@@ -1,6 +1,6 @@
 import std/unittest
 
-import figdraw/fignodes
+import figdraw
 
 import sigils/core
 import sigils/selectors

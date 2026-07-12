@@ -1,6 +1,10 @@
 import std/[algorithm, math, options, strutils, tables, times]
 
-from figdraw/fignodes import FigIdx
+when defined(useNativeDynlib):
+  from figdraw/dynlib import FigIdx
+else:
+  import figdraw as figdrawRoot
+  type FigIdx = figdrawRoot.FigIdx
 import sigils/core
 
 import ../accessibility/accessibilityprotocols
@@ -16,6 +20,7 @@ import ../containers/scrollviews
 import ../foundation/objectvalues
 import ../foundation/selectors
 import ../themes
+import ../themes/themecore as themeCore
 import ../text/fieldeditors
 import ../text/textviews
 import ../foundation/types
@@ -1142,7 +1147,7 @@ proc `rowItemRole=`*(tableView: TableView, role: StyleRole) =
   tableView.invalidateTableRows()
 
 func normalizedColumnMetric(value, fallback: float32): float32 =
-  if value.isNaN:
+  if math.isNaN(value):
     fallback
   else:
     max(value, 0.0'f32)
@@ -1440,12 +1445,12 @@ proc visibleTableColumns(tableView: TableView): seq[TableColumn] =
   for column in tableView.visibleColumns():
     result.add column
 
-func tableHeaderCornerRadii(chrome: TableHeaderChrome): CornerRadii =
+func tableHeaderCornerRadii(chrome: TableHeaderChrome): themeCore.CornerRadii =
   initCornerRadii(chrome.cornerRadius, chrome.cornerRadius, 0.0'f32, 0.0'f32)
 
 func tableHeaderCellCornerRadii(
     chrome: TableHeaderChrome, firstVisible, lastVisible: bool
-): CornerRadii =
+): themeCore.CornerRadii =
   initCornerRadii(
     if firstVisible: chrome.cornerRadius else: 0.0'f32,
     if lastVisible: chrome.cornerRadius else: 0.0'f32,
@@ -4290,7 +4295,9 @@ proc tableFocusRingBox(box: ControlBoxStyle): ControlBoxStyle =
 func tableBodyRowTouchesEdge(rowEdge, viewportEdge: float32): bool =
   abs(rowEdge - viewportEdge) <= 0.5'f32
 
-proc tableBodyRowCornerRadii(tableView: TableView, row: RowState): CornerRadii =
+proc tableBodyRowCornerRadii(
+    tableView: TableView, row: RowState
+): themeCore.CornerRadii =
   if row.index < 0:
     return
   let

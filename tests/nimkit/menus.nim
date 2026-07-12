@@ -5,7 +5,7 @@ when defined(macosx):
   import darwin/foundation/nsstring
   import darwin/objc/runtime
 
-import figdraw/fignodes
+import figdraw
 import sigils/selectors
 
 import merenda/nimkit

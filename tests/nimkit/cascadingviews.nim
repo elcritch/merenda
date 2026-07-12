@@ -1,7 +1,6 @@
 import std/[tables, unicode, unittest]
 
-from figdraw/fignodes import
-  Fig, RenderList, NfClipContent, flColor, nkRectangle, nkText
+import figdraw
 from pkg/chroma import rgba
 import sigils/core
 

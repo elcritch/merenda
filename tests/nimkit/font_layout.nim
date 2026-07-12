@@ -1,6 +1,6 @@
 import std/[options, os, unittest]
 
-from figdraw/common/fonttypes import GlyphArrangement
+import figdraw
 
 import merenda/nimkit/drawing
 import merenda/nimkit/foundation/types

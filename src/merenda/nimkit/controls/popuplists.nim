@@ -1,5 +1,7 @@
-from figdraw/figbasics import ZLevel
-from figdraw/fignodes import FigIdx
+when defined(useNativeDynlib):
+  from figdraw/dynlib import ZLevel, FigIdx
+else:
+  import figdraw
 import std/options
 
 import ../accessibility/accessibilityprotocols

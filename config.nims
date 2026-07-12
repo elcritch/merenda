@@ -14,6 +14,9 @@
 import std/strutils
 import std/os
 
+when defined(useNativeDynlib):
+  switch("path", "../figdraw/bin")
+
 const
   referenceDir = "docs/reference"
   openStepSpecUrl = "https://levenez.com/NeXTSTEP/OpenStepSpec.pdf"

@@ -2,7 +2,10 @@ import ../responder/responders
 import ../themes
 import ../foundation/types
 
-from figdraw/fignodes import Renders
+when defined(useNativeDynlib):
+  from figdraw/dynlib import Renders
+else:
+  import figdraw
 
 export responders
 

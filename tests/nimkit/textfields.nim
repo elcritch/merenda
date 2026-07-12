@@ -1,6 +1,6 @@
 import std/[times, unicode, unittest]
 
-import figdraw/fignodes
+import figdraw
 
 import sigils/core
 

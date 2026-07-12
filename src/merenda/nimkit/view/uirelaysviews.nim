@@ -1,6 +1,9 @@
 import std/[math, os, times, unicode]
 
-import figdraw/fignodes
+when defined(useNativeDynlib):
+  import figdraw/dynlib
+else:
+  import figdraw
 import sigils/core
 import uirelays as ui
 

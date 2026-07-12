@@ -1,11 +1,16 @@
 import std/[math, options, os, strutils, tables, times]
 
-from figdraw/common/shared import clearColor, setFigUiScale
-import figdraw/figrender as figrender
-from figdraw/fignodes import Renders
-import figdraw/windowing/siwinshim as siwinshim
+when defined(useNativeDynlib):
+  from figdraw/dynlib import clearColor, setFigUiScale, Renders
+  import figdraw/dynlib as figrender
+  import figdraw/dynlib as siwinshim
+else:
+  from figdraw import clearColor, setFigUiScale, Renders
+  import figdraw as figrender
+  import figdraw/windowing/siwinshim as siwinshim
 import pkg/pixie/fileformats/png
-import siwin/clipboards as siwinClipboards
+when not defined(useNativeDynlib):
+  import siwin/clipboards as siwinClipboards
 import sigils/selectors
 
 when defined(macosx):

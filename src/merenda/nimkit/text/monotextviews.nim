@@ -1,8 +1,9 @@
 import std/[math, unicode]
 
-import figdraw/common/fonttypes
-import figdraw/common/fontutils
-import figdraw/common/typefaces
+when defined(useNativeDynlib):
+  import figdraw/dynlib
+else:
+  import figdraw
 import pkg/pixie/fonts
 import pkg/vmath
 

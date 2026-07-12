@@ -3,7 +3,7 @@ import std/[os, unittest]
 import pkg/pixie
 import pkg/pixie/fileformats/png
 
-import figdraw/fignodes
+import figdraw
 
 import merenda/nimkit
 

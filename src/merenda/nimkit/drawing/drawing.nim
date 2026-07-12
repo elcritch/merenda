@@ -2,20 +2,27 @@ import std/unicode
 
 import pkg/bumpy
 
-import figdraw/commons
-import figdraw/common/filltypes
-import figdraw/common/fonttypes
-import figdraw/common/typefaces
-import figdraw/figextras
-import figdraw/fignodes
+when defined(useNativeDynlib):
+  import figdraw/dynlib
+else:
+  import figdraw
+  import figdraw/figextras
+  from figdraw/common/typefaces import getLineHeightImpl
 
 import ./images
 import ../themes
+import ../themes/themecore as themeCore
 import ../text/textstorage
 import ../text/texttypes
 import ../foundation/types as nimkitTypes
 
-export filltypes
+when defined(useNativeDynlib):
+  export dynlib
+else:
+  export
+    figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,
+    figdraw.Fill, figdraw.ColorRGBA, figdraw.toFill, figdraw.sampleColor,
+    figdraw.centerColorRgba, figdraw.centerColor
 export images
 
 const
@@ -74,6 +81,12 @@ proc defaultFont(size: float32, fontName = defaultFontName()): FigFont =
 proc fontFor(style: TextStyle): FigFont =
   defaultFont(style.fontSize, style.fontName)
 
+proc fontLineHeight(font: FigFont): float32 =
+  when defined(useNativeDynlib):
+    max(font.size, font.lineHeight)
+  else:
+    getLineHeightImpl(font)
+
 const AllCorners = {dcTopLeft, dcTopRight, dcBottomLeft, dcBottomRight}
 
 proc uniformCornerRadii(
@@ -84,7 +97,7 @@ proc uniformCornerRadii(
     if corner in roundedCorners:
       result[corner] = clamped.round().uint16
 
-proc figCornerRadii(radii: CornerRadii): array[DirectionCorners, uint16] =
+proc figCornerRadii(radii: themeCore.CornerRadii): array[DirectionCorners, uint16] =
   result[dcTopLeft] = radii.topLeft.round().uint16
   result[dcTopRight] = radii.topRight.round().uint16
   result[dcBottomLeft] = radii.bottomLeft.round().uint16
@@ -216,7 +229,7 @@ proc textNaturalSize*(text: string, style: TextStyle): nimkitTypes.Size =
     fontSize = style.fontSize
     font = style.fontFor()
     style = fs(font, fill(color(0.0, 0.0, 0.0, 1.0).rgba))
-    lineHeight = max(fontSize, getLineHeightImpl(font))
+    lineHeight = max(fontSize, font.fontLineHeight())
     lineCount = block:
       var count = 1
       for ch in text:
@@ -361,7 +374,7 @@ proc caretRect*(
   let
     fontSize = defaultFontSize()
     font = defaultFont(fontSize)
-    lineHeight = max(fontSize, getLineHeightImpl(font))
+    lineHeight = max(fontSize, font.fontLineHeight())
   rect(
     textRect.origin.x,
     textRect.origin.y + max((textRect.size.height - lineHeight) / 2.0'f32, 0.0),

@@ -2,11 +2,15 @@ import std/[algorithm, hashes, options, unicode]
 
 import sigils/core
 
-from figdraw/common/fonttypes import
-  CaretInside, CaretLeading, CaretTrailing, GlyphArrangement, GlyphSourceRange,
-  TextCaretAffinity, caretPositionsFor, glyphCount, glyphFont, glyphIndexAt,
-  glyphRangeFor, glyphRect, glyphSourceRange, layoutContentSize, lineGlyphRanges,
-  nearestSourceRuneForCaretPoint, selectionRectsFor, sourceRuneCount, sourceRuneRangeAt
+when defined(useNativeDynlib):
+  from figdraw/dynlib import
+    CaretInside, CaretLeading, CaretTrailing, GlyphArrangement, GlyphSourceRange,
+    TextCaretAffinity, caretPositionsFor, glyphCount, glyphFont, glyphIndexAt,
+    glyphRangeFor, glyphRect, glyphSourceRange, layoutContentSize, lineGlyphRanges,
+    nearestSourceRuneForCaretPoint, selectionRectsFor, sourceRuneCount,
+    sourceRuneRangeAt
+else:
+  import figdraw
 from pkg/vmath import vec2, x, y
 
 import ../drawing

@@ -1,12 +1,15 @@
 import std/[hashes, os, tables]
 
-import pkg/pixie
-
-import figdraw/common/imgutils
+when defined(useNativeDynlib):
+  import figdraw/dynlib
+else:
+  import pkg/pixie
+  import figdraw
 
 import ../foundation/types
 
-export imgutils except loadImage
+when defined(useNativeDynlib):
+  export dynlib except loadImage
 
 type
   ImageCachePolicy* = enum
@@ -57,7 +60,7 @@ proc newImageResource*(
     xCachePolicy: cachePolicy,
     xPixels:
       if image.isNil:
-        nil
+        default(Image)
       else:
         image.copy(),
   )
@@ -87,7 +90,11 @@ proc newImageResourceFromFile*(
     filePath: string, name = "", cachePolicy = icpDefault
 ): ImageResource =
   let
-    pixels = pixie.readImage(filePath)
+    pixels =
+      when defined(useNativeDynlib):
+        readImage(filePath)
+      else:
+        pixie.readImage(filePath)
     resolvedName =
       if name.len > 0:
         name
@@ -112,7 +119,7 @@ proc copyImageResource*(image: ImageResource): ImageResource =
     xCachePolicy: image.xCachePolicy,
     xPixels:
       if image.xPixels.isNil:
-        nil
+        default(Image)
       else:
         image.xPixels.copy(),
   )
@@ -141,7 +148,7 @@ proc `cachePolicy=`*(image: ImageResource, policy: ImageCachePolicy) =
 
 proc pixels*(image: ImageResource): Image =
   if image.xPixels.isNil:
-    return nil
+    return default(Image)
   image.xPixels.copy()
 
 proc registerImage*(name: string, image: ImageResource) =

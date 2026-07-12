@@ -1,6 +1,6 @@
 import std/[tables, unicode, unittest]
 
-import figdraw/fignodes
+import figdraw
 from figdraw/windowing/siwinshim import nil
 import sigils/core
 

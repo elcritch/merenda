@@ -1,7 +1,10 @@
 import std/options
 import std/tables
 
-import figdraw/fignodes
+when defined(useNativeDynlib):
+  import figdraw/dynlib
+else:
+  import figdraw
 
 import ./drawing
 import ../foundation/selectors

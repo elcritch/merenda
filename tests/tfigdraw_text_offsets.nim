@@ -1,6 +1,6 @@
 import std/unittest
 
-import figdraw/commons
+import figdraw
 import pkg/vmath
 
 proc glyphDrawPos(glyphPos: Vec2, descent: float32): Vec2 =

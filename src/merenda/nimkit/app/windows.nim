@@ -1,8 +1,13 @@
 import std/[math, options, tables, times]
 
-import figdraw/figrender as figrender
-from figdraw/fignodes import Renders
-import figdraw/windowing/siwinshim as siwinshim
+when defined(useNativeDynlib):
+  import figdraw/dynlib as figrender
+  from figdraw/dynlib import Renders
+  import figdraw/dynlib as siwinshim
+else:
+  import figdraw as figrender
+  from figdraw import Renders
+  import figdraw/windowing/siwinshim as siwinshim
 import sigils/core
 
 import ../accessibility/accessibility
