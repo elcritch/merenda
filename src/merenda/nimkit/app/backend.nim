@@ -958,14 +958,14 @@ proc createHostWindow*(
   result = HostWindow(xCallbacks: callbacks)
   result.xNativeWindow =
     siwinshim.newSiwinWindow(size = size, title = title, vsync = true, resizable = true)
-  result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
-  result.configureHostUiScale(scaleOverride)
-  if scaleOverride.isNone and result.usesScaledBackingSize(result.xNativeWindow):
-    result.xNativeWindow.size = nativeWindowSize(frame.size, result.configuredUiScale())
   result.xRenderer = figrender.newFigRenderer(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
   )
   result.xRenderer.setupBackend(result.xNativeWindow)
+  result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
+  result.configureHostUiScale(scaleOverride)
+  if scaleOverride.isNone and result.usesScaledBackingSize(result.xNativeWindow):
+    result.xNativeWindow.size = nativeWindowSize(frame.size, result.configuredUiScale())
   result.configureTransparentPresentation()
   result.registerHost()
   result.installNativeClipboardBridge()
