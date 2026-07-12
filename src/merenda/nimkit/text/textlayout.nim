@@ -8,7 +8,7 @@ when defined(useNativeDynlib):
     TextCaretAffinity, caretPositionsFor, glyphCount, glyphFont, glyphIndexAt,
     glyphRangeFor, glyphRect, glyphSourceRange, layoutContentSize, lineGlyphRanges,
     nearestSourceRuneForCaretPoint, selectionRectsFor, sourceRuneCount,
-    sourceRuneRangeAt
+    sourceRuneRangeAt, toIntSlice, toNativeIntSlice, toNativeVec2, toRect
 else:
   import figdraw
 from pkg/vmath import vec2, x, y
