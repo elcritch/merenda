@@ -24,6 +24,7 @@ import image_resources_demo
 import layout_showcase
 import matrix_demo
 import menu_demo
+import merenda_settings_demo
 import modelcontrollers_demo
 import monotext_demo
 import outline_demo
