@@ -20,7 +20,7 @@ else:
   export
     figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,
     figdraw.Fill, figdraw.ColorRGBA, figdraw.toFill, figdraw.sampleColor,
-    figdraw.centerColorRgba, figdraw.centerColor
+    figdraw.centerColorRgba, figdraw.centerColor, figdraw.`==`
 
 type
   EdgeInsets* = object
