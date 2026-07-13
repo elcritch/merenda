@@ -1,5 +1,6 @@
 import std/[os, unittest]
 
+from figdraw/common/filltypes import `==`
 import sigils/core
 
 import merenda/nimkit
