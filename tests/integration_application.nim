@@ -1,6 +1,6 @@
 import std/[tables, unicode, unittest]
 
-import figdraw/fignodes
+import figdraw
 from figdraw/windowing/siwinshim import nil
 import sigils/core
 
@@ -178,6 +178,45 @@ protocol WindowDelegateSpyProtocol of WindowDelegateProtocol:
     windowDelegateEvents.add "didSheet:" & sheet.title
 
 suite "nimkit application":
+  test "standard application menus include commands and preserve window entries":
+    let app = newApplication("Menu Test")
+    app.installStandardMainMenu()
+
+    let mainMenu = app.mainMenu()
+    check mainMenu.len == 5
+    check mainMenu[0].title == "Menu Test"
+    check mainMenu[1].title == "File"
+    check mainMenu[2].title == "Edit"
+    check mainMenu[3].title == "Window"
+    check mainMenu[4].title == "Help"
+
+    let
+      applicationMenu = mainMenu[0].submenu()
+      quitItem = applicationMenu[applicationMenu.len - 1]
+    check quitItem.title == "Quit Menu Test"
+    check quitItem.action().name == actionSelector("terminate").name
+    check quitItem.keyEquivalent().modifiers == shortcutModifiers()
+
+    let windowMenu = app.windowsMenu()
+    check windowMenu == mainMenu[3].submenu()
+    check windowMenu.len == 3
+    check windowMenu[0].title == "Minimize"
+    check windowMenu[1].title == "Zoom"
+    check windowMenu[2].isSeparatorItem()
+
+    let window = newWindow("Standard Menu Window")
+    app.addWindow(window)
+    check windowMenu.len == 4
+    check windowMenu[3].title == "Standard Menu Window"
+
+    let quitEvent =
+      KeyEvent(key: keyQ, keyCode: keyQ.ord, modifiers: shortcutModifiers())
+    check mainMenu.findKeyEquivalentItem(quitEvent) == quitItem
+    check quitItem.enabled()
+    check quitItem.validate(Responder(app))
+    check app.performMenuKeyEquivalent(quitEvent)
+    check app.isTerminating
+
   test "window protocols observe and veto core window behavior":
     let
       window = newWindow("Window hooks", frame = rect(0, 0, 240, 160))

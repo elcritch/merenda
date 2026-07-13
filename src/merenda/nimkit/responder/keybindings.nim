@@ -283,6 +283,8 @@ proc bindMacOSEditing(table: var KeyBindingTable) =
   table.bindKey(keyE, {kmControl}, moveToEndOfLine())
   table.bindKey(keyB, {kmControl}, moveLeft())
   table.bindKey(keyF, {kmControl}, moveRight())
+  table.bindKey(keyP, {kmControl}, moveUp())
+  table.bindKey(keyN, {kmControl}, moveDown())
   table.bindKey(keyH, {kmControl}, deleteBackward())
   table.bindKey(keyD, {kmControl}, deleteForward())
   table.bindKey(keyK, {kmControl}, deleteToEndOfLine())

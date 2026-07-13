@@ -67,6 +67,12 @@ suite "nimkit key bindings":
     .commandFor(KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: {kmControl}))
     .get() == deleteToEndOfLine()
     check bindings
+    .commandFor(KeyEvent(key: keyP, keyCode: keyP.ord, modifiers: {kmControl}))
+    .get() == moveUp()
+    check bindings
+    .commandFor(KeyEvent(key: keyN, keyCode: keyN.ord, modifiers: {kmControl}))
+    .get() == moveDown()
+    check bindings
     .commandFor(
       KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord, modifiers: {kmOption})
     )

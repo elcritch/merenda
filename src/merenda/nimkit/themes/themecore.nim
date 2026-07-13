@@ -1,12 +1,26 @@
 import std/tables
 
-import figdraw/common/filltypes
+when defined(useNativeDynlib):
+  import std/math
+
+when defined(useNativeDynlib):
+  import figdraw/dynlib
+else:
+  import figdraw
 from pkg/chroma import rgba
 from sigils/selectors import DynamicAgent
 
 import ../foundation/types
 
-export filltypes
+when defined(useNativeDynlib):
+  export
+    dynlib.FillGradientAxis, dynlib.FillKind, dynlib.Linear2, dynlib.Linear3,
+    dynlib.Fill, dynlib.ColorRGBA, dynlib.toFill
+else:
+  export
+    figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,
+    figdraw.Fill, figdraw.ColorRGBA, figdraw.toFill, figdraw.sampleColor,
+    figdraw.centerColorRgba, figdraw.centerColor, figdraw.`==`
 
 type
   EdgeInsets* = object
@@ -373,14 +387,87 @@ func horizontal*(insets: EdgeInsets): float32 =
 func vertical*(insets: EdgeInsets): float32 =
   insets.top + insets.bottom
 
-func fill*(color: Color): Fill =
-  filltypes.fill(color.rgba)
+when defined(useNativeDynlib):
+  func `==`*(a, b: Fill): bool =
+    if a.kind != b.kind:
+      return false
+    case a.kind
+    of flColor:
+      a.color == b.color
+    of flLinear2:
+      a.lin2 == b.lin2
+    of flLinear3:
+      a.lin3 == b.lin3
 
-func linear*(start, stop: Color, axis: FillGradientAxis): Fill =
-  filltypes.linear(start.rgba, stop.rgba, axis)
+  func fill*(color: Color): Fill =
+    Fill(kind: flColor, color: cast[dynlib.ColorRGBA](color.rgba))
 
-func linear*(start, mid, stop: Color, axis: FillGradientAxis, midPos = 128'u8): Fill =
-  filltypes.linear(start.rgba, mid.rgba, stop.rgba, axis, midPos)
+  func linear*(start, stop: Color, axis: FillGradientAxis): Fill =
+    Fill(
+      kind: flLinear2,
+      lin2: Linear2(
+        axis: axis,
+        start: cast[dynlib.ColorRGBA](start.rgba),
+        stop: cast[dynlib.ColorRGBA](stop.rgba),
+      ),
+    )
+
+  func linear*(start, mid, stop: Color, axis: FillGradientAxis, midPos = 128'u8): Fill =
+    Fill(
+      kind: flLinear3,
+      lin3: Linear3(
+        axis: axis,
+        start: cast[dynlib.ColorRGBA](start.rgba),
+        mid: cast[dynlib.ColorRGBA](mid.rgba),
+        stop: cast[dynlib.ColorRGBA](stop.rgba),
+        midPos: midPos,
+      ),
+    )
+
+  func lerpFillColor(
+      start, stop: dynlib.ColorRGBA, progress: float32
+  ): dynlib.ColorRGBA =
+    let
+      t = clamp(progress, 0.0'f32, 1.0'f32)
+      inverseT = 1.0'f32 - t
+    result.r = (start.r.float32 * inverseT + stop.r.float32 * t).round().uint8
+    result.g = (start.g.float32 * inverseT + stop.g.float32 * t).round().uint8
+    result.b = (start.b.float32 * inverseT + stop.b.float32 * t).round().uint8
+    result.a = (start.a.float32 * inverseT + stop.a.float32 * t).round().uint8
+
+  func sampleColor*(fill: Fill, progress: float32): ColorRGBA =
+    let color =
+      case fill.kind
+      of flColor:
+        fill.color
+      of flLinear2:
+        lerpFillColor(fill.lin2.start, fill.lin2.stop, progress)
+      of flLinear3:
+        let
+          t = clamp(progress, 0.0'f32, 1.0'f32)
+          middle = clamp(fill.lin3.midPos.float32 / 255.0'f32, 0.01'f32, 0.99'f32)
+        if t <= middle:
+          lerpFillColor(fill.lin3.start, fill.lin3.mid, t / middle)
+        else:
+          lerpFillColor(
+            fill.lin3.mid, fill.lin3.stop, (t - middle) / (1.0'f32 - middle)
+          )
+    cast[ColorRGBA](color)
+
+  func centerColorRgba*(fill: Fill): ColorRGBA =
+    fill.sampleColor(0.5'f32)
+
+  func centerColor*(fill: Fill): Color =
+    fill.centerColorRgba().color
+else:
+  func fill*(color: Color): Fill =
+    figdraw.fill(color.rgba)
+
+  func linear*(start, stop: Color, axis: FillGradientAxis): Fill =
+    figdraw.linear(start.rgba, stop.rgba, axis)
+
+  func linear*(start, mid, stop: Color, axis: FillGradientAxis, midPos = 128'u8): Fill =
+    figdraw.linear(start.rgba, mid.rgba, stop.rgba, axis, midPos)
 
 func initBoxShadow*(
     kind: BoxShadowKind,

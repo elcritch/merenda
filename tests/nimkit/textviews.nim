@@ -748,6 +748,28 @@ suite "nimkit text views":
     check spy.selectors[^1] == "moveToEndOfDocument"
     check spy.handled[^2] and spy.handled[^1]
 
+  test "macOS control p and n move between visual lines":
+    let
+      window = newWindow("Text control line movement", frame = rect(0, 0, 260, 120))
+      root = newView(frame = rect(0, 0, 260, 120))
+      textView = newTextView("abc\ndef\nghi", frame = rect(12, 12, 180, 90))
+
+    root.addSubview(textView)
+    window.setContentView(root)
+    window.setKeyBindingProfile(kbpMacOS)
+    check window.makeFirstResponder(textView)
+
+    textView.selectedRange = initTextRange(1, 0)
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyN, keyCode: keyN.ord, modifiers: {kmControl})
+    )
+    check textView.selectedRange == initTextRange(5, 0)
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyP, keyCode: keyP.ord, modifiers: {kmControl})
+    )
+    check textView.selectedRange == initTextRange(1, 0)
+
   test "text view line deletion and document movement selectors work":
     let textView = newTextView("alpha\nbeta", frame = rect(0, 0, 180, 80))
 

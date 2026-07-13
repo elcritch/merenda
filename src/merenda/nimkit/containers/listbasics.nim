@@ -1,9 +1,14 @@
-from figdraw/fignodes import FigIdx
+when defined(useNativeDynlib):
+  from figdraw/dynlib import FigIdx
+else:
+  import figdraw as figdrawRoot
+  type FigIdx = figdrawRoot.FigIdx
 import std/options
 
 import ../drawing
 import ./scrollergeometry
 import ../themes
+import ../themes/themecore as themeCore
 import ../foundation/events
 import ../foundation/types
 
@@ -19,7 +24,7 @@ type
   RowStyle* = object
     fill*: Option[Fill]
     textColor*: Option[Color]
-    cornerRadii*: Option[CornerRadii]
+    cornerRadii*: Option[themeCore.CornerRadii]
 
 func normalizedRowHeight*(rowHeight: float32): float32 =
   max(rowHeight, 1.0'f32)
@@ -166,7 +171,9 @@ func initRowState*(index: int, text: string, states: set[WidgetState] = {}): Row
   RowState(index: index, text: text, states: states)
 
 func initRowStyle*(
-    fill = none(Fill), textColor = none(Color), cornerRadii = none(CornerRadii)
+    fill = none(Fill),
+    textColor = none(Color),
+    cornerRadii = none(themeCore.CornerRadii),
 ): RowStyle =
   RowStyle(fill: fill, textColor: textColor, cornerRadii: cornerRadii)
 

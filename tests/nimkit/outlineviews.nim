@@ -1,6 +1,6 @@
 import std/[unicode, unittest]
 
-import figdraw/fignodes
+import figdraw
 import sigils/core
 
 import merenda/nimkit

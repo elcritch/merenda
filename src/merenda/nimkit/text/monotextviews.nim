@@ -1,9 +1,12 @@
 import std/[math, unicode]
 
-import figdraw/common/fonttypes
-import figdraw/common/fontutils
-import figdraw/common/typefaces
-import pkg/pixie/fonts
+when defined(useNativeDynlib):
+  from figdraw/dynlib import
+    FigFont, GlyphTopLeft, TypefaceId, fill, fontWithSize, fs, glyphCount, glyphFont,
+    glyphRect, loadTypeface, placeGlyphs, typeset
+else:
+  import figdraw
+import pkg/bumpy as bumpy
 import pkg/vmath
 
 import ../accessibility/accessibilityprotocols
@@ -295,18 +298,22 @@ proc monoFont(view: MonoTextView): FigFont =
   view.xTypefaceId.fontWithSize(view.xFontSize)
 
 proc monoTextMetrics*(view: MonoTextView): MonoTextMetrics =
-  let
-    font = view.monoFont()
-    (_, px) = font.convertFont()
-    lineHeight =
-      if px.lineHeight >= 0.0'f32:
-        px.lineHeight
-      else:
-        px.defaultLineHeight()
-    advance = px.typeface.getAdvance(Rune('M')) * px.scale
-  MonoTextMetrics(
-    cellWidth: max(advance, 1.0'f32), lineHeight: max(lineHeight, font.size)
+  let font = view.monoFont()
+  let layout = typeset(
+    bumpy.rect(0, 0, font.size * 4.0'f32, font.size * 4.0'f32),
+    [(fs(font), "M")],
+    minContent = false,
+    wrap = false,
   )
+  if layout.glyphCount() > 0:
+    let
+      glyph = layout.glyphRect(0)
+      glyphMetrics = layout.glyphFont(0)
+    return MonoTextMetrics(
+      cellWidth: max(glyph.w, 1.0'f32),
+      lineHeight: max(glyphMetrics.lineHeight, font.size),
+    )
+  MonoTextMetrics(cellWidth: max(font.size * 0.6'f32, 1.0'f32), lineHeight: font.size)
 
 proc monoTextStyleContext(view: MonoTextView): StyleContext =
   controlStyle(

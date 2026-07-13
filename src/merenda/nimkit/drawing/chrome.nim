@@ -1,13 +1,19 @@
 import std/options
 
-from figdraw/figbasics import ZLevel
-from figdraw/fignodes import FigIdx
+when defined(useNativeDynlib):
+  from figdraw/dynlib import ZLevel, FigIdx
+else:
+  import figdraw as figdrawRoot
+  type
+    ZLevel = figdrawRoot.ZLevel
+    FigIdx = figdrawRoot.FigIdx
 
 import sigils/core
 import sigils/selectors
 
 import ./drawing
 import ../themes
+import ../themes/themecore as themeCore
 import ../foundation/types
 
 type
@@ -55,7 +61,7 @@ type
     parent*: FigIdx
     rect*: Rect
     cornerRadius*: float32
-    cornerRadii*: CornerRadii
+    cornerRadii*: themeCore.CornerRadii
     edge*: ChromeEdge
     seamFill*: Fill
     highlightFill*: Fill

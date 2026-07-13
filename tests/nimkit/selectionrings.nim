@@ -1,6 +1,6 @@
 import std/unittest
 
-import figdraw/fignodes
+import figdraw
 
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes

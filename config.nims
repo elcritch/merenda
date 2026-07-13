@@ -14,6 +14,13 @@
 import std/strutils
 import std/os
 
+when defined(useNativeDynlib):
+  switch("path", "../figdraw/bin")
+  when defined(macosx):
+    switch("define", "nativeLibrary=../figdraw/bin/libfigdraw_native.dylib")
+  elif defined(linux) or defined(bsd):
+    switch("define", "nativeLibrary=../figdraw/bin/libfigdraw_native.so")
+
 const
   referenceDir = "docs/reference"
   openStepSpecUrl = "https://levenez.com/NeXTSTEP/OpenStepSpec.pdf"

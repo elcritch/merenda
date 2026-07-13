@@ -2,7 +2,7 @@ import std/[unicode, unittest]
 
 import sigils/core
 
-import figdraw/fignodes
+import figdraw
 
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes

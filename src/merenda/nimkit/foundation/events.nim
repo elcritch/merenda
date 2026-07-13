@@ -151,3 +151,4 @@ type
     key*: Key
     keyCode*: int
     modifiers*: set[KeyModifier]
+    repeated*: bool

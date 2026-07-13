@@ -2,9 +2,8 @@ import std/[math, os, unittest]
 
 import pkg/pixie
 
-import figdraw/commons
-import figdraw/figrender as glrenderer
-import figdraw/fignodes
+import figdraw
+import figdraw as glrenderer
 import figdraw/windowing/siwinshim
 
 import merenda/nimkit

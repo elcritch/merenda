@@ -1,7 +1,6 @@
 import std/[strutils, unicode, unittest]
 
-import figdraw/common/fontglyphs
-import figdraw/fignodes
+import figdraw
 
 import merenda/nimkit
 
@@ -26,11 +25,15 @@ proc hasFill(
     node: Fig, range: Slice[int], color: ColorRGBA
 ): tuple[matched, total: int] =
   let stop = range.b + 1
-  for glyph in node.textLayout.glyphs:
+  for glyphIndex, glyph in node.textLayout.arrangedGlyphs:
     if glyph.source.runeStart < stop and range.a < glyph.source.runeEnd:
       inc result.total
-      if glyph.fill.kind == flColor and glyph.fill.color == color:
-        inc result.matched
+      for spanIndex, span in node.textLayout.spans:
+        if glyphIndex in span:
+          let fill = node.textLayout.spanColors[spanIndex]
+          if fill.kind == flColor and fill.color == color:
+            inc result.matched
+          break
 
 proc textNodeForDemo(nodes: openArray[Fig]): tuple[found: bool, node: Fig] =
   for node in nodes:

@@ -1,6 +1,6 @@
 import std/[strutils, unicode, unittest]
 
-import figdraw/fignodes
+import figdraw
 
 import merenda/nimkit
 

@@ -1,14 +1,19 @@
 import std/[math, options, os, strutils, tables, times]
 
-from figdraw/common/shared import clearColor, setFigUiScale
-import figdraw/figrender as figrender
-from figdraw/fignodes import Renders
-import figdraw/windowing/siwinshim as siwinshim
-import pkg/pixie/fileformats/png
+when defined(useNativeDynlib):
+  from figdraw/dynlib import clearColor, setFigUiScale, Renders
+  import figdraw/dynlib as figrender
+  import figdraw/dynlib as siwinshim
+else:
+  from figdraw import clearColor, setFigUiScale, Renders
+  import figdraw as figrender
+  import figdraw/windowing/siwinshim as siwinshim
+when not defined(useNativeDynlib):
+  import pkg/pixie/fileformats/png
 import siwin/clipboards as siwinClipboards
 import sigils/selectors
 
-when defined(macosx):
+when defined(macosx) and not defined(useNativeDynlib):
   import darwin/app_kit/[nscolor, nspasteboard, nswindow]
   import darwin/objc/runtime
 
@@ -17,7 +22,7 @@ import ../foundation/types
 import ../foundation/events
 import ./pasteboards
 
-when defined(macosx):
+when defined(macosx) and not defined(useNativeDynlib):
   proc setOpaque(window: NSWindow, opaque: BOOL) {.objc: "setOpaque:".}
 
 type
@@ -237,7 +242,7 @@ proc addType(types: var seq[string], kind: string) =
 
 proc hostReportedChangeCount(provider: NativePasteboardProvider): Option[int] =
   discard provider
-  when defined(macosx):
+  when defined(macosx) and not defined(useNativeDynlib):
     let pasteboard = NSPasteboard.generalPasteboard()
     if pasteboard != nil:
       return some(pasteboard.changeCount().int)
@@ -449,10 +454,33 @@ proc publishHostClipboard(provider: NativePasteboardProvider) =
     else:
       discard
 
-  if content.converters.len > 0:
-    host.xNativeWindow.clipboard.content = content
-  else:
+  when defined(useNativeDynlib):
     host.xNativeWindow.clipboard.clipboardText = ""
+    host.xNativeWindow.clipboard.clipboardFiles = payloadFiles(content.data)
+    for kind, item in provider.xItems:
+      case item.kind
+      of pikString:
+        if kind == PasteboardTypeString:
+          host.xNativeWindow.clipboard.clipboardText = item.stringValue
+        else:
+          host.xNativeWindow.clipboard.setClipboardData(kind, item.stringValue)
+      of pikFile:
+        host.xNativeWindow.clipboard.setClipboardData(kind, item.filePath)
+      of pikUrl:
+        host.xNativeWindow.clipboard.setClipboardData(kind, item.url)
+      of pikData:
+        host.xNativeWindow.clipboard.setClipboardData(kind, item.data)
+      of pikImage:
+        let data = payloadOtherData(content.data, kind)
+        host.xNativeWindow.clipboard.setClipboardData(kind, data)
+        host.xNativeWindow.clipboard.setClipboardData(NativeImagePngType, data)
+      else:
+        discard
+  else:
+    if content.converters.len > 0:
+      host.xNativeWindow.clipboard.content = content
+    else:
+      host.xNativeWindow.clipboard.clipboardText = ""
 
 proc storeItem(
     provider: NativePasteboardProvider, kind: string, item: PasteboardItem
@@ -757,7 +785,7 @@ proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
 proc configureTransparentPresentation(host: HostWindow) =
   if not host.xTransparent or host.xRenderer.isNil:
     return
-  when defined(macosx):
+  when defined(macosx) and not defined(useNativeDynlib):
     if host.xNativeWindow of siwinshim.WindowCocoa:
       let nativeWindow =
         cast[NSWindow](siwinshim.WindowCocoa(host.xNativeWindow).nativeWindowHandle())
@@ -837,6 +865,7 @@ proc dispatchKey(host: HostWindow, event: siwinshim.KeyEvent) =
         key: key,
         keyCode: event.key.ord,
         modifiers: event.modifiers.toNimkitModifiers,
+        repeated: event.repeated,
       ),
       pressed: event.pressed,
       isEscape: event.key == siwinshim.Key.escape,
@@ -927,14 +956,14 @@ proc createHostWindow*(
   result = HostWindow(xCallbacks: callbacks)
   result.xNativeWindow =
     siwinshim.newSiwinWindow(size = size, title = title, vsync = true, resizable = true)
-  result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
-  result.configureHostUiScale(scaleOverride)
-  if scaleOverride.isNone and result.usesScaledBackingSize(result.xNativeWindow):
-    result.xNativeWindow.size = nativeWindowSize(frame.size, result.configuredUiScale())
   result.xRenderer = figrender.newFigRenderer(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
   )
   result.xRenderer.setupBackend(result.xNativeWindow)
+  result.xNativeWindow.pos = ivec2(frame.origin.x.int32, frame.origin.y.int32)
+  result.configureHostUiScale(scaleOverride)
+  if scaleOverride.isNone and result.usesScaledBackingSize(result.xNativeWindow):
+    result.xNativeWindow.size = nativeWindowSize(frame.size, result.configuredUiScale())
   result.configureTransparentPresentation()
   result.registerHost()
   result.installNativeClipboardBridge()
@@ -959,9 +988,14 @@ proc createPopupHostWindow*(
       none(UiScaleOverride)
 
   result = HostWindow(xCallbacks: callbacks, xTransparent: true)
-  result.xNativeWindow = siwinshim.sharedSiwinGlobals().newPopupWindow(
+  when defined(useNativeDynlib):
+    result.xNativeWindow = siwinshim.newPopupWindow(
       owner.xNativeWindow, placement, transparent = true, grab = true
     )
+  else:
+    result.xNativeWindow = siwinshim.sharedSiwinGlobals().newPopupWindow(
+        owner.xNativeWindow, placement, transparent = true, grab = true
+      )
   result.configureHostUiScale(scaleOverride)
   result.xRenderer = figrender.newFigRenderer(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()

@@ -171,6 +171,14 @@ button.action = action
 Application menus use the same `Menu` and `MenuItem` tree on every platform.
 Assigning the tree to `app.mainMenu` publishes a native menu in the macOS menu
 bar, including submenus, separators, validation, state, and key equivalents.
+On macOS, `newApplication` and `sharedApplication` start with the standard
+application, File, Edit, Window, and Help menus. The application menu includes
+About, Services, Hide, and Quit; the Window menu retains Minimize and Zoom while
+automatically listing open windows. Pass an application name to
+`newApplication("My App")` when the executable name is not the desired display
+name. Call `app.installStandardMainMenu()` to restore the standard tree after
+replacing `app.mainMenu`, or add application-specific top-level menus directly
+to the existing tree.
 The default `mmpAutomatic` presentation uses that native menu when available.
 Applications can switch `app.mainMenuPresentation` at runtime between
 `mmpNative` and `mmpInWindow`; `app.usesNativeMainMenu()` reports the effective

@@ -1,7 +1,10 @@
 import std/options
 
-from figdraw/figbasics import
-  DirectionCorners, dcBottomLeft, dcBottomRight, dcTopLeft, dcTopRight
+when defined(useNativeDynlib):
+  from figdraw/dynlib import
+    DirectionCorners, dcBottomLeft, dcBottomRight, dcTopLeft, dcTopRight
+else:
+  import figdraw
 
 import sigils/core
 

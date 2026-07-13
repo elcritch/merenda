@@ -2,7 +2,10 @@ import std/options
 
 import sigils/selectors
 
-from figdraw/figbasics import ZLevel
+when defined(useNativeDynlib):
+  from figdraw/dynlib import ZLevel
+else:
+  import figdraw
 
 import ../drawing/drawing
 import ./undomanagers
