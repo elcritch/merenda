@@ -1,4 +1,4 @@
-import std/unicode
+import std/[tables, unicode]
 
 import pkg/bumpy
 
@@ -44,9 +44,7 @@ type DrawContext* = ref object
   xVisibleRect: nimkitTypes.Rect
   xAppearance: Appearance
 
-var defaultTypefaceId {.threadvar.}: TypefaceId
-var defaultTypefaceKey {.threadvar.}: string
-var defaultTypefaceReady {.threadvar.}: bool
+var defaultTypefaceIds {.threadvar.}: Table[string, TypefaceId]
 
 proc defaultTypefaceRequest(
     fontName = defaultFontName()
@@ -75,11 +73,11 @@ proc defaultFont(size: float32, fontName = defaultFontName()): FigFont =
   let
     request = defaultTypefaceRequest(fontName)
     cacheKey = request.defaultTypefaceCacheKey()
-  if not defaultTypefaceReady or defaultTypefaceKey != cacheKey:
-    defaultTypefaceId = loadTypeface(request.name, request.fallbackNames)
-    defaultTypefaceKey = cacheKey
-    defaultTypefaceReady = true
-  defaultTypefaceId.fontWithSize(size)
+  if defaultTypefaceIds.len == 0:
+    defaultTypefaceIds = initTable[string, TypefaceId]()
+  if cacheKey notin defaultTypefaceIds:
+    defaultTypefaceIds[cacheKey] = loadTypeface(request.name, request.fallbackNames)
+  defaultTypefaceIds[cacheKey].fontWithSize(size)
 
 proc fontFor(style: TextStyle): FigFont =
   defaultFont(style.fontSize, style.fontName)
