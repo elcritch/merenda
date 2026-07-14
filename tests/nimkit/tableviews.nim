@@ -17,6 +17,8 @@ func hasDrawableOp(node: Fig, kind: DrawableKind): bool =
 type TableDataSourceSpy = ref object of Responder
   rows: int
   textCalls: seq[string]
+  intrinsicWidth: float32
+  widthHintCalls: int
 
 type EditableTableRow = object
   project: string
@@ -471,6 +473,12 @@ protocol TableDataSourceSpyMethods of TableViewDataSource:
     result = column.identifier & ":" & $row
     source.textCalls.add result
 
+  method tableIntrinsicContentWidth(
+      source: TableDataSourceSpy, tableView: TableView
+  ): float32 =
+    inc source.widthHintCalls
+    source.intrinsicWidth
+
 protocol TableDelegateSpyMethods of TableViewDelegate:
   method viewForCell(
       delegate: TableDelegateSpy, tableView: TableView, row: int, column: TableColumn
@@ -806,7 +814,7 @@ proc newTableEditSignalSpy(source: EditableTableSpy): TableEditSignalSpy =
   TableEditSignalSpy(source: source)
 
 proc newTableDataSourceSpy(rows: int): TableDataSourceSpy =
-  result = TableDataSourceSpy(rows: rows)
+  result = TableDataSourceSpy(rows: rows, intrinsicWidth: -1.0'f32)
   initResponder(result)
   discard result.withProtocol(TableDataSourceSpyMethods)
 
@@ -1667,6 +1675,47 @@ suite "NimKit TableView":
     check tableView.dataSource == DynamicAgent(source)
     check tableView.rowCount == 7
     check len(tableView) == 7
+
+  test "table intrinsic width is bounded unless content sizing is requested":
+    let
+      tableView = newTableView(frame = rect(0, 0, 320, 180))
+      source = newTableDataSourceSpy(1_000)
+
+    tableView.addColumn(newTableColumn("name", "Name", width = 140.0))
+    tableView.dataSource = source
+    source.textCalls.setLen(0)
+
+    check tableView.widthSizingMode() == tvwsmColumns
+    let columnsSize = View(tableView).sizeThatFits()
+    check source.textCalls.len == 0
+    check source.widthHintCalls == 0
+
+    tableView.widthSizingMode = tvwsmContent
+    let contentSize = View(tableView).sizeThatFits()
+    check source.textCalls.len == 1_000
+    check source.widthHintCalls == 1
+    check contentSize.width >= columnsSize.width
+
+    discard View(tableView).sizeThatFits()
+    check source.textCalls.len == 1_000
+    check source.widthHintCalls == 1
+
+    source.intrinsicWidth = 260.0'f32
+    tableView.reloadData()
+    source.textCalls.setLen(0)
+    source.widthHintCalls = 0
+    let hintedSize = View(tableView).sizeThatFits()
+    check source.textCalls.len == 0
+    check source.widthHintCalls == 1
+    check hintedSize.width > columnsSize.width
+
+    tableView.preferredContentWidth = 200.0
+    tableView.widthSizingMode = tvwsmPreferredWidth
+    let preferredSize = View(tableView).sizeThatFits()
+    check tableView.preferredContentWidth() == 200.0'f32
+    check preferredSize.width > columnsSize.width
+    check preferredSize.width < hintedSize.width
+    check source.widthHintCalls == 1
 
   test "table view resolves text and hosted cell views through explicit hooks":
     let

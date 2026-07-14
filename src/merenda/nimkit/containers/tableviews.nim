@@ -49,6 +49,11 @@ type
     tcrFixed
     tcrResizable
 
+  TableViewWidthSizingMode* = enum
+    tvwsmColumns
+    tvwsmContent
+    tvwsmPreferredWidth
+
   TableSortDirection* = enum
     tsdNone
     tsdAscending
@@ -205,6 +210,12 @@ type
     xContentView: TableContentView
     xRowHeight: float32
     xVisibleRows: int
+    xWidthSizingMode: TableViewWidthSizingMode
+    xPreferredContentWidth: float32
+    xMeasuredContentWidth: float32
+    xMeasuredContentFontName: string
+    xMeasuredContentFontSize: float32
+    xContentWidthMeasurementValid: bool
     xRowHeights: seq[float32]
     xRowOffsets: seq[float32]
     xRowHeightOverrides: Table[int, float32]
@@ -300,6 +311,7 @@ type
 const TableViewStateDefaultsPrefix = "nimkit.table.state."
 
 proc noteColumnsChanged(tableView: TableView)
+proc invalidateTableWidthMeasurement(tableView: TableView)
 proc detachColumn(column: TableColumn)
 proc removeColumnAtIndex(tableView: TableView, index: int)
 proc removeColumnAt*(tableView: TableView, index: int)
@@ -633,6 +645,7 @@ protocol TableViewDataSource {.selectorScope: protocol.}:
 
   method identifierForRow*(tableView: TableView, row: int): string {.optional.}
   method rowForIdentifier*(tableView: TableView, identifier: string): int {.optional.}
+  method tableIntrinsicContentWidth*(tableView: TableView): float32 {.optional.}
 
 protocol TableViewEvents:
   proc selectionIsChanging*(tableView: TableView, sender: DynamicAgent) {.signal.}
@@ -1173,6 +1186,29 @@ proc tableStyle(tableView: TableView): TableViewStyle =
 
 proc defaultTableStyle(): TableViewStyle =
   initAppearance().resolveTableViewStyle(controlStyle(srTableView))
+
+proc invalidateTableWidthMeasurement(tableView: TableView) =
+  tableView.xContentWidthMeasurementValid = false
+  tableView.invalidateIntrinsicContentSize()
+
+proc widthSizingMode*(tableView: TableView): TableViewWidthSizingMode =
+  tableView.xWidthSizingMode
+
+proc `widthSizingMode=`*(tableView: TableView, mode: TableViewWidthSizingMode) =
+  if tableView.xWidthSizingMode == mode:
+    return
+  tableView.xWidthSizingMode = mode
+  tableView.invalidateTableWidthMeasurement()
+
+proc preferredContentWidth*(tableView: TableView): float32 =
+  tableView.xPreferredContentWidth
+
+proc `preferredContentWidth=`*(tableView: TableView, width: float32) =
+  let normalizedWidth = max(width, 0.0'f32)
+  if tableView.xPreferredContentWidth == normalizedWidth:
+    return
+  tableView.xPreferredContentWidth = normalizedWidth
+  tableView.invalidateTableWidthMeasurement()
 
 proc tableRole*(tableView: TableView): StyleRole =
   tableView.xTableRole
@@ -1928,10 +1964,13 @@ proc writeTableCellObjectValue*(
     setObjectValueForCell(),
     (tableView: tableView, row: row, column: column, value: value),
   )
-  if written.isSome:
-    written.get()
-  else:
-    true
+  result =
+    if written.isSome:
+      written.get()
+    else:
+      true
+  if result:
+    tableView.invalidateTableWidthMeasurement()
 
 proc tableRowIdentifier*(tableView: TableView, row: int): string =
   if row notin 0 ..< tableView.len():
@@ -2965,6 +3004,7 @@ proc clearPointerHighlights*(tableView: TableView) =
   tableView.clearPointerColumnHighlight()
 
 proc reloadData*(tableView: TableView) =
+  tableView.xContentWidthMeasurementValid = false
   let oldFirst = tableView.firstVisibleIndex()
   let
     oldFirstIdentifier = tableView.tableRowIdentifier(oldFirst)
@@ -3030,6 +3070,7 @@ proc reloadData*(tableView: TableView) =
 proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdate]) =
   if updates.len == 0:
     return
+  tableView.xContentWidthMeasurementValid = false
   let
     selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
     anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
@@ -3060,7 +3101,7 @@ proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdat
     tableView.xEditing = TableEditingState(row: -1)
     Control(tableView).clearValidationError()
     tableView.clearEditingSurface()
-  tableView.invalidateIntrinsicContentSize()
+  tableView.invalidateTableWidthMeasurement()
   tableView.invalidateTableRows()
   emit tableView.tableRowsDidUpdate(DynamicAgent(tableView), @updates)
 
@@ -4430,7 +4471,7 @@ proc noteColumnsChanged(tableView: TableView) =
   tableView.syncTableScrollChrome()
   tableView.syncHeaderTrackingAreas()
   tableView.clearTableCellSlots()
-  tableView.invalidateIntrinsicContentSize()
+  tableView.invalidateTableWidthMeasurement()
   tableView.setNeedsLayout()
   tableView.setNeedsDisplay(true)
 
@@ -4810,6 +4851,28 @@ proc drawCustomTableRow(
     drawRow(), (tableView: tableView, context: context, rect: rect, row: row)
   )
 
+proc measuredTableContentWidth(tableView: TableView, style: TextStyle): float32 =
+  if tableView.xContentWidthMeasurementValid and
+      tableView.xMeasuredContentFontName == style.fontName and
+      tableView.xMeasuredContentFontSize == style.fontSize:
+    return tableView.xMeasuredContentWidth
+
+  let source = tableView.dataSource()
+  var widthHint = none(float32)
+  if not source.isNil:
+    widthHint = source.trySendLocal(tableIntrinsicContentWidth(), tableView)
+  if widthHint.isSome and widthHint.get() >= 0.0'f32:
+    result = widthHint.get()
+  else:
+    for index in 0 ..< tableView.len():
+      result =
+        max(result, textNaturalSize(tableView.rowTextForSummary(index), style).width)
+
+  tableView.xMeasuredContentWidth = result
+  tableView.xMeasuredContentFontName = style.fontName
+  tableView.xMeasuredContentFontSize = style.fontSize
+  tableView.xContentWidthMeasurementValid = true
+
 proc naturalSize(tableView: TableView): Size =
   let
     appearance = tableView.effectiveAppearance()
@@ -4831,35 +4894,40 @@ proc naturalSize(tableView: TableView): Size =
         classes = tableView.styleClasses(),
       )
     )
-    rowCount =
-      if tableView.len() == 0:
+    totalRows = tableView.len()
+    displayedRows =
+      if totalRows == 0:
         max(tableView.visibleRows(), 1)
       else:
-        visibleRowItemCount(tableView.len(), tableView.visibleRows())
-
-  var
-    maxTextWidth = 0.0'f32
-    naturalHeight = 0.0'f32
+        visibleRowItemCount(totalRows, tableView.visibleRows())
   let summaryTextStyle =
     tableView.effectiveAppearance().resolveRowItemStyle(controlStyle(srRowItem)).text
-  for index in 0 ..< tableView.len():
-    maxTextWidth = max(
-      maxTextWidth,
-      textNaturalSize(tableView.rowTextForSummary(index), summaryTextStyle).width,
-    )
-    if index < rowCount:
+
+  var naturalHeight = 0.0'f32
+  if totalRows == 0 or tableView.usesFixedRowHeights():
+    naturalHeight = tableView.rowHeight() * displayedRows.float32
+  else:
+    for index in 0 ..< displayedRows:
       naturalHeight += tableView.rowHeightForRow(index)
-  if tableView.len() == 0:
-    naturalHeight = tableView.rowHeight() * rowCount.float32
+
+  let
+    requestedContentWidth =
+      case tableView.xWidthSizingMode
+      of tvwsmColumns:
+        0.0'f32
+      of tvwsmContent:
+        tableView.measuredTableContentWidth(summaryTextStyle)
+      of tvwsmPreferredWidth:
+        tableView.xPreferredContentWidth
+    bodyWidth = max(tableView.visibleColumnWidth(), requestedContentWidth)
 
   initSize(
     max(
       listStyle.minSize.width,
       max(
         itemStyle.minSize.width,
-        tableView.visibleRowHeaderWidth() +
-          max(tableView.visibleColumnWidth(), maxTextWidth) +
-          itemStyle.text.insets.horizontal + 2.0'f32,
+        tableView.visibleRowHeaderWidth() + bodyWidth + itemStyle.text.insets.horizontal +
+          2.0'f32,
       ),
     ),
     max(
@@ -6402,6 +6470,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xPressedIndex = -1
   tableView.xRowHeight = style.rowHeight
   tableView.xVisibleRows = 5
+  tableView.xWidthSizingMode = tvwsmColumns
   tableView.xSelectionMode = tsmSingle
   tableView.xItemRole = srRowItem
   tableView.xRowCount = 0
