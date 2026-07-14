@@ -37,6 +37,14 @@ suite "NimKit threading":
     check newer.logicalSize == nimkitTypes.initSize(60.0, 20.0)
     check newest.logicalSize == nimkitTypes.initSize(70.0, 20.0)
 
+    check host.submitRenders(renders, nimkitTypes.initSize(80.0, 20.0))
+    check host.submitRenders(renders, nimkitTypes.initSize(90.0, 20.0))
+    check host.submitRenders(renders, nimkitTypes.initSize(100.0, 20.0))
+    var latest: nimkitBackend.ThreadRenderSnapshot
+    require host.channels.pollLatestRender(latest)
+    check latest.logicalSize == nimkitTypes.initSize(100.0, 20.0)
+    check not host.channels.renders.tryRecv(latest)
+
   test "application loop runs on a selector thread and renderer stays primary":
     let
       primaryThread = getThreadId()

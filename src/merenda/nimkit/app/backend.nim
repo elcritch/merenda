@@ -362,6 +362,14 @@ proc submitRenders*(
 proc pollEvent*(host: ThreadHostClient, event: var ThreadHostEvent): bool =
   not host.isNil and host.channels.events.tryRecv(event)
 
+proc pollLatestRender*(
+    channels: ThreadHostChannels, snapshot: var ThreadRenderSnapshot
+): bool =
+  var pending: ThreadRenderSnapshot
+  while channels.renders.tryRecv(pending):
+    snapshot = move pending
+    result = true
+
 type UiScaleOverride* = object
   envName*: string
   scale*: float32
@@ -1332,6 +1340,15 @@ proc postEvent(state: ThreadRendererHost, event: sink ThreadHostEvent) =
   if not state.isNil:
     state.channels.events.pushLatest(event)
 
+proc acceptPendingRender(state: ThreadRendererHost): bool =
+  if state.isNil:
+    return
+  var snapshot: ThreadRenderSnapshot
+  if not state.channels.pollLatestRender(snapshot):
+    return
+  state.lastRenders = move snapshot.renders
+  true
+
 proc renderLatest(state: ThreadRendererHost) =
   if state.isNil or state.host.isNil or state.lastRenders.isNil:
     return
@@ -1377,6 +1394,9 @@ proc createRendererHost(
     onTextInput: proc(text: string) =
       state.postEvent(ThreadHostEvent(kind: theTextInput, text: text)),
     onRender: proc() =
+      # Native live-resize runs its own event loop. Consume the worker's newest
+      # snapshot here because the outer renderer loop cannot drain it meanwhile.
+      discard state.acceptPendingRender()
       state.renderLatest(),
     onFocusChanged: proc(focused: bool) =
       state.postEvent(ThreadHostEvent(kind: theFocusChanged, flag: focused)),
@@ -1430,14 +1450,9 @@ proc drainHostChannels(state: ThreadRendererHost) =
   while state.channels.commands.tryRecv(command):
     state.applyHostCommand(move command)
 
-  var
-    snapshot: ThreadRenderSnapshot
-    hasSnapshot = false
-  while state.channels.renders.tryRecv(snapshot):
-    state.lastRenders = move snapshot.renders
-    state.logicalSize = snapshot.logicalSize
-    hasSnapshot = true
-  if hasSnapshot:
+  # The host's logical size is authoritative. A render snapshot can lag one
+  # native resize event while the application thread lays out its view tree.
+  if state.acceptPendingRender():
     state.renderLatest()
 
 proc postMenuEvent(
