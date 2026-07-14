@@ -238,6 +238,8 @@ layout.pinEdges(
   toGuide = root.contentLayoutGuide(insets(22.0, 24.0)),
   edges = {leLeft, leTop, leRight, leBottom},
 )
+panel.styleMask = panel.styleMask + {wsmResizable}
+panel.automaticallyAdjustsContentMinSize = true
 
 applyAppearance()
 app.runWindow(panel, root, themePicker)

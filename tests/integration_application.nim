@@ -658,6 +658,46 @@ suite "nimkit application":
     check openPanel.canChooseFiles
     check savePanel.window.title == "Save"
 
+  test "window content minimum size constrains programmatic resizing":
+    let window = newWindow("Minimum", frame = rect(0, 0, 240, 160))
+
+    window.minSize = initSize(100, 70)
+    window.contentMinSize = initSize(140, 90)
+    window.frame = rect(10, 20, 40, 30)
+
+    check window.minSize == initSize(100, 70)
+    check window.contentMinSize == initSize(140, 90)
+    check window.frame == rect(10, 20, 140, 90)
+
+  test "window can derive its content minimum from constrained layout":
+    let
+      window = newWindow("Automatic minimum", frame = rect(0, 0, 80, 60))
+      root = newView()
+      stack = newStackView(laVertical)
+      button = newButton("Initial setting")
+
+    stack.addArrangedSubview(button)
+    root.addSubview(stack)
+    discard stack.pinEdges(
+      toGuide = root.contentLayoutGuide(insets(12.0, 18.0)),
+      edges = {leLeft, leTop, leRight, leBottom},
+    )
+    window.automaticallyAdjustsContentMinSize = true
+    window.setContentView(root)
+
+    let initialMinimum = root.fittingSize()
+    check window.contentMinSize == initialMinimum
+    check window.frame.size.width >= initialMinimum.width
+    check window.frame.size.height >= initialMinimum.height
+
+    window.frame = rect(0, 0, 1, 1)
+    check window.frame.size == initialMinimum
+
+    button.title =
+      "A substantially longer setting that increases the required window width"
+    check window.contentMinSize.width > initialMinimum.width
+    check window.frame.size.width == window.contentMinSize.width
+
   test "panels build reusable pure Nim views and validate selections":
     let
       alert = newAlert(
@@ -1062,6 +1102,7 @@ suite "nimkit application":
         root = newView(frame = rect(0, 0, 240, 140))
 
       root.addSubview(newTextField("Native window", frame = rect(16, 16, 180, 32)))
+      window.contentMinSize = initSize(120, 80)
       window.setContentView(root)
       app.addWindow(window)
 
@@ -1073,6 +1114,10 @@ suite "nimkit application":
         check app.runForFrames(2) == 2
         check window.nativeReady
         check not window.nativeWindowOrNil().isNil
+        when compiles(window.nativeWindowOrNil().minSize):
+          check window.nativeWindowOrNil().minSize == siwinshim.ivec2(120, 80)
+          window.contentMinSize = initSize(150, 90)
+          check window.nativeWindowOrNil().minSize == siwinshim.ivec2(150, 90)
       except CatchableError:
         skip()
         break nativeRun

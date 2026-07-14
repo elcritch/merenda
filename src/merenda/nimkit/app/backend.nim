@@ -119,6 +119,12 @@ proc nativePixels(value: float32, scale: float32): int32 =
 proc nativeWindowSize(frameSize: Size, scale: float32): IVec2 =
   ivec2(nativePixels(frameSize.width, scale), nativePixels(frameSize.height, scale))
 
+proc nativeWindowLimit(value, scale: float32): int32 =
+  let scaled = value * scale
+  if scaled <= 0.0'f32 or scaled >= int32.high.float32:
+    return 0
+  max(scaled.round().int32, 1)
+
 proc overrideScale(override: Option[UiScaleOverride]): float32 =
   if override.isSome:
     override.get().scale
@@ -756,6 +762,35 @@ proc logicalSize*(host: HostWindow, fallback: Size): Size =
   if nativeSize.x <= 0.0'f32 or nativeSize.y <= 0.0'f32:
     return initSize(max(fallback.width, 1.0'f32), max(fallback.height, 1.0'f32))
   initSize(nativeSize.x, nativeSize.y)
+
+proc nativeSizeScale(host: HostWindow): float32 =
+  if host.xHasUiScaleOverride or host.usesScaledBackingSize(host.xNativeWindow):
+    host.configuredUiScale()
+  else:
+    1.0'f32
+
+proc setLogicalSize*(host: HostWindow, size: Size) =
+  if not host.isReady:
+    return
+  host.xNativeWindow.size = nativeWindowSize(size, host.nativeSizeScale())
+
+proc setMinimumSize*(host: HostWindow, size: Size) =
+  if not host.isReady:
+    return
+  let
+    scale = host.nativeSizeScale()
+    nativeSize =
+      ivec2(nativeWindowLimit(size.width, scale), nativeWindowLimit(size.height, scale))
+  host.xNativeWindow.minSize = nativeSize
+
+proc setMaximumSize*(host: HostWindow, size: Size) =
+  if not host.isReady:
+    return
+  let
+    scale = host.nativeSizeScale()
+    nativeSize =
+      ivec2(nativeWindowLimit(size.width, scale), nativeWindowLimit(size.height, scale))
+  host.xNativeWindow.maxSize = nativeSize
 
 proc setTitle*(host: HostWindow, title: string) =
   if host.isReady:

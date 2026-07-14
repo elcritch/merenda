@@ -127,6 +127,9 @@ type
     xMiniaturized: bool
     xZoomed: bool
     xMinSize: Size
+    xContentMinSize: Size
+    xAutomaticContentMinSize: Size
+    xAutomaticallyAdjustsContentMinSize: bool
     xMaxSize: Size
     xResizeIncrements: Size
     xFrameAutosaveName: string
@@ -320,6 +323,8 @@ proc drainAnimations*(window: Window): int {.discardable.}
 proc updateInsertionPointBlink(window: Window)
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
+proc refreshAutomaticContentMinSize(window: Window)
+proc syncNativeSizeLimits(window: Window)
 proc dispatchKeyEventInChain(
   window: Window, target: Responder, event: events.KeyEvent, selector: KeyEventSelector
 ): EventDispatchResult
@@ -464,13 +469,41 @@ proc popupPlacement(
 proc frame*(window: Window): Rect =
   window.xFrame
 
+func componentMaximum(a, b: Size): Size =
+  initSize(max(a.width, b.width), max(a.height, b.height))
+
+func normalizedMinimumSize(size: Size): Size =
+  initSize(max(size.width, 0.0'f32), max(size.height, 0.0'f32))
+
+proc contentMinSize*(window: Window): Size =
+  window.xContentMinSize.componentMaximum(window.xAutomaticContentMinSize)
+
+proc effectiveMinimumSize(window: Window): Size =
+  window.xMinSize.componentMaximum(window.contentMinSize())
+
+proc effectiveMaximumSize(window: Window): Size =
+  window.xMaxSize.componentMaximum(window.effectiveMinimumSize())
+
+proc boundedWindowSize(window: Window, size: Size): Size =
+  let
+    minimum = window.effectiveMinimumSize()
+    maximum = window.effectiveMaximumSize()
+  initSize(
+    min(max(size.width, minimum.width), maximum.width),
+    min(max(size.height, minimum.height), maximum.height),
+  )
+
 proc setFrame*(window: Window, frame: Rect) =
-  if window.xFrame == frame:
+  let boundedFrame = rect(frame.origin, window.boundedWindowSize(frame.size))
+  if window.xFrame == boundedFrame:
     return
-  window.xFrame = frame
+  window.xFrame = boundedFrame
   if not window.xContentView.isNil:
-    window.xContentView.setFrame(rect(0.0, 0.0, frame.size.width, frame.size.height))
+    window.xContentView.setFrame(
+      rect(0.0, 0.0, boundedFrame.size.width, boundedFrame.size.height)
+    )
   if not window.xHostWindow.isNil:
+    window.xHostWindow.setLogicalSize(boundedFrame.size)
     window.requestNativeDisplayUpdate()
 
 proc `frame=`*(window: Window, frame: Rect) =
@@ -530,13 +563,31 @@ proc minSize*(window: Window): Size =
   window.xMinSize
 
 proc `minSize=`*(window: Window, size: Size) =
-  window.xMinSize = size
+  window.xMinSize = size.normalizedMinimumSize()
+  window.syncNativeSizeLimits()
+  window.setFrame(window.xFrame)
+
+proc `contentMinSize=`*(window: Window, size: Size) =
+  window.xContentMinSize = size.normalizedMinimumSize()
+  window.syncNativeSizeLimits()
+  window.setFrame(window.xFrame)
+
+proc automaticallyAdjustsContentMinSize*(window: Window): bool =
+  window.xAutomaticallyAdjustsContentMinSize
+
+proc `automaticallyAdjustsContentMinSize=`*(window: Window, value: bool) =
+  if window.xAutomaticallyAdjustsContentMinSize == value:
+    return
+  window.xAutomaticallyAdjustsContentMinSize = value
+  window.refreshAutomaticContentMinSize()
 
 proc maxSize*(window: Window): Size =
   window.xMaxSize
 
 proc `maxSize=`*(window: Window, size: Size) =
   window.xMaxSize = size
+  window.syncNativeSizeLimits()
+  window.setFrame(window.xFrame)
 
 proc resizeIncrements*(window: Window): Size =
   window.xResizeIncrements
@@ -760,16 +811,47 @@ proc setMouseActiveView(window: Window, view: View) =
   if not view.isNil:
     view.active = true
 
+proc syncNativeSizeLimits(window: Window) =
+  if window.xHostWindow.isNil:
+    return
+  window.xHostWindow.setMinimumSize(window.effectiveMinimumSize())
+  window.xHostWindow.setMaximumSize(window.effectiveMaximumSize())
+
+proc refreshAutomaticContentMinSize(window: Window) =
+  let nextSize =
+    if window.xAutomaticallyAdjustsContentMinSize and not window.xContentView.isNil:
+      window.xContentView.fittingSize()
+    else:
+      initSize()
+  if window.xAutomaticContentMinSize == nextSize:
+    return
+  window.xAutomaticContentMinSize = nextSize
+  window.syncNativeSizeLimits()
+  window.setFrame(window.xFrame)
+
+protocol WindowContentLayoutSlots of ViewLayoutInputEvents:
+  proc handleWindowContentLayoutChange(
+      window: Window, reason: LayoutInvalidationReason
+  ) {.slotFor: layoutInputChanged.} =
+    if window.xAutomaticallyAdjustsContentMinSize and
+        reason in {
+          lirSubviews, lirHierarchy, lirDescendantIntrinsic, lirHidden, lirConstraints,
+          lirIntrinsic, lirAppearanceMetrics, lirContainerMetrics,
+        }:
+      window.refreshAutomaticContentMinSize()
+
 proc setContentView*(window: Window, view: View) =
   if not window.shouldSetContentView(view):
     return
   if window.xContentView == view:
     window.clearMouseState()
+    window.refreshAutomaticContentMinSize()
     return
 
   let oldContent = window.xContentView
   emit window.willSetContentView(view)
   if not oldContent.isNil:
+    window.unobserveProtocol(oldContent, WindowContentLayoutSlots)
     window.clearMouseState()
     if not window.xFirstResponder.isNil and window.xFirstResponder of View:
       let firstResponderView = View(window.xFirstResponder)
@@ -792,11 +874,13 @@ proc setContentView*(window: Window, view: View) =
   window.clearMouseState()
   if not view.isNil:
     view.setFrame(rect(0.0, 0.0, window.xFrame.size.width, window.xFrame.size.height))
+    window.observeProtocol(view, WindowContentLayoutSlots)
     view.setNeedsLayout()
     view.setNeedsDisplaySubtree()
   if window.xAutorecalculatesKeyViewLoop:
     window.recalculateKeyViewLoop()
   emit window.didSetContentView(oldContent)
+  window.refreshAutomaticContentMinSize()
   if not window.xHostWindow.isNil:
     window.requestNativeDisplayUpdate()
 
@@ -1604,7 +1688,10 @@ proc dispatchFlagsChanged*(window: Window, event: events.KeyEvent): bool =
   window.dispatchKeyEventInChain(target, event, flagsChanged()).handled
 
 proc syncNativeGeometry(window: Window): Size =
-  result = window.xHostWindow.logicalSize(window.xFrame.size)
+  let nativeSize = window.xHostWindow.logicalSize(window.xFrame.size)
+  result = window.boundedWindowSize(nativeSize)
+  if nativeSize != result:
+    window.xHostWindow.setLogicalSize(result)
   if window.xFrame.size != result:
     window.xFrame.size = result
     if not window.xContentView.isNil:
@@ -2287,6 +2374,7 @@ proc ensureNativeWindow*(window: Window) =
     )
   else:
     window.xHostWindow = createHostWindow(window.xFrame, window.xTitle, callbacks)
+  window.syncNativeSizeLimits()
   if window.xVisibleRequested:
     window.xHostWindow.setVisible(true)
 

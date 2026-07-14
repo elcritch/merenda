@@ -29,6 +29,34 @@ suite "nimkit sizing":
     view.sizeToFit()
     check view.frame() == initialFrame
 
+  test "fitting size resolves a constraint-wrapped intrinsic subtree":
+    let
+      root = newView(frame = rect(0, 0, 40, 30))
+      stack = newStackView(laVertical)
+      button = newButton("Constraint fitting")
+
+    stack.addArrangedSubview(button)
+    root.addSubview(stack)
+    discard stack.pinEdges(
+      toGuide = root.contentLayoutGuide(insets(12.0, 18.0)),
+      edges = {leLeft, leTop, leRight, leBottom},
+    )
+
+    let
+      rootFrame = root.frame()
+      stackFrame = stack.frame()
+      natural = button.sizeThatFits()
+      fitting = root.fittingSize()
+
+    check fitting == initSize(natural.width + 36.0, natural.height + 24.0)
+    check root.frame() == rootFrame
+    check stack.frame() == stackFrame
+
+  test "fitting size uses intrinsic dimensions for an unconstrained control":
+    let button = newButton("Natural")
+
+    check button.fittingSize() == button.sizeThatFits()
+
   test "cyclic intrinsic sizing fails with a layout resolution defect":
     let view = newCyclicIntrinsicView()
 

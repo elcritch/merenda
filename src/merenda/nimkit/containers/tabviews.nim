@@ -30,7 +30,12 @@ type
   TabBarView = ref object of View
     xTabView: TabView
 
-  TabViewItem* = ref object
+  TabViewItemChangeKind = enum
+    tvickMetrics
+    tvickView
+    tvickDisplay
+
+  TabViewItem* = ref object of DynamicAgent
     xIdentifier: string
     xLabel: string
     xView: View
@@ -49,6 +54,16 @@ type
     xTabMode: TabViewMode
     xDelegate: DynamicAgent
     xTabBar: TabBarView
+    xObservedItems: seq[TabViewItem]
+    xObservedContentViews: seq[View]
+
+protocol TabViewItemEvents:
+  proc tabViewItemDidChange(
+    item: TabViewItem,
+    changedItem: TabViewItem,
+    kind: TabViewItemChangeKind,
+    oldView: View,
+  ) {.signal.}
 
 proc syncSelectedContent(tabView: TabView)
 proc selectTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable.}
@@ -91,19 +106,29 @@ proc label*(item: TabViewItem): string =
   item.xLabel
 
 proc `label=`*(item: TabViewItem, label: string) =
+  if item.xLabel == label:
+    return
   item.xLabel = label
+  emit item.tabViewItemDidChange(item, tvickMetrics, nil)
 
 proc view*(item: TabViewItem): View =
   item.xView
 
 proc `view=`*(item: TabViewItem, view: View) =
+  if item.xView == view:
+    return
+  let oldView = item.xView
   item.xView = view
+  emit item.tabViewItemDidChange(item, tvickView, oldView)
 
 proc enabled*(item: TabViewItem): bool =
   item.xEnabled
 
 proc `enabled=`*(item: TabViewItem, enabled: bool) =
+  if item.xEnabled == enabled:
+    return
   item.xEnabled = enabled
+  emit item.tabViewItemDidChange(item, tvickDisplay, nil)
 
 proc toolTip*(item: TabViewItem): string =
   item.xToolTip
@@ -174,6 +199,7 @@ proc `tabMode=`*(tabView: TabView, mode: TabViewMode) =
   if tabView.xTabMode == mode:
     return
   tabView.xTabMode = mode
+  tabView.invalidateIntrinsicContentSize()
   tabView.syncTabBarFrame()
   tabView.setNeedsLayout()
   tabView.setNeedsDisplay(true)
@@ -371,13 +397,96 @@ proc selectedContentView(tabView: TabView): View =
   else:
     item.view()
 
-proc contentIntrinsicHeight(tabView: TabView): float32 =
+proc contentFittingSize(tabView: TabView): Size =
   for item in tabView.xItems:
     let content = item.view()
     if not content.isNil:
-      let measured = content.trySendLocal(layoutIntrinsicContentSize(), ())
-      if measured.isSome and measured.get().hasHeight:
-        result = max(result, measured.get().height)
+      let measured = content.fittingSize()
+      result.width = max(result.width, measured.width)
+      result.height = max(result.height, measured.height)
+
+proc observesItem(tabView: TabView, item: TabViewItem): bool =
+  for observed in tabView.xObservedItems:
+    if observed == item:
+      return true
+
+proc observesContentView(tabView: TabView, content: View): bool =
+  for observed in tabView.xObservedContentViews:
+    if observed == content:
+      return true
+
+proc usesContentView(tabView: TabView, content: View): bool =
+  if content.isNil:
+    return false
+  for item in tabView.xItems:
+    if item.view() == content:
+      return true
+
+proc observeItem(tabView: TabView, item: TabViewItem)
+proc unobserveItem(tabView: TabView, item: TabViewItem)
+
+protocol TabViewContentLayoutSlots of ViewLayoutInputEvents:
+  proc handleTabViewContentLayoutChange(
+      tabView: TabView, reason: LayoutInvalidationReason
+  ) {.slotFor: layoutInputChanged.} =
+    if reason in {
+      lirSubviews, lirHierarchy, lirDescendantIntrinsic, lirHidden, lirConstraints,
+      lirIntrinsic, lirAppearanceMetrics, lirContainerMetrics,
+    }:
+      tabView.invalidateIntrinsicContentSize()
+
+protocol TabViewItemChangeSlots of TabViewItemEvents:
+  proc handleTabViewItemChange(
+      tabView: TabView, item: TabViewItem, kind: TabViewItemChangeKind, oldView: View
+  ) {.slotFor: tabViewItemDidChange.} =
+    case kind
+    of tvickMetrics:
+      tabView.invalidateIntrinsicContentSize()
+      tabView.setNeedsDisplay(true)
+      tabView.xTabBar.setNeedsDisplay(true)
+    of tvickView:
+      if not oldView.isNil:
+        if oldView.superview() == View(tabView):
+          oldView.removeFromSuperview()
+        if tabView.observesContentView(oldView) and not tabView.usesContentView(oldView):
+          tabView.unobserveProtocol(oldView, TabViewContentLayoutSlots)
+          let index = tabView.xObservedContentViews.find(oldView)
+          if index >= 0:
+            tabView.xObservedContentViews.delete(index)
+      if not item.view().isNil and not tabView.observesContentView(item.view()):
+        tabView.observeProtocol(item.view(), TabViewContentLayoutSlots)
+        tabView.xObservedContentViews.add item.view()
+      tabView.invalidateIntrinsicContentSize()
+      tabView.syncSelectedContent()
+      tabView.setNeedsLayout()
+    of tvickDisplay:
+      tabView.setNeedsDisplay(true)
+      tabView.xTabBar.setNeedsDisplay(true)
+
+proc observeItem(tabView: TabView, item: TabViewItem) =
+  if item.isNil:
+    return
+  if not tabView.observesItem(item):
+    tabView.observeProtocol(item, TabViewItemChangeSlots)
+    tabView.xObservedItems.add item
+  let content = item.view()
+  if not content.isNil and not tabView.observesContentView(content):
+    tabView.observeProtocol(content, TabViewContentLayoutSlots)
+    tabView.xObservedContentViews.add content
+
+proc unobserveItem(tabView: TabView, item: TabViewItem) =
+  if item.isNil:
+    return
+  let itemIndex = tabView.xObservedItems.find(item)
+  if itemIndex >= 0:
+    tabView.unobserveProtocol(item, TabViewItemChangeSlots)
+    tabView.xObservedItems.delete(itemIndex)
+  let
+    content = item.view()
+    contentIndex = tabView.xObservedContentViews.find(content)
+  if contentIndex >= 0 and not tabView.usesContentView(content):
+    tabView.unobserveProtocol(content, TabViewContentLayoutSlots)
+    tabView.xObservedContentViews.delete(contentIndex)
 
 proc detachItemView(tabView: TabView, item: TabViewItem) =
   if item.isNil or item.xView.isNil:
@@ -479,6 +588,7 @@ proc addTabViewItem*(tabView: TabView, item: TabViewItem): TabViewItem {.discard
   if item.isNil:
     return nil
   tabView.xItems.add item
+  tabView.observeItem(item)
   tabView.invalidateIntrinsicContentSize()
   if tabView.xSelectedIndex < 0 and item.enabled():
     tabView.xSelectedIndex = tabView.xItems.high
@@ -494,6 +604,7 @@ proc insertTabViewItem*(
     return nil
   let boundedIndex = min(index.int, tabView.xItems.len)
   tabView.xItems.insert(item, boundedIndex)
+  tabView.observeItem(item)
   tabView.invalidateIntrinsicContentSize()
   if tabView.xSelectedIndex >= boundedIndex:
     inc tabView.xSelectedIndex
@@ -507,8 +618,11 @@ proc removeTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable
   if index < 0 or index >= tabView.xItems.len:
     return
   let removingSelected = index == tabView.xSelectedIndex
-  tabView.detachItemView(tabView.xItems[index])
+  let removedItem = tabView.xItems[index]
+  tabView.detachItemView(removedItem)
   tabView.xItems.delete(index)
+  if tabView.indexOfTabViewItem(removedItem) < 0:
+    tabView.unobserveItem(removedItem)
   tabView.invalidateIntrinsicContentSize()
   if tabView.xItems.len == 0:
     tabView.xSelectedIndex = -1
@@ -760,14 +874,14 @@ protocol TabViewLayout of ViewLayoutProtocol:
     let
       style = tabView.tabStyle()
       tabWidthSum = tabView.tabGroupWidth(style) + style.tabInset * 2.0'f32
-      contentHeight = tabView.contentIntrinsicHeight()
+      contentSize = tabView.contentFittingSize()
+      contentInsets = tabView.tabPosition.contentViewInsets()
     initIntrinsicSize(
-      max(tabWidthSum, 160.0'f32),
+      max(max(tabWidthSum, contentSize.width + contentInsets.horizontal), 160.0'f32),
       max(
         120.0'f32,
-        contentHeight + contentChromeHeight(
-          tabView.tabPosition, tabView.xTabMode, style
-        ),
+        contentSize.height +
+          contentChromeHeight(tabView.tabPosition, tabView.xTabMode, style),
       ),
     )
 

@@ -1186,6 +1186,17 @@ proc addRootGeometryConstraints(state: var LayoutSolveState, root: View) =
   state.addSolverConstraint(eq(solverView.width, rect.size.width.solverValue))
   state.addSolverConstraint(eq(solverView.height, rect.size.height.solverValue))
 
+proc addRootFittingConstraints(state: var LayoutSolveState, root: View) =
+  if root.isNil:
+    return
+  let
+    solverView = state.solverView(root)
+    rect = root.alignmentRect()
+  state.addSolverConstraint(eq(solverView.left, rect.minX.solverValue))
+  state.addSolverConstraint(eq(solverView.top, rect.minY.solverValue))
+  state.addStay(solverView.width, 0.0'f32, Weak)
+  state.addStay(solverView.height, 0.0'f32, Weak)
+
 proc addRelation(
     state: var LayoutSolveState,
     left, right: Expression,
@@ -1472,3 +1483,25 @@ proc applyConstraintsForSubtree*(view: View) =
   state.applySolvedFrames()
   state.refreshAutoresizingStates()
   state.refreshLayoutInputCaches(view)
+
+proc fittingSize*(view: View): Size =
+  if view.isNil:
+    return initSize()
+
+  var state = initLayoutSolveState()
+  state.collectSolverViews(view)
+  state.collectConstraintItems(view)
+  state.addConstraintItem(view)
+  state.addRootFittingConstraints(view)
+  state.addNonNegativeSizeConstraints()
+  state.addOwnedConstraints(view)
+  state.refreshGeneratedLayoutInputs(view)
+  state.addGeometryStays(view)
+  state.solver.updateVariables()
+  state.refreshLayoutInputCaches(view)
+
+  let solverView = state.solverView(view)
+  initSize(
+    max(solverView.width.solvedFloat(), 0.0'f32),
+    max(solverView.height.solvedFloat(), 0.0'f32),
+  )

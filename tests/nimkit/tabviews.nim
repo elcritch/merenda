@@ -71,6 +71,14 @@ proc newTabViewDemoPane(): View =
   stack.addFlexibleSpacer()
   View(stack)
 
+proc newConstraintWrappedPane(content: View, edgeInsets = insets(0.0)): View =
+  result = newView()
+  result.addSubview(content)
+  discard content.pinEdges(
+    toGuide = result.contentLayoutGuide(edgeInsets),
+    edges = {leLeft, leTop, leRight, leBottom},
+  )
+
 proc newTabViewDemoFixture(): TabViewDemoFixture =
   let
     root = newView()
@@ -278,6 +286,83 @@ suite "nimkit tab views":
     tabView.frame = rect(0, 0, 320, tabHeight)
     tabView.layoutSubtreeIfNeeded()
     check pane.frame.size.height >= paneHeight - 0.01'f32
+
+  test "tab view fitting size includes every constraint-wrapped page":
+    let
+      tabView = newTabView(frame = rect(0, 0, 120, 80))
+      wideStack = newStackView(laVertical)
+      tallStack = newStackView(laVertical)
+
+    wideStack.addArrangedSubview(
+      newButton("A deliberately wide setting that must fit without clipping")
+    )
+    for label in ["First", "Second", "Third", "Fourth", "Fifth"]:
+      tallStack.addArrangedSubview(newButton(label))
+    tallStack.spacing = 10.0
+
+    let
+      widePage = newConstraintWrappedPane(wideStack, insets(8.0, 14.0))
+      tallPage = newConstraintWrappedPane(tallStack, insets(16.0, 10.0))
+      widePageSize = widePage.fittingSize()
+      tallPageSize = tallPage.fittingSize()
+
+    discard tabView.addTabViewItem(newTabViewItem("Wide", widePage))
+    discard tabView.addTabViewItem(newTabViewItem("Tall", tallPage))
+
+    let tabSize = tabView.fittingSize()
+    check tabSize.width >= widePageSize.width + 32.0'f32
+    check tabSize.height > tallPageSize.height
+
+    tabView.frame = rect(initPoint(), tabSize)
+    tabView.layoutSubtreeIfNeeded()
+    check widePage.frame() == tabView.contentViewRect()
+
+  test "unselected tab page changes invalidate tab fitting size":
+    let
+      root = newView(frame = rect(0, 0, 400, 240))
+      tabView = newTabView(frame = rect(0, 0, 320, 180))
+      firstStack = newStackView(laVertical)
+      secondStack = newStackView(laVertical)
+      changingButton = newButton("Short")
+
+    firstStack.addArrangedSubview(newButton("First"))
+    secondStack.addArrangedSubview(changingButton)
+    discard tabView.addTabViewItem(
+      newTabViewItem("First", newConstraintWrappedPane(firstStack))
+    )
+    discard tabView.addTabViewItem(
+      newTabViewItem("Second", newConstraintWrappedPane(secondStack))
+    )
+    root.addSubview(tabView)
+    root.layoutSubtreeIfNeeded()
+    root.needsLayout = false
+    tabView.needsLayout = false
+
+    let initialWidth = tabView.fittingSize().width
+    changingButton.title =
+      "A much longer unselected setting that changes the required panel width"
+
+    check root.needsLayout
+    check tabView.needsLayout
+    check tabView.fittingSize().width > initialWidth
+
+  test "replacing a selected tab item view updates hosted content":
+    let
+      tabView = newTabView(frame = rect(0, 0, 320, 180))
+      oldView = newView()
+      replacement = newStackView(laVertical)
+      item = newTabViewItem("General", oldView)
+
+    replacement.addArrangedSubview(newButton("Replacement"))
+    discard tabView.addTabViewItem(item)
+    check oldView.superview() == View(tabView)
+
+    item.view = replacement
+    tabView.layoutSubtreeIfNeeded()
+
+    check oldView.superview().isNil
+    check replacement.superview() == View(tabView)
+    check replacement.frame() == tabView.contentViewRect()
 
   test "tab view renders panel tab labels and selected content":
     let

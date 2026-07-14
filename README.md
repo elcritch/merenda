@@ -92,6 +92,12 @@ window without entering the application run loop. Pass an initial responder as
 the third argument, such as `app.runWindow(window, root, textField)`, when a
 specific control should receive focus first.
 
+Constraint-wrapped views expose their minimum layout through `fittingSize()`.
+Set `window.automaticallyAdjustsContentMinSize = true` to keep a resizable
+window from becoming smaller than that fitting size. Tab views include the
+largest fitting width and height required by any of their pages, so switching
+pages does not reveal clipped content.
+
 Merenda apps automatically use the native window content scale. To force a
 specific UI scale for development or display debugging, set `UISCALE` or
 `NIMKIT_UISCALE`:
