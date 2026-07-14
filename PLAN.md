@@ -366,6 +366,12 @@ build on that vocabulary instead of adding parallel storage models.
 
 ## Near-Term Work
 
+### Threading
+
+Split the renderer and apps to run on separate threads. Make the renderer take the primary thread and run the app on a new thread. Use Sigils thread, probably the thread-selectors. Fig nodes should be sent using channels. Review ../figuro/ render and app split and follow it's design.
+
+Next I want to be able to run receive Sigil signals and run slots. Don't forget to tie it into animation events / timings.
+
 ### FigDraw Managed Font and Image Resources
 
 Migrate NimKit drawing and cached layouts from unmanaged `FigFont`/`ImageId`
