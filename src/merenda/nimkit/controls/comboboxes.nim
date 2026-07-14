@@ -252,7 +252,7 @@ proc invalidateOptionIndex(cache: var ComboBoxOptionIndexCache, corpusChanged = 
     cache.corpusValid = false
   cache.visibleIndexesValid = false
 
-proc ensureSearchCorpus(
+proc refreshSearchCorpus(
     cache: var ComboBoxOptionIndexCache, options: openArray[ComboBoxOption]
 ) =
   if cache.corpusValid and cache.searchCorpus.len == options.len:
@@ -263,7 +263,7 @@ proc ensureSearchCorpus(
   cache.corpusValid = true
   cache.visibleIndexesValid = false
 
-proc ensureVisibleOptionIndexes(
+proc refreshVisibleOptionIndexes(
     cache: var ComboBoxOptionIndexCache,
     options: openArray[ComboBoxOption],
     filterText: string,
@@ -273,7 +273,7 @@ proc ensureVisibleOptionIndexes(
     return
 
   if normalizedFilter.len > 0:
-    cache.ensureSearchCorpus(options)
+    cache.refreshSearchCorpus(options)
   cache.visibleStorageIndexes.setLen(0)
   cache.identifierToVisibleIndex = initTable[string, int]()
   for storageIndex, option in options:
@@ -294,7 +294,7 @@ proc visibleOptionCount(
     options: openArray[ComboBoxOption],
     filterText: string,
 ): int =
-  cache.ensureVisibleOptionIndexes(options, filterText)
+  cache.refreshVisibleOptionIndexes(options, filterText)
   cache.visibleStorageIndexes.len
 
 proc visibleOptionStorageIndex(
@@ -303,7 +303,7 @@ proc visibleOptionStorageIndex(
     visibleIndex: int,
     filterText: string,
 ): int =
-  cache.ensureVisibleOptionIndexes(options, filterText)
+  cache.refreshVisibleOptionIndexes(options, filterText)
   if visibleIndex in 0 ..< cache.visibleStorageIndexes.len:
     cache.visibleStorageIndexes[visibleIndex]
   else:
@@ -315,7 +315,7 @@ proc visibleOptionInsertionIndex(
     visibleIndex: int,
     filterText: string,
 ): int =
-  cache.ensureVisibleOptionIndexes(options, filterText)
+  cache.refreshVisibleOptionIndexes(options, filterText)
   let target = max(visibleIndex, 0)
   if target < cache.visibleStorageIndexes.len:
     cache.visibleStorageIndexes[target]
@@ -339,7 +339,7 @@ proc indexOfVisibleOptionIdentifier(
 ): int =
   if identifier.len == 0:
     return -1
-  cache.ensureVisibleOptionIndexes(options, filterText)
+  cache.refreshVisibleOptionIndexes(options, filterText)
   cache.identifierToVisibleIndex.getOrDefault(identifier, -1)
 
 proc initComboBoxOptionListFields(

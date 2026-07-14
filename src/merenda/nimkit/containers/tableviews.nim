@@ -890,7 +890,7 @@ proc invalidateTableModelCaches(
     model.xArrangementValid = false
   inc model.xRevision
 
-proc ensureSourceIdentifierIndex(model: TableModel) =
+proc refreshSourceIdentifierIndex(model: TableModel) =
   if model.xSourceIndexValid:
     return
   model.xSourceIndexByIdentifier = initTable[string, int]()
@@ -902,7 +902,7 @@ proc ensureSourceIdentifierIndex(model: TableModel) =
 proc sourceIndexOfIdentifier(model: TableModel, identifier: string): int =
   if identifier.len == 0:
     return -1
-  model.ensureSourceIdentifierIndex()
+  model.refreshSourceIdentifierIndex()
   model.xSourceIndexByIdentifier.getOrDefault(identifier, -1)
 
 proc ensureArrangement(model: TableModel) =
