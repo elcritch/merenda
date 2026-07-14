@@ -365,22 +365,38 @@ If you tab-select a button and use enter or space to activate it the button does
 ### FigDraw Managed Font and Image Resources
 
 Migrate NimKit drawing and cached layouts from unmanaged `FigFont`/`ImageId`
-lifetimes to FigDraw's `FontRef` and `ImageRef` ownership model. Keep rendering
+lifetime handling to a hybrid ownership model: Merenda owns resource-lifetime
+policy and lease scopes, while FigDraw's `FontRef` and `ImageRef` own the
+underlying retain/release bookkeeping and final backend cleanup. Keep rendering
 data cheap and copyable while ensuring that visible and preloaded resources stay
 resident, unused resources become eligible for eviction, and every renderer can
 recover after its image atlas is rebuilt.
 
 - Keep `TextStyle`, `TextAttributes`, theme values, model records, and FigDraw
   nodes as plain descriptors or raw IDs. Do not embed thread-affine `FontRef` or
-  `ImageRef` values in broadly copied or cross-thread data. Use FigDraw's refs
-  directly rather than adding a second NimKit font-handle type, and rely on their
-  ARC/ORC-managed ref-object destructors instead of adding NimKit ownership hooks.
-- Add an internal `RenderResourceSet` beside each cached root `Renders`. It should
-  deduplicate fonts by `FontId` and images by `ImageId`, retain refs for at least
-  as long as the cached nodes can render, and retain the corresponding
-  `ImageResource` reload source. Build the replacement resource set before
-  releasing the previous set so unchanged resources never pass through a
-  zero-owner gap during display-cache replacement.
+  `ImageRef` values in broadly copied or cross-thread data. Treat FigDraw refs as
+  the internal lease implementation rather than as NimKit's public resource
+  identity.
+- Add an internal per-host render-resource manager as the only place that creates
+  and releases drawing leases. Merenda explicitly decides which resources are
+  active, preloaded, pinned, or rebuildable; the manager owns the current render
+  snapshot's `RenderResourceSet` plus bounded preload and named-resource lease
+  sets. Do not add a parallel NimKit refcount or a second font/image handle type.
+- Store a `RenderResourceSet` beside each cached root `Renders`. It should
+  deduplicate fonts by `FontId` and images by `ImageId`, hold FigDraw refs for at
+  least as long as the cached nodes can render, and retain the corresponding
+  `ImageResource` reload source. Update these sets explicitly when render caches
+  are committed or discarded, visibility changes affect the active working set,
+  preload/pin policy changes, or the host is torn down.
+- Build a replacement resource set before releasing the previous set so
+  unchanged resources never pass through a zero-owner gap during display-cache
+  replacement. Let ARC/ORC destroy the contained FigDraw refs normally; their
+  existing destructors provide the actual release operation, so the manager and
+  resource set need no custom NimKit ownership hooks.
+- Never use a force-clear, `clearImageCache`, or raw-ID eviction as the normal
+  release path. Dropping Merenda's last lease only makes the logical resource
+  eligible for FigDraw eviction; renderer-local atlas clearing and rebuilding are
+  separate pressure/recovery operations coordinated at a frame boundary.
 - Keep refs on the UI/render thread that created them. Background text layout or
   image decoding may pass `FigFont`, `FontId`, `TypefaceId`, `ImageId`, encoded
   data, or decoded pixels back to that thread, but must create its own ref if it
