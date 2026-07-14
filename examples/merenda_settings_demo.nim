@@ -1,6 +1,6 @@
 import merenda/nimkit
 
-import std/[algorithm, os]
+import std/[options, os]
 import sigils/selectors
 
 when defined(useNativeDynlib):
@@ -44,20 +44,11 @@ func title(size: DemoFontSize): string =
   of dfs18: "18 pt"
   of dfs20: "20 pt"
 
-proc systemFontPaths(): seq[string] =
-  result = systemFontFiles()
-  result.sort()
-
 proc fontTitle(path: string): string =
   if path.len == 0:
     "Default"
   else:
     path.extractFilename()
-
-proc fontPickerItems(paths: openArray[string]): seq[string] =
-  result.add "Default"
-  for path in paths:
-    result.add path.fontTitle()
 
 func pointSize(size: DemoFontSize): float32 =
   case size
@@ -117,7 +108,7 @@ let
   themeLabel = newFormLabel("Theme")
   fontLabel = newFormLabel("Font")
   fontSizeLabel = newFormLabel("Size")
-  fontPaths = systemFontPaths()
+  fontPickerSource = newSystemFontCatalogDataSource()
   themePicker = newComboBox(
     [
       dtDefault.title(),
@@ -127,7 +118,7 @@ let
       dtSynthwave83.title(),
     ]
   )
-  fontPicker = newComboBox(fontPickerItems(fontPaths))
+  fontPicker = newComboBox()
   fontSizePicker = newComboBox(
     [dfs12.title(), dfs14.title(), dfs16.title(), dfs18.title(), dfs20.title()]
   )
@@ -164,13 +155,14 @@ proc themeDidChange(sender: DynamicAgent) =
 
 proc fontDidChange(sender: DynamicAgent) =
   if sender of ComboBox:
-    let index = ComboBox(sender).selectedIndex()
-    if index == 0:
-      previewFontPath = ""
-      updatePreview()
-    elif index > 0 and index - 1 < fontPaths.len:
-      previewFontPath = fontPaths[index - 1]
-      updatePreview()
+    let
+      comboBox = ComboBox(sender)
+      index = comboBox.selectedIndex()
+    if index >= 0:
+      let fontPath = comboBox.itemObjectValueAtIndex(index).getString()
+      if fontPath.isSome:
+        previewFontPath = fontPath.get()
+        updatePreview()
 
 proc fontSizeDidChange(sender: DynamicAgent) =
   if sender of ComboBox:
@@ -194,6 +186,9 @@ for form in [appearanceForm, typographyForm]:
 themePicker.selectedIndex = activeTheme.ord
 themePicker.target = newActionTarget(themeChanged, themeDidChange)
 themePicker.action = themeChanged
+fontPicker.sizingMode = cbsmPreferredWidth
+fontPicker.preferredContentWidth = DefaultFontPickerContentWidth
+fontPicker.dataSource = fontPickerSource
 fontPicker.selectedIndex = 0
 fontPicker.target = newActionTarget(fontChanged, fontDidChange)
 fontPicker.action = fontChanged

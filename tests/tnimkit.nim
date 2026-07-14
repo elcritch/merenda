@@ -10,6 +10,7 @@ import nimkit/controls
 import nimkit/documents
 import nimkit/documenttabs
 import nimkit/font_layout
+import nimkit/fontpickers
 import nimkit/formviews
 import nimkit/gaptextbuffers
 import nimkit/gridviews
