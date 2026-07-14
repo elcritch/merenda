@@ -7,6 +7,11 @@ import merenda/nimkit
 type
   ComboDataSource = ref object of Responder
     items: seq[string]
+    countCalls: int
+    itemCalls: int
+
+  ComboLayoutSpy = ref object of Agent
+    reasons: seq[LayoutInvalidationReason]
 
   ComboDelegate = ref object of Responder
     changingCount: int
@@ -15,14 +20,19 @@ type
 
 protocol ComboDataSourceMethods of ComboBoxDataSource:
   method itemCount(source: ComboDataSource, comboBox: ComboBox): int =
+    inc source.countCalls
     source.items.len
 
   method objectValueAtIndex(
       source: ComboDataSource, comboBox: ComboBox, index: int
   ): string =
+    inc source.itemCalls
     if index < 0 or index >= source.items.len:
       return ""
     source.items[index]
+
+proc recordLayout(spy: ComboLayoutSpy, reason: LayoutInvalidationReason) {.slot.} =
+  spy.reasons.add reason
 
 protocol ComboDelegateEvents from ComboDelegate:
   includes ComboBoxEvents
@@ -46,6 +56,56 @@ proc newComboDelegate(): ComboDelegate =
   result = result.withProto()
 
 suite "nimkit comboboxes":
+  test "bulk options replace storage with one metrics invalidation":
+    let
+      combo = newComboBox(frame = rect(0, 0, 140, 26))
+      spy = ComboLayoutSpy()
+      initialOptions = [
+        initComboBoxOption("one", "One"),
+        initComboBoxOption("two", "Two"),
+        initComboBoxOption("hidden", "Hidden", hidden = true),
+      ]
+      replacementOptions = [
+        initComboBoxOption("zero", "Zero"),
+        initComboBoxOption("two", "Second"),
+        initComboBoxOption("three", "Three"),
+      ]
+
+    combo.setOptions(initialOptions)
+    combo.selectOptionWithIdentifier("two")
+    combo.connect(layoutInputChanged, spy, recordLayout)
+
+    combo.setOptions(replacementOptions)
+
+    check spy.reasons == @[lirIntrinsic]
+    check combo.numberOfItems() == 3
+    check combo.selectedOptionIdentifier() == "two"
+    check combo.selectedIndex() == 1
+    check combo.stringValue() == "Second"
+
+    combo.optionFilterText = "thr"
+    check combo.numberOfItems() == 1
+    check combo.optionIdentifierAtIndex(0) == "three"
+    check combo.indexOfOptionIdentifier("three") == 0
+
+  test "data source count is cached until reload":
+    let
+      combo = newComboBox(frame = rect(0, 0, 140, 26))
+      source = newComboDataSource(["Red", "Green", "Blue"])
+
+    combo.dataSource = source
+    check source.countCalls == 1
+    check source.itemCalls == 0
+
+    for iteration in 0 ..< 100:
+      check combo.numberOfItems() == 3
+    check source.countCalls == 1
+
+    source.items.add "Orange"
+    combo.reloadData()
+    check combo.numberOfItems() == 4
+    check source.countCalls == 2
+
   test "combo box stores local items and syncs selected string":
     let combo = newComboBox(["Small", "Medium"], frame = rect(0, 0, 140, 26))
 

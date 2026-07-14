@@ -1,4 +1,4 @@
-import std/[options, strutils]
+import std/[options, strutils, tables]
 
 import sigils/core
 
@@ -31,12 +31,23 @@ type
     searchText*: string
     representedObject*: DynamicAgent
 
+  ComboBoxOptionIndexCache = object
+    searchCorpus: seq[string]
+    visibleStorageIndexes: seq[int]
+    identifierToVisibleIndex: Table[string, int]
+    normalizedFilter: string
+    corpusValid: bool
+    visibleIndexesValid: bool
+
   ComboBoxOptionList* = ref object of Responder
     xOptions: seq[ComboBoxOption]
     xFilterText: string
+    xIndexCache: ComboBoxOptionIndexCache
 
   ComboBox* = ref object of Control
     xDataSource: DynamicAgent
+    xDataSourceItemCount: int
+    xDataSourceItemCountValid: bool
     xPopupHighlightedIndex: int
     xPopupHighlightedIdentifier: string
     xPopupWindow: Window
@@ -54,6 +65,7 @@ type
     xEditable: bool
     xMaxVisibleItems: int
     xItemHeight: float32
+    xIndexCache: ComboBoxOptionIndexCache
 
   ComboBoxStoredItem = object
     option: ComboBoxOption
@@ -218,61 +230,103 @@ proc optionMatchesFilter(option: ComboBoxOption, filterText: string): bool =
     return true
   option.optionSearchCorpus().normalizedSearchText().contains(normalizedFilter)
 
-proc optionIsVisible(option: ComboBoxOption, filterText: string): bool =
-  not option.hidden and option.optionMatchesFilter(filterText)
-
 proc optionIsSelectable(option: ComboBoxOption): bool =
   option.enabled and not option.separator and not option.hidden
 
-proc visibleOptionStorageIndex(
-    options: openArray[ComboBoxOption], visibleIndex: int, filterText = ""
-): int =
-  if visibleIndex < 0:
-    return -1
-  var current = 0
+proc invalidateOptionIndex(cache: var ComboBoxOptionIndexCache, corpusChanged = true) =
+  if corpusChanged:
+    cache.corpusValid = false
+  cache.visibleIndexesValid = false
+
+proc ensureSearchCorpus(
+    cache: var ComboBoxOptionIndexCache, options: openArray[ComboBoxOption]
+) =
+  if cache.corpusValid and cache.searchCorpus.len == options.len:
+    return
+  cache.searchCorpus.setLen(0)
+  for option in options:
+    cache.searchCorpus.add option.optionSearchCorpus().normalizedSearchText()
+  cache.corpusValid = true
+  cache.visibleIndexesValid = false
+
+proc ensureVisibleOptionIndexes(
+    cache: var ComboBoxOptionIndexCache,
+    options: openArray[ComboBoxOption],
+    filterText: string,
+) =
+  let normalizedFilter = filterText.normalizedSearchText()
+  if cache.visibleIndexesValid and cache.normalizedFilter == normalizedFilter:
+    return
+
+  if normalizedFilter.len > 0:
+    cache.ensureSearchCorpus(options)
+  cache.visibleStorageIndexes.setLen(0)
+  cache.identifierToVisibleIndex = initTable[string, int]()
   for storageIndex, option in options:
-    if option.optionIsVisible(filterText):
-      if current == visibleIndex:
-        return storageIndex
-      inc current
-  -1
+    let matches =
+      normalizedFilter.len == 0 or
+      cache.searchCorpus[storageIndex].contains(normalizedFilter)
+    if not option.hidden and matches:
+      let visibleIndex = cache.visibleStorageIndexes.len
+      cache.visibleStorageIndexes.add storageIndex
+      if option.identifier.len > 0 and
+          option.identifier notin cache.identifierToVisibleIndex:
+        cache.identifierToVisibleIndex[option.identifier] = visibleIndex
+  cache.normalizedFilter = normalizedFilter
+  cache.visibleIndexesValid = true
+
+proc visibleOptionCount(
+    cache: var ComboBoxOptionIndexCache,
+    options: openArray[ComboBoxOption],
+    filterText: string,
+): int =
+  cache.ensureVisibleOptionIndexes(options, filterText)
+  cache.visibleStorageIndexes.len
+
+proc visibleOptionStorageIndex(
+    cache: var ComboBoxOptionIndexCache,
+    options: openArray[ComboBoxOption],
+    visibleIndex: int,
+    filterText: string,
+): int =
+  cache.ensureVisibleOptionIndexes(options, filterText)
+  if visibleIndex in 0 ..< cache.visibleStorageIndexes.len:
+    cache.visibleStorageIndexes[visibleIndex]
+  else:
+    -1
 
 proc visibleOptionInsertionIndex(
-    options: openArray[ComboBoxOption], visibleIndex: int, filterText = ""
+    cache: var ComboBoxOptionIndexCache,
+    options: openArray[ComboBoxOption],
+    visibleIndex: int,
+    filterText: string,
 ): int =
+  cache.ensureVisibleOptionIndexes(options, filterText)
   let target = max(visibleIndex, 0)
-  var current = 0
-  for storageIndex, option in options:
-    if option.optionIsVisible(filterText):
-      if current >= target:
-        return storageIndex
-      inc current
-  options.len
-
-proc visibleOptionCount(options: openArray[ComboBoxOption], filterText = ""): int =
-  for option in options:
-    if option.optionIsVisible(filterText):
-      inc result
+  if target < cache.visibleStorageIndexes.len:
+    cache.visibleStorageIndexes[target]
+  else:
+    options.len
 
 proc optionAtVisibleIndex(
-    options: openArray[ComboBoxOption], index: int, filterText = ""
+    cache: var ComboBoxOptionIndexCache,
+    options: openArray[ComboBoxOption],
+    index: int,
+    filterText: string,
 ): ComboBoxOption =
-  let storageIndex = options.visibleOptionStorageIndex(index, filterText)
+  let storageIndex = cache.visibleOptionStorageIndex(options, index, filterText)
   if storageIndex >= 0:
     result = options[storageIndex]
 
 proc indexOfVisibleOptionIdentifier(
-    options: openArray[ComboBoxOption], identifier: string, filterText = ""
+    cache: var ComboBoxOptionIndexCache,
+    options: openArray[ComboBoxOption],
+    identifier, filterText: string,
 ): int =
   if identifier.len == 0:
     return -1
-  var current = 0
-  for option in options:
-    if option.optionIsVisible(filterText):
-      if option.identifier == identifier:
-        return current
-      inc current
-  -1
+  cache.ensureVisibleOptionIndexes(options, filterText)
+  cache.identifierToVisibleIndex.getOrDefault(identifier, -1)
 
 proc initComboBoxOptionListFields(
     list: ComboBoxOptionList, options: openArray[ComboBoxOption] = []
@@ -285,36 +339,47 @@ proc options*(list: ComboBoxOptionList): seq[ComboBoxOption] =
 
 proc `options=`*(list: ComboBoxOptionList, options: openArray[ComboBoxOption]) =
   list.xOptions = @options
+  list.xIndexCache.invalidateOptionIndex()
 
 proc sourceLen*(list: ComboBoxOptionList): int =
   list.xOptions.len
 
 proc len*(list: ComboBoxOptionList): int =
-  list.xOptions.visibleOptionCount(list.xFilterText)
+  list.xIndexCache.visibleOptionCount(list.xOptions, list.xFilterText)
 
 proc filterText*(list: ComboBoxOptionList): string =
   list.xFilterText
 
 proc `filterText=`*(list: ComboBoxOptionList, text: string) =
+  if list.xFilterText == text:
+    return
   list.xFilterText = text
+  list.xIndexCache.invalidateOptionIndex(corpusChanged = false)
 
 proc optionListItemAtIndex*(list: ComboBoxOptionList, index: int): ComboBoxOption =
-  result = list.xOptions.optionAtVisibleIndex(index, list.xFilterText)
+  result = list.xIndexCache.optionAtVisibleIndex(list.xOptions, index, list.xFilterText)
 
 proc optionListIndexOfIdentifier*(list: ComboBoxOptionList, identifier: string): int =
-  list.xOptions.indexOfVisibleOptionIdentifier(identifier, list.xFilterText)
+  list.xIndexCache.indexOfVisibleOptionIdentifier(
+    list.xOptions, identifier, list.xFilterText
+  )
 
 proc add*(list: ComboBoxOptionList, option: ComboBoxOption) =
   list.xOptions.add option
+  list.xIndexCache.invalidateOptionIndex()
 
 proc insert*(list: ComboBoxOptionList, option: ComboBoxOption, index: int) =
-  let storageIndex = list.xOptions.visibleOptionInsertionIndex(index, list.xFilterText)
+  let storageIndex =
+    list.xIndexCache.visibleOptionInsertionIndex(list.xOptions, index, list.xFilterText)
   list.xOptions.insert(option, storageIndex)
+  list.xIndexCache.invalidateOptionIndex()
 
 proc delete*(list: ComboBoxOptionList, index: int) =
-  let storageIndex = list.xOptions.visibleOptionStorageIndex(index, list.xFilterText)
+  let storageIndex =
+    list.xIndexCache.visibleOptionStorageIndex(list.xOptions, index, list.xFilterText)
   if storageIndex >= 0:
     list.xOptions.delete(storageIndex)
+    list.xIndexCache.invalidateOptionIndex()
 
 proc delete*(list: ComboBoxOptionList, identifier: string): bool {.discardable.} =
   if identifier.len == 0:
@@ -326,10 +391,12 @@ proc delete*(list: ComboBoxOptionList, identifier: string): bool {.discardable.}
   if storageIndex < 0:
     return false
   list.xOptions.delete(storageIndex)
+  list.xIndexCache.invalidateOptionIndex()
   true
 
 proc clear*(list: ComboBoxOptionList) =
   list.xOptions.setLen(0)
+  list.xIndexCache.invalidateOptionIndex()
 
 proc addOptionListItem*(list: ComboBoxOptionList, option: ComboBoxOption) =
   list.add(option)
@@ -499,7 +566,9 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     if comboBox.xOptionFilterText == text:
       return
     comboBox.xOptionFilterText = text
-    comboBox.comboBoxCell().xFilterText = text
+    let cell = comboBox.comboBoxCell()
+    cell.xFilterText = text
+    cell.xIndexCache.invalidateOptionIndex(corpusChanged = false)
     let source = comboBox.dataSource()
     if not source.isNil:
       discard source.trySendLocal(
@@ -511,9 +580,13 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   method numberOfItems*(comboBox: ComboBox): int =
     let source = comboBox.dataSource()
     if not source.isNil:
+      if comboBox.xDataSourceItemCountValid:
+        return comboBox.xDataSourceItemCount
       let count = source.trySendLocal(itemCount(), comboBox)
       if count.isSome:
-        return max(count.get(), 0)
+        comboBox.xDataSourceItemCount = max(count.get(), 0)
+        comboBox.xDataSourceItemCountValid = true
+        return comboBox.xDataSourceItemCount
     comboBox.comboBoxCell().cellNumberOfItems()
 
   method optionAtIndex*(comboBox: ComboBox, index: int): ComboBoxOption =
@@ -590,6 +663,8 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
         cell.xStringValue = comboBox.itemAtIndex(identifierIndex)
         return identifierIndex
       cell.xSelectedIndex = -1
+      return -1
+    if cell.xSelectedIndex < 0 and cell.xStringValue.len == 0:
       return -1
     if cell.xSelectedIndex >= 0 and cell.xSelectedIndex < comboBox.numberOfItems() and
         comboBox.itemAtIndex(cell.xSelectedIndex) == cell.xStringValue:
@@ -743,6 +818,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     comboBox.setPopupOpen(not comboBox.popupOpen())
 
   method reloadData*(comboBox: ComboBox) =
+    comboBox.xDataSourceItemCountValid = false
     let cell = comboBox.comboBoxCell()
     if comboBox.numberOfItems() == 0:
       cell.xSelectedIndex = -1
@@ -1029,22 +1105,26 @@ proc setCellEditable(cell: ComboBoxCell, editable: bool) =
   cell.invalidateControlMetrics()
 
 proc cellNumberOfItems(cell: ComboBoxCell): int =
-  cell.xOptions.visibleOptionCount(cell.xFilterText)
+  cell.xIndexCache.visibleOptionCount(cell.xOptions, cell.xFilterText)
 
 proc cellItemAtIndex(cell: ComboBoxCell, index: int): string =
   cell.cellOptionAtIndex(index).optionDisplayText()
 
 proc cellOptionAtIndex(cell: ComboBoxCell, index: int): ComboBoxOption =
-  result = cell.xOptions.optionAtVisibleIndex(index, cell.xFilterText)
+  result = cell.xIndexCache.optionAtVisibleIndex(cell.xOptions, index, cell.xFilterText)
 
 proc cellIndexOfOptionIdentifier(cell: ComboBoxCell, identifier: string): int =
-  cell.xOptions.indexOfVisibleOptionIdentifier(identifier, cell.xFilterText)
+  cell.xIndexCache.indexOfVisibleOptionIdentifier(
+    cell.xOptions, identifier, cell.xFilterText
+  )
 
 proc cellInsertOption(cell: ComboBoxCell, option: ComboBoxOption, index: int) =
   let oldSelectedIdentifier = cell.xSelectedIdentifier
   let oldSelectedIndex = cell.xSelectedIndex
-  let boundedIndex = cell.xOptions.visibleOptionInsertionIndex(index, cell.xFilterText)
+  let boundedIndex =
+    cell.xIndexCache.visibleOptionInsertionIndex(cell.xOptions, index, cell.xFilterText)
   cell.xOptions.insert(option, boundedIndex)
+  cell.xIndexCache.invalidateOptionIndex()
   if oldSelectedIdentifier.len > 0:
     cell.xSelectedIndex = cell.cellIndexOfOptionIdentifier(oldSelectedIdentifier)
   elif oldSelectedIndex >= max(index, 0):
@@ -1054,11 +1134,13 @@ proc cellInsertOption(cell: ComboBoxCell, option: ComboBoxOption, index: int) =
 proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int) =
   if index < 0 or index >= cell.cellNumberOfItems():
     return
-  let storageIndex = cell.xOptions.visibleOptionStorageIndex(index, cell.xFilterText)
+  let storageIndex =
+    cell.xIndexCache.visibleOptionStorageIndex(cell.xOptions, index, cell.xFilterText)
   if storageIndex < 0:
     return
   let removedIdentifier = cell.xOptions[storageIndex].identifier
   cell.xOptions.delete(storageIndex)
+  cell.xIndexCache.invalidateOptionIndex()
   if cell.cellNumberOfItems() == 0:
     cell.xSelectedIndex = -1
     cell.xSelectedIdentifier = ""
@@ -1078,6 +1160,7 @@ proc cellRemoveAllItems(cell: ComboBoxCell) =
   cell.xStringValue = ""
   cell.xSelectedIndex = -1
   cell.xSelectedIdentifier = ""
+  cell.xIndexCache.invalidateOptionIndex()
   cell.invalidateControlMetrics()
 
 proc comboBoxStyleContext(comboBox: ComboBox): StyleContext =
@@ -1656,6 +1739,63 @@ proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int) =
   comboBox.xPopupViewport.firstIndex = clampFirstIndex(target, total, visible)
   comboBox.movePopupHighlightTo(target)
 
+proc replaceStoredOptions(comboBox: ComboBox, options: openArray[ComboBoxOption]) =
+  let
+    cell = comboBox.comboBoxCell()
+    oldSelectedIdentifier = cell.xSelectedIdentifier
+    oldStringValue = cell.xStringValue
+    oldHighlightedIdentifier = comboBox.xPopupHighlightedIdentifier
+
+  cell.xOptions = @options
+  cell.xIndexCache.invalidateOptionIndex()
+  cell.xSelectedIndex = -1
+
+  if oldSelectedIdentifier.len > 0:
+    cell.xSelectedIndex = cell.cellIndexOfOptionIdentifier(oldSelectedIdentifier)
+    if cell.xSelectedIndex >= 0:
+      let option = cell.cellOptionAtIndex(cell.xSelectedIndex)
+      cell.xStringValue = option.optionDisplayText()
+      Control(comboBox).setObjectValue(option.resolvedObjectValue())
+    else:
+      cell.xSelectedIdentifier = ""
+      cell.xStringValue = ""
+      Control(comboBox).setObjectValue(emptyObjectValue())
+  elif oldStringValue.len > 0:
+    for index in 0 ..< cell.cellNumberOfItems():
+      if cell.cellItemAtIndex(index) == oldStringValue:
+        cell.xSelectedIndex = index
+        break
+    Control(comboBox).setObjectValue(toObj(oldStringValue))
+  else:
+    Control(comboBox).setObjectValue(emptyObjectValue())
+
+  comboBox.xPopupHighlightedIndex =
+    cell.cellIndexOfOptionIdentifier(oldHighlightedIdentifier)
+  if comboBox.xPopupHighlightedIndex < 0:
+    comboBox.xPopupHighlightedIdentifier = ""
+  comboBox.xPopupViewport.reset()
+  if cell.cellNumberOfItems() == 0:
+    comboBox.closePopup()
+  cell.invalidateControlMetrics()
+
+proc setOptions*(comboBox: ComboBox, options: openArray[ComboBoxOption]) =
+  comboBox.replaceStoredOptions(options)
+
+proc setItems*(comboBox: ComboBox, values: openArray[string]) =
+  var options = newSeqOfCap[ComboBoxOption](values.len)
+  for value in values:
+    options.add initComboBoxOption(displayText = value, objectValue = toObj(value))
+  comboBox.replaceStoredOptions(options)
+
+proc setItems*(comboBox: ComboBox, values: openArray[ObjectValue]) =
+  var options = newSeqOfCap[ComboBoxOption](values.len)
+  for value in values:
+    options.add initComboBoxOption(
+      displayText = Control(comboBox).formatObjectValue(value, ovrComboBox),
+      objectValue = value,
+    )
+  comboBox.replaceStoredOptions(options)
+
 proc addItems*(comboBox: ComboBox, values: openArray[string]) =
   for value in values:
     comboBox.addItem(value)
@@ -1689,7 +1829,7 @@ proc initComboBoxFields*(
   discard comboBox.withProtocol(DefaultComboBoxDrawing)
   discard comboBox.withProtocol(DefaultComboBoxEvents)
   discard comboBox.withProtocol(DefaultComboBoxAccessibility)
-  comboBox.addItems(items)
+  comboBox.setItems(items)
   comboBox.applyInitialFrame(frame)
 
 proc newComboBox*(items: openArray[string] = [], frame: Rect = AutoRect): ComboBox =
