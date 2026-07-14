@@ -393,7 +393,7 @@ proc resolvedAppearance*(view: View, inherited: Appearance): Appearance =
 proc `appearance=`*(view: View, appearance: Appearance) =
   view.xAppearance = appearance
   view.xHasAppearance = true
-  view.invalidateIntrinsicContentSizeSubtree()
+  view.invalidateIntrinsicContentSizeSubtree(lirAppearanceMetrics)
   view.setNeedsDisplaySubtree()
 
 proc clearAppearance*(view: View) =
@@ -401,27 +401,30 @@ proc clearAppearance*(view: View) =
     return
   view.xAppearance = Appearance()
   view.xHasAppearance = false
-  view.invalidateIntrinsicContentSizeSubtree()
+  view.invalidateIntrinsicContentSizeSubtree(lirAppearanceMetrics)
   view.setNeedsDisplaySubtree()
 
 proc assignInheritedAppearance(view: View, appearance: Appearance) =
   view.xInheritedAppearance = appearance
   view.xHasInheritedAppearance = true
-  view.invalidateIntrinsicContentSize()
   for child in view.xSubviews:
     child.assignInheritedAppearance(appearance)
 
 proc setInheritedAppearance*(view: View, appearance: Appearance) =
   view.assignInheritedAppearance(appearance)
+  view.invalidateIntrinsicContentSizeSubtree(lirAppearanceMetrics)
   view.setNeedsDisplaySubtree()
 
-proc clearInheritedAppearance*(view: View) =
+proc clearInheritedAppearanceFields(view: View) =
   view.xInheritedAppearance = Appearance()
   view.xHasInheritedAppearance = false
-  view.invalidateIntrinsicContentSize()
   for child in view.xSubviews:
-    child.clearInheritedAppearance()
-  view.setNeedsDisplay(true)
+    child.clearInheritedAppearanceFields()
+
+proc clearInheritedAppearance*(view: View) =
+  view.clearInheritedAppearanceFields()
+  view.invalidateIntrinsicContentSizeSubtree(lirAppearanceMetrics)
+  view.setNeedsDisplaySubtree()
 
 proc propagateWillMoveToWindow*(view: View, window: Responder) =
   emit view.viewWillMoveToWindow(window)

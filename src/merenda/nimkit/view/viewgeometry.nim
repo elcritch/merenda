@@ -409,10 +409,15 @@ proc invalidateContainerMetrics*(view: View) =
     lirContainerMetrics, ancestorReason = lirDescendantIntrinsic
   )
 
-proc invalidateIntrinsicContentSizeSubtree*(view: View) =
-  view.invalidateIntrinsicContentSize()
+proc markIntrinsicContentSizeDirtySubtree(view: View) =
+  view.xLayoutInputCache.dirtySources.incl lisIntrinsic
+  view.markConstraintStorageChangedRaw()
   for child in view.xSubviews:
-    child.invalidateIntrinsicContentSizeSubtree()
+    child.markIntrinsicContentSizeDirtySubtree()
+
+proc invalidateIntrinsicContentSizeSubtree*(view: View, reason = lirIntrinsic) =
+  view.markIntrinsicContentSizeDirtySubtree()
+  view.invalidateLayoutItemGeometry(reason, ancestorReason = lirDescendantIntrinsic)
 
 proc layoutPriority(
     view: View, kind: ViewLayoutPriorityKind, axis: LayoutAxis

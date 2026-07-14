@@ -750,6 +750,25 @@ suite "nimkit constraints":
     check lisContainer in root.xLayoutInputCache.aggregateDirtySources
     check root.xLayoutInputCache.aggregateStructureDirty
 
+  test "appearance propagation emits one root layout invalidation":
+    let
+      root = newView(frame = rect(0, 0, 240, 120))
+      branch = newView(frame = rect(0, 0, 120, 60))
+      leaf = newLabel("Leaf")
+      spy = LayoutInvalidationSpy()
+
+    branch.addSubview(leaf)
+    root.addSubview(branch)
+    root.layoutSubtreeIfNeeded()
+    root.connect(layoutInputChanged, spy, record)
+
+    root.setInheritedAppearance(initAppearance())
+
+    check spy.reasons == @[lirAppearanceMetrics]
+    check lisIntrinsic in root.layoutInputDirtySources()
+    check lisIntrinsic in branch.layoutInputDirtySources()
+    check lisIntrinsic in leaf.layoutInputDirtySources()
+
   test "generated layout summary exposes internal autoresizing equations":
     let
       root = newView(frame = rect(0, 0, 240, 120))
