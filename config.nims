@@ -3,7 +3,11 @@
 --define:
   useMalloc
 --mm:
-  arc
+  atomicArc
+--threads:
+  on
+--deepcopy:
+  on
 --define:
   release
 --mangle:

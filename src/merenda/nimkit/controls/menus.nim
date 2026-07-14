@@ -972,6 +972,8 @@ when defined(macosx):
     nativeActionStart: MenuActionStart
     nativeMainMenuInstalled: bool
     nativeSyncSuspended: bool
+    nativeMenuThreadId: int
+    nativeMenuRevisionCounter: uint64
 
   proc currentNativeActionStart(): Responder =
     if nativeActionStart.isNil:
@@ -1044,6 +1046,9 @@ when defined(macosx):
     )
 
   proc syncNativeMainMenu() =
+    inc nativeMenuRevisionCounter
+    if nativeMenuThreadId != 0 and getThreadId() != nativeMenuThreadId:
+      return
     if nativeSyncSuspended or not nativeMainMenuInstalled:
       return
     let description =
@@ -1058,6 +1063,8 @@ when defined(macosx):
       nativeSyncSuspended = false
 
   proc installNativeMainMenu*(menu: Menu, actionStart: MenuActionStart = nil) =
+    if nativeMenuThreadId == 0:
+      nativeMenuThreadId = getThreadId()
     nativeMainMenuInstalled = true
     nativeMainMenu = menu
     nativeWindowsMenu = nil
@@ -1073,6 +1080,9 @@ when defined(macosx):
     nativeServicesMenu = menu
     syncNativeMainMenu()
 
+  proc nativeMenuRevision*(): uint64 =
+    nativeMenuRevisionCounter
+
 else:
   proc syncNativeMainMenu() =
     discard
@@ -1086,6 +1096,9 @@ else:
 
   proc installNativeServicesMenu*(menu: Menu) =
     discard menu
+
+  proc nativeMenuRevision*(): uint64 =
+    0
 
 func popupMenuDefaultItemHeight*(): float32 =
   24.0'f32

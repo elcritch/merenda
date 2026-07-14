@@ -344,6 +344,14 @@ build on that vocabulary instead of adding parallel storage models.
   materialized local items/types before reads, provider swaps discard stale
   local cache and owner state, and the native clipboard provider reports host
   clipboard changes through platform change counts or a synthetic fingerprint.
+- Split the native runtime across the primary renderer thread and a
+  selector-backed application thread. Per-window channels now carry independent
+  FigDraw snapshots, native host commands, and input/window events; selector
+  ticks service queued Sigils slots and the existing animation clocks on the app
+  thread without re-entering the selector. Native menu snapshots and actions
+  cross the same channel boundary, while all AppKit window/menu and renderer
+  access stays on the primary thread. Threaded builds use atomic ARC for shared
+  immutable resources such as cached typefaces.
 
 ## Current Verification
 
@@ -355,7 +363,7 @@ build on that vocabulary instead of adding parallel storage models.
   documents, animations, rendering, accessibility, text storage/layout/views,
   pasteboards/dragging, document tabs, undo managers, object values, model
   controllers, notifications, responders, view controllers, windows/controllers,
-  constraints, and themes.
+  constraints, themes, and the renderer/application threading boundary.
 - Demo coverage for recently completed work lives in
   `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
   `examples/matrix_demo.nim`, `examples/modelcontrollers_demo.nim`,
@@ -365,12 +373,6 @@ build on that vocabulary instead of adding parallel storage models.
   `examples/merenda_settings_demo.nim`.
 
 ## Near-Term Work
-
-### Threading
-
-Split the renderer and apps to run on separate threads. Make the renderer take the primary thread and run the app on a new thread. Use Sigils thread, probably the thread-selectors. Fig nodes should be sent using channels. Review ../figuro/ render and app split and follow it's design.
-
-Next I want to be able to run receive Sigil signals and run slots. Don't forget to tie it into animation events / timings.
 
 ### FigDraw Managed Font and Image Resources
 

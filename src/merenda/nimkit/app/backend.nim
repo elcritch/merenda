@@ -1,4 +1,9 @@
-import std/[math, options, os, strutils, tables, times]
+import std/[isolation, math, options, os, strutils, tables, times]
+
+import threading/channels
+
+when not compileOption("threads") and not defined(nimdoc):
+  {.error: "NimKit's split renderer runtime requires --threads:on".}
 
 when defined(useNativeDynlib):
   from figdraw/dynlib import clearColor, setFigUiScale, Renders
@@ -18,6 +23,7 @@ when defined(macosx) and not defined(useNativeDynlib):
   import darwin/objc/runtime
 
 import ../drawing/images
+import ../controls/nativemenus as nativeMenus
 import ../foundation/types
 import ../foundation/events
 import ./pasteboards
@@ -45,6 +51,129 @@ type
     onFocusChanged*: proc(focused: bool) {.closure.}
     onPopupDone*: proc() {.closure.}
 
+  ThreadHostId* = uint64
+
+  ThreadHostEventKind* = enum
+    theReady
+    theClosed
+    thePopupDone
+    theResized
+    theMoved
+    theMouseButton
+    theMouseMove
+    theScroll
+    theKey
+    theTextInput
+    theFocusChanged
+    theRendered
+
+  ThreadHostEvent* = object
+    kind*: ThreadHostEventKind
+    size*: Size
+    point*: Point
+    mouseEvent*: events.MouseEvent
+    scrollEvent*: events.ScrollEvent
+    keyEvent*: HostKeyEvent
+    text*: string
+    flag*: bool
+    contentScale*: float32
+    renderCount*: Natural
+
+  ThreadHostCommandKind* = enum
+    thcRequestRender
+    thcSetLogicalSize
+    thcSetMinimumSize
+    thcSetMaximumSize
+    thcSetTitle
+    thcSetVisible
+    thcClose
+
+  ThreadHostCommand* = object
+    kind*: ThreadHostCommandKind
+    size*: Size
+    title*: string
+    visible*: bool
+
+  ThreadRenderSnapshot* = object
+    renders*: Renders
+    logicalSize*: Size
+
+  ThreadMenuId* = uint
+
+  ThreadNativeMenuItem* = object
+    id*: ThreadMenuId
+    title*: string
+    separator*: bool
+    enabled*: bool
+    hidden*: bool
+    state*: nativeMenus.NativeMenuItemState
+    tag*: int
+    keyEquivalent*: string
+    modifiers*: set[nativeMenus.NativeMenuModifier]
+    submenu*: ThreadNativeMenu
+
+  ThreadNativeMenu* = object
+    id*: ThreadMenuId
+    title*: string
+    items*: seq[ThreadNativeMenuItem]
+
+  ThreadNativeMenuSnapshot* = object
+    installed*: bool
+    menu*: ThreadNativeMenu
+    windowsMenu*: ThreadMenuId
+    servicesMenu*: ThreadMenuId
+
+  ThreadMenuEventKind* = enum
+    tmeRefresh
+    tmeClose
+    tmeActivate
+
+  ThreadMenuEvent* = object
+    kind*: ThreadMenuEventKind
+    menu*: ThreadMenuId
+    item*: ThreadMenuId
+
+  ThreadHostChannels* = object
+    events*: Chan[ThreadHostEvent]
+    commands*: Chan[ThreadHostCommand]
+    renders*: Chan[ThreadRenderSnapshot]
+
+  ThreadHostCreateRequest* = object
+    id*: ThreadHostId
+    ownerId*: ThreadHostId
+    frame*: Rect
+    title*: string
+    isPopup*: bool
+    popupPlacement*: siwinshim.PopupPlacement
+    channels*: ThreadHostChannels
+
+  ThreadRendererCommandKind* = enum
+    trcCreateHost
+    trcSetNativeMenu
+    trcShowAboutPanel
+    trcHideOtherApplications
+    trcUnhideAllApplications
+    trcQuit
+
+  ThreadRendererCommand* = object
+    kind*: ThreadRendererCommandKind
+    create*: ThreadHostCreateRequest
+    menu*: ThreadNativeMenuSnapshot
+
+  ThreadRendererClient* = ref object
+    commands: Chan[ThreadRendererCommand]
+    menuEvents: Chan[ThreadMenuEvent]
+    nextHostId: uint64
+
+  ThreadHostClient* = ref object
+    id*: ThreadHostId
+    channels*: ThreadHostChannels
+    createRequested*: bool
+    ready*: bool
+    renderRequested*: bool
+    renderCount*: Natural
+    contentScale*: float32
+
   HostWindow* = ref object
     xNativeWindow: siwinshim.Window
     xRenderer: figrender.FigRenderer[siwinshim.SiwinRenderBackend]
@@ -57,6 +186,19 @@ type
     xHasUiScaleOverride: bool
     xUiScaleOverride: float32
     xTransparent: bool
+
+  ThreadRendererHost = ref object
+    id: ThreadHostId
+    host: HostWindow
+    channels: ThreadHostChannels
+    lastRenders: Renders
+    logicalSize: Size
+
+  ThreadRenderer* = ref object
+    commands: Chan[ThreadRendererCommand]
+    menuEvents: Chan[ThreadMenuEvent]
+    hosts: Table[ThreadHostId, ThreadRendererHost]
+    running: bool
 
   NativePasteboardProvider = ref object of DynamicAgent
     xHost: HostWindow
@@ -89,6 +231,136 @@ const
     NimKitUiScaleEnv, NimKitCompactUiScaleEnv, MerendaUiScaleEnv, UiScaleEnv,
     FigDrawLegacyUiScaleEnv,
   ]
+
+const
+  ThreadRendererCommandCapacity = 256
+  ThreadHostEventCapacity = 512
+  ThreadHostCommandCapacity = 128
+  ThreadRenderCapacity = 2
+  ThreadMenuEventCapacity = 128
+
+proc sendMoved[T](channel: Chan[T], value: sink T) =
+  var value = move value
+  channel.send(unsafeIsolate(move value))
+
+proc pushLatest[T](channel: Chan[T], value: sink T) =
+  var
+    value = move value
+    isolated = unsafeIsolate(move value)
+  if channel.tryTake(isolated):
+    return
+
+  var stale: T
+  discard channel.tryRecv(stale)
+  if not channel.tryTake(isolated):
+    discard
+
+proc cloneRenders(renders: Renders): Renders =
+  if renders.isNil:
+    return nil
+  deepCopy(result, renders)
+
+proc newThreadRenderer*(): tuple[renderer: ThreadRenderer, client: ThreadRendererClient] =
+  let
+    commands = newChan[ThreadRendererCommand](ThreadRendererCommandCapacity)
+    menuEvents = newChan[ThreadMenuEvent](ThreadMenuEventCapacity)
+  result.renderer = ThreadRenderer(
+    commands: commands,
+    menuEvents: menuEvents,
+    hosts: initTable[ThreadHostId, ThreadRendererHost](),
+  )
+  result.client =
+    ThreadRendererClient(commands: commands, menuEvents: menuEvents, nextHostId: 1)
+
+proc newThreadHostClient*(renderer: ThreadRendererClient): ThreadHostClient =
+  if renderer.isNil:
+    return nil
+  result = ThreadHostClient(
+    id: ThreadHostId(renderer.nextHostId),
+    channels: ThreadHostChannels(
+      events: newChan[ThreadHostEvent](ThreadHostEventCapacity),
+      commands: newChan[ThreadHostCommand](ThreadHostCommandCapacity),
+      renders: newChan[ThreadRenderSnapshot](ThreadRenderCapacity),
+    ),
+    contentScale: 1.0'f32,
+  )
+  inc renderer.nextHostId
+
+proc requestCreation*(
+    host: ThreadHostClient,
+    renderer: ThreadRendererClient,
+    frame: Rect,
+    title: string,
+    owner: ThreadHostClient = nil,
+    popupPlacement = siwinshim.PopupPlacement(),
+) =
+  if host.isNil or renderer.isNil or host.createRequested:
+    return
+  let ownerId =
+    if owner.isNil:
+      ThreadHostId(0)
+    else:
+      owner.id
+  host.createRequested = true
+  renderer.commands.sendMoved(
+    ThreadRendererCommand(
+      kind: trcCreateHost,
+      create: ThreadHostCreateRequest(
+        id: host.id,
+        ownerId: ownerId,
+        frame: frame,
+        title: title,
+        isPopup: not owner.isNil,
+        popupPlacement: popupPlacement,
+        channels: host.channels,
+      ),
+    )
+  )
+
+proc stopRenderer*(renderer: ThreadRendererClient) =
+  if not renderer.isNil:
+    renderer.commands.sendMoved(ThreadRendererCommand(kind: trcQuit))
+
+proc submitNativeMenu*(
+    renderer: ThreadRendererClient, snapshot: sink ThreadNativeMenuSnapshot
+) =
+  if not renderer.isNil:
+    renderer.commands.sendMoved(
+      ThreadRendererCommand(kind: trcSetNativeMenu, menu: move snapshot)
+    )
+
+proc pollMenuEvent*(renderer: ThreadRendererClient, event: var ThreadMenuEvent): bool =
+  not renderer.isNil and renderer.menuEvents.tryRecv(event)
+
+proc showAboutPanel*(renderer: ThreadRendererClient) =
+  if not renderer.isNil:
+    renderer.commands.sendMoved(ThreadRendererCommand(kind: trcShowAboutPanel))
+
+proc hideOtherApplications*(renderer: ThreadRendererClient) =
+  if not renderer.isNil:
+    renderer.commands.sendMoved(ThreadRendererCommand(kind: trcHideOtherApplications))
+
+proc unhideAllApplications*(renderer: ThreadRendererClient) =
+  if not renderer.isNil:
+    renderer.commands.sendMoved(ThreadRendererCommand(kind: trcUnhideAllApplications))
+
+proc sendCommand*(host: ThreadHostClient, command: sink ThreadHostCommand) =
+  if not host.isNil and host.createRequested:
+    host.channels.commands.pushLatest(command)
+
+proc submitRenders*(
+    host: ThreadHostClient, renders: Renders, logicalSize: Size
+): bool {.discardable.} =
+  if host.isNil or not host.createRequested or renders.isNil:
+    return false
+  var snapshot =
+    ThreadRenderSnapshot(renders: renders.cloneRenders(), logicalSize: logicalSize)
+  host.channels.renders.pushLatest(move snapshot)
+  host.renderRequested = true
+  true
+
+proc pollEvent*(host: ThreadHostClient, event: var ThreadHostEvent): bool =
+  not host.isNil and host.channels.events.tryRecv(event)
 
 type UiScaleOverride* = object
   envName*: string
@@ -1055,3 +1327,205 @@ proc pump*(host: HostWindow) =
   nativeWindow.step()
   if host.isReady and nativeWindow.closed():
     host.markClosed(notify = true)
+
+proc postEvent(state: ThreadRendererHost, event: sink ThreadHostEvent) =
+  if not state.isNil:
+    state.channels.events.pushLatest(event)
+
+proc renderLatest(state: ThreadRendererHost) =
+  if state.isNil or state.host.isNil or state.lastRenders.isNil:
+    return
+  let previousCount = state.host.renderCount()
+  state.host.render(state.lastRenders, state.logicalSize)
+  if state.host.renderCount() != previousCount:
+    state.postEvent(
+      ThreadHostEvent(kind: theRendered, renderCount: state.host.renderCount())
+    )
+
+proc createRendererHost(
+    renderer: ThreadRenderer, request: sink ThreadHostCreateRequest
+) =
+  if request.id in renderer.hosts:
+    return
+
+  let state = ThreadRendererHost(
+    id: request.id, channels: request.channels, logicalSize: request.frame.size
+  )
+  let callbacks = HostWindowCallbacks(
+    onClose: proc() =
+      state.postEvent(ThreadHostEvent(kind: theClosed)),
+    onResize: proc() =
+      if not state.host.isNil:
+        let size = state.host.logicalSize(state.logicalSize)
+        state.logicalSize = size
+        state.postEvent(ThreadHostEvent(kind: theResized, size: size))
+    ,
+    onMove: proc(pos: Point) =
+      state.postEvent(ThreadHostEvent(kind: theMoved, point: pos)),
+    onMouseButton: proc(event: events.MouseEvent, pressed: bool) =
+      state.postEvent(
+        ThreadHostEvent(kind: theMouseButton, mouseEvent: event, flag: pressed)
+      ),
+    onMouseMove: proc(event: events.MouseEvent, dragging: bool) =
+      state.postEvent(
+        ThreadHostEvent(kind: theMouseMove, mouseEvent: event, flag: dragging)
+      ),
+    onScroll: proc(event: events.ScrollEvent) =
+      state.postEvent(ThreadHostEvent(kind: theScroll, scrollEvent: event)),
+    onKey: proc(event: HostKeyEvent) =
+      state.postEvent(ThreadHostEvent(kind: theKey, keyEvent: event)),
+    onTextInput: proc(text: string) =
+      state.postEvent(ThreadHostEvent(kind: theTextInput, text: text)),
+    onRender: proc() =
+      state.renderLatest(),
+    onFocusChanged: proc(focused: bool) =
+      state.postEvent(ThreadHostEvent(kind: theFocusChanged, flag: focused)),
+    onPopupDone: proc() =
+      state.postEvent(ThreadHostEvent(kind: thePopupDone)),
+  )
+
+  if request.isPopup:
+    if request.ownerId notin renderer.hosts:
+      state.postEvent(ThreadHostEvent(kind: theClosed))
+      return
+    let owner = renderer.hosts[request.ownerId].host
+    state.host = createPopupHostWindow(owner, request.popupPlacement, callbacks)
+  else:
+    state.host = createHostWindow(request.frame, request.title, callbacks)
+
+  if state.host.isNil:
+    state.postEvent(ThreadHostEvent(kind: theClosed))
+    return
+
+  renderer.hosts[state.id] = state
+  state.logicalSize = state.host.logicalSize(request.frame.size)
+  state.postEvent(
+    ThreadHostEvent(
+      kind: theReady, size: state.logicalSize, contentScale: state.host.contentScale()
+    )
+  )
+
+proc applyHostCommand(state: ThreadRendererHost, command: sink ThreadHostCommand) =
+  if state.isNil or state.host.isNil:
+    return
+  case command.kind
+  of thcRequestRender:
+    state.host.requestRender()
+  of thcSetLogicalSize:
+    state.logicalSize = command.size
+    state.host.setLogicalSize(command.size)
+  of thcSetMinimumSize:
+    state.host.setMinimumSize(command.size)
+  of thcSetMaximumSize:
+    state.host.setMaximumSize(command.size)
+  of thcSetTitle:
+    state.host.setTitle(command.title)
+  of thcSetVisible:
+    state.host.setVisible(command.visible)
+  of thcClose:
+    state.host.close()
+
+proc drainHostChannels(state: ThreadRendererHost) =
+  var command: ThreadHostCommand
+  while state.channels.commands.tryRecv(command):
+    state.applyHostCommand(move command)
+
+  var
+    snapshot: ThreadRenderSnapshot
+    hasSnapshot = false
+  while state.channels.renders.tryRecv(snapshot):
+    state.lastRenders = move snapshot.renders
+    state.logicalSize = snapshot.logicalSize
+    hasSnapshot = true
+  if hasSnapshot:
+    state.renderLatest()
+
+proc postMenuEvent(
+    events: Chan[ThreadMenuEvent],
+    kind: ThreadMenuEventKind,
+    menu: ThreadMenuId = 0,
+    item: ThreadMenuId = 0,
+) =
+  events.sendMoved(ThreadMenuEvent(kind: kind, menu: menu, item: item))
+
+proc nativeMenuDescription(
+    menu: ThreadNativeMenu, events: Chan[ThreadMenuEvent]
+): nativeMenus.NativeMenuDescription =
+  if menu.id == 0:
+    return nil
+
+  let frozenMenu = menu
+  result = nativeMenus.NativeMenuDescription(
+    identity: cast[pointer](menu.id), title: menu.title
+  )
+  result.refresh = proc(): nativeMenus.NativeMenuDescription =
+    events.postMenuEvent(tmeRefresh, frozenMenu.id)
+    frozenMenu.nativeMenuDescription(events)
+  result.didClose = proc() =
+    events.postMenuEvent(tmeClose, frozenMenu.id)
+
+  for item in menu.items:
+    let frozenItem = item
+    var description = nativeMenus.NativeMenuItemDescription(
+      title: item.title,
+      separator: item.separator,
+      enabled: item.enabled,
+      hidden: item.hidden,
+      state: item.state,
+      tag: item.tag,
+      keyEquivalent: item.keyEquivalent,
+      modifiers: item.modifiers,
+    )
+    if item.submenu.id != 0:
+      description.submenu = item.submenu.nativeMenuDescription(events)
+    elif item.id != 0:
+      description.activate = proc() =
+        events.postMenuEvent(tmeActivate, frozenMenu.id, frozenItem.id)
+    result.items.add description
+
+proc installNativeMenu(
+    renderer: ThreadRenderer, snapshot: sink ThreadNativeMenuSnapshot
+) =
+  if not snapshot.installed:
+    nativeMenus.installNativeMenus(nil, nil, nil)
+    return
+  nativeMenus.installNativeMenus(
+    snapshot.menu.nativeMenuDescription(renderer.menuEvents),
+    cast[pointer](snapshot.windowsMenu),
+    cast[pointer](snapshot.servicesMenu),
+  )
+
+proc drainRendererCommands(renderer: ThreadRenderer) =
+  var command: ThreadRendererCommand
+  while renderer.commands.tryRecv(command):
+    case command.kind
+    of trcCreateHost:
+      renderer.createRendererHost(move command.create)
+    of trcSetNativeMenu:
+      renderer.installNativeMenu(move command.menu)
+    of trcShowAboutPanel:
+      nativeMenus.showStandardAboutPanel()
+    of trcHideOtherApplications:
+      nativeMenus.hideOtherNativeApplications()
+    of trcUnhideAllApplications:
+      nativeMenus.unhideAllNativeApplications()
+    of trcQuit:
+      renderer.running = false
+
+proc run*(renderer: ThreadRenderer) =
+  if renderer.isNil:
+    return
+  renderer.running = true
+  while renderer.running:
+    renderer.drainRendererCommands()
+    for state in renderer.hosts.values:
+      state.drainHostChannels()
+      if not state.host.isNil:
+        state.host.pump()
+    sleep(1)
+
+  for state in renderer.hosts.values:
+    if not state.host.isNil:
+      state.host.close()
+  renderer.hosts.clear()
+  nativeMenus.installNativeMenus(nil, nil, nil)

@@ -345,7 +345,7 @@ const
   LabelFormStyleClass* = "label-form"
   IconLabelStyleClass* = "icon-label"
 
-var themeInstallers {.threadvar.}: seq[ThemeInstaller]
+var themeInstallers: seq[ThemeInstaller]
 
 func insets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)

@@ -207,7 +207,7 @@ protocol NotificationRouteEvents:
     route: NotificationRoute, notification: Notification
   ) {.signal.}
 
-var sharedNotificationCenterInstance {.threadvar.}: NotificationCenter
+var sharedNotificationCenterInstance: NotificationCenter
 
 func notificationName*(kind: NotificationKind): string =
   case kind

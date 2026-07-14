@@ -1413,8 +1413,8 @@ proc initBannerTheme*(): Theme =
 type ThemeFactory* = proc(): Theme
 
 var
-  themeFactories {.threadvar.}: Table[string, ThemeFactory]
-  themeFactoriesInitialized {.threadvar.}: bool
+  themeFactories: Table[string, ThemeFactory]
+  themeFactoriesInitialized: bool
 
 proc normalizedThemeName(name: string): string =
   name.strip().toLowerAscii()
