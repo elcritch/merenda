@@ -339,9 +339,36 @@ If you tab-select a button and use enter or space to activate it the button does
 
 ### TableView & Data Models Optimizations
 
-Can TableView, Comboboxes, and other collections handle dynamic creation of items? For example it we have a combobox menu with several thousand items currently it seems to slow down our refresh speed.
+Keep large collections responsive by bounding work to model changes and visible
+content rather than repeating whole-collection work during layout and drawing.
 
-We should improve this. Consider whether layout caching can/should be improved. Additionally are their ways to only construct visible items dynamically?
+- Coalesce appearance, intrinsic-size, and automatic window-minimum invalidations.
+  Descendants should be marked dirty locally, followed by one root notification,
+  and automatic content minimums should be recomputed once in the next layout pass.
+- Give `ComboBox` a bulk option replacement path with one invalidation and no
+  per-item undo registration. Cache visible storage indexes, identifier lookups,
+  normalized search text, and the item count for each model revision.
+- Make combo intrinsic width policy explicit: selected-item, widest-item, or
+  preferred fixed width. Cache widest-item measurement by model and text-style
+  revision, and let data sources provide a width hint without enumerating items.
+- Preserve the existing visible-only popup and table row construction. Ensure
+  data-source queries, hosted cell creation, layout, and drawing remain bounded
+  by the visible range.
+- Cache `TableModel` arranged source indexes and source/arranged identifier maps.
+  Invalidate them once when rows, filtering, or sorting change, and reuse them for
+  count, lookup, selection restoration, and cell access.
+- Use arithmetic for fixed-height table row offsets and hit testing. For variable
+  heights, cache prefix offsets and use binary search; update affected cache ranges
+  incrementally when practical.
+- Avoid measuring every table row during intrinsic sizing. Prefer explicit column
+  widths or a model-provided width hint, with revision-keyed measurement caching
+  when content-driven width is requested.
+- Cache system font catalogs process-wide and populate font controls lazily in one
+  batch. Present family-oriented searchable choices rather than every font file,
+  while retaining stable paths or identifiers for the selected face.
+- Cover scaling behavior with deterministic operation-count tests using thousands
+  of items. Keep wall-clock benchmarks diagnostic rather than timing-sensitive CI
+  assertions.
 
 ### Resource-Backed UI Construction
 
