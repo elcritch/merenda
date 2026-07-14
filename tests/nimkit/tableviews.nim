@@ -1381,6 +1381,38 @@ suite "NimKit TableView":
     check tableView.selectedIndexes == @[1]
     check tableView.selectedTableRowIdentifiers() == @["ada"]
 
+  test "table model caches arrangement and identifier lookups per revision":
+    let model = newTableModel(tableModelRows(), tableModelColumns())
+    var filterCalls = 0
+
+    model.filter = proc(row: TableRowValue): bool =
+      inc filterCalls
+      row.enabled
+    let filteredRevision = model.revision()
+
+    for iteration in 0 ..< 100:
+      check model.len() == 3
+      check model.rowAt(1).identifier == "grace"
+      check model.indexOfIdentifier("alan") == 2
+      check model.getRowWithIdentifier("ada").isSome
+    check filterCalls == 3
+
+    model.setValue("ada", "score", toObj(32))
+    check model.revision() == filteredRevision + 1
+    check model.len() == 3
+    check filterCalls == 6
+
+    model.sortDescriptors = [initTableModelSortDescriptor("score", tsdDescending)]
+    check model.revision() == filteredRevision + 2
+    check model.rowAt(0).identifier == "grace"
+    check filterCalls == 9
+
+    model.addRow(tableRow("edith", objectValue = toObj("Edith")))
+    check model.revision() == filteredRevision + 3
+    check model.getRowWithIdentifier("edith").isSome
+    check model.len() == 4
+    check filterCalls == 13
+
   test "table view persists row identities drags identifiers and batches row updates":
     let
       model = newTableModel(tableModelRows(), tableModelColumns())

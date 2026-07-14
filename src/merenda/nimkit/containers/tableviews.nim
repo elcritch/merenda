@@ -134,6 +134,12 @@ type
     xColumns: seq[TableModelColumn]
     xSortDescriptors: seq[TableModelSortDescriptor]
     xFilter: TableModelFilter
+    xArrangedSourceIndexes: seq[int]
+    xSourceIndexByIdentifier: Table[string, int]
+    xArrangedIndexByIdentifier: Table[string, int]
+    xSourceIndexValid: bool
+    xArrangementValid: bool
+    xRevision: Natural
 
   TableHeaderDragIndicator* = object
     index*: int
@@ -862,28 +868,57 @@ proc compareTableRows(
           result = -result
         return
 
+proc invalidateTableModelCaches(
+    model: TableModel, rowsChanged = false, arrangementChanged = true
+) =
+  if rowsChanged:
+    model.xSourceIndexValid = false
+  if rowsChanged or arrangementChanged:
+    model.xArrangementValid = false
+  inc model.xRevision
+
+proc ensureSourceIdentifierIndex(model: TableModel) =
+  if model.xSourceIndexValid:
+    return
+  model.xSourceIndexByIdentifier = initTable[string, int]()
+  for index, row in model.xRows:
+    if row.identifier.len > 0 and row.identifier notin model.xSourceIndexByIdentifier:
+      model.xSourceIndexByIdentifier[row.identifier] = index
+  model.xSourceIndexValid = true
+
 proc sourceIndexOfIdentifier(model: TableModel, identifier: string): int =
   if identifier.len == 0:
     return -1
-  for index, row in model.xRows:
-    if row.identifier == identifier:
-      return index
-  -1
+  model.ensureSourceIdentifierIndex()
+  model.xSourceIndexByIdentifier.getOrDefault(identifier, -1)
 
-proc arrangedSourceIndexes(model: TableModel): seq[int] =
+proc ensureArrangement(model: TableModel) =
+  if model.xArrangementValid:
+    return
+  model.xArrangedSourceIndexes.setLen(0)
   for index, row in model.xRows:
     if not row.hidden and (model.xFilter.isNil or model.xFilter(row)):
-      result.add index
+      model.xArrangedSourceIndexes.add index
   if model.xSortDescriptors.len > 0:
-    result.sort(
+    model.xArrangedSourceIndexes.sort(
       proc(a, b: int): int =
         compareTableRows(model.xRows[a], model.xRows[b], model.xSortDescriptors)
     )
+  model.xArrangedIndexByIdentifier = initTable[string, int]()
+  for arrangedIndex, sourceIndex in model.xArrangedSourceIndexes:
+    let identifier = model.xRows[sourceIndex].identifier
+    if identifier.len > 0 and identifier notin model.xArrangedIndexByIdentifier:
+      model.xArrangedIndexByIdentifier[identifier] = arrangedIndex
+  model.xArrangementValid = true
+
+proc arrangedSourceIndexes(model: TableModel): seq[int] =
+  model.ensureArrangement()
+  model.xArrangedSourceIndexes
 
 proc arrangedSourceIndex(model: TableModel, index: int): int =
-  let indexes = model.arrangedSourceIndexes()
-  if index in 0 ..< indexes.len:
-    indexes[index]
+  model.ensureArrangement()
+  if index in 0 ..< model.xArrangedSourceIndexes.len:
+    model.xArrangedSourceIndexes[index]
   else:
     -1
 
@@ -903,7 +938,11 @@ proc newTableModel*(
   result.initTableModelFields(rows, columns)
 
 proc len*(model: TableModel): int =
-  model.arrangedSourceIndexes().len
+  model.ensureArrangement()
+  model.xArrangedSourceIndexes.len
+
+proc revision*(model: TableModel): Natural =
+  model.xRevision
 
 proc sourceLen*(model: TableModel): int =
   model.xRows.len
@@ -913,6 +952,7 @@ proc rows*(model: TableModel): seq[TableRowValue] =
 
 proc `rows=`*(model: TableModel, rows: openArray[TableRowValue]) =
   model.xRows = @rows
+  model.invalidateTableModelCaches(rowsChanged = true)
 
 proc arrangedRows*(model: TableModel): seq[TableRowValue] =
   for index in model.arrangedSourceIndexes():
@@ -923,6 +963,7 @@ proc columns*(model: TableModel): seq[TableModelColumn] =
 
 proc `columns=`*(model: TableModel, columns: openArray[TableModelColumn]) =
   model.xColumns = @columns
+  model.invalidateTableModelCaches(arrangementChanged = false)
 
 proc sortDescriptors*(model: TableModel): seq[TableModelSortDescriptor] =
   model.xSortDescriptors
@@ -931,12 +972,14 @@ proc `sortDescriptors=`*(
     model: TableModel, descriptors: openArray[TableModelSortDescriptor]
 ) =
   model.xSortDescriptors = @descriptors
+  model.invalidateTableModelCaches()
 
 proc filter*(model: TableModel): TableModelFilter =
   model.xFilter
 
 proc `filter=`*(model: TableModel, filter: TableModelFilter) =
   model.xFilter = filter
+  model.invalidateTableModelCaches()
 
 proc getRowAt*(model: TableModel, index: int): Option[TableRowValue] =
   let sourceIndex = model.arrangedSourceIndex(index)
@@ -969,28 +1012,30 @@ proc rowWithIdentifier*(
   raiseTableModelError("unknown table row identifier: " & identifier)
 
 proc indexOfIdentifier*(model: TableModel, identifier: string): int =
-  let indexes = model.arrangedSourceIndexes()
-  for arrangedIndex, sourceIndex in indexes:
-    if model.xRows[sourceIndex].identifier == identifier:
-      return arrangedIndex
-  -1
+  if identifier.len == 0:
+    return -1
+  model.ensureArrangement()
+  model.xArrangedIndexByIdentifier.getOrDefault(identifier, -1)
 
 proc addRow*(model: TableModel, row: TableRowValue) =
   if row.identifier.len > 0 and model.sourceIndexOfIdentifier(row.identifier) >= 0:
     raiseTableModelError("duplicate table row identifier: " & row.identifier)
   model.xRows.add row
+  model.invalidateTableModelCaches(rowsChanged = true)
 
 proc insertRow*(model: TableModel, row: TableRowValue, index: int) =
   if row.identifier.len > 0 and model.sourceIndexOfIdentifier(row.identifier) >= 0:
     raiseTableModelError("duplicate table row identifier: " & row.identifier)
   let insertIndex = max(0, min(index, model.xRows.len))
   model.xRows.insert(row, insertIndex)
+  model.invalidateTableModelCaches(rowsChanged = true)
 
 proc removeRow*(model: TableModel, identifier: string): bool {.discardable.} =
   let index = model.sourceIndexOfIdentifier(identifier)
   if index < 0:
     return false
   model.xRows.delete(index)
+  model.invalidateTableModelCaches(rowsChanged = true)
   true
 
 proc moveRow*(model: TableModel, identifier: string, toIndex: int): bool =
@@ -1001,6 +1046,7 @@ proc moveRow*(model: TableModel, identifier: string, toIndex: int): bool =
   model.xRows.delete(index)
   let insertIndex = max(0, min(toIndex, model.xRows.len))
   model.xRows.insert(row, insertIndex)
+  model.invalidateTableModelCaches(rowsChanged = true)
   true
 
 proc valueForRow*(
@@ -1015,6 +1061,7 @@ proc setValue*(
   if index < 0:
     raiseTableModelError("unknown table row identifier: " & identifier)
   model.xRows[index].setValue(columnIdentifier, value)
+  model.invalidateTableModelCaches()
 
 proc objectValueForTableModelCell(
     model: TableModel, row: int, column: TableColumn
@@ -1029,6 +1076,7 @@ proc setObjectValueForTableModelCell(
   if sourceIndex < 0:
     return false
   model.xRows[sourceIndex].setValue(model.tableModelColumnKey(column), value)
+  model.invalidateTableModelCaches()
   true
 
 proc parseTableModelCellValue(
