@@ -119,10 +119,11 @@ build on that vocabulary instead of adding parallel storage models.
   selected-item, widest-item, and preferred-width sizing policies avoid
   unrequested whole-model measurement.
 - Added a process-cached, family-oriented system font catalog and lazy combo-box
-  data source. Font choices retain stable identifiers and representative paths,
-  searchable face names, cached width hints, and on-demand option materialization;
-  `merenda_settings_demo.nim` now uses this path instead of eagerly loading every
-  font file into the control.
+  data source. Font choices retain stable family and face identifiers, language
+  variants, styles, representative paths, searchable face names, cached width
+  hints, and on-demand option materialization. `merenda_settings_demo.nim`
+  consumes the cached catalog through a family-language-face `CascadingView`
+  data source instead of eagerly loading every font file into a combo box.
 - Added deterministic operation-count coverage with thousands of combo and table
   items for invalidation, lookup, measurement, arrangement, row geometry, and
   lazy font-option behavior. Wall-clock benchmarks remain diagnostic and are not

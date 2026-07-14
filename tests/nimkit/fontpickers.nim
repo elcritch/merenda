@@ -20,6 +20,27 @@ suite "NimKit font pickers":
     check catalog[0].identifier == "system-font:arial"
     check "Arial Bold" in catalog[0].searchText
     check "IBM Plex Sans Bold Italic" in catalog[2].searchText
+    check catalog[0].faces.mapIt(it.style) == @["Regular", "Italic", "Bold"]
+
+  test "font catalog groups language variants and preserves their faces":
+    let catalog = buildFontCatalog(
+      [
+        "/fonts/IBMPlexSans-Regular.otf", "/fonts/IBMPlexSans-Bold.otf",
+        "/fonts/IBMPlexSansArabic-Regular.otf", "/fonts/IBMPlexSansArabic-Bold.otf",
+        "/fonts/IBMPlexSansHebrew-Regular.otf", "/fonts/IBMPlexSansJP-Bold.otf",
+        "/fonts/Bangla MN-Regular.ttf",
+      ]
+    )
+
+    check catalog.mapIt(it.family) == @["Bangla MN", "IBM Plex Sans"]
+    check catalog[0].faces.mapIt(it.language & ":" & it.style) == @["Bengali:Regular"]
+    check catalog[1].path == "/fonts/IBMPlexSans-Regular.otf"
+    check catalog[1].faces.mapIt(it.language & ":" & it.style) ==
+      @[
+        "Default:Regular", "Default:Bold", "Arabic:Regular", "Arabic:Bold",
+        "Hebrew:Regular", "Japanese:Bold",
+      ]
+    check "IBM Plex Sans Arabic Bold" in catalog[1].searchText
 
   test "font options are built only when requested":
     var entries: seq[FontCatalogEntry]

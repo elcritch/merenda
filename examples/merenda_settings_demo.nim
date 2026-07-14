@@ -1,6 +1,6 @@
 import merenda/nimkit
 
-import std/[options, os]
+import std/[options, os, strutils, tables]
 import sigils/selectors
 
 when defined(useNativeDynlib):
@@ -22,6 +22,115 @@ type
     dfs16
     dfs18
     dfs20
+
+  FontSelectionProc = proc(path: string) {.closure.}
+
+  FontPickerController = ref object of Responder
+    items: Table[string, CascadingItem]
+    childIdentifiers: Table[string, seq[string]]
+    childIndexes: Table[string, Table[string, int]]
+    selectionHandler: FontSelectionProc
+
+proc addFontPickerItem(controller: FontPickerController, item: CascadingItem) =
+  controller.items[item.identifier] = item
+  controller.childIdentifiers.mgetOrPut(item.parentIdentifier, @[]).add item.identifier
+
+protocol FontPickerDataSource of CascadingDataSource:
+  method cascadingNumberOfChildren(
+      controller: FontPickerController, view: CascadingView, parentIdentifier: string
+  ): int =
+    discard view
+    controller.childIdentifiers.getOrDefault(parentIdentifier).len
+
+  method cascadingChildIdentifier(
+      controller: FontPickerController,
+      view: CascadingView,
+      parentIdentifier: string,
+      index: int,
+  ): string =
+    discard view
+    let children = controller.childIdentifiers.getOrDefault(parentIdentifier)
+    if index in 0 ..< children.len:
+      children[index]
+    else:
+      ""
+
+  method cascadingItem(
+      controller: FontPickerController, view: CascadingView, identifier: string
+  ): CascadingItem =
+    discard view
+    controller.items.getOrDefault(identifier)
+
+  method indexOfCascadingChildIdentifier(
+      controller: FontPickerController,
+      view: CascadingView,
+      parentIdentifier: string,
+      identifier: string,
+  ): int =
+    discard view
+    if parentIdentifier in controller.childIndexes:
+      controller.childIndexes[parentIdentifier].getOrDefault(identifier, -1)
+    else:
+      -1
+
+protocol FontPickerDelegate of CascadingDelegate:
+  method didSelectCascadingItem(
+      controller: FontPickerController,
+      view: CascadingView,
+      column: int,
+      row: int,
+      identifier: string,
+  ) =
+    discard column
+    discard row
+    let item = view.cascadingItemWithIdentifier(identifier)
+    if not item.leaf or controller.selectionHandler.isNil:
+      return
+    let path = item.objectValue.getString()
+    if path.isSome:
+      controller.selectionHandler(path.get())
+
+proc newFontPickerController(): FontPickerController =
+  result = FontPickerController(
+    items: initTable[string, CascadingItem](),
+    childIdentifiers: initTable[string, seq[string]](),
+    childIndexes: initTable[string, Table[string, int]](),
+  )
+  result.addFontPickerItem(
+    initCascadingItem(
+      DefaultSystemFontIdentifier, "Default", leaf = true, objectValue = toObj("")
+    )
+  )
+  for entry in systemFontCatalog():
+    result.addFontPickerItem(initCascadingItem(entry.identifier, entry.family))
+    var languageIdentifiers = initTable[string, string]()
+    for face in entry.faces:
+      let languageIdentifier =
+        entry.identifier & ":language:" & face.language.toLowerAscii()
+      if face.language notin languageIdentifiers:
+        languageIdentifiers[face.language] = languageIdentifier
+        result.addFontPickerItem(
+          initCascadingItem(
+            languageIdentifier, face.language, parentIdentifier = entry.identifier
+          )
+        )
+      result.addFontPickerItem(
+        initCascadingItem(
+          face.identifier,
+          face.style,
+          parentIdentifier = languageIdentifier,
+          leaf = true,
+          objectValue = toObj(face.path),
+        )
+      )
+  for parentIdentifier, identifiers in result.childIdentifiers:
+    var indexes = initTable[string, int]()
+    for index, identifier in identifiers:
+      indexes[identifier] = index
+    result.childIndexes[parentIdentifier] = indexes
+  initResponder(result)
+  discard result.withProtocol(FontPickerDataSource)
+  discard result.withProtocol(FontPickerDelegate)
 
 const TextStyleRoles = [
   srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srMonoTextView,
@@ -108,7 +217,7 @@ let
   themeLabel = newFormLabel("Theme")
   fontLabel = newFormLabel("Font")
   fontSizeLabel = newFormLabel("Size")
-  fontPickerSource = newSystemFontCatalogDataSource()
+  fontPickerController = newFontPickerController()
   themePicker = newComboBox(
     [
       dtDefault.title(),
@@ -118,14 +227,13 @@ let
       dtSynthwave83.title(),
     ]
   )
-  fontPicker = newComboBox()
+  fontPicker = newCascadingView()
   fontSizePicker = newComboBox(
     [dfs12.title(), dfs14.title(), dfs16.title(), dfs18.title(), dfs20.title()]
   )
   preview = newLabel("The quick brown fox jumps over the lazy dog.")
   applyFontButton = newButton("Apply font")
   themeChanged = actionSelector("themeChanged")
-  fontChanged = actionSelector("fontChanged")
   fontSizeChanged = actionSelector("fontSizeChanged")
   applyFont = actionSelector("applyFont")
 
@@ -153,17 +261,6 @@ proc themeDidChange(sender: DynamicAgent) =
       activeTheme = DemoTheme(index)
       applyAppearance()
 
-proc fontDidChange(sender: DynamicAgent) =
-  if sender of ComboBox:
-    let
-      comboBox = ComboBox(sender)
-      index = comboBox.selectedIndex()
-    if index >= 0:
-      let fontPath = comboBox.itemObjectValueAtIndex(index).getString()
-      if fontPath.isSome:
-        previewFontPath = fontPath.get()
-        updatePreview()
-
 proc fontSizeDidChange(sender: DynamicAgent) =
   if sender of ComboBox:
     let index = ComboBox(sender).selectedIndex()
@@ -186,12 +283,15 @@ for form in [appearanceForm, typographyForm]:
 themePicker.selectedIndex = activeTheme.ord
 themePicker.target = newActionTarget(themeChanged, themeDidChange)
 themePicker.action = themeChanged
-fontPicker.sizingMode = cbsmPreferredWidth
-fontPicker.preferredContentWidth = DefaultFontPickerContentWidth
-fontPicker.dataSource = fontPickerSource
-fontPicker.selectedIndex = 0
-fontPicker.target = newActionTarget(fontChanged, fontDidChange)
-fontPicker.action = fontChanged
+fontPicker.columnWidth = 180.0
+fontPicker.minColumnWidth = 140.0
+fontPicker.accessibilityLabel = "Font"
+fontPickerController.selectionHandler = proc(path: string) =
+  previewFontPath = path
+  updatePreview()
+fontPicker.dataSource = fontPickerController
+fontPicker.delegate = fontPickerController
+fontPicker.selectedPath = @[DefaultSystemFontIdentifier]
 fontSizePicker.selectedIndex = previewFontSize.ord
 fontSizePicker.target = newActionTarget(fontSizeChanged, fontSizeDidChange)
 fontSizePicker.action = fontSizeChanged
@@ -210,7 +310,7 @@ typographyForm.addRow(fontLabel, fontPicker)
 typographyForm.addRow(fontSizeLabel, fontSizePicker)
 typographyPage.stack.addArrangedSubview(
   newHeadingLabel("Typography"),
-  newLabel("Preview a system font, then apply it to the application."),
+  newLabel("Choose a font family, language, and face, then preview and apply it."),
   typographyForm,
   newHeadingLabel("Preview"),
   preview,
