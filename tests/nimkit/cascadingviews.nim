@@ -512,6 +512,38 @@ suite "NimKit CascadingView":
       check column.width() == viewportWidth
       check tableView.contentView().frame.size.width == viewportWidth
 
+  test "columns expand to fit their longest item title":
+    let
+      root = newView(frame = rect(0, 0, 900, 120))
+      view = newCascadingView(frame = rect(0, 0, 900, 120))
+      longTitle = "A Particularly Long Font Family Name That Must Remain Visible"
+
+    view.columnWidth = 100.0
+    view.cascadingItems = [
+      cascadeItem("language", "Language"),
+      cascadeItem("family", longTitle, parentIdentifier = "language", leaf = true),
+    ]
+    root.addSubview(view)
+    view.selectItem(0, 0)
+    let renders = buildRenders(root)
+    let
+      firstWidth = view.tableViewForColumn(0).frame.size.width
+      secondWidth = view.tableViewForColumn(1).frame.size.width
+      fittingWidth = View(view).sizeThatFits().width
+
+    check firstWidth == view.columnWidth()
+    check secondWidth > view.columnWidth()
+    check fittingWidth.nearlyEqual(firstWidth + view.columnSpacing() + secondWidth)
+    check renders.layers[DefaultDrawLevel].textNodeX(longTitle) >= 0.0'f32
+
+    view.cascadingItems = [
+      cascadeItem("language", "Language"),
+      cascadeItem("family", "Short", parentIdentifier = "language", leaf = true),
+    ]
+    discard buildRenders(root)
+
+    check view.tableViewForColumn(1).frame.size.width == view.columnWidth()
+
   test "horizontal scroll moves column chrome and row text together":
     let
       root = newView(frame = rect(0, 0, 300, 120))

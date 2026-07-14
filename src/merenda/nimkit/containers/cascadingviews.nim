@@ -26,6 +26,12 @@ type
     visibleIndices: seq[int]
     items: seq[CascadingItem]
     visibleIndexByIdentifier: Table[string, int]
+    measuredContentWidth: float32
+    measuredFontName: string
+    measuredFontSize: float32
+    measuredTextInsets: EdgeInsets
+    measuredRowMinWidth: float32
+    contentWidthMeasurementValid: bool
 
   CascadingItem* = object
     identifier*: string
@@ -317,6 +323,7 @@ proc `columnWidth=`*(view: CascadingView, width: float32) =
     DynamicAgent(view), animColumnWidthValue(), view.xColumnWidth, nextWidth
   )
   view.xColumnWidth = nextWidth
+  view.invalidateIntrinsicContentSize()
   view.setNeedsLayout()
   view.setNeedsDisplay(true)
 
@@ -333,6 +340,7 @@ proc `minColumnWidth=`*(view: CascadingView, width: float32) =
   )
   view.xMinColumnWidth = nextWidth
   view.xColumnWidth = max(view.xColumnWidth, nextWidth)
+  view.invalidateIntrinsicContentSize()
   view.setNeedsLayout()
   view.setNeedsDisplay(true)
 
@@ -348,6 +356,7 @@ proc `columnSpacing=`*(view: CascadingView, spacing: float32) =
     DynamicAgent(view), animColumnSpacingValue(), view.xColumnSpacing, nextSpacing
   )
   view.xColumnSpacing = nextSpacing
+  view.invalidateIntrinsicContentSize()
   view.setNeedsLayout()
   view.setNeedsDisplay(true)
 
@@ -836,14 +845,68 @@ proc desiredColumnCount(view: CascadingView): int =
   else:
     view.xSelectedPath.len
 
+proc cascadingRowItemStyle(
+    view: CascadingView, appearance: Appearance, states: set[WidgetState] = {}
+): RowItemStyle =
+  appearance.resolveRowItemStyle(
+    controlStyle(
+      srCascadingRowItem, states, id = view.styleId(), classes = view.styleClasses()
+    )
+  )
+
+func hasMatchingContentWidthMetrics(
+    cache: CascadingChildrenCache, style: RowItemStyle
+): bool =
+  cache.contentWidthMeasurementValid and cache.measuredFontName == style.text.fontName and
+    cache.measuredFontSize == style.text.fontSize and
+    cache.measuredTextInsets == style.text.insets and
+    cache.measuredRowMinWidth == style.minSize.width
+
+proc measuredContentWidthForParent(
+    view: CascadingView, parentIdentifier: string, style: RowItemStyle
+): float32 =
+  view.refreshChildrenForParent(parentIdentifier)
+  var cache = view.xChildrenByParent[parentIdentifier]
+  if cache.hasMatchingContentWidthMetrics(style):
+    return cache.measuredContentWidth
+
+  let trailingInset = max(
+    style.text.insets.right,
+    CascadingChildArrowRightInset + CascadingChildArrowWidth + CascadingChildArrowTextGap,
+  )
+  result = style.minSize.width
+  for item in cache.items:
+    let textWidth = textNaturalSize(view.titleForItem(item), style.text).width
+    result = max(
+      result,
+      textWidth + style.text.insets.left + trailingInset +
+        CascadingColumnEdgeInset * 2.0'f32,
+    )
+
+  cache.measuredContentWidth = result
+  cache.measuredFontName = style.text.fontName
+  cache.measuredFontSize = style.text.fontSize
+  cache.measuredTextInsets = style.text.insets
+  cache.measuredRowMinWidth = style.minSize.width
+  cache.contentWidthMeasurementValid = true
+  view.xChildrenByParent[parentIdentifier] = cache
+
+proc widthForColumn(view: CascadingView, column: int, style: RowItemStyle): float32 =
+  max(
+    max(view.xColumnWidth, view.xMinColumnWidth),
+    view.measuredContentWidthForParent(view.parentIdentifierForColumn(column), style),
+  )
+
 proc columnsContentWidth(view: CascadingView): float32 =
   if view.xColumns.len == 0:
-    return 0.0'f32
+    return max(view.xColumnWidth, view.xMinColumnWidth)
   let
     count = view.xColumns.len
-    columnWidth = max(view.xColumnWidth, view.xMinColumnWidth)
     spacing = view.xColumnSpacing * max(count - 1, 0).float32
-  columnWidth * count.float32 + spacing
+    style = view.cascadingRowItemStyle(view.effectiveAppearance())
+  result = spacing
+  for column in 0 ..< count:
+    result += view.widthForColumn(column, style)
 
 proc syncCascadingLayout(view: CascadingView) =
   view.syncCascadingStyle()
@@ -858,8 +921,8 @@ proc syncCascadingLayout(view: CascadingView) =
   view.xScrollView.tile()
   let
     viewport = view.xScrollView.viewportSize()
-    columnWidth = max(view.xColumnWidth, view.xMinColumnWidth)
     documentHeight = viewport.height
+    style = view.cascadingRowItemStyle(view.effectiveAppearance())
   view.xColumnContainer.frame =
     rect(0.0'f32, 0.0'f32, max(contentWidth, viewport.width), documentHeight)
   if view.xColumns.len == 0:
@@ -868,6 +931,7 @@ proc syncCascadingLayout(view: CascadingView) =
     return
   var x = 0.0'f32
   for index, tableView in view.xColumns:
+    let columnWidth = view.widthForColumn(index, style)
     tableView.frame = rect(x, 0.0'f32, columnWidth, documentHeight)
     let column = tableView.columnAt(0)
     if not column.isNil:
@@ -1016,6 +1080,7 @@ proc applySelectedPath(view: CascadingView, path: openArray[string]) =
     return
   emit view.selectionIsChanging(DynamicAgent(view))
   view.xSelectedPath = nextPath
+  view.invalidateIntrinsicContentSize()
   view.syncCascadingColumns()
   view.scrollColumnToVisible(min(view.xSelectedPath.len, view.xColumns.high))
   view.notifyCascadingSelectionDidChange()
@@ -1329,6 +1394,7 @@ proc selectItem*(view: CascadingView, column, row: int) =
 
   emit view.selectionIsChanging(DynamicAgent(view))
   view.xSelectedPath = nextPath
+  view.invalidateIntrinsicContentSize()
   view.syncCascadingColumns()
   view.scrollColumnToVisible(min(column + 1, view.xColumns.high))
   if not delegate.isNil:
@@ -1354,19 +1420,6 @@ proc activateCascadingItem(view: CascadingView, column, row: int) =
     )
   emit view.itemWasActivated(DynamicAgent(view))
   discard view.sendAction()
-
-proc cascadingRowItemStyle(
-    view: CascadingView,
-    tableView: TableView,
-    context: DrawContext,
-    states: set[WidgetState],
-): RowItemStyle =
-  let
-    styleId = view.styleId()
-    styleClasses = view.styleClasses()
-  context.appearance.resolveRowItemStyle(
-    controlStyle(srCascadingRowItem, states, id = styleId, classes = styleClasses)
-  )
 
 proc cascadingChildArrowRect(rowBounds: Rect): Rect =
   let width = min(CascadingChildArrowWidth, rowBounds.size.width)
@@ -1497,7 +1550,7 @@ protocol CascadingTableDelegate of TableViewDelegate:
     let
       column = view.columnForTableView(tableView)
       rowBounds = rect(0.0, 0.0, rect.size.width, rect.size.height)
-      style = view.cascadingRowItemStyle(tableView, context, row.states)
+      style = view.cascadingRowItemStyle(context.appearance, row.states)
     if column < 0:
       return
     let
@@ -1577,10 +1630,7 @@ protocol CascadingViewKeyEvents of ResponderEventProtocol:
 protocol CascadingViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: CascadingView): IntrinsicSize =
     let
-      count = max(view.columnCount(), 1)
-      width =
-        view.xColumnWidth * count.float32 +
-        view.xColumnSpacing * max(count - 1, 0).float32
+      width = view.columnsContentWidth()
       height = max(view.tableViewForColumn(0).rowHeight() * 5.0'f32, 96.0'f32)
     initIntrinsicSize(initSize(width, height))
 
