@@ -362,6 +362,135 @@ If you tab-select a button and use enter or space to activate it the button does
 
 - `addComboBoxDoubleArrow` in drawing.nim should be removed or made into a L&F helper. 
 
+### FigDraw Managed Font and Image Resources
+
+Migrate NimKit drawing and cached layouts from unmanaged `FigFont`/`ImageId`
+lifetimes to FigDraw's `FontRef` and `ImageRef` ownership model. Keep rendering
+data cheap and copyable while ensuring that visible and preloaded resources stay
+resident, unused resources become eligible for eviction, and every renderer can
+recover after its image atlas is rebuilt.
+
+- Keep `TextStyle`, `TextAttributes`, theme values, model records, and FigDraw
+  nodes as plain descriptors or raw IDs. Do not embed thread-affine `FontRef` or
+  `ImageRef` values in broadly copied or cross-thread data. Use FigDraw's refs
+  directly rather than adding a second NimKit font-handle type, and rely on their
+  ARC/ORC-managed ref-object destructors instead of adding NimKit ownership hooks.
+- Add an internal `RenderResourceSet` beside each cached root `Renders`. It should
+  deduplicate fonts by `FontId` and images by `ImageId`, retain refs for at least
+  as long as the cached nodes can render, and retain the corresponding
+  `ImageResource` reload source. Build the replacement resource set before
+  releasing the previous set so unchanged resources never pass through a
+  zero-owner gap during display-cache replacement.
+- Keep refs on the UI/render thread that created them. Background text layout or
+  image decoding may pass `FigFont`, `FontId`, `TypefaceId`, `ImageId`, encoded
+  data, or decoded pixels back to that thread, but must create its own ref if it
+  needs ownership. Do not pass `FontRef` or `ImageRef` through signals, render
+  queues, pasteboard providers, or worker-thread result records.
+
+Font migration:
+
+- Change the internal style resolver so a concrete font is acquired as a
+  `FontRef`; use the FontRef overloads of `fs`, `span`, `typeset`, and
+  `placeGlyphs`. Continue caching name/fallback resolution as `TypefaceId`s, but
+  do not keep every resolved size alive in a process-wide FontRef cache.
+- Capture every distinct `FontId` referenced by a committed
+  `GlyphArrangement`, including fallback faces, into its owning
+  `TextLayoutManager` and into any render snapshot that copies the arrangement.
+  Replacing or invalidating a layout must acquire the new refs before dropping
+  the old refs; destroying the last layout/render owner should allow FigDraw to
+  recycle that font's glyph entries.
+- Route simple labels, natural-size queries, explicit glyph placement, UI-relay
+  fonts, and externally supplied layouts through the same acquisition path.
+  Add or use a FigDraw measurement-only typesetting mode that does not rasterize
+  glyphs so transient intrinsic-size queries do not create and immediately evict
+  atlas entries.
+- Treat FigDraw's parsed typeface registry separately from concrete font/glyph
+  ownership. This migration recycles glyph entries through `FontRef`; parsed
+  typefaces remain process-cached until FigDraw exposes a safe typeface-release
+  contract.
+
+Image migration:
+
+- Keep `ImageResource` as NimKit's identity-bearing metadata and reload-source
+  object, but acquire an `ImageRef` only for an active render snapshot, explicit
+  preload, or pinned named image. Merely storing an `ImageResource` in a model,
+  hidden view, pasteboard item, or off-screen row must not pin its atlas entry.
+- Store a rebuildable source for every drawable image: a file path, encoded
+  bytes, or an owned copy of direct pixels. File/data resources may discard
+  decoded pixels when inactive; direct-pixel and snapshot resources must retain
+  a source until the resource itself dies. Preserve the current constructors,
+  metadata accessors, `imageId`, and named-image lookup while adding one internal
+  acquire/reload path used by all drawing.
+- Define the existing `ImageCachePolicy` values in terms of source retention,
+  preload admission, and explicit pinning; no policy may create a short-lived
+  `ImageRef` and leave a longer-lived node with only its ID. Audit
+  `copyImageResource` so pasteboard/drag snapshots have independent source and
+  stable-ID semantics instead of accidentally replacing another live image with
+  the same ID.
+- Make `DrawContext.addImage` retain the acquired `ImageRef` and source in its
+  resource set before emitting an image node. Normal assignments may share an
+  `ImageResource`; the named registry and explicit preload APIs are the only
+  long-lived strong caches, and removal/window teardown must release their refs.
+
+Atlas rebuild and pressure handling:
+
+- Separate FigDraw's logical ref ownership from renderer-local atlas residency.
+  Retain/release and cache-reset events must be broadcast to every registered
+  renderer (or read through a generation-stamped event log with a cursor per
+  renderer); a single host draining the current global queue must not consume an
+  event that another window or popup atlas also needs. Final release should make
+  the ID evictable in every renderer without requiring refs to be renderer-bound.
+- Add or require a per-renderer FigDraw atlas generation that changes on manual
+  cache clears, automatic atlas growth, backend recreation, and device/context
+  loss. Expose a renderer-targeted `ensureImage`/rebuild operation; do not infer
+  residency from FigDraw's current process-global `hasImage` set or last-renderer
+  `atlasUsageSnapshot`, because each NimKit `HostWindow` and popup owns a distinct
+  renderer atlas.
+- Rebuild at a frame boundary from that renderer's current
+  `RenderResourceSet` plus its bounded preload/pinned set. Keep all refs alive,
+  clear/recreate the target atlas, upload each live image source exactly once,
+  then render. Glyph entries do not need a bulk upload: FigDraw can regenerate
+  missing glyphs lazily from the retained `FontId`, but the FontRefs must remain
+  alive throughout the rebuild.
+- Make automatic FigDraw atlas growth generation-aware. The current backend
+  `grow` implementations clear lookup tables while the logical cache still says
+  images are loaded; this must either preserve/copy existing entries or publish a
+  new generation and repack all live sources before drawing continues. Treat the
+  renderer-targeted generation/rebuild API as a prerequisite rather than hiding
+  the race behind NimKit retries or `compiles` fallbacks.
+- Monitor exact `renderer.atlasUsage().packedRatio()` per host renderer. Use a
+  configurable high-water threshold, hysteresis/cooldown, and a rebuild counter;
+  rebuild only the visible/preloaded working set. If that live set cannot fit,
+  grow to a planned capacity before repacking instead of repeatedly clearing the
+  atlas. Decode reload sources before entering the render-critical upload phase.
+- Preserve FigDraw upload generations so stale queued uploads cannot repopulate a
+  newly rebuilt atlas. Coalesce concurrent release, reload, and rebuild requests
+  at the frame boundary, then request another frame for every window whose atlas
+  generation changed.
+
+Verification and rollout:
+
+- Add deterministic tests for copy/move/final-release behavior, overlapping
+  render-cache replacement, layout invalidation, hidden/off-screen resources,
+  named-image pin/unpin, pasteboard snapshots, and last-owner glyph/image
+  eviction under ARC and ORC. Since FigDraw owns the hooks, verify delegation and
+  message counts rather than defining duplicate NimKit hooks.
+- Force tiny atlases in backend tests to cover automatic growth, explicit
+  pressure rebuilds, stale uploads, repeated rebuilds, glyph regeneration, and
+  image re-upload without a blank frame. Add two-window and popup-window tests to
+  prove that renderer-local residency and generations do not leak across atlases.
+- Record live FontRef/ImageRef counts, source bytes, uploads per generation,
+  atlas used/packed ratios, and rebuild counts. Use operation counts for CI and
+  keep wall-clock/frame-time measurements diagnostic.
+- Migrate the static FigDraw build first. `useNativeDynlib` currently aliases
+  `ImageRef` to a raw ID and has no managed `FontRef` ABI; leave that mode
+  explicitly unsupported until the native ABI gains retain/release and
+  renderer-targeted rebuild primitives. Do not add `compiles` shims that silently
+  restore unmanaged behavior.
+- Update image, text-layout, rendering, UI-relay, pasteboard/dragging, multiwindow,
+  and example coverage, then remove internal raw-font/raw-image upload paths only
+  after all NimKit render entry points retain managed resources correctly.
+
 ### Resource-Backed UI Construction
 
 Add a Nim-native resource construction layer for UI assets and declarative
