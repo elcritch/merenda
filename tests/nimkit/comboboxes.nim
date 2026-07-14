@@ -13,6 +13,13 @@ type
   ComboLayoutSpy = ref object of Agent
     reasons: seq[LayoutInvalidationReason]
 
+  SizedComboDataSource = ref object of Responder
+    items: seq[string]
+    countCalls: int
+    itemCalls: int
+    widthCalls: int
+    intrinsicWidth: float32
+
   ComboDelegate = ref object of Responder
     changingCount: int
     changedCount: int
@@ -30,6 +37,25 @@ protocol ComboDataSourceMethods of ComboBoxDataSource:
     if index < 0 or index >= source.items.len:
       return ""
     source.items[index]
+
+protocol SizedComboDataSourceMethods of ComboBoxDataSource:
+  method itemCount(source: SizedComboDataSource, comboBox: ComboBox): int =
+    inc source.countCalls
+    source.items.len
+
+  method objectValueAtIndex(
+      source: SizedComboDataSource, comboBox: ComboBox, index: int
+  ): string =
+    inc source.itemCalls
+    if index < 0 or index >= source.items.len:
+      return ""
+    source.items[index]
+
+  method comboBoxIntrinsicContentWidth(
+      source: SizedComboDataSource, comboBox: ComboBox
+  ): float32 =
+    inc source.widthCalls
+    source.intrinsicWidth
 
 proc recordLayout(spy: ComboLayoutSpy, reason: LayoutInvalidationReason) {.slot.} =
   spy.reasons.add reason
@@ -49,6 +75,13 @@ proc newComboDataSource(items: openArray[string]): ComboDataSource =
   result = ComboDataSource(items: @items)
   initResponder(result)
   discard result.withProtocol(ComboDataSourceMethods)
+
+proc newSizedComboDataSource(
+    items: openArray[string], intrinsicWidth: float32
+): SizedComboDataSource =
+  result = SizedComboDataSource(items: @items, intrinsicWidth: intrinsicWidth)
+  initResponder(result)
+  discard result.withProtocol(SizedComboDataSourceMethods)
 
 proc newComboDelegate(): ComboDelegate =
   result = ComboDelegate()
@@ -105,6 +138,57 @@ suite "nimkit comboboxes":
     combo.reloadData()
     check combo.numberOfItems() == 4
     check source.countCalls == 2
+
+  test "intrinsic sizing caches measurements and accepts width hints":
+    let
+      combo = newComboBox(frame = rect(0, 0, 140, 26))
+      source = newSizedComboDataSource(["Short", "A much longer item"], 240.0)
+
+    combo.dataSource = source
+    let hintedSize = combo.intrinsicContentSize()
+    check source.widthCalls == 1
+    check source.itemCalls == 0
+    check hintedSize.width > source.intrinsicWidth
+
+    discard combo.intrinsicContentSize()
+    check source.widthCalls == 1
+    check source.itemCalls == 0
+
+    combo.sizingMode = cbsmSelectedItem
+    let selectedSize = combo.intrinsicContentSize()
+    check selectedSize.width < hintedSize.width
+    check source.widthCalls == 1
+    check source.itemCalls == 0
+
+    combo.preferredContentWidth = 180.0
+    combo.sizingMode = cbsmPreferredWidth
+    let preferredSize = combo.intrinsicContentSize()
+    check combo.preferredContentWidth() == 180.0
+    check preferredSize.width > 180.0
+    check preferredSize.width < hintedSize.width
+
+    combo.sizingMode = cbsmWidestItem
+    discard combo.intrinsicContentSize()
+    check source.widthCalls == 2
+    combo.reloadData()
+    discard combo.intrinsicContentSize()
+    check source.widthCalls == 3
+
+  test "widest-item sizing enumerates an unhinted source once per reload":
+    let
+      combo = newComboBox(frame = rect(0, 0, 140, 26))
+      source = newComboDataSource(["One", "Two", "Three"])
+
+    combo.dataSource = source
+    discard combo.intrinsicContentSize()
+    check source.itemCalls == 3
+
+    discard combo.intrinsicContentSize()
+    check source.itemCalls == 3
+
+    combo.reloadData()
+    discard combo.intrinsicContentSize()
+    check source.itemCalls == 6
 
   test "combo box stores local items and syncs selected string":
     let combo = newComboBox(["Small", "Medium"], frame = rect(0, 0, 140, 26))

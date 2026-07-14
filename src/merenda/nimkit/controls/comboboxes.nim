@@ -19,6 +19,11 @@ import ./popuplists
 export controls
 
 type
+  ComboBoxSizingMode* = enum
+    cbsmSelectedItem
+    cbsmWidestItem
+    cbsmPreferredWidth
+
   ComboBoxOption* = object
     identifier*: string
     displayText*: string
@@ -65,7 +70,13 @@ type
     xEditable: bool
     xMaxVisibleItems: int
     xItemHeight: float32
+    xSizingMode: ComboBoxSizingMode
+    xPreferredContentWidth: float32
     xIndexCache: ComboBoxOptionIndexCache
+    xMeasuredTextSize: Size
+    xMeasuredFontName: string
+    xMeasuredFontSize: float32
+    xMeasurementValid: bool
 
   ComboBoxStoredItem = object
     option: ComboBoxOption
@@ -142,6 +153,7 @@ proc cellItemAtIndex(cell: ComboBoxCell, index: int): string
 proc cellOptionAtIndex(cell: ComboBoxCell, index: int): ComboBoxOption
 proc cellIndexOfOptionIdentifier(cell: ComboBoxCell, identifier: string): int
 proc cellInsertOption(cell: ComboBoxCell, option: ComboBoxOption, index: int)
+proc invalidateComboBoxMeasurement(cell: ComboBoxCell)
 
 proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int)
 proc cellRemoveAllItems(cell: ComboBoxCell)
@@ -162,6 +174,8 @@ protocol ComboBoxDataSource {.selectorScope: protocol.}:
   ): int {.optional.}
 
   method setComboBoxOptionFilterText*(comboBox: ComboBox, text: string) {.optional.}
+
+  method comboBoxIntrinsicContentWidth*(comboBox: ComboBox): float32 {.optional.}
 
 protocol ComboBoxEvents:
   proc selectionIsChanging*(comboBox: ComboBox, sender: DynamicAgent) {.signal.}
@@ -485,6 +499,8 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   property itemHeight -> float32
   property popupPresentation -> PopupPresentation
   property optionFilterText -> string
+  property sizingMode -> ComboBoxSizingMode
+  property preferredContentWidth -> float32
 
   method selectedIndex(comboBox: ComboBox): int =
     comboBox.indexOfSelectedItem()
@@ -576,6 +592,28 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
       )
     comboBox.xPopupViewport.reset()
     comboBox.reloadData()
+
+  method sizingMode(comboBox: ComboBox): ComboBoxSizingMode =
+    comboBox.comboBoxCell().xSizingMode
+
+  method setSizingMode(comboBox: ComboBox, mode: ComboBoxSizingMode) =
+    let cell = comboBox.comboBoxCell()
+    if cell.xSizingMode == mode:
+      return
+    cell.xSizingMode = mode
+    cell.invalidateComboBoxMeasurement()
+
+  method preferredContentWidth(comboBox: ComboBox): float32 =
+    comboBox.comboBoxCell().xPreferredContentWidth
+
+  method setPreferredContentWidth(comboBox: ComboBox, width: float32) =
+    let
+      cell = comboBox.comboBoxCell()
+      normalizedWidth = max(width, 0.0'f32)
+    if cell.xPreferredContentWidth == normalizedWidth:
+      return
+    cell.xPreferredContentWidth = normalizedWidth
+    cell.invalidateComboBoxMeasurement()
 
   method numberOfItems*(comboBox: ComboBox): int =
     let source = comboBox.dataSource()
@@ -710,7 +748,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     cell.xStringValue = value
     cell.xSelectedIdentifier = option.identifier
     Control(comboBox).setObjectValue(comboBox.optionObjectValueAtIndex(index))
-    cell.invalidateControlMetrics()
+    cell.invalidateComboBoxMeasurement()
     comboBox.postAccessibilityNotification(anSelectionChanged)
 
   method deselectItem*(comboBox: ComboBox) =
@@ -730,7 +768,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     cell.xStringValue = ""
     Control(comboBox).setObjectValue(emptyObjectValue())
     comboBox.highlightedIndex = -1
-    cell.invalidateControlMetrics()
+    cell.invalidateComboBoxMeasurement()
     comboBox.postAccessibilityNotification(anSelectionChanged)
 
   method addOption*(comboBox: ComboBox, option: ComboBoxOption) =
@@ -833,8 +871,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     if comboBox.highlightedOptionIdentifier().len > 0:
       comboBox.xPopupHighlightedIndex =
         comboBox.indexOfOptionIdentifier(comboBox.highlightedOptionIdentifier())
-    comboBox.invalidateIntrinsicContentSize()
-    comboBox.setNeedsDisplay(true)
+    cell.invalidateComboBoxMeasurement()
 
 protocol DefaultComboBoxView of ComboBoxViewProtocol:
   method pointInside(comboBox: ComboBox, point: Point): bool =
@@ -1057,6 +1094,10 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
 proc cellStringValue(cell: ComboBoxCell): string =
   cell.xStringValue
 
+proc invalidateComboBoxMeasurement(cell: ComboBoxCell) =
+  cell.xMeasurementValid = false
+  cell.invalidateControlMetrics()
+
 proc setCellSelectedIndex(cell: ComboBoxCell, index: int) =
   if index < 0:
     if cell.xSelectedIndex < 0 and cell.xStringValue.len == 0 and
@@ -1065,7 +1106,7 @@ proc setCellSelectedIndex(cell: ComboBoxCell, index: int) =
     cell.xSelectedIndex = -1
     cell.xSelectedIdentifier = ""
     cell.xStringValue = ""
-    cell.invalidateControlMetrics()
+    cell.invalidateComboBoxMeasurement()
     return
   let option = cell.cellOptionAtIndex(index)
   if option.displayText.len == 0 and option.objectValue.isNilOrEmpty():
@@ -1073,7 +1114,7 @@ proc setCellSelectedIndex(cell: ComboBoxCell, index: int) =
   cell.xSelectedIndex = index
   cell.xSelectedIdentifier = option.identifier
   cell.xStringValue = option.optionDisplayText()
-  cell.invalidateControlMetrics()
+  cell.invalidateComboBoxMeasurement()
 
 proc cellMaxVisibleItems(cell: ComboBoxCell): int =
   cell.xMaxVisibleItems
@@ -1083,7 +1124,7 @@ proc setCellMaxVisibleItems(cell: ComboBoxCell, value: int) =
   if cell.xMaxVisibleItems == count:
     return
   cell.xMaxVisibleItems = count
-  cell.invalidateControlMetrics()
+  cell.invalidateComboBoxMeasurement()
 
 proc cellItemHeight(cell: ComboBoxCell): float32 =
   cell.xItemHeight
@@ -1093,7 +1134,7 @@ proc setCellItemHeight(cell: ComboBoxCell, value: float32) =
   if cell.xItemHeight == height:
     return
   cell.xItemHeight = height
-  cell.invalidateControlMetrics()
+  cell.invalidateComboBoxMeasurement()
 
 proc cellIsEditable(cell: ComboBoxCell): bool =
   cell.xEditable
@@ -1102,7 +1143,7 @@ proc setCellEditable(cell: ComboBoxCell, editable: bool) =
   if cell.xEditable == editable:
     return
   cell.xEditable = editable
-  cell.invalidateControlMetrics()
+  cell.invalidateComboBoxMeasurement()
 
 proc cellNumberOfItems(cell: ComboBoxCell): int =
   cell.xIndexCache.visibleOptionCount(cell.xOptions, cell.xFilterText)
@@ -1129,7 +1170,7 @@ proc cellInsertOption(cell: ComboBoxCell, option: ComboBoxOption, index: int) =
     cell.xSelectedIndex = cell.cellIndexOfOptionIdentifier(oldSelectedIdentifier)
   elif oldSelectedIndex >= max(index, 0):
     cell.xSelectedIndex = oldSelectedIndex + 1
-  cell.invalidateControlMetrics()
+  cell.invalidateComboBoxMeasurement()
 
 proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int) =
   if index < 0 or index >= cell.cellNumberOfItems():
@@ -1153,7 +1194,7 @@ proc cellRemoveItemAtIndex(cell: ComboBoxCell, index: int) =
     cell.setCellSelectedIndex(min(index, cell.cellNumberOfItems() - 1))
   elif index < cell.xSelectedIndex:
     dec cell.xSelectedIndex
-  cell.invalidateControlMetrics()
+  cell.invalidateComboBoxMeasurement()
 
 proc cellRemoveAllItems(cell: ComboBoxCell) =
   cell.xOptions.setLen(0)
@@ -1161,7 +1202,7 @@ proc cellRemoveAllItems(cell: ComboBoxCell) =
   cell.xSelectedIndex = -1
   cell.xSelectedIdentifier = ""
   cell.xIndexCache.invalidateOptionIndex()
-  cell.invalidateControlMetrics()
+  cell.invalidateComboBoxMeasurement()
 
 proc comboBoxStyleContext(comboBox: ComboBox): StyleContext =
   controlStyle(
@@ -1172,22 +1213,41 @@ proc comboBoxStyleContext(comboBox: ComboBox): StyleContext =
   )
 
 proc comboBoxMeasuredTextSize(cell: ComboBoxCell, style: TextStyle): Size =
-  let view = cell.controlView()
-  if view of ComboBox:
-    let comboBox = ComboBox(view)
-    result = textNaturalSize(comboBox.stringValue(), style)
-    for idx in 0 ..< comboBox.numberOfItems():
-      let itemSize = textNaturalSize(comboBox.itemAtIndex(idx), style)
-      result.width = max(result.width, itemSize.width)
-      result.height = max(result.height, itemSize.height)
-    return
+  if cell.xMeasurementValid and cell.xMeasuredFontName == style.fontName and
+      cell.xMeasuredFontSize == style.fontSize:
+    return cell.xMeasuredTextSize
 
+  let view = cell.controlView()
   result = textNaturalSize(cell.cellStringValue(), style)
-  for idx in 0 ..< cell.cellNumberOfItems():
-    let item = cell.cellItemAtIndex(idx)
-    let itemSize = textNaturalSize(item, style)
-    result.width = max(result.width, itemSize.width)
-    result.height = max(result.height, itemSize.height)
+  case cell.xSizingMode
+  of cbsmSelectedItem:
+    discard
+  of cbsmPreferredWidth:
+    result.width = cell.xPreferredContentWidth
+  of cbsmWidestItem:
+    var widthHint = none(float32)
+    if view of ComboBox:
+      let comboBox = ComboBox(view)
+      let source = comboBox.dataSource()
+      if not source.isNil:
+        widthHint = source.trySendLocal(comboBoxIntrinsicContentWidth(), comboBox)
+      if widthHint.isSome and widthHint.get() >= 0.0'f32:
+        result.width = max(result.width, widthHint.get())
+      else:
+        for index in 0 ..< comboBox.numberOfItems():
+          let itemSize = textNaturalSize(comboBox.itemAtIndex(index), style)
+          result.width = max(result.width, itemSize.width)
+          result.height = max(result.height, itemSize.height)
+    else:
+      for index in 0 ..< cell.cellNumberOfItems():
+        let itemSize = textNaturalSize(cell.cellItemAtIndex(index), style)
+        result.width = max(result.width, itemSize.width)
+        result.height = max(result.height, itemSize.height)
+
+  cell.xMeasuredTextSize = result
+  cell.xMeasuredFontName = style.fontName
+  cell.xMeasuredFontSize = style.fontSize
+  cell.xMeasurementValid = true
 
 protocol DefaultComboBoxCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: ComboBoxCell): IntrinsicSize =
@@ -1229,7 +1289,7 @@ proc setComboBoxStringValue(comboBox: ComboBox, value: string) =
   cell.xSelectedIndex = index
   cell.xSelectedIdentifier = ""
   Control(comboBox).setObjectValue(toObj(value))
-  cell.invalidateControlMetrics()
+  cell.invalidateComboBoxMeasurement()
 
 proc comboBoxStringValueMethod(self: DynamicAgent, invocation: var Invocation) =
   invocation.setResult(ComboBox(self).comboBoxCell().cellStringValue())
@@ -1261,6 +1321,7 @@ proc initComboBoxCellFields*(cell: ComboBoxCell) =
   cell.xEditable = true
   cell.xMaxVisibleItems = 5
   cell.xItemHeight = 22.0
+  cell.xSizingMode = cbsmWidestItem
   discard cell.withProtocol(DefaultComboBoxCellMeasurement)
 
 proc newComboBoxCell*(): ComboBoxCell =
@@ -1304,6 +1365,12 @@ proc `itemHeight=`*(comboBox: ComboBox, value: float32) =
 
 proc `popupPresentation=`*(comboBox: ComboBox, popupPresentation: PopupPresentation) =
   comboBox.setPopupPresentation(popupPresentation)
+
+proc `sizingMode=`*(comboBox: ComboBox, mode: ComboBoxSizingMode) =
+  comboBox.setSizingMode(mode)
+
+proc `preferredContentWidth=`*(comboBox: ComboBox, width: float32) =
+  comboBox.setPreferredContentWidth(width)
 
 proc dataSource*(comboBox: ComboBox): DynamicAgent =
   comboBox.xDataSource
@@ -1776,7 +1843,7 @@ proc replaceStoredOptions(comboBox: ComboBox, options: openArray[ComboBoxOption]
   comboBox.xPopupViewport.reset()
   if cell.cellNumberOfItems() == 0:
     comboBox.closePopup()
-  cell.invalidateControlMetrics()
+  cell.invalidateComboBoxMeasurement()
 
 proc setOptions*(comboBox: ComboBox, options: openArray[ComboBoxOption]) =
   comboBox.replaceStoredOptions(options)
