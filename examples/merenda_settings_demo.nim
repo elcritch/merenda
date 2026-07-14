@@ -32,6 +32,7 @@ type
 
   FontPickerController = ref object of Responder
     items: Table[string, CascadingItem]
+    faces: Table[string, FontCatalogFace]
     childIdentifiers: Table[string, seq[string]]
     childIndexes: Table[string, Table[string, int]]
     selectionHandler: FontSelectionProc
@@ -46,8 +47,10 @@ func fontPickerLanguageIdentifier(language: string): string =
 func fontPickerFamilyIdentifier(languageIdentifier, familyIdentifier: string): string =
   languageIdentifier & ":family:" & familyIdentifier
 
-func fontPickerFaceTitle(style: string): string =
-  if style.toLowerAscii() == "regular": "Normal" else: style
+func fontPickerFaceTitle(face: FontCatalogFace): string =
+  result = if face.style.toLowerAscii() == "regular": "Normal" else: face.style
+  if face.variable:
+    result.add " (Variable)"
 
 proc addFontPickerLanguage(controller: FontPickerController, language: string): string =
   result = language.fontPickerLanguageIdentifier()
@@ -78,6 +81,13 @@ protocol FontPickerDataSource of CascadingDataSource:
       controller: FontPickerController, view: CascadingView, identifier: string
   ): CascadingItem =
     discard view
+    if identifier in controller.faces and not controller.faces[identifier].metadataLoaded:
+      var face = controller.faces[identifier]
+      let groupedLanguage = face.language
+      face.loadFontCatalogFaceMetadata()
+      face.language = groupedLanguage
+      controller.faces[identifier] = face
+      controller.items[identifier].title = face.fontPickerFaceTitle()
     controller.items.getOrDefault(identifier)
 
   method indexOfCascadingChildIdentifier(
@@ -112,6 +122,7 @@ protocol FontPickerDelegate of CascadingDelegate:
 proc newFontPickerController(): FontPickerController =
   result = FontPickerController(
     items: initTable[string, CascadingItem](),
+    faces: initTable[string, FontCatalogFace](),
     childIdentifiers: initTable[string, seq[string]](),
     childIndexes: initTable[string, Table[string, int]](),
   )
@@ -140,12 +151,13 @@ proc newFontPickerController(): FontPickerController =
       result.addFontPickerItem(
         cascadeItem(
           face.identifier,
-          face.style.fontPickerFaceTitle(),
+          face.fontPickerFaceTitle(),
           parentIdentifier = familyIdentifier,
           leaf = true,
           objectValue = toObj(face.path),
         )
       )
+      result.faces[face.identifier] = face
   for parentIdentifier, identifiers in result.childIdentifiers:
     var indexes = initTable[string, int]()
     for index, identifier in identifiers:

@@ -1,4 +1,4 @@
-import std/[sequtils, strutils, unittest]
+import std/[os, sequtils, strutils, unittest]
 
 import merenda/nimkit
 
@@ -41,6 +41,38 @@ suite "NimKit font pickers":
         "Hebrew:Regular", "Japanese:Bold",
       ]
     check "IBM Plex Sans Arabic Bold" in catalog[1].searchText
+
+  test "font catalog prefers parsed typeface metadata":
+    let
+      fontPath = getCurrentDir() / "data/Ubuntu.ttf"
+      catalog = buildFontCatalog([fontPath])
+
+    check catalog.len == 1
+    check catalog[0].family == "Ubuntu"
+    check catalog[0].faces.len == 1
+    check catalog[0].faces[0].style == "Regular"
+    check catalog[0].faces[0].weightClass == 400
+    check catalog[0].faces[0].widthClass == 5
+    check catalog[0].faces[0].regular
+    check not catalog[0].faces[0].bold
+    check not catalog[0].faces[0].italic
+    check not catalog[0].faces[0].monospace
+    check not catalog[0].faces[0].variable
+    check catalog[0].faces[0].metadataLoaded
+    check "Ubuntu Regular" in catalog[0].searchText
+
+  test "font catalog can defer typeface metadata":
+    let
+      fontPath = getCurrentDir() / "data/Ubuntu.ttf"
+      catalog = buildFontCatalog([fontPath], fcmmDeferred)
+    var face = catalog[0].faces[0]
+
+    check not face.metadataLoaded
+    face.loadFontCatalogFaceMetadata()
+    check face.metadataLoaded
+    check face.style == "Regular"
+    check face.weightClass == 400
+    check face.regular
 
   test "font options are built only when requested":
     var entries: seq[FontCatalogEntry]
