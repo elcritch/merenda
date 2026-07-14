@@ -3,6 +3,11 @@ import merenda/nimkit
 import std/[options, os, strutils, tables]
 import sigils/selectors
 
+when defined(settingsDemoBenchmark):
+  import std/[monotimes, times]
+
+  let settingsDemoStartedAt = getMonoTime()
+
 when defined(useNativeDynlib):
   import figdraw/dynlib
 else:
@@ -34,6 +39,20 @@ type
 proc addFontPickerItem(controller: FontPickerController, item: CascadingItem) =
   controller.items[item.identifier] = item
   controller.childIdentifiers.mgetOrPut(item.parentIdentifier, @[]).add item.identifier
+
+func fontPickerLanguageIdentifier(language: string): string =
+  "system-font-language:" & language.toLowerAscii()
+
+func fontPickerFamilyIdentifier(languageIdentifier, familyIdentifier: string): string =
+  languageIdentifier & ":family:" & familyIdentifier
+
+func fontPickerFaceTitle(style: string): string =
+  if style.toLowerAscii() == "regular": "Normal" else: style
+
+proc addFontPickerLanguage(controller: FontPickerController, language: string): string =
+  result = language.fontPickerLanguageIdentifier()
+  if result notin controller.items:
+    controller.addFontPickerItem(cascadeItem(result, language))
 
 protocol FontPickerDataSource of CascadingDataSource:
   method cascadingNumberOfChildren(
@@ -96,29 +115,33 @@ proc newFontPickerController(): FontPickerController =
     childIdentifiers: initTable[string, seq[string]](),
     childIndexes: initTable[string, Table[string, int]](),
   )
+  let defaultLanguageIdentifier = result.addFontPickerLanguage(DefaultFontLanguage)
   result.addFontPickerItem(
-    initCascadingItem(
-      DefaultSystemFontIdentifier, "Default", leaf = true, objectValue = toObj("")
+    cascadeItem(
+      DefaultSystemFontIdentifier,
+      "System Default",
+      parentIdentifier = defaultLanguageIdentifier,
+      leaf = true,
+      objectValue = toObj(""),
     )
   )
   for entry in systemFontCatalog():
-    result.addFontPickerItem(initCascadingItem(entry.identifier, entry.family))
-    var languageIdentifiers = initTable[string, string]()
     for face in entry.faces:
-      let languageIdentifier =
-        entry.identifier & ":language:" & face.language.toLowerAscii()
-      if face.language notin languageIdentifiers:
-        languageIdentifiers[face.language] = languageIdentifier
+      let
+        languageIdentifier = result.addFontPickerLanguage(face.language)
+        familyIdentifier =
+          languageIdentifier.fontPickerFamilyIdentifier(entry.identifier)
+      if familyIdentifier notin result.items:
         result.addFontPickerItem(
-          initCascadingItem(
-            languageIdentifier, face.language, parentIdentifier = entry.identifier
+          cascadeItem(
+            familyIdentifier, entry.family, parentIdentifier = languageIdentifier
           )
         )
       result.addFontPickerItem(
-        initCascadingItem(
+        cascadeItem(
           face.identifier,
-          face.style,
-          parentIdentifier = languageIdentifier,
+          face.style.fontPickerFaceTitle(),
+          parentIdentifier = familyIdentifier,
           leaf = true,
           objectValue = toObj(face.path),
         )
@@ -217,7 +240,15 @@ let
   themeLabel = newFormLabel("Theme")
   fontLabel = newFormLabel("Font")
   fontSizeLabel = newFormLabel("Size")
-  fontPickerController = newFontPickerController()
+  fontPickerController =
+    when defined(settingsDemoBenchmark):
+      block:
+        let startedAt = getMonoTime()
+        let controller = newFontPickerController()
+        echo "font picker model: ", (getMonoTime() - startedAt).inMilliseconds, " ms"
+        controller
+    else:
+      newFontPickerController()
   themePicker = newComboBox(
     [
       dtDefault.title(),
@@ -289,9 +320,15 @@ fontPicker.accessibilityLabel = "Font"
 fontPickerController.selectionHandler = proc(path: string) =
   previewFontPath = path
   updatePreview()
+when defined(settingsDemoBenchmark):
+  let cascadingSetupStartedAt = getMonoTime()
 fontPicker.dataSource = fontPickerController
 fontPicker.delegate = fontPickerController
-fontPicker.selectedPath = @[DefaultSystemFontIdentifier]
+fontPicker.selectedPath =
+  @[DefaultFontLanguage.fontPickerLanguageIdentifier(), DefaultSystemFontIdentifier]
+when defined(settingsDemoBenchmark):
+  echo "cascading source setup: ",
+    (getMonoTime() - cascadingSetupStartedAt).inMilliseconds, " ms"
 fontSizePicker.selectedIndex = previewFontSize.ord
 fontSizePicker.target = newActionTarget(fontSizeChanged, fontSizeDidChange)
 fontSizePicker.action = fontSizeChanged
@@ -337,4 +374,8 @@ panel.styleMask = panel.styleMask + {wsmResizable}
 panel.automaticallyAdjustsContentMinSize = true
 
 applyAppearance()
-app.runWindow(panel, root, themePicker)
+when defined(settingsDemoBenchmark):
+  echo "settings demo setup: ",
+    (getMonoTime() - settingsDemoStartedAt).inMilliseconds, " ms"
+else:
+  app.runWindow(panel, root, themePicker)

@@ -9,6 +9,9 @@ import merenda/nimkit
 type
   CascadingSourceSpy = ref object of Responder
     items: seq[CascadingItem]
+    numberOfChildrenCalls: int
+    childIdentifierCalls: int
+    itemCalls: int
 
   CascadingDelegateSpy = ref object of Responder
     denied: seq[string]
@@ -25,6 +28,9 @@ type
 
   CascadingNotificationSpy = ref object of Responder
     notifications: seq[Notification]
+
+  CascadingLayoutSpy = ref object of Agent
+    reasons: seq[LayoutInvalidationReason]
 
 proc containsValue(values: openArray[string], value: string): bool =
   for item in values:
@@ -87,6 +93,7 @@ protocol CascadingSourceSpyMethods of CascadingDataSource:
   method cascadingNumberOfChildren(
       source: CascadingSourceSpy, view: CascadingView, parentIdentifier: string
   ): int =
+    inc source.numberOfChildrenCalls
     for item in source.items:
       if item.parentIdentifier == parentIdentifier:
         inc result
@@ -97,6 +104,7 @@ protocol CascadingSourceSpyMethods of CascadingDataSource:
       parentIdentifier: string,
       index: int,
   ): string =
+    inc source.childIdentifierCalls
     var current = 0
     for item in source.items:
       if item.parentIdentifier == parentIdentifier:
@@ -107,6 +115,7 @@ protocol CascadingSourceSpyMethods of CascadingDataSource:
   method cascadingItem(
       source: CascadingSourceSpy, view: CascadingView, identifier: string
   ): CascadingItem =
+    inc source.itemCalls
     for item in source.items:
       if item.identifier == identifier:
         return item
@@ -179,6 +188,11 @@ proc rememberCascadingNotification(
 ) {.slot.} =
   spy.notifications.add notification
 
+proc recordCascadingLayout(
+    spy: CascadingLayoutSpy, reason: LayoutInvalidationReason
+) {.slot.} =
+  spy.reasons.add reason
+
 proc newCascadingSourceSpy(items: openArray[CascadingItem]): CascadingSourceSpy =
   result = CascadingSourceSpy(items: @items)
   initResponder(result)
@@ -200,14 +214,83 @@ proc newCascadingNotificationSpy(): CascadingNotificationSpy =
   result = result.withProto()
 
 suite "NimKit CascadingView":
+  test "bulk items build visible and identifier indexes once":
+    let
+      view = newCascadingView(frame = rect(0, 0, 360, 160))
+      layoutSpy = CascadingLayoutSpy()
+    var items: seq[CascadingItem]
+    for index in 0 ..< 1_000:
+      items.add cascadeItem(
+        "item-" & $index, "Item " & $index, leaf = true, hidden = index mod 10 == 0
+      )
+
+    view.connect(layoutInputChanged, layoutSpy, recordCascadingLayout)
+    view.cascadingItems = items
+
+    var intrinsicInvalidations = 0
+    for reason in layoutSpy.reasons:
+      if reason == lirIntrinsic:
+        inc intrinsicInvalidations
+    check intrinsicInvalidations == 1
+    check view.tableViewForColumn(0).rowCount == 900
+    check view.indexOfChildIdentifier("", "item-1") == 0
+    check view.indexOfChildIdentifier("", "item-10") == -1
+    check view.indexOfChildIdentifier("", "item-999") == 899
+    for discardIndex in 0 ..< 100:
+      discard discardIndex
+      check view.childrenForParent("").len == 900
+      check view.indexOfChildIdentifier("", "item-999") == 899
+
+    view.cascadingItems = [cascadeItem("replacement", "Replacement", leaf = true)]
+    check view.tableViewForColumn(0).rowCount == 1
+    check view.indexOfChildIdentifier("", "item-999") == -1
+    check view.indexOfChildIdentifier("", "replacement") == 0
+
+  test "data source rows and counts stay cached until reload":
+    var items: seq[CascadingItem]
+    for index in 0 ..< 1_000:
+      items.add cascadeItem(
+        "item-" & $index, "Item " & $index, leaf = true, hidden = index mod 10 == 0
+      )
+    let
+      view = newCascadingView(frame = rect(0, 0, 360, 160))
+      source = newCascadingSourceSpy(items)
+
+    view.dataSource = source
+    let tableView = view.tableViewForColumn(0)
+    check tableView.rowCount == 900
+    check tableView.tableCellText(899, tableView.columnAt(0)) == "Item 999"
+    check view.indexOfChildIdentifier("", "item-999") == 899
+    let
+      numberOfChildrenCalls = source.numberOfChildrenCalls
+      childIdentifierCalls = source.childIdentifierCalls
+      itemCalls = source.itemCalls
+
+    for discardIndex in 0 ..< 100:
+      discard discardIndex
+      check tableView.rowCount == 900
+      check tableView.tableCellText(899, tableView.columnAt(0)) == "Item 999"
+      check view.indexOfChildIdentifier("", "item-999") == 899
+
+    check source.numberOfChildrenCalls == numberOfChildrenCalls
+    check source.childIdentifierCalls == childIdentifierCalls
+    check source.itemCalls == itemCalls
+
+    source.items.add cascadeItem("last", "Last", leaf = true)
+    view.reloadData()
+    check tableView.rowCount == 901
+    check source.numberOfChildrenCalls == numberOfChildrenCalls + 1
+    check source.childIdentifierCalls == childIdentifierCalls + 1_001
+    check source.itemCalls == itemCalls + 1_001
+
   test "view flattens path selections into cascading columns":
     let view = newCascadingView(frame = rect(0, 0, 360, 160))
     view.cascadingItems = [
-      initCascadingItem("project", "Project"),
-      initCascadingItem("notes", "Notes", leaf = true),
-      initCascadingItem("src", "src", parentIdentifier = "project"),
-      initCascadingItem("tests", "tests", parentIdentifier = "project", leaf = true),
-      initCascadingItem("main", "main.nim", parentIdentifier = "src", leaf = true),
+      cascadeItem("project", "Project"),
+      cascadeItem("notes", "Notes", leaf = true),
+      cascadeItem("src", "src", parentIdentifier = "project"),
+      cascadeItem("tests", "tests", parentIdentifier = "project", leaf = true),
+      cascadeItem("main", "main.nim", parentIdentifier = "src", leaf = true),
     ]
 
     check view.columnCount == 1
@@ -258,9 +341,9 @@ suite "NimKit CascadingView":
       view = newCascadingView(frame = rect(0, 0, 360, 160))
       source = newCascadingSourceSpy(
         [
-          initCascadingItem("root", "Root"),
-          initCascadingItem("blocked", "Blocked", leaf = true),
-          initCascadingItem("child", "Child", parentIdentifier = "root", leaf = true),
+          cascadeItem("root", "Root"),
+          cascadeItem("blocked", "Blocked", leaf = true),
+          cascadeItem("child", "Child", parentIdentifier = "root", leaf = true),
         ]
       )
       delegate = newCascadingDelegateSpy()
@@ -313,9 +396,9 @@ suite "NimKit CascadingView":
     center.connect(notificationPosted, notificationSpy, rememberCascadingNotification)
     try:
       view.cascadingItems = [
-        initCascadingItem("root", objectValue = toObj("Root")),
-        initCascadingItem("hidden", "Hidden", hidden = true),
-        initCascadingItem(
+        cascadeItem("root", objectValue = toObj("Root")),
+        cascadeItem("hidden", "Hidden", hidden = true),
+        cascadeItem(
           "child", parentIdentifier = "root", objectValue = toObj(42), leaf = true
         ),
       ]
@@ -337,9 +420,7 @@ suite "NimKit CascadingView":
         @["root"]
 
       view.insertCascadingItems(
-        "root",
-        1,
-        [initCascadingItem("second", objectValue = toObj("Second"), leaf = true)],
+        "root", 1, [cascadeItem("second", objectValue = toObj("Second"), leaf = true)]
       )
       check view.tableViewForColumn(1).rowCount == 2
       check signals.updates.len == 1
@@ -406,11 +487,9 @@ suite "NimKit CascadingView":
     view.columnWidth = 170.0
     view.minColumnWidth = 120.0
     view.cascadingItems = [
-      initCascadingItem("root", "Root"),
-      initCascadingItem("child", "Child", parentIdentifier = "root"),
-      initCascadingItem(
-        "grandchild", "Grandchild", parentIdentifier = "child", leaf = true
-      ),
+      cascadeItem("root", "Root"),
+      cascadeItem("child", "Child", parentIdentifier = "root"),
+      cascadeItem("grandchild", "Grandchild", parentIdentifier = "child", leaf = true),
     ]
     root.addSubview(view)
     view.selectItem(0, 0)
@@ -440,11 +519,9 @@ suite "NimKit CascadingView":
 
     view.columnWidth = 170.0
     view.cascadingItems = [
-      initCascadingItem("root", "Root"),
-      initCascadingItem("child", "Child", parentIdentifier = "root"),
-      initCascadingItem(
-        "grandchild", "Grandchild", parentIdentifier = "child", leaf = true
-      ),
+      cascadeItem("root", "Root"),
+      cascadeItem("child", "Child", parentIdentifier = "root"),
+      cascadeItem("grandchild", "Grandchild", parentIdentifier = "child", leaf = true),
     ]
     root.addSubview(view)
     view.selectItem(0, 0)
@@ -512,9 +589,9 @@ suite "NimKit CascadingView":
     view.columnWidth = 120.0
     view.styleClasses = @["project-browser"]
     view.cascadingItems = [
-      initCascadingItem("parent", "Parent"),
-      initCascadingItem("leaf", "Leaf", leaf = true),
-      initCascadingItem("child", "Child", parentIdentifier = "parent", leaf = true),
+      cascadeItem("parent", "Parent"),
+      cascadeItem("leaf", "Leaf", leaf = true),
+      cascadeItem("child", "Child", parentIdentifier = "parent", leaf = true),
     ]
     root.addSubview(view)
     view.selectItem(0, 0)
@@ -560,9 +637,9 @@ suite "NimKit CascadingView":
 
     view.columnWidth = 180.0
     view.cascadingItems = [
-      initCascadingItem("parent", "Parent"),
-      initCascadingItem("leaf", "Leaf", leaf = true),
-      initCascadingItem("child", "Child", parentIdentifier = "parent", leaf = true),
+      cascadeItem("parent", "Parent"),
+      cascadeItem("leaf", "Leaf", leaf = true),
+      cascadeItem("child", "Child", parentIdentifier = "parent", leaf = true),
     ]
     root.addSubview(view)
     discard buildRenders(root)
@@ -584,9 +661,9 @@ suite "NimKit CascadingView":
       view = newCascadingView(frame = rect(0, 0, 360, 160))
 
     view.cascadingItems = [
-      initCascadingItem("project", "Project"),
-      initCascadingItem("src", "src", parentIdentifier = "project"),
-      initCascadingItem("main", "main.nim", parentIdentifier = "src", leaf = true),
+      cascadeItem("project", "Project"),
+      cascadeItem("src", "src", parentIdentifier = "project"),
+      cascadeItem("main", "main.nim", parentIdentifier = "src", leaf = true),
     ]
     root.addSubview(view)
     window.setContentView(root)

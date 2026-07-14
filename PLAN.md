@@ -118,11 +118,16 @@ build on that vocabulary instead of adding parallel storage models.
   identifiers, normalized search text, and data-source counts are cached; and
   selected-item, widest-item, and preferred-width sizing policies avoid
   unrequested whole-model measurement.
+- Added scalable cascading-view collection paths: bulk item replacement rebuilds
+  local caches with one intrinsic invalidation; visible child indexes, items,
+  identifier lookups, normalized type-selection text, and per-parent model counts
+  are cached until reload or an incremental tree update. The settings demo also
+  has an opt-in noninteractive startup benchmark for the font hierarchy.
 - Added a process-cached, family-oriented system font catalog and lazy combo-box
   data source. Font choices retain stable family and face identifiers, language
   variants, styles, representative paths, searchable face names, cached width
   hints, and on-demand option materialization. `merenda_settings_demo.nim`
-  consumes the cached catalog through a family-language-face `CascadingView`
+  consumes the cached catalog through a language-family-face `CascadingView`
   data source instead of eagerly loading every font file into a combo box.
 - Added deterministic operation-count coverage with thousands of combo and table
   items for invalidation, lookup, measurement, arrangement, row geometry, and

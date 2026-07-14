@@ -1,4 +1,4 @@
-import std/[options, strutils]
+import std/[options, strutils, tables]
 
 import sigils/core
 
@@ -21,6 +21,12 @@ import ./tableviews
 export controls, scrollviews, tableviews
 
 type
+  CascadingChildrenCache = object
+    modelCount: int
+    visibleIndices: seq[int]
+    items: seq[CascadingItem]
+    visibleIndexByIdentifier: Table[string, int]
+
   CascadingItem* = object
     identifier*: string
     parentIdentifier*: string
@@ -70,6 +76,12 @@ type
     xBatchUpdateDepth: int
     xPendingTreeUpdates: seq[CascadingTreeUpdate]
     xActivatedIdentifier: string
+    xLocalIndexByIdentifier: Table[string, int]
+    xItemByIdentifier: Table[string, CascadingItem]
+    xChildCountByParent: Table[string, int]
+    xChildrenByParent: Table[string, CascadingChildrenCache]
+    xTitleByIdentifier: Table[string, string]
+    xNormalizedSearchTextByIdentifier: Table[string, string]
 
 const
   CascadingDefaultColumnWidth = 160.0'f32
@@ -186,7 +198,7 @@ protocol CascadingTransactionAnim of CascadingTransactionAnimProtocol:
   method animColumnSpacingValue(view: CascadingView, spacing: float32) =
     view.columnSpacing = spacing
 
-proc initCascadingItem*(
+proc cascadeItem*(
     identifier: string,
     title = "",
     parentIdentifier = "",
@@ -418,12 +430,25 @@ proc columnForTableView(view: CascadingView, tableView: TableView): int =
       return index
   -1
 
+proc clearCascadingModelCaches(view: CascadingView) =
+  view.xLocalIndexByIdentifier = initTable[string, int]()
+  view.xItemByIdentifier = initTable[string, CascadingItem]()
+  view.xChildCountByParent = initTable[string, int]()
+  view.xChildrenByParent = initTable[string, CascadingChildrenCache]()
+  view.xTitleByIdentifier = initTable[string, string]()
+  view.xNormalizedSearchTextByIdentifier = initTable[string, string]()
+  for index, item in view.xItems:
+    if item.identifier.len > 0 and item.identifier notin view.xLocalIndexByIdentifier:
+      view.xLocalIndexByIdentifier[item.identifier] = index
+
 proc localItemWithIdentifier(
     view: CascadingView, identifier: string
 ): tuple[found: bool, item: CascadingItem] =
-  for item in view.xItems:
-    if item.identifier == identifier:
-      return (true, item)
+  let index = view.xLocalIndexByIdentifier.getOrDefault(identifier, -1)
+  if index in 0 ..< view.xItems.len:
+    (true, view.xItems[index])
+  else:
+    (false, CascadingItem())
 
 proc dataSourceObjectValueForIdentifier(
     view: CascadingView, identifier: string
@@ -445,11 +470,63 @@ proc applyDataSourceItemMetadata(view: CascadingView, item: var CascadingItem) =
   if item.title.len == 0 and not item.objectValue.isNilOrEmpty():
     item.title = Control(view).formatObjectValue(item.objectValue, ovrTableCell)
 
+proc cacheCascadingItem(view: CascadingView, item: sink CascadingItem): CascadingItem =
+  result = item
+  let identifier = result.identifier
+  if identifier.len == 0:
+    return
+  view.xItemByIdentifier[identifier] = result
+  let title =
+    if result.title.len > 0:
+      result.title
+    elif not result.objectValue.isNilOrEmpty():
+      Control(view).formatObjectValue(result.objectValue, ovrTableCell)
+    else:
+      identifier
+  view.xTitleByIdentifier[identifier] = title
+  view.xNormalizedSearchTextByIdentifier[identifier] = title.strip().toLowerAscii()
+
+proc rebuildLocalCascadingCaches(view: CascadingView) =
+  if not view.dataSource().isNil:
+    return
+  var siblingCounts = initTable[string, int]()
+  for item in view.xItems:
+    let
+      parentIdentifier = item.parentIdentifier
+      modelIndex = siblingCounts.getOrDefault(parentIdentifier)
+    siblingCounts[parentIdentifier] = modelIndex + 1
+    if parentIdentifier notin view.xChildrenByParent:
+      view.xChildrenByParent[parentIdentifier] =
+        CascadingChildrenCache(visibleIndexByIdentifier: initTable[string, int]())
+    view.xChildrenByParent[parentIdentifier].modelCount = modelIndex + 1
+    var cachedItem = item
+    view.applyDataSourceItemMetadata(cachedItem)
+    cachedItem = view.cacheCascadingItem(cachedItem)
+    if cachedItem.hidden:
+      continue
+    let visibleIndex = view.xChildrenByParent[parentIdentifier].visibleIndices.len
+    view.xChildrenByParent[parentIdentifier].visibleIndices.add modelIndex
+    view.xChildrenByParent[parentIdentifier].items.add cachedItem
+    if cachedItem.identifier.len > 0 and
+        cachedItem.identifier notin
+        view.xChildrenByParent[parentIdentifier].visibleIndexByIdentifier:
+      view.xChildrenByParent[parentIdentifier].visibleIndexByIdentifier[
+        cachedItem.identifier
+      ] = visibleIndex
+  for parentIdentifier, cache in view.xChildrenByParent:
+    view.xChildCountByParent[parentIdentifier] = cache.items.len
+
+proc refreshCascadingModelCaches(view: CascadingView) =
+  view.clearCascadingModelCaches()
+  view.rebuildLocalCascadingCaches()
+
 proc cascadingItemWithIdentifier*(
     view: CascadingView, identifier: string
 ): CascadingItem =
   if identifier.len == 0:
     return
+  if identifier in view.xItemByIdentifier:
+    return view.xItemByIdentifier[identifier]
   let source = view.dataSource()
   if not source.isNil:
     let item =
@@ -467,20 +544,21 @@ proc cascadingItemWithIdentifier*(
           result.title = title.get()
       if result.title.len == 0:
         result.title = result.identifier
-      return
+      return view.cacheCascadingItem(result)
     let title =
       source.trySendLocal(cascadingItemTitle(), (view: view, identifier: identifier))
     if title.isSome:
-      result = initCascadingItem(identifier, title.get())
+      result = cascadeItem(identifier, title.get())
       view.applyDataSourceItemMetadata(result)
-      return
+      return view.cacheCascadingItem(result)
   let local = view.localItemWithIdentifier(identifier)
   if local.found:
     result = local.item
     view.applyDataSourceItemMetadata(result)
   else:
-    result = initCascadingItem(identifier, identifier, leaf = true)
+    result = cascadeItem(identifier, identifier, leaf = true)
     view.applyDataSourceItemMetadata(result)
+  result = view.cacheCascadingItem(result)
 
 proc cascadingItemObjectValue*(view: CascadingView, identifier: string): ObjectValue =
   if identifier.len == 0:
@@ -513,49 +591,83 @@ proc parentIdentifierForColumn(view: CascadingView, column: int): string =
   else:
     ""
 
+proc cachedChildCount(view: CascadingView, parentIdentifier: string): Option[int] =
+  if parentIdentifier in view.xChildCountByParent:
+    return some(view.xChildCountByParent[parentIdentifier])
+  let source = view.dataSource()
+  if source.isNil:
+    return none(int)
+  let count = source.trySendLocal(
+    cascadingNumberOfChildren(), (view: view, parentIdentifier: parentIdentifier)
+  )
+  if count.isSome:
+    let modelCount = max(count.get(), 0)
+    view.xChildCountByParent[parentIdentifier] = modelCount
+    return some(modelCount)
+
+proc refreshChildrenForParent(view: CascadingView, parentIdentifier: string) =
+  if parentIdentifier in view.xChildrenByParent:
+    return
+  var cache = CascadingChildrenCache(visibleIndexByIdentifier: initTable[string, int]())
+  let
+    source = view.dataSource()
+    count = view.cachedChildCount(parentIdentifier)
+  if not source.isNil and count.isSome:
+    cache.modelCount = count.get()
+    for modelIndex in 0 ..< cache.modelCount:
+      let identifier = source.trySendLocal(
+        cascadingChildIdentifier(),
+        (view: view, parentIdentifier: parentIdentifier, index: modelIndex),
+      )
+      if identifier.isNone or identifier.get().len == 0:
+        continue
+      var item = view.cascadingItemWithIdentifier(identifier.get())
+      if item.hidden:
+        continue
+      if item.parentIdentifier.len == 0 and parentIdentifier.len > 0:
+        item.parentIdentifier = parentIdentifier
+      let visibleIndex = cache.visibleIndices.len
+      cache.visibleIndices.add modelIndex
+      cache.items.add item
+      if item.identifier notin cache.visibleIndexByIdentifier:
+        cache.visibleIndexByIdentifier[item.identifier] = visibleIndex
+  else:
+    var modelIndex = 0
+    for item in view.xItems:
+      if item.parentIdentifier != parentIdentifier:
+        continue
+      inc cache.modelCount
+      if not item.hidden:
+        let visibleIndex = cache.visibleIndices.len
+        cache.visibleIndices.add modelIndex
+        cache.items.add item
+        if item.identifier.len > 0 and
+            item.identifier notin cache.visibleIndexByIdentifier:
+          cache.visibleIndexByIdentifier[item.identifier] = visibleIndex
+      inc modelIndex
+    view.xChildCountByParent[parentIdentifier] = cache.items.len
+  view.xChildrenByParent[parentIdentifier] = cache
+
 proc childrenForParent*(
     view: CascadingView, parentIdentifier: string
 ): seq[CascadingItem] =
-  let source = view.dataSource()
-  if not source.isNil:
-    let count = source.trySendLocal(
-      cascadingNumberOfChildren(), (view: view, parentIdentifier: parentIdentifier)
-    )
-    if count.isSome:
-      for index in 0 ..< max(count.get(), 0):
-        let identifier = source.trySendLocal(
-          cascadingChildIdentifier(),
-          (view: view, parentIdentifier: parentIdentifier, index: index),
-        )
-        if identifier.isSome and identifier.get().len > 0:
-          var item = view.cascadingItemWithIdentifier(identifier.get())
-          if not item.hidden:
-            if item.parentIdentifier.len == 0 and parentIdentifier.len > 0:
-              item.parentIdentifier = parentIdentifier
-            result.add item
-      return
-  for item in view.xItems:
-    if item.parentIdentifier == parentIdentifier and not item.hidden:
-      result.add item
+  view.refreshChildrenForParent(parentIdentifier)
+  view.xChildrenByParent[parentIdentifier].items
 
 proc itemHasChildren*(view: CascadingView, identifier: string): bool =
   if identifier.len == 0:
     return false
   let source = view.dataSource()
   if not source.isNil:
-    let count = source.trySendLocal(
-      cascadingNumberOfChildren(), (view: view, parentIdentifier: identifier)
-    )
+    let count = view.cachedChildCount(identifier)
     if count.isSome:
       return count.get() > 0
     let leaf =
       source.trySendLocal(isLeafCascadingItem(), (view: view, identifier: identifier))
     if leaf.isSome:
       return not leaf.get()
-  for item in view.xItems:
-    if item.parentIdentifier == identifier and not item.hidden:
-      return true
-  false
+  view.refreshChildrenForParent(identifier)
+  view.xChildrenByParent[identifier].items.len > 0
 
 proc cascadingItemIsLeaf(view: CascadingView, item: CascadingItem): bool =
   if item.identifier.len == 0:
@@ -576,18 +688,10 @@ proc cascadingRowForIdentifier(
 ): int =
   if identifier.len == 0:
     return -1
-  let source = view.dataSource()
-  if not source.isNil:
-    let index = source.trySendLocal(
-      indexOfCascadingChildIdentifier(),
-      (view: view, parentIdentifier: parentIdentifier, identifier: identifier),
-    )
-    if index.isSome and index.get() >= 0:
-      return index.get()
-  for index, item in view.childrenForParent(parentIdentifier):
-    if item.identifier == identifier:
-      return index
-  -1
+  view.refreshChildrenForParent(parentIdentifier)
+  view.xChildrenByParent[parentIdentifier].visibleIndexByIdentifier.getOrDefault(
+    identifier, -1
+  )
 
 proc indexOfChildIdentifier*(
     view: CascadingView, parentIdentifier, identifier: string
@@ -597,17 +701,21 @@ proc indexOfChildIdentifier*(
 proc itemForColumnRow(view: CascadingView, column, row: int): CascadingItem =
   if row < 0:
     return
-  let children = view.childrenForParent(view.parentIdentifierForColumn(column))
-  if row in 0 ..< children.len:
-    result = children[row]
+  let parentIdentifier = view.parentIdentifierForColumn(column)
+  view.refreshChildrenForParent(parentIdentifier)
+  if row in 0 ..< view.xChildrenByParent[parentIdentifier].items.len:
+    result = view.xChildrenByParent[parentIdentifier].items[row]
 
 proc titleForItem(view: CascadingView, item: CascadingItem): string =
-  if item.title.len > 0:
-    item.title
-  elif not item.objectValue.isNilOrEmpty():
-    Control(view).formatObjectValue(item.objectValue, ovrTableCell)
-  else:
-    item.identifier
+  if item.identifier in view.xTitleByIdentifier:
+    return view.xTitleByIdentifier[item.identifier]
+  let cachedItem = view.cacheCascadingItem(item)
+  view.xTitleByIdentifier.getOrDefault(cachedItem.identifier, cachedItem.identifier)
+
+proc normalizedSearchTextForItem(view: CascadingView, item: CascadingItem): string =
+  if item.identifier notin view.xNormalizedSearchTextByIdentifier:
+    discard view.cacheCascadingItem(item)
+  view.xNormalizedSearchTextByIdentifier.getOrDefault(item.identifier)
 
 proc syncCascadingColumnStyle(view: CascadingView, tableView: TableView) =
   let transparent = color(0.0, 0.0, 0.0, 0.0)
@@ -913,6 +1021,7 @@ proc applySelectedPath(view: CascadingView, path: openArray[string]) =
   view.notifyCascadingSelectionDidChange()
 
 proc reloadData*(view: CascadingView) =
+  view.refreshCascadingModelCaches()
   let selectionChanged = view.preserveSelectedPathAfterDataChange()
   view.syncCascadingColumns()
   view.scrollColumnToVisible(min(view.xSelectedPath.len, view.xColumns.high))
@@ -990,6 +1099,7 @@ proc flushCascadingTreeUpdates(
 ) =
   if updates.len == 0:
     return
+  view.refreshCascadingModelCaches()
   let
     focusedColumn = view.columnForTableView(view.focusedColumnTable())
     selectionChanged = view.preserveSelectedPathAfterDataChange()
@@ -1032,6 +1142,7 @@ proc applyCascadingTreeUpdates*(
   view.flushCascadingTreeUpdates(updates)
 
 proc reloadChildrenForParent*(view: CascadingView, parentIdentifier: string) =
+  view.refreshCascadingModelCaches()
   let children = view.childrenForParent(parentIdentifier)
   var
     indexes: seq[int]
@@ -1172,6 +1283,7 @@ proc moveCascadingItem*(
   item.parentIdentifier = parentIdentifier
   let targetStorageIndex = view.localStorageIndexForChildIndex(parentIdentifier, index)
   view.xItems.insert(item, targetStorageIndex)
+  view.refreshCascadingModelCaches()
   let newRow = view.indexOfChildIdentifier(parentIdentifier, identifier)
   if oldParent == parentIdentifier:
     view.moveChildForParent(parentIdentifier, oldRow, newRow, [identifier])
@@ -1333,6 +1445,14 @@ protocol CascadingTableDataSource of TableViewDataSource:
     if columnIndex < 0:
       return ""
     view.titleForItem(view.itemForColumnRow(columnIndex, row))
+
+  method normalizedSearchTextForRow(
+      view: CascadingView, tableView: TableView, row: int
+  ): string =
+    let columnIndex = view.columnForTableView(tableView)
+    if columnIndex < 0:
+      return ""
+    view.normalizedSearchTextForItem(view.itemForColumnRow(columnIndex, row))
 
   method objectValueForCell(
       view: CascadingView, tableView: TableView, row: int, column: TableColumn

@@ -635,6 +635,10 @@ protocol TableViewDataSource {.selectorScope: protocol.}:
 
   method textForRowHeader*(tableView: TableView, row: int): string {.optional.}
 
+  method normalizedSearchTextForRow*(
+    tableView: TableView, row: int
+  ): string {.optional.}
+
   method objectValueForCell*(
     tableView: TableView, row: int, column: TableColumn
   ): ObjectValue {.optional.}
@@ -2657,6 +2661,13 @@ proc typeSelectStartIndex(tableView: TableView): int =
 proc rowTextMatchesPrefix(
     tableView: TableView, index: int, normalizedPrefix: string
 ): bool =
+  let source = tableView.dataSource()
+  if not source.isNil:
+    let searchText = source.trySendLocal(
+      normalizedSearchTextForRow(), (tableView: tableView, row: index)
+    )
+    if searchText.isSome:
+      return searchText.get().startsWith(normalizedPrefix)
   tableView.rowTextForSummary(index).toLowerAscii().startsWith(normalizedPrefix)
 
 proc firstRowMatchingText(tableView: TableView, text: string): int =

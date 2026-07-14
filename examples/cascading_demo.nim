@@ -25,7 +25,7 @@ proc initNode(
     leaf = false,
 ): CascadingDemoNode =
   CascadingDemoNode(
-    item: initCascadingItem(identifier, title, parentIdentifier, leaf),
+    item: cascadeItem(identifier, title, parentIdentifier, leaf),
     kind: kind,
     owner: owner,
     status: status,

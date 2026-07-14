@@ -883,11 +883,11 @@ suite "nimkit application":
       browser = newCascadingView(frame = rect(10, 10, 360, 160))
 
     browser.cascadingItems = [
-      initCascadingItem("project", "Project"),
-      initCascadingItem("notes", "Notes", leaf = true),
-      initCascadingItem("src", "src", parentIdentifier = "project"),
-      initCascadingItem("tests", "tests", parentIdentifier = "project", leaf = true),
-      initCascadingItem("main", "main.nim", parentIdentifier = "src", leaf = true),
+      cascadeItem("project", "Project"),
+      cascadeItem("notes", "Notes", leaf = true),
+      cascadeItem("src", "src", parentIdentifier = "project"),
+      cascadeItem("tests", "tests", parentIdentifier = "project", leaf = true),
+      cascadeItem("main", "main.nim", parentIdentifier = "src", leaf = true),
     ]
     root.addSubview(browser)
     window.setContentView(root)
