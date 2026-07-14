@@ -337,11 +337,11 @@ If you tab-select a button and use enter or space to activate it the button does
 
 - `addComboBoxDoubleArrow` in drawing.nim should be removed or made into a L&F helper. 
 
-### TableView / Models
+### TableView & Data Models Optimizations
 
 Can TableView, Comboboxes, and other collections handle dynamic creation of items? For example it we have a combobox menu with several thousand items currently it seems to slow down our refresh speed.
 
-We should improve this.
+We should improve this. Consider whether layout caching can/should be improved. Additionally are their ways to only construct visible items dynamically?
 
 ### Resource-Backed UI Construction
 
