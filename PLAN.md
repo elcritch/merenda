@@ -97,6 +97,30 @@ build on that vocabulary instead of adding parallel storage models.
   row-identifier lookups, data-source object-value writeback, a seq-backed
   `TableModel` adapter, ID-first selection persistence with alias/resolver
   migration, batched row-update signals, and row-identifier drag payloads.
+- Completed the large-table and data-model scaling pass: `TableModel` now caches
+  arranged source indexes and source/arranged identifier maps by revision;
+  fixed-height row geometry uses arithmetic, variable-height geometry uses
+  cached prefix offsets and binary search, and table intrinsic sizing defaults
+  to explicit column widths with opt-in content measurement and data-source
+  width hints. Popup and table row construction remains visible-range bounded.
+- Coalesced cross-cutting layout work: appearance changes mark descendant state
+  locally and emit one root invalidation, automatic window content minimums are
+  deferred and flushed once, and repeated intrinsic-size invalidations no longer
+  force a solver pass for every intermediate mutation.
+- Added scalable combo-box collection paths: bulk option replacement performs
+  one invalidation without per-item undo registration; visible indexes,
+  identifiers, normalized search text, and data-source counts are cached; and
+  selected-item, widest-item, and preferred-width sizing policies avoid
+  unrequested whole-model measurement.
+- Added a process-cached, family-oriented system font catalog and lazy combo-box
+  data source. Font choices retain stable identifiers and representative paths,
+  searchable face names, cached width hints, and on-demand option materialization;
+  `merenda_settings_demo.nim` now uses this path instead of eagerly loading every
+  font file into the control.
+- Added deterministic operation-count coverage with thousands of combo and table
+  items for invalidation, lookup, measurement, arrangement, row geometry, and
+  lazy font-option behavior. Wall-clock benchmarks remain diagnostic and are not
+  timing-sensitive CI assertions.
 - Added backend-neutral pasteboard and dragging foundations with typed item
   storage, named/unique pasteboards, lazy providers, strings/text/data/property
   lists/URLs/files/colors/fonts/images, drag sessions, promised-file staging,
@@ -325,7 +349,8 @@ build on that vocabulary instead of adding parallel storage models.
   `examples/matrix_demo.nim`, `examples/modelcontrollers_demo.nim`,
   `examples/monotext_demo.nim`, `examples/progress_indicator_demo.nim`,
   `examples/cascading_demo.nim`, `examples/viewcontroller_demo.nim`,
-  `examples/collectionview_demo.nim`, and `examples/controls_showcase.nim`.
+  `examples/collectionview_demo.nim`, `examples/controls_showcase.nim`, and
+  `examples/merenda_settings_demo.nim`.
 
 ## Near-Term Work
 
@@ -336,39 +361,6 @@ build on that vocabulary instead of adding parallel storage models.
 If you tab-select a button and use enter or space to activate it the button doesn't show the normal activation render / animations / etc.
 
 - `addComboBoxDoubleArrow` in drawing.nim should be removed or made into a L&F helper. 
-
-### TableView & Data Models Optimizations
-
-Keep large collections responsive by bounding work to model changes and visible
-content rather than repeating whole-collection work during layout and drawing.
-
-- Coalesce appearance, intrinsic-size, and automatic window-minimum invalidations.
-  Descendants should be marked dirty locally, followed by one root notification,
-  and automatic content minimums should be recomputed once in the next layout pass.
-- Give `ComboBox` a bulk option replacement path with one invalidation and no
-  per-item undo registration. Cache visible storage indexes, identifier lookups,
-  normalized search text, and the item count for each model revision.
-- Make combo intrinsic width policy explicit: selected-item, widest-item, or
-  preferred fixed width. Cache widest-item measurement by model and text-style
-  revision, and let data sources provide a width hint without enumerating items.
-- Preserve the existing visible-only popup and table row construction. Ensure
-  data-source queries, hosted cell creation, layout, and drawing remain bounded
-  by the visible range.
-- Cache `TableModel` arranged source indexes and source/arranged identifier maps.
-  Invalidate them once when rows, filtering, or sorting change, and reuse them for
-  count, lookup, selection restoration, and cell access.
-- Use arithmetic for fixed-height table row offsets and hit testing. For variable
-  heights, cache prefix offsets and use binary search; update affected cache ranges
-  incrementally when practical.
-- Avoid measuring every table row during intrinsic sizing. Prefer explicit column
-  widths or a model-provided width hint, with revision-keyed measurement caching
-  when content-driven width is requested.
-- Cache system font catalogs process-wide and populate font controls lazily in one
-  batch. Present family-oriented searchable choices rather than every font file,
-  while retaining stable paths or identifiers for the selected face.
-- Cover scaling behavior with deterministic operation-count tests using thousands
-  of items. Keep wall-clock benchmarks diagnostic rather than timing-sensitive CI
-  assertions.
 
 ### Resource-Backed UI Construction
 
