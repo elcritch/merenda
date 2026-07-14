@@ -98,7 +98,7 @@ proc clickMatrixCell(window: Window, matrix: Matrix, index: int): bool =
 
 proc personItems(): seq[ModelItem] =
   @[
-    initModelItem(
+    modelItem(
       "ada",
       objectValue = toObj("Ada"),
       fields = [
@@ -107,7 +107,7 @@ proc personItems(): seq[ModelItem] =
         modelField("active", toObj(true)),
       ],
     ),
-    initModelItem(
+    modelItem(
       "grace",
       objectValue = toObj("Grace"),
       fields = [
@@ -116,7 +116,7 @@ proc personItems(): seq[ModelItem] =
         modelField("active", toObj(true)),
       ],
     ),
-    initModelItem(
+    modelItem(
       "alan",
       objectValue = toObj("Alan"),
       fields = [
@@ -202,9 +202,9 @@ suite "nimkit model controllers":
     let
       controller = newTreeController(
         [
-          initModelTreeItem(initModelItem("root", objectValue = toObj("Root"))),
-          initModelTreeItem(
-            initModelItem("child", objectValue = toObj("Child")),
+          modelTreeItem(modelItem("root", objectValue = toObj("Root"))),
+          modelTreeItem(
+            modelItem("child", objectValue = toObj("Child")),
             parentIdentifier = "root",
             leaf = true,
           ),
@@ -234,8 +234,8 @@ suite "nimkit model controllers":
     check controller.selectionController().selectedIdentifier == "child"
 
     controller.addItem(
-      initModelTreeItem(
-        initModelItem(
+      modelTreeItem(
+        modelItem(
           "second",
           objectValue = toObj("Second"),
           fields = [modelField("status", toObj("ready"))],
@@ -260,8 +260,8 @@ suite "nimkit model controllers":
     let
       controller = newArrayController(
         [
-          initModelItem("one", objectValue = toObj("One")),
-          initModelItem(
+          modelItem("one", objectValue = toObj("One")),
+          modelItem(
             "two",
             objectValue = toObj("Two"),
             title = "Second",
@@ -273,7 +273,7 @@ suite "nimkit model controllers":
             ],
             enabled = false,
           ),
-          initModelItem("separator", separator = true),
+          modelItem("separator", separator = true),
         ]
       )
       comboBox = newComboBox()
@@ -315,7 +315,7 @@ suite "nimkit model controllers":
     bindMenu(boundMenu, controller)
     check boundMenu.len == 3
     check boundMenu[0.Natural].identifier == "one"
-    controller.addItem(initModelItem("three", objectValue = toObj("Three")))
+    controller.addItem(modelItem("three", objectValue = toObj("Three")))
     boundMenu.reloadData()
     check boundMenu.len == 4
     check boundMenu[3.Natural].identifier == "three"

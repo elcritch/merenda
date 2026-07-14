@@ -185,7 +185,7 @@ suite "nimkit notifications":
 
     let array = newArrayController(
       [
-        initModelItem(
+        modelItem(
           "one", objectValue = toObj("One"), fields = [modelField("name", toObj("One"))]
         )
       ]

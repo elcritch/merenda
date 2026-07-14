@@ -10,31 +10,31 @@ type CollectionViewDemo* = ref object
 
 proc demoItems(): seq[ModelItem] =
   @[
-    initModelItem(
+    modelItem(
       "assets",
       title = "Assets",
       objectValue = toObj("Assets"),
       fields = [modelField("kind", toObj("Folder"))],
     ),
-    initModelItem(
+    modelItem(
       "timeline",
       title = "Timeline",
       objectValue = toObj("Timeline"),
       fields = [modelField("kind", toObj("Panel"))],
     ),
-    initModelItem(
+    modelItem(
       "renderer",
       title = "Renderer",
       objectValue = toObj("Renderer"),
       fields = [modelField("kind", toObj("Job"))],
     ),
-    initModelItem(
+    modelItem(
       "notes",
       title = "Notes",
       objectValue = toObj("Notes"),
       fields = [modelField("kind", toObj("Document"))],
     ),
-    initModelItem(
+    modelItem(
       "exports",
       title = "Exports",
       objectValue = toObj("Exports"),

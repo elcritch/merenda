@@ -221,7 +221,7 @@ Tables and choice controls can share `ArrayController` data:
 ```nim
 let
   items = @[
-    initModelItem(
+    modelItem(
       "ada",
       objectValue = toObj("Ada"),
       fields = [
@@ -229,7 +229,7 @@ let
         modelField("score", toObj(31)),
       ],
     ),
-    initModelItem(
+    modelItem(
       "grace",
       objectValue = toObj("Grace"),
       fields = [

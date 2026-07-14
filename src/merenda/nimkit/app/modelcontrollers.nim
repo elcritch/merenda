@@ -200,7 +200,7 @@ func initModelSortDescriptor*(
 ): ModelSortDescriptor =
   ModelSortDescriptor(key: key, direction: direction)
 
-proc initModelItem*(
+proc modelItem*(
     identifier = "",
     title = "",
     objectValue = emptyObjectValue(),
@@ -221,7 +221,7 @@ proc initModelItem*(
     representedObject: representedObject,
   )
 
-proc initModelTreeItem*(
+proc modelTreeItem*(
     item: ModelItem, parentIdentifier = "", leaf = false
 ): ModelTreeItem =
   ModelTreeItem(item: item, parentIdentifier: parentIdentifier, leaf: leaf)
@@ -405,7 +405,7 @@ proc initObjectControllerFields(controller: ObjectController, item: ModelItem) =
   initResponder(controller)
   controller.xItem = item
 
-proc newObjectController*(item = initModelItem()): ObjectController =
+proc newObjectController*(item = modelItem()): ObjectController =
   result = ObjectController()
   result.initObjectControllerFields(item)
 
@@ -511,7 +511,7 @@ proc itemAt*(controller: ArrayController, index: int): ModelItem =
   if sourceIndex >= 0:
     controller.xItems[sourceIndex]
   else:
-    initModelItem()
+    modelItem()
 
 proc itemWithIdentifier*(
     controller: ArrayController, identifier: string

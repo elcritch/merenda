@@ -59,7 +59,7 @@ proc configureChoiceActions(demo: ModelControllersDemo) =
 proc newBuildController(): ArrayController =
   newArrayController(
     [
-      initModelItem(
+      modelItem(
         "renderer",
         objectValue = toObj("Renderer"),
         fields = [
@@ -68,7 +68,7 @@ proc newBuildController(): ArrayController =
           field("owner", toObj("Mara")),
         ],
       ),
-      initModelItem(
+      modelItem(
         "sync",
         objectValue = toObj("Sync Engine"),
         fields = [
@@ -77,7 +77,7 @@ proc newBuildController(): ArrayController =
           field("owner", toObj("Ren")),
         ],
       ),
-      initModelItem(
+      modelItem(
         "docs",
         objectValue = toObj("Documentation"),
         fields = [
@@ -97,25 +97,25 @@ proc newBuildController(): ArrayController =
 proc newTreeControllerForDemo(): TreeController =
   newTreeController(
     [
-      initModelTreeItem(initModelItem("apps", objectValue = toObj("Apps"))),
-      initModelTreeItem(initModelItem("framework", objectValue = toObj("Framework"))),
-      initModelTreeItem(
-        initModelItem("workspace", objectValue = toObj("Workspace")),
+      modelTreeItem(modelItem("apps", objectValue = toObj("Apps"))),
+      modelTreeItem(modelItem("framework", objectValue = toObj("Framework"))),
+      modelTreeItem(
+        modelItem("workspace", objectValue = toObj("Workspace")),
         parentIdentifier = "apps",
         leaf = true,
       ),
-      initModelTreeItem(
-        initModelItem("preferences", objectValue = toObj("Preferences")),
+      modelTreeItem(
+        modelItem("preferences", objectValue = toObj("Preferences")),
         parentIdentifier = "apps",
         leaf = true,
       ),
-      initModelTreeItem(
-        initModelItem("tables", objectValue = toObj("Tables")),
+      modelTreeItem(
+        modelItem("tables", objectValue = toObj("Tables")),
         parentIdentifier = "framework",
         leaf = true,
       ),
-      initModelTreeItem(
-        initModelItem("text", objectValue = toObj("Text")),
+      modelTreeItem(
+        modelItem("text", objectValue = toObj("Text")),
         parentIdentifier = "framework",
         leaf = true,
       ),
@@ -125,20 +125,20 @@ proc newTreeControllerForDemo(): TreeController =
 proc newTabController(): ArrayController =
   newArrayController(
     [
-      initModelItem("plan", title = "Project Plan", objectValue = toObj("Plan")),
-      initModelItem("budget", title = "Budget.xlsx", objectValue = toObj("Budget")),
-      initModelItem("notes", title = "Research Notes", objectValue = toObj("Notes")),
+      modelItem("plan", title = "Project Plan", objectValue = toObj("Plan")),
+      modelItem("budget", title = "Budget.xlsx", objectValue = toObj("Budget")),
+      modelItem("notes", title = "Research Notes", objectValue = toObj("Notes")),
     ]
   )
 
 proc newChoiceController(): ArrayController =
   newArrayController(
     [
-      initModelItem("low", objectValue = toObj("Low")),
-      initModelItem("medium", objectValue = toObj("Medium")),
-      initModelItem("high", objectValue = toObj("High")),
-      initModelItem("separator", separator = true),
-      initModelItem("custom", title = "Custom...", objectValue = toObj("Custom")),
+      modelItem("low", objectValue = toObj("Low")),
+      modelItem("medium", objectValue = toObj("Medium")),
+      modelItem("high", objectValue = toObj("High")),
+      modelItem("separator", separator = true),
+      modelItem("custom", title = "Custom...", objectValue = toObj("Custom")),
     ]
   )
 

@@ -448,9 +448,9 @@ suite "NimKit CascadingView":
     let
       controller = newTreeController(
         [
-          initModelTreeItem(initModelItem("root", objectValue = toObj("Root"))),
-          initModelTreeItem(
-            initModelItem("child", objectValue = toObj("Child")),
+          modelTreeItem(modelItem("root", objectValue = toObj("Root"))),
+          modelTreeItem(
+            modelItem("child", objectValue = toObj("Child")),
             parentIdentifier = "root",
             leaf = true,
           ),
@@ -465,8 +465,8 @@ suite "NimKit CascadingView":
     check view.cascadingItemObjectValue("child").requireString() == "Child"
 
     controller.addItem(
-      initModelTreeItem(
-        initModelItem("second", objectValue = toObj("Second")),
+      modelTreeItem(
+        modelItem("second", objectValue = toObj("Second")),
         parentIdentifier = "root",
         leaf = true,
       )
