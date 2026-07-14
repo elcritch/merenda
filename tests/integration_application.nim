@@ -693,10 +693,15 @@ suite "nimkit application":
     window.frame = rect(0, 0, 1, 1)
     check window.frame.size == initialMinimum
 
+    let initialGeneration = root.layoutInputGeneration()
     button.title =
       "A substantially longer setting that increases the required window width"
-    check window.contentMinSize.width > initialMinimum.width
-    check window.frame.size.width == window.contentMinSize.width
+    check root.layoutInputGeneration() == initialGeneration
+
+    let updatedMinimum = window.contentMinSize()
+    check root.layoutInputGeneration() == initialGeneration + 1
+    check updatedMinimum.width > initialMinimum.width
+    check window.frame.size.width == updatedMinimum.width
 
   test "panels build reusable pure Nim views and validate selections":
     let

@@ -130,6 +130,8 @@ type
     xContentMinSize: Size
     xAutomaticContentMinSize: Size
     xAutomaticallyAdjustsContentMinSize: bool
+    xAutomaticContentMinSizeNeedsUpdate: bool
+    xUpdatingAutomaticContentMinSize: bool
     xMaxSize: Size
     xResizeIncrements: Size
     xFrameAutosaveName: string
@@ -476,6 +478,7 @@ func normalizedMinimumSize(size: Size): Size =
   initSize(max(size.width, 0.0'f32), max(size.height, 0.0'f32))
 
 proc contentMinSize*(window: Window): Size =
+  window.refreshAutomaticContentMinSize()
   window.xContentMinSize.componentMaximum(window.xAutomaticContentMinSize)
 
 proc effectiveMinimumSize(window: Window): Size =
@@ -579,6 +582,7 @@ proc `automaticallyAdjustsContentMinSize=`*(window: Window, value: bool) =
   if window.xAutomaticallyAdjustsContentMinSize == value:
     return
   window.xAutomaticallyAdjustsContentMinSize = value
+  window.xAutomaticContentMinSizeNeedsUpdate = true
   window.refreshAutomaticContentMinSize()
 
 proc maxSize*(window: Window): Size =
@@ -818,6 +822,13 @@ proc syncNativeSizeLimits(window: Window) =
   window.xHostWindow.setMaximumSize(window.effectiveMaximumSize())
 
 proc refreshAutomaticContentMinSize(window: Window) =
+  if not window.xAutomaticContentMinSizeNeedsUpdate or
+      window.xUpdatingAutomaticContentMinSize:
+    return
+  window.xAutomaticContentMinSizeNeedsUpdate = false
+  window.xUpdatingAutomaticContentMinSize = true
+  defer:
+    window.xUpdatingAutomaticContentMinSize = false
   let nextSize =
     if window.xAutomaticallyAdjustsContentMinSize and not window.xContentView.isNil:
       window.xContentView.fittingSize()
@@ -838,13 +849,14 @@ protocol WindowContentLayoutSlots of ViewLayoutInputEvents:
           lirSubviews, lirHierarchy, lirDescendantIntrinsic, lirHidden, lirConstraints,
           lirIntrinsic, lirAppearanceMetrics, lirContainerMetrics,
         }:
-      window.refreshAutomaticContentMinSize()
+      window.xAutomaticContentMinSizeNeedsUpdate = true
 
 proc setContentView*(window: Window, view: View) =
   if not window.shouldSetContentView(view):
     return
   if window.xContentView == view:
     window.clearMouseState()
+    window.xAutomaticContentMinSizeNeedsUpdate = true
     window.refreshAutomaticContentMinSize()
     return
 
@@ -880,6 +892,7 @@ proc setContentView*(window: Window, view: View) =
   if window.xAutorecalculatesKeyViewLoop:
     window.recalculateKeyViewLoop()
   emit window.didSetContentView(oldContent)
+  window.xAutomaticContentMinSizeNeedsUpdate = true
   window.refreshAutomaticContentMinSize()
   if not window.xHostWindow.isNil:
     window.requestNativeDisplayUpdate()
@@ -1149,12 +1162,15 @@ proc selectPreviousKeyView*(window: Window): bool {.discardable.} =
   window.selectKeyViewPrecedingView(window.keyViewCommandStartView(nil))
 
 proc buildRenders*(window: Window): Renders =
+  window.refreshAutomaticContentMinSize()
   nimkitRendering.buildRenders(window.xContentView, window.effectiveAppearance())
 
 proc buildRenders*(window: Window, appearance: Appearance): Renders =
+  window.refreshAutomaticContentMinSize()
   nimkitRendering.buildRenders(window.xContentView, appearance)
 
 proc buildRenders*(window: Window, theme: Theme): Renders =
+  window.refreshAutomaticContentMinSize()
   nimkitRendering.buildRenders(window.xContentView, theme)
 
 proc nativeWindowOrNil*(window: Window): siwinshim.Window =
