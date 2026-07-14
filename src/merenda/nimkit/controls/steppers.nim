@@ -30,6 +30,7 @@ type
     xRepeatStartedAt: float
     xLastRepeatAt: float
     xValueFormatter: StepperValueFormatter
+    xActivationPart: StepperPart
 
   StepperCell* = ref object of ActionCell
 
@@ -298,6 +299,17 @@ proc partEnabled(stepper: Stepper, part: StepperPart): bool =
   of spNone:
     false
 
+proc pulseActivationFeedback(stepper: Stepper, part: StepperPart) =
+  if not stepper.partEnabled(part):
+    return
+  stepper.xActivationPart = part
+  Control(stepper).pulseActivationFeedback()
+
+protocol DefaultStepperActivationFeedback of ControlActivationFeedbackProtocol:
+  method setActivationFeedback(stepper: Stepper, active: bool) =
+    stepper.xPressedPart = if active: stepper.xActivationPart else: spNone
+    stepper.setNeedsDisplay(true)
+
 proc stepperCellSize(cell: StepperCell): Size =
   let view = cell.controlView()
   let appearance =
@@ -330,11 +342,11 @@ proc newStepperCell*(): StepperCell =
 
 proc stepperSegmentStates(stepper: Stepper, part: StepperPart): set[WidgetState] =
   result = stepper.widgetStateSet()
-  if not stepper.partEnabled(part):
-    result.incl ssDisabled
-  elif stepper.xPressedPart == part:
+  if stepper.xPressedPart == part:
     result.incl ssHighlighted
     result.incl ssPressed
+  elif not stepper.partEnabled(part):
+    result.incl ssDisabled
 
 proc drawStepperSegment(
     stepper: Stepper, context: DrawContext, part: StepperPart, label: string
@@ -429,6 +441,7 @@ protocol DefaultStepperEvents of ResponderEventProtocol:
       let part = stepper.partAtPoint(event.location)
       if not stepper.partEnabled(part):
         return false
+      stepper.cancelActivationFeedback()
       discard stepper.beginRepeat(part, event.timestamp)
       return true
 
@@ -460,9 +473,11 @@ protocol DefaultStepperEvents of ResponderEventProtocol:
       return false
     case event.key
     of keyArrowUp, keyArrowRight, keyAdd, keyEqual:
+      stepper.pulseActivationFeedback(spIncrement)
       discard stepper.incrementValue()
       true
     of keyArrowDown, keyArrowLeft, keySubtract, keyMinus:
+      stepper.pulseActivationFeedback(spDecrement)
       discard stepper.decrementValue()
       true
     else:
@@ -523,6 +538,7 @@ proc initStepperFields*(
   stepper.setAcceptsFirstResponder(true)
   stepper.setHuggingPriority(LayoutPriorityRequired, laHorizontal)
   stepper.setCompressionPriority(LayoutPriorityHigh, laHorizontal)
+  discard stepper.withProtocol(DefaultStepperActivationFeedback)
   discard stepper.withProtocol(DefaultStepperDrawing)
   discard stepper.withProtocol(DefaultStepperEvents)
   discard stepper.withProtocol(DefaultStepperAccessibility)

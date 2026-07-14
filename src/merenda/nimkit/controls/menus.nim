@@ -1,5 +1,10 @@
 import std/options
 
+when defined(useNativeDynlib):
+  from figdraw/dynlib import FigIdx
+else:
+  from figdraw import FigIdx
+
 import sigils/core
 import sigils/selectors
 
@@ -1620,6 +1625,42 @@ proc closePopupImpl(button: PopupMenuButton) =
   if button.xRemoveFromSuperviewOnClose and not button.superview().isNil:
     button.removeFromSuperview()
 
+proc drawPopupButtonArrow(
+    context: DrawContext, parent: FigIdx, arrowRect: Rect, arrowColor: Color
+) =
+  if arrowRect.size.width <= 0.0'f32 or arrowRect.size.height <= 0.0'f32:
+    return
+  let
+    width = max(min(arrowRect.size.width * 0.28'f32, 6.0'f32), 4.0'f32)
+    centerX = arrowRect.origin.x + arrowRect.size.width * 0.5'f32
+    centerY = arrowRect.origin.y + arrowRect.size.height * 0.5'f32
+    upY = centerY - 5.0'f32
+    downY = centerY + 2.0'f32
+  discard context.addRenderRectangle(
+    parent, rect(centerX - width * 0.20'f32, upY, width * 0.40'f32, 1.0'f32), arrowColor
+  )
+  discard context.addRenderRectangle(
+    parent,
+    rect(centerX - width * 0.35'f32, upY + 1.0'f32, width * 0.70'f32, 1.0'f32),
+    arrowColor,
+  )
+  discard context.addRenderRectangle(
+    parent, rect(centerX - width * 0.50'f32, upY + 2.0'f32, width, 1.0'f32), arrowColor
+  )
+  discard context.addRenderRectangle(
+    parent, rect(centerX - width * 0.50'f32, downY, width, 1.0'f32), arrowColor
+  )
+  discard context.addRenderRectangle(
+    parent,
+    rect(centerX - width * 0.35'f32, downY + 1.0'f32, width * 0.70'f32, 1.0'f32),
+    arrowColor,
+  )
+  discard context.addRenderRectangle(
+    parent,
+    rect(centerX - width * 0.20'f32, downY + 2.0'f32, width * 0.40'f32, 1.0'f32),
+    arrowColor,
+  )
+
 protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
   method draw(button: PopupMenuButton, context: DrawContext) =
     let states = button.widgetStateSet()
@@ -1694,7 +1735,7 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
         context.renderRectFor(separatorRect),
         context.appearance.chromeFill(separatorChrome),
       )
-      context.addComboBoxDoubleArrow(arrowRoot, arrowFrame, style.arrowColor)
+      context.drawPopupButtonArrow(arrowRoot, arrowFrame, style.arrowColor)
       context.addText(style.comboBoxTextRect(button.bounds), button.title(), style.text)
       return
 

@@ -107,6 +107,12 @@ build on that vocabulary instead of adding parallel storage models.
   locally and emit one root invalidation, automatic window content minimums are
   deferred and flushed once, and repeated intrinsic-size invalidations no longer
   force a solver pass for every intermediate mutation.
+- Added Control-owned, scheduler-backed pressed feedback for keyboard and
+  programmatic activation. Buttons and switch buttons use the default cell
+  highlight hook, while steppers override it for segment-specific feedback;
+  mouse tracking takes over cleanly from an in-flight pulse. Moved the popup-menu
+  double-arrow mark into its control-specific drawing implementation instead of
+  exposing it through the general drawing API.
 - Added scalable combo-box collection paths: bulk option replacement performs
   one invalidation without per-item undo registration; visible indexes,
   identifiers, normalized search text, and data-source counts are cached; and
@@ -353,14 +359,6 @@ build on that vocabulary instead of adding parallel storage models.
   `examples/merenda_settings_demo.nim`.
 
 ## Near-Term Work
-
-### General Fixes
-
-- Trigger Button / Widget animations when activated from keyboard
-
-If you tab-select a button and use enter or space to activate it the button doesn't show the normal activation render / animations / etc.
-
-- `addComboBoxDoubleArrow` in drawing.nim should be removed or made into a L&F helper. 
 
 ### FigDraw Managed Font and Image Resources
 

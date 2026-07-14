@@ -309,6 +309,11 @@ suite "nimkit responder":
       KeyEvent(text: " ", key: keySpace, keyCode: keySpace.ord)
     )
     check actionCount == 1
+    check button.isHighlighted
+    check window.animationScheduler().animationCount == 1
+    check window.animationScheduler().tick(120.ms) == 1
+    check not button.isHighlighted
+    window.stopAnimationClock()
 
   test "space and enter activate tab-selected checkbox":
     let
@@ -339,10 +344,17 @@ suite "nimkit responder":
     check window.dispatchKeyDown(KeyEvent(key: keySpace, keyCode: keySpace.ord))
     check checkbox.state == bsOn
     check actionCount == 1
+    check checkbox.isHighlighted
+    check window.animationScheduler().tick(120.ms) == 1
+    check not checkbox.isHighlighted
 
     check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
     check checkbox.state == bsOff
     check actionCount == 2
+    check checkbox.isHighlighted
+    check window.animationScheduler().tick(120.ms) == 1
+    check not checkbox.isHighlighted
+    window.stopAnimationClock()
 
   test "window key bindings dispatch commands through responder chain":
     let

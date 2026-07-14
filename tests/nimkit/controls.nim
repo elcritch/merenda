@@ -30,6 +30,37 @@ suite "nimkit controls":
     cell.setSendsActionOnEndEditing(true)
     check cell.sendsActionOnEndEditing()
 
+  test "control activation feedback restarts and cancels one shared pulse":
+    let
+      window = newWindow("Control feedback", frame = rect(0, 0, 120, 80))
+      root = newView(frame = rect(0, 0, 120, 80))
+      control = Control()
+
+    initControlFields(control, frame = rect(10, 10, 60, 24))
+    root.addSubview(control)
+    window.setContentView(root)
+
+    try:
+      check control.conformsTo(ControlActivationFeedbackProtocol)
+      control.pulseActivationFeedback()
+      check control.cell().isHighlighted()
+      check window.animationScheduler().animationCount == 1
+
+      control.pulseActivationFeedback()
+      check control.cell().isHighlighted()
+      check window.animationScheduler().animationCount == 1
+
+      control.cancelActivationFeedback()
+      check not control.cell().isHighlighted()
+      check window.animationScheduler().animationCount == 0
+
+      control.pulseActivationFeedback()
+      check window.animationScheduler().tick(120.ms) == 1
+      check not control.cell().isHighlighted()
+    finally:
+      window.animationScheduler().clearAnimations()
+      window.stopAnimationClock()
+
   test "button core methods are selector-backed and protocol visible":
     let button = newButton("Original", frame = rect(0, 0, 120, 36))
 
@@ -331,8 +362,27 @@ suite "nimkit controls":
     check window.makeFirstResponder(stepper)
     check window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
     check stepper.value == 8.0
+    check stepper.pressedPart == spDecrement
     check window.dispatchKeyDown(KeyEvent(key: keyArrowUp))
     check stepper.value == 10.0
+    check stepper.pressedPart == spIncrement
+    check window.animationScheduler().animationCount == 1
+    check window.animationScheduler().tick(120.ms) == 1
+    check stepper.pressedPart == spNone
+
+    check window.dispatchKeyDown(KeyEvent(text: "-", key: keyMinus))
+    check stepper.value == 8.0
+    check stepper.pressedPart == spDecrement
+    check window.animationScheduler().tick(120.ms) == 1
+    check stepper.pressedPart == spNone
+
+    check window.dispatchKeyDown(KeyEvent(text: "+", key: keyAdd))
+    check stepper.value == 10.0
+    check stepper.pressedPart == spIncrement
+    check window.animationScheduler().tick(120.ms) == 1
+    check stepper.pressedPart == spNone
+    window.stopAnimationClock()
+
     check not window.mouseDownAt(initPoint(23, 21), timestamp = 12.0)
     check not stepper.repeatActive()
 
@@ -424,6 +474,29 @@ suite "nimkit controls":
     switchButton.state = bsMixed
     check switchButton.state == bsOff
     check not switchButton.on
+
+  test "switch button keyboard activation shows pressed feedback":
+    let
+      window = newWindow("Switch keyboard", frame = rect(0, 0, 180, 90))
+      root = newView(frame = rect(0, 0, 180, 90))
+      switchButton = newSwitchButton(false, frame = rect(16, 24, 54, 30))
+
+    root.addSubview(switchButton)
+    window.setContentView(root)
+
+    try:
+      check window.makeFirstResponder(switchButton)
+      check window.dispatchKeyDown(
+        KeyEvent(text: " ", key: keySpace, keyCode: keySpace.ord)
+      )
+      check switchButton.on
+      check switchButton.highlighted
+      check window.animationScheduler().animationCount == 1
+      check window.animationScheduler().tick(120.ms) == 1
+      check not switchButton.highlighted
+    finally:
+      window.animationScheduler().clearAnimations()
+      window.stopAnimationClock()
 
   test "switch button mouse tracking cancels click when released outside":
     let

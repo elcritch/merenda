@@ -349,9 +349,13 @@ proc clearRadioSiblings(button: Button) =
           siblingButton.action() == button.action() and siblingButton.state != bsOff:
         siblingButton.setState(bsOff)
 
-proc buttonPerformClick(button: Button, args: ActionArgs) =
+proc buttonPerformClick(
+    button: Button, args: ActionArgs, showActivationFeedback = false
+) =
   if not button.isEnabled or args.sender.isNil:
     return
+  if showActivationFeedback:
+    button.pulseActivationFeedback()
   case button.buttonType
   of btMomentary:
     discard
@@ -882,6 +886,7 @@ protocol DefaultButtonEvents of ResponderEventProtocol:
 
   method mouseDown(button: Button, event: MouseEvent): bool =
     if button.isEnabled and event.button == mbPrimary:
+      button.cancelActivationFeedback()
       button.setHighlighted(true)
       return true
 
@@ -900,11 +905,11 @@ protocol DefaultButtonEvents of ResponderEventProtocol:
 
 protocol DefaultButtonAction of ButtonActionProtocol:
   method performClick(button: Button, args: ActionArgs) =
-    button.buttonPerformClick(args)
+    button.buttonPerformClick(args, showActivationFeedback = true)
 
 protocol DefaultButtonKeyCommands of KeyViewCommandProtocol:
   method insertNewline(button: Button, args: ActionArgs) =
-    button.buttonPerformClick(args)
+    button.buttonPerformClick(args, showActivationFeedback = true)
 
 proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect) =
   initControlFields(button, frame, newButtonCell(title))

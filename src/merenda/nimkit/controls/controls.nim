@@ -2,15 +2,16 @@ import sigils/core
 
 import ./cells
 import ../accessibility/accessibility
+import ../app/animations
 import ../app/dragging
 import ../app/pasteboards
+import ../app/windows
 import ../text/fieldeditors
 import ../foundation/events
 import ../foundation/objectvalues
 import ../foundation/selectors
 import ../foundation/types
 import ../view/views
-import ../app/windows
 
 export cells, objectvalues, views
 
@@ -26,6 +27,7 @@ type
     xObjectFormatContext: ObjectFormatContext
     xObjectParseContext: ObjectParseContext
     xValidationError: ObjectValidationError
+    xActivationAnimation: Animation
 
   ActionProc* = proc(sender: DynamicAgent) {.closure.}
 
@@ -56,6 +58,9 @@ protocol ControlValueHooks {.selectorScope: protocol.}:
   method didFailValue*(control: Control, error: ObjectValidationError) {.optional.}
 
   method didCommitValue*(control: Control, value: ObjectValue) {.optional.}
+
+protocol ControlActivationFeedbackProtocol {.selectorScope: protocol.}:
+  method setActivationFeedback*(active: bool)
 
 proc cell*(control: Control): Cell
 proc setCell*(control: Control, cell: Cell)
@@ -93,6 +98,12 @@ proc syncActionCell(control: Control, cell: Cell) =
 
 proc defaultControlCell(): Cell =
   newActionCell()
+
+protocol DefaultControlActivationFeedback of ControlActivationFeedbackProtocol:
+  method setActivationFeedback(control: Control, active: bool) =
+    let controlCell = control.cell()
+    if not controlCell.isNil:
+      controlCell.setHighlighted(active)
 
 protocol ControlProtocol from Control:
   method isEnabled*(self: Control): bool =
@@ -213,6 +224,39 @@ proc sizeToFit*(control: Control) =
   let frame = control.frame()
   control.setFrame(rect(frame.origin, control.sizeThatFits(UnconstrainedFittingSize)))
 
+const ControlActivationFeedbackMs = 120
+
+proc finishActivationFeedback(control: Control) {.slot.} =
+  control.xActivationAnimation = nil
+  control.setActivationFeedback(false)
+
+proc stopActivationAnimation(control: Control) =
+  let animation = control.xActivationAnimation
+  if animation.isNil:
+    return
+  control.xActivationAnimation = nil
+  let owner = control.window()
+  if owner of Window:
+    discard Window(owner).stopAnimation(animation)
+  else:
+    animation.stop()
+
+proc cancelActivationFeedback*(control: Control) =
+  control.stopActivationAnimation()
+  control.setActivationFeedback(false)
+
+proc pulseActivationFeedback*(control: Control) =
+  control.cancelActivationFeedback()
+  control.setActivationFeedback(true)
+  let animation =
+    newPauseAnimation(initDuration(milliseconds = ControlActivationFeedbackMs))
+  animation.connect(finished, control, finishActivationFeedback)
+  control.xActivationAnimation = animation
+  let owner = control.window()
+  if not (owner of Window) or not Window(owner).startAnimation(animation):
+    control.xActivationAnimation = nil
+    control.setActivationFeedback(false)
+
 proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = nil) =
   initViewFields(control, frame)
   control.background = color(0.0, 0.0, 0.0, 0.0)
@@ -228,6 +272,7 @@ proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = n
       cell
   )
   discard control.withProto()
+  discard control.withProtocol(DefaultControlActivationFeedback)
   discard control.withProtocol(DefaultControlDraggingSource)
   discard control.withProtocol(DefaultControlDraggingDestination)
 

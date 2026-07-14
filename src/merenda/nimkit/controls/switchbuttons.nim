@@ -210,9 +210,13 @@ proc drawSwitchKnob(
     chrome, initChromeExtras(knobRoot, frame, cornerRadius = radius)
   )
 
-proc switchButtonPerformClick(switchButton: SwitchButton, args: ActionArgs) =
+proc switchButtonPerformClick(
+    switchButton: SwitchButton, args: ActionArgs, showActivationFeedback = false
+) =
   if not switchButton.isEnabled() or args.sender.isNil:
     return
+  if showActivationFeedback:
+    switchButton.pulseActivationFeedback()
   switchButton.on = not switchButton.on
   discard switchButton.sendAction()
 
@@ -232,6 +236,7 @@ protocol DefaultSwitchButtonDrawing of ViewDrawingProtocol:
 protocol DefaultSwitchButtonEvents of ResponderEventProtocol:
   method mouseDown(switchButton: SwitchButton, event: MouseEvent): bool =
     if switchButton.isEnabled() and event.button == mbPrimary:
+      switchButton.cancelActivationFeedback()
       switchButton.highlighted = true
       return true
 
@@ -250,11 +255,11 @@ protocol DefaultSwitchButtonEvents of ResponderEventProtocol:
 
 protocol DefaultSwitchButtonAction of ButtonActionProtocol:
   method performClick(switchButton: SwitchButton, args: ActionArgs) =
-    switchButton.switchButtonPerformClick(args)
+    switchButton.switchButtonPerformClick(args, showActivationFeedback = true)
 
 protocol DefaultSwitchButtonKeyCommands of KeyViewCommandProtocol:
   method insertNewline(switchButton: SwitchButton, args: ActionArgs) =
-    switchButton.switchButtonPerformClick(args)
+    switchButton.switchButtonPerformClick(args, showActivationFeedback = true)
 
 protocol DefaultSwitchButtonAccessibility of AccessibilityProtocol:
   method accessibilityRole(switchButton: SwitchButton): AccessibilityRole =

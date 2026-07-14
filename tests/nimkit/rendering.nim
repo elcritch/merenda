@@ -882,6 +882,15 @@ suite "nimkit rendering":
       keyEquivalentFound = false
       separatorFound = false
       resetFound = false
+      popupButtonArrowLines = 0
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.screenBox.h == 1.0'f32 and
+          node.screenBox.w <= 6.0'f32 and node.screenBox.x >= 70.0'f32 and
+          node.screenBox.x + node.screenBox.w <= 85.0'f32 and
+          node.screenBox.y in
+          [11.0'f32, 12.0'f32, 13.0'f32, 18.0'f32, 19.0'f32, 20.0'f32]:
+        inc popupButtonArrowLines
 
     for node in renders[PopupDrawLevel].nodes:
       if node.kind == nkRectangle and node.screenBox.x == 10.0 and
@@ -910,6 +919,7 @@ suite "nimkit rendering":
     check keyEquivalentFound
     check separatorFound
     check resetFound
+    check popupButtonArrowLines == 6
 
   test "buildRenders draws a menu bar from a main menu":
     let
@@ -1335,6 +1345,42 @@ suite "nimkit rendering":
         activeFillFound = true
 
     check activeFillFound
+
+  test "stepper keyboard activation renders its segment pressed at a limit":
+    let
+      window = newWindow("Stepper keyboard rendering", frame = rect(0, 0, 120, 80))
+      root = newView(frame = rect(0, 0, 120, 80))
+      stepper =
+        newStepper(0.0, 10.0, 8.0, increment = 2.0, frame = rect(10, 10, 52, 23))
+      baseFill = color(0.1, 0.1, 0.1, 1.0)
+      disabledFill = color(0.3, 0.3, 0.3, 1.0)
+      pressedFill = color(0.1, 0.2, 0.8, 1.0)
+
+    var theme = initTheme()
+    theme[srStepper, StyleFill] = baseFill
+    theme[srStepper, {ssDisabled}, StyleFill] = disabledFill
+    theme[srStepper, {ssPressed}, StyleFill] = pressedFill
+
+    root.appearance = initAppearance(theme)
+    root.addSubview(stepper)
+    window.setContentView(root)
+
+    try:
+      check window.makeFirstResponder(stepper)
+      check window.dispatchKeyDown(KeyEvent(key: keyArrowUp))
+      check stepper.value == 10.0'f32
+      check stepper.pressedPart == spIncrement
+
+      let list = buildRenders(root)[DefaultDrawLevel]
+      var pressedFillFound = false
+      for node in list.nodes:
+        if node.kind == nkRectangle and node.fill.kind == flColor and
+            node.fill.color == pressedFill.rgba:
+          pressedFillFound = true
+      check pressedFillFound
+    finally:
+      window.animationScheduler().clearAnimations()
+      window.stopAnimationClock()
 
   test "matrix button cells do not inherit active state from the matrix":
     let
