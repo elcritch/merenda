@@ -2185,6 +2185,12 @@ proc uncachedRowHeightForRow(tableView: TableView, index: int): float32 =
     return 0.0'f32
   tableView.resolvedRowHeight(index).normalizedRowHeight()
 
+proc usesFixedRowHeights(tableView: TableView): bool =
+  if tableView.xRowHeightOverrides.len > 0:
+    return false
+  let delegate = tableView.delegate()
+  delegate.isNil or not delegate.respondsTo(tableRowHeight())
+
 proc ensureRowHeightCache(tableView: TableView) =
   if tableView.xRowHeightCacheValid or tableView.xComputingRowHeights:
     return
@@ -2225,29 +2231,49 @@ proc applyRowHeightResize(tableView: TableView, row: int, height: float32) =
 proc rowOffset(tableView: TableView, index: int): float32 =
   if index <= 0:
     return 0.0'f32
+  let rowCount = tableView.len()
+  if tableView.usesFixedRowHeights():
+    return min(index, rowCount).float32 * tableView.rowHeight()
   tableView.ensureRowHeightCache()
   if index >= tableView.xRowHeights.len:
-    for height in tableView.xRowHeights:
-      result += height
+    if tableView.xRowHeights.len > 0:
+      result = tableView.xRowOffsets[^1] + tableView.xRowHeights[^1]
   elif index < tableView.xRowOffsets.len:
     result = tableView.xRowOffsets[index]
 
 proc rowIndexAtContentY(tableView: TableView, y: float32): int =
-  if tableView.len() <= 0:
+  let rowCount = tableView.len()
+  if rowCount <= 0:
     return -1
-  tableView.ensureRowHeightCache()
   let targetY = max(y, 0.0'f32)
-  for index, offset in tableView.xRowOffsets:
-    if targetY < offset + tableView.xRowHeights[index]:
-      return index
-  tableView.len() - 1
+  if tableView.usesFixedRowHeights():
+    return min(int(floor(targetY / tableView.rowHeight())), rowCount - 1)
+
+  tableView.ensureRowHeightCache()
+  var
+    lower = 0
+    upper = tableView.xRowHeights.len
+  while lower < upper:
+    let middle = lower + (upper - lower) div 2
+    if targetY < tableView.xRowOffsets[middle] + tableView.xRowHeights[middle]:
+      upper = middle
+    else:
+      lower = middle + 1
+  min(lower, rowCount - 1)
 
 proc contentHeight(tableView: TableView): float32 =
-  tableView.rowOffset(tableView.len())
+  if tableView.usesFixedRowHeights():
+    tableView.len().float32 * tableView.rowHeight()
+  else:
+    tableView.rowOffset(tableView.len())
 
 proc visibleRowsFrom(tableView: TableView, firstIndex: int, height: float32): int =
-  if tableView.len() <= 0 or firstIndex < 0 or height <= 0.0'f32:
+  let rowCount = tableView.len()
+  if rowCount <= 0 or firstIndex notin 0 ..< rowCount or height <= 0.0'f32:
     return 0
+  if tableView.usesFixedRowHeights():
+    return
+      min(max(int(floor(height / tableView.rowHeight())), 1), rowCount - firstIndex)
   var
     count = 0
     consumed = 0.0'f32
@@ -2884,6 +2910,10 @@ proc rowHeight*(tableView: TableView): float32 =
   tableView.xRowHeight.normalizedRowHeight()
 
 proc rowHeightForRow*(tableView: TableView, row: int): float32 =
+  if row notin 0 ..< tableView.len():
+    return 0.0'f32
+  if tableView.usesFixedRowHeights():
+    return tableView.rowHeight()
   tableView.uncachedRowHeightForRow(row)
 
 proc `rowHeight=`*(tableView: TableView, height: float32) =

@@ -1846,6 +1846,18 @@ suite "NimKit TableView":
     tableView.selectedIndexes = [0, 1, 2, 3]
     check tableView.selectedIndexes == @[0, 3]
 
+  test "fixed row geometry remains correct for large row counts":
+    let tableView = newTableView(frame = rect(0, 0, 320, 180))
+
+    tableView.showsHeader = false
+    tableView.rowHeight = 20.0
+    tableView.rowCount = 100_000
+    tableView.scrollRows(50_000)
+
+    check tableView.firstVisibleIndex() == 50_000
+    check tableView.rowHeightForRow(99_999) == 20.0'f32
+    check tableView.visibleItemCount() < 20
+
   test "table activation hook receives activated row":
     let
       tableView = newTableView()
