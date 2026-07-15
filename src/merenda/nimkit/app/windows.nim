@@ -1510,6 +1510,10 @@ proc hasActiveTransientSession*(window: Window): bool =
 proc transientDismissReason*(window: Window): DismissReason =
   window.xLastTransientDismissReason
 
+proc transientWindow*(window: Window): Window =
+  if window.xTransientSession.active:
+    result = window.xTransientSession.transientWindow
+
 proc restoreTransientFocus(window: Window, session: TransientSession) =
   let restoreWindow = if session.restoreWindow.isNil: window else: session.restoreWindow
   if restoreWindow.isNil or restoreWindow.isClosed:
