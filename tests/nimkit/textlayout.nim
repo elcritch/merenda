@@ -1233,3 +1233,17 @@ suite "nimkit text layout":
       if position.lineIndex == fragments[1].lineIndex:
         foundBoundaryLine = true
     check foundBoundaryLine
+
+  test "cached arrangements retain every font used by the layout":
+    let
+      storage = newTextStorage("managed font ownership")
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(240.0, 60.0), insets(0.0))
+      )
+
+    discard manager.glyphArrangement()
+    check manager.retainedFontCount > 0
+
+    storage.replaceCharacters(initTextRange(0, storage.len), "replacement layout")
+    discard manager.glyphArrangement()
+    check manager.retainedFontCount > 0

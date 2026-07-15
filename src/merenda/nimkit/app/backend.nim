@@ -23,6 +23,7 @@ when defined(macosx) and not defined(useNativeDynlib):
   import darwin/objc/runtime
 
 import ../drawing/images
+import ../drawing/renderresources
 import ../controls/nativemenus as nativeMenus
 import ../foundation/types
 import ../foundation/events
@@ -97,6 +98,7 @@ type
   ThreadRenderSnapshot* = object
     renders*: Renders
     logicalSize*: Size
+    resources*: FrozenRenderResources
 
   ThreadMenuId* = uint
 
@@ -186,12 +188,14 @@ type
     xHasUiScaleOverride: bool
     xUiScaleOverride: float32
     xTransparent: bool
+    xResources: RenderResourceManager
 
   ThreadRendererHost = ref object
     id: ThreadHostId
     host: HostWindow
     channels: ThreadHostChannels
     lastRenders: Renders
+    lastResources: FrozenRenderResources
     logicalSize: Size
 
   ThreadRenderer* = ref object
@@ -349,12 +353,16 @@ proc sendCommand*(host: ThreadHostClient, command: sink ThreadHostCommand) =
     host.channels.commands.pushLatest(command)
 
 proc submitRenders*(
-    host: ThreadHostClient, renders: Renders, logicalSize: Size
+    host: ThreadHostClient,
+    renders: Renders,
+    logicalSize: Size,
+    resources = default(FrozenRenderResources),
 ): bool {.discardable.} =
   if host.isNil or not host.createRequested or renders.isNil:
     return false
-  var snapshot =
-    ThreadRenderSnapshot(renders: renders.cloneRenders(), logicalSize: logicalSize)
+  var snapshot = ThreadRenderSnapshot(
+    renders: renders.cloneRenders(), logicalSize: logicalSize, resources: resources
+  )
   host.channels.renders.pushLatest(move snapshot)
   host.renderRequested = true
   true
@@ -1000,6 +1008,10 @@ proc renderRequested*(host: HostWindow): bool =
 proc renderCount*(host: HostWindow): Natural =
   host.xRenderCount
 
+proc resourceMetrics*(host: HostWindow): RenderResourceMetrics =
+  if not host.isNil:
+    result = host.xResources.metrics()
+
 proc requestRender*(host: HostWindow) =
   if host.xRenderRequested:
     return
@@ -1081,13 +1093,21 @@ proc setVisible*(host: HostWindow, visible: bool) =
     return
   if visible and host.xNativeWindow.visible() and not host.xNativeWindow.focused():
     host.xNativeWindow.visible = false
+  host.xResources.setVisible(visible)
   host.xNativeWindow.visible = visible
 
-proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
+proc render*(
+    host: HostWindow,
+    renders: var Renders,
+    logicalSize: Size,
+    resources = default(FrozenRenderResources),
+) =
   if not host.isReady or host.xRenderer.isNil or not host.xNativeWindow.opened():
     return
   host.xRenderRequested = false
   host.refreshContentScale()
+  host.xResources.commit(resources)
+  host.xResources.prepare(host.xRenderer)
   let size = vec2(logicalSize.width, logicalSize.height)
   host.xRenderer.beginFrame()
   if host.xTransparent:
@@ -1117,6 +1137,9 @@ proc configureTransparentPresentation(host: HostWindow) =
 proc close*(host: HostWindow) =
   let nativeWindow = host.xNativeWindow
   let shouldClose = not nativeWindow.isNil and not nativeWindow.closed()
+  host.xResources.clear()
+  if not host.xRenderer.isNil:
+    host.xRenderer.processImageMessages()
   host.markClosed(notify = false)
   if shouldClose:
     siwinshim.close(nativeWindow)
@@ -1268,7 +1291,7 @@ proc createHostWindow*(
   let
     scaleOverride = uiScaleOverrideFromEnv()
     size = nativeWindowSize(frame.size, scaleOverride.overrideScale())
-  result = HostWindow(xCallbacks: callbacks)
+  result = HostWindow(xCallbacks: callbacks, xResources: newRenderResourceManager())
   result.xNativeWindow =
     siwinshim.newSiwinWindow(size = size, title = title, vsync = true, resizable = true)
   result.xRenderer = figrender.newFigRenderer(
@@ -1302,7 +1325,9 @@ proc createPopupHostWindow*(
     else:
       none(UiScaleOverride)
 
-  result = HostWindow(xCallbacks: callbacks, xTransparent: true)
+  result = HostWindow(
+    xCallbacks: callbacks, xTransparent: true, xResources: newRenderResourceManager()
+  )
   when defined(useNativeDynlib):
     result.xNativeWindow = siwinshim.newPopupWindow(
       owner.xNativeWindow, placement, transparent = true, grab = true
@@ -1330,6 +1355,8 @@ proc pump*(host: HostWindow) =
   let nativeWindow = host.xNativeWindow
   if nativeWindow.isNil or not nativeWindow.opened():
     return
+  if not host.xRenderer.isNil:
+    host.xRenderer.processImageMessages()
   if host.xRenderRequested:
     nativeWindow.redraw()
   nativeWindow.step()
@@ -1347,13 +1374,14 @@ proc acceptPendingRender(state: ThreadRendererHost): bool =
   if not state.channels.pollLatestRender(snapshot):
     return
   state.lastRenders = move snapshot.renders
+  state.lastResources = move snapshot.resources
   true
 
 proc renderLatest(state: ThreadRendererHost) =
   if state.isNil or state.host.isNil or state.lastRenders.isNil:
     return
   let previousCount = state.host.renderCount()
-  state.host.render(state.lastRenders, state.logicalSize)
+  state.host.render(state.lastRenders, state.logicalSize, state.lastResources)
   if state.host.renderCount() != previousCount:
     state.postEvent(
       ThreadHostEvent(kind: theRendered, renderCount: state.host.renderCount())

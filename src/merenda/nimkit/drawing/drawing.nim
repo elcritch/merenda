@@ -10,6 +10,7 @@ else:
   from figdraw/common/typefaces import getLineHeightImpl
 
 import ./images
+import ./renderresources
 import ../themes
 import ../themes/themecore as themeCore
 import ../text/textstorage
@@ -27,6 +28,7 @@ else:
     figdraw.Fill, figdraw.ColorRGBA, figdraw.toFill, figdraw.sampleColor,
     figdraw.centerColorRgba, figdraw.centerColor
 export images
+export renderresources
 
 const
   DefaultDrawLevel* = 50.ZLevel
@@ -43,6 +45,7 @@ type DrawContext* = ref object
   xBounds: nimkitTypes.Rect
   xVisibleRect: nimkitTypes.Rect
   xAppearance: Appearance
+  xResources: RenderResourceManifest
 
 var defaultTypefaceIds {.threadvar.}: Table[string, TypefaceId]
 
@@ -69,7 +72,7 @@ proc defaultTypefaceCacheKey(
 proc toFigRect(rect: nimkitTypes.Rect): bumpy.Rect =
   bumpy.rect(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
 
-proc defaultFont(size: float32, fontName = defaultFontName()): FigFont =
+proc defaultFont(size: float32, fontName = defaultFontName()): FontRef =
   let
     request = defaultTypefaceRequest(fontName)
     cacheKey = request.defaultTypefaceCacheKey()
@@ -77,16 +80,16 @@ proc defaultFont(size: float32, fontName = defaultFontName()): FigFont =
     defaultTypefaceIds = initTable[string, TypefaceId]()
   if cacheKey notin defaultTypefaceIds:
     defaultTypefaceIds[cacheKey] = loadTypeface(request.name, request.fallbackNames)
-  defaultTypefaceIds[cacheKey].fontWithSize(size)
+  fontRef(defaultTypefaceIds[cacheKey].fontWithSize(size))
 
-proc fontFor(style: TextStyle): FigFont =
+proc fontFor(style: TextStyle): FontRef =
   defaultFont(style.fontSize, style.fontName)
 
-proc fontLineHeight(font: FigFont): float32 =
+proc fontLineHeight(font: FontRef): float32 =
   when defined(useNativeDynlib):
-    max(font.size, font.lineHeight)
+    max(font.font.size, font.font.lineHeight)
   else:
-    getLineHeightImpl(font)
+    getLineHeightImpl(font.font)
 
 when defined(useNativeDynlib):
   proc figLine(a, b: Vec2, fillValue: Fill, weight: float32, zlevel = 0.ZLevel): Fig =
@@ -236,13 +239,13 @@ proc textLayout*(
   var spans: seq[(FontStyle, string)]
   if storage.isNil or storage.len == 0:
     let attributes = defaultTextAttributes(style.color, style.fontSize)
-    var font = defaultFont(attributes.fontSize, style.fontName)
+    var font = defaultFont(attributes.fontSize, style.fontName).font
     font.underline = attributes.hasUnderline
     font.strikethrough = attributes.hasStrikethrough
     spans.add((fs(font, fill(style.color.rgba)), ""))
   else:
     for (attributes, text) in storage.styledRuns:
-      var font = defaultFont(attributes.fontSize, style.fontName)
+      var font = defaultFont(attributes.fontSize, style.fontName).font
       font.underline = attributes.hasUnderline
       font.strikethrough = attributes.hasStrikethrough
       spans.add((fs(font, fill(attributes.foregroundColor.rgba)), text))
@@ -280,7 +283,7 @@ proc textNaturalSize*(text: string, style: TextStyle): nimkitTypes.Size =
         if ch == '\n':
           inc count
       count
-    layout = typeset(
+    layout = typesetForMeasurement(
       bumpy.rect(0.0, 0.0, 10000.0, max(lineHeight * lineCount.float32, 100.0'f32)),
       [(style, text)],
       hAlign = Left,
@@ -427,8 +430,10 @@ proc caretRect*(
   )
 
 proc initDrawContext*(): DrawContext =
-  result =
-    DrawContext(xRenders: Renders(layers: initOrderedTable[ZLevel, RenderList]()))
+  result = DrawContext(
+    xRenders: Renders(layers: initOrderedTable[ZLevel, RenderList]()),
+    xResources: initRenderResourceManifest(),
+  )
   result.xRenders.layers[DefaultDrawLevel] = RenderList()
 
 proc beginDraw*(
@@ -460,6 +465,9 @@ proc renderViewParent*(context: DrawContext): FigIdx =
 
 proc renders*(context: DrawContext): Renders =
   context.xRenders
+
+proc resources*(context: DrawContext): RenderResourceManifest =
+  context.xResources
 
 proc appearance*(context: DrawContext): Appearance =
   context.xAppearance
@@ -656,7 +664,10 @@ proc addText*(
     style: TextStyle,
     alignment = taLeft,
 ): FigIdx {.discardable.} =
-  context.addFig(textNode(context.renderRectFor(rect), text, style, alignment))
+  let renderedRect = context.renderRectFor(rect)
+  let layout = textLayout(renderedRect, text, style, alignment)
+  context.xResources.addFonts(layout)
+  context.addFig(textNode(renderedRect, layout))
 
 proc addText*(
     context: DrawContext,
@@ -681,9 +692,10 @@ proc addText*(
     style: TextStyle,
     alignment = taLeft,
 ): FigIdx {.discardable.} =
-  context.addFig(
-    layer, parent, textNode(context.renderRectFor(rect), text, style, alignment)
-  )
+  let renderedRect = context.renderRectFor(rect)
+  let layout = textLayout(renderedRect, text, style, alignment)
+  context.xResources.addFonts(layout)
+  context.addFig(layer, parent, textNode(renderedRect, layout))
 
 proc addText*(
     context: DrawContext,
@@ -706,6 +718,7 @@ proc addText*(
 proc addText*(
     context: DrawContext, rect: nimkitTypes.Rect, layout: GlyphArrangement
 ): FigIdx {.discardable.} =
+  context.xResources.addFonts(layout)
   context.addFig(textNode(context.renderRectFor(rect), layout))
 
 proc addImage*(
@@ -716,6 +729,7 @@ proc addImage*(
 ): FigIdx {.discardable.} =
   if image.isNil:
     return (-1).FigIdx
+  context.xResources.addImage(image)
   context.addFig(imageNode(context.renderRectFor(rect), image, fill(tint.rgba)))
 
 proc addImage*(
@@ -728,6 +742,7 @@ proc addImage*(
 ): FigIdx {.discardable.} =
   if image.isNil:
     return (-1).FigIdx
+  context.xResources.addImage(image)
   context.addFig(
     layer, parent, imageNode(context.renderRectFor(rect), image, fill(tint.rgba))
   )
@@ -739,6 +754,7 @@ proc addSelectedText*(
     selectedLocation, selectedLength: int,
     selectionColor: nimkitTypes.Color,
 ): FigIdx {.discardable.} =
+  context.xResources.addFonts(layout)
   var node = textNode(context.renderRectFor(rect), layout)
   node.selectTextNode(selectedLocation, selectedLength, selectionColor)
   context.addFig(node)

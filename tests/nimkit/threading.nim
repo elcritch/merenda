@@ -1,11 +1,13 @@
 import std/unittest
 
 import figdraw
+import pkg/pixie
 import threading/channels
 
 import merenda/nimkit/app/application
 import merenda/nimkit/app/backend as nimkitBackend
 import merenda/nimkit/foundation/types as nimkitTypes
+import merenda/nimkit/drawing
 
 suite "NimKit threading":
   test "render snapshots cross a bounded channel as independent values":
@@ -56,3 +58,27 @@ suite "NimKit threading":
     check app.rendererThreadId() == primaryThread
     check not app.isThreaded()
     check not app.isRunning()
+
+  test "render snapshots carry value-only managed image sources":
+    let
+      runtime = nimkitBackend.newThreadRenderer()
+      host = nimkitBackend.newThreadHostClient(runtime.client)
+      renders = newRenders()
+      pixels = pixie.newImage(3, 2)
+      image = newImageResource(pixels)
+    var manifest = initRenderResourceManifest()
+    manifest.addImage(image)
+    host.requestCreation(
+      runtime.client, nimkitTypes.rect(0.0, 0.0, 30.0, 20.0), "Resources"
+    )
+
+    check host.submitRenders(
+      renders, nimkitTypes.initSize(30.0, 20.0), manifest.freeze()
+    )
+    var snapshot: nimkitBackend.ThreadRenderSnapshot
+    require host.channels.renders.tryRecv(snapshot)
+    require snapshot.resources.images.len == 1
+    check snapshot.resources.images[0].id == image.imageId()
+    check snapshot.resources.images[0].width == 3
+    check snapshot.resources.images[0].height == 2
+    check snapshot.resources.images[0].data.len == 6

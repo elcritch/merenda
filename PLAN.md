@@ -352,6 +352,14 @@ build on that vocabulary instead of adding parallel storage models.
   cross the same channel boundary, while all AppKit window/menu and renderer
   access stays on the primary thread. Threaded builds use atomic ARC for shared
   immutable resources such as cached typefaces.
+- Added managed FigDraw font and image resources for the static renderer:
+  cached render roots and text layouts retain deduplicated FigDraw leases,
+  image resources preserve rebuildable sources with bounded preload/pin policy,
+  threaded snapshots carry value-only sources, and each host renderer recovers
+  its working set across atlas generations and pressure rebuilds. FigDraw now
+  broadcasts retain/release and cache events to every renderer, reports
+  renderer-local generations and rebuild metrics, and supports measurement-only
+  text layout without transient glyph uploads.
 
 ## Current Verification
 
@@ -363,7 +371,8 @@ build on that vocabulary instead of adding parallel storage models.
   documents, animations, rendering, accessibility, text storage/layout/views,
   pasteboards/dragging, document tabs, undo managers, object values, model
   controllers, notifications, responders, view controllers, windows/controllers,
-  constraints, themes, and the renderer/application threading boundary.
+  constraints, themes, the renderer/application threading boundary, and managed
+  font/image resource retention and atlas recovery.
 - Demo coverage for recently completed work lives in
   `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
   `examples/matrix_demo.nim`, `examples/modelcontrollers_demo.nim`,
@@ -372,9 +381,13 @@ build on that vocabulary instead of adding parallel storage models.
   `examples/collectionview_demo.nim`, `examples/controls_showcase.nim`, and
   `examples/merenda_settings_demo.nim`.
 
-## Near-Term Work
+## Completed Design Reference
 
-### FigDraw Managed Font and Image Resources
+### FigDraw Managed Font and Image Resources (Completed 2026-07-15)
+
+Implemented for the static FigDraw build. The design remains here as the
+ownership and renderer-recovery contract; native-dynlib support remains gated
+on equivalent managed-resource ABI primitives.
 
 Migrate NimKit drawing and cached layouts from unmanaged `FigFont`/`ImageId`
 lifetime handling to a hybrid ownership model: Merenda owns resource-lifetime
@@ -518,6 +531,8 @@ Verification and rollout:
 - Update image, text-layout, rendering, UI-relay, pasteboard/dragging, multiwindow,
   and example coverage, then remove internal raw-font/raw-image upload paths only
   after all NimKit render entry points retain managed resources correctly.
+
+## Near-Term Work
 
 ### Resource-Backed UI Construction
 

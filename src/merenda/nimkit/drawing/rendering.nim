@@ -253,6 +253,7 @@ proc buildRenders*(root: View, appearance: Appearance): Renders =
   renderViewInto(context, root, appearance)
   result = context.renders
   root.xCachedRenders = result
+  root.xCachedRenderResources = context.resources
   root.xCachedAppearance = initAppearance(appearance.theme)
   root.xHasCachedRenders = true
   root.finishDisplaySubtree()
@@ -262,3 +263,8 @@ proc buildRenders*(root: View, theme: Theme): Renders =
 
 proc buildRenders*(root: View): Renders =
   buildRenders(root, root.effectiveAppearance())
+
+proc renderResources*(root: View): RenderResourceManifest =
+  if root.isNil:
+    return nil
+  root.xCachedRenderResources

@@ -15,6 +15,7 @@ import ./backend as nimkitBackend
 import ./animations
 import ../responder/keybindings
 import ../drawing/rendering as nimkitRendering
+import ../drawing/renderresources
 import ../foundation/events
 import ../foundation/notifications
 import ../text/fieldeditors
@@ -1773,7 +1774,8 @@ proc renderNativeWindow*(window: Window) =
   window.xHostWindow.refreshContentScale()
   let logicalSize = window.syncNativeGeometry()
   var renders = window.buildRenders()
-  window.xHostWindow.render(renders, logicalSize)
+  let resources = nimkitRendering.renderResources(window.xContentView).freeze()
+  window.xHostWindow.render(renders, logicalSize, resources)
 
 proc contentPoint(window: Window, windowPoint: Point): Point =
   window.xContentView.pointFromWindow(windowPoint)
@@ -2503,7 +2505,8 @@ proc pumpThreadedWindowFrame*(window: Window) =
     discard window.requestNativeDisplayUpdateIfNeeded()
   if window.needsDisplayUpdate() and not window.xThreadHost.isNil:
     let renders = window.buildRenders()
-    discard window.xThreadHost.submitRenders(renders, window.xFrame.size)
+    let resources = nimkitRendering.renderResources(window.xContentView).freeze()
+    discard window.xThreadHost.submitRenders(renders, window.xFrame.size, resources)
   if window.dispatchMouseTrackingTick():
     discard window.requestNativeDisplayUpdateIfNeeded()
 
@@ -2569,7 +2572,11 @@ proc ensureNativeWindow*(window: Window) =
     window.xHostWindow.setVisible(true)
 
 proc pumpNativeWindowFrame*(window: Window) =
-  if not window.xVisibleRequested or window.xClosed:
+  if window.xClosed:
+    return
+  if not window.xVisibleRequested:
+    if not window.xHostWindow.isNil:
+      window.xHostWindow.pump()
     return
   window.ensureNativeWindow()
   if window.drainAnimations() > 0:

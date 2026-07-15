@@ -1,6 +1,7 @@
 import ../responder/responders
 import ../themes
 import ../foundation/types
+import ../drawing/renderresources
 
 when defined(useNativeDynlib):
   from figdraw/dynlib import Renders
@@ -179,5 +180,6 @@ type
     xContextMenu*: Responder
     xContextMenuHandlerInstalled*: bool
     xCachedRenders*: Renders
+    xCachedRenderResources*: RenderResourceManifest
     xCachedAppearance*: Appearance
     xHasCachedRenders*: bool
