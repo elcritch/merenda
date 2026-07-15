@@ -382,198 +382,83 @@ build on that vocabulary instead of adding parallel storage models.
 
 ## Completed Design Reference
 
-### FigDraw Managed Font and Image Resources (Completed 2026-07-15)
+The render-threading and managed-resource work completed on 2026-07-15 share
+one architectural boundary: NimKit builds value-only render snapshots on the
+application thread, while FigDraw may consume moved snapshots on a dedicated
+backend thread. Logical resource ownership remains on the application side
+until the renderer acknowledges the corresponding snapshot.
 
-Implemented for the static FigDraw build. The design remains here as the
-ownership and renderer-recovery contract; native-dynlib support remains gated
-on equivalent managed-resource ABI primitives.
+### Runtime Topology and Render Handoff
 
-Migrate NimKit drawing and cached layouts from unmanaged `FigFont`/`ImageId`
-lifetime handling to a hybrid ownership model: Merenda owns resource-lifetime
-policy and lease scopes, while FigDraw's `FontRef` and `ImageRef` own the
-underlying retain/release bookkeeping and final backend cleanup. Keep rendering
-data cheap and copyable while ensuring that visible and preloaded resources stay
-resident, unused resources become eligible for eviction, and every renderer can
-recover after its image atlas is rebuilt.
+- Keep the application, responder and view trees, native windows, input, menus,
+  clipboard, IME, accessibility, and window lifecycle on the platform UI
+  thread. Parsing, indexing, I/O, decoding, and other expensive application
+  work belongs in bounded Sigils workers.
+- Treat the UI thread, application state, rendering runtime, and worker pool as
+  distinct roles even when a backend colocates them.
+- Select rendering per backend as automatic, direct/main-thread, or dedicated.
+  Static FigDraw Metal and Vulkan backends support the dedicated runtime;
+  OpenGL, unsupported backends, and failed runtime setup use direct rendering.
+- Keep the render boundary limited to moved `Renders`, logical size and target
+  generations, renderer-local resource messages, acknowledgements, diagnostics,
+  and shutdown. Ordinary window and application commands do not cross it.
+- Build render trees as mutable values, transfer them with `ensureMove`,
+  invalidate the source cache immediately, and coalesce pending work per window
+  so the renderer receives the newest frame instead of stale intermediates.
+- Create, resize, replace, and destroy native presentation targets on the UI
+  thread. The renderer exclusively owns its FigDraw context, command encoding,
+  atlas state, and resource replay; target replacement and shutdown require
+  generation-aware release acknowledgement.
+- This topology also matches mobile constraints: UIKit or Android
+  Activity/View, input, IME, and lifecycle stay on the main thread while a
+  supported Metal, EGL, or Vulkan presentation path may render elsewhere.
 
-- Keep `TextStyle`, `TextAttributes`, theme values, model records, and FigDraw
-  nodes as plain descriptors or raw IDs. Do not embed thread-affine `FontRef` or
-  `ImageRef` values in broadly copied or cross-thread data. Treat FigDraw refs as
-  the internal lease implementation rather than as NimKit's public resource
-  identity.
-- Store a `RenderResourceManifest` beside each cached root `Renders`. It
-  deduplicates and owns app-thread `FontRef` and `ImageRef` handles while nodes
-  keep only raw IDs. `ImageResource` remains the reload source, but is not itself
-  pinned merely because a model or hidden view retains it.
-- Build the replacement manifest before releasing the previous one so unchanged
-  resources never pass through a zero-owner gap. Let ARC/ORC destroy the
-  contained FigDraw refs normally; their existing destructors provide the actual
-  release operation, so NimKit defines no duplicate resource ownership hooks.
-- For threaded rendering, keep manifests on the application thread. Assign each
-  moved render tree an ID and retain its manifest in a pending lease queue until
-  the renderer acknowledges that ID. The render snapshot contains only the moved
-  `Renders`, logical size, and ID; it never copies pixels or crosses threads with
-  `FontRef`, `ImageRef`, or `ImageResource` values.
-- Never use a force-clear, `clearImageCache`, or raw-ID eviction as the normal
-  release path. Dropping Merenda's last lease only makes the logical resource
-  eligible for FigDraw eviction; renderer-local atlas clearing and rebuilding are
-  separate pressure/recovery operations coordinated at a frame boundary.
-- Keep refs on the application thread that created them. Background text layout or
-  image decoding may pass `FigFont`, `FontId`, `TypefaceId`, `ImageId`, encoded
-  data, or decoded pixels back to that thread, but must create its own ref if it
-  needs ownership. Do not pass `FontRef` or `ImageRef` through signals, render
-  queues, pasteboard providers, or worker-thread result records.
+### Managed Resource Ownership and Recovery
 
-Font migration:
+- Keep themes, text attributes, model records, layouts exposed to callers, and
+  FigDraw nodes as plain descriptors or raw IDs. `FontRef` and `ImageRef`
+  are internal lease handles and never travel through render queues, signals,
+  pasteboards, or worker results.
+- Store a deduplicated `RenderResourceManifest` beside each cached root
+  `Renders`. Replace manifests by acquiring the new leases before releasing
+  the old ones so unchanged resources never pass through a zero-owner gap.
+- For threaded rendering, associate the moved snapshot with a render ID and
+  retain its manifest on the application thread until that ID is acknowledged.
+  Snapshot transfer moves render values; it does not copy pixels or move managed
+  FigDraw references.
+- Concrete fonts are acquired through `FontRef`; committed text layouts retain
+  every referenced `FontId`, including fallback faces. Measurement-only
+  typesetting avoids transient glyph uploads. Parsed typefaces remain
+  process-cached until FigDraw provides a separate release contract.
+- `ImageResource` remains the identity and rebuild-source object. Active
+  snapshots, explicit preloads, and named pins acquire `ImageRef` leases;
+  models, hidden views, pasteboard items, and off-screen rows do not pin atlas
+  entries merely by retaining metadata. Every drawable image preserves a file,
+  encoded-data, decoded-pixel, or owned direct-pixel source suitable for replay.
+- Logical ownership and renderer-local atlas residency are separate. FigDraw
+  broadcasts retain/release and cache events to every renderer, and each
+  renderer tracks its own atlas generation across clears, growth, backend
+  recreation, and device/context loss.
+- Rebuild only at frame boundaries from the live manifest/preload working set.
+  Generation-stamped uploads prevent stale work from repopulating a rebuilt
+  atlas. Pressure handling uses renderer-local usage, hysteresis/cooldown, and
+  planned growth when the live set cannot fit.
+- Dropping the final lease makes a logical resource eligible for eviction; it
+  does not force-clear a global cache. Each renderer independently releases or
+  rebuilds its local residency.
 
-- Change the internal style resolver so a concrete font is acquired as a
-  `FontRef`; use the FontRef overloads of `fs`, `span`, `typeset`, and
-  `placeGlyphs`. Continue caching name/fallback resolution as `TypefaceId`s, but
-  do not keep every resolved size alive in a process-wide FontRef cache.
-- Capture every distinct `FontId` referenced by a committed
-  `GlyphArrangement`, including fallback faces, into its owning
-  `TextLayoutManager` and into any render snapshot that copies the arrangement.
-  Replacing or invalidating a layout must acquire the new refs before dropping
-  the old refs; destroying the last layout/render owner should allow FigDraw to
-  recycle that font's glyph entries.
-- Route simple labels, natural-size queries, explicit glyph placement, UI-relay
-  fonts, and externally supplied layouts through the same acquisition path.
-  Add or use a FigDraw measurement-only typesetting mode that does not rasterize
-  glyphs so transient intrinsic-size queries do not create and immediately evict
-  atlas entries.
-- Treat FigDraw's parsed typeface registry separately from concrete font/glyph
-  ownership. This migration recycles glyph entries through `FontRef`; parsed
-  typefaces remain process-cached until FigDraw exposes a safe typeface-release
-  contract.
+### Supported Scope and Verification
 
-Image migration:
+The static FigDraw path is covered for direct rendering and dedicated Metal and
+Vulkan runtimes, including moved latest-frame delivery, resize/target generation
+ordering, shutdown acknowledgements, pending-manifest lifetime, multiwindow and
+popup atlas recovery, stale uploads, pressure rebuilds, and ARC/ORC
+copy/move/final-release behavior.
 
-- Keep `ImageResource` as NimKit's identity-bearing metadata and reload-source
-  object, but acquire an `ImageRef` only for an active render snapshot, explicit
-  preload, or pinned named image. Merely storing an `ImageResource` in a model,
-  hidden view, pasteboard item, or off-screen row must not pin its atlas entry.
-- Store a rebuildable source for every drawable image: a file path, encoded
-  bytes, or an owned copy of direct pixels. File/data resources may discard
-  decoded pixels when inactive; direct-pixel and snapshot resources must retain
-  a source until the resource itself dies. Preserve the current constructors,
-  metadata accessors, `imageId`, and named-image lookup while adding one internal
-  acquire/reload path used by all drawing.
-- Define the existing `ImageCachePolicy` values in terms of source retention,
-  preload admission, and explicit pinning; no policy may create a short-lived
-  `ImageRef` and leave a longer-lived node with only its ID. Audit
-  `copyImageResource` so pasteboard/drag snapshots have independent source and
-  stable-ID semantics instead of accidentally replacing another live image with
-  the same ID.
-- Make `DrawContext.addImage` retain the acquired `ImageRef` in its manifest
-  before emitting an image node. Normal assignments may share an
-  `ImageResource`; the named registry and explicit preload APIs are the only
-  long-lived strong caches, and removal/window teardown must release their refs.
-
-Atlas rebuild and pressure handling:
-
-- Separate FigDraw's logical ref ownership from renderer-local atlas residency.
-  Retain/release and cache-reset events must be broadcast to every registered
-  renderer (or read through a generation-stamped event log with a cursor per
-  renderer); a single host draining the current global queue must not consume an
-  event that another window or popup atlas also needs. Final release should make
-  the ID evictable in every renderer without requiring refs to be renderer-bound.
-- Add or require a per-renderer FigDraw atlas generation that changes on manual
-  cache clears, automatic atlas growth, backend recreation, and device/context
-  loss. Expose a renderer-targeted `ensureImage`/rebuild operation; do not infer
-  residency from FigDraw's current process-global `hasImage` set or last-renderer
-  `atlasUsageSnapshot`, because each NimKit `HostWindow` and popup owns a distinct
-  renderer atlas.
-- Rebuild at a frame boundary by creating a fresh FigDraw renderer subscription.
-  FigDraw replays independently copied current image and glyph messages into that
-  renderer's atlas. If replay itself grows the atlas, resubscribe and replay until
-  its generation stabilizes before drawing. App-thread manifests and explicit
-  preload/pin handles keep the corresponding logical resources alive throughout.
-- Make automatic FigDraw atlas growth generation-aware. The current backend
-  `grow` implementations clear lookup tables while the logical cache still says
-  images are loaded; this must either preserve/copy existing entries or publish a
-  new generation and repack all live sources before drawing continues. Treat the
-  renderer-targeted generation/rebuild API as a prerequisite rather than hiding
-  the race behind NimKit retries or `compiles` fallbacks.
-- Monitor exact `renderer.atlasUsage().packedRatio()` per host renderer. Use a
-  configurable high-water threshold, hysteresis/cooldown, and a rebuild counter;
-  rebuild only the visible/preloaded working set. If that live set cannot fit,
-  grow to a planned capacity before repacking instead of repeatedly clearing the
-  atlas. Decode reload sources before entering the render-critical upload phase.
-- Preserve FigDraw upload generations so stale queued uploads cannot repopulate a
-  newly rebuilt atlas. Coalesce concurrent release, reload, and rebuild requests
-  at the frame boundary, then request another frame for every window whose atlas
-  generation changed.
-
-Verification and rollout:
-
-- Add deterministic tests for copy/move/final-release behavior, overlapping
-  render-cache replacement, layout invalidation, hidden/off-screen resources,
-  named-image pin/unpin, pasteboard snapshots, and last-owner glyph/image
-  eviction under ARC and ORC. Since FigDraw owns the hooks, verify delegation and
-  message counts rather than defining duplicate NimKit hooks.
-- Force tiny atlases in backend tests to cover automatic growth, explicit
-  pressure rebuilds, stale uploads, repeated rebuilds, glyph regeneration, and
-  image re-upload without a blank frame. Add two-window and popup-window tests to
-  prove that renderer-local residency and generations do not leak across atlases.
-- Record replay and generation-recovery counts plus atlas used/packed ratios and
-  rebuild counts. Use operation counts for CI and keep wall-clock/frame-time
-  measurements diagnostic.
-- Migrate the static FigDraw build first. `useNativeDynlib` currently aliases
-  `ImageRef` to a raw ID and has no managed `FontRef` ABI; leave that mode
-  explicitly unsupported until the native ABI gains retain/release and
-  renderer-targeted rebuild primitives. Do not add `compiles` shims that silently
-  restore unmanaged behavior.
-- Update image, text-layout, rendering, UI-relay, pasteboard/dragging, multiwindow,
-  and example coverage, then remove internal raw-font/raw-image upload paths only
-  after all NimKit render entry points retain managed resources correctly.
-
-### Main-Thread Application with Optional Render Runtime (Completed 2026-07-15)
-
-Implemented for static FigDraw Metal and Vulkan backends, with direct
-main-thread rendering retained for unsupported backends and runtime fallbacks.
-
-Invert the current desktop threading split so the NimKit application, responder
-tree, native windows, event dispatch, menus, clipboard, IME, accessibility, and
-window lifecycle stay on the platform main thread. Move only FigDraw rendering
-behind an optional backend-owned render runtime. This is the natural topology
-for UIKit and Android's UI thread while retaining a dedicated renderer where a
-presentation backend supports it.
-
-- Treat the platform/UI thread, NimKit application state, renderer, and worker
-  pool as explicit roles. A backend may colocate roles, but application and
-  widget code must not depend on a particular placement.
-- Keep the render boundary narrow: moved `Renders` snapshots, renderer-local
-  resource messages, presentation-target size/lifecycle changes, render
-  acknowledgements, diagnostics, and shutdown. Do not send input, focus,
-  popup, menu, title, visibility, clipboard, or ordinary window commands
-  through it.
-- Make the render execution mode backend-selected: automatic, direct/main
-  thread, or dedicated thread. Use a dedicated thread only after the backend
-  can prove that its graphics context and presentation target obey the required
-  ownership rules; retain the direct path for unsupported and test backends.
-- Use FigDraw's backend capability for application-level selection, then verify
-  each configured renderer before moving it. Static Siwin builds support Metal
-  and Vulkan presentation targets; OpenGL and failed runtime fallbacks remain
-  on the main thread.
-- Keep each `Application` and native window on the platform main thread.
-  Expensive parsing, indexing, I/O, image decoding, and project work belong in
-  Sigil worker actors, with bounded, cancellable, generation-stamped results
-  returned to the UI thread.
-- Keep `Renders` as a `var`, transfer it with `ensureMove`, and invalidate the
-  source render cache immediately. Coalesce pending snapshots per window so a
-  renderer never works through stale intermediate frames.
-- Have the main thread create, resize, and destroy native presentation targets.
-  The renderer exclusively owns its FigDraw context, command encoding, GPU
-  cache, and resource replay. Surface replacement/destruction needs an explicit
-  generation and release acknowledgement before its target is discarded.
-- For Metal, use a custom `CAMetalLayer` host rather than assuming an
-  `MTKView` delegate can leave the main actor. For Android, keep Activity/View,
-  input, IME, and lifecycle on the main Looper while a surface-backed renderer
-  may own EGL/Vulkan work on a dedicated thread.
-- Add focused tests for main-thread event dispatch, moved latest-frame delivery,
-  renderer shutdown/target release, resize generation ordering, direct fallback,
-  and render-resource lease lifetime. Benchmark end-to-end queue/wakeup and
-  frame latency separately from the existing ownership-transfer benchmark.
+`useNativeDynlib` remains intentionally unsupported for managed resources:
+its ABI still lacks equivalent `FontRef` and `ImageRef` retain/release and
+renderer-targeted rebuild primitives. It must not silently fall back to
+unmanaged ownership.
 
 ## Near-Term Work
 
