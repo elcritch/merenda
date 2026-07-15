@@ -1,7 +1,8 @@
 import std/[algorithm, locks, os, strutils, tables]
 
 import sigils/core
-from figdraw/common/typefaceinfos import TypefaceInfo, parseTypefaceInfo
+from figdraw/common/typefaceinfos import
+  TypefaceInfo, parseTypefaceInfo, supportedCodepointCount
 
 import ./comboboxes
 import ../foundation/selectors
@@ -87,6 +88,10 @@ const
     ("Urdu", "Urdu"),
     ("Greek", "Greek"),
     ("Oriya", "Oriya"),
+    ("Dingbats", "Symbols"),
+    ("Ornaments", "Symbols"),
+    ("Symbols", "Symbols"),
+    ("Symbol", "Symbols"),
     ("JP", "Japanese"),
     ("KR", "Korean"),
     ("SC", "Simplified Chinese"),
@@ -113,6 +118,8 @@ const
     ("gur2", "Gurmukhi"),
     ("hang", "Korean"),
     ("hebr", "Hebrew"),
+    ("mong", "Mongolian"),
+    ("nko", "NKo"),
     ("knda", "Kannada"),
     ("knd2", "Kannada"),
     ("khmr", "Khmer"),
@@ -131,6 +138,9 @@ const
     ("tel2", "Telugu"),
     ("thai", "Thai"),
     ("tibt", "Tibetan"),
+    ("syrc", "Syriac"),
+    ("thaa", "Thaana"),
+    ("yi", "Yi"),
   ]
 
   FontLayoutTagLanguages = [
@@ -192,12 +202,48 @@ const
     (51, "Chinese"),
     (52, "Korean"),
     (56, "Korean"),
-    (59, "Chinese"),
+    (58, "Phoenician"),
     (70, "Tibetan"),
+    (71, "Syriac"),
+    (72, "Thaana"),
     (73, "Sinhala"),
     (74, "Myanmar"),
     (75, "Ethiopic"),
+    (76, "Cherokee"),
+    (77, "Canadian Aboriginal"),
+    (78, "Ogham"),
+    (79, "Runic"),
     (80, "Khmer"),
+    (81, "Mongolian"),
+    (82, "Braille"),
+    (83, "Yi"),
+    (84, "Philippine Scripts"),
+    (85, "Old Italic"),
+    (86, "Gothic"),
+    (87, "Deseret"),
+    (93, "Limbu"),
+    (94, "Tai Le"),
+    (95, "New Tai Lue"),
+    (96, "Buginese"),
+    (97, "Glagolitic"),
+    (98, "Tifinagh"),
+    (100, "Syloti Nagri"),
+    (101, "Linear B"),
+    (103, "Ugaritic"),
+    (104, "Old Persian"),
+    (105, "Shavian"),
+    (106, "Osmanya"),
+    (107, "Cypriot"),
+    (108, "Kharoshthi"),
+    (110, "Cuneiform"),
+    (112, "Sundanese"),
+    (113, "Lepcha"),
+    (114, "Ol Chiki"),
+    (115, "Saurashtra"),
+    (116, "Kayah Li"),
+    (117, "Rejang"),
+    (118, "Cham"),
+    (121, "Carian, Lycian, and Lydian"),
   ]
 
   FontCodePageLanguages = [
@@ -211,7 +257,38 @@ const
     (31, "Symbols"),
   ]
 
-  FontUnicodeSymbolRanges = [37, 38, 39, 45, 46, 47, 88, 89]
+  FontUnicodeSymbolRanges =
+    [37, 38, 39, 45, 46, 47, 88, 89, 99, 109, 111, 119, 120, 122]
+
+  FontCodepointLanguages = [
+    (0x0370'u32, 0x03ff'u32, 16, "Greek"),
+    (0x0400'u32, 0x052f'u32, 16, "Cyrillic"),
+    (0x0530'u32, 0x058f'u32, 16, "Armenian"),
+    (0x0590'u32, 0x05ff'u32, 16, "Hebrew"),
+    (0x0600'u32, 0x06ff'u32, 16, "Arabic"),
+    (0x0700'u32, 0x074f'u32, 12, "Syriac"),
+    (0x0780'u32, 0x07bf'u32, 12, "Thaana"),
+    (0x07c0'u32, 0x07ff'u32, 12, "NKo"),
+    (0x0900'u32, 0x097f'u32, 16, "Devanagari"),
+    (0x0980'u32, 0x09ff'u32, 16, "Bengali"),
+    (0x0a00'u32, 0x0a7f'u32, 16, "Gurmukhi"),
+    (0x0a80'u32, 0x0aff'u32, 16, "Gujarati"),
+    (0x0b00'u32, 0x0b7f'u32, 16, "Oriya"),
+    (0x0b80'u32, 0x0bff'u32, 16, "Tamil"),
+    (0x0c00'u32, 0x0c7f'u32, 16, "Telugu"),
+    (0x0c80'u32, 0x0cff'u32, 16, "Kannada"),
+    (0x0d00'u32, 0x0d7f'u32, 16, "Malayalam"),
+    (0x0d80'u32, 0x0dff'u32, 16, "Sinhala"),
+    (0x0e00'u32, 0x0e7f'u32, 16, "Thai"),
+    (0x0e80'u32, 0x0eff'u32, 16, "Lao"),
+    (0x0f00'u32, 0x0fff'u32, 16, "Tibetan"),
+    (0x1000'u32, 0x109f'u32, 16, "Myanmar"),
+    (0x1200'u32, 0x137f'u32, 16, "Ethiopic"),
+    (0x1780'u32, 0x17ff'u32, 16, "Khmer"),
+    (0x1800'u32, 0x18af'u32, 16, "Mongolian"),
+    (0x3040'u32, 0x30ff'u32, 16, "Japanese"),
+    (0xac00'u32, 0xd7af'u32, 32, "Korean"),
+  ]
 
 var
   cachedSystemFontCatalog: seq[FontCatalogEntry]
@@ -366,37 +443,74 @@ proc fontCatalogLanguages*(info: TypefaceInfo, family = ""): seq[string] =
   if hasKoreanScript:
     result.addUniqueFontLanguage("Korean")
   if hasHanScript and not hasJapaneseScript and not hasKoreanScript:
-    result.addUniqueFontLanguage("Chinese")
+    result.addUniqueFontLanguage("CJK")
 
   for (bit, language) in FontCodePageLanguages:
     if info.codePageRanges.hasRangeBit(bit):
       result.addUniqueFontLanguage(language)
 
+  let hasCodepointCoverage = info.codepointRanges.len > 0
+  var latinLetterCount = 0
+  if hasCodepointCoverage:
+    latinLetterCount =
+      info.supportedCodepointCount(0x0041'u32, 0x005a'u32) +
+      info.supportedCodepointCount(0x0061'u32, 0x007a'u32)
+    if latinLetterCount >= 26:
+      result.addUniqueFontLanguage(DefaultFontLanguage)
+    for (first, last, minimumCount, language) in FontCodepointLanguages:
+      if info.supportedCodepointCount(first, last) >= minimumCount:
+        result.addUniqueFontLanguage(language)
+
+    let hanCount = info.supportedCodepointCount(0x3400'u32, 0x9fff'u32)
+    if hanCount >= 128 and not result.hasFontLanguage("Japanese") and
+        not result.hasFontLanguage("Korean") and
+        not result.hasFontLanguage("Simplified Chinese") and
+        not result.hasFontLanguage("Traditional Chinese"):
+      result.addUniqueFontLanguage("CJK")
+
   for (bit, language) in FontUnicodeRangeLanguages:
-    if info.unicodeRanges.hasRangeBit(bit):
+    if (not hasCodepointCoverage or language != DefaultFontLanguage) and
+        info.unicodeRanges.hasRangeBit(bit):
       let genericCjkCovered =
         language == "Chinese" and
         (result.hasFontLanguage("Japanese") or result.hasFontLanguage("Korean"))
       if not genericCjkCovered:
         result.addUniqueFontLanguage(language)
 
-  var
-    hasSpecializedTextCoverage = false
-    hasSymbolCoverage = false
-  for language in result:
-    if language notin [DefaultFontLanguage, "Symbols"]:
-      hasSpecializedTextCoverage = true
-      break
-  for bit in FontUnicodeSymbolRanges:
-    if info.unicodeRanges.hasRangeBit(bit):
-      hasSymbolCoverage = true
-      break
-  if hasSymbolCoverage and not hasSpecializedTextCoverage:
-    result.addUniqueFontLanguage("Symbols")
+  if hasCodepointCoverage:
+    let
+      brailleCount = info.supportedCodepointCount(0x2800'u32, 0x28ff'u32)
+      emojiCount = info.supportedCodepointCount(0x1f000'u32, 0x1faff'u32)
+      symbolCount =
+        info.supportedCodepointCount(0x2190'u32, 0x27ff'u32) +
+        info.supportedCodepointCount(0x2900'u32, 0x2bff'u32) +
+        info.supportedCodepointCount(0x1d000'u32, 0x1d2ff'u32)
+    if brailleCount >= 64 and brailleCount > emojiCount and brailleCount > symbolCount:
+      result = @["Braille"]
+    elif emojiCount >= 64 and emojiCount > symbolCount and
+        emojiCount > latinLetterCount * 4:
+      result = @["Emoji"]
+    elif symbolCount >= 32 and symbolCount > latinLetterCount * 4:
+      result = @["Symbols"]
+  else:
+    var
+      hasSpecializedTextCoverage = false
+      hasSymbolCoverage = false
+    for language in result:
+      if language notin [DefaultFontLanguage, "Symbols"]:
+        hasSpecializedTextCoverage = true
+        break
+    for bit in FontUnicodeSymbolRanges:
+      if info.unicodeRanges.hasRangeBit(bit):
+        hasSymbolCoverage = true
+        break
+    if hasSymbolCoverage and not hasSpecializedTextCoverage:
+      result.addUniqueFontLanguage("Symbols")
 
   if result.hasFontLanguage("Simplified Chinese") or
       result.hasFontLanguage("Traditional Chinese"):
     result.removeFontLanguage("Chinese")
+    result.removeFontLanguage("CJK")
 
   if result.len == 0:
     let namedLanguage = family.splitFontFamilyAndLanguage().language

@@ -1,6 +1,6 @@
 import std/[os, sequtils, strutils, unittest]
 
-from figdraw/common/typefaceinfos import TypefaceInfo
+from figdraw/common/typefaceinfos import TypefaceCodepointRange, TypefaceInfo
 import merenda/nimkit
 
 suite "NimKit font pickers":
@@ -40,6 +40,42 @@ suite "NimKit font pickers":
     arabicMathInfo.unicodeRanges[0] = 1'u32 shl 13
     arabicMathInfo.unicodeRanges[1] = 1'u32 shl (38 - 32)
     check arabicMathInfo.fontCatalogLanguages() == @["Arabic"]
+
+  test "font languages prefer actual cmap coverage over incorrect OS/2 ranges":
+    let
+      arabicInfo = TypefaceInfo(
+        unicodeRanges: [1'u32, 0'u32, 0'u32, 0'u32],
+        codePageRanges: [1'u32, 0'u32],
+        codepointRanges:
+          @[
+            TypefaceCodepointRange(first: 0x0020'u32, last: 0x0020'u32),
+            TypefaceCodepointRange(first: 0x0600'u32, last: 0x064f'u32),
+          ],
+      )
+      hebrewInfo = TypefaceInfo(
+        unicodeRanges: [1'u32, 0'u32, 0'u32, 0'u32],
+        codepointRanges: @[TypefaceCodepointRange(first: 0x0590'u32, last: 0x05ef'u32)],
+      )
+
+    check arabicInfo.fontCatalogLanguages() == @["Arabic"]
+    check hebrewInfo.fontCatalogLanguages() == @["Hebrew"]
+
+  test "font languages separate specialist cmap coverage from default text":
+    let
+      brailleInfo = TypefaceInfo(
+        codepointRanges: @[TypefaceCodepointRange(first: 0x2800'u32, last: 0x28ff'u32)]
+      )
+      emojiInfo = TypefaceInfo(
+        codepointRanges:
+          @[TypefaceCodepointRange(first: 0x1f300'u32, last: 0x1f6ff'u32)]
+      )
+      symbolInfo = TypefaceInfo(
+        codepointRanges: @[TypefaceCodepointRange(first: 0x2190'u32, last: 0x22ff'u32)]
+      )
+
+    check brailleInfo.fontCatalogLanguages() == @["Braille"]
+    check emojiInfo.fontCatalogLanguages() == @["Emoji"]
+    check symbolInfo.fontCatalogLanguages() == @["Symbols"]
 
   test "font catalog groups faces into stable families":
     let catalog = buildFontCatalog(
@@ -123,6 +159,19 @@ suite "NimKit font pickers":
 
       check face.metadataLoaded
       check "Arabic" in face.languages
+
+  test "system specialist fonts use cmap classifications when available":
+    for (path, expectedLanguage) in [
+      ("/System/Library/Fonts/Apple Braille.ttf", "Braille"),
+      ("/System/Library/Fonts/Apple Color Emoji.ttc", "Emoji"),
+      ("/System/Library/Fonts/SFHebrewRounded.ttf", "Hebrew"),
+      ("/System/Library/Fonts/Supplemental/Al Nile.ttc", "Arabic"),
+    ]:
+      if fileExists(path):
+        var face = initFontCatalogFace("Regular", DefaultFontLanguage, path)
+        face.loadFontCatalogFaceMetadata()
+
+        check face.languages == @[expectedLanguage]
 
   test "font options are built only when requested":
     var entries: seq[FontCatalogEntry]

@@ -175,6 +175,8 @@ proc loadFontCatalog(loader: FontCatalogLoader) {.slot.} =
       loadedEntryCount = 0
       loadedFaceCount = 0
     for catalogEntry in systemFontCatalog():
+      if catalogEntry.family == "Last Resort":
+        continue
       var loadedEntry = catalogEntry
       for face in loadedEntry.faces.mitems:
         face.loadFontCatalogFaceMetadata()
