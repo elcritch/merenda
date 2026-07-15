@@ -1231,12 +1231,11 @@ proc stop*(clock: AnimationSchedulerClock) =
   clock.xUsesSharedThread = false
 
 proc drain*(
-    scheduler: AnimationScheduler, clock: AnimationSchedulerClock, pollQueued = true
+    scheduler: AnimationScheduler, clock: AnimationSchedulerClock
 ): int {.discardable.} =
   if clock.isNil:
     return 0
-  if pollQueued:
-    discard clock.pollQueuedTicks()
+  discard clock.pollQueuedTicks()
   for delta in clock.takePendingDeltas():
     discard scheduler.tick(delta)
     inc result

@@ -325,7 +325,7 @@ proc stopAnimation*(
   window: Window, animation: Animation, finished = false
 ): bool {.discardable.}
 
-proc drainAnimations*(window: Window, pollQueued = true): int {.discardable.}
+proc drainAnimations*(window: Window): int {.discardable.}
 proc updateInsertionPointBlink(window: Window)
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
@@ -1261,10 +1261,10 @@ proc stopAnimation*(
   if window.xAnimationScheduler.animationCount == 0:
     window.stopAnimationClock()
 
-proc drainAnimations*(window: Window, pollQueued = true): int {.discardable.} =
+proc drainAnimations*(window: Window): int {.discardable.} =
   if window.xAnimationScheduler.isNil or window.xAnimationClock.isNil:
     return 0
-  result = window.xAnimationScheduler.drain(window.xAnimationClock, pollQueued)
+  result = window.xAnimationScheduler.drain(window.xAnimationClock)
   if window.xAnimationScheduler.animationCount == 0:
     window.stopAnimationClock()
 
@@ -1739,9 +1739,11 @@ proc renderNativeWindow*(window: Window) =
   let logicalSize = window.syncNativeGeometry()
   var renders = window.buildRenders()
   if not window.xThreadHost.isNil:
-    let resources = nimkitRendering.renderResources(window.xContentView)
+    var resources = nimkitRendering.renderResources(window.xContentView)
     window.xContentView.invalidateRenderCache()
-    discard window.xThreadHost.submitRenders(ensureMove renders, logicalSize, resources)
+    discard window.xThreadHost.submitRenders(
+      ensureMove renders, logicalSize, ensureMove resources
+    )
     window.xHostWindow.renderSubmitted()
   else:
     window.xHostWindow.render(renders, logicalSize)
@@ -2415,9 +2417,6 @@ proc releaseThreadRenderer(window: Window, waitForRelease: bool) =
     if client.renderTargetReleasePending():
       sleep(1)
   window.xThreadHost = nil
-
-proc pumpThreadedWindowFrame*(window: Window) =
-  discard window.drainThreadHostEvents()
 
 proc ensureNativeWindow*(window: Window) =
   if window.nativeReady:

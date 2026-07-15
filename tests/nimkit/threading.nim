@@ -2,13 +2,29 @@ import std/[assertions, os, unittest]
 
 import figdraw
 import figdraw/windowing/siwinshim as figdrawSiwin
-import pkg/pixie
+import pkg/pixie except draw
 import threading/channels
 
 import merenda/nimkit/app/application
 import merenda/nimkit/app/backend as nimkitBackend
+import merenda/nimkit/app/windows
+import merenda/nimkit/foundation/selectors
 import merenda/nimkit/foundation/types as nimkitTypes
 import merenda/nimkit/drawing
+import merenda/nimkit/view/views
+
+type RaisingDrawView = ref object of View
+
+protocol RaisingDrawing of ViewDrawingProtocol:
+  method draw(view: RaisingDrawView, context: DrawContext) =
+    discard view
+    discard context
+    raise newException(ValueError, "intentional drawing failure")
+
+proc newRaisingDrawView(frame: nimkitTypes.Rect): RaisingDrawView =
+  result = RaisingDrawView()
+  initViewFields(result, frame)
+  discard result.withProtocol(RaisingDrawing)
 
 proc waitForRendererThread(client: nimkitBackend.ThreadRendererClient): int =
   for _ in 0 ..< 100:
@@ -106,6 +122,34 @@ suite "NimKit threading":
     check app.rendererThreadId() == -1
     check not app.isThreaded()
     check not app.isRunning()
+
+  test "application loop joins dedicated renderer after an exception":
+    if not nimkitBackend.dedicatedRendererSupported():
+      skip()
+    else:
+      let
+        app = newApplication("Threading Exception Test")
+        window = newWindow(
+          "Threading Exception Test", frame = nimkitTypes.rect(80, 80, 120, 80)
+        )
+        root = newRaisingDrawView(nimkitTypes.rect(0, 0, 120, 80))
+      app.renderExecutionMode = nimkitBackend.remDedicatedThread
+      window.setContentView(root)
+      app.addWindow(window)
+      window.orderFront()
+
+      var raised = false
+      try:
+        app.run()
+      except ValueError:
+        raised = true
+      finally:
+        window.close()
+
+      check raised
+      check app.rendererThreadId() == -1
+      check not app.isThreaded()
+      check not app.isRunning()
 
   test "render snapshots exclude app-thread managed resource handles":
     clearImageCache()

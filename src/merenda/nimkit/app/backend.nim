@@ -200,13 +200,10 @@ const
   ThreadRenderCapacity = 2
 
 proc sendMoved[T](channel: Chan[T], value: sink T) =
-  var value = move value
-  channel.send(unsafeIsolate(move value))
+  channel.send(unsafeIsolate(ensureMove value))
 
 proc pushLatest[T](channel: Chan[T], value: sink T) =
-  var
-    value = move value
-    isolated = unsafeIsolate(move value)
+  var isolated = unsafeIsolate(ensureMove value)
   if channel.tryTake(isolated):
     return
 
@@ -267,9 +264,9 @@ proc start*(runtime: var ThreadRendererRuntime) =
   var start = ThreadRendererStart(
     renderer: move runtime.renderer, threadId: addr runtime.client.threadId
   )
-  runtime.client.running.store(true, moRelease)
   createThread(runtime.worker, runThreadRenderer, move start)
   runtime.started = true
+  runtime.client.running.store(true, moRelease)
 
 proc stop*(runtime: var ThreadRendererRuntime) =
   if runtime.started:
@@ -306,31 +303,30 @@ proc submitRenders*(
     host: ThreadHostClient,
     renders: sink Renders,
     logicalSize: Size,
-    resources: RenderResourceManifest = nil,
+    resources: sink RenderResourceManifest = nil,
 ): bool {.discardable.} =
   if host.isNil or renders.isNil:
     return false
   inc host.nextRenderId
   let renderId = host.nextRenderId
   host.pendingResources.addLast(
-    ThreadRenderResourceLease(renderId: renderId, resources: resources)
+    ThreadRenderResourceLease(renderId: renderId, resources: ensureMove resources)
   )
-  var snapshot = ThreadRenderSnapshot(
-    renders: ensureMove renders, logicalSize: logicalSize, renderId: renderId
+  host.channels.renders.pushLatest(
+    ThreadRenderSnapshot(
+      renders: ensureMove renders, logicalSize: logicalSize, renderId: renderId
+    )
   )
-  host.channels.renders.pushLatest(move snapshot)
   host.renderRequested = true
   true
 
 proc acknowledgeRender*(host: ThreadHostClient, renderId: uint64) =
   if host.isNil or renderId == 0:
     return
-  var active = host.activeResources
   while host.pendingResources.len > 0 and
       host.pendingResources.peekFirst().renderId <= renderId:
     var lease = host.pendingResources.popFirst()
-    active = move lease.resources
-  host.activeResources = move active
+    host.activeResources = move lease.resources
 
 proc clearRenderResources*(host: ThreadHostClient) =
   if host.isNil:
@@ -1454,9 +1450,8 @@ proc drainRendererCommands(renderer: ThreadRenderer) =
         renderer.hosts[state.id] = state
     of trcDetachRenderHost:
       if command.hostId in renderer.hosts:
-        let state = renderer.hosts[command.hostId]
+        renderer.hosts[command.hostId].releaseRenderHost()
         renderer.hosts.del(command.hostId)
-        state.releaseRenderHost()
     of trcQuit:
       renderer.running = false
 

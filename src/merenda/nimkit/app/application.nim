@@ -71,7 +71,6 @@ type
     xRenderExecutionMode: RenderExecutionMode
     xThreadRenderer: ThreadRendererClient
     xApplicationThreadId: int
-    xRendererThreadId: int
 
 const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
@@ -91,7 +90,7 @@ proc modalSession*(app: Application): ModalSession
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool
 proc runForFrames*(app: Application, frames: Natural): int
 proc run*(app: Application)
-proc drainAnimations*(app: Application, pollQueued = true): int {.discardable.}
+proc drainAnimations*(app: Application): int {.discardable.}
 proc setKeyWindow*(app: Application, window: Window)
 proc setMainWindow*(app: Application, window: Window)
 proc noteWindowOrderedFront(app: Application, window: Window)
@@ -118,7 +117,7 @@ proc installApplicationCommandMethods(app: Application) =
   let aboutMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
   ) =
-    discard Application(self)
+    discard self
     nativeMenus.showStandardAboutPanel()
     invocation.setResult(())
   discard app.replaceMethod(actionSelector("orderFrontStandardAboutPanel"), aboutMethod)
@@ -131,7 +130,7 @@ proc installApplicationCommandMethods(app: Application) =
   let hideOthersMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
   ) =
-    discard Application(self)
+    discard self
     nativeMenus.hideOtherNativeApplications()
     invocation.setResult(())
   discard app.replaceMethod(actionSelector("hideOtherApplications"), hideOthersMethod)
@@ -139,7 +138,7 @@ proc installApplicationCommandMethods(app: Application) =
   let unhideAllMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
   ) =
-    discard Application(self)
+    discard self
     nativeMenus.unhideAllNativeApplications()
     invocation.setResult(())
   discard app.replaceMethod(actionSelector("unhideAllApplications"), unhideAllMethod)
@@ -221,9 +220,7 @@ proc installApplicationForwarding(app: Application) =
   )
 
 proc newApplication*(applicationName = ""): Application =
-  result = Application(
-    xApplicationName: resolvedApplicationName(applicationName), xRendererThreadId: -1
-  )
+  result = Application(xApplicationName: resolvedApplicationName(applicationName))
   initResponder(result)
   result.installApplicationForwarding()
   result.installApplicationCommandMethods()
@@ -280,10 +277,10 @@ proc stopAnimation*(
   if app.xAnimationScheduler.animationCount == 0:
     app.stopAnimationClock()
 
-proc drainAnimations*(app: Application, pollQueued = true): int {.discardable.} =
+proc drainAnimations*(app: Application): int {.discardable.} =
   if app.xAnimationScheduler.isNil or app.xAnimationClock.isNil:
     return 0
-  result = app.xAnimationScheduler.drain(app.xAnimationClock, pollQueued)
+  result = app.xAnimationScheduler.drain(app.xAnimationClock)
   if app.xAnimationScheduler.animationCount == 0:
     app.stopAnimationClock()
 
@@ -830,7 +827,7 @@ proc applicationThreadId*(app: Application): int =
 proc rendererThreadId*(app: Application): int =
   if not app.xThreadRenderer.isNil:
     return app.xThreadRenderer.rendererThreadId()
-  app.xRendererThreadId
+  -1
 
 proc keyEquivalentDispatchStart(app: Application): Responder =
   if not app.xKeyWindow.isNil:
@@ -1068,31 +1065,33 @@ proc runForFrames*(app: Application, frames: Natural): int =
 proc run*(app: Application) =
   app.xApplicationThreadId = getThreadId()
   var runtime: ThreadRendererRuntime
-  if app.usesDedicatedRenderer():
-    runtime = newThreadRendererRuntime()
-    runtime.start()
-    app.xThreadRenderer = runtime.client
-    for window in app.xWindows:
-      if not window.isNil:
-        window.useThreadRenderer(runtime.client)
+  try:
+    if app.usesDedicatedRenderer():
+      runtime = newThreadRendererRuntime()
+      runtime.start()
+      app.xThreadRenderer = runtime.client
+      for window in app.xWindows:
+        if not window.isNil:
+          window.useThreadRenderer(runtime.client)
 
-  app.xRunning = true
-  while app.xRunning:
-    let activeWindows = app.runApplicationFrame()
-    if activeWindows == 0:
+    app.xRunning = true
+    while app.xRunning:
+      let activeWindows = app.runApplicationFrame()
+      if activeWindows == 0:
+        app.xRunning = false
+      elif app.xRunning:
+        sleep(8)
+  finally:
+    try:
+      for window in app.xWindows:
+        if not window.isNil:
+          window.useThreadRenderer(nil)
+    finally:
+      runtime.stop()
+      runtime.join()
+      app.xThreadRenderer = nil
       app.xRunning = false
-    elif app.xRunning:
-      sleep(8)
-
-  for window in app.xWindows:
-    if not window.isNil:
-      window.useThreadRenderer(nil)
-  runtime.stop()
-  runtime.join()
-  app.xThreadRenderer = nil
-  app.xRendererThreadId = -1
-  app.xRunning = false
-  app.stopAnimationClock()
+      app.stopAnimationClock()
 
 proc stop*(app: Application) =
   app.xRunning = false

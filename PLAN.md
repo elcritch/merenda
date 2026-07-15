@@ -344,14 +344,13 @@ build on that vocabulary instead of adding parallel storage models.
   materialized local items/types before reads, provider swaps discard stale
   local cache and owner state, and the native clipboard provider reports host
   clipboard changes through platform change counts or a synthetic fingerprint.
-- Split the native runtime across the primary renderer thread and a
-  selector-backed application thread. Per-window channels now carry independent
-  FigDraw snapshots, native host commands, and input/window events; selector
-  ticks service queued Sigils slots and the existing animation clocks on the app
-  thread without re-entering the selector. Native menu snapshots and actions
-  cross the same channel boundary, while all AppKit window/menu and renderer
-  access stays on the primary thread. Threaded builds use atomic ARC for shared
-  immutable resources such as cached typefaces.
+- Kept the application, native windows, input, menus, and platform services on
+  the main thread while adding an optional dedicated FigDraw renderer runtime.
+  Supported Metal and Vulkan backends receive moved, coalesced render trees;
+  unsupported backends retain direct main-thread rendering. Render-resource
+  manifests remain on the application thread until their render IDs are
+  acknowledged, and the build uses regular ARC with explicit ownership
+  transfers at thread boundaries.
 - Added managed FigDraw font and image resources for the static renderer:
   cached render roots and text layouts retain deduplicated FigDraw leases,
   image resources preserve rebuildable sources with bounded preload/pin policy,
@@ -528,9 +527,10 @@ Verification and rollout:
   and example coverage, then remove internal raw-font/raw-image upload paths only
   after all NimKit render entry points retain managed resources correctly.
 
-## Near-Term Work
+### Main-Thread Application with Optional Render Runtime (Completed 2026-07-15)
 
-### Main-Thread Application with Optional Render Runtime
+Implemented for static FigDraw Metal and Vulkan backends, with direct
+main-thread rendering retained for unsupported backends and runtime fallbacks.
 
 Invert the current desktop threading split so the NimKit application, responder
 tree, native windows, event dispatch, menus, clipboard, IME, accessibility, and
@@ -574,6 +574,8 @@ presentation backend supports it.
   renderer shutdown/target release, resize generation ordering, direct fallback,
   and render-resource lease lifetime. Benchmark end-to-end queue/wakeup and
   frame latency separately from the existing ownership-transfer benchmark.
+
+## Near-Term Work
 
 ### Resource-Backed UI Construction
 

@@ -92,13 +92,12 @@ window without entering the application run loop. Pass an initial responder as
 the third argument, such as `app.runWindow(window, root, textField)`, when a
 specific control should receive focus first.
 
-The application run loop executes NimKit view, responder, signal-slot, and
-animation work on a selector-backed app thread. Native windows and FigDraw stay
-on the primary thread; immutable render snapshots and input/window commands move
-between them through bounded channels. Native menu snapshots and actions cross
-the same boundary so AppKit remains on the primary thread. Build Merenda
-applications with threads, deep copying, and atomic ARC enabled (the repository
-`config.nims` supplies these settings).
+The application run loop keeps NimKit views, responders, signal-slot dispatch,
+animations, native windows, and platform services on the main thread. When the
+selected FigDraw backend supports it, rendering runs on a dedicated thread and
+receives moved render trees through bounded latest-frame channels; unsupported
+backends render directly on the main thread. Merenda builds with threads and ARC
+enabled, as configured by the repository's `config.nims`.
 
 Constraint-wrapped views expose their minimum layout through `fittingSize()`.
 Set `window.automaticallyAdjustsContentMinSize = true` to keep a resizable
