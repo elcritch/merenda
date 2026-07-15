@@ -259,11 +259,6 @@ proc pushLatest[T](channel: Chan[T], value: sink T) =
   if not channel.tryTake(isolated):
     discard
 
-proc cloneRenders(renders: Renders): Renders =
-  if renders.isNil:
-    return nil
-  deepCopy(result, renders)
-
 proc newThreadRenderer*(): tuple[renderer: ThreadRenderer, client: ThreadRendererClient] =
   let
     commands = newChan[ThreadRendererCommand](ThreadRendererCommandCapacity)
@@ -354,14 +349,16 @@ proc sendCommand*(host: ThreadHostClient, command: sink ThreadHostCommand) =
 
 proc submitRenders*(
     host: ThreadHostClient,
-    renders: Renders,
+    renders: sink Renders,
     logicalSize: Size,
-    resources = default(FrozenRenderResources),
+    resources: sink FrozenRenderResources = default(FrozenRenderResources),
 ): bool {.discardable.} =
   if host.isNil or not host.createRequested or renders.isNil:
     return false
   var snapshot = ThreadRenderSnapshot(
-    renders: renders.cloneRenders(), logicalSize: logicalSize, resources: resources
+    renders: ensureMove renders,
+    logicalSize: logicalSize,
+    resources: ensureMove resources,
   )
   host.channels.renders.pushLatest(move snapshot)
   host.renderRequested = true

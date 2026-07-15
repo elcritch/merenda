@@ -6,8 +6,6 @@
   atomicArc
 --threads:
   on
---deepcopy:
-  on
 --define:
   release
 --mangle:

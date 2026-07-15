@@ -1598,6 +1598,12 @@ suite "nimkit rendering":
     check themedRenders != invalidatedRenders
     check customDrawCount == 3
 
+    root.invalidateRenderCache()
+    check root.renderResources().isNil
+    let rebuiltRenders = buildRenders(root, initAppearance(theme))
+    check rebuiltRenders != themedRenders
+    check customDrawCount == 4
+
   test "buildRenders does not clip view subtrees by default":
     let
       root = newView(frame = rect(0, 0, 100, 80))

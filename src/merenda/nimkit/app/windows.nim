@@ -2508,9 +2508,12 @@ proc pumpThreadedWindowFrame*(window: Window) =
   if window.drainAnimations(pollQueued = false) > 0:
     discard window.requestNativeDisplayUpdateIfNeeded()
   if window.needsDisplayUpdate() and not window.xThreadHost.isNil:
-    let renders = window.buildRenders()
-    let resources = nimkitRendering.renderResources(window.xContentView).freeze()
-    discard window.xThreadHost.submitRenders(renders, window.xFrame.size, resources)
+    var renders = window.buildRenders()
+    var resources = nimkitRendering.renderResources(window.xContentView).freeze()
+    window.xContentView.invalidateRenderCache()
+    discard window.xThreadHost.submitRenders(
+      ensureMove renders, window.xFrame.size, ensureMove resources
+    )
   if window.dispatchMouseTrackingTick():
     discard window.requestNativeDisplayUpdateIfNeeded()
 

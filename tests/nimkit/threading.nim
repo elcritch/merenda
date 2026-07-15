@@ -1,4 +1,4 @@
-import std/unittest
+import std/[assertions, unittest]
 
 import figdraw
 import pkg/pixie
@@ -9,39 +9,44 @@ import merenda/nimkit/app/backend as nimkitBackend
 import merenda/nimkit/foundation/types as nimkitTypes
 import merenda/nimkit/drawing
 
+proc newRectangleRenders(): Renders =
+  result = newRenders()
+  discard result.addRoot(
+    Fig(kind: nkRectangle, screenBox: figdraw.rect(0.0, 0.0, 40.0, 20.0))
+  )
+
 suite "NimKit threading":
-  test "render snapshots cross a bounded channel as independent values":
+  test "render snapshots move through a bounded channel":
     let
       runtime = nimkitBackend.newThreadRenderer()
       host = nimkitBackend.newThreadHostClient(runtime.client)
-      renders = newRenders()
-    discard renders.addRoot(
-      Fig(kind: nkRectangle, screenBox: figdraw.rect(0.0, 0.0, 40.0, 20.0))
-    )
     host.requestCreation(
       runtime.client, nimkitTypes.rect(0.0, 0.0, 40.0, 20.0), "Snapshot Test"
     )
 
-    check host.submitRenders(renders, nimkitTypes.initSize(40.0, 20.0))
+    doAssert host.submitRenders(
+      ensureMove newRectangleRenders(), nimkitTypes.initSize(40.0, 20.0)
+    )
 
     var snapshot: nimkitBackend.ThreadRenderSnapshot
     require host.channels.renders.tryRecv(snapshot)
-    check snapshot.renders != renders
     check snapshot.logicalSize == nimkitTypes.initSize(40.0, 20.0)
     check snapshot.renders.len(0.ZLevel) == 1
 
-    check host.submitRenders(renders, nimkitTypes.initSize(50.0, 20.0))
-    check host.submitRenders(renders, nimkitTypes.initSize(60.0, 20.0))
-    check host.submitRenders(renders, nimkitTypes.initSize(70.0, 20.0))
+    for width in [50.0, 60.0, 70.0]:
+      doAssert host.submitRenders(
+        ensureMove newRenders(), nimkitTypes.initSize(width, 20.0)
+      )
     var newer, newest: nimkitBackend.ThreadRenderSnapshot
     require host.channels.renders.tryRecv(newer)
     require host.channels.renders.tryRecv(newest)
     check newer.logicalSize == nimkitTypes.initSize(60.0, 20.0)
     check newest.logicalSize == nimkitTypes.initSize(70.0, 20.0)
 
-    check host.submitRenders(renders, nimkitTypes.initSize(80.0, 20.0))
-    check host.submitRenders(renders, nimkitTypes.initSize(90.0, 20.0))
-    check host.submitRenders(renders, nimkitTypes.initSize(100.0, 20.0))
+    for width in [80.0, 90.0, 100.0]:
+      doAssert host.submitRenders(
+        ensureMove newRenders(), nimkitTypes.initSize(width, 20.0)
+      )
     var latest: nimkitBackend.ThreadRenderSnapshot
     require host.channels.pollLatestRender(latest)
     check latest.logicalSize == nimkitTypes.initSize(100.0, 20.0)
@@ -63,7 +68,6 @@ suite "NimKit threading":
     let
       runtime = nimkitBackend.newThreadRenderer()
       host = nimkitBackend.newThreadHostClient(runtime.client)
-      renders = newRenders()
       pixels = pixie.newImage(3, 2)
       image = newImageResource(pixels)
     var manifest = initRenderResourceManifest()
@@ -72,8 +76,10 @@ suite "NimKit threading":
       runtime.client, nimkitTypes.rect(0.0, 0.0, 30.0, 20.0), "Resources"
     )
 
-    check host.submitRenders(
-      renders, nimkitTypes.initSize(30.0, 20.0), manifest.freeze()
+    doAssert host.submitRenders(
+      ensureMove newRenders(),
+      nimkitTypes.initSize(30.0, 20.0),
+      ensureMove manifest.freeze(),
     )
     var snapshot: nimkitBackend.ThreadRenderSnapshot
     require host.channels.renders.tryRecv(snapshot)
