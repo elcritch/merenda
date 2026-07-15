@@ -18,6 +18,7 @@ import ./userdefaults
 import ./animations
 import ./backend as nimkitBackend
 import ./panels
+import ./settings
 import ../app/windows
 
 type
@@ -74,6 +75,7 @@ type
     xThreadRenderer: ThreadRendererClient
     xApplicationThreadId: int
     xAutomaticallyStartsLocalSigilThread: bool
+    xMerendaSettingsWindow: MerendaSettingsWindow
 
 const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
@@ -90,6 +92,7 @@ proc addWindow*(app: Application, window: Window)
 proc activateWindow*(app: Application, window: Window)
 proc updateWindowsMenu*(app: Application)
 proc installStandardMainMenu*(app: Application)
+proc showMerendaSettings*(app: Application)
 proc modalSession*(app: Application): ModalSession
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool
 proc runForFrames*(app: Application, frames: Natural): int
@@ -164,6 +167,14 @@ proc installApplicationCommandMethods(app: Application) =
         Application(self).activateWindow(Window(represented))
     invocation.setResult(())
   discard app.replaceMethod(orderFrontWindowAction(), orderFrontWindowMethod)
+
+  let showMerendaSettingsMethod: DynamicMethod = proc(
+      self: DynamicAgent, invocation: var Invocation
+  ) =
+    Application(self).showMerendaSettings()
+    invocation.setResult(())
+  discard
+    app.replaceMethod(actionSelector("showMerendaSettings"), showMerendaSettingsMethod)
 
   let keyEquivalentMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
@@ -582,6 +593,10 @@ proc installStandardMainMenu*(app: Application) =
     windowMenu.addItem("Minimize", actionSelector("performMiniaturize"), "m", shortcut)
   discard windowMenu.addItem("Zoom", actionSelector("performZoom"))
   windowMenu.addSeparator()
+  windowMenu.addStandardApplicationItem(
+    app, "Merenda Settings", actionSelector("showMerendaSettings")
+  )
+  windowMenu.addSeparator()
 
   discard helpMenu.addItem(appName & " Help", actionSelector("showHelp"))
 
@@ -772,6 +787,19 @@ proc showWindow*(
     discard window.makeFirstResponder(firstResponder)
   app.activateWindow(window)
   window
+
+proc showMerendaSettings*(app: Application) =
+  ## Opens Merenda's built-in appearance and typography settings panel.
+  if app.xMerendaSettingsWindow.isNil or app.xMerendaSettingsWindow.window.isClosed:
+    app.xMerendaSettingsWindow = newMerendaSettingsWindow(
+      proc(appearance: Appearance) =
+        app.setAppearance(appearance)
+    )
+  discard app.showWindow(
+    app.xMerendaSettingsWindow.window,
+    app.xMerendaSettingsWindow.contentView(),
+    app.xMerendaSettingsWindow.firstResponder(),
+  )
 
 proc runWindow*(
     app: Application, window: Window, contentView: View, firstResponder: Responder = nil

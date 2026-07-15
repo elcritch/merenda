@@ -216,15 +216,19 @@ suite "nimkit application":
 
     let windowMenu = app.windowsMenu()
     check windowMenu == mainMenu[3].submenu()
-    check windowMenu.len == 3
+    check windowMenu.len == 5
     check windowMenu[0].title == "Minimize"
     check windowMenu[1].title == "Zoom"
     check windowMenu[2].isSeparatorItem()
+    check windowMenu[3].title == "Merenda Settings"
+    check windowMenu[3].action().name == actionSelector("showMerendaSettings").name
+    check windowMenu[3].target() == app
+    check windowMenu[4].isSeparatorItem()
 
     let window = newWindow("Standard Menu Window")
     app.addWindow(window)
-    check windowMenu.len == 4
-    check windowMenu[3].title == "Standard Menu Window"
+    check windowMenu.len == 6
+    check windowMenu[5].title == "Standard Menu Window"
 
     let quitEvent =
       KeyEvent(key: keyQ, keyCode: keyQ.ord, modifiers: shortcutModifiers())
@@ -233,6 +237,20 @@ suite "nimkit application":
     check quitItem.validate(Responder(app))
     check app.performMenuKeyEquivalent(quitEvent)
     check app.isTerminating
+
+  test "Merenda Settings menu command opens and closes its panel":
+    let app = newApplication("Settings Menu Test")
+    app.installStandardMainMenu()
+
+    let settingsItem = app.windowsMenu()[3]
+    check settingsItem.perform(Responder(app))
+    check app.windows.len == 1
+    let settingsPanel = app.windows[0]
+    check settingsPanel.title == "Merenda Settings"
+    check settingsPanel.isVisible
+
+    settingsPanel.close()
+    check settingsPanel.isClosed
 
   test "window protocols observe and veto core window behavior":
     let
