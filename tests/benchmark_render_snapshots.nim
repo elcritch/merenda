@@ -53,12 +53,14 @@ proc benchmark(benchmarkCase: BenchmarkCase) =
   doAssert host.submitRenders(ensureMove renders, logicalSize)
   doAssert host.channels.pollLatestRender(snapshot)
   doAssert snapshot.renders.len(0.ZLevel) == benchmarkCase.nodeCount
+  host.acknowledgeRender(snapshot.renderId)
   renders = move snapshot.renders
 
   let startedAt = getMonoTime()
   for _ in 0 ..< benchmarkCase.iterations:
     doAssert host.submitRenders(ensureMove renders, logicalSize)
     doAssert host.channels.pollLatestRender(snapshot)
+    host.acknowledgeRender(snapshot.renderId)
     renders = move snapshot.renders
   let
     elapsed = getMonoTime() - startedAt

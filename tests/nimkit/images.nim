@@ -175,24 +175,31 @@ suite "nimkit image resources":
     for image in images:
       image.unpreloadImage()
 
-  test "frozen signatures distinguish replacement pixels under one image ID":
+  test "managed image messages publish replacement pixels under one image ID":
+    clearImageCache()
+    let messages = newImageMessageSubscription()
     let
-      first = newImageResource(testImage(4, 4), name = "replacement-signature")
+      first = newImageResource(testImage(4, 4), name = "replacement-message")
       secondPixels = testImage(4, 4)
     secondPixels[0, 0] = rgba(220, 40, 10, 255).rgbx()
-    let second = newImageResource(secondPixels, name = "replacement-signature")
+    let second = newImageResource(secondPixels, name = "replacement-message")
     var
       firstManifest = initRenderResourceManifest()
       secondManifest = initRenderResourceManifest()
     firstManifest.addImage(first)
     secondManifest.addImage(second)
 
-    let
-      firstSnapshot = firstManifest.freeze()
-      secondSnapshot = secondManifest.freeze()
-    check firstSnapshot.images[0].id == secondSnapshot.images[0].id
-    check firstSnapshot.images[0].contentHash != secondSnapshot.images[0].contentHash
-    check firstSnapshot.signature != secondSnapshot.signature
+    var
+      message: ImageMsg
+      putCount = 0
+      lastPixel: ColorRGBX
+    while messages.tryRecvImageMsg(message):
+      if message.kind == ImkPutPixie and message.id == first.imageId():
+        inc putCount
+        lastPixel = message.pimg[0, 0]
+    check first.imageId() == second.imageId()
+    check putCount == 2
+    check lastPixel == rgba(220, 40, 10, 255).rgbx()
 
   test "draw manifests include visible images and omit hidden images":
     let
@@ -203,38 +210,33 @@ suite "nimkit image resources":
 
     discard buildRenders(root)
     check root.renderResources().imageCount == 1
-    let visible = root.renderResources().freeze()
-    check visible.images.len == 1
-    check visible.images[0].id == image.imageId()
-    check visible.images[0].retention == {rrrActive}
+    check hasImage(image.imageId())
 
     imageView.hidden = true
     discard buildRenders(root)
     check root.renderResources().imageCount == 0
-    check root.renderResources().freeze().images.len == 0
+    check not hasImage(image.imageId())
 
-  test "host resource sets release active images while hidden but retain pins":
-    let
-      image = newImageResource(testImage(6, 6))
-      manager = newRenderResourceManager()
+  test "render manifests release active images while explicit pins retain them":
+    clearImageCache()
+    let image = newImageResource(testImage(6, 6))
     var manifest = initRenderResourceManifest()
     manifest.addImage(image)
-    manager.commit(manifest.freeze())
-    check manager.metrics.retainedImages == 1
-    check manager.metrics.activeImages == 1
-
-    manager.setVisible(false)
-    check manager.metrics.retainedImages == 0
+    check hasImage(image.imageId())
+    manifest = nil
+    check not hasImage(image.imageId())
 
     image.pinImage()
-    manager.commit(manifest.freeze())
-    check manager.metrics.retainedImages == 1
-    check manager.metrics.pinnedImages == 1
+    check hasImage(image.imageId())
+    manifest = initRenderResourceManifest()
+    manifest.addImage(image)
+    manifest = nil
+    check hasImage(image.imageId())
     image.unpinImage()
-    manager.clear()
+    check not hasImage(image.imageId())
 
   when not defined(useNativeDynlib):
-    test "host resource sets recover renderer generations and pressure rebuilds":
+    test "managed subscriptions recover renderer generations and pressure rebuilds":
       clearImageCache()
       let
         first = newImageResource(testImage(2, 2))
@@ -244,7 +246,6 @@ suite "nimkit image resources":
       var manifest = initRenderResourceManifest()
       manifest.addImage(first)
       manifest.addImage(second)
-      manager.commit(manifest.freeze())
 
       manager.prepare(recovery.renderer)
       check first.imageId().Hash in recovery.context.entries
@@ -256,7 +257,8 @@ suite "nimkit image resources":
       check manager.metrics.pressureRebuildCount == 1
       check manager.metrics.atlasRebuildCount >= 2
       check manager.metrics.atlasPackedRatio < ImageAtlasPressureThreshold
-      check recovery.context.uploadCount >= 5
+      check manager.metrics.replayCount >= 2
+      check recovery.context.uploadCount >= 6
 
       manager.clear()
       recovery.renderer.processImageMessages()

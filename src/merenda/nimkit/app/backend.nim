@@ -1,6 +1,6 @@
 import std/[deques, isolation, locks, math, options, os, strutils, tables, times]
 
-import threading/channels
+import threading/[channels, smartptrs]
 
 when not compileOption("threads") and not defined(nimdoc):
   {.error: "NimKit's split renderer runtime requires --threads:on".}
@@ -79,13 +79,15 @@ type
     flag*: bool
     contentScale*: float32
     renderCount*: Natural
+    renderId*: uint64
 
   ThreadHostEventQueueObj = object
     lock: Lock
     pending: Deque[ThreadHostEvent]
     lockReady: bool
 
-  ThreadHostEventQueue* = ref ThreadHostEventQueueObj
+  ThreadHostEventQueue* = object
+    raw: SharedPtr[ThreadHostEventQueueObj]
 
   ThreadHostCommandKind* = enum
     thcRequestRender
@@ -105,7 +107,7 @@ type
   ThreadRenderSnapshot* = object
     renders*: Renders
     logicalSize*: Size
-    resources*: FrozenRenderResources
+    renderId*: uint64
 
   ThreadMenuId* = uint
 
@@ -174,6 +176,10 @@ type
     menuEvents: Chan[ThreadMenuEvent]
     nextHostId: uint64
 
+  ThreadRenderResourceLease = object
+    renderId: uint64
+    resources: RenderResourceManifest
+
   ThreadHostClient* = ref object
     id*: ThreadHostId
     channels*: ThreadHostChannels
@@ -182,6 +188,9 @@ type
     renderRequested*: bool
     renderCount*: Natural
     contentScale*: float32
+    nextRenderId: uint64
+    activeResources: RenderResourceManifest
+    pendingResources: Deque[ThreadRenderResourceLease]
 
   HostWindow* = ref object
     xNativeWindow: siwinshim.Window
@@ -202,7 +211,7 @@ type
     host: HostWindow
     channels: ThreadHostChannels
     lastRenders: Renders
-    lastResources: FrozenRenderResources
+    lastRenderId: uint64
     logicalSize: Size
 
   ThreadRenderer* = ref object
@@ -226,7 +235,7 @@ type
   NativePasteboardPayload = ref object of RootObj
     items: Table[string, PasteboardItem]
 
-proc `=destroy`(queue: ThreadHostEventQueueObj) =
+proc `=destroy`(queue: ThreadHostEventQueueObj) {.raises: [].} =
   let queuePtr = addr(queue)
   if queuePtr.lockReady:
     deinitLock(queuePtr.lock)
@@ -275,26 +284,27 @@ func coalesces(kind: ThreadHostEventKind): bool =
   kind in {theResized, theMoved, theMouseMove, theRendered}
 
 proc newThreadHostEventQueue*(): ThreadHostEventQueue =
-  result = ThreadHostEventQueue(pending: initDeque[ThreadHostEvent]())
-  initLock(result.lock)
-  result.lockReady = true
+  result.raw = newSharedPtr(ThreadHostEventQueueObj)
+  result.raw[].pending = initDeque[ThreadHostEvent]()
+  initLock(result.raw[].lock)
+  result.raw[].lockReady = true
 
 proc post*(queue: ThreadHostEventQueue, event: sink ThreadHostEvent) =
-  if queue.isNil:
+  if queue.raw.isNil:
     return
-  withLock queue.lock:
-    if event.kind.coalesces() and queue.pending.len > 0 and
-        queue.pending.peekLast().kind == event.kind:
-      queue.pending[^1] = ensureMove event
+  withLock queue.raw[].lock:
+    if event.kind.coalesces() and queue.raw[].pending.len > 0 and
+        queue.raw[].pending.peekLast().kind == event.kind:
+      queue.raw[].pending[^1] = ensureMove event
     else:
-      queue.pending.addLast(ensureMove event)
+      queue.raw[].pending.addLast(ensureMove event)
 
 proc poll*(queue: ThreadHostEventQueue, event: var ThreadHostEvent): bool =
-  if queue.isNil:
+  if queue.raw.isNil:
     return
-  withLock queue.lock:
-    if queue.pending.len > 0:
-      event = queue.pending.popFirst()
+  withLock queue.raw[].lock:
+    if queue.raw[].pending.len > 0:
+      event = queue.raw[].pending.popFirst()
       result = true
 
 proc newThreadRenderer*(): tuple[renderer: ThreadRenderer, client: ThreadRendererClient] =
@@ -320,6 +330,7 @@ proc newThreadHostClient*(renderer: ThreadRendererClient): ThreadHostClient =
       renders: newChan[ThreadRenderSnapshot](ThreadRenderCapacity),
     ),
     contentScale: 1.0'f32,
+    pendingResources: initDeque[ThreadRenderResourceLease](),
   )
   inc renderer.nextHostId
 
@@ -389,18 +400,37 @@ proc submitRenders*(
     host: ThreadHostClient,
     renders: sink Renders,
     logicalSize: Size,
-    resources: sink FrozenRenderResources = default(FrozenRenderResources),
+    resources: RenderResourceManifest = nil,
 ): bool {.discardable.} =
   if host.isNil or not host.createRequested or renders.isNil:
     return false
+  inc host.nextRenderId
+  let renderId = host.nextRenderId
+  host.pendingResources.addLast(
+    ThreadRenderResourceLease(renderId: renderId, resources: resources)
+  )
   var snapshot = ThreadRenderSnapshot(
-    renders: ensureMove renders,
-    logicalSize: logicalSize,
-    resources: ensureMove resources,
+    renders: ensureMove renders, logicalSize: logicalSize, renderId: renderId
   )
   host.channels.renders.pushLatest(move snapshot)
   host.renderRequested = true
   true
+
+proc acknowledgeRender*(host: ThreadHostClient, renderId: uint64) =
+  if host.isNil or renderId == 0:
+    return
+  var active = host.activeResources
+  while host.pendingResources.len > 0 and
+      host.pendingResources.peekFirst().renderId <= renderId:
+    var lease = host.pendingResources.popFirst()
+    active = move lease.resources
+  host.activeResources = move active
+
+proc clearRenderResources*(host: ThreadHostClient) =
+  if host.isNil:
+    return
+  host.activeResources = nil
+  host.pendingResources.clear()
 
 proc pollEvent*(host: ThreadHostClient, event: var ThreadHostEvent): bool =
   not host.isNil and host.channels.events.poll(event)
@@ -1128,20 +1158,13 @@ proc setVisible*(host: HostWindow, visible: bool) =
     return
   if visible and host.xNativeWindow.visible() and not host.xNativeWindow.focused():
     host.xNativeWindow.visible = false
-  host.xResources.setVisible(visible)
   host.xNativeWindow.visible = visible
 
-proc render*(
-    host: HostWindow,
-    renders: var Renders,
-    logicalSize: Size,
-    resources = default(FrozenRenderResources),
-) =
+proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
   if not host.isReady or host.xRenderer.isNil or not host.xNativeWindow.opened():
     return
   host.xRenderRequested = false
   host.refreshContentScale()
-  host.xResources.commit(resources)
   host.xResources.prepare(host.xRenderer)
   let size = vec2(logicalSize.width, logicalSize.height)
   host.xRenderer.beginFrame()
@@ -1409,17 +1432,21 @@ proc acceptPendingRender(state: ThreadRendererHost): bool =
   if not state.channels.pollLatestRender(snapshot):
     return
   state.lastRenders = move snapshot.renders
-  state.lastResources = move snapshot.resources
+  state.lastRenderId = snapshot.renderId
   true
 
 proc renderLatest(state: ThreadRendererHost) =
   if state.isNil or state.host.isNil or state.lastRenders.isNil:
     return
   let previousCount = state.host.renderCount()
-  state.host.render(state.lastRenders, state.logicalSize, state.lastResources)
+  state.host.render(state.lastRenders, state.logicalSize)
   if state.host.renderCount() != previousCount:
     state.postEvent(
-      ThreadHostEvent(kind: theRendered, renderCount: state.host.renderCount())
+      ThreadHostEvent(
+        kind: theRendered,
+        renderCount: state.host.renderCount(),
+        renderId: state.lastRenderId,
+      )
     )
 
 proc createRendererHost(

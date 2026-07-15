@@ -1778,8 +1778,7 @@ proc renderNativeWindow*(window: Window) =
   window.xHostWindow.refreshContentScale()
   let logicalSize = window.syncNativeGeometry()
   var renders = window.buildRenders()
-  let resources = nimkitRendering.renderResources(window.xContentView).freeze()
-  window.xHostWindow.render(renders, logicalSize, resources)
+  window.xHostWindow.render(renders, logicalSize)
 
 proc contentPoint(window: Window, windowPoint: Point): Point =
   window.xContentView.pointFromWindow(windowPoint)
@@ -2467,9 +2466,11 @@ proc drainThreadHostEvents(window: Window): int =
       discard window.requestNativeDisplayUpdateIfNeeded()
     of theClosed:
       window.xThreadHost.ready = false
+      window.xThreadHost.clearRenderResources()
       window.markHostClosed()
     of thePopupDone:
       window.xThreadHost.ready = false
+      window.xThreadHost.clearRenderResources()
       window.markHostClosed()
       if not window.xOnPopupDone.isNil:
         window.xOnPopupDone()
@@ -2491,6 +2492,7 @@ proc drainThreadHostEvents(window: Window): int =
     of theFocusChanged:
       window.dispatchHostFocusChanged(event.flag)
     of theRendered:
+      window.xThreadHost.acknowledgeRender(event.renderId)
       window.xThreadHost.renderCount = event.renderCount
       window.xThreadHost.renderRequested = false
 
@@ -2509,10 +2511,10 @@ proc pumpThreadedWindowFrame*(window: Window) =
     discard window.requestNativeDisplayUpdateIfNeeded()
   if window.needsDisplayUpdate() and not window.xThreadHost.isNil:
     var renders = window.buildRenders()
-    var resources = nimkitRendering.renderResources(window.xContentView).freeze()
+    let resources = nimkitRendering.renderResources(window.xContentView)
     window.xContentView.invalidateRenderCache()
     discard window.xThreadHost.submitRenders(
-      ensureMove renders, window.xFrame.size, ensureMove resources
+      ensureMove renders, window.xFrame.size, resources
     )
   if window.dispatchMouseTrackingTick():
     discard window.requestNativeDisplayUpdateIfNeeded()

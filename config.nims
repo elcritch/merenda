@@ -3,7 +3,7 @@
 --define:
   useMalloc
 --mm:
-  atomicArc
+  arc
 --threads:
   on
 --define:

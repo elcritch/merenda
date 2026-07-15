@@ -128,7 +128,8 @@ suite "NimKit threading":
     check not app.isThreaded()
     check not app.isRunning()
 
-  test "render snapshots carry value-only managed image sources":
+  test "render snapshots exclude app-thread managed resource handles":
+    clearImageCache()
     let
       runtime = nimkitBackend.newThreadRenderer()
       host = nimkitBackend.newThreadHostClient(runtime.client)
@@ -141,14 +142,50 @@ suite "NimKit threading":
     )
 
     doAssert host.submitRenders(
-      ensureMove newRenders(),
-      nimkitTypes.initSize(30.0, 20.0),
-      ensureMove manifest.freeze(),
+      ensureMove newRenders(), nimkitTypes.initSize(30.0, 20.0), manifest
     )
+    manifest = nil
+    check hasImage(image.imageId())
     var snapshot: nimkitBackend.ThreadRenderSnapshot
     require host.channels.renders.tryRecv(snapshot)
-    require snapshot.resources.images.len == 1
-    check snapshot.resources.images[0].id == image.imageId()
-    check snapshot.resources.images[0].width == 3
-    check snapshot.resources.images[0].height == 2
-    check snapshot.resources.images[0].data.len == 6
+    check snapshot.renderId > 0
+    check snapshot.logicalSize == nimkitTypes.initSize(30.0, 20.0)
+    host.acknowledgeRender(snapshot.renderId)
+    check hasImage(image.imageId())
+    host.clearRenderResources()
+    check not hasImage(image.imageId())
+
+  test "latest render acknowledgement advances managed resource leases":
+    clearImageCache()
+    let
+      runtime = nimkitBackend.newThreadRenderer()
+      host = nimkitBackend.newThreadHostClient(runtime.client)
+      first = newImageResource(pixie.newImage(2, 2))
+      second = newImageResource(pixie.newImage(3, 3))
+    host.requestCreation(
+      runtime.client, nimkitTypes.rect(0.0, 0.0, 30.0, 20.0), "Resource Leases"
+    )
+
+    var firstManifest = initRenderResourceManifest()
+    firstManifest.addImage(first)
+    doAssert host.submitRenders(
+      ensureMove newRenders(), nimkitTypes.initSize(30.0, 20.0), firstManifest
+    )
+    firstManifest = nil
+
+    var secondManifest = initRenderResourceManifest()
+    secondManifest.addImage(second)
+    doAssert host.submitRenders(
+      ensureMove newRenders(), nimkitTypes.initSize(30.0, 20.0), secondManifest
+    )
+    secondManifest = nil
+    check hasImage(first.imageId())
+    check hasImage(second.imageId())
+
+    var latest: nimkitBackend.ThreadRenderSnapshot
+    require host.channels.pollLatestRender(latest)
+    host.acknowledgeRender(latest.renderId)
+    check not hasImage(first.imageId())
+    check hasImage(second.imageId())
+    host.clearRenderResources()
+    check not hasImage(second.imageId())

@@ -22,6 +22,8 @@ type
     xImageId: ImageId
     xCachePolicy: ImageCachePolicy
     xPixels: Image
+    xOwned: ImageRef
+    xPublished: bool
 
 const
   AutomaticPreloadMaximumArea* = 256 * 256
@@ -36,6 +38,26 @@ var
   automaticPreloadedImages: Table[ImageId, ImageResource]
   automaticPreloadedImageOrder: seq[ImageId]
   pinnedImages: Table[ImageId, ImageResource]
+
+proc retainForRendering(image: ImageResource)
+
+proc retainsImage(
+    resources: Table[ImageId, ImageResource], image: ImageResource
+): bool =
+  let id = image.xImageId
+  id in resources and resources[id] == image
+
+proc releaseUnusedRenderingRef(image: ImageResource) =
+  when defined(useNativeDynlib):
+    if image.xOwned == default(ImageRef):
+      return
+  else:
+    if image.xOwned.isNil:
+      return
+  if not preloadedImages.retainsImage(image) and
+      not automaticPreloadedImages.retainsImage(image) and
+      not pinnedImages.retainsImage(image):
+    image.xOwned = nil
 
 proc ensureNamedImages() =
   if not namedImagesReady:
@@ -73,13 +95,18 @@ proc admitPreload(
     image: ImageResource,
 ) =
   let id = image.xImageId
+  let replaced = resources.getOrDefault(id)
   order.removePreloadOrder(id)
   order.add(id)
   resources[id] = image
+  if not replaced.isNil and replaced != image:
+    replaced.releaseUnusedRenderingRef()
   while resources.len > MaximumPreloadedImages and order.len > 0:
     let oldest = order[0]
     order.delete(0)
+    let evicted = resources[oldest]
     resources.del(oldest)
+    evicted.releaseUnusedRenderingRef()
 
 proc usesAutomaticPreload(image: ImageResource): bool =
   case image.xCachePolicy
@@ -93,11 +120,13 @@ proc usesAutomaticPreload(image: ImageResource): bool =
 proc updateAutomaticPreload(image: ImageResource) =
   ensureNamedImages()
   if image.usesAutomaticPreload():
+    image.retainForRendering()
     automaticPreloadedImages.admitPreload(automaticPreloadedImageOrder, image)
   elif image.xImageId in automaticPreloadedImages and
       automaticPreloadedImages[image.xImageId] == image:
     automaticPreloadedImages.del(image.xImageId)
     automaticPreloadedImageOrder.removePreloadOrder(image.xImageId)
+    image.releaseUnusedRenderingRef()
 
 proc newImageResource*(
     image: Image, name = "", cachePolicy = icpDefault
@@ -205,6 +234,35 @@ proc pixels*(image: ImageResource): Image =
     return default(Image)
   image.xPixels.copy()
 
+proc renderingRef*(image: ImageResource): ImageRef =
+  if image.isNil:
+    return
+  when defined(useNativeDynlib):
+    if not image.xPublished:
+      loadImage(image.xImageId, image.xPixels)
+      image.xPublished = true
+    image.xImageId
+  else:
+    if image.xPublished and hasImage(image.xImageId):
+      return imageRef(image.xImageId)
+    image.xPublished = true
+    if image.xPixels.isNil:
+      return imageRef(image.xImageId)
+    var pixels = image.pixels()
+    imageRef(image.xImageId, ensureMove pixels)
+
+proc retainForRendering(image: ImageResource) =
+  if image.isNil or image.xPixels.isNil:
+    return
+  when defined(useNativeDynlib):
+    if image.xOwned == image.xImageId:
+      return
+    image.xOwned = image.renderingRef()
+  else:
+    if not image.xOwned.isNil and image.xOwned.id == image.xImageId:
+      return
+    image.xOwned = image.renderingRef()
+
 proc registerImage*(name: string, image: ImageResource) =
   if name.len == 0 or image.isNil:
     return
@@ -212,6 +270,8 @@ proc registerImage*(name: string, image: ImageResource) =
   let oldId = image.xImageId
   let wasPreloaded = oldId in preloadedImages and preloadedImages[oldId] == image
   let wasPinned = oldId in pinnedImages and pinnedImages[oldId] == image
+  image.xOwned = default(ImageRef)
+  image.xPublished = false
   image.xName = name
   image.xImageId = imageIdForName(name)
   if oldId in preloadedImages and preloadedImages[oldId] == image:
@@ -225,8 +285,13 @@ proc registerImage*(name: string, image: ImageResource) =
   if wasPreloaded:
     preloadedImages.admitPreload(preloadedImageOrder, image)
   if wasPinned:
+    let replaced = pinnedImages.getOrDefault(image.xImageId)
     pinnedImages[image.xImageId] = image
+    if not replaced.isNil and replaced != image:
+      replaced.releaseUnusedRenderingRef()
   image.updateAutomaticPreload()
+  if wasPreloaded or wasPinned:
+    image.retainForRendering()
   namedImages[name] = image
 
 proc imageNamed*(name: string): ImageResource =
@@ -245,6 +310,7 @@ proc preloadImage*(image: ImageResource) =
   if image.isNil:
     return
   ensureNamedImages()
+  image.retainForRendering()
   preloadedImages.admitPreload(preloadedImageOrder, image)
 
 proc unpreloadImage*(image: ImageResource) =
@@ -254,6 +320,7 @@ proc unpreloadImage*(image: ImageResource) =
   if image.xImageId in preloadedImages and preloadedImages[image.xImageId] == image:
     preloadedImages.del(image.xImageId)
     preloadedImageOrder.removePreloadOrder(image.xImageId)
+    image.releaseUnusedRenderingRef()
 
 proc isImagePreloaded*(image: ImageResource): bool =
   if image.isNil:
@@ -268,7 +335,11 @@ proc pinImage*(image: ImageResource) =
   if image.isNil:
     return
   ensureNamedImages()
+  image.retainForRendering()
+  let replaced = pinnedImages.getOrDefault(image.xImageId)
   pinnedImages[image.xImageId] = image
+  if not replaced.isNil and replaced != image:
+    replaced.releaseUnusedRenderingRef()
 
 proc unpinImage*(image: ImageResource) =
   if image.isNil:
@@ -276,6 +347,7 @@ proc unpinImage*(image: ImageResource) =
   ensureNamedImages()
   if image.xImageId in pinnedImages and pinnedImages[image.xImageId] == image:
     pinnedImages.del(image.xImageId)
+    image.releaseUnusedRenderingRef()
 
 proc isImagePinned*(image: ImageResource): bool =
   if image.isNil:
