@@ -7,10 +7,16 @@ import std/[monotimes, times]
 import sigils
 
 const
-  TaskCount = 4
+  TaskCount = 8
   ProgressStepCount = 20
-  FirstCandidate = 20_000_000
-  BaseCandidatesPerTask = 4_000_000
+  ResultsLayoutInset = 12.0'f32
+  ResultsRowSpacing = 12.0'f32
+  ResultsTaskHeight = 90.0'f32
+  ResultsDocumentHeight =
+    ResultsLayoutInset * 2.0'f32 + ResultsTaskHeight * float32(TaskCount) +
+    ResultsRowSpacing * float32(TaskCount - 1)
+  FirstCandidate = 400_000
+  BaseCandidatesPerTask = 2_000_000
 
 type
   WorkDispatcher = ref object of Agent
@@ -151,7 +157,8 @@ let
   )
   overallStatus = newStatusLabel("Ready to search four number ranges.")
   runButton = newButton("Run four prime searches")
-  resultsLayout = newStackView(laVertical, frame = rect(0, 0, 620, 420))
+  resultsLayout =
+    newStackView(laVertical, frame = rect(0, 0, 620, ResultsDocumentHeight))
   resultsScrollView = newScrollView(documentView = resultsLayout)
   controller = LongWorkController(runButton: runButton, overallStatus: overallStatus)
 
@@ -159,8 +166,8 @@ layout.spacing = 12.0
 layout.alignment = svaFill
 layout.addArrangedSubview(title, explanation, overallStatus, resultsScrollView)
 
-resultsLayout.spacing = 12.0
-resultsLayout.edgeInsets = insets(12.0)
+resultsLayout.spacing = ResultsRowSpacing
+resultsLayout.edgeInsets = insets(ResultsLayoutInset)
 resultsLayout.alignment = svaFill
 resultsScrollView.hasVerticalScroller = true
 resultsScrollView.hasHorizontalScroller = false
