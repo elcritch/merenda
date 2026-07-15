@@ -1,15 +1,14 @@
 ## Runs CPU-heavy prime searches without blocking Merenda's application thread.
-## Each worker reports incremental progress through cross-thread Sigils signals.
+## Each worker processes one batch per cross-thread Sigils signal.
 
 import merenda/nimkit
 
-import std/[atomics, monotimes, times]
+import std/[monotimes, times]
 import sigils
 
 const
   TaskCount = 8
-  ProgressStepCount = 20
-  StopCheckInterval = 1_024
+  CandidatesPerBatch = 2_000_000
   ResultsLayoutInset = 12.0'f32
   ResultsRowSpacing = 12.0'f32
   ResultsTaskHeight = 90.0'f32
@@ -17,7 +16,7 @@ const
     ResultsLayoutInset * 2.0'f32 + ResultsTaskHeight * float32(TaskCount) +
     ResultsRowSpacing * float32(TaskCount - 1)
   FirstCandidate = 400_000
-  BaseCandidatesPerTask = 2_000_000
+  BaseCandidatesPerTask = CandidatesPerBatch
 
 type
   WorkDispatcher = ref object of Agent
@@ -29,7 +28,10 @@ type
     progressIndicators: array[TaskCount, ProgressIndicator]
     resultLabels: array[TaskCount, Label]
     stopButtons: array[TaskCount, Button]
-    stopFlags: array[TaskCount, Atomic[bool]]
+    stopRequested: array[TaskCount, bool]
+    primeCounts: array[TaskCount, int]
+    largestPrimes: array[TaskCount, int]
+    elapsedMilliseconds: array[TaskCount, int]
     runButton: Button
     overallStatus: Label
     completed: array[TaskCount, bool]
@@ -39,23 +41,19 @@ type
 proc workRequested*(
   dispatcher: WorkDispatcher,
   taskIndex: int,
+  batchIndex: int,
   firstCandidate: int,
   candidateCount: int,
-  stopFlag: ptr Atomic[bool],
 ) {.signal.}
 
 proc workStopRequested*(controller: LongWorkController, taskIndex: int) {.signal.}
 
-proc workProgress*(
-  worker: PrimeSearchWorker, taskIndex: int, percentComplete: int
-) {.signal.}
-
-proc workFinished*(
+proc workBatchFinished*(
   worker: PrimeSearchWorker,
   taskIndex: int,
+  batchIndex: int,
   primeCount: int,
   largestPrime: int,
-  stopped: bool,
   elapsedMilliseconds: int,
   workerThreadId: int,
 ) {.signal.}
@@ -81,77 +79,57 @@ func candidateCount(taskIndex: int): int =
 func firstCandidate(taskIndex: int): int =
   FirstCandidate + BaseCandidatesPerTask * ((1 shl taskIndex) - 1)
 
-proc searchForPrimes(
+func batchCount(taskIndex: int): int =
+  (taskIndex.candidateCount() + CandidatesPerBatch - 1) div CandidatesPerBatch
+
+func batchFirstCandidate(taskIndex, batchIndex: int): int =
+  taskIndex.firstCandidate() + batchIndex * CandidatesPerBatch
+
+func batchCandidateCount(taskIndex, batchIndex: int): int =
+  min(CandidatesPerBatch, taskIndex.candidateCount() - batchIndex * CandidatesPerBatch)
+
+proc searchPrimeBatch(
     worker: PrimeSearchWorker,
     taskIndex: int,
+    batchIndex: int,
     firstCandidate: int,
     candidateCount: int,
-    stopFlag: ptr Atomic[bool],
 ) {.slot.} =
   let startedAt = getMonoTime()
   var
     primeCount = 0
     largestPrime = 0
-    stopped = false
 
-  for step in 0 ..< ProgressStepCount:
-    if stopFlag[].load(moRelaxed):
-      stopped = true
-      break
-    let
-      stepStart = firstCandidate + candidateCount * step div ProgressStepCount
-      stepEnd = firstCandidate + candidateCount * (step + 1) div ProgressStepCount
-    for candidate in stepStart ..< stepEnd:
-      if candidate mod StopCheckInterval == 0 and stopFlag[].load(moRelaxed):
-        stopped = true
-        break
-      if candidate.isPrime():
-        inc primeCount
-        largestPrime = candidate
-    if stopped:
-      break
-    emit worker.workProgress(taskIndex, (step + 1) * 100 div ProgressStepCount)
+  for candidate in firstCandidate ..< firstCandidate + candidateCount:
+    if candidate.isPrime():
+      inc primeCount
+      largestPrime = candidate
 
   let elapsedMilliseconds = (getMonoTime() - startedAt).inMilliseconds.int
-  emit worker.workFinished(
-    taskIndex, primeCount, largestPrime, stopped, elapsedMilliseconds, getThreadId()
+  emit worker.workBatchFinished(
+    taskIndex, batchIndex, primeCount, largestPrime, elapsedMilliseconds, getThreadId()
   )
 
 proc requestWorkStop(controller: LongWorkController, taskIndex: int) {.slot.} =
-  if taskIndex notin 0 ..< TaskCount or controller.completed[taskIndex]:
+  if taskIndex notin 0 ..< TaskCount or not controller.running or
+      controller.completed[taskIndex]:
     return
-  controller.stopFlags[taskIndex].store(true, moRelaxed)
+  controller.stopRequested[taskIndex] = true
   controller.stopButtons[taskIndex].enabled = false
-  controller.resultLabels[taskIndex].text = "Stopping after the current check..."
+  controller.resultLabels[taskIndex].text = "Stopping after the current batch..."
 
-proc didMakeProgress(
-    controller: LongWorkController, taskIndex: int, percentComplete: int
-) {.slot.} =
-  if taskIndex notin 0 ..< TaskCount:
-    return
-  controller.progressIndicators[taskIndex].value = percentComplete.float32
-  controller.resultLabels[taskIndex].text =
-    "Running — " & $percentComplete & "% complete"
-
-proc didFinishWork(
-    controller: LongWorkController,
-    taskIndex: int,
-    primeCount: int,
-    largestPrime: int,
-    stopped: bool,
-    elapsedMilliseconds: int,
-    workerThreadId: int,
-) {.slot.} =
-  if taskIndex notin 0 ..< TaskCount or controller.completed[taskIndex]:
-    return
-
+proc finishWork(
+    controller: LongWorkController, taskIndex: int, stopped: bool, workerThreadId: int
+) =
   controller.completed[taskIndex] = true
   inc controller.completedCount
   controller.stopButtons[taskIndex].enabled = false
   controller.resultLabels[taskIndex].text =
-    (if stopped: "Stopped after finding " else: "Found ") & $primeCount &
-    " primes; largest: " & $largestPrime & " · " & $elapsedMilliseconds &
-    " ms on worker thread " & $workerThreadId
+    (if stopped: "Stopped after finding " else: "Found ") &
+    $controller.primeCounts[taskIndex] & " primes; largest: " &
+    $controller.largestPrimes[taskIndex] & " · " &
+    $controller.elapsedMilliseconds[taskIndex] & " ms on worker thread " &
+    $workerThreadId
   if not stopped:
     controller.progressIndicators[taskIndex].value = 100.0
 
@@ -160,6 +138,44 @@ proc didFinishWork(
     controller.runButton.enabled = true
     controller.overallStatus.text =
       "All tasks finished. Run them again or keep interacting with the window."
+
+proc requestNextBatch(controller: LongWorkController, taskIndex, batchIndex: int) =
+  emit controller.dispatchers[taskIndex].workRequested(
+    taskIndex,
+    batchIndex,
+    taskIndex.batchFirstCandidate(batchIndex),
+    taskIndex.batchCandidateCount(batchIndex),
+  )
+
+proc didFinishPrimeBatch(
+    controller: LongWorkController,
+    taskIndex: int,
+    batchIndex: int,
+    primeCount: int,
+    largestPrime: int,
+    elapsedMilliseconds: int,
+    workerThreadId: int,
+) {.slot.} =
+  if taskIndex notin 0 ..< TaskCount or batchIndex notin 0 ..< taskIndex.batchCount() or
+      controller.completed[taskIndex]:
+    return
+
+  controller.primeCounts[taskIndex] += primeCount
+  controller.largestPrimes[taskIndex] =
+    max(controller.largestPrimes[taskIndex], largestPrime)
+  controller.elapsedMilliseconds[taskIndex] += elapsedMilliseconds
+  if batchIndex + 1 == taskIndex.batchCount():
+    controller.finishWork(taskIndex, stopped = false, workerThreadId)
+  elif controller.stopRequested[taskIndex]:
+    controller.finishWork(taskIndex, stopped = true, workerThreadId)
+  else:
+    let percentComplete = min(
+      100, (batchIndex + 1) * CandidatesPerBatch * 100 div taskIndex.candidateCount()
+    )
+    controller.progressIndicators[taskIndex].value = percentComplete.float32
+    controller.resultLabels[taskIndex].text =
+      "Running — " & $percentComplete & "% complete"
+    controller.requestNextBatch(taskIndex, batchIndex + 1)
 
 proc startWork(controller: LongWorkController) =
   if controller.running:
@@ -173,16 +189,14 @@ proc startWork(controller: LongWorkController) =
 
   for taskIndex in 0 ..< TaskCount:
     controller.completed[taskIndex] = false
-    controller.stopFlags[taskIndex].store(false, moRelaxed)
+    controller.stopRequested[taskIndex] = false
+    controller.primeCounts[taskIndex] = 0
+    controller.largestPrimes[taskIndex] = 0
+    controller.elapsedMilliseconds[taskIndex] = 0
     controller.progressIndicators[taskIndex].value = 0.0
     controller.resultLabels[taskIndex].text = "Queued"
     controller.stopButtons[taskIndex].enabled = true
-    emit controller.dispatchers[taskIndex].workRequested(
-      taskIndex,
-      taskIndex.firstCandidate(),
-      taskIndex.candidateCount(),
-      addr controller.stopFlags[taskIndex],
-    )
+    controller.requestNextBatch(taskIndex, 0)
 
 proc newStopWorkTarget(controller: LongWorkController, taskIndex: int): ClosureTarget =
   result = newActionTarget(actionSelector("stopPrimeSearch")) do(sender: DynamicAgent):
@@ -196,8 +210,8 @@ let
   layout = newStackView(laVertical)
   title = newTitleLabel("Long-running work with Sigils")
   explanation = newLabel(
-    "Each worker searches twice as many candidates as the previous worker. " &
-      "Results return to the UI thread through signals."
+    "Each batch tests " & $CandidatesPerBatch & " candidates, so longer " &
+      "searches schedule more batches while workers remain available to the pool."
   )
   overallStatus = newStatusLabel("Ready to search four number ranges.")
   runButton = newButton("Run prime searches")
@@ -229,7 +243,7 @@ for taskIndex in 0 ..< TaskCount:
     taskLayout = newStackView(laVertical)
     taskLabel = newHeadingLabel(
       "Task " & $(taskIndex + 1) & ": " & $firstCandidate & "–" & $lastCandidate & " (" &
-        $candidateCount & " candidates)"
+        $candidateCount & " candidates, " & $taskIndex.batchCount() & " batches)"
     )
     progress = newProgressIndicator(0.0, 100.0, 0.0)
     resultLabel = newStatusLabel("Waiting")
@@ -265,12 +279,12 @@ runButton.target = newActionTarget(runButton.action) do(sender: DynamicAgent):
 let pool = newSigilThreadPool(workers = TaskCount)
 pool.start()
 
-# Keep cancellation local: a stop slot queued on a busy worker would not run
-# until its prime search completed. The worker reads the atomic flag directly.
+# Stop requests stay on the application thread and suppress the next batch.
 connect(controller, workStopRequested, controller, LongWorkController.requestWorkStop())
 
 # A pool may execute different actors concurrently, while calls to one actor
-# remain serialized. Give each independent task its own actor and dispatcher.
+# remain serialized. Each completion signal schedules one more batch, yielding
+# the actor between batches. Give each independent task its own actor and dispatcher.
 var workerProxies: array[TaskCount, AgentProxy[PrimeSearchWorker]]
 for taskIndex in 0 ..< TaskCount:
   controller.dispatchers[taskIndex] = WorkDispatcher()
@@ -280,19 +294,13 @@ for taskIndex in 0 ..< TaskCount:
     controller.dispatchers[taskIndex],
     workRequested,
     workerProxies[taskIndex],
-    searchForPrimes,
+    searchPrimeBatch,
   )
   connectThreaded(
     workerProxies[taskIndex],
-    workProgress,
+    workBatchFinished,
     controller,
-    LongWorkController.didMakeProgress(),
-  )
-  connectThreaded(
-    workerProxies[taskIndex],
-    workFinished,
-    controller,
-    LongWorkController.didFinishWork(),
+    LongWorkController.didFinishPrimeBatch(),
   )
 
 controller.startWork()
