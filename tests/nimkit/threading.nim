@@ -6,8 +6,17 @@ import threading/channels
 
 import merenda/nimkit/app/application
 import merenda/nimkit/app/backend as nimkitBackend
+import merenda/nimkit/foundation/events as nimkitEvents
 import merenda/nimkit/foundation/types as nimkitTypes
 import merenda/nimkit/drawing
+
+const ThreadHostEventBurst = 1_024
+
+proc postTextInputBurst(queue: nimkitBackend.ThreadHostEventQueue) {.thread.} =
+  for index in 0 ..< ThreadHostEventBurst:
+    queue.post(
+      nimkitBackend.ThreadHostEvent(kind: nimkitBackend.theTextInput, text: $index)
+    )
 
 proc newRectangleRenders(): Renders =
   result = newRenders()
@@ -16,6 +25,61 @@ proc newRectangleRenders(): Renders =
   )
 
 suite "NimKit threading":
+  test "discrete host events survive a stalled consumer":
+    let queue = nimkitBackend.newThreadHostEventQueue()
+    var producer: Thread[nimkitBackend.ThreadHostEventQueue]
+    createThread(producer, postTextInputBurst, queue)
+    joinThread(producer)
+
+    var event: nimkitBackend.ThreadHostEvent
+    for index in 0 ..< ThreadHostEventBurst:
+      doAssert queue.poll(event)
+      check event.kind == nimkitBackend.theTextInput
+      check event.text == $index
+    check not queue.poll(event)
+
+  test "consecutive mouse moves coalesce without crossing discrete events":
+    let queue = nimkitBackend.newThreadHostEventQueue()
+    queue.post(
+      nimkitBackend.ThreadHostEvent(
+        kind: nimkitBackend.theMouseMove,
+        mouseEvent: nimkitEvents.MouseEvent(timestamp: 1.0),
+      )
+    )
+    queue.post(
+      nimkitBackend.ThreadHostEvent(
+        kind: nimkitBackend.theMouseMove,
+        mouseEvent: nimkitEvents.MouseEvent(timestamp: 2.0),
+      )
+    )
+    queue.post(
+      nimkitBackend.ThreadHostEvent(kind: nimkitBackend.theTextInput, text: "barrier")
+    )
+    queue.post(
+      nimkitBackend.ThreadHostEvent(
+        kind: nimkitBackend.theMouseMove,
+        mouseEvent: nimkitEvents.MouseEvent(timestamp: 3.0),
+      )
+    )
+    queue.post(
+      nimkitBackend.ThreadHostEvent(
+        kind: nimkitBackend.theMouseMove,
+        mouseEvent: nimkitEvents.MouseEvent(timestamp: 4.0),
+      )
+    )
+
+    var event: nimkitBackend.ThreadHostEvent
+    doAssert queue.poll(event)
+    check event.kind == nimkitBackend.theMouseMove
+    check event.mouseEvent.timestamp == 2.0
+    doAssert queue.poll(event)
+    check event.kind == nimkitBackend.theTextInput
+    check event.text == "barrier"
+    doAssert queue.poll(event)
+    check event.kind == nimkitBackend.theMouseMove
+    check event.mouseEvent.timestamp == 4.0
+    check not queue.poll(event)
+
   test "render snapshots move through a bounded channel":
     let
       runtime = nimkitBackend.newThreadRenderer()

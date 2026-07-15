@@ -1,4 +1,4 @@
-import std/[isolation, math, options, os, strutils, tables, times]
+import std/[deques, isolation, locks, math, options, os, strutils, tables, times]
 
 import threading/channels
 
@@ -80,6 +80,13 @@ type
     contentScale*: float32
     renderCount*: Natural
 
+  ThreadHostEventQueueObj = object
+    lock: Lock
+    pending: Deque[ThreadHostEvent]
+    lockReady: bool
+
+  ThreadHostEventQueue* = ref ThreadHostEventQueueObj
+
   ThreadHostCommandKind* = enum
     thcRequestRender
     thcSetLogicalSize
@@ -136,7 +143,7 @@ type
     item*: ThreadMenuId
 
   ThreadHostChannels* = object
-    events*: Chan[ThreadHostEvent]
+    events*: ThreadHostEventQueue
     commands*: Chan[ThreadHostCommand]
     renders*: Chan[ThreadRenderSnapshot]
 
@@ -219,6 +226,12 @@ type
   NativePasteboardPayload = ref object of RootObj
     items: Table[string, PasteboardItem]
 
+proc `=destroy`(queue: ThreadHostEventQueueObj) =
+  let queuePtr = addr(queue)
+  if queuePtr.lockReady:
+    deinitLock(queuePtr.lock)
+  `=destroy`(queuePtr.pending)
+
 var
   hostWindows {.threadvar.}: Table[pointer, HostWindow]
   hostWindowsReady {.threadvar.}: bool
@@ -238,7 +251,6 @@ const
 
 const
   ThreadRendererCommandCapacity = 256
-  ThreadHostEventCapacity = 512
   ThreadHostCommandCapacity = 128
   ThreadRenderCapacity = 2
   ThreadMenuEventCapacity = 128
@@ -259,6 +271,32 @@ proc pushLatest[T](channel: Chan[T], value: sink T) =
   if not channel.tryTake(isolated):
     discard
 
+func coalesces(kind: ThreadHostEventKind): bool =
+  kind in {theResized, theMoved, theMouseMove, theRendered}
+
+proc newThreadHostEventQueue*(): ThreadHostEventQueue =
+  result = ThreadHostEventQueue(pending: initDeque[ThreadHostEvent]())
+  initLock(result.lock)
+  result.lockReady = true
+
+proc post*(queue: ThreadHostEventQueue, event: sink ThreadHostEvent) =
+  if queue.isNil:
+    return
+  withLock queue.lock:
+    if event.kind.coalesces() and queue.pending.len > 0 and
+        queue.pending.peekLast().kind == event.kind:
+      queue.pending[^1] = ensureMove event
+    else:
+      queue.pending.addLast(ensureMove event)
+
+proc poll*(queue: ThreadHostEventQueue, event: var ThreadHostEvent): bool =
+  if queue.isNil:
+    return
+  withLock queue.lock:
+    if queue.pending.len > 0:
+      event = queue.pending.popFirst()
+      result = true
+
 proc newThreadRenderer*(): tuple[renderer: ThreadRenderer, client: ThreadRendererClient] =
   let
     commands = newChan[ThreadRendererCommand](ThreadRendererCommandCapacity)
@@ -277,7 +315,7 @@ proc newThreadHostClient*(renderer: ThreadRendererClient): ThreadHostClient =
   result = ThreadHostClient(
     id: ThreadHostId(renderer.nextHostId),
     channels: ThreadHostChannels(
-      events: newChan[ThreadHostEvent](ThreadHostEventCapacity),
+      events: newThreadHostEventQueue(),
       commands: newChan[ThreadHostCommand](ThreadHostCommandCapacity),
       renders: newChan[ThreadRenderSnapshot](ThreadRenderCapacity),
     ),
@@ -365,7 +403,7 @@ proc submitRenders*(
   true
 
 proc pollEvent*(host: ThreadHostClient, event: var ThreadHostEvent): bool =
-  not host.isNil and host.channels.events.tryRecv(event)
+  not host.isNil and host.channels.events.poll(event)
 
 proc pollLatestRender*(
     channels: ThreadHostChannels, snapshot: var ThreadRenderSnapshot
@@ -1362,7 +1400,7 @@ proc pump*(host: HostWindow) =
 
 proc postEvent(state: ThreadRendererHost, event: sink ThreadHostEvent) =
   if not state.isNil:
-    state.channels.events.pushLatest(event)
+    state.channels.events.post(ensureMove event)
 
 proc acceptPendingRender(state: ThreadRendererHost): bool =
   if state.isNil:
