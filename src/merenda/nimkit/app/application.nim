@@ -1,6 +1,7 @@
 import std/[options, os]
 
 import sigils/selectors
+import sigils/threadBase
 
 import ../foundation/events
 import ../foundation/notifications
@@ -76,6 +77,7 @@ const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
 const WindowDidOrderOutSelector = "_nimkitWindowDidOrderOut"
 const WindowDidCloseSelector = "_nimkitWindowDidClose"
+const ThreadSignalBudgetPerFrame = 10
 
 var sharedApplicationInstance: Application
 
@@ -280,7 +282,7 @@ proc stopAnimation*(
 proc drainAnimations*(app: Application): int {.discardable.} =
   if app.xAnimationScheduler.isNil or app.xAnimationClock.isNil:
     return 0
-  result = app.xAnimationScheduler.drain(app.xAnimationClock)
+  result = app.xAnimationScheduler.drain(app.xAnimationClock, pollSignals = false)
   if app.xAnimationScheduler.animationCount == 0:
     app.stopAnimationClock()
 
@@ -1013,6 +1015,11 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
     window == session.parentWindow
 
 proc runApplicationFrame(app: Application): int =
+  if hasLocalSigilThread():
+    let thread = getCurrentSigilThread()
+    for _ in 0 ..< ThreadSignalBudgetPerFrame:
+      if not thread.poll(NonBlocking):
+        break
   discard app.drainAnimations()
   var
     removedWindow = false

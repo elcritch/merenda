@@ -1,8 +1,46 @@
 import std/[os, sequtils, strutils, unittest]
 
+from figdraw/common/typefaceinfos import TypefaceInfo
 import merenda/nimkit
 
 suite "NimKit font pickers":
+  test "font languages prefer OpenType metadata over family-name heuristics":
+    var layoutInfo =
+      TypefaceInfo(layoutScripts: @["latn", "arab"], layoutLanguages: @["URD"])
+    layoutInfo.unicodeRanges[0] = (1'u32 shl 0) or (1'u32 shl 7) or (1'u32 shl 13)
+
+    check layoutInfo.fontCatalogLanguages("Misleading Japanese") ==
+      @[DefaultFontLanguage, "Arabic", "Greek", "Urdu"]
+
+    let fallbackInfo = TypefaceInfo()
+    check fallbackInfo.fontCatalogLanguages("Noto Naskh Arabic") == @["Arabic"]
+
+  test "font languages distinguish CJK shaping metadata":
+    var japaneseInfo = TypefaceInfo(layoutScripts: @["hani", "kana"])
+    japaneseInfo.unicodeRanges[1] = 1'u32 shl (59 - 32)
+    check japaneseInfo.fontCatalogLanguages() == @["Japanese"]
+
+    var traditionalInfo = TypefaceInfo(layoutScripts: @["hani"])
+    traditionalInfo.codePageRanges[0] = 1'u32 shl 20
+    traditionalInfo.unicodeRanges[1] = 1'u32 shl (59 - 32)
+    check traditionalInfo.fontCatalogLanguages() == @["Traditional Chinese"]
+
+  test "font languages recognize symbol fonts from loaded metadata":
+    var explicitSymbolInfo = TypefaceInfo()
+    explicitSymbolInfo.unicodeRanges[0] = 1'u32 shl 0
+    explicitSymbolInfo.codePageRanges[0] = 1'u32 shl 31
+    check explicitSymbolInfo.fontCatalogLanguages() == @[DefaultFontLanguage, "Symbols"]
+
+    var unicodeSymbolInfo = TypefaceInfo()
+    unicodeSymbolInfo.unicodeRanges[0] = 1'u32 shl 0
+    unicodeSymbolInfo.unicodeRanges[1] = 1'u32 shl (46 - 32)
+    check unicodeSymbolInfo.fontCatalogLanguages() == @[DefaultFontLanguage, "Symbols"]
+
+    var arabicMathInfo = TypefaceInfo()
+    arabicMathInfo.unicodeRanges[0] = 1'u32 shl 13
+    arabicMathInfo.unicodeRanges[1] = 1'u32 shl (38 - 32)
+    check arabicMathInfo.fontCatalogLanguages() == @["Arabic"]
+
   test "font catalog groups faces into stable families":
     let catalog = buildFontCatalog(
       [
@@ -59,6 +97,7 @@ suite "NimKit font pickers":
     check not catalog[0].faces[0].monospace
     check not catalog[0].faces[0].variable
     check catalog[0].faces[0].metadataLoaded
+    check DefaultFontLanguage in catalog[0].faces[0].languages
     check "Ubuntu Regular" in catalog[0].searchText
 
   test "font catalog can defer typeface metadata":
@@ -73,6 +112,17 @@ suite "NimKit font pickers":
     check face.style == "Regular"
     check face.weightClass == 400
     check face.regular
+    check DefaultFontLanguage in face.languages
+
+  test "loaded Arabic metadata classifies the face without its filename":
+    let fontPath =
+      getCurrentDir() / "../figdraw/examples/fonts/NotoNaskhArabic-wght.ttf"
+    if fileExists(fontPath):
+      var face = initFontCatalogFace("Regular", DefaultFontLanguage, fontPath)
+      face.loadFontCatalogFaceMetadata()
+
+      check face.metadataLoaded
+      check "Arabic" in face.languages
 
   test "font options are built only when requested":
     var entries: seq[FontCatalogEntry]

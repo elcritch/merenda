@@ -21,6 +21,7 @@ type
   FontCatalogFace* = object
     style*: string
     language*: string
+    languages*: seq[string]
     path*: string
     identifier*: string
     weightClass*: uint16
@@ -99,37 +100,118 @@ const
     ("arab", "Arabic"),
     ("armn", "Armenian"),
     ("beng", "Bengali"),
+    ("bng2", "Bengali"),
     ("cyrl", "Cyrillic"),
     ("deva", "Devanagari"),
+    ("dev2", "Devanagari"),
     ("ethi", "Ethiopic"),
     ("geor", "Georgian"),
     ("grek", "Greek"),
     ("gujr", "Gujarati"),
+    ("gjr2", "Gujarati"),
     ("guru", "Gurmukhi"),
+    ("gur2", "Gurmukhi"),
     ("hang", "Korean"),
-    ("hani", "Chinese"),
     ("hebr", "Hebrew"),
-    ("kana", "Japanese"),
     ("knda", "Kannada"),
+    ("knd2", "Kannada"),
     ("khmr", "Khmer"),
     ("lao", "Lao"),
+    ("latn", DefaultFontLanguage),
     ("mlym", "Malayalam"),
+    ("mlm2", "Malayalam"),
     ("mymr", "Myanmar"),
+    ("mym2", "Myanmar"),
     ("orya", "Oriya"),
+    ("ory2", "Oriya"),
     ("sinh", "Sinhala"),
     ("taml", "Tamil"),
+    ("tml2", "Tamil"),
     ("telu", "Telugu"),
+    ("tel2", "Telugu"),
     ("thai", "Thai"),
     ("tibt", "Tibetan"),
   ]
 
   FontLayoutTagLanguages = [
+    ("ara", "Arabic"),
+    ("asm", "Bengali"),
+    ("ben", "Bengali"),
+    ("bgr", "Cyrillic"),
+    ("far", "Arabic"),
+    ("guj", "Gujarati"),
+    ("hin", "Devanagari"),
+    ("hye", "Armenian"),
+    ("iwr", "Hebrew"),
     ("jan", "Japanese"),
+    ("kan", "Kannada"),
+    ("khm", "Khmer"),
     ("kor", "Korean"),
+    ("mal", "Malayalam"),
+    ("mar", "Devanagari"),
+    ("nep", "Devanagari"),
+    ("pan", "Gurmukhi"),
+    ("rus", "Cyrillic"),
+    ("san", "Devanagari"),
+    ("sin", "Sinhala"),
+    ("srb", "Cyrillic"),
+    ("tam", "Tamil"),
+    ("tel", "Telugu"),
+    ("tha", "Thai"),
+    ("tib", "Tibetan"),
     ("urd", "Urdu"),
+    ("vit", "Vietnamese"),
     ("zhs", "Simplified Chinese"),
     ("zht", "Traditional Chinese"),
   ]
+
+  FontUnicodeRangeLanguages = [
+    (0, DefaultFontLanguage),
+    (1, DefaultFontLanguage),
+    (2, DefaultFontLanguage),
+    (3, DefaultFontLanguage),
+    (7, "Greek"),
+    (9, "Cyrillic"),
+    (10, "Armenian"),
+    (11, "Hebrew"),
+    (13, "Arabic"),
+    (15, "Devanagari"),
+    (16, "Bengali"),
+    (17, "Gurmukhi"),
+    (18, "Gujarati"),
+    (19, "Oriya"),
+    (20, "Tamil"),
+    (21, "Telugu"),
+    (22, "Kannada"),
+    (23, "Malayalam"),
+    (24, "Thai"),
+    (25, "Lao"),
+    (26, "Georgian"),
+    (49, "Japanese"),
+    (50, "Japanese"),
+    (51, "Chinese"),
+    (52, "Korean"),
+    (56, "Korean"),
+    (59, "Chinese"),
+    (70, "Tibetan"),
+    (73, "Sinhala"),
+    (74, "Myanmar"),
+    (75, "Ethiopic"),
+    (80, "Khmer"),
+  ]
+
+  FontCodePageLanguages = [
+    (8, "Vietnamese"),
+    (16, "Thai"),
+    (17, "Japanese"),
+    (18, "Simplified Chinese"),
+    (19, "Korean"),
+    (20, "Traditional Chinese"),
+    (21, "Korean"),
+    (31, "Symbols"),
+  ]
+
+  FontUnicodeSymbolRanges = [37, 38, 39, 45, 46, 47, 88, 89]
 
 var
   cachedSystemFontCatalog: seq[FontCatalogEntry]
@@ -229,24 +311,103 @@ proc addUniqueFontLanguage(languages: var seq[string], language: string) =
   if language.len > 0 and language notin languages:
     languages.add language
 
-proc fontLanguage(info: TypefaceInfo, family: string): string =
-  let namedLanguage = family.splitFontFamilyAndLanguage().language
-  if namedLanguage != DefaultFontLanguage:
-    return namedLanguage
+func hasRangeBit(ranges: openArray[uint32], bit: int): bool =
+  let word = bit div 32
+  if word notin 0 ..< ranges.len:
+    return
+  let mask = 1'u32 shl (bit mod 32)
+  (ranges[word] and mask) != 0
 
-  var languages: seq[string]
+func hasFontLanguage(languages: openArray[string], language: string): bool =
+  language in languages
+
+proc removeFontLanguage(languages: var seq[string], language: string) =
+  var destination = 0
+  for source in 0 ..< languages.len:
+    if languages[source] != language:
+      if source != destination:
+        languages[destination] = move languages[source]
+      inc destination
+  languages.setLen(destination)
+
+proc sortFontLanguages(languages: var seq[string]) =
+  languages.sort(
+    proc(left, right: string): int =
+      let
+        leftIsDefault = left == DefaultFontLanguage
+        rightIsDefault = right == DefaultFontLanguage
+      if leftIsDefault != rightIsDefault:
+        return if leftIsDefault: -1 else: 1
+      result = cmp(left.toLowerAscii(), right.toLowerAscii())
+      if result == 0:
+        result = cmp(left, right)
+  )
+
+proc fontCatalogLanguages*(info: TypefaceInfo, family = ""): seq[string] =
+  ## Classifies a typeface using OpenType layout and OS/2 coverage metadata.
+  ## Family-name suffixes are used only when the font provides no useful metadata.
   for tag in info.layoutLanguages:
-    languages.addUniqueFontLanguage(tag.fontLanguageForTag(FontLayoutTagLanguages))
-  if languages.len == 1:
-    return languages[0]
+    result.addUniqueFontLanguage(tag.fontLanguageForTag(FontLayoutTagLanguages))
 
-  languages.setLen(0)
+  var
+    hasHanScript = false
+    hasJapaneseScript = false
+    hasKoreanScript = false
   for tag in info.layoutScripts:
-    languages.addUniqueFontLanguage(tag.fontLanguageForTag(FontLayoutScriptLanguages))
-  if languages.len == 1:
-    languages[0]
-  else:
-    DefaultFontLanguage
+    let normalized = tag.strip().toLowerAscii()
+    hasHanScript = hasHanScript or normalized == "hani"
+    hasJapaneseScript = hasJapaneseScript or normalized == "kana"
+    hasKoreanScript = hasKoreanScript or normalized == "hang"
+    result.addUniqueFontLanguage(
+      normalized.fontLanguageForTag(FontLayoutScriptLanguages)
+    )
+  if hasJapaneseScript:
+    result.addUniqueFontLanguage("Japanese")
+  if hasKoreanScript:
+    result.addUniqueFontLanguage("Korean")
+  if hasHanScript and not hasJapaneseScript and not hasKoreanScript:
+    result.addUniqueFontLanguage("Chinese")
+
+  for (bit, language) in FontCodePageLanguages:
+    if info.codePageRanges.hasRangeBit(bit):
+      result.addUniqueFontLanguage(language)
+
+  for (bit, language) in FontUnicodeRangeLanguages:
+    if info.unicodeRanges.hasRangeBit(bit):
+      let genericCjkCovered =
+        language == "Chinese" and
+        (result.hasFontLanguage("Japanese") or result.hasFontLanguage("Korean"))
+      if not genericCjkCovered:
+        result.addUniqueFontLanguage(language)
+
+  var
+    hasSpecializedTextCoverage = false
+    hasSymbolCoverage = false
+  for language in result:
+    if language notin [DefaultFontLanguage, "Symbols"]:
+      hasSpecializedTextCoverage = true
+      break
+  for bit in FontUnicodeSymbolRanges:
+    if info.unicodeRanges.hasRangeBit(bit):
+      hasSymbolCoverage = true
+      break
+  if hasSymbolCoverage and not hasSpecializedTextCoverage:
+    result.addUniqueFontLanguage("Symbols")
+
+  if result.hasFontLanguage("Simplified Chinese") or
+      result.hasFontLanguage("Traditional Chinese"):
+    result.removeFontLanguage("Chinese")
+
+  if result.len == 0:
+    let namedLanguage = family.splitFontFamilyAndLanguage().language
+    result.add(if namedLanguage.len > 0: namedLanguage else: DefaultFontLanguage)
+  result.sortFontLanguages()
+
+func primaryFontLanguage(languages: openArray[string]): string =
+  for language in languages:
+    if language != DefaultFontLanguage:
+      return language
+  DefaultFontLanguage
 
 func normalizedFontStyle(style: string): string =
   let normalized = style.strip().toLowerAscii()
@@ -327,6 +488,7 @@ func initFontCatalogFace*(
   FontCatalogFace(
     style: normalizedStyle,
     language: if language.len > 0: language else: DefaultFontLanguage,
+    languages: @[if language.len > 0: language else: DefaultFontLanguage],
     path: path,
     identifier:
       if identifier.len > 0:
@@ -379,7 +541,7 @@ type ParsedFontFace = object
   face: FontCatalogFace
 
 func preferredFaceRank(face: ParsedFontFace): int =
-  (if face.face.language == DefaultFontLanguage: 0 else: 100) +
+  (if DefaultFontLanguage in face.face.languages: 0 else: 100) +
     face.face.preferredFontStyleRank()
 
 proc fontInfoForPath(path: string): tuple[info: TypefaceInfo, available: bool] =
@@ -427,15 +589,17 @@ proc parsedFontFace(path: string): ParsedFontFace =
         metadata.info.subfamily.normalizedFontStyle()
       else:
         fallbackName.style
-    language =
+    languages =
       if metadata.available:
-        metadata.info.fontLanguage(rawFamily)
+        metadata.info.fontCatalogLanguages(rawFamily)
       else:
-        rawFamily.splitFontFamilyAndLanguage().language
+        @[rawFamily.splitFontFamilyAndLanguage().language]
+    language = languages.primaryFontLanguage()
     family = rawFamily.splitFontFamilyAndLanguage()
   result.rawFamily = rawFamily
   result.candidateFamily = family.baseFamily
   result.face = initFontCatalogFace(style, language, path)
+  result.face.languages = languages
   result.face.metadataLoaded = true
   result.searchText = path.splitFile().name.humanizedFontStem()
   if metadata.available:
@@ -461,7 +625,8 @@ proc loadFontCatalogFaceMetadata*(face: var FontCatalogFace) =
   let info = metadata.info
   if info.subfamily.len > 0:
     face.style = info.subfamily.normalizedFontStyle()
-  face.language = info.fontLanguage(info.family)
+  face.languages = info.fontCatalogLanguages(info.family)
+  face.language = face.languages.primaryFontLanguage()
   face.weightClass = info.weightClass
   face.widthClass = info.widthClass
   face.bold = info.bold
@@ -553,8 +718,8 @@ proc buildFontCatalog*(
     entry.faces.sort(
       proc(left, right: FontCatalogFace): int =
         let
-          leftLanguageRank = if left.language == DefaultFontLanguage: 0 else: 1
-          rightLanguageRank = if right.language == DefaultFontLanguage: 0 else: 1
+          leftLanguageRank = if DefaultFontLanguage in left.languages: 0 else: 1
+          rightLanguageRank = if DefaultFontLanguage in right.languages: 0 else: 1
         result = cmp(leftLanguageRank, rightLanguageRank)
         if result == 0:
           result = cmp(left.language.toLowerAscii(), right.language.toLowerAscii())

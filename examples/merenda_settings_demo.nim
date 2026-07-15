@@ -1,7 +1,7 @@
 import merenda/nimkit
 
-import std/[options, os, strutils, tables]
-import sigils/selectors
+import std/[algorithm, options, os, strutils, tables]
+import sigils
 
 when defined(settingsDemoBenchmark):
   import std/[monotimes, times]
@@ -29,23 +29,84 @@ type
     dfs20
 
   FontSelectionProc = proc(path: string) {.closure.}
+  FontLoadingProgressProc = proc(message: string) {.closure.}
+
+  FontCatalogLoader = ref object of AgentActor
 
   FontPickerController = ref object of Responder
     items: Table[string, CascadingItem]
     faces: Table[string, FontCatalogFace]
     childIdentifiers: Table[string, seq[string]]
     childIndexes: Table[string, Table[string, int]]
+    fontPicker: CascadingView
+    needsFontPickerReload: bool
+    pendingFontPickerBatchCount: int
     selectionHandler: FontSelectionProc
+    progressHandler: FontLoadingProgressProc
+
+const
+  FontCatalogBatchSize = 8
+  FontCatalogBatchesPerReload = 10
+
+proc fontCatalogLoadRequested*(controller: FontPickerController) {.signal.}
+proc fontCatalogBatchLoaded*(
+  loader: FontCatalogLoader,
+  entries: seq[FontCatalogEntry],
+  loadedEntryCount: int,
+  loadedFaceCount: int,
+) {.signal.}
+
+proc fontCatalogLoadingFinished*(
+  loader: FontCatalogLoader, loadedEntryCount: int, loadedFaceCount: int
+) {.signal.}
+
+proc fontCatalogLoadingFailed*(loader: FontCatalogLoader, message: string) {.signal.}
 
 proc addFontPickerItem(controller: FontPickerController, item: CascadingItem) =
   controller.items[item.identifier] = item
-  controller.childIdentifiers.mgetOrPut(item.parentIdentifier, @[]).add item.identifier
+  let
+    parentIdentifier = item.parentIdentifier
+    childIndex = controller.childIdentifiers.getOrDefault(parentIdentifier).len
+
+  controller.childIndexes.mgetOrPut(parentIdentifier, initTable[string, int]())[
+    item.identifier
+  ] = childIndex
+  controller.childIdentifiers.mgetOrPut(parentIdentifier, @[]).add item.identifier
+
+proc reindexFontPickerChildren(
+    controller: FontPickerController, parentIdentifier: string
+) =
+  var indexes = initTable[string, int]()
+  for index, identifier in controller.childIdentifiers.getOrDefault(parentIdentifier):
+    indexes[identifier] = index
+  controller.childIndexes[parentIdentifier] = move indexes
+
+proc sortFontPickerLanguages(controller: FontPickerController) =
+  var identifiers = controller.childIdentifiers.getOrDefault("")
+  identifiers.sort(
+    proc(left, right: string): int =
+      let
+        leftTitle = controller.items.getOrDefault(left).title
+        rightTitle = controller.items.getOrDefault(right).title
+        leftIsDefault = leftTitle == DefaultFontLanguage
+        rightIsDefault = rightTitle == DefaultFontLanguage
+      if leftIsDefault != rightIsDefault:
+        return if leftIsDefault: -1 else: 1
+      result = cmp(leftTitle.toLowerAscii(), rightTitle.toLowerAscii())
+      if result == 0:
+        result = cmp(leftTitle, rightTitle)
+  )
+  controller.childIdentifiers[""] = move identifiers
+  controller.reindexFontPickerChildren("")
 
 func fontPickerLanguageIdentifier(language: string): string =
   "system-font-language:" & language.toLowerAscii()
 
 func fontPickerFamilyIdentifier(languageIdentifier, familyIdentifier: string): string =
   languageIdentifier & ":family:" & familyIdentifier
+
+func fontPickerFaceIdentifier(languageIdentifier, faceIdentifier: string): string =
+  languageIdentifier & ":face:" & faceIdentifier
 
 func fontPickerFaceTitle(face: FontCatalogFace): string =
   result = if face.style.toLowerAscii() == "regular": "Normal" else: face.style
@@ -56,6 +117,118 @@ proc addFontPickerLanguage(controller: FontPickerController, language: string): 
   result = language.fontPickerLanguageIdentifier()
   if result notin controller.items:
     controller.addFontPickerItem(cascadeItem(result, language))
+    controller.sortFontPickerLanguages()
+
+proc addFontCatalogEntry(controller: FontPickerController, entry: FontCatalogEntry) =
+  for face in entry.faces:
+    let languages =
+      if face.languages.len > 0:
+        face.languages
+      else:
+        @[face.language]
+    for language in languages:
+      let
+        languageIdentifier = controller.addFontPickerLanguage(language)
+        familyIdentifier =
+          languageIdentifier.fontPickerFamilyIdentifier(entry.identifier)
+        faceIdentifier = languageIdentifier.fontPickerFaceIdentifier(face.identifier)
+      if familyIdentifier notin controller.items:
+        controller.addFontPickerItem(
+          cascadeItem(
+            familyIdentifier, entry.family, parentIdentifier = languageIdentifier
+          )
+        )
+      controller.addFontPickerItem(
+        cascadeItem(
+          faceIdentifier,
+          face.fontPickerFaceTitle(),
+          parentIdentifier = familyIdentifier,
+          leaf = true,
+          objectValue = toObj(face.path),
+        )
+      )
+      controller.faces[faceIdentifier] = face
+
+proc reportFontLoadingProgress(
+    controller: FontPickerController,
+    loadedEntryCount, loadedFaceCount: int,
+    finished = false,
+) =
+  if controller.progressHandler.isNil:
+    return
+  let prefix = if finished: "Loaded" else: "Loading fonts:"
+  controller.progressHandler(
+    prefix & " " & $loadedEntryCount & " families, " & $loadedFaceCount & " faces"
+  )
+
+proc reloadFontPickerIfVisible(controller: FontPickerController) =
+  if controller.fontPicker.isNil or controller.fontPicker.isHiddenOrHasHiddenAncestor():
+    return
+  controller.fontPicker.reloadData()
+  controller.needsFontPickerReload = false
+  controller.pendingFontPickerBatchCount = 0
+
+proc loadFontCatalog(loader: FontCatalogLoader) {.slot.} =
+  try:
+    var
+      batch = newSeqOfCap[FontCatalogEntry](FontCatalogBatchSize)
+      loadedEntryCount = 0
+      loadedFaceCount = 0
+    for catalogEntry in systemFontCatalog():
+      var loadedEntry = catalogEntry
+      for face in loadedEntry.faces.mitems:
+        face.loadFontCatalogFaceMetadata()
+        inc loadedFaceCount
+      batch.add move loadedEntry
+      inc loadedEntryCount
+      if batch.len == FontCatalogBatchSize:
+        emit loader.fontCatalogBatchLoaded(
+          move batch, loadedEntryCount, loadedFaceCount
+        )
+        batch = newSeqOfCap[FontCatalogEntry](FontCatalogBatchSize)
+    if batch.len > 0:
+      emit loader.fontCatalogBatchLoaded(move batch, loadedEntryCount, loadedFaceCount)
+    emit loader.fontCatalogLoadingFinished(loadedEntryCount, loadedFaceCount)
+  except CatchableError as error:
+    emit loader.fontCatalogLoadingFailed(error.msg)
+
+proc didLoadFontCatalogBatch(
+    controller: FontPickerController,
+    entries: seq[FontCatalogEntry],
+    loadedEntryCount: int,
+    loadedFaceCount: int,
+) {.slot.} =
+  for entry in entries:
+    controller.addFontCatalogEntry(entry)
+  controller.needsFontPickerReload = true
+  inc controller.pendingFontPickerBatchCount
+  if controller.pendingFontPickerBatchCount >= FontCatalogBatchesPerReload:
+    controller.reloadFontPickerIfVisible()
+  controller.reportFontLoadingProgress(loadedEntryCount, loadedFaceCount)
+
+proc didFinishLoadingFontCatalog(
+    controller: FontPickerController, loadedEntryCount: int, loadedFaceCount: int
+) {.slot.} =
+  if controller.needsFontPickerReload:
+    controller.reloadFontPickerIfVisible()
+  controller.reportFontLoadingProgress(
+    loadedEntryCount, loadedFaceCount, finished = true
+  )
+
+proc didFailLoadingFontCatalog(
+    controller: FontPickerController, message: string
+) {.slot.} =
+  if not controller.progressHandler.isNil:
+    controller.progressHandler("Font loading failed: " & message)
+
+protocol FontPickerTabDelegate of TabViewDelegate:
+  method didSelectTabViewItem(
+      controller: FontPickerController, tabView: TabView, item: TabViewItem
+  ) =
+    discard tabView
+    if not item.isNil and item.identifier() == "typography" and
+        controller.needsFontPickerReload:
+      controller.reloadFontPickerIfVisible()
 
 protocol FontPickerDataSource of CascadingDataSource:
   method cascadingNumberOfChildren(
@@ -136,36 +309,10 @@ proc newFontPickerController(): FontPickerController =
       objectValue = toObj(""),
     )
   )
-  for entry in systemFontCatalog():
-    for face in entry.faces:
-      let
-        languageIdentifier = result.addFontPickerLanguage(face.language)
-        familyIdentifier =
-          languageIdentifier.fontPickerFamilyIdentifier(entry.identifier)
-      if familyIdentifier notin result.items:
-        result.addFontPickerItem(
-          cascadeItem(
-            familyIdentifier, entry.family, parentIdentifier = languageIdentifier
-          )
-        )
-      result.addFontPickerItem(
-        cascadeItem(
-          face.identifier,
-          face.fontPickerFaceTitle(),
-          parentIdentifier = familyIdentifier,
-          leaf = true,
-          objectValue = toObj(face.path),
-        )
-      )
-      result.faces[face.identifier] = face
-  for parentIdentifier, identifiers in result.childIdentifiers:
-    var indexes = initTable[string, int]()
-    for index, identifier in identifiers:
-      indexes[identifier] = index
-    result.childIndexes[parentIdentifier] = indexes
   initResponder(result)
   discard result.withProtocol(FontPickerDataSource)
   discard result.withProtocol(FontPickerDelegate)
+  discard result.withProtocol(FontPickerTabDelegate)
 
 const TextStyleRoles = [
   srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srMonoTextView,
@@ -286,12 +433,14 @@ var
   previewFontSize = dfs14
   appliedFontPath = ""
   appliedFontSize = dfs14
+  fontLoadingStatus = "Loading system fonts…"
 
 proc updatePreview() =
   preview.appearance = activeTheme.appearanceFor(previewFontPath, previewFontSize)
   status.text =
     "Previewing " & previewFontPath.fontTitle() & " · " & previewFontSize.title() &
-    " — application: " & appliedFontPath.fontTitle() & " · " & appliedFontSize.title()
+    " — application: " & appliedFontPath.fontTitle() & " · " & appliedFontSize.title() &
+    " · " & fontLoadingStatus
 
 proc applyAppearance() =
   app.setAppearance(activeTheme.appearanceFor(appliedFontPath, appliedFontSize))
@@ -329,8 +478,12 @@ themePicker.action = themeChanged
 fontPicker.columnWidth = 180.0
 fontPicker.minColumnWidth = 140.0
 fontPicker.accessibilityLabel = "Font"
+fontPickerController.fontPicker = fontPicker
 fontPickerController.selectionHandler = proc(path: string) =
   previewFontPath = path
+  updatePreview()
+fontPickerController.progressHandler = proc(message: string) =
+  fontLoadingStatus = message
   updatePreview()
 when defined(settingsDemoBenchmark):
   let cascadingSetupStartedAt = getMonoTime()
@@ -371,6 +524,7 @@ discard
   tabs.addTabViewItem(newTabViewItem("Appearance", appearancePage.view, "appearance"))
 discard
   tabs.addTabViewItem(newTabViewItem("Typography", typographyPage.view, "typography"))
+tabs.delegate = fontPickerController
 tabs.setHuggingPriority(LayoutPriorityLow, laVertical)
 tabs.setCompressionPriority(LayoutPriorityRequired, laVertical)
 
@@ -390,4 +544,36 @@ when defined(settingsDemoBenchmark):
   echo "settings demo setup: ",
     (getMonoTime() - settingsDemoStartedAt).inMilliseconds, " ms"
 else:
-  app.runWindow(panel, root, themePicker)
+  startLocalThreadDefault()
+  let fontLoadingPool = newSigilThreadPool(workers = 2)
+  fontLoadingPool.start()
+  var fontCatalogLoader = FontCatalogLoader()
+  let fontCatalogLoaderProxy = fontCatalogLoader.moveToThread(fontLoadingPool)
+  connectThreaded(
+    fontPickerController, fontCatalogLoadRequested, fontCatalogLoaderProxy,
+    loadFontCatalog,
+  )
+  connectThreaded(
+    fontCatalogLoaderProxy,
+    fontCatalogBatchLoaded,
+    fontPickerController,
+    FontPickerController.didLoadFontCatalogBatch(),
+  )
+  connectThreaded(
+    fontCatalogLoaderProxy,
+    fontCatalogLoadingFinished,
+    fontPickerController,
+    FontPickerController.didFinishLoadingFontCatalog(),
+  )
+  connectThreaded(
+    fontCatalogLoaderProxy,
+    fontCatalogLoadingFailed,
+    fontPickerController,
+    FontPickerController.didFailLoadingFontCatalog(),
+  )
+  emit fontPickerController.fontCatalogLoadRequested()
+  try:
+    app.runWindow(panel, root, themePicker)
+  finally:
+    fontLoadingPool.stop()
+    fontLoadingPool.join()
