@@ -4,6 +4,8 @@
   useMalloc
 --mm:
   arc
+--threads:
+  on
 --define:
   release
 --mangle:

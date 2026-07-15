@@ -92,6 +92,13 @@ window without entering the application run loop. Pass an initial responder as
 the third argument, such as `app.runWindow(window, root, textField)`, when a
 specific control should receive focus first.
 
+The application run loop keeps NimKit views, responders, signal-slot dispatch,
+animations, native windows, and platform services on the main thread. When the
+selected FigDraw backend supports it, rendering runs on a dedicated thread and
+receives moved render trees through bounded latest-frame channels; unsupported
+backends render directly on the main thread. Merenda builds with threads and ARC
+enabled, as configured by the repository's `config.nims`.
+
 Constraint-wrapped views expose their minimum layout through `fittingSize()`.
 Set `window.automaticallyAdjustsContentMinSize = true` to keep a resizable
 window from becoming smaller than that fitting size. Tab views include the

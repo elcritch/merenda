@@ -1638,8 +1638,7 @@ proc endPopupSession(comboBox: ComboBox, reason = tdrProgrammatic): bool =
   owner.endTransientSession(reason)
 
 proc popupWindowActive(comboBox: ComboBox): bool =
-  not comboBox.xPopupWindow.isNil and not comboBox.xPopupWindow.isClosed and
-    comboBox.xPopupWindow.nativeReady
+  not comboBox.xPopupWindow.isNil and not comboBox.xPopupWindow.isClosed
 
 proc popupPresentationPreference(comboBox: ComboBox): PopupPresentation =
   if comboBox.xPopupPresentation == ppAutomatic:
@@ -1710,11 +1709,7 @@ proc openPopupWindow(comboBox: ComboBox) =
   comboBox.xPopupWindow = popupWindow
   popupWindow.makeKeyAndOrderFront()
   popupWindow.ensureNativeWindow()
-  if popupWindow.nativeReady:
-    discard popupWindow.makeFirstResponder(popupView)
-  else:
-    comboBox.xPopupWindow = nil
-    popupWindow.close()
+  discard popupWindow.makeFirstResponder(popupView)
 
 proc closePopupWindow(comboBox: ComboBox, restoreOwner = true) =
   let popupWindow = comboBox.xPopupWindow

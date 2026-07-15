@@ -10,7 +10,7 @@ const FlatInset = 1.6'f32
 
 type FlatTransparentChrome = ref object of Chrome
 
-var fallbackFlatTransparentChrome {.threadvar.}: Chrome
+var fallbackFlatTransparentChrome: Chrome
 
 func withPart(chrome: ChromeContext, part: ChromePart): ChromeContext =
   result = chrome

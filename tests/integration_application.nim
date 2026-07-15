@@ -5,6 +5,7 @@ from figdraw/windowing/siwinshim import nil
 import sigils/core
 
 import merenda/nimkit
+from merenda/nimkit/app/backend import join, newThreadRendererRuntime, start, stop
 
 proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
@@ -1250,8 +1251,8 @@ suite "nimkit application":
         check combo.stringValue == "Medium"
         check window.firstResponder == combo
         let nativeWindow = window.nativeWindowOrNil()
-        if not nativeWindow.isNil:
-          check siwinshim.focused(nativeWindow)
+        check window.isKeyWindow
+        check app.keyWindow == window
 
         check window.mouseDownAt(initPoint(24, 24))
         check combo.popupOpen
@@ -1281,14 +1282,52 @@ suite "nimkit application":
         check combo.indexOfSelectedItem() == 1
         check other.indexOfSelectedItem() == -1
         check window.firstResponder == combo
-        if not nativeWindow.isNil:
-          check siwinshim.focused(nativeWindow)
+        check window.isKeyWindow
+        check app.keyWindow == window
       except CatchableError:
         skip()
         break nativeComboPopup
       finally:
         combo.closePopup()
         window.close()
+
+  test "threaded combo boxes create popup windows on the application thread":
+    block threadedComboPopup:
+      let
+        app = newApplication()
+        window = newWindow("Nimkit Pending Combo Popup", frame = rect(80, 80, 260, 160))
+        root = newView(frame = rect(0, 0, 260, 160))
+        combo = newComboBox(["Low", "Medium", "High"], frame = rect(16, 16, 140, 24))
+      var runtime = newThreadRendererRuntime()
+
+      root.addSubview(combo)
+      window.setContentView(root)
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+
+      try:
+        check app.runForFrames(1) == 1
+        check window.nativeReady
+        runtime.start()
+        window.useThreadRenderer(runtime.client)
+
+        check window.mouseDownAt(initPoint(24, 24))
+        check combo.popupOpen
+        let popup = window.transientWindow()
+        check not popup.isNil
+        if popup.isNil:
+          break threadedComboPopup
+        check not popup.isClosed
+        check popup.nativeReady
+      except CatchableError:
+        skip()
+        break threadedComboPopup
+      finally:
+        combo.closePopup()
+        window.useThreadRenderer(nil)
+        window.close()
+        runtime.stop()
+        runtime.join()
 
   test "native combo boxes can force inline popup drawing":
     block nativeInlineComboPopup:

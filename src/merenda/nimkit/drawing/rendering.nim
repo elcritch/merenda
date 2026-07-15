@@ -244,6 +244,13 @@ proc cacheCanReuse(root: View, appearance: Appearance): bool =
   root.xHasCachedRenders and not root.needsDisplayInSubtree() and
     root.xCachedAppearance.sameAppearance(appearance)
 
+proc invalidateRenderCache*(root: View) =
+  if root.isNil:
+    return
+  root.xCachedRenders = nil
+  root.xCachedRenderResources = nil
+  root.xHasCachedRenders = false
+
 proc buildRenders*(root: View, appearance: Appearance): Renders =
   discard root.prepareDisplaySubtree()
   if root.cacheCanReuse(appearance):
@@ -253,6 +260,7 @@ proc buildRenders*(root: View, appearance: Appearance): Renders =
   renderViewInto(context, root, appearance)
   result = context.renders
   root.xCachedRenders = result
+  root.xCachedRenderResources = context.resources
   root.xCachedAppearance = initAppearance(appearance.theme)
   root.xHasCachedRenders = true
   root.finishDisplaySubtree()
@@ -262,3 +270,8 @@ proc buildRenders*(root: View, theme: Theme): Renders =
 
 proc buildRenders*(root: View): Renders =
   buildRenders(root, root.effectiveAppearance())
+
+proc renderResources*(root: View): RenderResourceManifest =
+  if root.isNil:
+    return nil
+  root.xCachedRenderResources

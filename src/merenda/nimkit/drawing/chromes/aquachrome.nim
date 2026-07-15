@@ -16,7 +16,7 @@ type
 
 const AquaButtonInset = 2.0'f32
 
-var fallbackAquaChrome {.threadvar.}: Chrome
+var fallbackAquaChrome: Chrome
 
 func transparentFill(): Fill =
   fill(color(0.0, 0.0, 0.0, 0.0))

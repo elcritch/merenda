@@ -1,4 +1,4 @@
-import std/[algorithm, hashes, options, unicode]
+import std/[algorithm, hashes, options, sets, unicode]
 
 import sigils/core
 
@@ -6,6 +6,7 @@ when defined(useNativeDynlib):
   import figdraw/dynlib except Hash
 else:
   import figdraw
+  from figdraw/common/typefaces import getFigFont
 from pkg/vmath import vec2, x, y
 
 import ../drawing
@@ -145,6 +146,7 @@ type
   TextLayoutResult* = object
     snapshot*: TextLayoutSnapshot
     arrangement: GlyphArrangement
+    fontRefs: seq[FontRef]
 
   TextLayoutManager* = ref object of DynamicAgent
     xTextStorage: TextStorage
@@ -156,6 +158,7 @@ type
     xClient: DynamicAgent
     xDelegate: DynamicAgent
     xLayout: GlyphArrangement
+    xFontRefs: seq[FontRef]
     xLayoutRect: Rect
     xSnapshot: TextLayoutSnapshot
     xInvalidatedRanges: seq[TextRange]
@@ -1099,6 +1102,7 @@ proc defaultUpdateLayout(manager: TextLayoutManager) =
     oldUsedRect = oldSnapshot.usedRect
     oldContentSize = oldSnapshot.contentSize
     layout = manager.xBackend.layoutText(request)
+  manager.xFontRefs = layout.fontRefs
   manager.xLayout = layout.arrangement
   manager.xLayoutRect = request.effectiveContainers().virtualLayoutRect()
   manager.xSnapshot = layout.snapshot
@@ -1125,6 +1129,11 @@ proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult =
     wraps = request.wraps or containers.anyContainerWraps()
   result.arrangement =
     textLayout(rect, request.storage, request.style, request.alignment, wraps)
+  var retainedFontIds = initHashSet[FontId]()
+  for glyphFont in result.arrangement.fonts:
+    if glyphFont.fontId notin retainedFontIds:
+      retainedFontIds.incl glyphFont.fontId
+      result.fontRefs.add(fontRef(getFigFont(glyphFont.fontId)))
   let manager = TextLayoutManager(
     xTextStorage: request.storage,
     xTextContainer: containers[0],
@@ -1132,6 +1141,7 @@ proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult =
     xTextStyle: request.style,
     xAlignment: request.alignment,
     xLayout: result.arrangement,
+    xFontRefs: result.fontRefs,
     xLayoutRect: rect,
     xHasLayout: true,
   )
@@ -1140,6 +1150,10 @@ proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult =
 proc glyphArrangement*(manager: TextLayoutManager): GlyphArrangement =
   manager.updateLayout()
   manager.xLayout
+
+proc retainedFontCount*(manager: TextLayoutManager): Natural =
+  manager.updateLayout()
+  manager.xFontRefs.len.Natural
 
 proc layoutBounds*(manager: TextLayoutManager): Rect =
   manager.updateLayout()

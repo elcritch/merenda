@@ -14,6 +14,7 @@ import ../foundation/types
 import ../view/views
 import ./userdefaults
 import ./animations
+import ./backend as nimkitBackend
 import ./panels
 import ../app/windows
 
@@ -67,6 +68,9 @@ type
     xUserDefaults: UserDefaults
     xAnimationScheduler: AnimationScheduler
     xAnimationClock: AnimationSchedulerClock
+    xRenderExecutionMode: RenderExecutionMode
+    xThreadRenderer: ThreadRendererClient
+    xApplicationThreadId: int
 
 const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
@@ -96,6 +100,7 @@ proc noteWindowClosed(app: Application, window: Window)
 proc keyEquivalentDispatchStart(app: Application): Responder
 proc syncMainMenuPresentation(app: Application)
 proc syncMenuBarPresenters(app: Application)
+proc runApplicationFrame(app: Application): int
 
 proc resolvedApplicationName(name: string): string =
   if name.len > 0:
@@ -775,6 +780,8 @@ proc addWindow*(app: Application, window: Window) =
   app.includeOrderedWindow(window)
   window.setNextResponder(app)
   window.setInheritedAppearance(app.effectiveAppearance())
+  if not app.xThreadRenderer.isNil:
+    window.useThreadRenderer(app.xThreadRenderer)
   if app.xMainWindow.isNil:
     app.setMainWindow(window)
   if app.xKeyWindow.isNil:
@@ -790,6 +797,37 @@ proc orderedWindows*(app: Application): lent seq[Window] =
 
 proc isRunning*(app: Application): bool =
   app.xRunning
+
+proc renderExecutionMode*(app: Application): RenderExecutionMode =
+  app.xRenderExecutionMode
+
+proc `renderExecutionMode=`*(app: Application, mode: RenderExecutionMode) =
+  if app.xRunning:
+    raise
+      newException(ValueError, "set renderExecutionMode before running the application")
+  app.xRenderExecutionMode = mode
+
+proc usesDedicatedRenderer(app: Application): bool =
+  case app.xRenderExecutionMode
+  of remMainThread:
+    false
+  of remDedicatedThread:
+    if not dedicatedRendererSupported():
+      raise newException(ValueError, "the current backend has no dedicated renderer")
+    true
+  of remAutomatic:
+    dedicatedRendererSupported()
+
+proc isThreaded*(app: Application): bool =
+  not app.xThreadRenderer.isNil and app.xThreadRenderer.isRunning()
+
+proc applicationThreadId*(app: Application): int =
+  app.xApplicationThreadId
+
+proc rendererThreadId*(app: Application): int =
+  if not app.xThreadRenderer.isNil:
+    return app.xThreadRenderer.rendererThreadId()
+  -1
 
 proc keyEquivalentDispatchStart(app: Application): Responder =
   if not app.xKeyWindow.isNil:
@@ -974,6 +1012,38 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
   of msmWindowModal:
     window == session.parentWindow
 
+proc runApplicationFrame(app: Application): int =
+  discard app.drainAnimations()
+  var
+    removedWindow = false
+    hostWindowCreated = false
+    idx = 0
+  while idx < app.xWindows.len:
+    let window = app.xWindows[idx]
+    if window.isNil or window.isClosed:
+      if not window.isNil and window.nextResponder() == Responder(app):
+        window.clearNextResponder()
+      if not window.isNil:
+        discard app.xOrderedWindows.removeWindow(window)
+        app.restoreFocusAfterWindowClosed(window)
+      app.xWindows.delete(idx)
+      removedWindow = true
+    else:
+      if window.isVisible:
+        let wasNativeReady = window.nativeReady
+        if not app.xThreadRenderer.isNil:
+          window.useThreadRenderer(app.xThreadRenderer)
+        window.pumpNativeWindowFrame()
+        if not wasNativeReady and window.nativeReady:
+          hostWindowCreated = true
+        if not window.isClosed:
+          inc result
+      inc idx
+  if removedWindow:
+    app.updateWindowsMenu()
+  if hostWindowCreated:
+    app.syncMainMenuPresentation()
+
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:
     return 0
@@ -981,35 +1051,7 @@ proc runForFrames*(app: Application, frames: Natural): int =
   var keepRunning = wasRunning
   app.xRunning = true
   while app.xRunning:
-    discard app.drainAnimations()
-    var activeWindows = 0
-    var removedWindow = false
-    var hostWindowCreated = false
-    var idx = 0
-    while idx < app.xWindows.len:
-      let window = app.xWindows[idx]
-      if window.isNil or window.isClosed:
-        if not window.isNil and window.nextResponder() == Responder(app):
-          window.clearNextResponder()
-        if not window.isNil:
-          discard app.xOrderedWindows.removeWindow(window)
-          app.restoreFocusAfterWindowClosed(window)
-        app.xWindows.delete(idx)
-        removedWindow = true
-      else:
-        if window.isVisible:
-          let wasNativeReady = window.nativeReady
-          window.pumpNativeWindowFrame()
-          if not wasNativeReady and window.nativeReady:
-            hostWindowCreated = true
-          if not window.isClosed:
-            inc activeWindows
-        inc idx
-    if removedWindow:
-      app.updateWindowsMenu()
-    if hostWindowCreated:
-      app.syncMainMenuPresentation()
-
+    let activeWindows = app.runApplicationFrame()
     inc result
     if result >= frames.int:
       break
@@ -1021,42 +1063,35 @@ proc runForFrames*(app: Application, frames: Natural): int =
     app.xRunning = keepRunning
 
 proc run*(app: Application) =
-  app.xRunning = true
-  while app.xRunning:
-    discard app.drainAnimations()
-    var activeWindows = 0
-    var removedWindow = false
-    var hostWindowCreated = false
-    var idx = 0
-    while idx < app.xWindows.len:
-      let window = app.xWindows[idx]
-      if window.isNil or window.isClosed:
-        if not window.isNil and window.nextResponder() == Responder(app):
-          window.clearNextResponder()
+  app.xApplicationThreadId = getThreadId()
+  var runtime: ThreadRendererRuntime
+  try:
+    if app.usesDedicatedRenderer():
+      runtime = newThreadRendererRuntime()
+      runtime.start()
+      app.xThreadRenderer = runtime.client
+      for window in app.xWindows:
         if not window.isNil:
-          discard app.xOrderedWindows.removeWindow(window)
-          app.restoreFocusAfterWindowClosed(window)
-        app.xWindows.delete(idx)
-        removedWindow = true
-      else:
-        if window.isVisible:
-          let wasNativeReady = window.nativeReady
-          window.pumpNativeWindowFrame()
-          if not wasNativeReady and window.nativeReady:
-            hostWindowCreated = true
-          if not window.isClosed:
-            inc activeWindows
-        inc idx
-    if removedWindow:
-      app.updateWindowsMenu()
-    if hostWindowCreated:
-      app.syncMainMenuPresentation()
+          window.useThreadRenderer(runtime.client)
 
-    if activeWindows == 0:
-      break
-    sleep(8)
-  app.xRunning = false
-  app.stopAnimationClock()
+    app.xRunning = true
+    while app.xRunning:
+      let activeWindows = app.runApplicationFrame()
+      if activeWindows == 0:
+        app.xRunning = false
+      elif app.xRunning:
+        sleep(8)
+  finally:
+    try:
+      for window in app.xWindows:
+        if not window.isNil:
+          window.useThreadRenderer(nil)
+    finally:
+      runtime.stop()
+      runtime.join()
+      app.xThreadRenderer = nil
+      app.xRunning = false
+      app.stopAnimationClock()
 
 proc stop*(app: Application) =
   app.xRunning = false

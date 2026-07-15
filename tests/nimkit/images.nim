@@ -1,4 +1,4 @@
-import std/[os, unittest]
+import std/[hashes, os, tables, unittest]
 
 import pkg/pixie
 import pkg/pixie/fileformats/png
@@ -13,6 +13,55 @@ import merenda/nimkit
 proc testImage(width, height: int): Image =
   result = newImage(width, height)
   result.fill(rgba(64, 128, 192, 255))
+
+when not defined(useNativeDynlib):
+  type RecoveryContext = ref object of BackendContext
+    entries: Table[Hash, figdraw.Rect]
+    entryMetadata: Table[Hash, AtlasEntryMeta]
+    packedArea: int
+    uploadCount: int
+    resetOnSecondUpload: bool
+
+  method entriesPtr*(context: RecoveryContext): ptr Table[Hash, figdraw.Rect] =
+    context.entries.addr
+
+  method atlasEntryMetaPtr*(context: RecoveryContext): var Table[Hash, AtlasEntryMeta] =
+    context.entryMetadata
+
+  method atlasSize*(context: RecoveryContext): int =
+    16
+
+  method atlasPackedArea*(context: RecoveryContext): int =
+    context.packedArea
+
+  method hasImage*(context: RecoveryContext, key: Hash): bool =
+    key in context.entries
+
+  method putImage*(context: RecoveryContext, image: ImgObj) =
+    inc context.uploadCount
+    if context.resetOnSecondUpload and context.uploadCount == 2:
+      context.resetOnSecondUpload = false
+      context.resetImageAtlas(16)
+    context.entries[image.id.Hash] =
+      figdraw.rect(0, 0, 1.0'f32 / 16.0'f32, 1.0'f32 / 16.0'f32)
+
+  method resetImageAtlas*(context: RecoveryContext, minimumSize: int) =
+    discard minimumSize
+    context.entries.clear()
+    context.entryMetadata.clear()
+    context.packedArea = 0
+    context.noteAtlasRebuilt()
+
+  proc newRecoveryRenderer(): tuple[
+    context: RecoveryContext, renderer: FigRenderer[NoRendererBackendState]
+  ] =
+    result.context = RecoveryContext(
+      entries: initTable[Hash, figdraw.Rect](),
+      entryMetadata: initTable[Hash, AtlasEntryMeta](),
+      packedArea: 255,
+      resetOnSecondUpload: true,
+    )
+    result.renderer = newFigRenderer(result.context)
 
 suite "nimkit image resources":
   test "image resources can be created from pixels data files and names":
@@ -79,3 +128,137 @@ suite "nimkit image resources":
         check node.screenBox.w == 12.0
         check node.screenBox.h == 6.0
     check foundImage
+
+  test "image sources stay lazy and copies have independent identities":
+    let
+      source = testImage(7, 5)
+      image = newImageResource(source)
+      copied = image.copyImageResource()
+
+    check not hasImage(image.imageId())
+    check image.imageId() != copied.imageId()
+    check copied.size == image.size
+    check copied.pixels().data == image.pixels().data
+
+  test "automatic preload explicit preload and named pins are independent":
+    let image = newImageResource(testImage(8, 8), cachePolicy = icpAlways)
+
+    check image.isImagePreloaded()
+    image.preloadImage()
+    image.cachePolicy = icpNever
+    check image.isImagePreloaded()
+    image.unpreloadImage()
+    check not image.isImagePreloaded()
+
+    image.pinImage()
+    registerImage("retained-image", image)
+    check image.isImagePinned()
+    check removeImageNamed("retained-image")
+    check image.isImagePinned()
+    image.unpinImage()
+    check not image.isImagePinned()
+
+  test "preload admission is bounded and supports readmission":
+    var images: seq[ImageResource]
+    for _ in 0 .. MaximumPreloadedImages:
+      let image = newImageResource(testImage(1, 1))
+      image.preloadImage()
+      images.add(image)
+
+    check not images[0].isImagePreloaded()
+    check images[^1].isImagePreloaded()
+    images[^1].unpreloadImage()
+    check not images[^1].isImagePreloaded()
+    images[^1].preloadImage()
+    check images[^1].isImagePreloaded()
+
+    for image in images:
+      image.unpreloadImage()
+
+  test "managed image messages publish replacement pixels under one image ID":
+    clearImageCache()
+    let messages = newImageMessageSubscription()
+    let
+      first = newImageResource(testImage(4, 4), name = "replacement-message")
+      secondPixels = testImage(4, 4)
+    secondPixels[0, 0] = rgba(220, 40, 10, 255).rgbx()
+    let second = newImageResource(secondPixels, name = "replacement-message")
+    var
+      firstManifest = initRenderResourceManifest()
+      secondManifest = initRenderResourceManifest()
+    firstManifest.addImage(first)
+    secondManifest.addImage(second)
+
+    var
+      message: ImageMsg
+      putCount = 0
+      lastPixel: ColorRGBX
+    while messages.tryRecvImageMsg(message):
+      if message.kind == ImkPutPixie and message.id == first.imageId():
+        inc putCount
+        lastPixel = message.pimg[0, 0]
+    check first.imageId() == second.imageId()
+    check putCount == 2
+    check lastPixel == rgba(220, 40, 10, 255).rgbx()
+
+  test "draw manifests include visible images and omit hidden images":
+    let
+      image = newImageResource(testImage(10, 4))
+      root = newView(frame = rect(0, 0, 80, 40))
+      imageView = newImageView(image, frame = rect(2, 3, 10, 4))
+    root.addSubview(imageView)
+
+    discard buildRenders(root)
+    check root.renderResources().imageCount == 1
+    check hasImage(image.imageId())
+
+    imageView.hidden = true
+    discard buildRenders(root)
+    check root.renderResources().imageCount == 0
+    check not hasImage(image.imageId())
+
+  test "render manifests release active images while explicit pins retain them":
+    clearImageCache()
+    let image = newImageResource(testImage(6, 6))
+    var manifest = initRenderResourceManifest()
+    manifest.addImage(image)
+    check hasImage(image.imageId())
+    manifest = nil
+    check not hasImage(image.imageId())
+
+    image.pinImage()
+    check hasImage(image.imageId())
+    manifest = initRenderResourceManifest()
+    manifest.addImage(image)
+    manifest = nil
+    check hasImage(image.imageId())
+    image.unpinImage()
+    check not hasImage(image.imageId())
+
+  when not defined(useNativeDynlib):
+    test "managed subscriptions recover renderer generations and pressure rebuilds":
+      clearImageCache()
+      let
+        first = newImageResource(testImage(2, 2))
+        second = newImageResource(testImage(3, 3))
+        manager = newRenderResourceManager()
+        recovery = newRecoveryRenderer()
+      var manifest = initRenderResourceManifest()
+      manifest.addImage(first)
+      manifest.addImage(second)
+
+      manager.prepare(recovery.renderer)
+      check first.imageId().Hash in recovery.context.entries
+      check second.imageId().Hash in recovery.context.entries
+      check manager.metrics.generationRecoveryCount > 0
+
+      recovery.context.packedArea = 255
+      manager.prepare(recovery.renderer)
+      check manager.metrics.pressureRebuildCount == 1
+      check manager.metrics.atlasRebuildCount >= 2
+      check manager.metrics.atlasPackedRatio < ImageAtlasPressureThreshold
+      check manager.metrics.replayCount >= 2
+      check recovery.context.uploadCount >= 6
+
+      manager.clear()
+      recovery.renderer.processImageMessages()

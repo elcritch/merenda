@@ -66,7 +66,7 @@ type
     seamFill*: Fill
     highlightFill*: Fill
 
-var fallbackDefaultChrome {.threadvar.}: Chrome
+var fallbackDefaultChrome: Chrome
 
 protocol ChromeProtocol:
   method chromeFillFor*(context: ChromeContext): Fill {.optional.}
