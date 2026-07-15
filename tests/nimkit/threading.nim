@@ -1,4 +1,4 @@
-import std/[assertions, unittest]
+import std/[assertions, os, unittest]
 
 import figdraw
 import pkg/pixie
@@ -6,17 +6,16 @@ import threading/channels
 
 import merenda/nimkit/app/application
 import merenda/nimkit/app/backend as nimkitBackend
-import merenda/nimkit/foundation/events as nimkitEvents
 import merenda/nimkit/foundation/types as nimkitTypes
 import merenda/nimkit/drawing
 
-const ThreadHostEventBurst = 1_024
-
-proc postTextInputBurst(queue: nimkitBackend.ThreadHostEventQueue) {.thread.} =
-  for index in 0 ..< ThreadHostEventBurst:
-    queue.post(
-      nimkitBackend.ThreadHostEvent(kind: nimkitBackend.theTextInput, text: $index)
-    )
+proc waitForRendererThread(client: nimkitBackend.ThreadRendererClient): int =
+  for _ in 0 ..< 100:
+    result = client.rendererThreadId()
+    if result >= 0:
+      return
+    sleep(1)
+  return -1
 
 proc newRectangleRenders(): Renders =
   result = newRenders()
@@ -25,69 +24,23 @@ proc newRectangleRenders(): Renders =
   )
 
 suite "NimKit threading":
-  test "discrete host events survive a stalled consumer":
-    let queue = nimkitBackend.newThreadHostEventQueue()
-    var producer: Thread[nimkitBackend.ThreadHostEventQueue]
-    createThread(producer, postTextInputBurst, queue)
-    joinThread(producer)
+  test "dedicated render runtime owns a different thread":
+    let primaryThread = getThreadId()
+    var runtime = nimkitBackend.newThreadRendererRuntime()
+    runtime.start()
+    defer:
+      runtime.stop()
+      runtime.join()
 
-    var event: nimkitBackend.ThreadHostEvent
-    for index in 0 ..< ThreadHostEventBurst:
-      doAssert queue.poll(event)
-      check event.kind == nimkitBackend.theTextInput
-      check event.text == $index
-    check not queue.poll(event)
-
-  test "consecutive mouse moves coalesce without crossing discrete events":
-    let queue = nimkitBackend.newThreadHostEventQueue()
-    queue.post(
-      nimkitBackend.ThreadHostEvent(
-        kind: nimkitBackend.theMouseMove,
-        mouseEvent: nimkitEvents.MouseEvent(timestamp: 1.0),
-      )
-    )
-    queue.post(
-      nimkitBackend.ThreadHostEvent(
-        kind: nimkitBackend.theMouseMove,
-        mouseEvent: nimkitEvents.MouseEvent(timestamp: 2.0),
-      )
-    )
-    queue.post(
-      nimkitBackend.ThreadHostEvent(kind: nimkitBackend.theTextInput, text: "barrier")
-    )
-    queue.post(
-      nimkitBackend.ThreadHostEvent(
-        kind: nimkitBackend.theMouseMove,
-        mouseEvent: nimkitEvents.MouseEvent(timestamp: 3.0),
-      )
-    )
-    queue.post(
-      nimkitBackend.ThreadHostEvent(
-        kind: nimkitBackend.theMouseMove,
-        mouseEvent: nimkitEvents.MouseEvent(timestamp: 4.0),
-      )
-    )
-
-    var event: nimkitBackend.ThreadHostEvent
-    doAssert queue.poll(event)
-    check event.kind == nimkitBackend.theMouseMove
-    check event.mouseEvent.timestamp == 2.0
-    doAssert queue.poll(event)
-    check event.kind == nimkitBackend.theTextInput
-    check event.text == "barrier"
-    doAssert queue.poll(event)
-    check event.kind == nimkitBackend.theMouseMove
-    check event.mouseEvent.timestamp == 4.0
-    check not queue.poll(event)
+    let renderThread = runtime.client.waitForRendererThread()
+    check runtime.client.isRunning()
+    check renderThread >= 0
+    check renderThread != primaryThread
 
   test "render snapshots move through a bounded channel":
     let
       runtime = nimkitBackend.newThreadRenderer()
       host = nimkitBackend.newThreadHostClient(runtime.client)
-    host.requestCreation(
-      runtime.client, nimkitTypes.rect(0.0, 0.0, 40.0, 20.0), "Snapshot Test"
-    )
-
     doAssert host.submitRenders(
       ensureMove newRectangleRenders(), nimkitTypes.initSize(40.0, 20.0)
     )
@@ -116,15 +69,16 @@ suite "NimKit threading":
     check latest.logicalSize == nimkitTypes.initSize(100.0, 20.0)
     check not host.channels.renders.tryRecv(latest)
 
-  test "application loop runs on a selector thread and renderer stays primary":
+  test "application loop stays on the platform thread when rendering is direct":
     let
       primaryThread = getThreadId()
       app = newApplication("Threading Test")
+    app.renderExecutionMode = nimkitBackend.remMainThread
 
     app.run()
 
-    check app.applicationThreadId() != primaryThread
-    check app.rendererThreadId() == primaryThread
+    check app.applicationThreadId() == primaryThread
+    check app.rendererThreadId() == -1
     check not app.isThreaded()
     check not app.isRunning()
 
@@ -137,10 +91,6 @@ suite "NimKit threading":
       image = newImageResource(pixels)
     var manifest = initRenderResourceManifest()
     manifest.addImage(image)
-    host.requestCreation(
-      runtime.client, nimkitTypes.rect(0.0, 0.0, 30.0, 20.0), "Resources"
-    )
-
     doAssert host.submitRenders(
       ensureMove newRenders(), nimkitTypes.initSize(30.0, 20.0), manifest
     )
@@ -162,10 +112,6 @@ suite "NimKit threading":
       host = nimkitBackend.newThreadHostClient(runtime.client)
       first = newImageResource(pixie.newImage(2, 2))
       second = newImageResource(pixie.newImage(3, 3))
-    host.requestCreation(
-      runtime.client, nimkitTypes.rect(0.0, 0.0, 30.0, 20.0), "Resource Leases"
-    )
-
     var firstManifest = initRenderResourceManifest()
     firstManifest.addImage(first)
     doAssert host.submitRenders(

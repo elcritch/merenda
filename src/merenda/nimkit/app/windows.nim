@@ -1,4 +1,4 @@
-import std/[math, options, tables, times]
+import std/[math, options, os, tables, times]
 
 when defined(useNativeDynlib):
   import figdraw/dynlib as figrender
@@ -15,7 +15,6 @@ import ./backend as nimkitBackend
 import ./animations
 import ../responder/keybindings
 import ../drawing/rendering as nimkitRendering
-import ../drawing/renderresources
 import ../foundation/events
 import ../foundation/notifications
 import ../text/fieldeditors
@@ -140,7 +139,6 @@ type
     xHostWindow: HostWindow
     xThreadRenderer: ThreadRendererClient
     xThreadHost: ThreadHostClient
-    xThreadAnimationClockPrepared: bool
     xAnimationScheduler: AnimationScheduler
     xAnimationClock: AnimationSchedulerClock
     xInsertionPointBlinkAnimation: Animation
@@ -275,6 +273,7 @@ proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable
 proc effectiveAppearance*(window: Window): Appearance
 proc effectivePopupPresentation*(window: Window): PopupPresentation
 proc close*(window: Window)
+proc releaseThreadRenderer(window: Window, waitForRelease: bool)
 proc setKeyWindow*(window: Window, value: bool)
 proc setMainWindow*(window: Window, value: bool)
 proc postWindowNotification(window: Window, kind: NotificationKind)
@@ -510,13 +509,9 @@ proc setFrame*(window: Window, frame: Rect) =
     window.xContentView.setFrame(
       rect(0.0, 0.0, boundedFrame.size.width, boundedFrame.size.height)
     )
-  if not window.xThreadHost.isNil:
-    window.xThreadHost.sendCommand(
-      ThreadHostCommand(kind: thcSetLogicalSize, size: boundedFrame.size)
-    )
-    window.requestNativeDisplayUpdate()
-  elif not window.xHostWindow.isNil:
+  if not window.xHostWindow.isNil:
     window.xHostWindow.setLogicalSize(boundedFrame.size)
+    window.xHostWindow.updatePresentationTarget()
     window.requestNativeDisplayUpdate()
 
 proc `frame=`*(window: Window, frame: Rect) =
@@ -826,14 +821,7 @@ proc setMouseActiveView(window: Window, view: View) =
     view.active = true
 
 proc syncNativeSizeLimits(window: Window) =
-  if not window.xThreadHost.isNil:
-    window.xThreadHost.sendCommand(
-      ThreadHostCommand(kind: thcSetMinimumSize, size: window.effectiveMinimumSize())
-    )
-    window.xThreadHost.sendCommand(
-      ThreadHostCommand(kind: thcSetMaximumSize, size: window.effectiveMaximumSize())
-    )
-  elif not window.xHostWindow.isNil:
+  if not window.xHostWindow.isNil:
     window.xHostWindow.setMinimumSize(window.effectiveMinimumSize())
     window.xHostWindow.setMaximumSize(window.effectiveMaximumSize())
 
@@ -915,9 +903,7 @@ proc setContentView*(window: Window, view: View) =
 
 proc setTitle*(window: Window, title: string) =
   window.xTitle = title
-  if not window.xThreadHost.isNil:
-    window.xThreadHost.sendCommand(ThreadHostCommand(kind: thcSetTitle, title: title))
-  elif not window.xHostWindow.isNil:
+  if not window.xHostWindow.isNil:
     window.xHostWindow.setTitle(title)
 
 proc `title=`*(window: Window, title: string) =
@@ -1192,8 +1178,6 @@ proc buildRenders*(window: Window, theme: Theme): Renders =
   nimkitRendering.buildRenders(window.xContentView, theme)
 
 proc nativeWindowOrNil*(window: Window): siwinshim.Window =
-  if not window.xThreadHost.isNil:
-    return nil
   if window.xHostWindow.isNil:
     return nil
   window.xHostWindow.nativeWindowOrNil()
@@ -1208,13 +1192,9 @@ proc rendererOrNil*(
   window.xHostWindow.rendererOrNil()
 
 proc nativeReady*(window: Window): bool =
-  if not window.xThreadHost.isNil:
-    return window.xThreadHost.ready
   not window.xHostWindow.isNil and window.xHostWindow.isReady
 
 proc nativeContentScale*(window: Window): float32 =
-  if not window.xThreadHost.isNil:
-    return window.xThreadHost.contentScale
   if window.xHostWindow.isNil:
     return 1.0'f32
   window.xHostWindow.contentScale()
@@ -1235,10 +1215,7 @@ proc needsDisplayUpdate*(window: Window): bool =
   (not window.xContentView.isNil) and window.xContentView.needsDisplayUpdateInSubtree()
 
 proc requestNativeDisplayUpdate*(window: Window) =
-  if not window.xThreadHost.isNil:
-    window.xThreadHost.renderRequested = true
-    window.xThreadHost.sendCommand(ThreadHostCommand(kind: thcRequestRender))
-  elif not window.xHostWindow.isNil:
+  if not window.xHostWindow.isNil:
     window.xHostWindow.requestRender()
 
 proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.} =
@@ -1390,11 +1367,7 @@ proc orderFrontImpl(window: Window, makeKeyMain: bool) =
   if makeKeyMain:
     window.setKeyWindow(true)
     window.setMainWindow(true)
-  if not window.xThreadHost.isNil:
-    window.xThreadHost.sendCommand(
-      ThreadHostCommand(kind: thcSetVisible, visible: true)
-    )
-  elif not window.xHostWindow.isNil:
+  if not window.xHostWindow.isNil:
     window.xHostWindow.setVisible(true)
   window.notifyApplication(WindowDidOrderFrontSelector)
 
@@ -1409,21 +1382,13 @@ proc orderBack*(window: Window) =
     return
   window.xMiniaturized = false
   window.xVisibleRequested = true
-  if not window.xThreadHost.isNil:
-    window.xThreadHost.sendCommand(
-      ThreadHostCommand(kind: thcSetVisible, visible: true)
-    )
-  elif not window.xHostWindow.isNil:
+  if not window.xHostWindow.isNil:
     window.xHostWindow.setVisible(true)
   window.notifyApplication(WindowDidOrderBackSelector)
 
 proc orderOut*(window: Window) =
   window.xVisibleRequested = false
-  if not window.xThreadHost.isNil:
-    window.xThreadHost.sendCommand(
-      ThreadHostCommand(kind: thcSetVisible, visible: false)
-    )
-  elif not window.xHostWindow.isNil:
+  if not window.xHostWindow.isNil:
     window.xHostWindow.setVisible(false)
   window.notifyApplication(WindowDidOrderOutSelector)
 
@@ -1432,11 +1397,7 @@ proc miniaturize*(window: Window) =
     return
   window.xMiniaturized = true
   window.xVisibleRequested = false
-  if not window.xThreadHost.isNil:
-    window.xThreadHost.sendCommand(
-      ThreadHostCommand(kind: thcSetVisible, visible: false)
-    )
-  elif not window.xHostWindow.isNil:
+  if not window.xHostWindow.isNil:
     window.xHostWindow.setVisible(false)
   window.notifyApplication(WindowDidOrderOutSelector)
 
@@ -1615,10 +1576,8 @@ proc close*(window: Window) =
   if not window.xSheetParent.isNil and window.xSheetParent.xSheet == window:
     window.xSheetParent.xSheet = nil
     window.xSheetParent = nil
-  if not window.xThreadHost.isNil:
-    window.xThreadHost.sendCommand(ThreadHostCommand(kind: thcClose))
-    window.xThreadHost = nil
-  elif not window.xHostWindow.isNil:
+  window.releaseThreadRenderer(waitForRelease = true)
+  if not window.xHostWindow.isNil:
     window.xHostWindow.close()
     window.xHostWindow = nil
   if notifyPopupDone:
@@ -1765,6 +1724,7 @@ proc syncNativeGeometry(window: Window): Size =
   result = window.boundedWindowSize(nativeSize)
   if nativeSize != result:
     window.xHostWindow.setLogicalSize(result)
+    window.xHostWindow.updatePresentationTarget()
   if window.xFrame.size != result:
     window.xFrame.size = result
     if not window.xContentView.isNil:
@@ -1778,7 +1738,13 @@ proc renderNativeWindow*(window: Window) =
   window.xHostWindow.refreshContentScale()
   let logicalSize = window.syncNativeGeometry()
   var renders = window.buildRenders()
-  window.xHostWindow.render(renders, logicalSize)
+  if not window.xThreadHost.isNil:
+    let resources = nimkitRendering.renderResources(window.xContentView)
+    window.xContentView.invalidateRenderCache()
+    discard window.xThreadHost.submitRenders(ensureMove renders, logicalSize, resources)
+    window.xHostWindow.renderSubmitted()
+  else:
+    window.xHostWindow.render(renders, logicalSize)
 
 proc contentPoint(window: Window, windowPoint: Point): Point =
   window.xContentView.pointFromWindow(windowPoint)
@@ -2390,6 +2356,7 @@ proc dispatchHostFocusChanged(window: Window, focused: bool) =
   discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc markHostClosed(window: Window) =
+  window.releaseThreadRenderer(waitForRelease = true)
   window.stopInsertionPointBlink()
   window.stopAnimationClock()
   window.xClosed = true
@@ -2407,50 +2374,19 @@ proc markHostClosed(window: Window) =
 proc useThreadRenderer*(window: Window, renderer: ThreadRendererClient) =
   if window.isNil or window.xThreadRenderer == renderer:
     return
+  window.releaseThreadRenderer(waitForRelease = false)
   window.xThreadRenderer = renderer
   window.xThreadHost = nil
-  window.xThreadAnimationClockPrepared = false
   for auxiliary in window.xAuxiliaryWindows:
     if not auxiliary.isNil:
       auxiliary.useThreadRenderer(renderer)
 
-proc acceptThreadHostSize(window: Window, size: Size) =
-  let boundedSize = window.boundedWindowSize(size)
-  if window.xFrame.size == boundedSize:
-    return
-  window.xFrame.size = boundedSize
-  if not window.xContentView.isNil:
-    window.xContentView.setFrame(rect(0.0, 0.0, boundedSize.width, boundedSize.height))
-    window.xContentView.setNeedsDisplaySubtree()
-  discard window.saveFrameUsingName()
-
 proc ensureThreadHost(window: Window) =
-  if window.xThreadRenderer.isNil:
+  if window.xThreadRenderer.isNil or window.xHostWindow.isNil or
+      not window.xThreadHost.isNil:
     return
-  if window.xThreadHost.isNil:
-    window.xThreadHost = newThreadHostClient(window.xThreadRenderer)
-  elif window.xThreadHost.createRequested:
-    return
-
-  var ownerHost: ThreadHostClient
-  if window.xIsPopup:
-    if window.xOwnerWindow.isNil:
-      return
-    window.xOwnerWindow.useThreadRenderer(window.xThreadRenderer)
-    window.xOwnerWindow.ensureThreadHost()
-    ownerHost = window.xOwnerWindow.xThreadHost
-
-  window.xThreadHost.requestCreation(
-    window.xThreadRenderer,
-    window.xFrame,
-    window.xTitle,
-    owner = ownerHost,
-    popupPlacement = window.xPopupPlacement,
-  )
-  window.syncNativeSizeLimits()
-  window.xThreadHost.sendCommand(
-    ThreadHostCommand(kind: thcSetVisible, visible: window.xVisibleRequested)
-  )
+  window.xThreadHost =
+    window.xHostWindow.attachThreadRenderer(window.xThreadRenderer, window.xFrame.size)
 
 proc drainThreadHostEvents(window: Window): int =
   if window.xThreadHost.isNil:
@@ -2459,82 +2395,33 @@ proc drainThreadHostEvents(window: Window): int =
   while window.xThreadHost.pollEvent(event):
     inc result
     case event.kind
-    of theReady:
-      window.xThreadHost.ready = true
-      window.xThreadHost.contentScale = max(event.contentScale, 1.0'f32)
-      window.acceptThreadHostSize(event.size)
-      discard window.requestNativeDisplayUpdateIfNeeded()
-    of theClosed:
-      window.xThreadHost.ready = false
-      window.xThreadHost.clearRenderResources()
-      window.markHostClosed()
-    of thePopupDone:
-      window.xThreadHost.ready = false
-      window.xThreadHost.clearRenderResources()
-      window.markHostClosed()
-      if not window.xOnPopupDone.isNil:
-        window.xOnPopupDone()
-    of theResized:
-      window.acceptThreadHostSize(event.size)
-    of theMoved:
-      window.xFrame.origin = event.point
-      discard window.saveFrameUsingName()
-    of theMouseButton:
-      window.dispatchHostMouseButton(event.mouseEvent, event.flag)
-    of theMouseMove:
-      window.dispatchHostMouseMove(event.mouseEvent, event.flag)
-    of theScroll:
-      window.dispatchHostScroll(event.scrollEvent)
-    of theKey:
-      window.dispatchHostKey(event.keyEvent)
-    of theTextInput:
-      window.dispatchHostTextInput(event.text)
-    of theFocusChanged:
-      window.dispatchHostFocusChanged(event.flag)
     of theRendered:
       window.xThreadHost.acknowledgeRender(event.renderId)
       window.xThreadHost.renderCount = event.renderCount
       window.xThreadHost.renderRequested = false
+    of theRenderTargetReleased:
+      window.xThreadHost.clearRenderResources()
+      window.xThreadHost.acknowledgeRenderTargetRelease()
+
+proc releaseThreadRenderer(window: Window, waitForRelease: bool) =
+  let client = window.xThreadHost
+  if client.isNil:
+    return
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.detachThreadRenderer(window.xThreadRenderer, client)
+  while waitForRelease and client.renderTargetReleasePending() and
+      not window.xThreadRenderer.isNil and window.xThreadRenderer.isRunning():
+    discard window.drainThreadHostEvents()
+    if client.renderTargetReleasePending():
+      sleep(1)
+  window.xThreadHost = nil
 
 proc pumpThreadedWindowFrame*(window: Window) =
-  if not window.xVisibleRequested or window.xClosed or window.xThreadRenderer.isNil:
-    return
-  window.ensureThreadHost()
-  if not window.xThreadAnimationClockPrepared:
-    window.xThreadAnimationClockPrepared = true
-    if not window.xAnimationScheduler.isNil and
-        window.xAnimationScheduler.animationCount > 0:
-      window.stopAnimationClock()
-      window.startAnimationClock()
   discard window.drainThreadHostEvents()
-  if window.drainAnimations(pollQueued = false) > 0:
-    discard window.requestNativeDisplayUpdateIfNeeded()
-  if window.needsDisplayUpdate() and not window.xThreadHost.isNil:
-    var renders = window.buildRenders()
-    let resources = nimkitRendering.renderResources(window.xContentView)
-    window.xContentView.invalidateRenderCache()
-    discard window.xThreadHost.submitRenders(
-      ensureMove renders, window.xFrame.size, resources
-    )
-  if window.dispatchMouseTrackingTick():
-    discard window.requestNativeDisplayUpdateIfNeeded()
-
-  var idx = 0
-  while idx < window.xAuxiliaryWindows.len:
-    let auxiliary = window.xAuxiliaryWindows[idx]
-    if auxiliary.isNil or auxiliary.isClosed:
-      window.xAuxiliaryWindows.delete(idx)
-    else:
-      if auxiliary.isVisible:
-        auxiliary.useThreadRenderer(window.xThreadRenderer)
-        auxiliary.pumpThreadedWindowFrame()
-      inc idx
 
 proc ensureNativeWindow*(window: Window) =
-  if not window.xThreadRenderer.isNil:
-    window.ensureThreadHost()
-    return
   if window.nativeReady:
+    window.ensureThreadHost()
     return
 
   let callbacks = HostWindowCallbacks(
@@ -2577,6 +2464,7 @@ proc ensureNativeWindow*(window: Window) =
   else:
     window.xHostWindow = createHostWindow(window.xFrame, window.xTitle, callbacks)
   window.syncNativeSizeLimits()
+  window.ensureThreadHost()
   if window.xVisibleRequested:
     window.xHostWindow.setVisible(true)
 
@@ -2588,6 +2476,7 @@ proc pumpNativeWindowFrame*(window: Window) =
       window.xHostWindow.pump()
     return
   window.ensureNativeWindow()
+  discard window.drainThreadHostEvents()
   if window.drainAnimations() > 0:
     discard window.requestNativeDisplayUpdateIfNeeded()
   discard window.requestNativeDisplayUpdateIfNeeded()

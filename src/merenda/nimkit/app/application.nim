@@ -1,8 +1,6 @@
-import std/[options, os, sets, tables, times]
+import std/[options, os]
 
 import sigils/selectors
-import sigils/threadSelectors
-import sigils/threads
 
 import ../foundation/events
 import ../foundation/notifications
@@ -70,23 +68,10 @@ type
     xUserDefaults: UserDefaults
     xAnimationScheduler: AnimationScheduler
     xAnimationClock: AnimationSchedulerClock
+    xRenderExecutionMode: RenderExecutionMode
     xThreadRenderer: ThreadRendererClient
-    xThreadMenus: Table[ThreadMenuId, Menu]
-    xThreadMenuItems: Table[ThreadMenuId, MenuItem]
-    xThreadMenuRevision: uint64
-    xThreadMenuSynced: bool
     xApplicationThreadId: int
     xRendererThreadId: int
-
-  ApplicationThreadLoop = ref object of AgentActor
-    app: Application
-    renderer: ThreadRendererClient
-    selectorThread: SigilSelectorThreadPtr
-    timer: SigilTimer
-
-  ApplicationThreadStarter = ref object of Agent
-
-proc startRequested(starter: ApplicationThreadStarter) {.signal.}
 
 const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
@@ -116,9 +101,7 @@ proc noteWindowClosed(app: Application, window: Window)
 proc keyEquivalentDispatchStart(app: Application): Responder
 proc syncMainMenuPresentation(app: Application)
 proc syncMenuBarPresenters(app: Application)
-proc syncThreadNativeMenu(app: Application, force = false)
-proc drainThreadMenuEvents(app: Application)
-proc runApplicationFrame(app: Application, threaded: bool): int
+proc runApplicationFrame(app: Application): int
 
 proc resolvedApplicationName(name: string): string =
   if name.len > 0:
@@ -135,11 +118,8 @@ proc installApplicationCommandMethods(app: Application) =
   let aboutMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
   ) =
-    let app = Application(self)
-    if app.xThreadRenderer.isNil:
-      nativeMenus.showStandardAboutPanel()
-    else:
-      app.xThreadRenderer.showAboutPanel()
+    discard Application(self)
+    nativeMenus.showStandardAboutPanel()
     invocation.setResult(())
   discard app.replaceMethod(actionSelector("orderFrontStandardAboutPanel"), aboutMethod)
 
@@ -151,22 +131,16 @@ proc installApplicationCommandMethods(app: Application) =
   let hideOthersMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
   ) =
-    let app = Application(self)
-    if app.xThreadRenderer.isNil:
-      nativeMenus.hideOtherNativeApplications()
-    else:
-      app.xThreadRenderer.hideOtherApplications()
+    discard Application(self)
+    nativeMenus.hideOtherNativeApplications()
     invocation.setResult(())
   discard app.replaceMethod(actionSelector("hideOtherApplications"), hideOthersMethod)
 
   let unhideAllMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
   ) =
-    let app = Application(self)
-    if app.xThreadRenderer.isNil:
-      nativeMenus.unhideAllNativeApplications()
-    else:
-      app.xThreadRenderer.unhideAllApplications()
+    discard Application(self)
+    nativeMenus.unhideAllNativeApplications()
     invocation.setResult(())
   discard app.replaceMethod(actionSelector("unhideAllApplications"), unhideAllMethod)
 
@@ -247,7 +221,9 @@ proc installApplicationForwarding(app: Application) =
   )
 
 proc newApplication*(applicationName = ""): Application =
-  result = Application(xApplicationName: resolvedApplicationName(applicationName))
+  result = Application(
+    xApplicationName: resolvedApplicationName(applicationName), xRendererThreadId: -1
+  )
   initResponder(result)
   result.installApplicationForwarding()
   result.installApplicationCommandMethods()
@@ -478,18 +454,15 @@ proc syncMenuBarPresenters(app: Application) =
 
 proc syncMainMenuPresentation(app: Application) =
   app.xMainMenu.presentedNatively = app.usesNativeMainMenu()
-  if not app.xThreadRenderer.isNil:
-    app.syncThreadNativeMenu(force = true)
+  if app.usesNativeMainMenu():
+    app.xMainMenu.installNativeMainMenu(
+      proc(): Responder =
+        app.keyEquivalentDispatchStart()
+    )
+    app.xWindowsMenu.installNativeWindowsMenu()
+    app.xServicesMenu.installNativeServicesMenu()
   else:
-    if app.usesNativeMainMenu():
-      app.xMainMenu.installNativeMainMenu(
-        proc(): Responder =
-          app.keyEquivalentDispatchStart()
-      )
-      app.xWindowsMenu.installNativeWindowsMenu()
-      app.xServicesMenu.installNativeServicesMenu()
-    else:
-      Menu(nil).installNativeMainMenu()
+    Menu(nil).installNativeMainMenu()
   app.syncMenuBarPresenters()
 
 proc `mainMenuPresentation=`*(app: Application, presentation: MainMenuPresentation) =
@@ -828,13 +801,35 @@ proc orderedWindows*(app: Application): lent seq[Window] =
 proc isRunning*(app: Application): bool =
   app.xRunning
 
+proc renderExecutionMode*(app: Application): RenderExecutionMode =
+  app.xRenderExecutionMode
+
+proc `renderExecutionMode=`*(app: Application, mode: RenderExecutionMode) =
+  if app.xRunning:
+    raise
+      newException(ValueError, "set renderExecutionMode before running the application")
+  app.xRenderExecutionMode = mode
+
+proc usesDedicatedRenderer(app: Application): bool =
+  case app.xRenderExecutionMode
+  of remMainThread:
+    false
+  of remDedicatedThread:
+    if not dedicatedRendererSupported():
+      raise newException(ValueError, "the current backend has no dedicated renderer")
+    true
+  of remAutomatic:
+    dedicatedRendererSupported()
+
 proc isThreaded*(app: Application): bool =
-  not app.xThreadRenderer.isNil
+  not app.xThreadRenderer.isNil and app.xThreadRenderer.isRunning()
 
 proc applicationThreadId*(app: Application): int =
   app.xApplicationThreadId
 
 proc rendererThreadId*(app: Application): int =
+  if not app.xThreadRenderer.isNil:
+    return app.xThreadRenderer.rendererThreadId()
   app.xRendererThreadId
 
 proc keyEquivalentDispatchStart(app: Application): Responder =
@@ -844,104 +839,6 @@ proc keyEquivalentDispatchStart(app: Application): Responder =
       return firstResponder
     return Responder(app.xKeyWindow)
   Responder(app)
-
-func threadMenuId(menu: Menu): ThreadMenuId =
-  if menu.isNil:
-    return 0
-  cast[ThreadMenuId](cast[pointer](menu))
-
-func threadMenuId(item: MenuItem): ThreadMenuId =
-  if item.isNil:
-    return 0
-  cast[ThreadMenuId](cast[pointer](item))
-
-proc threadNativeMenu(
-    app: Application, menu: Menu, building: var HashSet[ThreadMenuId]
-): ThreadNativeMenu =
-  if menu.isNil:
-    return
-
-  result.id = menu.threadMenuId()
-  result.title = menu.title()
-  app.xThreadMenus[result.id] = menu
-  if result.id in building:
-    return
-
-  building.incl result.id
-  for item in menu.items():
-    if item.isNil:
-      continue
-    let itemId = item.threadMenuId()
-    app.xThreadMenuItems[itemId] = item
-    var snapshot = ThreadNativeMenuItem(
-      id: if item.action().name.len > 0: itemId else: 0,
-      title: item.title(),
-      separator: item.isSeparatorItem(),
-      enabled: item.enabled(),
-      hidden: item.hidden(),
-      state: nativeMenus.toNativeState(item.state()),
-      tag: item.tag(),
-      modifiers: nativeMenus.toNativeModifiers(item.modifierMask()),
-    )
-    if item.hasKeyEquivalent():
-      snapshot.keyEquivalent = nativeMenus.toNativeKeyEquivalent(item.keyEquivalent())
-    if not item.submenu().isNil:
-      snapshot.submenu = app.threadNativeMenu(item.submenu(), building)
-    result.items.add move snapshot
-  building.excl result.id
-
-proc syncThreadNativeMenu(app: Application, force = false) =
-  when defined(macosx):
-    if app.xThreadRenderer.isNil:
-      return
-    let revision = menus.nativeMenuRevision()
-    if not force and app.xThreadMenuSynced and revision == app.xThreadMenuRevision:
-      return
-
-    app.xThreadMenus = initTable[ThreadMenuId, Menu]()
-    app.xThreadMenuItems = initTable[ThreadMenuId, MenuItem]()
-    var snapshot = ThreadNativeMenuSnapshot(
-      installed: app.usesNativeMainMenu() and not app.xMainMenu.isNil
-    )
-    if snapshot.installed:
-      var building = initHashSet[ThreadMenuId]()
-      snapshot.menu = app.threadNativeMenu(app.xMainMenu, building)
-      snapshot.windowsMenu = app.xWindowsMenu.threadMenuId()
-      snapshot.servicesMenu = app.xServicesMenu.threadMenuId()
-    app.xThreadRenderer.submitNativeMenu(move snapshot)
-    app.xThreadMenuRevision = revision
-    app.xThreadMenuSynced = true
-
-proc drainThreadMenuEvents(app: Application) =
-  when defined(macosx):
-    if app.xThreadRenderer.isNil:
-      return
-    var
-      event: ThreadMenuEvent
-      handled = false
-    while app.xThreadRenderer.pollMenuEvent(event):
-      case event.kind
-      of tmeRefresh:
-        if event.menu in app.xThreadMenus:
-          let menu = app.xThreadMenus[event.menu]
-          menu.open()
-          menu.update(app.keyEquivalentDispatchStart())
-          handled = true
-      of tmeClose:
-        if event.menu in app.xThreadMenus:
-          app.xThreadMenus[event.menu].close()
-          handled = true
-      of tmeActivate:
-        if event.menu in app.xThreadMenus and event.item in app.xThreadMenuItems:
-          let
-            menu = app.xThreadMenus[event.menu]
-            item = app.xThreadMenuItems[event.item]
-            sender = DynamicAgent(item)
-          if item.perform(app.keyEquivalentDispatchStart(), sender):
-            emit menu.menuItemDidActivate(sender, item.identifier())
-          handled = true
-    if handled:
-      app.syncThreadNativeMenu(force = true)
 
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool =
   if app.xMainMenu.isNil:
@@ -1118,10 +1015,8 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
   of msmWindowModal:
     window == session.parentWindow
 
-proc runApplicationFrame(app: Application, threaded: bool): int =
-  if threaded:
-    app.drainThreadMenuEvents()
-  discard app.drainAnimations(pollQueued = not threaded)
+proc runApplicationFrame(app: Application): int =
+  discard app.drainAnimations()
   var
     removedWindow = false
     hostWindowCreated = false
@@ -1134,18 +1029,14 @@ proc runApplicationFrame(app: Application, threaded: bool): int =
       if not window.isNil:
         discard app.xOrderedWindows.removeWindow(window)
         app.restoreFocusAfterWindowClosed(window)
-        if threaded:
-          window.useThreadRenderer(nil)
       app.xWindows.delete(idx)
       removedWindow = true
     else:
       if window.isVisible:
         let wasNativeReady = window.nativeReady
-        if threaded:
+        if not app.xThreadRenderer.isNil:
           window.useThreadRenderer(app.xThreadRenderer)
-          window.pumpThreadedWindowFrame()
-        else:
-          window.pumpNativeWindowFrame()
+        window.pumpNativeWindowFrame()
         if not wasNativeReady and window.nativeReady:
           hostWindowCreated = true
         if not window.isClosed:
@@ -1155,8 +1046,6 @@ proc runApplicationFrame(app: Application, threaded: bool): int =
     app.updateWindowsMenu()
   if hostWindowCreated:
     app.syncMainMenuPresentation()
-  elif threaded:
-    app.syncThreadNativeMenu()
 
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:
@@ -1165,7 +1054,7 @@ proc runForFrames*(app: Application, frames: Natural): int =
   var keepRunning = wasRunning
   app.xRunning = true
   while app.xRunning:
-    let activeWindows = app.runApplicationFrame(app.isThreaded())
+    let activeWindows = app.runApplicationFrame()
     inc result
     if result >= frames.int:
       break
@@ -1176,73 +1065,32 @@ proc runForFrames*(app: Application, frames: Natural): int =
   if app.xRunning:
     app.xRunning = keepRunning
 
-proc finish(loop: ApplicationThreadLoop) =
-  if not loop.timer.isNil:
-    loop.timer.cancel(loop.selectorThread)
-    loop.timer = nil
-  loop.app.xRunning = false
-  loop.app.stopAnimationClock()
-  loop.renderer.stopRenderer()
-  loop.selectorThread.stop(drain = true)
-
-proc tick(loop: ApplicationThreadLoop) {.slot.} =
-  try:
-    if not loop.app.xRunning or loop.app.runApplicationFrame(threaded = true) == 0:
-      loop.finish()
-  except Exception as error:
-    echo "NimKit application thread error: ", error.msg
-    echo error.getStackTrace()
-    loop.finish()
-
-proc start(loop: ApplicationThreadLoop) {.slot.} =
-  try:
-    loop.app.xApplicationThreadId = getThreadId()
-    loop.app.xRunning = true
-    if not loop.app.xAnimationScheduler.isNil and
-        loop.app.xAnimationScheduler.animationCount > 0:
-      loop.app.stopAnimationClock()
-      loop.app.startAnimationClock()
-    loop.timer = newSigilTimer(initDuration(milliseconds = 8))
-    connect(loop.timer, timeout, loop, ApplicationThreadLoop.tick())
-    loop.timer.start(loop.selectorThread)
-    loop.tick()
-  except Exception as error:
-    echo "NimKit application thread startup error: ", error.msg
-    echo error.getStackTrace()
-    loop.finish()
-
 proc run*(app: Application) =
-  let runtime = nimkitBackend.newThreadRenderer()
-  app.xThreadRenderer = runtime.client
-  app.xRendererThreadId = getThreadId()
-  for window in app.xWindows:
-    if not window.isNil:
-      window.useThreadRenderer(runtime.client)
+  app.xApplicationThreadId = getThreadId()
+  var runtime: ThreadRendererRuntime
+  if app.usesDedicatedRenderer():
+    runtime = newThreadRendererRuntime()
+    runtime.start()
+    app.xThreadRenderer = runtime.client
+    for window in app.xWindows:
+      if not window.isNil:
+        window.useThreadRenderer(runtime.client)
 
-  startLocalThreadDefault()
-  let selectorThread = newSigilSelectorThread()
-  var loop = ApplicationThreadLoop(
-    app: app, renderer: runtime.client, selectorThread: selectorThread
-  )
-  let loopProxy = loop.moveToThread(selectorThread)
-  let starter = ApplicationThreadStarter()
-  connectThreaded(starter, startRequested, loopProxy, ApplicationThreadLoop.start())
-  selectorThread.start()
-  emit starter.startRequested()
-  runtime.renderer.run()
-  selectorThread.stop()
-  selectorThread.join()
-  selectorThread.closeSelectorThread()
-  discard starter
-  discard loopProxy
+  app.xRunning = true
+  while app.xRunning:
+    let activeWindows = app.runApplicationFrame()
+    if activeWindows == 0:
+      app.xRunning = false
+    elif app.xRunning:
+      sleep(8)
 
   for window in app.xWindows:
     if not window.isNil:
       window.useThreadRenderer(nil)
+  runtime.stop()
+  runtime.join()
   app.xThreadRenderer = nil
-  app.xThreadMenuSynced = false
-  app.xThreadMenus.clear()
-  app.xThreadMenuItems.clear()
+  app.xRendererThreadId = -1
   app.xRunning = false
   app.stopAnimationClock()
 

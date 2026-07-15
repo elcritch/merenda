@@ -530,6 +530,47 @@ Verification and rollout:
 
 ## Near-Term Work
 
+### Main-Thread Application with Optional Render Runtime
+
+Invert the current desktop threading split so the NimKit application, responder
+tree, native windows, event dispatch, menus, clipboard, IME, accessibility, and
+window lifecycle stay on the platform main thread. Move only FigDraw rendering
+behind an optional backend-owned render runtime. This is the natural topology
+for UIKit and Android's UI thread while retaining a dedicated renderer where a
+presentation backend supports it.
+
+- Treat the platform/UI thread, NimKit application state, renderer, and worker
+  pool as explicit roles. A backend may colocate roles, but application and
+  widget code must not depend on a particular placement.
+- Keep the render boundary narrow: moved `Renders` snapshots, renderer-local
+  resource messages, presentation-target size/lifecycle changes, render
+  acknowledgements, diagnostics, and shutdown. Do not send input, focus,
+  popup, menu, title, visibility, clipboard, or ordinary window commands
+  through it.
+- Make the render execution mode backend-selected: automatic, direct/main
+  thread, or dedicated thread. Use a dedicated thread only after the backend
+  can prove that its graphics context and presentation target obey the required
+  ownership rules; retain the direct path for unsupported and test backends.
+- Keep each `Application` and native window on the platform main thread.
+  Expensive parsing, indexing, I/O, image decoding, and project work belong in
+  Sigil worker actors, with bounded, cancellable, generation-stamped results
+  returned to the UI thread.
+- Keep `Renders` as a `var`, transfer it with `ensureMove`, and invalidate the
+  source render cache immediately. Coalesce pending snapshots per window so a
+  renderer never works through stale intermediate frames.
+- Have the main thread create, resize, and destroy native presentation targets.
+  The renderer exclusively owns its FigDraw context, command encoding, GPU
+  cache, and resource replay. Surface replacement/destruction needs an explicit
+  generation and release acknowledgement before its target is discarded.
+- For Metal, use a custom `CAMetalLayer` host rather than assuming an
+  `MTKView` delegate can leave the main actor. For Android, keep Activity/View,
+  input, IME, and lifecycle on the main Looper while a surface-backed renderer
+  may own EGL/Vulkan work on a dedicated thread.
+- Add focused tests for main-thread event dispatch, moved latest-frame delivery,
+  renderer shutdown/target release, resize generation ordering, direct fallback,
+  and render-resource lease lifetime. Benchmark end-to-end queue/wakeup and
+  frame latency separately from the existing ownership-transfer benchmark.
+
 ### Resource-Backed UI Construction
 
 Add a Nim-native resource construction layer for UI assets and declarative

@@ -1,5 +1,5 @@
 ## Measures the ownership-transfer and bounded-channel cost paid when the
-## application thread submits a FigDraw render snapshot to the primary renderer
+## platform thread submits a FigDraw render snapshot to a dedicated renderer
 ## thread.
 ##
 ## Run with:
@@ -43,12 +43,6 @@ proc benchmark(benchmarkCase: BenchmarkCase) =
     host = nimkitBackend.newThreadHostClient(runtime.client)
     logicalSize = nimkitTypes.initSize(1_000.0, 1_000.0)
   var renders = makeRenders(benchmarkCase.nodeCount)
-  host.requestCreation(
-    runtime.client,
-    nimkitTypes.rect(0.0, 0.0, logicalSize.width, logicalSize.height),
-    "Render Snapshot Benchmark",
-  )
-
   var snapshot: nimkitBackend.ThreadRenderSnapshot
   doAssert host.submitRenders(ensureMove renders, logicalSize)
   doAssert host.channels.pollLatestRender(snapshot)
@@ -73,7 +67,7 @@ proc benchmark(benchmarkCase: BenchmarkCase) =
   echo &"{benchmarkCase.nodeCount:>6} nodes  " &
     &"{meanMicroseconds:>9.2f} us/snapshot  " & &"{rawThroughput:>9.1f} raw-node MiB/s"
 
-echo "Threaded render snapshot transport"
+echo "Dedicated-render snapshot transport"
 echo "Fig size: ", sizeof(Fig), " bytes"
 for benchmarkCase in BenchmarkCases:
   benchmark(benchmarkCase)
