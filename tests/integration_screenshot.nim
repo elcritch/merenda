@@ -475,6 +475,7 @@ suite "nimkit screenshot":
         discard button.send(performClick(), ActionArgs(sender: button))
         discard button.send(performClick(), ActionArgs(sender: button))
         check button.state == bsMixed
+        button.cancelActivationFeedback()
         check app.runForFrames(3) == 3
         let updated = captureNativeWindowScreenshot(window, updatedPath)
         check fileExists(updatedPath)
