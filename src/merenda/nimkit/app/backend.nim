@@ -1085,9 +1085,10 @@ proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
   host.xRenderer.endFrame()
   inc host.xRenderCount
 
-func dedicatedRendererSupported*(): bool =
-  when defined(macosx) and not defined(useNativeDynlib):
-    when figrender.UseMetalBackend: true else: false
+proc dedicatedRendererSupported*(): bool =
+  when not defined(useNativeDynlib):
+    not figrender.runtimeForceOpenGlRequested() and
+      siwinshim.backendSupportsDedicatedRenderThread(figrender.PreferredBackendKind)
   else:
     false
 
@@ -1100,25 +1101,30 @@ proc attachThreadRenderer*(
 ): ThreadHostClient =
   ## Transfers FigDraw ownership to the render runtime. Native windows and all
   ## callbacks remain owned by the caller's platform thread.
-  if host.isNil or renderer.isNil or host.xRenderer.isNil or not renderer.isRunning() or
-      not dedicatedRendererSupported():
+  if host.isNil or renderer.isNil or host.xRenderer.isNil or not renderer.isRunning():
     return nil
 
-  result = newThreadHostClient(renderer)
-  host.updatePresentationTarget()
-  host.xRenderer.useDedicatedRenderThread()
-  let renderHost = ThreadRendererHost(
-    id: result.id,
-    renderer: move host.xRenderer,
-    resources: move host.xResources,
-    channels: result.channels,
-    logicalSize: logicalSize,
-    transparent: host.xTransparent,
-  )
-  renderer.commands.sendMoved(
-    ThreadRendererCommand(kind: trcAttachRenderHost, renderHost: renderHost)
-  )
-  result.renderTargetAttached = true
+  when defined(useNativeDynlib):
+    return nil
+  else:
+    if not host.xRenderer.supportsDedicatedRenderThread():
+      return nil
+
+    result = newThreadHostClient(renderer)
+    host.updatePresentationTarget()
+    host.xRenderer.useDedicatedRenderThread()
+    let renderHost = ThreadRendererHost(
+      id: result.id,
+      renderer: move host.xRenderer,
+      resources: move host.xResources,
+      channels: result.channels,
+      logicalSize: logicalSize,
+      transparent: host.xTransparent,
+    )
+    renderer.commands.sendMoved(
+      ThreadRendererCommand(kind: trcAttachRenderHost, renderHost: renderHost)
+    )
+    result.renderTargetAttached = true
 
 proc detachThreadRenderer*(
     host: HostWindow, renderer: ThreadRendererClient, client: ThreadHostClient

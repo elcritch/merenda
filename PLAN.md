@@ -551,6 +551,10 @@ presentation backend supports it.
   thread, or dedicated thread. Use a dedicated thread only after the backend
   can prove that its graphics context and presentation target obey the required
   ownership rules; retain the direct path for unsupported and test backends.
+- Use FigDraw's backend capability for application-level selection, then verify
+  each configured renderer before moving it. Static Siwin builds support Metal
+  and Vulkan presentation targets; OpenGL and failed runtime fallbacks remain
+  on the main thread.
 - Keep each `Application` and native window on the platform main thread.
   Expensive parsing, indexing, I/O, image decoding, and project work belong in
   Sigil worker actors, with bounded, cancellable, generation-stamped results

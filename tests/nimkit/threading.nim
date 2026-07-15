@@ -1,6 +1,7 @@
 import std/[assertions, os, unittest]
 
 import figdraw
+import figdraw/windowing/siwinshim as figdrawSiwin
 import pkg/pixie
 import threading/channels
 
@@ -24,6 +25,30 @@ proc newRectangleRenders(): Renders =
   )
 
 suite "NimKit threading":
+  test "dedicated renderer support follows the active FigDraw build":
+    when defined(useNativeDynlib):
+      check not nimkitBackend.dedicatedRendererSupported()
+    else:
+      check nimkitBackend.dedicatedRendererSupported() == (
+        not runtimeForceOpenGlRequested() and
+        figdrawSiwin.backendSupportsDedicatedRenderThread(PreferredBackendKind)
+      )
+
+  test "forced OpenGL keeps automatic rendering on the main thread":
+    when not defined(useNativeDynlib) and UseOpenGlFallback:
+      let
+        existed = existsEnv("FIGDRAW_FORCE_OPENGL")
+        previous = getEnv("FIGDRAW_FORCE_OPENGL")
+      defer:
+        if existed:
+          putEnv("FIGDRAW_FORCE_OPENGL", previous)
+        else:
+          delEnv("FIGDRAW_FORCE_OPENGL")
+      putEnv("FIGDRAW_FORCE_OPENGL", "1")
+      check not nimkitBackend.dedicatedRendererSupported()
+    else:
+      skip()
+
   test "dedicated render runtime owns a different thread":
     let primaryThread = getThreadId()
     var runtime = nimkitBackend.newThreadRendererRuntime()
