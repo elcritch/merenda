@@ -55,6 +55,7 @@ type
 const
   DefaultSystemFontIdentifier* = "system-font:default"
   DefaultFontLanguage* = "Default"
+  OtherFontLanguage* = "Other"
   DefaultFontPickerContentWidth* = 260.0'f32
 
   FontLanguageSuffixes = [
@@ -450,12 +451,15 @@ proc fontCatalogLanguages*(info: TypefaceInfo, family = ""): seq[string] =
       result.addUniqueFontLanguage(language)
 
   let hasCodepointCoverage = info.codepointRanges.len > 0
-  var latinLetterCount = 0
+  var
+    latinUppercaseCount = 0
+    latinLowercaseCount = 0
+    latinLetterCount = 0
   if hasCodepointCoverage:
-    latinLetterCount =
-      info.supportedCodepointCount(0x0041'u32, 0x005a'u32) +
-      info.supportedCodepointCount(0x0061'u32, 0x007a'u32)
-    if latinLetterCount >= 26:
+    latinUppercaseCount = info.supportedCodepointCount(0x0041'u32, 0x005a'u32)
+    latinLowercaseCount = info.supportedCodepointCount(0x0061'u32, 0x007a'u32)
+    latinLetterCount = latinUppercaseCount + latinLowercaseCount
+    if latinUppercaseCount >= 20 and latinLowercaseCount >= 20:
       result.addUniqueFontLanguage(DefaultFontLanguage)
     for (first, last, minimumCount, language) in FontCodepointLanguages:
       if info.supportedCodepointCount(first, last) >= minimumCount:
@@ -514,7 +518,12 @@ proc fontCatalogLanguages*(info: TypefaceInfo, family = ""): seq[string] =
 
   if result.len == 0:
     let namedLanguage = family.splitFontFamilyAndLanguage().language
-    result.add(if namedLanguage.len > 0: namedLanguage else: DefaultFontLanguage)
+    result.add(
+      if hasCodepointCoverage and namedLanguage == DefaultFontLanguage:
+        OtherFontLanguage
+      else:
+        namedLanguage
+    )
   result.sortFontLanguages()
 
 func primaryFontLanguage(languages: openArray[string]): string =

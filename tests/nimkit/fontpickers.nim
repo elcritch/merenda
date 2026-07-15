@@ -60,6 +60,18 @@ suite "NimKit font pickers":
     check arabicInfo.fontCatalogLanguages() == @["Arabic"]
     check hebrewInfo.fontCatalogLanguages() == @["Hebrew"]
 
+  test "default text requires both uppercase and lowercase Latin coverage":
+    let
+      uppercaseOnly = TypefaceInfo(
+        codepointRanges: @[TypefaceCodepointRange(first: 0x0041'u32, last: 0x005a'u32)]
+      )
+      mixedCase = TypefaceInfo(
+        codepointRanges: @[TypefaceCodepointRange(first: 0x0041'u32, last: 0x007a'u32)]
+      )
+
+    check uppercaseOnly.fontCatalogLanguages() == @[OtherFontLanguage]
+    check DefaultFontLanguage in mixedCase.fontCatalogLanguages()
+
   test "font languages separate specialist cmap coverage from default text":
     let
       brailleInfo = TypefaceInfo(
@@ -172,6 +184,13 @@ suite "NimKit font pickers":
         face.loadFontCatalogFaceMetadata()
 
         check face.languages == @[expectedLanguage]
+
+    let numericPath = "/System/Library/Fonts/ADTNumeric.ttc"
+    if fileExists(numericPath):
+      var numericFace = initFontCatalogFace("Regular", DefaultFontLanguage, numericPath)
+      numericFace.loadFontCatalogFaceMetadata()
+
+      check DefaultFontLanguage notin numericFace.languages
 
   test "font options are built only when requested":
     var entries: seq[FontCatalogEntry]

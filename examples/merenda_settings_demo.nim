@@ -32,6 +32,12 @@ type
   FontLoadingProgressProc = proc(message: string) {.closure.}
 
   FontCatalogLoader = ref object of AgentActor
+    entries: seq[FontCatalogEntry]
+    nextEntryIndex: int
+    loadedEntryCount: int
+    loadedFaceCount: int
+    started: bool
+    finished: bool
 
   FontPickerController = ref object of Responder
     items: Table[string, CascadingItem]
@@ -63,6 +69,9 @@ proc fontCatalogLoadingFinished*(
 proc fontCatalogLoadingFailed*(loader: FontCatalogLoader, message: string) {.signal.}
 
 proc addFontPickerItem(controller: FontPickerController, item: CascadingItem) =
+  if item.identifier in controller.items:
+    controller.items[item.identifier] = item
+    return
   controller.items[item.identifier] = item
   let
     parentIdentifier = item.parentIdentifier
@@ -169,29 +178,39 @@ proc reloadFontPickerIfVisible(controller: FontPickerController) =
   controller.pendingFontPickerBatchCount = 0
 
 proc loadFontCatalog(loader: FontCatalogLoader) {.slot.} =
+  if loader.finished:
+    return
   try:
-    var
-      batch = newSeqOfCap[FontCatalogEntry](FontCatalogBatchSize)
-      loadedEntryCount = 0
-      loadedFaceCount = 0
-    for catalogEntry in systemFontCatalog():
-      if catalogEntry.family == "Last Resort":
+    if not loader.started:
+      loader.entries = systemFontCatalog()
+      loader.started = true
+
+    # Keep one batch in flight so queued signal arguments remain bounded and
+    # the application thread controls how quickly catalog work is produced.
+    var batch = newSeqOfCap[FontCatalogEntry](FontCatalogBatchSize)
+    while loader.nextEntryIndex < loader.entries.len and batch.len < FontCatalogBatchSize:
+      var loadedEntry = move loader.entries[loader.nextEntryIndex]
+      inc loader.nextEntryIndex
+      if loadedEntry.family == "Last Resort":
         continue
-      var loadedEntry = catalogEntry
       for face in loadedEntry.faces.mitems:
         face.loadFontCatalogFaceMetadata()
-        inc loadedFaceCount
+        inc loader.loadedFaceCount
       batch.add move loadedEntry
-      inc loadedEntryCount
-      if batch.len == FontCatalogBatchSize:
-        emit loader.fontCatalogBatchLoaded(
-          move batch, loadedEntryCount, loadedFaceCount
-        )
-        batch = newSeqOfCap[FontCatalogEntry](FontCatalogBatchSize)
+      inc loader.loadedEntryCount
+
     if batch.len > 0:
-      emit loader.fontCatalogBatchLoaded(move batch, loadedEntryCount, loadedFaceCount)
-    emit loader.fontCatalogLoadingFinished(loadedEntryCount, loadedFaceCount)
+      emit loader.fontCatalogBatchLoaded(
+        move batch, loader.loadedEntryCount, loader.loadedFaceCount
+      )
+    else:
+      loader.finished = true
+      loader.entries.setLen(0)
+      emit loader.fontCatalogLoadingFinished(
+        loader.loadedEntryCount, loader.loadedFaceCount
+      )
   except CatchableError as error:
+    loader.finished = true
     emit loader.fontCatalogLoadingFailed(error.msg)
 
 proc didLoadFontCatalogBatch(
@@ -207,6 +226,7 @@ proc didLoadFontCatalogBatch(
   if controller.pendingFontPickerBatchCount >= FontCatalogBatchesPerReload:
     controller.reloadFontPickerIfVisible()
   controller.reportFontLoadingProgress(loadedEntryCount, loadedFaceCount)
+  emit controller.fontCatalogLoadRequested()
 
 proc didFinishLoadingFontCatalog(
     controller: FontPickerController, loadedEntryCount: int, loadedFaceCount: int
