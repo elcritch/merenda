@@ -3,12 +3,13 @@
 
 import merenda/nimkit
 
-import std/[monotimes, times]
+import std/[atomics, monotimes, times]
 import sigils
 
 const
   TaskCount = 8
   ProgressStepCount = 20
+  StopCheckInterval = 1_024
   ResultsLayoutInset = 12.0'f32
   ResultsRowSpacing = 12.0'f32
   ResultsTaskHeight = 90.0'f32
@@ -27,6 +28,8 @@ type
     dispatchers: array[TaskCount, WorkDispatcher]
     progressIndicators: array[TaskCount, ProgressIndicator]
     resultLabels: array[TaskCount, Label]
+    stopButtons: array[TaskCount, Button]
+    stopFlags: array[TaskCount, Atomic[bool]]
     runButton: Button
     overallStatus: Label
     completed: array[TaskCount, bool]
@@ -34,8 +37,14 @@ type
     running: bool
 
 proc workRequested*(
-  dispatcher: WorkDispatcher, taskIndex: int, firstCandidate: int, candidateCount: int
+  dispatcher: WorkDispatcher,
+  taskIndex: int,
+  firstCandidate: int,
+  candidateCount: int,
+  stopFlag: ptr Atomic[bool],
 ) {.signal.}
+
+proc workStopRequested*(controller: LongWorkController, taskIndex: int) {.signal.}
 
 proc workProgress*(
   worker: PrimeSearchWorker, taskIndex: int, percentComplete: int
@@ -46,6 +55,7 @@ proc workFinished*(
   taskIndex: int,
   primeCount: int,
   largestPrime: int,
+  stopped: bool,
   elapsedMilliseconds: int,
   workerThreadId: int,
 ) {.signal.}
@@ -72,27 +82,47 @@ func firstCandidate(taskIndex: int): int =
   FirstCandidate + BaseCandidatesPerTask * ((1 shl taskIndex) - 1)
 
 proc searchForPrimes(
-    worker: PrimeSearchWorker, taskIndex: int, firstCandidate: int, candidateCount: int
+    worker: PrimeSearchWorker,
+    taskIndex: int,
+    firstCandidate: int,
+    candidateCount: int,
+    stopFlag: ptr Atomic[bool],
 ) {.slot.} =
   let startedAt = getMonoTime()
   var
     primeCount = 0
     largestPrime = 0
+    stopped = false
 
   for step in 0 ..< ProgressStepCount:
+    if stopFlag[].load(moRelaxed):
+      stopped = true
+      break
     let
       stepStart = firstCandidate + candidateCount * step div ProgressStepCount
       stepEnd = firstCandidate + candidateCount * (step + 1) div ProgressStepCount
     for candidate in stepStart ..< stepEnd:
+      if candidate mod StopCheckInterval == 0 and stopFlag[].load(moRelaxed):
+        stopped = true
+        break
       if candidate.isPrime():
         inc primeCount
         largestPrime = candidate
+    if stopped:
+      break
     emit worker.workProgress(taskIndex, (step + 1) * 100 div ProgressStepCount)
 
   let elapsedMilliseconds = (getMonoTime() - startedAt).inMilliseconds.int
   emit worker.workFinished(
-    taskIndex, primeCount, largestPrime, elapsedMilliseconds, getThreadId()
+    taskIndex, primeCount, largestPrime, stopped, elapsedMilliseconds, getThreadId()
   )
+
+proc requestWorkStop(controller: LongWorkController, taskIndex: int) {.slot.} =
+  if taskIndex notin 0 ..< TaskCount or controller.completed[taskIndex]:
+    return
+  controller.stopFlags[taskIndex].store(true, moRelaxed)
+  controller.stopButtons[taskIndex].enabled = false
+  controller.resultLabels[taskIndex].text = "Stopping after the current check..."
 
 proc didMakeProgress(
     controller: LongWorkController, taskIndex: int, percentComplete: int
@@ -108,6 +138,7 @@ proc didFinishWork(
     taskIndex: int,
     primeCount: int,
     largestPrime: int,
+    stopped: bool,
     elapsedMilliseconds: int,
     workerThreadId: int,
 ) {.slot.} =
@@ -116,10 +147,13 @@ proc didFinishWork(
 
   controller.completed[taskIndex] = true
   inc controller.completedCount
-  controller.progressIndicators[taskIndex].value = 100.0
+  controller.stopButtons[taskIndex].enabled = false
   controller.resultLabels[taskIndex].text =
-    "Found " & $primeCount & " primes; largest: " & $largestPrime & " · " &
-    $elapsedMilliseconds & " ms on worker thread " & $workerThreadId
+    (if stopped: "Stopped after finding " else: "Found ") & $primeCount &
+    " primes; largest: " & $largestPrime & " · " & $elapsedMilliseconds &
+    " ms on worker thread " & $workerThreadId
+  if not stopped:
+    controller.progressIndicators[taskIndex].value = 100.0
 
   if controller.completedCount == TaskCount:
     controller.running = false
@@ -139,11 +173,21 @@ proc startWork(controller: LongWorkController) =
 
   for taskIndex in 0 ..< TaskCount:
     controller.completed[taskIndex] = false
+    controller.stopFlags[taskIndex].store(false, moRelaxed)
     controller.progressIndicators[taskIndex].value = 0.0
     controller.resultLabels[taskIndex].text = "Queued"
+    controller.stopButtons[taskIndex].enabled = true
     emit controller.dispatchers[taskIndex].workRequested(
-      taskIndex, taskIndex.firstCandidate(), taskIndex.candidateCount()
+      taskIndex,
+      taskIndex.firstCandidate(),
+      taskIndex.candidateCount(),
+      addr controller.stopFlags[taskIndex],
     )
+
+proc newStopWorkTarget(controller: LongWorkController, taskIndex: int): ClosureTarget =
+  result = newActionTarget(actionSelector("stopPrimeSearch")) do(sender: DynamicAgent):
+    discard sender
+    emit controller.workStopRequested(taskIndex)
 
 let
   app = sharedApplication()
@@ -156,7 +200,7 @@ let
       "Results return to the UI thread through signals."
   )
   overallStatus = newStatusLabel("Ready to search four number ranges.")
-  runButton = newButton("Run four prime searches")
+  runButton = newButton("Run prime searches")
   resultsLayout =
     newStackView(laVertical, frame = rect(0, 0, 620, ResultsDocumentHeight))
   resultsScrollView = newScrollView(documentView = resultsLayout)
@@ -189,13 +233,22 @@ for taskIndex in 0 ..< TaskCount:
     )
     progress = newProgressIndicator(0.0, 100.0, 0.0)
     resultLabel = newStatusLabel("Waiting")
+    stopButton = newButton("Stop")
+    taskHeader = newStackView(laHorizontal)
 
   taskLayout.spacing = 4.0
   taskLayout.alignment = svaFill
-  taskLayout.addArrangedSubview(taskLabel, progress, resultLabel)
+  taskHeader.spacing = 8.0
+  taskHeader.alignment = svaCenter
+  stopButton.setHuggingPriority(LayoutPriorityRequired, laHorizontal)
+  taskHeader.addArrangedSubview(taskLabel, stopButton)
+  taskLayout.addArrangedSubview(taskHeader, progress, resultLabel)
   resultsLayout.addArrangedSubview(taskLayout)
   controller.progressIndicators[taskIndex] = progress
   controller.resultLabels[taskIndex] = resultLabel
+  controller.stopButtons[taskIndex] = stopButton
+  stopButton.action = actionSelector("stopPrimeSearch")
+  stopButton.target = controller.newStopWorkTarget(taskIndex)
 
 layout.addArrangedSubview(runButton)
 root.addSubview(layout)
@@ -211,6 +264,10 @@ runButton.target = newActionTarget(runButton.action) do(sender: DynamicAgent):
 
 let pool = newSigilThreadPool(workers = TaskCount)
 pool.start()
+
+# Keep cancellation local: a stop slot queued on a busy worker would not run
+# until its prime search completed. The worker reads the atomic flag directly.
+connect(controller, workStopRequested, controller, LongWorkController.requestWorkStop())
 
 # A pool may execute different actors concurrently, while calls to one actor
 # remain serialized. Give each independent task its own actor and dispatcher.
