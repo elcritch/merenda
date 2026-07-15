@@ -1117,7 +1117,6 @@ suite "nimkit application":
     ) == siwinshim.vec2(72.0'f32, 108.0'f32)
 
   test "application frames deliver threaded Sigils results":
-    startLocalThreadDefault()
     let
       app = newApplication()
       dispatcher = ThreadPollDispatcher()

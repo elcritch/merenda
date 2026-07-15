@@ -139,8 +139,6 @@ proc startWork(controller: LongWorkController) =
       taskIndex, taskIndex.firstCandidate(), taskIndex.candidateCount()
     )
 
-startLocalThreadDefault()
-
 let
   app = sharedApplication()
   window = newWindow("Sigils Thread Pool", frame = rect(120, 120, 680, 520))

@@ -2,6 +2,7 @@ import std/[options, os]
 
 import sigils/selectors
 import sigils/threadBase
+import sigils/threadDefault
 
 import ../foundation/events
 import ../foundation/notifications
@@ -72,6 +73,7 @@ type
     xRenderExecutionMode: RenderExecutionMode
     xThreadRenderer: ThreadRendererClient
     xApplicationThreadId: int
+    xAutomaticallyStartsLocalSigilThread: bool
 
 const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
@@ -222,7 +224,10 @@ proc installApplicationForwarding(app: Application) =
   )
 
 proc newApplication*(applicationName = ""): Application =
-  result = Application(xApplicationName: resolvedApplicationName(applicationName))
+  result = Application(
+    xApplicationName: resolvedApplicationName(applicationName),
+    xAutomaticallyStartsLocalSigilThread: true,
+  )
   initResponder(result)
   result.installApplicationForwarding()
   result.installApplicationCommandMethods()
@@ -800,6 +805,22 @@ proc orderedWindows*(app: Application): lent seq[Window] =
 proc isRunning*(app: Application): bool =
   app.xRunning
 
+proc automaticallyStartsLocalSigilThread*(app: Application): bool =
+  ## Whether the application installs a default local Sigils scheduler when
+  ## it first pumps a frame and no local scheduler already exists.
+  app.xAutomaticallyStartsLocalSigilThread
+
+proc `automaticallyStartsLocalSigilThread=`*(app: Application, value: bool) =
+  ## Sets automatic local Sigils scheduler installation. Set this before the
+  ## application starts; disabling it does not replace or remove an existing
+  ## local scheduler.
+  if app.xRunning:
+    raise newException(
+      ValueError,
+      "set automaticallyStartsLocalSigilThread before running the application",
+    )
+  app.xAutomaticallyStartsLocalSigilThread = value
+
 proc renderExecutionMode*(app: Application): RenderExecutionMode =
   app.xRenderExecutionMode
 
@@ -1015,6 +1036,8 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
     window == session.parentWindow
 
 proc runApplicationFrame(app: Application): int =
+  if app.xAutomaticallyStartsLocalSigilThread and not hasLocalSigilThread():
+    startLocalThreadDefault()
   if hasLocalSigilThread():
     let thread = getCurrentSigilThread()
     for _ in 0 ..< ThreadSignalBudgetPerFrame:

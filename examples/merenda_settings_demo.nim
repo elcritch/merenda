@@ -566,7 +566,6 @@ when defined(settingsDemoBenchmark):
   echo "settings demo setup: ",
     (getMonoTime() - settingsDemoStartedAt).inMilliseconds, " ms"
 else:
-  startLocalThreadDefault()
   let fontLoadingPool = newSigilThreadPool(workers = 2)
   fontLoadingPool.start()
   var fontCatalogLoader = FontCatalogLoader()
