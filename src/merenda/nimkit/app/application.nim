@@ -1,6 +1,8 @@
 import std/[options, os]
 
 import sigils/selectors
+import sigils/threadBase
+import sigils/threadDefault
 
 import ../foundation/events
 import ../foundation/notifications
@@ -71,11 +73,13 @@ type
     xRenderExecutionMode: RenderExecutionMode
     xThreadRenderer: ThreadRendererClient
     xApplicationThreadId: int
+    xAutomaticallyStartsLocalSigilThread: bool
 
 const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
 const WindowDidOrderOutSelector = "_nimkitWindowDidOrderOut"
 const WindowDidCloseSelector = "_nimkitWindowDidClose"
+const ThreadSignalBudgetPerFrame = 10
 
 var sharedApplicationInstance: Application
 
@@ -220,7 +224,10 @@ proc installApplicationForwarding(app: Application) =
   )
 
 proc newApplication*(applicationName = ""): Application =
-  result = Application(xApplicationName: resolvedApplicationName(applicationName))
+  result = Application(
+    xApplicationName: resolvedApplicationName(applicationName),
+    xAutomaticallyStartsLocalSigilThread: true,
+  )
   initResponder(result)
   result.installApplicationForwarding()
   result.installApplicationCommandMethods()
@@ -280,7 +287,7 @@ proc stopAnimation*(
 proc drainAnimations*(app: Application): int {.discardable.} =
   if app.xAnimationScheduler.isNil or app.xAnimationClock.isNil:
     return 0
-  result = app.xAnimationScheduler.drain(app.xAnimationClock)
+  result = app.xAnimationScheduler.drain(app.xAnimationClock, pollSignals = false)
   if app.xAnimationScheduler.animationCount == 0:
     app.stopAnimationClock()
 
@@ -798,6 +805,22 @@ proc orderedWindows*(app: Application): lent seq[Window] =
 proc isRunning*(app: Application): bool =
   app.xRunning
 
+proc automaticallyStartsLocalSigilThread*(app: Application): bool =
+  ## Whether the application installs a default local Sigils scheduler when
+  ## it first pumps a frame and no local scheduler already exists.
+  app.xAutomaticallyStartsLocalSigilThread
+
+proc `automaticallyStartsLocalSigilThread=`*(app: Application, value: bool) =
+  ## Sets automatic local Sigils scheduler installation. Set this before the
+  ## application starts; disabling it does not replace or remove an existing
+  ## local scheduler.
+  if app.xRunning:
+    raise newException(
+      ValueError,
+      "set automaticallyStartsLocalSigilThread before running the application",
+    )
+  app.xAutomaticallyStartsLocalSigilThread = value
+
 proc renderExecutionMode*(app: Application): RenderExecutionMode =
   app.xRenderExecutionMode
 
@@ -1013,6 +1036,13 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
     window == session.parentWindow
 
 proc runApplicationFrame(app: Application): int =
+  if app.xAutomaticallyStartsLocalSigilThread and not hasLocalSigilThread():
+    startLocalThreadDefault()
+  if hasLocalSigilThread():
+    let thread = getCurrentSigilThread()
+    for _ in 0 ..< ThreadSignalBudgetPerFrame:
+      if not thread.poll(NonBlocking):
+        break
   discard app.drainAnimations()
   var
     removedWindow = false

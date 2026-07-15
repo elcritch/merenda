@@ -192,6 +192,12 @@ automatically listing open windows. Pass an application name to
 name. Call `app.installStandardMainMenu()` to restore the standard tree after
 replacing `app.mainMenu`, or add application-specific top-level menus directly
 to the existing tree.
+
+When an application first pumps a frame, NimKit installs a default local Sigils
+scheduler unless the thread already has one. Set
+`app.automaticallyStartsLocalSigilThread = false` before running to opt out;
+NimKit never replaces or removes an existing local scheduler.
+
 The default `mmpAutomatic` presentation uses that native menu when available.
 Applications can switch `app.mainMenuPresentation` at runtime between
 `mmpNative` and `mmpInWindow`; `app.usesNativeMainMenu()` reports the effective

@@ -1,8 +1,9 @@
-import std/[tables, unicode, unittest]
+import std/[os, tables, unicode, unittest]
 
 import figdraw
 from figdraw/windowing/siwinshim import nil
 import sigils/core
+import sigils/threads
 
 import merenda/nimkit
 from merenda/nimkit/app/backend import join, newThreadRendererRuntime, start, stop
@@ -46,6 +47,21 @@ proc renderedTextX(window: Window, text: string): float32 =
   -1.0'f32
 
 type WindowHookObserver = ref object of Agent
+
+type
+  ThreadPollDispatcher = ref object of Agent
+  ThreadPollWorker = ref object of AgentActor
+  ThreadPollCollector = ref object of Agent
+    value: int
+
+proc threadPollRequested*(dispatcher: ThreadPollDispatcher, value: int) {.signal.}
+proc threadPollFinished*(worker: ThreadPollWorker, value: int) {.signal.}
+
+proc processThreadPoll(worker: ThreadPollWorker, value: int) {.slot.} =
+  emit worker.threadPollFinished(value)
+
+proc collectThreadPoll(collector: ThreadPollCollector, value: int) {.slot.} =
+  collector.value = value
 
 type
   MenuSpyTarget = ref object of View
@@ -1099,6 +1115,35 @@ suite "nimkit application":
       siwinshim.ivec2(540'i32, 330'i32),
       logicalSize,
     ) == siwinshim.vec2(72.0'f32, 108.0'f32)
+
+  test "application frames deliver threaded Sigils results":
+    let
+      app = newApplication()
+      dispatcher = ThreadPollDispatcher()
+      collector = ThreadPollCollector()
+      pool = newSigilThreadPool(workers = 1)
+    pool.start()
+    var worker = ThreadPollWorker()
+    let workerProxy = worker.moveToThread(pool)
+    connectThreaded(dispatcher, threadPollRequested, workerProxy, processThreadPoll)
+    connectThreaded(
+      workerProxy,
+      threadPollFinished,
+      collector,
+      ThreadPollCollector.collectThreadPoll(),
+    )
+
+    try:
+      emit dispatcher.threadPollRequested(42)
+      for _ in 0 ..< 1_000:
+        discard app.runForFrames(1)
+        if collector.value == 42:
+          break
+        sleep(1)
+      check collector.value == 42
+    finally:
+      pool.stop()
+      pool.join()
 
   test "runForFrames opens and pumps a visible native window":
     block nativeRun:
