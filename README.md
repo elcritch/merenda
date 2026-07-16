@@ -146,6 +146,18 @@ The `mac` and `modern-macos` names are aliases. The theme is platform-neutral,
 so Linux applications can use the same look while macOS continues to use its
 native application menu bar.
 
+Use `macos-dark` for the matching dark appearance:
+
+```sh
+NIMKIT_THEME=macos-dark nim r examples/controls_showcase.nim
+```
+
+```nim
+root.appearance = initAppearance(initMacOSDarkTheme())
+```
+
+The `dark-macos` and `modern-macos-dark` names are aliases.
+
 Compose Finder-style icon rows with `IconLabel`. The icon is a Unicode glyph,
 rendered through the same FigDraw glyph atlas as other text, and can have an
 independent semantic tint:

@@ -533,7 +533,7 @@ suite "nimkit document tabs":
           return node.renderedRect()
 
     let tabRect = tabs.documentTabRect(0)
-    for theme in [initTheme(), initMacOSTheme()]:
+    for theme in [initTheme(), initMacOSTheme(), initMacOSDarkTheme()]:
       check closeSymbolRect(theme).center().x < tabRect.center().x
 
     var rightTheme = initTheme()

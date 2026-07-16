@@ -780,6 +780,7 @@ suite "nimkit theme":
       initTheme(),
       initBannerTheme(),
       initMacOSTheme(),
+      initMacOSDarkTheme(),
       initNebulaTheme(),
       initPeachyTheme(),
       initSynthwave83Theme(),
@@ -900,6 +901,53 @@ suite "nimkit theme":
       check theme.resolveChromeName(context) == DefaultChromeName
       check theme.resolveTextFieldStyle(context).box.shadows.len == 0
 
+  test "macOS dark theme keeps modern geometry with a dark semantic palette":
+    let
+      theme = initMacOSDarkTheme()
+      buttonStyle = theme.resolveButtonStyle(controlStyle(srButton))
+      accentStyle = theme.resolveButtonStyle(controlStyle(srButton, {ssAccent}))
+      checkBoxStyle =
+        theme.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
+      textFieldStyle = theme.resolveTextFieldStyle(controlStyle(srTextField))
+      comboBoxStyle = theme.resolveComboBoxStyle(controlStyle(srComboBox))
+      selectedDocumentTab = controlStyle(srDocumentTab, {ssSelected})
+      documentTabBar = controlStyle(srDocumentTabBar)
+      title = theme.resolveTextFieldStyle(
+        controlStyle(srTextField, classes = @[LabelStyleClass, LabelTitleStyleClass])
+      )
+      status = theme.resolveTextFieldStyle(
+        controlStyle(srTextField, classes = @[LabelStyleClass, LabelStatusStyleClass])
+      )
+
+    check theme.resolveColor(
+      controlStyle(srView), StyleBackgroundColor, color(1.0, 1.0, 1.0, 1.0)
+    ) == color(0.12, 0.12, 0.14, 1.0)
+    check buttonStyle.chrome == DefaultChromeName
+    check buttonStyle.box.cornerRadius == 7.0'f32
+    check buttonStyle.box.fill == color(0.25, 0.25, 0.27, 0.98)
+    check buttonStyle.text.color == color(0.93, 0.93, 0.95, 1.0)
+    check buttonStyle.box.borderColor == color(1.0, 1.0, 1.0, 0.14)
+    check accentStyle.box.fill == color(0.04, 0.52, 1.0, 1.0)
+    check accentStyle.text.color == color(1.0, 1.0, 1.0, 1.0)
+    check checkBoxStyle.indicator.fill == color(0.04, 0.52, 1.0, 1.0)
+    check textFieldStyle.box.fill == color(0.15, 0.15, 0.17, 0.98)
+    check textFieldStyle.text.color == color(0.93, 0.93, 0.95, 1.0)
+    check comboBoxStyle.box.fill == color(0.25, 0.25, 0.27, 0.98)
+    check comboBoxStyle.arrowColor == color(0.76, 0.76, 0.78, 1.0)
+    check theme.resolveFill(selectedDocumentTab, fill(color(1.0, 1.0, 1.0, 1.0))) ==
+      fill(color(0.25, 0.25, 0.27, 0.98))
+    check theme.resolveColor(
+      selectedDocumentTab, StyleTextColor, color(0.0, 0.0, 0.0, 1.0)
+    ) == color(0.96, 0.96, 0.97, 1.0)
+    check theme.resolveFill(documentTabBar, fill(color(1.0, 1.0, 1.0, 1.0))) ==
+      fill(color(0.16, 0.16, 0.18, 0.96))
+    check theme.resolveKeyword(
+      controlStyle(srDocumentTab), StyleCloseButtonPosition, ""
+    ) == "left"
+    check title.text.color == color(0.96, 0.96, 0.97, 1.0)
+    check status.text.color == color(0.70, 0.70, 0.72, 1.0)
+    checkRootPinstripesDisabled(theme)
+
   test "macOS labels use typographic hierarchy instead of bordered bands":
     let theme = initMacOSTheme()
     let transparent = fill(color(0.0, 0.0, 0.0, 0.0))
@@ -950,3 +998,9 @@ suite "nimkit theme":
       let style = initThemeByName(name).resolveButtonStyle(controlStyle(srButton))
       check style.chrome == DefaultChromeName
       check style.box.cornerRadius == 7.0'f32
+
+    for name in ["macos-dark", "dark-macos", "modern-macos-dark"]:
+      let style = initThemeByName(name).resolveButtonStyle(controlStyle(srButton))
+      check style.chrome == DefaultChromeName
+      check style.box.cornerRadius == 7.0'f32
+      check style.box.fill == color(0.25, 0.25, 0.27, 0.98)
