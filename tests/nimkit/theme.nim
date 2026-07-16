@@ -842,6 +842,11 @@ suite "nimkit theme":
         theme.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
       textFieldStyle = theme.resolveTextFieldStyle(controlStyle(srTextField))
       switchStyle = theme.resolveSwitchButtonStyle(controlStyle(srSwitch, {ssSelected}))
+      documentTab = controlStyle(srDocumentTab)
+      selectedDocumentTab = controlStyle(srDocumentTab, {ssSelected})
+      documentTabBar = controlStyle(srDocumentTabBar)
+      documentTabButton = controlStyle(srDocumentTabButton)
+      transparentFill = fill(color(0.0, 0.0, 0.0, 0.0))
 
     check buttonStyle.chrome == DefaultChromeName
     check buttonStyle.box.cornerRadius == 7.0'f32
@@ -856,6 +861,23 @@ suite "nimkit theme":
     check textFieldStyle.box.cornerRadius == 6.0'f32
     check switchStyle.chrome == DefaultChromeName
     check switchStyle.track.fill == color(0.20, 0.78, 0.35, 1.0)
+    check theme.resolveChromeName(documentTab) == DefaultChromeName
+    check theme.resolveFill(documentTab, transparentFill) == transparentFill
+    check theme.resolveFill(selectedDocumentTab, transparentFill) ==
+      fill(color(1.0, 1.0, 1.0, 0.96))
+    check theme.resolveColor(
+      selectedDocumentTab, StyleBorderColor, color(1.0, 0.0, 0.0, 1.0)
+    ) == color(0.0, 0.0, 0.0, 0.18)
+    check theme.resolveFill(documentTabBar, transparentFill) ==
+      fill(color(1.0, 1.0, 1.0, 0.72))
+    check theme.resolveColor(
+      documentTabBar, StyleBorderColor, color(1.0, 0.0, 0.0, 1.0)
+    ) == color(0.0, 0.0, 0.0, 0.14)
+    check theme.resolveFill(documentTabButton, fill(color(1.0, 0.0, 0.0, 1.0))) ==
+      transparentFill
+    check theme.resolveColor(
+      documentTabButton, StyleMarkColor, color(1.0, 0.0, 0.0, 1.0)
+    ) == color(0.24, 0.24, 0.26, 1.0)
     let
       stepperStyle = theme.resolveButtonStyle(controlStyle(srStepper))
       pressedStepperStyle =

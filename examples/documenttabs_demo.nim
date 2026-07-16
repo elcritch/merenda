@@ -7,6 +7,7 @@ type DocumentTabsDemo = ref object of Responder
   tabs: DocumentTabs
   status: TextField
   styleChoice: ComboBox
+  lookChoice: ComboBox
   nextNumber: int
 
 const DemoWindowWidth = 720.0'f32
@@ -100,6 +101,95 @@ proc applyStyle(demo: DocumentTabsDemo, sender: DynamicAgent) =
   demo.tabs.reloadDocumentTabs()
   demo.status.text = "Restyled " & item.title
 
+proc configureFlatDocumentTabs(appearance: var Appearance) =
+  let
+    selectedTab = initStyleSelector(srDocumentTab, {ssSelected})
+    transparent = color(0.0, 0.0, 0.0, 0.0)
+  appearance.setStyle(srDocumentTab, StyleChrome, styleKeyword(DefaultChromeName))
+  appearance.setStyle(srDocumentTab, StyleFill, fill(transparent))
+  appearance.setStyle(srDocumentTab, StyleBorderColor, transparent)
+  appearance.setStyle(srDocumentTab, StyleBorderWidth, 0.0)
+  appearance.setStyle(selectedTab, StyleFill, fill(transparent))
+  appearance.setStyle(selectedTab, StyleBorderColor, transparent)
+  appearance.setStyle(selectedTab, StyleBorderWidth, 0.0)
+  appearance.setStyle(srDocumentTab, StyleBoxShadows, newSeq[BoxShadow]())
+  appearance.setStyle(selectedTab, StyleBoxShadows, newSeq[BoxShadow]())
+
+proc configureAccentSelection(appearance: var Appearance) =
+  let
+    selectedTab = initStyleSelector(srDocumentTab, {ssSelected})
+    accent = appearance.colorToken("accent", color(0.0, 0.48, 0.92, 1.0))
+    luminance = accent.r * 0.2126'f32 + accent.g * 0.7152'f32 + accent.b * 0.0722'f32
+    selectedText =
+      if luminance >= 0.62'f32:
+        appearance.colorToken("tab.text.color.selected", color(0.08, 0.08, 0.09, 1.0))
+      else:
+        color(1.0, 1.0, 1.0, 1.0)
+  appearance.setStyle(
+    srDocumentTab, StyleSelectionIndicatorPosition, styleKeyword(dtipNone)
+  )
+  appearance.setStyle(selectedTab, StyleFill, styleToken("accent"))
+  appearance.setStyle(selectedTab, StyleBorderColor, styleToken("accent"))
+  appearance.setStyle(selectedTab, StyleTextColor, selectedText)
+  appearance.setStyle(selectedTab, StyleMarkColor, selectedText)
+
+proc applyLook(demo: DocumentTabsDemo, sender: DynamicAgent) =
+  discard sender
+  let choice = demo.lookChoice.indexOfSelectedItem()
+  demo.tabs.clearAppearance()
+  if choice <= 0:
+    demo.status.text = "Tab look: Theme Default"
+    return
+
+  var appearance = initAppearance(demo.tabs.effectiveAppearance().theme)
+  let selectedTab = initStyleSelector(srDocumentTab, {ssSelected})
+  if choice >= 3:
+    appearance.configureFlatDocumentTabs()
+  case choice
+  of 1, 2:
+    let position = if choice == 1: dtipTop else: dtipBottom
+    appearance.setStyle(
+      srDocumentTab, StyleSelectionIndicatorPosition, styleKeyword(position)
+    )
+    appearance.setStyle(
+      srDocumentTab, StyleSelectionIndicatorInsets, insets(2.0, 12.0, 1.0, 12.0)
+    )
+    appearance.setStyle(srDocumentTab, StyleSelectionIndicatorSize, 2.0)
+  of 3:
+    appearance.setStyle(
+      srDocumentTab, StyleSelectionIndicatorPosition, styleKeyword(dtipNone)
+    )
+    appearance.setStyle(selectedTab, StyleBorderColor, styleToken("accent"))
+    appearance.setStyle(selectedTab, StyleBorderWidth, 1.5)
+    appearance.setStyle(srDocumentTab, StyleCornerRadius, 8.0)
+  of 4:
+    appearance.configureAccentSelection()
+    appearance.setStyle(srDocumentTab, StyleCornerRadius, 5.0)
+  of 5:
+    appearance.configureAccentSelection()
+    appearance.setStyle(srDocumentTab, StyleCornerRadius, 999.0)
+    appearance.setStyle(srDocumentTab, StyleItemGap, 4.0)
+  of 6:
+    appearance.configureAccentSelection()
+    appearance.setStyle(srDocumentTab, StyleBorderColor, styleToken("tab.border.color"))
+    appearance.setStyle(srDocumentTab, StyleBorderWidth, 1.0)
+    appearance.setStyle(srDocumentTab, StyleCornerRadius, 0.0)
+    appearance.setStyle(srDocumentTab, StyleItemGap, 0.0)
+  else:
+    discard
+
+  demo.tabs.appearance = appearance
+  let lookName =
+    case choice
+    of 1: "Top Indicator"
+    of 2: "Bottom Indicator"
+    of 3: "Outlined"
+    of 4: "Filled"
+    of 5: "Pill"
+    of 6: "Segmented"
+    else: "Theme Default"
+  demo.status.text = "Tab look: " & lookName
+
 proc newDocumentTabsDemo(): DocumentTabsDemo =
   result = DocumentTabsDemo(nextNumber: 8)
   initResponder(result)
@@ -115,16 +205,24 @@ let
   status = newStatusLabel("Selected Project Plan")
   tabs = newDocumentTabs()
   controls = newStackView(laHorizontal)
+  styleControls = newStackView(laHorizontal)
   addButton = newButton("Add")
   closeButton = newButton("Close")
   leftButton = newButton("Move Left")
   rightButton = newButton("Move Right")
   styleChoice = newComboBox(["Rounded", "Pill", "Underline", "Compact"])
+  lookChoice = newComboBox(
+    [
+      "Theme Default", "Top Indicator", "Bottom Indicator", "Outlined", "Filled",
+      "Pill", "Segmented",
+    ]
+  )
   content = newTextField("Project Plan")
 
 demo.tabs = tabs
 demo.status = status
 demo.styleChoice = styleChoice
+demo.lookChoice = lookChoice
 tabs.delegate = demo
 demo.observeProtocol(tabs, DocumentTabsEvents)
 
@@ -150,7 +248,11 @@ tabs[5].modified = true
 controls.spacing = 8.0
 controls.alignment = svaCenter
 controls.distribution = svdNatural
+styleControls.spacing = 8.0
+styleControls.alignment = svaCenter
+styleControls.distribution = svdNatural
 styleChoice.selectItemAtIndex(0)
+lookChoice.selectItemAtIndex(0)
 
 addButton.target = newActionTarget(actionSelector("addDocumentTab")) do(
   sender: DynamicAgent
@@ -182,16 +284,27 @@ styleChoice.target = newActionTarget(actionSelector("styleDocumentTab")) do(
   demo.applyStyle(sender)
 styleChoice.action = actionSelector("styleDocumentTab")
 
+lookChoice.target = newActionTarget(actionSelector("styleDocumentTabLook")) do(
+  sender: DynamicAgent
+):
+  demo.applyLook(sender)
+lookChoice.action = actionSelector("styleDocumentTabLook")
+
 content.editable = false
 content.selectable = false
 content.setHuggingPriority(LayoutPriorityLow, laVertical)
 content.setCompressionPriority(LayoutPriorityLow, laVertical)
 
-controls.addArrangedSubview(
-  addButton, closeButton, leftButton, rightButton, styleChoice
-)
+controls.addArrangedSubview(addButton, closeButton, leftButton, rightButton)
 controls.addFlexibleSpacer()
-layout.addArrangedSubview(header, status, tabs, controls, content)
+styleControls.addArrangedSubview(
+  newFormLabel("Selected tab shape"),
+  styleChoice,
+  newFormLabel("Active look"),
+  lookChoice,
+)
+styleControls.addFlexibleSpacer()
+layout.addArrangedSubview(header, status, tabs, controls, styleControls, content)
 root.addSubview(layout)
 layout.pinEdges(
   toGuide = root.contentLayoutGuide(), edges = {leLeft, leTop, leRight, leBottom}
