@@ -305,6 +305,33 @@ root.appearance = appearance
 Appearance inherits through the app, window, and view hierarchy, so local
 overrides can be scoped to a whole window or a single subtree.
 
+Document tabs expose their active marker and close-button placement through the
+same look-and-feel rules:
+
+```nim
+var appearance = initAppearance()
+let documentTab = initStyleSelector(srDocumentTab)
+
+appearance.setStyle(
+  documentTab, StyleSelectionIndicatorPosition, styleKeyword(dtipTop)
+)
+appearance.setStyle(
+  documentTab, StyleSelectionIndicatorInsets, insets(3.0, 12.0, 0.0, 12.0)
+)
+appearance.setStyle(documentTab, StyleSelectionIndicatorSize, 2.0)
+appearance.setStyle(
+  documentTab, StyleCloseButtonPosition, styleKeyword(dtcbRight)
+)
+```
+
+The marker position can be `dtipTop`, `dtipBottom`, `dtipLeft`, `dtipRight`, or
+`dtipNone`. Set `StyleSelectionIndicatorFill` and
+`StyleSelectionIndicatorCornerRadius` to customize its color and shape. With
+`dtipNone`, the selected `StyleFill`, `StyleBorderColor`, `StyleBorderWidth`,
+and `StyleCornerRadius` rules can provide filled, outlined, pill, or segmented
+tab styles without an additional marker. The default and macOS themes place
+close buttons on the left.
+
 ## Drawing
 
 Custom views draw through a `DrawContext`, which wraps the active FigDraw render

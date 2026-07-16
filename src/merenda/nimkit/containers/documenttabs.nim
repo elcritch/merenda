@@ -26,6 +26,17 @@ type
     dtsUnderline
     dtsCompact
 
+  DocumentTabIndicatorPosition* = enum
+    dtipNone
+    dtipTop
+    dtipBottom
+    dtipLeft
+    dtipRight
+
+  DocumentTabCloseButtonPosition* = enum
+    dtcbLeft
+    dtcbRight
+
   DocumentTabScrollButton* = enum
     dtsbPrevious
     dtsbNext
@@ -102,9 +113,8 @@ const
   DocumentTabCompactMaxWidth = 140.0'f32
   DocumentTabHorizontalInset = 12.0'f32
   DocumentTabCloseWidth = 16.0'f32
-  DocumentTabAccentWidth = 2.0'f32
-  DocumentTabAccentInset = 7.0'f32
-  DocumentTabAccentLeadingInset = 2.0'f32
+  DocumentTabCloseSpacing = 7.0'f32
+  DocumentTabIndicatorSize = 2.0'f32
   DocumentTabAccentAlpha = 0.72'f32
   DocumentTabModifiedAccentAlpha = 0.52'f32
   DocumentTabDragThreshold = 3.0'f32
@@ -196,6 +206,23 @@ proc selectDocumentTabWithIdentifier*(
 proc drawDocumentTab(
   tabs: DocumentTabs, context: DrawContext, parent: FigIdx, index: int
 )
+
+func styleKeyword*(position: DocumentTabIndicatorPosition): StyleValue =
+  styleKeyword(
+    case position
+    of dtipNone: "none"
+    of dtipTop: "top"
+    of dtipBottom: "bottom"
+    of dtipLeft: "left"
+    of dtipRight: "right"
+  )
+
+func styleKeyword*(position: DocumentTabCloseButtonPosition): StyleValue =
+  styleKeyword(
+    case position
+    of dtcbLeft: "left"
+    of dtcbRight: "right"
+  )
 
 proc initDocumentTabItemFields*(
     item: DocumentTabItem,
@@ -609,7 +636,7 @@ proc documentTabWidth(tabs: DocumentTabs, item: DocumentTabItem): float32 =
     horizontalInset = max(viewStyle.tabHorizontalPadding, 0.0'f32)
     closeWidth =
       if tabs.allowsClosing() and item.closeable():
-        DocumentTabCloseWidth + 6.0'f32
+        DocumentTabCloseWidth + DocumentTabCloseSpacing
       else:
         0.0'f32
     modifiedWidth = if item.modified(): 9.0'f32 else: 0.0'f32
@@ -700,7 +727,28 @@ proc documentTabRect*(tabs: DocumentTabs, index: int): Rect =
     contentRect.size.height,
   )
 
-proc closeRect(tabs: DocumentTabs, index: int): Rect =
+func documentTabIndicatorPosition(keyword: string): DocumentTabIndicatorPosition =
+  case keyword
+  of "none": dtipNone
+  of "top": dtipTop
+  of "left", "leading": dtipLeft
+  of "right", "trailing": dtipRight
+  else: dtipBottom
+
+func documentTabCloseButtonPosition(keyword: string): DocumentTabCloseButtonPosition =
+  case keyword
+  of "left", "leading": dtcbLeft
+  else: dtcbRight
+
+proc documentTabCloseButtonPosition(
+    tabs: DocumentTabs, item: DocumentTabItem, appearance: Appearance
+): DocumentTabCloseButtonPosition =
+  let styleContext = tabs.documentTabStyleContext(item)
+  documentTabCloseButtonPosition(
+    appearance.resolveKeyword(styleContext, StyleCloseButtonPosition, "right")
+  )
+
+proc closeRect(tabs: DocumentTabs, index: int, appearance: Appearance): Rect =
   if index < 0 or index >= tabs.xItems.len:
     return
   let
@@ -708,12 +756,21 @@ proc closeRect(tabs: DocumentTabs, index: int): Rect =
     rect = tabs.documentTabRect(index)
   if not tabs.allowsClosing() or not item.closeable() or rect.size.width < 44.0'f32:
     return
+  let x =
+    case tabs.documentTabCloseButtonPosition(item, appearance)
+    of dtcbLeft:
+      rect.origin.x + DocumentTabCloseSpacing
+    of dtcbRight:
+      rect.maxX - DocumentTabCloseWidth - DocumentTabCloseSpacing
   rect(
-    rect.maxX - DocumentTabCloseWidth - 7.0'f32,
+    x,
     rect.origin.y + max((rect.size.height - DocumentTabCloseWidth) / 2.0'f32, 0.0),
     DocumentTabCloseWidth,
     DocumentTabCloseWidth,
   )
+
+proc closeRect(tabs: DocumentTabs, index: int): Rect =
+  tabs.closeRect(index, tabs.documentTabAppearance())
 
 proc scrollTabToVisible(tabs: DocumentTabs, index: int) =
   if index < 0 or index >= tabs.xItems.len:
@@ -1280,6 +1337,39 @@ func documentTabSelectionAccentColor(source: Color, modified: bool): Color =
     if modified: DocumentTabModifiedAccentAlpha else: DocumentTabAccentAlpha
   color(source.r, source.g, source.b, source.a * alphaScale)
 
+func documentTabSelectionIndicatorRect(
+    tabRect: Rect,
+    position: DocumentTabIndicatorPosition,
+    indicatorInsets: EdgeInsets,
+    indicatorSize: float32,
+): Rect =
+  let
+    available = tabRect.inset(indicatorInsets)
+    size = max(indicatorSize, 0.0'f32)
+  case position
+  of dtipNone:
+    Rect()
+  of dtipTop:
+    rect(
+      available.minX,
+      available.minY,
+      available.size.width,
+      min(size, available.size.height),
+    )
+  of dtipBottom:
+    let height = min(size, available.size.height)
+    rect(available.minX, available.maxY - height, available.size.width, height)
+  of dtipLeft:
+    rect(
+      available.minX,
+      available.minY,
+      min(size, available.size.width),
+      available.size.height,
+    )
+  of dtipRight:
+    let width = min(size, available.size.width)
+    rect(available.maxX - width, available.minY, width, available.size.height)
+
 proc drawCloseButton(
     tabs: DocumentTabs,
     context: DrawContext,
@@ -1421,45 +1511,62 @@ proc drawDocumentTab(
 
   if selected:
     let
-      accentRect =
-        case style
-        of dtsUnderline:
-          rect(
-            rect.origin.x + 8.0'f32,
-            rect.maxY - DocumentTabAccentWidth,
-            max(rect.size.width - 16.0'f32, 0.0'f32),
-            DocumentTabAccentWidth,
-          )
-        else:
-          rect(
-            rect.origin.x + max(borderWidth, 1.0'f32) + DocumentTabAccentLeadingInset,
-            rect.origin.y + DocumentTabAccentInset,
-            DocumentTabAccentWidth,
-            max(rect.size.height - DocumentTabAccentInset * 2.0'f32, 0.0'f32),
-          )
-      accentRadius = DocumentTabAccentWidth / 2.0'f32
-    discard context.addRenderRectangle(
-      DefaultDrawLevel,
-      parent,
-      context.renderRectFor(accentRect),
-      fill(accentColor.documentTabSelectionAccentColor(item.modified())),
-      cornerRadius = accentRadius,
-    )
+      position = documentTabIndicatorPosition(
+        context.appearance.resolveKeyword(
+          styleContext, StyleSelectionIndicatorPosition, "bottom"
+        )
+      )
+      indicatorInsets = context.appearance.resolveInsets(
+        styleContext, StyleSelectionIndicatorInsets, insets(2.0, 10.0, 1.0, 10.0)
+      )
+      indicatorSize = context.appearance.resolveLength(
+        styleContext, StyleSelectionIndicatorSize, DocumentTabIndicatorSize
+      )
+      indicatorRect =
+        rect.documentTabSelectionIndicatorRect(position, indicatorInsets, indicatorSize)
+      indicatorFill = context.appearance.resolveFill(
+        styleContext,
+        fill(accentColor.documentTabSelectionAccentColor(item.modified())),
+        StyleSelectionIndicatorFill,
+      )
+      indicatorRadius = context.appearance.resolveLength(
+        styleContext,
+        StyleSelectionIndicatorCornerRadius,
+        min(indicatorSize, DocumentTabIndicatorSize) / 2.0'f32,
+      )
+    if not indicatorRect.isEmpty:
+      discard context.addRenderRectangle(
+        DefaultDrawLevel,
+        parent,
+        context.renderRectFor(indicatorRect),
+        indicatorFill,
+        cornerRadius = max(indicatorRadius, 0.0'f32),
+      )
 
   let
-    close = tabs.closeRect(index)
+    close = tabs.closeRect(index, context.appearance)
+    closePosition = tabs.documentTabCloseButtonPosition(item, context.appearance)
     modifiedWidth = if item.modified(): 8.0'f32 else: 0.0'f32
     textInsets = tabTextStyle.insets
-    textLeftInset = max(textInsets.left, DocumentTabHorizontalInset)
-    textRightInset =
+    baseLeftInset = max(textInsets.left, DocumentTabHorizontalInset)
+    baseRightInset = max(textInsets.right, DocumentTabHorizontalInset)
+    closeReserve =
       if close.isEmpty:
-        max(textInsets.right, DocumentTabHorizontalInset)
+        0.0'f32
       else:
-        DocumentTabCloseWidth + max(textInsets.right, 14.0'f32)
+        DocumentTabCloseWidth + DocumentTabCloseSpacing
+    textLeftInset =
+      baseLeftInset + (if closePosition == dtcbLeft: closeReserve else: 0.0'f32) +
+      modifiedWidth
+    textRightInset =
+      baseRightInset + (if closePosition == dtcbRight: closeReserve else: 0.0'f32)
+    modifiedCenterX =
+      rect.origin.x + baseLeftInset +
+      (if closePosition == dtcbLeft: closeReserve else: 0.0'f32)
     textRect = rect(
-      rect.origin.x + textLeftInset + modifiedWidth,
+      rect.origin.x + textLeftInset,
       rect.origin.y,
-      max(rect.size.width - textLeftInset - textRightInset - modifiedWidth, 0.0'f32),
+      max(rect.size.width - textLeftInset - textRightInset, 0.0'f32),
       rect.size.height,
     )
 
@@ -1467,7 +1574,7 @@ proc drawDocumentTab(
     discard context.addRenderCircle(
       DefaultDrawLevel,
       parent,
-      initPoint(rect.origin.x + 12.0'f32, rect.origin.y + rect.size.height / 2.0'f32),
+      initPoint(modifiedCenterX, rect.origin.y + rect.size.height / 2.0'f32),
       fill(accentColor),
       3.0'f32,
     )

@@ -1242,6 +1242,7 @@ proc installSynthwave83DocumentTabs(theme: var Theme) =
 
 proc initSynthwave83Theme*(): Theme =
   result = initTheme()
+  result[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
   result.installSynthwave83Tokens()
   result.installSynthwave83ControlStyles()
   result.installSynthwave83Labels()

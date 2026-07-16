@@ -338,6 +338,7 @@ proc installNebulaTables(theme: var Theme) =
 
 proc initNebulaTheme*(): Theme =
   result = initTheme()
+  result[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
   result.installNebulaTokens()
   result.installNebulaControlStyles()
   result.installNebulaLabels()

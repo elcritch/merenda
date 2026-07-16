@@ -407,8 +407,9 @@ suite "nimkit document tabs":
     check selectedAccentRect.minY > selectedRect.minY
     check selectedAccentRect.maxX < selectedRect.maxX
     check selectedAccentRect.maxY < selectedRect.maxY
-    check selectedAccentRect.size.width == 2.0'f32
-    check selectedAccentRect.size.height <= 16.0'f32
+    check selectedAccentRect.size.width > selectedAccentRect.size.height
+    check selectedAccentRect.size.width < selectedRect.size.width
+    check selectedAccentRect.size.height == 2.0'f32
     check modifiedDotFound
     check not modifiedAccentRectFound
 
@@ -459,6 +460,85 @@ suite "nimkit document tabs":
     check modified.accentColor.a == 0.0'f32
     check selectedAccentFound
     check modifiedDotFound
+
+  test "document tab themes control every selection indicator edge":
+    let
+      tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
+      selected = newDocumentTabItem("Selected", "selected")
+      indicatorFill = fill(color(0.76, 0.16, 0.58, 1.0))
+      indicatorInsets = insets(4.0, 9.0, 5.0, 11.0)
+      indicatorSize = 3.0'f32
+
+    discard tabs.addDocumentTabItem(selected)
+
+    for position in [dtipTop, dtipBottom, dtipLeft, dtipRight, dtipNone]:
+      var theme = initTheme()
+      theme[srDocumentTab, StyleSelectionIndicatorPosition] = styleKeyword(position)
+      theme[srDocumentTab, StyleSelectionIndicatorFill] = indicatorFill
+      theme[srDocumentTab, StyleSelectionIndicatorInsets] = indicatorInsets
+      theme[srDocumentTab, StyleSelectionIndicatorSize] = indicatorSize
+      theme[srDocumentTab, StyleSelectionIndicatorCornerRadius] = 0.5
+
+      let
+        renders = buildRenders(tabs, initAppearance(theme))
+        tabRect = tabs.documentTabRect(0)
+        available = tabRect.inset(indicatorInsets)
+      var indicatorRect: nimkitTypes.Rect
+      for node in renders[DefaultDrawLevel].nodes:
+        if node.kind == nkRectangle and node.fill == indicatorFill:
+          indicatorRect = node.renderedRect()
+          break
+
+      case position
+      of dtipNone:
+        check indicatorRect.isEmpty
+      of dtipTop:
+        check indicatorRect.rectsClose(
+          rect(available.minX, available.minY, available.size.width, indicatorSize)
+        )
+      of dtipBottom:
+        check indicatorRect.rectsClose(
+          rect(
+            available.minX,
+            available.maxY - indicatorSize,
+            available.size.width,
+            indicatorSize,
+          )
+        )
+      of dtipLeft:
+        check indicatorRect.rectsClose(
+          rect(available.minX, available.minY, indicatorSize, available.size.height)
+        )
+      of dtipRight:
+        check indicatorRect.rectsClose(
+          rect(
+            available.maxX - indicatorSize,
+            available.minY,
+            indicatorSize,
+            available.size.height,
+          )
+        )
+
+  test "document tab themes control the close button side":
+    let
+      tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
+      selected = newDocumentTabItem("Selected", "selected")
+
+    discard tabs.addDocumentTabItem(selected)
+
+    proc closeSymbolRect(theme: Theme): nimkitTypes.Rect =
+      let renders = buildRenders(tabs, initAppearance(theme))
+      for node in renders[DefaultDrawLevel].nodes:
+        if node.kind == nkText and node.renderedText() == "×":
+          return node.renderedRect()
+
+    let tabRect = tabs.documentTabRect(0)
+    for theme in [initTheme(), initMacOSTheme()]:
+      check closeSymbolRect(theme).center().x < tabRect.center().x
+
+    var rightTheme = initTheme()
+    rightTheme[srDocumentTab, StyleCloseButtonPosition] = styleKeyword(dtcbRight)
+    check closeSymbolRect(rightTheme).center().x > tabRect.center().x
 
   test "delegates can veto selection closing and moving while signals fire":
     let

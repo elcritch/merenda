@@ -854,6 +854,7 @@ proc installPeachyDocumentTabs(theme: var Theme) =
 
 proc initPeachyTheme*(): Theme =
   result = initTheme()
+  result[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
   result.installPeachyTokens()
   result.installPeachyControlStyles()
   result.installPeachyLabels()

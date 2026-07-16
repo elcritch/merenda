@@ -225,6 +225,11 @@ proc installMacOSControlStyles(theme: var Theme) =
   theme[srTab, StyleOverlap] = 0.0
   theme[srTabPanel, StyleCornerRadius] = 8.0
   theme[srDocumentTab, StyleCornerRadius] = 7.0
+  theme[srDocumentTab, StyleSelectionIndicatorPosition] = styleKeyword("bottom")
+  theme[srDocumentTab, StyleSelectionIndicatorInsets] = insets(2.0, 11.0, 1.0, 11.0)
+  theme[srDocumentTab, StyleSelectionIndicatorSize] = 2.0
+  theme[srDocumentTab, StyleSelectionIndicatorCornerRadius] = 1.0
+  theme[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("left")
   theme[srDocumentTabBar, StyleCornerRadius] = 8.0
 
   theme[srScrollView, StyleCornerRadius] = 8.0

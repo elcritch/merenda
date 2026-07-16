@@ -298,6 +298,12 @@ const
   StyleTextHighlightColor* = StyleKey[Color]("text.highlight.color")
   StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
   StyleSelectionColor* = StyleKey[Color]("selection.color")
+  StyleSelectionIndicatorPosition* = StyleKey[string]("selection.indicator.position")
+  StyleSelectionIndicatorFill* = StyleKey[Fill]("selection.indicator.fill")
+  StyleSelectionIndicatorInsets* = StyleKey[EdgeInsets]("selection.indicator.insets")
+  StyleSelectionIndicatorSize* = StyleKey[float32]("selection.indicator.size")
+  StyleSelectionIndicatorCornerRadius* =
+    StyleKey[float32]("selection.indicator.corner.radius")
   StyleCursorColor* = StyleKey[Color]("cursor.color")
   StyleHighlightFill* = StyleKey[Fill]("highlight.fill")
   StyleAlternatingFill* = StyleKey[Fill]("alternating.fill")
@@ -333,6 +339,7 @@ const
   StyleSeparatorThickness* = StyleKey[float32]("separator.thickness")
   StyleMarkColor* = StyleKey[Color]("mark.color")
   StyleMinimumSize* = StyleKey[Size]("minimum.size")
+  StyleCloseButtonPosition* = StyleKey[string]("close.button.position")
   StyleChrome* = StyleKey[string]("chrome")
 
   DefaultChromeName* = "default"
@@ -1279,6 +1286,19 @@ proc resolveColor*(
     appearance: Appearance, context: StyleContext, key: StyleKey[Color], fallback: Color
 ): Color =
   appearance.theme.resolveColor(context, key, fallback)
+
+proc resolveKeyword*(
+    theme: Theme, context: StyleContext, key: StyleKey[string], fallback: string
+): string =
+  theme.keywordRule(context, key, fallback)
+
+proc resolveKeyword*(
+    appearance: Appearance,
+    context: StyleContext,
+    key: StyleKey[string],
+    fallback: string,
+): string =
+  appearance.theme.resolveKeyword(context, key, fallback)
 
 proc resolveLength*(
     theme: Theme, context: StyleContext, key: StyleKey[float32], fallback: float32
