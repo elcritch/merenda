@@ -17,6 +17,7 @@ import ../containers/tabviews
 import ../controls/buttons
 import ../controls/comboboxes
 import ../controls/fontpickers
+import ../controls/steppers
 import ../foundation/objectvalues
 import ../foundation/selectors
 import ../foundation/types
@@ -34,13 +35,6 @@ type
     stNebula
     stPeachy
     stSynthwave83
-
-  SettingsFontSize = enum
-    sfs12
-    sfs14
-    sfs16
-    sfs18
-    sfs20
 
   AppearanceHandler* = proc(appearance: Appearance) {.closure.}
   FontSelectionProc = proc(path: string) {.closure.}
@@ -76,16 +70,20 @@ type
     applyAppearanceHandler: AppearanceHandler
     activeTheme: SettingsTheme
     previewFontPath: string
-    previewFontSize: SettingsFontSize
+    previewFontSize: float32
     appliedFontPath: string
-    appliedFontSize: SettingsFontSize
+    appliedFontSize: float32
     fontLoadingStatus: string
     preview: Label
     status: Label
+    fontSizeValue: Label
 
 const
   FontCatalogBatchSize = 8
   FontCatalogBatchesPerReload = 10
+  SettingsMinimumFontSize = 6.0'f32
+  SettingsMaximumFontSize = 120.0'f32
+  SettingsDefaultFontSize = 14.0'f32
 
 proc fontCatalogLoadRequested(controller: FontPickerController) {.signal.}
 proc fontCatalogBatchLoaded(
@@ -381,30 +379,17 @@ func title(theme: SettingsTheme): string =
   of stPeachy: "Peachy"
   of stSynthwave83: "Synthwave '83"
 
-func title(size: SettingsFontSize): string =
-  case size
-  of sfs12: "12 pt"
-  of sfs14: "14 pt"
-  of sfs16: "16 pt"
-  of sfs18: "18 pt"
-  of sfs20: "20 pt"
-
 proc fontTitle(path: string): string =
   if path.len == 0:
     "Default"
   else:
     path.extractFilename()
 
-func pointSize(size: SettingsFontSize): float32 =
-  case size
-  of sfs12: 12.0'f32
-  of sfs14: 14.0'f32
-  of sfs16: 16.0'f32
-  of sfs18: 18.0'f32
-  of sfs20: 20.0'f32
+func fontSizeTitle(size: float32): string =
+  $size.int & " pt"
 
 proc appearanceFor(
-    theme: SettingsTheme, fontPath: string, fontSize: SettingsFontSize
+    theme: SettingsTheme, fontPath: string, fontSize: float32
 ): Appearance =
   case theme
   of stDefault:
@@ -427,7 +412,7 @@ proc appearanceFor(
       else:
         defaultFontName()
     )
-    result.theme[role, StyleFontSize] = fontSize.pointSize()
+    result.theme[role, StyleFontSize] = fontSize
 
 proc newSettingsPage(): tuple[view: View, stack: StackView] =
   result.view = newView()
@@ -441,14 +426,16 @@ proc newSettingsPage(): tuple[view: View, stack: StackView] =
   )
 
 proc updatePreview(settings: MerendaSettingsWindow) =
+  if not settings.fontSizeValue.isNil:
+    settings.fontSizeValue.text = settings.previewFontSize.fontSizeTitle()
   settings.preview.appearance = settings.activeTheme.appearanceFor(
     settings.previewFontPath, settings.previewFontSize
   )
   settings.status.text =
     "Previewing " & settings.previewFontPath.fontTitle() & " · " &
-    settings.previewFontSize.title() & " — application: " &
-    settings.appliedFontPath.fontTitle() & " · " & settings.appliedFontSize.title() &
-    " · " & settings.fontLoadingStatus
+    settings.previewFontSize.fontSizeTitle() & " — application: " &
+    settings.appliedFontPath.fontTitle() & " · " &
+    settings.appliedFontSize.fontSizeTitle() & " · " & settings.fontLoadingStatus
 
 proc applyAppearance(settings: MerendaSettingsWindow) =
   if not settings.applyAppearanceHandler.isNil:
@@ -467,11 +454,9 @@ proc themeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
       settings.applyAppearance()
 
 proc fontSizeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
-  if sender of ComboBox:
-    let index = ComboBox(sender).selectedIndex()
-    if index >= ord(low(SettingsFontSize)) and index <= ord(high(SettingsFontSize)):
-      settings.previewFontSize = SettingsFontSize(index)
-      settings.updatePreview()
+  if sender of Stepper:
+    settings.previewFontSize = Stepper(sender).value
+    settings.updatePreview()
 
 proc applyFontDidClick(settings: MerendaSettingsWindow, sender: DynamicAgent) =
   if sender of Button:
@@ -500,8 +485,8 @@ proc newMerendaSettingsWindow*(
     fontPickerController: newFontPickerController(),
     applyAppearanceHandler: appearanceHandler,
     activeTheme: stDefault,
-    previewFontSize: sfs14,
-    appliedFontSize: sfs14,
+    previewFontSize: SettingsDefaultFontSize,
+    appliedFontSize: SettingsDefaultFontSize,
     fontLoadingStatus: "Loading system fonts…",
   )
   initResponder(result)
@@ -530,8 +515,13 @@ proc newMerendaSettingsWindow*(
       ]
     )
     fontPicker = newCascadingView()
-    fontSizePicker = newComboBox(
-      [sfs12.title(), sfs14.title(), sfs16.title(), sfs18.title(), sfs20.title()]
+    fontSizeControl = newStackView(laHorizontal)
+    fontSizeValue = newLabel(SettingsDefaultFontSize.fontSizeTitle())
+    fontSizeStepper = newStepper(
+      SettingsMinimumFontSize,
+      SettingsMaximumFontSize,
+      result.previewFontSize,
+      increment = 1.0,
     )
     applyFontButton = newButton("Apply font")
     themeChanged = actionSelector("themeChanged")
@@ -540,7 +530,9 @@ proc newMerendaSettingsWindow*(
 
   result.preview = newLabel("The quick brown fox jumps over the lazy dog.")
   result.status = newStatusLabel()
+  result.fontSizeValue = fontSizeValue
   result.xFirstResponder = themePicker
+  tabs.identifier = "settings-tabs"
 
   for form in [appearanceForm, typographyForm]:
     form.edgeInsets = insets(0.0)
@@ -569,13 +561,21 @@ proc newMerendaSettingsWindow*(
   fontPicker.delegate = result.fontPickerController
   fontPicker.selectedPath =
     @[DefaultFontLanguage.fontPickerLanguageIdentifier(), DefaultSystemFontIdentifier]
-  fontSizePicker.selectedIndex = result.previewFontSize.ord
-  fontSizePicker.target = newActionTarget(
+  fontSizeControl.spacing = 8.0
+  fontSizeControl.alignment = svaCenter
+  fontSizeValue.setHuggingPriority(LayoutPriorityHigh, laHorizontal)
+  fontSizeStepper.accessibilityLabel = "Font size"
+  fontSizeStepper.valueFormatter = proc(value: float32): string =
+    value.fontSizeTitle()
+  fontSizeStepper.target = newActionTarget(
     fontSizeChanged,
     proc(sender: DynamicAgent) =
       settings.fontSizeDidChange(sender),
   )
-  fontSizePicker.action = fontSizeChanged
+  fontSizeStepper.action = fontSizeChanged
+  fontSizeControl.addArrangedSubview(fontSizeValue, fontSizeStepper)
+  fontSizeStepper.identifier = "settings-font-size-stepper"
+  fontSizeControl.addFlexibleSpacer()
   applyFontButton.target = newActionTarget(
     applyFont,
     proc(sender: DynamicAgent) =
@@ -592,7 +592,7 @@ proc newMerendaSettingsWindow*(
   appearancePage.stack.addFlexibleSpacer()
 
   typographyForm.addRow(fontLabel, fontPicker)
-  typographyForm.addRow(fontSizeLabel, fontSizePicker)
+  typographyForm.addRow(fontSizeLabel, fontSizeControl)
   typographyPage.stack.addArrangedSubview(
     newHeadingLabel("Typography"),
     newLabel("Choose a font family, language, and face, then preview and apply it."),
@@ -601,6 +601,8 @@ proc newMerendaSettingsWindow*(
     result.preview,
     applyFontButton,
   )
+  result.preview.identifier = "settings-font-preview"
+  applyFontButton.identifier = "settings-apply-font"
   typographyPage.stack.addFlexibleSpacer()
 
   discard

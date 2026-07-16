@@ -30,6 +30,7 @@ import nimkit/responder
 import nimkit/scrollviews
 import nimkit/scrollviews2
 import nimkit/selectionrings
+import nimkit/settings
 import nimkit/sizing
 import nimkit/splitviews
 import nimkit/stackviews
