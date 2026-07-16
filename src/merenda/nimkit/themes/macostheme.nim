@@ -37,6 +37,8 @@ proc addMacOSLabelRule(
 proc installMacOSTokens(theme: var Theme) =
   theme["accent"] = color(0.04, 0.52, 1.0, 1.0)
   theme["accent.pressed"] = color(0.0, 0.38, 0.82, 1.0)
+  theme["progress.fill"] = styleToken("accent")
+  theme["progress.border.color"] = styleToken("accent.pressed")
   theme["disabled.fill"] = color(0.93, 0.93, 0.94, 1.0)
   theme["disabled.text.color"] = color(0.56, 0.56, 0.58, 1.0)
   theme["focus.ring.color"] = color(0.04, 0.52, 1.0, 0.48)
@@ -204,6 +206,8 @@ proc installMacOSControlStyles(theme: var Theme) =
     theme[role, StyleKnobFill] = fill(color(1.0, 1.0, 1.0, 1.0))
     theme[role, StyleKnobBorderColor] = color(0.0, 0.0, 0.0, 0.14)
     theme[role, StyleKnobShadows] = knobShadow()
+  theme[srProgressIndicator, StyleHighlightFill] = styleToken("progress.fill")
+  theme[srProgressIndicator, StyleFocusRingColor] = styleToken("progress.border.color")
 
   theme[srTextField, StyleCornerRadius] = 6.0
   theme[srTextField, StyleMinimumSize] = initSize(80.0, 28.0)

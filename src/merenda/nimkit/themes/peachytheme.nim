@@ -148,6 +148,8 @@ func peachyKnobShadows(): seq[BoxShadow] =
 proc installPeachyTokens(theme: var Theme) =
   theme["accent"] = color(0.10, 0.92, 1.0, 0.92)
   theme["accent.pressed"] = color(0.78, 0.18, 1.0, 0.82)
+  theme["progress.fill"] = styleToken("accent")
+  theme["progress.border.color"] = styleToken("accent.pressed")
   theme["disabled.fill"] = peachyDisabledFill()
   theme["disabled.text.color"] = color(0.44, 0.58, 0.70, 0.66)
   theme["focus.ring.color"] = color(0.18, 0.92, 1.0, 0.88)
@@ -861,6 +863,12 @@ proc initPeachyTheme*(): Theme =
   result.installPeachyTextReadabilityPass()
   result.installPeachyDocumentTabs()
   result.clearBackgroundPinstripes()
+
+  result[srProgressIndicator, StyleFill] = result[srSlider, StyleFill]
+  result[srProgressIndicator, StyleHighlightFill] = styleToken("progress.fill")
+  result[srProgressIndicator, StyleBorderColor] = result[srSlider, StyleBorderColor]
+  result[srProgressIndicator, StyleFocusRingColor] = styleToken("progress.border.color")
+  result[srProgressIndicator, StyleBoxShadows] = result[srSlider, StyleBoxShadows]
 
   for role in [
     srButton, srCheckBox, srRadioButton, srSwitch, srSlider, srProgressIndicator, srTab,

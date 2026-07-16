@@ -209,7 +209,7 @@ proc initDocumentTabItemFields*(
   item.xEnabled = true
   item.xCloseable = closeable
   item.xStyle = style
-  item.xAccentColor = color(0.20, 0.45, 0.92, 1.0)
+  item.xAccentColor = color(0.0, 0.0, 0.0, 0.0)
   item.xObjectValue = emptyObjectValue()
 
 proc initDocumentTabItem*(
@@ -232,7 +232,7 @@ proc initDocumentTabModel*(
     closeable = true,
     modified = false,
     style = dtsAutomatic,
-    accentColor = color(0.20, 0.45, 0.92, 1.0),
+    accentColor = color(0.0, 0.0, 0.0, 0.0),
     styleId = "",
     styleClasses: openArray[string] = [],
     tooltip = "",
@@ -1267,11 +1267,17 @@ func tabCornerRadius(style: DocumentTabStyle): float32 =
 func tabHighlightFill(enabled: bool): Fill =
   fill(color(1.0, 1.0, 1.0, if enabled: 0.46 else: 0.20))
 
-func documentTabAccentColor(item: DocumentTabItem): Color =
-  let
-    source = item.accentColor()
-    alphaScale =
-      if item.modified(): DocumentTabModifiedAccentAlpha else: DocumentTabAccentAlpha
+proc resolvedDocumentTabAccentColor(
+    item: DocumentTabItem, appearance: Appearance, styleContext: StyleContext
+): Color =
+  let configured = item.accentColor()
+  if configured.a > 0.0'f32:
+    return configured
+  appearance.resolveColor(styleContext, StyleMarkColor, color(0.20, 0.45, 0.92, 1.0))
+
+func documentTabSelectionAccentColor(source: Color, modified: bool): Color =
+  let alphaScale =
+    if modified: DocumentTabModifiedAccentAlpha else: DocumentTabAccentAlpha
   color(source.r, source.g, source.b, source.a * alphaScale)
 
 proc drawCloseButton(
@@ -1364,6 +1370,7 @@ proc drawDocumentTab(
 
   let
     styleContext = tabs.documentTabStyleContext(item, states)
+    accentColor = item.resolvedDocumentTabAccentColor(context.appearance, styleContext)
     textColor = documentTabTextColor(item.enabled(), selected)
     tabTextStyle = context.appearance.tabTextStyle(styleContext, textColor)
     fillFallback = fill(tabFillColor(style, selected, pressed))
@@ -1435,7 +1442,7 @@ proc drawDocumentTab(
       DefaultDrawLevel,
       parent,
       context.renderRectFor(accentRect),
-      fill(item.documentTabAccentColor()),
+      fill(accentColor.documentTabSelectionAccentColor(item.modified())),
       cornerRadius = accentRadius,
     )
 
@@ -1461,7 +1468,7 @@ proc drawDocumentTab(
       DefaultDrawLevel,
       parent,
       initPoint(rect.origin.x + 12.0'f32, rect.origin.y + rect.size.height / 2.0'f32),
-      fill(item.accentColor()),
+      fill(accentColor),
       3.0'f32,
     )
   context.addText(DefaultDrawLevel, parent, textRect, item.title(), tabTextStyle)

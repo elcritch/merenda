@@ -895,7 +895,7 @@ proc matrixItemModelForArrayItem(
   )
 
 proc documentTabModelForArrayItem(item: ModelItem): DocumentTabModel =
-  let accentColor = color(0.20, 0.45, 0.92, 1.0)
+  let accentColor = color(0.0, 0.0, 0.0, 0.0)
   initDocumentTabModel(
     identifier = item.identifier,
     title = item.displayTitle(ovrLabel),

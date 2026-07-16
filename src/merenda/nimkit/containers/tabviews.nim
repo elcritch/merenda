@@ -763,10 +763,13 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     rect.tabTextRect(tabTextInsets), item.label(), tabTextStyle, alignment = taCenter
   )
   if selected and tabView.isFocusVisible:
+    let focusRingColor = context.appearance.resolveColor(
+      tabStyleContext, StyleFocusRingColor, color(0.25, 0.45, 0.90)
+    )
     discard context.addRenderRectangle(
       context.renderRectFor(rect.inset(insets(3.0'f32))),
       color(0.0, 0.0, 0.0, 0.0),
-      color(0.25, 0.45, 0.90),
+      focusRingColor,
       1.0'f32,
       3.0'f32,
     )

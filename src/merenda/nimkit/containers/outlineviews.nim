@@ -1060,7 +1060,17 @@ proc drawOutlineDropTarget(
     rowBounds.size.width,
     2.0,
   )
-  discard context.addRenderRectangle(indicatorRect, fill(color(0.18, 0.42, 0.88, 0.95)))
+  let indicatorFill = context.appearance.resolveFill(
+    controlStyle(
+      TableView(outlineView).tableRole(),
+      outlineView.widgetStateSet(),
+      id = outlineView.styleId(),
+      classes = outlineView.styleClasses(),
+    ),
+    fill(color(0.18, 0.42, 0.88, 0.95)),
+    StyleDropIndicatorFill,
+  )
+  discard context.addRenderRectangle(indicatorRect, indicatorFill)
 
 protocol OutlineViewDrawing of ViewDrawingProtocol:
   method draw(outlineView: OutlineView, context: DrawContext) =

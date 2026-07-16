@@ -53,15 +53,6 @@ protocol DocumentTabsDemoSignals from DocumentTabsDemo:
 proc newDemoTab(title, identifier: string, style: DocumentTabStyle): DocumentTabItem =
   result = newDocumentTabItem(title, identifier, closeable = identifier != "pinned")
   result.style = style
-  case style
-  of dtsPill:
-    result.accentColor = color(0.12, 0.42, 0.86, 1.0)
-  of dtsUnderline:
-    result.accentColor = color(0.16, 0.50, 0.92, 1.0)
-  of dtsCompact:
-    result.accentColor = color(0.20, 0.48, 0.78, 1.0)
-  else:
-    result.accentColor = color(0.08, 0.36, 0.78, 1.0)
 
 proc selectedStyle(demo: DocumentTabsDemo): DocumentTabStyle =
   case demo.styleChoice.indexOfSelectedItem()

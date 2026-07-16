@@ -69,6 +69,22 @@ proc checkDocumentTabsUseThemeTabStyle(theme: Theme) =
   check appearance.resolveColor(tabButtonStyle, StyleMarkColor, fallbackColor) ==
     appearance.colorToken("tab.text.color", fallbackColor)
 
+proc checkThemeAccentConsumers(theme: Theme) =
+  let
+    appearance = initAppearance(theme)
+    fallbackColor = color(0.0, 0.0, 0.0, 1.0)
+    fallbackFill = fill(fallbackColor)
+    tabStyle = controlStyle(srDocumentTab, {ssSelected})
+    progressStyle =
+      appearance.resolveProgressIndicatorStyle(controlStyle(srProgressIndicator))
+
+  check appearance.resolveColor(tabStyle, StyleMarkColor, fallbackColor) ==
+    appearance.colorToken("accent", fallbackColor)
+  check progressStyle.activeTrack.fill ==
+    appearance.fillToken("progress.fill", fallbackFill)
+  check progressStyle.activeTrack.borderColor ==
+    appearance.colorToken("progress.border.color", fallbackColor)
+
 func aquaButtonFill(): Fill =
   linear(
     rgbaColor(86, 167, 233, 163),
@@ -758,6 +774,30 @@ suite "nimkit theme":
   test "peachy and synthwave document tabs use theme tab styling":
     checkDocumentTabsUseThemeTabStyle(initPeachyTheme())
     checkDocumentTabsUseThemeTabStyle(initSynthwave83Theme())
+
+  test "theme accents drive document tabs and progress indicators":
+    for theme in [
+      initTheme(),
+      initBannerTheme(),
+      initMacOSTheme(),
+      initNebulaTheme(),
+      initPeachyTheme(),
+      initSynthwave83Theme(),
+    ]:
+      checkThemeAccentConsumers(theme)
+
+    let
+      defaultProgress =
+        initTheme().resolveProgressIndicatorStyle(controlStyle(srProgressIndicator))
+      peachyProgress = initPeachyTheme().resolveProgressIndicatorStyle(
+          controlStyle(srProgressIndicator)
+        )
+      synthwaveProgress = initSynthwave83Theme().resolveProgressIndicatorStyle(
+          controlStyle(srProgressIndicator)
+        )
+    check peachyProgress.activeTrack.fill != defaultProgress.activeTrack.fill
+    check synthwaveProgress.activeTrack.fill != defaultProgress.activeTrack.fill
+    check peachyProgress.activeTrack.fill != synthwaveProgress.activeTrack.fill
 
   test "banner theme exposes generated banner palette as an opt-in theme":
     let

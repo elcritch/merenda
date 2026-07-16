@@ -424,6 +424,42 @@ suite "nimkit document tabs":
         break
     check softenedModifiedAccentFound
 
+  test "document tab default accents resolve from the theme palette":
+    let
+      tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
+      selected = newDocumentTabItem("Selected", "selected")
+      modified = newDocumentTabItem("Modified", "modified")
+      themeAccent = color(0.90, 0.28, 0.54, 0.94)
+
+    modified.modified = true
+    discard tabs.addDocumentTabItem(selected)
+    discard tabs.addDocumentTabItem(modified)
+
+    var theme = initTheme()
+    theme["accent"] = themeAccent
+    let
+      renders = buildRenders(tabs, initAppearance(theme))
+      selectedAccentFill = fill(
+        color(themeAccent.r, themeAccent.g, themeAccent.b, themeAccent.a * 0.72'f32)
+      )
+      modifiedDotFill = fill(themeAccent)
+    var
+      selectedAccentFound = false
+      modifiedDotFound = false
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill == selectedAccentFill:
+        selectedAccentFound = true
+      elif node.kind == nkDrawable and node.fill == modifiedDotFill:
+        for op in node.drawOps:
+          if op.kind == dkCircle:
+            modifiedDotFound = true
+
+    check selected.accentColor.a == 0.0'f32
+    check modified.accentColor.a == 0.0'f32
+    check selectedAccentFound
+    check modifiedDotFound
+
   test "delegates can veto selection closing and moving while signals fire":
     let
       tabs = newDocumentTabs(frame = rect(0, 0, 420, 34))

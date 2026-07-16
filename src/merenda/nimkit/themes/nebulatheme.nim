@@ -140,6 +140,8 @@ proc installNebulaTokens(theme: var Theme) =
 
   theme["accent"] = color(0.10, 0.92, 1.0, 0.92)
   theme["accent.pressed"] = color(0.78, 0.18, 1.0, 0.82)
+  theme["progress.fill"] = styleToken("accent")
+  theme["progress.border.color"] = styleToken("accent.pressed")
   theme["disabled.fill"] = nebulaDisabledFill()
   theme["disabled.text.color"] = color(0.44, 0.58, 0.70, 0.66)
   theme["focus.ring.color"] = color(0.18, 0.92, 1.0, 0.88)
@@ -264,6 +266,11 @@ proc installNebulaControlStyles(theme: var Theme) =
   theme[srTableView, StyleBoxShadows] = nebulaInsetShadows()
   theme[srTableView, StyleDropIndicatorFill] = nebulaSelectionFill()
   theme[srTableView, StyleFocusRingColor] = styleToken("focus.ring.color")
+  theme[srProgressIndicator, StyleFill] = nebulaFieldFill()
+  theme[srProgressIndicator, StyleHighlightFill] = styleToken("progress.fill")
+  theme[srProgressIndicator, StyleBorderColor] = color(0.16, 0.86, 1.0, 0.54)
+  theme[srProgressIndicator, StyleFocusRingColor] = styleToken("progress.border.color")
+  theme[srProgressIndicator, StyleBoxShadows] = nebulaInsetShadows()
 
 proc installNebulaLabels(theme: var Theme) =
   theme.addLabelRule(
