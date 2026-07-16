@@ -1,4 +1,4 @@
-import std/[unicode, unittest]
+import std/[strutils, unicode, unittest]
 
 import sigils/core
 
@@ -348,6 +348,50 @@ suite "nimkit document tabs":
       newDocumentTabItem("Underline", "underline", style = dtsUnderline)
     )
     check tabs.contentWidth() > tabs.documentTabRect(0).size.width
+
+  test "document tabs reserve width for titles and stateful font sizes":
+    let
+      tabs = newDocumentTabs(frame = rect(0, 0, 1200, 48))
+      short = newDocumentTabItem("Log", "log")
+      long = newDocumentTabItem("sam_inference_server", "server")
+
+    var theme = initTheme()
+    theme[srDocumentTab, StyleFontSize] = DefaultFontSize
+    theme[srDocumentTab, {ssSelected}, StyleFontSize] = 32.0
+    let
+      appearance = initAppearance(theme)
+      selectedContext = controlStyle(srDocumentTab, {ssSelected})
+      selectedTextStyle = appearance.resolveTextStyle(
+        selectedContext, color(0.0, 0.0, 0.0, 1.0), insets(0.0)
+      )
+      selectedTitleWidth = textNaturalSize(long.title, selectedTextStyle).width
+
+    tabs.appearance = appearance
+    discard tabs.addDocumentTabItem(short)
+    discard tabs.addDocumentTabItem(long)
+
+    check tabs.documentTabRect(1).size.width > tabs.documentTabRect(0).size.width
+    check tabs.documentTabRect(1).size.width > selectedTitleWidth
+
+  test "document tab rendering ellipsizes titles constrained by theme width":
+    let
+      tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
+      title = "A document title much longer than the themed maximum width"
+
+    discard tabs.addDocumentTabItem(newDocumentTabItem(title, "long-title"))
+
+    let renders = buildRenders(tabs)
+    var renderedTitle = ""
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        let text = node.renderedText()
+        if text.startsWith("A document"):
+          renderedTitle = text
+          break
+
+    check renderedTitle.len > 0
+    check renderedTitle != title
+    check renderedTitle.endsWith("…")
 
   test "document tabs can move an item all the way to the front":
     let

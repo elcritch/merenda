@@ -614,6 +614,20 @@ proc tabTextStyle(
 ): TextStyle =
   appearance.resolveTextStyle(styleContext, color, insets(0.0))
 
+func documentTabHorizontalInsets(
+    viewStyle: TabViewStyle, textStyle: TextStyle
+): tuple[left, right: float32] =
+  (
+    left: max(
+      DocumentTabHorizontalInset,
+      max(viewStyle.tabHorizontalPadding, textStyle.insets.left),
+    ),
+    right: max(
+      DocumentTabHorizontalInset,
+      max(viewStyle.tabHorizontalPadding, textStyle.insets.right),
+    ),
+  )
+
 func documentTabTextColor(enabled, selected: bool): Color =
   if not enabled:
     color(0.50, 0.52, 0.56, 1.0)
@@ -622,31 +636,42 @@ func documentTabTextColor(enabled, selected: bool): Color =
   else:
     color(0.18, 0.20, 0.25, 1.0)
 
-proc documentTabWidth(tabs: DocumentTabs, item: DocumentTabItem): float32 =
+proc documentTabWidth(
+    tabs: DocumentTabs, item: DocumentTabItem, states: set[WidgetState]
+): float32 =
+  var effectiveStates = states
+  if not item.enabled():
+    effectiveStates.incl ssDisabled
   let
     appearance = tabs.documentTabAppearance()
     style = tabs.effectiveStyle(item)
-    styleContext = tabs.documentTabStyleContext(item)
+    styleContext = tabs.documentTabStyleContext(item, effectiveStates)
     viewStyle = appearance.resolveTabViewStyle(styleContext)
     bounds = style.tabWidthBounds(viewStyle)
     textStyle = appearance.tabTextStyle(
-      styleContext, documentTabTextColor(item.enabled(), selected = false)
+      styleContext, documentTabTextColor(item.enabled(), ssSelected in states)
     )
-    titleWidth = min(textNaturalSize(item.title(), textStyle).width, bounds.maxWidth)
-    horizontalInset = max(viewStyle.tabHorizontalPadding, 0.0'f32)
+    titleWidth = textNaturalSize(item.title(), textStyle).width
+    horizontalInsets = documentTabHorizontalInsets(viewStyle, textStyle)
     closeWidth =
       if tabs.allowsClosing() and item.closeable():
         DocumentTabCloseWidth + DocumentTabCloseSpacing
       else:
         0.0'f32
     modifiedWidth = if item.modified(): 9.0'f32 else: 0.0'f32
+    fontScale = max(textStyle.fontSize / DefaultFontSize, 1.0'f32)
+    maximumWidth = max(bounds.maxWidth * fontScale, bounds.minWidth)
   min(
     max(
-      titleWidth + horizontalInset * 2.0'f32 + closeWidth + modifiedWidth,
+      titleWidth + horizontalInsets.left + horizontalInsets.right + closeWidth +
+        modifiedWidth,
       bounds.minWidth,
     ),
-    bounds.maxWidth,
+    maximumWidth,
   )
+
+proc documentTabWidth(tabs: DocumentTabs, item: DocumentTabItem): float32 =
+  max(tabs.documentTabWidth(item, {}), tabs.documentTabWidth(item, {ssSelected}))
 
 proc contentWidth*(tabs: DocumentTabs): float32 =
   for index, item in tabs.xItems:
@@ -1547,9 +1572,10 @@ proc drawDocumentTab(
     close = tabs.closeRect(index, context.appearance)
     closePosition = tabs.documentTabCloseButtonPosition(item, context.appearance)
     modifiedWidth = if item.modified(): 8.0'f32 else: 0.0'f32
-    textInsets = tabTextStyle.insets
-    baseLeftInset = max(textInsets.left, DocumentTabHorizontalInset)
-    baseRightInset = max(textInsets.right, DocumentTabHorizontalInset)
+    viewStyle = context.appearance.resolveTabViewStyle(styleContext)
+    horizontalInsets = documentTabHorizontalInsets(viewStyle, tabTextStyle)
+    baseLeftInset = horizontalInsets.left
+    baseRightInset = horizontalInsets.right
     closeReserve =
       if close.isEmpty:
         0.0'f32
@@ -1569,6 +1595,7 @@ proc drawDocumentTab(
       max(rect.size.width - textLeftInset - textRightInset, 0.0'f32),
       rect.size.height,
     )
+    displayTitle = item.title().clippedText(textRect.size.width, tabTextStyle)
 
   if item.modified():
     discard context.addRenderCircle(
@@ -1578,7 +1605,7 @@ proc drawDocumentTab(
       fill(accentColor),
       3.0'f32,
     )
-  context.addText(DefaultDrawLevel, parent, textRect, item.title(), tabTextStyle)
+  context.addText(DefaultDrawLevel, parent, textRect, displayTitle, tabTextStyle)
   tabs.drawCloseButton(
     context,
     parent,
