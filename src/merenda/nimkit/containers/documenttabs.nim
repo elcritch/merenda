@@ -102,6 +102,11 @@ const
   DocumentTabCompactMaxWidth = 140.0'f32
   DocumentTabHorizontalInset = 12.0'f32
   DocumentTabCloseWidth = 16.0'f32
+  DocumentTabAccentWidth = 2.0'f32
+  DocumentTabAccentInset = 7.0'f32
+  DocumentTabAccentLeadingInset = 2.0'f32
+  DocumentTabAccentAlpha = 0.72'f32
+  DocumentTabModifiedAccentAlpha = 0.52'f32
   DocumentTabDragThreshold = 3.0'f32
   DocumentTabScrollerHeight = 3.0'f32
   DocumentTabDefaultLineScroll = 18.0'f32
@@ -1262,6 +1267,13 @@ func tabCornerRadius(style: DocumentTabStyle): float32 =
 func tabHighlightFill(enabled: bool): Fill =
   fill(color(1.0, 1.0, 1.0, if enabled: 0.46 else: 0.20))
 
+func documentTabAccentColor(item: DocumentTabItem): Color =
+  let
+    source = item.accentColor()
+    alphaScale =
+      if item.modified(): DocumentTabModifiedAccentAlpha else: DocumentTabAccentAlpha
+  color(source.r, source.g, source.b, source.a * alphaScale)
+
 proc drawCloseButton(
     tabs: DocumentTabs,
     context: DrawContext,
@@ -1400,24 +1412,31 @@ proc drawDocumentTab(
       ),
     )
 
-  let accentRect =
-    case style
-    of dtsUnderline:
-      rect(
-        rect.origin.x + 8.0'f32,
-        rect.maxY - 3.0'f32,
-        rect.size.width - 16.0'f32,
-        3.0'f32,
-      )
-    else:
-      rect(rect.origin.x, rect.origin.y, 4.0'f32, rect.size.height)
-  if selected or item.modified() or style == dtsUnderline:
+  if selected:
+    let
+      accentRect =
+        case style
+        of dtsUnderline:
+          rect(
+            rect.origin.x + 8.0'f32,
+            rect.maxY - DocumentTabAccentWidth,
+            max(rect.size.width - 16.0'f32, 0.0'f32),
+            DocumentTabAccentWidth,
+          )
+        else:
+          rect(
+            rect.origin.x + max(borderWidth, 1.0'f32) + DocumentTabAccentLeadingInset,
+            rect.origin.y + DocumentTabAccentInset,
+            DocumentTabAccentWidth,
+            max(rect.size.height - DocumentTabAccentInset * 2.0'f32, 0.0'f32),
+          )
+      accentRadius = DocumentTabAccentWidth / 2.0'f32
     discard context.addRenderRectangle(
       DefaultDrawLevel,
       parent,
       context.renderRectFor(accentRect),
-      fill(item.accentColor()),
-      cornerRadius = if style == dtsUnderline: 2.0'f32 else: radius,
+      fill(item.documentTabAccentColor()),
+      cornerRadius = accentRadius,
     )
 
   let

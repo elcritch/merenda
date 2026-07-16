@@ -367,6 +367,63 @@ suite "nimkit document tabs":
     check tabs.selectedDocumentTabItem == third
     check tabs.selectedIndex() == 0
 
+  test "document tab selection accent stays inside the tab":
+    let
+      tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
+      selectedAccent = color(0.84, 0.12, 0.28, 1.0)
+      modifiedAccent = color(0.12, 0.68, 0.34, 1.0)
+      selected = newDocumentTabItem("Selected", "selected")
+      modified = newDocumentTabItem("Modified", "modified")
+
+    selected.accentColor = selectedAccent
+    modified.accentColor = modifiedAccent
+    modified.modified = true
+    discard tabs.addDocumentTabItem(selected)
+    discard tabs.addDocumentTabItem(modified)
+
+    let
+      renders = buildRenders(tabs)
+      selectedRect = tabs.documentTabRect(0)
+      selectedAccentFill =
+        fill(color(selectedAccent.r, selectedAccent.g, selectedAccent.b, 0.72))
+    var
+      selectedAccentRect: nimkitTypes.Rect
+      modifiedDotFound = false
+      modifiedAccentRectFound = false
+
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.fill == selectedAccentFill and node.kind == nkRectangle:
+        selectedAccentRect = node.renderedRect()
+      elif node.fill == fill(modifiedAccent):
+        if node.kind == nkRectangle:
+          modifiedAccentRectFound = true
+        elif node.kind == nkDrawable:
+          for op in node.drawOps:
+            if op.kind == dkCircle:
+              modifiedDotFound = true
+
+    check not selectedAccentRect.isEmpty
+    check selectedAccentRect.minX > selectedRect.minX
+    check selectedAccentRect.minY > selectedRect.minY
+    check selectedAccentRect.maxX < selectedRect.maxX
+    check selectedAccentRect.maxY < selectedRect.maxY
+    check selectedAccentRect.size.width == 2.0'f32
+    check selectedAccentRect.size.height <= 16.0'f32
+    check modifiedDotFound
+    check not modifiedAccentRectFound
+
+    check tabs.selectDocumentTab(modified)
+    let
+      modifiedRenders = buildRenders(tabs)
+      softenedModifiedAccent =
+        fill(color(modifiedAccent.r, modifiedAccent.g, modifiedAccent.b, 0.52))
+    var softenedModifiedAccentFound = false
+    for node in modifiedRenders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill == softenedModifiedAccent:
+        softenedModifiedAccentFound = true
+        break
+    check softenedModifiedAccentFound
+
   test "delegates can veto selection closing and moving while signals fire":
     let
       tabs = newDocumentTabs(frame = rect(0, 0, 420, 34))
