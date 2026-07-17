@@ -42,24 +42,24 @@ jobs:
         path: deps/
         key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
-    - name: Install Choosenim
-      if: runner.os != 'Windows'
+    - name: Install GrabNim
       run: |
-        curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
-        echo "$HOME/.nimble/bin" >> $GITHUB_PATH
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
+        echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
+        echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
 
     - name: Install Nim
-      if: runner.os != 'Windows'
       run: |
-        choosenim ${{ matrix.nimversion }}
-        nim -v
+        grabnim "${{ matrix.nimversion }}"
 
-    - name: Install Nim (Windows)
+    - name: Set up GrabNim (Windows)
       if: runner.os == 'Windows'
-      uses: jiro4989/setup-nim-action@v2
-      with:
-        nim-version: ${{ matrix.nimversion }}
+      run: |
+        grabnim setup
+        echo "$LOCALAPPDATA/grabnim/current/bin" >> "$GITHUB_PATH"
+
+    - name: Verify Nim
+      run: nim -v
 
     - name: Setup software OpenGL/Vulkan (Mesa) + Xvfb (X11)
       if: runner.os == 'Linux' && matrix.display == 'x11'
@@ -141,24 +141,24 @@ jobs:
         path: deps/
         key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
-    - name: Install Choosenim
-      if: runner.os != 'Windows'
+    - name: Install GrabNim
       run: |
-        curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
-        echo "$HOME/.nimble/bin" >> $GITHUB_PATH
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
+        echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
+        echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
 
     - name: Install Nim
-      if: runner.os != 'Windows'
       run: |
-        choosenim ${{ matrix.nimversion }}
-        nim -v
+        grabnim "${{ matrix.nimversion }}"
 
-    - name: Install Nim (Windows)
+    - name: Set up GrabNim (Windows)
       if: runner.os == 'Windows'
-      uses: jiro4989/setup-nim-action@v2
-      with:
-        nim-version: ${{ matrix.nimversion }}
+      run: |
+        grabnim setup
+        echo "$LOCALAPPDATA/grabnim/current/bin" >> "$GITHUB_PATH"
+
+    - name: Verify Nim
+      run: nim -v
 
     - name: Install Atlas
       run: |
