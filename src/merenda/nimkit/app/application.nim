@@ -795,6 +795,7 @@ proc showMerendaSettings*(app: Application) =
       proc(appearance: Appearance) =
         app.setAppearance(appearance)
     )
+  app.xMerendaSettingsWindow.resetSelections()
   discard app.showWindow(
     app.xMerendaSettingsWindow.window,
     app.xMerendaSettingsWindow.contentView(),
