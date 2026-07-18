@@ -5,11 +5,16 @@ import sigils/selectors
 
 const DefaultSvg =
   """
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240">
-  <path d="M160 18 L193 86 L268 97 L214 150 L227 224 L160 188
-    L93 224 L106 150 L52 97 L127 86 Z"/>
-  <path d="M160 65 C130 65 108 88 108 117 C108 154 143 178 160 192
-    C177 178 212 154 212 117 C212 88 190 65 160 65 Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 240">
+  <path d="M120 18 L153 86 L228 97 L174 150 L187 224 L120 188
+    L53 224 L66 150 L12 97 L87 86 Z"/>
+  <path d="M345 218 C330 202 250 153 250 96 C250 62 276 40 307 40
+    C325 40 339 49 345 62 C351 49 365 40 383 40 C414 40 440 62 440 96
+    C440 153 360 202 345 218 Z"/>
+  <path d="M28 30 C72 2 166 2 212 30" fill="none" stroke="black"
+    stroke-width="4" stroke-linecap="round"/>
+  <ellipse cx="345" cy="132" rx="72" ry="82" fill="none" stroke="black"
+    stroke-width="3"/>
 </svg>
 """
 
@@ -40,13 +45,12 @@ proc fittedRect(bounds: Rect, aspect, zoom: float32): Rect =
 
 protocol SvgCanvasDrawing of ViewDrawingProtocol:
   method draw(canvas: SvgCanvas, context: DrawContext) =
-    if canvas.svg.image.isNil:
+    if canvas.svg.layers.len == 0:
       return
 
     let
-      fieldSize = canvas.svg.image.size()
-      fieldAspect = fieldSize.width / fieldSize.height
-      imageRect = fittedRect(context.bounds, fieldAspect, canvas.zoom)
+      imageAspect = canvas.svg.size.width / canvas.svg.size.height
+      imageRect = fittedRect(context.bounds, imageAspect, canvas.zoom)
       shadowRect = rect(
         imageRect.origin.x + 8.0'f32,
         imageRect.origin.y + 10.0'f32,
@@ -74,9 +78,12 @@ proc installSvg(
   canvas.svg = svg
   canvas.accessibilityLabel = displayName
   canvas.setNeedsDisplay(true)
-  let size = canvas.svg.image.size()
+  var mtsdfCount = 0
+  for layer in canvas.svg.layers:
+    if layer.kind == slkMtsdfFill:
+      inc mtsdfCount
   status.text =
-    fmt"{displayName} — {canvas.svg.elementCount} paths, {size.width.int}×{size.height.int} MTSDF"
+    fmt"{displayName} — {canvas.svg.elementCount} elements, {mtsdfCount} MTSDFs, {canvas.svg.layers.len} layers"
 
 let
   app = sharedApplication()

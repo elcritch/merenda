@@ -5,6 +5,7 @@ import pkg/sdfy/msdfgen
 
 import ./images
 import ./private/svgpathloader
+import ../foundation/types
 
 const
   DefaultSvgMtsdfLongEdge* = 192
@@ -15,21 +16,63 @@ type
   SvgMtsdfError* = object of CatchableError
     ## Raised when SVG path loading or MTSDF generation fails.
 
+  SvgLayerKind* = enum
+    slkMtsdfFill
+    slkStrokePath
+    slkCircle
+
+  SvgPathSegmentKind* = enum
+    spsLine
+    spsQuadratic
+    spsCubic
+
+  SvgStrokeCap* = enum
+    svcButt
+    svcRound
+    svcSquare
+
+  SvgStrokeJoin* = enum
+    svjMiter
+    svjRound
+    svjBevel
+
+  SvgPathSegment* = object ## One stroked path segment in SVG document coordinates.
+    kind*: SvgPathSegmentKind
+    start*, control1*, control2*, stop*: Point
+
+  SvgAffineTransform* = object ## A 2D affine transform in SVG document coordinates.
+    a*, b*, c*, d*, tx*, ty*: float32
+
+  SvgLayer* = object ## One ordered SVG paint operation.
+    case kind*: SvgLayerKind
+    of slkMtsdfFill:
+      image*: ImageResource
+      frame*: Rect
+      pixelRange*: float32
+    of slkStrokePath:
+      segments*: seq[SvgPathSegment]
+      strokeWidth*: float32
+      strokeCap*: SvgStrokeCap
+      strokeJoin*: SvgStrokeJoin
+    of slkCircle:
+      transform*: SvgAffineTransform
+      drawsFill*, drawsStroke*: bool
+      localStrokeWidth*: float32
+
   SvgMtsdfResource* = object
-    ## A reusable MTSDF image generated from the visible paths in an SVG.
-    image*: ImageResource
+    ## Reusable ordered vector and MTSDF layers generated from an SVG.
+    layers*: seq[SvgLayer]
     elementCount*: Natural
-    pixelRange*: float32
+    size*: Size
 
 proc fieldDimensions(
-    path: Path, longEdge, minimumShortEdge: Positive
+    width, height: float32, longEdge, minimumShortEdge: Positive
 ): tuple[width, height: int] =
-  let bounds = path.computeBounds()
-  if bounds.w <= 0.0'f32 or bounds.h <= 0.0'f32:
-    raise newException(PixieError, "SVG path has empty bounds")
+  if width <= 0.0'f32 or height <= 0.0'f32:
+    raise newException(PixieError, "SVG has empty bounds")
 
   let
-    aspect = bounds.w / bounds.h
+    aspect = width / height
     shortest = min(minimumShortEdge.int, longEdge.int)
   if aspect >= 1.0'f32:
     result.width = longEdge
@@ -41,6 +84,82 @@ proc fieldDimensions(
 proc raiseSvgMtsdfError(message: string) {.noinline, noreturn.} =
   raise newException(SvgMtsdfError, message)
 
+proc layerName(name: string, index, count: int): string =
+  if name.len == 0:
+    return ""
+  if count == 1:
+    return name
+  name & ":" & $index
+
+proc toPoint(value: Vec2): Point =
+  initPoint(value.x, value.y)
+
+proc toSegment(segment: svgpathloader.SvgStrokeSegment): SvgPathSegment =
+  let kind =
+    case segment.kind
+    of sskLine: spsLine
+    of sskQuadratic: spsQuadratic
+    of sskCubic: spsCubic
+  SvgPathSegment(
+    kind: kind,
+    start: segment.start.toPoint(),
+    control1: segment.control1.toPoint(),
+    control2: segment.control2.toPoint(),
+    stop: segment.stop.toPoint(),
+  )
+
+proc toStrokeCap(value: svgpathloader.SvgStrokeCap): SvgStrokeCap =
+  case value
+  of sscButt: svcButt
+  of sscRound: svcRound
+  of sscSquare: svcSquare
+
+proc toStrokeJoin(value: svgpathloader.SvgStrokeJoin): SvgStrokeJoin =
+  case value
+  of ssjMiter: svjMiter
+  of ssjRound: svjRound
+  of ssjBevel: svjBevel
+
+proc toAffine(value: SvgAffine): SvgAffineTransform =
+  SvgAffineTransform(
+    a: value.a, b: value.b, c: value.c, d: value.d, tx: value.tx, ty: value.ty
+  )
+
+proc newMtsdfLayer(
+    path: Path,
+    name: string,
+    imageIndex, imageCount: int,
+    documentScale, pixelRange: float64,
+    cachePolicy: ImageCachePolicy,
+): SvgLayer =
+  let bounds = path.computeBounds()
+  if bounds.w <= 0.0'f32 or bounds.h <= 0.0'f32:
+    raise newException(PixieError, "SVG path has empty bounds")
+
+  let
+    minimumDimension = int(ceil(pixelRange + 1.0))
+    width =
+      max(minimumDimension, int(ceil(bounds.w.float64 * documentScale + pixelRange)))
+    height =
+      max(minimumDimension, int(ceil(bounds.h.float64 * documentScale + pixelRange)))
+    field = generateMtsdfPath(path, width, height, pixelRange)
+    fieldScale = field.scale.float32
+  field.image.flipVertical()
+
+  SvgLayer(
+    kind: slkMtsdfFill,
+    image: newImageResource(
+      field.image, layerName(name, imageIndex, imageCount), cachePolicy
+    ),
+    frame: rect(
+      (-field.translate.x).float32,
+      (-field.translate.y).float32,
+      width.float32 / fieldScale,
+      height.float32 / fieldScale,
+    ),
+    pixelRange: (field.range * field.scale).float32,
+  )
+
 proc newSvgMtsdfResource*(
     svgData: string,
     name = "",
@@ -49,26 +168,75 @@ proc newSvgMtsdfResource*(
     pixelRange = DefaultSvgMtsdfPixelRange,
     cachePolicy = icpDefault,
 ): SvgMtsdfResource =
-  ## Parses visible SVG paths and generates an MTSDF-backed image resource.
+  ## Parses an SVG into ordered FigDraw vector strokes and MTSDF fill layers.
   ##
-  ## SVG paint is intentionally ignored: callers choose fill and stroke while drawing.
+  ## Independently filled complex elements receive separate compact MTSDFs.
+  ## Circles, ellipses, lines, and Bezier strokes remain vector drawables. SVG
+  ## colors are intentionally ignored so callers can tint the resource.
   if pixelRange <= 0.0:
     raiseSvgMtsdfError("SVG MTSDF pixel range must be positive")
 
   try:
-    let parsed = parseSvgPath(svgData)
-    if parsed.elements == 0:
-      raiseSvgMtsdfError("SVG contains no visible path elements")
-
+    let parsed = parseSvgDocument(svgData)
+    result.size = initSize(parsed.width.float32, parsed.height.float32)
     let
-      dimensions = parsed.path.fieldDimensions(longEdge, minimumShortEdge)
-      field =
-        generateMtsdfPath(parsed.path, dimensions.width, dimensions.height, pixelRange)
-    result = SvgMtsdfResource(
-      image: newImageResource(field.image, name, cachePolicy),
-      elementCount: parsed.elements.Natural,
-      pixelRange: (field.range * field.scale).float32,
-    )
+      imageCount = block:
+        var count = 0
+        for element in parsed.elements:
+          if element.hasFill and element.kind notin {sekCircle, sekEllipse}:
+            inc count
+        count
+      dimensions = fieldDimensions(
+        result.size.width, result.size.height, longEdge, minimumShortEdge
+      )
+      usableWidth = dimensions.width.float64 - pixelRange
+      usableHeight = dimensions.height.float64 - pixelRange
+    if imageCount > 0 and (usableWidth <= 0.0 or usableHeight <= 0.0):
+      raiseSvgMtsdfError("SVG MTSDF dimensions must exceed the pixel range")
+
+    let documentScale =
+      if imageCount > 0:
+        min(
+          usableWidth / result.size.width.float64,
+          usableHeight / result.size.height.float64,
+        )
+      else:
+        0.0
+    var imageIndex = 0
+
+    for element in parsed.elements:
+      let firstLayer = result.layers.len
+      if element.kind in {sekCircle, sekEllipse}:
+        result.layers.add SvgLayer(
+          kind: slkCircle,
+          transform: element.primitiveTransform.toAffine(),
+          drawsFill: element.hasFill,
+          drawsStroke: element.hasStroke,
+          localStrokeWidth: element.primitiveStrokeWidth,
+        )
+      else:
+        if element.hasFill and not element.fillPath.isNil:
+          result.layers.add newMtsdfLayer(
+            element.fillPath, name, imageIndex, imageCount, documentScale, pixelRange,
+            cachePolicy,
+          )
+          inc imageIndex
+        if element.hasStroke and element.strokeSegments.len > 0:
+          var segments = newSeqOfCap[SvgPathSegment](element.strokeSegments.len)
+          for segment in element.strokeSegments:
+            segments.add segment.toSegment()
+          result.layers.add SvgLayer(
+            kind: slkStrokePath,
+            segments: segments,
+            strokeWidth: element.strokeWidth,
+            strokeCap: element.strokeCap.toStrokeCap(),
+            strokeJoin: element.strokeJoin.toStrokeJoin(),
+          )
+      if result.layers.len > firstLayer:
+        inc result.elementCount
+
+    if result.layers.len == 0:
+      raiseSvgMtsdfError("SVG contains no supported visible painted elements")
   except PixieError as error:
     raiseSvgMtsdfError(error.msg)
 
@@ -80,7 +248,7 @@ proc newSvgMtsdfResourceFromFile*(
     pixelRange = DefaultSvgMtsdfPixelRange,
     cachePolicy = icpDefault,
 ): SvgMtsdfResource =
-  ## Reads an SVG file and generates an MTSDF-backed image resource.
+  ## Reads an SVG file and creates its ordered vector and MTSDF layers.
   let data =
     try:
       readFile(filePath)
@@ -94,3 +262,19 @@ proc newSvgMtsdfResourceFromFile*(
   newSvgMtsdfResource(
     data, resolvedName, longEdge, minimumShortEdge, pixelRange, cachePolicy
   )
+
+proc len*(resource: SvgMtsdfResource): int =
+  ## Returns the number of ordered paint layers.
+  resource.layers.len
+
+proc image*(resource: SvgMtsdfResource): ImageResource =
+  ## Returns the first MTSDF image, retained for single-image compatibility.
+  for layer in resource.layers:
+    if layer.kind == slkMtsdfFill:
+      return layer.image
+
+proc pixelRange*(resource: SvgMtsdfResource): float32 =
+  ## Returns the first MTSDF layer's pixel range, or zero for vector-only SVGs.
+  for layer in resource.layers:
+    if layer.kind == slkMtsdfFill:
+      return layer.pixelRange

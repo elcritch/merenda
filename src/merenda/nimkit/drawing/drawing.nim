@@ -777,6 +777,119 @@ proc addImage*(
     layer, parent, imageNode(context.renderRectFor(rect), image, fill(tint.rgba))
   )
 
+proc toFigStrokeCap(value: SvgStrokeCap): StrokeCap =
+  case value
+  of svcButt: scButt
+  of svcRound: scRound
+  of svcSquare: scSquare
+
+proc toFigStrokeJoin(value: SvgStrokeJoin): StrokeJoin =
+  case value
+  of svjMiter: sjMiter
+  of svjRound: sjRound
+  of svjBevel: sjBevel
+
+proc svgLayerRect(
+    target: nimkitTypes.Rect, documentSize: nimkitTypes.Size, frame: nimkitTypes.Rect
+): nimkitTypes.Rect =
+  let
+    scaleX = target.size.width / documentSize.width
+    scaleY = target.size.height / documentSize.height
+  nimkitTypes.rect(
+    target.origin.x + frame.origin.x * scaleX,
+    target.origin.y + frame.origin.y * scaleY,
+    frame.size.width * scaleX,
+    frame.size.height * scaleY,
+  )
+
+proc svgLocalPoint(point: nimkitTypes.Point, scaleX, scaleY: float32): Vec2 =
+  vec2(point.x * scaleX, point.y * scaleY)
+
+proc svgPathNode(
+    target: nimkitTypes.Rect,
+    documentSize: nimkitTypes.Size,
+    svgLayer: SvgLayer,
+    fillValue: Fill,
+): Fig =
+  let
+    scaleX = target.size.width / documentSize.width
+    scaleY = target.size.height / documentSize.height
+  result = Fig(
+    kind: nkDrawable,
+    screenBox: target.toFigRect,
+    fill: fill(rgba(0, 0, 0, 0)),
+    drawStroke: RenderStroke(
+      weight: svgLayer.strokeWidth * min(abs(scaleX), abs(scaleY)),
+      fill: fillValue,
+      cap: svgLayer.strokeCap.toFigStrokeCap(),
+      join: svgLayer.strokeJoin.toFigStrokeJoin(),
+    ),
+  )
+  for segment in svgLayer.segments:
+    let
+      start = segment.start.svgLocalPoint(scaleX, scaleY)
+      stop = segment.stop.svgLocalPoint(scaleX, scaleY)
+    case segment.kind
+    of spsLine:
+      result.drawOps.add drawableLine(start, stop)
+    of spsQuadratic:
+      result.drawOps.add drawableBezier(
+        start, segment.control1.svgLocalPoint(scaleX, scaleY), stop
+      )
+    of spsCubic:
+      result.drawOps.add drawableBezier(
+        start,
+        segment.control1.svgLocalPoint(scaleX, scaleY),
+        segment.control2.svgLocalPoint(scaleX, scaleY),
+        stop,
+      )
+
+proc svgCircleNodes(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    target: nimkitTypes.Rect,
+    documentSize: nimkitTypes.Size,
+    svgLayer: SvgLayer,
+    fillValue: Fill,
+): FigIdx =
+  let
+    scaleX = target.size.width / documentSize.width
+    scaleY = target.size.height / documentSize.height
+    transform = svgLayer.transform
+    translation = vec2(
+      target.origin.x + transform.tx * scaleX, target.origin.y + transform.ty * scaleY
+    )
+  var matrix = mat4()
+  matrix[0, 0] = transform.a * scaleX
+  matrix[0, 1] = transform.b * scaleY
+  matrix[1, 0] = transform.c * scaleX
+  matrix[1, 1] = transform.d * scaleY
+
+  let transformIndex = context.addFig(
+    layer,
+    parent,
+    Fig(
+      kind: nkTransform,
+      screenBox: target.toFigRect,
+      transform:
+        TransformStyle(translation: translation, matrix: matrix, useMatrix: true),
+    ),
+  )
+  var circle = Fig(
+    kind: nkDrawable,
+    screenBox: bumpy.rect(-1.0'f32, -1.0'f32, 2.0'f32, 2.0'f32),
+    fill:
+      if svgLayer.drawsFill:
+        fillValue
+      else:
+        fill(rgba(0, 0, 0, 0)),
+  )
+  if svgLayer.drawsStroke:
+    circle.drawStroke = RenderStroke(weight: svgLayer.localStrokeWidth, fill: fillValue)
+  circle.drawOps.add drawableCircle(vec2(1.0'f32, 1.0'f32), 1.0'f32)
+  context.addFig(layer, transformIndex, circle)
+
 proc addSvgMtsdf*(
     context: DrawContext,
     layer: ZLevel,
@@ -787,25 +900,39 @@ proc addSvgMtsdf*(
     strokeWeight = 0.0'f32,
     sdThreshold = 0.5'f32,
 ): FigIdx {.discardable.} =
-  ## Draws an SVG MTSDF resource with a caller-selected fill or annular stroke.
-  if svg.image.isNil:
+  ## Draws an SVG using ordered FigDraw vector and MTSDF fill layers.
+  if svg.layers.len == 0 or svg.size.width <= 0.0'f32 or svg.size.height <= 0.0'f32:
     return (-1).FigIdx
-  context.xResources.addImage(svg.image)
-  context.addFig(
-    layer,
-    parent,
-    Fig(
-      kind: nkMtsdfImage,
-      screenBox: context.renderRectFor(rect).toFigRect,
-      mtsdfImage: MsdfImageStyle(
-        id: svg.image.imageId(),
-        fill: fillValue,
-        pxRange: svg.pixelRange,
-        sdThreshold: sdThreshold,
-        strokeWeight: strokeWeight,
-      ),
-    ),
-  )
+
+  let target = context.renderRectFor(rect)
+  result = (-1).FigIdx
+  for svgLayer in svg.layers:
+    case svgLayer.kind
+    of slkMtsdfFill:
+      if not svgLayer.image.isNil:
+        context.xResources.addImage(svgLayer.image)
+        let layerRect = target.svgLayerRect(svg.size, svgLayer.frame)
+        result = context.addFig(
+          layer,
+          parent,
+          Fig(
+            kind: nkMtsdfImage,
+            screenBox: layerRect.toFigRect,
+            mtsdfImage: MsdfImageStyle(
+              id: svgLayer.image.imageId(),
+              fill: fillValue,
+              pxRange: svgLayer.pixelRange,
+              sdThreshold: sdThreshold,
+              strokeWeight: strokeWeight,
+            ),
+          ),
+        )
+    of slkStrokePath:
+      result =
+        context.addFig(layer, parent, target.svgPathNode(svg.size, svgLayer, fillValue))
+    of slkCircle:
+      result =
+        context.svgCircleNodes(layer, parent, target, svg.size, svgLayer, fillValue)
 
 proc addSvgMtsdf*(
     context: DrawContext,
