@@ -36,6 +36,7 @@ import quick_start
 import radio_demo
 import scrollview_demo
 import splitview_demo
+import svg_viewer_demo
 import stepper_demo
 import table_demo
 import tabview_demo

@@ -18,6 +18,7 @@ const AutomaticFontFallbackEnabled =
 
 import ./images
 import ./renderresources
+import ./svgimages
 import ../themes
 import ../themes/themecore as themeCore
 import ../text/textstorage
@@ -774,6 +775,48 @@ proc addImage*(
   context.xResources.addImage(image)
   context.addFig(
     layer, parent, imageNode(context.renderRectFor(rect), image, fill(tint.rgba))
+  )
+
+proc addSvgMtsdf*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    svg: SvgMtsdfResource,
+    fillValue: Fill,
+    strokeWeight = 0.0'f32,
+    sdThreshold = 0.5'f32,
+): FigIdx {.discardable.} =
+  ## Draws an SVG MTSDF resource with a caller-selected fill or annular stroke.
+  if svg.image.isNil:
+    return (-1).FigIdx
+  context.xResources.addImage(svg.image)
+  context.addFig(
+    layer,
+    parent,
+    Fig(
+      kind: nkMtsdfImage,
+      screenBox: context.renderRectFor(rect).toFigRect,
+      mtsdfImage: MsdfImageStyle(
+        id: svg.image.imageId(),
+        fill: fillValue,
+        pxRange: svg.pixelRange,
+        sdThreshold: sdThreshold,
+        strokeWeight: strokeWeight,
+      ),
+    ),
+  )
+
+proc addSvgMtsdf*(
+    context: DrawContext,
+    rect: nimkitTypes.Rect,
+    svg: SvgMtsdfResource,
+    fillValue: Fill,
+    strokeWeight = 0.0'f32,
+    sdThreshold = 0.5'f32,
+): FigIdx {.discardable.} =
+  context.addSvgMtsdf(
+    DefaultDrawLevel, context.xParent, rect, svg, fillValue, strokeWeight, sdThreshold
   )
 
 proc addSelectedText*(
