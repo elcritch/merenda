@@ -442,7 +442,9 @@ suite "nimkit text views":
     let textView = newTextView("Title\nBody", frame = rect(0, 0, 220, 90))
     var attributes = textView.textStorage().attributesAt(0)
     attributes.link = "https://example.test"
+    attributes.fontName = "ExampleSans.ttf"
     attributes.fontSize = 18.0
+    attributes.language = initLanguageTag("ja_JP.UTF-8")
     textView.textStorage().setAttributes(initTextRange(0, 5), attributes)
     textView.allowsMultipleSelectedRanges = true
     textView.selectedRanges = @[initTextRange(0, 5), initTextRange(6, 4)]
@@ -467,6 +469,12 @@ suite "nimkit text views":
     check attributed.runs.len == 1
     check attributed.runs[0].attributes.anyIt(
       it.name == "link" and it.value == "https://example.test"
+    )
+    check attributed.runs[0].attributes.anyIt(
+      it.name == "fontName" and it.value == "ExampleSans.ttf"
+    )
+    check attributed.runs[0].attributes.anyIt(
+      it.name == "language" and it.value == "ja-JP"
     )
     check rangeValue.kind == avTextRanges
     check visibleValue.kind == avTextRange

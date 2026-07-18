@@ -15,6 +15,18 @@ proc clickView(window: Window, view: View): bool =
   )
 
 suite "nimkit mono text views":
+  test "monospace font follows the theme until explicitly overridden":
+    var theme = initTheme()
+    theme.setFontName(frMonospace, "Ubuntu.ttf")
+    let view = newMonoTextViewer("theme font")
+    view.appearance = initAppearance(theme)
+
+    check view.fontName == "Ubuntu.ttf"
+    view.fontName = DefaultMonoFontName
+    check view.fontName == DefaultMonoFontName
+    view.fontName = ""
+    check view.fontName == "Ubuntu.ttf"
+
   test "plain text API stores lines and exposes grid cells":
     let view = newMonoTextViewer("alpha\nbeta")
 

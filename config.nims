@@ -60,8 +60,7 @@ proc nimFileStemHasPrefix(file, prefix: string): bool =
 proc downloadReference(url, outputFile: string) =
   exec("mkdir -p " & parentDir(outputFile).quoteShell())
   exec(
-    "curl -L --fail --show-error -o " & outputFile.quoteShell() & " " &
-      url.quoteShell()
+    "curl -L --fail --show-error -o " & outputFile.quoteShell() & " " & url.quoteShell()
   )
 
 proc platforms(): seq[string] =

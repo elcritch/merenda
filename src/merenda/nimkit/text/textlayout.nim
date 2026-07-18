@@ -1169,14 +1169,17 @@ proc lineFragment(
   let
     containers = manager.effectiveContainers()
     layout = manager.xLayout
-    textRange = layout.textRangeForGlyphLine(line)
     glyphRange = initGlyphRange(line.a, line.b - line.a + 1)
     sourceRunes =
       if manager.xTextStorage.isNil:
         @[]
       else:
         manager.xTextStorage.stringValue().toRunes()
-    hardBreak = containsHardBreak(sourceRunes, textRange)
+  var textRange = layout.textRangeForGlyphLine(line)
+  if textRange.maxIndex < sourceRunes.len and
+      sourceRunes[textRange.maxIndex] in [Rune('\n'), Rune('\r')]:
+    inc textRange.length
+  let hardBreak = containsHardBreak(sourceRunes, textRange)
 
   var
     virtualUsedRect = rect(0.0, 0.0, 0.0, 0.0)
@@ -1248,6 +1251,14 @@ proc emptyLineFragment(
 ): TextLineFragment =
   let
     containers = manager.effectiveContainers()
+    sourceRunes =
+      if manager.xTextStorage.isNil:
+        @[]
+      else:
+        manager.xTextStorage.stringValue().toRunes()
+    hardBreak =
+      sourceIndex < sourceRunes.len and
+      sourceRunes[sourceIndex] in [Rune('\n'), Rune('\r')]
     caret = manager.virtualCaretRect(sourceIndex)
     lineHeight = max(caret.size.height, defaultFontSize())
     containerIndex = containers.containerIndexForVirtualY(caret.origin.y)
@@ -1267,13 +1278,14 @@ proc emptyLineFragment(
     lineIndex: initTextLineIndex(visualIndex),
     containerIndex: containerIndex,
     glyphRange: initGlyphRange(0, 0),
-    textRange: initTextRange(sourceIndex, 0),
+    textRange: initTextRange(sourceIndex, if hardBreak: 1 else: 0),
     fragmentRect: fragmentRect,
     usedRect: rect(fragmentRect.origin, initSize(0.0, lineHeight)),
     baseline: fragmentRect.origin.y + ascent,
     ascent: ascent,
     descent: max(lineHeight - ascent, 0.0'f32),
     leading: leading,
+    hardBreak: hardBreak,
   )
 
 func startsAtTextIndex(fragments: openArray[TextLineFragment], index: int): bool =

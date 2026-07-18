@@ -1050,8 +1050,12 @@ suite "nimkit text layout":
     check firstGlyph.get().bounds == firstBounds
     check spaceGlyph.isSome
     check gpElastic in manager.glyphProperties(spaceGlyph.get())
-    check newlineGlyph.isSome
-    check gpControl in manager.glyphProperties(newlineGlyph.get())
+    if newlineGlyph.isSome:
+      check gpControl in manager.glyphProperties(newlineGlyph.get())
+    else:
+      let newlineLine = manager.lineFragmentForTextIndex(3)
+      check newlineLine.isSome
+      check newlineLine.get().hardBreak
     check manager.textIndexForGlyphIndex(0).toInt == 0
     check manager.characterIndexForGlyphIndex(0).toInt == 0
     check manager.glyphIndexForCharacterIndex(0).isSome

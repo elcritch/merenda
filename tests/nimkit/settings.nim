@@ -4,6 +4,26 @@ import merenda/nimkit
 import merenda/nimkit/app/settings
 
 suite "nimkit settings":
+  test "typography settings offer only interface and monospace font categories":
+    let settings = newMerendaSettingsWindow()
+    defer:
+      settings.window().close()
+    let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require not tabsView.isNil
+    require tabsView of TabView
+    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    let roleView =
+      settings.contentView().viewWithIdentifier("settings-font-role-picker")
+
+    require not roleView.isNil
+    require roleView of ComboBox
+    let rolePicker = ComboBox(roleView)
+    check rolePicker.numberOfItems() == 2
+    check rolePicker.selectedIndex() == 0
+
+    rolePicker.selectedIndex = 1
+    check rolePicker.sendAction()
+
   test "font size stepper previews within bounds and applies on request":
     var appliedCount = 0
     var appliedAppearance: Appearance

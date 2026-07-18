@@ -18,6 +18,7 @@ import constraint_playground_demo
 import controls_showcase
 import documenttabs_demo
 import document_workspace_demo
+import font_fallback_demo
 import grid_preferences
 import hello
 import image_resources_demo

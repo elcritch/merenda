@@ -18,22 +18,25 @@ proc demoSourceRange(needle: string): Slice[int] =
   int(range.location) .. int(range.location + range.length - 1)
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
+  for rune in node.textLayout.sourceRunes:
     result.add(rune)
 
 proc hasFill(
     node: Fig, range: Slice[int], color: ColorRGBA
 ): tuple[matched, total: int] =
-  let stop = range.b + 1
-  for glyphIndex, glyph in node.textLayout.arrangedGlyphs:
-    if glyph.source.runeStart < stop and range.a < glyph.source.runeEnd:
-      inc result.total
-      for spanIndex, span in node.textLayout.spans:
-        if glyphIndex in span:
-          let fill = node.textLayout.spanColors[spanIndex]
-          if fill.kind == flColor and fill.color == color:
-            inc result.matched
-          break
+  for sourceIndex in range:
+    inc result.total
+    for glyphIndex, glyph in node.textLayout.arrangedGlyphs:
+      if sourceIndex >= glyph.source.runeStart and sourceIndex < glyph.source.runeEnd:
+        var matches = false
+        for spanIndex, span in node.textLayout.spans:
+          if glyphIndex in span:
+            let fill = node.textLayout.spanColors[spanIndex]
+            matches = fill.kind == flColor and fill.color == color
+            break
+        if matches:
+          inc result.matched
+        break
 
 proc textNodeForDemo(nodes: openArray[Fig]): tuple[found: bool, node: Fig] =
   for node in nodes:

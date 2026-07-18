@@ -70,9 +70,10 @@ type
     fontLoadingStopped: bool
     applyAppearanceHandler: AppearanceHandler
     activeTheme: SettingsTheme
-    previewFontPath: string
+    activeFontRole: FontRole
+    previewFontPaths: array[FontRole, string]
     previewFontSize: float32
-    appliedFontPath: string
+    appliedFontPaths: array[FontRole, string]
     appliedFontSize: float32
     fontLoadingStatus: string
     preview: Label
@@ -87,6 +88,7 @@ const
   SettingsMaximumFontSize = 120.0'f32
   SettingsDefaultFontSize = 14.0'f32
   SettingsThemePickerIdentifier = "settings-theme-picker"
+  SettingsFontRolePickerIdentifier = "settings-font-role-picker"
   SettingsFontPickerIdentifier = "settings-font-picker"
   SettingsFontPreviewIdentifier = "settings-font-preview"
 
@@ -425,8 +427,16 @@ proc fontTitle(path: string): string =
 func fontSizeTitle(size: float32): string =
   $size.int & " pt"
 
+func title(role: FontRole): string =
+  case role
+  of frUI: "Interface"
+  of frMonospace: "Monospace"
+
 proc appearanceFor(
-    theme: SettingsTheme, fontPath: string, fontSize: float32
+    theme: SettingsTheme,
+    fontPaths: array[FontRole, string],
+    fontSize: float32,
+    previewRole = frUI,
 ): Appearance =
   case theme
   of stDefault:
@@ -442,16 +452,17 @@ proc appearanceFor(
   of stSynthwave83:
     result = initAppearance(initSynthwave83Theme())
 
-  let selectedFont =
-    if fontPath.len > 0:
-      fontPath
-    else:
-      defaultFontName()
+  for role in FontRole:
+    let selectedFont =
+      if fontPaths[role].len > 0:
+        fontPaths[role]
+      else:
+        defaultFontName(role)
+    result.theme.setFontName(role, selectedFont)
   for role in TextStyleRoles:
-    result.theme[role, StyleFontName] = styleKeyword(selectedFont)
     result.theme[role, StyleFontSize] = fontSize
   let preview = initStyleSelector(srTextField, id = SettingsFontPreviewIdentifier)
-  result.theme[preview, StyleFontName] = styleKeyword(selectedFont)
+  result.theme[preview, StyleFontName] = styleKeyword(result.fontName(previewRole))
   result.theme[preview, StyleFontSize] = fontSize
 
 proc newSettingsPage(): tuple[view: View, stack: StackView] =
@@ -467,16 +478,18 @@ proc newSettingsPage(): tuple[view: View, stack: StackView] =
 
 proc updateStatus(settings: MerendaSettingsWindow) =
   settings.status.text =
-    "Previewing " & settings.previewFontPath.fontTitle() & " · " &
-    settings.previewFontSize.fontSizeTitle() & " — application: " &
-    settings.appliedFontPath.fontTitle() & " · " &
-    settings.appliedFontSize.fontSizeTitle() & " · " & settings.fontLoadingStatus
+    "Previewing " & settings.activeFontRole.title() & ": " &
+    settings.previewFontPaths[settings.activeFontRole].fontTitle() & " · " &
+    settings.previewFontSize.fontSizeTitle() & " — UI: " &
+    settings.appliedFontPaths[frUI].fontTitle() & " · mono: " &
+    settings.appliedFontPaths[frMonospace].fontTitle() & " · " &
+    settings.fontLoadingStatus
 
 proc updatePreview(settings: MerendaSettingsWindow) =
   if not settings.fontSizeValue.isNil:
     settings.fontSizeValue.text = settings.previewFontSize.fontSizeTitle()
   settings.preview.appearance = settings.activeTheme.appearanceFor(
-    settings.previewFontPath, settings.previewFontSize
+    settings.previewFontPaths, settings.previewFontSize, settings.activeFontRole
   )
   settings.updateStatus()
 
@@ -484,7 +497,7 @@ proc applyAppearance(settings: MerendaSettingsWindow) =
   if not settings.applyAppearanceHandler.isNil:
     settings.applyAppearanceHandler(
       settings.activeTheme.appearanceFor(
-        settings.appliedFontPath, settings.appliedFontSize
+        settings.appliedFontPaths, settings.appliedFontSize
       )
     )
   settings.updatePreview()
@@ -501,19 +514,31 @@ proc fontSizeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
     settings.previewFontSize = Stepper(sender).value
     settings.updatePreview()
 
+proc fontRoleDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
+  if sender of ComboBox:
+    let index = ComboBox(sender).selectedIndex()
+    if index >= ord(low(FontRole)) and index <= ord(high(FontRole)):
+      settings.activeFontRole = FontRole(index)
+      settings.fontPickerController.selectFontPath(
+        settings.previewFontPaths[settings.activeFontRole]
+      )
+      settings.updatePreview()
+
 proc applyFontDidClick(settings: MerendaSettingsWindow, sender: DynamicAgent) =
   if sender of Button:
-    settings.appliedFontPath = settings.previewFontPath
+    settings.appliedFontPaths = settings.previewFontPaths
     settings.appliedFontSize = settings.previewFontSize
     settings.applyAppearance()
 
 proc resetSelections*(settings: MerendaSettingsWindow) =
   ## Restores the controls to the currently applied appearance when the panel opens.
-  settings.previewFontPath = settings.appliedFontPath
+  settings.previewFontPaths = settings.appliedFontPaths
   settings.previewFontSize = settings.appliedFontSize
   if not settings.fontSizeStepper.isNil:
     settings.fontSizeStepper.value = settings.previewFontSize
-  settings.fontPickerController.selectFontPath(settings.previewFontPath)
+  settings.fontPickerController.selectFontPath(
+    settings.previewFontPaths[settings.activeFontRole]
+  )
   settings.updatePreview()
 
 proc stopFontLoading(settings: MerendaSettingsWindow) =
@@ -537,6 +562,7 @@ proc newMerendaSettingsWindow*(
     fontPickerController: newFontPickerController(),
     applyAppearanceHandler: appearanceHandler,
     activeTheme: stDefault,
+    activeFontRole: frUI,
     previewFontSize: SettingsDefaultFontSize,
     appliedFontSize: SettingsDefaultFontSize,
     fontLoadingStatus: "Loading system fonts…",
@@ -554,6 +580,7 @@ proc newMerendaSettingsWindow*(
     typographyForm = newFormView()
     titleLabel = newTitleLabel("Merenda Settings")
     themeLabel = newFormLabel("Theme")
+    fontRoleLabel = newFormLabel("Category")
     fontLabel = newFormLabel("Font")
     fontSizeLabel = newFormLabel("Size")
     themePicker = newComboBox(
@@ -566,6 +593,7 @@ proc newMerendaSettingsWindow*(
         stSynthwave83.title(),
       ]
     )
+    fontRolePicker = newComboBox([frUI.title(), frMonospace.title()])
     fontPicker = newCascadingView()
     fontSizeControl = newStackView(laHorizontal)
     fontSizeValue = newLabel(SettingsDefaultFontSize.fontSizeTitle())
@@ -577,6 +605,7 @@ proc newMerendaSettingsWindow*(
     )
     applyFontButton = newButton("Apply font")
     themeChanged = actionSelector("themeChanged")
+    fontRoleChanged = actionSelector("fontRoleChanged")
     fontSizeChanged = actionSelector("fontSizeChanged")
     applyFont = actionSelector("applyFont")
 
@@ -601,13 +630,21 @@ proc newMerendaSettingsWindow*(
       settings.themeDidChange(sender),
   )
   themePicker.action = themeChanged
+  fontRolePicker.selectedIndex = result.activeFontRole.ord
+  fontRolePicker.identifier = SettingsFontRolePickerIdentifier
+  fontRolePicker.target = newActionTarget(
+    fontRoleChanged,
+    proc(sender: DynamicAgent) =
+      settings.fontRoleDidChange(sender),
+  )
+  fontRolePicker.action = fontRoleChanged
   fontPicker.columnWidth = 180.0
   fontPicker.minColumnWidth = 140.0
   fontPicker.accessibilityLabel = "Font"
   fontPicker.identifier = SettingsFontPickerIdentifier
   result.fontPickerController.fontPicker = fontPicker
   result.fontPickerController.selectionHandler = proc(path: string) =
-    settings.previewFontPath = path
+    settings.previewFontPaths[settings.activeFontRole] = path
     settings.updatePreview()
   result.fontPickerController.progressHandler = proc(message: string) =
     settings.fontLoadingStatus = message
@@ -645,11 +682,12 @@ proc newMerendaSettingsWindow*(
   )
   appearancePage.stack.addFlexibleSpacer()
 
+  typographyForm.addRow(fontRoleLabel, fontRolePicker)
   typographyForm.addRow(fontLabel, fontPicker)
   typographyForm.addRow(fontSizeLabel, fontSizeControl)
   typographyPage.stack.addArrangedSubview(
     newHeadingLabel("Typography"),
-    newLabel("Choose a font family, language, and face, then preview and apply it."),
+    newLabel("Choose interface and monospace fonts, then preview and apply them."),
     typographyForm,
     newHeadingLabel("Preview"),
     result.preview,

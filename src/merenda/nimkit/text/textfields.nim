@@ -1052,7 +1052,11 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
       return TextView(editor).accessibilityCharacterIndexAtPoint(point)
-    textField.layoutManager().textIndexAtPoint(textField.pointFromWindow(point))
+    int(
+      textField
+      .layoutManager()
+      .textRangeAtPoint(textField.pointFromWindow(point)).location
+    )
 
   method accessibilityLineRange(
       textField: TextField, line: int

@@ -107,7 +107,9 @@ type
 
   TextAttributes* = object
     foregroundColor*: Color
+    fontName*: string
     fontSize*: float32
+    language*: LanguageTag
     paragraphStyle*: TextParagraphStyle
     baselineOffset*: float32
     kerning*: float32
@@ -261,7 +263,10 @@ proc initTextAttachment*(
   )
 
 proc defaultTextAttributes*(
-    color = color(0.08, 0.09, 0.11, 1.0), fontSize = AutoMetric
+    color = color(0.08, 0.09, 0.11, 1.0),
+    fontSize = AutoMetric,
+    fontName = "",
+    language = LanguageTag(""),
 ): TextAttributes =
   let resolvedFontSize =
     if fontSize.isAutoMetric:
@@ -270,7 +275,9 @@ proc defaultTextAttributes*(
       fontSize
   TextAttributes(
     foregroundColor: color,
+    fontName: fontName,
     fontSize: max(resolvedFontSize, 1.0'f32),
+    language: language,
     paragraphStyle: initTextParagraphStyle(),
     ligatureLevel: tllDefault,
   )

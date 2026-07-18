@@ -116,20 +116,55 @@ UISCALE=1.5 nim r examples/quick_start.nim
 `NIMKIT_UISCALE` and `MERENDA_UISCALE` take priority over `UISCALE`, and
 FigDraw's legacy `HDI` variable remains a fallback.
 
-Text rendering and measurement use the active theme's `StyleFontName` and
-`StyleFontSize` values. To seed those theme defaults from the command line, set
-`NIMKIT_FONT` to a bundled font name, system font name, or font file path. Set
-`NIMKIT_FONT_SIZE` to override the default font size used by text and `em`
-layout lengths:
+Text rendering and measurement use two global font roles: `frUI` for normal
+interface text and `frMonospace` for code and fixed-width text. Applications and
+the settings panel only choose those two fonts. Script, symbol, and emoji faces
+are selected automatically from the bundled and installed system fonts.
+
+Set `NIMKIT_FONT` and `NIMKIT_MONOSPACE_FONT` to seed the two roles with a
+bundled font name, system font name, or font file path. `NIMKIT_FONT_SIZE`
+overrides the default size used by text and `em` layout lengths:
 
 ```sh
-NIMKIT_FONT=HackNerdFont-Regular.ttf NIMKIT_FONT_SIZE=15 nim r examples/quick_start.nim
+NIMKIT_FONT=IBMPlexSans-Regular.ttf \
+NIMKIT_MONOSPACE_FONT=HackNerdFont-Regular.ttf \
+NIMKIT_FONT_SIZE=15 nim r examples/quick_start.nim
 ```
 
-`NIMKIT_FONT` and `NIMKIT_FONT_SIZE` take priority over `MERENDA_FONT` and
-`MERENDA_FONT_SIZE`. If the font override cannot be resolved, NimKit falls back
-to its bundled default font list. Per-role or per-class theme rules can override
-the same values with `StyleFontName` and `StyleFontSize`.
+The `NIMKIT_` variables take priority over their `MERENDA_FONT`,
+`MERENDA_MONOSPACE_FONT`, and `MERENDA_FONT_SIZE` aliases. Font roles can also
+be configured directly on a theme:
+
+```nim
+var theme = initTheme()
+theme.setFontName(frUI, "IBMPlexSans-Regular.ttf")
+theme.setFontName(frMonospace, "HackNerdFont-Regular.ttf")
+root.appearance = initAppearance(theme)
+```
+
+NimKit shapes text with HarfBuzz. It detects Unicode scripts, preserves
+bidirectional runs, and chooses a fallback face that covers each run. The
+process locale supplies the default BCP 47 language preference; attributed text
+can override it when language-specific shaping or CJK font choice matters:
+
+```nim
+var attributes = defaultTextAttributes(language = initLanguageTag("ja-JP"))
+textView.textStorage().setAttributes(initTextRange(0, 5), attributes)
+```
+
+HarfBuzz reads the font tables, detects scripts, chooses fallbacks, and shapes
+glyph ids. FigDraw obtains their outlines through HarfBuzz draw callbacks and
+uses Pixie's path/image machinery to rasterize them. This currently produces
+monochrome outlines; bitmap, SVG, and COLR color emoji paint is not yet
+rendered. Per-role or per-class rules can still override `StyleFontName`,
+`StyleFontSize`, and `StyleLanguage`.
+
+Run the font fallback example to see both user-selectable roles alongside
+automatic language, symbol, and outline-emoji fallback:
+
+```sh
+nim r examples/font_fallback_demo.nim
+```
 
 For a flatter, modern macOS-style appearance, select the built-in `macos` theme
 at startup or construct it directly:
