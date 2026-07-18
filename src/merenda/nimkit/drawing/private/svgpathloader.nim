@@ -42,6 +42,7 @@ type
     kind*: SvgSourceElementKind
     fillPath*: Path
     hasFill*, hasStroke*: bool
+    fillColor*, strokeColor*: Color
     strokeSegments*: seq[SvgStrokeSegment]
     strokeWidth*: float32
     strokeCap*: SvgStrokeCap
@@ -348,6 +349,24 @@ proc parseSvgRoot(data: string): XmlNode =
   except CatchableError as error:
     raise newException(PixieError, error.msg)
 
+proc colorWithOpacity(value: Color, opacity: float32): Color =
+  result = value
+  result.a *= opacity
+
+proc solidFillColor(properties: SvgProperties): Color =
+  if properties.fill.startsWith("url("):
+    raise newException(
+      PixieError, "SVG gradient fills are not supported by the MTSDF loader"
+    )
+  parseHtmlColor(properties.fill).colorWithOpacity(
+    properties.opacity * properties.fillOpacity
+  )
+
+proc solidStrokeColor(properties: SvgProperties): Color =
+  properties.stroke.rgba.color.colorWithOpacity(
+    properties.opacity * properties.strokeOpacity
+  )
+
 proc parseSvgDocument*(svgData: string): ParsedSvgDocument =
   let
     normalized = normalizeSvgData(svgData)
@@ -378,6 +397,16 @@ proc parseSvgDocument*(svgData: string): ParsedSvgDocument =
       kind: kind,
       hasFill: hasFill,
       hasStroke: hasStroke,
+      fillColor:
+        if hasFill:
+          properties.solidFillColor()
+        else:
+          color(0.0, 0.0, 0.0, 0.0),
+      strokeColor:
+        if hasStroke:
+          properties.solidStrokeColor()
+        else:
+          color(0.0, 0.0, 0.0, 0.0),
       strokeWidth: properties.strokeWidth * properties.transform.transformScale(),
       strokeCap: properties.strokeLineCap.toStrokeCap(),
       strokeJoin: properties.strokeLineJoin.toStrokeJoin(),

@@ -52,8 +52,7 @@ protocol SvgCanvasDrawing of ViewDrawingProtocol:
       imageAspect = canvas.svg.size.width / canvas.svg.size.height
       imageRect = fittedRect(context.bounds, imageAspect, canvas.zoom)
 
-    discard
-      context.addSvgMtsdf(imageRect, canvas.svg, fill(color(0.18, 0.52, 0.94, 1.0)))
+    discard context.addSvgMtsdf(imageRect, canvas.svg)
 
 proc newSvgCanvas(): SvgCanvas =
   result = SvgCanvas(zoom: 1.0'f32)

@@ -852,6 +852,7 @@ proc svgCircleNodes(
     documentSize: nimkitTypes.Size,
     svgLayer: SvgLayer,
     fillValue: Fill,
+    strokeFillValue: Fill,
 ): FigIdx =
   let
     scaleX = target.size.width / documentSize.width
@@ -886,27 +887,38 @@ proc svgCircleNodes(
         fill(rgba(0, 0, 0, 0)),
   )
   if svgLayer.drawsStroke:
-    circle.drawStroke = RenderStroke(weight: svgLayer.localStrokeWidth, fill: fillValue)
+    circle.drawStroke =
+      RenderStroke(weight: svgLayer.localStrokeWidth, fill: strokeFillValue)
   circle.drawOps.add drawableCircle(vec2(1.0'f32, 1.0'f32), 1.0'f32)
   context.addFig(layer, transformIndex, circle)
 
-proc addSvgMtsdf*(
+type SvgPaintOverride = object
+  enabled: bool
+  value: Fill
+
+proc layerFill(svgLayer: SvgLayer, paintOverride: SvgPaintOverride): Fill =
+  if paintOverride.enabled:
+    paintOverride.value
+  else:
+    fill(svgLayer.paint.rgba)
+
+proc addSvgMtsdfLayers(
     context: DrawContext,
     layer: ZLevel,
     parent: FigIdx,
     rect: nimkitTypes.Rect,
     svg: SvgMtsdfResource,
-    fillValue: Fill,
+    paintOverride: SvgPaintOverride,
     strokeWeight = 0.0'f32,
     sdThreshold = 0.5'f32,
 ): FigIdx {.discardable.} =
-  ## Draws an SVG using ordered FigDraw vector and MTSDF fill layers.
   if svg.layers.len == 0 or svg.size.width <= 0.0'f32 or svg.size.height <= 0.0'f32:
     return (-1).FigIdx
 
   let target = context.renderRectFor(rect)
   result = (-1).FigIdx
   for svgLayer in svg.layers:
+    let fillValue = svgLayer.layerFill(paintOverride)
     case svgLayer.kind
     of slkMtsdfFill, slkMtsdfStroke:
       if not svgLayer.image.isNil:
@@ -941,8 +953,61 @@ proc addSvgMtsdf*(
       result =
         context.addFig(layer, parent, target.svgPathNode(svg.size, svgLayer, fillValue))
     of slkCircle:
-      result =
-        context.svgCircleNodes(layer, parent, target, svg.size, svgLayer, fillValue)
+      let strokeFillValue =
+        if paintOverride.enabled:
+          paintOverride.value
+        else:
+          fill(svgLayer.strokePaint.rgba)
+      result = context.svgCircleNodes(
+        layer, parent, target, svg.size, svgLayer, fillValue, strokeFillValue
+      )
+
+proc addSvgMtsdf*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    svg: SvgMtsdfResource,
+    strokeWeight = 0.0'f32,
+    sdThreshold = 0.5'f32,
+): FigIdx {.discardable.} =
+  ## Draws an SVG using its source fill and stroke colors.
+  context.addSvgMtsdfLayers(
+    layer, parent, rect, svg, SvgPaintOverride(), strokeWeight, sdThreshold
+  )
+
+proc addSvgMtsdf*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    svg: SvgMtsdfResource,
+    fillValue: Fill,
+    strokeWeight = 0.0'f32,
+    sdThreshold = 0.5'f32,
+): FigIdx {.discardable.} =
+  ## Draws an SVG with one caller-selected tint replacing its source paints.
+  context.addSvgMtsdfLayers(
+    layer,
+    parent,
+    rect,
+    svg,
+    SvgPaintOverride(enabled: true, value: fillValue),
+    strokeWeight,
+    sdThreshold,
+  )
+
+proc addSvgMtsdf*(
+    context: DrawContext,
+    rect: nimkitTypes.Rect,
+    svg: SvgMtsdfResource,
+    strokeWeight = 0.0'f32,
+    sdThreshold = 0.5'f32,
+): FigIdx {.discardable.} =
+  ## Draws an SVG using its source fill and stroke colors.
+  context.addSvgMtsdf(
+    DefaultDrawLevel, context.xParent, rect, svg, strokeWeight, sdThreshold
+  )
 
 proc addSvgMtsdf*(
     context: DrawContext,
@@ -952,6 +1017,7 @@ proc addSvgMtsdf*(
     strokeWeight = 0.0'f32,
     sdThreshold = 0.5'f32,
 ): FigIdx {.discardable.} =
+  ## Draws an SVG with one caller-selected tint replacing its source paints.
   context.addSvgMtsdf(
     DefaultDrawLevel, context.xParent, rect, svg, fillValue, strokeWeight, sdThreshold
   )

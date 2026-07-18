@@ -45,6 +45,7 @@ type
     a*, b*, c*, d*, tx*, ty*: float32
 
   SvgLayer* = object ## One ordered SVG paint operation.
+    paint*: Color
     case kind*: SvgLayerKind
     of slkMtsdfFill, slkMtsdfStroke:
       image*: ImageResource
@@ -59,6 +60,7 @@ type
     of slkCircle:
       transform*: SvgAffineTransform
       drawsFill*, drawsStroke*: bool
+      strokePaint*: Color
       localStrokeWidth*: float32
 
   SvgMtsdfResource* = object
@@ -92,6 +94,12 @@ proc layerName(name: string, index, count: int): string =
   if count == 1:
     return name
   name & ":" & $index
+
+proc hasArea(path: Path): bool =
+  if path.isNil:
+    return
+  let bounds = path.computeBounds()
+  bounds.w > 0.0'f32 and bounds.h > 0.0'f32
 
 proc toPoint(value: Vec2): Point =
   initPoint(value.x, value.y)
@@ -129,6 +137,7 @@ proc toAffine(value: SvgAffine): SvgAffineTransform =
 
 proc newMtsdfLayer(
     path: Path,
+    paint: Color,
     name: string,
     imageIndex, imageCount: int,
     documentScale, pixelRange: float64,
@@ -150,6 +159,7 @@ proc newMtsdfLayer(
 
   SvgLayer(
     kind: slkMtsdfFill,
+    paint: paint,
     image: newImageResource(
       field.image, layerName(name, imageIndex, imageCount), cachePolicy
     ),
@@ -162,9 +172,12 @@ proc newMtsdfLayer(
     pixelRange: (field.range * field.scale).float32,
   )
 
-proc mtsdfStrokeLayer(fillLayer: SvgLayer, strokeWidth: float32): SvgLayer =
+proc mtsdfStrokeLayer(
+    fillLayer: SvgLayer, strokeWidth: float32, paint: Color
+): SvgLayer =
   SvgLayer(
     kind: slkMtsdfStroke,
+    paint: paint,
     image: fillLayer.image,
     frame: fillLayer.frame,
     pixelRange: fillLayer.pixelRange,
@@ -181,9 +194,10 @@ proc newSvgMtsdfResource*(
 ): SvgMtsdfResource =
   ## Parses an SVG into ordered FigDraw vector strokes and MTSDF fill layers.
   ##
-  ## Independently filled complex elements receive separate compact MTSDFs.
-  ## Circles, ellipses, lines, and Bezier strokes remain vector drawables. SVG
-  ## colors are intentionally ignored so callers can tint the resource.
+  ## Circles, lines, and Bezier strokes remain vector drawables. Ellipses and
+  ## independently filled complex elements receive separate compact MTSDFs.
+  ## Solid SVG fill and stroke colors, including inherited colors and opacity,
+  ## are kept. Gradient fills are not yet supported.
   if pixelRange <= 0.0:
     raiseSvgMtsdfError("SVG MTSDF pixel range must be positive")
 
@@ -194,7 +208,7 @@ proc newSvgMtsdfResource*(
       imageCount = block:
         var count = 0
         for element in parsed.elements:
-          if element.kind == sekEllipse or element.hasFill and element.kind != sekCircle:
+          if element.kind != sekCircle and element.fillPath.hasArea():
             inc count
         count
       dimensions = fieldDimensions(
@@ -220,26 +234,31 @@ proc newSvgMtsdfResource*(
       if element.kind == sekCircle:
         result.layers.add SvgLayer(
           kind: slkCircle,
+          paint: element.fillColor,
           transform: element.primitiveTransform.toAffine(),
           drawsFill: element.hasFill,
           drawsStroke: element.hasStroke,
+          strokePaint: element.strokeColor,
           localStrokeWidth: element.primitiveStrokeWidth,
         )
       elif element.kind == sekEllipse:
-        let mtsdfLayer = newMtsdfLayer(
-          element.fillPath, name, imageIndex, imageCount, documentScale, pixelRange,
-          cachePolicy,
-        )
-        inc imageIndex
-        if element.hasFill:
-          result.layers.add mtsdfLayer
-        if element.hasStroke:
-          result.layers.add mtsdfLayer.mtsdfStrokeLayer(element.strokeWidth)
+        if element.fillPath.hasArea():
+          let mtsdfLayer = newMtsdfLayer(
+            element.fillPath, element.fillColor, name, imageIndex, imageCount,
+            documentScale, pixelRange, cachePolicy,
+          )
+          inc imageIndex
+          if element.hasFill:
+            result.layers.add mtsdfLayer
+          if element.hasStroke:
+            result.layers.add mtsdfLayer.mtsdfStrokeLayer(
+              element.strokeWidth, element.strokeColor
+            )
       else:
-        if element.hasFill and not element.fillPath.isNil:
+        if element.hasFill and element.fillPath.hasArea():
           result.layers.add newMtsdfLayer(
-            element.fillPath, name, imageIndex, imageCount, documentScale, pixelRange,
-            cachePolicy,
+            element.fillPath, element.fillColor, name, imageIndex, imageCount,
+            documentScale, pixelRange, cachePolicy,
           )
           inc imageIndex
         if element.hasStroke and element.strokeSegments.len > 0:
@@ -248,6 +267,7 @@ proc newSvgMtsdfResource*(
             segments.add segment.toSegment()
           result.layers.add SvgLayer(
             kind: slkStrokePath,
+            paint: element.strokeColor,
             segments: segments,
             strokeWidth: element.strokeWidth,
             strokeCap: element.strokeCap.toStrokeCap(),

@@ -71,12 +71,69 @@ suite "SVG drawing resources":
     )
     check context.resources.imageCount == 2
 
+  test "preserves inherited source paints while retaining tint overrides":
+    let resource = newSvgMtsdfResource(
+      """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 30">
+  <g fill="#cc7226" stroke="#102030" stroke-width="2">
+    <path d="M4 4 H36 V26 H4 Z" fill-opacity="0.5"/>
+  </g>
+</svg>
+""",
+      longEdge = 48,
+      minimumShortEdge = 24,
+      pixelRange = 4.0,
+    )
+
+    check resource.layers.len == 2
+    check resource.layers[0].kind == slkMtsdfFill
+    check resource.layers[0].paint.rgba == rgba(204, 114, 38, 128)
+    check resource.layers[1].kind == slkStrokePath
+    check resource.layers[1].paint.rgba == rgba(16, 32, 48, 255)
+
+    let sourceContext = initDrawContext()
+    discard sourceContext.addSvgMtsdf(
+      DefaultDrawLevel, FigIdx(-1), rect(0.0, 0.0, 80.0, 60.0), resource
+    )
+    check sourceContext.renderList.nodes.len == 2
+    check sourceContext.renderList.nodes[0].mtsdfImage.fill.color ==
+      rgba(204, 114, 38, 128)
+    check sourceContext.renderList.nodes[1].drawStroke.fill.color ==
+      rgba(16, 32, 48, 255)
+
+    let
+      tintContext = initDrawContext()
+      tint = color(0.2, 0.5, 0.9, 1.0)
+    discard tintContext.addSvgMtsdf(
+      DefaultDrawLevel, FigIdx(-1), rect(0.0, 0.0, 80.0, 60.0), resource, fill(tint)
+    )
+    check tintContext.renderList.nodes[0].mtsdfImage.fill.color == tint.rgba
+    check tintContext.renderList.nodes[1].drawStroke.fill.color == tint.rgba
+
+  test "ignores zero-area fills":
+    let resource = newSvgMtsdfResource(
+      """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 30">
+  <path d="M4 4 H20"/>
+  <path d="M4 8 H36 V26 H4 Z" fill="#cc7226"/>
+</svg>
+""",
+      name = "nondegenerate-fill",
+      longEdge = 48,
+      minimumShortEdge = 24,
+      pixelRange = 4.0,
+    )
+
+    check resource.elementCount == 1
+    check resource.layers.len == 1
+    check resource.image.name == "nondegenerate-fill"
+
   test "uses vector strokes but MTSDFs for ellipses":
     let resource = newSvgMtsdfResource(
       """
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">
   <line x1="5" y1="10" x2="40" y2="30" stroke="black" stroke-width="2"/>
-  <circle cx="65" cy="20" r="12" fill="none" stroke="black" stroke-width="3"/>
+  <circle cx="65" cy="20" r="12" fill="#f00" stroke="#00f" stroke-width="3"/>
   <ellipse cx="95" cy="20" rx="16" ry="10" fill="none" stroke="black"/>
   <path d="M10 65 C30 35 60 35 80 65" fill="none" stroke="black"
     stroke-width="2" stroke-linecap="round"/>
@@ -89,6 +146,8 @@ suite "SVG drawing resources":
     check resource.layers[0].kind == slkStrokePath
     check resource.layers[0].segments[0].kind == spsLine
     check resource.layers[1].kind == slkCircle
+    check resource.layers[1].paint.rgba == rgba(255, 0, 0, 255)
+    check resource.layers[1].strokePaint.rgba == rgba(0, 0, 255, 255)
     check resource.layers[2].kind == slkMtsdfStroke
     check resource.layers[3].kind == slkStrokePath
     check resource.layers[3].segments[0].kind == spsCubic
