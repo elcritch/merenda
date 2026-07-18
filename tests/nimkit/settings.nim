@@ -4,7 +4,7 @@ import merenda/nimkit
 import merenda/nimkit/app/settings
 
 suite "nimkit settings":
-  test "typography settings offer only interface and monospace font categories":
+  test "typography settings expose independent interface and monospace fonts":
     let settings = newMerendaSettingsWindow()
     defer:
       settings.window().close()
@@ -12,17 +12,31 @@ suite "nimkit settings":
     require not tabsView.isNil
     require tabsView of TabView
     check TabView(tabsView).selectTabViewItemAtIndex(1)
-    let roleView =
-      settings.contentView().viewWithIdentifier("settings-font-role-picker")
+    let
+      interfaceView =
+        settings.contentView().viewWithIdentifier("settings-ui-font-button")
+      monospaceView =
+        settings.contentView().viewWithIdentifier("settings-monospace-font-button")
 
-    require not roleView.isNil
-    require roleView of ComboBox
-    let rolePicker = ComboBox(roleView)
-    check rolePicker.numberOfItems() == 2
-    check rolePicker.selectedIndex() == 0
+    require not interfaceView.isNil
+    require interfaceView of Button
+    require not monospaceView.isNil
+    require monospaceView of Button
+    let
+      interfaceButton = Button(interfaceView)
+      monospaceButton = Button(monospaceView)
+    check interfaceButton.title == "Default"
+    check interfaceButton.state == bsOn
+    check monospaceButton.title == "Default"
+    check monospaceButton.state == bsOff
 
-    rolePicker.selectedIndex = 1
-    check rolePicker.sendAction()
+    check monospaceButton.sendAction()
+    check interfaceButton.state == bsOff
+    check monospaceButton.state == bsOn
+
+    check interfaceButton.sendAction()
+    check interfaceButton.state == bsOn
+    check monospaceButton.state == bsOff
 
   test "font size stepper previews within bounds and applies on request":
     var appliedCount = 0

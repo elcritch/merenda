@@ -1,4 +1,4 @@
-import std/[hashes, strutils, tables, unicode]
+import std/[tables, unicode]
 
 import pkg/bumpy
 
@@ -7,8 +7,8 @@ when defined(useNativeDynlib):
 else:
   import figdraw
   import figdraw/figextras
-  import figdraw/extras/systemfonts
   from figdraw/common/typefaces import getLineHeightImpl
+  import ./fontfallbacks
 
 const AutomaticFontFallbackEnabled =
   when defined(useNativeDynlib):
@@ -34,6 +34,7 @@ else:
     figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,
     figdraw.Fill, figdraw.ColorRGBA, figdraw.toFill, figdraw.sampleColor,
     figdraw.centerColorRgba, figdraw.centerColor
+  export fontfallbacks
 export images
 export renderresources
 
@@ -55,95 +56,9 @@ type DrawContext* = ref object
   xResources: RenderResourceManifest
 
 var defaultTypefaceIds {.threadvar.}: Table[string, TypefaceId]
-when AutomaticFontFallbackEnabled:
-  var automaticFallbackIds {.threadvar.}: Table[string, seq[TypefaceId]]
 
 when AutomaticFontFallbackEnabled:
-  proc automaticFallbackGroups(language: LanguageTag): seq[seq[string]] =
-    let preferred = ($language).toLowerAscii()
-    when defined(macosx):
-      let languageGroups =
-        if preferred.startsWith("ja"):
-          @[
-            @["Hiragino Sans", "Yu Gothic"],
-            @["PingFang SC", "Hiragino Sans GB"],
-            @["PingFang TC"],
-            @["Apple SD Gothic Neo"],
-          ]
-        elif preferred.startsWith("ko"):
-          @[
-            @["Apple SD Gothic Neo"],
-            @["Hiragino Sans", "Yu Gothic"],
-            @["PingFang SC", "Hiragino Sans GB"],
-            @["PingFang TC"],
-          ]
-        elif preferred.startsWith("zh-hant") or preferred.startsWith("zh-tw") or
-          preferred.startsWith("zh-hk"):
-          @[
-            @["PingFang TC"],
-            @["PingFang SC", "Hiragino Sans GB"],
-            @["Hiragino Sans", "Yu Gothic"],
-            @["Apple SD Gothic Neo"],
-          ]
-        else:
-          @[
-            @["PingFang SC", "Hiragino Sans GB"],
-            @["PingFang TC"],
-            @["Hiragino Sans", "Yu Gothic"],
-            @["Apple SD Gothic Neo"],
-          ]
-      result.add languageGroups
-      result.add @[
-        @["Arial Unicode MS", "Arial Unicode"],
-        @["Apple Symbols", "Noto Sans Symbols 2", "Noto Sans Symbols"],
-        @["Noto Emoji"],
-      ]
-    elif defined(windows):
-      result.add @[
-        @["Microsoft YaHei UI", "Microsoft YaHei"],
-        @["Microsoft JhengHei UI", "Microsoft JhengHei"],
-        @["Yu Gothic UI", "Yu Gothic"],
-        @["Malgun Gothic"],
-        @["Segoe UI Symbol"],
-        @["Segoe UI Emoji"],
-      ]
-    else:
-      result.add @[
-        @["Noto Sans CJK SC", "Noto Sans SC"],
-        @["Noto Sans CJK TC", "Noto Sans TC"],
-        @["Noto Sans CJK JP", "Noto Sans JP"],
-        @["Noto Sans CJK KR", "Noto Sans KR"],
-        @["Noto Sans Arabic"],
-        @["Noto Sans Hebrew"],
-        @["Noto Sans Devanagari"],
-        @["Noto Sans Symbols 2", "Noto Sans Symbols", "DejaVu Sans"],
-        @["Noto Emoji"],
-      ]
-
-  proc addFallbackTypeface(
-      ids: var seq[TypefaceId], name: string, primary: TypefaceId
-  ) =
-    try:
-      let id = loadTypeface(name)
-      if id != primary and id notin ids:
-        ids.add id
-    except CatchableError:
-      discard
-
-  proc automaticFallbackTypefaces(
-      primary: TypefaceId, language: LanguageTag
-  ): seq[TypefaceId] =
-    let cacheKey = $Hash(primary) & "\0" & $language
-    if cacheKey in automaticFallbackIds:
-      return automaticFallbackIds[cacheKey]
-
-    result.addFallbackTypeface(DefaultFontName, primary)
-    result.addFallbackTypeface(DefaultMonospaceFontName, primary)
-    for group in language.automaticFallbackGroups():
-      let path = findSystemFontFile(group)
-      if path.len > 0:
-        result.addFallbackTypeface(path, primary)
-    automaticFallbackIds[cacheKey] = result
+  installAutomaticFontFallbackResolver()
 
 proc defaultTypefaceRequest(
     fontName = defaultFontName()
@@ -185,8 +100,6 @@ proc defaultFont(
     defaultTypefaceIds[cacheKey] = loadTypeface(request.name, request.fallbackNames)
   var font = defaultTypefaceIds[cacheKey].fontWithSize(size)
   when AutomaticFontFallbackEnabled:
-    font.fallbackTypefaceIds =
-      font.typefaceId.automaticFallbackTypefaces(resolvedLanguage)
     font.language = $resolvedLanguage
   fontRef(font)
 

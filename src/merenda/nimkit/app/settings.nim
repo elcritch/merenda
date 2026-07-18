@@ -80,6 +80,7 @@ type
     status: Label
     fontSizeValue: Label
     fontSizeStepper: Stepper
+    fontRoleButtons: array[FontRole, Button]
 
 const
   FontCatalogBatchSize = 8
@@ -88,7 +89,8 @@ const
   SettingsMaximumFontSize = 120.0'f32
   SettingsDefaultFontSize = 14.0'f32
   SettingsThemePickerIdentifier = "settings-theme-picker"
-  SettingsFontRolePickerIdentifier = "settings-font-role-picker"
+  SettingsUIFontButtonIdentifier = "settings-ui-font-button"
+  SettingsMonospaceFontButtonIdentifier = "settings-monospace-font-button"
   SettingsFontPickerIdentifier = "settings-font-picker"
   SettingsFontPreviewIdentifier = "settings-font-preview"
 
@@ -485,9 +487,18 @@ proc updateStatus(settings: MerendaSettingsWindow) =
     settings.appliedFontPaths[frMonospace].fontTitle() & " · " &
     settings.fontLoadingStatus
 
+proc updateFontRoleButtons(settings: MerendaSettingsWindow) =
+  for role in FontRole:
+    let button = settings.fontRoleButtons[role]
+    if button.isNil:
+      continue
+    button.title = settings.previewFontPaths[role].fontTitle()
+    button.state = if role == settings.activeFontRole: bsOn else: bsOff
+
 proc updatePreview(settings: MerendaSettingsWindow) =
   if not settings.fontSizeValue.isNil:
     settings.fontSizeValue.text = settings.previewFontSize.fontSizeTitle()
+  settings.updateFontRoleButtons()
   settings.preview.appearance = settings.activeTheme.appearanceFor(
     settings.previewFontPaths, settings.previewFontSize, settings.activeFontRole
   )
@@ -514,15 +525,16 @@ proc fontSizeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
     settings.previewFontSize = Stepper(sender).value
     settings.updatePreview()
 
-proc fontRoleDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
-  if sender of ComboBox:
-    let index = ComboBox(sender).selectedIndex()
-    if index >= ord(low(FontRole)) and index <= ord(high(FontRole)):
-      settings.activeFontRole = FontRole(index)
-      settings.fontPickerController.selectFontPath(
-        settings.previewFontPaths[settings.activeFontRole]
-      )
-      settings.updatePreview()
+proc selectFontRole(settings: MerendaSettingsWindow, role: FontRole) =
+  settings.activeFontRole = role
+  settings.fontPickerController.selectFontPath(settings.previewFontPaths[role])
+  settings.updatePreview()
+
+proc fontRoleDidClick(
+    settings: MerendaSettingsWindow, role: FontRole, sender: DynamicAgent
+) =
+  if sender of Button:
+    settings.selectFontRole(role)
 
 proc applyFontDidClick(settings: MerendaSettingsWindow, sender: DynamicAgent) =
   if sender of Button:
@@ -557,7 +569,7 @@ proc newMerendaSettingsWindow*(
     appearanceHandler: AppearanceHandler = nil
 ): MerendaSettingsWindow =
   result = MerendaSettingsWindow(
-    xWindow: newPanel("Merenda Settings", frame = rect(180, 160, 520, 350)),
+    xWindow: newPanel("Merenda Settings", frame = rect(180, 160, 520, 390)),
     xContentView: newView(),
     fontPickerController: newFontPickerController(),
     applyAppearanceHandler: appearanceHandler,
@@ -580,8 +592,9 @@ proc newMerendaSettingsWindow*(
     typographyForm = newFormView()
     titleLabel = newTitleLabel("Merenda Settings")
     themeLabel = newFormLabel("Theme")
-    fontRoleLabel = newFormLabel("Category")
-    fontLabel = newFormLabel("Font")
+    interfaceFontLabel = newFormLabel("Interface Font")
+    monospaceFontLabel = newFormLabel("Monospace Font")
+    fontLabel = newFormLabel("Browse Fonts")
     fontSizeLabel = newFormLabel("Size")
     themePicker = newComboBox(
       [
@@ -593,7 +606,8 @@ proc newMerendaSettingsWindow*(
         stSynthwave83.title(),
       ]
     )
-    fontRolePicker = newComboBox([frUI.title(), frMonospace.title()])
+    interfaceFontButton = newRadioButton("Default")
+    monospaceFontButton = newRadioButton("Default")
     fontPicker = newCascadingView()
     fontSizeControl = newStackView(laHorizontal)
     fontSizeValue = newLabel(SettingsDefaultFontSize.fontSizeTitle())
@@ -605,7 +619,8 @@ proc newMerendaSettingsWindow*(
     )
     applyFontButton = newButton("Apply font")
     themeChanged = actionSelector("themeChanged")
-    fontRoleChanged = actionSelector("fontRoleChanged")
+    interfaceFontSelected = actionSelector("interfaceFontSelected")
+    monospaceFontSelected = actionSelector("monospaceFontSelected")
     fontSizeChanged = actionSelector("fontSizeChanged")
     applyFont = actionSelector("applyFont")
 
@@ -613,6 +628,8 @@ proc newMerendaSettingsWindow*(
   result.status = newStatusLabel()
   result.fontSizeValue = fontSizeValue
   result.fontSizeStepper = fontSizeStepper
+  result.fontRoleButtons[frUI] = interfaceFontButton
+  result.fontRoleButtons[frMonospace] = monospaceFontButton
   result.xFirstResponder = themePicker
   tabs.identifier = "settings-tabs"
 
@@ -630,14 +647,22 @@ proc newMerendaSettingsWindow*(
       settings.themeDidChange(sender),
   )
   themePicker.action = themeChanged
-  fontRolePicker.selectedIndex = result.activeFontRole.ord
-  fontRolePicker.identifier = SettingsFontRolePickerIdentifier
-  fontRolePicker.target = newActionTarget(
-    fontRoleChanged,
+  interfaceFontButton.identifier = SettingsUIFontButtonIdentifier
+  interfaceFontButton.accessibilityLabel = "Interface font"
+  interfaceFontButton.target = newActionTarget(
+    interfaceFontSelected,
     proc(sender: DynamicAgent) =
-      settings.fontRoleDidChange(sender),
+      settings.fontRoleDidClick(frUI, sender),
   )
-  fontRolePicker.action = fontRoleChanged
+  interfaceFontButton.action = interfaceFontSelected
+  monospaceFontButton.identifier = SettingsMonospaceFontButtonIdentifier
+  monospaceFontButton.accessibilityLabel = "Monospace font"
+  monospaceFontButton.target = newActionTarget(
+    monospaceFontSelected,
+    proc(sender: DynamicAgent) =
+      settings.fontRoleDidClick(frMonospace, sender),
+  )
+  monospaceFontButton.action = monospaceFontSelected
   fontPicker.columnWidth = 180.0
   fontPicker.minColumnWidth = 140.0
   fontPicker.accessibilityLabel = "Font"
@@ -682,12 +707,13 @@ proc newMerendaSettingsWindow*(
   )
   appearancePage.stack.addFlexibleSpacer()
 
-  typographyForm.addRow(fontRoleLabel, fontRolePicker)
+  typographyForm.addRow(interfaceFontLabel, interfaceFontButton)
+  typographyForm.addRow(monospaceFontLabel, monospaceFontButton)
   typographyForm.addRow(fontLabel, fontPicker)
   typographyForm.addRow(fontSizeLabel, fontSizeControl)
   typographyPage.stack.addArrangedSubview(
     newHeadingLabel("Typography"),
-    newLabel("Choose interface and monospace fonts, then preview and apply them."),
+    newLabel("Choose which font to edit, select a face from Browse Fonts, then apply."),
     typographyForm,
     newHeadingLabel("Preview"),
     result.preview,

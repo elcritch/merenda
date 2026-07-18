@@ -1,6 +1,8 @@
-import std/[options, os, unittest]
+import std/[options, os, unicode, unittest]
 
 import figdraw
+import figdraw/common/typefaces
+import pkg/bumpy
 
 import merenda/nimkit/drawing
 import merenda/nimkit/foundation/types
@@ -75,6 +77,40 @@ proc selectionBounds(layout: GlyphArrangement): tuple[x, y, w, h: float32] =
   (minX, minY, maxX - minX, maxY - minY)
 
 suite "nimkit font layout":
+  test "font fallback groups are runtime customizable by language and script":
+    setFontFallbackGroups("x-test", "Test", @[@["Example Sans"]])
+    check fontFallbackGroups("x-test-region", "test")[0] == @["Example Sans"]
+
+    addFontFallbackGroup("x-test", "Test", ["Preferred Sans"], prepend = true)
+    check fontFallbackGroups("x-test", "test")[0] == @["Preferred Sans"]
+    setFontFallbackGroups("x-test", "Test", newSeq[seq[string]]())
+
+  when not defined(useNativeDynlib) and
+      (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
+    test "runtime language table lazily resolves bundled symbol fonts":
+      setFontFallbackGroups("x-symbol-test", "symbols", @[@[DefaultMonospaceFontName]])
+      defer:
+        setFontFallbackGroups("x-symbol-test", "symbols", newSeq[seq[string]]())
+
+      var font = loadTypeface(DefaultFontName).fontWithSize(18)
+      font.language = "x-symbol-test"
+      check font.fallbackTypefaceIds.len == 0
+
+      let layout = typeset(
+        bumpy.rect(0, 0, 60, 30),
+        font,
+        Rune(0xF135).toUTF8(),
+        minContent = false,
+        wrap = false,
+      )
+      require layout.arrangedGlyphs.len == 1
+      require layout.fonts.len == 1
+      let fallbackId = getFigFont(layout.fonts[0].fontId).typefaceId
+      check fallbackId != font.typefaceId
+      check getTypefaceSource(fallbackId).name.extractFilename() ==
+        DefaultMonospaceFontName
+      check layout.arrangedGlyphs[0].glyphId != FontGlyphId(0)
+
   test "theme text style uses font env override precedence":
     withCleanFontEnv(
       proc() =
@@ -134,7 +170,7 @@ suite "nimkit font layout":
           check defaultFontName(frMonospace) == "HackNerdFont-Regular.ttf"
     )
 
-  test "text fonts carry automatic fallbacks and BCP 47 language":
+  test "text fonts defer automatic fallbacks and carry BCP 47 language":
     var style = initAppearance().resolveTextStyle(
         controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
       )
@@ -145,7 +181,22 @@ suite "nimkit font layout":
     when not defined(useNativeDynlib) and
         (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
       check font.font.language == "ja-JP"
-      check font.font.fallbackTypefaceIds.len > 0
+      check font.font.fallbackTypefaceIds.len == 0
+      check fontFallbackResolver() != nil
+
+      when defined(macosx):
+        let layout = typeset(
+          bumpy.rect(0, 0, 240, 60),
+          font.font,
+          "こんにちは",
+          minContent = false,
+          wrap = false,
+        )
+        require layout.arrangedGlyphs.len > 0
+        require layout.fonts.len > 0
+        check getFigFont(layout.fonts[0].fontId).typefaceId != font.font.typefaceId
+        for glyph in layout.arrangedGlyphs:
+          check glyph.glyphId != FontGlyphId(0)
     else:
       check font.font.fallbackTypefaceIds.len == 0
 

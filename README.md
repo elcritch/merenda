@@ -165,6 +165,22 @@ This currently produces monochrome outlines; bitmap, SVG, and COLR color emoji
 paint is not yet rendered. Per-role or per-class rules can still override
 `StyleFontName`, `StyleFontSize`, and `StyleLanguage`.
 
+Fallback fonts are loaded lazily, only after the selected UI or monospace font
+is missing a codepoint. Applications can extend or replace the runtime BCP 47
+language/script table. Categories use lowercase ISO 15924 script tags, plus
+`symbols`, `emoji`, and `*`:
+
+```nim
+addFontFallbackGroup(
+  "th", "thai", ["Noto Sans Thai", "Leelawadee UI"], prepend = true
+)
+setFontFallbackGroups("x-demo", "latn", @[@["Demo Latin"]])
+```
+
+Each inner group contains alternative names for one font choice. Groups are
+tried in order, one at a time, until the missing text is covered. Language keys
+match BCP 47 prefixes, so a rule for `th` also applies to `th-TH`.
+
 Run the font fallback example to see both user-selectable roles alongside
 automatic language, symbol, and outline-emoji fallback:
 
