@@ -376,9 +376,10 @@ proc clampIndex(total, index: int): int {.inline.} =
   max(0, min(index, total))
 
 const ValidMarkedTextAttributes* = [
-  "foregroundColor", "fontSize", "paragraphStyle", "baselineOffset", "kerning",
-  "ligatureLevel", "expansion", "backgroundColor", "shadow", "link", "underlineStyle",
-  "strikethroughStyle", "attachment", "underline", "strikethrough",
+  "foregroundColor", "fontName", "fontSize", "language", "paragraphStyle",
+  "baselineOffset", "kerning", "ligatureLevel", "expansion", "backgroundColor",
+  "shadow", "link", "underlineStyle", "strikethroughStyle", "attachment", "underline",
+  "strikethrough",
 ]
 
 proc initTextCheckingResult*(
@@ -651,7 +652,8 @@ proc textStyle(textView: TextView): TextStyle =
 proc setTextStyleOverride*(textView: TextView, style: TextStyle) =
   textView.xTextStyleOverride = style
   textView.xHasTextStyleOverride = true
-  textView.xTypingAttributes = defaultTextAttributes(style.color, style.fontSize)
+  textView.xTypingAttributes =
+    defaultTextAttributes(style.color, style.fontSize, style.fontName, style.language)
   textView.syncLayout()
   textView.setNeedsDisplay(true)
 
@@ -660,7 +662,8 @@ proc clearTextStyleOverride*(textView: TextView) =
     return
   textView.xHasTextStyleOverride = false
   let style = textView.textStyle()
-  textView.xTypingAttributes = defaultTextAttributes(style.color, style.fontSize)
+  textView.xTypingAttributes =
+    defaultTextAttributes(style.color, style.fontSize, style.fontName, style.language)
   textView.syncLayout()
   textView.setNeedsDisplay(true)
 
@@ -669,7 +672,8 @@ proc `textColor=`*(textView: TextView, color: Color) =
     return
   textView.xTextColor = color
   let style = textView.textStyle()
-  textView.xTypingAttributes = defaultTextAttributes(style.color, style.fontSize)
+  textView.xTypingAttributes =
+    defaultTextAttributes(style.color, style.fontSize, style.fontName, style.language)
   textView.setNeedsDisplay(true)
 
 proc selectionColor*(textView: TextView): Color =
@@ -1968,7 +1972,8 @@ proc displayTextStorage(textView: TextView): TextStorage =
   if shouldApplyPlainTextColor and result.len > 0:
     let style = textView.textStyle()
     result.setAttributes(
-      initTextRange(0, result.len), defaultTextAttributes(style.color, style.fontSize)
+      initTextRange(0, result.len),
+      defaultTextAttributes(style.color, style.fontSize, style.fontName, style.language),
     )
   if hasMarkedOverlay:
     result.setAttributes(textView.xMarkedRange, textView.xMarkedTextAttributes)
@@ -2998,6 +3003,10 @@ func accessibilityAttributesFor(
     "foregroundColor", attributes.foregroundColor.accessibilityColorValue()
   )
   result.add initAccessibilityTextAttribute("fontSize", $attributes.fontSize)
+  if attributes.fontName.len > 0:
+    result.add initAccessibilityTextAttribute("fontName", attributes.fontName)
+  if not attributes.language.isAutomatic:
+    result.add initAccessibilityTextAttribute("language", $attributes.language)
   if attributes.hasBackgroundColor:
     result.add initAccessibilityTextAttribute(
       "backgroundColor", attributes.backgroundColor.accessibilityColorValue()
@@ -3115,7 +3124,11 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
     textView.rectToWindow(textView.characterRect(index))
 
   method accessibilityCharacterIndexAtPoint(textView: TextView, point: Point): int =
-    textView.textIndexAtPoint(textView.pointFromWindow(point))
+    int(
+      textView
+      .layoutManager()
+      .textRangeAtPoint(textView.pointFromWindow(point)).location
+    )
 
   method accessibilityLineRange(textView: TextView, line: int): AccessibilityTextRange =
     textView.lineRange(line).toAccessibilityTextRange()

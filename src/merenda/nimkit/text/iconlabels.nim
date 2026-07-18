@@ -75,6 +75,7 @@ proc iconLabelMetrics(
       insets: insets(0.0),
       fontName: textStyle.fontName,
       fontSize: iconSize,
+      language: textStyle.language,
     )
     iconNaturalSize = label.xIcon.textNaturalSize(iconStyle)
     iconWidth =

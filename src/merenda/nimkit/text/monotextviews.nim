@@ -2,8 +2,8 @@ import std/[math, unicode]
 
 when defined(useNativeDynlib):
   from figdraw/dynlib import
-    FigFont, GlyphTopLeft, TypefaceId, fill, fontWithSize, fs, glyphCount, glyphFont,
-    glyphRect, loadTypeface, placeGlyphs, typeset
+    FigFont, GlyphTopLeft, fill, fs, glyphCount, glyphFont, glyphRect, placeGlyphs,
+    typeset
 else:
   import figdraw
 import pkg/bumpy as bumpy
@@ -23,7 +23,7 @@ export views
 export texttypes
 
 const
-  DefaultMonoFontName* = "HackNerdFont-Regular.ttf"
+  DefaultMonoFontName* = DefaultMonospaceFontName
   DefaultMonoTabWidth* = 2
   DefaultMonoPadding* = 6.0'f32
 
@@ -93,9 +93,6 @@ type
     xFontSize: float32
     xTextColor: nimkitTypes.Color
     xCursorColor: nimkitTypes.Color
-    xTypefaceId: TypefaceId
-    xFontReady: bool
-    xCachedFontName: string
 
 func toAccessibilityTextRange(range: TextRange): AccessibilityTextRange =
   initAccessibilityTextRange(int(range.location), int(range.length))
@@ -107,10 +104,6 @@ const AllMonoTextRawEvents* = {
   mtreMouseDown, mtreMouseDragged, mtreMouseUp, mtreScrollWheel, mtreKeyDown,
   mtreFlagsChanged,
 }
-
-var monoTypefaceId {.threadvar.}: TypefaceId
-var monoTypefaceKey {.threadvar.}: string
-var monoTypefaceReady {.threadvar.}: bool
 
 func initMonoTextRawEventPolicy*(
     forwardedEvents: MonoTextRawEventKinds = AllMonoTextRawEvents,
@@ -280,22 +273,27 @@ proc postCursorSelectionChanged(view: MonoTextView, before: int) =
     view.postAccessibilityNotification(anSelectionChanged)
 
 proc monoFont(view: MonoTextView): FigFont =
-  if view.isNil:
-    if not monoTypefaceReady or monoTypefaceKey != DefaultMonoFontName:
-      monoTypefaceId =
-        loadTypeface(DefaultMonoFontName, [defaultFontName(), "Ubuntu.ttf"])
-      monoTypefaceKey = DefaultMonoFontName
-      monoTypefaceReady = true
-    return monoTypefaceId.fontWithSize(defaultFontSize())
-  if not view.xFontReady or view.xCachedFontName != view.xFontName:
-    if not monoTypefaceReady or monoTypefaceKey != view.xFontName:
-      monoTypefaceId = loadTypeface(view.xFontName, [defaultFontName(), "Ubuntu.ttf"])
-      monoTypefaceKey = view.xFontName
-      monoTypefaceReady = true
-    view.xTypefaceId = monoTypefaceId
-    view.xCachedFontName = view.xFontName
-    view.xFontReady = true
-  view.xTypefaceId.fontWithSize(view.xFontSize)
+  var style =
+    if view.isNil:
+      initAppearance().resolveTextStyle(
+        controlStyle(srMonoTextView), color(0.08, 0.09, 0.11), insets(0.0)
+      )
+    else:
+      view.effectiveAppearance().resolveTextStyle(
+        controlStyle(
+          srMonoTextView,
+          view.widgetStateSet(),
+          id = view.styleId,
+          classes = view.styleClasses,
+        ),
+        color(0.08, 0.09, 0.11),
+        insets(0.0),
+      )
+  if not view.isNil:
+    if view.xFontName.len > 0:
+      style.fontName = view.xFontName
+    style.fontSize = view.xFontSize
+  style.textFont().font
 
 proc monoTextMetrics*(view: MonoTextView): MonoTextMetrics =
   let font = view.monoFont()
@@ -630,10 +628,13 @@ proc `cursorColor=`*(view: MonoTextView, color: nimkitTypes.Color) =
   view.setNeedsDisplay(true)
 
 proc fontName*(view: MonoTextView): string =
-  view.xFontName
+  if view.xFontName.len > 0:
+    view.xFontName
+  else:
+    view.monoTextStyle().text.fontName
 
 proc `fontName=`*(view: MonoTextView, name: string) =
-  if name.len == 0 or view.xFontName == name:
+  if view.xFontName == name:
     return
   view.xFontName = name
   view.invalidateTextGeometry()
@@ -1364,7 +1365,7 @@ proc initMonoTextViewFields*(
   view.xCursorStyle = mtcBlock
   view.xTabWidth = DefaultMonoTabWidth
   view.xPadding = -1.0'f32
-  view.xFontName = DefaultMonoFontName
+  view.xFontName = ""
   view.xFontSize = defaultFontSize()
   view.xTextColor = color(0.0, 0.0, 0.0, 0.0)
   view.xCursorColor = color(0.0, 0.0, 0.0, 0.0)

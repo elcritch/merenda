@@ -387,16 +387,20 @@ proc clearBackgroundPinstripes*(theme: var Theme) =
   theme.clearBackgroundPinstripes(initStyleSelector(srView))
 
 const TextStyleRoles = [
-  srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srMonoTextView,
-  srComboBox, srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem,
+  srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srComboBox,
+  srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem,
 ]
 
 proc initTheme*(): Theme =
   result.tokens = newStyleTokenStore()
   result.chromes = initTable[string, Chrome]()
+  result.setFontName(frUI, defaultFontName(frUI))
+  result.setFontName(frMonospace, defaultFontName(frMonospace))
   for role in TextStyleRoles:
-    result[role, StyleFontName] = styleKeyword(defaultFontName())
+    result[role, StyleFontName] = styleToken(UIFontNameToken)
     result[role, StyleFontSize] = defaultFontSize()
+  result[srMonoTextView, StyleFontName] = styleToken(MonospaceFontNameToken)
+  result[srMonoTextView, StyleFontSize] = defaultFontSize()
   result["accent"] = styleColor(rgbaColor(0, 124, 238, 255))
   result["accent.pressed"] = styleColor(rgbaColor(0, 82, 191, 255))
   result["documentTab.accent.color"] = styleToken("accent")

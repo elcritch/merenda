@@ -168,6 +168,7 @@ type
     insets*: EdgeInsets
     fontName*: string
     fontSize*: float32
+    language*: LanguageTag
 
   ButtonStyle* = object
     box*: ControlBoxStyle
@@ -295,6 +296,7 @@ const
   StyleTextColor* = StyleKey[Color]("text.color")
   StyleFontName* = StyleKey[string]("font.name")
   StyleFontSize* = StyleKey[float32]("font.size")
+  StyleLanguage* = StyleKey[string]("text.language")
   StyleTextHighlightColor* = StyleKey[Color]("text.highlight.color")
   StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
   StyleSelectionColor* = StyleKey[Color]("selection.color")
@@ -1245,6 +1247,37 @@ proc styleValue*(
 ): StyleValue =
   appearance.theme.styleValue(name, fallback)
 
+const
+  UIFontNameToken* = "font.ui.name"
+  MonospaceFontNameToken* = "font.monospace.name"
+
+func fontNameToken(role: FontRole): string =
+  case role
+  of frUI: UIFontNameToken
+  of frMonospace: MonospaceFontNameToken
+
+proc fontName*(theme: Theme, role: FontRole): string =
+  ## Resolves a user-configurable font role from the theme token store.
+  let value =
+    theme.styleValue(role.fontNameToken(), styleKeyword(defaultFontName(role)))
+  if value.kind == svKeyword:
+    value.keyword
+  else:
+    defaultFontName(role)
+
+proc setFontName*(theme: var Theme, role: FontRole, name: string) =
+  ## Sets a font role, or restores its environment/bundled default when empty.
+  let resolved =
+    if name.len > 0:
+      name
+    else:
+      defaultFontName(role)
+  theme[role.fontNameToken()] = styleKeyword(resolved)
+
+proc fontName*(appearance: Appearance, role: FontRole): string =
+  ## Resolves a user-configurable font role from an appearance.
+  appearance.theme.fontName(role)
+
 proc colorToken*(appearance: Appearance, name: string, fallback: Color): Color =
   appearance.theme.colorToken(name, fallback)
 
@@ -1343,6 +1376,8 @@ proc resolveTextStyle*(
     insets: theme.insetsRule(context, StyleTextInsets, insetsFallback),
     fontName: theme.keywordRule(context, StyleFontName, defaultFontName()),
     fontSize: max(theme.lengthRule(context, StyleFontSize, defaultFontSize()), 1.0'f32),
+    language:
+      theme.keywordRule(context, StyleLanguage, $defaultLanguageTag()).initLanguageTag(),
   )
 
 proc resolveTextStyle*(

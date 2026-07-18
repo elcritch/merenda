@@ -1,6 +1,8 @@
 import std/[strutils, unicode, unittest]
 
 import figdraw
+import figdraw/common/typefaces
+import pkg/bumpy
 
 import merenda/nimkit
 
@@ -15,6 +17,18 @@ proc clickView(window: Window, view: View): bool =
   )
 
 suite "nimkit mono text views":
+  test "monospace font follows the theme until explicitly overridden":
+    var theme = initTheme()
+    theme.setFontName(frMonospace, "Ubuntu.ttf")
+    let view = newMonoTextViewer("theme font")
+    view.appearance = initAppearance(theme)
+
+    check view.fontName == "Ubuntu.ttf"
+    view.fontName = DefaultMonoFontName
+    check view.fontName == DefaultMonoFontName
+    view.fontName = ""
+    check view.fontName == "Ubuntu.ttf"
+
   test "plain text API stores lines and exposes grid cells":
     let view = newMonoTextViewer("alpha\nbeta")
 
@@ -260,6 +274,31 @@ suite "nimkit mono text views":
         check node.stroke.fill.color == surfaceBorder.rgba
 
     check foundSurface
+
+  test "rendered monospace cells use backend-correct glyph identities":
+    let view = newMonoTextViewer("AB", frame = rect(0, 0, 220, 80))
+    let list = buildRenders(view)[DefaultDrawLevel]
+
+    var foundText = false
+    for node in list.nodes:
+      if node.kind == nkText and node.renderedText() == "AB":
+        foundText = true
+        require node.textLayout.arrangedGlyphs.len == 2
+        when figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid":
+          let font = getFigFont(node.textLayout.arrangedGlyphs[0].fontId)
+          for index, rune in [Rune('A'), Rune('B')]:
+            let shaped = typeset(
+              bumpy.rect(0, 0, 80, 40), font, $rune, minContent = false, wrap = false
+            )
+            require shaped.arrangedGlyphs.len == 1
+            check node.textLayout.arrangedGlyphs[index].glyphId ==
+              shaped.arrangedGlyphs[0].glyphId
+        else:
+          for index, rune in [Rune('A'), Rune('B')]:
+            let glyph = node.textLayout.arrangedGlyphs[index]
+            check glyph.glyphId == syntheticFontGlyphId(glyph.fontId, rune)
+
+    check foundText
 
   test "rendering only emits visible monospace rows":
     var lines: seq[string]

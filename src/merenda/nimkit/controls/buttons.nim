@@ -649,6 +649,7 @@ proc drawChoiceButtonCell*(
           insets: style.text.insets,
           fontName: style.text.fontName,
           fontSize: style.text.fontSize,
+          language: style.text.language,
         )
       context.addText(markRect, CheckboxCheckmark, markTextStyle, alignment = taCenter)
       context.addText(
@@ -720,6 +721,7 @@ proc drawPushButtonCell*(
         insets: style.text.insets,
         fontName: style.text.fontName,
         fontSize: style.text.fontSize,
+        language: style.text.language,
       ),
       alignment = taCenter,
     )
@@ -732,6 +734,7 @@ proc drawPushButtonCell*(
         insets: style.text.insets,
         fontName: style.text.fontName,
         fontSize: style.text.fontSize,
+        language: style.text.language,
       ),
       alignment = taCenter,
     )
@@ -795,6 +798,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
               insets: style.text.insets,
               fontName: style.text.fontName,
               fontSize: style.text.fontSize,
+              language: style.text.language,
             )
           context.addText(
             markRect, CheckboxCheckmark, markTextStyle, alignment = taCenter
@@ -854,6 +858,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
             insets: style.text.insets,
             fontName: style.text.fontName,
             fontSize: style.text.fontSize,
+            language: style.text.language,
           ),
           alignment = taCenter,
         )
@@ -866,6 +871,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
             insets: style.text.insets,
             fontName: style.text.fontName,
             fontSize: style.text.fontSize,
+            language: style.text.language,
           ),
           alignment = taCenter,
         )

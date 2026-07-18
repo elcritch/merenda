@@ -1,4 +1,4 @@
-import std/[math, options, os, parseutils, strutils]
+import std/[hashes, math, options, os, parseutils, strutils]
 
 import pkg/bumpy
 import pkg/chroma
@@ -186,6 +186,13 @@ type
     chpSelectAndTrack ## Select the owning row, then let the cell/control track.
     chpIgnore ## Consume the event without row or cell handling.
 
+  FontRole* = enum
+    ## User-configurable application font roles.
+    frUI ## Proportional text used by interface controls and documents.
+    frMonospace ## Fixed-width text used by code-oriented controls.
+
+  LanguageTag* = distinct string ## Normalized BCP 47 text-language preference.
+
 const
   AutoMetric* = NaN.float32
   AutoPoint* = Point(x: AutoMetric, y: AutoMetric)
@@ -203,11 +210,15 @@ const
   LayoutPriorityRequired* = LayoutPriority(1000.0'f32)
   DefaultFontSize* = 13.0'f32
   DefaultFontName* = "IBMPlexSans-Regular.ttf"
+  DefaultMonospaceFontName* = "HackNerdFont-Regular.ttf"
   NimKitEnvOverridePrefix* = "NIMKIT_"
   NimKitIgnoreEnvOverridesDefine* = "nimkitIgnoreEnvOverrides"
   NimKitFontEnv* = "NIMKIT_FONT"
   MerendaFontEnv* = "MERENDA_FONT"
   FontEnvVars* = [NimKitFontEnv, MerendaFontEnv]
+  NimKitMonospaceFontEnv* = "NIMKIT_MONOSPACE_FONT"
+  MerendaMonospaceFontEnv* = "MERENDA_MONOSPACE_FONT"
+  MonospaceFontEnvVars* = [NimKitMonospaceFontEnv, MerendaMonospaceFontEnv]
   NimKitFontSizeEnv* = "NIMKIT_FONT_SIZE"
   MerendaFontSizeEnv* = "MERENDA_FONT_SIZE"
   FontSizeEnvVars* = [NimKitFontSizeEnv, MerendaFontSizeEnv]
@@ -220,6 +231,31 @@ type FontSizeOverride* = object
   envName*: string
   size*: float32
 
+func initLanguageTag*(value: string): LanguageTag =
+  ## Normalizes a BCP 47 tag or a POSIX locale such as `ja_JP.UTF-8`.
+  var normalized = value.strip()
+  let encoding = normalized.find('.')
+  if encoding >= 0:
+    normalized.setLen(encoding)
+  let modifier = normalized.find('@')
+  if modifier >= 0:
+    normalized.setLen(modifier)
+  LanguageTag(normalized.replace('_', '-'))
+
+func `$`*(language: LanguageTag): string {.borrow.}
+func `==`*(a, b: LanguageTag): bool {.borrow.}
+func hash*(language: LanguageTag): Hash {.borrow.}
+
+func isAutomatic*(language: LanguageTag): bool =
+  string(language).len == 0
+
+proc defaultLanguageTag*(): LanguageTag =
+  ## Returns the first language present in the process locale environment.
+  for envName in ["LC_ALL", "LC_MESSAGES", "LANG"]:
+    let language = getEnv(envName).initLanguageTag()
+    if not language.isAutomatic:
+      return language
+
 func `==`*(a, b: LayoutPriority): bool {.borrow.}
 func `<`*(a, b: LayoutPriority): bool {.borrow.}
 func `<=`*(a, b: LayoutPriority): bool {.borrow.}
@@ -230,20 +266,28 @@ func envOverrideAllowed*(envName: string): bool =
   else:
     true
 
-proc fontOverrideFromEnv*(): Option[FontOverride] =
-  for envName in FontEnvVars:
+proc fontOverrideFromEnv*(role = frUI): Option[FontOverride] =
+  ## Returns the environment override for one user-configurable font role.
+  let envNames =
+    case role
+    of frUI: FontEnvVars
+    of frMonospace: MonospaceFontEnvVars
+  for envName in envNames:
     if envOverrideAllowed(envName):
       let value = getEnv(envName).strip()
       if value.len > 0:
         return some(FontOverride(envName: envName, name: value))
   none(FontOverride)
 
-proc defaultFontName*(): string =
-  let override = fontOverrideFromEnv()
+proc defaultFontName*(role = frUI): string =
+  ## Returns the environment override or bundled default for a font role.
+  let override = fontOverrideFromEnv(role)
   if override.isSome:
     override.get().name
   else:
-    DefaultFontName
+    case role
+    of frUI: DefaultFontName
+    of frMonospace: DefaultMonospaceFontName
 
 proc fontSizeOverrideFromEnv*(): Option[FontSizeOverride] =
   for envName in FontSizeEnvVars:

@@ -360,6 +360,7 @@ proc drawStepperSegment(
       insets: insets(0.0),
       fontName: style.text.fontName,
       fontSize: max(style.text.fontSize, min(22.0'f32, rect.size.height - 6.0'f32)),
+      language: style.text.language,
     )
   context.addText(rect, label, textStyle, alignment = taCenter)
 
