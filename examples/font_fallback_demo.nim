@@ -4,6 +4,11 @@ import merenda/nimkit
 
 import sigils/selectors
 
+from figdraw/common/fonttypes import figdrawTextBackend
+
+const AutomaticFallbackEnabled =
+  figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"
+
 const ScriptSamples =
   """
 Latin: Hello, world!
@@ -42,14 +47,32 @@ let
   window = newWindow("NimKit Font Fallback", frame = rect(140, 100, 820, 600))
   root = newView()
   layout = newStackView(laVertical)
-  title = newTitleLabel("Two font choices, automatic fallback")
+  title = newTitleLabel(
+    when AutomaticFallbackEnabled:
+      "Two font choices, automatic fallback"
+    else:
+      "Two font choices with the lightweight Pixie backend"
+  )
   summary = newStatusLabel(
-    "Choose only Interface and Monospace. HarfBuzz selects script and symbol faces."
+    when AutomaticFallbackEnabled:
+      "HarfBuzz selects script and symbol faces automatically."
+    else:
+      "Pixie uses the Interface and Monospace faces without language-aware fallback."
   )
   settingsButton = newButton("Open Font Settings…")
-  scriptsTitle = newHeadingLabel("Interface role with language-aware shaping")
+  scriptsTitle = newHeadingLabel(
+    when AutomaticFallbackEnabled:
+      "Interface role with language-aware shaping"
+    else:
+      "Interface role"
+  )
   scripts = newTextEditor(frame = rect(0, 0, 760, 300), richText = true, wraps = true)
-  monospaceTitle = newHeadingLabel("Monospace role with the same automatic fallback")
+  monospaceTitle = newHeadingLabel(
+    when AutomaticFallbackEnabled:
+      "Monospace role with the same automatic fallback"
+    else:
+      "Monospace role"
+  )
   monospace = newMonoTextViewer(
     "let greeting = \"Hello, 世界 ☕︎\"\necho greeting & \" — Καλημέρα\"",
     frame = rect(0, 0, 760, 76),

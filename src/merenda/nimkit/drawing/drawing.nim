@@ -10,6 +10,12 @@ else:
   import figdraw/extras/systemfonts
   from figdraw/common/typefaces import getLineHeightImpl
 
+const AutomaticFontFallbackEnabled =
+  when defined(useNativeDynlib):
+    false
+  else:
+    figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"
+
 import ./images
 import ./renderresources
 import ../themes
@@ -49,10 +55,10 @@ type DrawContext* = ref object
   xResources: RenderResourceManifest
 
 var defaultTypefaceIds {.threadvar.}: Table[string, TypefaceId]
-when not defined(useNativeDynlib):
+when AutomaticFontFallbackEnabled:
   var automaticFallbackIds {.threadvar.}: Table[string, seq[TypefaceId]]
 
-when not defined(useNativeDynlib):
+when AutomaticFontFallbackEnabled:
   proc automaticFallbackGroups(language: LanguageTag): seq[seq[string]] =
     let preferred = ($language).toLowerAscii()
     when defined(macosx):
@@ -178,7 +184,7 @@ proc defaultFont(
   if cacheKey notin defaultTypefaceIds:
     defaultTypefaceIds[cacheKey] = loadTypeface(request.name, request.fallbackNames)
   var font = defaultTypefaceIds[cacheKey].fontWithSize(size)
-  when not defined(useNativeDynlib):
+  when AutomaticFontFallbackEnabled:
     font.fallbackTypefaceIds =
       font.typefaceId.automaticFallbackTypefaces(resolvedLanguage)
     font.language = $resolvedLanguage

@@ -142,28 +142,34 @@ theme.setFontName(frMonospace, "HackNerdFont-Regular.ttf")
 root.appearance = initAppearance(theme)
 ```
 
-NimKit shapes text with HarfBuzz. It detects Unicode scripts, preserves
-bidirectional runs, and chooses a fallback face that covers each run. The
-process locale supplies the default BCP 47 language preference; attributed text
-can override it when language-specific shaping or CJK font choice matters:
+Merenda follows FigDraw's resolved `figdrawTextBackend` constant. The default
+Pixie backend is lightweight and supports the Interface and Monospace roles.
+The HarfBuzzy and hybrid backends additionally detect Unicode scripts, preserve
+bidirectional runs, and choose fallback faces automatically. A FigDraw package
+feature or string-define can select a backend; application code should inspect
+`figdrawTextBackend` rather than the selection mechanism.
+
+The process locale supplies the default BCP 47 language preference. Attributed
+text can override it when the selected backend supports language-specific
+shaping or CJK font choice:
 
 ```nim
 var attributes = defaultTextAttributes(language = initLanguageTag("ja-JP"))
 textView.textStorage().setAttributes(initTextRange(0, 5), attributes)
 ```
 
-HarfBuzz reads the font tables, detects scripts, chooses fallbacks, and shapes
-glyph ids. FigDraw obtains their outlines through HarfBuzz draw callbacks and
-uses Pixie's path/image machinery to rasterize them. This currently produces
-monochrome outlines; bitmap, SVG, and COLR color emoji paint is not yet
-rendered. Per-role or per-class rules can still override `StyleFontName`,
-`StyleFontSize`, and `StyleLanguage`.
+With the HarfBuzzy backend, HarfBuzz reads the font tables, detects scripts,
+chooses fallbacks, and shapes glyph ids. FigDraw obtains their outlines through
+HarfBuzz draw callbacks and uses Pixie's path/image machinery to rasterize them.
+This currently produces monochrome outlines; bitmap, SVG, and COLR color emoji
+paint is not yet rendered. Per-role or per-class rules can still override
+`StyleFontName`, `StyleFontSize`, and `StyleLanguage`.
 
 Run the font fallback example to see both user-selectable roles alongside
 automatic language, symbol, and outline-emoji fallback:
 
 ```sh
-nim r examples/font_fallback_demo.nim
+nim r -d:figdrawTextBackend=harfbuzzy examples/font_fallback_demo.nim
 ```
 
 For a flatter, modern macOS-style appearance, select the built-in `macos` theme

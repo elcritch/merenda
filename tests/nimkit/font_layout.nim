@@ -142,9 +142,12 @@ suite "nimkit font layout":
     let font = style.textFont()
 
     check $style.language == "ja-JP"
-    when not defined(useNativeDynlib):
+    when not defined(useNativeDynlib) and
+        (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
       check font.font.language == "ja-JP"
       check font.font.fallbackTypefaceIds.len > 0
+    else:
+      check font.font.fallbackTypefaceIds.len == 0
 
   test "default font size uses env override precedence":
     withCleanFontSizeEnv(
