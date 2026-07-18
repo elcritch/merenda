@@ -135,8 +135,33 @@ proc toAffine(value: SvgAffine): SvgAffineTransform =
     a: value.a, b: value.b, c: value.c, d: value.d, tx: value.tx, ty: value.ty
   )
 
+proc correctMtsdfSign(
+    image: Image,
+    path: Path,
+    windingRule: WindingRule,
+    fieldScale: float32,
+    fieldTranslation: Vec2,
+) =
+  ## SVG paths can be self-intersecting or use overlapping contours whose
+  ## winding differs from the distance generator's contour orientation. Keep
+  ## its distance magnitude, but use Pixie's SVG fill result for the sign.
+  let mask = newImage(image.width, image.height)
+  mask.fillPath(
+    path,
+    color(1.0, 1.0, 1.0, 1.0),
+    translate(fieldTranslation * fieldScale) * scale(vec2(fieldScale)),
+    windingRule,
+  )
+  for index in 0 ..< image.data.len:
+    let
+      generatedInside = image.data[index].a >= 128
+      rasterInside = mask.data[index].a >= 128
+    if generatedInside != rasterInside:
+      image.data[index].a = 255 - image.data[index].a
+
 proc newMtsdfLayer(
     path: Path,
+    windingRule: WindingRule,
     paint: Color,
     name: string,
     imageIndex, imageCount: int,
@@ -156,6 +181,12 @@ proc newMtsdfLayer(
     field = generateMtsdfPath(path, width, height, pixelRange)
     fieldScale = field.scale.float32
   field.image.flipVertical()
+  field.image.correctMtsdfSign(
+    path,
+    windingRule,
+    fieldScale,
+    vec2(field.translate.x.float32, field.translate.y.float32),
+  )
 
   SvgLayer(
     kind: slkMtsdfFill,
@@ -244,8 +275,8 @@ proc newSvgMtsdfResource*(
       elif element.kind == sekEllipse:
         if element.fillPath.hasArea():
           let mtsdfLayer = newMtsdfLayer(
-            element.fillPath, element.fillColor, name, imageIndex, imageCount,
-            documentScale, pixelRange, cachePolicy,
+            element.fillPath, element.fillRule, element.fillColor, name, imageIndex,
+            imageCount, documentScale, pixelRange, cachePolicy,
           )
           inc imageIndex
           if element.hasFill:
@@ -257,8 +288,8 @@ proc newSvgMtsdfResource*(
       else:
         if element.hasFill and element.fillPath.hasArea():
           result.layers.add newMtsdfLayer(
-            element.fillPath, element.fillColor, name, imageIndex, imageCount,
-            documentScale, pixelRange, cachePolicy,
+            element.fillPath, element.fillRule, element.fillColor, name, imageIndex,
+            imageCount, documentScale, pixelRange, cachePolicy,
           )
           inc imageIndex
         if element.hasStroke and element.strokeSegments.len > 0:

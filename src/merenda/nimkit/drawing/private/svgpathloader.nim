@@ -43,6 +43,7 @@ type
     fillPath*: Path
     hasFill*, hasStroke*: bool
     fillColor*, strokeColor*: Color
+    fillRule*: WindingRule
     strokeSegments*: seq[SvgStrokeSegment]
     strokeWidth*: float32
     strokeCap*: SvgStrokeCap
@@ -407,6 +408,7 @@ proc parseSvgDocument*(svgData: string): ParsedSvgDocument =
           properties.solidStrokeColor()
         else:
           color(0.0, 0.0, 0.0, 0.0),
+      fillRule: properties.fillRule,
       strokeWidth: properties.strokeWidth * properties.transform.transformScale(),
       strokeCap: properties.strokeLineCap.toStrokeCap(),
       strokeJoin: properties.strokeLineJoin.toStrokeJoin(),

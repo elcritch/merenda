@@ -128,6 +128,28 @@ suite "SVG drawing resources":
     check resource.layers.len == 1
     check resource.image.name == "nondegenerate-fill"
 
+  test "keeps compact field padding outside complex SVG fills":
+    let resource = newSvgMtsdfResource(
+      """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="50 90 80 120">
+  <path d="m65.8 102s17.698 26.82 17.1 31.6c-1.3 10.4-1.5 20 1.7 24
+    3.201 4 12.001 37.2 12.001 37.2s-.4 1.2 11.999-36.8c0 0 11.6-16-8.4-34.4
+    0 0-35.2-28.8-34.4-21.6z" fill="#ccc"/>
+</svg>
+""",
+      longEdge = 64,
+      minimumShortEdge = 24,
+      pixelRange = 4.0,
+    )
+    let pixels = resource.image.pixels()
+
+    for x in 0 ..< pixels.width:
+      check pixels.data[x].a < 128
+      check pixels.data[(pixels.height - 1) * pixels.width + x].a < 128
+    for y in 0 ..< pixels.height:
+      check pixels.data[y * pixels.width].a < 128
+      check pixels.data[y * pixels.width + pixels.width - 1].a < 128
+
   test "uses vector strokes but MTSDFs for ellipses":
     let resource = newSvgMtsdfResource(
       """
