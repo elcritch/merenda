@@ -383,7 +383,7 @@ proc parseSvgDocument*(svgData: string): ParsedSvgDocument =
       strokeJoin: properties.strokeLineJoin.toStrokeJoin(),
     )
 
-    if kind in {sekCircle, sekEllipse}:
+    if kind == sekCircle:
       let bounds = path.computeBounds()
       let
         radiusX = bounds.w * 0.5'f32
@@ -398,10 +398,10 @@ proc parseSvgDocument*(svgData: string): ParsedSvgDocument =
         else:
           0.0'f32
     else:
-      if hasFill:
+      if hasFill or kind == sekEllipse and hasStroke:
         element.fillPath = path.copy()
         element.fillPath.transform(properties.transform)
-      if hasStroke:
+      if hasStroke and kind != sekEllipse:
         let parsedStroke = path.strokeSegments(properties.transform)
         if parsedStroke.complete:
           element.strokeSegments = parsedStroke.segments

@@ -71,7 +71,7 @@ suite "SVG drawing resources":
     )
     check context.resources.imageCount == 2
 
-  test "uses FigDraw vector layers for stroked lines curves and ellipses":
+  test "uses vector strokes but MTSDFs for ellipses":
     let resource = newSvgMtsdfResource(
       """
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">
@@ -89,10 +89,11 @@ suite "SVG drawing resources":
     check resource.layers[0].kind == slkStrokePath
     check resource.layers[0].segments[0].kind == spsLine
     check resource.layers[1].kind == slkCircle
-    check resource.layers[2].kind == slkCircle
+    check resource.layers[2].kind == slkMtsdfStroke
     check resource.layers[3].kind == slkStrokePath
     check resource.layers[3].segments[0].kind == spsCubic
-    check resource.image.isNil
+    check resource.image != nil
+    check resource.layers[2].mtsdfStrokeWidth == 1.0'f32
 
     let context = initDrawContext()
     discard context.addSvgMtsdf(
@@ -102,8 +103,34 @@ suite "SVG drawing resources":
       resource,
       fill(color(0.2, 0.5, 0.9, 1.0)),
     )
-    check context.resources.imageCount == 0
-    check context.renderList.nodes.len == 6
+    check context.resources.imageCount == 1
+    check context.renderList.nodes.len == 5
+
+  test "filled and stroked ellipses share one MTSDF image":
+    let resource = newSvgMtsdfResource(
+      """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 50">
+  <ellipse cx="40" cy="25" rx="30" ry="16" fill="black" stroke="black"
+    stroke-width="3"/>
+</svg>
+"""
+    )
+
+    check resource.layers.len == 2
+    check resource.layers[0].kind == slkMtsdfFill
+    check resource.layers[1].kind == slkMtsdfStroke
+    check resource.layers[0].image == resource.layers[1].image
+
+    let context = initDrawContext()
+    discard context.addSvgMtsdf(
+      DefaultDrawLevel,
+      FigIdx(-1),
+      rect(0.0, 0.0, 160.0, 100.0),
+      resource,
+      fill(color(0.2, 0.5, 0.9, 1.0)),
+    )
+    check context.resources.imageCount == 1
+    check context.renderList.nodes.len == 2
 
   test "rejects SVGs without visible painted elements":
     expect SvgMtsdfError:

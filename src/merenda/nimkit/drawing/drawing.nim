@@ -908,10 +908,20 @@ proc addSvgMtsdf*(
   result = (-1).FigIdx
   for svgLayer in svg.layers:
     case svgLayer.kind
-    of slkMtsdfFill:
+    of slkMtsdfFill, slkMtsdfStroke:
       if not svgLayer.image.isNil:
         context.xResources.addImage(svgLayer.image)
-        let layerRect = target.svgLayerRect(svg.size, svgLayer.frame)
+        let
+          layerRect = target.svgLayerRect(svg.size, svgLayer.frame)
+          layerStrokeWeight =
+            if svgLayer.kind == slkMtsdfStroke:
+              svgLayer.mtsdfStrokeWidth *
+                min(
+                  abs(target.size.width / svg.size.width),
+                  abs(target.size.height / svg.size.height),
+                )
+            else:
+              strokeWeight
         result = context.addFig(
           layer,
           parent,
@@ -923,7 +933,7 @@ proc addSvgMtsdf*(
               fill: fillValue,
               pxRange: svgLayer.pixelRange,
               sdThreshold: sdThreshold,
-              strokeWeight: strokeWeight,
+              strokeWeight: layerStrokeWeight,
             ),
           ),
         )

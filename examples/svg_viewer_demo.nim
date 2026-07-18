@@ -51,15 +51,7 @@ protocol SvgCanvasDrawing of ViewDrawingProtocol:
     let
       imageAspect = canvas.svg.size.width / canvas.svg.size.height
       imageRect = fittedRect(context.bounds, imageAspect, canvas.zoom)
-      shadowRect = rect(
-        imageRect.origin.x + 8.0'f32,
-        imageRect.origin.y + 10.0'f32,
-        imageRect.size.width,
-        imageRect.size.height,
-      )
 
-    discard
-      context.addSvgMtsdf(shadowRect, canvas.svg, fill(color(0.02, 0.03, 0.05, 0.30)))
     discard
       context.addSvgMtsdf(imageRect, canvas.svg, fill(color(0.18, 0.52, 0.94, 1.0)))
 
@@ -80,7 +72,7 @@ proc installSvg(
   canvas.setNeedsDisplay(true)
   var mtsdfCount = 0
   for layer in canvas.svg.layers:
-    if layer.kind == slkMtsdfFill:
+    if layer.kind in {slkMtsdfFill, slkMtsdfStroke}:
       inc mtsdfCount
   status.text =
     fmt"{displayName} — {canvas.svg.elementCount} elements, {mtsdfCount} MTSDFs, {canvas.svg.layers.len} layers"

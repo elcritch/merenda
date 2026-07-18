@@ -18,6 +18,7 @@ type
 
   SvgLayerKind* = enum
     slkMtsdfFill
+    slkMtsdfStroke
     slkStrokePath
     slkCircle
 
@@ -45,10 +46,11 @@ type
 
   SvgLayer* = object ## One ordered SVG paint operation.
     case kind*: SvgLayerKind
-    of slkMtsdfFill:
+    of slkMtsdfFill, slkMtsdfStroke:
       image*: ImageResource
       frame*: Rect
       pixelRange*: float32
+      mtsdfStrokeWidth*: float32
     of slkStrokePath:
       segments*: seq[SvgPathSegment]
       strokeWidth*: float32
@@ -160,6 +162,15 @@ proc newMtsdfLayer(
     pixelRange: (field.range * field.scale).float32,
   )
 
+proc mtsdfStrokeLayer(fillLayer: SvgLayer, strokeWidth: float32): SvgLayer =
+  SvgLayer(
+    kind: slkMtsdfStroke,
+    image: fillLayer.image,
+    frame: fillLayer.frame,
+    pixelRange: fillLayer.pixelRange,
+    mtsdfStrokeWidth: strokeWidth,
+  )
+
 proc newSvgMtsdfResource*(
     svgData: string,
     name = "",
@@ -183,7 +194,7 @@ proc newSvgMtsdfResource*(
       imageCount = block:
         var count = 0
         for element in parsed.elements:
-          if element.hasFill and element.kind notin {sekCircle, sekEllipse}:
+          if element.kind == sekEllipse or element.hasFill and element.kind != sekCircle:
             inc count
         count
       dimensions = fieldDimensions(
@@ -206,7 +217,7 @@ proc newSvgMtsdfResource*(
 
     for element in parsed.elements:
       let firstLayer = result.layers.len
-      if element.kind in {sekCircle, sekEllipse}:
+      if element.kind == sekCircle:
         result.layers.add SvgLayer(
           kind: slkCircle,
           transform: element.primitiveTransform.toAffine(),
@@ -214,6 +225,16 @@ proc newSvgMtsdfResource*(
           drawsStroke: element.hasStroke,
           localStrokeWidth: element.primitiveStrokeWidth,
         )
+      elif element.kind == sekEllipse:
+        let mtsdfLayer = newMtsdfLayer(
+          element.fillPath, name, imageIndex, imageCount, documentScale, pixelRange,
+          cachePolicy,
+        )
+        inc imageIndex
+        if element.hasFill:
+          result.layers.add mtsdfLayer
+        if element.hasStroke:
+          result.layers.add mtsdfLayer.mtsdfStrokeLayer(element.strokeWidth)
       else:
         if element.hasFill and not element.fillPath.isNil:
           result.layers.add newMtsdfLayer(
@@ -270,11 +291,11 @@ proc len*(resource: SvgMtsdfResource): int =
 proc image*(resource: SvgMtsdfResource): ImageResource =
   ## Returns the first MTSDF image, retained for single-image compatibility.
   for layer in resource.layers:
-    if layer.kind == slkMtsdfFill:
+    if layer.kind in {slkMtsdfFill, slkMtsdfStroke}:
       return layer.image
 
 proc pixelRange*(resource: SvgMtsdfResource): float32 =
   ## Returns the first MTSDF layer's pixel range, or zero for vector-only SVGs.
   for layer in resource.layers:
-    if layer.kind == slkMtsdfFill:
+    if layer.kind in {slkMtsdfFill, slkMtsdfStroke}:
       return layer.pixelRange
