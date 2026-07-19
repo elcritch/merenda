@@ -16,7 +16,7 @@ import ../themes
 import ../view/views
 import
   ./[
-    resourcecbor, resourceconstruction, resourcecore, resourcedocument,
+    resourcecbor, resourceconstruction, resourcecore, resourcedocument, resourcepreview,
     resourceregistry, resourcevalidation, resourcevalueediting,
   ]
 
@@ -56,13 +56,20 @@ type
     xPaletteKinds: seq[string]
     xPropertyRows: seq[ResourceEditorPropertyRow]
     xDiagnosticRows: seq[ResourceDiagnostic]
-    xPreviewInstance: ResourceInstance
+    xPreview: ResourcePreview
     xPreviewDiagnostics: ResourceDiagnostics
     xPreviewRevision: int
     xHasPreview: bool
     xSynchronizingSelection: bool
     xPreviewSelection: ViewSelection
     xSelectionRing: SelectionRing
+    xHoverRing: SelectionRing
+    xHoverTokens: seq[SwizzleToken]
+    xHoveredResourceId: Option[ResourceId]
+    xHoverGeometry: ResourcePreviewGeometry
+
+  ResourceEditorPreviewSurface = ref object of View
+    xEditor: ResourceEditor
 
 const
   ResourceEditorDocumentType* = "nimkit-resource"
@@ -74,6 +81,11 @@ const
 proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor
 proc newResourceEditorWindow*(editor: ResourceEditor): Window
 proc synchronize*(editor: ResourceEditor)
+proc updatePreviewHover*(
+  editor: ResourceEditor, point: Point
+): ResourcePreviewHit {.discardable.}
+
+proc clearPreviewHover*(editor: ResourceEditor)
 
 protocol ResourceEditorDocumentEvents:
   proc resourcesDidChange*(
@@ -229,11 +241,23 @@ proc previewRevision*(editor: ResourceEditor): Natural =
   if editor.xHasPreview:
     result = editor.xPreviewRevision.Natural
 
-proc previewInstance*(editor: ResourceEditor): ResourceInstance =
-  editor.xPreviewInstance
+proc previewInstance*(editor: ResourceEditor): ResourcePreview =
+  editor.xPreview
 
 func hasPreviewSelection*(editor: ResourceEditor): bool =
   editor.xSelectionRing.installed()
+
+proc hoveredResourceId*(editor: ResourceEditor): Option[ResourceId] =
+  editor.xHoveredResourceId
+
+proc hoverGeometry*(editor: ResourceEditor): ResourcePreviewGeometry =
+  editor.xHoverGeometry
+
+proc previewGeometry*(editor: ResourceEditor, id: ResourceId): ResourcePreviewGeometry =
+  editor.xPreview.geometry(id, editor.xPreviewSurface)
+
+proc previewHitTest*(editor: ResourceEditor, point: Point): ResourcePreviewHit =
+  editor.xPreview.hitTest(editor.xPreviewSurface, point)
 
 func resourceNodeKindTitle(kind: ResourceNodeKind): string =
   case kind
@@ -388,29 +412,128 @@ proc refreshDiagnosticRows(editor: ResourceEditor) =
   editor.xDiagnosticsTitle.text = "Diagnostics (" & $editor.xDiagnosticRows.len & ")"
   editor.xDiagnosticsView.reloadData()
 
+proc clearPreviewHover*(editor: ResourceEditor) =
+  discard editor.xHoverRing.uninstall()
+  editor.xHoveredResourceId = none(ResourceId)
+  editor.xHoverGeometry = ResourcePreviewGeometry()
+  editor.refreshPropertyRows()
+
+proc updatePreviewHover*(
+    editor: ResourceEditor, point: Point
+): ResourcePreviewHit {.discardable.} =
+  if not editor.xHasPreview:
+    return
+  result = editor.previewHitTest(point)
+  let nextId =
+    if result.found:
+      some(result.resourceId)
+    else:
+      none(ResourceId)
+  if nextId == editor.xHoveredResourceId:
+    if result.found:
+      editor.xHoverGeometry = result.geometry
+    return
+
+  discard editor.xHoverRing.uninstall()
+  editor.xHoveredResourceId = nextId
+  editor.xHoverGeometry = result.geometry
+  if result.found:
+    editor.xHoverRing = result.resourceView.installSelectionRing(
+      initSelectionRingStyle(
+        strokeColor = color(0.1, 0.72, 0.82, 0.9),
+        fillColor = color(0.1, 0.72, 0.82, 0.08),
+        lineWidth = 2.0,
+        cornerRadius = 5.0,
+        insets = insets(1.0),
+      )
+    )
+    let frame = result.geometry.frameInReferenceView
+    editor.xSelectionLabel.text =
+      "Hover " & $result.resourceId & " · x " & $frame.x & "  y " & $frame.y & "  w " &
+      $frame.w & "  h " & $frame.h
+  else:
+    editor.refreshPropertyRows()
+
+protocol ResourceEditorPreviewSurfaceEvents of ResponderEventProtocol:
+  method mouseMoved(surface: ResourceEditorPreviewSurface, event: MouseEvent): bool =
+    if not surface.xEditor.isNil:
+      discard surface.xEditor.updatePreviewHover(event.location)
+    false
+
+  method mouseExited(surface: ResourceEditorPreviewSurface, event: MouseEvent): bool =
+    discard event
+    if not surface.xEditor.isNil:
+      surface.xEditor.clearPreviewHover()
+    false
+
+proc uninstallPreviewHoverTracking(editor: ResourceEditor) =
+  for index in countdown(editor.xHoverTokens.high, 0):
+    discard editor.xHoverTokens[index].popMethod()
+  editor.xHoverTokens.setLen(0)
+
+proc installPreviewHoverTracking(editor: ResourceEditor, view: View) =
+  if view.isNil:
+    return
+  let editorCopy = editor
+  let movedWrapper: AroundMethod = proc(
+      self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
+  ) =
+    if not next.isNil:
+      next(self, invocation)
+    let
+      event = invocation.argsAs(MouseEvent)
+      localView = View(self)
+      point = localView.pointToView(event.location, editorCopy.xPreviewSurface)
+    discard editorCopy.updatePreviewHover(point)
+  let exitedWrapper: AroundMethod = proc(
+      self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
+  ) =
+    discard self
+    if not next.isNil:
+      next(self, invocation)
+    if editorCopy.xHoveredResourceId.isSome:
+      editorCopy.clearPreviewHover()
+  editor.xHoverTokens.add DynamicAgent(view).pushMethod(
+    nimkitSelectors.mouseMoved(), movedWrapper
+  )
+  editor.xHoverTokens.add DynamicAgent(view).pushMethod(
+    nimkitSelectors.mouseExited(), exitedWrapper
+  )
+  for child in view.subviews():
+    editor.installPreviewHoverTracking(child)
+
+proc installPreviewHoverTracking(editor: ResourceEditor) =
+  editor.uninstallPreviewHoverTracking()
+  for view in editor.xPreview.rootViews():
+    editor.installPreviewHoverTracking(view)
+
 proc clearPreview(editor: ResourceEditor) =
+  editor.uninstallPreviewHoverTracking()
   discard editor.xPreviewSelection.uninstall()
   discard editor.xSelectionRing.uninstall()
+  discard editor.xHoverRing.uninstall()
   while editor.xPreviewSurface.subviews().len > 0:
     editor.xPreviewSurface.subviews()[^1].removeFromSuperview()
+  editor.xPreview = newResourcePreview(
+    editor.xDocument.xRegistry, editor.xDocument.xInstantiationContext,
+    editor.xDocument.xValidationOptions,
+  )
+  editor.xHoveredResourceId = none(ResourceId)
+  editor.xHoverGeometry = ResourcePreviewGeometry()
 
 proc selectPreviewView(editor: ResourceEditor) =
   discard editor.xSelectionRing.uninstall()
   let selected = editor.selectedViewId()
   if selected.isNone or not editor.xHasPreview:
     return
-  let view = editor.xPreviewInstance.findView(selected.get())
+  let view = editor.xPreview.findView(selected.get())
   if not view.isNil:
     editor.xSelectionRing = view.installSelectionRing()
 
 proc previewResourceId(editor: ResourceEditor, selectedView: View): ResourceId =
-  var candidate = selectedView
-  while not candidate.isNil and candidate != editor.xPreviewSurface:
-    let id = resourceId(candidate.identifier())
-    let path = editor.xDocument.xResources.findNodePath(id)
-    if path.isSome and path.get().kind == rnkView:
-      return id
-    candidate = candidate.superview()
+  let found = editor.xPreview.resourceIdForView(selectedView)
+  if found.isSome:
+    result = found.get()
 
 proc selectResource*(editor: ResourceEditor, id: ResourceId): bool =
   result = editor.xDocument.xResources.selectResource(id)
@@ -439,28 +562,28 @@ proc rebuildPreview(editor: ResourceEditor) =
     editor.selectPreviewView()
     return
 
-  let construction = document.lastValidBundle().instantiateResources(
-      editor.xDocument.xRegistry, editor.xDocument.xInstantiationContext,
-      editor.xDocument.xValidationOptions,
-    )
-  editor.xPreviewDiagnostics = construction.diagnostics
-  if not construction.instantiated:
+  editor.uninstallPreviewHoverTracking()
+  discard editor.xHoverRing.uninstall()
+  editor.xHoveredResourceId = none(ResourceId)
+  editor.xHoverGeometry = ResourcePreviewGeometry()
+  let update = editor.xPreview.update(
+    document.lastValidBundle(), revision.Natural, editor.xPreviewSurface
+  )
+  editor.xPreviewDiagnostics = update.diagnostics
+  if not update.applied:
+    editor.installPreviewHoverTracking()
     return
 
-  editor.clearPreview()
-  editor.xPreviewInstance = construction.instance
   editor.xPreviewRevision = revision
   editor.xHasPreview = true
-  for node in document.lastValidBundle().views:
-    let view = editor.xPreviewInstance.findView(node.id)
-    if not view.isNil:
-      editor.xPreviewSurface.addSubview(view)
-  editor.xPreviewSelection = installViewSelection(
-    editor.xPreviewSurface,
-    proc(view: View, event: MouseEvent) =
-      editor.previewViewSelected(view, event),
-    initViewSelectionOptions(includeRoot = false),
-  )
+  editor.installPreviewHoverTracking()
+  if not editor.xPreviewSelection.installed():
+    editor.xPreviewSelection = installViewSelection(
+      editor.xPreviewSurface,
+      proc(view: View, event: MouseEvent) =
+        editor.previewViewSelected(view, event),
+      initViewSelectionOptions(includeRoot = false),
+    )
   editor.selectPreviewView()
 
 proc refreshStatus(editor: ResourceEditor) =
@@ -764,6 +887,8 @@ proc configureToolbar(
   redoButton.action = redoAction
 
 proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
+  let previewSurface = ResourceEditorPreviewSurface()
+  initViewFields(previewSurface)
   result = ResourceEditor(
     xDocument: document,
     xRootView: newView(),
@@ -771,13 +896,18 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     xPaletteView: newGridView(),
     xPropertyInspector: newTableView(),
     xDiagnosticsView: newTableView(),
-    xPreviewSurface: newView(),
+    xPreviewSurface: previewSurface,
     xStatusLabel: newStatusLabel(),
     xSelectionLabel: newStatusLabel(),
     xDiagnosticsTitle: newHeadingLabel("Diagnostics"),
+    xPreview: newResourcePreview(
+      document.xRegistry, document.xInstantiationContext, document.xValidationOptions
+    ),
     xPreviewRevision: -1,
   )
   initResponder(result)
+  previewSurface.xEditor = result
+  discard previewSurface.withProtocol(ResourceEditorPreviewSurfaceEvents)
   discard result.withProtocol(ResourceEditorTableSource)
   discard result.withProtocol(ResourceEditorTableDelegate)
 

@@ -57,11 +57,25 @@ suite "NimKit resource editor":
     check editor.hasPreview()
     check editor.previewRevision() == 0
     check Button(editor.previewInstance().view(buttonId)).title() == "Original"
+    let previewButton = editor.previewInstance().view(buttonId)
 
     let window = editor.newResourceEditorWindow()
     discard window.buildRenders()
     check window.contentView() == editor.rootView()
     check editor.previewSurface().frame().size.width > 0.0
+
+    let geometry = editor.previewGeometry(buttonId)
+    check geometry.found
+    check geometry.view == previewButton
+    let hoverPoint = previewButton.pointToView(initPoint(2, 2), editor.previewSurface())
+    discard window.mouseMovedAt(previewButton.pointToWindow(initPoint(2, 2)))
+    let hover = editor.previewHitTest(hoverPoint)
+    check hover.found
+    check hover.resourceId == buttonId
+    check editor.hoveredResourceId() == some(buttonId)
+    check editor.hoverGeometry().frameInReferenceView == geometry.frameInReferenceView
+    discard window.mouseMovedAt(editor.rootView().pointToWindow(initPoint(2, 2)))
+    check editor.hoveredResourceId().isNone
 
     check editor.selectResource(buttonId)
     check editor.hasPreviewSelection()
@@ -73,6 +87,7 @@ suite "NimKit resource editor":
     check not document.resources().draftIsValid()
     check document.resources().revision() == 1
     check editor.previewRevision() == 0
+    check editor.previewInstance().view(buttonId) == previewButton
     check editor.propertyRow("enabled").get().text == "not a bool"
     check editor.diagnosticRows().len > 0
     check editor.hasPreviewSelection()
@@ -82,6 +97,7 @@ suite "NimKit resource editor":
     check valid.parsed
     check document.resources().draftIsValid()
     check editor.previewRevision() == 2
+    check editor.previewInstance().view(buttonId) == previewButton
     check not Button(editor.previewInstance().view(buttonId)).enabled()
     check document.resources().selectedResourceIds() == @[buttonId]
     check document.isDocumentEdited()

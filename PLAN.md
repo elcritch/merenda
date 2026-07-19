@@ -506,24 +506,25 @@ runtime.
 - Ready: plain resource records, canonical cborious persistence, structural and
   semantic diagnostics, stable `ResourceId` paths, controlled editable resource
   documents with current/last-valid revisions and undo, two-pass construction,
-  deterministic registry descriptors, and Sigils protocol setter discovery with
-  typed resource-value conversion.
+  deterministic registry descriptors, Sigils protocol setter/getter discovery
+  with bidirectional typed resource-value conversion, and transactional
+  identity-preserving preview reconciliation.
 - Reusable for editor work: `Document` and `UndoManager` already provide file,
   edited-state, grouped undo/redo, and clean-state contracts; view inspection,
   subtree click selection, identifiers, coordinate conversion, and selection
   rings provide most of the preview-selection primitives.
 - Ready for use: `ResourceEditorDocument` and `ResourceEditor` provide a resource
   hierarchy, the nine registered starter kinds, a descriptor-driven property
-  inspector, path-addressed diagnostics, valid-revision preview rebuilding,
-  identifier-based hierarchy/canvas selection, and canonical CBOR save/revert.
+  inspector, path-addressed diagnostics, identity-preserving valid-revision
+  previews, identifier-based hierarchy/canvas selection, hover geometry, and
+  canonical CBOR save/revert.
 - Partial: the hierarchy can inspect all identified resources, while property
   editing and palette insertion currently target view resources. UI-only labels,
   grouping, ranges, and specialized input hints still need a separate optional
   metadata layer above the registry descriptors.
-- Missing: identity-preserving preview reconciliation, constraint records, and
-  editor surfaces for connections and non-view resources. Controller and window
-  extension properties also remain deferred in the built-in construction
-  registry.
+- Missing: constraint records and editor surfaces for connections and non-view
+  resources. Controller and window extension properties also remain deferred in
+  the built-in construction registry.
 
 #### Milestone 1 — Editable Document and Property Schema (Completed 2026-07-19)
 
@@ -561,22 +562,29 @@ runtime.
   and clean-state window behavior stay synchronized.
 - Added `examples/resource_builder_demo.nim` as the runnable vertical slice.
 
-#### Milestone 3 — Identity-Preserving Preview
+#### Milestone 3 — Identity-Preserving Preview (Completed 2026-07-19)
 
-- Add a resource-to-instance diff and reconciliation layer keyed by
-  `ResourceId`. Preserve view and controller identities when kind and ownership
-  remain compatible, and route every property update through the registry.
-- Define transactional replacement behavior for kind changes, hierarchy moves,
-  insertions, deletions, changed assets, and failed property application. A
-  failed preview update must not corrupt the document or leave stale instance
-  mappings.
-- Add getter-side resource conversion only where direct manipulation or
-  runtime-normalized values must be written back. Read through Sigils getter
-  selectors and convert supported Nim values into `ResourceValue` without
-  exposing backing fields.
-- Add hover overlays, geometry inspection, and explicit hit-test-to-resource
-  mapping. Keep selection in the editor document so replacement previews can
-  remap it deterministically.
+- Added `ResourcePreview`, a resource-to-instance diff and reconciliation layer
+  keyed by `ResourceId`. It preserves compatible view identities across property
+  edits and hierarchy moves, preserves controller identities while kind and
+  owned view remain compatible, and reports deterministic insert, remove, reuse,
+  replacement, move, and update changes with stable paths.
+- Each update first constructs a complete staging graph, preflights getter-backed
+  property round trips, and commits mappings only after property and hierarchy
+  application succeeds. Kind changes, moves, insertions, deletions, changed or
+  unavailable assets, window and menu-target rewiring, and failed property
+  application leave the resource document independent and the prior preview
+  revision installed on failure.
+- Extended registry value conversions with getter-side encoders for supported
+  scalar, sequence, geometry, color, image-reference, and enum values. Reads go
+  through discovered Sigils getter selectors; image identities map back through
+  `ResourceId`, and no widget backing fields are exposed.
+- The resource editor now reconciles valid revisions instead of rebuilding them,
+  remaps document-owned selection to retained or replacement views, and exposes
+  hover rings, preview-relative geometry, explicit hit-test results, and
+  implementation-subview-to-resource mapping. Added focused coverage for
+  identity preservation, transactional failures, asset changes, getter
+  conversion, geometry, hover, and selection restoration.
 
 #### Milestone 4 — Layout and Resource Breadth
 

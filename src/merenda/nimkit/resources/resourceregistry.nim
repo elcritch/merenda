@@ -34,13 +34,22 @@ type
 
   ResourcePropertyContext* = object
     imageFor*: proc(id: ResourceId): ImageResource {.closure.}
+    imageIdFor*: proc(image: ImageResource): ResourceId {.closure.}
     textFor*: proc(key, fallback: string): string {.closure.}
+
+  ResourcePropertyReadResult* = object
+    read*: bool
+    value*: ResourceValue
 
   ResourceViewFactory* = proc(frame: Rect): View {.closure.}
   ResourceControllerFactory* = proc(): ViewController {.closure.}
   ResourceChildAttacher* = proc(parent, child: View) {.closure.}
+  ResourceChildDetacher* = proc(parent, child: View) {.closure.}
   ResourceValueDecoder*[T] = proc(
     value: ResourceValue, context: ResourcePropertyContext, decoded: var T
+  ): bool {.closure.}
+  ResourceValueEncoder*[T] = proc(
+    value: T, context: ResourcePropertyContext, encoded: var ResourceValue
   ): bool {.closure.}
   ResourceViewPropertySetter* = proc(
     view: View, value: ResourceValue, context: ResourcePropertyContext
@@ -52,10 +61,17 @@ type
     value: ResourceValue,
     context: ResourcePropertyContext,
   ): bool {.closure.}
+  ResourcePropertyValueReader = proc(
+    view: View,
+    selectorName: SigilName,
+    context: ResourcePropertyContext,
+    value: var ResourceValue,
+  ): bool {.closure.}
 
   ResourcePropertyValueRegistration = object
     acceptedKinds: set[ResourceValueKind]
     apply: ResourcePropertyValueApplier
+    read: ResourcePropertyValueReader
 
   ResourceViewPropertyRegistration* = object
     acceptedKinds*: set[ResourceValueKind]
@@ -69,6 +85,7 @@ type
     baseKind: string
     factory: ResourceViewFactory
     attachChild: ResourceChildAttacher
+    detachChild: ResourceChildDetacher
 
   ResourceRegistry* = object
     viewKinds: Table[string, ResourceViewRegistration]
@@ -94,11 +111,13 @@ proc registerViewKind*(
     factory: ResourceViewFactory,
     baseKind = "view",
     attachChild: ResourceChildAttacher = nil,
+    detachChild: ResourceChildDetacher = nil,
 ) =
   registry.viewKinds[kind] = ResourceViewRegistration(
     baseKind: if kind == baseKind: "" else: baseKind,
     factory: factory,
     attachChild: attachChild,
+    detachChild: detachChild,
   )
 
 proc registerViewProperty*(
@@ -117,6 +136,7 @@ proc registerResourceValueType*[T](
     typeName: string,
     acceptedKinds: set[ResourceValueKind],
     decoder: ResourceValueDecoder[T],
+    encoder: ResourceValueEncoder[T] = nil,
 ) =
   ## Register one conversion from resource data to a Sigils property value type.
   let applyValue: ResourcePropertyValueApplier = proc(
@@ -131,8 +151,24 @@ proc registerResourceValueType*[T](
     let setter = selector[T, tuple[]]($selectorName)
     DynamicAgent(view).sendLocalIfHandled(setter, decoded)
 
-  registry.propertyValueTypes[typeName] =
-    ResourcePropertyValueRegistration(acceptedKinds: acceptedKinds, apply: applyValue)
+  let readValue: ResourcePropertyValueReader =
+    if encoder.isNil:
+      nil
+    else:
+      proc(
+          view: View,
+          selectorName: SigilName,
+          context: ResourcePropertyContext,
+          value: var ResourceValue,
+      ): bool =
+        let getter = selector[tuple[], T]($selectorName)
+        let current = DynamicAgent(view).trySendLocal(getter, ())
+        if current.isSome:
+          return encoder(current.get(), context, value)
+
+  registry.propertyValueTypes[typeName] = ResourcePropertyValueRegistration(
+    acceptedKinds: acceptedKinds, apply: applyValue, read: readValue
+  )
 
 func localSelectorName(name: string): string =
   let separator = name.rfind('.')
@@ -397,11 +433,40 @@ proc applyViewProperty*(
       if property.value.kind in valueType.acceptedKinds:
         return valueType.apply(view, registration.selector, property.value, context)
 
+proc readViewProperty*(
+    registry: ResourceRegistry,
+    kind: string,
+    view: View,
+    name: string,
+    context = ResourcePropertyContext(),
+): ResourcePropertyReadResult =
+  ## Reads a supported protocol property through its Sigils getter selector.
+  ##
+  ## The registry converts the returned Nim value into a backend-neutral
+  ## `ResourceValue`; it never reaches into a view's backing fields.
+  var
+    registration: ResourceViewPropertyRegistration
+    declaredKind: string
+  if registry.findViewProperty(kind, name, registration, declaredKind) and
+      registry.propertyValueTypes.hasKey(registration.valueType):
+    let valueType = registry.propertyValueTypes[registration.valueType]
+    if not valueType.read.isNil:
+      result.read =
+        valueType.read(view, registration.getterSelector, context, result.value)
+
 proc attachChild*(registry: ResourceRegistry, kind: string, parent, child: View) =
   if registry.viewKinds.hasKey(kind) and not registry.viewKinds[kind].attachChild.isNil:
     registry.viewKinds[kind].attachChild(parent, child)
   else:
     parent.addSubview(child)
+
+proc detachChild*(registry: ResourceRegistry, kind: string, parent, child: View) =
+  if parent.isNil or child.isNil:
+    return
+  if registry.viewKinds.hasKey(kind) and not registry.viewKinds[kind].detachChild.isNil:
+    registry.viewKinds[kind].detachChild(parent, child)
+  else:
+    child.removeFromSuperview()
 
 proc enumNamed[T: enum](name: string, value: var T): bool =
   for candidate in T:
@@ -489,29 +554,109 @@ proc decodeEnum[T: enum](
 ): bool =
   value.kind == rvString and value.stringValue.enumNamed(decoded)
 
+proc encodeBool(
+    value: bool, _: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  encoded = resourceValue(value)
+  true
+
+proc encodeInt(
+    value: int, _: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  encoded = resourceValue(value)
+  true
+
+proc encodeFloat32(
+    value: float32, _: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  encoded = resourceValue(value)
+  true
+
+proc encodeString(
+    value: string, _: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  encoded = resourceValue(value)
+  true
+
+proc encodeStrings(
+    value: seq[string], _: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  encoded = resourceValue(value)
+  true
+
+proc encodeRect(
+    value: Rect, _: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  encoded = resourceValue(value)
+  true
+
+proc encodeSize(
+    value: Size, _: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  encoded = resourceValue(value)
+  true
+
+proc encodeInsets(
+    value: EdgeInsets, _: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  encoded = resourceValue(value)
+  true
+
+proc encodeColor(
+    value: Color, _: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  encoded = resourceValue(value)
+  true
+
+proc encodeImage(
+    value: ImageResource, context: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  if value.isNil:
+    encoded = resourceValue(resourceReference(rrImage, ResourceId("")))
+    return true
+  if context.imageIdFor.isNil:
+    return
+  let id = context.imageIdFor(value)
+  if id.isEmpty:
+    return
+  encoded = resourceValue(resourceReference(rrImage, id))
+  true
+
+proc encodeEnum[T: enum](
+    value: T, _: ResourcePropertyContext, encoded: var ResourceValue
+): bool =
+  encoded = resourceValue($value)
+  true
+
 proc registerResourceEnumType*[T: enum](
     registry: var ResourceRegistry, typeName: string
 ) =
-  registerResourceValueType[T](registry, typeName, {rvString}, decodeEnum[T])
+  registerResourceValueType[T](
+    registry, typeName, {rvString}, decodeEnum[T], encodeEnum[T]
+  )
 
 proc registerDefaultResourceValueTypes(registry: var ResourceRegistry) =
-  registerResourceValueType[bool](registry, "bool", {rvBool}, decodeBool)
-  registerResourceValueType[int](registry, "int", {rvInt}, decodeInt)
-  registerResourceValueType[float32](registry, "float32", {rvFloat}, decodeFloat32)
+  registerResourceValueType[bool](registry, "bool", {rvBool}, decodeBool, encodeBool)
+  registerResourceValueType[int](registry, "int", {rvInt}, decodeInt, encodeInt)
+  registerResourceValueType[float32](
+    registry, "float32", {rvFloat}, decodeFloat32, encodeFloat32
+  )
   registerResourceValueType[string](
-    registry, "string", {rvString, rvReference}, decodeString
+    registry, "string", {rvString, rvReference}, decodeString, encodeString
   )
   registerResourceValueType[seq[string]](
-    registry, "seq[string]", {rvStrings}, decodeStrings
+    registry, "seq[string]", {rvStrings}, decodeStrings, encodeStrings
   )
-  registerResourceValueType[Rect](registry, "Rect", {rvRect}, decodeRect)
-  registerResourceValueType[Size](registry, "Size", {rvSize}, decodeSize)
+  registerResourceValueType[Rect](registry, "Rect", {rvRect}, decodeRect, encodeRect)
+  registerResourceValueType[Size](registry, "Size", {rvSize}, decodeSize, encodeSize)
   registerResourceValueType[EdgeInsets](
-    registry, "EdgeInsets", {rvInsets}, decodeInsets
+    registry, "EdgeInsets", {rvInsets}, decodeInsets, encodeInsets
   )
-  registerResourceValueType[Color](registry, "Color", {rvColor}, decodeColor)
+  registerResourceValueType[Color](
+    registry, "Color", {rvColor}, decodeColor, encodeColor
+  )
   registerResourceValueType[ImageResource](
-    registry, "ImageResource", {rvReference}, decodeImage
+    registry, "ImageResource", {rvReference}, decodeImage, encodeImage
   )
 
   registerResourceEnumType[ButtonState](registry, "ButtonState")
@@ -584,6 +729,9 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
     baseKind = "view",
     attachChild = proc(parent, child: View) =
       StackView(parent).addArrangedSubview(child),
+    detachChild = proc(parent, child: View) =
+      StackView(parent).removeArrangedSubview(child)
+      child.removeFromSuperview(),
   )
   result.registerControllerKind(
     "viewController",

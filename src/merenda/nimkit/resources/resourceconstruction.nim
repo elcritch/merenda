@@ -190,6 +190,31 @@ proc localizedValue(bundle: ResourceBundle, locale, key, fallback: string): stri
         return entry.value
   fallback
 
+proc initResourcePropertyContext*(
+    bundle: ResourceBundle,
+    instance: ResourceInstance,
+    context = initResourceInstantiationContext(),
+): ResourcePropertyContext =
+  ## Creates the bidirectional conversion context used by registry properties.
+  ##
+  ## Image getters are mapped back to stable resource identifiers by identity;
+  ## localized getter values are intentionally returned as their resolved string.
+  let
+    bundleCopy = bundle
+    instanceCopy = instance
+    locale = context.locale
+    imageIdFor = proc(image: ImageResource): ResourceId =
+      for asset in bundleCopy.images:
+        if instanceCopy.findImage(asset.id) == image:
+          return asset.id
+  ResourcePropertyContext(
+    imageFor: proc(id: ResourceId): ImageResource =
+      instanceCopy.findImage(id),
+    imageIdFor: imageIdFor,
+    textFor: proc(key, fallback: string): string =
+      bundleCopy.localizedValue(locale, key, fallback),
+  )
+
 proc localizedValue(state: ConstructionState, text: ResourceText): string =
   state.bundle.localizedValue(state.context.locale, text.key, text.fallback)
 
@@ -363,13 +388,7 @@ proc allocateViews(
     state.allocateViews(node.children, nodePath & ".children")
 
 proc propertyContext(state: ConstructionState): ResourcePropertyContext =
-  let stateCopy = state
-  ResourcePropertyContext(
-    imageFor: proc(id: ResourceId): ImageResource =
-      stateCopy.instance.imagesValue.getOrDefault(id),
-    textFor: proc(key, fallback: string): string =
-      stateCopy.bundle.localizedValue(stateCopy.context.locale, key, fallback),
-  )
+  initResourcePropertyContext(state.bundle, state.instance, state.context)
 
 proc configureViews(
     state: var ConstructionState, nodes: openArray[ViewNodeResource], path: string
