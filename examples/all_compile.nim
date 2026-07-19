@@ -34,7 +34,7 @@ import preferences_demo
 import progress_indicator_demo
 import quick_start
 import radio_demo
-import merenda/tekton/tekton
+import merenda/tekton
 import resource_ui_demo
 import scrollview_demo
 import splitview_demo
