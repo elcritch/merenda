@@ -69,6 +69,12 @@ build on that vocabulary instead of adding parallel storage models.
 
 ## Recently Completed
 
+- Added the identity-bearing `ResourceDocument` editor boundary around value-only
+  bundles. Typed view-tree insert/remove/move/replace and property edits now update
+  stable identifier paths, validation, current/last-valid revisions, selection,
+  and undo/redo through one controlled mutation path. The resource registry now
+  exposes deterministic view-kind and inherited property descriptors with aliases,
+  selector/type names, accepted value kinds, and editability for generated editors.
 - Added a Nim-native, backend-neutral resource construction layer with stable plain
   records for UI trees, windows/panels, menus, commands, images, localization, key
   bindings, and theme fragments; canonical cborious serialization; structured
@@ -497,40 +503,41 @@ The runtime foundation is ready for a constrained builder prototype, but the
 editor layer itself has not been built yet.
 
 - Ready: plain resource records, canonical cborious persistence, structural and
-  semantic diagnostics, stable `ResourceId` values, two-pass construction, and
-  Sigils protocol setter discovery with typed resource-value conversion.
+  semantic diagnostics, stable `ResourceId` paths, controlled editable resource
+  documents with current/last-valid revisions and undo, two-pass construction,
+  deterministic registry descriptors, and Sigils protocol setter discovery with
+  typed resource-value conversion.
 - Reusable for editor work: `Document` and `UndoManager` already provide file,
   edited-state, grouped undo/redo, and clean-state contracts; view inspection,
   subtree click selection, identifiers, coordinate conversion, and selection
   rings provide most of the preview-selection primitives.
-- Partial: `ResourceRegistry` can validate and apply known properties, but does
-  not publicly enumerate view kinds or inherited property descriptors. The
-  default resource palette currently covers view, control, button, checkbox,
-  radio button, text field, label, image view, and stack view.
-- Missing: a controlled editable resource document, registry metadata for a
-  generated inspector, invalid-draft versus last-valid-preview state, preview
+- Partial: the default resource palette currently covers view, control, button,
+  checkbox, radio button, text field, label, image view, and stack view. UI-only
+  labels, grouping, ranges, and specialized input hints still need a separate
+  optional metadata layer above the registry descriptors.
+- Missing: the builder window and generated inspector, preview rebuilding and
   reconciliation, constraint records, and editor surfaces for connections and
   non-view resources. Controller and window extension properties also remain
   deferred in the built-in construction registry.
 
-#### Milestone 1 — Editable Document and Property Schema
+#### Milestone 1 — Editable Document and Property Schema (Completed 2026-07-19)
 
-- Add an identity-bearing `ResourceDocument` around a value-only
-  `ResourceBundle`. It should own the current draft, last valid revision,
-  revision number, diagnostics, selection identifiers, and undo manager without
-  making serialized resource records into `ref object` graphs.
-- Express edits as typed insert, remove, move, and replace operations with named
-  result records. Route all mutation through document procs so identifier
-  indexes, validation, diagnostics, revision tracking, and undo registration
-  cannot be bypassed through mutable bundle access.
-- Provide strict and optional resource lookup, read-only iteration, and stable
-  node paths suitable for diagnostics and selection. Avoid exposing `var`
-  references into nested resource sequences.
-- Add public `ResourceViewKindDescriptor` and `ResourcePropertyDescriptor`
-  records plus registry iterators/lookups. Descriptors should expose kind
-  inheritance, aliases, selector and Nim type names, accepted resource-value
-  kinds, and editability. Keep editor labels, grouping, ranges, and specialized
-  input hints in a separate optional metadata layer.
+- Added an identity-bearing `ResourceDocument` around a value-only
+  `ResourceBundle`. It owns the current draft, last valid revision, revision
+  number, diagnostics, selection identifiers, and undo manager without making
+  serialized resource records into `ref object` graphs.
+- Added typed view-tree insert, remove, move, replace, and property operations
+  with named results. All mutation updates identifier indexes, validation,
+  diagnostics, revisions, selection pruning, and undo registration through the
+  document boundary.
+- Added strict and optional resource lookup, read-only iteration, and stable
+  identifier paths that resolve to current diagnostic locations. Nested resource
+  sequences are not exposed through mutable borrows.
+- Added public `ResourceViewKindDescriptor` and `ResourcePropertyDescriptor`
+  records plus deterministic registry iterators and strict/optional lookup.
+  Descriptors expose kind inheritance, aliases, selector and Nim type names,
+  accepted resource-value kinds, and editability; editor-only presentation
+  metadata remains a separate future layer.
 
 #### Milestone 2 — First Interactive Vertical Slice
 

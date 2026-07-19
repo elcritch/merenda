@@ -1,6 +1,6 @@
 ## Extensible construction and property registry for NimKit resources.
 
-import std/[sets, strutils, tables]
+import std/[algorithm, options, sets, strutils, tables]
 
 import sigils/selectors
 
@@ -15,6 +15,23 @@ import ../view/[imageviews, views]
 import ./resourcecore
 
 type
+  ResourceRegistryLookupError* = object of CatchableError
+
+  ResourceViewKindDescriptor* = object
+    kind*: string
+    baseKind*: string
+
+  ResourcePropertyDescriptor* = object
+    name*: string
+    declaredKind*: string
+    aliasOf*: string
+    getterSelectorName*: string
+    setterSelectorName*: string
+    nimTypeName*: string
+    acceptedKinds*: set[ResourceValueKind]
+    inherited*: bool
+    editable*: bool
+
   ResourcePropertyContext* = object
     imageFor*: proc(id: ResourceId): ImageResource {.closure.}
     textFor*: proc(key, fallback: string): string {.closure.}
@@ -43,6 +60,8 @@ type
   ResourceViewPropertyRegistration* = object
     acceptedKinds*: set[ResourceValueKind]
     selector*: SigilName
+    getterSelector: SigilName
+    aliasOf: string
     valueType*: string
     setter*: ResourceViewPropertySetter
 
@@ -169,6 +188,7 @@ proc registerViewProtocolProperties*(
         )[propertyName] = ResourceViewPropertyRegistration(
           acceptedKinds: acceptedKinds,
           selector: requirement.selector,
+          getterSelector: toSigilName(getterName),
           valueType: valueType,
         )
 
@@ -179,6 +199,7 @@ proc registerViewPropertyAlias*(
   if registry.viewProperties.hasKey(kind) and
       registry.viewProperties[kind].hasKey(propertyName):
     registry.viewProperties[kind][alias] = registry.viewProperties[kind][propertyName]
+    registry.viewProperties[kind][alias].aliasOf = propertyName
 
 proc registerControllerKind*(
     registry: var ResourceRegistry, kind: string, factory: ResourceControllerFactory
@@ -209,12 +230,14 @@ proc findViewProperty(
     registry: ResourceRegistry,
     kind, name: string,
     registration: var ResourceViewPropertyRegistration,
+    declaredKind: var string,
 ): bool =
   var current = kind
   for _ in 0 ..< 32:
     if registry.viewProperties.hasKey(current) and
         registry.viewProperties[current].hasKey(name):
       registration = registry.viewProperties[current][name]
+      declaredKind = current
       return true
     if not registry.viewKinds.hasKey(current):
       return
@@ -222,11 +245,125 @@ proc findViewProperty(
     if current.len == 0:
       return
 
+proc missingRegistryEntry(kind, name: string) {.noinline, noreturn.} =
+  raise newException(
+    ResourceRegistryLookupError,
+    "resource " & kind & " descriptor '" & name & "' is unavailable",
+  )
+
+func findViewKindDescriptor*(
+    registry: ResourceRegistry, kind: string
+): Option[ResourceViewKindDescriptor] =
+  ## Returns a public, non-factory view-kind description when registered.
+  if registry.viewKinds.hasKey(kind):
+    return some(
+      ResourceViewKindDescriptor(
+        kind: kind, baseKind: registry.viewKinds[kind].baseKind
+      )
+    )
+
+proc viewKindDescriptor*(
+    registry: ResourceRegistry, kind: string
+): ResourceViewKindDescriptor =
+  ## Returns a required view-kind description.
+  let found = registry.findViewKindDescriptor(kind)
+  if found.isNone:
+    missingRegistryEntry("view kind", kind)
+  found.get()
+
+iterator viewKinds*(registry: ResourceRegistry): ResourceViewKindDescriptor =
+  ## Iterates registered view kinds in deterministic name order.
+  var names: seq[string]
+  for name in registry.viewKinds.keys:
+    names.add name
+  names.sort()
+  for name in names:
+    yield ResourceViewKindDescriptor(
+      kind: name, baseKind: registry.viewKinds[name].baseKind
+    )
+
+func propertyAcceptedKinds(
+    registry: ResourceRegistry, registration: ResourceViewPropertyRegistration
+): set[ResourceValueKind] =
+  if not registration.setter.isNil:
+    registration.acceptedKinds
+  elif registry.propertyValueTypes.hasKey(registration.valueType):
+    registry.propertyValueTypes[registration.valueType].acceptedKinds
+  else:
+    {}
+
+func propertyDescriptor(
+    registry: ResourceRegistry,
+    requestedKind, declaredKind, name: string,
+    registration: ResourceViewPropertyRegistration,
+): ResourcePropertyDescriptor =
+  let acceptedKinds = registry.propertyAcceptedKinds(registration)
+  ResourcePropertyDescriptor(
+    name: name,
+    declaredKind: declaredKind,
+    aliasOf: registration.aliasOf,
+    getterSelectorName: $registration.getterSelector,
+    setterSelectorName: $registration.selector,
+    nimTypeName: registration.valueType,
+    acceptedKinds: acceptedKinds,
+    inherited: requestedKind != declaredKind,
+    editable: not registration.setter.isNil or acceptedKinds != {},
+  )
+
+func findViewPropertyDescriptor*(
+    registry: ResourceRegistry, kind, name: string
+): Option[ResourcePropertyDescriptor] =
+  ## Describes a directly declared or inherited resource property.
+  var
+    registration: ResourceViewPropertyRegistration
+    declaredKind: string
+  if registry.findViewProperty(kind, name, registration, declaredKind):
+    return some(registry.propertyDescriptor(kind, declaredKind, name, registration))
+
+proc viewPropertyDescriptor*(
+    registry: ResourceRegistry, kind, name: string
+): ResourcePropertyDescriptor =
+  ## Returns a required directly declared or inherited property description.
+  let found = registry.findViewPropertyDescriptor(kind, name)
+  if found.isNone:
+    missingRegistryEntry("view property", kind & "." & name)
+  found.get()
+
+iterator viewProperties*(
+    registry: ResourceRegistry, kind: string
+): ResourcePropertyDescriptor =
+  ## Iterates effective properties for a view kind in deterministic name order.
+  var
+    descriptors: seq[ResourcePropertyDescriptor]
+    names = initHashSet[string]()
+    current = kind
+  for _ in 0 ..< 32:
+    if registry.viewProperties.hasKey(current):
+      for name, registration in registry.viewProperties[current].pairs:
+        if name notin names:
+          names.incl name
+          descriptors.add(
+            registry.propertyDescriptor(kind, current, name, registration)
+          )
+    if not registry.viewKinds.hasKey(current):
+      break
+    current = registry.viewKinds[current].baseKind
+    if current.len == 0:
+      break
+  descriptors.sort(
+    proc(a, b: ResourcePropertyDescriptor): int =
+      cmp(a.name, b.name)
+  )
+  for descriptor in descriptors:
+    yield descriptor
+
 proc acceptsViewProperty*(
     registry: ResourceRegistry, kind, name: string, valueKind: ResourceValueKind
 ): bool =
-  var registration: ResourceViewPropertyRegistration
-  if registry.findViewProperty(kind, name, registration):
+  var
+    registration: ResourceViewPropertyRegistration
+    declaredKind: string
+  if registry.findViewProperty(kind, name, registration, declaredKind):
     if not registration.setter.isNil:
       return valueKind in registration.acceptedKinds
     if registry.propertyValueTypes.hasKey(registration.valueType):
@@ -248,8 +385,10 @@ proc applyViewProperty*(
     property: ResourceProperty,
     context: ResourcePropertyContext,
 ): bool =
-  var registration: ResourceViewPropertyRegistration
-  if registry.findViewProperty(kind, property.name, registration):
+  var
+    registration: ResourceViewPropertyRegistration
+    declaredKind: string
+  if registry.findViewProperty(kind, property.name, registration, declaredKind):
     if not registration.setter.isNil and
         property.value.kind in registration.acceptedKinds:
       return registration.setter(view, property.value, context)

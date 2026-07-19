@@ -1,4 +1,4 @@
-import std/[os, unittest]
+import std/[options, os, strutils, unittest]
 
 import merenda/nimkit
 import merenda/nimkit/resources
@@ -164,7 +164,72 @@ proc sampleBundle(): ResourceBundle =
       )
     ]
 
+proc editorBundle(): ResourceBundle =
+  result = initResourceBundle("tests.resource-editor")
+  result.views =
+    @[
+      initViewNodeResource(
+        resourceId("editor.root"),
+        kind = "stackView",
+        properties = [resourceProperty("spacing", resourceValue(8.0'f32))],
+        children = [
+          initViewNodeResource(
+            resourceId("editor.button"),
+            kind = "button",
+            properties = [resourceProperty("title", resourceValue("Original"))],
+          )
+        ],
+      )
+    ]
+
 suite "NimKit resources":
+  test "registry exposes deterministic kind and inherited property descriptors":
+    let registry = initNimKitResourceRegistry()
+    var kindNames: seq[string]
+    for descriptor in registry.viewKinds:
+      kindNames.add descriptor.kind
+
+    check kindNames ==
+      @[
+        "button", "checkBox", "control", "imageView", "label", "radioButton",
+        "stackView", "textField", "view",
+      ]
+    check registry.viewKindDescriptor("button").baseKind == "control"
+    check registry.findViewKindDescriptor("missing").isNone
+    expect ResourceRegistryLookupError:
+      discard registry.viewKindDescriptor("missing")
+
+    let
+      frame = registry.viewPropertyDescriptor("button", "frame")
+      title = registry.viewPropertyDescriptor("button", "title")
+      background = registry.viewPropertyDescriptor("button", "background")
+    check frame.declaredKind == "view"
+    check frame.inherited
+    check frame.nimTypeName == "Rect"
+    check frame.acceptedKinds == {rvRect}
+    check frame.getterSelectorName.endsWith("frame")
+    check frame.setterSelectorName.endsWith("frame=")
+    check frame.editable
+    check title.declaredKind == "button"
+    check not title.inherited
+    check title.nimTypeName == "string"
+    check background.aliasOf == "backgroundColor"
+    check background.acceptedKinds == {rvColor}
+
+    var
+      propertyNames: seq[string]
+      previousName: string
+    for descriptor in registry.viewProperties("button"):
+      propertyNames.add descriptor.name
+      check previousName.len == 0 or previousName < descriptor.name
+      previousName = descriptor.name
+    check "frame" in propertyNames
+    check "title" in propertyNames
+    check "background" in propertyNames
+    check registry.findViewPropertyDescriptor("button", "missing").isNone
+    expect ResourceRegistryLookupError:
+      discard registry.viewPropertyDescriptor("button", "missing")
+
   test "Sigils protocol properties are discovered and bound automatically":
     var registry = initNimKitResourceRegistry()
 
@@ -208,6 +273,12 @@ suite "NimKit resources":
     )
     check view.resourceCount() == 42
     check view.resourceMode() == rtmExpanded
+
+    let customProperty =
+      registry.viewPropertyDescriptor("resourceTestView", "resourceCount")
+    check customProperty.nimTypeName == "int"
+    check customProperty.acceptedKinds == {rvInt}
+    check customProperty.editable
 
   test "discovered properties preserve conversion and setter behavior":
     let
@@ -391,3 +462,159 @@ suite "NimKit resources":
       )
     expect ResourceLookupError:
       discard construction.instance.view(resourceId("missing"))
+
+  test "resource documents provide read-only lookup paths and selection":
+    let document = newResourceDocument(editorBundle())
+
+    check document.revision == 0
+    check document.hasLastValidRevision
+    check document.lastValidRevision == 0
+    check document.draftIsValid
+    check document.contains(resourceId("editor.root"))
+    check document.findView(resourceId("editor.button")).isSome
+    check document.findView(resourceId("missing")).isNone
+    check document.nodePath(resourceId("editor.button")) ==
+      resourceNodePath(rnkView, resourceId("editor.button"))
+    check document.diagnosticPath(
+      resourceNodePath(rnkView, resourceId("editor.button"))
+    ) == "views[0].children[0]"
+    check document.findParentPath(
+      resourceNodePath(rnkView, resourceId("editor.button"))
+    ) == some(resourceNodePath(rnkView, resourceId("editor.root")))
+    check document.viewProperty(resourceId("editor.button"), "title").value.stringValue ==
+      "Original"
+
+    var detached = document.view(resourceId("editor.button"))
+    detached.kind = "textField"
+    check document.view(resourceId("editor.button")).kind == "button"
+
+    check document.selectResource(resourceId("editor.button"))
+    check document.isSelected(resourceId("editor.button"))
+    document.selectResources(
+      [resourceId("editor.button"), resourceId("missing"), resourceId("editor.button")]
+    )
+    check document.selectedResourceIds == @[resourceId("editor.button")]
+
+    var paths: seq[ResourceNodePath]
+    for path in document:
+      paths.add path
+    check paths.len == 2
+
+    let unchanged = document.setViewProperty(
+      resourceId("editor.button"), resourceProperty("title", resourceValue("Original"))
+    )
+    check not unchanged.applied
+    check unchanged.error == reeUnchanged
+    check document.revision == 0
+    check document.undoManager.undoCount == 0
+
+    expect ResourceDocumentLookupError:
+      discard document.view(resourceId("missing"))
+    expect ResourceDocumentLookupError:
+      discard document.nodePath(resourceId("missing"))
+
+  test "resource document view edits validate revision and undo state":
+    let
+      document = newResourceDocument(editorBundle())
+      labelId = resourceId("editor.label")
+      rootId = resourceId("editor.root")
+      label = initViewNodeResource(
+        labelId,
+        kind = "label",
+        properties = [resourceProperty("stringValue", resourceValue("Status"))],
+      )
+
+    let inserted = document.insertView(label, rootId, 1)
+    check inserted.applied
+    check inserted.kind == rekInsert
+    check inserted.error == reeNone
+    check inserted.revision == 1
+    check inserted.path == some(resourceNodePath(rnkView, labelId))
+    check inserted.diagnosticPath == "views[0].children[1]"
+    check document.view(labelId).kind == "label"
+    check document.undoManager.undoCount == 1
+    check document.lastValidRevision == 1
+
+    let stablePath = document.nodePath(labelId)
+    let moved =
+      document.apply(initResourceViewMoveOperation(labelId, index = some(0.Natural)))
+    check moved.applied
+    check moved.kind == rekMove
+    check document.nodePath(labelId) == stablePath
+    check document.diagnosticPath(stablePath) == "views[0]"
+    check document.findParentPath(stablePath).isNone
+
+    var replacement = document.view(labelId)
+    replacement.kind = "textField"
+    replacement.properties =
+      @[resourceProperty("stringValue", resourceValue("Editable"))]
+    let replaced = document.replaceView(labelId, replacement)
+    check replaced.applied
+    check replaced.kind == rekReplace
+    check document.view(labelId).kind == "textField"
+
+    check document.selectResource(labelId)
+    let removed = document.apply(initResourceViewRemoveOperation(labelId))
+    check removed.applied
+    check removed.kind == rekRemove
+    check removed.path.isNone
+    check removed.previousPath == some(stablePath)
+    check not document.contains(labelId)
+    check document.selectedResourceIds.len == 0
+
+    check document.undoManager.performUndo()
+    check document.contains(labelId)
+    check document.view(labelId).kind == "textField"
+    check document.revision == 5
+    check document.undoManager.performRedo()
+    check not document.contains(labelId)
+    check document.revision == 6
+
+  test "resource documents retain invalid drafts beside the last valid revision":
+    let document = newResourceDocument(editorBundle())
+    let validBundle = document.lastValidBundle
+    let invalid = document.setViewProperty(
+      resourceId("editor.root"),
+      resourceProperty("missingProperty", resourceValue(true)),
+    )
+
+    check invalid.applied
+    check invalid.diagnostics.hasErrors
+    check not document.draftIsValid
+    check document.revision == 1
+    check document.lastValidRevision == 0
+    check document.findViewProperty(resourceId("editor.root"), "missingProperty").isSome
+    check validBundle.findView(resourceId("editor.root")).get().properties.len == 1
+    check document.lastValidBundle
+    .findView(resourceId("editor.root"))
+    .get().properties.len == 1
+
+    check document.undoManager.performUndo()
+    check document.draftIsValid
+    check document.revision == 2
+    check document.lastValidRevision == 2
+    check document.findViewProperty(resourceId("editor.root"), "missingProperty").isNone
+
+    let duplicate = document.insertView(
+      initViewNodeResource(resourceId("editor.button")), resourceId("editor.root")
+    )
+    check not duplicate.applied
+    check duplicate.error == reeIdentifierDuplicate
+    check document.revision == 2
+
+    let cycle =
+      document.moveView(resourceId("editor.root"), resourceId("editor.button"))
+    check not cycle.applied
+    check cycle.error == reeHierarchyCycle
+
+  test "invalid initial resource documents report missing valid state":
+    var bundle = editorBundle()
+    bundle.views[0].kind = "missingKind"
+    let document = newResourceDocument(bundle)
+
+    check not document.draftIsValid
+    check not document.hasLastValidRevision
+    expect ResourceDocumentStateError:
+      discard document.lastValidRevision
+    expect ResourceDocumentStateError:
+      discard document.lastValidBundle

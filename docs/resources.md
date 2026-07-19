@@ -114,6 +114,51 @@ Construction returns windows without showing them or adding them to an applicati
 Image resources remain local to the `ResourceInstance`; they are not published in the
 global named-image registry.
 
+## Editable Resource Documents
+
+`ResourceDocument` adds editor identity and mutation history around a value-only
+`ResourceBundle`. It owns the current draft, the most recent valid bundle, revision
+numbers, diagnostics, selected resource identifiers, and an `UndoManager`. The
+serialized records remain plain values, and document lookup returns values or
+read-only borrows rather than mutable access into nested sequences.
+
+```nim
+let document = newResourceDocument(bundle)
+let inserted = document.insertView(
+  initViewNodeResource(resourceId("status"), kind = "label"),
+  parentId = resourceId("root"),
+)
+
+if inserted.applied:
+  echo document.revision
+else:
+  echo inserted.message
+
+discard document.undoManager.performUndo()
+```
+
+Typed view-tree insert, remove, move, replace, and property operations update
+identifier indexes, stable `ResourceNodePath` values, validation diagnostics,
+revisions, and undo registration as one transaction. Structurally ambiguous
+operations such as duplicate identifiers, unavailable parents, invalid indexes, and
+hierarchy cycles are rejected with `ResourceEditError`. Semantically invalid property
+edits remain in the current draft with diagnostics while `lastValidBundle` continues
+to provide a safe preview source.
+
+Use `findNodePath`/`nodePath` and `findView`/`view` for optional and required lookup.
+`diagnosticPath` resolves a stable identifier path to its current index-addressed
+validation location. Iteration yields value copies, and deleting a subtree prunes
+unavailable selection identifiers automatically.
+
+The registry exposes deterministic, read-only property schema through `viewKinds`
+and `viewProperties`. Required and optional descriptor lookup are available through
+`viewKindDescriptor`/`findViewKindDescriptor` and
+`viewPropertyDescriptor`/`findViewPropertyDescriptor`. Property descriptors include
+the declaring kind, inheritance and alias information, getter and setter selector
+names, Nim type name, accepted `ResourceValueKind` values, and editability. UI-only
+labels, grouping, ranges, and specialized editor hints intentionally remain outside
+the core registry contract.
+
 ## Resource Limits
 
 `ResourceLoadLimits` controls the maximum encoded bytes, node count, tree depth, and
