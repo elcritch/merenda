@@ -18,11 +18,18 @@ const DefaultSvg =
 </svg>
 """
 
+const
+  MinZoom = 0.25'f32
+  MaxZoom = 9.0'f32
+  PanStep = 24.0'f32
+  WheelZoomStep = 0.1'f32
+
 type SvgCanvas = ref object of View
   svg: SvgMtsdfResource
   zoom: float32
+  panOffset: Point
 
-proc fittedRect(bounds: Rect, aspect, zoom: float32): Rect =
+proc fittedRect(bounds: Rect, aspect, zoom: float32, panOffset: Point): Rect =
   let available = bounds.inset(insets(28.0))
   if available.isEmpty or aspect <= 0.0'f32:
     return rect(available.origin, initSize(0.0, 0.0))
@@ -37,8 +44,8 @@ proc fittedRect(bounds: Rect, aspect, zoom: float32): Rect =
   width *= zoom
   height *= zoom
   rect(
-    available.origin.x + (available.size.width - width) * 0.5'f32,
-    available.origin.y + (available.size.height - height) * 0.5'f32,
+    available.origin.x + (available.size.width - width) * 0.5'f32 + panOffset.x,
+    available.origin.y + (available.size.height - height) * 0.5'f32 + panOffset.y,
     width,
     height,
   )
@@ -50,7 +57,7 @@ protocol SvgCanvasDrawing of ViewDrawingProtocol:
 
     let
       imageAspect = canvas.svg.size.width / canvas.svg.size.height
-      imageRect = fittedRect(context.bounds, imageAspect, canvas.zoom)
+      imageRect = fittedRect(context.bounds, imageAspect, canvas.zoom, canvas.panOffset)
 
     discard context.addSvgMtsdf(imageRect, canvas.svg)
 
@@ -85,7 +92,7 @@ let
   status = newStatusLabel("Loading sample SVG…")
   openButton = newButton("Open SVG…")
   zoomLabel = newStatusLabel("Zoom: 100%")
-  zoomSlider = newSlider(0.25, 3.0, 1.0)
+  zoomSlider = newSlider(MinZoom, MaxZoom, 1.0)
   canvas = newSvgCanvas()
 
 proc reportError(error: ref CatchableError) =
@@ -108,14 +115,33 @@ proc openSvg(sender: DynamicAgent) =
   if app.runModal(panel) == PanelResponseOk:
     loadSvgFile(panel.selectedUrl().filePathFromUrl())
 
-proc updateZoom(slider: Slider, sender: DynamicAgent) {.slot.} =
-  discard sender
-  canvas.zoom = slider.value.float32
+proc setZoom(canvas: SvgCanvas, zoom: float32) =
+  canvas.zoom = min(max(zoom, MinZoom), MaxZoom)
+  zoomSlider.value = canvas.zoom
   zoomLabel.text = "Zoom: " & $int(round(canvas.zoom * 100.0'f32)) & "%"
   canvas.needsDisplay = true
 
+protocol SvgCanvasEvents of ResponderEventProtocol:
+  method scrollWheel(canvas: SvgCanvas, event: ScrollEvent): bool =
+    if kmShift in event.modifiers:
+      if event.deltaY == 0.0'f32:
+        return false
+      canvas.setZoom(canvas.zoom + event.deltaY * WheelZoomStep)
+    else:
+      if event.deltaX == 0.0'f32 and event.deltaY == 0.0'f32:
+        return false
+      canvas.panOffset.x -= event.deltaX * PanStep
+      canvas.panOffset.y += event.deltaY * PanStep
+      canvas.needsDisplay = true
+    true
+
+proc updateZoom(slider: Slider, sender: DynamicAgent) {.slot.} =
+  discard sender
+  canvas.setZoom(slider.value)
+
 openButton.target = newActionTarget(actionSelector("openSvg"), openSvg)
 openButton.action = actionSelector("openSvg")
+discard canvas.withProtocol(SvgCanvasEvents)
 zoomSlider.stepValue = 0.05
 zoomSlider.connect(actionDidSend, zoomSlider, updateZoom)
 
