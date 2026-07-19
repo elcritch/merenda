@@ -1,19 +1,20 @@
-## Melani, Merenda's resource-document builder application.
+## Tekton, Merenda's resource-document builder application.
 
 import std/os
 
 import merenda/nimkit
+import merenda/tekton/editor
 
 const
-  MelaniNamespace* = "merenda.melani"
-  MelaniRootResourceId* = ResourceId("melani.root")
+  TektonNamespace* = "merenda.tekton"
+  TektonRootResourceId* = ResourceId("tekton.root")
 
-proc melaniStarterBundle*(): ResourceBundle =
-  ## Builds the editable starter document used for new Melani documents.
-  result = initResourceBundle(MelaniNamespace)
+proc tektonStarterBundle*(): ResourceBundle =
+  ## Builds the editable starter document used for new Tekton documents.
+  result = initResourceBundle(TektonNamespace)
   let
     heading = initViewNodeResource(
-      resourceId("melani.heading"),
+      resourceId("tekton.heading"),
       kind = "label",
       properties = [
         resourceProperty("stringValue", resourceValue("Build a NimKit interface")),
@@ -21,7 +22,7 @@ proc melaniStarterBundle*(): ResourceBundle =
       ],
     )
     instructions = initViewNodeResource(
-      resourceId("melani.instructions"),
+      resourceId("tekton.instructions"),
       kind = "label",
       properties = [
         resourceProperty(
@@ -32,7 +33,7 @@ proc melaniStarterBundle*(): ResourceBundle =
       ],
     )
     nameField = initViewNodeResource(
-      resourceId("melani.name"),
+      resourceId("tekton.name"),
       kind = "textField",
       properties = [
         resourceProperty("stringValue", resourceValue("Editable text")),
@@ -40,7 +41,7 @@ proc melaniStarterBundle*(): ResourceBundle =
       ],
     )
     enabled = initViewNodeResource(
-      resourceId("melani.enabled"),
+      resourceId("tekton.enabled"),
       kind = "checkBox",
       properties = [
         resourceProperty("title", resourceValue("Enable live resource editing")),
@@ -48,17 +49,17 @@ proc melaniStarterBundle*(): ResourceBundle =
       ],
     )
     mode = initViewNodeResource(
-      resourceId("melani.mode"),
+      resourceId("tekton.mode"),
       kind = "switchButton",
       properties = [resourceProperty("on", resourceValue(true))],
     )
     progress = initViewNodeResource(
-      resourceId("melani.progress"),
+      resourceId("tekton.progress"),
       kind = "progressIndicator",
       properties = [resourceProperty("value", resourceValue(0.68'f32))],
     )
     root = initViewNodeResource(
-      MelaniRootResourceId,
+      TektonRootResourceId,
       kind = "stackView",
       properties = [
         resourceProperty("frame", resourceValue(rect(20, 20, 480, 330))),
@@ -71,25 +72,25 @@ proc melaniStarterBundle*(): ResourceBundle =
     )
   result.views = @[root]
 
-proc newMelaniDocument*(fileUrl = ""): ResourceEditorDocument =
+proc newTektonDocument*(fileUrl = ""): ResourceEditorDocument =
   ## Creates a starter document or loads an existing canonical CBOR resource file.
-  result = newResourceEditorDocument(melaniStarterBundle(), fileUrl = fileUrl)
+  result = newResourceEditorDocument(tektonStarterBundle(), fileUrl = fileUrl)
   if fileUrl.len > 0 and fileExists(fileUrl):
     discard result.readFromFileUrl(fileUrl)
   elif fileUrl.len == 0:
-    result.displayName = "Melani — Untitled Resources"
-  discard result.resources().selectResource(MelaniRootResourceId)
+    result.displayName = "Tekton — Untitled Resources"
+  discard result.resources().selectResource(TektonRootResourceId)
 
-proc runMelani*(fileUrl = "") =
+proc runTekton*(fileUrl = "") =
   let
     app = sharedApplication()
-    document = newMelaniDocument(fileUrl)
+    document = newTektonDocument(fileUrl)
   discard document.showWindows(app)
   app.run()
 
 when isMainModule:
   let arguments = commandLineParams()
-  runMelani(
+  runTekton(
     if arguments.len > 0:
       arguments[0]
     else:

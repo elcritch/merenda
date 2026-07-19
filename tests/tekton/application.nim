@@ -1,7 +1,8 @@
 import std/[algorithm, options, os, unittest]
 
-import merenda/melani/melani
 import merenda/nimkit
+import merenda/tekton
+import merenda/tekton/tekton
 
 proc propertyRowIndex(editor: ResourceEditor, name: string): int =
   for index, row in editor.propertyRows():
@@ -9,22 +10,22 @@ proc propertyRowIndex(editor: ResourceEditor, name: string): int =
       return index
   -1
 
-suite "Melani resource builder":
+suite "Tekton resource builder application":
   test "starter documents expose a valid editable workspace":
-    let document = newMelaniDocument()
-    check document.displayName() == "Melani — Untitled Resources"
+    let document = newTektonDocument()
+    check document.displayName() == "Tekton — Untitled Resources"
     check document.resources().draftIsValid()
-    check document.resources().selectedResourceIds() == @[MelaniRootResourceId]
-    check document.resources().view(MelaniRootResourceId).kind == "stackView"
-    check document.resources().view(MelaniRootResourceId).children.len == 6
+    check document.resources().selectedResourceIds() == @[TektonRootResourceId]
+    check document.resources().view(TektonRootResourceId).kind == "stackView"
+    check document.resources().view(TektonRootResourceId).children.len == 6
 
   test "inspector uses choices checkboxes and popup colors":
     let
-      document = newMelaniDocument()
+      document = newTektonDocument()
       editor = newResourceEditor(document)
       valueColumn = editor.propertyInspector().columnWithIdentifier("value")
 
-    check editor.selectResource(resourceId("melani.heading"))
+    check editor.selectResource(resourceId("tekton.heading"))
     let alignmentRow = editor.propertyRowIndex("alignment")
     check alignmentRow >= 0
     check editor.propertyRows()[alignmentRow].propertyEditorKind() == rpekComboBox
@@ -36,10 +37,10 @@ suite "Melani resource builder":
     alignmentEditor.activateItemAtIndex(rightIndex)
     check document
     .resources()
-    .viewProperty(resourceId("melani.heading"), "alignment").value.stringValue ==
+    .viewProperty(resourceId("tekton.heading"), "alignment").value.stringValue ==
       "taRight"
 
-    check editor.selectResource(resourceId("melani.name"))
+    check editor.selectResource(resourceId("tekton.name"))
     let editableRow = editor.propertyRowIndex("editable")
     check editableRow >= 0
     check editor.propertyRows()[editableRow].propertyEditorKind() == rpekCheckBox
@@ -50,9 +51,9 @@ suite "Melani resource builder":
     check editableEditor.sendAction()
     check not document
     .resources()
-    .viewProperty(resourceId("melani.name"), "editable").value.boolValue
+    .viewProperty(resourceId("tekton.name"), "editable").value.boolValue
 
-    check editor.selectResource(MelaniRootResourceId)
+    check editor.selectResource(TektonRootResourceId)
     let colorRow = editor.propertyRowIndex("backgroundColor")
     check colorRow >= 0
     check editor.propertyRows()[colorRow].propertyEditorKind() == rpekColorWell
@@ -65,14 +66,14 @@ suite "Melani resource builder":
     check colorEditor.activateColorAtIndex(redIndex)
     check document
     .resources()
-    .viewProperty(MelaniRootResourceId, "backgroundColor").value.colorValue ==
+    .viewProperty(TektonRootResourceId, "backgroundColor").value.colorValue ==
       color(0.88, 0.24, 0.26, 1.0)
 
   test "palette adds siblings for leaf selections and Delete removes them":
     let
-      document = newMelaniDocument()
+      document = newTektonDocument()
       editor = newResourceEditor(document)
-    check editor.selectResource(resourceId("melani.heading"))
+    check editor.selectResource(resourceId("tekton.heading"))
     let button = editor.paletteButton("button")
     check not button.isNil
     check button.sendAction()
@@ -80,39 +81,39 @@ suite "Melani resource builder":
     check document.resources().contains(insertedId)
     let insertedPath = document.resources().nodePath(insertedId)
     check document.resources().findParentPath(insertedPath) ==
-      some(resourceNodePath(rnkView, MelaniRootResourceId))
+      some(resourceNodePath(rnkView, TektonRootResourceId))
     check document.resources().selectedResourceIds() == @[insertedId]
 
     let window = editor.newResourceEditorWindow()
     check window.dispatchKeyDown(KeyEvent(key: keyDelete))
     check not document.resources().contains(insertedId)
-    check document.resources().selectedResourceIds() == @[MelaniRootResourceId]
+    check document.resources().selectedResourceIds() == @[TektonRootResourceId]
 
   test "preview roots keep authored positions across layout and edits":
     let
-      document = newMelaniDocument()
+      document = newTektonDocument()
       editor = newResourceEditor(document)
-      initial = editor.previewGeometry(MelaniRootResourceId).frameInReferenceView
+      initial = editor.previewGeometry(TektonRootResourceId).frameInReferenceView
       window = editor.newResourceEditorWindow()
     discard window.buildRenders()
-    let laidOut = editor.previewGeometry(MelaniRootResourceId).frameInReferenceView
+    let laidOut = editor.previewGeometry(TektonRootResourceId).frameInReferenceView
     check initial.origin == initPoint(20, 20)
     check laidOut.origin == initial.origin
 
-    let changed = editor.commitPropertyText(MelaniRootResourceId, "spacing", "16")
+    let changed = editor.commitPropertyText(TektonRootResourceId, "spacing", "16")
     check changed.edit.applied
-    check editor.previewGeometry(MelaniRootResourceId).frameInReferenceView.origin ==
+    check editor.previewGeometry(TektonRootResourceId).frameInReferenceView.origin ==
       initial.origin
 
-  test "existing CBOR documents load into the Melani document type":
-    let path = getTempDir() / ("melani-resource-" & $getCurrentProcessId() & ".cbor")
+  test "existing CBOR documents load into the Tekton document type":
+    let path = getTempDir() / ("tekton-resource-" & $getCurrentProcessId() & ".cbor")
     defer:
       if fileExists(path):
         removeFile(path)
-    var bundle = melaniStarterBundle()
-    bundle.namespace = "tests.melani.loaded"
+    var bundle = tektonStarterBundle()
+    bundle.namespace = "tests.tekton.loaded"
     writeFile(path, bundle.encodeResourceBundle())
 
-    let document = newMelaniDocument(path)
-    check document.resources().bundle().namespace == "tests.melani.loaded"
-    check document.resources().selectedResourceIds() == @[MelaniRootResourceId]
+    let document = newTektonDocument(path)
+    check document.resources().bundle().namespace == "tests.tekton.loaded"
+    check document.resources().selectedResourceIds() == @[TektonRootResourceId]

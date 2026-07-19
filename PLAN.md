@@ -513,7 +513,9 @@ the first backend-neutral layout bridge.
   a 13-kind Sigils-backed view palette, text/checkbox/combo-box/color-well property
   editing, keyboard deletion, path-addressed diagnostics, and read-only detail
   surfaces for layout, ownership, connections, menus, commands, images,
-  localization, key bindings, and themes. Melani hosts this as a standalone app.
+  localization, key bindings, and themes. Tekton owns the editor, preview
+  reconciler, and resource-value editing modules as a standalone app layer, while
+  NimKit retains the backend-neutral resource model and runtime bridge.
 - Remaining builder work: typed authoring operations and specialized editors for
   non-view resources and constraints, optional presentation metadata, controller
   and window extension properties, and import/export adapters.
@@ -553,7 +555,7 @@ the first backend-neutral layout bridge.
   application document share one `UndoManager`, so edits, save, revert, undo/redo,
   and clean-state window behavior stay synchronized.
 - Added the resource builder vertical slice, now promoted to the
-  `src/merenda/melani/melani.nim` application module.
+  `src/merenda/tekton/tekton.nim` application module.
 
 #### Milestone 3 — Identity-Preserving Preview (Completed 2026-07-19)
 

@@ -1,10 +1,10 @@
-## Text formatting and parsing for generic resource property editors.
+## Text formatting and parsing for Tekton resource property editors.
 
 import std/[sequtils, strutils]
 
-import ../foundation/types
-import ../themes
-import ./resrccore
+import merenda/nimkit/foundation/types
+import merenda/nimkit/resources/resrccore
+import merenda/nimkit/themes
 
 type ResourceValueParseResult* = object
   parsed*: bool

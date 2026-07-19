@@ -198,15 +198,17 @@ names, Nim type name, accepted `ResourceValueKind` values, and editability. UI-o
 labels, grouping, ranges, and specialized editor hints intentionally remain outside
 the core registry contract.
 
-## Interactive Resource Editor
+## Tekton Resource Editor
 
-`ResourceEditorDocument` combines the value-only resource draft with NimKit's
+Tekton's `ResourceEditorDocument` combines the value-only resource draft with NimKit's
 application `Document` behavior. `showWindows` creates the first builder window:
 the resource hierarchy and palette are on the left, the valid preview is in the
 center, and the generic property inspector and path-addressed diagnostics are on
 the right.
 
 ```nim
+import merenda/tekton
+
 let
   document = newResourceEditorDocument(bundle, fileUrl = "ui.cbor")
   app = sharedApplication()
@@ -243,12 +245,14 @@ revert updates the manager's clean state and the normal document edited indicato
 Run the complete vertical slice with:
 
 ```sh
-nim r src/merenda/melani/melani.nim
+nim r src/merenda/tekton/tekton.nim
 ```
 
-The module exports `melaniStarterBundle`, `newMelaniDocument`, and `runMelani`, so
+The app module exports `tektonStarterBundle`, `newTektonDocument`, and `runTekton`, so
 applications and tests can host the builder without relying on example-only code. Pass
-an existing CBOR path to load it at startup.
+an existing CBOR path to load it at startup. The reusable editor, preview reconciler,
+and resource-value editing APIs are available through `import merenda/tekton`; they are
+kept separate from the backend-neutral `merenda/nimkit/resources` API.
 
 ## Resource Limits
 

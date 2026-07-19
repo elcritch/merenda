@@ -380,7 +380,8 @@ automatically. The built-in resource-editor palette includes views, controls,
 buttons, check/radio buttons, text fields, labels, image/stack views, switches,
 progress indicators, boxes, and split views. Its inspector uses checkboxes for
 booleans, registry-backed combo boxes for enum properties, and popup color wells for
-colors. The standalone builder lives in `src/merenda/melani/melani.nim`. See
+colors. The Tekton builder and its reusable editor API live under
+`src/merenda/tekton/`. See
 [docs/resources.md](docs/resources.md) and `examples/resource_ui_demo.nim` for the
 format and construction workflow.
 

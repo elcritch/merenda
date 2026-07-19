@@ -1,26 +1,27 @@
-## Interactive resource-document editing and preview construction.
+## Tekton's interactive resource-document editor.
 
 import std/[algorithm, options, os, strutils]
 
 import sigils/[core, selectors]
 
-import ../accessibility/accessibility
-import ../app/[application, documents, windowcontrollers, windows]
-import ../containers/[gridviews, outlineviews, tableviews]
-import ../controls/[buttons, colorwells, comboboxes]
-import ../debug/[selectionrings, viewselection]
-import ../foundation/events
-import ../foundation/[selectors as nimkitSelectors, types, undomanagers]
-import ../text/textfields
-import ../themes
-import ../view/views
+import merenda/nimkit/accessibility/accessibility
+import merenda/nimkit/app/[application, documents, windowcontrollers, windows]
+import merenda/nimkit/containers/[gridviews, outlineviews, tableviews]
+import merenda/nimkit/controls/[buttons, colorwells, comboboxes]
+import merenda/nimkit/debug/[selectionrings, viewselection]
+import merenda/nimkit/foundation/events
+import merenda/nimkit/foundation/[selectors as nimkitSelectors, types, undomanagers]
 import
-  ./[
-    resrccbor, resrcconstruction, resrccore, resrcdocument, resrcpreview, resrcregistry,
-    resrcvalidation, resrcvalueediting,
+  merenda/nimkit/resources/[
+    resrccbor, resrcconstruction, resrccore, resrcdocument, resrcregistry,
+    resrcvalidation,
   ]
+import merenda/nimkit/text/textfields
+import merenda/nimkit/themes
+import merenda/nimkit/view/views
+import merenda/tekton/[preview, valueediting]
 
-export resrcvalueediting
+export valueediting
 
 type
   ResourcePropertyEditorKind* = enum

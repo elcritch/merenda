@@ -4,6 +4,7 @@ import sigils/[core, selectors]
 
 import merenda/nimkit
 import merenda/nimkit/resources
+import merenda/tekton
 
 proc previewBundle(): ResourceBundle =
   result = initResourceBundle("tests.resource-preview")
@@ -101,7 +102,7 @@ proc hasDiagnostic(diagnostics: ResourceDiagnostics, code: string): bool =
     if diagnostic.code == code:
       return true
 
-suite "NimKit identity-preserving resource previews":
+suite "Tekton identity-preserving resource previews":
   test "reconciliation preserves compatible view and controller identities":
     let
       registry = initNimKitResourceRegistry()

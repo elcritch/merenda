@@ -1,6 +1,7 @@
 import std/[options, os, strutils, unittest]
 
 import merenda/nimkit
+import merenda/tekton
 
 proc editorBundle(): ResourceBundle =
   result = initResourceBundle("tests.resource-editor-window")
@@ -31,7 +32,7 @@ proc propertyRow(
     if row.descriptor.name == name:
       return some(row)
 
-suite "NimKit resource editor":
+suite "Tekton resource editor":
   test "generic resource values parse and retain invalid text":
     let
       parsedRect = parseResourceValue("1, 2, 30, 40", {rvRect})

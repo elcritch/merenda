@@ -1,17 +1,19 @@
-## Transactional, identity-preserving previews for declarative resources.
+## Tekton's transactional, identity-preserving resource previews.
 
 import std/[algorithm, options, sets, strutils, tables]
 
 import sigils/selectors
 
-import ../app/[viewcontrollers, windowcontrollers, windows]
-import ../controls/menus
-import ../drawing/images
-import ../foundation/types
-import ../responder/keybindings
-import ../themes
-import ../view/views
-import ./[resrcconstruction, resrccore, resrclayout, resrcregistry, resrcvalidation]
+import merenda/nimkit/app/[viewcontrollers, windowcontrollers, windows]
+import merenda/nimkit/controls/menus
+import merenda/nimkit/drawing/images
+import merenda/nimkit/foundation/types
+import merenda/nimkit/responder/keybindings
+import
+  merenda/nimkit/resources/
+    [resrcconstruction, resrccore, resrclayout, resrcregistry, resrcvalidation]
+import merenda/nimkit/themes
+import merenda/nimkit/view/views
 
 type
   ResourcePreviewObjectKind* = enum
