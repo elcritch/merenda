@@ -67,6 +67,7 @@ import merenda/nimkit/app/viewcontrollers
 import merenda/nimkit/view/views
 import merenda/nimkit/app/windowcontrollers
 import merenda/nimkit/app/windows
+import merenda/nimkit/resources
 
 export application
 export chroma
@@ -114,6 +115,7 @@ export progressindicators
 export popuplists
 export rendering
 export responders
+export resources
 export scrollergeometry
 export sliders
 export steppers

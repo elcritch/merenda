@@ -354,6 +354,30 @@ discard window.makeFirstResponder(textField)
 
 Buttons can be tab-selected and activated from the keyboard.
 
+## Resource-Backed UI
+
+NimKit can encode plain resource records as canonical CBOR, validate them without
+constructing UI identities, and explicitly instantiate view/controller trees,
+windows, panels, menus, commands, images, localized strings, key bindings, and theme
+fragments.
+
+```nim
+import merenda/nimkit/resources
+
+let loaded = loadResourceBundle("ui/main.cbor")
+if loaded.loaded:
+  let context = initResourceInstantiationContext(
+    locale = "en", assetBasePath = "ui"
+  )
+  let construction = loaded.bundle.instantiateResources(context)
+  if construction.instantiated:
+    let window = construction.instance.window(resourceId("main.window"))
+```
+
+Custom view/controller kinds and property setters can be added through
+`ResourceRegistry`. See [docs/resources.md](docs/resources.md) and
+`examples/resource_ui_demo.nim` for the format and construction workflow.
+
 ## Styling
 
 Use an `Appearance` to override theme tokens or style selectors. Views can carry

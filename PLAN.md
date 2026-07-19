@@ -61,6 +61,11 @@ build on that vocabulary instead of adding parallel storage models.
 
 ## Recently Completed
 
+- Added a Nim-native, backend-neutral resource construction layer with stable plain
+  records for UI trees, windows/panels, menus, commands, images, localization, key
+  bindings, and theme fragments; canonical cborious serialization; structured
+  validation diagnostics; extensible factories and property setters; and explicit
+  two-pass construction into NimKit identities.
 - Reorganized NimKit under domain subdirectories while keeping
   `merenda/nimkit` as the stable umbrella import; completed the drawing/chrome
   split, image resources, view geometry/parity APIs, render alpha/shadow
