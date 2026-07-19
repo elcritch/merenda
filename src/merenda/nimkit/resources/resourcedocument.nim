@@ -256,12 +256,12 @@ proc replaceDraft(
     document: ResourceDocument, bundle: sink ResourceBundle, actionName: string
 ) =
   let previous = document.xDraft
+  document.updateDraft(bundle)
   document.xUndoManager.registerUndo(
     proc() =
       document.replaceDraft(previous, actionName),
     actionName,
   )
-  document.updateDraft(bundle)
 
 proc newResourceDocument*(
     bundle: sink ResourceBundle,

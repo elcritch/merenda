@@ -499,8 +499,9 @@ validate changes, update a live preview, and save canonical CBOR.
 
 #### Current Builder Readiness
 
-The runtime foundation is ready for a constrained builder prototype, but the
-editor layer itself has not been built yet.
+The first constrained builder workflow is now interactive and backed by the
+same resource, document, validation, construction, and undo contracts as the
+runtime.
 
 - Ready: plain resource records, canonical cborious persistence, structural and
   semantic diagnostics, stable `ResourceId` paths, controlled editable resource
@@ -511,14 +512,18 @@ editor layer itself has not been built yet.
   edited-state, grouped undo/redo, and clean-state contracts; view inspection,
   subtree click selection, identifiers, coordinate conversion, and selection
   rings provide most of the preview-selection primitives.
-- Partial: the default resource palette currently covers view, control, button,
-  checkbox, radio button, text field, label, image view, and stack view. UI-only
-  labels, grouping, ranges, and specialized input hints still need a separate
-  optional metadata layer above the registry descriptors.
-- Missing: the builder window and generated inspector, preview rebuilding and
-  reconciliation, constraint records, and editor surfaces for connections and
-  non-view resources. Controller and window extension properties also remain
-  deferred in the built-in construction registry.
+- Ready for use: `ResourceEditorDocument` and `ResourceEditor` provide a resource
+  hierarchy, the nine registered starter kinds, a descriptor-driven property
+  inspector, path-addressed diagnostics, valid-revision preview rebuilding,
+  identifier-based hierarchy/canvas selection, and canonical CBOR save/revert.
+- Partial: the hierarchy can inspect all identified resources, while property
+  editing and palette insertion currently target view resources. UI-only labels,
+  grouping, ranges, and specialized input hints still need a separate optional
+  metadata layer above the registry descriptors.
+- Missing: identity-preserving preview reconciliation, constraint records, and
+  editor surfaces for connections and non-view resources. Controller and window
+  extension properties also remain deferred in the built-in construction
+  registry.
 
 #### Milestone 1 — Editable Document and Property Schema (Completed 2026-07-19)
 
@@ -539,19 +544,22 @@ editor layer itself has not been built yet.
   accepted resource-value kinds, and editability; editor-only presentation
   metadata remains a separate future layer.
 
-#### Milestone 2 — First Interactive Vertical Slice
+#### Milestone 2 — First Interactive Vertical Slice (Completed 2026-07-19)
 
-- Build a document window containing a resource hierarchy, the initial nine-kind
-  view palette, a generic property inspector, path-addressed diagnostics, and a
-  preview surface. Property values should be read from the resource document;
-  live getter conversion is not a prerequisite for this slice.
-- Validate after each committed edit. Preserve invalid draft input in the editor
-  while leaving the last valid preview untouched.
-- Rebuild the preview from each valid revision at first, then restore hierarchy
-  and canvas selection by `ResourceId`. Reuse the existing view-selection and
-  selection-ring primitives rather than placing editor state on preview views.
-- Load and save through the existing canonical CBOR envelope and integrate with
-  `Document` edited-state and `UndoManager` clean-state behavior.
+- Added a `ResourceEditorDocument` window with a full resource hierarchy, the
+  nine-kind starter view palette, a descriptor-driven property inspector,
+  path-addressed diagnostics, and a preview canvas. Inspector values come from
+  the resource draft rather than live widget getters.
+- Every inspector and palette commit goes through `ResourceDocument` validation.
+  Unparseable typed input is retained as a string resource value with diagnostics,
+  while the last valid preview remains installed.
+- Valid revisions rebuild through the construction registry. Hierarchy and canvas
+  selection are restored by `ResourceId` using the existing subtree-selection and
+  selection-ring primitives, without attaching editor state to preview views.
+- Added canonical CBOR read/write through `DocumentFileProtocol`; the editor and
+  application document share one `UndoManager`, so edits, save, revert, undo/redo,
+  and clean-state window behavior stay synchronized.
+- Added `examples/resource_builder_demo.nim` as the runnable vertical slice.
 
 #### Milestone 3 — Identity-Preserving Preview
 

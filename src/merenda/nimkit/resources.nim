@@ -2,10 +2,10 @@
 
 import
   merenda/nimkit/resources/[
-    resourcecbor, resourceconstruction, resourcecore, resourcedocument,
-    resourceregistry, resourcevalidation,
+    resourcecbor, resourceconstruction, resourcecore, resourcedocument, resourceeditor,
+    resourceregistry, resourcevalidation, resourcevalueediting,
   ]
 
 export
-  resourcecbor, resourceconstruction, resourcecore, resourcedocument, resourceregistry,
-  resourcevalidation
+  resourcecbor, resourceconstruction, resourcecore, resourcedocument, resourceeditor,
+  resourceregistry, resourcevalidation, resourcevalueediting

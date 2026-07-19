@@ -159,6 +159,42 @@ names, Nim type name, accepted `ResourceValueKind` values, and editability. UI-o
 labels, grouping, ranges, and specialized editor hints intentionally remain outside
 the core registry contract.
 
+## Interactive Resource Editor
+
+`ResourceEditorDocument` combines the value-only resource draft with NimKit's
+application `Document` behavior. `showWindows` creates the first builder window:
+the resource hierarchy and palette are on the left, the valid preview is in the
+center, and the generic property inspector and path-addressed diagnostics are on
+the right.
+
+```nim
+let
+  document = newResourceEditorDocument(bundle, fileUrl = "ui.cbor")
+  app = sharedApplication()
+
+discard document.resources().selectResource(resourceId("root"))
+discard document.showWindows(app)
+app.run()
+```
+
+The inspector parses values according to each `ResourcePropertyDescriptor`. If
+typed input cannot be parsed, it is committed as a string value so the exact draft
+text remains visible and validation can diagnose the mismatch. The preview is
+rebuilt only from `lastValidBundle`; invalid drafts therefore never replace the
+last working preview. Hierarchy clicks and preview clicks both update selection by
+`ResourceId`, and preview selection uses `installViewSelection` and
+`installSelectionRing` rather than changing serialized records or preview state.
+
+The editor installs `DocumentFileProtocol` for canonical CBOR reads and writes and
+shares the resource draft's `UndoManager` with the application document. A save or
+revert updates the manager's clean state and the normal document edited indicator.
+
+Run the complete vertical slice with:
+
+```sh
+nim r examples/resource_builder_demo.nim
+```
+
 ## Resource Limits
 
 `ResourceLoadLimits` controls the maximum encoded bytes, node count, tree depth, and
