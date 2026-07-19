@@ -37,13 +37,19 @@ when not defined(useNativeDynlib):
   method hasImage*(context: RecoveryContext, key: Hash): bool =
     key in context.entries
 
-  method putImage*(context: RecoveryContext, image: ImgObj) =
+  proc recordImageUpload(context: RecoveryContext, key: Hash) =
     inc context.uploadCount
     if context.resetOnSecondUpload and context.uploadCount == 2:
       context.resetOnSecondUpload = false
       context.resetImageAtlas(16)
-    context.entries[image.id.Hash] =
-      figdraw.rect(0, 0, 1.0'f32 / 16.0'f32, 1.0'f32 / 16.0'f32)
+    context.entries[key] = figdraw.rect(0, 0, 1.0'f32 / 16.0'f32, 1.0'f32 / 16.0'f32)
+
+  method putImage*(context: RecoveryContext, key: Hash, image: Image) =
+    discard image
+    context.recordImageUpload(key)
+
+  method putImage*(context: RecoveryContext, image: ImgObj) =
+    context.recordImageUpload(image.id.Hash)
 
   method resetImageAtlas*(context: RecoveryContext, minimumSize: int) =
     discard minimumSize
