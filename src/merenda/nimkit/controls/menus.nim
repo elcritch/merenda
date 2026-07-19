@@ -1113,7 +1113,7 @@ proc `title=`*(button: PopupMenuButton, title: string) =
     return
   button.xTitle = title
   button.invalidateIntrinsicContentSize()
-  button.setNeedsDisplay(true)
+  button.needsDisplay = true
 
 proc menu*(button: PopupMenuButton): Menu =
   button.xMenu
@@ -1126,7 +1126,7 @@ proc `menu=`*(button: PopupMenuButton, menu: Menu) =
     menu.setNextResponder(button)
   button.xViewport.reset()
   button.xHighlightedIndex = -1
-  button.setNeedsDisplay(true)
+  button.needsDisplay = true
 
 proc popupOpen*(button: PopupMenuButton): bool =
   button.xPopupOpen
@@ -1145,14 +1145,14 @@ proc maxVisibleItems*(button: PopupMenuButton): int =
 
 proc `maxVisibleItems=`*(button: PopupMenuButton, value: int) =
   button.xMaxVisibleItems = max(value, 1)
-  button.setNeedsDisplay(true)
+  button.needsDisplay = true
 
 proc itemHeight*(button: PopupMenuButton): float32 =
   button.xItemHeight
 
 proc `itemHeight=`*(button: PopupMenuButton, value: float32) =
   button.xItemHeight = value.normalizedRowHeight()
-  button.setNeedsDisplay(true)
+  button.needsDisplay = true
 
 proc popupPresentation*(button: PopupMenuButton): PopupPresentation =
   button.xPopupPresentation
@@ -1290,11 +1290,11 @@ proc nextSelectableItemIndex(button: PopupMenuButton, startIndex, delta: int): i
   -1
 
 proc setPopupNeedsDisplay(button: PopupMenuButton) =
-  button.setNeedsDisplay(true)
+  button.needsDisplay = true
   if not button.xPopupList.isNil:
-    button.xPopupList.setNeedsDisplay(true)
+    button.xPopupList.needsDisplay = true
   if not button.xPopupWindow.isNil and not button.xPopupWindow.contentView().isNil:
-    button.xPopupWindow.contentView().setNeedsDisplay(true)
+    button.xPopupWindow.contentView().needsDisplay = true
 
 proc setHighlightedIndex(button: PopupMenuButton, index: int, openSubmenu = false) =
   var boundedIndex = if index < 0 or index >= button.menuItemCount(): -1 else: index
@@ -1533,7 +1533,7 @@ proc openInlinePopup(button: PopupMenuButton) =
   popup.frame = button.popupFrameInSuperview()
   if popup.superview() != parent:
     parent.addSubview(popup)
-  popup.setNeedsDisplay(true)
+  popup.needsDisplay = true
 
 proc openPopupWindow(button: PopupMenuButton) =
   if not button.shouldUseWindowPopup():
@@ -1603,7 +1603,7 @@ proc openPopupImpl(button: PopupMenuButton) =
   button.beginPopupSession()
   button.noteMenuBarPopupOpened()
   button.setWidgetState(ssOpen, true)
-  button.setNeedsDisplay(true)
+  button.needsDisplay = true
 
 proc closePopupImpl(button: PopupMenuButton) =
   if not button.popupOpen():
@@ -1621,7 +1621,7 @@ proc closePopupImpl(button: PopupMenuButton) =
     button.xParentPopup.xChildPopupOwnerIndex = -1
   button.noteMenuBarPopupClosed()
   button.setWidgetState(ssOpen, false)
-  button.setNeedsDisplay(true)
+  button.needsDisplay = true
   if button.xRemoveFromSuperviewOnClose and not button.superview().isNil:
     button.removeFromSuperview()
 
@@ -1836,7 +1836,7 @@ proc initPopupMenuButtonFields*(
   button.xPopupPresentation = ppAutomatic
   button.background = color(0.0, 0.0, 0.0, 0.0)
   button.menu = menu
-  button.setAcceptsFirstResponder(true)
+  button.acceptsFirstResponder = true
   discard button.withProto()
   discard button.withProtocol(PopupMenuButtonDrawing)
   discard button.withProtocol(PopupMenuButtonEvents)
@@ -1980,7 +1980,7 @@ proc reloadImpl(menuBar: MenuBar) =
   menuBar.clearMenuBarButtons()
   if menuBar.xMenu.isNil:
     menuBar.setNeedsLayout()
-    menuBar.setNeedsDisplay(true)
+    menuBar.needsDisplay = true
     return
   for item in menuBar.xMenu.items:
     if not item.hidden():
@@ -1990,7 +1990,7 @@ proc reloadImpl(menuBar: MenuBar) =
       menuBar.addSubview(button)
       menuBar.xButtons.add button
   menuBar.setNeedsLayout()
-  menuBar.setNeedsDisplay(true)
+  menuBar.needsDisplay = true
 
 proc `menu=`*(menuBar: MenuBar, menu: Menu) =
   if menuBar.xMenu == menu:

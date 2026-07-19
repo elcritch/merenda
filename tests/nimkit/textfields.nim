@@ -1035,7 +1035,7 @@ suite "nimkit text fields":
       check sender == DynamicAgent(first)
       inc actionCount
 
-    first.textFieldCell().setSendsActionOnEndEditing(true)
+    first.textFieldCell().sendsActionOnEndEditing = true
     first.target = newActionTarget(action, onEndEditing)
     first.action = action
     root.addSubview(first)

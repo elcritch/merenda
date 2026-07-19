@@ -506,9 +506,8 @@ proc setFrame*(window: Window, frame: Rect) =
     return
   window.xFrame = boundedFrame
   if not window.xContentView.isNil:
-    window.xContentView.setFrame(
+    window.xContentView.frame =
       rect(0.0, 0.0, boundedFrame.size.width, boundedFrame.size.height)
-    )
   if not window.xHostWindow.isNil:
     window.xHostWindow.setLogicalSize(boundedFrame.size)
     window.xHostWindow.updatePresentationTarget()
@@ -762,7 +761,7 @@ proc setPopupPresentation*(window: Window, presentation: PopupPresentation) =
   else:
     window.closeAuxiliaryWindows()
   if not window.xContentView.isNil:
-    window.xContentView.setNeedsDisplay(true)
+    window.xContentView.needsDisplay = true
 
 proc setAppearance*(window: Window, appearance: Appearance) =
   window.xAppearance = appearance
@@ -889,7 +888,7 @@ proc setContentView*(window: Window, view: View) =
   window.xContentView = view
   window.clearMouseState()
   if not view.isNil:
-    view.setFrame(rect(0.0, 0.0, window.xFrame.size.width, window.xFrame.size.height))
+    view.frame = rect(0.0, 0.0, window.xFrame.size.width, window.xFrame.size.height)
     window.observeProtocol(view, WindowContentLayoutSlots)
     view.setNeedsLayout()
     view.setNeedsDisplaySubtree()
@@ -1095,15 +1094,15 @@ proc recalculateKeyViewLoop*(window: Window) =
   var views: seq[View]
   window.xContentView.collectKeyViews(views)
   for view in views:
-    view.setNextKeyView(nil)
-    view.setPreviousKeyView(nil)
+    view.nextKeyView = nil
+    view.previousKeyView = nil
 
   if views.len == 0:
     window.xInitialFirstResponder = nil
     return
 
   for idx, view in views:
-    view.setNextKeyView(views[(idx + 1) mod views.len])
+    view.nextKeyView = views[(idx + 1) mod views.len]
 
   window.xInitialFirstResponder = window.xContentView.nextValidKeyView()
 
@@ -1411,7 +1410,7 @@ proc zoom*(window: Window) =
     return
   window.xZoomed = not window.xZoomed
   if not window.xContentView.isNil:
-    window.xContentView.setNeedsDisplay(true)
+    window.xContentView.needsDisplay = true
 
 proc detachAuxiliaryWindow(owner, auxiliary: Window) =
   if owner.isNil:
@@ -1502,7 +1501,7 @@ proc finishTransientSession(
   if reason != tdrOwnerClosed:
     window.restoreTransientFocus(session)
   if not window.xContentView.isNil:
-    window.xContentView.setNeedsDisplay(true)
+    window.xContentView.needsDisplay = true
   true
 
 proc beginTransientSession*(
@@ -1728,7 +1727,7 @@ proc syncNativeGeometry(window: Window): Size =
   if window.xFrame.size != result:
     window.xFrame.size = result
     if not window.xContentView.isNil:
-      window.xContentView.setFrame(rect(0.0, 0.0, result.width, result.height))
+      window.xContentView.frame = rect(0.0, 0.0, result.width, result.height)
     discard window.saveFrameUsingName()
 
 proc renderNativeWindow*(window: Window) =

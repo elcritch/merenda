@@ -201,7 +201,7 @@ proc recomputeMaxColumns(view: MonoTextView) =
 proc invalidateTextGeometry(view: MonoTextView) =
   view.recomputeMaxColumns()
   view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc ensureLine(view: MonoTextView, row: int) =
   if row < 0:
@@ -514,7 +514,7 @@ proc `editable=`*(view: MonoTextView, editable: bool) =
   if view.xEditable == editable:
     return
   view.xEditable = editable
-  view.setAcceptsFirstResponder(editable or view.xForwardedRawEvents != {})
+  view.acceptsFirstResponder = editable or view.xForwardedRawEvents != {}
 
 proc forwardsRawEvents*(view: MonoTextView): bool =
   view.xForwardedRawEvents != {}
@@ -529,7 +529,7 @@ proc `forwardsRawEvents=`*(view: MonoTextView, value: bool) =
       return
     view.xForwardedRawEvents = {}
     view.xCapturedRawEvents = {}
-  view.setAcceptsFirstResponder(view.xEditable or view.xForwardedRawEvents != {})
+  view.acceptsFirstResponder = view.xEditable or view.xForwardedRawEvents != {}
 
 proc rawEventPolicy*(view: MonoTextView): MonoTextRawEventPolicy =
   MonoTextRawEventPolicy(
@@ -539,7 +539,7 @@ proc rawEventPolicy*(view: MonoTextView): MonoTextRawEventPolicy =
 proc `rawEventPolicy=`*(view: MonoTextView, policy: MonoTextRawEventPolicy) =
   view.xForwardedRawEvents = policy.forwardedEvents + policy.capturedEvents
   view.xCapturedRawEvents = policy.capturedEvents
-  view.setAcceptsFirstResponder(view.xEditable or view.xForwardedRawEvents != {})
+  view.acceptsFirstResponder = view.xEditable or view.xForwardedRawEvents != {}
 
 proc forwardedRawEvents*(view: MonoTextView): MonoTextRawEventKinds =
   view.xForwardedRawEvents
@@ -547,7 +547,7 @@ proc forwardedRawEvents*(view: MonoTextView): MonoTextRawEventKinds =
 proc `forwardedRawEvents=`*(view: MonoTextView, events: MonoTextRawEventKinds) =
   view.xForwardedRawEvents = events
   view.xCapturedRawEvents = view.xCapturedRawEvents * events
-  view.setAcceptsFirstResponder(view.xEditable or view.xForwardedRawEvents != {})
+  view.acceptsFirstResponder = view.xEditable or view.xForwardedRawEvents != {}
 
 proc capturedRawEvents*(view: MonoTextView): MonoTextRawEventKinds =
   view.xCapturedRawEvents
@@ -555,7 +555,7 @@ proc capturedRawEvents*(view: MonoTextView): MonoTextRawEventKinds =
 proc `capturedRawEvents=`*(view: MonoTextView, events: MonoTextRawEventKinds) =
   view.xCapturedRawEvents = events
   view.xForwardedRawEvents = view.xForwardedRawEvents + events
-  view.setAcceptsFirstResponder(view.xEditable or view.xForwardedRawEvents != {})
+  view.acceptsFirstResponder = view.xEditable or view.xForwardedRawEvents != {}
 
 proc rawEventHandler*(view: MonoTextView): MonoTextRawEventHandler =
   view.xRawEventHandler
@@ -576,7 +576,7 @@ proc setCursorPosition*(view: MonoTextView, row, column: int) =
   view.xCursorRow = row
   view.xCursorColumn = column
   view.clampCursor()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
   view.postCursorSelectionChanged(previousCursor)
 
 proc cursorVisible*(view: MonoTextView): bool =
@@ -586,7 +586,7 @@ proc `cursorVisible=`*(view: MonoTextView, value: bool) =
   if view.xCursorVisible == value:
     return
   view.xCursorVisible = value
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc cursorStyle*(view: MonoTextView): MonoTextCursorStyle =
   view.xCursorStyle
@@ -595,7 +595,7 @@ proc `cursorStyle=`*(view: MonoTextView, style: MonoTextCursorStyle) =
   if view.xCursorStyle == style:
     return
   view.xCursorStyle = style
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc tabWidth*(view: MonoTextView): int =
   view.xTabWidth
@@ -613,7 +613,7 @@ proc `textColor=`*(view: MonoTextView, color: nimkitTypes.Color) =
   if view.xTextColor == color:
     return
   view.xTextColor = color
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc cursorColor*(view: MonoTextView): nimkitTypes.Color =
   if view.xCursorColor.a > 0.0'f32:
@@ -625,7 +625,7 @@ proc `cursorColor=`*(view: MonoTextView, color: nimkitTypes.Color) =
   if view.xCursorColor == color:
     return
   view.xCursorColor = color
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc fontName*(view: MonoTextView): string =
   if view.xFontName.len > 0:
@@ -942,7 +942,7 @@ proc moveCursorHorizontal(view: MonoTextView, delta: int) =
     elif view.xCursorRow + 1 < view.xLines.len:
       inc view.xCursorRow
       view.xCursorColumn = 0
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
   view.postCursorSelectionChanged(previousCursor)
 
 proc moveCursorVertical(view: MonoTextView, delta: int) =
@@ -950,7 +950,7 @@ proc moveCursorVertical(view: MonoTextView, delta: int) =
   view.xCursorRow = (view.xCursorRow + delta).clampIndex(0, view.xLines.high)
   view.xCursorColumn =
     view.xCursorColumn.clampIndex(0, view.xLines[view.xCursorRow].cells.len)
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
   view.postCursorSelectionChanged(previousCursor)
 
 proc handleEditorKey(view: MonoTextView, event: KeyEvent): bool =
@@ -970,13 +970,13 @@ proc handleEditorKey(view: MonoTextView, event: KeyEvent): bool =
   of keyHome:
     let previousCursor = view.cursorTextIndex()
     view.xCursorColumn = 0
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
     view.postCursorSelectionChanged(previousCursor)
     true
   of keyEnd:
     let previousCursor = view.cursorTextIndex()
     view.xCursorColumn = view.xLines[view.xCursorRow].cells.len
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
     view.postCursorSelectionChanged(previousCursor)
     true
   of keyBackspace:
@@ -1376,7 +1376,7 @@ proc initMonoTextViewFields*(
   discard view.withProtocol(DefaultMonoTextViewKeyEquivalents)
   discard view.withProtocol(DefaultMonoTextViewInput)
   discard view.withProtocol(DefaultMonoTextViewAccessibility)
-  view.setAcceptsFirstResponder(editable)
+  view.acceptsFirstResponder = editable
   view.stringValue = value
   view.applyInitialFrame(frame)
 

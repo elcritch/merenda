@@ -78,7 +78,7 @@ let
 
 proc invalidateMatrix(matrix: Matrix) =
   matrix.invalidateIntrinsicContentSize()
-  matrix.setNeedsDisplay(true)
+  matrix.needsDisplay = true
 
 func normalizedCount(value: int): int =
   max(value, 0)
@@ -223,15 +223,15 @@ proc applyMatrixItemModelToCell(
 ) =
   if cell.isNil:
     return
-  cell.setTitle(model.title)
-  cell.setState(matrix.selectedStateForModel(model, selectedIdentifiers))
+  cell.title = model.title
+  cell.state = matrix.selectedStateForModel(model, selectedIdentifiers)
   cells.setEnabled(cell, model.enabled)
   cell.setTarget(model.target)
   cell.setAction(model.action)
 
 proc clearMatrixItemCell(cell: ButtonCell) =
-  cell.setTitle("")
-  cell.setState(bsOff)
+  cell.title = ""
+  cell.state = bsOff
   cells.setEnabled(cell, false)
   cell.setTarget(nil)
   cell.setAction(ActionSelector())
@@ -241,7 +241,7 @@ proc normalizeModelBackedCellSelection(matrix: Matrix) =
     let selected = matrix.firstSelectedIndex()
     for index, cell in matrix.xCells:
       if not cell.isNil and index != selected:
-        cell.setState(bsOff)
+        cell.state = bsOff
     matrix.xSelectedIndex = selected
   else:
     matrix.xSelectedIndex = matrix.firstSelectedIndex()
@@ -307,7 +307,7 @@ proc `selectedIndexes=`*(matrix: Matrix, indexes: openArray[int]) =
   )
   matrix.clearSelectionStates()
   for index in nextIndexes:
-    matrix.xCells[index].setState(bsOn)
+    matrix.xCells[index].state = bsOn
   matrix.xSelectedIndex =
     if nextIndexes.len == 0:
       -1
@@ -416,7 +416,7 @@ proc `selectionMode=`*(matrix: Matrix, mode: MatrixSelectionMode) =
     let selected = matrix.firstSelectedIndex()
     for index, cell in matrix.xCells:
       if not cell.isNil and index != selected:
-        cell.setState(bsOff)
+        cell.state = bsOff
     matrix.xSelectedIndex = selected
   matrix.normalizeLeadAndSelection()
   matrix.syncMatrixModelSelectionStates()
@@ -713,12 +713,12 @@ proc setHighlightedIndex(matrix: Matrix, index: int) =
   if matrix.validIndex(index):
     matrix.xCells[index].setHighlighted(true)
     matrix.xHighlightedIndex = index
-  matrix.setNeedsDisplay(true)
+  matrix.needsDisplay = true
 
 proc clearSelectionStates(matrix: Matrix, exceptIndex = -1) =
   for index, cell in matrix.xCells:
     if not cell.isNil and index != exceptIndex and cell.state() != bsOff:
-      cell.setState(bsOff)
+      cell.state = bsOff
 
 proc emitSelectionChangedIfNeeded(matrix: Matrix, before: seq[int]) =
   let after = matrix.selectedIndexes()
@@ -741,20 +741,20 @@ proc selectIndex(matrix: Matrix, index: int, notify = false): bool =
     of btToggle, btCheckBox:
       cell.setNextState()
     of btRadio:
-      cell.setState(bsOn)
+      cell.state = bsOn
     of btMomentary:
       discard
     matrix.xSelectedIndex = matrix.firstSelectedIndex()
   of msmRadio, msmSingle:
     matrix.clearSelectionStates(exceptIndex = index)
-    cell.setState(bsOn)
+    cell.state = bsOn
     matrix.xSelectedIndex = index
   of msmMultiple:
     case cell.buttonType()
     of btMomentary:
       discard
     of btRadio:
-      cell.setState(bsOn)
+      cell.state = bsOn
     of btToggle, btCheckBox:
       cell.setNextState()
     matrix.xSelectedIndex =
@@ -765,7 +765,7 @@ proc selectIndex(matrix: Matrix, index: int, notify = false): bool =
 
   matrix.syncMatrixModelSelectionStates()
   matrix.emitSelectionChangedIfNeeded(before)
-  matrix.setNeedsDisplay(true)
+  matrix.needsDisplay = true
   if notify:
     discard matrix.sendMatrixAction()
   true
@@ -870,7 +870,7 @@ proc moveLead(matrix: Matrix, rowDelta, columnDelta: int, notify = true): bool =
     matrix.selectIndex(nextIndex, notify)
   else:
     matrix.xLeadIndex = nextIndex
-    matrix.setNeedsDisplay(true)
+    matrix.needsDisplay = true
     true
 
 proc currentActionCell(matrix: Matrix): ActionCell =
@@ -1048,7 +1048,7 @@ protocol DefaultMatrixEvents of ResponderEventProtocol:
         matrix.selectIndex(index, notify = true)
       elif matrix.validIndex(index):
         matrix.xLeadIndex = index
-        matrix.setNeedsDisplay(true)
+        matrix.needsDisplay = true
         true
       else:
         false
@@ -1061,7 +1061,7 @@ protocol DefaultMatrixEvents of ResponderEventProtocol:
         matrix.selectIndex(last, notify = true)
       elif matrix.validIndex(last):
         matrix.xLeadIndex = last
-        matrix.setNeedsDisplay(true)
+        matrix.needsDisplay = true
         true
       else:
         false
@@ -1114,7 +1114,7 @@ proc initMatrixFields*(
   matrix.xSelectionMode = msmRadio
   matrix.xCellSize = AutoSize
   matrix.xIntercellSpacing = initSize(8.0, 6.0)
-  matrix.setAcceptsFirstResponder(true)
+  matrix.acceptsFirstResponder = true
   matrix.installMatrixControlProtocol()
   discard matrix.withProtocol(DefaultMatrixDrawing)
   discard matrix.withProtocol(DefaultMatrixEvents)
@@ -1132,13 +1132,13 @@ proc newRadioMatrix*(
     titles: openArray[string], columns = 1, frame: Rect = AutoRect
 ): Matrix =
   let prototype = newButtonCell()
-  prototype.setButtonType(btRadio)
+  prototype.buttonType = btRadio
   result = newMatrix(titles.len.gridRows(columns), columns, prototype, frame)
   result.selectionMode = msmRadio
   for index, title in titles:
-    result.cellAtIndex(index).setTitle(title)
+    result.cellAtIndex(index).title = title
   for index in titles.len ..< result.len:
-    result.cellAtIndex(index).setTitle("")
+    result.cellAtIndex(index).title = ""
     cells.setEnabled(result.cellAtIndex(index), false)
   if titles.len > 0:
     discard result.selectCellAtIndex(0)
@@ -1149,13 +1149,13 @@ proc newCheckMatrix*(
     titles: openArray[string], columns = 1, frame: Rect = AutoRect
 ): Matrix =
   let prototype = newButtonCell()
-  prototype.setButtonType(btCheckBox)
+  prototype.buttonType = btCheckBox
   result = newMatrix(titles.len.gridRows(columns), columns, prototype, frame)
   result.selectionMode = msmMultiple
   for index, title in titles:
-    result.cellAtIndex(index).setTitle(title)
+    result.cellAtIndex(index).title = title
   for index in titles.len ..< result.len:
-    result.cellAtIndex(index).setTitle("")
+    result.cellAtIndex(index).title = ""
     cells.setEnabled(result.cellAtIndex(index), false)
   result.applyInitialFrame(frame)
 
@@ -1163,12 +1163,12 @@ proc newButtonMatrix*(
     titles: openArray[string], columns = 1, frame: Rect = AutoRect
 ): Matrix =
   let prototype = newButtonCell()
-  prototype.setButtonType(btMomentary)
+  prototype.buttonType = btMomentary
   result = newMatrix(titles.len.gridRows(columns), columns, prototype, frame)
   result.selectionMode = msmNone
   for index, title in titles:
-    result.cellAtIndex(index).setTitle(title)
+    result.cellAtIndex(index).title = title
   for index in titles.len ..< result.len:
-    result.cellAtIndex(index).setTitle("")
+    result.cellAtIndex(index).title = ""
     cells.setEnabled(result.cellAtIndex(index), false)
   result.applyInitialFrame(frame)

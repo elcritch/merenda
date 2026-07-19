@@ -118,7 +118,7 @@ proc availablePaneLength(splitView: SplitView): float32 =
 proc invalidateSplitViewLayout(splitView: SplitView) =
   splitView.invalidateContainerMetrics()
   splitView.setNeedsLayout()
-  splitView.setNeedsDisplay(true)
+  splitView.needsDisplay = true
 
 proc setPositionOfDivider*(splitView: SplitView, dividerIndex: int, position: float32)
 
@@ -132,7 +132,7 @@ protocol SplitDividerTransactionAnim of SplitDividerTransactionAnimProtocol:
     if not target.splitView.isNil:
       target.splitView.setPositionOfDivider(target.dividerIndex, position)
 
-protocol SplitViewProtocol {.selectorScope: protocol.} from SplitView:
+protocol SplitViewProtocol {.selectorScope: protocol, setterStyle: nim.} from SplitView:
   property splitAxis -> LayoutAxis
   property dividerThickness -> float32
   property autosaveName -> string {.field: xAutosaveName.}
@@ -155,7 +155,7 @@ protocol SplitViewProtocol {.selectorScope: protocol.} from SplitView:
   method splitAxis(splitView: SplitView): LayoutAxis =
     splitView.xAxis
 
-  method setSplitAxis(splitView: SplitView, axis: LayoutAxis) =
+  method `splitAxis=`(splitView: SplitView, axis: LayoutAxis) =
     if splitView.xAxis == axis:
       return
     splitView.xAxis = axis
@@ -164,20 +164,11 @@ protocol SplitViewProtocol {.selectorScope: protocol.} from SplitView:
   method dividerThickness(splitView: SplitView): float32 =
     splitView.xDividerThickness
 
-  method setDividerThickness(splitView: SplitView, value: float32) =
+  method `dividerThickness=`(splitView: SplitView, value: float32) =
     if splitView.xDividerThickness == value:
       return
     splitView.xDividerThickness = max(value, 0.0'f32)
     splitView.invalidateSplitViewLayout()
-
-proc `splitAxis=`*(splitView: SplitView, axis: LayoutAxis) =
-  splitView.setSplitAxis(axis)
-
-proc `dividerThickness=`*(splitView: SplitView, value: float32) =
-  splitView.setDividerThickness(value)
-
-proc `autosaveName=`*(splitView: SplitView, name: string) =
-  splitView.setAutosaveName(name)
 
 proc paneMinSize*(splitView: SplitView, index: int): float32 =
   if index < 0 or index >= splitView.xPanes.len:
@@ -705,7 +696,7 @@ protocol DefaultSplitViewEvents of ResponderEventProtocol:
     splitView.redistributeDelta(visible, lengths, splitView.xDragDivider, delta)
     splitView.saveFractionsFromLengths(visible, lengths)
     splitView.setNeedsLayout()
-    splitView.setNeedsDisplay(true)
+    splitView.needsDisplay = true
     true
 
   method mouseUp(splitView: SplitView, event: MouseEvent): bool =

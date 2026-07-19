@@ -203,7 +203,7 @@ proc newTrackingSpyView(name: string, frame: Rect): TrackingSpyView =
 proc newFocusSpyView(name: string, frame: Rect): FocusSpyView =
   result = FocusSpyView(xName: name)
   initViewFields(result, frame)
-  result.setAcceptsFirstResponder(true)
+  result.acceptsFirstResponder = true
   discard result.withProtocol(FocusSpyResponderLifecycle)
 
 suite "nimkit responder":
@@ -212,7 +212,7 @@ suite "nimkit responder":
 
     check responder.conformsTo(ResponderProtocol)
     check not responder.acceptsFirstResponder()
-    responder.setAcceptsFirstResponder(true)
+    responder.acceptsFirstResponder = true
     check responder.acceptsFirstResponder()
 
   test "next responder is observable and forwards selector dispatch":
@@ -363,7 +363,7 @@ suite "nimkit responder":
       parent = newTrackingSpyView("parent", rect(10, 10, 100, 80))
       child = newView(frame = rect(20, 15, 30, 20))
 
-    child.setAcceptsFirstResponder(true)
+    child.acceptsFirstResponder = true
     parent.addSubview(child)
     root.addSubview(parent)
     window.setContentView(root)
@@ -386,7 +386,7 @@ suite "nimkit responder":
       parent = newTrackingSpyView("parent", rect(10, 10, 100, 80))
       child = newView(frame = rect(20, 15, 30, 20))
 
-    child.setAcceptsFirstResponder(true)
+    child.acceptsFirstResponder = true
     parent.addSubview(child)
     root.addSubview(parent)
     window.setContentView(root)
@@ -409,7 +409,7 @@ suite "nimkit responder":
       parent = newTrackingSpyView("parent", rect(10, 10, 100, 80))
       child = newView(frame = rect(20, 15, 30, 20))
 
-    child.setAcceptsFirstResponder(true)
+    child.acceptsFirstResponder = true
     parent.addSubview(child)
     root.addSubview(parent)
     window.setContentView(root)
@@ -489,8 +489,8 @@ suite "nimkit responder":
       hidden = newButton("Hidden", frame = rect(170, 10, 60, 28))
       enabled = newButton("OK", frame = rect(240, 10, 60, 28))
 
-    disabled.setEnabled(false)
-    hidden.setHidden(true)
+    disabled.enabled = false
+    hidden.hidden = true
     root.addSubview(plain)
     root.addSubview(disabled)
     root.addSubview(hidden)
@@ -512,8 +512,8 @@ suite "nimkit responder":
     root.addSubview(first)
     root.addSubview(skipped)
     root.addSubview(last)
-    first.setNextKeyView(last)
-    last.setNextKeyView(first)
+    first.nextKeyView = last
+    last.nextKeyView = first
     window.setAutorecalculatesKeyViewLoop(false)
     window.setContentView(root)
 
@@ -745,7 +745,7 @@ suite "nimkit responder":
       parent = newTrackingSpyView("parent", rect(10, 10, 100, 80))
       child = newView(frame = rect(20, 15, 30, 20))
 
-    child.setAcceptsFirstResponder(true)
+    child.acceptsFirstResponder = true
     parent.addSubview(child)
     root.addSubview(parent)
     window.setContentView(root)
@@ -767,7 +767,7 @@ suite "nimkit responder":
       parent = newTrackingSpyView("parent", rect(10, 10, 100, 80))
       child = newView(frame = rect(20, 15, 30, 20))
 
-    child.setAcceptsFirstResponder(true)
+    child.acceptsFirstResponder = true
     parent.addSubview(child)
     root.addSubview(parent)
     window.setContentView(root)
@@ -792,7 +792,7 @@ suite "nimkit responder":
       parent = newTrackingSpyView("parent", rect(10, 10, 100, 80))
       child = newView(frame = rect(20, 15, 30, 20))
 
-    child.setAcceptsFirstResponder(true)
+    child.acceptsFirstResponder = true
     parent.addSubview(child)
     root.addSubview(parent)
     window.setContentView(root)

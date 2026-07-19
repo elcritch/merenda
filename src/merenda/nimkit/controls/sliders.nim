@@ -42,7 +42,7 @@ proc setSliderValue(slider: Slider, value: float32, notify = false) =
     return
   slider.xValue = nextValue
   Control(slider).setObjectValue(toObj(nextValue))
-  slider.setNeedsDisplay(true)
+  slider.needsDisplay = true
   slider.postAccessibilityNotification(anValueChanged)
   if notify:
     discard slider.sendAction()
@@ -141,7 +141,7 @@ proc `minValue=`*(slider: Slider, value: float32) =
     return
   slider.xMinValue = value
   slider.setSliderValue(slider.xValue)
-  slider.setNeedsDisplay(true)
+  slider.needsDisplay = true
 
 proc maxValue*(slider: Slider): float32 =
   slider.xMaxValue
@@ -151,7 +151,7 @@ proc `maxValue=`*(slider: Slider, value: float32) =
     return
   slider.xMaxValue = value
   slider.setSliderValue(slider.xValue)
-  slider.setNeedsDisplay(true)
+  slider.needsDisplay = true
 
 proc stepValue*(slider: Slider): float32 =
   slider.xStepValue
@@ -396,7 +396,7 @@ proc initSliderFields*(
   Control(slider).objectParseContext =
     initObjectParseContext(expectedKind = ovFloat, role = ovrSlider)
   Control(slider).setObjectValue(toObj(slider.xValue))
-  slider.setAcceptsFirstResponder(true)
+  slider.acceptsFirstResponder = true
   slider.setHuggingPriority(LayoutPriorityLow, laHorizontal)
   slider.setCompressionPriority(LayoutPriorityHigh, laHorizontal)
   discard slider.withProtocol(DefaultSliderDrawing)

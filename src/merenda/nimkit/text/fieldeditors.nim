@@ -379,7 +379,7 @@ proc initFieldEditorFields*(editor: FieldEditor) =
   editor.selectable = true
   editor.richText = true
   editor.fieldEditor = true
-  editor.setAcceptsFirstResponder(true)
+  editor.acceptsFirstResponder = true
   discard editor.withProtocol(DefaultFieldEditorResponder)
   discard editor.withProtocol(DefaultFieldEditorView)
   discard editor.withProtocol(DefaultFieldEditorEvents)

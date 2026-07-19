@@ -70,7 +70,7 @@ proc `textInsets=`*(editor: TextEditor, insets: EdgeInsets) =
     return
   editor.xTextInsets = normalized
   editor.updateTextEditorLayout()
-  editor.setNeedsDisplay(true)
+  editor.needsDisplay = true
 
 proc wraps*(editor: TextEditor): bool =
   editor.xWraps
@@ -178,7 +178,7 @@ proc setAttributes*(editor: TextEditor, range: TextRange, attributes: TextAttrib
   editor.xTextView.textStorage().setAttributes(range, attributes)
   editor.xTextView.layoutManager().invalidateLayout()
   editor.updateTextEditorLayout()
-  editor.xTextView.setNeedsDisplay(true)
+  editor.xTextView.needsDisplay = true
 
 proc selectAllText*(editor: TextEditor) =
   editor.xTextView.selectAllText()
@@ -572,7 +572,7 @@ proc initTextEditorFields*(
   editor.xWraps = wraps
   editor.xMinimumDocumentSize =
     initSize(DefaultTextEditorWidth, DefaultTextEditorHeight)
-  editor.setAcceptsFirstResponder(true)
+  editor.acceptsFirstResponder = true
   editor.xTextView = newTextView(value)
   editor.xTextView.richText = richText
   editor.xTextView.textContainer =

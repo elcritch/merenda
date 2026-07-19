@@ -699,7 +699,7 @@ proc disclosureMouseDown*(outlineView: OutlineView, event: MouseEvent): bool =
   outlineView.xTrackingDisclosureRow = hit.row
   outlineView.xTrackingDisclosureIdentifier = hit.item.identifier
   outlineView.xPressedDisclosureRow = hit.row
-  outlineView.setNeedsDisplay(true)
+  outlineView.needsDisplay = true
   true
 
 proc disclosureMouseUp*(outlineView: OutlineView, event: MouseEvent): bool =
@@ -716,7 +716,7 @@ proc disclosureMouseUp*(outlineView: OutlineView, event: MouseEvent): bool =
   outlineView.xPressedDisclosureRow = -1
   if clicked:
     outlineView.toggleItem(trackingIdentifier)
-  outlineView.setNeedsDisplay(true)
+  outlineView.needsDisplay = true
   true
 
 proc handleOutlineKey*(outlineView: OutlineView, event: KeyEvent): bool =
@@ -1129,7 +1129,7 @@ protocol OutlineViewEvents of ResponderEventProtocol:
           hit.row
         else:
           -1
-      outlineView.setNeedsDisplay(true)
+      outlineView.needsDisplay = true
       return true
     let session = TableView(outlineView).draggingSession()
     if not session.isNil and session.state() == dssActive:
@@ -1137,7 +1137,7 @@ protocol OutlineViewEvents of ResponderEventProtocol:
       discard updateDraggingSession(
         session, event.location, DynamicAgent(outlineView), target
       )
-      outlineView.setNeedsDisplay(true)
+      outlineView.needsDisplay = true
       discard autoscrollDraggingSession(
         session, event.location, DynamicAgent(outlineView), target
       )

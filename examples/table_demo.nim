@@ -206,7 +206,7 @@ proc updateSelection(controller: TableDemoController) =
 proc makeStateCell(state: string): TextField =
   result = newTextField(state)
   result.alignment = taCenter
-  result.styleClasses = ["table-state-cell"]
+  result.styleClasses = @["table-state-cell"]
 
 proc onInspect(controller: TableDemoController, row: int) =
   let index = row
@@ -538,7 +538,7 @@ let
   )
   scratchColumn = newTableColumn("scratch", "Scratch")
 
-projectColumn.styleClasses = ["primary"]
+projectColumn.styleClasses = @["primary"]
 projectColumn.userInfo = newColumnInfo("Primary project identity")
 stateColumn.reuseIdentifier = "status-cell"
 actionColumn.resizePolicy = tcrFixed

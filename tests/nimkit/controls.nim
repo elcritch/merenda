@@ -27,7 +27,7 @@ suite "nimkit controls":
 
     check cell.conformsTo(CellEditingProtocol)
     check not cell.sendsActionOnEndEditing()
-    cell.setSendsActionOnEndEditing(true)
+    cell.sendsActionOnEndEditing = true
     check cell.sendsActionOnEndEditing()
 
   test "control activation feedback restarts and cancels one shared pulse":
@@ -111,7 +111,7 @@ suite "nimkit controls":
     button.title = "Forwarded"
     check cell.title == "Forwarded"
 
-    cell.setState(bsOn)
+    cell.state = bsOn
     check button.state == bsOn
 
     button.buttonType = btCheckBox

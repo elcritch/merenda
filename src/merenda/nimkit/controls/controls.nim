@@ -87,7 +87,7 @@ proc controlIntrinsicContentSize(control: Control): IntrinsicSize =
 
 proc invalidateCellMetrics(control: Control) =
   control.invalidateIntrinsicContentSize()
-  control.setNeedsDisplay(true)
+  control.needsDisplay = true
 
 proc syncActionCell(control: Control, cell: Cell) =
   if cell.isNil or not (cell of ActionCell):
@@ -105,11 +105,16 @@ protocol DefaultControlActivationFeedback of ControlActivationFeedbackProtocol:
     if not controlCell.isNil:
       controlCell.setHighlighted(active)
 
-protocol ControlProtocol from Control:
+protocol ControlProtocol {.setterStyle: nim.} from Control:
+  property enabled -> bool
+
+  method enabled(self: Control): bool =
+    self.isEnabled()
+
   method isEnabled*(self: Control): bool =
     self.cell().isEnabled()
 
-  method setEnabled*(self: Control, enabled: bool) =
+  method `enabled=`*(self: Control, enabled: bool) =
     self.cell().setEnabled(enabled)
 
   method canBecomeKeyView*(self: Control): bool =
@@ -177,12 +182,6 @@ protocol DefaultControlDraggingDestination of DraggingDestinationProtocol:
   method performDragOperation(control: Control, info: DraggingInfo): bool =
     control.acceptsDraggingInfo(info)
 
-proc enabled*(control: Control): bool =
-  control.isEnabled()
-
-proc `enabled=`*(control: Control, enabled: bool) =
-  control.setEnabled(enabled)
-
 proc cellForwardingTarget*(control: Control, selector: SigilName): DynamicAgent =
   let controlCell = control.xCell
   if not controlCell.isNil and controlCell.respondsTo(selector):
@@ -222,7 +221,7 @@ proc sizeThatFits*(control: Control, proposedSize: Size): Size =
 
 proc sizeToFit*(control: Control) =
   let frame = control.frame()
-  control.setFrame(rect(frame.origin, control.sizeThatFits(UnconstrainedFittingSize)))
+  control.frame = rect(frame.origin, control.sizeThatFits(UnconstrainedFittingSize))
 
 const ControlActivationFeedbackMs = 120
 

@@ -48,7 +48,7 @@ proc setProgressValue(indicator: ProgressIndicator, value: float32) =
   if indicator.xValue == nextValue:
     return
   indicator.xValue = nextValue
-  indicator.setNeedsDisplay(true)
+  indicator.needsDisplay = true
   indicator.postAccessibilityNotification(anValueChanged)
 
 proc progressStyleContext(indicator: ProgressIndicator): StyleContext =
@@ -114,7 +114,8 @@ proc progressIndicatorCell*(indicator: ProgressIndicator): ProgressIndicatorCell
   if controlCell of ProgressIndicatorCell:
     return ProgressIndicatorCell(controlCell)
 
-protocol ProgressProtocol {.selectorScope: protocol.} from ProgressIndicator:
+protocol ProgressProtocol {.selectorScope: protocol, setterStyle: nim.} from
+  ProgressIndicator:
   property value -> float32
   property minValue -> float32
   property maxValue -> float32
@@ -126,43 +127,43 @@ protocol ProgressProtocol {.selectorScope: protocol.} from ProgressIndicator:
   method value(indicator: ProgressIndicator): float32 =
     indicator.xValue
 
-  method setValue(indicator: ProgressIndicator, value: float32) =
+  method `value=`(indicator: ProgressIndicator, value: float32) =
     let nextValue = indicator.normalizedValue(value)
     if indicator.xValue == nextValue:
       return
     discard recordPropertyAnimation(
-      DynamicAgent(indicator), setValue(), indicator.xValue, nextValue
+      DynamicAgent(indicator), `value=`(), indicator.xValue, nextValue
     )
     indicator.setProgressValue(nextValue)
 
   method minValue(indicator: ProgressIndicator): float32 =
     indicator.xMinValue
 
-  method setMinValue(indicator: ProgressIndicator, value: float32) =
+  method `minValue=`(indicator: ProgressIndicator, value: float32) =
     if indicator.xMinValue == value:
       return
     indicator.xMinValue = value
     indicator.setProgressValue(indicator.xValue)
-    indicator.setNeedsDisplay(true)
+    indicator.needsDisplay = true
 
   method maxValue(indicator: ProgressIndicator): float32 =
     indicator.xMaxValue
 
-  method setMaxValue(indicator: ProgressIndicator, value: float32) =
+  method `maxValue=`(indicator: ProgressIndicator, value: float32) =
     if indicator.xMaxValue == value:
       return
     indicator.xMaxValue = value
     indicator.setProgressValue(indicator.xValue)
-    indicator.setNeedsDisplay(true)
+    indicator.needsDisplay = true
 
   method indeterminate(indicator: ProgressIndicator): bool =
     indicator.xIndeterminate
 
-  method setIndeterminate(indicator: ProgressIndicator, value: bool) =
+  method `indeterminate=`(indicator: ProgressIndicator, value: bool) =
     if indicator.xIndeterminate == value:
       return
     indicator.xIndeterminate = value
-    indicator.setNeedsDisplay(true)
+    indicator.needsDisplay = true
     indicator.postAccessibilityNotification(anValueChanged)
 
   method animating*(indicator: ProgressIndicator): bool =
@@ -171,79 +172,56 @@ protocol ProgressProtocol {.selectorScope: protocol.} from ProgressIndicator:
   method displayedWhenStopped(indicator: ProgressIndicator): bool =
     indicator.xDisplayedWhenStopped
 
-  method setDisplayedWhenStopped(indicator: ProgressIndicator, value: bool) =
+  method `displayedWhenStopped=`(indicator: ProgressIndicator, value: bool) =
     if indicator.xDisplayedWhenStopped == value:
       return
     indicator.xDisplayedWhenStopped = value
-    indicator.setNeedsDisplay(true)
+    indicator.needsDisplay = true
 
   method progressIndicatorStyle(indicator: ProgressIndicator): ProgressIndicatorStyle =
     indicator.xStyle
 
-  method setProgressIndicatorStyle(
+  method `progressIndicatorStyle=`(
       indicator: ProgressIndicator, style: ProgressIndicatorStyle
   ) =
     if indicator.xStyle == style:
       return
     indicator.xStyle = style
     indicator.invalidateIntrinsicContentSize()
-    indicator.setNeedsDisplay(true)
+    indicator.needsDisplay = true
 
   method animationPhase(indicator: ProgressIndicator): float32 =
     indicator.xAnimationPhase
 
-  method setAnimationPhase(indicator: ProgressIndicator, phase: float32) =
+  method `animationPhase=`(indicator: ProgressIndicator, phase: float32) =
     let nextPhase = phase - floor(phase)
     if indicator.xAnimationPhase == nextPhase:
       return
     indicator.xAnimationPhase = nextPhase
-    indicator.setNeedsDisplay(true)
+    indicator.needsDisplay = true
 
   method startAnimation*(indicator: ProgressIndicator) =
     if indicator.xAnimating:
       return
     indicator.xAnimating = true
     indicator.setWidgetState(ssActive, true)
-    indicator.setNeedsDisplay(true)
+    indicator.needsDisplay = true
 
   method stopAnimation*(indicator: ProgressIndicator) =
     if not indicator.xAnimating:
       return
     indicator.xAnimating = false
     indicator.setWidgetState(ssActive, false)
-    indicator.setNeedsDisplay(true)
+    indicator.needsDisplay = true
 
   method stepAnimation*(indicator: ProgressIndicator) =
-    indicator.setAnimationPhase(indicator.animationPhase + 1.0'f32 / 12.0'f32)
+    indicator.animationPhase = indicator.animationPhase + 1.0'f32 / 12.0'f32
 
   method incrementBy*(indicator: ProgressIndicator, amount: float32) =
-    indicator.setValue(indicator.value + amount)
+    indicator.value = indicator.value + amount
 
 proc stepAnimation*(indicator: ProgressIndicator, delta: float32) =
-  indicator.setAnimationPhase(indicator.animationPhase + delta)
-
-proc `value=`*(indicator: ProgressIndicator, value: float32) =
-  indicator.setValue(value)
-
-proc `minValue=`*(indicator: ProgressIndicator, value: float32) =
-  indicator.setMinValue(value)
-
-proc `maxValue=`*(indicator: ProgressIndicator, value: float32) =
-  indicator.setMaxValue(value)
-
-proc `indeterminate=`*(indicator: ProgressIndicator, value: bool) =
-  indicator.setIndeterminate(value)
-
-proc `displayedWhenStopped=`*(indicator: ProgressIndicator, value: bool) =
-  indicator.setDisplayedWhenStopped(value)
-
-proc `progressIndicatorStyle=`*(
-    indicator: ProgressIndicator, style: ProgressIndicatorStyle
-) =
-  indicator.setProgressIndicatorStyle(style)
-
-proc `animationPhase=`*(indicator: ProgressIndicator, phase: float32) =
-  indicator.setAnimationPhase(phase)
+  indicator.animationPhase = indicator.animationPhase + delta
 
 protocol DefaultProgressIndicatorCellMeasurement of CellMeasurementProtocol:
   method cellSize(cell: ProgressIndicatorCell): IntrinsicSize =

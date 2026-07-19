@@ -80,7 +80,7 @@ proc installSelectionRing*(
   result.xView = view
   result.xInstalled = true
   result.xToken = DynamicAgent(view).pushMethod(nimkitSelectors.draw(), ringWrapper)
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc uninstall*(ring: var SelectionRing): bool {.discardable.} =
   if not ring.xInstalled:
@@ -91,4 +91,4 @@ proc uninstall*(ring: var SelectionRing): bool {.discardable.} =
   ring.xView = nil
   ring.xInstalled = false
   if not view.isNil:
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true

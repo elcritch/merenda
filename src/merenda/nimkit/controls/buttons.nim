@@ -80,7 +80,7 @@ proc buttonStyleContext(cell: ButtonCell, role: StyleRole): StyleContext =
 
 proc choiceRole(cell: ButtonCell): StyleRole
 
-protocol ButtonProtocol {.selectorScope: protocol.}:
+protocol ButtonProtocol {.selectorScope: protocol, setterStyle: nim.}:
   property title -> string
   property state -> ButtonState
   property buttonType -> ButtonType
@@ -89,7 +89,7 @@ protocol ButtonProtocol {.selectorScope: protocol.}:
   method isHighlighted*(): bool
   method setHighlighted*(highlighted: bool)
 
-protocol ButtonHoverProtocol {.selectorScope: protocol.}:
+protocol ButtonHoverProtocol {.selectorScope: protocol, setterStyle: nim.}:
   property hoverProgress -> float32
 
 func clampUnit(value: float32): float32 =
@@ -99,12 +99,12 @@ protocol DefaultButtonHover of ButtonHoverProtocol:
   method hoverProgress(button: Button): float32 =
     button.xHoverProgress
 
-  method setHoverProgress(button: Button, progress: float32) =
+  method `hoverProgress=`(button: Button, progress: float32) =
     let normalized = progress.clampUnit()
     if abs(button.xHoverProgress - normalized) <= 0.0001'f32:
       return
     button.xHoverProgress = normalized
-    button.setNeedsDisplay(true)
+    button.needsDisplay = true
 
 proc buttonTextSize(cell: ButtonCell, style: TextStyle): Size =
   result = textNaturalSize(cell.title(), style)
@@ -117,7 +117,7 @@ protocol DefaultButtonCell of ButtonProtocol:
   method title(cell: ButtonCell): string =
     cell.xTitle
 
-  method setTitle(cell: ButtonCell, title: string) =
+  method `title=`(cell: ButtonCell, title: string) =
     if cell.xTitle == title:
       return
     cell.xTitle = title
@@ -126,25 +126,25 @@ protocol DefaultButtonCell of ButtonProtocol:
   method state(cell: ButtonCell): ButtonState =
     Cell(cell).state()
 
-  method setState(cell: ButtonCell, state: ButtonState) =
+  method `state=`(cell: ButtonCell, state: ButtonState) =
     Cell(cell).setState(state)
 
   method buttonType(cell: ButtonCell): ButtonType =
     cell.xButtonType
 
-  method setButtonType(cell: ButtonCell, buttonType: ButtonType) =
+  method `buttonType=`(cell: ButtonCell, buttonType: ButtonType) =
     if cell.xButtonType == buttonType:
       return
     cell.xButtonType = buttonType
     if buttonType == btRadio:
-      cell.setAllowsMixedState(false)
+      cell.allowsMixedState = false
     cell.updateButtonLayoutPriorities()
     cell.invalidateControlMetrics()
 
   method allowsMixedState(cell: ButtonCell): bool =
     Cell(cell).allowsMixedState()
 
-  method setAllowsMixedState(cell: ButtonCell, value: bool) =
+  method `allowsMixedState=`(cell: ButtonCell, value: bool) =
     if value and cell.xButtonType == btRadio:
       return
     Cell(cell).setAllowsMixedState(value)
@@ -260,9 +260,9 @@ proc newButtonCell*(title = "Button"): ButtonCell =
 
 proc copyButtonCell*(cell: ButtonCell): ButtonCell =
   result = newButtonCell(cell.title())
-  result.setButtonType(cell.buttonType())
-  result.setAllowsMixedState(cell.allowsMixedState())
-  result.setState(cell.state())
+  result.buttonType = cell.buttonType()
+  result.allowsMixedState = cell.allowsMixedState()
+  result.state = cell.state()
   cells.setEnabled(result, cells.isEnabled(cell))
   result.setTarget(cell.target())
   result.setAction(cell.action())
@@ -289,18 +289,6 @@ proc `reservedTitles=`*(button: Button, titles: openArray[string]) =
   cell.xReservedTitles = nextTitles
   cell.invalidateControlMetrics()
 
-proc `title=`*(button: Button, title: string) =
-  button.setTitle(title)
-
-proc `state=`*(button: Button, state: ButtonState) =
-  button.setState(state)
-
-proc `buttonType=`*(button: Button, buttonType: ButtonType) =
-  button.setButtonType(buttonType)
-
-proc `allowsMixedState=`*(button: Button, value: bool) =
-  button.setAllowsMixedState(value)
-
 proc highlighted*(button: Button): bool =
   button.isHighlighted()
 
@@ -325,7 +313,7 @@ proc animateHoverProgress(button: Button, progress: float32) =
 
   let animation = newPropertyAnimation[float32](
     DynamicAgent(button),
-    setHoverProgress(),
+    `hoverProgress=`(),
     button.hoverProgress(),
     target,
     duration = initDuration(milliseconds = ButtonHoverAnimationMs),
@@ -336,7 +324,7 @@ proc animateHoverProgress(button: Button, progress: float32) =
   if owner of Window:
     discard Window(owner).startAnimation(button.xHoverAnimation)
   else:
-    button.setHoverProgress(target)
+    button.hoverProgress = target
 
 proc clearRadioSiblings(button: Button) =
   let parent = button.superview
@@ -347,7 +335,7 @@ proc clearRadioSiblings(button: Button) =
       let siblingButton = Button(sibling)
       if siblingButton.buttonType == btRadio and
           siblingButton.action() == button.action() and siblingButton.state != bsOff:
-        siblingButton.setState(bsOff)
+        siblingButton.state = bsOff
 
 proc buttonPerformClick(
     button: Button, args: ActionArgs, showActivationFeedback = false
@@ -362,7 +350,7 @@ proc buttonPerformClick(
   of btToggle, btCheckBox:
     button.buttonCell().setNextState()
   of btRadio:
-    button.setState(bsOn)
+    button.state = bsOn
     button.clearRadioSiblings()
   discard button.sendAction()
 
@@ -920,7 +908,7 @@ protocol DefaultButtonKeyCommands of KeyViewCommandProtocol:
 proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect) =
   initControlFields(button, frame, newButtonCell(title))
   button.buttonCell().updateButtonLayoutPriorities()
-  button.setAcceptsFirstResponder(true)
+  button.acceptsFirstResponder = true
   discard button.withProtocol(DefaultButtonHover)
   discard button.withProtocol(DefaultButtonDrawing)
   discard button.withProtocol(DefaultButtonEvents)
@@ -935,10 +923,10 @@ proc newButton*(title = "Button", frame: Rect = AutoRect): Button =
 
 proc newCheckBox*(title = "Check Box", frame: Rect = AutoRect): Button =
   result = newButton(title, frame)
-  result.setButtonType(btCheckBox)
+  result.buttonType = btCheckBox
   result.applyInitialFrame(frame)
 
 proc newRadioButton*(title = "Radio", frame: Rect = AutoRect): Button =
   result = newButton(title, frame)
-  result.setButtonType(btRadio)
+  result.buttonType = btRadio
   result.applyInitialFrame(frame)

@@ -3,6 +3,25 @@ import std/[os, unittest]
 import merenda/nimkit
 import merenda/nimkit/resources
 
+type
+  ResourceTestMode = enum
+    rtmCompact
+    rtmExpanded
+
+  ResourceTestView = ref object of View
+    xResourceCount: int
+    xResourceMode: ResourceTestMode
+
+protocol ResourceTestViewProtocol {.selectorScope: protocol, setterStyle: nim.} from
+  ResourceTestView:
+  property resourceCount -> int {.field: xResourceCount.}
+  property resourceMode -> ResourceTestMode {.field: xResourceMode.}
+
+proc newResourceTestView(frame = AutoRect): ResourceTestView =
+  result = ResourceTestView()
+  initViewFields(result, frame)
+  discard result.withProto()
+
 proc diagnosticWithCode(diagnostics: ResourceDiagnostics, code: string): bool =
   for diagnostic in diagnostics:
     if diagnostic.code == code:
@@ -146,6 +165,109 @@ proc sampleBundle(): ResourceBundle =
     ]
 
 suite "NimKit resources":
+  test "Sigils protocol properties are discovered and bound automatically":
+    var registry = initNimKitResourceRegistry()
+
+    check registry.acceptsViewProperty("view", "frame", rvRect)
+    check registry.acceptsViewProperty("view", "tag", rvInt)
+    check registry.acceptsViewProperty("view", "backgroundColor", rvColor)
+    check registry.acceptsViewProperty("view", "background", rvColor)
+    check registry.acceptsViewProperty("view", "alpha", rvFloat)
+    check registry.acceptsViewProperty("control", "enabled", rvBool)
+    check registry.acceptsViewProperty("button", "buttonType", rvString)
+    check registry.acceptsViewProperty("textField", "textColor", rvColor)
+    check registry.acceptsViewProperty("textField", "editable", rvBool)
+    check registry.acceptsViewProperty("stackView", "distribution", rvString)
+    check registry.acceptsViewProperty("imageView", "imageTint", rvColor)
+    check not registry.acceptsViewProperty("button", "state", rvBool)
+
+    registry.registerViewKind(
+      "resourceTestView",
+      proc(frame: Rect): View =
+        newResourceTestView(frame),
+    )
+    registerResourceEnumType[ResourceTestMode](registry, "ResourceTestMode")
+    registry.registerViewProtocolProperties(
+      "resourceTestView", ResourceTestViewProtocol
+    )
+    check registry.acceptsViewProperty("resourceTestView", "resourceMode", rvString)
+
+    let view =
+      ResourceTestView(registry.constructView("resourceTestView", rect(1, 2, 30, 40)))
+    check registry.applyViewProperty(
+      "resourceTestView",
+      view,
+      resourceProperty("resourceCount", resourceValue(42)),
+      ResourcePropertyContext(),
+    )
+    check registry.applyViewProperty(
+      "resourceTestView",
+      view,
+      resourceProperty("resourceMode", resourceValue("rtmExpanded")),
+      ResourcePropertyContext(),
+    )
+    check view.resourceCount() == 42
+    check view.resourceMode() == rtmExpanded
+
+  test "discovered properties preserve conversion and setter behavior":
+    let
+      registry = initNimKitResourceRegistry()
+      context = ResourcePropertyContext(
+        textFor: proc(key, fallback: string): string =
+          if key == "localized.title": "Localized Title" else: fallback
+      )
+      view = newView()
+      button = newButton()
+      textField = newTextField()
+      stackView = newStackView()
+
+    check registry.applyViewProperty(
+      "view", view, resourceProperty("tag", resourceValue(19)), context
+    )
+    check registry.applyViewProperty(
+      "view", view, resourceProperty("alpha", resourceValue(2.0'f32)), context
+    )
+    check registry.applyViewProperty(
+      "button",
+      button,
+      resourceProperty(
+        "title",
+        resourceValue(
+          resourceReference(rrLocalizedString, resourceId("localized.title"))
+        ),
+      ),
+      context,
+    )
+    check registry.applyViewProperty(
+      "button", button, resourceProperty("state", resourceValue("bsOn")), context
+    )
+    check registry.applyViewProperty(
+      "textField",
+      textField,
+      resourceProperty("alignment", resourceValue("taRight")),
+      context,
+    )
+    check registry.applyViewProperty(
+      "textField",
+      textField,
+      resourceProperty("editable", resourceValue(false)),
+      context,
+    )
+    check registry.applyViewProperty(
+      "stackView",
+      stackView,
+      resourceProperty("spacing", resourceValue(-4.0'f32)),
+      context,
+    )
+
+    check view.tag() == 19
+    check view.alphaValue() == 1.0'f32
+    check button.title() == "Localized Title"
+    check button.state() == bsOn
+    check textField.alignment() == taRight
+    check not textField.editable()
+    check stackView.spacing() == 0.0'f32
+
   test "canonical CBOR round trips stable resource records":
     let
       bundle = sampleBundle()

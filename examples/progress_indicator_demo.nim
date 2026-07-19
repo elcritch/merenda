@@ -30,7 +30,7 @@ proc updateStatus() =
 proc newPhaseAnimation(indicator: ProgressIndicator): PropertyAnimation[float32] =
   result = newPropertyAnimation[float32](
     DynamicAgent(indicator),
-    setAnimationPhase(),
+    `animationPhase=`(),
     indicator.animationPhase,
     indicator.animationPhase + 1.0'f32,
     duration = 900.ms,

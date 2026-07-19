@@ -80,7 +80,7 @@ proc setStepperValue(stepper: Stepper, value: float32, notify = false): bool =
     return false
   stepper.xValue = nextValue
   Control(stepper).setObjectValue(toObj(nextValue))
-  stepper.setNeedsDisplay(true)
+  stepper.needsDisplay = true
   stepper.postAccessibilityNotification(anValueChanged)
   if notify:
     discard stepper.sendAction()
@@ -122,7 +122,7 @@ proc beginRepeat*(
   stepper.xRepeatCount = 1
   stepper.xRepeatStartedAt = now
   stepper.xLastRepeatAt = now
-  stepper.setNeedsDisplay(true)
+  stepper.needsDisplay = true
   stepper.performPart(part, notify)
 
 proc continueRepeat*(stepper: Stepper, timestamp = 0.0, notify = true): bool =
@@ -152,7 +152,7 @@ proc endRepeat*(stepper: Stepper) =
     return
   stepper.xPressedPart = spNone
   stepper.xRepeatPart = spNone
-  stepper.setNeedsDisplay(true)
+  stepper.needsDisplay = true
 
 proc value*(stepper: Stepper): float32 =
   stepper.xValue
@@ -184,7 +184,7 @@ proc `minValue=`*(stepper: Stepper, value: float32) =
     return
   stepper.xMinValue = value
   discard stepper.setStepperValue(stepper.xValue)
-  stepper.setNeedsDisplay(true)
+  stepper.needsDisplay = true
 
 proc maxValue*(stepper: Stepper): float32 =
   stepper.xMaxValue
@@ -194,7 +194,7 @@ proc `maxValue=`*(stepper: Stepper, value: float32) =
     return
   stepper.xMaxValue = value
   discard stepper.setStepperValue(stepper.xValue)
-  stepper.setNeedsDisplay(true)
+  stepper.needsDisplay = true
 
 proc increment*(stepper: Stepper): float32 =
   stepper.xIncrement
@@ -308,7 +308,7 @@ proc pulseActivationFeedback(stepper: Stepper, part: StepperPart) =
 protocol DefaultStepperActivationFeedback of ControlActivationFeedbackProtocol:
   method setActivationFeedback(stepper: Stepper, active: bool) =
     stepper.xPressedPart = if active: stepper.xActivationPart else: spNone
-    stepper.setNeedsDisplay(true)
+    stepper.needsDisplay = true
 
 proc stepperCellSize(cell: StepperCell): Size =
   let view = cell.controlView()
@@ -450,7 +450,7 @@ protocol DefaultStepperEvents of ResponderEventProtocol:
     if stepper.isEnabled() and event.button == mbPrimary and stepper.repeatActive():
       let part = stepper.partAtPoint(event.location)
       stepper.xPressedPart = if part == stepper.xRepeatPart: part else: spNone
-      stepper.setNeedsDisplay(true)
+      stepper.needsDisplay = true
       return true
 
   method mouseTrackingTick(stepper: Stepper, event: MouseEvent): bool =
@@ -459,7 +459,7 @@ protocol DefaultStepperEvents of ResponderEventProtocol:
       let pressedPart = if part == stepper.xRepeatPart: part else: spNone
       if stepper.xPressedPart != pressedPart:
         stepper.xPressedPart = pressedPart
-        stepper.setNeedsDisplay(true)
+        stepper.needsDisplay = true
       if pressedPart != spNone:
         discard stepper.repeatTick(event.timestamp)
       return true
@@ -536,7 +536,7 @@ proc initStepperFields*(
   Control(stepper).objectParseContext =
     initObjectParseContext(expectedKind = ovFloat, role = ovrStepper)
   Control(stepper).setObjectValue(toObj(stepper.xValue))
-  stepper.setAcceptsFirstResponder(true)
+  stepper.acceptsFirstResponder = true
   stepper.setHuggingPriority(LayoutPriorityRequired, laHorizontal)
   stepper.setCompressionPriority(LayoutPriorityHigh, laHorizontal)
   discard stepper.withProtocol(DefaultStepperActivationFeedback)

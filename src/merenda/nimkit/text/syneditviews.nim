@@ -1184,7 +1184,7 @@ proc applySyntaxHighlighting*(view: SynEditView) =
   storage.endEditing()
   if not view.xEditor.textView().isNil:
     view.xEditor.textView().layoutManager().invalidateLayout()
-    view.xEditor.textView().setNeedsDisplay(true)
+    view.xEditor.textView().needsDisplay = true
   view.xApplyingHighlight = false
 
 proc `stringValue=`*(view: SynEditView, value: string) =
@@ -1218,7 +1218,7 @@ proc `theme=`*(view: SynEditView, theme: SynEditTheme) =
   view.xTheme = theme
   view.applySynEditTheme()
   view.applySyntaxHighlighting()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc showLineNumbers*(view: SynEditView): bool =
   view.xShowLineNumbers
@@ -1285,7 +1285,7 @@ proc updateGutter(view: SynEditView) =
   elif scroll.verticalHeaderView() == View(view.xGutter):
     scroll.verticalHeaderView = nil
   scroll.tile()
-  view.xGutter.setNeedsDisplay(true)
+  view.xGutter.needsDisplay = true
 
 proc applySynEditTheme(view: SynEditView) =
   if view.xEditor.isNil:
@@ -1321,7 +1321,7 @@ proc synEditTextDidChange(view: SynEditView, sender: DynamicAgent) {.slot.} =
 
 proc synEditGutterNeedsDisplay(view: SynEditView) {.slot.} =
   if not view.xGutter.isNil:
-    view.xGutter.setNeedsDisplay(true)
+    view.xGutter.needsDisplay = true
 
 protocol DefaultSynEditDrawing of ViewDrawingProtocol:
   method draw(view: SynEditView, context: DrawContext) =

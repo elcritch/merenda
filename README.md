@@ -374,8 +374,9 @@ if loaded.loaded:
     let window = construction.instance.window(resourceId("main.window"))
 ```
 
-Custom view/controller kinds and property setters can be added through
-`ResourceRegistry`. See [docs/resources.md](docs/resources.md) and
+Custom view/controller kinds and Sigils property protocols can be added through
+`ResourceRegistry`; compatible property getter/setter pairs are discovered and bound
+automatically. See [docs/resources.md](docs/resources.md) and
 `examples/resource_ui_demo.nim` for the format and construction workflow.
 
 ## Styling

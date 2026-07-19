@@ -353,7 +353,7 @@ proc showInsertionPoint(textView: TextView) =
   if textView.xInsertionPointVisible:
     return
   textView.xInsertionPointVisible = true
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc isControlInput(rune: Rune): bool =
   let code = rune.int
@@ -485,7 +485,7 @@ proc `textStorage=`*(textView: TextView, storage: TextStorage) =
     @[initTextRange(selectionStart, selectionStop - selectionStart)]
   textView.clearMarkedText()
   textView.invalidateIntrinsicContentSize()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
   if textView.textViewStringValue() != previousValue:
     textView.postAccessibilityNotification(anValueChanged)
   textView.postSelectionChanged(previousSelection)
@@ -499,7 +499,7 @@ proc textContainer*(textView: TextView): TextContainer =
 proc `textContainer=`*(textView: TextView, container: TextContainer) =
   textView.xTextContainer = container
   textView.syncLayout()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc textViewStringValue(textView: TextView): string =
   textView.xTextStorage.stringValue()
@@ -535,9 +535,8 @@ proc `editable=`*(textView: TextView, editable: bool) =
     textView.xFlags.incl tvEditable
   else:
     textView.xFlags.excl tvEditable
-  textView.setAcceptsFirstResponder(
+  textView.acceptsFirstResponder =
     tvEditable in textView.xFlags or tvSelectable in textView.xFlags
-  )
 
 proc selectable*(textView: TextView): bool =
   tvSelectable in textView.xFlags
@@ -549,9 +548,8 @@ proc `selectable=`*(textView: TextView, selectable: bool) =
     textView.xFlags.incl tvSelectable
   else:
     textView.xFlags.excl tvSelectable
-  textView.setAcceptsFirstResponder(
+  textView.acceptsFirstResponder =
     tvEditable in textView.xFlags or tvSelectable in textView.xFlags
-  )
 
 proc richText*(textView: TextView): bool =
   tvRichText in textView.xFlags
@@ -608,7 +606,7 @@ proc `alignment=`*(textView: TextView, alignment: TextAlignment) =
     return
   textView.xAlignment = alignment
   textView.syncLayout()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc textColor*(textView: TextView): Color =
   if textView.xTextColor.a > 0.0:
@@ -655,7 +653,7 @@ proc setTextStyleOverride*(textView: TextView, style: TextStyle) =
   textView.xTypingAttributes =
     defaultTextAttributes(style.color, style.fontSize, style.fontName, style.language)
   textView.syncLayout()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc clearTextStyleOverride*(textView: TextView) =
   if not textView.xHasTextStyleOverride:
@@ -665,7 +663,7 @@ proc clearTextStyleOverride*(textView: TextView) =
   textView.xTypingAttributes =
     defaultTextAttributes(style.color, style.fontSize, style.fontName, style.language)
   textView.syncLayout()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc `textColor=`*(textView: TextView, color: Color) =
   if textView.xTextColor == color:
@@ -674,7 +672,7 @@ proc `textColor=`*(textView: TextView, color: Color) =
   let style = textView.textStyle()
   textView.xTypingAttributes =
     defaultTextAttributes(style.color, style.fontSize, style.fontName, style.language)
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc selectionColor*(textView: TextView): Color =
   textView.xSelectionColor
@@ -683,7 +681,7 @@ proc `selectionColor=`*(textView: TextView, color: Color) =
   if textView.xSelectionColor == color:
     return
   textView.xSelectionColor = color
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc selectedTextAttributes*(textView: TextView): TextAttributes =
   if not textView.xHasSelectedTextAttributes:
@@ -694,11 +692,11 @@ proc selectedTextAttributes*(textView: TextView): TextAttributes =
 proc `selectedTextAttributes=`*(textView: TextView, attributes: TextAttributes) =
   textView.xSelectedTextAttributes = attributes
   textView.xHasSelectedTextAttributes = true
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc clearSelectedTextAttributes*(textView: TextView) =
   textView.xHasSelectedTextAttributes = false
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc typingAttributes*(textView: TextView): TextAttributes =
   textView.xTypingAttributes
@@ -718,7 +716,7 @@ proc `insertionPointColor=`*(textView: TextView, color: Color) =
   if textView.xInsertionPointColor == color:
     return
   textView.xInsertionPointColor = color
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc insertionPointVisible*(textView: TextView): bool =
   textView.xInsertionPointVisible
@@ -727,7 +725,7 @@ proc `insertionPointVisible=`*(textView: TextView, visible: bool) =
   if textView.xInsertionPointVisible == visible:
     return
   textView.xInsertionPointVisible = visible
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc insertionPointBlinkPeriod*(textView: TextView): float32 =
   textView.xInsertionPointBlinkPeriod
@@ -742,7 +740,7 @@ proc `markedTextAttributes=`*(textView: TextView, attributes: TextAttributes) =
   if textView.xMarkedTextAttributes == attributes:
     return
   textView.xMarkedTextAttributes = attributes
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc selectionAffinity*(textView: TextView): TextAffinity =
   textView.xSelectionAffinity
@@ -905,7 +903,7 @@ proc setTextViewSelectedRange(textView: TextView, value: TextRange) =
   textView.xSelectedRanges = @[clamped]
   textView.updateTypingAttributesForSelection()
   textView.showInsertionPoint()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
   textView.dispatchSelectionChanged(previousRanges)
 
 proc stringValue*(textView: TextView): string =
@@ -942,7 +940,7 @@ proc setSelectedRanges*(textView: TextView, ranges: openArray[TextRange]) =
   textView.xInsertionPoint = nextRanges[0].maxIndex
   textView.updateTypingAttributesForSelection()
   textView.showInsertionPoint()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
   textView.dispatchSelectionChanged(previousRanges)
 
 proc `selectedRanges=`*(textView: TextView, ranges: seq[TextRange]) =
@@ -1097,7 +1095,7 @@ proc finishTextMutation(
 ) =
   textView.syncLayout()
   textView.invalidateIntrinsicContentSize()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
   if not textView.xDelegate.isNil:
     discard textView.xDelegate.trySendLocal(
       tvDidChange(), (textView: textView, range: changedRange)
@@ -1241,13 +1239,13 @@ proc setFindIndicators*(
         color: color,
         visible: true,
       )
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc clearFindIndicators*(textView: TextView) =
   if textView.xFindIndicators.len == 0:
     return
   textView.xFindIndicators.setLen(0)
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc findTextRanges*(
     textView: TextView, needle: string, caseSensitive = true
@@ -1342,7 +1340,7 @@ proc clearTextCheckingResults*(textView: TextView) =
   if textView.xCheckingResults.len == 0:
     return
   textView.xCheckingResults.setLen(0)
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc applyTextCheckingResults*(
     textView: TextView, results: openArray[TextCheckingResult]
@@ -1375,7 +1373,7 @@ proc applyTextCheckingResults*(
   textView.xCheckingResults = @results
   textView.syncLayout()
   textView.invalidateIntrinsicContentSize()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc checkSpellingAndGrammar*(textView: TextView): seq[TextCheckingResult] =
   result = textView.checkText()
@@ -1407,12 +1405,12 @@ proc completeText*(textView: TextView): TextCompletionPanel =
     selectedIndex: if completions.len > 0: 0 else: -1,
     visible: completions.len > 0,
   )
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
   textView.xCompletionPanel
 
 proc dismissCompletionPanel*(textView: TextView) =
   textView.xCompletionPanel.visible = false
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc acceptCompletion*(textView: TextView, index = -1): bool =
   if not textView.editable or not textView.xCompletionPanel.visible:
@@ -1947,7 +1945,7 @@ proc setParagraphStyle*(
   textView.xTypingAttributes.paragraphStyle = style
   textView.syncLayout()
   textView.invalidateIntrinsicContentSize()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc setTabStops*(
     textView: TextView, range: TextRange, tabStops: openArray[TextTabStop]
@@ -2002,7 +2000,7 @@ proc setCursor*(textView: TextView, index: int, extending = false) =
   textView.xSelectedRanges = @[initTextRange(start, stop - start)]
   textView.updateTypingAttributesForSelection()
   textView.showInsertionPoint()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
   textView.dispatchSelectionChanged(previousRanges)
 
 proc selectAllText*(textView: TextView) =
@@ -2012,7 +2010,7 @@ proc selectAllText*(textView: TextView) =
   textView.xSelectedRanges = @[initTextRange(0, textView.xTextStorage.len)]
   textView.updateTypingAttributesForSelection()
   textView.showInsertionPoint()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
   textView.dispatchSelectionChanged(previousRanges)
 
 proc replaceSelectedText*(textView: TextView, insertion: string) =
@@ -2071,11 +2069,11 @@ proc setMarkedTextValue*(
   textView.xHasMarkedText = true
   textView.xMarkedRange = initTextRange(markedStart, markedLength)
   textView.setSelection(initTextRange(selectedStart, selectedLength))
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc unmarkMarkedText*(textView: TextView) =
   textView.clearMarkedText()
-  textView.setNeedsDisplay(true)
+  textView.needsDisplay = true
 
 proc copyText*(textView: TextView): bool =
   if not textView.selectable:
@@ -2964,14 +2962,14 @@ protocol DefaultTextViewLayoutClient of TextLayoutClientProtocol:
 protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
   proc layoutDidInvalidate(textView: TextView, ranges: seq[TextRange]) {.slot.} =
     discard ranges
-    textView.setNeedsDisplay(true)
+    textView.needsDisplay = true
 
   proc containersDidChange(
       textView: TextView, containers: seq[TextContainer]
   ) {.slot.} =
     discard containers
     textView.invalidateIntrinsicContentSize()
-    textView.setNeedsDisplay(true)
+    textView.needsDisplay = true
 
   proc containerDidInvalidate(
       textView: TextView, index: TextContainerIndex, container: TextContainer
@@ -2979,7 +2977,7 @@ protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
     discard index
     discard container
     textView.invalidateIntrinsicContentSize()
-    textView.setNeedsDisplay(true)
+    textView.needsDisplay = true
 
   proc layoutGeometryDidChange(
       textView: TextView,
@@ -2991,7 +2989,7 @@ protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
     discard oldContentSize
     discard snapshot
     textView.invalidateIntrinsicContentSize()
-    textView.setNeedsDisplay(true)
+    textView.needsDisplay = true
 
 func accessibilityColorValue(color: Color): string =
   $color.r & "," & $color.g & "," & $color.b & "," & $color.a
@@ -3169,7 +3167,7 @@ proc initTextViewFields*(
   textView.xMarkedTextAttributes.underlineStyle = tldsSingle
   textView.xDefaultParagraphStyle = initTextParagraphStyle()
   textView.xCompletionPanel = TextCompletionPanel(selectedIndex: -1)
-  textView.setAcceptsFirstResponder(true)
+  textView.acceptsFirstResponder = true
   discard textView.withProtocol(DefaultTextViewLayoutClient)
   discard textView.withProtocol(DefaultTextViewLayoutEventSlots)
   discard textView.withProtocol(DefaultTextViewAccessibility)

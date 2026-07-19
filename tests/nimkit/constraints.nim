@@ -334,14 +334,14 @@ suite "nimkit constraints":
     check child.needsLayout
 
     root.layoutSubtreeIfNeeded()
-    root.setFrame(rect(0, 0, 300, 180))
+    root.frame = rect(0, 0, 300, 180)
     check root.needsUpdateConstraints
     check root.needsLayout
     check not child.needsUpdateConstraints
 
     child.autoresizingMaskConstraints = true
     root.layoutSubtreeIfNeeded()
-    root.setBounds(rect(0, 0, 320, 200))
+    root.bounds = rect(0, 0, 320, 200)
     check root.needsUpdateConstraints
     check root.needsLayout
     check child.needsUpdateConstraints
@@ -959,7 +959,7 @@ suite "nimkit constraints":
       initialContainerGeneration =
         root.xLayoutInputCache.sourceGenerations[lisContainer]
 
-    root.setNeedsDisplay(true)
+    root.needsDisplay = true
     root.layoutSubtreeIfNeeded()
 
     check root.xLayoutInputCache.sourceGenerations[lisAutoresizingMask] ==

@@ -190,8 +190,8 @@ suite "nimkit views":
       child.effectiveAppearance().resolveButtonStyle(controlStyle(srButton))
     check appStyle.box.fill == appFill
 
-    root.setNeedsDisplay(false)
-    child.setNeedsDisplay(false)
+    root.needsDisplay = false
+    child.needsDisplay = false
 
     var windowAppearance = initAppearance()
     let windowFill = color(0.4, 0.5, 0.6, 1.0)
@@ -204,8 +204,8 @@ suite "nimkit views":
     check root.needsDisplay
     check child.needsDisplay
 
-    root.setNeedsDisplay(false)
-    child.setNeedsDisplay(false)
+    root.needsDisplay = false
+    child.needsDisplay = false
 
     var rootAppearance = initAppearance()
     let rootFill = color(0.7, 0.2, 0.1, 1.0)
@@ -232,17 +232,17 @@ suite "nimkit views":
     check view.needsDisplay
 
     view.needsDisplay = false
-    view.styleClasses = ["toolbar", "primary"]
+    view.styleClasses = @["toolbar", "primary"]
     check view.styleClasses == @["toolbar", "primary"]
     check view.hasStyleClass("toolbar")
     check view.needsDisplay
 
-    view.setNeedsDisplay(false)
+    view.needsDisplay = false
     view.addStyleClass("danger")
     check view.styleClasses == @["toolbar", "primary", "danger"]
     check view.needsDisplay
 
-    view.setNeedsDisplay(false)
+    view.needsDisplay = false
     view.removeStyleClass("primary")
     check view.styleClasses == @["toolbar", "danger"]
     check not view.hasStyleClass("primary")
@@ -386,7 +386,7 @@ suite "nimkit views":
     root.finishDisplaySubtree()
     check not root.needsDisplayUpdateInSubtree()
 
-    child.setNeedsDisplay(true)
+    child.needsDisplay = true
     check root.needsDisplayUpdateInSubtree()
     root.finishDisplaySubtree()
     check not root.needsDisplayUpdateInSubtree()
@@ -454,7 +454,7 @@ suite "nimkit views":
 
   test "setNeedsDisplayInRect clips and unions dirty rects":
     let view = newView(frame = rect(0, 0, 100, 80))
-    view.setNeedsDisplay(false)
+    view.needsDisplay = false
 
     view.setNeedsDisplayInRect(rect(10, 10, 20, 20))
     check view.needsDisplay
@@ -496,8 +496,8 @@ suite "nimkit views":
       child = newView(frame = rect(80, 60, 50, 40))
 
     root.addSubview(child)
-    root.setNeedsDisplay(false)
-    child.setNeedsDisplay(false)
+    root.needsDisplay = false
+    child.needsDisplay = false
 
     child.setNeedsDisplayInRect(rect(0, 0, 50, 40))
 
@@ -505,8 +505,8 @@ suite "nimkit views":
     check root.invalidRects == @[rect(80, 60, 20, 20)]
 
     root.clipsToBounds = true
-    root.setNeedsDisplay(false)
-    child.setNeedsDisplay(false)
+    root.needsDisplay = false
+    child.needsDisplay = false
 
     child.setNeedsDisplayInRect(rect(0, 0, 50, 40))
 
@@ -519,8 +519,8 @@ suite "nimkit views":
       child = newView(frame = rect(20, 30, 80, 50))
 
     root.addSubview(child)
-    root.setNeedsDisplay(false)
-    child.setNeedsDisplay(false)
+    root.needsDisplay = false
+    child.needsDisplay = false
 
     child.setNeedsDisplayInRect(rect(5, 6, 10, 11))
 
@@ -533,10 +533,10 @@ suite "nimkit views":
       child = newView(frame = rect(20, 30, 80, 50))
 
     root.addSubview(child)
-    root.setNeedsDisplay(false)
-    child.setNeedsDisplay(false)
+    root.needsDisplay = false
+    child.needsDisplay = false
 
-    child.setNeedsDisplay(true)
+    child.needsDisplay = true
 
     check child.invalidRects == @[rect(0, 0, 80, 50)]
     check root.invalidRects == @[rect(20, 30, 80, 50)]
@@ -566,8 +566,8 @@ suite "nimkit views":
       root = newView(frame = rect(0, 0, 300, 240))
       child = newView(frame = rect(30, 40, 100, 80))
 
-    root.setBounds(rect(10, 20, 300, 240))
-    child.setBounds(rect(5, 6, 100, 80))
+    root.bounds = rect(10, 20, 300, 240)
+    child.bounds = rect(5, 6, 100, 80)
     root.addSubview(child)
 
     check child.pointFromView(initPoint(30, 40), root) == initPoint(5, 6)
@@ -685,7 +685,7 @@ suite "nimkit views":
 
   test "window coordinate helpers convert through content view frames and bounds":
     let content = newView(frame = rect(10, 15, 240, 180))
-    content.setBounds(rect(5, 7, 240, 180))
+    content.bounds = rect(5, 7, 240, 180)
 
     check content.pointToWindow(initPoint(5, 7)) == initPoint(10, 15)
     check content.pointFromWindow(initPoint(10, 15)) == initPoint(5, 7)
@@ -697,8 +697,8 @@ suite "nimkit views":
       root = newView(frame = rect(0, 0, 200, 160))
       child = newMouseSpyView(rect(30, 40, 80, 50))
 
-    root.setBounds(rect(10, 20, 200, 160))
-    child.setBounds(rect(5, 6, 80, 50))
+    root.bounds = rect(10, 20, 200, 160)
+    child.bounds = rect(5, 6, 80, 50)
     root.addSubview(child)
 
     spyMouseDownPoint = initPoint(0, 0)
@@ -736,7 +736,7 @@ suite "nimkit views":
     check view.needsDisplay
 
     view.needsDisplay = false
-    view.shadow = [shadow]
+    view.shadow = @[shadow]
     check view.shadow == @[shadow]
     check view.needsDisplay
 

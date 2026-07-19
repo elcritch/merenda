@@ -520,7 +520,7 @@ proc `drawProc=`*(view: UIRelaysView, drawProc: UIRelaysDrawProc) =
   if view.xDrawProc == drawProc:
     return
   view.xDrawProc = drawProc
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 protocol DefaultUIRelaysViewDrawing of ViewDrawingProtocol:
   method draw(view: UIRelaysView, context: DrawContext) =

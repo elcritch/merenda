@@ -25,27 +25,6 @@ export viewgeometry except
   ViewSuperviewGeometrySlots
 export viewprotos except ViewSuperviewLifecycleSlots
 
-proc `alphaValue=`*(view: View, alphaValue: float32)
-
-protocol ViewAlphaTransactionAnimProtocol:
-  method animAlphaValue*(alphaValue: float32)
-
-protocol ViewAlphaTransactionAnim of ViewAlphaTransactionAnimProtocol:
-  method animAlphaValue(view: View, alphaValue: float32) =
-    view.alphaValue = alphaValue
-
-proc tag*(view: View): int =
-  view.xTag
-
-proc `tag=`*(view: View, tag: int) =
-  view.xTag = tag
-
-proc identifier*(view: View): string =
-  view.xIdentifier
-
-proc `identifier=`*(view: View, identifier: string) =
-  view.xIdentifier = identifier
-
 proc name*(view: View): string =
   view.identifier
 
@@ -71,57 +50,8 @@ proc viewWithIdentifier*(view: View, identifier: string): View =
 proc viewNamed*(view: View, name: string): View =
   view.viewWithIdentifier(name)
 
-proc flipped*(view: View): bool =
-  view.xFlipped
-
 proc isFlipped*(view: View): bool =
   view.flipped()
-
-proc `flipped=`*(view: View, flipped: bool) =
-  if view.xFlipped == flipped:
-    return
-  view.xFlipped = flipped
-  view.invalidateLayoutItemGeometry(lirBounds)
-  view.setNeedsDisplaySubtree()
-
-proc focusRingType*(view: View): FocusRingType =
-  view.xFocusRingType
-
-proc `focusRingType=`*(view: View, focusRingType: FocusRingType) =
-  if view.xFocusRingType == focusRingType:
-    return
-  view.xFocusRingType = focusRingType
-  view.setNeedsDisplay(true)
-
-proc alphaValue*(view: View): float32 =
-  view.xAlphaValue
-
-proc `alphaValue=`*(view: View, alphaValue: float32) =
-  let normalized = min(max(alphaValue, 0.0'f32), 1.0'f32)
-  if view.xAlphaValue == normalized:
-    return
-  discard view.withProtocol(ViewAlphaTransactionAnim)
-  discard recordPropertyAnimation(
-    DynamicAgent(view), animAlphaValue(), view.xAlphaValue, normalized
-  )
-  view.xAlphaValue = normalized
-  view.setNeedsDisplaySubtree()
-
-proc shadow*(view: View): seq[BoxShadow] =
-  view.xShadow
-
-proc `shadow=`*(view: View, shadows: openArray[BoxShadow]) =
-  let nextShadows = @shadows
-  if view.xShadow == nextShadows:
-    return
-  view.xShadow = nextShadows
-  view.setNeedsDisplay(true)
-
-proc toolTip*(view: View): string =
-  view.xToolTip
-
-proc `toolTip=`*(view: View, toolTip: string) =
-  view.xToolTip = toolTip
 
 proc cursorRects*(view: View): seq[ViewCursorRect] =
   view.xCursorRects
@@ -160,27 +90,6 @@ proc autoscroll*(view: View, event: MouseEvent): bool =
   discard view
   discard event
 
-proc styleId*(view: View): string =
-  view.xStyleId
-
-proc `styleId=`*(view: View, id: string) =
-  if view.xStyleId == id:
-    return
-  view.xStyleId = id
-  view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
-
-proc styleClasses*(view: View): seq[string] =
-  view.xStyleClasses
-
-proc `styleClasses=`*(view: View, classes: openArray[string]) =
-  let nextClasses = @classes
-  if view.xStyleClasses == nextClasses:
-    return
-  view.xStyleClasses = nextClasses
-  view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
-
 proc hasStyleClass*(view: View, className: string): bool =
   view.xStyleClasses.find(className) >= 0
 
@@ -189,7 +98,7 @@ proc addStyleClass*(view: View, className: string) =
     return
   view.xStyleClasses.add className
   view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc removeStyleClass*(view: View, className: string) =
   let idx = view.xStyleClasses.find(className)
@@ -197,7 +106,7 @@ proc removeStyleClass*(view: View, className: string) =
     return
   view.xStyleClasses.delete(idx)
   view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc widgetStateSet*(view: View): set[WidgetState] =
   view.xWidgetStates
@@ -209,7 +118,7 @@ proc setWidgetState*(view: View, state: WidgetState, value: bool) =
     view.xWidgetStates.incl state
   else:
     view.xWidgetStates.excl state
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc validationMessage*(view: View): string =
   view.xValidationMessage
@@ -273,7 +182,7 @@ protocol DefaultViewResponder of ResponderProtocol:
     if view.xWidgetStates == states:
       return
     view.xWidgetStates = states
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
 
 proc needsUpdateConstraints*(view: View): bool =
   view.xNeedsUpdateConstraints
@@ -342,7 +251,7 @@ proc prepareDisplaySubtree*(view: View): bool =
   view.needsDisplayInSubtree()
 
 proc finishDisplaySubtree*(view: View) =
-  view.setNeedsDisplay(false)
+  view.needsDisplay = false
   for child in view.xSubviews:
     child.finishDisplaySubtree()
 

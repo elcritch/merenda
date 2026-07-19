@@ -95,7 +95,7 @@ protocol TodoTableDelegate of TableViewDelegate:
       checkBox = newCheckBox(rowValue.value(TodoTitleColumn).requireString())
       done = rowValue.value(TodoDoneColumn).requireBool()
     checkBox.state = if done: bsOn else: bsOff
-    checkBox.setAcceptsFirstResponder(false)
+    checkBox.acceptsFirstResponder = false
     checkBox
 
   method hitPolicyForCell(

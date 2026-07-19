@@ -91,7 +91,7 @@ proc ensureTerminal(view: TerminalRelaysView): bool =
 
 proc enqueue(view: TerminalRelaysView, event: ui.Event) =
   view.pendingEvents.add event
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc enqueueText(view: TerminalRelaysView, text: string) =
   for event in text.toUIRelaysTextInputEvents():
@@ -140,7 +140,7 @@ proc drawTerminal(view: TerminalRelaysView) =
       view.drawTerminalEvent(event, area, focused)
 
   if focused or view.terminal.processRunning:
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
 
 protocol TerminalRelaysDrawing of UIRelaysViewHooks:
   method drawUIRelays(view: TerminalRelaysView) =
@@ -200,7 +200,7 @@ proc newTerminalRelaysView(
   result = TerminalRelaysView()
   result.initUIRelaysViewFields(frame = frame)
   result.commandLog = commandLog
-  result.setAcceptsFirstResponder(true)
+  result.acceptsFirstResponder = true
   discard result.withProtocol(TerminalRelaysDrawing)
   discard result.withProtocol(TerminalRelaysEvents)
   discard result.withProtocol(TerminalRelaysTextInput)

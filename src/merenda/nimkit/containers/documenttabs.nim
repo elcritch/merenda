@@ -466,7 +466,7 @@ proc `allowsTabReordering=`*(tabs: DocumentTabs, allowed: bool) =
   tabs.xAllowsTabReordering = allowed
   tabs.xDraggingTab = false
   tabs.xPressedPart = dthNone
-  tabs.setNeedsDisplay(true)
+  tabs.needsDisplay = true
 
 proc showsScrollButtons*(tabs: DocumentTabs): bool =
   tabs.xShowsScrollButtons
@@ -484,7 +484,7 @@ proc `showsHorizontalScroller=`*(tabs: DocumentTabs, shows: bool) =
   if tabs.xShowsHorizontalScroller == shows:
     return
   tabs.xShowsHorizontalScroller = shows
-  tabs.setNeedsDisplay(true)
+  tabs.needsDisplay = true
 
 proc defaultTabStyle*(tabs: DocumentTabs): DocumentTabStyle =
   tabs.xDefaultTabStyle
@@ -503,7 +503,7 @@ proc `scrollOffset=`*(tabs: DocumentTabs, offset: float32) =
   if abs(tabs.xScrollOffset - clamped) <= 0.01'f32:
     return
   tabs.xScrollOffset = clamped
-  tabs.setNeedsDisplay(true)
+  tabs.needsDisplay = true
   emit tabs.documentTabsDidScroll(clamped)
 
 proc lineScroll*(tabs: DocumentTabs): float32 =
@@ -725,7 +725,7 @@ proc reloadDocumentTabs*(tabs: DocumentTabs) =
   tabs.xScrollOffset = tabs.clampScrollOffset(tabs.xScrollOffset)
   tabs.invalidateIntrinsicContentSize()
   tabs.setNeedsLayout()
-  tabs.setNeedsDisplay(true)
+  tabs.needsDisplay = true
 
 proc contentTabRect(tabs: DocumentTabs, index: int): Rect =
   if index < 0 or index >= tabs.xItems.len:
@@ -1056,7 +1056,7 @@ proc selectDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardab
   tabs.xSelectedIndex = index
   tabs.scrollTabToVisible(index)
   tabs.didSelect(item)
-  tabs.setNeedsDisplay(true)
+  tabs.needsDisplay = true
   tabs.postAccessibilityNotification(anSelectionChanged)
   emit tabs.documentTabSelectionDidChange(DynamicAgent(tabs))
   true
@@ -1783,12 +1783,12 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
     of dthPreviousButton:
       tabs.xPressedPart = dthPreviousButton
       discard tabs.scrollDocumentTabsBy(tabs.scrollButtonDelta(dtsbPrevious))
-      tabs.setNeedsDisplay(true)
+      tabs.needsDisplay = true
       true
     of dthNextButton:
       tabs.xPressedPart = dthNextButton
       discard tabs.scrollDocumentTabsBy(tabs.scrollButtonDelta(dtsbNext))
-      tabs.setNeedsDisplay(true)
+      tabs.needsDisplay = true
       true
     of dthTab, dthClose:
       if not tabs.xItems[hit.index].enabled():
@@ -1797,7 +1797,7 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
       tabs.xPressedPart = hit.part
       tabs.xDraggingTab = false
       tabs.xDragStartPoint = event.location
-      tabs.setNeedsDisplay(true)
+      tabs.needsDisplay = true
       true
     else:
       false
@@ -1830,20 +1830,20 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
 
     case part
     of dthPreviousButton, dthNextButton:
-      tabs.setNeedsDisplay(true)
+      tabs.needsDisplay = true
       true
     of dthTab:
       if not wasDragging and pressed == tabs.documentTabIndexAtPoint(event.location):
         discard tabs.selectDocumentTabAtIndex(pressed)
       else:
-        tabs.setNeedsDisplay(true)
+        tabs.needsDisplay = true
       true
     of dthClose:
       let hit = tabs.hitPart(event.location)
       if not wasDragging and hit.part == dthClose and hit.index == pressed:
         discard tabs.closeDocumentTabAtIndex(pressed)
       else:
-        tabs.setNeedsDisplay(true)
+        tabs.needsDisplay = true
       true
     else:
       false
@@ -1927,7 +1927,7 @@ proc initDocumentTabsFields*(tabs: DocumentTabs, frame: Rect = AutoRect) =
   tabs.xLineScroll = DocumentTabDefaultLineScroll
   tabs.background = color(0.0, 0.0, 0.0, 0.0)
   tabs.clipsToBounds = true
-  tabs.setAcceptsFirstResponder(true)
+  tabs.acceptsFirstResponder = true
   discard tabs.withProtocol(DocumentTabsDrawing)
   discard tabs.withProtocol(DocumentTabsEventsProtocol)
   discard tabs.withProtocol(DocumentTabsLayout)

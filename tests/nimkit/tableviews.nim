@@ -859,7 +859,7 @@ suite "NimKit TableView":
     column.alignment = taRight
     column.resizePolicy = tcrFixed
     column.styleId = "primary-name"
-    column.styleClasses = ["primary", "text"]
+    column.styleClasses = @["primary", "text"]
     let userInfo = TableColumnUserInfo(label: "metadata")
     initResponder(userInfo)
     column.userInfo = userInfo

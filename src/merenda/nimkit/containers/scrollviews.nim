@@ -296,7 +296,7 @@ proc `drawsBackground=`*(clipView: ClipView, value: bool) =
   if clipView.xDrawsBackground == value:
     return
   clipView.xDrawsBackground = value
-  clipView.setNeedsDisplay(true)
+  clipView.needsDisplay = true
 
 proc constrainScrollPoint*(clipView: ClipView, point: Point): Point =
   clipView.xScrollView.clampContentOffset(point)
@@ -342,14 +342,14 @@ protocol DefaultClipViewDrawing of ViewDrawingProtocol:
       )
 
 protocol DefaultClipViewGeometry of ViewProtocol:
-  method setBounds(clipView: ClipView, bounds: Rect) =
+  method `bounds=`(clipView: ClipView, bounds: Rect) =
     let constrained = rect(clipView.constrainScrollPoint(bounds.origin), bounds.size)
     if clipView.xBounds == constrained:
       return
     clipView.xBounds = rect(constrained.origin, constrained.size)
     emit clipView.layoutInputChanged(lirBounds)
     emit clipView.geometryDidChange()
-    clipView.setNeedsDisplay(true)
+    clipView.needsDisplay = true
     clipView.xScrollView.reflectScrolledClipView(clipView)
 
 proc setClipViewBoundsOrigin(scrollView: ScrollView, offset: Point) =
@@ -457,7 +457,7 @@ proc `documentView=`*(scrollView: ScrollView, documentView: View) =
     scrollView.xClipView.addSubview(documentView)
   scrollView.tile()
   scrollView.invalidateContainerMetrics()
-  scrollView.setNeedsDisplay(true)
+  scrollView.needsDisplay = true
 
 proc contentOffset*(scrollView: ScrollView): Point =
   scrollView.xClipView.constrainScrollPoint(scrollView.xClipView.bounds().origin)
@@ -543,13 +543,13 @@ proc scrollWheelWouldMove(scrollView: ScrollView, event: ScrollEvent): bool =
 proc scrollerMetricsChanged(scrollView: ScrollView) =
   scrollView.tile()
   scrollView.invalidateContainerMetrics()
-  scrollView.setNeedsDisplay(true)
+  scrollView.needsDisplay = true
 
 proc reflectScrolledClipView*(scrollView: ScrollView, clipView: ClipView) =
   if clipView.isNil or clipView != scrollView.xClipView:
     return
   scrollView.tile()
-  scrollView.setNeedsDisplay(true)
+  scrollView.needsDisplay = true
 
 proc hasScroller*(scrollView: ScrollView, axis: LayoutAxis): bool =
   scrollView.xHasScroller[axis]
@@ -662,7 +662,7 @@ proc `borderType=`*(scrollView: ScrollView, borderType: ScrollViewBorderType) =
   if scrollView.xBorderType == borderType:
     return
   scrollView.xBorderType = borderType
-  scrollView.setNeedsDisplay(true)
+  scrollView.needsDisplay = true
 
 proc drawsBackground*(scrollView: ScrollView): bool =
   scrollView.xDrawsBackground
@@ -671,7 +671,7 @@ proc `drawsBackground=`*(scrollView: ScrollView, value: bool) =
   if scrollView.xDrawsBackground == value:
     return
   scrollView.xDrawsBackground = value
-  scrollView.setNeedsDisplay(true)
+  scrollView.needsDisplay = true
 
 proc scrollViewRole*(scrollView: ScrollView): StyleRole =
   scrollView.xScrollViewRole
@@ -680,7 +680,7 @@ proc `scrollViewRole=`*(scrollView: ScrollView, role: StyleRole) =
   if scrollView.xScrollViewRole == role:
     return
   scrollView.xScrollViewRole = role
-  scrollView.setNeedsDisplay(true)
+  scrollView.needsDisplay = true
 
 proc scrollerRole*(scrollView: ScrollView): StyleRole =
   scrollView.xScrollerRole
@@ -689,9 +689,9 @@ proc `scrollerRole=`*(scrollView: ScrollView, role: StyleRole) =
   if scrollView.xScrollerRole == role:
     return
   scrollView.xScrollerRole = role
-  scrollView.setNeedsDisplay(true)
+  scrollView.needsDisplay = true
   for scroller in scrollView.xScroller:
-    scroller.setNeedsDisplay(true)
+    scroller.needsDisplay = true
 
 proc scrollerInsets*(scrollView: ScrollView): EdgeInsets =
   scrollView.xScrollerInsets

@@ -717,7 +717,7 @@ protocol ArrayControllerTableDelegate of TableViewDelegate:
       controller.sortDescriptors =
         [initModelSortDescriptor(controller.columnKey(column), modelDirection)]
     tableView.setNeedsLayout()
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
 
 protocol ArrayControllerComboDataSource of ComboBoxDataSource:
   method itemCount(controller: ArrayController, comboBox: ComboBox): int =

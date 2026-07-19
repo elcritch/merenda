@@ -496,7 +496,7 @@ suite "nimkit screenshot":
 
     proc onClicked(sender: DynamicAgent) =
       if not sender.isNil:
-        label.setStringValue("Clicked")
+        label.stringValue = "Clicked"
 
     let target = newActionTarget(action, onClicked)
     button.target = target
@@ -516,7 +516,7 @@ suite "nimkit screenshot":
       try:
         let initial = renderAndScreenshotOnce(
           proc(w, h: float32): Renders =
-            root.setFrame(rect(0, 0, w, h))
+            root.frame = rect(0, 0, w, h)
             buildRenders(root),
           outputPath = initialPath,
           title = "merenda nimkit screenshot initial",
@@ -531,7 +531,7 @@ suite "nimkit screenshot":
 
         let clicked = renderAndScreenshotOnce(
           proc(w, h: float32): Renders =
-            root.setFrame(rect(0, 0, w, h))
+            root.frame = rect(0, 0, w, h)
             buildRenders(root),
           outputPath = clickedPath,
           title = "merenda nimkit screenshot clicked",

@@ -13,7 +13,7 @@ type
 
   SwitchButtonCell* = ref object of ActionCell
 
-protocol SwitchButtonProtocol {.selectorScope: protocol.}:
+protocol SwitchButtonProtocol {.selectorScope: protocol, setterStyle: nim.}:
   property on -> bool
 
 proc switchButtonCell*(switchButton: SwitchButton): SwitchButtonCell
@@ -103,9 +103,6 @@ proc `state=`*(switchButton: SwitchButton, state: ButtonState) =
   if not cell.isNil:
     cell.state = state
 
-proc `on=`*(switchButton: SwitchButton, on: bool) =
-  switchButton.setOn(on)
-
 proc highlighted*(switchButton: SwitchButton): bool =
   let cell = switchButton.switchButtonCell()
   (not cell.isNil) and cell.isHighlighted()
@@ -119,7 +116,7 @@ protocol DefaultSwitchButtonControl of SwitchButtonProtocol:
   method on(switchButton: SwitchButton): bool =
     switchButton.state == bsOn
 
-  method setOn(switchButton: SwitchButton, on: bool) =
+  method `on=`(switchButton: SwitchButton, on: bool) =
     switchButton.state = (if on: bsOn else: bsOff)
 
 proc switchTrackRect(switchButton: SwitchButton, style: SwitchButtonStyle): Rect =
@@ -300,7 +297,7 @@ proc initSwitchButtonFields*(
 ) =
   initControlFields(switchButton, frame, newSwitchButtonCell())
   switchButton.state = (if on: bsOn else: bsOff)
-  switchButton.setAcceptsFirstResponder(true)
+  switchButton.acceptsFirstResponder = true
   switchButton.setHuggingPriority(LayoutPriorityHigh, laHorizontal)
   switchButton.setCompressionPriority(LayoutPriorityRequired, laHorizontal)
   discard switchButton.withProtocol(DefaultSwitchButtonDrawing)

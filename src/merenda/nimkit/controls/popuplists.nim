@@ -523,7 +523,7 @@ proc setPopupListRoles*(
 ) =
   popupList.xPopupRole = popupRole
   popupList.xItemRole = itemRole
-  popupList.setNeedsDisplay(true)
+  popupList.needsDisplay = true
 
 proc initPopupListViewFields*(
     popupList: PopupListView,
@@ -536,7 +536,7 @@ proc initPopupListViewFields*(
   popupList.xItemRole = srComboBoxItem
   popupList.usesThemedRootBackground = false
   popupList.configure(data, actions)
-  popupList.setAcceptsFirstResponder(true)
+  popupList.acceptsFirstResponder = true
   discard popupList.withProtocol(DefaultPopupListDrawing)
   discard popupList.withProtocol(DefaultPopupListEvents)
   discard popupList.withProtocol(DefaultPopupListAccessibility)

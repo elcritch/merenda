@@ -75,23 +75,25 @@ action selectors, and standard chrome names.
 Applications can extend a registry before validation and construction:
 
 ```nim
+type InspectorView = ref object of View
+  xShowsDetails: bool
+
+protocol InspectorViewProtocol {.selectorScope: protocol, setterStyle: nim.} from InspectorView:
+  property showsDetails -> bool {.field: xShowsDetails.}
+
+proc newInspectorView(frame: Rect): InspectorView =
+  result = InspectorView()
+  initViewFields(result, frame)
+  discard result.withProto()
+
 var registry = initNimKitResourceRegistry()
 registry.registerActionSelector("showInspector")
 registry.registerViewKind(
   "inspectorView",
   proc(frame: Rect): View = newInspectorView(frame),
 )
-registry.registerViewProperty(
-  "inspectorView",
-  "showsDetails",
-  {rvBool},
-  proc(
-    view: View,
-    value: ResourceValue,
-    context: ResourcePropertyContext,
-  ): bool =
-    InspectorView(view).showsDetails = value.boolValue
-    true,
+registry.registerViewProtocolProperties(
+  "inspectorView", InspectorViewProtocol
 )
 
 let construction = bundle.instantiateResources(registry)
@@ -99,8 +101,14 @@ let construction = bundle.instantiateResources(registry)
 
 Factories allocate identities during the first construction pass. Properties and
 view/controller relationships are applied during the second pass, so references do
-not depend on declaration order. Property setters use normal NimKit mutation APIs,
-preserving layout, drawing, responder, accessibility, and native-window side effects.
+not depend on declaration order. `registerViewProtocolProperties` discovers matching
+Sigils property getter/setter requirements and binds resource values to the generated
+Nim-style setter selectors. The built-in registry supplies decoders for primitive,
+geometry, color, image, and common enum property types. Applications can add another
+typed decoder with `registerResourceValueType`; `registerViewProperty` remains an
+escape hatch for properties that need custom conversion. Because dispatch still uses
+the property protocol, normal layout, drawing, responder, accessibility, and
+native-window side effects are preserved.
 
 Construction returns windows without showing them or adding them to an application.
 Image resources remain local to the `ResourceInstance`; they are not published in the
