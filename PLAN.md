@@ -52,6 +52,14 @@ and sheet workflows before native bridges land: alert button response mapping,
 accessory views, open/save validation, live panel button validation, and
 document-controller open/save integration are covered in tests and examples.
 
+The Nim-native resource layer now provides the serialization and construction
+boundary needed by future visual tooling: stable plain resource records,
+canonical cborious encoding, validation diagnostics, two-pass identity
+construction, and Sigils-backed property discovery. The next resource milestone
+is no longer basic loading; it is an editable resource document and the first
+interactive preview workflow. Identity-preserving resource reconciliation should
+follow once hierarchy and property editing work end to end.
+
 Model-backed widget work should now reuse the contracts proven by `TableView`,
 `OutlineView`, `CollectionView`, `CascadingView`, `ComboBox`, menus,
 `DocumentTabs`, and `Matrix`:
@@ -64,8 +72,12 @@ build on that vocabulary instead of adding parallel storage models.
 - Added a Nim-native, backend-neutral resource construction layer with stable plain
   records for UI trees, windows/panels, menus, commands, images, localization, key
   bindings, and theme fragments; canonical cborious serialization; structured
-  validation diagnostics; extensible factories and property setters; and explicit
-  two-pass construction into NimKit identities.
+  validation diagnostics; extensible factories; and explicit two-pass construction
+  into NimKit identities. Resource properties now discover compatible Sigils
+  protocol getter/setter pairs, decode registered Nim value types, and dispatch
+  through generated Nim-style `property=` selectors instead of maintaining a
+  callback table per built-in property. Geometry, sizes, insets, and colors use
+  the native NimKit value types directly.
 - Reorganized NimKit under domain subdirectories while keeping
   `merenda/nimkit` as the stable umbrella import; completed the drawing/chrome
   split, image resources, view geometry/parity APIs, render alpha/shadow
@@ -368,7 +380,7 @@ build on that vocabulary instead of adding parallel storage models.
 ## Current Verification
 
 - `atlas-run tests` passes locally on macOS with the current domain module
-  layout; the latest full run passed `2/2`.
+  layout; the latest full run passed `5/5`.
 - Focused NimKit coverage lives under `tests/nimkit/*.nim` and is aggregated
   by `tests/tnimkit.nim`; current modules cover controls, matrix,
   monospace text views, tables, outlines, cascading views, collection views,
@@ -376,14 +388,19 @@ build on that vocabulary instead of adding parallel storage models.
   pasteboards/dragging, document tabs, undo managers, object values, model
   controllers, notifications, responders, view controllers, windows/controllers,
   constraints, themes, the renderer/application threading boundary, and managed
-  font/image resource retention and atlas recovery.
+  font/image resource retention and atlas recovery. `tests/tresources.nim` covers
+  canonical CBOR, validation, construction, lookup, automatic Sigils property
+  discovery, built-in value conversion, and application-registered property types.
 - Demo coverage for recently completed work lives in
   `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
   `examples/matrix_demo.nim`, `examples/modelcontrollers_demo.nim`,
   `examples/monotext_demo.nim`, `examples/progress_indicator_demo.nim`,
   `examples/cascading_demo.nim`, `examples/viewcontroller_demo.nim`,
   `examples/collectionview_demo.nim`, `examples/controls_showcase.nim`, and
-  `examples/merenda_settings_demo.nim`.
+  `examples/merenda_settings_demo.nim`. Resource workflows are demonstrated by
+  `examples/resource_ui_demo.nim` and `examples/image_resources_demo.nim`; the
+  complete example bundle compiles through
+  `atlas-run tests --compile-only examples/all_compile.nim`.
 
 ## Completed Design Reference
 
@@ -467,21 +484,102 @@ unmanaged ownership.
 
 ## Near-Term Work
 
-### Resource-Backed UI Construction
+### Interactive GUI Builder Foundations
 
-Add a Nim-native resource construction layer for UI assets and declarative
-structure without committing to Cocoa nib/storyboard compatibility. The goal is
-repeatable loading, inspection, and backend bridging for menus, windows, panels,
-images, key bindings, and themes.
+Build the first editor-facing workflow on top of `ResourceBundle` rather than
+introducing a second declarative model. The first vertical slice should load a
+bundle, show its hierarchy, select a resource node, edit supported properties,
+validate changes, update a live preview, and save canonical CBOR.
 
-- Define stable resource records for view/controller trees, menus, commands,
-  images, localized strings, key bindings, and theme fragments.
-- Keep loaded resources as plain Nim data until they are instantiated into
-  identity-bearing views, controls, windows, or controllers.
-- Add validation and diagnostics for missing identifiers, selector mismatches,
-  unavailable assets, and incompatible resource versions.
-- Leave room for future native nib/storyboard or GNUstep resource bridge layers
-  without exposing platform resource types in core NimKit APIs.
+#### Current Builder Readiness
+
+The runtime foundation is ready for a constrained builder prototype, but the
+editor layer itself has not been built yet.
+
+- Ready: plain resource records, canonical cborious persistence, structural and
+  semantic diagnostics, stable `ResourceId` values, two-pass construction, and
+  Sigils protocol setter discovery with typed resource-value conversion.
+- Reusable for editor work: `Document` and `UndoManager` already provide file,
+  edited-state, grouped undo/redo, and clean-state contracts; view inspection,
+  subtree click selection, identifiers, coordinate conversion, and selection
+  rings provide most of the preview-selection primitives.
+- Partial: `ResourceRegistry` can validate and apply known properties, but does
+  not publicly enumerate view kinds or inherited property descriptors. The
+  default resource palette currently covers view, control, button, checkbox,
+  radio button, text field, label, image view, and stack view.
+- Missing: a controlled editable resource document, registry metadata for a
+  generated inspector, invalid-draft versus last-valid-preview state, preview
+  reconciliation, constraint records, and editor surfaces for connections and
+  non-view resources. Controller and window extension properties also remain
+  deferred in the built-in construction registry.
+
+#### Milestone 1 — Editable Document and Property Schema
+
+- Add an identity-bearing `ResourceDocument` around a value-only
+  `ResourceBundle`. It should own the current draft, last valid revision,
+  revision number, diagnostics, selection identifiers, and undo manager without
+  making serialized resource records into `ref object` graphs.
+- Express edits as typed insert, remove, move, and replace operations with named
+  result records. Route all mutation through document procs so identifier
+  indexes, validation, diagnostics, revision tracking, and undo registration
+  cannot be bypassed through mutable bundle access.
+- Provide strict and optional resource lookup, read-only iteration, and stable
+  node paths suitable for diagnostics and selection. Avoid exposing `var`
+  references into nested resource sequences.
+- Add public `ResourceViewKindDescriptor` and `ResourcePropertyDescriptor`
+  records plus registry iterators/lookups. Descriptors should expose kind
+  inheritance, aliases, selector and Nim type names, accepted resource-value
+  kinds, and editability. Keep editor labels, grouping, ranges, and specialized
+  input hints in a separate optional metadata layer.
+
+#### Milestone 2 — First Interactive Vertical Slice
+
+- Build a document window containing a resource hierarchy, the initial nine-kind
+  view palette, a generic property inspector, path-addressed diagnostics, and a
+  preview surface. Property values should be read from the resource document;
+  live getter conversion is not a prerequisite for this slice.
+- Validate after each committed edit. Preserve invalid draft input in the editor
+  while leaving the last valid preview untouched.
+- Rebuild the preview from each valid revision at first, then restore hierarchy
+  and canvas selection by `ResourceId`. Reuse the existing view-selection and
+  selection-ring primitives rather than placing editor state on preview views.
+- Load and save through the existing canonical CBOR envelope and integrate with
+  `Document` edited-state and `UndoManager` clean-state behavior.
+
+#### Milestone 3 — Identity-Preserving Preview
+
+- Add a resource-to-instance diff and reconciliation layer keyed by
+  `ResourceId`. Preserve view and controller identities when kind and ownership
+  remain compatible, and route every property update through the registry.
+- Define transactional replacement behavior for kind changes, hierarchy moves,
+  insertions, deletions, changed assets, and failed property application. A
+  failed preview update must not corrupt the document or leave stale instance
+  mappings.
+- Add getter-side resource conversion only where direct manipulation or
+  runtime-normalized values must be written back. Read through Sigils getter
+  selectors and convert supported Nim values into `ResourceValue` without
+  exposing backing fields.
+- Add hover overlays, geometry inspection, and explicit hit-test-to-resource
+  mapping. Keep selection in the editor document so replacement previews can
+  remap it deterministically.
+
+#### Milestone 4 — Layout and Resource Breadth
+
+- Add backend-neutral records for layout constraints and guides before freeform
+  constraint editing. Model stable constraint identifiers, item references,
+  anchors, relations, multipliers, constants, priorities, and activation state;
+  validate and reconcile endpoints through `ResourceId` references. Frame and
+  stack-view properties remain sufficient for the first vertical slice.
+- Expand the default registry and palette across stable NimKit controls and
+  containers as their protocol properties become resource-convertible. Do not
+  add parallel callback-based property tables for builder-only support.
+- Add editor surfaces for target/action connections, controller ownership,
+  menus, commands, images, localization, key bindings, and theme fragments after
+  the view-tree/property workflow is stable. Keep connections as resource
+  references and selector names until instantiation.
+- Keep native nib/storyboard and GNUstep import/export as optional translation
+  layers into the same resource document. Native handles and platform editor
+  assumptions must not enter core NimKit APIs.
 
 
 ## Medium-Term Architecture
