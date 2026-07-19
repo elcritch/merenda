@@ -1,7 +1,7 @@
 ## Backend-neutral loading, validation, inspection, and construction of NimKit UI resources.
 
 import
-  merenda/nimkit/resources/[
+  ./resources/[
     resrccbor, resrcconstruction, resrccore, resrcdocument, resrclayout, resrcregistry,
     resrcvalidation,
   ]

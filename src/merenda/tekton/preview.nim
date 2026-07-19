@@ -4,16 +4,16 @@ import std/[algorithm, options, sets, strutils, tables]
 
 import sigils/selectors
 
-import merenda/nimkit/app/[viewcontrollers, windowcontrollers, windows]
-import merenda/nimkit/controls/menus
-import merenda/nimkit/drawing/images
-import merenda/nimkit/foundation/types
-import merenda/nimkit/responder/keybindings
+import ../nimkit/app/[viewcontrollers, windowcontrollers, windows]
+import ../nimkit/controls/menus
+import ../nimkit/drawing/images
+import ../nimkit/foundation/types
+import ../nimkit/responder/keybindings
 import
-  merenda/nimkit/resources/
+  ../nimkit/resources/
     [resrcconstruction, resrccore, resrclayout, resrcregistry, resrcvalidation]
-import merenda/nimkit/themes
-import merenda/nimkit/view/views
+import ../nimkit/themes
+import ../nimkit/view/views
 
 type
   ResourcePreviewObjectKind* = enum

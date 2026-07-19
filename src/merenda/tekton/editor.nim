@@ -4,22 +4,22 @@ import std/[algorithm, options, os, strutils]
 
 import sigils/[core, selectors]
 
-import merenda/nimkit/accessibility/accessibility
-import merenda/nimkit/app/[application, documents, windowcontrollers, windows]
-import merenda/nimkit/containers/[gridviews, outlineviews, tableviews]
-import merenda/nimkit/controls/[buttons, colorwells, comboboxes]
-import merenda/nimkit/debug/[selectionrings, viewselection]
-import merenda/nimkit/foundation/events
-import merenda/nimkit/foundation/[selectors as nimkitSelectors, types, undomanagers]
+import ../nimkit/accessibility/accessibility
+import ../nimkit/app/[application, documents, windowcontrollers, windows]
+import ../nimkit/containers/[gridviews, outlineviews, tableviews]
+import ../nimkit/controls/[buttons, colorwells, comboboxes]
+import ../nimkit/debug/[selectionrings, viewselection]
+import ../nimkit/foundation/events
+import ../nimkit/foundation/[selectors as nimkitSelectors, types, undomanagers]
 import
-  merenda/nimkit/resources/[
+  ../nimkit/resources/[
     resrccbor, resrcconstruction, resrccore, resrcdocument, resrcregistry,
     resrcvalidation,
   ]
-import merenda/nimkit/text/textfields
-import merenda/nimkit/themes
-import merenda/nimkit/view/views
-import merenda/tekton/[preview, valueediting]
+import ../nimkit/text/textfields
+import ../nimkit/themes
+import ../nimkit/view/views
+import ./[preview, valueediting]
 
 export valueediting
 

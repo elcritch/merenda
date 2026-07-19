@@ -2,7 +2,7 @@ import std/[algorithm, options, os, unittest]
 
 import merenda/nimkit
 import merenda/tekton
-import merenda/tekton/tekton
+import merenda/tekton/tkapp
 
 proc propertyRowIndex(editor: ResourceEditor, name: string): int =
   for index, row in editor.propertyRows():

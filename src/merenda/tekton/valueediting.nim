@@ -2,9 +2,9 @@
 
 import std/[sequtils, strutils]
 
-import merenda/nimkit/foundation/types
-import merenda/nimkit/resources/resrccore
-import merenda/nimkit/themes
+import ../nimkit/foundation/types
+import ../nimkit/resources/resrccore
+import ../nimkit/themes
 
 type ResourceValueParseResult* = object
   parsed*: bool

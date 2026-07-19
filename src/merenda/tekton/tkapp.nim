@@ -2,8 +2,8 @@
 
 import std/os
 
-import merenda/nimkit
-import merenda/tekton/editor
+import ../nimkit
+import ./editor
 
 const
   TektonNamespace* = "merenda.tekton"
@@ -88,11 +88,3 @@ proc runTekton*(fileUrl = "") =
   discard document.showWindows(app)
   app.run()
 
-when isMainModule:
-  let arguments = commandLineParams()
-  runTekton(
-    if arguments.len > 0:
-      arguments[0]
-    else:
-      ""
-  )
