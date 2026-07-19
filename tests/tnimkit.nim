@@ -5,7 +5,7 @@ import nimkit/boxes
 import nimkit/cascadingviews
 import nimkit/collectionviews
 import nimkit/comboboxes
-import nimkit/colorwells
+import nimkit/colorpicker
 import nimkit/constraints
 import nimkit/controls
 import nimkit/documents

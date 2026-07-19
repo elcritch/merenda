@@ -10,7 +10,7 @@ import ./nimkit/containers/collectionviews
 import ./nimkit/controls/buttons
 import ./nimkit/controls/cells
 import ./nimkit/controls/comboboxes
-import ./nimkit/controls/colorwells
+import ./nimkit/controls/colorpicker
 import ./nimkit/controls/controls
 import ./nimkit/controls/dialogbuttonboxes
 import ./nimkit/controls/fontpickers
@@ -81,7 +81,7 @@ export collectionviews
 export buttons
 export cells
 export comboboxes
-export colorwells
+export colorpicker
 export controls
 export dialogbuttonboxes
 export fontpickers

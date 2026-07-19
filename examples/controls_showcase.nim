@@ -13,7 +13,7 @@ proc stateName(state: ButtonState): string =
 
 let
   app = sharedApplication()
-  window = newWindow("Nimkit Controls Showcase", frame = rect(140, 140, 760, 500))
+  window = newWindow("Nimkit Controls Showcase", frame = rect(140, 140, 760, 580))
   root = newView()
 
   layout = newStackView(laVertical)
@@ -53,7 +53,10 @@ let
 
   popupTitle = newHeadingLabel("Combo Boxes")
   priority = newComboBox(["Low", "Medium", "High"])
-  color = newComboBox(["Red", "Green", "Blue"])
+  colorChoice = newComboBox(["Red", "Green", "Blue"])
+  colorWellTitle = newHeadingLabel("Color Picker")
+  accentColorWell = newColorWell(color(0.20, 0.48, 0.92, 1.0))
+  accentColorLabel = newStatusLabel("")
   sliderTitle = newHeadingLabel("Slider")
   volumeSlider = newSlider(0.0, 100.0, 42.0)
   volumeLabel = newStatusLabel("")
@@ -70,6 +73,7 @@ let
   choiceAction = actionSelector("showcaseChoiceChanged")
   radioAction = actionSelector("showcaseRadioChanged")
   comboAction = actionSelector("showcaseComboChanged")
+  colorWellAction = actionSelector("showcaseColorWellChanged")
   stepperAction = actionSelector("showcaseStepperChanged")
   contextToggleAction = actionSelector("showcaseContextToggleButton")
   contextDownloadsAction = actionSelector("showcaseContextToggleDownloads")
@@ -92,8 +96,9 @@ proc updateSummary() =
     nameField.stringValue & " / " & noteField.stringValue & " / Toggle: " &
     toggleButton.state.stateName & " / Downloads: " & downloads.state.stateName &
     " / Size: " & selectedSize() & " / Priority: " & priority.stringValue & " / Color: " &
-    color.stringValue & " / Volume: " & $int(volumeSlider.value) & " / Count: " &
-    countStepper.formattedValue & " / Power: " & powerSwitch.state.stateName
+    colorChoice.stringValue & " / Accent: " & accentColorWell.colorDescription() &
+    " / Volume: " & $int(volumeSlider.value) & " / Count: " & countStepper.formattedValue &
+    " / Power: " & powerSwitch.state.stateName
 
 proc updateToggleTitle() =
   toggleButton.title = "Toggle " & toggleButton.state.stateName
@@ -150,6 +155,14 @@ proc onChoiceChanged(sender: DynamicAgent) =
   if not sender.isNil:
     updateSummary()
 
+proc updateAccentColor() =
+  accentColorLabel.text = "Accent: " & accentColorWell.colorDescription()
+
+proc onColorWellChanged(sender: DynamicAgent) =
+  if sender == DynamicAgent(accentColorWell):
+    updateAccentColor()
+    updateSummary()
+
 proc cycleToggleButton(sender: DynamicAgent) =
   discard sender
   case toggleButton.state
@@ -181,7 +194,8 @@ proc resetControls(sender: DynamicAgent) =
   medium.state = bsOn
   large.state = bsOff
   priority.selectedIndex = 1
-  color.selectedIndex = 0
+  colorChoice.selectedIndex = 0
+  accentColorWell.color = color(0.20, 0.48, 0.92, 1.0)
   volumeSlider.value = 42.0
   countStepper.value = 2.0
   powerSwitch.state = bsOn
@@ -189,6 +203,7 @@ proc resetControls(sender: DynamicAgent) =
   updateVolumeLabel(volumeSlider)
   syncCountField()
   updatePowerSwitchLabel(powerSwitch)
+  updateAccentColor()
   updateSummary()
 
 let
@@ -236,12 +251,15 @@ for radio in [small, medium, large]:
   radio.action = radioAction
 
 priority.selectedIndex = 1
-color.selectedIndex = 0
+colorChoice.selectedIndex = 0
 
 let comboTarget = newActionTarget(comboAction, onChoiceChanged)
-for combo in [priority, color]:
+for combo in [priority, colorChoice]:
   combo.target = comboTarget
   combo.action = comboAction
+
+accentColorWell.target = newActionTarget(colorWellAction, onColorWellChanged)
+accentColorWell.action = colorWellAction
 
 volumeSlider.stepValue = 1.0
 volumeSlider.connect(actionDidSend, volumeSlider, updateSliderSummary)
@@ -294,12 +312,13 @@ inputColumn.addArrangedSubview(
 )
 inputColumn.addFlexibleSpacer()
 choiceColumn.addArrangedSubview(
-  choiceTitle, downloads, notifications, sync, sizeTitle, small, medium, large
+  choiceTitle, downloads, notifications, sync, sizeTitle, small, medium, large,
+  colorWellTitle, accentColorWell, accentColorLabel,
 )
 choiceColumn.addFlexibleSpacer()
 popupColumn.addArrangedSubview(
-  popupTitle, priority, color, sliderTitle, volumeSlider, volumeLabel, stepperTitle,
-  countRow, switchTitle, switchRow,
+  popupTitle, priority, colorChoice, sliderTitle, volumeSlider, volumeLabel,
+  stepperTitle, countRow, switchTitle, switchRow,
 )
 switchRow.addArrangedSubview(powerSwitch, powerSwitchLabel)
 bodyRow.addArrangedSubview(inputColumn, choiceColumn, popupColumn)
@@ -316,5 +335,6 @@ updateToggleTitle()
 updateVolumeLabel(volumeSlider)
 syncCountField()
 updatePowerSwitchLabel(powerSwitch)
+updateAccentColor()
 updateSummary()
 app.runWindow(window, root, nameField)

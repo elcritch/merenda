@@ -7,7 +7,7 @@ import sigils/[core, selectors]
 import ../nimkit/accessibility/accessibility
 import ../nimkit/app/[application, documents, windowcontrollers, windows]
 import ../nimkit/containers/[gridviews, outlineviews, tableviews]
-import ../nimkit/controls/[buttons, colorwells, comboboxes]
+import ../nimkit/controls/[buttons, colorpicker, comboboxes]
 import ../nimkit/debug/[selectionrings, viewselection]
 import ../nimkit/foundation/events
 import ../nimkit/foundation/[selectors as nimkitSelectors, types, undomanagers]
