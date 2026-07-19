@@ -35,7 +35,7 @@ protocol CellMeasurementProtocol:
   method cellSize*(): IntrinsicSize
   method cellSizeForBounds*(bounds: Rect): Size
 
-protocol CellEditingProtocol:
+protocol CellEditingProtocol {.setterStyle: nim.}:
   method fieldEditorForView*(controlView: View): FieldEditor {.optional.}
   method setUpFieldEditorAttributes*(
     editor: FieldEditor, controlView: View
@@ -59,7 +59,7 @@ protocol DefaultCellMeasurement of CellMeasurementProtocol:
   method cellSizeForBounds(cell: Cell, bounds: Rect): Size =
     cell.cellSize().resolveIntrinsicSize(bounds.size)
 
-protocol DefaultCellEditing of CellEditingProtocol from Cell:
+protocol DefaultCellEditing {.setterStyle: nim.} of CellEditingProtocol from Cell:
   method fieldEditorForView(cell: Cell, controlView: View): FieldEditor =
     nil
 
@@ -98,7 +98,7 @@ protocol DefaultCellEditing of CellEditingProtocol from Cell:
 proc invalidateViewCellMetrics(view: View) =
   if not view.isNil:
     view.invalidateIntrinsicContentSize()
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
 
 proc invalidateControlMetrics*(cell: Cell) =
   cell.controlView().invalidateViewCellMetrics()

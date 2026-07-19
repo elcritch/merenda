@@ -173,7 +173,7 @@ proc `allowsTabDragging=`*(tabView: TabView, allowed: bool) =
   if not allowed:
     tabView.xDraggingTab = false
     tabView.xPressedIndex = -1
-  tabView.xTabBar.setNeedsDisplay(true)
+  tabView.xTabBar.needsDisplay = true
 
 proc selectedTabViewItem*(tabView: TabView): TabViewItem =
   let index = tabView.xSelectedIndex
@@ -190,7 +190,7 @@ proc `tabPosition=`*(tabView: TabView, position: TabPosition) =
   tabView.xTabPosition = position
   tabView.syncTabBarFrame()
   tabView.setNeedsLayout()
-  tabView.setNeedsDisplay(true)
+  tabView.needsDisplay = true
 
 proc tabMode*(tabView: TabView): TabViewMode =
   tabView.xTabMode
@@ -202,8 +202,8 @@ proc `tabMode=`*(tabView: TabView, mode: TabViewMode) =
   tabView.invalidateIntrinsicContentSize()
   tabView.syncTabBarFrame()
   tabView.setNeedsLayout()
-  tabView.setNeedsDisplay(true)
-  tabView.xTabBar.setNeedsDisplay(true)
+  tabView.needsDisplay = true
+  tabView.xTabBar.needsDisplay = true
 
 func tabPanelOffset(mode: TabViewMode, style: TabViewStyle): float32 =
   case mode
@@ -386,8 +386,8 @@ proc moveTabViewItem(tabView: TabView, fromIndex, toIndex: int): bool =
   tabView.xSelectedIndex = tabView.indexOfTabViewItem(selectedItem)
   tabView.syncSelectedContent()
   tabView.setNeedsLayout()
-  tabView.setNeedsDisplay(true)
-  tabView.xTabBar.setNeedsDisplay(true)
+  tabView.needsDisplay = true
+  tabView.xTabBar.needsDisplay = true
   true
 
 proc selectedContentView(tabView: TabView): View =
@@ -442,8 +442,8 @@ protocol TabViewItemChangeSlots of TabViewItemEvents:
     case kind
     of tvickMetrics:
       tabView.invalidateIntrinsicContentSize()
-      tabView.setNeedsDisplay(true)
-      tabView.xTabBar.setNeedsDisplay(true)
+      tabView.needsDisplay = true
+      tabView.xTabBar.needsDisplay = true
     of tvickView:
       if not oldView.isNil:
         if oldView.superview() == View(tabView):
@@ -460,8 +460,8 @@ protocol TabViewItemChangeSlots of TabViewItemEvents:
       tabView.syncSelectedContent()
       tabView.setNeedsLayout()
     of tvickDisplay:
-      tabView.setNeedsDisplay(true)
-      tabView.xTabBar.setNeedsDisplay(true)
+      tabView.needsDisplay = true
+      tabView.xTabBar.needsDisplay = true
 
 proc observeItem(tabView: TabView, item: TabViewItem) =
   if item.isNil:
@@ -507,8 +507,8 @@ proc syncSelectedContent(tabView: TabView) =
       content.frame = tabView.contentViewRect()
     elif content.superview() == View(tabView):
       content.removeFromSuperview()
-  tabView.setNeedsDisplay(true)
-  tabView.xTabBar.setNeedsDisplay(true)
+  tabView.needsDisplay = true
+  tabView.xTabBar.needsDisplay = true
 
 proc shouldSelect(tabView: TabView, item: TabViewItem): bool =
   if item.isNil or not item.enabled():
@@ -594,7 +594,7 @@ proc addTabViewItem*(tabView: TabView, item: TabViewItem): TabViewItem {.discard
     tabView.xSelectedIndex = tabView.xItems.high
     tabView.syncSelectedContent()
   else:
-    tabView.setNeedsDisplay(true)
+    tabView.needsDisplay = true
   item
 
 proc insertTabViewItem*(
@@ -611,7 +611,7 @@ proc insertTabViewItem*(
   elif tabView.xSelectedIndex < 0 and item.enabled():
     tabView.xSelectedIndex = boundedIndex
     tabView.syncSelectedContent()
-  tabView.setNeedsDisplay(true)
+  tabView.needsDisplay = true
   item
 
 proc removeTabViewItemAtIndex*(tabView: TabView, index: int): bool {.discardable.} =
@@ -793,7 +793,7 @@ protocol TabBarEvents of ResponderEventProtocol:
       tabView.xPressedIndex = index
       tabView.xDraggingTab = false
       tabView.xTabDragStartPoint = event.location
-      tabBar.setNeedsDisplay(true)
+      tabBar.needsDisplay = true
       return true
     false
 
@@ -811,13 +811,13 @@ protocol TabBarEvents of ResponderEventProtocol:
         discard tabView.moveTabViewItem(
           tabView.xPressedIndex, tabView.tabDragDestinationIndex(event.location)
         )
-        tabBar.setNeedsDisplay(true)
+        tabBar.needsDisplay = true
         return true
     let index = tabView.tabIndexAtBarPoint(event.location)
     let nextPressed = if index == tabView.xPressedIndex: index else: -1
     if nextPressed != tabView.xPressedIndex:
       tabView.xPressedIndex = nextPressed
-      tabBar.setNeedsDisplay(true)
+      tabBar.needsDisplay = true
     true
 
   method mouseUp(tabBar: TabBarView, event: MouseEvent): bool =
@@ -829,12 +829,12 @@ protocol TabBarEvents of ResponderEventProtocol:
       return false
     tabView.xPressedIndex = -1
     if wasDragging:
-      tabBar.setNeedsDisplay(true)
+      tabBar.needsDisplay = true
       return true
     if pressed == tabView.tabIndexAtBarPoint(event.location):
       discard tabView.selectTabViewItemAtIndex(pressed)
     else:
-      tabBar.setNeedsDisplay(true)
+      tabBar.needsDisplay = true
     true
 
 protocol TabViewDrawing of ViewDrawingProtocol:
@@ -953,7 +953,7 @@ proc initTabViewFields*(tabView: TabView, frame: Rect = AutoRect) =
   tabView.xTabBar = newTabBarView(tabView)
   tabView.background = color(0.94, 0.95, 0.97, 0.0)
   tabView.clipsToBounds = true
-  tabView.setAcceptsFirstResponder(true)
+  tabView.acceptsFirstResponder = true
   discard tabView.withProto()
   discard tabView.withProtocol(TabViewDrawing)
   discard tabView.withProtocol(TabViewLayout)

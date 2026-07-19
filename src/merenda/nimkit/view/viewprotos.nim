@@ -9,50 +9,73 @@ import ./viewgeometry
 import ./viewbase
 import sigils/core
 
-protocol ViewProtocol from View:
+protocol ViewProtocol {.setterStyle: nim.} from View:
+  property tag -> int
+  property identifier -> string
   property frame -> Rect
   property bounds -> Rect
   property needsDisplay -> bool
   property backgroundColor -> Color
+  property hidden -> bool
+  property flipped -> bool
+  property focusRingType -> FocusRingType
+  property alphaValue -> float32
+  property shadow -> seq[BoxShadow]
+  property toolTip -> string
+  property styleId -> string
+  property styleClasses -> seq[string]
+  property usesThemedRootBackground -> bool
   property clipsToBounds -> bool
   property nextKeyView -> View
   property previousKeyView -> View
 
+  method tag(self: View): int =
+    self.xTag
+
+  method `tag=`(self: View, tag: int) =
+    self.xTag = tag
+
+  method identifier(self: View): string =
+    self.xIdentifier
+
+  method `identifier=`(self: View, identifier: string) =
+    self.xIdentifier = identifier
+
   method frame(self: View): Rect =
     self.xFrame
 
-  method setFrame(self: View, frame: Rect) =
+  method `frame=`(self: View, frame: Rect) =
     let nextFrame = self.resolvedFrame(frame)
     if frame.hasAutoMetric:
       self.autoresizingMaskConstraints = false
     if self.xFrame == nextFrame:
       return
     discard
-      recordPropertyAnimation(DynamicAgent(self), setFrame(), self.xFrame, nextFrame)
+      recordPropertyAnimation(DynamicAgent(self), `frame=`(), self.xFrame, nextFrame)
     self.xFrame = nextFrame
     self.xBounds = rect(self.xBounds.origin, nextFrame.size)
     self.invalidateLayoutItemGeometry(lirFrame)
     self.refreshAutoresizingReference()
     emit self.geometryDidChange()
-    self.setNeedsDisplay(true)
+    self.needsDisplay = true
 
   method bounds(self: View): Rect =
     self.xBounds
 
-  method setBounds(self: View, bounds: Rect) =
+  method `bounds=`(self: View, bounds: Rect) =
     if self.xBounds == bounds:
       return
     discard
-      recordPropertyAnimation(DynamicAgent(self), setBounds(), self.xBounds, bounds)
+      recordPropertyAnimation(DynamicAgent(self), `bounds=`(), self.xBounds, bounds)
     self.xBounds = rect(bounds.origin, bounds.size)
     emit self.layoutInputChanged(lirBounds)
     emit self.geometryDidChange()
-    self.setNeedsDisplay(true)
+    self.needsDisplay = true
 
   method needsDisplay(self: View): bool =
     self.xNeedsDisplay
 
-  method setNeedsDisplay(self: View, value: bool) =
+  method `needsDisplay=`(self: View, value: bool) =
     if not value:
       self.xNeedsDisplay = false
       self.xInvalidRects.setLen(0)
@@ -99,16 +122,95 @@ protocol ViewProtocol from View:
   method backgroundColor(self: View): Color =
     self.xBackgroundColor
 
-  method setBackgroundColor(self: View, color: Color) =
+  method `backgroundColor=`(self: View, color: Color) =
     if self.xBackgroundColor == color:
       return
     self.xBackgroundColor = color
-    self.setNeedsDisplay(true)
+    self.needsDisplay = true
+
+  method hidden(self: View): bool =
+    self.isHidden()
+
+  method flipped(self: View): bool =
+    self.xFlipped
+
+  method `flipped=`(self: View, flipped: bool) =
+    if self.xFlipped == flipped:
+      return
+    self.xFlipped = flipped
+    self.invalidateLayoutItemGeometry(lirBounds)
+    self.setNeedsDisplaySubtree()
+
+  method focusRingType(self: View): FocusRingType =
+    self.xFocusRingType
+
+  method `focusRingType=`(self: View, focusRingType: FocusRingType) =
+    if self.xFocusRingType == focusRingType:
+      return
+    self.xFocusRingType = focusRingType
+    self.needsDisplay = true
+
+  method alphaValue(self: View): float32 =
+    self.xAlphaValue
+
+  method `alphaValue=`(self: View, alphaValue: float32) =
+    let normalized = min(max(alphaValue, 0.0'f32), 1.0'f32)
+    if self.xAlphaValue == normalized:
+      return
+    discard recordPropertyAnimation(
+      DynamicAgent(self), `alphaValue=`(), self.xAlphaValue, normalized
+    )
+    self.xAlphaValue = normalized
+    self.setNeedsDisplaySubtree()
+
+  method shadow(self: View): seq[BoxShadow] =
+    self.xShadow
+
+  method `shadow=`(self: View, shadows: seq[BoxShadow]) =
+    if self.xShadow == shadows:
+      return
+    self.xShadow = shadows
+    self.needsDisplay = true
+
+  method toolTip(self: View): string =
+    self.xToolTip
+
+  method `toolTip=`(self: View, toolTip: string) =
+    self.xToolTip = toolTip
+
+  method styleId(self: View): string =
+    self.xStyleId
+
+  method `styleId=`(self: View, id: string) =
+    if self.xStyleId == id:
+      return
+    self.xStyleId = id
+    self.invalidateIntrinsicContentSize()
+    self.needsDisplay = true
+
+  method styleClasses(self: View): seq[string] =
+    self.xStyleClasses
+
+  method `styleClasses=`(self: View, classes: seq[string]) =
+    if self.xStyleClasses == classes:
+      return
+    self.xStyleClasses = classes
+    self.invalidateIntrinsicContentSize()
+    self.needsDisplay = true
+
+  method usesThemedRootBackground(self: View): bool =
+    self.xUsesThemedRootBackground
+
+  method `usesThemedRootBackground=`(self: View, enabled: bool) =
+    if self.xUsesThemedRootBackground == enabled:
+      return
+    self.xUsesThemedRootBackground = enabled
+    self.needsDisplay = true
 
   method clipsToBounds(self: View): bool =
     self.xClipsToBounds
 
-  method setClipsToBounds(self: View, clipsToBounds: bool) =
+  method `clipsToBounds=`(self: View, clipsToBounds: bool) =
     if self.xClipsToBounds == clipsToBounds:
       return
     self.xClipsToBounds = clipsToBounds
@@ -117,7 +219,7 @@ protocol ViewProtocol from View:
   method nextKeyView(self: View): View =
     self.xNextKeyView
 
-  method setNextKeyView(self: View, next: View) =
+  method `nextKeyView=`(self: View, next: View) =
     if self.xNextKeyView == next:
       return
 
@@ -136,7 +238,7 @@ protocol ViewProtocol from View:
   method previousKeyView(self: View): View =
     self.xPreviousKeyView
 
-  method setPreviousKeyView(self: View, previous: View) =
+  method `previousKeyView=`(self: View, previous: View) =
     if self.xPreviousKeyView == previous:
       return
     if previous.isNil:
@@ -145,7 +247,7 @@ protocol ViewProtocol from View:
         oldPrevious.xNextKeyView = nil
       self.xPreviousKeyView = nil
       return
-    previous.setNextKeyView(self)
+    previous.nextKeyView = self
 
   method canBecomeKeyView*(self: View): bool =
     self.viewCanBecomeKeyView()
@@ -179,7 +281,7 @@ protocol ViewProtocol from View:
   method isHidden*(self: View): bool =
     ssHidden in self.xWidgetStates
 
-  method setHidden*(self: View, hidden: bool) =
+  method `hidden=`*(self: View, hidden: bool) =
     if (ssHidden in self.xWidgetStates) == hidden:
       return
     if hidden:
@@ -187,7 +289,7 @@ protocol ViewProtocol from View:
     else:
       self.xWidgetStates.excl(ssHidden)
     self.invalidateLayoutItemGeometry(lirHidden)
-    self.setNeedsDisplay(true)
+    self.needsDisplay = true
 
   method isHiddenOrHasHiddenAncestor*(self: View): bool =
     var current = self
@@ -236,8 +338,8 @@ protocol ViewProtocol from View:
     self.xSuperview = nil
     self.resetAutoresizingState()
     self.clearNextResponder()
-    self.setNextKeyView(nil)
-    self.setPreviousKeyView(nil)
+    self.nextKeyView = nil
+    self.previousKeyView = nil
     self.setWindowOwner(nil)
     self.clearInheritedAppearance()
     emit self.viewDidMoveToSuperview()
@@ -316,50 +418,14 @@ protocol ViewSuperviewLifecycleSlots of ViewLifecycleProtocol:
   proc bindSuperviewGeometry(view: View) {.slotFor: viewDidMoveToSuperview.} =
     view.observeSuperviewGeometry()
 
-proc `frame=`*(view: View, frame: Rect) =
-  view.setFrame(frame)
-
-proc `bounds=`*(view: View, bounds: Rect) =
-  view.setBounds(bounds)
-
-proc `needsDisplay=`*(view: View, value: bool) =
-  view.setNeedsDisplay(value)
-
 proc background*(view: View): Color =
   view.backgroundColor()
 
 proc `background=`*(view: View, color: Color) =
-  view.setBackgroundColor(color)
-
-proc `backgroundColor=`*(view: View, color: Color) =
-  view.setBackgroundColor(color)
-
-proc usesThemedRootBackground*(view: View): bool =
-  view.xUsesThemedRootBackground
-
-proc `usesThemedRootBackground=`*(view: View, enabled: bool) =
-  if view.xUsesThemedRootBackground == enabled:
-    return
-  view.xUsesThemedRootBackground = enabled
-  view.setNeedsDisplay(true)
-
-proc `clipsToBounds=`*(view: View, clipsToBounds: bool) =
-  view.setClipsToBounds(clipsToBounds)
-
-proc `nextKeyView=`*(view: View, next: View) =
-  view.setNextKeyView(next)
-
-proc `previousKeyView=`*(view: View, previous: View) =
-  view.setPreviousKeyView(previous)
-
-proc hidden*(view: View): bool =
-  view.isHidden()
-
-proc `hidden=`*(view: View, hidden: bool) =
-  view.setHidden(hidden)
+  view.backgroundColor = color
 
 proc setNeedsDisplaySubtree*(view: View) =
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
   for child in view.xSubviews:
     child.setNeedsDisplaySubtree()
 
@@ -501,7 +567,7 @@ proc sortSubviews*(view: View, compare: proc(a, b: View): int) =
     return
   view.xSubviews.sort(compare)
   emit view.layoutInputChanged(lirHierarchy)
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 type NamedSubview* = tuple[view: View, name: string]
 

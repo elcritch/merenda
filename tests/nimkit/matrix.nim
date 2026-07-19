@@ -271,9 +271,9 @@ suite "nimkit matrix":
 
   test "matrix clones prototypes, reuses cells, and isolates cell view state":
     let prototype = newButtonCell("Prototype")
-    prototype.setButtonType(btCheckBox)
-    prototype.setAllowsMixedState(true)
-    prototype.setState(bsMixed)
+    prototype.buttonType = btCheckBox
+    prototype.allowsMixedState = true
+    prototype.state = bsMixed
 
     let matrix = newMatrix(2, 2, prototype)
     let
@@ -289,7 +289,7 @@ suite "nimkit matrix":
     check reused.state == bsMixed
     check reused.controlView() == View(matrix)
 
-    reused.setTitle("Changed")
+    reused.title = "Changed"
     check matrix.cellAt(0, 1).title == "Prototype"
 
     matrix.renewRowsColumns(3, 2)
@@ -304,7 +304,7 @@ suite "nimkit matrix":
     check detached.controlView().isNil
 
     let custom = newButtonCell("Custom")
-    custom.setButtonType(btCheckBox)
+    custom.buttonType = btCheckBox
     matrix[0, 0] = custom
 
     custom.setEnabled(false)

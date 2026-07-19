@@ -32,9 +32,9 @@ proc makeCard(
   card.background = color(0.99, 0.985, 0.955)
 
   imageView.backgroundColor = color(0.13, 0.15, 0.18)
-  imageView.setImageScaling(scaling)
-  imageView.setImageAlignment(iaCenter)
-  imageView.setImageTint(color(1.0, 1.0, 1.0, 1.0))
+  imageView.imageScaling = scaling
+  imageView.imageAlignment = iaCenter
+  imageView.imageTint = color(1.0, 1.0, 1.0, 1.0)
 
   card.addArrangedSubview(heading, imageView, caption)
   card

@@ -26,7 +26,7 @@ type
 proc invalidateBoxMetrics(box: Box) =
   box.invalidateContainerMetrics()
   box.setNeedsLayout()
-  box.setNeedsDisplay(true)
+  box.needsDisplay = true
 
 proc boxStyleContext(box: Box): StyleContext =
   controlStyle(
@@ -111,7 +111,7 @@ proc naturalSeparatorSize(box: Box): IntrinsicSize =
   of laVertical:
     initIntrinsicSize(thickness, NoIntrinsicMetric)
 
-protocol BoxProtocol {.selectorScope: protocol.} from Box:
+protocol BoxProtocol {.selectorScope: protocol, setterStyle: nim.} from Box:
   property boxTitle -> string
   property boxKind -> BoxKind
   property separatorAxis -> LayoutAxis
@@ -120,7 +120,7 @@ protocol BoxProtocol {.selectorScope: protocol.} from Box:
   method boxTitle(box: Box): string =
     box.xTitle
 
-  method setBoxTitle(box: Box, title: string) =
+  method `boxTitle=`(box: Box, title: string) =
     if box.xTitle == title:
       return
     box.xTitle = title
@@ -129,7 +129,7 @@ protocol BoxProtocol {.selectorScope: protocol.} from Box:
   method boxKind(box: Box): BoxKind =
     box.xKind
 
-  method setBoxKind(box: Box, kind: BoxKind) =
+  method `boxKind=`(box: Box, kind: BoxKind) =
     if box.xKind == kind:
       return
     box.xKind = kind
@@ -138,7 +138,7 @@ protocol BoxProtocol {.selectorScope: protocol.} from Box:
   method separatorAxis(box: Box): LayoutAxis =
     box.xSeparatorAxis
 
-  method setSeparatorAxis(box: Box, axis: LayoutAxis) =
+  method `separatorAxis=`(box: Box, axis: LayoutAxis) =
     if box.xSeparatorAxis == axis:
       return
     box.xSeparatorAxis = axis
@@ -147,7 +147,7 @@ protocol BoxProtocol {.selectorScope: protocol.} from Box:
   method contentView(box: Box): View =
     box.xContentView
 
-  method setContentView(box: Box, contentView: View) =
+  method `contentView=`(box: Box, contentView: View) =
     if not contentView.isNil and box.xContentView == contentView:
       return
 
@@ -170,7 +170,7 @@ protocol BoxProtocol {.selectorScope: protocol.} from Box:
     if child.isNil:
       return
     if box.xContentView.isNil:
-      box.setContentView(nil)
+      box.contentView = nil
     box.xContentView.addSubview(child)
     box.invalidateBoxMetrics()
 
@@ -178,16 +178,7 @@ proc title*(box: Box): string =
   box.boxTitle()
 
 proc `title=`*(box: Box, title: string) =
-  box.setBoxTitle(title)
-
-proc `boxKind=`*(box: Box, kind: BoxKind) =
-  box.setBoxKind(kind)
-
-proc `separatorAxis=`*(box: Box, axis: LayoutAxis) =
-  box.setSeparatorAxis(axis)
-
-proc `contentView=`*(box: Box, contentView: View) =
-  box.setContentView(contentView)
+  box.boxTitle = title
 
 proc intrinsicContentSize*(box: Box): IntrinsicSize =
   if box.xKind == bkSeparator:
@@ -330,7 +321,7 @@ proc initBoxFields*(
   discard box.withProtocol(DefaultBoxAccessibility)
   discard box.withProtocol(BoxLifecycleSlots)
   box.observeProtocol(box, BoxLifecycleSlots)
-  box.setContentView(nil)
+  box.contentView = nil
   box.applyInitialFrame(frame)
 
 proc newBox*(title = "", frame: Rect = AutoRect): Box =

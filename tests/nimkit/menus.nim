@@ -334,7 +334,7 @@ suite "nimkit menus":
       item = newMenuItem("Run", action)
 
     discard menu.addItem(item)
-    target.setAcceptsFirstResponder(true)
+    target.acceptsFirstResponder = true
     target.menu = menu
     root.addSubview(target)
     window.setContentView(root)

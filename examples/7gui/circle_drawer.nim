@@ -78,7 +78,7 @@ protocol CircleCanvasEvents of ResponderEventProtocol:
     let hit = canvas.selectedCircleAt(event.location)
     if hit >= 0:
       canvas.selectedIndex = hit
-      canvas.setNeedsDisplay(true)
+      canvas.needsDisplay = true
       return true
 
     let circle = Circle(center: event.location, diameter: DefaultDiameter)
@@ -87,20 +87,20 @@ protocol CircleCanvasEvents of ResponderEventProtocol:
     canvas.pushHistory(
       CircleAction(kind: cakCreate, index: canvas.selectedIndex, circle: circle)
     )
-    canvas.setNeedsDisplay(true)
+    canvas.needsDisplay = true
     true
 
   method mouseMoved(canvas: CircleCanvas, event: MouseEvent): bool =
     let hit = canvas.selectedCircleAt(event.location)
     if hit != canvas.selectedIndex:
       canvas.selectedIndex = hit
-      canvas.setNeedsDisplay(true)
+      canvas.needsDisplay = true
     true
 
   method rightMouseDown(canvas: CircleCanvas, event: MouseEvent): bool =
     let hit = canvas.selectedCircleAt(event.location)
     canvas.selectedIndex = hit
-    canvas.setNeedsDisplay(true)
+    canvas.needsDisplay = true
     if not canvas.adjustItem.isNil:
       canvas.adjustItem.enabled = hit >= 0
     if hit >= 0 and not canvas.menu().isNil:
@@ -113,7 +113,7 @@ proc newCircleCanvas(): CircleCanvas =
   initViewFields(result)
   result.accessibilityRole = arGroup
   result.accessibilityLabel = "Circle canvas"
-  result.setAcceptsFirstResponder(true)
+  result.acceptsFirstResponder = true
   discard result.withProtocol(CircleCanvasDrawing)
   discard result.withProtocol(CircleCanvasEvents)
 
@@ -160,7 +160,7 @@ proc undoLast(canvas: CircleCanvas) =
       canvas.selectedIndex = action.index
   canvas.redoStack.add action
   canvas.updateHistoryButtons()
-  canvas.setNeedsDisplay(true)
+  canvas.needsDisplay = true
 
 proc redoLast(canvas: CircleCanvas) =
   if canvas.redoStack.len == 0:
@@ -177,7 +177,7 @@ proc redoLast(canvas: CircleCanvas) =
       canvas.selectedIndex = action.index
   canvas.undoStack.add action
   canvas.updateHistoryButtons()
-  canvas.setNeedsDisplay(true)
+  canvas.needsDisplay = true
 
 proc openDiameterEditor(canvas: CircleCanvas) =
   let index = canvas.selectedIndex
@@ -203,7 +203,7 @@ proc openDiameterEditor(canvas: CircleCanvas) =
     discard sender
     if index in 0 ..< canvas.circles.len:
       canvas.circles[index].diameter = slider.value
-      canvas.setNeedsDisplay(true)
+      canvas.needsDisplay = true
       updateLabel()
 
   proc finishDiameterEdit(sender: DynamicAgent) =

@@ -366,7 +366,7 @@ proc installCellsSelectionAppearance(table: TableView) =
 
   appearance[tableStyle, StyleColumnSelectionFill] = selectionFill
   appearance[tableStyle, StyleColumnHoverFill] = hoverFill
-  table.styleClasses = [CellsTableClass]
+  table.styleClasses = @[CellsTableClass]
   table.appearance = appearance
 
 let

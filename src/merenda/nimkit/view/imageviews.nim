@@ -75,7 +75,7 @@ proc imageRectForBounds(
 
   rect(x, y, drawSize.width, drawSize.height)
 
-protocol ImageViewProtocol from ImageView:
+protocol ImageViewProtocol {.setterStyle: nim.} from ImageView:
   property image -> ImageResource
   property imageScaling -> ImageScaling
   property imageAlignment -> ImageAlignment
@@ -84,39 +84,39 @@ protocol ImageViewProtocol from ImageView:
   method image(imageView: ImageView): ImageResource =
     imageView.xImage
 
-  method setImage(imageView: ImageView, image: ImageResource) =
+  method `image=`(imageView: ImageView, image: ImageResource) =
     if imageView.xImage == image:
       return
     imageView.xImage = image
     imageView.invalidateIntrinsicContentSize()
-    imageView.setNeedsDisplay(true)
+    imageView.needsDisplay = true
 
   method imageScaling(imageView: ImageView): ImageScaling =
     imageView.xScaling
 
-  method setImageScaling(imageView: ImageView, scaling: ImageScaling) =
+  method `imageScaling=`(imageView: ImageView, scaling: ImageScaling) =
     if imageView.xScaling == scaling:
       return
     imageView.xScaling = scaling
-    imageView.setNeedsDisplay(true)
+    imageView.needsDisplay = true
 
   method imageAlignment(imageView: ImageView): ImageAlignment =
     imageView.xAlignment
 
-  method setImageAlignment(imageView: ImageView, alignment: ImageAlignment) =
+  method `imageAlignment=`(imageView: ImageView, alignment: ImageAlignment) =
     if imageView.xAlignment == alignment:
       return
     imageView.xAlignment = alignment
-    imageView.setNeedsDisplay(true)
+    imageView.needsDisplay = true
 
   method imageTint(imageView: ImageView): Color =
     imageView.xTint
 
-  method setImageTint(imageView: ImageView, tint: Color) =
+  method `imageTint=`(imageView: ImageView, tint: Color) =
     if imageView.xTint == tint:
       return
     imageView.xTint = tint
-    imageView.setNeedsDisplay(true)
+    imageView.needsDisplay = true
 
 protocol ImageViewDrawing of ViewDrawingProtocol:
   method draw(imageView: ImageView, context: DrawContext) =

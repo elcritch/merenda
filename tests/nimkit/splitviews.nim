@@ -27,7 +27,7 @@ suite "nimkit split views":
 
     check splitView.conformsTo(SplitViewProtocol)
     check splitView.autosaveName() == ""
-    splitView.setAutosaveName("workspace")
+    splitView.autosaveName = "workspace"
     check splitView.autosaveName() == "workspace"
 
   test "split view protocol exposes selector-backed properties":

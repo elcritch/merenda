@@ -126,7 +126,7 @@ proc selectBuffer(view: SynEditRelaysView, index: int) =
   if view.isNil or index < 0 or index >= view.buffers.len:
     return
   view.selectedIndex = index
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc bufferIndex(view: SynEditRelaysView, identifier: string): int =
   if view.isNil:
@@ -138,7 +138,7 @@ proc bufferIndex(view: SynEditRelaysView, identifier: string): int =
 
 proc enqueue(view: SynEditRelaysView, event: ui.Event) =
   view.pendingEvents.add event
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc enqueueText(view: SynEditRelaysView, text: string) =
   for event in text.toUIRelaysTextInputEvents():
@@ -166,7 +166,7 @@ proc drawEditor(view: SynEditRelaysView) =
       view.drawEditorEvent(event, area, focused)
 
   if focused:
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
 
 protocol SynEditRelaysDrawing of UIRelaysViewHooks:
   method drawUIRelays(view: SynEditRelaysView) =
@@ -232,7 +232,7 @@ proc newSynEditRelaysView(
   result = SynEditRelaysView()
   result.initUIRelaysViewFields(frame = frame)
   result.buffers = @buffers
-  result.setAcceptsFirstResponder(true)
+  result.acceptsFirstResponder = true
   discard result.withProtocol(SynEditRelaysDrawing)
   discard result.withProtocol(SynEditRelaysEvents)
   discard result.withProtocol(SynEditRelaysTextInput)

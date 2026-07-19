@@ -111,7 +111,7 @@ proc flexibleSpacer*(axis = laVertical, frame: Rect = AutoRect): View =
 
 proc invalidateStackLayout(stackView: StackView) =
   stackView.invalidateContainerMetrics()
-  stackView.setNeedsDisplay(true)
+  stackView.needsDisplay = true
 
 proc arrangedIndex(stackView: StackView, child: View): int =
   if child.isNil:
@@ -329,52 +329,65 @@ proc layoutStackSubviews(stackView: StackView) =
     child.setFrameFromStackLayout(frame)
     mainCursor += mainSizes[index] + spacing
 
-proc orientation*(stackView: StackView): LayoutAxis =
-  stackView.xOrientation
+protocol StackViewProtocol {.selectorScope: protocol, setterStyle: nim.} from StackView:
+  property orientation -> LayoutAxis
+  property spacing -> float32
+  property edgeInsets -> EdgeInsets
+  property stackAlignment -> StackViewAlignment
+  property distribution -> StackViewDistribution
 
-proc `orientation=`*(stackView: StackView, orientation: LayoutAxis) =
-  if stackView.xOrientation == orientation:
-    return
-  stackView.xOrientation = orientation
-  stackView.invalidateStackLayout()
+  method orientation(stackView: StackView): LayoutAxis =
+    stackView.xOrientation
 
-proc spacing*(stackView: StackView): float32 =
-  stackView.xSpacing
+  method `orientation=`(stackView: StackView, orientation: LayoutAxis) =
+    if stackView.xOrientation == orientation:
+      return
+    stackView.xOrientation = orientation
+    stackView.invalidateStackLayout()
 
-proc `spacing=`*(stackView: StackView, spacing: float32) =
-  let normalized = spacing.normalizedSpacing()
-  if stackView.xSpacing == normalized:
-    return
-  stackView.xSpacing = normalized
-  stackView.invalidateStackLayout()
+  method spacing(stackView: StackView): float32 =
+    stackView.xSpacing
 
-proc edgeInsets*(stackView: StackView): EdgeInsets =
-  stackView.xEdgeInsets
+  method `spacing=`(stackView: StackView, spacing: float32) =
+    let normalized = spacing.normalizedSpacing()
+    if stackView.xSpacing == normalized:
+      return
+    stackView.xSpacing = normalized
+    stackView.invalidateStackLayout()
 
-proc `edgeInsets=`*(stackView: StackView, insets: EdgeInsets) =
-  let normalized = insets.normalizedInsets()
-  if stackView.xEdgeInsets == normalized:
-    return
-  stackView.xEdgeInsets = normalized
-  stackView.invalidateStackLayout()
+  method edgeInsets(stackView: StackView): EdgeInsets =
+    stackView.xEdgeInsets
+
+  method `edgeInsets=`(stackView: StackView, insets: EdgeInsets) =
+    let normalized = insets.normalizedInsets()
+    if stackView.xEdgeInsets == normalized:
+      return
+    stackView.xEdgeInsets = normalized
+    stackView.invalidateStackLayout()
+
+  method stackAlignment(stackView: StackView): StackViewAlignment =
+    stackView.xAlignment
+
+  method `stackAlignment=`(stackView: StackView, alignment: StackViewAlignment) =
+    if stackView.xAlignment == alignment:
+      return
+    stackView.xAlignment = alignment
+    stackView.invalidateStackLayout()
+
+  method distribution(stackView: StackView): StackViewDistribution =
+    stackView.xDistribution
+
+  method `distribution=`(stackView: StackView, distribution: StackViewDistribution) =
+    if stackView.xDistribution == distribution:
+      return
+    stackView.xDistribution = distribution
+    stackView.invalidateStackLayout()
 
 proc alignment*(stackView: StackView): StackViewAlignment =
-  stackView.xAlignment
+  stackView.stackAlignment()
 
 proc `alignment=`*(stackView: StackView, alignment: StackViewAlignment) =
-  if stackView.xAlignment == alignment:
-    return
-  stackView.xAlignment = alignment
-  stackView.invalidateStackLayout()
-
-proc distribution*(stackView: StackView): StackViewDistribution =
-  stackView.xDistribution
-
-proc `distribution=`*(stackView: StackView, distribution: StackViewDistribution) =
-  if stackView.xDistribution == distribution:
-    return
-  stackView.xDistribution = distribution
-  stackView.invalidateStackLayout()
+  stackView.stackAlignment = alignment
 
 proc intrinsicContentSize*(stackView: StackView): IntrinsicSize =
   initIntrinsicSize(stackView.stackNaturalSize())
@@ -437,6 +450,7 @@ proc initStackViewFields*(
   stackView.xSpacing = 8.0'f32
   stackView.xAlignment = svaFill
   stackView.xDistribution = svdFill
+  discard stackView.withProto()
   discard stackView.withProtocol(DefaultStackViewLayout)
   discard stackView.withProtocol(StackViewLifecycleSlots)
   stackView.observeProtocol(stackView, StackViewLifecycleSlots)

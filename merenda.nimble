@@ -12,7 +12,7 @@ requires "chronicles"
 requires "figdraw[siwin, sharedlib, harfbuzz] >= 0.31.7"
 requires "gh:elcritch/kiwiberry"
 requires "siwin#063fc0f"
-requires "sigils[sigNameAsString, closures] >= 0.25.1"
+requires "sigils[sigNameAsString, closures] >= 0.25.3"
 requires "cborious"
 
 feature "libbacktrace":

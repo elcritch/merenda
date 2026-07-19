@@ -68,7 +68,7 @@ proc installSvg(
 ) =
   canvas.svg = svg
   canvas.accessibilityLabel = displayName
-  canvas.setNeedsDisplay(true)
+  canvas.needsDisplay = true
   var mtsdfCount = 0
   for layer in canvas.svg.layers:
     if layer.kind in {slkMtsdfFill, slkMtsdfStroke}:
@@ -112,7 +112,7 @@ proc updateZoom(slider: Slider, sender: DynamicAgent) {.slot.} =
   discard sender
   canvas.zoom = slider.value.float32
   zoomLabel.text = "Zoom: " & $int(round(canvas.zoom * 100.0'f32)) & "%"
-  canvas.setNeedsDisplay(true)
+  canvas.needsDisplay = true
 
 openButton.target = newActionTarget(actionSelector("openSvg"), openSvg)
 openButton.action = actionSelector("openSvg")

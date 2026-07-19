@@ -1222,7 +1222,7 @@ proc `tableRole=`*(tableView: TableView, role: StyleRole) =
     return
   tableView.xTableRole = role
   tableView.invalidateIntrinsicContentSize()
-  tableView.setNeedsDisplay(true)
+  tableView.needsDisplay = true
 
 proc rowItemRole*(tableView: TableView): StyleRole =
   tableView.xItemRole
@@ -1266,7 +1266,7 @@ proc initTableBaseChild(view: View, clipsToBounds: bool) =
   view.background = color(0.0, 0.0, 0.0, 0.0)
   view.autoresizingMaskConstraints = false
   view.clipsToBounds = clipsToBounds
-  view.setAcceptsFirstResponder(false)
+  view.acceptsFirstResponder = false
 
 proc rowTextForSummary(tableView: TableView, row: int): string =
   let column = tableView.columnAt(0)
@@ -1572,7 +1572,7 @@ proc `rowHeaderTitle=`*(tableView: TableView, title: string) =
   if tableView.xRowHeaderTitle == title:
     return
   tableView.xRowHeaderTitle = title
-  tableView.setNeedsDisplay(true)
+  tableView.needsDisplay = true
 
 proc `showsRowHeader=`*(tableView: TableView, value: bool) =
   if tableView.xShowsRowHeader == value:
@@ -2216,12 +2216,12 @@ proc viewportSize(tableView: TableView): Size =
 
 proc invalidateTableRows(tableView: TableView) =
   tableView.xContentView.syncVisibleRowViews()
-  tableView.xScrollView.setNeedsDisplay(true)
+  tableView.xScrollView.needsDisplay = true
   let scroller = tableView.xScrollView.verticalScroller()
   if not scroller.isNil:
-    scroller.setNeedsDisplay(true)
-  tableView.xContentView.setNeedsDisplay(true)
-  tableView.setNeedsDisplay(true)
+    scroller.needsDisplay = true
+  tableView.xContentView.needsDisplay = true
+  tableView.needsDisplay = true
 
 proc uncachedRowHeightForRow(tableView: TableView, index: int): float32 =
   if index notin 0 ..< tableView.len():
@@ -2715,7 +2715,7 @@ proc clearFocusedColumn(tableView: TableView) =
   if tableView.xFocusedColumn.isNil:
     return
   tableView.xFocusedColumn = nil
-  tableView.setNeedsDisplay(true)
+  tableView.needsDisplay = true
 
 proc selectableCellColumns(tableView: TableView, row: int): seq[TableColumn] =
   if row notin 0 ..< tableView.len():
@@ -2766,7 +2766,7 @@ proc setFocusedCellColumn(
       previousSelectedColumns != tableView.xSelectedColumns:
     if not tableView.window().isNil:
       tableView.scrollCellToVisible(row, column)
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
     if notifySelection and previousSelectedColumns != tableView.xSelectedColumns:
       emit tableView.selectionDidChange(DynamicAgent(tableView))
       tableView.postAccessibilityNotification(anSelectionChanged)
@@ -2790,7 +2790,7 @@ proc selectCellAtIndex(
   discard tableView.setFocusedCellColumn(index, column, notifySelection = false)
   tableView.xClickedRow = index
   tableView.xClickedColumn = column
-  tableView.setNeedsDisplay(true)
+  tableView.needsDisplay = true
   if tableView.xAllowsColumnSelection and
       previousSelectedColumns != tableView.xSelectedColumns and
       previousSelectedIndexes == tableView.xSelectedIndexes:
@@ -3359,7 +3359,7 @@ proc `allowsColumnSelection=`*(tableView: TableView, value: bool) =
   if not value:
     tableView.xSelectedColumns.setLen(0)
     tableView.clearPointerColumnHighlight()
-  tableView.setNeedsDisplay(true)
+  tableView.needsDisplay = true
 
 proc tracksPointerRowHighlights*(tableView: TableView): bool =
   tableView.xTracksPointerRowHighlights
@@ -3990,7 +3990,7 @@ proc setEditingValidation(tableView: TableView, error: ObjectValidationError) =
   else:
     Control(tableView).clearValidationError()
   if hadError or error.failed():
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
 
 proc parseEditingObjectValue(tableView: TableView, value: string): ObjectParseResult =
   if not tableView.xEditing.active:
@@ -4103,7 +4103,7 @@ proc finishCommitEditingCell(tableView: TableView, value: string): bool =
   )
   Control(tableView).clearValidationError()
   tableView.clearTableCellSlots()
-  tableView.setNeedsDisplay(true)
+  tableView.needsDisplay = true
   true
 
 proc finishCancelEditingCell(tableView: TableView): bool =
@@ -4122,7 +4122,7 @@ proc finishCancelEditingCell(tableView: TableView): bool =
       didCancelEditingCell(),
       (tableView: tableView, row: editing.row, column: editing.column),
     )
-  tableView.setNeedsDisplay(true)
+  tableView.needsDisplay = true
   true
 
 proc editableColumns(tableView: TableView): seq[TableColumn] =
@@ -4484,7 +4484,7 @@ proc noteColumnsChanged(tableView: TableView) =
   tableView.clearTableCellSlots()
   tableView.invalidateTableWidthMeasurement()
   tableView.setNeedsLayout()
-  tableView.setNeedsDisplay(true)
+  tableView.needsDisplay = true
 
 proc syncTableScrollChrome(tableView: TableView) =
   tableView.xScrollView.scrollerInsets =
@@ -5137,7 +5137,7 @@ proc defaultTableViewMouseUp*(tableView: TableView, event: MouseEvent): bool =
     tableView.activateCellAtIndex(
       index, tableView.tableColumnAtPoint(event.location), event.modifiers
     )
-  tableView.setNeedsDisplay(true)
+  tableView.needsDisplay = true
   true
 
 proc defaultTableViewKeyDown*(tableView: TableView, event: KeyEvent): bool =
@@ -5237,7 +5237,7 @@ proc initTableScrollView(tableView: TableView): ScrollView =
   result.autohidesScrollers = true
   result.scrollerThickness = 12.0'f32
   result.lineScroll = tableView.rowHeight()
-  result.setAcceptsFirstResponder(false)
+  result.acceptsFirstResponder = false
   result.autoresizingMaskConstraints = false
 
 proc drawTableHeaderSortIndicator*(
@@ -5651,7 +5651,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
         tableView.installFieldEditorOnSurface(editor)
     tableView.syncHeaderTrackingAreas()
     tableView.setNeedsLayout()
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
 
   method moveColumn(tableView: TableView, fromIndex, toIndex: int) =
     if fromIndex notin 0 ..< tableView.xColumns.len:
@@ -5722,7 +5722,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
         tableView.rowHeightForRow(hit.row)
       else:
         0.0'f32
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
     true
 
   method headerMouseDragged(tableView: TableView, event: MouseEvent): bool =
@@ -5757,7 +5757,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
           tableView.setHeaderDragInsertion(
             tableView.headerInsertionIndexAtPoint(event.location)
           )
-        tableView.setNeedsDisplay(true)
+        tableView.needsDisplay = true
     of thpNone:
       discard
     true
@@ -5804,7 +5804,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
           else:
             tsdAscending
         tableView.requestSort(clickedColumn, nextDirection)
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
     true
 
   method headerMouseMoved(tableView: TableView, event: MouseEvent): bool =
@@ -5812,7 +5812,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     if tableView.xHoveredColumn == column:
       return column != nil
     tableView.xHoveredColumn = column
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
     column != nil
 
 protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
@@ -5828,7 +5828,7 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
     discard tableView.setFocusedCellColumn(row, column, notifySelection = false)
     tableView.xClickedRow = row
     tableView.xClickedColumn = column
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
     if tableView.xAllowsColumnSelection and
         previousSelectedColumns != tableView.xSelectedColumns and
         previousSelectedIndexes == tableView.xSelectedIndexes:
@@ -5856,7 +5856,7 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
       tableView.xFocusedColumn = next[0]
     else:
       tableView.clearFocusedColumn()
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
     emit tableView.selectionDidChange(DynamicAgent(tableView))
     tableView.postAccessibilityNotification(anSelectionChanged)
 
@@ -6005,7 +6005,7 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
     tableView.installFieldEditorOnSurface(editor)
     tableView.focused = true
     tableView.focusVisible = editor.isFocusVisible()
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
 
   method didChangeFocusInEditor(tableView: TableView, editor: FieldEditor) =
     if Control(tableView).activeEditor() != editor:
@@ -6037,7 +6037,7 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
     Control(tableView).setCurrentEditor(nil)
     tableView.focused = false
     tableView.focusVisible = false
-    tableView.setNeedsDisplay(true)
+    tableView.needsDisplay = true
 
   method didEndEditingReason(
       tableView: TableView, editor: FieldEditor, reason: TextEditReason
@@ -6509,7 +6509,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xScrollView = initTableScrollView(tableView)
   tableView.xContentView = initTableContentView(tableView)
   tableView.xScrollView.documentView = tableView.xContentView
-  tableView.setAcceptsFirstResponder(true)
+  tableView.acceptsFirstResponder = true
   tableView.clipsToBounds = true
   tableView.addSubview(tableView.xScrollView)
   tableView.syncTableScrollChrome()

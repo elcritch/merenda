@@ -131,8 +131,6 @@ proc popupListData(comboBox: ComboBox): PopupListData
 proc popupListActions(comboBox: ComboBox): PopupListActions
 proc popupList(comboBox: ComboBox): PopupListView
 proc itemObjectValueAtIndex*(comboBox: ComboBox, index: int): ObjectValue
-proc `selectedOptionIdentifier=`*(comboBox: ComboBox, identifier: string)
-proc `optionFilterText=`*(comboBox: ComboBox, text: string)
 proc indexOfOptionMatchingText*(comboBox: ComboBox, text: string, startIndex = 0): int
 proc insertStoredItem(
   comboBox: ComboBox, title: string, objectValue: ObjectValue, index: int
@@ -491,7 +489,7 @@ protocol DefaultComboBoxAccessibility of AccessibilityProtocol:
     comboBox.popupOpen = true
     true
 
-protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
+protocol ComboBoxProtocol {.selectorScope: protocol, setterStyle: nim.} from ComboBox:
   property selectedIndex -> int
   property selectedOptionIdentifier -> string
   property popupOpen -> bool
@@ -505,7 +503,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   method selectedIndex(comboBox: ComboBox): int =
     comboBox.indexOfSelectedItem()
 
-  method setSelectedIndex(comboBox: ComboBox, index: int) =
+  method `selectedIndex=`(comboBox: ComboBox, index: int) =
     if index < 0:
       comboBox.deselectItem()
     else:
@@ -514,7 +512,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   method popupOpen(comboBox: ComboBox): bool =
     ssOpen in comboBox.widgetStateSet()
 
-  method setPopupOpen(comboBox: ComboBox, open: bool) =
+  method `popupOpen=`(comboBox: ComboBox, open: bool) =
     let wasOpen = comboBox.popupOpen()
     let shouldOpen = open and comboBox.isEnabled and comboBox.numberOfItems() > 0
     if wasOpen == shouldOpen:
@@ -548,7 +546,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   method maxVisibleItems(comboBox: ComboBox): int =
     comboBox.comboBoxCell().cellMaxVisibleItems()
 
-  method setMaxVisibleItems(comboBox: ComboBox, value: int) =
+  method `maxVisibleItems=`(comboBox: ComboBox, value: int) =
     comboBox.comboBoxCell().setCellMaxVisibleItems(value)
     if comboBox.popupOpen():
       comboBox.scrollPopupItemToVisible(comboBox.highlightedIndex())
@@ -558,7 +556,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   method itemHeight(comboBox: ComboBox): float32 =
     comboBox.comboBoxCell().cellItemHeight()
 
-  method setItemHeight(comboBox: ComboBox, value: float32) =
+  method `itemHeight=`(comboBox: ComboBox, value: float32) =
     comboBox.comboBoxCell().setCellItemHeight(value)
     if comboBox.popupOpen():
       comboBox.scrollPopupItemToVisible(comboBox.highlightedIndex())
@@ -568,17 +566,17 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   method popupPresentation(comboBox: ComboBox): PopupPresentation =
     comboBox.xPopupPresentation
 
-  method setPopupPresentation(comboBox: ComboBox, presentation: PopupPresentation) =
+  method `popupPresentation=`(comboBox: ComboBox, presentation: PopupPresentation) =
     if comboBox.xPopupPresentation == presentation:
       return
     comboBox.xPopupPresentation = presentation
     comboBox.updatePopupPresentation()
-    comboBox.setNeedsDisplay(true)
+    comboBox.needsDisplay = true
 
   method optionFilterText(comboBox: ComboBox): string =
     comboBox.xOptionFilterText
 
-  method setOptionFilterText(comboBox: ComboBox, text: string) =
+  method `optionFilterText=`(comboBox: ComboBox, text: string) =
     if comboBox.xOptionFilterText == text:
       return
     comboBox.xOptionFilterText = text
@@ -596,7 +594,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   method sizingMode(comboBox: ComboBox): ComboBoxSizingMode =
     comboBox.comboBoxCell().xSizingMode
 
-  method setSizingMode(comboBox: ComboBox, mode: ComboBoxSizingMode) =
+  method `sizingMode=`(comboBox: ComboBox, mode: ComboBoxSizingMode) =
     let cell = comboBox.comboBoxCell()
     if cell.xSizingMode == mode:
       return
@@ -606,7 +604,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   method preferredContentWidth(comboBox: ComboBox): float32 =
     comboBox.comboBoxCell().xPreferredContentWidth
 
-  method setPreferredContentWidth(comboBox: ComboBox, width: float32) =
+  method `preferredContentWidth=`(comboBox: ComboBox, width: float32) =
     let
       cell = comboBox.comboBoxCell()
       normalizedWidth = max(width, 0.0'f32)
@@ -713,7 +711,7 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
   method selectedOptionIdentifier*(comboBox: ComboBox): string =
     comboBox.comboBoxCell().xSelectedIdentifier
 
-  method setSelectedOptionIdentifier(comboBox: ComboBox, identifier: string) =
+  method `selectedOptionIdentifier=`(comboBox: ComboBox, identifier: string) =
     comboBox.selectOptionWithIdentifier(identifier)
 
   method selectOptionWithIdentifier*(comboBox: ComboBox, identifier: string) =
@@ -847,13 +845,13 @@ protocol ComboBoxProtocol {.selectorScope: protocol.} from ComboBox:
     discard comboBox.sendAction()
 
   method openPopup*(comboBox: ComboBox) =
-    comboBox.setPopupOpen(true)
+    comboBox.popupOpen = true
 
   method closePopup*(comboBox: ComboBox) =
-    comboBox.setPopupOpen(false)
+    comboBox.popupOpen = false
 
   method togglePopup*(comboBox: ComboBox) =
-    comboBox.setPopupOpen(not comboBox.popupOpen())
+    comboBox.popupOpen = not comboBox.popupOpen()
 
   method reloadData*(comboBox: ComboBox) =
     comboBox.xDataSourceItemCountValid = false
@@ -991,7 +989,7 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
       comboBox.popupList().resetPopupListTracking()
       comboBox.setWidgetState(ssPressed, true)
       comboBox.togglePopup()
-      comboBox.setNeedsDisplay(true)
+      comboBox.needsDisplay = true
     true
 
   method mouseDragged(comboBox: ComboBox, event: MouseEvent): bool =
@@ -1019,7 +1017,7 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
       comboBox.popupList().finishPopupListTracking(
         comboBox.popupRect(comboBox.bounds()), event.location, closeWhenDone = false
       )
-    comboBox.setNeedsDisplay(true)
+    comboBox.needsDisplay = true
     true
 
   method wantsForwardedScrollEvents(comboBox: ComboBox, event: ScrollEvent): bool =
@@ -1073,7 +1071,7 @@ protocol DefaultComboBoxEvents of ResponderEventProtocol:
       comboBox.closePopup()
     else:
       if comboBox.isEditable and event.text.len > 0:
-        comboBox.setStringValue(event.text)
+        comboBox.stringValue = event.text
       elif event.text.len > 0:
         let start =
           if comboBox.highlightedIndex() >= 0:
@@ -1309,11 +1307,11 @@ proc installComboBoxTextSelectors(comboBox: ComboBox) =
   discard
     comboBox.replaceMethod(stringValue(), DynamicMethod(comboBoxStringValueMethod))
   discard comboBox.replaceMethod(
-    setStringValue(), DynamicMethod(comboBoxSetStringValueMethod)
+    `stringValue=`(), DynamicMethod(comboBoxSetStringValueMethod)
   )
   discard comboBox.replaceMethod(isEditable(), DynamicMethod(comboBoxIsEditableMethod))
   discard
-    comboBox.replaceMethod(setEditable(), DynamicMethod(comboBoxSetEditableMethod))
+    comboBox.replaceMethod(`editable=`(), DynamicMethod(comboBoxSetEditableMethod))
 
 proc initComboBoxCellFields*(cell: ComboBoxCell) =
   initActionCellFields(cell)
@@ -1340,37 +1338,10 @@ proc text*(comboBox: ComboBox): string =
   comboBox.stringValue()
 
 proc `text=`*(comboBox: ComboBox, value: string) =
-  comboBox.setStringValue(value)
-
-proc `stringValue=`*(comboBox: ComboBox, value: string) =
-  comboBox.setStringValue(value)
+  comboBox.stringValue = value
 
 proc editable*(comboBox: ComboBox): bool =
   comboBox.isEditable()
-
-proc `editable=`*(comboBox: ComboBox, editable: bool) =
-  comboBox.setEditable(editable)
-
-proc `selectedIndex=`*(comboBox: ComboBox, index: int) =
-  comboBox.setSelectedIndex(index)
-
-proc `popupOpen=`*(comboBox: ComboBox, open: bool) =
-  comboBox.setPopupOpen(open)
-
-proc `maxVisibleItems=`*(comboBox: ComboBox, value: int) =
-  comboBox.setMaxVisibleItems(value)
-
-proc `itemHeight=`*(comboBox: ComboBox, value: float32) =
-  comboBox.setItemHeight(value)
-
-proc `popupPresentation=`*(comboBox: ComboBox, popupPresentation: PopupPresentation) =
-  comboBox.setPopupPresentation(popupPresentation)
-
-proc `sizingMode=`*(comboBox: ComboBox, mode: ComboBoxSizingMode) =
-  comboBox.setSizingMode(mode)
-
-proc `preferredContentWidth=`*(comboBox: ComboBox, width: float32) =
-  comboBox.setPreferredContentWidth(width)
 
 proc dataSource*(comboBox: ComboBox): DynamicAgent =
   comboBox.xDataSource
@@ -1428,11 +1399,11 @@ proc highlightedOptionIdentifier*(comboBox: ComboBox): string =
     ""
 
 proc setPopupNeedsDisplay(comboBox: ComboBox) =
-  comboBox.setNeedsDisplay(true)
+  comboBox.needsDisplay = true
   if not comboBox.xPopupWindow.isNil:
     let contentView = comboBox.xPopupWindow.contentView()
     if not contentView.isNil:
-      contentView.setNeedsDisplay(true)
+      contentView.needsDisplay = true
 
 proc `highlightedIndex=`*(comboBox: ComboBox, index: int) =
   let boundedIndex = if index < 0 or index >= comboBox.numberOfItems(): -1 else: index
@@ -1451,12 +1422,6 @@ proc `highlightedIndex=`*(comboBox: ComboBox, index: int) =
       ""
   emit comboBox.selectionIsChanging(DynamicAgent(comboBox))
   comboBox.setPopupNeedsDisplay()
-
-proc `selectedOptionIdentifier=`*(comboBox: ComboBox, identifier: string) =
-  comboBox.selectOptionWithIdentifier(identifier)
-
-proc `optionFilterText=`*(comboBox: ComboBox, text: string) =
-  comboBox.setOptionFilterText(text)
 
 proc indexOfOptionMatchingText*(comboBox: ComboBox, text: string, startIndex = 0): int =
   if text.normalizedSearchText().len == 0:
@@ -1697,7 +1662,7 @@ proc openPopupWindow(comboBox: ComboBox) =
     popupWindow = owner.newPopupWindow(anchorFrame, size, "ComboBox Popup")
     popupView = comboBox.popupList()
 
-  popupView.setFrame(rect(0.0, 0.0, size.width, size.height))
+  popupView.frame = rect(0.0, 0.0, size.width, size.height)
   popupWindow.setContentView(popupView)
   popupWindow.setPopupDoneHandler(
     proc() =
@@ -1883,7 +1848,7 @@ proc initComboBoxFields*(
 ) =
   initControlFields(comboBox, frame, newComboBoxCell())
   comboBox.xPopupHighlightedIndex = -1
-  comboBox.setAcceptsFirstResponder(true)
+  comboBox.acceptsFirstResponder = true
   discard comboBox.withProto()
   comboBox.installComboBoxTextSelectors()
   discard comboBox.withProtocol(DefaultComboBoxView)

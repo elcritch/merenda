@@ -325,7 +325,7 @@ proc `columnWidth=`*(view: CascadingView, width: float32) =
   view.xColumnWidth = nextWidth
   view.invalidateIntrinsicContentSize()
   view.setNeedsLayout()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc minColumnWidth*(view: CascadingView): float32 =
   view.xMinColumnWidth
@@ -342,7 +342,7 @@ proc `minColumnWidth=`*(view: CascadingView, width: float32) =
   view.xColumnWidth = max(view.xColumnWidth, nextWidth)
   view.invalidateIntrinsicContentSize()
   view.setNeedsLayout()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc columnSpacing*(view: CascadingView): float32 =
   view.xColumnSpacing
@@ -358,7 +358,7 @@ proc `columnSpacing=`*(view: CascadingView, spacing: float32) =
   view.xColumnSpacing = nextSpacing
   view.invalidateIntrinsicContentSize()
   view.setNeedsLayout()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc showsColumnHeaders*(view: CascadingView): bool =
   view.xShowsColumnHeaders
@@ -370,7 +370,7 @@ proc `showsColumnHeaders=`*(view: CascadingView, shows: bool) =
   for column in view.xColumns:
     column.showsHeader = shows
   view.setNeedsLayout()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc columnCount*(view: CascadingView): int =
   view.xColumns.len
@@ -384,7 +384,8 @@ proc tableViewForColumn*(view: CascadingView, column: int): TableView =
   else:
     view.xColumns[column]
 
-protocol CascadingViewProtocol {.selectorScope: protocol.} from CascadingView:
+protocol CascadingViewProtocol {.selectorScope: protocol, setterStyle: nim.} from
+  CascadingView:
   property cascadingSelectionPath -> seq[string]
   property cascadingColumnWidth -> float32
   property cascadingMinColumnWidth -> float32
@@ -394,31 +395,31 @@ protocol CascadingViewProtocol {.selectorScope: protocol.} from CascadingView:
   method cascadingSelectionPath(view: CascadingView): seq[string] =
     view.xSelectedPath
 
-  method setCascadingSelectionPath(view: CascadingView, path: seq[string]) =
+  method `cascadingSelectionPath=`(view: CascadingView, path: seq[string]) =
     view.applySelectedPath(path)
 
   method cascadingColumnWidth(view: CascadingView): float32 =
     view.xColumnWidth
 
-  method setCascadingColumnWidth(view: CascadingView, width: float32) =
+  method `cascadingColumnWidth=`(view: CascadingView, width: float32) =
     view.columnWidth = width
 
   method cascadingMinColumnWidth(view: CascadingView): float32 =
     view.xMinColumnWidth
 
-  method setCascadingMinColumnWidth(view: CascadingView, width: float32) =
+  method `cascadingMinColumnWidth=`(view: CascadingView, width: float32) =
     view.minColumnWidth = width
 
   method cascadingColumnSpacing(view: CascadingView): float32 =
     view.xColumnSpacing
 
-  method setCascadingColumnSpacing(view: CascadingView, spacing: float32) =
+  method `cascadingColumnSpacing=`(view: CascadingView, spacing: float32) =
     view.columnSpacing = spacing
 
   method cascadingShowsHeaders(view: CascadingView): bool =
     view.xShowsColumnHeaders
 
-  method setCascadingShowsHeaders(view: CascadingView, shows: bool) =
+  method `cascadingShowsHeaders=`(view: CascadingView, shows: bool) =
     view.showsColumnHeaders = shows
 
   method cascadeScrollView*(view: CascadingView): ScrollView =
@@ -978,7 +979,7 @@ proc initCascadingTableView(view: CascadingView): TableView =
   result.addColumn(column)
   `hasHorizontalScroller=`(result.scrollView(), false)
   result.autoresizingMaskConstraints = false
-  result.setAcceptsFirstResponder(true)
+  result.acceptsFirstResponder = true
 
 proc focusedColumnTable(view: CascadingView): TableView =
   let owner = view.window()
@@ -1091,7 +1092,7 @@ proc reloadData*(view: CascadingView) =
   view.syncCascadingColumns()
   view.scrollColumnToVisible(min(view.xSelectedPath.len, view.xColumns.high))
   view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
   if selectionChanged:
     view.notifyCascadingSelectionDidChange()
 
@@ -1176,7 +1177,7 @@ proc flushCascadingTreeUpdates(
   view.scrollColumnToVisible(min(view.xSelectedPath.len, view.xColumns.high))
   view.restoreFocusedColumn(focusedColumn)
   view.invalidateIntrinsicContentSize()
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
   emit view.cascadingItemsDidUpdate(DynamicAgent(view), @updates)
   view.postAccessibilityNotification(anValueChanged)
   view.postCascadingModelNotification(updates)
@@ -1723,7 +1724,7 @@ proc initCascadingMillerColumn*(view: CascadingView, frame: Rect = AutoRect) =
   view.xScrollView.horizontalLineScroll = view.xColumnWidth
   view.xScrollView.autoresizingMaskConstraints = false
   view.addSubview(view.xScrollView)
-  view.setAcceptsFirstResponder(false)
+  view.acceptsFirstResponder = false
   discard view.withProto()
   discard view.withProtocol(CascadingTableDataSource)
   discard view.withProtocol(CascadingTableDelegate)

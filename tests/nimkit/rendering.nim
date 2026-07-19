@@ -150,7 +150,7 @@ proc rectsClose(left, right: nimkitTypes.Rect): bool =
 suite "nimkit rendering":
   test "buildRenders emits root, text field, and button nodes":
     let root = newView(frame = rect(0, 0, 320, 200))
-    root.setBackgroundColor(color(1, 1, 1))
+    root.backgroundColor = color(1, 1, 1)
     root.addSubview(newTextField("Ready", frame = rect(16, 16, 180, 32)))
     root.addSubview(newButton("Click", frame = rect(16, 64, 120, 36)))
 
@@ -182,7 +182,7 @@ suite "nimkit rendering":
 
     root.backgroundColor = color(0.2, 0.4, 0.6, 0.8)
     root.alphaValue = 0.5
-    root.shadow = [shadow]
+    root.shadow = @[shadow]
 
     let list = buildRenders(root)[DefaultDrawLevel]
     check list.rootIds.len == 1
@@ -241,7 +241,7 @@ suite "nimkit rendering":
     check childFound
 
     let explicitRoot = newView(frame = rect(0, 0, 24, 10))
-    explicitRoot.setBackgroundColor(color(0.2, 0.3, 0.4, 1.0))
+    explicitRoot.backgroundColor = color(0.2, 0.3, 0.4, 1.0)
 
     let
       explicitList = buildRenders(explicitRoot, initAppearance(theme))[DefaultDrawLevel]
@@ -693,8 +693,8 @@ suite "nimkit rendering":
       checkbox = newCheckBox("Check", frame = rect(10, 20, 120, 24))
       radio = newRadioButton("Radio", frame = rect(10, 56, 120, 24))
 
-    checkbox.setState(bsOn)
-    radio.setState(bsOn)
+    checkbox.state = bsOn
+    radio.state = bsOn
     root.addSubview(checkbox)
     root.addSubview(radio)
 
@@ -1302,7 +1302,7 @@ suite "nimkit rendering":
 
     root.addSubview(field)
     discard field.becomeFirstResponder()
-    field.setSelectedRange(initTextRange(1, 2))
+    field.selectedRange = initTextRange(1, 2)
 
     let selectionRenders = buildRenders(root)
     var selectionFound = false
@@ -1312,7 +1312,7 @@ suite "nimkit rendering":
           node.screenBox.h > 0.0:
         selectionFound = true
 
-    field.setSelectedRange(initTextRange(3, 0))
+    field.selectedRange = initTextRange(3, 0)
     let caretRenders = buildRenders(root)
     var caretFound = false
     for node in caretRenders[DefaultDrawLevel].nodes:
@@ -1474,8 +1474,8 @@ suite "nimkit rendering":
       theme[role, StyleIndicatorSpacing] = 5.0
       theme[role, StyleTextInsets] = insets(0.0, 3.0)
 
-    checkbox.setState(bsOn)
-    radio.setState(bsOn)
+    checkbox.state = bsOn
+    radio.state = bsOn
     root.addSubview(checkbox)
     root.addSubview(radio)
 
@@ -1553,8 +1553,8 @@ suite "nimkit rendering":
       child = newView(frame = rect(20, 30, 80, 50))
 
     root.addSubview(child)
-    root.setNeedsDisplay(false)
-    child.setNeedsDisplay(false)
+    root.needsDisplay = false
+    child.needsDisplay = false
     child.setNeedsDisplayInRect(rect(5, 6, 10, 11))
 
     let renders = buildRenders(root)
@@ -1587,7 +1587,7 @@ suite "nimkit rendering":
     check cachedRenders == firstRenders
     check customDrawCount == 1
 
-    custom.setNeedsDisplay(true)
+    custom.needsDisplay = true
     let invalidatedRenders = buildRenders(root)
     check invalidatedRenders != firstRenders
     check customDrawCount == 2
@@ -1609,7 +1609,7 @@ suite "nimkit rendering":
       root = newView(frame = rect(0, 0, 100, 80))
       child = newView(frame = rect(90, 90, 50, 40))
 
-    root.setBounds(rect(10, 20, 100, 80))
+    root.bounds = rect(10, 20, 100, 80)
     root.addSubview(child)
 
     let renders = buildRenders(root)
@@ -1640,9 +1640,9 @@ suite "nimkit rendering":
       root = newView(frame = rect(0, 0, 100, 80))
       child = newView(frame = rect(90, 90, 50, 40))
 
-    root.setBounds(rect(10, 20, 100, 80))
-    root.setClipsToBounds(true)
-    child.setClipsToBounds(true)
+    root.bounds = rect(10, 20, 100, 80)
+    root.clipsToBounds = true
+    child.clipsToBounds = true
     root.addSubview(child)
 
     let renders = buildRenders(root)

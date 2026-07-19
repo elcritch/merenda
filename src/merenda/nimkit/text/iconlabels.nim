@@ -22,7 +22,7 @@ proc `icon=`*(label: IconLabel, value: string) =
     return
   label.xIcon = value
   label.invalidateIntrinsicContentSize()
-  label.setNeedsDisplay(true)
+  label.needsDisplay = true
 
 proc title*(label: IconLabel): string =
   label.xTitle
@@ -32,7 +32,7 @@ proc `title=`*(label: IconLabel, value: string) =
     return
   label.xTitle = value
   label.invalidateIntrinsicContentSize()
-  label.setNeedsDisplay(true)
+  label.needsDisplay = true
 
 proc iconColor*(label: IconLabel): Color =
   label.xIconColor
@@ -41,7 +41,7 @@ proc `iconColor=`*(label: IconLabel, value: Color) =
   if label.xIconColor == value:
     return
   label.xIconColor = value
-  label.setNeedsDisplay(true)
+  label.needsDisplay = true
 
 proc iconLabelStyleContext(label: IconLabel): StyleContext =
   controlStyle(
@@ -153,7 +153,7 @@ proc initIconLabelFields*(
   label.xIcon = icon
   label.xTitle = title
   label.xIconColor = iconColor
-  label.styleClasses = [LabelStyleClass, IconLabelStyleClass]
+  label.styleClasses = @[LabelStyleClass, IconLabelStyleClass]
   label.accessibilityElement = true
   discard label.withProtocol(IconLabelDrawing)
   discard label.withProtocol(IconLabelAccessibility)

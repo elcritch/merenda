@@ -9,7 +9,7 @@ import ../foundation/undomanagers
 type Responder* = ref object of DynamicAgent
   xAcceptsFirstResponder: bool
 
-protocol ResponderProtocol from Responder:
+protocol ResponderProtocol {.setterStyle: nim.} from Responder:
   property acceptsFirstResponder -> bool {.field: xAcceptsFirstResponder.}
 
   method shouldBecomeFirstResponder*(self: Responder): bool =

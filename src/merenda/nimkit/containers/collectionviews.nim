@@ -762,7 +762,7 @@ proc `collectionRole=`*(collectionView: CollectionView, role: StyleRole) =
   if collectionView.xCollectionRole == role:
     return
   collectionView.xCollectionRole = role
-  collectionView.setNeedsDisplay(true)
+  collectionView.needsDisplay = true
 
 proc collectionItemRole*(collectionView: CollectionView): StyleRole =
   collectionView.xItemRole
@@ -771,7 +771,7 @@ proc `collectionItemRole=`*(collectionView: CollectionView, role: StyleRole) =
   if collectionView.xItemRole == role:
     return
   collectionView.xItemRole = role
-  collectionView.setNeedsDisplay(true)
+  collectionView.needsDisplay = true
 
 proc collectionItemIdentifier*(collectionView: CollectionView, index: int): string =
   if index notin 0 ..< collectionView.len():
@@ -967,7 +967,7 @@ proc initCollectionBaseChild(view: View, clipsToBounds: bool) =
   view.background = color(0.0, 0.0, 0.0, 0.0)
   view.autoresizingMaskConstraints = false
   view.clipsToBounds = clipsToBounds
-  view.setAcceptsFirstResponder(false)
+  view.acceptsFirstResponder = false
 
 proc initCollectionContentView(collectionView: CollectionView): CollectionContentView =
   result = CollectionContentView()
@@ -986,7 +986,7 @@ proc initCollectionScrollView(collectionView: CollectionView): ScrollView =
   result.autohidesScrollers = true
   result.scrollerThickness = 12.0'f32
   result.lineScroll = collectionView.defaultLayout().itemSize().height
-  result.setAcceptsFirstResponder(false)
+  result.acceptsFirstResponder = false
   result.autoresizingMaskConstraints = false
 
 proc applyCollectionItemAccessibility(
@@ -1315,11 +1315,11 @@ proc tileCollectionContent(collectionView: CollectionView) =
 
 proc invalidateCollectionItems(collectionView: CollectionView) =
   collectionView.xContentView.syncVisibleItemViews()
-  collectionView.xContentView.setNeedsDisplay(true)
-  collectionView.xScrollView.setNeedsDisplay(true)
-  collectionView.xScrollView.verticalScroller().setNeedsDisplay(true)
-  collectionView.xScrollView.horizontalScroller().setNeedsDisplay(true)
-  collectionView.setNeedsDisplay(true)
+  collectionView.xContentView.needsDisplay = true
+  collectionView.xScrollView.needsDisplay = true
+  collectionView.xScrollView.verticalScroller().needsDisplay = true
+  collectionView.xScrollView.horizontalScroller().needsDisplay = true
+  collectionView.needsDisplay = true
 
 proc reloadData*(collectionView: CollectionView) =
   let selected = collectionView.xSelectedIdentifiers
@@ -1941,7 +1941,7 @@ proc updateCollectionDropTarget(
   if collectionView.xDropTarget == target:
     return
   collectionView.xDropTarget = target
-  collectionView.setNeedsDisplay(true)
+  collectionView.needsDisplay = true
 
 proc currentDropTarget*(collectionView: CollectionView): DraggingDropTarget =
   if not collectionView.xCollectionDraggingSession.isNil and
@@ -2286,7 +2286,7 @@ proc initCollectionViewFields*(collectionView: CollectionView, frame: Rect = Aut
   collectionView.xScrollView = initCollectionScrollView(collectionView)
   collectionView.xContentView = initCollectionContentView(collectionView)
   collectionView.xScrollView.documentView = collectionView.xContentView
-  collectionView.setAcceptsFirstResponder(true)
+  collectionView.acceptsFirstResponder = true
   collectionView.clipsToBounds = true
   collectionView.addSubview(collectionView.xScrollView)
   discard collectionView.withProtocol(DefaultCollectionViewLayoutBehavior)

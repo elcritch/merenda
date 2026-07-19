@@ -25,7 +25,7 @@ proc newLabeledPanel(
 
 proc setPanelTitle(panel: LabeledPanel, value: string) =
   panel.title = value
-  panel.setNeedsDisplay(true)
+  panel.needsDisplay = true
 
 let
   app = sharedApplication()

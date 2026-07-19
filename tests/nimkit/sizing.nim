@@ -112,7 +112,7 @@ suite "nimkit sizing":
     button.needsLayout = false
 
     let initialFrame = button.frame()
-    button.setTitle("A much longer title")
+    button.title = "A much longer title"
 
     check button.frame() == initialFrame
     check root.needsLayout
@@ -270,10 +270,10 @@ suite "nimkit sizing":
 
     root.needsLayout = false
     button.needsLayout = false
-    oldCell.setTitle("Detached")
+    oldCell.title = "Detached"
     check not root.needsLayout
     check not button.needsLayout
 
-    nextCell.setTitle("Attached and wider")
+    nextCell.title = "Attached and wider"
     check root.needsLayout
     check button.needsLayout

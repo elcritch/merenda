@@ -293,17 +293,17 @@ proc addTask(view: TodoRelaysView) =
   view.inputText.setLen(0)
   view.selectedIndex = view.items.high
   view.focus = tfList
-  view.setNeedsDisplay(true)
+  view.needsDisplay = true
 
 proc deleteSelected(view: TodoRelaysView) =
   if view.selectedIndex >= 0 and view.selectedIndex < view.items.len:
     view.items.delete(view.selectedIndex)
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
 
 proc toggleSelected(view: TodoRelaysView) =
   if view.selectedIndex >= 0 and view.selectedIndex < view.items.len:
     view.items[view.selectedIndex].done = not view.items[view.selectedIndex].done
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
 
 proc drawTodo(view: TodoRelaysView) =
   var metrics: ui.FontMetrics
@@ -463,7 +463,7 @@ proc handleMouseClick(view: TodoRelaysView, point: ui.Point) =
 
   if composerRect.contains(point):
     view.focus = tfComposer
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
     return
 
   let hover = hitList(listInner, rowHeight, view.scrollIndex, view.items, point)
@@ -473,19 +473,19 @@ proc handleMouseClick(view: TodoRelaysView, point: ui.Point) =
     if hover.index >= 0 and hover.index < view.items.len:
       view.items.delete(hover.index)
       view.clampSelection(visibleRows)
-      view.setNeedsDisplay(true)
+      view.needsDisplay = true
   of hkCheckbox:
     view.focus = tfList
     if hover.index >= 0 and hover.index < view.items.len:
       view.selectedIndex = hover.index
       view.items[hover.index].done = not view.items[hover.index].done
       view.clampSelection(visibleRows)
-      view.setNeedsDisplay(true)
+      view.needsDisplay = true
   of hkRow:
     view.focus = tfList
     view.selectedIndex = hover.index
     view.clampSelection(visibleRows)
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
   else:
     discard
 
@@ -496,7 +496,7 @@ protocol TodoRelaysDrawing of UIRelaysViewHooks:
 protocol TodoRelaysEvents of ResponderEventProtocol:
   method mouseMoved(view: TodoRelaysView, event: MouseEvent): bool =
     view.mousePoint = event.location.toUiPoint()
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
     true
 
   method mouseDown(view: TodoRelaysView, event: MouseEvent): bool =
@@ -524,7 +524,7 @@ protocol TodoRelaysEvents of ResponderEventProtocol:
     elif event.deltaY > 0.0'f32:
       view.scrollIndex = clampInt(view.scrollIndex - 1, 0, maxScroll)
     view.clampSelection(visibleRows)
-    view.setNeedsDisplay(true)
+    view.needsDisplay = true
     true
 
   method keyDown(view: TodoRelaysView, event: KeyEvent): bool =
@@ -537,7 +537,7 @@ protocol TodoRelaysEvents of ResponderEventProtocol:
           view.selectedIndex = 0
       else:
         view.focus = tfComposer
-      view.setNeedsDisplay(true)
+      view.needsDisplay = true
       true
     of keyEnter:
       if view.focus == tfComposer:
@@ -553,7 +553,7 @@ protocol TodoRelaysEvents of ResponderEventProtocol:
     of keyBackspace:
       if view.focus == tfComposer:
         view.inputText.removeLastRune()
-        view.setNeedsDisplay(true)
+        view.needsDisplay = true
       else:
         view.deleteSelected()
       true
@@ -569,7 +569,7 @@ protocol TodoRelaysEvents of ResponderEventProtocol:
         else:
           dec view.selectedIndex
         view.clampSelection(view.visibleRows())
-        view.setNeedsDisplay(true)
+        view.needsDisplay = true
         return true
       false
     of keyArrowDown:
@@ -579,14 +579,14 @@ protocol TodoRelaysEvents of ResponderEventProtocol:
         else:
           inc view.selectedIndex
         view.clampSelection(view.visibleRows())
-        view.setNeedsDisplay(true)
+        view.needsDisplay = true
         return true
       false
     else:
       if view.focus == tfComposer and event.text.insertableText():
         view.inputText.add event.text
         view.suppressNextTextInput = true
-        view.setNeedsDisplay(true)
+        view.needsDisplay = true
         return true
       false
 
@@ -597,7 +597,7 @@ protocol TodoRelaysTextInput of TextInputProtocol:
       return
     if view.focus == tfComposer and text.insertableText():
       view.inputText.add text
-      view.setNeedsDisplay(true)
+      view.needsDisplay = true
 
 proc newTodoRelaysView(frame: nimkitTypes.Rect = nimkitTypes.AutoRect): TodoRelaysView =
   result = TodoRelaysView(
@@ -613,7 +613,7 @@ proc newTodoRelaysView(frame: nimkitTypes.Rect = nimkitTypes.AutoRect): TodoRela
     mousePoint: ui.point(-1, -1),
   )
   initUIRelaysViewFields(result, frame = frame)
-  result.setAcceptsFirstResponder(true)
+  result.acceptsFirstResponder = true
   discard result.withProtocol(TodoRelaysDrawing)
   discard result.withProtocol(TodoRelaysEvents)
   discard result.withProtocol(TodoRelaysTextInput)
