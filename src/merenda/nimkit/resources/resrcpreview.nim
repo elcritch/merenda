@@ -430,6 +430,7 @@ proc attachRoots(bundle: ResourceBundle, views: Table[ResourceId, View], host: V
   for node in bundle.views:
     let view = views.getOrDefault(node.id)
     if not view.isNil:
+      view.translatesAutoresizingMaskIntoConstraints = false
       host.addSubview(view)
 
 proc restorePreviousGraph(

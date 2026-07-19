@@ -221,14 +221,20 @@ for runtime construction. Selecting a non-view hierarchy item shows path-address
 read-only details for layout, controller/window ownership, target/action connections,
 menus, commands, images, localization, key bindings, and themes.
 
-The view inspector parses values according to each `ResourcePropertyDescriptor`. If
-typed input cannot be parsed, it is committed as a string value so the exact draft
-text remains visible and validation can diagnose the mismatch. Valid revisions are
+The view inspector chooses controls from each `ResourcePropertyDescriptor`: boolean
+properties use checkboxes, enum-backed properties use combo boxes populated from the
+registry, colors use a popup color well, and open-ended values retain text editing. If
+typed text cannot be parsed, it is committed as a string value so the exact draft text
+remains visible and validation can diagnose the mismatch. Valid revisions are
 reconciled while preserving compatible view and controller identities; layout
 constraints are rebuilt against the resulting view map. Invalid drafts never replace
 the last working preview. Hierarchy clicks and preview clicks both update selection by
 `ResourceId`, and preview selection uses `installViewSelection` and
 `installSelectionRing` rather than changing serialized records or preview state.
+
+Palette buttons insert into selected containers and beside selected leaf views. The
+Delete and Backspace keys remove the selected view and restore selection to its parent;
+the toolbar also exposes the same deletion operation.
 
 The editor installs `DocumentFileProtocol` for canonical CBOR reads and writes and
 shares the resource draft's `UndoManager` with the application document. A save or
@@ -237,8 +243,12 @@ revert updates the manager's clean state and the normal document edited indicato
 Run the complete vertical slice with:
 
 ```sh
-nim r examples/resource_builder_demo.nim
+nim r src/merenda/melani/melani.nim
 ```
+
+The module exports `melaniStarterBundle`, `newMelaniDocument`, and `runMelani`, so
+applications and tests can host the builder without relying on example-only code. Pass
+an existing CBOR path to load it at startup.
 
 ## Resource Limits
 

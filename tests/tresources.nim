@@ -241,6 +241,8 @@ suite "NimKit resources":
     check title.declaredKind == "button"
     check not title.inherited
     check title.nimTypeName == "string"
+    check registry.viewPropertyDescriptor("button", "state").options ==
+      @[resourceValue("bsOff"), resourceValue("bsOn"), resourceValue("bsMixed")]
     check background.aliasOf == "backgroundColor"
     check background.acceptedKinds == {rvColor}
 

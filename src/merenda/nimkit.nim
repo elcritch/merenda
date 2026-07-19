@@ -10,6 +10,7 @@ import merenda/nimkit/containers/collectionviews
 import merenda/nimkit/controls/buttons
 import merenda/nimkit/controls/cells
 import merenda/nimkit/controls/comboboxes
+import merenda/nimkit/controls/colorwells
 import merenda/nimkit/controls/controls
 import merenda/nimkit/controls/dialogbuttonboxes
 import merenda/nimkit/controls/fontpickers
@@ -80,6 +81,7 @@ export collectionviews
 export buttons
 export cells
 export comboboxes
+export colorwells
 export controls
 export dialogbuttonboxes
 export fontpickers

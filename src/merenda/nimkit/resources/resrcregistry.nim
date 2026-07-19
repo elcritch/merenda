@@ -29,6 +29,7 @@ type
     setterSelectorName*: string
     nimTypeName*: string
     acceptedKinds*: set[ResourceValueKind]
+    options*: seq[ResourceValue]
     inherited*: bool
     editable*: bool
 
@@ -70,6 +71,7 @@ type
 
   ResourcePropertyValueRegistration = object
     acceptedKinds: set[ResourceValueKind]
+    options: seq[ResourceValue]
     apply: ResourcePropertyValueApplier
     read: ResourcePropertyValueReader
 
@@ -137,6 +139,7 @@ proc registerResourceValueType*[T](
     acceptedKinds: set[ResourceValueKind],
     decoder: ResourceValueDecoder[T],
     encoder: ResourceValueEncoder[T] = nil,
+    options: openArray[ResourceValue] = [],
 ) =
   ## Register one conversion from resource data to a Sigils property value type.
   let applyValue: ResourcePropertyValueApplier = proc(
@@ -167,7 +170,7 @@ proc registerResourceValueType*[T](
           return encoder(current.get(), context, value)
 
   registry.propertyValueTypes[typeName] = ResourcePropertyValueRegistration(
-    acceptedKinds: acceptedKinds, apply: applyValue, read: readValue
+    acceptedKinds: acceptedKinds, options: @options, apply: applyValue, read: readValue
   )
 
 func localSelectorName(name: string): string =
@@ -328,6 +331,12 @@ func propertyAcceptedKinds(
   else:
     {}
 
+func propertyOptions(
+    registry: ResourceRegistry, registration: ResourceViewPropertyRegistration
+): seq[ResourceValue] =
+  if registry.propertyValueTypes.hasKey(registration.valueType):
+    result = registry.propertyValueTypes[registration.valueType].options
+
 func propertyDescriptor(
     registry: ResourceRegistry,
     requestedKind, declaredKind, name: string,
@@ -342,6 +351,7 @@ func propertyDescriptor(
     setterSelectorName: $registration.selector,
     nimTypeName: registration.valueType,
     acceptedKinds: acceptedKinds,
+    options: registry.propertyOptions(registration),
     inherited: requestedKind != declaredKind,
     editable: not registration.setter.isNil or acceptedKinds != {},
   )
@@ -631,8 +641,11 @@ proc encodeEnum[T: enum](
 proc registerResourceEnumType*[T: enum](
     registry: var ResourceRegistry, typeName: string
 ) =
+  var options: seq[ResourceValue]
+  for value in T:
+    options.add resourceValue($value)
   registerResourceValueType[T](
-    registry, typeName, {rvString}, decodeEnum[T], encodeEnum[T]
+    registry, typeName, {rvString}, decodeEnum[T], encodeEnum[T], options
   )
 
 proc registerDefaultResourceValueTypes(registry: var ResourceRegistry) =

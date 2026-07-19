@@ -510,9 +510,10 @@ the first backend-neutral layout bridge.
   guide insets into solver constants, and rebuild against preserved preview view
   identities.
 - Ready: `ResourceEditor` provides hierarchy and canvas selection, hover geometry,
-  a 13-kind Sigils-backed view palette, editable view properties, path-addressed
-  diagnostics, and read-only detail surfaces for layout, ownership, connections,
-  menus, commands, images, localization, key bindings, and themes.
+  a 13-kind Sigils-backed view palette, text/checkbox/combo-box/color-well property
+  editing, keyboard deletion, path-addressed diagnostics, and read-only detail
+  surfaces for layout, ownership, connections, menus, commands, images,
+  localization, key bindings, and themes. Melani hosts this as a standalone app.
 - Remaining builder work: typed authoring operations and specialized editors for
   non-view resources and constraints, optional presentation metadata, controller
   and window extension properties, and import/export adapters.
@@ -551,7 +552,8 @@ the first backend-neutral layout bridge.
 - Added canonical CBOR read/write through `DocumentFileProtocol`; the editor and
   application document share one `UndoManager`, so edits, save, revert, undo/redo,
   and clean-state window behavior stay synchronized.
-- Added `examples/resource_builder_demo.nim` as the runnable vertical slice.
+- Added the resource builder vertical slice, now promoted to the
+  `src/merenda/melani/melani.nim` application module.
 
 #### Milestone 3 — Identity-Preserving Preview (Completed 2026-07-19)
 
@@ -609,8 +611,8 @@ the first backend-neutral layout bridge.
   localization catalogs, key bindings, and themes. Add grouped transactions for
   edits that create or remove several related references atomically.
 - Add an optional editor metadata registry for labels, categories, palette order,
-  default frames, numeric ranges, enum choices, asset pickers, multiline text,
-  and other input hints without changing runtime property descriptors.
+  default frames, numeric ranges, asset pickers, multiline text, and other input
+  hints. Enum choices already come from runtime property descriptors.
 - Build direct-manipulation layout authoring: guide overlays, anchor handles,
   snapping, constant editing, priority and activation controls, constraint
   ownership visualization, and conflict/ambiguity diagnostics. Keep frames and

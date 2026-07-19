@@ -34,7 +34,7 @@ import preferences_demo
 import progress_indicator_demo
 import quick_start
 import radio_demo
-import resource_builder_demo
+import merenda/melani/melani
 import resource_ui_demo
 import scrollview_demo
 import splitview_demo

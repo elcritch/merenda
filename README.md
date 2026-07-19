@@ -378,7 +378,9 @@ Custom view/controller kinds and Sigils property protocols can be added through
 `ResourceRegistry`; compatible property getter/setter pairs are discovered and bound
 automatically. The built-in resource-editor palette includes views, controls,
 buttons, check/radio buttons, text fields, labels, image/stack views, switches,
-progress indicators, boxes, and split views. See
+progress indicators, boxes, and split views. Its inspector uses checkboxes for
+booleans, registry-backed combo boxes for enum properties, and popup color wells for
+colors. The standalone builder lives in `src/merenda/melani/melani.nim`. See
 [docs/resources.md](docs/resources.md) and `examples/resource_ui_demo.nim` for the
 format and construction workflow.
 

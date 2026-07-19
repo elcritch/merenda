@@ -7,7 +7,7 @@ import sigils/[core, selectors]
 import ../accessibility/accessibility
 import ../app/[application, documents, windowcontrollers, windows]
 import ../containers/[gridviews, outlineviews, tableviews]
-import ../controls/buttons
+import ../controls/[buttons, colorwells, comboboxes]
 import ../debug/[selectionrings, viewselection]
 import ../foundation/events
 import ../foundation/[selectors as nimkitSelectors, types, undomanagers]
@@ -23,6 +23,13 @@ import
 export resrcvalueediting
 
 type
+  ResourcePropertyEditorKind* = enum
+    rpekReadOnly
+    rpekText
+    rpekCheckBox
+    rpekComboBox
+    rpekColorWell
+
   ResourceEditorPropertyRow* = object
     descriptor*: ResourcePropertyDescriptor
     value*: Option[ResourceValue]
@@ -54,6 +61,7 @@ type
     xSelectionLabel: Label
     xDiagnosticsTitle: Label
     xPaletteKinds: seq[string]
+    xPaletteButtons: seq[Button]
     xPropertyRows: seq[ResourceEditorPropertyRow]
     xDiagnosticRows: seq[ResourceDiagnostic]
     xPreview: ResourcePreview
@@ -71,6 +79,9 @@ type
   ResourceEditorPreviewSurface = ref object of View
     xEditor: ResourceEditor
 
+  ResourceEditorHierarchyView = ref object of OutlineView
+    xEditor: ResourceEditor
+
 const
   ResourceEditorDocumentType* = "nimkit-resource"
   ResourceEditorPaletteKinds* = [
@@ -81,6 +92,7 @@ const
 proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor
 proc newResourceEditorWindow*(editor: ResourceEditor): Window
 proc synchronize*(editor: ResourceEditor)
+proc removeSelectedView*(editor: ResourceEditor): ResourceEditResult {.discardable.}
 proc updatePreviewHover*(
   editor: ResourceEditor, point: Point
 ): ResourcePreviewHit {.discardable.}
@@ -210,6 +222,11 @@ proc ioDiagnostics*(document: ResourceEditorDocument): lent ResourceDiagnostics 
 proc paletteKinds*(editor: ResourceEditor): lent seq[string] =
   editor.xPaletteKinds
 
+proc paletteButton*(editor: ResourceEditor, kind: string): Button =
+  for index, candidate in editor.xPaletteKinds:
+    if candidate == kind and index < editor.xPaletteButtons.len:
+      return editor.xPaletteButtons[index]
+
 proc rootView*(editor: ResourceEditor): View =
   editor.xRootView
 
@@ -258,6 +275,18 @@ proc previewGeometry*(editor: ResourceEditor, id: ResourceId): ResourcePreviewGe
 
 proc previewHitTest*(editor: ResourceEditor, point: Point): ResourcePreviewHit =
   editor.xPreview.hitTest(editor.xPreviewSurface, point)
+
+func propertyEditorKind*(row: ResourceEditorPropertyRow): ResourcePropertyEditorKind =
+  if not row.descriptor.editable:
+    rpekReadOnly
+  elif row.descriptor.options.len > 0:
+    rpekComboBox
+  elif row.descriptor.acceptedKinds == {rvBool}:
+    rpekCheckBox
+  elif rvColor in row.descriptor.acceptedKinds:
+    rpekColorWell
+  else:
+    rpekText
 
 func resourceNodeKindTitle(kind: ResourceNodeKind): string =
   case kind
@@ -620,6 +649,18 @@ protocol ResourceEditorPreviewSurfaceEvents of ResponderEventProtocol:
       surface.xEditor.clearPreviewHover()
     false
 
+protocol ResourceEditorHierarchyEvents of ResponderEventProtocol:
+  method keyDown(hierarchy: ResourceEditorHierarchyView, event: KeyEvent): bool =
+    if event.key in {keyBackspace, keyDelete} and event.modifiers == {} and
+        not hierarchy.xEditor.isNil:
+      if hierarchy.xEditor.removeSelectedView().applied:
+        return true
+    let next = hierarchy.performNext(keyDown, event)
+    if next.isSome:
+      next.get()
+    else:
+      false
+
 proc uninstallPreviewHoverTracking(editor: ResourceEditor) =
   for index in countdown(editor.xHoverTokens.high, 0):
     discard editor.xHoverTokens[index].popMethod()
@@ -898,13 +939,153 @@ proc insertViewKind*(editor: ResourceEditor, kind: string): ResourceEditResult =
       message: "view kind '" & kind & "' is unavailable",
       revision: document.revision(),
     )
-  let
-    id = document.nextViewIdentifier(kind)
-    parent = editor.selectedViewId().get(ResourceId(""))
+  let id = document.nextViewIdentifier(kind)
+  var parent = ResourceId("")
+  let selected = editor.selectedResourceId()
+  if selected.isSome:
+    let path = document.findNodePath(selected.get())
+    if path.isSome and path.get().kind == rnkView:
+      let selectedView = document.view(selected.get())
+      if selectedView.kind in ["view", "stackView", "box", "splitView"]:
+        parent = selected.get()
+      else:
+        let parentPath = document.findParentPath(path.get())
+        if parentPath.isSome and parentPath.get().kind == rnkView:
+          parent = parentPath.get().id
+    elif path.isSome:
+      let parentPath = document.findParentPath(path.get())
+      if parentPath.isSome and parentPath.get().kind == rnkView:
+        parent = parentPath.get().id
   result = document.insertView(kind.defaultViewNode(id), parent)
   if result.applied:
     discard document.selectResource(id)
     editor.synchronize()
+
+proc removeSelectedView*(editor: ResourceEditor): ResourceEditResult =
+  let
+    document = editor.xDocument.xResources
+    selected = editor.selectedResourceId()
+  if selected.isNone:
+    return ResourceEditResult(
+      kind: rekRemove,
+      error: reeResourceUnavailable,
+      message: "no view resource is selected",
+      revision: document.revision(),
+    )
+  let path = document.findNodePath(selected.get())
+  if path.isNone or path.get().kind != rnkView:
+    return ResourceEditResult(
+      kind: rekRemove,
+      error: reeResourceUnavailable,
+      message: "the selected resource is not a view",
+      resourceId: selected.get(),
+      revision: document.revision(),
+    )
+  let parent = document.findParentPath(path.get())
+  result = document.removeView(selected.get(), actionName = "Delete View")
+  if not result.applied:
+    return
+  if parent.isSome and document.selectResource(parent.get().id):
+    discard
+  else:
+    document.clearSelection()
+    for candidate in document:
+      if candidate.kind == rnkView:
+        discard document.selectResource(candidate.id)
+        break
+  editor.synchronize()
+
+proc propertyChoiceTexts(row: ResourceEditorPropertyRow): seq[string] =
+  for value in row.descriptor.options:
+    result.add value.formatResourceValue()
+
+proc newPropertyCheckBox(
+    editor: ResourceEditor, viewId: ResourceId, row: ResourceEditorPropertyRow
+): Button =
+  result = newCheckBox("")
+  if row.value.isSome and row.value.get().kind == rvBool and row.value.get().boolValue:
+    result.state = bsOn
+  let
+    checkBox = result
+    propertyName = row.descriptor.name
+    action = nimkitSelectors.actionSelector("resourceEditorToggle" & propertyName)
+  checkBox.target = newActionTarget(
+    action,
+    proc(sender: DynamicAgent) =
+      discard sender
+      discard
+        editor.commitPropertyText(viewId, propertyName, $(checkBox.state() == bsOn)),
+  )
+  checkBox.action = action
+
+proc newPropertyComboBox(
+    editor: ResourceEditor, viewId: ResourceId, row: ResourceEditorPropertyRow
+): ComboBox =
+  let options = row.propertyChoiceTexts()
+  result = newComboBox(options)
+  result.editable = false
+  let selected = options.find(row.text)
+  if selected >= 0:
+    result.selectedIndex = selected
+  let
+    comboBox = result
+    propertyName = row.descriptor.name
+    action = nimkitSelectors.actionSelector("resourceEditorChoose" & propertyName)
+  comboBox.target = newActionTarget(
+    action,
+    proc(sender: DynamicAgent) =
+      discard sender
+      let index = comboBox.indexOfSelectedItem()
+      if index >= 0:
+        discard
+          editor.commitPropertyText(viewId, propertyName, comboBox.itemAtIndex(index))
+    ,
+  )
+  comboBox.action = action
+
+proc newPropertyColorWell(
+    editor: ResourceEditor, viewId: ResourceId, row: ResourceEditorPropertyRow
+): PopupColorWell =
+  let selectedColor =
+    if row.value.isSome and row.value.get().kind == rvColor:
+      row.value.get().colorValue
+    else:
+      color(0.0, 0.0, 0.0, 0.0)
+  var choices = defaultPopupColorChoices()
+  var found = false
+  for choice in choices:
+    if choice.color == selectedColor:
+      found = true
+  if not found:
+    choices.insert(initPopupColorChoice("Custom", selectedColor), 0)
+  result = newPopupColorWell(choices, selectedColor)
+  let
+    colorWell = result
+    propertyName = row.descriptor.name
+    action = nimkitSelectors.actionSelector("resourceEditorChoose" & propertyName)
+  colorWell.target = newActionTarget(
+    action,
+    proc(sender: DynamicAgent) =
+      discard sender
+      discard editor.commitPropertyText(
+        viewId, propertyName, resourceValue(colorWell.color()).formatResourceValue()
+      ),
+  )
+  colorWell.action = action
+
+proc propertyEditorView(editor: ResourceEditor, row: ResourceEditorPropertyRow): View =
+  let selected = editor.selectedViewId()
+  if selected.isNone:
+    return
+  case row.propertyEditorKind()
+  of rpekCheckBox:
+    View(editor.newPropertyCheckBox(selected.get(), row))
+  of rpekComboBox:
+    View(editor.newPropertyComboBox(selected.get(), row))
+  of rpekColorWell:
+    View(editor.newPropertyColorWell(selected.get(), row))
+  of rpekReadOnly, rpekText:
+    nil
 
 protocol ResourceEditorTableSource of TableViewDataSource:
   method numberOfRows(editor: ResourceEditor, tableView: TableView): int =
@@ -951,12 +1132,36 @@ protocol ResourceEditorTableSource of TableViewDataSource:
       ""
 
 protocol ResourceEditorTableDelegate of TableViewDelegate:
+  method viewForCell(
+      editor: ResourceEditor, tableView: TableView, row: int, column: TableColumn
+  ): View =
+    if tableView == editor.xPropertyInspector and column.identifier() == "value" and
+        row in 0 ..< editor.xPropertyRows.len:
+      return editor.propertyEditorView(editor.xPropertyRows[row])
+
+  method hitPolicyForCell(
+      editor: ResourceEditor,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      target: View,
+      event: MouseEvent,
+  ): CellHitPolicy =
+    discard target
+    discard event
+    if tableView == editor.xPropertyInspector and column.identifier() == "value" and
+        row in 0 ..< editor.xPropertyRows.len and
+        editor.xPropertyRows[row].propertyEditorKind() in
+        {rpekCheckBox, rpekComboBox, rpekColorWell}:
+      return chpSelectAndTrack
+    chpDefault
+
   method shouldEditCell(
       editor: ResourceEditor, tableView: TableView, row: int, column: TableColumn
   ): bool =
     tableView == editor.xPropertyInspector and column.identifier() == "value" and
       row in 0 ..< editor.xPropertyRows.len and
-      editor.xPropertyRows[row].descriptor.editable
+      editor.xPropertyRows[row].propertyEditorKind() == rpekText
 
   method didCommitEditingCell(
       editor: ResourceEditor,
@@ -999,32 +1204,35 @@ proc configureDiagnostics(tableView: TableView) =
   tableView.addColumn(newTableColumn("path", "Path", width = 146.0))
   tableView.addColumn(newTableColumn("message", "Diagnostic", width = 260.0))
 
+proc newPaletteButton(editor: ResourceEditor, kind: string): Button =
+  let action = nimkitSelectors.actionSelector("resourceEditorInsert" & kind)
+  result = newButton(kind)
+  result.target = newActionTarget(
+    action,
+    proc(sender: DynamicAgent) =
+      discard sender
+      discard editor.insertViewKind(kind),
+  )
+  result.action = action
+  result.toolTip = "Insert a " & kind & " resource"
+
 proc configurePalette(editor: ResourceEditor) =
   editor.xPaletteView.edgeInsets = insets(4.0)
   editor.xPaletteView.spacing[dcol] = 6.0
   editor.xPaletteView.spacing[drow] = 6.0
   for index, kind in editor.xPaletteKinds:
-    let
-      button = newButton(kind)
-      action = nimkitSelectors.actionSelector("resourceEditorInsert" & kind)
-      selectedKind = kind
-    button.target = newActionTarget(
-      action,
-      proc(sender: DynamicAgent) =
-        discard sender
-        discard editor.insertViewKind(selectedKind),
-    )
-    button.action = action
-    button.toolTip = "Insert a " & kind & " resource"
+    let button = editor.newPaletteButton(kind)
+    editor.xPaletteButtons.add button
     editor.xPaletteView.addSubview(button, row = index div 3, col = index mod 3)
 
 proc configureToolbar(
-    editor: ResourceEditor, saveButton, undoButton, redoButton: Button
+    editor: ResourceEditor, saveButton, undoButton, redoButton, deleteButton: Button
 ) =
   let
     saveAction = nimkitSelectors.actionSelector("resourceEditorSave")
     undoAction = nimkitSelectors.actionSelector("resourceEditorUndo")
     redoAction = nimkitSelectors.actionSelector("resourceEditorRedo")
+    deleteAction = nimkitSelectors.actionSelector("resourceEditorDelete")
   saveButton.target = newActionTarget(
     saveAction,
     proc(sender: DynamicAgent) =
@@ -1047,14 +1255,25 @@ proc configureToolbar(
       discard editor.xDocument.undoManagerFor().performRedo(),
   )
   redoButton.action = redoAction
+  deleteButton.target = newActionTarget(
+    deleteAction,
+    proc(sender: DynamicAgent) =
+      discard sender
+      discard editor.removeSelectedView(),
+  )
+  deleteButton.action = deleteAction
 
 proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
-  let previewSurface = ResourceEditorPreviewSurface()
+  let
+    previewSurface = ResourceEditorPreviewSurface()
+    hierarchyView = ResourceEditorHierarchyView()
   initViewFields(previewSurface)
+  initOutlineViewFields(hierarchyView)
+  discard hierarchyView.withProtocol(ResourceEditorHierarchyEvents)
   result = ResourceEditor(
     xDocument: document,
     xRootView: newView(),
-    xHierarchyView: newOutlineView(),
+    xHierarchyView: hierarchyView,
     xPaletteView: newGridView(),
     xPropertyInspector: newTableView(),
     xDiagnosticsView: newTableView(),
@@ -1069,6 +1288,7 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
   )
   initResponder(result)
   previewSurface.xEditor = result
+  hierarchyView.xEditor = result
   discard previewSurface.withProtocol(ResourceEditorPreviewSurfaceEvents)
   discard result.withProtocol(ResourceEditorTableSource)
   discard result.withProtocol(ResourceEditorTableDelegate)
@@ -1097,15 +1317,16 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     saveButton = newButton("Save")
     undoButton = newButton("Undo")
     redoButton = newButton("Redo")
+    deleteButton = newButton("Delete")
 
   result.configurePalette()
-  result.configureToolbar(saveButton, undoButton, redoButton)
+  result.configureToolbar(saveButton, undoButton, redoButton, deleteButton)
   result.xRootView.addSubviews(
     autoNames(
       hierarchyTitle, result.xHierarchyView, paletteTitle, result.xPaletteView,
       previewTitle, result.xStatusLabel, result.xPreviewSurface, inspectorTitle,
       result.xSelectionLabel, result.xPropertyInspector, result.xDiagnosticsTitle,
-      result.xDiagnosticsView, saveButton, undoButton, redoButton,
+      result.xDiagnosticsView, saveButton, undoButton, redoButton, deleteButton,
     )
   )
 
@@ -1122,6 +1343,10 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     undoButton[atRight] == redoButton[atLeft] - 8.0
     undoButton[atWidth] == 72.0
     undoButton[atHeight] == saveButton[atHeight]
+    deleteButton[atTop] == saveButton[atTop]
+    deleteButton[atRight] == undoButton[atLeft] - 8.0
+    deleteButton[atWidth] == 72.0
+    deleteButton[atHeight] == saveButton[atHeight]
 
     hierarchyTitle[atTop] == saveButton[atBottom] + 12.0
     hierarchyTitle[atLeft] == result.xRootView[atLeft] + 18.0
@@ -1138,7 +1363,7 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     result.xPaletteView[atLeft] == hierarchyTitle[atLeft]
     result.xPaletteView[atWidth] == hierarchyTitle[atWidth]
     result.xPaletteView[atBottom] == result.xRootView[atBottom] - 18.0
-    result.xPaletteView[atHeight] == 128.0
+    result.xPaletteView[atHeight] == 170.0
 
     previewTitle[atTop] == hierarchyTitle[atTop]
     previewTitle[atLeft] == result.xHierarchyView[atRight] + 18.0
