@@ -48,5 +48,6 @@ import threadpool_long_work_demo
 import todo_basic
 import todo_stack_drag
 import todo_table
+import treeview_demo
 import view_inspector_demo
 import viewcontroller_demo
