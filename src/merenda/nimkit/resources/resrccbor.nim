@@ -2,7 +2,7 @@
 
 import cborious
 
-import ./resourcecore
+import ./resrccore
 
 const
   ResourceEncodingMode =

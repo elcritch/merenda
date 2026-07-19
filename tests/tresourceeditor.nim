@@ -1,4 +1,4 @@
-import std/[options, os, unittest]
+import std/[options, os, strutils, unittest]
 
 import merenda/nimkit
 
@@ -115,6 +115,119 @@ suite "NimKit resource editor":
     check document.resources().selectedResourceIds() == @[resourceId("label.1")]
     check editor.previewInstance().findView(resourceId("label.1")).isNil == false
     check editor.hierarchyView().selectedItemIdentifier() == "label.1"
+
+  test "hierarchy inspector exposes layout connections and non-view resources":
+    var bundle = editorBundle()
+    bundle.layoutGuides =
+      @[
+        initResourceLayoutGuide(
+          resourceId("editor.content"), resourceId("editor.root"), insets(8.0)
+        )
+      ]
+    bundle.layoutConstraints =
+      @[
+        initResourceLayoutConstraint(
+          resourceId("editor.button.width"),
+          resourceId("editor.root"),
+          resourceLayoutItem(resourceId("editor.button")),
+          rlaWidth,
+          constant = 120.0'f32,
+        )
+      ]
+    bundle.controllers =
+      @[
+        initControllerNodeResource(
+          resourceId("editor.controller"), resourceId("editor.root")
+        )
+      ]
+    bundle.windows =
+      @[
+        WindowResource(
+          id: resourceId("editor.window"),
+          title: resourceText("Editor"),
+          controllerId: resourceId("editor.controller"),
+          keyBindingTableId: resourceId("editor.keys"),
+          themeId: resourceId("editor.theme"),
+        )
+      ]
+    bundle.commands =
+      @[
+        CommandResource(
+          id: resourceId("editor.save"),
+          selector: "saveDocument",
+          targetKind: rctResponderChain,
+        )
+      ]
+    bundle.menus =
+      @[
+        MenuResource(
+          id: resourceId("editor.menu"),
+          title: resourceText("File"),
+          items:
+            @[
+              MenuItemResource(
+                id: resourceId("editor.save.item"),
+                title: resourceText("Save"),
+                commandId: resourceId("editor.save"),
+              )
+            ],
+        )
+      ]
+    bundle.images =
+      @[
+        ImageAssetResource(
+          id: resourceId("editor.image"),
+          sourceKind: risFile,
+          path: "data/shadow-button.png",
+        )
+      ]
+    bundle.localizations =
+      @[
+        LocalizedCatalogResource(
+          id: resourceId("editor.localization"),
+          locale: "en",
+          strings: @[LocalizedStringResource(key: "editor.save", value: "Save")],
+        )
+      ]
+    bundle.keyBindings =
+      @[
+        KeyBindingTableResource(
+          id: resourceId("editor.keys"),
+          bindings:
+            @[
+              KeyBindingResource(
+                stroke: KeyStrokeResource(text: "s", modifiers: {rsmShortcut}),
+                commandId: resourceId("editor.save"),
+              )
+            ],
+        )
+      ]
+    bundle.themes = @[ThemeFragmentResource(id: resourceId("editor.theme"))]
+
+    let
+      document = newResourceEditorDocument(bundle)
+      editor = newResourceEditor(document)
+    check document.resources().draftIsValid()
+    check editor.hasPreview()
+    check editor.hierarchyView().outlineItemIdentifiers().len == 13
+
+    for (id, rowName, expected) in [
+      (resourceId("editor.button.width"), "firstAnchor", "rlaWidth"),
+      (resourceId("editor.content"), "owningViewId", "editor.root"),
+      (resourceId("editor.controller"), "viewId", "editor.root"),
+      (resourceId("editor.window"), "controllerId", "editor.controller"),
+      (resourceId("editor.save.item"), "commandId", "editor.save"),
+      (resourceId("editor.save"), "selector", "saveDocument"),
+      (resourceId("editor.image"), "sourceKind", "risFile"),
+      (resourceId("editor.localization"), "locale", "en"),
+      (resourceId("editor.keys"), "binding[0]", "editor.save"),
+      (resourceId("editor.theme"), "rules", "0"),
+    ]:
+      check editor.selectResource(id)
+      let row = editor.propertyRow(rowName)
+      check row.isSome
+      check expected in row.get().text
+      check not row.get().descriptor.editable
 
   test "CBOR document save and revert share undo clean state":
     let path =

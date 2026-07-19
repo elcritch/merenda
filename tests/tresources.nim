@@ -32,6 +32,7 @@ proc sampleBundle(): ResourceBundle =
   result.localizations =
     @[
       LocalizedCatalogResource(
+        id: resourceId("localization.en"),
         locale: "en",
         strings:
           @[
@@ -131,6 +132,32 @@ proc sampleBundle(): ResourceBundle =
       children = [runButton, icon],
     )
   result.views = @[root]
+  result.layoutGuides =
+    @[
+      initResourceLayoutGuide(
+        resourceId("root.content"), resourceId("root"), insets(4, 8, 12, 16)
+      )
+    ]
+  result.layoutConstraints =
+    @[
+      initResourceLayoutConstraint(
+        resourceId("run.width"),
+        resourceId("root"),
+        resourceLayoutItem(resourceId("run.button")),
+        rlaWidth,
+        constant = 140.0'f32,
+      ),
+      initResourceLayoutConstraint(
+        resourceId("icon.leading"),
+        resourceId("root"),
+        resourceLayoutItem(resourceId("run.icon")),
+        rlaLeading,
+        resourceLayoutItem(resourceId("root.content"), rliGuide),
+        rlaLeading,
+        constant = 4.0'f32,
+        active = false,
+      ),
+    ]
   result.controllers =
     @[initControllerNodeResource(resourceId("root.controller"), resourceId("root"))]
   result.windows =
@@ -191,8 +218,9 @@ suite "NimKit resources":
 
     check kindNames ==
       @[
-        "button", "checkBox", "control", "imageView", "label", "radioButton",
-        "stackView", "textField", "view",
+        "box", "button", "checkBox", "control", "imageView", "label",
+        "progressIndicator", "radioButton", "splitView", "stackView", "switchButton",
+        "textField", "view",
       ]
     check registry.viewKindDescriptor("button").baseKind == "control"
     check registry.findViewKindDescriptor("missing").isNone
@@ -244,6 +272,10 @@ suite "NimKit resources":
     check registry.acceptsViewProperty("textField", "editable", rvBool)
     check registry.acceptsViewProperty("stackView", "distribution", rvString)
     check registry.acceptsViewProperty("imageView", "imageTint", rvColor)
+    check registry.acceptsViewProperty("switchButton", "on", rvBool)
+    check registry.acceptsViewProperty("progressIndicator", "value", rvFloat)
+    check registry.acceptsViewProperty("box", "boxKind", rvString)
+    check registry.acceptsViewProperty("splitView", "dividerThickness", rvFloat)
     check not registry.acceptsViewProperty("button", "state", rvBool)
 
     registry.registerViewKind(
@@ -291,6 +323,10 @@ suite "NimKit resources":
       button = newButton()
       textField = newTextField()
       stackView = newStackView()
+      switchButton = newSwitchButton()
+      progress = newProgressIndicator()
+      box = newBox()
+      splitView = newSplitView()
 
     check registry.applyViewProperty(
       "view", view, resourceProperty("tag", resourceValue(19)), context
@@ -330,6 +366,24 @@ suite "NimKit resources":
       resourceProperty("spacing", resourceValue(-4.0'f32)),
       context,
     )
+    check registry.applyViewProperty(
+      "switchButton", switchButton, resourceProperty("on", resourceValue(true)), context
+    )
+    check registry.applyViewProperty(
+      "progressIndicator",
+      progress,
+      resourceProperty("value", resourceValue(0.75'f32)),
+      context,
+    )
+    check registry.applyViewProperty(
+      "box", box, resourceProperty("title", resourceValue("Resource Group")), context
+    )
+    check registry.applyViewProperty(
+      "splitView",
+      splitView,
+      resourceProperty("splitAxis", resourceValue("laVertical")),
+      context,
+    )
 
     check view.tag() == 19
     check view.alphaValue() == 1.0'f32
@@ -338,6 +392,10 @@ suite "NimKit resources":
     check textField.alignment() == taRight
     check not textField.editable()
     check stackView.spacing() == 0.0'f32
+    check switchButton.on()
+    check progress.value() == 0.75'f32
+    check box.title() == "Resource Group"
+    check splitView.splitAxis() == laVertical
 
   test "canonical CBOR round trips stable resource records":
     let
@@ -351,6 +409,8 @@ suite "NimKit resources":
     check decoded.bundle.format == ResourceFormatName
     check decoded.bundle.namespace == "tests.resources"
     check decoded.bundle.views[0].children[0].id == resourceId("run.button")
+    check decoded.bundle.layoutGuides[0].owningViewId == resourceId("root")
+    check decoded.bundle.layoutConstraints[1].secondItem.kind == rliGuide
     check decoded.bundle.views[0].properties[2].value.insetsValue == insets(
       4, 8, 12, 16
     )
@@ -392,8 +452,12 @@ suite "NimKit resources":
     var bundle = sampleBundle()
     bundle.localizations =
       @[
-        LocalizedCatalogResource(locale: "a", fallbackLocale: "b"),
-        LocalizedCatalogResource(locale: "b", fallbackLocale: "a"),
+        LocalizedCatalogResource(
+          id: resourceId("localization.a"), locale: "a", fallbackLocale: "b"
+        ),
+        LocalizedCatalogResource(
+          id: resourceId("localization.b"), locale: "b", fallbackLocale: "a"
+        ),
       ]
     bundle.themes =
       @[
@@ -405,6 +469,26 @@ suite "NimKit resources":
     let diagnostics = bundle.validateResources(initNimKitResourceRegistry())
     check diagnostics.diagnosticWithCode("resource.localization.fallbackCycle")
     check diagnostics.diagnosticWithCode("resource.theme.parentCycle")
+
+  test "layout validation reports endpoint anchor ownership and scalar errors":
+    var bundle = sampleBundle()
+    bundle.layoutConstraints.add initResourceLayoutConstraint(
+      resourceId("invalid.layout"),
+      resourceId("run.button"),
+      resourceLayoutItem(resourceId("run.icon")),
+      rlaLeft,
+      resourceLayoutItem(resourceId("missing.guide"), rliGuide),
+      rlaTop,
+      multiplier = 0.0'f32,
+      priority = 1200.0'f32,
+    )
+
+    let diagnostics = bundle.validateResources(initNimKitResourceRegistry())
+    check diagnostics.diagnosticWithCode("resource.reference.unavailable")
+    check diagnostics.diagnosticWithCode("resource.layout.anchorMismatch")
+    check diagnostics.diagnosticWithCode("resource.layout.multiplierInvalid")
+    check diagnostics.diagnosticWithCode("resource.layout.priorityInvalid")
+    check diagnostics.diagnosticWithCode("resource.layout.ownerMismatch")
 
   test "validated resources instantiate and bridge to NimKit identities":
     let
@@ -420,6 +504,9 @@ suite "NimKit resources":
       imageView = ImageView(construction.instance.view(resourceId("run.icon")))
       window = construction.instance.window(resourceId("main.window"))
       menu = construction.instance.menu(resourceId("main.menu"))
+      widthConstraint = construction.instance.layoutConstraint(resourceId("run.width"))
+      leadingConstraint =
+        construction.instance.layoutConstraint(resourceId("icon.leading"))
 
     check root.subviews.len == 2
     check root.edgeInsets == insets(4, 8, 12, 16)
@@ -434,6 +521,18 @@ suite "NimKit resources":
     check menu.len == 1
     check menu[0].title == "Run Resource"
     check menu[0].action().name == "performClick"
+    check widthConstraint.firstItem() == View(button)
+    check widthConstraint.firstAttribute() == atWidth
+    check widthConstraint.constant() == 140.0'f32
+    check widthConstraint.active()
+    check leadingConstraint.secondItem() == View(root)
+    check leadingConstraint.constant() == 12.0'f32
+    check not leadingConstraint.active()
+
+    var guide: LayoutGuide
+    check construction.instance.findLayoutGuide(resourceId("root.content"), guide)
+    check guide.owningView() == View(root)
+    check guide.insets() == insets(4, 8, 12, 16)
 
     var theme: Theme
     check construction.instance.findTheme(resourceId("test.theme"), theme)
@@ -462,6 +561,8 @@ suite "NimKit resources":
       )
     expect ResourceLookupError:
       discard construction.instance.view(resourceId("missing"))
+    expect ResourceLookupError:
+      discard construction.instance.layoutConstraint(resourceId("missing"))
 
   test "resource documents provide read-only lookup paths and selection":
     let document = newResourceDocument(editorBundle())

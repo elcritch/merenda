@@ -7,7 +7,7 @@
 import std/[algorithm, options, sets, tables]
 
 import ../foundation/undomanagers
-import ./[resourcecore, resourceregistry, resourcevalidation]
+import ./[resrccore, resrcregistry, resrcvalidation]
 
 type
   ResourceDocumentLookupError* = object of CatchableError
@@ -15,12 +15,15 @@ type
 
   ResourceNodeKind* = enum
     rnkView
+    rnkLayoutGuide
+    rnkLayoutConstraint
     rnkController
     rnkWindow
     rnkMenu
     rnkMenuItem
     rnkCommand
     rnkImage
+    rnkLocalization
     rnkKeyBindings
     rnkTheme
 
@@ -213,6 +216,30 @@ proc buildIndex(bundle: ResourceBundle): Table[ResourceId, ResourceIndexEntry] =
   result = initTable[ResourceId, ResourceIndexEntry]()
   var order: int
   result.indexViewNodes(bundle.views, "views", order)
+  for index, guide in bundle.layoutGuides:
+    let parent =
+      if result.hasKey(guide.owningViewId) and
+          result[guide.owningViewId].path.kind == rnkView:
+        some(result[guide.owningViewId].path)
+      else:
+        none(ResourceNodePath)
+    result.addIndexEntry(
+      rnkLayoutGuide, guide.id, "layoutGuides[" & $index & "]", order, parent
+    )
+  for index, constraint in bundle.layoutConstraints:
+    let parent =
+      if result.hasKey(constraint.owningViewId) and
+          result[constraint.owningViewId].path.kind == rnkView:
+        some(result[constraint.owningViewId].path)
+      else:
+        none(ResourceNodePath)
+    result.addIndexEntry(
+      rnkLayoutConstraint,
+      constraint.id,
+      "layoutConstraints[" & $index & "]",
+      order,
+      parent,
+    )
   result.indexControllerNodes(bundle.controllers, "controllers", order)
   for index, window in bundle.windows:
     result.addIndexEntry(rnkWindow, window.id, "windows[" & $index & "]", order)
@@ -226,6 +253,10 @@ proc buildIndex(bundle: ResourceBundle): Table[ResourceId, ResourceIndexEntry] =
     result.addIndexEntry(rnkCommand, command.id, "commands[" & $index & "]", order)
   for index, image in bundle.images:
     result.addIndexEntry(rnkImage, image.id, "images[" & $index & "]", order)
+  for index, catalog in bundle.localizations:
+    result.addIndexEntry(
+      rnkLocalization, catalog.id, "localizations[" & $index & "]", order
+    )
   for index, bindings in bundle.keyBindings:
     result.addIndexEntry(
       rnkKeyBindings, bindings.id, "keyBindings[" & $index & "]", order
@@ -438,6 +469,38 @@ proc viewProperty*(
     missingResource("view property " & name & " on", viewId)
   found.get()
 
+proc findLayoutGuide*(
+    document: ResourceDocument, id: ResourceId
+): Option[ResourceLayoutGuide] =
+  document.xDraft.findLayoutGuide(id)
+
+proc layoutGuide*(document: ResourceDocument, id: ResourceId): ResourceLayoutGuide =
+  let found = document.findLayoutGuide(id)
+  if found.isNone:
+    missingResource("layout guide", id)
+  found.get()
+
+iterator layoutGuides*(document: ResourceDocument): ResourceLayoutGuide =
+  for guide in document.xDraft.layoutGuides:
+    yield guide
+
+proc findLayoutConstraint*(
+    document: ResourceDocument, id: ResourceId
+): Option[ResourceLayoutConstraint] =
+  document.xDraft.findLayoutConstraint(id)
+
+proc layoutConstraint*(
+    document: ResourceDocument, id: ResourceId
+): ResourceLayoutConstraint =
+  let found = document.findLayoutConstraint(id)
+  if found.isNone:
+    missingResource("layout constraint", id)
+  found.get()
+
+iterator layoutConstraints*(document: ResourceDocument): ResourceLayoutConstraint =
+  for constraint in document.xDraft.layoutConstraints:
+    yield constraint
+
 proc findController*(
     document: ResourceDocument, id: ResourceId
 ): Option[ControllerNodeResource] =
@@ -511,6 +574,21 @@ proc image*(document: ResourceDocument, id: ResourceId): ImageAssetResource =
   let found = document.findImage(id)
   if found.isNone:
     missingResource("image", id)
+  found.get()
+
+proc findLocalization*(
+    document: ResourceDocument, id: ResourceId
+): Option[LocalizedCatalogResource] =
+  for catalog in document.xDraft.localizations:
+    if catalog.id == id:
+      return some(catalog)
+
+proc localization*(
+    document: ResourceDocument, id: ResourceId
+): LocalizedCatalogResource =
+  let found = document.findLocalization(id)
+  if found.isNone:
+    missingResource("localization", id)
   found.get()
 
 proc findKeyBindings*(

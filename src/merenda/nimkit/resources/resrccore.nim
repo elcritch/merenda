@@ -1,4 +1,4 @@
-## Stable, backend-neutral records for declarative NimKit resources.
+## Stable backend-neutral records for declarative NimKit resources.
 ##
 ## These records intentionally contain no identity-bearing NimKit objects. A decoded
 ## bundle can be inspected and validated without constructing views, controllers,
@@ -10,6 +10,8 @@ from ../foundation/types import Color, Rect, Size
 from ../themes/themecore import EdgeInsets
 
 type
+  ResourceLookupError* = object of CatchableError
+
   ResourceId* = distinct string
 
   ResourceVersion* = object
@@ -19,12 +21,15 @@ type
   ResourceReferenceKind* = enum
     rrNone
     rrView
+    rrLayoutGuide
+    rrLayoutConstraint
     rrController
     rrWindow
     rrMenu
     rrCommand
     rrImage
     rrLocalizedString
+    rrLocalization
     rrKeyBindings
     rrTheme
     rrTarget
@@ -79,6 +84,52 @@ type
     kind*: string
     properties*: seq[ResourceProperty]
     children*: seq[ViewNodeResource]
+
+  ResourceLayoutItemKind* = enum
+    rliView
+    rliGuide
+
+  ResourceLayoutAnchor* = enum
+    rlaNotAnAnchor
+    rlaLeft
+    rlaRight
+    rlaTop
+    rlaBottom
+    rlaLeading
+    rlaTrailing
+    rlaWidth
+    rlaHeight
+    rlaCenterX
+    rlaCenterY
+    rlaLastBaseline
+    rlaFirstBaseline
+
+  ResourceLayoutRelation* = enum
+    rlrLessThanOrEqual
+    rlrEqual
+    rlrGreaterThanOrEqual
+
+  ResourceLayoutItemReference* = object
+    kind*: ResourceLayoutItemKind
+    id*: ResourceId
+
+  ResourceLayoutGuide* = object
+    id*: ResourceId
+    owningViewId*: ResourceId
+    insets*: EdgeInsets
+
+  ResourceLayoutConstraint* = object
+    id*: ResourceId
+    owningViewId*: ResourceId
+    firstItem*: ResourceLayoutItemReference
+    firstAnchor*: ResourceLayoutAnchor
+    relation*: ResourceLayoutRelation
+    secondItem*: ResourceLayoutItemReference
+    secondAnchor*: ResourceLayoutAnchor
+    multiplier*: float32
+    constant*: float32
+    priority*: float32
+    active*: bool
 
   ControllerNodeResource* = object
     id*: ResourceId
@@ -179,6 +230,7 @@ type
     value*: string
 
   LocalizedCatalogResource* = object
+    id*: ResourceId
     locale*: string
     fallbackLocale*: string
     strings*: seq[LocalizedStringResource]
@@ -244,6 +296,8 @@ type
     version*: ResourceVersion
     namespace*: string
     views*: seq[ViewNodeResource]
+    layoutGuides*: seq[ResourceLayoutGuide]
+    layoutConstraints*: seq[ResourceLayoutConstraint]
     controllers*: seq[ControllerNodeResource]
     windows*: seq[WindowResource]
     menus*: seq[MenuResource]
@@ -281,7 +335,7 @@ type
 
 const
   ResourceFormatName* = "org.merenda.nimkit.resources"
-  CurrentResourceVersion* = ResourceVersion(major: 1, minor: 0)
+  CurrentResourceVersion* = ResourceVersion(major: 1, minor: 1)
 
 func `==`*(a, b: ResourceId): bool {.borrow.}
 func hash*(id: ResourceId): Hash {.borrow.}
@@ -364,6 +418,40 @@ func initViewNodeResource*(
 ): ViewNodeResource =
   ViewNodeResource(id: id, kind: kind, properties: @properties, children: @children)
 
+func resourceLayoutItem*(id: ResourceId, kind = rliView): ResourceLayoutItemReference =
+  ResourceLayoutItemReference(kind: kind, id: id)
+
+func initResourceLayoutGuide*(
+    id, owningViewId: ResourceId, insets = EdgeInsets()
+): ResourceLayoutGuide =
+  ResourceLayoutGuide(id: id, owningViewId: owningViewId, insets: insets)
+
+func initResourceLayoutConstraint*(
+    id, owningViewId: ResourceId,
+    firstItem: ResourceLayoutItemReference,
+    firstAnchor: ResourceLayoutAnchor,
+    secondItem = ResourceLayoutItemReference(),
+    secondAnchor = rlaNotAnAnchor,
+    relation = rlrEqual,
+    multiplier = 1.0'f32,
+    constant = 0.0'f32,
+    priority = 1000.0'f32,
+    active = true,
+): ResourceLayoutConstraint =
+  ResourceLayoutConstraint(
+    id: id,
+    owningViewId: owningViewId,
+    firstItem: firstItem,
+    firstAnchor: firstAnchor,
+    relation: relation,
+    secondItem: secondItem,
+    secondAnchor: secondAnchor,
+    multiplier: multiplier,
+    constant: constant,
+    priority: priority,
+    active: active,
+  )
+
 func initControllerNodeResource*(
     id: ResourceId,
     viewId: ResourceId,
@@ -432,6 +520,22 @@ proc findView*(bundle: ResourceBundle, id: ResourceId): Option[ViewNodeResource]
     some(found)
   else:
     none(ViewNodeResource)
+
+proc findLayoutGuide*(
+    bundle: ResourceBundle, id: ResourceId
+): Option[ResourceLayoutGuide] =
+  for guide in bundle.layoutGuides:
+    if guide.id == id:
+      return some(guide)
+  none(ResourceLayoutGuide)
+
+proc findLayoutConstraint*(
+    bundle: ResourceBundle, id: ResourceId
+): Option[ResourceLayoutConstraint] =
+  for constraint in bundle.layoutConstraints:
+    if constraint.id == id:
+      return some(constraint)
+  none(ResourceLayoutConstraint)
 
 proc findController*(
     bundle: ResourceBundle, id: ResourceId

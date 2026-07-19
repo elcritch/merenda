@@ -5,14 +5,14 @@ import std/[algorithm, options, sets, strutils, tables]
 import sigils/selectors
 
 import ../app/viewcontrollers
-import ../containers/stackviews
-import ../controls/[buttons, controls]
+import ../containers/[boxes, splitviews, stackviews]
+import ../controls/[buttons, controls, progressindicators, switchbuttons]
 import ../drawing/images
 import ../foundation/types
 import ../text/textfields
 import ../themes
 import ../view/[imageviews, views]
-import ./resourcecore
+import ./resrccore
 
 type
   ResourceRegistryLookupError* = object of CatchableError
@@ -668,6 +668,8 @@ proc registerDefaultResourceValueTypes(registry: var ResourceRegistry) =
   registerResourceEnumType[StackViewDistribution](registry, "StackViewDistribution")
   registerResourceEnumType[ImageScaling](registry, "ImageScaling")
   registerResourceEnumType[ImageAlignment](registry, "ImageAlignment")
+  registerResourceEnumType[BoxKind](registry, "BoxKind")
+  registerResourceEnumType[ProgressIndicatorStyle](registry, "ProgressIndicatorStyle")
 
 proc initNimKitResourceRegistry*(): ResourceRegistry =
   result = initResourceRegistry()
@@ -733,6 +735,39 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
       StackView(parent).removeArrangedSubview(child)
       child.removeFromSuperview(),
   )
+  result.registerViewKind(
+    "switchButton",
+    proc(frame: Rect): View =
+      newSwitchButton(frame = frame),
+    baseKind = "control",
+  )
+  result.registerViewKind(
+    "progressIndicator",
+    proc(frame: Rect): View =
+      newProgressIndicator(frame = frame),
+    baseKind = "control",
+  )
+  result.registerViewKind(
+    "box",
+    proc(frame: Rect): View =
+      newBox(frame = frame),
+    baseKind = "view",
+    attachChild = proc(parent, child: View) =
+      Box(parent).addContentSubview(child),
+    detachChild = proc(parent, child: View) =
+      discard parent
+      child.removeFromSuperview(),
+  )
+  result.registerViewKind(
+    "splitView",
+    proc(frame: Rect): View =
+      newSplitView(frame = frame),
+    baseKind = "view",
+    attachChild = proc(parent, child: View) =
+      SplitView(parent).addPane(child),
+    detachChild = proc(parent, child: View) =
+      SplitView(parent).removePane(child),
+  )
   result.registerControllerKind(
     "viewController",
     proc(): ViewController =
@@ -748,6 +783,11 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
   result.registerViewProtocolProperties("stackView", StackViewProtocol)
   result.registerViewPropertyAlias("stackView", "alignment", "stackAlignment")
   result.registerViewProtocolProperties("imageView", ImageViewProtocol)
+  result.registerViewProtocolProperties("switchButton", SwitchButtonProtocol)
+  result.registerViewProtocolProperties("progressIndicator", ProgressProtocol)
+  result.registerViewProtocolProperties("box", BoxProtocol)
+  result.registerViewPropertyAlias("box", "title", "boxTitle")
+  result.registerViewProtocolProperties("splitView", SplitViewProtocol)
 
   for name in [
     "cancelOperation", "complete", "copy", "cut", "deleteBackward", "deleteForward",

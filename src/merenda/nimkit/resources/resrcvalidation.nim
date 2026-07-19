@@ -1,10 +1,10 @@
 ## Structural and semantic validation for NimKit resource bundles.
 
-import std/[options, os, sets, tables]
+import std/[math, options, os, sets, tables]
 
 import ../foundation/types
 import ../themes
-import ./[resourcecore, resourceregistry]
+import ./[resrccore, resrcregistry]
 
 type
   ResourceValidationOptions* = object
@@ -131,6 +131,12 @@ proc collectIdentifiers(
     state: var ValidationState, bundle: ResourceBundle, limits: ResourceLoadLimits
 ) =
   state.collectViewIdentifiers(bundle.views, "views", 1, limits)
+  for index, guide in bundle.layoutGuides:
+    state.addIdentifier(guide.id, rrLayoutGuide, "layoutGuides[" & $index & "].id")
+  for index, constraint in bundle.layoutConstraints:
+    state.addIdentifier(
+      constraint.id, rrLayoutConstraint, "layoutConstraints[" & $index & "].id"
+    )
   state.collectControllerIdentifiers(bundle.controllers, "controllers", 1, limits)
   for index, window in bundle.windows:
     state.addIdentifier(window.id, rrWindow, "windows[" & $index & "].id")
@@ -147,6 +153,12 @@ proc collectIdentifiers(
   for index, theme in bundle.themes:
     state.addIdentifier(theme.id, rrTheme, "themes[" & $index & "].id")
   for catalogIndex, catalog in bundle.localizations:
+    state.addIdentifier(
+      catalog.id,
+      rrLocalization,
+      "localizations[" & $catalogIndex & "].id",
+      required = bundle.version.minor >= 1,
+    )
     for stringIndex, entry in catalog.strings:
       let path = "localizations[" & $catalogIndex & "].strings[" & $stringIndex & "]"
       if entry.key.len == 0:
@@ -300,6 +312,187 @@ proc validateControllerNodes(
         relatedId = node.viewId,
       )
     state.validateControllerNodes(registry, node.children, nodePath & ".children")
+
+func layoutAxis(anchor: ResourceLayoutAnchor): int =
+  case anchor
+  of rlaLeft, rlaRight, rlaLeading, rlaTrailing, rlaCenterX: 1
+  of rlaTop, rlaBottom, rlaCenterY, rlaLastBaseline, rlaFirstBaseline: 2
+  of rlaWidth, rlaHeight: 3
+  of rlaNotAnAnchor: 0
+
+func finiteResourceFloat(value: float32): bool =
+  classify(value.float) notin {fcNan, fcInf, fcNegInf}
+
+proc viewNodeContains(node: ViewNodeResource, id: ResourceId): bool =
+  if node.id == id:
+    return true
+  for child in node.children:
+    if child.viewNodeContains(id):
+      return true
+
+proc viewContains(
+    nodes: openArray[ViewNodeResource], ownerId, itemId: ResourceId
+): bool =
+  for node in nodes:
+    if node.id == ownerId:
+      return node.viewNodeContains(itemId)
+    if node.children.viewContains(ownerId, itemId):
+      return true
+
+proc endpointViewId(
+    bundle: ResourceBundle, item: ResourceLayoutItemReference
+): ResourceId =
+  case item.kind
+  of rliView:
+    item.id
+  of rliGuide:
+    let guide = bundle.findLayoutGuide(item.id)
+    if guide.isSome:
+      guide.get().owningViewId
+    else:
+      ResourceId("")
+
+proc validateLayoutItem(
+    state: var ValidationState, item: ResourceLayoutItemReference, path: string
+) =
+  state.checkReference(
+    resourceReference(if item.kind == rliView: rrView else: rrLayoutGuide, item.id),
+    path,
+  )
+
+proc validateLayout(state: var ValidationState, bundle: ResourceBundle) =
+  for index, guide in bundle.layoutGuides:
+    let path = "layoutGuides[" & $index & "]"
+    state.checkReference(
+      resourceReference(rrView, guide.owningViewId), path & ".owningViewId"
+    )
+    for (name, value) in [
+      ("top", guide.insets.top),
+      ("left", guide.insets.left),
+      ("bottom", guide.insets.bottom),
+      ("right", guide.insets.right),
+    ]:
+      if not finiteResourceFloat(value):
+        state.diagnostics.add(
+          rdsError,
+          "resource.layout.guideInsetInvalid",
+          "layout guide inset '" & name & "' must be finite",
+          path = path & ".insets." & name,
+          resourceId = guide.id,
+        )
+
+  for index, constraint in bundle.layoutConstraints:
+    let
+      path = "layoutConstraints[" & $index & "]"
+      hasSecond = not constraint.secondItem.id.isEmpty
+      firstAxis = constraint.firstAnchor.layoutAxis()
+      secondAxis = constraint.secondAnchor.layoutAxis()
+    state.checkReference(
+      resourceReference(rrView, constraint.owningViewId), path & ".owningViewId"
+    )
+    state.validateLayoutItem(constraint.firstItem, path & ".firstItem")
+    if constraint.firstAnchor == rlaNotAnAnchor:
+      state.diagnostics.add(
+        rdsError,
+        "resource.layout.anchorMissing",
+        "layout constraint first anchor is required",
+        path = path & ".firstAnchor",
+        resourceId = constraint.id,
+      )
+    if constraint.firstItem.kind == rliGuide and
+        constraint.firstAnchor in {rlaFirstBaseline, rlaLastBaseline}:
+      state.diagnostics.add(
+        rdsError,
+        "resource.layout.guideAnchorInvalid",
+        "layout guides do not provide baseline anchors",
+        path = path & ".firstAnchor",
+        resourceId = constraint.id,
+      )
+
+    if hasSecond:
+      state.validateLayoutItem(constraint.secondItem, path & ".secondItem")
+      if constraint.secondAnchor == rlaNotAnAnchor:
+        state.diagnostics.add(
+          rdsError,
+          "resource.layout.anchorMissing",
+          "layout constraint second anchor is required",
+          path = path & ".secondAnchor",
+          resourceId = constraint.id,
+        )
+      elif firstAxis != secondAxis:
+        state.diagnostics.add(
+          rdsError,
+          "resource.layout.anchorMismatch",
+          "layout constraint anchors must use compatible axes",
+          path = path & ".secondAnchor",
+          resourceId = constraint.id,
+        )
+      if constraint.secondItem.kind == rliGuide and
+          constraint.secondAnchor in {rlaFirstBaseline, rlaLastBaseline}:
+        state.diagnostics.add(
+          rdsError,
+          "resource.layout.guideAnchorInvalid",
+          "layout guides do not provide baseline anchors",
+          path = path & ".secondAnchor",
+          resourceId = constraint.id,
+        )
+    elif constraint.secondAnchor != rlaNotAnAnchor:
+      state.diagnostics.add(
+        rdsError,
+        "resource.layout.secondItemMissing",
+        "a second anchor requires a second layout item",
+        path = path & ".secondItem",
+        resourceId = constraint.id,
+      )
+    elif firstAxis != 3:
+      state.diagnostics.add(
+        rdsError,
+        "resource.layout.constantAnchorInvalid",
+        "constant-only constraints require a width or height anchor",
+        path = path & ".firstAnchor",
+        resourceId = constraint.id,
+      )
+
+    if not finiteResourceFloat(constraint.multiplier) or constraint.multiplier <= 0.0'f32:
+      state.diagnostics.add(
+        rdsError,
+        "resource.layout.multiplierInvalid",
+        "layout constraint multiplier must be finite and greater than zero",
+        path = path & ".multiplier",
+        resourceId = constraint.id,
+      )
+    if not finiteResourceFloat(constraint.constant):
+      state.diagnostics.add(
+        rdsError,
+        "resource.layout.constantInvalid",
+        "layout constraint constant must be finite",
+        path = path & ".constant",
+        resourceId = constraint.id,
+      )
+    if not finiteResourceFloat(constraint.priority) or constraint.priority <= 0.0'f32 or
+        constraint.priority > 1000.0'f32:
+      state.diagnostics.add(
+        rdsError,
+        "resource.layout.priorityInvalid",
+        "layout constraint priority must be greater than 0 and at most 1000",
+        path = path & ".priority",
+        resourceId = constraint.id,
+      )
+
+    for endpoint in [constraint.firstItem, constraint.secondItem]:
+      if endpoint.id.isEmpty:
+        continue
+      let endpointView = bundle.endpointViewId(endpoint)
+      if not endpointView.isEmpty and
+          not bundle.views.viewContains(constraint.owningViewId, endpointView):
+        state.diagnostics.add(
+          rdsError,
+          "resource.layout.ownerMismatch",
+          "layout constraint owner must contain every endpoint",
+          path = path & ".owningViewId",
+          resourceId = constraint.id,
+          relatedId = endpoint.id,
+        )
 
 proc resolveAssetPath(basePath, path: string): string =
   if path.isAbsolute or basePath.len == 0:
@@ -593,6 +786,7 @@ proc validateResources*(
       "resource bundle exceeds the configured node limit",
     )
   state.validateViewNodes(registry, bundle.views, "views")
+  state.validateLayout(bundle)
   state.validateControllerNodes(registry, bundle.controllers, "controllers")
 
   for index, window in bundle.windows:

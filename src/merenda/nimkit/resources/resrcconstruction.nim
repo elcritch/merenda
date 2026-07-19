@@ -11,11 +11,9 @@ import ../foundation/[selectors as nimkitSelectors, types]
 import ../responder/keybindings
 import ../themes
 import ../view/views
-import ./[resourcecore, resourceregistry, resourcevalidation]
+import ./[resrccore, resrclayout, resrcregistry, resrcvalidation]
 
 type
-  ResourceLookupError* = object of CatchableError
-
   ResourceInstantiationContext* = object
     locale*: string
     assetBasePath*: string
@@ -31,6 +29,7 @@ type
     imagesValue: Table[ResourceId, ImageResource]
     themesValue: Table[ResourceId, Theme]
     keyBindingsValue: Table[ResourceId, KeyBindingTable]
+    layoutValue: ResourceLayoutInstance
 
   ResourceInstantiationResult* = object
     instance*: ResourceInstance
@@ -127,6 +126,22 @@ proc findKeyBindings*(
   if instance.keyBindingsValue.hasKey(id):
     bindings = instance.keyBindingsValue[id]
     return true
+
+proc findLayoutGuide*(
+    instance: ResourceInstance, id: ResourceId, guide: var LayoutGuide
+): bool =
+  instance.layoutValue.findLayoutGuide(id, guide)
+
+proc layoutGuide*(instance: ResourceInstance, id: ResourceId): LayoutGuide =
+  instance.layoutValue.layoutGuide(id)
+
+proc findLayoutConstraint*(
+    instance: ResourceInstance, id: ResourceId
+): LayoutConstraint =
+  instance.layoutValue.findLayoutConstraint(id)
+
+proc layoutConstraint*(instance: ResourceInstance, id: ResourceId): LayoutConstraint =
+  instance.layoutValue.layoutConstraint(id)
 
 proc toImageCachePolicy(value: ResourceImageCachePolicy): ImageCachePolicy =
   case value
@@ -425,6 +440,15 @@ proc configureViews(
         if not childView.isNil:
           state.registry.attachChild(node.kind, view, childView)
 
+proc constructLayout(state: var ConstructionState) =
+  let views = state.instance.viewsValue
+  state.instance.layoutValue = state.bundle.instantiateResourceLayout(
+    proc(id: ResourceId): View =
+      views.getOrDefault(id)
+  )
+  for diagnostic in state.instance.layoutValue.diagnostics():
+    state.diagnostics.entries.add diagnostic
+
 proc allocateControllers(
     state: var ConstructionState, nodes: openArray[ControllerNodeResource], path: string
 ) =
@@ -649,6 +673,7 @@ proc instantiateResources*(
   state.allocateMenus()
   state.allocateWindows()
   state.configureViews(bundle.views, "views")
+  state.constructLayout()
   state.configureControllers(bundle.controllers, "controllers")
   state.configureMenus()
   state.configureWindows()

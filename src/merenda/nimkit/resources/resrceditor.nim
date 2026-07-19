@@ -16,11 +16,11 @@ import ../themes
 import ../view/views
 import
   ./[
-    resourcecbor, resourceconstruction, resourcecore, resourcedocument, resourcepreview,
-    resourceregistry, resourcevalidation, resourcevalueediting,
+    resrccbor, resrcconstruction, resrccore, resrcdocument, resrcpreview, resrcregistry,
+    resrcvalidation, resrcvalueediting,
   ]
 
-export resourcevalueediting
+export resrcvalueediting
 
 type
   ResourceEditorPropertyRow* = object
@@ -75,7 +75,7 @@ const
   ResourceEditorDocumentType* = "nimkit-resource"
   ResourceEditorPaletteKinds* = [
     "view", "control", "button", "checkBox", "radioButton", "textField", "label",
-    "imageView", "stackView",
+    "imageView", "stackView", "switchButton", "progressIndicator", "box", "splitView",
   ]
 
 proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor
@@ -262,12 +262,15 @@ proc previewHitTest*(editor: ResourceEditor, point: Point): ResourcePreviewHit =
 func resourceNodeKindTitle(kind: ResourceNodeKind): string =
   case kind
   of rnkView: "View"
+  of rnkLayoutGuide: "Layout Guide"
+  of rnkLayoutConstraint: "Layout Constraint"
   of rnkController: "Controller"
   of rnkWindow: "Window"
   of rnkMenu: "Menu"
   of rnkMenuItem: "Menu Item"
   of rnkCommand: "Command"
   of rnkImage: "Image"
+  of rnkLocalization: "Localization"
   of rnkKeyBindings: "Key Bindings"
   of rnkTheme: "Theme"
 
@@ -352,19 +355,170 @@ proc unknownPropertyDescriptor(property: ResourceProperty): ResourcePropertyDesc
     editable: true,
   )
 
+func displayedId(id: ResourceId): string =
+  if id.isEmpty:
+    "—"
+  else:
+    $id
+
+func displayedText(text: ResourceText): string =
+  if text.key.len > 0:
+    "@" & text.key & (if text.fallback.len > 0: " (" & text.fallback & ")"
+    else: "")
+  else:
+    text.fallback
+
+func displayedLayoutItem(item: ResourceLayoutItemReference): string =
+  if item.id.isEmpty:
+    "—"
+  else:
+    $item.kind & ":" & $item.id
+
+proc addDetailRow(
+    editor: ResourceEditor, name, nimTypeName, text, diagnosticPath: string
+) =
+  editor.xPropertyRows.add ResourceEditorPropertyRow(
+    descriptor:
+      ResourcePropertyDescriptor(name: name, nimTypeName: nimTypeName, editable: false),
+    text: text,
+    diagnosticPath: diagnosticPath,
+  )
+
+proc refreshResourceDetailRows(editor: ResourceEditor, path: ResourceNodePath) =
+  let
+    document = editor.xDocument.xResources
+    basePath = document.diagnosticPath(path)
+  template detail(name, nimType, value: untyped) =
+    editor.addDetailRow(name, nimType, $value, basePath & "." & name)
+
+  template reference(name, value: untyped) =
+    editor.addDetailRow(name, "ResourceId", displayedId(value), basePath & "." & name)
+
+  case path.kind
+  of rnkView:
+    discard
+  of rnkLayoutGuide:
+    let guide = document.layoutGuide(path.id)
+    reference("owningViewId", guide.owningViewId)
+    detail("insets", "EdgeInsets", guide.insets)
+  of rnkLayoutConstraint:
+    let constraint = document.layoutConstraint(path.id)
+    reference("owningViewId", constraint.owningViewId)
+    detail(
+      "firstItem",
+      "ResourceLayoutItemReference",
+      displayedLayoutItem(constraint.firstItem),
+    )
+    detail("firstAnchor", "ResourceLayoutAnchor", constraint.firstAnchor)
+    detail("relation", "ResourceLayoutRelation", constraint.relation)
+    detail(
+      "secondItem",
+      "ResourceLayoutItemReference",
+      displayedLayoutItem(constraint.secondItem),
+    )
+    detail("secondAnchor", "ResourceLayoutAnchor", constraint.secondAnchor)
+    detail("multiplier", "float32", constraint.multiplier)
+    detail("constant", "float32", constraint.constant)
+    detail("priority", "float32", constraint.priority)
+    detail("active", "bool", constraint.active)
+  of rnkController:
+    let controller = document.controller(path.id)
+    detail("kind", "string", controller.kind)
+    reference("viewId", controller.viewId)
+    detail("children", "seq[ControllerNodeResource]", controller.children.len)
+  of rnkWindow:
+    let window = document.window(path.id)
+    detail("kind", "ResourceWindowKind", window.kind)
+    detail("title", "ResourceText", displayedText(window.title))
+    detail("frame", "Rect", window.frame)
+    reference("contentViewId", window.contentViewId)
+    reference("controllerId", window.controllerId)
+    reference("initialFirstResponderId", window.initialFirstResponderId)
+    reference("keyBindingTableId", window.keyBindingTableId)
+    reference("themeId", window.themeId)
+  of rnkMenu:
+    let menu = document.menu(path.id)
+    detail("title", "ResourceText", displayedText(menu.title))
+    detail("items", "seq[MenuItemResource]", menu.items.len)
+  of rnkMenuItem:
+    let item = document.menuItem(path.id)
+    detail("title", "ResourceText", displayedText(item.title))
+    detail("subtitle", "ResourceText", displayedText(item.subtitle))
+    reference("commandId", item.commandId)
+    reference("imageId", item.imageId)
+    if item.hasKeyEquivalent:
+      detail("keyEquivalent", "KeyStrokeResource", item.keyEquivalent)
+    detail("enabled", "ResourceFlag", item.enabled)
+    detail("hidden", "bool", item.hidden)
+    detail("separator", "bool", item.separator)
+    detail("tag", "int", item.tag)
+    detail("validates", "ResourceFlag", item.validates)
+  of rnkCommand:
+    let command = document.command(path.id)
+    detail("selector", "string", command.selector)
+    detail("targetKind", "ResourceCommandTargetKind", command.targetKind)
+    reference("targetId", command.targetId)
+  of rnkImage:
+    let image = document.image(path.id)
+    detail("sourceKind", "ResourceImageSourceKind", image.sourceKind)
+    detail("name", "string", image.name)
+    detail("path", "string", image.path)
+    detail("mediaType", "string", image.mediaType)
+    detail("dataBytes", "int", image.data.len)
+    detail("cachePolicy", "ResourceImageCachePolicy", image.cachePolicy)
+  of rnkLocalization:
+    let catalog = document.localization(path.id)
+    detail("locale", "string", catalog.locale)
+    detail("fallbackLocale", "string", catalog.fallbackLocale)
+    for index, entry in catalog.strings:
+      editor.addDetailRow(
+        "string[" & $index & "]",
+        "LocalizedStringResource",
+        entry.key & " = " & entry.value,
+        basePath & ".strings[" & $index & "]",
+      )
+  of rnkKeyBindings:
+    let bindings = document.keyBindings(path.id)
+    for index, binding in bindings.bindings:
+      editor.addDetailRow(
+        "binding[" & $index & "]",
+        "KeyBindingResource",
+        $binding.stroke & " → " & $binding.commandId,
+        basePath & ".bindings[" & $index & "]",
+      )
+  of rnkTheme:
+    let theme = document.theme(path.id)
+    reference("parentId", theme.parentId)
+    for index, token in theme.tokens:
+      editor.addDetailRow(
+        "token[" & $index & "]",
+        "ThemeTokenResource",
+        token.name & " (" & $token.value.kind & ")",
+        basePath & ".tokens[" & $index & "]",
+      )
+    detail("rules", "seq[ThemeRuleResource]", theme.rules.len)
+
 proc refreshPropertyRows(editor: ResourceEditor) =
   editor.xPropertyRows.setLen(0)
-  let selected = editor.selectedViewId()
+  let selected = editor.selectedResourceId()
   if selected.isNone:
     editor.xPropertyInspector.reloadData()
-    editor.xSelectionLabel.text = "Select a view to inspect its resource properties."
+    editor.xSelectionLabel.text = "Select a resource to inspect its properties."
     return
 
   let
     document = editor.xDocument.xResources
     id = selected.get()
-    node = document.view(id)
-    nodePath = document.diagnosticPath(document.nodePath(id))
+    path = document.nodePath(id)
+    nodePath = document.diagnosticPath(path)
+  if path.kind != rnkView:
+    editor.xSelectionLabel.text =
+      path.kind.resourceNodeKindTitle() & "  " & $id & "  ·  " & nodePath
+    editor.refreshResourceDetailRows(path)
+    editor.xPropertyInspector.reloadData()
+    return
+
+  let node = document.view(id)
   editor.xSelectionLabel.text = node.kind & "  " & $id & "  ·  " & nodePath
 
   var knownNames: seq[string]
@@ -723,6 +877,14 @@ proc defaultViewNode(kind: string, id: ResourceId): ViewNodeResource =
     properties.add resourceProperty("orientation", resourceValue("laVertical"))
     properties.add resourceProperty("spacing", resourceValue(8.0'f32))
     properties.add resourceProperty("edgeInsets", resourceValue(insets(8.0)))
+  of "switchButton":
+    properties.add resourceProperty("on", resourceValue(false))
+  of "progressIndicator":
+    properties.add resourceProperty("value", resourceValue(0.5'f32))
+  of "box":
+    properties.add resourceProperty("title", resourceValue("Group"))
+  of "splitView":
+    properties.add resourceProperty("splitAxis", resourceValue("laHorizontal"))
   else:
     discard
   result = initViewNodeResource(id, kind, properties)
@@ -931,7 +1093,7 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     hierarchyTitle = newHeadingLabel("Resource Hierarchy")
     paletteTitle = newHeadingLabel("View Palette")
     previewTitle = newHeadingLabel("Valid Revision Preview")
-    inspectorTitle = newHeadingLabel("Property Inspector")
+    inspectorTitle = newHeadingLabel("Resource Inspector")
     saveButton = newButton("Save")
     undoButton = newButton("Undo")
     redoButton = newButton("Redo")

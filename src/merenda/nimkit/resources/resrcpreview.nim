@@ -1,6 +1,6 @@
 ## Transactional, identity-preserving previews for declarative resources.
 
-import std/[algorithm, options, sets, tables]
+import std/[algorithm, options, sets, strutils, tables]
 
 import sigils/selectors
 
@@ -11,7 +11,7 @@ import ../foundation/types
 import ../responder/keybindings
 import ../themes
 import ../view/views
-import ./[resourceconstruction, resourcecore, resourceregistry, resourcevalidation]
+import ./[resrcconstruction, resrccore, resrclayout, resrcregistry, resrcvalidation]
 
 type
   ResourcePreviewObjectKind* = enum
@@ -80,6 +80,7 @@ type
     xInstance: ResourceInstance
     xViews: Table[ResourceId, View]
     xControllers: Table[ResourceId, ViewController]
+    xLayout: ResourceLayoutInstance
     xRevision: Natural
     xHasRevision: bool
 
@@ -171,6 +172,26 @@ proc findKeyBindings*(
 ): bool =
   if not preview.isNil:
     result = preview.xInstance.findKeyBindings(id, bindings)
+
+proc findLayoutGuide*(
+    preview: ResourcePreview, id: ResourceId, guide: var LayoutGuide
+): bool =
+  if not preview.isNil:
+    result = preview.xLayout.findLayoutGuide(id, guide)
+
+proc layoutGuide*(preview: ResourcePreview, id: ResourceId): LayoutGuide =
+  if preview.isNil:
+    raise newException(ResourceLookupError, "resource preview is unavailable")
+  preview.xLayout.layoutGuide(id)
+
+proc findLayoutConstraint*(preview: ResourcePreview, id: ResourceId): LayoutConstraint =
+  if not preview.isNil:
+    result = preview.xLayout.findLayoutConstraint(id)
+
+proc layoutConstraint*(preview: ResourcePreview, id: ResourceId): LayoutConstraint =
+  if preview.isNil:
+    raise newException(ResourceLookupError, "resource preview is unavailable")
+  preview.xLayout.layoutConstraint(id)
 
 iterator rootViews*(preview: ResourcePreview): View =
   ## Iterates top-level preview views in resource order.
@@ -354,7 +375,7 @@ proc detachViewHierarchy(
         parentSnapshot = snapshots.getOrDefault(snapshot.parentId)
         parent = views.getOrDefault(snapshot.parentId)
         child = views.getOrDefault(id)
-      if not parent.isNil and not child.isNil and child.superview() == parent:
+      if not parent.isNil and not child.isNil:
         registry.detachChild(parentSnapshot.node.kind, parent, child)
 
 proc attachViewHierarchy(
@@ -698,6 +719,16 @@ proc update*(
         continue
     nextControllers[id] = stagedController
 
+  let nextLayout = bundle.instantiateResourceLayout(
+    proc(id: ResourceId): View =
+      nextViews.getOrDefault(id),
+    activate = false,
+  )
+  for diagnostic in nextLayout.diagnostics():
+    result.diagnostics.entries.add diagnostic
+  if not nextLayout.instantiated:
+    return
+
   for update in propertyUpdates:
     try:
       let stagedView = construction.instance.findView(update.resourceId)
@@ -760,6 +791,7 @@ proc update*(
       return
 
   try:
+    preview.xLayout.deactivate()
     detachRoots(preview.xBundle, preview.xViews, host)
     detachControllerHierarchy(previousControllerSnapshots, preview.xControllers)
     detachControllerHierarchy(nextControllerSnapshots, stagedControllerMap)
@@ -774,15 +806,24 @@ proc update*(
     rewireMenus(
       bundle, preview.xContext, construction.instance, nextViews, nextControllers
     )
+    nextLayout.activate()
     attachRoots(bundle, nextViews, host)
   except CatchableError as error:
+    var rollbackMessages: seq[string]
     try:
+      nextLayout.deactivate()
       preview.restorePreviousGraph(bundle, nextViews, nextControllers, host)
     except CatchableError as rollbackError:
+      rollbackMessages.add rollbackError.msg
+    try:
+      preview.xLayout.activate()
+    except CatchableError as rollbackError:
+      rollbackMessages.add rollbackError.msg
+    if rollbackMessages.len > 0:
       result.diagnostics.add(
         rdsError,
         "resource.preview.rollbackFailed",
-        "preview hierarchy rollback failed: " & rollbackError.msg,
+        "preview hierarchy/layout rollback failed: " & rollbackMessages.join("; "),
       )
     preview.rollbackProperties(
       propertyUpdates, lastApplied, previousPropertyContext, result.diagnostics
@@ -805,6 +846,7 @@ proc update*(
   preview.xInstance = construction.instance
   preview.xViews = move nextViews
   preview.xControllers = move nextControllers
+  preview.xLayout = nextLayout
   preview.xRevision = revision
   preview.xHasRevision = true
   result.applied = true

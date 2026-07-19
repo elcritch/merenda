@@ -358,8 +358,8 @@ Buttons can be tab-selected and activated from the keyboard.
 
 NimKit can encode plain resource records as canonical CBOR, validate them without
 constructing UI identities, and explicitly instantiate view/controller trees,
-windows, panels, menus, commands, images, localized strings, key bindings, and theme
-fragments.
+windows, panels, menus, commands, images, localized strings, key bindings, theme
+fragments, layout guides, and constraints.
 
 ```nim
 import merenda/nimkit/resources
@@ -376,8 +376,11 @@ if loaded.loaded:
 
 Custom view/controller kinds and Sigils property protocols can be added through
 `ResourceRegistry`; compatible property getter/setter pairs are discovered and bound
-automatically. See [docs/resources.md](docs/resources.md) and
-`examples/resource_ui_demo.nim` for the format and construction workflow.
+automatically. The built-in resource-editor palette includes views, controls,
+buttons, check/radio buttons, text fields, labels, image/stack views, switches,
+progress indicators, boxes, and split views. See
+[docs/resources.md](docs/resources.md) and `examples/resource_ui_demo.nim` for the
+format and construction workflow.
 
 ## Styling
 

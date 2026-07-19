@@ -4,7 +4,7 @@ import std/[sequtils, strutils]
 
 import ../foundation/types
 import ../themes
-import ./resourcecore
+import ./resrccore
 
 type ResourceValueParseResult* = object
   parsed*: bool

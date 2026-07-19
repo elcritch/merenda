@@ -36,6 +36,22 @@ proc previewBundle(): ResourceBundle =
         ],
       )
     ]
+  result.layoutGuides =
+    @[
+      initResourceLayoutGuide(
+        resourceId("root.content"), resourceId("root"), insets(8.0)
+      )
+    ]
+  result.layoutConstraints =
+    @[
+      initResourceLayoutConstraint(
+        resourceId("action.width"),
+        resourceId("root"),
+        resourceLayoutItem(resourceId("action")),
+        rlaWidth,
+        constant = 100.0'f32,
+      )
+    ]
   result.controllers =
     @[
       initControllerNodeResource(
@@ -94,11 +110,14 @@ suite "NimKit identity-preserving resource previews":
       initial = preview.update(previewBundle(), 0, host)
       button = preview.view(resourceId("action"))
       controller = preview.controller(resourceId("action.controller"))
+      initialConstraint = preview.layoutConstraint(resourceId("action.width"))
 
     check initial.applied
     check preview.revision() == 0
     check button.superview() == preview.view(resourceId("left"))
     check host.subviews() == @[preview.view(resourceId("root"))]
+    check initialConstraint.firstItem() == button
+    check initialConstraint.active()
 
     let reconciled = preview.update(movedBundle(), 1, host)
 
@@ -111,6 +130,11 @@ suite "NimKit identity-preserving resource previews":
     check controller.view() == button
     check preview.menu(resourceId("main.menu")).itemModels()[0].target ==
       DynamicAgent(button)
+    let reconciledConstraint = preview.layoutConstraint(resourceId("action.width"))
+    check reconciledConstraint != initialConstraint
+    check not initialConstraint.active()
+    check reconciledConstraint.firstItem() == button
+    check reconciledConstraint.active()
 
     var foundMove = false
     for change in reconciled.changes:

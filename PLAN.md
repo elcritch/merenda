@@ -52,13 +52,13 @@ and sheet workflows before native bridges land: alert button response mapping,
 accessory views, open/save validation, live panel button validation, and
 document-controller open/save integration are covered in tests and examples.
 
-The Nim-native resource layer now provides the serialization and construction
-boundary needed by future visual tooling: stable plain resource records,
-canonical cborious encoding, validation diagnostics, two-pass identity
-construction, and Sigils-backed property discovery. The next resource milestone
-is no longer basic loading; it is an editable resource document and the first
-interactive preview workflow. Identity-preserving resource reconciliation should
-follow once hierarchy and property editing work end to end.
+The Nim-native resource layer now covers canonical serialization, validation,
+controlled document editing and undo, identity-preserving preview reconciliation,
+backend-neutral constraint/guide construction, a 13-kind Sigils-backed palette,
+and inspection of the full resource hierarchy. The next resource work is to turn
+the current constrained editor into a broader builder with typed non-view edits,
+specialized property metadata and controls, direct layout authoring, reusable
+components, and optional native-format translation.
 
 Model-backed widget work should now reuse the contracts proven by `TableView`,
 `OutlineView`, `CollectionView`, `CascadingView`, `ComboBox`, menus,
@@ -69,21 +69,20 @@ build on that vocabulary instead of adding parallel storage models.
 
 ## Recently Completed
 
-- Added the identity-bearing `ResourceDocument` editor boundary around value-only
-  bundles. Typed view-tree insert/remove/move/replace and property edits now update
-  stable identifier paths, validation, current/last-valid revisions, selection,
-  and undo/redo through one controlled mutation path. The resource registry now
-  exposes deterministic view-kind and inherited property descriptors with aliases,
-  selector/type names, accepted value kinds, and editability for generated editors.
-- Added a Nim-native, backend-neutral resource construction layer with stable plain
-  records for UI trees, windows/panels, menus, commands, images, localization, key
-  bindings, and theme fragments; canonical cborious serialization; structured
-  validation diagnostics; extensible factories; and explicit two-pass construction
-  into NimKit identities. Resource properties now discover compatible Sigils
-  protocol getter/setter pairs, decode registered Nim value types, and dispatch
-  through generated Nim-style `property=` selectors instead of maintaining a
-  callback table per built-in property. Geometry, sizes, insets, and colors use
-  the native NimKit value types directly.
+- Completed the first four resource-builder milestones: the identity-bearing
+  `ResourceDocument` owns value-only drafts, validation, stable paths, selection,
+  revisions, and undo; `ResourceEditor` loads and saves canonical cborious data,
+  retains invalid drafts beside a valid preview, and exposes hierarchy/canvas
+  selection, diagnostics, view editing, and full-resource inspection; and
+  `ResourcePreview` reconciles valid revisions while preserving compatible view
+  and controller identities.
+- Expanded the backend-neutral resource schema and construction layer across UI
+  trees, windows/panels, menus, commands, images, localization, key bindings,
+  themes, layout guides, and constraints. Constraint endpoints and owners resolve
+  through `ResourceId`; the default palette has 13 stable controls/containers;
+  and editable properties continue to come from Sigils protocol discovery and
+  registered value conversion rather than builder-only callbacks. Geometry,
+  sizes, insets, and colors use native NimKit value types directly.
 - Reorganized NimKit under domain subdirectories while keeping
   `merenda/nimkit` as the stable umbrella import; completed the drawing/chrome
   split, image resources, view geometry/parity APIs, render alpha/shadow
@@ -492,39 +491,31 @@ unmanaged ownership.
 
 ### Interactive GUI Builder Foundations
 
-Build the first editor-facing workflow on top of `ResourceBundle` rather than
-introducing a second declarative model. The first vertical slice should load a
-bundle, show its hierarchy, select a resource node, edit supported properties,
-validate changes, update a live preview, and save canonical CBOR.
+The first editor-facing workflow is built directly on `ResourceBundle`; there is
+no parallel declarative model. It loads and saves canonical CBOR, validates every
+committed view edit, preserves invalid drafts beside the last valid preview, and
+keeps selection and compatible runtime identities stable across valid revisions.
 
 #### Current Builder Readiness
 
-The first constrained builder workflow is now interactive and backed by the
-same resource, document, validation, construction, and undo contracts as the
-runtime.
+The constrained builder workflow now covers the complete resource hierarchy and
+the first backend-neutral layout bridge.
 
-- Ready: plain resource records, canonical cborious persistence, structural and
-  semantic diagnostics, stable `ResourceId` paths, controlled editable resource
-  documents with current/last-valid revisions and undo, two-pass construction,
-  deterministic registry descriptors, Sigils protocol setter/getter discovery
-  with bidirectional typed resource-value conversion, and transactional
-  identity-preserving preview reconciliation.
-- Reusable for editor work: `Document` and `UndoManager` already provide file,
-  edited-state, grouped undo/redo, and clean-state contracts; view inspection,
-  subtree click selection, identifiers, coordinate conversion, and selection
-  rings provide most of the preview-selection primitives.
-- Ready for use: `ResourceEditorDocument` and `ResourceEditor` provide a resource
-  hierarchy, the nine registered starter kinds, a descriptor-driven property
-  inspector, path-addressed diagnostics, identity-preserving valid-revision
-  previews, identifier-based hierarchy/canvas selection, hover geometry, and
-  canonical CBOR save/revert.
-- Partial: the hierarchy can inspect all identified resources, while property
-  editing and palette insertion currently target view resources. UI-only labels,
-  grouping, ranges, and specialized input hints still need a separate optional
-  metadata layer above the registry descriptors.
-- Missing: constraint records and editor surfaces for connections and non-view
-  resources. Controller and window extension properties also remain deferred in
-  the built-in construction registry.
+- Ready: value-only versioned records, canonical cborious persistence, semantic
+  diagnostics, stable `ResourceId` paths, document revisions and undo, staged
+  construction, deterministic registry descriptors, Sigils property discovery,
+  and transactional identity-preserving preview reconciliation.
+- Ready: backend-neutral layout guides and constraints resolve view/guide
+  endpoints by identifier, validate ownership and anchor compatibility, lower
+  guide insets into solver constants, and rebuild against preserved preview view
+  identities.
+- Ready: `ResourceEditor` provides hierarchy and canvas selection, hover geometry,
+  a 13-kind Sigils-backed view palette, editable view properties, path-addressed
+  diagnostics, and read-only detail surfaces for layout, ownership, connections,
+  menus, commands, images, localization, key bindings, and themes.
+- Remaining builder work: typed authoring operations and specialized editors for
+  non-view resources and constraints, optional presentation metadata, controller
+  and window extension properties, and import/export adapters.
 
 #### Milestone 1 — Editable Document and Property Schema (Completed 2026-07-19)
 
@@ -586,24 +577,54 @@ runtime.
   identity preservation, transactional failures, asset changes, getter
   conversion, geometry, hover, and selection restoration.
 
-#### Milestone 4 — Layout and Resource Breadth
+#### Milestone 4 — Layout and Resource Breadth (Completed 2026-07-19)
 
-- Add backend-neutral records for layout constraints and guides before freeform
-  constraint editing. Model stable constraint identifiers, item references,
-  anchors, relations, multipliers, constants, priorities, and activation state;
-  validate and reconcile endpoints through `ResourceId` references. Frame and
-  stack-view properties remain sufficient for the first vertical slice.
-- Expand the default registry and palette across stable NimKit controls and
-  containers as their protocol properties become resource-convertible. Do not
-  add parallel callback-based property tables for builder-only support.
-- Add editor surfaces for target/action connections, controller ownership,
-  menus, commands, images, localization, key bindings, and theme fragments after
-  the view-tree/property workflow is stable. Keep connections as resource
-  references and selector names until instantiation.
-- Keep native nib/storyboard and GNUstep import/export as optional translation
-  layers into the same resource document. Native handles and platform editor
-  assumptions must not enter core NimKit APIs.
+- Added format 1.1 value records for layout guides, layout item references, and
+  constraints with stable identifiers, anchors, relations, multipliers,
+  constants, priorities, explicit owners, and activation state. Validation checks
+  references, finite scalar values, compatible anchors, guide baseline use, and
+  owner containment before construction.
+- Added a backend-neutral layout bridge that lowers guide inset offsets into the
+  existing NimKit constraint solver. Full construction exposes strict and optional
+  guide/constraint lookup; preview updates replace constraint identities while
+  reconnecting endpoints to reused views and restoring the prior active layout on
+  failed reconciliation.
+- Expanded the default registry and palette from 9 to 13 kinds with `switchButton`,
+  `progressIndicator`, `box`, and `splitView`. Their editable properties are
+  discovered from Sigils protocols and existing resource-value converters; no
+  builder-specific setter tables were added.
+- Added stable localization catalog identifiers and hierarchy/detail inspection
+  for layout records, target/action references, controller/window ownership,
+  menus, commands, images, localization, key bindings, and theme fragments.
+  Connections remain serialized identifiers and selector names until runtime
+  instantiation.
+- Kept all records, validation, document paths, and construction interfaces free
+  of native resource handles. Future nib/storyboard and GNUstep bridges remain
+  translation layers into this same model.
 
+#### Future Work — Resource Builder
+
+- Extend `ResourceDocument` with typed insert, remove, move, and replace operations
+  for constraints, guides, controllers, windows, menus, commands, assets,
+  localization catalogs, key bindings, and themes. Add grouped transactions for
+  edits that create or remove several related references atomically.
+- Add an optional editor metadata registry for labels, categories, palette order,
+  default frames, numeric ranges, enum choices, asset pickers, multiline text,
+  and other input hints without changing runtime property descriptors.
+- Build direct-manipulation layout authoring: guide overlays, anchor handles,
+  snapping, constant editing, priority and activation controls, constraint
+  ownership visualization, and conflict/ambiguity diagnostics. Keep frames and
+  stack/container layout available as simpler authoring modes.
+- Turn the read-only resource detail surfaces into structured editors for
+  target/action connections, controller ownership, menus, commands, images,
+  localized strings, key bindings, and theme fragments. Every commit should use
+  typed document operations and retain invalid draft input where appropriate.
+- Add reusable components and templates, copy/paste and drag/drop payloads,
+  multi-selection transforms, stable duplicate-ID remapping, and package-relative
+  asset management suitable for a standalone builder application.
+- Define schema migrations and optional nib/storyboard and GNUstep import/export
+  adapters. Adapters should report lossy mappings explicitly and must translate
+  into `ResourceBundle` rather than leaking platform resource types into NimKit.
 
 ## Medium-Term Architecture
 
