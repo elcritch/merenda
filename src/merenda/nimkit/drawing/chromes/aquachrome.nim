@@ -695,29 +695,13 @@ proc drawAquaButtonBacking(
   if not chrome.isEnabled:
     return
   if aqua.buttonCapGloss:
-    let
-      shadowRect = rect(
-        extras.rect.origin.x,
-        extras.rect.origin.y + 2.0'f32,
-        extras.rect.size.width,
-        extras.rect.size.height,
-      )
-      pearlRect = rect(
-        extras.rect.origin.x,
-        extras.rect.origin.y + 1.8'f32,
-        extras.rect.size.width,
-        extras.rect.size.height,
-      )
-    discard context.addRenderRectangle(
-      extras.layer,
-      extras.parent,
-      shadowRect,
-      transparentFill(),
-      color(0.0, 0.0, 0.0, 0.0),
-      0.0'f32,
-      extras.cornerRadius,
-      [dropShadow(color(0.0, 0.0, 0.0, 0.64), y = 2.0, blur = 6.0)],
-      cornerRadii = extras.cornerRadii,
+    if not chrome.isPressed:
+      return
+    let pearlRect = rect(
+      extras.rect.origin.x,
+      extras.rect.origin.y + 1.8'f32,
+      extras.rect.size.width,
+      extras.rect.size.height,
     )
     discard context.addRenderRectangle(
       extras.layer,

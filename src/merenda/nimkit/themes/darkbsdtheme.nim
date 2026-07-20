@@ -65,11 +65,7 @@ func rubyAccentButtonPressedFill(): Fill =
   )
 
 func rubyButtonShadows(): seq[BoxShadow] =
-  @[
-    dropShadow(color(0.96, 0.18, 0.28, 0.20), blur = 3.2, spread = 0.7),
-    dropShadow(color(0.0, 0.0, 0.0, 0.58), y = 2.0, blur = 5.5),
-    insetShadow(color(0.12, 0.0, 0.012, 0.52), y = -1.0, blur = 2.8),
-  ]
+  @[insetShadow(color(0.12, 0.0, 0.012, 0.52), y = -1.0, blur = 2.8)]
 
 func rubyButtonPressedShadows(): seq[BoxShadow] =
   @[

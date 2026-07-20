@@ -1035,7 +1035,8 @@ suite "nimkit theme":
     check buttonStyle.text.color == color(1.0, 0.97, 0.98, 1.0)
     check buttonStyle.textHighlightColor == color(1.0, 0.90, 0.92, 0.34)
     check buttonStyle.textShadowColor == color(0.16, 0.0, 0.025, 0.66)
-    check buttonStyle.box.shadows.len == 3
+    check buttonStyle.box.shadows ==
+      @[insetShadow(color(0.12, 0.0, 0.012, 0.52), y = -1.0, blur = 2.8)]
     check pressedStyle.box.shadows.len == 2
     check disabledStyle.box.shadows.len == 0
     check checkBoxStyle.indicator.fill == color(0.58, 0.022, 0.052, 1.0)
