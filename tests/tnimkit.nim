@@ -3,6 +3,7 @@ import nimkit/animations
 import nimkit/backend
 import nimkit/boxes
 import nimkit/canvasviews
+import nimkit/canvasdemo
 import nimkit/cascadingviews
 import nimkit/collectionviews
 import nimkit/comboboxes

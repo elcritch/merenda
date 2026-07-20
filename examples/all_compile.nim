@@ -9,6 +9,7 @@ import "7gui/timer"
 import box_demo
 import button_counter
 import button_demo
+import canvas_demo
 import cascading_demo
 import checkbox_demo
 import combo_scroll_demo

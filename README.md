@@ -459,6 +459,28 @@ proc newBadgeView(frame: Rect): BadgeView =
   discard result.withProtocol(BadgeDrawing)
 ```
 
+For retained, browser-style drawing, use `CanvasView` and its `"2d"` context:
+
+```nim
+let
+  canvas = newCanvasView(rect(0, 0, 640, 420))
+  context = canvas.getContext("2d")
+
+context.fillStyle = "rebeccapurple"
+context.fillRect(24, 24, 120, 72)
+context.beginPath()
+context.moveTo(220, 30)
+context.lineTo(280, 130)
+context.lineTo(170, 100)
+context.closePath()
+context.fill()
+```
+
+Primitive operations are retained as FigDraw drawables, arbitrary filled paths
+are converted to MTSDF resources, and `drawImage` retains an `ImageResource`.
+Run `nim r examples/canvas_demo.nim` for a tool palette with drag drawing,
+color and stroke controls, image stamping, clearing, and undo.
+
 ## Examples
 
 Run the combined controls demo:
@@ -473,7 +495,8 @@ Current examples are mirrored by `examples/all_compile.nim`:
 - Controls: `textfield_demo`, `checkbox_demo`, `radio_demo`, `combobox_demo`, `combo_scroll_demo`, `stepper_demo`, `progress_indicator_demo`
 - Layout and containers: `box_demo`, `splitview_demo`, `scrollview_demo`, `tabview_demo`, `layout_showcase`, `constraint_playground_demo`, `grid_preferences`
 - Data and models: `table_demo`, `treeview_demo`, `outline_demo`, `cascading_demo`, `collectionview_demo`, `documenttabs_demo`, `matrix_demo`, `menu_demo`, `modelcontrollers_demo`
-- Application workflows: `panel_demo`, `document_workspace_demo`, `preferences_demo`, `viewcontroller_demo`, `view_inspector_demo`, `image_resources_demo`
+- Application workflows: `panel_demo`, `document_workspace_demo`, `preferences_demo`, `viewcontroller_demo`, `view_inspector_demo`
+- Drawing and media: `canvas_demo`, `svg_viewer_demo`, `image_resources_demo`
 - Text and animation: `texteditor_demo`, `synedit_demo`, `monotext_demo`, `animation_demo`
 
 Run any focused example with:
