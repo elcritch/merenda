@@ -6,7 +6,14 @@ Merenda is a modern desktop GUI toolkit based on Cocoa and OpenStep, written in 
 
 The main public module is `merenda/nimkit`. NimKit is designed around [Sigils](https://github.com/elcritch/sigils), which provides Objective-C-style dynamic selectors and protocols along with Qt-style signals and slots. NimKit uses selectors to build Cocoa-style responder/action patterns, while signals and slots cover observable control events. It also provides model controllers, a theme system, and custom chrome for desktop application workflows.
 
-<img width="400"  alt="Screenshot 2026-06-23 at 9 49 13 PM" src="https://github.com/user-attachments/assets/8737afcd-bbcf-4ad1-a7d7-8e5574406c54" /> <img width="400" alt="Screenshot 2026-06-23 at 9 43 10 PM" src="https://github.com/user-attachments/assets/24514943-f0fa-46cd-a6fd-feb2327ad81c" />
+Eye candy:
+
+<img width="828" height="677" alt="modern macos" src="https://github.com/user-attachments/assets/4289a99e-be27-4e06-9d42-3d1a57e82987" />
+<img width="828" height="677" alt="aqua macosx" src="https://github.com/user-attachments/assets/f2d8143b-e6ac-4ce0-b2eb-90b5c2fa0183" />
+<img width="828" height="677" alt="synthwave83" src="https://github.com/user-attachments/assets/5b81393b-ce0a-439f-98c4-da0f721ad57d" />
+<img width="828" height="677" alt="peeachy" src="https://github.com/user-attachments/assets/04f6dea9-c695-481a-a53a-b7f3f0eb61a1" />
+
+
 
 ## Why Try It?
 
