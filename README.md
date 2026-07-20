@@ -12,7 +12,7 @@ Eye candy:
 <img width="400" alt="aqua macosx" src="https://github.com/user-attachments/assets/f2d8143b-e6ac-4ce0-b2eb-90b5c2fa0183" />
 <img width="400" alt="synthwave83" src="https://github.com/user-attachments/assets/5b81393b-ce0a-439f-98c4-da0f721ad57d" />
 <img width="400" alt="peeachy" src="https://github.com/user-attachments/assets/04f6dea9-c695-481a-a53a-b7f3f0eb61a1" />
-<img width="400" alt="darkbsd" src="https://github.com/user-attachments/assets/ad1e1383-55c6-4bf1-9218-66fd75cd28bd" />
+<img width="400" alt="darkbsd2" src="https://github.com/user-attachments/assets/70674e38-e678-4fb6-8b0b-93da41d9f7fd" />
 
 
 
