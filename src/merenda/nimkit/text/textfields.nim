@@ -236,7 +236,6 @@ protocol DefaultTextFieldCellEditing of CellEditingProtocol:
       editor.selectable = textField.isSelectable()
       editor.alignment = textField.alignment()
       editor.textColor = style.text.color
-      editor.selectionColor = style.selectionColor
       editor.typingAttributes =
         defaultTextAttributes(style.text.color, style.text.fontSize)
       editor.allowsUndo = true

@@ -85,6 +85,9 @@ proc checkThemeAccentConsumers(theme: Theme) =
   check progressStyle.activeTrack.borderColor ==
     appearance.colorToken("progress.border.color", fallbackColor)
 
+proc textSelectionColor(theme: Theme): Color =
+  theme.resolveTextFieldStyle(controlStyle(srTextField)).selectionColor
+
 func aquaButtonFill(): Fill =
   linear(
     rgbaColor(86, 167, 233, 163),
@@ -801,6 +804,16 @@ suite "nimkit theme":
     check synthwaveProgress.activeTrack.fill != defaultProgress.activeTrack.fill
     check peachyProgress.activeTrack.fill != synthwaveProgress.activeTrack.fill
 
+  test "built-in themes keep independent text selection colors":
+    check initTheme().textSelectionColor() == color(0.24, 0.56, 1.0, 0.34)
+    check initBannerTheme().textSelectionColor() == color(0.31, 0.58, 0.54, 0.32)
+    check initMacOSTheme().textSelectionColor() == color(0.04, 0.52, 1.0, 0.26)
+    check initMacOSDarkTheme().textSelectionColor() == color(0.04, 0.52, 1.0, 0.38)
+    check initDarkBSDTheme().textSelectionColor() == color(0.34, 0.18, 0.23, 0.92)
+    check initNebulaTheme().textSelectionColor() == color(0.20, 0.88, 1.0, 0.34)
+    check initPeachyTheme().textSelectionColor() == color(0.88, 0.30, 0.52, 0.40)
+    check initSynthwave83Theme().textSelectionColor() == color(1.0, 0.08, 0.86, 0.40)
+
   test "banner theme exposes generated banner palette as an opt-in theme":
     let
       theme = initBannerTheme()
@@ -861,6 +874,7 @@ suite "nimkit theme":
     check checkBoxStyle.indicator.fill == color(0.04, 0.52, 1.0, 1.0)
     check theme.resolveChromeName(controlStyle(srTextField)) == DefaultChromeName
     check textFieldStyle.box.cornerRadius == 6.0'f32
+    check textFieldStyle.selectionColor == color(0.04, 0.52, 1.0, 0.26)
     check switchStyle.chrome == DefaultChromeName
     check switchStyle.track.fill == color(0.20, 0.78, 0.35, 1.0)
     check theme.resolveChromeName(documentTab) == DefaultChromeName
@@ -933,6 +947,7 @@ suite "nimkit theme":
     check checkBoxStyle.indicator.fill == color(0.04, 0.52, 1.0, 1.0)
     check textFieldStyle.box.fill == color(0.15, 0.15, 0.17, 0.98)
     check textFieldStyle.text.color == color(0.93, 0.93, 0.95, 1.0)
+    check textFieldStyle.selectionColor == color(0.04, 0.52, 1.0, 0.38)
     check comboBoxStyle.box.fill == color(0.25, 0.25, 0.27, 0.98)
     check comboBoxStyle.arrowColor == color(0.76, 0.76, 0.78, 1.0)
     check theme.resolveFill(selectedDocumentTab, fill(color(1.0, 1.0, 1.0, 1.0))) ==

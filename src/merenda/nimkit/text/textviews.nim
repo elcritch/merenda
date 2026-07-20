@@ -166,6 +166,7 @@ type
     xTextColor: Color
     xTextStyleOverride: TextStyle
     xSelectionColor: Color
+    xHasSelectionColorOverride: bool
     xTypingAttributes: TextAttributes
     xSelectedTextAttributes: TextAttributes
     xHasTextStyleOverride: bool
@@ -675,12 +676,31 @@ proc `textColor=`*(textView: TextView, color: Color) =
   textView.needsDisplay = true
 
 proc selectionColor*(textView: TextView): Color =
-  textView.xSelectionColor
+  if textView.xHasSelectionColorOverride:
+    return textView.xSelectionColor
+  let role = if textView.isFieldEditor: srTextField else: srTextView
+  textView.effectiveAppearance().resolveColor(
+    controlStyle(
+      role,
+      textView.widgetStateSet(),
+      id = textView.styleId,
+      classes = textView.styleClasses,
+    ),
+    StyleSelectionColor,
+    textView.xSelectionColor,
+  )
 
 proc `selectionColor=`*(textView: TextView, color: Color) =
-  if textView.xSelectionColor == color:
+  if textView.xHasSelectionColorOverride and textView.xSelectionColor == color:
     return
   textView.xSelectionColor = color
+  textView.xHasSelectionColorOverride = true
+  textView.needsDisplay = true
+
+proc clearSelectionColorOverride*(textView: TextView) =
+  if not textView.xHasSelectionColorOverride:
+    return
+  textView.xHasSelectionColorOverride = false
   textView.needsDisplay = true
 
 proc selectedTextAttributes*(textView: TextView): TextAttributes =

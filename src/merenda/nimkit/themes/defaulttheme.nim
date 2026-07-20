@@ -959,6 +959,8 @@ proc initTheme*(): Theme =
   result[srTextField, StyleBoxShadows] = newSeq[BoxShadow]()
   result[srTextField, StyleChrome] = styleKeyword(AquaChromeName)
 
+  result[srTextView, StyleSelectionColor] = styleToken("textField.selection.color")
+
   result[srMonoTextView, StyleFill] = styleToken("monoText.fill")
   result[srMonoTextView, StyleBorderColor] = styleToken("monoText.border.color")
   result[srMonoTextView, StyleBorderWidth] = 1.0
@@ -966,6 +968,7 @@ proc initTheme*(): Theme =
   result[srMonoTextView, StyleTextColor] = styleToken("monoText.text.color")
   result[srMonoTextView, StyleTextInsets] = insets(6.0)
   result[srMonoTextView, StyleCursorColor] = styleToken("monoText.cursor.color")
+  result[srMonoTextView, StyleSelectionColor] = styleToken("textField.selection.color")
   result[srMonoTextView, StyleMinimumSize] = initSize(80.0, 24.0)
   result[srMonoTextView, StyleFocusRingWidth] = 3.0
   result[srMonoTextView, StyleFocusRingInset] = -2.0

@@ -283,6 +283,30 @@ suite "nimkit text fields":
     check field.stringValue == "Xy"
     check field.selectedRange == initTextRange(2, 0)
 
+  test "active field editor selection follows effective theme":
+    let
+      window = newWindow("Theme selection", frame = rect(0, 0, 240, 120))
+      root = newView(frame = rect(0, 0, 240, 120))
+      field = newTextField("Selected", frame = rect(10, 10, 140, 24))
+
+    root.appearance = initAppearance(initDarkBSDTheme())
+    root.addSubview(field)
+    window.setContentView(root)
+    check window.makeFirstResponder(field)
+    check window.fieldEditor().selectionColor == color(0.34, 0.18, 0.23, 0.92)
+
+    root.appearance = initAppearance(initTheme())
+    check window.fieldEditor().selectionColor == color(0.24, 0.56, 1.0, 0.34)
+
+    root.appearance = initAppearance(initMacOSTheme())
+    check window.fieldEditor().selectionColor == color(0.04, 0.52, 1.0, 0.26)
+
+    root.appearance = initAppearance(initMacOSDarkTheme())
+    check window.fieldEditor().selectionColor == color(0.04, 0.52, 1.0, 0.38)
+
+    root.appearance = initAppearance(initDarkBSDTheme())
+    check window.fieldEditor().selectionColor == color(0.34, 0.18, 0.23, 0.92)
+
   test "field editor keeps caret aligned with passive text field text":
     let
       window = newWindow("Text alignment", frame = rect(0, 0, 240, 120))

@@ -173,6 +173,24 @@ proc newTextViewCheckerSpy(): TextViewCheckerSpy =
   discard result.withProtocol(TextViewCheckerSpyProtocol)
 
 suite "nimkit text views":
+  test "selection color follows the theme until explicitly overridden":
+    let
+      textView = newTextView("Selected")
+      customSelection = color(0.2, 0.8, 0.4, 0.5)
+
+    textView.appearance = initAppearance(initDarkBSDTheme())
+    check textView.selectionColor == color(0.34, 0.18, 0.23, 0.92)
+
+    textView.appearance = initAppearance(initMacOSTheme())
+    check textView.selectionColor == color(0.04, 0.52, 1.0, 0.26)
+
+    textView.selectionColor = customSelection
+    textView.appearance = initAppearance(initMacOSDarkTheme())
+    check textView.selectionColor == customSelection
+
+    textView.clearSelectionColorOverride()
+    check textView.selectionColor == color(0.04, 0.52, 1.0, 0.38)
+
   test "text view inserts and replaces selected text":
     let textView = newTextView("abcdef", frame = rect(0, 0, 160, 24))
 
