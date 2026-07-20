@@ -973,18 +973,54 @@ suite "nimkit theme":
       controlStyle(srView), StyleBackgroundColor, color(1.0, 1.0, 1.0, 1.0)
     ) == color(0.12, 0.12, 0.14, 1.0)
     check buttonStyle.chrome == RubyAquaChromeName
-    check buttonStyle.box.fill == fill(color(0.56, 0.018, 0.052, 0.98))
-    check hoveredStyle.box.fill == fill(color(0.66, 0.030, 0.074, 1.0))
-    check pressedStyle.box.fill == fill(color(0.36, 0.005, 0.022, 1.0))
-    check accentStyle.box.fill == fill(color(0.63, 0.022, 0.060, 1.0))
-    check disabledStyle.box.fill == fill(color(0.29, 0.07, 0.09, 0.82))
-    check buttonStyle.box.cornerRadius == 5.0'f32
-    check buttonStyle.box.borderWidth == 0.8'f32
-    check buttonStyle.minSize == initSize(0.0, 30.0)
+    check buttonStyle.box.fill ==
+      linear(
+        color(0.34, 0.003, 0.020, 1.0),
+        color(0.78, 0.008, 0.036, 1.0),
+        color(0.40, 0.002, 0.018, 1.0),
+        fgaY,
+        142'u8,
+      )
+    check hoveredStyle.box.fill ==
+      linear(
+        color(0.42, 0.006, 0.026, 1.0),
+        color(0.88, 0.016, 0.052, 1.0),
+        color(0.49, 0.004, 0.024, 1.0),
+        fgaY,
+        142'u8,
+      )
+    check pressedStyle.box.fill ==
+      linear(
+        color(0.22, 0.001, 0.012, 1.0),
+        color(0.54, 0.004, 0.024, 1.0),
+        color(0.28, 0.001, 0.012, 1.0),
+        fgaY,
+        136'u8,
+      )
+    check accentStyle.box.fill ==
+      linear(
+        color(0.40, 0.004, 0.024, 1.0),
+        color(0.84, 0.010, 0.044, 1.0),
+        color(0.46, 0.003, 0.022, 1.0),
+        fgaY,
+        142'u8,
+      )
+    check disabledStyle.box.fill ==
+      linear(
+        color(0.24, 0.07, 0.08, 0.78),
+        color(0.40, 0.10, 0.12, 0.78),
+        color(0.27, 0.06, 0.07, 0.78),
+        fgaY,
+        142'u8,
+      )
+    check buttonStyle.box.cornerRadius == 10.0'f32
+    check buttonStyle.box.cornerRadii == initCornerRadii(10.0)
+    check buttonStyle.box.borderWidth == 1.0'f32
+    check buttonStyle.minSize == initSize(0.0, 32.0)
     check buttonStyle.text.color == color(1.0, 0.97, 0.98, 1.0)
     check buttonStyle.textHighlightColor == color(1.0, 0.90, 0.92, 0.34)
     check buttonStyle.textShadowColor == color(0.16, 0.0, 0.025, 0.66)
-    check buttonStyle.box.shadows.len == 2
+    check buttonStyle.box.shadows.len == 3
     check pressedStyle.box.shadows.len == 2
     check disabledStyle.box.shadows.len == 0
     check checkBoxStyle.indicator.fill == color(0.58, 0.022, 0.052, 1.0)
@@ -1063,8 +1099,9 @@ suite "nimkit theme":
       check style.box.cornerRadius == 7.0'f32
       check style.box.fill == color(0.25, 0.25, 0.27, 0.98)
 
+    let darkBSDStyle = initDarkBSDTheme().resolveButtonStyle(controlStyle(srButton))
     for name in ["darkbsd", "dark-bsd", "ruby-bsd"]:
       let style = initThemeByName(name).resolveButtonStyle(controlStyle(srButton))
       check style.chrome == RubyAquaChromeName
-      check style.box.cornerRadius == 5.0'f32
-      check style.box.fill == fill(color(0.56, 0.018, 0.052, 0.98))
+      check style.box.cornerRadius == 10.0'f32
+      check style.box.fill == darkBSDStyle.box.fill

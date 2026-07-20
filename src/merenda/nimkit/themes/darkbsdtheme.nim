@@ -2,30 +2,73 @@ import ./[defaulttheme, macostheme, themecore]
 import ../foundation/types
 
 func rubyButtonFill(): Fill =
-  fill(color(0.56, 0.018, 0.052, 0.98))
+  linear(
+    color(0.34, 0.003, 0.020, 1.0),
+    color(0.78, 0.008, 0.036, 1.0),
+    color(0.40, 0.002, 0.018, 1.0),
+    fgaY,
+    142'u8,
+  )
 
 func rubyButtonHoverFill(): Fill =
-  fill(color(0.66, 0.030, 0.074, 1.0))
+  linear(
+    color(0.42, 0.006, 0.026, 1.0),
+    color(0.88, 0.016, 0.052, 1.0),
+    color(0.49, 0.004, 0.024, 1.0),
+    fgaY,
+    142'u8,
+  )
 
 func rubyButtonPressedFill(): Fill =
-  fill(color(0.36, 0.005, 0.022, 1.0))
+  linear(
+    color(0.22, 0.001, 0.012, 1.0),
+    color(0.54, 0.004, 0.024, 1.0),
+    color(0.28, 0.001, 0.012, 1.0),
+    fgaY,
+    136'u8,
+  )
 
 func rubyButtonDisabledFill(): Fill =
-  fill(color(0.29, 0.07, 0.09, 0.82))
+  linear(
+    color(0.24, 0.07, 0.08, 0.78),
+    color(0.40, 0.10, 0.12, 0.78),
+    color(0.27, 0.06, 0.07, 0.78),
+    fgaY,
+    142'u8,
+  )
 
 func rubyAccentButtonFill(): Fill =
-  fill(color(0.63, 0.022, 0.060, 1.0))
+  linear(
+    color(0.40, 0.004, 0.024, 1.0),
+    color(0.84, 0.010, 0.044, 1.0),
+    color(0.46, 0.003, 0.022, 1.0),
+    fgaY,
+    142'u8,
+  )
 
 func rubyAccentButtonHoverFill(): Fill =
-  fill(color(0.74, 0.040, 0.088, 1.0))
+  linear(
+    color(0.47, 0.008, 0.030, 1.0),
+    color(0.94, 0.022, 0.064, 1.0),
+    color(0.54, 0.005, 0.028, 1.0),
+    fgaY,
+    142'u8,
+  )
 
 func rubyAccentButtonPressedFill(): Fill =
-  fill(color(0.42, 0.006, 0.026, 1.0))
+  linear(
+    color(0.26, 0.001, 0.014, 1.0),
+    color(0.60, 0.005, 0.028, 1.0),
+    color(0.32, 0.001, 0.014, 1.0),
+    fgaY,
+    136'u8,
+  )
 
 func rubyButtonShadows(): seq[BoxShadow] =
   @[
-    dropShadow(color(0.0, 0.0, 0.0, 0.52), y = 1.5, blur = 4.0),
-    insetShadow(color(1.0, 0.42, 0.48, 0.10), y = 1.0, blur = 2.0),
+    dropShadow(color(0.96, 0.18, 0.28, 0.20), blur = 3.2, spread = 0.7),
+    dropShadow(color(0.0, 0.0, 0.0, 0.58), y = 2.0, blur = 5.5),
+    insetShadow(color(0.12, 0.0, 0.012, 0.52), y = -1.0, blur = 2.8),
   ]
 
 func rubyButtonPressedShadows(): seq[BoxShadow] =
@@ -73,9 +116,9 @@ proc installDarkBSDTokens(theme: var Theme) =
 
 proc installDarkBSDButtonStyle(theme: var Theme) =
   theme[srButton, StyleChrome] = styleKeyword(RubyAquaChromeName)
-  theme[srButton, StyleCornerRadius] = 5.0
-  theme[srButton, StyleBorderWidth] = 0.8
-  theme[srButton, StyleMinimumSize] = initSize(0.0, 30.0)
+  theme[srButton, StyleCornerRadius] = 10.0
+  theme[srButton, StyleBorderWidth] = 1.0
+  theme[srButton, StyleMinimumSize] = initSize(0.0, 32.0)
   theme[srButton, StyleTextInsets] = insets(0.0, 12.0)
   theme[srButton, StyleTextHighlightColor] = color(1.0, 0.90, 0.92, 0.34)
   theme[srButton, StyleTextShadowColor] = color(0.16, 0.0, 0.025, 0.66)
