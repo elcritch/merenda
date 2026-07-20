@@ -890,14 +890,20 @@ proc toNimkitMouseButton(button: siwinshim.MouseButton): events.MouseButton =
   of siwinshim.MouseButton.right: events.mbSecondary
   else: events.mbOther
 
-proc toNimkitModifiers(modifiers: set[siwinshim.ModifierKey]): set[events.KeyModifier] =
-  if siwinshim.ModifierKey.shift in modifiers:
+proc toNimkitModifiers*(
+    modifiers: set[siwinshim.ModifierKey], pressed: set[siwinshim.Key] = {}
+): set[events.KeyModifier] =
+  if siwinshim.ModifierKey.shift in modifiers or
+      pressed * {siwinshim.Key.lshift, siwinshim.Key.rshift} != {}:
     result.incl events.kmShift
-  if siwinshim.ModifierKey.control in modifiers:
+  if siwinshim.ModifierKey.control in modifiers or
+      pressed * {siwinshim.Key.lcontrol, siwinshim.Key.rcontrol} != {}:
     result.incl events.kmControl
-  if siwinshim.ModifierKey.alt in modifiers:
+  if siwinshim.ModifierKey.alt in modifiers or
+      pressed * {siwinshim.Key.lalt, siwinshim.Key.ralt} != {}:
     result.incl events.kmOption
-  if siwinshim.ModifierKey.system in modifiers:
+  if siwinshim.ModifierKey.system in modifiers or
+      pressed * {siwinshim.Key.lsystem, siwinshim.Key.rsystem} != {}:
     result.incl events.kmCommand
 
 proc toNimkitKey(key: siwinshim.Key): events.Key =
@@ -947,7 +953,7 @@ proc nativeMousePoint(host: HostWindow, window: siwinshim.Window, rawPos: Vec2):
   initPoint(pos.x.float32, pos.y.float32)
 
 proc nativeModifiers(window: siwinshim.Window): set[events.KeyModifier] =
-  window.keyboard.modifiers.toNimkitModifiers
+  toNimkitModifiers(window.keyboard.modifiers, window.keyboard.pressed)
 
 proc activeMouseButton(window: siwinshim.Window): events.MouseButton =
   if siwinshim.MouseButton.left in window.mouse.pressed:
@@ -1221,14 +1227,20 @@ proc dispatchScroll(host: HostWindow, event: siwinshim.ScrollEvent) =
 proc dispatchKey(host: HostWindow, event: siwinshim.KeyEvent) =
   if host.xCallbacks.onKey.isNil:
     return
-  let key = event.key.toNimkitKey
+  let
+    key = event.key.toNimkitKey
+    pressedKeys: set[siwinshim.Key] =
+      if event.window.isNil:
+        {}
+      else:
+        event.window.keyboard.pressed
   host.xCallbacks.onKey(
     HostKeyEvent(
       event: events.KeyEvent(
         text: event.key.keyText,
         key: key,
         keyCode: event.key.ord,
-        modifiers: event.modifiers.toNimkitModifiers,
+        modifiers: toNimkitModifiers(event.modifiers, pressedKeys),
         repeated: event.repeated,
       ),
       pressed: event.pressed,

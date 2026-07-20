@@ -1,6 +1,8 @@
 import std/[options, os, unittest]
 
+import figdraw/windowing/siwinshim as figdrawSiwin
 import merenda/nimkit/app/backend as nimkitBackend
+import merenda/nimkit/foundation/events
 
 type EnvSnapshot = object
   name: string
@@ -23,6 +25,14 @@ proc withCleanUiScaleEnv(body: proc() {.closure.}) =
         delEnv(item.name)
 
 suite "nimkit backend":
+  test "held native modifier keys supplement missing event modifier flags":
+    check nimkitBackend.toNimkitModifiers({}, {figdrawSiwin.Key.lsystem}) == {kmCommand}
+    check nimkitBackend.toNimkitModifiers(
+      {}, {figdrawSiwin.Key.rcontrol, figdrawSiwin.Key.lshift}
+    ) == {kmControl, kmShift}
+    check nimkitBackend.toNimkitModifiers({figdrawSiwin.ModifierKey.alt}, {}) ==
+      {kmOption}
+
   test "ui scale override prefers NimKit env over aliases":
     withCleanUiScaleEnv(
       proc() =
