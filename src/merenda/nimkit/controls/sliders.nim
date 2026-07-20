@@ -183,7 +183,7 @@ proc sliderFocusBox(style: SliderStyle): ControlBoxStyle =
   ControlBoxStyle(
     focusRingWidth: 3.0'f32,
     focusRingInset: -3.0'f32,
-    focusRingColor: color(0.28, 0.62, 1.0, 0.80),
+    focusRingColor: style.knob.focusRingColor,
     cornerRadius: style.knobSize * 0.5'f32,
   )
 
@@ -233,7 +233,14 @@ func mixFill(a, b: Fill, progress: float32): Fill =
   fill(mixColor(a.centerColor(), b.centerColor(), progress))
 
 proc sliderKnobFill(slider: Slider, style: SliderStyle): Fill =
-  mixFill(style.knob.fill, style.activeTrack.fill, slider.sliderFraction())
+  mixFill(
+    style.knob.fill,
+    style.activeTrack.fill,
+    slider.sliderFraction() * style.knobValueTint,
+  )
+
+proc sliderActiveTrackFill(slider: Slider, style: SliderStyle): Fill =
+  mixFill(style.activeTrack.fill, style.activeTrackMaximumFill, slider.sliderFraction())
 
 proc sliderChromeStates(slider: Slider): set[WidgetState] =
   result = slider.widgetStateSet()
@@ -253,8 +260,13 @@ proc drawSliderTrack(
     frame = context.renderRectFor(rect)
     radius = rect.size.height * 0.5'f32
     box = if part == cpHighlight: style.activeTrack else: style.track
+    trackFill =
+      if part == cpHighlight:
+        slider.sliderActiveTrackFill(style)
+      else:
+        box.fill
     chrome = chromeContext(
-      style.chrome, crSliderTrack, part, box.fill, slider.sliderChromeStates()
+      style.chrome, crSliderTrack, part, trackFill, slider.sliderChromeStates()
     )
     trackRoot = context.addRenderRectangle(
       frame,

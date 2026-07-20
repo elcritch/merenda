@@ -32,6 +32,7 @@ type
     stDefault
     stMacOS
     stMacOSDark
+    stDarkBSD
     stNebula
     stPeachy
     stSynthwave83
@@ -416,6 +417,7 @@ func title(theme: SettingsTheme): string =
   of stDefault: "Default"
   of stMacOS: "macOS"
   of stMacOSDark: "macOS Dark"
+  of stDarkBSD: "DarkBSD"
   of stNebula: "Nebula"
   of stPeachy: "Peachy"
   of stSynthwave83: "Synthwave '83"
@@ -447,6 +449,8 @@ proc appearanceFor(
     result = initAppearance(initMacOSTheme())
   of stMacOSDark:
     result = initAppearance(initMacOSDarkTheme())
+  of stDarkBSD:
+    result = initAppearance(initDarkBSDTheme())
   of stNebula:
     result = initAppearance(initNebulaTheme())
   of stPeachy:
@@ -601,6 +605,7 @@ proc newMerendaSettingsWindow*(
         stDefault.title(),
         stMacOS.title(),
         stMacOSDark.title(),
+        stDarkBSD.title(),
         stNebula.title(),
         stPeachy.title(),
         stSynthwave83.title(),

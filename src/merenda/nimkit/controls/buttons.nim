@@ -528,6 +528,9 @@ proc pushButtonStyle(
 proc checkmarkTextRect(rect: Rect): Rect =
   rect.offsetRect(0.0'f32, -1.0'f32).inset(insets(-1.0'f32))
 
+func usesAquaChrome(style: ButtonStyle): bool =
+  style.chrome in [AquaChromeName, RubyAquaChromeName]
+
 func buttonFaceRadius(style: ButtonStyle, absoluteFrame: Rect): float32 =
   result = style.box.cornerRadius
   let halfHeight = absoluteFrame.size.height / 2.0'f32
@@ -536,7 +539,7 @@ func buttonFaceRadius(style: ButtonStyle, absoluteFrame: Rect): float32 =
     style.box.cornerRadii.topRight == style.box.cornerRadius and
     style.box.cornerRadii.bottomLeft == style.box.cornerRadius and
     style.box.cornerRadii.bottomRight == style.box.cornerRadius
-  if style.chrome == AquaChromeName and hasUniformRadius and (
+  if style.usesAquaChrome() and hasUniformRadius and (
     abs(style.box.cornerRadius - DefaultAquaButtonCornerRadius) <= 0.001'f32 or
     style.box.cornerRadius >= halfHeight
   ):
@@ -561,7 +564,7 @@ proc drawPushButtonFace(
 ) =
   let chrome = chromeContext(style.chrome, crButton, cpFace, style.box.fill, states)
   let
-    isAqua = style.chrome == AquaChromeName
+    isAqua = style.usesAquaChrome()
     radius = style.buttonFaceRadius(absoluteFrame)
     cornerRadii = style.buttonFaceCornerRadii(radius)
   context.drawChromeBacking(

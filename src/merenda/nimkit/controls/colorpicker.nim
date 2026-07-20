@@ -1,5 +1,9 @@
 ## Color wells and tabbed color-picker controls.
 
+when defined(useNativeDynlib):
+  from figdraw/dynlib import FigIdx
+else:
+  from figdraw import FigIdx
 import std/[math, strutils]
 
 import sigils/core
@@ -204,8 +208,12 @@ proc `popupOpen=`*(well: ColorWell, value: bool) =
 func clampUnit(value: float32): float32 =
   min(max(value, 0.0'f32), 1.0'f32)
 
-proc drawTransparencyBackground(context: DrawContext, bounds: Rect) =
+proc drawTransparencyBackground(context: DrawContext, bounds: Rect): FigIdx =
   let
+    frame = context.renderRectFor(bounds)
+    background = context.addRenderRectangle(
+      frame, fill(color(0.0, 0.0, 0.0, 0.0)), cornerRadius = 4.0'f32, maskContent = true
+    )
     rowCount = 2
     cellHeight = bounds.size.height / float32(rowCount)
     columnCount = max(int(bounds.size.width / max(cellHeight, 1.0'f32)), 1)
@@ -218,6 +226,7 @@ proc drawTransparencyBackground(context: DrawContext, bounds: Rect) =
         else:
           color(0.68, 0.70, 0.74, 1.0)
       discard context.addRenderRectangle(
+        background,
         context.renderRectFor(
           rect(
             bounds.origin.x + float32(column) * cellWidth,
@@ -228,17 +237,23 @@ proc drawTransparencyBackground(context: DrawContext, bounds: Rect) =
         ),
         fill(shade),
       )
+  background
 
 proc drawColorSample(
-    context: DrawContext, bounds: Rect, value: Color, selected = false
+    context: DrawContext,
+    bounds: Rect,
+    value: Color,
+    selected = false,
+    selectionColor = color(0.18, 0.48, 0.92, 1.0),
 ) =
   let sample = bounds.inset(insets(1.0))
-  context.drawTransparencyBackground(sample)
+  let background = context.drawTransparencyBackground(sample)
   discard context.addRenderRectangle(
+    background,
     context.renderRectFor(sample),
     fill(value),
     if selected:
-      color(0.18, 0.48, 0.92, 1.0)
+      selectionColor
     else:
       color(0.25, 0.27, 0.31, 0.9),
     if selected: 3.0'f32 else: 1.0'f32,
@@ -260,10 +275,12 @@ proc newColorWellCell(): ColorWellCell =
 protocol ColorWellDrawing of ViewDrawingProtocol:
   method draw(well: ColorWell, context: DrawContext) =
     discard well.performNext(draw, context)
+    let appearance = context.appearance()
     context.drawColorSample(
       well.bounds().inset(insets(3.0)),
       well.xColor,
       well.xPopupOpen or well.cell().isHighlighted(),
+      appearance.colorToken("accent", color(0.18, 0.48, 0.92, 1.0)),
     )
     if well.isFocusVisible():
       context.addFocusRing(
@@ -271,7 +288,8 @@ protocol ColorWellDrawing of ViewDrawingProtocol:
         ControlBoxStyle(
           focusRingWidth: 3.0'f32,
           focusRingInset: -2.0'f32,
-          focusRingColor: color(0.28, 0.62, 1.0, 0.80),
+          focusRingColor:
+            appearance.colorToken("focus.ring.color", color(0.28, 0.62, 1.0, 0.80)),
           cornerRadius: 4.0'f32,
         ),
       )
@@ -294,6 +312,7 @@ protocol ColorPaletteButtonDrawing of ViewDrawingProtocol:
         button.bounds().inset(insets(3.0)),
         choice.color,
         choice.color == button.xSource.xColor,
+        context.appearance().colorToken("accent", color(0.18, 0.48, 0.92, 1.0)),
       )
 
 proc newColorPaletteButton(
@@ -497,8 +516,9 @@ proc drawAlphaControl(wheel: ColorWheelView, context: DrawContext) =
     bounds = wheel.alphaRect()
     opaque = colorAtHsv(wheel.xHue, wheel.xSaturation, wheel.xValue, 1.0'f32)
     clear = color(opaque.r, opaque.g, opaque.b, 0.0'f32)
-  context.drawTransparencyBackground(bounds)
+  let background = context.drawTransparencyBackground(bounds)
   discard context.addRenderRectangle(
+    background,
     context.renderRectFor(bounds),
     linear(clear, opaque, fgaX),
     color(0.20, 0.22, 0.26, 0.9),
