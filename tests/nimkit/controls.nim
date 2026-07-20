@@ -1,5 +1,6 @@
 import std/unittest
 
+import figdraw
 import sigils/core
 import sigils/selectors
 
@@ -22,6 +23,26 @@ proc rememberActionDidSend(spy: ControlActionSpy, sender: DynamicAgent) {.slot.}
   spy.lastSender = sender
 
 suite "nimkit controls":
+  test "switch and slider focus rings follow the active theme":
+    let
+      root = newView(frame = rect(0, 0, 240, 100))
+      switchButton = newSwitchButton(true, frame = rect(16, 16, 54, 30))
+      slider = newSlider(0.0, 1.0, 0.5, frame = rect(16, 58, 180, 26))
+      focusColor = color(0.70, 0.06, 0.24, 0.64)
+
+    root.appearance = initAppearance(initDarkBSDTheme())
+    switchButton.focusVisible = true
+    slider.focusVisible = true
+    root.addSubview(switchButton)
+    root.addSubview(slider)
+
+    var focusRingCount = 0
+    for node in buildRenders(root)[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.stroke.weight == 3.0'f32 and
+          node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
+        inc focusRingCount
+    check focusRingCount == 2
+
   test "cell editing action flag is a field-backed protocol property":
     let cell = newCell()
 

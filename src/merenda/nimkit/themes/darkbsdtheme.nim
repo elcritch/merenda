@@ -63,6 +63,7 @@ proc installDarkBSDTokens(theme: var Theme) =
   theme["button.shadows.disabled"] = newSeq[BoxShadow]()
 
   theme["choice.indicator.border.color.selected"] = color(0.68, 0.07, 0.14, 0.90)
+  theme["choice.indicator.fill.selected.highlighted"] = color(0.72, 0.040, 0.080, 1.0)
   theme["comboBox.item.fill.highlighted"] = color(0.31, 0.20, 0.23, 1.0)
 
   # Keep combo boxes on the original macOS dark surface instead of following

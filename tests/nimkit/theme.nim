@@ -959,6 +959,9 @@ suite "nimkit theme":
       disabledStyle = theme.resolveButtonStyle(controlStyle(srButton, {ssDisabled}))
       checkBoxStyle =
         theme.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
+      activeCheckBoxStyle = theme.resolveChoiceButtonStyle(
+        controlStyle(srCheckBox, {ssSelected, ssHighlighted})
+      )
       textFieldStyle = theme.resolveTextFieldStyle(controlStyle(srTextField))
       comboBoxStyle = theme.resolveComboBoxStyle(controlStyle(srComboBox))
       selectedComboItem =
@@ -986,16 +989,20 @@ suite "nimkit theme":
     check disabledStyle.box.shadows.len == 0
     check checkBoxStyle.indicator.fill == color(0.58, 0.022, 0.052, 1.0)
     check checkBoxStyle.indicator.borderColor == color(0.68, 0.07, 0.14, 0.90)
+    check checkBoxStyle.indicator.focusRingColor == color(0.70, 0.06, 0.24, 0.64)
+    check activeCheckBoxStyle.indicator.fill == color(0.72, 0.040, 0.080, 1.0)
     check textFieldStyle.box.fill == color(0.15, 0.15, 0.17, 0.98)
     check textFieldStyle.selectionColor == color(0.34, 0.18, 0.23, 0.92)
     check comboBoxStyle.box.fill == color(0.25, 0.25, 0.27, 0.98)
     check selectedComboItem.box.fill == color(0.58, 0.022, 0.052, 1.0)
     check switchStyle.track.fill == color(0.58, 0.022, 0.052, 1.0)
     check switchStyle.track.borderColor == color(0.36, 0.005, 0.020, 1.0)
+    check switchStyle.track.focusRingColor == color(0.70, 0.06, 0.24, 0.64)
     check sliderStyle.activeTrack.fill == color(0.58, 0.022, 0.052, 1.0)
     check sliderStyle.activeTrackMaximumFill == color(0.78, 0.040, 0.095, 1.0)
     check sliderStyle.knob.fill == color(0.25, 0.25, 0.27, 1.0)
     check sliderStyle.knob.borderColor == color(1.0, 1.0, 1.0, 0.14)
+    check sliderStyle.knob.focusRingColor == color(0.70, 0.06, 0.24, 0.64)
     check sliderStyle.knobValueTint == 0.0'f32
     checkRootPinstripesDisabled(theme)
 

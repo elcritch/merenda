@@ -671,7 +671,7 @@ proc initTheme*(): Theme =
   result[srSwitch, StyleBorderWidth] = 1.0
   result[srSwitch, StyleFocusRingWidth] = 3.0
   result[srSwitch, StyleFocusRingInset] = -3.0
-  result[srSwitch, StyleFocusRingColor] = color(0.28, 0.62, 1.0, 0.80)
+  result[srSwitch, StyleFocusRingColor] = styleToken("focus.ring.color")
   result[srSwitch, StyleBoxShadows] = aquaSwitchTrackShadows(enabled = true)
   result[srSwitch, StyleKnobFill] = aquaTextFieldFill()
   result[srSwitch, StyleKnobBorderColor] = rgbaColor(82, 116, 170, 220)
@@ -704,7 +704,7 @@ proc initTheme*(): Theme =
   result[srSlider, StyleFill] = aquaComboBoxFill()
   result[srSlider, StyleHighlightFill] = aquaSliderProgressFill()
   result[srSlider, StyleBorderColor] = rgbaColor(82, 116, 170, 190)
-  result[srSlider, StyleFocusRingColor] = color(0.0, 0.24, 0.72, 0.70)
+  result[srSlider, StyleFocusRingColor] = styleToken("focus.ring.color")
   result[srSlider, StyleKnobFill] = aquaSliderKnobFill()
   result[srSlider, StyleKnobBorderColor] = rgbaColor(82, 116, 170, 220)
   result[srSlider, StyleKnobShadows] = aquaKnobShadows()

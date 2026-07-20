@@ -183,7 +183,7 @@ proc sliderFocusBox(style: SliderStyle): ControlBoxStyle =
   ControlBoxStyle(
     focusRingWidth: 3.0'f32,
     focusRingInset: -3.0'f32,
-    focusRingColor: color(0.28, 0.62, 1.0, 0.80),
+    focusRingColor: style.knob.focusRingColor,
     cornerRadius: style.knobSize * 0.5'f32,
   )
 
