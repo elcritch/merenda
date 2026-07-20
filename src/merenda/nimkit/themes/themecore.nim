@@ -198,7 +198,9 @@ type
   SliderStyle* = object
     track*: ControlBoxStyle
     activeTrack*: ControlBoxStyle
+    activeTrackMaximumFill*: Fill
     knob*: ControlBoxStyle
+    knobValueTint*: float32
     trackHeight*: float32
     knobSize*: float32
     minSize*: Size
@@ -308,11 +310,13 @@ const
     StyleKey[float32]("selection.indicator.corner.radius")
   StyleCursorColor* = StyleKey[Color]("cursor.color")
   StyleHighlightFill* = StyleKey[Fill]("highlight.fill")
+  StyleMaximumHighlightFill* = StyleKey[Fill]("highlight.fill.maximum")
   StyleAlternatingFill* = StyleKey[Fill]("alternating.fill")
   StyleIndicatorFill* = StyleKey[Fill]("indicator.fill")
   StyleDropIndicatorFill* = StyleKey[Fill]("drop.indicator.fill")
   StyleInsertionIndicatorFill* = StyleKey[Fill]("insertion.indicator.fill")
   StyleKnobFill* = StyleKey[Fill]("knob.fill")
+  StyleKnobValueTint* = StyleKey[float32]("knob.value.tint")
   StyleKnobBorderColor* = StyleKey[Color]("knob.border.color")
   StyleKnobSize* = StyleKey[float32]("knob.size")
   StyleKnobInset* = StyleKey[float32]("knob.inset")
@@ -346,6 +350,7 @@ const
 
   DefaultChromeName* = "default"
   AquaChromeName* = "aqua"
+  RubyAquaChromeName* = "ruby-aqua"
   FlatTransparentChromeName* = "flat-transparent"
   LabelStyleClass* = "label"
   LabelTitleStyleClass* = "label-title"
@@ -1837,6 +1842,15 @@ proc resolveSwitchButtonStyle*(theme: Theme, context: StyleContext): SwitchButto
   )
 
 proc resolveSliderStyle*(theme: Theme, context: StyleContext): SliderStyle =
+  let activeTrack = theme.resolveControlBoxStyle(
+    context,
+    fill(color(0.13, 0.55, 0.96, 1.0)),
+    color(0.02, 0.20, 0.58, 0.70),
+    cornerRadiusFallback = 3.0,
+    fillKey = StyleHighlightFill,
+    borderColorKey = StyleFocusRingColor,
+    shadowsFallback = @[insetShadow(color(0.0, 0.0, 0.0, 0.16), y = 1.0, blur = 2.0)],
+  )
   SliderStyle(
     track: theme.resolveControlBoxStyle(
       context,
@@ -1845,15 +1859,9 @@ proc resolveSliderStyle*(theme: Theme, context: StyleContext): SliderStyle =
       cornerRadiusFallback = 3.0,
       shadowsFallback = @[insetShadow(color(0.0, 0.0, 0.0, 0.16), y = 1.0, blur = 2.0)],
     ),
-    activeTrack: theme.resolveControlBoxStyle(
-      context,
-      fill(color(0.13, 0.55, 0.96, 1.0)),
-      color(0.02, 0.20, 0.58, 0.70),
-      cornerRadiusFallback = 3.0,
-      fillKey = StyleHighlightFill,
-      borderColorKey = StyleFocusRingColor,
-      shadowsFallback = @[insetShadow(color(0.0, 0.0, 0.0, 0.16), y = 1.0, blur = 2.0)],
-    ),
+    activeTrack: activeTrack,
+    activeTrackMaximumFill:
+      theme.fillRule(context, StyleMaximumHighlightFill, activeTrack.fill),
     knob: theme.resolveControlBoxStyle(
       context,
       fill(color(0.92, 0.94, 0.97, 1.0)),
@@ -1868,6 +1876,7 @@ proc resolveSliderStyle*(theme: Theme, context: StyleContext): SliderStyle =
           insetShadow(color(1.0, 1.0, 1.0, 0.75), y = 1.0, blur = 2.0),
         ],
     ),
+    knobValueTint: theme.lengthRule(context, StyleKnobValueTint, 1.0'f32),
     trackHeight: theme.lengthRule(context, StyleIndicatorSize, 6.0'f32),
     knobSize: theme.lengthRule(context, StyleKnobSize, 18.0'f32),
     minSize: theme.sizeRule(context, StyleMinimumSize, initSize(160.0'f32, 24.0'f32)),

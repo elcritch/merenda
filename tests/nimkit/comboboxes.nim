@@ -1,5 +1,6 @@
 import std/[tables, unittest]
 
+import figdraw
 import sigils/core
 
 import merenda/nimkit
@@ -405,7 +406,20 @@ suite "nimkit comboboxes":
     combo.popupPresentation = ppInline
     combo.popupOpen = true
     check combo.popupOpen
-    check PopupDrawLevel in window.buildRenders().layers
+    let inlineRenders = window.buildRenders()
+    check PopupDrawLevel in inlineRenders.layers
+    var
+      hasTopRoundedRow = false
+      hasBottomRoundedRow = false
+    for node in inlineRenders.layers[PopupDrawLevel].nodes:
+      if node.kind != nkRectangle:
+        continue
+      if node.corners[dcTopLeft] > 0'u16 and node.corners[dcBottomLeft] == 0'u16:
+        hasTopRoundedRow = true
+      if node.corners[dcTopLeft] == 0'u16 and node.corners[dcBottomLeft] > 0'u16:
+        hasBottomRoundedRow = true
+    check hasTopRoundedRow
+    check hasBottomRoundedRow
 
     combo.closePopup()
     combo.popupPresentation = ppAutomatic

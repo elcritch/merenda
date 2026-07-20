@@ -8,6 +8,9 @@ import ../../foundation/types
 
 type
   AquaChrome = ref object of Chrome
+    buttonRimLightScale: float32
+    buttonGlossLightScale: float32
+    buttonWhiteScale: float32
 
   AquaButtonPalette = object
     rimTop, rimMid, rimBottom, rimStroke: Color
@@ -16,7 +19,9 @@ type
 
 const AquaButtonInset = 2.0'f32
 
-var fallbackAquaChrome: Chrome
+var
+  fallbackAquaChrome: Chrome
+  fallbackRubyAquaChrome: Chrome
 
 func transparentFill(): Fill =
   fill(color(0.0, 0.0, 0.0, 0.0))
@@ -98,20 +103,24 @@ func aquaButtonStaticPalette(): AquaButtonPalette =
     bottomGlow: rgbaColor(221, 251, 255, 82),
   )
 
-func aquaButtonBasePalette(base: Color): AquaButtonPalette =
+func aquaButtonBasePalette(
+    base: Color, rimLightScale, glossLightScale, whiteScale: float32
+): AquaButtonPalette =
   AquaButtonPalette(
-    rimTop: base.lightenColor(0.18'f32, base.scaledAlpha(1.14'f32)),
-    rimMid: base.lightenColor(0.06'f32, base.scaledAlpha(0.98'f32)),
+    rimTop: base.lightenColor(0.18'f32 * rimLightScale, base.scaledAlpha(1.14'f32)),
+    rimMid: base.lightenColor(0.06'f32 * rimLightScale, base.scaledAlpha(0.98'f32)),
     rimBottom: base.darkenColor(0.02'f32, base.scaledAlpha(0.94'f32)),
     rimStroke: base.darkenColor(0.30'f32, base.scaledAlpha(1.04'f32)),
-    innerTop: base.lightenColor(0.78'f32, base.scaledAlpha(1.02'f32)),
-    innerMid: base.lightenColor(0.25'f32, base.scaledAlpha(0.96'f32)),
-    innerBottom: base.lightenColor(0.68'f32, base.scaledAlpha(1.00'f32)),
+    innerTop: base.lightenColor(0.78'f32 * glossLightScale, base.scaledAlpha(1.02'f32)),
+    innerMid: base.lightenColor(0.25'f32 * glossLightScale, base.scaledAlpha(0.96'f32)),
+    innerBottom:
+      base.lightenColor(0.68'f32 * glossLightScale, base.scaledAlpha(1.00'f32)),
     topShade: base.darkenColor(0.35'f32, base.scaledAlpha(0.20'f32)),
     waistShade: base.darkenColor(0.24'f32, base.scaledAlpha(0.16'f32)),
-    lowerWash: rgbaColor(255, 255, 255, 29),
+    lowerWash: rgbaColor(255, 255, 255, 29).withAlphaScale(whiteScale),
     sideShade: base.darkenColor(0.28'f32, base.scaledAlpha(0.10'f32)),
-    bottomGlow: base.lightenColor(0.86'f32, base.scaledAlpha(0.58'f32)),
+    bottomGlow:
+      base.lightenColor(0.86'f32 * glossLightScale, base.scaledAlpha(0.58'f32)),
   )
 
 func scaleAlpha(palette: AquaButtonPalette, scale: float32): AquaButtonPalette =
@@ -146,40 +155,54 @@ func darken(palette: AquaButtonPalette, amount: float32): AquaButtonPalette =
     bottomGlow: palette.bottomGlow,
   )
 
-func aquaButtonPalette(chrome: ChromeContext): AquaButtonPalette =
+func aquaButtonPalette(aqua: AquaChrome, chrome: ChromeContext): AquaButtonPalette =
   let
     alphaScale = if chrome.isEnabled: 1.0'f32 else: 0.42'f32
     pressedDarken = if chrome.isPressed: 0.14'f32 else: 0.0'f32
     basePalette =
       if chrome.role == crButton:
-        aquaButtonBasePalette(chrome.baseFill.centerColor())
+        aquaButtonBasePalette(
+          chrome.baseFill.centerColor(),
+          aqua.buttonRimLightScale,
+          aqua.buttonGlossLightScale,
+          aqua.buttonWhiteScale,
+        )
       else:
         aquaButtonStaticPalette()
   basePalette.scaleAlpha(alphaScale).darken(pressedDarken)
 
-func aquaButtonFaceFill(chrome: ChromeContext): Fill =
-  let p = chrome.aquaButtonPalette
+func aquaButtonFaceFill(aqua: AquaChrome, chrome: ChromeContext): Fill =
+  let p = aqua.aquaButtonPalette(chrome)
   linear(p.innerTop, p.innerMid, p.innerBottom, fgaY, 124'u8)
 
-func aquaButtonLowerWash(chrome: ChromeContext): Fill =
-  let p = chrome.aquaButtonPalette
+func aquaButtonLowerWash(aqua: AquaChrome, chrome: ChromeContext): Fill =
+  let p = aqua.aquaButtonPalette(chrome)
   linear(
     color(1.0, 1.0, 1.0, 0.0),
     p.lowerWash,
-    color(p.bottomGlow.r, p.bottomGlow.g, p.bottomGlow.b, 44.0'f32 / 255.0'f32),
+    color(
+      p.bottomGlow.r,
+      p.bottomGlow.g,
+      p.bottomGlow.b,
+      44.0'f32 / 255.0'f32 * aqua.buttonWhiteScale,
+    ),
     fgaY,
     164'u8,
   )
 
-func aquaButtonGlossFill(chrome: ChromeContext): Fill =
-  let p = chrome.aquaButtonPalette
+func aquaButtonGlossFill(aqua: AquaChrome, chrome: ChromeContext): Fill =
+  let p = aqua.aquaButtonPalette(chrome)
   linear(p.topShade, color(p.topShade.r, p.topShade.g, p.topShade.b, 0.0), fgaY)
 
-func aquaButtonInnerShadows(chrome: ChromeContext): seq[BoxShadow] =
-  let p = chrome.aquaButtonPalette
+func aquaButtonInnerShadows(aqua: AquaChrome, chrome: ChromeContext): seq[BoxShadow] =
+  let p = aqua.aquaButtonPalette(chrome)
   @[
     insetShadow(rgbaColor(0, 0, 0, 26), y = 1.2, blur = 3.0),
-    insetShadow(rgbaColor(255, 255, 255, 68), y = -1.0, blur = 2.0),
+    insetShadow(
+      rgbaColor(255, 255, 255, 68).withAlphaScale(aqua.buttonWhiteScale),
+      y = -1.0,
+      blur = 2.0,
+    ),
     insetShadow(p.sideShade, x = 2.0, blur = 7.0),
     insetShadow(p.sideShade, x = -2.0, blur = 7.0),
   ]
@@ -741,7 +764,7 @@ proc drawAquaRoundedControlBacking(
   )
 
 proc drawAquaButtonExtras(
-    context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
+    context: DrawContext, aqua: AquaChrome, chrome: ChromeContext, extras: ChromeExtras
 ) =
   let
     radius = extras.cornerRadius
@@ -760,7 +783,7 @@ proc drawAquaButtonExtras(
       color(0.0, 0.0, 0.0, 0.0),
       0.0'f32,
       innerRadius,
-      aquaButtonInnerShadows(chrome),
+      aqua.aquaButtonInnerShadows(chrome),
       lightMaskContent = true,
     )
     topShade = rect(
@@ -815,9 +838,15 @@ proc drawAquaButtonExtras(
       upperSheen,
       transparentFill(),
       shadows = [
-        dropShadow(rgbaColor(255, 255, 255, 36), y = 1.0, blur = 9.2),
         dropShadow(
-          chrome.aquaButtonPalette.innerTop.withAlphaByte(38), y = 2.0, blur = 5.75
+          rgbaColor(255, 255, 255, 36).withAlphaScale(aqua.buttonWhiteScale),
+          y = 1.0,
+          blur = 9.2,
+        ),
+        dropShadow(
+          aqua.aquaButtonPalette(chrome).innerTop.withAlphaByte(38),
+          y = 2.0,
+          blur = 5.75,
         ),
       ],
     )
@@ -829,9 +858,15 @@ proc drawAquaButtonExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          chrome.aquaButtonPalette.waistShade.withAlphaByte(30), y = 1.2, blur = 6.9
+          aqua.aquaButtonPalette(chrome).waistShade.withAlphaByte(30),
+          y = 1.2,
+          blur = 6.9,
         ),
-        dropShadow(rgbaColor(255, 255, 255, 14), y = -1.2, blur = 4.6),
+        dropShadow(
+          rgbaColor(255, 255, 255, 14).withAlphaScale(aqua.buttonWhiteScale),
+          y = -1.2,
+          blur = 4.6,
+        ),
       ],
     )
   discard context.addRenderRectangle(
@@ -851,9 +886,15 @@ proc drawAquaButtonExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          chrome.aquaButtonPalette.bottomGlow.withAlphaByte(36), y = 1.2, blur = 9.2
+          aqua.aquaButtonPalette(chrome).bottomGlow.withAlphaByte(36),
+          y = 1.2,
+          blur = 9.2,
         ),
-        dropShadow(rgbaColor(255, 255, 255, 14), y = -0.6, blur = 5.75),
+        dropShadow(
+          rgbaColor(255, 255, 255, 14).withAlphaScale(aqua.buttonWhiteScale),
+          y = -0.6,
+          blur = 5.75,
+        ),
       ],
     )
   if not bottomGlow.isEmpty:
@@ -864,7 +905,9 @@ proc drawAquaButtonExtras(
       transparentFill(),
       shadows = [
         dropShadow(
-          chrome.aquaButtonPalette.bottomGlow.withAlphaByte(30), y = -1.2, blur = 5.5
+          aqua.aquaButtonPalette(chrome).bottomGlow.withAlphaByte(30),
+          y = -1.2,
+          blur = 5.5,
         )
       ],
     )
@@ -1505,11 +1548,11 @@ protocol AquaChromeProtocol of ChromeProtocol:
     of crButton:
       case context.part
       of cpInnerFace:
-        aquaButtonFaceFill(context)
+        chrome.aquaButtonFaceFill(context)
       of cpGloss:
-        aquaButtonGlossFill(context)
+        chrome.aquaButtonGlossFill(context)
       of cpLowerWash:
-        aquaButtonLowerWash(context)
+        chrome.aquaButtonLowerWash(context)
       else:
         context.baseFill
     of crChoiceIndicator, crCheckBoxIndicator, crRadioIndicator:
@@ -1613,11 +1656,11 @@ protocol AquaChromeProtocol of ChromeProtocol:
     of crDocumentTabButton:
       case context.part
       of cpInnerFace:
-        aquaButtonFaceFill(context)
+        chrome.aquaButtonFaceFill(context)
       of cpGloss:
-        aquaButtonGlossFill(context)
+        chrome.aquaButtonGlossFill(context)
       of cpLowerWash:
-        aquaButtonLowerWash(context)
+        chrome.aquaButtonLowerWash(context)
       else:
         context.baseFill
 
@@ -1627,7 +1670,6 @@ protocol AquaChromeProtocol of ChromeProtocol:
       chromeContext: ChromeContext,
       extras: ChromeExtras,
   ) =
-    discard chrome
     case chromeContext.role
     of crButton:
       if chromeContext.part == cpFace:
@@ -1656,11 +1698,10 @@ protocol AquaChromeProtocol of ChromeProtocol:
       chromeContext: ChromeContext,
       extras: ChromeExtras,
   ) =
-    discard chrome
     case chromeContext.role
     of crButton:
       if chromeContext.part == cpFace:
-        context.drawAquaButtonExtras(chromeContext, extras)
+        context.drawAquaButtonExtras(chrome, chromeContext, extras)
     of crChoiceIndicator, crCheckBoxIndicator, crRadioIndicator:
       if chromeContext.part == cpFace:
         context.drawAquaChoiceExtras(chromeContext, extras)
@@ -1698,10 +1739,18 @@ protocol AquaChromeProtocol of ChromeProtocol:
         context.drawAquaDocumentTabBarExtras(chromeContext, extras)
     of crDocumentTabButton:
       if chromeContext.part == cpFace:
-        context.drawAquaButtonExtras(chromeContext, extras)
+        context.drawAquaButtonExtras(chrome, chromeContext, extras)
 
-proc newAquaChrome*(): Chrome =
-  let aqua = AquaChrome()
+proc newAquaChrome*(
+    buttonRimLightScale = 1.0'f32,
+    buttonGlossLightScale = 1.0'f32,
+    buttonWhiteScale = 1.0'f32,
+): Chrome =
+  let aqua = AquaChrome(
+    buttonRimLightScale: buttonRimLightScale.clampUnit(),
+    buttonGlossLightScale: buttonGlossLightScale.clampUnit(),
+    buttonWhiteScale: buttonWhiteScale.clampUnit(),
+  )
   discard aqua.withProtocol(AquaChromeProtocol)
   Chrome(aqua)
 
@@ -1710,7 +1759,17 @@ proc aquaChrome(): Chrome =
     fallbackAquaChrome = newAquaChrome()
   fallbackAquaChrome
 
+proc rubyAquaChrome(): Chrome =
+  if fallbackRubyAquaChrome.isNil:
+    fallbackRubyAquaChrome = newAquaChrome(
+      buttonRimLightScale = 0.55'f32,
+      buttonGlossLightScale = 0.28'f32,
+      buttonWhiteScale = 0.30'f32,
+    )
+  fallbackRubyAquaChrome
+
 proc installAquaChrome*(theme: var Theme) =
   theme.installChrome(AquaChromeName, aquaChrome())
+  theme.installChrome(RubyAquaChromeName, rubyAquaChrome())
 
 registerThemeInstaller(installAquaChrome)

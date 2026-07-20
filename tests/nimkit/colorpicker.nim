@@ -20,11 +20,16 @@ suite "NimKit color picker":
     check well.accessibilityValue() == "Blue"
     check AccessibilityActionShowMenu in well.accessibilityActionNames()
 
-    var rectangleCount = 0
+    var
+      rectangleCount = 0
+      hasRoundedTransparencyMask = false
     for node in buildRenders(root)[DefaultDrawLevel].nodes:
       if node.kind == nkRectangle:
         inc rectangleCount
+        if NfClipContent in node.flags and node.corners[dcTopLeft] > 0'u16:
+          hasRoundedTransparencyMask = true
     check rectangleCount >= 4
+    check hasRoundedTransparencyMask
 
   test "tabbed picker sends palette wheel and CSS colors back to its source well":
     let

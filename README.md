@@ -215,6 +215,20 @@ root.appearance = initAppearance(initMacOSDarkTheme())
 
 The `dark-macos` and `modern-macos-dark` names are aliases.
 
+For a ruby-red variation of the macOS dark theme, use `darkbsd`. It keeps the
+dark platform-neutral surfaces while giving buttons a squarer Aqua gloss and a
+deep red accent palette:
+
+```sh
+NIMKIT_THEME=darkbsd nim r examples/controls_showcase.nim
+```
+
+```nim
+root.appearance = initAppearance(initDarkBSDTheme())
+```
+
+The `dark-bsd` and `ruby-bsd` names are aliases.
+
 Compose Finder-style icon rows with `IconLabel`. The icon is a Unicode glyph,
 rendered through the same FigDraw glyph atlas as other text, and can have an
 independent semantic tint:

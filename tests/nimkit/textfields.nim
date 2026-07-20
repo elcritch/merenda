@@ -259,7 +259,9 @@ suite "nimkit text fields":
       window = newWindow("Text input", frame = rect(0, 0, 240, 120))
       root = newView(frame = rect(0, 0, 240, 120))
       field = newTextField("abc", frame = rect(10, 10, 140, 24))
+      appearance = initAppearance(initDarkBSDTheme())
 
+    root.appearance = appearance
     root.addSubview(field)
     window.setContentView(root)
 
@@ -268,6 +270,8 @@ suite "nimkit text fields":
     check window.fieldEditorClient() == field
     check field.currentEditor == window.fieldEditor()
     check window.fieldEditor().superview == field
+    check window.fieldEditor().selectionColor ==
+      appearance.resolveTextFieldStyle(controlStyle(srTextField)).selectionColor
     check field.isEditing
     check field.selectedRange == initTextRange(0, 3)
 

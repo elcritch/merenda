@@ -319,6 +319,10 @@ proc drawPopupList*(
     first = popupList.firstIndex()
     visible = popupList.visibleItemCount()
     total = popupList.itemCount()
+    last = min(first + visible, total) - 1
+    itemRadius = max(
+      popupStyle.box.cornerRadius - max(popupStyle.box.borderWidth, 1.0'f32), 0.0'f32
+    )
 
   context.drawChromeExtras(
     popupChrome,
@@ -362,11 +366,20 @@ proc drawPopupList*(
               rowStates.incl(ssFocused)
             rowStates
           row = initRowState(itemIndex, popupList.itemText(itemIndex), states = states)
-          rowStyle =
-            if ssDisabled in states:
-              initRowStyle(textColor = some(color(0.48, 0.49, 0.52)))
-            else:
-              initRowStyle()
+          itemCornerRadii = initCornerRadii(
+            if itemIndex == first: itemRadius else: 0.0'f32,
+            if itemIndex == first: itemRadius else: 0.0'f32,
+            if itemIndex == last: itemRadius else: 0.0'f32,
+            if itemIndex == last: itemRadius else: 0.0'f32,
+          )
+          rowStyle = initRowStyle(
+            textColor =
+              if ssDisabled in states:
+                some(color(0.48, 0.49, 0.52))
+              else:
+                none(Color),
+            cornerRadii = some(itemCornerRadii),
+          )
           keyEquivalentText = popupList.itemKeyEquivalentText(itemIndex)
           accessoryColor =
             if ssDisabled in states:

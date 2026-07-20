@@ -83,7 +83,7 @@ suite "nimkit settings":
       controlStyle(srTextField), StyleFontSize, 0.0'f32
     ) == 15.0'f32
 
-  test "macOS themes apply font size to the preview label":
+  test "macOS-family themes apply font size to the preview label":
     let settings = newMerendaSettingsWindow()
     defer:
       settings.window().close()
@@ -110,7 +110,7 @@ suite "nimkit settings":
         srTextField, id = "settings-font-preview", classes = @[LabelStyleClass]
       )
 
-    for themeIndex in [1, 2]:
+    for themeIndex in [1, 2, 3]:
       themePicker.selectedIndex = themeIndex
       check themePicker.sendAction()
       fontSizeStepper.value = 14.0'f32
