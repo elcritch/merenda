@@ -665,6 +665,59 @@ proc addRenderCircle*(
 ): FigIdx {.discardable.} =
   context.addRenderCircle(context.xParent, center, fillValue, radius)
 
+proc addRenderDrawable*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    drawOps: openArray[DrawableOp],
+    fillValue: Fill,
+    stroke = RenderStroke(),
+    drawSteps = 0'u16,
+    drawAa = 0.0'f32,
+): FigIdx {.discardable.} =
+  ## Adds one FigDraw drawable node containing caller-provided primitive operations.
+  context.addFig(
+    layer,
+    parent,
+    Fig(
+      kind: nkDrawable,
+      screenBox: context.renderRectFor(rect).toFigRect,
+      fill: fillValue,
+      drawStroke: stroke,
+      drawSteps: drawSteps,
+      drawAa: drawAa,
+      drawOps: @drawOps,
+    ),
+  )
+
+proc addRenderDrawable*(
+    context: DrawContext,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    drawOps: openArray[DrawableOp],
+    fillValue: Fill,
+    stroke = RenderStroke(),
+    drawSteps = 0'u16,
+    drawAa = 0.0'f32,
+): FigIdx {.discardable.} =
+  context.addRenderDrawable(
+    DefaultDrawLevel, parent, rect, drawOps, fillValue, stroke, drawSteps, drawAa
+  )
+
+proc addRenderDrawable*(
+    context: DrawContext,
+    rect: nimkitTypes.Rect,
+    drawOps: openArray[DrawableOp],
+    fillValue: Fill,
+    stroke = RenderStroke(),
+    drawSteps = 0'u16,
+    drawAa = 0.0'f32,
+): FigIdx {.discardable.} =
+  context.addRenderDrawable(
+    context.xParent, rect, drawOps, fillValue, stroke, drawSteps, drawAa
+  )
+
 proc addRenderTranslation*(
     context: DrawContext,
     layer: ZLevel,

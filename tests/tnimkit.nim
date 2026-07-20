@@ -2,6 +2,7 @@ import nimkit/accessibility
 import nimkit/animations
 import nimkit/backend
 import nimkit/boxes
+import nimkit/canvasviews
 import nimkit/cascadingviews
 import nimkit/collectionviews
 import nimkit/comboboxes

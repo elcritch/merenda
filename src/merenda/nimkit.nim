@@ -29,6 +29,7 @@ import ./nimkit/text/texteditors
 import ./nimkit/containers/formviews
 import ./nimkit/containers/gridviews
 import ./nimkit/view/imageviews
+import ./nimkit/view/canvasviews
 import ./nimkit/text/iconlabels
 import ./nimkit/responder/keybindings
 import ./nimkit/containers/listbasics
@@ -101,6 +102,7 @@ export texteditors
 export formviews
 export gridviews
 export imageviews
+export canvasviews
 export iconlabels
 export keybindings
 export listbasics
