@@ -9,7 +9,18 @@ const EffectNames = [
   "Material: Titlebar", "Material: Sidebar", "Material: HUD", "Material: Popover",
 ]
 
-type BackdropCanvas = ref object of View
+type
+  BackdropCanvas* = ref object of View
+
+  WindowEffectsDemo* = ref object
+    app*: Application
+    window*: Window
+    root*: BackdropCanvas
+    effectPicker*: ComboBox
+    regionToggle*: Button
+    applyButton*: Button
+    clearButton*: Button
+    status*: Label
 
 func backdropRegions(size: Size): seq[Rect] =
   let
@@ -28,9 +39,6 @@ func backdropRegions(size: Size): seq[Rect] =
 
 protocol BackdropCanvasDrawing of ViewDrawingProtocol:
   method draw(canvas: BackdropCanvas, context: DrawContext) =
-    discard context.addRenderRectangle(
-      context.renderRectFor(canvas.bounds), fill(color(0.03, 0.04, 0.07, 0.08))
-    )
     for index, region in canvas.bounds.size.backdropRegions():
       let tint =
         if index == 0:
@@ -46,31 +54,8 @@ protocol BackdropCanvasDrawing of ViewDrawingProtocol:
 proc newBackdropCanvas(): BackdropCanvas =
   result = BackdropCanvas()
   initViewFields(result)
-  result.background = color(0.0, 0.0, 0.0, 0.0)
+  result.background = color(0.03, 0.04, 0.07, 0.08)
   discard result.withProtocol(BackdropCanvasDrawing)
-
-let
-  app = sharedApplication()
-  window = newWindow(
-    "NimKit Window Effects", frame = rect(140, 120, 720, 480), transparent = true
-  )
-  root = newBackdropCanvas()
-  effectTitle = newHeadingLabel("Backdrop effect")
-  effectPicker = newComboBox(EffectNames)
-  regionToggle = newCheckBox("Limit blur to panels")
-  applyButton = newButton("Apply")
-  clearButton = newButton("Clear")
-  title = newTitleLabel("Native window effects")
-  subtitle = newStatusLabel(
-    "A transparent NimKit window backed by Siwin blur and material effects."
-  )
-  statusTitle = newHeadingLabel("Backend status")
-  status = newStatusLabel("Preparing the native window…")
-  hint = newStatusLabel(
-    "Move this window over photos, text, or another app to make the effect obvious."
-  )
-  applyAction = actionSelector("applyWindowBackdrop")
-  clearAction = actionSelector("clearWindowBackdrop")
 
 func chosenEffect(index: int, regions: openArray[Rect]): WindowBackdropEffect =
   case index
@@ -106,82 +91,134 @@ proc capabilitySummary(window: Window): string =
     return "none"
   names.join(", ")
 
-proc applyEffect(sender: DynamicAgent) =
-  discard sender
+proc applyEffect*(demo: WindowEffectsDemo): bool {.discardable.} =
+  if demo.isNil:
+    return
   let
-    selectedIndex = min(max(effectPicker.selectedIndex, 0), EffectNames.high)
+    selectedIndex = min(max(demo.effectPicker.selectedIndex, 0), EffectNames.high)
     regions =
-      if regionToggle.state == bsOn:
-        root.bounds.size.backdropRegions()
+      if demo.regionToggle.state == bsOn:
+        demo.root.bounds.size.backdropRegions()
       else:
         @[]
     effect = chosenEffect(selectedIndex, regions)
-  if window.trySetBackdrop(effect):
+  result = demo.window.trySetBackdrop(effect)
+  if result:
     let scope = if regions.len == 0: "whole window" else: "three panel regions"
-    status.text =
-      EffectNames[selectedIndex] & " active · " & scope & " · capabilities: " &
-      window.capabilitySummary()
+    let state = if demo.window.backdropActive: "active" else: "staged"
+    demo.status.text =
+      EffectNames[selectedIndex] & " " & state & " · " & scope & " · capabilities: " &
+      demo.window.capabilitySummary()
   else:
-    status.text =
-      "Unavailable on this backend · capabilities: " & window.capabilitySummary()
+    demo.status.text =
+      "Unavailable on this backend · capabilities: " & demo.window.capabilitySummary()
 
-proc clearEffect(sender: DynamicAgent) =
-  discard sender
-  window.clearBackdrop()
-  status.text = "Backdrop cleared · capabilities: " & window.capabilitySummary()
+proc clearEffect*(demo: WindowEffectsDemo) =
+  if demo.isNil:
+    return
+  demo.window.clearBackdrop()
+  demo.status.text =
+    "Backdrop cleared · capabilities: " & demo.window.capabilitySummary()
 
-effectPicker.selectedIndex = 0
-regionToggle.state = bsOff
-let applyTarget = newActionTarget(applyAction, applyEffect)
-effectPicker.target = applyTarget
-effectPicker.action = applyAction
-regionToggle.target = applyTarget
-regionToggle.action = applyAction
-applyButton.target = applyTarget
-applyButton.action = applyAction
-clearButton.target = newActionTarget(clearAction, clearEffect)
-clearButton.action = clearAction
-
-root.addSubviews(
-  autoNames(
-    effectTitle, effectPicker, regionToggle, applyButton, clearButton, title, subtitle,
-    statusTitle, status, hint,
+proc newWindowEffectsDemo*(app = newApplication()): WindowEffectsDemo =
+  result = WindowEffectsDemo(
+    app: app,
+    window: newWindow(
+      "NimKit Window Effects", frame = rect(140, 120, 720, 480), transparent = true
+    ),
+    root: newBackdropCanvas(),
+    effectPicker: newComboBox(EffectNames),
+    regionToggle: newCheckBox("Limit blur to panels"),
+    applyButton: newButton("Apply"),
+    clearButton: newButton("Clear"),
+    status: newStatusLabel("Preparing the native window…"),
   )
-)
+  let
+    effectTitle = newHeadingLabel("Backdrop effect")
+    title = newTitleLabel("Native window effects")
+    subtitle = newStatusLabel(
+      "A transparent NimKit window backed by Siwin blur and material effects."
+    )
+    statusTitle = newHeadingLabel("Backend status")
+    hint = newStatusLabel(
+      "Move this window over photos, text, or another app to make the effect obvious."
+    )
+    applyAction = actionSelector("applyWindowBackdrop")
+    clearAction = actionSelector("clearWindowBackdrop")
+    demo = result
 
-activateConstraints:
-  effectTitle[atTop] == root[atTop] + 48.0
-  effectTitle[atLeft] == root[atLeft] + 42.0
-  effectTitle[atWidth] == 180.0
-  effectPicker[atTop] == effectTitle[atBottom] + 12.0
-  effectPicker[atLeft] == effectTitle[atLeft]
-  effectPicker[atWidth] == 176.0
-  regionToggle[atTop] == effectPicker[atBottom] + 14.0
-  regionToggle[atLeft] == effectTitle[atLeft]
-  regionToggle[atWidth] == 176.0
-  applyButton[atTop] == regionToggle[atBottom] + 18.0
-  applyButton[atLeft] == effectTitle[atLeft]
-  applyButton[atWidth] == 82.0
-  clearButton[atTop] == applyButton[atTop]
-  clearButton[atLeft] == applyButton[atRight] + 10.0
-  clearButton[atWidth] == 82.0
-  title[atTop] == root[atTop] + 48.0
-  title[atLeft] == root[atLeft] + 284.0
-  title[atRight] == root[atRight] - 42.0
-  subtitle[atTop] == title[atBottom] + 8.0
-  subtitle[atLeft] == title[atLeft]
-  subtitle[atRight] == title[atRight]
-  statusTitle[atTop] == root[atTop] + 184.0
-  statusTitle[atLeft] == title[atLeft]
-  statusTitle[atRight] == title[atRight]
-  status[atTop] == statusTitle[atBottom] + 12.0
-  status[atLeft] == statusTitle[atLeft]
-  status[atRight] == statusTitle[atRight]
-  hint[atTop] == status[atBottom] + 24.0
-  hint[atLeft] == statusTitle[atLeft]
-  hint[atRight] == statusTitle[atRight]
+  result.effectPicker.selectedIndex = 0
+  result.regionToggle.state = bsOff
+  let applyTarget = newActionTarget(
+    applyAction,
+    proc(sender: DynamicAgent) =
+      discard sender
+      demo.applyEffect(),
+  )
+  result.effectPicker.target = applyTarget
+  result.effectPicker.action = applyAction
+  result.regionToggle.target = applyTarget
+  result.regionToggle.action = applyAction
+  result.applyButton.target = applyTarget
+  result.applyButton.action = applyAction
+  result.clearButton.target = newActionTarget(
+    clearAction,
+    proc(sender: DynamicAgent) =
+      discard sender
+      demo.clearEffect(),
+  )
+  result.clearButton.action = clearAction
 
-discard app.showWindow(window, root, effectPicker)
-window.ensureNativeWindow()
-applyEffect(nil)
-app.run()
+  result.root.addSubviews(
+    autoNames(
+      effectTitle, result.effectPicker, result.regionToggle, result.applyButton,
+      result.clearButton, title, subtitle, statusTitle, result.status, hint,
+    )
+  )
+
+  activateConstraints:
+    effectTitle[atTop] == result.root[atTop] + 48.0
+    effectTitle[atLeft] == result.root[atLeft] + 42.0
+    effectTitle[atWidth] == 180.0
+    result.effectPicker[atTop] == effectTitle[atBottom] + 12.0
+    result.effectPicker[atLeft] == effectTitle[atLeft]
+    result.effectPicker[atWidth] == 176.0
+    result.regionToggle[atTop] == result.effectPicker[atBottom] + 14.0
+    result.regionToggle[atLeft] == effectTitle[atLeft]
+    result.regionToggle[atWidth] == 176.0
+    result.applyButton[atTop] == result.regionToggle[atBottom] + 18.0
+    result.applyButton[atLeft] == effectTitle[atLeft]
+    result.applyButton[atWidth] == 82.0
+    result.clearButton[atTop] == result.applyButton[atTop]
+    result.clearButton[atLeft] == result.applyButton[atRight] + 10.0
+    result.clearButton[atWidth] == 82.0
+    title[atTop] == result.root[atTop] + 48.0
+    title[atLeft] == result.root[atLeft] + 284.0
+    title[atRight] == result.root[atRight] - 42.0
+    subtitle[atTop] == title[atBottom] + 8.0
+    subtitle[atLeft] == title[atLeft]
+    subtitle[atRight] == title[atRight]
+    statusTitle[atTop] == result.root[atTop] + 184.0
+    statusTitle[atLeft] == title[atLeft]
+    statusTitle[atRight] == title[atRight]
+    result.status[atTop] == statusTitle[atBottom] + 12.0
+    result.status[atLeft] == statusTitle[atLeft]
+    result.status[atRight] == statusTitle[atRight]
+    hint[atTop] == result.status[atBottom] + 24.0
+    hint[atLeft] == statusTitle[atLeft]
+    hint[atRight] == statusTitle[atRight]
+
+  result.window.setContentView(result.root)
+  result.applyEffect()
+
+proc showWindowEffectsDemo*(demo: WindowEffectsDemo) =
+  if demo.isNil:
+    return
+  discard demo.app.showWindow(demo.window, demo.root, demo.effectPicker)
+  demo.window.ensureNativeWindow()
+  demo.applyEffect()
+
+when isMainModule:
+  let demo = newWindowEffectsDemo(sharedApplication())
+  demo.showWindowEffectsDemo()
+  demo.app.run()
