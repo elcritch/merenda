@@ -28,6 +28,7 @@ import ../drawing/renderresources
 import ../foundation/types
 import ../foundation/events
 import ./pasteboards
+import ./windoweffects
 
 when defined(macosx) and not defined(useNativeDynlib):
   proc setOpaque(window: NSWindow, opaque: BOOL) {.objc: "setOpaque:".}
@@ -373,6 +374,42 @@ proc nativePixels(value: float32, scale: float32): int32 =
 
 proc nativeWindowSize(frameSize: Size, scale: float32): IVec2 =
   ivec2(nativePixels(frameSize.width, scale), nativePixels(frameSize.height, scale))
+
+when declared(siwinshim.WindowVisualCapability):
+  func nativeCoordinate(value, scale: float32): int32 =
+    let scaled = value.float64 * scale.float64
+    if scaled <= int32.low.float64:
+      return int32.low
+    if scaled >= int32.high.float64:
+      return int32.high
+    round(scaled).int32
+
+  func nativeExtent(value, scale: float32): int32 =
+    max(nativeCoordinate(value, scale), 1'i32)
+
+  func toNativeMaterial(material: BackdropMaterial): siwinshim.WindowBackdropMaterial =
+    case material
+    of bmDefault: siwinshim.wbmDefault
+    of bmLight: siwinshim.wbmLight
+    of bmDark: siwinshim.wbmDark
+    of bmTitlebar: siwinshim.wbmTitlebar
+    of bmSidebar: siwinshim.wbmSidebar
+    of bmHud: siwinshim.wbmHud
+    of bmPopover: siwinshim.wbmPopover
+
+  func nativeRegion(
+      region: Rect, horizontalScale, verticalScale: float32
+  ): siwinshim.WindowVisualRegion =
+    siwinshim.WindowVisualRegion(
+      pos: ivec2(
+        region.origin.x.nativeCoordinate(horizontalScale),
+        region.origin.y.nativeCoordinate(verticalScale),
+      ),
+      size: ivec2(
+        region.size.width.nativeExtent(horizontalScale),
+        region.size.height.nativeExtent(verticalScale),
+      ),
+    )
 
 proc nativeWindowLimit(value, scale: float32): int32 =
   let scaled = value * scale
@@ -955,6 +992,65 @@ proc nativeMousePoint(host: HostWindow, window: siwinshim.Window, rawPos: Vec2):
 proc nativeModifiers(window: siwinshim.Window): set[events.KeyModifier] =
   toNimkitModifiers(window.keyboard.modifiers, window.keyboard.pressed)
 
+proc visualCapabilities*(host: HostWindow): set[WindowEffectCapability] =
+  if not host.hostReady():
+    return
+  when declared(siwinshim.WindowVisualCapability):
+    let capabilities = host.xNativeWindow.visualCapabilities()
+    if siwinshim.wvcBackdropBlur in capabilities:
+      result.incl wecBackdropBlur
+    if siwinshim.wvcBackdropBlurRegion in capabilities:
+      result.incl wecBackdropBlurRegions
+    if siwinshim.wvcBackdropMaterial in capabilities:
+      result.incl wecBackdropMaterial
+
+proc supports*(host: HostWindow, capability: WindowEffectCapability): bool =
+  capability in host.visualCapabilities()
+
+proc trySetBackdrop*(host: HostWindow, effect: WindowBackdropEffect): bool =
+  if not host.hostReady() or not effect.isValid():
+    return false
+  if effect.kind != wbekNone and not host.xTransparent:
+    return false
+  when declared(siwinshim.WindowVisualCapability):
+    if effect.kind == wbekNone:
+      return host.xNativeWindow.trySetBackdrop(
+        siwinshim.WindowBackdropConfig(kind: siwinshim.wbkNone)
+      )
+
+    let
+      logicalSize = host.xNativeWindow.logicalSize()
+      nativeSize = host.xNativeWindow.size()
+      horizontalScale =
+        if logicalSize.x > 0.0'f32:
+          nativeSize.x.float32 / logicalSize.x
+        else:
+          1.0'f32
+      verticalScale =
+        if logicalSize.y > 0.0'f32:
+          nativeSize.y.float32 / logicalSize.y
+        else:
+          1.0'f32
+    var regions: seq[siwinshim.WindowVisualRegion]
+    for region in effect.regions:
+      regions.add region.nativeRegion(horizontalScale, verticalScale)
+
+    case effect.kind
+    of wbekNone:
+      discard
+    of wbekBlur:
+      result = host.xNativeWindow.trySetBackdrop(siwinshim.initWindowBackdrop(regions))
+    of wbekMaterial:
+      result = host.xNativeWindow.trySetBackdrop(
+        siwinshim.initWindowBackdrop(effect.material.toNativeMaterial(), regions)
+      )
+  else:
+    false
+
+proc clearBackdrop*(host: HostWindow) =
+  if host.hostReady():
+    discard host.trySetBackdrop(noWindowBackdropEffect())
+
 proc activeMouseButton(window: siwinshim.Window): events.MouseButton =
   if siwinshim.MouseButton.left in window.mouse.pressed:
     return events.mbPrimary
@@ -1325,14 +1421,23 @@ proc installEventHandlers(host: HostWindow) =
   )
 
 proc createHostWindow*(
-    frame: Rect, title: string, callbacks: HostWindowCallbacks
+    frame: Rect, title: string, callbacks: HostWindowCallbacks, transparent = false
 ): HostWindow =
   let
     scaleOverride = uiScaleOverrideFromEnv()
     size = nativeWindowSize(frame.size, scaleOverride.overrideScale())
-  result = HostWindow(xCallbacks: callbacks, xResources: newRenderResourceManager())
-  result.xNativeWindow =
-    siwinshim.newSiwinWindow(size = size, title = title, vsync = true, resizable = true)
+  result = HostWindow(
+    xCallbacks: callbacks,
+    xTransparent: transparent,
+    xResources: newRenderResourceManager(),
+  )
+  result.xNativeWindow = siwinshim.newSiwinWindow(
+    size = size,
+    title = title,
+    vsync = true,
+    resizable = true,
+    transparent = transparent,
+  )
   result.xRenderer = figrender.newFigRenderer(
     atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
   )

@@ -52,3 +52,4 @@ import todo_table
 import treeview_demo
 import view_inspector_demo
 import viewcontroller_demo
+import window_effects_demo

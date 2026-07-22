@@ -26,6 +26,9 @@ import ../themes
 import ../foundation/types
 import ../foundation/undomanagers
 import ../view/views
+import ./windoweffects
+
+export windoweffects
 
 type
   WindowStyleMask* = enum
@@ -169,6 +172,9 @@ type
     xHasLastClick: bool
     xVisibleRequested: bool
     xClosed: bool
+    xTransparent: bool
+    xBackdrop: WindowBackdropEffect
+    xBackdropActive: bool
     xUndoManager: UndoManager
 
   TransientSession = object
@@ -385,7 +391,9 @@ protocol CaretBlinkAnimationProtocol of AnimationProtocol:
     if animation.textView.insertionPointVisible() != visible:
       animation.textView.insertionPointVisible = visible
 
-proc newWindow*(title = "KNutella Window", frame: Rect = defaultWindowFrame()): Window =
+proc newWindow*(
+    title = "KNutella Window", frame: Rect = defaultWindowFrame(), transparent = false
+): Window =
   let resolvedFrame = frame.resolveAutoRect(defaultWindowFrame())
   result = Window(
     xFrame: resolvedFrame,
@@ -397,6 +405,7 @@ proc newWindow*(title = "KNutella Window", frame: Rect = defaultWindowFrame()): 
     xResizeIncrements: initSize(1.0'f32, 1.0'f32),
     xAutorecalculatesKeyViewLoop: true,
     xKeyBindings: initDefaultKeyBindings(),
+    xTransparent: transparent,
   )
   initResponder(result)
   discard result.withProtocol(DefaultWindowKeyViewCommands)
@@ -1193,6 +1202,70 @@ proc rendererOrNil*(
 proc nativeReady*(window: Window): bool =
   not window.xHostWindow.isNil and window.xHostWindow.isReady
 
+proc transparent*(window: Window): bool =
+  ## Returns whether the native window uses an alpha-capable presentation surface.
+  window.xTransparent
+
+proc setTransparent*(window: Window, value: bool): bool {.discardable.} =
+  ## Configures transparency before native realization.
+  ## Disabling it also requires any staged backdrop to be cleared first.
+  if window.nativeReady() and window.xTransparent != value:
+    return false
+  if not value and window.xBackdrop.kind != wbekNone:
+    return false
+  window.xTransparent = value
+  true
+
+proc `transparent=`*(window: Window, value: bool) =
+  if not window.setTransparent(value):
+    raise WindowEffectError.newException(
+      "window transparency cannot change after native realization or while a backdrop " &
+        "is staged"
+    )
+
+proc backdrop*(window: Window): WindowBackdropEffect =
+  ## Returns the requested backdrop, including one staged before realization.
+  window.xBackdrop
+
+proc backdropActive*(window: Window): bool =
+  ## Returns whether the realized backend accepted a nonempty backdrop request.
+  window.xBackdropActive
+
+proc visualCapabilities*(window: Window): set[WindowEffectCapability] =
+  ## Returns native effect capabilities after the window has been realized.
+  if not window.xHostWindow.isNil:
+    result = window.xHostWindow.visualCapabilities()
+
+proc supports*(window: Window, capability: WindowEffectCapability): bool =
+  capability in window.visualCapabilities()
+
+proc trySetBackdrop*(window: Window, effect: WindowBackdropEffect): bool =
+  ## Stages or applies an effect, returning false for an unsupported request.
+  if not effect.isValid():
+    return false
+  if effect.kind != wbekNone and not window.xTransparent:
+    return false
+  if window.xHostWindow.isNil:
+    window.xBackdrop = effect
+    window.xBackdropActive = false
+    return true
+  if not window.xHostWindow.trySetBackdrop(effect):
+    return false
+  window.xBackdrop = effect
+  window.xBackdropActive = effect.kind != wbekNone
+  true
+
+proc setBackdrop*(window: Window, effect: WindowBackdropEffect) =
+  ## Stages or applies an effect, raising WindowEffectError on failure.
+  if not window.trySetBackdrop(effect):
+    raise WindowEffectError.newException(
+      "window backdrop is invalid, unavailable, or requires transparency"
+    )
+
+proc clearBackdrop*(window: Window) =
+  ## Removes an active or staged backdrop request.
+  discard window.trySetBackdrop(noWindowBackdropEffect())
+
 proc nativeContentScale*(window: Window): float32 =
   if window.xHostWindow.isNil:
     return 1.0'f32
@@ -1563,6 +1636,7 @@ proc close*(window: Window) =
   window.xMiniaturized = false
   window.xIsKeyWindow = false
   window.xIsMainWindow = false
+  window.xBackdropActive = false
   if window.xTransientSession.active:
     discard window.dismissTransientSession(tdrOwnerClosed)
   else:
@@ -2363,6 +2437,7 @@ proc markHostClosed(window: Window) =
   window.xClosed = true
   window.xVisibleRequested = false
   window.xMiniaturized = false
+  window.xBackdropActive = false
   if window.xTransientSession.active:
     discard window.dismissTransientSession(tdrOwnerClosed)
   else:
@@ -2460,8 +2535,13 @@ proc ensureNativeWindow*(window: Window) =
       window.xOwnerWindow.xHostWindow, window.xPopupPlacement, callbacks
     )
   else:
-    window.xHostWindow = createHostWindow(window.xFrame, window.xTitle, callbacks)
+    window.xHostWindow = createHostWindow(
+      window.xFrame, window.xTitle, callbacks, transparent = window.xTransparent
+    )
   window.syncNativeSizeLimits()
+  window.xBackdropActive = false
+  if window.xBackdrop.kind != wbekNone:
+    window.xBackdropActive = window.xHostWindow.trySetBackdrop(window.xBackdrop)
   window.ensureThreadHost()
   if window.xVisibleRequested:
     window.xHostWindow.setVisible(true)

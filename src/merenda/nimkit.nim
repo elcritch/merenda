@@ -68,6 +68,7 @@ import ./nimkit/app/userdefaults
 import ./nimkit/app/viewcontrollers
 import ./nimkit/view/views
 import ./nimkit/app/windowcontrollers
+import ./nimkit/app/windoweffects
 import ./nimkit/app/windows
 import ./nimkit/resources
 
@@ -143,4 +144,5 @@ export userdefaults
 export viewcontrollers
 export views
 export windowcontrollers
+export windoweffects
 export windows
