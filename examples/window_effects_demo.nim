@@ -29,18 +29,18 @@ func backdropRegions(size: Size): seq[Rect] =
 protocol BackdropCanvasDrawing of ViewDrawingProtocol:
   method draw(canvas: BackdropCanvas, context: DrawContext) =
     discard context.addRenderRectangle(
-      context.renderRectFor(canvas.bounds), fill(color(0.05, 0.07, 0.11, 0.24))
+      context.renderRectFor(canvas.bounds), fill(color(0.03, 0.04, 0.07, 0.08))
     )
     for index, region in canvas.bounds.size.backdropRegions():
       let tint =
         if index == 0:
-          color(0.13, 0.16, 0.23, 0.62)
+          color(0.13, 0.16, 0.23, 0.34)
         elif index == 1:
-          color(0.19, 0.13, 0.23, 0.52)
+          color(0.19, 0.13, 0.23, 0.27)
         else:
-          color(0.10, 0.14, 0.20, 0.52)
+          color(0.10, 0.14, 0.20, 0.27)
       discard context.addRenderRectangle(
-        context.renderRectFor(region), fill(tint), color(1.0, 1.0, 1.0, 0.16), 1.0, 14.0
+        context.renderRectFor(region), fill(tint), color(1.0, 1.0, 1.0, 0.24), 1.0, 14.0
       )
 
 proc newBackdropCanvas(): BackdropCanvas =
@@ -131,7 +131,7 @@ proc clearEffect(sender: DynamicAgent) =
   status.text = "Backdrop cleared · capabilities: " & window.capabilitySummary()
 
 effectPicker.selectedIndex = 0
-regionToggle.state = bsOn
+regionToggle.state = bsOff
 let applyTarget = newActionTarget(applyAction, applyEffect)
 effectPicker.target = applyTarget
 effectPicker.action = applyAction
