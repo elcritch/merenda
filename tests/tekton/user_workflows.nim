@@ -198,3 +198,33 @@ suite "Tekton user workflows":
     check document.resources().contains(buttonId)
     check document.resources().selectedResourceIds() == @[canvasId]
     check editor.previewInstance().view(buttonId) != nil
+
+  test "a user can drag a freeform control and undo the move":
+    let
+      document = newResourceEditorDocument(blankCanvasBundle())
+      editor = newResourceEditor(document)
+      window = editor.newResourceEditorWindow()
+      canvasId = resourceId("canvas")
+      buttonId = resourceId("button.1")
+
+    check editor.selectResource(canvasId)
+    check editor.paletteButton("button").sendAction()
+    discard window.buildRenders()
+    let
+      previewButton = editor.previewInstance().view(buttonId)
+      start = previewButton.pointToWindow(initPoint(24, 20))
+      destination = initPoint(start.x + 35, start.y + 22)
+
+    check window.mouseDownAt(start)
+    check window.mouseDraggedAt(destination)
+    check window.mouseUpAt(destination)
+    check document.resources().selectedResourceIds() == @[buttonId]
+    check document.resources().viewProperty(buttonId, "frame").value.rectValue ==
+      rect(53, 40, 180, 44)
+    check editor.previewInstance().view(buttonId) == previewButton
+    check previewButton.frame() == rect(53, 40, 180, 44)
+
+    check editor.undoButton().sendAction()
+    check document.resources().viewProperty(buttonId, "frame").value.rectValue ==
+      rect(18, 18, 180, 44)
+    check editor.previewInstance().view(buttonId) == previewButton

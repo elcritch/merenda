@@ -87,6 +87,11 @@ type
     xHoveredResourceId: Option[ResourceId]
     xHoverGeometry: ResourcePreviewGeometry
     xSelectionFallbackId: Option[ResourceId]
+    xDraggedResourceId: Option[ResourceId]
+    xDraggedView: View
+    xDragStartPoint: Point
+    xDragStartFrame: Rect
+    xDragDidMove: bool
 
   ResourceEditorPreviewSurface = ref object of View
     xEditor: ResourceEditor
@@ -104,6 +109,7 @@ const
 proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor
 proc newResourceEditorWindow*(editor: ResourceEditor): Window
 proc synchronize*(editor: ResourceEditor)
+proc selectResource*(editor: ResourceEditor, id: ResourceId): bool
 proc removeSelectedView*(editor: ResourceEditor): ResourceEditResult {.discardable.}
 proc duplicateSelectedView*(editor: ResourceEditor): ResourceEditResult {.discardable.}
 proc reorderSelectedView*(
@@ -119,6 +125,14 @@ proc updatePreviewHover*(
 ): ResourcePreviewHit {.discardable.}
 
 proc clearPreviewHover*(editor: ResourceEditor)
+
+proc beginPreviewDrag(
+  editor: ResourceEditor, view: View, point: Point
+): bool {.discardable.}
+
+proc updatePreviewDrag*(editor: ResourceEditor, point: Point): bool {.discardable.}
+proc endPreviewDrag*(editor: ResourceEditor): bool {.discardable.}
+proc previewResourceId(editor: ResourceEditor, selectedView: View): ResourceId
 
 protocol ResourceEditorDocumentEvents:
   proc resourcesDidChange*(
@@ -685,6 +699,75 @@ protocol ResourceEditorPreviewSurfaceEvents of ResponderEventProtocol:
       surface.xEditor.clearPreviewHover()
     false
 
+proc freeformParent(document: ResourceDocument, id: ResourceId): bool =
+  let path = document.findNodePath(id)
+  if path.isNone or path.get().kind != rnkView:
+    return
+  let parent = document.findParentPath(path.get())
+  if parent.isNone:
+    return true
+  parent.get().kind == rnkView and document.view(parent.get().id).kind in [
+    "view", "box"
+  ]
+
+proc beginPreviewDrag(editor: ResourceEditor, view: View, point: Point): bool =
+  if view.isNil or not editor.xDocument.xResources.draftIsValid():
+    return
+  let
+    id = editor.previewResourceId(view)
+    document = editor.xDocument.xResources
+  if id.isEmpty or not document.freeformParent(id):
+    return
+  let frame = document.findViewProperty(id, "frame")
+  if frame.isNone or frame.get().value.kind != rvRect:
+    return
+  discard editor.selectResource(id)
+  editor.xDraggedResourceId = some(id)
+  editor.xDraggedView = editor.xPreview.findView(id)
+  editor.xDragStartPoint = point
+  editor.xDragStartFrame = frame.get().value.rectValue
+  editor.xDragDidMove = false
+  result = not editor.xDraggedView.isNil
+
+proc updatePreviewDrag*(editor: ResourceEditor, point: Point): bool =
+  if editor.xDraggedResourceId.isNone or editor.xDraggedView.isNil:
+    return
+  let
+    delta =
+      initPoint(point.x - editor.xDragStartPoint.x, point.y - editor.xDragStartPoint.y)
+    nextFrame = rect(
+      editor.xDragStartFrame.x + delta.x,
+      editor.xDragStartFrame.y + delta.y,
+      editor.xDragStartFrame.w,
+      editor.xDragStartFrame.h,
+    )
+  editor.xDragDidMove = editor.xDragDidMove or delta != Point()
+  editor.xDraggedView.frame = nextFrame
+  result = true
+
+proc endPreviewDrag*(editor: ResourceEditor): bool =
+  if editor.xDraggedResourceId.isNone or editor.xDraggedView.isNil:
+    return
+  let
+    id = editor.xDraggedResourceId.get()
+    draggedFrame = editor.xDraggedView.frame()
+    delta = initPoint(
+      draggedFrame.x - editor.xDragStartFrame.x,
+      draggedFrame.y - editor.xDragStartFrame.y,
+    )
+    didMove = editor.xDragDidMove
+  editor.xDraggedResourceId = none(ResourceId)
+  editor.xDraggedView = nil
+  editor.xDragDidMove = false
+  if not didMove:
+    return true
+  let edit = editor.nudgeSelectedView(delta)
+  if not edit.applied and editor.xDocument.xResources.contains(id):
+    let previewView = editor.xPreview.findView(id)
+    if not previewView.isNil:
+      previewView.frame = editor.xDragStartFrame
+  result = edit.applied
+
 protocol ResourceEditorHierarchyEvents of ResponderEventProtocol:
   method keyDown(hierarchy: ResourceEditorHierarchyView, event: KeyEvent): bool =
     if not hierarchy.xEditor.isNil:
@@ -750,11 +833,50 @@ proc installPreviewHoverTracking(editor: ResourceEditor, view: View) =
       next(self, invocation)
     if editorCopy.xHoveredResourceId.isSome:
       editorCopy.clearPreviewHover()
+  let downWrapper: AroundMethod = proc(
+      self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
+  ) =
+    if not next.isNil:
+      next(self, invocation)
+    let
+      event = invocation.argsAs(MouseEvent)
+      localView = View(self)
+      point = localView.pointToView(event.location, editorCopy.xPreviewSurface)
+    if event.button == mbPrimary and editorCopy.beginPreviewDrag(localView, point):
+      invocation.setResult(true)
+  let draggedWrapper: AroundMethod = proc(
+      self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
+  ) =
+    if not next.isNil:
+      next(self, invocation)
+    let
+      event = invocation.argsAs(MouseEvent)
+      localView = View(self)
+      point = localView.pointToView(event.location, editorCopy.xPreviewSurface)
+    if event.button == mbPrimary and editorCopy.updatePreviewDrag(point):
+      invocation.setResult(true)
+  let upWrapper: AroundMethod = proc(
+      self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
+  ) =
+    if not next.isNil:
+      next(self, invocation)
+    let event = invocation.argsAs(MouseEvent)
+    if event.button == mbPrimary and editorCopy.endPreviewDrag():
+      invocation.setResult(true)
   editor.xHoverTokens.add DynamicAgent(view).pushMethod(
     nimkitSelectors.mouseMoved(), movedWrapper
   )
   editor.xHoverTokens.add DynamicAgent(view).pushMethod(
     nimkitSelectors.mouseExited(), exitedWrapper
+  )
+  editor.xHoverTokens.add DynamicAgent(view).pushMethod(
+    nimkitSelectors.mouseDown(), downWrapper
+  )
+  editor.xHoverTokens.add DynamicAgent(view).pushMethod(
+    nimkitSelectors.mouseDragged(), draggedWrapper
+  )
+  editor.xHoverTokens.add DynamicAgent(view).pushMethod(
+    nimkitSelectors.mouseUp(), upWrapper
   )
   for child in view.subviews():
     editor.installPreviewHoverTracking(child)
@@ -777,6 +899,9 @@ proc clearPreview(editor: ResourceEditor) =
   )
   editor.xHoveredResourceId = none(ResourceId)
   editor.xHoverGeometry = ResourcePreviewGeometry()
+  editor.xDraggedResourceId = none(ResourceId)
+  editor.xDraggedView = nil
+  editor.xDragDidMove = false
 
 proc selectPreviewView(editor: ResourceEditor) =
   discard editor.xSelectionRing.uninstall()
