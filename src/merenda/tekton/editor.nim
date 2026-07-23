@@ -120,6 +120,10 @@ proc nudgeSelectedView*(
   editor: ResourceEditor, delta: Point
 ): ResourceEditResult {.discardable.}
 
+proc resizeSelectedView*(
+  editor: ResourceEditor, delta: Size
+): ResourceEditResult {.discardable.}
+
 proc updatePreviewHover*(
   editor: ResourceEditor, point: Point
 ): ResourcePreviewHit {.discardable.}
@@ -784,6 +788,24 @@ protocol ResourceEditorHierarchyEvents of ResponderEventProtocol:
         discard hierarchy.xEditor.reorderSelectedView(rvsdLater)
         return true
       elif event.key in {keyArrowLeft, keyArrowRight, keyArrowUp, keyArrowDown} and
+          event.modifiers in
+          [shortcutModifiers() + {kmOption}, shortcutModifiers() + {kmOption, kmShift}]:
+        let amount = if kmShift in event.modifiers: 10.0'f32 else: 1.0'f32
+        let delta =
+          case event.key
+          of keyArrowLeft:
+            initSize(-amount, 0)
+          of keyArrowRight:
+            initSize(amount, 0)
+          of keyArrowUp:
+            initSize(0, -amount)
+          of keyArrowDown:
+            initSize(0, amount)
+          else:
+            Size()
+        discard hierarchy.xEditor.resizeSelectedView(delta)
+        return true
+      elif event.key in {keyArrowLeft, keyArrowRight, keyArrowUp, keyArrowDown} and
           kmOption in event.modifiers and event.modifiers <= {kmOption, kmShift}:
         let amount = if kmShift in event.modifiers: 10.0'f32 else: 1.0'f32
         let delta =
@@ -1245,6 +1267,10 @@ proc nudgeSelectedView*(editor: ResourceEditor, delta: Point): ResourceEditResul
   let
     document = editor.xDocument.xResources
     frameProperty = document.findViewProperty(selected.get(), "frame")
+  if not document.freeformParent(selected.get()):
+    return editor.rejectedSelectedViewEdit(
+      rekReplace, "the selected view is positioned by its parent layout", selected.get()
+    )
   if frameProperty.isNone or frameProperty.get().value.kind != rvRect:
     return editor.rejectedSelectedViewEdit(
       rekReplace, "the selected view does not have an editable frame", selected.get()
@@ -1261,6 +1287,45 @@ proc nudgeSelectedView*(editor: ResourceEditor, delta: Point): ResourceEditResul
     selected.get(),
     resourceProperty("frame", resourceValue(frame)),
     actionName = "Move View",
+  )
+  if result.applied:
+    editor.synchronize()
+
+proc resizeSelectedView*(editor: ResourceEditor, delta: Size): ResourceEditResult =
+  let selected = editor.selectedViewId()
+  if selected.isNone:
+    return editor.rejectedSelectedViewEdit(rekReplace, "no view resource is selected")
+  if delta == Size():
+    return editor.rejectedSelectedViewEdit(
+      rekReplace, "the view size is unchanged", selected.get(), reeUnchanged
+    )
+  let
+    document = editor.xDocument.xResources
+    frameProperty = document.findViewProperty(selected.get(), "frame")
+  if not document.freeformParent(selected.get()):
+    return editor.rejectedSelectedViewEdit(
+      rekReplace, "the selected view is sized by its parent layout", selected.get()
+    )
+  if frameProperty.isNone or frameProperty.get().value.kind != rvRect:
+    return editor.rejectedSelectedViewEdit(
+      rekReplace, "the selected view does not have an editable frame", selected.get()
+    )
+  let
+    previousFrame = frameProperty.get().value.rectValue
+    frame = rect(
+      previousFrame.x,
+      previousFrame.y,
+      max(previousFrame.w + delta.width, 1.0'f32),
+      max(previousFrame.h + delta.height, 1.0'f32),
+    )
+  if frame == previousFrame:
+    return editor.rejectedSelectedViewEdit(
+      rekReplace, "the view size is unchanged", selected.get(), reeUnchanged
+    )
+  result = document.setViewProperty(
+    selected.get(),
+    resourceProperty("frame", resourceValue(frame)),
+    actionName = "Resize View",
   )
   if result.applied:
     editor.synchronize()

@@ -228,3 +228,40 @@ suite "Tekton user workflows":
     check document.resources().viewProperty(buttonId, "frame").value.rectValue ==
       rect(18, 18, 180, 44)
     check editor.previewInstance().view(buttonId) == previewButton
+
+  test "a user can resize the selected control from the keyboard":
+    let
+      document = newResourceEditorDocument(blankCanvasBundle())
+      editor = newResourceEditor(document)
+      window = editor.newResourceEditorWindow()
+      canvasId = resourceId("canvas")
+      buttonId = resourceId("button.1")
+
+    check editor.selectResource(canvasId)
+    check editor.paletteButton("button").sendAction()
+    let previewButton = editor.previewInstance().view(buttonId)
+
+    check window.dispatchKeyDown(
+      KeyEvent(
+        key: keyArrowRight,
+        keyCode: keyArrowRight.ord,
+        modifiers: shortcutModifiers() + {kmOption},
+      )
+    )
+    check window.dispatchKeyDown(
+      KeyEvent(
+        key: keyArrowDown,
+        keyCode: keyArrowDown.ord,
+        modifiers: shortcutModifiers() + {kmOption, kmShift},
+      )
+    )
+    check document.resources().viewProperty(buttonId, "frame").value.rectValue ==
+      rect(18, 18, 181, 54)
+    check editor.previewInstance().view(buttonId) == previewButton
+
+    check editor.undoButton().sendAction()
+    check document.resources().viewProperty(buttonId, "frame").value.rectValue ==
+      rect(18, 18, 181, 44)
+    check editor.undoButton().sendAction()
+    check document.resources().viewProperty(buttonId, "frame").value.rectValue ==
+      rect(18, 18, 180, 44)
