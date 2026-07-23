@@ -1156,6 +1156,38 @@ proc defaultViewNode(kind: string, id: ResourceId): ViewNodeResource =
     discard
   result = initViewNodeResource(id, kind, properties)
 
+proc cascadeNewViewFrame(
+    document: ResourceDocument, parentId: ResourceId, node: var ViewNodeResource
+) =
+  let freeformContainer =
+    parentId.isEmpty or document.view(parentId).kind in ["view", "box"]
+  if not freeformContainer:
+    return
+  let siblings =
+    if parentId.isEmpty:
+      document.bundle().views
+    else:
+      document.view(parentId).children
+  var attempt = 0
+  while true:
+    let offset = 18.0'f32 + attempt.float32 * 24.0'f32
+    var occupied = false
+    for sibling in siblings:
+      let frame = document.findViewProperty(sibling.id, "frame")
+      if frame.isSome and frame.get().value.kind == rvRect and
+          frame.get().value.rectValue.x == offset and
+          frame.get().value.rectValue.y == offset:
+        occupied = true
+        break
+    if not occupied:
+      for property in node.properties.mitems:
+        if property.name == "frame" and property.value.kind == rvRect:
+          let previous = property.value.rectValue
+          property.value.rectValue = rect(offset, offset, previous.w, previous.h)
+          return
+      return
+    inc attempt
+
 proc insertViewKind*(editor: ResourceEditor, kind: string): ResourceEditResult =
   let document = editor.xDocument.xResources
   if not editor.xDocument.xRegistry.hasViewKind(kind):
@@ -1182,7 +1214,9 @@ proc insertViewKind*(editor: ResourceEditor, kind: string): ResourceEditResult =
       let parentPath = document.findParentPath(path.get())
       if parentPath.isSome and parentPath.get().kind == rnkView:
         parent = parentPath.get().id
-  result = document.insertView(kind.defaultViewNode(id), parent)
+  var node = kind.defaultViewNode(id)
+  document.cascadeNewViewFrame(parent, node)
+  result = document.insertView(node, parent)
   if result.applied:
     discard document.selectResource(id)
     editor.synchronize()

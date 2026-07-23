@@ -150,3 +150,28 @@ suite "Tekton user workflows":
     check editor.previewInstance().view(canvasId) == validPreview
     check validPreview.frame() == rect(40, 36, 600, 380)
     check editor.previewRevision() == 2
+
+  test "new controls on a freeform canvas do not cover each other":
+    let
+      document = newResourceEditorDocument(blankCanvasBundle())
+      editor = newResourceEditor(document)
+      canvasId = resourceId("canvas")
+      buttonId = resourceId("button.1")
+      labelId = resourceId("label.1")
+      fieldId = resourceId("textField.1")
+
+    check editor.selectResource(canvasId)
+    check editor.paletteButton("button").sendAction()
+    check editor.paletteButton("label").sendAction()
+    check editor.paletteButton("textField").sendAction()
+
+    check document.resources().viewProperty(buttonId, "frame").value.rectValue ==
+      rect(18, 18, 180, 44)
+    check document.resources().viewProperty(labelId, "frame").value.rectValue ==
+      rect(42, 42, 180, 44)
+    check document.resources().viewProperty(fieldId, "frame").value.rectValue ==
+      rect(66, 66, 180, 44)
+    check editor.previewInstance().view(buttonId).frame() !=
+      editor.previewInstance().view(labelId).frame()
+    check editor.previewInstance().view(labelId).frame() !=
+      editor.previewInstance().view(fieldId).frame()
