@@ -68,6 +68,8 @@ type
     xDiagnosticsTitle: Label
     xPaletteKinds: seq[string]
     xPaletteButtons: seq[Button]
+    xUndoButton: Button
+    xRedoButton: Button
     xDuplicateButton: Button
     xMoveEarlierButton: Button
     xMoveLaterButton: Button
@@ -84,6 +86,7 @@ type
     xHoverTokens: seq[SwizzleToken]
     xHoveredResourceId: Option[ResourceId]
     xHoverGeometry: ResourcePreviewGeometry
+    xSelectionFallbackId: Option[ResourceId]
 
   ResourceEditorPreviewSurface = ref object of View
     xEditor: ResourceEditor
@@ -247,6 +250,12 @@ proc paletteButton*(editor: ResourceEditor, kind: string): Button =
 
 proc duplicateButton*(editor: ResourceEditor): Button =
   editor.xDuplicateButton
+
+proc undoButton*(editor: ResourceEditor): Button =
+  editor.xUndoButton
+
+proc redoButton*(editor: ResourceEditor): Button =
+  editor.xRedoButton
 
 proc moveEarlierButton*(editor: ResourceEditor): Button =
   editor.xMoveEarlierButton
@@ -784,9 +793,12 @@ proc previewResourceId(editor: ResourceEditor, selectedView: View): ResourceId =
     result = found.get()
 
 proc selectResource*(editor: ResourceEditor, id: ResourceId): bool =
+  let previous = editor.selectedResourceId()
   result = editor.xDocument.xResources.selectResource(id)
   if not result:
     return
+  if previous != some(id):
+    editor.xSelectionFallbackId = previous
   editor.refreshHierarchy()
   editor.refreshPropertyRows()
   editor.selectPreviewView()
@@ -857,6 +869,10 @@ proc refreshStatus(editor: ResourceEditor) =
 
 proc synchronize*(editor: ResourceEditor) =
   ## Synchronizes hierarchy, inspector, diagnostics, and the valid preview.
+  let resources = editor.xDocument.xResources
+  if resources.selectedResourceIds().len == 0 and editor.xSelectionFallbackId.isSome and
+      resources.contains(editor.xSelectionFallbackId.get()):
+    discard resources.selectResource(editor.xSelectionFallbackId.get())
   editor.rebuildPreview()
   editor.refreshHierarchy()
   editor.refreshPropertyRows()
@@ -1060,6 +1076,7 @@ proc duplicateSelectedView*(editor: ResourceEditor): ResourceEditResult =
     actionName = "Duplicate View",
   )
   if result.applied:
+    editor.xSelectionFallbackId = editor.selectedResourceId()
     discard document.selectResource(duplicate.id)
     editor.synchronize()
 
@@ -1218,6 +1235,7 @@ proc insertViewKind*(editor: ResourceEditor, kind: string): ResourceEditResult =
   document.cascadeNewViewFrame(parent, node)
   result = document.insertView(node, parent)
   if result.applied:
+    editor.xSelectionFallbackId = editor.selectedResourceId()
     discard document.selectResource(id)
     editor.synchronize()
 
@@ -1634,6 +1652,8 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     moveLaterButton = newButton("Down")
 
   result.configurePalette()
+  result.xUndoButton = undoButton
+  result.xRedoButton = redoButton
   result.xDuplicateButton = duplicateButton
   result.xMoveEarlierButton = moveEarlierButton
   result.xMoveLaterButton = moveLaterButton

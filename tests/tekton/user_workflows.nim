@@ -175,3 +175,26 @@ suite "Tekton user workflows":
       editor.previewInstance().view(labelId).frame()
     check editor.previewInstance().view(labelId).frame() !=
       editor.previewInstance().view(fieldId).frame()
+
+  test "undoing insertion restores the selection the user came from":
+    let
+      document = newResourceEditorDocument(blankCanvasBundle())
+      editor = newResourceEditor(document)
+      canvasId = resourceId("canvas")
+      buttonId = resourceId("button.1")
+
+    check editor.selectResource(canvasId)
+    check editor.paletteButton("button").sendAction()
+    check document.resources().selectedResourceIds() == @[buttonId]
+    check editor.propertyRows().len > 0
+
+    check editor.undoButton().sendAction()
+    check not document.resources().contains(buttonId)
+    check document.resources().selectedResourceIds() == @[canvasId]
+    check editor.hierarchyView().selectedItemIdentifier() == $canvasId
+    check editor.propertyRows().len > 0
+
+    check editor.redoButton().sendAction()
+    check document.resources().contains(buttonId)
+    check document.resources().selectedResourceIds() == @[canvasId]
+    check editor.previewInstance().view(buttonId) != nil
