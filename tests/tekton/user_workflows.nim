@@ -18,6 +18,12 @@ proc blankCanvasBundle(): ResourceBundle =
       )
     ]
 
+proc propertyRowIndex(editor: ResourceEditor, name: string): int =
+  for index, row in editor.propertyRows():
+    if row.descriptor.name == name:
+      return index
+  -1
+
 suite "Tekton user workflows":
   test "a user can add edit duplicate position reorder and undo a view":
     let
@@ -111,3 +117,36 @@ suite "Tekton user workflows":
     check editor.selectResource(fieldId)
     check window.dispatchKeyDown(KeyEvent(key: keyDelete, keyCode: keyDelete.ord))
     check document.resources().selectedResourceIds() == @[labelId]
+
+  test "invalid inspector input stays editable without disturbing the preview":
+    let
+      document = newResourceEditorDocument(blankCanvasBundle())
+      editor = newResourceEditor(document)
+      window = editor.newResourceEditorWindow()
+      canvasId = resourceId("canvas")
+      valueColumn = editor.propertyInspector().columnWithIdentifier("value")
+    discard window.buildRenders()
+    check editor.selectResource(canvasId)
+    let
+      frameRow = editor.propertyRowIndex("frame")
+      validPreview = editor.previewInstance().view(canvasId)
+      validFrame = validPreview.frame()
+    check frameRow >= 0
+
+    check editor.propertyInspector().beginEditingCell(frameRow, valueColumn)
+    check editor.propertyInspector().commitEditingCell("20, nope, 640, 420")
+    check not document.resources().draftIsValid()
+    check editor.propertyRows()[frameRow].text == "20, nope, 640, 420"
+    check editor.previewInstance().view(canvasId) == validPreview
+    check validPreview.frame() == validFrame
+    check editor.previewRevision() == 0
+    check editor.diagnosticRows().len > 0
+
+    check editor.propertyInspector().beginEditingCell(frameRow, valueColumn)
+    check editor.propertyInspector().commitEditingCell("40, 36, 600, 380")
+    check document.resources().draftIsValid()
+    check document.resources().viewProperty(canvasId, "frame").value.rectValue ==
+      rect(40, 36, 600, 380)
+    check editor.previewInstance().view(canvasId) == validPreview
+    check validPreview.frame() == rect(40, 36, 600, 380)
+    check editor.previewRevision() == 2
