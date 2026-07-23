@@ -511,11 +511,16 @@ the first backend-neutral layout bridge.
   identities.
 - Ready: `ResourceEditor` provides hierarchy and canvas selection, hover geometry,
   a 13-kind Sigils-backed view palette, text/checkbox/combo-box/color-well property
-  editing, keyboard deletion, path-addressed diagnostics, and read-only detail
-  surfaces for layout, ownership, connections, menus, commands, images,
-  localization, key bindings, and themes. Tekton owns the editor, preview
-  reconciler, and resource-value editing modules as a standalone app layer, while
-  NimKit retains the backend-neutral resource model and runtime bridge.
+  editing, cascaded freeform insertion, subtree duplication with stable identifier
+  remapping, sibling reordering, selection-aware deletion and undo, direct canvas
+  dragging, keyboard position/size adjustment, path-addressed diagnostics, and
+  read-only detail surfaces for layout, ownership, connections, menus, commands,
+  images, localization, key bindings, and themes. Synthetic user workflows cover
+  add/edit/duplicate/reorder/move/resize/delete/undo and invalid-inspector recovery
+  while asserting resource, hierarchy, selection, and preview identity together.
+  Tekton owns the editor, preview reconciler, and resource-value editing modules as
+  a standalone app layer, while NimKit retains the backend-neutral resource model
+  and runtime bridge.
 - Remaining builder work: typed authoring operations and specialized editors for
   non-view resources and constraints, optional presentation metadata, controller
   and window extension properties, and import/export adapters.
@@ -615,17 +620,20 @@ the first backend-neutral layout bridge.
 - Add an optional editor metadata registry for labels, categories, palette order,
   default frames, numeric ranges, asset pickers, multiline text, and other input
   hints. Enum choices already come from runtime property descriptors.
-- Build direct-manipulation layout authoring: guide overlays, anchor handles,
-  snapping, constant editing, priority and activation controls, constraint
-  ownership visualization, and conflict/ambiguity diagnostics. Keep frames and
-  stack/container layout available as simpler authoring modes.
+- Continue direct-manipulation layout authoring beyond the completed freeform
+  frame dragging and keyboard position/size controls: add resize handles, guide
+  overlays, snapping, anchor handles, constant editing, priority and activation
+  controls, constraint ownership visualization, and conflict/ambiguity
+  diagnostics. Keep frames and stack/container layout available as simpler
+  authoring modes.
 - Turn the read-only resource detail surfaces into structured editors for
   target/action connections, controller ownership, menus, commands, images,
   localized strings, key bindings, and theme fragments. Every commit should use
   typed document operations and retain invalid draft input where appropriate.
 - Add reusable components and templates, copy/paste and drag/drop payloads,
-  multi-selection transforms, stable duplicate-ID remapping, and package-relative
-  asset management suitable for a standalone builder application.
+  multi-selection transforms, and package-relative asset management suitable for
+  a standalone builder application. Extend the completed view-subtree duplicate-ID
+  remapping to related constraints, connections, and non-view resources.
 - Define schema migrations and optional nib/storyboard and GNUstep import/export
   adapters. Adapters should report lossy mappings explicitly and must translate
   into `ResourceBundle` rather than leaking platform resource types into NimKit.
