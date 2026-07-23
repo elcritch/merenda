@@ -1,6 +1,6 @@
 ## Tekton's interactive resource-document editor.
 
-import std/[algorithm, options, os, strutils]
+import std/[algorithm, options, os, sets, strutils, tables]
 
 import sigils/[core, selectors]
 
@@ -11,6 +11,7 @@ import ../nimkit/controls/[buttons, colorpicker, comboboxes]
 import ../nimkit/debug/[selectionrings, viewselection]
 import ../nimkit/foundation/events
 import ../nimkit/foundation/[selectors as nimkitSelectors, types, undomanagers]
+import ../nimkit/responder/keybindings
 import
   ../nimkit/resources/[
     resrccbor, resrcconstruction, resrccore, resrcdocument, resrcregistry,
@@ -43,6 +44,10 @@ type
     value*: ResourceValue
     message*: string
 
+  ResourceViewSiblingDirection* = enum
+    rvsdEarlier
+    rvsdLater
+
   ResourceEditorDocument* = ref object of Document
     xResources: ResourceDocument
     xRegistry: ResourceRegistry
@@ -63,6 +68,9 @@ type
     xDiagnosticsTitle: Label
     xPaletteKinds: seq[string]
     xPaletteButtons: seq[Button]
+    xDuplicateButton: Button
+    xMoveEarlierButton: Button
+    xMoveLaterButton: Button
     xPropertyRows: seq[ResourceEditorPropertyRow]
     xDiagnosticRows: seq[ResourceDiagnostic]
     xPreview: ResourcePreview
@@ -94,6 +102,15 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor
 proc newResourceEditorWindow*(editor: ResourceEditor): Window
 proc synchronize*(editor: ResourceEditor)
 proc removeSelectedView*(editor: ResourceEditor): ResourceEditResult {.discardable.}
+proc duplicateSelectedView*(editor: ResourceEditor): ResourceEditResult {.discardable.}
+proc reorderSelectedView*(
+  editor: ResourceEditor, direction: ResourceViewSiblingDirection
+): ResourceEditResult {.discardable.}
+
+proc nudgeSelectedView*(
+  editor: ResourceEditor, delta: Point
+): ResourceEditResult {.discardable.}
+
 proc updatePreviewHover*(
   editor: ResourceEditor, point: Point
 ): ResourcePreviewHit {.discardable.}
@@ -227,6 +244,15 @@ proc paletteButton*(editor: ResourceEditor, kind: string): Button =
   for index, candidate in editor.xPaletteKinds:
     if candidate == kind and index < editor.xPaletteButtons.len:
       return editor.xPaletteButtons[index]
+
+proc duplicateButton*(editor: ResourceEditor): Button =
+  editor.xDuplicateButton
+
+proc moveEarlierButton*(editor: ResourceEditor): Button =
+  editor.xMoveEarlierButton
+
+proc moveLaterButton*(editor: ResourceEditor): Button =
+  editor.xMoveLaterButton
 
 proc rootView*(editor: ResourceEditor): View =
   editor.xRootView
@@ -652,9 +678,35 @@ protocol ResourceEditorPreviewSurfaceEvents of ResponderEventProtocol:
 
 protocol ResourceEditorHierarchyEvents of ResponderEventProtocol:
   method keyDown(hierarchy: ResourceEditorHierarchyView, event: KeyEvent): bool =
-    if event.key in {keyBackspace, keyDelete} and event.modifiers == {} and
-        not hierarchy.xEditor.isNil:
-      if hierarchy.xEditor.removeSelectedView().applied:
+    if not hierarchy.xEditor.isNil:
+      if event.key in {keyBackspace, keyDelete} and event.modifiers == {}:
+        if hierarchy.xEditor.removeSelectedView().applied:
+          return true
+      elif event.key == keyD and event.modifiers == shortcutModifiers():
+        discard hierarchy.xEditor.duplicateSelectedView()
+        return true
+      elif event.key == keyArrowUp and event.modifiers == shortcutModifiers():
+        discard hierarchy.xEditor.reorderSelectedView(rvsdEarlier)
+        return true
+      elif event.key == keyArrowDown and event.modifiers == shortcutModifiers():
+        discard hierarchy.xEditor.reorderSelectedView(rvsdLater)
+        return true
+      elif event.key in {keyArrowLeft, keyArrowRight, keyArrowUp, keyArrowDown} and
+          kmOption in event.modifiers and event.modifiers <= {kmOption, kmShift}:
+        let amount = if kmShift in event.modifiers: 10.0'f32 else: 1.0'f32
+        let delta =
+          case event.key
+          of keyArrowLeft:
+            initPoint(-amount, 0)
+          of keyArrowRight:
+            initPoint(amount, 0)
+          of keyArrowUp:
+            initPoint(0, -amount)
+          of keyArrowDown:
+            initPoint(0, amount)
+          else:
+            Point()
+        discard hierarchy.xEditor.nudgeSelectedView(delta)
         return true
     let next = hierarchy.performNext(keyDown, event)
     if next.isSome:
@@ -897,6 +949,179 @@ proc nextViewIdentifier(document: ResourceDocument, kind: string): ResourceId =
   while document.contains(resourceId(kind & "." & $index)):
     inc index
   result = resourceId(kind & "." & $index)
+
+type SelectedViewLocation = object
+  id: ResourceId
+  parentId: ResourceId
+  index: int
+  siblingCount: int
+
+proc selectedViewLocation(editor: ResourceEditor): Option[SelectedViewLocation] =
+  let
+    document = editor.xDocument.xResources
+    selected = editor.selectedViewId()
+  if selected.isNone:
+    return
+  let
+    path = document.nodePath(selected.get())
+    parent = document.findParentPath(path)
+    parentId =
+      if parent.isSome and parent.get().kind == rnkView:
+        parent.get().id
+      else:
+        ResourceId("")
+    siblings =
+      if parentId.isEmpty:
+        document.bundle().views
+      else:
+        document.view(parentId).children
+  for index, sibling in siblings:
+    if sibling.id == selected.get():
+      return some(
+        SelectedViewLocation(
+          id: sibling.id, parentId: parentId, index: index, siblingCount: siblings.len
+        )
+      )
+
+proc rejectedSelectedViewEdit(
+    editor: ResourceEditor,
+    kind: ResourceEditKind,
+    message: string,
+    id = ResourceId(""),
+    error = reeResourceUnavailable,
+): ResourceEditResult =
+  ResourceEditResult(
+    kind: kind,
+    error: error,
+    message: message,
+    resourceId: id,
+    revision: editor.xDocument.xResources.revision(),
+  )
+
+proc nextDuplicateIdentifier(
+    document: ResourceDocument, kind: string, reserved: HashSet[ResourceId]
+): ResourceId =
+  var index = 1
+  while true:
+    result = resourceId(kind & "." & $index)
+    if not document.contains(result) and result notin reserved:
+      return
+    inc index
+
+proc remapDuplicateIdentifiers(
+    document: ResourceDocument,
+    node: var ViewNodeResource,
+    replacements: var Table[ResourceId, ResourceId],
+    reserved: var HashSet[ResourceId],
+) =
+  let previousId = node.id
+  node.id = document.nextDuplicateIdentifier(node.kind, reserved)
+  replacements[previousId] = node.id
+  reserved.incl node.id
+  for child in node.children.mitems:
+    document.remapDuplicateIdentifiers(child, replacements, reserved)
+
+proc remapDuplicateReferences(
+    node: var ViewNodeResource, replacements: Table[ResourceId, ResourceId]
+) =
+  for property in node.properties.mitems:
+    if property.value.kind == rvReference and
+        replacements.hasKey(property.value.referenceValue.id):
+      property.value.referenceValue.id = replacements[property.value.referenceValue.id]
+  for child in node.children.mitems:
+    child.remapDuplicateReferences(replacements)
+
+proc offsetDuplicateFrame(node: var ViewNodeResource) =
+  for property in node.properties.mitems:
+    if property.name == "frame" and property.value.kind == rvRect:
+      let frame = property.value.rectValue
+      property.value.rectValue =
+        rect(frame.x + 12.0'f32, frame.y + 12.0'f32, frame.w, frame.h)
+      return
+
+proc duplicateSelectedView*(editor: ResourceEditor): ResourceEditResult =
+  let location = editor.selectedViewLocation()
+  if location.isNone:
+    return editor.rejectedSelectedViewEdit(rekInsert, "no view resource is selected")
+  let
+    document = editor.xDocument.xResources
+    source = document.view(location.get().id)
+  var
+    duplicate = source
+    replacements = initTable[ResourceId, ResourceId]()
+    reserved = initHashSet[ResourceId]()
+  document.remapDuplicateIdentifiers(duplicate, replacements, reserved)
+  duplicate.remapDuplicateReferences(replacements)
+  duplicate.offsetDuplicateFrame()
+  result = document.insertView(
+    duplicate,
+    location.get().parentId,
+    Natural(location.get().index + 1),
+    actionName = "Duplicate View",
+  )
+  if result.applied:
+    discard document.selectResource(duplicate.id)
+    editor.synchronize()
+
+proc reorderSelectedView*(
+    editor: ResourceEditor, direction: ResourceViewSiblingDirection
+): ResourceEditResult =
+  let location = editor.selectedViewLocation()
+  if location.isNone:
+    return editor.rejectedSelectedViewEdit(rekMove, "no view resource is selected")
+  let targetIndex =
+    case direction
+    of rvsdEarlier:
+      location.get().index - 1
+    of rvsdLater:
+      location.get().index + 1
+  if targetIndex < 0 or targetIndex >= location.get().siblingCount:
+    return editor.rejectedSelectedViewEdit(
+      rekMove,
+      "the selected view is already at that edge",
+      location.get().id,
+      reeUnchanged,
+    )
+  let document = editor.xDocument.xResources
+  result = document.moveView(
+    location.get().id,
+    location.get().parentId,
+    Natural(targetIndex),
+    actionName = "Reorder View",
+  )
+  if result.applied:
+    editor.synchronize()
+
+proc nudgeSelectedView*(editor: ResourceEditor, delta: Point): ResourceEditResult =
+  let selected = editor.selectedViewId()
+  if selected.isNone:
+    return editor.rejectedSelectedViewEdit(rekReplace, "no view resource is selected")
+  if delta == Point():
+    return editor.rejectedSelectedViewEdit(
+      rekReplace, "the view position is unchanged", selected.get(), reeUnchanged
+    )
+  let
+    document = editor.xDocument.xResources
+    frameProperty = document.findViewProperty(selected.get(), "frame")
+  if frameProperty.isNone or frameProperty.get().value.kind != rvRect:
+    return editor.rejectedSelectedViewEdit(
+      rekReplace, "the selected view does not have an editable frame", selected.get()
+    )
+  let
+    previousFrame = frameProperty.get().value.rectValue
+    frame = rect(
+      previousFrame.x + delta.x,
+      previousFrame.y + delta.y,
+      previousFrame.w,
+      previousFrame.h,
+    )
+  result = document.setViewProperty(
+    selected.get(),
+    resourceProperty("frame", resourceValue(frame)),
+    actionName = "Move View",
+  )
+  if result.applied:
+    editor.synchronize()
 
 proc defaultViewNode(kind: string, id: ResourceId): ViewNodeResource =
   let offset = 18.0'f32
@@ -1227,13 +1452,18 @@ proc configurePalette(editor: ResourceEditor) =
     editor.xPaletteView.addSubview(button, row = index div 3, col = index mod 3)
 
 proc configureToolbar(
-    editor: ResourceEditor, saveButton, undoButton, redoButton, deleteButton: Button
+    editor: ResourceEditor,
+    saveButton, undoButton, redoButton, deleteButton, duplicateButton,
+      moveEarlierButton, moveLaterButton: Button,
 ) =
   let
     saveAction = nimkitSelectors.actionSelector("resourceEditorSave")
     undoAction = nimkitSelectors.actionSelector("resourceEditorUndo")
     redoAction = nimkitSelectors.actionSelector("resourceEditorRedo")
     deleteAction = nimkitSelectors.actionSelector("resourceEditorDelete")
+    duplicateAction = nimkitSelectors.actionSelector("resourceEditorDuplicate")
+    moveEarlierAction = nimkitSelectors.actionSelector("resourceEditorMoveEarlier")
+    moveLaterAction = nimkitSelectors.actionSelector("resourceEditorMoveLater")
   saveButton.target = newActionTarget(
     saveAction,
     proc(sender: DynamicAgent) =
@@ -1263,6 +1493,30 @@ proc configureToolbar(
       discard editor.removeSelectedView(),
   )
   deleteButton.action = deleteAction
+  duplicateButton.target = newActionTarget(
+    duplicateAction,
+    proc(sender: DynamicAgent) =
+      discard sender
+      discard editor.duplicateSelectedView(),
+  )
+  duplicateButton.action = duplicateAction
+  duplicateButton.toolTip = "Duplicate the selected view (Shortcut-D)"
+  moveEarlierButton.target = newActionTarget(
+    moveEarlierAction,
+    proc(sender: DynamicAgent) =
+      discard sender
+      discard editor.reorderSelectedView(rvsdEarlier),
+  )
+  moveEarlierButton.action = moveEarlierAction
+  moveEarlierButton.toolTip = "Move the selected view earlier (Shortcut-Up)"
+  moveLaterButton.target = newActionTarget(
+    moveLaterAction,
+    proc(sender: DynamicAgent) =
+      discard sender
+      discard editor.reorderSelectedView(rvsdLater),
+  )
+  moveLaterButton.action = moveLaterAction
+  moveLaterButton.toolTip = "Move the selected view later (Shortcut-Down)"
 
 proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
   let
@@ -1319,15 +1573,25 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     undoButton = newButton("Undo")
     redoButton = newButton("Redo")
     deleteButton = newButton("Delete")
+    duplicateButton = newButton("Duplicate")
+    moveEarlierButton = newButton("Up")
+    moveLaterButton = newButton("Down")
 
   result.configurePalette()
-  result.configureToolbar(saveButton, undoButton, redoButton, deleteButton)
+  result.xDuplicateButton = duplicateButton
+  result.xMoveEarlierButton = moveEarlierButton
+  result.xMoveLaterButton = moveLaterButton
+  result.configureToolbar(
+    saveButton, undoButton, redoButton, deleteButton, duplicateButton,
+    moveEarlierButton, moveLaterButton,
+  )
   result.xRootView.addSubviews(
     autoNames(
       hierarchyTitle, result.xHierarchyView, paletteTitle, result.xPaletteView,
       previewTitle, result.xStatusLabel, result.xPreviewSurface, inspectorTitle,
       result.xSelectionLabel, result.xPropertyInspector, result.xDiagnosticsTitle,
       result.xDiagnosticsView, saveButton, undoButton, redoButton, deleteButton,
+      duplicateButton, moveEarlierButton, moveLaterButton,
     )
   )
 
@@ -1348,6 +1612,18 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     deleteButton[atRight] == undoButton[atLeft] - 8.0
     deleteButton[atWidth] == 72.0
     deleteButton[atHeight] == saveButton[atHeight]
+    duplicateButton[atTop] == saveButton[atTop]
+    duplicateButton[atRight] == deleteButton[atLeft] - 8.0
+    duplicateButton[atWidth] == 88.0
+    duplicateButton[atHeight] == saveButton[atHeight]
+    moveLaterButton[atTop] == saveButton[atTop]
+    moveLaterButton[atRight] == duplicateButton[atLeft] - 8.0
+    moveLaterButton[atWidth] == 64.0
+    moveLaterButton[atHeight] == saveButton[atHeight]
+    moveEarlierButton[atTop] == saveButton[atTop]
+    moveEarlierButton[atRight] == moveLaterButton[atLeft] - 8.0
+    moveEarlierButton[atWidth] == 64.0
+    moveEarlierButton[atHeight] == saveButton[atHeight]
 
     hierarchyTitle[atTop] == saveButton[atBottom] + 12.0
     hierarchyTitle[atLeft] == result.xRootView[atLeft] + 18.0
