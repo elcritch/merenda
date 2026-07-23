@@ -87,7 +87,7 @@ suite "Tekton resource builder application":
     let window = editor.newResourceEditorWindow()
     check window.dispatchKeyDown(KeyEvent(key: keyDelete))
     check not document.resources().contains(insertedId)
-    check document.resources().selectedResourceIds() == @[TektonRootResourceId]
+    check document.resources().selectedResourceIds() == @[resourceId("tekton.progress")]
 
   test "preview roots keep authored positions across layout and edits":
     let

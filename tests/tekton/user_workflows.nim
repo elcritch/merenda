@@ -77,3 +77,37 @@ suite "Tekton user workflows":
     check document.undoManagerFor().performRedo()
     check document.resources().view(canvasId).children[0].id == duplicateId
     check document.resources().draftIsValid()
+
+  test "deleting a view keeps the user at the nearest sibling":
+    let
+      document = newResourceEditorDocument(blankCanvasBundle())
+      editor = newResourceEditor(document)
+      window = editor.newResourceEditorWindow()
+      canvasId = resourceId("canvas")
+      buttonId = resourceId("button.1")
+      labelId = resourceId("label.1")
+      fieldId = resourceId("textField.1")
+
+    check editor.selectResource(canvasId)
+    check editor.paletteButton("button").sendAction()
+    check editor.paletteButton("label").sendAction()
+    check editor.paletteButton("textField").sendAction()
+    check document.resources().view(canvasId).children.len == 3
+
+    check editor.selectResource(labelId)
+    check window.dispatchKeyDown(KeyEvent(key: keyDelete, keyCode: keyDelete.ord))
+    check not document.resources().contains(labelId)
+    check document.resources().selectedResourceIds() == @[fieldId]
+    check editor.hierarchyView().selectedItemIdentifier() == $fieldId
+    check editor.previewInstance().view(fieldId) != nil
+
+    check document.undoManagerFor().performUndo()
+    check document.resources().contains(labelId)
+    check document.resources().selectedResourceIds() == @[fieldId]
+    check document.resources().view(canvasId).children[0].id == buttonId
+    check document.resources().view(canvasId).children[1].id == labelId
+    check document.resources().view(canvasId).children[2].id == fieldId
+
+    check editor.selectResource(fieldId)
+    check window.dispatchKeyDown(KeyEvent(key: keyDelete, keyCode: keyDelete.ord))
+    check document.resources().selectedResourceIds() == @[labelId]

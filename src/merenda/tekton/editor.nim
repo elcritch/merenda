@@ -1207,11 +1207,33 @@ proc removeSelectedView*(editor: ResourceEditor): ResourceEditResult =
       resourceId: selected.get(),
       revision: document.revision(),
     )
-  let parent = document.findParentPath(path.get())
+  let
+    parent = document.findParentPath(path.get())
+    parentId =
+      if parent.isSome and parent.get().kind == rnkView:
+        parent.get().id
+      else:
+        ResourceId("")
+    siblings =
+      if parentId.isEmpty:
+        document.bundle().views
+      else:
+        document.view(parentId).children
+  var nextSelection = ResourceId("")
+  for index, sibling in siblings:
+    if sibling.id != selected.get():
+      continue
+    if index + 1 < siblings.len:
+      nextSelection = siblings[index + 1].id
+    elif index > 0:
+      nextSelection = siblings[index - 1].id
+    break
   result = document.removeView(selected.get(), actionName = "Delete View")
   if not result.applied:
     return
-  if parent.isSome and document.selectResource(parent.get().id):
+  if not nextSelection.isEmpty and document.selectResource(nextSelection):
+    discard
+  elif parent.isSome and document.selectResource(parent.get().id):
     discard
   else:
     document.clearSelection()
