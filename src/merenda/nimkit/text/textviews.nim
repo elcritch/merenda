@@ -7,6 +7,7 @@ import ../app/dragging
 import ../drawing
 import ../foundation/events
 import ../app/pasteboards
+import ../app/workspaces
 import ../foundation/selectors
 import ./textlayout
 import ./textstorage
@@ -83,16 +84,8 @@ type
     selectedIndex*: int
     visible*: bool
 
-  TextServiceRequest* = object
-    range*: TextRange
-    selectedRanges*: seq[TextRange]
-    stringValue*: string
-    attributedString*: TextStorage
-
-  TextServiceResponse* = object
-    handled*: bool
-    replacementRange*: TextRange
-    replacement*: TextStorage
+  TextServiceRequest* = SelectedTextServiceRequest
+  TextServiceResponse* = SelectedTextServiceResponse
 
   TextAttachmentCell* = object
     attachment*: TextAttachment
@@ -1561,13 +1554,18 @@ proc selectedTextServiceRequest*(textView: TextView): TextServiceRequest =
     attributedString: textView.selectedTextStorage(),
   )
 
-proc performSelectedTextService*(textView: TextView): TextServiceResponse =
-  if textView.xDelegate.isNil:
-    return
-  let request = textView.selectedTextServiceRequest()
-  result = textView.xDelegate
-    .trySendLocal(tvPerformService(), (textView: textView, request: request))
-    .get(TextServiceResponse())
+proc performSelectedTextService*(
+    textView: TextView, workspace: Workspace = nil, serviceIdentifier = ""
+): TextServiceResponse =
+  var request = textView.selectedTextServiceRequest()
+  request.workspace = workspace
+  request.serviceIdentifier = serviceIdentifier
+  if not textView.xDelegate.isNil:
+    result = textView.xDelegate
+      .trySendLocal(tvPerformService(), (textView: textView, request: request))
+      .get(TextServiceResponse())
+  if not result.handled and not workspace.isNil:
+    result = workspace.performSelectedTextService(request)
   if result.handled and not result.replacement.isNil and textView.editable:
     let replacementRange =
       if result.replacementRange.length > 0:

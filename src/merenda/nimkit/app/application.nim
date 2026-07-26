@@ -19,6 +19,7 @@ import ./animations
 import ./backend as nimkitBackend
 import ./panels
 import ./settings
+import ./workspaces
 import ../app/windows
 
 type
@@ -69,6 +70,7 @@ type
     xTerminating: bool
     xModalSessions: seq[ModalSession]
     xUserDefaults: UserDefaults
+    xWorkspace: Workspace
     xAnimationScheduler: AnimationScheduler
     xAnimationClock: AnimationSchedulerClock
     xRenderExecutionMode: RenderExecutionMode
@@ -237,6 +239,7 @@ proc installApplicationForwarding(app: Application) =
 proc newApplication*(applicationName = ""): Application =
   result = Application(
     xApplicationName: resolvedApplicationName(applicationName),
+    xWorkspace: nimkitBackend.newNativeWorkspace(),
     xAutomaticallyStartsLocalSigilThread: true,
   )
   initResponder(result)
@@ -257,6 +260,14 @@ proc userDefaults*(app: Application): UserDefaults =
   if app.xUserDefaults.isNil:
     app.xUserDefaults = sharedUserDefaults()
   app.xUserDefaults
+
+proc workspace*(app: Application): Workspace =
+  if app.xWorkspace.isNil:
+    app.xWorkspace = newWorkspace()
+  app.xWorkspace
+
+proc `workspace=`*(app: Application, workspace: Workspace) =
+  app.xWorkspace = workspace
 
 proc animationScheduler*(app: Application): AnimationScheduler =
   if app.xAnimationScheduler.isNil:

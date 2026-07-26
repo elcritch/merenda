@@ -5,6 +5,7 @@ import sigils/selectors
 import ../drawing/images
 import ../foundation/types
 import ./pasteboards
+import ./workspaces
 
 type
   DragOperation* = enum
@@ -77,6 +78,7 @@ type
     info*: DraggingInfo
     item*: DraggingItem
     fileName*: string
+    destinationUrl*: string
 
 const
   NoDragOperations*: DragOperations = {}
@@ -288,8 +290,24 @@ proc writePromisedFileFallback(session: DraggingSession, item: DraggingItem): bo
   session.xPasteboard.setItem(pasteboardType, promisedItem)
 
 proc fulfillPromisedFile(
-    session: DraggingSession, info: DraggingInfo, item: DraggingItem
-): bool =
+    session: DraggingSession,
+    info: DraggingInfo,
+    item: DraggingItem,
+    workspace: Workspace,
+    destinationUrl: string,
+): PromisedFileResponse =
+  let request = PromisedFileRequest(
+    workspace: workspace,
+    fileName: item.promisedFileName,
+    destinationUrl: destinationUrl,
+    pasteboard: session.xPasteboard,
+    pasteboardType: item.pasteboardType,
+    item: item.pasteboardItem.copyPasteboardItem(),
+  )
+  if not workspace.isNil:
+    result = workspace.completePromisedFile(request)
+    if result.handled:
+      return
   if not session.xSource.isNil:
     let written = session.xSource.trySendLocal(
       writePromisedFile(),
@@ -298,17 +316,70 @@ proc fulfillPromisedFile(
         info: info,
         item: item.copyDraggingItem(),
         fileName: item.promisedFileName,
+        destinationUrl: destinationUrl,
       ),
     )
     if written.isSome:
-      return written.get()
-  session.writePromisedFileFallback(item)
+      result = PromisedFileResponse(
+        supported: true,
+        handled: true,
+        succeeded: written.get(),
+        fileUrl: item.promisedFileName,
+      )
+      return
+  result = PromisedFileResponse(
+    supported: true,
+    handled: true,
+    succeeded: session.writePromisedFileFallback(item),
+    fileUrl: item.promisedFileName,
+  )
 
-proc fulfillPromisedFiles*(session: DraggingSession, info: DraggingInfo): bool =
-  result = true
+proc promisedFileResponses*(
+    session: DraggingSession,
+    info: DraggingInfo,
+    workspace: Workspace = nil,
+    destinationUrl = "",
+): seq[PromisedFileResponse] =
   for item in session.xItems:
     if item.promisedFileName.len > 0 or item.pasteboardType == PasteboardTypePromisedFile:
-      result = session.fulfillPromisedFile(info, item) and result
+      result.add session.fulfillPromisedFile(info, item, workspace, destinationUrl)
+
+proc fulfillPromisedFiles*(
+    session: DraggingSession,
+    info: DraggingInfo,
+    workspace: Workspace = nil,
+    destinationUrl = "",
+): bool =
+  result = true
+  for response in session.promisedFileResponses(info, workspace, destinationUrl):
+    result = response.succeeded and result
+
+proc droppedFileUrls(session: DraggingSession): seq[string] =
+  for item in session.xItems:
+    if item.pasteboardItem.kind == pikFile and item.pasteboardItem.filePath.len > 0:
+      if item.pasteboardItem.filePath notin result:
+        result.add item.pasteboardItem.filePath
+
+proc handoffDroppedFiles(
+    session: DraggingSession,
+    workspace: Workspace,
+    destination: DynamicAgent,
+    destinationUrl: string,
+): FileHandoffResponse =
+  if workspace.isNil:
+    return
+  let fileUrls = session.droppedFileUrls()
+  if fileUrls.len == 0:
+    return
+  workspace.handoffFiles(
+    FileHandoffRequest(
+      workspace: workspace,
+      fileUrls: fileUrls,
+      pasteboard: session.xPasteboard,
+      destination: destination,
+      destinationUrl: destinationUrl,
+    )
+  )
 
 proc sourceOperationMask(session: DraggingSession, location: Point): DragOperations =
   result = session.xAllowedOperations
@@ -381,6 +452,8 @@ proc performDraggingOperation*(
     destination: DynamicAgent = nil,
     location = AutoPoint,
     dropTarget = initDraggingDropTarget(),
+    workspace: Workspace = nil,
+    destinationUrl = "",
 ): bool =
   if session.xState != dssActive:
     return false
@@ -402,7 +475,11 @@ proc performDraggingOperation*(
       session.xSelectedOperations != NoDragOperations
 
   if result:
-    if not session.fulfillPromisedFiles(info):
+    if not session.fulfillPromisedFiles(info, workspace, destinationUrl):
+      return false
+    let handoff =
+      session.handoffDroppedFiles(workspace, resolvedDestination, destinationUrl)
+    if handoff.handled and not handoff.accepted:
       return false
     discard resolvedDestination.sendLocalIfHandled(concludeDragOperation(), info)
 

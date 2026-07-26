@@ -70,6 +70,7 @@ import ./nimkit/view/views
 import ./nimkit/app/windowcontrollers
 import ./nimkit/app/windoweffects
 import ./nimkit/app/windows
+import ./nimkit/app/workspaces
 import ./nimkit/resources
 
 export application
@@ -146,3 +147,4 @@ export views
 export windowcontrollers
 export windoweffects
 export windows
+export workspaces

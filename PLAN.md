@@ -171,16 +171,6 @@ identities across valid revisions.
 - Keep full Cocoa compatibility names as aliases over Nim-native APIs rather than
   allowing them to define the internal model.
 
-### Workspace and Services
-
-- Add workspace operations for opening URLs/files, revealing files, launching or
-  activating applications where supported, and querying common system locations.
-- Route Services-style selected text, selected files, pasteboard requests, and
-  promised-file completions through typed request/response records.
-- Integrate recent documents, document-controller open/save flows, pasteboard
-  promises, and drag/drop file handoff without making any backend mandatory.
-- Keep platform-specific workspace capabilities behind explicit feature checks.
-
 ### Native Integration
 
 - Keep render and accessibility construction unit-testable without a live native

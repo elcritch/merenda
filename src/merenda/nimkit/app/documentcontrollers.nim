@@ -10,6 +10,7 @@ import ../responder/responders
 import ./application
 import ./documents except newDocument
 import ./panels
+import ./workspaces
 import ./windowcontrollers
 import ./windows
 
@@ -477,6 +478,8 @@ proc noteRecentDocumentUrl*(controller: DocumentController, fileUrl: string) =
   controller.trimRecentDocuments()
   emit controller.didChangeRecentDocuments()
   controller.postNotification(nkDocControllerDidChangeRecentDocuments)
+  if not controller.xApplication.isNil:
+    discard controller.xApplication.workspace().updateRecentDocument(rdaNote, fileUrl)
 
 proc removeRecentDocumentUrl*(
     controller: DocumentController, fileUrl: string
@@ -489,6 +492,8 @@ proc removeRecentDocumentUrl*(
   controller.xRecentDocumentUrls.delete(existing)
   emit controller.didChangeRecentDocuments()
   controller.postNotification(nkDocControllerDidChangeRecentDocuments)
+  if not controller.xApplication.isNil:
+    discard controller.xApplication.workspace().updateRecentDocument(rdaRemove, fileUrl)
   true
 
 proc clearRecentDocuments*(controller: DocumentController) =
@@ -497,6 +502,8 @@ proc clearRecentDocuments*(controller: DocumentController) =
   controller.xRecentDocumentUrls.setLen(0)
   emit controller.didChangeRecentDocuments()
   controller.postNotification(nkDocControllerDidChangeRecentDocuments)
+  if not controller.xApplication.isNil:
+    discard controller.xApplication.workspace().updateRecentDocument(rdaClear)
 
 proc createDocumentImpl(
     controller: DocumentController, fileType: string, app: Application

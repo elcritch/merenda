@@ -20,7 +20,9 @@ import siwin/clipboards as siwinClipboards
 import sigils/selectors
 
 when defined(macosx) and not defined(useNativeDynlib):
-  import darwin/app_kit/[nscolor, nspasteboard, nswindow]
+  import
+    darwin/app_kit/[nscolor, nspasteboard, nsrunningapplication, nswindow, nsworkspace]
+  import darwin/foundation/[nsarray, nsstring, nsurl]
   import darwin/objc/runtime
 
 import ../drawing/images
@@ -28,6 +30,7 @@ import ../drawing/renderresources
 import ../foundation/types
 import ../foundation/events
 import ./pasteboards
+import ./workspaces
 import ./windoweffects
 
 when defined(macosx) and not defined(useNativeDynlib):
@@ -169,6 +172,8 @@ type
     xHasObservedHostChangeCount: bool
     xHostFingerprint: string
     xHasHostFingerprint: bool
+
+  NativeWorkspaceProvider = ref object of DynamicAgent
 
   NativePasteboardPayload = ref object of RootObj
     items: Table[string, PasteboardItem]
@@ -903,6 +908,63 @@ protocol NativePasteboardProviderProtocol of PasteboardProviderProtocol:
   ): bool =
     provider.clearStoredItems()
     true
+
+protocol NativeWorkspaceProviderProtocol of WorkspaceProviderProtocol:
+  method workspaceFeatures(
+      provider: NativeWorkspaceProvider, workspace: Workspace
+  ): WorkspaceFeatures =
+    when defined(macosx) and not defined(useNativeDynlib):
+      {
+        wfOpenUrls, wfOpenFiles, wfRevealFiles, wfLaunchApplications,
+        wfActivateApplications,
+      }
+    else:
+      {}
+
+  method workspacePerformOperation(
+      provider: NativeWorkspaceProvider, request: WorkspaceOperationRequest
+  ): WorkspaceOperationResponse =
+    when defined(macosx) and not defined(useNativeDynlib):
+      result.handled = true
+      let nativeWorkspace = NSWorkspace.sharedWorkspace()
+      case request.kind
+      of wokOpenUrl:
+        let url = NSURL.URLWithString(NSString(request.target))
+        result.succeeded = not url.isNil and nativeWorkspace.openURL(url)
+      of wokOpenFile:
+        let url =
+          if request.target.startsWith("file://"):
+            NSURL.URLWithString(NSString(request.target))
+          else:
+            NSURL.fileURLWithPath(NSString(request.target))
+        result.succeeded = not url.isNil and nativeWorkspace.openURL(url)
+      of wokRevealFile:
+        result.succeeded =
+          nativeWorkspace.selectFile(NSString(request.target), NSString(""))
+      of wokLaunchApplication:
+        let url = nativeWorkspace.URLForApplicationWithBundleIdentifier(
+          NSString(request.applicationIdentifier)
+        )
+        result.succeeded = not url.isNil and nativeWorkspace.openURL(url)
+      of wokActivateApplication:
+        let applications = NSRunningApplication.runningApplicationsWithBundleIdentifier(
+          NSString(request.applicationIdentifier)
+        )
+        if not applications.isNil and applications.len > 0:
+          result.succeeded =
+            applications[0].activateWithOptions(NSApplicationActivateIgnoringOtherApps)
+        else:
+          let url = nativeWorkspace.URLForApplicationWithBundleIdentifier(
+            NSString(request.applicationIdentifier)
+          )
+          result.succeeded = not url.isNil and nativeWorkspace.openURL(url)
+      if not result.succeeded:
+        result.message = "The native workspace could not complete the request"
+
+proc newNativeWorkspace*(): Workspace =
+  let provider = NativeWorkspaceProvider()
+  discard provider.withProtocol(NativeWorkspaceProviderProtocol)
+  newWorkspace(DynamicAgent(provider))
 
 proc installNativeClipboardBridge(host: HostWindow) =
   if nativePasteboardProvider.isNil:

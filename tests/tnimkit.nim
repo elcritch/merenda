@@ -57,3 +57,4 @@ import nimkit/viewselection
 import nimkit/windowcontrollers
 import nimkit/windoweffects
 import nimkit/windoweffectsdemo
+import nimkit/workspaces

@@ -376,6 +376,29 @@ discard window.makeFirstResponder(textField)
 
 Buttons can be tab-selected and activated from the keyboard.
 
+## Workspace And Services
+
+Applications expose a backend-optional `Workspace` for opening and revealing
+resources, locating common directories, integrating recent documents, and routing
+Services-style requests. Check a feature before presenting platform-specific UI:
+
+```nim
+let workspace = app.workspace()
+if workspace.supports(wfOpenUrls):
+  let response = workspace.openUrl("https://nim-lang.org")
+  if response.handled and not response.succeeded:
+    echo response.message
+
+let documents = workspace.findLocation(wslDocuments)
+if documents.found:
+  echo documents.path
+```
+
+Attach a `WorkspaceProviderProtocol` implementation to enable host operations and
+typed selected-text, selected-file, pasteboard, promised-file, recent-document,
+and drag/drop handoff services. Providerless workspaces retain portable directory
+lookup and leave all host operations explicitly unsupported.
+
 ## Resource-Backed UI
 
 NimKit can encode plain resource records as canonical CBOR, validate them without
