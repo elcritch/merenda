@@ -191,20 +191,18 @@ identities across valid revisions.
 
 ### Framework Refinements
 
-- Add coordinate caching only after profiling demonstrates a measurable cost.
-  If added, keep frame, bounds, superview, and clipping invalidation explicit.
-- Continue centralizing borders, shadows, focus rings, state colors, and
-  control/popup/list metrics in `Theme` and `Appearance`.
-- Continue strengthening the control/cell split around invalidation, value
-  conversion, target/action storage, highlighting/tracking, and default cell
-  construction.
-- Reuse `ScrollView` as the primitive clipped document container for editors,
-  tables, outlines, collections, and large forms.
-- Expand constraints through the existing Cocoa-like lifecycle and
-  Kiwiberry-backed solver before adding compatibility conveniences.
-- Replace the fixed-font `em` shortcut with a `LayoutSize`/`LayoutLength` model
-  that preserves unresolved units through expressions and resolves them against
-  the relevant view, theme, and font context.
+- Profile coordinate conversion in deep, scrolling view hierarchies. Add caching
+  only if it is a measured cost, with explicit invalidation for frame, bounds,
+  superview, and clipping changes.
+- Move the remaining hard-coded popup, list, document-tab, and color-picker
+  chrome colors and metrics into `Theme` and `Appearance`; keep only
+  geometry-derived ratios local to controls.
+- Resolve duplicated `Control`/`ActionCell` ownership of target/action and
+  control values. Keep control setters authoritative for invalidation and
+  highlighting/tracking side effects, with cells owning measurement and drawing.
+- Preserve `LayoutLength` values through anchor and constraint expressions
+  instead of resolving `em` immediately against `defaultFontSize()`. Add
+  view/theme/font-context resolution and a two-axis `LayoutSize` value.
 
 ### Rendering Constraints
 
