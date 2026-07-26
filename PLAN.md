@@ -5,754 +5,257 @@
 Build and evolve Merenda's pure Nim UI layer at `src/merenda/nimkit` as the
 project's primary UI toolkit.
 
-The public API should stay Nim-native: plain value types for data, ref objects
+The public API should stay Nim-native: plain value types for data, `ref object`
 for identity-bearing UI objects, selector-backed hooks where dynamic dispatch is
 useful, and backend/runtime details kept behind NimKit boundaries.
 
 Completed architecture and design decisions live in [docs/design.md](docs/design.md).
 Detailed layout, constraint, invalidation, and solver notes live in
-[docs/layout.md](docs/layout.md).
+[docs/layout.md](docs/layout.md). This file tracks current state, active work,
+deferred architecture, and open decisions rather than serving as a change log.
 
-## Current Focus
+## Current State
 
-NimKit has the core desktop-control slice in place: views, responders, windows,
-application/menu/modal infrastructure, theme/rendering, intrinsic sizing,
-constraints, stack/form/grid/tab/split containers, buttons, switch/radio
-buttons, sliders, steppers, progress indicators, text fields, combo boxes,
-box/group containers, scroll views, popup lists, table views, outline views,
-cascading column views, collection views, basic text editing lifecycle, action
-dispatch, reusable pure Nim panel/dialog views, matrix cell grids, a themed
-high-throughput monospace text view/editor with raw event policy controls,
-document-controller infrastructure, Nim-native object/array/tree/selection
-model controllers and widget binding adapters, view-controller content ownership
-and containment, a responder-discovered undo-manager service,
-AppKit-style in-process pasteboard/dragging foundations, a shared object-value
-formatting, parsing, writeback, and validation layer for model-backed controls,
-a typed notification center for broad app/window/document/defaults/undo/
-selection/model broadcasts, and a pure Nim accessibility metadata,
-notification, traversal, validation, and text semantics core.
+NimKit now provides a broad desktop-control foundation across views, responders,
+windows, application/menu/modal infrastructure, themes, rendering, constraints,
+containers, text, model-backed controls, documents, undo, pasteboards, dragging,
+animations, accessibility, and resource construction. The source tree is grouped
+under `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
+`responder`, `text`, and `view`; `merenda/nimkit` remains the stable public
+umbrella import.
 
-The source tree is now organized around domain modules under
-`accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
-`responder`, `text`, and `view`. The stable public entry point remains
-`merenda/nimkit`; internal code and tests should import the domain modules
-directly when they need a narrower surface.
+The main established layers are:
 
-The first animation core is now in place through interpolation/timing,
-deterministic scheduler/threading, selector-backed property animation surfaces,
-Cocoa-style transaction sugar, application run-loop draining, and focused
-examples. Keep future animation extension points on methods, protocols, and
-selector dispatch rather than public callback hooks. Widget mutation should stay
-routed through existing NimKit setters so layout, display invalidation,
-responder state, and accessibility notifications remain the single source of
-truth.
+- A pure Nim application and responder runtime with window, menu, popup, modal,
+  sheet, document-controller, undo-manager, notification, pasteboard, dragging,
+  and animation services.
+- A shared model vocabulary based on stable identifiers, `ObjectValue`,
+  controller adapters, incremental updates, and model-mutation notifications.
+  Tables, outlines, collections, cascading views, combo boxes, menus, document
+  tabs, and matrices use this vocabulary instead of parallel storage models.
+- A TextKit-shaped text stack with attributed storage, layout-manager protocols,
+  selection and input-client behavior, accessibility geometry, and an optional
+  UTF-8 gap-backed storage path. Public text positions remain rune-indexed.
+- A backend-neutral resource system with canonical serialization, validation,
+  document editing and undo, identity-preserving preview reconciliation,
+  constraints and guides, Sigils-discovered properties, and the Tekton builder.
+- A FigDraw rendering path that supports direct rendering and dedicated static
+  Metal/Vulkan runtimes, with application-owned resource leases, moved render
+  snapshots, renderer acknowledgements, and atlas recovery.
 
-The pure Nim panel/dialog contracts are now reusable enough to support modal
-and sheet workflows before native bridges land: alert button response mapping,
-accessory views, open/save validation, live panel button validation, and
-document-controller open/save integration are covered in tests and examples.
+## Current Priorities
 
-The Nim-native resource layer now covers canonical serialization, validation,
-controlled document editing and undo, identity-preserving preview reconciliation,
-backend-neutral constraint/guide construction, a 13-kind Sigils-backed palette,
-and inspection of the full resource hierarchy. The next resource work is to turn
-the current constrained editor into a broader builder with typed non-view edits,
-specialized property metadata and controls, direct layout authoring, reusable
-components, and optional native-format translation.
+1. Turn Tekton's constrained resource editor into a broader authoring tool:
+   typed non-view edits, richer property metadata, direct constraint authoring,
+   reusable components, and package-relative assets.
+2. Introduce a backend-neutral workspace/services boundary for file, URL,
+   application, pasteboard, and promised-file handoff.
+3. Add native accessibility and document/workspace adapters without leaking
+   platform types into core NimKit modules.
+4. Profile text storage and layout before committing to virtual or
+   visible-range-only layout.
 
-Model-backed widget work should now reuse the contracts proven by `TableView`,
-`OutlineView`, `CollectionView`, `CascadingView`, `ComboBox`, menus,
-`DocumentTabs`, and `Matrix`:
-stable identifiers, `ObjectValue` conversion, controller adapters, incremental
-update records, and model-mutation notifications. The next controls should
-build on that vocabulary instead of adding parallel storage models.
+## Recently Completed — Consolidated July 2026
 
-## Recently Completed
+### Resource System and Tekton
 
-- Completed the first four resource-builder milestones: the identity-bearing
-  `ResourceDocument` owns value-only drafts, validation, stable paths, selection,
-  revisions, and undo; `ResourceEditor` loads and saves canonical cborious data,
-  retains invalid drafts beside a valid preview, and exposes hierarchy/canvas
-  selection, diagnostics, view editing, and full-resource inspection; and
-  `ResourcePreview` reconciles valid revisions while preserving compatible view
-  and controller identities.
-- Expanded the backend-neutral resource schema and construction layer across UI
-  trees, windows/panels, menus, commands, images, localization, key bindings,
-  themes, layout guides, and constraints. Constraint endpoints and owners resolve
-  through `ResourceId`; the default palette has 13 stable controls/containers;
-  and editable properties continue to come from Sigils protocol discovery and
-  registered value conversion rather than builder-only callbacks. Geometry,
-  sizes, insets, and colors use native NimKit value types directly.
-- Reorganized NimKit under domain subdirectories while keeping
-  `merenda/nimkit` as the stable umbrella import; completed the drawing/chrome
-  split, image resources, view geometry/parity APIs, render alpha/shadow
-  support, and tracking affordance storage.
-- Hardened the responder, command, action, selector, application, window, menu,
-  popup, modal, and sheet layers into a coherent pure Nim AppKit-style runtime:
-  key/mouse/scroll/help events have explicit handled/unhandled contracts,
-  responder-chain command dispatch is selector-backed, menus and popup menus are
-  interactive, and application/window state now covers key/main transitions,
-  modal blocking, activation, hide/unhide, autosave, and window-menu updates.
-- Built the document/controller stack above the pure Nim window/application
-  model: `WindowController`, `Document`, and `DocumentController` now manage
-  window ownership, file metadata, edited state, recent documents, open/reopen,
-  save/revert/close flows, responder-chain integration, and backend-neutral
-  document defaults.
-- Added the cross-cutting `UndoManager` architecture as a NimKit service rather
-  than text-only history: grouped/nested undo transactions, redo replay, action
-  names, discard/clear APIs, disabled registration scopes, clean-state tracking,
-  and debug summaries are in place; documents and windows provide undo managers
-  through the responder chain via `UndoManagerProvider`; documents track edited
-  state from undo clean-state signals; and text storage, table selection/columns,
-  combo choices, matrix selection, and document tabs register inverse operations
-  through shared value, selection, and collection helpers.
-- Expanded core containers and shared primitives: `ScrollView`/`ClipView`,
-  `Box`, `SplitView`, form/grid/stack support, table row primitives, popup
-  lists, and the list-to-row vocabulary cleanup are in place with themed
-  rendering, intrinsic sizing, layout integration, and example coverage.
-- Matured `TableView`, `OutlineView`, and `CascadingView` around protocols
-  instead of ad hoc callbacks: headers, sorting, resizing, reordering, hosted
-  cells, field-editor-backed editing, state persistence, drag/drop targets,
-  disclosure affordances, keyboard behavior, and accessibility semantics are
-  covered by focused tests and demos.
-- Added `TableView` model backing: typed row/cell value records, explicit
-  row-identifier lookups, data-source object-value writeback, a seq-backed
-  `TableModel` adapter, ID-first selection persistence with alias/resolver
-  migration, batched row-update signals, and row-identifier drag payloads.
-- Completed the large-table and data-model scaling pass: `TableModel` now caches
-  arranged source indexes and source/arranged identifier maps by revision;
-  fixed-height row geometry uses arithmetic, variable-height geometry uses
-  cached prefix offsets and binary search, and table intrinsic sizing defaults
-  to explicit column widths with opt-in content measurement and data-source
-  width hints. Popup and table row construction remains visible-range bounded.
-- Coalesced cross-cutting layout work: appearance changes mark descendant state
-  locally and emit one root invalidation, automatic window content minimums are
-  deferred and flushed once, and repeated intrinsic-size invalidations no longer
-  force a solver pass for every intermediate mutation.
-- Added Control-owned, scheduler-backed pressed feedback for keyboard and
-  programmatic activation. Buttons and switch buttons use the default cell
-  highlight hook, while steppers override it for segment-specific feedback;
-  mouse tracking takes over cleanly from an in-flight pulse. Moved the popup-menu
-  double-arrow mark into its control-specific drawing implementation instead of
-  exposing it through the general drawing API.
-- Added scalable combo-box collection paths: bulk option replacement performs
-  one invalidation without per-item undo registration; visible indexes,
-  identifiers, normalized search text, and data-source counts are cached; and
-  selected-item, widest-item, and preferred-width sizing policies avoid
-  unrequested whole-model measurement.
-- Added scalable cascading-view collection paths: bulk item replacement rebuilds
-  local caches with one intrinsic invalidation; visible child indexes, items,
-  identifier lookups, normalized type-selection text, and per-parent model counts
-  are cached until reload or an incremental tree update. The settings demo also
-  has an opt-in noninteractive startup benchmark for the font hierarchy.
-- Added a process-cached, family-oriented system font catalog and lazy combo-box
-  data source. Font choices retain stable family and face identifiers, language
-  variants, styles, representative paths, searchable face names, cached width
-  hints, and on-demand option materialization. `merenda_settings_demo.nim`
-  consumes the cached catalog through a language-family-face `CascadingView`
-  data source instead of eagerly loading every font file into a combo box.
-- Added deterministic operation-count coverage with thousands of combo and table
-  items for invalidation, lookup, measurement, arrangement, row geometry, and
-  lazy font-option behavior. Wall-clock benchmarks remain diagnostic and are not
-  timing-sensitive CI assertions.
-- Added backend-neutral pasteboard and dragging foundations with typed item
-  storage, named/unique pasteboards, lazy providers, strings/text/data/property
-  lists/URLs/files/colors/fonts/images, drag sessions, promised-file staging,
-  backend bridges for host-supported payloads, autoscroll/update dispatch, and
-  table/outline/list integration.
-- Added the pure Nim accessibility core and expanded built-in semantics across
-  views, buttons, checkboxes, text fields, labels, menus, popup controls,
-  combo boxes, tabs, scroll areas, table rows/cells, outline rows/disclosure
-  controls, progress indicators, sliders, switches, and steppers.
-- Routed accessibility notifications from committed semantic state transitions:
-  focus, selection, value, and expand/collapse changes now post through the
-  existing Sigils accessibility signal after state changes, while enabled-state
-  mutations update attributes without noisy notifications and drawing/layout
-  remain notification-free.
-- Added backend-neutral semantic accessibility traversal helpers: ordered
-  descendants/elements, stable element-at-point hit-testing, role/action support
-  checks, and validation result helpers for tests and future native bridges.
-- Added richer text accessibility hooks for text fields, text views, and
-  monospace text views: selected ranges, insertion points, character counts,
-  editable/selectable traits, selection-change notifications, character and
-  range bounds, line ranges/bounds, and point-to-character lookup.
-- Defined the first public `TextLayoutManager` value model: rune-indexed
-  `TextRange` remains canonical, while typed glyph indexes/ranges, visual line
-  indexes, line fragments, and layout snapshots now expose container-local
-  metrics, hard-break/wrap metadata, glyph counts, used rects, and content size
-  for tests and diagnostics.
-- Added the first `TextLayoutManager` query layer: layout cache lifecycle,
-  counts/bounds/content metrics, text-to-glyph mapping, point hit-testing,
-  visual line fragment lookup/ranges/iteration, caret positions, selection
-  rects, text bounds, character rects, and glyph bounds now share one
-  container-local contract.
-- Introduced the protocol-backed `TextLayoutManager` layer: manager lifecycle
-  and query methods, the FigDraw-backed `TextLayoutBackendProtocol`,
-  `TextLayoutClientProtocol` owner hooks, `TextStorageEditingEvents`
-  will/did-edit signals, and layout invalidation/completion/geometry signals
-  now provide AppKit-like semantic APIs with Sigils/Qt-style notification
-  delivery.
-- Reworked the FigDraw bridge behind the `TextLayoutManager` protocols:
-  `GlyphArrangement` glyph/source ranges, visual lines, caret positions,
-  merged selection bands, glyph metrics, and content sizing now map into
-  NimKit records through narrow value-query helpers without leaking backend
-  records into text view, field, or accessibility APIs.
-- Migrated text consumers onto the `TextLayoutManager` contract: TextView and
-  TextField selection drawing, caret/line movement, mouse hit-testing,
-  field-editor geometry, and accessibility text geometry now query committed
-  layout-manager state, while MonoText exposes matching fixed-grid geometry
-  helper names for shared accessibility expectations.
-- Locked down the first `TextLayoutManager` contract tests: backend-free
-  snapshots now cover empty text, hard breaks, wrapping, trailing lines, and
-  text/attribute invalidation requests, while deterministic FigDraw-backed
-  tests cover wrapped selections, caret affinity, point hit-testing,
-  glyph/text range round trips, field-editor text rect offsets, and
-  accessibility line geometry.
-- Drew the first text-layout milestone boundary: attachment layout,
-  non-contiguous layout, full Cocoa `NSLayoutManager` compatibility aliases,
-  and advanced bidi/grapheme navigation are explicitly deferred until the core
-  layout contract is proven.
-- Added the first Cocoa/TextKit-compatible text model layer without native
-  bridge types: richer `TextAttributes` now cover paragraph styles, tab stops,
-  line breaking, writing direction, baseline/kerning/ligature/expansion
-  fields, backgrounds, shadows, links, decorations, and attachment metadata;
-  `TextStorage` exposes mutable attributed-string aliases and rune-indexed
-  edit/query helpers; and text transfer/pasteboard contracts cover plain text,
-  attributed text, RTF, RTFD-style package payloads, HTML fragments, URLs, and
-  file promises.
-- Brought `TextStorage` closer to `NSTextStorage` while keeping NimKit's
-  Qt-style event path: `beginEditing`/`endEditing`, edited masks/ranges,
-  change-in-length tracking, coalesced `processEditing`, value/attribute
-  change signals, delegate-backed attribute fixing and font fallback hooks,
-  paragraph-range expansion, lazy materialization, and multiple layout-manager
-  observers now share one deterministic storage signal contract.
-  `TextStorageEditDispatchProtocol` is the explicit overridable delivery seam
-  for external editor bridges, coalescing, suppression, mirroring, and
-  instrumentation before `TextStorageEditingEvents` observers receive signals;
-  layout notifications now emit directly through Sigils signals.
-- Expanded `TextContainer` toward `NSTextContainer` parity: containers now carry
-  origin, size, line fragment padding, width/height tracking flags, maximum line
-  counts, line break modes, and exclusion rects; `TextLayoutManager` supports
-  multiple containers with container indexes in line fragments, caret positions,
-  snapshots, and semantic hit-test results, plus container replacement and
-  invalidation signals for paged, column, and flowed text models.
-- Expanded `TextLayoutManager` toward `NSLayoutManager`/TextKit 2 parity while
-  keeping NimKit names primary: glyph generation now exposes `TextGlyph`
-  records, glyph properties, character/glyph mapping helpers, bounding rect
-  queries, line-fragment rect/used-rect metrics, extra line fragments,
-  temporary rendering attributes, typed character/glyph/layout/display/container
-  invalidation payloads, delegate hooks for glyph generation, spacing,
-  hyphenation, completion, and temporary attributes, explicit background and
-  non-contiguous layout switches, partial-layout entry points, and Cocoa-shaped
-  aliases layered over the Nim-native API.
-- Brought `TextView` closer to `NSTextView` behavior while keeping the surface
-  pure Nim: selection affinity/granularity, multiple and rectangular selection
-  hooks, selected/marked text overlays, insertion-point color/visibility/blink
-  policy, find indicators, checking results, optional data detection, spelling
-  and grammar underline application, delegate protocols for edit lifecycle,
-  text changes, selection, clicked links/attachments, completions, and command
-  validation, undo grouping, smart insert/delete, quote/dash substitution,
-  find/replace helpers, completion panels, and paragraph/tab-stop editing now
-  share the existing storage/layout contracts.
-- Hardened text input, command, and field-editor parity: TextView/TextField/
-  TextEditor now expose NSTextInputClient-style marked-text, selected-range,
-  attributed-substring, marked-attribute, first-rect, and point-to-index query
-  contracts; keybindings and IME command dispatch route through selector-backed
-  responder command validation with Sigils command observers; and the shared
-  field editor keeps text-field and hosted-cell geometry/selection stable while
-  edits sync back to clients.
-- Filled out the current desktop control set: buttons, checkboxes, radio
-  buttons, switches, text fields/editors, combo boxes, popup/menu buttons,
-  progress indicators, sliders, steppers, dialog button boxes, group boxes, and
-  image views now route state through NimKit setters, target/action dispatch,
-  rendering invalidation, layout metrics, and accessibility notifications.
-- Added the shared object-value layer for model-backed controls:
-  `ObjectValue` now covers strings, numbers, booleans, temporal values, colors,
-  images, attributed text, links, dynamic agents, nil/empty values, and
-  validation failures; formatter/parser protocols provide role-aware display
-  and edited-text parse/writeback; text fields, table cells, combo boxes, menus,
-  sliders, steppers, and form rows now share typed value conversion and
-  structured validation state instead of each inventing its own string bridge.
-- Added the first controller and bindings layer for model-backed widgets:
-  `ObjectController`, `ArrayController`, `TreeController`, and
-  `SelectionController` now expose Nim-native identity, value, sort/filter, and
-  mutation APIs over `ModelItem`/`ModelColumn`/`ModelTreeItem` records. Shared
-  adapter protocols now feed table, outline, cascading, combo, menu,
-  document-tab, and matrix controls from the same object-value model vocabulary,
-  including typed table editing/writeback and structured parse validation.
-- Added model-backed `CollectionView` for reusable repeated-content views:
-  layout strategies stay separate from item storage, while data-source and
-  delegate protocols cover stable item identifiers, object values, identity
-  selection, reusable item/supplementary views, item state/accessibility,
-  incremental insert/remove/move/reload updates, and model-aware drag/drop
-  targets. `ArrayController` can now bind collection views using the same
-  sorted/filtered `ModelItem` vocabulary as tables, combo boxes, menus, tabs,
-  and matrices.
-- Implemented `CascadingView` model backing around stable `CascadingItem`
-  identifiers, parent identifiers, display/object values, leaf/hidden/image
-  metadata, represented objects, identity-backed selected paths, data-source
-  and delegate hooks, incremental tree insert/remove/move/reload updates,
-  batched update signals, model-mutation notifications, table-column row
-  adapters, and `TreeController` binding coverage.
-- Implemented `ComboBox` choice model backing around plain `ComboBoxOption`
-  records, option identifiers, display text, object values, enabled/hidden/
-  separator/image/tooltip/search metadata, identity-backed selected and
-  highlighted options, old string-item compatibility APIs, a seq-backed
-  `ComboBoxOptionList` data-source adapter with filtering, type-ahead lookup,
-  popup separator/disabled-row semantics, and `ArrayController` option-record
-  binding with selection writeback.
-- Implemented menu item model backing around plain `MenuItemModel` records,
-  item identifiers, subtitle/key-equivalent metadata, object values, enabled/
-  hidden/separator/image/state/action/target/represented-object fields,
-  submenu child records, model-to-`MenuItem` bridge generation, data-source
-  reload hooks, validation writeback into model records before popup opening,
-  identifier-based menu activation signals, and `ArrayController` menu/popup
-  binding with selection writeback.
-- Implemented `DocumentTabs` model backing around plain `DocumentTabModel`
-  records, stable document/tab identifiers, object values, hidden/closeable/
-  modified/enabled/style/accent/tooltip metadata, represented document/object
-  hooks, data-source reloads, identifier-backed selection and order state,
-  model-aware add/remove/move operations, `ArrayController` tab binding with
-  selection writeback, and `DocumentController` tab binding that routes close
-  requests through document ownership.
-- Implemented `Matrix` item model backing around plain `MatrixItemModel`
-  records, stable item identifiers, object values, enabled/hidden/state/tag/
-  tooltip/image/action metadata, data-source reloads, fixed column projection,
-  identifier-backed selection, model-aware insert/remove/reorder operations,
-  generated `ButtonCell` action dispatch, and `ArrayController` matrix binding
-  with selection writeback.
-- Implemented `OutlineView` model backing around expanded `OutlineItem`
-  records, stable item identifiers, parent/child lookup, object and column
-  values, enabled/hidden/leaf/image/tooltip/represented-object metadata,
-  identifier-backed expansion and selection state, local insert/remove/move
-  mutation helpers, table object-value read/write integration, and
-  `TreeController` binding with model-change reloads and selection writeback.
-- Added the typed notification center for cross-cutting observation:
-  `NotificationKind`, `Notification`, observer tokens, typed payload records,
-  and the Sigils-backed `notificationPosted` signal now cover application,
-  window, document, document-controller, defaults, appearance, undo, selection,
-  and model-mutation broadcasts while keeping direct owner/delegate wiring on
-  local Sigils signals.
-- Added the first `ViewController` architecture: controllers now lazily build
-  views through selector-backed loading protocols, emit Sigils lifecycle
-  signals, carry represented objects and optional undo managers, participate in
-  responder validation/target-action routing, support child-controller
-  containment, and can be owned/swapped by `WindowController` while documents
-  seed document-backed content controllers with represented objects.
-- Hardened reusable pure Nim panel/dialog contracts: `Alert`, `OpenPanel`, and
-  `SavePanel` now build modal and sheet content with buttons, accessory views,
-  response mapping, file-type validation, selected URL helpers, modal
-  preparation hooks, document-controller integration, and demo coverage.
-- Added the first animation layer: value/property animations, groups, timing
-  curves, scheduler/clock plumbing, transaction sugar, selector-backed property
-  dispatch, setter-routed mutation, and demos for progress indicators and
-  animation workflows.
-- Added legacy `NSMatrix`-style button cell grids with radio/check/button
-  modes, cell reuse, keyboard movement, selection behavior, target/action
-  dispatch, intrinsic sizing, rendering, accessibility semantics, and
-  `examples/matrix_demo.nim` coverage.
-- Added the first `MonoTextView`/`MonoTextEditor` pass: themed chrome-backed
-  monospace rendering, visible-row culling, grid/cell APIs, editable cursor
-  behavior, raw key/mouse/scroll forwarding and capture policies, host-style
-  text input dispatch, and an interactive `examples/monotext_demo.nim`.
-- Added the first gap-buffer-backed text storage path while preserving NimKit
-  editor interactions: `GapTextBuffer` now provides rune-indexed replace,
-  substring, line-count, and line-range operations; `TextGapStorage` subclasses
-  `TextStorage` for that backing through `newTextGapStorage` and public storage
-  primitive methods; edit dispatch, attributes, undo snapshots, layout
-  invalidation, accessibility observers, and `TextEditor` storage assignment
-  keep using the existing NimKit contracts.
-- Fixed pasteboard provider cache invalidation so provider change counts clear
-  materialized local items/types before reads, provider swaps discard stale
-  local cache and owner state, and the native clipboard provider reports host
-  clipboard changes through platform change counts or a synthetic fingerprint.
-- Kept the application, native windows, input, menus, and platform services on
-  the main thread while adding an optional dedicated FigDraw renderer runtime.
-  Supported Metal and Vulkan backends receive moved, coalesced render trees;
-  unsupported backends retain direct main-thread rendering. Render-resource
-  manifests remain on the application thread until their render IDs are
-  acknowledged, and the build uses regular ARC with explicit ownership
-  transfers at thread boundaries.
-- Added managed FigDraw font and image resources for the static renderer:
-  cached render roots and text layouts retain deduplicated FigDraw leases,
-  image resources preserve rebuildable sources with bounded preload/pin policy,
-  threaded snapshots carry value-only sources, and each host renderer recovers
-  its working set across atlas generations and pressure rebuilds. FigDraw now
-  broadcasts retain/release and cache events to every renderer, reports
-  renderer-local generations and rebuild metrics, and supports measurement-only
-  text layout without transient glyph uploads.
+- Completed the first four builder milestones. `ResourceDocument` owns value-only
+  drafts, validation, stable paths, selection, revisions, and undo;
+  `ResourcePreview` reconciles valid revisions transactionally while preserving
+  compatible view/controller identities; and `ResourceEditor` provides canonical
+  CBOR persistence, hierarchy/canvas selection, diagnostics, property editing,
+  direct movement and sizing, duplication, reordering, deletion, and undo.
+- Expanded the backend-neutral schema and construction layer across views,
+  controllers, windows/panels, menus, commands, images, localization, key
+  bindings, themes, layout guides, and constraints. Resource identifiers remain
+  the connection boundary, and the default palette exposes 13 registered kinds.
+- Kept editor presentation metadata separate from runtime property discovery.
+  Editable runtime properties continue to come from Sigils protocols and shared
+  resource-value conversion rather than builder-specific setter tables.
 
-## Current Verification
+### Text Storage, Layout, and Editing
 
-- `atlas-run tests` passes locally on macOS with the current domain module
-  layout; the latest full run passed `5/5`.
-- Focused NimKit coverage lives under `tests/nimkit/*.nim` and is aggregated
-  by `tests/tnimkit.nim`; current modules cover controls, matrix,
-  monospace text views, tables, outlines, cascading views, collection views,
-  documents, animations, rendering, accessibility, text storage/layout/views,
-  pasteboards/dragging, document tabs, undo managers, object values, model
-  controllers, notifications, responders, view controllers, windows/controllers,
-  constraints, themes, the renderer/application threading boundary, and managed
-  font/image resource retention and atlas recovery. `tests/tresources.nim` covers
-  canonical CBOR, validation, construction, lookup, automatic Sigils property
-  discovery, built-in value conversion, and application-registered property types.
-- Demo coverage for recently completed work lives in
-  `examples/panel_demo.nim`, `examples/stepper_demo.nim`,
-  `examples/matrix_demo.nim`, `examples/modelcontrollers_demo.nim`,
-  `examples/monotext_demo.nim`, `examples/progress_indicator_demo.nim`,
-  `examples/cascading_demo.nim`, `examples/viewcontroller_demo.nim`,
-  `examples/collectionview_demo.nim`, `examples/controls_showcase.nim`, and
-  `examples/merenda_settings_demo.nim`. Resource workflows are demonstrated by
-  `examples/resource_ui_demo.nim` and `examples/image_resources_demo.nim`; the
-  complete example bundle compiles through
-  `atlas-run tests --compile-only examples/all_compile.nim`.
+- Established the attributed text model, `TextStorage` edit lifecycle,
+  `TextContainer`, protocol-backed `TextLayoutManager`, FigDraw layout bridge,
+  glyph/text/line query APIs, invalidation signals, temporary attributes, and
+  multi-container records without exposing backend layout types.
+- Migrated text fields, text views, editors, field editors, selection drawing,
+  hit testing, movement, marked text, accessibility geometry, find/checking,
+  completion, transfer, and paragraph editing onto the shared storage/layout
+  contracts.
+- Reworked `GapTextBuffer` around ARC-owned UTF-8 byte segments with private
+  rune/byte coordinate helpers and sparse rune/line checkpoints. SynEdit now uses
+  gap-backed storage and caches token spans, shifting and invalidating affected
+  ranges while applying attributes through normal `TextStorage` APIs only where
+  highlighting changed.
 
-## Completed Design Reference
+### Controls, Models, and Application Services
 
-The render-threading and managed-resource work completed on 2026-07-15 share
-one architectural boundary: NimKit builds value-only render snapshots on the
-application thread, while FigDraw may consume moved snapshots on a dedicated
-backend thread. Logical resource ownership remains on the application side
-until the renderer acknowledges the corresponding snapshot.
+- Completed the current desktop control/container slice, including scroll,
+  stack, form, grid, tab, split, box, table, outline, collection, cascading,
+  combo, matrix, editor, monospace text, panel, and dialog foundations.
+- Added shared object-value conversion and validation plus object, array, tree,
+  and selection controllers. Model-backed widgets now preserve identity and
+  selection across sorting, filtering, reloads, and incremental mutation.
+- Added document/window controllers, responder-discovered undo, typed
+  notifications, view-controller containment, pure Nim panels, animation
+  scheduling, backend-neutral pasteboards/dragging, and broad accessibility
+  semantics and notifications.
+- Completed scaling passes for tables, combo boxes, cascading views, visible-row
+  construction, row geometry, cached lookups, system font catalogs, and lazy
+  option materialization. Deterministic operation-count tests cover the large
+  collection paths.
 
-### Runtime Topology and Render Handoff
+### Rendering and Managed Resources
 
-- Keep the application, responder and view trees, native windows, input, menus,
-  clipboard, IME, accessibility, and window lifecycle on the platform UI
-  thread. Parsing, indexing, I/O, decoding, and other expensive application
-  work belongs in bounded Sigils workers.
-- Treat the UI thread, application state, rendering runtime, and worker pool as
-  distinct roles even when a backend colocates them.
-- Select rendering per backend as automatic, direct/main-thread, or dedicated.
-  Static FigDraw Metal and Vulkan backends support the dedicated runtime;
-  OpenGL, unsupported backends, and failed runtime setup use direct rendering.
-- Keep the render boundary limited to moved `Renders`, logical size and target
-  generations, renderer-local resource messages, acknowledgements, diagnostics,
-  and shutdown. Ordinary window and application commands do not cross it.
-- Build render trees as mutable values, transfer them with `ensureMove`,
-  invalidate the source cache immediately, and coalesce pending work per window
-  so the renderer receives the newest frame instead of stale intermediates.
-- Create, resize, replace, and destroy native presentation targets on the UI
-  thread. The renderer exclusively owns its FigDraw context, command encoding,
-  atlas state, and resource replay; target replacement and shutdown require
-  generation-aware release acknowledgement.
-- This topology also matches mobile constraints: UIKit or Android
-  Activity/View, input, IME, and lifecycle stay on the main thread while a
-  supported Metal, EGL, or Vulkan presentation path may render elsewhere.
+- Kept application state, native windows, input, menus, IME, accessibility, and
+  lifecycle on the platform thread while allowing static Metal/Vulkan rendering
+  on a dedicated runtime. Render trees are moved and coalesced per window;
+  unsupported backends retain direct rendering.
+- Added managed FigDraw font/image leases, render-resource manifests,
+  acknowledgement-based snapshot lifetime, rebuildable image sources,
+  renderer-local atlas generations, pressure recovery, and multi-renderer cache
+  event delivery.
 
-### Managed Resource Ownership and Recovery
+## Verification
 
-- Keep themes, text attributes, model records, layouts exposed to callers, and
-  FigDraw nodes as plain descriptors or raw IDs. `FontRef` and `ImageRef`
-  are internal lease handles and never travel through render queues, signals,
-  pasteboards, or worker results.
-- Store a deduplicated `RenderResourceManifest` beside each cached root
-  `Renders`. Replace manifests by acquiring the new leases before releasing
-  the old ones so unchanged resources never pass through a zero-owner gap.
-- For threaded rendering, associate the moved snapshot with a render ID and
-  retain its manifest on the application thread until that ID is acknowledged.
-  Snapshot transfer moves render values; it does not copy pixels or move managed
-  FigDraw references.
-- Concrete fonts are acquired through `FontRef`; committed text layouts retain
-  every referenced `FontId`, including fallback faces. Measurement-only
-  typesetting avoids transient glyph uploads. Parsed typefaces remain
-  process-cached until FigDraw provides a separate release contract.
-- `ImageResource` remains the identity and rebuild-source object. Active
-  snapshots, explicit preloads, and named pins acquire `ImageRef` leases;
-  models, hidden views, pasteboard items, and off-screen rows do not pin atlas
-  entries merely by retaining metadata. Every drawable image preserves a file,
-  encoded-data, decoded-pixel, or owned direct-pixel source suitable for replay.
-- Logical ownership and renderer-local atlas residency are separate. FigDraw
-  broadcasts retain/release and cache events to every renderer, and each
-  renderer tracks its own atlas generation across clears, growth, backend
-  recreation, and device/context loss.
-- Rebuild only at frame boundaries from the live manifest/preload working set.
-  Generation-stamped uploads prevent stale work from repopulating a rebuilt
-  atlas. Pressure handling uses renderer-local usage, hysteresis/cooldown, and
-  planned growth when the live set cannot fit.
-- Dropping the final lease makes a logical resource eligible for eviction; it
-  does not force-clear a global cache. Each renderer independently releases or
-  rebuilds its local residency.
-
-### Supported Scope and Verification
-
-The static FigDraw path is covered for direct rendering and dedicated Metal and
-Vulkan runtimes, including moved latest-frame delivery, resize/target generation
-ordering, shutdown acknowledgements, pending-manifest lifetime, multiwindow and
-popup atlas recovery, stale uploads, pressure rebuilds, and ARC/ORC
-copy/move/final-release behavior.
-
-`useNativeDynlib` remains intentionally unsupported for managed resources:
-its ABI still lacks equivalent `FontRef` and `ImageRef` retain/release and
-renderer-targeted rebuild primitives. It must not silently fall back to
-unmanaged ownership.
+- Run the full suite with `atlas-run tests`. Focused NimKit tests live under
+  `tests/nimkit/*.nim` and are aggregated by `tests/tnimkit.nim`.
+- Compile the example bundle with
+  `atlas-run tests --compile-only examples/all_compile.nim`; do not run the
+  bundle as a test.
+- Resource serialization/construction coverage lives in `tests/tresources.nim`.
+  Tekton document, preview, editor, and user-workflow coverage is aggregated by
+  `tests/ttekton.nim`.
+- The full Atlas suite and example bundle compile currently pass on macOS.
 
 ## Near-Term Work
 
-### Interactive GUI Builder Foundations
+### Resource Builder
 
-The first editor-facing workflow is built directly on `ResourceBundle`; there is
-no parallel declarative model. It loads and saves canonical CBOR, validates every
-committed view edit, preserves invalid drafts beside the last valid preview, and
-keeps selection and compatible runtime identities stable across valid revisions.
+The current baseline is a standalone Tekton app built directly on
+`ResourceBundle`, with no parallel declarative model. It retains invalid drafts
+beside the last valid preview and preserves selection and compatible runtime
+identities across valid revisions.
 
-#### Current Builder Readiness
-
-The constrained builder workflow now covers the complete resource hierarchy and
-the first backend-neutral layout bridge.
-
-- Ready: value-only versioned records, canonical cborious persistence, semantic
-  diagnostics, stable `ResourceId` paths, document revisions and undo, staged
-  construction, deterministic registry descriptors, Sigils property discovery,
-  and transactional identity-preserving preview reconciliation.
-- Ready: backend-neutral layout guides and constraints resolve view/guide
-  endpoints by identifier, validate ownership and anchor compatibility, lower
-  guide insets into solver constants, and rebuild against preserved preview view
-  identities.
-- Ready: `ResourceEditor` provides hierarchy and canvas selection, hover geometry,
-  a 13-kind Sigils-backed view palette, text/checkbox/combo-box/color-well property
-  editing, cascaded freeform insertion, subtree duplication with stable identifier
-  remapping, sibling reordering, selection-aware deletion and undo, direct canvas
-  dragging, keyboard position/size adjustment, path-addressed diagnostics, and
-  read-only detail surfaces for layout, ownership, connections, menus, commands,
-  images, localization, key bindings, and themes. Synthetic user workflows cover
-  add/edit/duplicate/reorder/move/resize/delete/undo and invalid-inspector recovery
-  while asserting resource, hierarchy, selection, and preview identity together.
-  Tekton owns the editor, preview reconciler, and resource-value editing modules as
-  a standalone app layer, while NimKit retains the backend-neutral resource model
-  and runtime bridge.
-- Remaining builder work: typed authoring operations and specialized editors for
-  non-view resources and constraints, optional presentation metadata, controller
-  and window extension properties, and import/export adapters.
-
-#### Milestone 1 — Editable Document and Property Schema (Completed 2026-07-19)
-
-- Added an identity-bearing `ResourceDocument` around a value-only
-  `ResourceBundle`. It owns the current draft, last valid revision, revision
-  number, diagnostics, selection identifiers, and undo manager without making
-  serialized resource records into `ref object` graphs.
-- Added typed view-tree insert, remove, move, replace, and property operations
-  with named results. All mutation updates identifier indexes, validation,
-  diagnostics, revisions, selection pruning, and undo registration through the
-  document boundary.
-- Added strict and optional resource lookup, read-only iteration, and stable
-  identifier paths that resolve to current diagnostic locations. Nested resource
-  sequences are not exposed through mutable borrows.
-- Added public `ResourceViewKindDescriptor` and `ResourcePropertyDescriptor`
-  records plus deterministic registry iterators and strict/optional lookup.
-  Descriptors expose kind inheritance, aliases, selector and Nim type names,
-  accepted resource-value kinds, and editability; editor-only presentation
-  metadata remains a separate future layer.
-
-#### Milestone 2 — First Interactive Vertical Slice (Completed 2026-07-19)
-
-- Added a `ResourceEditorDocument` window with a full resource hierarchy, the
-  nine-kind starter view palette, a descriptor-driven property inspector,
-  path-addressed diagnostics, and a preview canvas. Inspector values come from
-  the resource draft rather than live widget getters.
-- Every inspector and palette commit goes through `ResourceDocument` validation.
-  Unparseable typed input is retained as a string resource value with diagnostics,
-  while the last valid preview remains installed.
-- Valid revisions rebuild through the construction registry. Hierarchy and canvas
-  selection are restored by `ResourceId` using the existing subtree-selection and
-  selection-ring primitives, without attaching editor state to preview views.
-- Added canonical CBOR read/write through `DocumentFileProtocol`; the editor and
-  application document share one `UndoManager`, so edits, save, revert, undo/redo,
-  and clean-state window behavior stay synchronized.
-- Added the resource builder vertical slice, now promoted to the
-  `src/merenda/tekton/tekton.nim` application module.
-
-#### Milestone 3 — Identity-Preserving Preview (Completed 2026-07-19)
-
-- Added `ResourcePreview`, a resource-to-instance diff and reconciliation layer
-  keyed by `ResourceId`. It preserves compatible view identities across property
-  edits and hierarchy moves, preserves controller identities while kind and
-  owned view remain compatible, and reports deterministic insert, remove, reuse,
-  replacement, move, and update changes with stable paths.
-- Each update first constructs a complete staging graph, preflights getter-backed
-  property round trips, and commits mappings only after property and hierarchy
-  application succeeds. Kind changes, moves, insertions, deletions, changed or
-  unavailable assets, window and menu-target rewiring, and failed property
-  application leave the resource document independent and the prior preview
-  revision installed on failure.
-- Extended registry value conversions with getter-side encoders for supported
-  scalar, sequence, geometry, color, image-reference, and enum values. Reads go
-  through discovered Sigils getter selectors; image identities map back through
-  `ResourceId`, and no widget backing fields are exposed.
-- The resource editor now reconciles valid revisions instead of rebuilding them,
-  remaps document-owned selection to retained or replacement views, and exposes
-  hover rings, preview-relative geometry, explicit hit-test results, and
-  implementation-subview-to-resource mapping. Added focused coverage for
-  identity preservation, transactional failures, asset changes, getter
-  conversion, geometry, hover, and selection restoration.
-
-#### Milestone 4 — Layout and Resource Breadth (Completed 2026-07-19)
-
-- Added format 1.1 value records for layout guides, layout item references, and
-  constraints with stable identifiers, anchors, relations, multipliers,
-  constants, priorities, explicit owners, and activation state. Validation checks
-  references, finite scalar values, compatible anchors, guide baseline use, and
-  owner containment before construction.
-- Added a backend-neutral layout bridge that lowers guide inset offsets into the
-  existing NimKit constraint solver. Full construction exposes strict and optional
-  guide/constraint lookup; preview updates replace constraint identities while
-  reconnecting endpoints to reused views and restoring the prior active layout on
-  failed reconciliation.
-- Expanded the default registry and palette from 9 to 13 kinds with `switchButton`,
-  `progressIndicator`, `box`, and `splitView`. Their editable properties are
-  discovered from Sigils protocols and existing resource-value converters; no
-  builder-specific setter tables were added.
-- Added stable localization catalog identifiers and hierarchy/detail inspection
-  for layout records, target/action references, controller/window ownership,
-  menus, commands, images, localization, key bindings, and theme fragments.
-  Connections remain serialized identifiers and selector names until runtime
-  instantiation.
-- Kept all records, validation, document paths, and construction interfaces free
-  of native resource handles. Future nib/storyboard and GNUstep bridges remain
-  translation layers into this same model.
-
-#### Future Work — Resource Builder
-
-- Extend `ResourceDocument` with typed insert, remove, move, and replace operations
-  for constraints, guides, controllers, windows, menus, commands, assets,
-  localization catalogs, key bindings, and themes. Add grouped transactions for
-  edits that create or remove several related references atomically.
-- Add an optional editor metadata registry for labels, categories, palette order,
-  default frames, numeric ranges, asset pickers, multiline text, and other input
-  hints. Enum choices already come from runtime property descriptors.
-- Continue direct-manipulation layout authoring beyond the completed freeform
-  frame dragging and keyboard position/size controls: add resize handles, guide
-  overlays, snapping, anchor handles, constant editing, priority and activation
-  controls, constraint ownership visualization, and conflict/ambiguity
-  diagnostics. Keep frames and stack/container layout available as simpler
-  authoring modes.
-- Turn the read-only resource detail surfaces into structured editors for
+- Add typed insert, remove, move, and replace operations for constraints, guides,
+  controllers, windows, menus, commands, assets, localization catalogs, key
+  bindings, and themes. Support grouped transactions for related edits.
+- Add optional editor metadata for labels, categories, palette order, default
+  frames, numeric ranges, asset pickers, multiline text, and other presentation
+  hints. Enum choices should continue to come from runtime descriptors.
+- Extend direct layout authoring with resize handles, guide overlays, snapping,
+  anchor handles, constant/priority/activation editing, ownership visualization,
+  and conflict or ambiguity diagnostics.
+- Replace read-only resource detail surfaces with structured editors for
   target/action connections, controller ownership, menus, commands, images,
-  localized strings, key bindings, and theme fragments. Every commit should use
-  typed document operations and retain invalid draft input where appropriate.
-- Add reusable components and templates, copy/paste and drag/drop payloads,
-  multi-selection transforms, and package-relative asset management suitable for
-  a standalone builder application. Extend the completed view-subtree duplicate-ID
-  remapping to related constraints, connections, and non-view resources.
+  localized strings, key bindings, and theme fragments. All commits should use
+  typed document operations and retain invalid draft input when appropriate.
+- Add reusable components/templates, copy/paste and drag/drop payloads,
+  multi-selection transforms, and package-relative asset management. Extend
+  duplicate-ID remapping from view subtrees to related constraints, connections,
+  and non-view resources.
 - Define schema migrations and optional nib/storyboard and GNUstep import/export
-  adapters. Adapters should report lossy mappings explicitly and must translate
-  into `ResourceBundle` rather than leaking platform resource types into NimKit.
+  adapters. Adapters must report lossy mappings and translate through
+  `ResourceBundle` rather than expose platform resource types.
 
 ## Medium-Term Architecture
 
-### Gap-Buffer Text Follow-Ups (Completed 2026-07-26)
+### Text Scaling and Layout
 
-Built on the first `GapTextBuffer`/`TextGapStorage` implementation without
-changing the `TextEditor`/`TextView` interaction model.
+- Profile gap-backed mutation and the existing layout manager together. Add true
+  virtual or visible-range layout only if layout remains the measured bottleneck.
+- Add attachment layout, non-contiguous layout, and advanced bidi/grapheme
+  navigation only after the core rune/glyph/line contracts remain stable under
+  real editor workloads.
+- Keep full Cocoa compatibility names as aliases over Nim-native APIs rather than
+  allowing them to define the internal model.
 
-- SynEdit now keeps token spans as a cache beside its gap-backed text storage.
-  Character edits shift and invalidate affected cached line/token ranges, and
-  attributes are reapplied through the normal `TextStorage` API only across the
-  resulting changed range. Language, theme, and font changes still deliberately
-  invalidate the complete cache.
-- `GapTextBuffer` now stores UTF-8 byte segments while preserving rune-indexed
-  `TextRange` semantics. Private `RuneIndex` and `ByteOffset` helpers keep the
-  coordinate spaces explicit, and sparse rune-to-byte and line-start checkpoints
-  support substring, line, paragraph, and edit operations without exposing byte
-  offsets through the public text API.
-- True virtual/visible-range text layout remains deferred until profiling shows
-  the existing layout manager remains the bottleneck after storage mutation is
-  gap-buffer-backed.
-
-### Workspace and Services Layer
-
-Add a backend-neutral workspace/service boundary for app-to-system integration.
-This should gather file, URL, service-request, app activation, and promised-file
-handoff behavior under one architecture instead of scattering it across panels,
-documents, pasteboards, and native adapters.
+### Workspace and Services
 
 - Add workspace operations for opening URLs/files, revealing files, launching or
-  activating apps where supported, and querying common system locations.
+  activating applications where supported, and querying common system locations.
 - Route Services-style selected text, selected files, pasteboard requests, and
-  promised-file completions through typed service request/response records.
+  promised-file completions through typed request/response records.
 - Integrate recent documents, document-controller open/save flows, pasteboard
   promises, and drag/drop file handoff without making any backend mandatory.
 - Keep platform-specific workspace capabilities behind explicit feature checks.
 
 ### Native Integration
 
-- Keep render construction unit-testable without a live native window.
-- Keep accessibility construction and notification tests backend-free until the native bridge exists.
-- Keep native handles private behind `nativeWindowOrNil`/`rendererOrNil` style escape hatches for tests and diagnostics.
-- Add accessibility backend adapters for NSAccessibility, UI Automation, and
-  AT-SPI-style APIs after the core semantic tree, notifications, and traversal
-  helpers are stable; do not put platform imports in the core accessibility
-  modules.
-- Verify activation, hide/unhide, focus changes, and key/main-window
-  transitions on macOS, X11, Wayland, and inline-windowless targets.
-- Route native focus/resign/key-window notifications through the same
-  `Application` and `Window` state transitions used by tests.
-- Enforce window-modal event blocking at the backend dispatch boundary after
-  the pure Nim modal blocking contract is stable.
+- Keep render and accessibility construction unit-testable without a live native
+  window; keep native handles behind narrow diagnostic escape hatches.
+- Add accessibility adapters for NSAccessibility, UI Automation, and AT-SPI-style
+  APIs without importing platform modules into the core accessibility layer.
+- Verify activation, hide/unhide, focus, key/main-window transitions, and modal
+  blocking on macOS, X11, Wayland, and inline-windowless targets. Native events
+  must route through the same `Application` and `Window` transitions used by
+  tests.
 - Add optional native-menu bridging after the pure Nim menu path remains stable
   across examples.
-- Move window frame autosave from the current in-process helper store to a
-  backend/user-defaults persistence layer when the backend adapter owns
-  platform persistence.
-- Add native open/save panels, recent-documents integration, represented file
-  URLs/proxy metadata, and native print/page setup only after the pure Nim
-  document/controller contracts are stable.
+- Move window-frame autosave from the in-process helper store to a backend or
+  user-defaults persistence adapter.
+- Add native open/save panels, recent-document integration, represented-file URL
+  and proxy metadata, and native print/page setup only after the pure Nim
+  document/controller contracts remain stable.
 
-### Medium-Term Architecture Updates
+### Framework Refinements
 
-- Keep popup presentation policy on `Window`/control instances. Do not add
-  global popup state; platforms without native popup windows should keep using
-  the same inline FigDraw path.
-- Add coordinate caching only after profiling shows the current uncached
-  conversion helpers are a measurable cost. Keep frame, bounds, superview, and
-  clipping invalidation explicit if caching lands.
-- Keep growing the theme/metrics boundary. `Theme` and `Appearance` should
-  centralize borders, shadows, focus rings, control metrics, popup/list
-  metrics, and state-specific colors as features are added.
-- Keep strengthening the control/cell split. Centralize cell invalidation,
-  value conversion, target/action storage, highlight/tracking behavior, and
-  default cell construction so controls stay thin.
-- Treat `ScrollView` as a primitive container like AppKit does. Future text
-  editors, table views, outline views, collection views, and large
-  forms should be able to build on the same clipped document-view and scrolling
-  model.
-- Stage layout work conservatively. Expand constraints through the existing
-  Cocoa-like lifecycle/model and Kiwiberry-backed solver, then add compatibility
-  conveniences only when controls and examples prove the need.
-- Expand layout length support beyond the current fixed-font `em` dimension
-  constant shortcut. A fuller `LayoutSize`/`LayoutLength` model should preserve
-  unresolved units through anchor expressions, resolve them against the relevant
-  view/theme/font context
+- Keep popup presentation policy on `Window` and control instances; do not add
+  global popup state. Backends without native popup windows should keep using the
+  inline FigDraw path.
+- Add coordinate caching only after profiling demonstrates a measurable cost.
+  If added, keep frame, bounds, superview, and clipping invalidation explicit.
+- Continue centralizing borders, shadows, focus rings, state colors, and
+  control/popup/list metrics in `Theme` and `Appearance`.
+- Continue strengthening the control/cell split around invalidation, value
+  conversion, target/action storage, highlighting/tracking, and default cell
+  construction.
+- Reuse `ScrollView` as the primitive clipped document container for editors,
+  tables, outlines, collections, and large forms.
+- Expand constraints through the existing Cocoa-like lifecycle and
+  Kiwiberry-backed solver before adding compatibility conveniences.
+- Replace the fixed-font `em` shortcut with a `LayoutSize`/`LayoutLength` model
+  that preserves unresolved units through expressions and resolves them against
+  the relevant view, theme, and font context.
+
+### Rendering Constraints
+
+- Keep the render boundary limited to moved `Renders`, logical size and target
+  generations, renderer-local resource messages, acknowledgements, diagnostics,
+  and shutdown. Ordinary application/window commands must not cross it.
+- Create, resize, replace, and destroy native presentation targets on the UI
+  thread. Renderer target replacement and shutdown require generation-aware
+  release acknowledgement.
+- Keep logical resource ownership separate from renderer-local atlas residency.
+  Rebuild at frame boundaries from live manifests/preloads, and reject stale
+  generation-stamped uploads.
+- Keep `useNativeDynlib` unsupported for managed resources until its ABI gains
+  equivalent font/image retain/release and renderer-targeted rebuild primitives.
+  It must not silently fall back to unmanaged ownership.
 
 ## Long-Term Architecture
 
 ### Printing and Page Layout
 
-Treat printing and page layout as a long-term architecture track. The immediate
-goal is to avoid painting NimKit into a corner; full print operation, native
-print panels, and paginated rendering can land after text, table, document, and
-native backend contracts are stable.
-
-- Define page setup records, printable content ranges, pagination containers,
-  margins, paper sizes, scale modes, headers/footers, and print job metadata as
-  backend-neutral value types.
-- Make text layout, table/collection layouts, image views, and custom drawing
-  able to produce page-fragment geometry without depending on a live window.
-- Add document-controller hooks for page setup, print preview, print operation
-  validation, and edited-state-safe print flows.
-- Defer native print panel bridges and platform spooler integration until the
-  pure Nim pagination and render snapshot contracts are testable.
+- Define backend-neutral page setup, printable-range, pagination-container,
+  margin, paper-size, scale, header/footer, and print-job records.
+- Let text, table/collection, image, and custom drawing produce page-fragment
+  geometry without a live window.
+- Add document-controller hooks for page setup, print preview, print validation,
+  and edited-state-safe print flows.
+- Defer native print panels and spooler integration until pure Nim pagination and
+  render snapshots are testable.
 
 ## Open Questions
 
-- How far to take public export narrowing for `View.x*` storage. The umbrella
-  import already hides raw layout-input/cache type names, but fully hiding view
-  storage needs a deeper internal accessor or module organization refactor.
-- Whether accessibility storage should stay directly on `View` or move behind a
-  small per-view semantic record if more role-specific state accumulates.
-- Whether container-generated layout inputs should become a real source before
-  adding more collection-style controls.
-- Whether generated layout summaries should expose richer diagnostics such as
-  item names, attributes, priorities, conflicts, or cache-generation metadata.
-- How much of the layout invalidation bus should be public. It is useful for
-  diagnostics, but most callers should not need to emit layout signals directly.
+- How far should public export narrowing go for `View.x*` storage? Fully hiding
+  it requires a deeper internal accessor or module-organization refactor.
+- Should accessibility storage remain directly on `View`, or move behind a
+  per-view semantic record if more role-specific state accumulates?
+- Should container-generated layout inputs become a distinct source before more
+  collection-style controls are added?
+- Should generated layout summaries expose richer item, attribute, priority,
+  conflict, or cache-generation diagnostics?
+- How much of the layout invalidation bus should remain public? It is useful for
+  diagnostics, but most callers should not emit layout signals directly.
