@@ -204,11 +204,40 @@ identities across valid revisions.
   instead of resolving `em` immediately against `defaultFontSize()`. Add
   view/theme/font-context resolution and a two-axis `LayoutSize` value.
 
+### Incremental Render Fragments
+
+FigDraw now provides `RenderFragments` for independently replaceable render
+subtrees, while NimKit still builds and caches one monolithic `Renders` tree per
+window content root.
+
+- Harden fragment handles before adoption: associate `RenderCursor` values with
+  their owning tree and generation, reject foreign or detached cursors in
+  `updateFragment`, and prevent raw `RenderList` mutation from leaving fragment
+  traversal metadata stale.
+- Refactor `DrawContext` and view render caching so stable view/subtree identities
+  own fragments and only display-dirty fragments rebuild. Preserve exact layer,
+  sibling, clipping, transform, popup, focus-ring, and accessibility-overlay
+  ordering, with monolithic `Renders` as the compatibility and diagnostic path.
+- Keep fragment resource manifests and generations explicit. Recompute the live
+  merged font/image manifest at frame boundaries, retain replaced-fragment
+  resources until render acknowledgement, and reject stale updates after clears,
+  layer replacement, target replacement, or atlas recovery.
+- Do not share mutable fragment graphs across the application and renderer
+  threads. Add generation-stamped, move-only fragment snapshots or replacement
+  messages with bounded coalescing and acknowledgement before enabling fragments
+  on the dedicated renderer; keep direct rendering and `useNativeDynlib` on the
+  monolithic path until equivalent support exists.
+- Add equivalence and operation-count tests comparing fragment-backed and
+  monolithic output across nested updates, physical inserts, multiple roots and
+  layers, removed views, resource replacement, threaded coalescing, and stale
+  handle rejection.
+
 ### Rendering Constraints
 
-- Keep the render boundary limited to moved `Renders`, logical size and target
-  generations, renderer-local resource messages, acknowledgements, diagnostics,
-  and shutdown. Ordinary application/window commands must not cross it.
+- Keep the render boundary limited to moved `Renders` or ownership-safe fragment
+  snapshots/replacements, logical size and target generations, renderer-local
+  resource messages, acknowledgements, diagnostics, and shutdown. Ordinary
+  application/window commands must not cross it.
 - Create, resize, replace, and destroy native presentation targets on the UI
   thread. Renderer target replacement and shutdown require generation-aware
   release acknowledgement.
