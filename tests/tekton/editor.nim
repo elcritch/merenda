@@ -117,6 +117,33 @@ suite "Tekton resource editor":
     check editor.previewInstance().findView(resourceId("label.1")).isNil == false
     check editor.hierarchyView().selectedItemIdentifier() == "label.1"
 
+  test "hierarchy selection replaces the preview selection ring":
+    let
+      document = newResourceEditorDocument(editorBundle())
+      editor = newResourceEditor(document)
+      buttonId = resourceId("editor.button")
+      rootId = resourceId("editor.root")
+      previewButton = editor.previewInstance().view(buttonId)
+      window = editor.newResourceEditorWindow()
+
+    discard window.buildRenders()
+    let baseDrawDepth = DynamicAgent(previewButton).methodStack(draw()).len
+
+    check editor.selectResource(buttonId)
+    check DynamicAgent(previewButton).methodStack(draw()).len == baseDrawDepth + 1
+
+    let hoverPoint = previewButton.pointToView(initPoint(2, 2), editor.previewSurface())
+    let hover = editor.updatePreviewHover(hoverPoint)
+    check hover.found
+    check hover.resourceId == buttonId
+    check DynamicAgent(previewButton).methodStack(draw()).len == baseDrawDepth + 2
+
+    editor.hierarchyView().selectedItemIdentifier = $rootId
+    check document.resources().selectedResourceIds() == @[rootId]
+    editor.clearPreviewHover()
+
+    check DynamicAgent(previewButton).methodStack(draw()).len == baseDrawDepth
+
   test "hierarchy inspector exposes layout connections and non-view resources":
     var bundle = editorBundle()
     bundle.layoutGuides =

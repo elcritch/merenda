@@ -655,6 +655,22 @@ proc clearPreviewHover*(editor: ResourceEditor) =
   editor.xHoverGeometry = ResourcePreviewGeometry()
   editor.refreshPropertyRows()
 
+func previewHoverRingStyle(): SelectionRingStyle =
+  initSelectionRingStyle(
+    strokeColor = color(0.1, 0.72, 0.82, 0.9),
+    fillColor = color(0.1, 0.72, 0.82, 0.08),
+    lineWidth = 2.0,
+    cornerRadius = 5.0,
+    insets = insets(1.0),
+  )
+
+proc installPreviewHoverRing(editor: ResourceEditor) =
+  if editor.xHoveredResourceId.isNone or not editor.xHasPreview:
+    return
+  let view = editor.xPreview.findView(editor.xHoveredResourceId.get())
+  if not view.isNil:
+    editor.xHoverRing = view.installSelectionRing(previewHoverRingStyle())
+
 proc updatePreviewHover*(
     editor: ResourceEditor, point: Point
 ): ResourcePreviewHit {.discardable.} =
@@ -675,15 +691,7 @@ proc updatePreviewHover*(
   editor.xHoveredResourceId = nextId
   editor.xHoverGeometry = result.geometry
   if result.found:
-    editor.xHoverRing = result.resourceView.installSelectionRing(
-      initSelectionRingStyle(
-        strokeColor = color(0.1, 0.72, 0.82, 0.9),
-        fillColor = color(0.1, 0.72, 0.82, 0.08),
-        lineWidth = 2.0,
-        cornerRadius = 5.0,
-        insets = insets(1.0),
-      )
-    )
+    editor.installPreviewHoverRing()
     let frame = result.geometry.frameInReferenceView
     editor.xSelectionLabel.text =
       "Hover " & $result.resourceId & " · x " & $frame.x & "  y " & $frame.y & "  w " &
@@ -911,8 +919,8 @@ proc installPreviewHoverTracking(editor: ResourceEditor) =
 proc clearPreview(editor: ResourceEditor) =
   editor.uninstallPreviewHoverTracking()
   discard editor.xPreviewSelection.uninstall()
-  discard editor.xSelectionRing.uninstall()
   discard editor.xHoverRing.uninstall()
+  discard editor.xSelectionRing.uninstall()
   while editor.xPreviewSurface.subviews().len > 0:
     editor.xPreviewSurface.subviews()[^1].removeFromSuperview()
   editor.xPreview = newResourcePreview(
@@ -926,13 +934,14 @@ proc clearPreview(editor: ResourceEditor) =
   editor.xDragDidMove = false
 
 proc selectPreviewView(editor: ResourceEditor) =
+  discard editor.xHoverRing.uninstall()
   discard editor.xSelectionRing.uninstall()
   let selected = editor.selectedViewId()
-  if selected.isNone or not editor.xHasPreview:
-    return
-  let view = editor.xPreview.findView(selected.get())
-  if not view.isNil:
-    editor.xSelectionRing = view.installSelectionRing()
+  if selected.isSome and editor.xHasPreview:
+    let view = editor.xPreview.findView(selected.get())
+    if not view.isNil:
+      editor.xSelectionRing = view.installSelectionRing()
+  editor.installPreviewHoverRing()
 
 proc previewResourceId(editor: ResourceEditor, selectedView: View): ResourceId =
   let found = editor.xPreview.resourceIdForView(selectedView)
