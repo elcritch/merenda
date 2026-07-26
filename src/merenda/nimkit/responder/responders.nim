@@ -3,11 +3,36 @@ import std/options
 import sigils/selectors as dynamicSelectors
 
 import ../foundation/events
+import ../foundation/backrefs
 import ../foundation/selectors
 import ../foundation/undomanagers
 
-type Responder* = ref object of DynamicAgent
-  xAcceptsFirstResponder: bool
+export backrefs
+
+type
+  Responder* = ref object of DynamicAgent
+    xBackRefs*: BackRefSet[Responder]
+    xNextResponderLink: ResponderLink
+    xAcceptsFirstResponder: bool
+
+  ResponderLink = ref object of DynamicAgent
+    target: BackRef[Responder]
+
+proc `[]=`*[T: Responder](backRef: var BackRef[T], target: T) {.inline.} =
+  if target.isNil:
+    backRef.clear()
+  else:
+    backRef.set(target, target.xBackRefs)
+
+proc nextResponder*(responder: Responder): Responder
+proc clearNextResponder*(responder: Responder)
+
+proc responderLinkTarget(self: DynamicAgent, selector: SigilName): DynamicAgent =
+  discard selector
+  if not self.isNil:
+    let link = ResponderLink(self)
+    if not link.target.isNil:
+      result = DynamicAgent(link.target[])
 
 protocol ResponderProtocol {.setterStyle: nim.} from Responder:
   property acceptsFirstResponder -> bool {.field: xAcceptsFirstResponder.}
@@ -45,7 +70,7 @@ protocol ResponderProtocol {.setterStyle: nim.} from Responder:
     while not responder.isNil:
       if responder.tryToPerform(args):
         return
-      responder = Responder(dynamicSelectors.nextResponder(responder))
+      responder = responder.nextResponder()
     self.noResponderFor(selector)
 
   method noResponderFor*(self: Responder, selector: CommandSelector) =
@@ -62,12 +87,24 @@ proc newResponder*(): Responder =
   initResponder(result)
 
 proc nextResponder*(responder: Responder): Responder =
-  Responder(dynamicSelectors.nextResponder(responder))
+  if not responder.isNil and not responder.xNextResponderLink.isNil and
+      not responder.xNextResponderLink.target.isNil:
+    result = responder.xNextResponderLink.target[]
 
 proc setNextResponder*(responder, next: Responder) =
-  dynamicSelectors.setNextResponder(responder, next)
+  if next.isNil:
+    responder.clearNextResponder()
+    return
+  if responder.xNextResponderLink.isNil:
+    let link = ResponderLink()
+    dynamicSelectors.setForwardingTarget(link, responderLinkTarget)
+    responder.xNextResponderLink = link
+  responder.xNextResponderLink.target[] = next
+  dynamicSelectors.setNextResponder(responder, responder.xNextResponderLink)
 
 proc clearNextResponder*(responder: Responder) =
+  if not responder.xNextResponderLink.isNil:
+    responder.xNextResponderLink.target.clear()
   dynamicSelectors.clearNextResponder(responder)
 
 proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =

@@ -173,7 +173,7 @@ proc hasHiddenAncestor(view: View): bool =
   while not current.isNil:
     if ssHidden in current.xWidgetStates:
       return true
-    current = current.xSuperview
+    current = current.superviewBacklink()
 
 proc accessibilityChildrenForView(view: View): seq[View]
 
@@ -321,7 +321,7 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     view.rectToWindow(view.xBounds)
 
   method accessibilityParent*(view: View): View =
-    view.xSuperview
+    view.superviewBacklink()
 
   method accessibilityChildren*(view: View): seq[View] =
     view.accessibilityChildrenForView()

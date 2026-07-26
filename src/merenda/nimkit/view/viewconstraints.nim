@@ -910,8 +910,8 @@ proc nearestCommonSuperview(first, second: View): View =
     while not other.isNil:
       if candidate == other:
         return candidate
-      other = other.xSuperview
-    candidate = candidate.xSuperview
+      other = other.superviewBacklink()
+    candidate = candidate.superviewBacklink()
 
 proc activationOwner(constraint: LayoutConstraint): View =
   if constraint.xFirstItem.isNil:

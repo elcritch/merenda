@@ -256,14 +256,14 @@ proc finishDisplaySubtree*(view: View) =
     child.finishDisplaySubtree()
 
 proc moveToWindowOwner*(view: View, window: Responder) =
-  if view.xWindow == window:
+  if view.windowBacklink() == window:
     return
   view.propagateWillMoveToWindow(window)
   view.setWindowOwner(window)
   view.propagateDidMoveToWindow()
 
 proc clearSuperviewForWindowOwner*(view: View) =
-  view.xSuperview = nil
+  view.xSuperview[] = nil
   view.clearNextResponder()
 
 proc containsView*(view, candidate: View): bool =

@@ -140,7 +140,7 @@ proc markAggregateLayoutInputDirty(
     if structureDirty:
       current.xLayoutInputCache.aggregateStructureDirty = true
     current.markConstraintStorageChangedRaw()
-    current = current.xSuperview
+    current = current.superviewBacklink()
 
 protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
   proc markLayoutInputDirty(
@@ -174,12 +174,12 @@ proc markConstraintStorageChanged*(view: View) =
   emit view.layoutInputChanged(lirConstraints)
 
 proc observeSuperviewGeometry*(view: View) =
-  let parent = view.xSuperview
+  let parent = view.superviewBacklink()
   if not parent.isNil:
     view.observeProtocol(parent, ViewSuperviewGeometrySlots)
 
 proc unobserveSuperviewGeometry*(view: View) =
-  let parent = view.xSuperview
+  let parent = view.superviewBacklink()
   if not parent.isNil:
     view.unobserveProtocol(parent, ViewSuperviewGeometrySlots)
 
@@ -191,7 +191,7 @@ proc invalidateLayoutItemGeometry*(
   while not current.isNil:
     emit current.layoutInputChanged(if isOrigin: reason else: ancestorReason)
     isOrigin = false
-    current = current.xSuperview
+    current = current.superviewBacklink()
 
 proc autoresizingMask*(view: View): AutoresizingMask =
   view.xAutoresizingMask
@@ -254,12 +254,13 @@ proc resetAutoresizingState*(view: View) =
   view.xAutoresizingState = AutoresizingState()
 
 proc refreshAutoresizingReference*(view: View) =
-  if view.xSuperview.isNil or not view.xAutoresizingMaskConstraints:
+  let superview = view.superviewBacklink()
+  if superview.isNil or not view.xAutoresizingMaskConstraints:
     view.resetAutoresizingState()
     return
   view.xAutoresizingState = AutoresizingState(
     referenceRect: view.alignmentRect(),
-    referenceSuperviewRect: view.xSuperview.alignmentRect(),
+    referenceSuperviewRect: superview.alignmentRect(),
     hasReference: true,
     referenceDirty: false,
     inputsDirty: false,
@@ -286,8 +287,9 @@ proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
     view.refreshAutoresizingReference()
     emit view.geometryDidChange()
   of lfoSolver:
-    if not view.xSuperview.isNil:
-      view.xSuperview.xNeedsLayout = true
+    let superview = view.superviewBacklink()
+    if not superview.isNil:
+      superview.xNeedsLayout = true
 
 proc setFrameFromLayout*(view: View, frame: Rect) =
   view.applyLayoutFrame(frame, lfoContainer)
@@ -528,7 +530,7 @@ proc pointToWindow*(view: View, point: Point): Point =
   var current = view
   while not current.isNil:
     resultPoint = current.pointToSuperview(resultPoint)
-    current = current.xSuperview
+    current = current.superviewBacklink()
   resultPoint
 
 proc pointFromWindow*(view: View, point: Point): Point =
@@ -536,7 +538,7 @@ proc pointFromWindow*(view: View, point: Point): Point =
   var current = view
   while not current.isNil:
     chain.add(current)
-    current = current.xSuperview
+    current = current.superviewBacklink()
   var resultPoint = point
   for idx in countdown(chain.high, 0):
     resultPoint = chain[idx].pointFromSuperview(resultPoint)

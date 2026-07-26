@@ -233,6 +233,44 @@ suite "nimkit responder":
     check child.sendIfHandled(action, ActionArgs(sender: child))
     check callCount == 1
 
+  test "back refs copy move and clear with their target":
+    var
+      first: BackRef[Responder]
+      second: BackRef[Responder]
+      moved: BackRef[Responder]
+
+    block:
+      let target = newResponder()
+      first[] = target
+      second = first
+      moved = move(second)
+
+      check first[] == target
+      check moved[] == target
+      check second.isNil
+
+    check first.isNil
+    check moved.isNil
+
+  test "next responder clears when its target is destroyed":
+    let
+      action = actionSelector("destroyedForwardingTarget")
+      child = newResponder()
+
+    block:
+      let parent = newActionTarget(
+        action,
+        proc(sender: DynamicAgent) =
+          discard sender,
+      )
+      child.setNextResponder(parent)
+
+      check child.nextResponder() == parent
+      check child.sendIfHandled(action, ActionArgs(sender: child))
+
+    check child.nextResponder().isNil
+    check not child.sendIfHandled(action, ActionArgs(sender: child))
+
   test "window first responder requires acceptance":
     let
       window = newWindow("Responder", frame = rect(0, 0, 240, 160))

@@ -83,7 +83,7 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
 
     self.xNeedsDisplay = true
     self.xInvalidRects.setLen(0)
-    let parent = self.xSuperview
+    let parent = self.superviewBacklink()
     if not parent.isNil:
       parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
 
@@ -99,7 +99,7 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
       self.xInvalidRects[0] = self.xInvalidRects[0].union(clipped)
       self.xInvalidRects.setLen(1)
 
-    let parent = self.xSuperview
+    let parent = self.superviewBacklink()
     if not parent.isNil:
       parent.setNeedsDisplayInRect(self.rectToView(clipped, parent))
 
@@ -296,35 +296,35 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
     while not current.isNil:
       if ssHidden in current.xWidgetStates:
         return true
-      current = current.xSuperview
+      current = current.superviewBacklink()
     false
 
   method visibleRect*(self: View): Rect =
     if self.isHiddenOrHasHiddenAncestor():
       return
     result = self.xBounds
-    var ancestor = self.xSuperview
+    var ancestor = self.superviewBacklink()
     while not ancestor.isNil:
       if ancestor.xClipsToBounds:
         result = result.intersection(self.rectFromView(ancestor.xBounds, ancestor))
         if result.isEmpty:
           return
-      ancestor = ancestor.xSuperview
+      ancestor = ancestor.superviewBacklink()
 
   method superview*(self: View): View =
-    self.xSuperview
+    self.superviewBacklink()
 
   method window*(self: View): Responder =
-    self.xWindow
+    self.windowBacklink()
 
   method subviews*(self: View): seq[View] =
     self.xSubviews
 
   method removeFromSuperview*(self: View) =
-    let parent = self.xSuperview
+    let parent = self.superviewBacklink()
     if parent.isNil:
       return
-    let oldWindow = self.xWindow
+    let oldWindow = self.windowBacklink()
     emit parent.willRemoveSubview(self)
     emit self.viewWillMoveToSuperview(nil)
     if oldWindow != nil:
@@ -335,7 +335,7 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
       emit self.layoutInputChanged(lirSuperview)
       emit parent.layoutInputChanged(lirHierarchy)
       parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
-    self.xSuperview = nil
+    self.xSuperview[] = nil
     self.resetAutoresizingState()
     self.clearNextResponder()
     self.nextKeyView = nil
@@ -350,21 +350,22 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
   method addSubview*(self: View, child: View) =
     if child.isNil:
       return
-    if not child.xSuperview.isNil:
+    if not child.superviewBacklink().isNil:
       child.removeFromSuperview()
-    let oldWindow = child.xWindow
+    let oldWindow = child.windowBacklink()
+    let window = self.windowBacklink()
     emit child.viewWillMoveToSuperview(self)
-    if oldWindow != self.xWindow:
-      child.propagateWillMoveToWindow(self.xWindow)
-    child.xSuperview = self
+    if oldWindow != window:
+      child.propagateWillMoveToWindow(window)
+    child.xSuperview[] = self
     child.refreshAutoresizingReference()
     self.xSubviews.add child
     child.setNextResponder(self)
-    child.setWindowOwner(self.xWindow)
+    child.setWindowOwner(window)
     child.setInheritedAppearance(self.effectiveAppearance())
     emit self.didAddSubview(child)
     emit child.viewDidMoveToSuperview()
-    if oldWindow != self.xWindow:
+    if oldWindow != window:
       child.propagateDidMoveToWindow()
     emit child.layoutInputChanged(lirSuperview)
     emit self.layoutInputChanged(lirHierarchy)
@@ -443,8 +444,9 @@ proc appearance*(view: View): Appearance =
 proc effectiveAppearance*(view: View): Appearance =
   if view.xHasAppearance:
     return view.xAppearance
-  if not view.xSuperview.isNil:
-    return view.xSuperview.effectiveAppearance()
+  let superview = view.superviewBacklink()
+  if not superview.isNil:
+    return superview.effectiveAppearance()
   if view.xHasInheritedAppearance:
     return view.xInheritedAppearance
   initAppearance()
@@ -452,7 +454,7 @@ proc effectiveAppearance*(view: View): Appearance =
 proc resolvedAppearance*(view: View, inherited: Appearance): Appearance =
   if view.xHasAppearance:
     return view.xAppearance
-  if view.xHasInheritedAppearance and view.xSuperview.isNil:
+  if view.xHasInheritedAppearance and view.superviewBacklink().isNil:
     return view.xInheritedAppearance
   inherited
 
@@ -503,28 +505,29 @@ proc propagateDidMoveToWindow*(view: View) =
     child.propagateDidMoveToWindow()
 
 proc setWindowOwner*(view: View, window: Responder) =
-  view.xWindow = window
+  view.xWindow[] = window
   for child in view.xSubviews:
     child.setWindowOwner(window)
 
 proc attachSubviewAt(view, child: View, index: Natural) =
   if child.isNil:
     return
-  if not child.xSuperview.isNil:
+  if not child.superviewBacklink().isNil:
     child.removeFromSuperview()
-  let oldWindow = child.xWindow
+  let oldWindow = child.windowBacklink()
+  let window = view.windowBacklink()
   emit child.viewWillMoveToSuperview(view)
-  if oldWindow != view.xWindow:
-    child.propagateWillMoveToWindow(view.xWindow)
-  child.xSuperview = view
+  if oldWindow != window:
+    child.propagateWillMoveToWindow(window)
+  child.xSuperview[] = view
   child.refreshAutoresizingReference()
   view.xSubviews.insert(child, min(index, view.xSubviews.len))
   child.setNextResponder(view)
-  child.setWindowOwner(view.xWindow)
+  child.setWindowOwner(window)
   child.setInheritedAppearance(view.effectiveAppearance())
   emit view.didAddSubview(child)
   emit child.viewDidMoveToSuperview()
-  if oldWindow != view.xWindow:
+  if oldWindow != window:
     child.propagateDidMoveToWindow()
   emit child.layoutInputChanged(lirSuperview)
   emit view.layoutInputChanged(lirHierarchy)
@@ -552,7 +555,7 @@ proc addSubview*(
   view.attachSubviewAt(child, index)
 
 proc replaceSubview*(view, oldChild, newChild: View): bool =
-  if view.isNil or oldChild.isNil or oldChild.xSuperview != view:
+  if view.isNil or oldChild.isNil or oldChild.superviewBacklink() != view:
     return
   let index = view.xSubviews.find(oldChild)
   if index < 0:

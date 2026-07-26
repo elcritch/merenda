@@ -631,6 +631,19 @@ suite "nimkit views":
       @["willSuperview", "didSuperview", "willSuperview", "didSuperview"]
     check parent.events == @["didAddSubview", "willRemoveSubview"]
 
+  test "superview back links do not retain destroyed parents":
+    let child = newView(frame = rect(20, 30, 80, 40))
+
+    block:
+      let parent = newView(frame = rect(0, 0, 200, 160))
+      parent.addSubview(child)
+
+      check child.superview == parent
+      check nimkitResponders.nextResponder(Responder(child)) == Responder(parent)
+
+    check child.superview.isNil
+    check nimkitResponders.nextResponder(Responder(child)).isNil
+
   test "content view changes route window lifecycle through descendants":
     let
       window = newWindow("Lifecycle", frame = rect(0, 0, 240, 160))
@@ -666,6 +679,20 @@ suite "nimkit views":
     check child.windows[1].isNil
     check replacement.window == Responder(window)
     check nimkitResponders.nextResponder(Responder(replacement)) == Responder(window)
+
+  test "window back links do not retain destroyed windows":
+    let content = newView(frame = rect(0, 0, 240, 160))
+
+    block:
+      let window = newWindow("Back link", frame = rect(0, 0, 240, 160))
+      window.setAutorecalculatesKeyViewLoop(false)
+      window.setContentView(content)
+
+      check content.window == Responder(window)
+      check nimkitResponders.nextResponder(Responder(content)) == Responder(window)
+
+    check content.window.isNil
+    check nimkitResponders.nextResponder(Responder(content)).isNil
 
   test "content view replacement clears first responder from removed subtree":
     let

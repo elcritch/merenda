@@ -1,5 +1,6 @@
 import ../responder/responders
 import ../themes
+import ../foundation/backrefs
 import ../foundation/types
 import ../drawing/renderresources
 
@@ -170,8 +171,8 @@ type
     xLayoutInputCache*: LayoutInputCache
     xNextKeyView*: View
     xPreviousKeyView*: View
-    xSuperview*: View
-    xWindow*: Responder
+    xSuperview*: BackRef[View]
+    xWindow*: BackRef[Responder]
     xSubviews*: seq[View]
     xToolTip*: string
     xCursorRects*: seq[ViewCursorRect]
@@ -183,3 +184,11 @@ type
     xCachedRenderResources*: RenderResourceManifest
     xCachedAppearance*: Appearance
     xHasCachedRenders*: bool
+
+proc superviewBacklink*(view: View): View {.inline.} =
+  if not view.isNil and not view.xSuperview.isNil:
+    result = view.xSuperview[]
+
+proc windowBacklink*(view: View): Responder {.inline.} =
+  if not view.isNil and not view.xWindow.isNil:
+    result = view.xWindow[]
