@@ -3,7 +3,7 @@
 --define:
   useMalloc
 --mm:
-  orc
+  arc
 --threads:
   on
 --define:
