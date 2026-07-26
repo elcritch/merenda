@@ -108,6 +108,8 @@ type
     xLineNumberWidth: float32
     xFontSize: float32
     xApplyingHighlight: bool
+    xTokenCache: seq[SynEditTokenSpan]
+    xTokenCacheValid: bool
 
   SynEditGutterView = ref object of View
     xOwner: SynEditView
@@ -1166,26 +1168,114 @@ proc stringValue*(view: SynEditView): string =
   else:
     view.xEditor.stringValue()
 
-proc applySyntaxHighlighting*(view: SynEditView) =
+func overlapRange(a, b: TextRange): TextRange =
+  let
+    start = max(int(a.location), int(b.location))
+    stop = min(a.maxIndex, b.maxIndex)
+  initTextRange(start, max(stop - start, 0))
+
+proc addTokenSpan(
+    spans: var seq[SynEditTokenSpan], range: TextRange, token: SynEditTokenClass
+) =
+  if range.length == 0:
+    return
+  if spans.len > 0 and spans[^1].token == token and
+      spans[^1].range.maxIndex == int(range.location):
+    spans[^1].range.length = (int(spans[^1].range.length) + int(range.length)).Natural
+  else:
+    spans.add SynEditTokenSpan(range: range, token: token)
+
+proc tokenCacheAfterEdit(
+    spans: openArray[SynEditTokenSpan], edit: TextStorageEdit
+): seq[SynEditTokenSpan] =
+  let
+    oldStart = int(edit.range.location)
+    oldStop = edit.range.maxIndex
+    newStop = oldStart + int(edit.replacementLength)
+    delta = edit.textDelta
+  for item in spans:
+    let
+      start = int(item.range.location)
+      stop = item.range.maxIndex
+    if stop <= oldStart:
+      result.addTokenSpan(item.range, item.token)
+    elif start >= oldStop:
+      result.addTokenSpan(initTextRange(start + delta, stop - start), item.token)
+    else:
+      if start < oldStart:
+        result.addTokenSpan(initTextRange(start, oldStart - start), item.token)
+      if stop > oldStop:
+        result.addTokenSpan(initTextRange(newStop, stop - oldStop), item.token)
+
+func sameSpan(a, b: SynEditTokenSpan): bool =
+  a.range == b.range and a.token == b.token
+
+proc changedHighlightRange(
+    storage: TextStorage,
+    oldSpans, newSpans: openArray[SynEditTokenSpan],
+    edit: TextStorageEdit,
+): TextRange =
+  let changedLines = storage.paragraphRangeForRange(
+    initTextRange(int(edit.range.location), int(edit.replacementLength))
+  )
+  var
+    oldIndex = oldSpans.high
+    newIndex = newSpans.high
+  while oldIndex >= 0 and newIndex >= 0 and
+      oldSpans[oldIndex].sameSpan(newSpans[newIndex]):
+    dec oldIndex
+    dec newIndex
+
+  var stop = changedLines.maxIndex
+  if oldIndex >= 0:
+    stop = max(stop, oldSpans[oldIndex].range.maxIndex)
+  if newIndex >= 0:
+    stop = max(stop, newSpans[newIndex].range.maxIndex)
+  initTextRange(int(changedLines.location), stop - int(changedLines.location))
+
+proc applyCachedHighlighting(view: SynEditView, range: TextRange) =
   if view.xEditor.isNil or view.xApplyingHighlight:
     return
   let
     storage = view.xEditor.textStorage()
     total = storage.len()
+    clamped = overlapRange(range, initTextRange(0, total))
+  if clamped.length == 0:
+    return
   view.xApplyingHighlight = true
   storage.beginEditing()
-  if total > 0:
-    storage.setAttributes(
-      initTextRange(0, total), view.textAttributes(SynEditTokenClass.None)
-    )
-    for item in synEditTokenSpans(storage.stringValue(), view.xLanguage):
-      if item.range.length > 0:
-        storage.setAttributes(item.range, view.textAttributes(item.token))
+  storage.setAttributes(clamped, view.textAttributes(SynEditTokenClass.None))
+  for item in view.xTokenCache:
+    let affected = item.range.overlapRange(clamped)
+    if affected.length > 0:
+      storage.setAttributes(affected, view.textAttributes(item.token))
   storage.endEditing()
   if not view.xEditor.textView().isNil:
     view.xEditor.textView().layoutManager().invalidateLayout()
     view.xEditor.textView().needsDisplay = true
   view.xApplyingHighlight = false
+
+proc applySyntaxHighlighting*(view: SynEditView) =
+  if view.xEditor.isNil or view.xApplyingHighlight:
+    return
+  let storage = view.xEditor.textStorage()
+  view.xTokenCache = synEditTokenSpans(storage.stringValue(), view.xLanguage)
+  view.xTokenCacheValid = true
+  view.applyCachedHighlighting(initTextRange(0, storage.len()))
+
+proc applySyntaxHighlightingForEdit(view: SynEditView, edit: TextStorageEdit) =
+  if view.xEditor.isNil or view.xApplyingHighlight:
+    return
+  if not view.xTokenCacheValid or tseCharacters notin edit.kinds:
+    view.applySyntaxHighlighting()
+    return
+  let
+    storage = view.xEditor.textStorage()
+    shiftedCache = view.xTokenCache.tokenCacheAfterEdit(edit)
+    nextCache = synEditTokenSpans(storage.stringValue(), view.xLanguage)
+    changed = storage.changedHighlightRange(shiftedCache, nextCache, edit)
+  view.xTokenCache = nextCache
+  view.applyCachedHighlighting(changed)
 
 proc `stringValue=`*(view: SynEditView, value: string) =
   if view.xEditor.isNil:
@@ -1194,7 +1284,6 @@ proc `stringValue=`*(view: SynEditView, value: string) =
     return
   view.xEditor.stringValue = value
   view.updateGutter()
-  view.applySyntaxHighlighting()
 
 proc text*(view: SynEditView): string =
   view.stringValue()
@@ -1317,7 +1406,7 @@ proc synEditTextDidChange(view: SynEditView, sender: DynamicAgent) {.slot.} =
   if view.xApplyingHighlight:
     return
   view.updateGutter()
-  view.applySyntaxHighlighting()
+  view.applySyntaxHighlightingForEdit(view.xEditor.textStorage().currentEdit())
 
 proc synEditGutterNeedsDisplay(view: SynEditView) {.slot.} =
   if not view.xGutter.isNil:
@@ -1396,7 +1485,8 @@ proc initSynEditViewFields*(
   view.xLineNumberWidth = DefaultSynEditLineNumberWidth
   view.xFontSize = DefaultSynEditFontSize
   view.background = view.xTheme.background
-  view.xEditor = newTextEditor(value, richText = true, wraps = false)
+  view.xEditor = newTextEditor(richText = true, wraps = false)
+  view.xEditor.textStorage = newTextGapStorage(value)
   view.xGutter = SynEditGutterView()
   view.xGutter.initSynEditGutterFields(view)
   view.addSubview(view.xEditor)

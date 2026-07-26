@@ -3,6 +3,15 @@ import std/[strutils, unicode, unittest]
 import merenda/nimkit
 
 suite "nimkit gap text buffers":
+  test "default buffer remains a valid empty value":
+    let buffer = GapTextBuffer()
+
+    check buffer.len == 0
+    check buffer.stringValue() == ""
+    check buffer.substring(initTextRange(0, 1)) == ""
+    check buffer.lineCount() == 1
+    check buffer.lineRange(0) == initTextRange(0, 0)
+
   test "buffer replaces and slices by rune range":
     var buffer = initGapTextBuffer("alpha\nβeta\nomega")
 
@@ -15,6 +24,28 @@ suite "nimkit gap text buffers":
 
     buffer.replace(initTextRange(buffer.len, 0), "\nশেষ")
     check buffer.stringValue().endsWith("\nশেষ")
+
+  test "UTF-8 gap edits stay rune indexed across sparse index boundaries":
+    let original = ("α🙂漢字-line\n").repeat(180)
+    var buffer = initGapTextBuffer(original)
+
+    buffer.replace(initTextRange(257, 3), "β🚀")
+    let expected = original.runeSubStr(0, 257) & "β🚀" & original.runeSubStr(260)
+    check buffer.stringValue() == expected
+    check buffer.len == expected.runeLen
+    check buffer.cursor() == 259
+    check buffer.substring(initTextRange(253, 12)) == expected.runeSubStr(253, 12)
+    let indexedLine = buffer.lineRange(129)
+    check buffer.substring(indexedLine) == "α🙂漢字-line\n"
+    check buffer.paragraphRange(initTextRange(int(indexedLine.location) + 2, 0)) ==
+      indexedLine
+
+    buffer.replace(initTextRange(3, 1), "界\n新")
+    let secondExpected = expected.runeSubStr(0, 3) & "界\n新" & expected.runeSubStr(4)
+    check buffer.stringValue() == secondExpected
+    check buffer.len == secondExpected.runeLen
+    check buffer.lineCount() == secondExpected.count('\n') + 1
+    check buffer.substring(buffer.lineRange(1)) == "新-line\n"
 
   test "buffer reports line and paragraph ranges":
     let buffer = initGapTextBuffer("one\ntwo\nthree")

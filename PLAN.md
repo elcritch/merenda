@@ -640,21 +640,23 @@ the first backend-neutral layout bridge.
 
 ## Medium-Term Architecture
 
-### Gap-Buffer Text Follow-Ups
+### Gap-Buffer Text Follow-Ups (Completed 2026-07-26)
 
-Build on the first `GapTextBuffer`/`TextGapStorage` implementation without
+Built on the first `GapTextBuffer`/`TextGapStorage` implementation without
 changing the `TextEditor`/`TextView` interaction model.
 
-- Keep syntax highlighting as a cache layered beside the buffer: edits should
-  invalidate affected line/token ranges, then apply attributes back through
-  the normal `TextStorage` APIs for visible or changed ranges.
-- Add a UTF-8-backed gap storage path for large files while keeping public
-  `TextRange` semantics rune-indexed. Use explicit internal `RuneIndex` and
-  `ByteOffset` helpers, plus sparse line/byte index caches, so edits can move
-  ARC-owned byte buffers cheaply without exposing byte offsets through the text
-  API.
-- Defer true virtual/visible-range text layout until profiling shows the
-  existing layout manager remains the bottleneck after storage mutation is
+- SynEdit now keeps token spans as a cache beside its gap-backed text storage.
+  Character edits shift and invalidate affected cached line/token ranges, and
+  attributes are reapplied through the normal `TextStorage` API only across the
+  resulting changed range. Language, theme, and font changes still deliberately
+  invalidate the complete cache.
+- `GapTextBuffer` now stores UTF-8 byte segments while preserving rune-indexed
+  `TextRange` semantics. Private `RuneIndex` and `ByteOffset` helpers keep the
+  coordinate spaces explicit, and sparse rune-to-byte and line-start checkpoints
+  support substring, line, paragraph, and edit operations without exposing byte
+  offsets through the public text API.
+- True virtual/visible-range text layout remains deferred until profiling shows
+  the existing layout manager remains the bottleneck after storage mutation is
   gap-buffer-backed.
 
 ### Workspace and Services Layer

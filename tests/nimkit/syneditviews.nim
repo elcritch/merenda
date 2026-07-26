@@ -1,7 +1,15 @@
-import std/[strutils, unittest]
+import std/[strutils, unicode, unittest]
+
+import sigils/core
 
 import merenda/nimkit
 import merenda/nimkit/text/syneditviews
+
+type HighlightEventSpy = ref object of DynamicAgent
+  attributeRanges: seq[TextRange]
+
+proc rememberHighlightEdit(spy: HighlightEventSpy, edit: TextStorageEdit) {.slot.} =
+  spy.attributeRanges.add edit.range
 
 proc tokenAt(source, needle: string, language = langNim): SynEditTokenClass =
   let
@@ -52,7 +60,29 @@ proc answer(): int = 42
     check editor.scrollView().verticalHeaderView() == editor.gutterView()
     check editor.showLineNumbers()
     check editor.lineCount() == 2
+    check editor.textEditor().textStorage().usesGapTextBuffer()
     check editor.textEditor().textStorage().attributesAt(0).foregroundColor ==
+      editor.theme().foreground[SynEditTokenClass.Keyword]
+
+  test "editing invalidates and reapplies only affected token lines":
+    let
+      source = "let first = 1\nlet second = 2\nlet third = 3\nlet fourth = 4\n"
+      editor = newSynEditView(source)
+      storage = editor.textEditor().textStorage()
+      spy = HighlightEventSpy()
+      insertion = source.find("2")
+
+    storage.connect(storageAttributesDidChange, spy, rememberHighlightEdit)
+    editor.textView().selectedRange = initTextRange(insertion, 0)
+    editor.textView().insertTextValue("0")
+
+    check editor.text() == source[0 ..< insertion] & "0" & source[insertion .. ^1]
+    check spy.attributeRanges.len > 0
+    check int(spy.attributeRanges[^1].location) == source.find("let second")
+    check int(spy.attributeRanges[^1].length) < editor.text().runeLen
+    check storage.attributesAt(insertion).foregroundColor ==
+      editor.theme().foreground[SynEditTokenClass.DecNumber]
+    check storage.attributesAt(editor.text().find("let fourth")).foregroundColor ==
       editor.theme().foreground[SynEditTokenClass.Keyword]
 
   test "widget keeps short lines fitted to gutter-adjusted viewport":
