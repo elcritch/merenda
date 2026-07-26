@@ -39,8 +39,8 @@ suite "NimKit color picker":
           initColorWellChoice("Ocean", color(0.12, 0.48, 0.78, 1.0)),
         ]
       well = newColorWell(choices, choices[0].color, rect(10, 10, 72, 30))
-      root = newView(frame = rect(0, 0, 180, 100))
-      window = newWindow("Color Well", frame = rect(0, 0, 180, 100))
+      root = newView(frame = rect(0, 0, 480, 440))
+      window = newWindow("Color Well", frame = rect(0, 0, 480, 440))
       action = actionSelector("testColorPickerAction")
     var actionCount = 0
     well.target = newActionTarget(
@@ -53,6 +53,10 @@ suite "NimKit color picker":
     well.action = action
     root.addSubview(well)
     window.setContentView(root)
+    well.popupPresentation = ppWindow
+
+    check well.popupPresentation == ppWindow
+    check well.effectivePopupPresentation == ppInline
 
     check window.mouseDownAt(initPoint(20, 20))
     check window.mouseUpAt(initPoint(20, 20))
@@ -60,16 +64,17 @@ suite "NimKit color picker":
     let
       popupWindow = well.popupWindow()
       picker = well.picker()
-    check not popupWindow.isNil
+    check popupWindow.isNil
     check not picker.isNil
-    check popupWindow.contentView() == View(picker)
+    check picker.superview() == root
     check picker.len == 3
     check picker[0].label() == "Palette"
     check picker[1].label() == "Wheel"
     check picker[2].label() == "Values"
     check picker.okayButton().title() == "OK"
+    check PopupDrawLevel in window.buildRenders().layers
     check window.hasActiveTransientSession()
-    check window.transientWindow() == popupWindow
+    check window.transientWindow().isNil
 
     check well.activateColorAtIndex(1)
     check well.color() == choices[1].color
@@ -88,8 +93,8 @@ suite "NimKit color picker":
         )
       )
       paletteColor = well.color()
-    check popupWindow.mouseDownAt(wheelPoint)
-    check popupWindow.mouseUpAt(wheelPoint)
+    check window.mouseDownAt(wheelPoint)
+    check window.mouseUpAt(wheelPoint)
     check well.color() != paletteColor
     check actionCount == 2
     check well.popupOpen()
@@ -122,7 +127,7 @@ suite "NimKit color picker":
     check picker.okayButton().sendAction()
     check not well.popupOpen()
     check well.popupWindow().isNil
-    check popupWindow.isClosed()
+    check picker.superview().isNil
     check not window.hasActiveTransientSession()
 
   test "popup color choices update selection state and send actions":

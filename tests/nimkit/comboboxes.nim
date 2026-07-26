@@ -385,22 +385,25 @@ suite "nimkit comboboxes":
     check combo.indexOfSelectedItem() == 1
     check combo.stringValue == "Medium"
 
-  test "popup presentation can force inline or window rendering":
+  test "popup presentation falls back inline without a native popup host":
     let
       window = newWindow("Combo popup presentation", frame = rect(0, 0, 220, 150))
       root = newView(frame = rect(0, 0, 220, 150))
       combo = newComboBox(["Low", "Medium", "High"], frame = rect(10, 20, 120, 26))
+      otherWindow = newWindow("Other popup policy")
 
     root.addSubview(combo)
     window.setContentView(root)
 
     check combo.popupPresentation == ppAutomatic
     check window.popupPresentation == ppAutomatic
+    check not window.supportsNativePopupWindows()
+    check window.effectivePopupPresentation == ppInline
 
     combo.popupPresentation = ppWindow
     combo.popupOpen = true
     check combo.popupOpen
-    check PopupDrawLevel notin window.buildRenders().layers
+    check PopupDrawLevel in window.buildRenders().layers
 
     combo.closePopup()
     combo.popupPresentation = ppInline
@@ -426,6 +429,7 @@ suite "nimkit comboboxes":
     window.setPopupPresentation(ppInline)
     combo.popupOpen = true
     check combo.popupPresentation == ppAutomatic
+    check otherWindow.popupPresentation == ppAutomatic
     check window.effectivePopupPresentation == ppInline
     check PopupDrawLevel in window.buildRenders().layers
 

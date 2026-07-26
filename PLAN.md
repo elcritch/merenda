@@ -191,9 +191,6 @@ identities across valid revisions.
 
 ### Framework Refinements
 
-- Keep popup presentation policy on `Window` and control instances; do not add
-  global popup state. Backends without native popup windows should keep using the
-  inline FigDraw path.
 - Add coordinate caching only after profiling demonstrates a measurable cost.
   If added, keep frame, bounds, superview, and clipping invalidation explicit.
 - Continue centralizing borders, shadows, focus rings, state colors, and

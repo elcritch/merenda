@@ -176,7 +176,7 @@ type
 
   PopupPresentation* = enum
     ppAutomatic ## Use popup windows when available and inline rendering otherwise.
-    ppWindow ## Use a separate popup window only.
+    ppWindow ## Prefer a separate popup window, falling back inline when unavailable.
     ppInline ## Draw the popup inline in the owner window.
 
   CellHitPolicy* = enum

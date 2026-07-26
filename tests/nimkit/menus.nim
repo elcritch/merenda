@@ -324,6 +324,26 @@ suite "nimkit menus":
     )
     check spy.events == @["activate:two"]
 
+  test "window popup preference falls back to an inline menu without a native host":
+    let
+      window = newWindow("Menu popup fallback", frame = rect(0, 0, 240, 140))
+      root = newView(frame = rect(0, 0, 240, 140))
+      menu = newMenu("Choices")
+      button = newPopupMenuButton("Choices", menu, rect(8, 8, 96, 24))
+
+    discard menu.addItem(newMenuItem("One"))
+    button.popupPresentation = ppWindow
+    root.addSubview(button)
+    window.setContentView(root)
+
+    button.openPopup()
+
+    check button.popupOpen()
+    check not window.supportsNativePopupWindows()
+    check root.subviews().len == 2
+    check root.subviews()[1] of PopupListView
+    button.closePopup()
+
   test "view context menu opens on secondary click and dispatches item action":
     let
       window = newWindow("Context menu", frame = rect(0, 0, 240, 160))

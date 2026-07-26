@@ -1450,28 +1450,14 @@ proc popupList(button: PopupMenuButton): PopupListView =
       newPopupListView(button.popupListData(), button.popupListActions())
   button.xPopupList
 
-proc popupPresentationPreference(button: PopupMenuButton): PopupPresentation =
-  if button.xPopupPresentation == ppAutomatic:
-    let owner = button.ownerWindow()
-    if owner.isNil:
-      return platformDefaultPopupPresentation()
-    return owner.effectivePopupPresentation()
-  button.xPopupPresentation
-
-proc canUseWindowPopup(button: PopupMenuButton): bool =
-  if not button.xParentPopup.isNil or not nativePopupWindowsSupported():
-    return false
+proc resolvedPopupPresentation(button: PopupMenuButton): PopupPresentation =
+  if not button.xParentPopup.isNil:
+    return ppInline
   let owner = button.ownerWindow()
-  not owner.isNil and owner.nativeReady
+  owner.resolvedPopupPresentation(button.xPopupPresentation)
 
 proc shouldUseWindowPopup(button: PopupMenuButton): bool =
-  case button.popupPresentationPreference()
-  of ppAutomatic:
-    nativePopupWindowsSupported() and button.canUseWindowPopup()
-  of ppWindow:
-    button.canUseWindowPopup()
-  of ppInline:
-    false
+  button.resolvedPopupPresentation() == ppWindow
 
 proc closePopupWindow(button: PopupMenuButton) =
   let popupWindow = button.xPopupWindow

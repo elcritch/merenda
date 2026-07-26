@@ -251,20 +251,6 @@ proc ensureWindowFrameStore() =
 func defaultWindowFrame*(): Rect =
   rect(100.0'f32, 100.0'f32, 640.0'f32, 480.0'f32)
 
-func nativePopupWindowsSupported*(): bool =
-  when defined(android) or defined(emscripten) or defined(js) or defined(wasm):
-    false
-  else:
-    true
-
-func platformDefaultPopupPresentation*(): PopupPresentation =
-  when defined(nimkitInlinePopups) or defined(emscripten) or defined(js) or defined(
-    wasm
-  ):
-    result = ppInline
-  else:
-    result = ppAutomatic
-
 proc makeFirstResponder*(window: Window, responder: Responder): bool
 proc makeFirstResponder*(window: Window, responder: Responder, focusVisible: bool): bool
 proc fieldEditor*(window: Window): FieldEditor
@@ -278,6 +264,11 @@ proc selectKeyViewFollowingView*(window: Window, view: View): bool {.discardable
 proc selectKeyViewPrecedingView*(window: Window, view: View): bool {.discardable.}
 proc effectiveAppearance*(window: Window): Appearance
 proc effectivePopupPresentation*(window: Window): PopupPresentation
+proc resolvedPopupPresentation*(
+  window: Window, preference: PopupPresentation
+): PopupPresentation
+
+proc supportsNativePopupWindows*(window: Window): bool
 proc close*(window: Window)
 proc releaseThreadRenderer(window: Window, waitForRelease: bool)
 proc setKeyWindow*(window: Window, value: bool)
@@ -755,10 +746,30 @@ proc effectiveAppearance*(window: Window): Appearance =
 proc popupPresentation*(window: Window): PopupPresentation =
   window.xPopupPresentation
 
+proc supportsNativePopupWindows*(window: Window): bool =
+  not window.isNil and not window.xHostWindow.isNil and
+    window.xHostWindow.supportsPopupWindows()
+
+proc resolvedPopupPresentation*(
+    window: Window, preference: PopupPresentation
+): PopupPresentation =
+  var preferred = preference
+  if preferred == ppAutomatic:
+    if window.isNil:
+      return ppInline
+    preferred = window.xPopupPresentation
+    if preferred == ppAutomatic:
+      when defined(nimkitInlinePopups):
+        preferred = ppInline
+      else:
+        preferred = ppWindow
+  if preferred == ppWindow and window.supportsNativePopupWindows():
+    ppWindow
+  else:
+    ppInline
+
 proc effectivePopupPresentation*(window: Window): PopupPresentation =
-  if window.xPopupPresentation == ppAutomatic:
-    return platformDefaultPopupPresentation()
-  window.xPopupPresentation
+  window.resolvedPopupPresentation(ppAutomatic)
 
 proc setPopupPresentation*(window: Window, presentation: PopupPresentation) =
   if window.xPopupPresentation == presentation:

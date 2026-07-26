@@ -1,9 +1,9 @@
 ## Color wells and tabbed color-picker controls.
 
 when defined(useNativeDynlib):
-  from figdraw/dynlib import FigIdx
+  from figdraw/dynlib import FigIdx, ZLevel
 else:
-  from figdraw import FigIdx
+  from figdraw import FigIdx, ZLevel
 import std/[math, strutils]
 
 import sigils/core
@@ -16,7 +16,7 @@ import ../foundation/[events, selectors, types]
 import ../text/textfields
 import ../themes
 import ../view/views
-import ./[buttons, controls, menus, sliders]
+import ./[buttons, controls, menus, popuplists, sliders]
 
 export menus, tabviews
 
@@ -48,6 +48,7 @@ type
     xPopupWindow: Window
     xPicker: ColorPicker
     xPopupOpen: bool
+    xPopupPresentation: PopupPresentation
 
   ColorPaletteView = ref object of View
     xPicker: ColorPicker
@@ -99,6 +100,7 @@ const
 
 proc openPopup*(well: ColorWell)
 proc closePopup*(well: ColorWell)
+proc ownerWindow(well: ColorWell): Window
 proc activateColorAtIndex*(well: ColorWell, index: int): bool {.discardable.}
 proc synchronizePicker(well: ColorWell)
 proc synchronizeFromSource(wheel: ColorWheelView)
@@ -182,6 +184,23 @@ proc rgbaSlider*(picker: ColorPicker, index: int): Slider =
 proc popupWindow*(well: ColorWell): Window =
   well.xPopupWindow
 
+proc popupPresentation*(well: ColorWell): PopupPresentation =
+  well.xPopupPresentation
+
+proc effectivePopupPresentation*(well: ColorWell): PopupPresentation =
+  well.ownerWindow().resolvedPopupPresentation(well.xPopupPresentation)
+
+proc `popupPresentation=`*(well: ColorWell, value: PopupPresentation) =
+  if well.xPopupPresentation == value:
+    return
+  let wasOpen = well.xPopupOpen
+  if wasOpen:
+    well.closePopup()
+  well.xPopupPresentation = value
+  if wasOpen:
+    well.openPopup()
+  well.needsDisplay = true
+
 protocol ColorWellProtocol {.selectorScope: protocol, setterStyle: nim.} from ColorWell:
   property color -> Color
 
@@ -204,6 +223,14 @@ proc `popupOpen=`*(well: ColorWell, value: bool) =
     well.openPopup()
   else:
     well.closePopup()
+
+protocol ColorPickerPopupDrawing of ViewDrawingProtocol:
+  method drawLevel(picker: ColorPicker): ZLevel =
+    PopupDrawLevel
+
+protocol ColorPickerPopupHitTesting of ViewProtocol:
+  method hitTestLevel(picker: ColorPicker, point: Point): int =
+    PopupDrawLevel.int
 
 func clampUnit(value: float32): float32 =
   min(max(value, 0.0'f32), 1.0'f32)
@@ -790,6 +817,8 @@ proc initColorPickerFields*(picker: ColorPicker, source: ColorWell, frame = Auto
   discard picker.addTabViewItem(newTabViewItem("Values", values, "values"))
   picker.xOkayButton = picker.newColorPickerOkayButton()
   picker.addSubview(picker.xOkayButton)
+  discard picker.withProtocol(ColorPickerPopupDrawing)
+  discard picker.withProtocol(ColorPickerPopupHitTesting)
 
 proc newColorPicker*(source: ColorWell, frame = AutoRect): ColorPicker =
   result = ColorPicker()
@@ -800,7 +829,33 @@ proc ownerWindow(well: ColorWell): Window =
   if owner of Window:
     result = Window(owner)
 
+proc inlinePopupFrame(well: ColorWell, parent: View, size: Size): Rect =
+  let
+    anchor = well.rectToView(well.bounds(), parent)
+    bounds = parent.bounds()
+    maximumX = max(bounds.maxX - size.width, bounds.origin.x)
+    x = min(max(anchor.origin.x, bounds.origin.x), maximumX)
+    belowY = anchor.maxY
+    aboveY = anchor.origin.y - size.height
+    y =
+      if belowY + size.height <= bounds.maxY or aboveY < bounds.origin.y:
+        belowY
+      else:
+        aboveY
+  rect(x, y, size.width, size.height)
+
+proc openInlinePopup(well: ColorWell, picker: ColorPicker, size: Size) =
+  let owner = well.ownerWindow()
+  if owner.isNil or owner.contentView().isNil:
+    return
+  let parent = owner.contentView()
+  picker.frame = well.inlinePopupFrame(parent, size)
+  parent.addSubview(picker)
+  picker.needsDisplay = true
+
 proc clearPopupState(well: ColorWell) =
+  if not well.xPicker.isNil and not well.xPicker.superview().isNil:
+    well.xPicker.removeFromSuperview()
   well.xPopupOpen = false
   well.xPopupWindow = nil
   well.xPicker = nil
@@ -823,35 +878,49 @@ proc openPopup*(well: ColorWell) =
   let
     size = initSize(ColorPickerWidth, ColorPickerHeight)
     picker = newColorPicker(well, rect(0.0, 0.0, size.width, size.height))
+  var popupWindow: Window
+  if well.effectivePopupPresentation() == ppWindow:
     popupWindow =
       owner.newPopupWindow(well.rectToWindow(well.bounds()), size, "Color Picker")
-  popupWindow.setContentView(picker)
+    popupWindow.setContentView(picker)
+    popupWindow.setInitialFirstResponder(picker)
+    popupWindow.makeKeyAndOrderFront()
+    popupWindow.ensureNativeWindow()
+    if not popupWindow.nativeReady():
+      popupWindow.close()
+      popupWindow = nil
+  if popupWindow.isNil:
+    well.openInlinePopup(picker, size)
   well.xPopupOpen = true
   well.xPopupWindow = popupWindow
   well.xPicker = picker
   well.setWidgetState(ssOpen, true)
   well.needsDisplay = true
-  popupWindow.setPopupDoneHandler(
-    proc() =
-      if well.xPopupWindow != popupWindow:
-        return
-      if owner.hasActiveTransientSession() and owner.transientWindow() == popupWindow:
-        discard owner.dismissTransientSession(tdrNativeDone)
-      else:
-        well.clearPopupState()
-  )
+  if not popupWindow.isNil:
+    popupWindow.setPopupDoneHandler(
+      proc() =
+        if well.xPopupWindow != popupWindow:
+          return
+        if owner.hasActiveTransientSession() and owner.transientWindow() == popupWindow:
+          discard owner.dismissTransientSession(tdrNativeDone)
+        else:
+          well.clearPopupState()
+    )
   owner.beginTransientSession(
-    owner = Responder(well),
+    owner =
+      if popupWindow.isNil:
+        Responder(picker)
+      else:
+        Responder(well),
     transientWindow = popupWindow,
     restoreResponder = Responder(well),
     onDismiss = proc(reason: DismissReason) =
       well.dismissPopup(reason),
   )
-  popupWindow.setInitialFirstResponder(picker)
-  popupWindow.makeKeyAndOrderFront()
-  if owner.nativeReady():
-    popupWindow.ensureNativeWindow()
-  discard popupWindow.makeFirstResponder(picker)
+  if popupWindow.isNil:
+    discard owner.makeFirstResponder(picker)
+  else:
+    discard popupWindow.makeFirstResponder(picker)
 
 proc closePopup*(well: ColorWell) =
   let
@@ -944,6 +1013,7 @@ proc initColorWellFields*(
   initControlFields(well, frame, newColorWellCell())
   well.xChoices = @choices
   well.xColor = selectedColor
+  well.xPopupPresentation = ppAutomatic
   well.backgroundColor = color(0.0, 0.0, 0.0, 0.0)
   well.acceptsFirstResponder = true
   well.setHuggingPriority(LayoutPriorityHigh, laHorizontal)

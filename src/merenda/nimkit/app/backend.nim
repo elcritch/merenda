@@ -1125,6 +1125,14 @@ proc activeMouseButton(window: siwinshim.Window): events.MouseButton =
 proc isReady*(host: HostWindow): bool =
   host.hostReady
 
+proc supportsPopupWindows*(host: HostWindow): bool =
+  if host.isNil or not host.hostReady:
+    return
+  when defined(android) or defined(emscripten) or defined(js) or defined(wasm):
+    false
+  else:
+    not host.xNativeWindow.isNil
+
 proc nativeWindowOrNil*(host: HostWindow): siwinshim.Window =
   host.xNativeWindow
 

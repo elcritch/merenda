@@ -116,7 +116,7 @@ proc movePopupHighlightTo(comboBox: ComboBox, index: int)
 proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int)
 proc canScrollPopupRows(comboBox: ComboBox, delta: int): bool
 proc scrollPopupRows(comboBox: ComboBox, delta: int)
-proc popupPresentationPreference(comboBox: ComboBox): PopupPresentation
+proc resolvedPopupPresentation(comboBox: ComboBox): PopupPresentation
 proc popupWindowActive(comboBox: ComboBox): bool
 proc shouldUseWindowPopup(comboBox: ComboBox): bool
 proc usesInlinePopup(comboBox: ComboBox): bool
@@ -1605,42 +1605,15 @@ proc endPopupSession(comboBox: ComboBox, reason = tdrProgrammatic): bool =
 proc popupWindowActive(comboBox: ComboBox): bool =
   not comboBox.xPopupWindow.isNil and not comboBox.xPopupWindow.isClosed
 
-proc popupPresentationPreference(comboBox: ComboBox): PopupPresentation =
-  if comboBox.xPopupPresentation == ppAutomatic:
-    let owner = comboBox.ownerWindow()
-    if owner.isNil:
-      return platformDefaultPopupPresentation()
-    return owner.effectivePopupPresentation()
-  comboBox.xPopupPresentation
-
-proc canUseWindowPopup(comboBox: ComboBox): bool =
-  if not nativePopupWindowsSupported():
-    return false
+proc resolvedPopupPresentation(comboBox: ComboBox): PopupPresentation =
   let owner = comboBox.ownerWindow()
-  not owner.isNil and owner.nativeReady
-
-proc wantsWindowPopup(comboBox: ComboBox): bool =
-  case comboBox.popupPresentationPreference()
-  of ppAutomatic:
-    nativePopupWindowsSupported()
-  of ppWindow:
-    true
-  of ppInline:
-    false
+  owner.resolvedPopupPresentation(comboBox.xPopupPresentation)
 
 proc shouldUseWindowPopup(comboBox: ComboBox): bool =
-  comboBox.wantsWindowPopup() and comboBox.canUseWindowPopup()
+  comboBox.resolvedPopupPresentation() == ppWindow
 
 proc usesInlinePopup(comboBox: ComboBox): bool =
-  if not comboBox.popupOpen():
-    return false
-  case comboBox.popupPresentationPreference()
-  of ppInline:
-    true
-  of ppAutomatic:
-    not comboBox.shouldUseWindowPopup()
-  of ppWindow:
-    false
+  comboBox.popupOpen() and comboBox.resolvedPopupPresentation() == ppInline
 
 proc openPopupWindow(comboBox: ComboBox) =
   if not comboBox.popupOpen():

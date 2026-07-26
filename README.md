@@ -298,6 +298,12 @@ or shows it as the presentation changes. Standalone `newMenuBar` presenters
 follow the same policy, and layout containers such as `StackView` automatically
 omit the hidden menu bar.
 
+Popup presentation stays local to each window and popup-capable control. Use
+`window.setPopupPresentation(ppInline)` for a window-wide preference, or assign
+`popupPresentation` on a combo box, popup menu button, or color well to override
+it. `ppWindow` prefers a native popup, but automatically retains the inline
+FigDraw path when the current window backend cannot create popup windows.
+
 Buttons can behave as push, toggle, checkbox, or radio controls:
 
 ```nim
