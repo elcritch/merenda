@@ -47,6 +47,7 @@ import nimkit/textstorage
 import nimkit/textviews
 import nimkit/theme
 import nimkit/threading
+import nimkit/tooltips
 import nimkit/types
 import nimkit/treeviewdemo
 import nimkit/undomanagers

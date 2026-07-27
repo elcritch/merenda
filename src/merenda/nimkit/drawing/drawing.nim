@@ -43,6 +43,7 @@ const
   DefaultDrawLevel* = 50.ZLevel
   FocusRingDrawLevel* = 90.ZLevel
   PopupDrawLevel* = 100.ZLevel
+  TooltipDrawLevel* = 110.ZLevel
   DefaultTypefaceFallbackNames* = ["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
   TextEllipsis = "…"
 

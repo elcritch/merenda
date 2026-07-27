@@ -2,11 +2,11 @@ import std/[math, options, os, tables, times]
 
 when defined(useNativeDynlib):
   import figdraw/dynlib as figrender
-  from figdraw/dynlib import Renders
+  from figdraw/dynlib import Renders, ZLevel
   import figdraw/dynlib as siwinshim
 else:
   import figdraw as figrender
-  from figdraw import Renders
+  from figdraw import Renders, ZLevel
   import figdraw/windowing/siwinshim as siwinshim
 import sigils/core
 
@@ -14,6 +14,7 @@ import ../accessibility/accessibility
 import ./backend as nimkitBackend
 import ./animations
 import ../responder/keybindings
+import ../drawing/drawing
 import ../drawing/rendering as nimkitRendering
 import ../foundation/events
 import ../foundation/notifications
@@ -108,6 +109,15 @@ type
 
   TransientDismissHandler* = proc(reason: DismissReason) {.closure.}
 
+  TooltipOverlayView = ref object of View
+    xText: string
+    xAnchor: Point
+
+  TooltipLayout = object
+    bubbleRect: Rect
+    textRect: Rect
+    text: string
+
   Window* = ref object of Responder
     xFrame: Rect
     xTitle: string
@@ -158,6 +168,10 @@ type
     xMouseCaptureView: View
     xMouseActiveView: View
     xMouseHoverView: View
+    xToolTipTarget: View
+    xToolTipPoint: Point
+    xToolTipOverlay: TooltipOverlayView
+    xToolTipDelayAnimation: Animation
     xMousePolicyStopResponder: Responder
     xMouseTrackingEvent: MouseEvent
     xHasMouseTrackingEvent: bool
@@ -324,6 +338,8 @@ proc stopAnimation*(
 
 proc drainAnimations*(window: Window): int {.discardable.}
 proc updateInsertionPointBlink(window: Window)
+proc clearToolTip(window: Window)
+proc updateToolTip(window: Window, target: View, contentPoint: Point)
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
 proc refreshAutomaticContentMinSize(window: Window)
@@ -382,6 +398,92 @@ protocol CaretBlinkAnimationProtocol of AnimationProtocol:
     if animation.textView.insertionPointVisible() != visible:
       animation.textView.insertionPointVisible = visible
 
+const
+  ToolTipShowDelayMilliseconds = 500
+  ToolTipMaximumWidth = 320.0'f32
+  ToolTipWindowMargin = 6.0'f32
+  ToolTipPointerOffset = initPoint(12.0'f32, 18.0'f32)
+  ToolTipFlippedGap = 10.0'f32
+
+proc toolTipLayout(overlay: TooltipOverlayView, style: TooltipStyle): TooltipLayout =
+  let
+    bounds = overlay.bounds()
+    maximumBubbleWidth = min(
+      ToolTipMaximumWidth,
+      max(bounds.size.width - ToolTipWindowMargin * 2.0'f32, 0.0'f32),
+    )
+    maximumTextWidth = max(maximumBubbleWidth - style.padding.horizontal(), 0.0'f32)
+  if overlay.xText.len == 0 or maximumTextWidth <= 0.0'f32:
+    return
+
+  result.text = overlay.xText.clippedText(maximumTextWidth, style.text)
+  let
+    naturalSize = result.text.textNaturalSize(style.text)
+    bubbleSize = initSize(
+      min(naturalSize.width + style.padding.horizontal(), maximumBubbleWidth),
+      naturalSize.height + style.padding.vertical(),
+    )
+    minimumX = bounds.origin.x + ToolTipWindowMargin
+    minimumY = bounds.origin.y + ToolTipWindowMargin
+    maximumX = max(minimumX, bounds.maxX - ToolTipWindowMargin - bubbleSize.width)
+    maximumY = max(minimumY, bounds.maxY - ToolTipWindowMargin - bubbleSize.height)
+
+  var
+    x = overlay.xAnchor.x + ToolTipPointerOffset.x
+    y = overlay.xAnchor.y + ToolTipPointerOffset.y
+  if y + bubbleSize.height > bounds.maxY - ToolTipWindowMargin:
+    y = overlay.xAnchor.y - bubbleSize.height - ToolTipFlippedGap
+  x = min(max(x, minimumX), maximumX)
+  y = min(max(y, minimumY), maximumY)
+
+  result.bubbleRect = rect(initPoint(x, y), bubbleSize)
+  result.textRect = rect(
+    x + style.padding.left,
+    y + style.padding.top,
+    max(bubbleSize.width - style.padding.horizontal(), 0.0'f32),
+    max(bubbleSize.height - style.padding.vertical(), 0.0'f32),
+  )
+
+protocol TooltipOverlayDrawing of ViewDrawingProtocol:
+  method drawLevel(overlay: TooltipOverlayView): ZLevel =
+    TooltipDrawLevel
+
+  method draw(overlay: TooltipOverlayView, context: DrawContext) =
+    let
+      style = context.appearance.resolveTooltipStyle()
+      layout = overlay.toolTipLayout(style)
+    if layout.bubbleRect.isEmpty:
+      return
+    let bubble = context.addRenderRectangle(
+      TooltipDrawLevel,
+      context.renderParent(),
+      context.renderRectFor(layout.bubbleRect),
+      style.box.fill,
+      style.box.borderColor,
+      style.box.borderWidth,
+      style.box.cornerRadius,
+      shadows = style.box.shadows,
+      cornerRadii = style.box.cornerRadii,
+    )
+    discard context.addText(
+      TooltipDrawLevel, bubble, layout.textRect, layout.text, style.text
+    )
+
+protocol TooltipOverlayHitTesting of ViewProtocol:
+  method pointInside(overlay: TooltipOverlayView, point: Point): bool =
+    discard overlay
+    discard point
+    false
+
+proc newTooltipOverlayView(): TooltipOverlayView =
+  result = TooltipOverlayView()
+  initViewFields(result, rect(0.0, 0.0, 0.0, 0.0))
+  result.usesThemedRootBackground = false
+  result.translatesAutoresizingMaskIntoConstraints = false
+  result.accessibilityIgnored = true
+  discard result.withProtocol(TooltipOverlayDrawing)
+  discard result.withProtocol(TooltipOverlayHitTesting)
+
 proc newWindow*(
     title = "KNutella Window", frame: Rect = defaultWindowFrame(), transparent = false
 ): Window =
@@ -403,6 +505,114 @@ proc newWindow*(
   discard result.withProtocol(DefaultWindowCommands)
   discard result.withProtocol(DefaultWindowUndoManagerProvider)
   discard result.withProtocol(DefaultWindowValidations)
+
+proc stopToolTipDelay(window: Window) =
+  let animation = window.xToolTipDelayAnimation
+  window.xToolTipDelayAnimation = nil
+  if not animation.isNil:
+    discard window.stopAnimation(animation)
+
+proc clearToolTip(window: Window) =
+  window.stopToolTipDelay()
+  window.xToolTipTarget = nil
+  if not window.xToolTipOverlay.isNil:
+    window.xToolTipOverlay.xText.setLen(0)
+    if not window.xToolTipOverlay.superview().isNil:
+      window.xToolTipOverlay.removeFromSuperview()
+
+proc finishToolTipDelay(window: Window) {.slot.} =
+  window.xToolTipDelayAnimation = nil
+  let
+    target = window.xToolTipTarget
+    content = window.xContentView
+  if target.isNil or content.isNil or window.hasActiveTransientSession() or
+      not content.containsView(target):
+    window.clearToolTip()
+    return
+
+  let text = target.toolTip()
+  if text.len == 0:
+    window.clearToolTip()
+    return
+
+  if window.xToolTipOverlay.isNil:
+    window.xToolTipOverlay = newTooltipOverlayView()
+  let
+    overlay = window.xToolTipOverlay
+    contentBounds = content.bounds()
+  overlay.xText = text
+  overlay.xAnchor = initPoint(
+    window.xToolTipPoint.x - contentBounds.origin.x,
+    window.xToolTipPoint.y - contentBounds.origin.y,
+  )
+  overlay.frame = contentBounds
+  if overlay.superview() != content:
+    if not overlay.superview().isNil:
+      overlay.removeFromSuperview()
+    content.addSubview(overlay)
+  overlay.needsDisplay = true
+
+proc scheduleToolTip(window: Window) =
+  if window.xToolTipTarget.isNil or window.xToolTipDelayAnimation != nil:
+    return
+  let animation =
+    newPauseAnimation(initDuration(milliseconds = ToolTipShowDelayMilliseconds))
+  animation.connect(finished, window, finishToolTipDelay)
+  window.xToolTipDelayAnimation = animation
+  if not window.startAnimation(animation):
+    window.xToolTipDelayAnimation = nil
+
+proc toolTipTarget(view: View): View =
+  var candidate = view
+  while not candidate.isNil:
+    if candidate.toolTip().len > 0:
+      return candidate
+    candidate = candidate.superview()
+
+proc updateToolTip(window: Window, target: View, contentPoint: Point) =
+  if window.hasActiveTransientSession():
+    window.clearToolTip()
+    return
+
+  let candidate = target.toolTipTarget()
+  if candidate == window.xToolTipTarget:
+    if candidate.isNil:
+      return
+    if window.xToolTipOverlay.isNil or window.xToolTipOverlay.superview().isNil:
+      window.xToolTipPoint = contentPoint
+      window.scheduleToolTip()
+    elif window.xToolTipOverlay.xText != candidate.toolTip():
+      window.xToolTipOverlay.xText = candidate.toolTip()
+      window.xToolTipOverlay.needsDisplay = true
+    return
+
+  window.clearToolTip()
+  if candidate.isNil:
+    return
+  window.xToolTipTarget = candidate
+  window.xToolTipPoint = contentPoint
+  window.scheduleToolTip()
+
+proc prepareToolTipForDisplay(window: Window) =
+  let
+    target = window.xToolTipTarget
+    content = window.xContentView
+  if target.isNil:
+    return
+  if content.isNil or window.hasActiveTransientSession() or
+      not content.containsView(target) or target.toolTip().len == 0:
+    window.clearToolTip()
+    return
+  if window.xToolTipOverlay.isNil or window.xToolTipOverlay.superview() != content:
+    return
+
+  let contentBounds = content.bounds()
+  window.xToolTipOverlay.xText = target.toolTip()
+  window.xToolTipOverlay.xAnchor = initPoint(
+    window.xToolTipPoint.x - contentBounds.origin.x,
+    window.xToolTipPoint.y - contentBounds.origin.y,
+  )
+  window.xToolTipOverlay.frame = contentBounds
 
 proc newPanel*(title = "Panel", frame: Rect = defaultWindowFrame()): Panel =
   result = newWindow(title, frame)
@@ -816,6 +1026,7 @@ proc clearInheritedAppearance*(window: Window) =
     window.postWindowAppearanceNotification()
 
 proc clearMouseState(window: Window) =
+  window.clearToolTip()
   if not window.xMouseActiveView.isNil:
     window.xMouseActiveView.active = false
   if not window.xMouseHoverView.isNil:
@@ -1185,14 +1396,17 @@ proc selectPreviousKeyView*(window: Window): bool {.discardable.} =
   window.selectKeyViewPrecedingView(window.keyViewCommandStartView(nil))
 
 proc buildRenders*(window: Window): Renders =
+  window.prepareToolTipForDisplay()
   window.refreshAutomaticContentMinSize()
   nimkitRendering.buildRenders(window.xContentView, window.effectiveAppearance())
 
 proc buildRenders*(window: Window, appearance: Appearance): Renders =
+  window.prepareToolTipForDisplay()
   window.refreshAutomaticContentMinSize()
   nimkitRendering.buildRenders(window.xContentView, appearance)
 
 proc buildRenders*(window: Window, theme: Theme): Renders =
+  window.prepareToolTipForDisplay()
   window.refreshAutomaticContentMinSize()
   nimkitRendering.buildRenders(window.xContentView, theme)
 
@@ -1406,6 +1620,7 @@ proc setKeyWindow*(window: Window, value: bool) =
     emit window.didBecomeKeyWindow()
     window.postWindowNotification(nkWindowDidBecomeKey)
   else:
+    window.clearToolTip()
     window.sendWindowDelegate(windowDidResignKey(), window)
     emit window.didResignKeyWindow()
     window.postWindowNotification(nkWindowDidResignKey)
@@ -1470,6 +1685,7 @@ proc orderBack*(window: Window) =
   window.notifyApplication(WindowDidOrderBackSelector)
 
 proc orderOut*(window: Window) =
+  window.clearToolTip()
   window.xVisibleRequested = false
   if not window.xHostWindow.isNil:
     window.xHostWindow.setVisible(false)
@@ -1478,6 +1694,7 @@ proc orderOut*(window: Window) =
 proc miniaturize*(window: Window) =
   if not window.canMiniaturize():
     return
+  window.clearToolTip()
   window.xMiniaturized = true
   window.xVisibleRequested = false
   if not window.xHostWindow.isNil:
@@ -1596,6 +1813,7 @@ proc beginTransientSession*(
     onDismiss: TransientDismissHandler = nil,
     restoreCurrentResponderIfNil = true,
 ) =
+  window.clearToolTip()
   if window.xTransientSession.active:
     let session = window.xTransientSession
     if session.ownerResponder != owner or session.transientWindow != transientWindow:
@@ -1641,6 +1859,7 @@ proc close*(window: Window) =
   let notifyPopupDone =
     window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
   window.stopInsertionPointBlink()
+  window.clearToolTip()
   discard window.saveFrameUsingName()
   window.xClosed = true
   window.xVisibleRequested = false
@@ -1773,6 +1992,7 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
   window.dispatchKeyCommand(target, event).handled
 
 proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
+  window.clearToolTip()
   let target = window.keyDispatchTarget()
   let dispatchTextFirst = event.shouldDispatchTextKeyDownFirst()
   if not target.isNil and dispatchTextFirst:
@@ -2068,6 +2288,8 @@ proc shouldDismissTransientForMouse(window: Window, target: View): bool =
   not responderChainContains(Responder(target), session.ownerResponder)
 
 proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool =
+  if pressed:
+    window.clearToolTip()
   if pressed and window.hasActiveTransientSession() and window.xContentView.isNil:
     discard window.dismissTransientSession(tdrOutsideClick)
     return true
@@ -2171,6 +2393,9 @@ proc dispatchMouseMove(window: Window, event: MouseEvent, dragging: bool): bool 
 
   if not dragging:
     result = window.updateHoverView(target, contentPoint, event)
+    window.updateToolTip(target, contentPoint)
+  else:
+    window.clearToolTip()
 
   if target.isNil:
     return result
@@ -2224,6 +2449,7 @@ proc dispatchUpdateTrackingAreas*(window: Window, event: MouseEvent): bool =
   window.dispatchMouseEventInChain(target, contentPoint, event, updateTrackingAreas()).handled
 
 proc dispatchScrollWheel*(window: Window, event: events.ScrollEvent): bool =
+  window.clearToolTip()
   if window.xContentView.isNil:
     return false
   var contentPoint = window.contentPoint(event.location)
@@ -2437,11 +2663,14 @@ proc dispatchHostTextInput(window: Window, text: string) =
   discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc dispatchHostFocusChanged(window: Window, focused: bool) =
+  if not focused:
+    window.clearToolTip()
   if focused and not window.xIsPopup and window.hasActiveTransientSession():
     discard window.dismissTransientSession(tdrFocusChange)
   discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc markHostClosed(window: Window) =
+  window.clearToolTip()
   window.releaseThreadRenderer(waitForRelease = true)
   window.stopInsertionPointBlink()
   window.stopAnimationClock()

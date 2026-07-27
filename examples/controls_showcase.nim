@@ -226,6 +226,17 @@ discard contextMenu.addItem(contextResetItem)
 for field in [nameField, noteField, countField]:
   field.connect(textDidChange, field, onTextDidChange)
 
+nameField.toolTip = "Enter the name shown in the status summary."
+noteField.toolTip = "Enter a short note; changes update the summary immediately."
+pushButton.toolTip = "Send the Push action and increment its counter."
+toggleButton.toolTip = "Cycle through Off, On, and Mixed states."
+downloads.toolTip = "Enable or disable background downloads."
+priority.toolTip = "Choose a priority from the popup list."
+accentColorWell.toolTip = "Open the color picker and choose an accent color."
+volumeSlider.toolTip = "Drag to change the volume from 0 to 100."
+countStepper.toolTip = "Increase or decrease the count by one."
+powerSwitch.toolTip = "Turn the example power setting on or off."
+
 pushButton.target = newActionTarget(pushAction, onPush)
 pushButton.action = pushAction
 

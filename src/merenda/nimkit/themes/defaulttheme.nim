@@ -388,7 +388,7 @@ proc clearBackgroundPinstripes*(theme: var Theme) =
 
 const TextStyleRoles = [
   srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srComboBox,
-  srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem,
+  srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem, srTooltip,
 ]
 
 proc initTheme*(): Theme =
@@ -474,6 +474,9 @@ proc initTheme*(): Theme =
     aquaComboItemSelectedHighlightedFill()
   result["comboBox.item.text.color"] = styleColor(color(0.08, 0.09, 0.11, 1.0))
   result["comboBox.item.text.color.selected"] = styleColor(color(1.0, 1.0, 1.0, 1.0))
+  result["tooltip.fill"] = styleToken("comboBox.item.fill")
+  result["tooltip.border.color"] = styleToken("comboBox.border.color")
+  result["tooltip.text.color"] = styleToken("comboBox.item.text.color")
   result["tableView.fill"] = styleToken("textField.fill")
   result["tableView.border.color"] = styleToken("textField.border.color")
   result["tableView.column.selection.fill"] = styleFill(color(0.24, 0.56, 1.0, 0.12))
@@ -1099,6 +1102,22 @@ proc initTheme*(): Theme =
   result[srComboBoxItem, StyleCornerRadius] = 0.0
   result[srComboBoxItem, StyleTextInsets] = insets(0.0, 6.0)
   result[srComboBoxItem, StyleMinimumSize] = initSize(0.0, 22.0)
+
+  result.addRoleRule(
+    srTooltip,
+    {},
+    styleToken("tooltip.fill"),
+    styleToken("tooltip.border.color"),
+    styleToken("tooltip.text.color"),
+  )
+  result[srTooltip, StyleBorderWidth] = 0.75
+  result[srTooltip, StyleCornerRadius] = 5.0
+  result[srTooltip, StyleTextInsets] = insets(0.0)
+  result[srTooltip, StylePadding] = insets(5.0, 8.0)
+  result[srTooltip, StyleFocusRingWidth] = 0.0
+  result[srTooltip, StyleFocusRingInset] = 0.0
+  result[srTooltip, StyleBoxShadows] =
+    @[dropShadow(color(0.0, 0.0, 0.0, 0.32), y = 2.0, blur = 7.0)]
 
   result[srTableView, StyleFill] = styleToken("tableView.fill")
   result[srTableView, StyleBorderColor] = styleToken("tableView.border.color")

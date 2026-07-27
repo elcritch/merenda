@@ -79,6 +79,7 @@ type
     srTableHeaderCell
     srRowItem
     srCascadingRowItem
+    srTooltip
 
   StyleContext* = object
     role*: StyleRole
@@ -169,6 +170,11 @@ type
     fontName*: string
     fontSize*: float32
     language*: LanguageTag
+
+  TooltipStyle* = object
+    box*: ControlBoxStyle
+    text*: TextStyle
+    padding*: EdgeInsets
 
   ButtonStyle* = object
     box*: ControlBoxStyle
@@ -1728,6 +1734,30 @@ proc resolveControlBoxStyle(
       theme.colorRule(context, StyleFocusRingColor, focusRingColorFallback),
     shadows: theme.shadowsRule(context, shadowKey, shadowsFallback),
   )
+
+proc resolveTooltipStyle*(
+    theme: Theme, context = controlStyle(srTooltip)
+): TooltipStyle =
+  TooltipStyle(
+    box: theme.resolveControlBoxStyle(
+      context,
+      fill(color(1.0, 1.0, 1.0, 0.96)),
+      color(0.55, 0.58, 0.64, 0.72),
+      borderWidthFallback = 0.75,
+      cornerRadiusFallback = 5.0,
+      focusRingWidthFallback = 0.0,
+      focusRingInsetFallback = 0.0,
+      focusRingColorFallback = color(0.0, 0.0, 0.0, 0.0),
+      shadowsFallback = @[dropShadow(color(0.0, 0.0, 0.0, 0.32), y = 2.0, blur = 7.0)],
+    ),
+    text: theme.resolveTextStyle(context, color(0.08, 0.09, 0.11, 1.0), insets(0.0)),
+    padding: theme.insetsRule(context, StylePadding, insets(5.0, 8.0)),
+  )
+
+proc resolveTooltipStyle*(
+    appearance: Appearance, context = controlStyle(srTooltip)
+): TooltipStyle =
+  appearance.theme.resolveTooltipStyle(context)
 
 proc resolveScrollViewStyle*(theme: Theme, context: StyleContext): ScrollViewStyle =
   let scrollerContext =
