@@ -48,6 +48,12 @@ type
     wlMainMenu
     wlStatus
 
+  LayerSurfaceLayer* = nimkitBackend.LayerSurfaceLayer
+  LayerSurfaceAnchor* = nimkitBackend.LayerSurfaceAnchor
+  LayerSurfaceKeyboardMode* = nimkitBackend.LayerSurfaceKeyboardMode
+  LayerSurfaceMargins* = nimkitBackend.LayerSurfaceMargins
+  LayerSurfaceConfig* = nimkitBackend.LayerSurfaceConfig
+
   Panel* = Window
 
   AlertStyle* = enum
@@ -150,6 +156,7 @@ type
     xFrameAutosaveName: string
     xKeyBindings: KeyBindingTable
     xHostWindow: HostWindow
+    xLayerSurface: Option[LayerSurfaceConfig]
     xThreadRenderer: ThreadRendererClient
     xThreadHost: ThreadHostClient
     xAnimationScheduler: AnimationScheduler
@@ -198,6 +205,19 @@ type
     restoreWindow: Window
     restoreResponder: Responder
     onDismiss: TransientDismissHandler
+
+const
+  lslBackground* = nimkitBackend.lslBackground
+  lslBottom* = nimkitBackend.lslBottom
+  lslTop* = nimkitBackend.lslTop
+  lslOverlay* = nimkitBackend.lslOverlay
+  lsaTop* = nimkitBackend.lsaTop
+  lsaBottom* = nimkitBackend.lsaBottom
+  lsaLeft* = nimkitBackend.lsaLeft
+  lsaRight* = nimkitBackend.lsaRight
+  lskNone* = nimkitBackend.lskNone
+  lskExclusive* = nimkitBackend.lskExclusive
+  lskOnDemand* = nimkitBackend.lskOnDemand
 
 type EventDispatchResult = object
   handled: bool
@@ -505,6 +525,17 @@ proc newWindow*(
   discard result.withProtocol(DefaultWindowCommands)
   discard result.withProtocol(DefaultWindowUndoManagerProvider)
   discard result.withProtocol(DefaultWindowValidations)
+
+proc newLayerSurfaceWindow*(
+    title: string,
+    frame: Rect,
+    config: LayerSurfaceConfig,
+    transparent = false,
+): Window =
+  result = newWindow(title, frame, transparent)
+  result.xLayerSurface = some(config)
+  result.xStyleMask = {wsmNonactivatingPanel}
+  result.xLevel = wlStatus
 
 proc stopToolTipDelay(window: Window) =
   let animation = window.xToolTipDelayAnimation
@@ -2773,6 +2804,14 @@ proc ensureNativeWindow*(window: Window) =
       return
     window.xHostWindow = createPopupHostWindow(
       window.xOwnerWindow.xHostWindow, window.xPopupPlacement, callbacks
+    )
+  elif window.xLayerSurface.isSome:
+    window.xHostWindow = createLayerSurfaceHostWindow(
+      window.xFrame,
+      window.xTitle,
+      callbacks,
+      window.xLayerSurface.get(),
+      transparent = window.xTransparent,
     )
   else:
     window.xHostWindow = createHostWindow(
