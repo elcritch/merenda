@@ -476,7 +476,7 @@ proc unregisterHost(host: HostWindow) =
   host.xOwnerKey = nil
 
 proc hostReady(host: HostWindow): bool =
-  host.xReady and not host.xNativeWindow.isNil
+  not host.isNil and host.xReady and not host.xNativeWindow.isNil
 
 proc firstReadyHost(): HostWindow =
   ensureHostRegistry()
