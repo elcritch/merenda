@@ -72,4 +72,58 @@ suite "NimKit canvas demo":
 
     check demo.clearButton.sendAction()
     check context.len == 0
-    check not demo.undoButton.enabled
+    check demo.undoButton.enabled
+
+    demo.canvas.undoLast()
+    check context.len == 1
+    check demo.canvas.itemCount == 1
+
+  test "select tool edits moves deletes and restores existing items":
+    let
+      demo = newCanvasDemo()
+      context = demo.canvas.getContext2D()
+
+    check demo.toolButtons[ctRectangle].sendAction()
+    demo.canvas.drawGesture(initPoint(20, 30), initPoint(140, 100))
+    check demo.canvas.itemCount == 1
+
+    check demo.toolButtons[ctSelect].sendAction()
+    check demo.canvas.mouseDown(
+      MouseEvent(location: initPoint(80, 65), button: mbPrimary)
+    )
+    check demo.canvas.mouseUp(
+      MouseEvent(location: initPoint(80, 65), button: mbPrimary)
+    )
+    check demo.canvas.selectedItemIndex == 0
+    check demo.deleteButton.enabled
+    check context.len == 3
+
+    check demo.canvas.mouseDown(
+      MouseEvent(location: initPoint(80, 65), button: mbPrimary)
+    )
+    check demo.canvas.mouseDragged(
+      MouseEvent(location: initPoint(110, 90), button: mbPrimary)
+    )
+    check demo.canvas.mouseUp(
+      MouseEvent(location: initPoint(110, 90), button: mbPrimary)
+    )
+    check demo.canvas.selectedItemBounds == rect(50, 55, 120, 70)
+    check demo.statusLabel.text.contains("Selected item moved")
+
+    check demo.fillWell.activateColorAtIndex(7)
+    check context[0].drawableFill == demo.fillWell.color
+
+    demo.widthSlider.value = 9.0
+    check demo.widthSlider.sendAction()
+    check context[1].drawableLineWidth == 9.0
+
+    check demo.deleteButton.sendAction()
+    check demo.canvas.itemCount == 0
+    check context.len == 0
+    check not demo.deleteButton.enabled
+
+    demo.canvas.undoLast()
+    check demo.canvas.itemCount == 1
+    check context.len == 2
+    check context[0].drawableFill == demo.fillWell.color
+    check context[1].drawableLineWidth == 9.0
