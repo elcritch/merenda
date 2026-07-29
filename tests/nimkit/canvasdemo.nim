@@ -9,12 +9,19 @@ proc drawGesture(canvas: CanvasDrawingView, start, stop: Point) =
   check canvas.mouseDragged(MouseEvent(location: stop, button: mbPrimary))
   check canvas.mouseUp(MouseEvent(location: stop, button: mbPrimary))
 
+proc descendantWithLabel(view: View, label: string): View =
+  if view.accessibilityLabel() == label:
+    return view
+  for child in view.subviews:
+    result = child.descendantWithLabel(label)
+    if not result.isNil:
+      return
+
 suite "NimKit canvas demo":
   test "shape palette draws retained primitives and complex MTSDF fills":
     let
       demo = newCanvasDemo()
       context = demo.canvas.getContext2D()
-
     check demo.canvas.selectedTool == ctFreehand
     check context.len == 0
     check not demo.undoButton.enabled
@@ -98,6 +105,24 @@ suite "NimKit canvas demo":
     check demo.deleteButton.enabled
     check context.len == 3
 
+    demo.fillWell.popupPresentation = ppInline
+    demo.fillWell.openPopup()
+    discard demo.fillWell.picker().buildRenders()
+    discard demo.window.buildRenders()
+    let orange = demo.fillWell.picker().descendantWithLabel("Orange")
+    check not orange.isNil
+    let orangeBounds = orange.bounds()
+    let orangePoint = orange.pointToWindow(
+      initPoint(
+        orangeBounds.origin.x + orangeBounds.size.width * 0.5'f32,
+        orangeBounds.origin.y + orangeBounds.size.height * 0.5'f32,
+      )
+    )
+    check demo.window.clickAt(orangePoint)
+    discard demo.window.buildRenders()
+    demo.fillWell.closePopup()
+    check context[0].drawableFill == demo.fillWell.color
+
     check demo.canvas.mouseDown(
       MouseEvent(location: initPoint(80, 65), button: mbPrimary)
     )
@@ -109,9 +134,6 @@ suite "NimKit canvas demo":
     )
     check demo.canvas.selectedItemBounds == rect(50, 55, 120, 70)
     check demo.statusLabel.text.contains("Selected item moved")
-
-    check demo.fillWell.activateColorAtIndex(7)
-    check context[0].drawableFill == demo.fillWell.color
 
     demo.widthSlider.value = 9.0
     check demo.widthSlider.sendAction()
