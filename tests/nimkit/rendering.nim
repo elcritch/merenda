@@ -6,6 +6,8 @@ import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
 
 type CustomDrawView = ref object of View
+type PopupLayerBlankView = ref object of View
+type PopupLayerDrawView = ref object of View
 type SingleColumnRenderTableSource = ref object of Responder
   rows: seq[string]
 
@@ -17,6 +19,7 @@ let
   ExtraChromeFill = fill(color(0.72, 0.10, 0.48, 1.0))
   CustomLineFill = fill(color(0.10, 0.55, 0.86, 1.0))
   CustomCircleFill = fill(color(0.16, 0.70, 0.28, 1.0))
+  PopupLayerFill = fill(color(0.82, 0.24, 0.62, 1.0))
 
 type ExtraChrome = ref object of Chrome
 
@@ -43,6 +46,19 @@ protocol CustomDrawing of ViewDrawingProtocol:
       initPoint(4.0, 22.0), initPoint(24.0, 30.0), CustomLineFill, 2.0
     )
     context.addRenderCircle(initPoint(35.0, 18.0), CustomCircleFill, 6.0)
+
+protocol PopupLayerBlankDrawing of ViewDrawingProtocol:
+  method drawLevel(view: PopupLayerBlankView): ZLevel =
+    PopupDrawLevel
+
+protocol PopupLayerDrawing of ViewDrawingProtocol:
+  method drawLevel(view: PopupLayerDrawView): ZLevel =
+    PopupDrawLevel
+
+  method draw(view: PopupLayerDrawView, context: DrawContext) =
+    discard view
+    discard
+      context.addRenderRectangle(rect(4, 5, 20, 10), PopupLayerFill, cornerRadius = 3.0)
 
 protocol ExtraChromeProtocol of ChromeProtocol:
   method drawChromeExtrasFor(
@@ -96,6 +112,16 @@ proc newCustomDrawView(frame: nimkitTypes.Rect): CustomDrawView =
   initViewFields(result, frame)
   discard result.withProtocol(CustomDrawing)
 
+proc newPopupLayerBlankView(frame: nimkitTypes.Rect): PopupLayerBlankView =
+  result = PopupLayerBlankView()
+  initViewFields(result, frame)
+  discard result.withProtocol(PopupLayerBlankDrawing)
+
+proc newPopupLayerDrawView(frame: nimkitTypes.Rect): PopupLayerDrawView =
+  result = PopupLayerDrawView()
+  initViewFields(result, frame)
+  discard result.withProtocol(PopupLayerDrawing)
+
 proc newExtraChrome(): Chrome =
   let chrome = ExtraChrome()
   discard chrome.withProtocol(ExtraChromeProtocol)
@@ -148,6 +174,27 @@ proc rectsClose(left, right: nimkitTypes.Rect): bool =
     abs(left.size.height - right.size.height) <= 0.01'f32
 
 suite "nimkit rendering":
+  test "drawing helpers keep popup nodes in their active render layer":
+    let root = newView(frame = rect(0, 0, 120, 80))
+    for index in 0 ..< 3:
+      root.addSubview(newPopupLayerBlankView(rect(index.float32 * 10.0'f32, 0, 8, 8)))
+    root.addSubview(newPopupLayerDrawView(rect(40, 0, 32, 24)))
+
+    let renders = buildRenders(root)
+    check PopupDrawLevel in renders
+
+    let popupList = renders[PopupDrawLevel]
+    var popupFillFound = false
+    for node in popupList.nodes:
+      if node.kind == nkRectangle and node.fill == PopupLayerFill:
+        popupFillFound = true
+        check node.parent.int >= 0
+        check node.parent.int < popupList.nodes.len
+    check popupFillFound
+
+    for node in renders[DefaultDrawLevel].nodes:
+      check node.kind != nkRectangle or node.fill != PopupLayerFill
+
   test "buildRenders emits root, text field, and button nodes":
     let root = newView(frame = rect(0, 0, 320, 200))
     root.backgroundColor = color(1, 1, 1)

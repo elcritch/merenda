@@ -577,7 +577,7 @@ proc renderOperation(context: DrawContext, operation: CanvasOperation) =
       context.renderParent()
     else:
       context.addRenderTranslation(
-        DefaultDrawLevel,
+        context.renderLayer(),
         context.renderParent(),
         context.renderRectFor(operation.target),
         operation.translation,
@@ -585,7 +585,7 @@ proc renderOperation(context: DrawContext, operation: CanvasOperation) =
   case operation.kind
   of cokDrawable:
     discard context.addRenderDrawable(
-      DefaultDrawLevel,
+      context.renderLayer(),
       parent,
       operation.target,
       operation.drawOps,
@@ -598,11 +598,16 @@ proc renderOperation(context: DrawContext, operation: CanvasOperation) =
       ),
     )
   of cokMtsdf:
-    discard
-      context.addSvgMtsdf(DefaultDrawLevel, parent, operation.target, operation.mtsdf)
+    discard context.addSvgMtsdf(
+      context.renderLayer(), parent, operation.target, operation.mtsdf
+    )
   of cokImage:
     discard context.addImage(
-      DefaultDrawLevel, parent, operation.target, operation.image, operation.imageTint
+      context.renderLayer(),
+      parent,
+      operation.target,
+      operation.image,
+      operation.imageTint,
     )
 
 protocol CanvasViewDrawing of ViewDrawingProtocol:

@@ -154,6 +154,7 @@ suite "NimKit canvas demo":
     check context[0].translation == initPoint(12, 8)
     check context[1].translation == initPoint(12, 8)
     check context[2].translation == initPoint(12, 8)
+    discard buildRenders(demo.root)
 
     check demo.canvas.mouseUp(
       MouseEvent(location: initPoint(92, 88), button: mbPrimary)
@@ -161,3 +162,10 @@ suite "NimKit canvas demo":
     check demo.canvas.selectedItemBounds == rect(32, 38, 120, 100)
     for operation in context:
       check operation.translation == initPoint(0, 0)
+
+    demo.fillWell.popupPresentation = ppInline
+    demo.fillWell.openPopup()
+    discard demo.window.buildRenders()
+    check demo.fillWell.activateColorAtIndex(7)
+    discard demo.window.buildRenders()
+    demo.fillWell.closePopup()
