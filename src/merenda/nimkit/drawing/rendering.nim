@@ -135,7 +135,7 @@ proc renderViewInto(
 
   let
     appearance = view.resolvedAppearance(inheritedAppearance)
-    level = view.trySendLocal(drawLevel()).get(DefaultDrawLevel)
+    level = view.trySendLocal(drawLevel()).get(parentLevel)
     parentedInCurrentLayer = parent != (-1).FigIdx and level == parentLevel
     isRoot = parent == (-1).FigIdx
     absoluteFrame = view.renderFrameRect(parentOrigin)
