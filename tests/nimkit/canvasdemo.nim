@@ -127,3 +127,37 @@ suite "NimKit canvas demo":
     check context.len == 2
     check context[0].drawableFill == demo.fillWell.color
     check context[1].drawableLineWidth == 9.0
+
+  test "move previews reuse retained MTSDF operations":
+    let
+      demo = newCanvasDemo()
+      context = demo.canvas.getContext2D()
+
+    check demo.toolButtons[ctStar].sendAction()
+    demo.canvas.drawGesture(initPoint(20, 30), initPoint(140, 130))
+    check demo.toolButtons[ctSelect].sendAction()
+    check demo.canvas.mouseDown(
+      MouseEvent(location: initPoint(80, 80), button: mbPrimary)
+    )
+    check demo.canvas.mouseUp(
+      MouseEvent(location: initPoint(80, 80), button: mbPrimary)
+    )
+
+    check demo.canvas.mouseDown(
+      MouseEvent(location: initPoint(80, 80), button: mbPrimary)
+    )
+    check demo.canvas.mouseDragged(
+      MouseEvent(location: initPoint(92, 88), button: mbPrimary)
+    )
+
+    check context[0].kind == cokMtsdf
+    check context[0].translation == initPoint(12, 8)
+    check context[1].translation == initPoint(12, 8)
+    check context[2].translation == initPoint(12, 8)
+
+    check demo.canvas.mouseUp(
+      MouseEvent(location: initPoint(92, 88), button: mbPrimary)
+    )
+    check demo.canvas.selectedItemBounds == rect(32, 38, 120, 100)
+    for operation in context:
+      check operation.translation == initPoint(0, 0)

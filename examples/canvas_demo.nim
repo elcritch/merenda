@@ -29,6 +29,8 @@ type
     startPoint: Point
     stopPoint: Point
     points: seq[Point]
+    operationStart: int
+    operationCount: int
 
   CanvasDrawingView* = ref object of CanvasView
     xSelectedTool: CanvasTool
@@ -43,6 +45,7 @@ type
     xDragOriginal: CanvasItem
     xGestureStartItems: seq[CanvasItem]
     xSelectionStart: int
+    xSelectionOperationStart: int
     xUndoStates: seq[seq[CanvasItem]]
     xStatusLabel: Label
     xUndoButton: Button
@@ -387,9 +390,13 @@ proc drawSelection(canvas: CanvasDrawingView) =
   context.stroke()
 
 proc redrawCanvas(canvas: CanvasDrawingView) =
-  canvas.getContext2D().clear()
-  for item in canvas.xItems:
+  let context = canvas.getContext2D()
+  context.clear()
+  for item in canvas.xItems.mitems:
+    item.operationStart = context.len
     canvas.drawItem(item)
+    item.operationCount = context.len - item.operationStart
+  canvas.xSelectionOperationStart = context.len
   canvas.drawSelection()
 
 proc redrawCanvas(canvas: CanvasDrawingView, preview: CanvasItem, committed: bool) =
@@ -397,6 +404,14 @@ proc redrawCanvas(canvas: CanvasDrawingView, preview: CanvasItem, committed: boo
   for item in canvas.xItems:
     canvas.drawItem(item)
   canvas.drawItem(preview, committed)
+
+proc previewSelectionMove(canvas: CanvasDrawingView, dx, dy: float32) =
+  let
+    context = canvas.getContext2D()
+    translation = initPoint(dx, dy)
+    item = canvas.xItems[canvas.xSelectedItem]
+  context.setOperationTranslation(item.operationStart, item.operationCount, translation)
+  context.setOperationTranslation(canvas.xSelectionOperationStart, 1, translation)
 
 proc currentItem(canvas: CanvasDrawingView, stop: Point): CanvasItem =
   CanvasItem(
@@ -537,8 +552,7 @@ protocol CanvasDrawingEvents of ResponderEventProtocol:
       let
         dx = event.location.x - canvas.xStartPoint.x
         dy = event.location.y - canvas.xStartPoint.y
-      canvas.xItems[canvas.xSelectedItem] = canvas.xDragOriginal.translated(dx, dy)
-      canvas.redrawCanvas()
+      canvas.previewSelectionMove(dx, dy)
       canvas.reportStatus("Moving selected item")
       return true
     if canvas.xSelectedTool == ctFreehand and
@@ -602,6 +616,7 @@ proc newCanvasDrawingView*(stampImage: ImageResource): CanvasDrawingView =
     xLineWidth: 3.0'f32,
     xStampImage: stampImage,
     xSelectedItem: -1,
+    xSelectionOperationStart: -1,
   )
   result.initCanvasViewFields()
   result.backgroundColor = color(0.985, 0.99, 1.0, 1.0)
