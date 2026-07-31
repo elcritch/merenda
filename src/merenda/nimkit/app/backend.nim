@@ -1578,6 +1578,9 @@ proc createLayerSurfaceHostWindow*(
       xTransparent: transparent,
       xResources: newRenderResourceManager(),
     )
+    result.xRenderer = figrender.newFigRenderer(
+      atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+    )
 
     var nativeAnchors: set[siwinshim.LayerSurfaceAnchor]
     for anchor in config.anchors:
@@ -1596,14 +1599,12 @@ proc createLayerSurfaceHostWindow*(
       namespace: config.namespace,
     )
     result.xNativeWindow = siwinshim.newSiwinLayerSurfaceWindow(
+      result.xRenderer,
       size = size,
       title = title,
       screen = config.output,
       config = nativeConfig,
       transparent = transparent,
-    )
-    result.xRenderer = figrender.newFigRenderer(
-      atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
     )
     result.xRenderer.setupBackend(result.xNativeWindow)
     result.xPresentationTarget = result.xRenderer.presentationTarget()
