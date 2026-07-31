@@ -42,6 +42,7 @@ type
 
   CanvasOperation* = object
     target*: Rect
+    translation*: Point
     case kind*: CanvasOperationKind
     of cokDrawable:
       drawOps*: seq[fd.DrawableOp]
@@ -571,9 +572,21 @@ func toStrokeJoin(value: CanvasLineJoin): fd.StrokeJoin =
   of cljBevel: fd.sjBevel
 
 proc renderOperation(context: DrawContext, operation: CanvasOperation) =
+  let parent =
+    if operation.translation == initPoint(0, 0):
+      context.renderParent()
+    else:
+      context.addRenderTranslation(
+        context.renderLayer(),
+        context.renderParent(),
+        context.renderRectFor(operation.target),
+        operation.translation,
+      )
   case operation.kind
   of cokDrawable:
     discard context.addRenderDrawable(
+      context.renderLayer(),
+      parent,
       operation.target,
       operation.drawOps,
       fill(operation.drawableFill.rgba),
@@ -585,9 +598,17 @@ proc renderOperation(context: DrawContext, operation: CanvasOperation) =
       ),
     )
   of cokMtsdf:
-    discard context.addSvgMtsdf(operation.target, operation.mtsdf)
+    discard context.addSvgMtsdf(
+      context.renderLayer(), parent, operation.target, operation.mtsdf
+    )
   of cokImage:
-    discard context.addImage(operation.target, operation.image, operation.imageTint)
+    discard context.addImage(
+      context.renderLayer(),
+      parent,
+      operation.target,
+      operation.image,
+      operation.imageTint,
+    )
 
 protocol CanvasViewDrawing of ViewDrawingProtocol:
   method draw(canvas: CanvasView, context: DrawContext) =
@@ -640,6 +661,16 @@ proc truncateOperations*(context: CanvasRenderingContext2D, count: Natural) =
   if count < context.xOperations.len:
     context.xOperations.setLen(count)
     context.xCanvas.needsDisplay = true
+
+proc setOperationTranslation*(
+    context: CanvasRenderingContext2D, first, count: Natural, translation: Point
+) =
+  if first >= context.xOperations.len or count == 0:
+    return
+  let stop = first + min(count, context.xOperations.len - first)
+  for index in first ..< stop:
+    context.xOperations[index].translation = translation
+  context.xCanvas.needsDisplay = true
 
 proc fillStyle*(context: CanvasRenderingContext2D): Color =
   context.xState.fillStyle

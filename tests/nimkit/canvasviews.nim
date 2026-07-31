@@ -1,4 +1,4 @@
-import std/[math, unittest]
+import std/[math, sequtils, unittest]
 
 import figdraw
 import pkg/pixie as pixie
@@ -122,3 +122,20 @@ suite "canvas views":
 
     context.clear()
     check context.len == 0
+
+  test "retained operation ranges support lightweight translation":
+    let
+      canvas = newCanvasView(rect(0, 0, 320, 200))
+      context = canvas.getContext2D()
+
+    context.fillRect(10, 20, 30, 40)
+    context.fillRect(60, 20, 30, 40)
+    context.setOperationTranslation(0, 1, initPoint(12, 8))
+
+    check context[0].translation == initPoint(12, 8)
+    check context[1].translation == initPoint(0, 0)
+
+    let renders = buildRenders(canvas)[DefaultDrawLevel]
+    check renders.nodes.anyIt(
+      it.kind == nkTransform and it.transform.translation == vec2(12.0'f32, 8.0'f32)
+    )

@@ -46,13 +46,14 @@ proc renderFrameRect(view: View, parentOrigin: types.Point): types.Rect =
 proc beginDraw(
     context: DrawContext,
     view: View,
+    layer: ZLevel,
     parent: FigIdx,
     viewParent: FigIdx,
     contentOrigin: types.Point,
     appearance: Appearance,
 ) =
   context.beginDraw(
-    parent, viewParent, contentOrigin, view.bounds, view.visibleRect, appearance
+    parent, viewParent, contentOrigin, view.bounds, view.visibleRect, appearance, layer
   )
 
 proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): Fill =
@@ -134,7 +135,7 @@ proc renderViewInto(
 
   let
     appearance = view.resolvedAppearance(inheritedAppearance)
-    level = view.trySendLocal(drawLevel()).get(DefaultDrawLevel)
+    level = view.trySendLocal(drawLevel()).get(parentLevel)
     parentedInCurrentLayer = parent != (-1).FigIdx and level == parentLevel
     isRoot = parent == (-1).FigIdx
     absoluteFrame = view.renderFrameRect(parentOrigin)
@@ -162,7 +163,8 @@ proc renderViewInto(
   )
 
   context.beginDraw(
-    view, placement.contentParent, nodeParent, placement.contentOrigin, appearance
+    view, level, placement.contentParent, nodeParent, placement.contentOrigin,
+    appearance,
   )
   discard view.sendLocalIfHandled(draw(), context)
 

@@ -49,6 +49,7 @@ const
 
 type DrawContext* = ref object
   xRenders: Renders
+  xLayer: ZLevel
   xParent: FigIdx
   xViewParent: FigIdx
   xRenderOrigin: nimkitTypes.Point
@@ -463,6 +464,7 @@ proc caretRect*(
 proc initDrawContext*(): DrawContext =
   result = DrawContext(
     xRenders: Renders(layers: initOrderedTable[ZLevel, RenderList]()),
+    xLayer: DefaultDrawLevel,
     xResources: initRenderResourceManifest(),
   )
   result.xRenders.layers[DefaultDrawLevel] = RenderList()
@@ -475,7 +477,9 @@ proc beginDraw*(
     bounds: nimkitTypes.Rect,
     visibleRect: nimkitTypes.Rect,
     appearance: Appearance,
+    layer = DefaultDrawLevel,
 ) =
+  context.xLayer = layer
   context.xParent = parent
   context.xViewParent = viewParent
   context.xRenderOrigin = renderOrigin
@@ -490,6 +494,9 @@ proc renderList*(context: DrawContext): RenderList =
 
 proc renderParent*(context: DrawContext): FigIdx =
   context.xParent
+
+proc renderLayer*(context: DrawContext): ZLevel =
+  context.xLayer
 
 proc renderViewParent*(context: DrawContext): FigIdx =
   context.xViewParent
@@ -531,7 +538,7 @@ proc addFig*(
     context.xRenders.addChild(layer, parent, node)
 
 proc addFig*(context: DrawContext, parent: FigIdx, node: Fig): FigIdx {.discardable.} =
-  context.addFig(DefaultDrawLevel, parent, node)
+  context.addFig(context.xLayer, parent, node)
 
 proc addFig*(context: DrawContext, node: Fig): FigIdx {.discardable.} =
   context.addFig(context.xParent, node)
@@ -577,7 +584,7 @@ proc addRenderRectangle*(
     cornerRadii = initCornerRadii(0.0'f32),
 ): FigIdx {.discardable.} =
   context.addRenderRectangle(
-    DefaultDrawLevel, parent, rect, fillValue, strokeColor, strokeWidth, cornerRadius,
+    context.xLayer, parent, rect, fillValue, strokeColor, strokeWidth, cornerRadius,
     shadows, clips, maskContent, roundedCorners, lightMaskContent, cornerRadii,
   )
 
@@ -627,7 +634,7 @@ proc addRenderLine*(
     fillValue: Fill,
     weight: float32,
 ): FigIdx {.discardable.} =
-  context.addRenderLine(DefaultDrawLevel, parent, start, stop, fillValue, weight)
+  context.addRenderLine(context.xLayer, parent, start, stop, fillValue, weight)
 
 proc addRenderLine*(
     context: DrawContext,
@@ -659,7 +666,7 @@ proc addRenderCircle*(
     fillValue: Fill,
     radius: float32,
 ): FigIdx {.discardable.} =
-  context.addRenderCircle(DefaultDrawLevel, parent, center, fillValue, radius)
+  context.addRenderCircle(context.xLayer, parent, center, fillValue, radius)
 
 proc addRenderCircle*(
     context: DrawContext, center: nimkitTypes.Point, fillValue: Fill, radius: float32
@@ -703,7 +710,7 @@ proc addRenderDrawable*(
     drawAa = 0.0'f32,
 ): FigIdx {.discardable.} =
   context.addRenderDrawable(
-    DefaultDrawLevel, parent, rect, drawOps, fillValue, stroke, drawSteps, drawAa
+    context.xLayer, parent, rect, drawOps, fillValue, stroke, drawSteps, drawAa
   )
 
 proc addRenderDrawable*(
@@ -734,7 +741,7 @@ proc addRenderTranslation*(
     rect: nimkitTypes.Rect,
     translation: nimkitTypes.Point,
 ): FigIdx {.discardable.} =
-  context.addRenderTranslation(DefaultDrawLevel, parent, rect, translation)
+  context.addRenderTranslation(context.xLayer, parent, rect, translation)
 
 proc addRectangle*(
     context: DrawContext, rect: nimkitTypes.Rect, fillValue: Fill
@@ -1060,7 +1067,7 @@ proc addSvgMtsdf*(
 ): FigIdx {.discardable.} =
   ## Draws an SVG using its source fill and stroke colors.
   context.addSvgMtsdf(
-    DefaultDrawLevel, context.xParent, rect, svg, strokeWeight, sdThreshold
+    context.xLayer, context.xParent, rect, svg, strokeWeight, sdThreshold
   )
 
 proc addSvgMtsdf*(
@@ -1073,7 +1080,7 @@ proc addSvgMtsdf*(
 ): FigIdx {.discardable.} =
   ## Draws an SVG with one caller-selected tint replacing its source paints.
   context.addSvgMtsdf(
-    DefaultDrawLevel, context.xParent, rect, svg, fillValue, strokeWeight, sdThreshold
+    context.xLayer, context.xParent, rect, svg, fillValue, strokeWeight, sdThreshold
   )
 
 proc addSelectedText*(
@@ -1114,7 +1121,7 @@ proc addFocusRing*(
 proc addFocusRing*(context: DrawContext, rect: nimkitTypes.Rect, box: ControlBoxStyle) =
   let parent =
     if box.focusRingInset < 0.0'f32: context.xViewParent else: context.xParent
-  context.addFocusRing(DefaultDrawLevel, parent, rect, box)
+  context.addFocusRing(context.xLayer, parent, rect, box)
 
 proc addFocusRing*(
     context: DrawContext, layer: ZLevel, rect: nimkitTypes.Rect, box: ControlBoxStyle

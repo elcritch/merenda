@@ -160,15 +160,21 @@ proc chromeFill*(appearance: Appearance, context: ChromeContext): Fill =
 proc drawChromeExtras*(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
+  var resolvedExtras = extras
+  if resolvedExtras.layer == DefaultDrawLevel:
+    resolvedExtras.layer = context.renderLayer()
   discard context.appearance.resolveChrome(chrome.name).sendLocalIfHandled(
-      drawChromeExtrasFor(), (context: context, chrome: chrome, extras: extras)
+      drawChromeExtrasFor(), (context: context, chrome: chrome, extras: resolvedExtras)
     )
 
 proc drawChromeBacking*(
     context: DrawContext, chrome: ChromeContext, extras: ChromeExtras
 ) =
+  var resolvedExtras = extras
+  if resolvedExtras.layer == DefaultDrawLevel:
+    resolvedExtras.layer = context.renderLayer()
   discard context.appearance.resolveChrome(chrome.name).sendLocalIfHandled(
-      drawChromeBackingFor(), (context: context, chrome: chrome, extras: extras)
+      drawChromeBackingFor(), (context: context, chrome: chrome, extras: resolvedExtras)
     )
 
 proc installDefaultChrome(theme: var Theme) =

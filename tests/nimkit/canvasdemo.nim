@@ -9,12 +9,19 @@ proc drawGesture(canvas: CanvasDrawingView, start, stop: Point) =
   check canvas.mouseDragged(MouseEvent(location: stop, button: mbPrimary))
   check canvas.mouseUp(MouseEvent(location: stop, button: mbPrimary))
 
+proc descendantWithLabel(view: View, label: string): View =
+  if view.accessibilityLabel() == label:
+    return view
+  for child in view.subviews:
+    result = child.descendantWithLabel(label)
+    if not result.isNil:
+      return
+
 suite "NimKit canvas demo":
   test "shape palette draws retained primitives and complex MTSDF fills":
     let
       demo = newCanvasDemo()
       context = demo.canvas.getContext2D()
-
     check demo.canvas.selectedTool == ctFreehand
     check context.len == 0
     check not demo.undoButton.enabled
@@ -72,4 +79,115 @@ suite "NimKit canvas demo":
 
     check demo.clearButton.sendAction()
     check context.len == 0
-    check not demo.undoButton.enabled
+    check demo.undoButton.enabled
+
+    demo.canvas.undoLast()
+    check context.len == 1
+    check demo.canvas.itemCount == 1
+
+  test "select tool edits moves deletes and restores existing items":
+    let
+      demo = newCanvasDemo()
+      context = demo.canvas.getContext2D()
+
+    check demo.toolButtons[ctRectangle].sendAction()
+    demo.canvas.drawGesture(initPoint(20, 30), initPoint(140, 100))
+    check demo.canvas.itemCount == 1
+
+    check demo.toolButtons[ctSelect].sendAction()
+    check demo.canvas.mouseDown(
+      MouseEvent(location: initPoint(80, 65), button: mbPrimary)
+    )
+    check demo.canvas.mouseUp(
+      MouseEvent(location: initPoint(80, 65), button: mbPrimary)
+    )
+    check demo.canvas.selectedItemIndex == 0
+    check demo.deleteButton.enabled
+    check context.len == 3
+
+    demo.fillWell.popupPresentation = ppInline
+    demo.fillWell.openPopup()
+    discard demo.fillWell.picker().buildRenders()
+    discard demo.window.buildRenders()
+    let orange = demo.fillWell.picker().descendantWithLabel("Orange")
+    check not orange.isNil
+    let orangeBounds = orange.bounds()
+    let orangePoint = orange.pointToWindow(
+      initPoint(
+        orangeBounds.origin.x + orangeBounds.size.width * 0.5'f32,
+        orangeBounds.origin.y + orangeBounds.size.height * 0.5'f32,
+      )
+    )
+    check demo.window.clickAt(orangePoint)
+    discard demo.window.buildRenders()
+    demo.fillWell.closePopup()
+    check context[0].drawableFill == demo.fillWell.color
+
+    check demo.canvas.mouseDown(
+      MouseEvent(location: initPoint(80, 65), button: mbPrimary)
+    )
+    check demo.canvas.mouseDragged(
+      MouseEvent(location: initPoint(110, 90), button: mbPrimary)
+    )
+    check demo.canvas.mouseUp(
+      MouseEvent(location: initPoint(110, 90), button: mbPrimary)
+    )
+    check demo.canvas.selectedItemBounds == rect(50, 55, 120, 70)
+    check demo.statusLabel.text.contains("Selected item moved")
+
+    demo.widthSlider.value = 9.0
+    check demo.widthSlider.sendAction()
+    check context[1].drawableLineWidth == 9.0
+
+    check demo.deleteButton.sendAction()
+    check demo.canvas.itemCount == 0
+    check context.len == 0
+    check not demo.deleteButton.enabled
+
+    demo.canvas.undoLast()
+    check demo.canvas.itemCount == 1
+    check context.len == 2
+    check context[0].drawableFill == demo.fillWell.color
+    check context[1].drawableLineWidth == 9.0
+
+  test "move previews reuse retained MTSDF operations":
+    let
+      demo = newCanvasDemo()
+      context = demo.canvas.getContext2D()
+
+    check demo.toolButtons[ctStar].sendAction()
+    demo.canvas.drawGesture(initPoint(20, 30), initPoint(140, 130))
+    check demo.toolButtons[ctSelect].sendAction()
+    check demo.canvas.mouseDown(
+      MouseEvent(location: initPoint(80, 80), button: mbPrimary)
+    )
+    check demo.canvas.mouseUp(
+      MouseEvent(location: initPoint(80, 80), button: mbPrimary)
+    )
+
+    check demo.canvas.mouseDown(
+      MouseEvent(location: initPoint(80, 80), button: mbPrimary)
+    )
+    check demo.canvas.mouseDragged(
+      MouseEvent(location: initPoint(92, 88), button: mbPrimary)
+    )
+
+    check context[0].kind == cokMtsdf
+    check context[0].translation == initPoint(12, 8)
+    check context[1].translation == initPoint(12, 8)
+    check context[2].translation == initPoint(12, 8)
+    discard buildRenders(demo.root)
+
+    check demo.canvas.mouseUp(
+      MouseEvent(location: initPoint(92, 88), button: mbPrimary)
+    )
+    check demo.canvas.selectedItemBounds == rect(32, 38, 120, 100)
+    for operation in context:
+      check operation.translation == initPoint(0, 0)
+
+    demo.fillWell.popupPresentation = ppInline
+    demo.fillWell.openPopup()
+    discard demo.window.buildRenders()
+    check demo.fillWell.activateColorAtIndex(7)
+    discard demo.window.buildRenders()
+    demo.fillWell.closePopup()

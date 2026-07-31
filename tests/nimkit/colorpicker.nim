@@ -5,6 +5,16 @@ import figdraw
 import merenda/nimkit
 
 suite "NimKit color picker":
+  test "picker descendants stay above the popup panel":
+    let
+      well = newColorWell(color(0.20, 0.48, 0.92, 1.0))
+      picker = newColorPicker(well, rect(0, 0, 300, 340))
+      renders = buildRenders(picker)
+
+    check PopupDrawLevel in renders.layers
+    check renders[PopupDrawLevel].nodes.len > 1
+    check renders[DefaultDrawLevel].nodes.len == 0
+
   test "color wells expose a drawn color value and popup accessibility":
     let
       selected = color(0.20, 0.48, 0.92, 1.0)
