@@ -487,6 +487,83 @@ suite "nimkit constraints":
 
     check child.frame() == rect(20, 15, 250, 160)
 
+  test "nested edge pins preserve the child's local frame origin":
+    let
+      root = newView(frame = rect(0, 0, 480, 240))
+      parent = newView(frame = rect(140, 30, 220, 120))
+      child = newView(frame = rect(18, 12, 184, 40))
+      left =
+        newLayoutConstraint(child, atLeft, lrEqual, parent, atLeft, constant = 18.0)
+      right =
+        newLayoutConstraint(child, atRight, lrEqual, parent, atRight, constant = -18.0)
+
+    root.addSubview(parent)
+    parent.addSubview(child)
+    activate(left, right)
+
+    root.layoutSubtreeIfNeeded()
+    check child.frame() == rect(18, 12, 184, 40)
+
+    root.layoutSubtreeIfNeeded()
+    check child.frame() == rect(18, 12, 184, 40)
+
+  test "nested edge pins honor parent bounds and alignment insets":
+    let
+      root = newView(frame = rect(0, 0, 480, 240))
+      parent = newView(frame = rect(140, 30, 220, 120))
+      child = newView(frame = rect(29, 24, 174, 88))
+      left =
+        newLayoutConstraint(child, atLeft, lrEqual, parent, atLeft, constant = 18.0)
+      top = newLayoutConstraint(child, atTop, lrEqual, parent, atTop, constant = 12.0)
+      right =
+        newLayoutConstraint(child, atRight, lrEqual, parent, atRight, constant = -18.0)
+      bottom = newLayoutConstraint(
+        child, atBottom, lrEqual, parent, atBottom, constant = -12.0
+      )
+
+    parent.bounds = rect(7, 9, 220, 120)
+    parent.alignmentInsets = insets(3, 4, 5, 6)
+    root.addSubview(parent)
+    parent.addSubview(child)
+    activate(left, top, right, bottom)
+
+    root.layoutSubtreeIfNeeded()
+    check child.frame() == rect(29, 24, 174, 88)
+
+    root.layoutSubtreeIfNeeded()
+    check child.frame() == rect(29, 24, 174, 88)
+
+  test "constraints between cousin views use their shared root coordinates":
+    let
+      root = newView(frame = rect(25, 15, 400, 220))
+      leftBranch = newView(frame = rect(30, 20, 100, 80))
+      rightBranch = newView(frame = rect(70, 40, 120, 80))
+      leftLeaf = newView(frame = rect(10, 5, 30, 20))
+      rightLeaf = newView(frame = rect(15, 5, 40, 20))
+      leftPin = newLayoutConstraint(
+        leftLeaf, atLeft, lrEqual, leftBranch, atLeft, constant = 10.0
+      )
+      leftWidth = newLayoutConstraint(leftLeaf, atWidth, constant = 30.0)
+      spacing = newLayoutConstraint(
+        rightLeaf, atLeft, lrEqual, leftLeaf, atRight, constant = 15.0
+      )
+      rightWidth = newLayoutConstraint(rightLeaf, atWidth, constant = 40.0)
+
+    root.bounds = rect(5, 7, 400, 220)
+    leftBranch.addSubview(leftLeaf)
+    rightBranch.addSubview(rightLeaf)
+    root.addSubview(leftBranch)
+    root.addSubview(rightBranch)
+    activate(leftPin, leftWidth, spacing, rightWidth)
+
+    root.layoutSubtreeIfNeeded()
+    check leftLeaf.frame() == rect(10, 5, 30, 20)
+    check rightLeaf.frame() == rect(15, 5, 40, 20)
+
+    root.layoutSubtreeIfNeeded()
+    check leftLeaf.frame() == rect(10, 5, 30, 20)
+    check rightLeaf.frame() == rect(15, 5, 40, 20)
+
   test "solver applies superview centers":
     let
       root = newView(frame = rect(0, 0, 300, 200))

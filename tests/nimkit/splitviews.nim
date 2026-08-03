@@ -62,6 +62,30 @@ suite "nimkit split views":
     check splitView.cursorRects().len == 1
     check splitView.cursorRects()[0].cursor == "resize-left-right"
 
+  test "constraints inside a positioned second pane stay local":
+    let
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 120.0))
+      left = newFixedIntrinsicView(80.0, 40.0)
+      right = newFixedIntrinsicView(90.0, 50.0)
+      sidebar = newView(frame = rect(18.0, 10.0, 80.0, 40.0))
+      sidebarLeft =
+        newLayoutConstraint(sidebar, atLeft, lrEqual, right, atLeft, constant = 18.0)
+
+    splitView.appearance = initAppearance(initAquaTheme())
+    splitView.addPane(left)
+    splitView.addPane(right)
+    splitView.layoutSubtreeIfNeeded()
+    check right.frame().origin.x == 156.0'f32
+
+    right.addSubview(sidebar)
+    activate(sidebarLeft)
+
+    splitView.layoutSubtreeIfNeeded()
+    check sidebar.frame().origin.x == 18.0'f32
+
+    splitView.layoutSubtreeIfNeeded()
+    check sidebar.frame().origin.x == 18.0'f32
+
   test "vertical split view uses vertical axis and natural size":
     let
       splitView = newSplitView(laVertical, rect(0.0, 0.0, 200.0, 206.0))
