@@ -4,7 +4,7 @@ import pkg/pixie
 import pkg/sdfy/msdfgen
 
 import ./images
-import ./private/svgpathloader
+import ./svgpathloader
 import ../foundation/types
 
 const
