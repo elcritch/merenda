@@ -319,6 +319,7 @@ suite "NimKit animations":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
+    splitView.appearance = initAppearance(initAquaTheme())
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.layoutSubtreeIfNeeded()

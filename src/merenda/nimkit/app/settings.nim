@@ -29,10 +29,10 @@ import ./windows
 
 type
   SettingsTheme = enum
-    stDefault
+    stDarkBSD
+    stAqua
     stMacOS
     stMacOSDark
-    stDarkBSD
     stNebula
     stPeachy
     stSynthwave83
@@ -414,10 +414,10 @@ const TextStyleRoles = [
 
 func title(theme: SettingsTheme): string =
   case theme
-  of stDefault: "Default"
+  of stDarkBSD: "DarkBSD"
+  of stAqua: "Aqua"
   of stMacOS: "macOS"
   of stMacOSDark: "macOS Dark"
-  of stDarkBSD: "DarkBSD"
   of stNebula: "Nebula"
   of stPeachy: "Peachy"
   of stSynthwave83: "Synthwave '83"
@@ -443,14 +443,14 @@ proc appearanceFor(
     previewRole = frUI,
 ): Appearance =
   case theme
-  of stDefault:
-    result = initAppearance(initTheme())
+  of stDarkBSD:
+    result = initAppearance(initDarkBSDTheme())
+  of stAqua:
+    result = initAppearance(initAquaTheme())
   of stMacOS:
     result = initAppearance(initMacOSTheme())
   of stMacOSDark:
     result = initAppearance(initMacOSDarkTheme())
-  of stDarkBSD:
-    result = initAppearance(initDarkBSDTheme())
   of stNebula:
     result = initAppearance(initNebulaTheme())
   of stPeachy:
@@ -577,7 +577,7 @@ proc newMerendaSettingsWindow*(
     xContentView: newView(),
     fontPickerController: newFontPickerController(),
     applyAppearanceHandler: appearanceHandler,
-    activeTheme: stDefault,
+    activeTheme: stDarkBSD,
     activeFontRole: frUI,
     previewFontSize: SettingsDefaultFontSize,
     appliedFontSize: SettingsDefaultFontSize,
@@ -602,10 +602,10 @@ proc newMerendaSettingsWindow*(
     fontSizeLabel = newFormLabel("Size")
     themePicker = newComboBox(
       [
-        stDefault.title(),
+        stDarkBSD.title(),
+        stAqua.title(),
         stMacOS.title(),
         stMacOSDark.title(),
-        stDarkBSD.title(),
         stNebula.title(),
         stPeachy.title(),
         stSynthwave83.title(),

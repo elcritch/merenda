@@ -51,6 +51,7 @@ suite "nimkit split views":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 50.0)
 
+    splitView.appearance = initAppearance(initAquaTheme())
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.layoutSubtreeIfNeeded()
@@ -67,6 +68,7 @@ suite "nimkit split views":
       top = newFixedIntrinsicView(80.0, 40.0)
       bottom = newFixedIntrinsicView(90.0, 50.0)
 
+    splitView.appearance = initAppearance(initAquaTheme())
     splitView.addPane(top)
     splitView.addPane(bottom)
     splitView.layoutSubtreeIfNeeded()
@@ -83,6 +85,7 @@ suite "nimkit split views":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
+    splitView.appearance = initAppearance(initAquaTheme())
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.setPaneSizeLimits(0, minSize = 80.0, maxSize = 210.0)
@@ -104,6 +107,7 @@ suite "nimkit split views":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
+    splitView.appearance = initAppearance(initAquaTheme())
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.layoutSubtreeIfNeeded()
@@ -155,6 +159,8 @@ suite "nimkit split views":
       c = newFixedIntrinsicView(80.0, 40.0)
       d = newFixedIntrinsicView(90.0, 40.0)
 
+    first.appearance = initAppearance(initAquaTheme())
+    second.appearance = initAppearance(initAquaTheme())
     first.addPane(a, collapsible = true)
     first.addPane(b)
     first.setPositionOfDivider(0, 180.0)

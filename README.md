@@ -196,6 +196,24 @@ automatic language, symbol, and outline-emoji fallback:
 nim r -d:figdrawTextBackend=harfbuzzy examples/font_fallback_demo.nim
 ```
 
+DarkBSD is the default theme. It uses dark platform-neutral surfaces, ruby-red
+Aqua buttons, and a deep red accent palette:
+
+```nim
+root.appearance = initAppearance()
+```
+
+The previous default is available as the `aqua` theme or through
+`initAquaTheme()`:
+
+```sh
+NIMKIT_THEME=aqua nim r examples/controls_showcase.nim
+```
+
+```nim
+root.appearance = initAppearance(initAquaTheme())
+```
+
 For a flatter, modern macOS-style appearance, select the built-in `macos` theme
 at startup or construct it directly:
 
@@ -223,9 +241,7 @@ root.appearance = initAppearance(initMacOSDarkTheme())
 
 The `dark-macos` and `modern-macos-dark` names are aliases.
 
-For a ruby-red variation of the macOS dark theme, use `darkbsd`. It keeps the
-dark platform-neutral surfaces while giving buttons a squarer Aqua gloss and a
-deep red accent palette:
+To select the default DarkBSD theme explicitly, use `darkbsd`:
 
 ```sh
 NIMKIT_THEME=darkbsd nim r examples/controls_showcase.nim

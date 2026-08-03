@@ -137,3 +137,4 @@ proc initDarkBSDTheme*(): Theme =
 registerThemeFactory("darkbsd", initDarkBSDTheme)
 registerThemeFactory("dark-bsd", initDarkBSDTheme)
 registerThemeFactory("ruby-bsd", initDarkBSDTheme)
+registerDefaultThemeFactory(initDarkBSDTheme)

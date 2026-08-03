@@ -747,19 +747,18 @@ suite "nimkit document tabs":
       tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
       first = newDocumentTabItem("Primary", "primary")
       special = newDocumentTabItem("Special", "special")
-      defaultAppearance = initAppearance()
+      aquaAppearance = initAppearance(initAquaTheme())
 
-    check defaultAppearance.resolveChromeName(controlStyle(srDocumentTab)) ==
-      defaultAppearance.resolveChromeName(controlStyle(srTab))
-    check defaultAppearance.resolveChromeName(controlStyle(srDocumentTabBar)) ==
-      defaultAppearance.resolveChromeName(controlStyle(srTabPanel))
-    check defaultAppearance.resolveLength(
+    check aquaAppearance.resolveChromeName(controlStyle(srDocumentTab)) ==
+      aquaAppearance.resolveChromeName(controlStyle(srTab))
+    check aquaAppearance.resolveChromeName(controlStyle(srDocumentTabBar)) ==
+      aquaAppearance.resolveChromeName(controlStyle(srTabPanel))
+    check aquaAppearance.resolveLength(
       controlStyle(srDocumentTab), StyleCornerRadius, 0.0
     ) == 10.0'f32
-    check defaultAppearance.resolveLength(
-      controlStyle(srDocumentTab), StyleItemGap, 0.0
-    ) == 2.0'f32
-    check defaultAppearance
+    check aquaAppearance.resolveLength(controlStyle(srDocumentTab), StyleItemGap, 0.0) ==
+      2.0'f32
+    check aquaAppearance
     .resolveFill(controlStyle(srDocumentTabBar), fill(color(1.0, 0.0, 0.0, 1.0)))
     .centerColor().a < 0.5'f32
 
@@ -767,7 +766,7 @@ suite "nimkit document tabs":
     discard tabs.addDocumentTabItem(first)
     discard tabs.addDocumentTabItem(special)
 
-    var theme = initTheme()
+    var theme = initAquaTheme()
     theme.installChrome(DocumentTabChromeName, newDocumentTabChromeSpy())
     theme[srDocumentTab, StyleChrome] = styleKeyword(DocumentTabChromeName)
     theme[srDocumentTabBar, StyleChrome] = styleKeyword(DocumentTabChromeName)
