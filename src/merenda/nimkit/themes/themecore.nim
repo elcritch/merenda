@@ -264,6 +264,8 @@ type
   SplitViewStyle* = object
     divider*: ControlBoxStyle
     dividerThickness*: float32
+    gripColor*: Color
+    gripLength*: float32
 
   RowItemStyle* = object
     box*: ControlBoxStyle
@@ -2013,18 +2015,21 @@ proc resolveTableViewStyle*(theme: Theme, context: StyleContext): TableViewStyle
   )
 
 proc resolveSplitViewStyle*(theme: Theme, context: StyleContext): SplitViewStyle =
+  let divider = theme.resolveControlBoxStyle(
+    context,
+    fill(color(0.84, 0.86, 0.90, 1.0)),
+    color(0.58, 0.62, 0.68, 1.0),
+    borderWidthFallback = 1.0,
+    cornerRadiusFallback = 2.0,
+    focusRingWidthFallback = 0.0,
+    focusRingInsetFallback = 0.0,
+    focusRingColorFallback = color(0.0, 0.0, 0.0, 0.0),
+  )
   SplitViewStyle(
-    divider: theme.resolveControlBoxStyle(
-      context,
-      fill(color(0.84, 0.86, 0.90, 1.0)),
-      color(0.58, 0.62, 0.68, 1.0),
-      borderWidthFallback = 1.0,
-      cornerRadiusFallback = 2.0,
-      focusRingWidthFallback = 0.0,
-      focusRingInsetFallback = 0.0,
-      focusRingColorFallback = color(0.0, 0.0, 0.0, 0.0),
-    ),
+    divider: divider,
     dividerThickness: theme.lengthRule(context, StyleSeparatorThickness, 6.0'f32),
+    gripColor: theme.colorRule(context, StyleMarkColor, divider.borderColor),
+    gripLength: theme.lengthRule(context, StyleIndicatorSize, 28.0'f32),
   )
 
 proc resolveRowItemStyle*(theme: Theme, context: StyleContext): RowItemStyle =

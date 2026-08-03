@@ -217,3 +217,32 @@ suite "nimkit split views":
       if node.kind == nkRectangle:
         inc rectangleCount
     check rectangleCount >= 2
+
+  test "DarkBSD split view renders a centered high-contrast drag grip":
+    let
+      appearance = initAppearance(initDarkBSDTheme())
+      style = appearance.resolveSplitViewStyle(controlStyle(srSplitView))
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
+      left = newFixedIntrinsicView(80.0, 40.0)
+      right = newFixedIntrinsicView(90.0, 40.0)
+
+    check style.dividerThickness == 8.0'f32
+    check style.divider.borderWidth == 0.0'f32
+    check style.gripLength == 32.0'f32
+    check style.gripColor == color(0.72, 0.72, 0.76, 0.82)
+
+    splitView.appearance = appearance
+    splitView.addPane(left)
+    splitView.addPane(right)
+    splitView.layoutSubtreeIfNeeded()
+
+    let list = buildRenders(splitView)[DefaultDrawLevel]
+    var foundGrip = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill == fill(style.gripColor):
+        foundGrip = true
+        check node.screenBox.w == 3.0'f32
+        check node.screenBox.h == 32.0'f32
+        check node.screenBox.x == 151.5'f32
+        check node.screenBox.y == 34.0'f32
+    check foundGrip
