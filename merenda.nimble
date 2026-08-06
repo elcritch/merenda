@@ -12,7 +12,7 @@ requires "figdraw[siwin, sharedlib, harfbuzz] >= 0.35.0"
 requires "gh:elcritch/kiwiberry"
 # requires "siwin >= 1.0.4"
 requires "gh:elcritch/siwin#refactor-window-events"
-requires "sigils[sigNameAsString, closures] >= 0.27.0"
+requires "sigils[sigNameAsString, closures, siwin] >= 0.27.1"
 requires "cborious"
 
 feature "libbacktrace":

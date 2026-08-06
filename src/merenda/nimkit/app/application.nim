@@ -83,7 +83,6 @@ const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
 const WindowDidOrderOutSelector = "_nimkitWindowDidOrderOut"
 const WindowDidCloseSelector = "_nimkitWindowDidClose"
-const ThreadSignalBudgetPerFrame = 10
 
 var sharedApplicationInstance: Application
 
@@ -110,6 +109,9 @@ proc keyEquivalentDispatchStart(app: Application): Responder
 proc syncMainMenuPresentation(app: Application)
 proc syncMenuBarPresenters(app: Application)
 proc runApplicationFrame(app: Application): int
+proc prepareApplicationEventLoop(app: Application)
+proc pollApplicationEvents(app: Application)
+proc waitForApplicationEvents(app: Application)
 
 proc resolvedApplicationName(name: string): string =
   if name.len > 0:
@@ -973,10 +975,22 @@ proc endModalSession*(app: Application, session: ModalSession) =
 proc runModalSession*(app: Application, session: ModalSession): int =
   if session.isNil:
     return 0
-  while session.state == mssRunning:
-    if app.runForFrames(1) == 0:
+  app.prepareApplicationEventLoop()
+  let wasRunning = app.xRunning
+  app.xRunning = true
+  try:
+    while app.xRunning and session.state == mssRunning:
+      app.pollApplicationEvents()
+      let activeWindows = app.runApplicationFrame()
+      if activeWindows == 0:
+        session.state = mssAborted
+      elif session.state == mssRunning:
+        app.waitForApplicationEvents()
+    if not app.xRunning and session.state == mssRunning:
       session.state = mssAborted
-      break
+  finally:
+    if not wasRunning:
+      app.xRunning = false
   result = session.response
 
 proc runModalForWindow*(app: Application, window: Window): int =
@@ -1076,13 +1090,8 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
     window == session.parentWindow
 
 proc runApplicationFrame(app: Application): int =
-  if app.xAutomaticallyStartsLocalSigilThread and not hasLocalSigilThread():
-    startLocalThreadDefault()
   if hasLocalSigilThread():
-    let thread = getCurrentSigilThread()
-    for _ in 0 ..< ThreadSignalBudgetPerFrame:
-      if not thread.poll(NonBlocking):
-        break
+    discard getCurrentSigilThread().pollAll(NonBlocking)
   discard app.drainAnimations()
   var
     removedWindow = false
@@ -1114,13 +1123,30 @@ proc runApplicationFrame(app: Application): int =
   if hostWindowCreated:
     app.syncMainMenuPresentation()
 
+proc prepareApplicationEventLoop(app: Application) =
+  if app.xAutomaticallyStartsLocalSigilThread and not hasLocalSigilThread():
+    startLocalThreadDefault()
+
+proc pollApplicationEvents(app: Application) =
+  for window in app.xWindows:
+    if not window.isNil and window.isVisible and window.nativeReady:
+      nimkitBackend.pollNativeEvents()
+      break
+
+proc waitForApplicationEvents(app: Application) =
+  if hasLocalSigilThread():
+    nimkitBackend.installNativeEventLoopWaker(getCurrentSigilThread())
+  nimkitBackend.waitForNativeEvents()
+
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:
     return 0
+  app.prepareApplicationEventLoop()
   let wasRunning = app.xRunning
   var keepRunning = wasRunning
   app.xRunning = true
   while app.xRunning:
+    app.pollApplicationEvents()
     let activeWindows = app.runApplicationFrame()
     inc result
     if result >= frames.int:
@@ -1128,12 +1154,12 @@ proc runForFrames*(app: Application, frames: Natural): int =
     if activeWindows == 0:
       keepRunning = false
       break
-    sleep(8)
   if app.xRunning:
     app.xRunning = keepRunning
 
 proc run*(app: Application) =
   app.xApplicationThreadId = getThreadId()
+  app.prepareApplicationEventLoop()
   var runtime: ThreadRendererRuntime
   try:
     if app.usesDedicatedRenderer():
@@ -1146,11 +1172,12 @@ proc run*(app: Application) =
 
     app.xRunning = true
     while app.xRunning:
+      app.pollApplicationEvents()
       let activeWindows = app.runApplicationFrame()
       if activeWindows == 0:
         app.xRunning = false
       elif app.xRunning:
-        sleep(8)
+        app.waitForApplicationEvents()
   finally:
     try:
       for window in app.xWindows:

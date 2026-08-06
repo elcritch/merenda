@@ -2703,6 +2703,7 @@ proc ensureThreadHost(window: Window) =
     return
   window.xThreadHost =
     window.xHostWindow.attachThreadRenderer(window.xThreadRenderer, window.xFrame.size)
+  window.xThreadHost.installNativeEventLoopWaker()
 
 proc drainThreadHostEvents(window: Window): int =
   if window.xThreadHost.isNil:
