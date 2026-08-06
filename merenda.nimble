@@ -11,7 +11,7 @@ requires "chronicles"
 requires "figdraw[siwin, sharedlib, harfbuzz] >= 0.35.0"
 requires "gh:elcritch/kiwiberry"
 # requires "siwin >= 1.0.4"
-requires "gh:elcritch/siwin#refactor-window-events"
+requires "siwin#40ed4d4"
 requires "sigils[sigNameAsString, closures, siwin] >= 0.27.1"
 requires "cborious"
 
