@@ -57,6 +57,10 @@ type
     value: int
     stopApp: Application
 
+  AnimationDeadlineObserver = ref object of Agent
+    app: Application
+    firedAt: MonoTime
+
   SafetyWakeRequest = object
     canceled: ptr Atomic[bool]
     waker: ptr siwinshim.EventLoopWaker
@@ -75,6 +79,10 @@ proc collectThreadPoll(collector: ThreadPollCollector, value: int) {.slot.} =
   collector.value = value
   if not collector.stopApp.isNil:
     collector.stopApp.stop()
+
+proc animationDeadlineReached(observer: AnimationDeadlineObserver) {.slot.} =
+  observer.firedAt = getMonoTime()
+  observer.app.stop()
 
 proc wakeAfterTimeout(request: SafetyWakeRequest) {.thread.} =
   for _ in 0 ..< 200:
@@ -1240,6 +1248,52 @@ suite "nimkit application":
         window.close()
         pool.stop()
         pool.join()
+
+  test "application blocking wait wakes at an animation deadline":
+    block nativeAnimationDeadline:
+      let
+        app = newApplication()
+        window = newWindow("Nimkit Animation Wake", frame = rect(80, 80, 240, 140))
+        root = newView(frame = rect(0, 0, 240, 140))
+        pause = newPauseAnimation(60.ms)
+        observer = AnimationDeadlineObserver(app: app)
+
+      pause.connect(finished, observer, animationDeadlineReached)
+      app.renderExecutionMode = remMainThread
+      window.setContentView(root)
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+
+      var
+        canceled: Atomic[bool]
+        safetyThread: Thread[SafetyWakeRequest]
+        safetyStarted = false
+        safetyWaker = siwinshim.sharedSiwinGlobals().eventLoopWaker()
+      canceled.store(false, moRelaxed)
+      try:
+        createThread(
+          safetyThread,
+          wakeAfterTimeout,
+          SafetyWakeRequest(canceled: addr canceled, waker: addr safetyWaker),
+        )
+        safetyStarted = true
+        let started = getMonoTime()
+        check app.startAnimation(pause)
+        check not app.animationClock().isRunning
+        app.run()
+        let elapsed = observer.firedAt - started
+
+        check observer.firedAt > started
+        check elapsed >= 40.ms
+        check elapsed < 500.ms
+      except CatchableError:
+        skip()
+        break nativeAnimationDeadline
+      finally:
+        canceled.store(true, moRelease)
+        if safetyStarted:
+          safetyThread.joinThread()
+        window.close()
 
   test "runForFrames opens and pumps a visible native window":
     block nativeRun:

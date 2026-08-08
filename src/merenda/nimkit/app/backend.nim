@@ -54,6 +54,14 @@ proc waitForNativeEvents*() =
   else:
     siwinshim.sharedSiwinGlobals().waitEvents()
 
+proc waitForNativeEvents*(timeout: Duration) =
+  when defined(useNativeDynlib):
+    let nanoseconds = max(timeout.inNanoseconds, 0'i64)
+    let milliseconds = nanoseconds div 1_000_000 + ord(nanoseconds mod 1_000_000 != 0)
+    sleep(min(milliseconds, int.high.int64).int)
+  else:
+    discard siwinshim.sharedSiwinGlobals().waitEvents(timeout)
+
 proc pollNativeEvents*() =
   when not defined(useNativeDynlib):
     discard siwinshim.sharedSiwinGlobals().pollEvents()

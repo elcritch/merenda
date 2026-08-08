@@ -1,4 +1,4 @@
-import std/[algorithm, locks, math, times]
+import std/[algorithm, locks, math, monotimes, options, times]
 
 import sigils/reactive
 import sigils/threadProxies
@@ -31,6 +31,24 @@ type
     adpKeepWhenStopped
     adpDeleteWhenStopped
 
+  AnimationCadenceKind* = enum
+    ackEveryFrame
+    ackInterval
+    ackEvents
+
+  AnimationCadence* = object
+    kind*: AnimationCadenceKind
+    interval*: Duration
+
+  AnimationDeadlineKind* = enum
+    adkCadence
+    adkEvent
+    adkCompletion
+
+  AnimationDeadline* = object
+    time*: Duration
+    kind*: AnimationDeadlineKind
+
   AnimationTiming* = object
     curve*: AnimationCurve
     controlPoint1*: Point
@@ -42,8 +60,16 @@ type
 
   AnimationScheduler* = ref object of DynamicAgent
     xAnimations: seq[Animation]
+    xSchedules: seq[AnimationSchedule]
     xElapsed: Duration
     xFrameInterval: Duration
+    xLastWallTick: MonoTime
+    xHasWallTick: bool
+
+  AnimationSchedule = object
+    anchor: MonoTime
+    anchorTime: Duration
+    observedState: AnimationState
 
   AnimationClockTicker = ref object of AgentActor
     xFrameInterval: Duration
@@ -63,6 +89,7 @@ type
     xDirection: AnimationDirection
     xDeletionPolicy: AnimationDeletionPolicy
     xTiming: AnimationTiming
+    xCadence: AnimationCadence
     xProgressMarks: seq[float32]
     xDeliveredMarks: seq[bool]
     state*: Sigil[AnimationState]
@@ -122,6 +149,31 @@ var
   sharedAnimationThreadUseCount: int
 
 sharedAnimationThreadLock.initLock()
+
+func everyFrameCadence*(): AnimationCadence =
+  AnimationCadence(kind: ackEveryFrame)
+
+func intervalCadence*(interval: Duration): AnimationCadence =
+  AnimationCadence(kind: ackInterval, interval: interval)
+
+func eventCadence*(): AnimationCadence =
+  AnimationCadence(kind: ackEvents)
+
+func earlierDeadline(
+    current: Option[AnimationDeadline], candidate: AnimationDeadline
+): Option[AnimationDeadline] =
+  if current.isNone or candidate.time < current.get().time or
+      (candidate.time == current.get().time and candidate.kind > current.get().kind):
+    some(candidate)
+  else:
+    current
+
+func nextAlignedTime(after, interval: Duration): Duration =
+  let intervalNs = interval.inNanoseconds
+  if intervalNs <= 0:
+    return after
+  let afterNs = max(after.inNanoseconds, 0'i64)
+  initDuration(nanoseconds = (afterNs div intervalNs + 1) * intervalNs)
 
 func clampProgress(value: float32): float32 =
   min(max(value, 0.0'f32), 1.0'f32)
@@ -588,6 +640,58 @@ method applyValue*(animation: PropertyAnimation[Color]) =
 
 proc setCurrentTime*(animation: Animation, currentTime: Duration)
 
+proc baseNextDeadline(
+    animation: Animation, after, frameInterval, duration, total: Duration
+): Option[AnimationDeadline] =
+  let
+    durationNs = duration.inNanoseconds
+    totalNs = total.inNanoseconds
+
+  case animation.xCadence.kind
+  of ackEveryFrame:
+    result = result.earlierDeadline(
+      AnimationDeadline(time: nextAlignedTime(after, frameInterval), kind: adkCadence)
+    )
+  of ackInterval:
+    if animation.xCadence.interval.inNanoseconds > 0:
+      result = result.earlierDeadline(
+        AnimationDeadline(
+          time: nextAlignedTime(after, animation.xCadence.interval), kind: adkCadence
+        )
+      )
+  of ackEvents:
+    discard
+
+  if durationNs > 0:
+    let afterNs = max(after.inNanoseconds, 0'i64)
+    if animation.xLoopCount < 0 or animation.xLoopCount > 1:
+      let loopBoundary =
+        initDuration(nanoseconds = (afterNs div durationNs + 1) * durationNs)
+      if totalNs < 0 or loopBoundary.inNanoseconds <= totalNs:
+        result =
+          result.earlierDeadline(AnimationDeadline(time: loopBoundary, kind: adkEvent))
+
+    for mark in animation.xProgressMarks:
+      let normalizedMark = mark.clampProgress()
+      let markProgress =
+        if animation.xDirection == adBackward:
+          1.0'f32 - normalizedMark
+        else:
+          normalizedMark
+      let markOffset = int64(round(markProgress.float64 * durationNs.float64))
+      var markTimeNs = (afterNs div durationNs) * durationNs + markOffset
+      if markTimeNs <= afterNs:
+        markTimeNs += durationNs
+      if totalNs < 0 or markTimeNs <= totalNs:
+        result = result.earlierDeadline(
+          AnimationDeadline(
+            time: initDuration(nanoseconds = markTimeNs), kind: adkEvent
+          )
+        )
+
+  if totalNs >= 0 and (total > after or (totalNs == 0 and after.inNanoseconds <= 0)):
+    result = result.earlierDeadline(AnimationDeadline(time: total, kind: adkCompletion))
+
 protocol AnimationProtocol {.selectorScope: protocol.} from Animation:
   method updateCurrentTime*(animation: Animation, currentTime: Duration) =
     discard currentTime
@@ -610,6 +714,13 @@ protocol AnimationProtocol {.selectorScope: protocol.} from Animation:
       initDuration(
         nanoseconds = animation.naturalDuration().inNanoseconds * animation.xLoopCount
       )
+
+  method nextDeadline*(
+      animation: Animation, after, frameInterval: Duration
+  ): Option[AnimationDeadline] =
+    animation.baseNextDeadline(
+      after, frameInterval, animation.naturalDuration(), animation.totalDuration()
+    )
 
 protocol FloatValueAnimationProtocol of AnimationProtocol:
   method updateCurrentTime*(animation: ValueAnimation[float32], currentTime: Duration) =
@@ -687,6 +798,19 @@ protocol ParallelAnimationGroupProtocol of AnimationProtocol:
       if childDuration > result:
         result = childDuration
 
+  method nextDeadline*(
+      animation: ParallelAnimationGroup, after, frameInterval: Duration
+  ): Option[AnimationDeadline] =
+    result = Animation(animation).baseNextDeadline(
+        after, frameInterval, animation.naturalDuration(), animation.totalDuration()
+      )
+    for child in animation.children:
+      if child.isNil:
+        continue
+      let childDeadline = child.nextDeadline(after, frameInterval)
+      if childDeadline.isSome:
+        result = result.earlierDeadline(childDeadline.get())
+
 protocol SequentialAnimationGroupProtocol of AnimationProtocol:
   method updateCurrentTime*(
       animation: SequentialAnimationGroup, currentTime: Duration
@@ -709,6 +833,33 @@ protocol SequentialAnimationGroupProtocol of AnimationProtocol:
         return childDuration
       result = result + childDuration
 
+  method nextDeadline*(
+      animation: SequentialAnimationGroup, after, frameInterval: Duration
+  ): Option[AnimationDeadline] =
+    result = Animation(animation).baseNextDeadline(
+        after, frameInterval, animation.naturalDuration(), animation.totalDuration()
+      )
+    var offset = initDuration()
+    for child in animation.children:
+      if child.isNil:
+        continue
+      let childDuration = child.totalDuration()
+      if childDuration.inNanoseconds == 0:
+        continue
+      if childDuration.inNanoseconds < 0 or after < offset + childDuration:
+        let localAfter =
+          if after > offset:
+            after - offset
+          else:
+            initDuration()
+        let childDeadline = child.nextDeadline(localAfter, frameInterval)
+        if childDeadline.isSome:
+          var translated = childDeadline.get()
+          translated.time = translated.time + offset
+          result = result.earlierDeadline(translated)
+        break
+      offset = offset + childDuration
+
 proc initAnimationFields*(
     animation: Animation,
     duration = initDuration(milliseconds = 250),
@@ -720,6 +871,7 @@ proc initAnimationFields*(
   animation.xDirection = direction
   animation.xDeletionPolicy = adpKeepWhenStopped
   animation.xTiming = linearTiming()
+  animation.xCadence = everyFrameCadence()
   animation.state = newSigil(asStopped)
   animation.currentTime = newSigil(initDuration())
   animation.progress = newSigil(0.0'f32)
@@ -797,6 +949,7 @@ proc initAnimationGroupFields*(
     duration = initDuration(),
 ) =
   initAnimationFields(group, duration)
+  group.xCadence = eventCadence()
   group.children = @children
 
 proc newParallelAnimationGroup*(
@@ -816,6 +969,7 @@ proc newSequentialAnimationGroup*(
 proc newPauseAnimation*(duration: Duration): PauseAnimation =
   result = PauseAnimation()
   initAnimationFields(result, duration)
+  result.xCadence = eventCadence()
 
 proc duration*(animation: Animation): Duration =
   animation.naturalDuration()
@@ -864,6 +1018,12 @@ proc timing*(animation: Animation): AnimationTiming =
 
 proc `timing=`*(animation: Animation, timing: AnimationTiming) =
   animation.xTiming = timing
+
+proc cadence*(animation: Animation): AnimationCadence =
+  animation.xCadence
+
+proc `cadence=`*(animation: Animation, cadence: AnimationCadence) =
+  animation.xCadence = cadence
 
 proc curve*(animation: Animation): AnimationCurve =
   animation.timing.curve
@@ -1023,6 +1183,7 @@ proc initAnimationSchedulerFields*(
     else:
       frameInterval
   scheduler.xElapsed = initDuration()
+  scheduler.xHasWallTick = false
 
 proc newAnimationScheduler*(
     frameInterval = initDuration(milliseconds = 16)
@@ -1044,7 +1205,8 @@ proc elapsed*(scheduler: AnimationScheduler): Duration =
   scheduler.xElapsed
 
 proc scheduledAnimations*(scheduler: AnimationScheduler): seq[Animation] =
-  scheduler.xAnimations
+  for animation in scheduler.xAnimations:
+    result.add(animation)
 
 proc animationCount*(scheduler: AnimationScheduler): int =
   scheduler.xAnimations.len
@@ -1056,10 +1218,62 @@ proc containsAnimation*(scheduler: AnimationScheduler, animation: Animation): bo
     if scheduled == animation:
       return true
 
+proc scheduleIndex(scheduler: AnimationScheduler, animation: Animation): int =
+  if animation.isNil:
+    return -1
+  for index, scheduled in scheduler.xAnimations:
+    if scheduled == animation:
+      return index
+  -1
+
+proc resetSchedule(scheduler: AnimationScheduler, index: int, now: MonoTime) =
+  scheduler.xSchedules[index] = AnimationSchedule(
+    anchor: now,
+    anchorTime: scheduler.xAnimations[index].rawCurrentTime(),
+    observedState: scheduler.xAnimations[index].rawState(),
+  )
+
+proc deleteSchedule(scheduler: AnimationScheduler, index: int) =
+  scheduler.xAnimations.delete(index)
+  scheduler.xSchedules.delete(index)
+  if scheduler.xAnimations.len == 0:
+    scheduler.xHasWallTick = false
+
+proc syncSchedule(
+    schedule: var AnimationSchedule, animation: Animation, now: MonoTime
+) =
+  let state = animation.rawState()
+  if state == schedule.observedState:
+    return
+  schedule.anchor = now
+  schedule.anchorTime = animation.rawCurrentTime()
+  schedule.observedState = state
+
+proc scheduleTime(schedule: AnimationSchedule, animationTime: Duration): MonoTime =
+  schedule.anchor + (animationTime - schedule.anchorTime)
+
+proc currentScheduleTime(schedule: AnimationSchedule, now: MonoTime): Duration =
+  let elapsed = now - schedule.anchor
+  if elapsed.inNanoseconds <= 0:
+    schedule.anchorTime
+  else:
+    schedule.anchorTime + elapsed
+
 proc addAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
   if animation.isNil or scheduler.containsAnimation(animation):
     return false
+  let now = getMonoTime()
   scheduler.xAnimations.add(animation)
+  scheduler.xSchedules.add(
+    AnimationSchedule(
+      anchor: now,
+      anchorTime: animation.rawCurrentTime(),
+      observedState: animation.rawState(),
+    )
+  )
+  if scheduler.xAnimations.len == 1:
+    scheduler.xLastWallTick = now
+    scheduler.xHasWallTick = true
   true
 
 proc removeAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
@@ -1067,18 +1281,33 @@ proc removeAnimation*(scheduler: AnimationScheduler, animation: Animation): bool
     return false
   for index, scheduled in scheduler.xAnimations:
     if scheduled == animation:
-      scheduler.xAnimations.delete(index)
+      scheduler.deleteSchedule(index)
       return true
 
 proc clearAnimations*(scheduler: AnimationScheduler) =
   scheduler.xAnimations.setLen(0)
+  scheduler.xSchedules.setLen(0)
+  scheduler.xHasWallTick = false
 
-proc startAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
+proc startAnimationAt*(
+    scheduler: AnimationScheduler, animation: Animation, now: MonoTime
+): bool =
   if animation.isNil:
     return false
-  discard scheduler.addAnimation(animation)
+  var index = scheduler.scheduleIndex(animation)
+  if index < 0:
+    scheduler.xAnimations.add(animation)
+    scheduler.xSchedules.add(default(AnimationSchedule))
+    index = scheduler.xAnimations.high
   animation.start()
+  scheduler.resetSchedule(index, now)
+  if scheduler.xAnimations.len == 1:
+    scheduler.xLastWallTick = now
+    scheduler.xHasWallTick = true
   true
+
+proc startAnimation*(scheduler: AnimationScheduler, animation: Animation): bool =
+  scheduler.startAnimationAt(animation, getMonoTime())
 
 proc stopAnimation*(
     scheduler: AnimationScheduler, animation: Animation, finished = false
@@ -1097,7 +1326,7 @@ proc tick*(scheduler: AnimationScheduler, delta: Duration): int {.discardable.} 
   while index < scheduler.xAnimations.len:
     let animation = scheduler.xAnimations[index]
     if animation.isNil or animation.isStopped:
-      scheduler.xAnimations.delete(index)
+      scheduler.deleteSchedule(index)
       continue
     if not animation.isRunning:
       inc index
@@ -1108,11 +1337,11 @@ proc tick*(scheduler: AnimationScheduler, delta: Duration): int {.discardable.} 
       nextTime = animation.rawCurrentTime() + delta
     if totalDuration.inNanoseconds == 0:
       animation.stop(finished = true)
-      scheduler.xAnimations.delete(index)
+      scheduler.deleteSchedule(index)
     elif totalDuration.inNanoseconds >= 0 and nextTime >= totalDuration:
       animation.setCurrentTime(totalDuration)
       animation.stop(finished = true)
-      scheduler.xAnimations.delete(index)
+      scheduler.deleteSchedule(index)
     else:
       animation.setCurrentTime(nextTime)
       inc index
@@ -1120,8 +1349,86 @@ proc tick*(scheduler: AnimationScheduler, delta: Duration): int {.discardable.} 
 
   emit scheduler.schedulerTicked(delta)
 
+  let now = getMonoTime()
+  for index in 0 ..< scheduler.xSchedules.len:
+    scheduler.resetSchedule(index, now)
+  if scheduler.xAnimations.len > 0:
+    scheduler.xLastWallTick = now
+    scheduler.xHasWallTick = true
+
 proc tick*(scheduler: AnimationScheduler): int {.discardable.} =
   scheduler.tick(scheduler.frameInterval)
+
+proc nextDeadline*(scheduler: AnimationScheduler, now: MonoTime): Option[MonoTime] =
+  for index in 0 ..< scheduler.xAnimations.len:
+    let animation = scheduler.xAnimations[index]
+    if animation.isNil:
+      continue
+    scheduler.xSchedules[index].syncSchedule(animation, now)
+    if animation.rawState() != asRunning:
+      continue
+    let deadline =
+      animation.nextDeadline(animation.rawCurrentTime(), scheduler.frameInterval)
+    if deadline.isNone:
+      continue
+    let candidate = scheduler.xSchedules[index].scheduleTime(deadline.get().time)
+    if result.isNone or candidate < result.get():
+      result = some(candidate)
+
+proc nextDeadline*(scheduler: AnimationScheduler): Option[MonoTime] =
+  scheduler.nextDeadline(getMonoTime())
+
+proc advance*(scheduler: AnimationScheduler, now: MonoTime): int {.discardable.} =
+  let
+    hadWallTick = scheduler.xHasWallTick
+    lastWallTick = scheduler.xLastWallTick
+  var index = 0
+  while index < scheduler.xAnimations.len:
+    let animation = scheduler.xAnimations[index]
+    if animation.isNil or animation.isStopped:
+      scheduler.deleteSchedule(index)
+      continue
+
+    scheduler.xSchedules[index].syncSchedule(animation, now)
+    if not animation.isRunning:
+      inc index
+      continue
+
+    let deadline =
+      animation.nextDeadline(animation.rawCurrentTime(), scheduler.frameInterval)
+    if deadline.isNone or
+        scheduler.xSchedules[index].scheduleTime(deadline.get().time) > now:
+      inc index
+      continue
+
+    let
+      totalDuration = animation.totalDuration()
+      nextTime = scheduler.xSchedules[index].currentScheduleTime(now)
+    if totalDuration.inNanoseconds == 0:
+      animation.stop(finished = true)
+      scheduler.deleteSchedule(index)
+    elif totalDuration.inNanoseconds >= 0 and nextTime >= totalDuration:
+      animation.setCurrentTime(totalDuration)
+      animation.stop(finished = true)
+      scheduler.deleteSchedule(index)
+    else:
+      animation.setCurrentTime(nextTime)
+      inc index
+    inc result
+
+  if result > 0:
+    let delta =
+      if hadWallTick:
+        now - lastWallTick
+      else:
+        scheduler.frameInterval
+    scheduler.xElapsed = scheduler.xElapsed + delta
+    scheduler.xLastWallTick = now
+    scheduler.xHasWallTick = scheduler.xAnimations.len > 0
+    emit scheduler.schedulerTicked(delta)
+
+proc advance*(scheduler: AnimationScheduler): int {.discardable.} =
+  scheduler.advance(getMonoTime())
 
 proc initAnimationSchedulerClockFields*(
     clock: AnimationSchedulerClock, frameInterval = initDuration(milliseconds = 16)

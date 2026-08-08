@@ -107,6 +107,14 @@ receives moved render trees through bounded latest-frame channels; unsupported
 backends render directly on the main thread. Merenda builds with threads and ARC
 enabled, as configured by the repository's `config.nims`.
 
+Animation scheduling is deadline-driven. Value and property animations use the
+display cadence by default, while pause animations and animation groups wake only
+for child events or completion. Less frequent animations can opt into an aligned
+interval with `animation.cadence = intervalCadence(100.ms)`. Event-only animations
+can use `eventCadence()` together with `progressMarks`; finite completion is always
+scheduled even when no cadence sample is due. With no native, Sigils, renderer, or
+animation deadline pending, the application blocks indefinitely in Siwin.
+
 Constraint-wrapped views expose their minimum layout through `fittingSize()`.
 Set `window.automaticallyAdjustsContentMinSize = true` to keep a resizable
 window from becoming smaller than that fitting size. Tab views include the

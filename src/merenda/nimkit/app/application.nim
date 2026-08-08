@@ -1,4 +1,4 @@
-import std/[options, os]
+import std/[monotimes, options, os, times]
 
 import sigils/selectors
 import sigils/threadBase
@@ -99,6 +99,7 @@ proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool
 proc runForFrames*(app: Application, frames: Natural): int
 proc run*(app: Application)
 proc drainAnimations*(app: Application): int {.discardable.}
+proc nextAnimationDeadline(app: Application, now: MonoTime): Option[MonoTime]
 proc setKeyWindow*(app: Application, window: Window)
 proc setMainWindow*(app: Application, window: Window)
 proc noteWindowOrderedFront(app: Application, window: Window)
@@ -295,9 +296,9 @@ proc startAnimation*(app: Application, animation: Animation): bool {.discardable
   let scheduler = app.animationScheduler()
   if scheduler.isNil:
     return false
+  if not app.xAnimationClock.isNil:
+    scheduler.frameInterval = app.xAnimationClock.frameInterval
   result = scheduler.startAnimation(animation)
-  if result and scheduler.animationCount > 0:
-    app.startAnimationClock()
 
 proc stopAnimation*(
     app: Application, animation: Animation, finished = false
@@ -305,15 +306,28 @@ proc stopAnimation*(
   if app.xAnimationScheduler.isNil:
     return false
   result = app.xAnimationScheduler.stopAnimation(animation, finished)
-  if app.xAnimationScheduler.animationCount == 0:
-    app.stopAnimationClock()
+
+proc drainAnimationsAt(app: Application, now: MonoTime): int =
+  if app.xAnimationScheduler.isNil:
+    return 0
+  if not app.xAnimationClock.isNil:
+    app.xAnimationScheduler.frameInterval = app.xAnimationClock.frameInterval
+  app.xAnimationScheduler.advance(now)
 
 proc drainAnimations*(app: Application): int {.discardable.} =
-  if app.xAnimationScheduler.isNil or app.xAnimationClock.isNil:
-    return 0
-  result = app.xAnimationScheduler.drain(app.xAnimationClock, pollSignals = false)
-  if app.xAnimationScheduler.animationCount == 0:
-    app.stopAnimationClock()
+  app.drainAnimationsAt(getMonoTime())
+
+proc nextAnimationDeadline(app: Application, now: MonoTime): Option[MonoTime] =
+  if not app.xAnimationScheduler.isNil:
+    if not app.xAnimationClock.isNil:
+      app.xAnimationScheduler.frameInterval = app.xAnimationClock.frameInterval
+    result = app.xAnimationScheduler.nextDeadline(now)
+  for window in app.xWindows:
+    if window.isNil or not window.isVisible:
+      continue
+    let candidate = window.nextAnimationDeadline(now)
+    if candidate.isSome and (result.isNone or candidate.get() < result.get()):
+      result = candidate
 
 proc hasAppearance*(app: Application): bool =
   app.xHasAppearance
@@ -1092,7 +1106,8 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
 proc runApplicationFrame(app: Application): int =
   if hasLocalSigilThread():
     discard getCurrentSigilThread().pollAll(NonBlocking)
-  discard app.drainAnimations()
+  let now = getMonoTime()
+  discard app.drainAnimationsAt(now)
   var
     removedWindow = false
     hostWindowCreated = false
@@ -1136,7 +1151,19 @@ proc pollApplicationEvents(app: Application) =
 proc waitForApplicationEvents(app: Application) =
   if hasLocalSigilThread():
     nimkitBackend.installNativeEventLoopWaker(getCurrentSigilThread())
-  nimkitBackend.waitForNativeEvents()
+  let
+    now = getMonoTime()
+    deadline = app.nextAnimationDeadline(now)
+  if deadline.isSome:
+    let timeout = deadline.get() - now
+    nimkitBackend.waitForNativeEvents(
+      if timeout.inNanoseconds > 0:
+        timeout
+      else:
+        initDuration()
+    )
+  else:
+    nimkitBackend.waitForNativeEvents()
 
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:

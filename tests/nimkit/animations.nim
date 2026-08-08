@@ -1,4 +1,4 @@
-import std/[math, os, times, unittest]
+import std/[math, monotimes, options, os, times, unittest]
 
 import sigils/core
 
@@ -396,6 +396,85 @@ suite "NimKit animations":
     check animation.state{} == asStopped
     check scheduler.animationCount == 0
 
+  test "wall scheduler advances only at cadence and completion deadlines":
+    let
+      scheduler = newAnimationScheduler(frameInterval = 16.ms)
+      animation = newValueAnimation[float32](0.0'f32, 1.0'f32, duration = 50.ms)
+      startedAt = getMonoTime()
+
+    check scheduler.startAnimationAt(animation, startedAt)
+    check scheduler.nextDeadline(startedAt).get() - startedAt == 16.ms
+    check scheduler.advance(startedAt + 15.ms) == 0
+    check animation.currentTime{} == initDuration()
+
+    check scheduler.advance(startedAt + 16.ms) == 1
+    check animation.currentTime{} == 16.ms
+    check scheduler.nextDeadline(startedAt + 16.ms).get() - startedAt == 32.ms
+
+    check scheduler.advance(startedAt + 32.ms) == 1
+    check scheduler.nextDeadline(startedAt + 32.ms).get() - startedAt == 48.ms
+    check scheduler.advance(startedAt + 48.ms) == 1
+    check scheduler.nextDeadline(startedAt + 48.ms).get() - startedAt == 50.ms
+    check scheduler.advance(startedAt + 50.ms) == 1
+    check animation.isStopped
+    check scheduler.animationCount == 0
+
+  test "event cadence schedules progress events and loop boundaries":
+    let
+      scheduler = newAnimationScheduler()
+      animation = newAnimation(duration = 100.ms, loopCount = 2)
+      startedAt = getMonoTime()
+
+    animation.cadence = eventCadence()
+    animation.progressMarks = [0.25'f32, 0.75'f32]
+    check scheduler.startAnimationAt(animation, startedAt)
+
+    check scheduler.nextDeadline(startedAt).get() - startedAt == 25.ms
+    check scheduler.advance(startedAt + 24.ms) == 0
+    check scheduler.advance(startedAt + 25.ms) == 1
+    check animation.currentTime{} == 25.ms
+    check scheduler.nextDeadline(startedAt + 25.ms).get() - startedAt == 75.ms
+
+    check scheduler.advance(startedAt + 75.ms) == 1
+    check scheduler.nextDeadline(startedAt + 75.ms).get() - startedAt == 100.ms
+    check scheduler.advance(startedAt + 100.ms) == 1
+    check animation.currentTime{} == 100.ms
+    check scheduler.nextDeadline(startedAt + 100.ms).get() - startedAt == 125.ms
+
+  test "pause and sequential group deadlines do not create frame ticks":
+    let
+      scheduler = newAnimationScheduler(frameInterval = 16.ms)
+      pause = newPauseAnimation(100.ms)
+      value = newValueAnimation[float32](0.0'f32, 1.0'f32, duration = 50.ms)
+      group = newSequentialAnimationGroup([pause, value])
+      startedAt = getMonoTime()
+
+    check pause.cadence.kind == ackEvents
+    check group.cadence.kind == ackEvents
+    check scheduler.startAnimationAt(group, startedAt)
+    check scheduler.nextDeadline(startedAt).get() - startedAt == 100.ms
+    check scheduler.advance(startedAt + 99.ms) == 0
+    check scheduler.advance(startedAt + 100.ms) == 1
+    check scheduler.nextDeadline(startedAt + 100.ms).get() - startedAt == 116.ms
+
+    group.pause()
+    check scheduler.nextDeadline(startedAt + 100.ms).isNone
+    check scheduler.advance(startedAt + 500.ms) == 0
+    group.resume()
+    check scheduler.nextDeadline(startedAt + 500.ms).get() - startedAt == 516.ms
+
+  test "interval cadence aligns samples and still schedules an earlier end":
+    let animation = newAnimation(duration = 100.ms)
+    animation.cadence = intervalCadence(40.ms)
+
+    let first = animation.nextDeadline(initDuration(), 16.ms)
+    check first.get().time == 40.ms
+    check first.get().kind == adkCadence
+
+    let last = animation.nextDeadline(80.ms, 16.ms)
+    check last.get().time == 100.ms
+    check last.get().kind == adkCompletion
+
   test "manual scheduler uses protocol natural duration for groups":
     let
       scheduler = newAnimationScheduler()
@@ -442,7 +521,7 @@ suite "NimKit animations":
     finally:
       clock.stop()
 
-  test "application drains scheduler clock ticks during run loop frames":
+  test "application advances deadlines without starting its legacy clock":
     let
       app = newApplication()
       view = newView(frame = rect(0.0, 0.0, 100.0, 40.0))
@@ -452,13 +531,8 @@ suite "NimKit animations":
     app.animationClock().frameInterval = 2.ms
     check app.startAnimation(animation)
     try:
-      for _ in 0 ..< 50:
-        discard app.animationClock().pollQueuedTicks()
-        if app.animationClock().pendingTickCount > 0:
-          break
-        sleep(2)
-
-      check app.animationClock().pendingTickCount > 0
+      check not app.animationClock().isRunning
+      sleep(3)
       check app.runForFrames(1) == 1
       check animation.currentTime{}.inNanoseconds > 0
       check view.frame() != rect(0.0, 0.0, 100.0, 40.0)
