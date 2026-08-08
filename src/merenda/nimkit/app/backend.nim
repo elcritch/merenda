@@ -66,12 +66,46 @@ proc pollNativeEvents*() =
   when not defined(useNativeDynlib):
     discard siwinshim.sharedSiwinGlobals().pollEvents()
 
-type
-  RenderExecutionMode* = enum
-    remAutomatic
-    remMainThread
-    remDedicatedThread
+type RenderExecutionMode* = enum
+  remAutomatic
+  remMainThread
+  remDedicatedThread
 
+when defined(linux) or defined(bsd):
+  type
+    LayerSurfaceLayer* = enum
+      lslBackground
+      lslBottom
+      lslTop
+      lslOverlay
+
+    LayerSurfaceAnchor* = enum
+      lsaTop
+      lsaBottom
+      lsaLeft
+      lsaRight
+
+    LayerSurfaceKeyboardMode* = enum
+      lskNone
+      lskExclusive
+      lskOnDemand
+
+    LayerSurfaceMargins* = object
+      top*: int32
+      right*: int32
+      bottom*: int32
+      left*: int32
+
+    LayerSurfaceConfig* = object
+      layer*: LayerSurfaceLayer
+      anchors*: set[LayerSurfaceAnchor]
+      margins*: LayerSurfaceMargins
+      exclusiveZone*: int32
+      keyboardMode*: LayerSurfaceKeyboardMode
+      output*: int32
+      namespace*: string
+
+type
   HostKeyEvent* = object
     event*: events.KeyEvent
     pressed*: bool
@@ -1592,6 +1626,67 @@ proc createHostWindow*(
   result.xNativeWindow.firstStep()
   result.xNativeWindow.refreshUiScale(result.xAutoScale)
   result.xReady = true
+
+when defined(linux) or defined(bsd):
+  proc createLayerSurfaceHostWindow*(
+      frame: Rect,
+      title: string,
+      callbacks: HostWindowCallbacks,
+      config: LayerSurfaceConfig,
+      transparent = false,
+  ): HostWindow =
+    when defined(useNativeDynlib):
+      raise newException(
+        ValueError, "Layer-shell surfaces are unavailable through the native dynlib"
+      )
+    else:
+      let
+        scaleOverride = uiScaleOverrideFromEnv()
+        size = nativeWindowSize(frame.size, scaleOverride.overrideScale())
+      result = HostWindow(
+        xCallbacks: callbacks,
+        xTransparent: transparent,
+        xResources: newRenderResourceManager(),
+      )
+      result.xRenderer = figrender.newFigRenderer(
+        atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+      )
+
+      var nativeAnchors: set[siwinshim.LayerSurfaceAnchor]
+      for anchor in config.anchors:
+        nativeAnchors.incl siwinshim.LayerSurfaceAnchor(anchor.ord)
+      let nativeConfig = siwinshim.LayerSurfaceConfig(
+        layer: siwinshim.LayerSurfaceLayer(config.layer.ord),
+        anchors: nativeAnchors,
+        margins: siwinshim.LayerSurfaceMargins(
+          top: config.margins.top,
+          right: config.margins.right,
+          bottom: config.margins.bottom,
+          left: config.margins.left,
+        ),
+        exclusiveZone: config.exclusiveZone,
+        keyboardMode: siwinshim.LayerSurfaceKeyboardMode(config.keyboardMode.ord),
+        namespace: config.namespace,
+      )
+      result.xNativeWindow = siwinshim.newSiwinLayerSurfaceWindow(
+        result.xRenderer,
+        size = size,
+        title = title,
+        screen = config.output,
+        config = nativeConfig,
+        transparent = transparent,
+      )
+      result.xRenderer.setupBackend(result.xNativeWindow)
+      result.xPresentationTarget = result.xRenderer.presentationTarget()
+      result.configureHostUiScale(scaleOverride)
+      result.configureTransparentPresentation()
+      result.registerHost()
+      result.installNativeClipboardBridge()
+      result.installEventHandlers()
+
+      result.xNativeWindow.firstStep()
+      result.xNativeWindow.refreshUiScale(result.xAutoScale)
+      result.xReady = true
 
 proc createPopupHostWindow*(
     owner: HostWindow,

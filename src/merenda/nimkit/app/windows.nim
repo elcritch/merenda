@@ -150,6 +150,8 @@ type
     xFrameAutosaveName: string
     xKeyBindings: KeyBindingTable
     xHostWindow: HostWindow
+    when defined(linux) or defined(bsd):
+      xLayerSurface: Option[nimkitBackend.LayerSurfaceConfig]
     xThreadRenderer: ThreadRendererClient
     xThreadHost: ThreadHostClient
     xAnimationScheduler: AnimationScheduler
@@ -198,6 +200,27 @@ type
     restoreWindow: Window
     restoreResponder: Responder
     onDismiss: TransientDismissHandler
+
+when defined(linux) or defined(bsd):
+  type
+    LayerSurfaceLayer* = nimkitBackend.LayerSurfaceLayer
+    LayerSurfaceAnchor* = nimkitBackend.LayerSurfaceAnchor
+    LayerSurfaceKeyboardMode* = nimkitBackend.LayerSurfaceKeyboardMode
+    LayerSurfaceMargins* = nimkitBackend.LayerSurfaceMargins
+    LayerSurfaceConfig* = nimkitBackend.LayerSurfaceConfig
+
+  const
+    lslBackground* = nimkitBackend.lslBackground
+    lslBottom* = nimkitBackend.lslBottom
+    lslTop* = nimkitBackend.lslTop
+    lslOverlay* = nimkitBackend.lslOverlay
+    lsaTop* = nimkitBackend.lsaTop
+    lsaBottom* = nimkitBackend.lsaBottom
+    lsaLeft* = nimkitBackend.lsaLeft
+    lsaRight* = nimkitBackend.lsaRight
+    lskNone* = nimkitBackend.lskNone
+    lskExclusive* = nimkitBackend.lskExclusive
+    lskOnDemand* = nimkitBackend.lskOnDemand
 
 type EventDispatchResult = object
   handled: bool
@@ -507,6 +530,15 @@ proc newWindow*(
   discard result.withProtocol(DefaultWindowCommands)
   discard result.withProtocol(DefaultWindowUndoManagerProvider)
   discard result.withProtocol(DefaultWindowValidations)
+
+when defined(linux) or defined(bsd):
+  proc newLayerSurfaceWindow*(
+      title: string, frame: Rect, config: LayerSurfaceConfig, transparent = false
+  ): Window =
+    result = newWindow(title, frame, transparent)
+    result.xLayerSurface = some(config)
+    result.xStyleMask = {wsmNonactivatingPanel}
+    result.xLevel = wlStatus
 
 proc stopToolTipDelay(window: Window) =
   let animation = window.xToolTipDelayAnimation
@@ -2793,9 +2825,23 @@ proc ensureNativeWindow*(window: Window) =
       window.xOwnerWindow.xHostWindow, window.xPopupPlacement, callbacks
     )
   else:
-    window.xHostWindow = createHostWindow(
-      window.xFrame, window.xTitle, callbacks, transparent = window.xTransparent
-    )
+    when defined(linux) or defined(bsd):
+      if window.xLayerSurface.isSome:
+        window.xHostWindow = createLayerSurfaceHostWindow(
+          window.xFrame,
+          window.xTitle,
+          callbacks,
+          window.xLayerSurface.get(),
+          transparent = window.xTransparent,
+        )
+      else:
+        window.xHostWindow = createHostWindow(
+          window.xFrame, window.xTitle, callbacks, transparent = window.xTransparent
+        )
+    else:
+      window.xHostWindow = createHostWindow(
+        window.xFrame, window.xTitle, callbacks, transparent = window.xTransparent
+      )
   window.syncNativeSizeLimits()
   window.xBackdropActive = false
   if window.xBackdrop.kind != wbekNone:

@@ -115,6 +115,14 @@ proc newConstraintSpyView(name: string, frame: Rect): ConstraintSpyView =
   discard result.withProtocol(ConstraintSpyHooks)
 
 suite "nimkit views":
+  test "layer surface window API is limited to Wayland platforms":
+    when defined(linux) or defined(bsd):
+      check declared(LayerSurfaceConfig)
+      check declared(newLayerSurfaceWindow)
+    else:
+      check not declared(LayerSurfaceConfig)
+      check not declared(newLayerSurfaceWindow)
+
   test "frame changes preserve bounds origin":
     let view = newView(frame = rect(0, 0, 100, 80))
 

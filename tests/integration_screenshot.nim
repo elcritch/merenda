@@ -295,6 +295,7 @@ suite "nimkit screenshot":
       status = newStatusLabel("Button state: Off (click to cycle)")
       button = newButton("Cycle State (Off)")
 
+    root.appearance = initAppearance(initAquaTheme())
     button.buttonType = btToggle
     button.allowsMixedState = true
     layout.spacing = 12.0
@@ -361,6 +362,7 @@ suite "nimkit screenshot":
         status = newStatusLabel("Button state: Off (click to cycle)")
         button = newButton("Cycle State (Off)")
 
+      root.appearance = initAppearance(initAquaTheme())
       button.buttonType = btToggle
       button.allowsMixedState = true
       layout.spacing = 12.0
@@ -423,6 +425,8 @@ suite "nimkit screenshot":
       status = newStatusLabel("Button state: Off (click to cycle)")
       button = newButton("Cycle State (Off)")
       action = actionSelector("cycleState")
+
+    root.appearance = initAppearance(initAquaTheme())
 
     proc updateStatus() =
       let label =

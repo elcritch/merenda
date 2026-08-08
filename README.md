@@ -283,6 +283,10 @@ NimKit ships the core controls needed for desktop-style interfaces:
 - Value and status controls: `newSlider`, `newStepper`, `newSwitchButton`, `newProgressIndicator`
 - Data and navigation views: `newTableView`, `newOutlineView`, `newCascadingView`, `newCollectionView`, `newDocumentTabs`, `newButtonMatrix`, `newRadioMatrix`
 
+Linux and BSD builds also expose `newLayerSurfaceWindow` and the
+`LayerSurfaceConfig` types for Wayland layer-shell surfaces. These APIs are not
+declared on macOS or Windows, and they require a Wayland session at runtime.
+
 Controls use Cocoa-style target/action for commands:
 
 ```nim
