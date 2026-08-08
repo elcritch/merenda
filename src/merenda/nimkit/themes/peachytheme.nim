@@ -853,7 +853,7 @@ proc installPeachyDocumentTabs(theme: var Theme) =
   theme[srDocumentTabBar, StyleBorderWidth] = 1.25
 
 proc initPeachyTheme*(): Theme =
-  result = initTheme()
+  result = initAquaTheme()
   result[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
   result.installPeachyTokens()
   result.installPeachyControlStyles()

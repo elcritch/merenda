@@ -391,7 +391,7 @@ const TextStyleRoles = [
   srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem, srTooltip,
 ]
 
-proc initTheme*(): Theme =
+proc initAquaTheme*(): Theme =
   result.tokens = newStyleTokenStore()
   result.chromes = initTable[string, Chrome]()
   result.setFontName(frUI, defaultFontName(frUI))
@@ -1353,7 +1353,7 @@ proc initTheme*(): Theme =
   result.installThemeExtensions()
 
 proc initBannerTheme*(): Theme =
-  result = initTheme()
+  result = initAquaTheme()
   result[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
   result[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
   result[srCheckBox, StyleChrome] = styleKeyword(DefaultChromeName)
@@ -1453,6 +1453,7 @@ type ThemeFactory* = proc(): Theme
 var
   themeFactories: Table[string, ThemeFactory]
   themeFactoriesInitialized: bool
+  defaultThemeFactory: ThemeFactory
 
 proc normalizedThemeName(name: string): string =
   name.strip().toLowerAscii()
@@ -1470,10 +1471,21 @@ proc registerThemeFactory*(name: string, factory: ThemeFactory) =
   ensureThemeFactories()
   themeFactories[key] = factory
 
+proc registerDefaultThemeFactory*(factory: ThemeFactory) =
+  defaultThemeFactory = factory
+
+proc initTheme*(): Theme =
+  if defaultThemeFactory.isNil:
+    initAquaTheme()
+  else:
+    defaultThemeFactory()
+
 proc initThemeByName*(name: string): Theme =
   let key = name.normalizedThemeName()
-  if key.len == 0 or key in ["default", "aqua", "system"]:
+  if key.len == 0 or key in ["default", "system"]:
     return initTheme()
+  if key == "aqua":
+    return initAquaTheme()
   if key == "banner":
     return initBannerTheme()
   ensureThemeFactories()

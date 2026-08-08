@@ -4,6 +4,27 @@ import merenda/nimkit
 import merenda/nimkit/app/settings
 
 suite "nimkit settings":
+  test "DarkBSD is selected by default and Aqua is named explicitly":
+    var appliedAppearance: Appearance
+    let settings = newMerendaSettingsWindow(
+      proc(appearance: Appearance) =
+        appliedAppearance = appearance
+    )
+    defer:
+      settings.window().close()
+    let themeView = settings.contentView().viewWithIdentifier("settings-theme-picker")
+
+    require not themeView.isNil
+    require themeView of ComboBox
+    let themePicker = ComboBox(themeView)
+    check themePicker.selectedIndex == 0
+    check themePicker.stringValue == "DarkBSD"
+    check appliedAppearance.resolveChromeName(controlStyle(srButton)) ==
+      RubyAquaChromeName
+
+    themePicker.selectedIndex = 1
+    check themePicker.stringValue == "Aqua"
+
   test "typography settings expose independent interface and monospace fonts":
     let settings = newMerendaSettingsWindow()
     defer:
@@ -110,7 +131,7 @@ suite "nimkit settings":
         srTextField, id = "settings-font-preview", classes = @[LabelStyleClass]
       )
 
-    for themeIndex in [1, 2, 3]:
+    for themeIndex in [0, 2, 3]:
       themePicker.selectedIndex = themeIndex
       check themePicker.sendAction()
       fontSizeStepper.value = 14.0'f32

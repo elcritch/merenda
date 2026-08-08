@@ -616,10 +616,10 @@ proc drawSplitViewDividers(splitView: SplitView, context: DrawContext) =
   let style =
     context.appearance.resolveSplitViewStyle(splitView.splitViewStyleContext())
   for index in 0 ..< splitView.splitDividerCount():
-    let rect = splitView.dividerRect(index)
-    if not rect.isEmpty:
+    let dividerRect = splitView.dividerRect(index)
+    if not dividerRect.isEmpty:
       discard context.addRenderRectangle(
-        context.renderRectFor(rect),
+        context.renderRectFor(dividerRect),
         style.divider.fill,
         style.divider.borderColor,
         style.divider.borderWidth,
@@ -628,30 +628,35 @@ proc drawSplitViewDividers(splitView: SplitView, context: DrawContext) =
         cornerRadii = style.divider.cornerRadii,
       )
       let
-        markLength = min(max(style.dividerThickness * 0.45'f32, 2.0'f32), 4.0'f32)
-        markInset = max((style.dividerThickness - markLength) / 2.0'f32, 0.0'f32)
-        markRect =
+        dividerThickness = dividerRect.size.mainSize(splitView.xAxis)
+        crossLength = dividerRect.size.crossSize(splitView.xAxis)
+        gripThickness = min(max(dividerThickness * 0.5'f32, 1.0'f32), 3.0'f32)
+        gripLength =
+          min(max(style.gripLength, 0.0'f32), max(crossLength - 16.0'f32, 0.0'f32))
+        mainInset = max((dividerThickness - gripThickness) / 2.0'f32, 0.0'f32)
+        crossInset = max((crossLength - gripLength) / 2.0'f32, 0.0'f32)
+        gripRect =
           if splitView.xAxis == laHorizontal:
             rect(
-              rect.origin.x + markInset,
-              rect.origin.y + 4.0'f32,
-              markLength,
-              max(rect.size.height - 8.0'f32, 0.0'f32),
+              dividerRect.origin.x + mainInset,
+              dividerRect.origin.y + crossInset,
+              gripThickness,
+              gripLength,
             )
           else:
             rect(
-              rect.origin.x + 4.0'f32,
-              rect.origin.y + markInset,
-              max(rect.size.width - 8.0'f32, 0.0'f32),
-              markLength,
+              dividerRect.origin.x + crossInset,
+              dividerRect.origin.y + mainInset,
+              gripLength,
+              gripThickness,
             )
-      if not markRect.isEmpty:
+      if not gripRect.isEmpty:
         discard context.addRenderRectangle(
-          context.renderRectFor(markRect),
-          fill(style.divider.borderColor),
-          style.divider.borderColor,
+          context.renderRectFor(gripRect),
+          fill(style.gripColor),
+          style.gripColor,
           0.0'f32,
-          style.divider.cornerRadius,
+          gripThickness / 2.0'f32,
         )
 
 protocol DefaultSplitViewLayout of ViewLayoutProtocol:

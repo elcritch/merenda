@@ -1,12 +1,14 @@
-import std/[os, tables, unicode, unittest]
+import std/[atomics, monotimes, os, tables, times, unicode, unittest]
 
 import figdraw
 from figdraw/windowing/siwinshim import nil
+from siwin/platforms/any/window import eventLoopWaker, wake
 import sigils/core
 import sigils/threads
 
 import merenda/nimkit
-from merenda/nimkit/app/backend import join, newThreadRendererRuntime, start, stop
+from merenda/nimkit/app/backend import
+  join, newThreadRendererRuntime, remMainThread, start, stop
 
 proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
@@ -53,6 +55,15 @@ type
   ThreadPollWorker = ref object of AgentActor
   ThreadPollCollector = ref object of Agent
     value: int
+    stopApp: Application
+
+  AnimationDeadlineObserver = ref object of Agent
+    app: Application
+    firedAt: MonoTime
+
+  SafetyWakeRequest = object
+    canceled: ptr Atomic[bool]
+    waker: ptr siwinshim.EventLoopWaker
 
 proc threadPollRequested*(dispatcher: ThreadPollDispatcher, value: int) {.signal.}
 proc threadPollFinished*(worker: ThreadPollWorker, value: int) {.signal.}
@@ -60,8 +71,25 @@ proc threadPollFinished*(worker: ThreadPollWorker, value: int) {.signal.}
 proc processThreadPoll(worker: ThreadPollWorker, value: int) {.slot.} =
   emit worker.threadPollFinished(value)
 
+proc processDelayedThreadPoll(worker: ThreadPollWorker, value: int) {.slot.} =
+  sleep(50)
+  emit worker.threadPollFinished(value)
+
 proc collectThreadPoll(collector: ThreadPollCollector, value: int) {.slot.} =
   collector.value = value
+  if not collector.stopApp.isNil:
+    collector.stopApp.stop()
+
+proc animationDeadlineReached(observer: AnimationDeadlineObserver) {.slot.} =
+  observer.firedAt = getMonoTime()
+  observer.app.stop()
+
+proc wakeAfterTimeout(request: SafetyWakeRequest) {.thread.} =
+  for _ in 0 ..< 200:
+    if request.canceled[].load(moAcquire):
+      return
+    sleep(10)
+  request.waker[].wake()
 
 type
   MenuSpyTarget = ref object of View
@@ -1162,6 +1190,110 @@ suite "nimkit application":
     finally:
       pool.stop()
       pool.join()
+
+  test "application blocking wait wakes for threaded Sigils results":
+    block nativeThreadWake:
+      let
+        app = newApplication()
+        window = newWindow("Nimkit Sigils Wake", frame = rect(80, 80, 240, 140))
+        root = newView(frame = rect(0, 0, 240, 140))
+        dispatcher = ThreadPollDispatcher()
+        collector = ThreadPollCollector(stopApp: app)
+        pool = newSigilThreadPool(workers = 1)
+      var worker = ThreadPollWorker()
+      let workerProxy = worker.moveToThread(pool)
+      connectThreaded(
+        dispatcher, threadPollRequested, workerProxy, processDelayedThreadPoll
+      )
+      connectThreaded(
+        workerProxy,
+        threadPollFinished,
+        collector,
+        ThreadPollCollector.collectThreadPoll(),
+      )
+
+      app.renderExecutionMode = remMainThread
+      window.setContentView(root)
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+      pool.start()
+
+      var
+        canceled: Atomic[bool]
+        safetyThread: Thread[SafetyWakeRequest]
+        safetyStarted = false
+        safetyWaker = siwinshim.sharedSiwinGlobals().eventLoopWaker()
+      canceled.store(false, moRelaxed)
+      try:
+        createThread(
+          safetyThread,
+          wakeAfterTimeout,
+          SafetyWakeRequest(canceled: addr canceled, waker: addr safetyWaker),
+        )
+        safetyStarted = true
+        emit dispatcher.threadPollRequested(42)
+        let started = getMonoTime()
+        app.run()
+        let elapsed = getMonoTime() - started
+
+        check collector.value == 42
+        check elapsed < initDuration(milliseconds = 1_500)
+      except CatchableError:
+        skip()
+        break nativeThreadWake
+      finally:
+        canceled.store(true, moRelease)
+        if safetyStarted:
+          safetyThread.joinThread()
+        window.close()
+        pool.stop()
+        pool.join()
+
+  test "application blocking wait wakes at an animation deadline":
+    block nativeAnimationDeadline:
+      let
+        app = newApplication()
+        window = newWindow("Nimkit Animation Wake", frame = rect(80, 80, 240, 140))
+        root = newView(frame = rect(0, 0, 240, 140))
+        pause = newPauseAnimation(60.ms)
+        observer = AnimationDeadlineObserver(app: app)
+
+      pause.connect(finished, observer, animationDeadlineReached)
+      app.renderExecutionMode = remMainThread
+      window.setContentView(root)
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+
+      var
+        canceled: Atomic[bool]
+        safetyThread: Thread[SafetyWakeRequest]
+        safetyStarted = false
+        safetyWaker = siwinshim.sharedSiwinGlobals().eventLoopWaker()
+      canceled.store(false, moRelaxed)
+      try:
+        createThread(
+          safetyThread,
+          wakeAfterTimeout,
+          SafetyWakeRequest(canceled: addr canceled, waker: addr safetyWaker),
+        )
+        safetyStarted = true
+        let started = getMonoTime()
+        check app.startAnimation(pause)
+        check not app.animationClock().isRunning
+        app.run()
+        let elapsed = observer.firedAt - started
+
+        check observer.firedAt > started
+        check elapsed >= 40.ms
+        check elapsed < 500.ms
+      except CatchableError:
+        skip()
+        break nativeAnimationDeadline
+      finally:
+        canceled.store(true, moRelease)
+        if safetyStarted:
+          safetyThread.joinThread()
+        window.close()
 
   test "runForFrames opens and pumps a visible native window":
     block nativeRun:

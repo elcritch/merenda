@@ -51,6 +51,7 @@ suite "nimkit split views":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 50.0)
 
+    splitView.appearance = initAppearance(initAquaTheme())
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.layoutSubtreeIfNeeded()
@@ -61,12 +62,37 @@ suite "nimkit split views":
     check splitView.cursorRects().len == 1
     check splitView.cursorRects()[0].cursor == "resize-left-right"
 
+  test "constraints inside a positioned second pane stay local":
+    let
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 120.0))
+      left = newFixedIntrinsicView(80.0, 40.0)
+      right = newFixedIntrinsicView(90.0, 50.0)
+      sidebar = newView(frame = rect(18.0, 10.0, 80.0, 40.0))
+      sidebarLeft =
+        newLayoutConstraint(sidebar, atLeft, lrEqual, right, atLeft, constant = 18.0)
+
+    splitView.appearance = initAppearance(initAquaTheme())
+    splitView.addPane(left)
+    splitView.addPane(right)
+    splitView.layoutSubtreeIfNeeded()
+    check right.frame().origin.x == 156.0'f32
+
+    right.addSubview(sidebar)
+    activate(sidebarLeft)
+
+    splitView.layoutSubtreeIfNeeded()
+    check sidebar.frame().origin.x == 18.0'f32
+
+    splitView.layoutSubtreeIfNeeded()
+    check sidebar.frame().origin.x == 18.0'f32
+
   test "vertical split view uses vertical axis and natural size":
     let
       splitView = newSplitView(laVertical, rect(0.0, 0.0, 200.0, 206.0))
       top = newFixedIntrinsicView(80.0, 40.0)
       bottom = newFixedIntrinsicView(90.0, 50.0)
 
+    splitView.appearance = initAppearance(initAquaTheme())
     splitView.addPane(top)
     splitView.addPane(bottom)
     splitView.layoutSubtreeIfNeeded()
@@ -83,6 +109,7 @@ suite "nimkit split views":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
+    splitView.appearance = initAppearance(initAquaTheme())
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.setPaneSizeLimits(0, minSize = 80.0, maxSize = 210.0)
@@ -104,6 +131,7 @@ suite "nimkit split views":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
+    splitView.appearance = initAppearance(initAquaTheme())
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.layoutSubtreeIfNeeded()
@@ -155,6 +183,8 @@ suite "nimkit split views":
       c = newFixedIntrinsicView(80.0, 40.0)
       d = newFixedIntrinsicView(90.0, 40.0)
 
+    first.appearance = initAppearance(initAquaTheme())
+    second.appearance = initAppearance(initAquaTheme())
     first.addPane(a, collapsible = true)
     first.addPane(b)
     first.setPositionOfDivider(0, 180.0)
@@ -187,3 +217,32 @@ suite "nimkit split views":
       if node.kind == nkRectangle:
         inc rectangleCount
     check rectangleCount >= 2
+
+  test "DarkBSD split view renders a centered high-contrast drag grip":
+    let
+      appearance = initAppearance(initDarkBSDTheme())
+      style = appearance.resolveSplitViewStyle(controlStyle(srSplitView))
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
+      left = newFixedIntrinsicView(80.0, 40.0)
+      right = newFixedIntrinsicView(90.0, 40.0)
+
+    check style.dividerThickness == 8.0'f32
+    check style.divider.borderWidth == 0.0'f32
+    check style.gripLength == 32.0'f32
+    check style.gripColor == color(0.72, 0.72, 0.76, 0.82)
+
+    splitView.appearance = appearance
+    splitView.addPane(left)
+    splitView.addPane(right)
+    splitView.layoutSubtreeIfNeeded()
+
+    let list = buildRenders(splitView)[DefaultDrawLevel]
+    var foundGrip = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill == fill(style.gripColor):
+        foundGrip = true
+        check node.screenBox.w == 3.0'f32
+        check node.screenBox.h == 32.0'f32
+        check node.screenBox.x == 151.5'f32
+        check node.screenBox.y == 34.0'f32
+    check foundGrip

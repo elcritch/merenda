@@ -252,7 +252,7 @@ suite "nimkit rendering":
       highlightColor = color(1.0, 1.0, 1.0, 0.4)
       stripeColor = color(0.2, 0.3, 0.4, 0.2)
 
-    var theme = initTheme()
+    var theme = initAquaTheme()
     theme[srView, StyleBackgroundFill] = baseFill
     theme[srView, StyleBackgroundPinstripeHighlightColor] = highlightColor
     theme[srView, StyleBackgroundPinstripeColor] = stripeColor
@@ -488,7 +488,7 @@ suite "nimkit rendering":
       expectedKnobFill = fill(color(0.35, 0.35, 0.55, 0.85))
       expectedKnobRect = rect(45.0, 25.0, 20.0, 20.0)
 
-    var theme = initTheme()
+    var theme = initAquaTheme()
     theme[srSlider, StyleChrome] = styleKeyword(DefaultChromeName)
     theme[srSlider, StyleKnobSize] = 20.0
     theme[srSlider, StyleIndicatorSize] = 6.0
@@ -515,6 +515,7 @@ suite "nimkit rendering":
       root = newView(frame = rect(0, 0, 180, 90))
       button = newButton("OK", frame = rect(20, 24, 120, 32))
 
+    root.appearance = initAppearance(initAquaTheme())
     root.addSubview(button)
 
     let
@@ -746,7 +747,7 @@ suite "nimkit rendering":
     root.addSubview(radio)
 
     let
-      appearance = initAppearance(initTheme())
+      appearance = initAppearance(initAquaTheme())
       checkStyle =
         appearance.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
       radioStyle =
@@ -836,6 +837,7 @@ suite "nimkit rendering":
       root = newView(frame = rect(0, 0, 220, 150))
       combo = newComboBox(["One", "Two", "Three"], frame = rect(10, 20, 120, 26))
 
+    root.appearance = initAppearance(initAquaTheme())
     combo.selectItemAtIndex(1)
     combo.openPopup()
     root.addSubview(combo)
@@ -911,6 +913,7 @@ suite "nimkit rendering":
       menu = newMenu("Actions")
       button = newPopupMenuButton("Actions", menu, rect(10, 4, 82, 24))
 
+    root.appearance = initAppearance(initAquaTheme())
     discard menu.addItem(
       newMenuItem("Run Menu Action", keyEquivalent = "r", modifiers = {kmCommand})
     )
@@ -1347,6 +1350,7 @@ suite "nimkit rendering":
       root = newView(frame = rect(0, 0, 180, 80))
       field = newTextField("Field", frame = rect(10, 20, 120, 30))
 
+    root.appearance = initAppearance(initAquaTheme())
     root.addSubview(field)
     discard field.becomeFirstResponder()
     field.selectedRange = initTextRange(1, 2)

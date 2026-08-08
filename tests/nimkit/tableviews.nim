@@ -1091,6 +1091,7 @@ suite "NimKit TableView":
       age = newTableColumn("age", "Age", width = 60.0)
       store = newTableViewStateStore()
 
+    tableView.appearance = initAppearance(initAquaTheme())
     tableView.addColumn(name)
     tableView.addColumn(age)
     tableView.autosaveName = "people"

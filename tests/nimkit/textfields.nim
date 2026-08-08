@@ -295,7 +295,7 @@ suite "nimkit text fields":
     check window.makeFirstResponder(field)
     check window.fieldEditor().selectionColor == color(0.34, 0.18, 0.23, 0.92)
 
-    root.appearance = initAppearance(initTheme())
+    root.appearance = initAppearance(initAquaTheme())
     check window.fieldEditor().selectionColor == color(0.24, 0.56, 1.0, 0.34)
 
     root.appearance = initAppearance(initMacOSTheme())
@@ -441,6 +441,7 @@ suite "nimkit text fields":
       status =
         newStatusLabel("Values: Edit me / Tab here", frame = rect(28, 154, 320, 24))
 
+    root.appearance = initAppearance(initAquaTheme())
     root.addSubviews(autoNames(title, field, secondField, status))
     window.setContentView(root)
 

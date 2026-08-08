@@ -1105,6 +1105,36 @@ proc expressionFor(solverView: SolverView, attribute: LayoutAttribute): Expressi
   of atNotAnAttribute:
     toExpression(0.KiwiScalar)
 
+proc constraintExpressionFor(
+    state: var LayoutSolveState, item: View, attribute: LayoutAttribute
+): Expression =
+  # Solver geometry remains local to each superview. Authored positional
+  # constraints need a shared coordinate space when they cross that boundary.
+  result = state.solverView(item).expressionFor(attribute)
+
+  case attribute
+  of atLeft, atRight, atLeading, atTrailing, atCenterX:
+    var ancestor = item.superviewBacklink()
+    while not ancestor.isNil and state.hasSolverView(ancestor):
+      let ancestorView = state.solverView(ancestor)
+      result =
+        result + ancestorView.left -
+        (ancestor.xAlignmentInsets.left + ancestor.xBounds.origin.x).solverValue
+      ancestor = ancestor.superviewBacklink()
+  of atTop, atBottom, atCenterY, atFirstBaseline, atLastBaseline:
+    var ancestor = item.superviewBacklink()
+    while not ancestor.isNil and state.hasSolverView(ancestor):
+      let
+        ancestorView = state.solverView(ancestor)
+        frameTop = ancestorView.top - ancestor.xAlignmentInsets.top.solverValue
+      if ancestor.xFlipped:
+        result = result + frameTop - ancestor.xBounds.origin.y.solverValue
+      else:
+        result = frameTop + ancestor.xBounds.maxY.solverValue - result
+      ancestor = ancestor.superviewBacklink()
+  of atWidth, atHeight, atNotAnAttribute:
+    discard
+
 func autoresizingOptions(axis: LayoutAxis): AutoresizingAxisOptions =
   case axis
   of laHorizontal:
@@ -1358,14 +1388,13 @@ proc addLayoutConstraint(state: var LayoutSolveState, constraint: LayoutConstrai
     return
 
   let left =
-    state.solverView(constraint.xFirstItem).expressionFor(constraint.xFirstAttribute)
+    state.constraintExpressionFor(constraint.xFirstItem, constraint.xFirstAttribute)
   let right =
     if constraint.xSecondItem.isNil:
       toExpression(constraint.xConstant.solverValue)
     else:
-      state.solverView(constraint.xSecondItem).expressionFor(
-        constraint.xSecondAttribute
-      ) * constraint.xMultiplier.solverValue + constraint.xConstant.solverValue
+      state.constraintExpressionFor(constraint.xSecondItem, constraint.xSecondAttribute) *
+        constraint.xMultiplier.solverValue + constraint.xConstant.solverValue
 
   state.addRelation(left, right, constraint.xRelation, constraint.xPriority)
 

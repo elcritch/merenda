@@ -1,4 +1,4 @@
-import std/[math, options, os, tables, times]
+import std/[math, monotimes, options, os, tables, times]
 
 when defined(useNativeDynlib):
   import figdraw/dynlib as figrender
@@ -47,12 +47,6 @@ type
     wlModalPanel
     wlMainMenu
     wlStatus
-
-  LayerSurfaceLayer* = nimkitBackend.LayerSurfaceLayer
-  LayerSurfaceAnchor* = nimkitBackend.LayerSurfaceAnchor
-  LayerSurfaceKeyboardMode* = nimkitBackend.LayerSurfaceKeyboardMode
-  LayerSurfaceMargins* = nimkitBackend.LayerSurfaceMargins
-  LayerSurfaceConfig* = nimkitBackend.LayerSurfaceConfig
 
   Panel* = Window
 
@@ -156,7 +150,8 @@ type
     xFrameAutosaveName: string
     xKeyBindings: KeyBindingTable
     xHostWindow: HostWindow
-    xLayerSurface: Option[LayerSurfaceConfig]
+    when defined(linux) or defined(bsd):
+      xLayerSurface: Option[nimkitBackend.LayerSurfaceConfig]
     xThreadRenderer: ThreadRendererClient
     xThreadHost: ThreadHostClient
     xAnimationScheduler: AnimationScheduler
@@ -206,18 +201,26 @@ type
     restoreResponder: Responder
     onDismiss: TransientDismissHandler
 
-const
-  lslBackground* = nimkitBackend.lslBackground
-  lslBottom* = nimkitBackend.lslBottom
-  lslTop* = nimkitBackend.lslTop
-  lslOverlay* = nimkitBackend.lslOverlay
-  lsaTop* = nimkitBackend.lsaTop
-  lsaBottom* = nimkitBackend.lsaBottom
-  lsaLeft* = nimkitBackend.lsaLeft
-  lsaRight* = nimkitBackend.lsaRight
-  lskNone* = nimkitBackend.lskNone
-  lskExclusive* = nimkitBackend.lskExclusive
-  lskOnDemand* = nimkitBackend.lskOnDemand
+when defined(linux) or defined(bsd):
+  type
+    LayerSurfaceLayer* = nimkitBackend.LayerSurfaceLayer
+    LayerSurfaceAnchor* = nimkitBackend.LayerSurfaceAnchor
+    LayerSurfaceKeyboardMode* = nimkitBackend.LayerSurfaceKeyboardMode
+    LayerSurfaceMargins* = nimkitBackend.LayerSurfaceMargins
+    LayerSurfaceConfig* = nimkitBackend.LayerSurfaceConfig
+
+  const
+    lslBackground* = nimkitBackend.lslBackground
+    lslBottom* = nimkitBackend.lslBottom
+    lslTop* = nimkitBackend.lslTop
+    lslOverlay* = nimkitBackend.lslOverlay
+    lsaTop* = nimkitBackend.lsaTop
+    lsaBottom* = nimkitBackend.lsaBottom
+    lsaLeft* = nimkitBackend.lsaLeft
+    lsaRight* = nimkitBackend.lsaRight
+    lskNone* = nimkitBackend.lskNone
+    lskExclusive* = nimkitBackend.lskExclusive
+    lskOnDemand* = nimkitBackend.lskOnDemand
 
 type EventDispatchResult = object
   handled: bool
@@ -345,6 +348,7 @@ proc newPopupWindow*(
 ): Window
 
 proc needsDisplayUpdate*(window: Window): bool
+proc isVisible*(window: Window): bool
 proc requestNativeDisplayUpdate*(window: Window)
 proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.}
 proc animationScheduler*(window: Window): AnimationScheduler
@@ -357,6 +361,7 @@ proc stopAnimation*(
 ): bool {.discardable.}
 
 proc drainAnimations*(window: Window): int {.discardable.}
+proc nextAnimationDeadline*(window: Window, now: MonoTime): Option[MonoTime]
 proc updateInsertionPointBlink(window: Window)
 proc clearToolTip(window: Window)
 proc updateToolTip(window: Window, target: View, contentPoint: Point)
@@ -526,16 +531,14 @@ proc newWindow*(
   discard result.withProtocol(DefaultWindowUndoManagerProvider)
   discard result.withProtocol(DefaultWindowValidations)
 
-proc newLayerSurfaceWindow*(
-    title: string,
-    frame: Rect,
-    config: LayerSurfaceConfig,
-    transparent = false,
-): Window =
-  result = newWindow(title, frame, transparent)
-  result.xLayerSurface = some(config)
-  result.xStyleMask = {wsmNonactivatingPanel}
-  result.xLevel = wlStatus
+when defined(linux) or defined(bsd):
+  proc newLayerSurfaceWindow*(
+      title: string, frame: Rect, config: LayerSurfaceConfig, transparent = false
+  ): Window =
+    result = newWindow(title, frame, transparent)
+    result.xLayerSurface = some(config)
+    result.xStyleMask = {wsmNonactivatingPanel}
+    result.xLevel = wlStatus
 
 proc stopToolTipDelay(window: Window) =
   let animation = window.xToolTipDelayAnimation
@@ -1233,6 +1236,8 @@ proc insertionPointBlinkDuration(textView: TextView): Duration =
 proc newCaretBlinkAnimation(textView: TextView): CaretBlinkAnimation =
   result = CaretBlinkAnimation(textView: textView)
   initAnimationFields(result, textView.insertionPointBlinkDuration(), loopCount = -1)
+  result.cadence = eventCadence()
+  result.progressMarks = [0.5'f32]
   discard result.withProtocol(CaretBlinkAnimationProtocol)
 
 proc stopInsertionPointBlink(window: Window) =
@@ -1576,9 +1581,9 @@ proc startAnimation*(window: Window, animation: Animation): bool {.discardable.}
   let scheduler = window.animationScheduler()
   if scheduler.isNil:
     return false
+  if not window.xAnimationClock.isNil:
+    scheduler.frameInterval = window.xAnimationClock.frameInterval
   result = scheduler.startAnimation(animation)
-  if result and scheduler.animationCount > 0:
-    window.startAnimationClock()
 
 proc stopAnimation*(
     window: Window, animation: Animation, finished = false
@@ -1586,15 +1591,28 @@ proc stopAnimation*(
   if window.xAnimationScheduler.isNil:
     return false
   result = window.xAnimationScheduler.stopAnimation(animation, finished)
-  if window.xAnimationScheduler.animationCount == 0:
-    window.stopAnimationClock()
+
+proc drainAnimationsAt(window: Window, now: MonoTime): int =
+  if window.xAnimationScheduler.isNil:
+    return 0
+  if not window.xAnimationClock.isNil:
+    window.xAnimationScheduler.frameInterval = window.xAnimationClock.frameInterval
+  window.xAnimationScheduler.advance(now)
 
 proc drainAnimations*(window: Window): int {.discardable.} =
-  if window.xAnimationScheduler.isNil or window.xAnimationClock.isNil:
-    return 0
-  result = window.xAnimationScheduler.drain(window.xAnimationClock)
-  if window.xAnimationScheduler.animationCount == 0:
-    window.stopAnimationClock()
+  window.drainAnimationsAt(getMonoTime())
+
+proc nextAnimationDeadline*(window: Window, now: MonoTime): Option[MonoTime] =
+  if not window.xAnimationScheduler.isNil:
+    if not window.xAnimationClock.isNil:
+      window.xAnimationScheduler.frameInterval = window.xAnimationClock.frameInterval
+    result = window.xAnimationScheduler.nextDeadline(now)
+  for auxiliary in window.xAuxiliaryWindows:
+    if auxiliary.isNil or not auxiliary.isVisible:
+      continue
+    let candidate = auxiliary.nextAnimationDeadline(now)
+    if candidate.isSome and (result.isNone or candidate.get() < result.get()):
+      result = candidate
 
 proc isClosed*(window: Window): bool =
   window.xClosed
@@ -2734,6 +2752,7 @@ proc ensureThreadHost(window: Window) =
     return
   window.xThreadHost =
     window.xHostWindow.attachThreadRenderer(window.xThreadRenderer, window.xFrame.size)
+  window.xThreadHost.installNativeEventLoopWaker()
 
 proc drainThreadHostEvents(window: Window): int =
   if window.xThreadHost.isNil:
@@ -2805,18 +2824,24 @@ proc ensureNativeWindow*(window: Window) =
     window.xHostWindow = createPopupHostWindow(
       window.xOwnerWindow.xHostWindow, window.xPopupPlacement, callbacks
     )
-  elif window.xLayerSurface.isSome:
-    window.xHostWindow = createLayerSurfaceHostWindow(
-      window.xFrame,
-      window.xTitle,
-      callbacks,
-      window.xLayerSurface.get(),
-      transparent = window.xTransparent,
-    )
   else:
-    window.xHostWindow = createHostWindow(
-      window.xFrame, window.xTitle, callbacks, transparent = window.xTransparent
-    )
+    when defined(linux) or defined(bsd):
+      if window.xLayerSurface.isSome:
+        window.xHostWindow = createLayerSurfaceHostWindow(
+          window.xFrame,
+          window.xTitle,
+          callbacks,
+          window.xLayerSurface.get(),
+          transparent = window.xTransparent,
+        )
+      else:
+        window.xHostWindow = createHostWindow(
+          window.xFrame, window.xTitle, callbacks, transparent = window.xTransparent
+        )
+    else:
+      window.xHostWindow = createHostWindow(
+        window.xFrame, window.xTitle, callbacks, transparent = window.xTransparent
+      )
   window.syncNativeSizeLimits()
   window.xBackdropActive = false
   if window.xBackdrop.kind != wbekNone:
@@ -2825,7 +2850,7 @@ proc ensureNativeWindow*(window: Window) =
   if window.xVisibleRequested:
     window.xHostWindow.setVisible(true)
 
-proc pumpNativeWindowFrame*(window: Window) =
+proc pumpNativeWindowFrameAt(window: Window, now: MonoTime) =
   if window.xClosed:
     return
   if not window.xVisibleRequested:
@@ -2834,8 +2859,7 @@ proc pumpNativeWindowFrame*(window: Window) =
     return
   window.ensureNativeWindow()
   discard window.drainThreadHostEvents()
-  if window.drainAnimations() > 0:
-    discard window.requestNativeDisplayUpdateIfNeeded()
+  discard window.drainAnimationsAt(now)
   discard window.requestNativeDisplayUpdateIfNeeded()
   if window.nativeReady:
     window.xHostWindow.pump()
@@ -2848,8 +2872,11 @@ proc pumpNativeWindowFrame*(window: Window) =
       window.xAuxiliaryWindows.delete(idx)
       continue
     if auxiliary.isVisible:
-      auxiliary.pumpNativeWindowFrame()
+      auxiliary.pumpNativeWindowFrameAt(now)
     inc idx
+
+proc pumpNativeWindowFrame*(window: Window) =
+  window.pumpNativeWindowFrameAt(getMonoTime())
 
 proc rawInputToLogical*(
     rawPos: siwinshim.Vec2, inputSize: siwinshim.IVec2, logicalSize: siwinshim.Vec2

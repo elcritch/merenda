@@ -107,6 +107,14 @@ receives moved render trees through bounded latest-frame channels; unsupported
 backends render directly on the main thread. Merenda builds with threads and ARC
 enabled, as configured by the repository's `config.nims`.
 
+Animation scheduling is deadline-driven. Value and property animations use the
+display cadence by default, while pause animations and animation groups wake only
+for child events or completion. Less frequent animations can opt into an aligned
+interval with `animation.cadence = intervalCadence(100.ms)`. Event-only animations
+can use `eventCadence()` together with `progressMarks`; finite completion is always
+scheduled even when no cadence sample is due. With no native, Sigils, renderer, or
+animation deadline pending, the application blocks indefinitely in Siwin.
+
 Constraint-wrapped views expose their minimum layout through `fittingSize()`.
 Set `window.automaticallyAdjustsContentMinSize = true` to keep a resizable
 window from becoming smaller than that fitting size. Tab views include the
@@ -196,6 +204,24 @@ automatic language, symbol, and outline-emoji fallback:
 nim r -d:figdrawTextBackend=harfbuzzy examples/font_fallback_demo.nim
 ```
 
+DarkBSD is the default theme. It uses dark platform-neutral surfaces, ruby-red
+Aqua buttons, and a deep red accent palette:
+
+```nim
+root.appearance = initAppearance()
+```
+
+The previous default is available as the `aqua` theme or through
+`initAquaTheme()`:
+
+```sh
+NIMKIT_THEME=aqua nim r examples/controls_showcase.nim
+```
+
+```nim
+root.appearance = initAppearance(initAquaTheme())
+```
+
 For a flatter, modern macOS-style appearance, select the built-in `macos` theme
 at startup or construct it directly:
 
@@ -223,9 +249,7 @@ root.appearance = initAppearance(initMacOSDarkTheme())
 
 The `dark-macos` and `modern-macos-dark` names are aliases.
 
-For a ruby-red variation of the macOS dark theme, use `darkbsd`. It keeps the
-dark platform-neutral surfaces while giving buttons a squarer Aqua gloss and a
-deep red accent palette:
+To select the default DarkBSD theme explicitly, use `darkbsd`:
 
 ```sh
 NIMKIT_THEME=darkbsd nim r examples/controls_showcase.nim
@@ -258,6 +282,10 @@ NimKit ships the core controls needed for desktop-style interfaces:
 - Buttons and choices: `newButton`, `newCheckBox`, `newRadioButton`, `newComboBox`, `newPopupMenuButton`, `newMenu`, `newMenuItem`
 - Value and status controls: `newSlider`, `newStepper`, `newSwitchButton`, `newProgressIndicator`
 - Data and navigation views: `newTableView`, `newOutlineView`, `newCascadingView`, `newCollectionView`, `newDocumentTabs`, `newButtonMatrix`, `newRadioMatrix`
+
+Linux and BSD builds also expose `newLayerSurfaceWindow` and the
+`LayerSurfaceConfig` types for Wayland layer-shell surfaces. These APIs are not
+declared on macOS or Windows, and they require a Wayland session at runtime.
 
 Controls use Cocoa-style target/action for commands:
 

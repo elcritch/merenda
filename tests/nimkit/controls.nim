@@ -277,6 +277,7 @@ suite "nimkit controls":
       action = actionSelector("stepperAction")
       spy = ControlActionSpy()
 
+    stepper.appearance = initAppearance(initAquaTheme())
     var actionCount = 0
     proc onStep(sender: DynamicAgent) =
       check sender == DynamicAgent(stepper)

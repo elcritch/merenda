@@ -110,6 +110,9 @@ proc installDarkBSDTokens(theme: var Theme) =
   theme["comboBox.fill"] = color(0.25, 0.25, 0.27, 0.98)
   theme["comboBox.border.color"] = color(1.0, 1.0, 1.0, 0.14)
 
+  theme["splitView.divider.fill"] = color(1.0, 1.0, 1.0, 0.035)
+  theme["splitView.divider.mark.color"] = color(0.72, 0.72, 0.76, 0.82)
+
 proc installDarkBSDButtonStyle(theme: var Theme) =
   theme[srButton, StyleChrome] = styleKeyword(RubyAquaChromeName)
   theme[srButton, StyleCornerRadius] = 10.0
@@ -127,6 +130,11 @@ proc installDarkBSDControlStyles(theme: var Theme) =
   theme[srSlider, StyleKnobShadows] = graphiteControlShadows()
   theme[srSlider, StyleKnobValueTint] = 0.0
   theme[srSlider, StyleMaximumHighlightFill] = fill(color(0.78, 0.040, 0.095, 1.0))
+  theme[srSplitView, StyleBorderWidth] = 0.0
+  theme[srSplitView, StyleCornerRadius] = 4.0
+  theme[srSplitView, StyleSeparatorThickness] = 8.0
+  theme[srSplitView, StyleIndicatorSize] = 32.0
+  theme[srSplitView, StyleMarkColor] = styleToken("splitView.divider.mark.color")
 
 proc initDarkBSDTheme*(): Theme =
   result = initMacOSDarkTheme()
@@ -137,3 +145,4 @@ proc initDarkBSDTheme*(): Theme =
 registerThemeFactory("darkbsd", initDarkBSDTheme)
 registerThemeFactory("dark-bsd", initDarkBSDTheme)
 registerThemeFactory("ruby-bsd", initDarkBSDTheme)
+registerDefaultThemeFactory(initDarkBSDTheme)

@@ -520,7 +520,7 @@ proc installMacOSDarkLabels(theme: var Theme) =
   theme[icon, StyleMarkColor] = styleToken("accent")
 
 proc initMacOSTheme*(): Theme =
-  result = initTheme()
+  result = initAquaTheme()
   result.installMacOSTokens()
   result.installMacOSControlStyles()
   result.installMacOSLabels()

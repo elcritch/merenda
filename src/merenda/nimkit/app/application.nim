@@ -1,4 +1,4 @@
-import std/[options, os]
+import std/[monotimes, options, os, times]
 
 import sigils/selectors
 import sigils/threadBase
@@ -83,7 +83,6 @@ const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
 const WindowDidOrderOutSelector = "_nimkitWindowDidOrderOut"
 const WindowDidCloseSelector = "_nimkitWindowDidClose"
-const ThreadSignalBudgetPerFrame = 10
 
 var sharedApplicationInstance: Application
 
@@ -100,6 +99,7 @@ proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool
 proc runForFrames*(app: Application, frames: Natural): int
 proc run*(app: Application)
 proc drainAnimations*(app: Application): int {.discardable.}
+proc nextAnimationDeadline(app: Application, now: MonoTime): Option[MonoTime]
 proc setKeyWindow*(app: Application, window: Window)
 proc setMainWindow*(app: Application, window: Window)
 proc noteWindowOrderedFront(app: Application, window: Window)
@@ -110,6 +110,9 @@ proc keyEquivalentDispatchStart(app: Application): Responder
 proc syncMainMenuPresentation(app: Application)
 proc syncMenuBarPresenters(app: Application)
 proc runApplicationFrame(app: Application): int
+proc prepareApplicationEventLoop(app: Application)
+proc pollApplicationEvents(app: Application)
+proc waitForApplicationEvents(app: Application)
 
 proc resolvedApplicationName(name: string): string =
   if name.len > 0:
@@ -293,9 +296,9 @@ proc startAnimation*(app: Application, animation: Animation): bool {.discardable
   let scheduler = app.animationScheduler()
   if scheduler.isNil:
     return false
+  if not app.xAnimationClock.isNil:
+    scheduler.frameInterval = app.xAnimationClock.frameInterval
   result = scheduler.startAnimation(animation)
-  if result and scheduler.animationCount > 0:
-    app.startAnimationClock()
 
 proc stopAnimation*(
     app: Application, animation: Animation, finished = false
@@ -303,15 +306,28 @@ proc stopAnimation*(
   if app.xAnimationScheduler.isNil:
     return false
   result = app.xAnimationScheduler.stopAnimation(animation, finished)
-  if app.xAnimationScheduler.animationCount == 0:
-    app.stopAnimationClock()
+
+proc drainAnimationsAt(app: Application, now: MonoTime): int =
+  if app.xAnimationScheduler.isNil:
+    return 0
+  if not app.xAnimationClock.isNil:
+    app.xAnimationScheduler.frameInterval = app.xAnimationClock.frameInterval
+  app.xAnimationScheduler.advance(now)
 
 proc drainAnimations*(app: Application): int {.discardable.} =
-  if app.xAnimationScheduler.isNil or app.xAnimationClock.isNil:
-    return 0
-  result = app.xAnimationScheduler.drain(app.xAnimationClock, pollSignals = false)
-  if app.xAnimationScheduler.animationCount == 0:
-    app.stopAnimationClock()
+  app.drainAnimationsAt(getMonoTime())
+
+proc nextAnimationDeadline(app: Application, now: MonoTime): Option[MonoTime] =
+  if not app.xAnimationScheduler.isNil:
+    if not app.xAnimationClock.isNil:
+      app.xAnimationScheduler.frameInterval = app.xAnimationClock.frameInterval
+    result = app.xAnimationScheduler.nextDeadline(now)
+  for window in app.xWindows:
+    if window.isNil or not window.isVisible:
+      continue
+    let candidate = window.nextAnimationDeadline(now)
+    if candidate.isSome and (result.isNone or candidate.get() < result.get()):
+      result = candidate
 
 proc hasAppearance*(app: Application): bool =
   app.xHasAppearance
@@ -973,10 +989,22 @@ proc endModalSession*(app: Application, session: ModalSession) =
 proc runModalSession*(app: Application, session: ModalSession): int =
   if session.isNil:
     return 0
-  while session.state == mssRunning:
-    if app.runForFrames(1) == 0:
+  app.prepareApplicationEventLoop()
+  let wasRunning = app.xRunning
+  app.xRunning = true
+  try:
+    while app.xRunning and session.state == mssRunning:
+      app.pollApplicationEvents()
+      let activeWindows = app.runApplicationFrame()
+      if activeWindows == 0:
+        session.state = mssAborted
+      elif session.state == mssRunning:
+        app.waitForApplicationEvents()
+    if not app.xRunning and session.state == mssRunning:
       session.state = mssAborted
-      break
+  finally:
+    if not wasRunning:
+      app.xRunning = false
   result = session.response
 
 proc runModalForWindow*(app: Application, window: Window): int =
@@ -1076,14 +1104,10 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
     window == session.parentWindow
 
 proc runApplicationFrame(app: Application): int =
-  if app.xAutomaticallyStartsLocalSigilThread and not hasLocalSigilThread():
-    startLocalThreadDefault()
   if hasLocalSigilThread():
-    let thread = getCurrentSigilThread()
-    for _ in 0 ..< ThreadSignalBudgetPerFrame:
-      if not thread.poll(NonBlocking):
-        break
-  discard app.drainAnimations()
+    discard getCurrentSigilThread().pollAll(NonBlocking)
+  let now = getMonoTime()
+  discard app.drainAnimationsAt(now)
   var
     removedWindow = false
     hostWindowCreated = false
@@ -1114,13 +1138,42 @@ proc runApplicationFrame(app: Application): int =
   if hostWindowCreated:
     app.syncMainMenuPresentation()
 
+proc prepareApplicationEventLoop(app: Application) =
+  if app.xAutomaticallyStartsLocalSigilThread and not hasLocalSigilThread():
+    startLocalThreadDefault()
+
+proc pollApplicationEvents(app: Application) =
+  for window in app.xWindows:
+    if not window.isNil and window.isVisible and window.nativeReady:
+      nimkitBackend.pollNativeEvents()
+      break
+
+proc waitForApplicationEvents(app: Application) =
+  if hasLocalSigilThread():
+    nimkitBackend.installNativeEventLoopWaker(getCurrentSigilThread())
+  let
+    now = getMonoTime()
+    deadline = app.nextAnimationDeadline(now)
+  if deadline.isSome:
+    let timeout = deadline.get() - now
+    nimkitBackend.waitForNativeEvents(
+      if timeout.inNanoseconds > 0:
+        timeout
+      else:
+        initDuration()
+    )
+  else:
+    nimkitBackend.waitForNativeEvents()
+
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:
     return 0
+  app.prepareApplicationEventLoop()
   let wasRunning = app.xRunning
   var keepRunning = wasRunning
   app.xRunning = true
   while app.xRunning:
+    app.pollApplicationEvents()
     let activeWindows = app.runApplicationFrame()
     inc result
     if result >= frames.int:
@@ -1128,12 +1181,12 @@ proc runForFrames*(app: Application, frames: Natural): int =
     if activeWindows == 0:
       keepRunning = false
       break
-    sleep(8)
   if app.xRunning:
     app.xRunning = keepRunning
 
 proc run*(app: Application) =
   app.xApplicationThreadId = getThreadId()
+  app.prepareApplicationEventLoop()
   var runtime: ThreadRendererRuntime
   try:
     if app.usesDedicatedRenderer():
@@ -1146,11 +1199,12 @@ proc run*(app: Application) =
 
     app.xRunning = true
     while app.xRunning:
+      app.pollApplicationEvents()
       let activeWindows = app.runApplicationFrame()
       if activeWindows == 0:
         app.xRunning = false
       elif app.xRunning:
-        sleep(8)
+        app.waitForApplicationEvents()
   finally:
     try:
       for window in app.xWindows:

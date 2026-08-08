@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Adapted from sdfy/src/sdfy/msdfgenSvg.nim.
 
+## Parses SVG documents into paths and vector stroke metadata.
+
 import std/[math, strutils]
 
 import pkg/pixie
@@ -145,6 +147,270 @@ proc readNumber(data: string, index: var int): float32 =
     parseFloat(data[start ..< index])
   except ValueError:
     raise newException(PixieError, "Invalid normalized SVG path number")
+
+proc addArcAsCubics(
+    path: Path,
+    start: Vec2,
+    rawRadii: Vec2,
+    rotation: float32,
+    largeArc, sweep: bool,
+    stop: Vec2,
+) =
+  ## Converts an SVG endpoint arc to cubic Beziers using the SVG 1.1 formula.
+  if start == stop:
+    return
+
+  var radii = vec2(abs(rawRadii.x), abs(rawRadii.y))
+  if radii.x == 0.0'f32 or radii.y == 0.0'f32:
+    path.lineTo(stop)
+    return
+
+  let
+    angle = rotation / 180.0'f32 * PI
+    cosAngle = cos(angle)
+    sinAngle = sin(angle)
+    midpointDelta = (start - stop) * 0.5'f32
+    transformedStart = vec2(
+      cosAngle * midpointDelta.x + sinAngle * midpointDelta.y,
+      -sinAngle * midpointDelta.x + cosAngle * midpointDelta.y,
+    )
+    radiusScale =
+      transformedStart.x * transformedStart.x / (radii.x * radii.x) +
+      transformedStart.y * transformedStart.y / (radii.y * radii.y)
+  if radiusScale > 1.0'f32:
+    radii *= sqrt(radiusScale)
+
+  let
+    radiiSquared = vec2(radii.x * radii.x, radii.y * radii.y)
+    startSquared = vec2(
+      transformedStart.x * transformedStart.x, transformedStart.y * transformedStart.y
+    )
+    denominator = radiiSquared.x * startSquared.y + radiiSquared.y * startSquared.x
+    numerator = max(0.0'f32, radiiSquared.x * radiiSquared.y - denominator)
+    direction = if largeArc == sweep: -1.0'f32 else: 1.0'f32
+    centerScale =
+      if denominator == 0.0'f32:
+        0.0'f32
+      else:
+        direction * sqrt(numerator / denominator)
+    transformedCenter = vec2(
+      centerScale * radii.x * transformedStart.y / radii.y,
+      -centerScale * radii.y * transformedStart.x / radii.x,
+    )
+    center = vec2(
+      cosAngle * transformedCenter.x - sinAngle * transformedCenter.y +
+        (start.x + stop.x) * 0.5'f32,
+      sinAngle * transformedCenter.x + cosAngle * transformedCenter.y +
+        (start.y + stop.y) * 0.5'f32,
+    )
+    startVector = vec2(
+      (transformedStart.x - transformedCenter.x) / radii.x,
+      (transformedStart.y - transformedCenter.y) / radii.y,
+    )
+    stopVector = vec2(
+      (-transformedStart.x - transformedCenter.x) / radii.x,
+      (-transformedStart.y - transformedCenter.y) / radii.y,
+    )
+  var
+    startAngle = arctan2(startVector.y, startVector.x)
+    sweepAngle = arctan2(
+      startVector.x * stopVector.y - startVector.y * stopVector.x,
+      startVector.x * stopVector.x + startVector.y * stopVector.y,
+    )
+  if sweep and sweepAngle < 0.0'f32:
+    sweepAngle += 2.0'f32 * PI
+  elif not sweep and sweepAngle > 0.0'f32:
+    sweepAngle -= 2.0'f32 * PI
+
+  let
+    segmentCount = max(1, int(ceil(abs(sweepAngle) / (PI * 0.5'f32))))
+    segmentAngle = sweepAngle / segmentCount.float32
+  proc pointAt(value: float32): Vec2 =
+    let local = vec2(radii.x * cos(value), radii.y * sin(value))
+    vec2(
+      center.x + cosAngle * local.x - sinAngle * local.y,
+      center.y + sinAngle * local.x + cosAngle * local.y,
+    )
+
+  proc derivativeAt(value: float32): Vec2 =
+    let local = vec2(-radii.x * sin(value), radii.y * cos(value))
+    vec2(
+      cosAngle * local.x - sinAngle * local.y, sinAngle * local.x + cosAngle * local.y
+    )
+
+  for index in 0 ..< segmentCount:
+    let
+      nextAngle = startAngle + segmentAngle
+      alpha = 4.0'f32 / 3.0'f32 * tan(segmentAngle * 0.25'f32)
+      segmentStart = pointAt(startAngle)
+      segmentStop =
+        if index == segmentCount - 1:
+          stop
+        else:
+          pointAt(nextAngle)
+      control1 = segmentStart + derivativeAt(startAngle) * alpha
+      control2 = segmentStop - derivativeAt(nextAngle) * alpha
+    path.bezierCurveTo(control1, control2, segmentStop)
+    startAngle = nextAngle
+
+proc normalizePathArcs(path: Path): Path =
+  ## Pixie retains SVG arcs in Path. SDFY accepts Beziers but not arc commands.
+  let data = $path
+  result = newPath()
+  var
+    index = 0
+    current = vec2(0.0'f32, 0.0'f32)
+    subpathStart = current
+    previousControl = current
+    previousCommand = '\0'
+
+  while index < data.len:
+    while index < data.len and data[index].isSpaceAscii:
+      inc index
+    if index >= data.len:
+      break
+
+    let command = data[index]
+    inc index
+    let relative = command in {'a' .. 'z'}
+    case command.toUpperAscii
+    of 'M':
+      let value = vec2(data.readNumber(index), data.readNumber(index))
+      current =
+        if relative:
+          current + value
+        else:
+          value
+      result.moveTo(current)
+      subpathStart = current
+      previousControl = current
+    of 'L':
+      let value = vec2(data.readNumber(index), data.readNumber(index))
+      current =
+        if relative:
+          current + value
+        else:
+          value
+      result.lineTo(current)
+      previousControl = current
+    of 'H':
+      let value = data.readNumber(index)
+      current.x =
+        if relative:
+          current.x + value
+        else:
+          value
+      result.lineTo(current)
+      previousControl = current
+    of 'V':
+      let value = data.readNumber(index)
+      current.y =
+        if relative:
+          current.y + value
+        else:
+          value
+      result.lineTo(current)
+      previousControl = current
+    of 'C':
+      let
+        rawControl1 = vec2(data.readNumber(index), data.readNumber(index))
+        rawControl2 = vec2(data.readNumber(index), data.readNumber(index))
+        rawStop = vec2(data.readNumber(index), data.readNumber(index))
+        control1 =
+          if relative:
+            current + rawControl1
+          else:
+            rawControl1
+        control2 =
+          if relative:
+            current + rawControl2
+          else:
+            rawControl2
+        stop =
+          if relative:
+            current + rawStop
+          else:
+            rawStop
+      result.bezierCurveTo(control1, control2, stop)
+      current = stop
+      previousControl = control2
+    of 'S':
+      let
+        rawControl2 = vec2(data.readNumber(index), data.readNumber(index))
+        rawStop = vec2(data.readNumber(index), data.readNumber(index))
+        control1 =
+          if previousCommand.toUpperAscii in {'C', 'S'}:
+            current * 2.0'f32 - previousControl
+          else:
+            current
+        control2 =
+          if relative:
+            current + rawControl2
+          else:
+            rawControl2
+        stop =
+          if relative:
+            current + rawStop
+          else:
+            rawStop
+      result.bezierCurveTo(control1, control2, stop)
+      current = stop
+      previousControl = control2
+    of 'Q':
+      let
+        rawControl = vec2(data.readNumber(index), data.readNumber(index))
+        rawStop = vec2(data.readNumber(index), data.readNumber(index))
+        control =
+          if relative:
+            current + rawControl
+          else:
+            rawControl
+        stop =
+          if relative:
+            current + rawStop
+          else:
+            rawStop
+      result.quadraticCurveTo(control, stop)
+      current = stop
+      previousControl = control
+    of 'T':
+      let
+        rawStop = vec2(data.readNumber(index), data.readNumber(index))
+        control =
+          if previousCommand.toUpperAscii in {'Q', 'T'}:
+            current * 2.0'f32 - previousControl
+          else:
+            current
+        stop =
+          if relative:
+            current + rawStop
+          else:
+            rawStop
+      result.quadraticCurveTo(control, stop)
+      current = stop
+      previousControl = control
+    of 'A':
+      let
+        radii = vec2(data.readNumber(index), data.readNumber(index))
+        rotation = data.readNumber(index)
+        largeArc = data.readNumber(index) != 0.0'f32
+        sweep = data.readNumber(index) != 0.0'f32
+        rawStop = vec2(data.readNumber(index), data.readNumber(index))
+        stop =
+          if relative:
+            current + rawStop
+          else:
+            rawStop
+      result.addArcAsCubics(current, radii, rotation, largeArc, sweep, stop)
+      current = stop
+      previousControl = current
+    of 'Z':
+      result.closePath()
+      current = subpathStart
+      previousControl = current
+    else:
+      raise newException(PixieError, "Unsupported normalized SVG path command")
+    previousCommand = command
 
 proc addLine(segments: var seq[SvgStrokeSegment], start, stop: Vec2, matrix: Mat3) =
   if start != stop:
@@ -382,8 +648,9 @@ proc parseSvgDocument*(svgData: string): ParsedSvgDocument =
   if kinds.len != svg.elements.len:
     raise newException(PixieError, "SVG element metadata does not match parsed paths")
 
-  for index, (path, properties) in svg.elements:
+  for index, (sourcePath, properties) in svg.elements:
     let
+      path = sourcePath.normalizePathArcs()
       kind = kinds[index]
       hasFill =
         kind != sekLine and properties.display and properties.opacity > 0 and

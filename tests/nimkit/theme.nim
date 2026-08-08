@@ -305,6 +305,27 @@ proc withCleanThemeEnv(body: proc() {.closure.}) =
       delEnv(NimKitThemeEnv)
 
 suite "nimkit theme":
+  test "DarkBSD is the default and Aqua remains available by name":
+    withCleanThemeEnv(
+      proc() =
+        let
+          defaultStyle = initTheme().resolveButtonStyle(controlStyle(srButton))
+          defaultAppearanceStyle =
+            initAppearance().resolveButtonStyle(controlStyle(srButton))
+          darkBSDStyle = initDarkBSDTheme().resolveButtonStyle(controlStyle(srButton))
+          aquaStyle = initAquaTheme().resolveButtonStyle(controlStyle(srButton))
+          namedAquaStyle =
+            initThemeByName("aqua").resolveButtonStyle(controlStyle(srButton))
+
+        check defaultStyle.chrome == RubyAquaChromeName
+        check defaultStyle.box.fill == darkBSDStyle.box.fill
+        check defaultAppearanceStyle.box.fill == darkBSDStyle.box.fill
+        check initThemeByName("default")
+        .resolveButtonStyle(controlStyle(srButton)).box.fill == darkBSDStyle.box.fill
+        check aquaStyle.chrome == AquaChromeName
+        check namedAquaStyle.box.fill == aquaStyle.box.fill
+    )
+
   test "NimKit theme env obeys override ignore flag":
     withCleanThemeEnv(
       proc() =
@@ -397,7 +418,7 @@ suite "nimkit theme":
     }
 
   test "chrome delegates install by name and selectors choose per widget":
-    var theme = initTheme()
+    var theme = initAquaTheme()
     theme.installChrome(CustomChromeName, newCustomFillChrome())
     theme[initStyleSelector(srButton, id = "special"), StyleChrome] =
       styleKeyword(CustomChromeName)
@@ -522,8 +543,8 @@ suite "nimkit theme":
     check theme.resolveButtonStyle(controlStyle(srButton)).box.cornerRadius ==
       baseStyle.box.cornerRadius
 
-  test "default theme exposes resolved button and text field styles":
-    let theme = initTheme()
+  test "Aqua theme exposes resolved button and text field styles":
+    let theme = initAquaTheme()
     let
       appearance = initAppearance(theme)
       defaultButtonStyle = appearance.resolveButtonStyle(controlStyle(srButton))
@@ -781,6 +802,7 @@ suite "nimkit theme":
   test "theme accents drive document tabs and progress indicators":
     for theme in [
       initTheme(),
+      initAquaTheme(),
       initBannerTheme(),
       initDarkBSDTheme(),
       initMacOSTheme(),
@@ -805,7 +827,8 @@ suite "nimkit theme":
     check peachyProgress.activeTrack.fill != synthwaveProgress.activeTrack.fill
 
   test "built-in themes keep independent text selection colors":
-    check initTheme().textSelectionColor() == color(0.24, 0.56, 1.0, 0.34)
+    check initTheme().textSelectionColor() == color(0.34, 0.18, 0.23, 0.92)
+    check initAquaTheme().textSelectionColor() == color(0.24, 0.56, 1.0, 0.34)
     check initBannerTheme().textSelectionColor() == color(0.31, 0.58, 0.54, 0.32)
     check initMacOSTheme().textSelectionColor() == color(0.04, 0.52, 1.0, 0.26)
     check initMacOSDarkTheme().textSelectionColor() == color(0.04, 0.52, 1.0, 0.38)

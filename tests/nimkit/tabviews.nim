@@ -248,6 +248,7 @@ suite "nimkit tab views":
 
   test "tab view exposes top and bottom geometry":
     let tabView = newTabView(frame = rect(0, 0, 320, 180))
+    tabView.appearance = initAppearance(initAquaTheme())
     discard tabView.addTabViewItem(newTabViewItem("Top", newView()))
 
     check tabView.contentRect.origin.y == 12.0
@@ -370,6 +371,7 @@ suite "nimkit tab views":
       content = newView()
       item = newTabViewItem("General", content)
 
+    tabView.appearance = initAppearance(initAquaTheme())
     content.background = color(0.20, 0.40, 0.80)
     discard tabView.addTabViewItem(item)
 
@@ -443,6 +445,7 @@ suite "nimkit tab views":
   test "tab view selected pane does not redraw panel over resized content":
     let fixture = newTabViewDemoFixture()
 
+    fixture.root.appearance = initAppearance(initAquaTheme())
     fixture.root.frame = rect(0, 0, 560, 500)
     let
       renders = buildRenders(fixture.root)

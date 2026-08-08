@@ -18,6 +18,9 @@ when not defined(useNativeDynlib):
   import pkg/pixie/fileformats/png
 import siwin/clipboards as siwinClipboards
 import sigils/selectors
+from sigils/threadBase import SigilThreadPtr
+when not defined(useNativeDynlib):
+  import sigils/threadExtras
 
 when defined(macosx) and not defined(useNativeDynlib):
   import
@@ -36,44 +39,73 @@ import ./windoweffects
 when defined(macosx) and not defined(useNativeDynlib):
   proc setOpaque(window: NSWindow, opaque: BOOL) {.objc: "setOpaque:".}
 
+when not defined(useNativeDynlib):
+  var nativeEventLoopSigilThread {.threadvar.}: SigilThreadPtr
+
+proc installNativeEventLoopWaker*(thread: SigilThreadPtr) =
+  when not defined(useNativeDynlib):
+    if not thread.isNil and thread != nativeEventLoopSigilThread:
+      thread.installSiwinEventLoopWaker(siwinshim.sharedSiwinGlobals())
+      nativeEventLoopSigilThread = thread
+
+proc waitForNativeEvents*() =
+  when defined(useNativeDynlib):
+    sleep(8)
+  else:
+    siwinshim.sharedSiwinGlobals().waitEvents()
+
+proc waitForNativeEvents*(timeout: Duration) =
+  when defined(useNativeDynlib):
+    let nanoseconds = max(timeout.inNanoseconds, 0'i64)
+    let milliseconds = nanoseconds div 1_000_000 + ord(nanoseconds mod 1_000_000 != 0)
+    sleep(min(milliseconds, int.high.int64).int)
+  else:
+    discard siwinshim.sharedSiwinGlobals().waitEvents(timeout)
+
+proc pollNativeEvents*() =
+  when not defined(useNativeDynlib):
+    discard siwinshim.sharedSiwinGlobals().pollEvents()
+
+type RenderExecutionMode* = enum
+  remAutomatic
+  remMainThread
+  remDedicatedThread
+
+when defined(linux) or defined(bsd):
+  type
+    LayerSurfaceLayer* = enum
+      lslBackground
+      lslBottom
+      lslTop
+      lslOverlay
+
+    LayerSurfaceAnchor* = enum
+      lsaTop
+      lsaBottom
+      lsaLeft
+      lsaRight
+
+    LayerSurfaceKeyboardMode* = enum
+      lskNone
+      lskExclusive
+      lskOnDemand
+
+    LayerSurfaceMargins* = object
+      top*: int32
+      right*: int32
+      bottom*: int32
+      left*: int32
+
+    LayerSurfaceConfig* = object
+      layer*: LayerSurfaceLayer
+      anchors*: set[LayerSurfaceAnchor]
+      margins*: LayerSurfaceMargins
+      exclusiveZone*: int32
+      keyboardMode*: LayerSurfaceKeyboardMode
+      output*: int32
+      namespace*: string
+
 type
-  RenderExecutionMode* = enum
-    remAutomatic
-    remMainThread
-    remDedicatedThread
-
-  LayerSurfaceLayer* = enum
-    lslBackground
-    lslBottom
-    lslTop
-    lslOverlay
-
-  LayerSurfaceAnchor* = enum
-    lsaTop
-    lsaBottom
-    lsaLeft
-    lsaRight
-
-  LayerSurfaceKeyboardMode* = enum
-    lskNone
-    lskExclusive
-    lskOnDemand
-
-  LayerSurfaceMargins* = object
-    top*: int32
-    right*: int32
-    bottom*: int32
-    left*: int32
-
-  LayerSurfaceConfig* = object
-    layer*: LayerSurfaceLayer
-    anchors*: set[LayerSurfaceAnchor]
-    margins*: LayerSurfaceMargins
-    exclusiveZone*: int32
-    keyboardMode*: LayerSurfaceKeyboardMode
-    output*: int32
-    namespace*: string
-
   HostKeyEvent* = object
     event*: events.KeyEvent
     pressed*: bool
@@ -108,6 +140,8 @@ type
     lock: Lock
     pending: Deque[ThreadHostEvent]
     lockReady: bool
+    when not defined(useNativeDynlib):
+      eventLoopWaker: siwinshim.EventLoopWaker
 
   ThreadHostEventQueue* = object
     raw: SharedPtr[ThreadHostEventQueueObj]
@@ -133,6 +167,7 @@ type
 
   ThreadRendererClient* = ref object
     commands: Chan[ThreadRendererCommand]
+    wakeups: Chan[bool]
     nextHostId: uint64
     threadId: Atomic[int]
     running: Atomic[bool]
@@ -151,6 +186,7 @@ type
     renderTargetReleasePending: bool
     activeResources: RenderResourceManifest
     pendingResources: Deque[ThreadRenderResourceLease]
+    rendererWakeups: Chan[bool]
 
   HostWindow* = ref object
     xNativeWindow: siwinshim.Window
@@ -180,6 +216,7 @@ type
 
   ThreadRenderer* = ref object
     commands: Chan[ThreadRendererCommand]
+    wakeups: Chan[bool]
     hosts: Table[ThreadHostId, ThreadRendererHost]
     running: bool
 
@@ -215,6 +252,8 @@ proc `=destroy`(queue: ThreadHostEventQueueObj) {.raises: [].} =
   if queuePtr.lockReady:
     deinitLock(queuePtr.lock)
   `=destroy`(queuePtr.pending)
+  when not defined(useNativeDynlib):
+    `=destroy`(queuePtr.eventLoopWaker)
 
 var
   hostWindows {.threadvar.}: Table[pointer, HostWindow]
@@ -236,9 +275,18 @@ const
 const
   ThreadRendererCommandCapacity = 256
   ThreadRenderCapacity = 2
+  ThreadRendererWakeCapacity = 1
 
 proc sendMoved[T](channel: Chan[T], value: sink T) =
   channel.send(unsafeIsolate(ensureMove value))
+
+proc wakeRenderer(channel: Chan[bool]) =
+  # Work remains in its owning queue, so one coalesced notification is enough.
+  discard channel.trySend(true)
+
+proc sendCommand(renderer: ThreadRendererClient, command: sink ThreadRendererCommand) =
+  renderer.commands.sendMoved(ensureMove command)
+  renderer.wakeups.wakeRenderer()
 
 proc pushLatest[T](channel: Chan[T], value: sink T) =
   var isolated = unsafeIsolate(ensureMove value)
@@ -265,6 +313,20 @@ proc post*(queue: ThreadHostEventQueue, event: sink ThreadHostEvent) =
       queue.raw[].pending[^1] = ensureMove event
     else:
       queue.raw[].pending.addLast(ensureMove event)
+    when not defined(useNativeDynlib):
+      queue.raw[].eventLoopWaker.wake()
+
+proc installNativeEventLoopWaker*(queue: ThreadHostEventQueue) =
+  when not defined(useNativeDynlib):
+    if queue.raw.isNil:
+      return
+    let eventLoopWaker = siwinshim.sharedSiwinGlobals().eventLoopWaker()
+    withLock queue.raw[].lock:
+      queue.raw[].eventLoopWaker = eventLoopWaker
+
+proc installNativeEventLoopWaker*(host: ThreadHostClient) =
+  if not host.isNil:
+    host.channels.events.installNativeEventLoopWaker()
 
 proc poll*(queue: ThreadHostEventQueue, event: var ThreadHostEvent): bool =
   if queue.raw.isNil:
@@ -277,11 +339,16 @@ proc poll*(queue: ThreadHostEventQueue, event: var ThreadHostEvent): bool =
 proc run*(renderer: ThreadRenderer)
 
 proc newThreadRenderer*(): tuple[renderer: ThreadRenderer, client: ThreadRendererClient] =
-  let commands = newChan[ThreadRendererCommand](ThreadRendererCommandCapacity)
+  let
+    commands = newChan[ThreadRendererCommand](ThreadRendererCommandCapacity)
+    wakeups = newChan[bool](ThreadRendererWakeCapacity)
   result.renderer = ThreadRenderer(
-    commands: commands, hosts: initTable[ThreadHostId, ThreadRendererHost]()
+    commands: commands,
+    wakeups: wakeups,
+    hosts: initTable[ThreadHostId, ThreadRendererHost](),
   )
-  result.client = ThreadRendererClient(commands: commands, nextHostId: 1)
+  result.client =
+    ThreadRendererClient(commands: commands, wakeups: wakeups, nextHostId: 1)
   result.client.threadId.store(-1, moRelaxed)
   result.client.running.store(false, moRelaxed)
 
@@ -309,7 +376,7 @@ proc start*(runtime: var ThreadRendererRuntime) =
 proc stop*(runtime: var ThreadRendererRuntime) =
   if runtime.started:
     runtime.client.running.store(false, moRelease)
-    runtime.client.commands.sendMoved(ThreadRendererCommand(kind: trcQuit))
+    runtime.client.sendCommand(ThreadRendererCommand(kind: trcQuit))
 
 proc join*(runtime: var ThreadRendererRuntime) =
   if runtime.started:
@@ -333,6 +400,7 @@ proc newThreadHostClient*(renderer: ThreadRendererClient): ThreadHostClient =
       events: newThreadHostEventQueue(),
       renders: newChan[ThreadRenderSnapshot](ThreadRenderCapacity),
     ),
+    rendererWakeups: renderer.wakeups,
     pendingResources: initDeque[ThreadRenderResourceLease](),
   )
   inc renderer.nextHostId
@@ -355,6 +423,7 @@ proc submitRenders*(
       renders: ensureMove renders, logicalSize: logicalSize, renderId: renderId
     )
   )
+  host.rendererWakeups.wakeRenderer()
   host.renderRequested = true
   true
 
@@ -1321,7 +1390,7 @@ proc attachThreadRenderer*(
       logicalSize: logicalSize,
       transparent: host.xTransparent,
     )
-    renderer.commands.sendMoved(
+    renderer.sendCommand(
       ThreadRendererCommand(kind: trcAttachRenderHost, renderHost: renderHost)
     )
     result.renderTargetAttached = true
@@ -1335,7 +1404,7 @@ proc detachThreadRenderer*(
   client.renderTargetReleasePending = true
   client.clearRenderResources()
   if not renderer.isNil:
-    renderer.commands.sendMoved(
+    renderer.sendCommand(
       ThreadRendererCommand(kind: trcDetachRenderHost, hostId: client.id)
     )
 
@@ -1558,65 +1627,66 @@ proc createHostWindow*(
   result.xNativeWindow.refreshUiScale(result.xAutoScale)
   result.xReady = true
 
-proc createLayerSurfaceHostWindow*(
-    frame: Rect,
-    title: string,
-    callbacks: HostWindowCallbacks,
-    config: LayerSurfaceConfig,
-    transparent = false,
-): HostWindow =
-  when defined(useNativeDynlib):
-    raise newException(
-      ValueError, "Layer-shell surfaces are unavailable through the native dynlib"
-    )
-  else:
-    let
-      scaleOverride = uiScaleOverrideFromEnv()
-      size = nativeWindowSize(frame.size, scaleOverride.overrideScale())
-    result = HostWindow(
-      xCallbacks: callbacks,
-      xTransparent: transparent,
-      xResources: newRenderResourceManager(),
-    )
-    result.xRenderer = figrender.newFigRenderer(
-      atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
-    )
+when defined(linux) or defined(bsd):
+  proc createLayerSurfaceHostWindow*(
+      frame: Rect,
+      title: string,
+      callbacks: HostWindowCallbacks,
+      config: LayerSurfaceConfig,
+      transparent = false,
+  ): HostWindow =
+    when defined(useNativeDynlib):
+      raise newException(
+        ValueError, "Layer-shell surfaces are unavailable through the native dynlib"
+      )
+    else:
+      let
+        scaleOverride = uiScaleOverrideFromEnv()
+        size = nativeWindowSize(frame.size, scaleOverride.overrideScale())
+      result = HostWindow(
+        xCallbacks: callbacks,
+        xTransparent: transparent,
+        xResources: newRenderResourceManager(),
+      )
+      result.xRenderer = figrender.newFigRenderer(
+        atlasSize = 1024, backendState = siwinshim.SiwinRenderBackend()
+      )
 
-    var nativeAnchors: set[siwinshim.LayerSurfaceAnchor]
-    for anchor in config.anchors:
-      nativeAnchors.incl siwinshim.LayerSurfaceAnchor(anchor.ord)
-    let nativeConfig = siwinshim.LayerSurfaceConfig(
-      layer: siwinshim.LayerSurfaceLayer(config.layer.ord),
-      anchors: nativeAnchors,
-      margins: siwinshim.LayerSurfaceMargins(
-        top: config.margins.top,
-        right: config.margins.right,
-        bottom: config.margins.bottom,
-        left: config.margins.left,
-      ),
-      exclusiveZone: config.exclusiveZone,
-      keyboardMode: siwinshim.LayerSurfaceKeyboardMode(config.keyboardMode.ord),
-      namespace: config.namespace,
-    )
-    result.xNativeWindow = siwinshim.newSiwinLayerSurfaceWindow(
-      result.xRenderer,
-      size = size,
-      title = title,
-      screen = config.output,
-      config = nativeConfig,
-      transparent = transparent,
-    )
-    result.xRenderer.setupBackend(result.xNativeWindow)
-    result.xPresentationTarget = result.xRenderer.presentationTarget()
-    result.configureHostUiScale(scaleOverride)
-    result.configureTransparentPresentation()
-    result.registerHost()
-    result.installNativeClipboardBridge()
-    result.installEventHandlers()
+      var nativeAnchors: set[siwinshim.LayerSurfaceAnchor]
+      for anchor in config.anchors:
+        nativeAnchors.incl siwinshim.LayerSurfaceAnchor(anchor.ord)
+      let nativeConfig = siwinshim.LayerSurfaceConfig(
+        layer: siwinshim.LayerSurfaceLayer(config.layer.ord),
+        anchors: nativeAnchors,
+        margins: siwinshim.LayerSurfaceMargins(
+          top: config.margins.top,
+          right: config.margins.right,
+          bottom: config.margins.bottom,
+          left: config.margins.left,
+        ),
+        exclusiveZone: config.exclusiveZone,
+        keyboardMode: siwinshim.LayerSurfaceKeyboardMode(config.keyboardMode.ord),
+        namespace: config.namespace,
+      )
+      result.xNativeWindow = siwinshim.newSiwinLayerSurfaceWindow(
+        result.xRenderer,
+        size = size,
+        title = title,
+        screen = config.output,
+        config = nativeConfig,
+        transparent = transparent,
+      )
+      result.xRenderer.setupBackend(result.xNativeWindow)
+      result.xPresentationTarget = result.xRenderer.presentationTarget()
+      result.configureHostUiScale(scaleOverride)
+      result.configureTransparentPresentation()
+      result.registerHost()
+      result.installNativeClipboardBridge()
+      result.installEventHandlers()
 
-    result.xNativeWindow.firstStep()
-    result.xNativeWindow.refreshUiScale(result.xAutoScale)
-    result.xReady = true
+      result.xNativeWindow.firstStep()
+      result.xNativeWindow.refreshUiScale(result.xAutoScale)
+      result.xReady = true
 
 proc createPopupHostWindow*(
     owner: HostWindow,
@@ -1667,7 +1737,10 @@ proc pump*(host: HostWindow) =
     host.xRenderer.processImageMessages()
   if host.xRenderRequested:
     nativeWindow.redraw()
-  nativeWindow.step()
+  when defined(useNativeDynlib):
+    nativeWindow.step()
+  else:
+    nativeWindow.serviceWindow()
   if host.isReady and nativeWindow.closed():
     host.markClosed(notify = true)
 
@@ -1739,10 +1812,11 @@ proc run*(renderer: ThreadRenderer) =
     return
   renderer.running = true
   while renderer.running:
+    # Commands and render submissions notify this channel after publishing work.
+    discard renderer.wakeups.recv()
     renderer.drainRendererCommands()
     for state in renderer.hosts.values:
       state.drainHostChannels()
-    sleep(1)
 
   for state in renderer.hosts.values:
     state.releaseRenderHost()

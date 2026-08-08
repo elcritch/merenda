@@ -25,6 +25,14 @@ proc withCleanUiScaleEnv(body: proc() {.closure.}) =
         delEnv(item.name)
 
 suite "nimkit backend":
+  test "layer surface APIs are limited to Wayland platforms":
+    when defined(linux) or defined(bsd):
+      check declared(nimkitBackend.LayerSurfaceConfig)
+      check declared(nimkitBackend.createLayerSurfaceHostWindow)
+    else:
+      check not declared(nimkitBackend.LayerSurfaceConfig)
+      check not declared(nimkitBackend.createLayerSurfaceHostWindow)
+
   test "held native modifier keys supplement missing event modifier flags":
     check nimkitBackend.toNimkitModifiers({}, {figdrawSiwin.Key.lsystem}) == {kmCommand}
     check nimkitBackend.toNimkitModifiers(
