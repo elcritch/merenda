@@ -1325,6 +1325,60 @@ suite "nimkit application":
       finally:
         window.close()
 
+  test "text caret blinks only while its native window is focused":
+    block nativeCaretBlinkFocus:
+      let
+        app = newApplication()
+        window = newWindow("Nimkit Caret Focus", frame = rect(80, 80, 240, 140))
+        root = newView(frame = rect(0, 0, 240, 140))
+        field = newTextField("Caret", frame = rect(16, 16, 180, 32))
+
+      root.addSubview(field)
+      window.setContentView(root)
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+      check window.makeFirstResponder(field)
+
+      try:
+        check app.runForFrames(1) == 1
+        check window.nativeReady
+        let
+          nativeWindow = window.nativeWindowOrNil()
+          editor = window.fieldEditor()
+        if nativeWindow.isNil:
+          skip()
+          break nativeCaretBlinkFocus
+
+        check window.animationScheduler().animationCount == 1
+        nativeWindow.eventsHandler.onStateBoolChanged(
+          siwinshim.StateBoolChangedEvent(
+            window: nativeWindow,
+            value: false,
+            kind: siwinshim.StateBoolChangedEventKind.focus,
+          )
+        )
+        check window.animationScheduler().animationCount == 0
+        check editor.insertionPointVisible
+
+        check window.makeFirstResponder(nil)
+        check window.makeFirstResponder(field)
+        check window.animationScheduler().animationCount == 0
+
+        nativeWindow.eventsHandler.onStateBoolChanged(
+          siwinshim.StateBoolChangedEvent(
+            window: nativeWindow,
+            value: true,
+            kind: siwinshim.StateBoolChangedEventKind.focus,
+          )
+        )
+        check window.animationScheduler().animationCount == 1
+        check editor.insertionPointVisible
+      except CatchableError:
+        skip()
+        break nativeCaretBlinkFocus
+      finally:
+        window.close()
+
   test "native render request follows display dirty state":
     block nativeRenderRequest:
       let

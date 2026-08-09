@@ -1226,6 +1226,11 @@ proc activeMouseButton(window: siwinshim.Window): events.MouseButton =
 proc isReady*(host: HostWindow): bool =
   host.hostReady
 
+proc isFocused*(host: HostWindow): bool =
+  if host.isNil or not host.hostReady:
+    return
+  host.xNativeWindow.focused()
+
 proc supportsPopupWindows*(host: HostWindow): bool =
   if host.isNil or not host.hostReady:
     return

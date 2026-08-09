@@ -150,6 +150,7 @@ type
     xFrameAutosaveName: string
     xKeyBindings: KeyBindingTable
     xHostWindow: HostWindow
+    xHostFocused: bool
     when defined(linux) or defined(bsd):
       xLayerSurface: Option[nimkitBackend.LayerSurfaceConfig]
     xThreadRenderer: ThreadRendererClient
@@ -523,6 +524,7 @@ proc newWindow*(
     xResizeIncrements: initSize(1.0'f32, 1.0'f32),
     xAutorecalculatesKeyViewLoop: true,
     xKeyBindings: initDefaultKeyBindings(),
+    xHostFocused: true,
     xTransparent: transparent,
   )
   initResponder(result)
@@ -1224,8 +1226,8 @@ proc insertionPointBlinkTarget(window: Window): TextView =
   if window.xFirstResponder of TextView:
     result = TextView(window.xFirstResponder)
 
-proc shouldBlinkInsertionPoint(textView: TextView): bool =
-  textView.editable() and textView.isFocused() and
+proc shouldBlinkInsertionPoint(window: Window, textView: TextView): bool =
+  window.xHostFocused and textView.editable() and textView.isFocused() and
     textView.insertionPointBlinkPeriod() > 0.0'f32
 
 proc insertionPointBlinkDuration(textView: TextView): Duration =
@@ -1253,7 +1255,7 @@ proc stopInsertionPointBlink(window: Window) =
 
 proc updateInsertionPointBlink(window: Window) =
   let target = window.insertionPointBlinkTarget()
-  if target.isNil or not target.shouldBlinkInsertionPoint():
+  if target.isNil or not window.shouldBlinkInsertionPoint(target):
     window.stopInsertionPointBlink()
     return
 
@@ -2712,7 +2714,11 @@ proc dispatchHostTextInput(window: Window, text: string) =
   discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc dispatchHostFocusChanged(window: Window, focused: bool) =
-  if not focused:
+  window.xHostFocused = focused
+  if focused:
+    window.updateInsertionPointBlink()
+  else:
+    window.stopInsertionPointBlink()
     window.clearToolTip()
   if focused and not window.xIsPopup and window.hasActiveTransientSession():
     discard window.dismissTransientSession(tdrFocusChange)
@@ -2842,6 +2848,9 @@ proc ensureNativeWindow*(window: Window) =
       window.xHostWindow = createHostWindow(
         window.xFrame, window.xTitle, callbacks, transparent = window.xTransparent
       )
+  window.xHostFocused = window.xHostWindow.isFocused()
+  if not window.xHostFocused:
+    window.stopInsertionPointBlink()
   window.syncNativeSizeLimits()
   window.xBackdropActive = false
   if window.xBackdrop.kind != wbekNone:
