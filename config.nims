@@ -23,6 +23,9 @@ when defined(useNativeDynlib):
   elif defined(linux) or defined(bsd):
     switch("define", "nativeLibrary=../figdraw/bin/libfigdraw_native.so")
 
+when defined(feature.merenda.kosmo):
+  switch("import", "src/merenda/kosmo/moe_sync_compat.nim")
+
 const
   referenceDir = "docs/reference"
   openStepSpecUrl = "https://levenez.com/NeXTSTEP/OpenStepSpec.pdf"

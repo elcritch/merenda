@@ -20,6 +20,9 @@ feature "libbacktrace":
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
+feature "kosmo":
+  requires "gh:fox0430/moe#d650f95b892519613e605f84dade85130d4437ed"
+
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
   requires "https://github.com/elcritch/figuro"
