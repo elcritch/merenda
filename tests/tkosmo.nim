@@ -1,7 +1,6 @@
 import std/[os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
-import merenda/nimkit/app/backend as nimkitBackend
 import merenda/kosmo/kosmo
 
 proc renderedText(buffer: RenderBuffer): string =
@@ -101,7 +100,6 @@ suite "Kosmo":
 
     check not openItem.isNil
     check openItem.title == "Open…"
-    check frontend.application.renderExecutionMode() == nimkitBackend.remMainThread
     frontend.contentView.frame = rect(0, 0, 640, 480)
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.contentView.menuBar().hidden() == app.usesNativeMainMenu()

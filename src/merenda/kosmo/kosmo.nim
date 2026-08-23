@@ -3,7 +3,6 @@
 import std/[math, os, strutils]
 
 import ../nimkit as nimkit
-import ../nimkit/app/backend as nimkitBackend
 import ./[filetree, moe]
 import pkg/celina as celina
 
@@ -277,10 +276,6 @@ proc chooseFile(view: KosmoEditorView, tree: KosmoFileTree, app: nimkit.Applicat
 proc newKosmoApplication*(
     app = nimkit.sharedApplication(), filePath = ""
 ): KosmoApplication =
-  # Kosmo synchronously mutates its Moe-backed cell grid during UI frames. Keep
-  # consumption of those render snapshots on the application thread as well so
-  # a later refresh cannot invalidate a tree being traversed by another thread.
-  app.renderExecutionMode = nimkitBackend.remMainThread
   let
     editorView = newKosmoEditorView()
     fileTree = newKosmoFileTree(getCurrentDir())
