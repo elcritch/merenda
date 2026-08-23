@@ -109,6 +109,18 @@ suite "Kosmo":
       @[View(frontend.fileTree), View(frontend.editorView)]
     frontend.editorView.editor.close()
 
+  test "settled editor refresh does not re-dirty its containing layout":
+    let frontend = newKosmoApplication(newApplication("Kosmo Layout Test"))
+    defer:
+      frontend.close()
+
+    frontend.contentView.frame = rect(0, 0, 640, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    check not frontend.contentView.needsLayout()
+    check not frontend.contentView.contentView().needsLayout()
+
   test "file tree lazily exposes folders before files":
     let
       root = createTempDir("merenda-kosmo-tree-", "")

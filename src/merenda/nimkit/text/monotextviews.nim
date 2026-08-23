@@ -444,6 +444,64 @@ proc setGridSize*(view: MonoTextView, rows, columns: int) =
     view.postAccessibilityNotification(anValueChanged)
   view.postCursorSelectionChanged(previousCursor)
 
+proc replaceGrid*(
+    view: MonoTextView, rows, columns: int, cells: openArray[MonoTextCell]
+) =
+  ## Replace a rectangular cell grid in one display and accessibility update.
+  ##
+  ## `cells` is row-major and must contain exactly `max(rows, 0) * max(columns,
+  ## 0)` cells. Empty grids retain the view's single empty editing line.
+  let
+    nextRows = max(rows, 0)
+    nextColumns = max(columns, 0)
+    expectedCellCount = nextRows * nextColumns
+  if cells.len != expectedCellCount:
+    raise newException(
+      ValueError,
+      "a mono text grid needs " & $expectedCellCount & " cells, got " & $cells.len,
+    )
+
+  let storedRows = max(nextRows, 1)
+  var dimensionsChanged = view.xLines.len != storedRows
+  if not dimensionsChanged:
+    for row in 0 ..< nextRows:
+      if view.xLines[row].cells.len != nextColumns:
+        dimensionsChanged = true
+        break
+    if nextRows == 0 and view.xLines[0].cells.len != 0:
+      dimensionsChanged = true
+
+  var contentsChanged = dimensionsChanged
+  if not contentsChanged:
+    for row in 0 ..< nextRows:
+      for column in 0 ..< nextColumns:
+        if view.xLines[row].cells[column] != cells[row * nextColumns + column]:
+          contentsChanged = true
+          break
+      if contentsChanged:
+        break
+  if not contentsChanged:
+    return
+
+  let previousCursor = view.cursorTextIndex()
+  if dimensionsChanged:
+    view.xLines.setLen(storedRows)
+    for row in 0 ..< nextRows:
+      view.xLines[row].cells.setLen(nextColumns)
+    if nextRows == 0:
+      view.xLines[0].cells.setLen(0)
+  for row in 0 ..< nextRows:
+    for column in 0 ..< nextColumns:
+      view.xLines[row].cells[column] = cells[row * nextColumns + column]
+
+  view.clampCursor()
+  if dimensionsChanged:
+    view.invalidateTextGeometry()
+  else:
+    view.needsDisplay = true
+  view.postAccessibilityNotification(anValueChanged)
+  view.postCursorSelectionChanged(previousCursor)
+
 proc replaceCells*(
     view: MonoTextView, row, column: int, cells: openArray[MonoTextCell]
 ) =

@@ -3,8 +3,17 @@ import std/[strutils, unicode, unittest]
 import figdraw
 import figdraw/common/typefaces
 import pkg/bumpy
+import sigils/core
 
 import merenda/nimkit
+
+type MonoTextAccessibilitySpy = ref object of Agent
+  notifications: seq[AccessibilityNotification]
+
+proc rememberAccessibilityNotification(
+    spy: MonoTextAccessibilitySpy, notification: AccessibilityNotification
+) {.slot.} =
+  spy.notifications.add notification
 
 proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
@@ -51,6 +60,56 @@ suite "nimkit mono text views":
     )
     check view.cellAt(1, 1).text == "X"
     check view.cellAt(1, 2).foregroundColor == color(0.9, 0.1, 0.1)
+
+  test "bulk grid replacement coalesces updates and skips unchanged grids":
+    let
+      root = newView(frame = rect(0, 0, 240, 120))
+      view = newMonoTextViewer(frame = rect(0, 0, 240, 120))
+      cells = [
+        initMonoTextCell("A"),
+        initMonoTextCell("B"),
+        initMonoTextCell("C"),
+        initMonoTextCell("D"),
+        initMonoTextCell("E"),
+        initMonoTextCell("F"),
+      ]
+      spy = MonoTextAccessibilitySpy()
+
+    root.addSubview(view)
+    root.layoutSubtreeIfNeeded()
+    view.connect(
+      accessibilityNotificationPosted, spy, rememberAccessibilityNotification
+    )
+    view.replaceGrid(2, 3, cells)
+    root.layoutSubtreeIfNeeded()
+
+    check view.lineCount == 2
+    check view.maxColumnCount == 3
+    check view.stringValue == "ABC\nDEF"
+    check spy.notifications == @[anValueChanged]
+    check not root.needsLayout()
+
+    root.clearNeedsDisplayTree()
+    var changedCells = cells
+    changedCells[0] = initMonoTextCell("G")
+    view.replaceGrid(2, 3, changedCells)
+    check view.stringValue == "GBC\nDEF"
+    check spy.notifications == @[anValueChanged, anValueChanged]
+    check view.needsDisplay()
+    check not root.needsLayout()
+
+    expect ValueError:
+      view.replaceGrid(2, 3, changedCells[0 .. 4])
+    check view.stringValue == "GBC\nDEF"
+    check spy.notifications == @[anValueChanged, anValueChanged]
+
+    root.clearNeedsDisplayTree()
+    view.replaceGrid(2, 3, changedCells)
+    check not view.needsDisplay()
+    view.replaceGrid(2, 3, changedCells)
+    check spy.notifications == @[anValueChanged, anValueChanged]
+    check not root.needsLayout()
+    check not view.needsLayout()
 
   test "editor handles cursor movement insertion and deletion":
     let

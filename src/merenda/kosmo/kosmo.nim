@@ -3,6 +3,7 @@
 import std/[math, os, strutils]
 
 import ../nimkit as nimkit
+from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ./[filetree, moe]
 import pkg/celina as celina
 
@@ -126,13 +127,12 @@ proc refresh*(view: KosmoEditorView) =
     rows = max(int(bounds.size.height / metrics.lineHeight), 1)
   if view.renderBuffer.width != columns or view.renderBuffer.height != rows:
     view.renderBuffer.resize(columns.Natural, rows.Natural)
-  view.setGridSize(rows, columns)
   view.editor.render(view.renderBuffer)
+  var cells = newSeq[nimkit.MonoTextCell](rows * columns)
   for row in 0 ..< rows:
-    var cells = newSeq[nimkit.MonoTextCell](columns)
     for column in 0 ..< columns:
-      cells[column] = view.renderBuffer.cell(column, row).toMonoTextCell
-    view.replaceCells(row, 0, cells)
+      cells[row * columns + column] = view.renderBuffer.cell(column, row).toMonoTextCell
+  view.replaceGrid(rows, columns, cells)
 
 proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load a file selected by the frontend and refresh the cell grid.
@@ -230,14 +230,18 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(content: KosmoContentView) =
     let bounds = content.bounds()
     const statusHeight = 22.0'f32
-    content.statusLabel.frame = nimkit.rect(
-      0,
-      max(bounds.size.height - statusHeight, 0.0'f32),
-      bounds.size.width,
-      statusHeight,
+    content.statusLabel.setFrameFromLayout(
+      nimkit.rect(
+        0,
+        max(bounds.size.height - statusHeight, 0.0'f32),
+        bounds.size.width,
+        statusHeight,
+      )
     )
-    content.splitView.frame = nimkit.rect(
-      0, 0, bounds.size.width, max(bounds.size.height - statusHeight, 1.0'f32)
+    content.splitView.setFrameFromLayout(
+      nimkit.rect(
+        0, 0, bounds.size.width, max(bounds.size.height - statusHeight, 1.0'f32)
+      )
     )
     if not content.setInitialDivider and bounds.size.width > 0.0'f32:
       content.splitView.setPositionOfDivider(0, min(bounds.size.width * 0.25, 260.0))
