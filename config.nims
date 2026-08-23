@@ -12,6 +12,8 @@
   cpp
 --debugger:
   native
+--exceptions:
+  setjmp
 
 import std/strutils
 import std/os
