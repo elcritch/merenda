@@ -904,6 +904,9 @@ suite "nimkit constraints":
     check initialAutoresizingGeneration > 0
     check initialIntrinsicGeneration > 0
 
+    root.layoutSubtreeIfNeeded()
+    check root.layoutInputGeneration() == initialSolveGeneration
+
     root.frame = rect(0, 0, 300, 120)
     root.layoutSubtreeIfNeeded()
 

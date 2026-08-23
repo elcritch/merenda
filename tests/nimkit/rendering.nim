@@ -1655,6 +1655,23 @@ suite "nimkit rendering":
     check rebuiltRenders != themedRenders
     check customDrawCount == 4
 
+  test "buildRenders invalidates a cached appearance after theme mutation":
+    let
+      root = newView(frame = rect(0, 0, 120, 90))
+      custom = newCustomDrawView(rect(10, 12, 50, 30))
+    var appearance = initAppearance()
+
+    customDrawCount = 0
+    root.addSubview(custom)
+    let initialRenders = buildRenders(root, appearance)
+    discard buildRenders(root, appearance)
+    check customDrawCount == 1
+
+    appearance[srView, StyleFill] = color(0.22, 0.34, 0.46, 1.0)
+    let changedRenders = buildRenders(root, appearance)
+    check changedRenders != initialRenders
+    check customDrawCount == 2
+
   test "buildRenders does not clip view subtrees by default":
     let
       root = newView(frame = rect(0, 0, 100, 80))

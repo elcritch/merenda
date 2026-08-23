@@ -1499,7 +1499,14 @@ proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
         default(array[LayoutInputSource, Natural])
       solverView.item.xLayoutInputCache.generation = 0
 
+proc needsConstraintSolve(view: View): bool =
+  let cache = view.xLayoutInputCache
+  cache.generation == 0 or cache.structureDirty or cache.aggregateStructureDirty or
+    cache.dirtySources != {} or cache.aggregateDirtySources != {}
+
 proc applyConstraintsForSubtree*(view: View) =
+  if not view.needsConstraintSolve():
+    return
   var state = initLayoutSolveState()
   state.collectSolverViews(view)
   state.collectConstraintItems(view)

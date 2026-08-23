@@ -339,7 +339,9 @@ proc appearance*(app: Application): Appearance =
 
 proc effectiveAppearance*(app: Application): Appearance =
   if not app.xHasAppearance:
-    return initAppearance()
+    if app.xAppearance.theme.tokens.isNil:
+      app.xAppearance = initAppearance()
+    return app.xAppearance
   app.xAppearance
 
 proc delegate*(app: Application): DynamicAgent =

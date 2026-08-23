@@ -7,6 +7,9 @@ import merenda/nimkit
 
 type OutlineSourceSpy = ref object of Responder
   items: seq[OutlineItem]
+  numberOfChildrenCalls: int
+  childIdentifierCalls: int
+  outlineItemCalls: int
 
 type OutlineDelegateSpy = ref object of Responder
   deniedExpand: seq[string]
@@ -47,6 +50,7 @@ protocol OutlineSourceSpyMethods of OutlineViewDataSource:
   method numberOfChildren(
       source: OutlineSourceSpy, outlineView: OutlineView, parentIdentifier: string
   ): int =
+    inc source.numberOfChildrenCalls
     for item in source.items:
       if item.parentIdentifier == parentIdentifier:
         inc result
@@ -57,6 +61,7 @@ protocol OutlineSourceSpyMethods of OutlineViewDataSource:
       parentIdentifier: string,
       index: int,
   ): string =
+    inc source.childIdentifierCalls
     var current = 0
     for item in source.items:
       if item.parentIdentifier == parentIdentifier:
@@ -67,6 +72,7 @@ protocol OutlineSourceSpyMethods of OutlineViewDataSource:
   method outlineItem(
       source: OutlineSourceSpy, outlineView: OutlineView, identifier: string
   ): OutlineItem =
+    inc source.outlineItemCalls
     for item in source.items:
       if item.identifier == identifier:
         return item
@@ -388,6 +394,35 @@ suite "NimKit OutlineView":
     let info = drag.draggingInfo()
     check info.tableDraggingRows() == @[1]
     check info.selectedOperations == {dgoCopy}
+
+  test "visible outline rows stay cached until data reload":
+    let
+      outlineView = newOutlineView()
+      source = newOutlineSourceSpy(
+        [
+          initOutlineItem("root", "Root", expandable = true),
+          initOutlineItem("child", "Child", parentIdentifier = "root"),
+        ]
+      )
+
+    outlineView.outlineDataSource = source
+    outlineView.expandItem("root")
+    check outlineView.rowCount == 2
+    let callsAfterLoad = (
+      source.numberOfChildrenCalls, source.childIdentifierCalls, source.outlineItemCalls
+    )
+
+    check outlineView.rowCount == 2
+    check outlineView.itemAtRow(1).identifier == "child"
+    check outlineView.levelForRow(1) == 1
+    check (
+      source.numberOfChildrenCalls, source.childIdentifierCalls, source.outlineItemCalls
+    ) == callsAfterLoad
+
+    source.items.add initOutlineItem("second", "Second", parentIdentifier = "root")
+    outlineView.reloadOutlineData()
+    check outlineView.rowCount == 3
+    check source.numberOfChildrenCalls > callsAfterLoad[0]
 
   test "outline drawn cell field editor aligns with indented row text":
     let

@@ -138,12 +138,20 @@ type
     selector*: StyleSelector
     patch*: StylePatch
 
+  StyleRuleIndex = ref object
+    valid: bool
+    revision: uint64
+    ruleCount: int
+    rulesByRole: array[StyleRole, seq[int]]
+
   Chrome* = ref object of DynamicAgent
 
   Theme* = object
     tokens*: StyleTokenStore
     rules*: seq[StyleRule]
     chromes*: Table[string, Chrome]
+    xRevision: uint64
+    xRuleIndex: StyleRuleIndex
 
   Appearance* = object
     theme*: Theme
@@ -596,6 +604,19 @@ proc clone*(theme: Theme): Theme =
   for rule in theme.rules:
     result.rules.add StyleRule(selector: rule.selector, patch: rule.patch.clone)
   result.chromes = theme.chromes
+  result.xRevision = theme.xRevision
+  result.xRuleIndex = StyleRuleIndex()
+
+proc noteThemeMutation(theme: var Theme) =
+  if theme.xRuleIndex.isNil:
+    theme.xRuleIndex = StyleRuleIndex()
+  inc theme.xRevision
+
+proc sameAppearanceGeneration*(left, right: Appearance): bool =
+  ## Compare immutable cache snapshots without traversing every theme value.
+  left.theme.tokens == right.theme.tokens and
+    left.theme.xRuleIndex == right.theme.xRuleIndex and
+    left.theme.xRevision == right.theme.xRevision
 
 proc registerThemeInstaller*(installer: ThemeInstaller) =
   themeInstallers.add installer
@@ -610,8 +631,12 @@ proc installChrome*(theme: var Theme, name: string, chrome: Chrome) =
   if chrome.isNil:
     if name in theme.chromes:
       theme.chromes.del(name)
+      theme.noteThemeMutation()
   else:
+    if name in theme.chromes and theme.chromes[name] == chrome:
+      return
     theme.chromes[name] = chrome
+    theme.noteThemeMutation()
 
 proc hasChrome*(theme: Theme, name: string): bool =
   name in theme.chromes
@@ -655,27 +680,28 @@ proc `[]=`*(tokens: StyleTokenStore, name: string, value: openArray[BoxShadow]) 
 
 proc `[]=`*(theme: var Theme, name: string, value: StyleValue) =
   theme.tokens[name] = value
+  theme.noteThemeMutation()
 
 proc `[]=`*(theme: var Theme, name: string, value: Color) =
-  theme.tokens[name] = value
+  theme[name] = styleColor(value)
 
 proc `[]=`*(theme: var Theme, name: string, value: Fill) =
-  theme.tokens[name] = value
+  theme[name] = styleFill(value)
 
 proc `[]=`*(theme: var Theme, name: string, value: float32) =
-  theme.tokens[name] = value
+  theme[name] = styleLength(value)
 
 proc `[]=`*(theme: var Theme, name: string, value: float) =
-  theme.tokens[name] = value
+  theme[name] = styleLength(value.float32)
 
 proc `[]=`*(theme: var Theme, name: string, value: Size) =
-  theme.tokens[name] = value
+  theme[name] = styleSize(value)
 
 proc `[]=`*(theme: var Theme, name: string, value: EdgeInsets) =
-  theme.tokens[name] = value
+  theme[name] = styleInsets(value)
 
 proc `[]=`*(theme: var Theme, name: string, value: openArray[BoxShadow]) =
-  theme.tokens[name] = value
+  theme[name] = styleShadows(value)
 
 proc lookupToken(tokens: StyleTokenStore, name: string, value: var StyleValue): bool =
   var current = tokens
@@ -818,36 +844,43 @@ proc stylePatch*(theme: Theme, selector: StyleSelector): StylePatch =
 
 proc addRule*(theme: var Theme, selector: StyleSelector, patch: StylePatch) =
   theme.rules.add StyleRule(selector: selector, patch: patch)
+  theme.noteThemeMutation()
 
 proc setStyle*[T](
     theme: var Theme, selector: StyleSelector, key: StyleKey[T], value: StyleValue
 ) =
   theme.stylePatch(selector).setStyle(key, value)
+  theme.noteThemeMutation()
 
 proc setStyle*(
     theme: var Theme, selector: StyleSelector, key: StyleKey[Color], value: Color
 ) =
   theme.stylePatch(selector).setStyle(key, value)
+  theme.noteThemeMutation()
 
 proc setStyle*(
     theme: var Theme, selector: StyleSelector, key: StyleKey[Fill], value: Fill
 ) =
   theme.stylePatch(selector).setStyle(key, value)
+  theme.noteThemeMutation()
 
 proc setStyle*(
     theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float32
 ) =
   theme.stylePatch(selector).setStyle(key, value)
+  theme.noteThemeMutation()
 
 proc setStyle*(
     theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float
 ) =
   theme.stylePatch(selector).setStyle(key, value)
+  theme.noteThemeMutation()
 
 proc setStyle*(
     theme: var Theme, selector: StyleSelector, key: StyleKey[Size], value: Size
 ) =
   theme.stylePatch(selector).setStyle(key, value)
+  theme.noteThemeMutation()
 
 proc setStyle*(
     theme: var Theme,
@@ -856,6 +889,7 @@ proc setStyle*(
     value: EdgeInsets,
 ) =
   theme.stylePatch(selector).setStyle(key, value)
+  theme.noteThemeMutation()
 
 proc setStyle*(
     theme: var Theme,
@@ -864,6 +898,7 @@ proc setStyle*(
     value: openArray[BoxShadow],
 ) =
   theme.stylePatch(selector).setStyle(key, value)
+  theme.noteThemeMutation()
 
 proc setStyle*[T](
     theme: var Theme, role: StyleRole, key: StyleKey[T], value: StyleValue
@@ -1128,13 +1163,35 @@ proc `[]`*[T](theme: Theme, role: StyleRole, key: StyleKey[T]): StyleValue =
   if patch.isNil or not patch.getStyle(key, result):
     result = missingStyleValue()
 
+proc indexedRules(theme: Theme): StyleRuleIndex =
+  result = theme.xRuleIndex
+  if result.isNil:
+    return
+  if result.valid and result.revision == theme.xRevision and
+      result.ruleCount == theme.rules.len:
+    return
+  for role in StyleRole:
+    result.rulesByRole[role].setLen(0)
+  for index, rule in theme.rules:
+    result.rulesByRole[rule.selector.role].add index
+  result.valid = true
+  result.revision = theme.xRevision
+  result.ruleCount = theme.rules.len
+
 proc ruleValue(
     theme: Theme, context: StyleContext, key: string, fallback: StyleValue
 ): StyleValue =
   result = fallback
-  var bestSpecificity = -1
-  for rule in theme.rules:
-    template applyRule(matchContext: StyleContext, roleRank: int) =
+  var
+    bestSpecificity = -1
+    inheritedContext = context
+  let
+    inheritedRole = context.role.inheritedStyleRole()
+    index = theme.indexedRules()
+  inheritedContext.role = inheritedRole
+
+  template applyRule(rule: StyleRule, matchContext: StyleContext, roleRank: int) =
+    block:
       var value: StyleValue
       if rule.selector.matches(matchContext) and rule.patch.getStyle(key, value):
         let ruleSpecificity = rule.selector.specificity() * 10 + roleRank
@@ -1147,12 +1204,17 @@ proc ruleValue(
             result = value
             bestSpecificity = ruleSpecificity
 
-    let inheritedRole = context.role.inheritedStyleRole()
+  if index.isNil:
+    for rule in theme.rules:
+      if inheritedRole != context.role:
+        applyRule(rule, inheritedContext, 0)
+      applyRule(rule, context, 1)
+  else:
     if inheritedRole != context.role:
-      var inheritedContext = context
-      inheritedContext.role = inheritedRole
-      applyRule(inheritedContext, 0)
-    applyRule(context, 1)
+      for ruleIndex in index.rulesByRole[inheritedRole]:
+        applyRule(theme.rules[ruleIndex], inheritedContext, 0)
+    for ruleIndex in index.rulesByRole[context.role]:
+      applyRule(theme.rules[ruleIndex], context, 1)
 
 proc colorRule(
     theme: Theme, context: StyleContext, key: StyleKey[Color], fallback: Color

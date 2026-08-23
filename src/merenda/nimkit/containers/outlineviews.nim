@@ -66,6 +66,8 @@ type
 
   OutlineView* = ref object of TableView
     xOutlineItems: seq[OutlineItem]
+    xOutlineRowsCache: seq[OutlineRow]
+    xOutlineRowsCacheValid: bool
     xExpanded: seq[string]
     xSelectedIdentifiers: seq[string]
     xOutlineColumn: TableColumn
@@ -157,9 +159,6 @@ proc displayTitle*(item: OutlineItem): string =
   else:
     item.objectValue.formatObjectValue(initObjectFormatContext(role = ovrTableCell))
 
-func outlineItemCanExpand(item: OutlineItem, hasChildren: bool): bool =
-  (not item.leaf) and (item.expandable or hasChildren)
-
 proc isItemExpanded*(outlineView: OutlineView, identifier: string): bool
 proc outlineItemWithIdentifier*(
   outlineView: OutlineView, identifier: string
@@ -175,6 +174,8 @@ proc `selectedItemIdentifiers=`*(
 proc childrenForParent(
   outlineView: OutlineView, parentIdentifier: string
 ): seq[OutlineItem]
+
+proc reloadOutlineData*(outlineView: OutlineView)
 
 const
   OutlineIndentStep = 16.0'f32
@@ -273,7 +274,7 @@ proc `outlineColumn=`*(outlineView: OutlineView, column: TableColumn) =
   outlineView.xOutlineColumn = column
   if not column.isNil and column.tableView() != TableView(outlineView):
     TableView(outlineView).addColumn(column)
-  TableView(outlineView).reloadData()
+  outlineView.reloadOutlineData()
 
 proc outlineDataSource*(outlineView: OutlineView): DynamicAgent =
   outlineView.xOutlineDataSource
@@ -284,7 +285,7 @@ proc `outlineDataSource=`*(outlineView: OutlineView, dataSource: DynamicAgent) =
   if not dataSource.isNil:
     discard dataSource.adopt(OutlineViewDataSource)
   outlineView.xOutlineDataSource = dataSource
-  TableView(outlineView).reloadData()
+  outlineView.reloadOutlineData()
 
 proc `outlineDataSource=`*(outlineView: OutlineView, dataSource: Responder) =
   outlineView.outlineDataSource = DynamicAgent(dataSource)
@@ -313,7 +314,7 @@ proc `outlineItems=`*(outlineView: OutlineView, items: openArray[OutlineItem]) =
     if outlineView.itemIndex(identifier) >= 0:
       nextExpanded.add identifier
   outlineView.xExpanded = nextExpanded
-  TableView(outlineView).reloadData()
+  outlineView.reloadOutlineData()
   outlineView.selectedItemIdentifiers = selectedIdentifiers
 
 proc outlineItemIdentifiers*(outlineView: OutlineView): seq[string] =
@@ -321,8 +322,17 @@ proc outlineItemIdentifiers*(outlineView: OutlineView): seq[string] =
     if item.identifier.len > 0:
       result.add item.identifier
 
-proc visibleOutlineRows*(outlineView: OutlineView): seq[OutlineRow] =
-  outlineView.appendVisibleRows("", 0, result)
+proc visibleOutlineRows*(outlineView: OutlineView): lent seq[OutlineRow] =
+  if not outlineView.xOutlineRowsCacheValid:
+    outlineView.xOutlineRowsCache.setLen(0)
+    outlineView.appendVisibleRows("", 0, outlineView.xOutlineRowsCache)
+    outlineView.xOutlineRowsCacheValid = true
+  outlineView.xOutlineRowsCache
+
+proc reloadOutlineData*(outlineView: OutlineView) =
+  ## Invalidates cached outline rows before reloading the table contents.
+  outlineView.xOutlineRowsCacheValid = false
+  TableView(outlineView).reloadData()
 
 proc rowCount*(outlineView: OutlineView): int =
   outlineView.visibleOutlineRows().len
@@ -388,7 +398,7 @@ proc selectItemWithIdentifier*(
 proc reloadOutlineDataPreservingSelection(
     outlineView: OutlineView, selectedIdentifiers: openArray[string]
 ) =
-  TableView(outlineView).reloadData()
+  outlineView.reloadOutlineData()
   outlineView.selectedItemIdentifiers = selectedIdentifiers
 
 proc localStorageIndexForChildIndex(
@@ -509,13 +519,15 @@ proc levelForRow*(outlineView: OutlineView, row: int): int =
     -1
 
 proc isItemExpandable*(outlineView: OutlineView, identifier: string): bool =
+  var item: OutlineItem
   let index = outlineView.itemIndex(identifier)
   if index >= 0:
-    return outlineView.xOutlineItems[index].outlineItemCanExpand(
-      outlineView.hasChildren(identifier)
-    )
-  let item = outlineView.sourcedOutlineItem(identifier)
-  item.outlineItemCanExpand(outlineView.hasChildren(identifier))
+    item = outlineView.xOutlineItems[index]
+  else:
+    item = outlineView.sourcedOutlineItem(identifier)
+  if item.leaf:
+    return false
+  item.expandable or outlineView.hasChildren(identifier)
 
 proc isItemExpanded*(outlineView: OutlineView, identifier: string): bool =
   outlineView.xExpanded.containsIdentifier(identifier)
@@ -598,7 +610,7 @@ proc expandItem*(outlineView: OutlineView, identifier: string) =
     if allowed.isSome and not allowed.get():
       return
   outlineView.xExpanded.add identifier
-  TableView(outlineView).reloadData()
+  outlineView.reloadOutlineData()
   if not delegate.isNil:
     discard delegate.sendLocalIfHandled(
       didExpandItem(), (outlineView: outlineView, identifier: identifier)
@@ -620,7 +632,7 @@ proc collapseItem*(outlineView: OutlineView, identifier: string) =
   if next == outlineView.xExpanded:
     return
   outlineView.xExpanded = next
-  TableView(outlineView).reloadData()
+  outlineView.reloadOutlineData()
   if not delegate.isNil:
     discard delegate.sendLocalIfHandled(
       didCollapseItem(), (outlineView: outlineView, identifier: identifier)
@@ -643,7 +655,7 @@ proc `expandedItemIdentifiers=`*(
   outlineView.xExpanded = @identifiers
   if outlineView.xExpanded == previous:
     return
-  TableView(outlineView).reloadData()
+  outlineView.reloadOutlineData()
   outlineView.postAccessibilityNotification(anExpandedChanged)
 
 proc expansionPersistenceString*(outlineView: OutlineView): string =
@@ -654,7 +666,7 @@ proc restoreExpansionPersistenceString*(outlineView: OutlineView, value: string)
     outlineView.xExpanded.setLen(0)
   else:
     outlineView.xExpanded = value.split(",")
-  TableView(outlineView).reloadData()
+  outlineView.reloadOutlineData()
 
 proc disclosureRectInRowBounds(
     outlineView: OutlineView, row: int, rowBounds: Rect
@@ -904,7 +916,7 @@ proc outlineModelDidChange*(outlineView: OutlineView, sender: DynamicAgent) {.sl
       outlineView.xSelectedIdentifiers
     else:
       outlineView.selectedItemIdentifiers()
-  TableView(outlineView).reloadData()
+  outlineView.reloadOutlineData()
   outlineView.selectedItemIdentifiers = selectedIdentifiers
 
 proc outlineSelectionDidChange*(

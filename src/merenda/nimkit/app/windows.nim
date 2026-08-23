@@ -987,7 +987,9 @@ proc effectiveAppearance*(window: Window): Appearance =
     return window.xAppearance
   if window.xHasInheritedAppearance:
     return window.xInheritedAppearance
-  initAppearance()
+  if window.xInheritedAppearance.theme.tokens.isNil:
+    window.xInheritedAppearance = initAppearance()
+  window.xInheritedAppearance
 
 proc popupPresentation*(window: Window): PopupPresentation =
   window.xPopupPresentation

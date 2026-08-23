@@ -1332,7 +1332,7 @@ proc bindOutlineView*(outlineView: OutlineView, controller: TreeController) =
     outlineView.selectedItemIdentifiers = controller.xSelection.selectedIdentifiers()
     controller.observeProtocol(outlineView, TableViewEvents)
     controller.connect(treeControllerDidChange, outlineView, outlineModelDidChange)
-  tableviews.reloadData(TableView(outlineView))
+  outlineviews.reloadOutlineData(outlineView)
 
 proc bindCascadingView*(view: CascadingView, controller: TreeController) =
   let oldController = view.dataSource()

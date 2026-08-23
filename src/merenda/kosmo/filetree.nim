@@ -28,24 +28,26 @@ proc compareTreePaths(left, right: string): int =
     return if leftDirectory: -1 else: 1
   cmpIgnoreCase(left.pathTitle(), right.pathTitle())
 
-proc childPaths(tree: KosmoFileTree, parentIdentifier: string): seq[string] =
+proc loadChildPaths(tree: KosmoFileTree, parentIdentifier: string) =
+  if tree.xChildren.hasKey(parentIdentifier):
+    return
+  var children: seq[string]
   if parentIdentifier.len == 0:
     if tree.xRootPath.len > 0:
-      return @[tree.xRootPath]
-    return
-  if not parentIdentifier.expandableDirectory():
-    return
-  if tree.xChildren.hasKey(parentIdentifier):
-    return tree.xChildren[parentIdentifier]
+      children.add tree.xRootPath
+  elif parentIdentifier.expandableDirectory():
+    try:
+      for kind, path in walkDir(parentIdentifier, relative = false):
+        if kind in {pcFile, pcDir, pcLinkToFile, pcLinkToDir}:
+          children.add path
+      children.sort(compareTreePaths)
+    except OSError:
+      discard
+  tree.xChildren[parentIdentifier] = children
 
-  try:
-    for kind, path in walkDir(parentIdentifier, relative = false):
-      if kind in {pcFile, pcDir, pcLinkToFile, pcLinkToDir}:
-        result.add path
-    result.sort(compareTreePaths)
-  except OSError:
-    discard
-  tree.xChildren[parentIdentifier] = result
+proc childPaths(tree: KosmoFileTree, parentIdentifier: string): lent seq[string] =
+  tree.loadChildPaths(parentIdentifier)
+  tree.xChildren[parentIdentifier]
 
 protocol KosmoFileTreeDataSource of nimkit.OutlineViewDataSource:
   method numberOfChildren(
@@ -116,12 +118,12 @@ proc `rootPath=`*(tree: KosmoFileTree, path: string) =
       @[]
   tree.expandedItemIdentifiers = expanded
   tree.selectedItemIdentifier = ""
-  nimkit.TableView(tree).reloadData()
+  tree.reloadOutlineData()
 
 proc refresh*(tree: KosmoFileTree) =
   ## Discard cached directory listings and reload the visible hierarchy.
   tree.xChildren.clear()
-  nimkit.TableView(tree).reloadData()
+  tree.reloadOutlineData()
 
 proc onOpenFile*(tree: KosmoFileTree): FileTreeOpenHandler =
   tree.xOnOpenFile

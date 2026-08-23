@@ -178,73 +178,9 @@ proc emptyRenders(): Renders =
   result = Renders(layers: initOrderedTable[ZLevel, RenderList]())
   result.layers[DefaultDrawLevel] = RenderList()
 
-proc sameStyleValue(a, b: StyleValue): bool =
-  if a.kind != b.kind:
-    return false
-  case a.kind
-  of svMissing:
-    true
-  of svColor:
-    a.color == b.color
-  of svFill:
-    a.fill == b.fill
-  of svLength:
-    a.length == b.length
-  of svSize:
-    a.size == b.size
-  of svInsets:
-    a.insets == b.insets
-  of svShadows:
-    a.shadows == b.shadows
-  of svToken:
-    a.token == b.token
-  of svKeyword:
-    a.keyword == b.keyword
-
-proc sameStyleValues(a, b: Table[string, StyleValue]): bool =
-  if a.len != b.len:
-    return false
-  for key, value in a.pairs:
-    if key notin b or not value.sameStyleValue(b[key]):
-      return false
-  true
-
-proc sameTokenStore(a, b: StyleTokenStore): bool =
-  if a.isNil or b.isNil:
-    return a.isNil and b.isNil
-  a.values.sameStyleValues(b.values) and a.parent.sameTokenStore(b.parent)
-
-proc sameStylePatch(a, b: StylePatch): bool =
-  if a.isNil or b.isNil:
-    return a.isNil and b.isNil
-  a.values.sameStyleValues(b.values)
-
-proc sameStyleRule(a, b: StyleRule): bool =
-  a.selector == b.selector and a.patch.sameStylePatch(b.patch)
-
-proc sameChromes(a, b: Table[string, Chrome]): bool =
-  if a.len != b.len:
-    return false
-  for name, chrome in a.pairs:
-    if name notin b or b[name] != chrome:
-      return false
-  true
-
-proc sameTheme(a, b: Theme): bool =
-  if not a.tokens.sameTokenStore(b.tokens) or not a.chromes.sameChromes(b.chromes) or
-      a.rules.len != b.rules.len:
-    return false
-  for idx in 0 ..< a.rules.len:
-    if not a.rules[idx].sameStyleRule(b.rules[idx]):
-      return false
-  true
-
-proc sameAppearance(a, b: Appearance): bool =
-  a.theme.sameTheme(b.theme)
-
 proc cacheCanReuse(root: View, appearance: Appearance): bool =
   root.xHasCachedRenders and not root.needsDisplayInSubtree() and
-    root.xCachedAppearance.sameAppearance(appearance)
+    root.xCachedAppearance.sameAppearanceGeneration(appearance)
 
 proc invalidateRenderCache*(root: View) =
   if root.isNil:
@@ -263,7 +199,7 @@ proc buildRenders*(root: View, appearance: Appearance): Renders =
   result = context.renders
   root.xCachedRenders = result
   root.xCachedRenderResources = context.resources
-  root.xCachedAppearance = initAppearance(appearance.theme)
+  root.xCachedAppearance = appearance
   root.xHasCachedRenders = true
   root.finishDisplaySubtree()
 

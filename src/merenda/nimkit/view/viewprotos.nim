@@ -449,7 +449,9 @@ proc effectiveAppearance*(view: View): Appearance =
     return superview.effectiveAppearance()
   if view.xHasInheritedAppearance:
     return view.xInheritedAppearance
-  initAppearance()
+  if view.xInheritedAppearance.theme.tokens.isNil:
+    view.xInheritedAppearance = initAppearance()
+  view.xInheritedAppearance
 
 proc resolvedAppearance*(view: View, inherited: Appearance): Appearance =
   if view.xHasAppearance:
