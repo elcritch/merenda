@@ -7,6 +7,7 @@
 import std/options
 
 import pkg/celina
+import pkg/results as pkgResults
 
 import moepkg/[editor, editor_frame, frontend_input, handler, config]
 import moepkg/key_bindings/registry as moeKeys
@@ -65,6 +66,10 @@ type
     appliedRows*: int
     viewportPhysicalRowsMoved*: int
 
+  FileOpenResult* = object ## The outcome of loading a file into the active Moe buffer.
+    loaded*: bool
+    message*: string
+
 func initGridRegion*(row, column, rows, columns: int): GridRegion =
   GridRegion(row: row, column: column, rows: max(rows, 0), columns: max(columns, 0))
 
@@ -93,7 +98,9 @@ func initScrollInput*(
 
 proc newKosmoEditor*(text = ""): KosmoEditor =
   ## Create an editor with Moe's default configuration and optional initial text.
-  result = KosmoEditor(editor: newEditor(newEditorConfig()))
+  var config = newEditorConfig()
+  config.standard.mouse = true
+  result = KosmoEditor(editor: newEditor(config))
   if text.len > 0:
     discard result.editor.handleKeyCombo(moeKeys.toKeyCombo('i'))
     discard result.editor.handleTextInput(text)
@@ -104,6 +111,15 @@ proc close*(editor: KosmoEditor) =
   if not editor.isNil and not editor.editor.isNil:
     editor.editor.releaseExternalResources()
     editor.editor = nil
+
+proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
+  ## Load `path` into the active Moe buffer.
+  if editor.isNil or editor.editor.isNil:
+    return FileOpenResult(message: "The editor is closed.")
+  let outcome = editor.editor.loadFile(path)
+  if pkgResults.isErr(outcome):
+    return FileOpenResult(message: outcome.error)
+  FileOpenResult(loaded: true)
 
 proc newRenderBuffer*(width, height: Natural): RenderBuffer =
   ## Create a cell grid that a Kosmo editor can render into.

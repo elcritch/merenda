@@ -72,7 +72,7 @@ proc acceptsFileType*(allowedFileTypes: openArray[string], fileType: string): bo
 proc acceptsFileUrl*(panel: OpenPanel, fileUrl: string): bool =
   if fileUrl.len == 0:
     return false
-  let looksLikeDirectory = fileUrl.endsWith("/")
+  let looksLikeDirectory = fileUrl.endsWith("/") or dirExists(filePathFromUrl(fileUrl))
   if looksLikeDirectory:
     return panel.canChooseDirectories
   panel.canChooseFiles and
@@ -253,6 +253,8 @@ proc attachButtonRow(
   row.spacing = PanelButtonSpacing
   row.alignment = svaFill
   row.distribution = svdFillEqually
+  row.setHuggingPriority(LayoutPriorityRequired, laVertical)
+  row.setCompressionPriority(LayoutPriorityRequired, laVertical)
   for index, title in titles:
     let response =
       if index < responses.len:
@@ -262,6 +264,7 @@ proc attachButtonRow(
     let button = newResponseButton(title, response, callback)
     row.addArrangedSubview(View(button))
     result.add View(button)
+  layout.addFlexibleSpacer()
   layout.addArrangedSubview(View(row))
 
 proc prepareRoot(window: Window): tuple[root: View, layout: StackView] =
