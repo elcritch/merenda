@@ -76,6 +76,23 @@ suite "Kosmo":
     check "opened from disk" in buffer.renderedText
     editor.close()
 
+  test "rejects binary files before rendering them as text":
+    let path = getTempDir() / "merenda-kosmo-binary-file"
+    writeFile(path, "\xCF\xFA\xED\xFE" & "\0".repeat(64))
+    defer:
+      if fileExists(path):
+        removeFile(path)
+
+    let
+      editor = newKosmoEditor()
+      outcome = editor.openFile(path)
+    var buffer = newRenderBuffer(24, 8)
+    editor.render(buffer)
+
+    check not outcome.loaded
+    check "binary file" in outcome.message
+    editor.close()
+
   test "frontend adds an Open command to the File menu":
     let app = newApplication("Kosmo Test")
     let frontend = newKosmoApplication(app)

@@ -4,12 +4,12 @@
 ## translate their input and paint the returned cells; Moe implementation types
 ## remain private to this module.
 
-import std/options
+import std/[options, os]
 
 import pkg/celina
 import pkg/results as pkgResults
 
-import moepkg/[editor, editor_frame, frontend_input, handler, config]
+import moepkg/[editor, editor_frame, frontend_input, handler, config, encoding]
 import moepkg/key_bindings/registry as moeKeys
 
 when hasAsyncSupport:
@@ -116,6 +116,14 @@ proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
   ## Load `path` into the active Moe buffer.
   if editor.isNil or editor.editor.isNil:
     return FileOpenResult(message: "The editor is closed.")
+  if fileExists(path):
+    try:
+      if detectCharacterEncoding(readFile(path)) == CharacterEncoding.unknown:
+        return FileOpenResult(
+          message: "Kosmo cannot open a binary file or unsupported text encoding."
+        )
+    except IOError as error:
+      return FileOpenResult(message: error.msg)
   let outcome = editor.editor.loadFile(path)
   if pkgResults.isErr(outcome):
     return FileOpenResult(message: outcome.error)
