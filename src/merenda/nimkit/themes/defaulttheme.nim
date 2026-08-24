@@ -3,7 +3,7 @@ import std/[os, strutils, tables]
 import ../foundation/types
 
 proc addRoleRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     fill: StyleValue,
@@ -16,7 +16,7 @@ proc addRoleRule(
   theme[selector, StyleTextColor] = textColor
 
 proc addChoiceRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     fill: StyleValue,
@@ -31,7 +31,7 @@ proc addChoiceRule(
   theme[selector, StyleTextColor] = textColor
 
 proc addLabelRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     className: string,
     fillValue: Fill,
     borderColor: Color,
@@ -377,13 +377,13 @@ func aquaSwitchKnobShadows(enabled: bool): seq[BoxShadow] =
     ),
   ]
 
-proc clearBackgroundPinstripes*(theme: var Theme, selector: StyleSelector) =
+proc clearBackgroundPinstripes*(theme: var ThemeBuilder, selector: StyleSelector) =
   theme[selector, StyleBackgroundPinstripeHighlightColor] = color(0.0, 0.0, 0.0, 0.0)
   theme[selector, StyleBackgroundPinstripeColor] = color(0.0, 0.0, 0.0, 0.0)
   theme[selector, StyleBackgroundPinstripePeriod] = 0.0
   theme[selector, StyleBackgroundPinstripeHeight] = 0.0
 
-proc clearBackgroundPinstripes*(theme: var Theme) =
+proc clearBackgroundPinstripes*(theme: var ThemeBuilder) =
   theme.clearBackgroundPinstripes(initStyleSelector(srView))
 
 const TextStyleRoles = [
@@ -391,9 +391,8 @@ const TextStyleRoles = [
   srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem, srTooltip,
 ]
 
-proc initAquaTheme*(): Theme =
-  result.tokens = newStyleTokenStore()
-  result.chromes = initTable[string, Chrome]()
+proc buildAquaTheme(): ThemeBuilder =
+  result = initThemeBuilder()
   result.setFontName(frUI, defaultFontName(frUI))
   result.setFontName(frMonospace, defaultFontName(frMonospace))
   for role in TextStyleRoles:
@@ -1352,8 +1351,11 @@ proc initAquaTheme*(): Theme =
   result[srCascadingRowItem, StyleAlternatingFill] = fill(color(0.96, 0.97, 0.99, 0.95))
   result.installThemeExtensions()
 
-proc initBannerTheme*(): Theme =
-  result = initAquaTheme()
+proc initAquaTheme*(): Theme =
+  buildAquaTheme().finish()
+
+proc buildBannerTheme(): ThemeBuilder =
+  result = initThemeBuilder(initAquaTheme())
   result[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
   result[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
   result[srCheckBox, StyleChrome] = styleKeyword(DefaultChromeName)
@@ -1448,6 +1450,9 @@ proc initBannerTheme*(): Theme =
   result[srTableHeaderCell, StyleMarkColor] = color(0.16, 0.15, 0.15, 1.0)
   result[srRowItem, StyleAlternatingFill] = fill(color(0.98, 0.95, 0.90, 1.0))
 
+proc initBannerTheme*(): Theme =
+  buildBannerTheme().finish()
+
 type ThemeFactory* = proc(): Theme
 
 var
@@ -1504,7 +1509,7 @@ proc initThemeFromEnv*(): Theme =
   initThemeByName(themeNameFromEnv())
 
 proc initAppearance*(theme: Theme): Appearance =
-  Appearance(theme: theme.clone)
+  Appearance(theme: theme)
 
 proc initAppearance*(): Appearance =
   initAppearance(initThemeFromEnv())

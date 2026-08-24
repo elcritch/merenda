@@ -458,18 +458,23 @@ proc appearanceFor(
   of stSynthwave83:
     result = initAppearance(initSynthwave83Theme())
 
+  var
+    builder = initThemeBuilder(result.theme)
+    selectedFonts: array[FontRole, string]
   for role in FontRole:
     let selectedFont =
       if fontPaths[role].len > 0:
         fontPaths[role]
       else:
         defaultFontName(role)
-    result.theme.setFontName(role, selectedFont)
+    selectedFonts[role] = selectedFont
+    builder.setFontName(role, selectedFont)
   for role in TextStyleRoles:
-    result.theme[role, StyleFontSize] = fontSize
+    builder[role, StyleFontSize] = fontSize
   let preview = initStyleSelector(srTextField, id = SettingsFontPreviewIdentifier)
-  result.theme[preview, StyleFontName] = styleKeyword(result.fontName(previewRole))
-  result.theme[preview, StyleFontSize] = fontSize
+  builder[preview, StyleFontName] = styleKeyword(selectedFonts[previewRole])
+  builder[preview, StyleFontSize] = fontSize
+  result.theme = builder.finish()
 
 proc newSettingsPage(): tuple[view: View, stack: StackView] =
   result.view = newView()

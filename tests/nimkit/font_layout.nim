@@ -144,10 +144,10 @@ suite "nimkit font layout":
     )
 
   test "theme keeps interface and monospace font roles independent":
-    var theme = initTheme()
-    theme.setFontName(frUI, "Ubuntu.ttf")
-    theme.setFontName(frMonospace, "HackNerdFont-Regular.ttf")
-    let appearance = initAppearance(theme)
+    var builder = initThemeBuilder(initTheme())
+    builder.setFontName(frUI, "Ubuntu.ttf")
+    builder.setFontName(frMonospace, "HackNerdFont-Regular.ttf")
+    let appearance = initAppearance(builder.finish())
 
     check appearance.fontName(frUI) == "Ubuntu.ttf"
     check appearance.fontName(frMonospace) == "HackNerdFont-Regular.ttf"

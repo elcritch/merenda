@@ -252,12 +252,13 @@ suite "nimkit rendering":
       highlightColor = color(1.0, 1.0, 1.0, 0.4)
       stripeColor = color(0.2, 0.3, 0.4, 0.2)
 
-    var theme = initAquaTheme()
-    theme[srView, StyleBackgroundFill] = baseFill
-    theme[srView, StyleBackgroundPinstripeHighlightColor] = highlightColor
-    theme[srView, StyleBackgroundPinstripeColor] = stripeColor
-    theme[srView, StyleBackgroundPinstripePeriod] = 4.0
-    theme[srView, StyleBackgroundPinstripeHeight] = 1.0
+    var builder = initThemeBuilder(initAquaTheme())
+    builder[srView, StyleBackgroundFill] = baseFill
+    builder[srView, StyleBackgroundPinstripeHighlightColor] = highlightColor
+    builder[srView, StyleBackgroundPinstripeColor] = stripeColor
+    builder[srView, StyleBackgroundPinstripePeriod] = 4.0
+    builder[srView, StyleBackgroundPinstripeHeight] = 1.0
+    let theme = builder.finish()
 
     root.addSubview(child)
 
@@ -322,23 +323,23 @@ suite "nimkit rendering":
           insetShadow(color(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
         ]
 
-    var theme = initTheme()
-    theme[srButton, StyleFill] = buttonFill
-    theme[srButton, StyleBorderColor] = buttonBorder
-    theme[srButton, StyleBorderWidth] = 3.0
-    theme[srButton, StyleCornerRadius] = 6.0
-    theme[srButton, StyleTextInsets] = insets(1.0, 9.0)
-    theme[srButton, StyleBoxShadows] = buttonShadows
-    theme[srTextField, StyleFill] = fieldFill
-    theme[srTextField, StyleBorderColor] = fieldBorder
-    theme[srTextField, StyleBorderWidth] = 2.0
-    theme[srTextField, StyleCornerRadius] = 5.0
-    theme[srTextField, StyleTextInsets] = insets(2.0, 7.0)
+    var builder = initThemeBuilder(initTheme())
+    builder[srButton, StyleFill] = buttonFill
+    builder[srButton, StyleBorderColor] = buttonBorder
+    builder[srButton, StyleBorderWidth] = 3.0
+    builder[srButton, StyleCornerRadius] = 6.0
+    builder[srButton, StyleTextInsets] = insets(1.0, 9.0)
+    builder[srButton, StyleBoxShadows] = buttonShadows
+    builder[srTextField, StyleFill] = fieldFill
+    builder[srTextField, StyleBorderColor] = fieldBorder
+    builder[srTextField, StyleBorderWidth] = 2.0
+    builder[srTextField, StyleCornerRadius] = 5.0
+    builder[srTextField, StyleTextInsets] = insets(2.0, 7.0)
 
     root.addSubview(field)
     root.addSubview(button)
 
-    let renders = buildRenders(root, initAppearance(theme))
+    let renders = buildRenders(root, initAppearance(builder.finish()))
     let list = renders[DefaultDrawLevel]
 
     var
@@ -488,18 +489,18 @@ suite "nimkit rendering":
       expectedKnobFill = fill(color(0.35, 0.35, 0.55, 0.85))
       expectedKnobRect = rect(45.0, 25.0, 20.0, 20.0)
 
-    var theme = initAquaTheme()
-    theme[srSlider, StyleChrome] = styleKeyword(DefaultChromeName)
-    theme[srSlider, StyleKnobSize] = 20.0
-    theme[srSlider, StyleIndicatorSize] = 6.0
-    theme[srSlider, StyleKnobFill] = knobFill
-    theme[srSlider, StyleHighlightFill] = activeFill
-    theme[srSlider, StyleKnobBorderColor] = color(0.0, 0.0, 0.0, 0.0)
-    theme[srSlider, StyleKnobShadows] = newSeq[BoxShadow]()
+    var builder = initThemeBuilder(initAquaTheme())
+    builder[srSlider, StyleChrome] = styleKeyword(DefaultChromeName)
+    builder[srSlider, StyleKnobSize] = 20.0
+    builder[srSlider, StyleIndicatorSize] = 6.0
+    builder[srSlider, StyleKnobFill] = knobFill
+    builder[srSlider, StyleHighlightFill] = activeFill
+    builder[srSlider, StyleKnobBorderColor] = color(0.0, 0.0, 0.0, 0.0)
+    builder[srSlider, StyleKnobShadows] = newSeq[BoxShadow]()
 
     root.addSubview(slider)
 
-    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
 
     var knobFound = false
     for node in list.nodes:
@@ -596,10 +597,11 @@ suite "nimkit rendering":
       root = newView(frame = rect(0, 0, 180, 90))
       button = newButton("OK", frame = rect(20, 24, 120, 32))
 
-    var theme = initTheme()
-    theme[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
-    theme[srButton, StyleTextHighlightColor] = color(0.0, 0.0, 0.0, 0.0)
-    theme[srButton, StyleTextShadowColor] = color(0.0, 0.0, 0.0, 0.0)
+    var builder = initThemeBuilder(initTheme())
+    builder[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
+    builder[srButton, StyleTextHighlightColor] = color(0.0, 0.0, 0.0, 0.0)
+    builder[srButton, StyleTextShadowColor] = color(0.0, 0.0, 0.0, 0.0)
+    let theme = builder.finish()
     root.addSubview(button)
 
     let
@@ -663,13 +665,13 @@ suite "nimkit rendering":
     root.addSubview(normalButton)
     root.addSubview(specialButton)
 
-    var theme = initTheme()
-    theme.installChrome(ExtraChromeName, newExtraChrome())
-    theme[initStyleSelector(srButton, id = "special"), StyleChrome] =
+    var builder = initThemeBuilder(initTheme())
+    builder.installChrome(ExtraChromeName, newExtraChrome())
+    builder[initStyleSelector(srButton, id = "special"), StyleChrome] =
       styleKeyword(ExtraChromeName)
 
     let
-      list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+      list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
       expectedExtraRect =
         specialButton.rectToWindow(specialButton.bounds).inset(insets(5.0))
 
@@ -694,15 +696,15 @@ suite "nimkit rendering":
     root.addSubview(checkbox)
     root.addSubview(combo)
 
-    var theme = initTheme()
-    theme.installChrome(ExtraChromeName, newExtraChrome())
-    theme[initStyleSelector(srCheckBox, id = "special-choice"), StyleChrome] =
+    var builder = initThemeBuilder(initTheme())
+    builder.installChrome(ExtraChromeName, newExtraChrome())
+    builder[initStyleSelector(srCheckBox, id = "special-choice"), StyleChrome] =
       styleKeyword(ExtraChromeName)
-    theme[initStyleSelector(srComboBox, id = "special-combo"), StyleChrome] =
+    builder[initStyleSelector(srComboBox, id = "special-combo"), StyleChrome] =
       styleKeyword(ExtraChromeName)
 
     let
-      appearance = initAppearance(theme)
+      appearance = initAppearance(builder.finish())
       checkStyle = appearance.resolveChoiceButtonStyle(
         controlStyle(srCheckBox, id = checkbox.styleId, classes = checkbox.styleClasses)
       )
@@ -1040,18 +1042,18 @@ suite "nimkit rendering":
       selectedText = color(1.0, 1.0, 1.0, 1.0)
       focusColor = color(0.91, 0.38, 0.18, 0.66)
 
-    var theme = initTheme()
-    theme[srTableView, StyleFill] = tableFill
-    theme[srTableView, StyleBorderColor] = tableBorder
-    theme[srTableView, StyleBorderWidth] = 2.0
-    theme[srTableView, StyleCornerRadius] = 4.0
-    theme[srTableView, StyleFocusRingWidth] = 3.0
-    theme[srTableView, StyleFocusRingInset] = -1.0
-    theme[srTableView, StyleFocusRingColor] = focusColor
-    theme[srRowItem, {ssSelected}, StyleFill] = selectedFill
-    theme[srRowItem, {ssSelected}, StyleTextColor] = selectedText
-    theme[srRowItem, {ssHovered}, StyleFill] = hoverFill
-    theme[srRowItem, StyleTextInsets] = insets(0.0, 5.0)
+    var builder = initThemeBuilder(initTheme())
+    builder[srTableView, StyleFill] = tableFill
+    builder[srTableView, StyleBorderColor] = tableBorder
+    builder[srTableView, StyleBorderWidth] = 2.0
+    builder[srTableView, StyleCornerRadius] = 4.0
+    builder[srTableView, StyleFocusRingWidth] = 3.0
+    builder[srTableView, StyleFocusRingInset] = -1.0
+    builder[srTableView, StyleFocusRingColor] = focusColor
+    builder[srRowItem, {ssSelected}, StyleFill] = selectedFill
+    builder[srRowItem, {ssSelected}, StyleTextColor] = selectedText
+    builder[srRowItem, {ssHovered}, StyleFill] = hoverFill
+    builder[srRowItem, StyleTextInsets] = insets(0.0, 5.0)
 
     tableView.rowHeight = 20.0
     tableView.selectedIndex = 1
@@ -1059,7 +1061,7 @@ suite "nimkit rendering":
     tableView.focusVisible = true
     root.addSubview(tableView)
 
-    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
 
     var
       selectedRowFound = false
@@ -1111,12 +1113,12 @@ suite "nimkit rendering":
     tableView.visibleRows = 3
     root.addSubview(tableView)
 
-    var theme = initTheme()
-    theme[srTableView, StyleBorderWidth] = 1.0
-    theme[srTableView, StyleCornerRadius] = 6.0
-    theme[srRowItem, StyleFill] = rowFill
+    var builder = initThemeBuilder(initTheme())
+    builder[srTableView, StyleBorderWidth] = 1.0
+    builder[srTableView, StyleCornerRadius] = 6.0
+    builder[srRowItem, StyleFill] = rowFill
 
-    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
     var
       firstRowFound = false
       middleRowFound = false
@@ -1158,13 +1160,13 @@ suite "nimkit rendering":
     tableView.addColumn(newTableColumn("value", "Value", width = 120.0))
     tableView.focusVisible = true
 
-    var theme = initTheme()
-    theme[srTableView, StyleFocusRingWidth] = 3.0
-    theme[srTableView, StyleFocusRingInset] = -1.0
-    theme[srTableView, StyleFocusRingColor] = focusColor
+    var builder = initThemeBuilder(initTheme())
+    builder[srTableView, StyleFocusRingWidth] = 3.0
+    builder[srTableView, StyleFocusRingInset] = -1.0
+    builder[srTableView, StyleFocusRingColor] = focusColor
     root.addSubview(tableView)
 
-    let renders = buildRenders(root, initAppearance(theme))
+    let renders = buildRenders(root, initAppearance(builder.finish()))
     let list = renders[FocusRingDrawLevel]
     var
       bodyFocusRingFound = false
@@ -1205,13 +1207,13 @@ suite "nimkit rendering":
     tableView.showsHeader = false
     tableView.focusVisible = true
 
-    var theme = initTheme()
-    theme[srTableView, StyleFocusRingWidth] = 3.0
-    theme[srTableView, StyleFocusRingInset] = -5.0
-    theme[srTableView, StyleFocusRingColor] = focusColor
+    var builder = initThemeBuilder(initTheme())
+    builder[srTableView, StyleFocusRingWidth] = 3.0
+    builder[srTableView, StyleFocusRingInset] = -5.0
+    builder[srTableView, StyleFocusRingColor] = focusColor
     root.addSubview(tableView)
 
-    let list = buildRenders(root, initAppearance(theme))[FocusRingDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[FocusRingDrawLevel]
     var focusRingFound = false
 
     for node in list.nodes:
@@ -1243,13 +1245,13 @@ suite "nimkit rendering":
     tableView.showsHeader = false
     tableView.focusVisible = true
 
-    var theme = initTheme()
-    theme[srTableView, StyleFocusRingWidth] = 4.0
-    theme[srTableView, StyleFocusRingInset] = 12.0
-    theme[srTableView, StyleFocusRingColor] = focusColor
+    var builder = initThemeBuilder(initTheme())
+    builder[srTableView, StyleFocusRingWidth] = 4.0
+    builder[srTableView, StyleFocusRingInset] = 12.0
+    builder[srTableView, StyleFocusRingColor] = focusColor
     root.addSubview(tableView)
 
-    let list = buildRenders(root, initAppearance(theme))[FocusRingDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[FocusRingDrawLevel]
     var focusRingFound = false
 
     for node in list.nodes:
@@ -1285,11 +1287,11 @@ suite "nimkit rendering":
     clipView.addSubview(tableView)
     root.addSubview(clipView)
 
-    var theme = initTheme()
-    theme[srTableView, StyleFocusRingWidth] = 3.0
-    theme[srTableView, StyleFocusRingColor] = focusColor
+    var builder = initThemeBuilder(initTheme())
+    builder[srTableView, StyleFocusRingWidth] = 3.0
+    builder[srTableView, StyleFocusRingColor] = focusColor
 
-    let list = buildRenders(root, initAppearance(theme))[FocusRingDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[FocusRingDrawLevel]
     var focusRingFound = false
 
     for node in list.nodes:
@@ -1323,11 +1325,11 @@ suite "nimkit rendering":
     scrollView.hasHorizontalScroller = true
     scrollView.contentOffset = initPoint(40, 0)
 
-    var theme = initTheme()
-    theme[srTableView, StyleFocusRingWidth] = 3.0
-    theme[srTableView, StyleFocusRingColor] = focusColor
+    var builder = initThemeBuilder(initTheme())
+    builder[srTableView, StyleFocusRingWidth] = 3.0
+    builder[srTableView, StyleFocusRingColor] = focusColor
 
-    let list = buildRenders(root, initAppearance(theme))[FocusRingDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[FocusRingDrawLevel]
     var focusRingFound = false
 
     for node in list.nodes:
@@ -1380,14 +1382,14 @@ suite "nimkit rendering":
       button = newButton("Button", frame = rect(10, 20, 80, 24))
 
     let activeFill = color(0.8, 0.2, 0.1, 1.0)
-    var theme = initTheme()
-    theme[srButton, StyleFill] = color(0.1, 0.1, 0.1, 1.0)
-    theme[srButton, {ssActive}, StyleFill] = activeFill
+    var builder = initThemeBuilder(initTheme())
+    builder[srButton, StyleFill] = color(0.1, 0.1, 0.1, 1.0)
+    builder[srButton, {ssActive}, StyleFill] = activeFill
 
     root.addSubview(button)
     button.active = true
 
-    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
 
     var activeFillFound = false
     for node in list.nodes:
@@ -1407,12 +1409,12 @@ suite "nimkit rendering":
       disabledFill = color(0.3, 0.3, 0.3, 1.0)
       pressedFill = color(0.1, 0.2, 0.8, 1.0)
 
-    var theme = initTheme()
-    theme[srStepper, StyleFill] = baseFill
-    theme[srStepper, {ssDisabled}, StyleFill] = disabledFill
-    theme[srStepper, {ssPressed}, StyleFill] = pressedFill
+    var builder = initThemeBuilder(initTheme())
+    builder[srStepper, StyleFill] = baseFill
+    builder[srStepper, {ssDisabled}, StyleFill] = disabledFill
+    builder[srStepper, {ssPressed}, StyleFill] = pressedFill
 
-    root.appearance = initAppearance(theme)
+    root.appearance = initAppearance(builder.finish())
     root.addSubview(stepper)
     window.setContentView(root)
 
@@ -1447,14 +1449,14 @@ suite "nimkit rendering":
     matrix.active = true
     matrix.cellAtIndex(1).setHighlighted(true)
 
-    var theme = initTheme()
-    theme[srButton, StyleFill] = baseFill
-    theme[srButton, {ssActive}, StyleFill] = activeFill
-    theme[srButton, {ssHighlighted}, StyleFill] = pressedFill
-    theme[srButton, {ssPressed}, StyleFill] = pressedFill
+    var builder = initThemeBuilder(initTheme())
+    builder[srButton, StyleFill] = baseFill
+    builder[srButton, {ssActive}, StyleFill] = activeFill
+    builder[srButton, {ssHighlighted}, StyleFill] = pressedFill
+    builder[srButton, {ssPressed}, StyleFill] = pressedFill
 
     root.addSubview(matrix)
-    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
 
     var
       baseCount = 0
@@ -1479,17 +1481,17 @@ suite "nimkit rendering":
       button = newButton("Button", frame = rect(10, 20, 80, 24))
       focusColor = color(0.24, 0.48, 0.92, 0.58)
 
-    var theme = initTheme()
-    theme[srButton, StyleFocusRingWidth] = 4.0
-    theme[srButton, StyleFocusRingInset] = -2.0
-    theme[srButton, StyleFocusRingColor] = focusColor
-    theme[srButton, StyleCornerRadius] = 5.0
+    var builder = initThemeBuilder(initTheme())
+    builder[srButton, StyleFocusRingWidth] = 4.0
+    builder[srButton, StyleFocusRingInset] = -2.0
+    builder[srButton, StyleFocusRingColor] = focusColor
+    builder[srButton, StyleCornerRadius] = 5.0
 
     root.addSubview(button)
     button.focused = true
     button.focusVisible = true
 
-    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
 
     var focusRingFound = false
     for node in list.nodes:
@@ -1515,22 +1517,22 @@ suite "nimkit rendering":
       selectedFill = color(0.23, 0.45, 0.67, 1.0)
       markFill = color(0.91, 0.82, 0.13, 1.0)
 
-    var theme = initTheme()
+    var builder = initThemeBuilder(initTheme())
     for role in [srCheckBox, srRadioButton]:
-      theme[role, {ssSelected}, StyleFill] = selectedFill
-      theme[role, {ssSelected}, StyleMarkColor] = markFill
-      theme[role, StyleChrome] = styleKeyword(DefaultChromeName)
-      theme[role, StyleIndicatorSize] = 12.0
-      theme[role, StyleCornerRadius] = if role == srRadioButton: 6.0 else: 3.0
-      theme[role, StyleIndicatorSpacing] = 5.0
-      theme[role, StyleTextInsets] = insets(0.0, 3.0)
+      builder[role, {ssSelected}, StyleFill] = selectedFill
+      builder[role, {ssSelected}, StyleMarkColor] = markFill
+      builder[role, StyleChrome] = styleKeyword(DefaultChromeName)
+      builder[role, StyleIndicatorSize] = 12.0
+      builder[role, StyleCornerRadius] = if role == srRadioButton: 6.0 else: 3.0
+      builder[role, StyleIndicatorSpacing] = 5.0
+      builder[role, StyleTextInsets] = insets(0.0, 3.0)
 
     checkbox.state = bsOn
     radio.state = bsOn
     root.addSubview(checkbox)
     root.addSubview(radio)
 
-    let list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
+    let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
 
     var
       selectedIndicatorCount = 0
@@ -1643,8 +1645,9 @@ suite "nimkit rendering":
     check invalidatedRenders != firstRenders
     check customDrawCount == 2
 
-    var theme = initTheme()
-    theme[srView, StyleFill] = color(0.1, 0.2, 0.3, 1.0)
+    var builder = initThemeBuilder(initTheme())
+    builder[srView, StyleFill] = color(0.1, 0.2, 0.3, 1.0)
+    let theme = builder.finish()
     let themedRenders = buildRenders(root, initAppearance(theme))
     check themedRenders != invalidatedRenders
     check customDrawCount == 3
@@ -1655,7 +1658,30 @@ suite "nimkit rendering":
     check rebuiltRenders != themedRenders
     check customDrawCount == 4
 
-  test "buildRenders invalidates a cached appearance after theme mutation":
+  test "buildRenders reuses cache across copies of one theme snapshot":
+    let
+      root = newView(frame = rect(0, 0, 120, 90))
+      custom = newCustomDrawView(rect(10, 12, 50, 30))
+      snapshot = initTheme()
+      firstAppearance = initAppearance(snapshot)
+      copiedAppearance = initAppearance(snapshot.clone())
+
+    customDrawCount = 0
+    root.addSubview(custom)
+    let firstRenders = buildRenders(root, firstAppearance)
+    let copiedRenders = buildRenders(root, copiedAppearance)
+
+    check copiedRenders == firstRenders
+    check customDrawCount == 1
+
+    var builder = initThemeBuilder(snapshot)
+    builder[srView, StyleFill] = color(0.22, 0.34, 0.46, 1.0)
+    let changedRenders = buildRenders(root, initAppearance(builder.finish()))
+
+    check changedRenders != firstRenders
+    check customDrawCount == 2
+
+  test "buildRenders invalidates a cached appearance after snapshot replacement":
     let
       root = newView(frame = rect(0, 0, 120, 90))
       custom = newCustomDrawView(rect(10, 12, 50, 30))

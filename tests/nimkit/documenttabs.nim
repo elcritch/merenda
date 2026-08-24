@@ -355,11 +355,11 @@ suite "nimkit document tabs":
       short = newDocumentTabItem("Log", "log")
       long = newDocumentTabItem("sam_inference_server", "server")
 
-    var theme = initTheme()
-    theme[srDocumentTab, StyleFontSize] = DefaultFontSize
-    theme[srDocumentTab, {ssSelected}, StyleFontSize] = 32.0
+    var builder = initThemeBuilder(initTheme())
+    builder[srDocumentTab, StyleFontSize] = DefaultFontSize
+    builder[srDocumentTab, {ssSelected}, StyleFontSize] = 32.0
     let
-      appearance = initAppearance(theme)
+      appearance = initAppearance(builder.finish())
       selectedContext = controlStyle(srDocumentTab, {ssSelected})
       selectedTextStyle = appearance.resolveTextStyle(
         selectedContext, color(0.0, 0.0, 0.0, 1.0), insets(0.0)
@@ -480,10 +480,10 @@ suite "nimkit document tabs":
     discard tabs.addDocumentTabItem(selected)
     discard tabs.addDocumentTabItem(modified)
 
-    var theme = initTheme()
-    theme["accent"] = themeAccent
+    var builder = initThemeBuilder(initTheme())
+    builder["accent"] = themeAccent
     let
-      renders = buildRenders(tabs, initAppearance(theme))
+      renders = buildRenders(tabs, initAppearance(builder.finish()))
       selectedAccentFill = fill(
         color(themeAccent.r, themeAccent.g, themeAccent.b, themeAccent.a * 0.72'f32)
       )
@@ -516,15 +516,15 @@ suite "nimkit document tabs":
     discard tabs.addDocumentTabItem(selected)
 
     for position in [dtipTop, dtipBottom, dtipLeft, dtipRight, dtipNone]:
-      var theme = initTheme()
-      theme[srDocumentTab, StyleSelectionIndicatorPosition] = styleKeyword(position)
-      theme[srDocumentTab, StyleSelectionIndicatorFill] = indicatorFill
-      theme[srDocumentTab, StyleSelectionIndicatorInsets] = indicatorInsets
-      theme[srDocumentTab, StyleSelectionIndicatorSize] = indicatorSize
-      theme[srDocumentTab, StyleSelectionIndicatorCornerRadius] = 0.5
+      var builder = initThemeBuilder(initTheme())
+      builder[srDocumentTab, StyleSelectionIndicatorPosition] = styleKeyword(position)
+      builder[srDocumentTab, StyleSelectionIndicatorFill] = indicatorFill
+      builder[srDocumentTab, StyleSelectionIndicatorInsets] = indicatorInsets
+      builder[srDocumentTab, StyleSelectionIndicatorSize] = indicatorSize
+      builder[srDocumentTab, StyleSelectionIndicatorCornerRadius] = 0.5
 
       let
-        renders = buildRenders(tabs, initAppearance(theme))
+        renders = buildRenders(tabs, initAppearance(builder.finish()))
         tabRect = tabs.documentTabRect(0)
         available = tabRect.inset(indicatorInsets)
       var indicatorRect: nimkitTypes.Rect
@@ -580,9 +580,9 @@ suite "nimkit document tabs":
     for theme in [initTheme(), initMacOSTheme(), initMacOSDarkTheme()]:
       check closeSymbolRect(theme).center().x < tabRect.center().x
 
-    var rightTheme = initTheme()
-    rightTheme[srDocumentTab, StyleCloseButtonPosition] = styleKeyword(dtcbRight)
-    check closeSymbolRect(rightTheme).center().x > tabRect.center().x
+    var builder = initThemeBuilder(initTheme())
+    builder[srDocumentTab, StyleCloseButtonPosition] = styleKeyword(dtcbRight)
+    check closeSymbolRect(builder.finish()).center().x > tabRect.center().x
 
   test "delegates can veto selection closing and moving while signals fire":
     let
@@ -720,12 +720,12 @@ suite "nimkit document tabs":
       discard tabs.addDocumentTabItem(newDocumentTabItem("Document " & $index))
     tabs.scrollOffset = 10.0'f32
 
-    var theme = initTheme()
-    theme[srDocumentTabButton, StyleChrome] = styleKeyword(DefaultChromeName)
-    theme[srDocumentTabButton, StyleFill] = DocumentTabButtonThemeFill
+    var builder = initThemeBuilder(initTheme())
+    builder[srDocumentTabButton, StyleChrome] = styleKeyword(DefaultChromeName)
+    builder[srDocumentTabButton, StyleFill] = DocumentTabButtonThemeFill
 
     let
-      renders = buildRenders(tabs, initAppearance(theme))
+      renders = buildRenders(tabs, initAppearance(builder.finish()))
       previousRect = tabs.scrollButtonRect(dtsbPrevious)
       nextRect = tabs.scrollButtonRect(dtsbNext)
     var
@@ -766,15 +766,15 @@ suite "nimkit document tabs":
     discard tabs.addDocumentTabItem(first)
     discard tabs.addDocumentTabItem(special)
 
-    var theme = initAquaTheme()
-    theme.installChrome(DocumentTabChromeName, newDocumentTabChromeSpy())
-    theme[srDocumentTab, StyleChrome] = styleKeyword(DocumentTabChromeName)
-    theme[srDocumentTabBar, StyleChrome] = styleKeyword(DocumentTabChromeName)
-    theme[srDocumentTabButton, StyleChrome] = styleKeyword(DocumentTabChromeName)
-    theme[initStyleSelector(srDocumentTab, id = "special-doc"), StyleFill] =
+    var builder = initThemeBuilder(initAquaTheme())
+    builder.installChrome(DocumentTabChromeName, newDocumentTabChromeSpy())
+    builder[srDocumentTab, StyleChrome] = styleKeyword(DocumentTabChromeName)
+    builder[srDocumentTabBar, StyleChrome] = styleKeyword(DocumentTabChromeName)
+    builder[srDocumentTabButton, StyleChrome] = styleKeyword(DocumentTabChromeName)
+    builder[initStyleSelector(srDocumentTab, id = "special-doc"), StyleFill] =
       SpecialDocumentTabFill
 
-    let renders = buildRenders(tabs, initAppearance(theme))
+    let renders = buildRenders(tabs, initAppearance(builder.finish()))
     var
       selectedChromeFound = false
       specialFillFound = false

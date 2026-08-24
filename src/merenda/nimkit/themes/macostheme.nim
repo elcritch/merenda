@@ -15,7 +15,7 @@ func darkKnobShadow(): seq[BoxShadow] =
   @[dropShadow(color(0.0, 0.0, 0.0, 0.52), y = 1.0, blur = 4.0)]
 
 proc addMacOSLabelRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     className: string,
     fillValue: Fill,
     borderColor: Color,
@@ -40,7 +40,7 @@ proc addMacOSLabelRule(
   theme[selector, StyleBoxShadows] = newSeq[BoxShadow]()
   theme[selector, StyleChrome] = styleKeyword(DefaultChromeName)
 
-proc installMacOSTokens(theme: var Theme) =
+proc installMacOSTokens(theme: var ThemeBuilder) =
   theme["accent"] = color(0.04, 0.52, 1.0, 1.0)
   theme["accent.pressed"] = color(0.0, 0.38, 0.82, 1.0)
   theme["progress.fill"] = styleToken("accent")
@@ -180,7 +180,7 @@ proc installMacOSTokens(theme: var Theme) =
   theme["documentTab.button.mark.color.disabled"] =
     styleToken("tab.text.color.disabled")
 
-proc installMacOSControlStyles(theme: var Theme) =
+proc installMacOSControlStyles(theme: var ThemeBuilder) =
   theme.clearBackgroundPinstripes()
   theme[srView, StyleBackgroundColor] = color(0.93, 0.93, 0.94, 1.0)
   theme[srView, StyleBackgroundFill] = fill(color(0.93, 0.93, 0.94, 1.0))
@@ -287,7 +287,7 @@ proc installMacOSControlStyles(theme: var Theme) =
   theme[srTableHeaderCell, StyleMarkColor] = color(0.35, 0.35, 0.37, 1.0)
   theme[srRowItem, StyleAlternatingFill] = fill(color(0.0, 0.0, 0.0, 0.025))
 
-proc installMacOSLabels(theme: var Theme) =
+proc installMacOSLabels(theme: var ThemeBuilder) =
   let
     bodySize = defaultFontSize()
     titleSize = bodySize + 4.0'f32
@@ -356,7 +356,7 @@ proc installMacOSLabels(theme: var Theme) =
     bodySize,
   )
 
-proc installMacOSDarkTokens(theme: var Theme) =
+proc installMacOSDarkTokens(theme: var ThemeBuilder) =
   theme["accent"] = color(0.04, 0.52, 1.0, 1.0)
   theme["accent.pressed"] = color(0.0, 0.38, 0.82, 1.0)
   theme["progress.fill"] = styleToken("accent")
@@ -464,7 +464,7 @@ proc installMacOSDarkTokens(theme: var Theme) =
   theme["tab.border.color.disabled"] = color(0.0, 0.0, 0.0, 0.0)
   theme["documentTab.fill.pressed"] = color(1.0, 1.0, 1.0, 0.08)
 
-proc installMacOSDarkControlStyles(theme: var Theme) =
+proc installMacOSDarkControlStyles(theme: var ThemeBuilder) =
   let background = color(0.12, 0.12, 0.14, 1.0)
   theme[srView, StyleBackgroundColor] = background
   theme[srView, StyleBackgroundFill] = fill(background)
@@ -502,7 +502,7 @@ proc installMacOSDarkControlStyles(theme: var Theme) =
   theme[srTableHeaderCell, StyleMarkColor] = color(0.65, 0.65, 0.68, 1.0)
   theme[srRowItem, StyleAlternatingFill] = fill(color(1.0, 1.0, 1.0, 0.025))
 
-proc installMacOSDarkLabels(theme: var Theme) =
+proc installMacOSDarkLabels(theme: var ThemeBuilder) =
   let
     body = initStyleSelector(srTextField, classes = @[LabelStyleClass])
     title = initStyleSelector(srTextField, classes = @[LabelTitleStyleClass])
@@ -520,16 +520,18 @@ proc installMacOSDarkLabels(theme: var Theme) =
   theme[icon, StyleMarkColor] = styleToken("accent")
 
 proc initMacOSTheme*(): Theme =
-  result = initAquaTheme()
-  result.installMacOSTokens()
-  result.installMacOSControlStyles()
-  result.installMacOSLabels()
+  var builder = initThemeBuilder(initAquaTheme())
+  builder.installMacOSTokens()
+  builder.installMacOSControlStyles()
+  builder.installMacOSLabels()
+  builder.finish()
 
 proc initMacOSDarkTheme*(): Theme =
-  result = initMacOSTheme()
-  result.installMacOSDarkTokens()
-  result.installMacOSDarkControlStyles()
-  result.installMacOSDarkLabels()
+  var builder = initThemeBuilder(initMacOSTheme())
+  builder.installMacOSDarkTokens()
+  builder.installMacOSDarkControlStyles()
+  builder.installMacOSDarkLabels()
+  builder.finish()
 
 registerThemeFactory("macos", initMacOSTheme)
 registerThemeFactory("mac", initMacOSTheme)

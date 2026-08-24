@@ -76,7 +76,7 @@ func rubyButtonPressedShadows(): seq[BoxShadow] =
 func graphiteControlShadows(): seq[BoxShadow] =
   @[dropShadow(color(0.0, 0.0, 0.0, 0.38), y = 1.0, blur = 3.0)]
 
-proc installDarkBSDTokens(theme: var Theme) =
+proc installDarkBSDTokens(theme: var ThemeBuilder) =
   theme["accent"] = color(0.58, 0.022, 0.052, 1.0)
   theme["accent.pressed"] = color(0.36, 0.005, 0.020, 1.0)
   theme["focus.ring.color"] = color(0.70, 0.06, 0.24, 0.64)
@@ -113,7 +113,7 @@ proc installDarkBSDTokens(theme: var Theme) =
   theme["splitView.divider.fill"] = color(1.0, 1.0, 1.0, 0.035)
   theme["splitView.divider.mark.color"] = color(0.72, 0.72, 0.76, 0.82)
 
-proc installDarkBSDButtonStyle(theme: var Theme) =
+proc installDarkBSDButtonStyle(theme: var ThemeBuilder) =
   theme[srButton, StyleChrome] = styleKeyword(RubyAquaChromeName)
   theme[srButton, StyleCornerRadius] = 10.0
   theme[srButton, StyleBorderWidth] = 1.0
@@ -122,7 +122,7 @@ proc installDarkBSDButtonStyle(theme: var Theme) =
   theme[srButton, StyleTextHighlightColor] = color(1.0, 0.90, 0.92, 0.34)
   theme[srButton, StyleTextShadowColor] = color(0.16, 0.0, 0.025, 0.66)
 
-proc installDarkBSDControlStyles(theme: var Theme) =
+proc installDarkBSDControlStyles(theme: var ThemeBuilder) =
   theme[srSwitch, {ssSelected}, StyleFill] = styleToken("accent")
   theme[srSwitch, {ssSelected}, StyleBorderColor] = styleToken("accent.pressed")
   theme[srSlider, StyleKnobFill] = fill(color(0.25, 0.25, 0.27, 1.0))
@@ -137,10 +137,11 @@ proc installDarkBSDControlStyles(theme: var Theme) =
   theme[srSplitView, StyleMarkColor] = styleToken("splitView.divider.mark.color")
 
 proc initDarkBSDTheme*(): Theme =
-  result = initMacOSDarkTheme()
-  result.installDarkBSDTokens()
-  result.installDarkBSDButtonStyle()
-  result.installDarkBSDControlStyles()
+  var builder = initThemeBuilder(initMacOSDarkTheme())
+  builder.installDarkBSDTokens()
+  builder.installDarkBSDButtonStyle()
+  builder.installDarkBSDControlStyles()
+  builder.finish()
 
 registerThemeFactory("darkbsd", initDarkBSDTheme)
 registerThemeFactory("dark-bsd", initDarkBSDTheme)

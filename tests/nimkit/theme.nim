@@ -357,15 +357,16 @@ suite "nimkit theme":
     check not initStyleSelector(srButton, id = "secondary").matches(context)
 
   test "style rule specificity beats insertion order":
-    var theme = initTheme()
+    var builder = initThemeBuilder(initTheme())
     let
       fallback = color(0.0, 0.0, 0.0, 1.0)
       broadText = color(0.12, 0.13, 0.14, 1.0)
       highlightedText = color(0.82, 0.40, 0.12, 1.0)
       highlightedContext = controlStyle(srButton, {ssHighlighted})
 
-    theme[srButton, {ssHighlighted}, StyleTextColor] = highlightedText
-    theme[srButton, StyleTextColor] = broadText
+    builder[srButton, {ssHighlighted}, StyleTextColor] = highlightedText
+    builder[srButton, StyleTextColor] = broadText
+    let theme = builder.finish()
 
     check theme.resolveColor(controlStyle(srButton), StyleTextColor, fallback) ==
       broadText
@@ -373,28 +374,31 @@ suite "nimkit theme":
       highlightedText
 
   test "style rules prefer more matching states over later weaker states":
-    var theme = initTheme()
+    var builder = initThemeBuilder(initTheme())
     let
       fallback = color(0.0, 0.0, 0.0, 1.0)
       pressedText = color(0.16, 0.38, 0.82, 1.0)
       highlightedPressedText = color(0.90, 0.24, 0.74, 1.0)
       context = controlStyle(srButton, {ssHighlighted, ssPressed})
 
-    theme[srButton, {ssHighlighted, ssPressed}, StyleTextColor] = highlightedPressedText
-    theme[srButton, {ssPressed}, StyleTextColor] = pressedText
+    builder[srButton, {ssHighlighted, ssPressed}, StyleTextColor] =
+      highlightedPressedText
+    builder[srButton, {ssPressed}, StyleTextColor] = pressedText
+    let theme = builder.finish()
 
     check theme.resolveColor(context, StyleTextColor, fallback) == highlightedPressedText
 
   test "style rules keep last-write-wins for equal specificity":
-    var theme = initTheme()
+    var builder = initThemeBuilder(initTheme())
     let
       fallback = color(0.0, 0.0, 0.0, 1.0)
       firstText = color(0.18, 0.24, 0.30, 1.0)
       secondText = color(0.44, 0.52, 0.62, 1.0)
       context = controlStyle(srButton, {ssHighlighted, ssPressed})
 
-    theme[srButton, {ssHighlighted}, StyleTextColor] = firstText
-    theme[srButton, {ssPressed}, StyleTextColor] = secondText
+    builder[srButton, {ssHighlighted}, StyleTextColor] = firstText
+    builder[srButton, {ssPressed}, StyleTextColor] = secondText
+    let theme = builder.finish()
 
     check theme.resolveColor(context, StyleTextColor, fallback) == secondText
 
@@ -418,12 +422,13 @@ suite "nimkit theme":
     }
 
   test "chrome delegates install by name and selectors choose per widget":
-    var theme = initAquaTheme()
-    theme.installChrome(CustomChromeName, newCustomFillChrome())
-    theme[initStyleSelector(srButton, id = "special"), StyleChrome] =
+    var builder = initThemeBuilder(initAquaTheme())
+    builder.installChrome(CustomChromeName, newCustomFillChrome())
+    builder[initStyleSelector(srButton, id = "special"), StyleChrome] =
       styleKeyword(CustomChromeName)
 
     let
+      theme = builder.finish()
       appearance = initAppearance(theme)
       normalContext = controlStyle(srButton)
       specialContext = controlStyle(srButton, id = "special")
@@ -460,13 +465,83 @@ suite "nimkit theme":
     check value.kind == svColor
     check value.color == accent
 
-    let appearance = Appearance(theme: Theme(tokens: child))
+    let appearance = Appearance(theme: initThemeBuilder(child).finish())
     check appearance.colorToken("nested.accent", color(0, 0, 0, 1)) == accent
     check appearance.lengthToken("space", 0.0) == 6.0
     check appearance.sizeToken("minimum.size", initSize(0, 0)) == minSize
     check appearance.insetsToken("padding", insets(0)) == padding
     check appearance.shadowsToken("shadow", @[]) == shadows
     check appearance.colorToken("missing", accent) == accent
+
+  test "theme builder freezes independently owned snapshots":
+    let
+      firstAccent = color(0.18, 0.42, 0.76, 1.0)
+      secondAccent = color(0.82, 0.24, 0.36, 1.0)
+      fallback = color(0.0, 0.0, 0.0, 1.0)
+      button = controlStyle(srButton)
+
+    var builder = initThemeBuilder(initTheme())
+    builder["snapshot.accent"] = firstAccent
+    builder[srButton, StyleTextColor] = firstAccent
+    let first = builder.finish()
+
+    builder["snapshot.accent"] = secondAccent
+    builder[srButton, StyleTextColor] = secondAccent
+    let second = builder.finish()
+
+    check first.generation != second.generation
+    check first.colorToken("snapshot.accent", fallback) == firstAccent
+    check second.colorToken("snapshot.accent", fallback) == secondAccent
+    check first.resolveColor(button, StyleTextColor, fallback) == firstAccent
+    check second.resolveColor(button, StyleTextColor, fallback) == secondAccent
+
+  test "theme snapshot accessors cannot mutate frozen storage":
+    let
+      accent = color(0.16, 0.38, 0.72, 1.0)
+      replacement = color(0.86, 0.26, 0.44, 1.0)
+      fallback = color(0.0, 0.0, 0.0, 1.0)
+      shadows = @[dropShadow(color(0.0, 0.0, 0.0, 0.4), blur = 5.0)]
+      selector = initStyleSelector(srButton, classes = @["primary"])
+      context = controlStyle(srButton, classes = @["primary"])
+
+    var builder = initThemeBuilder(initTheme())
+    builder["snapshot.accent"] = accent
+    builder["snapshot.shadows"] = shadows
+    builder[selector, StyleTextColor] = accent
+    builder[selector, StyleBoxShadows] = shadows
+    let snapshot = builder.finish()
+
+    let tokenCopy = snapshot.tokens
+    tokenCopy["snapshot.accent"] = replacement
+    var tokenShadows: StyleValue
+    check tokenCopy.resolveToken("snapshot.shadows", tokenShadows)
+    tokenShadows.shadows[0].blur = 99.0
+
+    let patchCopy = snapshot.stylePatch(selector)
+    patchCopy[StyleTextColor] = replacement
+    var patchShadows: StyleValue
+    check patchCopy.getStyle(StyleBoxShadows, patchShadows)
+    patchShadows.shadows[0].blur = 99.0
+
+    var rulesCopy = snapshot.rules
+    rulesCopy[^1].selector.classes[0][0] = 'x'
+
+    check snapshot.colorToken("snapshot.accent", fallback) == accent
+    check snapshot.shadowsToken("snapshot.shadows", @[]) == shadows
+    check snapshot.resolveColor(context, StyleTextColor, fallback) == accent
+    var frozenShadows: StyleValue
+    check snapshot.stylePatch(selector).getStyle(StyleBoxShadows, frozenShadows)
+    check frozenShadows.shadows == shadows
+
+  test "unchanged snapshots retain their cache generation":
+    let
+      snapshot = initTheme()
+      rebuilt = initThemeBuilder(snapshot).finish()
+      firstAppearance = initAppearance(snapshot)
+      secondAppearance = initAppearance(snapshot.clone())
+
+    check rebuilt.generation == snapshot.generation
+    check firstAppearance.sameAppearanceGeneration(secondAppearance)
 
   test "appearance tokens and style patches resolve into concrete styles":
     var appearance = initAppearance()
@@ -484,7 +559,9 @@ suite "nimkit theme":
           insetShadow(color(1, 1, 1, 0.18), y = -1.0, blur = 1.0),
         ]
 
-    appearance.theme["field.text.override"] = fieldText
+    var builder = initThemeBuilder(appearance.theme)
+    builder["field.text.override"] = fieldText
+    appearance.theme = builder.finish()
     appearance[srButton, StyleFill] = buttonFill
     appearance[srButton, StyleCornerRadius] = 9.0
     appearance[srButton, StyleFocusRingColor] = focusRing
@@ -528,7 +605,9 @@ suite "nimkit theme":
       baseStyle = theme.resolveButtonStyle(controlStyle(srButton))
       overrideFill = color(0.67, 0.18, 0.22, 1.0)
 
-    firstAppearance.theme["button.fill"] = overrideFill
+    var builder = initThemeBuilder(firstAppearance.theme)
+    builder["button.fill"] = overrideFill
+    firstAppearance.theme = builder.finish()
     firstAppearance[srButton, StyleCornerRadius] = 11.0
 
     check firstAppearance.resolveButtonStyle(controlStyle(srButton)).box.fill ==

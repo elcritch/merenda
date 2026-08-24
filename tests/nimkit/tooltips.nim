@@ -23,9 +23,11 @@ suite "NimKit tooltips":
       border = color(0.52, 0.68, 0.84, 0.88)
       textColor = color(0.92, 0.96, 1.0, 1.0)
 
-    appearance.theme["comboBox.item.fill"] = surface
-    appearance.theme["comboBox.border.color"] = border
-    appearance.theme["comboBox.item.text.color"] = textColor
+    var builder = initThemeBuilder(appearance.theme)
+    builder["comboBox.item.fill"] = surface
+    builder["comboBox.border.color"] = border
+    builder["comboBox.item.text.color"] = textColor
+    appearance.theme = builder.finish()
 
     let style = appearance.resolveTooltipStyle()
     check style.box.fill == surface

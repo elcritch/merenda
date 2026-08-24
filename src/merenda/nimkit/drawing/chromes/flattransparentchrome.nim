@@ -497,7 +497,7 @@ proc flatTransparentChrome(): Chrome =
     fallbackFlatTransparentChrome = newFlatTransparentChrome()
   fallbackFlatTransparentChrome
 
-proc installFlatTransparentChrome*(theme: var Theme) =
+proc installFlatTransparentChrome*(theme: var ThemeBuilder) =
   theme.installChrome(FlatTransparentChromeName, flatTransparentChrome())
 
 registerThemeInstaller(installFlatTransparentChrome)

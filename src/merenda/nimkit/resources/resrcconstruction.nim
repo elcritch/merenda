@@ -308,7 +308,7 @@ proc toStyleValue(value: ResourceStyleValue): StyleValue =
   of rsvKeyword:
     styleKeyword(value.text)
 
-proc applyThemeFragment(theme: var Theme, fragment: ThemeFragmentResource) =
+proc applyThemeFragment(theme: var ThemeBuilder, fragment: ThemeFragmentResource) =
   for token in fragment.tokens:
     theme[token.name] = token.value.toStyleValue()
   for rule in fragment.rules:
@@ -321,9 +321,8 @@ proc applyThemeFragment(theme: var Theme, fragment: ThemeFragmentResource) =
         states.incl state
     let selector =
       initStyleSelector(role, states, rule.selector.id, rule.selector.classes)
-    let patch = theme.stylePatch(selector)
     for style in rule.styles:
-      patch.setStyle(style.name, style.value.toStyleValue())
+      theme.setStyle(selector, style.name, style.value.toStyleValue())
 
 proc constructThemes(state: var ConstructionState) =
   var remaining = state.bundle.themes
@@ -333,13 +332,14 @@ proc constructThemes(state: var ConstructionState) =
     for fragment in remaining:
       if fragment.parentId.isEmpty or
           state.instance.themesValue.hasKey(fragment.parentId):
-        var theme =
+        let baseTheme =
           if fragment.parentId.isEmpty:
             initTheme()
           else:
-            state.instance.themesValue[fragment.parentId].clone()
-        theme.applyThemeFragment(fragment)
-        state.instance.themesValue[fragment.id] = theme
+            state.instance.themesValue[fragment.parentId]
+        var builder = initThemeBuilder(baseTheme)
+        builder.applyThemeFragment(fragment)
+        state.instance.themesValue[fragment.id] = builder.finish()
         madeProgress = true
       else:
         next.add fragment

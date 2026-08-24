@@ -339,7 +339,7 @@ proc appearance*(app: Application): Appearance =
 
 proc effectiveAppearance*(app: Application): Appearance =
   if not app.xHasAppearance:
-    if app.xAppearance.theme.tokens.isNil:
+    if not app.xAppearance.theme.isInitialized:
       app.xAppearance = initAppearance()
     return app.xAppearance
   app.xAppearance

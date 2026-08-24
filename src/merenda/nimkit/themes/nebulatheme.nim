@@ -3,7 +3,7 @@ import ./themecore
 import ../foundation/types
 
 proc addRoleRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     fill: StyleValue,
@@ -16,7 +16,7 @@ proc addRoleRule(
   theme[selector, StyleTextColor] = textColor
 
 proc addChoiceRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     fill: StyleValue,
@@ -31,7 +31,7 @@ proc addChoiceRule(
   theme[selector, StyleTextColor] = textColor
 
 proc addLabelRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     className: string,
     fillValue: Fill,
     borderColor: Color,
@@ -135,7 +135,7 @@ func nebulaKnobShadows(): seq[BoxShadow] =
     insetShadow(color(0.80, 1.0, 1.0, 0.42), y = 1.0, blur = 3.0),
   ]
 
-proc installNebulaTokens(theme: var Theme) =
+proc installNebulaTokens(theme: var ThemeBuilder) =
   theme[srView, StyleBackgroundColor] = color(0.04, 0.06, 0.12)
 
   theme["accent"] = color(0.10, 0.92, 1.0, 0.92)
@@ -223,7 +223,7 @@ proc installNebulaTokens(theme: var Theme) =
   theme["tab.border.color.selected"] = color(0.78, 0.24, 1.0, 0.74)
   theme["tab.border.color.disabled"] = color(0.22, 0.34, 0.44, 0.32)
 
-proc installNebulaControlStyles(theme: var Theme) =
+proc installNebulaControlStyles(theme: var ThemeBuilder) =
   theme[srButton, StyleCornerRadius] = 9.0
   theme[srButton, StyleTextHighlightColor] = color(0.64, 1.0, 1.0, 0.28)
   theme[srButton, StyleTextShadowColor] = color(0.0, 0.0, 0.0, 0.46)
@@ -272,7 +272,7 @@ proc installNebulaControlStyles(theme: var Theme) =
   theme[srProgressIndicator, StyleFocusRingColor] = styleToken("progress.border.color")
   theme[srProgressIndicator, StyleBoxShadows] = nebulaInsetShadows()
 
-proc installNebulaLabels(theme: var Theme) =
+proc installNebulaLabels(theme: var ThemeBuilder) =
   theme.addLabelRule(
     LabelStyleClass,
     fill(color(0.0, 0.0, 0.0, 0.0)),
@@ -324,7 +324,7 @@ proc installNebulaLabels(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc installNebulaTables(theme: var Theme) =
+proc installNebulaTables(theme: var ThemeBuilder) =
   theme[srTableHeader, StyleFill] = fill(color(0.04, 0.14, 0.24, 0.66))
   theme[srTableHeader, StyleBorderColor] = color(0.16, 0.80, 1.0, 0.38)
   theme[srTableHeader, StyleInsertionIndicatorFill] = nebulaSelectionFill()
@@ -337,12 +337,13 @@ proc installNebulaTables(theme: var Theme) =
   theme[srRowItem, StyleAlternatingFill] = fill(color(0.10, 0.30, 0.42, 0.10))
 
 proc initNebulaTheme*(): Theme =
-  result = initAquaTheme()
-  result[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
-  result.installNebulaTokens()
-  result.installNebulaControlStyles()
-  result.installNebulaLabels()
-  result.installNebulaTables()
+  var builder = initThemeBuilder(initAquaTheme())
+  builder[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
+  builder.installNebulaTokens()
+  builder.installNebulaControlStyles()
+  builder.installNebulaLabels()
+  builder.installNebulaTables()
+  builder.finish()
 
 registerThemeFactory("nebula", initNebulaTheme)
 registerThemeFactory("nebula-glass", initNebulaTheme)

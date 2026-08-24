@@ -27,10 +27,10 @@ proc clickView(window: Window, view: View): bool =
 
 suite "nimkit mono text views":
   test "monospace font follows the theme until explicitly overridden":
-    var theme = initTheme()
-    theme.setFontName(frMonospace, "Ubuntu.ttf")
+    var builder = initThemeBuilder(initTheme())
+    builder.setFontName(frMonospace, "Ubuntu.ttf")
     let view = newMonoTextViewer("theme font")
-    view.appearance = initAppearance(theme)
+    view.appearance = initAppearance(builder.finish())
 
     check view.fontName == "Ubuntu.ttf"
     view.fontName = DefaultMonoFontName
@@ -314,14 +314,14 @@ suite "nimkit mono text views":
       surfaceFill = color(0.12, 0.16, 0.20, 1.0)
       surfaceBorder = color(0.70, 0.80, 0.90, 1.0)
       view = newMonoTextViewer("theme", frame = rect(0, 0, 220, 80))
-    var theme = initTheme()
-    theme[srMonoTextView, StyleFill] = fill(surfaceFill)
-    theme[srMonoTextView, StyleBorderColor] = surfaceBorder
-    theme[srMonoTextView, StyleBorderWidth] = 2.0
-    theme[srMonoTextView, StyleCornerRadius] = 5.0
-    theme[srMonoTextView, StyleChrome] = styleKeyword(DefaultChromeName)
+    var builder = initThemeBuilder(initTheme())
+    builder[srMonoTextView, StyleFill] = fill(surfaceFill)
+    builder[srMonoTextView, StyleBorderColor] = surfaceBorder
+    builder[srMonoTextView, StyleBorderWidth] = 2.0
+    builder[srMonoTextView, StyleCornerRadius] = 5.0
+    builder[srMonoTextView, StyleChrome] = styleKeyword(DefaultChromeName)
 
-    let list = buildRenders(view, initAppearance(theme))[DefaultDrawLevel]
+    let list = buildRenders(view, initAppearance(builder.finish()))[DefaultDrawLevel]
 
     var foundSurface = false
     for node in list.nodes:

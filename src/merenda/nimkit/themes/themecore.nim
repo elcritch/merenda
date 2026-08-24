@@ -1,4 +1,4 @@
-import std/tables
+import std/[atomics, tables]
 
 when defined(useNativeDynlib):
   import std/math
@@ -138,20 +138,23 @@ type
     selector*: StyleSelector
     patch*: StylePatch
 
-  StyleRuleIndex = ref object
-    valid: bool
-    revision: uint64
-    ruleCount: int
-    rulesByRole: array[StyleRole, seq[int]]
-
   Chrome* = ref object of DynamicAgent
 
+  ThemeGeneration* = distinct uint64
+
   Theme* = object
-    tokens*: StyleTokenStore
-    rules*: seq[StyleRule]
-    chromes*: Table[string, Chrome]
-    xRevision: uint64
-    xRuleIndex: StyleRuleIndex
+    xTokens: StyleTokenStore
+    xRules: seq[StyleRule]
+    xChromes: Table[string, Chrome]
+    xRulesByRole: array[StyleRole, seq[int]]
+    xGeneration: ThemeGeneration
+
+  ThemeBuilder* = object
+    xTokens: StyleTokenStore
+    xRules: seq[StyleRule]
+    xChromes: Table[string, Chrome]
+    xBaseGeneration: ThemeGeneration
+    xChanged: bool
 
   Appearance* = object
     theme*: Theme
@@ -233,7 +236,7 @@ type
     panelCornerRadius*: float32
     panelOverlap*: float32
 
-  ThemeInstaller* = proc(theme: var Theme)
+  ThemeInstaller* = proc(builder: var ThemeBuilder)
 
   TextFieldStyle* = object
     box*: ControlBoxStyle
@@ -375,7 +378,9 @@ const
   LabelFormStyleClass* = "label-form"
   IconLabelStyleClass* = "icon-label"
 
-var themeInstallers: seq[ThemeInstaller]
+var
+  themeInstallers: seq[ThemeInstaller]
+  themeGenerationCounter: Atomic[uint64]
 
 func insets*(top, left, bottom, right: float32): EdgeInsets =
   EdgeInsets(top: top, left: left, bottom: bottom, right: right)
@@ -587,66 +592,159 @@ proc newStyleTokenStore*(parent: StyleTokenStore = nil): StyleTokenStore =
 proc newStylePatch*(): StylePatch =
   StylePatch(values: initTable[string, StyleValue]())
 
+proc cloneText(value: string): string =
+  result = newStringOfCap(value.len)
+  result.add value
+
+proc clone(value: StyleValue): StyleValue =
+  case value.kind
+  of svMissing:
+    missingStyleValue()
+  of svColor:
+    styleColor(value.color)
+  of svFill:
+    styleFill(value.fill)
+  of svLength:
+    styleLength(value.length)
+  of svSize:
+    styleSize(value.size)
+  of svInsets:
+    styleInsets(value.insets)
+  of svShadows:
+    styleShadows(value.shadows)
+  of svToken:
+    styleToken(value.token.cloneText)
+  of svKeyword:
+    styleKeyword(value.keyword.cloneText)
+
 proc clone*(tokens: StyleTokenStore): StyleTokenStore =
   if tokens.isNil:
     return
   result = newStyleTokenStore(tokens.parent.clone)
-  result.values = tokens.values
+  for name, value in tokens.values:
+    result.values[name.cloneText] = value.clone
 
 proc clone*(patch: StylePatch): StylePatch =
   if patch.isNil:
     return
   result = newStylePatch()
-  result.values = patch.values
+  for name, value in patch.values:
+    result.values[name.cloneText] = value.clone
+
+proc clone(selector: StyleSelector): StyleSelector =
+  result.role = selector.role
+  result.states = selector.states
+  result.id = selector.id.cloneText
+  for className in selector.classes:
+    result.classes.add className.cloneText
+
+proc cloneRules(rules: openArray[StyleRule]): seq[StyleRule] =
+  for rule in rules:
+    result.add StyleRule(selector: rule.selector.clone, patch: rule.patch.clone)
+
+proc cloneChromes(chromes: Table[string, Chrome]): Table[string, Chrome] =
+  result = initTable[string, Chrome]()
+  for name, chrome in chromes:
+    result[name.cloneText] = chrome
 
 proc clone*(theme: Theme): Theme =
-  result.tokens = theme.tokens.clone
-  for rule in theme.rules:
-    result.rules.add StyleRule(selector: rule.selector, patch: rule.patch.clone)
-  result.chromes = theme.chromes
-  result.xRevision = theme.xRevision
-  result.xRuleIndex = StyleRuleIndex()
+  ## Immutable theme snapshots can be copied without changing their generation.
+  theme
 
-proc noteThemeMutation(theme: var Theme) =
-  if theme.xRuleIndex.isNil:
-    theme.xRuleIndex = StyleRuleIndex()
-  inc theme.xRevision
+proc tokens*(theme: Theme): StyleTokenStore =
+  ## Returns a mutable copy of the snapshot's token store.
+  theme.xTokens.clone
 
-proc sameAppearanceGeneration*(left, right: Appearance): bool =
+proc rules*(theme: Theme): seq[StyleRule] =
+  ## Returns a mutable copy of the snapshot's style rules.
+  theme.xRules.cloneRules()
+
+proc chromes*(theme: Theme): Table[string, Chrome] =
+  ## Returns a value copy of the snapshot's chrome registry.
+  theme.xChromes.cloneChromes
+
+func generation*(theme: Theme): ThemeGeneration =
+  theme.xGeneration
+
+func `==`*(left, right: ThemeGeneration): bool =
+  uint64(left) == uint64(right)
+
+func isInitialized*(theme: Theme): bool =
+  not theme.xTokens.isNil
+
+proc nextThemeGeneration(): ThemeGeneration =
+  ThemeGeneration(themeGenerationCounter.fetchAdd(1'u64, moRelaxed) + 1'u64)
+
+proc initThemeBuilder*(): ThemeBuilder =
+  ## Creates a builder for a new immutable theme snapshot.
+  ThemeBuilder(
+    xTokens: newStyleTokenStore(), xChromes: initTable[string, Chrome](), xChanged: true
+  )
+
+proc initThemeBuilder*(tokens: StyleTokenStore): ThemeBuilder =
+  ## Creates a builder initialized with an isolated copy of `tokens`.
+  result = initThemeBuilder()
+  result.xTokens = tokens.clone
+
+proc initThemeBuilder*(theme: Theme): ThemeBuilder =
+  ## Creates an isolated builder initialized from an immutable snapshot.
+  ThemeBuilder(
+    xTokens: theme.xTokens.clone,
+    xRules: theme.xRules.cloneRules(),
+    xChromes: theme.xChromes.cloneChromes,
+    xBaseGeneration: theme.xGeneration,
+  )
+
+proc finish*(builder: ThemeBuilder): Theme =
+  ## Freezes the builder into an immutable, independently owned snapshot.
+  result.xTokens = builder.xTokens.clone
+  result.xRules = builder.xRules.cloneRules()
+  result.xChromes = builder.xChromes.cloneChromes
+  for index, rule in result.xRules:
+    result.xRulesByRole[rule.selector.role].add index
+  if builder.xChanged or builder.xBaseGeneration == ThemeGeneration(0):
+    result.xGeneration = nextThemeGeneration()
+  else:
+    result.xGeneration = builder.xBaseGeneration
+
+proc noteThemeMutation(builder: var ThemeBuilder) =
+  builder.xChanged = true
+
+func sameAppearanceGeneration*(left, right: Appearance): bool =
   ## Compare immutable cache snapshots without traversing every theme value.
-  left.theme.tokens == right.theme.tokens and
-    left.theme.xRuleIndex == right.theme.xRuleIndex and
-    left.theme.xRevision == right.theme.xRevision
+  left.theme.xGeneration == right.theme.xGeneration
 
 proc registerThemeInstaller*(installer: ThemeInstaller) =
   themeInstallers.add installer
 
-proc installThemeExtensions*(theme: var Theme) =
+proc installThemeExtensions*(theme: var ThemeBuilder) =
   for installer in themeInstallers:
     installer(theme)
 
-proc installChrome*(theme: var Theme, name: string, chrome: Chrome) =
+proc installChrome*(theme: var ThemeBuilder, name: string, chrome: Chrome) =
   if name.len == 0:
     return
   if chrome.isNil:
-    if name in theme.chromes:
-      theme.chromes.del(name)
+    if name in theme.xChromes:
+      theme.xChromes.del(name)
       theme.noteThemeMutation()
   else:
-    if name in theme.chromes and theme.chromes[name] == chrome:
+    if name in theme.xChromes and theme.xChromes[name] == chrome:
       return
-    theme.chromes[name] = chrome
+    theme.xChromes[name] = chrome
     theme.noteThemeMutation()
 
 proc hasChrome*(theme: Theme, name: string): bool =
-  name in theme.chromes
+  name in theme.xChromes
 
 proc chrome*(theme: Theme, name: string): Chrome =
-  if name in theme.chromes:
-    return theme.chromes[name]
+  if name in theme.xChromes:
+    return theme.xChromes[name]
 
 proc installChrome*(appearance: var Appearance, name: string, chrome: Chrome) =
-  appearance.theme.installChrome(name, chrome)
+  var builder = initThemeBuilder(appearance.theme)
+  builder.installChrome(name, chrome)
+  appearance.theme = builder.finish()
 
 proc hasChrome*(appearance: Appearance, name: string): bool =
   appearance.theme.hasChrome(name)
@@ -678,29 +776,29 @@ proc `[]=`*(tokens: StyleTokenStore, name: string, value: EdgeInsets) =
 proc `[]=`*(tokens: StyleTokenStore, name: string, value: openArray[BoxShadow]) =
   tokens[name] = styleShadows(value)
 
-proc `[]=`*(theme: var Theme, name: string, value: StyleValue) =
-  theme.tokens[name] = value
+proc `[]=`*(theme: var ThemeBuilder, name: string, value: StyleValue) =
+  theme.xTokens[name] = value
   theme.noteThemeMutation()
 
-proc `[]=`*(theme: var Theme, name: string, value: Color) =
+proc `[]=`*(theme: var ThemeBuilder, name: string, value: Color) =
   theme[name] = styleColor(value)
 
-proc `[]=`*(theme: var Theme, name: string, value: Fill) =
+proc `[]=`*(theme: var ThemeBuilder, name: string, value: Fill) =
   theme[name] = styleFill(value)
 
-proc `[]=`*(theme: var Theme, name: string, value: float32) =
+proc `[]=`*(theme: var ThemeBuilder, name: string, value: float32) =
   theme[name] = styleLength(value)
 
-proc `[]=`*(theme: var Theme, name: string, value: float) =
+proc `[]=`*(theme: var ThemeBuilder, name: string, value: float) =
   theme[name] = styleLength(value.float32)
 
-proc `[]=`*(theme: var Theme, name: string, value: Size) =
+proc `[]=`*(theme: var ThemeBuilder, name: string, value: Size) =
   theme[name] = styleSize(value)
 
-proc `[]=`*(theme: var Theme, name: string, value: EdgeInsets) =
+proc `[]=`*(theme: var ThemeBuilder, name: string, value: EdgeInsets) =
   theme[name] = styleInsets(value)
 
-proc `[]=`*(theme: var Theme, name: string, value: openArray[BoxShadow]) =
+proc `[]=`*(theme: var ThemeBuilder, name: string, value: openArray[BoxShadow]) =
   theme[name] = styleShadows(value)
 
 proc lookupToken(tokens: StyleTokenStore, name: string, value: var StyleValue): bool =
@@ -830,60 +928,79 @@ func inheritedStyleRole(role: StyleRole): StyleRole =
   of srDocumentTabBar: srTabPanel
   else: role
 
-proc stylePatch*(theme: var Theme, selector: StyleSelector): StylePatch =
-  for rule in theme.rules:
+proc stylePatch(theme: var ThemeBuilder, selector: StyleSelector): StylePatch =
+  for rule in theme.xRules:
     if rule.selector == selector:
       return rule.patch
   result = newStylePatch()
-  theme.rules.add StyleRule(selector: selector, patch: result)
+  theme.xRules.add StyleRule(selector: selector, patch: result)
 
-proc stylePatch*(theme: Theme, selector: StyleSelector): StylePatch =
-  for rule in theme.rules:
+proc stylePatchView(theme: Theme, selector: StyleSelector): StylePatch =
+  for rule in theme.xRules:
     if rule.selector == selector:
       return rule.patch
 
-proc addRule*(theme: var Theme, selector: StyleSelector, patch: StylePatch) =
-  theme.rules.add StyleRule(selector: selector, patch: patch)
+proc stylePatch*(theme: Theme, selector: StyleSelector): StylePatch =
+  ## Returns a mutable copy without exposing snapshot-owned storage.
+  theme.stylePatchView(selector).clone
+
+proc addRule*(theme: var ThemeBuilder, selector: StyleSelector, patch: StylePatch) =
+  theme.xRules.add StyleRule(selector: selector, patch: patch)
   theme.noteThemeMutation()
 
 proc setStyle*[T](
-    theme: var Theme, selector: StyleSelector, key: StyleKey[T], value: StyleValue
+    theme: var ThemeBuilder,
+    selector: StyleSelector,
+    key: StyleKey[T],
+    value: StyleValue,
 ) =
   theme.stylePatch(selector).setStyle(key, value)
   theme.noteThemeMutation()
 
 proc setStyle*(
-    theme: var Theme, selector: StyleSelector, key: StyleKey[Color], value: Color
+    theme: var ThemeBuilder, selector: StyleSelector, key: string, value: StyleValue
 ) =
   theme.stylePatch(selector).setStyle(key, value)
   theme.noteThemeMutation()
 
 proc setStyle*(
-    theme: var Theme, selector: StyleSelector, key: StyleKey[Fill], value: Fill
+    theme: var ThemeBuilder, selector: StyleSelector, key: StyleKey[Color], value: Color
 ) =
   theme.stylePatch(selector).setStyle(key, value)
   theme.noteThemeMutation()
 
 proc setStyle*(
-    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float32
+    theme: var ThemeBuilder, selector: StyleSelector, key: StyleKey[Fill], value: Fill
 ) =
   theme.stylePatch(selector).setStyle(key, value)
   theme.noteThemeMutation()
 
 proc setStyle*(
-    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float
+    theme: var ThemeBuilder,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float32,
 ) =
   theme.stylePatch(selector).setStyle(key, value)
   theme.noteThemeMutation()
 
 proc setStyle*(
-    theme: var Theme, selector: StyleSelector, key: StyleKey[Size], value: Size
+    theme: var ThemeBuilder,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float,
 ) =
   theme.stylePatch(selector).setStyle(key, value)
   theme.noteThemeMutation()
 
 proc setStyle*(
-    theme: var Theme,
+    theme: var ThemeBuilder, selector: StyleSelector, key: StyleKey[Size], value: Size
+) =
+  theme.stylePatch(selector).setStyle(key, value)
+  theme.noteThemeMutation()
+
+proc setStyle*(
+    theme: var ThemeBuilder,
     selector: StyleSelector,
     key: StyleKey[EdgeInsets],
     value: EdgeInsets,
@@ -892,7 +1009,7 @@ proc setStyle*(
   theme.noteThemeMutation()
 
 proc setStyle*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     selector: StyleSelector,
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
@@ -901,36 +1018,45 @@ proc setStyle*(
   theme.noteThemeMutation()
 
 proc setStyle*[T](
-    theme: var Theme, role: StyleRole, key: StyleKey[T], value: StyleValue
-) =
-  theme.setStyle(initStyleSelector(role), key, value)
-
-proc setStyle*(theme: var Theme, role: StyleRole, key: StyleKey[Color], value: Color) =
-  theme.setStyle(initStyleSelector(role), key, value)
-
-proc setStyle*(theme: var Theme, role: StyleRole, key: StyleKey[Fill], value: Fill) =
-  theme.setStyle(initStyleSelector(role), key, value)
-
-proc setStyle*(
-    theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float32
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[T], value: StyleValue
 ) =
   theme.setStyle(initStyleSelector(role), key, value)
 
 proc setStyle*(
-    theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float
-) =
-  theme.setStyle(initStyleSelector(role), key, value)
-
-proc setStyle*(theme: var Theme, role: StyleRole, key: StyleKey[Size], value: Size) =
-  theme.setStyle(initStyleSelector(role), key, value)
-
-proc setStyle*(
-    theme: var Theme, role: StyleRole, key: StyleKey[EdgeInsets], value: EdgeInsets
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[Color], value: Color
 ) =
   theme.setStyle(initStyleSelector(role), key, value)
 
 proc setStyle*(
-    theme: var Theme,
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[Fill], value: Fill
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[float32], value: float32
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[float32], value: float
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[Size], value: Size
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var ThemeBuilder,
+    role: StyleRole,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  theme.setStyle(initStyleSelector(role), key, value)
+
+proc setStyle*(
+    theme: var ThemeBuilder,
     role: StyleRole,
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
@@ -938,7 +1064,7 @@ proc setStyle*(
   theme.setStyle(initStyleSelector(role), key, value)
 
 proc setStyle*[T](
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[T],
@@ -947,7 +1073,7 @@ proc setStyle*[T](
   theme.setStyle(initStyleSelector(role, states), key, value)
 
 proc setStyle*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[Color],
@@ -956,7 +1082,7 @@ proc setStyle*(
   theme.setStyle(initStyleSelector(role, states), key, value)
 
 proc setStyle*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[Fill],
@@ -965,7 +1091,7 @@ proc setStyle*(
   theme.setStyle(initStyleSelector(role, states), key, value)
 
 proc setStyle*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[float32],
@@ -974,7 +1100,7 @@ proc setStyle*(
   theme.setStyle(initStyleSelector(role, states), key, value)
 
 proc setStyle*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[Size],
@@ -983,7 +1109,7 @@ proc setStyle*(
   theme.setStyle(initStyleSelector(role, states), key, value)
 
 proc setStyle*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[float32],
@@ -992,7 +1118,7 @@ proc setStyle*(
   theme.setStyle(initStyleSelector(role, states), key, value)
 
 proc setStyle*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[EdgeInsets],
@@ -1001,7 +1127,7 @@ proc setStyle*(
   theme.setStyle(initStyleSelector(role, states), key, value)
 
 proc setStyle*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[seq[BoxShadow]],
@@ -1010,37 +1136,46 @@ proc setStyle*(
   theme.setStyle(initStyleSelector(role, states), key, value)
 
 proc `[]=`*[T](
-    theme: var Theme, selector: StyleSelector, key: StyleKey[T], value: StyleValue
+    theme: var ThemeBuilder,
+    selector: StyleSelector,
+    key: StyleKey[T],
+    value: StyleValue,
 ) =
   theme.setStyle(selector, key, value)
 
 proc `[]=`*(
-    theme: var Theme, selector: StyleSelector, key: StyleKey[Color], value: Color
+    theme: var ThemeBuilder, selector: StyleSelector, key: StyleKey[Color], value: Color
 ) =
   theme.setStyle(selector, key, value)
 
 proc `[]=`*(
-    theme: var Theme, selector: StyleSelector, key: StyleKey[Fill], value: Fill
+    theme: var ThemeBuilder, selector: StyleSelector, key: StyleKey[Fill], value: Fill
 ) =
   theme.setStyle(selector, key, value)
 
 proc `[]=`*(
-    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float32
+    theme: var ThemeBuilder,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float32,
 ) =
   theme.setStyle(selector, key, value)
 
 proc `[]=`*(
-    theme: var Theme, selector: StyleSelector, key: StyleKey[float32], value: float
+    theme: var ThemeBuilder,
+    selector: StyleSelector,
+    key: StyleKey[float32],
+    value: float,
 ) =
   theme.setStyle(selector, key, value)
 
 proc `[]=`*(
-    theme: var Theme, selector: StyleSelector, key: StyleKey[Size], value: Size
+    theme: var ThemeBuilder, selector: StyleSelector, key: StyleKey[Size], value: Size
 ) =
   theme.setStyle(selector, key, value)
 
 proc `[]=`*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     selector: StyleSelector,
     key: StyleKey[EdgeInsets],
     value: EdgeInsets,
@@ -1048,38 +1183,53 @@ proc `[]=`*(
   theme.setStyle(selector, key, value)
 
 proc `[]=`*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     selector: StyleSelector,
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
 ) =
   theme.setStyle(selector, key, value)
 
-proc `[]=`*[T](theme: var Theme, role: StyleRole, key: StyleKey[T], value: StyleValue) =
-  theme.setStyle(role, key, value)
-
-proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[Color], value: Color) =
-  theme.setStyle(role, key, value)
-
-proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[Fill], value: Fill) =
-  theme.setStyle(role, key, value)
-
-proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float32) =
-  theme.setStyle(role, key, value)
-
-proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[float32], value: float) =
-  theme.setStyle(role, key, value)
-
-proc `[]=`*(theme: var Theme, role: StyleRole, key: StyleKey[Size], value: Size) =
-  theme.setStyle(role, key, value)
-
-proc `[]=`*(
-    theme: var Theme, role: StyleRole, key: StyleKey[EdgeInsets], value: EdgeInsets
+proc `[]=`*[T](
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[T], value: StyleValue
 ) =
   theme.setStyle(role, key, value)
 
 proc `[]=`*(
-    theme: var Theme,
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[Color], value: Color
+) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[Fill], value: Fill
+) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[float32], value: float32
+) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[float32], value: float
+) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(
+    theme: var ThemeBuilder, role: StyleRole, key: StyleKey[Size], value: Size
+) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(
+    theme: var ThemeBuilder,
+    role: StyleRole,
+    key: StyleKey[EdgeInsets],
+    value: EdgeInsets,
+) =
+  theme.setStyle(role, key, value)
+
+proc `[]=`*(
+    theme: var ThemeBuilder,
     role: StyleRole,
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
@@ -1087,7 +1237,7 @@ proc `[]=`*(
   theme.setStyle(role, key, value)
 
 proc `[]=`*[T](
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[T],
@@ -1096,7 +1246,7 @@ proc `[]=`*[T](
   theme.setStyle(role, states, key, value)
 
 proc `[]=`*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[Color],
@@ -1105,7 +1255,7 @@ proc `[]=`*(
   theme.setStyle(role, states, key, value)
 
 proc `[]=`*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[Fill],
@@ -1114,7 +1264,7 @@ proc `[]=`*(
   theme.setStyle(role, states, key, value)
 
 proc `[]=`*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[float32],
@@ -1123,7 +1273,7 @@ proc `[]=`*(
   theme.setStyle(role, states, key, value)
 
 proc `[]=`*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[float32],
@@ -1132,7 +1282,7 @@ proc `[]=`*(
   theme.setStyle(role, states, key, value)
 
 proc `[]=`*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[Size],
@@ -1141,7 +1291,7 @@ proc `[]=`*(
   theme.setStyle(role, states, key, value)
 
 proc `[]=`*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[EdgeInsets],
@@ -1150,7 +1300,7 @@ proc `[]=`*(
   theme.setStyle(role, states, key, value)
 
 proc `[]=`*(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     key: StyleKey[seq[BoxShadow]],
@@ -1159,24 +1309,15 @@ proc `[]=`*(
   theme.setStyle(role, states, key, value)
 
 proc `[]`*[T](theme: Theme, role: StyleRole, key: StyleKey[T]): StyleValue =
-  let patch = theme.stylePatch(initStyleSelector(role))
+  let patch = theme.stylePatchView(initStyleSelector(role))
   if patch.isNil or not patch.getStyle(key, result):
     result = missingStyleValue()
 
-proc indexedRules(theme: Theme): StyleRuleIndex =
-  result = theme.xRuleIndex
-  if result.isNil:
-    return
-  if result.valid and result.revision == theme.xRevision and
-      result.ruleCount == theme.rules.len:
-    return
-  for role in StyleRole:
-    result.rulesByRole[role].setLen(0)
-  for index, rule in theme.rules:
-    result.rulesByRole[rule.selector.role].add index
-  result.valid = true
-  result.revision = theme.xRevision
-  result.ruleCount = theme.rules.len
+proc `[]`*[T](theme: ThemeBuilder, role: StyleRole, key: StyleKey[T]): StyleValue =
+  for rule in theme.xRules:
+    if rule.selector == initStyleSelector(role) and rule.patch.getStyle(key, result):
+      return
+  result = missingStyleValue()
 
 proc ruleValue(
     theme: Theme, context: StyleContext, key: string, fallback: StyleValue
@@ -1185,9 +1326,7 @@ proc ruleValue(
   var
     bestSpecificity = -1
     inheritedContext = context
-  let
-    inheritedRole = context.role.inheritedStyleRole()
-    index = theme.indexedRules()
+  let inheritedRole = context.role.inheritedStyleRole()
   inheritedContext.role = inheritedRole
 
   template applyRule(rule: StyleRule, matchContext: StyleContext, roleRank: int) =
@@ -1197,24 +1336,18 @@ proc ruleValue(
         let ruleSpecificity = rule.selector.specificity() * 10 + roleRank
         if ruleSpecificity >= bestSpecificity:
           var resolved: StyleValue
-          if theme.tokens.resolveValue(value, resolved):
+          if theme.xTokens.resolveValue(value, resolved):
             result = resolved
             bestSpecificity = ruleSpecificity
           elif value.kind != svToken:
             result = value
             bestSpecificity = ruleSpecificity
 
-  if index.isNil:
-    for rule in theme.rules:
-      if inheritedRole != context.role:
-        applyRule(rule, inheritedContext, 0)
-      applyRule(rule, context, 1)
-  else:
-    if inheritedRole != context.role:
-      for ruleIndex in index.rulesByRole[inheritedRole]:
-        applyRule(theme.rules[ruleIndex], inheritedContext, 0)
-    for ruleIndex in index.rulesByRole[context.role]:
-      applyRule(theme.rules[ruleIndex], context, 1)
+  if inheritedRole != context.role:
+    for ruleIndex in theme.xRulesByRole[inheritedRole]:
+      applyRule(theme.xRules[ruleIndex], inheritedContext, 0)
+  for ruleIndex in theme.xRulesByRole[context.role]:
+    applyRule(theme.xRules[ruleIndex], context, 1)
 
 proc colorRule(
     theme: Theme, context: StyleContext, key: StyleKey[Color], fallback: Color
@@ -1274,9 +1407,9 @@ proc keywordRule(
   if value.kind == svKeyword: value.keyword else: fallback
 
 proc styleValue*(theme: Theme, name: string, fallback: StyleValue): StyleValue =
-  if theme.tokens.isNil:
+  if theme.xTokens.isNil:
     return fallback
-  if not theme.tokens.resolveToken(name, result):
+  if not theme.xTokens.resolveToken(name, result):
     result = fallback
 
 proc colorToken*(theme: Theme, name: string, fallback: Color): Color =
@@ -1340,7 +1473,7 @@ proc fontName*(theme: Theme, role: FontRole): string =
   else:
     defaultFontName(role)
 
-proc setFontName*(theme: var Theme, role: FontRole, name: string) =
+proc setFontName*(theme: var ThemeBuilder, role: FontRole, name: string) =
   ## Sets a font role, or restores its environment/bundled default when empty.
   let resolved =
     if name.len > 0:
@@ -1463,13 +1596,20 @@ proc resolveTextStyle*(
 ): TextStyle =
   appearance.theme.resolveTextStyle(context, colorFallback, insetsFallback)
 
+template editAppearanceTheme(appearance: var Appearance, body: untyped) =
+  block:
+    var builder {.inject.} = initThemeBuilder(appearance.theme)
+    body
+    appearance.theme = builder.finish()
+
 proc setStyle*[T](
     appearance: var Appearance,
     selector: StyleSelector,
     key: StyleKey[T],
     value: StyleValue,
 ) =
-  appearance.theme.setStyle(selector, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(selector, key, value)
 
 proc setStyle*(
     appearance: var Appearance,
@@ -1477,7 +1617,8 @@ proc setStyle*(
     key: StyleKey[Color],
     value: Color,
 ) =
-  appearance.theme.setStyle(selector, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(selector, key, value)
 
 proc setStyle*(
     appearance: var Appearance,
@@ -1485,7 +1626,8 @@ proc setStyle*(
     key: StyleKey[Fill],
     value: Fill,
 ) =
-  appearance.theme.setStyle(selector, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(selector, key, value)
 
 proc setStyle*(
     appearance: var Appearance,
@@ -1493,7 +1635,8 @@ proc setStyle*(
     key: StyleKey[float32],
     value: float32,
 ) =
-  appearance.theme.setStyle(selector, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(selector, key, value)
 
 proc setStyle*(
     appearance: var Appearance,
@@ -1501,7 +1644,8 @@ proc setStyle*(
     key: StyleKey[Size],
     value: Size,
 ) =
-  appearance.theme.setStyle(selector, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(selector, key, value)
 
 proc setStyle*(
     appearance: var Appearance,
@@ -1509,7 +1653,8 @@ proc setStyle*(
     key: StyleKey[float32],
     value: float,
 ) =
-  appearance.theme.setStyle(selector, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(selector, key, value)
 
 proc setStyle*(
     appearance: var Appearance,
@@ -1517,7 +1662,8 @@ proc setStyle*(
     key: StyleKey[EdgeInsets],
     value: EdgeInsets,
 ) =
-  appearance.theme.setStyle(selector, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(selector, key, value)
 
 proc setStyle*(
     appearance: var Appearance,
@@ -1525,37 +1671,44 @@ proc setStyle*(
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
 ) =
-  appearance.theme.setStyle(selector, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(selector, key, value)
 
 proc setStyle*[T](
     appearance: var Appearance, role: StyleRole, key: StyleKey[T], value: StyleValue
 ) =
-  appearance.theme.setStyle(role, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance, role: StyleRole, key: StyleKey[Color], value: Color
 ) =
-  appearance.theme.setStyle(role, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance, role: StyleRole, key: StyleKey[Fill], value: Fill
 ) =
-  appearance.theme.setStyle(role, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float32
 ) =
-  appearance.theme.setStyle(role, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance, role: StyleRole, key: StyleKey[float32], value: float
 ) =
-  appearance.theme.setStyle(role, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance, role: StyleRole, key: StyleKey[Size], value: Size
 ) =
-  appearance.theme.setStyle(role, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance,
@@ -1563,7 +1716,8 @@ proc setStyle*(
     key: StyleKey[EdgeInsets],
     value: EdgeInsets,
 ) =
-  appearance.theme.setStyle(role, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(role, key, value)
 
 proc setStyle*(
     appearance: var Appearance,
@@ -1571,7 +1725,8 @@ proc setStyle*(
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
 ) =
-  appearance.theme.setStyle(role, key, value)
+  editAppearanceTheme(appearance):
+    builder.setStyle(role, key, value)
 
 proc `[]=`*[T](
     appearance: var Appearance,
@@ -1579,7 +1734,8 @@ proc `[]=`*[T](
     key: StyleKey[T],
     value: StyleValue,
 ) =
-  appearance.theme[selector, key] = value
+  editAppearanceTheme(appearance):
+    builder[selector, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1587,7 +1743,8 @@ proc `[]=`*(
     key: StyleKey[Color],
     value: Color,
 ) =
-  appearance.theme[selector, key] = value
+  editAppearanceTheme(appearance):
+    builder[selector, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1595,7 +1752,8 @@ proc `[]=`*(
     key: StyleKey[Fill],
     value: Fill,
 ) =
-  appearance.theme[selector, key] = value
+  editAppearanceTheme(appearance):
+    builder[selector, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1603,7 +1761,8 @@ proc `[]=`*(
     key: StyleKey[float32],
     value: float32,
 ) =
-  appearance.theme[selector, key] = value
+  editAppearanceTheme(appearance):
+    builder[selector, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1611,7 +1770,8 @@ proc `[]=`*(
     key: StyleKey[float32],
     value: float,
 ) =
-  appearance.theme[selector, key] = value
+  editAppearanceTheme(appearance):
+    builder[selector, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1619,7 +1779,8 @@ proc `[]=`*(
     key: StyleKey[Size],
     value: Size,
 ) =
-  appearance.theme[selector, key] = value
+  editAppearanceTheme(appearance):
+    builder[selector, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1627,7 +1788,8 @@ proc `[]=`*(
     key: StyleKey[EdgeInsets],
     value: EdgeInsets,
 ) =
-  appearance.theme[selector, key] = value
+  editAppearanceTheme(appearance):
+    builder[selector, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1635,7 +1797,8 @@ proc `[]=`*(
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
 ) =
-  appearance.theme[selector, key] = value
+  editAppearanceTheme(appearance):
+    builder[selector, key] = value
 
 proc `[]=`*[T](
     appearance: var Appearance, role: StyleRole, key: StyleKey[T], value: StyleValue
@@ -1690,7 +1853,8 @@ proc `[]=`*[T](
     key: StyleKey[T],
     value: StyleValue,
 ) =
-  appearance.theme[role, states, key] = value
+  editAppearanceTheme(appearance):
+    builder[role, states, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1699,7 +1863,8 @@ proc `[]=`*(
     key: StyleKey[Color],
     value: Color,
 ) =
-  appearance.theme[role, states, key] = value
+  editAppearanceTheme(appearance):
+    builder[role, states, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1708,7 +1873,8 @@ proc `[]=`*(
     key: StyleKey[Fill],
     value: Fill,
 ) =
-  appearance.theme[role, states, key] = value
+  editAppearanceTheme(appearance):
+    builder[role, states, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1717,7 +1883,8 @@ proc `[]=`*(
     key: StyleKey[float32],
     value: float32,
 ) =
-  appearance.theme[role, states, key] = value
+  editAppearanceTheme(appearance):
+    builder[role, states, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1726,7 +1893,8 @@ proc `[]=`*(
     key: StyleKey[float32],
     value: float,
 ) =
-  appearance.theme[role, states, key] = value
+  editAppearanceTheme(appearance):
+    builder[role, states, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1735,7 +1903,8 @@ proc `[]=`*(
     key: StyleKey[Size],
     value: Size,
 ) =
-  appearance.theme[role, states, key] = value
+  editAppearanceTheme(appearance):
+    builder[role, states, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1744,7 +1913,8 @@ proc `[]=`*(
     key: StyleKey[EdgeInsets],
     value: EdgeInsets,
 ) =
-  appearance.theme[role, states, key] = value
+  editAppearanceTheme(appearance):
+    builder[role, states, key] = value
 
 proc `[]=`*(
     appearance: var Appearance,
@@ -1753,7 +1923,8 @@ proc `[]=`*(
     key: StyleKey[seq[BoxShadow]],
     value: openArray[BoxShadow],
 ) =
-  appearance.theme[role, states, key] = value
+  editAppearanceTheme(appearance):
+    builder[role, states, key] = value
 
 proc `[]`*[T](appearance: Appearance, role: StyleRole, key: StyleKey[T]): StyleValue =
   appearance.theme[role, key]
