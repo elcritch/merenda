@@ -89,7 +89,16 @@ protocol KosmoFileTreeDataSource of nimkit.OutlineViewDataSource:
       tooltip = identifier,
     )
 
-proc fileTreeSelectionDidChange(
+protocol KosmoFileTreeTableDelegate of nimkit.TableViewDelegate:
+  method shouldEditCell(
+      tree: KosmoFileTree,
+      tableView: nimkit.TableView,
+      row: int,
+      column: nimkit.TableColumn,
+  ): bool =
+    false
+
+proc fileTreeRowWasActivated(
     tree: KosmoFileTree, sender: nimkit.DynamicAgent
 ) {.slot.} =
   if sender != nimkit.DynamicAgent(tree) or tree.xOnOpenFile.isNil:
@@ -137,6 +146,7 @@ proc newKosmoFileTree*(
   result = KosmoFileTree()
   result.initOutlineViewFields(frame)
   discard result.withProtocol(KosmoFileTreeDataSource)
+  discard result.withProtocol(KosmoFileTreeTableDelegate)
   result.outlineDataSource = result
   result.outlineColumn().title = "Files"
   result.outlineColumn().width = 260.0'f32
@@ -145,5 +155,5 @@ proc newKosmoFileTree*(
   result.selectionMode = nimkit.tsmSingle
   result.usesAlternatingRowBackgrounds = false
   result.showsRowSeparators = false
-  result.connect(nimkit.selectionDidChange, result, fileTreeSelectionDidChange)
+  result.connect(nimkit.rowWasActivated, result, fileTreeRowWasActivated)
   result.rootPath = rootPath

@@ -280,6 +280,43 @@ suite "Kosmo":
     check tree.rowCount() == 4
     check tree.outlineItemWithIdentifier(nestedFile).leaf
 
+  test "file tree activates files without entering inline editing":
+    let
+      root = createTempDir("merenda-kosmo-tree-activation-", "")
+      filePath = root / "document.txt"
+    writeFile(filePath, "document body")
+    let
+      window = newWindow("Kosmo File Tree Activation", frame = rect(0, 0, 300, 120))
+      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 120))
+    defer:
+      removeFile(filePath)
+      removeDir(root)
+
+    var openedPaths: seq[string]
+    tree.onOpenFile = proc(path: string) =
+      openedPaths.add path
+    window.setContentView(tree)
+    discard buildRenders(tree)
+
+    let
+      row = tree.rowForItem(filePath)
+      rowRect = tree.rowItemRect(row)
+      point = tree.pointToWindow(
+        initPoint(
+          rowRect.origin.x + rowRect.size.width * 0.5'f32,
+          rowRect.origin.y + rowRect.size.height * 0.5'f32,
+        )
+      )
+    check window.mouseDownAt(point, clickCount = 2)
+    check window.mouseUpAt(point, clickCount = 2)
+    check not tree.editingState.active
+    check openedPaths == @[filePath]
+
+    openedPaths.setLen(0)
+    check tree.keyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check not tree.editingState.active
+    check openedPaths == @[filePath]
+
   test "opening files and folders updates the file-tree root":
     let
       root = createTempDir("merenda-kosmo-open-path-", "")
