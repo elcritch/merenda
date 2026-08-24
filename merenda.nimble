@@ -21,7 +21,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:fox0430/moe#d650f95b892519613e605f84dade85130d4437ed"
+  requires "gh:fox0430/moe#4f18384"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
