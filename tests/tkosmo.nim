@@ -61,6 +61,28 @@ suite "Kosmo":
     check outcome.appliedRows == 1
     editor.close()
 
+  test "editor view follows Moe's rendered cursor position":
+    let
+      editor = newKosmoEditor(text = "hello")
+      view = newKosmoEditorView(editor)
+    view.frame = rect(0, 0, 240, 120)
+    view.refresh()
+
+    var cursor = editor.cursor()
+    let initialColumn = cursor.column
+    check cursor.visible
+    check initialColumn > 0
+    check view.cursorRow == cursor.row
+    check view.cursorColumn == cursor.column
+    check view.cursorVisible == cursor.visible
+
+    check editor.handleKey("h")
+    view.refresh()
+    cursor = editor.cursor()
+    check view.cursorColumn == cursor.column
+    check view.cursorColumn < initialColumn
+    editor.close()
+
   test "opens a file through the Moe facade":
     let path = getTempDir() / "merenda-kosmo-open-file.txt"
     writeFile(path, "opened from disk")
@@ -194,6 +216,12 @@ suite "Kosmo":
     check frontend.editorView.frame().origin.y == KosmoTabBarHeight
     check frontend.editorView.frame().size.height ==
       frontend.editorPane.bounds().size.height - KosmoTabBarHeight
+
+    let editorStyle = frontend.editorView.effectiveAppearance.resolveMonoTextStyle(
+      controlStyle(srMonoTextView, id = frontend.editorView.styleId)
+    )
+    check editorStyle.box.cornerRadius == 0.0'f32
+    check editorStyle.box.cornerRadii.isZero
 
   test "settled editor refresh does not re-dirty its containing layout":
     let frontend = newKosmoApplication(newApplication("Kosmo Layout Test"))

@@ -45,6 +45,11 @@ type
     gitModified*: int
     gitDeleted*: int
 
+  KosmoCursor* = object ## Moe's cursor position in the rendered cell grid.
+    row*: int
+    column*: int
+    visible*: bool
+
   KosmoTabCloseResult* = object
     closed*: bool
     message*: string
@@ -233,6 +238,15 @@ proc status*(editor: KosmoEditor): KosmoStatus =
     gitAdded: snapshot.git.added,
     gitModified: snapshot.git.modified,
     gitDeleted: snapshot.git.deleted,
+  )
+
+proc cursor*(editor: KosmoEditor): KosmoCursor =
+  ## Return the cursor state computed during Moe's most recent frame.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let position = editor.editor.state.screenCursor
+  KosmoCursor(
+    row: position.y, column: position.x, visible: editor.editor.state.cursorVisible
   )
 
 proc newRenderBuffer*(width, height: Natural): RenderBuffer =

@@ -13,6 +13,7 @@ const
   KosmoOpenFileAction* = "kosmo.openFile"
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
+  KosmoEditorStyleId* = "kosmo.editor"
   KosmoTabIdentifierPrefix = "kosmo.buffer."
 
 type
@@ -195,6 +196,21 @@ proc syncChrome(view: KosmoEditorView) =
     let text = view.editor.status().statusText(tabs)
     if view.statusLabel.text != text:
       view.statusLabel.text = text
+  let cursor = view.editor.cursor()
+  view.setCursorPosition(cursor.row, cursor.column)
+  view.cursorVisible = cursor.visible
+
+proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
+  var appearance = base
+  let selector =
+    nimkit.initStyleSelector(nimkit.srMonoTextView, id = KosmoEditorStyleId)
+  appearance.setStyle(selector, nimkit.StyleCornerRadius, 0.0'f32)
+  appearance.setStyle(selector, nimkit.StyleCornerRadiusTopLeft, 0.0'f32)
+  appearance.setStyle(selector, nimkit.StyleCornerRadiusTopRight, 0.0'f32)
+  appearance.setStyle(selector, nimkit.StyleCornerRadiusBottomLeft, 0.0'f32)
+  appearance.setStyle(selector, nimkit.StyleCornerRadiusBottomRight, 0.0'f32)
+  view.styleId = KosmoEditorStyleId
+  view.appearance = appearance
 
 proc refresh*(view: KosmoEditorView) =
   ## Render the current editor state into the synchronous cell-grid view.
@@ -208,12 +224,12 @@ proc refresh*(view: KosmoEditorView) =
   if view.renderBuffer.width != columns or view.renderBuffer.height != rows:
     view.renderBuffer.resize(columns.Natural, rows.Natural)
   view.editor.render(view.renderBuffer)
-  view.syncChrome()
   var cells = newSeq[nimkit.MonoTextCell](rows * columns)
   for row in 0 ..< rows:
     for column in 0 ..< columns:
       cells[row * columns + column] = view.renderBuffer.cell(column, row).toMonoTextCell
   view.replaceGrid(rows, columns, cells)
+  view.syncChrome()
 
 proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load a file selected by the frontend and refresh the cell grid.
@@ -377,6 +393,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result.fontSize = 14.0'f32
   result.textColor = nimkit.color(0.88, 0.9, 0.94, 1.0)
   result.backgroundColor = nimkit.color(0.04, 0.05, 0.07, 1.0)
+  result.applyKosmoEditorStyle(result.effectiveAppearance())
   result.rawEventPolicy =
     nimkit.initMonoTextRawEventPolicy(capturedEvents = nimkit.AllMonoTextRawEvents)
   let editorView = result
@@ -472,6 +489,7 @@ proc newKosmoApplication*(
     openItem = nimkit.newMenuItem(
       "Open…", nimkit.actionSelector(KosmoOpenFileAction), "o", {nimkit.kmCommand}
     )
+  editorView.applyKosmoEditorStyle(app.effectiveAppearance())
   openItem.identifier = KosmoOpenFileAction
   openItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoOpenFileAction)) do(
     sender: nimkit.DynamicAgent
