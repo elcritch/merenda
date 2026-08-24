@@ -180,6 +180,7 @@ type
     insets*: EdgeInsets
     fontName*: string
     fontSize*: float32
+    fontSlant*: FontSlant
     language*: LanguageTag
 
   TooltipStyle* = object
@@ -317,6 +318,7 @@ const
   StyleTextColor* = StyleKey[Color]("text.color")
   StyleFontName* = StyleKey[string]("font.name")
   StyleFontSize* = StyleKey[float32]("font.size")
+  StyleFontSlant* = StyleKey[string]("font.slant")
   StyleLanguage* = StyleKey[string]("text.language")
   StyleTextHighlightColor* = StyleKey[Color]("text.highlight.color")
   StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
@@ -556,6 +558,20 @@ func styleToken*(name: string): StyleValue =
 
 func styleKeyword*(keyword: string): StyleValue =
   StyleValue(kind: svKeyword, keyword: keyword)
+
+func styleKeyword*(slant: FontSlant): StyleValue =
+  styleKeyword(
+    case slant
+    of fsUpright: "normal"
+    of fsItalic: "italic"
+    of fsOblique: "oblique"
+  )
+
+func fontSlant*(keyword: string): FontSlant =
+  case keyword
+  of "italic": fsItalic
+  of "oblique": fsOblique
+  else: fsUpright
 
 func styleKey*[T](name: string): StyleKey[T] =
   StyleKey[T](name)
@@ -1584,6 +1600,7 @@ proc resolveTextStyle*(
     insets: theme.insetsRule(context, StyleTextInsets, insetsFallback),
     fontName: theme.keywordRule(context, StyleFontName, defaultFontName()),
     fontSize: max(theme.lengthRule(context, StyleFontSize, defaultFontSize()), 1.0'f32),
+    fontSlant: theme.keywordRule(context, StyleFontSlant, "normal").fontSlant,
     language:
       theme.keywordRule(context, StyleLanguage, $defaultLanguageTag()).initLanguageTag(),
   )

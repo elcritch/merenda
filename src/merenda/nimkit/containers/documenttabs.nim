@@ -47,7 +47,6 @@ type
     xEnabled: bool
     xCloseable: bool
     xModified: bool
-    xItalic: bool
     xStyle: DocumentTabStyle
     xAccentColor: Color
     xObjectValue: ObjectValue
@@ -65,7 +64,6 @@ type
     hidden*: bool
     closeable*: bool
     modified*: bool
-    italic*: bool
     style*: DocumentTabStyle
     accentColor*: Color
     styleId*: string
@@ -260,7 +258,6 @@ proc initDocumentTabModel*(
     hidden = false,
     closeable = true,
     modified = false,
-    italic = false,
     style = dtsAutomatic,
     accentColor = color(0.0, 0.0, 0.0, 0.0),
     styleId = "",
@@ -277,7 +274,6 @@ proc initDocumentTabModel*(
     hidden: hidden,
     closeable: closeable,
     modified: modified,
-    italic: italic,
     style: style,
     accentColor: accentColor,
     styleId: styleId,
@@ -292,7 +288,6 @@ proc newDocumentTabItem*(model: DocumentTabModel): DocumentTabItem =
     newDocumentTabItem(model.title, model.identifier, model.closeable, model.style)
   result.xEnabled = model.enabled
   result.xModified = model.modified
-  result.xItalic = model.italic
   result.xAccentColor = model.accentColor
   result.xObjectValue = model.objectValue
   result.xRepresentedObject = model.representedObject
@@ -309,7 +304,6 @@ proc documentTabModel*(item: DocumentTabItem): DocumentTabModel =
     enabled = item.xEnabled,
     closeable = item.xCloseable,
     modified = item.xModified,
-    italic = item.xItalic,
     style = item.xStyle,
     accentColor = item.xAccentColor,
     styleId = item.xStyleId,
@@ -348,12 +342,6 @@ proc modified*(item: DocumentTabItem): bool =
 
 proc `modified=`*(item: DocumentTabItem, modified: bool) =
   item.xModified = modified
-
-proc italic*(item: DocumentTabItem): bool =
-  item.xItalic
-
-proc `italic=`*(item: DocumentTabItem, italic: bool) =
-  item.xItalic = italic
 
 proc style*(item: DocumentTabItem): DocumentTabStyle =
   item.xStyle
@@ -1617,12 +1605,7 @@ proc drawDocumentTab(
       fill(accentColor),
       3.0'f32,
     )
-  let textParent =
-    if item.italic():
-      context.addRenderHorizontalShear(DefaultDrawLevel, parent, textRect, 0.16'f32)
-    else:
-      parent
-  context.addText(DefaultDrawLevel, textParent, textRect, displayTitle, tabTextStyle)
+  context.addText(DefaultDrawLevel, parent, textRect, displayTitle, tabTextStyle)
   tabs.drawCloseButton(
     context,
     parent,

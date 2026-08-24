@@ -250,7 +250,6 @@ suite "nimkit document tabs":
         "Alpha",
         objectValue = toObj("alpha"),
         modified = true,
-        italic = true,
         style = dtsUnderline,
         accentColor = accent,
         tooltip = "Alpha document",
@@ -266,7 +265,6 @@ suite "nimkit document tabs":
     check tabs[0.Natural].identifier == "doc-a"
     check tabs[0.Natural].objectValue.requireString() == "alpha"
     check tabs[0.Natural].modified
-    check tabs[0.Natural].italic
     check tabs[0.Natural].style == dtsUnderline
     check tabs[0.Natural].accentColor == accent
     check tabs[0.Natural].toolTip == "Alpha document"
@@ -295,21 +293,28 @@ suite "nimkit document tabs":
     for model in tabs.documentTabModels:
       check model.identifier != "doc-a"
 
-  test "italic document tabs render their title through a shear transform":
+  test "document tab style classes can select an italic typeface":
     let tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
-    tabs.documentTabModels = [initDocumentTabModel("preview", "Preview", italic = true)]
+    var builder = initThemeBuilder(initTheme())
+    let previewSelector = initStyleSelector(srDocumentTab, classes = @["preview"])
+    builder[previewSelector, StyleFontSlant] = styleKeyword(fsItalic)
+    let appearance = initAppearance(builder.finish())
+    tabs.appearance = appearance
+    tabs.documentTabModels =
+      [initDocumentTabModel("preview", "Preview", styleClasses = ["preview"])]
 
-    let renders = buildRenders(tabs)
-    var italicTransformFound = false
-    for node in renders[DefaultDrawLevel].nodes:
-      if node.kind == nkTransform and node.transform.useMatrix and
-          node.transform.matrix[1, 0] != 0.0'f32:
-        italicTransformFound = true
-        break
+    let textStyle = appearance.resolveTextStyle(
+      controlStyle(srDocumentTab, classes = @["preview"]),
+      color(0.0, 0.0, 0.0, 1.0),
+      insets(0.0),
+    )
 
-    check tabs[0.Natural].italic
-    check tabs.documentTabModels[0].italic
-    check italicTransformFound
+    check tabs[0.Natural].styleClasses == @["preview"]
+    check tabs.documentTabModels[0].styleClasses == @["preview"]
+    check textStyle.fontSlant == fsItalic
+    when not defined(useNativeDynlib):
+      let typefaceInfo = getTypefaceInfo(textStyle.textFont.font.typefaceId)
+      check typefaceInfo.italic or typefaceInfo.oblique
 
   test "document tab data sources reload and preserve selected identifiers":
     let

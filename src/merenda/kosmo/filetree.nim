@@ -120,7 +120,7 @@ proc fileTreeRowWasActivated(
   let path = tree.selectedItemIdentifier()
   if path.expandableDirectory():
     if tree.xOpenDisposition == fodPermanent:
-      tree.expandItem(path)
+      tree.toggleItem(path)
   elif fileExists(path) and not tree.xOnOpenFile.isNil:
     tree.xOnOpenFile(path, tree.xOpenDisposition)
 

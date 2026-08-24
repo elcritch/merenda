@@ -14,6 +14,7 @@ const
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoEditorStyleId* = "kosmo.editor"
+  KosmoPreviewTabStyleClass* = "kosmo-preview"
   KosmoCursorOpacity = 0.45'f32
   KosmoGridOverscanRows = 1
   KosmoMoeBottomAreaRows = 1
@@ -175,12 +176,17 @@ proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
     return
   var models: seq[nimkit.DocumentTabModel]
   for tab in tabs:
+    let styleClasses =
+      if tab.temporary:
+        @[KosmoPreviewTabStyleClass]
+      else:
+        @[]
     models.add nimkit.initDocumentTabModel(
       identifier = tab.id.tabIdentifier,
       title = tab.title,
       closeable = true,
       modified = tab.modified,
-      italic = tab.temporary,
+      styleClasses = styleClasses,
       tooltip = tab.filePath.get(tab.title),
     )
   view.syncingTabs = true
@@ -208,6 +214,9 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   var appearance = base
   let selector =
     nimkit.initStyleSelector(nimkit.srMonoTextView, id = KosmoEditorStyleId)
+  let previewTabSelector = nimkit.initStyleSelector(
+    nimkit.srDocumentTab, classes = @[KosmoPreviewTabStyleClass]
+  )
   let cursorColor =
     base.resolveMonoTextStyle(nimkit.controlStyle(nimkit.srMonoTextView)).cursorColor
   appearance.setStyle(
@@ -222,8 +231,13 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   appearance.setStyle(selector, nimkit.StyleCornerRadiusTopRight, 0.0'f32)
   appearance.setStyle(selector, nimkit.StyleCornerRadiusBottomLeft, 0.0'f32)
   appearance.setStyle(selector, nimkit.StyleCornerRadiusBottomRight, 0.0'f32)
+  appearance.setStyle(
+    previewTabSelector, nimkit.StyleFontSlant, nimkit.styleKeyword(nimkit.fsItalic)
+  )
   view.styleId = KosmoEditorStyleId
   view.appearance = appearance
+  if not view.documentTabs.isNil:
+    view.documentTabs.appearance = appearance
 
 proc refresh*(view: KosmoEditorView) =
   ## Render the current editor state into the synchronous cell-grid view.

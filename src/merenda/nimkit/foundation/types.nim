@@ -191,6 +191,11 @@ type
     frUI ## Proportional text used by interface controls and documents.
     frMonospace ## Fixed-width text used by code-oriented controls.
 
+  FontSlant* = enum
+    fsUpright
+    fsItalic
+    fsOblique
+
   LanguageTag* = distinct string ## Normalized BCP 47 text-language preference.
 
 const

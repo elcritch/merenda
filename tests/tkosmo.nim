@@ -225,6 +225,33 @@ suite "Kosmo":
     check tabs[2].temporary
     editor.close()
 
+  test "preview tabs use the Kosmo preview style class":
+    let path = getTempDir() / "merenda-kosmo-preview-style.txt"
+    writeFile(path, "preview")
+    defer:
+      if fileExists(path):
+        removeFile(path)
+
+    let
+      editor = newKosmoEditor()
+      view = newKosmoEditorView(editor)
+    view.frame = rect(0, 0, 240, 120)
+    check view.previewFile(path)
+
+    var model = view.documentTabs.documentTabModels()[0]
+    let previewStyle = view.documentTabs.effectiveAppearance.resolveTextStyle(
+      controlStyle(srDocumentTab, classes = model.styleClasses),
+      color(0.0, 0.0, 0.0, 1.0),
+      insets(0.0),
+    )
+    check KosmoPreviewTabStyleClass in model.styleClasses
+    check previewStyle.fontSlant == fsItalic
+
+    check view.openFile(path)
+    model = view.documentTabs.documentTabModels()[0]
+    check KosmoPreviewTabStyleClass notin model.styleClasses
+    editor.close()
+
   test "rejects binary files before rendering them as text":
     let path = getTempDir() / "merenda-kosmo-binary-file"
     writeFile(path, "\xCF\xFA\xED\xFE" & "\0".repeat(64))
@@ -395,7 +422,7 @@ suite "Kosmo":
     check not tree.editingState.active
     check openRequests == @[(filePath, fodPermanent)]
 
-  test "double clicking a file tree folder expands it":
+  test "double clicking a file tree folder toggles it":
     let
       root = createTempDir("merenda-kosmo-tree-folder-", "")
       folder = root / "folder"
@@ -429,6 +456,11 @@ suite "Kosmo":
     check window.mouseUpAt(point, clickCount = 2)
     check tree.isItemExpanded(folder)
     check tree.rowForItem(nestedFile) >= 0
+
+    check window.mouseDownAt(point, clickCount = 2)
+    check window.mouseUpAt(point, clickCount = 2)
+    check not tree.isItemExpanded(folder)
+    check tree.rowForItem(nestedFile) < 0
 
   test "opening files and folders updates the file-tree root":
     let

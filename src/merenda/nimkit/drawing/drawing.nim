@@ -1,4 +1,4 @@
-import std/[tables, unicode]
+import std/[os, strutils, tables, unicode]
 
 import pkg/bumpy
 
@@ -45,6 +45,16 @@ const
   PopupDrawLevel* = 100.ZLevel
   TooltipDrawLevel* = 110.ZLevel
   DefaultTypefaceFallbackNames* = ["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
+  SlantedTypefaceFallbackNames =
+    when defined(macosx):
+      ["SFNSItalic.ttf", "Arial Italic.ttf", "Helvetica Oblique"]
+    elif defined(windows):
+      ["segoeuii.ttf", "ariali.ttf", "timesi.ttf"]
+    else:
+      [
+        "NotoSans-Italic.ttf", "DejaVuSans-Oblique.ttf", "LiberationSans-Italic.ttf",
+        "Ubuntu-Italic.ttf",
+      ]
   TextEllipsis = "…"
 
 type DrawContext* = ref object
@@ -63,15 +73,44 @@ var defaultTypefaceIds {.threadvar.}: Table[string, TypefaceId]
 when AutomaticFontFallbackEnabled:
   installAutomaticFontFallbackResolver()
 
+proc typefaceVariantNames(fontName: string, slant: FontSlant): seq[string] =
+  if slant == fsUpright:
+    return @[fontName]
+  let parts = fontName.splitFile()
+  var stem = parts.name
+  let lowerStem = stem.toLowerAscii()
+  if lowerStem.endsWith("italic") or lowerStem.endsWith("oblique"):
+    return @[fontName]
+  for suffix in ["-Regular", "_Regular", " Regular", "Regular"]:
+    if stem.endsWith(suffix):
+      stem.setLen(stem.len - suffix.len)
+      break
+  let variants =
+    if slant == fsOblique:
+      ["Oblique", "Italic"]
+    else:
+      ["Italic", "Oblique"]
+  for variant in variants:
+    result.add parts.dir / (stem & "-" & variant & parts.ext)
+    result.add parts.dir / (stem & " " & variant & parts.ext)
+
 proc defaultTypefaceRequest(
-    fontName = defaultFontName()
+    fontName = defaultFontName(), slant = fsUpright
 ): tuple[name: string, fallbackNames: seq[string]] =
-  result.name =
+  let baseName =
     if fontName.len > 0:
       fontName
     else:
       defaultFontName()
-  if result.name != DefaultFontName:
+  let variants = baseName.typefaceVariantNames(slant)
+  result.name = variants[0]
+  for index in 1 ..< variants.len:
+    result.fallbackNames.add variants[index]
+  if slant != fsUpright:
+    result.fallbackNames.add SlantedTypefaceFallbackNames
+  if result.name != baseName:
+    result.fallbackNames.add baseName
+  if baseName != DefaultFontName:
     result.fallbackNames.add DefaultFontName
   result.fallbackNames.add DefaultTypefaceFallbackNames
 
@@ -87,7 +126,10 @@ proc toFigRect(rect: nimkitTypes.Rect): bumpy.Rect =
   bumpy.rect(rect.origin.x, rect.origin.y, rect.size.width, rect.size.height)
 
 proc defaultFont(
-    size: float32, fontName = defaultFontName(), language = defaultLanguageTag()
+    size: float32,
+    fontName = defaultFontName(),
+    language = defaultLanguageTag(),
+    slant = fsUpright,
 ): FontRef =
   let
     resolvedLanguage =
@@ -95,7 +137,7 @@ proc defaultFont(
         defaultLanguageTag()
       else:
         language
-    request = defaultTypefaceRequest(fontName)
+    request = defaultTypefaceRequest(fontName, slant)
     cacheKey = request.defaultTypefaceCacheKey()
   if defaultTypefaceIds.len == 0:
     defaultTypefaceIds = initTable[string, TypefaceId]()
@@ -107,7 +149,7 @@ proc defaultFont(
   fontRef(font)
 
 proc textFont*(style: TextStyle): FontRef =
-  defaultFont(style.fontSize, style.fontName, style.language)
+  defaultFont(style.fontSize, style.fontName, style.language, style.fontSlant)
 
 proc fontFor(style: TextStyle): FontRef =
   style.textFont()
@@ -266,7 +308,9 @@ proc textLayout*(
   var spans: seq[(FontStyle, string)]
   if storage.isNil or storage.len == 0:
     let attributes = defaultTextAttributes(style.color, style.fontSize)
-    var font = defaultFont(attributes.fontSize, style.fontName, style.language).font
+    var font = defaultFont(
+      attributes.fontSize, style.fontName, style.language, style.fontSlant
+    ).font
     font.underline = attributes.hasUnderline
     font.strikethrough = attributes.hasStrikethrough
     spans.add((fs(font, fill(style.color.rgba)), ""))
@@ -277,7 +321,8 @@ proc textLayout*(
           if attributes.fontName.len > 0: attributes.fontName else: style.fontName
         language =
           if attributes.language.isAutomatic: style.language else: attributes.language
-      var font = defaultFont(attributes.fontSize, fontName, language).font
+      var font =
+        defaultFont(attributes.fontSize, fontName, language, style.fontSlant).font
       font.underline = attributes.hasUnderline
       font.strikethrough = attributes.hasStrikethrough
       spans.add((fs(font, fill(attributes.foregroundColor.rgba)), text))
@@ -742,30 +787,6 @@ proc addRenderTranslation*(
     translation: nimkitTypes.Point,
 ): FigIdx {.discardable.} =
   context.addRenderTranslation(context.xLayer, parent, rect, translation)
-
-proc addRenderHorizontalShear*(
-    context: DrawContext,
-    layer: ZLevel,
-    parent: FigIdx,
-    rect: nimkitTypes.Rect,
-    shear: float32,
-): FigIdx {.discardable.} =
-  ## Add a transform that shears its children around the bottom of `rect`.
-  let renderedRect = context.renderRectFor(rect)
-  var matrix = mat4()
-  matrix[0, 0] = 1.0'f32
-  matrix[1, 0] = -shear
-  matrix[1, 1] = 1.0'f32
-  matrix[3, 0] = shear * renderedRect.maxY
-  context.addFig(
-    layer,
-    parent,
-    Fig(
-      kind: nkTransform,
-      screenBox: renderedRect.toFigRect,
-      transform: TransformStyle(matrix: matrix, useMatrix: true),
-    ),
-  )
 
 proc addRectangle*(
     context: DrawContext, rect: nimkitTypes.Rect, fillValue: Fill
