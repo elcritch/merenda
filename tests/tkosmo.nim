@@ -63,6 +63,8 @@ suite "Kosmo":
     check outcome.requestedRows == 1
     check outcome.appliedRows == 1
     check view.gridOffset.y == 0.0'f32
+    check not editor.cursor().visible
+    check not view.cursorVisible
     editor.close()
 
   test "editor grid overscans partial rows and columns":
