@@ -93,6 +93,7 @@ type
     xFontSize: float32
     xTextColor: nimkitTypes.Color
     xCursorColor: nimkitTypes.Color
+    xGridOffset: nimkitTypes.Point
 
 func toAccessibilityTextRange(range: TextRange): AccessibilityTextRange =
   initAccessibilityTextRange(int(range.location), int(range.length))
@@ -329,6 +330,11 @@ proc monoTextInsets(view: MonoTextView, style: MonoTextStyle): EdgeInsets =
     return insets(view.xPadding)
   style.text.insets
 
+proc monoTextGridInsets(view: MonoTextView, style: MonoTextStyle): EdgeInsets =
+  result = view.monoTextInsets(style)
+  result.left += view.xGridOffset.x
+  result.top += view.xGridOffset.y
+
 proc resolvedTextColor(view: MonoTextView, style: MonoTextStyle): nimkitTypes.Color =
   if view.xTextColor.a > 0.0'f32: view.xTextColor else: style.text.color
 
@@ -341,7 +347,7 @@ proc rowColumnAtPoint*(
   let
     metrics = view.monoTextMetrics()
     style = view.monoTextStyle()
-    textInsets = view.monoTextInsets(style)
+    textInsets = view.monoTextGridInsets(style)
   result.row = int(floor(max(point.y - textInsets.top, 0.0'f32) / metrics.lineHeight))
   result.column =
     int(floor(max(point.x - textInsets.left, 0.0'f32) / metrics.cellWidth))
@@ -683,6 +689,17 @@ proc `cursorColor=`*(view: MonoTextView, color: nimkitTypes.Color) =
   if view.xCursorColor == color:
     return
   view.xCursorColor = color
+  view.needsDisplay = true
+
+proc gridOffset*(view: MonoTextView): nimkitTypes.Point =
+  ## Return the visual translation applied to the cell grid and cursor.
+  view.xGridOffset
+
+proc `gridOffset=`*(view: MonoTextView, offset: nimkitTypes.Point) =
+  ## Translate grid content without moving the view's themed surface.
+  if view.xGridOffset == offset:
+    return
+  view.xGridOffset = offset
   view.needsDisplay = true
 
 proc fontName*(view: MonoTextView): string =
@@ -1096,7 +1113,7 @@ proc characterRect*(view: MonoTextView, index: int): nimkitTypes.Rect =
     position = view.rowColumnForTextIndex(index)
     metrics = view.monoTextMetrics()
     style = view.monoTextStyle()
-    textInsets = view.monoTextInsets(style)
+    textInsets = view.monoTextGridInsets(style)
   view.cellRect(position.row, position.column, metrics, textInsets)
 
 proc selectionRects*(view: MonoTextView, range: TextRange): seq[nimkitTypes.Rect] =
@@ -1143,7 +1160,7 @@ proc lineBounds*(view: MonoTextView, line: int): nimkitTypes.Rect =
   let
     metrics = view.monoTextMetrics()
     style = view.monoTextStyle()
-    textInsets = view.monoTextInsets(style)
+    textInsets = view.monoTextGridInsets(style)
     width = max(view.xLines[line].cells.len, 1).float32 * metrics.cellWidth
   rect(
     textInsets.left,
@@ -1223,7 +1240,7 @@ proc drawMonoText(view: MonoTextView, context: DrawContext) =
     return
   let
     style = context.appearance.resolveMonoTextStyle(view.monoTextStyleContext())
-    textInsets = view.monoTextInsets(style)
+    textInsets = view.monoTextGridInsets(style)
     textColor = view.resolvedTextColor(style)
     cursorColor = view.resolvedCursorColor(style)
     metrics = view.monoTextMetrics()

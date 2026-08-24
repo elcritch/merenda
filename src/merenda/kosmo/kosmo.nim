@@ -15,6 +15,8 @@ const
   KosmoStatusBarHeight* = 22.0'f32
   KosmoEditorStyleId* = "kosmo.editor"
   KosmoCursorOpacity = 0.45'f32
+  KosmoGridOverscanRows = 1
+  KosmoMoeBottomAreaRows = 1
   KosmoTabIdentifierPrefix = "kosmo.buffer."
 
 type
@@ -23,7 +25,7 @@ type
     documentTabs*: nimkit.DocumentTabs
     renderBuffer: RenderBuffer
     statusLabel: nimkit.Label
-    scrollRemainder: float32
+    scrollOffsetRows: float32
     lastTabs: seq[KosmoTab]
     syncingTabs: bool
     tabsDelegate: KosmoEditorTabsHandler
@@ -229,8 +231,12 @@ proc refresh*(view: KosmoEditorView) =
     return
   let
     bounds = view.bounds()
-    columns = max(int(bounds.size.width / metrics.cellWidth), 1)
-    rows = max(int(bounds.size.height / metrics.lineHeight), 1)
+    columns = max(int(ceil(bounds.size.width / metrics.cellWidth)), 1)
+    rows = max(
+      int(ceil(bounds.size.height / metrics.lineHeight)) + KosmoGridOverscanRows +
+        KosmoMoeBottomAreaRows,
+      1,
+    )
   if view.renderBuffer.width != columns or view.renderBuffer.height != rows:
     view.renderBuffer.resize(columns.Natural, rows.Natural)
   view.editor.render(view.renderBuffer)
@@ -239,6 +245,8 @@ proc refresh*(view: KosmoEditorView) =
     for column in 0 ..< columns:
       cells[row * columns + column] = view.renderBuffer.cell(column, row).toMonoTextCell
   view.replaceGrid(rows, columns, cells)
+  view.gridOffset =
+    nimkit.initPoint(0.0'f32, -view.scrollOffsetRows * metrics.lineHeight)
   view.syncChrome()
 
 proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
@@ -257,21 +265,21 @@ proc scrollBy*(
     column = 0,
     modifiers: set[nimkit.KeyModifier] = {},
 ): ScrollOutcome =
-  ## Accumulate a wheel/trackpad delta and dispatch complete physical rows to Moe.
-  view.scrollRemainder -= deltaY
-  let rows =
-    if view.scrollRemainder >= 1.0'f32:
-      int(floor(view.scrollRemainder))
-    elif view.scrollRemainder <= -1.0'f32:
-      int(ceil(view.scrollRemainder))
-    else:
-      0
+  ## Translate fractional wheel input and commit complete physical rows to Moe.
+  view.scrollOffsetRows -= deltaY
+  let rows = int(floor(view.scrollOffsetRows))
   if rows == 0:
+    result.handled = true
+    let metrics = view.monoTextMetrics()
+    view.gridOffset =
+      nimkit.initPoint(0.0'f32, -view.scrollOffsetRows * metrics.lineHeight)
     return
-  view.scrollRemainder -= rows.float32
+  view.scrollOffsetRows -= rows.float32
   result = view.editor.handleScrollInput(
     initScrollInput(row, column, rows, modifiers.toMoeModifiers)
   )
+  if result.appliedRows != rows:
+    view.scrollOffsetRows = 0.0'f32
   view.refresh()
 
 proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool =
@@ -398,6 +406,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
     renderBuffer: newRenderBuffer(80, 24),
   )
   result.initMonoTextViewFields(editable = true)
+  result.clipsToBounds = true
   result.padding = 0.0'f32
   result.fontName = nimkit.DefaultMonoFontName
   result.fontSize = 14.0'f32

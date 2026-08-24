@@ -111,6 +111,22 @@ suite "nimkit mono text views":
     check not root.needsLayout()
     check not view.needsLayout()
 
+  test "grid offset translates cell geometry without changing the view frame":
+    let view = newMonoTextViewer("first\nsecond", frame = rect(0, 0, 240, 120))
+    view.padding = 0.0'f32
+    let
+      metrics = view.monoTextMetrics()
+      originalFrame = view.frame()
+      offset = initPoint(4.0'f32, -metrics.lineHeight / 2.0'f32)
+
+    view.gridOffset = offset
+
+    check view.gridOffset == offset
+    check view.frame() == originalFrame
+    check view.lineBounds(0).origin == offset
+    check view.rowColumnAtPoint(initPoint(4.0'f32, metrics.lineHeight * 0.75'f32)).row ==
+      1
+
   test "editor handles cursor movement insertion and deletion":
     let
       window = newWindow("Mono editor", frame = rect(0, 0, 240, 120))

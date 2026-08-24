@@ -54,11 +54,28 @@ suite "Kosmo":
     view.refresh()
 
     for _ in 0 ..< 3:
-      check view.scrollBy(-0.25'f32, row = 2, column = 2).requestedRows == 0
+      let outcome = view.scrollBy(-0.25'f32, row = 2, column = 2)
+      check outcome.handled
+      check outcome.requestedRows == 0
+      check view.gridOffset.y < 0.0'f32
     let outcome = view.scrollBy(-0.25'f32, row = 2, column = 2)
     check outcome.handled
     check outcome.requestedRows == 1
     check outcome.appliedRows == 1
+    check view.gridOffset.y == 0.0'f32
+    editor.close()
+
+  test "editor grid overscans partial rows and columns":
+    let
+      editor = newKosmoEditor(text = "one\ntwo\nthree\nfour\nfive")
+      view = newKosmoEditorView(editor)
+      metrics = view.monoTextMetrics()
+    view.frame = rect(0, 0, metrics.cellWidth * 5.5'f32, metrics.lineHeight * 3.5'f32)
+    view.refresh()
+
+    check view.maxColumnCount == 6
+    check view.lineCount == 6
+    check view.clipsToBounds
     editor.close()
 
   test "editor view follows Moe's rendered cursor position":
