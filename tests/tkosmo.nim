@@ -221,6 +221,8 @@ suite "Kosmo":
       controlStyle(srMonoTextView, id = frontend.editorView.styleId)
     )
     check editorStyle.cursorColor.a == 0.45'f32
+    check editorStyle.box.focusRingWidth == 0.0'f32
+    check editorStyle.box.focusRingInset == 0.0'f32
     check editorStyle.box.cornerRadius == 0.0'f32
     check editorStyle.box.cornerRadii.isZero
 

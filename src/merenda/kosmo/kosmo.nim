@@ -212,6 +212,8 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     nimkit.StyleCursorColor,
     nimkit.color(cursorColor.r, cursorColor.g, cursorColor.b, KosmoCursorOpacity),
   )
+  appearance.setStyle(selector, nimkit.StyleFocusRingWidth, 0.0'f32)
+  appearance.setStyle(selector, nimkit.StyleFocusRingInset, 0.0'f32)
   appearance.setStyle(selector, nimkit.StyleCornerRadius, 0.0'f32)
   appearance.setStyle(selector, nimkit.StyleCornerRadiusTopLeft, 0.0'f32)
   appearance.setStyle(selector, nimkit.StyleCornerRadiusTopRight, 0.0'f32)
