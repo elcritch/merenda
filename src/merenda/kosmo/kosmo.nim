@@ -9,18 +9,32 @@ import pkg/celina as celina
 
 export filetree, moe
 
-const KosmoOpenFileAction* = "kosmo.openFile"
+const
+  KosmoOpenFileAction* = "kosmo.openFile"
+  KosmoTabBarHeight* = 34.0'f32
+  KosmoStatusBarHeight* = 22.0'f32
+  KosmoTabIdentifierPrefix = "kosmo.buffer."
 
 type
   KosmoEditorView* = ref object of nimkit.MonoTextView
     editor*: KosmoEditor
+    documentTabs*: nimkit.DocumentTabs
     renderBuffer: RenderBuffer
     statusLabel: nimkit.Label
     scrollRemainder: float32
+    lastTabs: seq[KosmoTab]
+    syncingTabs: bool
+    tabsDelegate: KosmoEditorTabsHandler
+
+  KosmoEditorTabsHandler = ref object of nimkit.Responder
+    editorView: WeakRef[KosmoEditorView]
+
+  KosmoEditorPane* = ref object of nimkit.View
+    documentTabs*: nimkit.DocumentTabs
+    editorView*: KosmoEditorView
 
   KosmoContentView = ref object of nimkit.View
     splitView: nimkit.SplitView
-    editorView: KosmoEditorView
     statusLabel: nimkit.Label
     setInitialDivider: bool
 
@@ -28,6 +42,9 @@ type
     application*: nimkit.Application
     window*: nimkit.Window
     editorView*: KosmoEditorView
+    editorPane*: KosmoEditorPane
+    documentTabs*: nimkit.DocumentTabs
+    statusLabel*: nimkit.Label
     fileTree*: KosmoFileTree
     splitView*: nimkit.SplitView
     contentView*: nimkit.MenuRootView
@@ -116,6 +133,69 @@ func toMonoTextCell(cell: RenderCell): nimkit.MonoTextCell =
     background.kind != celina.Default,
   )
 
+func tabIdentifier(id: KosmoBufferId): string =
+  KosmoTabIdentifierPrefix & $id
+
+proc parseTabIdentifier(identifier: string, id: var KosmoBufferId): bool =
+  if not identifier.startsWith(KosmoTabIdentifierPrefix):
+    return
+  try:
+    id = KosmoBufferId(parseInt(identifier[KosmoTabIdentifierPrefix.len .. ^1]))
+    return true
+  except ValueError:
+    discard
+
+func statusText(status: KosmoStatus, tabs: openArray[KosmoTab]): string =
+  var parts: seq[string]
+  if status.modeLabel.len > 0:
+    parts.add status.modeLabel
+  for tab in tabs:
+    if tab.active:
+      parts.add tab.title
+      break
+  if status.message.len > 0:
+    parts.add status.message
+  if status.gitBranch.len > 0:
+    var git = "Git: " & status.gitBranch
+    if status.gitAdded != 0:
+      git.add " +" & $status.gitAdded
+    if status.gitModified != 0:
+      git.add " ~" & $status.gitModified
+    if status.gitDeleted != 0:
+      git.add " -" & $status.gitDeleted
+    parts.add git
+  parts.join("  •  ")
+
+proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
+  if view.documentTabs.isNil or tabs == view.lastTabs:
+    return
+  var models: seq[nimkit.DocumentTabModel]
+  for tab in tabs:
+    models.add nimkit.initDocumentTabModel(
+      identifier = tab.id.tabIdentifier,
+      title = tab.title,
+      closeable = true,
+      modified = tab.modified,
+      tooltip = tab.filePath.get(tab.title),
+    )
+  view.syncingTabs = true
+  defer:
+    view.syncingTabs = false
+  view.documentTabs.documentTabModels = models
+  for tab in tabs:
+    if tab.active:
+      view.documentTabs.selectedDocumentTabIdentifier = tab.id.tabIdentifier
+      break
+  view.lastTabs = tabs
+
+proc syncChrome(view: KosmoEditorView) =
+  let tabs = view.editor.tabs()
+  view.syncTabs(tabs)
+  if not view.statusLabel.isNil:
+    let text = view.editor.status().statusText(tabs)
+    if view.statusLabel.text != text:
+      view.statusLabel.text = text
+
 proc refresh*(view: KosmoEditorView) =
   ## Render the current editor state into the synchronous cell-grid view.
   let metrics = view.monoTextMetrics()
@@ -128,6 +208,7 @@ proc refresh*(view: KosmoEditorView) =
   if view.renderBuffer.width != columns or view.renderBuffer.height != rows:
     view.renderBuffer.resize(columns.Natural, rows.Natural)
   view.editor.render(view.renderBuffer)
+  view.syncChrome()
   var cells = newSeq[nimkit.MonoTextCell](rows * columns)
   for row in 0 ..< rows:
     for column in 0 ..< columns:
@@ -138,8 +219,6 @@ proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load a file selected by the frontend and refresh the cell grid.
   let outcome = view.editor.openFile(path)
   if outcome.loaded:
-    if not view.statusLabel.isNil:
-      view.statusLabel.text = path
     view.refresh()
     return true
   if not view.statusLabel.isNil:
@@ -212,8 +291,86 @@ proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool
   of nimkit.mtreFlagsChanged:
     true
 
+proc targetView(handler: KosmoEditorTabsHandler): KosmoEditorView =
+  if not handler.editorView.isNil:
+    return handler.editorView[]
+
+protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
+  method didSelectDocumentTab(
+      handler: KosmoEditorTabsHandler,
+      tabs: nimkit.DocumentTabs,
+      item: nimkit.DocumentTabItem,
+  ) =
+    discard tabs
+    let view = handler.targetView()
+    if view.isNil:
+      return
+    if view.syncingTabs:
+      return
+    var id: KosmoBufferId
+    if item.identifier.parseTabIdentifier(id):
+      if not view.editor.selectTab(id):
+        view.lastTabs.setLen(0)
+      view.refresh()
+
+  method shouldCloseDocumentTab(
+      handler: KosmoEditorTabsHandler,
+      tabs: nimkit.DocumentTabs,
+      item: nimkit.DocumentTabItem,
+      index: int,
+  ): bool =
+    discard tabs
+    discard index
+    let view = handler.targetView()
+    if view.isNil:
+      return
+    if view.syncingTabs:
+      return
+    var id: KosmoBufferId
+    if not item.identifier.parseTabIdentifier(id):
+      return
+    let outcome = view.editor.closeTab(id)
+    if not outcome.closed and not view.statusLabel.isNil:
+      view.statusLabel.text = outcome.message
+    outcome.closed
+
+  method didCloseDocumentTab(
+      handler: KosmoEditorTabsHandler,
+      tabs: nimkit.DocumentTabs,
+      item: nimkit.DocumentTabItem,
+      index: int,
+  ) =
+    discard tabs
+    discard item
+    discard index
+    let view = handler.targetView()
+    if not view.isNil:
+      view.refresh()
+
+  method didMoveDocumentTab(
+      handler: KosmoEditorTabsHandler,
+      tabs: nimkit.DocumentTabs,
+      item: nimkit.DocumentTabItem,
+      fromIndex: int,
+      toIndex: int,
+  ) =
+    discard tabs
+    discard fromIndex
+    let view = handler.targetView()
+    if view.isNil:
+      return
+    var id: KosmoBufferId
+    if not item.identifier.parseTabIdentifier(id) or
+        not view.editor.moveTab(id, toIndex.Natural):
+      view.lastTabs.setLen(0)
+    view.refresh()
+
 proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
-  result = KosmoEditorView(editor: editor, renderBuffer: newRenderBuffer(80, 24))
+  result = KosmoEditorView(
+    editor: editor,
+    documentTabs: nimkit.newDocumentTabs(),
+    renderBuffer: newRenderBuffer(80, 24),
+  )
   result.initMonoTextViewFields(editable = true)
   result.padding = 0.0'f32
   result.fontName = nimkit.DefaultMonoFontName
@@ -225,36 +382,60 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   let editorView = result
   result.rawEventHandler = proc(event: nimkit.MonoTextRawEvent): bool =
     editorView.handleRawEvent(event)
+  result.tabsDelegate = KosmoEditorTabsHandler(editorView: result.unsafeWeakRef())
+  discard result.tabsDelegate.withProtocol(KosmoEditorTabsDelegate)
+  result.documentTabs.delegate = result.tabsDelegate
+  result.syncChrome()
+
+protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
+  method layoutSubviews(pane: KosmoEditorPane) =
+    let bounds = pane.bounds()
+    pane.documentTabs.setFrameFromLayout(
+      nimkit.rect(0, 0, bounds.size.width, min(KosmoTabBarHeight, bounds.size.height))
+    )
+    pane.editorView.setFrameFromLayout(
+      nimkit.rect(
+        0,
+        min(KosmoTabBarHeight, bounds.size.height),
+        bounds.size.width,
+        max(bounds.size.height - KosmoTabBarHeight, 1.0'f32),
+      )
+    )
+    pane.editorView.refresh()
+
+proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
+  result =
+    KosmoEditorPane(documentTabs: editorView.documentTabs, editorView: editorView)
+  result.initViewFields()
+  result.addSubview(result.documentTabs)
+  result.addSubview(editorView)
+  discard result.withProtocol(KosmoEditorPaneLayout)
 
 protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(content: KosmoContentView) =
     let bounds = content.bounds()
-    const statusHeight = 22.0'f32
     content.statusLabel.setFrameFromLayout(
       nimkit.rect(
         0,
-        max(bounds.size.height - statusHeight, 0.0'f32),
+        max(bounds.size.height - KosmoStatusBarHeight, 0.0'f32),
         bounds.size.width,
-        statusHeight,
+        KosmoStatusBarHeight,
       )
     )
     content.splitView.setFrameFromLayout(
       nimkit.rect(
-        0, 0, bounds.size.width, max(bounds.size.height - statusHeight, 1.0'f32)
+        0, 0, bounds.size.width, max(bounds.size.height - KosmoStatusBarHeight, 1.0'f32)
       )
     )
     if not content.setInitialDivider and bounds.size.width > 0.0'f32:
       content.splitView.setPositionOfDivider(0, min(bounds.size.width * 0.25, 260.0))
       content.setInitialDivider = true
     content.splitView.layoutSubtreeIfNeeded()
-    content.editorView.refresh()
 
 proc newKosmoContentView(
-    splitView: nimkit.SplitView, editorView: KosmoEditorView, statusLabel: nimkit.Label
+    splitView: nimkit.SplitView, statusLabel: nimkit.Label
 ): KosmoContentView =
-  result = KosmoContentView(
-    splitView: splitView, editorView: editorView, statusLabel: statusLabel
-  )
+  result = KosmoContentView(splitView: splitView, statusLabel: statusLabel)
   result.initViewFields()
   result.addSubview(splitView)
   result.addSubview(statusLabel)
@@ -282,6 +463,7 @@ proc newKosmoApplication*(
 ): KosmoApplication =
   let
     editorView = newKosmoEditorView()
+    editorPane = newKosmoEditorPane(editorView)
     fileTree = newKosmoFileTree(getCurrentDir())
     splitView = nimkit.newSplitView(nimkit.laHorizontal)
     mainMenu = nimkit.newMenu("Main")
@@ -304,17 +486,21 @@ proc newKosmoApplication*(
   fileTree.onOpenFile = proc(path: string) =
     discard editorView.openFile(path)
   splitView.addPane(fileTree, minSize = 160.0'f32, maxSize = 420.0'f32)
-  splitView.addPane(editorView, minSize = 320.0'f32)
+  splitView.addPane(editorPane, minSize = 320.0'f32)
 
   let
     statusLabel = nimkit.newStatusLabel("Ready")
-    documentView = newKosmoContentView(splitView, editorView, statusLabel)
+    documentView = newKosmoContentView(splitView, statusLabel)
     contentView = nimkit.newMenuRootView(mainMenu, documentView)
   editorView.statusLabel = statusLabel
+  editorView.syncChrome()
   result = KosmoApplication(
     application: app,
     window: nimkit.newWindow("Kosmo", nimkit.rect(120, 100, 1024, 720)),
     editorView: editorView,
+    editorPane: editorPane,
+    documentTabs: editorView.documentTabs,
+    statusLabel: statusLabel,
     fileTree: fileTree,
     splitView: splitView,
     contentView: contentView,

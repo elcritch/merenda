@@ -9,7 +9,12 @@ import std/[options, os]
 import pkg/celina
 import pkg/results as pkgResults
 
-import moepkg/[editor, editor_frame, frontend_input, handler, config, encoding]
+import
+  moepkg/[
+    editor, editor_buffers, editor_display, editor_frame, frontend_input, handler,
+    config, encoding,
+  ]
+from moepkg/buffer/core import BufferId
 import moepkg/key_bindings/registry as moeKeys
 
 when hasAsyncSupport:
@@ -18,6 +23,31 @@ when hasAsyncSupport:
 type
   KosmoEditor* = ref object
     editor: Editor
+
+  KosmoBufferId* = distinct int
+    ## Stable identity for a Moe buffer without exposing Moe's buffer types.
+
+  KosmoTab* = object
+    ## Frontend-neutral information for one tab in the active editor window.
+    id*: KosmoBufferId
+    title*: string
+    filePath*: Option[string]
+    modified*: bool
+    readOnly*: bool
+    active*: bool
+
+  KosmoStatus* = object
+    ## A consistent snapshot of the status information Kosmo displays.
+    modeLabel*: string
+    message*: string
+    gitBranch*: string
+    gitAdded*: int
+    gitModified*: int
+    gitDeleted*: int
+
+  KosmoTabCloseResult* = object
+    closed*: bool
+    message*: string
 
   RenderBuffer* = object
     buffer: Buffer
@@ -100,7 +130,10 @@ proc newKosmoEditor*(text = ""): KosmoEditor =
   ## Create an editor with Moe's default configuration and optional initial text.
   var config = newEditorConfig()
   config.standard.mouse = true
+  config.standard.statusLine = false
+  config.tabLine.enable = false
   result = KosmoEditor(editor: newEditor(config))
+  result.editor.setFrontendGitStatusEnabled(true)
   if text.len > 0:
     discard result.editor.handleKeyCombo(moeKeys.toKeyCombo('i'))
     discard result.editor.handleTextInput(text)
@@ -113,10 +146,11 @@ proc close*(editor: KosmoEditor) =
     editor.editor = nil
 
 proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
-  ## Load `path` into the active Moe buffer.
+  ## Open `path` in a Moe buffer, reusing the pristine initial buffer.
   if editor.isNil or editor.editor.isNil:
     return FileOpenResult(message: "The editor is closed.")
-  if fileExists(path):
+  let pathExists = fileExists(path)
+  if pathExists:
     try:
       if detectCharacterEncoding(readFile(path)) == CharacterEncoding.unknown:
         return FileOpenResult(
@@ -124,10 +158,82 @@ proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
         )
     except IOError as error:
       return FileOpenResult(message: error.msg)
-  let outcome = editor.editor.loadFile(path)
+  let buffers = editor.editor.activeWindowBuffers()
+  let pristineInitialBuffer =
+    buffers.len == 1 and buffers[0].title == "No Name" and buffers[0].filePath.isNone and
+    not buffers[0].modified
+  let outcome =
+    if pristineInitialBuffer and pathExists:
+      editor.editor.loadFile(path)
+    else:
+      editor.editor.editFile(path)
   if pkgResults.isErr(outcome):
     return FileOpenResult(message: outcome.error)
+  if pristineInitialBuffer and not pathExists:
+    discard editor.editor.closeBuffer(buffers[0].id)
   FileOpenResult(loaded: true)
+
+func `$`*(id: KosmoBufferId): string {.inline.} =
+  $int(id)
+
+func `==`*(left, right: KosmoBufferId): bool {.borrow.}
+
+func toKosmoBufferId(id: BufferId): KosmoBufferId {.inline.} =
+  KosmoBufferId(int(id))
+
+func toMoeBufferId(id: KosmoBufferId): BufferId {.inline.} =
+  BufferId(int(id))
+
+proc tabs*(editor: KosmoEditor): seq[KosmoTab] =
+  ## Return the ordered tabs belonging to Moe's active window.
+  if editor.isNil or editor.editor.isNil:
+    return
+  for buffer in editor.editor.activeWindowBuffers():
+    result.add KosmoTab(
+      id: buffer.id.toKosmoBufferId,
+      title: buffer.title,
+      filePath: buffer.filePath,
+      modified: buffer.modified,
+      readOnly: buffer.readOnly,
+      active: buffer.active,
+    )
+
+proc selectTab*(editor: KosmoEditor, id: KosmoBufferId): bool {.discardable.} =
+  ## Activate the tab identified by `id`.
+  if editor.isNil or editor.editor.isNil:
+    return
+  editor.editor.activateBuffer(id.toMoeBufferId)
+
+proc closeTab*(editor: KosmoEditor, id: KosmoBufferId): KosmoTabCloseResult =
+  ## Close a tab unless Moe rejects the operation, for example when modified.
+  if editor.isNil or editor.editor.isNil:
+    return KosmoTabCloseResult(message: "The editor is closed.")
+  let outcome = editor.editor.closeBuffer(id.toMoeBufferId)
+  if pkgResults.isErr(outcome):
+    return KosmoTabCloseResult(message: outcome.error)
+  KosmoTabCloseResult(closed: true)
+
+proc moveTab*(
+    editor: KosmoEditor, id: KosmoBufferId, destination: Natural
+): bool {.discardable.} =
+  ## Move a tab to a zero-based position in the active window.
+  if editor.isNil or editor.editor.isNil:
+    return
+  editor.editor.moveBuffer(id.toMoeBufferId, destination)
+
+proc status*(editor: KosmoEditor): KosmoStatus =
+  ## Return the status values maintained by Moe for an embedding frontend.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let snapshot = editor.editor.frontendStatus()
+  KosmoStatus(
+    modeLabel: snapshot.modeLabel,
+    message: snapshot.message,
+    gitBranch: snapshot.git.branch,
+    gitAdded: snapshot.git.added,
+    gitModified: snapshot.git.modified,
+    gitDeleted: snapshot.git.deleted,
+  )
 
 proc newRenderBuffer*(width, height: Natural): RenderBuffer =
   ## Create a cell grid that a Kosmo editor can render into.

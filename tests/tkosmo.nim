@@ -16,6 +16,8 @@ suite "Kosmo":
     editor.render(buffer)
 
     check "hello" in buffer.renderedText
+    check "NORMAL" notin buffer.renderedText
+    check "No Name" notin buffer.renderedText
     editor.close()
 
   test "text input and physical keys use Moe's frontend API":
@@ -75,6 +77,42 @@ suite "Kosmo":
     check "opened from disk" in buffer.renderedText
     editor.close()
 
+  test "facade exposes ordered tabs and rejects closing modified buffers":
+    let
+      root = createTempDir("merenda-kosmo-tabs-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let editor = newKosmoEditor()
+    check editor.openFile(firstPath).loaded
+    check editor.openFile(secondPath).loaded
+
+    var tabs = editor.tabs()
+    check tabs.len == 2
+    check tabs[0].title == "first.txt"
+    check tabs[1].title == "second.txt"
+    check tabs[1].active
+    check editor.selectTab(tabs[0].id)
+    check editor.tabs()[0].active
+    check editor.moveTab(tabs[1].id, 0)
+    tabs = editor.tabs()
+    check tabs[0].title == "second.txt"
+
+    check editor.selectTab(tabs[1].id)
+    check editor.handleKey("i")
+    check editor.handleTextInput("changed")
+    check editor.handleKey("Esc")
+    let closeResult = editor.closeTab(tabs[1].id)
+    check not closeResult.closed
+    check "No write since last change" in closeResult.message
+    editor.close()
+
   test "rejects binary files before rendering them as text":
     let path = getTempDir() / "merenda-kosmo-binary-file"
     writeFile(path, "\xCF\xFA\xED\xFE" & "\0".repeat(64))
@@ -106,8 +144,56 @@ suite "Kosmo":
     if app.usesNativeMainMenu():
       check frontend.contentView.contentView().frame().origin.y == 0.0'f32
     check frontend.splitView.panes() ==
-      @[View(frontend.fileTree), View(frontend.editorView)]
+      @[View(frontend.fileTree), View(frontend.editorPane)]
     frontend.editorView.editor.close()
+
+  test "native tabs select, reorder, and close Moe buffers":
+    let
+      root = createTempDir("merenda-kosmo-native-tabs-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Tabs Test"))
+    defer:
+      frontend.close()
+    frontend.contentView.frame = rect(0, 0, 640, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(firstPath)
+    check frontend.openPath(secondPath)
+
+    let models = frontend.documentTabs.documentTabModels()
+    check models.len == 2
+    check models[0].title == "first.txt"
+    check models[1].title == "second.txt"
+    check frontend.documentTabs.selectedDocumentTabIdentifier == models[1].identifier
+    check frontend.documentTabs.selectDocumentTabWithIdentifier(models[0].identifier)
+    check frontend.editorView.editor.tabs()[0].active
+    check frontend.documentTabs.moveDocumentTabItem(0, 1)
+    check frontend.editorView.editor.tabs()[1].title == "first.txt"
+    check frontend.documentTabs.closeDocumentTabAtIndex(1)
+    check frontend.editorView.editor.tabs().len == 1
+    check frontend.documentTabs.documentTabModels().len == 1
+    check "NORMAL" in frontend.statusLabel.text
+    check "second.txt" in frontend.statusLabel.text
+
+  test "native tab bar sits above the editor grid":
+    let frontend = newKosmoApplication(newApplication("Kosmo Tabs Layout Test"))
+    defer:
+      frontend.close()
+    frontend.contentView.frame = rect(0, 0, 640, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    check frontend.documentTabs.frame().origin.y == 0.0'f32
+    check frontend.documentTabs.frame().size.height == KosmoTabBarHeight
+    check frontend.editorView.frame().origin.y == KosmoTabBarHeight
+    check frontend.editorView.frame().size.height ==
+      frontend.editorPane.bounds().size.height - KosmoTabBarHeight
 
   test "settled editor refresh does not re-dirty its containing layout":
     let frontend = newKosmoApplication(newApplication("Kosmo Layout Test"))
