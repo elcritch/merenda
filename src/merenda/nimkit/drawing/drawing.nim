@@ -743,6 +743,30 @@ proc addRenderTranslation*(
 ): FigIdx {.discardable.} =
   context.addRenderTranslation(context.xLayer, parent, rect, translation)
 
+proc addRenderHorizontalShear*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    shear: float32,
+): FigIdx {.discardable.} =
+  ## Add a transform that shears its children around the bottom of `rect`.
+  let renderedRect = context.renderRectFor(rect)
+  var matrix = mat4()
+  matrix[0, 0] = 1.0'f32
+  matrix[1, 0] = -shear
+  matrix[1, 1] = 1.0'f32
+  matrix[3, 0] = shear * renderedRect.maxY
+  context.addFig(
+    layer,
+    parent,
+    Fig(
+      kind: nkTransform,
+      screenBox: renderedRect.toFigRect,
+      transform: TransformStyle(matrix: matrix, useMatrix: true),
+    ),
+  )
+
 proc addRectangle*(
     context: DrawContext, rect: nimkitTypes.Rect, fillValue: Fill
 ): FigIdx {.discardable.} =

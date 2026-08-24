@@ -180,6 +180,7 @@ proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
       title = tab.title,
       closeable = true,
       modified = tab.modified,
+      italic = tab.temporary,
       tooltip = tab.filePath.get(tab.title),
     )
   view.syncingTabs = true
@@ -252,6 +253,15 @@ proc refresh*(view: KosmoEditorView) =
 proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load a file selected by the frontend and refresh the cell grid.
   let outcome = view.editor.openFile(path)
+  if outcome.loaded:
+    view.refresh()
+    return true
+  if not view.statusLabel.isNil:
+    view.statusLabel.text = outcome.message
+
+proc previewFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
+  ## Load `path` as the replaceable file-tree preview and refresh the grid.
+  let outcome = view.editor.previewFile(path)
   if outcome.loaded:
     view.refresh()
     return true
@@ -520,8 +530,12 @@ proc newKosmoApplication*(
   discard mainMenu.addItem(fileItem)
   app.mainMenu = mainMenu
 
-  fileTree.onOpenFile = proc(path: string) =
-    discard editorView.openFile(path)
+  fileTree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
+    case disposition
+    of fodTemporary:
+      discard editorView.previewFile(path)
+    of fodPermanent:
+      discard editorView.openFile(path)
   splitView.addPane(fileTree, minSize = 160.0'f32, maxSize = 420.0'f32)
   splitView.addPane(editorPane, minSize = 320.0'f32)
 

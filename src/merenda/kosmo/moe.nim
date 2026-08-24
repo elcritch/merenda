@@ -23,6 +23,7 @@ when hasAsyncSupport:
 type
   KosmoEditor* = ref object
     editor: Editor
+    temporaryBufferId: Option[BufferId]
 
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
@@ -35,6 +36,7 @@ type
     modified*: bool
     readOnly*: bool
     active*: bool
+    temporary*: bool
 
   KosmoStatus* = object
     ## A consistent snapshot of the status information Kosmo displays.
@@ -150,12 +152,10 @@ proc close*(editor: KosmoEditor) =
     editor.editor.releaseExternalResources()
     editor.editor = nil
 
-proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
-  ## Open `path` in a Moe buffer, reusing the pristine initial buffer.
+proc validateFileOpen(editor: KosmoEditor, path: string): FileOpenResult =
   if editor.isNil or editor.editor.isNil:
     return FileOpenResult(message: "The editor is closed.")
-  let pathExists = fileExists(path)
-  if pathExists:
+  if fileExists(path):
     try:
       if detectCharacterEncoding(readFile(path)) == CharacterEncoding.unknown:
         return FileOpenResult(
@@ -163,6 +163,10 @@ proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
         )
     except IOError as error:
       return FileOpenResult(message: error.msg)
+  FileOpenResult(loaded: true)
+
+proc openFileBuffer(editor: KosmoEditor, path: string): FileOpenResult =
+  let pathExists = fileExists(path)
   let buffers = editor.editor.activeWindowBuffers()
   let pristineInitialBuffer =
     buffers.len == 1 and buffers[0].title == "No Name" and buffers[0].filePath.isNone and
@@ -177,6 +181,78 @@ proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
   if pristineInitialBuffer and not pathExists:
     discard editor.editor.closeBuffer(buffers[0].id)
   FileOpenResult(loaded: true)
+
+proc normalizedFilePath(path: string): string =
+  normalizedPath(absolutePath(path))
+
+proc bufferIdForPath(editor: KosmoEditor, path: string): Option[BufferId] =
+  let normalized = path.normalizedFilePath
+  for buffer in editor.editor.activeWindowBuffers():
+    if buffer.filePath.isSome and buffer.filePath.get.normalizedFilePath == normalized:
+      return some(buffer.id)
+
+proc activeBufferId(editor: KosmoEditor): Option[BufferId] =
+  for buffer in editor.editor.activeWindowBuffers():
+    if buffer.active:
+      return some(buffer.id)
+
+proc normalizeTemporaryBuffer(editor: KosmoEditor) =
+  if editor.temporaryBufferId.isNone:
+    return
+  for buffer in editor.editor.activeWindowBuffers():
+    if buffer.id == editor.temporaryBufferId.get:
+      if buffer.modified:
+        editor.temporaryBufferId = none(BufferId)
+      return
+  editor.temporaryBufferId = none(BufferId)
+
+proc discardTemporaryBuffer(editor: KosmoEditor, exceptId: Option[BufferId]) =
+  editor.normalizeTemporaryBuffer()
+  if editor.temporaryBufferId.isNone or editor.temporaryBufferId == exceptId:
+    return
+  discard editor.editor.closeBuffer(editor.temporaryBufferId.get)
+  editor.temporaryBufferId = none(BufferId)
+
+proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
+  ## Permanently open `path`, promoting it when it is the temporary buffer.
+  result = editor.validateFileOpen(path)
+  if not result.loaded:
+    return
+  editor.normalizeTemporaryBuffer()
+  let existing = editor.bufferIdForPath(path)
+  if existing.isSome:
+    result.loaded = editor.editor.activateBuffer(existing.get)
+    if editor.temporaryBufferId == existing:
+      editor.temporaryBufferId = none(BufferId)
+    return
+  result = editor.openFileBuffer(path)
+  if not result.loaded:
+    return
+  let opened = editor.activeBufferId()
+  editor.discardTemporaryBuffer(opened)
+  editor.temporaryBufferId = none(BufferId)
+
+proc previewFile*(editor: KosmoEditor, path: string): FileOpenResult =
+  ## Temporarily open `path`, replacing the previous unmodified preview.
+  result = editor.validateFileOpen(path)
+  if not result.loaded:
+    return
+  editor.normalizeTemporaryBuffer()
+  let existing = editor.bufferIdForPath(path)
+  if existing.isSome:
+    result.loaded = editor.editor.activateBuffer(existing.get)
+    return
+  let previous = editor.temporaryBufferId
+  result = editor.openFileBuffer(path)
+  if not result.loaded:
+    return
+  let opened = editor.activeBufferId()
+  if opened.isNone:
+    return FileOpenResult(message: "Moe opened the file without an active buffer.")
+  editor.temporaryBufferId = none(BufferId)
+  if previous.isSome and previous != opened:
+    discard editor.editor.closeBuffer(previous.get)
+  editor.temporaryBufferId = opened
 
 func `$`*(id: KosmoBufferId): string {.inline.} =
   $int(id)
@@ -193,6 +269,7 @@ proc tabs*(editor: KosmoEditor): seq[KosmoTab] =
   ## Return the ordered tabs belonging to Moe's active window.
   if editor.isNil or editor.editor.isNil:
     return
+  editor.normalizeTemporaryBuffer()
   for buffer in editor.editor.activeWindowBuffers():
     result.add KosmoTab(
       id: buffer.id.toKosmoBufferId,
@@ -201,6 +278,8 @@ proc tabs*(editor: KosmoEditor): seq[KosmoTab] =
       modified: buffer.modified,
       readOnly: buffer.readOnly,
       active: buffer.active,
+      temporary:
+        editor.temporaryBufferId.isSome and buffer.id == editor.temporaryBufferId.get,
     )
 
 proc selectTab*(editor: KosmoEditor, id: KosmoBufferId): bool {.discardable.} =
@@ -216,6 +295,8 @@ proc closeTab*(editor: KosmoEditor, id: KosmoBufferId): KosmoTabCloseResult =
   let outcome = editor.editor.closeBuffer(id.toMoeBufferId)
   if pkgResults.isErr(outcome):
     return KosmoTabCloseResult(message: outcome.error)
+  if editor.temporaryBufferId.isSome and editor.temporaryBufferId.get == id.toMoeBufferId:
+    editor.temporaryBufferId = none(BufferId)
   KosmoTabCloseResult(closed: true)
 
 proc moveTab*(
@@ -224,7 +305,10 @@ proc moveTab*(
   ## Move a tab to a zero-based position in the active window.
   if editor.isNil or editor.editor.isNil:
     return
-  editor.editor.moveBuffer(id.toMoeBufferId, destination)
+  result = editor.editor.moveBuffer(id.toMoeBufferId, destination)
+  if result and editor.temporaryBufferId.isSome and
+      editor.temporaryBufferId.get == id.toMoeBufferId:
+    editor.temporaryBufferId = none(BufferId)
 
 proc status*(editor: KosmoEditor): KosmoStatus =
   ## Return the status values maintained by Moe for an embedding frontend.

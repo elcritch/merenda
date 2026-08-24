@@ -250,6 +250,7 @@ suite "nimkit document tabs":
         "Alpha",
         objectValue = toObj("alpha"),
         modified = true,
+        italic = true,
         style = dtsUnderline,
         accentColor = accent,
         tooltip = "Alpha document",
@@ -265,6 +266,7 @@ suite "nimkit document tabs":
     check tabs[0.Natural].identifier == "doc-a"
     check tabs[0.Natural].objectValue.requireString() == "alpha"
     check tabs[0.Natural].modified
+    check tabs[0.Natural].italic
     check tabs[0.Natural].style == dtsUnderline
     check tabs[0.Natural].accentColor == accent
     check tabs[0.Natural].toolTip == "Alpha document"
@@ -292,6 +294,22 @@ suite "nimkit document tabs":
     check tabs.documentTabItemWithIdentifier("doc-a").isNil
     for model in tabs.documentTabModels:
       check model.identifier != "doc-a"
+
+  test "italic document tabs render their title through a shear transform":
+    let tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
+    tabs.documentTabModels = [initDocumentTabModel("preview", "Preview", italic = true)]
+
+    let renders = buildRenders(tabs)
+    var italicTransformFound = false
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkTransform and node.transform.useMatrix and
+          node.transform.matrix[1, 0] != 0.0'f32:
+        italicTransformFound = true
+        break
+
+    check tabs[0.Natural].italic
+    check tabs.documentTabModels[0].italic
+    check italicTransformFound
 
   test "document tab data sources reload and preserve selected identifiers":
     let

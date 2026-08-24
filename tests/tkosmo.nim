@@ -65,6 +65,15 @@ suite "Kosmo":
     check view.gridOffset.y == 0.0'f32
     check not editor.cursor().visible
     check not view.cursorVisible
+
+    let
+      toBottom = view.scrollBy(-100.0'f32, row = 2, column = 2)
+      pastBottom = view.scrollBy(-1.0'f32, row = 2, column = 2)
+    check toBottom.appliedRows > 0
+    check pastBottom.handled
+    check pastBottom.appliedRows == 0
+    check not editor.cursor().visible
+    check not view.cursorVisible
     editor.close()
 
   test "editor grid overscans partial rows and columns":
@@ -152,6 +161,68 @@ suite "Kosmo":
     let closeResult = editor.closeTab(tabs[1].id)
     check not closeResult.closed
     check "No write since last change" in closeResult.message
+    editor.close()
+
+  test "file previews replace one another until promoted":
+    let
+      root = createTempDir("merenda-kosmo-previews-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+      thirdPath = root / "third.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    writeFile(thirdPath, "third")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeFile(thirdPath)
+      removeDir(root)
+
+    let editor = newKosmoEditor()
+    check editor.previewFile(firstPath).loaded
+    var tabs = editor.tabs()
+    check tabs.len == 1
+    check tabs[0].title == "first.txt"
+    check tabs[0].temporary
+
+    check editor.previewFile(secondPath).loaded
+    tabs = editor.tabs()
+    check tabs.len == 1
+    check tabs[0].title == "second.txt"
+    check tabs[0].temporary
+
+    check editor.openFile(secondPath).loaded
+    tabs = editor.tabs()
+    check tabs.len == 1
+    check not tabs[0].temporary
+
+    check editor.previewFile(firstPath).loaded
+    tabs = editor.tabs()
+    check tabs.len == 2
+    check tabs[1].title == "first.txt"
+    check tabs[1].temporary
+
+    check editor.previewFile(secondPath).loaded
+    tabs = editor.tabs()
+    check tabs[0].title == "second.txt"
+    check tabs[0].active
+    check tabs[1].temporary
+
+    check editor.previewFile(firstPath).loaded
+    check editor.handleKey("i")
+    check editor.handleTextInput("changed")
+    check editor.handleKey("Esc")
+    tabs = editor.tabs()
+    check tabs[1].modified
+    check not tabs[1].temporary
+
+    check editor.previewFile(thirdPath).loaded
+    tabs = editor.tabs()
+    check tabs.len == 3
+    check tabs[1].title == "first.txt"
+    check tabs[1].modified
+    check tabs[2].title == "third.txt"
+    check tabs[2].temporary
     editor.close()
 
   test "rejects binary files before rendering them as text":
@@ -294,9 +365,9 @@ suite "Kosmo":
       removeFile(filePath)
       removeDir(root)
 
-    var openedPaths: seq[string]
-    tree.onOpenFile = proc(path: string) =
-      openedPaths.add path
+    var openRequests: seq[tuple[path: string, disposition: FileTreeOpenDisposition]]
+    tree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
+      openRequests.add (path, disposition)
     window.setContentView(tree)
     discard buildRenders(tree)
 
@@ -309,15 +380,55 @@ suite "Kosmo":
           rowRect.origin.y + rowRect.size.height * 0.5'f32,
         )
       )
+    check window.mouseDownAt(point)
+    check window.mouseUpAt(point)
+    check not tree.editingState.active
+    check openRequests == @[(filePath, fodTemporary)]
+
     check window.mouseDownAt(point, clickCount = 2)
     check window.mouseUpAt(point, clickCount = 2)
     check not tree.editingState.active
-    check openedPaths == @[filePath]
+    check openRequests == @[(filePath, fodTemporary), (filePath, fodPermanent)]
 
-    openedPaths.setLen(0)
+    openRequests.setLen(0)
     check tree.keyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
     check not tree.editingState.active
-    check openedPaths == @[filePath]
+    check openRequests == @[(filePath, fodPermanent)]
+
+  test "double clicking a file tree folder expands it":
+    let
+      root = createTempDir("merenda-kosmo-tree-folder-", "")
+      folder = root / "folder"
+      nestedFile = folder / "nested.txt"
+    createDir(folder)
+    writeFile(nestedFile, "nested")
+    let
+      window = newWindow("Kosmo Folder Activation", frame = rect(0, 0, 300, 120))
+      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 120))
+    defer:
+      removeFile(nestedFile)
+      removeDir(folder)
+      removeDir(root)
+
+    window.setContentView(tree)
+    discard buildRenders(tree)
+    let
+      rowRect = tree.rowItemRect(tree.rowForItem(folder))
+      point = tree.pointToWindow(
+        initPoint(
+          rowRect.origin.x + rowRect.size.width * 0.5'f32,
+          rowRect.origin.y + rowRect.size.height * 0.5'f32,
+        )
+      )
+
+    check window.mouseDownAt(point)
+    check window.mouseUpAt(point)
+    check not tree.isItemExpanded(folder)
+
+    check window.mouseDownAt(point, clickCount = 2)
+    check window.mouseUpAt(point, clickCount = 2)
+    check tree.isItemExpanded(folder)
+    check tree.rowForItem(nestedFile) >= 0
 
   test "opening files and folders updates the file-tree root":
     let

@@ -1,16 +1,22 @@
 ## A lazy filesystem tree for Kosmo frontends.
 
-import std/[algorithm, os, strutils, tables]
+import std/[algorithm, options, os, strutils, tables]
 
 import ../nimkit as nimkit
 
 type
-  FileTreeOpenHandler* = proc(path: string) {.closure.}
+  FileTreeOpenDisposition* = enum
+    fodPermanent
+    fodTemporary
+
+  FileTreeOpenHandler* =
+    proc(path: string, disposition: FileTreeOpenDisposition) {.closure.}
 
   KosmoFileTree* = ref object of nimkit.OutlineView
     xRootPath: string
     xChildren: Table[string, seq[string]]
     xOnOpenFile: FileTreeOpenHandler
+    xOpenDisposition: FileTreeOpenDisposition
 
 func pathTitle(path: string): string =
   result = path.extractFilename()
@@ -98,14 +104,25 @@ protocol KosmoFileTreeTableDelegate of nimkit.TableViewDelegate:
   ): bool =
     false
 
+protocol KosmoFileTreeEvents of nimkit.ResponderEventProtocol:
+  method mouseUp(tree: KosmoFileTree, event: nimkit.MouseEvent): bool =
+    tree.xOpenDisposition = if event.clickCount >= 2: fodPermanent else: fodTemporary
+    defer:
+      tree.xOpenDisposition = fodPermanent
+    let next = tree.performNext(mouseUp, event)
+    if next.isSome: next.get else: false
+
 proc fileTreeRowWasActivated(
     tree: KosmoFileTree, sender: nimkit.DynamicAgent
 ) {.slot.} =
-  if sender != nimkit.DynamicAgent(tree) or tree.xOnOpenFile.isNil:
+  if sender != nimkit.DynamicAgent(tree):
     return
   let path = tree.selectedItemIdentifier()
-  if fileExists(path):
-    tree.xOnOpenFile(path)
+  if path.expandableDirectory():
+    if tree.xOpenDisposition == fodPermanent:
+      tree.expandItem(path)
+  elif fileExists(path) and not tree.xOnOpenFile.isNil:
+    tree.xOnOpenFile(path, tree.xOpenDisposition)
 
 proc rootPath*(tree: KosmoFileTree): string =
   tree.xRootPath
@@ -147,6 +164,7 @@ proc newKosmoFileTree*(
   result.initOutlineViewFields(frame)
   discard result.withProtocol(KosmoFileTreeDataSource)
   discard result.withProtocol(KosmoFileTreeTableDelegate)
+  discard nimkit.DynamicAgent(result).pushMethods(KosmoFileTreeEvents.init())
   result.outlineDataSource = result
   result.outlineColumn().title = "Files"
   result.outlineColumn().width = 260.0'f32
