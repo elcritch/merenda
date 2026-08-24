@@ -3,7 +3,7 @@ import ./themecore
 import ../foundation/types
 
 proc addRoleRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     fill: StyleValue,
@@ -16,7 +16,7 @@ proc addRoleRule(
   theme[selector, StyleTextColor] = textColor
 
 proc addChoiceRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     fill: StyleValue,
@@ -31,7 +31,7 @@ proc addChoiceRule(
   theme[selector, StyleTextColor] = textColor
 
 proc addLabelRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     className: string,
     fillValue: Fill,
     borderColor: Color,
@@ -145,7 +145,7 @@ func peachyKnobShadows(): seq[BoxShadow] =
     insetShadow(color(1.0, 0.80, 0.60, 0.24), y = 1.0, blur = 3.0),
   ]
 
-proc installPeachyTokens(theme: var Theme) =
+proc installPeachyTokens(theme: var ThemeBuilder) =
   theme["accent"] = color(0.10, 0.92, 1.0, 0.92)
   theme["accent.pressed"] = color(0.78, 0.18, 1.0, 0.82)
   theme["progress.fill"] = styleToken("accent")
@@ -232,7 +232,7 @@ proc installPeachyTokens(theme: var Theme) =
   theme["tab.border.color.selected"] = color(0.78, 0.24, 1.0, 0.74)
   theme["tab.border.color.disabled"] = color(0.22, 0.34, 0.44, 0.32)
 
-proc installPeachyControlStyles(theme: var Theme) =
+proc installPeachyControlStyles(theme: var ThemeBuilder) =
   theme[srButton, StyleCornerRadius] = 9.0
   theme[srButton, StyleTextHighlightColor] = color(0.64, 1.0, 1.0, 0.28)
   theme[srButton, StyleTextShadowColor] = color(0.0, 0.0, 0.0, 0.46)
@@ -277,7 +277,7 @@ proc installPeachyControlStyles(theme: var Theme) =
   theme[srTableView, StyleDropIndicatorFill] = peachySelectionFill()
   theme[srTableView, StyleFocusRingColor] = styleToken("focus.ring.color")
 
-proc installPeachyLabels(theme: var Theme) =
+proc installPeachyLabels(theme: var ThemeBuilder) =
   theme.addLabelRule(
     LabelStyleClass,
     fill(color(0.0, 0.0, 0.0, 0.0)),
@@ -329,7 +329,7 @@ proc installPeachyLabels(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc installPeachyTables(theme: var Theme) =
+proc installPeachyTables(theme: var ThemeBuilder) =
   theme[srTableHeader, StyleFill] = fill(color(0.04, 0.14, 0.24, 0.66))
   theme[srTableHeader, StyleBorderColor] = color(0.16, 0.80, 1.0, 0.38)
   theme[srTableHeader, StyleInsertionIndicatorFill] = peachySelectionFill()
@@ -341,7 +341,7 @@ proc installPeachyTables(theme: var Theme) =
   theme[srTableHeaderCell, StyleMarkColor] = color(0.66, 0.98, 1.0, 0.96)
   theme[srRowItem, StyleAlternatingFill] = fill(color(0.10, 0.30, 0.42, 0.10))
 
-proc installPeachyRetroPalette(theme: var Theme) =
+proc installPeachyRetroPalette(theme: var ThemeBuilder) =
   theme["accent"] = color(1.0, 0.18, 0.72, 0.94)
   theme["accent.pressed"] = color(1.0, 0.56, 0.12, 0.90)
   theme["focus.ring.color"] = color(0.10, 0.98, 1.0, 0.88)
@@ -610,7 +610,7 @@ proc installPeachyRetroPalette(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc installPeachyReferencePass(theme: var Theme) =
+proc installPeachyReferencePass(theme: var ThemeBuilder) =
   theme[srView, StyleBackgroundColor] = color(0.20, 0.21, 0.27)
   theme[srView, StyleBackgroundFill] = fill(color(0.20, 0.21, 0.27, 1.0))
 
@@ -768,7 +768,7 @@ proc installPeachyReferencePass(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc installPeachyTextReadabilityPass(theme: var Theme) =
+proc installPeachyTextReadabilityPass(theme: var ThemeBuilder) =
   theme[srTextField, StyleTextColor] = color(1.0, 0.80, 0.64, 0.98)
   theme[srTextField, {ssFocused}, StyleTextColor] = color(1.0, 0.88, 0.72, 1.0)
   theme[srTextField, {ssDisabled}, StyleTextColor] = styleToken("disabled.text.color")
@@ -813,7 +813,7 @@ proc installPeachyTextReadabilityPass(theme: var Theme) =
       insetShadow(color(0.0, 0.0, 0.0, 0.26), y = -1.0, blur = 3.0),
     ]
 
-proc installPeachyDocumentTabs(theme: var Theme) =
+proc installPeachyDocumentTabs(theme: var ThemeBuilder) =
   theme["documentTab.bar.fill"] = styleToken("tab.panel.fill")
   theme["documentTab.bar.border.color"] = styleToken("tab.panel.border.color")
   theme["documentTab.fill"] = styleToken("tab.fill")
@@ -853,30 +853,32 @@ proc installPeachyDocumentTabs(theme: var Theme) =
   theme[srDocumentTabBar, StyleBorderWidth] = 1.25
 
 proc initPeachyTheme*(): Theme =
-  result = initAquaTheme()
-  result[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
-  result.installPeachyTokens()
-  result.installPeachyControlStyles()
-  result.installPeachyLabels()
-  result.installPeachyTables()
-  result.installPeachyRetroPalette()
-  result.installPeachyReferencePass()
-  result.installPeachyTextReadabilityPass()
-  result.installPeachyDocumentTabs()
-  result.clearBackgroundPinstripes()
+  var builder = initThemeBuilder(initAquaTheme())
+  builder[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
+  builder.installPeachyTokens()
+  builder.installPeachyControlStyles()
+  builder.installPeachyLabels()
+  builder.installPeachyTables()
+  builder.installPeachyRetroPalette()
+  builder.installPeachyReferencePass()
+  builder.installPeachyTextReadabilityPass()
+  builder.installPeachyDocumentTabs()
+  builder.clearBackgroundPinstripes()
 
-  result[srProgressIndicator, StyleFill] = result[srSlider, StyleFill]
-  result[srProgressIndicator, StyleHighlightFill] = styleToken("progress.fill")
-  result[srProgressIndicator, StyleBorderColor] = result[srSlider, StyleBorderColor]
-  result[srProgressIndicator, StyleFocusRingColor] = styleToken("progress.border.color")
-  result[srProgressIndicator, StyleBoxShadows] = result[srSlider, StyleBoxShadows]
+  builder[srProgressIndicator, StyleFill] = builder[srSlider, StyleFill]
+  builder[srProgressIndicator, StyleHighlightFill] = styleToken("progress.fill")
+  builder[srProgressIndicator, StyleBorderColor] = builder[srSlider, StyleBorderColor]
+  builder[srProgressIndicator, StyleFocusRingColor] =
+    styleToken("progress.border.color")
+  builder[srProgressIndicator, StyleBoxShadows] = builder[srSlider, StyleBoxShadows]
 
   for role in [
     srButton, srCheckBox, srRadioButton, srSwitch, srSlider, srProgressIndicator, srTab,
     srTabPanel, srDocumentTab, srDocumentTabBar, srDocumentTabButton, srTextField,
     srMonoTextView, srComboBox,
   ]:
-    result[role, StyleChrome] = styleKeyword(FlatTransparentChromeName)
+    builder[role, StyleChrome] = styleKeyword(FlatTransparentChromeName)
+  builder.finish()
 
 registerThemeFactory("peachy", initPeachyTheme)
 registerThemeFactory("peach", initPeachyTheme)

@@ -592,26 +592,28 @@ suite "NimKit CascadingView":
       selectedFill = color(0.80, 0.10, 0.72, 1.0)
       selectedText = color(0.94, 0.98, 1.0, 1.0)
 
-    var theme = initTheme()
-    theme[initStyleSelector(srCascadingView, classes = @["project-browser"]), StyleFill] =
-      surfaceFill
+    var builder = initThemeBuilder(initTheme())
 
-    theme[
+    builder[
+      initStyleSelector(srCascadingView, classes = @["project-browser"]), StyleFill
+    ] = surfaceFill
+
+    builder[
       initStyleSelector(srCascadingColumn, classes = @["project-browser"]), StyleFill
     ] = columnFill
 
-    theme[
+    builder[
       initStyleSelector(srCascadingScroller, classes = @["project-browser"]), StyleFill
     ] = scrollerFill
 
-    theme[
+    builder[
       initStyleSelector(
         srCascadingRowItem, {ssSelected}, classes = @["project-browser"]
       ),
       StyleFill,
     ] = selectedFill
 
-    theme[
+    builder[
       initStyleSelector(
         srCascadingRowItem, {ssSelected}, classes = @["project-browser"]
       ),
@@ -631,7 +633,7 @@ suite "NimKit CascadingView":
     firstColumn.scrollView().autohidesScrollers = false
 
     let
-      renders = buildRenders(root, initAppearance(theme))
+      renders = buildRenders(root, initAppearance(builder.finish()))
       list = renders.layers[DefaultDrawLevel]
       surfaceRect = view.rectToWindow(view.bounds())
       firstColumnRect = firstColumn.rectToWindow(firstColumn.bounds())

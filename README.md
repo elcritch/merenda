@@ -149,13 +149,13 @@ NIMKIT_FONT_SIZE=15 nim r examples/quick_start.nim
 
 The `NIMKIT_` variables take priority over their `MERENDA_FONT`,
 `MERENDA_MONOSPACE_FONT`, and `MERENDA_FONT_SIZE` aliases. Font roles can also
-be configured directly on a theme:
+be configured while deriving an immutable theme snapshot:
 
 ```nim
-var theme = initTheme()
-theme.setFontName(frUI, "IBMPlexSans-Regular.ttf")
-theme.setFontName(frMonospace, "HackNerdFont-Regular.ttf")
-root.appearance = initAppearance(theme)
+var builder = initThemeBuilder(initTheme())
+builder.setFontName(frUI, "IBMPlexSans-Regular.ttf")
+builder.setFontName(frMonospace, "HackNerdFont-Regular.ttf")
+root.appearance = initAppearance(builder.finish())
 ```
 
 Merenda follows FigDraw's resolved `figdrawTextBackend` constant. The default

@@ -987,7 +987,7 @@ proc effectiveAppearance*(window: Window): Appearance =
     return window.xAppearance
   if window.xHasInheritedAppearance:
     return window.xInheritedAppearance
-  if window.xInheritedAppearance.theme.tokens.isNil:
+  if not window.xInheritedAppearance.theme.isInitialized:
     window.xInheritedAppearance = initAppearance()
   window.xInheritedAppearance
 

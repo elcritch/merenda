@@ -165,23 +165,24 @@ suite "NimKit OutlineView":
 
     outlineView.styleClasses = @["project-outline"]
 
-    var theme = initTheme()
-    theme[initStyleSelector(srTableView, classes = @["project-outline"]), StyleFill] =
+    var builder = initThemeBuilder(initTheme())
+
+    builder[initStyleSelector(srTableView, classes = @["project-outline"]), StyleFill] =
       surfaceFill
 
-    theme[
+    builder[
       initStyleSelector(srTableView, classes = @["project-outline"]), StyleBorderColor
     ] = borderColor
 
-    theme[
+    builder[
       initStyleSelector(srTableView, classes = @["project-outline"]), StyleBorderWidth
     ] = 2.0'f32
 
-    theme[
+    builder[
       initStyleSelector(srTableView, classes = @["project-outline"]), StyleCornerRadius
     ] = 5.0'f32
 
-    let renders = buildRenders(outlineView, initAppearance(theme))
+    let renders = buildRenders(outlineView, initAppearance(builder.finish()))
     check DefaultDrawLevel in renders
 
     var surfaceFound = false

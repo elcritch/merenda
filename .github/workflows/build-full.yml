@@ -99,7 +99,7 @@ jobs:
     - name: Install Deps
       run: |
         # sync deps
-        atlas -t --update install
+        atlas -t --update --features:kosmo install
 
     - name: Clean generated examples
       run: |

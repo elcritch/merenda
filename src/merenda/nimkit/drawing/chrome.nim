@@ -177,7 +177,7 @@ proc drawChromeBacking*(
       drawChromeBackingFor(), (context: context, chrome: chrome, extras: resolvedExtras)
     )
 
-proc installDefaultChrome(theme: var Theme) =
+proc installDefaultChrome(theme: var ThemeBuilder) =
   theme.installChrome(DefaultChromeName, defaultChrome())
 
 registerThemeInstaller(installDefaultChrome)

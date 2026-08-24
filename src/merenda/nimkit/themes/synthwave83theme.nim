@@ -3,7 +3,7 @@ import ./themecore
 import ../foundation/types
 
 proc addRoleRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     fill: StyleValue,
@@ -16,7 +16,7 @@ proc addRoleRule(
   theme[selector, StyleTextColor] = textColor
 
 proc addChoiceRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     role: StyleRole,
     states: set[WidgetState],
     fill: StyleValue,
@@ -31,7 +31,7 @@ proc addChoiceRule(
   theme[selector, StyleTextColor] = textColor
 
 proc addLabelRule(
-    theme: var Theme,
+    theme: var ThemeBuilder,
     className: string,
     fillValue: Fill,
     borderColor: Color,
@@ -136,7 +136,7 @@ func synthwave83KnobShadows(): seq[BoxShadow] =
     insetShadow(color(1.0, 0.80, 0.60, 0.24), y = 1.0, blur = 3.0),
   ]
 
-proc installSynthwave83Tokens(theme: var Theme) =
+proc installSynthwave83Tokens(theme: var ThemeBuilder) =
   theme["accent"] = color(0.10, 0.92, 1.0, 0.92)
   theme["accent.pressed"] = color(0.78, 0.18, 1.0, 0.82)
   theme["progress.fill"] = styleToken("accent")
@@ -222,7 +222,7 @@ proc installSynthwave83Tokens(theme: var Theme) =
   theme["tab.border.color.selected"] = color(0.78, 0.24, 1.0, 0.74)
   theme["tab.border.color.disabled"] = color(0.22, 0.34, 0.44, 0.32)
 
-proc installSynthwave83ControlStyles(theme: var Theme) =
+proc installSynthwave83ControlStyles(theme: var ThemeBuilder) =
   theme[srButton, StyleCornerRadius] = 9.0
   theme[srButton, StyleTextHighlightColor] = color(0.64, 1.0, 1.0, 0.28)
   theme[srButton, StyleTextShadowColor] = color(0.0, 0.0, 0.0, 0.46)
@@ -270,7 +270,7 @@ proc installSynthwave83ControlStyles(theme: var Theme) =
   theme[srTableView, StyleDropIndicatorFill] = synthwave83SelectionFill()
   theme[srTableView, StyleFocusRingColor] = styleToken("focus.ring.color")
 
-proc installSynthwave83Labels(theme: var Theme) =
+proc installSynthwave83Labels(theme: var ThemeBuilder) =
   theme.addLabelRule(
     LabelStyleClass,
     fill(color(0.0, 0.0, 0.0, 0.0)),
@@ -322,7 +322,7 @@ proc installSynthwave83Labels(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc installSynthwave83Tables(theme: var Theme) =
+proc installSynthwave83Tables(theme: var ThemeBuilder) =
   theme[srTableHeader, StyleFill] = fill(color(0.04, 0.14, 0.24, 0.66))
   theme[srTableHeader, StyleBorderColor] = color(0.16, 0.80, 1.0, 0.38)
   theme[srTableHeader, StyleInsertionIndicatorFill] = synthwave83SelectionFill()
@@ -334,7 +334,7 @@ proc installSynthwave83Tables(theme: var Theme) =
   theme[srTableHeaderCell, StyleMarkColor] = color(0.66, 0.98, 1.0, 0.96)
   theme[srRowItem, StyleAlternatingFill] = fill(color(0.10, 0.30, 0.42, 0.10))
 
-proc installSynthwave83RetroPalette(theme: var Theme) =
+proc installSynthwave83RetroPalette(theme: var ThemeBuilder) =
   theme["accent"] = color(1.0, 0.18, 0.72, 0.94)
   theme["accent.pressed"] = color(1.0, 0.56, 0.12, 0.90)
   theme["focus.ring.color"] = color(0.10, 0.98, 1.0, 0.88)
@@ -575,7 +575,7 @@ proc installSynthwave83RetroPalette(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc installSynthwave83ReferencePass(theme: var Theme) =
+proc installSynthwave83ReferencePass(theme: var ThemeBuilder) =
   theme[srView, StyleBackgroundColor] = color(0.20, 0.21, 0.27)
 
   theme["accent"] = color(0.88, 0.30, 0.52, 0.92)
@@ -732,7 +732,7 @@ proc installSynthwave83ReferencePass(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc installSynthwave83VaporwavePass(theme: var Theme) =
+proc installSynthwave83VaporwavePass(theme: var ThemeBuilder) =
   theme[srView, StyleBackgroundColor] = color(0.08, 0.00, 0.16)
   theme[srView, StyleBackgroundFill] = linear(
     color(0.08, 0.00, 0.16, 1.0),
@@ -973,7 +973,7 @@ proc installSynthwave83VaporwavePass(theme: var Theme) =
     initSize(0.0, 18.0),
   )
 
-proc installSynthwave83ReadabilityPass(theme: var Theme) =
+proc installSynthwave83ReadabilityPass(theme: var ThemeBuilder) =
   theme["button.fill"] = linear(
     color(0.10, 0.00, 0.22, 0.90),
     color(0.24, 0.02, 0.40, 0.78),
@@ -1194,7 +1194,7 @@ proc installSynthwave83ReadabilityPass(theme: var Theme) =
     ]
   theme[srTabPanel, StyleChrome] = styleKeyword(FlatTransparentChromeName)
 
-proc installSynthwave83DocumentTabs(theme: var Theme) =
+proc installSynthwave83DocumentTabs(theme: var ThemeBuilder) =
   theme["documentTab.bar.fill"] = styleToken("tab.panel.fill")
   theme["documentTab.bar.border.color"] = styleToken("tab.panel.border.color")
   theme["documentTab.fill"] = styleToken("tab.fill")
@@ -1241,31 +1241,33 @@ proc installSynthwave83DocumentTabs(theme: var Theme) =
     ]
 
 proc initSynthwave83Theme*(): Theme =
-  result = initAquaTheme()
-  result[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
-  result.installSynthwave83Tokens()
-  result.installSynthwave83ControlStyles()
-  result.installSynthwave83Labels()
-  result.installSynthwave83Tables()
-  result.installSynthwave83RetroPalette()
-  result.installSynthwave83ReferencePass()
-  result.installSynthwave83VaporwavePass()
-  result.installSynthwave83ReadabilityPass()
-  result.installSynthwave83DocumentTabs()
-  result.clearBackgroundPinstripes()
+  var builder = initThemeBuilder(initAquaTheme())
+  builder[srDocumentTab, StyleCloseButtonPosition] = styleKeyword("right")
+  builder.installSynthwave83Tokens()
+  builder.installSynthwave83ControlStyles()
+  builder.installSynthwave83Labels()
+  builder.installSynthwave83Tables()
+  builder.installSynthwave83RetroPalette()
+  builder.installSynthwave83ReferencePass()
+  builder.installSynthwave83VaporwavePass()
+  builder.installSynthwave83ReadabilityPass()
+  builder.installSynthwave83DocumentTabs()
+  builder.clearBackgroundPinstripes()
 
-  result[srProgressIndicator, StyleFill] = result[srSlider, StyleFill]
-  result[srProgressIndicator, StyleHighlightFill] = styleToken("progress.fill")
-  result[srProgressIndicator, StyleBorderColor] = result[srSlider, StyleBorderColor]
-  result[srProgressIndicator, StyleFocusRingColor] = styleToken("progress.border.color")
-  result[srProgressIndicator, StyleBoxShadows] = result[srSlider, StyleBoxShadows]
+  builder[srProgressIndicator, StyleFill] = builder[srSlider, StyleFill]
+  builder[srProgressIndicator, StyleHighlightFill] = styleToken("progress.fill")
+  builder[srProgressIndicator, StyleBorderColor] = builder[srSlider, StyleBorderColor]
+  builder[srProgressIndicator, StyleFocusRingColor] =
+    styleToken("progress.border.color")
+  builder[srProgressIndicator, StyleBoxShadows] = builder[srSlider, StyleBoxShadows]
 
   for role in [
     srButton, srCheckBox, srRadioButton, srSwitch, srSlider, srProgressIndicator, srTab,
     srTabPanel, srDocumentTab, srDocumentTabBar, srDocumentTabButton, srTextField,
     srMonoTextView, srComboBox,
   ]:
-    result[role, StyleChrome] = styleKeyword(FlatTransparentChromeName)
+    builder[role, StyleChrome] = styleKeyword(FlatTransparentChromeName)
+  builder.finish()
 
 registerThemeFactory("synthwave83", initSynthwave83Theme)
 registerThemeFactory("synthwave", initSynthwave83Theme)

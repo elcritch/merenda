@@ -987,12 +987,12 @@ suite "NimKit TableView":
 
     tableView.scrollView().contentOffset = initPoint(20.0, 0.0)
     tableView.focusVisible = true
-    var theme = initTheme()
-    theme[srTableView, StyleFocusRingWidth] = 3.0
-    theme[srTableView, StyleFocusRingInset] = -1.0
-    theme[srTableView, StyleFocusRingColor] = focusColor
+    var builder = initThemeBuilder(initTheme())
+    builder[srTableView, StyleFocusRingWidth] = 3.0
+    builder[srTableView, StyleFocusRingInset] = -1.0
+    builder[srTableView, StyleFocusRingColor] = focusColor
     check root.renderedFocusedCellStroke(
-      initAppearance(theme),
+      initAppearance(builder.finish()),
       3.0,
       42.0'f32 .. 46.0'f32,
       22.0'f32 .. 26.0'f32,
@@ -2289,11 +2289,12 @@ suite "NimKit TableView":
       selectedColumnFill = fill(color(0.22, 0.58, 1.0, 0.18))
       cellFocusColor = color(0.96, 0.32, 0.18, 0.90)
 
-    var theme = initTheme()
-    theme[srRowItem, {ssSelected}, StyleFill] = selectedFill
-    theme[srTableView, StyleColumnSelectionFill] = selectedColumnFill
-    theme[srRowItem, StyleFocusRingColor] = cellFocusColor
-    theme[srRowItem, StyleFocusRingWidth] = 2.0
+    var builder = initThemeBuilder(initTheme())
+    builder[srRowItem, {ssSelected}, StyleFill] = selectedFill
+    builder[srTableView, StyleColumnSelectionFill] = selectedColumnFill
+    builder[srRowItem, StyleFocusRingColor] = cellFocusColor
+    builder[srRowItem, StyleFocusRingWidth] = 2.0
+    let appearance = initAppearance(builder.finish())
 
     tableView.showsHeader = false
     tableView.rowCount = 2
@@ -2312,7 +2313,7 @@ suite "NimKit TableView":
     check tableView.focusedColumn == state
     check tableView.selectedColumns == @[state]
     check root.renderedRectangleFillIn(
-      initAppearance(theme),
+      appearance,
       selectedColumnFill,
       68.0'f32 .. 72.0'f32,
       0.0'f32 .. 2.0'f32,
@@ -2320,7 +2321,7 @@ suite "NimKit TableView":
       22.0'f32 .. 26.0'f32,
     )
     check root.renderedFocusedCellStroke(
-      initAppearance(theme),
+      appearance,
       cellFocusColor,
       2.0,
       66.0'f32 .. 78.0'f32,
@@ -2339,11 +2340,11 @@ suite "NimKit TableView":
       owner = newTableColumn("owner", "Owner", width = 80.0)
       cellFocusColor = color(0.96, 0.32, 0.18, 0.90)
 
-    var theme = initTheme()
-    theme[srRowItem, StyleFocusRingColor] = cellFocusColor
-    theme[srRowItem, StyleFocusRingWidth] = 2.0
-    theme[srTableView, StyleFocusRingColor] = cellFocusColor
-    theme[srTableView, StyleFocusRingWidth] = 2.0
+    var builder = initThemeBuilder(initTheme())
+    builder[srRowItem, StyleFocusRingColor] = cellFocusColor
+    builder[srRowItem, StyleFocusRingWidth] = 2.0
+    builder[srTableView, StyleFocusRingColor] = cellFocusColor
+    builder[srTableView, StyleFocusRingWidth] = 2.0
 
     tableView.showsHeader = false
     tableView.rowCount = 2
@@ -2360,7 +2361,7 @@ suite "NimKit TableView":
     check tableView.editingState.active
     check tableView.focusedColumn == state
     check root.renderedFocusedCellStroke(
-      initAppearance(theme),
+      initAppearance(builder.finish()),
       2.0,
       66.0'f32 .. 78.0'f32,
       0.0'f32 .. 8.0'f32,

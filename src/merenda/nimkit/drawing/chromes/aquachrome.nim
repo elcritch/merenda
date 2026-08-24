@@ -1856,7 +1856,7 @@ proc rubyAquaChrome(): Chrome =
     )
   fallbackRubyAquaChrome
 
-proc installAquaChrome*(theme: var Theme) =
+proc installAquaChrome*(theme: var ThemeBuilder) =
   theme.installChrome(AquaChromeName, aquaChrome())
   theme.installChrome(RubyAquaChromeName, rubyAquaChrome())
 
