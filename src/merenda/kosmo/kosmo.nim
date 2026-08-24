@@ -14,6 +14,7 @@ const
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoEditorStyleId* = "kosmo.editor"
+  KosmoCursorOpacity = 0.45'f32
   KosmoTabIdentifierPrefix = "kosmo.buffer."
 
 type
@@ -204,6 +205,13 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   var appearance = base
   let selector =
     nimkit.initStyleSelector(nimkit.srMonoTextView, id = KosmoEditorStyleId)
+  let cursorColor =
+    base.resolveMonoTextStyle(nimkit.controlStyle(nimkit.srMonoTextView)).cursorColor
+  appearance.setStyle(
+    selector,
+    nimkit.StyleCursorColor,
+    nimkit.color(cursorColor.r, cursorColor.g, cursorColor.b, KosmoCursorOpacity),
+  )
   appearance.setStyle(selector, nimkit.StyleCornerRadius, 0.0'f32)
   appearance.setStyle(selector, nimkit.StyleCornerRadiusTopLeft, 0.0'f32)
   appearance.setStyle(selector, nimkit.StyleCornerRadiusTopRight, 0.0'f32)
