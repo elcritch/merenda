@@ -15,6 +15,7 @@ import ./nimkit/controls/controls
 import ./nimkit/controls/dialogbuttonboxes
 import ./nimkit/controls/fontpickers
 import ./nimkit/containers/documenttabs
+import ./nimkit/containers/dockviews
 import ./nimkit/app/documentcontrollers
 import ./nimkit/app/documents
 import ./nimkit/drawing
@@ -89,6 +90,7 @@ export controls
 export dialogbuttonboxes
 export fontpickers
 export documenttabs
+export dockviews
 export documentcontrollers
 export documents
 export drawing, images, rendering

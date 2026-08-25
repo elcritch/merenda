@@ -12,6 +12,7 @@ import nimkit/constraints
 import nimkit/controls
 import nimkit/documents
 import nimkit/documenttabs
+import nimkit/dockviews
 import nimkit/font_layout
 import nimkit/fontpickers
 import nimkit/formviews

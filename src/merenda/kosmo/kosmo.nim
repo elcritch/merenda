@@ -1,6 +1,6 @@
 ## A synchronous NimKit frontend for the Moe editor engine.
 
-import std/[math, os, strutils]
+import std/[math, options, os, strutils]
 
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
@@ -30,18 +30,50 @@ type
     lastTabs: seq[KosmoTab]
     syncingTabs: bool
     tabsDelegate: KosmoEditorTabsHandler
+    usesBufferSubset: bool
+    bufferIds: seq[KosmoBufferId]
+    selectedBufferId: Option[KosmoBufferId]
+    dockGroup: WeakRef[KosmoEditorGroup]
 
   KosmoEditorTabsHandler = ref object of nimkit.Responder
     editorView: WeakRef[KosmoEditorView]
+    dockController: WeakRef[KosmoDockController]
 
   KosmoEditorPane* = ref object of nimkit.View
     documentTabs*: nimkit.DocumentTabs
     editorView*: KosmoEditorView
 
+  KosmoEditorGroup* = ref object
+    identifier*: string
+    panel*: nimkit.DockPanel
+    pane*: KosmoEditorPane
+    editorView*: KosmoEditorView
+    workspace*: nimkit.DockView
+    window*: nimkit.Window
+
+  KosmoDockHost = ref object
+    workspace: nimkit.DockView
+    window: nimkit.Window
+    contentView: nimkit.View
+    statusLabel: nimkit.Label
+    primary: bool
+
+  KosmoDockController = ref object
+    frontend: WeakRef[KosmoApplication]
+    editor: KosmoEditor
+    groups: seq[KosmoEditorGroup]
+    hosts: seq[KosmoDockHost]
+    activeGroup: KosmoEditorGroup
+    nextGroupIdentifier: int
+
   KosmoContentView = ref object of nimkit.View
     splitView: nimkit.SplitView
     statusLabel: nimkit.Label
     setInitialDivider: bool
+
+  KosmoDetachedContentView = ref object of nimkit.View
+    workspace: nimkit.DockView
+    statusLabel: nimkit.Label
 
   KosmoApplication* = ref object
     application*: nimkit.Application
@@ -52,8 +84,10 @@ type
     statusLabel*: nimkit.Label
     fileTree*: KosmoFileTree
     splitView*: nimkit.SplitView
+    dockView*: nimkit.DockView
     contentView*: nimkit.MenuRootView
     documentView: KosmoContentView
+    dockController: KosmoDockController
 
 func toMoeModifiers(modifiers: set[nimkit.KeyModifier]): set[moe.KeyModifier] =
   if nimkit.kmControl in modifiers:
@@ -171,11 +205,71 @@ func statusText(status: KosmoStatus, tabs: openArray[KosmoTab]): string =
     parts.add git
   parts.join("  •  ")
 
+proc visibleTabs(view: KosmoEditorView, tabs: openArray[KosmoTab]): seq[KosmoTab] =
+  if not view.usesBufferSubset:
+    return @tabs
+  var visibleIds: seq[KosmoBufferId]
+  for id in view.bufferIds:
+    for tab in tabs:
+      if tab.id == id:
+        result.add tab
+        visibleIds.add id
+        break
+  view.bufferIds = visibleIds
+
+proc syncEditorTabOrder(view: KosmoEditorView) =
+  let tabs = view.editor.tabs()
+  if tabs.len != view.bufferIds.len:
+    var
+      desiredIds = newSeqOfCap[KosmoBufferId](tabs.len)
+      groupIndex = 0
+    for tab in tabs:
+      if tab.id in view.bufferIds:
+        desiredIds.add view.bufferIds[groupIndex]
+        inc groupIndex
+      else:
+        desiredIds.add tab.id
+    for index, id in desiredIds:
+      discard view.editor.moveTab(id, index.Natural)
+  else:
+    for index, id in view.bufferIds:
+      discard view.editor.moveTab(id, index.Natural)
+
+proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
+  if not view.usesBufferSubset:
+    return
+  var selectedIsVisible = false
+  if view.selectedBufferId.isSome:
+    for tab in tabs:
+      if tab.id == view.selectedBufferId.get:
+        selectedIsVisible = true
+        break
+  if not selectedIsVisible:
+    view.selectedBufferId =
+      if tabs.len > 0:
+        some(tabs[^1].id)
+      else:
+        none(KosmoBufferId)
+  if view.selectedBufferId.isSome:
+    discard view.editor.selectTab(view.selectedBufferId.get)
+
+proc adoptActiveBuffer(view: KosmoEditorView) =
+  if not view.usesBufferSubset:
+    return
+  for tab in view.editor.tabs():
+    if tab.active:
+      if tab.id notin view.bufferIds:
+        view.bufferIds.add tab.id
+      view.selectedBufferId = some(tab.id)
+      view.lastTabs.setLen(0)
+      return
+
 proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
-  if view.documentTabs.isNil or tabs == view.lastTabs:
+  let visibleTabs = view.visibleTabs(tabs)
+  if view.documentTabs.isNil or visibleTabs == view.lastTabs:
     return
   var models: seq[nimkit.DocumentTabModel]
-  for tab in tabs:
+  for tab in visibleTabs:
     let styleClasses =
       if tab.temporary:
         @[KosmoPreviewTabStyleClass]
@@ -193,14 +287,18 @@ proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
   defer:
     view.syncingTabs = false
   view.documentTabs.documentTabModels = models
-  for tab in tabs:
-    if tab.active:
-      view.documentTabs.selectedDocumentTabIdentifier = tab.id.tabIdentifier
-      break
-  view.lastTabs = tabs
+  if view.usesBufferSubset and view.selectedBufferId.isSome:
+    view.documentTabs.selectedDocumentTabIdentifier =
+      view.selectedBufferId.get.tabIdentifier
+  else:
+    for tab in visibleTabs:
+      if tab.active:
+        view.documentTabs.selectedDocumentTabIdentifier = tab.id.tabIdentifier
+        break
+  view.lastTabs = visibleTabs
 
 proc syncChrome(view: KosmoEditorView) =
-  let tabs = view.editor.tabs()
+  let tabs = view.visibleTabs(view.editor.tabs())
   view.syncTabs(tabs)
   if not view.statusLabel.isNil:
     let text = view.editor.status().statusText(tabs)
@@ -254,6 +352,8 @@ proc refresh*(view: KosmoEditorView) =
     )
   if view.renderBuffer.width != columns or view.renderBuffer.height != rows:
     view.renderBuffer.resize(columns.Natural, rows.Natural)
+  let tabs = view.visibleTabs(view.editor.tabs())
+  view.selectVisibleBuffer(tabs)
   view.editor.render(view.renderBuffer)
   var cells = newSeq[nimkit.MonoTextCell](rows * columns)
   for row in 0 ..< rows:
@@ -268,6 +368,7 @@ proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load a file selected by the frontend and refresh the cell grid.
   let outcome = view.editor.openFile(path)
   if outcome.loaded:
+    view.adoptActiveBuffer()
     view.refresh()
     return true
   if not view.statusLabel.isNil:
@@ -277,6 +378,7 @@ proc previewFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load `path` as the replaceable file-tree preview and refresh the grid.
   let outcome = view.editor.previewFile(path)
   if outcome.loaded:
+    view.adoptActiveBuffer()
     view.refresh()
     return true
   if not view.statusLabel.isNil:
@@ -306,10 +408,25 @@ proc scrollBy*(
     view.scrollOffsetRows = 0.0'f32
   view.refresh()
 
+proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
+proc updateDockTarget(
+  controller: KosmoDockController, tabs: nimkit.DocumentTabs, location: nimkit.Point
+)
+
+proc finishDockDrag(
+  controller: KosmoDockController,
+  tabs: nimkit.DocumentTabs,
+  item: nimkit.DocumentTabItem,
+  location: nimkit.Point,
+)
+
 proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool =
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   case event.kind
   of nimkit.mtreMouseDown, nimkit.mtreMouseDragged, nimkit.mtreMouseUp:
     if event.kind == nimkit.mtreMouseDown:
+      if not view.tabsDelegate.dockController.isNil:
+        view.tabsDelegate.dockController[].activateGroup(view)
       let window = view.window()
       if window of nimkit.Window:
         discard nimkit.Window(window).makeFirstResponder(view)
@@ -367,6 +484,10 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
       return
     var id: KosmoBufferId
     if item.identifier.parseTabIdentifier(id):
+      if view.usesBufferSubset:
+        view.selectedBufferId = some(id)
+      if not handler.dockController.isNil:
+        handler.dockController[].activateGroup(view)
       if not view.editor.selectTab(id):
         view.lastTabs.setLen(0)
       view.refresh()
@@ -388,6 +509,11 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
     if not item.identifier.parseTabIdentifier(id):
       return
     let outcome = view.editor.closeTab(id)
+    if outcome.closed and view.usesBufferSubset:
+      let bufferIndex = view.bufferIds.find(id)
+      if bufferIndex >= 0:
+        view.bufferIds.delete(bufferIndex)
+      view.selectedBufferId = none(KosmoBufferId)
     if not outcome.closed and not view.statusLabel.isNil:
       view.statusLabel.text = outcome.message
     outcome.closed
@@ -418,10 +544,40 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
     if view.isNil:
       return
     var id: KosmoBufferId
-    if not item.identifier.parseTabIdentifier(id) or
-        not view.editor.moveTab(id, toIndex.Natural):
-      view.lastTabs.setLen(0)
+    if item.identifier.parseTabIdentifier(id):
+      if view.usesBufferSubset:
+        let fromBufferIndex = view.bufferIds.find(id)
+        if fromBufferIndex >= 0:
+          view.bufferIds.delete(fromBufferIndex)
+          view.bufferIds.insert(id, min(toIndex, view.bufferIds.len))
+          view.syncEditorTabOrder()
+      elif not view.editor.moveTab(id, toIndex.Natural):
+        view.lastTabs.setLen(0)
     view.refresh()
+
+  method didBeginDraggingDocumentTab(
+      handler: KosmoEditorTabsHandler,
+      tabs: nimkit.DocumentTabs,
+      info: nimkit.DocumentTabDragInfo,
+  ) =
+    if not handler.dockController.isNil:
+      handler.dockController[].updateDockTarget(tabs, info.location)
+
+  method didDragDocumentTab(
+      handler: KosmoEditorTabsHandler,
+      tabs: nimkit.DocumentTabs,
+      info: nimkit.DocumentTabDragInfo,
+  ) =
+    if not handler.dockController.isNil:
+      handler.dockController[].updateDockTarget(tabs, info.location)
+
+  method didEndDraggingDocumentTab(
+      handler: KosmoEditorTabsHandler,
+      tabs: nimkit.DocumentTabs,
+      info: nimkit.DocumentTabDragInfo,
+  ) =
+    if not handler.dockController.isNil:
+      handler.dockController[].finishDockDrag(tabs, info.item, info.location)
 
 proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result = KosmoEditorView(
@@ -470,6 +626,297 @@ proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   result.addSubview(result.documentTabs)
   result.addSubview(editorView)
   discard result.withProtocol(KosmoEditorPaneLayout)
+
+proc groupForView(
+    controller: KosmoDockController, view: KosmoEditorView
+): KosmoEditorGroup =
+  for group in controller.groups:
+    if group.editorView == view:
+      return group
+
+proc groupForTabs(
+    controller: KosmoDockController, tabs: nimkit.DocumentTabs
+): KosmoEditorGroup =
+  for group in controller.groups:
+    if group.editorView.documentTabs == tabs:
+      return group
+
+proc groupForPanel(
+    controller: KosmoDockController, panel: nimkit.DockPanel
+): KosmoEditorGroup =
+  for group in controller.groups:
+    if group.panel == panel:
+      return group
+
+proc hostForWorkspace(
+    controller: KosmoDockController, workspace: nimkit.DockView
+): KosmoDockHost =
+  for host in controller.hosts:
+    if host.workspace == workspace:
+      return host
+
+proc activeEditorView(controller: KosmoDockController): KosmoEditorView =
+  if not controller.activeGroup.isNil:
+    return controller.activeGroup.editorView
+  if controller.groups.len > 0:
+    return controller.groups[0].editorView
+
+proc activateGroup(controller: KosmoDockController, view: KosmoEditorView) =
+  if controller.isNil or view.isNil:
+    return
+  let group = controller.groupForView(view)
+  if not group.isNil:
+    controller.activeGroup = group
+    view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+
+proc initialBufferIds(editor: KosmoEditor): seq[KosmoBufferId] =
+  for tab in editor.tabs():
+    result.add tab.id
+
+proc configureGroupView(
+    controller: KosmoDockController,
+    group: KosmoEditorGroup,
+    bufferIds: openArray[KosmoBufferId],
+) =
+  let view = group.editorView
+  view.usesBufferSubset = true
+  view.bufferIds = @bufferIds
+  view.selectedBufferId =
+    if bufferIds.len > 0:
+      some(bufferIds[^1])
+    else:
+      none(KosmoBufferId)
+  view.lastTabs.setLen(0)
+  view.dockGroup = group.unsafeWeakRef()
+  view.tabsDelegate.dockController = controller.unsafeWeakRef()
+  let host = controller.hostForWorkspace(group.workspace)
+  if not host.isNil:
+    view.statusLabel = host.statusLabel
+  if not controller.frontend.isNil:
+    view.applyKosmoEditorStyle(controller.frontend[].application.effectiveAppearance())
+  view.refresh()
+
+proc newEditorGroup(
+    controller: KosmoDockController,
+    workspace: nimkit.DockView,
+    window: nimkit.Window,
+    bufferIds: openArray[KosmoBufferId],
+    editorView: KosmoEditorView = nil,
+    editorPane: KosmoEditorPane = nil,
+    addToWorkspace = false,
+): KosmoEditorGroup =
+  let
+    view =
+      if editorView.isNil:
+        newKosmoEditorView(controller.editor)
+      else:
+        editorView
+    pane =
+      if editorPane.isNil:
+        newKosmoEditorPane(view)
+      else:
+        editorPane
+    panel = nimkit.newDockPanel(pane)
+  inc controller.nextGroupIdentifier
+  result = KosmoEditorGroup(
+    identifier: "kosmo.group." & $controller.nextGroupIdentifier,
+    panel: panel,
+    pane: pane,
+    editorView: view,
+    workspace: workspace,
+    window: window,
+  )
+  controller.groups.add result
+  controller.configureGroupView(result, bufferIds)
+  if addToWorkspace:
+    discard workspace.addPanel(panel)
+  if controller.activeGroup.isNil:
+    controller.activeGroup = result
+
+proc removeBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
+  let index = group.editorView.bufferIds.find(id)
+  if index < 0:
+    return
+  group.editorView.bufferIds.delete(index)
+  group.editorView.selectedBufferId = none(KosmoBufferId)
+  group.editorView.lastTabs.setLen(0)
+
+proc addBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
+  if id notin group.editorView.bufferIds:
+    group.editorView.bufferIds.add id
+  group.editorView.selectedBufferId = some(id)
+  group.editorView.lastTabs.setLen(0)
+
+proc removeGroup(controller: KosmoDockController, group: KosmoEditorGroup) =
+  if group.isNil:
+    return
+  discard group.workspace.removePanel(group.panel)
+  let index = controller.groups.find(group)
+  if index >= 0:
+    controller.groups.delete(index)
+  let host = controller.hostForWorkspace(group.workspace)
+  if not host.isNil and group.workspace.len == 0 and not host.primary:
+    host.window.close()
+  if controller.activeGroup == group:
+    controller.activeGroup =
+      if controller.groups.len > 0:
+        controller.groups[0]
+      else:
+        nil
+
+proc finishBufferMove(
+    controller: KosmoDockController, source, target: KosmoEditorGroup, id: KosmoBufferId
+) =
+  if source != target:
+    target.addBuffer(id)
+    source.removeBuffer(id)
+    if source.editorView.bufferIds.len == 0:
+      controller.removeGroup(source)
+    else:
+      source.editorView.refresh()
+  controller.activeGroup = target
+  target.editorView.selectVisibleBuffer(
+    target.editorView.visibleTabs(target.editorView.editor.tabs())
+  )
+  target.editorView.refresh()
+
+proc screenPoint(tabs: nimkit.DocumentTabs, location: nimkit.Point): nimkit.Point =
+  let owner = tabs.window()
+  if owner of nimkit.Window:
+    return nimkit.Window(owner).convertPointToScreen(tabs.pointToWindow(location))
+  tabs.pointToWindow(location)
+
+proc targetAtScreenPoint(
+    controller: KosmoDockController, point: nimkit.Point
+): tuple[workspace: nimkit.DockView, target: nimkit.DockDropTarget] =
+  for host in controller.hosts:
+    if not host.window.isNil and not host.window.isClosed():
+      let
+        windowPoint = host.window.convertPointFromScreen(point)
+        workspacePoint = host.workspace.pointFromWindow(windowPoint)
+      if host.workspace.bounds().contains(workspacePoint):
+        var target = host.workspace.dropTargetAtPoint(workspacePoint)
+        if target.valid():
+          let group = controller.groupForPanel(target.panel)
+          if not group.isNil:
+            let tabPoint = group.editorView.documentTabs.pointFromView(
+              workspacePoint, host.workspace
+            )
+            if group.editorView.documentTabs.bounds().contains(tabPoint):
+              let panelRect =
+                target.panel.rectToView(target.panel.bounds(), host.workspace)
+              target = nimkit.DockDropTarget(
+                panel: target.panel, position: nimkit.dpCenter, rect: panelRect
+              )
+          return (host.workspace, target)
+
+proc clearDockTargets(controller: KosmoDockController) =
+  for host in controller.hosts:
+    host.workspace.clearDropTarget()
+
+proc updateDockTarget(
+    controller: KosmoDockController, tabs: nimkit.DocumentTabs, location: nimkit.Point
+) =
+  if controller.isNil:
+    return
+  controller.clearDockTargets()
+  let resolved = controller.targetAtScreenPoint(tabs.screenPoint(location))
+  if not resolved.workspace.isNil and resolved.target.valid():
+    resolved.workspace.dropTarget = resolved.target
+
+protocol KosmoDetachedContentLayout of nimkit.ViewLayoutProtocol:
+  method layoutSubviews(content: KosmoDetachedContentView) =
+    let bounds = content.bounds()
+    content.statusLabel.setFrameFromLayout(
+      nimkit.rect(
+        0,
+        max(bounds.size.height - KosmoStatusBarHeight, 0.0'f32),
+        bounds.size.width,
+        KosmoStatusBarHeight,
+      )
+    )
+    content.workspace.setFrameFromLayout(
+      nimkit.rect(
+        0, 0, bounds.size.width, max(bounds.size.height - KosmoStatusBarHeight, 1.0'f32)
+      )
+    )
+
+proc newKosmoDetachedContentView(
+    workspace: nimkit.DockView, statusLabel: nimkit.Label
+): KosmoDetachedContentView =
+  result = KosmoDetachedContentView(workspace: workspace, statusLabel: statusLabel)
+  result.initViewFields()
+  result.addSubview(workspace)
+  result.addSubview(statusLabel)
+  discard result.withProtocol(KosmoDetachedContentLayout)
+
+proc detachBuffer(
+    controller: KosmoDockController,
+    source: KosmoEditorGroup,
+    id: KosmoBufferId,
+    screenLocation: nimkit.Point,
+) =
+  if controller.frontend.isNil:
+    return
+  let
+    frontend = controller.frontend[]
+    workspace = nimkit.newDockView()
+    statusLabel = nimkit.newStatusLabel("Ready")
+    contentView = newKosmoDetachedContentView(workspace, statusLabel)
+    window = nimkit.newWindow(
+      "Kosmo",
+      nimkit.rect(screenLocation.x - 360.0'f32, screenLocation.y - 24.0'f32, 720, 520),
+    )
+    host = KosmoDockHost(
+      workspace: workspace,
+      window: window,
+      contentView: contentView,
+      statusLabel: statusLabel,
+    )
+  controller.hosts.add host
+  let group = controller.newEditorGroup(workspace, window, [id], addToWorkspace = true)
+  controller.finishBufferMove(source, group, id)
+  window.setContentView(contentView)
+  frontend.application.addWindow(window)
+  if frontend.application.isRunning():
+    frontend.application.activateWindow(window)
+
+proc finishDockDrag(
+    controller: KosmoDockController,
+    tabs: nimkit.DocumentTabs,
+    item: nimkit.DocumentTabItem,
+    location: nimkit.Point,
+) =
+  if controller.isNil or item.isNil:
+    return
+  let
+    point = tabs.screenPoint(location)
+    resolved = controller.targetAtScreenPoint(point)
+    source = controller.groupForTabs(tabs)
+  controller.clearDockTargets()
+  if source.isNil:
+    return
+  var id: KosmoBufferId
+  if not item.identifier().parseTabIdentifier(id):
+    return
+
+  if resolved.target.valid():
+    let target = controller.groupForPanel(resolved.target.panel)
+    if target.isNil:
+      return
+    if resolved.target.position == nimkit.dpCenter:
+      if target != source:
+        controller.finishBufferMove(source, target, id)
+    else:
+      let next = controller.newEditorGroup(resolved.workspace, target.window, [id])
+      if resolved.workspace.splitPanel(
+        target.panel, next.panel, resolved.target.position
+      ):
+        controller.finishBufferMove(source, next, id)
+      else:
+        controller.removeGroup(next)
+  else:
+    controller.detachBuffer(source, id, point)
 
 protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(content: KosmoContentView) =
@@ -526,6 +973,7 @@ proc newKosmoApplication*(
     editorPane = newKosmoEditorPane(editorView)
     fileTree = newKosmoFileTree(getCurrentDir())
     splitView = nimkit.newSplitView(nimkit.laHorizontal)
+    dockView = nimkit.newDockView()
     mainMenu = nimkit.newMenu("Main")
     fileMenu = nimkit.newMenu("File")
     fileItem = nimkit.newMenuItem("File")
@@ -534,24 +982,13 @@ proc newKosmoApplication*(
     )
   editorView.applyKosmoEditorStyle(app.effectiveAppearance())
   openItem.identifier = KosmoOpenFileAction
-  openItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoOpenFileAction)) do(
-    sender: nimkit.DynamicAgent
-  ):
-    discard sender
-    editorView.chooseFile(fileTree, app)
   fileItem.submenu = fileMenu
   discard fileMenu.addItem(openItem)
   discard mainMenu.addItem(fileItem)
   app.mainMenu = mainMenu
 
-  fileTree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
-    case disposition
-    of fodTemporary:
-      discard editorView.previewFile(path)
-    of fodPermanent:
-      discard editorView.openFile(path)
   splitView.addPane(fileTree, minSize = 160.0'f32, maxSize = 420.0'f32)
-  splitView.addPane(editorPane, minSize = 320.0'f32)
+  splitView.addPane(dockView, minSize = 320.0'f32)
 
   let
     statusLabel = nimkit.newStatusLabel("Ready")
@@ -568,28 +1005,88 @@ proc newKosmoApplication*(
     statusLabel: statusLabel,
     fileTree: fileTree,
     splitView: splitView,
+    dockView: dockView,
     contentView: contentView,
     documentView: documentView,
   )
+  let
+    controller = KosmoDockController(editor: editorView.editor)
+    mainHost = KosmoDockHost(
+      workspace: dockView,
+      window: result.window,
+      contentView: contentView,
+      statusLabel: statusLabel,
+      primary: true,
+    )
+  result.dockController = controller
+  controller.frontend = result.unsafeWeakRef()
+  controller.hosts.add mainHost
+  discard controller.newEditorGroup(
+    dockView,
+    result.window,
+    editorView.editor.initialBufferIds(),
+    editorView,
+    editorPane,
+    addToWorkspace = true,
+  )
+
+  let frontend = result.unsafeWeakRef()
+  openItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoOpenFileAction)) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    if not frontend.isNil:
+      frontend[].dockController.activeEditorView().chooseFile(fileTree, app)
+  fileTree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
+    if frontend.isNil:
+      return
+    let activeView = frontend[].dockController.activeEditorView()
+    if activeView.isNil:
+      return
+    case disposition
+    of fodTemporary:
+      discard activeView.previewFile(path)
+    of fodPermanent:
+      discard activeView.openFile(path)
   if filePath.len > 0:
-    discard editorView.openPath(fileTree, filePath)
+    discard result.dockController.activeEditorView().openPath(fileTree, filePath)
 
 proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
   ## Open a file or replace the file-tree root with a directory.
   if frontend.isNil:
     return
-  frontend.editorView.openPath(frontend.fileTree, path)
+  frontend.dockController.activeEditorView().openPath(frontend.fileTree, path)
+
+proc editorGroups*(frontend: KosmoApplication): seq[KosmoEditorGroup] =
+  ## Return the editor groups currently hosted by Kosmo dock workspaces.
+  if not frontend.isNil and not frontend.dockController.isNil:
+    result = frontend.dockController.groups
+
+proc detachedEditorWindows*(frontend: KosmoApplication): seq[nimkit.Window] =
+  ## Return the live windows created by detaching document tabs.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  for host in frontend.dockController.hosts:
+    if not host.primary and not host.window.isNil and not host.window.isClosed():
+      result.add host.window
 
 proc show*(frontend: KosmoApplication) =
   ## Present the Kosmo window and make the editor its first responder.
   if not frontend.isNil:
     discard frontend.application.showWindow(
-      frontend.window, frontend.contentView, frontend.editorView
+      frontend.window, frontend.contentView, frontend.dockController.activeEditorView()
     )
 
 proc close*(frontend: KosmoApplication) =
   ## Release the editor resources held by the frontend.
-  if not frontend.isNil and not frontend.editorView.isNil:
+  if frontend.isNil:
+    return
+  if not frontend.dockController.isNil:
+    let hosts = frontend.dockController.hosts
+    for host in hosts:
+      if not host.primary and not host.window.isNil and not host.window.isClosed():
+        host.window.close()
+  if not frontend.editorView.isNil:
     frontend.editorView.editor.close()
 
 proc runKosmo*(filePath = "") =

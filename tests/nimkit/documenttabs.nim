@@ -18,7 +18,11 @@ type
     didCloseCount: int
     shouldMoveCount: int
     didMoveCount: int
+    dragBeginCount: int
+    dragChangeCount: int
+    dragEndCount: int
     lastItem: DocumentTabItem
+    lastDragInfo: DocumentTabDragInfo
     lastIndex: int
     lastFromIndex: int
     lastToIndex: int
@@ -31,7 +35,11 @@ type
     willMoveCount: int
     didMoveCount: int
     scrollCount: int
+    dragBeginCount: int
+    dragChangeCount: int
+    dragEndCount: int
     lastItem: DocumentTabItem
+    lastDragInfo: DocumentTabDragInfo
     lastIndex: int
     lastFromIndex: int
     lastToIndex: int
@@ -108,6 +116,27 @@ protocol DocumentTabDelegateSpyMethods of DocumentTabsDelegate:
     spy.lastFromIndex = fromIndex
     spy.lastToIndex = toIndex
 
+  method didBeginDraggingDocumentTab(
+      spy: DocumentTabDelegateSpy, tabs: DocumentTabs, info: DocumentTabDragInfo
+  ) =
+    discard tabs
+    inc spy.dragBeginCount
+    spy.lastDragInfo = info
+
+  method didDragDocumentTab(
+      spy: DocumentTabDelegateSpy, tabs: DocumentTabs, info: DocumentTabDragInfo
+  ) =
+    discard tabs
+    inc spy.dragChangeCount
+    spy.lastDragInfo = info
+
+  method didEndDraggingDocumentTab(
+      spy: DocumentTabDelegateSpy, tabs: DocumentTabs, info: DocumentTabDragInfo
+  ) =
+    discard tabs
+    inc spy.dragEndCount
+    spy.lastDragInfo = info
+
 protocol DocumentTabModelDataSourceSpyMethods of DocumentTabsDataSource:
   method documentTabCount(spy: DocumentTabModelDataSourceSpy, tabs: DocumentTabs): int =
     discard tabs
@@ -139,6 +168,24 @@ protocol DocumentTabSignalSpyEvents from DocumentTabSignalSpy:
   ) {.slot.} =
     discard sender
     inc spy.changingCount
+
+  proc documentTabDraggingDidBegin(
+      spy: DocumentTabSignalSpy, info: DocumentTabDragInfo
+  ) {.slot.} =
+    inc spy.dragBeginCount
+    spy.lastDragInfo = info
+
+  proc documentTabDraggingDidChange(
+      spy: DocumentTabSignalSpy, info: DocumentTabDragInfo
+  ) {.slot.} =
+    inc spy.dragChangeCount
+    spy.lastDragInfo = info
+
+  proc documentTabDraggingDidEnd(
+      spy: DocumentTabSignalSpy, info: DocumentTabDragInfo
+  ) {.slot.} =
+    inc spy.dragEndCount
+    spy.lastDragInfo = info
 
   proc documentTabSelectionDidChange(
       spy: DocumentTabSignalSpy, sender: DynamicAgent
@@ -661,6 +708,40 @@ suite "nimkit document tabs":
     check signals.willCloseCount == 1
     check signals.didCloseCount == 1
     check signals.lastItem == second
+
+  test "document tab dragging reports a stable item outside the tab bar":
+    let
+      window = newWindow("Document tab dragging", frame = rect(0, 0, 420, 120))
+      root = newView(frame = rect(0, 0, 420, 120))
+      tabs = newDocumentTabs(frame = rect(0, 0, 420, 34))
+      first = newDocumentTabItem("First", "first")
+      delegate = newDelegateSpy()
+      signals = newSignalSpy()
+    window.setContentView(root)
+    root.addSubview(tabs)
+    tabs.delegate = delegate
+    signals.observeProtocol(tabs, DocumentTabsEvents)
+    discard tabs.addDocumentTabItem(first)
+    discard tabs.addDocumentTabItem(newDocumentTabItem("Second", "second"))
+
+    let
+      tabRect = tabs.documentTabRect(0)
+      start = tabs.pointToWindow(tabRect.center())
+      outside = tabs.pointToWindow(initPoint(tabRect.center().x + 8.0'f32, 72))
+    check window.mouseDownAt(start)
+    check window.mouseDraggedAt(outside)
+    check window.mouseUpAt(outside)
+    check delegate.dragBeginCount == 1
+    check delegate.dragChangeCount == 1
+    check delegate.dragEndCount == 1
+    check delegate.lastDragInfo.item == first
+    check delegate.lastDragInfo.initialIndex == 0
+    check delegate.lastDragInfo.currentIndex == 0
+    check delegate.lastDragInfo.location.y == 72.0'f32
+    check signals.dragBeginCount == 1
+    check signals.dragChangeCount == 1
+    check signals.dragEndCount == 1
+    check signals.lastDragInfo.item == first
 
   test "overflow tabs scroll with buttons and mouse wheel without visible scrollbar":
     let

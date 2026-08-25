@@ -283,7 +283,7 @@ suite "Kosmo":
     if app.usesNativeMainMenu():
       check frontend.contentView.contentView().frame().origin.y == 0.0'f32
     check frontend.splitView.panes() ==
-      @[View(frontend.fileTree), View(frontend.editorPane)]
+      @[View(frontend.fileTree), View(frontend.dockView)]
     frontend.editorView.editor.close()
 
   test "native tabs select, reorder, and close Moe buffers":
@@ -320,6 +320,100 @@ suite "Kosmo":
     check frontend.documentTabs.documentTabModels().len == 1
     check "NORMAL" in frontend.statusLabel.text
     check "second.txt" in frontend.statusLabel.text
+
+  test "dragging a document tab to an editor edge creates a split group":
+    let
+      root = createTempDir("merenda-kosmo-dock-split-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Dock Split Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(firstPath)
+    check frontend.openPath(secondPath)
+
+    let
+      sourceTabs = frontend.documentTabs
+      tabRect = sourceTabs.documentTabRect(0)
+      start = sourceTabs.pointToWindow(
+        initPoint(
+          tabRect.minX + tabRect.size.width * 0.5'f32,
+          tabRect.minY + tabRect.size.height * 0.5'f32,
+        )
+      )
+      drop = frontend.dockView.pointToWindow(
+        initPoint(
+          frontend.dockView.bounds().maxX - 4.0'f32,
+          frontend.dockView.bounds().minY +
+            frontend.dockView.bounds().size.height * 0.5'f32,
+        )
+      )
+      bufferCount = frontend.editorView.editor.tabs().len
+
+    check frontend.window.mouseDownAt(start)
+    check frontend.window.mouseDraggedAt(drop)
+    check frontend.dockView.dropTarget().position == dpRight
+    check frontend.window.mouseUpAt(drop)
+
+    let groups = frontend.editorGroups()
+    check groups.len == 2
+    check frontend.dockView.rootView() of SplitView
+    check SplitView(frontend.dockView.rootView()).splitAxis == laHorizontal
+    check groups[0].editorView.documentTabs.len == 1
+    check groups[1].editorView.documentTabs.len == 1
+    check frontend.editorView.editor.tabs().len == bufferCount
+
+  test "dragging a document tab outside every workspace creates a window":
+    let
+      root = createTempDir("merenda-kosmo-dock-window-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Dock Window Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(firstPath)
+    check frontend.openPath(secondPath)
+
+    let
+      sourceTabs = frontend.documentTabs
+      tabRect = sourceTabs.documentTabRect(0)
+      start = sourceTabs.pointToWindow(
+        initPoint(
+          tabRect.minX + tabRect.size.width * 0.5'f32,
+          tabRect.minY + tabRect.size.height * 0.5'f32,
+        )
+      )
+      drop = initPoint(
+        frontend.window.frame().size.width + 180.0'f32,
+        frontend.window.frame().size.height + 180.0'f32,
+      )
+
+    check frontend.window.mouseDownAt(start)
+    check frontend.window.mouseDraggedAt(drop)
+    check frontend.window.mouseUpAt(drop)
+    check frontend.editorGroups().len == 2
+    check frontend.detachedEditorWindows().len == 1
+    let detachedWindow = frontend.detachedEditorWindows()[0]
+    check detachedWindow.contentView() != nil
+    check frontend.editorView.editor.tabs().len == 2
 
   test "native tab bar sits above the editor grid":
     let frontend = newKosmoApplication(newApplication("Kosmo Tabs Layout Test"))

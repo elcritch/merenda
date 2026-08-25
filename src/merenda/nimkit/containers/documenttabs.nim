@@ -76,6 +76,12 @@ type
     selectedIdentifier*: string
     orderedIdentifiers*: seq[string]
 
+  DocumentTabDragInfo* = object
+    item*: DocumentTabItem
+    initialIndex*: int
+    currentIndex*: int
+    location*: Point
+
   DocumentTabHitPart = enum
     dthNone
     dthTab
@@ -91,9 +97,12 @@ type
     xPressedIndex: int
     xPressedPart: DocumentTabHitPart
     xDraggingTab: bool
+    xDraggedItem: DocumentTabItem
+    xDragInitialIndex: int
     xDragStartPoint: Point
     xAllowsClosing: bool
     xAllowsTabReordering: bool
+    xAllowsTabDragging: bool
     xShowsScrollButtons: bool
     xShowsHorizontalScroller: bool
     xDefaultTabStyle: DocumentTabStyle
@@ -144,6 +153,16 @@ protocol DocumentTabsDelegate {.selectorScope: protocol.}:
     tabs: DocumentTabs, item: DocumentTabItem, fromIndex: int, toIndex: int
   ) {.optional.}
 
+  method didBeginDraggingDocumentTab*(
+    tabs: DocumentTabs, info: DocumentTabDragInfo
+  ) {.optional.}
+
+  method didDragDocumentTab*(tabs: DocumentTabs, info: DocumentTabDragInfo) {.optional.}
+
+  method didEndDraggingDocumentTab*(
+    tabs: DocumentTabs, info: DocumentTabDragInfo
+  ) {.optional.}
+
 protocol DocumentTabsDataSource {.selectorScope: protocol.}:
   method documentTabCount*(tabs: DocumentTabs): int
 
@@ -177,6 +196,18 @@ protocol DocumentTabsEvents:
   ) {.signal.}
 
   proc documentTabsDidScroll*(tabs: DocumentTabs, offset: float32) {.signal.}
+
+  proc documentTabDraggingDidBegin*(
+    tabs: DocumentTabs, info: DocumentTabDragInfo
+  ) {.signal.}
+
+  proc documentTabDraggingDidChange*(
+    tabs: DocumentTabs, info: DocumentTabDragInfo
+  ) {.signal.}
+
+  proc documentTabDraggingDidEnd*(
+    tabs: DocumentTabs, info: DocumentTabDragInfo
+  ) {.signal.}
 
 proc reloadDocumentTabs*(tabs: DocumentTabs)
 proc reloadData*(tabs: DocumentTabs)
@@ -466,6 +497,19 @@ proc `allowsTabReordering=`*(tabs: DocumentTabs, allowed: bool) =
   tabs.xAllowsTabReordering = allowed
   tabs.xDraggingTab = false
   tabs.xPressedPart = dthNone
+  tabs.needsDisplay = true
+
+proc allowsTabDragging*(tabs: DocumentTabs): bool =
+  tabs.xAllowsTabDragging
+
+proc `allowsTabDragging=`*(tabs: DocumentTabs, allowed: bool) =
+  if tabs.xAllowsTabDragging == allowed:
+    return
+  tabs.xAllowsTabDragging = allowed
+  if not allowed:
+    tabs.xDraggingTab = false
+    tabs.xDraggedItem = nil
+    tabs.xDragInitialIndex = -1
   tabs.needsDisplay = true
 
 proc showsScrollButtons*(tabs: DocumentTabs): bool =
@@ -1043,6 +1087,40 @@ proc didMove(tabs: DocumentTabs, item: DocumentTabItem, fromIndex, toIndex: int)
       didMoveDocumentTab(),
       (tabs: tabs, item: item, fromIndex: fromIndex, toIndex: toIndex),
     )
+
+proc documentTabDragInfo(
+    tabs: DocumentTabs, item: DocumentTabItem, location: Point
+): DocumentTabDragInfo =
+  DocumentTabDragInfo(
+    item: item,
+    initialIndex: tabs.xDragInitialIndex,
+    currentIndex: tabs.indexOfDocumentTabItem(item),
+    location: location,
+  )
+
+proc beginDocumentTabDrag(tabs: DocumentTabs, item: DocumentTabItem, location: Point) =
+  let info = tabs.documentTabDragInfo(item, location)
+  let delegate = tabs.delegate()
+  if not delegate.isNil:
+    discard delegate.sendLocalIfHandled(
+      didBeginDraggingDocumentTab(), (tabs: tabs, info: info)
+    )
+  emit tabs.documentTabDraggingDidBegin(info)
+
+proc updateDocumentTabDrag(tabs: DocumentTabs, item: DocumentTabItem, location: Point) =
+  let info = tabs.documentTabDragInfo(item, location)
+  let delegate = tabs.delegate()
+  if not delegate.isNil:
+    discard delegate.sendLocalIfHandled(didDragDocumentTab(), (tabs: tabs, info: info))
+  emit tabs.documentTabDraggingDidChange(info)
+
+proc endDocumentTabDrag(tabs: DocumentTabs, item: DocumentTabItem, location: Point) =
+  let info = tabs.documentTabDragInfo(item, location)
+  let delegate = tabs.delegate()
+  if not delegate.isNil:
+    discard
+      delegate.sendLocalIfHandled(didEndDraggingDocumentTab(), (tabs: tabs, info: info))
+  emit tabs.documentTabDraggingDidEnd(info)
 
 proc selectDocumentTabAtIndex*(tabs: DocumentTabs, index: int): bool {.discardable.} =
   if index < 0 or index >= tabs.xItems.len:
@@ -1796,6 +1874,8 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
       tabs.xPressedIndex = hit.index
       tabs.xPressedPart = hit.part
       tabs.xDraggingTab = false
+      tabs.xDraggedItem = nil
+      tabs.xDragInitialIndex = -1
       tabs.xDragStartPoint = event.location
       tabs.needsDisplay = true
       true
@@ -1805,17 +1885,25 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
   method mouseDragged(tabs: DocumentTabs, event: MouseEvent): bool =
     if tabs.xPressedIndex < 0:
       return false
-    if tabs.xPressedPart != dthTab or not tabs.allowsTabReordering():
+    if tabs.xPressedPart != dthTab or
+        not (tabs.allowsTabReordering() or tabs.allowsTabDragging()):
       return true
     let
       deltaX = abs(event.location.x - tabs.xDragStartPoint.x)
       deltaY = abs(event.location.y - tabs.xDragStartPoint.y)
     if not tabs.xDraggingTab and max(deltaX, deltaY) >= DocumentTabDragThreshold:
       tabs.xDraggingTab = true
+      tabs.xDraggedItem = tabs.xItems[tabs.xPressedIndex]
+      tabs.xDragInitialIndex = tabs.xPressedIndex
+      if tabs.allowsTabDragging():
+        tabs.beginDocumentTabDrag(tabs.xDraggedItem, event.location)
     if tabs.xDraggingTab:
-      let destination = tabs.tabMoveDestinationIndex(event.location)
-      if destination >= 0:
-        discard tabs.moveDocumentTabItem(tabs.xPressedIndex, destination)
+      if tabs.allowsTabReordering() and tabs.tabViewportRect().contains(event.location):
+        let destination = tabs.tabMoveDestinationIndex(event.location)
+        if destination >= 0:
+          discard tabs.moveDocumentTabItem(tabs.xPressedIndex, destination)
+      if tabs.allowsTabDragging():
+        tabs.updateDocumentTabDrag(tabs.xDraggedItem, event.location)
       return true
     true
 
@@ -1824,16 +1912,25 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
       pressed = tabs.xPressedIndex
       part = tabs.xPressedPart
       wasDragging = tabs.xDraggingTab
+      draggedItem = tabs.xDraggedItem
     tabs.xPressedIndex = -1
     tabs.xPressedPart = dthNone
     tabs.xDraggingTab = false
+    tabs.xDraggedItem = nil
+
+    if wasDragging:
+      if tabs.allowsTabDragging():
+        tabs.endDocumentTabDrag(draggedItem, event.location)
+      tabs.xDragInitialIndex = -1
+      tabs.needsDisplay = true
+      return true
 
     case part
     of dthPreviousButton, dthNextButton:
       tabs.needsDisplay = true
       true
     of dthTab:
-      if not wasDragging and pressed == tabs.documentTabIndexAtPoint(event.location):
+      if pressed == tabs.documentTabIndexAtPoint(event.location):
         discard tabs.selectDocumentTabAtIndex(pressed)
       else:
         tabs.needsDisplay = true
@@ -1919,8 +2016,10 @@ proc initDocumentTabsFields*(tabs: DocumentTabs, frame: Rect = AutoRect) =
   tabs.xSelectedIndex = -1
   tabs.xPressedIndex = -1
   tabs.xPressedPart = dthNone
+  tabs.xDragInitialIndex = -1
   tabs.xAllowsClosing = true
   tabs.xAllowsTabReordering = true
+  tabs.xAllowsTabDragging = true
   tabs.xShowsScrollButtons = true
   tabs.xShowsHorizontalScroller = false
   tabs.xDefaultTabStyle = dtsRounded
