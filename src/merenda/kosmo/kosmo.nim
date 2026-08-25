@@ -33,6 +33,7 @@ type
     usesBufferSubset: bool
     bufferIds: seq[KosmoBufferId]
     selectedBufferId: Option[KosmoBufferId]
+    viewStates: seq[KosmoEditorViewState]
     dockGroup: WeakRef[KosmoEditorGroup]
 
   KosmoEditorTabsHandler = ref object of nimkit.Responder
@@ -235,9 +236,33 @@ proc syncEditorTabOrder(view: KosmoEditorView) =
     for index, id in view.bufferIds:
       discard view.editor.moveTab(id, index.Natural)
 
+proc viewStateIndex(view: KosmoEditorView, id: KosmoBufferId): int =
+  for index, state in view.viewStates:
+    if state.bufferId == some(id):
+      return index
+  -1
+
+proc saveViewState(view: KosmoEditorView) =
+  if not view.usesBufferSubset or view.selectedBufferId.isNone:
+    return
+  let state = view.editor.captureViewState()
+  if state.bufferId != view.selectedBufferId:
+    return
+  let index = view.viewStateIndex(view.selectedBufferId.get)
+  if index >= 0:
+    view.viewStates[index] = state
+  else:
+    view.viewStates.add state
+
+proc removeViewState(view: KosmoEditorView, id: KosmoBufferId) =
+  let index = view.viewStateIndex(id)
+  if index >= 0:
+    view.viewStates.delete(index)
+
 proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
   if not view.usesBufferSubset:
     return
+  view.saveViewState()
   var selectedIsVisible = false
   if view.selectedBufferId.isSome:
     for tab in tabs:
@@ -251,7 +276,11 @@ proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
       else:
         none(KosmoBufferId)
   if view.selectedBufferId.isSome:
-    discard view.editor.selectTab(view.selectedBufferId.get)
+    let index = view.viewStateIndex(view.selectedBufferId.get)
+    if index >= 0:
+      discard view.editor.restoreViewState(view.viewStates[index])
+    else:
+      discard view.editor.selectTab(view.selectedBufferId.get)
 
 proc adoptActiveBuffer(view: KosmoEditorView) =
   if not view.usesBufferSubset:
@@ -354,7 +383,8 @@ proc refresh*(view: KosmoEditorView) =
     view.renderBuffer.resize(columns.Natural, rows.Natural)
   let tabs = view.visibleTabs(view.editor.tabs())
   view.selectVisibleBuffer(tabs)
-  view.editor.render(view.renderBuffer)
+  view.editor.render(view.renderBuffer, view.editor.captureViewState())
+  view.saveViewState()
   var cells = newSeq[nimkit.MonoTextCell](rows * columns)
   for row in 0 ..< rows:
     for column in 0 ..< columns:
@@ -366,6 +396,7 @@ proc refresh*(view: KosmoEditorView) =
 
 proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load a file selected by the frontend and refresh the cell grid.
+  view.saveViewState()
   let outcome = view.editor.openFile(path)
   if outcome.loaded:
     view.adoptActiveBuffer()
@@ -376,6 +407,7 @@ proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
 
 proc previewFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load `path` as the replaceable file-tree preview and refresh the grid.
+  view.saveViewState()
   let outcome = view.editor.previewFile(path)
   if outcome.loaded:
     view.adoptActiveBuffer()
@@ -392,6 +424,7 @@ proc scrollBy*(
     modifiers: set[nimkit.KeyModifier] = {},
 ): ScrollOutcome =
   ## Translate fractional wheel input and commit complete physical rows to Moe.
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   view.scrollOffsetRows -= deltaY
   let rows = int(floor(view.scrollOffsetRows))
   if rows == 0:
@@ -484,11 +517,14 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
       return
     var id: KosmoBufferId
     if item.identifier.parseTabIdentifier(id):
+      view.saveViewState()
       if view.usesBufferSubset:
         view.selectedBufferId = some(id)
       if not handler.dockController.isNil:
         handler.dockController[].activateGroup(view)
-      if not view.editor.selectTab(id):
+      if view.usesBufferSubset:
+        view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+      elif not view.editor.selectTab(id):
         view.lastTabs.setLen(0)
       view.refresh()
 
@@ -513,6 +549,7 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
       let bufferIndex = view.bufferIds.find(id)
       if bufferIndex >= 0:
         view.bufferIds.delete(bufferIndex)
+      view.removeViewState(id)
       view.selectedBufferId = none(KosmoBufferId)
     if not outcome.closed and not view.statusLabel.isNil:
       view.statusLabel.text = outcome.message
@@ -738,6 +775,7 @@ proc removeBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
   if index < 0:
     return
   group.editorView.bufferIds.delete(index)
+  group.editorView.removeViewState(id)
   group.editorView.selectedBufferId = none(KosmoBufferId)
   group.editorView.lastTabs.setLen(0)
 

@@ -11,11 +11,12 @@ import pkg/results as pkgResults
 
 import
   moepkg/[
-    editor, editor_buffers, editor_display, editor_frame, frontend_input, handler,
-    config, encoding,
+    editor, editor_buffers, editor_display, editor_frame, editor_render_views,
+    frontend_input, handler, config, editor_window, encoding, motion,
   ]
 from moepkg/buffer/core import BufferId
 import moepkg/key_bindings/registry as moeKeys
+import moepkg/types as moeTypes
 
 when hasAsyncSupport:
   {.error: "Merenda's Moe facade requires Celina's synchronous backend".}
@@ -51,6 +52,17 @@ type
     row*: int
     column*: int
     visible*: bool
+
+  KosmoEditorViewState* = object
+    ## Cursor and viewport state for one buffer projection in an embedding frontend.
+    bufferId: Option[KosmoBufferId]
+    cursorLine: int
+    cursorColumn: int
+    preferredColumn: int
+    viewportTopLine: int
+    viewportTopWrapOffset: int
+    viewportLeftColumn: int
+    viewportDetachedFromCursor: bool
 
   KosmoTabCloseResult* = object
     closed*: bool
@@ -333,6 +345,53 @@ proc cursor*(editor: KosmoEditor): KosmoCursor =
     row: position.y, column: position.x, visible: editor.editor.state.cursorVisible
   )
 
+proc captureViewState*(editor: KosmoEditor): KosmoEditorViewState =
+  ## Capture the active buffer's logical cursor and viewport for a frontend pane.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let window = editor.editor.activeWindow()
+  result = KosmoEditorViewState(
+    bufferId: some(window.buffer.id.toKosmoBufferId),
+    cursorLine: window.cursor.line,
+    cursorColumn: window.cursor.column,
+    preferredColumn: window.preferredColumn,
+    viewportTopLine: window.viewport.topLine,
+    viewportTopWrapOffset: window.viewport.topWrapOffset,
+    viewportLeftColumn: window.viewport.leftColumn,
+    viewportDetachedFromCursor: window.viewport.detachedFromCursor,
+  )
+
+func bufferId*(state: KosmoEditorViewState): Option[KosmoBufferId] =
+  ## Return the buffer projected by a captured frontend view state.
+  state.bufferId
+
+proc applyViewState(editor: KosmoEditor, state: KosmoEditorViewState) =
+  let window = editor.editor.activeWindow()
+  let cursor = editor.editor.motionController.cursorManager.clampPosition(
+    moeTypes.CursorPosition(x: state.cursorColumn, y: state.cursorLine), window.buffer
+  )
+  window.cursor.line = cursor.y
+  window.cursor.column = cursor.x
+  window.preferredColumn = max(state.preferredColumn, 0)
+  window.viewport.topLine =
+    state.viewportTopLine.clamp(0, max(window.buffer.len - 1, 0))
+  window.viewport.topWrapOffset = max(state.viewportTopWrapOffset, 0)
+  window.viewport.leftColumn = max(state.viewportLeftColumn, 0)
+  window.viewport.detachedFromCursor = state.viewportDetachedFromCursor
+  editor.editor.syncActiveWindow()
+  editor.editor.setActiveWindowScreenCursor(window)
+
+proc restoreViewState*(
+    editor: KosmoEditor, state: KosmoEditorViewState
+): bool {.discardable.} =
+  ## Activate and restore a buffer projection previously captured by a frontend pane.
+  if editor.isNil or editor.editor.isNil or state.bufferId.isNone:
+    return
+  if not editor.selectTab(state.bufferId.get):
+    return
+  editor.applyViewState(state)
+  true
+
 proc newRenderBuffer*(width, height: Natural): RenderBuffer =
   ## Create a cell grid that a Kosmo editor can render into.
   RenderBuffer(buffer: newBuffer(width, height))
@@ -355,6 +414,22 @@ proc render*(editor: KosmoEditor, buffer: var RenderBuffer) =
   ## Advance Moe and draw the editor into `buffer`.
   if editor.isNil or editor.editor.isNil:
     return
+  editor.editor.render(buffer.buffer)
+
+proc render*(
+    editor: KosmoEditor, buffer: var RenderBuffer, state: KosmoEditorViewState
+) =
+  ## Draw a pane snapshot without losing detached scroll state when its grid resizes.
+  if editor.isNil or editor.editor.isNil or state.bufferId.isNone:
+    editor.render(buffer)
+    return
+  if not editor.restoreViewState(state):
+    editor.render(buffer)
+    return
+  let wasResized = editor.editor.updateViewportSize(buffer.buffer)
+  if wasResized:
+    editor.editor.advanceLayoutForFrame(buffer.buffer, true)
+    editor.applyViewState(state)
   editor.editor.render(buffer.buffer)
 
 func toMoeModifiers(modifiers: set[KeyModifier]): set[frontend_input.KeyModifier] =

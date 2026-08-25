@@ -1,6 +1,7 @@
 import std/[os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
+import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 
 proc renderedText(buffer: RenderBuffer): string =
@@ -8,6 +9,15 @@ proc renderedText(buffer: RenderBuffer): string =
     for column in 0 ..< buffer.width:
       result.add buffer.cell(column, row).symbol
     result.add '\n'
+
+proc numberedLines(prefix: string, count: Natural): string =
+  var lines = newSeqOfCap[string](count)
+  for index in 0 ..< count:
+    lines.add prefix & " row " & $index
+  lines.join("\n")
+
+proc displayedText(view: KosmoEditorView): string =
+  monoTextViews.stringValue(MonoTextView(view))
 
 suite "Kosmo":
   test "renders initial text into a cell grid":
@@ -371,6 +381,87 @@ suite "Kosmo":
     check groups[0].editorView.documentTabs.len == 1
     check groups[1].editorView.documentTabs.len == 1
     check frontend.editorView.editor.tabs().len == bufferCount
+
+  test "split editor groups keep independent cursor and scroll state":
+    let
+      root = createTempDir("merenda-kosmo-split-state-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, numberedLines("first", 80))
+    writeFile(secondPath, numberedLines("second", 80))
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Split State Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(firstPath)
+    check frontend.openPath(secondPath)
+
+    let
+      sourceTabs = frontend.documentTabs
+      tabRect = sourceTabs.documentTabRect(0)
+      start = sourceTabs.pointToWindow(
+        initPoint(
+          tabRect.minX + tabRect.size.width * 0.5'f32,
+          tabRect.minY + tabRect.size.height * 0.5'f32,
+        )
+      )
+      drop = frontend.dockView.pointToWindow(
+        initPoint(
+          frontend.dockView.bounds().maxX - 4.0'f32,
+          frontend.dockView.bounds().minY +
+            frontend.dockView.bounds().size.height * 0.5'f32,
+        )
+      )
+
+    check frontend.window.mouseDownAt(start)
+    check frontend.window.mouseDraggedAt(drop)
+    check frontend.window.mouseUpAt(drop)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    let groups = frontend.editorGroups()
+    check groups.len == 2
+    check groups[0].editorView.documentTabs.documentTabModels()[0].title == "second.txt"
+    check groups[1].editorView.documentTabs.documentTabModels()[0].title == "first.txt"
+
+    groups[0].editorView.refresh()
+    check groups[0].editorView.keyDown(
+      KeyEvent(text: "j", key: keyJ, keyCode: keyJ.ord)
+    )
+    let firstCursor = frontend.editorView.editor.cursor()
+    groups[1].editorView.refresh()
+    check groups[1].editorView.keyDown(
+      KeyEvent(text: "j", key: keyJ, keyCode: keyJ.ord)
+    )
+    check groups[1].editorView.keyDown(
+      KeyEvent(text: "j", key: keyJ, keyCode: keyJ.ord)
+    )
+    groups[0].editorView.refresh()
+    check frontend.editorView.editor.cursor() == firstCursor
+
+    let scroll = groups[0].editorView.scrollBy(-8.0'f32, row = 2, column = 2)
+    check scroll.appliedRows == 8
+    let firstScrolledGrid = groups[0].editorView.displayedText()
+    check "second row 8" in firstScrolledGrid
+
+    groups[1].editorView.refresh()
+    groups[0].editorView.refresh()
+    check groups[0].editorView.displayedText() == firstScrolledGrid
+
+    let secondScroll = groups[1].editorView.scrollBy(-3.0'f32, row = 2, column = 2)
+    check secondScroll.appliedRows == 3
+    let secondScrolledGrid = groups[1].editorView.displayedText()
+    check "first row 3" in secondScrolledGrid
+
+    groups[0].editorView.refresh()
+    check groups[0].editorView.displayedText() == firstScrolledGrid
+    groups[1].editorView.refresh()
+    check groups[1].editorView.displayedText() == secondScrolledGrid
 
   test "dragging a document tab outside every workspace creates a window":
     let
