@@ -37,10 +37,49 @@ suite "Kosmo":
     check editor.handleKey("i")
     check editor.handleTextInput("λ")
     check editor.handleKey("Esc")
+    check not editor.handleKey("S-'")
     editor.render(buffer)
 
     check "λ" in buffer.renderedText
     editor.close()
+
+  test "native shifted text enters Moe command mode without invalid key notation":
+    let frontend = newKosmoApplication(newApplication("Kosmo Command Input Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyQuote, keyCode: keyQuote.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput("\"")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
+    )
+
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    check "COMMAND" in frontend.statusLabel.text
+    check frontend.editorView.editor.commandLine().visible
+    check not frontend.editorPane.commandBar.hidden()
+    check frontend.editorPane.commandBar.frame().maxY ==
+      frontend.editorPane.bounds().maxY
+    check frontend.editorPane.commandBar.frame().minY >= frontend.editorView.frame().minY
+    check frontend.window.dispatchTextInput("set number")
+    check ":set number" in frontend.editorView.displayedText()
+    check ":set number" in
+      monoTextViews.stringValue(MonoTextView(frontend.editorPane.commandBar))
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
+    check not frontend.editorView.editor.commandLine().visible
+    check frontend.editorPane.commandBar.hidden()
+    check "NORMAL" in frontend.statusLabel.text
+    check "number" in frontend.statusLabel.text
 
   test "scroll input reports a frontend-neutral outcome":
     let editor = newKosmoEditor(text = "one\ntwo\nthree")
@@ -296,6 +335,21 @@ suite "Kosmo":
       @[View(frontend.fileTree), View(frontend.dockView)]
     frontend.editorView.editor.close()
 
+  test "window resizing preserves the chosen file tree width":
+    let frontend = newKosmoApplication(newApplication("Kosmo Resize Test"))
+    defer:
+      frontend.close()
+    frontend.contentView.frame = rect(0, 0, 720, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    frontend.splitView.setPositionOfDivider(0, 230.0'f32)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let fileTreeWidth = frontend.fileTree.frame().size.width
+
+    frontend.contentView.frame = rect(0, 0, 1040, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    check abs(frontend.fileTree.frame().size.width - fileTreeWidth) < 0.01'f32
+
   test "native tabs select, reorder, and close Moe buffers":
     let
       root = createTempDir("merenda-kosmo-native-tabs-", "")
@@ -462,6 +516,31 @@ suite "Kosmo":
     check groups[0].editorView.displayedText() == firstScrolledGrid
     groups[1].editorView.refresh()
     check groups[1].editorView.displayedText() == secondScrolledGrid
+
+    let secondFocusPoint = groups[1].editorView.pointToWindow(initPoint(12, 12))
+    check frontend.window.mouseDownAt(secondFocusPoint)
+    check "first.txt" in frontend.statusLabel.text
+    groups[0].editorView.refresh()
+    check "first.txt" in frontend.statusLabel.text
+    let firstFocusPoint = groups[0].editorView.pointToWindow(initPoint(12, 12))
+    check frontend.window.mouseDownAt(firstFocusPoint)
+    check "second.txt" in frontend.statusLabel.text
+    groups[1].editorView.refresh()
+    check "second.txt" in frontend.statusLabel.text
+
+    let inactiveGridBeforeCommand = groups[1].editorView.displayedText()
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    check frontend.window.dispatchTextInput("set")
+    check not groups[0].pane.commandBar.hidden()
+    check groups[1].pane.commandBar.hidden()
+    check frontend.window.mouseDownAt(secondFocusPoint)
+    check groups[0].pane.commandBar.hidden()
+    check groups[1].pane.commandBar.hidden()
+    check not frontend.editorView.editor.commandLine().visible
+    check groups[1].editorView.displayedText() == inactiveGridBeforeCommand
 
     groups[0].editorView.refresh()
     let firstCursorBeforePageMotion = frontend.editorView.editor.cursor()

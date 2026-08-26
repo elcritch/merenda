@@ -1,6 +1,6 @@
 ## A synchronous NimKit frontend for the Moe editor engine.
 
-import std/[math, options, os, strutils]
+import std/[math, options, os, strutils, unicode]
 
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
@@ -13,6 +13,7 @@ const
   KosmoOpenFileAction* = "kosmo.openFile"
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
+  KosmoCommandBarHeight* = 24.0'f32
   KosmoEditorStyleId* = "kosmo.editor"
   KosmoPreviewTabStyleClass* = "kosmo-preview"
   KosmoCursorOpacity = 0.45'f32
@@ -21,11 +22,14 @@ const
   KosmoTabIdentifierPrefix = "kosmo.buffer."
 
 type
+  KosmoCommandBar* = ref object of nimkit.MonoTextView
+
   KosmoEditorView* = ref object of nimkit.MonoTextView
     editor*: KosmoEditor
     documentTabs*: nimkit.DocumentTabs
     renderBuffer: RenderBuffer
     statusLabel: nimkit.Label
+    commandBar: KosmoCommandBar
     scrollOffsetRows: float32
     lastTabs: seq[KosmoTab]
     syncingTabs: bool
@@ -43,6 +47,7 @@ type
   KosmoEditorPane* = ref object of nimkit.View
     documentTabs*: nimkit.DocumentTabs
     editorView*: KosmoEditorView
+    commandBar*: KosmoCommandBar
 
   KosmoEditorGroup* = ref object
     identifier*: string
@@ -71,6 +76,8 @@ type
     splitView: nimkit.SplitView
     statusLabel: nimkit.Label
     setInitialDivider: bool
+    lastSplitWidth: float32
+    fileTreeWidth: float32
 
   KosmoDetachedContentView = ref object of nimkit.View
     workspace: nimkit.DockView
@@ -149,6 +156,34 @@ func keyNotation(event: nimkit.KeyEvent): string =
     parts.add "S"
   parts.add key
   parts.join("-")
+
+func awaitsCommittedText(event: nimkit.KeyEvent): bool =
+  if event.modifiers - {nimkit.kmShift} != {}:
+    return false
+  case event.key
+  of nimkit.keyA .. nimkit.keyZ,
+      nimkit.keyTilde,
+      nimkit.key1 .. nimkit.key0,
+      nimkit.keyMinus,
+      nimkit.keyEqual,
+      nimkit.keyLeftBracket,
+      nimkit.keyRightBracket,
+      nimkit.keySpace,
+      nimkit.keySlash,
+      nimkit.keyDot,
+      nimkit.keyComma,
+      nimkit.keySemicolon,
+      nimkit.keyQuote,
+      nimkit.keyBackslash,
+      nimkit.keyNumpad0 .. nimkit.keyNumpad9,
+      nimkit.keyNumpadDot,
+      nimkit.keyAdd,
+      nimkit.keySubtract,
+      nimkit.keyMultiply,
+      nimkit.keyDivide:
+    true
+  else:
+    false
 
 func toNimkitColor(color: celina.ColorValue): nimkit.Color =
   let rgb = celina.toRgb(color)
@@ -326,16 +361,58 @@ proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
         break
   view.lastTabs = visibleTabs
 
+proc isActiveEditorGroup(view: KosmoEditorView): bool =
+  if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
+    return true
+  let controller = view.tabsDelegate.dockController[]
+  controller.activeGroup.isNil or controller.activeGroup.editorView == view
+
+proc syncCommandBar(view: KosmoEditorView, command: KosmoCommandLine) =
+  let bar = view.commandBar
+  if bar.isNil:
+    return
+  let visible = command.visible and view.isActiveEditorGroup()
+  bar.hidden = not visible
+  if not visible:
+    return
+
+  var runes: seq[Rune]
+  for rune in command.text.runes:
+    runes.add rune
+  let
+    cursor = command.cursor.clamp(0, runes.len)
+    columns = max(runes.len, cursor + 1)
+    cursorColor = bar.cursorColor()
+  var cells = newSeq[nimkit.MonoTextCell](columns)
+  for column in 0 ..< columns:
+    let rune =
+      if column < runes.len:
+        runes[column]
+      else:
+        Rune(' ')
+    cells[column] = nimkit.initMonoTextCell(
+      rune, backgroundColor = cursorColor, hasBackgroundColor = column == cursor
+    )
+  bar.replaceGrid(1, columns, cells)
+
+  let metrics = bar.monoTextMetrics()
+  if metrics.cellWidth > 0.0'f32:
+    let visibleColumns = max(int(floor(bar.bounds().size.width / metrics.cellWidth)), 1)
+    let firstColumn = max(cursor - visibleColumns + 1, 0)
+    bar.gridOffset = nimkit.initPoint(-firstColumn.float32 * metrics.cellWidth, 0.0'f32)
+
 proc syncChrome(view: KosmoEditorView) =
   let tabs = view.visibleTabs(view.editor.tabs())
   view.syncTabs(tabs)
-  if not view.statusLabel.isNil:
+  if not view.statusLabel.isNil and view.isActiveEditorGroup():
     let text = view.editor.status().statusText(tabs)
     if view.statusLabel.text != text:
       view.statusLabel.text = text
+  let command = view.editor.commandLine()
+  view.syncCommandBar(command)
   let cursor = view.editor.cursor()
   view.setCursorPosition(cursor.row, cursor.column)
-  view.cursorVisible = cursor.visible
+  view.cursorVisible = cursor.visible and not command.visible
 
 proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   var appearance = base
@@ -365,16 +442,13 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   view.appearance = appearance
   if not view.documentTabs.isNil:
     view.documentTabs.appearance = appearance
-
-proc isActiveEditorGroup(view: KosmoEditorView): bool =
-  if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
-    return true
-  let controller = view.tabsDelegate.dockController[]
-  controller.activeGroup.isNil or controller.activeGroup.editorView == view
+  if not view.commandBar.isNil:
+    view.commandBar.appearance = appearance
 
 proc refresh*(view: KosmoEditorView) =
   ## Render the current editor state into the synchronous cell-grid view.
-  if view.editor.completionPopupVisible() and not view.isActiveEditorGroup():
+  if (view.editor.completionPopupVisible() or view.editor.commandLine().visible) and
+      not view.isActiveEditorGroup():
     return
   let metrics = view.monoTextMetrics()
   if metrics.cellWidth <= 0.0'f32 or metrics.lineHeight <= 0.0'f32:
@@ -462,12 +536,12 @@ proc finishDockDrag(
 )
 
 proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool =
+  if event.kind == nimkit.mtreMouseDown and not view.tabsDelegate.dockController.isNil:
+    view.tabsDelegate.dockController[].activateGroup(view)
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   case event.kind
   of nimkit.mtreMouseDown, nimkit.mtreMouseDragged, nimkit.mtreMouseUp:
     if event.kind == nimkit.mtreMouseDown:
-      if not view.tabsDelegate.dockController.isNil:
-        view.tabsDelegate.dockController[].activateGroup(view)
       let window = view.window()
       if window of nimkit.Window:
         discard nimkit.Window(window).makeFirstResponder(view)
@@ -498,6 +572,8 @@ proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool
     let keyEvent = event.keyEvent
     if keyEvent.text.len > 0 and keyEvent.modifiers - {nimkit.kmShift} == {}:
       discard view.editor.handleTextInput(keyEvent.text)
+    elif keyEvent.awaitsCommittedText():
+      return false
     else:
       let notation = keyEvent.keyNotation()
       if notation.len > 0:
@@ -506,6 +582,13 @@ proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool
     true
   of nimkit.mtreFlagsChanged:
     true
+
+protocol KosmoEditorInput of nimkit.TextInputProtocol:
+  method insertText(view: KosmoEditorView, text: string) =
+    if text.len > 0:
+      view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+      discard view.editor.handleTextInput(text)
+      view.refresh()
 
 proc targetView(handler: KosmoEditorTabsHandler): KosmoEditorView =
   if not handler.editorView.isNil:
@@ -527,6 +610,7 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
     if item.identifier.parseTabIdentifier(id):
       view.saveViewState()
       view.editor.dismissCompletionPopup()
+      view.editor.dismissCommandLine()
       if view.usesBufferSubset:
         view.selectedBufferId = some(id)
       if not handler.dockController.isNil:
@@ -639,38 +723,72 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result.textColor = nimkit.color(0.88, 0.9, 0.94, 1.0)
   result.backgroundColor = nimkit.color(0.04, 0.05, 0.07, 1.0)
   result.applyKosmoEditorStyle(result.effectiveAppearance())
-  result.rawEventPolicy =
-    nimkit.initMonoTextRawEventPolicy(capturedEvents = nimkit.AllMonoTextRawEvents)
+  result.rawEventPolicy = nimkit.initMonoTextRawEventPolicy(
+    capturedEvents = nimkit.AllMonoTextRawEvents - {nimkit.mtreKeyDown}
+  )
   let editorView = result
   result.rawEventHandler = proc(event: nimkit.MonoTextRawEvent): bool =
     editorView.handleRawEvent(event)
+  discard result.withProtocol(KosmoEditorInput)
   result.tabsDelegate = KosmoEditorTabsHandler(editorView: result.unsafeWeakRef())
   discard result.tabsDelegate.withProtocol(KosmoEditorTabsDelegate)
   result.documentTabs.delegate = result.tabsDelegate
   result.syncChrome()
 
+protocol KosmoCommandBarHitTesting of nimkit.ViewProtocol:
+  method pointInside(bar: KosmoCommandBar, point: nimkit.Point): bool =
+    discard bar
+    discard point
+
+proc newKosmoCommandBar(view: KosmoEditorView): KosmoCommandBar =
+  result = KosmoCommandBar()
+  result.initMonoTextViewFields()
+  result.clipsToBounds = true
+  result.padding = 0.0'f32
+  result.fontName = view.fontName()
+  result.fontSize = view.fontSize()
+  result.textColor = nimkit.color(0.88, 0.9, 0.94, 1.0)
+  result.cursorVisible = false
+  result.styleId = KosmoEditorStyleId
+  result.appearance = view.effectiveAppearance()
+  result.hidden = true
+  discard result.withProtocol(KosmoCommandBarHitTesting)
+
 protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(pane: KosmoEditorPane) =
-    let bounds = pane.bounds()
+    let
+      bounds = pane.bounds()
+      tabHeight = min(KosmoTabBarHeight, bounds.size.height)
+      editorHeight = max(bounds.size.height - KosmoTabBarHeight, 1.0'f32)
+      commandBarHeight = min(KosmoCommandBarHeight, editorHeight)
     pane.documentTabs.setFrameFromLayout(
-      nimkit.rect(0, 0, bounds.size.width, min(KosmoTabBarHeight, bounds.size.height))
+      nimkit.rect(0, 0, bounds.size.width, tabHeight)
     )
     pane.editorView.setFrameFromLayout(
+      nimkit.rect(0, tabHeight, bounds.size.width, editorHeight)
+    )
+    pane.commandBar.setFrameFromLayout(
       nimkit.rect(
         0,
-        min(KosmoTabBarHeight, bounds.size.height),
+        max(tabHeight, bounds.size.height - commandBarHeight),
         bounds.size.width,
-        max(bounds.size.height - KosmoTabBarHeight, 1.0'f32),
+        commandBarHeight,
       )
     )
     pane.editorView.refresh()
 
 proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
-  result =
-    KosmoEditorPane(documentTabs: editorView.documentTabs, editorView: editorView)
+  let commandBar = newKosmoCommandBar(editorView)
+  result = KosmoEditorPane(
+    documentTabs: editorView.documentTabs,
+    editorView: editorView,
+    commandBar: commandBar,
+  )
+  editorView.commandBar = commandBar
   result.initViewFields()
   result.addSubview(result.documentTabs)
   result.addSubview(editorView)
+  result.addSubview(commandBar)
   discard result.withProtocol(KosmoEditorPaneLayout)
 
 proc groupForView(
@@ -713,9 +831,14 @@ proc activateGroup(controller: KosmoDockController, view: KosmoEditorView) =
   let group = controller.groupForView(view)
   if not group.isNil:
     if controller.activeGroup != group:
+      let previous = controller.activeGroup
       controller.editor.dismissCompletionPopup()
+      controller.editor.dismissCommandLine()
+      if not previous.isNil:
+        previous.editorView.refresh()
     controller.activeGroup = group
     view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+    view.syncChrome()
 
 proc initialBufferIds(editor: KosmoEditor): seq[KosmoBufferId] =
   for tab in editor.tabs():
@@ -969,7 +1092,12 @@ proc finishDockDrag(
 
 protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(content: KosmoContentView) =
-    let bounds = content.bounds()
+    let
+      bounds = content.bounds()
+      panes = content.splitView.panes()
+      splitWidthChanged =
+        content.setInitialDivider and
+        abs(bounds.size.width - content.lastSplitWidth) > 0.001'f32
     content.statusLabel.setFrameFromLayout(
       nimkit.rect(
         0,
@@ -986,7 +1114,12 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
     if not content.setInitialDivider and bounds.size.width > 0.0'f32:
       content.splitView.setPositionOfDivider(0, min(bounds.size.width * 0.25, 260.0))
       content.setInitialDivider = true
+    elif splitWidthChanged:
+      content.splitView.setPositionOfDivider(0, content.fileTreeWidth)
+    content.lastSplitWidth = bounds.size.width
     content.splitView.layoutSubtreeIfNeeded()
+    if panes.len > 0:
+      content.fileTreeWidth = panes[0].frame().size.width
 
 proc newKosmoContentView(
     splitView: nimkit.SplitView, statusLabel: nimkit.Label

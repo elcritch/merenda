@@ -48,6 +48,12 @@ type
     gitModified*: int
     gitDeleted*: int
 
+  KosmoCommandLine* = object
+    ## The command input currently owned by Moe's command overlay.
+    visible*: bool
+    text*: string
+    cursor*: int
+
   KosmoCursor* = object ## Moe's cursor position in the rendered cell grid.
     row*: int
     column*: int
@@ -346,6 +352,17 @@ proc cursor*(editor: KosmoEditor): KosmoCursor =
     row: position.y, column: position.x, visible: editor.editor.state.cursorVisible
   )
 
+proc commandLine*(editor: KosmoEditor): KosmoCommandLine =
+  ## Return command input for a frontend-owned command bar.
+  if editor.isNil or editor.editor.isNil or
+      not moeTypes.isCommandOverlay(editor.editor.state):
+    return
+  KosmoCommandLine(
+    visible: true,
+    text: editor.editor.state.input.commandText,
+    cursor: editor.editor.state.input.commandCursor + 1,
+  )
+
 proc completionPopupVisible*(editor: KosmoEditor): bool =
   ## Return whether Moe currently has an active insert-completion popup.
   not editor.isNil and not editor.editor.isNil and
@@ -504,13 +521,18 @@ proc handleScrollInput*(editor: KosmoEditor, input: ScrollInput): ScrollOutcome 
 
 proc handleKey*(editor: KosmoEditor, key: string): bool =
   ## Send a physical key in Moe notation, for example `"j"` or `"C-s"`.
-  ## Invalid key notation raises `ValueError`.
+  ## Return false when `key` is not valid Moe notation.
   if editor.isNil or editor.editor.isNil:
     return false
   let combo = moeKeys.parseKeyCombo(key)
   if combo.isNone:
-    raise newException(ValueError, "Invalid Moe key: " & key)
+    return false
   editor.editor.handleKeyCombo(combo.get)
+
+proc dismissCommandLine*(editor: KosmoEditor) =
+  ## Cancel Moe's command overlay, if one is active.
+  if editor.commandLine().visible:
+    discard editor.handleKey("Esc")
 
 proc handleTextInput*(editor: KosmoEditor, text: string): bool =
   ## Send committed text, including IME and composed Unicode input.
