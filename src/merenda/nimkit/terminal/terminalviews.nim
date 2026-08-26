@@ -723,6 +723,14 @@ protocol TerminalViewInput of TextInputProtocol:
     discard view.sendInput(text)
 
 protocol TerminalViewEditingCommands of TextEditingCommandProtocol:
+  method insertTab(view: TerminalView, args: ActionArgs) =
+    discard args
+    discard view.sendInput("\t")
+
+  method insertBacktab(view: TerminalView, args: ActionArgs) =
+    discard args
+    discard view.sendInput("\x1b[Z")
+
   method copy(view: TerminalView, args: ActionArgs) =
     discard args
     let text = view.selectionText()

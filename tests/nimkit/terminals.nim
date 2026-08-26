@@ -1,5 +1,7 @@
 import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
+import sigils/core
+
 import merenda/nimkit/app/[animations, pasteboards, windows]
 import merenda/nimkit/foundation/[events, types]
 import
@@ -7,6 +9,12 @@ import
     [terminalparser, terminalscreen, terminalsessions, terminalviews]
 import merenda/nimkit/text/monotextviews
 import merenda/nimkit/view/views
+
+type TerminalInteractionSpy = ref object of Agent
+  links: seq[string]
+
+proc rememberTerminalLink(spy: TerminalInteractionSpy, link: string) {.slot.} =
+  spy.links.add link
 
 proc feed(screen: var TerminalScreen, parser: var TerminalParser, value: string) =
   parser.feed(screen, value)
@@ -30,6 +38,18 @@ proc pollUntilText(
     if expected in session.screen().plainText():
       return true
     sleep(5)
+
+proc terminalCellPoint(view: TerminalView, row, column: int): Point =
+  let metrics = view.monoTextMetrics()
+  view.pointToWindow(
+    initPoint(
+      view.padding() + metrics.cellWidth * (column.float32 + 0.5'f32),
+      view.padding() + metrics.lineHeight * (row.float32 + 0.5'f32),
+    )
+  )
+
+func normalizedTerminalOutput(session: TerminalSession): string =
+  session.screen().plainText().replace("\n", " ").splitWhitespace().join(" ")
 
 suite "nimkit terminal screen and parser":
   test "screen starts with bounded dimensions and terminal defaults":
@@ -482,6 +502,52 @@ suite "nimkit terminal views":
       discard view.poll()
       check "reply:hello" in view.stringValue()
 
+  test "window dispatch sends navigation control keys and ordinary paste":
+    when defined(posix):
+      let
+        session = spawnTerminalSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty raw -echo min 0 time 10; printf ready; " &
+              "dd bs=1 count=64 2>/dev/null | od -An -tx1"
+          ),
+          columns = 50,
+          rows = 4,
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 500, 120))
+        window = newWindow("Terminal keyboard", frame = rect(0, 0, 500, 120))
+      defer:
+        view.close()
+      window.setContentView(view)
+      check window.makeFirstResponder(view)
+      check session.pollUntilText("ready")
+
+      check window.dispatchTextInput("ab")
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
+      )
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord)
+      )
+      check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+      )
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmControl})
+      )
+      check window.dispatchKeyDown(
+        KeyEvent(text: "x", key: keyX, keyCode: keyX.ord, modifiers: {kmOption})
+      )
+      discard generalPasteboard().setPlainText("YZ")
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmCommand})
+      )
+
+      check session.pollUntilExit()
+      check "61 62 7f 1b 5b 44 09 1b 5b 5a 03 1b 78 59 5a" in
+        session.normalizedTerminalOutput()
+
   test "attached running views poll from the window animation scheduler":
     when defined(posix):
       let
@@ -503,31 +569,81 @@ suite "nimkit terminal views":
       check "automatic" in view.stringValue()
       check not session.running()
 
-  test "mouse selection and copy use window-dispatched clicks and commands":
+  test "resizing the window updates the visible grid and child PTY":
+    when defined(posix):
+      let
+        session = spawnTerminalSession(
+          initTerminalSpawnOptions(
+            command = "stty -echo; printf ready; IFS= read -r ignored; stty size"
+          ),
+          columns = 20,
+          rows = 3,
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 260, 90))
+        window = newWindow("Terminal resize", frame = rect(0, 0, 260, 90))
+      defer:
+        view.close()
+      window.setContentView(view)
+      view.layoutSubtreeIfNeeded()
+      check window.makeFirstResponder(view)
+      check session.pollUntilText("ready")
+      let initialSize = (session.screen().columns, session.screen().rows)
+
+      window.frame = rect(0, 0, 520, 200)
+      view.layoutSubtreeIfNeeded()
+      let resizedSize = (session.screen().columns, session.screen().rows)
+      check resizedSize[0] > initialSize[0]
+      check resizedSize[1] > initialSize[1]
+      check view.maxColumnCount == resizedSize[0]
+      check view.lineCount == resizedSize[1]
+
+      check window.dispatchTextInput("resized")
+      check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+      check session.pollUntilExit()
+      check $resizedSize[1] & " " & $resizedSize[0] in session.screen().plainText()
+
+  test "mouse drag word line and select-all interactions use responder commands":
     let
       session = newTerminalSession(columns = 20, rows = 3)
       view = newTerminalView(session, frame = rect(0, 0, 300, 90))
       window = newWindow("Terminal selection", frame = rect(0, 0, 300, 90))
-    session.processOutput("alpha beta")
+    session.processOutput("alpha beta\r\nsecond line")
     discard view.poll()
     window.setContentView(view)
     let
-      metrics = view.monoTextMetrics()
-      point = view.pointToWindow(
-        initPoint(
-          view.padding() + metrics.cellWidth * 7.2'f32,
-          view.padding() + metrics.lineHeight * 0.5'f32,
-        )
-      )
+      dragStart = view.terminalCellPoint(0, 0)
+      dragEnd = view.terminalCellPoint(0, 4)
+      wordPoint = view.terminalCellPoint(0, 7)
+      linePoint = view.terminalCellPoint(1, 3)
+      originalText = session.screen().plainText()
 
-    check window.mouseDownAt(point, clickCount = 2)
-    check window.mouseUpAt(point)
+    check window.mouseDownAt(dragStart, clickCount = 1)
+    check window.mouseDraggedAt(dragEnd)
+    check window.mouseUpAt(dragEnd, clickCount = 1)
+    check view.selectionText() == "alpha"
+
+    check window.mouseDownAt(wordPoint, clickCount = 2)
+    check window.mouseUpAt(wordPoint, clickCount = 2)
     check view.hasSelection()
     check view.selectionText() == "beta"
     check window.dispatchKeyDown(
       KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmCommand})
     )
     check generalPasteboard().plainText() == "beta"
+
+    check window.mouseDownAt(linePoint, clickCount = 3)
+    check window.mouseUpAt(linePoint, clickCount = 3)
+    check view.selectionText() == "second line"
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmCommand})
+    )
+    check view.selectionText().strip() == "alpha beta\nsecond line"
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyX, keyCode: keyX.ord, modifiers: {kmCommand})
+    )
+    check generalPasteboard().plainText().strip() == "alpha beta\nsecond line"
+    check session.screen().plainText() == originalText
 
   test "scrolling moves only the viewport with a fractional grid offset":
     let
@@ -552,6 +668,31 @@ suite "nimkit terminal views":
     )
     check view.scrollPosition() == session.screen().scrollbackCount().float32
     check session.screen().cursor.position == cursorBefore
+
+  test "Shift preserves local selection and scrolling during mouse tracking":
+    let
+      session = newTerminalSession(columns = 12, rows = 3)
+      view = newTerminalView(session, frame = rect(0, 0, 220, 90))
+      window = newWindow("Terminal Shift mouse", frame = rect(0, 0, 220, 90))
+    session.processOutput("\x1b[?1003;1006hone\r\ntwo\r\nthree\r\nfour\r\nfive")
+    discard view.poll()
+    window.setContentView(view)
+    let
+      dragStart = view.terminalCellPoint(0, 0)
+      dragEnd = view.terminalCellPoint(0, 4)
+
+    check session.screen().modes.mouseTracking == tmtAny
+    check window.mouseDownAt(dragStart, clickCount = 1, modifiers = {kmShift})
+    check window.mouseDraggedAt(dragEnd, modifiers = {kmShift})
+    check window.mouseUpAt(dragEnd, clickCount = 1, modifiers = {kmShift})
+    check view.selectionText() == "three"
+
+    check window.dispatchScrollWheel(
+      ScrollEvent(
+        location: dragStart, deltaY: 1.0'f32, phase: sepChanged, modifiers: {kmShift}
+      )
+    )
+    check view.scrollPosition() == 1.0'f32
 
   test "paste honors bracketed paste mode through responder commands":
     when defined(posix):
@@ -617,6 +758,55 @@ suite "nimkit terminal views":
         session.screen().plainText().replace("\n", " ").splitWhitespace().join(" ")
       check "1b 5b 3c 30 3b 31 3b 31 4d" in output
       check "1b 5b 3c 30 3b 31 3b 31 6d" in output
+
+  test "first responder changes report terminal focus to the child":
+    when defined(posix):
+      let
+        expectedBytes = 6
+        session = spawnTerminalSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty raw -echo; printf ready; dd bs=1 count=" & $expectedBytes &
+              " 2>/dev/null | od -An -tx1"
+          ),
+          columns = 30,
+          rows = 4,
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 300, 120))
+        peer = newView(frame = rect(300, 0, 60, 120))
+        root = newView(frame = rect(0, 0, 360, 120))
+        window = newWindow("Terminal focus", frame = rect(0, 0, 360, 120))
+      defer:
+        view.close()
+      peer.acceptsFirstResponder = true
+      root.addSubview(view)
+      root.addSubview(peer)
+      window.setContentView(root)
+      check session.pollUntilText("ready")
+      session.processOutput("\x1b[?1004h")
+
+      check window.makeFirstResponder(view)
+      check window.makeFirstResponder(peer)
+      check session.pollUntilExit()
+      check "1b 5b 49 1b 5b 4f" in session.normalizedTerminalOutput()
+
+  test "Command-click activates terminal hyperlinks through mouse dispatch":
+    let
+      session = newTerminalSession(columns = 24, rows = 2)
+      view = newTerminalView(session, frame = rect(0, 0, 300, 80))
+      window = newWindow("Terminal hyperlink", frame = rect(0, 0, 300, 80))
+      spy = TerminalInteractionSpy()
+    session.processOutput(
+      "\x1b]8;;https://example.com/docs\x07documentation\x1b]8;;\x07"
+    )
+    discard view.poll()
+    view.connect(terminalHyperlinkWasActivated, spy, rememberTerminalLink)
+    window.setContentView(view)
+    let point = view.terminalCellPoint(0, 3)
+
+    check window.mouseDownAt(point, clickCount = 1, modifiers = {kmCommand})
+    check window.mouseUpAt(point, clickCount = 1, modifiers = {kmCommand})
+    check spy.links == @["https://example.com/docs"]
 
   test "OSC clipboard writes remain opt-in":
     let
