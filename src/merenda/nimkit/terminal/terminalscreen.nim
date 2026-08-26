@@ -104,6 +104,7 @@ type
     pendingReplies: seq[string]
     clipboardText*: string
     clipboardRequestPending*: bool
+    bellCount*: uint64
     alternateScreen*: bool
     generation*: uint64
     tabStops: seq[bool]
@@ -175,6 +176,21 @@ func scrollbackLines*(screen: TerminalScreen): seq[TerminalLine] =
 func scrollbackCount*(screen: TerminalScreen): int =
   screen.scrollback.len
 
+func totalLineCount*(screen: TerminalScreen): int =
+  ## Return the number of addressable scrollback and live-screen lines.
+  screen.scrollback.len + screen.rows
+
+func lineAtAbsolute*(screen: TerminalScreen, index: int): TerminalLine =
+  ## Return a line from the combined scrollback and live-screen history.
+  ##
+  ## Scrollback occupies the first indexes and the current screen the last
+  ## `rows` indexes. An out-of-range index returns an empty line.
+  if index < 0 or index >= screen.totalLineCount():
+    return
+  if index < screen.scrollback.len:
+    return screen.scrollback[index]
+  screen.lineAt(index - screen.scrollback.len)
+
 func pendingReplies*(screen: TerminalScreen): seq[string] =
   screen.pendingReplies
 
@@ -184,6 +200,17 @@ proc takePendingReplies*(screen: var TerminalScreen): seq[string] =
 
 proc markChanged(screen: var TerminalScreen) =
   inc screen.generation
+
+proc ringBell*(screen: var TerminalScreen) =
+  inc screen.bellCount
+  screen.markChanged()
+
+proc takeClipboardRequest*(screen: var TerminalScreen): string =
+  ## Consume text requested by an OSC 52 clipboard-write sequence.
+  if not screen.clipboardRequestPending:
+    return
+  screen.clipboardRequestPending = false
+  screen.clipboardText
 
 proc resetTabStops(screen: var TerminalScreen) =
   screen.tabStops = newSeq[bool](screen.columns)

@@ -1,6 +1,12 @@
 import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
-import merenda/nimkit/terminal/[terminalparser, terminalscreen, terminalsessions]
+import merenda/nimkit/app/[animations, pasteboards, windows]
+import merenda/nimkit/foundation/[events, types]
+import
+  merenda/nimkit/terminal/
+    [terminalparser, terminalscreen, terminalsessions, terminalviews]
+import merenda/nimkit/text/monotextviews
+import merenda/nimkit/view/views
 
 proc feed(screen: var TerminalScreen, parser: var TerminalParser, value: string) =
   parser.feed(screen, value)
@@ -394,3 +400,236 @@ suite "nimkit terminal sessions":
       expect TerminalSessionError:
         session.start()
       check session.state == tssFailed
+
+suite "nimkit terminal views":
+  test "terminal cells map colors attributes and decorations into mono cells":
+    var
+      screen = initTerminalScreen(4, 1)
+      parser = initTerminalParser()
+    screen.feed(parser, "\x1b[1;2;3;4;9;53;38;5;196;48;2;10;20;30;58;2;1;2;3mX")
+
+    let cell = terminalCellToMonoTextCell(
+      screen.cellAt(0, 0), initTerminalPalette(), selected = true
+    )
+
+    check cell.text == "X"
+    check cell.hasForegroundColor
+    check cell.hasBackgroundColor
+    check cell.backgroundColor == initTerminalPalette().selection
+    check mttBold in cell.traits
+    check mttFaint in cell.traits
+    check mttItalic in cell.traits
+    check mtdUnderline in cell.decorations
+    check mtdStrikethrough in cell.decorations
+    check mtdOverline in cell.decorations
+    check cell.hasDecorationColor
+
+  test "terminal key translation follows normal application and modifier modes":
+    var modes = initTerminalModes()
+
+    check terminalKeyInput(KeyEvent(key: keyArrowUp), modes) == "\x1b[A"
+    modes.applicationCursorKeys = true
+    check terminalKeyInput(KeyEvent(key: keyArrowUp), modes) == "\x1bOA"
+    check terminalKeyInput(KeyEvent(key: keyC, modifiers: {kmControl}), modes) == "\x03"
+    check terminalKeyInput(KeyEvent(text: "x", key: keyX, modifiers: {kmOption}), modes) ==
+      "\x1bx"
+    check terminalKeyInput(KeyEvent(key: keyTab, modifiers: {kmShift}), modes) ==
+      "\x1b[Z"
+    check terminalKeyInput(KeyEvent(key: keyF12), modes) == "\x1b[24~"
+    check terminalKeyInput(
+      KeyEvent(text: "c", key: keyC, modifiers: {kmCommand}), modes
+    ).len == 0
+
+  test "view renders an idle session and resizes its screen to cell geometry":
+    let
+      session = newTerminalSession(columns = 12, rows = 3)
+      view = newTerminalView(session, frame = rect(0, 0, 240, 100))
+    session.processOutput("plain \x1b[31mred")
+
+    discard view.poll()
+    check view.cellAt(0, 0).text == "p"
+    check view.cellAt(0, 6).text == "r"
+    check view.cellAt(0, 6).foregroundColor == view.palette().colors[1]
+
+    let oldSize = (session.screen().columns, session.screen().rows)
+    view.frame = rect(0, 0, 360, 160)
+    view.resizeToFit()
+    check session.screen().columns > oldSize[0]
+    check session.screen().rows > oldSize[1]
+    check view.lineCount == session.screen().rows
+    check view.maxColumnCount == session.screen().columns
+
+  test "window text and key dispatch reach an interactive child process":
+    when defined(posix):
+      let
+        session = spawnTerminalSession(
+          initTerminalSpawnOptions(
+            command = "stty -echo; IFS= read -r value; printf 'reply:%s' \"$value\""
+          ),
+          columns = 30,
+          rows = 4,
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 360, 120))
+        window = newWindow("Terminal input", frame = rect(0, 0, 360, 120))
+      defer:
+        view.close()
+      window.setContentView(view)
+      check window.makeFirstResponder(view)
+
+      check window.dispatchTextInput("hello")
+      check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+      check session.pollUntilText("reply:hello")
+      discard view.poll()
+      check "reply:hello" in view.stringValue()
+
+  test "attached running views poll from the window animation scheduler":
+    when defined(posix):
+      let
+        session = spawnTerminalSession(
+          initTerminalSpawnOptions(command = "printf automatic"), columns = 20, rows = 3
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 260, 90))
+        window = newWindow("Terminal polling", frame = rect(0, 0, 260, 90))
+      defer:
+        view.close()
+      window.setContentView(view)
+
+      let deadline = getMonoTime() + initDuration(seconds = 3)
+      while ("automatic" notin view.stringValue() or session.running()) and
+          getMonoTime() < deadline:
+        discard window.animationScheduler().tick(initDuration(milliseconds = 16))
+        sleep(5)
+
+      check "automatic" in view.stringValue()
+      check not session.running()
+
+  test "mouse selection and copy use window-dispatched clicks and commands":
+    let
+      session = newTerminalSession(columns = 20, rows = 3)
+      view = newTerminalView(session, frame = rect(0, 0, 300, 90))
+      window = newWindow("Terminal selection", frame = rect(0, 0, 300, 90))
+    session.processOutput("alpha beta")
+    discard view.poll()
+    window.setContentView(view)
+    let
+      metrics = view.monoTextMetrics()
+      point = view.pointToWindow(
+        initPoint(
+          view.padding() + metrics.cellWidth * 7.2'f32,
+          view.padding() + metrics.lineHeight * 0.5'f32,
+        )
+      )
+
+    check window.mouseDownAt(point, clickCount = 2)
+    check window.mouseUpAt(point)
+    check view.hasSelection()
+    check view.selectionText() == "beta"
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmCommand})
+    )
+    check generalPasteboard().plainText() == "beta"
+
+  test "scrolling moves only the viewport with a fractional grid offset":
+    let
+      session = newTerminalSession(columns = 10, rows = 3)
+      view = newTerminalView(session, frame = rect(0, 0, 180, 80))
+      window = newWindow("Terminal scroll", frame = rect(0, 0, 180, 80))
+    session.processOutput("zero\r\none\r\ntwo\r\nthree\r\nfour")
+    discard view.poll()
+    let cursorBefore = session.screen().cursor.position
+    window.setContentView(view)
+    let point = view.pointToWindow(initPoint(10, 10))
+
+    check window.dispatchScrollWheel(
+      ScrollEvent(location: point, deltaY: 0.5'f32, phase: sepChanged)
+    )
+    check view.scrollPosition() == 0.5'f32
+    check view.gridOffset().y < 0.0'f32
+    check session.screen().cursor.position == cursorBefore
+
+    check window.dispatchScrollWheel(
+      ScrollEvent(location: point, deltaY: 20.0'f32, phase: sepEnded)
+    )
+    check view.scrollPosition() == session.screen().scrollbackCount().float32
+    check session.screen().cursor.position == cursorBefore
+
+  test "paste honors bracketed paste mode through responder commands":
+    when defined(posix):
+      let
+        expected = "\x1b[200~pasted\x1b[201~"
+        session = spawnTerminalSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty raw -echo; printf ready; dd bs=1 count=" & $expected.len &
+              " 2>/dev/null | od -An -tx1"
+          ),
+          columns = 60,
+          rows = 4,
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 600, 120))
+        window = newWindow("Terminal paste", frame = rect(0, 0, 600, 120))
+      defer:
+        view.close()
+      session.processOutput("\x1b[?2004h")
+      window.setContentView(view)
+      check window.makeFirstResponder(view)
+      check session.pollUntilText("ready")
+      discard generalPasteboard().setPlainText("pasted")
+
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmCommand})
+      )
+      check session.pollUntilExit()
+      check "1b 5b 32 30 30 7e 70 61 73 74 65 64 1b 5b 32 30 31 7e" in
+        session.screen().plainText().replace("\n", " ").splitWhitespace().join(" ")
+
+  test "application mouse tracking receives window-dispatched press and release":
+    when defined(posix):
+      let
+        expectedBytes = 18
+        session = spawnTerminalSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty raw -echo; printf ready; dd bs=1 count=" & $expectedBytes &
+              " 2>/dev/null | od -An -tx1"
+          ),
+          columns = 40,
+          rows = 4,
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 400, 120))
+        window = newWindow("Terminal mouse", frame = rect(0, 0, 400, 120))
+      defer:
+        view.close()
+      session.processOutput("\x1b[?1000;1006h")
+      window.setContentView(view)
+      check session.pollUntilText("ready")
+      let point = view.pointToWindow(
+        initPoint(
+          view.padding() + view.monoTextMetrics().cellWidth * 0.5'f32,
+          view.padding() + view.monoTextMetrics().lineHeight * 0.5'f32,
+        )
+      )
+
+      check window.mouseDownAt(point)
+      check window.mouseUpAt(point)
+      check session.pollUntilExit()
+      let output =
+        session.screen().plainText().replace("\n", " ").splitWhitespace().join(" ")
+      check "1b 5b 3c 30 3b 31 3b 31 4d" in output
+      check "1b 5b 3c 30 3b 31 3b 31 6d" in output
+
+  test "OSC clipboard writes remain opt-in":
+    let
+      session = newTerminalSession(columns = 20, rows = 2)
+      view = newTerminalView(session, frame = rect(0, 0, 240, 80))
+    discard generalPasteboard().setPlainText("existing")
+    session.processOutput("\x1b]52;c;bmV3IHZhbHVl\x07")
+
+    discard view.poll()
+    check generalPasteboard().plainText() == "existing"
+    check session.screen().clipboardRequestPending
+
+    view.allowsClipboardWrites = true
+    discard view.poll()
+    check generalPasteboard().plainText() == "new value"
+    check not session.screen().clipboardRequestPending

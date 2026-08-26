@@ -399,7 +399,7 @@ proc processOsc(screen: var TerminalScreen, sequence: string) =
 proc processControl(screen: var TerminalScreen, character: char) =
   case character
   of '\x07':
-    discard
+    screen.ringBell()
   of '\x08':
     screen.backspace()
   of '\x09':

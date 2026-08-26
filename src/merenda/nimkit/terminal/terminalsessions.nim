@@ -164,6 +164,10 @@ func lastError*(session: TerminalSession): string =
 func pendingWriteBytes*(session: TerminalSession): int =
   session.xPendingWrite.len
 
+proc takeClipboardRequest*(session: TerminalSession): string =
+  ## Consume a clipboard write requested by the child through OSC 52.
+  session.xScreen.takeClipboardRequest()
+
 func readLimit*(session: TerminalSession): int =
   session.xReadLimit
 

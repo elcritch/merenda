@@ -28,12 +28,28 @@ const
   DefaultMonoPadding* = 6.0'f32
 
 type
+  MonoTextTrait* = enum
+    mttBold
+    mttFaint
+    mttItalic
+    mttHidden
+
+  MonoTextDecoration* = enum
+    mtdUnderline
+    mtdDoubleUnderline
+    mtdStrikethrough
+    mtdOverline
+
   MonoTextCell* = object
     text*: string
     foregroundColor*: nimkitTypes.Color
     backgroundColor*: nimkitTypes.Color
+    decorationColor*: nimkitTypes.Color
     hasForegroundColor*: bool
     hasBackgroundColor*: bool
+    hasDecorationColor*: bool
+    traits*: set[MonoTextTrait]
+    decorations*: set[MonoTextDecoration]
 
   MonoTextMetrics* = object
     cellWidth*: float32
@@ -120,6 +136,10 @@ func initMonoTextCell*(
     backgroundColor = color(0.0, 0.0, 0.0, 0.0),
     hasForegroundColor = false,
     hasBackgroundColor = false,
+    traits: set[MonoTextTrait] = {},
+    decorations: set[MonoTextDecoration] = {},
+    decorationColor = color(0.0, 0.0, 0.0, 0.0),
+    hasDecorationColor = false,
 ): MonoTextCell =
   MonoTextCell(
     text: if text.len == 0: " " else: text,
@@ -127,6 +147,10 @@ func initMonoTextCell*(
     backgroundColor: backgroundColor,
     hasForegroundColor: hasForegroundColor,
     hasBackgroundColor: hasBackgroundColor,
+    traits: traits,
+    decorations: decorations,
+    decorationColor: decorationColor,
+    hasDecorationColor: hasDecorationColor,
   )
 
 func initMonoTextCell*(
@@ -135,9 +159,21 @@ func initMonoTextCell*(
     backgroundColor = color(0.0, 0.0, 0.0, 0.0),
     hasForegroundColor = false,
     hasBackgroundColor = false,
+    traits: set[MonoTextTrait] = {},
+    decorations: set[MonoTextDecoration] = {},
+    decorationColor = color(0.0, 0.0, 0.0, 0.0),
+    hasDecorationColor = false,
 ): MonoTextCell =
   initMonoTextCell(
-    $rune, foregroundColor, backgroundColor, hasForegroundColor, hasBackgroundColor
+    $rune,
+    foregroundColor,
+    backgroundColor,
+    hasForegroundColor,
+    hasBackgroundColor,
+    traits,
+    decorations,
+    decorationColor,
+    hasDecorationColor,
   )
 
 func styledMonoTextCell*(
@@ -162,7 +198,10 @@ func sameRunStyle(
 ): bool =
   left.foreground(defaultTextColor) == right.foreground(defaultTextColor) and
     left.hasBackgroundColor == right.hasBackgroundColor and
-    (not left.hasBackgroundColor or left.backgroundColor == right.backgroundColor)
+    (not left.hasBackgroundColor or left.backgroundColor == right.backgroundColor) and
+    left.traits == right.traits and left.decorations == right.decorations and
+    left.hasDecorationColor == right.hasDecorationColor and
+    (not left.hasDecorationColor or left.decorationColor == right.decorationColor)
 
 proc firstRune(cell: MonoTextCell): Rune =
   for rune in cell.text.runes:
@@ -273,7 +312,7 @@ proc postCursorSelectionChanged(view: MonoTextView, before: int) =
   if view.cursorTextIndex() != before:
     view.postAccessibilityNotification(anSelectionChanged)
 
-proc monoFont(view: MonoTextView): FigFont =
+proc monoFont(view: MonoTextView, italic = false): FigFont =
   var style =
     if view.isNil:
       initAppearance().resolveTextStyle(
@@ -294,6 +333,8 @@ proc monoFont(view: MonoTextView): FigFont =
     if view.xFontName.len > 0:
       style.fontName = view.xFontName
     style.fontSize = view.xFontSize
+  if italic:
+    style.fontSlant = fsItalic
   style.textFont().font
 
 proc monoTextMetrics*(view: MonoTextView): MonoTextMetrics =
@@ -1183,7 +1224,17 @@ proc drawRun(
   let
     line = view.xLines[row]
     firstCell = line.cells[startColumn]
-    foregroundColor = firstCell.foreground(defaultTextColor)
+    baseForegroundColor = firstCell.foreground(defaultTextColor)
+    foregroundColor =
+      if mttFaint in firstCell.traits:
+        color(
+          baseForegroundColor.r,
+          baseForegroundColor.g,
+          baseForegroundColor.b,
+          baseForegroundColor.a * 0.55'f32,
+        )
+      else:
+        baseForegroundColor
     runRect = rect(
       textInsets.left + startColumn.float32 * metrics.cellWidth,
       textInsets.top + row.float32 * metrics.lineHeight,
@@ -1198,11 +1249,61 @@ proc drawRun(
   glyphs.setLen(endColumn - startColumn)
   var x = 0.0'f32
   for column in startColumn ..< endColumn:
-    glyphs[column - startColumn] = (line.cells[column].firstRune(), vec2(x, 0.0'f32))
+    let rune =
+      if mttHidden in line.cells[column].traits:
+        Rune(' ')
+      else:
+        line.cells[column].firstRune()
+    glyphs[column - startColumn] = (rune, vec2(x, 0.0'f32))
     x += metrics.cellWidth
 
-  let layout = placeGlyphs(fs(font, fill(foregroundColor.rgba)), glyphs, GlyphTopLeft)
+  let runFont =
+    if mttItalic in firstCell.traits:
+      view.monoFont(italic = true)
+    else:
+      font
+  let layout =
+    placeGlyphs(fs(runFont, fill(foregroundColor.rgba)), glyphs, GlyphTopLeft)
   discard context.addText(runRect, layout)
+  if mttBold in firstCell.traits:
+    var boldRect = runRect
+    boldRect.x += min(metrics.cellWidth * 0.06'f32, 0.75'f32)
+    discard context.addText(boldRect, layout)
+
+  let decorationColor =
+    if firstCell.hasDecorationColor: firstCell.decorationColor else: foregroundColor
+  let decorationHeight = max(1.0'f32, metrics.lineHeight * 0.055'f32)
+  if mtdOverline in firstCell.decorations:
+    discard context.addRectangle(
+      rect(runRect.x, runRect.y, runRect.w, decorationHeight),
+      fill(decorationColor.rgba),
+    )
+  if mtdStrikethrough in firstCell.decorations:
+    discard context.addRectangle(
+      rect(
+        runRect.x,
+        runRect.y + metrics.lineHeight * 0.52'f32,
+        runRect.w,
+        decorationHeight,
+      ),
+      fill(decorationColor.rgba),
+    )
+  if mtdUnderline in firstCell.decorations or mtdDoubleUnderline in firstCell.decorations:
+    let underlineY = runRect.maxY - decorationHeight * 1.5'f32
+    discard context.addRectangle(
+      rect(runRect.x, underlineY, runRect.w, decorationHeight),
+      fill(decorationColor.rgba),
+    )
+    if mtdDoubleUnderline in firstCell.decorations:
+      discard context.addRectangle(
+        rect(
+          runRect.x,
+          underlineY - decorationHeight * 2.0'f32,
+          runRect.w,
+          decorationHeight,
+        ),
+        fill(decorationColor.rgba),
+      )
 
 proc drawMonoTextSurface(
     view: MonoTextView, context: DrawContext, style: MonoTextStyle
