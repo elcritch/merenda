@@ -278,7 +278,7 @@ NimKit ships the core controls needed for desktop-style interfaces:
 
 - Windows and views: `newApplication`, `sharedApplication`, `newWindow`, `newView`
 - Layout and containers: `newStackView`, `newGridView`, `newFormView`, `newSplitView`, `newScrollView`, `newTabView`, `newBox`, `newGroupBox`, `newSeparatorBox`
-- Text: `newTextField`, `newLabel`, `newTitleLabel`, `newStatusLabel`, `newTextEditor`, `newMonoTextEditor`
+- Text: `newTextField`, `newLabel`, `newTitleLabel`, `newStatusLabel`, `newTextEditor`, `newMonoTextEditor`, `newTerminalView`
 - Buttons and choices: `newButton`, `newCheckBox`, `newRadioButton`, `newComboBox`, `newPopupMenuButton`, `newMenu`, `newMenuItem`
 - Value and status controls: `newSlider`, `newStepper`, `newSwitchButton`, `newProgressIndicator`
 - Data and navigation views: `newTableView`, `newOutlineView`, `newFileBrowser`, `newCascadingView`, `newCollectionView`, `newDocumentTabs`, `newButtonMatrix`, `newRadioMatrix`
@@ -286,6 +286,37 @@ NimKit ships the core controls needed for desktop-style interfaces:
 Linux and BSD builds also expose `newLayerSurfaceWindow` and the
 `LayerSurfaceConfig` types for Wayland layer-shell surfaces. These APIs are not
 declared on macOS or Windows, and they require a Wayland session at runtime.
+
+### Terminal emulator
+
+`TerminalView` is a native NimKit terminal widget with an incremental VT parser,
+Unicode wide-cell handling, 256-color and true-color rendering, text attributes,
+primary and alternate screens, bounded scrollback, selection, clipboard
+commands, bracketed paste, application cursor keys, focus reporting, and xterm
+mouse tracking. It resizes its pseudo-terminal to the visible monospace grid and
+polls the child automatically while attached to a window.
+
+```nim
+let terminal = newTerminalView(
+  initTerminalSpawnOptions(
+    workingDirectory = getCurrentDir(),
+    environment = [initTerminalEnvironmentVariable("APP_MODE", "development")],
+  )
+)
+
+app.runWindow(window, terminal, terminal)
+```
+
+Passing a `command` runs it through the selected shell; leaving it empty starts
+an interactive shell. `TerminalSession` is also public for applications that
+want to drive the parser and PTY transport separately from the view. The PTY
+backend currently supports POSIX platforms (macOS, Linux, and FreeBSD).
+
+OSC 52 clipboard writes are disabled by default because terminal output should
+not silently replace user clipboard contents. Enable them for a trusted child
+with `terminal.allowsClipboardWrites = true`. Title, working-directory, bell,
+process-exit, and hyperlink activation changes are available as NimKit signals.
+The complete runnable example is `examples/terminal_demo.nim`.
 
 Controls use Cocoa-style target/action for commands:
 
@@ -616,7 +647,7 @@ Current examples are mirrored by `examples/all_compile.nim`:
 - Data and models: `table_demo`, `treeview_demo`, `outline_demo`, `cascading_demo`, `collectionview_demo`, `documenttabs_demo`, `matrix_demo`, `menu_demo`, `modelcontrollers_demo`
 - Application workflows: `panel_demo`, `document_workspace_demo`, `preferences_demo`, `viewcontroller_demo`, `view_inspector_demo`
 - Drawing and media: `canvas_demo`, `svg_viewer_demo`, `image_resources_demo`
-- Text and animation: `texteditor_demo`, `synedit_demo`, `monotext_demo`, `animation_demo`
+- Text and animation: `texteditor_demo`, `synedit_demo`, `monotext_demo`, `terminal_demo`, `animation_demo`
 
 Run any focused example with:
 

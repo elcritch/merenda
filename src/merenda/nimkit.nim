@@ -58,6 +58,7 @@ import ./nimkit/containers/stackviews
 import ./nimkit/containers/scrollviews
 import ./nimkit/containers/tabviews
 import ./nimkit/containers/tableviews
+import ./nimkit/terminal
 import ./nimkit/text/textfields
 import ./nimkit/text/textlayout
 import ./nimkit/text/textstorage
@@ -138,6 +139,7 @@ export stackviews
 export scrollviews
 export tabviews
 export tableviews
+export terminal
 export textfields
 export textlayout
 export textstorage

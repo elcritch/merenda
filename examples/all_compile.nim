@@ -43,6 +43,7 @@ import svg_viewer_demo
 import stepper_demo
 import table_demo
 import tabview_demo
+import terminal_demo
 import texteditor_demo
 import textfield_demo
 import threadpool_long_work_demo
