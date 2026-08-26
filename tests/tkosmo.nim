@@ -20,6 +20,53 @@ proc displayedText(view: KosmoEditorView): string =
   monoTextViews.stringValue(MonoTextView(view))
 
 suite "Kosmo":
+  test "pane documents adapt arbitrary views to native document tabs":
+    let
+      content = newView()
+      document = newKosmoPaneDocument(
+        "kosmo.preview.readme", "README Preview", content, tooltip = "README.md"
+      )
+      model = document.documentTabModel()
+
+    check document.contentView == content
+    check document.preferredFirstResponder == content
+    check model.identifier == "kosmo.preview.readme"
+    check model.title == "README Preview"
+    check model.tooltip == "README.md"
+    check document.close()
+    check not document.save()
+
+  test "view-backed documents use the shared pane tab lifecycle":
+    let
+      frontend = newKosmoApplication(newApplication("Kosmo Generic Document Test"))
+      content = newView()
+      initialTabCount = frontend.documentTabs.len
+    var closeCount = 0
+    let document = newKosmoPaneDocument(
+      "kosmo.preview.readme",
+      "README Preview",
+      content,
+      onClose = proc(document: KosmoPaneDocument): bool =
+        discard document
+        inc closeCount
+        true,
+    )
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    check frontend.openDocument(document)
+    check frontend.documentTabs.len == initialTabCount + 1
+    check frontend.editorPane.contentView == content
+    check frontend.documentTabs.selectedDocumentTabItem().title == "README Preview"
+    check frontend.documentTabs.closeDocumentTabAtIndex(
+      frontend.documentTabs.selectedIndex()
+    )
+    check closeCount == 1
+    check frontend.documentTabs.len == initialTabCount
+    check frontend.editorPane.contentView == View(frontend.editorView)
+
   test "renders initial text into a cell grid":
     let editor = newKosmoEditor(text = "hello")
     var buffer = newRenderBuffer(24, 8)
@@ -318,14 +365,17 @@ suite "Kosmo":
     check "binary file" in outcome.message
     editor.close()
 
-  test "frontend adds an Open command to the File menu":
+  test "frontend adds file and terminal commands to the File menu":
     let app = newApplication("Kosmo Test")
     let frontend = newKosmoApplication(app)
     let fileMenu = app.mainMenu()[0].submenu()
     let openItem = fileMenu.menuItemWithIdentifier(KosmoOpenFileAction)
+    let terminalItem = fileMenu.menuItemWithIdentifier(KosmoNewTerminalAction)
 
     check not openItem.isNil
     check openItem.title == "Open…"
+    check not terminalItem.isNil
+    check terminalItem.title == "New Terminal"
     frontend.contentView.frame = rect(0, 0, 640, 480)
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.contentView.menuBar().hidden() == app.usesNativeMainMenu()
@@ -334,6 +384,55 @@ suite "Kosmo":
     check frontend.splitView.panes() ==
       @[View(frontend.fileTree), View(frontend.dockView)]
     frontend.editorView.editor.close()
+
+  when defined(posix):
+    test "File menu opens a terminal as a fully managed pane tab":
+      let
+        frontend = newKosmoApplication(newApplication("Kosmo Terminal Tab Test"))
+        fileMenu = frontend.application.mainMenu()[0].submenu()
+        terminalItem = fileMenu.menuItemWithIdentifier(KosmoNewTerminalAction)
+        initialTabCount = frontend.documentTabs.len
+      defer:
+        frontend.close()
+      frontend.window.setContentView(frontend.contentView)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      check frontend.window.makeFirstResponder(frontend.editorView)
+
+      check terminalItem.perform(Responder(frontend.editorView))
+      check frontend.editorGroups().len == 1
+      check frontend.editorGroups()[0].documents.len == 1
+      check frontend.documentTabs.len == initialTabCount + 1
+      check frontend.documentTabs.selectedDocumentTabItem().title == "Terminal 1"
+      check frontend.editorPane.contentView of TerminalView
+      let terminalView = TerminalView(frontend.editorPane.contentView)
+      check terminalView.session().running()
+      check frontend.window.firstResponder() == Responder(terminalView)
+
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(
+          key: keyLeftBracket,
+          keyCode: keyLeftBracket.ord,
+          modifiers: {kmCommand, kmShift},
+        )
+      )
+      check frontend.editorPane.contentView == View(frontend.editorView)
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(
+          key: keyRightBracket,
+          keyCode: keyRightBracket.ord,
+          modifiers: {kmCommand, kmShift},
+        )
+      )
+      check frontend.editorPane.contentView == View(terminalView)
+
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
+      )
+      check frontend.editorGroups()[0].documents.len == 0
+      check frontend.documentTabs.len == initialTabCount
+      check frontend.editorPane.contentView == View(frontend.editorView)
+      check terminalView.session().state() == tssClosed
+      check frontend.window.firstResponder() == Responder(frontend.editorView)
 
   test "window resizing preserves the chosen file tree width":
     let frontend = newKosmoApplication(newApplication("Kosmo Resize Test"))
@@ -552,6 +651,54 @@ suite "Kosmo":
     check frontend.dockView.len == 1
     check frontend.dockView.rootView() == groups[0].panel
     check not (frontend.dockView.rootView() of SplitView)
+
+  when defined(posix):
+    test "dragging a terminal tab creates an independent split pane":
+      let
+        frontend = newKosmoApplication(newApplication("Kosmo Terminal Split Test"))
+        fileMenu = frontend.application.mainMenu()[0].submenu()
+        terminalItem = fileMenu.menuItemWithIdentifier(KosmoNewTerminalAction)
+      defer:
+        frontend.close()
+      frontend.window.setContentView(frontend.contentView)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      check frontend.window.makeFirstResponder(frontend.editorView)
+      check terminalItem.perform(Responder(frontend.editorView))
+
+      let
+        terminalView = TerminalView(frontend.editorPane.contentView)
+        sourceTabs = frontend.documentTabs
+        tabRect = sourceTabs.documentTabRect(sourceTabs.selectedIndex())
+        start = sourceTabs.pointToWindow(
+          initPoint(
+            tabRect.minX + tabRect.size.width * 0.5'f32,
+            tabRect.minY + tabRect.size.height * 0.5'f32,
+          )
+        )
+        drop = frontend.dockView.pointToWindow(
+          initPoint(
+            frontend.dockView.bounds().maxX - 4.0'f32,
+            frontend.dockView.bounds().minY +
+              frontend.dockView.bounds().size.height * 0.5'f32,
+          )
+        )
+
+      check frontend.window.mouseDownAt(start)
+      check frontend.window.mouseDraggedAt(drop)
+      check frontend.window.mouseUpAt(drop)
+
+      let groups = frontend.editorGroups()
+      check groups.len == 2
+      check groups[0].documents.len == 0
+      check groups[1].documents.len == 1
+      check groups[1].pane.contentView == View(terminalView)
+      check groups[1].pane.documentTabs.len == 1
+      check terminalView.session().running()
+
+      check groups[1].pane.documentTabs.closeDocumentTabAtIndex(0)
+      check frontend.editorGroups().len == 1
+      check frontend.dockView.len == 1
+      check terminalView.session().state() == tssClosed
 
   test "q and x commands close the active tab and its empty split":
     let

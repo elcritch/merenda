@@ -481,6 +481,13 @@ example:
 }
 ```
 
+Kosmo's File > New Terminal command opens a `TerminalView` in the focused
+editor group. Terminal and text tabs share selection, closing, reordering,
+split-pane dragging, detached windows, and tab-navigation shortcuts. Other
+content can use the same lifecycle by constructing a `KosmoPaneDocument` with
+a content view, preferred first responder, and optional save and close
+callbacks.
+
 ## Workspace And Services
 
 Applications expose a backend-optional `Workspace` for opening and revealing
