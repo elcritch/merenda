@@ -42,6 +42,7 @@ import nimkit/stackviews
 import nimkit/syneditviews
 import nimkit/tableviews
 import nimkit/tabviews
+import nimkit/terminals
 import nimkit/texteditors
 import nimkit/textfields
 import nimkit/textlayout
