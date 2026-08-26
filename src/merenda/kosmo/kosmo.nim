@@ -13,6 +13,7 @@ const
   KosmoOpenFileAction* = "kosmo.openFile"
   KosmoSaveAction* = "kosmo.save"
   KosmoCloseTabAction* = "kosmo.closeTab"
+  KosmoQuitAction* = "kosmo.quit"
   KosmoPreviousTabAction* = "kosmo.previousTab"
   KosmoNextTabAction* = "kosmo.nextTab"
   KosmoTabBarHeight* = 34.0'f32
@@ -24,8 +25,10 @@ const
   KosmoGridOverscanRows = 1
   KosmoMoeBottomAreaRows = 1
   KosmoTabIdentifierPrefix = "kosmo.buffer."
-  KosmoShortcutCommands =
-    [KosmoSaveAction, KosmoCloseTabAction, KosmoPreviousTabAction, KosmoNextTabAction]
+  KosmoShortcutCommands = [
+    KosmoSaveAction, KosmoCloseTabAction, KosmoQuitAction, KosmoPreviousTabAction,
+    KosmoNextTabAction,
+  ]
 
 type
   KosmoCommandBar* = ref object of nimkit.MonoTextView
@@ -111,6 +114,9 @@ func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
   )
   result.bindKey(
     nimkit.keyW, {nimkit.kmCommand}, nimkit.actionSelector(KosmoCloseTabAction)
+  )
+  result.bindKey(
+    nimkit.keyQ, {nimkit.kmCommand}, nimkit.actionSelector(KosmoQuitAction)
   )
   result.bindKey(
     nimkit.keyLeftBracket,
@@ -654,6 +660,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       controller.saveCurrentTab(view)
     of KosmoCloseTabAction:
       controller.closeCurrentTab(view)
+    of KosmoQuitAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].application.terminate()
     of KosmoPreviousTabAction:
       controller.selectRelativeTab(view, -1)
     of KosmoNextTabAction:

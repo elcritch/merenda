@@ -418,12 +418,14 @@ forms such as `cmd-s`, `cmd-shift-p`, and `cmd-{`.
 Standalone Kosmo reads `keybindings.json` from the `kosmo` directory beneath
 the platform configuration directory (`defaultKosmoKeyBindingsPath()`). Its
 defaults are Command-S to save, Command-W to close the active tab, and
-Command-{ / Command-} to select the previous or next tab. For example:
+Command-Q to quit. Command-{ / Command-} select the previous or next tab. For
+example:
 
 ```json
 {
   "kosmo.save": "cmd-shift-s",
-  "kosmo.closeTab": ["cmd-w", "cmd-q"],
+  "kosmo.closeTab": ["cmd-w", "cmd-shift-w"],
+  "kosmo.quit": "cmd-q",
   "kosmo.previousTab": "cmd-{",
   "kosmo.nextTab": "cmd-}"
 }

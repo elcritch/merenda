@@ -480,6 +480,22 @@ suite "Kosmo":
     )
     check frontend.editorView.editor.tabs()[0].active
 
+  test "Command-Q terminates Kosmo through the application lifecycle":
+    let
+      app = newApplication("Kosmo Quit Shortcut Test")
+      frontend = newKosmoApplication(app)
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    check not app.isTerminating
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyQ, keyCode: keyQ.ord, modifiers: {kmCommand})
+    )
+    check app.isTerminating
+
   test "dragging a document tab to an editor edge creates a split group":
     let
       root = createTempDir("merenda-kosmo-dock-split-", "")
