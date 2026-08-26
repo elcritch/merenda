@@ -1,9 +1,29 @@
-import std/[strutils, unittest]
+import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
-import merenda/nimkit/terminal/[terminalparser, terminalscreen]
+import merenda/nimkit/terminal/[terminalparser, terminalscreen, terminalsessions]
 
 proc feed(screen: var TerminalScreen, parser: var TerminalParser, value: string) =
   parser.feed(screen, value)
+
+proc pollUntilExit(
+    session: TerminalSession, timeout = initDuration(seconds = 3)
+): bool =
+  let deadline = getMonoTime() + timeout
+  while session.running() and getMonoTime() < deadline:
+    discard session.poll()
+    if session.running():
+      sleep(5)
+  not session.running()
+
+proc pollUntilText(
+    session: TerminalSession, expected: string, timeout = initDuration(seconds = 3)
+): bool =
+  let deadline = getMonoTime() + timeout
+  while getMonoTime() < deadline:
+    discard session.poll()
+    if expected in session.screen().plainText():
+      return true
+    sleep(5)
 
 suite "nimkit terminal screen and parser":
   test "screen starts with bounded dimensions and terminal defaults":
@@ -273,3 +293,104 @@ suite "nimkit terminal screen and parser":
     screen.feed(parser, "before\x1bP1;2|private payload\x1b\\after")
 
     check screen.plainText() == "beforeafter"
+
+suite "nimkit terminal sessions":
+  test "session can parse supplied output before starting a process":
+    let session = newTerminalSession(12, 2)
+
+    session.processOutput("plain \x1b[32mgreen")
+
+    check session.state == tssIdle
+    check session.screen().plainText() == "plain green"
+    check session.screen().cellAt(0, 6).style.foreground == indexedTerminalColor(2)
+    expect TerminalSessionError:
+      session.write("input")
+
+  when defined(posix):
+    test "PTY drains styled output and reports the child exit status":
+      let session = spawnTerminalSession(
+        initTerminalSpawnOptions(command = "printf '\\033[31mred\\033[0m\\n'; exit 7"),
+        columns = 20,
+        rows = 4,
+      )
+      defer:
+        session.close()
+
+      check session.pollUntilExit()
+      check session.state == tssExited
+      check session.exitCode == 7
+      check "red" in session.screen().plainText()
+      check session.screen().cellAt(0, 0).style.foreground == indexedTerminalColor(1)
+
+    test "PTY applies working directory environment and terminal size":
+      let root = createTempDir("merenda-terminal-session-", "")
+      defer:
+        removeDir(root)
+      let session = spawnTerminalSession(
+        initTerminalSpawnOptions(
+          command =
+            "printf '%s\\n%s\\n%s\\n' \"$(basename \"$PWD\")\" \"$TERM\" " &
+            "\"$NIMKIT_TEST\"; stty size",
+          workingDirectory = root,
+          environment = [initTerminalEnvironmentVariable("NIMKIT_TEST", "ready")],
+        ),
+        columns = 80,
+        rows = 7,
+      )
+      defer:
+        session.close()
+
+      check session.pollUntilExit()
+      let output = session.screen().plainText()
+      check root.extractFilename() in output
+      check "xterm-256color" in output
+      check "ready" in output
+      check "7 80" in output
+
+    test "PTY accepts interactive input without blocking the caller":
+      let session = spawnTerminalSession(
+        initTerminalSpawnOptions(
+          command = "IFS= read -r value; printf 'reply:%s' \"$value\""
+        ),
+        columns = 30,
+        rows = 4,
+      )
+      defer:
+        session.close()
+
+      session.write("hello\r")
+      check session.pollUntilText("reply:hello")
+      check session.pollUntilExit()
+      check session.exitCode == 0
+
+    test "PTY resize reaches the child process":
+      let session = spawnTerminalSession(
+        initTerminalSpawnOptions(command = "sleep 0.05; stty size"),
+        columns = 10,
+        rows = 3,
+      )
+      defer:
+        session.close()
+
+      session.resize(33, 7)
+      check session.screen().columns == 33
+      check session.screen().rows == 7
+      check session.pollUntilExit()
+      check "7 33" in session.screen().plainText()
+
+    test "closing a live PTY reaps its owned child":
+      let session = spawnTerminalSession(
+        initTerminalSpawnOptions(command = "sleep 30"), columns = 10, rows = 3
+      )
+
+      check session.running()
+      session.close()
+      check session.state == tssClosed
+      check not session.running()
+      session.close()
+  else:
+    test "unsupported platforms report a catchable spawn error":
+      let session = newTerminalSession()
+      expect TerminalSessionError:
+        session.start()
+      check session.state == tssFailed
