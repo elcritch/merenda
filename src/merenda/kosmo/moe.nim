@@ -12,7 +12,7 @@ import pkg/results as pkgResults
 import
   moepkg/[
     editor, editor_buffers, editor_display, editor_frame, editor_render_views,
-    frontend_input, handler, config, editor_window, encoding, motion,
+    frontend_input, handler, completion, config, editor_window, encoding, motion,
   ]
 from moepkg/buffer/core import BufferId
 import moepkg/key_bindings/registry as moeKeys
@@ -63,6 +63,7 @@ type
     viewportTopWrapOffset: int
     viewportLeftColumn: int
     viewportDetachedFromCursor: bool
+    scrollAnimation: moeTypes.ScrollAnimation
 
   KosmoTabCloseResult* = object
     closed*: bool
@@ -345,6 +346,16 @@ proc cursor*(editor: KosmoEditor): KosmoCursor =
     row: position.y, column: position.x, visible: editor.editor.state.cursorVisible
   )
 
+proc completionPopupVisible*(editor: KosmoEditor): bool =
+  ## Return whether Moe currently has an active insert-completion popup.
+  not editor.isNil and not editor.editor.isNil and
+    editor.editor.handlerManager.insertHandler.completionManager.isActive()
+
+proc dismissCompletionPopup*(editor: KosmoEditor) =
+  ## Dismiss Moe's active insert-completion popup, if any.
+  if not editor.isNil and not editor.editor.isNil:
+    editor.editor.handlerManager.insertHandler.completionManager.cancelCompletion()
+
 proc captureViewState*(editor: KosmoEditor): KosmoEditorViewState =
   ## Capture the active buffer's logical cursor and viewport for a frontend pane.
   if editor.isNil or editor.editor.isNil:
@@ -359,6 +370,7 @@ proc captureViewState*(editor: KosmoEditor): KosmoEditorViewState =
     viewportTopWrapOffset: window.viewport.topWrapOffset,
     viewportLeftColumn: window.viewport.leftColumn,
     viewportDetachedFromCursor: window.viewport.detachedFromCursor,
+    scrollAnimation: editor.editor.state.windowDisplay.scrollAnimation,
   )
 
 func bufferId*(state: KosmoEditorViewState): Option[KosmoBufferId] =
@@ -378,6 +390,7 @@ proc applyViewState(editor: KosmoEditor, state: KosmoEditorViewState) =
   window.viewport.topWrapOffset = max(state.viewportTopWrapOffset, 0)
   window.viewport.leftColumn = max(state.viewportLeftColumn, 0)
   window.viewport.detachedFromCursor = state.viewportDetachedFromCursor
+  editor.editor.state.windowDisplay.scrollAnimation = state.scrollAnimation
   editor.editor.syncActiveWindow()
   editor.editor.setActiveWindowScreenCursor(window)
 

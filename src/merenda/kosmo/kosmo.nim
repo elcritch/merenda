@@ -366,8 +366,16 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   if not view.documentTabs.isNil:
     view.documentTabs.appearance = appearance
 
+proc isActiveEditorGroup(view: KosmoEditorView): bool =
+  if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
+    return true
+  let controller = view.tabsDelegate.dockController[]
+  controller.activeGroup.isNil or controller.activeGroup.editorView == view
+
 proc refresh*(view: KosmoEditorView) =
   ## Render the current editor state into the synchronous cell-grid view.
+  if view.editor.completionPopupVisible() and not view.isActiveEditorGroup():
+    return
   let metrics = view.monoTextMetrics()
   if metrics.cellWidth <= 0.0'f32 or metrics.lineHeight <= 0.0'f32:
     return
@@ -518,6 +526,7 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
     var id: KosmoBufferId
     if item.identifier.parseTabIdentifier(id):
       view.saveViewState()
+      view.editor.dismissCompletionPopup()
       if view.usesBufferSubset:
         view.selectedBufferId = some(id)
       if not handler.dockController.isNil:
@@ -703,6 +712,8 @@ proc activateGroup(controller: KosmoDockController, view: KosmoEditorView) =
     return
   let group = controller.groupForView(view)
   if not group.isNil:
+    if controller.activeGroup != group:
+      controller.editor.dismissCompletionPopup()
     controller.activeGroup = group
     view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
 

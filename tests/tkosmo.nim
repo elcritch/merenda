@@ -382,7 +382,7 @@ suite "Kosmo":
     check groups[1].editorView.documentTabs.len == 1
     check frontend.editorView.editor.tabs().len == bufferCount
 
-  test "split editor groups keep independent cursor and scroll state":
+  test "split editor groups keep independent cursor scroll and motion state":
     let
       root = createTempDir("merenda-kosmo-split-state-", "")
       firstPath = root / "first.txt"
@@ -462,6 +462,45 @@ suite "Kosmo":
     check groups[0].editorView.displayedText() == firstScrolledGrid
     groups[1].editorView.refresh()
     check groups[1].editorView.displayedText() == secondScrolledGrid
+
+    groups[0].editorView.refresh()
+    let firstCursorBeforePageMotion = frontend.editorView.editor.cursor()
+    groups[1].editorView.refresh()
+    check groups[1].editorView.keyDown(
+      KeyEvent(text: "f", key: keyF, keyCode: keyF.ord, modifiers: {kmControl})
+    )
+    groups[0].editorView.refresh()
+    check frontend.editorView.editor.cursor() == firstCursorBeforePageMotion
+
+    groups[1].editorView.refresh()
+    check groups[1].editorView.keyDown(
+      KeyEvent(text: "b", key: keyB, keyCode: keyB.ord, modifiers: {kmControl})
+    )
+    groups[0].editorView.refresh()
+    check frontend.editorView.editor.cursor() == firstCursorBeforePageMotion
+
+    let inactiveGridBeforeCompletion = groups[0].editorView.displayedText()
+    let
+      metrics = groups[1].editorView.monoTextMetrics()
+      focusPoint = groups[1].editorView.pointToWindow(
+        initPoint(metrics.cellWidth * 12.0'f32, metrics.lineHeight * 2.0'f32)
+      )
+    check frontend.window.mouseDownAt(focusPoint)
+    check groups[1].editorView.keyDown(
+      KeyEvent(text: "a", key: keyA, keyCode: keyA.ord)
+    )
+    check groups[1].editorView.keyDown(
+      KeyEvent(text: " ", key: keySpace, keyCode: keySpace.ord)
+    )
+    check groups[1].editorView.keyDown(
+      KeyEvent(text: "f", key: keyF, keyCode: keyF.ord)
+    )
+    check groups[1].editorView.keyDown(
+      KeyEvent(text: "p", key: keyP, keyCode: keyP.ord, modifiers: {kmControl})
+    )
+    check frontend.editorView.editor.completionPopupVisible()
+    groups[0].editorView.refresh()
+    check groups[0].editorView.displayedText() == inactiveGridBeforeCompletion
 
   test "dragging a document tab outside every workspace creates a window":
     let
