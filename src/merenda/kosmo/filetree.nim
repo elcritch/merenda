@@ -1,6 +1,6 @@
 ## A lazy filesystem tree for Kosmo frontends.
 
-import std/[algorithm, options, os, strutils, tables]
+import std/[options, os, tables]
 
 import ../nimkit as nimkit
 
@@ -14,25 +14,13 @@ type
 
   KosmoFileTree* = ref object of nimkit.OutlineView
     xRootPath: string
+    xFileSystem: nimkit.FileSystemBrowserModel
     xChildren: Table[string, seq[string]]
     xOnOpenFile: FileTreeOpenHandler
     xOpenDisposition: FileTreeOpenDisposition
 
-func pathTitle(path: string): string =
-  result = path.extractFilename()
-  if result.len == 0:
-    result = path
-
 proc expandableDirectory(path: string): bool =
-  dirExists(path) and not symlinkExists(path)
-
-proc compareTreePaths(left, right: string): int =
-  let
-    leftDirectory = left.expandableDirectory()
-    rightDirectory = right.expandableDirectory()
-  if leftDirectory != rightDirectory:
-    return if leftDirectory: -1 else: 1
-  cmpIgnoreCase(left.pathTitle(), right.pathTitle())
+  path.isBrowsableDirectory()
 
 proc loadChildPaths(tree: KosmoFileTree, parentIdentifier: string) =
   if tree.xChildren.hasKey(parentIdentifier):
@@ -42,13 +30,8 @@ proc loadChildPaths(tree: KosmoFileTree, parentIdentifier: string) =
     if tree.xRootPath.len > 0:
       children.add tree.xRootPath
   elif parentIdentifier.expandableDirectory():
-    try:
-      for kind, path in walkDir(parentIdentifier, relative = false):
-        if kind in {pcFile, pcDir, pcLinkToFile, pcLinkToDir}:
-          children.add path
-      children.sort(compareTreePaths)
-    except OSError:
-      discard
+    for entry in tree.xFileSystem.entries(parentIdentifier):
+      children.add entry.path
   tree.xChildren[parentIdentifier] = children
 
 proc childPaths(tree: KosmoFileTree, parentIdentifier: string): lent seq[string] =
@@ -84,7 +67,7 @@ protocol KosmoFileTreeDataSource of nimkit.OutlineViewDataSource:
     let expandable = identifier.expandableDirectory()
     nimkit.initOutlineItem(
       identifier,
-      identifier.pathTitle(),
+      identifier.fileBrowserDisplayName(),
       parentIdentifier =
         if identifier == tree.xRootPath:
           ""
@@ -136,6 +119,7 @@ proc `rootPath=`*(tree: KosmoFileTree, path: string) =
   if tree.xRootPath == next:
     return
   tree.xRootPath = next
+  tree.xFileSystem.invalidate()
   tree.xChildren.clear()
   let expanded =
     if next.len > 0:
@@ -148,6 +132,7 @@ proc `rootPath=`*(tree: KosmoFileTree, path: string) =
 
 proc refresh*(tree: KosmoFileTree) =
   ## Discard cached directory listings and reload the visible hierarchy.
+  tree.xFileSystem.invalidate()
   tree.xChildren.clear()
   tree.reloadOutlineData()
 
@@ -162,6 +147,7 @@ proc newKosmoFileTree*(
 ): KosmoFileTree =
   result = KosmoFileTree()
   result.initOutlineViewFields(frame)
+  result.xFileSystem = nimkit.initFileSystemBrowserModel()
   discard result.withProtocol(KosmoFileTreeDataSource)
   discard result.withProtocol(KosmoFileTreeTableDelegate)
   discard nimkit.DynamicAgent(result).pushMethods(KosmoFileTreeEvents.init())

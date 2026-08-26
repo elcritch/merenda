@@ -1,4 +1,4 @@
-import std/strutils
+import std/[os, strutils]
 
 import merenda/nimkit
 
@@ -107,10 +107,10 @@ proc showAlert(sender: DynamicAgent) =
 proc showOpenPanel(sender: DynamicAgent) =
   discard sender
   let panel = newOpenPanel()
-  panel.message = "Open a .nim, .md, or .txt URL."
+  panel.message = "Choose a .nim, .md, or .txt file."
   panel.allowedFileTypes = @["nim", "md", "txt"]
-  panel.selectUrl("file:///tmp/panel_demo.nim")
-  panel.setAccessoryView(View(newStatusLabel("Try changing the extension.")))
+  panel.directoryUrl = getCurrentDir()
+  panel.setAccessoryView(View(newStatusLabel("Folders open with a double click.")))
 
   if app.runModal(panel) == PanelResponseOk:
     status.text = "Open selected: " & panel.selectedUrl()

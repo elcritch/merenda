@@ -28,6 +28,7 @@ import ./nimkit/text/fieldeditors
 import ./nimkit/text/gaptextbuffers
 import ./nimkit/text/texteditors
 import ./nimkit/containers/formviews
+import ./nimkit/containers/filebrowsers
 import ./nimkit/containers/gridviews
 import ./nimkit/view/imageviews
 import ./nimkit/view/canvasviews
@@ -105,6 +106,7 @@ export fieldeditors
 export gaptextbuffers
 export texteditors
 export formviews
+export filebrowsers
 export gridviews
 export imageviews
 export canvasviews

@@ -2,6 +2,7 @@ import std/[os, strutils]
 
 import sigils/core
 
+import ../containers/filebrowsers
 import ../containers/stackviews
 import ../controls/buttons
 import ../foundation/selectors
@@ -27,10 +28,6 @@ proc rebuildSavePanelView*(panel: SavePanel): View
 proc updatePrimaryButton(buttons: seq[View], enabled: bool)
 proc validateSelection*(panel: OpenPanel): bool
 proc validateSelection*(panel: SavePanel): bool
-
-proc refreshOpenPanelValidation(panel: OpenPanel, sender: DynamicAgent) {.slot.} =
-  discard sender
-  discard panel.validateSelection()
 
 proc refreshSavePanelValidation(panel: SavePanel, sender: DynamicAgent) {.slot.} =
   discard sender
@@ -144,15 +141,6 @@ proc dismiss*(panel: SavePanel, response: int) =
   if not panel.responseHandler.isNil:
     panel.responseHandler(response)
 
-proc syncOpenPanelFromField(panel: OpenPanel) =
-  if panel.urlField.isNil or not (panel.urlField of TextField):
-    return
-  panel.selectedUrls.setLen(0)
-  for line in TextField(panel.urlField).text.splitLines():
-    let value = line.strip()
-    if value.len > 0:
-      panel.selectedUrls.add value
-
 proc syncSavePanelFromField(panel: SavePanel) =
   if panel.nameField.isNil or not (panel.nameField of TextField):
     return
@@ -167,10 +155,34 @@ proc selectedUrl*(panel: OpenPanel): string =
 proc selectedUrls*(panel: OpenPanel): seq[string] =
   panel.selectedUrls
 
+proc fileBrowser*(panel: OpenPanel): FileBrowser =
+  ## Return the panel's browser after its content view has been built.
+  if not panel.browserView.isNil and panel.browserView of FileBrowser:
+    result = FileBrowser(panel.browserView)
+
 proc setSelectedUrls*(panel: OpenPanel, urls: openArray[string]) =
-  panel.selectedUrls = @urls
-  if not panel.urlField.isNil and panel.urlField of TextField:
-    TextField(panel.urlField).text = panel.selectedUrls.join("\n")
+  let requestedUrls = @urls
+  defer:
+    discard panel.validateSelection()
+  panel.selectedUrls = requestedUrls
+  let browser = panel.fileBrowser()
+  if browser.isNil or requestedUrls.len == 0:
+    if not browser.isNil:
+      browser.selectPaths([])
+    return
+  var paths: seq[string]
+  for url in requestedUrls:
+    paths.add filePathFromUrl(url)
+  let firstPath = paths[0]
+  if fileExists(firstPath) or dirExists(firstPath):
+    let parent = firstPath.parentDir()
+    if parent.isBrowsableDirectory() and parent != browser.directoryPath():
+      browser.directoryPath = parent
+    browser.selectPaths(paths)
+  else:
+    browser.selectPaths([])
+  if browser.selectedPaths().len == 0:
+    panel.selectedUrls = requestedUrls
 
 proc selectUrls*(panel: OpenPanel, urls: openArray[string]) =
   panel.setSelectedUrls(urls)
@@ -185,7 +197,6 @@ proc selectUrl*(panel: OpenPanel, url: string) =
     panel.setSelectedUrls([url])
 
 proc validateSelection*(panel: OpenPanel): bool =
-  panel.syncOpenPanelFromField()
   result =
     panel.selectedUrls.len > 0 and
     (panel.allowsMultipleSelection or panel.selectedUrls.len == 1)
@@ -280,6 +291,37 @@ proc prepareRoot(window: Window): tuple[root: View, layout: StackView] =
 proc setPanelContent(window: Window, content: View) =
   window.setContentView(content)
 
+proc openPanelBrowserSelectionDidChange(
+    panel: OpenPanel, sender: DynamicAgent
+) {.slot.} =
+  let browser = panel.fileBrowser()
+  if browser.isNil or sender != DynamicAgent(browser):
+    return
+  panel.selectedUrls = browser.selectedPaths()
+  discard panel.validateSelection()
+
+proc openPanelBrowserEntryWasActivated(
+    panel: OpenPanel, sender: DynamicAgent, entry: FileBrowserEntry
+) {.slot.} =
+  let browser = panel.fileBrowser()
+  if browser.isNil or sender != DynamicAgent(browser) or entry.isDirectory():
+    return
+  panel.selectedUrls = @[entry.path]
+  if panel.validateSelection():
+    panel.dismiss(PanelResponseOk)
+
+proc initialOpenPanelDirectory(panel: OpenPanel): string =
+  let configured = panel.directoryUrl.filePathFromUrl()
+  if configured.isBrowsableDirectory():
+    return configured
+  for url in panel.selectedUrls:
+    let path = url.filePathFromUrl()
+    if fileExists(path) or dirExists(path):
+      let parent = path.parentDir()
+      if parent.isBrowsableDirectory():
+        return parent
+  getCurrentDir()
+
 proc rebuildAlertView*(alert: Alert): View =
   let prepared = prepareRoot(alert.window)
   let layout = prepared.layout
@@ -302,9 +344,22 @@ proc rebuildOpenPanelView*(panel: OpenPanel): View =
   layout.addArrangedSubview(View(newTitleLabel(panel.window.title())))
   if panel.message.len > 0:
     layout.addArrangedSubview(View(newStatusLabel(panel.message)))
-  panel.urlField = View(newTextField(panel.selectedUrls.join("\n")))
-  TextField(panel.urlField).connect(textDidChange, panel, refreshOpenPanelValidation)
-  layout.addArrangedSubview(panel.urlField)
+  let browser =
+    newFileBrowser(panel.initialOpenPanelDirectory(), frame = rect(0, 0, 540, 280))
+  browser.allowsMultipleSelection = panel.allowsMultipleSelection
+  var selectedPaths: seq[string]
+  for url in panel.selectedUrls:
+    selectedPaths.add filePathFromUrl(url)
+  browser.selectPaths(selectedPaths)
+  panel.browserView = View(browser)
+  panel.urlField = nil
+  browser.connect(
+    fileBrowserSelectionDidChange, panel, openPanelBrowserSelectionDidChange
+  )
+  browser.connect(
+    fileBrowserEntryWasActivated, panel, openPanelBrowserEntryWasActivated
+  )
+  layout.addArrangedSubview(View(browser))
   if panel.allowedFileTypes.len > 0:
     layout.addArrangedSubview(
       View(newStatusLabel("Allowed types: " & panel.allowedFileTypes.join(", ")))

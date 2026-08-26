@@ -80,6 +80,7 @@ type
     canChooseDirectories*: bool
     accessoryView*: View
     contentView*: View
+    browserView*: View
     urlField*: View
     buttonViews*: seq[View]
     response*: int
@@ -679,7 +680,7 @@ proc newAlert*(
 
 proc newOpenPanel*(): OpenPanel =
   result = OpenPanel(
-    window: newPanel("Open", rect(100, 100, 520, 360)),
+    window: newPanel("Open", rect(100, 100, 640, 460)),
     prompt: "Open",
     canChooseFiles: true,
   )

@@ -281,7 +281,7 @@ NimKit ships the core controls needed for desktop-style interfaces:
 - Text: `newTextField`, `newLabel`, `newTitleLabel`, `newStatusLabel`, `newTextEditor`, `newMonoTextEditor`
 - Buttons and choices: `newButton`, `newCheckBox`, `newRadioButton`, `newComboBox`, `newPopupMenuButton`, `newMenu`, `newMenuItem`
 - Value and status controls: `newSlider`, `newStepper`, `newSwitchButton`, `newProgressIndicator`
-- Data and navigation views: `newTableView`, `newOutlineView`, `newCascadingView`, `newCollectionView`, `newDocumentTabs`, `newButtonMatrix`, `newRadioMatrix`
+- Data and navigation views: `newTableView`, `newOutlineView`, `newFileBrowser`, `newCascadingView`, `newCollectionView`, `newDocumentTabs`, `newButtonMatrix`, `newRadioMatrix`
 
 Linux and BSD builds also expose `newLayerSurfaceWindow` and the
 `LayerSurfaceConfig` types for Wayland layer-shell surfaces. These APIs are not
@@ -387,6 +387,25 @@ let
 bindTableView(table, controller)
 bindComboBox(combo, controller)
 ```
+
+`FileBrowser` lazily caches directory listings and presents them in a table by
+default. A single click selects an entry; double-clicking a folder navigates
+into it, and double-clicking or pressing Enter on a file emits
+`fileBrowserEntryWasActivated`. Its default toolbar provides Back, Forward, Up,
+Home, and Refresh. Add reusable file- or folder-only buttons with a selection
+policy:
+
+```nim
+let browser = newFileBrowser()
+discard browser.addOperationButton(
+  initFileBrowserOperation("example.inspect", "Inspect", selection = fbosFiles)
+) do(browser: FileBrowser, entries: seq[FileBrowserEntry]):
+  for entry in entries:
+    echo entry.path
+```
+
+`newOpenPanel` uses this browser and keeps its Open button synchronized with
+the selected files, folders, multiple-selection policy, and allowed file types.
 
 For larger examples, see:
 

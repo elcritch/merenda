@@ -803,7 +803,7 @@ suite "nimkit application":
     check not openPanel.validateSelection()
     discard openPanel.rebuildOpenPanelView()
     check not Button(openPanel.buttonViews[0]).enabled
-    TextField(openPanel.urlField).text = "file:///tmp/Fixed.md"
+    openPanel.selectUrl("file:///tmp/Fixed.md")
     check Button(openPanel.buttonViews[0]).enabled
 
     openPanel.selectUrls(["file:///tmp/A.txt", "file:///tmp/B.md"])

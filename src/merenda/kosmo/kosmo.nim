@@ -1303,6 +1303,7 @@ proc chooseFile(view: KosmoEditorView, tree: KosmoFileTree, app: nimkit.Applicat
   let panel = nimkit.newOpenPanel()
   panel.message = "Open a text file or folder in Kosmo."
   panel.canChooseDirectories = true
+  panel.directoryUrl = tree.rootPath
   if app.runModal(panel) == nimkit.PanelResponseOk:
     discard view.openPath(tree, nimkit.filePathFromUrl(panel.selectedUrl()))
 
