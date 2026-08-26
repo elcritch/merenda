@@ -11,6 +11,10 @@ export filetree, moe
 
 const
   KosmoOpenFileAction* = "kosmo.openFile"
+  KosmoSaveAction* = "kosmo.save"
+  KosmoCloseTabAction* = "kosmo.closeTab"
+  KosmoPreviousTabAction* = "kosmo.previousTab"
+  KosmoNextTabAction* = "kosmo.nextTab"
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
@@ -20,6 +24,8 @@ const
   KosmoGridOverscanRows = 1
   KosmoMoeBottomAreaRows = 1
   KosmoTabIdentifierPrefix = "kosmo.buffer."
+  KosmoShortcutCommands =
+    [KosmoSaveAction, KosmoCloseTabAction, KosmoPreviousTabAction, KosmoNextTabAction]
 
 type
   KosmoCommandBar* = ref object of nimkit.MonoTextView
@@ -71,6 +77,7 @@ type
     hosts: seq[KosmoDockHost]
     activeGroup: KosmoEditorGroup
     nextGroupIdentifier: int
+    shortcutBindings: nimkit.KeyBindingTable
 
   KosmoContentView = ref object of nimkit.View
     splitView: nimkit.SplitView
@@ -96,6 +103,29 @@ type
     contentView*: nimkit.MenuRootView
     documentView: KosmoContentView
     dockController: KosmoDockController
+
+func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
+  ## Return Kosmo's macOS-style application shortcut defaults.
+  result.bindKey(
+    nimkit.keyS, {nimkit.kmCommand}, nimkit.actionSelector(KosmoSaveAction)
+  )
+  result.bindKey(
+    nimkit.keyW, {nimkit.kmCommand}, nimkit.actionSelector(KosmoCloseTabAction)
+  )
+  result.bindKey(
+    nimkit.keyLeftBracket,
+    {nimkit.kmCommand, nimkit.kmShift},
+    nimkit.actionSelector(KosmoPreviousTabAction),
+  )
+  result.bindKey(
+    nimkit.keyRightBracket,
+    {nimkit.kmCommand, nimkit.kmShift},
+    nimkit.actionSelector(KosmoNextTabAction),
+  )
+
+func defaultKosmoKeyBindingsPath*(): string =
+  ## Return the standalone editor's user key bindings file path.
+  getConfigDir() / "kosmo" / "keybindings.json"
 
 func toMoeModifiers(modifiers: set[nimkit.KeyModifier]): set[moe.KeyModifier] =
   if nimkit.kmControl in modifiers:
@@ -537,6 +567,11 @@ proc scrollBy*(
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc closeCurrentTab(controller: KosmoDockController, view: KosmoEditorView)
 proc finishTabClose(controller: KosmoDockController, view: KosmoEditorView)
+proc saveCurrentTab(controller: KosmoDockController, view: KosmoEditorView)
+proc selectRelativeTab(
+  controller: KosmoDockController, view: KosmoEditorView, offset: int
+)
+
 proc updateDockTarget(
   controller: KosmoDockController, tabs: nimkit.DocumentTabs, location: nimkit.Point
 )
@@ -608,6 +643,24 @@ protocol KosmoEditorInput of nimkit.TextInputProtocol:
       view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
       discard view.editor.handleTextInput(text)
       view.refresh()
+
+protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
+  method dispatchCommand(view: KosmoEditorView, args: nimkit.TryToPerformArgs): bool =
+    if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
+      return false
+    let controller = view.tabsDelegate.dockController[]
+    case $args.selector.name
+    of KosmoSaveAction:
+      controller.saveCurrentTab(view)
+    of KosmoCloseTabAction:
+      controller.closeCurrentTab(view)
+    of KosmoPreviousTabAction:
+      controller.selectRelativeTab(view, -1)
+    of KosmoNextTabAction:
+      controller.selectRelativeTab(view, 1)
+    else:
+      return false
+    true
 
 proc targetView(handler: KosmoEditorTabsHandler): KosmoEditorView =
   if not handler.editorView.isNil:
@@ -744,6 +797,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result.rawEventHandler = proc(event: nimkit.MonoTextRawEvent): bool =
     editorView.handleRawEvent(event)
   discard result.withProtocol(KosmoEditorInput)
+  discard result.withProtocol(KosmoEditorCommandDispatch)
   result.tabsDelegate = KosmoEditorTabsHandler(editorView: result.unsafeWeakRef())
   discard result.tabsDelegate.withProtocol(KosmoEditorTabsDelegate)
   result.documentTabs.delegate = result.tabsDelegate
@@ -838,6 +892,14 @@ proc activeEditorView(controller: KosmoDockController): KosmoEditorView =
     return controller.activeGroup.editorView
   if controller.groups.len > 0:
     return controller.groups[0].editorView
+
+proc installShortcutBindings(controller: KosmoDockController, window: nimkit.Window) =
+  var bindings = window.keyBindings()
+  for command in KosmoShortcutCommands:
+    discard bindings.remove(nimkit.actionSelector(command))
+  for binding in controller.shortcutBindings.bindings:
+    bindings.add(binding.stroke, binding.selector)
+  window.setKeyBindings(bindings)
 
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView) =
   if controller.isNil or view.isNil:
@@ -996,6 +1058,33 @@ proc closeCurrentTab(controller: KosmoDockController, view: KosmoEditorView) =
   else:
     view.refresh()
 
+proc saveCurrentTab(controller: KosmoDockController, view: KosmoEditorView) =
+  controller.activateGroup(view)
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+  let outcome = view.editor.save()
+  view.lastTabs.setLen(0)
+  view.refresh()
+  if not outcome.saved and not view.statusLabel.isNil:
+    view.statusLabel.text = outcome.message
+
+proc selectRelativeTab(
+    controller: KosmoDockController, view: KosmoEditorView, offset: int
+) =
+  controller.activateGroup(view)
+  let tabs = view.visibleTabs(view.editor.tabs())
+  if tabs.len == 0:
+    return
+  var selectedIndex = 0
+  if view.selectedBufferId.isSome:
+    for index, tab in tabs:
+      if tab.id == view.selectedBufferId.get:
+        selectedIndex = index
+        break
+  let targetIndex = (selectedIndex + offset + tabs.len) mod tabs.len
+  discard view.documentTabs.selectDocumentTabWithIdentifier(
+    tabs[targetIndex].id.tabIdentifier
+  )
+
 proc finishBufferMove(
     controller: KosmoDockController, source, target: KosmoEditorGroup, id: KosmoBufferId
 ) =
@@ -1106,6 +1195,7 @@ proc detachBuffer(
       statusLabel: statusLabel,
     )
   controller.hosts.add host
+  controller.installShortcutBindings(window)
   let group = controller.newEditorGroup(workspace, window, [id], addToWorkspace = true)
   controller.finishBufferMove(source, group, id)
   window.setContentView(contentView)
@@ -1208,7 +1298,7 @@ proc chooseFile(view: KosmoEditorView, tree: KosmoFileTree, app: nimkit.Applicat
     discard view.openPath(tree, nimkit.filePathFromUrl(panel.selectedUrl()))
 
 proc newKosmoApplication*(
-    app = nimkit.sharedApplication(), filePath = ""
+    app = nimkit.sharedApplication(), filePath = "", keyBindingsPath = ""
 ): KosmoApplication =
   let
     editorView = newKosmoEditorView()
@@ -1252,7 +1342,9 @@ proc newKosmoApplication*(
     documentView: documentView,
   )
   let
-    controller = KosmoDockController(editor: editorView.editor)
+    controller = KosmoDockController(
+      editor: editorView.editor, shortcutBindings: initKosmoKeyBindings()
+    )
     mainHost = KosmoDockHost(
       workspace: dockView,
       window: result.window,
@@ -1263,6 +1355,12 @@ proc newKosmoApplication*(
   result.dockController = controller
   controller.frontend = result.unsafeWeakRef()
   controller.hosts.add mainHost
+  var keyBindingResult: nimkit.KeyBindingJsonResult
+  if keyBindingsPath.len > 0:
+    keyBindingResult = controller.shortcutBindings.loadKeyBindingOverridesJson(
+      keyBindingsPath, KosmoShortcutCommands
+    )
+  controller.installShortcutBindings(result.window)
   discard controller.newEditorGroup(
     dockView,
     result.window,
@@ -1292,6 +1390,21 @@ proc newKosmoApplication*(
       discard activeView.openFile(path)
   if filePath.len > 0:
     discard result.dockController.activeEditorView().openPath(fileTree, filePath)
+  if keyBindingResult.errors.len > 0:
+    statusLabel.text = keyBindingResult.errors.join("; ")
+
+proc loadKosmoKeyBindings*(
+    frontend: KosmoApplication, path: string
+): nimkit.KeyBindingJsonResult =
+  ## Reset Kosmo shortcuts to their defaults, then apply overrides from `path`.
+  if frontend.isNil or frontend.dockController.isNil:
+    result.errors.add "The Kosmo frontend is closed"
+    return
+  var bindings = initKosmoKeyBindings()
+  result = bindings.loadKeyBindingOverridesJson(path, KosmoShortcutCommands)
+  frontend.dockController.shortcutBindings = bindings
+  for host in frontend.dockController.hosts:
+    frontend.dockController.installShortcutBindings(host.window)
 
 proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
   ## Open a file or replace the file-tree root with a directory.
@@ -1333,7 +1446,11 @@ proc close*(frontend: KosmoApplication) =
 
 proc runKosmo*(filePath = "") =
   ## Run Kosmo as a standalone NimKit text-editor application.
-  let frontend = newKosmoApplication(filePath = filePath)
+  let keyBindingsPath = defaultKosmoKeyBindingsPath()
+  let frontend = newKosmoApplication(
+    filePath = filePath,
+    keyBindingsPath = if fileExists(keyBindingsPath): keyBindingsPath else: "",
+  )
   defer:
     frontend.close()
   frontend.show()

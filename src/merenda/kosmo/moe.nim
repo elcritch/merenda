@@ -11,9 +11,9 @@ import pkg/results as pkgResults
 
 import
   moepkg/[
-    editor, editor_buffers, editor_display, editor_frame, editor_render_views,
-    frontend_input, handler, completion, command_line, config, editor_window, encoding,
-    motion,
+    editor, editor_buffers, editor_display, editor_file, editor_frame,
+    editor_render_views, frontend_input, handler, completion, command_line, config,
+    editor_window, encoding, motion,
   ]
 from moepkg/buffer/core import BufferId
 import moepkg/key_bindings/registry as moeKeys
@@ -79,6 +79,10 @@ type
 
   KosmoTabCloseResult* = object
     closed*: bool
+    message*: string
+
+  KosmoSaveResult* = object
+    saved*: bool
     message*: string
 
   RenderBuffer* = object
@@ -324,6 +328,15 @@ proc closeTab*(editor: KosmoEditor, id: KosmoBufferId): KosmoTabCloseResult =
   if editor.temporaryBufferId.isSome and editor.temporaryBufferId.get == id.toMoeBufferId:
     editor.temporaryBufferId = none(BufferId)
   KosmoTabCloseResult(closed: true)
+
+proc save*(editor: KosmoEditor): KosmoSaveResult =
+  ## Save the active buffer to its current path.
+  if editor.isNil or editor.editor.isNil:
+    return KosmoSaveResult(message: "The editor is closed.")
+  let outcome = editor.editor.saveFile()
+  if pkgResults.isErr(outcome):
+    return KosmoSaveResult(message: outcome.error)
+  KosmoSaveResult(saved: true)
 
 proc moveTab*(
     editor: KosmoEditor, id: KosmoBufferId, destination: Natural

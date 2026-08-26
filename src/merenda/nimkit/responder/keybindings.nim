@@ -160,6 +160,19 @@ proc remove*(table: var KeyBindingTable, stroke: KeyStroke): bool {.discardable.
       table.bindings.delete(idx)
       return true
 
+proc remove*(
+    table: var KeyBindingTable, selector: CommandSelector
+): int {.discardable.} =
+  ## Remove every stroke that invokes `selector` and return the number removed.
+  var writeIndex = 0
+  for binding in table.bindings:
+    if binding.selector == selector:
+      inc result
+    else:
+      table.bindings[writeIndex] = binding
+      inc writeIndex
+  table.bindings.setLen(writeIndex)
+
 proc clear*(table: var KeyBindingTable) =
   table.bindings.setLen(0)
 
@@ -224,6 +237,80 @@ proc commandFor*(table: KeyBindingTable, event: KeyEvent): Option[CommandSelecto
     if binding.stroke.matches(event):
       return some(binding.selector)
   none(CommandSelector)
+
+proc shortcutKey(name: string, modifiers: var set[KeyModifier]): Key =
+  case name
+  of "{":
+    modifiers.incl kmShift
+    keyLeftBracket
+  of "}":
+    modifiers.incl kmShift
+    keyRightBracket
+  of "space":
+    keySpace
+  of "enter", "return":
+    keyEnter
+  of "tab":
+    keyTab
+  of "escape", "esc":
+    keyEscape
+  of "backspace":
+    keyBackspace
+  of "delete":
+    keyDelete
+  of "left":
+    keyArrowLeft
+  of "right":
+    keyArrowRight
+  of "up":
+    keyArrowUp
+  of "down":
+    keyArrowDown
+  of "pageup":
+    keyPageUp
+  of "pagedown":
+    keyPageDown
+  of "home":
+    keyHome
+  of "end":
+    keyEnd
+  of "minus":
+    keyMinus
+  of "equal":
+    keyEqual
+  else:
+    name.keyForText()
+
+proc parseKeyStroke*(description: string): KeyStroke =
+  ## Parse a shortcut such as `cmd-s`, `cmd-shift-p`, or `cmd-{`.
+  ##
+  ## Modifier names are `cmd`, `ctrl`, `option`/`alt`, and `shift`. Braces
+  ## imply the Shift modifier for their corresponding bracket key.
+  let normalized = description.strip().toLowerAscii()
+  if normalized.len == 0:
+    raise newException(ValueError, "Shortcut cannot be empty")
+  let parts = normalized.split('-')
+  if parts.len == 0 or parts[^1].len == 0:
+    raise newException(ValueError, "Shortcut must end with a key: " & description)
+
+  var modifiers: set[KeyModifier]
+  for index in 0 ..< parts.high:
+    case parts[index]
+    of "cmd", "command":
+      modifiers.incl kmCommand
+    of "ctrl", "control":
+      modifiers.incl kmControl
+    of "option", "alt":
+      modifiers.incl kmOption
+    of "shift":
+      modifiers.incl kmShift
+    else:
+      raise newException(ValueError, "Unknown shortcut modifier '" & parts[index] & "'")
+
+  let key = shortcutKey(parts[^1], modifiers)
+  if key == keyUnknown:
+    raise newException(ValueError, "Unknown shortcut key '" & parts[^1] & "'")
+  initKeyStroke(key, modifiers)
 
 proc defaultKeyBindingProfile*(): KeyBindingProfile =
   when defined(macosx) or defined(macos):

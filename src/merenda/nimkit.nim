@@ -33,6 +33,7 @@ import ./nimkit/view/imageviews
 import ./nimkit/view/canvasviews
 import ./nimkit/text/iconlabels
 import ./nimkit/responder/keybindings
+import ./nimkit/responder/keybindingjson
 import ./nimkit/containers/listbasics
 import ./nimkit/controls/matrices
 import ./nimkit/controls/menus
@@ -109,6 +110,7 @@ export imageviews
 export canvasviews
 export iconlabels
 export keybindings
+export keybindingjson
 export listbasics
 export matrices
 export menus

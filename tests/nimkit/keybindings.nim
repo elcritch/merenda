@@ -229,3 +229,72 @@ suite "nimkit key bindings":
     .keyBindings()
     .commandFor(KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl}))
     .get() == selectAll()
+
+  test "shortcut descriptions parse command keys and shifted braces":
+    let
+      save = parseKeyStroke("cmd-s")
+      previous = parseKeyStroke("cmd-{")
+      alternate = parseKeyStroke("ctrl-option-shift-p")
+
+    check save.key == keyS
+    check save.modifiers == {kmCommand}
+    check previous.key == keyLeftBracket
+    check previous.modifiers == {kmCommand, kmShift}
+    check alternate.key == keyP
+    check alternate.modifiers == {kmControl, kmOption, kmShift}
+    expect ValueError:
+      discard parseKeyStroke("cmd-mystery")
+
+  test "JSON key binding overrides replace and disable commands":
+    let
+      nextAction = actionSelector("demo.next")
+      closeAction = actionSelector("demo.close")
+    var bindings: KeyBindingTable
+    bindings.bindKey(keyN, {kmCommand}, nextAction)
+    bindings.bindKey(keyW, {kmCommand}, closeAction)
+
+    let outcome = bindings.applyKeyBindingOverridesJson(
+      """
+      {
+        "demo.next": ["cmd-}", "cmd-j"],
+        "demo.close": null
+      }
+      """,
+      ["demo.next", "demo.close"],
+    )
+
+    check outcome.succeeded
+    check outcome.applied == 2
+    check bindings.commandFor(
+      KeyEvent(key: keyN, keyCode: keyN.ord, modifiers: {kmCommand})
+    ).isNone
+    check bindings
+    .commandFor(
+      KeyEvent(
+        key: keyRightBracket,
+        keyCode: keyRightBracket.ord,
+        modifiers: {kmCommand, kmShift},
+      )
+    )
+    .get() == nextAction
+    check bindings
+    .commandFor(KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: {kmCommand}))
+    .get() == nextAction
+    check bindings.commandFor(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
+    ).isNone
+
+  test "invalid JSON overrides leave the existing command binding intact":
+    let action = actionSelector("demo.save")
+    var bindings: KeyBindingTable
+    bindings.bindKey(keyS, {kmCommand}, action)
+
+    let outcome = bindings.applyKeyBindingOverridesJson(
+      """{"demo.save": "cmd-unknown"}""", ["demo.save"]
+    )
+
+    check not outcome.succeeded
+    check outcome.errors.len == 1
+    check bindings
+    .commandFor(KeyEvent(key: keyS, keyCode: keyS.ord, modifiers: {kmCommand}))
+    .get() == action

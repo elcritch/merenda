@@ -410,6 +410,25 @@ discard window.makeFirstResponder(textField)
 
 Buttons can be tab-selected and activated from the keyboard.
 
+Application commands can use `KeyBindingTable` and load user overrides from a
+JSON command-to-shortcut map. A string assigns one shortcut, an array assigns
+several, and `null` or an empty array disables that command. Shortcut names use
+forms such as `cmd-s`, `cmd-shift-p`, and `cmd-{`.
+
+Standalone Kosmo reads `keybindings.json` from the `kosmo` directory beneath
+the platform configuration directory (`defaultKosmoKeyBindingsPath()`). Its
+defaults are Command-S to save, Command-W to close the active tab, and
+Command-{ / Command-} to select the previous or next tab. For example:
+
+```json
+{
+  "kosmo.save": "cmd-shift-s",
+  "kosmo.closeTab": ["cmd-w", "cmd-q"],
+  "kosmo.previousTab": "cmd-{",
+  "kosmo.nextTab": "cmd-}"
+}
+```
+
 ## Workspace And Services
 
 Applications expose a backend-optional `Workspace` for opening and revealing

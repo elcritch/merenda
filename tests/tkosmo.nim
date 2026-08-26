@@ -385,6 +385,101 @@ suite "Kosmo":
     check "NORMAL" in frontend.statusLabel.text
     check "second.txt" in frontend.statusLabel.text
 
+  test "application shortcuts save close and cycle the focused editor tabs":
+    let
+      root = createTempDir("merenda-kosmo-shortcuts-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Shortcuts Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    check frontend.openPath(firstPath)
+    check frontend.openPath(secondPath)
+    check frontend.editorView.editor.tabs()[1].active
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(
+        key: keyLeftBracket,
+        keyCode: keyLeftBracket.ord,
+        modifiers: {kmCommand, kmShift},
+      )
+    )
+    check frontend.editorView.editor.tabs()[0].active
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(
+        key: keyRightBracket,
+        keyCode: keyRightBracket.ord,
+        modifiers: {kmCommand, kmShift},
+      )
+    )
+    check frontend.editorView.editor.tabs()[1].active
+
+    check frontend.editorView.editor.handleKey("i")
+    check frontend.editorView.editor.handleTextInput("!")
+    check frontend.editorView.editor.handleKey("Esc")
+    check frontend.editorView.editor.tabs()[1].modified
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyS, keyCode: keyS.ord, modifiers: {kmCommand})
+    )
+    check not frontend.editorView.editor.tabs()[1].modified
+    check "!" in readFile(secondPath)
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
+    )
+    check frontend.editorView.editor.tabs().len == 1
+    check frontend.editorView.editor.tabs()[0].title == "first.txt"
+
+  test "JSON can customize Kosmo application shortcuts":
+    let
+      root = createTempDir("merenda-kosmo-shortcut-config-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+      bindingsPath = root / "keybindings.json"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    writeFile(bindingsPath, """{"kosmo.nextTab": "cmd-j"}""")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeFile(bindingsPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(
+      newApplication("Kosmo Shortcut Config Test"), keyBindingsPath = bindingsPath
+    )
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    check frontend.openPath(firstPath)
+    check frontend.openPath(secondPath)
+
+    check frontend.window
+    .keyBindings()
+    .commandFor(
+      KeyEvent(
+        key: keyRightBracket,
+        keyCode: keyRightBracket.ord,
+        modifiers: {kmCommand, kmShift},
+      )
+    ).isNone
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: {kmCommand})
+    )
+    check frontend.editorView.editor.tabs()[0].active
+
   test "dragging a document tab to an editor edge creates a split group":
     let
       root = createTempDir("merenda-kosmo-dock-split-", "")
