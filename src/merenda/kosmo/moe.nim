@@ -4,7 +4,7 @@
 ## translate their input and paint the returned cells; Moe implementation types
 ## remain private to this module.
 
-import std/[options, os]
+import std/[options, os, strutils]
 
 import pkg/celina
 import pkg/results as pkgResults
@@ -12,7 +12,8 @@ import pkg/results as pkgResults
 import
   moepkg/[
     editor, editor_buffers, editor_display, editor_frame, editor_render_views,
-    frontend_input, handler, completion, config, editor_window, encoding, motion,
+    frontend_input, handler, completion, command_line, config, editor_window, encoding,
+    motion,
   ]
 from moepkg/buffer/core import BufferId
 import moepkg/key_bindings/registry as moeKeys
@@ -58,6 +59,11 @@ type
     row*: int
     column*: int
     visible*: bool
+
+  KosmoKeyOutcome* = object ## The semantic outcome of sending a physical key to Moe.
+    valid*: bool
+    continueRunning*: bool
+    closeTabRequested*: bool
 
   KosmoEditorViewState* = object
     ## Cursor and viewport state for one buffer projection in an embedding frontend.
@@ -159,6 +165,7 @@ proc newKosmoEditor*(text = ""): KosmoEditor =
   config.standard.statusLine = false
   config.tabLine.enable = false
   result = KosmoEditor(editor: newEditor(config))
+  discard result.editor.addCommandAlias("x", claSaveAndQuit)
   result.editor.setFrontendGitStatusEnabled(true)
   if text.len > 0:
     discard result.editor.handleKeyCombo(moeKeys.toKeyCombo('i'))
@@ -519,15 +526,28 @@ proc handleScrollInput*(editor: KosmoEditor, input: ScrollInput): ScrollOutcome 
     viewportPhysicalRowsMoved: outcome.viewportPhysicalRowsMoved,
   )
 
-proc handleKey*(editor: KosmoEditor, key: string): bool =
-  ## Send a physical key in Moe notation, for example `"j"` or `"C-s"`.
-  ## Return false when `key` is not valid Moe notation.
+func requestsTabClose(commandText: string): bool =
+  let parts = strutils.splitWhitespace(commandText.strip().toLowerAscii())
+  parts.len > 0 and parts[0] in [":q", ":quit", ":x", ":wq", ":saveandquit"]
+
+proc handleKeyOutcome*(editor: KosmoEditor, key: string): KosmoKeyOutcome =
+  ## Send a physical key and retain frontend-relevant exit intent.
   if editor.isNil or editor.editor.isNil:
-    return false
+    return
   let combo = moeKeys.parseKeyCombo(key)
   if combo.isNone:
-    return false
-  editor.editor.handleKeyCombo(combo.get)
+    return
+  let command = editor.commandLine()
+  result.valid = true
+  result.continueRunning = editor.editor.handleKeyCombo(combo.get)
+  result.closeTabRequested =
+    not result.continueRunning and command.visible and command.text.requestsTabClose()
+
+proc handleKey*(editor: KosmoEditor, key: string): bool =
+  ## Send a physical key in Moe notation, for example `"j"` or `"C-s"`.
+  ## Return false for invalid notation or when Moe requests a frontend close.
+  let outcome = editor.handleKeyOutcome(key)
+  outcome.valid and outcome.continueRunning
 
 proc dismissCommandLine*(editor: KosmoEditor) =
   ## Cancel Moe's command overlay, if one is active.

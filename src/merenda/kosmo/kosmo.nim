@@ -294,6 +294,17 @@ proc removeViewState(view: KosmoEditorView, id: KosmoBufferId) =
   if index >= 0:
     view.viewStates.delete(index)
 
+proc closeTab(view: KosmoEditorView, id: KosmoBufferId): KosmoTabCloseResult =
+  result = view.editor.closeTab(id)
+  if result.closed and view.usesBufferSubset:
+    let bufferIndex = view.bufferIds.find(id)
+    if bufferIndex >= 0:
+      view.bufferIds.delete(bufferIndex)
+    view.removeViewState(id)
+    view.selectedBufferId = none(KosmoBufferId)
+  elif not result.closed and not view.statusLabel.isNil:
+    view.statusLabel.text = result.message
+
 proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
   if not view.usesBufferSubset:
     return
@@ -524,6 +535,8 @@ proc scrollBy*(
   view.refresh()
 
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
+proc closeCurrentTab(controller: KosmoDockController, view: KosmoEditorView)
+proc finishTabClose(controller: KosmoDockController, view: KosmoEditorView)
 proc updateDockTarget(
   controller: KosmoDockController, tabs: nimkit.DocumentTabs, location: nimkit.Point
 )
@@ -570,14 +583,20 @@ proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool
     true
   of nimkit.mtreKeyDown:
     let keyEvent = event.keyEvent
-    if keyEvent.text.len > 0 and keyEvent.modifiers - {nimkit.kmShift} == {}:
+    var keyOutcome: KosmoKeyOutcome
+    if keyEvent.key == nimkit.keyEnter:
+      keyOutcome = view.editor.handleKeyOutcome("Enter")
+    elif keyEvent.text.len > 0 and keyEvent.modifiers - {nimkit.kmShift} == {}:
       discard view.editor.handleTextInput(keyEvent.text)
     elif keyEvent.awaitsCommittedText():
       return false
     else:
       let notation = keyEvent.keyNotation()
       if notation.len > 0:
-        discard view.editor.handleKey(notation)
+        keyOutcome = view.editor.handleKeyOutcome(notation)
+    if keyOutcome.closeTabRequested and not view.tabsDelegate.dockController.isNil:
+      view.tabsDelegate.dockController[].closeCurrentTab(view)
+      return true
     view.refresh()
     true
   of nimkit.mtreFlagsChanged:
@@ -637,15 +656,7 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
     var id: KosmoBufferId
     if not item.identifier.parseTabIdentifier(id):
       return
-    let outcome = view.editor.closeTab(id)
-    if outcome.closed and view.usesBufferSubset:
-      let bufferIndex = view.bufferIds.find(id)
-      if bufferIndex >= 0:
-        view.bufferIds.delete(bufferIndex)
-      view.removeViewState(id)
-      view.selectedBufferId = none(KosmoBufferId)
-    if not outcome.closed and not view.statusLabel.isNil:
-      view.statusLabel.text = outcome.message
+    let outcome = view.closeTab(id)
     outcome.closed
 
   method didCloseDocumentTab(
@@ -659,7 +670,10 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
     discard index
     let view = handler.targetView()
     if not view.isNil:
-      view.refresh()
+      if handler.dockController.isNil:
+        view.refresh()
+      else:
+        handler.dockController[].finishTabClose(view)
 
   method didMoveDocumentTab(
       handler: KosmoEditorTabsHandler,
@@ -922,6 +936,7 @@ proc addBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
 proc removeGroup(controller: KosmoDockController, group: KosmoEditorGroup) =
   if group.isNil:
     return
+  let wasActive = controller.activeGroup == group
   discard group.workspace.removePanel(group.panel)
   let index = controller.groups.find(group)
   if index >= 0:
@@ -929,12 +944,57 @@ proc removeGroup(controller: KosmoDockController, group: KosmoEditorGroup) =
   let host = controller.hostForWorkspace(group.workspace)
   if not host.isNil and group.workspace.len == 0 and not host.primary:
     host.window.close()
-  if controller.activeGroup == group:
-    controller.activeGroup =
-      if controller.groups.len > 0:
-        controller.groups[0]
-      else:
-        nil
+  if wasActive:
+    controller.activeGroup = nil
+    for candidate in controller.groups:
+      if controller.activeGroup.isNil and candidate.workspace == group.workspace:
+        controller.activeGroup = candidate
+    if controller.activeGroup.isNil and controller.groups.len > 0:
+      controller.activeGroup = controller.groups[0]
+
+proc finishTabClose(controller: KosmoDockController, view: KosmoEditorView) =
+  let group = controller.groupForView(view)
+  if group.isNil:
+    view.refresh()
+    return
+  if view.bufferIds.len == 0 and group.workspace.len > 1:
+    let wasActive = controller.activeGroup == group
+    controller.removeGroup(group)
+    if wasActive and not controller.activeGroup.isNil:
+      let replacement = controller.activeGroup
+      controller.activateGroup(replacement.editorView)
+      discard replacement.window.makeFirstResponder(replacement.editorView)
+      replacement.editorView.refresh()
+    return
+  if view.bufferIds.len == 0:
+    view.adoptActiveBuffer()
+  view.lastTabs.setLen(0)
+  view.refresh()
+
+proc closeCurrentTab(controller: KosmoDockController, view: KosmoEditorView) =
+  let tabs = view.visibleTabs(view.editor.tabs())
+  var id = none(KosmoBufferId)
+  if view.selectedBufferId.isSome:
+    for tab in tabs:
+      if tab.id == view.selectedBufferId.get:
+        id = view.selectedBufferId
+        break
+  if id.isNone:
+    for tab in tabs:
+      if tab.active:
+        id = some(tab.id)
+        break
+  if id.isNone and tabs.len > 0:
+    id = some(tabs[^1].id)
+  view.editor.dismissCommandLine()
+  if id.isNone:
+    view.refresh()
+    return
+  let outcome = view.closeTab(id.get)
+  if outcome.closed:
+    controller.finishTabClose(view)
+  else:
+    view.refresh()
 
 proc finishBufferMove(
     controller: KosmoDockController, source, target: KosmoEditorGroup, id: KosmoBufferId

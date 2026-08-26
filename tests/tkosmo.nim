@@ -436,6 +436,88 @@ suite "Kosmo":
     check groups[1].editorView.documentTabs.len == 1
     check frontend.editorView.editor.tabs().len == bufferCount
 
+    check groups[1].editorView.documentTabs.closeDocumentTabAtIndex(0)
+    check frontend.editorGroups().len == 1
+    check frontend.dockView.len == 1
+    check frontend.dockView.rootView() == groups[0].panel
+    check not (frontend.dockView.rootView() of SplitView)
+
+  test "q and x commands close the active tab and its empty split":
+    let
+      root = createTempDir("merenda-kosmo-command-close-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Command Close Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(firstPath)
+    check frontend.openPath(secondPath)
+
+    let
+      sourceTabs = frontend.documentTabs
+      tabRect = sourceTabs.documentTabRect(0)
+      start = sourceTabs.pointToWindow(
+        initPoint(
+          tabRect.minX + tabRect.size.width * 0.5'f32,
+          tabRect.minY + tabRect.size.height * 0.5'f32,
+        )
+      )
+      drop = frontend.dockView.pointToWindow(
+        initPoint(
+          frontend.dockView.bounds().maxX - 4.0'f32,
+          frontend.dockView.bounds().minY +
+            frontend.dockView.bounds().size.height * 0.5'f32,
+        )
+      )
+
+    check frontend.window.mouseDownAt(start)
+    check frontend.window.mouseDraggedAt(drop)
+    check frontend.window.mouseUpAt(drop)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    let groups = frontend.editorGroups()
+    check groups.len == 2
+    let commandGroupPoint = groups[1].editorView.pointToWindow(initPoint(12, 12))
+    check frontend.window.mouseDownAt(commandGroupPoint)
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    check frontend.window.dispatchTextInput("q")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
+
+    check frontend.editorGroups().len == 1
+    check frontend.dockView.len == 1
+    check not (frontend.dockView.rootView() of SplitView)
+    check frontend.editorView.editor.tabs().len == 1
+    check frontend.editorView.editor.tabs()[0].title == "second.txt"
+
+    check frontend.openPath(firstPath)
+    check frontend.editorView.editor.tabs().len == 2
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    check frontend.window.dispatchTextInput("x")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
+
+    check frontend.editorGroups().len == 1
+    check frontend.editorView.editor.tabs().len == 1
+    check frontend.editorView.editor.tabs()[0].title == "second.txt"
+
   test "split editor groups keep independent cursor scroll and motion state":
     let
       root = createTempDir("merenda-kosmo-split-state-", "")
