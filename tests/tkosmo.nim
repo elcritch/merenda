@@ -1,5 +1,7 @@
 import std/[os, strutils, tempfiles, unittest]
 
+import figdraw
+
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
@@ -752,6 +754,7 @@ suite "Kosmo":
     check frontend.window.mouseDraggedAt(drop)
     check frontend.dockView.dropTarget().position == dpRight
     check frontend.window.mouseUpAt(drop)
+    frontend.contentView.layoutSubtreeIfNeeded()
 
     let groups = frontend.editorGroups()
     check groups.len == 2
@@ -760,6 +763,37 @@ suite "Kosmo":
     check groups[0].editorView.documentTabs.len == 1
     check groups[1].editorView.documentTabs.len == 1
     check frontend.editorView.editor.tabs().len == bufferCount
+    check groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+    check not groups[0].pane.documentTabs.hasStyleClass(KosmoActivePaneStyleClass)
+    check groups[1].pane.documentTabs.hasStyleClass(KosmoActivePaneStyleClass)
+    check not groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+
+    let
+      activeTabBarContext =
+        controlStyle(srDocumentTabBar, classes = @[KosmoActivePaneStyleClass])
+      activeOutlineColor = groups[1].pane.documentTabs.effectiveAppearance.resolveColor(
+        activeTabBarContext, StyleBorderColor, color(0.0, 0.0, 0.0, 0.0)
+      )
+      activeRenders = buildRenders(groups[1].pane)[DefaultDrawLevel]
+      paneBounds = groups[1].pane.bounds()
+    var foundPaneOutline = false
+    for node in activeRenders.nodes:
+      if node.kind == nkRectangle and node.stroke.weight == 1.0'f32 and
+          node.stroke.fill.kind == flColor and
+          node.stroke.fill.color == activeOutlineColor.rgba and
+          abs(node.screenBox.w - (paneBounds.size.width - 1.0'f32)) <= 0.01'f32 and
+          abs(node.screenBox.h - (paneBounds.size.height - 1.0'f32)) <= 0.01'f32:
+        foundPaneOutline = true
+    check foundPaneOutline
+
+    let sourceGroupPoint =
+      groups[0].editorView.pointToWindow(initPoint(12.0'f32, 12.0'f32))
+    check frontend.window.mouseDownAt(sourceGroupPoint)
+    check frontend.window.mouseUpAt(sourceGroupPoint)
+    check groups[0].pane.documentTabs.hasStyleClass(KosmoActivePaneStyleClass)
+    check not groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+    check groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+    check not groups[1].pane.documentTabs.hasStyleClass(KosmoActivePaneStyleClass)
 
     check groups[1].editorView.documentTabs.closeDocumentTabAtIndex(0)
     check frontend.editorGroups().len == 1
