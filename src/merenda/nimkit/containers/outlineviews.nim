@@ -20,6 +20,11 @@ import ../view/viewprotos
 export tableviews
 
 type
+  OutlineItemDecoration* = object
+    badge*: string
+    color*: Option[Color]
+    tooltip*: string
+
   OutlineItem* = object
     identifier*: string
     parentIdentifier*: string
@@ -34,6 +39,7 @@ type
     tooltip*: string
     representedObject*: DynamicAgent
     userInfo*: DynamicAgent
+    decoration*: OutlineItemDecoration
 
   OutlineRow* = object
     item*: OutlineItem
@@ -248,6 +254,7 @@ proc initOutlineItem*(
     tooltip = "",
     representedObject: DynamicAgent = nil,
     userInfo: DynamicAgent = nil,
+    decoration = OutlineItemDecoration(),
 ): OutlineItem =
   OutlineItem(
     identifier: identifier,
@@ -263,7 +270,14 @@ proc initOutlineItem*(
     tooltip: tooltip,
     representedObject: representedObject,
     userInfo: userInfo,
+    decoration: decoration,
   )
+
+func initOutlineItemDecoration*(
+    badge = "", color = none(Color), tooltip = ""
+): OutlineItemDecoration =
+  ## Describe optional trailing text and color for an outline row.
+  OutlineItemDecoration(badge: badge, color: color, tooltip: tooltip)
 
 proc outlineColumn*(outlineView: OutlineView): TableColumn =
   outlineView.xOutlineColumn
@@ -1030,7 +1044,8 @@ proc drawOutlineRowText(
   let
     tableView = TableView(outlineView)
     editing = tableView.editingState()
-    textStyle = context.appearance.resolveRowItemStyle(
+    item = outlineView.itemAtRow(row.index)
+    rowTextStyle = context.appearance.resolveRowItemStyle(
       controlStyle(
         srRowItem,
         row.states,
@@ -1045,18 +1060,41 @@ proc drawOutlineRowText(
       let
         text = outlineView.outlineCellText(row.index, column)
         textRect = outlineView.outlineTextRectForCell(row.index, column, rowBounds)
-      if text.len > 0 and not textRect.isEmpty:
+        decoration =
+          if column == outlineView.outlineColumn():
+            item.decoration
+          else:
+            OutlineItemDecoration()
+      if (text.len > 0 or decoration.badge.len > 0) and not textRect.isEmpty:
         let textRoot = context.addRenderRectangle(
           context.renderRectFor(textRect), fill(color(0.0, 0.0, 0.0, 0.0)), clips = true
         )
-        discard context.addText(
-          DefaultDrawLevel,
-          textRoot,
-          textRect,
-          clippedText(text, textRect.size.width, textStyle),
-          textStyle,
-          column.alignment(),
-        )
+        var textStyle = rowTextStyle
+        if decoration.color.isSome:
+          textStyle.color = decoration.color.get()
+        var titleRect = textRect
+        if decoration.badge.len > 0:
+          let badgeWidth = min(max(textStyle.fontSize * 1.8'f32, 18.0'f32), textRect.w)
+          titleRect.w = max(textRect.w - badgeWidth - 4.0'f32, 0.0'f32)
+          let badgeRect =
+            rect(textRect.maxX - badgeWidth, textRect.y, badgeWidth, textRect.h)
+          discard context.addText(
+            DefaultDrawLevel,
+            textRoot,
+            badgeRect,
+            clippedText(decoration.badge, badgeRect.w, textStyle),
+            textStyle,
+            taRight,
+          )
+        if text.len > 0 and titleRect.w > 0.0'f32:
+          discard context.addText(
+            DefaultDrawLevel,
+            textRoot,
+            titleRect,
+            clippedText(text, titleRect.size.width, textStyle),
+            textStyle,
+            column.alignment(),
+          )
 
 proc drawOutlineDropTarget(
     outlineView: OutlineView, context: DrawContext, row: int, rowBounds: Rect

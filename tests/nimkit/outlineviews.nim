@@ -248,6 +248,39 @@ suite "NimKit OutlineView":
     check disclosureShellFound
     check childTextFound
 
+  test "outline item decorations render colored trailing badges":
+    let
+      decorationColor = color(0.82, 0.64, 0.24, 1.0)
+      outlineView = newOutlineView(frame = rect(0, 0, 220, 80))
+    outlineView.showsHeader = false
+    outlineView.outlineItems = [
+      initOutlineItem(
+        "changed",
+        "changed.nim",
+        decoration = initOutlineItemDecoration(
+          badge = "M", color = some(decorationColor), tooltip = "Modified"
+        ),
+      )
+    ]
+
+    let list = buildRenders(outlineView)[DefaultDrawLevel]
+    var
+      titleFound = false
+      badgeFound = false
+    for node in list.nodes:
+      if node.kind == nkText and node.renderedText() in ["changed.nim", "M"]:
+        require node.textLayout.spanColors.len > 0
+        check node.textLayout.spanColors[0].color == decorationColor.rgba
+        if node.renderedText() == "changed.nim":
+          titleFound = true
+        else:
+          badgeFound = true
+
+    check titleFound
+    check badgeFound
+    check outlineView.outlineItemWithIdentifier("changed").decoration.tooltip ==
+      "Modified"
+
   test "outline column can be replaced and remains a table column":
     let
       outlineView = newOutlineView()
