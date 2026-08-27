@@ -691,6 +691,62 @@ suite "nimkit terminal views":
     check generalPasteboard().plainText().strip() == "alpha beta\nsecond line"
     check session.screen().plainText() == originalText
 
+  test "selection copy and backspace keep working during live terminal output":
+    when defined(posix):
+      let
+        session = spawnTerminalSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty raw -echo; printf 'copy target\\033[2;1Hready'; " &
+              "(i=0; while :; do " & "printf '\\033[2;1Hstatus %03d' \"$i\"; " &
+              "i=$(((i + 1) % 1000)); done) & producer=$!; " &
+              "bytes=$(dd bs=1 count=4 2>/dev/null | od -An -tx1 | " &
+              "tr -d '[:space:]'); " &
+              "kill \"$producer\" 2>/dev/null; wait \"$producer\" 2>/dev/null; " &
+              "printf '\\033[3;1Hinput:%s' \"$bytes\""
+          ),
+          columns = 30,
+          rows = 4,
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 360, 120))
+        window = newWindow("Terminal live selection", frame = rect(0, 0, 360, 120))
+      defer:
+        view.close()
+      session.readLimit = 16 * 1024
+      window.setContentView(view)
+      check window.makeFirstResponder(view)
+      check session.pollUntilText("status")
+      discard view.poll()
+
+      let
+        dragStart = view.terminalCellPoint(0, 0)
+        dragEnd = view.terminalCellPoint(0, 3)
+      check window.mouseDownAt(dragStart, clickCount = 1)
+      check window.mouseDraggedAt(dragEnd)
+      check window.mouseUpAt(dragEnd, clickCount = 1)
+      check view.selectionText() == "copy"
+      for _ in 0 ..< 5:
+        discard window.animationScheduler().tick(initDuration(milliseconds = 16))
+        sleep(5)
+      check view.selectionText() == "copy"
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmCommand})
+      )
+      check generalPasteboard().plainText() == "copy"
+
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
+      )
+      check not view.hasSelection()
+      check view.cellAt(0, 0).backgroundColor != view.palette().selection
+      check window.dispatchTextInput("ab")
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
+      )
+
+      check session.pollUntilExit()
+      check "input:7f61627f" in session.screen().plainText()
+
   test "scrolling moves only the viewport with a fractional grid offset":
     let
       session = newTerminalSession(columns = 10, rows = 3)

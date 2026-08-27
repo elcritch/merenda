@@ -384,7 +384,7 @@ proc sendInput*(view: TerminalView, input: string): bool {.discardable.} =
     view.xSession.write(input)
     view.xLastInputError.setLen(0)
     view.xScrollPosition = 0.0'f32
-    view.xHasSelection = false
+    view.clearSelection()
     true
   except TerminalSessionError as error:
     view.xLastInputError = error.msg
