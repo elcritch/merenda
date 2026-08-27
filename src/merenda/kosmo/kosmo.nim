@@ -22,15 +22,13 @@ const
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
   KosmoEditorStyleId* = "kosmo.editor"
+  KosmoPaneIndicatorStyleId* = "kosmo.pane-indicator"
   KosmoPreviewTabStyleClass* = "kosmo-preview"
-  KosmoActivePaneStyleClass* = "kosmo-active-pane"
   KosmoInactivePaneStyleClass* = "kosmo-inactive-pane"
   KosmoCursorOpacity = 0.45'f32
-  KosmoPaneAccentOpacity = 0.82'f32
   KosmoPaneOutlineOpacity = 0.38'f32
   KosmoInactiveTabAccentOpacity = 0.18'f32
   KosmoInactiveTabTextOpacity = 0.72'f32
-  KosmoPaneAccentHeight = 2.0'f32
   KosmoPaneOutlineWidth = 1.0'f32
   KosmoGridOverscanRows = 1
   KosmoMoeBottomAreaRows = 1
@@ -137,16 +135,13 @@ type
     documentView: KosmoContentView
     dockController: KosmoDockController
 
-proc updateActivePaneStyle(group: KosmoEditorGroup, active: bool) =
+proc updateActivePaneIndicator(group: KosmoEditorGroup, active: bool) =
   if group.isNil or group.pane.isNil:
     return
-  let tabs = group.pane.documentTabs
   if active:
-    tabs.removeStyleClass(KosmoInactivePaneStyleClass)
-    tabs.addStyleClass(KosmoActivePaneStyleClass)
+    group.pane.documentTabs.removeStyleClass(KosmoInactivePaneStyleClass)
   else:
-    tabs.removeStyleClass(KosmoActivePaneStyleClass)
-    tabs.addStyleClass(KosmoInactivePaneStyleClass)
+    group.pane.documentTabs.addStyleClass(KosmoInactivePaneStyleClass)
   if not group.pane.activeIndicator.isNil:
     group.pane.activeIndicator.hidden = not active
 
@@ -158,7 +153,7 @@ proc `activeGroup=`(controller: KosmoDockController, group: KosmoEditorGroup) =
     return
   controller.xActiveGroup = group
   for candidate in controller.groups:
-    candidate.updateActivePaneStyle(candidate == group)
+    candidate.updateActivePaneIndicator(candidate == group)
 
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
 
@@ -598,19 +593,12 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     previewTabSelector = nimkit.initStyleSelector(
       nimkit.srDocumentTab, classes = @[KosmoPreviewTabStyleClass]
     )
-    activeTabSelector = nimkit.initStyleSelector(
-      nimkit.srDocumentTab, {nimkit.ssSelected}, classes = @[KosmoActivePaneStyleClass]
-    )
+    paneIndicatorSelector =
+      nimkit.initStyleSelector(nimkit.srBox, id = KosmoPaneIndicatorStyleId)
     inactiveTabSelector = nimkit.initStyleSelector(
       nimkit.srDocumentTab,
       {nimkit.ssSelected},
       classes = @[KosmoInactivePaneStyleClass],
-    )
-    activeTabBarSelector = nimkit.initStyleSelector(
-      nimkit.srDocumentTabBar, classes = @[KosmoActivePaneStyleClass]
-    )
-    inactiveTabBarSelector = nimkit.initStyleSelector(
-      nimkit.srDocumentTabBar, classes = @[KosmoInactivePaneStyleClass]
     )
     tabContext = nimkit.controlStyle(nimkit.srDocumentTab)
     cursorColor =
@@ -622,12 +610,6 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
       base.resolveFill(tabContext, nimkit.fill(nimkit.color(0.16, 0.18, 0.22, 1.0)))
     normalTabTextColor = base.resolveColor(
       tabContext, nimkit.StyleTextColor, nimkit.color(0.72, 0.74, 0.80, 1.0)
-    )
-    activeAccentColor = nimkit.color(
-      accentColor.r,
-      accentColor.g,
-      accentColor.b,
-      accentColor.a * KosmoPaneAccentOpacity,
     )
     paneOutlineColor = nimkit.color(
       accentColor.r,
@@ -662,14 +644,6 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   appearance.setStyle(
     previewTabSelector, nimkit.StyleFontSlant, nimkit.styleKeyword(nimkit.fsItalic)
   )
-  appearance.setStyle(
-    activeTabSelector,
-    nimkit.StyleSelectionIndicatorFill,
-    nimkit.fill(activeAccentColor),
-  )
-  appearance.setStyle(
-    activeTabSelector, nimkit.StyleSelectionIndicatorSize, KosmoPaneAccentHeight
-  )
   appearance.setStyle(inactiveTabSelector, nimkit.StyleFill, normalTabFill)
   appearance.setStyle(inactiveTabSelector, nimkit.StyleTextColor, inactiveTabTextColor)
   appearance.setStyle(
@@ -677,12 +651,11 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     nimkit.StyleSelectionIndicatorFill,
     nimkit.fill(inactiveAccentColor),
   )
-  appearance.setStyle(activeTabBarSelector, nimkit.StyleBorderColor, paneOutlineColor)
+  appearance.setStyle(paneIndicatorSelector, nimkit.StyleBorderColor, paneOutlineColor)
   appearance.setStyle(
-    activeTabBarSelector, nimkit.StyleBorderWidth, KosmoPaneOutlineWidth
+    paneIndicatorSelector, nimkit.StyleBorderWidth, KosmoPaneOutlineWidth
   )
-  appearance.setStyle(activeTabBarSelector, nimkit.StyleCornerRadius, 0.0'f32)
-  appearance.setStyle(inactiveTabBarSelector, nimkit.StyleCornerRadius, 0.0'f32)
+  appearance.setStyle(paneIndicatorSelector, nimkit.StyleCornerRadius, 0.0'f32)
   view.styleId = KosmoEditorStyleId
   view.appearance = appearance
   if not view.documentTabs.isNil:
@@ -1099,38 +1072,32 @@ protocol KosmoPaneIndicatorDrawing of nimkit.ViewDrawingProtocol:
     if bounds.isEmpty:
       return
     let
-      tabContext = nimkit.controlStyle(nimkit.srDocumentTab)
-      accent = context.appearance.resolveColor(
-        tabContext, nimkit.StyleMarkColor, nimkit.color(0.20, 0.45, 0.92, 1.0)
+      styleContext = nimkit.controlStyle(nimkit.srBox, id = KosmoPaneIndicatorStyleId)
+      outlineColor = context.appearance.resolveColor(
+        styleContext,
+        nimkit.StyleBorderColor,
+        nimkit.color(0.20, 0.45, 0.92, KosmoPaneOutlineOpacity),
       )
-      accentColor =
-        nimkit.color(accent.r, accent.g, accent.b, accent.a * KosmoPaneAccentOpacity)
-      outlineColor =
-        nimkit.color(accent.r, accent.g, accent.b, accent.a * KosmoPaneOutlineOpacity)
-      inset = KosmoPaneOutlineWidth * 0.5'f32
+      outlineWidth = context.appearance.resolveLength(
+        styleContext, nimkit.StyleBorderWidth, KosmoPaneOutlineWidth
+      )
+      cornerRadius = context.appearance.resolveLength(
+        styleContext, nimkit.StyleCornerRadius, 0.0'f32
+      )
+      inset = outlineWidth * 0.5'f32
       outlineRect = nimkit.rect(
         bounds.minX + inset,
         bounds.minY + inset,
-        max(bounds.size.width - KosmoPaneOutlineWidth, 0.0'f32),
-        max(bounds.size.height - KosmoPaneOutlineWidth, 0.0'f32),
-      )
-      accentRect = nimkit.rect(
-        bounds.minX + KosmoPaneOutlineWidth,
-        bounds.minY + KosmoPaneOutlineWidth,
-        max(bounds.size.width - KosmoPaneOutlineWidth * 2.0'f32, 0.0'f32),
-        min(
-          KosmoPaneAccentHeight,
-          max(bounds.size.height - KosmoPaneOutlineWidth * 2.0'f32, 0.0'f32),
-        ),
+        max(bounds.size.width - outlineWidth, 0.0'f32),
+        max(bounds.size.height - outlineWidth, 0.0'f32),
       )
     discard context.addRenderRectangle(
       context.renderRectFor(outlineRect),
       nimkit.fill(nimkit.color(0.0, 0.0, 0.0, 0.0)),
       outlineColor,
-      KosmoPaneOutlineWidth,
-      0.0'f32,
+      outlineWidth,
+      cornerRadius,
     )
-    discard context.addRectangle(accentRect, nimkit.fill(accentColor))
 
 protocol KosmoPaneIndicatorHitTesting of nimkit.ViewProtocol:
   method pointInside(indicator: KosmoPaneIndicator, point: nimkit.Point): bool =
@@ -1141,6 +1108,7 @@ proc newKosmoPaneIndicator(): KosmoPaneIndicator =
   result = KosmoPaneIndicator()
   result.initViewFields()
   result.background = nimkit.color(0.0, 0.0, 0.0, 0.0)
+  result.styleId = KosmoPaneIndicatorStyleId
   result.hidden = true
   discard result.withProtocol(KosmoPaneIndicatorDrawing)
   discard result.withProtocol(KosmoPaneIndicatorHitTesting)
@@ -1167,7 +1135,9 @@ protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
         commandBarHeight,
       )
     )
-    pane.activeIndicator.setFrameFromLayout(bounds)
+    pane.activeIndicator.setFrameFromLayout(
+      nimkit.rect(0, tabHeight, bounds.size.width, editorHeight)
+    )
     if pane.contentView == nimkit.View(pane.editorView):
       pane.editorView.refresh()
 
@@ -1419,7 +1389,7 @@ proc newEditorGroup(
   if controller.activeGroup.isNil:
     controller.activeGroup = result
   else:
-    result.updateActivePaneStyle(false)
+    result.updateActivePaneIndicator(false)
 
 proc removeBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
   let index = group.editorView.bufferIds.find(id)

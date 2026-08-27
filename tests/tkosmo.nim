@@ -21,6 +21,17 @@ proc numberedLines(prefix: string, count: Natural): string =
 proc displayedText(view: KosmoEditorView): string =
   monoTextViews.stringValue(MonoTextView(view))
 
+proc hasPaneOutline(pane: KosmoEditorPane, color: Color, width: float32): bool =
+  let
+    renders = buildRenders(pane)[DefaultDrawLevel]
+    contentSize = pane.contentView.frame().size
+  for node in renders.nodes:
+    if node.kind == nkRectangle and node.stroke.weight == width and
+        node.stroke.fill.kind == flColor and node.stroke.fill.color == color.rgba and
+        abs(node.screenBox.w - (contentSize.width - width)) <= 0.01'f32 and
+        abs(node.screenBox.h - (contentSize.height - width)) <= 0.01'f32:
+      return true
+
 suite "Kosmo":
   test "pane documents adapt arbitrary views to native document tabs":
     let
@@ -764,36 +775,40 @@ suite "Kosmo":
     check groups[1].editorView.documentTabs.len == 1
     check frontend.editorView.editor.tabs().len == bufferCount
     check groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
-    check not groups[0].pane.documentTabs.hasStyleClass(KosmoActivePaneStyleClass)
-    check groups[1].pane.documentTabs.hasStyleClass(KosmoActivePaneStyleClass)
     check not groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
 
     let
-      activeTabBarContext =
-        controlStyle(srDocumentTabBar, classes = @[KosmoActivePaneStyleClass])
-      activeOutlineColor = groups[1].pane.documentTabs.effectiveAppearance.resolveColor(
-        activeTabBarContext, StyleBorderColor, color(0.0, 0.0, 0.0, 0.0)
+      paneIndicatorContext = controlStyle(srBox, id = KosmoPaneIndicatorStyleId)
+      paneAppearance = groups[1].pane.documentTabs.effectiveAppearance()
+      paneOutlineColor = paneAppearance.resolveColor(
+        paneIndicatorContext, StyleBorderColor, color(0.0, 0.0, 0.0, 0.0)
       )
-      activeRenders = buildRenders(groups[1].pane)[DefaultDrawLevel]
-      paneBounds = groups[1].pane.bounds()
-    var foundPaneOutline = false
-    for node in activeRenders.nodes:
-      if node.kind == nkRectangle and node.stroke.weight == 1.0'f32 and
-          node.stroke.fill.kind == flColor and
-          node.stroke.fill.color == activeOutlineColor.rgba and
-          abs(node.screenBox.w - (paneBounds.size.width - 1.0'f32)) <= 0.01'f32 and
-          abs(node.screenBox.h - (paneBounds.size.height - 1.0'f32)) <= 0.01'f32:
-        foundPaneOutline = true
-    check foundPaneOutline
+      paneOutlineWidth =
+        paneAppearance.resolveLength(paneIndicatorContext, StyleBorderWidth, 0.0'f32)
+      activeTabTextColor = paneAppearance.resolveColor(
+        controlStyle(srDocumentTab, {ssSelected}),
+        StyleTextColor,
+        color(0.0, 0.0, 0.0, 1.0),
+      )
+      inactiveTabTextColor = paneAppearance.resolveColor(
+        controlStyle(
+          srDocumentTab, {ssSelected}, classes = @[KosmoInactivePaneStyleClass]
+        ),
+        StyleTextColor,
+        color(0.0, 0.0, 0.0, 1.0),
+      )
+    check inactiveTabTextColor.a < activeTabTextColor.a
+    check not groups[0].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
+    check groups[1].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
 
     let sourceGroupPoint =
       groups[0].editorView.pointToWindow(initPoint(12.0'f32, 12.0'f32))
     check frontend.window.mouseDownAt(sourceGroupPoint)
     check frontend.window.mouseUpAt(sourceGroupPoint)
-    check groups[0].pane.documentTabs.hasStyleClass(KosmoActivePaneStyleClass)
     check not groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
     check groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
-    check not groups[1].pane.documentTabs.hasStyleClass(KosmoActivePaneStyleClass)
+    check groups[0].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
+    check not groups[1].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
 
     check groups[1].editorView.documentTabs.closeDocumentTabAtIndex(0)
     check frontend.editorGroups().len == 1
