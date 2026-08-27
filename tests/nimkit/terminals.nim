@@ -2,6 +2,7 @@ import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
 import sigils/core
 
+import merenda/nimkit/accessibility/accessibilityprotocols
 import merenda/nimkit/app/[animations, pasteboards, windows]
 import merenda/nimkit/foundation/[events, types]
 import
@@ -12,9 +13,15 @@ import merenda/nimkit/view/views
 
 type TerminalInteractionSpy = ref object of Agent
   links: seq[string]
+  notifications: seq[AccessibilityNotification]
 
 proc rememberTerminalLink(spy: TerminalInteractionSpy, link: string) {.slot.} =
   spy.links.add link
+
+proc rememberTerminalAccessibility(
+    spy: TerminalInteractionSpy, notification: AccessibilityNotification
+) {.slot.} =
+  spy.notifications.add notification
 
 proc feed(screen: var TerminalScreen, parser: var TerminalParser, value: string) =
   parser.feed(screen, value)
@@ -77,6 +84,25 @@ suite "nimkit terminal screen and parser":
     check screen.scrollbackCount == 2
     check screen.plainText() == "ABCDE\nF\nG\nH\nI"
     check screen.cursor.position == initTerminalPosition(2, 1)
+
+  test "bounded scrollback retains newest lines in logical order":
+    var
+      screen = initTerminalScreen(8, 2, maxScrollback = 3)
+      parser = initTerminalParser()
+
+    screen.feed(parser, "zero\r\none\r\ntwo\r\nthree\r\nfour\r\nfive")
+
+    let scrollback = screen.scrollbackLines()
+    check screen.scrollbackCount == 3
+    check scrollback[0][0].text == "o"
+    check scrollback[1][0].text == "t"
+    check scrollback[1][1].text == "w"
+    check scrollback[2][0].text == "t"
+    check scrollback[2][1].text == "h"
+    check screen.lineAtAbsolute(0)[0].text == "o"
+    check screen.lineAtAbsolute(2)[0].text == "t"
+    check screen.lineAtAbsolute(2)[1].text == "h"
+    check screen.plainText() == "one\ntwo\nthree\nfour\nfive"
 
   test "carriage return line feed tab and backspace follow VT semantics":
     var
@@ -157,6 +183,19 @@ suite "nimkit terminal screen and parser":
 
     screen.feed(parser, "\x1b[3J")
     check screen.scrollbackCount == 0
+
+  test "clearing scrollback preserves the live screen":
+    var
+      screen = initTerminalScreen(6, 2)
+      parser = initTerminalParser()
+    screen.feed(parser, "zero\r\none\r\ntwo")
+    let visibleText = screen.plainText(includeScrollback = false)
+
+    check screen.scrollbackCount == 1
+    screen.clearScrollback()
+
+    check screen.scrollbackCount == 0
+    check screen.plainText(includeScrollback = false) == visibleText
 
   test "scroll regions and line insertion leave outside rows unchanged":
     var
@@ -537,6 +576,9 @@ suite "nimkit terminal views":
         KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmControl})
       )
       check window.dispatchKeyDown(
+        KeyEvent(key: keyL, keyCode: keyL.ord, modifiers: {kmControl})
+      )
+      check window.dispatchKeyDown(
         KeyEvent(text: "x", key: keyX, keyCode: keyX.ord, modifiers: {kmOption})
       )
       discard generalPasteboard().setPlainText("YZ")
@@ -545,7 +587,7 @@ suite "nimkit terminal views":
       )
 
       check session.pollUntilExit()
-      check "61 62 7f 1b 5b 44 09 1b 5b 5a 03 1b 78 59 5a" in
+      check "61 62 7f 1b 5b 44 09 1b 5b 5a 03 0c 1b 78 59 5a" in
         session.normalizedTerminalOutput()
 
   test "attached running views poll from the window animation scheduler":
@@ -650,10 +692,12 @@ suite "nimkit terminal views":
       session = newTerminalSession(columns = 10, rows = 3)
       view = newTerminalView(session, frame = rect(0, 0, 180, 80))
       window = newWindow("Terminal scroll", frame = rect(0, 0, 180, 80))
+      spy = TerminalInteractionSpy()
     session.processOutput("zero\r\none\r\ntwo\r\nthree\r\nfour")
     discard view.poll()
     let cursorBefore = session.screen().cursor.position
     window.setContentView(view)
+    view.connect(accessibilityNotificationPosted, spy, rememberTerminalAccessibility)
     let point = view.pointToWindow(initPoint(10, 10))
 
     check window.dispatchScrollWheel(
@@ -661,13 +705,92 @@ suite "nimkit terminal views":
     )
     check view.scrollPosition() == 0.5'f32
     check view.gridOffset().y < 0.0'f32
+    check view.cellAt(0, 0).text == "o"
+    check spy.notifications == @[anValueChanged]
     check session.screen().cursor.position == cursorBefore
+
+    check window.dispatchScrollWheel(
+      ScrollEvent(location: point, deltaY: 0.25'f32, phase: sepChanged)
+    )
+    check view.scrollPosition() == 0.75'f32
+    check view.cellAt(0, 0).text == "o"
+    check spy.notifications == @[anValueChanged]
 
     check window.dispatchScrollWheel(
       ScrollEvent(location: point, deltaY: 20.0'f32, phase: sepEnded)
     )
     check view.scrollPosition() == session.screen().scrollbackCount().float32
+    check view.cellAt(0, 0).text == "z"
+    check spy.notifications == @[anValueChanged, anValueChanged]
     check session.screen().cursor.position == cursorBefore
+
+  test "window scrolling stays correct with a full scrollback buffer":
+    let
+      session = newTerminalSession(columns = 24, rows = 5, maxScrollback = 1_000)
+      view = newTerminalView(session, frame = rect(0, 0, 320, 120))
+      window = newWindow("Terminal large scrollback", frame = rect(0, 0, 320, 120))
+    var output = newStringOfCap(16_000)
+    for line in 0 .. 1_002:
+      if line > 0:
+        output.add "\r\n"
+      output.add "row " & $line
+    session.processOutput(output)
+    discard view.poll()
+    window.setContentView(view)
+    let
+      point = view.pointToWindow(initPoint(10, 10))
+      cursorBefore = session.screenInfo().cursor.position
+
+    check session.screenInfo().scrollbackCount == 998
+    check window.dispatchScrollWheel(
+      ScrollEvent(location: point, deltaY: 400.0'f32, phase: sepChanged)
+    )
+    check view.scrollPosition() == 400.0'f32
+    check view.stringValue().splitLines()[0].strip() == "row 598"
+    check session.screenInfo().cursor.position == cursorBefore
+
+    check window.dispatchScrollWheel(
+      ScrollEvent(location: point, deltaY: 10_000.0'f32, phase: sepChanged)
+    )
+    check view.scrollPosition() == 998.0'f32
+    check view.stringValue().splitLines()[0].strip() == "row 0"
+
+    check window.dispatchScrollWheel(
+      ScrollEvent(location: point, deltaY: -10_000.0'f32, phase: sepEnded)
+    )
+    check view.scrollPosition() == 0.0'f32
+    check view.stringValue().splitLines()[0].strip() == "row 998"
+    check session.screenInfo().cursor.position == cursorBefore
+
+  test "Command-K and Control-L clear scrollback through window input":
+    let
+      session = newTerminalSession(columns = 8, rows = 2)
+      view = newTerminalView(session, frame = rect(0, 0, 180, 70))
+      window = newWindow("Terminal clear scrollback", frame = rect(0, 0, 180, 70))
+    window.setContentView(view)
+    check window.makeFirstResponder(view)
+
+    session.processOutput("zero\r\none\r\ntwo")
+    discard view.poll()
+    let visibleAfterCommand = session.screen().plainText(includeScrollback = false)
+    check session.screen().scrollbackCount() == 1
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: {kmCommand})
+    )
+    check session.screen().scrollbackCount() == 0
+    check session.screen().plainText(includeScrollback = false) == visibleAfterCommand
+    check view.scrollPosition() == 0.0'f32
+
+    session.processOutput("\r\nthree\r\nfour")
+    discard view.poll()
+    let visibleAfterControl = session.screen().plainText(includeScrollback = false)
+    check session.screen().scrollbackCount() > 0
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyL, keyCode: keyL.ord, modifiers: {kmControl})
+    )
+    check session.screen().scrollbackCount() == 0
+    check session.screen().plainText(includeScrollback = false) == visibleAfterControl
+    check view.scrollPosition() == 0.0'f32
 
   test "Shift preserves local selection and scrolling during mouse tracking":
     let

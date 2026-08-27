@@ -582,8 +582,8 @@ proc installStandardMainMenu*(app: Application) =
     app, "About " & appName, actionSelector("orderFrontStandardAboutPanel")
   )
   applicationMenu.addSeparator()
-  discard applicationMenu.addItem(
-    "Settings…", actionSelector("showPreferences"), ",", shortcut
+  applicationMenu.addStandardApplicationItem(
+    app, "Settings…", actionSelector("showMerendaSettings"), ",", shortcut
   )
   applicationMenu.addSeparator()
   applicationMenu.addStandardMenu("Services", servicesMenu)

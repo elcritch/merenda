@@ -569,6 +569,67 @@ proc replaceCells*(
   view.postAccessibilityNotification(anValueChanged)
   view.postCursorSelectionChanged(previousCursor)
 
+proc rectangularGridColumnCount(view: MonoTextView): int =
+  if view.xLines.len == 0:
+    return
+  result = view.xLines[0].cells.len
+  for row in 1 ..< view.xLines.len:
+    if view.xLines[row].cells.len != result:
+      raise newException(ValueError, "scrolling grid rows requires a rectangular grid")
+
+proc scrollGridRows*(
+    view: MonoTextView, rowOffset: int, replacementCells: openArray[MonoTextCell]
+) =
+  ## Move rectangular grid rows and replace only the rows exposed by the move.
+  ##
+  ## A positive `rowOffset` moves later rows toward row zero and exposes rows at
+  ## the bottom. A negative offset moves earlier rows toward the last row and
+  ## exposes rows at the top. `replacementCells` contains the exposed rows in
+  ## top-to-bottom, row-major order.
+  if rowOffset == 0:
+    if replacementCells.len != 0:
+      raise newException(ValueError, "a zero row offset cannot replace grid cells")
+    return
+
+  let
+    rowCount = view.xLines.len
+    columnCount = view.rectangularGridColumnCount()
+    amount =
+      if rowOffset > 0:
+        min(rowOffset, rowCount)
+      elif rowOffset < -rowCount:
+        rowCount
+      else:
+        -rowOffset
+    expectedCellCount = amount * columnCount
+  if replacementCells.len != expectedCellCount:
+    raise newException(
+      ValueError,
+      "scrolling " & $amount & " grid rows needs " & $expectedCellCount &
+        " replacement cells, got " & $replacementCells.len,
+    )
+
+  if rowOffset > 0:
+    for row in 0 ..< rowCount - amount:
+      view.xLines[row] = move(view.xLines[row + amount])
+  else:
+    for row in countdown(rowCount - 1, amount):
+      view.xLines[row] = move(view.xLines[row - amount])
+
+  let firstReplacementRow =
+    if rowOffset > 0:
+      rowCount - amount
+    else:
+      0
+  for replacementRow in 0 ..< amount:
+    var cells = newSeq[MonoTextCell](columnCount)
+    for column in 0 ..< columnCount:
+      cells[column] = replacementCells[replacementRow * columnCount + column]
+    view.xLines[firstReplacementRow + replacementRow] = MonoTextLine(cells: move(cells))
+
+  view.needsDisplay = true
+  view.postAccessibilityNotification(anValueChanged)
+
 proc setLine*(view: MonoTextView, row: int, text: string) =
   if row < 0:
     return

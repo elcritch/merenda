@@ -111,6 +111,61 @@ suite "nimkit mono text views":
     check not root.needsLayout()
     check not view.needsLayout()
 
+  test "whole-row grid scrolling replaces only newly exposed rows":
+    let
+      root = newView(frame = rect(0, 0, 240, 120))
+      view = newMonoTextViewer(frame = rect(0, 0, 240, 120))
+      spy = MonoTextAccessibilitySpy()
+    view.replaceGrid(
+      4,
+      3,
+      [
+        initMonoTextCell("A"),
+        initMonoTextCell("B"),
+        initMonoTextCell("C"),
+        initMonoTextCell("D"),
+        initMonoTextCell("E"),
+        initMonoTextCell("F"),
+        initMonoTextCell("G"),
+        initMonoTextCell("H"),
+        initMonoTextCell("I"),
+        initMonoTextCell("J"),
+        initMonoTextCell("K"),
+        initMonoTextCell("L"),
+      ],
+    )
+    root.addSubview(view)
+    root.layoutSubtreeIfNeeded()
+    view.connect(
+      accessibilityNotificationPosted, spy, rememberAccessibilityNotification
+    )
+
+    view.scrollGridRows(
+      1, [initMonoTextCell("M"), initMonoTextCell("N"), initMonoTextCell("O")]
+    )
+    check view.stringValue() == "DEF\nGHI\nJKL\nMNO"
+    check spy.notifications == @[anValueChanged]
+    check view.needsDisplay()
+    check not root.needsLayout()
+
+    view.scrollGridRows(
+      -2,
+      [
+        initMonoTextCell("P"),
+        initMonoTextCell("Q"),
+        initMonoTextCell("R"),
+        initMonoTextCell("S"),
+        initMonoTextCell("T"),
+        initMonoTextCell("U"),
+      ],
+    )
+    check view.stringValue() == "PQR\nSTU\nDEF\nGHI"
+    check spy.notifications == @[anValueChanged, anValueChanged]
+
+    expect ValueError:
+      view.scrollGridRows(1, [initMonoTextCell("X")])
+    check view.stringValue() == "PQR\nSTU\nDEF\nGHI"
+
   test "grid offset translates cell geometry without changing the view frame":
     let view = newMonoTextViewer("first\nsecond", frame = rect(0, 0, 240, 120))
     view.padding = 0.0'f32

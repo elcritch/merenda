@@ -7,6 +7,7 @@ import ./nimkit/app/animationproperties
 import ./nimkit/containers/boxes
 import ./nimkit/containers/cascadingviews
 import ./nimkit/containers/collectionviews
+import ./nimkit/containers/compacttabviews
 import ./nimkit/controls/buttons
 import ./nimkit/controls/cells
 import ./nimkit/controls/comboboxes
@@ -24,6 +25,7 @@ import ./nimkit/debug/viewselection
 import ./nimkit/debug/viewinspectors
 import ./nimkit/app/dragging
 import ./nimkit/foundation/events
+import ./nimkit/foundation/filesearch
 import ./nimkit/text/fieldeditors
 import ./nimkit/text/gaptextbuffers
 import ./nimkit/text/texteditors
@@ -85,6 +87,7 @@ export animationproperties
 export boxes
 export cascadingviews
 export collectionviews
+export compacttabviews
 export buttons
 export cells
 export comboboxes
@@ -103,6 +106,7 @@ export viewselection
 export viewinspectors
 export dragging
 export events
+export filesearch
 export fieldeditors
 export gaptextbuffers
 export texteditors

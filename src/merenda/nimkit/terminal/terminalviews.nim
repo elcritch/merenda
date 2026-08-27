@@ -35,6 +35,9 @@ type
     xScrollPosition: float32
     xLastScrollbackCount: int
     xLastGeneration: uint64
+    xRenderedStart, xRenderedRows, xRenderedColumns: int
+    xCachedLineHeight, xCachedFontSize: float32
+    xCachedFontName: string
     xLastTitle, xLastDirectory: string
     xLastBellCount: uint64
     xExitNotified: bool
@@ -270,7 +273,7 @@ func mouseButtonCode(button: MouseButton): int =
   of mbSecondary: 2
 
 func encodeMouseInput(
-    screen: TerminalScreen,
+    session: TerminalSession,
     row, column, buttonCode: int,
     release, motion: bool,
     modifiers: set[KeyModifier],
@@ -279,9 +282,10 @@ func encodeMouseInput(
   if motion:
     code += 32
   let
-    oneBasedColumn = clamp(column + 1, 1, screen.columns)
-    oneBasedRow = clamp(row + 1, 1, screen.rows)
-  case screen.modes.mouseEncoding
+    info = session.screenInfo()
+    oneBasedColumn = clamp(column + 1, 1, info.columns)
+    oneBasedRow = clamp(row + 1, 1, info.rows)
+  case info.modes.mouseEncoding
   of tmeSgr:
     "\x1b[<" & $code & ";" & $oneBasedColumn & ";" & $oneBasedRow &
       (if release: "m" else: "M")
@@ -315,7 +319,7 @@ proc `session=`*(view: TerminalView, session: TerminalSession) =
   view.stopTerminalPolling()
   view.xSession = next
   view.xLastGeneration = high(uint64)
-  view.xLastScrollbackCount = next.screen().scrollbackCount()
+  view.xLastScrollbackCount = next.screenInfo().scrollbackCount
   view.xExitNotified = false
   view.xScrollPosition = 0.0'f32
   view.xHasSelection = false
@@ -361,6 +365,18 @@ proc clearSelection*(view: TerminalView) =
   view.xLastGeneration = high(uint64)
   view.syncTerminalScreen()
 
+proc clearScrollback*(view: TerminalView) =
+  ## Remove saved history and return the viewport to the live screen.
+  if view.isNil or view.xSession.isNil:
+    return
+  view.xSession.clearScrollback()
+  view.xScrollPosition = 0.0'f32
+  view.xLastScrollbackCount = 0
+  view.xHasSelection = false
+  view.xSelecting = false
+  view.xLastGeneration = high(uint64)
+  view.syncTerminalScreen()
+
 proc sendInput*(view: TerminalView, input: string): bool {.discardable.} =
   if view.isNil or view.xSession.isNil or input.len == 0:
     return false
@@ -378,7 +394,7 @@ proc pasteText*(view: TerminalView, text: string): bool {.discardable.} =
   if text.len == 0:
     return false
   let input =
-    if view.xSession.screen().modes.bracketedPaste:
+    if view.xSession.screenInfo().modes.bracketedPaste:
       "\x1b[200~" & text & "\x1b[201~"
     else:
       text
@@ -388,14 +404,14 @@ proc selectionText*(view: TerminalView): string =
   if not view.xHasSelection:
     return
   let
-    screen = view.xSession.screen()
     bounds = view.xSelection.orderedSelection()
+    totalLineCount = view.xSession.screenInfo().totalLineCount
   var selectedLineCount = 0
   for row in bounds.first.row .. bounds.last.row:
-    if row < 0 or row >= screen.totalLineCount():
+    if row < 0 or row >= totalLineCount:
       continue
     let
-      line = screen.lineAtAbsolute(row)
+      line = view.xSession.lineAtAbsolute(row)
       firstColumn = if row == bounds.first.row: bounds.first.column else: 0
       lastColumn = if row == bounds.last.row: bounds.last.column else: line.len
     var text = ""
@@ -415,37 +431,19 @@ proc viewportOffset(view: TerminalView): int =
   int(ceil(view.xScrollPosition.float64))
 
 proc viewportStart(view: TerminalView): int =
-  let screen = view.xSession.screen()
-  max(screen.totalLineCount() - screen.rows - view.viewportOffset(), 0)
+  let info = view.xSession.screenInfo()
+  max(info.totalLineCount - info.rows - view.viewportOffset(), 0)
 
-proc syncTerminalScreen(view: TerminalView) =
-  if view.isNil or view.xSession.isNil:
-    return
-  let screen = view.xSession.screen()
-  let nextScrollbackCount = screen.scrollbackCount()
-  if view.xScrollPosition > 0.0'f32 and nextScrollbackCount > view.xLastScrollbackCount:
-    view.xScrollPosition = min(
-      view.xScrollPosition + (nextScrollbackCount - view.xLastScrollbackCount).float32,
-      nextScrollbackCount.float32,
-    )
-  view.xLastScrollbackCount = nextScrollbackCount
-  if screen.alternateScreen:
-    view.xScrollPosition = 0.0'f32
-  else:
-    view.xScrollPosition =
-      clamp(view.xScrollPosition, 0.0'f32, nextScrollbackCount.float32)
-
-  let
-    rows = screen.rows
-    columns = screen.columns
-    start = view.viewportStart()
-  var cells = newSeq[MonoTextCell](rows * columns)
-  for row in 0 ..< rows:
+proc terminalRowsToMonoTextCells(
+    view: TerminalView, session: TerminalSession, columns, firstRow, rowCount: int
+): seq[MonoTextCell] =
+  result = newSeq[MonoTextCell](max(rowCount, 0) * columns)
+  for row in 0 ..< max(rowCount, 0):
     let
-      absoluteRow = start + row
-      line = screen.lineAtAbsolute(absoluteRow)
+      absoluteRow = firstRow + row
+      line = session.lineAtAbsolute(absoluteRow)
     for column in 0 ..< columns:
-      cells[row * columns + column] = terminalCellToMonoTextCell(
+      result[row * columns + column] = terminalCellToMonoTextCell(
         if column < line.len:
           line[column]
         else:
@@ -454,35 +452,107 @@ proc syncTerminalScreen(view: TerminalView) =
         selected = view.xHasSelection and view.xSelection.contains(absoluteRow, column),
         blinkVisible = view.xBlinkVisible,
       )
-  view.replaceGrid(rows, columns, cells)
+
+proc renderedGridDimensionsMatch(view: TerminalView, rows, columns: int): bool =
+  if view.xRenderedRows != rows or view.xRenderedColumns != columns or
+      view.lineCount() != rows:
+    return false
+  for row in 0 ..< rows:
+    if view.columnCount(row) != columns:
+      return false
+  true
+
+proc synchronizeTerminalGrid(
+    view: TerminalView, session: TerminalSession, info: TerminalScreenInfo, start: int
+) =
   let
+    rows = info.rows
+    columns = info.columns
+    rowOffset = start - view.xRenderedStart
+    canReuseRows =
+      view.xLastGeneration == info.generation and
+      view.renderedGridDimensionsMatch(rows, columns)
+  if canReuseRows and rowOffset != 0 and abs(rowOffset) < rows:
+    let
+      replacementCount = abs(rowOffset)
+      firstReplacementRow =
+        if rowOffset > 0:
+          start + rows - replacementCount
+        else:
+          start
+      replacementCells = view.terminalRowsToMonoTextCells(
+        session, columns, firstReplacementRow, replacementCount
+      )
+    view.scrollGridRows(rowOffset, replacementCells)
+  elif not canReuseRows or rowOffset != 0:
+    view.replaceGrid(
+      rows, columns, view.terminalRowsToMonoTextCells(session, columns, start, rows)
+    )
+  view.xRenderedStart = start
+  view.xRenderedRows = rows
+  view.xRenderedColumns = columns
+
+proc terminalLineHeight(view: TerminalView): float32 =
+  let
+    fontName = view.fontName()
+    fontSize = view.fontSize()
+  if view.xCachedLineHeight <= 0.0'f32 or view.xCachedFontName != fontName or
+      view.xCachedFontSize != fontSize:
+    view.xCachedLineHeight = view.monoTextMetrics().lineHeight
+    view.xCachedFontName = fontName
+    view.xCachedFontSize = fontSize
+  view.xCachedLineHeight
+
+proc syncTerminalScreen(view: TerminalView) =
+  if view.isNil or view.xSession.isNil:
+    return
+  let
+    info = view.xSession.screenInfo()
+    nextScrollbackCount = info.scrollbackCount
+  if view.xScrollPosition > 0.0'f32 and nextScrollbackCount > view.xLastScrollbackCount:
+    view.xScrollPosition = min(
+      view.xScrollPosition + (nextScrollbackCount - view.xLastScrollbackCount).float32,
+      nextScrollbackCount.float32,
+    )
+  view.xLastScrollbackCount = nextScrollbackCount
+  if info.alternateScreen:
+    view.xScrollPosition = 0.0'f32
+  else:
+    view.xScrollPosition =
+      clamp(view.xScrollPosition, 0.0'f32, nextScrollbackCount.float32)
+
+  let
+    start = max(info.totalLineCount - info.rows - view.viewportOffset(), 0)
     offset = view.viewportOffset().float32
-    metrics = view.monoTextMetrics()
+    cursor = info.cursor
+  view.synchronizeTerminalGrid(view.xSession, info, start)
   view.gridOffset =
-    initPoint(0.0'f32, -(offset - view.xScrollPosition) * metrics.lineHeight)
-  view.setCursorPosition(screen.cursor.position.row, screen.cursor.position.column)
+    initPoint(0.0'f32, -(offset - view.xScrollPosition) * view.terminalLineHeight())
+  if view.cursorRow() != cursor.position.row or
+      view.cursorColumn() != cursor.position.column:
+    view.setCursorPosition(cursor.position.row, cursor.position.column)
   view.cursorVisible =
-    view.xScrollPosition == 0.0'f32 and screen.cursor.visible and
-    (not screen.cursor.blinking or view.xBlinkVisible)
+    view.xScrollPosition == 0.0'f32 and cursor.visible and
+    (not cursor.blinking or view.xBlinkVisible)
   view.cursorStyle =
-    case screen.cursor.shape
+    case cursor.shape
     of tcsBlock: mtcBlock
     of tcsBar: mtcVertical
     of tcsUnderline: mtcUnderline
-  view.xLastGeneration = screen.generation
+  view.xLastGeneration = info.generation
 
 proc synchronizeMetadata(view: TerminalView) =
-  let screen = view.xSession.screen()
-  if screen.title != view.xLastTitle:
-    view.xLastTitle = screen.title
-    emit view.terminalTitleDidChange(screen.title)
-  if screen.currentDirectory != view.xLastDirectory:
-    view.xLastDirectory = screen.currentDirectory
-    emit view.terminalDirectoryDidChange(screen.currentDirectory)
-  if screen.bellCount != view.xLastBellCount:
-    view.xLastBellCount = screen.bellCount
+  let info = view.xSession.screenInfo()
+  if info.title != view.xLastTitle:
+    view.xLastTitle = info.title
+    emit view.terminalTitleDidChange(info.title)
+  if info.currentDirectory != view.xLastDirectory:
+    view.xLastDirectory = info.currentDirectory
+    emit view.terminalDirectoryDidChange(info.currentDirectory)
+  if info.bellCount != view.xLastBellCount:
+    view.xLastBellCount = info.bellCount
     emit view.terminalBellDidRing()
-  if view.xAllowsClipboardWrites and screen.clipboardRequestPending:
+  if view.xAllowsClipboardWrites and info.clipboardRequestPending:
     let text = view.xSession.takeClipboardRequest()
     discard generalPasteboard().setPlainText(text)
 
@@ -491,9 +561,8 @@ proc poll*(view: TerminalView): TerminalPollResult =
   if view.isNil or view.xSession.isNil:
     return
   result = view.xSession.poll()
-  let screen = view.xSession.screen()
-  if result.bytesRead > 0 or result.screenChanged or
-      view.xLastGeneration != screen.generation:
+  let generation = view.xSession.screenInfo().generation
+  if result.bytesRead > 0 or result.screenChanged or view.xLastGeneration != generation:
     view.syncTerminalScreen()
   view.synchronizeMetadata()
   if result.processExited and not view.xExitNotified:
@@ -511,7 +580,8 @@ proc resizeToFit*(view: TerminalView) =
     availableHeight = max(bounds.h - view.padding() * 2.0'f32, metrics.lineHeight)
     columns = max(int(floor(availableWidth / metrics.cellWidth)), 1)
     rows = max(int(floor(availableHeight / metrics.lineHeight)), 1)
-  if columns != view.xSession.screen().columns or rows != view.xSession.screen().rows:
+    info = view.xSession.screenInfo()
+  if columns != info.columns or rows != info.rows:
     view.xSession.resize(columns, rows)
     view.xLastGeneration = high(uint64)
     view.syncTerminalScreen()
@@ -530,10 +600,10 @@ proc close*(view: TerminalView) =
     view.xSession.close()
 
 proc absolutePosition(view: TerminalView, row, column: int): TerminalPosition =
-  let screen = view.xSession.screen()
+  let info = view.xSession.screenInfo()
   initTerminalPosition(
-    clamp(view.viewportStart() + row, 0, screen.totalLineCount() - 1),
-    clamp(column, 0, screen.columns),
+    clamp(view.viewportStart() + row, 0, info.totalLineCount - 1),
+    clamp(column, 0, info.columns),
   )
 
 func isWordCell(cell: TerminalCell): bool =
@@ -543,7 +613,7 @@ func isWordCell(cell: TerminalCell): bool =
     return rune.isAlpha() or rune.int in ord('0') .. ord('9') or rune == Rune('_')
 
 proc selectWord(view: TerminalView, position: TerminalPosition) =
-  let line = view.xSession.screen().lineAtAbsolute(position.row)
+  let line = view.xSession.lineAtAbsolute(position.row)
   if line.len == 0:
     return
   var
@@ -561,7 +631,7 @@ proc selectWord(view: TerminalView, position: TerminalPosition) =
   view.xHasSelection = true
 
 proc selectLine(view: TerminalView, position: TerminalPosition) =
-  let line = view.xSession.screen().lineAtAbsolute(position.row)
+  let line = view.xSession.lineAtAbsolute(position.row)
   view.xSelection = TerminalSelection(
     anchor: initTerminalPosition(position.row, 0),
     extent: initTerminalPosition(position.row, line.len),
@@ -579,7 +649,7 @@ proc handleLocalMouse(view: TerminalView, event: MonoTextRawEvent): bool =
       discard Window(owner).makeFirstResponder(view, focusVisible = false)
     let position = view.absolutePosition(event.row, event.column)
     if kmCommand in mouse.modifiers:
-      let line = view.xSession.screen().lineAtAbsolute(position.row)
+      let line = view.xSession.lineAtAbsolute(position.row)
       if position.column in 0 ..< line.len and
           line[position.column].style.hyperlink.len > 0:
         emit view.terminalHyperlinkWasActivated(line[position.column].style.hyperlink)
@@ -616,8 +686,8 @@ proc handleLocalMouse(view: TerminalView, event: MonoTextRawEvent): bool =
   else:
     false
 
-proc mouseTrackingAccepts(screen: TerminalScreen, kind: MonoTextRawEventKind): bool =
-  case screen.modes.mouseTracking
+proc mouseTrackingAccepts(modes: TerminalModes, kind: MonoTextRawEventKind): bool =
+  case modes.mouseTracking
   of tmtNone:
     false
   of tmtX10:
@@ -626,12 +696,10 @@ proc mouseTrackingAccepts(screen: TerminalScreen, kind: MonoTextRawEventKind): b
     kind in {mtreMouseDown, mtreMouseDragged, mtreMouseUp}
 
 proc handleTrackedMouse(view: TerminalView, event: MonoTextRawEvent): bool =
-  let screen = view.xSession.screen()
-  if kmShift in event.mouseEvent.modifiers or not screen.mouseTrackingAccepts(
-    event.kind
-  ):
+  if kmShift in event.mouseEvent.modifiers or
+      not view.xSession.screenInfo().modes.mouseTrackingAccepts(event.kind):
     return false
-  let input = screen.encodeMouseInput(
+  let input = view.xSession.encodeMouseInput(
     event.row,
     event.column,
     event.mouseEvent.button.mouseButtonCode(),
@@ -644,9 +712,8 @@ proc handleTrackedMouse(view: TerminalView, event: MonoTextRawEvent): bool =
 proc scrollLocally(view: TerminalView, event: ScrollEvent): bool =
   if event.deltaY == 0.0'f32:
     return false
-  let maxScroll = view.xSession.screen().scrollbackCount().float32
+  let maxScroll = view.xSession.screenInfo().scrollbackCount.float32
   view.xScrollPosition = clamp(view.xScrollPosition + event.deltaY, 0.0'f32, maxScroll)
-  view.xLastGeneration = high(uint64)
   view.syncTerminalScreen()
   true
 
@@ -657,14 +724,13 @@ proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
       return true
     view.handleLocalMouse(event)
   of mtreScrollWheel:
-    let screen = view.xSession.screen()
     if event.scrollEvent.deltaY == 0.0'f32:
       return false
-    if screen.modes.mouseTracking != tmtNone and
+    if view.xSession.screenInfo().modes.mouseTracking != tmtNone and
         kmShift notin event.scrollEvent.modifiers:
       let buttonCode = if event.scrollEvent.deltaY > 0.0'f32: 64 else: 65
       return view.sendInput(
-        screen.encodeMouseInput(
+        view.xSession.encodeMouseInput(
           event.row,
           event.column,
           buttonCode,
@@ -675,7 +741,15 @@ proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
       )
     view.scrollLocally(event.scrollEvent)
   of mtreKeyDown:
-    let input = terminalKeyInput(event.keyEvent, view.xSession.screen().modes)
+    let keyEvent = event.keyEvent
+    if keyEvent.key == keyK and keyEvent.modifiers == {kmCommand}:
+      view.clearScrollback()
+      return true
+    if keyEvent.key == keyL and keyEvent.modifiers == {kmControl}:
+      view.clearScrollback()
+      discard view.sendInput("\x0c")
+      return true
+    let input = terminalKeyInput(keyEvent, view.xSession.screenInfo().modes)
     if input.len == 0:
       return false
     view.sendInput(input)
@@ -749,10 +823,10 @@ protocol TerminalViewEditingCommands of TextEditingCommandProtocol:
 
   method selectAll(view: TerminalView, args: ActionArgs) =
     discard args
-    let screen = view.xSession.screen()
+    let info = view.xSession.screenInfo()
     view.xSelection = TerminalSelection(
       anchor: initTerminalPosition(0, 0),
-      extent: initTerminalPosition(screen.totalLineCount() - 1, screen.columns),
+      extent: initTerminalPosition(info.totalLineCount - 1, info.columns),
     )
     view.xHasSelection = true
     view.xLastGeneration = high(uint64)
@@ -760,11 +834,11 @@ protocol TerminalViewEditingCommands of TextEditingCommandProtocol:
 
 protocol TerminalViewFocus of ResponderProtocol:
   method didBecomeFirstResponder(view: TerminalView) =
-    if view.xSession.screen().modes.focusReporting:
+    if view.xSession.screenInfo().modes.focusReporting:
       discard view.sendInput("\x1b[I")
 
   method didResignFirstResponder(view: TerminalView) =
-    if view.xSession.screen().modes.focusReporting:
+    if view.xSession.screenInfo().modes.focusReporting:
       discard view.sendInput("\x1b[O")
 
 protocol TerminalViewLayout of ViewLayoutProtocol:
@@ -797,7 +871,7 @@ proc initTerminalViewFields*(
       session
   view.xPalette = palette
   view.xLastGeneration = high(uint64)
-  view.xLastScrollbackCount = view.xSession.screen().scrollbackCount()
+  view.xLastScrollbackCount = view.xSession.screenInfo().scrollbackCount
   view.xBlinkVisible = true
   view.clipsToBounds = true
   view.padding = DefaultTerminalPadding

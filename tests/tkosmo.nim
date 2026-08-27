@@ -365,13 +365,27 @@ suite "Kosmo":
     check "binary file" in outcome.message
     editor.close()
 
-  test "frontend adds file and terminal commands to the File menu":
+  test "frontend restores standard menus and applies themes to editor panes":
     let app = newApplication("Kosmo Test")
     let frontend = newKosmoApplication(app)
-    let fileMenu = app.mainMenu()[0].submenu()
+    defer:
+      frontend.close()
+    let
+      mainMenu = app.mainMenu()
+      applicationMenu = mainMenu[0].submenu()
+      fileMenu = mainMenu[1].submenu()
+      settingsItem = applicationMenu[2]
     let openItem = fileMenu.menuItemWithIdentifier(KosmoOpenFileAction)
     let terminalItem = fileMenu.menuItemWithIdentifier(KosmoNewTerminalAction)
 
+    check mainMenu.len == 5
+    check mainMenu[0].title == "Kosmo Test"
+    check mainMenu[1].title == "File"
+    check mainMenu[2].title == "Edit"
+    check mainMenu[3].title == "Window"
+    check mainMenu[4].title == "Help"
+    check settingsItem.title == "Settings…"
+    check settingsItem.action().name == actionSelector("showMerendaSettings").name
     check not openItem.isNil
     check openItem.title == "Open…"
     check not terminalItem.isNil
@@ -382,14 +396,113 @@ suite "Kosmo":
     if app.usesNativeMainMenu():
       check frontend.contentView.contentView().frame().origin.y == 0.0'f32
     check frontend.splitView.panes() ==
-      @[View(frontend.fileTree), View(frontend.dockView)]
-    frontend.editorView.editor.close()
+      @[View(frontend.sidebarTabs), View(frontend.dockView)]
+    check frontend.sidebarTabs.len == 2
+    check frontend.sidebarTabs[0].identifier == KosmoFilesTabIdentifier
+    check frontend.sidebarTabs[1].identifier == KosmoFindTabIdentifier
+
+    app.addWindow(frontend.window)
+    check settingsItem.perform(Responder(frontend.editorView))
+    check app.windows.len == 2
+    let settingsPanel = app.windows[^1]
+    check settingsPanel.title == "Merenda Settings"
+    let themeView =
+      settingsPanel.contentView().viewWithIdentifier("settings-theme-picker")
+    require not themeView.isNil
+    require themeView of ComboBox
+    ComboBox(themeView).activateItemAtIndex(1)
+    check app.effectiveAppearance.resolveChromeName(controlStyle(srButton)) ==
+      AquaChromeName
+    check frontend.editorView.effectiveAppearance.resolveChromeName(
+      controlStyle(srButton)
+    ) == AquaChromeName
+    settingsPanel.close()
+    frontend.window.close()
+
+  test "find sidebar searches from Command-Shift-F and opens clicked results":
+    let
+      root = createTempDir("merenda-kosmo-find-sidebar-", "")
+      alphaPath = root / "alpha.txt"
+      betaPath = root / "beta.nim"
+      frontend = newKosmoApplication(newApplication("Kosmo Find Sidebar Test"))
+    writeFile(alphaPath, "first needle\nsecond line\n")
+    writeFile(betaPath, "let needleValue = 1\n")
+    defer:
+      frontend.close()
+      removeFile(alphaPath)
+      removeFile(betaPath)
+      removeDir(root)
+
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 760, 520)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(root)
+    check frontend.sidebarTabs.selectedIndex == 0
+    check not frontend.fileTree.hidden
+    check frontend.searchPanel.hidden
+    let findTabPoint = frontend.sidebarTabs.pointToWindow(
+      initPoint(
+        frontend.sidebarTabs.tabWidth * 1.5'f32,
+        frontend.sidebarTabs.tabBarHeight * 0.5'f32,
+      )
+    )
+    check frontend.window.mouseDownAt(findTabPoint)
+    check frontend.window.mouseUpAt(findTabPoint)
+    check frontend.sidebarTabs.selectedIndex == 1
+    let filesTabPoint = frontend.sidebarTabs.pointToWindow(
+      initPoint(
+        frontend.sidebarTabs.tabWidth * 0.5'f32,
+        frontend.sidebarTabs.tabBarHeight * 0.5'f32,
+      )
+    )
+    check frontend.window.mouseDownAt(filesTabPoint)
+    check frontend.window.mouseUpAt(filesTabPoint)
+    check frontend.sidebarTabs.selectedIndex == 0
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmCommand, kmShift})
+    )
+    check frontend.sidebarTabs.selectedIndex == 1
+    check frontend.fileTree.hidden
+    check not frontend.searchPanel.hidden
+    check frontend.searchPanel.queryField.isEditing
+    check frontend.window.firstResponder == frontend.window.fieldEditor()
+
+    check frontend.window.dispatchTextInput("needle")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
+    )
+    check frontend.searchPanel.waitForSearch(timeoutMilliseconds = 10_000)
+    check frontend.searchPanel.resultsView.matches.len == 2
+    check frontend.searchPanel.resultsView.rowCount == 2
+    check frontend.searchPanel.statusLabel.text == "2 results"
+
+    frontend.contentView.layoutSubtreeIfNeeded()
+    discard frontend.window.buildRenders()
+    let
+      resultRect = frontend.searchPanel.resultsView.rowItemRect(0)
+      resultPoint = frontend.searchPanel.resultsView.pointToWindow(
+        initPoint(
+          resultRect.origin.x + resultRect.size.width * 0.5'f32,
+          resultRect.origin.y + resultRect.size.height * 0.5'f32,
+        )
+      )
+    check frontend.window.mouseDownAt(resultPoint)
+    check frontend.window.mouseUpAt(resultPoint)
+    let tabs = frontend.editorView.editor.tabs()
+    check tabs.len == 1
+    check tabs[0].title == "alpha.txt"
+    check tabs[0].temporary
+    check frontend.window.mouseDownAt(resultPoint, clickCount = 2)
+    check frontend.window.mouseUpAt(resultPoint, clickCount = 2)
+    check not frontend.editorView.editor.tabs()[0].temporary
 
   when defined(posix):
     test "File menu opens a terminal as a fully managed pane tab":
       let
         frontend = newKosmoApplication(newApplication("Kosmo Terminal Tab Test"))
-        fileMenu = frontend.application.mainMenu()[0].submenu()
+        fileMenu = frontend.application.mainMenu()[1].submenu()
         terminalItem = fileMenu.menuItemWithIdentifier(KosmoNewTerminalAction)
         initialTabCount = frontend.documentTabs.len
       defer:
@@ -656,7 +769,7 @@ suite "Kosmo":
     test "dragging a terminal tab creates an independent split pane":
       let
         frontend = newKosmoApplication(newApplication("Kosmo Terminal Split Test"))
-        fileMenu = frontend.application.mainMenu()[0].submenu()
+        fileMenu = frontend.application.mainMenu()[1].submenu()
         terminalItem = fileMenu.menuItemWithIdentifier(KosmoNewTerminalAction)
       defer:
         frontend.close()

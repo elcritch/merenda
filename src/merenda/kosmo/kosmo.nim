@@ -4,10 +4,10 @@ import std/[math, options, os, strutils, unicode]
 
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
-import ./[filetree, moe, panedocuments]
+import ./[filesearchpanel, filetree, moe, panedocuments]
 import pkg/celina as celina
 
-export filetree, moe, panedocuments
+export filesearchpanel, filetree, moe, panedocuments
 
 const
   KosmoOpenFileAction* = "kosmo.openFile"
@@ -17,6 +17,7 @@ const
   KosmoQuitAction* = "kosmo.quit"
   KosmoPreviousTabAction* = "kosmo.previousTab"
   KosmoNextTabAction* = "kosmo.nextTab"
+  KosmoFindInFilesAction* = "kosmo.findInFiles"
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
@@ -29,8 +30,14 @@ const
   KosmoTerminalIdentifierPrefix = "kosmo.terminal."
   KosmoShortcutCommands = [
     KosmoSaveAction, KosmoCloseTabAction, KosmoQuitAction, KosmoPreviousTabAction,
-    KosmoNextTabAction,
+    KosmoNextTabAction, KosmoFindInFilesAction,
   ]
+  KosmoFilesTabIdentifier* = "kosmo.sidebar.files"
+  KosmoFindTabIdentifier* = "kosmo.sidebar.find"
+  KosmoFilesIconSvg =
+    """<svg width="24" height="24" viewBox="0 0 24 24"><path fill="#000" d="M2 5h8l2 2h10v13H2z"/></svg>"""
+  KosmoFindIconSvg =
+    """<svg width="24" height="24" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6" fill="none" stroke="#000" stroke-width="2.4"/><path fill="#000" d="M14.2 13l7 7-1.7 1.7-7-7z"/></svg>"""
 
 type
   KosmoCommandBar* = ref object of nimkit.MonoTextView
@@ -54,6 +61,7 @@ type
   KosmoEditorTabsHandler = ref object of nimkit.Responder
     editorView: WeakRef[KosmoEditorView]
     dockController: WeakRef[KosmoDockController]
+    appearanceWindow: WeakRef[nimkit.Window]
 
   KosmoEditorPane* = ref object of nimkit.View
     documentTabs*: nimkit.DocumentTabs
@@ -96,6 +104,7 @@ type
     setInitialDivider: bool
     lastSplitWidth: float32
     fileTreeWidth: float32
+    onFindInFiles: proc() {.closure.}
 
   KosmoDetachedContentView = ref object of nimkit.View
     workspace: nimkit.DockView
@@ -109,11 +118,15 @@ type
     documentTabs*: nimkit.DocumentTabs
     statusLabel*: nimkit.Label
     fileTree*: KosmoFileTree
+    sidebarTabs*: nimkit.CompactTabView
+    searchPanel*: KosmoFileSearchPanel
     splitView*: nimkit.SplitView
     dockView*: nimkit.DockView
     contentView*: nimkit.MenuRootView
     documentView: KosmoContentView
     dockController: KosmoDockController
+
+proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
 
 func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
   ## Return Kosmo's macOS-style application shortcut defaults.
@@ -135,6 +148,11 @@ func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
     nimkit.keyRightBracket,
     {nimkit.kmCommand, nimkit.kmShift},
     nimkit.actionSelector(KosmoNextTabAction),
+  )
+  result.bindKey(
+    nimkit.keyF,
+    {nimkit.kmCommand, nimkit.kmShift},
+    nimkit.actionSelector(KosmoFindInFilesAction),
   )
 
 func defaultKosmoKeyBindingsPath*(): string =
@@ -570,6 +588,26 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   if not view.commandBar.isNil:
     view.commandBar.appearance = appearance
 
+protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
+  proc didChangeEffectiveAppearance(
+      handler: KosmoEditorTabsHandler, appearance: nimkit.Appearance
+  ) {.slot.} =
+    if not handler.editorView.isNil:
+      handler.editorView[].applyKosmoEditorStyle(appearance)
+
+proc stopObservingAppearance(handler: KosmoEditorTabsHandler) =
+  if handler.isNil or handler.appearanceWindow.isNil:
+    return
+  handler.unobserveProtocol(handler.appearanceWindow[], nimkit.WindowAppearanceEvents)
+  handler.appearanceWindow = default(WeakRef[nimkit.Window])
+
+proc observeAppearance(handler: KosmoEditorTabsHandler, window: nimkit.Window) =
+  handler.stopObservingAppearance()
+  if window.isNil:
+    return
+  handler.appearanceWindow = window.unsafeWeakRef()
+  handler.observeProtocol(window, nimkit.WindowAppearanceEvents)
+
 proc refresh*(view: KosmoEditorView) =
   ## Render the current editor state into the synchronous cell-grid view.
   if (view.editor.completionPopupVisible() or view.editor.commandLine().visible) and
@@ -760,6 +798,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       controller.selectRelativeTab(view, -1)
     of KosmoNextTabAction:
       controller.selectRelativeTab(view, 1)
+    of KosmoFindInFilesAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showFindInFiles()
     else:
       return false
     true
@@ -1004,6 +1045,9 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       controller.selectRelativePaneTab(group, -1)
     of KosmoNextTabAction:
       controller.selectRelativePaneTab(group, 1)
+    of KosmoFindInFilesAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showFindInFiles()
     else:
       return false
     true
@@ -1172,6 +1216,7 @@ proc configureGroupView(
     view.statusLabel = host.statusLabel
   if not controller.frontend.isNil:
     view.applyKosmoEditorStyle(controller.frontend[].application.effectiveAppearance())
+  view.tabsDelegate.observeAppearance(group.window)
   view.refresh()
 
 proc newEditorGroup(
@@ -1234,6 +1279,7 @@ proc addBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
 proc removeGroup(controller: KosmoDockController, group: KosmoEditorGroup) =
   if group.isNil:
     return
+  group.editorView.tabsDelegate.stopObservingAppearance()
   let wasActive = controller.activeGroup == group
   discard group.workspace.removePanel(group.panel)
   let index = controller.groups.find(group)
@@ -1624,6 +1670,15 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
     if panes.len > 0:
       content.fileTreeWidth = panes[0].frame().size.width
 
+protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
+  method dispatchCommand(
+      content: KosmoContentView, args: nimkit.TryToPerformArgs
+  ): bool =
+    if $args.selector.name != KosmoFindInFilesAction or content.onFindInFiles.isNil:
+      return false
+    content.onFindInFiles()
+    true
+
 proc newKosmoContentView(
     splitView: nimkit.SplitView, statusLabel: nimkit.Label
 ): KosmoContentView =
@@ -1632,6 +1687,7 @@ proc newKosmoContentView(
   result.addSubview(splitView)
   result.addSubview(statusLabel)
   discard result.withProtocol(KosmoContentLayout)
+  discard result.withProtocol(KosmoContentCommandDispatch)
 
 proc openPath(view: KosmoEditorView, tree: KosmoFileTree, path: string): bool =
   if dirExists(path):
@@ -1651,18 +1707,49 @@ proc chooseFile(view: KosmoEditorView, tree: KosmoFileTree, app: nimkit.Applicat
   if app.runModal(panel) == nimkit.PanelResponseOk:
     discard view.openPath(tree, nimkit.filePathFromUrl(panel.selectedUrl()))
 
+proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Select the find sidebar tab and focus its search query.
+  if frontend.isNil or frontend.sidebarTabs.isNil or frontend.searchPanel.isNil:
+    return
+  frontend.searchPanel.rootPath = frontend.fileTree.rootPath
+  if not frontend.sidebarTabs.selectCompactTabAtIndex(1):
+    return
+  result = frontend.searchPanel.focusQuery()
+
 proc newKosmoApplication*(
     app = nimkit.sharedApplication(), filePath = "", keyBindingsPath = ""
 ): KosmoApplication =
+  let existingMainMenu = app.mainMenu()
+  if existingMainMenu.isNil or existingMainMenu.len < 5 or
+      existingMainMenu[1].title != "File" or existingMainMenu[2].title != "Edit" or
+      existingMainMenu[3].title != "Window" or existingMainMenu[4].title != "Help":
+    app.installStandardMainMenu()
   let
     editorView = newKosmoEditorView()
     editorPane = newKosmoEditorPane(editorView)
     fileTree = newKosmoFileTree(getCurrentDir())
+    searchPanel = newKosmoFileSearchPanel(fileTree.rootPath)
+    sidebarTabs = nimkit.newCompactTabView(
+      [
+        nimkit.initCompactTabItem(
+          KosmoFilesTabIdentifier,
+          "Files",
+          nimkit.newSvgMtsdfResource(KosmoFilesIconSvg, "kosmo-files"),
+          fileTree,
+        ),
+        nimkit.initCompactTabItem(
+          KosmoFindTabIdentifier,
+          "Find",
+          nimkit.newSvgMtsdfResource(KosmoFindIconSvg, "kosmo-find"),
+          searchPanel,
+        ),
+      ]
+    )
     splitView = nimkit.newSplitView(nimkit.laHorizontal)
     dockView = nimkit.newDockView()
-    mainMenu = nimkit.newMenu("Main")
+    mainMenu = app.mainMenu()
     fileMenu = nimkit.newMenu("File")
-    fileItem = nimkit.newMenuItem("File")
+    fileItem = mainMenu[1]
     openItem = nimkit.newMenuItem(
       "Open…", nimkit.actionSelector(KosmoOpenFileAction), "o", {nimkit.kmCommand}
     )
@@ -1674,10 +1761,15 @@ proc newKosmoApplication*(
   fileItem.submenu = fileMenu
   discard fileMenu.addItem(openItem)
   discard fileMenu.addItem(terminalItem)
-  discard mainMenu.addItem(fileItem)
-  app.mainMenu = mainMenu
+  fileMenu.addSeparator()
+  discard fileMenu.addItem(
+    "Close Window",
+    nimkit.actionSelector("performClose"),
+    "w",
+    nimkit.shortcutModifiers(),
+  )
 
-  splitView.addPane(fileTree, minSize = 160.0'f32, maxSize = 420.0'f32)
+  splitView.addPane(sidebarTabs, minSize = 160.0'f32, maxSize = 420.0'f32)
   splitView.addPane(dockView, minSize = 320.0'f32)
 
   let
@@ -1694,6 +1786,8 @@ proc newKosmoApplication*(
     documentTabs: editorView.documentTabs,
     statusLabel: statusLabel,
     fileTree: fileTree,
+    sidebarTabs: sidebarTabs,
+    searchPanel: searchPanel,
     splitView: splitView,
     dockView: dockView,
     contentView: contentView,
@@ -1712,6 +1806,9 @@ proc newKosmoApplication*(
     )
   result.dockController = controller
   controller.frontend = result.unsafeWeakRef()
+  documentView.onFindInFiles = proc() =
+    if not controller.frontend.isNil:
+      discard controller.frontend[].showFindInFiles()
   controller.hosts.add mainHost
   var keyBindingResult: nimkit.KeyBindingJsonResult
   if keyBindingsPath.len > 0:
@@ -1735,6 +1832,7 @@ proc newKosmoApplication*(
     discard sender
     if not frontend.isNil:
       frontend[].dockController.activeEditorView().chooseFile(fileTree, app)
+      searchPanel.rootPath = fileTree.rootPath
   terminalItem.target = nimkit.newActionTarget(
     nimkit.actionSelector(KosmoNewTerminalAction)
   ) do(sender: nimkit.DynamicAgent):
@@ -1757,8 +1855,10 @@ proc newKosmoApplication*(
       discard activeView.previewFile(path)
     of fodPermanent:
       discard activeView.openFile(path)
+  searchPanel.onOpenFile = fileTree.onOpenFile
   if filePath.len > 0:
     discard result.dockController.activeEditorView().openPath(fileTree, filePath)
+    searchPanel.rootPath = fileTree.rootPath
   if keyBindingResult.errors.len > 0:
     statusLabel.text = keyBindingResult.errors.join("; ")
 
@@ -1779,7 +1879,9 @@ proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
   ## Open a file or replace the file-tree root with a directory.
   if frontend.isNil:
     return
-  frontend.dockController.activeEditorView().openPath(frontend.fileTree, path)
+  result = frontend.dockController.activeEditorView().openPath(frontend.fileTree, path)
+  if result and not frontend.searchPanel.isNil:
+    frontend.searchPanel.rootPath = frontend.fileTree.rootPath
 
 proc openDocument*(
     frontend: KosmoApplication, document: KosmoPaneDocument
@@ -1828,6 +1930,7 @@ proc close*(frontend: KosmoApplication) =
     return
   if not frontend.dockController.isNil:
     for group in frontend.dockController.groups:
+      group.editorView.tabsDelegate.stopObservingAppearance()
       for document in group.documents:
         discard document.close()
     let hosts = frontend.dockController.hosts
@@ -1836,6 +1939,8 @@ proc close*(frontend: KosmoApplication) =
         host.window.close()
   if not frontend.editorView.isNil:
     frontend.editorView.editor.close()
+  if not frontend.searchPanel.isNil:
+    frontend.searchPanel.close()
 
 proc runKosmo*(filePath = "") =
   ## Run Kosmo as a standalone NimKit text-editor application.

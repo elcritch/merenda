@@ -468,8 +468,9 @@ forms such as `cmd-s`, `cmd-shift-p`, and `cmd-{`.
 Standalone Kosmo reads `keybindings.json` from the `kosmo` directory beneath
 the platform configuration directory (`defaultKosmoKeyBindingsPath()`). Its
 defaults are Command-S to save, Command-W to close the active tab, and
-Command-Q to quit. Command-{ / Command-} select the previous or next tab. For
-example:
+Command-Q to quit. Command-{ / Command-} select the previous or next tab, and
+Command-Shift-F selects the find-in-files sidebar and focuses its query field.
+For example:
 
 ```json
 {
@@ -477,9 +478,14 @@ example:
   "kosmo.closeTab": ["cmd-w", "cmd-shift-w"],
   "kosmo.quit": "cmd-q",
   "kosmo.previousTab": "cmd-{",
-  "kosmo.nextTab": "cmd-}"
+  "kosmo.nextTab": "cmd-}",
+  "kosmo.findInFiles": "cmd-shift-f"
 }
 ```
+
+Kosmo's sidebar uses compact SVG tabs for the lazy file tree and regular-expression
+find-in-files results. A single click on a result opens it as a temporary preview;
+double-clicking promotes it to a permanent editor tab.
 
 Kosmo's File > New Terminal command opens a `TerminalView` in the focused
 editor group. Terminal and text tabs share selection, closing, reordering,

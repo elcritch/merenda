@@ -237,7 +237,12 @@ suite "nimkit application":
 
     let
       applicationMenu = mainMenu[0].submenu()
+      settingsItem = applicationMenu[2]
       quitItem = applicationMenu[applicationMenu.len - 1]
+    check settingsItem.title == "Settings…"
+    check settingsItem.action().name == actionSelector("showMerendaSettings").name
+    check settingsItem.target() == app
+    check settingsItem.keyEquivalent().modifiers == shortcutModifiers()
     check quitItem.title == "Quit Menu Test"
     check quitItem.action().name == actionSelector("terminate").name
     check quitItem.keyEquivalent().modifiers == shortcutModifiers()

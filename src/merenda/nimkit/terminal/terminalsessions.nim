@@ -36,6 +36,18 @@ type
     screenChanged*: bool
     processExited*: bool
 
+  TerminalScreenInfo* = object
+    ## Cheap session-owned screen metadata for rendering and input decisions.
+    columns*, rows*: int
+    scrollbackCount*, totalLineCount*: int
+    generation*: uint64
+    alternateScreen*: bool
+    cursor*: TerminalCursor
+    modes*: TerminalModes
+    title*, currentDirectory*: string
+    bellCount*: uint64
+    clipboardRequestPending*: bool
+
   TerminalSessionError* = object of CatchableError
 
   TerminalSessionObj = object
@@ -149,6 +161,26 @@ proc newTerminalSession*(
 func screen*(session: TerminalSession): lent TerminalScreen =
   session.xScreen
 
+func screenInfo*(session: TerminalSession): TerminalScreenInfo =
+  ## Return screen metadata without copying the terminal cells or scrollback.
+  TerminalScreenInfo(
+    columns: session.xScreen.columns,
+    rows: session.xScreen.rows,
+    scrollbackCount: session.xScreen.scrollbackCount(),
+    totalLineCount: session.xScreen.totalLineCount(),
+    generation: session.xScreen.generation,
+    alternateScreen: session.xScreen.alternateScreen,
+    cursor: session.xScreen.cursor,
+    modes: session.xScreen.modes,
+    title: session.xScreen.title,
+    currentDirectory: session.xScreen.currentDirectory,
+    bellCount: session.xScreen.bellCount,
+    clipboardRequestPending: session.xScreen.clipboardRequestPending,
+  )
+
+func lineAtAbsolute*(session: TerminalSession, index: int): TerminalLine =
+  session.xScreen.lineAtAbsolute(index)
+
 func state*(session: TerminalSession): TerminalSessionState =
   session.xState
 
@@ -167,6 +199,11 @@ func pendingWriteBytes*(session: TerminalSession): int =
 proc takeClipboardRequest*(session: TerminalSession): string =
   ## Consume a clipboard write requested by the child through OSC 52.
   session.xScreen.takeClipboardRequest()
+
+proc clearScrollback*(session: TerminalSession) =
+  ## Remove saved terminal history without changing the live screen.
+  if not session.isNil:
+    session.xScreen.clearScrollback()
 
 func readLimit*(session: TerminalSession): int =
   session.xReadLimit

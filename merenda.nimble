@@ -14,6 +14,8 @@ requires "sigils[sigNameAsString, closures, siwin] >= 0.27.2"
 requires "gh:elcritch/kiwiberry"
 requires "cborious"
 requires "unicodedb >= 0.14.0"
+requires "regex >= 0.26.3"
+requires "faststreams >= 0.5.1"
 
 feature "libbacktrace":
   requires "libbacktrace"

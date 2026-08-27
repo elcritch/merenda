@@ -16,6 +16,7 @@ import nimkit/dockviews
 import nimkit/font_layout
 import nimkit/fontpickers
 import nimkit/filebrowsers
+import nimkit/filesearch
 import nimkit/formviews
 import nimkit/gaptextbuffers
 import nimkit/gridviews

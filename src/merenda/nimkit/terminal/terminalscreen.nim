@@ -95,6 +95,8 @@ type
     columns*, rows*: int
     cells: seq[TerminalCell]
     scrollback: seq[TerminalLine]
+    scrollbackFirst: int
+    rowOrigin: int
     maxScrollback*: int
     cursor*: TerminalCursor
     style*: TerminalStyle
@@ -110,6 +112,7 @@ type
     tabStops: seq[bool]
     saved: TerminalSavedState
     primaryCells: seq[TerminalCell]
+    primaryRowOrigin: int
     primaryCursor: TerminalCursor
     primarySaved: TerminalSavedState
     wrapPending: bool
@@ -157,7 +160,7 @@ func initTerminalCursor*(): TerminalCursor =
   TerminalCursor(visible: true, blinking: true, shape: tcsBlock)
 
 func cellIndex(screen: TerminalScreen, row, column: int): int =
-  row * screen.columns + column
+  ((screen.rowOrigin + row) mod screen.rows) * screen.columns + column
 
 func contains*(screen: TerminalScreen, position: TerminalPosition): bool =
   position.row in 0 ..< screen.rows and position.column in 0 ..< screen.columns
@@ -171,7 +174,10 @@ func lineAt*(screen: TerminalScreen, row: int): TerminalLine =
     result[column] = screen.cellAt(row, column)
 
 func scrollbackLines*(screen: TerminalScreen): seq[TerminalLine] =
-  screen.scrollback
+  result = newSeq[TerminalLine](screen.scrollback.len)
+  for index in 0 ..< screen.scrollback.len:
+    result[index] =
+      screen.scrollback[(screen.scrollbackFirst + index) mod screen.scrollback.len]
 
 func scrollbackCount*(screen: TerminalScreen): int =
   screen.scrollback.len
@@ -188,7 +194,7 @@ func lineAtAbsolute*(screen: TerminalScreen, index: int): TerminalLine =
   if index < 0 or index >= screen.totalLineCount():
     return
   if index < screen.scrollback.len:
-    return screen.scrollback[index]
+    return screen.scrollback[(screen.scrollbackFirst + index) mod screen.scrollback.len]
   screen.lineAt(index - screen.scrollback.len)
 
 func pendingReplies*(screen: TerminalScreen): seq[string] =
@@ -263,12 +269,22 @@ proc clearRange(screen: var TerminalScreen, row, firstColumn, lastColumn: int) =
 proc clearLine(screen: var TerminalScreen, row: int) =
   screen.clearRange(row, 0, screen.columns - 1)
 
+proc clearScrollback*(screen: var TerminalScreen) =
+  ## Remove saved history without changing the live terminal screen.
+  if screen.scrollback.len == 0:
+    return
+  screen.scrollback.setLen(0)
+  screen.scrollbackFirst = 0
+  screen.markChanged()
+
 proc appendScrollback(screen: var TerminalScreen, line: sink TerminalLine) =
   if screen.alternateScreen or screen.maxScrollback == 0:
     return
-  screen.scrollback.add line
-  if screen.scrollback.len > screen.maxScrollback:
-    screen.scrollback.delete(0 .. screen.scrollback.len - screen.maxScrollback - 1)
+  if screen.scrollback.len < screen.maxScrollback:
+    screen.scrollback.add line
+  else:
+    screen.scrollback[screen.scrollbackFirst] = move(line)
+    screen.scrollbackFirst = (screen.scrollbackFirst + 1) mod screen.scrollback.len
 
 proc replaceLine(screen: var TerminalScreen, row: int, line: TerminalLine) =
   for column in 0 ..< screen.columns:
@@ -283,9 +299,15 @@ proc replaceLine(screen: var TerminalScreen, row: int, line: TerminalLine) =
 
 proc scrollUp*(screen: var TerminalScreen, count = 1) =
   let amount = min(max(count, 0), screen.scrollBottom - screen.scrollTop + 1)
+  if screen.scrollTop == 0 and screen.scrollBottom == screen.rows - 1:
+    for _ in 0 ..< amount:
+      screen.appendScrollback(screen.lineAt(0))
+      screen.rowOrigin = (screen.rowOrigin + 1) mod screen.rows
+      screen.clearLine(screen.rows - 1)
+    if amount > 0:
+      screen.markChanged()
+    return
   for _ in 0 ..< amount:
-    if screen.scrollTop == 0 and screen.scrollBottom == screen.rows - 1:
-      screen.appendScrollback(screen.lineAt(screen.scrollTop))
     for row in screen.scrollTop ..< screen.scrollBottom:
       screen.replaceLine(row, screen.lineAt(row + 1))
     screen.clearLine(screen.scrollBottom)
@@ -294,6 +316,13 @@ proc scrollUp*(screen: var TerminalScreen, count = 1) =
 
 proc scrollDown*(screen: var TerminalScreen, count = 1) =
   let amount = min(max(count, 0), screen.scrollBottom - screen.scrollTop + 1)
+  if screen.scrollTop == 0 and screen.scrollBottom == screen.rows - 1:
+    for _ in 0 ..< amount:
+      screen.rowOrigin = (screen.rowOrigin + screen.rows - 1) mod screen.rows
+      screen.clearLine(0)
+    if amount > 0:
+      screen.markChanged()
+    return
   for _ in 0 ..< amount:
     for row in countdown(screen.scrollBottom, screen.scrollTop + 1):
       screen.replaceLine(row, screen.lineAt(row - 1))
@@ -543,7 +572,8 @@ proc eraseInDisplay*(screen: var TerminalScreen, mode: int) =
     for row in 0 ..< screen.rows:
       screen.clearLine(row)
   of 3:
-    screen.scrollback.setLen(0)
+    screen.clearScrollback()
+    return
   else:
     return
   screen.markChanged()
@@ -582,15 +612,19 @@ proc useAlternateScreen*(screen: var TerminalScreen, enabled, saveRestore: bool)
     if saveRestore:
       screen.saveCursor()
     screen.primaryCells = move(screen.cells)
+    screen.primaryRowOrigin = screen.rowOrigin
     screen.primaryCursor = screen.cursor
     screen.primarySaved = screen.saved
     screen.cells = newSeqWith(screen.columns * screen.rows, initTerminalCell())
+    screen.rowOrigin = 0
     screen.cursor.position = initTerminalPosition(0, 0)
     screen.wrapPending = false
     screen.alternateScreen = true
   else:
     screen.cells = move(screen.primaryCells)
     screen.primaryCells = @[]
+    screen.rowOrigin = screen.primaryRowOrigin
+    screen.primaryRowOrigin = 0
     screen.alternateScreen = false
     if saveRestore:
       screen.cursor = screen.primaryCursor
@@ -620,13 +654,13 @@ proc resizeLine(line: TerminalLine, columns: int): TerminalLine =
     result[columns - 1] = initTerminalCell()
 
 proc resizeCells(
-    cells: seq[TerminalCell], oldColumns, oldRows, columns, rows: int
+    cells: seq[TerminalCell], rowOrigin, oldColumns, oldRows, columns, rows: int
 ): seq[TerminalCell] =
   result = newSeqWith(columns * rows, initTerminalCell())
   for row in 0 ..< min(oldRows, rows):
     var oldLine = newSeq[TerminalCell](oldColumns)
     for column in 0 ..< oldColumns:
-      oldLine[column] = cells[row * oldColumns + column]
+      oldLine[column] = cells[((rowOrigin + row) mod oldRows) * oldColumns + column]
     let line = oldLine.resizeLine(columns)
     for column in 0 ..< columns:
       result[row * columns + column] = line[column]
@@ -637,12 +671,16 @@ proc resize*(screen: var TerminalScreen, columns, rows: int) =
     nextRows = max(rows, 1)
   if nextColumns == screen.columns and nextRows == screen.rows:
     return
-  screen.cells =
-    resizeCells(screen.cells, screen.columns, screen.rows, nextColumns, nextRows)
+  screen.cells = resizeCells(
+    screen.cells, screen.rowOrigin, screen.columns, screen.rows, nextColumns, nextRows
+  )
   if screen.primaryCells.len > 0:
     screen.primaryCells = resizeCells(
-      screen.primaryCells, screen.columns, screen.rows, nextColumns, nextRows
+      screen.primaryCells, screen.primaryRowOrigin, screen.columns, screen.rows,
+      nextColumns, nextRows,
     )
+  screen.rowOrigin = 0
+  screen.primaryRowOrigin = 0
   screen.columns = nextColumns
   screen.rows = nextRows
   screen.cursor.position.row = clamp(screen.cursor.position.row, 0, nextRows - 1)
@@ -666,8 +704,8 @@ func lineText(line: TerminalLine): string =
 func plainText*(screen: TerminalScreen, includeScrollback = true): string =
   var lines: seq[string]
   if includeScrollback and not screen.alternateScreen:
-    for line in screen.scrollback:
-      lines.add line.lineText()
+    for index in 0 ..< screen.scrollback.len:
+      lines.add screen.lineAtAbsolute(index).lineText()
   var lastContentRow = -1
   for row in 0 ..< screen.rows:
     let text = screen.lineAt(row).lineText()
