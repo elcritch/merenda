@@ -180,6 +180,11 @@ suite "Kosmo":
     check not editor.cursor().visible
     check not view.cursorVisible
 
+    let accelerated =
+      view.scrollBy(-1.0'f32, row = 2, column = 2, modifiers = {nimkit.kmControl})
+    check accelerated.requestedRows == 3
+    check accelerated.appliedRows == 3
+
     let
       toBottom = view.scrollBy(-100.0'f32, row = 2, column = 2)
       pastBottom = view.scrollBy(-1.0'f32, row = 2, column = 2)
@@ -1025,6 +1030,66 @@ suite "Kosmo":
       KeyEvent(key: keyQ, keyCode: keyQ.ord, modifiers: {kmCommand})
     )
     check app.isTerminating
+
+  test "Command-number shortcuts focus the file browser and editor panels":
+    let
+      root = createTempDir("merenda-kosmo-panel-shortcuts-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+      frontend = newKosmoApplication(newApplication("Kosmo Panel Shortcuts Test"))
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      frontend.close()
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(firstPath)
+    check frontend.openPath(secondPath)
+
+    let
+      sourceTabs = frontend.documentTabs
+      tabRect = sourceTabs.documentTabRect(0)
+      start = sourceTabs.pointToWindow(
+        initPoint(
+          tabRect.minX + tabRect.size.width * 0.5'f32,
+          tabRect.minY + tabRect.size.height * 0.5'f32,
+        )
+      )
+      drop = frontend.dockView.pointToWindow(
+        initPoint(
+          frontend.dockView.bounds().maxX - 4.0'f32,
+          frontend.dockView.bounds().minY +
+            frontend.dockView.bounds().size.height * 0.5'f32,
+        )
+      )
+    check frontend.window.mouseDownAt(start)
+    check frontend.window.mouseDraggedAt(drop)
+    check frontend.window.mouseUpAt(drop)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: key2, keyCode: key2.ord, modifiers: {kmCommand})
+    )
+    check frontend.window.firstResponder == groups[0].editorView
+    check not groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: key1, keyCode: key1.ord, modifiers: {kmCommand})
+    )
+    check frontend.sidebarTabs.selectedIndex == 0
+    check frontend.window.firstResponder == frontend.fileTree
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: key3, keyCode: key3.ord, modifiers: {kmCommand})
+    )
+    check frontend.window.firstResponder == groups[1].editorView
+    check not groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
 
   test "dragging a document tab to an editor edge creates a split group":
     let

@@ -19,6 +19,8 @@ const
   KosmoNextTabAction* = "kosmo.nextTab"
   KosmoShowFileExplorerAction* = "kosmo.showFileExplorer"
   KosmoFindInFilesAction* = "kosmo.findInFiles"
+  KosmoFocusPanelActionPrefix* = "kosmo.focusPanel"
+  KosmoMaxFocusPanelShortcut* = 9
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
@@ -31,13 +33,28 @@ const
   KosmoInactiveTabAccentOpacity = 0.18'f32
   KosmoInactiveTabTextOpacity = 0.72'f32
   KosmoPaneOutlineWidth = 1.0'f32
+  KosmoControlScrollMultiplier = 3.0'f32
   KosmoGridOverscanRows = 1
   KosmoMoeBottomAreaRows = 1
   KosmoTabIdentifierPrefix = "kosmo.buffer."
   KosmoTerminalIdentifierPrefix = "kosmo.terminal."
   KosmoShortcutCommands = [
-    KosmoSaveAction, KosmoCloseTabAction, KosmoQuitAction, KosmoPreviousTabAction,
-    KosmoNextTabAction, KosmoShowFileExplorerAction, KosmoFindInFilesAction,
+    KosmoSaveAction,
+    KosmoCloseTabAction,
+    KosmoQuitAction,
+    KosmoPreviousTabAction,
+    KosmoNextTabAction,
+    KosmoShowFileExplorerAction,
+    KosmoFindInFilesAction,
+    KosmoFocusPanelActionPrefix & "1",
+    KosmoFocusPanelActionPrefix & "2",
+    KosmoFocusPanelActionPrefix & "3",
+    KosmoFocusPanelActionPrefix & "4",
+    KosmoFocusPanelActionPrefix & "5",
+    KosmoFocusPanelActionPrefix & "6",
+    KosmoFocusPanelActionPrefix & "7",
+    KosmoFocusPanelActionPrefix & "8",
+    KosmoFocusPanelActionPrefix & "9",
   ]
   KosmoFilesTabIdentifier* = "kosmo.sidebar.files"
   KosmoFindTabIdentifier* = "kosmo.sidebar.find"
@@ -116,6 +133,7 @@ type
     fileTreeWidth: float32
     onShowFileExplorer: proc() {.closure.}
     onFindInFiles: proc() {.closure.}
+    onFocusPanel: proc(panelNumber: int) {.closure.}
 
   KosmoDetachedContentView = ref object of nimkit.View
     workspace: nimkit.DockView
@@ -160,6 +178,22 @@ proc `activeGroup=`(controller: KosmoDockController, group: KosmoEditorGroup) =
 proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
+proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
+
+func focusPanelAction*(panelNumber: int): string =
+  ## Return the key-binding command name for a numbered Kosmo panel.
+  KosmoFocusPanelActionPrefix & $panelNumber
+
+func focusPanelNumber(selector: nimkit.CommandSelector): int =
+  let name = $selector.name
+  if not name.startsWith(KosmoFocusPanelActionPrefix):
+    return
+  try:
+    result = parseInt(name[KosmoFocusPanelActionPrefix.len .. ^1])
+  except ValueError:
+    discard
+  if result notin 1 .. KosmoMaxFocusPanelShortcut:
+    result = 0
 
 func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
   ## Return Kosmo's macOS-style application shortcut defaults.
@@ -192,6 +226,11 @@ func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
     {nimkit.kmCommand, nimkit.kmShift},
     nimkit.actionSelector(KosmoFindInFilesAction),
   )
+  for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
+    let key = nimkit.Key(ord(nimkit.key1) + panelNumber - 1)
+    result.bindKey(
+      key, {nimkit.kmCommand}, nimkit.actionSelector(panelNumber.focusPanelAction())
+    )
 
 func defaultKosmoKeyBindingsPath*(): string =
   ## Return the standalone editor's user key bindings file path.
@@ -805,9 +844,11 @@ proc scrollBy*(
     column = 0,
     modifiers: set[nimkit.KeyModifier] = {},
 ): ScrollOutcome =
-  ## Translate fractional wheel input and commit complete physical rows to Moe.
+  ## Translate fractional wheel input and accelerate Control-modified scrolling.
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
-  view.scrollOffsetRows -= deltaY
+  let multiplier =
+    if nimkit.kmControl in modifiers: KosmoControlScrollMultiplier else: 1.0'f32
+  view.scrollOffsetRows -= deltaY * multiplier
   let rows = int(floor(view.scrollOffsetRows))
   if rows == 0:
     result.handled = true
@@ -922,6 +963,10 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
       return false
     let controller = view.tabsDelegate.dockController[]
+    let panelNumber = args.selector.focusPanelNumber()
+    if panelNumber > 0:
+      discard controller.focusPanel(panelNumber)
+      return true
     case $args.selector.name
     of KosmoSaveAction:
       controller.saveCurrentTab(view)
@@ -1222,6 +1267,10 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
         group.editorView.tabsDelegate.dockController.isNil:
       return false
     let controller = group.editorView.tabsDelegate.dockController[]
+    let panelNumber = args.selector.focusPanelNumber()
+    if panelNumber > 0:
+      discard controller.focusPanel(panelNumber)
+      return true
     case $args.selector.name
     of KosmoSaveAction:
       controller.saveCurrentPaneTab(group)
@@ -1377,6 +1426,46 @@ proc activatePaneTab(
   group.pane.layoutSubtreeIfNeeded()
   if focus and not document.preferredFirstResponder.isNil:
     discard group.window.makeFirstResponder(document.preferredFirstResponder)
+
+proc activatePanelWindow(controller: KosmoDockController, window: nimkit.Window) =
+  if controller.frontend.isNil or window.isNil:
+    return
+  let app = controller.frontend[].application
+  let keyWindow = app.keyWindow()
+  if not keyWindow.isNil and keyWindow != window:
+    app.activateWindow(window)
+
+proc focusPanel(controller: KosmoDockController, panelNumber: int): bool =
+  if controller.isNil or panelNumber < 1:
+    return
+  if panelNumber == 1:
+    if controller.frontend.isNil:
+      return
+    let frontend = controller.frontend[]
+    controller.activatePanelWindow(frontend.window)
+    return frontend.showFileExplorer()
+
+  let groupIndex = panelNumber - 2
+  if groupIndex notin 0 ..< controller.groups.len:
+    return
+  let group = controller.groups[groupIndex]
+  if group.window.isNil or group.window.isClosed():
+    return
+
+  controller.activatePanelWindow(group.window)
+  controller.activateGroup(group.editorView)
+  let document = group.documentForIdentifier(group.selectedTabIdentifier)
+  if group.selectedTabIdentifier.len > 0:
+    controller.activatePaneTab(group, group.selectedTabIdentifier, focus = false)
+  else:
+    group.pane.setContentView(group.editorView)
+
+  let responder =
+    if document.isNil or document.preferredFirstResponder.isNil:
+      nimkit.Responder(group.editorView)
+    else:
+      nimkit.Responder(document.preferredFirstResponder)
+  result = group.window.makeFirstResponder(responder)
 
 proc initialBufferIds(editor: KosmoEditor): seq[KosmoBufferId] =
   for tab in editor.tabs():
@@ -1875,6 +1964,12 @@ protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(
       content: KosmoContentView, args: nimkit.TryToPerformArgs
   ): bool =
+    let panelNumber = args.selector.focusPanelNumber()
+    if panelNumber > 0:
+      if content.onFocusPanel.isNil:
+        return false
+      content.onFocusPanel(panelNumber)
+      return true
     case $args.selector.name
     of KosmoShowFileExplorerAction:
       if content.onShowFileExplorer.isNil:
@@ -2029,6 +2124,8 @@ proc newKosmoApplication*(
   documentView.onFindInFiles = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showFindInFiles()
+  documentView.onFocusPanel = proc(panelNumber: int) =
+    discard controller.focusPanel(panelNumber)
   controller.hosts.add mainHost
   var keyBindingResult: nimkit.KeyBindingJsonResult
   if keyBindingsPath.len > 0:

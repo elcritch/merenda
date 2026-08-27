@@ -470,7 +470,9 @@ the platform configuration directory (`defaultKosmoKeyBindingsPath()`). Its
 defaults are Command-S to save, Command-W to close the active tab, and
 Command-Q to quit. Command-{ / Command-} select the previous or next tab, and
 Command-Shift-E selects and focuses the file explorer. Command-Shift-F selects
-the find-in-files sidebar and focuses its query field. For example:
+the find-in-files sidebar and focuses its query field. Command-1 focuses the
+file browser, while Command-2 through Command-9 focus the corresponding editor
+panels in creation order. For example:
 
 ```json
 {
@@ -480,14 +482,17 @@ the find-in-files sidebar and focuses its query field. For example:
   "kosmo.previousTab": "cmd-{",
   "kosmo.nextTab": "cmd-}",
   "kosmo.showFileExplorer": "cmd-shift-e",
-  "kosmo.findInFiles": "cmd-shift-f"
+  "kosmo.findInFiles": "cmd-shift-f",
+  "kosmo.focusPanel1": "cmd-1",
+  "kosmo.focusPanel2": "cmd-2"
 }
 ```
 
 Kosmo's sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
 double-clicking promotes it to a permanent editor tab. Git-ignored files and
-dot-directories remain visible in the file tree with muted gray text.
+dot-directories remain visible in the file tree with muted gray text. Holding
+Control while scrolling over an editor accelerates the wheel movement threefold.
 
 Kosmo's File > New Terminal command opens a `TerminalView` in the focused
 editor group. Terminal and text tabs share selection, closing, reordering,
