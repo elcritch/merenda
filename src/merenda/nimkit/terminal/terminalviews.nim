@@ -665,7 +665,7 @@ proc handleLocalMouse(view: TerminalView, event: MonoTextRawEvent): bool =
         anchor: position,
         extent: initTerminalPosition(position.row, position.column + 1),
       )
-      view.xHasSelection = true
+      view.xHasSelection = false
       view.xSelecting = true
     view.xLastGeneration = high(uint64)
     view.syncTerminalScreen()
@@ -675,6 +675,7 @@ proc handleLocalMouse(view: TerminalView, event: MonoTextRawEvent): bool =
       return false
     let position = view.absolutePosition(event.row, event.column)
     view.xSelection.extent = initTerminalPosition(position.row, position.column + 1)
+    view.xHasSelection = true
     view.xLastGeneration = high(uint64)
     view.syncTerminalScreen()
     true

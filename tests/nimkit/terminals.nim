@@ -5,6 +5,7 @@ import sigils/core
 import merenda/nimkit/accessibility/accessibilityprotocols
 import merenda/nimkit/app/[animations, pasteboards, windows]
 import merenda/nimkit/foundation/[events, types]
+import merenda/nimkit/responder/responders
 import
   merenda/nimkit/terminal/
     [terminalparser, terminalscreen, terminalsessions, terminalviews]
@@ -690,6 +691,33 @@ suite "nimkit terminal views":
     )
     check generalPasteboard().plainText().strip() == "alpha beta\nsecond line"
     check session.screen().plainText() == originalText
+
+  test "single click focuses the terminal and clears selection without selecting a cell":
+    let
+      session = newTerminalSession(columns = 20, rows = 3)
+      view = newTerminalView(session, frame = rect(0, 0, 300, 90))
+      peer = newView(frame = rect(300, 0, 60, 90))
+      root = newView(frame = rect(0, 0, 360, 90))
+      window = newWindow("Terminal click focus", frame = rect(0, 0, 360, 90))
+    session.processOutput("alpha beta")
+    discard view.poll()
+    peer.acceptsFirstResponder = true
+    root.addSubview(view)
+    root.addSubview(peer)
+    window.setContentView(root)
+    let point = view.terminalCellPoint(0, 2)
+
+    check window.mouseDownAt(point, clickCount = 2)
+    check window.mouseUpAt(point, clickCount = 2)
+    check view.hasSelection()
+    check window.makeFirstResponder(peer)
+
+    check window.mouseDownAt(point, clickCount = 1)
+    check window.mouseUpAt(point, clickCount = 1)
+    check window.firstResponder() == Responder(view)
+    check not view.hasSelection()
+    check view.selectionText().len == 0
+    check view.cellAt(0, 2).backgroundColor != view.palette().selection
 
   test "selection copy and backspace keep working during live terminal output":
     when defined(posix):
