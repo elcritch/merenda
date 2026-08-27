@@ -17,6 +17,7 @@ const
   KosmoQuitAction* = "kosmo.quit"
   KosmoPreviousTabAction* = "kosmo.previousTab"
   KosmoNextTabAction* = "kosmo.nextTab"
+  KosmoShowFileExplorerAction* = "kosmo.showFileExplorer"
   KosmoFindInFilesAction* = "kosmo.findInFiles"
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
@@ -36,7 +37,7 @@ const
   KosmoTerminalIdentifierPrefix = "kosmo.terminal."
   KosmoShortcutCommands = [
     KosmoSaveAction, KosmoCloseTabAction, KosmoQuitAction, KosmoPreviousTabAction,
-    KosmoNextTabAction, KosmoFindInFilesAction,
+    KosmoNextTabAction, KosmoShowFileExplorerAction, KosmoFindInFilesAction,
   ]
   KosmoFilesTabIdentifier* = "kosmo.sidebar.files"
   KosmoFindTabIdentifier* = "kosmo.sidebar.find"
@@ -113,6 +114,7 @@ type
     setInitialDivider: bool
     lastSplitWidth: float32
     fileTreeWidth: float32
+    onShowFileExplorer: proc() {.closure.}
     onFindInFiles: proc() {.closure.}
 
   KosmoDetachedContentView = ref object of nimkit.View
@@ -155,7 +157,9 @@ proc `activeGroup=`(controller: KosmoDockController, group: KosmoEditorGroup) =
   for candidate in controller.groups:
     candidate.updateActivePaneIndicator(candidate == group)
 
+proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
+proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 
 func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
   ## Return Kosmo's macOS-style application shortcut defaults.
@@ -177,6 +181,11 @@ func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
     nimkit.keyRightBracket,
     {nimkit.kmCommand, nimkit.kmShift},
     nimkit.actionSelector(KosmoNextTabAction),
+  )
+  result.bindKey(
+    nimkit.keyE,
+    {nimkit.kmCommand, nimkit.kmShift},
+    nimkit.actionSelector(KosmoShowFileExplorerAction),
   )
   result.bindKey(
     nimkit.keyF,
@@ -674,18 +683,40 @@ protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
     if not handler.editorView.isNil:
       handler.editorView[].applyKosmoEditorStyle(appearance)
 
-proc stopObservingAppearance(handler: KosmoEditorTabsHandler) =
+protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
+  proc didChangeFirstResponder(
+      handler: KosmoEditorTabsHandler, previous: nimkit.Responder
+  ) {.slot.} =
+    discard previous
+    if handler.editorView.isNil or handler.dockController.isNil:
+      return
+    let
+      view = handler.editorView[]
+      controller = handler.dockController[]
+    if view.dockGroup.isNil:
+      return
+    let group = view.dockGroup[]
+    var responder = group.window.firstResponder()
+    while not responder.isNil:
+      if responder == nimkit.Responder(group.pane):
+        controller.activateGroup(view)
+        return
+      responder = responder.nextResponder()
+
+proc stopObservingWindow(handler: KosmoEditorTabsHandler) =
   if handler.isNil or handler.appearanceWindow.isNil:
     return
   handler.unobserveProtocol(handler.appearanceWindow[], nimkit.WindowAppearanceEvents)
+  handler.unobserveProtocol(handler.appearanceWindow[], nimkit.WindowFocusEvents)
   handler.appearanceWindow = default(WeakRef[nimkit.Window])
 
 proc observeAppearance(handler: KosmoEditorTabsHandler, window: nimkit.Window) =
-  handler.stopObservingAppearance()
+  handler.stopObservingWindow()
   if window.isNil:
     return
   handler.appearanceWindow = window.unsafeWeakRef()
   handler.observeProtocol(window, nimkit.WindowAppearanceEvents)
+  handler.observeProtocol(window, nimkit.WindowFocusEvents)
 
 proc refresh*(view: KosmoEditorView) =
   ## Render the current editor state into the synchronous cell-grid view.
@@ -759,7 +790,9 @@ proc openSearchResult(
       view.editor.openFile(match.path)
   if outcome.loaded:
     view.adoptActiveBuffer()
-    discard view.editor.revealLocation(max(match.line - 1, 0), match.bufferColumn())
+    discard view.editor.revealLocation(
+      max(match.line - 1, 0), match.bufferColumn(), centered = true
+    )
     view.refresh()
     return true
   if not view.statusLabel.isNil:
@@ -790,7 +823,6 @@ proc scrollBy*(
     view.scrollOffsetRows = 0.0'f32
   view.refresh()
 
-proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc closeCurrentTab(controller: KosmoDockController, view: KosmoEditorView)
 proc finishTabClose(controller: KosmoDockController, view: KosmoEditorView)
 proc saveCurrentTab(controller: KosmoDockController, view: KosmoEditorView)
@@ -902,6 +934,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       controller.selectRelativeTab(view, -1)
     of KosmoNextTabAction:
       controller.selectRelativeTab(view, 1)
+    of KosmoShowFileExplorerAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showFileExplorer()
     of KosmoFindInFilesAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFindInFiles()
@@ -1199,6 +1234,9 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       controller.selectRelativePaneTab(group, -1)
     of KosmoNextTabAction:
       controller.selectRelativePaneTab(group, 1)
+    of KosmoShowFileExplorerAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showFileExplorer()
     of KosmoFindInFilesAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFindInFiles()
@@ -1439,7 +1477,10 @@ proc addBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
 proc removeGroup(controller: KosmoDockController, group: KosmoEditorGroup) =
   if group.isNil:
     return
-  group.editorView.tabsDelegate.stopObservingAppearance()
+  group.editorView.tabsDelegate.stopObservingWindow()
+  group.editorView.tabsDelegate.dockController = default(WeakRef[KosmoDockController])
+  group.editorView.dockGroup = default(WeakRef[KosmoEditorGroup])
+  group.pane.dockGroup = default(WeakRef[KosmoEditorGroup])
   let wasActive = controller.activeGroup == group
   discard group.workspace.removePanel(group.panel)
   let index = controller.groups.find(group)
@@ -1834,9 +1875,17 @@ protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(
       content: KosmoContentView, args: nimkit.TryToPerformArgs
   ): bool =
-    if $args.selector.name != KosmoFindInFilesAction or content.onFindInFiles.isNil:
+    case $args.selector.name
+    of KosmoShowFileExplorerAction:
+      if content.onShowFileExplorer.isNil:
+        return false
+      content.onShowFileExplorer()
+    of KosmoFindInFilesAction:
+      if content.onFindInFiles.isNil:
+        return false
+      content.onFindInFiles()
+    else:
       return false
-    content.onFindInFiles()
     true
 
 proc newKosmoContentView(
@@ -1866,6 +1915,14 @@ proc chooseFile(view: KosmoEditorView, tree: KosmoFileTree, app: nimkit.Applicat
   panel.directoryUrl = tree.rootPath
   if app.runModal(panel) == nimkit.PanelResponseOk:
     discard view.openPath(tree, nimkit.filePathFromUrl(panel.selectedUrl()))
+
+proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Select the files sidebar tab and focus its tree.
+  if frontend.isNil or frontend.sidebarTabs.isNil or frontend.fileTree.isNil:
+    return
+  if not frontend.sidebarTabs.selectCompactTabAtIndex(0):
+    return
+  result = frontend.window.makeFirstResponder(frontend.fileTree)
 
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.} =
   ## Select the find sidebar tab and focus its search query.
@@ -1966,6 +2023,9 @@ proc newKosmoApplication*(
     )
   result.dockController = controller
   controller.frontend = result.unsafeWeakRef()
+  documentView.onShowFileExplorer = proc() =
+    if not controller.frontend.isNil:
+      discard controller.frontend[].showFileExplorer()
   documentView.onFindInFiles = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showFindInFiles()
@@ -2098,7 +2158,7 @@ proc close*(frontend: KosmoApplication) =
     return
   if not frontend.dockController.isNil:
     for group in frontend.dockController.groups:
-      group.editorView.tabsDelegate.stopObservingAppearance()
+      group.editorView.tabsDelegate.stopObservingWindow()
       for document in group.documents:
         discard document.close()
     let hosts = frontend.dockController.hosts

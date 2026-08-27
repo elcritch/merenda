@@ -4,7 +4,8 @@ import std/[math, strutils, times, unicode]
 
 import sigils/core
 
-import ../app/[animations, pasteboards, windows]
+import ../app/[animations, pasteboards]
+import ../app/windows except performKeyEquivalent
 import ../foundation/[events, selectors, types]
 import ../responder/responders
 import ../text/monotextviews
@@ -718,6 +719,19 @@ proc scrollLocally(view: TerminalView, event: ScrollEvent): bool =
   view.syncTerminalScreen()
   true
 
+proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
+  if event.key == keyK and event.modifiers == {kmCommand}:
+    view.clearScrollback()
+    return true
+  if event.key == keyL and event.modifiers == {kmControl}:
+    view.clearScrollback()
+    discard view.sendInput("\x0c")
+    return true
+  let input = terminalKeyInput(event, view.xSession.screenInfo().modes)
+  if input.len == 0:
+    return false
+  view.sendInput(input)
+
 proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
   case event.kind
   of mtreMouseDown, mtreMouseDragged, mtreMouseUp:
@@ -742,18 +756,7 @@ proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
       )
     view.scrollLocally(event.scrollEvent)
   of mtreKeyDown:
-    let keyEvent = event.keyEvent
-    if keyEvent.key == keyK and keyEvent.modifiers == {kmCommand}:
-      view.clearScrollback()
-      return true
-    if keyEvent.key == keyL and keyEvent.modifiers == {kmControl}:
-      view.clearScrollback()
-      discard view.sendInput("\x0c")
-      return true
-    let input = terminalKeyInput(keyEvent, view.xSession.screenInfo().modes)
-    if input.len == 0:
-      return false
-    view.sendInput(input)
+    view.handleTerminalKeyDown(event.keyEvent)
   of mtreFlagsChanged:
     true
 
@@ -792,6 +795,10 @@ proc startTerminalPolling(view: TerminalView) =
   view.xHeartbeat = newAnimation(duration = initDuration(seconds = 1))
   view.xHeartbeat.loopCount = -1
   discard owner.startAnimation(view.xHeartbeat)
+
+protocol TerminalViewKeyEquivalents of ResponderCommandDispatchProtocol:
+  method performKeyEquivalent(view: TerminalView, event: KeyEvent): bool =
+    view.handleTerminalKeyDown(event)
 
 protocol TerminalViewInput of TextInputProtocol:
   method insertText(view: TerminalView, text: string) =
@@ -889,6 +896,7 @@ proc initTerminalViewFields*(
   let terminalView = view
   view.rawEventHandler = proc(event: MonoTextRawEvent): bool =
     terminalView.handleTerminalRawEvent(event)
+  discard view.withProtocol(TerminalViewKeyEquivalents)
   discard view.withProtocol(TerminalViewInput)
   discard view.withProtocol(TerminalViewEditingCommands)
   discard view.withProtocol(TerminalViewFocus)

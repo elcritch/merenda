@@ -7,9 +7,33 @@ import merenda/nimkit/foundation/filesearch
 
 type FileSearchSpy = ref object of Agent
   finishedIdentifiers: seq[uint64]
+  batchIdentifiers: seq[uint64]
+  batchMatches: seq[seq[FileSearchMatch]]
+  batchWasFinished: seq[bool]
+
+type LateFileSearchSpy = ref object of Agent
+  path: string
+  createdFile: bool
+  batchWasFinished: bool
 
 proc rememberFinishedSearch(spy: FileSearchSpy, handle: FileSearchHandle) {.slot.} =
   spy.finishedIdentifiers.add handle.identifier()
+
+proc rememberSearchMatches(
+    spy: FileSearchSpy, handle: FileSearchHandle, matches: seq[FileSearchMatch]
+) {.slot.} =
+  spy.batchIdentifiers.add handle.identifier()
+  spy.batchMatches.add matches
+  spy.batchWasFinished.add handle.isFinished()
+
+proc createMatchAfterFirstBatch(
+    spy: LateFileSearchSpy, handle: FileSearchHandle, matches: seq[FileSearchMatch]
+) {.slot.} =
+  discard matches
+  if not spy.createdFile:
+    spy.batchWasFinished = handle.isFinished()
+    writeFile(spy.path, "late needle\n")
+    spy.createdFile = true
 
 proc runSearch(
     service: FileSearchService, root, pattern: string, options = initFileSearchOptions()
@@ -74,6 +98,61 @@ suite "nimkit memory-mapped file search":
       check searchResult.stats.skippedLargeFileCount == 1
       check searchResult.stats.searchedFileCount == 1
       check searchResult.stats.mappedFileCount == 1
+    finally:
+      service.close()
+      removeDir(root)
+
+  test "streams bounded match batches before search completion":
+    let
+      root = createTempDir("merenda-file-search-stream-", "")
+      service = newFileSearchService(workers = 1)
+      spy = FileSearchSpy()
+      contents = repeat("needle\n", 130)
+    writeFile(root / "matches.txt", contents)
+    service.connect(fileSearchDidFindMatches, spy, rememberSearchMatches)
+    service.connect(fileSearchDidFinish, spy, rememberFinishedSearch)
+
+    try:
+      let
+        handle = service.runSearch(root, "needle")
+        searchResult = handle.result()
+      var streamedMatches: seq[FileSearchMatch]
+      for batch in spy.batchMatches:
+        streamedMatches.add batch
+
+      check spy.batchMatches.len > 1
+      for batch in spy.batchMatches:
+        check batch.len in 1 .. 64
+      for identifier in spy.batchIdentifiers:
+        check identifier == handle.identifier()
+      for wasFinished in spy.batchWasFinished:
+        check not wasFinished
+      check streamedMatches == searchResult.matches
+      check spy.finishedIdentifiers == @[handle.identifier()]
+    finally:
+      service.close()
+      removeDir(root)
+
+  test "starts scanning before recursive file discovery finishes":
+    let
+      root = createTempDir("merenda-file-search-discovery-stream-", "")
+      nested = root / "nested"
+      latePath = nested / "late.txt"
+      service = newFileSearchService(workers = 1)
+      spy = LateFileSearchSpy(path: latePath)
+    createDir(nested)
+    writeFile(root / "first.txt", "needle\n" & repeat('x', 2 * 1024 * 1024))
+    service.connect(fileSearchDidFindMatches, spy, createMatchAfterFirstBatch)
+
+    try:
+      let searchResult = service.runSearch(root, "needle").result()
+
+      check spy.createdFile
+      check not spy.batchWasFinished
+      check searchResult.matches.len == 2
+      check searchResult.matches[0].path == root / "first.txt"
+      if searchResult.matches.len == 2:
+        check searchResult.matches[1].path == latePath
     finally:
       service.close()
       removeDir(root)

@@ -14,6 +14,7 @@ type
     gfsRenamed
     gfsUntracked
     gfsConflicted
+    gfsIgnored
 
   GitStatusEntry* = object
     path*: string
@@ -63,6 +64,8 @@ proc nextNulField(output: string, cursor: var int): string =
 func gitFileState(code: string): GitFileState =
   if code == "??":
     return gfsUntracked
+  if code == "!!":
+    return gfsIgnored
   let
     indexCode =
       if code.len > 0:
@@ -152,12 +155,21 @@ proc readGitStatus(rootPath: string): GitStatusSnapshot =
       repositoryPrefix = repository.output.strip()
       status = runGit(
         result.rootPath,
-        ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", "."],
+        [
+          "status", "--porcelain=v1", "-z", "--untracked-files=all",
+          "--ignored=matching", "--", ".",
+        ],
       )
     if status.exitCode == 0:
       result.isRepository = true
       result.entries =
         parseGitStatusPorcelain(result.rootPath, status.output, repositoryPrefix)
+      let gitMetadataPath = normalizedPath(result.rootPath / ".git")
+      if dirExists(gitMetadataPath) or fileExists(gitMetadataPath) or
+          symlinkExists(gitMetadataPath):
+        result.entries.add GitStatusEntry(
+          path: gitMetadataPath, state: gfsIgnored, indexCode: '!', workTreeCode: '!'
+        )
     else:
       result.errorMessage = status.output.strip()
   except CatchableError:

@@ -1,6 +1,7 @@
 import std/[monotimes, options, os, osproc, strutils, tempfiles, times, unittest]
 
 import figdraw
+import sigils/threads
 
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
@@ -20,6 +21,10 @@ proc numberedLines(prefix: string, count: Natural): string =
 
 proc displayedText(view: KosmoEditorView): string =
   monoTextViews.stringValue(MonoTextView(view))
+
+proc signalSubscriptionCount(source: Agent, signal: string): int =
+  for _ in source.getSubscriptions(toSigilName(signal)):
+    inc result
 
 proc hasPaneOutline(pane: KosmoEditorPane, color: Color, width: float32): bool =
   let
@@ -378,6 +383,42 @@ suite "Kosmo":
     check "binary file" in outcome.message
     editor.close()
 
+  test "rejects binary previews misdetected as UTF-16 text":
+    let path = getTempDir() / "merenda-kosmo-binary-utf16-file"
+    writeFile(path, "\xCF\xFA\xED\xFE\xD8\x00\x41\x00\x00\x00")
+    defer:
+      if fileExists(path):
+        removeFile(path)
+
+    let
+      editor = newKosmoEditor()
+      outcome = editor.previewFile(path)
+    var buffer = newRenderBuffer(24, 8)
+    editor.render(buffer)
+
+    check not outcome.loaded
+    check "binary file" in outcome.message
+    check editor.tabs().len == 1
+    check editor.tabs()[0].filePath.isNone
+    editor.close()
+
+  test "opens UTF-16 text without treating encoded zero bytes as binary":
+    let path = getTempDir() / "merenda-kosmo-utf16-file"
+    writeFile(path, "\xFF\xFE\x48\x00\x65\x00\x6C\x00\x6C\x00\x6F\x00\x0A\x00")
+    defer:
+      if fileExists(path):
+        removeFile(path)
+
+    let
+      editor = newKosmoEditor()
+      outcome = editor.openFile(path)
+    var buffer = newRenderBuffer(24, 8)
+    editor.render(buffer)
+
+    check outcome.loaded
+    check "Hello" in buffer.renderedText
+    editor.close()
+
   test "frontend restores standard menus and applies themes to editor panes":
     let app = newApplication("Kosmo Test")
     let frontend = newKosmoApplication(app)
@@ -432,13 +473,19 @@ suite "Kosmo":
     settingsPanel.close()
     frontend.window.close()
 
-  test "find sidebar searches from Command-Shift-F and opens clicked results":
+  test "sidebar shortcuts focus the explorer and open clicked search results":
     let
       root = createTempDir("merenda-kosmo-find-sidebar-", "")
       alphaPath = root / "alpha.txt"
       betaPath = root / "beta.nim"
       frontend = newKosmoApplication(newApplication("Kosmo Find Sidebar Test"))
-    writeFile(alphaPath, "first line\nsecond λ needle\n")
+    var alphaContents = ""
+    for line in 1 .. 80:
+      if line == 41:
+        alphaContents.add "second λ needle\n"
+      else:
+        alphaContents.add "alpha line " & $line & "\n"
+    writeFile(alphaPath, alphaContents)
     writeFile(betaPath, "let needleValue = 1\n")
     defer:
       frontend.close()
@@ -481,6 +528,20 @@ suite "Kosmo":
     check not frontend.searchPanel.hidden
     check frontend.searchPanel.queryField.isEditing
     check frontend.window.firstResponder == frontend.window.fieldEditor()
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmCommand, kmShift})
+    )
+    check frontend.sidebarTabs.selectedIndex == 0
+    check not frontend.fileTree.hidden
+    check frontend.searchPanel.hidden
+    check frontend.window.firstResponder == frontend.fileTree
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmCommand, kmShift})
+    )
+    check frontend.sidebarTabs.selectedIndex == 1
+    check frontend.searchPanel.queryField.isEditing
 
     check frontend.window.dispatchTextInput("needle")
     check frontend.window.dispatchKeyDown(
@@ -526,7 +587,10 @@ suite "Kosmo":
     check tabs[0].title == "alpha.txt"
     check tabs[0].temporary
     check frontend.editorView.editor.bufferCursor() ==
-      KosmoBufferCursor(line: 1, column: 9)
+      KosmoBufferCursor(line: 40, column: 9)
+    check abs(
+      frontend.editorView.editor.cursor().row - frontend.editorView.lineCount div 2
+    ) <= 1
     check frontend.window.mouseDownAt(resultPoint, clickCount = 2)
     check frontend.window.mouseUpAt(resultPoint, clickCount = 2)
     check not frontend.editorView.editor.tabs()[0].temporary
@@ -573,6 +637,49 @@ suite "Kosmo":
     check panel.progressIndicator.hidden
     check not panel.progressIndicator.animating
     check panel.cancelButton.hidden
+
+  test "find sidebar streams results while recursive search remains active":
+    let
+      root = createTempDir("merenda-kosmo-find-stream-", "")
+      nested = root / "nested"
+      latePath = nested / "late.txt"
+      panel = newKosmoFileSearchPanel(root)
+      window = newWindow("Kosmo Find Stream Test", rect(0, 0, 320, 420))
+    createDir(nested)
+    writeFile(root / "first.txt", "needle\n" & repeat('x', 8 * 1024 * 1024))
+    defer:
+      panel.close()
+      window.close()
+      removeDir(root)
+
+    window.setContentView(panel)
+    panel.frame = window.contentView().bounds()
+    panel.layoutSubtreeIfNeeded()
+    check window.makeFirstResponder(panel.queryField)
+    check window.dispatchTextInput("needle")
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    let handle = panel.activeSearch()
+
+    let deadline = getMonoTime() + initDuration(seconds = 10)
+    while panel.resultsView.matches.len == 0 and getMonoTime() < deadline:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      if panel.resultsView.matches.len == 0:
+        sleep(1)
+
+    let
+      streamedMatchCount = panel.resultsView.matches.len
+      streamedRowCount = panel.resultsView.rowCount
+      searchWasFinished = handle.isFinished()
+      streamedStatus = panel.statusLabel.text
+    writeFile(latePath, "late needle\n")
+
+    check streamedMatchCount == 1
+    check streamedRowCount == 2
+    check not searchWasFinished
+    check streamedStatus == "1 result…"
+    check panel.waitForSearch(timeoutMilliseconds = 10_000)
+    check panel.resultsView.matches.len == 2
+    check panel.resultsView.matches[1].path == latePath
 
   test "find results group by file and reveal more matches in fixed-size pages":
     let
@@ -1023,6 +1130,8 @@ suite "Kosmo":
       frontend.window.setContentView(frontend.contentView)
       frontend.contentView.layoutSubtreeIfNeeded()
       check frontend.window.makeFirstResponder(frontend.editorView)
+      let initialFocusObservers =
+        frontend.window.signalSubscriptionCount("didChangeFirstResponder")
       check terminalItem.perform(Responder(frontend.editorView))
 
       let
@@ -1049,16 +1158,48 @@ suite "Kosmo":
 
       let groups = frontend.editorGroups()
       check groups.len == 2
+      check frontend.window.signalSubscriptionCount("didChangeFirstResponder") ==
+        initialFocusObservers + 1
       check groups[0].documents.len == 0
       check groups[1].documents.len == 1
       check groups[1].pane.contentView == View(terminalView)
       check groups[1].pane.documentTabs.len == 1
       check terminalView.session().running()
 
+      frontend.contentView.layoutSubtreeIfNeeded()
+      let
+        paneIndicatorContext = controlStyle(srBox, id = KosmoPaneIndicatorStyleId)
+        paneAppearance = groups[1].pane.documentTabs.effectiveAppearance()
+        paneOutlineColor = paneAppearance.resolveColor(
+          paneIndicatorContext, StyleBorderColor, color(0.0, 0.0, 0.0, 0.0)
+        )
+        paneOutlineWidth =
+          paneAppearance.resolveLength(paneIndicatorContext, StyleBorderWidth, 0.0'f32)
+        editorPoint = groups[0].editorView.pointToWindow(initPoint(12.0'f32, 12.0'f32))
+      check frontend.window.mouseDownAt(editorPoint)
+      check frontend.window.mouseUpAt(editorPoint)
+      check not groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+      check groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+      check groups[0].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
+      check not groups[1].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
+
+      let terminalPoint = terminalView.pointToWindow(initPoint(12.0'f32, 12.0'f32))
+      check frontend.window.mouseDownAt(terminalPoint)
+      check frontend.window.mouseUpAt(terminalPoint)
+      check groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+      check not groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+      check not groups[0].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
+      check groups[1].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
+      check groups[1].pane.documentTabs.selectedDocumentTabIdentifier.startsWith(
+        "kosmo.terminal."
+      )
+
       check groups[1].pane.documentTabs.closeDocumentTabAtIndex(0)
       check frontend.editorGroups().len == 1
       check frontend.dockView.len == 1
       check terminalView.session().state() == tssClosed
+      check frontend.window.signalSubscriptionCount("didChangeFirstResponder") ==
+        initialFocusObservers
 
   test "q and x commands close the active tab and its empty split":
     let
@@ -1388,17 +1529,36 @@ suite "Kosmo":
       root = createTempDir("merenda-kosmo-tree-git-", "")
       folder = root / "folder"
       nestedFile = folder / "nested.nim"
+      gitDirectory = root / ".git"
+      githubFolder = root / ".github"
+      githubFile = githubFolder / "workflow.yml"
+      ignoredFolder = root / "ignored-cache"
+      ignoredNestedFile = ignoredFolder / "cached.bin"
       untrackedFile = root / "notes.txt"
+      ignoredFile = root / "ignored.log"
       tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 140))
       modifiedColor = color(0.82, 0.62, 0.20, 1.0)
       addedColor = color(0.32, 0.72, 0.40, 1.0)
+      ignoredColor = color(0.50, 0.52, 0.56, 0.72)
     createDir(folder)
+    createDir(gitDirectory)
+    createDir(githubFolder)
+    createDir(ignoredFolder)
     writeFile(nestedFile, "let nested = true\n")
+    writeFile(githubFile, "name: checks\n")
+    writeFile(ignoredNestedFile, "cached\n")
     writeFile(untrackedFile, "notes\n")
+    writeFile(ignoredFile, "ignored\n")
     defer:
       removeFile(nestedFile)
+      removeFile(githubFile)
+      removeFile(ignoredNestedFile)
       removeFile(untrackedFile)
+      removeFile(ignoredFile)
       removeDir(folder)
+      removeDir(gitDirectory)
+      removeDir(githubFolder)
+      removeDir(ignoredFolder)
       removeDir(root)
 
     tree.applyGitStatus(
@@ -1409,19 +1569,40 @@ suite "Kosmo":
           @[
             GitStatusEntry(path: nestedFile, state: gfsModified),
             GitStatusEntry(path: untrackedFile, state: gfsUntracked),
+            GitStatusEntry(path: gitDirectory, state: gfsIgnored),
+            GitStatusEntry(path: ignoredFile, state: gfsIgnored),
+            GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
           ],
       )
     )
     tree.expandItem(folder)
+    tree.expandItem(githubFolder)
+    tree.expandItem(ignoredFolder)
 
     let
       modifiedDecoration = tree.outlineItemWithIdentifier(nestedFile).decoration
       untrackedDecoration = tree.outlineItemWithIdentifier(untrackedFile).decoration
+      gitItem = tree.outlineItemWithIdentifier(gitDirectory)
+      githubItem = tree.outlineItemWithIdentifier(githubFolder)
+      githubFileItem = tree.outlineItemWithIdentifier(githubFile)
+      ignoredItem = tree.outlineItemWithIdentifier(ignoredFile)
+      ignoredNestedItem = tree.outlineItemWithIdentifier(ignoredNestedFile)
       folderItem = tree.outlineItemWithIdentifier(folder)
     check modifiedDecoration.badge == "M"
     check modifiedDecoration.color == some(modifiedColor)
     check untrackedDecoration.badge == "U"
     check untrackedDecoration.color == some(addedColor)
+    check gitItem.decoration.color == some(ignoredColor)
+    check gitItem.tooltip.endsWith("Ignored")
+    check githubItem.decoration.color == some(ignoredColor)
+    check githubItem.tooltip.endsWith("Ignored")
+    check githubFileItem.decoration.color == some(ignoredColor)
+    check githubFileItem.tooltip.endsWith("Ignored")
+    check ignoredItem.decoration.badge.len == 0
+    check ignoredItem.decoration.color == some(ignoredColor)
+    check ignoredItem.tooltip.endsWith("Ignored")
+    check ignoredNestedItem.decoration.color == some(ignoredColor)
+    check ignoredNestedItem.tooltip.endsWith("Ignored")
     check folderItem.decoration.badge.len == 0
     check folderItem.decoration.color == some(modifiedColor)
     check folderItem.tooltip.endsWith("Contains modified files")

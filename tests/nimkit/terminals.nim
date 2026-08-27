@@ -4,7 +4,7 @@ import sigils/core
 
 import merenda/nimkit/accessibility/accessibilityprotocols
 import merenda/nimkit/app/[animations, pasteboards, windows]
-import merenda/nimkit/foundation/[events, types]
+import merenda/nimkit/foundation/[events, selectors, types]
 import merenda/nimkit/responder/responders
 import
   merenda/nimkit/terminal/
@@ -15,6 +15,22 @@ import merenda/nimkit/view/views
 type TerminalInteractionSpy = ref object of Agent
   links: seq[string]
   notifications: seq[AccessibilityNotification]
+
+type TerminalEditingFallback = ref object of Responder
+  commands: seq[string]
+
+protocol TerminalEditingFallbackCommands of TextEditingCommandProtocol:
+  method insertNewline(fallback: TerminalEditingFallback, args: ActionArgs) =
+    discard args
+    fallback.commands.add "insertNewline"
+
+  method deleteBackward(fallback: TerminalEditingFallback, args: ActionArgs) =
+    discard args
+    fallback.commands.add "deleteBackward"
+
+  method deleteForward(fallback: TerminalEditingFallback, args: ActionArgs) =
+    discard args
+    fallback.commands.add "deleteForward"
 
 proc rememberTerminalLink(spy: TerminalInteractionSpy, link: string) {.slot.} =
   spy.links.add link
@@ -47,6 +63,20 @@ proc pollUntilText(
       return true
     sleep(5)
 
+proc tickUntilNormalizedText(
+    window: Window,
+    view: TerminalView,
+    expected: string,
+    timeout = initDuration(seconds = 3),
+): bool =
+  let deadline = getMonoTime() + timeout
+  while getMonoTime() < deadline:
+    discard window.animationScheduler().tick(initDuration(milliseconds = 16))
+    let rendered = view.stringValue().replace("\n", " ").splitWhitespace().join(" ")
+    if expected in rendered:
+      return true
+    sleep(5)
+
 proc terminalCellPoint(view: TerminalView, row, column: int): Point =
   let metrics = view.monoTextMetrics()
   view.pointToWindow(
@@ -58,6 +88,60 @@ proc terminalCellPoint(view: TerminalView, row, column: int): Point =
 
 func normalizedTerminalOutput(session: TerminalSession): string =
   session.screen().plainText().replace("\n", " ").splitWhitespace().join(" ")
+
+func terminalLineText(screen: TerminalScreen, row: int): string =
+  if row notin 0 ..< screen.rows:
+    return
+  for cell in screen.lineAt(row):
+    if not cell.continuation:
+      result.add(if cell.text.len > 0: cell.text else: " ")
+  result = result.strip(leading = false, trailing = true, chars = {' '})
+
+func currentTerminalLine(session: TerminalSession): string =
+  let screen = session.screen()
+  screen.terminalLineText(screen.cursor.position.row)
+
+func currentRenderedTerminalLine(view: TerminalView): string =
+  let
+    row = view.session().screenInfo().cursor.position.row
+    lines = view.lines()
+  if row in 0 ..< lines.len:
+    result = lines[row].strip(leading = false, trailing = true, chars = {' '})
+
+func renderedTerminalTail(view: TerminalView): string =
+  let
+    row = view.session().screenInfo().cursor.position.row
+    lines = view.lines()
+  for index in max(row, 0) ..< lines.len:
+    result.add lines[index]
+
+proc tickUntilCurrentLineContains(
+    window: Window,
+    view: TerminalView,
+    expected: string,
+    timeout = initDuration(seconds = 3),
+): bool =
+  let deadline = getMonoTime() + timeout
+  while getMonoTime() < deadline:
+    discard window.animationScheduler().tick(initDuration(milliseconds = 16))
+    if expected in view.session().currentTerminalLine():
+      return true
+    sleep(5)
+
+proc tickUntilCurrentLineAfterChange(
+    window: Window,
+    view: TerminalView,
+    generation: uint64,
+    expected: string,
+    timeout = initDuration(seconds = 3),
+): bool =
+  let deadline = getMonoTime() + timeout
+  while getMonoTime() < deadline:
+    discard window.animationScheduler().tick(initDuration(milliseconds = 16))
+    if view.session().screenInfo().generation != generation and
+        view.session().currentTerminalLine() == expected:
+      return true
+    sleep(5)
 
 suite "nimkit terminal screen and parser":
   test "screen starts with bounded dimensions and terminal defaults":
@@ -594,6 +678,123 @@ suite "nimkit terminal views":
       check session.pollUntilExit()
       check "61 62 7f 1b 5b 44 09 1b 5b 5a 03 0c 1b 78 59 5a" in
         session.normalizedTerminalOutput()
+
+  test "terminal captures basic input and editing keys before application commands":
+    when defined(posix):
+      let
+        session = spawnTerminalSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty raw -echo; printf ready; " &
+              "dd bs=1 count=11 2>/dev/null | od -An -tx1"
+          ),
+          columns = 60,
+          rows = 4,
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 600, 120))
+        window = newWindow("Terminal basic input", frame = rect(0, 0, 600, 120))
+        fallback = TerminalEditingFallback()
+      defer:
+        view.close()
+      initResponder(fallback)
+      discard fallback.withProtocol(TerminalEditingFallbackCommands)
+      window.setNextResponder(fallback)
+      window.setContentView(view)
+      check window.makeFirstResponder(view)
+      check session.pollUntilText("ready")
+
+      check window.dispatchTextInput("abc")
+      check window.dispatchKeyDown(
+        KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+      )
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
+      )
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyH, keyCode: keyH.ord, modifiers: {kmControl})
+      )
+      check window.dispatchKeyDown(KeyEvent(key: keyDelete, keyCode: keyDelete.ord))
+      check window.dispatchKeyDown(
+        KeyEvent(key: keyD, keyCode: keyD.ord, modifiers: {kmControl})
+      )
+
+      let expected = "61 62 63 0d 7f 08 1b 5b 33 7e 04"
+      check window.tickUntilNormalizedText(view, expected)
+      check fallback.commands.len == 0
+
+  when defined(posix) and not defined(windows):
+    test "a second Bash reverse search starts with an empty query":
+      let bashPath = findExe("bash")
+      if bashPath.len == 0:
+        skip()
+      else:
+        let
+          searchMarker = "reverse_search_" & repeat('z', 100)
+          command =
+            "export PS1='bash-test$ ' PS2='> ' HISTFILE=/dev/null " &
+            "INPUTRC=/dev/null LC_ALL=C; exec " & quoteShell(bashPath) &
+            " --noprofile --norc -i"
+          session = spawnTerminalSession(
+            initTerminalSpawnOptions(command = command, shell = bashPath),
+            columns = 100,
+            rows = 8,
+          )
+          view = newTerminalView(session, frame = rect(0, 0, 900, 180))
+          window = newWindow("Bash reverse search", frame = rect(0, 0, 900, 180))
+        defer:
+          view.close()
+        window.setContentView(view)
+        check window.makeFirstResponder(view)
+        check window.tickUntilCurrentLineContains(view, "bash-test$")
+
+        var generation = session.screenInfo().generation
+        check window.dispatchTextInput("history -c")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilCurrentLineAfterChange(view, generation, "bash-test$")
+        generation = session.screenInfo().generation
+        check window.dispatchTextInput("search_count=0")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilCurrentLineAfterChange(view, generation, "bash-test$")
+        generation = session.screenInfo().generation
+        check window.dispatchTextInput(
+          "search_count=$((search_count + 1)); " &
+            "echo search_execution_done_$search_count # " & searchMarker
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "search_execution_done_1")
+        check window.tickUntilCurrentLineAfterChange(view, generation, "bash-test$")
+
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyR, keyCode: keyR.ord, modifiers: {kmControl})
+        )
+        check window.dispatchTextInput(searchMarker)
+        check window.tickUntilCurrentLineContains(view, repeat('z', 20))
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "search_execution_done_2")
+        check window.tickUntilCurrentLineContains(view, "bash-test$")
+
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyR, keyCode: keyR.ord, modifiers: {kmControl})
+        )
+        check window.tickUntilCurrentLineContains(view, "reverse-i-search")
+        let
+          secondSearchLine = session.currentTerminalLine()
+          secondRenderedLine = view.currentRenderedTerminalLine()
+          secondRenderedTail = view.renderedTerminalTail()
+        checkpoint "second Bash search screen row: " & secondSearchLine.escape()
+        checkpoint "second Bash search rendered row: " & secondRenderedLine.escape()
+        checkpoint "second Bash search rendered tail: " & secondRenderedTail.escape()
+        check searchMarker notin secondSearchLine
+        check searchMarker notin secondRenderedLine
+        check repeat('z', 20) notin secondRenderedTail
 
   test "attached running views poll from the window animation scheduler":
     when defined(posix):

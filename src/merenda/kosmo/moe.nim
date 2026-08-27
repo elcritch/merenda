@@ -16,6 +16,7 @@ import
     editor_window, encoding, motion,
   ]
 from moepkg/buffer/core import BufferId
+from moepkg/render_utils import steadyBottomAreaHeight
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/types as moeTypes
 
@@ -198,12 +199,49 @@ proc readEncodingSample(path: string): string =
   result = newString(sampleLength)
   result.setLen(file.readBuffer(addr result[0], sampleLength))
 
+proc isTextEncodingSample(sample: string): bool =
+  var
+    encoding = detectCharacterEncoding(sample)
+    bomLength = 0
+  case encoding
+  of CharacterEncoding.utf8:
+    if sample.startsWith("\xEF\xBB\xBF"):
+      bomLength = 3
+  of CharacterEncoding.utf16:
+    bomLength = 2
+    encoding =
+      if sample.startsWith("\xFF\xFE"):
+        CharacterEncoding.utf16Le
+      else:
+        CharacterEncoding.utf16Be
+  of CharacterEncoding.utf32:
+    bomLength = 4
+    encoding =
+      if sample.startsWith("\xFF\xFE"):
+        CharacterEncoding.utf32Le
+      else:
+        CharacterEncoding.utf32Be
+  of CharacterEncoding.unknown:
+    return
+  else:
+    discard
+  let
+    content =
+      if bomLength < sample.len:
+        sample[bomLength ..^ 1]
+      else:
+        ""
+    decoded = decodeToUtf8(content, encoding)
+  if pkgResults.isErr(decoded):
+    return
+  result = '\0' notin decoded.get
+
 proc validateFileOpen(editor: KosmoEditor, path: string): FileOpenResult =
   if editor.isNil or editor.editor.isNil:
     return FileOpenResult(message: "The editor is closed.")
   if fileExists(path):
     try:
-      if detectCharacterEncoding(path.readEncodingSample()) == CharacterEncoding.unknown:
+      if not path.readEncodingSample().isTextEncodingSample():
         return FileOpenResult(
           message: "Kosmo cannot open a binary file or unsupported text encoding."
         )
@@ -395,9 +433,12 @@ proc bufferCursor*(editor: KosmoEditor): KosmoBufferCursor =
   let position = editor.editor.activeWindow().cursor
   KosmoBufferCursor(line: position.line, column: position.column)
 
-proc revealLocation*(editor: KosmoEditor, line, column: int): bool {.discardable.} =
+proc revealLocation*(
+    editor: KosmoEditor, line, column: int, centered = false
+): bool {.discardable.} =
   ## Move the active buffer cursor to a zero-based location. The next render
-  ## follows the cursor if the location lies outside the current viewport.
+  ## follows the cursor if the location lies outside the current viewport, or
+  ## places it in the center when `centered` is true.
   if editor.isNil or editor.editor.isNil:
     return
   let
@@ -408,7 +449,11 @@ proc revealLocation*(editor: KosmoEditor, line, column: int): bool {.discardable
   window.cursor.line = cursor.y
   window.cursor.column = cursor.x
   window.preferredColumn = cursor.x
-  window.viewport.detachedFromCursor = false
+  if centered:
+    let visibleHeight = max(window.viewport.height - steadyBottomAreaHeight(), 1)
+    window.viewport.resetViewportTop(max(cursor.y - visibleHeight div 2, 0))
+  else:
+    window.viewport.detachedFromCursor = false
   editor.editor.syncActiveWindow()
   editor.editor.setActiveWindowScreenCursor(window)
   result = true

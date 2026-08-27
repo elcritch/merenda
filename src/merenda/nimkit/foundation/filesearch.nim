@@ -12,6 +12,8 @@ const
   DefaultFileSearchMaxMatchesPerFile* = 1_000
   DefaultFileSearchMaxFiles* = 100_000
   DefaultFileSearchMaxFileSizeBytes* = 16'i64 * 1024 * 1024
+  FileSearchMatchBatchSize = 64
+  FileSearchMatchBatchMaxDelayMilliseconds = 50
 
 type
   FileSearchFinishReason* = enum
@@ -77,6 +79,47 @@ type
     xNextIdentifier: uint64
     xNextWorker: int
     xClosed: bool
+
+proc fileSearchMatchesFound(
+  worker: FileSearchWorker, identifier: uint64, matches: seq[FileSearchMatch]
+) {.signal.}
+
+type FileSearchBatchState = object
+  worker: FileSearchWorker
+  identifier: uint64
+  pendingMatches: seq[FileSearchMatch]
+  lastPublishedAt: MonoTime
+  hasPublished: bool
+
+proc initFileSearchBatchState(
+    worker: FileSearchWorker, identifier: uint64
+): FileSearchBatchState =
+  FileSearchBatchState(
+    worker: worker,
+    identifier: identifier,
+    pendingMatches: newSeqOfCap[FileSearchMatch](FileSearchMatchBatchSize),
+    lastPublishedAt: getMonoTime(),
+  )
+
+proc publish(batchState: var FileSearchBatchState) =
+  if batchState.pendingMatches.len == 0:
+    return
+  let matches = move batchState.pendingMatches
+  batchState.lastPublishedAt = getMonoTime()
+  batchState.hasPublished = true
+  emit batchState.worker.fileSearchMatchesFound(batchState.identifier, matches)
+
+proc addMatch(batchState: var FileSearchBatchState, match: FileSearchMatch) =
+  batchState.pendingMatches.add match
+  if not batchState.hasPublished or
+      batchState.pendingMatches.len == FileSearchMatchBatchSize:
+    batchState.publish()
+
+proc publishIfDue(batchState: var FileSearchBatchState) =
+  if batchState.pendingMatches.len > 0 and
+      getMonoTime() - batchState.lastPublishedAt >=
+      initDuration(milliseconds = FileSearchMatchBatchMaxDelayMilliseconds):
+    batchState.publish()
 
 func initFileSearchOptions*(
     recursive = true,
@@ -153,51 +196,71 @@ func hiddenPath(path: string): bool =
   let name = path.extractFilename()
   name.len > 0 and name[0] == '.'
 
-proc collectSearchFiles(
-    rootPath: string,
-    options: FileSearchOptions,
-    control: SharedPtr[FileSearchControl],
+type FileSearchTraversalState = object
+  options: FileSearchOptions
+  control: SharedPtr[FileSearchControl]
+  pendingDirectories: seq[string]
+  pendingFiles: seq[string]
+  nextFileIndex: int
+
+proc initFileSearchTraversal(
+    rootPath: string, options: FileSearchOptions, control: SharedPtr[FileSearchControl]
+): FileSearchTraversalState =
+  FileSearchTraversalState(
+    options: options, control: control, pendingDirectories: @[absolutePath(rootPath)]
+  )
+
+proc nextSearchFile(
+    traversal: var FileSearchTraversalState,
     stats: var FileSearchStats,
     reason: var FileSearchFinishReason,
-): seq[string] =
-  var pending = @[absolutePath(rootPath)]
-  while pending.len > 0 and not control.cancellationRequested():
-    let directory = pending.pop()
-    var
-      files: seq[string]
-      directories: seq[string]
+    path: var string,
+): bool =
+  while traversal.nextFileIndex >= traversal.pendingFiles.len:
+    traversal.pendingFiles.setLen(0)
+    traversal.nextFileIndex = 0
+    if traversal.control.cancellationRequested():
+      reason = fsfrCancelled
+      return
+    if traversal.pendingDirectories.len == 0:
+      return
+
+    let directory = traversal.pendingDirectories.pop()
+    var directories: seq[string]
     try:
-      for kind, path in walkDir(directory, relative = false):
-        if control.cancellationRequested():
+      for kind, entryPath in walkDir(directory, relative = false):
+        if traversal.control.cancellationRequested():
           break
-        if options.includeHidden or not path.hiddenPath():
+        if traversal.options.includeHidden or not entryPath.hiddenPath():
           case kind
           of pcFile:
-            files.add path
+            traversal.pendingFiles.add entryPath
           of pcDir:
-            if options.recursive:
-              directories.add path
+            if traversal.options.recursive:
+              directories.add entryPath
           of pcLinkToFile, pcLinkToDir:
             discard
     except OSError:
       inc stats.failedFileCount
 
-    files.sort()
-    for path in files:
-      if result.len == options.maxFiles:
-        reason = fsfrFileLimitReached
-        return
-      result.add path
-      inc stats.discoveredFileCount
-
+    if traversal.control.cancellationRequested():
+      reason = fsfrCancelled
+      return
+    traversal.pendingFiles.sort()
     directories.sort(SortOrder.Descending)
-    for path in directories:
-      pending.add path
+    for entryPath in directories:
+      traversal.pendingDirectories.add entryPath
 
-  if control.cancellationRequested():
-    reason = fsfrCancelled
+  if stats.discoveredFileCount == traversal.options.maxFiles:
+    reason = fsfrFileLimitReached
+    return
+  path = traversal.pendingFiles[traversal.nextFileIndex]
+  inc traversal.nextFileIndex
+  inc stats.discoveredFileCount
+  result = true
 
 proc addLineMatches(
+    batchState: var FileSearchBatchState,
     path, lineText: string,
     lineNumber: int,
     lineByteOffset: int64,
@@ -211,7 +274,7 @@ proc addLineMatches(
     if control.cancellationRequested():
       searchResult.reason = fsfrCancelled
       return false
-    searchResult.matches.add FileSearchMatch(
+    let match = FileSearchMatch(
       path: path,
       line: lineNumber,
       column: bounds.a + 1,
@@ -219,6 +282,8 @@ proc addLineMatches(
       matchLength: max(bounds.b - bounds.a + 1, 0),
       lineText: lineText,
     )
+    searchResult.matches.add match
+    batchState.addMatch(match)
     inc fileMatchCount
     if searchResult.matches.len == options.maxResults:
       searchResult.reason = fsfrResultLimitReached
@@ -229,6 +294,7 @@ proc addLineMatches(
   true
 
 proc searchMappedFile(
+    batchState: var FileSearchBatchState,
     path: string,
     pattern: Regex2,
     options: FileSearchOptions,
@@ -266,54 +332,54 @@ proc searchMappedFile(
         if lineText.len > 0 and lineText[^1] == '\r':
           lineText.setLen(lineText.len - 1)
         keepSearching = addLineMatches(
-          path, lineText, lineNumber, lineByteOffset, pattern, options, control,
-          fileMatchCount, searchResult,
+          batchState, path, lineText, lineNumber, lineByteOffset, pattern, options,
+          control, fileMatchCount, searchResult,
         )
         lineText.setLen(0)
         inc lineNumber
         lineByteOffset = bytesRead
       else:
         lineText.add char(value)
-      if (bytesRead and 0x3fff) == 0 and control.cancellationRequested():
-        searchResult.reason = fsfrCancelled
-        keepSearching = false
+      if (bytesRead and 0x3fff) == 0:
+        batchState.publishIfDue()
+        if control.cancellationRequested():
+          searchResult.reason = fsfrCancelled
+          keepSearching = false
 
     if keepSearching and lineText.len > 0:
       if lineText[^1] == '\r':
         lineText.setLen(lineText.len - 1)
       discard addLineMatches(
-        path, lineText, lineNumber, lineByteOffset, pattern, options, control,
-        fileMatchCount, searchResult,
+        batchState, path, lineText, lineNumber, lineByteOffset, pattern, options,
+        control, fileMatchCount, searchResult,
       )
     searchResult.stats.bytesSearched += bytesRead
   finally:
     stream.close()
 
 proc performFileSearch(
-    query: FileSearchQuery, control: SharedPtr[FileSearchControl]
+    worker: FileSearchWorker,
+    identifier: uint64,
+    query: FileSearchQuery,
+    control: SharedPtr[FileSearchControl],
 ): FileSearchResult =
+  var batchState = initFileSearchBatchState(worker, identifier)
+  defer:
+    batchState.publish()
   result.reason = fsfrCompleted
   result.stats.workerThreadId = getThreadId()
   let pattern = query.searchPattern()
-  let paths = collectSearchFiles(
-    query.rootPath, query.options, control, result.stats, result.reason
-  )
-  if result.reason == fsfrCancelled:
-    return
-  let traversalReason = result.reason
-  result.reason = fsfrCompleted
-
-  for path in paths:
-    if control.cancellationRequested():
-      result.reason = fsfrCancelled
-      return
+  var
+    traversal = initFileSearchTraversal(query.rootPath, query.options, control)
+    path: string
+  while traversal.nextSearchFile(result.stats, result.reason, path):
     try:
-      searchMappedFile(path, pattern, query.options, control, result)
+      searchMappedFile(batchState, path, pattern, query.options, control, result)
     except IOError, OSError:
       inc result.stats.failedFileCount
     if result.reason != fsfrCompleted:
       return
-  result.reason = traversalReason
+    batchState.publishIfDue()
 
 proc executeFileSearch(
   worker: AgentProxy[FileSearchWorker],
@@ -332,11 +398,25 @@ proc executeFileSearch(
     query: FileSearchQuery,
     control: SharedPtr[FileSearchControl],
 ) {.slot.} =
-  emit worker.fileSearchFinished(identifier, performFileSearch(query, control))
+  emit worker.fileSearchFinished(
+    identifier, performFileSearch(worker, identifier, query, control)
+  )
+
+## Publishes ordered, non-empty match batches while the handle is still pending.
+proc fileSearchDidFindMatches*(
+  service: FileSearchService, handle: FileSearchHandle, matches: seq[FileSearchMatch]
+) {.signal.}
 
 proc fileSearchDidFinish*(
   service: FileSearchService, handle: FileSearchHandle
 ) {.signal.}
+
+proc publishFileSearchMatches(
+    service: FileSearchService, identifier: uint64, matches: seq[FileSearchMatch]
+) {.slot.} =
+  if service.xClosed or identifier notin service.xActive:
+    return
+  emit service.fileSearchDidFindMatches(service.xActive[identifier], matches)
 
 proc completeFileSearch(
     service: FileSearchService, identifier: uint64, searchResult: FileSearchResult
@@ -363,6 +443,12 @@ proc newFileSearchService*(workers: Positive = 2): FileSearchService =
     var worker = FileSearchWorker()
     let proxy = worker.moveToThread(result.xPool)
     connectThreaded(proxy, executeFileSearch, proxy, executeFileSearch)
+    connectThreaded(
+      proxy,
+      fileSearchMatchesFound,
+      result,
+      FileSearchService.publishFileSearchMatches(),
+    )
     connectThreaded(
       proxy, fileSearchFinished, result, FileSearchService.completeFileSearch()
     )

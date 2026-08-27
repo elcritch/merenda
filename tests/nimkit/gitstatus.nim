@@ -23,7 +23,8 @@ proc runGit(rootPath: string, args: openArray[string]): string =
 proc initializeRepository(rootPath: string) =
   discard runGit(rootPath, ["init", "-q"])
   writeFile(rootPath / "tracked.nim", "let value = 1\n")
-  discard runGit(rootPath, ["add", "tracked.nim"])
+  writeFile(rootPath / ".gitignore", "*.log\n")
+  discard runGit(rootPath, ["add", "tracked.nim", ".gitignore"])
   discard runGit(
     rootPath,
     [
@@ -40,16 +41,16 @@ func entryForPath(
       return (true, entry)
 
 suite "nimkit Git status service":
-  test "parses modified untracked renamed and conflicted porcelain records":
+  test "parses modified untracked renamed conflicted and ignored records":
     let
       root = absolutePath("parser-root")
       entries = parseGitStatusPorcelain(
         root,
         " M tracked.nim\0?? untracked file.txt\0R  renamed.nim\0old.nim\0" &
-          "UU conflict.nim\0",
+          "UU conflict.nim\0!! ignored.log\0!! .github/\0",
       )
 
-    require entries.len == 4
+    require entries.len == 6
     check entries[0].path == root / "tracked.nim"
     check entries[0].state == gfsModified
     check entries[0].indexCode == ' '
@@ -60,6 +61,10 @@ suite "nimkit Git status service":
     check entries[2].originalPath == root / "old.nim"
     check entries[2].state == gfsRenamed
     check entries[3].state == gfsConflicted
+    check entries[4].path == root / "ignored.log"
+    check entries[4].state == gfsIgnored
+    check entries[5].path == root / ".github"
+    check entries[5].state == gfsIgnored
 
   test "runs Git on a worker and reports work-tree changes":
     let
@@ -69,6 +74,7 @@ suite "nimkit Git status service":
     root.initializeRepository()
     writeFile(root / "tracked.nim", "let value = 2\n")
     writeFile(root / "untracked.txt", "new\n")
+    writeFile(root / "ignored.log", "ignored\n")
     service.connect(gitStatusDidRefresh, spy, rememberGitStatus)
 
     try:
@@ -79,14 +85,20 @@ suite "nimkit Git status service":
       check snapshot.isRepository
       check snapshot.errorMessage.len == 0
       check snapshot.workerThreadId != getThreadId()
-      check snapshot.entries.len == 2
+      check snapshot.entries.len == 4
       let
+        gitDirectory = snapshot.entryForPath(root / ".git")
         modified = snapshot.entryForPath(root / "tracked.nim")
         untracked = snapshot.entryForPath(root / "untracked.txt")
+        ignored = snapshot.entryForPath(root / "ignored.log")
+      check gitDirectory.found
+      check gitDirectory.entry.state == gfsIgnored
       check modified.found
       check modified.entry.state == gfsModified
       check untracked.found
       check untracked.entry.state == gfsUntracked
+      check ignored.found
+      check ignored.entry.state == gfsIgnored
       check spy.snapshots.len == 1
     finally:
       service.close()

@@ -28,6 +28,7 @@ const
   GitDeletedColor = nimkit.color(0.90, 0.32, 0.32, 1.0)
   GitRenamedColor = nimkit.color(0.32, 0.64, 0.88, 1.0)
   GitConflictedColor = nimkit.color(0.94, 0.30, 0.36, 1.0)
+  GitIgnoredColor = nimkit.color(0.50, 0.52, 0.56, 0.72)
 
 proc expandableDirectory(path: string): bool =
   path.isBrowsableDirectory()
@@ -56,6 +57,7 @@ func gitStatePriority(state: nimkit.GitFileState): int =
   of nimkit.gfsRenamed: 3
   of nimkit.gfsAdded: 2
   of nimkit.gfsUntracked: 1
+  of nimkit.gfsIgnored: 0
 
 func gitStateTitle(state: nimkit.GitFileState): string =
   case state
@@ -65,6 +67,7 @@ func gitStateTitle(state: nimkit.GitFileState): string =
   of nimkit.gfsRenamed: "Renamed"
   of nimkit.gfsUntracked: "Untracked"
   of nimkit.gfsConflicted: "Merge conflict"
+  of nimkit.gfsIgnored: "Ignored"
 
 func gitStateBadge(state: nimkit.GitFileState): string =
   case state
@@ -74,6 +77,7 @@ func gitStateBadge(state: nimkit.GitFileState): string =
   of nimkit.gfsRenamed: "R"
   of nimkit.gfsUntracked: "U"
   of nimkit.gfsConflicted: "!"
+  of nimkit.gfsIgnored: ""
 
 func gitStateColor(state: nimkit.GitFileState): nimkit.Color =
   case state
@@ -82,6 +86,7 @@ func gitStateColor(state: nimkit.GitFileState): nimkit.Color =
   of nimkit.gfsDeleted: GitDeletedColor
   of nimkit.gfsRenamed: GitRenamedColor
   of nimkit.gfsConflicted: GitConflictedColor
+  of nimkit.gfsIgnored: GitIgnoredColor
 
 proc includeGitState(
     states: var Table[string, nimkit.GitFileState],
@@ -91,6 +96,16 @@ proc includeGitState(
   if path notin states or state.gitStatePriority() > states[path].gitStatePriority():
     states[path] = state
 
+proc isWithinHiddenDirectory(tree: KosmoFileTree, path: string): bool =
+  var currentPath = path
+  while currentPath.len > 0 and currentPath != tree.xRootPath:
+    if currentPath.extractFilename().startsWith(".") and dirExists(currentPath):
+      return true
+    let parentPath = currentPath.parentDir()
+    if parentPath == currentPath:
+      break
+    currentPath = parentPath
+
 proc gitDecoration(tree: KosmoFileTree, path: string): nimkit.OutlineItemDecoration =
   if path in tree.xGitFileStates:
     let state = tree.xGitFileStates[path]
@@ -98,6 +113,23 @@ proc gitDecoration(tree: KosmoFileTree, path: string): nimkit.OutlineItemDecorat
       badge = state.gitStateBadge(),
       color = some(state.gitStateColor()),
       tooltip = state.gitStateTitle(),
+    )
+  var parentPath = path.parentDir()
+  while parentPath.len > 0:
+    if parentPath in tree.xGitFileStates and
+        tree.xGitFileStates[parentPath] == nimkit.gfsIgnored:
+      return nimkit.initOutlineItemDecoration(
+        color = some(GitIgnoredColor), tooltip = nimkit.gfsIgnored.gitStateTitle()
+      )
+    if parentPath == tree.xRootPath:
+      break
+    let nextParent = parentPath.parentDir()
+    if nextParent == parentPath:
+      break
+    parentPath = nextParent
+  if tree.isWithinHiddenDirectory(path):
+    return nimkit.initOutlineItemDecoration(
+      color = some(GitIgnoredColor), tooltip = nimkit.gfsIgnored.gitStateTitle()
     )
   if path in tree.xGitDescendantStates:
     let state = tree.xGitDescendantStates[path]
@@ -225,15 +257,16 @@ proc applyGitStatus*(tree: KosmoFileTree, snapshot: nimkit.GitStatusSnapshot) =
   if snapshot.isRepository:
     for entry in snapshot.entries:
       fileStates.includeGitState(entry.path, entry.state)
-      var parentPath = entry.path.parentDir()
-      while parentPath.len > 0:
-        descendantStates.includeGitState(parentPath, entry.state)
-        if parentPath == tree.xRootPath:
-          break
-        let nextParent = parentPath.parentDir()
-        if nextParent == parentPath:
-          break
-        parentPath = nextParent
+      if entry.state != nimkit.gfsIgnored:
+        var parentPath = entry.path.parentDir()
+        while parentPath.len > 0:
+          descendantStates.includeGitState(parentPath, entry.state)
+          if parentPath == tree.xRootPath:
+            break
+          let nextParent = parentPath.parentDir()
+          if nextParent == parentPath:
+            break
+          parentPath = nextParent
   if tree.xGitFileStates == fileStates and tree.xGitDescendantStates == descendantStates:
     return
   tree.xGitFileStates = fileStates

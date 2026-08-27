@@ -27,6 +27,7 @@ type
   KosmoSearchResults* = ref object of nimkit.OutlineView
     xMatches: seq[nimkit.FileSearchMatch]
     xGroups: seq[SearchResultGroup]
+    xGroupIndexes: Table[string, int]
     xMatchGroupIndexes: seq[int]
     xOnOpenResult: SearchResultOpenHandler
     xOpenDisposition: FileTreeOpenDisposition
@@ -219,6 +220,10 @@ proc matchIdentifier*(results: KosmoSearchResults, index: Natural): string =
 proc `onOpenResult=`*(results: KosmoSearchResults, handler: SearchResultOpenHandler) =
   results.xOnOpenResult = handler
 
+proc appendMatches(
+  results: KosmoSearchResults, matches: openArray[nimkit.FileSearchMatch]
+)
+
 proc setMatches(
     results: KosmoSearchResults,
     rootPath: string,
@@ -226,31 +231,51 @@ proc setMatches(
 ) =
   results.selectedItemIdentifier = ""
   results.xRootPath = rootPath
-  results.xMatches = @matches
+  results.xMatches.setLen(0)
   results.xGroups.setLen(0)
-  results.xMatchGroupIndexes = newSeq[int](matches.len)
-  var groupIndexes = initTable[string, int]()
-  for index, match in matches:
+  results.xGroupIndexes.clear()
+  results.xMatchGroupIndexes.setLen(0)
+  results.expandedItemIdentifiers = []
+  results.reloadOutlineData()
+  results.appendMatches(matches)
+
+proc appendMatches(
+    results: KosmoSearchResults, matches: openArray[nimkit.FileSearchMatch]
+) =
+  if matches.len == 0:
+    return
+  let
+    selectedIdentifiers = results.selectedItemIdentifiers()
+    previousGroupCount = results.xGroups.len
+  for match in matches:
     var groupIndex: int
-    if groupIndexes.hasKey(match.path):
-      groupIndex = groupIndexes[match.path]
+    if results.xGroupIndexes.hasKey(match.path):
+      groupIndex = results.xGroupIndexes[match.path]
     else:
       groupIndex = results.xGroups.len
-      groupIndexes[match.path] = groupIndex
+      results.xGroupIndexes[match.path] = groupIndex
       results.xGroups.add SearchResultGroup(path: match.path)
-    results.xGroups[groupIndex].matchIndexes.add index
-    results.xMatchGroupIndexes[index] = groupIndex
-  var expanded = newSeqOfCap[string](results.xGroups.len)
-  for index in 0 ..< results.xGroups.len:
-    results.xGroups[index].visibleCount =
-      min(results.xResultsPerFile, results.xGroups[index].matchIndexes.len)
-    expanded.add fileIdentifier(index)
-  results.expandedItemIdentifiers = expanded
-  results.reloadOutlineData()
+    let matchIndex = results.xMatches.len
+    results.xMatches.add match
+    results.xGroups[groupIndex].matchIndexes.add matchIndex
+    results.xMatchGroupIndexes.add groupIndex
+    if results.xGroups[groupIndex].visibleCount < results.xResultsPerFile:
+      results.xGroups[groupIndex].visibleCount =
+        min(results.xResultsPerFile, results.xGroups[groupIndex].matchIndexes.len)
+  if results.xGroups.len > previousGroupCount:
+    var expanded = results.expandedItemIdentifiers()
+    for groupIndex in previousGroupCount ..< results.xGroups.len:
+      expanded.add fileIdentifier(groupIndex)
+    results.expandedItemIdentifiers = expanded
+  else:
+    results.reloadOutlineData()
+  results.selectedItemIdentifiers = selectedIdentifiers
 
 proc newKosmoSearchResults(): KosmoSearchResults =
   result = KosmoSearchResults(
-    xOpenDisposition: fodPermanent, xResultsPerFile: DefaultKosmoSearchResultsPerFile
+    xGroupIndexes: initTable[string, int](),
+    xOpenDisposition: fodPermanent,
+    xResultsPerFile: DefaultKosmoSearchResultsPerFile,
   )
   result.initOutlineViewFields()
   discard result.withProtocol(KosmoSearchResultsDataSource)
@@ -282,7 +307,8 @@ proc finishFileSearch(
     return
   panel.updateSearchControls(false)
   let searchResult = handle.result()
-  panel.resultsView.setMatches(panel.xRootPath, searchResult.matches)
+  if panel.resultsView.matches.len != searchResult.matches.len:
+    panel.resultsView.setMatches(panel.xRootPath, searchResult.matches)
   panel.statusLabel.text =
     case searchResult.reason
     of nimkit.fsfrCancelled:
@@ -297,9 +323,29 @@ proc finishFileSearch(
       else:
         $searchResult.matches.len & " results"
 
+proc appendFileSearchMatches(
+    panel: KosmoFileSearchPanel,
+    handle: nimkit.FileSearchHandle,
+    matches: seq[nimkit.FileSearchMatch],
+) {.slot.} =
+  if handle.isNil or handle != panel.xActiveSearch:
+    return
+  panel.resultsView.appendMatches(matches)
+  if handle.cancelRequested():
+    return
+  let count = panel.resultsView.matches.len
+  panel.statusLabel.text =
+    if count == 1:
+      "1 result…"
+    else:
+      $count & " results…"
+
 proc ensureSearchService(panel: KosmoFileSearchPanel) =
   if panel.xService.isNil:
     panel.xService = nimkit.newFileSearchService()
+    panel.xService.connect(
+      nimkit.fileSearchDidFindMatches, panel, appendFileSearchMatches
+    )
     panel.xService.connect(nimkit.fileSearchDidFinish, panel, finishFileSearch)
 
 proc cancelSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
@@ -444,6 +490,9 @@ proc close*(panel: KosmoFileSearchPanel) =
   ## Stop the search workers owned by this panel.
   if panel.isNil or panel.xService.isNil:
     return
+  panel.xService.disconnect(
+    nimkit.fileSearchDidFindMatches, panel, appendFileSearchMatches
+  )
   panel.xService.disconnect(nimkit.fileSearchDidFinish, panel, finishFileSearch)
   panel.xService.close()
   panel.xService = nil
