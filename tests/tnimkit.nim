@@ -20,6 +20,7 @@ import nimkit/filesearch
 import nimkit/formviews
 import nimkit/gaptextbuffers
 import nimkit/gridviews
+import nimkit/gitstatus
 import nimkit/images
 import nimkit/iconlabels
 import nimkit/keybindings

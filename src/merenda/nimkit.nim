@@ -26,6 +26,7 @@ import ./nimkit/debug/viewinspectors
 import ./nimkit/app/dragging
 import ./nimkit/foundation/events
 import ./nimkit/foundation/filesearch
+import ./nimkit/foundation/gitstatus
 import ./nimkit/text/fieldeditors
 import ./nimkit/text/gaptextbuffers
 import ./nimkit/text/texteditors
@@ -107,6 +108,7 @@ export viewinspectors
 export dragging
 export events
 export filesearch
+export gitstatus
 export fieldeditors
 export gaptextbuffers
 export texteditors
