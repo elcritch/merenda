@@ -494,13 +494,25 @@ suite "Kosmo":
     check not frontend.searchPanel.progressIndicator.animating
     check frontend.searchPanel.cancelButton.hidden
     check frontend.searchPanel.resultsView.matches.len == 2
-    check frontend.searchPanel.resultsView.rowCount == 2
+    check frontend.searchPanel.resultsView.rowCount == 4
     check frontend.searchPanel.statusLabel.text == "2 results"
+
+    let
+      firstResultIdentifier = frontend.searchPanel.resultsView.matchIdentifier(0)
+      firstFileIdentifier =
+        frontend.searchPanel.resultsView.parentIdentifierForItem(firstResultIdentifier)
+      firstFileItem =
+        frontend.searchPanel.resultsView.outlineItemWithIdentifier(firstFileIdentifier)
+    check firstFileIdentifier.len > 0
+    check firstFileItem.title == "alpha.txt"
+    check firstFileItem.decoration.badge == "1"
+    check frontend.searchPanel.resultsView.isItemExpanded(firstFileIdentifier)
 
     frontend.contentView.layoutSubtreeIfNeeded()
     discard frontend.window.buildRenders()
     let
-      resultRect = frontend.searchPanel.resultsView.rowItemRect(0)
+      resultRow = frontend.searchPanel.resultsView.rowForItem(firstResultIdentifier)
+      resultRect = frontend.searchPanel.resultsView.rowItemRect(resultRow)
       resultPoint = frontend.searchPanel.resultsView.pointToWindow(
         initPoint(
           resultRect.origin.x + resultRect.size.width * 0.5'f32,
@@ -562,6 +574,91 @@ suite "Kosmo":
     check not panel.progressIndicator.animating
     check panel.cancelButton.hidden
 
+  test "find results group by file and reveal more matches in fixed-size pages":
+    let
+      root = createTempDir("merenda-kosmo-find-groups-", "")
+      path = root / "many.txt"
+      panel = newKosmoFileSearchPanel(root)
+      window = newWindow("Kosmo Find Groups Test", rect(0, 0, 320, 420))
+    var contents = ""
+    for line in 1 .. 65:
+      contents.add "needle " & $line & "\n"
+    writeFile(path, contents)
+    defer:
+      panel.close()
+      window.close()
+      removeFile(path)
+      removeDir(root)
+
+    var
+      openedLine = 0
+      openDisposition = fodPermanent
+    panel.onOpenResult = proc(
+        match: FileSearchMatch, disposition: FileTreeOpenDisposition
+    ) =
+      openedLine = match.line
+      openDisposition = disposition
+    window.setContentView(panel)
+    panel.frame = window.contentView().bounds()
+    panel.layoutSubtreeIfNeeded()
+    check window.makeFirstResponder(panel.queryField)
+    check window.dispatchTextInput("needle")
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check panel.waitForSearch(timeoutMilliseconds = 10_000)
+
+    let
+      results = panel.resultsView
+      firstResultIdentifier = results.matchIdentifier(0)
+      fileIdentifier = results.parentIdentifierForItem(firstResultIdentifier)
+      fileItem = results.outlineItemWithIdentifier(fileIdentifier)
+    check results.matches.len == 65
+    check results.rowCount == 32
+    check fileItem.title == "many.txt"
+    check fileItem.decoration.badge == "65"
+    check results.isItemExpanded(fileIdentifier)
+
+    proc clickSearchRow(identifier: string): bool =
+      if not results.selectItemWithIdentifier(identifier):
+        return false
+      discard window.buildRenders()
+      let
+        row = results.rowForItem(identifier)
+        rowRect = results.rowItemRect(row)
+        point = results.pointToWindow(
+          initPoint(
+            rowRect.origin.x + rowRect.size.width * 0.5'f32,
+            rowRect.origin.y + rowRect.size.height * 0.5'f32,
+          )
+        )
+      window.mouseDownAt(point, clickCount = 1) and
+        window.mouseUpAt(point, clickCount = 1)
+
+    check clickSearchRow(fileIdentifier)
+    check results.rowCount == 1
+    check not results.isItemExpanded(fileIdentifier)
+    check clickSearchRow(fileIdentifier)
+    check results.rowCount == 32
+
+    var loadMoreIdentifier = results.itemIdentifierForRow(results.rowCount - 1)
+    check results.outlineItemWithIdentifier(loadMoreIdentifier).title.startsWith(
+      "Load 30"
+    )
+    check clickSearchRow(loadMoreIdentifier)
+    check results.rowCount == 62
+
+    loadMoreIdentifier = results.itemIdentifierForRow(results.rowCount - 1)
+    check results.outlineItemWithIdentifier(loadMoreIdentifier).title.startsWith(
+      "Load 5"
+    )
+    check clickSearchRow(loadMoreIdentifier)
+    check results.rowCount == 66
+
+    let lastResultIdentifier = results.matchIdentifier(64)
+    check results.rowForItem(lastResultIdentifier) == 65
+    check clickSearchRow(lastResultIdentifier)
+    check openedLine == 65
+    check openDisposition == fodTemporary
+
   test "selecting a result stays responsive at the search result limit":
     let
       root = createTempDir("merenda-kosmo-find-limit-", "")
@@ -591,7 +688,9 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     discard frontend.window.buildRenders()
     let
-      resultRect = frontend.searchPanel.resultsView.rowItemRect(10)
+      resultIdentifier = frontend.searchPanel.resultsView.matchIdentifier(10)
+      resultRow = frontend.searchPanel.resultsView.rowForItem(resultIdentifier)
+      resultRect = frontend.searchPanel.resultsView.rowItemRect(resultRow)
       resultPoint = frontend.searchPanel.resultsView.pointToWindow(
         initPoint(
           resultRect.origin.x + resultRect.size.width * 0.5'f32,

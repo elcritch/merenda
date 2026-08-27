@@ -1,26 +1,37 @@
 ## Find-in-files sidebar UI backed by NimKit's worker-based file search.
 
-import std/[options, os, strutils]
+import std/[options, os, strutils, tables]
 
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ./filetree
 
 const
+  DefaultKosmoSearchResultsPerFile* = 30
   SearchFieldAction = "kosmo.performFileSearch"
   CancelSearchAction = "kosmo.cancelFileSearch"
+  SearchFileIdentifierPrefix = "kosmo.search-file."
   SearchResultIdentifierPrefix = "kosmo.search-result."
+  SearchLoadMoreIdentifierPrefix = "kosmo.search-load-more."
 
 type
   SearchResultOpenHandler* = proc(
     match: nimkit.FileSearchMatch, disposition: FileTreeOpenDisposition
   ) {.closure.}
 
+  SearchResultGroup = object
+    path: string
+    matchIndexes: seq[int]
+    visibleCount: int
+
   KosmoSearchResults* = ref object of nimkit.OutlineView
     xMatches: seq[nimkit.FileSearchMatch]
+    xGroups: seq[SearchResultGroup]
+    xMatchGroupIndexes: seq[int]
     xOnOpenResult: SearchResultOpenHandler
     xOpenDisposition: FileTreeOpenDisposition
     xRootPath: string
+    xResultsPerFile: int
 
   KosmoFileSearchPanel* = ref object of nimkit.View
     queryField*: nimkit.TextField
@@ -32,28 +43,119 @@ type
     xService: nimkit.FileSearchService
     xActiveSearch: nimkit.FileSearchHandle
 
-func resultIdentifier(index: int): string =
-  SearchResultIdentifierPrefix & $index
+func indexedIdentifier(prefix: string, index: int): string =
+  prefix & $index
 
-func resultIndex(identifier: string): int =
-  if not identifier.startsWith(SearchResultIdentifierPrefix):
+func identifierIndex(identifier, prefix: string): int =
+  if not identifier.startsWith(prefix):
     return -1
   try:
-    parseInt(identifier[SearchResultIdentifierPrefix.len .. ^1])
+    parseInt(identifier[prefix.len .. ^1])
   except ValueError:
     -1
 
-proc searchResultTitle(match: nimkit.FileSearchMatch, rootPath: string): string =
-  let
-    path =
-      if rootPath.len > 0:
-        relativePath(match.path, rootPath)
-      else:
-        match.path
-    lineText = match.lineText.strip()
-  result = path & ":" & $match.line & ":" & $match.column
+func fileIdentifier(index: int): string =
+  indexedIdentifier(SearchFileIdentifierPrefix, index)
+
+func resultIdentifier(index: int): string =
+  indexedIdentifier(SearchResultIdentifierPrefix, index)
+
+func loadMoreIdentifier(index: int): string =
+  indexedIdentifier(SearchLoadMoreIdentifierPrefix, index)
+
+proc searchFileTitle(path, rootPath: string): string =
+  if rootPath.len > 0:
+    relativePath(path, rootPath)
+  else:
+    path
+
+proc searchResultTitle(match: nimkit.FileSearchMatch): string =
+  let lineText = match.lineText.strip()
+  result = $match.line & ":" & $match.column
   if lineText.len > 0:
     result.add "  " & lineText
+
+func loadMoreTitle(group: SearchResultGroup, resultsPerFile: int): string =
+  let
+    remaining = group.matchIndexes.len - group.visibleCount
+    nextCount = min(remaining, resultsPerFile)
+  "Load " & $nextCount & " more results (" & $remaining & " remaining)"
+
+protocol KosmoSearchResultsDataSource of nimkit.OutlineViewDataSource:
+  method numberOfChildren(
+      results: KosmoSearchResults,
+      outlineView: nimkit.OutlineView,
+      parentIdentifier: string,
+  ): int =
+    discard outlineView
+    if parentIdentifier.len == 0:
+      return results.xGroups.len
+    let groupIndex = parentIdentifier.identifierIndex(SearchFileIdentifierPrefix)
+    if groupIndex in 0 ..< results.xGroups.len:
+      let group = results.xGroups[groupIndex]
+      result = group.visibleCount
+      if group.visibleCount < group.matchIndexes.len:
+        inc result
+
+  method childIdentifier(
+      results: KosmoSearchResults,
+      outlineView: nimkit.OutlineView,
+      parentIdentifier: string,
+      index: int,
+  ): string =
+    discard outlineView
+    if parentIdentifier.len == 0:
+      if index in 0 ..< results.xGroups.len:
+        return fileIdentifier(index)
+      return
+    let groupIndex = parentIdentifier.identifierIndex(SearchFileIdentifierPrefix)
+    if groupIndex notin 0 ..< results.xGroups.len:
+      return
+    let group = results.xGroups[groupIndex]
+    if index in 0 ..< group.visibleCount:
+      result = resultIdentifier(group.matchIndexes[index])
+    elif index == group.visibleCount and group.visibleCount < group.matchIndexes.len:
+      result = loadMoreIdentifier(groupIndex)
+
+  method outlineItem(
+      results: KosmoSearchResults, outlineView: nimkit.OutlineView, identifier: string
+  ): nimkit.OutlineItem =
+    discard outlineView
+    let groupIndex = identifier.identifierIndex(SearchFileIdentifierPrefix)
+    if groupIndex in 0 ..< results.xGroups.len:
+      let group = results.xGroups[groupIndex]
+      return nimkit.initOutlineItem(
+        identifier,
+        group.path.searchFileTitle(results.xRootPath),
+        expandable = true,
+        tooltip = group.path,
+        decoration = nimkit.initOutlineItemDecoration(badge = $group.matchIndexes.len),
+      )
+
+    let matchIndex = identifier.identifierIndex(SearchResultIdentifierPrefix)
+    if matchIndex in 0 ..< results.xMatches.len:
+      let
+        match = results.xMatches[matchIndex]
+        parentIndex = results.xMatchGroupIndexes[matchIndex]
+      return nimkit.initOutlineItem(
+        identifier,
+        match.searchResultTitle(),
+        parentIdentifier = fileIdentifier(parentIndex),
+        leaf = true,
+        tooltip = match.path & ":" & $match.line & ":" & $match.column,
+      )
+
+    let loadMoreIndex = identifier.identifierIndex(SearchLoadMoreIdentifierPrefix)
+    if loadMoreIndex in 0 ..< results.xGroups.len:
+      let group = results.xGroups[loadMoreIndex]
+      if group.visibleCount < group.matchIndexes.len:
+        return nimkit.initOutlineItem(
+          identifier,
+          group.loadMoreTitle(results.xResultsPerFile),
+          parentIdentifier = fileIdentifier(loadMoreIndex),
+          leaf = true,
+          tooltip = "Show more matches from " & group.path,
+        )
 
 protocol KosmoSearchResultsTableDelegate of nimkit.TableViewDelegate:
   method shouldEditCell(
@@ -82,17 +184,35 @@ protocol KosmoSearchResultsEvents of nimkit.ResponderEventProtocol:
 proc searchResultWasActivated(
     results: KosmoSearchResults, sender: nimkit.DynamicAgent
 ) {.slot.} =
-  if sender != nimkit.DynamicAgent(results) or results.xOnOpenResult.isNil:
+  if sender != nimkit.DynamicAgent(results):
     return
-  let index = results.selectedItemIdentifier().resultIndex()
-  if index in 0 ..< results.xMatches.len:
+  let identifier = results.selectedItemIdentifier()
+  let groupIndex = identifier.identifierIndex(SearchFileIdentifierPrefix)
+  if groupIndex in 0 ..< results.xGroups.len:
+    results.toggleItem(identifier)
+    return
+  let loadMoreIndex = identifier.identifierIndex(SearchLoadMoreIdentifierPrefix)
+  if loadMoreIndex in 0 ..< results.xGroups.len:
+    let group = results.xGroups[loadMoreIndex]
+    results.xGroups[loadMoreIndex].visibleCount =
+      min(group.visibleCount + results.xResultsPerFile, group.matchIndexes.len)
+    results.reloadOutlineData()
+    let nextIdentifier =
+      if results.xGroups[loadMoreIndex].visibleCount < group.matchIndexes.len:
+        loadMoreIdentifier(loadMoreIndex)
+      else:
+        resultIdentifier(group.matchIndexes[^1])
+    results.selectedItemIdentifier = nextIdentifier
+    return
+  let index = identifier.identifierIndex(SearchResultIdentifierPrefix)
+  if index in 0 ..< results.xMatches.len and not results.xOnOpenResult.isNil:
     results.xOnOpenResult(results.xMatches[index], results.xOpenDisposition)
 
 proc matches*(results: KosmoSearchResults): lent seq[nimkit.FileSearchMatch] =
   results.xMatches
 
 proc matchIdentifier*(results: KosmoSearchResults, index: Natural): string =
-  ## Return the outline identifier for a displayed result.
+  ## Return the stable outline identifier for a search result.
   if index < results.xMatches.len:
     result = resultIdentifier(index)
 
@@ -104,24 +224,39 @@ proc setMatches(
     rootPath: string,
     matches: openArray[nimkit.FileSearchMatch],
 ) =
+  results.selectedItemIdentifier = ""
   results.xRootPath = rootPath
   results.xMatches = @matches
-  results.selectedItemIdentifier = ""
-  var items = newSeqOfCap[nimkit.OutlineItem](matches.len)
+  results.xGroups.setLen(0)
+  results.xMatchGroupIndexes = newSeq[int](matches.len)
+  var groupIndexes = initTable[string, int]()
   for index, match in matches:
-    items.add nimkit.initOutlineItem(
-      resultIdentifier(index),
-      match.searchResultTitle(rootPath),
-      leaf = true,
-      tooltip = match.path,
-    )
-  results.outlineItems = items
+    var groupIndex: int
+    if groupIndexes.hasKey(match.path):
+      groupIndex = groupIndexes[match.path]
+    else:
+      groupIndex = results.xGroups.len
+      groupIndexes[match.path] = groupIndex
+      results.xGroups.add SearchResultGroup(path: match.path)
+    results.xGroups[groupIndex].matchIndexes.add index
+    results.xMatchGroupIndexes[index] = groupIndex
+  var expanded = newSeqOfCap[string](results.xGroups.len)
+  for index in 0 ..< results.xGroups.len:
+    results.xGroups[index].visibleCount =
+      min(results.xResultsPerFile, results.xGroups[index].matchIndexes.len)
+    expanded.add fileIdentifier(index)
+  results.expandedItemIdentifiers = expanded
+  results.reloadOutlineData()
 
 proc newKosmoSearchResults(): KosmoSearchResults =
-  result = KosmoSearchResults(xOpenDisposition: fodPermanent)
+  result = KosmoSearchResults(
+    xOpenDisposition: fodPermanent, xResultsPerFile: DefaultKosmoSearchResultsPerFile
+  )
   result.initOutlineViewFields()
+  discard result.withProtocol(KosmoSearchResultsDataSource)
   discard result.withProtocol(KosmoSearchResultsTableDelegate)
   discard nimkit.DynamicAgent(result).pushMethods(KosmoSearchResultsEvents.init())
+  result.outlineDataSource = result
   result.outlineColumn().title = "Matches"
   result.outlineColumn().width = 320.0'f32
   result.showsHeader = false
