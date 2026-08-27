@@ -60,6 +60,10 @@ type
     column*: int
     visible*: bool
 
+  KosmoBufferCursor* = object ## Zero-based cursor position in the active text buffer.
+    line*: int
+    column*: int
+
   KosmoKeyOutcome* = object ## The semantic outcome of sending a physical key to Moe.
     valid*: bool
     continueRunning*: bool
@@ -182,16 +186,28 @@ proc close*(editor: KosmoEditor) =
     editor.editor.releaseExternalResources()
     editor.editor = nil
 
+proc readEncodingSample(path: string): string =
+  let sampleLength = min(getFileSize(path), (EncodingDetectionSampleSize + 4).int64).int
+  if sampleLength == 0:
+    return
+  var file: File
+  if not open(file, path, fmRead):
+    raise newException(IOError, "Cannot open file: " & path)
+  defer:
+    file.close()
+  result = newString(sampleLength)
+  result.setLen(file.readBuffer(addr result[0], sampleLength))
+
 proc validateFileOpen(editor: KosmoEditor, path: string): FileOpenResult =
   if editor.isNil or editor.editor.isNil:
     return FileOpenResult(message: "The editor is closed.")
   if fileExists(path):
     try:
-      if detectCharacterEncoding(readFile(path)) == CharacterEncoding.unknown:
+      if detectCharacterEncoding(path.readEncodingSample()) == CharacterEncoding.unknown:
         return FileOpenResult(
           message: "Kosmo cannot open a binary file or unsupported text encoding."
         )
-    except IOError as error:
+    except CatchableError as error:
       return FileOpenResult(message: error.msg)
   FileOpenResult(loaded: true)
 
@@ -371,6 +387,31 @@ proc cursor*(editor: KosmoEditor): KosmoCursor =
   KosmoCursor(
     row: position.y, column: position.x, visible: editor.editor.state.cursorVisible
   )
+
+proc bufferCursor*(editor: KosmoEditor): KosmoBufferCursor =
+  ## Return the logical cursor position in the active text buffer.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let position = editor.editor.activeWindow().cursor
+  KosmoBufferCursor(line: position.line, column: position.column)
+
+proc revealLocation*(editor: KosmoEditor, line, column: int): bool {.discardable.} =
+  ## Move the active buffer cursor to a zero-based location. The next render
+  ## follows the cursor if the location lies outside the current viewport.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let
+    window = editor.editor.activeWindow()
+    cursor = editor.editor.motionController.cursorManager.clampPosition(
+      moeTypes.CursorPosition(x: max(column, 0), y: max(line, 0)), window.buffer
+    )
+  window.cursor.line = cursor.y
+  window.cursor.column = cursor.x
+  window.preferredColumn = cursor.x
+  window.viewport.detachedFromCursor = false
+  editor.editor.syncActiveWindow()
+  editor.editor.setActiveWindowScreenCursor(window)
+  result = true
 
 proc commandLine*(editor: KosmoEditor): KosmoCommandLine =
   ## Return command input for a frontend-owned command bar.

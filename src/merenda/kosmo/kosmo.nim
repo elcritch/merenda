@@ -740,6 +740,31 @@ proc previewFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   if not view.statusLabel.isNil:
     view.statusLabel.text = outcome.message
 
+proc bufferColumn(match: nimkit.FileSearchMatch): int =
+  let byteColumn = clamp(match.column - 1, 0, match.lineText.len)
+  if byteColumn > 0:
+    result = match.lineText[0 ..< byteColumn].runeLen
+
+proc openSearchResult(
+    view: KosmoEditorView,
+    match: nimkit.FileSearchMatch,
+    disposition: FileTreeOpenDisposition,
+): bool =
+  view.saveViewState()
+  let outcome =
+    case disposition
+    of fodTemporary:
+      view.editor.previewFile(match.path)
+    of fodPermanent:
+      view.editor.openFile(match.path)
+  if outcome.loaded:
+    view.adoptActiveBuffer()
+    discard view.editor.revealLocation(max(match.line - 1, 0), match.bufferColumn())
+    view.refresh()
+    return true
+  if not view.statusLabel.isNil:
+    view.statusLabel.text = outcome.message
+
 proc scrollBy*(
     view: KosmoEditorView,
     deltaY: float32,
@@ -1990,7 +2015,14 @@ proc newKosmoApplication*(
       discard activeView.previewFile(path)
     of fodPermanent:
       discard activeView.openFile(path)
-  searchPanel.onOpenFile = fileTree.onOpenFile
+  searchPanel.onOpenResult = proc(
+      match: nimkit.FileSearchMatch, disposition: FileTreeOpenDisposition
+  ) =
+    if frontend.isNil:
+      return
+    let activeView = frontend[].dockController.activeEditorView()
+    if not activeView.isNil:
+      discard activeView.openSearchResult(match, disposition)
   if filePath.len > 0:
     discard result.dockController.activeEditorView().openPath(fileTree, filePath)
     searchPanel.rootPath = fileTree.rootPath

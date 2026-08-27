@@ -1,4 +1,4 @@
-import std/[os, strutils, tempfiles, unittest]
+import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
 import figdraw
 
@@ -438,7 +438,7 @@ suite "Kosmo":
       alphaPath = root / "alpha.txt"
       betaPath = root / "beta.nim"
       frontend = newKosmoApplication(newApplication("Kosmo Find Sidebar Test"))
-    writeFile(alphaPath, "first needle\nsecond line\n")
+    writeFile(alphaPath, "first line\nsecond λ needle\n")
     writeFile(betaPath, "let needleValue = 1\n")
     defer:
       frontend.close()
@@ -513,6 +513,8 @@ suite "Kosmo":
     check tabs.len == 1
     check tabs[0].title == "alpha.txt"
     check tabs[0].temporary
+    check frontend.editorView.editor.bufferCursor() ==
+      KosmoBufferCursor(line: 1, column: 9)
     check frontend.window.mouseDownAt(resultPoint, clickCount = 2)
     check frontend.window.mouseUpAt(resultPoint, clickCount = 2)
     check not frontend.editorView.editor.tabs()[0].temporary
@@ -559,6 +561,52 @@ suite "Kosmo":
     check panel.progressIndicator.hidden
     check not panel.progressIndicator.animating
     check panel.cancelButton.hidden
+
+  test "selecting a result stays responsive at the search result limit":
+    let
+      root = createTempDir("merenda-kosmo-find-limit-", "")
+      frontend = newKosmoApplication(newApplication("Kosmo Find Limit Test"))
+      contents = "needle\n".repeat(1_000)
+    for index in 0 ..< 10:
+      writeFile(root / (align($index, 2, '0') & ".txt"), contents)
+    defer:
+      frontend.close()
+      removeDir(root)
+
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 760, 520)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(root)
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmCommand, kmShift})
+    )
+    check frontend.window.dispatchTextInput("needle")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
+    )
+    check frontend.searchPanel.waitForSearch(timeoutMilliseconds = 10_000)
+    check frontend.searchPanel.resultsView.matches.len == DefaultFileSearchMaxResults
+
+    frontend.contentView.layoutSubtreeIfNeeded()
+    discard frontend.window.buildRenders()
+    let
+      resultRect = frontend.searchPanel.resultsView.rowItemRect(10)
+      resultPoint = frontend.searchPanel.resultsView.pointToWindow(
+        initPoint(
+          resultRect.origin.x + resultRect.size.width * 0.5'f32,
+          resultRect.origin.y + resultRect.size.height * 0.5'f32,
+        )
+      )
+      started = getMonoTime()
+    check frontend.window.mouseDownAt(resultPoint)
+    check frontend.window.mouseUpAt(resultPoint)
+    let activationTime = getMonoTime() - started
+
+    check activationTime.inMilliseconds < 750
+    check frontend.editorView.editor.bufferCursor() ==
+      KosmoBufferCursor(line: 10, column: 0)
+    check frontend.editorView.editor.tabs()[0].temporary
 
   when defined(posix):
     test "File menu opens a terminal as a fully managed pane tab":

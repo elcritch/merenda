@@ -342,7 +342,7 @@ proc visibleOutlineItems*(outlineView: OutlineView): seq[OutlineItem] =
     result.add row.item
 
 proc itemAtRow*(outlineView: OutlineView, row: int): OutlineItem =
-  let rows = outlineView.visibleOutlineRows()
+  let rows {.cursor.} = outlineView.visibleOutlineRows()
   if row in 0 ..< rows.len:
     rows[row].item
   else:
@@ -505,14 +505,14 @@ proc moveOutlineItem*(
   true
 
 proc rowForItem*(outlineView: OutlineView, identifier: string): int =
-  let rows = outlineView.visibleOutlineRows()
+  let rows {.cursor.} = outlineView.visibleOutlineRows()
   for index, row in rows:
     if row.item.identifier == identifier:
       return index
   -1
 
 proc levelForRow*(outlineView: OutlineView, row: int): int =
-  let rows = outlineView.visibleOutlineRows()
+  let rows {.cursor.} = outlineView.visibleOutlineRows()
   if row in 0 ..< rows.len:
     rows[row].level
   else:
@@ -838,7 +838,7 @@ proc setOutlineCellObjectValue(
   true
 
 proc outlineCellText(outlineView: OutlineView, row: int, column: TableColumn): string =
-  let rows = outlineView.visibleOutlineRows()
+  let rows {.cursor.} = outlineView.visibleOutlineRows()
   if row notin 0 ..< rows.len or column.isNil:
     return ""
   let item = rows[row].item

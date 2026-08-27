@@ -12,9 +12,13 @@ const
   SearchResultIdentifierPrefix = "kosmo.search-result."
 
 type
+  SearchResultOpenHandler* = proc(
+    match: nimkit.FileSearchMatch, disposition: FileTreeOpenDisposition
+  ) {.closure.}
+
   KosmoSearchResults* = ref object of nimkit.OutlineView
     xMatches: seq[nimkit.FileSearchMatch]
-    xOnOpenFile: FileTreeOpenHandler
+    xOnOpenResult: SearchResultOpenHandler
     xOpenDisposition: FileTreeOpenDisposition
     xRootPath: string
 
@@ -51,43 +55,6 @@ proc searchResultTitle(match: nimkit.FileSearchMatch, rootPath: string): string 
   if lineText.len > 0:
     result.add "  " & lineText
 
-protocol KosmoSearchResultsDataSource of nimkit.OutlineViewDataSource:
-  method numberOfChildren(
-      results: KosmoSearchResults,
-      outlineView: nimkit.OutlineView,
-      parentIdentifier: string,
-  ): int =
-    discard outlineView
-    if parentIdentifier.len == 0: results.xMatches.len else: 0
-
-  method childIdentifier(
-      results: KosmoSearchResults,
-      outlineView: nimkit.OutlineView,
-      parentIdentifier: string,
-      index: int,
-  ): string =
-    discard results
-    discard outlineView
-    if parentIdentifier.len == 0 and index >= 0:
-      resultIdentifier(index)
-    else:
-      ""
-
-  method outlineItem(
-      results: KosmoSearchResults, outlineView: nimkit.OutlineView, identifier: string
-  ): nimkit.OutlineItem =
-    discard outlineView
-    let index = identifier.resultIndex()
-    if index notin 0 ..< results.xMatches.len:
-      return
-    let match = results.xMatches[index]
-    nimkit.initOutlineItem(
-      identifier,
-      match.searchResultTitle(results.xRootPath),
-      leaf = true,
-      tooltip = match.path,
-    )
-
 protocol KosmoSearchResultsTableDelegate of nimkit.TableViewDelegate:
   method shouldEditCell(
       results: KosmoSearchResults,
@@ -115,11 +82,11 @@ protocol KosmoSearchResultsEvents of nimkit.ResponderEventProtocol:
 proc searchResultWasActivated(
     results: KosmoSearchResults, sender: nimkit.DynamicAgent
 ) {.slot.} =
-  if sender != nimkit.DynamicAgent(results) or results.xOnOpenFile.isNil:
+  if sender != nimkit.DynamicAgent(results) or results.xOnOpenResult.isNil:
     return
   let index = results.selectedItemIdentifier().resultIndex()
   if index in 0 ..< results.xMatches.len:
-    results.xOnOpenFile(results.xMatches[index].path, results.xOpenDisposition)
+    results.xOnOpenResult(results.xMatches[index], results.xOpenDisposition)
 
 proc matches*(results: KosmoSearchResults): lent seq[nimkit.FileSearchMatch] =
   results.xMatches
@@ -129,8 +96,8 @@ proc matchIdentifier*(results: KosmoSearchResults, index: Natural): string =
   if index < results.xMatches.len:
     result = resultIdentifier(index)
 
-proc `onOpenFile=`*(results: KosmoSearchResults, handler: FileTreeOpenHandler) =
-  results.xOnOpenFile = handler
+proc `onOpenResult=`*(results: KosmoSearchResults, handler: SearchResultOpenHandler) =
+  results.xOnOpenResult = handler
 
 proc setMatches(
     results: KosmoSearchResults,
@@ -140,15 +107,21 @@ proc setMatches(
   results.xRootPath = rootPath
   results.xMatches = @matches
   results.selectedItemIdentifier = ""
-  results.reloadOutlineData()
+  var items = newSeqOfCap[nimkit.OutlineItem](matches.len)
+  for index, match in matches:
+    items.add nimkit.initOutlineItem(
+      resultIdentifier(index),
+      match.searchResultTitle(rootPath),
+      leaf = true,
+      tooltip = match.path,
+    )
+  results.outlineItems = items
 
 proc newKosmoSearchResults(): KosmoSearchResults =
   result = KosmoSearchResults(xOpenDisposition: fodPermanent)
   result.initOutlineViewFields()
-  discard result.withProtocol(KosmoSearchResultsDataSource)
   discard result.withProtocol(KosmoSearchResultsTableDelegate)
   discard nimkit.DynamicAgent(result).pushMethods(KosmoSearchResultsEvents.init())
-  result.outlineDataSource = result
   result.outlineColumn().title = "Matches"
   result.outlineColumn().width = 320.0'f32
   result.showsHeader = false
@@ -329,8 +302,8 @@ proc focusQuery*(panel: KosmoFileSearchPanel): bool {.discardable.} =
     return
   result = nimkit.Window(panel.window()).makeFirstResponder(panel.queryField)
 
-proc `onOpenFile=`*(panel: KosmoFileSearchPanel, handler: FileTreeOpenHandler) =
-  panel.resultsView.onOpenFile = handler
+proc `onOpenResult=`*(panel: KosmoFileSearchPanel, handler: SearchResultOpenHandler) =
+  panel.resultsView.onOpenResult = handler
 
 proc close*(panel: KosmoFileSearchPanel) =
   ## Stop the search workers owned by this panel.
