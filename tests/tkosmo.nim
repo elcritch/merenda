@@ -1,4 +1,4 @@
-import std/[monotimes, os, strutils, tempfiles, times, unittest]
+import std/[monotimes, options, os, osproc, strutils, tempfiles, times, unittest]
 
 import figdraw
 
@@ -1283,6 +1283,70 @@ suite "Kosmo":
     tree.expandItem(folder)
     check tree.rowCount() == 4
     check tree.outlineItemWithIdentifier(nestedFile).leaf
+
+  test "file tree exposes Git file badges and descendant folder colors":
+    let
+      root = createTempDir("merenda-kosmo-tree-git-", "")
+      folder = root / "folder"
+      nestedFile = folder / "nested.nim"
+      untrackedFile = root / "notes.txt"
+      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 140))
+      modifiedColor = color(0.82, 0.62, 0.20, 1.0)
+      addedColor = color(0.32, 0.72, 0.40, 1.0)
+    createDir(folder)
+    writeFile(nestedFile, "let nested = true\n")
+    writeFile(untrackedFile, "notes\n")
+    defer:
+      removeFile(nestedFile)
+      removeFile(untrackedFile)
+      removeDir(folder)
+      removeDir(root)
+
+    tree.applyGitStatus(
+      GitStatusSnapshot(
+        rootPath: absolutePath(root),
+        isRepository: true,
+        entries:
+          @[
+            GitStatusEntry(path: nestedFile, state: gfsModified),
+            GitStatusEntry(path: untrackedFile, state: gfsUntracked),
+          ],
+      )
+    )
+    tree.expandItem(folder)
+
+    let
+      modifiedDecoration = tree.outlineItemWithIdentifier(nestedFile).decoration
+      untrackedDecoration = tree.outlineItemWithIdentifier(untrackedFile).decoration
+      folderItem = tree.outlineItemWithIdentifier(folder)
+    check modifiedDecoration.badge == "M"
+    check modifiedDecoration.color == some(modifiedColor)
+    check untrackedDecoration.badge == "U"
+    check untrackedDecoration.color == some(addedColor)
+    check folderItem.decoration.badge.len == 0
+    check folderItem.decoration.color == some(modifiedColor)
+    check folderItem.tooltip.endsWith("Contains modified files")
+
+  test "file tree receives Git status from its Sigils worker":
+    let root = createTempDir("merenda-kosmo-tree-git-worker-", "")
+    discard execProcess(
+      "git",
+      workingDir = root,
+      args = ["init", "-q"],
+      options = {poUsePath, poStdErrToStdOut},
+    )
+    let untrackedFile = root / "worker-result.txt"
+    writeFile(untrackedFile, "worker result\n")
+    let
+      tree = newKosmoFileTree(root)
+      service = tree.startGitStatusMonitoring(refreshInterval = initDuration())
+    defer:
+      tree.stopGitStatusMonitoring()
+      removeDir(root)
+
+    check tree.waitForGitStatus(timeoutMilliseconds = 10_000)
+    check service.lastSnapshot().workerThreadId != getThreadId()
+    check tree.outlineItemWithIdentifier(untrackedFile).decoration.badge == "U"
 
   test "file tree activates files without entering inline editing":
     let

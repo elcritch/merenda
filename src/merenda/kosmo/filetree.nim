@@ -1,6 +1,6 @@
 ## A lazy filesystem tree for Kosmo frontends.
 
-import std/[options, os, tables]
+import std/[options, os, strutils, tables, times]
 
 import ../nimkit as nimkit
 
@@ -18,6 +18,16 @@ type
     xChildren: Table[string, seq[string]]
     xOnOpenFile: FileTreeOpenHandler
     xOpenDisposition: FileTreeOpenDisposition
+    xGitStatusService: nimkit.GitStatusService
+    xGitFileStates: Table[string, nimkit.GitFileState]
+    xGitDescendantStates: Table[string, nimkit.GitFileState]
+
+const
+  GitModifiedColor = nimkit.color(0.82, 0.62, 0.20, 1.0)
+  GitAddedColor = nimkit.color(0.32, 0.72, 0.40, 1.0)
+  GitDeletedColor = nimkit.color(0.90, 0.32, 0.32, 1.0)
+  GitRenamedColor = nimkit.color(0.32, 0.64, 0.88, 1.0)
+  GitConflictedColor = nimkit.color(0.94, 0.30, 0.36, 1.0)
 
 proc expandableDirectory(path: string): bool =
   path.isBrowsableDirectory()
@@ -37,6 +47,64 @@ proc loadChildPaths(tree: KosmoFileTree, parentIdentifier: string) =
 proc childPaths(tree: KosmoFileTree, parentIdentifier: string): lent seq[string] =
   tree.loadChildPaths(parentIdentifier)
   tree.xChildren[parentIdentifier]
+
+func gitStatePriority(state: nimkit.GitFileState): int =
+  case state
+  of nimkit.gfsConflicted: 6
+  of nimkit.gfsDeleted: 5
+  of nimkit.gfsModified: 4
+  of nimkit.gfsRenamed: 3
+  of nimkit.gfsAdded: 2
+  of nimkit.gfsUntracked: 1
+
+func gitStateTitle(state: nimkit.GitFileState): string =
+  case state
+  of nimkit.gfsModified: "Modified"
+  of nimkit.gfsAdded: "Added"
+  of nimkit.gfsDeleted: "Deleted"
+  of nimkit.gfsRenamed: "Renamed"
+  of nimkit.gfsUntracked: "Untracked"
+  of nimkit.gfsConflicted: "Merge conflict"
+
+func gitStateBadge(state: nimkit.GitFileState): string =
+  case state
+  of nimkit.gfsModified: "M"
+  of nimkit.gfsAdded: "A"
+  of nimkit.gfsDeleted: "D"
+  of nimkit.gfsRenamed: "R"
+  of nimkit.gfsUntracked: "U"
+  of nimkit.gfsConflicted: "!"
+
+func gitStateColor(state: nimkit.GitFileState): nimkit.Color =
+  case state
+  of nimkit.gfsModified: GitModifiedColor
+  of nimkit.gfsAdded, nimkit.gfsUntracked: GitAddedColor
+  of nimkit.gfsDeleted: GitDeletedColor
+  of nimkit.gfsRenamed: GitRenamedColor
+  of nimkit.gfsConflicted: GitConflictedColor
+
+proc includeGitState(
+    states: var Table[string, nimkit.GitFileState],
+    path: string,
+    state: nimkit.GitFileState,
+) =
+  if path notin states or state.gitStatePriority() > states[path].gitStatePriority():
+    states[path] = state
+
+proc gitDecoration(tree: KosmoFileTree, path: string): nimkit.OutlineItemDecoration =
+  if path in tree.xGitFileStates:
+    let state = tree.xGitFileStates[path]
+    return nimkit.initOutlineItemDecoration(
+      badge = state.gitStateBadge(),
+      color = some(state.gitStateColor()),
+      tooltip = state.gitStateTitle(),
+    )
+  if path in tree.xGitDescendantStates:
+    let state = tree.xGitDescendantStates[path]
+    return nimkit.initOutlineItemDecoration(
+      color = some(state.gitStateColor()),
+      tooltip = "Contains " & state.gitStateTitle().toLowerAscii() & " files",
+    )
 
 protocol KosmoFileTreeDataSource of nimkit.OutlineViewDataSource:
   method numberOfChildren(
@@ -64,7 +132,9 @@ protocol KosmoFileTreeDataSource of nimkit.OutlineViewDataSource:
     discard outlineView
     if identifier.len == 0:
       return
-    let expandable = identifier.expandableDirectory()
+    let
+      expandable = identifier.expandableDirectory()
+      decoration = tree.gitDecoration(identifier)
     nimkit.initOutlineItem(
       identifier,
       identifier.fileBrowserDisplayName(),
@@ -75,7 +145,12 @@ protocol KosmoFileTreeDataSource of nimkit.OutlineViewDataSource:
           identifier.parentDir(),
       expandable = expandable,
       leaf = not expandable,
-      tooltip = identifier,
+      tooltip =
+        if decoration.tooltip.len > 0:
+          identifier & "\n" & decoration.tooltip
+        else:
+          identifier,
+      decoration = decoration,
     )
 
 protocol KosmoFileTreeTableDelegate of nimkit.TableViewDelegate:
@@ -119,6 +194,10 @@ proc `rootPath=`*(tree: KosmoFileTree, path: string) =
   if tree.xRootPath == next:
     return
   tree.xRootPath = next
+  tree.xGitFileStates.clear()
+  tree.xGitDescendantStates.clear()
+  if not tree.xGitStatusService.isNil:
+    tree.xGitStatusService.rootPath = next
   tree.xFileSystem.invalidate()
   tree.xChildren.clear()
   let expanded =
@@ -136,6 +215,71 @@ proc refresh*(tree: KosmoFileTree) =
   tree.xChildren.clear()
   tree.reloadOutlineData()
 
+proc applyGitStatus*(tree: KosmoFileTree, snapshot: nimkit.GitStatusSnapshot) =
+  ## Replace file and descendant decorations from one completed status snapshot.
+  if tree.isNil or snapshot.rootPath != tree.xRootPath:
+    return
+  var
+    fileStates = initTable[string, nimkit.GitFileState]()
+    descendantStates = initTable[string, nimkit.GitFileState]()
+  if snapshot.isRepository:
+    for entry in snapshot.entries:
+      fileStates.includeGitState(entry.path, entry.state)
+      var parentPath = entry.path.parentDir()
+      while parentPath.len > 0:
+        descendantStates.includeGitState(parentPath, entry.state)
+        if parentPath == tree.xRootPath:
+          break
+        let nextParent = parentPath.parentDir()
+        if nextParent == parentPath:
+          break
+        parentPath = nextParent
+  if tree.xGitFileStates == fileStates and tree.xGitDescendantStates == descendantStates:
+    return
+  tree.xGitFileStates = fileStates
+  tree.xGitDescendantStates = descendantStates
+  tree.reloadOutlineData()
+
+proc applyRefreshedGitStatus(
+    tree: KosmoFileTree, snapshot: nimkit.GitStatusSnapshot
+) {.slot.} =
+  tree.applyGitStatus(snapshot)
+
+proc startGitStatusMonitoring*(
+    tree: KosmoFileTree,
+    refreshInterval: Duration = nimkit.DefaultGitStatusRefreshInterval,
+): nimkit.GitStatusService =
+  ## Start periodic asynchronous Git decorations for this tree.
+  if tree.isNil:
+    return
+  if not tree.xGitStatusService.isNil:
+    tree.xGitStatusService.close()
+  result = nimkit.newGitStatusService(refreshInterval = refreshInterval)
+  result.connect(nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus)
+  tree.xGitStatusService = result
+  result.rootPath = tree.xRootPath
+
+proc refreshGitStatus*(tree: KosmoFileTree): bool {.discardable.} =
+  ## Request an immediate status refresh in addition to the periodic schedule.
+  not tree.isNil and not tree.xGitStatusService.isNil and
+    tree.xGitStatusService.refresh()
+
+proc waitForGitStatus*(
+    tree: KosmoFileTree, timeoutMilliseconds: Natural = 5_000
+): bool {.discardable.} =
+  not tree.isNil and not tree.xGitStatusService.isNil and
+    tree.xGitStatusService.waitForIdle(timeoutMilliseconds)
+
+proc stopGitStatusMonitoring*(tree: KosmoFileTree) =
+  ## Stop and join the Git status worker owned by this tree.
+  if tree.isNil or tree.xGitStatusService.isNil:
+    return
+  tree.xGitStatusService.disconnect(
+    nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus
+  )
+  tree.xGitStatusService.close()
+  tree.xGitStatusService = nil
+
 proc onOpenFile*(tree: KosmoFileTree): FileTreeOpenHandler =
   tree.xOnOpenFile
 
@@ -148,6 +292,8 @@ proc newKosmoFileTree*(
   result = KosmoFileTree()
   result.initOutlineViewFields(frame)
   result.xFileSystem = nimkit.initFileSystemBrowserModel()
+  result.xGitFileStates = initTable[string, nimkit.GitFileState]()
+  result.xGitDescendantStates = initTable[string, nimkit.GitFileState]()
   discard result.withProtocol(KosmoFileTreeDataSource)
   discard result.withProtocol(KosmoFileTreeTableDelegate)
   discard nimkit.DynamicAgent(result).pushMethods(KosmoFileTreeEvents.init())

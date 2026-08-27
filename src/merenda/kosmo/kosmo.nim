@@ -2028,6 +2028,7 @@ proc newKosmoApplication*(
     searchPanel.rootPath = fileTree.rootPath
   if keyBindingResult.errors.len > 0:
     statusLabel.text = keyBindingResult.errors.join("; ")
+  discard fileTree.startGitStatusMonitoring()
 
 proc loadKosmoKeyBindings*(
     frontend: KosmoApplication, path: string
@@ -2108,6 +2109,8 @@ proc close*(frontend: KosmoApplication) =
     frontend.editorView.editor.close()
   if not frontend.searchPanel.isNil:
     frontend.searchPanel.close()
+  if not frontend.fileTree.isNil:
+    frontend.fileTree.stopGitStatusMonitoring()
 
 proc runKosmo*(filePath = "") =
   ## Run Kosmo as a standalone NimKit text-editor application.
