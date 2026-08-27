@@ -486,7 +486,13 @@ suite "Kosmo":
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
     )
+    check not frontend.searchPanel.progressIndicator.hidden
+    check frontend.searchPanel.progressIndicator.animating
+    check not frontend.searchPanel.cancelButton.hidden
     check frontend.searchPanel.waitForSearch(timeoutMilliseconds = 10_000)
+    check frontend.searchPanel.progressIndicator.hidden
+    check not frontend.searchPanel.progressIndicator.animating
+    check frontend.searchPanel.cancelButton.hidden
     check frontend.searchPanel.resultsView.matches.len == 2
     check frontend.searchPanel.resultsView.rowCount == 2
     check frontend.searchPanel.statusLabel.text == "2 results"
@@ -510,6 +516,49 @@ suite "Kosmo":
     check frontend.window.mouseDownAt(resultPoint, clickCount = 2)
     check frontend.window.mouseUpAt(resultPoint, clickCount = 2)
     check not frontend.editorView.editor.tabs()[0].temporary
+
+  test "find sidebar cancel button stops an active search":
+    let
+      root = createTempDir("merenda-kosmo-find-cancel-", "")
+      path = root / "search.txt"
+      panel = newKosmoFileSearchPanel(root)
+      window = newWindow("Kosmo Find Cancel Test", rect(0, 0, 280, 320))
+    writeFile(path, "needle\n")
+    defer:
+      panel.close()
+      window.close()
+      removeFile(path)
+      removeDir(root)
+
+    window.setContentView(panel)
+    panel.frame = window.contentView().bounds()
+    panel.layoutSubtreeIfNeeded()
+    check window.makeFirstResponder(panel.queryField)
+    check window.dispatchTextInput("needle")
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    let handle = panel.activeSearch()
+    check not handle.isNil
+    check not panel.progressIndicator.hidden
+    check panel.progressIndicator.animating
+    check not panel.cancelButton.hidden
+
+    panel.layoutSubtreeIfNeeded()
+    let cancelPoint = panel.cancelButton.pointToWindow(
+      initPoint(
+        panel.cancelButton.bounds().size.width * 0.5'f32,
+        panel.cancelButton.bounds().size.height * 0.5'f32,
+      )
+    )
+    check window.mouseDownAt(cancelPoint)
+    check window.mouseUpAt(cancelPoint)
+    check handle.cancelRequested
+    check not panel.cancelButton.enabled
+    check panel.statusLabel.text == "Cancelling…"
+    check panel.waitForSearch(timeoutMilliseconds = 10_000)
+    check panel.statusLabel.text == "Search cancelled"
+    check panel.progressIndicator.hidden
+    check not panel.progressIndicator.animating
+    check panel.cancelButton.hidden
 
   when defined(posix):
     test "File menu opens a terminal as a fully managed pane tab":

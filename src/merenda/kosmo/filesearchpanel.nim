@@ -8,6 +8,7 @@ import ./filetree
 
 const
   SearchFieldAction = "kosmo.performFileSearch"
+  CancelSearchAction = "kosmo.cancelFileSearch"
   SearchResultIdentifierPrefix = "kosmo.search-result."
 
 type
@@ -21,6 +22,8 @@ type
     queryField*: nimkit.TextField
     resultsView*: KosmoSearchResults
     statusLabel*: nimkit.Label
+    progressIndicator*: nimkit.ProgressIndicator
+    cancelButton*: nimkit.Button
     xRootPath: string
     xService: nimkit.FileSearchService
     xActiveSearch: nimkit.FileSearchHandle
@@ -155,11 +158,21 @@ proc newKosmoSearchResults(): KosmoSearchResults =
   result.showsRowSeparators = false
   result.connect(nimkit.rowWasActivated, result, searchResultWasActivated)
 
+proc updateSearchControls(panel: KosmoFileSearchPanel, searching: bool) =
+  panel.progressIndicator.hidden = not searching
+  panel.cancelButton.hidden = not searching
+  panel.cancelButton.enabled = searching
+  if searching:
+    panel.progressIndicator.startAnimation()
+  else:
+    panel.progressIndicator.stopAnimation()
+
 proc finishFileSearch(
     panel: KosmoFileSearchPanel, handle: nimkit.FileSearchHandle
 ) {.slot.} =
   if handle.isNil or handle != panel.xActiveSearch:
     return
+  panel.updateSearchControls(false)
   let searchResult = handle.result()
   panel.resultsView.setMatches(panel.xRootPath, searchResult.matches)
   panel.statusLabel.text =
@@ -181,12 +194,27 @@ proc ensureSearchService(panel: KosmoFileSearchPanel) =
     panel.xService = nimkit.newFileSearchService()
     panel.xService.connect(nimkit.fileSearchDidFinish, panel, finishFileSearch)
 
+proc cancelSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
+  ## Request cancellation of the running search and keep showing its progress
+  ## until the worker acknowledges the request.
+  if panel.isNil or panel.xActiveSearch.isNil or panel.xActiveSearch.isFinished():
+    return
+  panel.xActiveSearch.cancel()
+  panel.cancelButton.enabled = false
+  panel.statusLabel.text = "Cancelling…"
+  result = true
+
+proc cancelFileSearch(panel: KosmoFileSearchPanel, sender: nimkit.DynamicAgent) =
+  discard sender
+  discard panel.cancelSearch()
+
 proc performSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
   ## Start a new asynchronous search for the current query field text.
   if panel.isNil:
     return
   let pattern = panel.queryField.text()
   if pattern.len == 0 or panel.xRootPath.len == 0:
+    panel.updateSearchControls(false)
     panel.resultsView.setMatches(panel.xRootPath, [])
     panel.statusLabel.text =
       if pattern.len == 0: "Enter a regular expression" else: "No folder is open"
@@ -195,6 +223,7 @@ proc performSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
     panel.xActiveSearch.cancel()
   panel.resultsView.setMatches(panel.xRootPath, [])
   panel.statusLabel.text = "Searching…"
+  panel.updateSearchControls(true)
   try:
     panel.ensureSearchService()
     panel.xActiveSearch = panel.xService.search(
@@ -205,6 +234,7 @@ proc performSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
     result = true
   except CatchableError as error:
     panel.xActiveSearch = nil
+    panel.updateSearchControls(false)
     panel.statusLabel.text = error.msg
 
 proc submitFileSearch(panel: KosmoFileSearchPanel, sender: nimkit.DynamicAgent) =
@@ -220,11 +250,40 @@ protocol KosmoFileSearchPanelLayout of nimkit.ViewLayoutProtocol:
       bounds = panel.bounds()
       horizontalPadding = min(8.0'f32, bounds.size.width * 0.5'f32)
       contentWidth = max(bounds.size.width - horizontalPadding * 2.0'f32, 0.0'f32)
+      cancelSize = min(20.0'f32, contentWidth)
+      progressSize = min(18.0'f32, max(contentWidth - cancelSize - 4.0'f32, 0.0'f32))
+      trailingWidth =
+        if panel.cancelButton.hidden:
+          0.0'f32
+        else:
+          progressSize + cancelSize + 6.0'f32
     panel.queryField.setFrameFromLayout(
       nimkit.rect(horizontalPadding, 8.0'f32, contentWidth, 26.0'f32)
     )
     panel.statusLabel.setFrameFromLayout(
-      nimkit.rect(horizontalPadding, 38.0'f32, contentWidth, 18.0'f32)
+      nimkit.rect(
+        horizontalPadding,
+        38.0'f32,
+        max(contentWidth - trailingWidth, 0.0'f32),
+        18.0'f32,
+      )
+    )
+    panel.progressIndicator.setFrameFromLayout(
+      nimkit.rect(
+        horizontalPadding +
+          max(contentWidth - progressSize - cancelSize - 4.0'f32, 0.0'f32),
+        38.0'f32,
+        progressSize,
+        18.0'f32,
+      )
+    )
+    panel.cancelButton.setFrameFromLayout(
+      nimkit.rect(
+        horizontalPadding + max(contentWidth - cancelSize, 0.0'f32),
+        37.0'f32,
+        cancelSize,
+        20.0'f32,
+      )
     )
     panel.resultsView.setFrameFromLayout(
       nimkit.rect(
@@ -249,6 +308,7 @@ proc `rootPath=`*(panel: KosmoFileSearchPanel, rootPath: string) =
   if not panel.xActiveSearch.isNil and not panel.xActiveSearch.isFinished():
     panel.xActiveSearch.cancel()
   panel.xActiveSearch = nil
+  panel.updateSearchControls(false)
   panel.xRootPath = next
   panel.resultsView.setMatches(next, [])
   panel.statusLabel.text = "Enter a regular expression"
@@ -280,28 +340,53 @@ proc close*(panel: KosmoFileSearchPanel) =
   panel.xService.close()
   panel.xService = nil
   panel.xActiveSearch = nil
+  panel.updateSearchControls(false)
 
 proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
   let
     queryField = nimkit.newTextField("")
     resultsView = newKosmoSearchResults()
     statusLabel = nimkit.newStatusLabel("Enter a regular expression")
-    action = nimkit.actionSelector(SearchFieldAction)
+    progressIndicator = nimkit.newProgressIndicator()
+    cancelButton = nimkit.newButton("×")
+    searchAction = nimkit.actionSelector(SearchFieldAction)
+    cancelAction = nimkit.actionSelector(CancelSearchAction)
   result = KosmoFileSearchPanel(
-    queryField: queryField, resultsView: resultsView, statusLabel: statusLabel
+    queryField: queryField,
+    resultsView: resultsView,
+    statusLabel: statusLabel,
+    progressIndicator: progressIndicator,
+    cancelButton: cancelButton,
   )
   result.initViewFields()
   result.addSubview(queryField)
   result.addSubview(statusLabel)
+  result.addSubview(progressIndicator)
+  result.addSubview(cancelButton)
   result.addSubview(resultsView)
   discard result.withProtocol(KosmoFileSearchPanelLayout)
   let panel = result.unsafeWeakRef()
+  progressIndicator.indeterminate = true
+  progressIndicator.displayedWhenStopped = false
+  progressIndicator.progressIndicatorStyle = nimkit.pisSpinning
+  progressIndicator.accessibilityLabel = "Searching files"
+  cancelButton.accessibilityLabel = "Cancel search"
+  cancelButton.toolTip = "Cancel search"
   queryField.target = nimkit.newActionTarget(
-    action,
+    searchAction,
     proc(sender: nimkit.DynamicAgent) =
       if not panel.isNil:
         panel[].submitFileSearch(sender)
     ,
   )
-  queryField.action = action
+  queryField.action = searchAction
+  cancelButton.target = nimkit.newActionTarget(
+    cancelAction,
+    proc(sender: nimkit.DynamicAgent) =
+      if not panel.isNil:
+        panel[].cancelFileSearch(sender)
+    ,
+  )
+  cancelButton.action = cancelAction
+  result.updateSearchControls(false)
   result.rootPath = rootPath
