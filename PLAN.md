@@ -131,6 +131,14 @@ The main established layers are:
 
 ## Near-Term Work
 
+### Workspace File Browser
+
+- Kosmo currently refreshes Git work-tree decorations from a Sigils worker every
+  three seconds. Keep this polling interval as the initial portable fallback.
+- Add dmon-backed project-tree watching to invalidate affected lazy directory
+  entries and request a coalesced Git-status refresh when files change. Debounce
+  event bursts and retain periodic polling on platforms where dmon is unavailable.
+
 ### Resource Builder
 
 The current baseline is a standalone Tekton app built directly on
