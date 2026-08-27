@@ -449,6 +449,27 @@ suite "nimkit mono text views":
 
     check foundText
 
+  test "italic monospace cells retain a monospaced typeface":
+    let
+      view = newMonoTextViewer(frame = rect(0, 0, 220, 80))
+      cells = [
+        initMonoTextCell("A", traits = {mttItalic}),
+        initMonoTextCell("B", traits = {mttItalic}),
+      ]
+    view.replaceGrid(1, cells.len, cells)
+
+    let list = buildRenders(view)[DefaultDrawLevel]
+    var foundText = false
+    for node in list.nodes:
+      if node.kind == nkText and node.renderedText() == "AB":
+        foundText = true
+        require node.textLayout.arrangedGlyphs.len == cells.len
+        when not defined(useNativeDynlib):
+          let font = getFigFont(node.textLayout.arrangedGlyphs[0].fontId)
+          check getTypefaceInfo(font.typefaceId).monospace
+
+    check foundText
+
   test "rendering only emits visible monospace rows":
     var lines: seq[string]
     for index in 0 ..< 80:

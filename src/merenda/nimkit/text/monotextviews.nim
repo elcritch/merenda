@@ -335,7 +335,7 @@ proc monoFont(view: MonoTextView, italic = false): FigFont =
     style.fontSize = view.xFontSize
   if italic:
     style.fontSlant = fsItalic
-  style.textFont().font
+  style.textFont(frMonospace).font
 
 proc monoTextMetrics*(view: MonoTextView): MonoTextMetrics =
   let font = view.monoFont()

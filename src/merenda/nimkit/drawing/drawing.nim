@@ -45,6 +45,16 @@ const
   PopupDrawLevel* = 100.ZLevel
   TooltipDrawLevel* = 110.ZLevel
   DefaultTypefaceFallbackNames* = ["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
+  MonospaceTypefaceFallbackNames =
+    when defined(macosx):
+      ["SFNSMono.ttf", "Menlo.ttc", "Monaco.ttf", "Courier New.ttf"]
+    elif defined(windows):
+      ["consola.ttf", "lucon.ttf", "cour.ttf"]
+    else:
+      [
+        "NotoSansMono-Regular.ttf", "DejaVuSansMono.ttf", "LiberationMono-Regular.ttf",
+        "UbuntuMono-R.ttf",
+      ]
   SlantedTypefaceFallbackNames =
     when defined(macosx):
       ["SFNSItalic.ttf", "Arial Italic.ttf", "Helvetica Oblique"]
@@ -54,6 +64,16 @@ const
       [
         "NotoSans-Italic.ttf", "DejaVuSans-Oblique.ttf", "LiberationSans-Italic.ttf",
         "Ubuntu-Italic.ttf",
+      ]
+  SlantedMonospaceTypefaceFallbackNames =
+    when defined(macosx):
+      ["SFNSMonoItalic.ttf", "Menlo Italic", "Courier New Italic.ttf"]
+    elif defined(windows):
+      ["consolai.ttf", "courii.ttf"]
+    else:
+      [
+        "NotoSansMono-Italic.ttf", "DejaVuSansMono-Oblique.ttf",
+        "LiberationMono-Italic.ttf", "UbuntuMono-RI.ttf",
       ]
   TextEllipsis = "…"
 
@@ -95,24 +115,34 @@ proc typefaceVariantNames(fontName: string, slant: FontSlant): seq[string] =
     result.add parts.dir / (stem & " " & variant & parts.ext)
 
 proc defaultTypefaceRequest(
-    fontName = defaultFontName(), slant = fsUpright
+    fontName = defaultFontName(), slant = fsUpright, role = frUI
 ): tuple[name: string, fallbackNames: seq[string]] =
   let baseName =
     if fontName.len > 0:
       fontName
     else:
-      defaultFontName()
+      defaultFontName(role)
   let variants = baseName.typefaceVariantNames(slant)
   result.name = variants[0]
   for index in 1 ..< variants.len:
     result.fallbackNames.add variants[index]
   if slant != fsUpright:
-    result.fallbackNames.add SlantedTypefaceFallbackNames
+    case role
+    of frUI:
+      result.fallbackNames.add SlantedTypefaceFallbackNames
+    of frMonospace:
+      result.fallbackNames.add SlantedMonospaceTypefaceFallbackNames
   if result.name != baseName:
     result.fallbackNames.add baseName
-  if baseName != DefaultFontName:
-    result.fallbackNames.add DefaultFontName
-  result.fallbackNames.add DefaultTypefaceFallbackNames
+  case role
+  of frUI:
+    if baseName != DefaultFontName:
+      result.fallbackNames.add DefaultFontName
+    result.fallbackNames.add DefaultTypefaceFallbackNames
+  of frMonospace:
+    if baseName != DefaultMonospaceFontName:
+      result.fallbackNames.add DefaultMonospaceFontName
+    result.fallbackNames.add MonospaceTypefaceFallbackNames
 
 proc defaultTypefaceCacheKey(
     request: tuple[name: string, fallbackNames: seq[string]]
@@ -130,6 +160,7 @@ proc defaultFont(
     fontName = defaultFontName(),
     language = defaultLanguageTag(),
     slant = fsUpright,
+    role = frUI,
 ): FontRef =
   let
     resolvedLanguage =
@@ -137,7 +168,7 @@ proc defaultFont(
         defaultLanguageTag()
       else:
         language
-    request = defaultTypefaceRequest(fontName, slant)
+    request = defaultTypefaceRequest(fontName, slant, role)
     cacheKey = request.defaultTypefaceCacheKey()
   if defaultTypefaceIds.len == 0:
     defaultTypefaceIds = initTable[string, TypefaceId]()
@@ -148,8 +179,8 @@ proc defaultFont(
     font.language = $resolvedLanguage
   fontRef(font)
 
-proc textFont*(style: TextStyle): FontRef =
-  defaultFont(style.fontSize, style.fontName, style.language, style.fontSlant)
+proc textFont*(style: TextStyle, role = frUI): FontRef =
+  defaultFont(style.fontSize, style.fontName, style.language, style.fontSlant, role)
 
 proc fontFor(style: TextStyle): FontRef =
   style.textFont()
