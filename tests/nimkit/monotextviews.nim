@@ -405,6 +405,25 @@ suite "nimkit mono text views":
 
     check foundSurface
 
+  test "focus ring type none suppresses the mono text focus ring":
+    let
+      focusColor = color(0.93, 0.17, 0.61, 0.84)
+      view = newMonoTextViewer("focused", frame = rect(0, 0, 220, 80))
+    var builder = initThemeBuilder(initTheme())
+    builder[srMonoTextView, StyleFocusRingWidth] = 4.0
+    builder[srMonoTextView, StyleFocusRingColor] = focusColor
+    view.focused = true
+    view.focusVisible = true
+    view.focusRingType = frtNone
+
+    let list = buildRenders(view, initAppearance(builder.finish()))[DefaultDrawLevel]
+    var foundFocusRing = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.stroke.fill.kind == flColor and
+          node.stroke.fill.color == focusColor.rgba:
+        foundFocusRing = true
+    check not foundFocusRing
+
   test "rendered monospace cells use backend-correct glyph identities":
     let view = newMonoTextViewer("AB", frame = rect(0, 0, 220, 80))
     let list = buildRenders(view)[DefaultDrawLevel]

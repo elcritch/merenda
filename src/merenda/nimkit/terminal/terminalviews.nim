@@ -874,6 +874,7 @@ proc initTerminalViewFields*(
   view.xLastScrollbackCount = view.xSession.screenInfo().scrollbackCount
   view.xBlinkVisible = true
   view.clipsToBounds = true
+  view.focusRingType = frtNone
   view.padding = DefaultTerminalPadding
   view.fontName = DefaultMonoFontName
   view.fontSize = DefaultTerminalFontSize

@@ -518,6 +518,10 @@ suite "nimkit terminal views":
     check view.lineCount == session.screen().rows
     check view.maxColumnCount == session.screen().columns
 
+  test "terminal views suppress the outer focus ring":
+    let view = newTerminalView(frame = rect(0, 0, 240, 100))
+    check view.focusRingType == frtNone
+
   test "window text and key dispatch reach an interactive child process":
     when defined(posix):
       let

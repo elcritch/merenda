@@ -520,6 +520,8 @@ suite "Kosmo":
       let terminalView = TerminalView(frontend.editorPane.contentView)
       check terminalView.session().running()
       check frontend.window.firstResponder() == Responder(terminalView)
+      check terminalView.focusVisible
+      check terminalView.focusRingType == frtNone
 
       check frontend.window.dispatchKeyDown(
         KeyEvent(

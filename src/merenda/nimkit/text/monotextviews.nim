@@ -1394,7 +1394,7 @@ proc drawMonoTextSurface(
       cornerRadii = style.box.cornerRadii,
     ),
   )
-  if view.isFocusVisible():
+  if view.isFocusVisible() and view.focusRingType() != frtNone:
     context.addFocusRing(frame, style.box)
 
 proc drawMonoText(view: MonoTextView, context: DrawContext) =
