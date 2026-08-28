@@ -103,7 +103,7 @@ jobs:
 
     - name: Build Tests
       run: |
-        atlas-run tests --jobs:2 --only-errors
+        atlas-run tests --jobs:1 --only-errors
 
     - name: Build Integration Tests
       if: runner.os == 'macOS'
