@@ -156,6 +156,7 @@ suite "Kosmo quick open":
     frontend.contentView.layoutSubtreeIfNeeded()
     frontend.fileTree.rootPath = root
     check frontend.window.makeFirstResponder(frontend.editorView)
+    let initialAnimationCount = frontend.window.animationScheduler().animationCount()
 
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyT, keyCode: keyT.ord, modifiers: {kmCommand})
@@ -163,6 +164,11 @@ suite "Kosmo quick open":
     check frontend.quickOpenPanel.isOpen()
     check frontend.window.fieldEditorClient() == frontend.quickOpenPanel.queryField
     check "build/main-generated.nim" notin frontend.quickOpenPanel.projectFiles()
+    let startFrame = frontend.quickOpenPanel.frame()
+    check startFrame.origin.y + startFrame.size.height <=
+      frontend.contentView.bounds().origin.y
+    check frontend.quickOpenPanel.presentationOffset() < 0.0'f32
+    check frontend.window.animationScheduler().animationCount() > initialAnimationCount
 
     check frontend.window.dispatchTextInput("mainx")
     check frontend.quickOpenPanel.filteredFiles().len == 0

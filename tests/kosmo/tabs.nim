@@ -101,14 +101,16 @@ suite "Kosmo":
     check frontend.editorView.editor.handleTextInput("!")
     check frontend.editorView.editor.handleKey("Esc")
     check frontend.editorView.editor.tabs()[1].modified
-    check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyS, keyCode: keyS.ord, modifiers: {kmCommand})
+    check frontend.application.mainMenu().performKeyEquivalent(
+      KeyEvent(key: keyS, keyCode: keyS.ord, modifiers: shortcutModifiers()),
+      Responder(frontend.editorView),
     )
     check not frontend.editorView.editor.tabs()[1].modified
     check "!" in readFile(secondPath)
 
-    check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
+    check frontend.application.mainMenu().performKeyEquivalent(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers()),
+      Responder(frontend.editorView),
     )
     check frontend.editorView.editor.tabs().len == 1
     check frontend.editorView.editor.tabs()[0].title == "first.txt"

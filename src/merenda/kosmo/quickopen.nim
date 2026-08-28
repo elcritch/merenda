@@ -12,6 +12,7 @@ const
   QuickOpenFieldHeight = 30.0'f32
   QuickOpenSpacing = 8.0'f32
   QuickOpenMaximumVisibleItems = 12
+  QuickOpenPresentationDurationMilliseconds = 100
   QuickOpenOuterBlurRadius = 20.0'f32
   QuickOpenInnerBlurRadius = 14.0'f32
   QuickOpenOuterTintOpacity = 0.18'f32
@@ -39,6 +40,8 @@ type
     xFirstIndex: int
     xOnOpen: KosmoQuickOpenHandler
     xObservedWindow: WeakRef[nimkit.Window]
+    xPresentationOffset: float32
+    xPresentationAnimation: nimkit.Animation
 
   KosmoQuickOpenFieldEditor = ref object of nimkit.FieldEditor
     panel: WeakRef[KosmoQuickOpenPanel]
@@ -53,6 +56,24 @@ type
   RankedFile = object
     path: string
     score: int
+
+protocol KosmoQuickOpenPresentationProtocol {.
+  selectorScope: protocol, setterStyle: nim
+.}:
+  property presentationOffset -> float32
+
+protocol DefaultKosmoQuickOpenPresentation of KosmoQuickOpenPresentationProtocol:
+  method presentationOffset(panel: KosmoQuickOpenPanel): float32 =
+    panel.xPresentationOffset
+
+  method `presentationOffset=`(panel: KosmoQuickOpenPanel, offset: float32) =
+    if panel.xPresentationOffset == offset:
+      return
+    panel.xPresentationOffset = offset
+    let parent = panel.superview()
+    if not parent.isNil:
+      parent.needsLayout = true
+    panel.needsDisplay = true
 
 proc moveHighlight(panel: KosmoQuickOpenPanel, delta: int)
 proc activateHighlighted(panel: KosmoQuickOpenPanel)
@@ -247,9 +268,23 @@ proc moveHighlight(panel: KosmoQuickOpenPanel, delta: int) =
   let current = max(panel.xHighlightedIndex, 0)
   panel.setHighlightedIndex(current + delta)
 
+proc stopPresentationAnimation(panel: KosmoQuickOpenPanel, finished = true) =
+  if panel.isNil or panel.xPresentationAnimation.isNil:
+    return
+  let owner = panel.window()
+  if owner of nimkit.Window:
+    discard nimkit.Window(owner).stopAnimation(
+        panel.xPresentationAnimation, finished = finished
+      )
+  else:
+    panel.xPresentationAnimation.stop(finished)
+  panel.xPresentationAnimation = nil
+
 proc finishDismiss(panel: KosmoQuickOpenPanel) =
   if panel.isNil:
     return
+  panel.stopPresentationAnimation()
+  panel.presentationOffset = 0.0'f32
   panel.hidden = true
   panel.needsDisplay = true
   let parent = panel.superview()
@@ -530,6 +565,7 @@ proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
   result = KosmoQuickOpenPanel(xRootPath: rootPath)
   result.initBoxFields("Open File")
   result.styleId = QuickOpenPanelStyleId
+  discard result.withProtocol(DefaultKosmoQuickOpenPresentation)
   discard result.withProtocol(KosmoQuickOpenPanelDrawing)
   let
     panel = result.unsafeWeakRef()
@@ -653,6 +689,38 @@ proc reloadProjectFiles*(panel: KosmoQuickOpenPanel, rootPath = "") =
   panel.xProjectFiles = projectFiles(panel.xRootPath)
   panel.filterFiles()
 
+proc startPresentationAnimation(panel: KosmoQuickOpenPanel, window: nimkit.Window) =
+  if panel.isNil or window.isNil:
+    return
+  panel.stopPresentationAnimation()
+  let parent = panel.superview()
+  if parent.isNil:
+    return
+
+  parent.layoutSubtreeIfNeeded()
+  let
+    restingFrame = panel.frame()
+    topEdge = parent.bounds().origin.y
+    startOffset = topEdge - restingFrame.origin.y - restingFrame.size.height
+  if restingFrame.size.height <= 0.0'f32 or abs(startOffset) <= 0.001'f32:
+    return
+
+  panel.presentationOffset = startOffset
+  parent.layoutSubtreeIfNeeded()
+  let animation = nimkit.newPropertyAnimation[float32](
+    DynamicAgent(panel),
+    `presentationOffset=`(),
+    startOffset,
+    0.0'f32,
+    duration = nimkit.ms(QuickOpenPresentationDurationMilliseconds),
+  )
+  animation.timing = nimkit.easeOutTiming()
+  panel.xPresentationAnimation = nimkit.Animation(animation)
+  if not window.startAnimation(panel.xPresentationAnimation):
+    panel.presentationOffset = 0.0'f32
+    parent.layoutSubtreeIfNeeded()
+    panel.xPresentationAnimation = nil
+
 proc present*(
     panel: KosmoQuickOpenPanel,
     window: nimkit.Window,
@@ -683,3 +751,5 @@ proc present*(
   if not result:
     discard window.endTransientSession()
     panel.finishDismiss()
+  else:
+    panel.startPresentationAnimation(window)

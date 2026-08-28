@@ -126,11 +126,8 @@ suite "Kosmo":
     check not (frontend.dockView.rootView() of SplitView)
 
   when defined(posix):
-    test "dragging a terminal tab creates an independent split pane":
-      let
-        frontend = newKosmoApplication(newApplication("Kosmo Terminal Split Test"))
-        fileMenu = frontend.application.mainMenu()[1].submenu()
-        terminalItem = fileMenu.menuItemWithIdentifier(KosmoNewTerminalAction)
+    test "terminal shortcut opens a tab that can create an independent split pane":
+      let frontend = newKosmoApplication(newApplication("Kosmo Terminal Split Test"))
       defer:
         frontend.close()
       frontend.window.setContentView(frontend.contentView)
@@ -138,7 +135,13 @@ suite "Kosmo":
       check frontend.window.makeFirstResponder(frontend.editorView)
       let initialFocusObservers =
         frontend.window.signalSubscriptionCount("didChangeFirstResponder")
-      check terminalItem.perform(Responder(frontend.editorView))
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(
+          key: keyT,
+          keyCode: keyT.ord,
+          modifiers: shortcutModifiers() + {nimkit.kmShift},
+        )
+      )
 
       let
         terminalView = TerminalView(frontend.editorPane.contentView)

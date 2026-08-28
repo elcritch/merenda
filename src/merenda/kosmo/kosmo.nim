@@ -41,6 +41,7 @@ const
   KosmoTabIdentifierPrefix = "kosmo.buffer."
   KosmoTerminalIdentifierPrefix = "kosmo.terminal."
   KosmoShortcutCommands = [
+    KosmoNewTerminalAction,
     KosmoSaveAction,
     KosmoCloseTabAction,
     KosmoQuitAction,
@@ -146,6 +147,7 @@ type
     onShowFileExplorer: proc() {.closure.}
     onFindInFiles: proc() {.closure.}
     onQuickOpen: proc() {.closure.}
+    onNewTerminal: proc() {.closure.}
     onFocusPanel: proc(panelNumber: int) {.closure.}
     quickOpenPanel: KosmoQuickOpenPanel
 
@@ -207,6 +209,7 @@ proc `sidebarFocused=`(controller: KosmoDockController, focused: bool) =
 proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
 proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.}
+proc newTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.}
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
@@ -259,6 +262,11 @@ func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
   )
   result.bindKey(
     nimkit.keyT, {nimkit.kmCommand}, nimkit.actionSelector(KosmoQuickOpenAction)
+  )
+  result.bindKey(
+    nimkit.keyT,
+    nimkit.shortcutModifiers() + {nimkit.kmShift},
+    nimkit.actionSelector(KosmoNewTerminalAction),
   )
   for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
     let key = nimkit.Key(ord(nimkit.key1) + panelNumber - 1)
@@ -1008,6 +1016,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       discard controller.focusPanel(panelNumber)
       return true
     case $args.selector.name
+    of KosmoNewTerminalAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].newTerminal()
     of KosmoSaveAction:
       controller.saveCurrentTab(view)
     of KosmoCloseTabAction:
@@ -1407,6 +1418,9 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       discard controller.focusPanel(panelNumber)
       return true
     case $args.selector.name
+    of KosmoNewTerminalAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].newTerminal()
     of KosmoSaveAction:
       controller.saveCurrentPaneTab(group)
     of KosmoCloseTabAction:
@@ -2066,6 +2080,17 @@ proc openTerminal(
     return true
   terminalView.close()
 
+proc newTerminal*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Open a terminal in the active editor pane.
+  if frontend.isNil or frontend.dockController.isNil or frontend.fileTree.isNil:
+    return
+  let
+    controller = frontend.dockController
+    group = controller.activePaneGroup()
+    options =
+      nimkit.initTerminalSpawnOptions(workingDirectory = frontend.fileTree.rootPath)
+  result = controller.openTerminal(group, options)
+
 protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(content: KosmoContentView) =
     let
@@ -2097,7 +2122,7 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
       content.quickOpenPanel.setFrameFromLayout(
         nimkit.rect(
           max((bounds.size.width - popupWidth) * 0.5'f32, 0.0'f32),
-          24.0'f32,
+          24.0'f32 + content.quickOpenPanel.presentationOffset(),
           popupWidth,
           popupHeight,
         )
@@ -2123,6 +2148,10 @@ protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       content.onFocusPanel(panelNumber)
       return true
     case $args.selector.name
+    of KosmoNewTerminalAction:
+      if content.onNewTerminal.isNil:
+        return false
+      content.onNewTerminal()
     of KosmoShowFileExplorerAction:
       if content.onShowFileExplorer.isNil:
         return false
@@ -2328,22 +2357,40 @@ proc newKosmoApplication*(
       "t",
       {nimkit.kmCommand},
     )
-    terminalItem =
-      nimkit.newMenuItem("New Terminal", nimkit.actionSelector(KosmoNewTerminalAction))
+    terminalItem = nimkit.newMenuItem(
+      "New Terminal",
+      nimkit.actionSelector(KosmoNewTerminalAction),
+      "t",
+      nimkit.shortcutModifiers() + {nimkit.kmShift},
+    )
+    saveItem = nimkit.newMenuItem(
+      "Save", nimkit.actionSelector(KosmoSaveAction), "s", nimkit.shortcutModifiers()
+    )
+    closeTabItem = nimkit.newMenuItem(
+      "Close Tab",
+      nimkit.actionSelector(KosmoCloseTabAction),
+      "w",
+      nimkit.shortcutModifiers(),
+    )
   editorView.applyKosmoEditorStyle(app.effectiveAppearance())
   openItem.identifier = KosmoOpenFileAction
   quickOpenItem.identifier = KosmoQuickOpenAction
   terminalItem.identifier = KosmoNewTerminalAction
+  saveItem.identifier = KosmoSaveAction
+  closeTabItem.identifier = KosmoCloseTabAction
   fileItem.submenu = fileMenu
   discard fileMenu.addItem(openItem)
   discard fileMenu.addItem(quickOpenItem)
   discard fileMenu.addItem(terminalItem)
   fileMenu.addSeparator()
+  discard fileMenu.addItem(saveItem)
+  fileMenu.addSeparator()
+  discard fileMenu.addItem(closeTabItem)
   discard fileMenu.addItem(
     "Close Window",
     nimkit.actionSelector("performClose"),
     "w",
-    nimkit.shortcutModifiers(),
+    nimkit.shortcutModifiers() + {nimkit.kmShift},
   )
 
   splitView.addPane(sidebarPane, minSize = 160.0'f32, maxSize = 420.0'f32)
@@ -2398,6 +2445,9 @@ proc newKosmoApplication*(
   documentView.onQuickOpen = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showQuickOpen()
+  documentView.onNewTerminal = proc() =
+    if not controller.frontend.isNil:
+      discard controller.frontend[].newTerminal()
   documentView.onFocusPanel = proc(panelNumber: int) =
     discard controller.focusPanel(panelNumber)
   controller.hosts.add mainHost
@@ -2435,13 +2485,22 @@ proc newKosmoApplication*(
     nimkit.actionSelector(KosmoNewTerminalAction)
   ) do(sender: nimkit.DynamicAgent):
     discard sender
-    if frontend.isNil:
-      return
-    let
-      controller = frontend[].dockController
-      group = controller.activePaneGroup()
-      options = nimkit.initTerminalSpawnOptions(workingDirectory = fileTree.rootPath)
-    discard controller.openTerminal(group, options)
+    if not frontend.isNil:
+      discard frontend[].newTerminal()
+  saveItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoSaveAction)) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    if not frontend.isNil:
+      let controller = frontend[].dockController
+      controller.saveCurrentPaneTab(controller.activePaneGroup())
+  closeTabItem.target = nimkit.newActionTarget(
+    nimkit.actionSelector(KosmoCloseTabAction)
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if not frontend.isNil:
+      let controller = frontend[].dockController
+      controller.closeCurrentPaneTab(controller.activePaneGroup())
   fileTree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
     if frontend.isNil:
       return
