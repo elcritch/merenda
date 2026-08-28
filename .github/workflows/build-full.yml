@@ -103,7 +103,13 @@ jobs:
 
     - name: Build Tests
       run: |
-        atlas-run tests --jobs:1 --compiler-output
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          # NimKit test targets emit hundreds of large C translation units. Keep
+          # test builds quick and within the hosted runner's memory budget.
+          atlas-run tests --jobs:1 --compiler-output -- --opt:none --debugger:off
+        else
+          atlas-run tests --jobs:1 --compiler-output
+        fi
 
     - name: Build Integration Tests
       if: runner.os == 'macOS'
