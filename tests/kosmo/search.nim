@@ -7,8 +7,17 @@ import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 
+proc hasSidebarPaneOutline(
+    view: View, outlineColor: Color, outlineWidth: float32
+): bool =
+  let renders = buildRenders(view)[DefaultDrawLevel]
+  for node in renders.nodes:
+    if node.kind == nkRectangle and node.stroke.weight == outlineWidth and
+        node.stroke.fill.kind == flColor and node.stroke.fill.color == outlineColor.rgba:
+      return true
+
 suite "Kosmo":
-  test "frontend restores standard menus and applies themes to editor panes":
+  test "frontend installs Kosmo settings with terminal Meta enabled by default":
     let app = newApplication("Kosmo Test")
     let frontend = newKosmoApplication(app)
     defer:
@@ -17,6 +26,7 @@ suite "Kosmo":
       mainMenu = app.mainMenu()
       applicationMenu = mainMenu[0].submenu()
       fileMenu = mainMenu[1].submenu()
+      windowMenu = mainMenu[3].submenu()
       settingsItem = applicationMenu[2]
     let openItem = fileMenu.menuItemWithIdentifier(KosmoOpenFileAction)
     let terminalItem = fileMenu.menuItemWithIdentifier(KosmoNewTerminalAction)
@@ -28,7 +38,12 @@ suite "Kosmo":
     check mainMenu[3].title == "Window"
     check mainMenu[4].title == "Help"
     check settingsItem.title == "Settings…"
-    check settingsItem.action().name == actionSelector("showMerendaSettings").name
+    check settingsItem.action().name == actionSelector(KosmoShowSettingsAction).name
+    var includesMerendaSettings = false
+    for item in windowMenu.items():
+      if item.action().name == actionSelector("showMerendaSettings").name:
+        includesMerendaSettings = true
+    check not includesMerendaSettings
     check not openItem.isNil
     check openItem.title == "Open…"
     check not terminalItem.isNil
@@ -39,7 +54,7 @@ suite "Kosmo":
     if app.usesNativeMainMenu():
       check frontend.contentView.contentView().frame().origin.y == 0.0'f32
     check frontend.splitView.panes() ==
-      @[View(frontend.sidebarTabs), View(frontend.dockView)]
+      @[View(frontend.sidebarPane), View(frontend.dockView)]
     check frontend.sidebarTabs.len == 2
     check frontend.sidebarTabs[0].identifier == KosmoFilesTabIdentifier
     check frontend.sidebarTabs[1].identifier == KosmoFindTabIdentifier
@@ -48,19 +63,87 @@ suite "Kosmo":
     check settingsItem.perform(Responder(frontend.editorView))
     check app.windows.len == 2
     let settingsPanel = app.windows[^1]
-    check settingsPanel.title == "Merenda Settings"
-    let themeView =
-      settingsPanel.contentView().viewWithIdentifier("settings-theme-picker")
-    require not themeView.isNil
-    require themeView of ComboBox
-    ComboBox(themeView).activateItemAtIndex(1)
-    check app.effectiveAppearance.resolveChromeName(controlStyle(srButton)) ==
-      AquaChromeName
-    check frontend.editorView.effectiveAppearance.resolveChromeName(
-      controlStyle(srButton)
-    ) == AquaChromeName
+    check settingsPanel.title == "Kosmo Settings"
+    check settingsPanel.contentView().viewWithIdentifier("settings-theme-picker").isNil
+    let optionView =
+      settingsPanel.contentView().viewWithIdentifier(KosmoOptionAsMetaIdentifier)
+    require not optionView.isNil
+    require optionView of Button
+    let optionButton = Button(optionView)
+    check frontend.terminalOptionAsMeta
+    check optionButton.state == bsOn
+
+    let terminalView = newTerminalView()
+    check frontend.openDocument(
+      newKosmoPaneDocument("kosmo.test.terminal", "Terminal", terminalView)
+    )
+    check terminalView.optionAsMeta
+    check optionButton.tryToPerform(performClick(), DynamicAgent(optionButton))
+    check optionButton.state == bsOff
+    check not frontend.terminalOptionAsMeta
+    check not terminalView.optionAsMeta
     settingsPanel.close()
     frontend.window.close()
+
+  test "sidebar focus highlights file and search panes with the pane accent outline":
+    let frontend = newKosmoApplication(newApplication("Kosmo Sidebar Focus Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 760, 520)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    let
+      paneIndicatorContext = controlStyle(srBox, id = KosmoPaneIndicatorStyleId)
+      paneAppearance = frontend.editorView.effectiveAppearance()
+      paneOutlineColor = paneAppearance.resolveColor(
+        paneIndicatorContext, StyleBorderColor, color(0.0, 0.0, 0.0, 0.0)
+      )
+      paneOutlineWidth =
+        paneAppearance.resolveLength(paneIndicatorContext, StyleBorderWidth, 0.0'f32)
+    check paneOutlineColor.a > 0.0'f32
+    check paneOutlineColor.a < 1.0'f32
+    check paneOutlineWidth > 0.0'f32
+
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    frontend.fileTree.selectedItemIdentifier = frontend.fileTree.rootPath
+    check not frontend.fileTree.showsFocusedRowHighlight
+    check not frontend.searchPanel.resultsView.showsFocusedRowHighlight
+    check not frontend.sidebarPane.hasSidebarPaneOutline(
+      paneOutlineColor, paneOutlineWidth
+    )
+
+    check frontend.showFileExplorer()
+    check frontend.window.firstResponder == frontend.fileTree
+    check frontend.fileTree.showsFocusedRowHighlight
+    check frontend.searchPanel.resultsView.showsFocusedRowHighlight
+    check frontend.sidebarPane.hasSidebarPaneOutline(paneOutlineColor, paneOutlineWidth)
+    check frontend.editorPane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    check not frontend.fileTree.showsFocusedRowHighlight
+    check not frontend.searchPanel.resultsView.showsFocusedRowHighlight
+    check not frontend.sidebarPane.hasSidebarPaneOutline(
+      paneOutlineColor, paneOutlineWidth
+    )
+    check not frontend.editorPane.documentTabs.hasStyleClass(
+      KosmoInactivePaneStyleClass
+    )
+
+    check frontend.showFindInFiles()
+    check frontend.window.firstResponder == frontend.window.fieldEditor()
+    check frontend.window.fieldEditorClient() == frontend.searchPanel.queryField
+    check frontend.fileTree.showsFocusedRowHighlight
+    check frontend.searchPanel.resultsView.showsFocusedRowHighlight
+    check frontend.sidebarPane.hasSidebarPaneOutline(paneOutlineColor, paneOutlineWidth)
+    check frontend.editorPane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+
+    check frontend.window.makeFirstResponder(frontend.searchPanel.resultsView)
+    check frontend.sidebarPane.hasSidebarPaneOutline(paneOutlineColor, paneOutlineWidth)
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    check not frontend.sidebarPane.hasSidebarPaneOutline(
+      paneOutlineColor, paneOutlineWidth
+    )
 
   test "sidebar shortcuts focus the explorer and open clicked search results":
     let
@@ -416,6 +499,8 @@ suite "Kosmo":
       frontend.contentView.layoutSubtreeIfNeeded()
       check frontend.window.makeFirstResponder(frontend.editorView)
 
+      check frontend.terminalOptionAsMeta
+      frontend.terminalOptionAsMeta = false
       check terminalItem.perform(Responder(frontend.editorView))
       check frontend.editorGroups().len == 1
       check frontend.editorGroups()[0].documents.len == 1
@@ -423,6 +508,7 @@ suite "Kosmo":
       check frontend.documentTabs.selectedDocumentTabItem().title == "Terminal 1"
       check frontend.editorPane.contentView of TerminalView
       let terminalView = TerminalView(frontend.editorPane.contentView)
+      check not terminalView.optionAsMeta
       check terminalView.session().running()
       check frontend.window.firstResponder() == Responder(terminalView)
       check terminalView.focusVisible

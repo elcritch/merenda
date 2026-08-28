@@ -278,7 +278,7 @@ proc clearScrollback*(screen: var TerminalScreen) =
   screen.markChanged()
 
 proc appendScrollback(screen: var TerminalScreen, line: sink TerminalLine) =
-  if screen.alternateScreen or screen.maxScrollback == 0:
+  if screen.maxScrollback == 0:
     return
   if screen.scrollback.len < screen.maxScrollback:
     screen.scrollback.add line

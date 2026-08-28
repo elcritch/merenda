@@ -401,6 +401,27 @@ suite "nimkit terminal screen and parser":
     check screen.plainText() == "primary"
     check screen.cursor.position == initTerminalPosition(2, 3)
 
+  test "alternate screen overflow remains available in scrollback":
+    var
+      screen = initTerminalScreen(12, 3)
+      parser = initTerminalParser()
+
+    screen.feed(
+      parser, "\x1b[?1049halternate-0\r\nalternate-1\r\nalternate-2\r\nalternate-3"
+    )
+
+    check screen.alternateScreen
+    check screen.scrollbackCount == 1
+    check screen.lineAtAbsolute(0)[0].text == "a"
+    check screen.lineAtAbsolute(0)[10].text == "0"
+
+    screen.feed(parser, "\x1b[?1049l")
+
+    check not screen.alternateScreen
+    check screen.scrollbackCount == 1
+    check screen.lineAtAbsolute(0)[0].text == "a"
+    check screen.lineAtAbsolute(0)[10].text == "0"
+
   test "save restore reset and resize keep cursor and wide-cell invariants":
     var
       screen = initTerminalScreen(8, 4)
@@ -568,21 +589,88 @@ suite "nimkit terminal views":
     check mtdOverline in cell.decorations
     check cell.hasDecorationColor
 
-  test "terminal key translation follows normal application and modifier modes":
-    var modes = initTerminalModes()
+  test "terminal key translation covers every supported keyboard input":
+    let
+      modes = initTerminalModes()
+      specialInputs = [
+        (keyEnter, "\r"),
+        (keyBackspace, "\x7f"),
+        (keyTab, "\t"),
+        (keyEscape, "\x1b"),
+        (keyArrowUp, "\x1b[A"),
+        (keyArrowDown, "\x1b[B"),
+        (keyArrowRight, "\x1b[C"),
+        (keyArrowLeft, "\x1b[D"),
+        (keyHome, "\x1b[H"),
+        (keyEnd, "\x1b[F"),
+        (keyInsert, "\x1b[2~"),
+        (keyDelete, "\x1b[3~"),
+        (keyPageUp, "\x1b[5~"),
+        (keyPageDown, "\x1b[6~"),
+      ]
+      functionInputs = [
+        "\x1bOP", "\x1bOQ", "\x1bOR", "\x1bOS", "\x1b[15~", "\x1b[17~", "\x1b[18~",
+        "\x1b[19~", "\x1b[20~", "\x1b[21~", "\x1b[23~", "\x1b[24~", "\x1b[25~",
+        "\x1b[26~", "\x1b[28~",
+      ]
 
-    check terminalKeyInput(KeyEvent(key: keyArrowUp), modes) == "\x1b[A"
-    modes.applicationCursorKeys = true
-    check terminalKeyInput(KeyEvent(key: keyArrowUp), modes) == "\x1bOA"
-    check terminalKeyInput(KeyEvent(key: keyC, modifiers: {kmControl}), modes) == "\x03"
-    check terminalKeyInput(KeyEvent(text: "x", key: keyX, modifiers: {kmOption}), modes) ==
-      "\x1bx"
+    for (key, expected) in specialInputs:
+      check terminalKeyInput(KeyEvent(key: key), modes) == expected
+    for key in keyA .. keyZ:
+      let expected = $char(key.ord - keyA.ord + 1)
+      check terminalKeyInput(KeyEvent(key: key, modifiers: {kmControl}), modes) ==
+        expected
+    for index, expected in functionInputs:
+      let key = Key(keyF1.ord + index)
+      check terminalKeyInput(KeyEvent(key: key), modes) == expected
+
+    check terminalKeyInput(KeyEvent(key: keySpace, modifiers: {kmControl}), modes) ==
+      "\x00"
+    check terminalKeyInput(KeyEvent(key: key2, modifiers: {kmControl}), modes) == "\x00"
+    check terminalKeyInput(KeyEvent(key: keyLeftBracket, modifiers: {kmControl}), modes) ==
+      "\x1b"
+    check terminalKeyInput(KeyEvent(key: keyBackslash, modifiers: {kmControl}), modes) ==
+      "\x1c"
+    check terminalKeyInput(
+      KeyEvent(key: keyRightBracket, modifiers: {kmControl}), modes
+    ) == "\x1d"
+    check terminalKeyInput(KeyEvent(key: key6, modifiers: {kmControl}), modes) == "\x1e"
+    check terminalKeyInput(KeyEvent(key: keyMinus, modifiers: {kmControl}), modes) ==
+      "\x1f"
+    check terminalKeyInput(KeyEvent(key: keyBackspace, modifiers: {kmControl}), modes) ==
+      "\x7f"
     check terminalKeyInput(KeyEvent(key: keyTab, modifiers: {kmShift}), modes) ==
       "\x1b[Z"
-    check terminalKeyInput(KeyEvent(key: keyF12), modes) == "\x1b[24~"
+    check terminalKeyInput(KeyEvent(text: "x", key: keyX, modifiers: {kmOption}), modes) ==
+      "\x1bx"
+    check terminalKeyInput(
+      KeyEvent(text: "ƒ", key: keyF, modifiers: {kmOption}), modes
+    ) == "\x1bf"
+    check terminalKeyInput(
+      KeyEvent(text: "∫", key: keyB, modifiers: {kmOption}), modes
+    ) == "\x1bb"
+    check terminalKeyInput(
+      KeyEvent(text: "ƒ", key: keyF, modifiers: {kmOption}),
+      modes,
+      optionAsMeta = false,
+    ).len == 0
+    check terminalKeyInput(KeyEvent(key: keyF, modifiers: {kmControl, kmOption}), modes) ==
+      "\x1b\x06"
+    check terminalKeyInput(KeyEvent(text: "X", key: keyX, modifiers: {kmShift}), modes) ==
+      "X"
     check terminalKeyInput(
       KeyEvent(text: "c", key: keyC, modifiers: {kmCommand}), modes
     ).len == 0
+    check terminalKeyInput(KeyEvent(key: keyUnknown), modes).len == 0
+
+    var applicationModes = modes
+    applicationModes.applicationCursorKeys = true
+    check terminalKeyInput(KeyEvent(key: keyArrowUp), applicationModes) == "\x1bOA"
+    check terminalKeyInput(KeyEvent(key: keyArrowDown), applicationModes) == "\x1bOB"
+    check terminalKeyInput(KeyEvent(key: keyArrowRight), applicationModes) == "\x1bOC"
+    check terminalKeyInput(KeyEvent(key: keyArrowLeft), applicationModes) == "\x1bOD"
+    check terminalKeyInput(KeyEvent(key: keyHome), applicationModes) == "\x1bOH"
+    check terminalKeyInput(KeyEvent(key: keyEnd), applicationModes) == "\x1bOF"
 
   test "view renders an idle session and resizes its screen to cell geometry":
     let
@@ -606,6 +694,9 @@ suite "nimkit terminal views":
   test "terminal views suppress the outer focus ring":
     let view = newTerminalView(frame = rect(0, 0, 240, 100))
     check view.focusRingType == frtNone
+    check view.optionAsMeta
+    view.optionAsMeta = false
+    check not view.optionAsMeta
 
   test "window text and key dispatch reach an interactive child process":
     when defined(posix):
@@ -770,6 +861,372 @@ suite "nimkit terminal views":
       check "61 62 0d 7f 0d 7f" in session.normalizedTerminalOutput()
 
   when defined(posix) and not defined(windows):
+    test "Bash receives every terminal input path exactly once":
+      let bashPath = findExe("bash")
+      if bashPath.len == 0:
+        skip()
+      else:
+        let
+          command =
+            "export PS1='bash-input$ ' PS2='> ' HISTFILE=/dev/null " &
+            "INPUTRC=/dev/null LC_ALL=C; exec " & quoteShell(bashPath) &
+            " --noprofile --norc -i"
+          session = spawnTerminalSession(
+            initTerminalSpawnOptions(command = command, shell = bashPath),
+            columns = 100,
+            rows = 8,
+          )
+          view = newTerminalView(session, frame = rect(0, 0, 900, 180))
+          window = newWindow("Bash terminal input", frame = rect(0, 0, 900, 180))
+        defer:
+          view.close()
+        window.setContentView(view)
+        check window.makeFirstResponder(view)
+        check window.tickUntilCurrentLineContains(view, "bash-input$")
+
+        var generation = session.screenInfo().generation
+        check window.dispatchTextInput(
+          "input_count=0; capture_input() { " & "input_count=$((input_count + 1)); " &
+            "printf 'input-ready-%s\\n' \"$input_count\"; " & "IFS= read -e value; " &
+            "printf 'input-result-%s:%s\\n' \"$input_count\" \"$value\"; }"
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilCurrentLineAfterChange(view, generation, "bash-input$")
+
+        check window.dispatchTextInput("capture_input")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "input-ready-1")
+        check window.dispatchTextInput("abcdef")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyB, keyCode: keyB.ord, modifiers: {kmControl})
+        )
+        # Model the duplicate control text callbacks Cocoa used to emit.
+        check window.dispatchTextInput("\x02")
+        check window.dispatchTextInput("X")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmControl})
+        )
+        check window.dispatchTextInput("\x06")
+        check window.dispatchTextInput("Y")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl})
+        )
+        check window.dispatchTextInput("\x01")
+        check window.dispatchTextInput("0")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmControl})
+        )
+        check window.dispatchTextInput("\x05")
+        check window.dispatchTextInput("9")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyH, keyCode: keyH.ord, modifiers: {kmControl})
+        )
+        check window.dispatchTextInput("\x08")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl})
+        )
+        check window.dispatchTextInput("\x01")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyD, keyCode: keyD.ord, modifiers: {kmControl})
+        )
+        check window.dispatchTextInput("\x04")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "input-result-1:abcdeXfY")
+
+        check window.dispatchTextInput("capture_input")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "input-ready-2")
+        check window.dispatchTextInput("ace")
+        check window.dispatchKeyDown(KeyEvent(key: keyHome, keyCode: keyHome.ord))
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
+        )
+        check window.dispatchTextInput("b")
+        check window.dispatchKeyDown(KeyEvent(key: keyEnd, keyCode: keyEnd.ord))
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord)
+        )
+        check window.dispatchTextInput("d")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
+        )
+        check window.dispatchTextInput("d")
+        check window.dispatchKeyDown(KeyEvent(key: keyDelete, keyCode: keyDelete.ord))
+        check window.dispatchTextInput("e")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "input-result-2:abcde")
+
+        check window.dispatchTextInput("capture_input")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "input-ready-3")
+        check window.dispatchTextInput("ac")
+        check window.dispatchKeyDown(KeyEvent(key: keyHome, keyCode: keyHome.ord))
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
+        )
+        check window.dispatchTextInput("b")
+        check window.sendAction(deleteForward(), DynamicAgent(view))
+        check window.dispatchTextInput("c")
+        check window.sendAction(deleteBackward(), DynamicAgent(view))
+        check window.dispatchTextInput("c")
+        discard generalPasteboard().setPlainText("XY")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmCommand})
+        )
+        check window.sendAction(insertNewline(), DynamicAgent(view))
+        check window.tickUntilNormalizedText(view, "input-result-3:abcXY")
+
+        check window.dispatchTextInput("capture_input")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "input-ready-4")
+        check window.dispatchTextInput("one three")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "∫", key: keyB, keyCode: keyB.ord, modifiers: {kmOption})
+        )
+        # Cocoa follows the physical Option keydown with the composed glyph.
+        check window.dispatchTextInput("∫")
+        check window.dispatchTextInput("two ")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "ƒ", key: keyF, keyCode: keyF.ord, modifiers: {kmOption})
+        )
+        check window.dispatchTextInput("ƒ")
+        check window.dispatchTextInput("!")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "input-result-4:one two three!")
+
+    test "Bash receives common Readline editing and shell control inputs":
+      let bashPath = findExe("bash")
+      if bashPath.len == 0:
+        skip()
+      else:
+        let
+          root = createTempDir("merenda-terminal-common-input-", "")
+          completionFile = root / "common-input-target.txt"
+        writeFile(completionFile, "")
+        defer:
+          removeFile(completionFile)
+          removeDir(root)
+
+        let
+          command =
+            "export PS1='bash-common$ ' PS2='> ' HISTFILE=/dev/null " &
+            "INPUTRC=/dev/null LC_ALL=C; exec " & quoteShell(bashPath) &
+            " --noprofile --norc -i"
+          session = spawnTerminalSession(
+            initTerminalSpawnOptions(
+              command = command, shell = bashPath, workingDirectory = root
+            ),
+            columns = 100,
+            rows = 10,
+          )
+          view = newTerminalView(session, frame = rect(0, 0, 900, 220))
+          window = newWindow("Common Bash input", frame = rect(0, 0, 900, 220))
+        defer:
+          view.close()
+        window.setContentView(view)
+        check window.makeFirstResponder(view)
+        check window.tickUntilCurrentLineContains(view, "bash-common$")
+
+        var generation = session.screenInfo().generation
+        check window.dispatchTextInput(
+          "set -o emacs; common_count=0; common_input() { " &
+            "common_count=$((common_count + 1)); " &
+            "printf 'common-ready-%s\\n' \"$common_count\"; " & "IFS= read -e value; " &
+            "printf 'common-result-%s:%s\\n' \"$common_count\" \"$value\"; }"
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilCurrentLineAfterChange(view, generation, "bash-common$")
+
+        check window.dispatchTextInput("common_input")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "common-ready-1")
+        check window.dispatchTextInput("alpha beta gamma")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl})
+        )
+        for _ in 0 ..< 6:
+          check window.dispatchKeyDown(
+            KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmControl})
+          )
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: {kmControl})
+        )
+        check window.dispatchTextInput("delta")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyU, keyCode: keyU.ord, modifiers: {kmControl})
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyY, keyCode: keyY.ord, modifiers: {kmControl})
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: {kmControl})
+        )
+        check window.tickUntilNormalizedText(view, "common-result-1:alpha delta")
+
+        check window.dispatchTextInput("common_input")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "common-ready-2")
+        check window.dispatchTextInput("acb")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyT, keyCode: keyT.ord, modifiers: {kmControl})
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyY, keyCode: keyY.ord, modifiers: {kmControl})
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyM, keyCode: keyM.ord, modifiers: {kmControl})
+        )
+        check window.tickUntilNormalizedText(view, "common-result-2:abc")
+
+        check window.dispatchTextInput("common_input")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "common-ready-3")
+        check window.dispatchTextInput("one two three")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl})
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(text: "∂", key: keyD, keyCode: keyD.ord, modifiers: {kmOption})
+        )
+        # Cocoa follows the physical Option keydown with the composed glyph.
+        check window.dispatchTextInput("∂")
+        check window.dispatchTextInput("zero")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmControl})
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord, modifiers: {kmOption})
+        )
+        check window.dispatchTextInput("four")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "common-result-3:zero two four")
+
+        check window.dispatchTextInput("common_input")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "common-ready-4")
+        check window.dispatchTextInput("left right")
+        check window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
+        check window.dispatchKeyDown(KeyEvent(text: "b", key: keyB, keyCode: keyB.ord))
+        check window.dispatchTextInput("middle ")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "common-result-4:left middle right")
+
+        check window.dispatchTextInput("common_input")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "common-ready-5")
+        check window.dispatchTextInput("common-input-ta")
+        check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(
+          view, "common-result-5:common-input-target.txt"
+        )
+
+        check window.dispatchTextInput("common_input")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "common-ready-6")
+        check window.dispatchTextInput("ctrl-l-value")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyL, keyCode: keyL.ord, modifiers: {kmControl})
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "common-result-6:ctrl-l-value")
+
+        generation = session.screenInfo().generation
+        check window.dispatchTextInput("interrupted command")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmControl})
+        )
+        # Model a duplicate Cocoa control-character text callback.
+        check window.dispatchTextInput("\x03")
+        check window.tickUntilCurrentLineAfterChange(view, generation, "bash-common$")
+        check window.dispatchTextInput("printf 'ctrl-c-recovered\\n'")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "ctrl-c-recovered")
+
+        check window.dispatchTextInput(
+          "history_count=$((history_count + 1)); " &
+            "printf 'history-result-%s\\n' \"$history_count\""
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "history-result-1")
+        check window.dispatchKeyDown(KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord))
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check window.tickUntilNormalizedText(view, "history-result-2")
+
+        check window.dispatchTextInput("arrow-saved")
+        check window.dispatchKeyDown(KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord))
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
+        )
+        check window.tickUntilCurrentLineContains(view, "bash-common$ arrow-saved")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyU, keyCode: keyU.ord, modifiers: {kmControl})
+        )
+        check window.dispatchTextInput("control-saved")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyP, keyCode: keyP.ord, modifiers: {kmControl})
+        )
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyN, keyCode: keyN.ord, modifiers: {kmControl})
+        )
+        check window.tickUntilCurrentLineContains(view, "bash-common$ control-saved")
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyU, keyCode: keyU.ord, modifiers: {kmControl})
+        )
+
+        check window.dispatchKeyDown(
+          KeyEvent(key: keyD, keyCode: keyD.ord, modifiers: {kmControl})
+        )
+        check window.dispatchTextInput("\x04")
+        check session.pollUntilExit()
+
     test "a second Bash reverse search starts with an empty query":
       let bashPath = findExe("bash")
       if bashPath.len == 0:
@@ -1059,6 +1516,49 @@ suite "nimkit terminal views":
     check view.cellAt(0, 0).text == "z"
     check spy.notifications == @[anValueChanged, anValueChanged]
     check session.screen().cursor.position == cursorBefore
+
+  test "scrolling inspects history while a fullscreen Bash app is running":
+    when defined(posix):
+      let bashPath = findExe("bash")
+      if bashPath.len == 0:
+        skip()
+      else:
+        let
+          command =
+            "stty -echo; printf '\\033[?1049h'; " &
+            "printf 'alternate-0\\r\\nalternate-1\\r\\nalternate-2\\r\\n" &
+            "alternate-3\\r\\nalternate-4\\r\\nalternate-ready'; " &
+            "IFS= read -r value; " & "printf '\\033[?1049lrestored:%s' \"$value\""
+          session = spawnTerminalSession(
+            initTerminalSpawnOptions(command = command, shell = bashPath),
+            columns = 24,
+            rows = 4,
+          )
+          view = newTerminalView(session, frame = rect(0, 0, 320, 100))
+          window =
+            newWindow("Fullscreen terminal history", frame = rect(0, 0, 320, 100))
+        defer:
+          view.close()
+        window.setContentView(view)
+        check window.makeFirstResponder(view)
+        check session.pollUntilText("alternate-ready")
+        discard view.poll()
+
+        let point = view.pointToWindow(initPoint(10, 10))
+        check session.screenInfo().alternateScreen
+        check session.screenInfo().scrollbackCount == 2
+        check window.dispatchScrollWheel(
+          ScrollEvent(location: point, deltaY: 2.0'f32, phase: sepChanged)
+        )
+        check view.scrollPosition() == 2.0'f32
+        check view.stringValue().splitLines()[0].strip() == "alternate-0"
+
+        check window.dispatchTextInput("done")
+        check window.dispatchKeyDown(
+          KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+        )
+        check session.pollUntilExit()
+        check "restored:done" in session.normalizedTerminalOutput()
 
   test "window scrolling stays correct with a full scrollback buffer":
     let

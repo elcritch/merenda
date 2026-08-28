@@ -4,10 +4,10 @@ import std/[math, options, os, strutils, unicode]
 
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
-import ./[filesearchpanel, filetree, moe, panedocuments]
+import ./[filesearchpanel, filetree, moe, panedocuments, quickopen, settings]
 import pkg/celina as celina
 
-export filesearchpanel, filetree, moe, panedocuments
+export filesearchpanel, filetree, moe, panedocuments, quickopen, settings
 
 const
   KosmoOpenFileAction* = "kosmo.openFile"
@@ -19,6 +19,8 @@ const
   KosmoNextTabAction* = "kosmo.nextTab"
   KosmoShowFileExplorerAction* = "kosmo.showFileExplorer"
   KosmoFindInFilesAction* = "kosmo.findInFiles"
+  KosmoQuickOpenAction* = "kosmo.quickOpen"
+  KosmoShowSettingsAction* = "kosmo.showSettings"
   KosmoFocusPanelActionPrefix* = "kosmo.focusPanel"
   KosmoMaxFocusPanelShortcut* = 9
   KosmoTabBarHeight* = 34.0'f32
@@ -46,6 +48,7 @@ const
     KosmoNextTabAction,
     KosmoShowFileExplorerAction,
     KosmoFindInFilesAction,
+    KosmoQuickOpenAction,
     KosmoFocusPanelActionPrefix & "1",
     KosmoFocusPanelActionPrefix & "2",
     KosmoFocusPanelActionPrefix & "3",
@@ -97,6 +100,14 @@ type
     activeIndicator: KosmoPaneIndicator
     dockGroup: WeakRef[KosmoEditorGroup]
 
+  KosmoSidebarPane* = ref object of nimkit.View
+    tabs*: nimkit.CompactTabView
+    fileTree: KosmoFileTree
+    searchPanel: KosmoFileSearchPanel
+    activeIndicator: KosmoPaneIndicator
+    dockController: WeakRef[KosmoDockController]
+    observedWindow: WeakRef[nimkit.Window]
+
   KosmoEditorGroup* = ref object
     identifier*: string
     panel*: nimkit.DockPanel
@@ -124,6 +135,7 @@ type
     nextGroupIdentifier: int
     nextDocumentIdentifier: int
     shortcutBindings: nimkit.KeyBindingTable
+    xSidebarFocused: bool
 
   KosmoContentView = ref object of nimkit.View
     splitView: nimkit.SplitView
@@ -133,7 +145,9 @@ type
     fileTreeWidth: float32
     onShowFileExplorer: proc() {.closure.}
     onFindInFiles: proc() {.closure.}
+    onQuickOpen: proc() {.closure.}
     onFocusPanel: proc(panelNumber: int) {.closure.}
+    quickOpenPanel: KosmoQuickOpenPanel
 
   KosmoDetachedContentView = ref object of nimkit.View
     workspace: nimkit.DockView
@@ -147,13 +161,17 @@ type
     documentTabs*: nimkit.DocumentTabs
     statusLabel*: nimkit.Label
     fileTree*: KosmoFileTree
+    sidebarPane*: KosmoSidebarPane
     sidebarTabs*: nimkit.CompactTabView
     searchPanel*: KosmoFileSearchPanel
+    quickOpenPanel*: KosmoQuickOpenPanel
     splitView*: nimkit.SplitView
     dockView*: nimkit.DockView
     contentView*: nimkit.MenuRootView
     documentView: KosmoContentView
     dockController: KosmoDockController
+    xSettingsWindow: KosmoSettingsWindow
+    xTerminalOptionAsMeta: bool
 
 proc updateActivePaneIndicator(group: KosmoEditorGroup, active: bool) =
   if group.isNil or group.pane.isNil:
@@ -173,10 +191,23 @@ proc `activeGroup=`(controller: KosmoDockController, group: KosmoEditorGroup) =
     return
   controller.xActiveGroup = group
   for candidate in controller.groups:
-    candidate.updateActivePaneIndicator(candidate == group)
+    candidate.updateActivePaneIndicator(
+      candidate == group and not controller.xSidebarFocused
+    )
+
+proc `sidebarFocused=`(controller: KosmoDockController, focused: bool) =
+  if controller.isNil or controller.xSidebarFocused == focused:
+    return
+  controller.xSidebarFocused = focused
+  for group in controller.groups:
+    group.updateActivePaneIndicator(
+      group == controller.activeGroup and not controller.xSidebarFocused
+    )
 
 proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
+proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.}
+proc showSettings*(frontend: KosmoApplication): bool {.discardable.}
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
 
@@ -225,6 +256,9 @@ func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
     nimkit.keyF,
     {nimkit.kmCommand, nimkit.kmShift},
     nimkit.actionSelector(KosmoFindInFilesAction),
+  )
+  result.bindKey(
+    nimkit.keyT, {nimkit.kmCommand}, nimkit.actionSelector(KosmoQuickOpenAction)
   )
   for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
     let key = nimkit.Key(ord(nimkit.key1) + panelNumber - 1)
@@ -634,6 +668,24 @@ proc syncChrome(view: KosmoEditorView) =
   view.setCursorPosition(cursor.row, cursor.column)
   view.cursorVisible = cursor.visible and not command.visible
 
+func kosmoPaneOutlineColor(base: nimkit.Appearance): nimkit.Color =
+  let accentColor = base.resolveColor(
+    nimkit.controlStyle(nimkit.srDocumentTab),
+    nimkit.StyleMarkColor,
+    nimkit.color(0.20, 0.45, 0.92, 1.0),
+  )
+  nimkit.color(
+    accentColor.r, accentColor.g, accentColor.b, accentColor.a * KosmoPaneOutlineOpacity
+  )
+
+proc installKosmoPaneIndicatorStyle(
+    appearance: var nimkit.Appearance, base: nimkit.Appearance
+) =
+  let selector = nimkit.initStyleSelector(nimkit.srBox, id = KosmoPaneIndicatorStyleId)
+  appearance.setStyle(selector, nimkit.StyleBorderColor, base.kosmoPaneOutlineColor())
+  appearance.setStyle(selector, nimkit.StyleBorderWidth, KosmoPaneOutlineWidth)
+  appearance.setStyle(selector, nimkit.StyleCornerRadius, 0.0'f32)
+
 proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   var appearance = base
   let
@@ -641,8 +693,6 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     previewTabSelector = nimkit.initStyleSelector(
       nimkit.srDocumentTab, classes = @[KosmoPreviewTabStyleClass]
     )
-    paneIndicatorSelector =
-      nimkit.initStyleSelector(nimkit.srBox, id = KosmoPaneIndicatorStyleId)
     inactiveTabSelector = nimkit.initStyleSelector(
       nimkit.srDocumentTab,
       {nimkit.ssSelected},
@@ -658,12 +708,6 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
       base.resolveFill(tabContext, nimkit.fill(nimkit.color(0.16, 0.18, 0.22, 1.0)))
     normalTabTextColor = base.resolveColor(
       tabContext, nimkit.StyleTextColor, nimkit.color(0.72, 0.74, 0.80, 1.0)
-    )
-    paneOutlineColor = nimkit.color(
-      accentColor.r,
-      accentColor.g,
-      accentColor.b,
-      accentColor.a * KosmoPaneOutlineOpacity,
     )
     inactiveAccentColor = nimkit.color(
       accentColor.r,
@@ -699,11 +743,7 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     nimkit.StyleSelectionIndicatorFill,
     nimkit.fill(inactiveAccentColor),
   )
-  appearance.setStyle(paneIndicatorSelector, nimkit.StyleBorderColor, paneOutlineColor)
-  appearance.setStyle(
-    paneIndicatorSelector, nimkit.StyleBorderWidth, KosmoPaneOutlineWidth
-  )
-  appearance.setStyle(paneIndicatorSelector, nimkit.StyleCornerRadius, 0.0'f32)
+  appearance.installKosmoPaneIndicatorStyle(base)
   view.styleId = KosmoEditorStyleId
   view.appearance = appearance
   if not view.documentTabs.isNil:
@@ -1217,6 +1257,101 @@ proc newKosmoPaneIndicator(): KosmoPaneIndicator =
   result.hidden = true
   discard result.withProtocol(KosmoPaneIndicatorDrawing)
   discard result.withProtocol(KosmoPaneIndicatorHitTesting)
+
+proc applyKosmoSidebarStyle(pane: KosmoSidebarPane, base: nimkit.Appearance) =
+  var appearance = base
+  appearance.installKosmoPaneIndicatorStyle(base)
+  pane.activeIndicator.appearance = appearance
+
+proc containsResponder(pane: KosmoSidebarPane, candidate: nimkit.Responder): bool =
+  var responder = candidate
+  while not responder.isNil:
+    if responder == nimkit.Responder(pane):
+      return true
+    responder = responder.nextResponder()
+
+proc hasSidebarFocus(pane: KosmoSidebarPane): bool =
+  if pane.isNil or pane.observedWindow.isNil:
+    return
+  let window = pane.observedWindow[]
+  if pane.containsResponder(window.firstResponder()):
+    return true
+  pane.containsResponder(window.fieldEditorClient())
+
+proc updateSidebarFocus(pane: KosmoSidebarPane) =
+  if pane.isNil:
+    return
+  let focused = pane.hasSidebarFocus()
+  pane.tabs.focused = focused
+  pane.activeIndicator.hidden = not focused
+  pane.fileTree.showsFocusedRowHighlight = focused
+  pane.searchPanel.resultsView.showsFocusedRowHighlight = focused
+  if not pane.dockController.isNil:
+    pane.dockController[].sidebarFocused = focused
+
+protocol KosmoSidebarAppearanceObserver of nimkit.WindowAppearanceEvents:
+  proc didChangeEffectiveAppearance(
+      pane: KosmoSidebarPane, appearance: nimkit.Appearance
+  ) {.slot.} =
+    pane.applyKosmoSidebarStyle(appearance)
+
+protocol KosmoSidebarFocusObserver of nimkit.WindowFocusEvents:
+  proc didChangeFirstResponder(
+      pane: KosmoSidebarPane, previous: nimkit.Responder
+  ) {.slot.} =
+    discard previous
+    pane.updateSidebarFocus()
+
+proc stopObservingWindow(pane: KosmoSidebarPane) =
+  if pane.isNil or pane.observedWindow.isNil:
+    return
+  pane.unobserveProtocol(pane.observedWindow[], nimkit.WindowAppearanceEvents)
+  pane.unobserveProtocol(pane.observedWindow[], nimkit.WindowFocusEvents)
+  pane.observedWindow = default(WeakRef[nimkit.Window])
+
+proc observeWindow(pane: KosmoSidebarPane, window: nimkit.Window) =
+  pane.stopObservingWindow()
+  if window.isNil:
+    return
+  pane.observedWindow = window.unsafeWeakRef()
+  pane.observeProtocol(window, nimkit.WindowAppearanceEvents)
+  pane.observeProtocol(window, nimkit.WindowFocusEvents)
+  pane.applyKosmoSidebarStyle(window.effectiveAppearance())
+  pane.updateSidebarFocus()
+
+protocol KosmoSidebarPaneLayout of nimkit.ViewLayoutProtocol:
+  method layoutSubviews(pane: KosmoSidebarPane) =
+    let
+      bounds = pane.bounds()
+      tabHeight = min(pane.tabs.tabBarHeight, bounds.size.height)
+    pane.tabs.setFrameFromLayout(bounds)
+    pane.activeIndicator.setFrameFromLayout(
+      nimkit.rect(
+        0.0'f32,
+        tabHeight,
+        bounds.size.width,
+        max(bounds.size.height - tabHeight, 0.0'f32),
+      )
+    )
+
+proc newKosmoSidebarPane(
+    tabs: nimkit.CompactTabView,
+    fileTree: KosmoFileTree,
+    searchPanel: KosmoFileSearchPanel,
+): KosmoSidebarPane =
+  let activeIndicator = newKosmoPaneIndicator()
+  result = KosmoSidebarPane(
+    tabs: tabs,
+    fileTree: fileTree,
+    searchPanel: searchPanel,
+    activeIndicator: activeIndicator,
+  )
+  result.initViewFields()
+  result.clipsToBounds = true
+  result.addSubview(tabs)
+  result.addSubview(activeIndicator)
+  discard result.withProtocol(KosmoSidebarPaneLayout)
+  result.updateSidebarFocus()
 
 protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(pane: KosmoEditorPane) =
@@ -1906,6 +2041,8 @@ proc openTerminal(
   if controller.isNil or group.isNil:
     return
   let terminalView = nimkit.newTerminalView()
+  if not controller.frontend.isNil:
+    terminalView.optionAsMeta = controller.frontend[].xTerminalOptionAsMeta
   try:
     terminalView.start(options)
   except nimkit.TerminalSessionError as error:
@@ -1950,6 +2087,21 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
         0, 0, bounds.size.width, max(bounds.size.height - KosmoStatusBarHeight, 1.0'f32)
       )
     )
+    if not content.quickOpenPanel.isNil:
+      let
+        availableWidth = max(bounds.size.width - 48.0'f32, 1.0'f32)
+        availableHeight =
+          max(bounds.size.height - KosmoStatusBarHeight - 48.0'f32, 1.0'f32)
+        popupWidth = min(availableWidth, 640.0'f32)
+        popupHeight = min(availableHeight, 360.0'f32)
+      content.quickOpenPanel.setFrameFromLayout(
+        nimkit.rect(
+          max((bounds.size.width - popupWidth) * 0.5'f32, 0.0'f32),
+          24.0'f32,
+          popupWidth,
+          popupHeight,
+        )
+      )
     if not content.setInitialDivider and bounds.size.width > 0.0'f32:
       content.splitView.setPositionOfDivider(0, min(bounds.size.width * 0.25, 260.0))
       content.setInitialDivider = true
@@ -1979,17 +2131,26 @@ protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       if content.onFindInFiles.isNil:
         return false
       content.onFindInFiles()
+    of KosmoQuickOpenAction:
+      if content.onQuickOpen.isNil:
+        return false
+      content.onQuickOpen()
     else:
       return false
     true
 
 proc newKosmoContentView(
-    splitView: nimkit.SplitView, statusLabel: nimkit.Label
+    splitView: nimkit.SplitView,
+    statusLabel: nimkit.Label,
+    quickOpenPanel: KosmoQuickOpenPanel,
 ): KosmoContentView =
-  result = KosmoContentView(splitView: splitView, statusLabel: statusLabel)
+  result = KosmoContentView(
+    splitView: splitView, statusLabel: statusLabel, quickOpenPanel: quickOpenPanel
+  )
   result.initViewFields()
   result.addSubview(splitView)
   result.addSubview(statusLabel)
+  result.addSubview(quickOpenPanel)
   discard result.withProtocol(KosmoContentLayout)
   discard result.withProtocol(KosmoContentCommandDispatch)
 
@@ -2028,6 +2189,100 @@ proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.} =
     return
   result = frontend.searchPanel.focusQuery()
 
+proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Present the fuzzy project-file picker and open its selected file.
+  if frontend.isNil or frontend.quickOpenPanel.isNil or frontend.fileTree.isNil:
+    return
+  let weakFrontend = frontend.unsafeWeakRef()
+  result = frontend.quickOpenPanel.present(
+    frontend.window,
+    frontend.fileTree.rootPath,
+    proc(path: string) =
+      if weakFrontend.isNil:
+        return
+      let activeView = weakFrontend[].dockController.activeEditorView()
+      if not activeView.isNil:
+        discard activeView.openFile(path)
+    ,
+  )
+
+func terminalOptionAsMeta*(frontend: KosmoApplication): bool =
+  ## Return whether Kosmo terminals use Option/Alt as the Meta modifier.
+  not frontend.isNil and frontend.xTerminalOptionAsMeta
+
+proc `terminalOptionAsMeta=`*(frontend: KosmoApplication, enabled: bool) =
+  ## Apply the Option/Alt-as-Meta preference to current and future terminals.
+  if frontend.isNil:
+    return
+  frontend.xTerminalOptionAsMeta = enabled
+  if not frontend.xSettingsWindow.isNil:
+    frontend.xSettingsWindow.optionAsMeta = enabled
+  if frontend.dockController.isNil:
+    return
+  for group in frontend.dockController.groups:
+    for document in group.documents:
+      if document.contentView of nimkit.TerminalView:
+        nimkit.TerminalView(document.contentView).optionAsMeta = enabled
+
+func settingsWindow*(frontend: KosmoApplication): KosmoSettingsWindow =
+  ## Return Kosmo's settings controller after the panel has been created.
+  if not frontend.isNil:
+    result = frontend.xSettingsWindow
+
+proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Present Kosmo's application settings without Merenda's global settings pages.
+  if frontend.isNil or frontend.application.isNil:
+    return
+  if frontend.xSettingsWindow.isNil or frontend.xSettingsWindow.window.isClosed():
+    let weakFrontend = frontend.unsafeWeakRef()
+    frontend.xSettingsWindow = newKosmoSettingsWindow(
+      frontend.xTerminalOptionAsMeta,
+      proc(enabled: bool) =
+        if not weakFrontend.isNil:
+          weakFrontend[].terminalOptionAsMeta = enabled
+      ,
+    )
+  else:
+    frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
+  result =
+    not frontend.application.showWindow(
+      frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
+      frontend.xSettingsWindow.firstResponder,
+    ).isNil
+
+proc configureKosmoSettingsMenu(frontend: KosmoApplication) =
+  let mainMenu = frontend.application.mainMenu()
+  if mainMenu.isNil or mainMenu.len == 0:
+    return
+  let applicationMenu = mainMenu[0].submenu()
+  if not applicationMenu.isNil and applicationMenu.len > 2:
+    let settingsItem = applicationMenu[2]
+    let weakFrontend = frontend.unsafeWeakRef()
+    settingsItem.identifier = KosmoShowSettingsAction
+    settingsItem.action = nimkit.actionSelector(KosmoShowSettingsAction)
+    settingsItem.target = nimkit.newActionTarget(
+      nimkit.actionSelector(KosmoShowSettingsAction)
+    ) do(sender: nimkit.DynamicAgent):
+      discard sender
+      if not weakFrontend.isNil:
+        discard weakFrontend[].showSettings()
+
+  let windowMenu = frontend.application.windowsMenu()
+  if windowMenu.isNil:
+    return
+  var merendaSettingsIndex = -1
+  for index, item in windowMenu.items():
+    if not item.isNil and
+        item.action().name == nimkit.actionSelector("showMerendaSettings").name:
+      merendaSettingsIndex = index
+      break
+  if merendaSettingsIndex < 0:
+    return
+  discard windowMenu.removeItem(windowMenu[merendaSettingsIndex])
+  if merendaSettingsIndex < windowMenu.len and
+      windowMenu[merendaSettingsIndex].isSeparatorItem():
+    discard windowMenu.removeItem(windowMenu[merendaSettingsIndex])
+
 proc newKosmoApplication*(
     app = nimkit.sharedApplication(), filePath = "", keyBindingsPath = ""
 ): KosmoApplication =
@@ -2041,6 +2296,7 @@ proc newKosmoApplication*(
     editorPane = newKosmoEditorPane(editorView)
     fileTree = newKosmoFileTree(getCurrentDir())
     searchPanel = newKosmoFileSearchPanel(fileTree.rootPath)
+    quickOpenPanel = newKosmoQuickOpenPanel(fileTree.rootPath)
     sidebarTabs = nimkit.newCompactTabView(
       [
         nimkit.initCompactTabItem(
@@ -2057,6 +2313,7 @@ proc newKosmoApplication*(
         ),
       ]
     )
+    sidebarPane = newKosmoSidebarPane(sidebarTabs, fileTree, searchPanel)
     splitView = nimkit.newSplitView(nimkit.laHorizontal)
     dockView = nimkit.newDockView()
     mainMenu = app.mainMenu()
@@ -2065,13 +2322,21 @@ proc newKosmoApplication*(
     openItem = nimkit.newMenuItem(
       "Open…", nimkit.actionSelector(KosmoOpenFileAction), "o", {nimkit.kmCommand}
     )
+    quickOpenItem = nimkit.newMenuItem(
+      "Open Quickly…",
+      nimkit.actionSelector(KosmoQuickOpenAction),
+      "t",
+      {nimkit.kmCommand},
+    )
     terminalItem =
       nimkit.newMenuItem("New Terminal", nimkit.actionSelector(KosmoNewTerminalAction))
   editorView.applyKosmoEditorStyle(app.effectiveAppearance())
   openItem.identifier = KosmoOpenFileAction
+  quickOpenItem.identifier = KosmoQuickOpenAction
   terminalItem.identifier = KosmoNewTerminalAction
   fileItem.submenu = fileMenu
   discard fileMenu.addItem(openItem)
+  discard fileMenu.addItem(quickOpenItem)
   discard fileMenu.addItem(terminalItem)
   fileMenu.addSeparator()
   discard fileMenu.addItem(
@@ -2081,12 +2346,12 @@ proc newKosmoApplication*(
     nimkit.shortcutModifiers(),
   )
 
-  splitView.addPane(sidebarTabs, minSize = 160.0'f32, maxSize = 420.0'f32)
+  splitView.addPane(sidebarPane, minSize = 160.0'f32, maxSize = 420.0'f32)
   splitView.addPane(dockView, minSize = 320.0'f32)
 
   let
     statusLabel = nimkit.newStatusLabel("Ready")
-    documentView = newKosmoContentView(splitView, statusLabel)
+    documentView = newKosmoContentView(splitView, statusLabel, quickOpenPanel)
     contentView = nimkit.newMenuRootView(mainMenu, documentView)
   editorView.statusLabel = statusLabel
   editorView.syncChrome()
@@ -2098,12 +2363,15 @@ proc newKosmoApplication*(
     documentTabs: editorView.documentTabs,
     statusLabel: statusLabel,
     fileTree: fileTree,
+    sidebarPane: sidebarPane,
     sidebarTabs: sidebarTabs,
     searchPanel: searchPanel,
+    quickOpenPanel: quickOpenPanel,
     splitView: splitView,
     dockView: dockView,
     contentView: contentView,
     documentView: documentView,
+    xTerminalOptionAsMeta: true,
   )
   let
     controller = KosmoDockController(
@@ -2118,12 +2386,17 @@ proc newKosmoApplication*(
     )
   result.dockController = controller
   controller.frontend = result.unsafeWeakRef()
+  sidebarPane.dockController = controller.unsafeWeakRef()
+  sidebarPane.observeWindow(result.window)
   documentView.onShowFileExplorer = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showFileExplorer()
   documentView.onFindInFiles = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showFindInFiles()
+  documentView.onQuickOpen = proc() =
+    if not controller.frontend.isNil:
+      discard controller.frontend[].showQuickOpen()
   documentView.onFocusPanel = proc(panelNumber: int) =
     discard controller.focusPanel(panelNumber)
   controller.hosts.add mainHost
@@ -2143,6 +2416,7 @@ proc newKosmoApplication*(
   )
 
   let frontend = result.unsafeWeakRef()
+  result.configureKosmoSettingsMenu()
   openItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoOpenFileAction)) do(
     sender: nimkit.DynamicAgent
   ):
@@ -2150,6 +2424,12 @@ proc newKosmoApplication*(
     if not frontend.isNil:
       frontend[].dockController.activeEditorView().chooseFile(fileTree, app)
       searchPanel.rootPath = fileTree.rootPath
+  quickOpenItem.target = nimkit.newActionTarget(
+    nimkit.actionSelector(KosmoQuickOpenAction)
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if not frontend.isNil:
+      discard frontend[].showQuickOpen()
   terminalItem.target = nimkit.newActionTarget(
     nimkit.actionSelector(KosmoNewTerminalAction)
   ) do(sender: nimkit.DynamicAgent):
@@ -2253,6 +2533,11 @@ proc close*(frontend: KosmoApplication) =
   ## Release the editor resources held by the frontend.
   if frontend.isNil:
     return
+  if not frontend.quickOpenPanel.isNil and frontend.quickOpenPanel.isOpen():
+    frontend.quickOpenPanel.dismiss()
+  if not frontend.xSettingsWindow.isNil and
+      not frontend.xSettingsWindow.window.isClosed():
+    frontend.xSettingsWindow.window.close()
   if not frontend.dockController.isNil:
     for group in frontend.dockController.groups:
       group.editorView.tabsDelegate.stopObservingWindow()
@@ -2262,6 +2547,8 @@ proc close*(frontend: KosmoApplication) =
     for host in hosts:
       if not host.primary and not host.window.isNil and not host.window.isClosed():
         host.window.close()
+  if not frontend.sidebarPane.isNil:
+    frontend.sidebarPane.stopObservingWindow()
   if not frontend.editorView.isNil:
     frontend.editorView.editor.close()
   if not frontend.searchPanel.isNil:

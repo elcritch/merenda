@@ -8,6 +8,7 @@ import ../app/[animations, pasteboards]
 import ../app/windows except performKeyEquivalent
 import ../foundation/[events, selectors, types]
 import ../responder/responders
+from ../text/textviews import isInsertableText
 import ../text/monotextviews
 import ../view/views
 import ./[terminalsessions, terminalscreen]
@@ -43,6 +44,8 @@ type
     xLastBellCount: uint64
     xExitNotified: bool
     xAllowsClipboardWrites: bool
+    xOptionAsMeta: bool
+    xSuppressOptionTextInput: bool
     xLastInputError: string
     xBlinkElapsed: Duration
     xBlinkVisible: bool
@@ -195,6 +198,71 @@ func controlCharacter(event: KeyEvent): string =
   of keyBackspace: "\x7f"
   else: ""
 
+func printableKeyText(event: KeyEvent): string =
+  let shifted = kmShift in event.modifiers
+  if event.key in keyA .. keyZ:
+    let letter = char(ord(event.key) - ord(keyA) + ord('a'))
+    return $(if shifted: letter.toUpperAscii() else: letter)
+  case event.key
+  of keyTilde:
+    if shifted: "~" else: "`"
+  of key1:
+    if shifted: "!" else: "1"
+  of key2:
+    if shifted: "@" else: "2"
+  of key3:
+    if shifted: "#" else: "3"
+  of key4:
+    if shifted: "$" else: "4"
+  of key5:
+    if shifted: "%" else: "5"
+  of key6:
+    if shifted: "^" else: "6"
+  of key7:
+    if shifted: "&" else: "7"
+  of key8:
+    if shifted: "*" else: "8"
+  of key9:
+    if shifted: "(" else: "9"
+  of key0:
+    if shifted: ")" else: "0"
+  of keyMinus:
+    if shifted: "_" else: "-"
+  of keyEqual:
+    if shifted: "+" else: "="
+  of keyLeftBracket:
+    if shifted: "{" else: "["
+  of keyRightBracket:
+    if shifted: "}" else: "]"
+  of keySpace:
+    " "
+  of keySlash:
+    if shifted: "?" else: "/"
+  of keyDot:
+    if shifted: ">" else: "."
+  of keyComma:
+    if shifted: "<" else: ","
+  of keySemicolon:
+    if shifted: ":" else: ";"
+  of keyQuote:
+    if shifted: "\"" else: "'"
+  of keyBackslash:
+    if shifted: "|" else: "\\"
+  of keyNumpad0 .. keyNumpad9:
+    $char(ord(event.key) - ord(keyNumpad0) + ord('0'))
+  of keyNumpadDot:
+    "."
+  of keyAdd:
+    "+"
+  of keySubtract:
+    "-"
+  of keyMultiply:
+    "*"
+  of keyDivide:
+    "/"
+  else:
+    ""
+
 func functionKeyInput(key: Key): string =
   case key
   of keyF1: "\x1bOP"
@@ -214,7 +282,9 @@ func functionKeyInput(key: Key): string =
   of keyF15: "\x1b[28~"
   else: ""
 
-func terminalKeyInput*(event: KeyEvent, modes: TerminalModes): string =
+func terminalKeyInput*(
+    event: KeyEvent, modes: TerminalModes, optionAsMeta = true
+): string =
   ## Translate a NimKit key event into xterm-compatible input bytes.
   if kmCommand in event.modifiers:
     return
@@ -254,9 +324,11 @@ func terminalKeyInput*(event: KeyEvent, modes: TerminalModes): string =
     of keyF1 .. keyF15:
       result = event.key.functionKeyInput()
     else:
-      if event.modifiers - {kmShift, kmOption} == {}:
+      if optionAsMeta and kmOption in event.modifiers:
+        result = event.printableKeyText()
+      elif kmOption notin event.modifiers and event.modifiers - {kmShift} == {}:
         result = event.text
-  if kmOption in event.modifiers and result.len > 0:
+  if optionAsMeta and kmOption in event.modifiers and result.len > 0:
     result = "\x1b" & result
 
 func mouseModifierCode(modifiers: set[KeyModifier]): int =
@@ -345,6 +417,16 @@ func allowsClipboardWrites*(view: TerminalView): bool =
 
 proc `allowsClipboardWrites=`*(view: TerminalView, value: bool) =
   view.xAllowsClipboardWrites = value
+
+func optionAsMeta*(view: TerminalView): bool =
+  ## Whether Option/Alt prefixes terminal input with Escape (Meta).
+  view.xOptionAsMeta
+
+proc `optionAsMeta=`*(view: TerminalView, value: bool) =
+  ## Configure Option/Alt to behave as the terminal Meta modifier.
+  view.xOptionAsMeta = value
+  if not value:
+    view.xSuppressOptionTextInput = false
 
 func lastInputError*(view: TerminalView): string =
   view.xLastInputError
@@ -516,11 +598,8 @@ proc syncTerminalScreen(view: TerminalView) =
       nextScrollbackCount.float32,
     )
   view.xLastScrollbackCount = nextScrollbackCount
-  if info.alternateScreen:
-    view.xScrollPosition = 0.0'f32
-  else:
-    view.xScrollPosition =
-      clamp(view.xScrollPosition, 0.0'f32, nextScrollbackCount.float32)
+  view.xScrollPosition =
+    clamp(view.xScrollPosition, 0.0'f32, nextScrollbackCount.float32)
 
   let
     start = max(info.totalLineCount - info.rows - view.viewportOffset(), 0)
@@ -720,6 +799,7 @@ proc scrollLocally(view: TerminalView, event: ScrollEvent): bool =
   true
 
 proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
+  view.xSuppressOptionTextInput = false
   if event.key == keyK and event.modifiers == {kmCommand}:
     view.clearScrollback()
     return true
@@ -727,9 +807,13 @@ proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
     view.clearScrollback()
     discard view.sendInput("\x0c")
     return true
-  let input = terminalKeyInput(event, view.xSession.screenInfo().modes)
+  let input =
+    terminalKeyInput(event, view.xSession.screenInfo().modes, view.xOptionAsMeta)
   if input.len == 0:
     return false
+  if view.xOptionAsMeta and kmOption in event.modifiers and
+      event.printableKeyText().len > 0:
+    view.xSuppressOptionTextInput = true
   view.sendInput(input)
 
 proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
@@ -802,7 +886,11 @@ protocol TerminalViewKeyEquivalents of ResponderCommandDispatchProtocol:
 
 protocol TerminalViewInput of TextInputProtocol:
   method insertText(view: TerminalView, text: string) =
-    discard view.sendInput(text)
+    if view.xSuppressOptionTextInput:
+      view.xSuppressOptionTextInput = false
+      return
+    if text.isInsertableText():
+      discard view.sendInput(text)
 
 protocol TerminalViewEditingCommands of TextEditingCommandProtocol:
   method insertNewline(view: TerminalView, args: ActionArgs) =
@@ -890,6 +978,7 @@ proc initTerminalViewFields*(
     else:
       session
   view.xPalette = palette
+  view.xOptionAsMeta = true
   view.xLastGeneration = high(uint64)
   view.xLastScrollbackCount = view.xSession.screenInfo().scrollbackCount
   view.xBlinkVisible = true
