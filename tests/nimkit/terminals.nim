@@ -672,6 +672,12 @@ suite "nimkit terminal views":
     check terminalKeyInput(KeyEvent(key: keyHome), applicationModes) == "\x1bOH"
     check terminalKeyInput(KeyEvent(key: keyEnd), applicationModes) == "\x1bOF"
 
+  test "terminal clipboard shortcuts use platform conventions":
+    when defined(macosx) or defined(macos):
+      check terminalShortcutModifiers() == {kmCommand}
+    else:
+      check terminalShortcutModifiers() == {kmControl, kmShift}
+
   test "view renders an idle session and resizes its screen to cell geometry":
     let
       session = newTerminalSession(columns = 12, rows = 3)
@@ -763,7 +769,7 @@ suite "nimkit terminal views":
       )
       discard generalPasteboard().setPlainText("YZ")
       check window.dispatchKeyDown(
-        KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmCommand})
+        KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: terminalShortcutModifiers())
       )
 
       check session.pollUntilExit()
@@ -983,7 +989,7 @@ suite "nimkit terminal views":
         check window.dispatchTextInput("c")
         discard generalPasteboard().setPlainText("XY")
         check window.dispatchKeyDown(
-          KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmCommand})
+          KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: terminalShortcutModifiers())
         )
         check window.sendAction(insertNewline(), DynamicAgent(view))
         check window.tickUntilNormalizedText(view, "input-result-3:abcXY")
@@ -1379,7 +1385,7 @@ suite "nimkit terminal views":
     check view.hasSelection()
     check view.selectionText() == "beta"
     check window.dispatchKeyDown(
-      KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmCommand})
+      KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: terminalShortcutModifiers())
     )
     check generalPasteboard().plainText() == "beta"
 
@@ -1388,11 +1394,11 @@ suite "nimkit terminal views":
     check view.selectionText() == "second line"
 
     check window.dispatchKeyDown(
-      KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmCommand})
+      KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: terminalShortcutModifiers())
     )
     check view.selectionText().strip() == "alpha beta\nsecond line"
     check window.dispatchKeyDown(
-      KeyEvent(key: keyX, keyCode: keyX.ord, modifiers: {kmCommand})
+      KeyEvent(key: keyX, keyCode: keyX.ord, modifiers: terminalShortcutModifiers())
     )
     check generalPasteboard().plainText().strip() == "alpha beta\nsecond line"
     check session.screen().plainText() == originalText
@@ -1432,7 +1438,7 @@ suite "nimkit terminal views":
             command =
               "stty raw -echo; printf 'copy target\\033[2;1Hready'; " &
               "(i=0; while :; do " & "printf '\\033[2;1Hstatus %03d' \"$i\"; " &
-              "i=$(((i + 1) % 1000)); done) & producer=$!; " &
+              "i=$(((i + 1) % 1000)); sleep 0.01; done) & producer=$!; " &
               "bytes=$(dd bs=1 count=4 2>/dev/null | od -An -tx1 | " &
               "tr -d '[:space:]'); " &
               "kill \"$producer\" 2>/dev/null; wait \"$producer\" 2>/dev/null; " &
@@ -1463,7 +1469,7 @@ suite "nimkit terminal views":
         sleep(5)
       check view.selectionText() == "copy"
       check window.dispatchKeyDown(
-        KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmCommand})
+        KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: terminalShortcutModifiers())
       )
       check generalPasteboard().plainText() == "copy"
 
@@ -1598,7 +1604,7 @@ suite "nimkit terminal views":
     check view.stringValue().splitLines()[0].strip() == "row 998"
     check session.screenInfo().cursor.position == cursorBefore
 
-  test "Command-K and Control-L clear scrollback through window input":
+  test "terminal shortcut and Control-L clear scrollback through window input":
     let
       session = newTerminalSession(columns = 8, rows = 2)
       view = newTerminalView(session, frame = rect(0, 0, 180, 70))
@@ -1611,7 +1617,7 @@ suite "nimkit terminal views":
     let visibleAfterCommand = session.screen().plainText(includeScrollback = false)
     check session.screen().scrollbackCount() == 1
     check window.dispatchKeyDown(
-      KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: {kmCommand})
+      KeyEvent(key: keyK, keyCode: keyK.ord, modifiers: terminalShortcutModifiers())
     )
     check session.screen().scrollbackCount() == 0
     check session.screen().plainText(includeScrollback = false) == visibleAfterCommand
@@ -1677,7 +1683,7 @@ suite "nimkit terminal views":
       discard generalPasteboard().setPlainText("pasted")
 
       check window.dispatchKeyDown(
-        KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmCommand})
+        KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: terminalShortcutModifiers())
       )
       check session.pollUntilExit()
       check "1b 5b 32 30 30 7e 70 61 73 74 65 64 1b 5b 32 30 31 7e" in
@@ -1693,11 +1699,11 @@ suite "nimkit terminal views":
               "stty raw -echo; printf ready; dd bs=1 count=" & $expectedBytes &
               " 2>/dev/null | od -An -tx1"
           ),
-          columns = 40,
+          columns = 80,
           rows = 4,
         )
-        view = newTerminalView(session, frame = rect(0, 0, 400, 120))
-        window = newWindow("Terminal mouse", frame = rect(0, 0, 400, 120))
+        view = newTerminalView(session, frame = rect(0, 0, 800, 120))
+        window = newWindow("Terminal mouse", frame = rect(0, 0, 800, 120))
       defer:
         view.close()
       session.processOutput("\x1b[?1000;1006h")

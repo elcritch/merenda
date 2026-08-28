@@ -331,6 +331,15 @@ func terminalKeyInput*(
   if optionAsMeta and kmOption in event.modifiers and result.len > 0:
     result = "\x1b" & result
 
+func terminalShortcutModifiers*(): set[KeyModifier] =
+  ## Modifiers for terminal-local clipboard and scrollback shortcuts.
+  ##
+  ## Ctrl is terminal input on Linux and Windows, so use Ctrl-Shift there.
+  when defined(macosx) or defined(macos):
+    {kmCommand}
+  else:
+    {kmControl, kmShift}
+
 func mouseModifierCode(modifiers: set[KeyModifier]): int =
   if kmShift in modifiers:
     result += 4
@@ -798,10 +807,27 @@ proc scrollLocally(view: TerminalView, event: ScrollEvent): bool =
   view.syncTerminalScreen()
   true
 
+proc handleTerminalShortcut(view: TerminalView, event: KeyEvent): bool =
+  if event.modifiers != terminalShortcutModifiers():
+    return false
+  case event.key
+  of keyK:
+    view.clearScrollback()
+    true
+  of keyA:
+    view.sendLocalIfHandled(selectAll(), ActionArgs(sender: DynamicAgent(view)))
+  of keyC:
+    view.sendLocalIfHandled(copy(), ActionArgs(sender: DynamicAgent(view)))
+  of keyX:
+    view.sendLocalIfHandled(cut(), ActionArgs(sender: DynamicAgent(view)))
+  of keyV:
+    view.sendLocalIfHandled(paste(), ActionArgs(sender: DynamicAgent(view)))
+  else:
+    false
+
 proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
   view.xSuppressOptionTextInput = false
-  if event.key == keyK and event.modifiers == {kmCommand}:
-    view.clearScrollback()
+  if view.handleTerminalShortcut(event):
     return true
   if event.key == keyL and event.modifiers == {kmControl}:
     view.clearScrollback()
