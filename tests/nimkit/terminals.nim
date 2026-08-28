@@ -3,7 +3,7 @@ import std/[monotimes, os, strutils, tempfiles, times, unittest]
 import sigils/core
 
 import merenda/nimkit/accessibility/accessibilityprotocols
-import merenda/nimkit/app/[animations, pasteboards, windows]
+import merenda/nimkit/app/[animations, application, pasteboards, windows]
 import merenda/nimkit/foundation/[events, selectors, types]
 import merenda/nimkit/responder/responders
 import
@@ -721,6 +721,53 @@ suite "nimkit terminal views":
       let expected = "61 62 63 0d 7f 08 1b 5b 33 7e 04"
       check window.tickUntilNormalizedText(view, expected)
       check fallback.commands.len == 0
+
+  test "focus regain modifier release keeps terminal editing keys usable":
+    when defined(posix):
+      let
+        session = spawnTerminalSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty raw -echo; printf ready; " &
+              "dd bs=1 count=6 2>/dev/null | od -An -tx1"
+          ),
+          columns = 50,
+          rows = 4,
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 500, 120))
+        terminalWindow = newWindow("Detached terminal", frame = rect(0, 0, 500, 120))
+        mainWindow = newWindow("Main window", frame = rect(0, 0, 500, 120))
+        app = newApplication("Terminal modifier recovery")
+      defer:
+        view.close()
+
+      terminalWindow.setContentView(view)
+      mainWindow.setContentView(newView(frame = rect(0, 0, 500, 120)))
+      app.addWindow(mainWindow)
+      app.addWindow(terminalWindow)
+      app.activateWindow(mainWindow)
+      app.activateWindow(terminalWindow)
+      check terminalWindow.makeFirstResponder(view)
+      check session.pollUntilText("ready")
+
+      # Model Cmd-Tab returning to this window while Command is still held.
+      # The first modifier event received after focus returns is its release.
+      check terminalWindow.dispatchFlagsChanged(
+        KeyEvent(key: keyLeftCommand, keyCode: keyLeftCommand.ord, modifiers: {})
+      )
+
+      check terminalWindow.dispatchTextInput("ab")
+      check terminalWindow.dispatchKeyDown(
+        KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+      )
+      check terminalWindow.dispatchKeyDown(
+        KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
+      )
+      check terminalWindow.sendAction(insertNewline(), DynamicAgent(view))
+      check terminalWindow.sendAction(deleteBackward(), DynamicAgent(view))
+
+      check session.pollUntilExit()
+      check "61 62 0d 7f 0d 7f" in session.normalizedTerminalOutput()
 
   when defined(posix) and not defined(windows):
     test "a second Bash reverse search starts with an empty query":

@@ -805,6 +805,10 @@ protocol TerminalViewInput of TextInputProtocol:
     discard view.sendInput(text)
 
 protocol TerminalViewEditingCommands of TextEditingCommandProtocol:
+  method insertNewline(view: TerminalView, args: ActionArgs) =
+    discard args
+    discard view.sendInput("\r")
+
   method insertTab(view: TerminalView, args: ActionArgs) =
     discard args
     discard view.sendInput("\t")
@@ -812,6 +816,14 @@ protocol TerminalViewEditingCommands of TextEditingCommandProtocol:
   method insertBacktab(view: TerminalView, args: ActionArgs) =
     discard args
     discard view.sendInput("\x1b[Z")
+
+  method deleteBackward(view: TerminalView, args: ActionArgs) =
+    discard args
+    discard view.sendInput("\x7f")
+
+  method deleteForward(view: TerminalView, args: ActionArgs) =
+    discard args
+    discard view.sendInput("\x1b[3~")
 
   method copy(view: TerminalView, args: ActionArgs) =
     discard args
