@@ -1,5 +1,7 @@
 import std/[options, os, osproc, tempfiles, unittest]
 
+import figdraw
+
 import merenda/nimkit
 import merenda/kosmo/kosmo
 
@@ -32,6 +34,56 @@ suite "Kosmo quick open":
     check "tests/main_spec.nim" in files
     check "build/main-generated.nim" notin files
     check fuzzyFilterFiles(files, "smn")[0] == "src/main.nim"
+
+  test "popup uses lighter outer blur and denser blurred input surfaces":
+    let frontend = newKosmoApplication(newApplication("Kosmo Quick Open Blur Test"))
+    defer:
+      frontend.close()
+
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    frontend.quickOpenPanel.hidden = false
+    let renders = buildRenders(frontend.contentView)
+
+    var
+      defaultBlurs: seq[Fig]
+      popupBlurs: seq[Fig]
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkBackdropBlur:
+        defaultBlurs.add node
+    for node in renders[PopupDrawLevel].nodes:
+      if node.kind == nkBackdropBlur:
+        popupBlurs.add node
+
+    require defaultBlurs.len == 2
+    require popupBlurs.len == 1
+    let
+      outerBlur = defaultBlurs[0]
+      queryBlur = defaultBlurs[1]
+      resultsBlur = popupBlurs[0]
+      outerTintAlpha = outerBlur.fill.centerColorRgba().a
+      queryTintAlpha = queryBlur.fill.centerColorRgba().a
+      resultsTintAlpha = resultsBlur.fill.centerColorRgba().a
+
+    check outerBlur.backdropBlur.blur > 0.0'f32
+    check queryBlur.backdropBlur.blur > 0.0'f32
+    check resultsBlur.backdropBlur.blur > 0.0'f32
+    check outerTintAlpha < queryTintAlpha
+    check queryTintAlpha == resultsTintAlpha
+    check outerBlur.screenBox.w > queryBlur.screenBox.w
+    check outerBlur.screenBox.h > resultsBlur.screenBox.h
+
+    var
+      queryCoverAlpha = 0'u8
+      resultsCoverAlpha = 0'u8
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.screenBox == queryBlur.screenBox:
+        queryCoverAlpha = max(queryCoverAlpha, node.fill.centerColorRgba().a)
+    for node in renders[PopupDrawLevel].nodes:
+      if node.kind == nkRectangle and node.screenBox == resultsBlur.screenBox:
+        resultsCoverAlpha = max(resultsCoverAlpha, node.fill.centerColorRgba().a)
+    check queryCoverAlpha < queryTintAlpha
+    check resultsCoverAlpha < resultsTintAlpha
 
   test "Command-T filters, selects, opens, and dismisses the file popup":
     let

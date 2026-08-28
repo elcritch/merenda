@@ -12,6 +12,14 @@ const
   QuickOpenFieldHeight = 30.0'f32
   QuickOpenSpacing = 8.0'f32
   QuickOpenMaximumVisibleItems = 12
+  QuickOpenOuterBlurRadius = 20.0'f32
+  QuickOpenInnerBlurRadius = 14.0'f32
+  QuickOpenOuterTintOpacity = 0.18'f32
+  QuickOpenInnerTintOpacity = 0.58'f32
+  QuickOpenControlFillOpacity = 0.10'f32
+  QuickOpenPanelStyleId = "kosmo.quick-open.panel"
+  QuickOpenFieldStyleId = "kosmo.quick-open.field"
+  QuickOpenResultsStyleId = "kosmo.quick-open.results"
   NoMatchingFilesTitle = "No matching files"
   GitProcessStartAttempts = 20
   GitProcessStartRetryMilliseconds = 25
@@ -28,6 +36,7 @@ type
     xHighlightedIndex: int
     xFirstIndex: int
     xOnOpen: KosmoQuickOpenHandler
+    xObservedWindow: WeakRef[nimkit.Window]
 
   KosmoQuickOpenFieldEditor = ref object of nimkit.FieldEditor
     panel: WeakRef[KosmoQuickOpenPanel]
@@ -328,9 +337,172 @@ protocol KosmoQuickOpenLayout of nimkit.ViewLayoutProtocol:
     )
     panel.clampFirstIndex()
 
+func tint(fill: nimkit.Fill, opacity: float32): nimkit.Fill =
+  let base = fill.centerColor()
+  nimkit.fill(nimkit.color(base.r, base.g, base.b, opacity))
+
+proc frameInPanel(panel: KosmoQuickOpenPanel, view: nimkit.View): nimkit.Rect =
+  let
+    contentFrame = panel.contentRect()
+    childFrame = view.frame()
+  nimkit.rect(
+    contentFrame.origin.x + childFrame.origin.x,
+    contentFrame.origin.y + childFrame.origin.y,
+    childFrame.size.width,
+    childFrame.size.height,
+  )
+
+protocol KosmoQuickOpenPanelDrawing of nimkit.ViewDrawingProtocol:
+  method draw(panel: KosmoQuickOpenPanel, context: nimkit.DrawContext) =
+    let bounds = panel.bounds()
+    if bounds.isEmpty:
+      return
+
+    let
+      appearance = context.appearance()
+      panelStyle = appearance.resolveBoxStyle(
+        nimkit.controlStyle(nimkit.srBox, id = QuickOpenPanelStyleId)
+      )
+      basePanelStyle = appearance.resolveBoxStyle(nimkit.controlStyle(nimkit.srBox))
+      fieldStyle = appearance.resolveTextFieldStyle(
+        nimkit.controlStyle(nimkit.srTextField, id = QuickOpenFieldStyleId)
+      )
+      baseFieldStyle =
+        appearance.resolveTextFieldStyle(nimkit.controlStyle(nimkit.srTextField))
+      popupStates = {nimkit.ssFocused, nimkit.ssOpen}
+      popupStyle = appearance.resolveComboBoxStyle(
+        nimkit.controlStyle(
+          nimkit.srComboBox, popupStates, id = QuickOpenResultsStyleId
+        )
+      )
+      basePopupStyle = appearance.resolveComboBoxStyle(
+        nimkit.controlStyle(nimkit.srComboBox, popupStates)
+      )
+      panelFrame = context.renderRectFor(bounds)
+      queryFrame = context.renderRectFor(panel.frameInPanel(panel.queryField))
+      resultsFrame = context.renderRectFor(panel.frameInPanel(panel.resultsView))
+
+    discard context.addRenderBackdropBlur(
+      context.renderLayer(),
+      context.renderParent(),
+      panelFrame,
+      basePanelStyle.box.fill.tint(QuickOpenOuterTintOpacity),
+      QuickOpenOuterBlurRadius,
+      panelStyle.box.cornerRadius,
+      panelStyle.box.cornerRadii,
+    )
+    discard context.addRenderRectangle(
+      panelFrame,
+      nimkit.fill(nimkit.color(0.0, 0.0, 0.0, 0.0)),
+      panelStyle.box.borderColor,
+      panelStyle.box.borderWidth,
+      panelStyle.box.cornerRadius,
+      panelStyle.box.shadows,
+      cornerRadii = panelStyle.box.cornerRadii,
+    )
+    discard context.addRenderBackdropBlur(
+      context.renderLayer(),
+      context.renderParent(),
+      queryFrame,
+      baseFieldStyle.box.fill.tint(QuickOpenInnerTintOpacity),
+      QuickOpenInnerBlurRadius,
+      fieldStyle.box.cornerRadius,
+      fieldStyle.box.cornerRadii,
+    )
+    discard context.addRenderBackdropBlur(
+      nimkit.PopupDrawLevel,
+      resultsFrame,
+      basePopupStyle.box.fill.tint(QuickOpenInnerTintOpacity),
+      QuickOpenInnerBlurRadius,
+      popupStyle.box.cornerRadius,
+      popupStyle.box.cornerRadii,
+    )
+
+    let title = panel.boxTitle()
+    if title.len > 0:
+      let
+        textRect = nimkit.rect(
+          bounds.origin.x + panelStyle.contentInsets.left + panelStyle.text.insets.left,
+          bounds.origin.y,
+          max(
+            bounds.size.width - panelStyle.contentInsets.horizontal -
+              panelStyle.text.insets.horizontal,
+            0.0'f32,
+          ),
+          max(panelStyle.titleHeight, title.textNaturalSize(panelStyle.text).height),
+        )
+        titleText = title.clippedText(textRect.size.width, panelStyle.text)
+      if titleText.len > 0 and not textRect.isEmpty:
+        context.addText(textRect, titleText, panelStyle.text)
+
+proc applyQuickOpenAppearance(panel: KosmoQuickOpenPanel, base: nimkit.Appearance) =
+  var appearance = base
+  let
+    panelSelector = nimkit.initStyleSelector(nimkit.srBox, id = QuickOpenPanelStyleId)
+    fieldSelector =
+      nimkit.initStyleSelector(nimkit.srTextField, id = QuickOpenFieldStyleId)
+    resultsSelector =
+      nimkit.initStyleSelector(nimkit.srComboBox, id = QuickOpenResultsStyleId)
+    fieldFill =
+      base.resolveTextFieldStyle(nimkit.controlStyle(nimkit.srTextField)).box.fill
+    resultsFill = base.resolveComboBoxStyle(
+      nimkit.controlStyle(nimkit.srComboBox, {nimkit.ssFocused, nimkit.ssOpen})
+    ).box.fill
+
+  appearance.setStyle(
+    panelSelector,
+    nimkit.StyleFill,
+    base.resolveBoxStyle(nimkit.controlStyle(nimkit.srBox)).box.fill.tint(
+      QuickOpenOuterTintOpacity
+    ),
+  )
+  appearance.setStyle(
+    fieldSelector, nimkit.StyleFill, fieldFill.tint(QuickOpenControlFillOpacity)
+  )
+  appearance.setStyle(
+    fieldSelector, nimkit.StyleChrome, nimkit.styleKeyword(nimkit.DefaultChromeName)
+  )
+  appearance.setStyle(fieldSelector, nimkit.StyleBoxShadows, newSeq[nimkit.BoxShadow]())
+  appearance.setStyle(
+    resultsSelector, nimkit.StyleFill, resultsFill.tint(QuickOpenControlFillOpacity)
+  )
+  appearance.setStyle(
+    resultsSelector, nimkit.StyleChrome, nimkit.styleKeyword(nimkit.DefaultChromeName)
+  )
+  appearance.setStyle(
+    resultsSelector, nimkit.StyleBoxShadows, newSeq[nimkit.BoxShadow]()
+  )
+  panel.appearance = appearance
+
+protocol KosmoQuickOpenAppearanceObserver of nimkit.WindowAppearanceEvents:
+  proc didChangeEffectiveAppearance(
+      panel: KosmoQuickOpenPanel, appearance: nimkit.Appearance
+  ) {.slot.} =
+    panel.applyQuickOpenAppearance(appearance)
+
+proc stopObservingWindow*(panel: KosmoQuickOpenPanel) =
+  ## Stop mirroring appearance changes from the popup's host window.
+  if panel.isNil or panel.xObservedWindow.isNil:
+    return
+  panel.unobserveProtocol(panel.xObservedWindow[], nimkit.WindowAppearanceEvents)
+  panel.xObservedWindow = default(WeakRef[nimkit.Window])
+
+proc observeWindow*(panel: KosmoQuickOpenPanel, window: nimkit.Window) =
+  ## Keep the popup's translucent styling synchronized with its host window.
+  if panel.isNil:
+    return
+  panel.stopObservingWindow()
+  if window.isNil:
+    return
+  panel.xObservedWindow = window.unsafeWeakRef()
+  panel.observeProtocol(window, nimkit.WindowAppearanceEvents)
+  panel.applyQuickOpenAppearance(window.effectiveAppearance())
+
 proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
   result = KosmoQuickOpenPanel(xRootPath: rootPath)
   result.initBoxFields("Open File")
+  result.styleId = QuickOpenPanelStyleId
+  discard result.withProtocol(KosmoQuickOpenPanelDrawing)
   let
     panel = result.unsafeWeakRef()
     editor = KosmoQuickOpenFieldEditor(panel: panel)
@@ -344,6 +516,7 @@ proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
   discard cell.withProtocol(KosmoQuickOpenFieldCellEditing)
   result.queryField = nimkit.newTextField()
   result.queryField.setCell(cell)
+  result.queryField.styleId = QuickOpenFieldStyleId
   result.queryField.accessibilityLabel = "Open file by name"
 
   result.resultsView = nimkit.newPopupListView(
@@ -390,6 +563,8 @@ proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
             nimkit.Window(owner).fieldEditorClient() == panel[].queryField,
       opened: proc(): bool =
         not panel.isNil and not panel[].hidden(),
+      styleId: proc(): string =
+        QuickOpenResultsStyleId,
     ),
     nimkit.PopupListActions(
       highlight: proc(index: int) =
@@ -416,6 +591,7 @@ proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
   result.contentView().addSubview(result.resultsView)
   discard result.withProtocol(KosmoQuickOpenLayout)
   result.queryField.connect(nimkit.textDidChange, result, quickOpenQueryDidChange)
+  result.applyQuickOpenAppearance(result.effectiveAppearance())
   result.hidden = true
   result.filterFiles()
 

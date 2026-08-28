@@ -2388,6 +2388,7 @@ proc newKosmoApplication*(
   controller.frontend = result.unsafeWeakRef()
   sidebarPane.dockController = controller.unsafeWeakRef()
   sidebarPane.observeWindow(result.window)
+  quickOpenPanel.observeWindow(result.window)
   documentView.onShowFileExplorer = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showFileExplorer()
@@ -2549,6 +2550,8 @@ proc close*(frontend: KosmoApplication) =
         host.window.close()
   if not frontend.sidebarPane.isNil:
     frontend.sidebarPane.stopObservingWindow()
+  if not frontend.quickOpenPanel.isNil:
+    frontend.quickOpenPanel.stopObservingWindow()
   if not frontend.editorView.isNil:
     frontend.editorView.editor.close()
   if not frontend.searchPanel.isNil:

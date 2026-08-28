@@ -683,6 +683,46 @@ proc addRenderRectangle*(
     clips, maskContent, roundedCorners, lightMaskContent, cornerRadii,
   )
 
+proc addRenderBackdropBlur*(
+    context: DrawContext,
+    layer: ZLevel,
+    parent: FigIdx,
+    rect: nimkitTypes.Rect,
+    tint: Fill,
+    blurRadius: float32,
+    cornerRadius = 0.0'f32,
+    cornerRadii = initCornerRadii(0.0'f32),
+): FigIdx {.discardable.} =
+  ## Add a rounded Figdraw backdrop blur with an optional color tint.
+  context.addFig(
+    layer,
+    parent,
+    Fig(
+      kind: nkBackdropBlur,
+      screenBox: rect.toFigRect,
+      fill: tint,
+      corners:
+        if cornerRadii.isZero:
+          uniformCornerRadii(cornerRadius, AllCorners)
+        else:
+          cornerRadii.figCornerRadii(),
+      backdropBlur: BackdropBlurStyle(blur: max(blurRadius, 0.0'f32)),
+    ),
+  )
+
+proc addRenderBackdropBlur*(
+    context: DrawContext,
+    layer: ZLevel,
+    rect: nimkitTypes.Rect,
+    tint: Fill,
+    blurRadius: float32,
+    cornerRadius = 0.0'f32,
+    cornerRadii = initCornerRadii(0.0'f32),
+): FigIdx {.discardable.} =
+  context.addRenderBackdropBlur(
+    layer, (-1).FigIdx, rect, tint, blurRadius, cornerRadius, cornerRadii
+  )
+
 proc addRenderLine*(
     context: DrawContext,
     layer: ZLevel,
