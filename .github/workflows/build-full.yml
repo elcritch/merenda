@@ -10,7 +10,7 @@ jobs:
   tests:
     name: tests (${{ matrix.os }}, ${{ matrix.nimversion }}, ${{ matrix.display }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 40
     defaults:
       run:
         shell: bash
@@ -21,7 +21,7 @@ jobs:
           - os: macos-latest
             nimversion: '2.2.10'
             display: none
-          - os: ubuntu-24.04
+          - os: ubuntu-26.04
             nimversion: '2.2.10'
             display: x11
           # - os: ubuntu-24.04
