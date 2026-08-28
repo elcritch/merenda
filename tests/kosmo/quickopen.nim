@@ -1,9 +1,13 @@
-import std/[options, os, osproc, tempfiles, unittest]
+import std/[options, os, osproc, tempfiles, unicode, unittest]
 
 import figdraw
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add rune
 
 suite "Kosmo quick open":
   test "project files use fuzzy ranking and exclude Git ignored paths":
@@ -35,13 +39,20 @@ suite "Kosmo quick open":
     check "build/main-generated.nim" notin files
     check fuzzyFilterFiles(files, "smn")[0] == "src/main.nim"
 
-  test "popup uses lighter outer blur and denser blurred input surfaces":
-    let frontend = newKosmoApplication(newApplication("Kosmo Quick Open Blur Test"))
+  test "popup blurs translucent panel input and result row surfaces":
+    let
+      root = createTempDir("merenda-kosmo-quick-open-blur-", "")
+      frontend = newKosmoApplication(newApplication("Kosmo Quick Open Blur Test"))
+    writeFile(root / "alpha.nim", "discard\n")
+    writeFile(root / "beta.nim", "discard\n")
+    writeFile(root / "gamma.nim", "discard\n")
     defer:
       frontend.close()
+      removeDir(root)
 
     frontend.window.setContentView(frontend.contentView)
     frontend.contentView.layoutSubtreeIfNeeded()
+    frontend.quickOpenPanel.reloadProjectFiles(root)
     frontend.quickOpenPanel.hidden = false
     let renders = buildRenders(frontend.contentView)
 
@@ -65,6 +76,18 @@ suite "Kosmo quick open":
       queryTintAlpha = queryBlur.fill.centerColorRgba().a
       resultsTintAlpha = resultsBlur.fill.centerColorRgba().a
 
+    check frontend.quickOpenPanel.boxTitle() == "Open File"
+    var titleNode = none(Fig)
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkText and node.renderedText() == "Open File":
+        titleNode = some(node)
+    require titleNode.isSome
+    require titleNode.get().textLayout.spanColors.len > 0
+    let titleColor = titleNode.get().textLayout.spanColors[0].centerColorRgba()
+    check titleNode.get().screenBox.y < queryBlur.screenBox.y
+    check titleColor.a == high(uint8)
+    check titleColor.r.int + titleColor.g.int + titleColor.b.int > 384
+
     check outerBlur.backdropBlur.blur > 0.0'f32
     check queryBlur.backdropBlur.blur > 0.0'f32
     check resultsBlur.backdropBlur.blur > 0.0'f32
@@ -84,6 +107,23 @@ suite "Kosmo quick open":
         resultsCoverAlpha = max(resultsCoverAlpha, node.fill.centerColorRgba().a)
     check queryCoverAlpha < queryTintAlpha
     check resultsCoverAlpha < resultsTintAlpha
+
+    var
+      minimumRowAlpha = high(uint8)
+      maximumRowAlpha = 0'u8
+      rowCount = 0
+    for node in renders[PopupDrawLevel].nodes:
+      if node.kind == nkRectangle and
+          node.screenBox.w > resultsBlur.screenBox.w * 0.9'f32 and
+          node.screenBox.h < resultsBlur.screenBox.h:
+        let alpha = node.fill.centerColorRgba().a
+        minimumRowAlpha = min(minimumRowAlpha, alpha)
+        maximumRowAlpha = max(maximumRowAlpha, alpha)
+        inc rowCount
+    require rowCount > 1
+    check minimumRowAlpha > 0'u8
+    check minimumRowAlpha < maximumRowAlpha
+    check maximumRowAlpha < high(uint8)
 
   test "Command-T filters, selects, opens, and dismisses the file popup":
     let

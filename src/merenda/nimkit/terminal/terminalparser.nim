@@ -212,6 +212,8 @@ proc setPrivateMode(screen: var TerminalScreen, mode: int, enabled: bool) =
     screen.modes.mouseEncoding = if enabled: tmeUtf8 else: tmeX10
   of 1006:
     screen.modes.mouseEncoding = if enabled: tmeSgr else: tmeX10
+  of 1007:
+    screen.modes.alternateScroll = enabled
   of 1015:
     screen.modes.mouseEncoding = if enabled: tmeUrxvt else: tmeX10
   of 2004:

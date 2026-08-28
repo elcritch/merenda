@@ -364,24 +364,26 @@ suite "nimkit terminal screen and parser":
       screen = initTerminalScreen(20, 5)
       parser = initTerminalParser()
 
-    screen.feed(parser, "\x1b[?1;6;1003;1004;1006;2004h\x1b[5 q\x1b[?25l")
+    screen.feed(parser, "\x1b[?1;6;1003;1004;1006;1007;2004h\x1b[5 q\x1b[?25l")
 
     check screen.modes.applicationCursorKeys
     check screen.modes.origin
     check screen.modes.mouseTracking == tmtAny
     check screen.modes.mouseEncoding == tmeSgr
     check screen.modes.focusReporting
+    check screen.modes.alternateScroll
     check screen.modes.bracketedPaste
     check screen.cursor.shape == tcsBar
     check screen.cursor.blinking
     check not screen.cursor.visible
 
-    screen.feed(parser, "\x1b[?1;6;1003;1004;1006;2004l\x1b[2 q\x1b[?25h")
+    screen.feed(parser, "\x1b[?1;6;1003;1004;1006;1007;2004l\x1b[2 q\x1b[?25h")
     check not screen.modes.applicationCursorKeys
     check not screen.modes.origin
     check screen.modes.mouseTracking == tmtNone
     check screen.modes.mouseEncoding == tmeX10
     check not screen.modes.focusReporting
+    check not screen.modes.alternateScroll
     check not screen.modes.bracketedPaste
     check screen.cursor.shape == tcsBlock
     check not screen.cursor.blinking
@@ -1565,6 +1567,44 @@ suite "nimkit terminal views":
         )
         check session.pollUntilExit()
         check "restored:done" in session.normalizedTerminalOutput()
+
+  test "alternate scroll sends cursor keys to a fullscreen Bash app":
+    when defined(posix):
+      let bashPath = findExe("bash")
+      if bashPath.len == 0:
+        skip()
+      else:
+        let
+          command =
+            "stty raw -echo; printf '\\033[?1;1007;1049hready'; " &
+            "dd bs=1 count=6 2>/dev/null | od -An -tx1"
+          session = spawnTerminalSession(
+            initTerminalSpawnOptions(command = command, shell = bashPath),
+            columns = 40,
+            rows = 4,
+          )
+          view = newTerminalView(session, frame = rect(0, 0, 400, 120))
+          window = newWindow("Terminal alternate scroll", frame = rect(0, 0, 400, 120))
+        defer:
+          view.close()
+        window.setContentView(view)
+        check window.makeFirstResponder(view)
+        check session.pollUntilText("ready")
+        discard view.poll()
+        let point = view.pointToWindow(initPoint(10, 10))
+
+        check session.screenInfo().alternateScreen
+        check session.screenInfo().modes.alternateScroll
+        check session.screenInfo().modes.applicationCursorKeys
+        check window.dispatchScrollWheel(
+          ScrollEvent(location: point, deltaY: 1.0'f32, phase: sepChanged)
+        )
+        check window.dispatchScrollWheel(
+          ScrollEvent(location: point, deltaY: -1.0'f32, phase: sepChanged)
+        )
+        check view.scrollPosition() == 0.0'f32
+        check session.pollUntilExit()
+        check "1b 4f 41 1b 4f 42" in session.normalizedTerminalOutput()
 
   test "window scrolling stays correct with a full scrollback buffer":
     let

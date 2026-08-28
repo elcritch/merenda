@@ -17,6 +17,8 @@ const
   QuickOpenOuterTintOpacity = 0.18'f32
   QuickOpenInnerTintOpacity = 0.58'f32
   QuickOpenControlFillOpacity = 0.10'f32
+  QuickOpenRowFillOpacity = 0.10'f32
+  QuickOpenHighlightedRowFillOpacity = 0.38'f32
   QuickOpenPanelStyleId = "kosmo.quick-open.panel"
   QuickOpenFieldStyleId = "kosmo.quick-open.field"
   QuickOpenResultsStyleId = "kosmo.quick-open.results"
@@ -443,11 +445,27 @@ proc applyQuickOpenAppearance(panel: KosmoQuickOpenPanel, base: nimkit.Appearanc
       nimkit.initStyleSelector(nimkit.srTextField, id = QuickOpenFieldStyleId)
     resultsSelector =
       nimkit.initStyleSelector(nimkit.srComboBox, id = QuickOpenResultsStyleId)
+    rowSelector =
+      nimkit.initStyleSelector(nimkit.srComboBoxItem, id = QuickOpenResultsStyleId)
+    highlightedRowSelector = nimkit.initStyleSelector(
+      nimkit.srComboBoxItem, {nimkit.ssHovered}, id = QuickOpenResultsStyleId
+    )
     fieldFill =
       base.resolveTextFieldStyle(nimkit.controlStyle(nimkit.srTextField)).box.fill
     resultsFill = base.resolveComboBoxStyle(
       nimkit.controlStyle(nimkit.srComboBox, {nimkit.ssFocused, nimkit.ssOpen})
     ).box.fill
+    rowFill =
+      base.resolveRowItemStyle(nimkit.controlStyle(nimkit.srComboBoxItem)).box.fill
+    highlightedRowFill = base.resolveRowItemStyle(
+      nimkit.controlStyle(nimkit.srComboBoxItem, {nimkit.ssHovered})
+    ).box.fill
+    titleText = base.resolveTextFieldStyle(
+      nimkit.controlStyle(
+        nimkit.srTextField,
+        classes = @[nimkit.LabelStyleClass, nimkit.LabelTitleStyleClass],
+      )
+    ).text
 
   appearance.setStyle(
     panelSelector,
@@ -456,6 +474,8 @@ proc applyQuickOpenAppearance(panel: KosmoQuickOpenPanel, base: nimkit.Appearanc
       QuickOpenOuterTintOpacity
     ),
   )
+  appearance.setStyle(panelSelector, nimkit.StyleTextColor, titleText.color)
+  appearance.setStyle(panelSelector, nimkit.StyleFontSize, titleText.fontSize)
   appearance.setStyle(
     fieldSelector, nimkit.StyleFill, fieldFill.tint(QuickOpenControlFillOpacity)
   )
@@ -471,6 +491,14 @@ proc applyQuickOpenAppearance(panel: KosmoQuickOpenPanel, base: nimkit.Appearanc
   )
   appearance.setStyle(
     resultsSelector, nimkit.StyleBoxShadows, newSeq[nimkit.BoxShadow]()
+  )
+  appearance.setStyle(
+    rowSelector, nimkit.StyleFill, rowFill.tint(QuickOpenRowFillOpacity)
+  )
+  appearance.setStyle(
+    highlightedRowSelector,
+    nimkit.StyleFill,
+    highlightedRowFill.tint(QuickOpenHighlightedRowFillOpacity),
   )
   panel.appearance = appearance
 

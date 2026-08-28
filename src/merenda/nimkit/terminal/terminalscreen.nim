@@ -76,6 +76,7 @@ type
     applicationKeypad*: bool
     bracketedPaste*: bool
     focusReporting*: bool
+    alternateScroll*: bool
     mouseTracking*: TerminalMouseTracking
     mouseEncoding*: TerminalMouseEncoding
 

@@ -851,7 +851,8 @@ proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
   of mtreScrollWheel:
     if event.scrollEvent.deltaY == 0.0'f32:
       return false
-    if view.xSession.screenInfo().modes.mouseTracking != tmtNone and
+    let screenInfo = view.xSession.screenInfo()
+    if screenInfo.modes.mouseTracking != tmtNone and
         kmShift notin event.scrollEvent.modifiers:
       let buttonCode = if event.scrollEvent.deltaY > 0.0'f32: 64 else: 65
       return view.sendInput(
@@ -862,6 +863,14 @@ proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
           release = false,
           motion = false,
           modifiers = event.scrollEvent.modifiers,
+        )
+      )
+    if screenInfo.alternateScreen and screenInfo.modes.alternateScroll and
+        screenInfo.modes.mouseTracking == tmtNone:
+      let key = if event.scrollEvent.deltaY > 0.0'f32: keyArrowUp else: keyArrowDown
+      return view.sendInput(
+        terminalKeyInput(
+          KeyEvent(key: key, keyCode: key.ord), screenInfo.modes, view.xOptionAsMeta
         )
       )
     view.scrollLocally(event.scrollEvent)
