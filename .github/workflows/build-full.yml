@@ -8,29 +8,28 @@ on:
 
 jobs:
   tests:
+    name: tests (${{ matrix.os }}, ${{ matrix.nimversion }}, ${{ matrix.display }}, ${{ matrix.suite }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 25
     defaults:
       run:
         shell: bash
     strategy:
       fail-fast: false
       matrix:
-        nimversion:
-          - '2.2.10'
-        os:
-          - macos-latest
-          - ubuntu-latest
-          # - windows-2022
-        display:
-          - none
-        exclude:
-          - os: ubuntu-latest
-            display: none
         include:
+          - os: macos-latest
+            nimversion: '2.2.10'
+            display: none
+            suite: all
           - os: ubuntu-24.04
             nimversion: '2.2.10'
             display: x11
+            suite: core
+          - os: ubuntu-24.04
+            nimversion: '2.2.10'
+            display: x11
+            suite: kosmo
           # - os: ubuntu-24.04
           #   display: wayland
     steps:
@@ -109,8 +108,27 @@ jobs:
           -delete
 
     - name: Build Tests
+      if: matrix.suite == 'all'
       run: |
         atlas-run tests --jobs:2 --only-errors
+
+    - name: Build Core Tests
+      if: matrix.suite == 'core'
+      run: |
+        atlas-run tests --jobs:2 --only-errors \
+          tests/tapplication_sigils.nim \
+          tests/tbackrefs_arc.nim \
+          tests/tfigdraw_text_offsets.nim \
+          tests/tnimkit.nim \
+          tests/tresources.nim \
+          tests/tsvgimages.nim \
+          tests/tsvgpathloader.nim \
+          tests/ttekton.nim
+
+    - name: Build Kosmo Tests
+      if: matrix.suite == 'kosmo'
+      run: |
+        atlas-run tests --jobs:2 --only-errors tests/tkosmo.nim
 
     - name: Build Integration Tests
       if: runner.os == 'macOS'
