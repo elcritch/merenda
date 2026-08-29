@@ -261,7 +261,7 @@ func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
     nimkit.actionSelector(KosmoFindInFilesAction),
   )
   result.bindKey(
-    nimkit.keyT, {nimkit.kmCommand}, nimkit.actionSelector(KosmoQuickOpenAction)
+    nimkit.keyP, nimkit.shortcutModifiers(), nimkit.actionSelector(KosmoQuickOpenAction)
   )
   result.bindKey(
     nimkit.keyT,
@@ -2354,8 +2354,8 @@ proc newKosmoApplication*(
     quickOpenItem = nimkit.newMenuItem(
       "Open Quickly…",
       nimkit.actionSelector(KosmoQuickOpenAction),
-      "t",
-      {nimkit.kmCommand},
+      "p",
+      nimkit.shortcutModifiers(),
     )
     terminalItem = nimkit.newMenuItem(
       "New Terminal",

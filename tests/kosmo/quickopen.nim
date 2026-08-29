@@ -10,6 +10,18 @@ proc renderedText(node: Fig): string =
     result.add rune
 
 suite "Kosmo quick open":
+  test "quick open uses the platform primary P shortcut":
+    let frontend = newKosmoApplication(newApplication("Kosmo Quick Open Shortcut Test"))
+    defer:
+      frontend.close()
+
+    let quickOpenItem = frontend.application.mainMenu()[1]
+      .submenu()
+      .menuItemWithIdentifier(KosmoQuickOpenAction)
+    require not quickOpenItem.isNil
+    check quickOpenItem.keyEquivalent().key == keyP
+    check quickOpenItem.modifierMask() == shortcutModifiers()
+
   test "project files use fuzzy ranking and exclude Git ignored paths":
     let
       root = createTempDir("merenda-kosmo-quick-open-files-", "")
@@ -125,7 +137,7 @@ suite "Kosmo quick open":
     check minimumRowAlpha < maximumRowAlpha
     check maximumRowAlpha < high(uint8)
 
-  test "Command-T filters, selects, opens, and dismisses the file popup":
+  test "platform primary P filters, selects, opens, and dismisses the file popup":
     let
       root = createTempDir("merenda-kosmo-quick-open-input-", "")
       sourceDirectory = root / "src"
@@ -159,7 +171,7 @@ suite "Kosmo quick open":
     let initialAnimationCount = frontend.window.animationScheduler().animationCount()
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyT, keyCode: keyT.ord, modifiers: {kmCommand})
+      KeyEvent(key: keyP, keyCode: keyP.ord, modifiers: shortcutModifiers())
     )
     check frontend.quickOpenPanel.isOpen()
     check frontend.window.fieldEditorClient() == frontend.quickOpenPanel.queryField
@@ -192,7 +204,7 @@ suite "Kosmo quick open":
 
     check frontend.window.makeFirstResponder(frontend.editorView)
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyT, keyCode: keyT.ord, modifiers: {kmCommand})
+      KeyEvent(key: keyP, keyCode: keyP.ord, modifiers: shortcutModifiers())
     )
     check frontend.quickOpenPanel.isOpen()
     check frontend.window.dispatchKeyDown(
