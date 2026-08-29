@@ -807,6 +807,14 @@ proc scrollLocally(view: TerminalView, event: ScrollEvent): bool =
   view.syncTerminalScreen()
   true
 
+func shouldScrollLocally(
+    view: TerminalView, event: ScrollEvent, screenInfo: TerminalScreenInfo
+): bool =
+  ## Keep terminal history reachable after a TUI enables mouse reporting.
+  ## Applications still receive wheel input when no local history exists.
+  kmShift in event.modifiers or screenInfo.scrollbackCount > 0 or
+    view.xScrollPosition > 0.0'f32
+
 proc handleTerminalShortcut(view: TerminalView, event: KeyEvent): bool =
   if event.modifiers != terminalShortcutModifiers():
     return false
@@ -852,8 +860,9 @@ proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
     if event.scrollEvent.deltaY == 0.0'f32:
       return false
     let screenInfo = view.xSession.screenInfo()
-    if screenInfo.modes.mouseTracking != tmtNone and
-        kmShift notin event.scrollEvent.modifiers:
+    if view.shouldScrollLocally(event.scrollEvent, screenInfo):
+      return view.scrollLocally(event.scrollEvent)
+    if screenInfo.modes.mouseTracking != tmtNone:
       let buttonCode = if event.scrollEvent.deltaY > 0.0'f32: 64 else: 65
       return view.sendInput(
         view.xSession.encodeMouseInput(

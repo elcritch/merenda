@@ -1699,6 +1699,29 @@ suite "nimkit terminal views":
     )
     check view.scrollPosition() == 1.0'f32
 
+  test "scrollback remains the default after an application enables mouse tracking":
+    for usesAlternateScreen in [false, true]:
+      let
+        session = newTerminalSession(columns = 12, rows = 3)
+        view = newTerminalView(session, frame = rect(0, 0, 220, 90))
+        window = newWindow("Terminal application history", frame = rect(0, 0, 220, 90))
+        alternateScreenInput = if usesAlternateScreen: "\x1b[?1049h" else: ""
+      session.processOutput(
+        alternateScreenInput & "\x1b[?1003;1006hone\r\ntwo\r\nthree\r\nfour\r\nfive"
+      )
+      discard view.poll()
+      window.setContentView(view)
+      let point = view.terminalCellPoint(0, 0)
+
+      check session.screenInfo().alternateScreen == usesAlternateScreen
+      check session.screenInfo().modes.mouseTracking == tmtAny
+      check session.screenInfo().scrollbackCount == 2
+      check window.dispatchScrollWheel(
+        ScrollEvent(location: point, deltaY: 1.0'f32, phase: sepChanged)
+      )
+      check view.scrollPosition() == 1.0'f32
+      check view.stringValue().splitLines()[0].strip() == "two"
+
   test "paste honors bracketed paste mode through responder commands":
     when defined(posix):
       let
@@ -1729,10 +1752,10 @@ suite "nimkit terminal views":
       check "1b 5b 32 30 30 7e 70 61 73 74 65 64 1b 5b 32 30 31 7e" in
         session.screen().plainText().replace("\n", " ").splitWhitespace().join(" ")
 
-  test "application mouse tracking receives window-dispatched press and release":
+  test "application mouse tracking receives input when scrollback is empty":
     when defined(posix):
       let
-        expectedBytes = 18
+        expectedBytes = 28
         session = spawnTerminalSession(
           initTerminalSpawnOptions(
             command =
@@ -1758,11 +1781,15 @@ suite "nimkit terminal views":
 
       check window.mouseDownAt(point)
       check window.mouseUpAt(point)
+      check window.dispatchScrollWheel(
+        ScrollEvent(location: point, deltaY: 1.0'f32, phase: sepChanged)
+      )
       check session.pollUntilExit()
       let output =
         session.screen().plainText().replace("\n", " ").splitWhitespace().join(" ")
       check "1b 5b 3c 30 3b 31 3b 31 4d" in output
       check "1b 5b 3c 30 3b 31 3b 31 6d" in output
+      check "1b 5b 3c 36 34 3b 31 3b 31 4d" in output
 
   test "first responder changes report terminal focus to the child":
     when defined(posix):
