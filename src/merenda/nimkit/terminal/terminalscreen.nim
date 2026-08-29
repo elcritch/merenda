@@ -309,6 +309,10 @@ proc scrollUp*(screen: var TerminalScreen, count = 1) =
       screen.markChanged()
     return
   for _ in 0 ..< amount:
+    # A partial region can still feed terminal history when anchored at row 0.
+    # Inline TUIs use this to keep a live composer below finalized output.
+    if screen.scrollTop == 0:
+      screen.appendScrollback(screen.lineAt(0))
     for row in screen.scrollTop ..< screen.scrollBottom:
       screen.replaceLine(row, screen.lineAt(row + 1))
     screen.clearLine(screen.scrollBottom)

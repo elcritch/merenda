@@ -1722,6 +1722,33 @@ suite "nimkit terminal views":
       check view.scrollPosition() == 1.0'f32
       check view.stringValue().splitLines()[0].strip() == "two"
 
+  test "Codex resume history inserted above its composer remains scrollable":
+    for usesAlternateScreen in [false, true]:
+      let
+        session = newTerminalSession(columns = 24, rows = 5)
+        view = newTerminalView(session, frame = rect(0, 0, 320, 120))
+        window = newWindow("Codex resume history", frame = rect(0, 0, 320, 120))
+        alternateScreenInput = if usesAlternateScreen: "\x1b[?1049h\x1b[?1007h" else: ""
+      # Codex commits resumed history through a top-anchored scroll region so
+      # its live composer can remain in the rows below that region.
+      var output = alternateScreenInput & "\x1b[?2026h\x1b[1;3r\x1b[3;1H"
+      for line in 0 .. 7:
+        output.add "\r\ncodex-history-" & $line
+      output.add "\x1b[r\x1b[5;1H> \x1b[?2026l"
+      session.processOutput(output)
+      discard view.poll()
+      window.setContentView(view)
+      let point = view.terminalCellPoint(0, 0)
+
+      check session.screenInfo().alternateScreen == usesAlternateScreen
+      check session.screenInfo().modes.alternateScroll == usesAlternateScreen
+      check session.screenInfo().scrollbackCount == 8
+      check window.dispatchScrollWheel(
+        ScrollEvent(location: point, deltaY: 100.0'f32, phase: sepChanged)
+      )
+      check view.scrollPosition() == 8.0'f32
+      check "codex-history-0" in view.stringValue()
+
   test "paste honors bracketed paste mode through responder commands":
     when defined(posix):
       let
