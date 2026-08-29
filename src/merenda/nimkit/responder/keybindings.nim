@@ -22,12 +22,24 @@ type
     keyCode*: int
     modifiers*: set[KeyModifier]
 
+  KeySequence* = object
+    strokes*: seq[KeyStroke]
+
   KeyBinding* = object
-    stroke*: KeyStroke
+    sequence*: KeySequence
     selector*: CommandSelector
 
   KeyBindingTable* = object
     bindings*: seq[KeyBinding]
+
+  KeyBindingMatchKind* = enum
+    kbmNone
+    kbmPrefix
+    kbmCommand
+
+  KeyBindingMatch* = object
+    kind*: KeyBindingMatchKind
+    selector*: CommandSelector
 
 proc normalizedKeyText(text: string): string =
   text.toLowerAscii()
@@ -133,8 +145,18 @@ proc initShortcutStroke*(
 proc initShortcutStroke*(key: Key, modifiers: set[ShortcutModifier] = {}): KeyStroke =
   initKeyStroke(key, modifiers.toKeyModifiers)
 
+proc initKeySequence*(strokes: openArray[KeyStroke]): KeySequence =
+  if strokes.len == 0:
+    raise newException(ValueError, "Key sequence cannot be empty")
+  KeySequence(strokes: @strokes)
+
+proc initKeyBinding*(sequence: KeySequence, selector: CommandSelector): KeyBinding =
+  if sequence.strokes.len == 0:
+    raise newException(ValueError, "Key sequence cannot be empty")
+  KeyBinding(sequence: sequence, selector: selector)
+
 proc initKeyBinding*(stroke: KeyStroke, selector: CommandSelector): KeyBinding =
-  KeyBinding(stroke: stroke, selector: selector)
+  initKeyBinding(initKeySequence([stroke]), selector)
 
 proc matches*(stroke: KeyStroke, event: KeyEvent): bool =
   if stroke.modifiers != event.modifiers:
@@ -147,18 +169,52 @@ proc matches*(stroke: KeyStroke, event: KeyEvent): bool =
     return stroke.keyCode == event.keyCode
   false
 
-proc add*(table: var KeyBindingTable, stroke: KeyStroke, selector: CommandSelector) =
+proc equivalent(first, second: KeyStroke): bool =
+  if first.modifiers != second.modifiers:
+    return false
+  if first.key != keyUnknown and second.key != keyUnknown:
+    return first.key == second.key
+  if first.keyCode != 0 and second.keyCode != 0:
+    return first.keyCode == second.keyCode
+  first.text.len > 0 and second.text.len > 0 and
+    first.text.normalizedKeyText == second.text.normalizedKeyText
+
+proc isPrefix(first, second: KeySequence): bool =
+  if first.strokes.len > second.strokes.len:
+    return false
+  for index, stroke in first.strokes:
+    if not stroke.equivalent(second.strokes[index]):
+      return false
+  true
+
+proc add*(
+    table: var KeyBindingTable, sequence: KeySequence, selector: CommandSelector
+) =
+  if sequence.strokes.len == 0:
+    raise newException(ValueError, "Key sequence cannot be empty")
   for binding in table.bindings.mitems:
-    if binding.stroke == stroke:
+    if sequence.strokes.len == binding.sequence.strokes.len and
+        sequence.isPrefix(binding.sequence):
       binding.selector = selector
       return
-  table.bindings.add initKeyBinding(stroke, selector)
+    if sequence.isPrefix(binding.sequence) or binding.sequence.isPrefix(sequence):
+      raise newException(
+        ValueError, "Key sequence cannot also be the prefix of another binding"
+      )
+  table.bindings.add initKeyBinding(sequence, selector)
+
+proc add*(table: var KeyBindingTable, stroke: KeyStroke, selector: CommandSelector) =
+  table.add(initKeySequence([stroke]), selector)
+
+proc remove*(table: var KeyBindingTable, sequence: KeySequence): bool {.discardable.} =
+  for index, binding in table.bindings:
+    if sequence.strokes.len == binding.sequence.strokes.len and
+        sequence.isPrefix(binding.sequence):
+      table.bindings.delete(index)
+      return true
 
 proc remove*(table: var KeyBindingTable, stroke: KeyStroke): bool {.discardable.} =
-  for idx, binding in table.bindings:
-    if binding.stroke == stroke:
-      table.bindings.delete(idx)
-      return true
+  table.remove(initKeySequence([stroke]))
 
 proc remove*(
     table: var KeyBindingTable, selector: CommandSelector
@@ -200,6 +256,11 @@ proc bindKey*(
 ) =
   table.add(initKeyStroke(keyCode, modifiers), selector)
 
+proc bindSequence*(
+    table: var KeyBindingTable, strokes: openArray[KeyStroke], selector: CommandSelector
+) =
+  table.add(initKeySequence(strokes), selector)
+
 proc bindShortcut*(
     table: var KeyBindingTable,
     text: string,
@@ -232,10 +293,25 @@ proc bindShortcuts*(
 ) =
   table.bindShortcut(key, modifiers, selector)
 
-proc commandFor*(table: KeyBindingTable, event: KeyEvent): Option[CommandSelector] =
+proc match*(table: KeyBindingTable, events: openArray[KeyEvent]): KeyBindingMatch =
+  if events.len == 0:
+    return
   for binding in table.bindings:
-    if binding.stroke.matches(event):
-      return some(binding.selector)
+    if events.len <= binding.sequence.strokes.len:
+      var matches = true
+      for index, event in events:
+        if not binding.sequence.strokes[index].matches(event):
+          matches = false
+          break
+      if matches:
+        if events.len == binding.sequence.strokes.len:
+          return KeyBindingMatch(kind: kbmCommand, selector: binding.selector)
+        result.kind = kbmPrefix
+
+proc commandFor*(table: KeyBindingTable, event: KeyEvent): Option[CommandSelector] =
+  let bindingMatch = table.match([event])
+  if bindingMatch.kind == kbmCommand:
+    return some(bindingMatch.selector)
   none(CommandSelector)
 
 proc shortcutKey(name: string, modifiers: var set[KeyModifier]): Key =
@@ -311,6 +387,21 @@ proc parseKeyStroke*(description: string): KeyStroke =
   if key == keyUnknown:
     raise newException(ValueError, "Unknown shortcut key '" & parts[^1] & "'")
   initKeyStroke(key, modifiers)
+
+proc parseKeySequence*(description: string): KeySequence =
+  ## Parse a key sequence such as `ctrl-w ctrl-s`.
+  let descriptions = description.splitWhitespace()
+  if descriptions.len == 0:
+    raise newException(ValueError, "Key sequence cannot be empty")
+  var strokes = newSeqOfCap[KeyStroke](descriptions.len)
+  for strokeDescription in descriptions:
+    strokes.add parseKeyStroke(strokeDescription)
+  initKeySequence(strokes)
+
+proc bindSequence*(
+    table: var KeyBindingTable, description: string, selector: CommandSelector
+) =
+  table.add(parseKeySequence(description), selector)
 
 proc defaultKeyBindingProfile*(): KeyBindingProfile =
   when defined(macosx) or defined(macos):

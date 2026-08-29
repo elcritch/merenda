@@ -150,6 +150,7 @@ type
     xResizeIncrements: Size
     xFrameAutosaveName: string
     xKeyBindings: KeyBindingTable
+    xPendingKeySequence: seq[events.KeyEvent]
     xHostWindow: HostWindow
     xHostFocused: bool
     when defined(linux) or defined(bsd):
@@ -227,6 +228,10 @@ when defined(linux) or defined(bsd):
 type EventDispatchResult = object
   handled: bool
   responder: Responder
+
+type KeyCommandDispatchResult = object
+  recognized: bool
+  dispatch: EventDispatchResult
 
 type CaretBlinkAnimation = ref object of Animation
   textView: TextView
@@ -896,25 +901,43 @@ proc `frameAutosaveName=`*(window: Window, name: string) =
 proc keyBindings*(window: Window): KeyBindingTable =
   window.xKeyBindings
 
+proc cancelKeySequence*(window: Window) =
+  window.xPendingKeySequence.setLen(0)
+
 proc setKeyBindings*(window: Window, bindings: KeyBindingTable) =
   window.xKeyBindings = bindings
+  window.cancelKeySequence()
 
 proc setKeyBindingProfile*(window: Window, profile: KeyBindingProfile) =
   window.xKeyBindings = initDefaultKeyBindings(profile)
+  window.cancelKeySequence()
 
 proc addKeyBinding*(window: Window, stroke: KeyStroke, selector: CommandSelector) =
   window.xKeyBindings.add(stroke, selector)
+  window.cancelKeySequence()
+
+proc addKeyBinding*(window: Window, sequence: KeySequence, selector: CommandSelector) =
+  window.xKeyBindings.add(sequence, selector)
+  window.cancelKeySequence()
 
 proc removeKeyBinding*(window: Window, stroke: KeyStroke): bool {.discardable.} =
-  window.xKeyBindings.remove(stroke)
+  result = window.xKeyBindings.remove(stroke)
+  if result:
+    window.cancelKeySequence()
+
+proc removeKeyBinding*(window: Window, sequence: KeySequence): bool {.discardable.} =
+  result = window.xKeyBindings.remove(sequence)
+  if result:
+    window.cancelKeySequence()
 
 proc clearKeyBindings*(window: Window) =
   window.xKeyBindings.clear()
+  window.cancelKeySequence()
 
 proc bindKey*(
     window: Window, text: string, modifiers: set[KeyModifier], selector: CommandSelector
 ) =
-  window.xKeyBindings.bindKey(text, modifiers, selector)
+  window.addKeyBinding(initKeyStroke(text, modifiers), selector)
 
 proc bindKey*(
     window: Window,
@@ -922,12 +945,21 @@ proc bindKey*(
     modifiers: set[KeyModifier],
     selector: CommandSelector,
 ) =
-  window.xKeyBindings.bindKey(key, modifiers, selector)
+  window.addKeyBinding(initKeyStroke(key, modifiers), selector)
 
 proc bindKey*(
     window: Window, keyCode: int, modifiers: set[KeyModifier], selector: CommandSelector
 ) =
-  window.xKeyBindings.bindKey(keyCode, modifiers, selector)
+  window.addKeyBinding(initKeyStroke(keyCode, modifiers), selector)
+
+proc bindSequence*(
+    window: Window, strokes: openArray[KeyStroke], selector: CommandSelector
+) =
+  window.xKeyBindings.bindSequence(strokes, selector)
+  window.cancelKeySequence()
+
+proc bindSequence*(window: Window, description: string, selector: CommandSelector) =
+  window.addKeyBinding(parseKeySequence(description), selector)
 
 proc bindShortcut*(
     window: Window,
@@ -935,7 +967,7 @@ proc bindShortcut*(
     modifiers: set[ShortcutModifier],
     selector: CommandSelector,
 ) =
-  window.xKeyBindings.bindShortcut(text, modifiers, selector)
+  window.bindKey(text, modifiers.toKeyModifiers(), selector)
 
 proc bindShortcut*(
     window: Window,
@@ -943,7 +975,7 @@ proc bindShortcut*(
     modifiers: set[ShortcutModifier],
     selector: CommandSelector,
 ) =
-  window.xKeyBindings.bindShortcut(key, modifiers, selector)
+  window.bindKey(key, modifiers.toKeyModifiers(), selector)
 
 proc bindShortcuts*(
     window: Window,
@@ -1312,6 +1344,7 @@ proc setFirstResponder(window: Window, responder: Responder, focusVisible: bool)
   if not nextResponder.isNil and not nextResponder.becomeFirstResponder():
     return false
 
+  window.cancelKeySequence()
   if not previousResponder.isNil:
     previousResponder.setFirstResponderFocusState(false, false)
   if not nextResponder.isNil:
@@ -2028,11 +2061,20 @@ proc sendAction*(
 
 proc dispatchKeyCommand(
     window: Window, target: Responder, event: events.KeyEvent
-): EventDispatchResult =
-  let command = window.xKeyBindings.commandFor(event)
-  if command.isNone:
-    return
-  dispatchCommandInChain(target, command.get(), DynamicAgent(target))
+): KeyCommandDispatchResult =
+  window.xPendingKeySequence.add event
+  let bindingMatch = window.xKeyBindings.match(window.xPendingKeySequence)
+  case bindingMatch.kind
+  of kbmNone:
+    window.cancelKeySequence()
+  of kbmPrefix:
+    result.recognized = true
+    result.dispatch.handled = true
+  of kbmCommand:
+    window.cancelKeySequence()
+    result.recognized = true
+    result.dispatch =
+      dispatchCommandInChain(target, bindingMatch.selector, DynamicAgent(target))
 
 func shouldDispatchTextKeyDownFirst(event: events.KeyEvent): bool =
   event.modifiers - {kmShift} == {} and event.text.isInsertableText()
@@ -2041,14 +2083,22 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
   let target = window.keyDispatchTarget()
   if target.isNil:
     return false
+  if window.xPendingKeySequence.len > 0:
+    if event.key == keyEscape:
+      window.cancelKeySequence()
+    else:
+      let pendingResult = window.dispatchKeyCommand(target, event)
+      if pendingResult.recognized:
+        return pendingResult.dispatch.handled
   if target.performKeyEquivalentInChain(event):
     return true
-  window.dispatchKeyCommand(target, event).handled
+  window.dispatchKeyCommand(target, event).dispatch.handled
 
 proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
   window.clearToolTip()
   let target = window.keyDispatchTarget()
-  let dispatchTextFirst = event.shouldDispatchTextKeyDownFirst()
+  let dispatchTextFirst =
+    window.xPendingKeySequence.len == 0 and event.shouldDispatchTextKeyDownFirst()
   if not target.isNil and dispatchTextFirst:
     if window.dispatchKeyEventInChain(target, event, keyDown()).handled:
       return true
@@ -2721,6 +2771,7 @@ proc dispatchHostFocusChanged(window: Window, focused: bool) =
   if focused:
     window.updateInsertionPointBlink()
   else:
+    window.cancelKeySequence()
     window.stopInsertionPointBlink()
     window.clearToolTip()
   if focused and not window.xIsPopup and window.hasActiveTransientSession():

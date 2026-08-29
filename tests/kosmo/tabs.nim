@@ -108,10 +108,19 @@ suite "Kosmo":
     check not frontend.editorView.editor.tabs()[1].modified
     check "!" in readFile(secondPath)
 
-    check frontend.application.mainMenu().performKeyEquivalent(
-      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers()),
-      Responder(frontend.editorView),
-    )
+    when defined(windows) or defined(linux) or defined(bsd):
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+      )
+      check frontend.editorView.editor.tabs().len == 2
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+      )
+    else:
+      check frontend.application.mainMenu().performKeyEquivalent(
+        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers()),
+        Responder(frontend.editorView),
+      )
     check frontend.editorView.editor.tabs().len == 1
     check frontend.editorView.editor.tabs()[0].title == "first.txt"
 
@@ -123,7 +132,7 @@ suite "Kosmo":
       bindingsPath = root / "keybindings.json"
     writeFile(firstPath, "first")
     writeFile(secondPath, "second")
-    writeFile(bindingsPath, """{"kosmo.nextTab": "cmd-j"}""")
+    writeFile(bindingsPath, """{"kosmo.nextTab": "ctrl-w ctrl-j"}""")
     defer:
       removeFile(firstPath)
       removeFile(secondPath)
@@ -150,8 +159,13 @@ suite "Kosmo":
         modifiers: {kmCommand, kmShift},
       )
     ).isNone
+    check frontend.editorView.editor.tabs()[1].active
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: {kmCommand})
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    check frontend.editorView.editor.tabs()[1].active
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: {kmControl})
     )
     check frontend.editorView.editor.tabs()[0].active
 

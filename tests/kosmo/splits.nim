@@ -31,7 +31,49 @@ proc hasPaneOutline(pane: KosmoEditorPane, color: Color, width: float32): bool =
         abs(node.screenBox.h - (contentSize.height - width)) <= 0.01'f32:
       return true
 
+proc dispatchControlWChord(window: Window, key: Key): bool =
+  if not window.dispatchKeyDown(
+    KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+  ):
+    return false
+  window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: {kmControl}))
+
 suite "Kosmo":
+  test "split shortcuts move the active tab into a new editor group":
+    let
+      root = createTempDir("merenda-kosmo-shortcut-split-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+
+    let scenarios: array[2, tuple[shortcut: Key, axis: LayoutAxis]] =
+      [(shortcut: keyS, axis: laVertical), (shortcut: keyV, axis: laHorizontal)]
+    for scenario in scenarios:
+      let frontend = newKosmoApplication(newApplication("Kosmo Shortcut Split Test"))
+      defer:
+        frontend.close()
+      frontend.window.setContentView(frontend.contentView)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      check frontend.openPath(firstPath)
+      check frontend.openPath(secondPath)
+      check frontend.window.makeFirstResponder(frontend.editorView)
+
+      check frontend.window.dispatchControlWChord(scenario.shortcut)
+      frontend.contentView.layoutSubtreeIfNeeded()
+
+      let groups = frontend.editorGroups()
+      require groups.len == 2
+      check frontend.dockView.rootView() of SplitView
+      check SplitView(frontend.dockView.rootView()).splitAxis == scenario.axis
+      check groups[0].pane.documentTabs.documentTabModels()[0].title == "first.txt"
+      check groups[1].pane.documentTabs.documentTabModels()[0].title == "second.txt"
+      check frontend.window.firstResponder == groups[1].editorView
+
   test "dragging a document tab to an editor edge creates a split group":
     let
       root = createTempDir("merenda-kosmo-dock-split-", "")

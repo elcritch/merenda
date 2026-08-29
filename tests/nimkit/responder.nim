@@ -417,6 +417,72 @@ suite "nimkit responder":
     check trackingEvents == @["parent.command"]
     check trackingCommandSenders == @[DynamicAgent(child)]
 
+  test "window key sequences consume prefixes and dispatch completed commands":
+    let
+      window = newWindow("Key sequences", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      parent = newTrackingSpyView("parent", rect(10, 10, 100, 80))
+      child = newView(frame = rect(20, 15, 30, 20))
+
+    child.acceptsFirstResponder = true
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+    window.clearKeyBindings()
+    window.bindSequence("ctrl-w ctrl-s", trackingCommand())
+
+    resetTracking()
+    check window.makeFirstResponder(child)
+    check window.dispatchKeyDown(
+      KeyEvent(text: "w", key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    check trackingEvents.len == 0
+
+    check window.dispatchKeyDown(
+      KeyEvent(text: "s", key: keyS, keyCode: keyS.ord, modifiers: {kmControl})
+    )
+    check trackingEvents == @["parent.command"]
+    check trackingCommandSenders == @[DynamicAgent(child)]
+
+  test "invalid sequence continuations are dispatched as fresh key events":
+    let
+      window = newWindow("Sequence fallback", frame = rect(0, 0, 240, 160))
+      root = newView(frame = rect(0, 0, 240, 160))
+      parent = newTrackingSpyView("parent", rect(10, 10, 100, 80))
+      child = newView(frame = rect(20, 15, 30, 20))
+
+    child.acceptsFirstResponder = true
+    parent.addSubview(child)
+    root.addSubview(parent)
+    window.setContentView(root)
+    window.clearKeyBindings()
+    window.bindSequence(
+      [initKeyStroke(keyW, {kmControl}), initKeyStroke(keyS, {kmControl})],
+      trackingCommand(),
+    )
+
+    resetTracking()
+    check window.makeFirstResponder(child)
+    check window.dispatchKeyDown(
+      KeyEvent(text: "w", key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    check window.dispatchKeyDown(
+      KeyEvent(text: "x", key: keyX, keyCode: keyX.ord, modifiers: {kmControl})
+    )
+
+    check trackingEvents == @["parent.key:x"]
+    check trackingModifiers == @[{kmControl}]
+
+    resetTracking()
+    check window.dispatchKeyDown(
+      KeyEvent(text: "w", key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    check window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
+    check window.dispatchKeyDown(
+      KeyEvent(text: "s", key: keyS, keyCode: keyS.ord, modifiers: {kmControl})
+    )
+    check trackingEvents == @["parent.key:", "parent.key:s"]
+
   test "window shortcut bindings resolve primary platform modifier":
     let
       window = newWindow("Shortcuts", frame = rect(0, 0, 240, 160))

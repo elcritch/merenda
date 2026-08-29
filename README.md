@@ -462,13 +462,19 @@ Buttons can be tab-selected and activated from the keyboard.
 
 Application commands can use `KeyBindingTable` and load user overrides from a
 JSON command-to-shortcut map. A string assigns one shortcut, an array assigns
-several, and `null` or an empty array disables that command. Shortcut names use
-forms such as `cmd-s`, `cmd-shift-p`, and `cmd-{`.
+several alternatives, and `null` or an empty array disables that command.
+Whitespace joins strokes into a sequence, so shortcut names can use forms such
+as `cmd-s`, `cmd-shift-p`, `cmd-{`, and `ctrl-w ctrl-s`. A sequence prefix is
+consumed until its next stroke; Escape, a focus change, or a binding-table change
+cancels it.
 
 Standalone Kosmo reads `keybindings.json` from the `kosmo` directory beneath
 the platform configuration directory (`defaultKosmoKeyBindingsPath()`). Its
-defaults are Command-S to save, Command-W to close the active tab, and
-Command-Q to quit. Command-{ / Command-} select the previous or next tab, and
+defaults are Command-S to save and Command-Q to quit. Command-W closes the
+active tab on macOS. Command-{ / Command-} select the previous or next tab.
+Control-W Control-S moves the active tab into a new panel below, while
+Control-W Control-V moves it into a new panel on the right. On Linux and
+Windows, Control-W Control-W closes the active tab instead of Command-W.
 Command-Shift-E selects and focuses the file explorer. Command-Shift-F selects
 the find-in-files sidebar and focuses its query field. Command-1 focuses the
 file browser, while Command-2 through Command-9 focus the corresponding editor
@@ -482,7 +488,7 @@ panels in creation order. For example:
   "kosmo.previousTab": "cmd-{",
   "kosmo.nextTab": "cmd-}",
   "kosmo.showFileExplorer": "cmd-shift-e",
-  "kosmo.findInFiles": "cmd-shift-f",
+  "kosmo.findInFiles": ["cmd-shift-f", "ctrl-w ctrl-f"],
   "kosmo.focusPanel1": "cmd-1",
   "kosmo.focusPanel2": "cmd-2"
 }

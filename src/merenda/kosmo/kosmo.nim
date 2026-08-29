@@ -17,6 +17,8 @@ const
   KosmoQuitAction* = "kosmo.quit"
   KosmoPreviousTabAction* = "kosmo.previousTab"
   KosmoNextTabAction* = "kosmo.nextTab"
+  KosmoSplitHorizontalAction* = "kosmo.splitHorizontal"
+  KosmoSplitVerticalAction* = "kosmo.splitVertical"
   KosmoShowFileExplorerAction* = "kosmo.showFileExplorer"
   KosmoFindInFilesAction* = "kosmo.findInFiles"
   KosmoQuickOpenAction* = "kosmo.quickOpen"
@@ -47,6 +49,8 @@ const
     KosmoQuitAction,
     KosmoPreviousTabAction,
     KosmoNextTabAction,
+    KosmoSplitHorizontalAction,
+    KosmoSplitVerticalAction,
     KosmoShowFileExplorerAction,
     KosmoFindInFilesAction,
     KosmoQuickOpenAction,
@@ -213,6 +217,15 @@ proc newTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.}
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
+proc groupForView(
+  controller: KosmoDockController, view: KosmoEditorView
+): KosmoEditorGroup
+
+proc splitCurrentPaneTab(
+  controller: KosmoDockController,
+  source: KosmoEditorGroup,
+  position: nimkit.DockPosition,
+): bool
 
 func focusPanelAction*(panelNumber: int): string =
   ## Return the key-binding command name for a numbered Kosmo panel.
@@ -234,9 +247,12 @@ func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
   result.bindKey(
     nimkit.keyS, {nimkit.kmCommand}, nimkit.actionSelector(KosmoSaveAction)
   )
-  result.bindKey(
-    nimkit.keyW, {nimkit.kmCommand}, nimkit.actionSelector(KosmoCloseTabAction)
-  )
+  when defined(windows) or defined(linux) or defined(bsd):
+    result.bindSequence("ctrl-w ctrl-w", nimkit.actionSelector(KosmoCloseTabAction))
+  else:
+    result.bindKey(
+      nimkit.keyW, {nimkit.kmCommand}, nimkit.actionSelector(KosmoCloseTabAction)
+    )
   result.bindKey(
     nimkit.keyQ, {nimkit.kmCommand}, nimkit.actionSelector(KosmoQuitAction)
   )
@@ -250,6 +266,10 @@ func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
     {nimkit.kmCommand, nimkit.kmShift},
     nimkit.actionSelector(KosmoNextTabAction),
   )
+  result.bindSequence(
+    "ctrl-w ctrl-s", nimkit.actionSelector(KosmoSplitHorizontalAction)
+  )
+  result.bindSequence("ctrl-w ctrl-v", nimkit.actionSelector(KosmoSplitVerticalAction))
   result.bindKey(
     nimkit.keyE,
     {nimkit.kmCommand, nimkit.kmShift},
@@ -1030,6 +1050,12 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       controller.selectRelativeTab(view, -1)
     of KosmoNextTabAction:
       controller.selectRelativeTab(view, 1)
+    of KosmoSplitHorizontalAction:
+      discard
+        controller.splitCurrentPaneTab(controller.groupForView(view), nimkit.dpBottom)
+    of KosmoSplitVerticalAction:
+      discard
+        controller.splitCurrentPaneTab(controller.groupForView(view), nimkit.dpRight)
     of KosmoShowFileExplorerAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFileExplorer()
@@ -1432,6 +1458,10 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       controller.selectRelativePaneTab(group, -1)
     of KosmoNextTabAction:
       controller.selectRelativePaneTab(group, 1)
+    of KosmoSplitHorizontalAction:
+      discard controller.splitCurrentPaneTab(group, nimkit.dpBottom)
+    of KosmoSplitVerticalAction:
+      discard controller.splitCurrentPaneTab(group, nimkit.dpRight)
     of KosmoShowFileExplorerAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFileExplorer()
@@ -1520,7 +1550,7 @@ proc installShortcutBindings(controller: KosmoDockController, window: nimkit.Win
   for command in KosmoShortcutCommands:
     discard bindings.remove(nimkit.actionSelector(command))
   for binding in controller.shortcutBindings.bindings:
-    bindings.add(binding.stroke, binding.selector)
+    bindings.add(binding.sequence, binding.selector)
   window.setKeyBindings(bindings)
 
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView) =
@@ -1869,6 +1899,32 @@ proc finishPaneTabMove(
   target.editorView.lastTabs.setLen(0)
   target.editorView.refresh()
   controller.activatePaneTab(target, identifier)
+
+proc splitCurrentPaneTab(
+    controller: KosmoDockController,
+    source: KosmoEditorGroup,
+    position: nimkit.DockPosition,
+): bool =
+  if controller.isNil or source.isNil or position == nimkit.dpCenter:
+    return false
+  let selectedItem = source.pane.documentTabs.selectedDocumentTabItem()
+  if selectedItem.isNil:
+    return false
+  let identifier = selectedItem.identifier()
+  var
+    id: KosmoBufferId
+    bufferIds: seq[KosmoBufferId]
+  if identifier.parseTabIdentifier(id):
+    bufferIds.add id
+  elif source.documentForIdentifier(identifier).isNil:
+    return false
+
+  let target = controller.newEditorGroup(source.workspace, source.window, bufferIds)
+  if not source.workspace.splitPanel(source.panel, target.panel, position):
+    controller.removeGroup(target)
+    return false
+  controller.finishPaneTabMove(source, target, identifier)
+  true
 
 proc screenPoint(tabs: nimkit.DocumentTabs, location: nimkit.Point): nimkit.Point =
   let owner = tabs.window()
@@ -2366,12 +2422,16 @@ proc newKosmoApplication*(
     saveItem = nimkit.newMenuItem(
       "Save", nimkit.actionSelector(KosmoSaveAction), "s", nimkit.shortcutModifiers()
     )
-    closeTabItem = nimkit.newMenuItem(
-      "Close Tab",
-      nimkit.actionSelector(KosmoCloseTabAction),
-      "w",
-      nimkit.shortcutModifiers(),
-    )
+    closeTabItem =
+      when defined(windows) or defined(linux) or defined(bsd):
+        nimkit.newMenuItem("Close Tab", nimkit.actionSelector(KosmoCloseTabAction))
+      else:
+        nimkit.newMenuItem(
+          "Close Tab",
+          nimkit.actionSelector(KosmoCloseTabAction),
+          "w",
+          nimkit.shortcutModifiers(),
+        )
   editorView.applyKosmoEditorStyle(app.effectiveAppearance())
   openItem.identifier = KosmoOpenFileAction
   quickOpenItem.identifier = KosmoQuickOpenAction

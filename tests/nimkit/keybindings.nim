@@ -245,6 +245,69 @@ suite "nimkit key bindings":
     expect ValueError:
       discard parseKeyStroke("cmd-mystery")
 
+  test "shortcut descriptions parse multi-stroke sequences":
+    let sequence = parseKeySequence("ctrl-w ctrl-s")
+    let
+      prefixEvent = KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+      commandEvent = KeyEvent(key: keyS, keyCode: keyS.ord, modifiers: {kmControl})
+      action = actionSelector("demo.split")
+    var bindings: KeyBindingTable
+    bindings.add(sequence, action)
+
+    check sequence.strokes.len == 2
+    check sequence.strokes[0] == initKeyStroke(keyW, {kmControl})
+    check sequence.strokes[1] == initKeyStroke(keyS, {kmControl})
+    check bindings.match([prefixEvent]).kind == kbmPrefix
+    let commandMatch = bindings.match([prefixEvent, commandEvent])
+    check commandMatch.kind == kbmCommand
+    check commandMatch.selector == action
+    check bindings.commandFor(prefixEvent).isNone
+
+  test "bindings reject a command that is also a sequence prefix":
+    var bindings: KeyBindingTable
+    bindings.add(parseKeySequence("ctrl-w ctrl-s"), actionSelector("demo.split"))
+
+    expect ValueError:
+      bindings.add(parseKeySequence("ctrl-w"), actionSelector("demo.close"))
+
+  test "conflicting JSON sequences leave existing bindings unchanged":
+    let
+      saveAction = actionSelector("demo.save")
+      leaderAction = actionSelector("demo.leader")
+    var bindings: KeyBindingTable
+    bindings.bindKey(keyS, {kmCommand}, saveAction)
+    bindings.bindKey(keyW, {kmControl}, leaderAction)
+
+    let outcome = bindings.applyKeyBindingOverridesJson(
+      """{"demo.save": "ctrl-w ctrl-s"}""", ["demo.save"]
+    )
+
+    check not outcome.succeeded
+    check bindings
+    .commandFor(KeyEvent(key: keyS, keyCode: keyS.ord, modifiers: {kmCommand}))
+    .get() == saveAction
+    check bindings
+    .commandFor(KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl}))
+    .get() == leaderAction
+
+  test "JSON key binding overrides support shortcut sequences":
+    let action = actionSelector("demo.split")
+    var bindings: KeyBindingTable
+
+    let outcome = bindings.applyKeyBindingOverridesJson(
+      """{"demo.split": "ctrl-w ctrl-s"}""", ["demo.split"]
+    )
+    let bindingMatch = bindings.match(
+      [
+        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl}),
+        KeyEvent(key: keyS, keyCode: keyS.ord, modifiers: {kmControl}),
+      ]
+    )
+
+    check outcome.succeeded
+    check bindingMatch.kind == kbmCommand
+    check bindingMatch.selector == action
+
   test "JSON key binding overrides replace and disable commands":
     let
       nextAction = actionSelector("demo.next")

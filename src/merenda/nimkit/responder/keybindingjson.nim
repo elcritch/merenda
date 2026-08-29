@@ -39,8 +39,10 @@ proc applyKeyBindingOverrides*(
 ): KeyBindingJsonResult =
   ## Apply an object mapping command names to shortcut strings or arrays.
   ##
-  ## A listed command replaces all of its previous strokes. An empty array or
-  ## `null` disables the command. Invalid entries leave that command unchanged.
+  ## Whitespace separates the strokes in a sequence, while arrays provide
+  ## alternative sequences. A listed command replaces all of its previous
+  ## bindings. An empty array or `null` disables the command. Invalid entries
+  ## leave that command unchanged.
   if node.kind != JObject:
     result.errors.add "Key bindings JSON must be an object"
     return
@@ -56,22 +58,29 @@ proc applyKeyBindingOverrides*(
       if descriptionError.len > 0:
         result.errors.add descriptionError
       else:
-        var strokes: seq[KeyStroke]
+        var sequences: seq[KeySequence]
         var parseError = ""
         for description in descriptions:
           if parseError.len == 0:
             try:
-              strokes.add parseKeyStroke(description)
+              sequences.add parseKeySequence(description)
             except ValueError as error:
               parseError = "Invalid shortcut for '" & command & "': " & error.msg
         if parseError.len > 0:
           result.errors.add parseError
         else:
           let selector = actionSelector(command)
-          discard table.remove(selector)
-          for stroke in strokes:
-            table.add(stroke, selector)
-          inc result.applied
+          var updated: KeyBindingTable
+          try:
+            for binding in table.bindings:
+              if binding.selector != selector:
+                updated.add(binding.sequence, binding.selector)
+            for sequence in sequences:
+              updated.add(sequence, selector)
+            table = move updated
+            inc result.applied
+          except ValueError as error:
+            result.errors.add "Invalid shortcut for '" & command & "': " & error.msg
 
 proc applyKeyBindingOverridesJson*(
     table: var KeyBindingTable,
