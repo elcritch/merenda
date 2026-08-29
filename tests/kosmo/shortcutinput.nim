@@ -89,6 +89,38 @@ suite "Kosmo synthetic shortcut input":
     check frontend.window.pressControlKey(keyK)
     check frontend.editorView.editor.tabs()[1].active
 
+  test "Moe receives the full sequence when Kosmo does not own its continuation":
+    let
+      root = createTempDir("merenda-kosmo-moe-sequence-", "")
+      path = root / "matches.txt"
+    writeFile(path, "needle zero\nneedle one\nneedle two")
+    defer:
+      removeFile(path)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Moe Sequence Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(path)
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "/", key: keySlash, keyCode: keySlash.ord)
+    )
+    check frontend.window.dispatchTextInput("needle")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
+    let cursorBeforeSequence = frontend.editorView.editor.bufferCursor()
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "n", key: keyN, keyCode: keyN.ord)
+    )
+    check frontend.editorView.editor.bufferCursor() == cursorBeforeSequence
+
   test "Escape cancels a pending sequence before the next shortcut key":
     let
       root = createTempDir("merenda-kosmo-synthetic-cancel-", "")

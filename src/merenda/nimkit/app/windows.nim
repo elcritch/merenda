@@ -232,6 +232,7 @@ type EventDispatchResult = object
 type KeyCommandDispatchResult = object
   recognized: bool
   dispatch: EventDispatchResult
+  unmatchedEvents: seq[events.KeyEvent]
 
 type CaretBlinkAnimation = ref object of Animation
   textView: TextView
@@ -2066,6 +2067,7 @@ proc dispatchKeyCommand(
   let bindingMatch = window.xKeyBindings.match(window.xPendingKeySequence)
   case bindingMatch.kind
   of kbmNone:
+    result.unmatchedEvents = window.xPendingKeySequence
     window.cancelKeySequence()
   of kbmPrefix:
     result.recognized = true
@@ -2075,6 +2077,14 @@ proc dispatchKeyCommand(
     result.recognized = true
     result.dispatch =
       dispatchCommandInChain(target, bindingMatch.selector, DynamicAgent(target))
+
+proc replayUnmatchedKeySequence(window: Window, sequence: openArray[events.KeyEvent]) =
+  ## Give a responder every stroke after a window-level sequence rejects it.
+  ## Replaying directly avoids matching the same window shortcut prefix again.
+  for event in sequence:
+    let target = window.keyDispatchTarget()
+    if not target.isNil:
+      discard window.dispatchKeyEventInChain(target, event, keyDown())
 
 func shouldDispatchTextKeyDownFirst(event: events.KeyEvent): bool =
   event.modifiers - {kmShift} == {} and event.text.isInsertableText()
@@ -2090,6 +2100,9 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
       let pendingResult = window.dispatchKeyCommand(target, event)
       if pendingResult.recognized:
         return pendingResult.dispatch.handled
+      if pendingResult.unmatchedEvents.len > 0:
+        window.replayUnmatchedKeySequence(pendingResult.unmatchedEvents)
+        return true
   if target.performKeyEquivalentInChain(event):
     return true
   window.dispatchKeyCommand(target, event).dispatch.handled

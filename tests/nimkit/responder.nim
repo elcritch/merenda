@@ -444,7 +444,7 @@ suite "nimkit responder":
     check trackingEvents == @["parent.command"]
     check trackingCommandSenders == @[DynamicAgent(child)]
 
-  test "invalid sequence continuations are dispatched as fresh key events":
+  test "unmatched key sequences replay every stroke to the responder":
     let
       window = newWindow("Sequence fallback", frame = rect(0, 0, 240, 160))
       root = newView(frame = rect(0, 0, 240, 160))
@@ -470,8 +470,8 @@ suite "nimkit responder":
       KeyEvent(text: "x", key: keyX, keyCode: keyX.ord, modifiers: {kmControl})
     )
 
-    check trackingEvents == @["parent.key:x"]
-    check trackingModifiers == @[{kmControl}]
+    check trackingEvents == @["parent.key:w", "parent.key:x"]
+    check trackingModifiers == @[{kmControl}, {kmControl}]
 
     resetTracking()
     check window.dispatchKeyDown(
