@@ -3,7 +3,7 @@
 import std/os
 
 when defined(posix):
-  import std/posix
+  import std/[posix, tables]
 
 import ./[terminalparser, terminalscreen]
 
@@ -230,24 +230,25 @@ when defined(posix):
     else:
       getEnv("SHELL", "/bin/sh")
 
-  proc configureChild(options: TerminalSpawnOptions) =
-    if options.workingDirectory.len > 0 and chdir(options.workingDirectory.cstring) != 0:
-      exitnow(126)
-    putEnv("TERM", options.terminalName)
-    putEnv("COLORTERM", options.colorTerminal)
-    putEnv("TERM_PROGRAM", "NimKit")
+  proc childEnvironment(options: TerminalSpawnOptions): seq[string] =
+    var environment = initOrderedTable[string, string]()
+    for name, value in envPairs():
+      environment[name] = value
+    environment["TERM"] = options.terminalName
+    environment["COLORTERM"] = options.colorTerminal
+    environment["TERM_PROGRAM"] = "NimKit"
     for variable in options.environment:
       if variable.name.len > 0 and '=' notin variable.name:
-        putEnv(variable.name, variable.value)
+        environment[variable.name] = variable.value
+    for name, value in environment.pairs:
+      result.add name & "=" & value
 
-  proc executeChild(options: TerminalSpawnOptions) {.noreturn.} =
-    options.configureChild()
-    let shell = options.resolvedShell()
-    if options.command.len > 0:
-      discard
-        execl(shell.cstring, shell.cstring, "-lc".cstring, options.command.cstring, nil)
-    else:
-      discard execl(shell.cstring, shell.cstring, nil)
+  proc executeChild(
+      shell, workingDirectory: cstring, arguments, environment: cstringArray
+  ) {.noreturn.} =
+    if workingDirectory != nil and chdir(workingDirectory) != 0:
+      exitnow(126)
+    discard execve(shell, arguments, environment)
     exitnow(127)
 
   proc setNonBlocking(descriptor: cint) =
@@ -261,6 +262,22 @@ proc start*(session: TerminalSession, options = initTerminalSpawnOptions()) =
   if session.xState == tssRunning:
     raise newException(TerminalSessionError, "terminal session is already running")
   when defined(posix):
+    # The child of a threaded process may only call async-signal-safe operations
+    # before exec, so allocate its argument and environment blocks in the parent.
+    let
+      shell = options.resolvedShell()
+      arguments = allocCStringArray(
+        if options.command.len > 0:
+          @[shell, "-lc", options.command]
+        else:
+          @[shell]
+      )
+      environment = allocCStringArray(options.childEnvironment())
+      workingDirectory =
+        if options.workingDirectory.len > 0: options.workingDirectory.cstring else: nil
+    defer:
+      deallocCStringArray(arguments)
+      deallocCStringArray(environment)
     var
       descriptor: cint
       windowSize = TerminalWindowSize(
@@ -272,7 +289,7 @@ proc start*(session: TerminalSession, options = initTerminalSpawnOptions()) =
       session.xError = "start PTY: " & $strerror(errno)
       raise newException(TerminalSessionError, session.xError)
     if child == 0:
-      options.executeChild()
+      executeChild(shell.cstring, workingDirectory, arguments, environment)
 
     try:
       descriptor.setNonBlocking()
