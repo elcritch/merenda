@@ -1,1 +1,2 @@
-import tekton/[application, editor, preview, user_workflows]
+## Compile-time smoke test for Tekton's public API.
+import merenda/tekton

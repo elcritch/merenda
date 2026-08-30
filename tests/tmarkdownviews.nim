@@ -1,6 +1,8 @@
-import std/[strutils, unicode, unittest]
+import std/[monotimes, os, strformat, strutils, times, unicode, unittest]
 
 import merenda/nimkit
+
+const RepositoryReadme = currentSourcePath().parentDir.parentDir / "README.md"
 
 proc runeIndexOf(text, needle: string): int =
   let
@@ -293,3 +295,35 @@ Press <kbd>Enter</kbd>.
     view.markdownConfig = initMarkdownParserConfig(mddCommonMark)
     view.markdown = "~~literal~~"
     check view.textStorage().stringValue() == "~~literal~~"
+
+  test "repository README renders and responds to clicks within an interactive budget":
+    let
+      source = readFile(RepositoryReadme)
+      constructionStarted = getMonoTime()
+      view = newMarkdownView(source, frame = rect(0, 0, 760, 540))
+      constructionElapsed = getMonoTime() - constructionStarted
+      renderingStarted = getMonoTime()
+    discard buildRenders(view)
+    let
+      renderingElapsed = getMonoTime() - renderingStarted
+      textView = view.textView()
+      snapshot = textView.layoutManager().layoutSnapshot()
+      firstLine = snapshot.lineFragments[0].fragmentRect
+      clickPoint = initPoint(
+        firstLine.origin.x + 8.0'f32,
+        firstLine.origin.y + firstLine.size.height * 0.5'f32,
+      )
+      clickStarted = getMonoTime()
+    check textView.mouseDown(MouseEvent(location: clickPoint, button: mbPrimary))
+    check textView.mouseUp(MouseEvent(location: clickPoint, button: mbPrimary))
+    let clickElapsed = getMonoTime() - clickStarted
+
+    echo &"README MarkdownView timing: construct " &
+      &"{constructionElapsed.inMilliseconds} ms, render " &
+      &"{renderingElapsed.inMilliseconds} ms, click " &
+      &"{clickElapsed.inMilliseconds} ms"
+    check source.len > 20_000
+    check snapshot.lineFragments.len > 100
+    check constructionElapsed < initDuration(seconds = 2)
+    check renderingElapsed < initDuration(seconds = 5)
+    check clickElapsed < initDuration(seconds = 1)

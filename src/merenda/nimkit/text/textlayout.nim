@@ -2157,81 +2157,123 @@ proc lineBounds*(manager: TextLayoutManager, line: int): Rect =
     return manager.caretRect(int(range.location))
   rect(0.0, 0.0, 0.0, 0.0)
 
-proc emptyLineIndexAtPoint(manager: TextLayoutManager, point: Point): int =
-  if manager.xTextStorage.isNil:
-    return -1
+func squaredDistance(point: Point, bounds: Rect): float32 =
+  let
+    dx =
+      if point.x < bounds.minX:
+        bounds.minX - point.x
+      elif point.x > bounds.maxX:
+        point.x - bounds.maxX
+      else:
+        0.0'f32
+    dy =
+      if point.y < bounds.minY:
+        bounds.minY - point.y
+      elif point.y > bounds.maxY:
+        point.y - bounds.maxY
+      else:
+        0.0'f32
+  dx * dx + dy * dy
 
-  let runes = manager.xTextStorage.stringValue().toRunes()
-  for index, rune in runes:
-    if rune != Rune('\n'):
-      continue
-    let nextIndex = index + 1
-    if nextIndex < runes.len and runes[nextIndex] != Rune('\n'):
-      continue
+proc nearestLineFragment(
+    manager: TextLayoutManager, point: Point
+): Option[TextLineFragment] =
+  var bestDistance = high(float32)
+  for fragment in manager.xSnapshot.lineFragments:
+    let distance = point.squaredDistance(fragment.fragmentRect)
+    if distance < bestDistance or
+        (distance == bestDistance and fragment.glyphRange.length == 0):
+      bestDistance = distance
+      result = some(fragment)
+
+func sameSourceRange(a, b: GlyphSourceRange): bool =
+  a.byteStart == b.byteStart and a.byteEnd == b.byteEnd and a.runeStart == b.runeStart and
+    a.runeEnd == b.runeEnd
+
+func clusterAppearsRtl(
+    layout: GlyphArrangement, firstGlyph, lastGlyph, lineStart, lineStop: int
+): bool =
+  let source = layout.glyphSourceRange(firstGlyph)
+  if firstGlyph > lineStart and
+      layout.glyphSourceRange(firstGlyph - 1).runeStart > source.runeStart:
+    return true
+  if lastGlyph < lineStop and
+      layout.glyphSourceRange(lastGlyph + 1).runeStart < source.runeStart:
+    return true
+
+proc lineBoundedIndexAtPoint(
+    manager: TextLayoutManager, fragment: TextLineFragment, point: Point
+): int =
+  # FigDraw's general caret lookup scans every glyph for every source index.
+  # Generate the same insertion candidates from only the selected visual line.
+  if fragment.glyphRange.length == 0:
+    return int(fragment.textRange.location)
+
+  let
+    lineStart = fragment.glyphRange.location.toInt
+    lineStop = fragment.glyphRange.maxIndex - 1
+    selectableStart = int(fragment.textRange.location)
+    selectableStop =
+      if fragment.hardBreak:
+        max(selectableStart, fragment.textRange.maxIndex - 1)
+      else:
+        fragment.textRange.maxIndex
+  var
+    glyphIndex = lineStart
+    closestIndex = int(fragment.textRange.location)
+    closestDistance = high(float32)
+
+  template considerCaret(index: int, caretX: float32) =
+    if index >= selectableStart and index <= selectableStop:
+      let distance = abs(point.x - caretX)
+      if distance < closestDistance:
+        closestDistance = distance
+        closestIndex = index
+
+  while glyphIndex <= lineStop:
+    let source = manager.xLayout.glyphSourceRange(glyphIndex)
+    var
+      clusterStop = glyphIndex
+      clusterRect = manager.xLayout.glyphRect(glyphIndex)
+    while clusterStop < lineStop and
+        manager.xLayout.glyphSourceRange(clusterStop + 1).sameSourceRange(source):
+      inc clusterStop
+      clusterRect = clusterRect.union(manager.xLayout.glyphRect(clusterStop))
 
     let
-      caret = manager.virtualCaretRect(nextIndex)
-      lineHeight = max(caret.size.height, defaultFontSize())
-      caretY = caret.origin.y - manager.xLayoutRect.origin.y
-    if point.y >= caretY and point.y < caretY + lineHeight:
-      return nextIndex
+      actualRect = manager.actualRectForVirtualRect(
+        clusterRect.toContainerRect(manager.xLayoutRect)
+      )
+      rtl =
+        manager.xLayout.clusterAppearsRtl(glyphIndex, clusterStop, lineStart, lineStop)
+      sourceLength = max(source.runeEnd - source.runeStart, 1)
+    for index in source.runeStart .. source.runeEnd:
+      let
+        amount = (index - source.runeStart).float32 / sourceLength.float32
+        caretX =
+          if rtl:
+            actualRect.maxX - actualRect.size.width * amount
+          else:
+            actualRect.minX + actualRect.size.width * amount
+      considerCaret(index, caretX)
 
-  -1
+    glyphIndex = clusterStop + 1
 
-proc lineBoundedIndexAtPoint(manager: TextLayoutManager, point: Point): int =
-  if manager.xTextStorage.isNil:
-    return -1
-
-  let total = manager.xTextStorage.stringValue().runeLen
-  var firstIndex = -1
-  var lastIndex = -1
-  var closestIndex = -1
-  var minX = high(float32)
-  var maxX = -high(float32)
-  var closestDistance = high(float32)
-
-  for index in 0 .. total:
-    let
-      caret = manager.virtualCaretRect(index)
-      lineHeight = max(caret.size.height, defaultFontSize())
-      caretX = caret.origin.x - manager.xLayoutRect.origin.x
-      caretY = caret.origin.y - manager.xLayoutRect.origin.y
-
-    if point.y < caretY or point.y >= caretY + lineHeight:
-      continue
-
-    if firstIndex < 0 or index < firstIndex:
-      firstIndex = index
-    if index > lastIndex:
-      lastIndex = index
-    minX = min(minX, caretX)
-    maxX = max(maxX, caretX)
-
-    let distance = abs(point.x - caretX)
-    if distance < closestDistance:
-      closestDistance = distance
-      closestIndex = index
-
-  if closestIndex < 0:
-    return -1
-  if point.x <= minX:
-    return firstIndex
-  if point.x >= maxX:
-    return lastIndex
   closestIndex
 
 proc defaultTextIndexAtPoint(manager: TextLayoutManager, point: Point): int =
   manager.updateLayout()
-  let localPoint = manager.localLayoutPoint(point)
-  let emptyLineIndex = manager.emptyLineIndexAtPoint(localPoint)
-  if emptyLineIndex >= 0:
-    return emptyLineIndex
-  let lineBoundedIndex = manager.lineBoundedIndexAtPoint(localPoint)
-  if lineBoundedIndex >= 0:
-    return lineBoundedIndex
-  let nearest =
-    manager.xLayout.nearestSourceRuneForCaretPoint(vec2(localPoint.x, localPoint.y))
-  max(0, min(nearest, manager.xTextStorage.len))
+  if manager.xTextStorage.isNil:
+    return 0
+  let fragment = manager.nearestLineFragment(point)
+  if fragment.isNone:
+    return 0
+  max(
+    0,
+    min(
+      manager.lineBoundedIndexAtPoint(fragment.get(), point), manager.xTextStorage.len
+    ),
+  )
 
 proc textIndexAtPoint*(manager: TextLayoutManager, point: Point): int =
   manager.lmTextIndexAtPoint(point)
