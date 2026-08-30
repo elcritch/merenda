@@ -74,6 +74,38 @@ suite "Kosmo":
     check "No Name" notin buffer.renderedText
     editor.close()
 
+  test "discovers and applies Moe TOML themes":
+    let
+      root = createTempDir("merenda-kosmo-moe-themes-", "")
+      lightPath = root / "soft-light.toml"
+      vividPath = root / "vivid.toml"
+    writeFile(
+      lightPath, "[Colors]\nforeground = \"#101010\"\nbackground = \"#f8f8f8\"\n"
+    )
+    writeFile(
+      vividPath, "[Colors]\nforeground = \"#ffdd66\"\nbackground = \"#160022\"\n"
+    )
+    defer:
+      removeFile(lightPath)
+      removeFile(vividPath)
+      removeDir(root)
+
+    let themes = discoverMoeThemes(root)
+    check themes.len == 3
+    check themes[0].identifier == KosmoMoeDefaultThemeIdentifier
+    check themes[0].name == "Default"
+    check themes[1].name == "Soft Light"
+    check themes[2].name == "Vivid"
+
+    let editor = newKosmoEditor(text = "themed")
+    let outcome = editor.applyMoeTheme(themes[1])
+    check outcome.applied
+    check outcome.message == "Theme changed to: Soft Light"
+    check editor.activeMoeThemeIdentifier() == themes[1].identifier
+    check editor.applyMoeTheme(themes[0]).applied
+    check editor.activeMoeThemeIdentifier() == KosmoMoeDefaultThemeIdentifier
+    editor.close()
+
   test "text input and physical keys use Moe's frontend API":
     let editor = newKosmoEditor()
     var buffer = newRenderBuffer(24, 8)

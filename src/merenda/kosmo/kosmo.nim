@@ -2446,6 +2446,24 @@ proc `terminalOptionAsMeta=`*(frontend: KosmoApplication, enabled: bool) =
       if document.contentView of nimkit.TerminalView:
         nimkit.TerminalView(document.contentView).optionAsMeta = enabled
 
+func moeThemeSettings(themes: openArray[KosmoMoeTheme]): seq[KosmoMoeThemeSetting] =
+  for theme in themes:
+    result.add KosmoMoeThemeSetting(identifier: theme.identifier, name: theme.name)
+
+proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
+  ## Apply an available Moe theme and repaint every editor pane.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  for theme in frontend.dockController.editor.availableMoeThemes():
+    if theme.identifier != identifier:
+      continue
+    let outcome = frontend.dockController.editor.applyMoeTheme(theme)
+    for group in frontend.dockController.groups:
+      group.editorView.refresh()
+    if not outcome.applied and not frontend.statusLabel.isNil:
+      frontend.statusLabel.text = outcome.message
+    return outcome.applied
+
 func settingsWindow*(frontend: KosmoApplication): KosmoSettingsWindow =
   ## Return Kosmo's settings controller after the panel has been created.
   if not frontend.isNil:
@@ -2455,7 +2473,12 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
   ## Present Kosmo's application settings without Merenda's global settings pages.
   if frontend.isNil or frontend.application.isNil:
     return
-  let shortcuts = frontend.dockController.shortcutBindings.kosmoShortcutSettings()
+  let
+    shortcuts = frontend.dockController.shortcutBindings.kosmoShortcutSettings()
+    moeThemes = frontend.dockController.editor.availableMoeThemes()
+    moeThemeSettings = moeThemes.moeThemeSettings()
+    selectedMoeThemeIdentifier =
+      frontend.dockController.editor.activeMoeThemeIdentifier()
   if frontend.xSettingsWindow.isNil or frontend.xSettingsWindow.window.isClosed():
     let weakFrontend = frontend.unsafeWeakRef()
     frontend.xSettingsWindow = newKosmoSettingsWindow(
@@ -2465,10 +2488,19 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
           weakFrontend[].terminalOptionAsMeta = enabled
       ,
       shortcuts = shortcuts,
+      moeThemes = moeThemeSettings,
+      selectedMoeThemeIdentifier = selectedMoeThemeIdentifier,
+      moeThemeHandler = proc(identifier: string): bool =
+        if not weakFrontend.isNil:
+          return weakFrontend[].setMoeTheme(identifier)
+      ,
     )
   else:
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
     frontend.xSettingsWindow.shortcuts = shortcuts
+    frontend.xSettingsWindow.updateMoeThemes(
+      moeThemeSettings, selectedMoeThemeIdentifier
+    )
   result =
     not frontend.application.showWindow(
       frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,

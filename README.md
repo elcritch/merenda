@@ -494,6 +494,11 @@ panels in creation order. For example:
 }
 ```
 
+Kosmo Settings includes a Moe Themes tab. It lists Moe's default theme and
+every `.toml` theme installed in `~/.config/moe/themes`; choosing one applies it
+immediately to all Kosmo editor panes. Reopening Settings refreshes the list, so
+new themes added to that directory appear without restarting Kosmo.
+
 Kosmo's sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
 double-clicking promotes it to a permanent editor tab. Git-ignored files and

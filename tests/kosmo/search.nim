@@ -70,11 +70,13 @@ suite "Kosmo":
     require not tabsView.isNil
     require tabsView of TabView
     let settingsTabs = TabView(tabsView)
-    check settingsTabs.len == 2
+    check settingsTabs.len == 3
     check settingsTabs[0].label == "Terminal"
     check settingsTabs[0].identifier == KosmoTerminalSettingsTabIdentifier
     check settingsTabs[1].label == "Shortcuts"
     check settingsTabs[1].identifier == KosmoShortcutsSettingsTabIdentifier
+    check settingsTabs[2].label == "Moe Themes"
+    check settingsTabs[2].identifier == KosmoMoeThemesSettingsTabIdentifier
     check settingsTabs.selectedIndex == 0
     check settingsTabs.selectTabViewItemAtIndex(1)
 
@@ -124,6 +126,24 @@ suite "Kosmo":
     check shortcutsTable.tableCellText(horizontalSplitRow, keysColumn) == "Ctrl+W Ctrl+S"
     check shortcutsTable.tableCellText(verticalSplitRow, keysColumn) == "Ctrl+W Ctrl+V"
     check not shortcutsTable.beginEditingCell(saveRow, keysColumn)
+    check settingsTabs.selectTabViewItemAtIndex(2)
+
+    let moeThemeView =
+      settingsPanel.contentView().viewWithIdentifier(KosmoMoeThemeSelectorIdentifier)
+    require not moeThemeView.isNil
+    require moeThemeView of ComboBox
+    let moeThemeSelector = ComboBox(moeThemeView)
+    check moeThemeSelector.numberOfItems() >= 2
+    let defaultThemeIndex =
+      moeThemeSelector.indexOfOptionIdentifier(KosmoMoeDefaultThemeIdentifier)
+    require defaultThemeIndex >= 0
+    check moeThemeSelector.selectedOptionIdentifier ==
+      frontend.editorView.editor.activeMoeThemeIdentifier()
+    moeThemeSelector.activateItemAtIndex(defaultThemeIndex)
+    check frontend.editorView.editor.activeMoeThemeIdentifier() ==
+      KosmoMoeDefaultThemeIdentifier
+    check frontend.settingsWindow().selectedMoeThemeIdentifier() ==
+      KosmoMoeDefaultThemeIdentifier
     check settingsTabs.selectTabViewItemAtIndex(0)
 
     let optionView =

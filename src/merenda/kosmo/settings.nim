@@ -6,19 +6,26 @@ const
   KosmoSettingsTabsIdentifier* = "kosmo.settings.tabs"
   KosmoTerminalSettingsTabIdentifier* = "kosmo.settings.terminal"
   KosmoShortcutsSettingsTabIdentifier* = "kosmo.settings.shortcuts"
+  KosmoMoeThemesSettingsTabIdentifier* = "kosmo.settings.moeThemes"
   KosmoOptionAsMetaIdentifier* = "kosmo.settings.terminal.optionAsMeta"
   KosmoShortcutsTableIdentifier* = "kosmo.settings.shortcuts.table"
+  KosmoMoeThemeSelectorIdentifier* = "kosmo.settings.moeThemes.selector"
   KosmoShortcutActionColumnIdentifier* = "action"
   KosmoShortcutDescriptionColumnIdentifier* = "description"
   KosmoShortcutKeysColumnIdentifier* = "keys"
 
 type
   KosmoOptionAsMetaHandler* = proc(enabled: bool) {.closure.}
+  KosmoMoeThemeHandler* = proc(identifier: string): bool {.closure.}
 
   KosmoShortcutSetting* = object
     action*: string
     description*: string
     keys*: string
+
+  KosmoMoeThemeSetting* = object
+    identifier*: string
+    name*: string
 
   KosmoShortcutsTableSource = ref object of nimkit.Responder
     shortcuts: seq[KosmoShortcutSetting]
@@ -32,6 +39,10 @@ type
     xTabs: nimkit.TabView
     xShortcutsTable: nimkit.TableView
     xShortcutsSource: KosmoShortcutsTableSource
+    xMoeThemeSelector: nimkit.ComboBox
+    xMoeThemes: seq[KosmoMoeThemeSetting]
+    xMoeThemeIdentifier: string
+    xMoeThemeHandler: KosmoMoeThemeHandler
 
 protocol KosmoShortcutsTableDataSource of nimkit.TableViewDataSource:
   method numberOfRows(
@@ -114,10 +125,39 @@ proc `shortcuts=`*(
   settings.xShortcutsSource.shortcuts = @shortcuts
   settings.xShortcutsTable.reloadData()
 
+proc selectedMoeThemeIdentifier*(settings: KosmoSettingsWindow): string =
+  ## Return the theme selected in the Moe Themes settings tab.
+  if not settings.isNil:
+    result = settings.xMoeThemeIdentifier
+
+proc updateMoeThemes*(
+    settings: KosmoSettingsWindow,
+    themes: openArray[KosmoMoeThemeSetting],
+    selectedIdentifier: string,
+) =
+  ## Replace the available Moe themes and synchronize the current selection.
+  if settings.isNil or settings.xMoeThemeSelector.isNil:
+    return
+  settings.xMoeThemes = @themes
+  var options = newSeqOfCap[nimkit.ComboBoxOption](themes.len)
+  for theme in themes:
+    options.add nimkit.initComboBoxOption(
+      identifier = theme.identifier, displayText = theme.name
+    )
+  settings.xMoeThemeSelector.setOptions(options)
+  settings.xMoeThemeIdentifier = selectedIdentifier
+  settings.xMoeThemeSelector.selectedOptionIdentifier = selectedIdentifier
+  if settings.xMoeThemeSelector.selectedIndex < 0 and themes.len > 0:
+    settings.xMoeThemeSelector.selectedIndex = 0
+    settings.xMoeThemeIdentifier = themes[0].identifier
+
 proc newKosmoSettingsWindow*(
     optionAsMeta = true,
     optionAsMetaHandler: KosmoOptionAsMetaHandler = nil,
     shortcuts: openArray[KosmoShortcutSetting] = [],
+    moeThemes: openArray[KosmoMoeThemeSetting] = [],
+    selectedMoeThemeIdentifier = "",
+    moeThemeHandler: KosmoMoeThemeHandler = nil,
 ): KosmoSettingsWindow =
   ## Create Kosmo's settings panel, which intentionally contains no Merenda settings.
   let shortcutsSource = newKosmoShortcutsTableSource(shortcuts)
@@ -126,6 +166,9 @@ proc newKosmoSettingsWindow*(
     xContentView: nimkit.newView(),
     xOptionAsMetaHandler: optionAsMetaHandler,
     xShortcutsSource: shortcutsSource,
+    xMoeThemes: @moeThemes,
+    xMoeThemeIdentifier: selectedMoeThemeIdentifier,
+    xMoeThemeHandler: moeThemeHandler,
   )
   nimkit.initResponder(result)
   let
@@ -134,13 +177,17 @@ proc newKosmoSettingsWindow*(
     tabs = nimkit.newTabView()
     terminalPage = newSettingsPage()
     shortcutsPage = newSettingsPage()
+    moeThemesPage = newSettingsPage()
     optionButton = nimkit.newCheckBox("Use Option/Alt as Meta")
     shortcutsTable = nimkit.newTableView()
+    moeThemeSelector = nimkit.newComboBox()
     optionChanged = nimkit.actionSelector("kosmo.optionAsMetaChanged")
+    moeThemeChanged = nimkit.actionSelector("kosmo.moeThemeChanged")
   result.xOptionAsMetaButton = optionButton
   result.xFirstResponder = optionButton
   result.xTabs = tabs
   result.xShortcutsTable = shortcutsTable
+  result.xMoeThemeSelector = moeThemeSelector
 
   optionButton.identifier = KosmoOptionAsMetaIdentifier
   optionButton.accessibilityLabel = "Use Option or Alt as Meta"
@@ -193,6 +240,35 @@ proc newKosmoSettingsWindow*(
     shortcutsTable,
   )
 
+  moeThemeSelector.identifier = KosmoMoeThemeSelectorIdentifier
+  moeThemeSelector.accessibilityLabel = "Moe editor theme"
+  settings.updateMoeThemes(moeThemes, selectedMoeThemeIdentifier)
+  moeThemeSelector.target = nimkit.newActionTarget(moeThemeChanged) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    let identifier = moeThemeSelector.selectedOptionIdentifier
+    if identifier.len == 0 or identifier == settings.xMoeThemeIdentifier:
+      return
+    let previousIdentifier = settings.xMoeThemeIdentifier
+    var applied = true
+    if not settings.xMoeThemeHandler.isNil:
+      applied = settings.xMoeThemeHandler(identifier)
+    if applied:
+      settings.xMoeThemeIdentifier = identifier
+    else:
+      moeThemeSelector.selectedOptionIdentifier = previousIdentifier
+  moeThemeSelector.action = moeThemeChanged
+  moeThemesPage.stack.addArrangedSubview(
+    nimkit.newHeadingLabel("Moe Theme"),
+    nimkit.newLabel(
+      "Choose from Moe's default theme and TOML themes installed in " &
+        "~/.config/moe/themes."
+    ),
+    moeThemeSelector,
+  )
+  moeThemesPage.stack.addFlexibleSpacer()
+
   tabs.identifier = KosmoSettingsTabsIdentifier
   discard tabs.addTabViewItem(
     nimkit.newTabViewItem(
@@ -202,6 +278,11 @@ proc newKosmoSettingsWindow*(
   discard tabs.addTabViewItem(
     nimkit.newTabViewItem(
       "Shortcuts", shortcutsPage.view, KosmoShortcutsSettingsTabIdentifier
+    )
+  )
+  discard tabs.addTabViewItem(
+    nimkit.newTabViewItem(
+      "Moe Themes", moeThemesPage.view, KosmoMoeThemesSettingsTabIdentifier
     )
   )
   tabs.setHuggingPriority(nimkit.LayoutPriorityLow, nimkit.laVertical)

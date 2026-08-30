@@ -4,7 +4,7 @@
 ## translate their input and paint the returned cells; Moe implementation types
 ## remain private to this module.
 
-import std/[options, os, strutils]
+import std/[algorithm, options, os, strutils]
 
 import pkg/celina
 import pkg/results as pkgResults
@@ -13,7 +13,7 @@ import
   moepkg/[
     editor, editor_buffers, editor_display, editor_file, editor_frame,
     editor_render_views, frontend_input, handler, completion, command_line, config,
-    editor_window, encoding, motion,
+    config_loader, editor_window, encoding, motion,
   ]
 from moepkg/buffer/core import BufferId
 from moepkg/render_utils import steadyBottomAreaHeight
@@ -88,6 +88,21 @@ type
 
   KosmoSaveResult* = object
     saved*: bool
+    message*: string
+
+  KosmoMoeThemeKind* = enum
+    kmmtDefault
+    kmmtConfig
+
+  KosmoMoeTheme* = object
+    ## A Moe theme that Kosmo can present without exposing Moe configuration types.
+    kind*: KosmoMoeThemeKind
+    identifier*: string
+    name*: string
+    path*: string
+
+  KosmoMoeThemeApplyResult* = object
+    applied*: bool
     message*: string
 
   RenderBuffer* = object
@@ -166,6 +181,125 @@ func initScrollInput*(
   ScrollInput(
     row: row, column: column, deltaPhysicalRows: deltaPhysicalRows, modifiers: modifiers
   )
+
+const KosmoMoeDefaultThemeIdentifier* = "default"
+
+proc moeThemesDirectory*(): string =
+  ## Return Moe's standard directory for user-installed TOML themes.
+  getHomeDir() / ".config" / "moe" / "themes"
+
+proc normalizedThemePath(path: string): string =
+  normalizedPath(absolutePath(path.expandTilde()))
+
+proc configThemeIdentifier(path: string): string =
+  "config:" & path.normalizedThemePath()
+
+func moeThemeName(path: string): string =
+  let baseName = splitFile(path).name
+  var capitalizeNext = true
+  for character in baseName:
+    if character in {'-', '_'}:
+      if result.len > 0 and result[^1] != ' ':
+        result.add ' '
+      capitalizeNext = true
+    elif capitalizeNext:
+      result.add character.toUpperAscii()
+      capitalizeNext = false
+    else:
+      result.add character
+
+proc configMoeTheme(path: string): KosmoMoeTheme =
+  let normalizedPath = path.normalizedThemePath()
+  KosmoMoeTheme(
+    kind: kmmtConfig,
+    identifier: normalizedPath.configThemeIdentifier(),
+    name: normalizedPath.moeThemeName(),
+    path: normalizedPath,
+  )
+
+proc sortConfigThemes(themes: var seq[KosmoMoeTheme]) =
+  themes.sort do(left, right: KosmoMoeTheme) -> int:
+    result = cmp(left.name.toLowerAscii(), right.name.toLowerAscii())
+    if result == 0:
+      result = cmp(left.identifier, right.identifier)
+
+proc discoverMoeThemes*(themesDirectory: string): seq[KosmoMoeTheme] =
+  ## Discover Moe-compatible TOML themes in `themesDirectory`.
+  result.add KosmoMoeTheme(
+    kind: kmmtDefault, identifier: KosmoMoeDefaultThemeIdentifier, name: "Default"
+  )
+  if not dirExists(themesDirectory):
+    return
+  var configThemes: seq[KosmoMoeTheme]
+  try:
+    for path in walkFiles(themesDirectory / "*.toml"):
+      configThemes.add path.configMoeTheme()
+  except OSError:
+    discard
+  configThemes.sortConfigThemes()
+  result.add configThemes
+
+proc activeMoeThemeIdentifier*(editor: KosmoEditor): string =
+  ## Return the stable identifier for the theme currently configured in Moe.
+  if editor.isNil or editor.editor.isNil:
+    return
+  case editor.editor.config.theme.kind
+  of tkDefault:
+    KosmoMoeDefaultThemeIdentifier
+  of tkConfig:
+    editor.editor.config.theme.path.configThemeIdentifier()
+  of tkVscode:
+    "vscode"
+
+proc availableMoeThemes*(editor: KosmoEditor): seq[KosmoMoeTheme] =
+  ## Return Moe's default and installed themes, retaining a custom active path.
+  result = discoverMoeThemes(moeThemesDirectory())
+  if editor.isNil or editor.editor.isNil or editor.editor.config.theme.kind != tkConfig:
+    return
+  let currentPath = editor.editor.config.theme.path.normalizedThemePath()
+  if not fileExists(currentPath):
+    return
+  let current = currentPath.configMoeTheme()
+  for theme in result:
+    if theme.identifier == current.identifier:
+      return
+  result.add current
+  if result.len > 2:
+    var configThemes = result[1 ..^ 1]
+    configThemes.sortConfigThemes()
+    result.setLen(1)
+    result.add configThemes
+
+proc applyMoeTheme*(
+    editor: KosmoEditor, theme: KosmoMoeTheme
+): KosmoMoeThemeApplyResult =
+  ## Apply a discovered theme to Moe's live configuration.
+  if editor.isNil or editor.editor.isNil:
+    return KosmoMoeThemeApplyResult(message: "The editor is closed.")
+  if theme.kind == kmmtConfig and not fileExists(theme.path):
+    return KosmoMoeThemeApplyResult(message: "Theme not found: " & theme.name)
+
+  let previousTheme = editor.editor.config.theme
+  case theme.kind
+  of kmmtDefault:
+    editor.editor.config.theme.kind = tkDefault
+    editor.editor.config.theme.path = ""
+  of kmmtConfig:
+    editor.editor.config.theme.kind = tkConfig
+    editor.editor.config.theme.path = theme.path
+
+  var validation = newValidationResult()
+  initTheme(editor.editor.config, validation)
+  if validation.hasErrors:
+    editor.editor.config.theme = previousTheme
+    initTheme(editor.editor.config)
+    result.message = "Failed to load theme: " & validation.toErrorMessages().join("; ")
+    editor.editor.state.statusMessage = result.message
+    return
+
+  result.applied = true
+  result.message = "Theme changed to: " & theme.name
+  editor.editor.state.statusMessage = result.message
 
 proc newKosmoEditor*(text = ""): KosmoEditor =
   ## Create an editor with Moe's default configuration and optional initial text.
