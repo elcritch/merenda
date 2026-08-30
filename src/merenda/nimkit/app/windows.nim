@@ -1137,6 +1137,7 @@ proc refreshAutomaticContentMinSize(window: Window) =
     window.xUpdatingAutomaticContentMinSize = false
   let nextSize =
     if window.xAutomaticallyAdjustsContentMinSize and not window.xContentView.isNil:
+      window.xContentView.layoutSubtreeIfNeeded()
       window.xContentView.fittingSize()
     else:
       initSize()
