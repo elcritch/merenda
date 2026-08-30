@@ -2103,6 +2103,8 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
       if pendingResult.unmatchedEvents.len > 0:
         window.replayUnmatchedKeySequence(pendingResult.unmatchedEvents)
         return true
+  if window.xKeyBindings.match([event]).kind == kbmPrefix:
+    return window.dispatchKeyCommand(target, event).dispatch.handled
   if target.performKeyEquivalentInChain(event):
     return true
   window.dispatchKeyCommand(target, event).dispatch.handled
