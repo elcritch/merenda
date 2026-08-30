@@ -7,7 +7,7 @@ srcDir        = "src"
 # Dependencies
 requires "nim >= 2.2.6"
 requires "msgpack4nim"
-requires "chronicles"
+requires "chronicles >= 0.4"
 requires "siwin#96ca695"
 requires "figdraw[siwin, sharedlib, harfbuzz] >= 0.35.2"
 requires "sigils[sigNameAsString, closures, siwin] >= 0.27.3"
