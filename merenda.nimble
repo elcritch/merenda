@@ -16,7 +16,7 @@ requires "cborious"
 requires "unicodedb >= 0.14.0"
 requires "regex >= 0.26.3"
 requires "faststreams >= 0.5.1"
-requires "markdown"
+requires "gh:elcritch/nim-markdown#fix-arc-delimiter-cycle"
 
 feature "libbacktrace":
   requires "libbacktrace"
@@ -32,4 +32,3 @@ feature "references":
   requires "https://github.com/ravynsoft/ravynos"
   requires "https://github.com/elcritch/figuro"
   requires "https://github.com/treeform/windy"
-

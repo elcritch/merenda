@@ -465,6 +465,23 @@ proc newTextStorage*(value = "", attributes = defaultTextAttributes()): TextStor
   result = TextStorage()
   initTextStorageFields(result, value, attributes)
 
+proc newTextStorage*(
+    value: sink string, runs: sink seq[TextAttributeRun]
+): TextStorage =
+  ## Creates attributed storage from complete text and precomputed attribute runs.
+  ## Runs are normalized and clamped to the text length without emitting edit events.
+  result = TextStorage()
+  discard result.withProto()
+  result.xStringValue = value
+  result.xRuns = runs
+  result.xMaterialized = true
+  if result.xStringValue.runeLen > 0 and result.xRuns.len == 0:
+    result.xRuns.add TextAttributeRun(
+      range: initTextRange(0, result.xStringValue.runeLen),
+      attributes: defaultTextAttributes(),
+    )
+  result.normalizeRuns()
+
 proc initTextGapStorageFields*(
     storage: TextGapStorage, value = "", attributes = defaultTextAttributes()
 ) =

@@ -25,6 +25,7 @@ import hello
 import image_resources_demo
 import layout_showcase
 import matrix_demo
+import markdown_viewer_demo
 import menu_demo
 import merenda_settings_demo
 import modelcontrollers_demo

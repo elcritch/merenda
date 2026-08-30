@@ -42,6 +42,7 @@ import ./nimkit/containers/listbasics
 import ./nimkit/controls/matrices
 import ./nimkit/controls/menus
 import ./nimkit/app/modelcontrollers
+import ./nimkit/text/markdownviews
 import ./nimkit/text/monotextviews
 import ./nimkit/foundation/notifications
 import ./nimkit/foundation/objectvalues
@@ -124,6 +125,7 @@ export listbasics
 export matrices
 export menus
 export modelcontrollers
+export markdownviews
 export monotextviews
 export notifications
 export objectvalues

@@ -100,6 +100,35 @@ window without entering the application run loop. Pass an initial responder as
 the third argument, such as `app.runWindow(window, root, textField)`, when a
 specific control should receive focus first.
 
+## Native Markdown Viewer
+
+`MarkdownView` parses CommonMark or GitHub-flavored Markdown and renders it as
+native, selectable NimKit attributed text. It supports headings, inline styles,
+links, code, quotes, lists, thematic breaks, GFM tables, and linked image alt text
+without embedding an HTML engine:
+
+```nim
+import merenda/nimkit
+
+let viewer = newMarkdownView("""
+# Release notes
+
+Read the [full changelog](https://example.com) or copy this text directly.
+""")
+
+viewer.markdown = "## Updated without replacing the view"
+
+var style = viewer.markdownStyle
+style.documentInsets = insets(18.0, 24.0, 18.0, 24.0)
+style.linkColor = color(0.1, 0.55, 0.9, 1.0)
+viewer.markdownStyle = style
+```
+
+GFM is the default. Pass `initMarkdownParserConfig(mddCommonMark)` when strict
+CommonMark parsing is preferable. Raw HTML is shown as inert monospace text;
+images remain linked alt text so applications can choose their own loading and
+security policy. See `examples/markdown_viewer_demo.nim` for a complete window.
+
 The application run loop keeps NimKit views, responders, signal-slot dispatch,
 animations, native windows, and platform services on the main thread. When the
 selected FigDraw backend supports it, rendering runs on a dedicated thread and
