@@ -65,6 +65,67 @@ suite "Kosmo":
     let settingsPanel = app.windows[^1]
     check settingsPanel.title == "Kosmo Settings"
     check settingsPanel.contentView().viewWithIdentifier("settings-theme-picker").isNil
+    let tabsView =
+      settingsPanel.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier)
+    require not tabsView.isNil
+    require tabsView of TabView
+    let settingsTabs = TabView(tabsView)
+    check settingsTabs.len == 2
+    check settingsTabs[0].label == "Terminal"
+    check settingsTabs[0].identifier == KosmoTerminalSettingsTabIdentifier
+    check settingsTabs[1].label == "Shortcuts"
+    check settingsTabs[1].identifier == KosmoShortcutsSettingsTabIdentifier
+    check settingsTabs.selectedIndex == 0
+    check settingsTabs.selectTabViewItemAtIndex(1)
+
+    let shortcutsView =
+      settingsPanel.contentView().viewWithIdentifier(KosmoShortcutsTableIdentifier)
+    require not shortcutsView.isNil
+    require shortcutsView of TableView
+    let
+      shortcutsTable = TableView(shortcutsView)
+      actionColumn =
+        shortcutsTable.columnWithIdentifier(KosmoShortcutActionColumnIdentifier)
+      descriptionColumn =
+        shortcutsTable.columnWithIdentifier(KosmoShortcutDescriptionColumnIdentifier)
+      keysColumn =
+        shortcutsTable.columnWithIdentifier(KosmoShortcutKeysColumnIdentifier)
+    check shortcutsTable.columnCount == 3
+    require not actionColumn.isNil
+    require not descriptionColumn.isNil
+    require not keysColumn.isNil
+    check actionColumn.title == "Action"
+    check descriptionColumn.title == "Description"
+    check keysColumn.title == "Shortcut Keys"
+    check shortcutsTable.rowCount == initKosmoKeyBindings().bindings.len
+    check shortcutsTable.selectionMode == tsmNone
+
+    var
+      saveRow = -1
+      horizontalSplitRow = -1
+      verticalSplitRow = -1
+    for row in 0 ..< shortcutsTable.rowCount:
+      let action = shortcutsTable.tableCellText(row, actionColumn)
+      check shortcutsTable.tableCellText(row, descriptionColumn).len > 0
+      check shortcutsTable.tableCellText(row, keysColumn).len > 0
+      case action
+      of KosmoSaveAction:
+        saveRow = row
+      of KosmoSplitHorizontalAction:
+        horizontalSplitRow = row
+      of KosmoSplitVerticalAction:
+        verticalSplitRow = row
+      else:
+        discard
+    require saveRow >= 0
+    require horizontalSplitRow >= 0
+    require verticalSplitRow >= 0
+    check shortcutsTable.tableCellText(saveRow, keysColumn) == "Cmd+S"
+    check shortcutsTable.tableCellText(horizontalSplitRow, keysColumn) == "Ctrl+W Ctrl+S"
+    check shortcutsTable.tableCellText(verticalSplitRow, keysColumn) == "Ctrl+W Ctrl+V"
+    check not shortcutsTable.beginEditingCell(saveRow, keysColumn)
+    check settingsTabs.selectTabViewItemAtIndex(0)
+
     let optionView =
       settingsPanel.contentView().viewWithIdentifier(KosmoOptionAsMetaIdentifier)
     require not optionView.isNil

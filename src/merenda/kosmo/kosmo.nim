@@ -231,6 +231,143 @@ func focusPanelAction*(panelNumber: int): string =
   ## Return the key-binding command name for a numbered Kosmo panel.
   KosmoFocusPanelActionPrefix & $panelNumber
 
+func shortcutKeyTitle(stroke: nimkit.KeyStroke): string =
+  if stroke.text.len > 0:
+    return stroke.text.toUpperAscii()
+  if stroke.key >= nimkit.keyA and stroke.key <= nimkit.keyZ:
+    return $char(ord('A') + ord(stroke.key) - ord(nimkit.keyA))
+  if stroke.key >= nimkit.key1 and stroke.key <= nimkit.key9:
+    return $char(ord('1') + ord(stroke.key) - ord(nimkit.key1))
+  if stroke.key == nimkit.key0:
+    return "0"
+  if stroke.key >= nimkit.keyF1 and stroke.key <= nimkit.keyF15:
+    return "F" & $(ord(stroke.key) - ord(nimkit.keyF1) + 1)
+  case stroke.key
+  of nimkit.keyTilde:
+    "`"
+  of nimkit.keyMinus:
+    "-"
+  of nimkit.keyEqual:
+    "="
+  of nimkit.keyLeftBracket:
+    "["
+  of nimkit.keyRightBracket:
+    "]"
+  of nimkit.keySpace:
+    "Space"
+  of nimkit.keyEscape:
+    "Esc"
+  of nimkit.keyEnter:
+    "Enter"
+  of nimkit.keyTab:
+    "Tab"
+  of nimkit.keyBackspace:
+    "Backspace"
+  of nimkit.keySlash:
+    "/"
+  of nimkit.keyDot:
+    "."
+  of nimkit.keyComma:
+    ","
+  of nimkit.keySemicolon:
+    ";"
+  of nimkit.keyQuote:
+    "'"
+  of nimkit.keyBackslash:
+    "\\"
+  of nimkit.keyPageUp:
+    "Page Up"
+  of nimkit.keyPageDown:
+    "Page Down"
+  of nimkit.keyHome:
+    "Home"
+  of nimkit.keyEnd:
+    "End"
+  of nimkit.keyInsert:
+    "Insert"
+  of nimkit.keyDelete:
+    "Delete"
+  of nimkit.keyArrowLeft:
+    "Left"
+  of nimkit.keyArrowRight:
+    "Right"
+  of nimkit.keyArrowUp:
+    "Up"
+  of nimkit.keyArrowDown:
+    "Down"
+  of nimkit.keyUnknown:
+    if stroke.keyCode == 0:
+      "Unknown"
+    else:
+      $stroke.keyCode
+  else:
+    let name = $stroke.key
+    if name.startsWith("key"):
+      name[3 .. ^1]
+    else:
+      name
+
+func shortcutStrokeTitle(stroke: nimkit.KeyStroke): string =
+  var parts: seq[string]
+  if nimkit.kmCommand in stroke.modifiers:
+    parts.add "Cmd"
+  if nimkit.kmControl in stroke.modifiers:
+    parts.add "Ctrl"
+  if nimkit.kmOption in stroke.modifiers:
+    parts.add "Option"
+  if nimkit.kmShift in stroke.modifiers:
+    parts.add "Shift"
+  parts.add stroke.shortcutKeyTitle()
+  parts.join("+")
+
+func shortcutSequenceTitle(sequence: nimkit.KeySequence): string =
+  for index, stroke in sequence.strokes:
+    if index > 0:
+      result.add " "
+    result.add stroke.shortcutStrokeTitle()
+
+func kosmoShortcutDescription(action: string): string =
+  case action
+  of KosmoNewTerminalAction:
+    "Open a new terminal tab."
+  of KosmoSaveAction:
+    "Save the active editor tab."
+  of KosmoCloseTabAction:
+    "Close the active tab."
+  of KosmoQuitAction:
+    "Quit Kosmo."
+  of KosmoPreviousTabAction:
+    "Select the previous tab."
+  of KosmoNextTabAction:
+    "Select the next tab."
+  of KosmoSplitHorizontalAction:
+    "Move the active tab to a new panel below."
+  of KosmoSplitVerticalAction:
+    "Move the active tab to a new panel on the right."
+  of KosmoShowFileExplorerAction:
+    "Show and focus the file explorer."
+  of KosmoFindInFilesAction:
+    "Show and focus Find in Files."
+  of KosmoQuickOpenAction:
+    "Open a file with Quick Open."
+  else:
+    if action.startsWith(KosmoFocusPanelActionPrefix):
+      "Focus panel " & action[KosmoFocusPanelActionPrefix.len .. ^1] & "."
+    else:
+      "Run this Kosmo command."
+
+func kosmoShortcutSettings*(
+    bindings: nimkit.KeyBindingTable
+): seq[KosmoShortcutSetting] =
+  ## Build display rows for Kosmo's currently resolved shortcut bindings.
+  for binding in bindings.bindings:
+    let action = $binding.selector.name
+    result.add KosmoShortcutSetting(
+      action: action,
+      description: action.kosmoShortcutDescription(),
+      keys: binding.sequence.shortcutSequenceTitle(),
+    )
+
 func focusPanelNumber(selector: nimkit.CommandSelector): int =
   let name = $selector.name
   if not name.startsWith(KosmoFocusPanelActionPrefix):
@@ -2318,17 +2455,20 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
   ## Present Kosmo's application settings without Merenda's global settings pages.
   if frontend.isNil or frontend.application.isNil:
     return
+  let shortcuts = frontend.dockController.shortcutBindings.kosmoShortcutSettings()
   if frontend.xSettingsWindow.isNil or frontend.xSettingsWindow.window.isClosed():
     let weakFrontend = frontend.unsafeWeakRef()
     frontend.xSettingsWindow = newKosmoSettingsWindow(
-      frontend.xTerminalOptionAsMeta,
-      proc(enabled: bool) =
+      optionAsMeta = frontend.xTerminalOptionAsMeta,
+      optionAsMetaHandler = proc(enabled: bool) =
         if not weakFrontend.isNil:
           weakFrontend[].terminalOptionAsMeta = enabled
       ,
+      shortcuts = shortcuts,
     )
   else:
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
+    frontend.xSettingsWindow.shortcuts = shortcuts
   result =
     not frontend.application.showWindow(
       frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
@@ -2599,6 +2739,8 @@ proc loadKosmoKeyBindings*(
   frontend.dockController.shortcutBindings = bindings
   for host in frontend.dockController.hosts:
     frontend.dockController.installShortcutBindings(host.window)
+  if not frontend.xSettingsWindow.isNil:
+    frontend.xSettingsWindow.shortcuts = bindings.kosmoShortcutSettings()
 
 proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
   ## Open a file or replace the file-tree root with a directory.
