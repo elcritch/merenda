@@ -127,7 +127,8 @@ suite "nimkit tab views":
   test "tab view items select content views through lifecycle helpers":
     let
       tabView = newTabView(frame = rect(0, 0, 320, 180))
-      firstView = newView()
+      firstContent = newView()
+      firstView = newConstraintWrappedPane(firstContent)
       secondView = newView()
       first = newTabViewItem("First", firstView, "first")
       second = newTabViewItem("Second", secondView, "second")
@@ -144,14 +145,20 @@ suite "nimkit tab views":
 
     tabView.layoutSubtreeIfNeeded()
     check firstView.frame == tabView.contentViewRect()
+    check firstContent.frame == firstView.bounds
+    check not tabView.needsLayout
 
     tabView.frame = rect(0, 0, 560, 320)
+    tabView.layoutSubtreeIfNeeded()
     check firstView.frame == tabView.contentViewRect()
+    check firstContent.frame == firstView.bounds
+    check not tabView.needsLayout
 
     check tabView.selectTabViewItem(second)
     check tabView.selectedIndex == 1
     check firstView.superview.isNil
     check secondView.superview == View(tabView)
+    check secondView.frame == tabView.contentViewRect()
 
     check tabView.removeTabViewItem(second)
     check tabView.len == 1

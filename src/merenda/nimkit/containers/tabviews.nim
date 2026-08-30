@@ -14,6 +14,7 @@ import ../foundation/events
 import ../foundation/selectors
 import ../themes
 import ../foundation/types
+from ../view/viewgeometry import setFrameFromLayout
 import ../view/views
 
 export views
@@ -504,7 +505,7 @@ proc syncSelectedContent(tabView: TabView) =
       if content.superview() != View(tabView):
         tabView.addSubview(content, positioned = svpBelow, relativeTo = tabView.xTabBar)
       content.hidden = false
-      content.frame = tabView.contentViewRect()
+      content.setFrameFromLayout(tabView.contentViewRect())
     elif content.superview() == View(tabView):
       content.removeFromSuperview()
   tabView.needsDisplay = true
@@ -872,6 +873,9 @@ protocol TabViewLayout of ViewLayoutProtocol:
   method layoutSubviews(tabView: TabView) =
     tabView.syncTabBarFrame()
     tabView.syncSelectedContent()
+    let content = tabView.selectedContentView()
+    if not content.isNil:
+      content.layoutSubtreeIfNeeded()
 
   method layoutIntrinsicContentSize(tabView: TabView): IntrinsicSize =
     let
@@ -887,14 +891,6 @@ protocol TabViewLayout of ViewLayoutProtocol:
           contentChromeHeight(tabView.tabPosition, tabView.xTabMode, style),
       ),
     )
-
-protocol TabViewGeometrySlots of ViewGeometryEvents:
-  proc syncTabViewContentGeometry(tabView: TabView) {.slotFor: geometryDidChange.} =
-    tabView.syncTabBarFrame()
-    tabView.syncSelectedContent()
-    let content = tabView.selectedContentView()
-    if not content.isNil:
-      content.layoutSubtreeIfNeeded()
 
 protocol TabViewEvents of ResponderEventProtocol:
   method keyDown(tabView: TabView, event: KeyEvent): bool =
@@ -950,7 +946,7 @@ proc newTabBarView(tabView: TabView): TabBarView =
   discard result.withProtocol(TabBarEvents)
 
 proc syncTabBarFrame(tabView: TabView) =
-  tabView.xTabBar.frame = tabView.tabBarFrame()
+  tabView.xTabBar.setFrameFromLayout(tabView.tabBarFrame())
 
 proc initTabViewFields*(tabView: TabView, frame: Rect = AutoRect) =
   initViewFields(tabView, frame)
@@ -965,7 +961,6 @@ proc initTabViewFields*(tabView: TabView, frame: Rect = AutoRect) =
   discard tabView.withProto()
   discard tabView.withProtocol(TabViewDrawing)
   discard tabView.withProtocol(TabViewLayout)
-  tabView.observeProtocol(tabView, TabViewGeometrySlots)
   discard tabView.withProtocol(TabViewEvents)
   discard tabView.withProtocol(TabViewAccessibility)
   tabView.addSubview(tabView.xTabBar)
