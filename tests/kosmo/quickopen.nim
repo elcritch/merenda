@@ -95,8 +95,19 @@ suite "Kosmo quick open":
         titleNode = some(node)
     require titleNode.isSome
     require titleNode.get().textLayout.spanColors.len > 0
-    let titleColor = titleNode.get().textLayout.spanColors[0].centerColorRgba()
+    require titleNode.get().textLayout.selectionRects.len > 0
+    var
+      titleMinX = float32.high
+      titleMaxX = -float32.high
+    for rect in titleNode.get().textLayout.selectionRects:
+      titleMinX = min(titleMinX, rect.x)
+      titleMaxX = max(titleMaxX, rect.x + rect.w)
+    let
+      titleColor = titleNode.get().textLayout.spanColors[0].centerColorRgba()
+      titleContentCenterX = (titleMinX + titleMaxX) / 2.0'f32
+      titleBoundsCenterX = titleNode.get().screenBox.w / 2.0'f32
     check titleNode.get().screenBox.y < queryBlur.screenBox.y
+    check abs(titleContentCenterX - titleBoundsCenterX) <= 1.0'f32
     check titleColor.a == high(uint8)
     check titleColor.r.int + titleColor.g.int + titleColor.b.int > 384
 

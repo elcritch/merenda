@@ -470,7 +470,9 @@ protocol KosmoQuickOpenPanelDrawing of nimkit.ViewDrawingProtocol:
         )
         titleText = title.clippedText(textRect.size.width, panelStyle.text)
       if titleText.len > 0 and not textRect.isEmpty:
-        context.addText(textRect, titleText, panelStyle.text)
+        context.addText(
+          textRect, titleText, panelStyle.text, alignment = nimkit.taCenter
+        )
 
 proc applyQuickOpenAppearance(panel: KosmoQuickOpenPanel, base: nimkit.Appearance) =
   var appearance = base
