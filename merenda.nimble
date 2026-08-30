@@ -31,3 +31,6 @@ feature "references":
   requires "https://github.com/ravynsoft/ravynos"
   requires "https://github.com/elcritch/figuro"
   requires "https://github.com/treeform/windy"
+  requires "markdown"
+  requires "https://github.com/openpeeps/marvdown"
+
