@@ -214,6 +214,15 @@ proc `needsLayout=`*(view: View, value: bool) =
 proc setNeedsLayout*(view: View) =
   view.needsLayout = true
 
+const MaxLayoutSubtreePasses = 64
+
+proc hasPendingLayoutInSubtree(view: View): bool =
+  if view.xNeedsUpdateConstraints or view.xNeedsLayout:
+    return true
+  for child in view.xSubviews:
+    if child.hasPendingLayoutInSubtree():
+      return true
+
 proc layoutSubtree(view: View) =
   if view.xNeedsLayout:
     view.xNeedsLayout = false
@@ -223,9 +232,12 @@ proc layoutSubtree(view: View) =
     child.layoutSubtree()
 
 proc layoutSubtreeIfNeeded*(view: View) =
-  view.updateConstraintsForSubtreeIfNeeded()
-  view.applyConstraintsForSubtree()
-  view.layoutSubtree()
+  for _ in 0 ..< MaxLayoutSubtreePasses:
+    view.updateConstraintsForSubtreeIfNeeded()
+    view.applyConstraintsForSubtree()
+    view.layoutSubtree()
+    if not view.hasPendingLayoutInSubtree():
+      break
 
 proc dirtyRects*(view: View): seq[Rect] =
   view.invalidRects()

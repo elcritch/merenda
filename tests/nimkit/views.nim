@@ -19,8 +19,14 @@ type
   LayoutSpyView = ref object of View
     events: seq[string]
 
+  LayoutInvalidatingView = ref object of View
+    layoutCount: int
+    target: View
+    invalidatesTarget: bool
+
   ConstraintSpyView = ref object of View
     name: string
+    constraintTarget: View
 
 var
   spyMouseDownPoint: Point
@@ -82,9 +88,20 @@ protocol LayoutSpyHooks of ViewLayoutProtocol:
   method layout(spy: LayoutSpyView) =
     spy.events.add "layout"
 
+protocol LayoutInvalidatingHooks of ViewLayoutProtocol:
+  method layout(spy: LayoutInvalidatingView) =
+    inc spy.layoutCount
+    if spy.invalidatesTarget:
+      spy.invalidatesTarget = false
+      spy.target.setNeedsLayout()
+
 protocol ConstraintSpyHooks of ViewLayoutProtocol:
   method updateConstraints(spy: ConstraintSpyView) =
     constraintEvents.add spy.name & ".updateConstraints"
+    if not spy.constraintTarget.isNil:
+      let target = spy.constraintTarget
+      spy.constraintTarget = nil
+      target.setNeedsUpdateConstraints()
 
   method layoutSubviews(spy: ConstraintSpyView) =
     constraintEvents.add spy.name & ".layoutSubviews"
@@ -109,8 +126,15 @@ proc newLayoutSpyView(frame: Rect): LayoutSpyView =
   initViewFields(result, frame)
   discard result.withProtocol(LayoutSpyHooks)
 
-proc newConstraintSpyView(name: string, frame: Rect): ConstraintSpyView =
-  result = ConstraintSpyView(name: name)
+proc newLayoutInvalidatingView(frame: Rect, target: View): LayoutInvalidatingView =
+  result = LayoutInvalidatingView(target: target, invalidatesTarget: true)
+  initViewFields(result, frame)
+  discard result.withProtocol(LayoutInvalidatingHooks)
+
+proc newConstraintSpyView(
+    name: string, frame: Rect, constraintTarget: View = nil
+): ConstraintSpyView =
+  result = ConstraintSpyView(name: name, constraintTarget: constraintTarget)
   initViewFields(result, frame)
   discard result.withProtocol(ConstraintSpyHooks)
 
@@ -383,6 +407,43 @@ suite "nimkit views":
     check root.needsLayout
     root.finishDisplaySubtree()
     check not root.needsDisplay
+
+  test "layout subtree settles invalidations created during the same pass":
+    let
+      root = newView(frame = rect(0, 0, 200, 160))
+      target = newLayoutSpyView(rect(0, 0, 80, 40))
+      invalidator = newLayoutInvalidatingView(rect(0, 50, 80, 40), target)
+
+    root.addSubview(target)
+    root.addSubview(invalidator)
+    target.events.setLen(0)
+
+    root.layoutSubtreeIfNeeded()
+
+    check target.events == @["layoutSubviews", "layout", "layoutSubviews", "layout"]
+    check invalidator.layoutCount == 1
+    check not root.needsLayout
+    check not target.needsLayout
+    check not invalidator.needsLayout
+
+  test "layout subtree settles recursive constraint invalidations":
+    let
+      child = newConstraintSpyView("child", rect(0, 0, 80, 40))
+      root =
+        newConstraintSpyView("root", rect(0, 0, 200, 160), constraintTarget = child)
+
+    root.addSubview(child)
+    constraintEvents.setLen(0)
+
+    root.layoutSubtreeIfNeeded()
+
+    var childConstraintUpdates = 0
+    for event in constraintEvents:
+      if event == "child.updateConstraints":
+        inc childConstraintUpdates
+    check childConstraintUpdates == 2
+    check not root.needsUpdateConstraints
+    check not child.needsUpdateConstraints
 
   test "display update predicate includes display layout and constraints":
     let
