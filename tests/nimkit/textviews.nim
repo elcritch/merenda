@@ -173,6 +173,17 @@ proc newTextViewCheckerSpy(): TextViewCheckerSpy =
   discard result.withProtocol(TextViewCheckerSpyProtocol)
 
 suite "nimkit text views":
+  test "rich text drawing reuses the managed layout":
+    let textView = newTextView("Cached rich text")
+    textView.frame = rect(0.0, 0.0, 240.0, 80.0)
+
+    check not textView.layoutManager().hasValidLayout()
+    discard buildRenders(textView)
+    check textView.layoutManager().hasValidLayout()
+
+    discard buildRenders(textView)
+    check textView.layoutManager().hasValidLayout()
+
   test "selection color follows the theme until explicitly overridden":
     let
       textView = newTextView("Selected")

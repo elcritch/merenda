@@ -25,6 +25,7 @@ type
   TextStorage* = ref object of DynamicAgent
     xStringValue: string
     xRuns: seq[TextAttributeRun]
+    xRevision: Natural
     xDelegate: DynamicAgent
     xLazyProvider: DynamicAgent
     xUndoManager: UndoManager
@@ -151,6 +152,10 @@ proc editedRange*(storage: TextStorage): TextRange =
 
 proc changeInLength*(storage: TextStorage): int =
   storage.currentEdit().textDelta
+
+proc revision*(storage: TextStorage): Natural =
+  ## Returns the number of committed editing batches applied to this storage.
+  if storage.isNil: 0 else: storage.xRevision
 
 proc delegate*(storage: TextStorage): DynamicAgent =
   storage.xDelegate
@@ -435,6 +440,7 @@ proc processEditing*(storage: TextStorage) =
   storage.xProcessingEditing = true
   storage.xLastProcessedEdit = edit
   storage.xHasLastProcessedEdit = true
+  inc storage.xRevision
 
   storage.dispatchWillProc(edit)
   if tseAttributes in edit.kinds:

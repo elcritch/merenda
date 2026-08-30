@@ -20,12 +20,27 @@ export textstorage
 export texttypes
 export textviews
 
-type TextEditor* = ref object of View
-  xScrollView: ScrollView
-  xTextView: TextView
-  xTextInsets: EdgeInsets
-  xWraps: bool
-  xMinimumDocumentSize: Size
+type
+  TextEditorMeasurement = object
+    storage: TextStorage
+    revision: Natural
+    materialized: bool
+    width: float32
+    insets: EdgeInsets
+    wraps: bool
+    alignment: TextAlignment
+    style: TextStyle
+    textSize: Size
+    hasText: bool
+    valid: bool
+
+  TextEditor* = ref object of View
+    xScrollView: ScrollView
+    xTextView: TextView
+    xTextInsets: EdgeInsets
+    xWraps: bool
+    xMinimumDocumentSize: Size
+    xMeasurement: TextEditorMeasurement
 
 const
   DefaultTextEditorWidth = 320.0'f32
@@ -183,17 +198,43 @@ proc setAttributes*(editor: TextEditor, range: TextRange, attributes: TextAttrib
 proc selectAllText*(editor: TextEditor) =
   editor.xTextView.selectAllText()
 
-proc measuredTextLayout(editor: TextEditor, width: float32): auto =
+proc measuredText(
+    editor: TextEditor, width: float32
+): tuple[size: Size, hasText: bool] =
   let
     insets = editor.xTextInsets
     measuringWidth = max(width, insets.horizontal + 1.0'f32)
+    storage = editor.xTextView.textStorage()
+    revision = storage.revision()
+    materialized = storage.isMaterialized()
+    alignment = editor.xTextView.alignment()
+    style = editor.xTextView.resolvedTextStyle()
     measuringRect =
       rect(0.0, 0.0, measuringWidth, DefaultTextEditorMeasureHeight).inset(insets)
-  textLayout(
-    measuringRect,
-    editor.xTextView.textStorage(),
-    editor.xTextView.alignment(),
-    editor.xWraps,
+
+  let cached = editor.xMeasurement
+  if cached.valid and cached.storage == storage and cached.revision == revision and
+      cached.materialized == materialized and cached.width == measuringWidth and
+      cached.insets == insets and cached.wraps == editor.xWraps and
+      cached.alignment == alignment and cached.style == style:
+    return (cached.textSize, cached.hasText)
+
+  let layout =
+    textLayoutForMeasurement(measuringRect, storage, style, alignment, editor.xWraps)
+  result =
+    (initSize(layout.bounding.w, layout.bounding.h), layout.selectionRects.len > 0)
+  editor.xMeasurement = TextEditorMeasurement(
+    storage: storage,
+    revision: revision,
+    materialized: storage.isMaterialized(),
+    width: measuringWidth,
+    insets: insets,
+    wraps: editor.xWraps,
+    alignment: alignment,
+    style: style,
+    textSize: result.size,
+    hasText: result.hasText,
+    valid: true,
   )
 
 proc textDocumentSize(
@@ -205,15 +246,15 @@ proc textDocumentSize(
   let
     insets = editor.xTextInsets
     width = if editor.xWraps: viewportWidth else: DefaultTextEditorMeasureWidth
-    layout = editor.measuredTextLayout(width)
+    measurement = editor.measuredText(width)
     textWidth =
-      if layout.selectionRects.len > 0:
-        layout.bounding.w + insets.horizontal
+      if measurement.hasText:
+        measurement.size.width + insets.horizontal
       else:
         insets.horizontal + 1.0'f32
     textHeight =
-      if layout.selectionRects.len > 0:
-        layout.bounding.h
+      if measurement.hasText:
+        measurement.size.height
       else:
         defaultFontSize()
     documentWidth =
@@ -243,14 +284,11 @@ proc updateTextEditorLayout(editor: TextEditor) =
   if editor.xScrollView.isNil or editor.xTextView.isNil:
     return
 
-  let
-    bounds = editor.bounds()
-    fallbackViewport =
-      initSize(max(bounds.size.width, 0.0'f32), max(bounds.size.height, 0.0'f32))
-
+  let bounds = editor.bounds()
   editor.xScrollView.frame = bounds
+  let initialViewport = editor.xScrollView.viewportSize()
   var documentSize =
-    editor.textDocumentSize(fallbackViewport.width, fallbackViewport.height)
+    editor.textDocumentSize(initialViewport.width, initialViewport.height)
   for _ in 0 ..< 4:
     editor.applyTextDocumentSize(documentSize)
     let viewport = editor.xScrollView.viewportSize()

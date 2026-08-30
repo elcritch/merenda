@@ -329,12 +329,13 @@ proc textLayout*(
     alignment,
   )
 
-proc textLayout*(
+proc textLayoutImpl(
     rect: nimkitTypes.Rect,
     storage: TextStorage,
     style: TextStyle,
     alignment = taLeft,
     wrap = false,
+    rasterize = true,
 ): GlyphArrangement =
   var spans: seq[(FontStyle, string)]
   if storage.isNil or storage.len == 0:
@@ -357,13 +358,55 @@ proc textLayout*(
       font.underline = attributes.hasUnderline
       font.strikethrough = attributes.hasStrikethrough
       spans.add((fs(font, fill(attributes.foregroundColor.rgba)), text))
-  typeset(
-    rect.toFigRect,
-    spans,
-    hAlign = alignment.toFontHorizontal,
-    vAlign = Top,
-    minContent = false,
-    wrap = wrap,
+  if rasterize:
+    typeset(
+      rect.toFigRect,
+      spans,
+      hAlign = alignment.toFontHorizontal,
+      vAlign = Top,
+      minContent = false,
+      wrap = wrap,
+    )
+  else:
+    typesetForMeasurement(
+      rect.toFigRect,
+      spans,
+      hAlign = alignment.toFontHorizontal,
+      vAlign = Top,
+      minContent = false,
+      wrap = wrap,
+    )
+
+proc textLayout*(
+    rect: nimkitTypes.Rect,
+    storage: TextStorage,
+    style: TextStyle,
+    alignment = taLeft,
+    wrap = false,
+): GlyphArrangement =
+  textLayoutImpl(rect, storage, style, alignment, wrap, rasterize = true)
+
+proc textLayoutForMeasurement*(
+    rect: nimkitTypes.Rect,
+    storage: TextStorage,
+    style: TextStyle,
+    alignment = taLeft,
+    wrap = false,
+): GlyphArrangement =
+  ## Typesets attributed text without generating and publishing glyph images.
+  textLayoutImpl(rect, storage, style, alignment, wrap, rasterize = false)
+
+proc textLayoutForMeasurement*(
+    rect: nimkitTypes.Rect, storage: TextStorage, alignment = taLeft, wrap = false
+): GlyphArrangement =
+  textLayoutForMeasurement(
+    rect,
+    storage,
+    initAppearance().resolveTextStyle(
+      controlStyle(srTextView), color(0.08, 0.09, 0.11, 1.0), insets(0.0)
+    ),
+    alignment,
+    wrap,
   )
 
 proc textLayout*(

@@ -641,6 +641,10 @@ proc textStyle(textView: TextView): TextStyle =
   if textView.xTextColor.a > 0.0:
     result.color = textView.xTextColor
 
+proc resolvedTextStyle*(textView: TextView): TextStyle =
+  ## Resolves the text style currently used for layout and drawing.
+  textView.textStyle()
+
 proc setTextStyleOverride*(textView: TextView, style: TextStyle) =
   textView.xTextStyleOverride = style
   textView.xHasTextStyleOverride = true
@@ -2556,13 +2560,18 @@ proc drawTextViewContents*(textView: TextView, context: DrawContext) =
   textView.updateTextContainer()
   let
     textRect = textView.bounds.inset(textView.xTextContainer.insets)
-    layout = textLayout(
-      textRect,
-      textView.displayTextStorage(),
-      textView.textStyle(),
-      textView.alignment(),
-      textView.xTextContainer.wraps,
-    )
+    displayStorage = textView.displayTextStorage()
+    layout =
+      if displayStorage == textView.xTextStorage:
+        textView.xLayoutManager.glyphArrangement()
+      else:
+        textLayout(
+          textRect,
+          displayStorage,
+          textView.textStyle(),
+          textView.alignment(),
+          textView.xTextContainer.wraps,
+        )
   for indicator in textView.xFindIndicators:
     if indicator.visible:
       let rects =

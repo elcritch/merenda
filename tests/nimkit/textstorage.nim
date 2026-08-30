@@ -140,6 +140,24 @@ proc newDispatchingTextStorage(value: string, recorder: DispatchRecorder): TextS
   discard result.withProtocol(RecordingTextStorageDispatchProtocol)
 
 suite "nimkit text storage":
+  test "text storage revisions advance once per committed editing batch":
+    let storage = newTextStorage("abcd")
+
+    check storage.revision == 0
+    storage.replace(initTextRange(0, 1), "A")
+    check storage.revision == 1
+
+    storage.beginEditing()
+    storage.setAttributes(
+      initTextRange(0, 1), defaultTextAttributes(color(1.0, 0.0, 0.0))
+    )
+    storage.setAttributes(
+      initTextRange(1, 1), defaultTextAttributes(color(0.0, 0.0, 1.0))
+    )
+    check storage.revision == 1
+    storage.endEditing()
+    check storage.revision == 2
+
   test "text storage replaces text and preserves surrounding attribute runs":
     let
       storage = newTextStorage("abcdef")
