@@ -1,0 +1,87 @@
+# Moe adaptation of the Catppuccin Mocha palette used by catppuccin/nvim.
+
+[Colors]
+
+foreground = "#cdd6f4"
+background = "#1e1e2e"
+
+lineNum = { fg = "#6c7086", bg = "#1e1e2e" }
+currentLineNum = { fg = "#b4befe", bg = "#1e1e2e" }
+commandLine = { fg = "#cdd6f4", bg = "#181825" }
+errorMessage = { fg = "#f38ba8", bg = "#1e1e2e" }
+warnMessage = { fg = "#f9e2af", bg = "#1e1e2e" }
+searchResult = { fg = "#1e1e2e", bg = "#f9e2af" }
+selectArea = { fg = "#cdd6f4", bg = "#585b70" }
+
+keyword = { fg = "#cba6f7" }
+functionName = { fg = "#89b4fa" }
+typeName = { fg = "#f9e2af" }
+boolean = { fg = "#fab387" }
+charLit = { fg = "#a6e3a1" }
+stringLit = { fg = "#a6e3a1" }
+specialVar = { fg = "#f5c2e7" }
+builtin = { fg = "#f38ba8" }
+binNumber = { fg = "#fab387" }
+decNumber = { fg = "#fab387" }
+floatNumber = { fg = "#fab387" }
+hexNumber = { fg = "#fab387" }
+octNumber = { fg = "#fab387" }
+comment = { fg = "#6c7086" }
+longComment = { fg = "#6c7086" }
+docComment = { fg = "#7f849c" }
+docLongComment = { fg = "#7f849c" }
+whitespace = { fg = "#45475a" }
+preprocessor = { fg = "#f5c2e7" }
+pragma = { fg = "#f5c2e7" }
+identifier = { fg = "#cdd6f4" }
+operator = { fg = "#89dceb" }
+property = { fg = "#89b4fa" }
+
+markdownCodeBlock = { fg = "#cdd6f4", bg = "#181825" }
+namespace = { fg = "#94e2d5" }
+className = { fg = "#f9e2af" }
+enumName = { fg = "#f9e2af" }
+enumMember = { fg = "#fab387" }
+interfaceName = { fg = "#f9e2af" }
+typeParameter = { fg = "#f9e2af" }
+parameter = { fg = "#eba0ac" }
+variable = { fg = "#cdd6f4" }
+string = { fg = "#a6e3a1" }
+function = { fg = "#89b4fa" }
+method = { fg = "#89b4fa" }
+macro = { fg = "#cba6f7" }
+regexp = { fg = "#f5c2e7" }
+decorator = { fg = "#f5c2e7" }
+builtinType = { fg = "#f9e2af" }
+constParameter = { fg = "#fab387" }
+escapeSequence = { fg = "#f2cdcd" }
+selfKeyword = { fg = "#f38ba8" }
+inlayHint = { fg = "#7f849c" }
+codeLens = { fg = "#7f849c" }
+
+currentFile = { fg = "#1e1e2e", bg = "#89b4fa" }
+file = { fg = "#cdd6f4", bg = "#1e1e2e" }
+dir = { fg = "#89b4fa", bg = "#1e1e2e" }
+popupWindow = { fg = "#cdd6f4", bg = "#181825" }
+popupWinCurrentLine = { fg = "#cdd6f4", bg = "#313244" }
+popupWindowBorder = { fg = "#585b70", bg = "#181825" }
+replaceText = { fg = "#1e1e2e", bg = "#f38ba8" }
+parenPair = { fg = "#1e1e2e", bg = "#89b4fa" }
+currentWord = { fg = "#cdd6f4", bg = "#45475a" }
+syntaxCheckInfo = { fg = "#89dceb", bg = "#1e1e2e" }
+syntaxCheckHint = { fg = "#94e2d5", bg = "#1e1e2e" }
+syntaxCheckWarn = { fg = "#f9e2af", bg = "#1e1e2e" }
+syntaxCheckErr = { fg = "#f38ba8", bg = "#1e1e2e" }
+diffViewerAddedLine = { fg = "#a6e3a1", bg = "#1e1e2e" }
+diffViewerDeletedLine = { fg = "#f38ba8", bg = "#1e1e2e" }
+currentLine = { bg = "#313244" }
+currentColumn = { bg = "#313244" }
+sidebarGitAddedSign = { fg = "#a6e3a1", bg = "#1e1e2e" }
+sidebarGitDeletedSign = { fg = "#f38ba8", bg = "#1e1e2e" }
+sidebarGitChangedSign = { fg = "#f9e2af", bg = "#1e1e2e" }
+indentationLine = { fg = "#45475a" }
+scrollBarThumb = { fg = "#585b70", bg = "#585b70" }
+scrollBarTrack = { fg = "#181825" }
+documentHighlightText = { fg = "termDefault", bg = "#45475a" }
+documentHighlightRead = { fg = "termDefault", bg = "#31453a" }
+documentHighlightWrite = { fg = "termDefault", bg = "#50303a" }

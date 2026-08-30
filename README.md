@@ -494,10 +494,12 @@ panels in creation order. For example:
 }
 ```
 
-Kosmo Settings includes a Moe Themes tab. It lists Moe's default theme and
-every `.toml` theme installed in `~/.config/moe/themes`; choosing one applies it
-immediately to all Kosmo editor panes. Reopening Settings refreshes the list, so
-new themes added to that directory appear without restarting Kosmo.
+Kosmo Settings includes a Moe Themes tab. It provides Catppuccin Mocha and
+Latte, Tokyo Night Moon, Kanagawa Wave, and One Dark alongside Moe's default
+theme. It also lists every `.toml` theme installed in `~/.config/moe/themes`,
+with an installed theme taking precedence over a bundled theme of the same
+name. Choosing one applies it immediately to all Kosmo editor panes. Reopening
+Settings refreshes the list, so new themes appear without restarting Kosmo.
 
 Kosmo's sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;

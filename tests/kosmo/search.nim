@@ -137,8 +137,20 @@ suite "Kosmo":
     let defaultThemeIndex =
       moeThemeSelector.indexOfOptionIdentifier(KosmoMoeDefaultThemeIdentifier)
     require defaultThemeIndex >= 0
+    for expectedName in [
+      "Catppuccin Latte", "Catppuccin Mocha", "Kanagawa Wave", "One Dark",
+      "Tokyo Night Moon",
+    ]:
+      check moeThemeSelector.indexOfItem(expectedName) >= 0
     check moeThemeSelector.selectedOptionIdentifier ==
       frontend.editorView.editor.activeMoeThemeIdentifier()
+    let catppuccinIndex = moeThemeSelector.indexOfItem("Catppuccin Mocha")
+    require catppuccinIndex >= 0
+    moeThemeSelector.activateItemAtIndex(catppuccinIndex)
+    check frontend.editorView.editor.activeMoeThemeIdentifier() ==
+      moeThemeSelector.selectedOptionIdentifier
+    check frontend.settingsWindow().selectedMoeThemeIdentifier() ==
+      moeThemeSelector.selectedOptionIdentifier
     moeThemeSelector.activateItemAtIndex(defaultThemeIndex)
     check frontend.editorView.editor.activeMoeThemeIdentifier() ==
       KosmoMoeDefaultThemeIdentifier

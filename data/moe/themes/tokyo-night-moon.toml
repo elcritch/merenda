@@ -1,0 +1,87 @@
+# Moe adaptation of the Tokyo Night Moon palette used by folke/tokyonight.nvim.
+
+[Colors]
+
+foreground = "#c8d3f5"
+background = "#222436"
+
+lineNum = { fg = "#3b4261", bg = "#222436" }
+currentLineNum = { fg = "#82aaff", bg = "#222436" }
+commandLine = { fg = "#c8d3f5", bg = "#1e2030" }
+errorMessage = { fg = "#ff757f", bg = "#222436" }
+warnMessage = { fg = "#ffc777", bg = "#222436" }
+searchResult = { fg = "#222436", bg = "#ffc777" }
+selectArea = { fg = "#c8d3f5", bg = "#394b70" }
+
+keyword = { fg = "#c099ff" }
+functionName = { fg = "#82aaff" }
+typeName = { fg = "#86e1fc" }
+boolean = { fg = "#ff966c" }
+charLit = { fg = "#c3e88d" }
+stringLit = { fg = "#c3e88d" }
+specialVar = { fg = "#fca7ea" }
+builtin = { fg = "#ff757f" }
+binNumber = { fg = "#ff966c" }
+decNumber = { fg = "#ff966c" }
+floatNumber = { fg = "#ff966c" }
+hexNumber = { fg = "#ff966c" }
+octNumber = { fg = "#ff966c" }
+comment = { fg = "#636da6" }
+longComment = { fg = "#636da6" }
+docComment = { fg = "#737aa2" }
+docLongComment = { fg = "#737aa2" }
+whitespace = { fg = "#394b70" }
+preprocessor = { fg = "#fca7ea" }
+pragma = { fg = "#fca7ea" }
+identifier = { fg = "#c8d3f5" }
+operator = { fg = "#89ddff" }
+property = { fg = "#65bcff" }
+
+markdownCodeBlock = { fg = "#c8d3f5", bg = "#1e2030" }
+namespace = { fg = "#86e1fc" }
+className = { fg = "#86e1fc" }
+enumName = { fg = "#86e1fc" }
+enumMember = { fg = "#ff966c" }
+interfaceName = { fg = "#86e1fc" }
+typeParameter = { fg = "#86e1fc" }
+parameter = { fg = "#ff757f" }
+variable = { fg = "#c8d3f5" }
+string = { fg = "#c3e88d" }
+function = { fg = "#82aaff" }
+method = { fg = "#82aaff" }
+macro = { fg = "#c099ff" }
+regexp = { fg = "#fca7ea" }
+decorator = { fg = "#fca7ea" }
+builtinType = { fg = "#86e1fc" }
+constParameter = { fg = "#ff966c" }
+escapeSequence = { fg = "#b4f9f8" }
+selfKeyword = { fg = "#ff757f" }
+inlayHint = { fg = "#737aa2" }
+codeLens = { fg = "#737aa2" }
+
+currentFile = { fg = "#222436", bg = "#82aaff" }
+file = { fg = "#c8d3f5", bg = "#222436" }
+dir = { fg = "#82aaff", bg = "#222436" }
+popupWindow = { fg = "#c8d3f5", bg = "#1e2030" }
+popupWinCurrentLine = { fg = "#c8d3f5", bg = "#2f334d" }
+popupWindowBorder = { fg = "#545c7e", bg = "#1e2030" }
+replaceText = { fg = "#222436", bg = "#ff757f" }
+parenPair = { fg = "#222436", bg = "#82aaff" }
+currentWord = { fg = "#c8d3f5", bg = "#394b70" }
+syntaxCheckInfo = { fg = "#86e1fc", bg = "#222436" }
+syntaxCheckHint = { fg = "#4fd6be", bg = "#222436" }
+syntaxCheckWarn = { fg = "#ffc777", bg = "#222436" }
+syntaxCheckErr = { fg = "#ff757f", bg = "#222436" }
+diffViewerAddedLine = { fg = "#b8db87", bg = "#222436" }
+diffViewerDeletedLine = { fg = "#e26a75", bg = "#222436" }
+currentLine = { bg = "#2f334d" }
+currentColumn = { bg = "#2f334d" }
+sidebarGitAddedSign = { fg = "#b8db87", bg = "#222436" }
+sidebarGitDeletedSign = { fg = "#e26a75", bg = "#222436" }
+sidebarGitChangedSign = { fg = "#7ca1f2", bg = "#222436" }
+indentationLine = { fg = "#394b70" }
+scrollBarThumb = { fg = "#545c7e", bg = "#545c7e" }
+scrollBarTrack = { fg = "#1e2030" }
+documentHighlightText = { fg = "termDefault", bg = "#394b70" }
+documentHighlightRead = { fg = "termDefault", bg = "#29483d" }
+documentHighlightWrite = { fg = "termDefault", bg = "#503040" }

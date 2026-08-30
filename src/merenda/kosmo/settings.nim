@@ -262,8 +262,7 @@ proc newKosmoSettingsWindow*(
   moeThemesPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Moe Theme"),
     nimkit.newLabel(
-      "Choose from Moe's default theme and TOML themes installed in " &
-        "~/.config/moe/themes."
+      "Choose a bundled theme or a TOML theme installed in ~/.config/moe/themes."
     ),
     moeThemeSelector,
   )

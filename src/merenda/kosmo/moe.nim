@@ -7,6 +7,7 @@
 import std/[algorithm, options, os, strutils]
 
 import pkg/celina
+from pkg/figdraw import figDataDir
 import pkg/results as pkgResults
 
 import
@@ -188,6 +189,10 @@ proc moeThemesDirectory*(): string =
   ## Return Moe's standard directory for user-installed TOML themes.
   getHomeDir() / ".config" / "moe" / "themes"
 
+proc bundledMoeThemesDirectory*(): string =
+  ## Return Kosmo's bundled Moe theme directory beneath the active data path.
+  figDataDir() / "moe" / "themes"
+
 proc normalizedThemePath(path: string): string =
   normalizedPath(absolutePath(path.expandTilde()))
 
@@ -239,6 +244,28 @@ proc discoverMoeThemes*(themesDirectory: string): seq[KosmoMoeTheme] =
   configThemes.sortConfigThemes()
   result.add configThemes
 
+proc mergeConfigThemes(
+    themes: var seq[KosmoMoeTheme], additions: openArray[KosmoMoeTheme]
+) =
+  for addition in additions:
+    if addition.kind == kmmtConfig:
+      var matchingIndex = -1
+      for index in 1 ..< themes.len:
+        if themes[index].name.toLowerAscii() == addition.name.toLowerAscii():
+          matchingIndex = index
+          break
+      if matchingIndex >= 0:
+        themes[matchingIndex] = addition
+      else:
+        themes.add addition
+
+proc sortAvailableMoeThemes(themes: var seq[KosmoMoeTheme]) =
+  if themes.len > 2:
+    var configThemes = themes[1 ..^ 1]
+    configThemes.sortConfigThemes()
+    themes.setLen(1)
+    themes.add configThemes
+
 proc activeMoeThemeIdentifier*(editor: KosmoEditor): string =
   ## Return the stable identifier for the theme currently configured in Moe.
   if editor.isNil or editor.editor.isNil:
@@ -252,23 +279,23 @@ proc activeMoeThemeIdentifier*(editor: KosmoEditor): string =
     "vscode"
 
 proc availableMoeThemes*(editor: KosmoEditor): seq[KosmoMoeTheme] =
-  ## Return Moe's default and installed themes, retaining a custom active path.
-  result = discoverMoeThemes(moeThemesDirectory())
+  ## Return bundled and installed themes, retaining a custom active path.
+  result = discoverMoeThemes(bundledMoeThemesDirectory())
+  result.mergeConfigThemes(discoverMoeThemes(moeThemesDirectory()))
   if editor.isNil or editor.editor.isNil or editor.editor.config.theme.kind != tkConfig:
+    result.sortAvailableMoeThemes()
     return
   let currentPath = editor.editor.config.theme.path.normalizedThemePath()
   if not fileExists(currentPath):
+    result.sortAvailableMoeThemes()
     return
   let current = currentPath.configMoeTheme()
   for theme in result:
     if theme.identifier == current.identifier:
+      result.sortAvailableMoeThemes()
       return
-  result.add current
-  if result.len > 2:
-    var configThemes = result[1 ..^ 1]
-    configThemes.sortConfigThemes()
-    result.setLen(1)
-    result.add configThemes
+  result.mergeConfigThemes([current])
+  result.sortAvailableMoeThemes()
 
 proc applyMoeTheme*(
     editor: KosmoEditor, theme: KosmoMoeTheme

@@ -106,6 +106,25 @@ suite "Kosmo":
     check editor.activeMoeThemeIdentifier() == KosmoMoeDefaultThemeIdentifier
     editor.close()
 
+  test "bundled Neovim-inspired themes load through Moe":
+    let editor = newKosmoEditor(text = "themed")
+    let themes = editor.availableMoeThemes()
+    for expectedName in [
+      "Catppuccin Latte", "Catppuccin Mocha", "Kanagawa Wave", "One Dark",
+      "Tokyo Night Moon",
+    ]:
+      var matchingIndex = -1
+      for index, theme in themes:
+        if theme.name == expectedName:
+          matchingIndex = index
+          break
+      require matchingIndex >= 0
+      let outcome = editor.applyMoeTheme(themes[matchingIndex])
+      check outcome.applied
+      check editor.activeMoeThemeIdentifier() == themes[matchingIndex].identifier
+    check editor.applyMoeTheme(themes[0]).applied
+    editor.close()
+
   test "text input and physical keys use Moe's frontend API":
     let editor = newKosmoEditor()
     var buffer = newRenderBuffer(24, 8)
