@@ -1534,7 +1534,6 @@ proc fittingSize*(view: View): Size =
   state.addNonNegativeSizeConstraints()
   state.addGeometryStays(view)
   state.solver.updateVariables()
-  state.refreshLayoutInputCaches(view)
 
   let solverView = state.solverView(view)
   initSize(

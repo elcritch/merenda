@@ -52,6 +52,23 @@ suite "nimkit sizing":
     check root.frame() == rootFrame
     check stack.frame() == stackFrame
 
+  test "fitting measurement preserves pending constraint layout":
+    let
+      root = newView()
+      child = newView()
+
+    root.addSubview(child)
+    discard child.pinEdges(
+      toGuide = root.contentLayoutGuide(insets(10.0, 12.0)),
+      edges = {leLeft, leTop, leRight, leBottom},
+    )
+    root.frame = rect(0.0, 0.0, 240.0, 160.0)
+
+    discard root.fittingSize()
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame == rect(12.0, 10.0, 216.0, 140.0)
+
   test "fitting size uses intrinsic dimensions for an unconstrained control":
     let button = newButton("Natural")
 

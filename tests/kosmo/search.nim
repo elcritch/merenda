@@ -78,6 +78,33 @@ suite "Kosmo":
     check settingsTabs[2].label == "Moe Themes"
     check settingsTabs[2].identifier == KosmoMoeThemesSettingsTabIdentifier
     check settingsTabs.selectedIndex == 0
+
+    discard settingsPanel.buildRenders()
+    check settingsPanel.contentView().frame.size.width > 0.0'f32
+    check settingsPanel.contentView().frame.size.height > 0.0'f32
+    require settingsPanel.contentView().subviews().len == 1
+    let settingsLayout = settingsPanel.contentView().subviews()[0]
+    check settingsLayout.frame.size.width > 0.0'f32
+    check settingsLayout.frame.size.height > 0.0'f32
+    check settingsTabs.frame.size.width > 0.0'f32
+    check settingsTabs.frame.size.height > 0.0'f32
+    let moeThemesTabRect = settingsTabs.tabRect(2)
+    let moeThemesTabPoint = settingsTabs.pointToWindow(
+      initPoint(
+        moeThemesTabRect.origin.x + moeThemesTabRect.size.width * 0.5'f32,
+        moeThemesTabRect.origin.y + moeThemesTabRect.size.height * 0.5'f32,
+      )
+    )
+    check settingsPanel.mouseDownAt(moeThemesTabPoint)
+    check settingsPanel.mouseUpAt(moeThemesTabPoint)
+    check settingsTabs.selectedIndex == 2
+    discard settingsPanel.buildRenders()
+    let initialMoeThemeView =
+      settingsPanel.contentView().viewWithIdentifier(KosmoMoeThemeSelectorIdentifier)
+    require not initialMoeThemeView.isNil
+    check initialMoeThemeView.frame.size.width > 0.0'f32
+    check initialMoeThemeView.frame.size.height > 0.0'f32
+
     check settingsTabs.selectTabViewItemAtIndex(1)
 
     let shortcutsView =
