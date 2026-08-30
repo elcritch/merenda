@@ -25,8 +25,8 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  # requires "gh:fox0430/moe#4f18384"
-  requires "gh:elcritch/moe#integration-improvements"
+  requires "gh:fox0430/moe#532c657"
+  # requires "gh:elcritch/moe#integration-improvements"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
