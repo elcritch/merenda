@@ -739,12 +739,12 @@ proc newMerendaSettingsWindow*(
   discard
     tabs.addTabViewItem(newTabViewItem("Typography", typographyPage.view, "typography"))
   tabs.delegate = result.fontPickerController
-  tabs.setHuggingPriority(LayoutPriorityLow, laVertical)
-  tabs.setCompressionPriority(LayoutPriorityRequired, laVertical)
 
   layout.spacing = 12.0
   layout.alignment = svaFill
-  layout.addArrangedSubview(titleLabel, tabs, result.status)
+  layout.addArrangedSubview(titleLabel)
+  layout.fillAvailableSpace(tabs)
+  layout.addArrangedSubview(result.status)
   result.xContentView.addSubview(layout)
   discard layout.pinEdges(
     toGuide = result.xContentView.contentLayoutGuide(insets(22.0, 24.0)),

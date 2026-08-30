@@ -400,15 +400,11 @@ proc newKosmoSettingsWindow*(
   )
   shortcutsTable.dataSource = shortcutsSource
   shortcutsTable.delegate = shortcutsSource
-  shortcutsTable.setHuggingPriority(nimkit.LayoutPriorityLow, nimkit.laVertical)
-  shortcutsTable.setCompressionPriority(
-    nimkit.LayoutPriorityRequired, nimkit.laVertical
-  )
   shortcutsPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Active Shortcuts"),
     nimkit.newLabel("These shortcuts are active in Kosmo and are read-only for now."),
-    shortcutsTable,
   )
+  shortcutsPage.stack.fillAvailableSpace(shortcutsTable)
 
   moeThemesTable.identifier = KosmoMoeThemesTableIdentifier
   moeThemesTable.accessibilityLabel = "Moe editor themes"
@@ -423,18 +419,14 @@ proc newKosmoSettingsWindow*(
   )
   moeThemesTable.dataSource = moeThemesSource
   moeThemesTable.delegate = moeThemesSource
-  moeThemesTable.setHuggingPriority(nimkit.LayoutPriorityLow, nimkit.laVertical)
-  moeThemesTable.setCompressionPriority(
-    nimkit.LayoutPriorityRequired, nimkit.laVertical
-  )
   settings.updateMoeThemes(moeThemes, selectedMoeThemeIdentifier)
   moeThemesPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Moe Theme"),
     nimkit.newLabel(
       "Choose a bundled theme or a TOML theme installed in ~/.config/moe/themes."
     ),
-    moeThemesTable,
   )
+  moeThemesPage.stack.fillAvailableSpace(moeThemesTable)
 
   tabs.identifier = KosmoSettingsTabsIdentifier
   discard tabs.addTabViewItem(
@@ -452,12 +444,10 @@ proc newKosmoSettingsWindow*(
       "Moe Themes", moeThemesPage.view, KosmoMoeThemesSettingsTabIdentifier
     )
   )
-  tabs.setHuggingPriority(nimkit.LayoutPriorityLow, nimkit.laVertical)
-  tabs.setCompressionPriority(nimkit.LayoutPriorityRequired, nimkit.laVertical)
-
   layout.spacing = 12.0
   layout.alignment = nimkit.svaFill
-  layout.addArrangedSubview(nimkit.newTitleLabel("Kosmo Settings"), tabs)
+  layout.addArrangedSubview(nimkit.newTitleLabel("Kosmo Settings"))
+  layout.fillAvailableSpace(tabs)
   result.xContentView.addSubview(layout)
   discard layout.pinEdges(
     toGuide = result.xContentView.contentLayoutGuide(nimkit.insets(22.0, 24.0)),

@@ -112,6 +112,41 @@ suite "nimkit stack views":
     check first.frame() == rect(0.0, 0.0, 80.0, 20.0)
     check second.frame() == rect(0.0, 28.0, 80.0, 10.0)
 
+  test "fill available width overrides cross alignment without changing height":
+    let
+      stack = newStackView(laVertical, frame = rect(0, 0, 120, 80))
+      child = newFixedIntrinsicView(40, 20)
+
+    stack.alignment = svaCenter
+    stack.distribution = svdNatural
+    stack.fillAvailableWidth(child)
+    stack.layoutSubtreeIfNeeded()
+
+    check stack.arrangedSubviews == @[View(child)]
+    check stack.arrangedSubviewSizingPolicy(child) == svspFillAvailableWidth
+    check child.frame() == rect(0.0, 0.0, 120.0, 20.0)
+
+  test "fill available space absorbs the remaining stack area":
+    let
+      stack = newStackView(laVertical, frame = rect(0, 0, 120, 100))
+      title = newFixedIntrinsicView(40, 20)
+      content = newFixedIntrinsicView(40, 10)
+
+    stack.spacing = 8.0
+    stack.alignment = svaCenter
+    stack.distribution = svdNatural
+    title.setHuggingPriority(LayoutPriorityRequired, laVertical)
+    content.setHuggingPriority(LayoutPriorityRequired, laVertical)
+    title.setCompressionPriority(LayoutPriorityRequired, laVertical)
+    content.setCompressionPriority(LayoutPriorityRequired, laVertical)
+    stack.addArrangedSubview(title)
+    stack.fillAvailableSpace(content)
+    stack.layoutSubtreeIfNeeded()
+
+    check stack.arrangedSubviewSizingPolicy(content) == svspFillAvailableSpace
+    check title.frame() == rect(40.0, 0.0, 40.0, 20.0)
+    check content.frame() == rect(0.0, 28.0, 120.0, 72.0)
+
   test "equal spacing distribution keeps natural sizes and expands gaps":
     let
       stack = newStackView(laHorizontal, frame = rect(0, 0, 100, 24))

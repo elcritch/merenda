@@ -298,6 +298,28 @@ suite "nimkit tab views":
     tabView.layoutSubtreeIfNeeded()
     check pane.frame.size.height >= paneHeight - 0.01'f32
 
+  test "stack fill available space sizes tab content in one layout call":
+    let
+      layout = newStackView(laVertical, frame = rect(0, 0, 320, 220))
+      title = newView(frame = rect(0, 0, 100, 20))
+      tabView = newTabView()
+      page = newView()
+
+    layout.spacing = 10.0
+    layout.alignment = svaCenter
+    layout.distribution = svdNatural
+    tabView.setHuggingPriority(LayoutPriorityRequired, laVertical)
+    tabView.setCompressionPriority(LayoutPriorityRequired, laVertical)
+    discard tabView.addTabViewItem(newTabViewItem("General", page))
+    layout.addArrangedSubview(title)
+    layout.fillAvailableSpace(tabView)
+
+    layout.layoutSubtreeIfNeeded()
+
+    check title.frame() == rect(110.0, 0.0, 100.0, 20.0)
+    check tabView.frame() == rect(0.0, 30.0, 320.0, 190.0)
+    check page.frame() == tabView.contentViewRect()
+
   test "tab view fitting size includes every constraint-wrapped page":
     let
       tabView = newTabView(frame = rect(0, 0, 120, 80))
