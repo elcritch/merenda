@@ -17,6 +17,8 @@ import
     config_loader, editor_window, encoding, motion,
   ]
 from moepkg/buffer/core import BufferId
+from moepkg/color import EditorColorPairIndex, Rgb, ThemeColors, isTermDefaultColor
+from moepkg/theme import DefaultColors
 from moepkg/render_utils import steadyBottomAreaHeight
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/types as moeTypes
@@ -95,12 +97,26 @@ type
     kmmtDefault
     kmmtConfig
 
+  KosmoMoeThemeColor* = object
+    ## An RGB theme color that can be presented without exposing Moe types.
+    red*, green*, blue*: uint8
+
+  KosmoMoeThemePreview* = object
+    ## Key colors used by Kosmo's compact Moe theme preview.
+    background*: KosmoMoeThemeColor
+    foreground*: KosmoMoeThemeColor
+    keyword*: KosmoMoeThemeColor
+    functionName*: KosmoMoeThemeColor
+    stringLiteral*: KosmoMoeThemeColor
+    comment*: KosmoMoeThemeColor
+
   KosmoMoeTheme* = object
     ## A Moe theme that Kosmo can present without exposing Moe configuration types.
     kind*: KosmoMoeThemeKind
     identifier*: string
     name*: string
     path*: string
+    preview*: KosmoMoeThemePreview
 
   KosmoMoeThemeApplyResult* = object
     applied*: bool
@@ -213,6 +229,40 @@ func moeThemeName(path: string): string =
     else:
       result.add character
 
+func moeThemeColor(rgb: Rgb, fallback: KosmoMoeThemeColor): KosmoMoeThemeColor =
+  if rgb.isTermDefaultColor():
+    return fallback
+  KosmoMoeThemeColor(red: rgb.red.uint8, green: rgb.green.uint8, blue: rgb.blue.uint8)
+
+func moeThemePreview(colors: ThemeColors): KosmoMoeThemePreview =
+  let
+    fallbackBackground = KosmoMoeThemeColor(red: 0, green: 0, blue: 0)
+    fallbackForeground = KosmoMoeThemeColor(red: 218, green: 218, blue: 218)
+    background = colors[EditorColorPairIndex.default].background.rgb.moeThemeColor(
+      fallbackBackground
+    )
+    foreground = colors[EditorColorPairIndex.default].foreground.rgb.moeThemeColor(
+      fallbackForeground
+    )
+  KosmoMoeThemePreview(
+    background: background,
+    foreground: foreground,
+    keyword:
+      colors[EditorColorPairIndex.keyword].foreground.rgb.moeThemeColor(foreground),
+    functionName:
+      colors[EditorColorPairIndex.functionName].foreground.rgb.moeThemeColor(foreground),
+    stringLiteral:
+      colors[EditorColorPairIndex.stringLit].foreground.rgb.moeThemeColor(foreground),
+    comment:
+      colors[EditorColorPairIndex.comment].foreground.rgb.moeThemeColor(foreground),
+  )
+
+proc themePreview(path: string): KosmoMoeThemePreview =
+  let loaded = loadThemeFromToml(path)
+  if loaded.isOk:
+    return loaded.get().moeThemePreview()
+  DefaultColors.moeThemePreview()
+
 proc configMoeTheme(path: string): KosmoMoeTheme =
   let normalizedPath = path.normalizedThemePath()
   KosmoMoeTheme(
@@ -220,6 +270,7 @@ proc configMoeTheme(path: string): KosmoMoeTheme =
     identifier: normalizedPath.configThemeIdentifier(),
     name: normalizedPath.moeThemeName(),
     path: normalizedPath,
+    preview: normalizedPath.themePreview(),
   )
 
 proc sortConfigThemes(themes: var seq[KosmoMoeTheme]) =
@@ -231,7 +282,10 @@ proc sortConfigThemes(themes: var seq[KosmoMoeTheme]) =
 proc discoverMoeThemes*(themesDirectory: string): seq[KosmoMoeTheme] =
   ## Discover Moe-compatible TOML themes in `themesDirectory`.
   result.add KosmoMoeTheme(
-    kind: kmmtDefault, identifier: KosmoMoeDefaultThemeIdentifier, name: "Default"
+    kind: kmmtDefault,
+    identifier: KosmoMoeDefaultThemeIdentifier,
+    name: "Default",
+    preview: DefaultColors.moeThemePreview(),
   )
   if not dirExists(themesDirectory):
     return

@@ -116,6 +116,15 @@ suite "Kosmo":
     check themes[0].name == "Default"
     check themes[1].name == "Soft Light"
     check themes[2].name == "Vivid"
+    check themes[1].preview.foreground ==
+      KosmoMoeThemeColor(red: 16, green: 16, blue: 16)
+    check themes[1].preview.background ==
+      KosmoMoeThemeColor(red: 248, green: 248, blue: 248)
+    check themes[2].preview.foreground ==
+      KosmoMoeThemeColor(red: 255, green: 221, blue: 102)
+    check themes[2].preview.background == KosmoMoeThemeColor(
+      red: 22, green: 0, blue: 34
+    )
 
     let editor = newKosmoEditor(text = "themed")
     let outcome = editor.applyMoeTheme(themes[1])
@@ -139,6 +148,17 @@ suite "Kosmo":
           matchingIndex = index
           break
       require matchingIndex >= 0
+      if expectedName == "Catppuccin Mocha":
+        let preview = themes[matchingIndex].preview
+        check preview.foreground == KosmoMoeThemeColor(red: 205, green: 214, blue: 244)
+        check preview.background == KosmoMoeThemeColor(red: 30, green: 30, blue: 46)
+        check preview.keyword == KosmoMoeThemeColor(red: 203, green: 166, blue: 247)
+        check preview.functionName == KosmoMoeThemeColor(
+          red: 137, green: 180, blue: 250
+        )
+        check preview.stringLiteral ==
+          KosmoMoeThemeColor(red: 166, green: 227, blue: 161)
+        check preview.comment == KosmoMoeThemeColor(red: 108, green: 112, blue: 134)
       let outcome = editor.applyMoeTheme(themes[matchingIndex])
       check outcome.applied
       check editor.activeMoeThemeIdentifier() == themes[matchingIndex].identifier

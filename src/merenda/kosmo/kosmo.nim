@@ -2587,7 +2587,9 @@ proc `terminalOptionAsMeta=`*(frontend: KosmoApplication, enabled: bool) =
 
 func moeThemeSettings(themes: openArray[KosmoMoeTheme]): seq[KosmoMoeThemeSetting] =
   for theme in themes:
-    result.add KosmoMoeThemeSetting(identifier: theme.identifier, name: theme.name)
+    result.add KosmoMoeThemeSetting(
+      identifier: theme.identifier, name: theme.name, preview: theme.preview
+    )
 
 proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
   ## Apply an available Moe theme and repaint every editor pane.

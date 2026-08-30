@@ -1,6 +1,7 @@
 ## Kosmo-specific application settings.
 
 import ../nimkit as nimkit
+import ./moe
 
 const
   KosmoSettingsTabsIdentifier* = "kosmo.settings.tabs"
@@ -9,10 +10,14 @@ const
   KosmoMoeThemesSettingsTabIdentifier* = "kosmo.settings.moeThemes"
   KosmoOptionAsMetaIdentifier* = "kosmo.settings.terminal.optionAsMeta"
   KosmoShortcutsTableIdentifier* = "kosmo.settings.shortcuts.table"
-  KosmoMoeThemeSelectorIdentifier* = "kosmo.settings.moeThemes.selector"
+  KosmoMoeThemesTableIdentifier* = "kosmo.settings.moeThemes.table"
+  KosmoMoeThemeSelectorIdentifier* = KosmoMoeThemesTableIdentifier
   KosmoShortcutActionColumnIdentifier* = "action"
   KosmoShortcutDescriptionColumnIdentifier* = "description"
   KosmoShortcutKeysColumnIdentifier* = "keys"
+  KosmoMoeThemeNameColumnIdentifier* = "theme"
+  KosmoMoeThemePreviewColumnIdentifier* = "preview"
+  KosmoMoeThemePreviewText* = "let fn = \"text\" #"
 
 type
   KosmoOptionAsMetaHandler* = proc(enabled: bool) {.closure.}
@@ -26,9 +31,18 @@ type
   KosmoMoeThemeSetting* = object
     identifier*: string
     name*: string
+    preview*: KosmoMoeThemePreview
 
   KosmoShortcutsTableSource = ref object of nimkit.Responder
     shortcuts: seq[KosmoShortcutSetting]
+
+  KosmoMoeThemePreviewView = ref object of nimkit.View
+    preview: KosmoMoeThemePreview
+
+  KosmoMoeThemesTableSource = ref object of nimkit.Responder
+    themes: seq[KosmoMoeThemeSetting]
+    selectedIdentifier: string
+    handler: KosmoMoeThemeHandler
 
   KosmoSettingsWindow* = ref object of nimkit.Responder
     xWindow: nimkit.Panel
@@ -39,10 +53,8 @@ type
     xTabs: nimkit.TabView
     xShortcutsTable: nimkit.TableView
     xShortcutsSource: KosmoShortcutsTableSource
-    xMoeThemeSelector: nimkit.ComboBox
-    xMoeThemes: seq[KosmoMoeThemeSetting]
-    xMoeThemeIdentifier: string
-    xMoeThemeHandler: KosmoMoeThemeHandler
+    xMoeThemesTable: nimkit.TableView
+    xMoeThemesSource: KosmoMoeThemesTableSource
 
 protocol KosmoShortcutsTableDataSource of nimkit.TableViewDataSource:
   method numberOfRows(
@@ -96,6 +108,149 @@ proc newKosmoShortcutsTableSource(
   discard result.withProtocol(KosmoShortcutsTableDataSource)
   discard result.withProtocol(KosmoShortcutsTableDelegate)
 
+func nimkitColor(value: KosmoMoeThemeColor): nimkit.Color =
+  nimkit.color(
+    value.red.float32 / 255.0'f32,
+    value.green.float32 / 255.0'f32,
+    value.blue.float32 / 255.0'f32,
+  )
+
+protocol KosmoMoeThemePreviewDrawing of nimkit.ViewDrawingProtocol:
+  method draw(view: KosmoMoeThemePreviewView, context: nimkit.DrawContext) =
+    let
+      bounds = view.bounds()
+      baseStyle = context.appearance.resolveTextStyle(
+        nimkit.controlStyle(nimkit.srMonoTextView),
+        view.preview.foreground.nimkitColor(),
+        nimkit.insets(0.0),
+      )
+      textSize = KosmoMoeThemePreviewText.textNaturalSize(baseStyle)
+      backgroundRect = nimkit.rect(
+        4.0,
+        max((bounds.size.height - textSize.height - 4.0'f32) * 0.5'f32, 0.0'f32),
+        min(textSize.width + 12.0'f32, max(bounds.size.width - 8.0'f32, 0.0'f32)),
+        min(textSize.height + 4.0'f32, bounds.size.height),
+      )
+      textY = max((bounds.size.height - textSize.height) * 0.5'f32, 0.0'f32)
+    context.addRectangle(backgroundRect, view.preview.background.nimkitColor())
+    var textX = backgroundRect.origin.x + 6.0'f32
+    template addSegment(text: string, colorValue: KosmoMoeThemeColor) =
+      block:
+        var style = baseStyle
+        style.color = colorValue.nimkitColor()
+        let segmentSize = text.textNaturalSize(style)
+        context.addText(
+          nimkit.rect(textX, textY, segmentSize.width, textSize.height), text, style
+        )
+        textX += segmentSize.width
+
+    addSegment("let", view.preview.keyword)
+    addSegment(" ", view.preview.foreground)
+    addSegment("fn", view.preview.functionName)
+    addSegment(" = ", view.preview.foreground)
+    addSegment("\"text\"", view.preview.stringLiteral)
+    addSegment(" ", view.preview.foreground)
+    addSegment("#", view.preview.comment)
+
+proc newKosmoMoeThemePreviewView(
+    preview: KosmoMoeThemePreview
+): KosmoMoeThemePreviewView =
+  result = KosmoMoeThemePreviewView(preview: preview)
+  nimkit.initViewFields(result)
+  result.accessibilityLabel = KosmoMoeThemePreviewText
+  discard result.withProtocol(KosmoMoeThemePreviewDrawing)
+
+protocol KosmoMoeThemesTableDataSource of nimkit.TableViewDataSource:
+  method numberOfRows(
+      source: KosmoMoeThemesTableSource, tableView: nimkit.TableView
+  ): int =
+    discard tableView
+    source.themes.len
+
+  method textForCell(
+      source: KosmoMoeThemesTableSource,
+      tableView: nimkit.TableView,
+      row: int,
+      column: nimkit.TableColumn,
+  ): string =
+    discard tableView
+    if row notin 0 ..< source.themes.len:
+      return
+    case column.identifier()
+    of KosmoMoeThemeNameColumnIdentifier:
+      source.themes[row].name
+    of KosmoMoeThemePreviewColumnIdentifier:
+      KosmoMoeThemePreviewText
+    else:
+      ""
+
+  method identifierForRow(
+      source: KosmoMoeThemesTableSource, tableView: nimkit.TableView, row: int
+  ): string =
+    discard tableView
+    if row in 0 ..< source.themes.len:
+      source.themes[row].identifier
+    else:
+      ""
+
+  method rowForIdentifier(
+      source: KosmoMoeThemesTableSource, tableView: nimkit.TableView, identifier: string
+  ): int =
+    discard tableView
+    for row, theme in source.themes:
+      if theme.identifier == identifier:
+        return row
+    -1
+
+protocol KosmoMoeThemesTableDelegate of nimkit.TableViewDelegate:
+  method viewForCell(
+      source: KosmoMoeThemesTableSource,
+      tableView: nimkit.TableView,
+      row: int,
+      column: nimkit.TableColumn,
+  ): nimkit.View =
+    discard tableView
+    if row in 0 ..< source.themes.len and
+        column.identifier() == KosmoMoeThemePreviewColumnIdentifier:
+      return source.themes[row].preview.newKosmoMoeThemePreviewView()
+
+  method didSelectTableRow(
+      source: KosmoMoeThemesTableSource, tableView: nimkit.TableView, row: int
+  ) =
+    if row notin 0 ..< source.themes.len:
+      return
+    let identifier = source.themes[row].identifier
+    if identifier == source.selectedIdentifier:
+      return
+    let previousIdentifier = source.selectedIdentifier
+    var applied = true
+    if not source.handler.isNil:
+      applied = source.handler(identifier)
+    if applied:
+      source.selectedIdentifier = identifier
+    else:
+      tableView.selectedIndex = tableView.tableRowIndexForIdentifier(previousIdentifier)
+
+  method shouldEditCell(
+      source: KosmoMoeThemesTableSource,
+      tableView: nimkit.TableView,
+      row: int,
+      column: nimkit.TableColumn,
+  ): bool =
+    discard source
+    discard tableView
+    discard row
+    discard column
+    false
+
+proc newKosmoMoeThemesTableSource(
+    handler: KosmoMoeThemeHandler
+): KosmoMoeThemesTableSource =
+  result = KosmoMoeThemesTableSource(handler: handler)
+  nimkit.initResponder(result)
+  discard result.withProtocol(KosmoMoeThemesTableDataSource)
+  discard result.withProtocol(KosmoMoeThemesTableDelegate)
+
 proc newSettingsPage(): tuple[view: nimkit.View, stack: nimkit.StackView] =
   result.view = nimkit.newView()
   result.stack = nimkit.newStackView(nimkit.laVertical)
@@ -127,8 +282,8 @@ proc `shortcuts=`*(
 
 proc selectedMoeThemeIdentifier*(settings: KosmoSettingsWindow): string =
   ## Return the theme selected in the Moe Themes settings tab.
-  if not settings.isNil:
-    result = settings.xMoeThemeIdentifier
+  if not settings.isNil and not settings.xMoeThemesSource.isNil:
+    result = settings.xMoeThemesSource.selectedIdentifier
 
 proc updateMoeThemes*(
     settings: KosmoSettingsWindow,
@@ -136,20 +291,20 @@ proc updateMoeThemes*(
     selectedIdentifier: string,
 ) =
   ## Replace the available Moe themes and synchronize the current selection.
-  if settings.isNil or settings.xMoeThemeSelector.isNil:
+  if settings.isNil or settings.xMoeThemesSource.isNil or settings.xMoeThemesTable.isNil:
     return
-  settings.xMoeThemes = @themes
-  var options = newSeqOfCap[nimkit.ComboBoxOption](themes.len)
-  for theme in themes:
-    options.add nimkit.initComboBoxOption(
-      identifier = theme.identifier, displayText = theme.name
-    )
-  settings.xMoeThemeSelector.setOptions(options)
-  settings.xMoeThemeIdentifier = selectedIdentifier
-  settings.xMoeThemeSelector.selectedOptionIdentifier = selectedIdentifier
-  if settings.xMoeThemeSelector.selectedIndex < 0 and themes.len > 0:
-    settings.xMoeThemeSelector.selectedIndex = 0
-    settings.xMoeThemeIdentifier = themes[0].identifier
+  settings.xMoeThemesSource.themes = @themes
+  settings.xMoeThemesTable.reloadData()
+  var selectedRow =
+    settings.xMoeThemesTable.tableRowIndexForIdentifier(selectedIdentifier)
+  if selectedRow < 0 and themes.len > 0:
+    selectedRow = 0
+  settings.xMoeThemesSource.selectedIdentifier =
+    if selectedRow >= 0:
+      themes[selectedRow].identifier
+    else:
+      ""
+  settings.xMoeThemesTable.selectedIndex = selectedRow
 
 proc newKosmoSettingsWindow*(
     optionAsMeta = true,
@@ -160,15 +315,15 @@ proc newKosmoSettingsWindow*(
     moeThemeHandler: KosmoMoeThemeHandler = nil,
 ): KosmoSettingsWindow =
   ## Create Kosmo's settings panel, which intentionally contains no Merenda settings.
-  let shortcutsSource = newKosmoShortcutsTableSource(shortcuts)
+  let
+    shortcutsSource = newKosmoShortcutsTableSource(shortcuts)
+    moeThemesSource = newKosmoMoeThemesTableSource(moeThemeHandler)
   result = KosmoSettingsWindow(
     xWindow: nimkit.newPanel("Kosmo Settings", nimkit.rect(180, 160, 760, 420)),
     xContentView: nimkit.newView(),
     xOptionAsMetaHandler: optionAsMetaHandler,
     xShortcutsSource: shortcutsSource,
-    xMoeThemes: @moeThemes,
-    xMoeThemeIdentifier: selectedMoeThemeIdentifier,
-    xMoeThemeHandler: moeThemeHandler,
+    xMoeThemesSource: moeThemesSource,
   )
   nimkit.initResponder(result)
   let
@@ -180,14 +335,13 @@ proc newKosmoSettingsWindow*(
     moeThemesPage = newSettingsPage()
     optionButton = nimkit.newCheckBox("Use Option/Alt as Meta")
     shortcutsTable = nimkit.newTableView()
-    moeThemeSelector = nimkit.newComboBox()
+    moeThemesTable = nimkit.newTableView()
     optionChanged = nimkit.actionSelector("kosmo.optionAsMetaChanged")
-    moeThemeChanged = nimkit.actionSelector("kosmo.moeThemeChanged")
   result.xOptionAsMetaButton = optionButton
   result.xFirstResponder = optionButton
   result.xTabs = tabs
   result.xShortcutsTable = shortcutsTable
-  result.xMoeThemeSelector = moeThemeSelector
+  result.xMoeThemesTable = moeThemesTable
 
   optionButton.identifier = KosmoOptionAsMetaIdentifier
   optionButton.accessibilityLabel = "Use Option or Alt as Meta"
@@ -240,33 +394,31 @@ proc newKosmoSettingsWindow*(
     shortcutsTable,
   )
 
-  moeThemeSelector.identifier = KosmoMoeThemeSelectorIdentifier
-  moeThemeSelector.accessibilityLabel = "Moe editor theme"
+  moeThemesTable.identifier = KosmoMoeThemesTableIdentifier
+  moeThemesTable.accessibilityLabel = "Moe editor themes"
+  moeThemesTable.selectionMode = nimkit.tsmSingle
+  moeThemesTable.usesAlternatingRowBackgrounds = true
+  moeThemesTable.showsRowSeparators = true
+  moeThemesTable.addColumn(
+    nimkit.newTableColumn(KosmoMoeThemeNameColumnIdentifier, "Theme", width = 285.0)
+  )
+  moeThemesTable.addColumn(
+    nimkit.newTableColumn(KosmoMoeThemePreviewColumnIdentifier, "Colors", width = 280.0)
+  )
+  moeThemesTable.dataSource = moeThemesSource
+  moeThemesTable.delegate = moeThemesSource
+  moeThemesTable.setHuggingPriority(nimkit.LayoutPriorityLow, nimkit.laVertical)
+  moeThemesTable.setCompressionPriority(
+    nimkit.LayoutPriorityRequired, nimkit.laVertical
+  )
   settings.updateMoeThemes(moeThemes, selectedMoeThemeIdentifier)
-  moeThemeSelector.target = nimkit.newActionTarget(moeThemeChanged) do(
-    sender: nimkit.DynamicAgent
-  ):
-    discard sender
-    let identifier = moeThemeSelector.selectedOptionIdentifier
-    if identifier.len == 0 or identifier == settings.xMoeThemeIdentifier:
-      return
-    let previousIdentifier = settings.xMoeThemeIdentifier
-    var applied = true
-    if not settings.xMoeThemeHandler.isNil:
-      applied = settings.xMoeThemeHandler(identifier)
-    if applied:
-      settings.xMoeThemeIdentifier = identifier
-    else:
-      moeThemeSelector.selectedOptionIdentifier = previousIdentifier
-  moeThemeSelector.action = moeThemeChanged
   moeThemesPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Moe Theme"),
     nimkit.newLabel(
       "Choose a bundled theme or a TOML theme installed in ~/.config/moe/themes."
     ),
-    moeThemeSelector,
+    moeThemesTable,
   )
-  moeThemesPage.stack.addFlexibleSpacer()
 
   tabs.identifier = KosmoSettingsTabsIdentifier
   discard tabs.addTabViewItem(

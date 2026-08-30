@@ -1,4 +1,5 @@
-import std/[monotimes, options, os, osproc, strutils, tempfiles, times, unittest]
+import
+  std/[monotimes, options, os, osproc, strutils, tempfiles, times, unicode, unittest]
 
 import figdraw
 import sigils/threads
@@ -6,6 +7,10 @@ import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
+
+proc renderedFigText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add rune.toUTF8()
 
 proc hasSidebarPaneOutline(
     view: View, outlineColor: Color, outlineWidth: float32
@@ -100,7 +105,7 @@ suite "Kosmo":
     check settingsTabs.selectedIndex == 2
     discard settingsPanel.buildRenders()
     let initialMoeThemeView =
-      settingsPanel.contentView().viewWithIdentifier(KosmoMoeThemeSelectorIdentifier)
+      settingsPanel.contentView().viewWithIdentifier(KosmoMoeThemesTableIdentifier)
     require not initialMoeThemeView.isNil
     check initialMoeThemeView.frame.size.width > 0.0'f32
     check initialMoeThemeView.frame.size.height > 0.0'f32
@@ -156,29 +161,82 @@ suite "Kosmo":
     check settingsTabs.selectTabViewItemAtIndex(2)
 
     let moeThemeView =
-      settingsPanel.contentView().viewWithIdentifier(KosmoMoeThemeSelectorIdentifier)
+      settingsPanel.contentView().viewWithIdentifier(KosmoMoeThemesTableIdentifier)
     require not moeThemeView.isNil
-    require moeThemeView of ComboBox
-    let moeThemeSelector = ComboBox(moeThemeView)
-    check moeThemeSelector.numberOfItems() >= 2
-    let defaultThemeIndex =
-      moeThemeSelector.indexOfOptionIdentifier(KosmoMoeDefaultThemeIdentifier)
-    require defaultThemeIndex >= 0
+    require moeThemeView of TableView
+    let
+      moeThemesTable = TableView(moeThemeView)
+      themeColumn =
+        moeThemesTable.columnWithIdentifier(KosmoMoeThemeNameColumnIdentifier)
+      previewColumn =
+        moeThemesTable.columnWithIdentifier(KosmoMoeThemePreviewColumnIdentifier)
+    check moeThemesTable.columnCount == 2
+    check moeThemesTable.selectionMode == tsmSingle
+    require not themeColumn.isNil
+    require not previewColumn.isNil
+    check themeColumn.title == "Theme"
+    check previewColumn.title == "Colors"
+    check moeThemesTable.rowCount >= 2
+    let defaultThemeRow =
+      moeThemesTable.tableRowIndexForIdentifier(KosmoMoeDefaultThemeIdentifier)
+    require defaultThemeRow >= 0
+    var catppuccinRow = -1
     for expectedName in [
       "Catppuccin Latte", "Catppuccin Mocha", "Kanagawa Wave", "One Dark",
       "Tokyo Night Moon",
     ]:
-      check moeThemeSelector.indexOfItem(expectedName) >= 0
-    check moeThemeSelector.selectedOptionIdentifier ==
+      var matchingRow = -1
+      for row in 0 ..< moeThemesTable.rowCount:
+        if moeThemesTable.tableCellText(row, themeColumn) == expectedName:
+          matchingRow = row
+          break
+      check matchingRow >= 0
+      if expectedName == "Catppuccin Mocha":
+        catppuccinRow = matchingRow
+    require catppuccinRow >= 0
+    check moeThemesTable.tableCellText(catppuccinRow, previewColumn) ==
+      KosmoMoeThemePreviewText
+    check KosmoMoeThemePreviewText.len <= 20
+    let previewView = moeThemesTable.tableCellView(catppuccinRow, previewColumn)
+    require not previewView.isNil
+    check previewView.accessibilityLabel == KosmoMoeThemePreviewText
+    previewView.frame = rect(0, 0, previewColumn.width, moeThemesTable.rowHeight)
+    let previewRenders = previewView.buildRenders()[DefaultDrawLevel]
+    var
+      hasPreviewBackground = false
+      renderedPreview = ""
+    for node in previewRenders.nodes:
+      if node.kind == nkRectangle:
+        hasPreviewBackground = true
+      elif node.kind == nkText:
+        renderedPreview.add node.renderedFigText()
+    check hasPreviewBackground
+    check renderedPreview == KosmoMoeThemePreviewText
+    check moeThemesTable.tableRowIdentifier(moeThemesTable.selectedIndex) ==
       frontend.editorView.editor.activeMoeThemeIdentifier()
-    let catppuccinIndex = moeThemeSelector.indexOfItem("Catppuccin Mocha")
-    require catppuccinIndex >= 0
-    moeThemeSelector.activateItemAtIndex(catppuccinIndex)
+    discard settingsPanel.buildRenders()
+    let catppuccinRect = moeThemesTable.rowItemRect(catppuccinRow)
+    let catppuccinPoint = moeThemesTable.pointToWindow(
+      initPoint(
+        catppuccinRect.origin.x + catppuccinRect.size.width * 0.5'f32,
+        catppuccinRect.origin.y + catppuccinRect.size.height * 0.5'f32,
+      )
+    )
+    check settingsPanel.mouseDownAt(catppuccinPoint)
+    check settingsPanel.mouseUpAt(catppuccinPoint)
     check frontend.editorView.editor.activeMoeThemeIdentifier() ==
-      moeThemeSelector.selectedOptionIdentifier
+      moeThemesTable.tableRowIdentifier(catppuccinRow)
     check frontend.settingsWindow().selectedMoeThemeIdentifier() ==
-      moeThemeSelector.selectedOptionIdentifier
-    moeThemeSelector.activateItemAtIndex(defaultThemeIndex)
+      moeThemesTable.tableRowIdentifier(catppuccinRow)
+    let defaultThemeRect = moeThemesTable.rowItemRect(defaultThemeRow)
+    let defaultThemePoint = moeThemesTable.pointToWindow(
+      initPoint(
+        defaultThemeRect.origin.x + defaultThemeRect.size.width * 0.5'f32,
+        defaultThemeRect.origin.y + defaultThemeRect.size.height * 0.5'f32,
+      )
+    )
+    check settingsPanel.mouseDownAt(defaultThemePoint)
+    check settingsPanel.mouseUpAt(defaultThemePoint)
     check frontend.editorView.editor.activeMoeThemeIdentifier() ==
       KosmoMoeDefaultThemeIdentifier
     check frontend.settingsWindow().selectedMoeThemeIdentifier() ==
