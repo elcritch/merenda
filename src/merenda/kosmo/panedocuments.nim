@@ -15,6 +15,7 @@ type KosmoPaneDocument* = ref object
   styleClasses*: seq[string]
   onClose*: proc(document: KosmoPaneDocument): bool {.closure.}
   onSave*: proc(document: KosmoPaneDocument): bool {.closure.}
+  onDuplicate*: proc(document: KosmoPaneDocument): KosmoPaneDocument {.closure.}
 
 proc newKosmoPaneDocument*(
     identifier, title: string,
@@ -26,6 +27,7 @@ proc newKosmoPaneDocument*(
     styleClasses: openArray[string] = [],
     onClose: proc(document: KosmoPaneDocument): bool {.closure.} = nil,
     onSave: proc(document: KosmoPaneDocument): bool {.closure.} = nil,
+    onDuplicate: proc(document: KosmoPaneDocument): KosmoPaneDocument {.closure.} = nil,
 ): KosmoPaneDocument =
   ## Create a pane document that can participate in Kosmo's tab lifecycle.
   KosmoPaneDocument(
@@ -40,6 +42,7 @@ proc newKosmoPaneDocument*(
     styleClasses: @styleClasses,
     onClose: onClose,
     onSave: onSave,
+    onDuplicate: onDuplicate,
   )
 
 func documentTabModel*(document: KosmoPaneDocument): nimkit.DocumentTabModel =
@@ -69,3 +72,8 @@ proc save*(document: KosmoPaneDocument): bool {.discardable.} =
   if document.isNil or document.onSave.isNil:
     return
   document.onSave(document)
+
+proc duplicate*(document: KosmoPaneDocument): KosmoPaneDocument =
+  ## Create an independent instance suitable for display in another pane.
+  if not document.isNil and not document.onDuplicate.isNil:
+    result = document.onDuplicate(document)

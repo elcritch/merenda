@@ -203,6 +203,33 @@ suite "Kosmo":
         "kosmo.terminal."
       )
 
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+      )
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmControl})
+      )
+
+      let splitGroups = frontend.editorGroups()
+      require splitGroups.len == 3
+      let
+        duplicatedGroup = splitGroups[^1]
+        duplicatedTerminal = TerminalView(duplicatedGroup.pane.contentView)
+      check frontend.window.signalSubscriptionCount("didChangeFirstResponder") ==
+        initialFocusObservers + 2
+      check groups[1].documents.len == 1
+      check duplicatedGroup.documents.len == 1
+      check duplicatedGroup.documents[0].identifier != groups[1].documents[0].identifier
+      check duplicatedTerminal != terminalView
+      check terminalView.session().running()
+      check duplicatedTerminal.session().running()
+
+      check duplicatedGroup.pane.documentTabs.closeDocumentTabAtIndex(0)
+      check frontend.editorGroups().len == 2
+      check duplicatedTerminal.session().state() == tssClosed
+      check frontend.window.signalSubscriptionCount("didChangeFirstResponder") ==
+        initialFocusObservers + 1
+
       check groups[1].pane.documentTabs.closeDocumentTabAtIndex(0)
       check frontend.editorGroups().len == 1
       check frontend.dockView.len == 1

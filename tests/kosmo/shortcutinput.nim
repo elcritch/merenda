@@ -25,6 +25,70 @@ suite "Kosmo synthetic shortcut input":
     else:
       check commandShortcut.kind == kbmNone
 
+  test "split sequences duplicate a lone empty editor tab":
+    let frontend = newKosmoApplication(newApplication("Kosmo Empty Split Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    let sourceModels = frontend.documentTabs.documentTabModels()
+    require sourceModels.len == 1
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressControlKey(keyV)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    check groups[0].editorView != groups[1].editorView
+    check groups[0].pane.documentTabs.len == 1
+    check groups[1].pane.documentTabs.len == 1
+    check groups[0].pane.documentTabs.documentTabModels()[0].identifier ==
+      sourceModels[0].identifier
+    check groups[1].pane.documentTabs.documentTabModels()[0].identifier ==
+      sourceModels[0].identifier
+    check frontend.editorView.editor.tabs().len == 1
+
+  test "split sequences duplicate a lone file tab":
+    let
+      root = createTempDir("merenda-kosmo-synthetic-lone-file-", "")
+      path = root / "only.txt"
+      frontend = newKosmoApplication(newApplication("Kosmo Lone File Split Test"))
+    writeFile(path, "only")
+    defer:
+      frontend.close()
+      removeFile(path)
+      removeDir(root)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(path)
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    let sourceModels = frontend.documentTabs.documentTabModels()
+    require sourceModels.len == 1
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressControlKey(keyS)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    require frontend.dockView.rootView() of SplitView
+    check SplitView(frontend.dockView.rootView()).splitAxis == laVertical
+    check groups[0].editorView != groups[1].editorView
+    check groups[0].pane.documentTabs.documentTabModels()[0].identifier ==
+      sourceModels[0].identifier
+    check groups[1].pane.documentTabs.documentTabModels()[0].identifier ==
+      sourceModels[0].identifier
+    check frontend.editorView.editor.tabs().len == 1
+
+    check groups[1].pane.documentTabs.closeDocumentTabAtIndex(0)
+    check frontend.editorGroups().len == 1
+    check groups[0].pane.documentTabs.len == 1
+    check groups[0].pane.documentTabs.documentTabModels()[0].identifier ==
+      sourceModels[0].identifier
+    check frontend.editorView.editor.tabs().len == 1
+
   test "split sequences wait for the second key before moving the active tab":
     let
       root = createTempDir("merenda-kosmo-synthetic-split-", "")

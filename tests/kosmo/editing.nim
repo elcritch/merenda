@@ -32,6 +32,26 @@ suite "Kosmo":
     check model.tooltip == "README.md"
     check document.close()
     check not document.save()
+    check document.duplicate().isNil
+
+  test "pane documents can create independent split instances":
+    var duplicateCount = 0
+    let document = newKosmoPaneDocument(
+      "kosmo.preview.readme",
+      "README Preview",
+      newView(),
+      onDuplicate = proc(document: KosmoPaneDocument): KosmoPaneDocument =
+        inc duplicateCount
+        newKosmoPaneDocument(document.identifier & ".copy", document.title, newView()),
+    )
+
+    let duplicate = document.duplicate()
+
+    check duplicateCount == 1
+    require not duplicate.isNil
+    check duplicate.identifier == "kosmo.preview.readme.copy"
+    check duplicate.title == document.title
+    check duplicate.contentView != document.contentView
 
   test "view-backed documents use the shared pane tab lifecycle":
     let

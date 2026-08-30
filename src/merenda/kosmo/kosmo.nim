@@ -670,6 +670,13 @@ proc closeTab(view: KosmoEditorView, id: KosmoBufferId): KosmoTabCloseResult =
   elif not result.closed and not view.statusLabel.isNil:
     view.statusLabel.text = result.message
 
+proc bufferIsVisibleOutside(
+    controller: KosmoDockController, source: KosmoEditorGroup, id: KosmoBufferId
+): bool =
+  for group in controller.groups:
+    if group != source and id in group.editorView.bufferIds:
+      return true
+
 proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
   if not view.usesBufferSubset:
     return
@@ -1086,6 +1093,12 @@ proc closeCurrentPaneTab(controller: KosmoDockController, group: KosmoEditorGrou
 
 proc saveCurrentPaneTab(controller: KosmoDockController, group: KosmoEditorGroup)
 
+proc removeBuffer(group: KosmoEditorGroup, id: KosmoBufferId)
+
+proc openPaneDocument(
+  controller: KosmoDockController, group: KosmoEditorGroup, document: KosmoPaneDocument
+): bool
+
 proc selectRelativePaneTab(
   controller: KosmoDockController, group: KosmoEditorGroup, offset: int
 )
@@ -1251,6 +1264,13 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
       return
     var id: KosmoBufferId
     if item.identifier.parseTabIdentifier(id):
+      if not handler.dockController.isNil and not view.dockGroup.isNil:
+        let
+          controller = handler.dockController[]
+          group = view.dockGroup[]
+        if controller.bufferIsVisibleOutside(group, id):
+          group.removeBuffer(id)
+          return true
       let outcome = view.closeTab(id)
       return outcome.closed
     if view.dockGroup.isNil:
@@ -2046,17 +2066,46 @@ proc splitCurrentPaneTab(
   let selectedItem = source.pane.documentTabs.selectedDocumentTabItem()
   if selectedItem.isNil:
     return false
-  let identifier = selectedItem.identifier()
+  let
+    identifier = selectedItem.identifier()
+    duplicatesCurrentTab = source.pane.documentTabs.len == 1
   var
     id: KosmoBufferId
     bufferIds: seq[KosmoBufferId]
+    duplicateDocument: KosmoPaneDocument
   if identifier.parseTabIdentifier(id):
     bufferIds.add id
-  elif source.documentForIdentifier(identifier).isNil:
-    return false
+  else:
+    let document = source.documentForIdentifier(identifier)
+    if document.isNil:
+      return false
+    if duplicatesCurrentTab:
+      try:
+        duplicateDocument = document.duplicate()
+      except nimkit.TerminalSessionError as error:
+        if not source.editorView.statusLabel.isNil:
+          source.editorView.statusLabel.text = error.msg
+        return false
+      if duplicateDocument.isNil:
+        if not source.editorView.statusLabel.isNil:
+          source.editorView.statusLabel.text = "This tab cannot be duplicated"
+        return false
 
   let target = controller.newEditorGroup(source.workspace, source.window, bufferIds)
   if not source.workspace.splitPanel(source.panel, target.panel, position):
+    if not duplicateDocument.isNil:
+      discard duplicateDocument.close()
+    controller.removeGroup(target)
+    return false
+  if duplicatesCurrentTab:
+    if duplicateDocument.isNil:
+      controller.activatePaneTab(target, identifier)
+      return true
+    let opened = controller.openPaneDocument(target, duplicateDocument)
+    if opened and
+        target.documentForIdentifier(duplicateDocument.identifier) == duplicateDocument:
+      return true
+    discard duplicateDocument.close()
     controller.removeGroup(target)
     return false
   controller.finishPaneTabMove(source, target, identifier)
@@ -2239,26 +2288,21 @@ proc openPaneDocument(
   controller.activatePaneTab(group, document.identifier)
   true
 
-proc openTerminal(
-    controller: KosmoDockController,
-    group: KosmoEditorGroup,
-    options: nimkit.TerminalSpawnOptions,
-): bool =
-  if controller.isNil or group.isNil:
-    return
+proc newTerminalDocument(
+    controller: KosmoDockController, options: nimkit.TerminalSpawnOptions
+): KosmoPaneDocument =
   let terminalView = nimkit.newTerminalView()
   if not controller.frontend.isNil:
     terminalView.optionAsMeta = controller.frontend[].xTerminalOptionAsMeta
   try:
     terminalView.start(options)
-  except nimkit.TerminalSessionError as error:
+  except nimkit.TerminalSessionError:
     terminalView.close()
-    if not group.editorView.statusLabel.isNil:
-      group.editorView.statusLabel.text = error.msg
-    return
+    raise
 
   inc controller.nextDocumentIdentifier
-  let document = newKosmoPaneDocument(
+  let weakController = controller.unsafeWeakRef()
+  result = newKosmoPaneDocument(
     identifier = KosmoTerminalIdentifierPrefix & $controller.nextDocumentIdentifier,
     title = "Terminal " & $controller.nextDocumentIdentifier,
     contentView = terminalView,
@@ -2267,10 +2311,30 @@ proc openTerminal(
       discard document
       terminalView.close()
       true,
+    onDuplicate = proc(document: KosmoPaneDocument): KosmoPaneDocument =
+      discard document
+      if not weakController.isNil:
+        result = weakController[].newTerminalDocument(options)
+    ,
   )
+
+proc openTerminal(
+    controller: KosmoDockController,
+    group: KosmoEditorGroup,
+    options: nimkit.TerminalSpawnOptions,
+): bool =
+  if controller.isNil or group.isNil:
+    return
+  var document: KosmoPaneDocument
+  try:
+    document = controller.newTerminalDocument(options)
+  except nimkit.TerminalSessionError as error:
+    if not group.editorView.statusLabel.isNil:
+      group.editorView.statusLabel.text = error.msg
+    return
   if controller.openPaneDocument(group, document):
     return true
-  terminalView.close()
+  discard document.close()
 
 proc newTerminal*(frontend: KosmoApplication): bool {.discardable.} =
   ## Open a terminal in the active editor pane.
