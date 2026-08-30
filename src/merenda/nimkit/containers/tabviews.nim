@@ -888,6 +888,14 @@ protocol TabViewLayout of ViewLayoutProtocol:
       ),
     )
 
+protocol TabViewGeometrySlots of ViewGeometryEvents:
+  proc syncTabViewContentGeometry(tabView: TabView) {.slotFor: geometryDidChange.} =
+    tabView.syncTabBarFrame()
+    tabView.syncSelectedContent()
+    let content = tabView.selectedContentView()
+    if not content.isNil:
+      content.layoutSubtreeIfNeeded()
+
 protocol TabViewEvents of ResponderEventProtocol:
   method keyDown(tabView: TabView, event: KeyEvent): bool =
     case event.key
@@ -957,6 +965,7 @@ proc initTabViewFields*(tabView: TabView, frame: Rect = AutoRect) =
   discard tabView.withProto()
   discard tabView.withProtocol(TabViewDrawing)
   discard tabView.withProtocol(TabViewLayout)
+  tabView.observeProtocol(tabView, TabViewGeometrySlots)
   discard tabView.withProtocol(TabViewEvents)
   discard tabView.withProtocol(TabViewAccessibility)
   tabView.addSubview(tabView.xTabBar)

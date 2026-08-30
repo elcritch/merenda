@@ -111,6 +111,7 @@ suite "Kosmo":
     check initialMoeThemeView.frame.size.height > 0.0'f32
 
     check settingsTabs.selectTabViewItemAtIndex(1)
+    discard settingsPanel.buildRenders()
 
     let shortcutsView =
       settingsPanel.contentView().viewWithIdentifier(KosmoShortcutsTableIdentifier)
@@ -133,6 +134,36 @@ suite "Kosmo":
     check keysColumn.title == "Shortcut Keys"
     check shortcutsTable.rowCount == initKosmoKeyBindings().bindings.len
     check shortcutsTable.selectionMode == tsmNone
+    let
+      initialShortcutsWidth = shortcutsTable.frame.size.width
+      initialDescriptionWidth = descriptionColumn.width
+      initialContentWidth = settingsPanel.contentView().frame.size.width
+      initialLayoutWidth = settingsLayout.frame.size.width
+      initialTabsWidth = settingsTabs.frame.size.width
+      initialPageWidth = shortcutsTable.superview.bounds.size.width
+      initialSettingsFrame = settingsPanel.frame
+    settingsPanel.frame = rect(
+      initialSettingsFrame.origin,
+      initSize(
+        initialSettingsFrame.size.width + 240.0'f32,
+        initialSettingsFrame.size.height + 120.0'f32,
+      ),
+    )
+    settingsPanel.contentView().layoutSubtreeIfNeeded()
+    discard settingsPanel.buildRenders()
+    check settingsPanel.contentView().frame.size.width > initialContentWidth + 200.0'f32
+    check settingsLayout.frame.size.width > initialLayoutWidth + 200.0'f32
+    check settingsTabs.frame.size.width > initialTabsWidth + 200.0'f32
+    check shortcutsTable.superview.bounds.size.width > initialPageWidth + 200.0'f32
+    check shortcutsTable.frame.size.width > initialShortcutsWidth + 200.0'f32
+    check descriptionColumn.width > initialDescriptionWidth + 200.0'f32
+    check abs(
+      shortcutsTable.frame.size.width - shortcutsTable.superview.bounds.size.width
+    ) < 1.0'f32
+    check abs(
+      actionColumn.width + descriptionColumn.width + keysColumn.width -
+        shortcutsTable.scrollView.viewportSize.width
+    ) < 1.0'f32
 
     var
       saveRow = -1

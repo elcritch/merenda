@@ -145,6 +145,9 @@ suite "nimkit tab views":
     tabView.layoutSubtreeIfNeeded()
     check firstView.frame == tabView.contentViewRect()
 
+    tabView.frame = rect(0, 0, 560, 320)
+    check firstView.frame == tabView.contentViewRect()
+
     check tabView.selectTabViewItem(second)
     check tabView.selectedIndex == 1
     check firstView.superview.isNil
