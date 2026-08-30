@@ -1,0 +1,5 @@
+.git
+.nimcache
+deps
+nimcache
+tests/output
