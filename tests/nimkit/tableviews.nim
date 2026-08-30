@@ -17,6 +17,7 @@ func hasDrawableOp(node: Fig, kind: DrawableKind): bool =
 type TableDataSourceSpy = ref object of Responder
   rows: int
   textCalls: seq[string]
+  cellText: string
   intrinsicWidth: float32
   widthHintCalls: int
 
@@ -470,7 +471,11 @@ protocol TableDataSourceSpyMethods of TableViewDataSource:
   method textForCell(
       source: TableDataSourceSpy, tableView: TableView, row: int, column: TableColumn
   ): string =
-    result = column.identifier & ":" & $row
+    result =
+      if source.cellText.len > 0:
+        source.cellText
+      else:
+        column.identifier & ":" & $row
     source.textCalls.add result
 
   method tableIntrinsicContentWidth(
@@ -838,6 +843,7 @@ suite "NimKit TableView":
       maxWidth = 240.0,
       alignment = taCenter,
       resizePolicy = tcrResizable,
+      sizingPolicy = tcspFlexible,
     )
 
     check column.identifier == "name"
@@ -847,6 +853,7 @@ suite "NimKit TableView":
     check column.maxWidth == 240.0'f32
     check column.alignment == taCenter
     check column.resizePolicy == tcrResizable
+    check column.sizingPolicy == tcspFlexible
 
     column.width = 500.0
     check column.width == 240.0'f32
@@ -858,6 +865,7 @@ suite "NimKit TableView":
     column.title = "Full Name"
     column.alignment = taRight
     column.resizePolicy = tcrFixed
+    column.sizingPolicy = tcspContentSized
     column.styleId = "primary-name"
     column.styleClasses = @["primary", "text"]
     let userInfo = TableColumnUserInfo(label: "metadata")
@@ -867,6 +875,7 @@ suite "NimKit TableView":
     check column.title == "Full Name"
     check column.alignment == taRight
     check column.resizePolicy == tcrFixed
+    check column.sizingPolicy == tcspContentSized
     check column.styleId == "primary-name"
     check column.styleClasses == @["primary", "text"]
     check column.userInfo == DynamicAgent(userInfo)
@@ -3405,6 +3414,94 @@ suite "NimKit TableView":
 
     check not scrollView.verticalScrollerRect().isEmpty
     check scrollView.horizontalScrollerRect().isEmpty
+
+  test "flexible table columns fill the viewport within their width limits":
+    let
+      tableView = newTableView(frame = rect(0, 0, 500, 180))
+      scrollView = tableView.scrollView()
+      fixed = newTableColumn("fixed", "Fixed", width = 90.0, sizingPolicy = tcspFixed)
+      capped = newTableColumn(
+        "capped",
+        "Capped",
+        width = 100.0,
+        minWidth = 60.0,
+        maxWidth = 140.0,
+        sizingPolicy = tcspFlexible,
+      )
+      flexible = newTableColumn(
+        "flexible",
+        "Flexible",
+        width = 100.0,
+        minWidth = 80.0,
+        maxWidth = 500.0,
+        sizingPolicy = tcspFlexible,
+      )
+
+    tableView.rowCount = 12
+    tableView.addColumn(fixed)
+    tableView.addColumn(capped)
+    tableView.addColumn(flexible)
+    discard buildRenders(tableView)
+
+    check fixed.width == 90.0'f32
+    check capped.width == 140.0'f32
+    check abs(
+      fixed.width + capped.width + flexible.width - scrollView.viewportSize.width
+    ) < 1.0'f32
+    let initialFlexibleWidth = flexible.width
+
+    tableView.frame = rect(0, 0, 700, 180)
+    discard buildRenders(tableView)
+
+    check fixed.width == 90.0'f32
+    check capped.width == 140.0'f32
+    check flexible.width > initialFlexibleWidth + 190.0'f32
+    check abs(
+      fixed.width + capped.width + flexible.width - scrollView.viewportSize.width
+    ) < 1.0'f32
+
+    tableView.frame = rect(0, 0, 190, 180)
+    discard buildRenders(tableView)
+
+    check fixed.width == 90.0'f32
+    check capped.width == 60.0'f32
+    check flexible.width == 80.0'f32
+    check not scrollView.horizontalScrollerRect().isEmpty
+
+  test "content-sized table columns measure cells and respect width limits":
+    let
+      tableView = newTableView(frame = rect(0, 0, 400, 180))
+      source = newTableDataSourceSpy(2)
+      short = newTableColumn(
+        "x",
+        "X",
+        width = 190.0,
+        minWidth = 64.0,
+        maxWidth = 180.0,
+        sizingPolicy = tcspContentSized,
+      )
+      long = newTableColumn(
+        "exceptionally-long-content-column",
+        "Long",
+        width = 50.0,
+        minWidth = 40.0,
+        maxWidth = 120.0,
+        sizingPolicy = tcspContentSized,
+      )
+
+    tableView.addColumn(short)
+    tableView.addColumn(long)
+    tableView.dataSource = source
+    discard buildRenders(tableView)
+
+    check short.width == 64.0'f32
+    check long.width == 120.0'f32
+
+    source.cellText = "Content that is much wider than either column's maximum"
+    tableView.reloadRowsAtIndexes([0])
+
+    check short.width == 180.0'f32
+    check long.width == 120.0'f32
 
   test "table view pages to scroll edge when trailing rows are disabled":
     let

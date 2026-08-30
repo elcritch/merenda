@@ -132,6 +132,9 @@ suite "Kosmo":
     check actionColumn.title == "Action"
     check descriptionColumn.title == "Description"
     check keysColumn.title == "Shortcut Keys"
+    check actionColumn.sizingPolicy == tcspFixed
+    check descriptionColumn.sizingPolicy == tcspFlexible
+    check keysColumn.sizingPolicy == tcspFixed
     check shortcutsTable.rowCount == initKosmoKeyBindings().bindings.len
     check shortcutsTable.selectionMode == tsmNone
     let

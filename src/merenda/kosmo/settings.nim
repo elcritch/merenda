@@ -36,8 +36,6 @@ type
     name*: string
     preview*: KosmoMoeThemePreview
 
-  KosmoShortcutsTable = ref object of nimkit.TableView
-
   KosmoShortcutsTableSource = ref object of nimkit.Responder
     shortcuts: seq[KosmoShortcutSetting]
 
@@ -104,32 +102,6 @@ protocol KosmoShortcutsTableDelegate of nimkit.TableViewDelegate:
     discard row
     discard column
     false
-
-proc resizeShortcutDescriptionColumn(table: KosmoShortcutsTable) =
-  if table.isNil or table.bounds().size.width <= 0.0'f32:
-    return
-  let
-    action = table.columnWithIdentifier(KosmoShortcutActionColumnIdentifier)
-    description = table.columnWithIdentifier(KosmoShortcutDescriptionColumnIdentifier)
-    keys = table.columnWithIdentifier(KosmoShortcutKeysColumnIdentifier)
-  if action.isNil or description.isNil or keys.isNil:
-    return
-  table.layoutSubtreeIfNeeded()
-  description.width = max(
-    KosmoShortcutDescriptionColumnWidth,
-    table.scrollView.viewportSize.width - action.width - keys.width,
-  )
-
-protocol KosmoShortcutsTableGeometrySlots of nimkit.ViewGeometryEvents:
-  proc resizeShortcutColumns(
-      table: KosmoShortcutsTable
-  ) {.slotFor: geometryDidChange.} =
-    table.resizeShortcutDescriptionColumn()
-
-proc newKosmoShortcutsTable(): KosmoShortcutsTable =
-  result = KosmoShortcutsTable()
-  nimkit.initTableViewFields(result)
-  result.observeProtocol(result, KosmoShortcutsTableGeometrySlots)
 
 proc newKosmoShortcutsTableSource(
     shortcuts: openArray[KosmoShortcutSetting]
@@ -365,7 +337,7 @@ proc newKosmoSettingsWindow*(
     shortcutsPage = newSettingsPage()
     moeThemesPage = newSettingsPage()
     optionButton = nimkit.newCheckBox("Use Option/Alt as Meta")
-    shortcutsTable = newKosmoShortcutsTable()
+    shortcutsTable = nimkit.newTableView()
     moeThemesTable = nimkit.newTableView()
     optionChanged = nimkit.actionSelector("kosmo.optionAsMetaChanged")
   result.xOptionAsMetaButton = optionButton
@@ -405,6 +377,7 @@ proc newKosmoSettingsWindow*(
       KosmoShortcutActionColumnIdentifier,
       "Action",
       width = KosmoShortcutActionColumnWidth,
+      sizingPolicy = nimkit.tcspFixed,
     )
   )
   shortcutsTable.addColumn(
@@ -412,6 +385,8 @@ proc newKosmoSettingsWindow*(
       KosmoShortcutDescriptionColumnIdentifier,
       "Description",
       width = KosmoShortcutDescriptionColumnWidth,
+      minWidth = KosmoShortcutDescriptionColumnWidth,
+      sizingPolicy = nimkit.tcspFlexible,
     )
   )
   shortcutsTable.addColumn(
@@ -419,6 +394,7 @@ proc newKosmoSettingsWindow*(
       KosmoShortcutKeysColumnIdentifier,
       "Shortcut Keys",
       width = KosmoShortcutKeysColumnWidth,
+      sizingPolicy = nimkit.tcspFixed,
     )
   )
   shortcutsTable.dataSource = shortcutsSource

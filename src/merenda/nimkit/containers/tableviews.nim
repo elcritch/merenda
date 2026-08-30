@@ -35,6 +35,7 @@ const
 const
   TableTypeSelectTimeout = 1.0
   TableSelectionIdentityPrefix = "ids:"
+  TableColumnWidthEpsilon = 0.001'f32
 
 type
   TableModelError* = object of KeyError
@@ -48,6 +49,11 @@ type
   TableColumnResizePolicy* = enum
     tcrFixed
     tcrResizable
+
+  TableColumnSizingPolicy* = enum
+    tcspFixed
+    tcspFlexible
+    tcspContentSized
 
   TableViewWidthSizingMode* = enum
     tvwsmColumns
@@ -297,10 +303,19 @@ type
     xIdentifier: string
     xTitle: string
     xWidth: float32
+    xPreferredWidth: float32
     xMinWidth: float32
     xMaxWidth: float32
     xAlignment: TextAlignment
     xResizePolicy: TableColumnResizePolicy
+    xSizingPolicy: TableColumnSizingPolicy
+    xMeasuredContentWidth: float32
+    xMeasuredContentFontName: string
+    xMeasuredContentFontSize: float32
+    xMeasuredContentHorizontalInsets: float32
+    xMeasuredHeaderFontName: string
+    xMeasuredHeaderFontSize: float32
+    xContentWidthMeasurementValid: bool
     xHidden: bool
     xSortDirection: TableSortDirection
     xReuseIdentifier: string
@@ -312,6 +327,7 @@ const TableViewStateDefaultsPrefix = "nimkit.table.state."
 
 proc noteColumnsChanged(tableView: TableView)
 proc invalidateTableWidthMeasurement(tableView: TableView)
+proc invalidateColumnWidthMeasurements(tableView: TableView)
 proc detachColumn(column: TableColumn)
 proc removeColumnAtIndex(tableView: TableView, index: int)
 proc removeColumnAt*(tableView: TableView, index: int)
@@ -1195,6 +1211,17 @@ proc invalidateTableWidthMeasurement(tableView: TableView) =
   tableView.xContentWidthMeasurementValid = false
   tableView.invalidateIntrinsicContentSize()
 
+proc invalidateColumnWidthMeasurements(tableView: TableView) =
+  if tableView.isNil:
+    return
+  var needsLayout = false
+  for column in tableView.xColumns:
+    if column.xSizingPolicy == tcspContentSized:
+      column.xContentWidthMeasurementValid = false
+      needsLayout = true
+  if needsLayout:
+    tableView.setNeedsLayout()
+
 proc widthSizingMode*(tableView: TableView): TableViewWidthSizingMode =
   tableView.xWidthSizingMode
 
@@ -1231,6 +1258,7 @@ proc `rowItemRole=`*(tableView: TableView, role: StyleRole) =
   if tableView.xItemRole == role:
     return
   tableView.xItemRole = role
+  tableView.invalidateColumnWidthMeasurements()
   tableView.invalidateIntrinsicContentSize()
   tableView.invalidateTableRows()
 
@@ -1282,6 +1310,7 @@ proc `title=`*(column: TableColumn, title: string) =
   if column.xTitle == title:
     return
   column.xTitle = title
+  column.xContentWidthMeasurementValid = false
   column.tableView().noteColumnsChanged()
 
 proc width*(column: TableColumn): float32 =
@@ -1289,9 +1318,10 @@ proc width*(column: TableColumn): float32 =
 
 proc `width=`*(column: TableColumn, width: float32) =
   let nextWidth = width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
-  if column.xWidth == nextWidth:
+  if column.xWidth == nextWidth and column.xPreferredWidth == nextWidth:
     return
   column.xWidth = nextWidth
+  column.xPreferredWidth = nextWidth
   column.tableView().noteColumnsChanged()
 
 proc minWidth*(column: TableColumn): float32 =
@@ -1304,6 +1334,8 @@ proc `minWidth=`*(column: TableColumn, width: float32) =
   column.xMinWidth = nextMin
   column.xMaxWidth = max(column.xMaxWidth, nextMin)
   column.xWidth = column.xWidth.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+  column.xPreferredWidth =
+    column.xPreferredWidth.normalizedWidth(column.xMinWidth, column.xMaxWidth)
   column.tableView().noteColumnsChanged()
 
 proc maxWidth*(column: TableColumn): float32 =
@@ -1315,6 +1347,8 @@ proc `maxWidth=`*(column: TableColumn, width: float32) =
     return
   column.xMaxWidth = nextMax
   column.xWidth = column.xWidth.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+  column.xPreferredWidth =
+    column.xPreferredWidth.normalizedWidth(column.xMinWidth, column.xMaxWidth)
   column.tableView().noteColumnsChanged()
 
 proc alignment*(column: TableColumn): TextAlignment =
@@ -1333,6 +1367,19 @@ proc `resizePolicy=`*(column: TableColumn, policy: TableColumnResizePolicy) =
   if column.xResizePolicy == policy:
     return
   column.xResizePolicy = policy
+  column.tableView().noteColumnsChanged()
+
+proc sizingPolicy*(column: TableColumn): TableColumnSizingPolicy =
+  column.xSizingPolicy
+
+proc `sizingPolicy=`*(column: TableColumn, policy: TableColumnSizingPolicy) =
+  if column.xSizingPolicy == policy:
+    return
+  column.xSizingPolicy = policy
+  column.xContentWidthMeasurementValid = false
+  if policy != tcspContentSized:
+    column.xWidth =
+      column.xPreferredWidth.normalizedWidth(column.xMinWidth, column.xMaxWidth)
   column.tableView().noteColumnsChanged()
 
 proc hidden*(column: TableColumn): bool =
@@ -1405,6 +1452,7 @@ proc initTableColumnFields*(
     maxWidth = NaN,
     alignment = taLeft,
     resizePolicy = tcrResizable,
+    sizingPolicy = tcspFixed,
 ) =
   let style = defaultTableStyle()
   column.xIdentifier = identifier
@@ -1412,8 +1460,10 @@ proc initTableColumnFields*(
   column.xMinWidth = minWidth.normalizedColumnMetric(style.columnMinWidth)
   column.xMaxWidth = maxWidth.normalizedMaxWidth(column.xMinWidth)
   column.xWidth = width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+  column.xPreferredWidth = column.xWidth
   column.xAlignment = alignment
   column.xResizePolicy = resizePolicy
+  column.xSizingPolicy = sizingPolicy
   column.xSortDirection = tsdNone
   column.xReuseIdentifier = identifier
 
@@ -1425,10 +1475,12 @@ proc newTableColumn*(
     maxWidth = NaN,
     alignment = taLeft,
     resizePolicy = tcrResizable,
+    sizingPolicy = tcspFixed,
 ): TableColumn =
   result = TableColumn()
   initTableColumnFields(
-    result, identifier, title, width, minWidth, maxWidth, alignment, resizePolicy
+    result, identifier, title, width, minWidth, maxWidth, alignment, resizePolicy,
+    sizingPolicy,
   )
 
 proc dataSource*(tableView: TableView): DynamicAgent =
@@ -1974,6 +2026,7 @@ proc writeTableCellObjectValue*(
     else:
       true
   if result:
+    tableView.invalidateColumnWidthMeasurements()
     tableView.invalidateTableWidthMeasurement()
 
 proc tableRowIdentifier*(tableView: TableView, row: int): string =
@@ -2349,6 +2402,129 @@ proc setTableContentOffset(tableView: TableView, offset: Point, invalidate: bool
     tableView.invalidateTableRows()
   tableView.xContentView.syncVisibleRowViews()
 
+proc measuredColumnContentWidth(tableView: TableView, column: TableColumn): float32 =
+  let
+    appearance = tableView.effectiveAppearance()
+    rowStyle = appearance.resolveRowItemStyle(
+      controlStyle(
+        tableView.xItemRole,
+        tableView.widgetStateSet(),
+        id = tableView.styleId(),
+        classes = tableView.styleClasses(),
+      )
+    )
+    contentStyle = rowStyle.text
+    headerStyle = appearance.resolveTextStyle(
+      controlStyle(srTableHeaderCell), color(0.0, 0.0, 0.0), insets(0.0)
+    )
+    contentInsets = contentStyle.insets.horizontal
+  if column.xContentWidthMeasurementValid and
+      column.xMeasuredContentFontName == contentStyle.fontName and
+      column.xMeasuredContentFontSize == contentStyle.fontSize and
+      column.xMeasuredContentHorizontalInsets == contentInsets and
+      column.xMeasuredHeaderFontName == headerStyle.fontName and
+      column.xMeasuredHeaderFontSize == headerStyle.fontSize:
+    return column.xMeasuredContentWidth
+
+  let indicatorWidth =
+    if column.sortDirection() == tsdNone:
+      0.0'f32
+    else:
+      defaultTableHeaderChrome().sortIndicatorWidth
+  result =
+    textNaturalSize(column.title(), headerStyle).width + 16.0'f32 + indicatorWidth
+  for row in 0 ..< tableView.len():
+    result = max(
+      result,
+      textNaturalSize(tableView.tableCellText(row, column), contentStyle).width +
+        contentInsets,
+    )
+  result = result.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+  column.xMeasuredContentWidth = result
+  column.xMeasuredContentFontName = contentStyle.fontName
+  column.xMeasuredContentFontSize = contentStyle.fontSize
+  column.xMeasuredContentHorizontalInsets = contentInsets
+  column.xMeasuredHeaderFontName = headerStyle.fontName
+  column.xMeasuredHeaderFontSize = headerStyle.fontSize
+  column.xContentWidthMeasurementValid = true
+
+proc setResolvedColumnWidth(column: TableColumn, width: float32): bool =
+  let resolved = width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+  if abs(column.xWidth - resolved) <= TableColumnWidthEpsilon:
+    return
+  column.xWidth = resolved
+  true
+
+proc distributeFlexibleColumnWidths(
+    tableView: TableView, availableWidth: float32
+): bool =
+  var
+    flexible: seq[TableColumn]
+    occupiedWidth = 0.0'f32
+  for column in tableView.visibleColumns():
+    if column.sizingPolicy() == tcspFlexible:
+      flexible.add column
+    else:
+      occupiedWidth += column.width()
+  if flexible.len == 0:
+    return
+
+  var flexibleWidth = 0.0'f32
+  for column in flexible:
+    flexibleWidth += column.width()
+  var
+    remaining = max(availableWidth - occupiedWidth, 0.0'f32) - flexibleWidth
+    adjustable = flexible
+  while abs(remaining) > TableColumnWidthEpsilon and adjustable.len > 0:
+    let adjustment = remaining / adjustable.len.float32
+    var
+      applied = 0.0'f32
+      nextAdjustable: seq[TableColumn]
+    for column in adjustable:
+      let
+        oldWidth = column.width()
+        nextWidth =
+          (oldWidth + adjustment).normalizedWidth(column.xMinWidth, column.xMaxWidth)
+      if column.setResolvedColumnWidth(nextWidth):
+        result = true
+      applied += nextWidth - oldWidth
+      let canAdjust =
+        if remaining > 0.0'f32:
+          nextWidth < column.xMaxWidth - TableColumnWidthEpsilon
+        else:
+          nextWidth > column.xMinWidth + TableColumnWidthEpsilon
+      if canAdjust:
+        nextAdjustable.add column
+    if abs(applied) <= TableColumnWidthEpsilon:
+      break
+    remaining -= applied
+    adjustable = nextAdjustable
+
+proc resolveColumnSizing(tableView: TableView, availableWidth: float32): bool =
+  for column in tableView.visibleColumns():
+    let width =
+      case column.sizingPolicy()
+      of tcspFixed, tcspFlexible:
+        column.xPreferredWidth
+      of tcspContentSized:
+        tableView.measuredColumnContentWidth(column)
+    if column.setResolvedColumnWidth(width):
+      result = true
+  if tableView.distributeFlexibleColumnWidths(availableWidth):
+    result = true
+  if result:
+    tableView.xContentView.needsDisplay = true
+    tableView.xScrollView.needsDisplay = true
+    tableView.needsDisplay = true
+
+proc updateTableDocumentSize(
+    tableView: TableView, availableWidth, contentHeight: float32
+) =
+  discard tableView.resolveColumnSizing(availableWidth)
+  let documentWidth = max(tableView.visibleColumnWidth(), availableWidth)
+  tableView.xContentView.frame = rect(0.0'f32, 0.0'f32, documentWidth, contentHeight)
+  tableView.xScrollView.tile()
+
 proc tileTableContent(tableView: TableView) =
   let
     offset = tableView.listContentOffset()
@@ -2360,15 +2536,13 @@ proc tileTableContent(tableView: TableView) =
       max(tableView.bounds().size.height - 2.0'f32, 0.0'f32),
     )
   tableView.xScrollView.frame = scrollFrame
-  let
-    contentHeight = tableView.contentHeight()
-    columnWidth = tableView.visibleColumnWidth()
-    naturalWidth = max(columnWidth, 0.0'f32)
-  tableView.xContentView.frame = rect(0.0'f32, 0.0'f32, naturalWidth, contentHeight)
-  tableView.xScrollView.tile()
-  let documentWidth = max(naturalWidth, tableView.xScrollView.viewportSize().width)
-  tableView.xContentView.frame = rect(0.0'f32, 0.0'f32, documentWidth, contentHeight)
-  tableView.xScrollView.tile()
+  let contentHeight = tableView.contentHeight()
+  tableView.updateTableDocumentSize(scrollFrame.size.width, contentHeight)
+  let proposedViewportWidth = tableView.xScrollView.viewportSize().width
+  tableView.updateTableDocumentSize(proposedViewportWidth, contentHeight)
+  let settledViewportWidth = tableView.xScrollView.viewportSize().width
+  if abs(settledViewportWidth - proposedViewportWidth) > TableColumnWidthEpsilon:
+    tableView.updateTableDocumentSize(settledViewportWidth, contentHeight)
   tableView.setTableContentOffset(offset, false)
 
 proc scrollContentRectToVisible(tableView: TableView, rect: Rect) =
@@ -3016,6 +3190,7 @@ proc clearPointerHighlights*(tableView: TableView) =
 
 proc reloadData*(tableView: TableView) =
   tableView.xContentWidthMeasurementValid = false
+  tableView.invalidateColumnWidthMeasurements()
   let oldFirst = tableView.firstVisibleIndex()
   let
     oldFirstIdentifier = tableView.tableRowIdentifier(oldFirst)
@@ -3082,6 +3257,7 @@ proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdat
   if updates.len == 0:
     return
   tableView.xContentWidthMeasurementValid = false
+  tableView.invalidateColumnWidthMeasurements()
   let
     selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
     anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
@@ -4479,6 +4655,7 @@ proc noteColumnsChanged(tableView: TableView) =
     tableView.xHighlightedColumn.hidden()
   ):
     tableView.xHighlightedColumn = nil
+  tableView.invalidateColumnWidthMeasurements()
   tableView.syncTableScrollChrome()
   tableView.syncHeaderTrackingAreas()
   tableView.clearTableCellSlots()
@@ -6281,7 +6458,7 @@ protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
     for column in tableView.xColumns:
       result.add TableColumnAutosaveRecord(
         identifier: column.identifier(),
-        width: column.width(),
+        width: column.xPreferredWidth,
         hidden: column.hidden(),
         sortDirection: column.sortDirection(),
       )
@@ -6296,7 +6473,9 @@ protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
         tableView.resolveColumnAutosaveIdentifier(record.identifier)
       let column = tableView.columnWithIdentifier(resolvedIdentifier)
       if not column.isNil and column notin restored:
-        column.xWidth = record.width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+        column.xPreferredWidth =
+          record.width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+        column.xWidth = column.xPreferredWidth
         column.xHidden = record.hidden
         column.xSortDirection = record.sortDirection
         ordered.add column
