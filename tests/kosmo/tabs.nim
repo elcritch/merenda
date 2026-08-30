@@ -97,15 +97,50 @@ suite "Kosmo":
     check frontend.editorPane.markdownView.markdown.strip() == source.strip()
     check "Kosmo" in frontend.editorPane.markdownView.textStorage.stringValue()
     check "Preview" in frontend.editorPane.markdownView.textStorage.stringValue()
-    check frontend.documentTabs.documentTabModels()[0].accessoryTitle ==
-      KosmoMarkdownPreviewAccessoryTitle
+    check frontend.documentTabs.documentTabModels()[0].accessoryTitle.len == 0
 
-    let previewAccessory = frontend.documentTabs.documentTabAccessoryRect(0)
-    check frontend.documentTabs.clickAt(previewAccessory.center())
+    let controls = frontend.editorPane.markdownControls
+    frontend.editorPane.layoutSubtreeIfNeeded()
+    controls.layoutSubtreeIfNeeded()
+    check not controls.hidden
+    check controls.modeButton.title == "</>"
+    check controls.colorModeButton.title == "Dark"
+    check controls.markdownColorMode == kmcmLight
+    check controls.markdownFontSize == KosmoMarkdownDefaultFontSize
+    check controls.frame().maxX < frontend.editorPane.bounds().maxX
+    check controls.frame().minY > KosmoTabBarHeight
+
+    let lightBackground = frontend.editorPane.markdownView.markdownStyle.backgroundColor
+    check frontend.window.clickAt(
+      controls.colorModeButton.pointToWindow(controls.colorModeButton.bounds().center())
+    )
+    check controls.markdownColorMode == kmcmDark
+    check controls.colorModeButton.title == "Light"
+    check frontend.editorPane.markdownView.markdownStyle.backgroundColor !=
+      lightBackground
+
+    check frontend.window.clickAt(
+      controls.increaseFontButton.pointToWindow(
+        controls.increaseFontButton.bounds().center()
+      )
+    )
+    check controls.markdownFontSize == KosmoMarkdownDefaultFontSize + 1.0'f32
+    check frontend.editorPane.markdownView.markdownStyle.bodyFontSize ==
+      controls.markdownFontSize
+    check frontend.window.clickAt(
+      controls.decreaseFontButton.pointToWindow(
+        controls.decreaseFontButton.bounds().center()
+      )
+    )
+    check controls.markdownFontSize == KosmoMarkdownDefaultFontSize
+
+    check frontend.window.clickAt(
+      controls.modeButton.pointToWindow(controls.modeButton.bounds().center())
+    )
     check frontend.editorView.markdownMode(markdownId) == kmmSyntax
     check frontend.editorPane.contentView == View(frontend.editorView)
-    check frontend.documentTabs.documentTabModels()[0].accessoryTitle ==
-      KosmoMarkdownSyntaxAccessoryTitle
+    check not controls.hidden
+    check controls.modeButton.title == "MD"
 
     check frontend.editorView.editor.handleKey("i")
     check frontend.editorView.editor.handleTextInput("## Unsaved\n")
@@ -113,8 +148,9 @@ suite "Kosmo":
     frontend.editorView.refresh()
     check "## Unsaved" in frontend.editorView.editor.bufferText(markdownId).get
 
-    let syntaxAccessory = frontend.documentTabs.documentTabAccessoryRect(0)
-    check frontend.documentTabs.clickAt(syntaxAccessory.center())
+    check frontend.window.clickAt(
+      controls.modeButton.pointToWindow(controls.modeButton.bounds().center())
+    )
     check frontend.editorView.markdownMode(markdownId) == kmmPreview
     check frontend.editorPane.contentView == View(frontend.editorPane.markdownView)
     check "## Unsaved" in frontend.editorPane.markdownView.markdown
@@ -122,6 +158,7 @@ suite "Kosmo":
 
     check frontend.openPath(textPath)
     check frontend.editorPane.contentView == View(frontend.editorView)
+    check controls.hidden
     check frontend.documentTabs.documentTabModels()[^1].accessoryTitle.len == 0
 
   test "application shortcuts save close and cycle the focused editor tabs":

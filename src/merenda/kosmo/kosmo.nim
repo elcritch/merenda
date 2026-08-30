@@ -30,15 +30,21 @@ const
   KosmoCommandBarHeight* = 24.0'f32
   KosmoEditorStyleId* = "kosmo.editor"
   KosmoPaneIndicatorStyleId* = "kosmo.pane-indicator"
+  KosmoMarkdownControlsStyleId* = "kosmo.markdown-controls"
   KosmoPreviewTabStyleClass* = "kosmo-preview"
-  KosmoMarkdownPreviewAccessoryTitle* = "</>"
-  KosmoMarkdownSyntaxAccessoryTitle* = "MD"
+  KosmoMarkdownDefaultFontSize* = 14.0'f32
+  KosmoMarkdownMinimumFontSize* = 9.0'f32
+  KosmoMarkdownMaximumFontSize* = 28.0'f32
   KosmoInactivePaneStyleClass* = "kosmo-inactive-pane"
   KosmoCursorOpacity = 0.45'f32
   KosmoPaneOutlineOpacity = 0.38'f32
   KosmoInactiveTabAccentOpacity = 0.18'f32
   KosmoInactiveTabTextOpacity = 0.72'f32
   KosmoPaneOutlineWidth = 1.0'f32
+  KosmoMarkdownControlsWidth = 184.0'f32
+  KosmoMarkdownControlsHeight = 38.0'f32
+  KosmoMarkdownControlsInset = 10.0'f32
+  KosmoMarkdownFontSizeIncrement = 1.0'f32
   KosmoControlScrollMultiplier = 3.0'f32
   KosmoGridOverscanRows = 1
   KosmoMoeBottomAreaRows = 1
@@ -78,6 +84,10 @@ type
     kmmPreview
     kmmSyntax
 
+  KosmoMarkdownColorMode* = enum
+    kmcmLight
+    kmcmDark
+
   KosmoEditorContentKind = enum
     keckOther
     keckSyntax
@@ -86,6 +96,15 @@ type
   KosmoCommandBar* = ref object of nimkit.MonoTextView
 
   KosmoPaneIndicator = ref object of nimkit.View
+
+  KosmoMarkdownControls* = ref object of nimkit.Box
+    modeButton*: nimkit.Button
+    colorModeButton*: nimkit.Button
+    decreaseFontButton*: nimkit.Button
+    increaseFontButton*: nimkit.Button
+    editorView: WeakRef[KosmoEditorView]
+    xColorMode: KosmoMarkdownColorMode
+    xFontSize: float32
 
   KosmoEditorView* = ref object of nimkit.MonoTextView
     editor*: KosmoEditor
@@ -114,6 +133,7 @@ type
     editorView*: KosmoEditorView
     commandBar*: KosmoCommandBar
     markdownView*: nimkit.MarkdownView
+    markdownControls*: KosmoMarkdownControls
     contentView*: nimkit.View
     activeIndicator: KosmoPaneIndicator
     dockGroup: WeakRef[KosmoEditorGroup]
@@ -582,6 +602,59 @@ func markdownMode*(view: KosmoEditorView, id: KosmoBufferId): KosmoMarkdownMode 
   ## Return the pane-local presentation mode for a Markdown buffer.
   if not view.isNil and id in view.markdownSyntaxBufferIds: kmmSyntax else: kmmPreview
 
+func markdownColorMode*(controls: KosmoMarkdownControls): KosmoMarkdownColorMode =
+  ## Return the pane-local Markdown preview color mode.
+  if controls.isNil: kmcmLight else: controls.xColorMode
+
+func markdownFontSize*(controls: KosmoMarkdownControls): float32 =
+  ## Return the pane-local Markdown preview base font size.
+  if controls.isNil: KosmoMarkdownDefaultFontSize else: controls.xFontSize
+
+func markdownPresentationStyle(controls: KosmoMarkdownControls): nimkit.MarkdownStyle =
+  result = nimkit.initMarkdownStyle()
+  if not controls.isNil and controls.xColorMode == kmcmDark:
+    result.backgroundColor = nimkit.color(0.055, 0.065, 0.085, 1.0)
+    result.textColor = nimkit.color(0.84, 0.86, 0.90, 1.0)
+    result.headingColor = nimkit.color(0.96, 0.97, 0.99, 1.0)
+    result.strongColor = nimkit.color(0.96, 0.97, 0.99, 1.0)
+    result.emphasisColor = nimkit.color(0.80, 0.65, 0.96, 1.0)
+    result.linkColor = nimkit.color(0.40, 0.69, 0.98, 1.0)
+    result.codeColor = nimkit.color(0.96, 0.53, 0.64, 1.0)
+    result.quoteColor = nimkit.color(0.67, 0.72, 0.82, 1.0)
+    result.mutedColor = nimkit.color(0.56, 0.61, 0.70, 1.0)
+    result.ruleColor = nimkit.color(0.35, 0.40, 0.49, 1.0)
+
+  let
+    fontSize = if controls.isNil: KosmoMarkdownDefaultFontSize else: controls.xFontSize
+    scale = fontSize / KosmoMarkdownDefaultFontSize
+  result.bodyFontSize = fontSize
+  for size in result.headingFontSizes.mitems:
+    size *= scale
+
+proc syncMarkdownControls(pane: KosmoEditorPane, visible: bool, mode = kmmPreview) =
+  if pane.isNil or pane.markdownControls.isNil:
+    return
+  let controls = pane.markdownControls
+  controls.hidden = not visible
+  if not visible:
+    return
+  controls.modeButton.title = if mode == kmmPreview: "</>" else: "MD"
+  controls.modeButton.accessibilityLabel =
+    if mode == kmmPreview: "Edit Markdown source" else: "Preview Markdown"
+  controls.modeButton.toolTip = controls.modeButton.accessibilityLabel()
+  controls.colorModeButton.title =
+    if controls.xColorMode == kmcmLight: "Dark" else: "Light"
+  controls.colorModeButton.accessibilityLabel =
+    if controls.xColorMode == kmcmLight:
+      "Use dark Markdown preview"
+    else:
+      "Use light Markdown preview"
+  controls.colorModeButton.toolTip = controls.colorModeButton.accessibilityLabel()
+  controls.decreaseFontButton.enabled =
+    controls.xFontSize > KosmoMarkdownMinimumFontSize
+  controls.increaseFontButton.enabled =
+    controls.xFontSize < KosmoMarkdownMaximumFontSize
+
 proc forgetMarkdownMode(view: KosmoEditorView, id: KosmoBufferId) =
   let index = view.markdownSyntaxBufferIds.find(id)
   if index >= 0:
@@ -755,13 +828,6 @@ proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
         @[KosmoPreviewTabStyleClass]
       else:
         @[]
-    let accessoryTitle =
-      if not tab.isMarkdownTab:
-        ""
-      elif view.markdownMode(tab.id) == kmmPreview:
-        KosmoMarkdownPreviewAccessoryTitle
-      else:
-        KosmoMarkdownSyntaxAccessoryTitle
     editorModels.add nimkit.initDocumentTabModel(
       identifier = tab.id.tabIdentifier,
       title = tab.title,
@@ -769,7 +835,6 @@ proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
       modified = tab.modified,
       styleClasses = styleClasses,
       tooltip = tab.filePath.get(tab.title),
-      accessoryTitle = accessoryTitle,
     )
   var
     models = editorModels
@@ -897,6 +962,17 @@ proc installKosmoPaneIndicatorStyle(
   appearance.setStyle(selector, nimkit.StyleBorderWidth, KosmoPaneOutlineWidth)
   appearance.setStyle(selector, nimkit.StyleCornerRadius, 0.0'f32)
 
+proc installKosmoMarkdownControlsStyle(appearance: var nimkit.Appearance) =
+  let selector =
+    nimkit.initStyleSelector(nimkit.srBox, id = KosmoMarkdownControlsStyleId)
+  appearance.setStyle(selector, nimkit.StylePadding, nimkit.insets(4.0'f32))
+  appearance.setStyle(selector, nimkit.StyleCornerRadius, 8.0'f32)
+  appearance.setStyle(
+    selector,
+    nimkit.StyleBoxShadows,
+    @[nimkit.dropShadow(nimkit.color(0.0, 0.0, 0.0, 0.28), y = 2.0, blur = 7.0)],
+  )
+
 proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   var appearance = base
   let
@@ -955,6 +1031,7 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     nimkit.fill(inactiveAccentColor),
   )
   appearance.installKosmoPaneIndicatorStyle(base)
+  appearance.installKosmoMarkdownControlsStyle()
   view.styleId = KosmoEditorStyleId
   view.appearance = appearance
   if not view.documentTabs.isNil:
@@ -965,6 +1042,8 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     let pane = view.dockGroup[].pane
     if not pane.activeIndicator.isNil:
       pane.activeIndicator.appearance = appearance
+    if not pane.markdownControls.isNil:
+      pane.markdownControls.appearance = appearance
 
 protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
   proc didChangeEffectiveAppearance(
@@ -1016,20 +1095,30 @@ proc syncSelectedEditorContent(
   let group = view.dockGroup[]
   var selectedId: KosmoBufferId
   if not group.selectedTabIdentifier.parseTabIdentifier(selectedId):
+    group.pane.syncMarkdownControls(false)
     return keckOther
   for tab in tabs:
     if tab.id != selectedId:
       continue
-    if tab.isMarkdownTab and view.markdownMode(selectedId) == kmmPreview:
+    if not tab.isMarkdownTab:
+      group.pane.syncMarkdownControls(false)
+      group.pane.setContentView(view)
+      return keckSyntax
+    let mode = view.markdownMode(selectedId)
+    group.pane.syncMarkdownControls(true, mode)
+    if mode == kmmPreview:
       let source = view.editor.bufferText(selectedId)
       if source.isNone:
         group.pane.setContentView(view)
         return keckSyntax
+      group.pane.markdownView.markdownStyle =
+        group.pane.markdownControls.markdownPresentationStyle()
       group.pane.markdownView.markdown = source.get
       group.pane.setContentView(group.pane.markdownView)
       return keckMarkdownPreview
     group.pane.setContentView(view)
     return keckSyntax
+  group.pane.syncMarkdownControls(false)
   keckOther
 
 proc refresh*(view: KosmoEditorView) =
@@ -1337,31 +1426,6 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
         view.lastTabs.setLen(0)
       view.refresh()
 
-  method didActivateDocumentTabAccessory(
-      handler: KosmoEditorTabsHandler,
-      tabs: nimkit.DocumentTabs,
-      item: nimkit.DocumentTabItem,
-      index: int,
-  ) =
-    discard tabs
-    discard index
-    let view = handler.targetView()
-    if view.isNil:
-      return
-    var id: KosmoBufferId
-    if not item.identifier().parseTabIdentifier(id):
-      return
-    if not handler.dockController.isNil and not view.dockGroup.isNil:
-      handler.dockController[].activatePaneTab(
-        view.dockGroup[], item.identifier(), false
-      )
-    elif not view.editor.selectTab(id):
-      return
-    if not view.toggleMarkdownMode(id) or view.dockGroup.isNil:
-      return
-    let group = view.dockGroup[]
-    discard group.window.makeFirstResponder(nimkit.Responder(group.pane.contentView))
-
   method shouldCloseDocumentTab(
       handler: KosmoEditorTabsHandler,
       tabs: nimkit.DocumentTabs,
@@ -1564,6 +1628,141 @@ proc newKosmoPaneIndicator(): KosmoPaneIndicator =
   discard result.withProtocol(KosmoPaneIndicatorDrawing)
   discard result.withProtocol(KosmoPaneIndicatorHitTesting)
 
+proc selectedMarkdownBufferId(controls: KosmoMarkdownControls): Option[KosmoBufferId] =
+  if controls.isNil or controls.editorView.isNil:
+    return
+  let view = controls.editorView[]
+  if view.dockGroup.isNil:
+    return
+  var id: KosmoBufferId
+  if not view.dockGroup[].selectedTabIdentifier.parseTabIdentifier(id):
+    return
+  for tab in view.editor.tabs():
+    if tab.id == id and tab.isMarkdownTab:
+      return some(id)
+
+proc focusMarkdownContent(controls: KosmoMarkdownControls) =
+  if controls.isNil or controls.editorView.isNil:
+    return
+  let view = controls.editorView[]
+  if view.dockGroup.isNil:
+    return
+  let group = view.dockGroup[]
+  if not group.window.isNil:
+    discard group.window.makeFirstResponder(nimkit.Responder(group.pane.contentView))
+
+proc toggleSelectedMarkdownMode(controls: KosmoMarkdownControls) =
+  let id = controls.selectedMarkdownBufferId()
+  if id.isNone or controls.editorView.isNil:
+    return
+  if controls.editorView[].toggleMarkdownMode(id.get):
+    controls.focusMarkdownContent()
+
+proc toggleMarkdownColorMode(controls: KosmoMarkdownControls) =
+  if controls.isNil:
+    return
+  controls.xColorMode = if controls.xColorMode == kmcmLight: kmcmDark else: kmcmLight
+  if not controls.editorView.isNil:
+    controls.editorView[].refresh()
+
+proc changeMarkdownFontSize(controls: KosmoMarkdownControls, delta: float32) =
+  if controls.isNil:
+    return
+  let nextSize = clamp(
+    controls.xFontSize + delta,
+    KosmoMarkdownMinimumFontSize,
+    KosmoMarkdownMaximumFontSize,
+  )
+  if abs(nextSize - controls.xFontSize) <= 0.001'f32:
+    return
+  controls.xFontSize = nextSize
+  if not controls.editorView.isNil:
+    controls.editorView[].refresh()
+
+proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
+  let
+    modeButton = nimkit.newButton("</>")
+    colorModeButton = nimkit.newButton("Dark")
+    decreaseFontButton = nimkit.newButton("-")
+    increaseFontButton = nimkit.newButton("+")
+    row = nimkit.newStackView(nimkit.laHorizontal)
+  result = KosmoMarkdownControls(
+    modeButton: modeButton,
+    colorModeButton: colorModeButton,
+    decreaseFontButton: decreaseFontButton,
+    increaseFontButton: increaseFontButton,
+    editorView: view.unsafeWeakRef(),
+    xColorMode: kmcmLight,
+    xFontSize: KosmoMarkdownDefaultFontSize,
+  )
+  result.initBoxFields()
+  result.styleId = KosmoMarkdownControlsStyleId
+  result.accessibilityLabel = "Markdown preview controls"
+  result.hidden = true
+
+  modeButton.reservedTitles = ["</>", "MD"]
+  modeButton.accessibilityLabel = "Edit Markdown source"
+  modeButton.toolTip = "Edit Markdown source"
+  colorModeButton.reservedTitles = ["Dark", "Light"]
+  colorModeButton.accessibilityLabel = "Use dark Markdown preview"
+  colorModeButton.toolTip = "Use dark Markdown preview"
+  decreaseFontButton.accessibilityLabel = "Decrease Markdown font size"
+  decreaseFontButton.toolTip = "Decrease Markdown font size"
+  increaseFontButton.accessibilityLabel = "Increase Markdown font size"
+  increaseFontButton.toolTip = "Increase Markdown font size"
+
+  row.spacing = 2.0'f32
+  row.distribution = nimkit.svdFillEqually
+  row.addArrangedSubview(
+    modeButton, colorModeButton, decreaseFontButton, increaseFontButton
+  )
+  result.contentView = row
+
+  let weakControls = result.unsafeWeakRef()
+  let modeAction = nimkit.actionSelector("kosmo.toggleMarkdownMode")
+  modeButton.target = nimkit.newActionTarget(
+    modeAction,
+    proc(sender: nimkit.DynamicAgent) =
+      discard sender
+      if not weakControls.isNil:
+        weakControls[].toggleSelectedMarkdownMode()
+    ,
+  )
+  modeButton.action = modeAction
+
+  let colorModeAction = nimkit.actionSelector("kosmo.toggleMarkdownColorMode")
+  colorModeButton.target = nimkit.newActionTarget(
+    colorModeAction,
+    proc(sender: nimkit.DynamicAgent) =
+      discard sender
+      if not weakControls.isNil:
+        weakControls[].toggleMarkdownColorMode()
+    ,
+  )
+  colorModeButton.action = colorModeAction
+
+  let decreaseFontAction = nimkit.actionSelector("kosmo.decreaseMarkdownFontSize")
+  decreaseFontButton.target = nimkit.newActionTarget(
+    decreaseFontAction,
+    proc(sender: nimkit.DynamicAgent) =
+      discard sender
+      if not weakControls.isNil:
+        weakControls[].changeMarkdownFontSize(-KosmoMarkdownFontSizeIncrement)
+    ,
+  )
+  decreaseFontButton.action = decreaseFontAction
+
+  let increaseFontAction = nimkit.actionSelector("kosmo.increaseMarkdownFontSize")
+  increaseFontButton.target = nimkit.newActionTarget(
+    increaseFontAction,
+    proc(sender: nimkit.DynamicAgent) =
+      discard sender
+      if not weakControls.isNil:
+        weakControls[].changeMarkdownFontSize(KosmoMarkdownFontSizeIncrement)
+    ,
+  )
+  increaseFontButton.action = increaseFontAction
+
 proc applyKosmoSidebarStyle(pane: KosmoSidebarPane, base: nimkit.Appearance) =
   var appearance = base
   let
@@ -1760,6 +1959,21 @@ protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
     pane.activeIndicator.setFrameFromLayout(
       nimkit.rect(0, tabHeight, bounds.size.width, editorHeight)
     )
+    if not pane.markdownControls.isNil:
+      let
+        controlsWidth = min(
+          KosmoMarkdownControlsWidth,
+          max(bounds.size.width - KosmoMarkdownControlsInset * 2.0'f32, 1.0'f32),
+        )
+        controlsHeight = min(KosmoMarkdownControlsHeight, editorHeight)
+      pane.markdownControls.setFrameFromLayout(
+        nimkit.rect(
+          max(bounds.size.width - controlsWidth - KosmoMarkdownControlsInset, 0.0'f32),
+          tabHeight + KosmoMarkdownControlsInset,
+          controlsWidth,
+          controlsHeight,
+        )
+      )
     if pane.contentView == nimkit.View(pane.editorView):
       pane.editorView.refresh()
 
@@ -1821,12 +2035,14 @@ proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   let
     commandBar = newKosmoCommandBar(editorView)
     markdownView = nimkit.newMarkdownView()
+    markdownControls = newKosmoMarkdownControls(editorView)
     activeIndicator = newKosmoPaneIndicator()
   result = KosmoEditorPane(
     documentTabs: editorView.documentTabs,
     editorView: editorView,
     commandBar: commandBar,
     markdownView: markdownView,
+    markdownControls: markdownControls,
     contentView: editorView,
     activeIndicator: activeIndicator,
   )
@@ -1836,6 +2052,7 @@ proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   result.addSubview(editorView)
   result.addSubview(commandBar)
   result.addSubview(activeIndicator)
+  result.addSubview(markdownControls)
   discard result.withProtocol(KosmoEditorPaneLayout)
   discard result.withProtocol(KosmoEditorPaneCommandDispatch)
 
