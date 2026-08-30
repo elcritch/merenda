@@ -3443,12 +3443,39 @@ suite "NimKit TableView":
     tableView.addColumn(flexible)
     discard buildRenders(tableView)
 
+    check tableView.columnSizing == tvcsNatural
+    check fixed.width == 90.0'f32
+    check capped.width == 100.0'f32
+    check flexible.width == 100.0'f32
+
+    tableView.columnSizing = tvcsFill
+    discard buildRenders(tableView)
+
     check fixed.width == 90.0'f32
     check capped.width == 140.0'f32
     check abs(
       fixed.width + capped.width + flexible.width - scrollView.viewportSize.width
     ) < 1.0'f32
     let initialFlexibleWidth = flexible.width
+
+    let
+      viewportWidthWithScroller = scrollView.viewportSize.width
+      flexibleWidthWithScroller = flexible.width
+    tableView.rowCount = 1
+    discard buildRenders(tableView)
+
+    check scrollView.verticalScrollerRect().isEmpty
+    check scrollView.viewportSize.width > viewportWidthWithScroller
+    check abs(
+      flexible.width - flexibleWidthWithScroller -
+        (scrollView.viewportSize.width - viewportWidthWithScroller)
+    ) < 1.0'f32
+    check abs(
+      fixed.width + capped.width + flexible.width - scrollView.viewportSize.width
+    ) < 1.0'f32
+
+    tableView.rowCount = 12
+    discard buildRenders(tableView)
 
     tableView.frame = rect(0, 0, 700, 180)
     discard buildRenders(tableView)

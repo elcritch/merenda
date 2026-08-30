@@ -55,6 +55,10 @@ type
     tcspFlexible
     tcspContentSized
 
+  TableViewColumnSizing* = enum
+    tvcsNatural
+    tvcsFill
+
   TableViewWidthSizingMode* = enum
     tvwsmColumns
     tvwsmContent
@@ -216,6 +220,7 @@ type
     xContentView: TableContentView
     xRowHeight: float32
     xVisibleRows: int
+    xColumnSizing: TableViewColumnSizing
     xWidthSizingMode: TableViewWidthSizingMode
     xPreferredContentWidth: float32
     xMeasuredContentWidth: float32
@@ -1230,6 +1235,16 @@ proc `widthSizingMode=`*(tableView: TableView, mode: TableViewWidthSizingMode) =
     return
   tableView.xWidthSizingMode = mode
   tableView.invalidateTableWidthMeasurement()
+
+proc columnSizing*(tableView: TableView): TableViewColumnSizing =
+  tableView.xColumnSizing
+
+proc `columnSizing=`*(tableView: TableView, sizing: TableViewColumnSizing) =
+  if tableView.xColumnSizing == sizing:
+    return
+  tableView.xColumnSizing = sizing
+  tableView.setNeedsLayout()
+  tableView.needsDisplay = true
 
 proc preferredContentWidth*(tableView: TableView): float32 =
   tableView.xPreferredContentWidth
@@ -2500,7 +2515,7 @@ proc distributeFlexibleColumnWidths(
     remaining -= applied
     adjustable = nextAdjustable
 
-proc resolveColumnSizing(tableView: TableView, availableWidth: float32): bool =
+proc resolveNaturalColumnWidths(tableView: TableView): bool =
   for column in tableView.visibleColumns():
     let width =
       case column.sizingPolicy()
@@ -2510,12 +2525,19 @@ proc resolveColumnSizing(tableView: TableView, availableWidth: float32): bool =
         tableView.measuredColumnContentWidth(column)
     if column.setResolvedColumnWidth(width):
       result = true
-  if tableView.distributeFlexibleColumnWidths(availableWidth):
+
+proc noteResolvedColumnWidthsChanged(tableView: TableView) =
+  tableView.xContentView.needsDisplay = true
+  tableView.xScrollView.needsDisplay = true
+  tableView.needsDisplay = true
+
+proc resolveColumnSizing(tableView: TableView, availableWidth: float32): bool =
+  result = tableView.resolveNaturalColumnWidths()
+  if tableView.xColumnSizing == tvcsFill and
+      tableView.distributeFlexibleColumnWidths(availableWidth):
     result = true
   if result:
-    tableView.xContentView.needsDisplay = true
-    tableView.xScrollView.needsDisplay = true
-    tableView.needsDisplay = true
+    tableView.noteResolvedColumnWidthsChanged()
 
 proc updateTableDocumentSize(
     tableView: TableView, availableWidth, contentHeight: float32
@@ -2537,7 +2559,11 @@ proc tileTableContent(tableView: TableView) =
     )
   tableView.xScrollView.frame = scrollFrame
   let contentHeight = tableView.contentHeight()
-  tableView.updateTableDocumentSize(scrollFrame.size.width, contentHeight)
+  if tableView.resolveNaturalColumnWidths():
+    tableView.noteResolvedColumnWidthsChanged()
+  tableView.xContentView.frame =
+    rect(0.0'f32, 0.0'f32, tableView.visibleColumnWidth(), contentHeight)
+  tableView.xScrollView.tile()
   let proposedViewportWidth = tableView.xScrollView.viewportSize().width
   tableView.updateTableDocumentSize(proposedViewportWidth, contentHeight)
   let settledViewportWidth = tableView.xScrollView.viewportSize().width
@@ -6660,6 +6686,7 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xPressedIndex = -1
   tableView.xRowHeight = style.rowHeight
   tableView.xVisibleRows = 5
+  tableView.xColumnSizing = tvcsNatural
   tableView.xWidthSizingMode = tvwsmColumns
   tableView.xSelectionMode = tsmSingle
   tableView.xItemRole = srRowItem

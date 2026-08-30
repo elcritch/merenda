@@ -135,6 +135,7 @@ suite "Kosmo":
     check actionColumn.sizingPolicy == tcspFixed
     check descriptionColumn.sizingPolicy == tcspFlexible
     check keysColumn.sizingPolicy == tcspFixed
+    check shortcutsTable.columnSizing == tvcsFill
     check shortcutsTable.rowCount == initKosmoKeyBindings().bindings.len
     check shortcutsTable.selectionMode == tsmNone
     let

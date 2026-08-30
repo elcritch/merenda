@@ -369,6 +369,7 @@ proc newKosmoSettingsWindow*(
 
   shortcutsTable.identifier = KosmoShortcutsTableIdentifier
   shortcutsTable.accessibilityLabel = "Active Kosmo shortcuts"
+  shortcutsTable.columnSizing = nimkit.tvcsFill
   shortcutsTable.selectionMode = nimkit.tsmNone
   shortcutsTable.usesAlternatingRowBackgrounds = true
   shortcutsTable.showsRowSeparators = true
