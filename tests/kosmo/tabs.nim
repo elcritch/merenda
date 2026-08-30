@@ -7,7 +7,19 @@ import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 
+func center(rect: Rect): Point =
+  initPoint(
+    rect.origin.x + rect.size.width / 2.0'f32,
+    rect.origin.y + rect.size.height / 2.0'f32,
+  )
+
 suite "Kosmo":
+  test "recognizes conventional Markdown file extensions":
+    for path in ["README.md", "guide.MARKDOWN", "notes.mkd", "manual.mdtext"]:
+      check path.isMarkdownFilePath
+    for path in ["readme.txt", "markdown.nim", "document.html"]:
+      check not path.isMarkdownFilePath
+
   test "window resizing preserves the chosen file tree width":
     let frontend = newKosmoApplication(newApplication("Kosmo Resize Test"))
     defer:
@@ -57,6 +69,60 @@ suite "Kosmo":
     check frontend.documentTabs.documentTabModels().len == 1
     check "NORMAL" in frontend.statusLabel.text
     check "second.txt" in frontend.statusLabel.text
+
+  test "Markdown tabs preview live Moe buffers and toggle to syntax":
+    let
+      root = createTempDir("merenda-kosmo-markdown-tabs-", "")
+      markdownPath = root / "README.md"
+      textPath = root / "notes.txt"
+      source = "# Kosmo\n\n| Feature | State |\n| --- | --- |\n| Preview | Ready |\n"
+    writeFile(markdownPath, source)
+    writeFile(textPath, "ordinary text")
+    defer:
+      removeFile(markdownPath)
+      removeFile(textPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Markdown Tabs Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 720, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    check frontend.openPath(markdownPath)
+    let markdownId = frontend.editorView.editor.tabs()[0].id
+    check frontend.editorView.markdownMode(markdownId) == kmmPreview
+    check frontend.editorPane.contentView == View(frontend.editorPane.markdownView)
+    check frontend.editorPane.markdownView.markdown.strip() == source.strip()
+    check "Kosmo" in frontend.editorPane.markdownView.textStorage.stringValue()
+    check "Preview" in frontend.editorPane.markdownView.textStorage.stringValue()
+    check frontend.documentTabs.documentTabModels()[0].accessoryTitle ==
+      KosmoMarkdownPreviewAccessoryTitle
+
+    let previewAccessory = frontend.documentTabs.documentTabAccessoryRect(0)
+    check frontend.documentTabs.clickAt(previewAccessory.center())
+    check frontend.editorView.markdownMode(markdownId) == kmmSyntax
+    check frontend.editorPane.contentView == View(frontend.editorView)
+    check frontend.documentTabs.documentTabModels()[0].accessoryTitle ==
+      KosmoMarkdownSyntaxAccessoryTitle
+
+    check frontend.editorView.editor.handleKey("i")
+    check frontend.editorView.editor.handleTextInput("## Unsaved\n")
+    check frontend.editorView.editor.handleKey("Esc")
+    frontend.editorView.refresh()
+    check "## Unsaved" in frontend.editorView.editor.bufferText(markdownId).get
+
+    let syntaxAccessory = frontend.documentTabs.documentTabAccessoryRect(0)
+    check frontend.documentTabs.clickAt(syntaxAccessory.center())
+    check frontend.editorView.markdownMode(markdownId) == kmmPreview
+    check frontend.editorPane.contentView == View(frontend.editorPane.markdownView)
+    check "## Unsaved" in frontend.editorPane.markdownView.markdown
+    check "## Unsaved" notin readFile(markdownPath)
+
+    check frontend.openPath(textPath)
+    check frontend.editorPane.contentView == View(frontend.editorView)
+    check frontend.documentTabs.documentTabModels()[^1].accessoryTitle.len == 0
 
   test "application shortcuts save close and cycle the focused editor tabs":
     let

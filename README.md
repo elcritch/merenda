@@ -536,6 +536,11 @@ double-clicking promotes it to a permanent editor tab. Git-ignored files and
 dot-directories remain visible in the file tree with muted gray text. Holding
 Control while scrolling over an editor accelerates the wheel movement threefold.
 
+Markdown files open in Kosmo's native pretty viewer by default. Their tab shows
+a small `</>` button for switching to Moe's syntax editor; while editing, the
+button reads `MD` and switches back to the rendered preview. Both modes share
+the same in-memory Moe buffer, so the preview includes unsaved edits.
+
 Kosmo's File > New Terminal command opens a `TerminalView` in the focused
 editor group. Terminal and text tabs share selection, closing, reordering,
 split-pane dragging, detached windows, and tab-navigation shortcuts. Other

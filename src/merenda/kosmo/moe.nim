@@ -16,7 +16,7 @@ import
     editor_render_views, frontend_input, handler, completion, command_line, config,
     config_loader, editor_window, encoding, motion,
   ]
-from moepkg/buffer/core import BufferId
+from moepkg/buffer/core import BufferId, getTextString
 from moepkg/color import EditorColorPairIndex, Rgb, ThemeColors, isTermDefaultColor
 from moepkg/theme import DefaultColors
 from moepkg/render_utils import steadyBottomAreaHeight
@@ -580,6 +580,14 @@ proc tabs*(editor: KosmoEditor): seq[KosmoTab] =
       temporary:
         editor.temporaryBufferId.isSome and buffer.id == editor.temporaryBufferId.get,
     )
+
+proc bufferText*(editor: KosmoEditor, id: KosmoBufferId): Option[string] =
+  ## Return the current in-memory text for a buffer, including unsaved edits.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let buffer = editor.editor.bufferById(id.toMoeBufferId)
+  if buffer.isSome:
+    result = some(buffer.get.getTextString())
 
 proc selectTab*(editor: KosmoEditor, id: KosmoBufferId): bool {.discardable.} =
   ## Activate the tab identified by `id`.

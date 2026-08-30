@@ -31,6 +31,8 @@ const
   KosmoEditorStyleId* = "kosmo.editor"
   KosmoPaneIndicatorStyleId* = "kosmo.pane-indicator"
   KosmoPreviewTabStyleClass* = "kosmo-preview"
+  KosmoMarkdownPreviewAccessoryTitle* = "</>"
+  KosmoMarkdownSyntaxAccessoryTitle* = "MD"
   KosmoInactivePaneStyleClass* = "kosmo-inactive-pane"
   KosmoCursorOpacity = 0.45'f32
   KosmoPaneOutlineOpacity = 0.38'f32
@@ -72,6 +74,15 @@ const
     """<svg width="24" height="24" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6" fill="none" stroke="#000" stroke-width="2.4"/><path fill="#000" d="M14.2 13l7 7-1.7 1.7-7-7z"/></svg>"""
 
 type
+  KosmoMarkdownMode* = enum
+    kmmPreview
+    kmmSyntax
+
+  KosmoEditorContentKind = enum
+    keckOther
+    keckSyntax
+    keckMarkdownPreview
+
   KosmoCommandBar* = ref object of nimkit.MonoTextView
 
   KosmoPaneIndicator = ref object of nimkit.View
@@ -89,6 +100,7 @@ type
     usesBufferSubset: bool
     bufferIds: seq[KosmoBufferId]
     selectedBufferId: Option[KosmoBufferId]
+    markdownSyntaxBufferIds: seq[KosmoBufferId]
     viewStates: seq[KosmoEditorViewState]
     dockGroup: WeakRef[KosmoEditorGroup]
 
@@ -101,6 +113,7 @@ type
     documentTabs*: nimkit.DocumentTabs
     editorView*: KosmoEditorView
     commandBar*: KosmoCommandBar
+    markdownView*: nimkit.MarkdownView
     contentView*: nimkit.View
     activeIndicator: KosmoPaneIndicator
     dockGroup: WeakRef[KosmoEditorGroup]
@@ -557,6 +570,23 @@ proc parseTabIdentifier(identifier: string, id: var KosmoBufferId): bool =
   except ValueError:
     discard
 
+func isMarkdownFilePath*(path: string): bool =
+  ## Return whether `path` uses a conventional Markdown-family extension.
+  splitFile(path).ext.toLowerAscii() in
+    [".md", ".markdown", ".mdown", ".mkd", ".mkdn", ".mdwn", ".mdtxt", ".mdtext"]
+
+func isMarkdownTab(tab: KosmoTab): bool =
+  tab.filePath.isSome and tab.filePath.get.isMarkdownFilePath()
+
+func markdownMode*(view: KosmoEditorView, id: KosmoBufferId): KosmoMarkdownMode =
+  ## Return the pane-local presentation mode for a Markdown buffer.
+  if not view.isNil and id in view.markdownSyntaxBufferIds: kmmSyntax else: kmmPreview
+
+proc forgetMarkdownMode(view: KosmoEditorView, id: KosmoBufferId) =
+  let index = view.markdownSyntaxBufferIds.find(id)
+  if index >= 0:
+    view.markdownSyntaxBufferIds.delete(index)
+
 proc documentIndex(group: KosmoEditorGroup, identifier: string): int =
   if group.isNil:
     return -1
@@ -661,6 +691,8 @@ proc removeViewState(view: KosmoEditorView, id: KosmoBufferId) =
 
 proc closeTab(view: KosmoEditorView, id: KosmoBufferId): KosmoTabCloseResult =
   result = view.editor.closeTab(id)
+  if result.closed:
+    view.forgetMarkdownMode(id)
   if result.closed and view.usesBufferSubset:
     let bufferIndex = view.bufferIds.find(id)
     if bufferIndex >= 0:
@@ -723,6 +755,13 @@ proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
         @[KosmoPreviewTabStyleClass]
       else:
         @[]
+    let accessoryTitle =
+      if not tab.isMarkdownTab:
+        ""
+      elif view.markdownMode(tab.id) == kmmPreview:
+        KosmoMarkdownPreviewAccessoryTitle
+      else:
+        KosmoMarkdownSyntaxAccessoryTitle
     editorModels.add nimkit.initDocumentTabModel(
       identifier = tab.id.tabIdentifier,
       title = tab.title,
@@ -730,6 +769,7 @@ proc syncTabs(view: KosmoEditorView, tabs: seq[KosmoTab]) =
       modified = tab.modified,
       styleClasses = styleClasses,
       tooltip = tab.filePath.get(tab.title),
+      accessoryTitle = accessoryTitle,
     )
   var
     models = editorModels
@@ -968,11 +1008,49 @@ proc observeAppearance(handler: KosmoEditorTabsHandler, window: nimkit.Window) =
   handler.observeProtocol(window, nimkit.WindowAppearanceEvents)
   handler.observeProtocol(window, nimkit.WindowFocusEvents)
 
+proc syncSelectedEditorContent(
+    view: KosmoEditorView, tabs: openArray[KosmoTab]
+): KosmoEditorContentKind =
+  if view.dockGroup.isNil:
+    return keckSyntax
+  let group = view.dockGroup[]
+  var selectedId: KosmoBufferId
+  if not group.selectedTabIdentifier.parseTabIdentifier(selectedId):
+    return keckOther
+  for tab in tabs:
+    if tab.id != selectedId:
+      continue
+    if tab.isMarkdownTab and view.markdownMode(selectedId) == kmmPreview:
+      let source = view.editor.bufferText(selectedId)
+      if source.isNone:
+        group.pane.setContentView(view)
+        return keckSyntax
+      group.pane.markdownView.markdown = source.get
+      group.pane.setContentView(group.pane.markdownView)
+      return keckMarkdownPreview
+    group.pane.setContentView(view)
+    return keckSyntax
+  keckOther
+
 proc refresh*(view: KosmoEditorView) =
   ## Render the current editor state into the synchronous cell-grid view.
   if (view.editor.completionPopupVisible() or view.editor.commandLine().visible) and
       not view.isActiveEditorGroup():
     return
+  let tabs = view.visibleTabs(view.editor.tabs())
+  view.selectVisibleBuffer(tabs)
+  case view.syncSelectedEditorContent(tabs)
+  of keckMarkdownPreview:
+    view.syncChrome()
+    view.cursorVisible = false
+    if not view.commandBar.isNil:
+      view.commandBar.hidden = true
+    return
+  of keckOther:
+    view.syncChrome()
+    return
+  of keckSyntax:
+    discard
   let metrics = view.monoTextMetrics()
   if metrics.cellWidth <= 0.0'f32 or metrics.lineHeight <= 0.0'f32:
     return
@@ -986,8 +1064,6 @@ proc refresh*(view: KosmoEditorView) =
     )
   if view.renderBuffer.width != columns or view.renderBuffer.height != rows:
     view.renderBuffer.resize(columns.Natural, rows.Natural)
-  let tabs = view.visibleTabs(view.editor.tabs())
-  view.selectVisibleBuffer(tabs)
   view.editor.render(view.renderBuffer, view.editor.captureViewState())
   view.saveViewState()
   var cells = newSeq[nimkit.MonoTextCell](rows * columns)
@@ -998,6 +1074,18 @@ proc refresh*(view: KosmoEditorView) =
   view.gridOffset =
     nimkit.initPoint(0.0'f32, -view.scrollOffsetRows * metrics.lineHeight)
   view.syncChrome()
+
+proc toggleMarkdownMode(view: KosmoEditorView, id: KosmoBufferId): bool =
+  for tab in view.editor.tabs():
+    if tab.id != id or not tab.isMarkdownTab:
+      continue
+    if view.markdownMode(id) == kmmPreview:
+      view.markdownSyntaxBufferIds.add id
+    else:
+      view.forgetMarkdownMode(id)
+    view.lastTabs.setLen(0)
+    view.refresh()
+    return true
 
 proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load a file selected by the frontend and refresh the cell grid.
@@ -1248,6 +1336,31 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
       elif not view.editor.selectTab(id):
         view.lastTabs.setLen(0)
       view.refresh()
+
+  method didActivateDocumentTabAccessory(
+      handler: KosmoEditorTabsHandler,
+      tabs: nimkit.DocumentTabs,
+      item: nimkit.DocumentTabItem,
+      index: int,
+  ) =
+    discard tabs
+    discard index
+    let view = handler.targetView()
+    if view.isNil:
+      return
+    var id: KosmoBufferId
+    if not item.identifier().parseTabIdentifier(id):
+      return
+    if not handler.dockController.isNil and not view.dockGroup.isNil:
+      handler.dockController[].activatePaneTab(
+        view.dockGroup[], item.identifier(), false
+      )
+    elif not view.editor.selectTab(id):
+      return
+    if not view.toggleMarkdownMode(id) or view.dockGroup.isNil:
+      return
+    let group = view.dockGroup[]
+    discard group.window.makeFirstResponder(nimkit.Responder(group.pane.contentView))
 
   method shouldCloseDocumentTab(
       handler: KosmoEditorTabsHandler,
@@ -1707,11 +1820,13 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
 proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   let
     commandBar = newKosmoCommandBar(editorView)
+    markdownView = nimkit.newMarkdownView()
     activeIndicator = newKosmoPaneIndicator()
   result = KosmoEditorPane(
     documentTabs: editorView.documentTabs,
     editorView: editorView,
     commandBar: commandBar,
+    markdownView: markdownView,
     contentView: editorView,
     activeIndicator: activeIndicator,
   )
@@ -1797,7 +1912,9 @@ proc activateGroup(controller: KosmoDockController, view: KosmoEditorView) =
       if not previous.isNil:
         previous.editorView.refresh()
     controller.activeGroup = group
-    view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+    let tabs = view.visibleTabs(view.editor.tabs())
+    view.selectVisibleBuffer(tabs)
+    discard view.syncSelectedEditorContent(tabs)
     view.syncChrome()
 
 proc activatePaneTab(
@@ -1822,7 +1939,7 @@ proc activatePaneTab(
     )
     group.editorView.refresh()
     if focus:
-      discard group.window.makeFirstResponder(group.editorView)
+      discard group.window.makeFirstResponder(nimkit.Responder(group.pane.contentView))
     return
 
   let document = group.documentForIdentifier(identifier)
@@ -1960,6 +2077,7 @@ proc removeBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
     return
   group.editorView.bufferIds.delete(index)
   group.editorView.removeViewState(id)
+  group.editorView.forgetMarkdownMode(id)
   group.editorView.selectedBufferId = none(KosmoBufferId)
   group.editorView.lastTabs.setLen(0)
   let orderIndex = group.tabOrder.find(id.tabIdentifier)
