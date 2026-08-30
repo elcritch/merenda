@@ -7,6 +7,24 @@ proc pressControlKey(window: Window, key: Key): bool =
   window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: {kmControl}))
 
 suite "Kosmo synthetic shortcut input":
+  test "close tab defaults use a control sequence with a macOS command alias":
+    let
+      bindings = initKosmoKeyBindings()
+      controlW = KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+      commandW = KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
+      firstStroke = bindings.match([controlW])
+      closeSequence = bindings.match([controlW, controlW])
+      commandShortcut = bindings.match([commandW])
+
+    check firstStroke.kind == kbmPrefix
+    check closeSequence.kind == kbmCommand
+    check closeSequence.selector == actionSelector(KosmoCloseTabAction)
+    when defined(macosx) or defined(macos):
+      check commandShortcut.kind == kbmCommand
+      check commandShortcut.selector == actionSelector(KosmoCloseTabAction)
+    else:
+      check commandShortcut.kind == kbmNone
+
   test "split sequences wait for the second key before moving the active tab":
     let
       root = createTempDir("merenda-kosmo-synthetic-split-", "")

@@ -380,13 +380,12 @@ func focusPanelNumber(selector: nimkit.CommandSelector): int =
     result = 0
 
 func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
-  ## Return Kosmo's macOS-style application shortcut defaults.
+  ## Return Kosmo's platform-specific application shortcut defaults.
   result.bindKey(
     nimkit.keyS, {nimkit.kmCommand}, nimkit.actionSelector(KosmoSaveAction)
   )
-  when defined(windows) or defined(linux) or defined(bsd):
-    result.bindSequence("ctrl-w ctrl-w", nimkit.actionSelector(KosmoCloseTabAction))
-  else:
+  result.bindSequence("ctrl-w ctrl-w", nimkit.actionSelector(KosmoCloseTabAction))
+  when defined(macosx) or defined(macos):
     result.bindKey(
       nimkit.keyW, {nimkit.kmCommand}, nimkit.actionSelector(KosmoCloseTabAction)
     )
@@ -2595,15 +2594,15 @@ proc newKosmoApplication*(
       "Save", nimkit.actionSelector(KosmoSaveAction), "s", nimkit.shortcutModifiers()
     )
     closeTabItem =
-      when defined(windows) or defined(linux) or defined(bsd):
-        nimkit.newMenuItem("Close Tab", nimkit.actionSelector(KosmoCloseTabAction))
-      else:
+      when defined(macosx) or defined(macos):
         nimkit.newMenuItem(
           "Close Tab",
           nimkit.actionSelector(KosmoCloseTabAction),
           "w",
           nimkit.shortcutModifiers(),
         )
+      else:
+        nimkit.newMenuItem("Close Tab", nimkit.actionSelector(KosmoCloseTabAction))
   editorView.applyKosmoEditorStyle(app.effectiveAppearance())
   openItem.identifier = KosmoOpenFileAction
   quickOpenItem.identifier = KosmoQuickOpenAction

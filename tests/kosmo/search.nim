@@ -624,18 +624,13 @@ suite "Kosmo":
       )
       check frontend.editorPane.contentView == View(terminalView)
 
-      when defined(windows) or defined(linux) or defined(bsd):
-        check frontend.window.dispatchKeyDown(
-          KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
-        )
-        check frontend.documentTabs.len == initialTabCount + 1
-        check frontend.window.dispatchKeyDown(
-          KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
-        )
-      else:
-        check frontend.window.dispatchKeyDown(
-          KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
-        )
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+      )
+      check frontend.documentTabs.len == initialTabCount + 1
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+      )
       check frontend.editorGroups()[0].documents.len == 0
       check frontend.documentTabs.len == initialTabCount
       check frontend.editorPane.contentView == View(frontend.editorView)

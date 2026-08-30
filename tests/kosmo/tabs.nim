@@ -108,21 +108,24 @@ suite "Kosmo":
     check not frontend.editorView.editor.tabs()[1].modified
     check "!" in readFile(secondPath)
 
-    when defined(windows) or defined(linux) or defined(bsd):
-      check frontend.window.dispatchKeyDown(
-        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
-      )
-      check frontend.editorView.editor.tabs().len == 2
-      check frontend.window.dispatchKeyDown(
-        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
-      )
-    else:
-      check frontend.application.mainMenu().performKeyEquivalent(
-        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers()),
-        Responder(frontend.editorView),
-      )
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    check frontend.editorView.editor.tabs().len == 2
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
     check frontend.editorView.editor.tabs().len == 1
     check frontend.editorView.editor.tabs()[0].title == "first.txt"
+
+    when defined(macosx) or defined(macos):
+      check frontend.openPath(secondPath)
+      check frontend.editorView.editor.tabs().len == 2
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
+      )
+      check frontend.editorView.editor.tabs().len == 1
+      check frontend.editorView.editor.tabs()[0].title == "first.txt"
 
   test "JSON can customize Kosmo application shortcuts":
     let
