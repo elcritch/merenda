@@ -1453,8 +1453,84 @@ proc newKosmoPaneIndicator(): KosmoPaneIndicator =
 
 proc applyKosmoSidebarStyle(pane: KosmoSidebarPane, base: nimkit.Appearance) =
   var appearance = base
+  let
+    tabContext = nimkit.controlStyle(nimkit.srTab)
+    selectedTabContext = nimkit.controlStyle(nimkit.srTab, {nimkit.ssSelected})
+    inactiveTabSelector = nimkit.initStyleSelector(nimkit.srTab, {nimkit.ssSelected})
+    activeTabSelector =
+      nimkit.initStyleSelector(nimkit.srTab, {nimkit.ssSelected, nimkit.ssFocused})
+    cancelButtonSelector =
+      nimkit.initStyleSelector(nimkit.srButton, id = KosmoCancelSearchButtonStyleId)
+    highlightedCancelButtonSelector = nimkit.initStyleSelector(
+      nimkit.srButton, {nimkit.ssHighlighted}, id = KosmoCancelSearchButtonStyleId
+    )
+    normalTabFill =
+      base.resolveFill(tabContext, nimkit.fill(nimkit.color(0.16, 0.18, 0.22, 1.0)))
+    normalTabTextColor = base.resolveColor(
+      tabContext, nimkit.StyleTextColor, nimkit.color(0.72, 0.74, 0.80, 1.0)
+    )
+    selectedTabFill = base.resolveFill(
+      selectedTabContext, nimkit.fill(nimkit.color(0.18, 0.42, 0.88, 0.18))
+    )
+    selectedTabTextColor = base.resolveColor(
+      selectedTabContext, nimkit.StyleTextColor, nimkit.color(0.22, 0.50, 0.92, 1.0)
+    )
+    selectedTabIndicatorFill = base.resolveFill(
+      selectedTabContext,
+      nimkit.fill(selectedTabTextColor),
+      nimkit.StyleSelectionIndicatorFill,
+    )
+    inactiveTabTextColor = nimkit.color(
+      normalTabTextColor.r,
+      normalTabTextColor.g,
+      normalTabTextColor.b,
+      normalTabTextColor.a * KosmoInactiveTabTextOpacity,
+    )
+    inactiveTabIndicatorColor = nimkit.color(
+      selectedTabTextColor.r,
+      selectedTabTextColor.g,
+      selectedTabTextColor.b,
+      selectedTabTextColor.a * KosmoInactiveTabAccentOpacity,
+    )
+  appearance.setStyle(inactiveTabSelector, nimkit.StyleFill, normalTabFill)
+  appearance.setStyle(inactiveTabSelector, nimkit.StyleTextColor, inactiveTabTextColor)
+  appearance.setStyle(
+    inactiveTabSelector,
+    nimkit.StyleSelectionIndicatorFill,
+    nimkit.fill(inactiveTabIndicatorColor),
+  )
+  appearance.setStyle(activeTabSelector, nimkit.StyleFill, selectedTabFill)
+  appearance.setStyle(activeTabSelector, nimkit.StyleTextColor, selectedTabTextColor)
+  appearance.setStyle(
+    activeTabSelector, nimkit.StyleSelectionIndicatorFill, selectedTabIndicatorFill
+  )
+  appearance.setStyle(
+    cancelButtonSelector,
+    nimkit.StyleFill,
+    nimkit.fill(nimkit.color(0.12, 0.13, 0.16, 1.0)),
+  )
+  appearance.setStyle(
+    cancelButtonSelector, nimkit.StyleBorderColor, nimkit.color(0.38, 0.40, 0.46, 1.0)
+  )
+  appearance.setStyle(
+    cancelButtonSelector, nimkit.StyleTextColor, nimkit.color(0.88, 0.89, 0.92, 1.0)
+  )
+  appearance.setStyle(cancelButtonSelector, nimkit.StyleBorderWidth, 1.0'f32)
+  appearance.setStyle(cancelButtonSelector, nimkit.StyleCornerRadius, 10.0'f32)
+  appearance.setStyle(
+    cancelButtonSelector,
+    nimkit.StyleChrome,
+    nimkit.styleKeyword(nimkit.DefaultChromeName),
+  )
+  appearance.setStyle(
+    highlightedCancelButtonSelector,
+    nimkit.StyleFill,
+    nimkit.fill(nimkit.color(0.22, 0.23, 0.27, 1.0)),
+  )
   appearance.installKosmoPaneIndicatorStyle(base)
   pane.activeIndicator.appearance = appearance
+  pane.tabs.appearance = appearance
+  pane.searchPanel.cancelButton.appearance = appearance
 
 proc containsResponder(pane: KosmoSidebarPane, candidate: nimkit.Responder): bool =
   var responder = candidate

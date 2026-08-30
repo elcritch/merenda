@@ -194,11 +194,31 @@ suite "Kosmo":
       )
       paneOutlineWidth =
         paneAppearance.resolveLength(paneIndicatorContext, StyleBorderWidth, 0.0'f32)
+      sidebarAppearance = frontend.sidebarTabs.effectiveAppearance()
+      activeSidebarTabTextColor = sidebarAppearance.resolveColor(
+        controlStyle(srTab, {ssSelected, ssFocused}),
+        StyleTextColor,
+        color(0.0, 0.0, 0.0, 1.0),
+      )
+      inactiveSidebarTabTextColor = sidebarAppearance.resolveColor(
+        controlStyle(srTab, {ssSelected}), StyleTextColor, color(0.0, 0.0, 0.0, 1.0)
+      )
+      cancelButtonStyle = frontend.searchPanel.cancelButton
+        .effectiveAppearance()
+        .resolveButtonStyle(controlStyle(srButton, id = KosmoCancelSearchButtonStyleId))
     check paneOutlineColor.a > 0.0'f32
     check paneOutlineColor.a < 1.0'f32
     check paneOutlineWidth > 0.0'f32
+    check inactiveSidebarTabTextColor.a < activeSidebarTabTextColor.a
+    check frontend.searchPanel.cancelButton.title == "X"
+    check frontend.searchPanel.cancelButton.styleId == KosmoCancelSearchButtonStyleId
+    check cancelButtonStyle.chrome == DefaultChromeName
+    check cancelButtonStyle.box.fill.centerColor().r < cancelButtonStyle.text.color.r
+    check cancelButtonStyle.box.fill.centerColor().g < cancelButtonStyle.text.color.g
+    check cancelButtonStyle.box.fill.centerColor().b < cancelButtonStyle.text.color.b
 
     check frontend.window.makeFirstResponder(frontend.editorView)
+    check not frontend.sidebarTabs.focused
     frontend.fileTree.selectedItemIdentifier = frontend.fileTree.rootPath
     check not frontend.fileTree.showsFocusedRowHighlight
     check not frontend.searchPanel.resultsView.showsFocusedRowHighlight
@@ -207,6 +227,7 @@ suite "Kosmo":
     )
 
     check frontend.showFileExplorer()
+    check frontend.sidebarTabs.focused
     check frontend.window.firstResponder == frontend.fileTree
     check frontend.fileTree.showsFocusedRowHighlight
     check frontend.searchPanel.resultsView.showsFocusedRowHighlight
@@ -214,6 +235,7 @@ suite "Kosmo":
     check frontend.editorPane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
 
     check frontend.window.makeFirstResponder(frontend.editorView)
+    check not frontend.sidebarTabs.focused
     check not frontend.fileTree.showsFocusedRowHighlight
     check not frontend.searchPanel.resultsView.showsFocusedRowHighlight
     check not frontend.sidebarPane.hasSidebarPaneOutline(
@@ -224,6 +246,7 @@ suite "Kosmo":
     )
 
     check frontend.showFindInFiles()
+    check frontend.sidebarTabs.focused
     check frontend.window.firstResponder == frontend.window.fieldEditor()
     check frontend.window.fieldEditorClient() == frontend.searchPanel.queryField
     check frontend.fileTree.showsFocusedRowHighlight

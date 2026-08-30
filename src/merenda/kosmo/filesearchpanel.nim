@@ -10,6 +10,7 @@ const
   DefaultKosmoSearchResultsPerFile* = 30
   SearchFieldAction = "kosmo.performFileSearch"
   CancelSearchAction = "kosmo.cancelFileSearch"
+  KosmoCancelSearchButtonStyleId* = "kosmo.cancel-search"
   SearchFileIdentifierPrefix = "kosmo.search-file."
   SearchResultIdentifierPrefix = "kosmo.search-result."
   SearchLoadMoreIdentifierPrefix = "kosmo.search-load-more."
@@ -505,7 +506,7 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
     resultsView = newKosmoSearchResults()
     statusLabel = nimkit.newStatusLabel("Enter a regular expression")
     progressIndicator = nimkit.newProgressIndicator()
-    cancelButton = nimkit.newButton("×")
+    cancelButton = nimkit.newButton("X")
     searchAction = nimkit.actionSelector(SearchFieldAction)
     cancelAction = nimkit.actionSelector(CancelSearchAction)
   result = KosmoFileSearchPanel(
@@ -529,6 +530,7 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
   progressIndicator.accessibilityLabel = "Searching files"
   cancelButton.accessibilityLabel = "Cancel search"
   cancelButton.toolTip = "Cancel search"
+  cancelButton.styleId = KosmoCancelSearchButtonStyleId
   queryField.target = nimkit.newActionTarget(
     searchAction,
     proc(sender: nimkit.DynamicAgent) =

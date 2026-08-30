@@ -93,8 +93,17 @@ proc `tabWidth=`*(tabs: CompactTabView, width: float32) =
   tabs.xTabWidth = next
   tabs.setNeedsLayout()
 
+proc `focused=`*(tabs: CompactTabView, focused: bool) =
+  ## Focus belongs to the utility pane, but its selected tab renders that state.
+  View(tabs).focused = focused
+  for button in tabs.xButtons:
+    button.needsDisplay = true
+
 proc compactTabButtonStates(button: CompactTabButton): set[WidgetState] =
   result = button.widgetStateSet()
+  let owner = button.superview()
+  if owner of CompactTabView and CompactTabView(owner).focused:
+    result.incl ssFocused
   if button.state() in {bsOn, bsMixed}:
     result.incl ssSelected
   if button.highlighted():
