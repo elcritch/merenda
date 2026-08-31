@@ -333,6 +333,8 @@ proc newKosmoFileTree*(
   result.outlineDataSource = result
   result.outlineColumn().title = "Files"
   result.outlineColumn().width = 260.0'f32
+  result.outlineColumn().sizingPolicy = nimkit.tcspFlexible
+  result.columnSizing = nimkit.tvcsFill
   result.showsHeader = false
   result.rowHeight = 24.0'f32
   result.selectionMode = nimkit.tsmSingle

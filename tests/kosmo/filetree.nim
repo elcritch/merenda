@@ -1,4 +1,5 @@
-import std/[monotimes, options, os, osproc, strutils, tempfiles, times, unittest]
+import
+  std/[monotimes, options, os, osproc, strutils, tempfiles, times, unicode, unittest]
 
 import figdraw
 import sigils/threads
@@ -7,7 +8,56 @@ import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add rune
+
+proc renderedTextStartingWith(view: View, prefix: string): string =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkText:
+      let text = node.renderedText()
+      if text.startsWith(prefix):
+        return text
+
 suite "Kosmo":
+  test "file tree column follows its viewport and retruncates after resize":
+    let
+      root = createTempDir("merenda-kosmo-tree-resize-", "")
+      longName = "a_very_long_filename_that_needs_live_truncation.nim"
+      longPath = root / longName
+    var paths = @[longPath]
+    writeFile(longPath, "long")
+    for index in 0 ..< 8:
+      let path = root / ("short-" & $index & ".nim")
+      writeFile(path, "short")
+      paths.add path
+    defer:
+      for path in paths:
+        removeFile(path)
+      removeDir(root)
+
+    let
+      tree = newKosmoFileTree(root, frame = rect(0, 0, 340, 120))
+      scrollView = tree.scrollView()
+      wideTitle = tree.renderedTextStartingWith("a_very")
+      wideColumnWidth = tree.outlineColumn().width()
+
+    check not scrollView.verticalScrollerRect().isEmpty
+    check scrollView.horizontalScrollerRect().isEmpty
+    check abs(wideColumnWidth - scrollView.viewportSize().width) < 0.01'f32
+
+    tree.frame = rect(0, 0, 190, 120)
+    let narrowTitle = tree.renderedTextStartingWith("a_very")
+
+    check scrollView.horizontalScrollerRect().isEmpty
+    check tree.outlineColumn().width() < wideColumnWidth
+    check abs(tree.outlineColumn().width() - scrollView.viewportSize().width) < 0.01'f32
+    check narrowTitle != wideTitle
+    check narrowTitle.endsWith("…")
+
   test "file tree lazily exposes folders before files":
     let
       root = createTempDir("merenda-kosmo-tree-", "")
