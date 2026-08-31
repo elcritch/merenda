@@ -33,8 +33,15 @@ export texteditors
 export textstorage
 export texttypes
 
-const MarkdownImageBlockSpacing = 12.0'f32
-  ## Fixed separation around image attachment lines, independent of image size.
+const
+  MarkdownImageBlockSpacing = 12.0'f32
+    ## Fixed separation around image attachment lines, independent of image size.
+  MarkdownTableDefaultColumnLimit = 100
+  MarkdownTableMinimumColumnLimit = 24
+  MarkdownTableMaximumColumnLimit = 160
+  MarkdownTableColumnQuantum = 4
+  MarkdownTableMinimumColumnWidth = 3
+  MarkdownTableSeparatorWidth = 3
 
 type
   MarkdownImageLoader* = proc(url: string): ImageResource {.closure.}
@@ -95,6 +102,7 @@ type
     storage: TextStorage
     codeBlockRanges: seq[TextRange]
     images: seq[MarkdownImagePresentation]
+    hasTables: bool
 
   MarkdownBuilder = object
     text: string
@@ -105,6 +113,28 @@ type
     style: MarkdownStyle
     imageLoader: MarkdownImageLoader
     imageContentTypeLoader: MarkdownImageContentTypeLoader
+    tableColumnLimit: int
+    hasTables: bool
+
+  MarkdownTableAlignment = enum
+    mtaLeft
+    mtaCenter
+    mtaRight
+
+  MarkdownTableRune = object
+    value: Rune
+    attributes: TextAttributes
+    image: ImageResource
+    imageDisplaySize: Size
+
+  MarkdownTableCell = object
+    content: seq[MarkdownTableRune]
+    alignment: MarkdownTableAlignment
+    paddingAttributes: TextAttributes
+
+  MarkdownTableRow = object
+    cells: seq[MarkdownTableCell]
+    header: bool
 
   MarkdownRenderJob = object
     generation: uint64
@@ -140,6 +170,10 @@ type
     xImageCache: Table[string, ImageResource]
     xImageMediaTypes: Table[string, string]
     xPendingUrlAssets: Table[string, UrlAssetHandle]
+    xHasMarkdownTables: bool
+    xMarkdownTableColumnLimit: int
+    xMarkdownTableResizeGeneration: uint64
+    xMarkdownTableResizePending: bool
 
 const
   MarkdownRenderBlocksPerChunk = 16
@@ -318,6 +352,7 @@ proc addBlockBreak(builder: var MarkdownBuilder, attributes: TextAttributes) =
 
 proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
   let offset = builder.runeLength
+  builder.hasTables = builder.hasTables or rendered.hasTables
   builder.text.add rendered.text
   builder.runeLength += rendered.runeLength
   for run in rendered.runs:
@@ -537,22 +572,217 @@ proc renderList(
       inc index
       first = false
 
-proc childCount(token: markdownParser.Token): int =
-  for child in token.children:
-    discard child
-    inc result
+func tableAlignment(cell: markdownParser.Token): MarkdownTableAlignment =
+  let alignment =
+    if cell of markdownParser.THeadCell:
+      markdownParser.THeadCell(cell).align
+    elif cell of markdownParser.TBodyCell:
+      markdownParser.TBodyCell(cell).align
+    else:
+      ""
+  case alignment
+  of "center": mtaCenter
+  of "right": mtaRight
+  else: mtaLeft
 
-proc renderTableRow(
-    builder: var MarkdownBuilder, row: markdownParser.Token, attributes: TextAttributes
+proc tableRunes(rendered: MarkdownBuilder): seq[MarkdownTableRune] =
+  let runes = rendered.text.toRunes()
+  var
+    runIndex = 0
+    imageIndex = 0
+  for index, value in runes:
+    while runIndex < rendered.runs.high and
+        index >= rendered.runs[runIndex].range.maxIndex:
+      inc runIndex
+    while imageIndex < rendered.images.len and
+        rendered.images[imageIndex].range.maxIndex <= index:
+      inc imageIndex
+    var tableRune = MarkdownTableRune(
+      value: value,
+      attributes:
+        if runIndex < rendered.runs.len:
+          rendered.runs[runIndex].attributes
+        else:
+          rendered.style.bodyAttributes(),
+    )
+    if imageIndex < rendered.images.len and
+        int(rendered.images[imageIndex].range.location) <= index and
+        rendered.images[imageIndex].range.maxIndex > index:
+      tableRune.image = rendered.images[imageIndex].image
+      tableRune.imageDisplaySize = rendered.images[imageIndex].displaySize
+    result.add tableRune
+
+func naturalTableCellWidth(content: openArray[MarkdownTableRune]): int =
+  var
+    lineWidth = 0
+    pendingSpace = false
+  for unit in content:
+    if unit.value == Rune('\n'):
+      result = max(result, lineWidth)
+      lineWidth = 0
+      pendingSpace = false
+    elif unit.value.isWhiteSpace and not unit.attributes.hasAttachment:
+      pendingSpace = lineWidth > 0
+    else:
+      if pendingSpace:
+        inc lineWidth
+      inc lineWidth
+      pendingSpace = false
+  max(result, lineWidth)
+
+proc finishTableLine(
+    lines: var seq[seq[MarkdownTableRune]],
+    line: var seq[MarkdownTableRune],
+    hasPendingSpace: var bool,
 ) =
-  var first = true
-  for cell in row.children:
-    if not first:
-      var separatorAttributes = attributes
-      separatorAttributes.foregroundColor = builder.style.ruleColor
-      builder.add("  │  ", separatorAttributes)
-    builder.renderInlineChildren(cell, attributes)
-    first = false
+  lines.add move line
+  line = @[]
+  hasPendingSpace = false
+
+proc appendTableWord(
+    lines: var seq[seq[MarkdownTableRune]],
+    line: var seq[MarkdownTableRune],
+    word: var seq[MarkdownTableRune],
+    pendingSpace: MarkdownTableRune,
+    hasPendingSpace: var bool,
+    limit: int,
+) =
+  if word.len == 0:
+    return
+  let spacing = if line.len > 0 and hasPendingSpace: 1 else: 0
+  if line.len > 0 and line.len + spacing + word.len > limit:
+    lines.finishTableLine(line, hasPendingSpace)
+
+  if word.len > limit:
+    if line.len > 0:
+      lines.finishTableLine(line, hasPendingSpace)
+    var offset = 0
+    while word.len - offset > limit:
+      lines.add word[offset ..< offset + limit]
+      offset += limit
+    if offset < word.len:
+      line = word[offset ..< word.len]
+  else:
+    if line.len > 0 and hasPendingSpace:
+      line.add pendingSpace
+    line.add word
+  word = @[]
+  hasPendingSpace = false
+
+proc wrapTableCell(
+    content: openArray[MarkdownTableRune], width: int
+): seq[seq[MarkdownTableRune]] =
+  let limit = max(width, 1)
+  var
+    line: seq[MarkdownTableRune]
+    word: seq[MarkdownTableRune]
+    pendingSpace: MarkdownTableRune
+    hasPendingSpace = false
+
+  for unit in content:
+    if unit.value == Rune('\n'):
+      result.appendTableWord(line, word, pendingSpace, hasPendingSpace, limit)
+      result.finishTableLine(line, hasPendingSpace)
+    elif unit.value.isWhiteSpace and not unit.attributes.hasAttachment:
+      result.appendTableWord(line, word, pendingSpace, hasPendingSpace, limit)
+      if line.len > 0:
+        pendingSpace = unit
+        pendingSpace.value = Rune(' ')
+        hasPendingSpace = true
+    else:
+      word.add unit
+  result.appendTableWord(line, word, pendingSpace, hasPendingSpace, limit)
+  if line.len > 0 or result.len == 0:
+    result.add move line
+
+func fittedTableWidths(naturalWidths: openArray[int], columnLimit: int): seq[int] =
+  if naturalWidths.len == 0:
+    return
+  let
+    separatorColumns = MarkdownTableSeparatorWidth * (naturalWidths.len - 1)
+    contentLimit = max(
+      columnLimit - separatorColumns,
+      MarkdownTableMinimumColumnWidth * naturalWidths.len,
+    )
+  var
+    maximumWidth = MarkdownTableMinimumColumnWidth
+    naturalTotal = 0
+  for width in naturalWidths:
+    let resolved = max(width, MarkdownTableMinimumColumnWidth)
+    maximumWidth = max(maximumWidth, resolved)
+    naturalTotal += resolved
+  if naturalTotal <= contentLimit:
+    for width in naturalWidths:
+      result.add max(width, MarkdownTableMinimumColumnWidth)
+    return
+
+  var
+    low = MarkdownTableMinimumColumnWidth
+    high = maximumWidth
+    cap = low
+  while low <= high:
+    let candidate = (low + high) div 2
+    var used = 0
+    for width in naturalWidths:
+      used += min(max(width, MarkdownTableMinimumColumnWidth), candidate)
+    if used <= contentLimit:
+      cap = candidate
+      low = candidate + 1
+    else:
+      high = candidate - 1
+
+  var used = 0
+  for width in naturalWidths:
+    let fitted = min(max(width, MarkdownTableMinimumColumnWidth), cap)
+    result.add fitted
+    used += fitted
+  var remaining = contentLimit - used
+  while remaining > 0:
+    var distributed = false
+    for index, naturalWidth in naturalWidths:
+      let target = max(naturalWidth, MarkdownTableMinimumColumnWidth)
+      if result[index] < target and remaining > 0:
+        inc result[index]
+        dec remaining
+        distributed = true
+    if not distributed:
+      break
+
+proc addTableRunes(
+    builder: var MarkdownBuilder, content: openArray[MarkdownTableRune]
+) =
+  for unit in content:
+    let start = builder.runeLength
+    builder.add($unit.value, unit.attributes)
+    if not unit.image.isNil:
+      builder.images.add MarkdownImagePresentation(
+        range: initTextRange(start, 1),
+        image: unit.image,
+        displaySize: unit.imageDisplaySize,
+      )
+
+proc addTableCellLine(
+    builder: var MarkdownBuilder,
+    line: openArray[MarkdownTableRune],
+    width: int,
+    alignment: MarkdownTableAlignment,
+    paddingAttributes: TextAttributes,
+) =
+  let padding = max(width - line.len, 0)
+  var leftPadding, rightPadding: int
+  case alignment
+  of mtaLeft:
+    rightPadding = padding
+  of mtaCenter:
+    leftPadding = padding div 2
+    rightPadding = padding - leftPadding
+  of mtaRight:
+    leftPadding = padding
+  if leftPadding > 0:
+    builder.add(" ".repeat(leftPadding), paddingAttributes)
+  builder.addTableRunes(line)
+  if rightPadding > 0:
+    builder.add(" ".repeat(rightPadding), paddingAttributes)
 
 proc renderTable(
     builder: var MarkdownBuilder,
@@ -561,23 +791,98 @@ proc renderTable(
 ) =
   var tableAttributes = attributes
   tableAttributes.fontName = builder.style.codeFontName
-  var wroteRow = false
+  var rows: seq[MarkdownTableRow]
   for section in table.children:
     let isHeader = section of markdownParser.THead
     for row in section.children:
-      if wroteRow:
-        builder.add("\n", tableAttributes)
       var rowAttributes = tableAttributes
       if isHeader:
         rowAttributes.foregroundColor = builder.style.headingColor
-        rowAttributes.underlineStyle = tldsSingle
-      builder.renderTableRow(row, rowAttributes)
-      if isHeader:
-        var ruleAttributes = tableAttributes
-        ruleAttributes.foregroundColor = builder.style.ruleColor
-        let columns = max(row.childCount(), 1)
-        builder.add("\n" & "────".repeat(columns), ruleAttributes)
-      wroteRow = true
+      var renderedRow = MarkdownTableRow(header: isHeader)
+      for cell in row.children:
+        var renderedCell = MarkdownBuilder(
+          style: builder.style,
+          imageLoader: builder.imageLoader,
+          imageContentTypeLoader: builder.imageContentTypeLoader,
+          tableColumnLimit: builder.tableColumnLimit,
+        )
+        renderedCell.renderInlineChildren(cell, rowAttributes)
+        renderedRow.cells.add MarkdownTableCell(
+          content: renderedCell.tableRunes(),
+          alignment: cell.tableAlignment(),
+          paddingAttributes: rowAttributes,
+        )
+      rows.add move renderedRow
+
+  var columnCount = 0
+  for row in rows:
+    columnCount = max(columnCount, row.cells.len)
+  if columnCount == 0:
+    return
+
+  var naturalWidths = newSeq[int](columnCount)
+  for row in rows:
+    for index, cell in row.cells:
+      naturalWidths[index] =
+        max(naturalWidths[index], cell.content.naturalTableCellWidth())
+  let widths = naturalWidths.fittedTableWidths(
+    if builder.tableColumnLimit > 0:
+      builder.tableColumnLimit
+    else:
+      MarkdownTableDefaultColumnLimit
+  )
+  var separatorAttributes = tableAttributes
+  separatorAttributes.foregroundColor = builder.style.ruleColor
+
+  for rowIndex, row in rows:
+    if rowIndex > 0:
+      builder.add("\n", tableAttributes)
+    var
+      wrappedCells = newSeq[seq[seq[MarkdownTableRune]]](columnCount)
+      rowHeight = 1
+    for index in 0 ..< columnCount:
+      if index < row.cells.len:
+        wrappedCells[index] = row.cells[index].content.wrapTableCell(widths[index])
+        rowHeight = max(rowHeight, wrappedCells[index].len)
+      else:
+        wrappedCells[index] = @[newSeq[MarkdownTableRune]()]
+
+    for lineIndex in 0 ..< rowHeight:
+      if lineIndex > 0:
+        builder.add("\n", tableAttributes)
+      for columnIndex in 0 ..< columnCount:
+        if columnIndex > 0:
+          builder.add(" │ ", separatorAttributes)
+        let
+          cellExists = columnIndex < row.cells.len
+          lineExists = lineIndex < wrappedCells[columnIndex].len
+          alignment =
+            if cellExists:
+              row.cells[columnIndex].alignment
+            else:
+              mtaLeft
+          paddingAttributes =
+            if cellExists:
+              row.cells[columnIndex].paddingAttributes
+            else:
+              tableAttributes
+        if lineExists:
+          builder.addTableCellLine(
+            wrappedCells[columnIndex][lineIndex],
+            widths[columnIndex],
+            alignment,
+            paddingAttributes,
+          )
+        else:
+          builder.add(" ".repeat(widths[columnIndex]), paddingAttributes)
+
+    if row.header:
+      builder.add("\n", tableAttributes)
+      for columnIndex, width in widths:
+        if columnIndex > 0:
+          builder.add("─┼─", separatorAttributes)
+        builder.add("─".repeat(width), separatorAttributes)
+  builder.hasTables = true
 
 proc renderContainerChild(
     builder: var MarkdownBuilder,
@@ -589,6 +894,7 @@ proc renderContainerChild(
     style: builder.style,
     imageLoader: builder.imageLoader,
     imageContentTypeLoader: builder.imageContentTypeLoader,
+    tableColumnLimit: builder.tableColumnLimit,
   )
   rendered.renderBlock(child, attributes)
   if rendered.text.len > 0:
@@ -620,6 +926,7 @@ proc renderBlockquote(
     style: builder.style,
     imageLoader: builder.imageLoader,
     imageContentTypeLoader: builder.imageContentTypeLoader,
+    tableColumnLimit: builder.tableColumnLimit,
   )
   quoted.renderContainer(quote, quoteAttributes)
   if quoted.text.len == 0:
@@ -655,6 +962,7 @@ proc renderBlockquote(
       stop = sourceToDestination[presentation.range.maxIndex]
     mapped.range = initTextRange(start, stop - start)
     builder.images.add mapped
+  builder.hasTables = builder.hasTables or quoted.hasTables
 
 proc renderBlock(
     builder: var MarkdownBuilder,
@@ -712,6 +1020,7 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
     storage: newTextStorage(builder.text, builder.runs),
     codeBlockRanges: builder.codeBlockRanges,
     images: builder.images,
+    hasTables: builder.hasTables,
   )
 
 proc parseMarkdownRoot(
@@ -730,6 +1039,7 @@ proc markdownDocument(
     style: style,
     imageLoader: imageLoader,
     imageContentTypeLoader: imageContentTypeLoader,
+    tableColumnLimit: MarkdownTableDefaultColumnLimit,
   )
   let attributes = style.bodyAttributes()
   builder.renderContainer(root, attributes)
@@ -813,6 +1123,7 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
   textView.codeBlockRanges = document.codeBlockRanges
   textView.codeBlockStyle = view.xMarkdownStyle.codeBlockStyle
   textView.markdownImages = document.images
+  view.xHasMarkdownTables = document.hasTables
   view.textStorage = document.storage
   textView.needsDisplay = true
 
@@ -834,6 +1145,61 @@ proc resolvedDefaultMarkdownUrlAssetLoader(): UrlAssetLoader =
   defaultMarkdownUrlAssetLoader
 
 proc renderCurrentMarkdownDocument(view: MarkdownView)
+
+proc markdownTableColumnLimit(view: MarkdownView): int =
+  if view.isNil:
+    return MarkdownTableDefaultColumnLimit
+  let
+    codeStyle = TextStyle(
+      color: view.xMarkdownStyle.textColor,
+      fontName: view.xMarkdownStyle.codeFontName,
+      fontSize: max(view.xMarkdownStyle.bodyFontSize, 1.0'f32),
+    )
+    characterWidth = max(textNaturalSize("M", codeStyle).width, 1.0'f32)
+    viewportWidth =
+      if view.scrollView().isNil:
+        view.bounds().size.width
+      else:
+        view.scrollView().viewportSize().width
+    availableWidth =
+      max(viewportWidth - view.xMarkdownStyle.documentInsets.horizontal, characterWidth)
+    measuredLimit = int(availableWidth / characterWidth)
+    quantizedLimit =
+      (measuredLimit div MarkdownTableColumnQuantum) * MarkdownTableColumnQuantum
+  clamp(
+    quantizedLimit, MarkdownTableMinimumColumnLimit, MarkdownTableMaximumColumnLimit
+  )
+
+proc scheduleMarkdownTableResize(view: MarkdownView) =
+  if view.isNil or not view.xHasMarkdownTables:
+    return
+  inc view.xMarkdownTableResizeGeneration
+  if view.xMarkdownTableResizePending:
+    return
+
+  view.xMarkdownTableResizePending = true
+  var
+    observedGeneration = view.xMarkdownTableResizeGeneration
+    stableCycles = 0
+  scheduleMainThreadWork(
+    proc(): bool =
+      if observedGeneration != view.xMarkdownTableResizeGeneration:
+        observedGeneration = view.xMarkdownTableResizeGeneration
+        stableCycles = 0
+        return true
+      inc stableCycles
+      if stableCycles < 2:
+        return true
+
+      view.xMarkdownTableResizePending = false
+      if view.xHasMarkdownTables and view.xActiveMarkdownGeneration == 0 and
+          view.markdownTableColumnLimit() != view.xMarkdownTableColumnLimit:
+        view.renderCurrentMarkdownDocument()
+      false
+  )
+
+proc markdownViewGeometryDidChange(view: MarkdownView) {.slot.} =
+  view.scheduleMarkdownTableResize()
 
 proc markdownUrlAssetDidFinish(view: MarkdownView, handle: UrlAssetHandle) {.slot.} =
   let url = handle.result().url
@@ -954,14 +1320,18 @@ proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
 
 proc scheduleMarkdownRendering(view: MarkdownView) =
   inc view.xMarkdownRenderGeneration
-  let generation = view.xMarkdownRenderGeneration
+  let
+    generation = view.xMarkdownRenderGeneration
+    tableColumnLimit = view.markdownTableColumnLimit()
+  view.xMarkdownTableColumnLimit = tableColumnLimit
   view.xActiveMarkdownRenderGeneration = generation
   view.xMarkdownRenderJob = MarkdownRenderJob(
     generation: generation,
     rootGeneration: view.xMarkdownRootGeneration,
     root: view.xMarkdownRoot,
     nextBlock: view.xMarkdownRoot.children.head,
-    builder: MarkdownBuilder(style: view.xMarkdownStyle),
+    builder:
+      MarkdownBuilder(style: view.xMarkdownStyle, tableColumnLimit: tableColumnLimit),
     attributes: view.xMarkdownStyle.bodyAttributes(),
   )
   scheduleMainThreadWork(
@@ -1040,8 +1410,9 @@ proc renderCurrentMarkdownDocument(view: MarkdownView) =
   view.scheduleMarkdownRendering()
 
 func isMarkdownRendering*(view: MarkdownView): bool =
-  ## Return whether the owning thread has an incremental render in progress.
-  not view.isNil and view.xActiveMarkdownRenderGeneration != 0
+  ## Return whether incremental rendering or table resize reflow is pending.
+  not view.isNil and
+    (view.xActiveMarkdownRenderGeneration != 0 or view.xMarkdownTableResizePending)
 
 func isMarkdownParsing*(view: MarkdownView): bool =
   ## Return whether parsing or incremental AST application is in progress.
@@ -1055,7 +1426,7 @@ func markdownRenderChunkCount*(view: MarkdownView): int =
   ## Return the number of chunks used by the current or last completed render.
   if view.isNil:
     return
-  if view.isMarkdownRendering():
+  if view.xActiveMarkdownRenderGeneration != 0:
     view.xMarkdownRenderJob.chunkCount
   else:
     view.xMarkdownRenderChunkCount
@@ -1083,7 +1454,7 @@ proc pollMarkdownParsing*(view: MarkdownView): int {.discardable.} =
 proc waitForMarkdownRendering*(
     view: MarkdownView, timeoutMilliseconds: Natural = 5_000
 ): bool {.discardable.} =
-  ## Poll until this view's active incremental render finishes.
+  ## Poll until incremental rendering and table resize reflow finish.
   let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
   while getMonoTime() < deadline:
     discard view.pollMarkdownParsing()
@@ -1235,11 +1606,13 @@ proc initMarkdownViewFields*(
   view.xImageCache = initTable[string, ImageResource]()
   view.xImageMediaTypes = initTable[string, string]()
   view.xPendingUrlAssets = initTable[string, UrlAssetHandle]()
+  view.xMarkdownTableColumnLimit = view.markdownTableColumnLimit()
   view.xMarkdown = source
   view.editable = false
   view.selectable = true
   view.allowsUndo = false
   view.scrollView().borderType = svbNoBorder
+  view.connect(geometryDidChange, view, markdownViewGeometryDidChange)
   view.accessibilityLabel = "Markdown document"
   view.applyMarkdownStyle()
   view.applyMarkdownDocument(view.xMarkdownRoot.markdownDocument(style))

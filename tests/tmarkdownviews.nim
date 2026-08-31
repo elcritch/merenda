@@ -522,17 +522,62 @@ Press <kbd>Enter</kbd>.
       header = storage.attributesFor("Left")
       bold = storage.attributesFor("bold")
 
-    check rendered.contains("Left  │  Center  │  Right")
-    check rendered.contains("bold  │  code  │  link")
-    check rendered.contains("a | pipe  │  middle  │  tail")
+    check rendered.contains("Left     │ Center │ Right")
+    check rendered.contains("bold     │  code  │  link")
+    check rendered.contains("a | pipe │ middle │  tail")
+    check rendered.contains(
+      "─────────┼────────┼──────"
+    )
     check header.fontName == style.codeFontName
     check header.foregroundColor == style.headingColor
-    check header.underlineStyle == tldsSingle
+    check header.underlineStyle == tldsNone
     check bold.fontName == style.emphasisCodeFontName
     check bold.foregroundColor == style.strongColor
     check storage.attributesFor("code").fontName == style.codeFontName
     check storage.attributesFor("link").link == "https://example.test"
     check storage.attributesFor("│").foregroundColor == style.ruleColor
+
+  test "GFM tables share bounded columns and wrap long cells":
+    let
+      storage = markdownTextStorage(
+        """
+| Mode | Shortcut | Notes |
+| :--- | :------: | ----: |
+| Normal | Ctrl+Shift+P | Opens the command palette and keeps this deliberately long explanation inside the visible Markdown viewport instead of extending the document horizontally. |
+"""
+      )
+      lines = storage.stringValue().splitLines()
+      tableWidth = lines[0].runeLen
+    var foundContinuation = false
+
+    check lines.len > 4
+    check tableWidth <= 100
+    for line in lines:
+      check line.runeLen == tableWidth
+      let cells = line.split(" │ ")
+      if cells.len == 3 and cells[0].strip().len == 0 and cells[1].strip().len == 0 and
+          cells[2].strip().len > 0:
+        foundContinuation = true
+    check foundContinuation
+
+  test "GFM tables reflow once the Markdown viewport settles":
+    let
+      source =
+        """
+| Mode | Shortcut | Notes |
+| :--- | :------: | :---- |
+| Normal | Ctrl+Shift+P | Opens the command palette and keeps a deliberately long explanation constrained to the current Markdown viewport. |
+"""
+      view = newMarkdownView(source, frame = rect(0, 0, 360, 240))
+    require view.waitForMarkdownParsing()
+    let narrowLineCount = view.textStorage().stringValue().splitLines().len
+
+    view.frame = rect(0, 0, 900, 240)
+    view.layoutSubtreeIfNeeded()
+    require view.waitForMarkdownRendering()
+    let wideLineCount = view.textStorage().stringValue().splitLines().len
+
+    check wideLineCount < narrowLineCount
 
   test "CommonMark and GFM configurations select their extension syntax":
     let
@@ -545,7 +590,7 @@ Press <kbd>Enter</kbd>.
     check commonStorage.stringValue().contains("~~removed~~")
     check commonStorage.stringValue().contains("| A | B |")
     check not gfmStorage.stringValue().contains("~~removed~~")
-    check gfmStorage.stringValue().contains("A  │  B")
+    check gfmStorage.stringValue().contains("A   │ B  ")
 
   test "empty and Unicode documents produce valid native text storage":
     let
