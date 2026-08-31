@@ -33,7 +33,7 @@ suite "Kosmo":
     for path in ["readme.txt", "markdown.nim", "document.html"]:
       check not path.isMarkdownFilePath
 
-  test "window resizing preserves the chosen file tree width":
+  test "repeated window resizing preserves the chosen file tree width":
     let frontend = newKosmoApplication(newApplication("Kosmo Resize Test"))
     defer:
       frontend.close()
@@ -43,10 +43,10 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     let fileTreeWidth = frontend.fileTree.frame().size.width
 
-    frontend.contentView.frame = rect(0, 0, 1040, 480)
-    frontend.contentView.layoutSubtreeIfNeeded()
-
-    check abs(frontend.fileTree.frame().size.width - fileTreeWidth) < 0.01'f32
+    for width in [1040.0'f32, 760.0'f32, 1180.0'f32, 820.0'f32, 960.0'f32]:
+      frontend.contentView.frame = rect(0, 0, width, 480)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      check abs(frontend.fileTree.frame().size.width - fileTreeWidth) < 0.01'f32
 
   test "native tabs select, reorder, and close Moe buffers":
     let

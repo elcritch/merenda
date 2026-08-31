@@ -2775,7 +2775,6 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(content: KosmoContentView) =
     let
       bounds = content.bounds()
-      panes = content.splitView.panes()
       splitWidthChanged =
         content.setInitialDivider and
         abs(bounds.size.width - content.lastSplitWidth) > 0.001'f32
@@ -2813,9 +2812,8 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
     elif splitWidthChanged:
       content.splitView.setPositionOfDivider(0, content.fileTreeWidth)
     content.lastSplitWidth = bounds.size.width
-    content.splitView.layoutSubtreeIfNeeded()
-    if panes.len > 0:
-      content.fileTreeWidth = panes[0].frame().size.width
+    if content.splitView.paneCount() > 1 and not splitWidthChanged:
+      content.fileTreeWidth = content.splitView.positionOfDivider(0)
 
 protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(
