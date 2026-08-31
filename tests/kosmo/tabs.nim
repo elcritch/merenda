@@ -108,6 +108,7 @@ suite "Kosmo":
     check frontend.editorView.markdownMode(markdownId) == kmmPreview
     check frontend.editorPane.contentView == View(frontend.editorPane.markdownView)
     check frontend.editorPane.markdownView.markdown.strip() == source.strip()
+    require frontend.editorPane.markdownView.waitForMarkdownParsing()
     check "Kosmo" in frontend.editorPane.markdownView.textStorage.stringValue()
     check "Preview" in frontend.editorPane.markdownView.textStorage.stringValue()
 
