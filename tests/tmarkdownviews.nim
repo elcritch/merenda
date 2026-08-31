@@ -27,6 +27,9 @@ proc attributesFor(storage: TextStorage, needle: string): TextAttributes =
   doAssert index >= 0, "rendered Markdown should contain: " & needle
   storage.attributesAt(index)
 
+proc unavailableMarkdownImage(url: string): ImageResource =
+  discard url
+
 suite "nimkit markdown views":
   test "ATX and setext headings use every configured heading level":
     let
@@ -228,6 +231,32 @@ Setext two
         TextMetadataItem(key: "alt", value: "Inline & banner"),
         TextMetadataItem(key: "title", value: ""),
       ]
+
+  test "adjacent HTML img tags render as separate attachments":
+    const
+      ModernUrl =
+        "https://github.com/user-attachments/assets/" &
+        "4289a99e-be27-4e06-9d42-3d1a57e82987"
+      AquaUrl =
+        "https://github.com/user-attachments/assets/" &
+        "f2d8143b-e6ac-4ce0-b2eb-90b5c2fa0183"
+    let image = newImageResourceFromFile(TestImagePath)
+    var requestedUrls: seq[string]
+    let loader: MarkdownImageLoader = proc(url: string): ImageResource =
+      requestedUrls.add url
+      image
+    let view = newMarkdownView(
+      "<img width=\"800\" alt=\"modern macos\" src=\"" & ModernUrl & "\" />\n" &
+        "<img width=\"400\" alt=\"aqua macosx\" src=\"" & AquaUrl & "\" />",
+      imageLoader = loader,
+    )
+
+    require view.waitForMarkdownParsing()
+    check requestedUrls == @[ModernUrl, AquaUrl]
+    let attachments = view.textView().attachmentPresentations()
+    require attachments.len == 2
+    check attachments[0].attachment.fileUrl == ModernUrl
+    check attachments[1].attachment.fileUrl == AquaUrl
 
   test "custom image loaders are cached across Markdown style changes":
     let image = newImageResourceFromFile(TestImagePath)
@@ -516,7 +545,9 @@ Press <kbd>Enter</kbd>.
     let
       source = readFile(RepositoryReadme)
       constructionStarted = getMonoTime()
-      view = newMarkdownView(source, frame = rect(0, 0, 760, 540))
+      view = newMarkdownView(
+        source, frame = rect(0, 0, 760, 540), imageLoader = unavailableMarkdownImage
+      )
       constructionElapsed = getMonoTime() - constructionStarted
       parsingStarted = getMonoTime()
     require view.waitForMarkdownParsing()
@@ -569,8 +600,12 @@ Press <kbd>Enter</kbd>.
   test "repository README reports live resize timings":
     let
       source = readFile(RepositoryReadme)
-      first = newMarkdownView(source, frame = rect(0, 0, 760, 540))
-      second = newMarkdownView(source, frame = rect(0, 0, 760, 540))
+      first = newMarkdownView(
+        source, frame = rect(0, 0, 760, 540), imageLoader = unavailableMarkdownImage
+      )
+      second = newMarkdownView(
+        source, frame = rect(0, 0, 760, 540), imageLoader = unavailableMarkdownImage
+      )
     require first.waitForMarkdownParsing()
     require second.waitForMarkdownParsing()
     discard buildRenders(first)

@@ -390,15 +390,17 @@ proc renderImage(
   )
   builder.add("\n", attributes)
 
-proc renderHtmlImage(
+proc renderHtmlImages(
     builder: var MarkdownBuilder, html: string, attributes: TextAttributes
 ): bool =
-  var htmlImage: MarkdownHtmlImage
-  if not html.parseMarkdownHtmlImage(htmlImage):
+  var htmlImages: seq[MarkdownHtmlImage]
+  if not html.parseMarkdownHtmlImages(htmlImages):
     return
-  let image =
-    markdownParser.Image(url: htmlImage.url, alt: htmlImage.alt, title: htmlImage.title)
-  builder.renderImage(image, attributes, initSize(htmlImage.width, htmlImage.height))
+  for htmlImage in htmlImages:
+    let image = markdownParser.Image(
+      url: htmlImage.url, alt: htmlImage.alt, title: htmlImage.title
+    )
+    builder.renderImage(image, attributes, initSize(htmlImage.width, htmlImage.height))
   true
 
 proc renderInline(
@@ -449,7 +451,7 @@ proc renderInline(
   elif token of markdownParser.Image:
     builder.renderImage(markdownParser.Image(token), attributes)
   elif token of markdownParser.InlineHtml:
-    if not builder.renderHtmlImage(token.doc, attributes):
+    if not builder.renderHtmlImages(token.doc, attributes):
       builder.add(token.doc, builder.style.mutedCodeAttributes(attributes))
   elif not token.children.head.isNil:
     builder.renderInlineChildren(token, attributes)
@@ -677,7 +679,7 @@ proc renderBlock(
     builder.renderTable(token, attributes)
   elif token of markdownParser.HtmlBlock:
     let html = token.doc.strip(chars = {'\n'})
-    if not builder.renderHtmlImage(html, attributes):
+    if not builder.renderHtmlImages(html, attributes):
       builder.add(html, builder.style.mutedCodeAttributes(attributes))
   elif $token == "":
     # Reference-definition nodes intentionally have no rendered representation.

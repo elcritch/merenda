@@ -60,9 +60,9 @@ func parseHtmlDimension(value: string): float32 =
   if parsed > 0.0:
     result = float32(parsed)
 
-proc parseMarkdownHtmlImage*(html: string, image: var MarkdownHtmlImage): bool =
-  ## Parse one complete HTML `img` tag without interpreting any other HTML.
-  var index = 0
+proc parseMarkdownHtmlImageAt(
+    html: string, index: var int, image: var MarkdownHtmlImage
+): bool =
   html.skipHtmlSpace(index)
   if index >= html.len or html[index] != '<':
     return
@@ -137,5 +137,29 @@ proc parseMarkdownHtmlImage*(html: string, image: var MarkdownHtmlImage): bool =
     else:
       discard
 
+  hasSource and image.url.len > 0
+
+proc parseMarkdownHtmlImage*(html: string, image: var MarkdownHtmlImage): bool =
+  ## Parse one complete HTML `img` tag without interpreting any other HTML.
+  var index = 0
+  if not html.parseMarkdownHtmlImageAt(index, image):
+    return
   html.skipHtmlSpace(index)
-  hasSource and image.url.len > 0 and index == html.len
+  index == html.len
+
+proc parseMarkdownHtmlImages*(html: string, images: var seq[MarkdownHtmlImage]): bool =
+  ## Parse a complete whitespace-separated sequence of HTML `img` tags.
+  var
+    index = 0
+    parsed: seq[MarkdownHtmlImage]
+  html.skipHtmlSpace(index)
+  while index < html.len:
+    var image: MarkdownHtmlImage
+    if not html.parseMarkdownHtmlImageAt(index, image):
+      return
+    parsed.add image
+    html.skipHtmlSpace(index)
+  if parsed.len == 0:
+    return
+  images = move parsed
+  true

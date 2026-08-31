@@ -195,18 +195,23 @@ suite "URL asset loader":
     let
       cache = createTempDir("merenda-markdown-url-assets-", "")
       server = newTestServer(bodyKind = 2)
+      secondServer = newTestServer(bodyKind = 2)
       assetUrl = server.url("/remote-image")
+      secondAssetUrl = secondServer.url("/second-remote-image")
     defer:
       removeDir(cache)
     defer:
       server.close()
+    defer:
+      secondServer.close()
 
     let loader = newUrlAssetLoader("org.example.merenda-tests", cache)
     defer:
       loader.close()
     let view = newMarkdownView(
       "![Remote preview](" & assetUrl & ")\n\n" &
-        "<img alt=\"HTML remote preview\" src=\"" & assetUrl & "\" />",
+        "<img alt=\"HTML remote preview\" src=\"" & assetUrl & "\" />\n" &
+        "<img alt=\"Second HTML remote preview\" src=\"" & secondAssetUrl & "\" />",
       urlAssetLoader = loader,
     )
     require view.waitForMarkdownParsing()
@@ -223,11 +228,15 @@ suite "URL asset loader":
 
     check loader.pendingCount() == 0
     require view.waitForMarkdownRendering()
-    check view.textView().attachmentPresentations().len == 2
+    let attachments = view.textView().attachmentPresentations()
+    check attachments.len == 3
     check view.textView().attachmentPresentations()[0].attachment.contentType ==
       "image/png"
+    check attachments[2].attachment.fileUrl == secondAssetUrl
     check server.state.requestCount.load(moAcquire) == 1
+    check secondServer.state.requestCount.load(moAcquire) == 1
     check fileExists(loader.cachedAssetPath(assetUrl))
+    check fileExists(loader.cachedAssetPath(secondAssetUrl))
 
   test "validates URLs and rejects loads after closing":
     let cache = createTempDir("merenda-url-assets-", "")
