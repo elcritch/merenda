@@ -836,6 +836,22 @@ suite "nimkit text layout":
     check snapshot.usedRect.size.height > 0.0
     check snapshot.contentSize.height > 0.0
 
+  test "mixed-height lines do not overlap":
+    let storage = newTextStorage("Banner\nBody")
+    storage.setAttributes(
+      initTextRange(0, 6), defaultTextAttributes(color(0.1, 0.2, 0.3), 180.0)
+    )
+    storage.setAttributes(
+      initTextRange(7, 4), defaultTextAttributes(color(0.1, 0.2, 0.3), 14.0)
+    )
+    let manager = newTextLayoutManager(
+      storage, initTextContainer(initSize(720.0, 480.0), wraps = false)
+    )
+    let fragments = manager.layoutSnapshot().lineFragments
+
+    require fragments.len >= 2
+    check fragments[1].fragmentRect.minY >= fragments[0].fragmentRect.maxY
+
   test "layout snapshot marks wrapped visual lines":
     let manager = newTextLayoutManager(
       newTextStorage("one two three four five six"),

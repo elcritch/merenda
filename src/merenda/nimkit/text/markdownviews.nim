@@ -917,7 +917,10 @@ proc renderContainerChild(
   )
   rendered.renderBlock(child, attributes)
   if rendered.text.len > 0:
-    if wroteBlock:
+    let previousBlockEndsWithImage =
+      builder.images.len > 0 and builder.text.endsWith("\n") and
+      builder.images[^1].range.maxIndex == builder.runeLength - 1
+    if wroteBlock and not previousBlockEndsWithImage:
       builder.addBlockBreak(attributes)
     builder.add(rendered)
     wroteBlock = true

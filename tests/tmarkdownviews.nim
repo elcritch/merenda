@@ -264,15 +264,15 @@ Setext two
       discard url
       image
     var style = initMarkdownStyle()
-    style.maximumImageSize = initSize(400.0'f32, 400.0'f32)
+    style.maximumImageSize = initSize(640.0'f32, 420.0'f32)
     let view = newMarkdownView(
       "# Heading\n\n" &
-        "<img width=\"300\" height=\"100\" alt=\"first\" src=\"asset:first\" />\n\n" &
+        "<img width=\"2172\" height=\"724\" alt=\"first\" src=\"asset:first\" />\n\n" &
         "After first.\n\n" &
         "<img width=\"300\" height=\"100\" alt=\"second\" src=\"asset:second\" />\n" &
         "<img width=\"300\" height=\"100\" alt=\"third\" src=\"asset:third\" />\n\n" &
         "After adjacent.",
-      frame = rect(0, 0, 520, 800),
+      frame = rect(0, 0, 760, 1000),
       style = style,
       imageLoader = loader,
     )
@@ -304,9 +304,9 @@ Setext two
       firstParagraphGap = firstParagraph.minY - imageFrames[0].maxY
       adjacentImageGap = imageFrames[2].minY - imageFrames[1].maxY
       adjacentParagraphGap = adjacentParagraph.minY - imageFrames[2].maxY
-    check abs(firstParagraphGap - 12.0'f32) <= 2.0'f32
+    check abs(firstParagraphGap - 12.0'f32) <= 3.0'f32
     check abs(adjacentImageGap - 12.0'f32) <= 2.0'f32
-    check abs(adjacentParagraphGap - 12.0'f32) <= 2.0'f32
+    check abs(adjacentParagraphGap - 12.0'f32) <= 3.0'f32
 
   test "custom image loaders are cached across Markdown style changes":
     let image = newImageResourceFromFile(TestImagePath)

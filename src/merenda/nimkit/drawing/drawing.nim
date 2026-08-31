@@ -329,6 +329,59 @@ proc textLayout*(
     alignment,
   )
 
+proc normalizeLineAdvances(layout: var GlyphArrangement) =
+  ## Keep mixed-height line boxes from overlapping when a backend advances a
+  ## baseline using the following line's metrics.
+  if layout.lines.len < 2:
+    return
+
+  var
+    nextLineTop = 0.0'f32
+    hasLineTop = false
+    minimumY = float32.high
+    maximumY = -float32.high
+  for line in layout.lines:
+    var
+      lineMinimumY = float32.high
+      lineMaximumY = -float32.high
+      hasGlyph = false
+    for glyphIndex in line:
+      let glyphRect =
+        if glyphIndex >= 0 and glyphIndex < layout.arrangedGlyphs.len:
+          layout.arrangedGlyphs[glyphIndex].rect
+        elif glyphIndex >= 0 and glyphIndex < layout.selectionRects.len:
+          layout.selectionRects[glyphIndex]
+        else:
+          continue
+      lineMinimumY = min(lineMinimumY, glyphRect.y)
+      lineMaximumY = max(lineMaximumY, glyphRect.y + glyphRect.h)
+      hasGlyph = true
+    if not hasGlyph:
+      continue
+
+    if not hasLineTop:
+      nextLineTop = lineMinimumY
+      hasLineTop = true
+    let offset = nextLineTop - lineMinimumY
+    if abs(offset) > 0.001'f32:
+      for glyphIndex in line:
+        if glyphIndex >= 0 and glyphIndex < layout.arrangedGlyphs.len:
+          layout.arrangedGlyphs[glyphIndex].rect.y += offset
+          layout.arrangedGlyphs[glyphIndex].pos.y += offset
+        if glyphIndex >= 0 and glyphIndex < layout.selectionRects.len:
+          layout.selectionRects[glyphIndex].y += offset
+        if glyphIndex >= 0 and glyphIndex < layout.positions.len:
+          layout.positions[glyphIndex].y += offset
+    let lineHeight = max(lineMaximumY - lineMinimumY, 0.0'f32)
+    minimumY = min(minimumY, nextLineTop)
+    maximumY = max(maximumY, nextLineTop + lineHeight)
+    nextLineTop += lineHeight
+
+  if hasLineTop:
+    layout.bounding.y = minimumY
+    layout.bounding.h = max(maximumY - minimumY, 0.0'f32)
+    layout.maxSize.y = max(layout.maxSize.y, layout.bounding.h)
+
 proc textLayoutImpl(
     rect: nimkitTypes.Rect,
     storage: TextStorage,
@@ -359,7 +412,7 @@ proc textLayoutImpl(
       font.strikethrough = attributes.hasStrikethrough
       spans.add((fs(font, fill(attributes.foregroundColor.rgba)), text))
   if rasterize:
-    typeset(
+    result = typeset(
       rect.toFigRect,
       spans,
       hAlign = alignment.toFontHorizontal,
@@ -368,7 +421,7 @@ proc textLayoutImpl(
       wrap = wrap,
     )
   else:
-    typesetForMeasurement(
+    result = typesetForMeasurement(
       rect.toFigRect,
       spans,
       hAlign = alignment.toFontHorizontal,
@@ -376,6 +429,7 @@ proc textLayoutImpl(
       minContent = false,
       wrap = wrap,
     )
+  result.normalizeLineAdvances()
 
 proc textLayout*(
     rect: nimkitTypes.Rect,
