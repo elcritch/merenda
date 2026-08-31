@@ -21,6 +21,12 @@ type TableDataSourceSpy = ref object of Responder
   intrinsicWidth: float32
   widthHintCalls: int
 
+var tableDefaultThemeFactoryCalls: int
+
+proc initCountingTableTheme(): Theme =
+  inc tableDefaultThemeFactoryCalls
+  initDarkBSDTheme()
+
 type EditableTableRow = object
   project: string
   state: string
@@ -3414,6 +3420,24 @@ suite "NimKit TableView":
 
     check not scrollView.verticalScrollerRect().isEmpty
     check scrollView.horizontalScrollerRect().isEmpty
+
+  test "resizing tables with concrete column widths does not rebuild the default theme":
+    registerDefaultThemeFactory(initCountingTableTheme)
+    defer:
+      registerDefaultThemeFactory(initDarkBSDTheme)
+
+    let tableView = newTableView(frame = rect(0, 0, 300, 180))
+    tableView.appearance = initAppearance(initDarkBSDTheme())
+    tableView.rowCount = 12
+    tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
+    tableView.addColumn(newTableColumn("state", "State", width = 100.0))
+    tableDefaultThemeFactoryCalls = 0
+
+    for width in [320.0'f32, 480.0'f32, 260.0'f32, 420.0'f32]:
+      tableView.frame = rect(0, 0, width, 180)
+      tableView.layoutSubtreeIfNeeded()
+
+    check tableDefaultThemeFactoryCalls == 0
 
   test "flexible table columns fill the viewport within their width limits":
     let

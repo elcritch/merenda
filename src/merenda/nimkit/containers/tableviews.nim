@@ -1277,11 +1277,13 @@ proc `rowItemRole=`*(tableView: TableView, role: StyleRole) =
   tableView.invalidateIntrinsicContentSize()
   tableView.invalidateTableRows()
 
-func normalizedColumnMetric(value, fallback: float32): float32 =
-  if math.isNaN(value):
-    fallback
-  else:
-    max(value, 0.0'f32)
+template normalizedColumnMetric(value, fallback: float32): float32 =
+  block:
+    let metric = value
+    if math.isNaN(metric):
+      fallback
+    else:
+      max(metric, 0.0'f32)
 
 proc normalizedMaxWidth(value, minWidth: float32): float32 =
   max(value.normalizedColumnMetric(defaultTableStyle().columnMaxWidth), minWidth)
@@ -1469,7 +1471,9 @@ proc initTableColumnFields*(
     resizePolicy = tcrResizable,
     sizingPolicy = tcspFixed,
 ) =
-  let style = defaultTableStyle()
+  var style: TableViewStyle
+  if math.isNaN(minWidth) or math.isNaN(maxWidth) or math.isNaN(width):
+    style = defaultTableStyle()
   column.xIdentifier = identifier
   column.xTitle = if title.len == 0: identifier else: title
   column.xMinWidth = minWidth.normalizedColumnMetric(style.columnMinWidth)
