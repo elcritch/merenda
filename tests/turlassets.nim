@@ -206,6 +206,8 @@ suite "URL asset loader":
       loader.close()
     let view =
       newMarkdownView("![Remote preview](" & assetUrl & ")", urlAssetLoader = loader)
+    require view.waitForMarkdownParsing()
+    check view.markdownParseError() == ""
 
     check view.urlAssetLoader() == loader
     check view.textView().attachmentPresentations().len == 0

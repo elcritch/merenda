@@ -1,14 +1,16 @@
 ## Native Markdown rendering for NimKit text views.
 ##
-## The renderer converts a CommonMark or GFM syntax tree into attributed NimKit
-## text. Raw HTML stays inert, local images resolve explicitly, remote images
-## load through a Chronos worker, and unavailable images use linked alt text.
+## CommonMark and GFM parsing runs on a Sigils pool worker, then the complete AST
+## moves back to the view's owning thread for attributed-text construction. Raw
+## HTML stays inert, local images resolve explicitly, remote images load through
+## a Chronos worker, and unavailable images use linked alt text.
 
-import std/[lists, os, strutils, tables, unicode]
+import std/[lists, monotimes, os, strutils, tables, times, unicode]
 
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8
-import sigils/core
+import sigils/[core, threads]
+import threading/smartptrs
 
 import ../accessibility/accessibility
 import ../drawing
@@ -18,6 +20,7 @@ import ../foundation/urlassets
 import ../foundation/urls
 import ../themes
 import ../view/views
+import ./markdownparsing
 import ./texteditors
 import ./textstorage
 import ./texttypes
@@ -76,6 +79,11 @@ type
     xMarkdownStyle: MarkdownStyle
     xMarkdownConfig: MarkdownParserConfig
     xMarkdownRoot: markdownParser.Document
+    xMarkdownParseWorker: AgentProxy[MarkdownParseWorker]
+    xMarkdownGeneration: uint64
+    xActiveMarkdownGeneration: uint64
+    xMarkdownParseWorkerThreadId: int
+    xMarkdownParseError: string
     xImageBasePath: string
     xImageLoader: MarkdownImageLoader
     xUrlAssetLoader: UrlAssetLoader
@@ -812,10 +820,106 @@ proc renderMarkdownDocument(
     view.xImageMediaTypes.getOrDefault(key, initUrl(url).mediaType())
   root.markdownDocument(style, loader, contentTypeLoader)
 
+## Emitted on the view's owning thread after the latest parse is applied.
+## `workerThreadId` is `-1` only for a custom parser configuration that must
+## retain its synchronous extension behavior.
+proc markdownDidFinishParsing*(view: MarkdownView, workerThreadId: int) {.signal.}
+
+proc startLatestMarkdownParse(view: MarkdownView)
+
+proc completeMarkdownParse(
+    view: MarkdownView, parseResultBox: SharedPtr[MarkdownParseResult]
+) {.slot.} =
+  var parseResult = move parseResultBox[]
+  if parseResult.generation != view.xActiveMarkdownGeneration:
+    return
+
+  view.xActiveMarkdownGeneration = 0
+  view.xMarkdownParseWorkerThreadId = parseResult.workerThreadId
+  if parseResult.generation == view.xMarkdownGeneration:
+    view.xMarkdownParseError = parseResult.errorMessage
+    if parseResult.errorMessage.len == 0:
+      view.xMarkdownRoot = move parseResult.root
+      view.applyMarkdownDocument(
+        view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
+      )
+    emit view.markdownDidFinishParsing(parseResult.workerThreadId)
+  if parseResult.generation != view.xMarkdownGeneration:
+    view.startLatestMarkdownParse()
+
+proc ensureMarkdownParseWorker(view: MarkdownView) =
+  if not view.xMarkdownParseWorker.isNil:
+    return
+  view.xMarkdownParseWorker = newMarkdownParseWorker()
+  connectThreaded(
+    view.xMarkdownParseWorker,
+    markdownParseFinished,
+    view,
+    MarkdownView.completeMarkdownParse(),
+  )
+
+proc startLatestMarkdownParse(view: MarkdownView) =
+  if view.xActiveMarkdownGeneration != 0:
+    return
+
+  var dialect: MarkdownParseDialect
+  if view.xMarkdownConfig.builtInMarkdownDialect(dialect):
+    view.ensureMarkdownParseWorker()
+    view.xActiveMarkdownGeneration = view.xMarkdownGeneration
+    emit view.xMarkdownParseWorker.requestMarkdownParse(
+      view.xActiveMarkdownGeneration, view.xMarkdown, dialect,
+      view.xMarkdownConfig.escape, view.xMarkdownConfig.keepHtml,
+    )
+  else:
+    # Arbitrary parser subclasses are thread-affine reference objects. Preserve
+    # their existing behavior rather than sharing or attempting to clone them.
+    view.xMarkdownRoot = view.xMarkdown.parseMarkdownRoot(view.xMarkdownConfig)
+    view.xMarkdownParseWorkerThreadId = -1
+    view.xMarkdownParseError.setLen(0)
+    view.applyMarkdownDocument(
+      view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
+    )
+    emit view.markdownDidFinishParsing(-1)
+
+proc scheduleMarkdownParse(view: MarkdownView) =
+  inc view.xMarkdownGeneration
+  view.xMarkdownParseError.setLen(0)
+  view.startLatestMarkdownParse()
+
 proc renderCurrentMarkdownDocument(view: MarkdownView) =
   view.applyMarkdownDocument(
     view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
   )
+
+func isMarkdownParsing*(view: MarkdownView): bool =
+  ## Return whether this view has an active or coalesced Markdown parse.
+  not view.isNil and view.xActiveMarkdownGeneration != 0
+
+func markdownParseWorkerThreadId*(view: MarkdownView): int =
+  ## Return the thread ID of the last applied parse, or `-1` before completion.
+  if view.isNil: -1 else: view.xMarkdownParseWorkerThreadId
+
+func markdownParseError*(view: MarkdownView): string =
+  ## Return the last asynchronous parser error, if any.
+  if not view.isNil:
+    result = view.xMarkdownParseError
+
+proc pollMarkdownParsing*(view: MarkdownView): int {.discardable.} =
+  ## Deliver completed worker parses on the view's owning thread.
+  if not view.isNil:
+    getCurrentSigilThread().pollAll()
+
+proc waitForMarkdownParsing*(
+    view: MarkdownView, timeoutMilliseconds: Natural = 5_000
+): bool {.discardable.} =
+  ## Poll until the latest scheduled parse is applied or the timeout expires.
+  let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
+  while view.isMarkdownParsing() and getMonoTime() < deadline:
+    discard view.pollMarkdownParsing()
+    if view.isMarkdownParsing():
+      sleep(1)
+  discard view.pollMarkdownParsing()
+  not view.isMarkdownParsing()
 
 proc editable*(view: MarkdownView): bool =
   ## Markdown views are deliberately read-only.
@@ -831,16 +935,12 @@ proc markdown*(view: MarkdownView): string =
   view.xMarkdown
 
 proc `markdown=`*(view: MarkdownView, source: string) =
-  ## Parses and atomically replaces the displayed document.
+  ## Schedules a parse and atomically replaces the document when it completes.
   if view.xMarkdown == source:
     return
   view.xPendingUrlAssets.clear()
-  let
-    root = source.parseMarkdownRoot(view.xMarkdownConfig)
-    document = view.renderMarkdownDocument(root, view.xMarkdownStyle)
   view.xMarkdown = source
-  view.xMarkdownRoot = root
-  view.applyMarkdownDocument(document)
+  view.scheduleMarkdownParse()
 
 proc imageBasePath*(view: MarkdownView): string =
   ## Returns the directory used to resolve relative local image destinations.
@@ -909,17 +1009,13 @@ proc markdownConfig*(view: MarkdownView): MarkdownParserConfig =
   view.xMarkdownConfig
 
 proc `markdownConfig=`*(view: MarkdownView, config: MarkdownParserConfig) =
-  ## Applies `config` and reparses the current source; nil selects GFM.
+  ## Applies `config` and schedules the current source for reparsing.
   let resolved = config.resolvedConfig()
   if view.xMarkdownConfig == resolved:
     return
   view.xPendingUrlAssets.clear()
-  let
-    root = view.xMarkdown.parseMarkdownRoot(resolved)
-    document = view.renderMarkdownDocument(root, view.xMarkdownStyle)
   view.xMarkdownConfig = resolved
-  view.xMarkdownRoot = root
-  view.applyMarkdownDocument(document)
+  view.scheduleMarkdownParse()
 
 proc initMarkdownViewFields*(
     view: MarkdownView,
@@ -942,7 +1038,8 @@ proc initMarkdownViewFields*(
   )
   view.xMarkdownStyle = style
   view.xMarkdownConfig = config.resolvedConfig()
-  view.xMarkdownRoot = source.parseMarkdownRoot(view.xMarkdownConfig)
+  view.xMarkdownRoot = markdownParser.Document()
+  view.xMarkdownParseWorkerThreadId = -1
   view.xImageBasePath = imageBasePath
   view.xImageLoader = imageLoader
   view.xUrlAssetLoader = urlAssetLoader
@@ -957,6 +1054,7 @@ proc initMarkdownViewFields*(
   view.accessibilityLabel = "Markdown document"
   view.applyMarkdownStyle()
   view.applyMarkdownDocument(view.renderMarkdownDocument(view.xMarkdownRoot, style))
+  view.scheduleMarkdownParse()
 
 proc newMarkdownView*(
     source = "",
@@ -969,6 +1067,8 @@ proc newMarkdownView*(
 ): MarkdownView =
   ## Creates a scrollable, selectable, read-only Markdown document view.
   ##
+  ## Built-in CommonMark and GFM configurations parse asynchronously on a
+  ## shared Sigils pool worker. The owning application thread applies the AST.
   ## Remote HTTP(S) images load asynchronously through `urlAssetLoader`. The
   ## default shared loader uses the executable name for its platform cache.
   result = MarkdownView()

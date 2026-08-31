@@ -102,7 +102,8 @@ specific control should receive focus first.
 
 ## Native Markdown Viewer
 
-`MarkdownView` parses CommonMark or GitHub-flavored Markdown and renders it as
+`MarkdownView` parses CommonMark or GitHub-flavored Markdown on a Sigils pool
+worker, moves the completed AST back to its owning thread, and renders it as
 native, selectable NimKit attributed text. It supports headings, inline styles,
 links, code, quotes, lists, thematic breaks, GFM tables, and native local images
 without embedding an HTML engine:
@@ -132,7 +133,10 @@ relative and absolute local image destinations are loaded when `imageBasePath` i
 set. HTTP and HTTPS images load asynchronously through `UrlAssetLoader`, first
 appearing as linked alt text and then rerendering from the platform disk cache.
 Set `viewer.imageLoader` for data URLs or application-specific image schemes.
-See `examples/markdown_viewer_demo.nim` for a complete window.
+The application loop applies completed parses automatically. Tests and
+command-line tools can call `viewer.waitForMarkdownParsing()` when they need the
+rendered text immediately. See `examples/markdown_viewer_demo.nim` for a complete
+window.
 
 ## Cached URL Assets
 

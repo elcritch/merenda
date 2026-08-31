@@ -144,13 +144,15 @@ Setext two
   test "local Markdown images render as native image attachments":
     var style = initMarkdownStyle()
     style.maximumImageSize = initSize(60.0'f32, 40.0'f32)
+    let view = newMarkdownView(
+      "![Image preview](img1.png \"Preview title\")\n\n> ![Quoted](img1.png)",
+      frame = rect(0, 0, 320, 240),
+      style = style,
+      imageBasePath = TestImagePath.parentDir,
+    )
+    require view.waitForMarkdownParsing()
+    check view.markdownParseError() == ""
     let
-      view = newMarkdownView(
-        "![Image preview](img1.png \"Preview title\")\n\n> ![Quoted](img1.png)",
-        frame = rect(0, 0, 320, 240),
-        style = style,
-        imageBasePath = TestImagePath.parentDir,
-      )
       storage = view.textStorage()
       renders = buildRenders(view)
 
@@ -191,6 +193,8 @@ Setext two
       frame = rect(0, 0, 320, 180),
       imageLoader = loader,
     )
+    require view.waitForMarkdownParsing()
+    check view.markdownParseError() == ""
 
     discard buildRenders(view)
     var style = view.markdownStyle
@@ -200,6 +204,24 @@ Setext two
 
     check requestedUrls == @["asset:logo"]
     check view.textView().attachmentPresentations().len == 1
+
+  test "parses on a Sigils pool worker and applies the AST on the owning thread":
+    let ownerThreadId = getThreadId()
+    var imageLoaderThreadId = -1
+    let loader: MarkdownImageLoader = proc(url: string): ImageResource =
+      discard url
+      imageLoaderThreadId = getThreadId()
+    let view = newMarkdownView(
+      "# Worker parse\n\n" & "paragraph\n\n".repeat(500) & "![Missing](asset:missing)",
+      imageLoader = loader,
+    )
+
+    check view.isMarkdownParsing()
+    require view.waitForMarkdownParsing()
+    check view.markdownParseError() == ""
+    check view.markdownParseWorkerThreadId() != ownerThreadId
+    check imageLoaderThreadId == ownerThreadId
+    check view.textStorage().stringValue().startsWith("Worker parse\n\nparagraph")
 
   test "unordered, ordered, nested, and multi-block lists retain their structure":
     let storage = markdownTextStorage(
@@ -278,9 +300,8 @@ echo "fenced"
       cornerRadius: 9.0'f32,
       padding: insets(7.0'f32, 10.0'f32),
     )
-    let
-      source =
-        """
+    let source =
+      """
 Before `inline`.
 
 ```nim
@@ -289,7 +310,10 @@ echo "fenced"
 
     echo "indented"
 """
-      view = newMarkdownView(source, frame = rect(0, 0, 520, 320), style = style)
+    let view = newMarkdownView(source, frame = rect(0, 0, 520, 320), style = style)
+    require view.waitForMarkdownParsing()
+    check view.markdownParseError() == ""
+    let
       storage = view.textStorage()
       renders = buildRenders(view)
 
@@ -384,6 +408,8 @@ Press <kbd>Enter</kbd>.
 
   test "markdown view is reusable, read-only, selectable, and styleable":
     let view = newMarkdownView("# First", frame = rect(0, 0, 480, 320))
+    require view.waitForMarkdownParsing()
+    check view.markdownParseError() == ""
 
     check view.markdown == "# First"
     check not view.editable
@@ -394,6 +420,7 @@ Press <kbd>Enter</kbd>.
     check view.scrollView().borderType == svbNoBorder
 
     view.markdown = "## Second"
+    require view.waitForMarkdownParsing()
     check view.markdown == "## Second"
     check view.textStorage().stringValue() == "Second"
 
@@ -407,6 +434,7 @@ Press <kbd>Enter</kbd>.
 
     view.markdownConfig = initMarkdownParserConfig(mddCommonMark)
     view.markdown = "~~literal~~"
+    require view.waitForMarkdownParsing()
     check view.textStorage().stringValue() == "~~literal~~"
 
   test "repository README renders and responds to clicks":
@@ -415,6 +443,11 @@ Press <kbd>Enter</kbd>.
       constructionStarted = getMonoTime()
       view = newMarkdownView(source, frame = rect(0, 0, 760, 540))
       constructionElapsed = getMonoTime() - constructionStarted
+      parsingStarted = getMonoTime()
+    require view.waitForMarkdownParsing()
+    check view.markdownParseError() == ""
+    let
+      parsingElapsed = getMonoTime() - parsingStarted
       renderingStarted = getMonoTime()
     discard buildRenders(view)
     let
@@ -441,8 +474,9 @@ Press <kbd>Enter</kbd>.
     discard buildRenders(view)
     let styleElapsed = getMonoTime() - styleStarted
 
-    echo &"README MarkdownView timing: construct " &
-      &"{constructionElapsed.inMilliseconds} ms, render " &
+    echo &"README MarkdownView timing: dispatch " &
+      &"{constructionElapsed.inMilliseconds} ms, parse and apply " &
+      &"{parsingElapsed.inMilliseconds} ms, render " &
       &"{renderingElapsed.inMilliseconds} ms, click " &
       &"{clickElapsed.inMilliseconds} ms, restyle and render " &
       &"{styleElapsed.inMilliseconds} ms"
