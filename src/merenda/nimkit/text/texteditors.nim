@@ -294,8 +294,11 @@ func closeEnough(left, right: Size): bool =
   abs(left.width - right.width) <= TextEditorLayoutEpsilon and
     abs(left.height - right.height) <= TextEditorLayoutEpsilon
 
-proc applyTextDocumentSize(editor: TextEditor, documentSize: Size) =
-  editor.xTextView.frame = rect(0.0, 0.0, documentSize.width, documentSize.height)
+proc applyTextEditorLayout(editor: TextEditor, frame: Rect, documentSize: Size) =
+  editor.xScrollView.setFrameFromLayout(frame)
+  editor.xTextView.setFrameFromLayout(
+    rect(0.0, 0.0, documentSize.width, documentSize.height)
+  )
   if not editor.xTextView.layoutManager().usesBackgroundLayout():
     editor.xTextView.textContainer =
       initTextContainer(documentSize, editor.xTextInsets, editor.xWraps)
@@ -305,19 +308,19 @@ proc updateTextEditorLayout(editor: TextEditor) =
   if editor.xScrollView.isNil or editor.xTextView.isNil:
     return
 
-  let bounds = editor.bounds()
-  editor.xScrollView.frame = bounds
-  let initialViewport = editor.xScrollView.viewportSize()
-  var documentSize =
-    editor.textDocumentSize(initialViewport.width, initialViewport.height)
+  let frame = editor.bounds()
+  var
+    viewport = editor.xScrollView.viewportSizeForDocumentSize(
+      frame.size, editor.xTextView.frame().size
+    )
+    documentSize = editor.textDocumentSize(viewport.width, viewport.height)
   for _ in 0 ..< 4:
-    editor.applyTextDocumentSize(documentSize)
-    let viewport = editor.xScrollView.viewportSize()
+    viewport = editor.xScrollView.viewportSizeForDocumentSize(frame.size, documentSize)
     let nextSize = editor.textDocumentSize(viewport.width, viewport.height)
     if nextSize.closeEnough(documentSize):
-      return
+      break
     documentSize = nextSize
-  editor.applyTextDocumentSize(documentSize)
+  editor.applyTextEditorLayout(frame, documentSize)
 
 protocol DefaultTextEditorLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(editor: TextEditor): IntrinsicSize =
@@ -640,6 +643,7 @@ proc initTextEditorFields*(
       textView
   if not textView.isNil:
     editor.xTextView.stringValue = value
+  editor.xTextView.propagatesIntrinsicContentSizeChanges = false
   editor.xTextView.richText = richText
   editor.xTextView.textContainer =
     initTextContainer(initSize(0.0, 0.0), editor.xTextInsets, wraps)

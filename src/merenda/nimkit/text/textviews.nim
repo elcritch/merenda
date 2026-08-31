@@ -145,6 +145,7 @@ type
     xTextStorage: TextStorage
     xTextContainer: TextContainer
     xLayoutManager: TextLayoutManager
+    xPropagatesIntrinsicContentSizeChanges: bool
     xDelegate: DynamicAgent
     xTextChecker: DynamicAgent
     xFlags: TextViewFlags
@@ -460,6 +461,20 @@ proc selectionRangeForGranularity(
 proc textStorage*(textView: TextView): TextStorage =
   textView.xTextStorage
 
+proc propagatesIntrinsicContentSizeChanges*(textView: TextView): bool =
+  textView.xPropagatesIntrinsicContentSizeChanges
+
+proc `propagatesIntrinsicContentSizeChanges=`*(textView: TextView, value: bool) =
+  if textView.xPropagatesIntrinsicContentSizeChanges == value:
+    return
+  textView.xPropagatesIntrinsicContentSizeChanges = value
+  if value:
+    textView.invalidateIntrinsicContentSize()
+
+proc invalidateTextViewIntrinsicContentSize(textView: TextView) =
+  if textView.xPropagatesIntrinsicContentSizeChanges:
+    textView.invalidateIntrinsicContentSize()
+
 proc `textStorage=`*(textView: TextView, storage: TextStorage) =
   let
     previousValue = textView.textViewStringValue()
@@ -479,7 +494,7 @@ proc `textStorage=`*(textView: TextView, storage: TextStorage) =
   textView.xSelectedRanges =
     @[initTextRange(selectionStart, selectionStop - selectionStart)]
   textView.clearMarkedText()
-  textView.invalidateIntrinsicContentSize()
+  textView.invalidateTextViewIntrinsicContentSize()
   textView.needsDisplay = true
   if textView.textViewStringValue() != previousValue:
     textView.postAccessibilityNotification(anValueChanged)
@@ -1112,7 +1127,7 @@ proc finishTextMutation(
     textView: TextView, changedRange: TextRange, valueChanged: bool
 ) =
   textView.syncLayout()
-  textView.invalidateIntrinsicContentSize()
+  textView.invalidateTextViewIntrinsicContentSize()
   textView.needsDisplay = true
   if not textView.xDelegate.isNil:
     discard textView.xDelegate.trySendLocal(
@@ -1390,7 +1405,7 @@ proc applyTextCheckingResults*(
   textView.xTextStorage.endEditing()
   textView.xCheckingResults = @results
   textView.syncLayout()
-  textView.invalidateIntrinsicContentSize()
+  textView.invalidateTextViewIntrinsicContentSize()
   textView.needsDisplay = true
 
 proc checkSpellingAndGrammar*(textView: TextView): seq[TextCheckingResult] =
@@ -1964,7 +1979,7 @@ proc setParagraphStyle*(
   textView.xDefaultParagraphStyle = style
   textView.xTypingAttributes.paragraphStyle = style
   textView.syncLayout()
-  textView.invalidateIntrinsicContentSize()
+  textView.invalidateTextViewIntrinsicContentSize()
   textView.needsDisplay = true
 
 proc setTabStops*(
@@ -2993,7 +3008,7 @@ protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
       textView: TextView, containers: seq[TextContainer]
   ) {.slot.} =
     discard containers
-    textView.invalidateIntrinsicContentSize()
+    textView.invalidateTextViewIntrinsicContentSize()
     textView.needsDisplay = true
 
   proc containerDidInvalidate(
@@ -3001,7 +3016,7 @@ protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
   ) {.slot.} =
     discard index
     discard container
-    textView.invalidateIntrinsicContentSize()
+    textView.invalidateTextViewIntrinsicContentSize()
     textView.needsDisplay = true
 
   proc layoutGeometryDidChange(
@@ -3013,7 +3028,7 @@ protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
     discard oldUsedRect
     discard oldContentSize
     discard snapshot
-    textView.invalidateIntrinsicContentSize()
+    textView.invalidateTextViewIntrinsicContentSize()
     textView.needsDisplay = true
 
 func accessibilityColorValue(color: Color): string =
@@ -3174,6 +3189,7 @@ proc initTextViewFields*(
     initTextContainer(widthTracksTextView = true, heightTracksTextView = true)
   textView.xLayoutManager =
     newTextLayoutManager(textView.xTextStorage, textView.xTextContainer)
+  textView.xPropagatesIntrinsicContentSizeChanges = true
   textView.xFlags = {tvEditable, tvSelectable, tvRichText, tvAllowsUndo}
   textView.xAlignment = taLeft
   textView.xInsertionPoint = textView.xTextStorage.len

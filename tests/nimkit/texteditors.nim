@@ -93,6 +93,13 @@ suite "nimkit text editors":
     check abs(scroll.maximumContentOffset().x) <= 0.001'f32
     check abs(scroll.documentSize().width - scroll.viewportSize().width) <= 0.001'f32
 
+    for width in [320.0'f32, 280.0'f32, 360.0'f32]:
+      editor.frame = rect(0, 0, width, 120)
+      editor.layoutSubtreeIfNeeded()
+      check not editor.needsUpdateConstraints
+      check not editor.needsLayout
+      check editor.layoutFeedbackCycles() == 0
+
   test "text editor demo rich text reaches FigDraw glyph fills":
     let
       demo = newTextEditorDemo(newApplication())

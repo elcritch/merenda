@@ -374,6 +374,7 @@ protocol DefaultFieldEditorDrawing of ViewDrawingProtocol:
 
 proc initFieldEditorFields*(editor: FieldEditor) =
   initTextViewFields(editor, installDefaultProtocols = false)
+  editor.propagatesIntrinsicContentSizeChanges = false
   editor.background = color(0.0, 0.0, 0.0, 0.0)
   editor.editable = true
   editor.selectable = true

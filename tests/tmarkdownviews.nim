@@ -615,6 +615,9 @@ Press <kbd>Enter</kbd>.
     for width in [680.0'f32, 600.0'f32, 520.0'f32, 440.0'f32]:
       first.frame = rect(0, 0, width, 540)
       discard buildRenders(first)
+      check not first.needsUpdateConstraints
+      check not first.needsLayout
+      check first.layoutFeedbackCycles() == 0
     let
       singleElapsed = getMonoTime() - singleStarted
       singleSettleStarted = getMonoTime()
@@ -628,6 +631,12 @@ Press <kbd>Enter</kbd>.
       second.frame = rect(0, 0, width, 540)
       discard buildRenders(first)
       discard buildRenders(second)
+      check not first.needsUpdateConstraints
+      check not first.needsLayout
+      check first.layoutFeedbackCycles() == 0
+      check not second.needsUpdateConstraints
+      check not second.needsLayout
+      check second.layoutFeedbackCycles() == 0
     let
       pairElapsed = getMonoTime() - pairStarted
       pairSettleStarted = getMonoTime()
