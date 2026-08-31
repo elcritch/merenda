@@ -1,9 +1,10 @@
 ## Native Markdown rendering for NimKit text views.
 ##
 ## CommonMark and GFM parsing runs on a Sigils pool worker, then the complete AST
-## moves back to the view's owning thread for attributed-text construction. Raw
-## HTML stays inert, local images resolve explicitly, remote images load through
-## a Chronos worker, and unavailable images use linked alt text.
+## moves back to the view's owning thread for attributed-text construction. HTML
+## image tags share the native Markdown image path; other raw HTML stays inert.
+## Local images resolve explicitly, remote images load through a Chronos worker,
+## and unavailable images use linked alt text.
 
 import std/[lists, monotimes, os, strutils, tables, times, unicode]
 
@@ -20,6 +21,7 @@ import ../foundation/urlassets
 import ../foundation/urls
 import ../themes
 import ../view/views
+import ./markdownhtmlimages
 import ./markdownparsing
 import ./texteditors
 import ./textstorage
@@ -199,6 +201,20 @@ func scaledDown(size, maximumSize: Size): Size =
     scale = min(scale, maximumSize.height / size.height)
   initSize(size.width * scale, size.height * scale)
 
+func resolvedImageSize(imageSize, requestedSize: Size): Size =
+  if requestedSize.width > 0.0'f32 and requestedSize.height > 0.0'f32:
+    requestedSize
+  elif requestedSize.width > 0.0'f32:
+    initSize(
+      requestedSize.width, imageSize.height * requestedSize.width / imageSize.width
+    )
+  elif requestedSize.height > 0.0'f32:
+    initSize(
+      imageSize.width * requestedSize.height / imageSize.height, requestedSize.height
+    )
+  else:
+    imageSize
+
 proc resolvedImageContentType(builder: MarkdownBuilder, url: string): string =
   if not builder.imageContentTypeLoader.isNil:
     result = builder.imageContentTypeLoader(url).normalizedMediaType()
@@ -300,6 +316,7 @@ proc renderImage(
     builder: var MarkdownBuilder,
     token: markdownParser.Image,
     attributes: TextAttributes,
+    requestedSize = Size(),
 ) =
   var image: ImageResource
   if not builder.imageLoader.isNil:
@@ -323,7 +340,9 @@ proc renderImage(
     builder.add("\n", attributes)
 
   let
-    displaySize = image.size().scaledDown(builder.style.maximumImageSize)
+    displaySize = image.size().resolvedImageSize(requestedSize).scaledDown(
+        builder.style.maximumImageSize
+      )
     start = builder.runeLength
     fileName = initUrl(token.url).lastPathComponent()
   var imageAttributes = attributes
@@ -346,6 +365,17 @@ proc renderImage(
     range: initTextRange(start, 1), image: image, displaySize: displaySize
   )
   builder.add("\n", attributes)
+
+proc renderHtmlImage(
+    builder: var MarkdownBuilder, html: string, attributes: TextAttributes
+): bool =
+  var htmlImage: MarkdownHtmlImage
+  if not html.parseMarkdownHtmlImage(htmlImage):
+    return
+  let image =
+    markdownParser.Image(url: htmlImage.url, alt: htmlImage.alt, title: htmlImage.title)
+  builder.renderImage(image, attributes, initSize(htmlImage.width, htmlImage.height))
+  true
 
 proc renderInline(
     builder: var MarkdownBuilder,
@@ -395,7 +425,8 @@ proc renderInline(
   elif token of markdownParser.Image:
     builder.renderImage(markdownParser.Image(token), attributes)
   elif token of markdownParser.InlineHtml:
-    builder.add(token.doc, builder.style.mutedCodeAttributes(attributes))
+    if not builder.renderHtmlImage(token.doc, attributes):
+      builder.add(token.doc, builder.style.mutedCodeAttributes(attributes))
   elif not token.children.head.isNil:
     builder.renderInlineChildren(token, attributes)
   else:
@@ -613,9 +644,9 @@ proc renderBlock(
   elif token of markdownParser.HtmlTable:
     builder.renderTable(token, attributes)
   elif token of markdownParser.HtmlBlock:
-    builder.add(
-      token.doc.strip(chars = {'\n'}), builder.style.mutedCodeAttributes(attributes)
-    )
+    let html = token.doc.strip(chars = {'\n'})
+    if not builder.renderHtmlImage(html, attributes):
+      builder.add(html, builder.style.mutedCodeAttributes(attributes))
   elif $token == "":
     # Reference-definition nodes intentionally have no rendered representation.
     discard

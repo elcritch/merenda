@@ -204,8 +204,11 @@ suite "URL asset loader":
     let loader = newUrlAssetLoader("org.example.merenda-tests", cache)
     defer:
       loader.close()
-    let view =
-      newMarkdownView("![Remote preview](" & assetUrl & ")", urlAssetLoader = loader)
+    let view = newMarkdownView(
+      "![Remote preview](" & assetUrl & ")\n\n" &
+        "<img alt=\"HTML remote preview\" src=\"" & assetUrl & "\" />",
+      urlAssetLoader = loader,
+    )
     require view.waitForMarkdownParsing()
     check view.markdownParseError() == ""
 
@@ -219,9 +222,10 @@ suite "URL asset loader":
     discard loader.poll()
 
     check loader.pendingCount() == 0
-    check view.textView().attachmentPresentations().len == 1
+    check view.textView().attachmentPresentations().len == 2
     check view.textView().attachmentPresentations()[0].attachment.contentType ==
       "image/png"
+    check server.state.requestCount.load(moAcquire) == 1
     check fileExists(loader.cachedAssetPath(assetUrl))
 
   test "validates URLs and rejects loads after closing":

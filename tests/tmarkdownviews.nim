@@ -182,6 +182,53 @@ Setext two
         check node.screenBox.h == 40.0'f32
     check imageCount == 2
 
+  test "HTML img tags render through the Markdown image loader":
+    const
+      ImageUrl =
+        "https://github.com/user-attachments/assets/" &
+        "f0a429f0-c5b5-49a4-819b-32d2cc454ac7"
+      ImageAlt = "merenda-github-banner-robot-chocolate"
+      InlineImageUrl = "https://example.test/banner?a=1&b=2"
+    let image = newImageResourceFromFile(TestImagePath)
+    var requestedUrls: seq[string]
+    let loader: MarkdownImageLoader = proc(url: string): ImageResource =
+      requestedUrls.add url
+      image
+    var style = initMarkdownStyle()
+    style.maximumImageSize = initSize(300.0'f32, 300.0'f32)
+    let view = newMarkdownView(
+      "<img width=\"2172\" height=\"724\" alt=\"" & ImageAlt & "\" src=\"" & ImageUrl &
+        "\" />\n\nInline <IMG alt='Inline &amp; banner' " &
+        "src='https://example.test/banner?a=1&amp;b=2'> image.",
+      style = style,
+      imageLoader = loader,
+    )
+
+    require view.waitForMarkdownParsing()
+    check view.markdownParseError() == ""
+    check requestedUrls == @[ImageUrl, InlineImageUrl]
+
+    var attachments: seq[TextAttachment]
+    for run in view.textStorage().runs:
+      if run.attributes.hasAttachment:
+        attachments.add run.attributes.attachment
+    require attachments.len == 2
+    let attachment = attachments[0]
+    check attachment.fileUrl == ImageUrl
+    check abs(attachment.size.width - 300.0'f32) < 0.01'f32
+    check abs(attachment.size.height - 100.0'f32) < 0.01'f32
+    check attachment.metadata ==
+      @[
+        TextMetadataItem(key: "alt", value: ImageAlt),
+        TextMetadataItem(key: "title", value: ""),
+      ]
+    check attachments[1].fileUrl == InlineImageUrl
+    check attachments[1].metadata ==
+      @[
+        TextMetadataItem(key: "alt", value: "Inline & banner"),
+        TextMetadataItem(key: "title", value: ""),
+      ]
+
   test "custom image loaders are cached across Markdown style changes":
     let image = newImageResourceFromFile(TestImagePath)
     var requestedUrls: seq[string]

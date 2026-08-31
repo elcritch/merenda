@@ -128,15 +128,16 @@ viewer.markdownStyle = style
 ```
 
 GFM is the default. Pass `initMarkdownParserConfig(mddCommonMark)` when strict
-CommonMark parsing is preferable. Raw HTML is shown as inert monospace text;
-relative and absolute local image destinations are loaded when `imageBasePath` is
-set. HTTP and HTTPS images load asynchronously through `UrlAssetLoader`, first
-appearing as linked alt text and then rerendering from the platform disk cache.
-Set `viewer.imageLoader` for data URLs or application-specific image schemes.
-The application loop applies completed parses automatically. Tests and
-command-line tools can call `viewer.waitForMarkdownParsing()` when they need the
-rendered text immediately. See `examples/markdown_viewer_demo.nim` for a complete
-window.
+CommonMark parsing is preferable. Raw HTML is shown as inert monospace text,
+except for `<img>` tags, which use the same native image path as Markdown image
+syntax and honor `src`, `alt`, `title`, `width`, and `height`. Relative and
+absolute local image destinations are loaded when `imageBasePath` is set. HTTP
+and HTTPS images load asynchronously through `UrlAssetLoader`, first appearing
+as linked alt text and then rerendering from the platform disk cache. Set
+`viewer.imageLoader` for data URLs or application-specific image schemes. The
+application loop applies completed parses automatically. Tests and command-line
+tools can call `viewer.waitForMarkdownParsing()` when they need the rendered text
+immediately. See `examples/markdown_viewer_demo.nim` for a complete window.
 
 ## Cached URL Assets
 
