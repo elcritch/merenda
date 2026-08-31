@@ -18,6 +18,8 @@
 import std/strutils
 import std/os
 
+switch("define", "features.markdown.regex") # temporary hack until we get atlas 0.15.1
+
 when defined(useNativeDynlib):
   switch("path", "../figdraw/bin")
   when defined(macosx):
