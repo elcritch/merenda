@@ -133,6 +133,34 @@ set, while unavailable images remain linked alt text. Set `viewer.imageLoader` t
 resolve remote URLs, data URLs, or application-specific image schemes. See
 `examples/markdown_viewer_demo.nim` for a complete window.
 
+## Cached URL Assets
+
+`UrlAssetLoader` fetches HTTP and HTTPS assets away from the UI thread and keeps
+them in the operating system's application cache directory. Concurrent requests
+for the same URL share one download, and later requests return the cached file
+immediately:
+
+```nim
+import merenda/nimkit
+
+let assets = newUrlAssetLoader("com.example.photo-browser")
+defer:
+  assets.close()
+
+let thumbnail = assets.load("https://example.com/images/thumbnail.png")
+discard assets.waitFor(thumbnail)
+if thumbnail.succeeded():
+  echo thumbnail.result().path
+```
+
+The default cache root follows the host platform: `LocalAppData` on Windows,
+`~/Library/Caches` on macOS, and `XDG_CACHE_HOME` (falling back to `~/.cache`) on
+Linux and BSD. URLs are stored under an application-specific `url-assets`
+directory using deterministic SHA-256 names. GUI code can connect to
+`urlAssetDidFinish` instead of blocking with `waitFor`; NimKit's application loop
+delivers the signal on the loader's owning thread. The default per-asset limit is
+64 MiB and can be changed with `maximumAssetBytes`.
+
 The application run loop keeps NimKit views, responders, signal-slot dispatch,
 animations, native windows, and platform services on the main thread. When the
 selected FigDraw backend supports it, rendering runs on a dedicated thread and

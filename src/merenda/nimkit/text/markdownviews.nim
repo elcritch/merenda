@@ -70,6 +70,7 @@ type
     xMarkdown: string
     xMarkdownStyle: MarkdownStyle
     xMarkdownConfig: MarkdownParserConfig
+    xMarkdownRoot: markdownParser.Document
     xImageBasePath: string
     xImageLoader: MarkdownImageLoader
     xImageCache: Table[string, ImageResource]
@@ -91,6 +92,7 @@ type
 
   MarkdownBuilder = object
     text: string
+    runeLength: int
     runs: seq[TextAttributeRun]
     codeBlockRanges: seq[TextRange]
     images: seq[MarkdownImagePresentation]
@@ -251,8 +253,9 @@ proc add(builder: var MarkdownBuilder, value: string, attributes: TextAttributes
   let length = value.runeLen
   if length == 0:
     return
-  let start = builder.text.runeLen
+  let start = builder.runeLength
   builder.text.add value
+  builder.runeLength += length
   if builder.runs.len > 0 and builder.runs[^1].attributes == attributes and
       builder.runs[^1].range.maxIndex == start:
     builder.runs[^1].range.length =
@@ -270,13 +273,21 @@ proc addBlockBreak(builder: var MarkdownBuilder, attributes: TextAttributes) =
   else:
     builder.add("\n\n", attributes)
 
-proc add(builder: var MarkdownBuilder, rendered: MarkdownBuilder) =
-  let offset = builder.text.runeLen
+proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
+  let offset = builder.runeLength
+  builder.text.add rendered.text
+  builder.runeLength += rendered.runeLength
   for run in rendered.runs:
-    builder.add(
-      rendered.text.runeSubStr(int(run.range.location), int(run.range.length)),
-      run.attributes,
+    let shifted = TextAttributeRun(
+      range: initTextRange(offset + int(run.range.location), int(run.range.length)),
+      attributes: run.attributes,
     )
+    if builder.runs.len > 0 and builder.runs[^1].attributes == shifted.attributes and
+        builder.runs[^1].range.maxIndex == int(shifted.range.location):
+      builder.runs[^1].range.length =
+        (int(builder.runs[^1].range.length) + int(shifted.range.length)).Natural
+    else:
+      builder.runs.add shifted
   for range in rendered.codeBlockRanges:
     builder.codeBlockRanges.add initTextRange(
       offset + int(range.location), int(range.length)
@@ -328,7 +339,7 @@ proc renderImage(
 
   let
     displaySize = image.size().scaledDown(builder.style.maximumImageSize)
-    start = builder.text.runeLen
+    start = builder.runeLength
     sourcePath = token.url.imageUrlPath()
     parts = splitFile(sourcePath)
   var imageAttributes = attributes
@@ -552,9 +563,9 @@ proc renderBlockquote(
     if atLineStart:
       builder.add(builder.style.quotePrefix, prefixAttributes)
       atLineStart = false
-    sourceToDestination[index] = builder.text.runeLen
+    sourceToDestination[index] = builder.runeLength
     builder.add($rune, quoted.runs[runIndex].attributes)
-    sourceToDestination[index + 1] = builder.text.runeLen
+    sourceToDestination[index + 1] = builder.runeLength
     if rune == Rune('\n'):
       atLineStart = true
 
@@ -589,7 +600,7 @@ proc renderBlock(
     builder.renderInlineChildren(token, headingAttributes)
   elif token of markdownParser.CodeBlock:
     let code = markdownParser.CodeBlock(token)
-    let blockStart = builder.text.runeLen
+    let blockStart = builder.runeLength
     var codeAttributes = builder.style.codeAttributes(attributes)
     codeAttributes.backgroundColor = builder.style.codeBlockStyle.backgroundColor
     if code.info.len > 0:
@@ -597,7 +608,7 @@ proc renderBlock(
       infoAttributes.backgroundColor = builder.style.codeBlockStyle.backgroundColor
       builder.add("[" & code.info & "]\n", infoAttributes)
     builder.add(code.doc.strip(chars = {'\n'}), codeAttributes)
-    let blockLength = builder.text.runeLen - blockStart
+    let blockLength = builder.runeLength - blockStart
     if blockLength > 0:
       builder.codeBlockRanges.add initTextRange(blockStart, blockLength)
   elif token of markdownParser.ThematicBreak:
@@ -629,19 +640,29 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
     images: builder.images,
   )
 
+proc parseMarkdownRoot(
+    source: string, config: MarkdownParserConfig
+): markdownParser.Document =
+  result = markdownParser.Document()
+  discard markdownParser.markdown(source, config.resolvedConfig(), result)
+
+proc markdownDocument(
+    root: markdownParser.Token,
+    style = initMarkdownStyle(),
+    imageLoader: MarkdownImageLoader = nil,
+): MarkdownDocument =
+  var builder = MarkdownBuilder(style: style, imageLoader: imageLoader)
+  let attributes = style.bodyAttributes()
+  builder.renderContainer(root, attributes)
+  builder.toMarkdownDocument()
+
 proc markdownDocument(
     source: string,
     style = initMarkdownStyle(),
     config: MarkdownParserConfig = nil,
     imageLoader: MarkdownImageLoader = nil,
 ): MarkdownDocument =
-  let root = markdownParser.Document()
-  discard markdownParser.markdown(source, config.resolvedConfig(), root)
-
-  var builder = MarkdownBuilder(style: style, imageLoader: imageLoader)
-  let attributes = style.bodyAttributes()
-  builder.renderContainer(root, attributes)
-  builder.toMarkdownDocument()
+  source.parseMarkdownRoot(config).markdownDocument(style, imageLoader)
 
 proc markdownTextStorage*(
     source: string, style = initMarkdownStyle(), config: MarkdownParserConfig = nil
@@ -742,14 +763,11 @@ proc loadMarkdownImage(view: MarkdownView, url: string): ImageResource =
     view.xImageCache[key] = result
 
 proc renderMarkdownDocument(
-    view: MarkdownView,
-    source: string,
-    style: MarkdownStyle,
-    config: MarkdownParserConfig,
+    view: MarkdownView, root: markdownParser.Token, style: MarkdownStyle
 ): MarkdownDocument =
   let loader: MarkdownImageLoader = proc(url: string): ImageResource =
     view.loadMarkdownImage(url)
-  source.markdownDocument(style, config, loader)
+  root.markdownDocument(style, loader)
 
 proc editable*(view: MarkdownView): bool =
   ## Markdown views are deliberately read-only.
@@ -768,9 +786,11 @@ proc `markdown=`*(view: MarkdownView, source: string) =
   ## Parses and atomically replaces the displayed document.
   if view.xMarkdown == source:
     return
-  let document =
-    view.renderMarkdownDocument(source, view.xMarkdownStyle, view.xMarkdownConfig)
+  let
+    root = source.parseMarkdownRoot(view.xMarkdownConfig)
+    document = view.renderMarkdownDocument(root, view.xMarkdownStyle)
   view.xMarkdown = source
+  view.xMarkdownRoot = root
   view.applyMarkdownDocument(document)
 
 proc imageBasePath*(view: MarkdownView): string =
@@ -784,9 +804,7 @@ proc `imageBasePath=`*(view: MarkdownView, basePath: string) =
   view.xImageBasePath = basePath
   view.xImageCache.clear()
   view.applyMarkdownDocument(
-    view.renderMarkdownDocument(
-      view.xMarkdown, view.xMarkdownStyle, view.xMarkdownConfig
-    )
+    view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
   )
 
 proc imageLoader*(view: MarkdownView): MarkdownImageLoader =
@@ -798,9 +816,7 @@ proc `imageLoader=`*(view: MarkdownView, loader: MarkdownImageLoader) =
   view.xImageLoader = loader
   view.xImageCache.clear()
   view.applyMarkdownDocument(
-    view.renderMarkdownDocument(
-      view.xMarkdown, view.xMarkdownStyle, view.xMarkdownConfig
-    )
+    view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
   )
 
 proc markdownStyle*(view: MarkdownView): MarkdownStyle =
@@ -811,8 +827,7 @@ proc `markdownStyle=`*(view: MarkdownView, style: MarkdownStyle) =
   ## Applies `style` and rerenders the current source.
   if view.xMarkdownStyle == style:
     return
-  let document =
-    view.renderMarkdownDocument(view.xMarkdown, style, view.xMarkdownConfig)
+  let document = view.renderMarkdownDocument(view.xMarkdownRoot, style)
   view.xMarkdownStyle = style
   view.applyMarkdownStyle()
   view.applyMarkdownDocument(document)
@@ -826,9 +841,11 @@ proc `markdownConfig=`*(view: MarkdownView, config: MarkdownParserConfig) =
   let resolved = config.resolvedConfig()
   if view.xMarkdownConfig == resolved:
     return
-  let document =
-    view.renderMarkdownDocument(view.xMarkdown, view.xMarkdownStyle, resolved)
+  let
+    root = view.xMarkdown.parseMarkdownRoot(resolved)
+    document = view.renderMarkdownDocument(root, view.xMarkdownStyle)
   view.xMarkdownConfig = resolved
+  view.xMarkdownRoot = root
   view.applyMarkdownDocument(document)
 
 proc initMarkdownViewFields*(
@@ -849,6 +866,7 @@ proc initMarkdownViewFields*(
   )
   view.xMarkdownStyle = style
   view.xMarkdownConfig = config.resolvedConfig()
+  view.xMarkdownRoot = source.parseMarkdownRoot(view.xMarkdownConfig)
   view.xImageBasePath = imageBasePath
   view.xImageLoader = imageLoader
   view.xImageCache = initTable[string, ImageResource]()
@@ -859,9 +877,7 @@ proc initMarkdownViewFields*(
   view.scrollView().borderType = svbNoBorder
   view.accessibilityLabel = "Markdown document"
   view.applyMarkdownStyle()
-  view.applyMarkdownDocument(
-    view.renderMarkdownDocument(source, style, view.xMarkdownConfig)
-  )
+  view.applyMarkdownDocument(view.renderMarkdownDocument(view.xMarkdownRoot, style))
 
 proc newMarkdownView*(
     source = "",

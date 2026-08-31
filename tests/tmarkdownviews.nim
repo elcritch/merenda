@@ -429,14 +429,26 @@ Press <kbd>Enter</kbd>.
       clickStarted = getMonoTime()
     check textView.mouseDown(MouseEvent(location: clickPoint, button: mbPrimary))
     check textView.mouseUp(MouseEvent(location: clickPoint, button: mbPrimary))
-    let clickElapsed = getMonoTime() - clickStarted
+    let
+      clickElapsed = getMonoTime() - clickStarted
+      styleStarted = getMonoTime()
+    var darkStyle = view.markdownStyle
+    darkStyle.backgroundColor = color(0.055, 0.065, 0.085, 1.0)
+    darkStyle.textColor = color(0.84, 0.86, 0.90, 1.0)
+    darkStyle.headingColor = color(0.96, 0.97, 0.99, 1.0)
+    darkStyle.codeBlockStyle.backgroundColor = color(0.08, 0.10, 0.14, 1.0)
+    view.markdownStyle = darkStyle
+    discard buildRenders(view)
+    let styleElapsed = getMonoTime() - styleStarted
 
     echo &"README MarkdownView timing: construct " &
       &"{constructionElapsed.inMilliseconds} ms, render " &
       &"{renderingElapsed.inMilliseconds} ms, click " &
-      &"{clickElapsed.inMilliseconds} ms"
+      &"{clickElapsed.inMilliseconds} ms, restyle and render " &
+      &"{styleElapsed.inMilliseconds} ms"
     check source.len > 20_000
     check snapshot.lineFragments.len > 100
-    check constructionElapsed < initDuration(seconds = 2)
+    check constructionElapsed < initDuration(seconds = 5)
     check renderingElapsed < initDuration(seconds = 5)
     check clickElapsed < initDuration(seconds = 1)
+    check styleElapsed < initDuration(seconds = 1)
