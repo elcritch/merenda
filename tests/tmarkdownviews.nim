@@ -247,6 +247,7 @@ Setext two
     var style = view.markdownStyle
     style.bodyFontSize += 1.0'f32
     view.markdownStyle = style
+    require view.waitForMarkdownRendering()
     discard buildRenders(view)
 
     check requestedUrls == @["asset:logo"]
@@ -269,6 +270,32 @@ Setext two
     check view.markdownParseWorkerThreadId() != ownerThreadId
     check imageLoaderThreadId == ownerThreadId
     check view.textStorage().stringValue().startsWith("Worker parse\n\nparagraph")
+
+  test "applies large Markdown ASTs in resumable owner-thread chunks":
+    var source: string
+    for index in 0 ..< 256:
+      source.add "Paragraph " & $index & " with **incremental rendering**.\n\n"
+    let view = newMarkdownView(source)
+    let deadline = getMonoTime() + initDuration(seconds = 5)
+    while not view.isMarkdownRendering() and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      if not view.isMarkdownRendering():
+        sleep(1)
+
+    require view.isMarkdownRendering()
+    check view.markdownRenderChunkCount() >= 1
+    check view.textStorage().stringValue() == ""
+    discard view.pollMarkdownParsing()
+    check view.isMarkdownRendering()
+    check view.textStorage().stringValue() == ""
+
+    require view.waitForMarkdownParsing()
+    check view.markdownRenderChunkCount() > 1
+    check view.markdownMaximumRenderChunkDuration().inNanoseconds > 0
+    check view.textStorage().stringValue().startsWith("Paragraph 0 with incremental")
+    check view.textStorage().stringValue().endsWith(
+      "Paragraph 255 with incremental rendering."
+    )
 
   test "unordered, ordered, nested, and multi-block lists retain their structure":
     let storage = markdownTextStorage(
@@ -475,6 +502,7 @@ Press <kbd>Enter</kbd>.
     style.documentInsets = insets(12.0)
     style.headingColor = color(0.8, 0.2, 0.3, 1.0)
     view.markdownStyle = style
+    require view.waitForMarkdownRendering()
 
     check view.textInsets == insets(12.0)
     check view.textStorage().attributesAt(0).foregroundColor == style.headingColor
@@ -495,6 +523,8 @@ Press <kbd>Enter</kbd>.
     check view.markdownParseError() == ""
     let
       parsingElapsed = getMonoTime() - parsingStarted
+      parsingChunkCount = view.markdownRenderChunkCount()
+      maximumParsingChunk = view.markdownMaximumRenderChunkDuration()
       renderingStarted = getMonoTime()
     discard buildRenders(view)
     let
@@ -518,14 +548,20 @@ Press <kbd>Enter</kbd>.
     darkStyle.headingColor = color(0.96, 0.97, 0.99, 1.0)
     darkStyle.codeBlockStyle.backgroundColor = color(0.08, 0.10, 0.14, 1.0)
     view.markdownStyle = darkStyle
+    require view.waitForMarkdownRendering()
     discard buildRenders(view)
-    let styleElapsed = getMonoTime() - styleStarted
+    let
+      styleElapsed = getMonoTime() - styleStarted
+      styleChunkCount = view.markdownRenderChunkCount()
+      maximumStyleChunk = view.markdownMaximumRenderChunkDuration()
 
     echo &"README MarkdownView timing: dispatch " &
       &"{constructionElapsed.inMilliseconds} ms, parse and apply " &
-      &"{parsingElapsed.inMilliseconds} ms, render " &
+      &"{parsingElapsed.inMilliseconds} ms in {parsingChunkCount} chunks " &
+      &"(max {maximumParsingChunk.inMilliseconds} ms), render " &
       &"{renderingElapsed.inMilliseconds} ms, click " &
       &"{clickElapsed.inMilliseconds} ms, restyle and render " &
-      &"{styleElapsed.inMilliseconds} ms"
+      &"{styleElapsed.inMilliseconds} ms in {styleChunkCount} chunks " &
+      &"(max {maximumStyleChunk.inMilliseconds} ms)"
     check source.len > 20_000
     check snapshot.lineFragments.len > 100

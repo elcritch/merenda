@@ -5,6 +5,7 @@ import sigils/threadBase
 import sigils/threadDefault
 
 import ../foundation/events
+import ../foundation/mainthreadwork
 import ../foundation/notifications
 import ../controls/menus
 import ../controls/nativemenus as nativeMenus
@@ -1108,6 +1109,7 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
 proc runApplicationFrame(app: Application): int =
   if hasLocalSigilThread():
     discard getCurrentSigilThread().pollAll(NonBlocking)
+  discard drainMainThreadWork()
   let now = getMonoTime()
   discard app.drainAnimationsAt(now)
   var
@@ -1151,6 +1153,8 @@ proc pollApplicationEvents(app: Application) =
       break
 
 proc waitForApplicationEvents(app: Application) =
+  if hasPendingMainThreadWork():
+    return
   if hasLocalSigilThread():
     nimkitBackend.installNativeEventLoopWaker(getCurrentSigilThread())
   let

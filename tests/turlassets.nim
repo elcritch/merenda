@@ -222,6 +222,7 @@ suite "URL asset loader":
     discard loader.poll()
 
     check loader.pendingCount() == 0
+    require view.waitForMarkdownRendering()
     check view.textView().attachmentPresentations().len == 2
     check view.textView().attachmentPresentations()[0].attachment.contentType ==
       "image/png"

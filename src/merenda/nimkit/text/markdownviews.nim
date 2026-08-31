@@ -1,10 +1,11 @@
 ## Native Markdown rendering for NimKit text views.
 ##
 ## CommonMark and GFM parsing runs on a Sigils pool worker, then the complete AST
-## moves back to the view's owning thread for attributed-text construction. HTML
-## image tags share the native Markdown image path; other raw HTML stays inert.
-## Local images resolve explicitly, remote images load through a Chronos worker,
-## and unavailable images use linked alt text.
+## moves back to the view's owning thread for incremental attributed-text
+## construction between application frames. HTML image tags share the native
+## Markdown image path; other raw HTML stays inert. Local images resolve
+## explicitly, remote images load through a Chronos worker, and unavailable
+## images use linked alt text.
 
 import std/[lists, monotimes, os, strutils, tables, times, unicode]
 
@@ -15,6 +16,7 @@ import threading/smartptrs
 
 import ../accessibility/accessibility
 import ../drawing
+import ../foundation/mainthreadwork
 import ../foundation/selectors
 import ../foundation/types
 import ../foundation/urlassets
@@ -76,23 +78,6 @@ type
     imagePrefix*: string ## Marker prepended to linked image alt text.
     thematicBreak*: string ## Native text used for horizontal rules.
 
-  MarkdownView* = ref object of TextEditor ## Scrollable, selectable Markdown document.
-    xMarkdown: string
-    xMarkdownStyle: MarkdownStyle
-    xMarkdownConfig: MarkdownParserConfig
-    xMarkdownRoot: markdownParser.Document
-    xMarkdownParseWorker: AgentProxy[MarkdownParseWorker]
-    xMarkdownGeneration: uint64
-    xActiveMarkdownGeneration: uint64
-    xMarkdownParseWorkerThreadId: int
-    xMarkdownParseError: string
-    xImageBasePath: string
-    xImageLoader: MarkdownImageLoader
-    xUrlAssetLoader: UrlAssetLoader
-    xImageCache: Table[string, ImageResource]
-    xImageMediaTypes: Table[string, string]
-    xPendingUrlAssets: Table[string, UrlAssetHandle]
-
   MarkdownImagePresentation = object
     range: TextRange
     image: ImageResource
@@ -117,6 +102,45 @@ type
     style: MarkdownStyle
     imageLoader: MarkdownImageLoader
     imageContentTypeLoader: MarkdownImageContentTypeLoader
+
+  MarkdownRenderJob = object
+    generation: uint64
+    rootGeneration: uint64
+    root: markdownParser.Token ## Retains the complete AST while its cursor advances.
+    nextBlock: DoublyLinkedNode[markdownParser.Token]
+    builder: MarkdownBuilder
+    attributes: TextAttributes
+    wroteBlock: bool
+    chunkCount: int
+    maximumChunkDuration: Duration
+
+  MarkdownView* = ref object of TextEditor ## Scrollable, selectable Markdown document.
+    xMarkdown: string
+    xMarkdownStyle: MarkdownStyle
+    xMarkdownConfig: MarkdownParserConfig
+    xMarkdownRoot: markdownParser.Document
+    xMarkdownRootGeneration: uint64
+    xMarkdownParseWorker: AgentProxy[MarkdownParseWorker]
+    xMarkdownGeneration: uint64
+    xActiveMarkdownGeneration: uint64
+    xPendingMarkdownCompletionGeneration: uint64
+    xMarkdownParseWorkerThreadId: int
+    xMarkdownParseError: string
+    xMarkdownRenderGeneration: uint64
+    xActiveMarkdownRenderGeneration: uint64
+    xMarkdownRenderJob: MarkdownRenderJob
+    xMarkdownRenderChunkCount: int
+    xMarkdownMaximumRenderChunkDuration: Duration
+    xImageBasePath: string
+    xImageLoader: MarkdownImageLoader
+    xUrlAssetLoader: UrlAssetLoader
+    xImageCache: Table[string, ImageResource]
+    xImageMediaTypes: Table[string, string]
+    xPendingUrlAssets: Table[string, UrlAssetHandle]
+
+const
+  MarkdownRenderBlocksPerChunk = 16
+  MarkdownRenderChunkBudgetNanoseconds = 4_000_000'i64
 
 var defaultMarkdownUrlAssetLoader {.threadvar.}: UrlAssetLoader
 
@@ -535,6 +559,24 @@ proc renderTable(
         builder.add("\n" & "────".repeat(columns), ruleAttributes)
       wroteRow = true
 
+proc renderContainerChild(
+    builder: var MarkdownBuilder,
+    child: markdownParser.Token,
+    attributes: TextAttributes,
+    wroteBlock: var bool,
+) =
+  var rendered = MarkdownBuilder(
+    style: builder.style,
+    imageLoader: builder.imageLoader,
+    imageContentTypeLoader: builder.imageContentTypeLoader,
+  )
+  rendered.renderBlock(child, attributes)
+  if rendered.text.len > 0:
+    if wroteBlock:
+      builder.addBlockBreak(attributes)
+    builder.add(rendered)
+    wroteBlock = true
+
 proc renderContainer(
     builder: var MarkdownBuilder,
     token: markdownParser.Token,
@@ -542,17 +584,7 @@ proc renderContainer(
 ) =
   var wroteBlock = false
   for child in token.children:
-    var rendered = MarkdownBuilder(
-      style: builder.style,
-      imageLoader: builder.imageLoader,
-      imageContentTypeLoader: builder.imageContentTypeLoader,
-    )
-    rendered.renderBlock(child, attributes)
-    if rendered.text.len > 0:
-      if wroteBlock:
-        builder.addBlockBreak(attributes)
-      builder.add(rendered)
-      wroteBlock = true
+    builder.renderContainerChild(child, attributes, wroteBlock)
 
 proc renderBlockquote(
     builder: var MarkdownBuilder,
@@ -841,22 +873,91 @@ proc loadMarkdownImage(view: MarkdownView, url: string): ImageResource =
   if not result.isNil:
     view.xImageCache[key] = result
 
-proc renderMarkdownDocument(
-    view: MarkdownView, root: markdownParser.Token, style: MarkdownStyle
-): MarkdownDocument =
-  let loader: MarkdownImageLoader = proc(url: string): ImageResource =
-    view.loadMarkdownImage(url)
-  let contentTypeLoader: MarkdownImageContentTypeLoader = proc(url: string): string =
-    let key = view.markdownImageCacheKey(url)
-    view.xImageMediaTypes.getOrDefault(key, initUrl(url).mediaType())
-  root.markdownDocument(style, loader, contentTypeLoader)
-
 ## Emitted on the view's owning thread after the latest parse is applied.
 ## `workerThreadId` is `-1` only for a custom parser configuration that must
 ## retain its synchronous extension behavior.
 proc markdownDidFinishParsing*(view: MarkdownView, workerThreadId: int) {.signal.}
 
 proc startLatestMarkdownParse(view: MarkdownView)
+
+proc configureMarkdownImageLoaders(view: MarkdownView, builder: var MarkdownBuilder) =
+  builder.imageLoader = proc(url: string): ImageResource =
+    view.loadMarkdownImage(url)
+  builder.imageContentTypeLoader = proc(url: string): string =
+    let key = view.markdownImageCacheKey(url)
+    view.xImageMediaTypes.getOrDefault(key, initUrl(url).mediaType())
+
+proc clearMarkdownImageLoaders(builder: var MarkdownBuilder) =
+  builder.imageLoader = nil
+  builder.imageContentTypeLoader = nil
+
+proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
+  if view.isNil or generation != view.xActiveMarkdownRenderGeneration or
+      generation != view.xMarkdownRenderJob.generation:
+    return
+
+  var job = move view.xMarkdownRenderJob
+  let chunkStarted = getMonoTime()
+  view.configureMarkdownImageLoaders(job.builder)
+  var processedBlocks = 0
+  while not job.nextBlock.isNil and processedBlocks < MarkdownRenderBlocksPerChunk:
+    let child = job.nextBlock.value
+    job.nextBlock = job.nextBlock.next
+    job.builder.renderContainerChild(child, job.attributes, job.wroteBlock)
+    inc processedBlocks
+    if (getMonoTime() - chunkStarted).inNanoseconds >=
+        MarkdownRenderChunkBudgetNanoseconds:
+      break
+  job.builder.clearMarkdownImageLoaders()
+
+  if generation != view.xMarkdownRenderGeneration:
+    return
+
+  inc job.chunkCount
+  if not job.nextBlock.isNil:
+    let chunkDuration = getMonoTime() - chunkStarted
+    if chunkDuration > job.maximumChunkDuration:
+      job.maximumChunkDuration = chunkDuration
+    view.xMarkdownRenderJob = move job
+    return true
+
+  let
+    rootGeneration = job.rootGeneration
+    document = toMarkdownDocument(move job.builder)
+  view.xActiveMarkdownRenderGeneration = 0
+  view.applyMarkdownDocument(document)
+  let chunkDuration = getMonoTime() - chunkStarted
+  if chunkDuration > job.maximumChunkDuration:
+    job.maximumChunkDuration = chunkDuration
+  view.xMarkdownRenderChunkCount = job.chunkCount
+  view.xMarkdownMaximumRenderChunkDuration = job.maximumChunkDuration
+
+  if generation == view.xMarkdownRenderGeneration and
+      rootGeneration == view.xPendingMarkdownCompletionGeneration:
+    view.xPendingMarkdownCompletionGeneration = 0
+    emit view.markdownDidFinishParsing(view.xMarkdownParseWorkerThreadId)
+
+proc scheduleMarkdownRendering(view: MarkdownView) =
+  inc view.xMarkdownRenderGeneration
+  let generation = view.xMarkdownRenderGeneration
+  view.xActiveMarkdownRenderGeneration = generation
+  view.xMarkdownRenderJob = MarkdownRenderJob(
+    generation: generation,
+    rootGeneration: view.xMarkdownRootGeneration,
+    root: view.xMarkdownRoot,
+    nextBlock: view.xMarkdownRoot.children.head,
+    builder: MarkdownBuilder(style: view.xMarkdownStyle),
+    attributes: view.xMarkdownStyle.bodyAttributes(),
+  )
+  scheduleMainThreadWork(
+    proc(): bool =
+      view.continueMarkdownRendering(generation)
+  )
+
+proc cancelMarkdownRendering(view: MarkdownView) =
+  inc view.xMarkdownRenderGeneration
+  view.xActiveMarkdownRenderGeneration = 0
+  view.xMarkdownRenderJob = default(MarkdownRenderJob)
 
 proc completeMarkdownParse(
     view: MarkdownView, parseResultBox: SharedPtr[MarkdownParseResult]
@@ -866,15 +967,17 @@ proc completeMarkdownParse(
     return
 
   view.xActiveMarkdownGeneration = 0
-  view.xMarkdownParseWorkerThreadId = parseResult.workerThreadId
   if parseResult.generation == view.xMarkdownGeneration:
+    view.xMarkdownParseWorkerThreadId = parseResult.workerThreadId
     view.xMarkdownParseError = parseResult.errorMessage
     if parseResult.errorMessage.len == 0:
       view.xMarkdownRoot = move parseResult.root
-      view.applyMarkdownDocument(
-        view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
-      )
-    emit view.markdownDidFinishParsing(parseResult.workerThreadId)
+      view.xMarkdownRootGeneration = parseResult.generation
+      view.xPendingMarkdownCompletionGeneration = parseResult.generation
+      view.scheduleMarkdownRendering()
+    else:
+      view.xPendingMarkdownCompletionGeneration = 0
+      emit view.markdownDidFinishParsing(parseResult.workerThreadId)
   if parseResult.generation != view.xMarkdownGeneration:
     view.startLatestMarkdownParse()
 
@@ -905,26 +1008,43 @@ proc startLatestMarkdownParse(view: MarkdownView) =
     # Arbitrary parser subclasses are thread-affine reference objects. Preserve
     # their existing behavior rather than sharing or attempting to clone them.
     view.xMarkdownRoot = view.xMarkdown.parseMarkdownRoot(view.xMarkdownConfig)
+    view.xMarkdownRootGeneration = view.xMarkdownGeneration
     view.xMarkdownParseWorkerThreadId = -1
     view.xMarkdownParseError.setLen(0)
-    view.applyMarkdownDocument(
-      view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
-    )
-    emit view.markdownDidFinishParsing(-1)
+    view.xPendingMarkdownCompletionGeneration = view.xMarkdownGeneration
+    view.scheduleMarkdownRendering()
 
 proc scheduleMarkdownParse(view: MarkdownView) =
+  view.cancelMarkdownRendering()
+  view.xPendingMarkdownCompletionGeneration = 0
   inc view.xMarkdownGeneration
   view.xMarkdownParseError.setLen(0)
   view.startLatestMarkdownParse()
 
 proc renderCurrentMarkdownDocument(view: MarkdownView) =
-  view.applyMarkdownDocument(
-    view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
-  )
+  view.scheduleMarkdownRendering()
+
+func isMarkdownRendering*(view: MarkdownView): bool =
+  ## Return whether the owning thread has an incremental render in progress.
+  not view.isNil and view.xActiveMarkdownRenderGeneration != 0
 
 func isMarkdownParsing*(view: MarkdownView): bool =
-  ## Return whether this view has an active or coalesced Markdown parse.
-  not view.isNil and view.xActiveMarkdownGeneration != 0
+  ## Return whether parsing or incremental AST application is in progress.
+  not view.isNil and (view.xActiveMarkdownGeneration != 0 or view.isMarkdownRendering())
+
+func markdownRenderChunkCount*(view: MarkdownView): int =
+  ## Return the number of chunks used by the current or last completed render.
+  if view.isNil:
+    return
+  if view.isMarkdownRendering():
+    view.xMarkdownRenderJob.chunkCount
+  else:
+    view.xMarkdownRenderChunkCount
+
+func markdownMaximumRenderChunkDuration*(view: MarkdownView): Duration =
+  ## Return the longest owner-thread chunk in the last completed render.
+  if not view.isNil:
+    result = view.xMarkdownMaximumRenderChunkDuration
 
 func markdownParseWorkerThreadId*(view: MarkdownView): int =
   ## Return the thread ID of the last applied parse, or `-1` before completion.
@@ -936,21 +1056,32 @@ func markdownParseError*(view: MarkdownView): string =
     result = view.xMarkdownParseError
 
 proc pollMarkdownParsing*(view: MarkdownView): int {.discardable.} =
-  ## Deliver completed worker parses on the view's owning thread.
+  ## Deliver worker results and run at most one rendering chunk per ready job.
   if not view.isNil:
-    getCurrentSigilThread().pollAll()
+    result = getCurrentSigilThread().pollAll()
+    result += drainMainThreadWork()
+
+proc waitForMarkdownRendering*(
+    view: MarkdownView, timeoutMilliseconds: Natural = 5_000
+): bool {.discardable.} =
+  ## Poll until this view's active incremental render finishes.
+  let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
+  while getMonoTime() < deadline:
+    discard view.pollMarkdownParsing()
+    if not view.isMarkdownRendering():
+      return true
+    sleep(1)
 
 proc waitForMarkdownParsing*(
     view: MarkdownView, timeoutMilliseconds: Natural = 5_000
 ): bool {.discardable.} =
-  ## Poll until the latest scheduled parse is applied or the timeout expires.
+  ## Poll until the latest parse and incremental application finish.
   let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
-  while view.isMarkdownParsing() and getMonoTime() < deadline:
+  while getMonoTime() < deadline:
     discard view.pollMarkdownParsing()
-    if view.isMarkdownParsing():
-      sleep(1)
-  discard view.pollMarkdownParsing()
-  not view.isMarkdownParsing()
+    if not view.isMarkdownParsing():
+      return true
+    sleep(1)
 
 proc editable*(view: MarkdownView): bool =
   ## Markdown views are deliberately read-only.
@@ -985,9 +1116,7 @@ proc `imageBasePath=`*(view: MarkdownView, basePath: string) =
   view.xImageCache.clear()
   view.xImageMediaTypes.clear()
   view.xPendingUrlAssets.clear()
-  view.applyMarkdownDocument(
-    view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
-  )
+  view.renderCurrentMarkdownDocument()
 
 proc imageLoader*(view: MarkdownView): MarkdownImageLoader =
   ## Returns the optional application-provided image resolver.
@@ -999,9 +1128,7 @@ proc `imageLoader=`*(view: MarkdownView, loader: MarkdownImageLoader) =
   view.xImageCache.clear()
   view.xImageMediaTypes.clear()
   view.xPendingUrlAssets.clear()
-  view.applyMarkdownDocument(
-    view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
-  )
+  view.renderCurrentMarkdownDocument()
 
 proc urlAssetLoader*(view: MarkdownView): UrlAssetLoader =
   ## Returns the optional application-owned loader used for HTTP(S) images.
@@ -1027,13 +1154,12 @@ proc markdownStyle*(view: MarkdownView): MarkdownStyle =
   view.xMarkdownStyle
 
 proc `markdownStyle=`*(view: MarkdownView, style: MarkdownStyle) =
-  ## Applies `style` and rerenders the current source.
+  ## Applies `style` and incrementally rerenders the current source.
   if view.xMarkdownStyle == style:
     return
-  let document = view.renderMarkdownDocument(view.xMarkdownRoot, style)
   view.xMarkdownStyle = style
   view.applyMarkdownStyle()
-  view.applyMarkdownDocument(document)
+  view.renderCurrentMarkdownDocument()
 
 proc markdownConfig*(view: MarkdownView): MarkdownParserConfig =
   ## Returns the active parser configuration.
@@ -1070,6 +1196,7 @@ proc initMarkdownViewFields*(
   view.xMarkdownStyle = style
   view.xMarkdownConfig = config.resolvedConfig()
   view.xMarkdownRoot = markdownParser.Document()
+  view.xMarkdownRootGeneration = 0
   view.xMarkdownParseWorkerThreadId = -1
   view.xImageBasePath = imageBasePath
   view.xImageLoader = imageLoader
@@ -1084,7 +1211,7 @@ proc initMarkdownViewFields*(
   view.scrollView().borderType = svbNoBorder
   view.accessibilityLabel = "Markdown document"
   view.applyMarkdownStyle()
-  view.applyMarkdownDocument(view.renderMarkdownDocument(view.xMarkdownRoot, style))
+  view.applyMarkdownDocument(view.xMarkdownRoot.markdownDocument(style))
   view.scheduleMarkdownParse()
 
 proc newMarkdownView*(
@@ -1099,7 +1226,8 @@ proc newMarkdownView*(
   ## Creates a scrollable, selectable, read-only Markdown document view.
   ##
   ## Built-in CommonMark and GFM configurations parse asynchronously on a
-  ## shared Sigils pool worker. The owning application thread applies the AST.
+  ## shared Sigils pool worker. The owning application thread applies the AST
+  ## incrementally between application frames, then swaps in the final document.
   ## Remote HTTP(S) images load asynchronously through `urlAssetLoader`. The
   ## default shared loader uses the executable name for its platform cache.
   result = MarkdownView()
