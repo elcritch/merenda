@@ -851,6 +851,28 @@ suite "nimkit text layout":
     check snapshot.lineFragments.len > 1
     check foundWrapped
 
+  test "wrapped content size follows the visual layout extent":
+    let
+      storage =
+        newTextStorage("one two three four five six seven eight nine ten eleven twelve")
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(180.0, 1000.0), wraps = true)
+      )
+      wide = manager.layoutSnapshot()
+
+    manager.textContainer = initTextContainer(initSize(72.0, 1000.0), wraps = true)
+    let narrow = manager.layoutSnapshot()
+
+    check narrow.lineFragments.len > wide.lineFragments.len
+    check narrow.contentSize.height > wide.contentSize.height
+    checkClose(wide.contentSize.width, wide.containerRect.size.width)
+    checkClose(narrow.contentSize.width, narrow.containerRect.size.width)
+    checkClose(
+      narrow.contentSize.height,
+      narrow.lineFragments[^1].fragmentRect.maxY -
+        narrow.lineFragments[0].fragmentRect.minY,
+    )
+
   test "wrapped selections return merged visual line bands":
     let storage = newTextStorage("one two three four five six")
     let manager = newTextLayoutManager(

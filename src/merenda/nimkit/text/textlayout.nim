@@ -1502,20 +1502,19 @@ proc snapshotFromCurrentLayout(manager: TextLayoutManager): TextLayoutSnapshot =
   if not hasUsedRect:
     result.usedRect = rect(result.containerRect.origin, initSize(0.0, 0.0))
 
-  let layoutContentSize = manager.xLayout.layoutContentSize()
   var
-    contentWidth = layoutContentSize.x
-    contentHeight = layoutContentSize.y
-  if hasUsedRect:
-    contentWidth = max(contentWidth, result.usedRect.size.width)
-    contentHeight =
-      max(contentHeight, result.usedRect.maxY - result.containerRect.origin.y)
-  if result.lineFragments.len > 0:
-    contentHeight = max(
-      contentHeight,
-      result.lineFragments[^1].fragmentRect.maxY - result.containerRect.origin.y,
-    )
-  result.contentSize = initSize(max(contentWidth, 0.0'f32), max(contentHeight, 0.0'f32))
+    contentRect = result.usedRect
+    hasContentRect = hasUsedRect
+  for fragment in result.lineFragments:
+    if fragment.fragmentRect.isEmpty:
+      continue
+    if hasContentRect:
+      contentRect = contentRect.union(fragment.fragmentRect)
+    else:
+      contentRect = fragment.fragmentRect
+      hasContentRect = true
+  if hasContentRect:
+    result.contentSize = contentRect.size
 
 proc defaultLayoutSnapshot(manager: TextLayoutManager): TextLayoutSnapshot =
   manager.updateLayout()

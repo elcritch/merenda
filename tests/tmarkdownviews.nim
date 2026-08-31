@@ -609,3 +609,42 @@ Press <kbd>Enter</kbd>.
       &"{pairSettleElapsed.inMilliseconds} ms)"
     check first.textView().layoutManager().hasValidLayout()
     check second.textView().layoutManager().hasValidLayout()
+
+  test "markdown scroll extent follows settled resize reflow":
+    let
+      source = (
+        "A paragraph with enough words to wrap differently as the viewport changes.\n\n"
+      ).repeat(80)
+      view = newMarkdownView(source, frame = rect(0, 0, 520, 240))
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    discard buildRenders(view)
+    let wideDocument = view.scrollView().documentSize()
+
+    view.frame = rect(0, 0, 260, 240)
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    discard buildRenders(view)
+    let
+      scrollView = view.scrollView()
+      narrowDocument = scrollView.documentSize()
+      narrowViewport = scrollView.viewportSize()
+      narrowSnapshot = view.textView().layoutManager().layoutSnapshot()
+
+    check narrowDocument.height > wideDocument.height
+    check abs(
+      narrowDocument.height - narrowSnapshot.contentSize.height -
+        view.textInsets().vertical
+    ) <= 0.001'f32
+    check abs(
+      scrollView.maximumContentOffset().y -
+        (narrowDocument.height - narrowViewport.height)
+    ) <= 0.001'f32
+
+    view.frame = rect(0, 0, 520, 240)
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    discard buildRenders(view)
+
+    check abs(view.scrollView().documentSize().height - wideDocument.height) <= 0.001'f32
