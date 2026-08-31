@@ -1,23 +1,31 @@
 # NimKit Layout Design
 
-This document describes the intended direction for NimKit layout, constraints,
-generated layout inputs, and invalidation. The goal is to keep the public API
-Cocoa-like where that shape is useful, while using Nim and Kiwiberry in a more
-direct way internally.
+This document describes NimKit's implemented layout model: constraints,
+generated layout inputs, invalidation, transaction scheduling, and
+container-owned layout. The public API remains Cocoa-like where that shape is
+useful, while the implementation combines Kiwiberry solving with a Qt-like
+coalesced update cycle and direct Nim container layout.
 
 ## Goals
 
 - Keep normal widget state as plain Nim fields behind setter procs.
 - Use a signal bus for layout invalidation events, not reactive `Sigil[T]`
   storage for scalar view properties.
+- Run at most one constraints update, one solve, and one top-down layout
+  traversal per update transaction.
+- Coalesce invalidation discovered during a transaction into a later update
+  instead of repeatedly invoking arbitrary widget callbacks in one frame.
+- Keep container output separate from authored layout input so applying final
+  geometry, visibility, or scroll position cannot feed back into the same
+  calculation.
 - Keep authored constraints Cocoa-like and easy to inspect.
 - Allow richer internal equations than the public `LayoutConstraint` shape can
   express.
 - Treat generated autoresizing-mask inputs as compatibility/debug data, not as
   normal user-authored constraints.
-- Keep simple containers such as stack, form, grid, popup lists, and future
-  list views container-native instead of forcing every layout through the
-  solver.
+- Keep containers such as stack, form, grid, popup lists, tables, collections,
+  and cascading views container-native instead of forcing every layout through
+  the solver.
 - Defer a full public solver DSL until examples and controls justify it.
 
 ## Current Baseline
@@ -42,11 +50,22 @@ NimKit already has the core pieces needed to build this direction:
 - Generated solver inputs are cached per source on the current solve root.
   Dirty sources can rebuild only their source bucket, while structural and
   user-constraint changes still rebuild all generated buckets.
+- Layout runs as a generation-tagged transaction with explicit constraints,
+  solve, and layout phases. A callback runs at most once in each applicable
+  phase of a transaction.
+- Invalidation during a transaction records whether a follow-up cycle is
+  required. The native rendering path preserves that request after the current
+  render request has been cleared.
+- Scroll views and text editors compute their final geometry before applying
+  it. Their internally managed frames, bounds origins, and visibility use
+  layout-owned application paths that do not become new authored inputs.
+- Repeated cross-frame feedback records an actionable diagnostic rather than
+  retrying layout callbacks up to a fixed pass limit.
 
-The remaining work is to grow on this core without making every widget
-hand-wire cache behavior. New controls should emit layout reasons through the
-bus, add focused generated-input sources only when needed, and keep public
-debugging APIs summary-oriented.
+New controls should build on this core without hand-wiring cache behavior:
+emit semantic layout reasons through the bus, compute container output before
+applying it, use layout-owned state application for owned children, and add
+focused generated-input sources only when solver participation is needed.
 
 ## Public API Shape
 
@@ -74,7 +93,7 @@ them too early would make the public surface harder to stabilize.
 The solver should consume a common internal input representation. Public
 constraints are one kind of input; generated equations are another.
 
-Proposed core shape:
+Core shape:
 
 ```nim
 type
@@ -174,6 +193,7 @@ type
     lirIntrinsic
     lirAppearanceMetrics
     lirContainerMetrics
+    lirExplicit # direct needsLayout requests
 ```
 
 Current signal and slot shape:
@@ -203,6 +223,7 @@ proc markLayoutInputDirty(view: View, reason: LayoutInvalidationReason) {.slot.}
   else:
     discard
 
+  view.noteLayoutInvalidation(reason, affectsConstraints = true)
   view.markAggregateLayoutInputDirty(source, structureDirty)
 ```
 
@@ -228,32 +249,101 @@ This keeps Sigils useful as a bus without making frame, bounds, size, title,
 enabled state, or other widget fields reactive values. That is less surprising
 for NimKit users and keeps the current plain-field view model intact.
 
-## Lifecycle
+## Layout Transactions
 
-The intended layout pass is:
+Each update cycle runs one layout transaction for a dirty root:
 
-1. A setter mutates normal view/widget state.
-2. The setter emits `layoutInputChanged(view, reason)` when the change affects
-   constraints, intrinsic size, generated inputs, or layout.
-3. The layout invalidation slot marks local caches dirty and propagates
-   aggregate dirty sources and lifecycle flags to the relevant layout root or
-   ancestors.
-4. `updateConstraintsForSubtreeIfNeeded` runs optional view hooks.
-5. The layout input cache is refreshed for dirty roots:
-   authored constraints, autoresizing inputs, intrinsic inputs, and future
-   container-generated inputs.
-6. Kiwiberry solves the subtree using the common `LayoutInput` representation.
-7. Solved frames are applied through an internal path that does not treat solver
-   output as a new authored frame edit.
-8. Autoresizing reference state is refreshed after solved geometry is applied.
-9. Container layout hooks run for views that still perform native layout.
-10. Display invalidation remains separate and only redraws dirty views.
+1. A setter mutates normal view/widget state and emits a semantic
+   `layoutInputChanged(view, reason)` event when the change affects layout.
+2. The invalidation slot marks local and aggregate cache sources dirty and sets
+   the constraints/layout lifecycle flags.
+3. The transaction receives a new generation and enters
+   `ltpUpdatingConstraints`. Constraint callbacks are visited bottom-up once.
+4. The transaction enters `ltpSolvingConstraints`. Dirty generated inputs are
+   refreshed and Kiwiberry solves the subtree once. Internal iteration inside
+   Kiwiberry is still valid because it operates on mathematical state, not
+   arbitrary widget callbacks.
+5. Solved frames are applied through the solver-owned path, and autoresizing
+   reference state is refreshed.
+6. The transaction enters `ltpLayingOut`. Native container callbacks are
+   visited top-down once.
+7. The transaction returns to `ltpIdle`. Display preparation and drawing remain
+   separate from layout.
 
-The important feedback-loop rule is that authored frame changes and solver frame
-application are not the same event. A user calling `view.frame = ...` can update
-autoresizing reference geometry and invalidate constraints. Applying solved
-geometry should update visible geometry without immediately regenerating inputs
-from half-applied solver output.
+Every view records the generation in which its constraints and layout callbacks
+were visited. This gives invalidation deterministic scheduling rules:
+
+- A not-yet-visited descendant can join the current traversal naturally.
+- Invalidation of self, an ancestor, or an already-visited view is retained as
+  one coalesced request for the next transaction.
+- Constraint-affecting invalidation during the solve or layout phase always
+  requests a follow-up transaction.
+- Nested calls to `layoutSubtreeIfNeeded` do not start another transaction while
+  an ancestor transaction is active.
+- Repeated invalidations in one transaction set flags and update diagnostic
+  metadata; they do not schedule duplicate native renders.
+
+This is intentionally similar to Qt's deferred layout/update-event model: work
+is coalesced at the update-cycle boundary. Sigils signals carry typed change
+notifications, but scalar geometry does not become a reactive graph and
+same-thread layout callbacks do not recursively restart layout.
+
+## Render Scheduling
+
+The native backend already coalesces render requests. `requestRender` returns
+when a request is pending, so multiple invalidations before a frame produce one
+native redraw request.
+
+Rendering can itself discover deferred layout—for example, an asynchronous text
+layout completion can arrive while the current frame is being prepared. The
+window therefore records whether display/layout work remains after
+`buildRenders`, submits and clears the current native request, and only then
+requests the follow-up render. This preserves work discovered during rendering
+without recursively rendering or losing it when the current request is cleared.
+
+## Container-Owned State
+
+The important feedback-loop rule is that authored input, solver output, and
+container output are different operations:
+
+- `view.frame = ...` is an authored change. It invalidates layout inputs,
+  updates autoresizing reference geometry, and emits geometry changes.
+- Solver frame application updates solved geometry without treating it as a new
+  authored edit.
+- `setFrameFromLayout` applies a container-owned child frame. It updates visible
+  geometry and display state without invalidating the container's inputs.
+- `setHiddenFromLayout` and `setBoundsOriginFromLayout` provide the same
+  ownership rule for computed visibility and scroll offsets.
+
+Containers must compute final geometry before applying it. A scroll view first
+resolves its clip, header, corner, and scroller geometry, then applies those
+results in one direction. A text editor similarly converges viewport and
+document size as local mathematical state before applying its scroll-view frame,
+document frame, and text container.
+
+Manually laid-out scroll-view internals disable autoresizing-mask constraints.
+Their frames, visibility, and clip bounds are owned by `ScrollView.tile`, so
+that output must not regenerate solver inputs or tile the hierarchy from a draw
+callback. Text layout signals remain observable, but container-owned text views
+can disable propagation of intrinsic-size changes; `TextEditor` receives the
+semantic text/layout signals and schedules its own layout directly.
+
+## Feedback Diagnostics
+
+NimKit does not retry arbitrary layout callbacks within one transaction. If a
+root remains dirty across update cycles, it counts consecutive feedback cycles.
+After three cycles it emits one diagnostic containing:
+
+- transaction generation
+- invalidating view
+- invalidation target
+- transaction phase
+- invalidation reason
+
+The latest data is also available through `layoutGeneration`, `layoutPhase`,
+`layoutFeedbackCycles`, and `lastLayoutInvalidation`. A transaction that settles
+resets the feedback count and diagnostic. This makes cross-frame feedback
+actionable without freezing a frame in a 64-pass retry loop.
 
 ## Caching
 
@@ -283,7 +373,8 @@ The generated-cache refresh reads the solve root's local and aggregate dirty
 state directly. It no longer scans the subtree to rediscover dirty sources
 before deciding which generated source buckets to rebuild.
 
-The solver itself is still rebuilt for the full subtree on each layout pass.
+The solver itself is still rebuilt for the full subtree on each layout
+transaction.
 That keeps correctness straightforward while the cache model settles. A future
 incremental solver cache can build on the same source buckets and generation
 counters if examples show real pressure.
@@ -296,6 +387,9 @@ Autoresizing masks should remain a compatibility path for framed views:
   autoresizing constraints.
 - A view with `autoresizingMaskConstraints = true` and no explicit active
   constraint participation may receive generated internal equations.
+- Container-owned scroll internals and document views set
+  `autoresizingMaskConstraints = false`; their owner applies frames through
+  `setFrameFromLayout`.
 - Generated autoresizing equations use `AutoresizingState` reference geometry
   to translate flexible margins and sizable dimensions into parent-size
   dependent equations.
@@ -318,6 +412,9 @@ matters:
 - hugging priority produces maximum-size inequalities
 - controls and containers invalidate intrinsic inputs when text, theme metrics,
   spacing, insets, or content changes
+- a container-owned `TextView` can keep receiving text-layout signals while
+  suppressing redundant intrinsic invalidation propagation; its owning editor
+  schedules document layout from the semantic signal instead
 
 The signal reason should be `lirIntrinsic`, `lirAppearanceMetrics`, or
 `lirContainerMetrics` depending on the source. These currently dirty the
@@ -328,11 +425,18 @@ the resulting inputs through the same `LayoutInput` model.
 
 ## Containers
 
-Stack, form, grid, popup-list, and future list/table controls should remain
+Stack, form, grid, popup-list, table, collection, and cascading controls remain
 container-native when their layout is clearer as direct measurement and
-allocation. The solver should be used for explicit cross-view relationships,
-priority conflicts, generated compatibility inputs, and cases where a container
-needs to participate in external constraints.
+allocation. The solver is used for explicit cross-view relationships, priority
+conflicts, generated compatibility inputs, and cases where a container needs to
+participate in external constraints.
+
+A native container callback is a one-way allocation step. It should compute a
+complete layout value first, then apply owned frames and state through
+layout-owned setters. It must not mutate hierarchy or retile itself while
+drawing, and it must not depend on a later callback in the same transaction to
+correct partially applied geometry. Visible row/cell synchronization belongs in
+layout, not drawing.
 
 This avoids turning simple row/column/list layout into harder-to-debug
 constraint systems while preserving the ability to compose with constraints.
@@ -341,6 +445,13 @@ constraint systems while preserving the ability to compose with constraints.
 
 - A signal bus gives us a single invalidation vocabulary without making every
   property reactive.
+- A generation-tagged, coalesced transaction gives the useful part of Qt's
+  update-event behavior without introducing a second object/property system.
+- One callback traversal per transaction keeps widget work deterministic;
+  mathematical convergence remains inside the solver or local geometry
+  calculation where it belongs.
+- Explicit container-owned application paths prevent output-to-input feedback
+  while retaining normal display and geometry notification behavior.
 - Source-tagged `LayoutInput` values keep generated constraints debuggable and
   separate from user-authored constraints.
 - Internal `LayoutEquation` values let NimKit use Kiwiberry's real linear
@@ -356,8 +467,6 @@ constraint systems while preserving the ability to compose with constraints.
 
 ## Open Questions
 
-- Whether `LayoutInput` should live in `viewconstraints.nim` or a smaller
-  `viewlayoutinputs.nim` module once the cache exists.
 - How far to take public export narrowing for `View.x*` storage. The current
   umbrella import hides raw layout-input/cache type names, but full field
   hiding needs a deeper internal accessor or module-organization refactor
@@ -367,11 +476,13 @@ constraint systems while preserving the ability to compose with constraints.
   raw internal objects broadly.
 - How much of the signal bus should be public. The reason enum is useful for
   diagnostics, but most callers should not need to emit layout signals directly.
-- Whether container-generated inputs should become a real source before adding
-  a full list/table control.
-- Whether the current source-bucket generations are enough diagnostics, or
-  whether generated input summaries should expose rebuild/cache metadata
-  through public debug APIs.
+- Whether the existing table and collection layout patterns justify generating
+  any `lisContainer` solver inputs, or should remain entirely direct.
+- Whether generated input summaries should expose rebuild/cache metadata beside
+  the transaction feedback diagnostic.
+- Whether container ownership should eventually become explicit inspectable
+  metadata, beyond the current layout-owned application procs and disabled
+  autoresizing-mask inputs.
 
 ## Sources Reviewed
 
