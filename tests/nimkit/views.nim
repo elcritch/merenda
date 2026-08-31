@@ -28,6 +28,9 @@ type
     target: LayoutSpyView
     targetEventsDuringLayout: int
 
+  NonConvergingLayoutView = ref object of View
+    layoutCount: int
+
   ConstraintSpyView = ref object of View
     name: string
     constraintTarget: View
@@ -104,6 +107,11 @@ protocol ReentrantLayoutHooks of ViewLayoutProtocol:
     spy.target.layoutSubtreeIfNeeded()
     spy.targetEventsDuringLayout = spy.target.events.len
 
+protocol NonConvergingLayoutHooks of ViewLayoutProtocol:
+  method layout(spy: NonConvergingLayoutView) =
+    inc spy.layoutCount
+    spy.setNeedsLayout()
+
 protocol ConstraintSpyHooks of ViewLayoutProtocol:
   method updateConstraints(spy: ConstraintSpyView) =
     constraintEvents.add spy.name & ".updateConstraints"
@@ -144,6 +152,12 @@ proc newReentrantLayoutView(frame: Rect, target: LayoutSpyView): ReentrantLayout
   result = ReentrantLayoutView(target: target)
   initViewFields(result, frame)
   discard result.withProtocol(ReentrantLayoutHooks)
+
+proc newNonConvergingLayoutView(frame: Rect): NonConvergingLayoutView =
+  result = NonConvergingLayoutView()
+  initViewFields(result, frame)
+  result.identifier = "nonconverging-layout-test"
+  discard result.withProtocol(NonConvergingLayoutHooks)
 
 proc newConstraintSpyView(
     name: string, frame: Rect, constraintTarget: View = nil
@@ -453,6 +467,14 @@ suite "nimkit views":
     check target.events == @["layoutSubviews", "layout"]
     check not root.needsLayout
     check not target.needsLayout
+
+  test "layout subtree reports when the pass cap is exhausted":
+    let view = newNonConvergingLayoutView(rect(0, 0, 200, 160))
+
+    view.layoutSubtreeIfNeeded()
+
+    check view.layoutCount == 64
+    check view.needsLayout
 
   test "layout subtree settles recursive constraint invalidations":
     let

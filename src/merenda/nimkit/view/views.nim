@@ -249,7 +249,10 @@ proc layoutSubtreeIfNeeded*(view: View) =
     view.applyConstraintsForSubtree()
     view.layoutSubtree()
     if not view.hasPendingLayoutInSubtree():
-      break
+      return
+  let identifier = if view.xIdentifier.len > 0: view.xIdentifier else: "<unnamed>"
+  debugEcho "NimKit layout subtree did not converge after ",
+    MaxLayoutSubtreePasses, " passes: ", identifier, " frame=", view.xFrame
 
 proc dirtyRects*(view: View): seq[Rect] =
   view.invalidRects()
