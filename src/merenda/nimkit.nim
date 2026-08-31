@@ -44,6 +44,8 @@ import ./nimkit/controls/menus
 import ./nimkit/app/modelcontrollers
 import ./nimkit/text/markdownviews
 import ./nimkit/text/monotextviews
+import ./nimkit/text/syneditviews
+import ./nimkit/text/syntaxhighlighting
 import ./nimkit/foundation/notifications
 import ./nimkit/foundation/objectvalues
 import ./nimkit/containers/outlineviews
@@ -129,6 +131,8 @@ export menus
 export modelcontrollers
 export markdownviews
 export monotextviews
+export syneditviews
+export syntaxhighlighting
 export notifications
 export objectvalues
 export outlineviews

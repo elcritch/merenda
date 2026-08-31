@@ -442,7 +442,64 @@ echo "fenced"
     check storage.attributesFor("inline()").fontName == style.codeFontName
     check storage.attributesFor("echo \"fenced\"").fontName == style.codeFontName
     check storage.attributesFor("echo \"indented\"").fontName == style.codeFontName
+    check storage.attributesFor("inline()").foregroundColor == style.codeColor
+    check storage.attributesFor("\"fenced\"").foregroundColor ==
+      style.syntaxTokenColors[stcString]
+    check storage.attributesFor("echo \"indented\"").foregroundColor == style.codeColor
     check storage.attributesFor("[nim]").foregroundColor == style.mutedColor
+
+  test "syntax highlighters receive only language-tagged fenced code":
+    var
+      calls = 0
+      highlightedSource = ""
+      highlightedLanguage = ""
+    let highlighter: SyntaxHighlighter = proc(
+        source, language: string
+    ): seq[SyntaxTokenSpan] =
+      inc calls
+      highlightedSource = source
+      highlightedLanguage = language
+      result.add SyntaxTokenSpan(
+        range: initTextRange(0, "fencedToken".runeLen), tokenClass: stcKeyword
+      )
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage(
+        """
+# headingToken
+
+`inlineToken`
+
+```custom
+fencedToken value
+```
+
+    indentedToken
+""",
+        syntaxHighlighter = highlighter,
+      )
+
+    check calls == 1
+    check highlightedSource == "fencedToken value"
+    check highlightedLanguage == "custom"
+    check storage.attributesFor("headingToken").foregroundColor == style.headingColor
+    check storage.attributesFor("inlineToken").foregroundColor == style.codeColor
+    check storage.attributesFor("fencedToken").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+    check storage.attributesFor("indentedToken").foregroundColor == style.codeColor
+
+  test "unknown fenced languages retain the ordinary code color":
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage(
+        """
+```not-a-language
+mystery value
+```
+"""
+      )
+
+    check storage.attributesFor("mystery").foregroundColor == style.codeColor
 
   test "fenced and indented code blocks render outlined background panels":
     var style = initMarkdownStyle()

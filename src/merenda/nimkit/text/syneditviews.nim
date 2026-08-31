@@ -17,12 +17,14 @@ import ../foundation/types
 import ../themes
 import ../text/texteditors
 import ../text/textstorage
+import ../text/syntaxhighlighting
 import ../text/texttypes
 import ../text/textviews
 import ../view/views
 
 export texteditors
 export textstorage
+export syntaxhighlighting
 export texttypes
 export textviews
 
@@ -42,7 +44,7 @@ type
     langRust
     langMarkdown
 
-  SynEditTokenClass* {.pure.} = enum
+  SynEditTokenClass {.pure.} = enum
     None
     Whitespace
     DecNumber
@@ -84,7 +86,7 @@ type
     MarkdownFence
 
   SynEditTheme* = object
-    foreground*: array[SynEditTokenClass, Color]
+    foreground*: array[SyntaxTokenClass, Color]
     background*: Color
     selectionBackground*: Color
     bracketBackground*: Color
@@ -95,7 +97,7 @@ type
     scrollBarActiveColor*: Color
     scrollTrackColor*: Color
 
-  SynEditTokenSpan* = object
+  SynEditTokenSpan = object
     range*: TextRange
     token*: SynEditTokenClass
 
@@ -108,7 +110,8 @@ type
     xLineNumberWidth: float32
     xFontSize: float32
     xApplyingHighlight: bool
-    xTokenCache: seq[SynEditTokenSpan]
+    xSyntaxHighlighter: SyntaxHighlighter
+    xTokenCache: seq[SyntaxTokenSpan]
     xTokenCacheValid: bool
 
   SynEditGutterView = ref object of View
@@ -179,28 +182,15 @@ func rgb(r, g, b: int): Color =
 
 func catppuccinMochaSynEditTheme*(): SynEditTheme =
   let base = rgb(205, 214, 244)
-  for token in SynEditTokenClass:
+  for token in SyntaxTokenClass:
     result.foreground[token] = base
-  result.foreground[SynEditTokenClass.Keyword] = rgb(203, 166, 247)
-  result.foreground[SynEditTokenClass.StringLit] = rgb(166, 227, 161)
-  result.foreground[SynEditTokenClass.LongStringLit] = rgb(166, 227, 161)
-  result.foreground[SynEditTokenClass.CharLit] = rgb(166, 227, 161)
-  result.foreground[SynEditTokenClass.RawData] = rgb(166, 227, 161)
-  result.foreground[SynEditTokenClass.Comment] = rgb(108, 112, 134)
-  result.foreground[SynEditTokenClass.LongComment] = rgb(108, 112, 134)
-  result.foreground[SynEditTokenClass.DecNumber] = rgb(250, 179, 135)
-  result.foreground[SynEditTokenClass.BinNumber] = rgb(250, 179, 135)
-  result.foreground[SynEditTokenClass.HexNumber] = rgb(250, 179, 135)
-  result.foreground[SynEditTokenClass.OctNumber] = rgb(250, 179, 135)
-  result.foreground[SynEditTokenClass.FloatNumber] = rgb(250, 179, 135)
-  result.foreground[SynEditTokenClass.Operator] = rgb(137, 180, 250)
-  result.foreground[SynEditTokenClass.Punctuation] = rgb(147, 153, 178)
-  result.foreground[SynEditTokenClass.EscapeSequence] = rgb(245, 194, 231)
-  result.foreground[SynEditTokenClass.Preprocessor] = rgb(203, 166, 247)
-  result.foreground[SynEditTokenClass.Green] = rgb(166, 227, 161)
-  result.foreground[SynEditTokenClass.Yellow] = rgb(249, 226, 175)
-  result.foreground[SynEditTokenClass.Red] = rgb(243, 139, 168)
-  result.foreground[SynEditTokenClass.MarkdownFence] = rgb(128, 128, 128)
+  result.foreground[stcKeyword] = rgb(203, 166, 247)
+  result.foreground[stcString] = rgb(166, 227, 161)
+  result.foreground[stcNumber] = rgb(250, 179, 135)
+  result.foreground[stcComment] = rgb(108, 112, 134)
+  result.foreground[stcOperator] = rgb(137, 180, 250)
+  result.foreground[stcPunctuation] = rgb(147, 153, 178)
+  result.foreground[stcPreprocessor] = rgb(203, 166, 247)
   result.background = rgb(30, 30, 46)
   result.selectionBackground = rgb(88, 91, 112)
   result.bracketBackground = rgb(69, 71, 90)
@@ -244,6 +234,23 @@ func strToLanguage*(language: string): SourceLanguage =
   of "md", "markdown": langMarkdown
   else: langNone
 
+func sourceLanguageName*(language: SourceLanguage): string =
+  ## Return the canonical name passed through the neutral highlighter boundary.
+  case language
+  of langNone: ""
+  of langNim: "nim"
+  of langCpp: "cpp"
+  of langCsharp: "csharp"
+  of langC: "c"
+  of langJava: "java"
+  of langJs: "javascript"
+  of langXml: "xml"
+  of langHtml: "html"
+  of langConsole: "console"
+  of langPython: "python"
+  of langRust: "rust"
+  of langMarkdown: "markdown"
+
 func isOperatorChar(ch: char): bool =
   ch in {
     '+',
@@ -278,6 +285,35 @@ func isKeyword(word: string, keywords: openArray[string]): bool =
 
 func span(start, stop: int, token: SynEditTokenClass): SynEditTokenSpan =
   SynEditTokenSpan(range: initTextRange(start, max(stop - start, 0)), token: token)
+
+func syntaxTokenClass(token: SynEditTokenClass): SyntaxTokenClass =
+  case token
+  of SynEditTokenClass.Keyword:
+    stcKeyword
+  of SynEditTokenClass.Identifier:
+    stcIdentifier
+  of SynEditTokenClass.StringLit, SynEditTokenClass.LongStringLit,
+      SynEditTokenClass.CharLit, SynEditTokenClass.Backticks,
+      SynEditTokenClass.EscapeSequence, SynEditTokenClass.RegularExpression,
+      SynEditTokenClass.RawData, SynEditTokenClass.Green:
+    stcString
+  of SynEditTokenClass.DecNumber, SynEditTokenClass.BinNumber,
+      SynEditTokenClass.HexNumber, SynEditTokenClass.OctNumber,
+      SynEditTokenClass.FloatNumber:
+    stcNumber
+  of SynEditTokenClass.Comment, SynEditTokenClass.LongComment:
+    stcComment
+  of SynEditTokenClass.Operator:
+    stcOperator
+  of SynEditTokenClass.Punctuation, SynEditTokenClass.TagStart,
+      SynEditTokenClass.TagStandalone, SynEditTokenClass.TagEnd,
+      SynEditTokenClass.MarkdownFence:
+    stcPunctuation
+  of SynEditTokenClass.Preprocessor, SynEditTokenClass.Directive,
+      SynEditTokenClass.Assembler:
+    stcPreprocessor
+  else:
+    stcOther
 
 type
   SynEditHighlightCell = object
@@ -1114,7 +1150,7 @@ proc tokenSpans(buffer: SynEditHighlightBuffer, text: string): seq[SynEditTokenS
         start = index
         token = buffer.cells[index].token
 
-proc synEditTokenSpans*(text: string, language: SourceLanguage): seq[SynEditTokenSpan] =
+proc internalTokenSpans(text: string, language: SourceLanguage): seq[SynEditTokenSpan] =
   if text.len == 0:
     return
   var buffer = initHighlightBuffer(text)
@@ -1124,13 +1160,25 @@ proc synEditTokenSpans*(text: string, language: SourceLanguage): seq[SynEditToke
     buffer.highlightRange(0, buffer.cells.high, language)
   buffer.tokenSpans(text)
 
-proc synEditTokenAt*(
-    spans: openArray[SynEditTokenSpan], index: int
-): SynEditTokenClass =
-  for item in spans:
-    if index >= int(item.range.location) and index < item.range.maxIndex:
-      return item.token
-  SynEditTokenClass.None
+proc addSyntaxTokenSpan(
+    spans: var seq[SyntaxTokenSpan], range: TextRange, tokenClass: SyntaxTokenClass
+) =
+  if range.length == 0:
+    return
+  if spans.len > 0 and spans[^1].tokenClass == tokenClass and
+      spans[^1].range.maxIndex == int(range.location):
+    spans[^1].range.length = (int(spans[^1].range.length) + int(range.length)).Natural
+  else:
+    spans.add SyntaxTokenSpan(range: range, tokenClass: tokenClass)
+
+proc synEditTokenSpans*(text: string, language: SourceLanguage): seq[SyntaxTokenSpan] =
+  ## Classify `text` with NimKit's built-in SynEdit tokenizer.
+  for span in text.internalTokenSpans(language):
+    result.addSyntaxTokenSpan(span.range, span.token.syntaxTokenClass())
+
+proc synEditSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
+  ## Neutral highlighter adapter for NimKit's built-in SynEdit tokenizer.
+  source.synEditTokenSpans(language.strToLanguage())
 
 func lineCountOf(text: string): int =
   result = 1
@@ -1138,8 +1186,8 @@ func lineCountOf(text: string): int =
     if ch == '\n':
       inc result
 
-proc textAttributes(view: SynEditView, token: SynEditTokenClass): TextAttributes =
-  defaultTextAttributes(view.xTheme.foreground[token], view.xFontSize)
+proc textAttributes(view: SynEditView, tokenClass: SyntaxTokenClass): TextAttributes =
+  defaultTextAttributes(view.xTheme.foreground[tokenClass], view.xFontSize)
 
 proc updateGutter(view: SynEditView)
 proc applySynEditTheme(view: SynEditView)
@@ -1175,19 +1223,19 @@ func overlapRange(a, b: TextRange): TextRange =
   initTextRange(start, max(stop - start, 0))
 
 proc addTokenSpan(
-    spans: var seq[SynEditTokenSpan], range: TextRange, token: SynEditTokenClass
+    spans: var seq[SyntaxTokenSpan], range: TextRange, tokenClass: SyntaxTokenClass
 ) =
   if range.length == 0:
     return
-  if spans.len > 0 and spans[^1].token == token and
+  if spans.len > 0 and spans[^1].tokenClass == tokenClass and
       spans[^1].range.maxIndex == int(range.location):
     spans[^1].range.length = (int(spans[^1].range.length) + int(range.length)).Natural
   else:
-    spans.add SynEditTokenSpan(range: range, token: token)
+    spans.add SyntaxTokenSpan(range: range, tokenClass: tokenClass)
 
 proc tokenCacheAfterEdit(
-    spans: openArray[SynEditTokenSpan], edit: TextStorageEdit
-): seq[SynEditTokenSpan] =
+    spans: openArray[SyntaxTokenSpan], edit: TextStorageEdit
+): seq[SyntaxTokenSpan] =
   let
     oldStart = int(edit.range.location)
     oldStop = edit.range.maxIndex
@@ -1198,21 +1246,21 @@ proc tokenCacheAfterEdit(
       start = int(item.range.location)
       stop = item.range.maxIndex
     if stop <= oldStart:
-      result.addTokenSpan(item.range, item.token)
+      result.addTokenSpan(item.range, item.tokenClass)
     elif start >= oldStop:
-      result.addTokenSpan(initTextRange(start + delta, stop - start), item.token)
+      result.addTokenSpan(initTextRange(start + delta, stop - start), item.tokenClass)
     else:
       if start < oldStart:
-        result.addTokenSpan(initTextRange(start, oldStart - start), item.token)
+        result.addTokenSpan(initTextRange(start, oldStart - start), item.tokenClass)
       if stop > oldStop:
-        result.addTokenSpan(initTextRange(newStop, stop - oldStop), item.token)
+        result.addTokenSpan(initTextRange(newStop, stop - oldStop), item.tokenClass)
 
-func sameSpan(a, b: SynEditTokenSpan): bool =
-  a.range == b.range and a.token == b.token
+func sameSpan(a, b: SyntaxTokenSpan): bool =
+  a.range == b.range and a.tokenClass == b.tokenClass
 
 proc changedHighlightRange(
     storage: TextStorage,
-    oldSpans, newSpans: openArray[SynEditTokenSpan],
+    oldSpans, newSpans: openArray[SyntaxTokenSpan],
     edit: TextStorageEdit,
 ): TextRange =
   let changedLines = storage.paragraphRangeForRange(
@@ -1244,22 +1292,30 @@ proc applyCachedHighlighting(view: SynEditView, range: TextRange) =
     return
   view.xApplyingHighlight = true
   storage.beginEditing()
-  storage.setAttributes(clamped, view.textAttributes(SynEditTokenClass.None))
+  storage.setAttributes(clamped, view.textAttributes(stcOther))
   for item in view.xTokenCache:
     let affected = item.range.overlapRange(clamped)
     if affected.length > 0:
-      storage.setAttributes(affected, view.textAttributes(item.token))
+      storage.setAttributes(affected, view.textAttributes(item.tokenClass))
   storage.endEditing()
   if not view.xEditor.textView().isNil:
     view.xEditor.textView().layoutManager().invalidateLayout()
     view.xEditor.textView().needsDisplay = true
   view.xApplyingHighlight = false
 
+proc syntaxTokenSpans(view: SynEditView, source: string): seq[SyntaxTokenSpan] =
+  if view.xSyntaxHighlighter.isNil:
+    return
+  try:
+    result = view.xSyntaxHighlighter(source, view.xLanguage.sourceLanguageName())
+  except CatchableError:
+    discard
+
 proc applySyntaxHighlighting*(view: SynEditView) =
   if view.xEditor.isNil or view.xApplyingHighlight:
     return
   let storage = view.xEditor.textStorage()
-  view.xTokenCache = synEditTokenSpans(storage.stringValue(), view.xLanguage)
+  view.xTokenCache = view.syntaxTokenSpans(storage.stringValue())
   view.xTokenCacheValid = true
   view.applyCachedHighlighting(initTextRange(0, storage.len()))
 
@@ -1272,7 +1328,7 @@ proc applySyntaxHighlightingForEdit(view: SynEditView, edit: TextStorageEdit) =
   let
     storage = view.xEditor.textStorage()
     shiftedCache = view.xTokenCache.tokenCacheAfterEdit(edit)
-    nextCache = synEditTokenSpans(storage.stringValue(), view.xLanguage)
+    nextCache = view.syntaxTokenSpans(storage.stringValue())
     changed = storage.changedHighlightRange(shiftedCache, nextCache, edit)
   view.xTokenCache = nextCache
   view.applyCachedHighlighting(changed)
@@ -1298,6 +1354,16 @@ proc `language=`*(view: SynEditView, language: SourceLanguage) =
   if view.xLanguage == language:
     return
   view.xLanguage = language
+  view.applySyntaxHighlighting()
+
+proc syntaxHighlighter*(view: SynEditView): SyntaxHighlighter =
+  ## Return the classifier used for editor source text.
+  view.xSyntaxHighlighter
+
+proc `syntaxHighlighter=`*(view: SynEditView, highlighter: SyntaxHighlighter) =
+  ## Replace the classifier and rehighlight the current source.
+  view.xSyntaxHighlighter = highlighter
+  view.xTokenCacheValid = false
   view.applySyntaxHighlighting()
 
 proc theme*(view: SynEditView): SynEditTheme =
@@ -1382,18 +1448,17 @@ proc applySynEditTheme(view: SynEditView) =
   let
     textView = view.xEditor.textView()
     scroll = view.xEditor.scrollView()
-    baseAttributes = view.textAttributes(SynEditTokenClass.None)
+    baseAttributes = view.textAttributes(stcOther)
   view.background = view.xTheme.background
   view.xEditor.background = color(0.0, 0.0, 0.0, 0.0)
   view.xEditor.textInsets = insets(8.0'f32, 10.0'f32, 8.0'f32, 10.0'f32)
-  view.xEditor.textColor = view.xTheme.foreground[SynEditTokenClass.None]
+  view.xEditor.textColor = view.xTheme.foreground[stcOther]
   view.xEditor.selectionColor = view.xTheme.selectionBackground
   if not textView.isNil:
     textView.typingAttributes = baseAttributes
     textView.insertionPointColor = view.xTheme.cursorColor
-    textView.selectedTextAttributes = defaultTextAttributes(
-      view.xTheme.foreground[SynEditTokenClass.None], view.xFontSize
-    )
+    textView.selectedTextAttributes =
+      defaultTextAttributes(view.xTheme.foreground[stcOther], view.xFontSize)
   if not scroll.isNil:
     scroll.drawsBackground = false
     scroll.borderType = svbNoBorder
@@ -1476,11 +1541,16 @@ proc initSynEditGutterFields(gutter: SynEditGutterView, owner: SynEditView) =
   discard gutter.withProtocol(DefaultSynEditGutterDrawing)
 
 proc initSynEditViewFields*(
-    view: SynEditView, value = "", frame: Rect = AutoRect, language = langNim
+    view: SynEditView,
+    value = "",
+    frame: Rect = AutoRect,
+    language = langNim,
+    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
 ) =
   initViewFields(view, frame)
   view.xTheme = synEditTheme()
   view.xLanguage = language
+  view.xSyntaxHighlighter = syntaxHighlighter
   view.xShowLineNumbers = true
   view.xLineNumberWidth = DefaultSynEditLineNumberWidth
   view.xFontSize = DefaultSynEditFontSize
@@ -1504,7 +1574,10 @@ proc initSynEditViewFields*(
   view.applyInitialFrame(frame)
 
 proc newSynEditView*(
-    value = "", frame: Rect = AutoRect, language = langNim
+    value = "",
+    frame: Rect = AutoRect,
+    language = langNim,
+    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
 ): SynEditView =
   result = SynEditView()
-  result.initSynEditViewFields(value, frame, language)
+  result.initSynEditViewFields(value, frame, language, syntaxHighlighter)

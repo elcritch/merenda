@@ -25,12 +25,15 @@ import ../themes
 import ../view/views
 import ./markdownhtmlimages
 import ./markdownparsing
+import ./syneditviews
+import ./syntaxhighlighting
 import ./texteditors
 import ./textstorage
 import ./texttypes
 
 export texteditors
 export textstorage
+export syntaxhighlighting
 export texttypes
 
 const
@@ -73,6 +76,8 @@ type
     quoteColor*: Color ## Block quote contents.
     mutedColor*: Color ## Raw HTML and code-language labels.
     ruleColor*: Color ## Quotes, table separators, and thematic breaks.
+    syntaxTokenColors*: array[SyntaxTokenClass, Color]
+      ## Fenced-code colors keyed by frontend-neutral token class.
     bodyFontName*: string ## Proportional document font.
     emphasisFontName*: string ## Bold proportional font for inline emphasis.
     codeFontName*: string ## Monospace font for code and tables.
@@ -113,6 +118,7 @@ type
     style: MarkdownStyle
     imageLoader: MarkdownImageLoader
     imageContentTypeLoader: MarkdownImageContentTypeLoader
+    syntaxHighlighter: SyntaxHighlighter
     tableColumnLimit: int
     hasTables: bool
 
@@ -164,6 +170,7 @@ type
     xMarkdownRenderJob: MarkdownRenderJob
     xMarkdownRenderChunkCount: int
     xMarkdownMaximumRenderChunkDuration: Duration
+    xSyntaxHighlighter: SyntaxHighlighter
     xImageBasePath: string
     xImageLoader: MarkdownImageLoader
     xUrlAssetLoader: UrlAssetLoader
@@ -211,7 +218,7 @@ proc initMarkdownStyle*(): MarkdownStyle =
   let
     bodyFontName = defaultFontName(frUI)
     codeFontName = defaultFontName(frMonospace)
-  MarkdownStyle(
+  result = MarkdownStyle(
     backgroundColor: color(0.965, 0.97, 0.98, 1.0),
     textColor: color(0.12, 0.14, 0.18, 1.0),
     headingColor: color(0.06, 0.09, 0.15, 1.0),
@@ -237,6 +244,16 @@ proc initMarkdownStyle*(): MarkdownStyle =
     thematicBreak:
       "────────────────────────────────────────",
   )
+  for tokenClass in SyntaxTokenClass:
+    result.syntaxTokenColors[tokenClass] = result.codeColor
+  result.syntaxTokenColors[stcKeyword] = color(0.48, 0.14, 0.60, 1.0)
+  result.syntaxTokenColors[stcIdentifier] = color(0.10, 0.31, 0.57, 1.0)
+  result.syntaxTokenColors[stcString] = color(0.10, 0.43, 0.24, 1.0)
+  result.syntaxTokenColors[stcNumber] = color(0.72, 0.32, 0.08, 1.0)
+  result.syntaxTokenColors[stcComment] = result.mutedColor
+  result.syntaxTokenColors[stcOperator] = color(0.08, 0.40, 0.66, 1.0)
+  result.syntaxTokenColors[stcPunctuation] = result.ruleColor
+  result.syntaxTokenColors[stcPreprocessor] = result.emphasisColor
 
 proc initMarkdownParserConfig*(dialect = mddGitHub): MarkdownParserConfig =
   ## Creates an independent parser configuration for `dialect`.
@@ -804,6 +821,7 @@ proc renderTable(
           style: builder.style,
           imageLoader: builder.imageLoader,
           imageContentTypeLoader: builder.imageContentTypeLoader,
+          syntaxHighlighter: builder.syntaxHighlighter,
           tableColumnLimit: builder.tableColumnLimit,
         )
         renderedCell.renderInlineChildren(cell, rowAttributes)
@@ -894,6 +912,7 @@ proc renderContainerChild(
     style: builder.style,
     imageLoader: builder.imageLoader,
     imageContentTypeLoader: builder.imageContentTypeLoader,
+    syntaxHighlighter: builder.syntaxHighlighter,
     tableColumnLimit: builder.tableColumnLimit,
   )
   rendered.renderBlock(child, attributes)
@@ -926,6 +945,7 @@ proc renderBlockquote(
     style: builder.style,
     imageLoader: builder.imageLoader,
     imageContentTypeLoader: builder.imageContentTypeLoader,
+    syntaxHighlighter: builder.syntaxHighlighter,
     tableColumnLimit: builder.tableColumnLimit,
   )
   quoted.renderContainer(quote, quoteAttributes)
@@ -964,6 +984,36 @@ proc renderBlockquote(
     builder.images.add mapped
   builder.hasTables = builder.hasTables or quoted.hasTables
 
+proc addHighlightedCode(
+    builder: var MarkdownBuilder, source, language: string, attributes: TextAttributes
+) =
+  if source.len == 0 or language.len == 0 or builder.syntaxHighlighter.isNil:
+    builder.add(source, attributes)
+    return
+
+  var spans: seq[SyntaxTokenSpan]
+  try:
+    spans = builder.syntaxHighlighter(source, language)
+  except CatchableError:
+    builder.add(source, attributes)
+    return
+
+  let runeCount = source.runeLen
+  var position = 0
+  for span in spans:
+    let
+      start = max(position, min(int(span.range.location), runeCount))
+      stop = max(start, min(span.range.maxIndex, runeCount))
+    if stop > start:
+      if start > position:
+        builder.add(source.runeSubStr(position, start - position), attributes)
+      var tokenAttributes = attributes
+      tokenAttributes.foregroundColor = builder.style.syntaxTokenColors[span.tokenClass]
+      builder.add(source.runeSubStr(start, stop - start), tokenAttributes)
+      position = stop
+  if position < runeCount:
+    builder.add(source.runeSubStr(position), attributes)
+
 proc renderBlock(
     builder: var MarkdownBuilder,
     token: markdownParser.Token,
@@ -989,7 +1039,9 @@ proc renderBlock(
       var infoAttributes = builder.style.mutedCodeAttributes(attributes)
       infoAttributes.backgroundColor = builder.style.codeBlockStyle.backgroundColor
       builder.add("[" & code.info & "]\n", infoAttributes)
-    builder.add(code.doc.strip(chars = {'\n'}), codeAttributes)
+    builder.addHighlightedCode(
+      code.doc.strip(chars = {'\n'}), code.info, codeAttributes
+    )
     let blockLength = builder.runeLength - blockStart
     if blockLength > 0:
       builder.codeBlockRanges.add initTextRange(blockStart, blockLength)
@@ -1034,11 +1086,13 @@ proc markdownDocument(
     style = initMarkdownStyle(),
     imageLoader: MarkdownImageLoader = nil,
     imageContentTypeLoader: MarkdownImageContentTypeLoader = nil,
+    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
 ): MarkdownDocument =
   var builder = MarkdownBuilder(
     style: style,
     imageLoader: imageLoader,
     imageContentTypeLoader: imageContentTypeLoader,
+    syntaxHighlighter: syntaxHighlighter,
     tableColumnLimit: MarkdownTableDefaultColumnLimit,
   )
   let attributes = style.bodyAttributes()
@@ -1051,17 +1105,21 @@ proc markdownDocument(
     config: MarkdownParserConfig = nil,
     imageLoader: MarkdownImageLoader = nil,
     imageContentTypeLoader: MarkdownImageContentTypeLoader = nil,
+    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
 ): MarkdownDocument =
   source.parseMarkdownRoot(config).markdownDocument(
-    style, imageLoader, imageContentTypeLoader
+    style, imageLoader, imageContentTypeLoader, syntaxHighlighter
   )
 
 proc markdownTextStorage*(
-    source: string, style = initMarkdownStyle(), config: MarkdownParserConfig = nil
+    source: string,
+    style = initMarkdownStyle(),
+    config: MarkdownParserConfig = nil,
+    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
 ): TextStorage =
   ## Parses `source` and returns native attributed text without creating a view.
   ## A nil configuration selects GFM so tables and strikethrough work by default.
-  source.markdownDocument(style, config).storage
+  source.markdownDocument(style, config, syntaxHighlighter = syntaxHighlighter).storage
 
 proc codeBlockRect(
     textView: MarkdownTextView, range: TextRange, padding: EdgeInsets
@@ -1330,8 +1388,11 @@ proc scheduleMarkdownRendering(view: MarkdownView) =
     rootGeneration: view.xMarkdownRootGeneration,
     root: view.xMarkdownRoot,
     nextBlock: view.xMarkdownRoot.children.head,
-    builder:
-      MarkdownBuilder(style: view.xMarkdownStyle, tableColumnLimit: tableColumnLimit),
+    builder: MarkdownBuilder(
+      style: view.xMarkdownStyle,
+      syntaxHighlighter: view.xSyntaxHighlighter,
+      tableColumnLimit: tableColumnLimit,
+    ),
     attributes: view.xMarkdownStyle.bodyAttributes(),
   )
   scheduleMainThreadWork(
@@ -1551,6 +1612,15 @@ proc `urlAssetLoader=`*(view: MarkdownView, loader: UrlAssetLoader) =
   view.xPendingUrlAssets.clear()
   view.renderCurrentMarkdownDocument()
 
+proc syntaxHighlighter*(view: MarkdownView): SyntaxHighlighter =
+  ## Return the classifier used for fenced code blocks.
+  view.xSyntaxHighlighter
+
+proc `syntaxHighlighter=`*(view: MarkdownView, highlighter: SyntaxHighlighter) =
+  ## Replace the classifier and rerender fenced code blocks.
+  view.xSyntaxHighlighter = highlighter
+  view.renderCurrentMarkdownDocument()
+
 proc markdownStyle*(view: MarkdownView): MarkdownStyle =
   ## Returns a copy of the current document presentation.
   view.xMarkdownStyle
@@ -1585,6 +1655,7 @@ proc initMarkdownViewFields*(
     imageBasePath = "",
     imageLoader: MarkdownImageLoader = nil,
     urlAssetLoader: UrlAssetLoader = nil,
+    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
 ) =
   ## Initializes a custom `MarkdownView` subtype.
   ##
@@ -1603,6 +1674,7 @@ proc initMarkdownViewFields*(
   view.xImageBasePath = imageBasePath
   view.xImageLoader = imageLoader
   view.xUrlAssetLoader = urlAssetLoader
+  view.xSyntaxHighlighter = syntaxHighlighter
   view.xImageCache = initTable[string, ImageResource]()
   view.xImageMediaTypes = initTable[string, string]()
   view.xPendingUrlAssets = initTable[string, UrlAssetHandle]()
@@ -1615,7 +1687,9 @@ proc initMarkdownViewFields*(
   view.connect(geometryDidChange, view, markdownViewGeometryDidChange)
   view.accessibilityLabel = "Markdown document"
   view.applyMarkdownStyle()
-  view.applyMarkdownDocument(view.xMarkdownRoot.markdownDocument(style))
+  view.applyMarkdownDocument(
+    view.xMarkdownRoot.markdownDocument(style, syntaxHighlighter = syntaxHighlighter)
+  )
   view.textView().layoutManager().usesBackgroundLayout = true
   view.scheduleMarkdownParse()
 
@@ -1627,6 +1701,7 @@ proc newMarkdownView*(
     imageBasePath = "",
     imageLoader: MarkdownImageLoader = nil,
     urlAssetLoader: UrlAssetLoader = nil,
+    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
 ): MarkdownView =
   ## Creates a scrollable, selectable, read-only Markdown document view.
   ##
@@ -1637,5 +1712,6 @@ proc newMarkdownView*(
   ## default shared loader uses the executable name for its platform cache.
   result = MarkdownView()
   result.initMarkdownViewFields(
-    source, frame, style, config, imageBasePath, imageLoader, urlAssetLoader
+    source, frame, style, config, imageBasePath, imageLoader, urlAssetLoader,
+    syntaxHighlighter,
   )

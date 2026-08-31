@@ -148,6 +148,15 @@ block the GUI. Tests can use `waitForMarkdownLayout()` when they need the settle
 post-resize geometry. See `examples/markdown_viewer_demo.nim` for a
 complete window.
 
+Language-tagged fenced code blocks use the same frontend-neutral
+`SyntaxHighlighter` boundary as `SynEditView`. A highlighter returns rune-based
+`SyntaxTokenSpan` values; `MarkdownStyle.syntaxTokenColors` maps their classes to
+presentation colors. The Markdown parser still owns all document structure and
+inline styling—the syntax highlighter never receives the Markdown source outside
+the contents of a tagged fence. NimKit's built-in SynEdit classifier is the
+default, while a nil highlighter or unknown language retains the ordinary
+monospace `codeColor`.
+
 ## Cached URL Assets
 
 `UrlAssetLoader` fetches HTTP and HTTPS assets away from the UI thread and keeps
