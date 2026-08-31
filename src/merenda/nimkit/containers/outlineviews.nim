@@ -3,6 +3,7 @@ import std/[options, strutils]
 import sigils/core
 
 import ./listbasics
+import ./scrollviews
 import ./tableviews
 import ../accessibility/accessibilityprotocols
 import ../app/dragging
@@ -188,7 +189,6 @@ const
   OutlineDisclosureLeading = 4.0'f32
   OutlineDisclosureMaxSize = 16.0'f32
   OutlineTextLeading = 24.0'f32
-  OutlineTextTrailing = 6.0'f32
 
 proc hasChildren(outlineView: OutlineView, identifier: string): bool =
   outlineView.childrenForParent(identifier).len > 0
@@ -1015,25 +1015,42 @@ proc outlineColumnRectForRow(
   rect(0.0, 0.0, 0.0, 0.0)
 
 proc outlineTextRectForCellFrame(
-    outlineView: OutlineView, row: int, column: TableColumn, cellFrame: Rect
+    outlineView: OutlineView,
+    row: int,
+    column: TableColumn,
+    cellFrame: Rect,
+    textInsets: EdgeInsets,
 ): Rect =
   result = cellFrame
   if result.isEmpty:
     return
+  var
+    lastVisibleColumn: TableColumn
+    trailingInset = textInsets.right
+  for current in TableView(outlineView).columns():
+    if not current.hidden():
+      lastVisibleColumn = current
+  if column == lastVisibleColumn and
+      not TableView(outlineView).scrollView().verticalScrollerRect().isEmpty:
+    trailingInset = 0.0'f32
   if column == outlineView.outlineColumn():
     let indent =
       outlineView.levelForRow(row).float32 * OutlineIndentStep + OutlineTextLeading
     result.x += indent
-    result.w = max(result.w - indent - OutlineTextTrailing, 0.0'f32)
+    result.w = max(result.w - indent - trailingInset, 0.0'f32)
   else:
-    result.x += 6.0'f32
-    result.w = max(result.w - 12.0'f32, 0.0'f32)
+    result.x += textInsets.left
+    result.w = max(result.w - textInsets.left - trailingInset, 0.0'f32)
 
 proc outlineTextRectForCell(
-    outlineView: OutlineView, row: int, column: TableColumn, rowBounds: Rect
+    outlineView: OutlineView,
+    row: int,
+    column: TableColumn,
+    rowBounds: Rect,
+    textInsets: EdgeInsets,
 ): Rect =
   outlineView.outlineTextRectForCellFrame(
-    row, column, outlineView.outlineColumnRectForRow(column, rowBounds)
+    row, column, outlineView.outlineColumnRectForRow(column, rowBounds), textInsets
   )
 
 proc drawOutlineRowText(
@@ -1059,7 +1076,9 @@ proc drawOutlineRowText(
     if not column.hidden() and not isEditingCell:
       let
         text = outlineView.outlineCellText(row.index, column)
-        textRect = outlineView.outlineTextRectForCell(row.index, column, rowBounds)
+        textRect = outlineView.outlineTextRectForCell(
+          row.index, column, rowBounds, rowTextStyle.insets
+        )
         decoration =
           if column == outlineView.outlineColumn():
             item.decoration
@@ -1264,7 +1283,14 @@ protocol OutlineViewTableDelegate of TableViewDelegate:
       proposedFrame: Rect,
   ): Rect =
     discard tableView
-    outlineView.outlineTextRectForCellFrame(row, column, proposedFrame)
+    let textInsets = outlineView
+      .effectiveAppearance()
+      .resolveRowItemStyle(
+        controlStyle(
+          srRowItem, id = outlineView.styleId(), classes = outlineView.styleClasses()
+        )
+      ).text.insets
+    outlineView.outlineTextRectForCellFrame(row, column, proposedFrame, textInsets)
 
   method parseObjectValueForCell(
       outlineView: OutlineView,

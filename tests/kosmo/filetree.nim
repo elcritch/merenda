@@ -22,6 +22,16 @@ proc renderedTextStartingWith(view: View, prefix: string): string =
       if text.startsWith(prefix):
         return text
 
+proc renderedTextFrameStartingWith(
+    view: View, prefix: string
+): typeof(default(Fig).screenBox) =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkText and node.renderedText().startsWith(prefix):
+      return node.screenBox
+
 suite "Kosmo":
   test "file tree column follows its viewport and retruncates after resize":
     let
@@ -43,18 +53,27 @@ suite "Kosmo":
       tree = newKosmoFileTree(root, frame = rect(0, 0, 340, 120))
       scrollView = tree.scrollView()
       wideTitle = tree.renderedTextStartingWith("a_very")
+      wideTextFrame = tree.renderedTextFrameStartingWith("a_very")
       wideColumnWidth = tree.outlineColumn().width()
+      wideScrollerMinX =
+        scrollView.frame().origin.x + scrollView.verticalScrollerRect().origin.x
 
     check not scrollView.verticalScrollerRect().isEmpty
     check scrollView.horizontalScrollerRect().isEmpty
     check abs(wideColumnWidth - scrollView.viewportSize().width) < 0.01'f32
+    check abs(wideTextFrame.x + wideTextFrame.w - wideScrollerMinX) < 0.01'f32
 
     tree.frame = rect(0, 0, 190, 120)
-    let narrowTitle = tree.renderedTextStartingWith("a_very")
+    let
+      narrowTitle = tree.renderedTextStartingWith("a_very")
+      narrowTextFrame = tree.renderedTextFrameStartingWith("a_very")
+      narrowScrollerMinX =
+        scrollView.frame().origin.x + scrollView.verticalScrollerRect().origin.x
 
     check scrollView.horizontalScrollerRect().isEmpty
     check tree.outlineColumn().width() < wideColumnWidth
     check abs(tree.outlineColumn().width() - scrollView.viewportSize().width) < 0.01'f32
+    check abs(narrowTextFrame.x + narrowTextFrame.w - narrowScrollerMinX) < 0.01'f32
     check narrowTitle != wideTitle
     check narrowTitle.endsWith("…")
 
