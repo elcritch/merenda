@@ -565,3 +565,47 @@ Press <kbd>Enter</kbd>.
       &"(max {maximumStyleChunk.inMilliseconds} ms)"
     check source.len > 20_000
     check snapshot.lineFragments.len > 100
+
+  test "repository README reports live resize timings":
+    let
+      source = readFile(RepositoryReadme)
+      first = newMarkdownView(source, frame = rect(0, 0, 760, 540))
+      second = newMarkdownView(source, frame = rect(0, 0, 760, 540))
+    require first.waitForMarkdownParsing()
+    require second.waitForMarkdownParsing()
+    discard buildRenders(first)
+    discard buildRenders(second)
+
+    let singleStarted = getMonoTime()
+    for width in [680.0'f32, 600.0'f32, 520.0'f32, 440.0'f32]:
+      first.frame = rect(0, 0, width, 540)
+      discard buildRenders(first)
+    let
+      singleElapsed = getMonoTime() - singleStarted
+      singleSettleStarted = getMonoTime()
+    require first.waitForMarkdownLayout()
+    discard buildRenders(first)
+    let
+      singleSettleElapsed = getMonoTime() - singleSettleStarted
+      pairStarted = getMonoTime()
+    for width in [680.0'f32, 600.0'f32, 520.0'f32, 440.0'f32]:
+      first.frame = rect(0, 0, width, 540)
+      second.frame = rect(0, 0, width, 540)
+      discard buildRenders(first)
+      discard buildRenders(second)
+    let
+      pairElapsed = getMonoTime() - pairStarted
+      pairSettleStarted = getMonoTime()
+    require first.waitForMarkdownLayout()
+    require second.waitForMarkdownLayout()
+    discard buildRenders(first)
+    discard buildRenders(second)
+    let pairSettleElapsed = getMonoTime() - pairSettleStarted
+
+    echo &"README MarkdownView resize timing: 4 widths single " &
+      &"{singleElapsed.inMilliseconds} ms (settled in " &
+      &"{singleSettleElapsed.inMilliseconds} ms), paired " &
+      &"{pairElapsed.inMilliseconds} ms (settled in " &
+      &"{pairSettleElapsed.inMilliseconds} ms)"
+    check first.textView().layoutManager().hasValidLayout()
+    check second.textView().layoutManager().hasValidLayout()

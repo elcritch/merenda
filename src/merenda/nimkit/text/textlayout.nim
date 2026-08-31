@@ -1,6 +1,7 @@
 import std/[algorithm, hashes, options, sets, unicode]
 
-import sigils/core
+import sigils/[core, threads]
+import threading/smartptrs
 
 when defined(useNativeDynlib):
   import figdraw/dynlib except Hash
@@ -10,8 +11,10 @@ else:
 from pkg/vmath import vec2, x, y
 
 import ../drawing
+import ../foundation/mainthreadwork
 import ../foundation/selectors
 import ./textstorage
+import ./textlayoutworkers
 import ./texttypes
 import ../themes
 import ../foundation/types
@@ -171,6 +174,12 @@ type
     xAllowsNonContiguousLayout: bool
     xHasNonContiguousLayout: bool
     xHasLayout: bool
+    xHasCachedLayout: bool
+    xCanUseBackgroundLayout: bool
+    xBackgroundGeneration: uint64
+    xPendingBackgroundGeneration: uint64
+    xBackgroundSchedulePending: bool
+    xBackgroundWorker: AgentProxy[TextLayoutWorker]
 
 proc `==`*(a, b: GlyphIndex): bool {.borrow.}
 proc `$`*(index: GlyphIndex): string {.borrow.}
@@ -194,6 +203,10 @@ proc defaultSelectionRects(manager: TextLayoutManager, range: TextRange): seq[Re
 proc defaultTextIndexAtPoint(manager: TextLayoutManager, point: Point): int
 proc snapshotFromCurrentLayout(manager: TextLayoutManager): TextLayoutSnapshot
 proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult
+proc completeBackgroundTextLayout(
+  manager: TextLayoutManager, layoutResultBox: SharedPtr[TextLayoutWorkerResult]
+) {.slot.}
+
 proc updateLayout*(manager: TextLayoutManager)
 proc textRangeForGlyphRange*(manager: TextLayoutManager, range: GlyphRange): TextRange
 
@@ -641,6 +654,17 @@ proc initTextLayoutManagerFields*(
   manager.xBackend = newFigDrawTextTypesetter()
   manager.observeTextStorage(storage)
 
+proc ensureBackgroundWorker(manager: TextLayoutManager) =
+  if not manager.xBackgroundWorker.isNil:
+    return
+  manager.xBackgroundWorker = newTextLayoutWorker()
+  connectThreaded(
+    manager.xBackgroundWorker,
+    textLayoutFinished,
+    manager,
+    TextLayoutManager.completeBackgroundTextLayout(),
+  )
+
 proc newTextLayoutManager*(
     storage: TextStorage = nil,
     container = initTextContainer(),
@@ -681,7 +705,7 @@ proc `textContainer=`*(manager: TextLayoutManager, container: TextContainer) =
   manager.xTextContainer = container
   manager.xTextContainers.setLen(0)
   emit manager.containersDidChange(manager.effectiveContainers())
-  manager.invalidateLayout()
+  manager.defaultInvalidateContainer(initTextContainerIndex(0))
 
 proc textContainers*(manager: TextLayoutManager): seq[TextContainer] =
   manager.effectiveContainers()
@@ -697,7 +721,8 @@ proc `textContainers=`*(manager: TextLayoutManager, containers: seq[TextContaine
   manager.xTextContainer = normalized[0]
   manager.xTextContainers = normalized
   emit manager.containersDidChange(normalized)
-  manager.invalidateLayout()
+  for index in 0 ..< normalized.len:
+    manager.defaultInvalidateContainer(initTextContainerIndex(index))
 
 proc addTextContainer*(manager: TextLayoutManager, container: TextContainer) =
   var containers = manager.effectiveContainers()
@@ -779,7 +804,16 @@ proc usesBackgroundLayout*(manager: TextLayoutManager): bool =
   manager.xUsesBackgroundLayout
 
 proc `usesBackgroundLayout=`*(manager: TextLayoutManager, value: bool) =
+  if manager.xUsesBackgroundLayout == value:
+    return
   manager.xUsesBackgroundLayout = value
+  if not value:
+    manager.xCanUseBackgroundLayout = false
+
+proc isBackgroundLayoutPending*(manager: TextLayoutManager): bool =
+  ## Return whether a cached layout is visible while replacement reflow is pending.
+  manager.xBackgroundSchedulePending or manager.xPendingBackgroundGeneration != 0 or
+    (not manager.xHasLayout and manager.xCanUseBackgroundLayout)
 
 proc allowsNonContiguousLayout*(manager: TextLayoutManager): bool =
   manager.xAllowsNonContiguousLayout
@@ -798,6 +832,13 @@ proc recordInvalidation(
 ) =
   manager.xInvalidations.add invalidation
   emit manager.textLayoutDidInvalidate(manager.xInvalidations)
+
+proc markLayoutInvalid(manager: TextLayoutManager, containerOnly: bool) =
+  let hadReusableLayout =
+    manager.xHasCachedLayout and (manager.xHasLayout or manager.xCanUseBackgroundLayout)
+  inc manager.xBackgroundGeneration
+  manager.xHasLayout = false
+  manager.xCanUseBackgroundLayout = containerOnly and hadReusableLayout
 
 proc invalidateCharacters*(manager: TextLayoutManager, range: TextRange) =
   manager.lmInvalidateChars(range)
@@ -946,7 +987,7 @@ proc applyClientInputs(manager: TextLayoutManager) =
     manager.unobserveTextStorage(manager.xTextStorage)
     manager.xTextStorage = storage.get()
     manager.observeTextStorage(manager.xTextStorage)
-    manager.xHasLayout = false
+    manager.markLayoutInvalid(containerOnly = false)
 
   let containers = manager.xClient.trySendLocal(textLayoutContainers(), manager)
   if containers.isSome and containers.get().len > 0:
@@ -954,23 +995,23 @@ proc applyClientInputs(manager: TextLayoutManager) =
     if supplied != manager.effectiveContainers():
       manager.xTextContainer = supplied[0]
       manager.xTextContainers = supplied
-      manager.xHasLayout = false
+      manager.markLayoutInvalid(containerOnly = true)
   else:
     let container = manager.xClient.trySendLocal(textLayoutContainer(), manager)
     if container.isSome and
         (manager.xTextContainers.len > 0 or container.get() != manager.xTextContainer):
       manager.xTextContainer = container.get()
       manager.xTextContainers.setLen(0)
-      manager.xHasLayout = false
+      manager.markLayoutInvalid(containerOnly = true)
 
   let style = manager.xClient.trySendLocal(textLayoutStyle(), manager)
   if style.isSome and style.get() != manager.xTextStyle:
     manager.xTextStyle = style.get()
-    manager.xHasLayout = false
+    manager.markLayoutInvalid(containerOnly = false)
   let alignment = manager.xClient.trySendLocal(textLayoutAlignment(), manager)
   if alignment.isSome and alignment.get() != manager.xAlignment:
     manager.xAlignment = alignment.get()
-    manager.xHasLayout = false
+    manager.markLayoutInvalid(containerOnly = false)
 
 proc layoutRequest(manager: TextLayoutManager): TextLayoutRequest =
   let containers = manager.effectiveContainers()
@@ -990,13 +1031,13 @@ proc layoutRequest(manager: TextLayoutManager): TextLayoutRequest =
 proc defaultInvalidateLayout(manager: TextLayoutManager, range: TextRange) =
   manager.xInvalidatedRanges.add range
   manager.recordInvalidation(invalidationForText(tlikLayout, range))
-  manager.xHasLayout = false
+  manager.markLayoutInvalid(containerOnly = false)
   emit manager.layoutDidInvalidate(manager.xInvalidatedRanges)
 
 proc defaultInvalidateCharacters(manager: TextLayoutManager, range: TextRange) =
   manager.xInvalidatedRanges.add range
   manager.recordInvalidation(invalidationForText(tlikCharacters, range))
-  manager.xHasLayout = false
+  manager.markLayoutInvalid(containerOnly = false)
   emit manager.layoutDidInvalidate(manager.xInvalidatedRanges)
 
 proc defaultInvalidateGlyphs(manager: TextLayoutManager, range: GlyphRange) =
@@ -1006,7 +1047,7 @@ proc defaultInvalidateGlyphs(manager: TextLayoutManager, range: GlyphRange) =
   manager.recordInvalidation(
     invalidationForGlyphs(tlikGlyphs, clamped, manager.textRangeForGlyphRange(clamped))
   )
-  manager.xHasLayout = false
+  manager.markLayoutInvalid(containerOnly = false)
   emit manager.layoutDidInvalidate(manager.xInvalidatedRanges)
 
 proc defaultInvalidateDisplay(manager: TextLayoutManager, range: TextRange) =
@@ -1020,7 +1061,7 @@ proc defaultInvalidateContainer(manager: TextLayoutManager, index: TextContainer
   let clamped = initTextContainerIndex(position)
   manager.xInvalidatedContainers.add clamped
   manager.recordInvalidation(invalidationForContainer(clamped))
-  manager.xHasLayout = false
+  manager.markLayoutInvalid(containerOnly = true)
   emit manager.containerDidInvalidate(clamped, containers[position])
 
 proc defaultHasValidLayout(manager: TextLayoutManager): bool =
@@ -1089,24 +1130,29 @@ proc shouldHyphenate*(manager: TextLayoutManager, range: TextRange, word = ""): 
   .trySendLocal(shouldHyphenateText(), (manager: manager, range: range, word: word))
   .get(false)
 
-proc defaultUpdateLayout(manager: TextLayoutManager) =
-  manager.applyClientInputs()
-  if manager.xHasLayout:
-    return
-  if manager.xBackend.isNil:
-    manager.xBackend = newFigDrawTextTypesetter()
+proc retainedFonts(arrangement: GlyphArrangement): seq[FontRef] =
+  var retainedFontIds = initHashSet[FontId]()
+  for glyphFont in arrangement.fonts:
+    if glyphFont.fontId notin retainedFontIds:
+      retainedFontIds.incl glyphFont.fontId
+      result.add fontRef(getFigFont(glyphFont.fontId))
 
+proc finishLayout(
+    manager: TextLayoutManager,
+    arrangement: sink GlyphArrangement,
+    snapshot: sink TextLayoutSnapshot,
+    fontRefs: sink seq[FontRef],
+) =
   let
-    request = manager.layoutRequest()
     oldSnapshot = manager.xSnapshot
     oldUsedRect = oldSnapshot.usedRect
     oldContentSize = oldSnapshot.contentSize
-    layout = manager.xBackend.layoutText(request)
-  manager.xFontRefs = layout.fontRefs
-  manager.xLayout = layout.arrangement
-  manager.xLayoutRect = request.effectiveContainers().virtualLayoutRect()
-  manager.xSnapshot = layout.snapshot
+  manager.xFontRefs = fontRefs
+  manager.xLayout = arrangement
+  manager.xSnapshot = snapshot
   manager.xHasLayout = true
+  manager.xHasCachedLayout = true
+  manager.xCanUseBackgroundLayout = false
   manager.xInvalidatedRanges.setLen(0)
   manager.xInvalidatedGlyphRanges.setLen(0)
   manager.xInvalidatedContainers.setLen(0)
@@ -1119,6 +1165,98 @@ proc defaultUpdateLayout(manager: TextLayoutManager) =
       oldContentSize != manager.xSnapshot.contentSize:
     emit manager.layoutGeometryDidChange(oldUsedRect, oldContentSize, manager.xSnapshot)
 
+proc startBackgroundTextLayout(manager: TextLayoutManager) =
+  if manager.xPendingBackgroundGeneration != 0:
+    return
+  manager.ensureBackgroundWorker()
+  let
+    request = manager.layoutRequest()
+    containers = request.effectiveContainers()
+    layoutRect = containers.virtualLayoutRect()
+    generation = manager.xBackgroundGeneration
+    source =
+      if request.storage.isNil:
+        ""
+      else:
+        request.storage.stringValue()
+    runs =
+      if request.storage.isNil:
+        @[]
+      else:
+        request.storage.attributeRuns()
+  manager.xPendingBackgroundGeneration = generation
+  emit manager.xBackgroundWorker.requestTextLayout(
+    generation,
+    layoutRect,
+    source,
+    runs,
+    request.style,
+    request.alignment,
+    request.wraps or containers.anyContainerWraps(),
+  )
+
+proc scheduleBackgroundTextLayout(manager: TextLayoutManager) =
+  if manager.xPendingBackgroundGeneration != 0 or manager.xBackgroundSchedulePending:
+    return
+  manager.xBackgroundSchedulePending = true
+  var
+    observedGeneration = manager.xBackgroundGeneration
+    stableFrames = 0
+  scheduleMainThreadWork(
+    proc(): bool =
+      if not manager.xUsesBackgroundLayout or not manager.xCanUseBackgroundLayout:
+        manager.xBackgroundSchedulePending = false
+        return
+      if observedGeneration != manager.xBackgroundGeneration:
+        observedGeneration = manager.xBackgroundGeneration
+        stableFrames = 0
+        return true
+      inc stableFrames
+      if stableFrames < 2:
+        return true
+      manager.xBackgroundSchedulePending = false
+      manager.startBackgroundTextLayout()
+  )
+
+proc completeBackgroundTextLayout(
+    manager: TextLayoutManager, layoutResultBox: SharedPtr[TextLayoutWorkerResult]
+) {.slot.} =
+  var layoutResult = move layoutResultBox[]
+  if layoutResult.generation == manager.xPendingBackgroundGeneration:
+    manager.xPendingBackgroundGeneration = 0
+  if layoutResult.generation != manager.xBackgroundGeneration or
+      not manager.xUsesBackgroundLayout or not manager.xCanUseBackgroundLayout:
+    if manager.xUsesBackgroundLayout and manager.xCanUseBackgroundLayout and
+        manager.xPendingBackgroundGeneration == 0:
+      manager.scheduleBackgroundTextLayout()
+    return
+
+  manager.xLayoutRect = manager.effectiveContainers().virtualLayoutRect()
+  var fontRefs = layoutResult.arrangement.retainedFonts()
+  manager.xLayout = move layoutResult.arrangement
+  var
+    snapshot = manager.snapshotFromCurrentLayout()
+    arrangement = move manager.xLayout
+  manager.finishLayout(move arrangement, move snapshot, move fontRefs)
+
+proc defaultUpdateLayout(manager: TextLayoutManager) =
+  manager.applyClientInputs()
+  if manager.xHasLayout:
+    return
+  if manager.xBackend.isNil:
+    manager.xBackend = newFigDrawTextTypesetter()
+
+  if manager.xUsesBackgroundLayout and manager.xCanUseBackgroundLayout and
+      manager.xBackend of FigDrawTextTypesetter:
+    manager.scheduleBackgroundTextLayout()
+    return
+
+  let
+    request = manager.layoutRequest()
+    layout = manager.xBackend.layoutText(request)
+  manager.xLayoutRect = request.effectiveContainers().virtualLayoutRect()
+  manager.finishLayout(layout.arrangement, layout.snapshot, layout.fontRefs)
+
 proc updateLayout*(manager: TextLayoutManager) =
   manager.lmUpdate()
 
@@ -1129,11 +1267,7 @@ proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult =
     wraps = request.wraps or containers.anyContainerWraps()
   result.arrangement =
     textLayout(rect, request.storage, request.style, request.alignment, wraps)
-  var retainedFontIds = initHashSet[FontId]()
-  for glyphFont in result.arrangement.fonts:
-    if glyphFont.fontId notin retainedFontIds:
-      retainedFontIds.incl glyphFont.fontId
-      result.fontRefs.add(fontRef(getFigFont(glyphFont.fontId)))
+  result.fontRefs = result.arrangement.retainedFonts()
   let manager = TextLayoutManager(
     xTextStorage: request.storage,
     xTextContainer: containers[0],

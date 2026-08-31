@@ -59,6 +59,13 @@ proc textEditorTextDidChange(editor: TextEditor, sender: DynamicAgent) {.slot.} 
   editor.updateTextEditorLayout()
   emit editor.textDidChange(DynamicAgent(editor))
 
+proc textEditorLayoutDidComplete(
+    editor: TextEditor, snapshot: TextLayoutSnapshot
+) {.slot.} =
+  discard snapshot
+  editor.xMeasurement.valid = false
+  editor.setNeedsLayout()
+
 func normalizedTextInsets(insets: EdgeInsets): EdgeInsets =
   insets(
     max(insets.top, 0.0'f32),
@@ -209,8 +216,10 @@ proc measuredText(
     materialized = storage.isMaterialized()
     alignment = editor.xTextView.alignment()
     style = editor.xTextView.resolvedTextStyle()
-    measuringRect =
-      rect(0.0, 0.0, measuringWidth, DefaultTextEditorMeasureHeight).inset(insets)
+    measuringContainer = initTextContainer(
+      initSize(measuringWidth, DefaultTextEditorMeasureHeight), insets, editor.xWraps
+    )
+    measuringRect = measuringContainer.layoutRect()
 
   let cached = editor.xMeasurement
   if cached.valid and cached.storage == storage and cached.revision == revision and
@@ -219,23 +228,34 @@ proc measuredText(
       cached.alignment == alignment and cached.style == style:
     return (cached.textSize, cached.hasText)
 
-  let layout =
-    textLayoutForMeasurement(measuringRect, storage, style, alignment, editor.xWraps)
-  result =
-    (initSize(layout.bounding.w, layout.bounding.h), layout.selectionRects.len > 0)
-  editor.xMeasurement = TextEditorMeasurement(
-    storage: storage,
-    revision: revision,
-    materialized: storage.isMaterialized(),
-    width: measuringWidth,
-    insets: insets,
-    wraps: editor.xWraps,
-    alignment: alignment,
-    style: style,
-    textSize: result.size,
-    hasText: result.hasText,
-    valid: true,
-  )
+  let
+    manager = editor.xTextView.layoutManager()
+    canReuseLayout =
+      manager.usesBackgroundLayout() and
+      (manager.hasValidLayout() or manager.isBackgroundLayoutPending())
+  editor.xTextView.textContainer = measuringContainer
+  if canReuseLayout:
+    let snapshot = manager.layoutSnapshot()
+    result = (snapshot.contentSize, storage.len > 0)
+  else:
+    let layout =
+      textLayoutForMeasurement(measuringRect, storage, style, alignment, editor.xWraps)
+    result =
+      (initSize(layout.bounding.w, layout.bounding.h), layout.selectionRects.len > 0)
+  if not manager.isBackgroundLayoutPending():
+    editor.xMeasurement = TextEditorMeasurement(
+      storage: storage,
+      revision: revision,
+      materialized: storage.isMaterialized(),
+      width: measuringWidth,
+      insets: insets,
+      wraps: editor.xWraps,
+      alignment: alignment,
+      style: style,
+      textSize: result.size,
+      hasText: result.hasText,
+      valid: true,
+    )
 
 proc textDocumentSize(
     editor: TextEditor, viewportWidth, viewportHeight: float32
@@ -276,8 +296,9 @@ func closeEnough(left, right: Size): bool =
 
 proc applyTextDocumentSize(editor: TextEditor, documentSize: Size) =
   editor.xTextView.frame = rect(0.0, 0.0, documentSize.width, documentSize.height)
-  editor.xTextView.textContainer =
-    initTextContainer(documentSize, editor.xTextInsets, editor.xWraps)
+  if not editor.xTextView.layoutManager().usesBackgroundLayout():
+    editor.xTextView.textContainer =
+      initTextContainer(documentSize, editor.xTextInsets, editor.xWraps)
   editor.xScrollView.tile()
 
 proc updateTextEditorLayout(editor: TextEditor) =
@@ -630,6 +651,9 @@ proc initTextEditorFields*(
   editor.xScrollView.drawsBackground = true
   editor.addSubview(editor.xScrollView)
   editor.xTextView.connect(textDidChange, editor, textEditorTextDidChange)
+  editor.xTextView.layoutManager().connect(
+    layoutDidComplete, editor, textEditorLayoutDidComplete
+  )
   discard editor.withProtocol(DefaultTextEditorLayout)
   discard editor.withProtocol(DefaultTextEditorResponder)
   discard editor.withProtocol(DefaultTextEditorView)

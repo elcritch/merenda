@@ -1032,6 +1032,10 @@ func isMarkdownParsing*(view: MarkdownView): bool =
   ## Return whether parsing or incremental AST application is in progress.
   not view.isNil and (view.xActiveMarkdownGeneration != 0 or view.isMarkdownRendering())
 
+func isMarkdownLayoutPending*(view: MarkdownView): bool =
+  ## Return whether resize reflow is finishing on a text-layout worker.
+  not view.isNil and view.textView().layoutManager().isBackgroundLayoutPending()
+
 func markdownRenderChunkCount*(view: MarkdownView): int =
   ## Return the number of chunks used by the current or last completed render.
   if view.isNil:
@@ -1080,6 +1084,18 @@ proc waitForMarkdownParsing*(
   while getMonoTime() < deadline:
     discard view.pollMarkdownParsing()
     if not view.isMarkdownParsing():
+      return true
+    sleep(1)
+
+proc waitForMarkdownLayout*(
+    view: MarkdownView, timeoutMilliseconds: Natural = 5_000
+): bool {.discardable.} =
+  ## Poll until the latest background resize reflow is installed.
+  let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
+  while getMonoTime() < deadline:
+    discard view.pollMarkdownParsing()
+    view.layoutSubtreeIfNeeded()
+    if not view.isMarkdownLayoutPending():
       return true
     sleep(1)
 
@@ -1212,6 +1228,7 @@ proc initMarkdownViewFields*(
   view.accessibilityLabel = "Markdown document"
   view.applyMarkdownStyle()
   view.applyMarkdownDocument(view.xMarkdownRoot.markdownDocument(style))
+  view.textView().layoutManager().usesBackgroundLayout = true
   view.scheduleMarkdownParse()
 
 proc newMarkdownView*(

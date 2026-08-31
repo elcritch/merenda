@@ -140,7 +140,10 @@ as linked alt text and then rerendering from the platform disk cache. Set
 application loop applies completed parses automatically. Tests and command-line
 tools can call `viewer.waitForMarkdownParsing()` when they need the rendered text
 immediately; `isMarkdownRendering()` and `waitForMarkdownRendering()` expose the
-application phase separately. See `examples/markdown_viewer_demo.nim` for a
+application phase separately. Width-only reflow keeps the last complete layout
+visible and runs on a coalescing Sigils worker pool, so live pane resizing does not
+block the GUI. Tests can use `waitForMarkdownLayout()` when they need the settled
+post-resize geometry. See `examples/markdown_viewer_demo.nim` for a
 complete window.
 
 ## Cached URL Assets
