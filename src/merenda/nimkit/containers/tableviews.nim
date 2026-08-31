@@ -25,6 +25,7 @@ import ../text/fieldeditors
 import ../text/textviews
 import ../foundation/types
 import ../foundation/undomanagers
+from ../view/viewgeometry import setFrameFromLayout
 import ../view/views
 
 const
@@ -36,6 +37,7 @@ const
   TableTypeSelectTimeout = 1.0
   TableSelectionIdentityPrefix = "ids:"
   TableColumnWidthEpsilon = 0.001'f32
+  MaxTableContentLayoutPasses = 4
 
 type
   TableModelError* = object of KeyError
@@ -303,6 +305,10 @@ type
     column: TableColumn
     view: View
 
+  TableContentLayout = object
+    scrollFrame: Rect
+    documentSize: Size
+
   TableColumn* = ref object
     xTableView: TableView
     xIdentifier: string
@@ -375,7 +381,8 @@ proc rowIndexAtContentY(tableView: TableView, y: float32): int
 proc contentHeight(tableView: TableView): float32
 proc visibleRowsFrom(tableView: TableView, firstIndex: int, height: float32): int
 proc maxFirstVisibleIndex(tableView: TableView): int
-proc tileTableContent(tableView: TableView)
+proc layoutTableContent(tableView: TableView)
+proc layoutTableContentIfNeeded(tableView: TableView)
 proc listContentOffset(tableView: TableView): Point
 proc setTableContentOffset(tableView: TableView, offset: Point, invalidate: bool)
 proc scrollItemToVisible(tableView: TableView, itemIndex: int)
@@ -1766,7 +1773,7 @@ proc tableHeaderRect*(tableView: TableView): Rect =
 proc tableColumnRect*(tableView: TableView, column: TableColumn): Rect =
   if column.isNil:
     return rect(0.0, 0.0, 0.0, 0.0)
-  tableView.tileTableContent()
+  tableView.layoutTableContentIfNeeded()
   let contentView = tableView.contentView()
   let contentRect = tableView.columnRect(
     rect(0.0, 0.0, contentView.bounds().size.width, tableView.bounds().h), column
@@ -1796,7 +1803,7 @@ proc tableRowHeaderRect*(tableView: TableView): Rect =
 proc tableRowHeaderCellFrame(tableView: TableView, row: int): Rect =
   if not tableView.showsRowHeader():
     return rect(0.0, 0.0, 0.0, 0.0)
-  tableView.tileTableContent()
+  tableView.layoutTableContentIfNeeded()
   let contentView = tableView.contentView()
   let rowRect = contentView.rectToView(contentView.tableContentItemRect(row), tableView)
   if rowRect.isEmpty:
@@ -2287,7 +2294,7 @@ proc viewportSize(tableView: TableView): Size =
   tableView.xScrollView.viewportSize()
 
 proc invalidateTableRows(tableView: TableView) =
-  tableView.xContentView.syncVisibleRowViews()
+  tableView.setNeedsLayout()
   tableView.xScrollView.needsDisplay = true
   let scroller = tableView.xScrollView.verticalScroller()
   if not scroller.isNil:
@@ -2419,7 +2426,6 @@ proc setTableContentOffset(tableView: TableView, offset: Point, invalidate: bool
   let nextOffset = scrollView.contentOffset()
   if oldOffset != nextOffset and invalidate:
     tableView.invalidateTableRows()
-  tableView.xContentView.syncVisibleRowViews()
 
 proc measuredColumnContentWidth(tableView: TableView, column: TableColumn): float32 =
   let
@@ -2543,44 +2549,54 @@ proc resolveColumnSizing(tableView: TableView, availableWidth: float32): bool =
   if result:
     tableView.noteResolvedColumnWidthsChanged()
 
-proc updateTableDocumentSize(
-    tableView: TableView, availableWidth, contentHeight: float32
-) =
-  discard tableView.resolveColumnSizing(availableWidth)
-  let documentWidth = max(tableView.visibleColumnWidth(), availableWidth)
-  tableView.xContentView.frame = rect(0.0'f32, 0.0'f32, documentWidth, contentHeight)
-  tableView.xScrollView.tile()
-
-proc tileTableContent(tableView: TableView) =
-  let
-    offset = tableView.listContentOffset()
-    rowHeaderWidth = tableView.visibleRowHeaderWidth()
-    scrollFrame = rect(
-      1.0'f32 + rowHeaderWidth,
-      1.0'f32,
-      max(tableView.bounds().size.width - 2.0'f32 - rowHeaderWidth, 0.0'f32),
-      max(tableView.bounds().size.height - 2.0'f32, 0.0'f32),
-    )
-  tableView.xScrollView.frame = scrollFrame
+proc resolvedTableContentLayout(tableView: TableView): TableContentLayout =
+  let rowHeaderWidth = tableView.visibleRowHeaderWidth()
+  result.scrollFrame = rect(
+    1.0'f32 + rowHeaderWidth,
+    1.0'f32,
+    max(tableView.bounds().size.width - 2.0'f32 - rowHeaderWidth, 0.0'f32),
+    max(tableView.bounds().size.height - 2.0'f32, 0.0'f32),
+  )
   let contentHeight = tableView.contentHeight()
   if tableView.resolveNaturalColumnWidths():
     tableView.noteResolvedColumnWidthsChanged()
-  tableView.xContentView.frame =
-    rect(0.0'f32, 0.0'f32, tableView.visibleColumnWidth(), contentHeight)
+  var availableWidth = tableView.xScrollView.viewportSizeForDocumentSize(
+    result.scrollFrame.size, initSize(tableView.visibleColumnWidth(), contentHeight)
+  ).width
+  for _ in 0 ..< MaxTableContentLayoutPasses:
+    discard tableView.resolveColumnSizing(availableWidth)
+    let
+      documentWidth = max(tableView.visibleColumnWidth(), availableWidth)
+      viewportSize = tableView.xScrollView.viewportSizeForDocumentSize(
+        result.scrollFrame.size, initSize(documentWidth, contentHeight)
+      )
+    result.documentSize = initSize(documentWidth, contentHeight)
+    if abs(viewportSize.width - availableWidth) <= TableColumnWidthEpsilon:
+      break
+    availableWidth = viewportSize.width
+
+proc layoutTableContent(tableView: TableView) =
+  let
+    offset = tableView.listContentOffset()
+    layout = tableView.resolvedTableContentLayout()
+  tableView.xScrollView.setFrameFromLayout(layout.scrollFrame)
+  tableView.xContentView.setFrameFromLayout(
+    rect(initPoint(0.0'f32, 0.0'f32), layout.documentSize)
+  )
   tableView.xScrollView.tile()
-  let proposedViewportWidth = tableView.xScrollView.viewportSize().width
-  tableView.updateTableDocumentSize(proposedViewportWidth, contentHeight)
-  let settledViewportWidth = tableView.xScrollView.viewportSize().width
-  if abs(settledViewportWidth - proposedViewportWidth) > TableColumnWidthEpsilon:
-    tableView.updateTableDocumentSize(settledViewportWidth, contentHeight)
   tableView.setTableContentOffset(offset, false)
+  tableView.xContentView.syncVisibleRowViews()
+  tableView.syncVisibleTableCells()
+
+proc layoutTableContentIfNeeded(tableView: TableView) =
+  if tableView.needsLayout() or tableView.needsUpdateConstraints():
+    tableView.layoutSubtreeIfNeeded()
 
 proc scrollContentRectToVisible(tableView: TableView, rect: Rect) =
   let oldFirst = tableView.firstVisibleIndex()
   if rect.isEmpty:
     return
-  if tableView.xScrollView.scrollRectToVisible(rect):
-    tableView.xContentView.syncVisibleRowViews()
+  discard tableView.xScrollView.scrollRectToVisible(rect)
   if tableView.firstVisibleIndex() != oldFirst:
     tableView.invalidateTableRows()
 
@@ -3234,6 +3250,7 @@ proc reloadData*(tableView: TableView) =
         ""
   tableView.clearTableCellSlots()
   tableView.invalidateRowHeightCache()
+  tableView.setNeedsLayout()
   if selectedIdentifiers.len > 0:
     tableView.applySelectionForRowIdentifiers(
       selectedIdentifiers, anchorIdentifier, leadIdentifier
@@ -3265,7 +3282,7 @@ proc reloadData*(tableView: TableView) =
       tableView.xEditing = TableEditingState(row: -1)
       Control(tableView).clearValidationError()
       tableView.clearEditingSurface()
-  tableView.tileTableContent()
+  tableView.layoutTableContentIfNeeded()
   let restoredFirst =
     if oldFirstIdentifier.len > 0:
       let row = tableView.tableRowIndexForIdentifier(oldFirstIdentifier)
@@ -3299,7 +3316,8 @@ proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdat
         ""
   tableView.clearTableCellSlots()
   tableView.invalidateRowHeightCache()
-  tableView.tileTableContent()
+  tableView.setNeedsLayout()
+  tableView.layoutTableContentIfNeeded()
   if selectedIdentifiers.len > 0:
     tableView.applySelectionForRowIdentifiers(
       selectedIdentifiers, anchorIdentifier, leadIdentifier
@@ -3468,7 +3486,7 @@ proc `selectedIndex=`*(tableView: TableView, index: int) =
     tableView.selectItemAtIndex(index)
 
 proc rowItemRect*(tableView: TableView, itemIndex: int): Rect =
-  tableView.tileTableContent()
+  tableView.layoutTableContentIfNeeded()
   let contentView = tableView.contentView()
   let contentRect = contentView.tableContentItemRect(itemIndex)
   if contentRect.isEmpty:
@@ -3482,7 +3500,7 @@ proc rowItemRect*(tableView: TableView, itemIndex: int): Rect =
     visibleRect
 
 proc rowItemIndexAtPoint*(tableView: TableView, point: Point): int =
-  tableView.tileTableContent()
+  tableView.layoutTableContentIfNeeded()
   if tableView.showsRowHeader() and tableView.tableRowHeaderRect().contains(point):
     let contentView = tableView.contentView()
     let index =
@@ -3514,7 +3532,7 @@ proc firstVisibleIndex*(tableView: TableView): int =
   tableView.rowIndexAtContentY(tableView.listContentOffset().y)
 
 proc visibleRowSummaries*(tableView: TableView): seq[TableVisibleRowSummary] =
-  tableView.tileTableContent()
+  tableView.layoutTableContentIfNeeded()
   let
     contentView = tableView.contentView()
     rows = contentView.visibleContentRows()
@@ -3534,9 +3552,8 @@ proc visibleRowSummaries*(tableView: TableView): seq[TableVisibleRowSummary] =
 iterator visibleRowViews*(
     tableView: TableView
 ): tuple[index: int, view: View, rect: Rect] =
-  tableView.tileTableContent()
+  tableView.layoutTableContentIfNeeded()
   let contentView = tableView.contentView()
-  contentView.syncVisibleRowViews()
   for rowView in contentView.xRowViews:
     yield (rowView.xRow.index, View(rowView), rowView.frame())
 
@@ -4038,7 +4055,10 @@ proc syncVisibleTableCells(tableView: TableView) =
   var
     nextSlots: seq[TableCellSlot]
     used = newSeq[bool](previousSlots.len)
-  for (row, rowView, rowRect) in tableView.visibleRowViews():
+  for rowView in tableView.xContentView.xRowViews:
+    let
+      row = rowView.xRow.index
+      rowRect = rowView.frame()
     let rowBounds = rect(0.0, 0.0, rowRect.size.width, rowRect.size.height)
     for column in tableView.columns:
       if not column.hidden():
@@ -4052,7 +4072,7 @@ proc syncVisibleTableCells(tableView: TableView) =
         if not cellView.isNil:
           if cellView.superview() != rowView:
             rowView.addSubview(cellView)
-          cellView.frame = tableView.columnRect(rowBounds, column)
+          cellView.setFrameFromLayout(tableView.columnRect(rowBounds, column))
           cellView.hidden = false
           cellView.setWidgetState(ssDisabled, not tableView.rowEnabled(row))
           tableView.applyCellAccessibility(row, column, cellView)
@@ -4083,7 +4103,7 @@ proc prepareEditingSurface(tableView: TableView): bool =
   tableView.xEditingHostIsRowView = false
 
   tableView.scrollItemToVisible(tableView.xEditing.row)
-  tableView.syncVisibleTableCells()
+  tableView.layoutSubtreeIfNeeded()
 
   let cellView =
     tableView.visibleCellView(tableView.xEditing.row, tableView.xEditing.column)
@@ -4174,7 +4194,7 @@ proc installFieldEditorOnSurface(tableView: TableView, editor: FieldEditor) =
     let textView = TextView(editor)
     textView.setTextStyleOverride(tableView.fieldEditorTextStyleForEditing())
     textView.alignment = tableView.xEditing.column.alignment()
-    editor.frame = frame
+    editor.setFrameFromLayout(frame)
     editor.bounds = rect(0.0, 0.0, frame.size.width, frame.size.height)
     if not tableView.xEditingHostView.isNil and
         editor.superview() != tableView.xEditingHostView:
@@ -4994,7 +5014,7 @@ proc visibleContentRows(contentView: TableContentView): tuple[first, last: int] 
 proc configureRowView(rowView: TableRowView, itemIndex: int) =
   let tableView = rowView.xTableView
   rowView.xRow = tableView.tableRowState(itemIndex)
-  rowView.frame = tableView.xContentView.tableContentItemRect(itemIndex)
+  rowView.setFrameFromLayout(tableView.xContentView.tableContentItemRect(itemIndex))
 
 proc removeLastRowView(contentView: TableContentView) =
   if contentView.xRowViews.len == 0:
@@ -5187,12 +5207,6 @@ protocol DefaultTableRowViewAccessibility of AccessibilityProtocol:
   method isAccessibilityElement(rowView: TableRowView): bool =
     rowView.xRow.index >= 0
 
-protocol DefaultTableContentViewDrawing of ViewDrawingProtocol:
-  method draw(contentView: TableContentView, context: DrawContext) =
-    contentView.syncVisibleRowViews()
-    let tableView = contentView.tableView()
-    tableView.syncVisibleTableCells()
-
 protocol DefaultTableContentViewHitTesting of ViewProtocol:
   method pointInside(contentView: TableContentView, point: Point): bool =
     contentView.bounds().contains(point)
@@ -5202,7 +5216,7 @@ protocol DefaultTableViewLayout of ViewLayoutProtocol:
     initIntrinsicSize(tableView.naturalSize())
 
   method layoutSubviews(tableView: TableView) =
-    tableView.tileTableContent()
+    tableView.layoutTableContent()
 
 func hasExceededDragThreshold(startPoint, location: Point, threshold: float32): bool =
   max(abs(location.x - startPoint.x), abs(location.y - startPoint.y)) >= threshold
@@ -5430,7 +5444,6 @@ proc initTableContentView(tableView: TableView): TableContentView =
   result = TableContentView()
   initTableBaseChild(result, false)
   result.xTableView = tableView
-  discard result.withProtocol(DefaultTableContentViewDrawing)
   discard result.withProtocol(DefaultTableContentViewHitTesting)
 
 proc initTableScrollView(tableView: TableView): ScrollView =
@@ -6610,7 +6623,6 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
   method draw(tableView: TableView, context: DrawContext) =
     if context.isNil or tableView.bounds().isEmpty:
       return
-    tableView.tileTableContent()
     let
       classes = tableView.styleClasses()
       focusedState = tableView.widgetStateSet()

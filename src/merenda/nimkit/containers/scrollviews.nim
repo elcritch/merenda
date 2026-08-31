@@ -58,6 +58,15 @@ type
     xRuler: array[LayoutAxis, RulerPlaceholder]
     xDynamicScrolling: bool
 
+  ScrollViewLayout = object
+    visibleAxes: set[LayoutAxis]
+    clipFrame: Rect
+    horizontalHeaderFrame: Rect
+    verticalHeaderFrame: Rect
+    cornerFrame: Rect
+    horizontalScrollerFrame: Rect
+    verticalScrollerFrame: Rect
+
 func normalizedScrollerThickness(value: float32): float32 =
   max(value, 0.0'f32)
 
@@ -184,20 +193,23 @@ proc headerChromeThickness(scrollView: ScrollView, axis: LayoutAxis): float32 =
   if scrollView.xRuler[axis].visible:
     result = max(result, scrollView.xRuler[axis].thickness)
 
-proc chromeContentSize(scrollView: ScrollView): Size =
+proc chromeContentSize(scrollView: ScrollView, boundsSize: Size): Size =
   initSize(
     max(
-      scrollView.bounds().size.width - scrollView.xScrollerInsets.left -
+      boundsSize.width - scrollView.xScrollerInsets.left -
         scrollView.xScrollerInsets.right - scrollView.headerChromeThickness(laVertical),
       0.0'f32,
     ),
     max(
-      scrollView.bounds().size.height - scrollView.xScrollerInsets.top -
+      boundsSize.height - scrollView.xScrollerInsets.top -
         scrollView.xScrollerInsets.bottom -
         scrollView.headerChromeThickness(laHorizontal),
       0.0'f32,
     ),
   )
+
+proc chromeContentSize(scrollView: ScrollView): Size =
+  scrollView.chromeContentSize(scrollView.bounds().size)
 
 proc visibleScrollerAxes(scrollView: ScrollView): set[LayoutAxis] =
   visibleScrollerAxes(
@@ -209,10 +221,19 @@ proc visibleScrollerAxes(scrollView: ScrollView): set[LayoutAxis] =
     scrollView.xScrollerThickness,
   )
 
-proc viewportSize*(scrollView: ScrollView): Size =
-  let visible = scrollView.visibleScrollerAxes()
+proc viewportSizeForDocumentSize*(
+    scrollView: ScrollView, boundsSize, documentSize: Size
+): Size =
   let
-    contentSize = scrollView.chromeContentSize()
+    contentSize = scrollView.chromeContentSize(boundsSize)
+    visible = visibleScrollerAxes(
+      contentSize,
+      documentSize,
+      scrollView.xHasScroller[laHorizontal],
+      scrollView.xHasScroller[laVertical],
+      scrollView.xAutohidePolicy,
+      scrollView.xScrollerThickness,
+    )
     scrollerWidth =
       if laVertical in visible: scrollView.xScrollerThickness else: 0.0'f32
     scrollerHeight =
@@ -220,6 +241,11 @@ proc viewportSize*(scrollView: ScrollView): Size =
     width = max(contentSize.width - scrollerWidth, 0.0'f32)
     height = max(contentSize.height - scrollerHeight, 0.0'f32)
   initSize(width, height)
+
+proc viewportSize*(scrollView: ScrollView): Size =
+  scrollView.viewportSizeForDocumentSize(
+    scrollView.bounds().size, scrollView.documentSize()
+  )
 
 proc viewportRect*(scrollView: ScrollView): Rect =
   rect(
@@ -411,25 +437,36 @@ proc cornerViewRect(scrollView: ScrollView): Rect =
     )
   rect(0.0, 0.0, 0.0, 0.0)
 
-proc applyChromeFrame(view: View, frame: Rect) =
+proc resolvedScrollViewLayout(scrollView: ScrollView): ScrollViewLayout =
+  result.visibleAxes = scrollView.visibleScrollerAxes()
+  result.clipFrame = scrollView.viewportRect()
+  result.horizontalHeaderFrame = scrollView.horizontalHeaderRect()
+  result.verticalHeaderFrame = scrollView.verticalHeaderRect()
+  result.cornerFrame = scrollView.cornerViewRect()
+  result.horizontalScrollerFrame = scrollView.horizontalScrollerRect()
+  result.verticalScrollerFrame = scrollView.verticalScrollerRect()
+
+proc applyChromeFrameFromLayout(view: View, frame: Rect) =
   if view.isNil:
     return
-  view.frame = frame
+  view.setFrameFromLayout(frame)
   view.hidden = frame.size.width <= 0.0'f32 or frame.size.height <= 0.0'f32
 
 proc tile*(scrollView: ScrollView) =
-  let visibleAxes = scrollView.visibleScrollerAxes()
-  scrollView.xClipView.frame = scrollView.viewportRect()
+  let layout = scrollView.resolvedScrollViewLayout()
+  scrollView.xClipView.setFrameFromLayout(layout.clipFrame)
   scrollView.setClipViewBoundsOrigin(scrollView.contentOffset())
-  applyChromeFrame(
-    scrollView.xHeaderView[laHorizontal], scrollView.horizontalHeaderRect()
+  applyChromeFrameFromLayout(
+    scrollView.xHeaderView[laHorizontal], layout.horizontalHeaderFrame
   )
-  applyChromeFrame(scrollView.xHeaderView[laVertical], scrollView.verticalHeaderRect())
-  applyChromeFrame(scrollView.xCornerView, scrollView.cornerViewRect())
-  scrollView.xScroller[laHorizontal].frame = scrollView.horizontalScrollerRect()
-  scrollView.xScroller[laHorizontal].hidden = laHorizontal notin visibleAxes
-  scrollView.xScroller[laVertical].frame = scrollView.verticalScrollerRect()
-  scrollView.xScroller[laVertical].hidden = laVertical notin visibleAxes
+  applyChromeFrameFromLayout(
+    scrollView.xHeaderView[laVertical], layout.verticalHeaderFrame
+  )
+  applyChromeFrameFromLayout(scrollView.xCornerView, layout.cornerFrame)
+  scrollView.xScroller[laHorizontal].setFrameFromLayout(layout.horizontalScrollerFrame)
+  scrollView.xScroller[laHorizontal].hidden = laHorizontal notin layout.visibleAxes
+  scrollView.xScroller[laVertical].setFrameFromLayout(layout.verticalScrollerFrame)
+  scrollView.xScroller[laVertical].hidden = laVertical notin layout.visibleAxes
 
 proc clipView*(scrollView: ScrollView): ClipView =
   scrollView.xClipView

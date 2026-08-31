@@ -159,6 +159,13 @@ func rectsClose(left, right: nimkitTypes.Rect): bool =
     abs(left.size.width - right.size.width) <= 0.01'f32 and
     abs(left.size.height - right.size.height) <= 0.01'f32
 
+proc hasPendingLayout(view: View): bool =
+  if view.needsLayout() or view.needsUpdateConstraints():
+    return true
+  for child in view.subviews():
+    if child.hasPendingLayout():
+      return true
+
 proc clippedRectangleIndex(view: View, rect: nimkitTypes.Rect): int =
   let renders = buildRenders(view)
   if DefaultDrawLevel notin renders:
@@ -1744,6 +1751,7 @@ suite "NimKit TableView":
     tableView.dataSource = source
     tableView.delegate = delegate
     source.textCalls.setLen(0)
+    delegate.viewCalls.setLen(0)
 
     check tableView.tableCellText(2, name) == "name:2"
     check source.textCalls == @["name:2"]
@@ -3420,6 +3428,27 @@ suite "NimKit TableView":
 
     check not scrollView.verticalScrollerRect().isEmpty
     check scrollView.horizontalScrollerRect().isEmpty
+
+  test "one table resize converges without pending layout":
+    let
+      root = newView(frame = rect(0, 0, 500, 400))
+      tableView = newTableView(frame = rect(0, 0, 300, 350))
+
+    tableView.rowCount = 12
+    tableView.rowHeight = 28.0
+    tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
+    tableView.addColumn(newTableColumn("state", "State", width = 100.0))
+    root.addSubview(tableView)
+    root.layoutSubtreeIfNeeded()
+
+    tableView.frame = rect(0, 0, 420, 350)
+    root.layoutSubtreeIfNeeded()
+
+    check not root.hasPendingLayout()
+
+    discard buildRenders(root)
+
+    check not root.hasPendingLayout()
 
   test "resizing tables with concrete column widths does not rebuild the default theme":
     registerDefaultThemeFactory(initCountingTableTheme)
