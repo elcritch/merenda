@@ -430,6 +430,29 @@ proc setNeedsDisplaySubtree*(view: View) =
   for child in view.xSubviews:
     child.setNeedsDisplaySubtree()
 
+proc setHiddenFromLayout*(view: View, hidden: bool) =
+  ## Apply container-owned visibility without feeding it back into layout inputs.
+  if view.isNil or view.isHidden() == hidden:
+    return
+  let parent = view.superviewBacklink()
+  if not parent.isNil:
+    parent.setNeedsDisplayInRect(view.rectToView(view.bounds(), parent))
+  if hidden:
+    view.xWidgetStates.incl ssHidden
+  else:
+    view.xWidgetStates.excl ssHidden
+  view.xNeedsDisplay = true
+  view.xInvalidRects.setLen(0)
+  if not hidden and not parent.isNil:
+    parent.setNeedsDisplayInRect(view.rectToView(view.bounds(), parent))
+
+proc setBoundsOriginFromLayout*(view: View, origin: Point) =
+  ## Apply a container-owned content offset without invalidating constraints.
+  if view.isNil or view.xBounds.origin == origin:
+    return
+  view.xBounds.origin = origin
+  view.needsDisplay = true
+
 proc viewCanBecomeKeyView*(view: View): bool =
   view.acceptsFirstResponder() and not view.isHiddenOrHasHiddenAncestor()
 

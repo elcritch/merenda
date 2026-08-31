@@ -218,6 +218,17 @@ proc checkScrollViewResizeInvariants(scrollView: ScrollView) =
     check verticalScroller.isEmpty
     check scrollView.scrollViewScrollerKnobRect(laVertical).isEmpty
 
+proc checkSettledScrollLayout(scrollView: ScrollView) =
+  check not scrollView.needsUpdateConstraints
+  check not scrollView.needsLayout
+  check not scrollView.clipView().needsUpdateConstraints
+  check not scrollView.clipView().needsLayout
+  check not scrollView.horizontalScroller().needsUpdateConstraints
+  check not scrollView.horizontalScroller().needsLayout
+  check not scrollView.verticalScroller().needsUpdateConstraints
+  check not scrollView.verticalScroller().needsLayout
+  check scrollView.layoutFeedbackCycles() == 0
+
 proc newScrollResizeFixture(frame: nimkitTypes.Rect): ScrollResizeFixture =
   result.root = newView(frame = frame)
   result.title = newTitleLabel("Scroll View")
@@ -319,13 +330,17 @@ suite "nimkit scroll views":
     check scrollView.contentView() != nil
     check View(scrollView.clipView()) == scrollView.contentView()
     check scrollView.contentView().clipsToBounds
+    check not scrollView.contentView().autoresizingMaskConstraints
     check scrollView.documentView() == document
     check document.superview == scrollView.contentView()
+    check not document.autoresizingMaskConstraints
     check scrollView.horizontalScroller() != nil
     check scrollView.horizontalScroller().superview == scrollView
+    check not scrollView.horizontalScroller().autoresizingMaskConstraints
     check scrollView.horizontalScroller().hidden
     check scrollView.verticalScroller() != nil
     check scrollView.verticalScroller().superview == scrollView
+    check not scrollView.verticalScroller().autoresizingMaskConstraints
     check scrollView.verticalScroller().hidden
     check scrollView.viewportSize() == initSize(120, 80)
     check scrollView.contentOffset() == initPoint(0, 0)
@@ -680,12 +695,14 @@ suite "nimkit scroll views":
     scrollView.layoutSubtreeIfNeeded()
     scrollView.scrollTo(scrollView.maximumContentOffset())
     checkScrollViewResizeInvariants(scrollView)
+    checkSettledScrollLayout(scrollView)
     check not scrollView.horizontalScrollerRect().isEmpty
     check not scrollView.verticalScrollerRect().isEmpty
 
     scrollView.frame = rect(0, 0, 760, 680)
     scrollView.layoutSubtreeIfNeeded()
     checkScrollViewResizeInvariants(scrollView)
+    checkSettledScrollLayout(scrollView)
     check scrollView.contentOffset() == initPoint(0, 0)
     check scrollView.horizontalScrollerRect().isEmpty
     check scrollView.verticalScrollerRect().isEmpty
@@ -693,6 +710,7 @@ suite "nimkit scroll views":
     scrollView.frame = rect(0, 0, 260, 180)
     scrollView.layoutSubtreeIfNeeded()
     checkScrollViewResizeInvariants(scrollView)
+    checkSettledScrollLayout(scrollView)
     check not scrollView.horizontalScrollerRect().isEmpty
     check not scrollView.verticalScrollerRect().isEmpty
 

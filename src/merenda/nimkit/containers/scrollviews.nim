@@ -333,7 +333,7 @@ proc scrollToPoint*(clipView: ClipView, point: Point) =
     nextBounds = rect(nextPoint, clipView.bounds().size)
   if clipView.bounds() == nextBounds:
     return
-  clipView.bounds = nextBounds
+  clipView.setBoundsOriginFromLayout(nextPoint)
   clipView.xScrollView.reflectScrolledClipView(clipView)
 
 proc autoscroll*(clipView: ClipView, event: MouseEvent): bool =
@@ -377,9 +377,6 @@ protocol DefaultClipViewGeometry of ViewProtocol:
     emit clipView.geometryDidChange()
     clipView.needsDisplay = true
     clipView.xScrollView.reflectScrolledClipView(clipView)
-
-proc setClipViewBoundsOrigin(scrollView: ScrollView, offset: Point) =
-  scrollView.xClipView.scrollToPoint(offset)
 
 proc horizontalHeaderRect(scrollView: ScrollView): Rect =
   if scrollView.xHeaderView[laHorizontal].isNil:
@@ -450,12 +447,14 @@ proc applyChromeFrameFromLayout(view: View, frame: Rect) =
   if view.isNil:
     return
   view.setFrameFromLayout(frame)
-  view.hidden = frame.size.width <= 0.0'f32 or frame.size.height <= 0.0'f32
+  view.setHiddenFromLayout(frame.size.width <= 0.0'f32 or frame.size.height <= 0.0'f32)
 
 proc tile*(scrollView: ScrollView) =
   let layout = scrollView.resolvedScrollViewLayout()
   scrollView.xClipView.setFrameFromLayout(layout.clipFrame)
-  scrollView.setClipViewBoundsOrigin(scrollView.contentOffset())
+  scrollView.xClipView.setBoundsOriginFromLayout(
+    scrollView.xClipView.constrainScrollPoint(scrollView.contentOffset())
+  )
   applyChromeFrameFromLayout(
     scrollView.xHeaderView[laHorizontal], layout.horizontalHeaderFrame
   )
@@ -464,9 +463,13 @@ proc tile*(scrollView: ScrollView) =
   )
   applyChromeFrameFromLayout(scrollView.xCornerView, layout.cornerFrame)
   scrollView.xScroller[laHorizontal].setFrameFromLayout(layout.horizontalScrollerFrame)
-  scrollView.xScroller[laHorizontal].hidden = laHorizontal notin layout.visibleAxes
+  scrollView.xScroller[laHorizontal].setHiddenFromLayout(
+    laHorizontal notin layout.visibleAxes
+  )
   scrollView.xScroller[laVertical].setFrameFromLayout(layout.verticalScrollerFrame)
-  scrollView.xScroller[laVertical].hidden = laVertical notin layout.visibleAxes
+  scrollView.xScroller[laVertical].setHiddenFromLayout(
+    laVertical notin layout.visibleAxes
+  )
 
 proc clipView*(scrollView: ScrollView): ClipView =
   scrollView.xClipView
@@ -491,6 +494,7 @@ proc `documentView=`*(scrollView: ScrollView, documentView: View) =
   scrollView.xDocumentView = documentView
   scrollView.xClipView.xDocumentView = documentView
   if not documentView.isNil:
+    documentView.autoresizingMaskConstraints = false
     scrollView.xClipView.addSubview(documentView)
   scrollView.tile()
   scrollView.invalidateContainerMetrics()
@@ -750,6 +754,7 @@ proc setHeaderView*(scrollView: ScrollView, axis: LayoutAxis, view: View) =
     scrollView.xHeaderView[axis].removeFromSuperview()
   scrollView.xHeaderView[axis] = view
   if not view.isNil:
+    view.autoresizingMaskConstraints = false
     scrollView.addSubview(view)
   scrollView.scrollerMetricsChanged()
 
@@ -775,6 +780,7 @@ proc `cornerView=`*(scrollView: ScrollView, view: View) =
     scrollView.xCornerView.removeFromSuperview()
   scrollView.xCornerView = view
   if not view.isNil:
+    view.autoresizingMaskConstraints = false
     scrollView.addSubview(view)
   scrollView.scrollerMetricsChanged()
 
@@ -993,8 +999,9 @@ protocol DefaultScrollViewEvents of ResponderEventProtocol:
 proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
   result = Scroller()
   initViewFields(result, rect(0.0, 0.0, 0.0, 0.0))
+  result.autoresizingMaskConstraints = false
   result.background = color(0.0, 0.0, 0.0, 0.0)
-  result.hidden = true
+  result.setHiddenFromLayout(true)
   result.xScrollView = scrollView
   result.xAxis = axis
   discard result.withProtocol(DefaultScrollerDrawing)
@@ -1003,6 +1010,7 @@ proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
 proc initClipView(scrollView: ScrollView, frame: Rect): ClipView =
   result = ClipView()
   initViewFields(result, frame)
+  result.autoresizingMaskConstraints = false
   result.background = color(0.0, 0.0, 0.0, 0.0)
   result.clipsToBounds = true
   result.xScrollView = scrollView

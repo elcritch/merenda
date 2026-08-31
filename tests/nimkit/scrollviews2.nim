@@ -83,6 +83,9 @@ suite "nimkit scroll views":
     check scrollView.horizontalHeaderView() == horizontalHeader
     check scrollView.verticalHeaderView() == verticalHeader
     check scrollView.cornerView() == corner
+    check not horizontalHeader.autoresizingMaskConstraints
+    check not verticalHeader.autoresizingMaskConstraints
+    check not corner.autoresizingMaskConstraints
     check scrollView.rulerPlaceholder(laHorizontal) == initRulerPlaceholder(true, 18)
     check not scrollView.dynamicScrolling()
     check scrollView.autohidePolicy() == sapAlways
