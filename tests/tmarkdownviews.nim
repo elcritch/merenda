@@ -258,6 +258,56 @@ Setext two
     check attachments[0].attachment.fileUrl == ModernUrl
     check attachments[1].attachment.fileUrl == AquaUrl
 
+  test "Markdown images use consistent block spacing":
+    let image = newImageResourceFromFile(TestImagePath)
+    let loader: MarkdownImageLoader = proc(url: string): ImageResource =
+      discard url
+      image
+    var style = initMarkdownStyle()
+    style.maximumImageSize = initSize(400.0'f32, 400.0'f32)
+    let view = newMarkdownView(
+      "# Heading\n\n" &
+        "<img width=\"300\" height=\"100\" alt=\"first\" src=\"asset:first\" />\n\n" &
+        "After first.\n\n" &
+        "<img width=\"300\" height=\"100\" alt=\"second\" src=\"asset:second\" />\n" &
+        "<img width=\"300\" height=\"100\" alt=\"third\" src=\"asset:third\" />\n\n" &
+        "After adjacent.",
+      frame = rect(0, 0, 520, 800),
+      style = style,
+      imageLoader = loader,
+    )
+    require view.waitForMarkdownParsing()
+    let renders = buildRenders(view)
+    var imageFrames: seq[Rect]
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkImage:
+        imageFrames.add rect(
+          node.screenBox.x, node.screenBox.y, node.screenBox.w, node.screenBox.h
+        )
+    require imageFrames.len == 3
+
+    let storage = view.textStorage()
+    proc renderedTextFrame(text: string): Rect =
+      let index = storage.stringValue().runeIndexOf(text)
+      require index >= 0
+      for selectionRect in view.textView().selectionRects(
+        initTextRange(index, text.runeLen)
+      ):
+        if result.isEmpty:
+          result = selectionRect
+        else:
+          result = result.union(selectionRect)
+
+    let
+      firstParagraph = renderedTextFrame("After first.")
+      adjacentParagraph = renderedTextFrame("After adjacent.")
+      firstParagraphGap = firstParagraph.minY - imageFrames[0].maxY
+      adjacentImageGap = imageFrames[2].minY - imageFrames[1].maxY
+      adjacentParagraphGap = adjacentParagraph.minY - imageFrames[2].maxY
+    check abs(firstParagraphGap - 12.0'f32) <= 2.0'f32
+    check abs(adjacentImageGap - 12.0'f32) <= 2.0'f32
+    check abs(adjacentParagraphGap - 12.0'f32) <= 2.0'f32
+
   test "custom image loaders are cached across Markdown style changes":
     let image = newImageResourceFromFile(TestImagePath)
     var requestedUrls: seq[string]

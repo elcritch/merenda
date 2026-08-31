@@ -33,6 +33,9 @@ export texteditors
 export textstorage
 export texttypes
 
+const MarkdownImageBlockSpacing = 12.0'f32
+  ## Fixed separation around image attachment lines, independent of image size.
+
 type
   MarkdownImageLoader* = proc(url: string): ImageResource {.closure.}
     ## Application-provided resolver for non-local or generated Markdown images.
@@ -239,6 +242,21 @@ func resolvedImageSize(imageSize, requestedSize: Size): Size =
   else:
     imageSize
 
+proc imageLineFontSize(attributes: TextAttributes, imageHeight: float32): float32 =
+  let
+    probeFontSize = max(attributes.fontSize, 1.0'f32)
+    probeStyle = TextStyle(
+      color: attributes.foregroundColor,
+      fontName: attributes.fontName,
+      fontSize: probeFontSize,
+      language: attributes.language,
+    )
+    probeLineHeight = textNaturalSize("", probeStyle).height
+  if probeLineHeight <= 0.0'f32:
+    return max(imageHeight + MarkdownImageBlockSpacing, probeFontSize)
+  let targetLineHeight = max(imageHeight + MarkdownImageBlockSpacing, probeLineHeight)
+  probeFontSize * targetLineHeight / probeLineHeight
+
 proc resolvedImageContentType(builder: MarkdownBuilder, url: string): string =
   if not builder.imageContentTypeLoader.isNil:
     result = builder.imageContentTypeLoader(url).normalizedMediaType()
@@ -371,7 +389,7 @@ proc renderImage(
     fileName = initUrl(token.url).lastPathComponent()
   var imageAttributes = attributes
   imageAttributes.foregroundColor = color(0.0, 0.0, 0.0, 0.0)
-  imageAttributes.fontSize = max(displaySize.height, builder.style.bodyFontSize)
+  imageAttributes.fontSize = attributes.imageLineFontSize(displaySize.height)
   imageAttributes.link = token.url
   imageAttributes.attachment = initTextAttachment(
     identifier = "markdown-image:" & token.url,
@@ -767,12 +785,7 @@ proc imageRect(
     drawSize = presentation.displaySize.scaledDown(availableSize)
   if drawSize.width <= 0.0'f32 or drawSize.height <= 0.0'f32:
     return
-  rect(
-    anchor.origin.x,
-    anchor.origin.y + max(anchor.size.height - drawSize.height, 0.0'f32) / 2.0'f32,
-    drawSize.width,
-    drawSize.height,
-  )
+  rect(anchor.origin.x, anchor.origin.y, drawSize.width, drawSize.height)
 
 protocol MarkdownTextViewDrawing of ViewDrawingProtocol:
   method draw(textView: MarkdownTextView, context: DrawContext) =
