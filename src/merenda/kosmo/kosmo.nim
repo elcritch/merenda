@@ -4,10 +4,14 @@ import std/[math, options, os, strutils, unicode]
 
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
-import ./[filesearchpanel, filetree, moe, panedocuments, quickopen, settings]
+import
+  ./[
+    filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen, settings
+  ]
 import pkg/celina as celina
 
-export filesearchpanel, filetree, moe, panedocuments, quickopen, settings
+export
+  filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen, settings
 
 const
   KosmoOpenFileAction* = "kosmo.openFile"
@@ -663,6 +667,18 @@ func markdownPresentationStyle(controls: KosmoMarkdownControls): nimkit.Markdown
     result.ruleColor = nimkit.color(0.35, 0.40, 0.49, 1.0)
     result.codeBlockStyle.backgroundColor = nimkit.color(0.08, 0.10, 0.14, 1.0)
     result.codeBlockStyle.outlineColor = nimkit.color(0.28, 0.33, 0.42, 1.0)
+    for tokenClass in nimkit.SyntaxTokenClass:
+      result.syntaxTokenColors[tokenClass] = result.codeColor
+    result.syntaxTokenColors[nimkit.stcKeyword] = nimkit.color(0.80, 0.65, 0.96, 1.0)
+    result.syntaxTokenColors[nimkit.stcIdentifier] = nimkit.color(0.54, 0.71, 0.98, 1.0)
+    result.syntaxTokenColors[nimkit.stcString] = nimkit.color(0.65, 0.89, 0.63, 1.0)
+    result.syntaxTokenColors[nimkit.stcNumber] = nimkit.color(0.98, 0.70, 0.53, 1.0)
+    result.syntaxTokenColors[nimkit.stcComment] = result.mutedColor
+    result.syntaxTokenColors[nimkit.stcOperator] = nimkit.color(0.54, 0.71, 0.98, 1.0)
+    result.syntaxTokenColors[nimkit.stcPunctuation] =
+      nimkit.color(0.58, 0.60, 0.70, 1.0)
+    result.syntaxTokenColors[nimkit.stcPreprocessor] =
+      nimkit.color(0.80, 0.65, 0.96, 1.0)
 
   let
     fontSize = if controls.isNil: KosmoMarkdownDefaultFontSize else: controls.xFontSize
@@ -2082,7 +2098,7 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
 proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   let
     commandBar = newKosmoCommandBar(editorView)
-    markdownView = nimkit.newMarkdownView()
+    markdownView = nimkit.newMarkdownView(syntaxHighlighter = moeSyntaxHighlighter)
     markdownControls = newKosmoMarkdownControls(editorView)
     activeIndicator = newKosmoPaneIndicator()
   result = KosmoEditorPane(

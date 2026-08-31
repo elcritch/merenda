@@ -1,2 +1,40 @@
-## Compile-time smoke test for Kosmo's public API.
+## Kosmo's public API and frontend-specific adapters.
+import std/[strutils, unicode, unittest]
+
+import merenda/nimkit
 import merenda/kosmo/kosmo
+
+proc runeIndexOf(source, needle: string): int =
+  let byteIndex = source.find(needle)
+  if byteIndex >= 0:
+    result = source[0 ..< byteIndex].runeLen
+
+suite "Kosmo public adapters":
+  test "Moe syntax highlighting maps broad languages to neutral rune spans":
+    let
+      nimSource = "proc π(): int = 42 # answer"
+      nimSpans = moeSyntaxHighlighter(nimSource, "nim")
+      goSource = "func main() { value := \"κόσμος\" }"
+      goSpans = moeSyntaxHighlighter(goSource, "go")
+
+    check nimSpans.syntaxTokenAt(nimSource.runeIndexOf("proc")) == stcKeyword
+    check nimSpans.syntaxTokenAt(nimSource.runeIndexOf("π")) == stcIdentifier
+    check nimSpans.syntaxTokenAt(nimSource.runeIndexOf("42")) == stcNumber
+    check nimSpans.syntaxTokenAt(nimSource.runeIndexOf("# answer")) == stcComment
+    check goSpans.syntaxTokenAt(goSource.runeIndexOf("func")) == stcKeyword
+    check goSpans.syntaxTokenAt(goSource.runeIndexOf("\"κόσμος\"")) == stcString
+    check moeSyntaxHighlighter("value", "not-a-language").len == 0
+
+  test "Moe adapter installs on editors and Markdown fenced code":
+    let editor = newSynEditView("proc answer = 42", syntaxHighlighter = nil)
+    editor.installMoeSyntaxHighlighter()
+    check editor.textEditor().textStorage().attributesAt(0).foregroundColor ==
+      editor.theme().foreground[stcKeyword]
+
+    let preview = newMarkdownView("```go\nfunc main() {}\n```", syntaxHighlighter = nil)
+    require preview.waitForMarkdownParsing()
+    preview.installMoeSyntaxHighlighter()
+    require preview.waitForMarkdownRendering()
+    let funcIndex = preview.textStorage().stringValue().runeIndexOf("func")
+    check preview.textStorage().attributesAt(funcIndex).foregroundColor ==
+      preview.markdownStyle().syntaxTokenColors[stcKeyword]
