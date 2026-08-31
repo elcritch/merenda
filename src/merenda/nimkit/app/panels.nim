@@ -7,6 +7,7 @@ import ../containers/stackviews
 import ../controls/buttons
 import ../foundation/selectors
 import ../foundation/types
+import ../foundation/urls
 import ../text/textfields
 import ../themes
 import ../view/views
@@ -34,27 +35,13 @@ proc refreshSavePanelValidation(panel: SavePanel, sender: DynamicAgent) {.slot.}
   discard panel.validateSelection()
 
 func normalizedFileType*(fileType: string): string =
-  result = fileType.strip().toLowerAscii()
-  while result.len > 0 and result[0] == '.':
-    result = result[1 .. ^1]
+  urls.normalizedFileType(fileType)
 
 proc filePathFromUrl*(fileUrl: string): string =
-  result = fileUrl
-  let queryStart = result.find('?')
-  if queryStart >= 0:
-    result.setLen(queryStart)
-  let fragmentStart = result.find('#')
-  if fragmentStart >= 0:
-    result.setLen(fragmentStart)
-  if result.startsWith("file://"):
-    result = result[7 .. ^1]
+  initUrl(fileUrl).localFilePath()
 
 proc fileTypeForUrl*(fileUrl: string): string =
-  let ext = splitFile(filePathFromUrl(fileUrl)).ext
-  if ext.len > 0 and ext[0] == '.':
-    ext[1 .. ^1].normalizedFileType()
-  else:
-    ext.normalizedFileType()
+  initUrl(fileUrl).pathExtension()
 
 proc selectedFileType*(panel: SavePanel): string
 
@@ -152,6 +139,10 @@ proc selectedUrl*(panel: OpenPanel): string =
   else:
     panel.selectedUrls[0]
 
+proc selectedUrlValue*(panel: OpenPanel): Url =
+  ## Return the first selected location as a parsed Foundation URL.
+  initUrl(panel.selectedUrl())
+
 proc selectedUrls*(panel: OpenPanel): seq[string] =
   panel.selectedUrls
 
@@ -196,6 +187,10 @@ proc selectUrl*(panel: OpenPanel, url: string) =
   else:
     panel.setSelectedUrls([url])
 
+proc selectUrl*(panel: OpenPanel, url: Url) =
+  ## Select a parsed Foundation file URL.
+  panel.selectUrl(url.absoluteString())
+
 proc validateSelection*(panel: OpenPanel): bool =
   result =
     panel.selectedUrls.len > 0 and
@@ -234,6 +229,10 @@ proc selectedUrl*(panel: SavePanel): string =
   if fileType.len > 0 and name.fileTypeForUrl().len == 0:
     name.add "." & fileType
   panel.directoryUrl.urlFromDirectory(name)
+
+proc selectedUrlValue*(panel: SavePanel): Url =
+  ## Return the save destination as a parsed Foundation URL.
+  initUrl(panel.selectedUrl())
 
 proc validateSelection*(panel: SavePanel): bool =
   let url = panel.selectedUrl()

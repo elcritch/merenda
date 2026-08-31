@@ -5,6 +5,7 @@ import sigils/core
 import ../foundation/notifications
 import ../foundation/selectors
 import ../foundation/undomanagers
+import ../foundation/urls
 import ../responder/responders
 import ./userdefaults
 import ./application
@@ -83,15 +84,7 @@ proc nextDocumentIdentifier(): string =
   "document:" & $nextDocumentIdentifierValue
 
 proc filePathFromUrl(fileUrl: string): string =
-  result = fileUrl
-  let queryStart = result.find('?')
-  if queryStart >= 0:
-    result.setLen(queryStart)
-  let fragmentStart = result.find('#')
-  if fragmentStart >= 0:
-    result.setLen(fragmentStart)
-  if result.startsWith("file://"):
-    result = result[7 .. ^1]
+  initUrl(fileUrl).localFilePath()
 
 proc defaultFileName(fileUrl: string): string =
   let path = filePathFromUrl(fileUrl)
@@ -100,10 +93,7 @@ proc defaultFileName(fileUrl: string): string =
   path.extractFilename()
 
 proc inferredFileType(fileUrl: string): string =
-  let ext = splitFile(filePathFromUrl(fileUrl)).ext
-  if ext.len > 0 and ext[0] == '.':
-    return ext[1 .. ^1]
-  ext
+  initUrl(fileUrl).pathExtension()
 
 proc resolvedFileType(document: Document, fileUrl, fileType: string): string =
   if fileType.len > 0:
@@ -206,7 +196,16 @@ proc initDocument*(document: Document, fileUrl = "", fileType = "", fileName = "
   discard document.withProtocol(DocumentMenuCommands)
   discard document.withProtocol(DefaultDocumentWindows)
 
+proc initDocument*(document: Document, fileUrl: Url, fileType = "", fileName = "") =
+  ## Initialize a document from a parsed Foundation file URL.
+  document.initDocument(fileUrl.absoluteString(), fileType, fileName)
+
 proc newDocument*(fileUrl = "", fileType = "", fileName = ""): Document =
+  result = Document()
+  result.initDocument(fileUrl, fileType, fileName)
+
+proc newDocument*(fileUrl: Url, fileType = "", fileName = ""): Document =
+  ## Create a document from a parsed Foundation file URL.
   result = Document()
   result.initDocument(fileUrl, fileType, fileName)
 
@@ -221,6 +220,10 @@ proc `delegate=`*(document: Document, delegate: Responder) =
 
 proc fileUrl*(document: Document): string =
   document.xFileUrl
+
+func fileUrlValue*(document: Document): Url =
+  ## Return the document location as a parsed Foundation URL value.
+  initUrl(document.xFileUrl)
 
 proc documentIdentifier*(document: Document): string =
   if document.xFileUrl.len > 0:
@@ -238,7 +241,14 @@ proc setFileUrl*(document: Document, fileUrl: string) =
   if oldDisplayName != document.displayName():
     document.notifyDisplayNameChanged()
 
+proc setFileUrl*(document: Document, fileUrl: Url) =
+  ## Change the document location from a parsed Foundation file URL.
+  document.setFileUrl(fileUrl.absoluteString())
+
 proc `fileUrl=`*(document: Document, fileUrl: string) =
+  document.setFileUrl(fileUrl)
+
+proc `fileUrl=`*(document: Document, fileUrl: Url) =
   document.setFileUrl(fileUrl)
 
 proc fileName*(document: Document): string =

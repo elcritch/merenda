@@ -1,18 +1,21 @@
 ## Native Markdown rendering for NimKit text views.
 ##
 ## The renderer converts a CommonMark or GFM syntax tree into attributed NimKit
-## text. Raw HTML stays inert, local images can be resolved explicitly, and
-## unavailable images use linked alt text without requiring an embedded browser.
+## text. Raw HTML stays inert, local images resolve explicitly, remote images
+## load through a Chronos worker, and unavailable images use linked alt text.
 
-import std/[lists, os, strutils, tables, unicode, uri]
+import std/[lists, os, strutils, tables, unicode]
 
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8
+import sigils/core
 
 import ../accessibility/accessibility
 import ../drawing
 import ../foundation/selectors
 import ../foundation/types
+import ../foundation/urlassets
+import ../foundation/urls
 import ../themes
 import ../view/views
 import ./texteditors
@@ -26,6 +29,8 @@ export texttypes
 type
   MarkdownImageLoader* = proc(url: string): ImageResource {.closure.}
     ## Application-provided resolver for non-local or generated Markdown images.
+
+  MarkdownImageContentTypeLoader = proc(url: string): string {.closure.}
 
   MarkdownBlockStyle* = object ## Native panel styling for a Markdown block.
     backgroundColor*: Color ## Fill behind the block contents.
@@ -73,7 +78,10 @@ type
     xMarkdownRoot: markdownParser.Document
     xImageBasePath: string
     xImageLoader: MarkdownImageLoader
+    xUrlAssetLoader: UrlAssetLoader
     xImageCache: Table[string, ImageResource]
+    xImageMediaTypes: Table[string, string]
+    xPendingUrlAssets: Table[string, UrlAssetHandle]
 
   MarkdownImagePresentation = object
     range: TextRange
@@ -98,6 +106,9 @@ type
     images: seq[MarkdownImagePresentation]
     style: MarkdownStyle
     imageLoader: MarkdownImageLoader
+    imageContentTypeLoader: MarkdownImageContentTypeLoader
+
+var defaultMarkdownUrlAssetLoader {.threadvar.}: UrlAssetLoader
 
 func initMarkdownBlockStyle*(): MarkdownBlockStyle =
   ## Returns the default light code-block panel presentation.
@@ -180,47 +191,13 @@ func scaledDown(size, maximumSize: Size): Size =
     scale = min(scale, maximumSize.height / size.height)
   initSize(size.width * scale, size.height * scale)
 
-func hasUrlScheme(value: string): bool =
-  let colon = value.find(':')
-  if colon <= 0 or not value[0].isAlphaAscii:
-    return
-  for index in 1 ..< colon:
-    if not (value[index].isAlphaNumeric or value[index] in {'+', '-', '.'}):
-      return
-  true
-
-func imageUrlPath(value: string): string =
-  let suffix = value.find({'?', '#'})
-  if suffix < 0:
-    value
-  else:
-    value[0 ..< suffix]
-
-proc localImagePath(url, basePath: string): string =
-  let source = url.imageUrlPath()
-  if source.len == 0:
-    return
-  if source.startsWith("file://"):
-    return decodeUrl(source[7 ..^ 1], decodePlus = false)
-  if source.hasUrlScheme():
-    return
-  let path = decodeUrl(source, decodePlus = false)
-  if path.isAbsolute:
-    path
-  elif basePath.len > 0:
-    basePath / path
-  else:
-    ""
-
-func imageContentType(url: string): string =
-  case splitFile(url.imageUrlPath()).ext.toLowerAscii()
-  of ".png": "image/png"
-  of ".jpg", ".jpeg": "image/jpeg"
-  of ".gif": "image/gif"
-  of ".webp": "image/webp"
-  of ".bmp": "image/bmp"
-  of ".tif", ".tiff": "image/tiff"
-  else: "image/*"
+proc resolvedImageContentType(builder: MarkdownBuilder, url: string): string =
+  if not builder.imageContentTypeLoader.isNil:
+    result = builder.imageContentTypeLoader(url).normalizedMediaType()
+  if not result.isImageMediaType():
+    result = initUrl(url).mediaType()
+  if not result.isImageMediaType():
+    result = "image/*"
 
 func bodyAttributes(style: MarkdownStyle): TextAttributes =
   defaultTextAttributes(
@@ -340,16 +317,15 @@ proc renderImage(
   let
     displaySize = image.size().scaledDown(builder.style.maximumImageSize)
     start = builder.runeLength
-    sourcePath = token.url.imageUrlPath()
-    parts = splitFile(sourcePath)
+    fileName = initUrl(token.url).lastPathComponent()
   var imageAttributes = attributes
   imageAttributes.foregroundColor = color(0.0, 0.0, 0.0, 0.0)
   imageAttributes.fontSize = max(displaySize.height, builder.style.bodyFontSize)
   imageAttributes.link = token.url
   imageAttributes.attachment = initTextAttachment(
     identifier = "markdown-image:" & token.url,
-    contentType = token.url.imageContentType(),
-    fileName = parts.name & parts.ext,
+    contentType = builder.resolvedImageContentType(token.url),
+    fileName = fileName,
     fileUrl = token.url,
     size = displaySize,
     metadata = [
@@ -527,8 +503,11 @@ proc renderContainer(
 ) =
   var wroteBlock = false
   for child in token.children:
-    var rendered =
-      MarkdownBuilder(style: builder.style, imageLoader: builder.imageLoader)
+    var rendered = MarkdownBuilder(
+      style: builder.style,
+      imageLoader: builder.imageLoader,
+      imageContentTypeLoader: builder.imageContentTypeLoader,
+    )
     rendered.renderBlock(child, attributes)
     if rendered.text.len > 0:
       if wroteBlock:
@@ -546,7 +525,11 @@ proc renderBlockquote(
   var prefixAttributes = quoteAttributes
   prefixAttributes.foregroundColor = builder.style.ruleColor
 
-  var quoted = MarkdownBuilder(style: builder.style, imageLoader: builder.imageLoader)
+  var quoted = MarkdownBuilder(
+    style: builder.style,
+    imageLoader: builder.imageLoader,
+    imageContentTypeLoader: builder.imageContentTypeLoader,
+  )
   quoted.renderContainer(quote, quoteAttributes)
   if quoted.text.len == 0:
     builder.add(builder.style.quotePrefix, prefixAttributes)
@@ -650,8 +633,13 @@ proc markdownDocument(
     root: markdownParser.Token,
     style = initMarkdownStyle(),
     imageLoader: MarkdownImageLoader = nil,
+    imageContentTypeLoader: MarkdownImageContentTypeLoader = nil,
 ): MarkdownDocument =
-  var builder = MarkdownBuilder(style: style, imageLoader: imageLoader)
+  var builder = MarkdownBuilder(
+    style: style,
+    imageLoader: imageLoader,
+    imageContentTypeLoader: imageContentTypeLoader,
+  )
   let attributes = style.bodyAttributes()
   builder.renderContainer(root, attributes)
   builder.toMarkdownDocument()
@@ -661,8 +649,11 @@ proc markdownDocument(
     style = initMarkdownStyle(),
     config: MarkdownParserConfig = nil,
     imageLoader: MarkdownImageLoader = nil,
+    imageContentTypeLoader: MarkdownImageContentTypeLoader = nil,
 ): MarkdownDocument =
-  source.parseMarkdownRoot(config).markdownDocument(style, imageLoader)
+  source.parseMarkdownRoot(config).markdownDocument(
+    style, imageLoader, imageContentTypeLoader
+  )
 
 proc markdownTextStorage*(
     source: string, style = initMarkdownStyle(), config: MarkdownParserConfig = nil
@@ -746,17 +737,66 @@ proc applyMarkdownStyle(view: MarkdownView) =
   view.textView().backgroundColor = view.xMarkdownStyle.backgroundColor
   view.scrollView().drawsBackground = false
 
+func markdownImageCacheKey(view: MarkdownView, url: string): string =
+  view.xImageBasePath & "\x00" & url
+
+proc resolvedDefaultMarkdownUrlAssetLoader(): UrlAssetLoader =
+  if defaultMarkdownUrlAssetLoader.isNil or defaultMarkdownUrlAssetLoader.isClosed():
+    let executableName = getAppFilename().splitFile.name
+    defaultMarkdownUrlAssetLoader =
+      newUrlAssetLoader(if executableName.len > 0: executableName else: "merenda")
+  defaultMarkdownUrlAssetLoader
+
+proc renderCurrentMarkdownDocument(view: MarkdownView)
+
+proc markdownUrlAssetDidFinish(view: MarkdownView, handle: UrlAssetHandle) {.slot.} =
+  let url = handle.result().url
+  if url notin view.xPendingUrlAssets or view.xPendingUrlAssets[url] != handle:
+    return
+  view.xPendingUrlAssets.del(url)
+  if not view.xImageLoader.isNil or not handle.succeeded():
+    return
+  try:
+    let key = view.markdownImageCacheKey(url)
+    let image = newImageResourceFromFile(
+      handle.result().path, name = url, cachePolicy = icpBySize
+    )
+    view.xImageCache[key] = image
+    view.xImageMediaTypes[key] = handle.result().mediaType
+    view.renderCurrentMarkdownDocument()
+  except CatchableError:
+    discard
+
+proc resolvedUrlAssetLoader(view: MarkdownView): UrlAssetLoader =
+  result =
+    if view.xUrlAssetLoader.isNil:
+      resolvedDefaultMarkdownUrlAssetLoader()
+    else:
+      view.xUrlAssetLoader
+  result.connect(urlAssetDidFinish, view, markdownUrlAssetDidFinish)
+
 proc loadMarkdownImage(view: MarkdownView, url: string): ImageResource =
-  let key = view.xImageBasePath & "\x00" & url
+  let key = view.markdownImageCacheKey(url)
   if key in view.xImageCache:
     return view.xImageCache[key]
   try:
     if not view.xImageLoader.isNil:
       result = view.xImageLoader(url)
     else:
-      let path = url.localImagePath(view.xImageBasePath)
+      let parsedUrl = initUrl(url)
+      let path = parsedUrl.localFilePath(view.xImageBasePath)
       if path.len > 0 and path.fileExists:
         result = newImageResourceFromFile(path, name = path, cachePolicy = icpBySize)
+        view.xImageMediaTypes[key] = parsedUrl.mediaType()
+      elif parsedUrl.isHttpUrl():
+        let handle = view.resolvedUrlAssetLoader().load(url)
+        if handle.succeeded():
+          result = newImageResourceFromFile(
+            handle.result().path, name = url, cachePolicy = icpBySize
+          )
+          view.xImageMediaTypes[key] = handle.result().mediaType
+        else:
+          view.xPendingUrlAssets[url] = handle
   except CatchableError:
     discard
   if not result.isNil:
@@ -767,7 +807,15 @@ proc renderMarkdownDocument(
 ): MarkdownDocument =
   let loader: MarkdownImageLoader = proc(url: string): ImageResource =
     view.loadMarkdownImage(url)
-  root.markdownDocument(style, loader)
+  let contentTypeLoader: MarkdownImageContentTypeLoader = proc(url: string): string =
+    let key = view.markdownImageCacheKey(url)
+    view.xImageMediaTypes.getOrDefault(key, initUrl(url).mediaType())
+  root.markdownDocument(style, loader, contentTypeLoader)
+
+proc renderCurrentMarkdownDocument(view: MarkdownView) =
+  view.applyMarkdownDocument(
+    view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
+  )
 
 proc editable*(view: MarkdownView): bool =
   ## Markdown views are deliberately read-only.
@@ -786,6 +834,7 @@ proc `markdown=`*(view: MarkdownView, source: string) =
   ## Parses and atomically replaces the displayed document.
   if view.xMarkdown == source:
     return
+  view.xPendingUrlAssets.clear()
   let
     root = source.parseMarkdownRoot(view.xMarkdownConfig)
     document = view.renderMarkdownDocument(root, view.xMarkdownStyle)
@@ -803,6 +852,8 @@ proc `imageBasePath=`*(view: MarkdownView, basePath: string) =
     return
   view.xImageBasePath = basePath
   view.xImageCache.clear()
+  view.xImageMediaTypes.clear()
+  view.xPendingUrlAssets.clear()
   view.applyMarkdownDocument(
     view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
   )
@@ -815,9 +866,30 @@ proc `imageLoader=`*(view: MarkdownView, loader: MarkdownImageLoader) =
   ## Changes the image resolver and rerenders the current document.
   view.xImageLoader = loader
   view.xImageCache.clear()
+  view.xImageMediaTypes.clear()
+  view.xPendingUrlAssets.clear()
   view.applyMarkdownDocument(
     view.renderMarkdownDocument(view.xMarkdownRoot, view.xMarkdownStyle)
   )
+
+proc urlAssetLoader*(view: MarkdownView): UrlAssetLoader =
+  ## Returns the optional application-owned loader used for HTTP(S) images.
+  ##
+  ## A nil value selects a lazy loader shared by Markdown views on this thread.
+  view.xUrlAssetLoader
+
+proc `urlAssetLoader=`*(view: MarkdownView, loader: UrlAssetLoader) =
+  ## Changes the URL asset loader and rerenders remote images.
+  ##
+  ## The caller retains ownership and must close a non-nil `loader` after all
+  ## views using it have finished.
+  if view.xUrlAssetLoader == loader:
+    return
+  view.xUrlAssetLoader = loader
+  view.xImageCache.clear()
+  view.xImageMediaTypes.clear()
+  view.xPendingUrlAssets.clear()
+  view.renderCurrentMarkdownDocument()
 
 proc markdownStyle*(view: MarkdownView): MarkdownStyle =
   ## Returns a copy of the current document presentation.
@@ -841,6 +913,7 @@ proc `markdownConfig=`*(view: MarkdownView, config: MarkdownParserConfig) =
   let resolved = config.resolvedConfig()
   if view.xMarkdownConfig == resolved:
     return
+  view.xPendingUrlAssets.clear()
   let
     root = view.xMarkdown.parseMarkdownRoot(resolved)
     document = view.renderMarkdownDocument(root, view.xMarkdownStyle)
@@ -856,8 +929,11 @@ proc initMarkdownViewFields*(
     config: MarkdownParserConfig = nil,
     imageBasePath = "",
     imageLoader: MarkdownImageLoader = nil,
+    urlAssetLoader: UrlAssetLoader = nil,
 ) =
   ## Initializes a custom `MarkdownView` subtype.
+  ##
+  ## HTTP(S) images use `urlAssetLoader`, or a lazy shared loader when it is nil.
   let textView = MarkdownTextView()
   textView.initTextViewFields()
   discard textView.withProtocol(MarkdownTextViewDrawing)
@@ -869,7 +945,10 @@ proc initMarkdownViewFields*(
   view.xMarkdownRoot = source.parseMarkdownRoot(view.xMarkdownConfig)
   view.xImageBasePath = imageBasePath
   view.xImageLoader = imageLoader
+  view.xUrlAssetLoader = urlAssetLoader
   view.xImageCache = initTable[string, ImageResource]()
+  view.xImageMediaTypes = initTable[string, string]()
+  view.xPendingUrlAssets = initTable[string, UrlAssetHandle]()
   view.xMarkdown = source
   view.editable = false
   view.selectable = true
@@ -886,9 +965,13 @@ proc newMarkdownView*(
     config: MarkdownParserConfig = nil,
     imageBasePath = "",
     imageLoader: MarkdownImageLoader = nil,
+    urlAssetLoader: UrlAssetLoader = nil,
 ): MarkdownView =
   ## Creates a scrollable, selectable, read-only Markdown document view.
+  ##
+  ## Remote HTTP(S) images load asynchronously through `urlAssetLoader`. The
+  ## default shared loader uses the executable name for its platform cache.
   result = MarkdownView()
   result.initMarkdownViewFields(
-    source, frame, style, config, imageBasePath, imageLoader
+    source, frame, style, config, imageBasePath, imageLoader, urlAssetLoader
   )

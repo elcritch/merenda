@@ -1,11 +1,14 @@
 ## Asynchronous URL-backed assets cached in the platform application cache.
 
-import std/[appdirs, monotimes, os, paths, strutils, tables, times, uri]
+import std/[appdirs, monotimes, os, paths, strutils, tables, times]
+from std/uri import Uri, parseUri
 
 import chronos
 import chronos/apps/http/httpclient
 import crunchy/[common, sha256]
 import sigils/[core, threads]
+
+import ./urls
 
 const
   DefaultUrlAssetMaximumBytes* = 64 * 1024 * 1024 ## Default per-asset size limit.
@@ -21,6 +24,7 @@ type
   UrlAssetResult* = object ## Completed URL asset request details.
     url*: string ## Requested HTTP or HTTPS URL.
     path*: string ## Cached file path when `state` is `ualsReady`.
+    mediaType*: string ## Normalized response media type or URL-derived fallback.
     state*: UrlAssetLoadState ## Final request state.
     statusCode*: int ## HTTP status, or zero if no response was received.
     byteLength*: int64 ## Size of the ready cached file in bytes.
@@ -52,25 +56,106 @@ type
     xWorkerClosed: bool
     xClosed: bool
 
-proc validateUrlAssetUrl(url: string): Uri =
+  UrlAssetHttpResponse = object
+    status: int
+    data: seq[byte]
+    mediaType: string
+
+proc validateUrlAssetUrl(url: string): urls.Url =
   if url.len == 0:
     raise newException(ValueError, "URL asset URL cannot be empty")
-  result = parseUri(url)
-  if result.scheme.toLowerAscii() notin ["http", "https"] or result.hostname.len == 0:
+  result = initUrl(url)
+  if not result.isHttpUrl():
     raise newException(ValueError, "URL asset URL must use HTTP or HTTPS: " & url)
 
-func safeAssetExtension(uri: Uri): string =
-  let extension = splitFile(uri.path).ext
-  if extension.len notin 2 .. 16:
+func safeAssetExtension(url: urls.Url): string =
+  let extension = url.pathExtension()
+  if extension.len notin 1 .. 15:
     return
-  for index in 1 ..< extension.len:
-    if not extension[index].isAlphaNumeric:
+  for character in extension:
+    if not character.isAlphaNumeric:
       return
-  extension.toLowerAscii()
+  "." & extension
 
 proc urlAssetFileName(url: string): string =
-  let uri = url.validateUrlAssetUrl()
-  sha256(url).toHex() & uri.safeAssetExtension()
+  let parsedUrl = url.validateUrlAssetUrl()
+  sha256(url).toHex() & parsedUrl.safeAssetExtension()
+
+func urlAssetMetadataPath(path: string): string =
+  path & ".media-type"
+
+proc cachedUrlAssetMediaType(url, path: string): string =
+  let metadataPath = path.urlAssetMetadataPath()
+  if fileExists(metadataPath):
+    try:
+      result = readFile(metadataPath).normalizedMediaType()
+    except OSError:
+      discard
+  if result.len == 0:
+    result = initUrl(url).mediaType()
+
+proc fetchUrlAsset(
+    session: HttpSessionRef, url: Uri
+): Future[UrlAssetHttpResponse] {.async: (raises: [CancelledError, HttpError]).} =
+  let address = getHttpAddress(url).valueOr:
+    raiseHttpAddressError($error)
+
+  var
+    request = HttpClientRequestRef.new(session, address)
+    response: HttpClientResponseRef
+    redirect: HttpClientRequestRef
+
+  while true:
+    try:
+      response = await request.send()
+      if response.status in 300 .. 399:
+        redirect = block:
+          if "location" notin response.headers:
+            raiseHttpRedirectError("Location header missing")
+          let location = response.headers.getString("location")
+          if location.len == 0:
+            raiseHttpRedirectError("Location header with an empty value")
+          let redirected = request.redirect(parseUri(location))
+          if redirected.isErr():
+            raiseHttpRedirectError(redirected.error())
+          redirected.get()
+        discard await response.consumeBody()
+        await response.closeWait()
+        response = nil
+        await request.closeWait()
+        request = redirect
+        redirect = nil
+      else:
+        let
+          mediaType =
+            response.headers.getString(ContentTypeHeader).normalizedMediaType()
+          data = await response.getBodyBytes()
+          status = response.status
+        await response.closeWait()
+        response = nil
+        await request.closeWait()
+        request = nil
+        return UrlAssetHttpResponse(status: status, data: data, mediaType: mediaType)
+    except CancelledError as exception:
+      var pending: seq[Future[void]]
+      if not response.isNil:
+        pending.add response.closeWait()
+      if not request.isNil:
+        pending.add request.closeWait()
+      if not redirect.isNil:
+        pending.add redirect.closeWait()
+      await noCancel(allFutures(pending))
+      raise exception
+    except HttpError as exception:
+      var pending: seq[Future[void]]
+      if not response.isNil:
+        pending.add response.closeWait()
+      if not request.isNil:
+        pending.add request.closeWait()
+      if not redirect.isNil:
+        pending.add redirect.closeWait()
+      await noCancel(allFutures(pending))
+      raise exception
 
 proc urlAssetCacheDirectory*(applicationIdentifier: string): string =
   ## Return the platform cache directory used for one application's URL assets.
@@ -105,6 +190,10 @@ func result*(handle: UrlAssetHandle): lent UrlAssetResult =
     raise newException(UrlAssetPendingError, "URL asset has not finished loading")
   handle.xResult
 
+func urlValue*(loadResult: UrlAssetResult): urls.Url =
+  ## Return the requested location as a parsed Foundation URL.
+  initUrl(loadResult.url)
+
 proc cacheDirectory*(loader: UrlAssetLoader): string =
   ## Return the loader's absolute cache directory.
   if not loader.isNil:
@@ -129,6 +218,10 @@ proc cachedAssetPath*(loader: UrlAssetLoader, url: string): string =
   if loader.isNil:
     raise newException(UrlAssetLoaderClosedError, "URL asset loader is nil")
   loader.xCacheDirectory / url.urlAssetFileName()
+
+proc cachedAssetPath*(loader: UrlAssetLoader, url: urls.Url): string =
+  ## Return the deterministic cache path for a parsed `url` without loading it.
+  loader.cachedAssetPath(url.absoluteString())
 
 proc executeUrlAssetLoad(
   worker: AgentProxy[UrlAssetWorker],
@@ -188,8 +281,11 @@ proc loadUrlAsset(
     await sleepAsync(ZeroDuration)
     if worker.session.isNil:
       worker.session = HttpSessionRef.new()
-    let response = await worker.session.fetch(parseUri(url))
+    let response = await worker.session.fetchUrlAsset(parseUri(url))
     loadResult.statusCode = response.status
+    loadResult.mediaType = response.mediaType
+    if loadResult.mediaType.len == 0:
+      loadResult.mediaType = initUrl(url).mediaType()
     if response.status notin 200 .. 299:
       loadResult.errorMessage = "HTTP request returned status " & $response.status
     elif response.data.len > maximumAssetBytes:
@@ -205,6 +301,11 @@ proc loadUrlAsset(
       else:
         moveFile(temporaryPath, path)
         loadResult.byteLength = response.data.len.int64
+      if loadResult.mediaType.len > 0:
+        try:
+          writeFile(path.urlAssetMetadataPath(), loadResult.mediaType)
+        except OSError:
+          discard
       loadResult.path = path
       loadResult.state = ualsReady
   except CancelledError:
@@ -354,6 +455,7 @@ proc load*(loader: UrlAssetLoader, url: string): UrlAssetHandle {.discardable.} 
     result.xResult = UrlAssetResult(
       url: url,
       path: path,
+      mediaType: cachedUrlAssetMediaType(url, path),
       state: ualsReady,
       byteLength: getFileSize(path),
       cacheHit: true,
@@ -366,6 +468,10 @@ proc load*(loader: UrlAssetLoader, url: string): UrlAssetHandle {.discardable.} 
     emit loader.xWorker.executeUrlAssetLoad(
       result.xIdentifier, url, path, loader.xMaximumAssetBytes
     )
+
+proc load*(loader: UrlAssetLoader, url: urls.Url): UrlAssetHandle {.discardable.} =
+  ## Load a parsed HTTP or HTTPS URL.
+  loader.load(url.absoluteString())
 
 proc cancel*(loader: UrlAssetLoader, handle: UrlAssetHandle) =
   ## Cancel an in-flight load. Coalesced callers share the same handle.

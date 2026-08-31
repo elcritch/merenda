@@ -9,6 +9,7 @@ import ../foundation/events
 import ../app/pasteboards
 import ../app/workspaces
 import ../foundation/selectors
+import ../foundation/urls
 import ./textlayout
 import ./textstorage
 import ./texttypes
@@ -1674,12 +1675,9 @@ proc attachmentPresentations*(textView: TextView): seq[TextAttachmentPresentatio
     )
 
 func isImageAttachment*(attachment: TextAttachment): bool =
-  let
-    contentType = attachment.contentType.toLowerAscii()
-    name = attachment.fileName.toLowerAscii()
-  contentType.startsWith("image/") or name.endsWith(".png") or name.endsWith(".jpg") or
-    name.endsWith(".jpeg") or name.endsWith(".gif") or name.endsWith(".webp") or
-    name.endsWith(".tif") or name.endsWith(".tiff")
+  attachment.contentType.isImageMediaType() or
+    initUrl(attachment.fileName).mediaType().isImageMediaType() or
+    attachment.fileUrlValue().mediaType().isImageMediaType()
 
 func promisedFileName*(attachment: TextAttachment): string =
   if attachment.fileName.len > 0:

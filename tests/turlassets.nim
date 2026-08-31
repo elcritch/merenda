@@ -5,8 +5,12 @@ import
   ]
 
 import merenda/nimkit/foundation/urlassets
+import merenda/nimkit/foundation/urls
+import merenda/nimkit/text/markdownviews
 
 const
+  RepositoryRoot = currentSourcePath().parentDir.parentDir
+  TestImagePath = RepositoryRoot / "data" / "img1.png"
   TestBody = "cached asset payload"
   LargeTestBody = "asset body larger than four bytes"
 
@@ -23,7 +27,13 @@ type
     thread: Thread[ptr TestServerState]
 
 proc responseBody(state: ptr TestServerState): string =
-  if state.bodyKind == 1: LargeTestBody else: TestBody
+  case state.bodyKind
+  of 1:
+    LargeTestBody
+  of 2:
+    readFile(TestImagePath)
+  else:
+    TestBody
 
 proc serveOneRequest(state: ptr TestServerState) {.thread.} =
   try:
@@ -53,9 +63,10 @@ proc serveOneRequest(state: ptr TestServerState) {.thread.} =
     let
       body = state.responseBody()
       reason = if state.statusCode == 200: "OK" else: "Not Found"
+      contentType = if state.bodyKind == 2: "image/png" else: "application/octet-stream"
       response =
         "HTTP/1.1 " & $state.statusCode & " " & reason & "\r\n" & "Content-Length: " &
-        $body.len & "\r\n" & "Content-Type: application/octet-stream\r\n" &
+        $body.len & "\r\n" & "Content-Type: " & contentType & "\r\n" &
         "Connection: close\r\n\r\n" & body
     client.send(response)
     discard state.requestCount.fetchAdd(1, moRelaxed)
@@ -100,7 +111,7 @@ suite "URL asset loader":
     let
       cache = createTempDir("merenda-url-assets-", "")
       server = newTestServer()
-      assetUrl = server.url("/images/icon.PNG?version=1")
+      assetUrl = initUrl(server.url("/images/icon.PNG?version=1"))
       mainThreadId = getThreadId()
     defer:
       removeDir(cache)
@@ -119,7 +130,9 @@ suite "URL asset loader":
     check loader.waitFor(handle, 5_000)
     check handle.succeeded()
     check handle.result().state == ualsReady
+    check handle.result().urlValue() == assetUrl
     check handle.result().statusCode == 200
+    check handle.result().mediaType == "application/octet-stream"
     check handle.result().byteLength == TestBody.len.int64
     check handle.result().workerThreadId != mainThreadId
     check not handle.result().cacheHit
@@ -134,6 +147,7 @@ suite "URL asset loader":
     check cached.result().cacheHit
     check cached.result().workerThreadId == -1
     check cached.result().path == handle.result().path
+    check cached.result().mediaType == "application/octet-stream"
 
   test "reports HTTP errors without leaving partial files":
     let
@@ -176,6 +190,37 @@ suite "URL asset loader":
     check handle.state() == ualsFailed
     check handle.result().errorMessage.contains("4 byte limit")
     check not fileExists(loader.cachedAssetPath(assetUrl))
+
+  test "Markdown views rerender remote images after asynchronous loading":
+    let
+      cache = createTempDir("merenda-markdown-url-assets-", "")
+      server = newTestServer(bodyKind = 2)
+      assetUrl = server.url("/remote-image")
+    defer:
+      removeDir(cache)
+    defer:
+      server.close()
+
+    let loader = newUrlAssetLoader("org.example.merenda-tests", cache)
+    defer:
+      loader.close()
+    let view =
+      newMarkdownView("![Remote preview](" & assetUrl & ")", urlAssetLoader = loader)
+
+    check view.urlAssetLoader() == loader
+    check view.textView().attachmentPresentations().len == 0
+    let deadline = getMonoTime() + initDuration(seconds = 5)
+    while loader.pendingCount() > 0 and getMonoTime() < deadline:
+      discard loader.poll()
+      if loader.pendingCount() > 0:
+        sleep(1)
+    discard loader.poll()
+
+    check loader.pendingCount() == 0
+    check view.textView().attachmentPresentations().len == 1
+    check view.textView().attachmentPresentations()[0].attachment.contentType ==
+      "image/png"
+    check fileExists(loader.cachedAssetPath(assetUrl))
 
   test "validates URLs and rejects loads after closing":
     let cache = createTempDir("merenda-url-assets-", "")

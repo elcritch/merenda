@@ -1,4 +1,5 @@
 import ../foundation/types
+import ../foundation/urls
 
 type
   TextIndex* = distinct Natural
@@ -261,6 +262,10 @@ proc initTextAttachment*(
     size: size,
     metadata: @metadata,
   )
+
+func fileUrlValue*(attachment: TextAttachment): Url =
+  ## Return the attachment's file URL as a parsed Foundation URL value.
+  initUrl(attachment.fileUrl)
 
 proc defaultTextAttributes*(
     color = color(0.08, 0.09, 0.11, 1.0),

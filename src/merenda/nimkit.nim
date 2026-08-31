@@ -72,6 +72,7 @@ import ./nimkit/text/textviews
 import ./nimkit/themes
 import ./nimkit/foundation/types
 import ./nimkit/foundation/undomanagers
+import ./nimkit/foundation/urls
 import ./nimkit/foundation/urlassets
 import ./nimkit/app/userdefaults
 import ./nimkit/app/viewcontrollers
@@ -158,6 +159,7 @@ export textviews
 export themes
 export types
 export undomanagers
+export urls
 export urlassets
 export userdefaults
 export viewcontrollers

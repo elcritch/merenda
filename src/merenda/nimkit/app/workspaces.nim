@@ -2,6 +2,7 @@ import std/[options, os]
 
 import sigils/selectors
 
+import ../foundation/urls
 import ../text/textstorage
 import ../text/texttypes
 import ./pasteboards
@@ -270,13 +271,27 @@ proc performOperation(
 proc openUrl*(workspace: Workspace, url: string): WorkspaceOperationResponse =
   workspace.performOperation(wokOpenUrl, url)
 
+proc openUrl*(workspace: Workspace, url: Url): WorkspaceOperationResponse =
+  ## Ask the platform workspace to open a parsed Foundation URL.
+  workspace.openUrl(url.absoluteString())
+
 proc openFile*(
     workspace: Workspace, fileUrl: string, applicationIdentifier = ""
 ): WorkspaceOperationResponse =
   workspace.performOperation(wokOpenFile, fileUrl, applicationIdentifier)
 
+proc openFile*(
+    workspace: Workspace, fileUrl: Url, applicationIdentifier = ""
+): WorkspaceOperationResponse =
+  ## Ask the platform workspace to open a parsed Foundation file URL.
+  workspace.openFile(fileUrl.absoluteString(), applicationIdentifier)
+
 proc revealFile*(workspace: Workspace, fileUrl: string): WorkspaceOperationResponse =
   workspace.performOperation(wokRevealFile, fileUrl)
+
+proc revealFile*(workspace: Workspace, fileUrl: Url): WorkspaceOperationResponse =
+  ## Ask the platform workspace to reveal a parsed Foundation file URL.
+  workspace.revealFile(fileUrl.absoluteString())
 
 proc launchApplication*(
     workspace: Workspace, applicationIdentifier: string

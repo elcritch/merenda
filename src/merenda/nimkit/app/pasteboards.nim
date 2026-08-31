@@ -4,6 +4,7 @@ import sigils/selectors
 
 import ../drawing/images
 import ../foundation/types
+import ../foundation/urls
 import ../text/textstorage
 import ../text/texttypes
 
@@ -233,6 +234,10 @@ proc initPasteboardPropertyListItem*(
 
 proc initPasteboardUrlItem*(url: string): PasteboardItem =
   PasteboardItem(kind: pikUrl, url: url)
+
+proc initPasteboardUrlItem*(url: Url): PasteboardItem =
+  ## Create a URL pasteboard item from a parsed Foundation URL.
+  initPasteboardUrlItem(url.absoluteString())
 
 proc initPasteboardFileItem*(filePath: string): PasteboardItem =
   PasteboardItem(kind: pikFile, filePath: filePath)
@@ -546,10 +551,18 @@ proc propertyListForType*(
 proc setUrl*(pasteboard: Pasteboard, kind, url: string): bool =
   pasteboard.setItem(kind, initPasteboardUrlItem(url))
 
+proc setUrl*(pasteboard: Pasteboard, kind: string, url: Url): bool =
+  ## Store a parsed Foundation URL on the pasteboard.
+  pasteboard.setUrl(kind, url.absoluteString())
+
 proc urlForType*(pasteboard: Pasteboard, kind: string): string =
   let item = pasteboard.itemForType(kind)
   if item.kind == pikUrl:
     return item.url
+
+proc urlValueForType*(pasteboard: Pasteboard, kind: string): Url =
+  ## Return a URL pasteboard item as a parsed Foundation URL value.
+  initUrl(pasteboard.urlForType(kind))
 
 proc setFile*(pasteboard: Pasteboard, kind, filePath: string): bool =
   pasteboard.setItem(kind, initPasteboardFileItem(filePath))

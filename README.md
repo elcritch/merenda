@@ -129,9 +129,10 @@ viewer.markdownStyle = style
 GFM is the default. Pass `initMarkdownParserConfig(mddCommonMark)` when strict
 CommonMark parsing is preferable. Raw HTML is shown as inert monospace text;
 relative and absolute local image destinations are loaded when `imageBasePath` is
-set, while unavailable images remain linked alt text. Set `viewer.imageLoader` to
-resolve remote URLs, data URLs, or application-specific image schemes. See
-`examples/markdown_viewer_demo.nim` for a complete window.
+set. HTTP and HTTPS images load asynchronously through `UrlAssetLoader`, first
+appearing as linked alt text and then rerendering from the platform disk cache.
+Set `viewer.imageLoader` for data URLs or application-specific image schemes.
+See `examples/markdown_viewer_demo.nim` for a complete window.
 
 ## Cached URL Assets
 
@@ -147,19 +148,25 @@ let assets = newUrlAssetLoader("com.example.photo-browser")
 defer:
   assets.close()
 
-let thumbnail = assets.load("https://example.com/images/thumbnail.png")
-discard assets.waitFor(thumbnail)
-if thumbnail.succeeded():
-  echo thumbnail.result().path
+let latestImage = initUrl("https://example.com/images/latest.png")
+let request = assets.load(latestImage)
+let viewer = newMarkdownView(
+  "![Latest photo](" & latestImage.absoluteString() & ")",
+  urlAssetLoader = assets,
+)
 ```
 
 The default cache root follows the host platform: `LocalAppData` on Windows,
 `~/Library/Caches` on macOS, and `XDG_CACHE_HOME` (falling back to `~/.cache`) on
 Linux and BSD. URLs are stored under an application-specific `url-assets`
-directory using deterministic SHA-256 names. GUI code can connect to
-`urlAssetDidFinish` instead of blocking with `waitFor`; NimKit's application loop
-delivers the signal on the loader's owning thread. The default per-asset limit is
-64 MiB and can be changed with `maximumAssetBytes`.
+directory using deterministic SHA-256 names. `MarkdownView` observes
+`urlAssetDidFinish` and refreshes itself on the loader's owning thread. Other GUI
+code can connect to the same signal, while command-line tools can use `waitFor`.
+Each completed result includes the normalized HTTP `mediaType`; it is retained
+beside the cached asset and falls back to the URL extension when the server omits
+it. The Foundation-style `Url` value is also accepted by workspace, pasteboard,
+document, and panel handlers while existing string APIs remain supported. The
+default per-asset limit is 64 MiB and can be changed with `maximumAssetBytes`.
 
 The application run loop keeps NimKit views, responders, signal-slot dispatch,
 animations, native windows, and platform services on the main thread. When the
