@@ -68,6 +68,8 @@ suite "Kosmo quick open":
     frontend.quickOpenPanel.hidden = false
     let renders = buildRenders(frontend.contentView)
 
+    check frontend.quickOpenPanel.frame().origin.y == 96.0'f32
+
     var
       defaultBlurs: seq[Fig]
       popupBlurs: seq[Fig]
@@ -99,15 +101,24 @@ suite "Kosmo quick open":
     var
       titleMinX = float32.high
       titleMaxX = -float32.high
+      titleMinY = float32.high
+      titleMaxY = -float32.high
     for rect in titleNode.get().textLayout.selectionRects:
       titleMinX = min(titleMinX, rect.x)
       titleMaxX = max(titleMaxX, rect.x + rect.w)
+      titleMinY = min(titleMinY, rect.y)
+      titleMaxY = max(titleMaxY, rect.y + rect.h)
     let
       titleColor = titleNode.get().textLayout.spanColors[0].centerColorRgba()
       titleContentCenterX = (titleMinX + titleMaxX) / 2.0'f32
       titleBoundsCenterX = titleNode.get().screenBox.w / 2.0'f32
-    check titleNode.get().screenBox.y < queryBlur.screenBox.y
+      titleContentCenterY = (titleMinY + titleMaxY) / 2.0'f32
+      titleBoundsCenterY = titleNode.get().screenBox.h / 2.0'f32
+    check abs(
+      titleNode.get().screenBox.y + titleNode.get().screenBox.h - queryBlur.screenBox.y
+    ) <= 1.0'f32
     check abs(titleContentCenterX - titleBoundsCenterX) <= 1.0'f32
+    check abs(titleContentCenterY - titleBoundsCenterY) <= 1.0'f32
     check titleColor.a == high(uint8)
     check titleColor.r.int + titleColor.g.int + titleColor.b.int > 384
 

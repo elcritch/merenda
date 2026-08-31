@@ -32,6 +32,8 @@ const
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
+  KosmoQuickOpenTopInset = 96.0'f32
+  KosmoQuickOpenBottomInset = 24.0'f32
   KosmoEditorStyleId* = "kosmo.editor"
   KosmoPaneIndicatorStyleId* = "kosmo.pane-indicator"
   KosmoMarkdownControlsStyleId* = "kosmo.markdown-controls"
@@ -2845,14 +2847,17 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
     if not content.quickOpenPanel.isNil:
       let
         availableWidth = max(bounds.size.width - 48.0'f32, 1.0'f32)
-        availableHeight =
-          max(bounds.size.height - KosmoStatusBarHeight - 48.0'f32, 1.0'f32)
+        availableHeight = max(
+          bounds.size.height - KosmoStatusBarHeight - KosmoQuickOpenTopInset -
+            KosmoQuickOpenBottomInset,
+          1.0'f32,
+        )
         popupWidth = min(availableWidth, 640.0'f32)
         popupHeight = min(availableHeight, 360.0'f32)
       content.quickOpenPanel.setFrameFromLayout(
         nimkit.rect(
           max((bounds.size.width - popupWidth) * 0.5'f32, 0.0'f32),
-          24.0'f32 + content.quickOpenPanel.presentationOffset(),
+          KosmoQuickOpenTopInset + content.quickOpenPanel.presentationOffset(),
           popupWidth,
           popupHeight,
         )

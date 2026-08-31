@@ -415,6 +415,7 @@ protocol KosmoQuickOpenPanelDrawing of nimkit.ViewDrawingProtocol:
       basePopupStyle = appearance.resolveComboBoxStyle(
         nimkit.controlStyle(nimkit.srComboBox, popupStates)
       )
+      contentFrame = panel.contentRect()
       panelFrame = context.renderRectFor(bounds)
       queryFrame = context.renderRectFor(panel.frameInPanel(panel.queryField))
       resultsFrame = context.renderRectFor(panel.frameInPanel(panel.resultsView))
@@ -458,6 +459,7 @@ protocol KosmoQuickOpenPanelDrawing of nimkit.ViewDrawingProtocol:
     let title = panel.boxTitle()
     if title.len > 0:
       let
+        titleHeight = title.textNaturalSize(panelStyle.text).height
         textRect = nimkit.rect(
           bounds.origin.x + panelStyle.contentInsets.left + panelStyle.text.insets.left,
           bounds.origin.y,
@@ -466,7 +468,7 @@ protocol KosmoQuickOpenPanelDrawing of nimkit.ViewDrawingProtocol:
               panelStyle.text.insets.horizontal,
             0.0'f32,
           ),
-          max(panelStyle.titleHeight, title.textNaturalSize(panelStyle.text).height),
+          max(contentFrame.origin.y - bounds.origin.y, titleHeight),
         )
         titleText = title.clippedText(textRect.size.width, panelStyle.text)
       if titleText.len > 0 and not textRect.isEmpty:
