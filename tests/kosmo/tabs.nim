@@ -96,7 +96,9 @@ suite "Kosmo":
       removeFile(textPath)
       removeDir(root)
 
-    let frontend = newKosmoApplication(newApplication("Kosmo Markdown Tabs Test"))
+    let app = newApplication("Kosmo Markdown Tabs Test")
+    app.setAppearance(initAppearance(initAquaTheme()))
+    let frontend = newKosmoApplication(app)
     defer:
       frontend.close()
     frontend.window.setContentView(frontend.contentView)
@@ -128,6 +130,17 @@ suite "Kosmo":
     check "…" notin controlTitles
 
     let lightBackground = frontend.editorPane.markdownView.markdownStyle.backgroundColor
+    frontend.window.setAppearance(initAppearance(initDarkBSDTheme()))
+    check controls.markdownColorMode == kmcmDark
+    check controls.colorModeButton.title == "Light"
+    check frontend.editorPane.markdownView.markdownStyle.backgroundColor !=
+      lightBackground
+    frontend.window.setAppearance(initAppearance(initAquaTheme()))
+    check controls.markdownColorMode == kmcmLight
+    check controls.colorModeButton.title == "Dark"
+    check frontend.editorPane.markdownView.markdownStyle.backgroundColor ==
+      lightBackground
+
     check frontend.window.clickAt(
       controls.colorModeButton.pointToWindow(controls.colorModeButton.bounds().center())
     )

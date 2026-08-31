@@ -105,6 +105,7 @@ type
     increaseFontButton*: nimkit.Button
     editorView: WeakRef[KosmoEditorView]
     xColorMode: KosmoMarkdownColorMode
+    xThemeColorMode: KosmoMarkdownColorMode
     xFontSize: float32
 
   KosmoEditorView* = ref object of nimkit.MonoTextView
@@ -611,6 +612,42 @@ func markdownFontSize*(controls: KosmoMarkdownControls): float32 =
   ## Return the pane-local Markdown preview base font size.
   if controls.isNil: KosmoMarkdownDefaultFontSize else: controls.xFontSize
 
+proc syncMarkdownColorButton(controls: KosmoMarkdownControls) =
+  if controls.isNil or controls.colorModeButton.isNil:
+    return
+  controls.colorModeButton.title =
+    if controls.xColorMode == kmcmLight: "Dark" else: "Light"
+  controls.colorModeButton.accessibilityLabel =
+    if controls.xColorMode == kmcmLight:
+      "Use dark Markdown preview"
+    else:
+      "Use light Markdown preview"
+  controls.colorModeButton.toolTip = controls.colorModeButton.accessibilityLabel()
+
+func markdownColorMode(appearance: nimkit.Appearance): KosmoMarkdownColorMode =
+  let
+    context = nimkit.controlStyle(nimkit.srView)
+    fallback = appearance.resolveColor(
+      context, nimkit.StyleBackgroundColor, nimkit.color(1.0, 1.0, 1.0, 1.0)
+    )
+    background = appearance
+      .resolveFill(context, nimkit.fill(fallback), nimkit.StyleBackgroundFill)
+      .centerColor()
+    luminance =
+      0.2126'f32 * background.r + 0.7152'f32 * background.g + 0.0722'f32 * background.b
+  if luminance < 0.5'f32: kmcmDark else: kmcmLight
+
+proc syncMarkdownColorMode(
+    controls: KosmoMarkdownControls, appearance: nimkit.Appearance
+) =
+  if controls.isNil:
+    return
+  let mode = appearance.markdownColorMode()
+  if controls.xColorMode == controls.xThemeColorMode:
+    controls.xColorMode = mode
+  controls.xThemeColorMode = mode
+  controls.syncMarkdownColorButton()
+
 func markdownPresentationStyle(controls: KosmoMarkdownControls): nimkit.MarkdownStyle =
   result = nimkit.initMarkdownStyle()
   if not controls.isNil and controls.xColorMode == kmcmDark:
@@ -645,14 +682,7 @@ proc syncMarkdownControls(pane: KosmoEditorPane, visible: bool, mode = kmmPrevie
   controls.modeButton.accessibilityLabel =
     if mode == kmmPreview: "Edit Markdown source" else: "Preview Markdown"
   controls.modeButton.toolTip = controls.modeButton.accessibilityLabel()
-  controls.colorModeButton.title =
-    if controls.xColorMode == kmcmLight: "Dark" else: "Light"
-  controls.colorModeButton.accessibilityLabel =
-    if controls.xColorMode == kmcmLight:
-      "Use dark Markdown preview"
-    else:
-      "Use light Markdown preview"
-  controls.colorModeButton.toolTip = controls.colorModeButton.accessibilityLabel()
+  controls.syncMarkdownColorButton()
   controls.decreaseFontButton.enabled =
     controls.xFontSize > KosmoMarkdownMinimumFontSize
   controls.increaseFontButton.enabled =
@@ -983,6 +1013,8 @@ proc installKosmoMarkdownControlsStyle(appearance: var nimkit.Appearance) =
     buttonSelector, nimkit.StyleTextInsets, nimkit.insets(0.0'f32, 2.0'f32)
   )
 
+proc refresh*(view: KosmoEditorView)
+
 proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   var appearance = base
   let
@@ -1053,6 +1085,7 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     if not pane.activeIndicator.isNil:
       pane.activeIndicator.appearance = appearance
     if not pane.markdownControls.isNil:
+      pane.markdownControls.syncMarkdownColorMode(base)
       pane.markdownControls.appearance = appearance
 
 protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
@@ -1061,6 +1094,7 @@ protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
   ) {.slot.} =
     if not handler.editorView.isNil:
       handler.editorView[].applyKosmoEditorStyle(appearance)
+      handler.editorView[].refresh()
 
 protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
   proc didChangeFirstResponder(
@@ -1692,8 +1726,9 @@ proc changeMarkdownFontSize(controls: KosmoMarkdownControls, delta: float32) =
 
 proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
   let
+    colorMode = view.effectiveAppearance().markdownColorMode()
     modeButton = nimkit.newButton("</>")
-    colorModeButton = nimkit.newButton("Dark")
+    colorModeButton = nimkit.newButton(if colorMode == kmcmLight: "Dark" else: "Light")
     decreaseFontButton = nimkit.newButton("-")
     increaseFontButton = nimkit.newButton("+")
     row = nimkit.newStackView(nimkit.laHorizontal)
@@ -1703,7 +1738,8 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
     decreaseFontButton: decreaseFontButton,
     increaseFontButton: increaseFontButton,
     editorView: view.unsafeWeakRef(),
-    xColorMode: kmcmLight,
+    xColorMode: colorMode,
+    xThemeColorMode: colorMode,
     xFontSize: KosmoMarkdownDefaultFontSize,
   )
   result.initBoxFields()
@@ -1715,8 +1751,7 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
   modeButton.accessibilityLabel = "Edit Markdown source"
   modeButton.toolTip = "Edit Markdown source"
   colorModeButton.reservedTitles = ["Dark", "Light"]
-  colorModeButton.accessibilityLabel = "Use dark Markdown preview"
-  colorModeButton.toolTip = "Use dark Markdown preview"
+  result.syncMarkdownColorButton()
   decreaseFontButton.accessibilityLabel = "Decrease Markdown font size"
   decreaseFontButton.toolTip = "Decrease Markdown font size"
   increaseFontButton.accessibilityLabel = "Increase Markdown font size"
