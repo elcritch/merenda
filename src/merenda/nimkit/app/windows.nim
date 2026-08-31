@@ -2162,6 +2162,7 @@ proc renderNativeWindow*(window: Window) =
   window.xHostWindow.refreshContentScale()
   let logicalSize = window.syncNativeGeometry()
   var renders = window.buildRenders()
+  let needsFollowUpRender = window.needsDisplayUpdate()
   if not window.xThreadHost.isNil:
     var resources = nimkitRendering.renderResources(window.xContentView)
     window.xContentView.invalidateRenderCache()
@@ -2171,6 +2172,8 @@ proc renderNativeWindow*(window: Window) =
     window.xHostWindow.renderSubmitted()
   else:
     window.xHostWindow.render(renders, logicalSize)
+  if needsFollowUpRender:
+    window.requestNativeDisplayUpdate()
 
 proc contentPoint(window: Window, windowPoint: Point): Point =
   window.xContentView.pointFromWindow(windowPoint)

@@ -121,7 +121,7 @@ proc sourceFor(reason: LayoutInvalidationReason): LayoutInputSource =
   of lirHidden, lirHierarchy:
     lisContainer
   of lirFrame, lirBounds, lirSuperview, lirSuperviewGeometry, lirSubviews,
-      lirDescendantGeometry, lirAutoresizingMask:
+      lirDescendantGeometry, lirAutoresizingMask, lirExplicit:
     lisAutoresizingMask
 
 func isStructureDirtyReason(reason: LayoutInvalidationReason): bool =
@@ -160,6 +160,7 @@ protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
       view.xAutoresizingState.inputsDirty = true
     else:
       discard
+    view.noteLayoutInvalidation(reason, affectsConstraints = true)
     view.markAggregateLayoutInputDirty(source, structureDirty)
 
 protocol ViewSuperviewGeometrySlots of ViewGeometryEvents:

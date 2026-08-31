@@ -27,6 +27,13 @@ type
     lirIntrinsic
     lirAppearanceMetrics
     lirContainerMetrics
+    lirExplicit
+
+  LayoutTransactionPhase* = enum
+    ltpIdle
+    ltpUpdatingConstraints
+    ltpSolvingConstraints
+    ltpLayingOut
 
   LayoutInputSource* = enum
     lisUser
@@ -126,6 +133,21 @@ type
     equations*: Natural
     terms*: Natural
 
+  LayoutInvalidationDiagnostic* = object
+    generation*: Natural
+    invalidatingView*: string
+    targetView*: string
+    phase*: LayoutTransactionPhase
+    reason*: LayoutInvalidationReason
+
+  LayoutTransactionState* = object
+    root*: View
+    currentView*: View
+    generation*: Natural
+    phase*: LayoutTransactionPhase
+    followUpRequested*: bool
+    lastInvalidation*: LayoutInvalidationDiagnostic
+
   View* = ref object of Responder
     xTag*: int
     xIdentifier*: string
@@ -160,6 +182,12 @@ type
     xNeedsUpdateConstraints*: bool
     xNeedsLayout*: bool
     xLayoutSubtreeInProgress*: bool
+    xLayoutGeneration*: Natural
+    xConstraintVisitGeneration*: Natural
+    xLayoutVisitGeneration*: Natural
+    xLayoutPhase*: LayoutTransactionPhase
+    xLayoutFeedbackCycles*: Natural
+    xLastLayoutInvalidation*: LayoutInvalidationDiagnostic
     xAutoresizingMask*: AutoresizingMask
     xAutoresizingMaskConstraints*: bool
     xAutoresizingState*: AutoresizingState
@@ -193,3 +221,60 @@ proc superviewBacklink*(view: View): View {.inline.} =
 proc windowBacklink*(view: View): Responder {.inline.} =
   if not view.isNil and not view.xWindow.isNil:
     result = view.xWindow[]
+
+var activeLayoutTransaction* {.threadvar.}: ptr LayoutTransactionState
+var layoutGenerationCounter {.threadvar.}: Natural
+
+proc nextLayoutGeneration*(): Natural =
+  inc layoutGenerationCounter
+  if layoutGenerationCounter == 0:
+    inc layoutGenerationCounter
+  layoutGenerationCounter
+
+proc layoutDiagnosticName(view: View): string =
+  if view.isNil:
+    return "<none>"
+  if view.xIdentifier.len > 0:
+    return view.xIdentifier
+  "<unnamed frame=" & $view.xFrame & ">"
+
+proc belongsToLayoutTransaction(
+    view: View, transaction: ptr LayoutTransactionState
+): bool =
+  var current = view
+  while not current.isNil:
+    if current == transaction.root:
+      return true
+    current = current.superviewBacklink()
+
+proc noteLayoutInvalidation*(
+    target: View, reason: LayoutInvalidationReason, affectsConstraints: bool
+) =
+  let transaction = activeLayoutTransaction
+  if transaction.isNil or target.isNil or
+      not target.belongsToLayoutTransaction(transaction):
+    return
+
+  let requiresFollowUp =
+    case transaction.phase
+    of ltpIdle:
+      false
+    of ltpUpdatingConstraints:
+      affectsConstraints and target.xConstraintVisitGeneration == transaction.generation
+    of ltpSolvingConstraints:
+      affectsConstraints
+    of ltpLayingOut:
+      affectsConstraints or target.xLayoutVisitGeneration == transaction.generation
+  if not requiresFollowUp:
+    return
+
+  let invalidatingView =
+    if transaction.currentView.isNil: target else: transaction.currentView
+  transaction.followUpRequested = true
+  transaction.lastInvalidation = LayoutInvalidationDiagnostic(
+    generation: transaction.generation,
+    invalidatingView: invalidatingView.layoutDiagnosticName(),
+    targetView: target.layoutDiagnosticName(),
+    phase: transaction.phase,
+    reason: reason,
+  )

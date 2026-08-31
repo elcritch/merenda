@@ -15,7 +15,8 @@ import ../accessibility/accessibilityprotocols
 export responders
 export viewbase except
   AutoresizingState, LayoutInputKind, LayoutTerm, LayoutEquation, LayoutInput,
-  LayoutInputCache
+  LayoutInputCache, LayoutTransactionState, activeLayoutTransaction,
+  nextLayoutGeneration, noteLayoutInvalidation
 export viewconstraints except generatedLayoutInputs, applyConstraintsForSubtree
 export viewgeometry except
   resetAutoresizingState, refreshAutoresizingReference,
@@ -190,6 +191,7 @@ proc needsUpdateConstraints*(view: View): bool =
 proc setNeedsUpdateConstraints*(view: View, value: bool) =
   if not value:
     return
+  view.noteLayoutInvalidation(lirConstraints, affectsConstraints = true)
   view.xNeedsUpdateConstraints = true
 
 proc setNeedsUpdateConstraints*(view: View) =
@@ -209,12 +211,14 @@ proc needsLayout*(view: View): bool =
   view.xNeedsLayout
 
 proc `needsLayout=`*(view: View, value: bool) =
+  if value:
+    view.noteLayoutInvalidation(lirExplicit, affectsConstraints = false)
   view.xNeedsLayout = value
 
 proc setNeedsLayout*(view: View) =
   view.needsLayout = true
 
-const MaxLayoutSubtreePasses = 64
+const LayoutFeedbackDiagnosticThreshold = 3
 
 proc hasPendingLayoutInSubtree(view: View): bool =
   if view.xNeedsUpdateConstraints or view.xNeedsLayout:
@@ -223,13 +227,33 @@ proc hasPendingLayoutInSubtree(view: View): bool =
     if child.hasPendingLayoutInSubtree():
       return true
 
-proc layoutSubtree(view: View) =
+proc firstPendingLayoutView(view: View): View =
+  if view.xNeedsUpdateConstraints or view.xNeedsLayout:
+    return view
+  for child in view.xSubviews:
+    result = child.firstPendingLayoutView()
+    if not result.isNil:
+      return
+
+proc updateConstraintsForTransaction(
+    view: View, transaction: var LayoutTransactionState
+) =
+  for child in view.xSubviews:
+    child.updateConstraintsForTransaction(transaction)
+  view.xConstraintVisitGeneration = transaction.generation
+  transaction.currentView = view
+  if view.xNeedsUpdateConstraints:
+    view.runUpdateConstraints()
+
+proc layoutSubtree(view: View, transaction: var LayoutTransactionState) =
+  view.xLayoutVisitGeneration = transaction.generation
+  transaction.currentView = view
   if view.xNeedsLayout:
     view.xNeedsLayout = false
     discard view.sendLocalIfHandled(layoutSubviews())
     discard view.sendLocalIfHandled(layout())
   for child in view.xSubviews:
-    child.layoutSubtree()
+    child.layoutSubtree(transaction)
 
 proc hasActiveLayoutAncestor(view: View): bool =
   var current = view
@@ -239,20 +263,72 @@ proc hasActiveLayoutAncestor(view: View): bool =
     current = current.superviewBacklink()
 
 proc layoutSubtreeIfNeeded*(view: View) =
-  if view.hasActiveLayoutAncestor():
+  if view.hasActiveLayoutAncestor() or not view.hasPendingLayoutInSubtree():
     return
   view.xLayoutSubtreeInProgress = true
+  var transaction = LayoutTransactionState(
+    root: view, generation: nextLayoutGeneration(), phase: ltpUpdatingConstraints
+  )
+  let previousTransaction = activeLayoutTransaction
+  activeLayoutTransaction = addr transaction
+  view.xLayoutGeneration = transaction.generation
   defer:
+    view.xLayoutPhase = ltpIdle
+    activeLayoutTransaction = previousTransaction
     view.xLayoutSubtreeInProgress = false
-  for _ in 0 ..< MaxLayoutSubtreePasses:
-    view.updateConstraintsForSubtreeIfNeeded()
-    view.applyConstraintsForSubtree()
-    view.layoutSubtree()
-    if not view.hasPendingLayoutInSubtree():
-      return
-  let identifier = if view.xIdentifier.len > 0: view.xIdentifier else: "<unnamed>"
-  debugEcho "NimKit layout subtree did not converge after ",
-    MaxLayoutSubtreePasses, " passes: ", identifier, " frame=", view.xFrame
+
+  view.xLayoutPhase = transaction.phase
+  view.updateConstraintsForTransaction(transaction)
+
+  transaction.currentView = nil
+  transaction.phase = ltpSolvingConstraints
+  view.xLayoutPhase = transaction.phase
+  view.applyConstraintsForSubtree()
+
+  transaction.phase = ltpLayingOut
+  view.xLayoutPhase = transaction.phase
+  view.layoutSubtree(transaction)
+  transaction.currentView = nil
+
+  if not view.hasPendingLayoutInSubtree():
+    view.xLayoutFeedbackCycles = 0
+    view.xLastLayoutInvalidation = LayoutInvalidationDiagnostic()
+    return
+
+  inc view.xLayoutFeedbackCycles
+  if transaction.followUpRequested:
+    view.xLastLayoutInvalidation = transaction.lastInvalidation
+  else:
+    let pending = view.firstPendingLayoutView()
+    view.xLastLayoutInvalidation = LayoutInvalidationDiagnostic(
+      generation: transaction.generation,
+      invalidatingView: "<unknown>",
+      targetView:
+        if pending.isNil or pending.xIdentifier.len == 0:
+          "<unnamed>"
+        else:
+          pending.xIdentifier,
+      phase: transaction.phase,
+      reason: lirExplicit,
+    )
+  if view.xLayoutFeedbackCycles == LayoutFeedbackDiagnosticThreshold:
+    let diagnostic = view.xLastLayoutInvalidation
+    debugEcho "NimKit repeated layout feedback after ",
+      view.xLayoutFeedbackCycles, " update cycles: generation=", diagnostic.generation,
+      " invalidatingView=", diagnostic.invalidatingView, " target=",
+      diagnostic.targetView, " phase=", diagnostic.phase, " reason=", diagnostic.reason
+
+proc layoutGeneration*(view: View): Natural =
+  view.xLayoutGeneration
+
+proc layoutPhase*(view: View): LayoutTransactionPhase =
+  view.xLayoutPhase
+
+proc layoutFeedbackCycles*(view: View): Natural =
+  view.xLayoutFeedbackCycles
+
+proc lastLayoutInvalidation*(view: View): LayoutInvalidationDiagnostic =
+  view.xLastLayoutInvalidation
 
 proc dirtyRects*(view: View): seq[Rect] =
   view.invalidRects()

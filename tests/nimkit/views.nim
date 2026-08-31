@@ -111,6 +111,7 @@ protocol NonConvergingLayoutHooks of ViewLayoutProtocol:
   method layout(spy: NonConvergingLayoutView) =
     inc spy.layoutCount
     spy.setNeedsLayout()
+    spy.setNeedsLayout()
 
 protocol ConstraintSpyHooks of ViewLayoutProtocol:
   method updateConstraints(spy: ConstraintSpyView) =
@@ -143,8 +144,10 @@ proc newLayoutSpyView(frame: Rect): LayoutSpyView =
   initViewFields(result, frame)
   discard result.withProtocol(LayoutSpyHooks)
 
-proc newLayoutInvalidatingView(frame: Rect, target: View): LayoutInvalidatingView =
-  result = LayoutInvalidatingView(target: target, invalidatesTarget: true)
+proc newLayoutInvalidatingView(
+    frame: Rect, target: View, invalidatesTarget = true
+): LayoutInvalidatingView =
+  result = LayoutInvalidatingView(target: target, invalidatesTarget: invalidatesTarget)
   initViewFields(result, frame)
   discard result.withProtocol(LayoutInvalidatingHooks)
 
@@ -436,7 +439,7 @@ suite "nimkit views":
     root.finishDisplaySubtree()
     check not root.needsDisplay
 
-  test "layout subtree settles invalidations created during the same pass":
+  test "layout subtree defers invalidations of an already visited view":
     let
       root = newView(frame = rect(0, 0, 200, 160))
       target = newLayoutSpyView(rect(0, 0, 80, 40))
@@ -448,11 +451,38 @@ suite "nimkit views":
 
     root.layoutSubtreeIfNeeded()
 
+    check target.events == @["layoutSubviews", "layout"]
+    check invalidator.layoutCount == 1
+    check target.needsLayout
+
+    root.layoutSubtreeIfNeeded()
+
     check target.events == @["layoutSubviews", "layout", "layoutSubviews", "layout"]
     check invalidator.layoutCount == 1
     check not root.needsLayout
     check not target.needsLayout
     check not invalidator.needsLayout
+
+  test "layout invalidation of an unvisited descendant joins the transaction":
+    let
+      root = newView(frame = rect(0, 0, 200, 160))
+      target = newLayoutSpyView(rect(0, 50, 80, 40))
+      invalidator =
+        newLayoutInvalidatingView(rect(0, 0, 80, 40), target, invalidatesTarget = false)
+
+    root.addSubview(invalidator)
+    root.addSubview(target)
+    root.layoutSubtreeIfNeeded()
+    target.events.setLen(0)
+    invalidator.invalidatesTarget = true
+    invalidator.setNeedsLayout()
+
+    root.layoutSubtreeIfNeeded()
+
+    check invalidator.layoutCount == 2
+    check target.events == @["layoutSubviews", "layout"]
+    check not target.needsLayout
+    check root.layoutPhase() == ltpIdle
 
   test "nested subtree layout waits for the active ancestor layout pass":
     let
@@ -468,13 +498,32 @@ suite "nimkit views":
     check not root.needsLayout
     check not target.needsLayout
 
-  test "layout subtree reports when the pass cap is exhausted":
+  test "self invalidation queues one callback for the next transaction":
     let view = newNonConvergingLayoutView(rect(0, 0, 200, 160))
 
     view.layoutSubtreeIfNeeded()
 
-    check view.layoutCount == 64
+    check view.layoutCount == 1
     check view.needsLayout
+
+    view.layoutSubtreeIfNeeded()
+
+    check view.layoutCount == 2
+    check view.needsLayout
+
+    view.layoutSubtreeIfNeeded()
+
+    check view.layoutCount == 3
+    check view.needsLayout
+    check view.layoutFeedbackCycles() == 3
+    check view.layoutGeneration() > 0
+    check view.layoutPhase() == ltpIdle
+    let diagnostic = view.lastLayoutInvalidation()
+    check diagnostic.generation == view.layoutGeneration()
+    check diagnostic.invalidatingView == "nonconverging-layout-test"
+    check diagnostic.targetView == "nonconverging-layout-test"
+    check diagnostic.phase == ltpLayingOut
+    check diagnostic.reason == lirExplicit
 
   test "layout subtree settles recursive constraint invalidations":
     let
@@ -488,6 +537,15 @@ suite "nimkit views":
     root.layoutSubtreeIfNeeded()
 
     var childConstraintUpdates = 0
+    for event in constraintEvents:
+      if event == "child.updateConstraints":
+        inc childConstraintUpdates
+    check childConstraintUpdates == 1
+    check child.needsUpdateConstraints
+
+    root.layoutSubtreeIfNeeded()
+
+    childConstraintUpdates = 0
     for event in constraintEvents:
       if event == "child.updateConstraints":
         inc childConstraintUpdates
