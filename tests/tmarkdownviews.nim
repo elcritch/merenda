@@ -1,8 +1,13 @@
 import std/[monotimes, os, strformat, strutils, times, unicode, unittest]
 
+import figdraw
+
 import merenda/nimkit
 
-const RepositoryReadme = currentSourcePath().parentDir.parentDir / "README.md"
+const
+  RepositoryRoot = currentSourcePath().parentDir.parentDir
+  RepositoryReadme = RepositoryRoot / "README.md"
+  TestImagePath = RepositoryRoot / "data" / "img1.png"
 
 proc runeIndexOf(text, needle: string): int =
   let
@@ -81,9 +86,12 @@ Setext two
 
     check rendered == "Plain emphasis, strong, both, code, and removed."
     check emphasis.foregroundColor == style.emphasisColor
+    check emphasis.fontName == style.emphasisFontName
     check strong.foregroundColor == style.strongColor
-    check strong.fontSize > style.bodyFontSize
-    check both.fontSize > style.bodyFontSize
+    check strong.fontName == style.emphasisFontName
+    check strong.fontSize == style.bodyFontSize
+    check both.fontName == style.emphasisFontName
+    check both.fontSize == style.bodyFontSize
     check storage.attributesFor("code").fontName == style.codeFontName
     check storage.attributesFor("removed").hasStrikethrough()
 
@@ -132,6 +140,66 @@ Setext two
     check reference.link == "https://example.test/logo.webp"
     check storage.attributesFor("▧").foregroundColor == style.linkColor
     check reference.foregroundColor == style.linkColor
+
+  test "local Markdown images render as native image attachments":
+    var style = initMarkdownStyle()
+    style.maximumImageSize = initSize(60.0'f32, 40.0'f32)
+    let
+      view = newMarkdownView(
+        "![Image preview](img1.png \"Preview title\")\n\n> ![Quoted](img1.png)",
+        frame = rect(0, 0, 320, 240),
+        style = style,
+        imageBasePath = TestImagePath.parentDir,
+      )
+      storage = view.textStorage()
+      renders = buildRenders(view)
+
+    var attachments: seq[TextAttachment]
+    for run in storage.runs:
+      if run.attributes.hasAttachment:
+        attachments.add run.attributes.attachment
+    require attachments.len == 2
+    let attachment = attachments[0]
+    check attachment.identifier == "markdown-image:img1.png"
+    check attachment.contentType == "image/png"
+    check attachment.fileName == "img1.png"
+    check attachment.fileUrl == "img1.png"
+    check attachment.size == initSize(40.0'f32, 40.0'f32)
+    check attachment.metadata ==
+      @[
+        TextMetadataItem(key: "alt", value: "Image preview"),
+        TextMetadataItem(key: "title", value: "Preview title"),
+      ]
+    require DefaultDrawLevel in renders
+
+    var imageCount = 0
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkImage:
+        inc imageCount
+        check node.screenBox.w == 40.0'f32
+        check node.screenBox.h == 40.0'f32
+    check imageCount == 2
+
+  test "custom image loaders are cached across Markdown style changes":
+    let image = newImageResourceFromFile(TestImagePath)
+    var requestedUrls: seq[string]
+    let loader: MarkdownImageLoader = proc(url: string): ImageResource =
+      requestedUrls.add url
+      if url == "asset:logo": image else: nil
+    let view = newMarkdownView(
+      "![Generated logo](asset:logo)",
+      frame = rect(0, 0, 320, 180),
+      imageLoader = loader,
+    )
+
+    discard buildRenders(view)
+    var style = view.markdownStyle
+    style.bodyFontSize += 1.0'f32
+    view.markdownStyle = style
+    discard buildRenders(view)
+
+    check requestedUrls == @["asset:logo"]
+    check view.textView().attachmentPresentations().len == 1
 
   test "unordered, ordered, nested, and multi-block lists retain their structure":
     let storage = markdownTextStorage(
@@ -201,6 +269,50 @@ echo "fenced"
     check storage.attributesFor("echo \"indented\"").fontName == style.codeFontName
     check storage.attributesFor("[nim]").foregroundColor == style.mutedColor
 
+  test "fenced and indented code blocks render outlined background panels":
+    var style = initMarkdownStyle()
+    style.codeBlockStyle = MarkdownBlockStyle(
+      backgroundColor: color(0.14, 0.22, 0.32, 0.94),
+      outlineColor: color(0.52, 0.66, 0.82, 1.0),
+      outlineWidth: 2.0'f32,
+      cornerRadius: 9.0'f32,
+      padding: insets(7.0'f32, 10.0'f32),
+    )
+    let
+      source =
+        """
+Before `inline`.
+
+```nim
+echo "fenced"
+```
+
+    echo "indented"
+"""
+      view = newMarkdownView(source, frame = rect(0, 0, 520, 320), style = style)
+      storage = view.textStorage()
+      renders = buildRenders(view)
+
+    check storage.attributesFor("inline").backgroundColor.a == 0.0'f32
+    check storage.attributesFor("echo \"fenced\"").backgroundColor ==
+      style.codeBlockStyle.backgroundColor
+    check storage.attributesFor("echo \"indented\"").backgroundColor ==
+      style.codeBlockStyle.backgroundColor
+    require DefaultDrawLevel in renders
+
+    var panelCount = 0
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == style.codeBlockStyle.backgroundColor.rgba:
+        inc panelCount
+        check node.stroke.weight == style.codeBlockStyle.outlineWidth
+        check node.stroke.fill.kind == flColor
+        check node.stroke.fill.color == style.codeBlockStyle.outlineColor.rgba
+        check node.corners[dcTopLeft] == 9'u16
+        check node.screenBox.w > 20.0'f32
+        check node.screenBox.h > 20.0'f32
+    check panelCount == 2
+
   test "raw inline and block HTML remain inert and visibly muted":
     let
       style = initMarkdownStyle()
@@ -239,7 +351,7 @@ Press <kbd>Enter</kbd>.
     check header.fontName == style.codeFontName
     check header.foregroundColor == style.headingColor
     check header.underlineStyle == tldsSingle
-    check bold.fontName == style.codeFontName
+    check bold.fontName == style.emphasisCodeFontName
     check bold.foregroundColor == style.strongColor
     check storage.attributesFor("code").fontName == style.codeFontName
     check storage.attributesFor("link").link == "https://example.test"
@@ -260,6 +372,7 @@ Press <kbd>Enter</kbd>.
 
   test "empty and Unicode documents produce valid native text storage":
     let
+      style = initMarkdownStyle()
       empty = markdownTextStorage("")
       unicode =
         markdownTextStorage("# Καλημέρα 🌍\n\nПривет **мир**")
@@ -267,7 +380,7 @@ Press <kbd>Enter</kbd>.
     check empty.stringValue() == ""
     check empty.len == 0
     check unicode.stringValue() == "Καλημέρα 🌍\n\nПривет мир"
-    check unicode.attributesFor("мир").fontSize > initMarkdownStyle().bodyFontSize
+    check unicode.attributesFor("мир").fontName == style.emphasisFontName
 
   test "markdown view is reusable, read-only, selectable, and styleable":
     let view = newMarkdownView("# First", frame = rect(0, 0, 480, 320))

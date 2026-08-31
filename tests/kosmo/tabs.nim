@@ -1,4 +1,5 @@
-import std/[monotimes, options, os, osproc, strutils, tempfiles, times, unittest]
+import
+  std/[monotimes, options, os, osproc, strutils, tempfiles, times, unicode, unittest]
 
 import figdraw
 import sigils/threads
@@ -12,6 +13,18 @@ func center(rect: Rect): Point =
     rect.origin.x + rect.size.width / 2.0'f32,
     rect.origin.y + rect.size.height / 2.0'f32,
   )
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add(rune)
+
+proc renderedTexts(view: View): seq[string] =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkText:
+      result.add node.renderedText()
 
 suite "Kosmo":
   test "recognizes conventional Markdown file extensions":
@@ -97,7 +110,6 @@ suite "Kosmo":
     check frontend.editorPane.markdownView.markdown.strip() == source.strip()
     check "Kosmo" in frontend.editorPane.markdownView.textStorage.stringValue()
     check "Preview" in frontend.editorPane.markdownView.textStorage.stringValue()
-    check frontend.documentTabs.documentTabModels()[0].accessoryTitle.len == 0
 
     let controls = frontend.editorPane.markdownControls
     frontend.editorPane.layoutSubtreeIfNeeded()
@@ -109,6 +121,10 @@ suite "Kosmo":
     check controls.markdownFontSize == KosmoMarkdownDefaultFontSize
     check controls.frame().maxX < frontend.editorPane.bounds().maxX
     check controls.frame().minY > KosmoTabBarHeight
+    let controlTitles = View(controls).renderedTexts()
+    for title in ["</>", "Dark", "-", "+"]:
+      check title in controlTitles
+    check "…" notin controlTitles
 
     let lightBackground = frontend.editorPane.markdownView.markdownStyle.backgroundColor
     check frontend.window.clickAt(
@@ -116,6 +132,7 @@ suite "Kosmo":
     )
     check controls.markdownColorMode == kmcmDark
     check controls.colorModeButton.title == "Light"
+    check "Light" in View(controls).renderedTexts()
     check frontend.editorPane.markdownView.markdownStyle.backgroundColor !=
       lightBackground
 
@@ -159,7 +176,6 @@ suite "Kosmo":
     check frontend.openPath(textPath)
     check frontend.editorPane.contentView == View(frontend.editorView)
     check controls.hidden
-    check frontend.documentTabs.documentTabModels()[^1].accessoryTitle.len == 0
 
   test "application shortcuts save close and cycle the focused editor tabs":
     let

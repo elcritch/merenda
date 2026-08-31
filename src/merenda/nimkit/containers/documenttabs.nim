@@ -52,7 +52,6 @@ type
     xObjectValue: ObjectValue
     xRepresentedObject: DynamicAgent
     xToolTip: string
-    xAccessoryTitle: string
     xStyleId: string
     xStyleClasses: seq[string]
     xUserInfo: DynamicAgent
@@ -70,7 +69,6 @@ type
     styleId*: string
     styleClasses*: seq[string]
     tooltip*: string
-    accessoryTitle*: string
     representedObject*: DynamicAgent
     userInfo*: DynamicAgent
 
@@ -88,7 +86,6 @@ type
     dthNone
     dthTab
     dthClose
-    dthAccessory
     dthPreviousButton
     dthNextButton
 
@@ -126,8 +123,6 @@ const
   DocumentTabHorizontalInset = 12.0'f32
   DocumentTabCloseWidth = 16.0'f32
   DocumentTabCloseSpacing = 7.0'f32
-  DocumentTabAccessoryWidth = 28.0'f32
-  DocumentTabAccessorySpacing = 5.0'f32
   DocumentTabIndicatorSize = 2.0'f32
   DocumentTabAccentAlpha = 0.72'f32
   DocumentTabModifiedAccentAlpha = 0.52'f32
@@ -141,10 +136,6 @@ protocol DocumentTabsDelegate {.selectorScope: protocol.}:
   ): bool {.optional.}
 
   method didSelectDocumentTab*(tabs: DocumentTabs, item: DocumentTabItem) {.optional.}
-
-  method didActivateDocumentTabAccessory*(
-    tabs: DocumentTabs, item: DocumentTabItem, index: int
-  ) {.optional.}
 
   method shouldCloseDocumentTab*(
     tabs: DocumentTabs, item: DocumentTabItem, index: int
@@ -188,10 +179,6 @@ protocol DocumentTabsEvents:
     tabs: DocumentTabs, sender: DynamicAgent
   ) {.signal.}
 
-  proc documentTabAccessoryWasActivated*(
-    tabs: DocumentTabs, item: DocumentTabItem, index: int
-  ) {.signal.}
-
   proc documentTabWillClose*(
     tabs: DocumentTabs, item: DocumentTabItem, index: int
   ) {.signal.}
@@ -228,7 +215,6 @@ proc clampScrollOffset(tabs: DocumentTabs, offset: float32): float32
 proc maximumScrollOffset*(tabs: DocumentTabs): float32
 proc tabViewportRect*(tabs: DocumentTabs): Rect
 proc documentTabRect*(tabs: DocumentTabs, index: int): Rect
-proc documentTabAccessoryRect*(tabs: DocumentTabs, index: int): Rect
 proc documentTabIndexAtPoint*(tabs: DocumentTabs, point: Point): int
 proc insertDocumentTabItem*(
   tabs: DocumentTabs, item: DocumentTabItem, index: Natural
@@ -308,7 +294,6 @@ proc initDocumentTabModel*(
     styleId = "",
     styleClasses: openArray[string] = [],
     tooltip = "",
-    accessoryTitle = "",
     representedObject: DynamicAgent = nil,
     userInfo: DynamicAgent = nil,
 ): DocumentTabModel =
@@ -325,7 +310,6 @@ proc initDocumentTabModel*(
     styleId: styleId,
     styleClasses: @styleClasses,
     tooltip: tooltip,
-    accessoryTitle: accessoryTitle,
     representedObject: representedObject,
     userInfo: userInfo,
   )
@@ -339,7 +323,6 @@ proc newDocumentTabItem*(model: DocumentTabModel): DocumentTabItem =
   result.xObjectValue = model.objectValue
   result.xRepresentedObject = model.representedObject
   result.xToolTip = model.tooltip
-  result.xAccessoryTitle = model.accessoryTitle
   result.xStyleId = model.styleId
   result.xStyleClasses = model.styleClasses
   result.xUserInfo = model.userInfo
@@ -357,7 +340,6 @@ proc documentTabModel*(item: DocumentTabItem): DocumentTabModel =
     styleId = item.xStyleId,
     styleClasses = item.xStyleClasses,
     tooltip = item.xToolTip,
-    accessoryTitle = item.xAccessoryTitle,
     representedObject = item.xRepresentedObject,
     userInfo = item.xUserInfo,
   )
@@ -424,12 +406,6 @@ proc toolTip*(item: DocumentTabItem): string =
 
 proc `toolTip=`*(item: DocumentTabItem, tooltip: string) =
   item.xToolTip = tooltip
-
-proc accessoryTitle*(item: DocumentTabItem): string =
-  item.xAccessoryTitle
-
-proc `accessoryTitle=`*(item: DocumentTabItem, title: string) =
-  item.xAccessoryTitle = title
 
 proc styleId*(item: DocumentTabItem): string =
   item.xStyleId
@@ -726,18 +702,13 @@ proc documentTabWidth(
         DocumentTabCloseWidth + DocumentTabCloseSpacing
       else:
         0.0'f32
-    accessoryWidth =
-      if item.accessoryTitle().len > 0:
-        DocumentTabAccessoryWidth + DocumentTabAccessorySpacing
-      else:
-        0.0'f32
     modifiedWidth = if item.modified(): 9.0'f32 else: 0.0'f32
     fontScale = max(textStyle.fontSize / DefaultFontSize, 1.0'f32)
     maximumWidth = max(bounds.maxWidth * fontScale, bounds.minWidth)
   min(
     max(
       titleWidth + horizontalInsets.left + horizontalInsets.right + closeWidth +
-        accessoryWidth + modifiedWidth,
+        modifiedWidth,
       bounds.minWidth,
     ),
     maximumWidth,
@@ -869,41 +840,6 @@ proc closeRect(tabs: DocumentTabs, index: int, appearance: Appearance): Rect =
 
 proc closeRect(tabs: DocumentTabs, index: int): Rect =
   tabs.closeRect(index, tabs.documentTabAppearance())
-
-proc accessoryRect(tabs: DocumentTabs, index: int, appearance: Appearance): Rect =
-  if index < 0 or index >= tabs.xItems.len:
-    return
-  let
-    item = tabs.xItems[index]
-    tabRect = tabs.documentTabRect(index)
-  if item.accessoryTitle().len == 0 or tabRect.isEmpty:
-    return
-  let
-    close = tabs.closeRect(index, appearance)
-    position = tabs.documentTabCloseButtonPosition(item, appearance)
-    height = min(20.0'f32, max(tabRect.size.height - 6.0'f32, 0.0'f32))
-    x =
-      case position
-      of dtcbLeft:
-        if close.isEmpty:
-          tabRect.minX + DocumentTabCloseSpacing
-        else:
-          close.maxX + DocumentTabAccessorySpacing
-      of dtcbRight:
-        if close.isEmpty:
-          tabRect.maxX - DocumentTabCloseSpacing - DocumentTabAccessoryWidth
-        else:
-          close.minX - DocumentTabAccessorySpacing - DocumentTabAccessoryWidth
-  rect(
-    x,
-    tabRect.minY + max((tabRect.size.height - height) / 2.0'f32, 0.0'f32),
-    DocumentTabAccessoryWidth,
-    height,
-  )
-
-proc documentTabAccessoryRect*(tabs: DocumentTabs, index: int): Rect =
-  ## Return the optional accessory-button rectangle for a visible tab.
-  tabs.accessoryRect(index, tabs.documentTabAppearance())
 
 proc scrollTabToVisible(tabs: DocumentTabs, index: int) =
   if index < 0 or index >= tabs.xItems.len:
@@ -1109,14 +1045,6 @@ proc didSelect(tabs: DocumentTabs, item: DocumentTabItem) =
   if not delegate.isNil:
     discard
       delegate.sendLocalIfHandled(didSelectDocumentTab(), (tabs: tabs, item: item))
-
-proc activateAccessory(tabs: DocumentTabs, item: DocumentTabItem, index: int) =
-  let delegate = tabs.delegate()
-  if not delegate.isNil:
-    discard delegate.sendLocalIfHandled(
-      didActivateDocumentTabAccessory(), (tabs: tabs, item: item, index: index)
-    )
-  emit tabs.documentTabAccessoryWasActivated(item, index)
 
 proc shouldClose(tabs: DocumentTabs, item: DocumentTabItem, index: int): bool =
   if item.isNil or not tabs.allowsClosing() or not item.closeable():
@@ -1451,8 +1379,6 @@ proc hitPart(
     return
   if tabs.closeRect(index).contains(point):
     result = (dthClose, index)
-  elif tabs.documentTabAccessoryRect(index).contains(point):
-    result = (dthAccessory, index)
   else:
     result = (dthTab, index)
 
@@ -1612,70 +1538,6 @@ proc drawCloseButton(
     DefaultDrawLevel, parent, markRect, "×", markStyle, alignment = taCenter
   )
 
-proc drawAccessoryButton(
-    tabs: DocumentTabs,
-    context: DrawContext,
-    parent: FigIdx,
-    rect: Rect,
-    title: string,
-    selected, pressed: bool,
-) =
-  if rect.isEmpty or title.len == 0:
-    return
-  var states: set[WidgetState]
-  if selected:
-    states.incl ssSelected
-  if pressed:
-    states.incl ssHighlighted
-    states.incl ssPressed
-  let
-    styleContext =
-      tabs.documentTabButtonStyleContext(states, classes = ["document-tab-accessory"])
-    fillColor =
-      if pressed:
-        color(0.46, 0.52, 0.62, 0.88)
-      elif selected:
-        color(0.68, 0.73, 0.82, 0.72)
-      else:
-        color(0.60, 0.65, 0.74, 0.52)
-    textColor =
-      if selected:
-        color(0.10, 0.12, 0.16, 1.0)
-      else:
-        color(0.20, 0.22, 0.28, 1.0)
-    fillValue = context.appearance.resolveFill(styleContext, fill(fillColor))
-    borderColor = context.appearance.resolveColor(
-      styleContext, StyleBorderColor, color(0.0, 0.0, 0.0, 0.0)
-    )
-    borderWidth =
-      context.appearance.resolveLength(styleContext, StyleBorderWidth, 0.0'f32)
-    radius = context.appearance.resolveLength(styleContext, StyleCornerRadius, 4.0'f32)
-    markColor = context.appearance.resolveColor(styleContext, StyleMarkColor, textColor)
-    markStyle = context.appearance.tabTextStyle(styleContext, markColor)
-    chrome = chromeContext(
-      context.appearance.resolveChromeName(styleContext),
-      crDocumentTabButton,
-      cpFace,
-      fillValue,
-      states,
-    )
-    renderRect = context.renderRectFor(rect)
-    buttonRoot = context.addRenderRectangle(
-      DefaultDrawLevel,
-      parent,
-      renderRect,
-      context.appearance.chromeFill(chrome),
-      borderColor,
-      borderWidth,
-      radius,
-    )
-  context.drawChromeExtras(
-    chrome, initChromeExtras(buttonRoot, renderRect, cornerRadius = radius)
-  )
-  context.addText(
-    DefaultDrawLevel, parent, rect, title, markStyle, alignment = taCenter
-  )
-
 proc drawDocumentTab(
     tabs: DocumentTabs, context: DrawContext, parent: FigIdx, index: int
 ) =
@@ -1786,7 +1648,6 @@ proc drawDocumentTab(
 
   let
     close = tabs.closeRect(index, context.appearance)
-    accessory = tabs.accessoryRect(index, context.appearance)
     closePosition = tabs.documentTabCloseButtonPosition(item, context.appearance)
     modifiedWidth = if item.modified(): 8.0'f32 else: 0.0'f32
     viewStyle = context.appearance.resolveTabViewStyle(styleContext)
@@ -1798,20 +1659,14 @@ proc drawDocumentTab(
         0.0'f32
       else:
         DocumentTabCloseWidth + DocumentTabCloseSpacing
-    accessoryReserve =
-      if accessory.isEmpty:
-        0.0'f32
-      else:
-        DocumentTabAccessoryWidth + DocumentTabAccessorySpacing
-    controlReserve = closeReserve + accessoryReserve
     textLeftInset =
-      baseLeftInset + (if closePosition == dtcbLeft: controlReserve else: 0.0'f32) +
+      baseLeftInset + (if closePosition == dtcbLeft: closeReserve else: 0.0'f32) +
       modifiedWidth
     textRightInset =
-      baseRightInset + (if closePosition == dtcbRight: controlReserve else: 0.0'f32)
+      baseRightInset + (if closePosition == dtcbRight: closeReserve else: 0.0'f32)
     modifiedCenterX =
       rect.origin.x + baseLeftInset +
-      (if closePosition == dtcbLeft: controlReserve else: 0.0'f32)
+      (if closePosition == dtcbLeft: closeReserve else: 0.0'f32)
     textRect = rect(
       rect.origin.x + textLeftInset,
       rect.origin.y,
@@ -1829,14 +1684,6 @@ proc drawDocumentTab(
       3.0'f32,
     )
   context.addText(DefaultDrawLevel, parent, textRect, displayTitle, tabTextStyle)
-  tabs.drawAccessoryButton(
-    context,
-    parent,
-    accessory,
-    item.accessoryTitle(),
-    selected,
-    index == tabs.xPressedIndex and tabs.xPressedPart == dthAccessory,
-  )
   tabs.drawCloseButton(
     context,
     parent,
@@ -2021,7 +1868,7 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
       discard tabs.scrollDocumentTabsBy(tabs.scrollButtonDelta(dtsbNext))
       tabs.needsDisplay = true
       true
-    of dthTab, dthClose, dthAccessory:
+    of dthTab, dthClose:
       if not tabs.xItems[hit.index].enabled():
         return false
       tabs.xPressedIndex = hit.index
@@ -2092,13 +1939,6 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
       let hit = tabs.hitPart(event.location)
       if not wasDragging and hit.part == dthClose and hit.index == pressed:
         discard tabs.closeDocumentTabAtIndex(pressed)
-      else:
-        tabs.needsDisplay = true
-      true
-    of dthAccessory:
-      let hit = tabs.hitPart(event.location)
-      if hit.part == dthAccessory and hit.index == pressed:
-        tabs.activateAccessory(tabs.xItems[pressed], pressed)
       else:
         tabs.needsDisplay = true
       true

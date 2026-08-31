@@ -14,9 +14,8 @@ requires "sigils[sigNameAsString, closures, siwin] >= 0.27.4"
 requires "gh:elcritch/kiwiberry"
 requires "cborious"
 requires "unicodedb >= 0.14.0"
-requires "regex >= 0.26.3"
 requires "faststreams >= 0.5.1"
-requires "gh:elcritch/nim-markdown#fix-arc-delimiter-cycle"
+requires "gh:elcritch/nim-markdown#devel[regex]"
 
 feature "libbacktrace":
   requires "libbacktrace"

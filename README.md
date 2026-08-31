@@ -104,7 +104,7 @@ specific control should receive focus first.
 
 `MarkdownView` parses CommonMark or GitHub-flavored Markdown and renders it as
 native, selectable NimKit attributed text. It supports headings, inline styles,
-links, code, quotes, lists, thematic breaks, GFM tables, and linked image alt text
+links, code, quotes, lists, thematic breaks, GFM tables, and native local images
 without embedding an HTML engine:
 
 ```nim
@@ -114,7 +114,9 @@ let viewer = newMarkdownView("""
 # Release notes
 
 Read the [full changelog](https://example.com) or copy this text directly.
-""")
+
+![Build overview](images/build-overview.png)
+""", imageBasePath = "/path/to/project")
 
 viewer.markdown = "## Updated without replacing the view"
 
@@ -126,8 +128,10 @@ viewer.markdownStyle = style
 
 GFM is the default. Pass `initMarkdownParserConfig(mddCommonMark)` when strict
 CommonMark parsing is preferable. Raw HTML is shown as inert monospace text;
-images remain linked alt text so applications can choose their own loading and
-security policy. See `examples/markdown_viewer_demo.nim` for a complete window.
+relative and absolute local image destinations are loaded when `imageBasePath` is
+set, while unavailable images remain linked alt text. Set `viewer.imageLoader` to
+resolve remote URLs, data URLs, or application-specific image schemes. See
+`examples/markdown_viewer_demo.nim` for a complete window.
 
 The application run loop keeps NimKit views, responders, signal-slot dispatch,
 animations, native windows, and platform services on the main thread. When the

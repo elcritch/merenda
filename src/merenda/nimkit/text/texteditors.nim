@@ -603,6 +603,7 @@ proc initTextEditorFields*(
     frame: Rect = AutoRect,
     richText = true,
     wraps = true,
+    textView: TextView = nil,
 ) =
   initViewFields(editor, frame)
   editor.background = color(0.0, 0.0, 0.0, 0.0)
@@ -611,7 +612,13 @@ proc initTextEditorFields*(
   editor.xMinimumDocumentSize =
     initSize(DefaultTextEditorWidth, DefaultTextEditorHeight)
   editor.acceptsFirstResponder = true
-  editor.xTextView = newTextView(value)
+  editor.xTextView =
+    if textView.isNil:
+      newTextView(value)
+    else:
+      textView
+  if not textView.isNil:
+    editor.xTextView.stringValue = value
   editor.xTextView.richText = richText
   editor.xTextView.textContainer =
     initTextContainer(initSize(0.0, 0.0), editor.xTextInsets, wraps)

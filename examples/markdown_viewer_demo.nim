@@ -31,20 +31,31 @@ viewer.markdown = "## Updated document"
 
 ---
 
-Images are represented by linked alt text until an application supplies its own image
-loading policy: ![NimKit logo](nimkit.png)
+Local images render natively when the viewer has a base path:
+
+![NimKit sample](img1.png)
 """
 
 let
-  source =
+  documentPath =
     if paramCount() > 0:
-      readFile(paramStr(1))
+      absolutePath(paramStr(1))
+    else:
+      ""
+  source =
+    if documentPath.len > 0:
+      readFile(documentPath)
     else:
       SampleMarkdown
+  imageBasePath =
+    if documentPath.len > 0:
+      documentPath.parentDir
+    else:
+      currentSourcePath().parentDir.parentDir / "data"
   app = sharedApplication()
   window = newWindow("NimKit Markdown Viewer", frame = rect(120, 80, 820, 700))
   root = newView()
-  viewer = newMarkdownView(source)
+  viewer = newMarkdownView(source, imageBasePath = imageBasePath)
 
 root.addSubview(viewer)
 viewer.pinEdges(toGuide = root.contentLayoutGuide(insets(20.0)))

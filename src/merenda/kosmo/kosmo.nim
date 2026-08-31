@@ -31,6 +31,7 @@ const
   KosmoEditorStyleId* = "kosmo.editor"
   KosmoPaneIndicatorStyleId* = "kosmo.pane-indicator"
   KosmoMarkdownControlsStyleId* = "kosmo.markdown-controls"
+  KosmoMarkdownControlButtonStyleClass = "kosmo-markdown-control-button"
   KosmoPreviewTabStyleClass* = "kosmo-preview"
   KosmoMarkdownDefaultFontSize* = 14.0'f32
   KosmoMarkdownMinimumFontSize* = 9.0'f32
@@ -623,6 +624,8 @@ func markdownPresentationStyle(controls: KosmoMarkdownControls): nimkit.Markdown
     result.quoteColor = nimkit.color(0.67, 0.72, 0.82, 1.0)
     result.mutedColor = nimkit.color(0.56, 0.61, 0.70, 1.0)
     result.ruleColor = nimkit.color(0.35, 0.40, 0.49, 1.0)
+    result.codeBlockStyle.backgroundColor = nimkit.color(0.08, 0.10, 0.14, 1.0)
+    result.codeBlockStyle.outlineColor = nimkit.color(0.28, 0.33, 0.42, 1.0)
 
   let
     fontSize = if controls.isNil: KosmoMarkdownDefaultFontSize else: controls.xFontSize
@@ -963,14 +966,21 @@ proc installKosmoPaneIndicatorStyle(
   appearance.setStyle(selector, nimkit.StyleCornerRadius, 0.0'f32)
 
 proc installKosmoMarkdownControlsStyle(appearance: var nimkit.Appearance) =
-  let selector =
-    nimkit.initStyleSelector(nimkit.srBox, id = KosmoMarkdownControlsStyleId)
-  appearance.setStyle(selector, nimkit.StylePadding, nimkit.insets(4.0'f32))
-  appearance.setStyle(selector, nimkit.StyleCornerRadius, 8.0'f32)
+  let
+    controlsSelector =
+      nimkit.initStyleSelector(nimkit.srBox, id = KosmoMarkdownControlsStyleId)
+    buttonSelector = nimkit.initStyleSelector(
+      nimkit.srButton, classes = @[KosmoMarkdownControlButtonStyleClass]
+    )
+  appearance.setStyle(controlsSelector, nimkit.StylePadding, nimkit.insets(4.0'f32))
+  appearance.setStyle(controlsSelector, nimkit.StyleCornerRadius, 8.0'f32)
   appearance.setStyle(
-    selector,
+    controlsSelector,
     nimkit.StyleBoxShadows,
     @[nimkit.dropShadow(nimkit.color(0.0, 0.0, 0.0, 0.28), y = 2.0, blur = 7.0)],
+  )
+  appearance.setStyle(
+    buttonSelector, nimkit.StyleTextInsets, nimkit.insets(0.0'f32, 2.0'f32)
   )
 
 proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
@@ -1111,6 +1121,7 @@ proc syncSelectedEditorContent(
       if source.isNone:
         group.pane.setContentView(view)
         return keckSyntax
+      group.pane.markdownView.imageBasePath = tab.filePath.get.parentDir
       group.pane.markdownView.markdownStyle =
         group.pane.markdownControls.markdownPresentationStyle()
       group.pane.markdownView.markdown = source.get
@@ -1710,6 +1721,8 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
   decreaseFontButton.toolTip = "Decrease Markdown font size"
   increaseFontButton.accessibilityLabel = "Increase Markdown font size"
   increaseFontButton.toolTip = "Increase Markdown font size"
+  for button in [modeButton, colorModeButton, decreaseFontButton, increaseFontButton]:
+    button.addStyleClass(KosmoMarkdownControlButtonStyleClass)
 
   row.spacing = 2.0'f32
   row.distribution = nimkit.svdFillEqually

@@ -14,7 +14,6 @@ type
     denyMoveTo: int
     shouldSelectCount: int
     didSelectCount: int
-    accessoryCount: int
     shouldCloseCount: int
     didCloseCount: int
     shouldMoveCount: int
@@ -31,7 +30,6 @@ type
   DocumentTabSignalSpy = ref object of Responder
     changingCount: int
     changedCount: int
-    accessoryCount: int
     willCloseCount: int
     didCloseCount: int
     willMoveCount: int
@@ -75,14 +73,6 @@ protocol DocumentTabDelegateSpyMethods of DocumentTabsDelegate:
     discard tabs
     inc spy.didSelectCount
     spy.lastItem = item
-
-  method didActivateDocumentTabAccessory(
-      spy: DocumentTabDelegateSpy, tabs: DocumentTabs, item: DocumentTabItem, index: int
-  ) =
-    discard tabs
-    inc spy.accessoryCount
-    spy.lastItem = item
-    spy.lastIndex = index
 
   method shouldCloseDocumentTab(
       spy: DocumentTabDelegateSpy, tabs: DocumentTabs, item: DocumentTabItem, index: int
@@ -202,13 +192,6 @@ protocol DocumentTabSignalSpyEvents from DocumentTabSignalSpy:
   ) {.slot.} =
     discard sender
     inc spy.changedCount
-
-  proc documentTabAccessoryWasActivated(
-      spy: DocumentTabSignalSpy, item: DocumentTabItem, index: int
-  ) {.slot.} =
-    inc spy.accessoryCount
-    spy.lastItem = item
-    spy.lastIndex = index
 
   proc documentTabWillClose(
       spy: DocumentTabSignalSpy, item: DocumentTabItem, index: int
@@ -670,43 +653,6 @@ suite "nimkit document tabs":
     var builder = initThemeBuilder(initTheme())
     builder[srDocumentTab, StyleCloseButtonPosition] = styleKeyword(dtcbRight)
     check closeSymbolRect(builder.finish()).center().x > tabRect.center().x
-
-  test "document tab accessories round-trip, render, and activate":
-    let
-      tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
-      delegate = newDelegateSpy()
-      signals = newSignalSpy()
-    tabs.delegate = delegate
-    signals.observeProtocol(tabs, DocumentTabsEvents)
-    tabs.documentTabModels =
-      [initDocumentTabModel("readme", "README.md", accessoryTitle = "MD")]
-
-    let
-      item = tabs[0.Natural]
-      accessoryRect = tabs.documentTabAccessoryRect(0)
-      renders = buildRenders(tabs)
-    var renderedAccessory = false
-    for node in renders[DefaultDrawLevel].nodes:
-      if node.kind == nkText and node.renderedText() == "MD":
-        renderedAccessory = true
-        break
-
-    check item.accessoryTitle == "MD"
-    check tabs.documentTabModels[0].accessoryTitle == "MD"
-    check not accessoryRect.isEmpty
-    check tabs.documentTabRect(0).contains(accessoryRect.center())
-    check renderedAccessory
-    check tabs.mouseDown(
-      MouseEvent(button: mbPrimary, location: accessoryRect.center())
-    )
-    check tabs.mouseUp(MouseEvent(button: mbPrimary, location: accessoryRect.center()))
-    check delegate.accessoryCount == 1
-    check delegate.didSelectCount == 0
-    check delegate.lastItem == item
-    check delegate.lastIndex == 0
-    check signals.accessoryCount == 1
-    check signals.lastItem == item
-    check signals.lastIndex == 0
 
   test "delegates can veto selection closing and moving while signals fire":
     let
