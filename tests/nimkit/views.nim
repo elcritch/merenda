@@ -24,6 +24,10 @@ type
     target: View
     invalidatesTarget: bool
 
+  ReentrantLayoutView = ref object of View
+    target: LayoutSpyView
+    targetEventsDuringLayout: int
+
   ConstraintSpyView = ref object of View
     name: string
     constraintTarget: View
@@ -95,6 +99,11 @@ protocol LayoutInvalidatingHooks of ViewLayoutProtocol:
       spy.invalidatesTarget = false
       spy.target.setNeedsLayout()
 
+protocol ReentrantLayoutHooks of ViewLayoutProtocol:
+  method layoutSubviews(spy: ReentrantLayoutView) =
+    spy.target.layoutSubtreeIfNeeded()
+    spy.targetEventsDuringLayout = spy.target.events.len
+
 protocol ConstraintSpyHooks of ViewLayoutProtocol:
   method updateConstraints(spy: ConstraintSpyView) =
     constraintEvents.add spy.name & ".updateConstraints"
@@ -130,6 +139,11 @@ proc newLayoutInvalidatingView(frame: Rect, target: View): LayoutInvalidatingVie
   result = LayoutInvalidatingView(target: target, invalidatesTarget: true)
   initViewFields(result, frame)
   discard result.withProtocol(LayoutInvalidatingHooks)
+
+proc newReentrantLayoutView(frame: Rect, target: LayoutSpyView): ReentrantLayoutView =
+  result = ReentrantLayoutView(target: target)
+  initViewFields(result, frame)
+  discard result.withProtocol(ReentrantLayoutHooks)
 
 proc newConstraintSpyView(
     name: string, frame: Rect, constraintTarget: View = nil
@@ -425,6 +439,20 @@ suite "nimkit views":
     check not root.needsLayout
     check not target.needsLayout
     check not invalidator.needsLayout
+
+  test "nested subtree layout waits for the active ancestor layout pass":
+    let
+      target = newLayoutSpyView(rect(0, 0, 80, 40))
+      root = newReentrantLayoutView(rect(0, 0, 200, 160), target)
+
+    root.addSubview(target)
+    target.events.setLen(0)
+    root.layoutSubtreeIfNeeded()
+
+    check root.targetEventsDuringLayout == 0
+    check target.events == @["layoutSubviews", "layout"]
+    check not root.needsLayout
+    check not target.needsLayout
 
   test "layout subtree settles recursive constraint invalidations":
     let

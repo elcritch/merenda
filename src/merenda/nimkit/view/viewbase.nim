@@ -159,6 +159,7 @@ type
     xValidationMessage*: string
     xNeedsUpdateConstraints*: bool
     xNeedsLayout*: bool
+    xLayoutSubtreeInProgress*: bool
     xAutoresizingMask*: AutoresizingMask
     xAutoresizingMaskConstraints*: bool
     xAutoresizingState*: AutoresizingState

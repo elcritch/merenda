@@ -231,7 +231,19 @@ proc layoutSubtree(view: View) =
   for child in view.xSubviews:
     child.layoutSubtree()
 
+proc hasActiveLayoutAncestor(view: View): bool =
+  var current = view
+  while not current.isNil:
+    if current.xLayoutSubtreeInProgress:
+      return true
+    current = current.superviewBacklink()
+
 proc layoutSubtreeIfNeeded*(view: View) =
+  if view.hasActiveLayoutAncestor():
+    return
+  view.xLayoutSubtreeInProgress = true
+  defer:
+    view.xLayoutSubtreeInProgress = false
   for _ in 0 ..< MaxLayoutSubtreePasses:
     view.updateConstraintsForSubtreeIfNeeded()
     view.applyConstraintsForSubtree()
