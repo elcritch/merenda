@@ -585,8 +585,9 @@ Control-W Control-V moves it into a new panel on the right. On Linux and
 Windows, Control-W Control-W closes the active tab instead of Command-W.
 Command-Shift-E selects and focuses the file explorer. Command-Shift-F selects
 the find-in-files sidebar and focuses its query field. Command-1 focuses the
-file browser, while Command-2 through Command-9 focus the corresponding editor
-panels in creation order. For example:
+file browser, while Command-2 through Command-8 focus editor panels in their
+current split-tree order, visiting top or left panes before bottom or right panes.
+For example:
 
 ```json
 {

@@ -578,3 +578,21 @@ suite "Kosmo":
     )
     check frontend.window.firstResponder == groups[1].editorView
     check not groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: key2, keyCode: key2.ord, modifiers: {kmCommand})
+    )
+    check frontend.window.sendAction(actionSelector(KosmoSplitHorizontalAction))
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let positionedGroups = frontend.editorGroups()
+    require positionedGroups.len == 3
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: key3, keyCode: key3.ord, modifiers: {kmCommand})
+    )
+    check frontend.window.firstResponder == positionedGroups[2].editorView
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: key4, keyCode: key4.ord, modifiers: {kmCommand})
+    )
+    check frontend.window.firstResponder == positionedGroups[1].editorView

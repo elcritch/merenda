@@ -26,7 +26,7 @@ const
   KosmoPasteAction* = "kosmo.paste"
   KosmoSelectAllAction* = "kosmo.selectAll"
   KosmoFocusPanelActionPrefix* = "kosmo.focusPanel"
-  KosmoMaxFocusPanelShortcut* = 9
+  KosmoMaxFocusPanelShortcut* = 8
 
 type
   KosmoShortcutProfile* {.pure.} = enum

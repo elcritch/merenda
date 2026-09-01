@@ -2365,6 +2365,24 @@ proc groupForPanel(
     if group.panel == panel:
       return group
 
+proc appendGroupsInPanelOrder(
+    controller: KosmoDockController,
+    view: nimkit.View,
+    groups: var seq[KosmoEditorGroup],
+) =
+  if view of nimkit.DockPanel:
+    let group = controller.groupForPanel(nimkit.DockPanel(view))
+    if not group.isNil:
+      groups.add group
+  elif view of nimkit.SplitView:
+    for pane in nimkit.SplitView(view).panes():
+      controller.appendGroupsInPanelOrder(pane, groups)
+
+proc groupsInPanelOrder(controller: KosmoDockController): seq[KosmoEditorGroup] =
+  for host in controller.hosts:
+    if not host.window.isNil and not host.window.isClosed():
+      controller.appendGroupsInPanelOrder(host.workspace.rootView(), result)
+
 proc hostForWorkspace(
     controller: KosmoDockController, workspace: nimkit.DockView
 ): KosmoDockHost =
@@ -2478,10 +2496,12 @@ proc focusPanel(controller: KosmoDockController, panelNumber: int): bool =
     controller.activatePanelWindow(frontend.window)
     return frontend.showFileExplorer()
 
-  let groupIndex = panelNumber - 2
-  if groupIndex notin 0 ..< controller.groups.len:
+  let
+    groupIndex = panelNumber - 2
+    groups = controller.groupsInPanelOrder()
+  if groupIndex notin 0 ..< groups.len:
     return
-  let group = controller.groups[groupIndex]
+  let group = groups[groupIndex]
   if group.window.isNil or group.window.isClosed():
     return
 

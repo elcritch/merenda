@@ -54,7 +54,7 @@ uses `primary`; Settings and menus show its resolved physical spelling.
 | `primary-Shift-E` / `primary-Shift-F` | Show and focus Files / Find in Files | |
 | `primary-P` | Quick Open | |
 | `primary-Shift-T` | New terminal tab | |
-| `primary-1` through `primary-9` | Focus panel 1 through 9 | Panel 1 is the file browser; editor panels follow. |
+| `primary-1` through `primary-8` | Focus panel 1 through 8 | Panel 1 is the file browser; editor panels follow in split-tree order, with top or left panes first. |
 
 The scoped Vim pane commands are described below. They are handled only by a
 focused Kosmo editor in the applicable Moe mode; they are not global window
@@ -138,7 +138,7 @@ kosmo.splitVertical
 kosmo.showFileExplorer
 kosmo.findInFiles
 kosmo.quickOpen
-kosmo.focusPanel1 ... kosmo.focusPanel9
+kosmo.focusPanel1 ... kosmo.focusPanel8
 ```
 
 An override replaces all defaults for that command. Invalid sequences, unknown
@@ -334,7 +334,7 @@ the physical spelling shown by the active profile:
 | New terminal | `primary-Shift-T` |
 | Previous / next tab | `primary-Shift-[` / `primary-Shift-]`; also `gt` / `gT` through Moe |
 | Files / Find in Files | `primary-Shift-E` / `primary-Shift-F` |
-| Focus panel | `primary-1` through `primary-9` |
+| Focus panel | `primary-1` through `primary-8` |
 | Split below / right | `Ctrl-W s` / `Ctrl-W v` in Vim routing, with their control-key aliases; configurable GUI alternatives otherwise |
 
 The registry removes the former accidental difference between Save, Quick

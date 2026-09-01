@@ -47,6 +47,16 @@ suite "Kosmo shortcut profiles":
         check bindings.match([controlW, keyEvent(keyS, {kmControl})]).kind == kbmNone
         check bindings.match([controlW, keyEvent(keyV, {kmControl})]).kind == kbmNone
 
+  test "numbered panel shortcuts stop at eight":
+    let bindings =
+      initKosmoKeyBindings(KosmoShortcutProfile.MacOS, KosmoShortcutPlatform.LinuxBsd)
+
+    check bindings.bindingFor([keyEvent(key1, {kmCommand})]) ==
+      actionSelector(1.focusPanelAction())
+    check bindings.bindingFor([keyEvent(key8, {kmCommand})]) ==
+      actionSelector(8.focusPanelAction())
+    check bindings.match([keyEvent(key9, {kmCommand})]).kind == kbmNone
+
   test "structured configuration resolves profile, editor mode, and symbolic bindings":
     let loaded = applyKosmoShortcutConfigurationJson(
       """{
