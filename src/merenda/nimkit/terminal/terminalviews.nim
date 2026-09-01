@@ -372,13 +372,18 @@ proc pasteText*(view: TerminalView, text: string): bool {.discardable.} =
   let input = terminput.terminalPasteInput(text, view.xSession.screenInfo().modes)
   view.sendInput(input)
 
+func endsAtRightMargin(line: TerminexLine): bool =
+  line.len > 0 and (line[^1].text.len > 0 or line[^1].continuation)
+
 proc selectionText*(view: TerminalView): string =
   if not view.xHasSelection:
     return
   let
     bounds = view.xSelection.orderedSelection()
     totalLineCount = view.xSession.screenInfo().totalLineCount
-  var selectedLineCount = 0
+  var
+    selectedLineCount = 0
+    previousLineEndedAtRightMargin = false
   for row in bounds.first.row .. bounds.last.row:
     if row < 0 or row >= totalLineCount:
       continue
@@ -394,10 +399,11 @@ proc selectionText*(view: TerminalView): string =
         else:
           text.add ' '
     text = text.strip(leading = false, trailing = true, chars = {' '})
-    if selectedLineCount > 0:
+    if selectedLineCount > 0 and not previousLineEndedAtRightMargin:
       result.add '\n'
     result.add text
     inc selectedLineCount
+    previousLineEndedAtRightMargin = line.endsAtRightMargin()
 
 proc viewportOffset(view: TerminalView): int =
   int(ceil(view.xScrollPosition.float64))

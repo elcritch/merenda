@@ -24,6 +24,49 @@ proc terminalCellPoint(view: TerminalView, row, column: int): Point =
 
 suite "Kosmo terminal clipboard commands":
   when defined(posix):
+    test "Edit menu copy rejoins a wrapped terminal line":
+      let
+        app = newApplication("Kosmo Wrapped Terminal Clipboard Test")
+        frontend = newKosmoApplication(app)
+        session = newTerminalSession(columns = 12, rows = 4)
+        terminal = newTerminalView(session, frame = rect(0, 0, 400, 120))
+        pasteboard = generalPasteboard()
+        previousClipboard = pasteboard.plainText()
+      defer:
+        discard pasteboard.setPlainText(previousClipboard)
+        frontend.close()
+        frontend.window.close()
+
+      frontend.application.addWindow(frontend.window)
+      frontend.window.setContentView(frontend.contentView)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      check frontend.openDocument(
+        newKosmoPaneDocument("kosmo.test.wrapped-terminal", "Terminal", terminal)
+      )
+      frontend.contentView.layoutSubtreeIfNeeded()
+      require frontend.window.firstResponder() == Responder(terminal)
+
+      let
+        columns = session.screenInfo().columns
+        originalLine = repeat('a', columns) & "tail"
+      session.processOutput(originalLine)
+      discard terminal.poll()
+
+      let
+        dragStart = terminal.terminalCellPoint(0, 0)
+        dragEnd = terminal.terminalCellPoint(1, 3)
+        copyEvent = KeyEvent(
+          key: keyC,
+          keyCode: keyC.ord,
+          modifiers: frontend.shortcutProfile().primaryModifiers(),
+        )
+      check frontend.window.mouseDownAt(dragStart)
+      check frontend.window.mouseDraggedAt(dragEnd)
+      check frontend.window.mouseUpAt(dragEnd)
+
+      check frontend.application.performMenuKeyEquivalent(copyEvent)
+      check pasteboard.plainText() == originalLine
+
     test "Edit menu copy and paste target the focused terminal":
       let
         app = newApplication("Kosmo Terminal Clipboard Test")
