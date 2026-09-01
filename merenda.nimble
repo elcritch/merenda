@@ -10,13 +10,14 @@ requires "msgpack4nim"
 requires "chronicles >= 0.4"
 requires "crunchy >= 0.1.11"
 requires "siwin#96ca695"
-requires "figdraw >= 0.35.2 [siwin, sharedlib, harfbuzz]"
-requires "sigils >= 0.27.4 [sigNameAsString, closures, siwin, chronos]"
+requires "figdraw[siwin,sharedlib,harfbuzz] >= 0.35.2"
+requires "sigils[sigNameAsString,closures,siwin,chronos] >= 0.27.4"
 requires "gh:elcritch/kiwiberry"
 requires "cborious"
 requires "unicodedb >= 0.14.0"
 requires "faststreams >= 0.5.1"
-requires "gh:elcritch/nim-markdown#devel[regex]"
+requires "gh:elcritch/nim-markdown[regex]#devel"
+requires "regex >= 0.26.3" # markdown[regex] backend; see nim-lang/nimble#1832
 
 feature "libbacktrace":
   requires "libbacktrace"

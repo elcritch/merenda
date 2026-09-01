@@ -127,3 +127,7 @@ task download_references, "download local study copies of reference docs":
   downloadReference(openStepSpecUrl, openStepSpecPdf)
   echo "Downloaded ", openStepSpecPdf
   echo "OpenStep UI guidelines remain link-only; their notice restricts copying."
+# begin Nimble config (version 2)
+when withDir(thisDir(), system.fileExists("nimble.paths")):
+  include "nimble.paths"
+# end Nimble config
