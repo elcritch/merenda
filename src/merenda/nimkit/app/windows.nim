@@ -2795,9 +2795,14 @@ proc dispatchHostTextInput(window: Window, text: string) =
   discard window.dispatchTextInput(text)
   discard window.requestNativeDisplayUpdateIfNeeded()
 
-proc dispatchHostFocusChanged(window: Window, focused: bool) =
+proc dispatchHostFocusChanged*(window: Window, focused: bool) =
+  ## Route a native or synthetic host-focus change into window and application state.
   window.xHostFocused = focused
   if focused:
+    if not window.xIsPopup:
+      window.setKeyWindow(true)
+      window.setMainWindow(true)
+      window.notifyApplication(WindowDidOrderFrontSelector)
     window.updateInsertionPointBlink()
   else:
     window.cancelKeySequence()

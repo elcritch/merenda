@@ -3837,17 +3837,20 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
     item.target = nimkit.newActionTarget(nimkit.actionSelector(identifier)) do(
       sender: nimkit.DynamicAgent
     ):
-      discard sender
-      if not manager.isNil:
-        let active = manager.activeFrontend()
-        if not active.isNil:
-          discard active.dockController.focusPanel(targetPanelNumber)
+      if manager.isNil or not (sender of nimkit.MenuItem):
+        return
+      let
+        panelNumber = nimkit.MenuItem(sender).action().focusPanelNumber()
+        active = manager.activeFrontend()
+      if panelNumber > 0 and not active.isNil:
+        discard active.dockController.focusPanel(panelNumber)
     discard focusMenu.addItem(item)
   discard windowMenu.addItem(focusMenuItem)
 
-proc newKosmoApplication(
+proc newKosmoApplication*(
     manager: KosmoWindowManager, filePath = "", hasFileBrowser = true
 ): KosmoApplication =
+  ## Create an unpresented Kosmo window owned by `manager`.
   let
     app = manager.application
     keyBindingsPath = manager.keyBindingsPath
