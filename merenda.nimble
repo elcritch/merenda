@@ -1,4 +1,4 @@
-version       = "0.12.0"
+version       = "0.14.0"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
