@@ -3,6 +3,7 @@ import std/[strutils, unicode, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import kosmo/terminalclipboard
 
 proc runeIndexOf(source, needle: string): int =
   let byteIndex = source.find(needle)

@@ -3603,7 +3603,6 @@ proc configureKosmoStandardActionMenus(frontend: KosmoApplication) =
         identifier = KosmoSelectAllAction
       if identifier.len > 0:
         item.identifier = identifier
-        item.action = nimkit.actionSelector(identifier)
 
   let applicationMenu = mainMenu[0].submenu()
   if applicationMenu.isNil:
