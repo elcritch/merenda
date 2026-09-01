@@ -20,6 +20,7 @@ import threading/smartptrs
 
 import ../accessibility/accessibility
 import ../drawing
+import ../foundation/events
 import ../foundation/mainthreadwork
 import ../foundation/selectors
 import ../foundation/types
@@ -505,12 +506,19 @@ proc renderInline(
 ) =
   if token.isNil:
     return
-  if token of markdownParser.Text or token of markdownParser.Escape:
+  if token of markdownParser.Text:
+    # nim-markdown may leave a soft break in its fallback Text token.
+    builder.add(token.doc.replace("\n", " "), attributes)
+  elif token of markdownParser.Escape:
     builder.add(token.doc, attributes)
   elif token of markdownParser.HtmlEntity:
     let decoded = htmlEntityToUtf8(token.doc)
     builder.add(if decoded.len > 0: decoded else: token.doc, attributes)
-  elif token of markdownParser.SoftBreak or token of markdownParser.HardBreak:
+  elif token of markdownParser.SoftBreak:
+    # A physical source line ending remains part of the surrounding paragraph.
+    # Preserve word separation while leaving wrapping to the text layout engine.
+    builder.add(" ", attributes)
+  elif token of markdownParser.HardBreak:
     builder.add("\n", attributes)
   elif token of markdownParser.CodeSpan:
     builder.add(token.doc, builder.style.codeAttributes(attributes))
@@ -1613,6 +1621,33 @@ proc selectable*(view: MarkdownView): bool =
   discard view
   true
 
+proc handleMarkdownNavigationKey(view: MarkdownView, event: KeyEvent): bool =
+  if view.isNil or event.modifiers != {}:
+    return
+  let scrollView = view.scrollView()
+  if scrollView.isNil:
+    return
+  let delta =
+    case event.key
+    of keyArrowLeft:
+      initPoint(-scrollView.lineScroll(laHorizontal), 0.0'f32)
+    of keyArrowRight:
+      initPoint(scrollView.lineScroll(laHorizontal), 0.0'f32)
+    of keyArrowUp, keyK:
+      initPoint(0.0'f32, -scrollView.lineScroll(laVertical))
+    of keyArrowDown, keyJ:
+      initPoint(0.0'f32, scrollView.lineScroll(laVertical))
+    of keySpace:
+      initPoint(0.0'f32, scrollView.pageScroll(laVertical))
+    else:
+      return
+  scrollView.scrollBy(delta)
+  true
+
+protocol MarkdownViewKeyEquivalents of ResponderCommandDispatchProtocol:
+  method performKeyEquivalent(view: MarkdownView, event: KeyEvent): bool =
+    view.handleMarkdownNavigationKey(event)
+
 proc markdown*(view: MarkdownView): string =
   ## Returns the source Markdown last rendered by `view`.
   view.xMarkdown
@@ -1746,6 +1781,7 @@ proc initMarkdownViewFields*(
   view.selectable = true
   view.allowsUndo = false
   view.scrollView().borderType = svbNoBorder
+  discard view.withProtocol(MarkdownViewKeyEquivalents)
   view.connect(geometryDidChange, view, markdownViewGeometryDidChange)
   view.accessibilityLabel = "Markdown document"
   view.applyMarkdownStyle()

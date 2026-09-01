@@ -74,10 +74,9 @@ Setext two
       storage = markdownTextStorage(source)
       rendered = storage.stringValue()
 
-    check rendered.contains(
-      "first line\nsoft continuation\nhard continuation\nbackslash continuation"
-    )
-    check rendered.contains("\n\nEscaped *stars* & © ©.")
+    check rendered ==
+      "first line soft continuation\nhard continuation\nbackslash continuation\n\n" &
+      "Escaped *stars* & © ©."
 
   test "emphasis, strong text, nested emphasis, code, and strikethrough are attributed":
     let
@@ -455,6 +454,8 @@ Setext two
 - first
   - nested one
   - nested two
+- multi-line item
+  remains one paragraph
 - last
 
 3. third
@@ -467,7 +468,9 @@ Setext two
     )
     let rendered = storage.stringValue()
 
-    check rendered.contains("• first\n  • nested one\n  • nested two\n• last")
+    check rendered.contains(
+      "• first\n  • nested one\n  • nested two\n• multi-line item remains one paragraph\n• last"
+    )
     check rendered.contains("3. third\n4. fourth")
     check rendered.contains("• paragraph one\n  paragraph two")
 
@@ -486,9 +489,7 @@ Setext two
       )
       rendered = storage.stringValue()
 
-    check rendered.startsWith(
-      "│ first line\n│ second line\n│ \n│ second paragraph"
-    )
+    check rendered.startsWith("│ first line second line\n│ \n│ second paragraph")
     check rendered.endsWith(style.thematicBreak)
     check storage.attributesFor("first line").foregroundColor == style.quoteColor
     check storage.attributesFor("│").foregroundColor == style.ruleColor
@@ -765,6 +766,48 @@ Press <kbd>Enter</kbd>.
     view.markdown = "~~literal~~"
     require view.waitForMarkdownParsing()
     check view.textStorage().stringValue() == "~~literal~~"
+
+  test "markdown view scrolls with arrows j k and space":
+    let
+      source = (("wide markdown row ".repeat(40)) & "\n\n").repeat(60)
+      view = newMarkdownView(source, frame = rect(0, 0, 260, 120))
+      window = newWindow("Markdown keyboard scrolling", frame = rect(0, 0, 260, 120))
+    view.wraps = false
+    window.setContentView(view)
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    discard buildRenders(view)
+    let
+      scrollView = view.scrollView()
+      lineX = scrollView.lineScroll(laHorizontal)
+      lineY = scrollView.lineScroll(laVertical)
+      pageY = scrollView.pageScroll(laVertical)
+    require scrollView.maximumContentOffset().x > lineX
+    require scrollView.maximumContentOffset().y > pageY
+    require window.makeFirstResponder(view)
+
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
+    )
+    check scrollView.contentOffset().x == lineX
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
+    check scrollView.contentOffset().x == 0.0'f32
+
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check scrollView.contentOffset().y == lineY
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord))
+    check scrollView.contentOffset().y == 0.0'f32
+
+    check window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ, keyCode: keyJ.ord))
+    check scrollView.contentOffset().y == lineY
+    check window.dispatchKeyDown(KeyEvent(text: "k", key: keyK, keyCode: keyK.ord))
+    check scrollView.contentOffset().y == 0.0'f32
+
+    check window.dispatchKeyDown(
+      KeyEvent(text: " ", key: keySpace, keyCode: keySpace.ord)
+    )
+    check scrollView.contentOffset().y == pageY
 
   test "repository README renders and responds to clicks":
     let
