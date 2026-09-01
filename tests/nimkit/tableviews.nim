@@ -1831,6 +1831,27 @@ suite "NimKit TableView":
     check texts.contains("name:2")
     check texts.contains("age:2")
 
+  test "viewport scrolling refreshes virtualized rows before rendering":
+    let
+      tableView = newTableView(frame = rect(0, 0, 260, 46))
+      source = newTableDataSourceSpy(5)
+
+    tableView.showsHeader = false
+    tableView.addColumn(newTableColumn("name", "Name", width = 120.0))
+    tableView.addColumn(newTableColumn("age", "Age", width = 80.0))
+    tableView.dataSource = source
+
+    discard tableView.renderedTexts()
+    tableView.scrollView().contentOffset = initPoint(0.0, tableView.rowHeight())
+    let texts = tableView.renderedTexts()
+
+    check not texts.contains("name:0")
+    check not texts.contains("age:0")
+    check texts.contains("name:1")
+    check texts.contains("age:1")
+    check texts.contains("name:2")
+    check texts.contains("age:2")
+
   test "table view fills the viewport after a data reload adds rows":
     let
       tableView = newTableView(frame = rect(0, 0, 260, 260))

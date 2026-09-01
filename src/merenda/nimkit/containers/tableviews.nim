@@ -5209,6 +5209,12 @@ protocol DefaultTableRowViewAccessibility of AccessibilityProtocol:
   method isAccessibilityElement(rowView: TableRowView): bool =
     rowView.xRow.index >= 0
 
+protocol DefaultTableContentViewDrawing of ViewDrawingProtocol:
+  method draw(contentView: TableContentView, context: DrawContext) =
+    discard context
+    contentView.syncVisibleRowViews()
+    contentView.tableView().syncVisibleTableCells()
+
 protocol DefaultTableContentViewHitTesting of ViewProtocol:
   method pointInside(contentView: TableContentView, point: Point): bool =
     contentView.bounds().contains(point)
@@ -5446,6 +5452,7 @@ proc initTableContentView(tableView: TableView): TableContentView =
   result = TableContentView()
   initTableBaseChild(result, false)
   result.xTableView = tableView
+  discard result.withProtocol(DefaultTableContentViewDrawing)
   discard result.withProtocol(DefaultTableContentViewHitTesting)
 
 proc initTableScrollView(tableView: TableView): ScrollView =
