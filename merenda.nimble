@@ -1,4 +1,4 @@
-version       = "0.14.0"
+version       = "0.15.0"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -18,6 +18,7 @@ requires "unicodedb >= 0.14.0"
 requires "faststreams >= 0.5.1"
 requires "gh:elcritch/nim-markdown#devel[regex]"
 requires "gh:elcritch/terminex >= 0.2.0"
+requires "https://github.com/Araq/iconbundler"
 
 feature "libbacktrace":
   requires "libbacktrace"
@@ -33,4 +34,3 @@ feature "references":
   requires "https://github.com/ravynsoft/ravynos"
   requires "https://github.com/elcritch/figuro"
   requires "https://github.com/treeform/windy"
-requires "https://github.com/Araq/iconbundler"
