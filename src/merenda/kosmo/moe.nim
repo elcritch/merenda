@@ -68,6 +68,21 @@ type
     line*: int
     column*: int
 
+  KosmoSelectionKind* {.pure.} = enum
+    Character
+    Block
+    Line
+
+  KosmoSelection* = object
+    ## Value snapshot of Moe's active selection using zero-based rune positions.
+    ## Endpoints are inclusive; block selections describe a rectangle.
+    bufferId*: KosmoBufferId
+    kind*: KosmoSelectionKind
+    anchor*: KosmoBufferCursor
+    focus*: KosmoBufferCursor
+    first*: KosmoBufferCursor
+    last*: KosmoBufferCursor
+
   KosmoKeyOutcome* = object ## The semantic outcome of sending a physical key to Moe.
     valid*: bool
     continueRunning*: bool
@@ -564,6 +579,15 @@ func toKosmoBufferId(id: BufferId): KosmoBufferId {.inline.} =
 func toMoeBufferId(id: KosmoBufferId): BufferId {.inline.} =
   BufferId(int(id))
 
+func toKosmoBufferCursor(position: moeTypes.BufferPosition): KosmoBufferCursor =
+  KosmoBufferCursor(line: position.line, column: position.column)
+
+func toKosmoSelectionKind(kind: EditorSelectionKind): KosmoSelectionKind =
+  case kind
+  of EditorSelectionKind.Character: KosmoSelectionKind.Character
+  of EditorSelectionKind.Block: KosmoSelectionKind.Block
+  of EditorSelectionKind.Line: KosmoSelectionKind.Line
+
 proc tabs*(editor: KosmoEditor): seq[KosmoTab] =
   ## Return the ordered tabs belonging to Moe's active window.
   if editor.isNil or editor.editor.isNil:
@@ -654,7 +678,30 @@ proc bufferCursor*(editor: KosmoEditor): KosmoBufferCursor =
   if editor.isNil or editor.editor.isNil:
     return
   let position = editor.editor.activeWindow().cursor
-  KosmoBufferCursor(line: position.line, column: position.column)
+  position.toKosmoBufferCursor
+
+proc currentSelection*(editor: KosmoEditor): Option[KosmoSelection] =
+  ## Return a value snapshot of the active selection, or none for a lone caret.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let selection = editor.editor.currentSelection()
+  if selection.isSome:
+    let value = selection.get
+    result = some(
+      KosmoSelection(
+        bufferId: value.bufferId.toKosmoBufferId,
+        kind: value.kind.toKosmoSelectionKind,
+        anchor: value.anchor.toKosmoBufferCursor,
+        focus: value.focus.toKosmoBufferCursor,
+        first: value.first.toKosmoBufferCursor,
+        last: value.last.toKosmoBufferCursor,
+      )
+    )
+
+proc selectedText*(editor: KosmoEditor): string =
+  ## Return the text selected by Moe's character, block, or line semantics.
+  if not editor.isNil and not editor.editor.isNil:
+    result = editor.editor.selectedText()
 
 proc revealLocation*(
     editor: KosmoEditor, line, column: int, centered = false

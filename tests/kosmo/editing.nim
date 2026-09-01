@@ -16,6 +16,23 @@ proc renderedText(buffer: RenderBuffer): string =
 proc displayedText(view: KosmoEditorView): string =
   monoTextViews.stringValue(MonoTextView(view))
 
+proc gridPoint(view: KosmoEditorView, row, column: int): Point =
+  let metrics = view.monoTextMetrics()
+  view.pointToWindow(
+    initPoint(
+      (column.float32 + 0.5'f32) * metrics.cellWidth,
+      (row.float32 + 0.5'f32) * metrics.lineHeight,
+    )
+  )
+
+proc pointForBufferPosition(
+    view: KosmoEditorView, line, column: int
+): tuple[point: Point, cursor: KosmoCursor] =
+  discard view.editor.revealLocation(line, column)
+  view.refresh()
+  result.cursor = view.editor.cursor()
+  result.point = view.gridPoint(result.cursor.row, result.cursor.column)
+
 suite "Kosmo":
   test "pane documents adapt arbitrary views to native document tabs":
     let
@@ -299,6 +316,75 @@ suite "Kosmo":
     check view.cursorColumn == cursor.column
     check view.cursorColumn < initialColumn
     editor.close()
+
+  test "native pointer gestures select and repaint Moe text":
+    let
+      frontend = newKosmoApplication(newApplication("Kosmo Pointer Selection Test"))
+      view = frontend.editorView
+      editor = view.editor
+    defer:
+      frontend.close()
+
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check editor.handleKey("i")
+    check editor.handleTextInput("alpha beta\nsecond line")
+    check editor.handleKey("Esc")
+    view.refresh()
+    check editor.currentSelection().isNone
+    check editor.selectedText().len == 0
+
+    let
+      start = view.pointForBufferPosition(0, 1)
+      startCell = view.cellAt(start.cursor.row, start.cursor.column)
+      finish = view.pointForBufferPosition(1, 5)
+    check frontend.window.mouseDownAt(start.point, clickCount = 1)
+    check frontend.window.mouseDraggedAt(finish.point)
+    check frontend.window.mouseUpAt(finish.point, clickCount = 1)
+
+    let dragSelection = editor.currentSelection()
+    require dragSelection.isSome
+    check dragSelection.get.kind == KosmoSelectionKind.Character
+    check dragSelection.get.anchor == KosmoBufferCursor(line: 0, column: 1)
+    check dragSelection.get.focus == KosmoBufferCursor(line: 1, column: 5)
+    check dragSelection.get.first == dragSelection.get.anchor
+    check dragSelection.get.last == dragSelection.get.focus
+    check editor.selectedText() == "lpha beta\nsecond"
+    let selectedCell = view.cellAt(start.cursor.row, start.cursor.column)
+    check selectedCell.backgroundColor != startCell.backgroundColor
+
+    let word = view.pointForBufferPosition(0, 7)
+    check frontend.window.mouseDownAt(word.point, clickCount = 2)
+    check frontend.window.mouseUpAt(word.point, clickCount = 2)
+    let wordSelection = editor.currentSelection()
+    require wordSelection.isSome
+    check wordSelection.get.kind == KosmoSelectionKind.Character
+    check editor.selectedText() == "beta"
+
+    let line = view.pointForBufferPosition(1, 2)
+    check frontend.window.mouseDownAt(line.point, clickCount = 3)
+    check frontend.window.mouseUpAt(line.point, clickCount = 3)
+    let lineSelection = editor.currentSelection()
+    require lineSelection.isSome
+    check lineSelection.get.kind == KosmoSelectionKind.Line
+    check editor.selectedText() == "second line"
+
+    let caret = view.pointForBufferPosition(0, 2)
+    check frontend.window.mouseDownAt(caret.point, clickCount = 1)
+    check frontend.window.mouseUpAt(caret.point, clickCount = 1)
+    check editor.currentSelection().isNone
+    let extension = view.gridPoint(caret.cursor.row, caret.cursor.column + 5)
+    check frontend.window.mouseDownAt(
+      extension, clickCount = 1, modifiers = {nimkit.kmShift}
+    )
+    check frontend.window.mouseUpAt(
+      extension, clickCount = 1, modifiers = {nimkit.kmShift}
+    )
+    let extendedSelection = editor.currentSelection()
+    require extendedSelection.isSome
+    check extendedSelection.get.anchor == KosmoBufferCursor(line: 0, column: 2)
+    check extendedSelection.get.focus == KosmoBufferCursor(line: 0, column: 7)
+    check editor.selectedText() == "pha be"
 
   test "opens a file through the Moe facade":
     let path = getTempDir() / "merenda-kosmo-open-file.txt"
