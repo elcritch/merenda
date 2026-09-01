@@ -27,6 +27,8 @@ suite "Kosmo shortcut profiles":
 
       check platformBindings.bindingFor([keyEvent(keyS, expectedPlatformModifiers)]) ==
         actionSelector(KosmoSaveAction)
+      check platformBindings.bindingFor([keyEvent(keyN, expectedPlatformModifiers)]) ==
+        actionSelector(KosmoNewFileAction)
       check platformBindings.bindingFor(
         [keyEvent(keyO, expectedPlatformModifiers + {kmShift})]
       ) == actionSelector(KosmoOpenProjectAction)

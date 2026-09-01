@@ -41,6 +41,7 @@ suite "Kosmo":
       fileMenu = mainMenu[1].submenu()
       windowMenu = mainMenu[3].submenu()
       settingsItem = applicationMenu[2]
+    let newItem = fileMenu.menuItemWithIdentifier(KosmoNewFileAction)
     let openItem = fileMenu.menuItemWithIdentifier(KosmoOpenFileAction)
     let openProjectItem = fileMenu.menuItemWithIdentifier(KosmoOpenProjectAction)
     let terminalItem = fileMenu.menuItemWithIdentifier(KosmoNewTerminalAction)
@@ -58,6 +59,8 @@ suite "Kosmo":
       if item.action().name == actionSelector("showMerendaSettings").name:
         includesMerendaSettings = true
     check not includesMerendaSettings
+    check not newItem.isNil
+    check newItem.title == "New…"
     check not openItem.isNil
     check openItem.title == "Open…"
     check not openProjectItem.isNil

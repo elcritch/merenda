@@ -5,6 +5,7 @@ import std/[json, os, strutils]
 import ../nimkit as nimkit
 
 const
+  KosmoNewFileAction* = "kosmo.newFile"
   KosmoOpenFileAction* = "kosmo.openFile"
   KosmoOpenProjectAction* = "kosmo.openProject"
   KosmoNewTerminalAction* = "kosmo.newTerminal"
@@ -132,6 +133,11 @@ func kosmoActions*(): seq[KosmoAction] =
   ## Return every configurable action shown by Kosmo's menus and Settings.
   result =
     @[
+      KosmoAction(
+        identifier: KosmoNewFileAction,
+        title: "New File",
+        description: "Open a new blank editor tab.",
+      ),
       KosmoAction(
         identifier: KosmoOpenFileAction,
         title: "Open File",
@@ -330,6 +336,7 @@ proc initKosmoKeyBindings*(
     profile: KosmoShortcutProfile, platform = currentKosmoShortcutPlatform()
 ): nimkit.KeyBindingTable =
   ## Return the resolved defaults for `profile` on `platform`.
+  result.addBinding("primary-n", KosmoNewFileAction, profile, platform)
   result.addBinding("primary-o", KosmoOpenFileAction, profile, platform)
   result.addBinding("primary-shift-o", KosmoOpenProjectAction, profile, platform)
   result.addBinding("primary-p", KosmoQuickOpenAction, profile, platform)

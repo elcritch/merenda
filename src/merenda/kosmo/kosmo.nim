@@ -258,6 +258,7 @@ proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
 func hasFileBrowser*(frontend: KosmoApplication): bool
 proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.}
+proc newEditorTab*(frontend: KosmoApplication): bool {.discardable.}
 proc newTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.}
 proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.}
@@ -1531,6 +1532,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       discard controller.focusPanel(panelNumber)
       return true
     case $args.selector.name
+    of KosmoNewFileAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].newEditorTab()
     of KosmoOpenFileAction:
       if not controller.frontend.isNil:
         controller.frontend[].chooseFile()
@@ -2234,6 +2238,9 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       discard controller.focusPanel(panelNumber)
       return true
     case $args.selector.name
+    of KosmoNewFileAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].newEditorTab()
     of KosmoOpenFileAction:
       if not controller.frontend.isNil:
         controller.frontend[].chooseFile()
@@ -3272,6 +3279,22 @@ proc openTerminal(
     return true
   discard document.close()
 
+proc newEditorTab*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Create and select an unnamed buffer in the active editor pane.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  let
+    controller = frontend.dockController
+    group = controller.activePaneGroup()
+  if group.isNil:
+    return
+  let bufferId = controller.editor.newEmptyBuffer()
+  if bufferId.isNone:
+    return
+  group.addBuffer(bufferId.get)
+  controller.activatePaneTab(group, bufferId.get.tabIdentifier)
+  result = true
+
 proc newTerminal*(frontend: KosmoApplication): bool {.discardable.} =
   ## Open a terminal in the active editor pane.
   if frontend.isNil or frontend.dockController.isNil or frontend.fileTree.isNil:
@@ -3834,6 +3857,7 @@ proc newKosmoApplication(
     mainMenu = app.mainMenu()
     fileMenu = nimkit.newMenu("File")
     fileItem = mainMenu[1]
+    newItem = nimkit.newMenuItem("New…", nimkit.actionSelector(KosmoNewFileAction))
     openItem = nimkit.newMenuItem("Open…", nimkit.actionSelector(KosmoOpenFileAction))
     openProjectItem = nimkit.newMenuItem(
       "Open Project…", nimkit.actionSelector(KosmoOpenProjectAction)
@@ -3848,6 +3872,7 @@ proc newKosmoApplication(
     closeWindowItem =
       nimkit.newMenuItem("Close Window", nimkit.actionSelector(KosmoCloseWindowAction))
   editorView.applyKosmoEditorStyle(app.effectiveAppearance())
+  newItem.identifier = KosmoNewFileAction
   openItem.identifier = KosmoOpenFileAction
   openProjectItem.identifier = KosmoOpenProjectAction
   quickOpenItem.identifier = KosmoQuickOpenAction
@@ -3856,6 +3881,7 @@ proc newKosmoApplication(
   closeTabItem.identifier = KosmoCloseTabAction
   closeWindowItem.identifier = KosmoCloseWindowAction
   fileItem.submenu = fileMenu
+  discard fileMenu.addItem(newItem)
   discard fileMenu.addItem(openItem)
   discard fileMenu.addItem(openProjectItem)
   fileMenu.addSeparator()
@@ -3951,6 +3977,13 @@ proc newKosmoApplication(
   result.configureKosmoStandardActionMenus()
   result.configureKosmoWorkspaceMenu()
   result.synchronizeKosmoMenuBindings()
+  newItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoNewFileAction)) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    let active = manager.activeFrontend()
+    if not active.isNil:
+      discard active.newEditorTab()
   openItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoOpenFileAction)) do(
     sender: nimkit.DynamicAgent
   ):

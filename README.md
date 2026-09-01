@@ -578,9 +578,10 @@ cancels it.
 
 Standalone Kosmo reads `keybindings.json` from the `kosmo` directory beneath
 the platform configuration directory (`defaultKosmoKeyBindingsPath()`). Its
-defaults are Command-O to open and Command-Shift-O to open a project in a new
-window. Command-S saves and Command-Q quits. Command-W closes the active tab on
-macOS. Command-{ / Command-} select the previous or next tab.
+defaults are Command-N for a new blank tab, Command-O to open, and
+Command-Shift-O to open a project in a new window. Command-S saves and Command-Q
+quits. Command-W closes the active tab on macOS. Command-{ / Command-} select
+the previous or next tab.
 Control-W Control-S moves the active tab into a new panel below, while
 Control-W Control-V moves it into a new panel on the right. On Linux and
 Windows, Control-W Control-W closes the active tab instead of Command-W.
@@ -611,10 +612,11 @@ standard input, output, and error streams. Use `kosmo --help` to see the
 available standalone options. Use `kosmo --bg -- --dash-prefixed-path` when the
 path itself starts with a dash.
 
-File > Open Project… opens a folder in a new window with its own file browser.
-File > Open… opens files in the current window and appends selected folders to
-that window's ordered top-level browser roots. If no Kosmo window is available,
-opening a file creates an editor-only window without a file-browser sidebar.
+File > New… opens a blank tab in the active editor pane. File > Open Project…
+opens a folder in a new window with its own file browser. File > Open… opens
+files in the current window and appends selected folders to that window's
+ordered top-level browser roots. If no Kosmo window is available, opening a file
+creates an editor-only window without a file-browser sidebar.
 
 Kosmo Settings includes a Moe Themes tab. It provides Catppuccin Mocha and
 Latte, Tokyo Night Moon, Kanagawa Wave, and One Dark alongside Moe's default

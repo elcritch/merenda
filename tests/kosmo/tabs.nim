@@ -106,6 +106,26 @@ suite "Kosmo":
     check "NORMAL" in frontend.statusLabel.text
     check "second.txt" in frontend.statusLabel.text
 
+  test "File menu opens a new blank editor tab":
+    let
+      frontend = newKosmoApplication(newApplication("Kosmo New Tab Test"))
+      fileMenu = frontend.application.mainMenu()[1].submenu()
+      newItem = fileMenu.menuItemWithIdentifier(KosmoNewFileAction)
+      initialTabCount = frontend.documentTabs.len
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    require not newItem.isNil
+    check newItem.perform(Responder(frontend.editorView))
+    check frontend.documentTabs.len == initialTabCount + 1
+    check frontend.documentTabs.selectedDocumentTabItem().title == "No Name"
+    check frontend.editorView.editor.tabs()[^1].filePath.isNone
+    check frontend.editorPane.contentView == View(frontend.editorView)
+    check frontend.window.firstResponder() == Responder(frontend.editorView)
+
   test "double clicking a preview tab promotes it":
     let
       root = createTempDir("merenda-kosmo-preview-tab-promotion-", "")
