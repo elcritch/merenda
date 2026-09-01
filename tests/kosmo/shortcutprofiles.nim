@@ -27,6 +27,9 @@ suite "Kosmo shortcut profiles":
 
       check platformBindings.bindingFor([keyEvent(keyS, expectedPlatformModifiers)]) ==
         actionSelector(KosmoSaveAction)
+      check platformBindings.bindingFor(
+        [keyEvent(keyO, expectedPlatformModifiers + {kmShift})]
+      ) == actionSelector(KosmoOpenProjectAction)
       check macosBindings.bindingFor([keyEvent(keyS, {kmCommand})]) ==
         actionSelector(KosmoSaveAction)
       if platform != KosmoShortcutPlatform.MacOS:

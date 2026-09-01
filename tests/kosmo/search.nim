@@ -42,6 +42,7 @@ suite "Kosmo":
       windowMenu = mainMenu[3].submenu()
       settingsItem = applicationMenu[2]
     let openItem = fileMenu.menuItemWithIdentifier(KosmoOpenFileAction)
+    let openProjectItem = fileMenu.menuItemWithIdentifier(KosmoOpenProjectAction)
     let terminalItem = fileMenu.menuItemWithIdentifier(KosmoNewTerminalAction)
 
     check mainMenu.len == 5
@@ -59,6 +60,8 @@ suite "Kosmo":
     check not includesMerendaSettings
     check not openItem.isNil
     check openItem.title == "Open…"
+    check not openProjectItem.isNil
+    check openProjectItem.title == "Open Project…"
     check not terminalItem.isNil
     check terminalItem.title == "New Terminal"
     frontend.contentView.frame = rect(0, 0, 640, 480)
@@ -438,7 +441,8 @@ suite "Kosmo":
       root = createTempDir("merenda-kosmo-find-sidebar-", "")
       alphaPath = root / "alpha.txt"
       betaPath = root / "beta.nim"
-      frontend = newKosmoApplication(newApplication("Kosmo Find Sidebar Test"))
+      frontend =
+        newKosmoApplication(newApplication("Kosmo Find Sidebar Test"), filePath = root)
     var alphaContents = ""
     for line in 1 .. 80:
       if line == 41:
@@ -774,7 +778,8 @@ suite "Kosmo":
   test "selecting a result activates it at the search result limit":
     let
       root = createTempDir("merenda-kosmo-find-limit-", "")
-      frontend = newKosmoApplication(newApplication("Kosmo Find Limit Test"))
+      frontend =
+        newKosmoApplication(newApplication("Kosmo Find Limit Test"), filePath = root)
       contents = "needle\n".repeat(1_000)
     for index in 0 ..< 10:
       writeFile(root / (align($index, 2, '0') & ".txt"), contents)

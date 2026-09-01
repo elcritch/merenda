@@ -311,7 +311,7 @@ suite "Kosmo":
     check not tree.isItemExpanded(folder)
     check tree.rowForItem(nestedFile) < 0
 
-  test "opening files and folders updates the file-tree root":
+  test "opening files preserves roots and opening folders appends them":
     let
       root = createTempDir("merenda-kosmo-open-path-", "")
       folder = root / "folder"
@@ -323,13 +323,59 @@ suite "Kosmo":
       removeDir(folder)
       removeDir(root)
 
-    let frontend = newKosmoApplication(newApplication("Kosmo Open Path Test"))
+    let
+      frontend = newKosmoApplication(newApplication("Kosmo Open Path Test"))
+      initialRoot = frontend.fileTree.rootPath
     check frontend.openPath(filePath)
-    check frontend.fileTree.rootPath == absolutePath(root)
+    check frontend.fileTree.rootPaths == @[initialRoot]
 
     check frontend.openPath(folder)
-    check frontend.fileTree.rootPath == absolutePath(folder)
+    check frontend.fileTree.rootPaths == @[initialRoot, absolutePath(folder)]
     frontend.close()
+
+  test "opening a project creates a new window with its own file browser":
+    let
+      folder = createTempDir("merenda-kosmo-project-window-", "")
+      app = newApplication("Kosmo Project Window Test")
+      manager = newKosmoWindowManager(app)
+    defer:
+      removeDir(folder)
+
+    let frontend = manager.openProject(folder)
+    require not frontend.isNil
+    check frontend.hasFileBrowser()
+    check frontend.fileTree.rootPaths == @[absolutePath(folder)]
+    check frontend.splitView.panes() ==
+      @[View(frontend.sidebarPane), View(frontend.dockView)]
+    check manager.managedWindows() == @[frontend]
+    check frontend.window in app.windows()
+
+    frontend.window.close()
+    check manager.managedWindows().len == 0
+
+  test "opening a file without a window creates a browserless window":
+    let
+      folder = createTempDir("merenda-kosmo-file-window-", "")
+      filePath = folder / "document.txt"
+      app = newApplication("Kosmo File Window Test")
+      manager = newKosmoWindowManager(app)
+    writeFile(filePath, "document body")
+    defer:
+      removeFile(filePath)
+      removeDir(folder)
+
+    check manager.openPath(filePath)
+    let windows = manager.managedWindows()
+    require windows.len == 1
+    let frontend = windows[0]
+    check not frontend.hasFileBrowser()
+    check frontend.fileTree.rootPaths.len == 0
+    check frontend.splitView.panes() == @[View(frontend.dockView)]
+    check not frontend.showFileExplorer()
+    check frontend.window in app.windows()
+
+    frontend.window.close()
+    check manager.managedWindows().len == 0
 
   test "open panel action buttons keep their natural height":
     let panel = newOpenPanel()

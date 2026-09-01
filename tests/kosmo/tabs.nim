@@ -320,6 +320,7 @@ suite "Kosmo":
     let frontend = newKosmoApplication(newApplication("Kosmo Markdown Links Test"))
     defer:
       frontend.close()
+    let initialRoot = frontend.fileTree.rootPath
     frontend.contentView.frame = rect(0, 0, 720, 480)
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.openPath(markdownPath)
@@ -334,8 +335,7 @@ suite "Kosmo":
     check preview.clickMarkdownLink("directory")
     check preview.clickMarkdownImage("preview.png")
     check frontend.editorView.editor.tabs().len == 1
-    check normalizedPath(frontend.fileTree.rootPath) ==
-      normalizedPath(absolutePath(docs))
+    check normalizedPath(frontend.fileTree.rootPath) == normalizedPath(initialRoot)
 
     check preview.clickMarkdownLink("relative")
     check frontend.editorView.editor.tabs().len == 2

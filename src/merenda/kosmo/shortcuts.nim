@@ -6,6 +6,7 @@ import ../nimkit as nimkit
 
 const
   KosmoOpenFileAction* = "kosmo.openFile"
+  KosmoOpenProjectAction* = "kosmo.openProject"
   KosmoNewTerminalAction* = "kosmo.newTerminal"
   KosmoSaveAction* = "kosmo.save"
   KosmoCloseTabAction* = "kosmo.closeTab"
@@ -135,6 +136,11 @@ func kosmoActions*(): seq[KosmoAction] =
         identifier: KosmoOpenFileAction,
         title: "Open File",
         description: "Open a file in the active editor panel.",
+      ),
+      KosmoAction(
+        identifier: KosmoOpenProjectAction,
+        title: "Open Project",
+        description: "Open a folder in a new project window.",
       ),
       KosmoAction(
         identifier: KosmoQuickOpenAction,
@@ -325,6 +331,7 @@ proc initKosmoKeyBindings*(
 ): nimkit.KeyBindingTable =
   ## Return the resolved defaults for `profile` on `platform`.
   result.addBinding("primary-o", KosmoOpenFileAction, profile, platform)
+  result.addBinding("primary-shift-o", KosmoOpenProjectAction, profile, platform)
   result.addBinding("primary-p", KosmoQuickOpenAction, profile, platform)
   result.addBinding("primary-shift-t", KosmoNewTerminalAction, profile, platform)
   result.addBinding("primary-s", KosmoSaveAction, profile, platform)
