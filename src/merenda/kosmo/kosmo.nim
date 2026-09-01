@@ -2779,7 +2779,7 @@ proc splitCurrentPaneTab(
     if duplicatesCurrentTab:
       try:
         duplicateDocument = document.duplicate()
-      except nimkit.TerminalSessionError as error:
+      except nimkit.TerminexSessionError as error:
         if not source.editorView.statusLabel.isNil:
           source.editorView.statusLabel.text = error.msg
         return false
@@ -3183,14 +3183,14 @@ proc openPaneDocument(
   true
 
 proc newTerminalDocument(
-    controller: KosmoDockController, options: nimkit.TerminalSpawnOptions
+    controller: KosmoDockController, options: nimkit.TerminexSpawnOptions
 ): KosmoPaneDocument =
   let terminalView = nimkit.newTerminalView()
   if not controller.frontend.isNil:
     terminalView.optionAsMeta = controller.frontend[].xTerminalOptionAsMeta
   try:
     terminalView.start(options)
-  except nimkit.TerminalSessionError:
+  except nimkit.TerminexSessionError:
     terminalView.close()
     raise
 
@@ -3215,14 +3215,14 @@ proc newTerminalDocument(
 proc openTerminal(
     controller: KosmoDockController,
     group: KosmoEditorGroup,
-    options: nimkit.TerminalSpawnOptions,
+    options: nimkit.TerminexSpawnOptions,
 ): bool =
   if controller.isNil or group.isNil:
     return
   var document: KosmoPaneDocument
   try:
     document = controller.newTerminalDocument(options)
-  except nimkit.TerminalSessionError as error:
+  except nimkit.TerminexSessionError as error:
     if not group.editorView.statusLabel.isNil:
       group.editorView.statusLabel.text = error.msg
     return

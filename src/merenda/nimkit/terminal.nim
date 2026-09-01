@@ -1,8 +1,11 @@
 ## Terminal emulation, pseudo-terminal transport, and NimKit presentation.
 
-import ./terminal/[terminalparser, terminalscreen, terminalsessions, terminalviews]
+import terminex/[ringbuffer, termparser, termscreen, termsessions]
 
-export terminalparser
-export terminalscreen
-export terminalsessions
+import ./terminal/terminalviews
+
+export ringbuffer
+export termparser
+export termscreen
+export termsessions
 export terminalviews

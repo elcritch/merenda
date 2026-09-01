@@ -390,9 +390,9 @@ declared on macOS or Windows, and they require a Wayland session at runtime.
 
 ### Terminal emulator
 
-`TerminalView` is a native NimKit terminal widget with an incremental VT parser,
+`TerminalView` is a native NimKit terminal widget backed by Terminex. It provides
 Unicode wide-cell handling, 256-color and true-color rendering, text attributes,
-primary and alternate screens, bounded scrollback, selection, clipboard
+primary and alternate screens, ring-buffered scrollback, selection, clipboard
 commands, bracketed paste, application cursor keys, focus reporting, and xterm
 mouse tracking. It resizes its pseudo-terminal to the visible monospace grid and
 polls the child automatically while attached to a window.
@@ -409,7 +409,7 @@ app.runWindow(window, terminal, terminal)
 ```
 
 Passing a `command` runs it through the selected shell; leaving it empty starts
-an interactive shell. `TerminalSession` is also public for applications that
+an interactive shell. `TerminexSession` is also public for applications that
 want to drive the parser and PTY transport separately from the view. The PTY
 backend currently supports POSIX platforms (macOS, Linux, and FreeBSD).
 

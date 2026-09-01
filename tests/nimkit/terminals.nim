@@ -1,4 +1,6 @@
-import std/[monotimes, os, strutils, tempfiles, times, unittest]
+import std/[monotimes, os, sequtils, strutils, tempfiles, times, unittest]
+
+import terminex
 
 import sigils/core
 
@@ -6,9 +8,7 @@ import merenda/nimkit/accessibility/accessibilityprotocols
 import merenda/nimkit/app/[animations, application, pasteboards, windows]
 import merenda/nimkit/foundation/[events, selectors, types]
 import merenda/nimkit/responder/responders
-import
-  merenda/nimkit/terminal/
-    [terminalparser, terminalscreen, terminalsessions, terminalviews]
+import merenda/nimkit/terminal/terminalviews
 import merenda/nimkit/text/monotextviews
 import merenda/nimkit/view/views
 
@@ -40,11 +40,11 @@ proc rememberTerminalAccessibility(
 ) {.slot.} =
   spy.notifications.add notification
 
-proc feed(screen: var TerminalScreen, parser: var TerminalParser, value: string) =
+proc feed(screen: var TerminexScreen, parser: var TerminexParser, value: string) =
   parser.feed(screen, value)
 
 proc pollUntilExit(
-    session: TerminalSession, timeout = initDuration(seconds = 3)
+    session: TerminexSession, timeout = initDuration(seconds = 3)
 ): bool =
   let deadline = getMonoTime() + timeout
   while session.running() and getMonoTime() < deadline:
@@ -54,7 +54,7 @@ proc pollUntilExit(
   not session.running()
 
 proc pollUntilText(
-    session: TerminalSession, expected: string, timeout = initDuration(seconds = 3)
+    session: TerminexSession, expected: string, timeout = initDuration(seconds = 3)
 ): bool =
   let deadline = getMonoTime() + timeout
   while getMonoTime() < deadline:
@@ -86,10 +86,10 @@ proc terminalCellPoint(view: TerminalView, row, column: int): Point =
     )
   )
 
-func normalizedTerminalOutput(session: TerminalSession): string =
+func normalizedTerminalOutput(session: TerminexSession): string =
   session.screen().plainText().replace("\n", " ").splitWhitespace().join(" ")
 
-func terminalLineText(screen: TerminalScreen, row: int): string =
+func terminalLineText(screen: TerminexScreen, row: int): string =
   if row notin 0 ..< screen.rows:
     return
   for cell in screen.lineAt(row):
@@ -97,7 +97,7 @@ func terminalLineText(screen: TerminalScreen, row: int): string =
       result.add(if cell.text.len > 0: cell.text else: " ")
   result = result.strip(leading = false, trailing = true, chars = {' '})
 
-func currentTerminalLine(session: TerminalSession): string =
+func currentTerminalLine(session: TerminexSession): string =
   let screen = session.screen()
   screen.terminalLineText(screen.cursor.position.row)
 
@@ -177,7 +177,7 @@ suite "nimkit terminal screen and parser":
 
     screen.feed(parser, "zero\r\none\r\ntwo\r\nthree\r\nfour\r\nfive")
 
-    let scrollback = screen.scrollbackLines()
+    let scrollback = toSeq(scrollbackLines(screen))
     check screen.scrollbackCount == 3
     check scrollback[0][0].text == "o"
     check scrollback[1][0].text == "t"
@@ -476,7 +476,7 @@ suite "nimkit terminal sessions":
     check session.state == tssIdle
     check session.screen().plainText() == "plain green"
     check session.screen().cellAt(0, 6).style.foreground == indexedTerminalColor(2)
-    expect TerminalSessionError:
+    expect TerminexSessionError:
       session.write("input")
 
   when defined(posix):
@@ -564,7 +564,7 @@ suite "nimkit terminal sessions":
   else:
     test "unsupported platforms report a catchable spawn error":
       let session = newTerminalSession()
-      expect TerminalSessionError:
+      expect TerminexSessionError:
         session.start()
       check session.state == tssFailed
 

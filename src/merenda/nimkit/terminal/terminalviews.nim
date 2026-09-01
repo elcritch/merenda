@@ -1,8 +1,9 @@
-## A reusable terminal-emulator view backed by `TerminalSession`.
+## A reusable terminal-emulator view backed by Terminex.
 
 import std/[math, strutils, times, unicode]
 
 import sigils/core
+import terminex/[ringbuffer, terminput, termscreen, termsessions]
 
 import ../app/[animations, pasteboards]
 import ../app/windows except performKeyEquivalent
@@ -11,9 +12,6 @@ import ../responder/responders
 from ../text/textviews import isInsertableText
 import ../text/monotextviews
 import ../view/views
-import ./[terminalsessions, terminalscreen]
-
-export terminalsessions
 
 const
   DefaultTerminalFontSize* = 14.0'f32
@@ -26,10 +24,10 @@ type
     selection*, cursor*: Color
 
   TerminalSelection* = object
-    anchor*, extent*: TerminalPosition
+    anchor*, extent*: TerminexPosition
 
   TerminalView* = ref object of MonoTextView
-    xSession: TerminalSession
+    xSession: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]]
     xPalette: TerminalPalette
     xSelection: TerminalSelection
     xHasSelection: bool
@@ -113,7 +111,7 @@ func indexedColor(palette: TerminalPalette, index: uint8): Color =
   color(gray.colorByte(), gray.colorByte(), gray.colorByte(), 1.0)
 
 func resolvedColor(
-    palette: TerminalPalette, value: TerminalColor, fallback: Color
+    palette: TerminalPalette, value: TerminexColor, fallback: Color
 ): Color =
   case value.kind
   of tckDefault:
@@ -128,12 +126,12 @@ func resolvedColor(
       1.0,
     )
 
-func positionLess(left, right: TerminalPosition): bool =
+func positionLess(left, right: TerminexPosition): bool =
   left.row < right.row or (left.row == right.row and left.column < right.column)
 
 func orderedSelection(
     selection: TerminalSelection
-): tuple[first, last: TerminalPosition] =
+): tuple[first, last: TerminexPosition] =
   if selection.extent.positionLess(selection.anchor):
     (selection.extent, selection.anchor)
   else:
@@ -146,7 +144,7 @@ func contains(selection: TerminalSelection, row, column: int): bool =
   not position.positionLess(bounds.first) and position.positionLess(bounds.last)
 
 func terminalCellToMonoTextCell*(
-    cell: TerminalCell, palette: TerminalPalette, selected = false, blinkVisible = true
+    cell: TerminexCell, palette: TerminalPalette, selected = false, blinkVisible = true
 ): MonoTextCell =
   var
     foreground = palette.resolvedColor(cell.style.foreground, palette.foreground)
@@ -185,151 +183,49 @@ func terminalCellToMonoTextCell*(
     hasDecorationColor = cell.style.underlineColor.kind != tckDefault,
   )
 
-func controlCharacter(event: KeyEvent): string =
-  if event.key in keyA .. keyZ:
-    return $char(ord(event.key) - ord(keyA) + 1)
-  case event.key
-  of keySpace, key2: "\x00"
-  of keyLeftBracket: "\x1b"
-  of keyBackslash: "\x1c"
-  of keyRightBracket: "\x1d"
-  of key6: "\x1e"
-  of keyMinus: "\x1f"
-  of keyBackspace: "\x7f"
-  else: ""
+static:
+  doAssert ord(keyF15) - ord(keyA) == ord(tkF15) - ord(tkA)
+  doAssert ord(keyBackspace) - ord(keyLeftBracket) ==
+    ord(tkBackspace) - ord(tkLeftBracket)
+  doAssert ord(keyDivide) - ord(keySlash) == ord(tkDivide) - ord(tkSlash)
 
-func printableKeyText(event: KeyEvent): string =
-  let shifted = kmShift in event.modifiers
-  if event.key in keyA .. keyZ:
-    let letter = char(ord(event.key) - ord(keyA) + ord('a'))
-    return $(if shifted: letter.toUpperAscii() else: letter)
-  case event.key
-  of keyTilde:
-    if shifted: "~" else: "`"
-  of key1:
-    if shifted: "!" else: "1"
-  of key2:
-    if shifted: "@" else: "2"
-  of key3:
-    if shifted: "#" else: "3"
-  of key4:
-    if shifted: "$" else: "4"
-  of key5:
-    if shifted: "%" else: "5"
-  of key6:
-    if shifted: "^" else: "6"
-  of key7:
-    if shifted: "&" else: "7"
-  of key8:
-    if shifted: "*" else: "8"
-  of key9:
-    if shifted: "(" else: "9"
-  of key0:
-    if shifted: ")" else: "0"
-  of keyMinus:
-    if shifted: "_" else: "-"
-  of keyEqual:
-    if shifted: "+" else: "="
-  of keyLeftBracket:
-    if shifted: "{" else: "["
-  of keyRightBracket:
-    if shifted: "}" else: "]"
-  of keySpace:
-    " "
-  of keySlash:
-    if shifted: "?" else: "/"
-  of keyDot:
-    if shifted: ">" else: "."
-  of keyComma:
-    if shifted: "<" else: ","
-  of keySemicolon:
-    if shifted: ":" else: ";"
-  of keyQuote:
-    if shifted: "\"" else: "'"
-  of keyBackslash:
-    if shifted: "|" else: "\\"
-  of keyNumpad0 .. keyNumpad9:
-    $char(ord(event.key) - ord(keyNumpad0) + ord('0'))
-  of keyNumpadDot:
-    "."
-  of keyAdd:
-    "+"
-  of keySubtract:
-    "-"
-  of keyMultiply:
-    "*"
-  of keyDivide:
-    "/"
-  else:
-    ""
-
-func functionKeyInput(key: Key): string =
+func toTerminexKey(key: Key): TerminexKey =
   case key
-  of keyF1: "\x1bOP"
-  of keyF2: "\x1bOQ"
-  of keyF3: "\x1bOR"
-  of keyF4: "\x1bOS"
-  of keyF5: "\x1b[15~"
-  of keyF6: "\x1b[17~"
-  of keyF7: "\x1b[18~"
-  of keyF8: "\x1b[19~"
-  of keyF9: "\x1b[20~"
-  of keyF10: "\x1b[21~"
-  of keyF11: "\x1b[23~"
-  of keyF12: "\x1b[24~"
-  of keyF13: "\x1b[25~"
-  of keyF14: "\x1b[26~"
-  of keyF15: "\x1b[28~"
-  else: ""
+  of keyA .. keyF15:
+    TerminexKey(ord(tkA) + ord(key) - ord(keyA))
+  of keyLeftBracket .. keyBackspace:
+    TerminexKey(ord(tkLeftBracket) + ord(key) - ord(keyLeftBracket))
+  of keySlash .. keyDivide:
+    TerminexKey(ord(tkSlash) + ord(key) - ord(keySlash))
+  else:
+    tkUnknown
+
+func toTerminexModifiers(modifiers: set[KeyModifier]): set[TerminexModifier] =
+  if kmShift in modifiers:
+    result.incl tmShift
+  if kmControl in modifiers:
+    result.incl tmControl
+  if kmOption in modifiers:
+    result.incl tmAlt
+  if kmCommand in modifiers:
+    result.incl tmSuper
+
+func toTerminexKeyEvent(event: KeyEvent): TerminexKeyEvent =
+  TerminexKeyEvent(
+    key: event.key.toTerminexKey(),
+    text: event.text,
+    modifiers: event.modifiers.toTerminexModifiers(),
+  )
+
+func isPrintableTerminalKey(key: Key): bool =
+  key in keyA .. keyEqual or key in keyLeftBracket .. keySpace or
+    key in keySlash .. keyBackslash or key in keyNumpad0 .. keyDivide
 
 func terminalKeyInput*(
-    event: KeyEvent, modes: TerminalModes, optionAsMeta = true
+    event: KeyEvent, modes: TerminexModes, optionAsMeta = true
 ): string =
   ## Translate a NimKit key event into xterm-compatible input bytes.
-  if kmCommand in event.modifiers:
-    return
-  if kmControl in event.modifiers:
-    result = event.controlCharacter()
-  if result.len == 0:
-    let applicationPrefix = if modes.applicationCursorKeys: "\x1bO" else: "\x1b["
-    case event.key
-    of keyEnter:
-      result = "\r"
-    of keyBackspace:
-      result = "\x7f"
-    of keyTab:
-      result = if kmShift in event.modifiers: "\x1b[Z" else: "\t"
-    of keyEscape:
-      result = "\x1b"
-    of keyArrowUp:
-      result = applicationPrefix & "A"
-    of keyArrowDown:
-      result = applicationPrefix & "B"
-    of keyArrowRight:
-      result = applicationPrefix & "C"
-    of keyArrowLeft:
-      result = applicationPrefix & "D"
-    of keyHome:
-      result = applicationPrefix & "H"
-    of keyEnd:
-      result = applicationPrefix & "F"
-    of keyInsert:
-      result = "\x1b[2~"
-    of keyDelete:
-      result = "\x1b[3~"
-    of keyPageUp:
-      result = "\x1b[5~"
-    of keyPageDown:
-      result = "\x1b[6~"
-    of keyF1 .. keyF15:
-      result = event.key.functionKeyInput()
-    else:
-      if optionAsMeta and kmOption in event.modifiers:
-        result = event.printableKeyText()
-      elif kmOption notin event.modifiers and event.modifiers - {kmShift} == {}:
-        result = event.text
-  if optionAsMeta and kmOption in event.modifiers and result.len > 0:
-    result = "\x1b" & result
+  terminput.terminalKeyInput(event.toTerminexKeyEvent(), modes, optionAsMeta)
 
 func terminalShortcutModifiers*(): set[KeyModifier] =
   ## Modifiers for terminal-local clipboard and scrollback shortcuts.
@@ -340,57 +236,45 @@ func terminalShortcutModifiers*(): set[KeyModifier] =
   else:
     {kmControl, kmShift}
 
-func mouseModifierCode(modifiers: set[KeyModifier]): int =
-  if kmShift in modifiers:
-    result += 4
-  if kmOption in modifiers:
-    result += 8
-  if kmControl in modifiers:
-    result += 16
-
-func mouseButtonCode(button: MouseButton): int =
+func toTerminexMouseButton(button: MouseButton): TerminexMouseButton =
   case button
-  of mbPrimary: 0
-  of mbOther: 1
-  of mbSecondary: 2
+  of mbPrimary: tmbPrimary
+  of mbOther: tmbMiddle
+  of mbSecondary: tmbSecondary
 
 func encodeMouseInput(
-    session: TerminalSession,
-    row, column, buttonCode: int,
+    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]],
+    row, column: int,
+    button: TerminexMouseButton,
     release, motion: bool,
     modifiers: set[KeyModifier],
 ): string =
-  var code = buttonCode + modifiers.mouseModifierCode()
-  if motion:
-    code += 32
-  let
-    info = session.screenInfo()
-    oneBasedColumn = clamp(column + 1, 1, info.columns)
-    oneBasedRow = clamp(row + 1, 1, info.rows)
-  case info.modes.mouseEncoding
-  of tmeSgr:
-    "\x1b[<" & $code & ";" & $oneBasedColumn & ";" & $oneBasedRow &
-      (if release: "m" else: "M")
-  of tmeUrxvt:
-    "\x1b[" & $(code + 32) & ";" & $oneBasedColumn & ";" & $oneBasedRow & "M"
-  of tmeX10, tmeUtf8:
-    let releaseCode =
-      if release:
-        3 + modifiers.mouseModifierCode()
-      else:
-        code
-    "\x1b[M" & $Rune(clamp(releaseCode + 32, 32, 255)) &
-      $Rune(clamp(oneBasedColumn + 32, 32, 255)) &
-      $Rune(clamp(oneBasedRow + 32, 32, 255))
+  let info = session.screenInfo()
+  terminput.encodeTerminalMouseInput(
+    info.modes,
+    info.columns,
+    info.rows,
+    row,
+    column,
+    button,
+    modifiers.toTerminexModifiers(),
+    release,
+    motion,
+  )
 
-func session*(view: TerminalView): TerminalSession =
+func session*(
+    view: TerminalView
+): TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]] =
   view.xSession
 
 proc syncTerminalScreen(view: TerminalView)
 proc startTerminalPolling(view: TerminalView)
 proc stopTerminalPolling(view: TerminalView)
 
-proc `session=`*(view: TerminalView, session: TerminalSession) =
+proc `session=`*(
+    view: TerminalView,
+    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]],
+) =
   let next =
     if session.isNil:
       newTerminalSession()
@@ -478,18 +362,14 @@ proc sendInput*(view: TerminalView, input: string): bool {.discardable.} =
     view.xScrollPosition = 0.0'f32
     view.clearSelection()
     true
-  except TerminalSessionError as error:
+  except TerminexSessionError as error:
     view.xLastInputError = error.msg
     false
 
 proc pasteText*(view: TerminalView, text: string): bool {.discardable.} =
   if text.len == 0:
     return false
-  let input =
-    if view.xSession.screenInfo().modes.bracketedPaste:
-      "\x1b[200~" & text & "\x1b[201~"
-    else:
-      text
+  let input = terminput.terminalPasteInput(text, view.xSession.screenInfo().modes)
   view.sendInput(input)
 
 proc selectionText*(view: TerminalView): string =
@@ -527,7 +407,9 @@ proc viewportStart(view: TerminalView): int =
   max(info.totalLineCount - info.rows - view.viewportOffset(), 0)
 
 proc terminalRowsToMonoTextCells(
-    view: TerminalView, session: TerminalSession, columns, firstRow, rowCount: int
+    view: TerminalView,
+    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]],
+    columns, firstRow, rowCount: int,
 ): seq[MonoTextCell] =
   result = newSeq[MonoTextCell](max(rowCount, 0) * columns)
   for row in 0 ..< max(rowCount, 0):
@@ -555,7 +437,10 @@ proc renderedGridDimensionsMatch(view: TerminalView, rows, columns: int): bool =
   true
 
 proc synchronizeTerminalGrid(
-    view: TerminalView, session: TerminalSession, info: TerminalScreenInfo, start: int
+    view: TerminalView,
+    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]],
+    info: TerminexScreenInfo,
+    start: int,
 ) =
   let
     rows = info.rows
@@ -645,7 +530,7 @@ proc synchronizeMetadata(view: TerminalView) =
     let text = view.xSession.takeClipboardRequest()
     discard generalPasteboard().setPlainText(text)
 
-proc poll*(view: TerminalView): TerminalPollResult =
+proc poll*(view: TerminalView): TerminexPollResult =
   ## Drain available PTY output and synchronize the rendered grid.
   if view.isNil or view.xSession.isNil:
     return
@@ -688,20 +573,20 @@ proc close*(view: TerminalView) =
   if not view.xSession.isNil:
     view.xSession.close()
 
-proc absolutePosition(view: TerminalView, row, column: int): TerminalPosition =
+proc absolutePosition(view: TerminalView, row, column: int): TerminexPosition =
   let info = view.xSession.screenInfo()
   initTerminalPosition(
     clamp(view.viewportStart() + row, 0, info.totalLineCount - 1),
     clamp(column, 0, info.columns),
   )
 
-func isWordCell(cell: TerminalCell): bool =
+func isWordCell(cell: TerminexCell): bool =
   if cell.text.len == 0:
     return false
   for rune in cell.text.runes:
     return rune.isAlpha() or rune.int in ord('0') .. ord('9') or rune == Rune('_')
 
-proc selectWord(view: TerminalView, position: TerminalPosition) =
+proc selectWord(view: TerminalView, position: TerminexPosition) =
   let line = view.xSession.lineAtAbsolute(position.row)
   if line.len == 0:
     return
@@ -719,7 +604,7 @@ proc selectWord(view: TerminalView, position: TerminalPosition) =
   )
   view.xHasSelection = true
 
-proc selectLine(view: TerminalView, position: TerminalPosition) =
+proc selectLine(view: TerminalView, position: TerminexPosition) =
   let line = view.xSession.lineAtAbsolute(position.row)
   view.xSelection = TerminalSelection(
     anchor: initTerminalPosition(position.row, 0),
@@ -776,14 +661,16 @@ proc handleLocalMouse(view: TerminalView, event: MonoTextRawEvent): bool =
   else:
     false
 
-proc mouseTrackingAccepts(modes: TerminalModes, kind: MonoTextRawEventKind): bool =
-  case modes.mouseTracking
-  of tmtNone:
+proc mouseTrackingAccepts(modes: TerminexModes, kind: MonoTextRawEventKind): bool =
+  case kind
+  of mtreMouseDown:
+    terminput.mouseTrackingAccepts(modes, tmekPress)
+  of mtreMouseDragged:
+    terminput.mouseTrackingAccepts(modes, tmekMotion)
+  of mtreMouseUp:
+    terminput.mouseTrackingAccepts(modes, tmekRelease)
+  else:
     false
-  of tmtX10:
-    kind == mtreMouseDown
-  of tmtButton, tmtAny:
-    kind in {mtreMouseDown, mtreMouseDragged, mtreMouseUp}
 
 proc handleTrackedMouse(view: TerminalView, event: MonoTextRawEvent): bool =
   if kmShift in event.mouseEvent.modifiers or
@@ -792,7 +679,7 @@ proc handleTrackedMouse(view: TerminalView, event: MonoTextRawEvent): bool =
   let input = view.xSession.encodeMouseInput(
     event.row,
     event.column,
-    event.mouseEvent.button.mouseButtonCode(),
+    event.mouseEvent.button.toTerminexMouseButton(),
     release = event.kind == mtreMouseUp,
     motion = event.kind == mtreMouseDragged,
     modifiers = event.mouseEvent.modifiers,
@@ -808,7 +695,7 @@ proc scrollLocally(view: TerminalView, event: ScrollEvent): bool =
   true
 
 func shouldScrollLocally(
-    view: TerminalView, event: ScrollEvent, screenInfo: TerminalScreenInfo
+    view: TerminalView, event: ScrollEvent, screenInfo: TerminexScreenInfo
 ): bool =
   ## Keep terminal history reachable after a TUI enables mouse reporting.
   ## Applications still receive wheel input when no local history exists.
@@ -846,7 +733,7 @@ proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
   if input.len == 0:
     return false
   if view.xOptionAsMeta and kmOption in event.modifiers and
-      event.printableKeyText().len > 0:
+      event.key.isPrintableTerminalKey():
     view.xSuppressOptionTextInput = true
   view.sendInput(input)
 
@@ -863,12 +750,12 @@ proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
     if view.shouldScrollLocally(event.scrollEvent, screenInfo):
       return view.scrollLocally(event.scrollEvent)
     if screenInfo.modes.mouseTracking != tmtNone:
-      let buttonCode = if event.scrollEvent.deltaY > 0.0'f32: 64 else: 65
+      let button = if event.scrollEvent.deltaY > 0.0'f32: tmbWheelUp else: tmbWheelDown
       return view.sendInput(
         view.xSession.encodeMouseInput(
           event.row,
           event.column,
-          buttonCode,
+          button,
           release = false,
           motion = false,
           modifiers = event.scrollEvent.modifiers,
@@ -986,12 +873,14 @@ protocol TerminalViewEditingCommands of TextEditingCommandProtocol:
 
 protocol TerminalViewFocus of ResponderProtocol:
   method didBecomeFirstResponder(view: TerminalView) =
-    if view.xSession.screenInfo().modes.focusReporting:
-      discard view.sendInput("\x1b[I")
+    discard view.sendInput(
+      terminput.terminalFocusInput(true, view.xSession.screenInfo().modes)
+    )
 
   method didResignFirstResponder(view: TerminalView) =
-    if view.xSession.screenInfo().modes.focusReporting:
-      discard view.sendInput("\x1b[O")
+    discard view.sendInput(
+      terminput.terminalFocusInput(false, view.xSession.screenInfo().modes)
+    )
 
 protocol TerminalViewLayout of ViewLayoutProtocol:
   method layoutSubviews(view: TerminalView) =
@@ -1011,7 +900,7 @@ protocol TerminalViewLifecycle of ViewLifecycleProtocol:
 
 proc initTerminalViewFields*(
     view: TerminalView,
-    session: TerminalSession = nil,
+    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]] = nil,
     frame: Rect = AutoRect,
     palette = initTerminalPalette(),
 ) =
@@ -1051,7 +940,7 @@ proc initTerminalViewFields*(
   view.applyInitialFrame(frame)
 
 proc newTerminalView*(
-    session: TerminalSession = nil,
+    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]] = nil,
     frame: Rect = AutoRect,
     palette = initTerminalPalette(),
 ): TerminalView =
@@ -1059,7 +948,7 @@ proc newTerminalView*(
   result.initTerminalViewFields(session, frame, palette)
 
 proc newTerminalView*(
-    options: TerminalSpawnOptions,
+    options: TerminexSpawnOptions,
     frame: Rect = AutoRect,
     palette = initTerminalPalette(),
 ): TerminalView =
