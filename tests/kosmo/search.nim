@@ -113,6 +113,40 @@ suite "Kosmo":
     check settingsTabs.selectTabViewItemAtIndex(1)
     discard settingsPanel.buildRenders()
 
+    let
+      shortcutProfileView =
+        settingsPanel.contentView().viewWithIdentifier(KosmoShortcutProfileIdentifier)
+      editorInputPolicyView =
+        settingsPanel.contentView().viewWithIdentifier(KosmoEditorInputPolicyIdentifier)
+    require not shortcutProfileView.isNil
+    require shortcutProfileView of ComboBox
+    require not editorInputPolicyView.isNil
+    require editorInputPolicyView of ComboBox
+    let
+      shortcutProfileChoice = ComboBox(shortcutProfileView)
+      editorInputPolicyChoice = ComboBox(editorInputPolicyView)
+    check shortcutProfileChoice.selectedIndex ==
+      (if frontend.shortcutProfile() == KosmoShortcutProfile.MacOS: 1 else: 0)
+    check editorInputPolicyChoice.selectedIndex == 2
+    check frontend.editorInputPolicy() == KosmoEditorInputPolicy.Hybrid
+
+    shortcutProfileChoice.activateItemAtIndex(1)
+    check frontend.shortcutProfile() == KosmoShortcutProfile.MacOS
+    check frontend.settingsWindow().shortcutProfile == KosmoShortcutProfile.MacOS
+    shortcutProfileChoice.activateItemAtIndex(0)
+    check frontend.shortcutProfile() == KosmoShortcutProfile.Platform
+    check frontend.settingsWindow().shortcutProfile == KosmoShortcutProfile.Platform
+
+    editorInputPolicyChoice.activateItemAtIndex(0)
+    check frontend.editorInputPolicy() == KosmoEditorInputPolicy.Vim
+    check frontend.settingsWindow().editorInputPolicy == KosmoEditorInputPolicy.Vim
+    editorInputPolicyChoice.activateItemAtIndex(1)
+    check frontend.editorInputPolicy() == KosmoEditorInputPolicy.Native
+    check frontend.settingsWindow().editorInputPolicy == KosmoEditorInputPolicy.Native
+    editorInputPolicyChoice.activateItemAtIndex(2)
+    check frontend.editorInputPolicy() == KosmoEditorInputPolicy.Hybrid
+    check frontend.settingsWindow().editorInputPolicy == KosmoEditorInputPolicy.Hybrid
+
     let shortcutsView =
       settingsPanel.contentView().viewWithIdentifier(KosmoShortcutsTableIdentifier)
     require not shortcutsView.isNil
@@ -136,7 +170,7 @@ suite "Kosmo":
     check descriptionColumn.sizingPolicy == tcspFlexible
     check keysColumn.sizingPolicy == tcspFixed
     check shortcutsTable.columnSizing == tvcsFill
-    check shortcutsTable.rowCount == initKosmoKeyBindings().bindings.len
+    check shortcutsTable.rowCount == kosmoActions().len
     check shortcutsTable.selectionMode == tsmNone
     let
       initialShortcutsWidth = shortcutsTable.frame.size.width
@@ -161,8 +195,13 @@ suite "Kosmo":
     check shortcutsTable.superview.bounds.size.width > initialPageWidth + 200.0'f32
     check shortcutsTable.frame.size.width > initialShortcutsWidth + 200.0'f32
     check descriptionColumn.width > initialDescriptionWidth + 200.0'f32
+    require shortcutsTable.superview of StackView
+    let shortcutsPageStack = StackView(shortcutsTable.superview)
     check abs(
-      shortcutsTable.frame.size.width - shortcutsTable.superview.bounds.size.width
+      shortcutsTable.frame.size.width - (
+        shortcutsPageStack.bounds.size.width - shortcutsPageStack.edgeInsets.left -
+        shortcutsPageStack.edgeInsets.right
+      )
     ) < 1.0'f32
     check abs(
       actionColumn.width + descriptionColumn.width + keysColumn.width -
@@ -189,9 +228,14 @@ suite "Kosmo":
     require saveRow >= 0
     require horizontalSplitRow >= 0
     require verticalSplitRow >= 0
-    check shortcutsTable.tableCellText(saveRow, keysColumn) == "Cmd+S"
-    check shortcutsTable.tableCellText(horizontalSplitRow, keysColumn) == "Ctrl+W Ctrl+S"
-    check shortcutsTable.tableCellText(verticalSplitRow, keysColumn) == "Ctrl+W Ctrl+V"
+    when defined(macosx) or defined(macos):
+      check shortcutsTable.tableCellText(saveRow, keysColumn) == "Cmd+S"
+    else:
+      check shortcutsTable.tableCellText(saveRow, keysColumn) == "Ctrl+S"
+    check shortcutsTable.tableCellText(horizontalSplitRow, keysColumn) ==
+      "Ctrl+W S / Ctrl+W Ctrl+S"
+    check shortcutsTable.tableCellText(verticalSplitRow, keysColumn) ==
+      "Ctrl+W V / Ctrl+W Ctrl+V"
     check not shortcutsTable.beginEditingCell(saveRow, keysColumn)
     check settingsTabs.selectTabViewItemAtIndex(2)
 
@@ -764,13 +808,14 @@ suite "Kosmo":
       )
       check frontend.editorPane.contentView == View(terminalView)
 
-      check frontend.window.dispatchKeyDown(
-        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
-      )
-      check frontend.documentTabs.len == initialTabCount + 1
-      check frontend.window.dispatchKeyDown(
-        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
-      )
+      when defined(macosx) or defined(macos):
+        check frontend.window.dispatchKeyDown(
+          KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
+        )
+      else:
+        check frontend.window.dispatchKeyDown(
+          KeyEvent(key: keyF4, keyCode: keyF4.ord, modifiers: {kmControl})
+        )
       check frontend.editorGroups()[0].documents.len == 0
       check frontend.documentTabs.len == initialTabCount
       check frontend.editorPane.contentView == View(frontend.editorView)

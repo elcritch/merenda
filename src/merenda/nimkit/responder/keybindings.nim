@@ -355,6 +355,13 @@ proc shortcutKey(name: string, modifiers: var set[KeyModifier]): Key =
   of "equal":
     keyEqual
   else:
+    if name.len > 1 and name[0] == 'f':
+      try:
+        let functionNumber = parseInt(name[1 .. ^1])
+        if functionNumber in 1 .. 15:
+          return Key(ord(keyF1) + functionNumber - 1)
+      except ValueError:
+        discard
     name.keyForText()
 
 proc parseKeyStroke*(description: string): KeyStroke =

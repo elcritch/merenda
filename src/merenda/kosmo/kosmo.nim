@@ -4,31 +4,19 @@ import std/[math, options, os, strutils, unicode]
 
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
+import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
-    filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen, settings
+    filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen, settings,
+    shortcuts,
   ]
 import pkg/celina as celina
 
 export
-  filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen, settings
+  filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen, settings,
+  shortcuts
 
 const
-  KosmoOpenFileAction* = "kosmo.openFile"
-  KosmoNewTerminalAction* = "kosmo.newTerminal"
-  KosmoSaveAction* = "kosmo.save"
-  KosmoCloseTabAction* = "kosmo.closeTab"
-  KosmoQuitAction* = "kosmo.quit"
-  KosmoPreviousTabAction* = "kosmo.previousTab"
-  KosmoNextTabAction* = "kosmo.nextTab"
-  KosmoSplitHorizontalAction* = "kosmo.splitHorizontal"
-  KosmoSplitVerticalAction* = "kosmo.splitVertical"
-  KosmoShowFileExplorerAction* = "kosmo.showFileExplorer"
-  KosmoFindInFilesAction* = "kosmo.findInFiles"
-  KosmoQuickOpenAction* = "kosmo.quickOpen"
-  KosmoShowSettingsAction* = "kosmo.showSettings"
-  KosmoFocusPanelActionPrefix* = "kosmo.focusPanel"
-  KosmoMaxFocusPanelShortcut* = 9
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
@@ -57,28 +45,6 @@ const
   KosmoMoeBottomAreaRows = 1
   KosmoTabIdentifierPrefix = "kosmo.buffer."
   KosmoTerminalIdentifierPrefix = "kosmo.terminal."
-  KosmoShortcutCommands = [
-    KosmoNewTerminalAction,
-    KosmoSaveAction,
-    KosmoCloseTabAction,
-    KosmoQuitAction,
-    KosmoPreviousTabAction,
-    KosmoNextTabAction,
-    KosmoSplitHorizontalAction,
-    KosmoSplitVerticalAction,
-    KosmoShowFileExplorerAction,
-    KosmoFindInFilesAction,
-    KosmoQuickOpenAction,
-    KosmoFocusPanelActionPrefix & "1",
-    KosmoFocusPanelActionPrefix & "2",
-    KosmoFocusPanelActionPrefix & "3",
-    KosmoFocusPanelActionPrefix & "4",
-    KosmoFocusPanelActionPrefix & "5",
-    KosmoFocusPanelActionPrefix & "6",
-    KosmoFocusPanelActionPrefix & "7",
-    KosmoFocusPanelActionPrefix & "8",
-    KosmoFocusPanelActionPrefix & "9",
-  ]
   KosmoFilesTabIdentifier* = "kosmo.sidebar.files"
   KosmoFindTabIdentifier* = "kosmo.sidebar.find"
   KosmoFilesIconSvg =
@@ -99,6 +65,23 @@ type
     keckOther
     keckSyntax
     keckMarkdownPreview
+
+  KosmoPaneCommand = enum
+    kpcNone
+    kpcSplitBelow
+    kpcSplitRight
+    kpcNewBelow
+    kpcFocusNext
+    kpcFocusLeft
+    kpcFocusBelow
+    kpcFocusAbove
+    kpcFocusRight
+    kpcClose
+    kpcGrowHeight
+    kpcShrinkHeight
+    kpcShrinkWidth
+    kpcGrowWidth
+    kpcEqualize
 
   KosmoCommandBar* = ref object of nimkit.MonoTextView
 
@@ -130,6 +113,7 @@ type
     markdownSyntaxBufferIds: seq[KosmoBufferId]
     viewStates: seq[KosmoEditorViewState]
     dockGroup: WeakRef[KosmoEditorGroup]
+    pendingPanePrefix: bool
 
   KosmoEditorTabsHandler = ref object of nimkit.Responder
     editorView: WeakRef[KosmoEditorView]
@@ -181,6 +165,8 @@ type
     nextGroupIdentifier: int
     nextDocumentIdentifier: int
     shortcutBindings: nimkit.KeyBindingTable
+    shortcutProfile: KosmoShortcutProfile
+    editorInputPolicy: KosmoEditorInputPolicy
     xSidebarFocused: bool
 
   KosmoContentView = ref object of nimkit.View
@@ -262,15 +248,18 @@ proc groupForView(
   controller: KosmoDockController, view: KosmoEditorView
 ): KosmoEditorGroup
 
+proc chooseFile(view: KosmoEditorView, tree: KosmoFileTree, app: nimkit.Application)
+func isEditingAction(action: string): bool
+
 proc splitCurrentPaneTab(
   controller: KosmoDockController,
   source: KosmoEditorGroup,
   position: nimkit.DockPosition,
 ): bool
 
-func focusPanelAction*(panelNumber: int): string =
-  ## Return the key-binding command name for a numbered Kosmo panel.
-  KosmoFocusPanelActionPrefix & $panelNumber
+proc performPaneCommand(
+  controller: KosmoDockController, source: KosmoEditorGroup, command: KosmoPaneCommand
+): bool
 
 func shortcutKeyTitle(stroke: nimkit.KeyStroke): string =
   if stroke.text.len > 0:
@@ -351,7 +340,10 @@ func shortcutKeyTitle(stroke: nimkit.KeyStroke): string =
 func shortcutStrokeTitle(stroke: nimkit.KeyStroke): string =
   var parts: seq[string]
   if nimkit.kmCommand in stroke.modifiers:
-    parts.add "Cmd"
+    when defined(macosx) or defined(macos):
+      parts.add "Cmd"
+    else:
+      parts.add "Super"
   if nimkit.kmControl in stroke.modifiers:
     parts.add "Ctrl"
   if nimkit.kmOption in stroke.modifiers:
@@ -367,46 +359,21 @@ func shortcutSequenceTitle(sequence: nimkit.KeySequence): string =
       result.add " "
     result.add stroke.shortcutStrokeTitle()
 
-func kosmoShortcutDescription(action: string): string =
-  case action
-  of KosmoNewTerminalAction:
-    "Open a new terminal tab."
-  of KosmoSaveAction:
-    "Save the active editor tab."
-  of KosmoCloseTabAction:
-    "Close the active tab."
-  of KosmoQuitAction:
-    "Quit Kosmo."
-  of KosmoPreviousTabAction:
-    "Select the previous tab."
-  of KosmoNextTabAction:
-    "Select the next tab."
-  of KosmoSplitHorizontalAction:
-    "Move the active tab to a new panel below."
-  of KosmoSplitVerticalAction:
-    "Move the active tab to a new panel on the right."
-  of KosmoShowFileExplorerAction:
-    "Show and focus the file explorer."
-  of KosmoFindInFilesAction:
-    "Show and focus Find in Files."
-  of KosmoQuickOpenAction:
-    "Open a file with Quick Open."
-  else:
-    if action.startsWith(KosmoFocusPanelActionPrefix):
-      "Focus panel " & action[KosmoFocusPanelActionPrefix.len .. ^1] & "."
-    else:
-      "Run this Kosmo command."
-
 func kosmoShortcutSettings*(
     bindings: nimkit.KeyBindingTable
 ): seq[KosmoShortcutSetting] =
   ## Build display rows for Kosmo's currently resolved shortcut bindings.
-  for binding in bindings.bindings:
-    let action = $binding.selector.name
+  for action in kosmoActions():
+    var keys: seq[string]
+    for binding in bindings.bindings:
+      if $binding.selector.name == action.identifier:
+        keys.add binding.sequence.shortcutSequenceTitle()
+    if action.identifier == KosmoSplitHorizontalAction:
+      keys.add "Ctrl+W S / Ctrl+W Ctrl+S"
+    elif action.identifier == KosmoSplitVerticalAction:
+      keys.add "Ctrl+W V / Ctrl+W Ctrl+V"
     result.add KosmoShortcutSetting(
-      action: action,
-      description: action.kosmoShortcutDescription(),
-      keys: binding.sequence.shortcutSequenceTitle(),
+      action: action.identifier, description: action.description, keys: keys.join(", ")
     )
 
 func focusPanelNumber(selector: nimkit.CommandSelector): int =
@@ -419,61 +386,6 @@ func focusPanelNumber(selector: nimkit.CommandSelector): int =
     discard
   if result notin 1 .. KosmoMaxFocusPanelShortcut:
     result = 0
-
-func initKosmoKeyBindings*(): nimkit.KeyBindingTable =
-  ## Return Kosmo's platform-specific application shortcut defaults.
-  result.bindKey(
-    nimkit.keyS, {nimkit.kmCommand}, nimkit.actionSelector(KosmoSaveAction)
-  )
-  result.bindSequence("ctrl-w ctrl-w", nimkit.actionSelector(KosmoCloseTabAction))
-  when defined(macosx) or defined(macos):
-    result.bindKey(
-      nimkit.keyW, {nimkit.kmCommand}, nimkit.actionSelector(KosmoCloseTabAction)
-    )
-  result.bindKey(
-    nimkit.keyQ, {nimkit.kmCommand}, nimkit.actionSelector(KosmoQuitAction)
-  )
-  result.bindKey(
-    nimkit.keyLeftBracket,
-    {nimkit.kmCommand, nimkit.kmShift},
-    nimkit.actionSelector(KosmoPreviousTabAction),
-  )
-  result.bindKey(
-    nimkit.keyRightBracket,
-    {nimkit.kmCommand, nimkit.kmShift},
-    nimkit.actionSelector(KosmoNextTabAction),
-  )
-  result.bindSequence(
-    "ctrl-w ctrl-s", nimkit.actionSelector(KosmoSplitHorizontalAction)
-  )
-  result.bindSequence("ctrl-w ctrl-v", nimkit.actionSelector(KosmoSplitVerticalAction))
-  result.bindKey(
-    nimkit.keyE,
-    {nimkit.kmCommand, nimkit.kmShift},
-    nimkit.actionSelector(KosmoShowFileExplorerAction),
-  )
-  result.bindKey(
-    nimkit.keyF,
-    {nimkit.kmCommand, nimkit.kmShift},
-    nimkit.actionSelector(KosmoFindInFilesAction),
-  )
-  result.bindKey(
-    nimkit.keyP, nimkit.shortcutModifiers(), nimkit.actionSelector(KosmoQuickOpenAction)
-  )
-  result.bindKey(
-    nimkit.keyT,
-    nimkit.shortcutModifiers() + {nimkit.kmShift},
-    nimkit.actionSelector(KosmoNewTerminalAction),
-  )
-  for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
-    let key = nimkit.Key(ord(nimkit.key1) + panelNumber - 1)
-    result.bindKey(
-      key, {nimkit.kmCommand}, nimkit.actionSelector(panelNumber.focusPanelAction())
-    )
-
-func defaultKosmoKeyBindingsPath*(): string =
-  ## Return the standalone editor's user key bindings file path.
-  getConfigDir() / "kosmo" / "keybindings.json"
 
 func toMoeModifiers(modifiers: set[nimkit.KeyModifier]): set[moe.KeyModifier] =
   if nimkit.kmControl in modifiers:
@@ -1354,6 +1266,91 @@ proc finishDockDrag(
   location: nimkit.Point,
 )
 
+proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
+  var keyOutcome: KosmoKeyOutcome
+  if keyEvent.key == nimkit.keyEnter:
+    keyOutcome = view.editor.handleKeyOutcome("Enter")
+  elif keyEvent.text.len > 0 and keyEvent.modifiers - {nimkit.kmShift} == {}:
+    discard view.editor.handleTextInput(keyEvent.text)
+  elif keyEvent.awaitsCommittedText():
+    return false
+  else:
+    let notation = keyEvent.keyNotation()
+    if notation.len > 0:
+      keyOutcome = view.editor.handleKeyOutcome(notation)
+  if keyOutcome.closeTabRequested and not view.tabsDelegate.dockController.isNil:
+    view.tabsDelegate.dockController[].closeCurrentTab(view)
+    return true
+  view.refresh()
+  true
+
+proc paneCommand(event: nimkit.KeyEvent): KosmoPaneCommand =
+  let modifiers = event.modifiers
+  if modifiers - {nimkit.kmControl, nimkit.kmShift} != {}:
+    return
+  if event.key >= nimkit.keyA and event.key <= nimkit.keyZ:
+    let letter = char(ord('a') + ord(event.key) - ord(nimkit.keyA))
+    case letter
+    of 's':
+      if nimkit.kmShift notin modifiers:
+        return kpcSplitBelow
+    of 'v':
+      if nimkit.kmShift notin modifiers:
+        return kpcSplitRight
+    of 'n':
+      if nimkit.kmShift notin modifiers:
+        return kpcNewBelow
+    of 'w':
+      if nimkit.kmShift notin modifiers:
+        return kpcFocusNext
+    of 'h':
+      if nimkit.kmShift notin modifiers:
+        return kpcFocusLeft
+    of 'j':
+      if nimkit.kmShift notin modifiers:
+        return kpcFocusBelow
+    of 'k':
+      if nimkit.kmShift notin modifiers:
+        return kpcFocusAbove
+    of 'l':
+      if nimkit.kmShift notin modifiers:
+        return kpcFocusRight
+    of 'c':
+      if nimkit.kmShift notin modifiers:
+        return kpcClose
+    else:
+      discard
+    return
+  case event.key
+  of nimkit.keyEqual:
+    if nimkit.kmShift in modifiers or event.text == "+": kpcGrowHeight else: kpcEqualize
+  of nimkit.keyMinus:
+    kpcShrinkHeight
+  of nimkit.keyComma:
+    if nimkit.kmShift in modifiers or event.text == "<": kpcShrinkWidth else: kpcNone
+  of nimkit.keyDot:
+    if nimkit.kmShift in modifiers or event.text == ">": kpcGrowWidth else: kpcNone
+  else:
+    kpcNone
+
+proc handlePendingPaneKey(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
+  if not view.pendingPanePrefix:
+    return false
+  view.pendingPanePrefix = false
+  if event.key == nimkit.keyEscape:
+    return true
+  let command = event.paneCommand()
+  if command != kpcNone and not view.tabsDelegate.dockController.isNil and
+      not view.dockGroup.isNil:
+    discard
+      view.tabsDelegate.dockController[].performPaneCommand(view.dockGroup[], command)
+    return true
+
+  # Preserve Moe mappings for continuations Kosmo does not claim.
+  discard view.editor.handleKeyOutcome("C-w")
+  discard view.sendKeyDownToMoe(event)
+  true
+
 proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool =
   if event.kind == nimkit.mtreMouseDown and not view.tabsDelegate.dockController.isNil:
     view.tabsDelegate.dockController[].activateGroup(view)
@@ -1389,22 +1386,9 @@ proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool
     true
   of nimkit.mtreKeyDown:
     let keyEvent = event.keyEvent
-    var keyOutcome: KosmoKeyOutcome
-    if keyEvent.key == nimkit.keyEnter:
-      keyOutcome = view.editor.handleKeyOutcome("Enter")
-    elif keyEvent.text.len > 0 and keyEvent.modifiers - {nimkit.kmShift} == {}:
-      discard view.editor.handleTextInput(keyEvent.text)
-    elif keyEvent.awaitsCommittedText():
-      return false
-    else:
-      let notation = keyEvent.keyNotation()
-      if notation.len > 0:
-        keyOutcome = view.editor.handleKeyOutcome(notation)
-    if keyOutcome.closeTabRequested and not view.tabsDelegate.dockController.isNil:
-      view.tabsDelegate.dockController[].closeCurrentTab(view)
+    if view.handlePendingPaneKey(keyEvent):
       return true
-    view.refresh()
-    true
+    view.sendKeyDownToMoe(keyEvent)
   of nimkit.mtreFlagsChanged:
     true
 
@@ -1414,6 +1398,80 @@ protocol KosmoEditorInput of nimkit.TextInputProtocol:
       view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
       discard view.editor.handleTextInput(text)
       view.refresh()
+
+proc editorCopy(view: KosmoEditorView) =
+  if view.editor.currentSelection().isSome:
+    discard nimkit.generalPasteboard().setPlainText(view.editor.copySelection())
+    view.refresh()
+
+proc editorCut(view: KosmoEditorView) =
+  if view.editor.currentSelection().isSome:
+    discard nimkit.generalPasteboard().setPlainText(view.editor.cutSelection())
+    view.refresh()
+
+proc editorPaste(view: KosmoEditorView) =
+  discard view.editor.handlePaste(nimkit.generalPasteboard().plainText())
+  view.refresh()
+
+protocol KosmoEditorEditingCommands of nimkit.TextEditingCommandProtocol:
+  method copy(view: KosmoEditorView, args: nimkit.ActionArgs) =
+    discard args
+    view.editorCopy()
+
+  method cut(view: KosmoEditorView, args: nimkit.ActionArgs) =
+    discard args
+    view.editorCut()
+
+  method paste(view: KosmoEditorView, args: nimkit.ActionArgs) =
+    discard args
+    view.editorPaste()
+
+  method selectAll(view: KosmoEditorView, args: nimkit.ActionArgs) =
+    discard args
+    discard view.editor.selectAll()
+    view.refresh()
+
+  method undo(view: KosmoEditorView, args: nimkit.ActionArgs) =
+    discard args
+    discard view.editor.undo()
+    view.refresh()
+
+  method redo(view: KosmoEditorView, args: nimkit.ActionArgs) =
+    discard args
+    discard view.editor.redo()
+    view.refresh()
+
+func isEditingAction(action: string): bool =
+  action.kosmoAction().kind == KosmoActionKind.Editing
+
+proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
+  if view.handlePendingPaneKey(event):
+    return true
+  if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
+    return false
+  let controller = view.tabsDelegate.dockController[]
+  if event.key == nimkit.keyForText("w") and event.modifiers == {nimkit.kmControl} and
+      controller.editorInputPolicy != KosmoEditorInputPolicy.Native:
+    if view.editor.mode() == KosmoEditorMode.Normal:
+      view.pendingPanePrefix = true
+      return true
+    return view.sendKeyDownToMoe(event)
+
+  let selector = controller.shortcutBindings.commandFor(event)
+  if selector.isNone or not ($selector.get.name).isEditingAction():
+    return false
+  let sendToMoe =
+    case controller.editorInputPolicy
+    of KosmoEditorInputPolicy.Vim:
+      true
+    of KosmoEditorInputPolicy.Native:
+      false
+    of KosmoEditorInputPolicy.Hybrid:
+      view.editor.mode() notin
+        {KosmoEditorMode.Insert, KosmoEditorMode.Replace, KosmoEditorMode.Visual}
+  if sendToMoe:
+    return view.sendKeyDownToMoe(event)
+  false
 
 protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(view: KosmoEditorView, args: nimkit.TryToPerformArgs): bool =
@@ -1425,6 +1483,13 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       discard controller.focusPanel(panelNumber)
       return true
     case $args.selector.name
+    of KosmoOpenFileAction:
+      if not controller.frontend.isNil:
+        let frontend = controller.frontend[]
+        view.chooseFile(frontend.fileTree, frontend.application)
+    of KosmoQuickOpenAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showQuickOpen()
     of KosmoNewTerminalAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].newTerminal()
@@ -1432,6 +1497,10 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       controller.saveCurrentTab(view)
     of KosmoCloseTabAction:
       controller.closeCurrentTab(view)
+    of KosmoCloseWindowAction:
+      let group = controller.groupForView(view)
+      if not group.isNil:
+        group.window.close()
     of KosmoQuitAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].application.terminate()
@@ -1451,6 +1520,24 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoFindInFilesAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFindInFiles()
+    of KosmoShowSettingsAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showSettings()
+    of KosmoCopyAction:
+      view.editorCopy()
+    of KosmoCutAction:
+      view.editorCut()
+    of KosmoPasteAction:
+      view.editorPaste()
+    of KosmoSelectAllAction:
+      discard view.editor.selectAll()
+      view.refresh()
+    of KosmoUndoAction:
+      discard view.editor.undo()
+      view.refresh()
+    of KosmoRedoAction:
+      discard view.editor.redo()
+      view.refresh()
     else:
       return false
     true
@@ -1619,7 +1706,15 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result.rawEventHandler = proc(event: nimkit.MonoTextRawEvent): bool =
     editorView.handleRawEvent(event)
   discard result.withProtocol(KosmoEditorInput)
+  discard result.withProtocol(KosmoEditorEditingCommands)
   discard result.withProtocol(KosmoEditorCommandDispatch)
+  let keyEquivalentMethod: nimkit.DynamicMethod = proc(
+      self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+  ) =
+    let event = invocation.argsAs(nimkit.KeyEvent)
+    invocation.setResult(KosmoEditorView(self).handleKosmoKeyEquivalent(event))
+  discard
+    result.replaceMethod(nimkitSelectors.performKeyEquivalent(), keyEquivalentMethod)
   result.tabsDelegate = KosmoEditorTabsHandler(editorView: result.unsafeWeakRef())
   discard result.tabsDelegate.withProtocol(KosmoEditorTabsDelegate)
   result.documentTabs.delegate = result.tabsDelegate
@@ -2072,6 +2167,13 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       discard controller.focusPanel(panelNumber)
       return true
     case $args.selector.name
+    of KosmoOpenFileAction:
+      if not controller.frontend.isNil:
+        let frontend = controller.frontend[]
+        group.editorView.chooseFile(frontend.fileTree, frontend.application)
+    of KosmoQuickOpenAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showQuickOpen()
     of KosmoNewTerminalAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].newTerminal()
@@ -2079,6 +2181,8 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       controller.saveCurrentPaneTab(group)
     of KosmoCloseTabAction:
       controller.closeCurrentPaneTab(group)
+    of KosmoCloseWindowAction:
+      group.window.close()
     of KosmoQuitAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].application.terminate()
@@ -2096,6 +2200,24 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
     of KosmoFindInFilesAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFindInFiles()
+    of KosmoShowSettingsAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showSettings()
+    of KosmoCopyAction:
+      group.editorView.editorCopy()
+    of KosmoCutAction:
+      group.editorView.editorCut()
+    of KosmoPasteAction:
+      group.editorView.editorPaste()
+    of KosmoSelectAllAction:
+      discard group.editorView.editor.selectAll()
+      group.editorView.refresh()
+    of KosmoUndoAction:
+      discard group.editorView.editor.undo()
+      group.editorView.refresh()
+    of KosmoRedoAction:
+      discard group.editorView.editor.redo()
+      group.editorView.refresh()
     else:
       return false
     true
@@ -2180,7 +2302,7 @@ proc activeEditorView(controller: KosmoDockController): KosmoEditorView =
 
 proc installShortcutBindings(controller: KosmoDockController, window: nimkit.Window) =
   var bindings = window.keyBindings()
-  for command in KosmoShortcutCommands:
+  for command in kosmoShortcutCommands():
     discard bindings.remove(nimkit.actionSelector(command))
   for binding in controller.shortcutBindings.bindings:
     bindings.add(binding.sequence, binding.selector)
@@ -2590,6 +2712,197 @@ proc splitCurrentPaneTab(
     return false
   controller.finishPaneTabMove(source, target, identifier)
   true
+
+proc splitCurrentBuffer(
+    controller: KosmoDockController,
+    source: KosmoEditorGroup,
+    position: nimkit.DockPosition,
+): bool =
+  let selectedItem = source.pane.documentTabs.selectedDocumentTabItem()
+  if selectedItem.isNil:
+    return
+  var id: KosmoBufferId
+  if not selectedItem.identifier().parseTabIdentifier(id):
+    return controller.splitCurrentPaneTab(source, position)
+  let target = controller.newEditorGroup(source.workspace, source.window, [id])
+  if not source.workspace.splitPanel(source.panel, target.panel, position):
+    controller.removeGroup(target)
+    return
+  controller.activatePaneTab(target, id.tabIdentifier)
+  true
+
+proc splitNewBufferBelow(
+    controller: KosmoDockController, source: KosmoEditorGroup
+): bool =
+  let bufferId = controller.editor.newEmptyBuffer()
+  if bufferId.isNone:
+    return
+  let target =
+    controller.newEditorGroup(source.workspace, source.window, [bufferId.get])
+  if not source.workspace.splitPanel(source.panel, target.panel, nimkit.dpBottom):
+    controller.removeGroup(target)
+    return
+  controller.activatePaneTab(target, bufferId.get.tabIdentifier)
+  true
+
+proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool =
+  if controller.isNil or group.isNil:
+    return
+  controller.activateGroup(group.editorView)
+  discard group.window.makeFirstResponder(group.editorView)
+  group.editorView.refresh()
+  true
+
+proc focusNextGroup(controller: KosmoDockController, source: KosmoEditorGroup): bool =
+  var candidates: seq[KosmoEditorGroup]
+  for group in controller.groups:
+    if group.workspace == source.workspace:
+      candidates.add group
+  let index = candidates.find(source)
+  if candidates.len < 2 or index < 0:
+    return
+  controller.focusGroup(candidates[(index + 1) mod candidates.len])
+
+proc focusSpatialGroup(
+    controller: KosmoDockController,
+    source: KosmoEditorGroup,
+    direction: KosmoPaneCommand,
+): bool =
+  let sourceRect = source.panel.rectToView(source.panel.bounds(), source.workspace)
+  let
+    sourceX = sourceRect.origin.x + sourceRect.size.width * 0.5'f32
+    sourceY = sourceRect.origin.y + sourceRect.size.height * 0.5'f32
+  var
+    target: KosmoEditorGroup
+    bestScore = float32.high
+  for candidate in controller.groups:
+    if candidate == source or candidate.workspace != source.workspace:
+      continue
+    let candidateRect =
+      candidate.panel.rectToView(candidate.panel.bounds(), candidate.workspace)
+    let
+      dx = candidateRect.origin.x + candidateRect.size.width * 0.5'f32 - sourceX
+      dy = candidateRect.origin.y + candidateRect.size.height * 0.5'f32 - sourceY
+      eligible =
+        case direction
+        of kpcFocusLeft:
+          dx < 0.0'f32
+        of kpcFocusRight:
+          dx > 0.0'f32
+        of kpcFocusAbove:
+          dy < 0.0'f32
+        of kpcFocusBelow:
+          dy > 0.0'f32
+        else:
+          false
+    if not eligible:
+      continue
+    let score =
+      case direction
+      of kpcFocusLeft, kpcFocusRight:
+        abs(dx) + abs(dy) * 0.35'f32
+      of kpcFocusAbove, kpcFocusBelow:
+        abs(dy) + abs(dx) * 0.35'f32
+      else:
+        float32.high
+    if score < bestScore:
+      bestScore = score
+      target = candidate
+  controller.focusGroup(target)
+
+proc closePane(controller: KosmoDockController, source: KosmoEditorGroup): bool =
+  if source.workspace.len <= 1:
+    return
+  for document in source.documents:
+    if not document.closeable or not document.close():
+      return
+  var replacement: KosmoEditorGroup
+  for candidate in controller.groups:
+    if candidate != source and candidate.workspace == source.workspace:
+      replacement = candidate
+      break
+  controller.removeGroup(source)
+  controller.focusGroup(replacement)
+
+proc containingSplit(
+    source: KosmoEditorGroup, axis: nimkit.LayoutAxis
+): tuple[splitView: nimkit.SplitView, paneIndex: int] =
+  var child = nimkit.View(source.panel)
+  while not child.isNil:
+    let parent = child.superview()
+    if parent of nimkit.SplitView and nimkit.SplitView(parent).splitAxis == axis:
+      return (
+        splitView: nimkit.SplitView(parent),
+        paneIndex: nimkit.SplitView(parent).paneIndex(child),
+      )
+    child = parent
+  (splitView: nil, paneIndex: -1)
+
+proc resizePane(source: KosmoEditorGroup, axis: nimkit.LayoutAxis, grow: bool): bool =
+  const ResizeStep = 32.0'f32
+  let context = source.containingSplit(axis)
+  if context.splitView.isNil or context.splitView.paneCount() < 2 or
+      context.paneIndex < 0:
+    return
+  let
+    hasFollowing = context.paneIndex < context.splitView.paneCount() - 1
+    dividerIndex =
+      if hasFollowing:
+        context.paneIndex
+      else:
+        context.paneIndex - 1
+    direction =
+      if hasFollowing:
+        (if grow: 1.0'f32 else: -1.0'f32)
+      else:
+        (if grow: -1.0'f32 else: 1.0'f32)
+    position = context.splitView.positionOfDivider(dividerIndex)
+  context.splitView.setPositionOfDivider(
+    dividerIndex, position + direction * ResizeStep
+  )
+  true
+
+proc equalizeSplits(view: nimkit.View) =
+  if view of nimkit.SplitView:
+    let splitView = nimkit.SplitView(view)
+    var state = splitView.captureState()
+    for index in 0 ..< state.fractions.len:
+      state.fractions[index] = 1.0'f32
+    splitView.restoreState(state)
+  for child in view.xSubviews:
+    child.equalizeSplits()
+
+proc performPaneCommand(
+    controller: KosmoDockController, source: KosmoEditorGroup, command: KosmoPaneCommand
+): bool =
+  if controller.isNil or source.isNil:
+    return
+  case command
+  of kpcSplitBelow:
+    controller.splitCurrentBuffer(source, nimkit.dpBottom)
+  of kpcSplitRight:
+    controller.splitCurrentBuffer(source, nimkit.dpRight)
+  of kpcNewBelow:
+    controller.splitNewBufferBelow(source)
+  of kpcFocusNext:
+    controller.focusNextGroup(source)
+  of kpcFocusLeft, kpcFocusBelow, kpcFocusAbove, kpcFocusRight:
+    controller.focusSpatialGroup(source, command)
+  of kpcClose:
+    controller.closePane(source)
+  of kpcGrowHeight:
+    source.resizePane(nimkit.laVertical, true)
+  of kpcShrinkHeight:
+    source.resizePane(nimkit.laVertical, false)
+  of kpcShrinkWidth:
+    source.resizePane(nimkit.laHorizontal, false)
+  of kpcGrowWidth:
+    source.resizePane(nimkit.laHorizontal, true)
+  of kpcEqualize:
+    source.workspace.rootView().equalizeSplits()
+    true
+  of kpcNone:
+    false
 
 proc screenPoint(tabs: nimkit.DocumentTabs, location: nimkit.Point): nimkit.Point =
   let owner = tabs.window()
@@ -3010,6 +3323,76 @@ proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
       frontend.statusLabel.text = outcome.message
     return outcome.applied
 
+proc menuItemWithIdentifier(menu: nimkit.Menu, identifier: string): nimkit.MenuItem =
+  if menu.isNil:
+    return
+  for item in menu.items():
+    if item.identifier() == identifier:
+      return item
+    let nested = item.submenu().menuItemWithIdentifier(identifier)
+    if not nested.isNil:
+      return nested
+
+proc synchronizeKosmoMenuBindings(frontend: KosmoApplication) =
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  let menu = frontend.application.mainMenu()
+  for action in kosmoActions():
+    let item = menu.menuItemWithIdentifier(action.identifier)
+    if item.isNil:
+      continue
+    var found = false
+    for binding in frontend.dockController.shortcutBindings.bindings:
+      if binding.selector == nimkit.actionSelector(action.identifier) and
+          binding.sequence.strokes.len == 1:
+        let stroke = binding.sequence.strokes[0]
+        item.setKeyEquivalent(stroke.key, stroke.modifiers)
+        found = true
+        break
+    if not found:
+      item.setKeyEquivalent("")
+
+proc updateShortcutSettingsWindow(frontend: KosmoApplication) =
+  if frontend.isNil or frontend.xSettingsWindow.isNil:
+    return
+  let controller = frontend.dockController
+  frontend.xSettingsWindow.shortcutProfile = controller.shortcutProfile
+  frontend.xSettingsWindow.editorInputPolicy = controller.editorInputPolicy
+  frontend.xSettingsWindow.shortcuts =
+    controller.shortcutBindings.kosmoShortcutSettings()
+
+proc setShortcutProfile*(frontend: KosmoApplication, profile: KosmoShortcutProfile) =
+  ## Apply a shortcut profile immediately to every Kosmo window and menu.
+  if frontend.isNil or frontend.dockController.isNil or
+      frontend.dockController.shortcutProfile == profile:
+    return
+  let controller = frontend.dockController
+  controller.shortcutProfile = profile
+  controller.shortcutBindings = initKosmoKeyBindings(profile)
+  for host in controller.hosts:
+    controller.installShortcutBindings(host.window)
+  frontend.synchronizeKosmoMenuBindings()
+  frontend.updateShortcutSettingsWindow()
+
+func shortcutProfile*(frontend: KosmoApplication): KosmoShortcutProfile =
+  if frontend.isNil or frontend.dockController.isNil:
+    defaultKosmoShortcutProfile()
+  else:
+    frontend.dockController.shortcutProfile
+
+proc setEditorInputPolicy*(frontend: KosmoApplication, policy: KosmoEditorInputPolicy) =
+  ## Apply Moe/native key routing immediately to every editor pane.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  frontend.dockController.editorInputPolicy = policy
+  frontend.updateShortcutSettingsWindow()
+
+func editorInputPolicy*(frontend: KosmoApplication): KosmoEditorInputPolicy =
+  if frontend.isNil or frontend.dockController.isNil:
+    defaultKosmoEditorInputPolicy()
+  else:
+    frontend.dockController.editorInputPolicy
+
 func settingsWindow*(frontend: KosmoApplication): KosmoSettingsWindow =
   ## Return Kosmo's settings controller after the panel has been created.
   if not frontend.isNil:
@@ -3033,6 +3416,16 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
         if not weakFrontend.isNil:
           weakFrontend[].terminalOptionAsMeta = enabled
       ,
+      shortcutProfile = frontend.dockController.shortcutProfile,
+      shortcutProfileHandler = proc(profile: KosmoShortcutProfile) =
+        if not weakFrontend.isNil:
+          weakFrontend[].setShortcutProfile(profile)
+      ,
+      editorInputPolicy = frontend.dockController.editorInputPolicy,
+      editorInputPolicyHandler = proc(policy: KosmoEditorInputPolicy) =
+        if not weakFrontend.isNil:
+          weakFrontend[].setEditorInputPolicy(policy)
+      ,
       shortcuts = shortcuts,
       moeThemes = moeThemeSettings,
       selectedMoeThemeIdentifier = selectedMoeThemeIdentifier,
@@ -3043,7 +3436,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     )
   else:
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
-    frontend.xSettingsWindow.shortcuts = shortcuts
+    frontend.updateShortcutSettingsWindow()
     frontend.xSettingsWindow.updateMoeThemes(
       moeThemeSettings, selectedMoeThemeIdentifier
     )
@@ -3086,9 +3479,124 @@ proc configureKosmoSettingsMenu(frontend: KosmoApplication) =
       windowMenu[merendaSettingsIndex].isSeparatorItem():
     discard windowMenu.removeItem(windowMenu[merendaSettingsIndex])
 
+proc configureKosmoStandardActionMenus(frontend: KosmoApplication) =
+  let mainMenu = frontend.application.mainMenu()
+  if mainMenu.isNil or mainMenu.len < 3:
+    return
+  let editMenu = mainMenu[2].submenu()
+  if not editMenu.isNil:
+    for item in editMenu.items():
+      let action = item.action()
+      var identifier = ""
+      if action.name == nimkit.undo().name:
+        identifier = KosmoUndoAction
+      elif action.name == nimkit.redo().name:
+        identifier = KosmoRedoAction
+      elif action.name == nimkit.cut().name:
+        identifier = KosmoCutAction
+      elif action.name == nimkit.copy().name:
+        identifier = KosmoCopyAction
+      elif action.name == nimkit.paste().name:
+        identifier = KosmoPasteAction
+      elif action.name == nimkit.selectAll().name:
+        identifier = KosmoSelectAllAction
+      if identifier.len > 0:
+        item.identifier = identifier
+        item.action = nimkit.actionSelector(identifier)
+
+  let applicationMenu = mainMenu[0].submenu()
+  if applicationMenu.isNil:
+    return
+  for item in applicationMenu.items():
+    if item.action().name == nimkit.terminate().name:
+      let weakFrontend = frontend.unsafeWeakRef()
+      item.identifier = KosmoQuitAction
+      item.action = nimkit.actionSelector(KosmoQuitAction)
+      item.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoQuitAction)) do(
+        sender: nimkit.DynamicAgent
+      ):
+        discard sender
+        if not weakFrontend.isNil:
+          discard weakFrontend[].application.terminate()
+      break
+
+proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
+  let windowMenu = frontend.application.windowsMenu()
+  if windowMenu.isNil or not windowMenu.menuItemWithIdentifier(KosmoNextTabAction).isNil:
+    return
+  let weakFrontend = frontend.unsafeWeakRef()
+
+  proc addAction(title, identifier: string) =
+    let item = nimkit.newMenuItem(title, nimkit.actionSelector(identifier))
+    item.identifier = identifier
+    item.target = nimkit.newActionTarget(nimkit.actionSelector(identifier)) do(
+      sender: nimkit.DynamicAgent
+    ):
+      discard sender
+      if weakFrontend.isNil:
+        return
+      let
+        controller = weakFrontend[].dockController
+        group = controller.activePaneGroup()
+      case identifier
+      of KosmoPreviousTabAction:
+        controller.selectRelativePaneTab(group, -1)
+      of KosmoNextTabAction:
+        controller.selectRelativePaneTab(group, 1)
+      of KosmoSplitHorizontalAction:
+        discard controller.splitCurrentPaneTab(group, nimkit.dpBottom)
+      of KosmoSplitVerticalAction:
+        discard controller.splitCurrentPaneTab(group, nimkit.dpRight)
+      of KosmoShowFileExplorerAction:
+        discard weakFrontend[].showFileExplorer()
+      of KosmoFindInFilesAction:
+        discard weakFrontend[].showFindInFiles()
+      else:
+        if identifier.startsWith(KosmoFocusPanelActionPrefix):
+          discard
+            controller.focusPanel(nimkit.actionSelector(identifier).focusPanelNumber())
+    discard windowMenu.addItem(item)
+
+  windowMenu.addSeparator()
+  addAction("Previous Tab", KosmoPreviousTabAction)
+  addAction("Next Tab", KosmoNextTabAction)
+  windowMenu.addSeparator()
+  addAction("Split Below", KosmoSplitHorizontalAction)
+  addAction("Split Right", KosmoSplitVerticalAction)
+  windowMenu.addSeparator()
+  addAction("Show Files", KosmoShowFileExplorerAction)
+  addAction("Find in Files", KosmoFindInFilesAction)
+
+  let
+    focusMenu = nimkit.newMenu("Focus Panel")
+    focusMenuItem = nimkit.newMenuItem("Focus Panel")
+  focusMenuItem.submenu = focusMenu
+  for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
+    let
+      targetPanelNumber = panelNumber
+      identifier = targetPanelNumber.focusPanelAction()
+    let item = nimkit.newMenuItem(
+      "Panel " & $targetPanelNumber, nimkit.actionSelector(identifier)
+    )
+    item.identifier = identifier
+    item.target = nimkit.newActionTarget(nimkit.actionSelector(identifier)) do(
+      sender: nimkit.DynamicAgent
+    ):
+      discard sender
+      if not weakFrontend.isNil:
+        discard weakFrontend[].dockController.focusPanel(targetPanelNumber)
+    discard focusMenu.addItem(item)
+  discard windowMenu.addItem(focusMenuItem)
+
 proc newKosmoApplication*(
     app = nimkit.sharedApplication(), filePath = "", keyBindingsPath = ""
 ): KosmoApplication =
+  var shortcutConfiguration = initKosmoShortcutConfiguration()
+  var keyBindingErrors: seq[string]
+  if keyBindingsPath.len > 0:
+    let loaded = loadKosmoShortcutConfiguration(keyBindingsPath, shortcutConfiguration)
+    shortcutConfiguration = loaded.configuration
+    keyBindingErrors = loaded.errors
   let existingMainMenu = app.mainMenu()
   if existingMainMenu.isNil or existingMainMenu.len < 5 or
       existingMainMenu[1].title != "File" or existingMainMenu[2].title != "Edit" or
@@ -3122,40 +3630,23 @@ proc newKosmoApplication*(
     mainMenu = app.mainMenu()
     fileMenu = nimkit.newMenu("File")
     fileItem = mainMenu[1]
-    openItem = nimkit.newMenuItem(
-      "Open…", nimkit.actionSelector(KosmoOpenFileAction), "o", {nimkit.kmCommand}
-    )
-    quickOpenItem = nimkit.newMenuItem(
-      "Open Quickly…",
-      nimkit.actionSelector(KosmoQuickOpenAction),
-      "p",
-      nimkit.shortcutModifiers(),
-    )
-    terminalItem = nimkit.newMenuItem(
-      "New Terminal",
-      nimkit.actionSelector(KosmoNewTerminalAction),
-      "t",
-      nimkit.shortcutModifiers() + {nimkit.kmShift},
-    )
-    saveItem = nimkit.newMenuItem(
-      "Save", nimkit.actionSelector(KosmoSaveAction), "s", nimkit.shortcutModifiers()
-    )
+    openItem = nimkit.newMenuItem("Open…", nimkit.actionSelector(KosmoOpenFileAction))
+    quickOpenItem =
+      nimkit.newMenuItem("Open Quickly…", nimkit.actionSelector(KosmoQuickOpenAction))
+    terminalItem =
+      nimkit.newMenuItem("New Terminal", nimkit.actionSelector(KosmoNewTerminalAction))
+    saveItem = nimkit.newMenuItem("Save", nimkit.actionSelector(KosmoSaveAction))
     closeTabItem =
-      when defined(macosx) or defined(macos):
-        nimkit.newMenuItem(
-          "Close Tab",
-          nimkit.actionSelector(KosmoCloseTabAction),
-          "w",
-          nimkit.shortcutModifiers(),
-        )
-      else:
-        nimkit.newMenuItem("Close Tab", nimkit.actionSelector(KosmoCloseTabAction))
+      nimkit.newMenuItem("Close Tab", nimkit.actionSelector(KosmoCloseTabAction))
+    closeWindowItem =
+      nimkit.newMenuItem("Close Window", nimkit.actionSelector(KosmoCloseWindowAction))
   editorView.applyKosmoEditorStyle(app.effectiveAppearance())
   openItem.identifier = KosmoOpenFileAction
   quickOpenItem.identifier = KosmoQuickOpenAction
   terminalItem.identifier = KosmoNewTerminalAction
   saveItem.identifier = KosmoSaveAction
   closeTabItem.identifier = KosmoCloseTabAction
+  closeWindowItem.identifier = KosmoCloseWindowAction
   fileItem.submenu = fileMenu
   discard fileMenu.addItem(openItem)
   discard fileMenu.addItem(quickOpenItem)
@@ -3164,12 +3655,7 @@ proc newKosmoApplication*(
   discard fileMenu.addItem(saveItem)
   fileMenu.addSeparator()
   discard fileMenu.addItem(closeTabItem)
-  discard fileMenu.addItem(
-    "Close Window",
-    nimkit.actionSelector("performClose"),
-    "w",
-    nimkit.shortcutModifiers() + {nimkit.kmShift},
-  )
+  discard fileMenu.addItem(closeWindowItem)
 
   splitView.addPane(sidebarPane, minSize = 160.0'f32, maxSize = 420.0'f32)
   splitView.addPane(dockView, minSize = 320.0'f32)
@@ -3200,7 +3686,10 @@ proc newKosmoApplication*(
   )
   let
     controller = KosmoDockController(
-      editor: editorView.editor, shortcutBindings: initKosmoKeyBindings()
+      editor: editorView.editor,
+      shortcutBindings: shortcutConfiguration.bindings,
+      shortcutProfile: shortcutConfiguration.profile,
+      editorInputPolicy: shortcutConfiguration.editorInput,
     )
     mainHost = KosmoDockHost(
       workspace: dockView,
@@ -3229,11 +3718,6 @@ proc newKosmoApplication*(
   documentView.onFocusPanel = proc(panelNumber: int) =
     discard controller.focusPanel(panelNumber)
   controller.hosts.add mainHost
-  var keyBindingResult: nimkit.KeyBindingJsonResult
-  if keyBindingsPath.len > 0:
-    keyBindingResult = controller.shortcutBindings.loadKeyBindingOverridesJson(
-      keyBindingsPath, KosmoShortcutCommands
-    )
   controller.installShortcutBindings(result.window)
   discard controller.newEditorGroup(
     dockView,
@@ -3246,6 +3730,9 @@ proc newKosmoApplication*(
 
   let frontend = result.unsafeWeakRef()
   result.configureKosmoSettingsMenu()
+  result.configureKosmoStandardActionMenus()
+  result.configureKosmoWorkspaceMenu()
+  result.synchronizeKosmoMenuBindings()
   openItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoOpenFileAction)) do(
     sender: nimkit.DynamicAgent
   ):
@@ -3279,6 +3766,14 @@ proc newKosmoApplication*(
     if not frontend.isNil:
       let controller = frontend[].dockController
       controller.closeCurrentPaneTab(controller.activePaneGroup())
+  closeWindowItem.target = nimkit.newActionTarget(
+    nimkit.actionSelector(KosmoCloseWindowAction)
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if not frontend.isNil:
+      let group = frontend[].dockController.activePaneGroup()
+      if not group.isNil:
+        group.window.close()
   fileTree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
     if frontend.isNil:
       return
@@ -3301,8 +3796,8 @@ proc newKosmoApplication*(
   if filePath.len > 0:
     discard result.dockController.activeEditorView().openPath(fileTree, filePath)
     searchPanel.rootPath = fileTree.rootPath
-  if keyBindingResult.errors.len > 0:
-    statusLabel.text = keyBindingResult.errors.join("; ")
+  if keyBindingErrors.len > 0:
+    statusLabel.text = keyBindingErrors.join("; ")
   discard fileTree.startGitStatusMonitoring()
 
 proc loadKosmoKeyBindings*(
@@ -3312,13 +3807,16 @@ proc loadKosmoKeyBindings*(
   if frontend.isNil or frontend.dockController.isNil:
     result.errors.add "The Kosmo frontend is closed"
     return
-  var bindings = initKosmoKeyBindings()
-  result = bindings.loadKeyBindingOverridesJson(path, KosmoShortcutCommands)
-  frontend.dockController.shortcutBindings = bindings
+  let loaded = loadKosmoShortcutConfiguration(path)
+  result.applied = loaded.applied
+  result.errors = loaded.errors
+  frontend.dockController.shortcutBindings = loaded.configuration.bindings
+  frontend.dockController.shortcutProfile = loaded.configuration.profile
+  frontend.dockController.editorInputPolicy = loaded.configuration.editorInput
   for host in frontend.dockController.hosts:
     frontend.dockController.installShortcutBindings(host.window)
-  if not frontend.xSettingsWindow.isNil:
-    frontend.xSettingsWindow.shortcuts = bindings.kosmoShortcutSettings()
+  frontend.synchronizeKosmoMenuBindings()
+  frontend.updateShortcutSettingsWindow()
 
 proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
   ## Open a file or replace the file-tree root with a directory.

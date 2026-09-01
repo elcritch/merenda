@@ -7,23 +7,26 @@ proc pressControlKey(window: Window, key: Key): bool =
   window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: {kmControl}))
 
 suite "Kosmo synthetic shortcut input":
-  test "close tab defaults use a control sequence with a macOS command alias":
+  test "close tab defaults do not consume the Vim control-W namespace":
     let
       bindings = initKosmoKeyBindings()
       controlW = KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
       commandW = KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
+      controlF4 = KeyEvent(key: keyF4, keyCode: keyF4.ord, modifiers: {kmControl})
       firstStroke = bindings.match([controlW])
       closeSequence = bindings.match([controlW, controlW])
       commandShortcut = bindings.match([commandW])
+      fallbackShortcut = bindings.match([controlF4])
 
-    check firstStroke.kind == kbmPrefix
-    check closeSequence.kind == kbmCommand
-    check closeSequence.selector == actionSelector(KosmoCloseTabAction)
+    check firstStroke.kind == kbmNone
+    check closeSequence.kind == kbmNone
     when defined(macosx) or defined(macos):
       check commandShortcut.kind == kbmCommand
       check commandShortcut.selector == actionSelector(KosmoCloseTabAction)
+      check fallbackShortcut.kind == kbmNone
     else:
-      check commandShortcut.kind == kbmNone
+      check fallbackShortcut.kind == kbmCommand
+      check fallbackShortcut.selector == actionSelector(KosmoCloseTabAction)
 
   test "split sequences duplicate a lone empty editor tab":
     let frontend = newKosmoApplication(newApplication("Kosmo Empty Split Test"))
@@ -171,7 +174,7 @@ suite "Kosmo synthetic shortcut input":
     check frontend.window.pressControlKey(keyK)
     check frontend.editorView.editor.tabs()[1].active
 
-  test "Moe receives the full sequence when Kosmo does not own its continuation":
+  test "control-W n creates an empty buffer in a GUI split":
     let
       root = createTempDir("merenda-kosmo-moe-sequence-", "")
       path = root / "matches.txt"
@@ -195,13 +198,94 @@ suite "Kosmo synthetic shortcut input":
     check frontend.window.dispatchKeyDown(
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
-    let cursorBeforeSequence = frontend.editorView.editor.bufferCursor()
-
     check frontend.window.pressControlKey(keyW)
     check frontend.window.dispatchKeyDown(
       KeyEvent(text: "n", key: keyN, keyCode: keyN.ord)
     )
-    check frontend.editorView.editor.bufferCursor() == cursorBeforeSequence
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    check groups[0].pane.documentTabs.documentTabModels()[0].title == "matches.txt"
+    check groups[1].pane.documentTabs.documentTabModels()[0].title == "No Name"
+    check frontend.window.firstResponder == groups[1].editorView
+
+  test "control-W control-W navigates panes and control-W c closes a pane":
+    let frontend = newKosmoApplication(newApplication("Kosmo Vim Pane Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressControlKey(keyV)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    check frontend.window.firstResponder == groups[1].editorView
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.firstResponder == groups[0].editorView
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressControlKey(keyL)
+    check frontend.window.firstResponder == groups[1].editorView
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressControlKey(keyC)
+    check frontend.editorGroups().len == 1
+    check frontend.window.firstResponder == groups[0].editorView
+
+  test "hybrid input keeps insert-mode control-W in Moe":
+    let frontend = newKosmoApplication(newApplication("Kosmo Insert Control-W Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    check frontend.editorView.editor.handleKey("i")
+    check frontend.editorView.editor.handleTextInput("alpha beta")
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.editorView.editor.handleKey("Esc")
+    let tab = frontend.editorView.editor.tabs()[0]
+    check frontend.editorView.editor.bufferText(tab.id).get == "alpha "
+
+  test "native input routes selection and undo through Moe semantics":
+    let
+      frontend = newKosmoApplication(newApplication("Kosmo Native Editing Test"))
+      pasteboard = generalPasteboard()
+      previousClipboard = pasteboard.plainText()
+    defer:
+      discard pasteboard.setPlainText(previousClipboard)
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    frontend.setEditorInputPolicy(KosmoEditorInputPolicy.Native)
+    check frontend.editorView.editor.handleKey("i")
+    check frontend.editorView.editor.handleTextInput("alpha beta")
+    check frontend.editorView.editor.handleKey("Esc")
+    check frontend.editorView.editor.handleKey("0")
+    check frontend.editorView.editor.handleKey("v")
+    check frontend.editorView.editor.handleKey("e")
+
+    let primary = frontend.shortcutProfile().primaryModifiers()
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: primary)
+    )
+    check pasteboard.plainText() == "alpha"
+    check frontend.editorView.editor.currentSelection().isSome
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyX, keyCode: keyX.ord, modifiers: primary)
+    )
+    let tab = frontend.editorView.editor.tabs()[0]
+    check frontend.editorView.editor.bufferText(tab.id).get == " beta"
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyZ, keyCode: keyZ.ord, modifiers: primary)
+    )
+    check frontend.editorView.editor.bufferText(tab.id).get == "alpha beta"
 
   test "Escape cancels a pending sequence before the next shortcut key":
     let

@@ -4,7 +4,7 @@
 ## translate their input and paint the returned cells; Moe implementation types
 ## remain private to this module.
 
-import std/[algorithm, options, os, strutils]
+import std/[algorithm, options, os, strutils, unicode]
 
 import pkg/celina
 from pkg/figdraw import figDataDir
@@ -16,11 +16,15 @@ import
     editor_render_views, frontend_input, handler, completion, command_line, config,
     config_loader, editor_window, encoding, motion,
   ]
-from moepkg/buffer/core import BufferId, getTextString
+import moepkg/buffer/undo as moeUndo
+from moepkg/buffer/core import BufferId, getLine, getTextString, len
+from moepkg/command_handlers/visual_commands import visualDelete
+from moepkg/registers import setYankedRegister
 from moepkg/color import EditorColorPairIndex, Rgb, ThemeColors, isTermDefaultColor
 from moepkg/theme import DefaultColors
 from moepkg/render_utils import steadyBottomAreaHeight
 import moepkg/key_bindings/registry as moeKeys
+import moepkg/modes as moeModes
 import moepkg/types as moeTypes
 
 when hasAsyncSupport:
@@ -82,6 +86,14 @@ type
     focus*: KosmoBufferCursor
     first*: KosmoBufferCursor
     last*: KosmoBufferCursor
+
+  KosmoEditorMode* {.pure.} = enum
+    Normal
+    Insert
+    Replace
+    Visual
+    Command
+    Other
 
   KosmoKeyOutcome* = object ## The semantic outcome of sending a physical key to Moe.
     valid*: bool
@@ -702,6 +714,106 @@ proc selectedText*(editor: KosmoEditor): string =
   ## Return the text selected by Moe's character, block, or line semantics.
   if not editor.isNil and not editor.editor.isNil:
     result = editor.editor.selectedText()
+
+proc mode*(editor: KosmoEditor): KosmoEditorMode =
+  ## Return the active Moe mode reduced to the modes relevant to GUI routing.
+  if editor.isNil or editor.editor.isNil:
+    return KosmoEditorMode.Other
+  case editor.editor.currentMode()
+  of moeModes.EditorMode.Normal:
+    KosmoEditorMode.Normal
+  of moeModes.EditorMode.Insert:
+    KosmoEditorMode.Insert
+  of moeModes.EditorMode.Replace:
+    KosmoEditorMode.Replace
+  of moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
+      moeModes.EditorMode.VisualLine:
+    KosmoEditorMode.Visual
+  of moeModes.EditorMode.Command:
+    KosmoEditorMode.Command
+  else:
+    KosmoEditorMode.Other
+
+proc copySelection*(editor: KosmoEditor): string =
+  ## Copy the active selection into Moe's yank and unnamed registers.
+  if editor.isNil or editor.editor.isNil or editor.currentSelection().isNone:
+    return
+  result = editor.selectedText()
+  let isLine = editor.currentSelection().get.kind == KosmoSelectionKind.Line
+  editor.editor.state.registers.setYankedRegister(result, isLine)
+
+proc cutSelection*(editor: KosmoEditor): string =
+  ## Delete the active selection as one Moe undo transaction.
+  if editor.isNil or editor.editor.isNil or editor.currentSelection().isNone:
+    return
+  result = editor.selectedText()
+  visualDelete(editor.editor.activeBuffer, editor.editor.state)
+  editor.editor.syncActiveWindow()
+  editor.editor.setActiveWindowScreenCursor(editor.editor.activeWindow)
+
+proc selectAll*(editor: KosmoEditor): bool {.discardable.} =
+  ## Select the entire active buffer using Moe's character selection state.
+  if editor.isNil or editor.editor.isNil or editor.editor.activeBuffer.len == 0:
+    return
+  let
+    buffer = editor.editor.activeBuffer
+    lastLine = buffer.len - 1
+    lastColumn = max(buffer.getLine(lastLine).runeLen - 1, 0)
+    currentMode = editor.editor.currentMode()
+  if currentMode notin {
+    moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
+    moeModes.EditorMode.VisualLine,
+  }:
+    editor.editor.state.previousMode = currentMode
+  editor.editor.state.visualSelection = moeTypes.VisualSelection(
+    start: moeTypes.BufferPosition(line: 0, column: 0),
+    current: moeTypes.BufferPosition(line: lastLine, column: lastColumn),
+    active: true,
+    kind: moeTypes.VisualSelectionKind.vskChar,
+  )
+  editor.editor.setMode(moeModes.EditorMode.Visual)
+  editor.editor.activeWindow.cursor = editor.editor.state.visualSelection.current
+  editor.editor.syncActiveWindow()
+  editor.editor.setActiveWindowScreenCursor(editor.editor.activeWindow)
+  true
+
+proc applyUndoPosition(editor: KosmoEditor, position: moeTypes.BufferPosition) =
+  editor.editor.activeWindow.cursor = position
+  editor.editor.activeWindow.preferredColumn = position.column
+  editor.editor.syncActiveWindow()
+  editor.editor.setActiveWindowScreenCursor(editor.editor.activeWindow)
+
+proc undo*(editor: KosmoEditor): bool {.discardable.} =
+  ## Undo one Moe transaction and synchronize its suggested cursor position.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let outcome = moeUndo.undo(editor.editor.activeBuffer)
+  if outcome.isErr:
+    editor.editor.state.statusMessage = outcome.error
+    return
+  editor.applyUndoPosition(outcome.get())
+  true
+
+proc redo*(editor: KosmoEditor): bool {.discardable.} =
+  ## Redo one Moe transaction and synchronize its suggested cursor position.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let outcome = moeUndo.redo(editor.editor.activeBuffer)
+  if outcome.isErr:
+    editor.editor.state.statusMessage = outcome.error
+    return
+  editor.applyUndoPosition(outcome.get())
+  true
+
+proc newEmptyBuffer*(editor: KosmoEditor): Option[KosmoBufferId] =
+  ## Create and activate an empty Moe buffer without creating a Moe split.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let outcome = editor.editor.enew()
+  if outcome.isErr:
+    editor.editor.state.statusMessage = outcome.error
+    return
+  some(editor.editor.activeBuffer.id.toKosmoBufferId)
 
 proc revealLocation*(
     editor: KosmoEditor, line, column: int, centered = false

@@ -206,8 +206,9 @@ suite "Kosmo":
       check frontend.window.dispatchKeyDown(
         KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
       )
-      check frontend.window.dispatchKeyDown(
-        KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {kmControl})
+      check frontend.editorGroups().len == 2
+      check frontend.window.sendAction(
+        actionSelector(KosmoSplitVerticalAction), DynamicAgent(terminalView)
       )
 
       let splitGroups = frontend.editorGroups()

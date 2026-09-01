@@ -285,24 +285,16 @@ suite "Kosmo":
     check not frontend.editorView.editor.tabs()[1].modified
     check "!" in readFile(secondPath)
 
-    check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
-    )
-    check frontend.editorView.editor.tabs().len == 2
-    check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
-    )
-    check frontend.editorView.editor.tabs().len == 1
-    check frontend.editorView.editor.tabs()[0].title == "first.txt"
-
     when defined(macosx) or defined(macos):
-      check frontend.openPath(secondPath)
-      check frontend.editorView.editor.tabs().len == 2
       check frontend.window.dispatchKeyDown(
         KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
       )
-      check frontend.editorView.editor.tabs().len == 1
-      check frontend.editorView.editor.tabs()[0].title == "first.txt"
+    else:
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyF4, keyCode: keyF4.ord, modifiers: {kmControl})
+      )
+    check frontend.editorView.editor.tabs().len == 1
+    check frontend.editorView.editor.tabs()[0].title == "first.txt"
 
   test "JSON can customize Kosmo application shortcuts":
     let

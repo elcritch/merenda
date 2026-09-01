@@ -2,6 +2,9 @@
 
 import ../nimkit as nimkit
 import ./moe
+import ./shortcuts
+
+export shortcuts
 
 const
   KosmoSettingsTabsIdentifier* = "kosmo.settings.tabs"
@@ -10,6 +13,8 @@ const
   KosmoMoeThemesSettingsTabIdentifier* = "kosmo.settings.moeThemes"
   KosmoOptionAsMetaIdentifier* = "kosmo.settings.terminal.optionAsMeta"
   KosmoShortcutsTableIdentifier* = "kosmo.settings.shortcuts.table"
+  KosmoShortcutProfileIdentifier* = "kosmo.settings.shortcuts.profile"
+  KosmoEditorInputPolicyIdentifier* = "kosmo.settings.shortcuts.editorInput"
   KosmoMoeThemesTableIdentifier* = "kosmo.settings.moeThemes.table"
   KosmoMoeThemeSelectorIdentifier* = KosmoMoeThemesTableIdentifier
   KosmoShortcutActionColumnIdentifier* = "action"
@@ -25,6 +30,8 @@ const
 type
   KosmoOptionAsMetaHandler* = proc(enabled: bool) {.closure.}
   KosmoMoeThemeHandler* = proc(identifier: string): bool {.closure.}
+  KosmoShortcutProfileHandler* = proc(profile: KosmoShortcutProfile) {.closure.}
+  KosmoEditorInputPolicyHandler* = proc(policy: KosmoEditorInputPolicy) {.closure.}
 
   KosmoShortcutSetting* = object
     action*: string
@@ -56,6 +63,10 @@ type
     xTabs: nimkit.TabView
     xShortcutsTable: nimkit.TableView
     xShortcutsSource: KosmoShortcutsTableSource
+    xShortcutProfileChoice: nimkit.ComboBox
+    xEditorInputPolicyChoice: nimkit.ComboBox
+    xShortcutProfileHandler: KosmoShortcutProfileHandler
+    xEditorInputPolicyHandler: KosmoEditorInputPolicyHandler
     xMoeThemesTable: nimkit.TableView
     xMoeThemesSource: KosmoMoeThemesTableSource
 
@@ -255,15 +266,11 @@ proc newKosmoMoeThemesTableSource(
   discard result.withProtocol(KosmoMoeThemesTableDelegate)
 
 proc newSettingsPage(): tuple[view: nimkit.View, stack: nimkit.StackView] =
-  result.view = nimkit.newView()
   result.stack = nimkit.newStackView(nimkit.laVertical)
   result.stack.spacing = 12.0
   result.stack.alignment = nimkit.svaFill
-  result.view.addSubview(result.stack)
-  discard result.stack.pinEdges(
-    toGuide = result.view.contentLayoutGuide(nimkit.insets(18.0, 20.0)),
-    edges = {nimkit.leLeft, nimkit.leTop, nimkit.leRight, nimkit.leBottom},
-  )
+  result.stack.edgeInsets = nimkit.insets(18.0, 20.0)
+  result.view = result.stack
 
 proc optionAsMeta*(settings: KosmoSettingsWindow): bool =
   ## Return the current terminal Option/Alt-as-Meta selection.
@@ -282,6 +289,42 @@ proc `shortcuts=`*(
     return
   settings.xShortcutsSource.shortcuts = @shortcuts
   settings.xShortcutsTable.reloadData()
+
+proc shortcutProfile*(settings: KosmoSettingsWindow): KosmoShortcutProfile =
+  ## Return the shortcut profile selected in Settings.
+  if not settings.isNil and not settings.xShortcutProfileChoice.isNil and
+      settings.xShortcutProfileChoice.selectedIndex == 1:
+    KosmoShortcutProfile.MacOS
+  else:
+    KosmoShortcutProfile.Platform
+
+proc `shortcutProfile=`*(settings: KosmoSettingsWindow, profile: KosmoShortcutProfile) =
+  ## Synchronize the shortcut profile control without invoking its action.
+  if not settings.isNil and not settings.xShortcutProfileChoice.isNil:
+    settings.xShortcutProfileChoice.selectedIndex =
+      case profile
+      of KosmoShortcutProfile.Platform: 0
+      of KosmoShortcutProfile.MacOS: 1
+
+proc editorInputPolicy*(settings: KosmoSettingsWindow): KosmoEditorInputPolicy =
+  ## Return the Moe input-routing policy selected in Settings.
+  if settings.isNil or settings.xEditorInputPolicyChoice.isNil:
+    return defaultKosmoEditorInputPolicy()
+  case settings.xEditorInputPolicyChoice.selectedIndex
+  of 0: KosmoEditorInputPolicy.Vim
+  of 1: KosmoEditorInputPolicy.Native
+  else: KosmoEditorInputPolicy.Hybrid
+
+proc `editorInputPolicy=`*(
+    settings: KosmoSettingsWindow, policy: KosmoEditorInputPolicy
+) =
+  ## Synchronize the editor input control without invoking its action.
+  if not settings.isNil and not settings.xEditorInputPolicyChoice.isNil:
+    settings.xEditorInputPolicyChoice.selectedIndex =
+      case policy
+      of KosmoEditorInputPolicy.Vim: 0
+      of KosmoEditorInputPolicy.Native: 1
+      of KosmoEditorInputPolicy.Hybrid: 2
 
 proc selectedMoeThemeIdentifier*(settings: KosmoSettingsWindow): string =
   ## Return the theme selected in the Moe Themes settings tab.
@@ -312,6 +355,10 @@ proc updateMoeThemes*(
 proc newKosmoSettingsWindow*(
     optionAsMeta = true,
     optionAsMetaHandler: KosmoOptionAsMetaHandler = nil,
+    shortcutProfile = defaultKosmoShortcutProfile(),
+    shortcutProfileHandler: KosmoShortcutProfileHandler = nil,
+    editorInputPolicy = defaultKosmoEditorInputPolicy(),
+    editorInputPolicyHandler: KosmoEditorInputPolicyHandler = nil,
     shortcuts: openArray[KosmoShortcutSetting] = [],
     moeThemes: openArray[KosmoMoeThemeSetting] = [],
     selectedMoeThemeIdentifier = "",
@@ -325,6 +372,8 @@ proc newKosmoSettingsWindow*(
     xWindow: nimkit.newPanel("Kosmo Settings", nimkit.rect(180, 160, 760, 420)),
     xContentView: nimkit.newView(),
     xOptionAsMetaHandler: optionAsMetaHandler,
+    xShortcutProfileHandler: shortcutProfileHandler,
+    xEditorInputPolicyHandler: editorInputPolicyHandler,
     xShortcutsSource: shortcutsSource,
     xMoeThemesSource: moeThemesSource,
   )
@@ -337,13 +386,19 @@ proc newKosmoSettingsWindow*(
     shortcutsPage = newSettingsPage()
     moeThemesPage = newSettingsPage()
     optionButton = nimkit.newCheckBox("Use Option/Alt as Meta")
+    shortcutProfileChoice = nimkit.newComboBox(["Platform", "macOS-style"])
+    editorInputPolicyChoice = nimkit.newComboBox(["Vim", "Native", "Hybrid"])
     shortcutsTable = nimkit.newTableView()
     moeThemesTable = nimkit.newTableView()
     optionChanged = nimkit.actionSelector("kosmo.optionAsMetaChanged")
+    shortcutProfileChanged = nimkit.actionSelector("kosmo.shortcutProfileChanged")
+    editorInputPolicyChanged = nimkit.actionSelector("kosmo.editorInputPolicyChanged")
   result.xOptionAsMetaButton = optionButton
   result.xFirstResponder = optionButton
   result.xTabs = tabs
   result.xShortcutsTable = shortcutsTable
+  result.xShortcutProfileChoice = shortcutProfileChoice
+  result.xEditorInputPolicyChoice = editorInputPolicyChoice
   result.xMoeThemesTable = moeThemesTable
 
   optionButton.identifier = KosmoOptionAsMetaIdentifier
@@ -366,6 +421,35 @@ proc newKosmoSettingsWindow*(
     ),
   )
   terminalPage.stack.addFlexibleSpacer()
+
+  shortcutProfileChoice.identifier = KosmoShortcutProfileIdentifier
+  shortcutProfileChoice.accessibilityLabel = "Shortcut profile"
+  shortcutProfileChoice.selectedIndex =
+    case shortcutProfile
+    of KosmoShortcutProfile.Platform: 0
+    of KosmoShortcutProfile.MacOS: 1
+  shortcutProfileChoice.target = nimkit.newActionTarget(shortcutProfileChanged) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    if not settings.xShortcutProfileHandler.isNil:
+      settings.xShortcutProfileHandler(settings.shortcutProfile())
+  shortcutProfileChoice.action = shortcutProfileChanged
+
+  editorInputPolicyChoice.identifier = KosmoEditorInputPolicyIdentifier
+  editorInputPolicyChoice.accessibilityLabel = "Editor input policy"
+  editorInputPolicyChoice.selectedIndex =
+    case editorInputPolicy
+    of KosmoEditorInputPolicy.Vim: 0
+    of KosmoEditorInputPolicy.Native: 1
+    of KosmoEditorInputPolicy.Hybrid: 2
+  editorInputPolicyChoice.target = nimkit.newActionTarget(editorInputPolicyChanged) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    if not settings.xEditorInputPolicyHandler.isNil:
+      settings.xEditorInputPolicyHandler(settings.editorInputPolicy())
+  editorInputPolicyChoice.action = editorInputPolicyChanged
 
   shortcutsTable.identifier = KosmoShortcutsTableIdentifier
   shortcutsTable.accessibilityLabel = "Active Kosmo shortcuts"
@@ -402,7 +486,14 @@ proc newKosmoSettingsWindow*(
   shortcutsTable.delegate = shortcutsSource
   shortcutsPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Active Shortcuts"),
-    nimkit.newLabel("These shortcuts are active in Kosmo and are read-only for now."),
+    nimkit.newLabel("Shortcut profile"),
+    shortcutProfileChoice,
+    nimkit.newLabel("Editor input"),
+    editorInputPolicyChoice,
+    nimkit.newLabel(
+      "Profiles and input routing apply immediately. Individual bindings are " &
+        "configured in keybindings.json."
+    ),
   )
   shortcutsPage.stack.fillAvailableSpace(shortcutsTable)
 
