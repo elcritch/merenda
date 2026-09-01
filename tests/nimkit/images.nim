@@ -164,6 +164,28 @@ suite "nimkit image resources":
     image.unpinImage()
     check not image.isImagePinned()
 
+  test "automatic preload purges preserve live manifests and explicit preloads":
+    clearImageCache()
+    discard purgeAutomaticImagePreloads()
+    let
+      cached = newImageResource(testImage(8, 8), cachePolicy = icpAlways)
+      explicit = newImageResource(testImage(9, 9), cachePolicy = icpAlways)
+    explicit.preloadImage()
+    var manifest = initRenderResourceManifest()
+    manifest.addImage(cached)
+
+    check cached.isImagePreloaded()
+    check explicit.isImagePreloaded()
+    check purgeAutomaticImagePreloads() == 2
+    check not cached.isImagePreloaded()
+    check explicit.isImagePreloaded()
+    check hasImage(cached.imageId())
+
+    manifest = nil
+    check not hasImage(cached.imageId())
+    explicit.unpreloadImage()
+    check not hasImage(explicit.imageId())
+
   test "preload admission is bounded and supports readmission":
     var images: seq[ImageResource]
     for _ in 0 .. MaximumPreloadedImages:
@@ -247,6 +269,7 @@ suite "nimkit image resources":
       let
         first = newImageResource(testImage(2, 2))
         second = newImageResource(testImage(3, 3))
+        cached = newImageResource(testImage(4, 4), cachePolicy = icpAlways)
         manager = newRenderResourceManager()
         recovery = newRecoveryRenderer()
       var manifest = initRenderResourceManifest()
@@ -261,10 +284,12 @@ suite "nimkit image resources":
       recovery.context.packedArea = 255
       manager.prepare(recovery.renderer)
       check manager.metrics.pressureRebuildCount == 1
+      check manager.metrics.automaticPreloadEvictionCount >= 1
       check manager.metrics.atlasRebuildCount >= 2
       check manager.metrics.atlasPackedRatio < ImageAtlasPressureThreshold
       check manager.metrics.replayCount >= 2
       check recovery.context.uploadCount >= 6
+      check not cached.isImagePreloaded()
 
       manager.clear()
       recovery.renderer.processImageMessages()

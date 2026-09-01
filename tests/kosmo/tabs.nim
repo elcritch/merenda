@@ -170,6 +170,7 @@ suite "Kosmo":
     )
     check frontend.editorView.markdownMode(markdownId) == kmmSyntax
     check frontend.editorPane.contentView == View(frontend.editorView)
+    check frontend.editorPane.markdownView.markdown == ""
     check not controls.hidden
     check controls.modeButton.title == "MD"
 
@@ -189,6 +190,7 @@ suite "Kosmo":
 
     check frontend.openPath(textPath)
     check frontend.editorPane.contentView == View(frontend.editorView)
+    check frontend.editorPane.markdownView.markdown == ""
     check controls.hidden
 
   test "application shortcuts save close and cycle the focused editor tabs":

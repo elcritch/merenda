@@ -332,6 +332,49 @@ Setext two
     check requestedUrls == @["asset:logo"]
     check view.textView().attachmentPresentations().len == 1
 
+  test "replacing Markdown releases images that the new document does not use":
+    clearImageCache()
+    let
+      first = newImageResourceFromFile(TestImagePath, name = "markdown-first")
+      second = newImageResourceFromFile(TestImagePath, name = "markdown-second")
+    var requestedUrls: seq[string]
+    let loader: MarkdownImageLoader = proc(url: string): ImageResource =
+      requestedUrls.add(url)
+      case url
+      of "asset:first": first
+      of "asset:second": second
+      else: nil
+    let view = newMarkdownView(
+      "![First](asset:first)", frame = rect(0, 0, 320, 180), imageLoader = loader
+    )
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    check hasImage(first.imageId())
+
+    view.markdown = "![Second](asset:second)"
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    check not hasImage(first.imageId())
+    check hasImage(second.imageId())
+    check requestedUrls == @["asset:first", "asset:second"]
+
+    var style = view.markdownStyle
+    style.bodyFontSize += 1.0'f32
+    view.markdownStyle = style
+    require view.waitForMarkdownRendering()
+    discard buildRenders(view)
+    check requestedUrls == @["asset:first", "asset:second"]
+
+    view.markdown = ""
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    check not hasImage(second.imageId())
+
+    view.markdown = "![First](asset:first)"
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    check requestedUrls == @["asset:first", "asset:second", "asset:first"]
+
   test "parses on a Sigils pool worker and applies the AST on the owning thread":
     let ownerThreadId = getThreadId()
     var imageLoaderThreadId = -1

@@ -107,6 +107,7 @@ type
     storage: TextStorage
     codeBlockRanges: seq[TextRange]
     images: seq[MarkdownImagePresentation]
+    imageUrls: seq[string]
     hasTables: bool
 
   MarkdownBuilder = object
@@ -115,6 +116,7 @@ type
     runs: seq[TextAttributeRun]
     codeBlockRanges: seq[TextRange]
     images: seq[MarkdownImagePresentation]
+    imageUrls: seq[string]
     style: MarkdownStyle
     imageLoader: MarkdownImageLoader
     imageContentTypeLoader: MarkdownImageContentTypeLoader
@@ -370,6 +372,7 @@ proc addBlockBreak(builder: var MarkdownBuilder, attributes: TextAttributes) =
 proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
   let offset = builder.runeLength
   builder.hasTables = builder.hasTables or rendered.hasTables
+  builder.imageUrls.add(rendered.imageUrls)
   builder.text.add rendered.text
   builder.runeLength += rendered.runeLength
   for run in rendered.runs:
@@ -412,6 +415,7 @@ proc renderImage(
     attributes: TextAttributes,
     requestedSize = Size(),
 ) =
+  builder.imageUrls.add(token.url)
   var image: ImageResource
   if not builder.imageLoader.isNil:
     try:
@@ -825,6 +829,7 @@ proc renderTable(
           tableColumnLimit: builder.tableColumnLimit,
         )
         renderedCell.renderInlineChildren(cell, rowAttributes)
+        builder.imageUrls.add(renderedCell.imageUrls)
         renderedRow.cells.add MarkdownTableCell(
           content: renderedCell.tableRunes(),
           alignment: cell.tableAlignment(),
@@ -1075,6 +1080,7 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
     storage: newTextStorage(builder.text, builder.runs),
     codeBlockRanges: builder.codeBlockRanges,
     images: builder.images,
+    imageUrls: builder.imageUrls,
     hasTables: builder.hasTables,
   )
 
@@ -1179,6 +1185,34 @@ protocol MarkdownTextViewDrawing of ViewDrawingProtocol:
         discard context.addImage(rect, presentation.image)
     TextView(textView).drawTextViewContents(context)
 
+func markdownImageCacheKey(view: MarkdownView, url: string): string
+
+proc pruneMarkdownImageCache(view: MarkdownView, imageUrls: openArray[string]) =
+  var activeKeys = initTable[string, bool]()
+  for url in imageUrls:
+    activeKeys[view.markdownImageCacheKey(url)] = true
+
+  var obsoleteKeys: seq[string]
+  for key in view.xImageCache.keys:
+    if key notin activeKeys:
+      obsoleteKeys.add(key)
+  for key in obsoleteKeys:
+    view.xImageCache.del(key)
+
+  obsoleteKeys.setLen(0)
+  for key in view.xImageMediaTypes.keys:
+    if key notin activeKeys:
+      obsoleteKeys.add(key)
+  for key in obsoleteKeys:
+    view.xImageMediaTypes.del(key)
+
+  var obsoleteUrls: seq[string]
+  for url in view.xPendingUrlAssets.keys:
+    if view.markdownImageCacheKey(url) notin activeKeys:
+      obsoleteUrls.add(url)
+  for url in obsoleteUrls:
+    view.xPendingUrlAssets.del(url)
+
 proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) =
   let textView = MarkdownTextView(view.textView())
   textView.codeBlockRanges = document.codeBlockRanges
@@ -1186,6 +1220,7 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
   textView.markdownImages = document.images
   view.xHasMarkdownTables = document.hasTables
   view.textStorage = document.storage
+  view.pruneMarkdownImageCache(document.imageUrls)
   textView.needsDisplay = true
 
 proc applyMarkdownStyle(view: MarkdownView) =
@@ -1271,9 +1306,7 @@ proc markdownUrlAssetDidFinish(view: MarkdownView, handle: UrlAssetHandle) {.slo
     return
   try:
     let key = view.markdownImageCacheKey(url)
-    let image = newImageResourceFromFile(
-      handle.result().path, name = url, cachePolicy = icpBySize
-    )
+    let image = newImageResourceFromFile(handle.result().path, name = url)
     view.xImageCache[key] = image
     view.xImageMediaTypes[key] = handle.result().mediaType
     view.renderCurrentMarkdownDocument()
@@ -1299,14 +1332,12 @@ proc loadMarkdownImage(view: MarkdownView, url: string): ImageResource =
       let parsedUrl = initUrl(url)
       let path = parsedUrl.localFilePath(view.xImageBasePath)
       if path.len > 0 and path.fileExists:
-        result = newImageResourceFromFile(path, name = path, cachePolicy = icpBySize)
+        result = newImageResourceFromFile(path, name = path)
         view.xImageMediaTypes[key] = parsedUrl.mediaType()
       elif parsedUrl.isHttpUrl():
         let handle = view.resolvedUrlAssetLoader().load(url)
         if handle.succeeded():
-          result = newImageResourceFromFile(
-            handle.result().path, name = url, cachePolicy = icpBySize
-          )
+          result = newImageResourceFromFile(handle.result().path, name = url)
           view.xImageMediaTypes[key] = handle.result().mediaType
         else:
           view.xPendingUrlAssets[url] = handle

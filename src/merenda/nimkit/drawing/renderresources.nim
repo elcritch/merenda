@@ -21,6 +21,7 @@ type
     replayCount*: uint64
     generationRecoveryCount*: uint64
     pressureRebuildCount*: uint64
+    automaticPreloadEvictionCount*: uint64
     atlasGeneration*: uint64
     atlasRebuildCount*: uint64
     atlasUsedRatio*: float32
@@ -115,16 +116,21 @@ proc prepare*[BackendState](
   if manager.pressureCooldown > 0:
     dec manager.pressureCooldown
   elif pressure >= manager.pressureThreshold:
-    let minimumSize =
-      if usage.usedRatio() >= manager.pressureThreshold:
-        usage.atlasSize * 2
-      else:
-        usage.atlasSize
-    renderer.rebuildImageAtlas(minimumSize)
-    inc manager.metricsValue.pressureRebuildCount
-    manager.pressureCooldown = manager.pressureCooldownFrames.int
-    manager.replayWorkingSet(renderer)
+    manager.metricsValue.automaticPreloadEvictionCount +=
+      purgeAutomaticImagePreloads().uint64
+    renderer.processImageMessages()
     usage = renderer.atlasUsage()
+    if max(usage.usedRatio(), usage.packedRatio()) >= manager.pressureThreshold:
+      let minimumSize =
+        if usage.usedRatio() >= manager.pressureThreshold:
+          usage.atlasSize * 2
+        else:
+          usage.atlasSize
+      renderer.rebuildImageAtlas(minimumSize)
+      inc manager.metricsValue.pressureRebuildCount
+      manager.pressureCooldown = manager.pressureCooldownFrames.int
+      manager.replayWorkingSet(renderer)
+      usage = renderer.atlasUsage()
 
   manager.metricsValue.atlasUsedRatio = usage.usedRatio()
   manager.metricsValue.atlasPackedRatio = usage.packedRatio()

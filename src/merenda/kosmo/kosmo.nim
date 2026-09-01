@@ -2046,6 +2046,9 @@ protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
 proc setContentView(pane: KosmoEditorPane, contentView: nimkit.View) =
   if pane.isNil or contentView.isNil or pane.contentView == contentView:
     return
+  if pane.contentView == nimkit.View(pane.markdownView) and
+      contentView != nimkit.View(pane.markdownView):
+    pane.markdownView.markdown = ""
   if pane.contentView.isNil:
     pane.addSubview(contentView, positioned = nimkit.svpBelow)
   elif not pane.replaceSubview(pane.contentView, contentView):

@@ -223,6 +223,73 @@ proc cachedAssetPath*(loader: UrlAssetLoader, url: urls.Url): string =
   ## Return the deterministic cache path for a parsed `url` without loading it.
   loader.cachedAssetPath(url.absoluteString())
 
+func urlAssetCacheBaseName(fileName: string): string =
+  var candidate = fileName
+  if candidate.endsWith(".media-type"):
+    candidate.setLen(candidate.len - ".media-type".len)
+  if candidate.len < 64:
+    return
+  for character in candidate[0 ..< 64]:
+    if character notin {'0' .. '9', 'a' .. 'f', 'A' .. 'F'}:
+      return
+  if candidate.len > 64:
+    if candidate[64] != '.' or candidate.len notin 66 .. 80:
+      return
+    for character in candidate[65 .. ^1]:
+      if not character.isAlphaNumeric:
+        return
+  candidate
+
+proc removeCachedAssetFiles(path: string): bool =
+  for candidate in [path, path.urlAssetMetadataPath()]:
+    if fileExists(candidate):
+      removeFile(candidate)
+      result = true
+
+proc removeCachedAsset*(loader: UrlAssetLoader, url: string): bool =
+  ## Remove the cached file and media-type metadata for one completed asset.
+  ##
+  ## An in-flight asset is left alone and returns false, so its worker cannot
+  ## race a cache deletion. This does not invalidate handles already returned.
+  if loader.isNil:
+    raise newException(UrlAssetLoaderClosedError, "URL asset loader is nil")
+  discard url.validateUrlAssetUrl()
+  if url in loader.xActiveUrls:
+    return
+  removeCachedAssetFiles(loader.cachedAssetPath(url))
+
+proc removeCachedAsset*(loader: UrlAssetLoader, url: urls.Url): bool =
+  ## Remove one completed asset addressed by a parsed URL.
+  loader.removeCachedAsset(url.absoluteString())
+
+proc clearCachedAssets*(loader: UrlAssetLoader): int {.discardable.} =
+  ## Remove completed URL assets owned by this loader's cache directory.
+  ##
+  ## Only deterministic URL asset names are touched. Unrelated files and
+  ## in-flight assets remain intact. The result is the number of asset entries
+  ## removed; a data file and its metadata count as one entry.
+  if loader.isNil:
+    raise newException(UrlAssetLoaderClosedError, "URL asset loader is nil")
+  if not dirExists(loader.xCacheDirectory):
+    return
+
+  var paths = initTable[string, bool]()
+  for kind, path in walkDir(loader.xCacheDirectory):
+    if kind != pcFile:
+      continue
+    let baseName = path.extractFilename().urlAssetCacheBaseName()
+    if baseName.len > 0:
+      paths[loader.xCacheDirectory / baseName] = true
+
+  for path in paths.keys:
+    var active = false
+    for url in loader.xActiveUrls.keys:
+      if loader.cachedAssetPath(url) == path:
+        active = true
+        break
+    if not active and removeCachedAssetFiles(path):
+      inc result
+
 proc executeUrlAssetLoad(
   worker: AgentProxy[UrlAssetWorker],
   identifier: uint64,

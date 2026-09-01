@@ -149,6 +149,37 @@ suite "URL asset loader":
     check cached.result().path == handle.result().path
     check cached.result().mediaType == "application/octet-stream"
 
+  test "removes individual or all completed cache entries safely":
+    let cache = createTempDir("merenda-url-assets-", "")
+    defer:
+      removeDir(cache)
+    let loader = newUrlAssetLoader("org.example.merenda-tests", cache)
+    defer:
+      loader.close()
+    let
+      firstUrl = "https://example.test/images/first.png"
+      secondUrl = initUrl("https://example.test/images/second.webp")
+      firstPath = loader.cachedAssetPath(firstUrl)
+      secondPath = loader.cachedAssetPath(secondUrl)
+      unrelatedPath = cache / "keep-me.txt"
+
+    writeFile(firstPath, "first")
+    writeFile(firstPath & ".media-type", "image/png")
+    check loader.removeCachedAsset(firstUrl)
+    check not fileExists(firstPath)
+    check not fileExists(firstPath & ".media-type")
+    check not loader.removeCachedAsset(firstUrl)
+
+    writeFile(firstPath, "first")
+    writeFile(firstPath & ".media-type", "image/png")
+    writeFile(secondPath, "second")
+    writeFile(secondPath & ".media-type", "image/webp")
+    writeFile(unrelatedPath, "unrelated")
+    check loader.clearCachedAssets() == 2
+    check not fileExists(firstPath)
+    check not fileExists(secondPath)
+    check fileExists(unrelatedPath)
+
   test "reports HTTP errors without leaving partial files":
     let
       cache = createTempDir("merenda-url-assets-", "")

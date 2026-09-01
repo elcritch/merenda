@@ -148,6 +148,11 @@ block the GUI. Tests can use `waitForMarkdownLayout()` when they need the settle
 post-resize geometry. See `examples/markdown_viewer_demo.nim` for a
 complete window.
 
+Each applied document retains only its own decoded images. Replacing the source
+drops stale image resources, allowing FigDraw's managed render refs to remove
+unused atlas entries. Under atlas pressure, NimKit also purges optional automatic
+preloads before rebuilding and replaying the live render working set.
+
 Language-tagged fenced code blocks use the same frontend-neutral
 `SyntaxHighlighter` boundary as `SynEditView`. A highlighter returns rune-based
 `SyntaxTokenSpan` values; `MarkdownStyle.syntaxTokenColors` maps their classes to
@@ -190,6 +195,8 @@ beside the cached asset and falls back to the URL extension when the server omit
 it. The Foundation-style `Url` value is also accepted by workspace, pasteboard,
 document, and panel handlers while existing string APIs remain supported. The
 default per-asset limit is 64 MiB and can be changed with `maximumAssetBytes`.
+Call `removeCachedAsset` to evict one completed download or `clearCachedAssets`
+to remove all recognized entries while preserving unrelated and in-flight files.
 
 The application run loop keeps NimKit views, responders, signal-slot dispatch,
 animations, native windows, and platform services on the main thread. When the

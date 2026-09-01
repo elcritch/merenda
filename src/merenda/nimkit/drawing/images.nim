@@ -322,6 +322,21 @@ proc unpreloadImage*(image: ImageResource) =
     preloadedImageOrder.removePreloadOrder(image.xImageId)
     image.releaseUnusedRenderingRef()
 
+proc purgeAutomaticImagePreloads*(): int {.discardable.} =
+  ## Release image refs retained only by the bounded automatic preload cache.
+  ##
+  ## Explicit preloads and pins remain intact. Live render manifests also keep
+  ## their own refs, so purging cannot remove an image from an in-use render.
+  ensureNamedImages()
+  var evicted = newSeqOfCap[ImageResource](automaticPreloadedImages.len)
+  for image in automaticPreloadedImages.values:
+    evicted.add(image)
+  automaticPreloadedImages.clear()
+  automaticPreloadedImageOrder.setLen(0)
+  for image in evicted:
+    image.releaseUnusedRenderingRef()
+  evicted.len
+
 proc isImagePreloaded*(image: ImageResource): bool =
   if image.isNil:
     return false
