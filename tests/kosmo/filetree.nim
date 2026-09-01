@@ -102,6 +102,29 @@ suite "Kosmo":
     check tree.rowCount() == 4
     check tree.outlineItemWithIdentifier(nestedFile).leaf
 
+  test "file tree appends ordered top-level folders":
+    let
+      workspace = createTempDir("merenda-kosmo-tree-roots-", "")
+      firstRoot = workspace / "first"
+      secondRoot = workspace / "second"
+    createDir(firstRoot)
+    createDir(secondRoot)
+    defer:
+      removeDir(secondRoot)
+      removeDir(firstRoot)
+      removeDir(workspace)
+
+    let tree = newKosmoFileTree(firstRoot)
+    check tree.rootPaths == @[absolutePath(firstRoot)]
+    check tree.addRootPath(secondRoot)
+    check tree.rootPaths == @[absolutePath(firstRoot), absolutePath(secondRoot)]
+    check tree.outlineItemWithIdentifier(firstRoot).parentIdentifier.len == 0
+    check tree.outlineItemWithIdentifier(secondRoot).parentIdentifier.len == 0
+    check not tree.addRootPath(secondRoot)
+
+    tree.rootPath = firstRoot
+    check tree.rootPaths == @[absolutePath(firstRoot)]
+
   test "file tree exposes Git file badges and descendant folder colors":
     let
       root = createTempDir("merenda-kosmo-tree-git-", "")

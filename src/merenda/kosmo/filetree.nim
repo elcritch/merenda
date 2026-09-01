@@ -14,6 +14,7 @@ type
 
   KosmoFileTree* = ref object of nimkit.OutlineView
     xRootPath: string
+    xRootPaths: seq[string]
     xFileSystem: nimkit.FileSystemBrowserModel
     xChildren: Table[string, seq[string]]
     xOnOpenFile: FileTreeOpenHandler
@@ -38,8 +39,7 @@ proc loadChildPaths(tree: KosmoFileTree, parentIdentifier: string) =
     return
   var children: seq[string]
   if parentIdentifier.len == 0:
-    if tree.xRootPath.len > 0:
-      children.add tree.xRootPath
+    children.add tree.xRootPaths
   elif parentIdentifier.expandableDirectory():
     for entry in tree.xFileSystem.entries(parentIdentifier):
       children.add entry.path
@@ -98,7 +98,7 @@ proc includeGitState(
 
 proc isWithinHiddenDirectory(tree: KosmoFileTree, path: string): bool =
   var currentPath = path
-  while currentPath.len > 0 and currentPath != tree.xRootPath:
+  while currentPath.len > 0 and currentPath notin tree.xRootPaths:
     if currentPath.extractFilename().startsWith(".") and dirExists(currentPath):
       return true
     let parentPath = currentPath.parentDir()
@@ -121,7 +121,7 @@ proc gitDecoration(tree: KosmoFileTree, path: string): nimkit.OutlineItemDecorat
       return nimkit.initOutlineItemDecoration(
         color = some(GitIgnoredColor), tooltip = nimkit.gfsIgnored.gitStateTitle()
       )
-    if parentPath == tree.xRootPath:
+    if parentPath in tree.xRootPaths:
       break
     let nextParent = parentPath.parentDir()
     if nextParent == parentPath:
@@ -171,7 +171,7 @@ protocol KosmoFileTreeDataSource of nimkit.OutlineViewDataSource:
       identifier,
       identifier.fileBrowserDisplayName(),
       parentIdentifier =
-        if identifier == tree.xRootPath:
+        if identifier in tree.xRootPaths:
           ""
         else:
           identifier.parentDir(),
@@ -215,7 +215,19 @@ proc fileTreeRowWasActivated(
     tree.xOnOpenFile(path, tree.xOpenDisposition)
 
 proc rootPath*(tree: KosmoFileTree): string =
+  ## Return the first project root, used by single-root services such as Git.
   tree.xRootPath
+
+proc rootPaths*(tree: KosmoFileTree): lent seq[string] =
+  ## Return the file browser's ordered top-level folders.
+  tree.xRootPaths
+
+proc reloadRoots(tree: KosmoFileTree, expanded: seq[string]) =
+  tree.xFileSystem.invalidate()
+  tree.xChildren.clear()
+  tree.expandedItemIdentifiers = expanded
+  tree.selectedItemIdentifier = ""
+  tree.reloadOutlineData()
 
 proc `rootPath=`*(tree: KosmoFileTree, path: string) =
   let next =
@@ -223,23 +235,44 @@ proc `rootPath=`*(tree: KosmoFileTree, path: string) =
       absolutePath(path)
     else:
       ""
-  if tree.xRootPath == next:
+  let nextRoots =
+    if next.len > 0:
+      @[next]
+    else:
+      @[]
+  if tree.xRootPath == next and tree.xRootPaths == nextRoots:
     return
   tree.xRootPath = next
+  tree.xRootPaths = nextRoots
   tree.xGitFileStates.clear()
   tree.xGitDescendantStates.clear()
   if not tree.xGitStatusService.isNil:
     tree.xGitStatusService.rootPath = next
-  tree.xFileSystem.invalidate()
-  tree.xChildren.clear()
   let expanded =
     if next.len > 0:
       @[next]
     else:
       @[]
-  tree.expandedItemIdentifiers = expanded
-  tree.selectedItemIdentifier = ""
-  tree.reloadOutlineData()
+  tree.reloadRoots(expanded)
+
+proc addRootPath*(tree: KosmoFileTree, path: string): bool {.discardable.} =
+  ## Append a directory to the browser's ordered top-level folders.
+  if tree.isNil or path.len == 0 or not dirExists(path):
+    return
+  let next = absolutePath(path)
+  if next in tree.xRootPaths:
+    return
+  if tree.xRootPath.len == 0:
+    tree.xRootPath = next
+    tree.xGitFileStates.clear()
+    tree.xGitDescendantStates.clear()
+    if not tree.xGitStatusService.isNil:
+      tree.xGitStatusService.rootPath = next
+  tree.xRootPaths.add next
+  var expanded = tree.expandedItemIdentifiers()
+  expanded.add next
+  tree.reloadRoots(expanded)
+  result = true
 
 proc refresh*(tree: KosmoFileTree) =
   ## Discard cached directory listings and reload the visible hierarchy.
