@@ -1831,6 +1831,42 @@ suite "NimKit TableView":
     check texts.contains("name:2")
     check texts.contains("age:2")
 
+  test "table view fills the viewport after a data reload adds rows":
+    let
+      tableView = newTableView(frame = rect(0, 0, 260, 260))
+      source = newTableDataSourceSpy(4)
+
+    tableView.showsHeader = false
+    tableView.addColumn(newTableColumn("name", "Name", width = 200.0))
+    tableView.dataSource = source
+
+    discard tableView.renderedTexts()
+    check tableView.visibleRowSummaries().len == 4
+
+    source.rows = 20
+    tableView.reloadData()
+
+    check not tableView.needsLayout()
+    check tableView.visibleRowSummaries().len > 4
+    let texts = tableView.renderedTexts()
+    check texts.contains("name:9")
+
+  test "table row updates fill the viewport immediately":
+    let
+      tableView = newTableView(frame = rect(0, 0, 260, 260))
+      source = newTableDataSourceSpy(4)
+
+    tableView.showsHeader = false
+    tableView.addColumn(newTableColumn("name", "Name", width = 200.0))
+    tableView.dataSource = source
+
+    discard tableView.renderedTexts()
+    source.rows = 20
+    tableView.insertRowsAtIndexes([4])
+
+    check not tableView.needsLayout()
+    check tableView.visibleRowSummaries().len > 4
+
   test "table view reloadData refreshes hosted cell views from updated data":
     let
       tableView = newTableView(frame = rect(0, 0, 320, 46))

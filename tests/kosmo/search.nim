@@ -12,6 +12,14 @@ proc renderedFigText(node: Fig): string =
   for rune in node.textLayout.runes:
     result.add rune.toUTF8()
 
+proc renderedTexts(view: View): seq[string] =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkText:
+      result.add node.renderedFigText()
+
 proc hasSidebarPaneOutline(
     view: View, outlineColor: Color, outlineWidth: float32
 ): bool =
@@ -632,6 +640,51 @@ suite "Kosmo":
     check panel.waitForSearch(timeoutMilliseconds = 10_000)
     check panel.resultsView.matches.len == 2
     check panel.resultsView.matches[1].path == latePath
+
+  test "find sidebar materializes all visible rows after streamed results grow":
+    let
+      root = createTempDir("merenda-kosmo-find-stream-render-", "")
+      nested = root / "nested"
+      panel = newKosmoFileSearchPanel(root)
+      window = newWindow("Kosmo Find Stream Render Test", rect(0, 0, 320, 420))
+    createDir(nested)
+    writeFile(root / "00-initial.txt", "needle\n" & repeat('x', 8 * 1024 * 1024))
+    defer:
+      panel.close()
+      window.close()
+      removeDir(root)
+
+    window.setContentView(panel)
+    panel.frame = window.contentView().bounds()
+    panel.layoutSubtreeIfNeeded()
+    check window.makeFirstResponder(panel.queryField)
+    check window.dispatchTextInput("needle")
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    let handle = panel.activeSearch()
+
+    let deadline = getMonoTime() + initDuration(seconds = 10)
+    while panel.resultsView.matches.len == 0 and getMonoTime() < deadline:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      if panel.resultsView.matches.len == 0:
+        sleep(1)
+
+    check panel.resultsView.matches.len == 1
+    check not handle.isFinished()
+    check window.contentView().renderedTexts().contains("00-initial.txt")
+
+    for index in 0 ..< 24:
+      writeFile(nested / ("late-" & align($index, 2, '0') & ".txt"), "needle\n")
+
+    check panel.waitForSearch(timeoutMilliseconds = 10_000)
+    check panel.resultsView.matches.len == 25
+    check not panel.resultsView.needsLayout()
+
+    let
+      visibleRows = panel.resultsView.visibleRowSummaries()
+      texts = window.contentView().renderedTexts()
+    check visibleRows.len > 12
+    for row in visibleRows:
+      check texts.contains(row.text)
 
   test "find results group by file and reveal more matches in fixed-size pages":
     let

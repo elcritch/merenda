@@ -3299,6 +3299,7 @@ proc reloadData*(tableView: TableView) =
     tableView.scrollItemToVisible(tableView.xSelectedIndex)
   tableView.invalidateIntrinsicContentSize()
   tableView.invalidateTableRows()
+  tableView.layoutTableContentIfNeeded()
 
 proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdate]) =
   if updates.len == 0:
@@ -3338,6 +3339,7 @@ proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdat
     tableView.clearEditingSurface()
   tableView.invalidateTableWidthMeasurement()
   tableView.invalidateTableRows()
+  tableView.layoutTableContentIfNeeded()
   emit tableView.tableRowsDidUpdate(DynamicAgent(tableView), @updates)
 
 proc beginTableUpdates*(tableView: TableView) =
