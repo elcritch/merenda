@@ -148,10 +148,13 @@ block the GUI. Tests can use `waitForMarkdownLayout()` when they need the settle
 post-resize geometry. See `examples/markdown_viewer_demo.nim` for a
 complete window.
 
-Each applied document retains only its own decoded images. Replacing the source
-drops stale image resources, allowing FigDraw's managed render refs to remove
-unused atlas entries. Under atlas pressure, NimKit also purges optional automatic
-preloads before rebuilding and replaying the live render working set.
+Each applied document retains only its own decoded images. Markdown downsamples
+large sources to their maximum display size before publishing them to the static
+FigDraw renderer. Replacing the source drops stale image resources, allowing
+FigDraw's managed render refs to remove unused atlas entries. When the live
+working set contracts, NimKit shrinks an expanded atlas back toward its initial
+size and replays the resources that remain. Under atlas pressure, it first purges
+optional automatic preloads before rebuilding the live render working set.
 
 Language-tagged fenced code blocks use the same frontend-neutral
 `SyntaxHighlighter` boundary as `SynEditView`. A highlighter returns rune-based

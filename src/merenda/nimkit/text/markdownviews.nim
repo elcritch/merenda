@@ -7,7 +7,11 @@
 ## explicitly, remote images load through a Chronos worker, and unavailable
 ## images use linked alt text.
 
-import std/[lists, monotimes, os, strutils, tables, times, unicode]
+import std/[lists, math, monotimes, os, strutils, tables, times, unicode]
+
+when not defined(useNativeDynlib):
+  import std/hashes
+  from pkg/pixie import resize
 
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8
@@ -294,6 +298,23 @@ func resolvedImageSize(imageSize, requestedSize: Size): Size =
     )
   else:
     imageSize
+
+proc imageForMarkdownDisplay(view: MarkdownView, image: ImageResource): ImageResource =
+  when defined(useNativeDynlib):
+    result = image
+  else:
+    if image.isNil:
+      return
+    let
+      sourceSize = image.size()
+      displaySize = sourceSize.scaledDown(view.xMarkdownStyle.maximumImageSize)
+      width = max(1, ceil(displaySize.width).int)
+      height = max(1, ceil(displaySize.height).int)
+    if width >= sourceSize.width.int and height >= sourceSize.height.int:
+      return image
+    let name =
+      "markdown.scaled:" & $Hash(image.imageId()) & ":" & $width & "x" & $height
+    result = newImageResource(image.pixels().resize(width, height), name = name)
 
 proc imageLineFontSize(attributes: TextAttributes, imageHeight: float32): float32 =
   let
@@ -1306,7 +1327,9 @@ proc markdownUrlAssetDidFinish(view: MarkdownView, handle: UrlAssetHandle) {.slo
     return
   try:
     let key = view.markdownImageCacheKey(url)
-    let image = newImageResourceFromFile(handle.result().path, name = url)
+    let image = view.imageForMarkdownDisplay(
+      newImageResourceFromFile(handle.result().path, name = url)
+    )
     view.xImageCache[key] = image
     view.xImageMediaTypes[key] = handle.result().mediaType
     view.renderCurrentMarkdownDocument()
@@ -1341,10 +1364,11 @@ proc loadMarkdownImage(view: MarkdownView, url: string): ImageResource =
           view.xImageMediaTypes[key] = handle.result().mediaType
         else:
           view.xPendingUrlAssets[url] = handle
+    if not result.isNil:
+      result = view.imageForMarkdownDisplay(result)
+      view.xImageCache[key] = result
   except CatchableError:
-    discard
-  if not result.isNil:
-    view.xImageCache[key] = result
+    result = nil
 
 ## Emitted on the view's owning thread after the latest parse is applied.
 ## `workerThreadId` is `-1` only for a custom parser configuration that must
@@ -1663,7 +1687,11 @@ proc `markdownStyle=`*(view: MarkdownView, style: MarkdownStyle) =
   ## Applies `style` and incrementally rerenders the current source.
   if view.xMarkdownStyle == style:
     return
+  let maximumImageSizeChanged =
+    view.xMarkdownStyle.maximumImageSize != style.maximumImageSize
   view.xMarkdownStyle = style
+  if maximumImageSizeChanged:
+    view.xImageCache.clear()
   view.applyMarkdownStyle()
   view.renderCurrentMarkdownDocument()
 

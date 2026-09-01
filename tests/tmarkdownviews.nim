@@ -2,6 +2,9 @@ import std/[monotimes, os, strformat, strutils, times, unicode, unittest]
 
 import figdraw
 
+when not defined(useNativeDynlib):
+  import pkg/pixie
+
 import merenda/nimkit
 
 const
@@ -184,6 +187,33 @@ Setext two
         check node.screenBox.w == 40.0'f32
         check node.screenBox.h == 40.0'f32
     check imageCount == 2
+
+  when not defined(useNativeDynlib):
+    test "Markdown downsamples decoded images to their maximum display size":
+      clearImageCache()
+      let
+        messages = newImageMessageSubscription()
+        sourceImage = newImageResource(newImage(2000, 1000), name = "large-markdown")
+      var style = initMarkdownStyle()
+      style.maximumImageSize = initSize(100.0'f32, 100.0'f32)
+      let loader: MarkdownImageLoader = proc(url: string): ImageResource =
+        discard url
+        sourceImage
+      let view =
+        newMarkdownView("![Large](asset:large)", style = style, imageLoader = loader)
+      require view.waitForMarkdownParsing()
+      discard buildRenders(view)
+
+      var
+        message: ImageMsg
+        uploadedWidth, uploadedHeight: int
+      while messages.tryRecvImageMsg(message):
+        if message.kind == ImkPutPixie:
+          uploadedWidth = message.pimg.width
+          uploadedHeight = message.pimg.height
+      check uploadedWidth == 100
+      check uploadedHeight == 50
+      check not hasImage(sourceImage.imageId())
 
   test "HTML img tags render through the Markdown image loader":
     const

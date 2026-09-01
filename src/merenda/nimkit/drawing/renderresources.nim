@@ -11,6 +11,7 @@ import ./images
 const
   ImageAtlasPressureThreshold* = 0.88'f32
   ImageAtlasPressureCooldownFrames* = 120
+  ImageAtlasShrinkWorkingSetDivisor* = 4
 
 type
   RenderResourceManifest* = ref object
@@ -21,6 +22,7 @@ type
     replayCount*: uint64
     generationRecoveryCount*: uint64
     pressureRebuildCount*: uint64
+    atlasShrinkRebuildCount*: uint64
     automaticPreloadEvictionCount*: uint64
     atlasGeneration*: uint64
     atlasRebuildCount*: uint64
@@ -32,6 +34,8 @@ type
     pressureThreshold: float32
     pressureCooldownFrames: Natural
     pressureCooldown: int
+    initialAtlasSize: int
+    atlasHighWaterUsedArea: int
     metricsValue: RenderResourceMetrics
 
 proc initRenderResourceManifest*(): RenderResourceManifest =
@@ -101,6 +105,9 @@ proc prepare*[BackendState](
   if manager.isNil or renderer.isNil:
     return
 
+  if manager.initialAtlasSize <= 0:
+    manager.initialAtlasSize = renderer.atlasUsage().atlasSize
+
   let generationBefore = renderer.atlasGeneration()
   renderer.processImageMessages()
   if renderer.atlasGeneration() != generationBefore:
@@ -108,12 +115,27 @@ proc prepare*[BackendState](
     manager.replayWorkingSet(renderer)
 
   var usage = renderer.atlasUsage()
+  manager.atlasHighWaterUsedArea = max(manager.atlasHighWaterUsedArea, usage.usedArea)
   let pressure = max(usage.usedRatio(), usage.packedRatio())
   manager.metricsValue.atlasUsedRatio = usage.usedRatio()
   manager.metricsValue.atlasPackedRatio = usage.packedRatio()
   manager.metricsValue.atlasHighWaterRatio =
     max(manager.metricsValue.atlasHighWaterRatio, pressure)
-  if manager.pressureCooldown > 0:
+  let shouldShrink =
+    manager.initialAtlasSize > 0 and usage.atlasSize > manager.initialAtlasSize and
+    manager.atlasHighWaterUsedArea > 0 and
+    usage.usedArea.int64 * ImageAtlasShrinkWorkingSetDivisor.int64 <=
+    manager.atlasHighWaterUsedArea.int64
+  if shouldShrink:
+    let previousAtlasSize = usage.atlasSize
+    renderer.rebuildImageAtlas(manager.initialAtlasSize)
+    manager.replayWorkingSet(renderer)
+    usage = renderer.atlasUsage()
+    if usage.atlasSize < previousAtlasSize:
+      inc manager.metricsValue.atlasShrinkRebuildCount
+    manager.atlasHighWaterUsedArea = usage.usedArea
+    manager.pressureCooldown = manager.pressureCooldownFrames.int
+  elif manager.pressureCooldown > 0:
     dec manager.pressureCooldown
   elif pressure >= manager.pressureThreshold:
     manager.metricsValue.automaticPreloadEvictionCount +=
@@ -131,6 +153,8 @@ proc prepare*[BackendState](
       manager.pressureCooldown = manager.pressureCooldownFrames.int
       manager.replayWorkingSet(renderer)
       usage = renderer.atlasUsage()
+      manager.atlasHighWaterUsedArea =
+        max(manager.atlasHighWaterUsedArea, usage.usedArea)
 
   manager.metricsValue.atlasUsedRatio = usage.usedRatio()
   manager.metricsValue.atlasPackedRatio = usage.packedRatio()

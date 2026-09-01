@@ -8,6 +8,10 @@ import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 
+const
+  RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
+  TestImagePath = RepositoryRoot / "data" / "img1.png"
+
 func center(rect: Rect): Point =
   initPoint(
     rect.origin.x + rect.size.width / 2.0'f32,
@@ -192,6 +196,44 @@ suite "Kosmo":
     check frontend.editorPane.contentView == View(frontend.editorView)
     check frontend.editorPane.markdownView.markdown == ""
     check controls.hidden
+
+  test "closing the last Markdown tab releases its rendered images":
+    let
+      root = createTempDir("merenda-kosmo-markdown-close-", "")
+      markdownPath = root / "README.md"
+      imagePath = root / "preview.png"
+    writeFile(markdownPath, "# Preview\n\n![Preview](preview.png)\n")
+    copyFile(TestImagePath, imagePath)
+    defer:
+      removeFile(markdownPath)
+      removeFile(imagePath)
+      removeDir(root)
+
+    clearImageCache()
+    let frontend = newKosmoApplication(newApplication("Kosmo Markdown Close Test"))
+    defer:
+      frontend.close()
+    check frontend.openPath(markdownPath)
+    require frontend.editorPane.markdownView.waitForMarkdownParsing()
+    let renders = buildRenders(frontend.editorPane.markdownView)
+    var
+      renderedImageId: ImageId
+      foundImage = false
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkImage:
+        renderedImageId = node.image.id
+        foundImage = true
+        break
+    require foundImage
+    check hasImage(renderedImageId)
+    check frontend.documentTabs.len == 1
+
+    check frontend.documentTabs.closeDocumentTabAtIndex(0)
+    check frontend.editorPane.contentView == View(frontend.editorView)
+    check frontend.editorPane.markdownView.markdown == ""
+    require frontend.editorPane.markdownView.waitForMarkdownParsing()
+    discard buildRenders(frontend.editorPane.markdownView)
+    check not hasImage(renderedImageId)
 
   test "application shortcuts save close and cycle the focused editor tabs":
     let

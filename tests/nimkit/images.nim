@@ -18,6 +18,7 @@ when not defined(useNativeDynlib):
   type RecoveryContext = ref object of BackendContext
     entries: Table[Hash, figdraw.Rect]
     entryMetadata: Table[Hash, AtlasEntryMeta]
+    atlasSizeValue: int
     packedArea: int
     uploadCount: int
     resetOnSecondUpload: bool
@@ -29,7 +30,7 @@ when not defined(useNativeDynlib):
     context.entryMetadata
 
   method atlasSize*(context: RecoveryContext): int =
-    16
+    context.atlasSizeValue
 
   method atlasPackedArea*(context: RecoveryContext): int =
     context.packedArea
@@ -42,7 +43,8 @@ when not defined(useNativeDynlib):
     if context.resetOnSecondUpload and context.uploadCount == 2:
       context.resetOnSecondUpload = false
       context.resetImageAtlas(16)
-    context.entries[key] = figdraw.rect(0, 0, 1.0'f32 / 16.0'f32, 1.0'f32 / 16.0'f32)
+    let atlasSize = context.atlasSizeValue.float32
+    context.entries[key] = figdraw.rect(0, 0, 1.0'f32 / atlasSize, 1.0'f32 / atlasSize)
 
   method putImage*(context: RecoveryContext, key: Hash, image: Image) =
     discard image
@@ -52,7 +54,7 @@ when not defined(useNativeDynlib):
     context.recordImageUpload(image.id.Hash)
 
   method resetImageAtlas*(context: RecoveryContext, minimumSize: int) =
-    discard minimumSize
+    context.atlasSizeValue = plannedAtlasSize(16, minimumSize)
     context.entries.clear()
     context.entryMetadata.clear()
     context.packedArea = 0
@@ -64,6 +66,7 @@ when not defined(useNativeDynlib):
     result.context = RecoveryContext(
       entries: initTable[Hash, figdraw.Rect](),
       entryMetadata: initTable[Hash, AtlasEntryMeta](),
+      atlasSizeValue: 16,
       packedArea: 255,
       resetOnSecondUpload: true,
     )
@@ -293,3 +296,42 @@ suite "nimkit image resources":
 
       manager.clear()
       recovery.renderer.processImageMessages()
+
+    test "managed resources shrink a grown atlas after its working set contracts":
+      clearImageCache()
+      discard purgeAutomaticImagePreloads()
+      let
+        retainedImage = newImageResource(testImage(2, 2))
+        releasedImage = newImageResource(testImage(8, 8))
+        manager = newRenderResourceManager()
+        recovery = newRecoveryRenderer()
+      recovery.context.resetOnSecondUpload = false
+      recovery.context.packedArea = 0
+      manager.prepare(recovery.renderer)
+
+      var
+        retainedManifest = initRenderResourceManifest()
+        releasedManifest = initRenderResourceManifest()
+      retainedManifest.addImage(retainedImage)
+      releasedManifest.addImage(releasedImage)
+      manager.prepare(recovery.renderer)
+
+      recovery.context.atlasSizeValue = 64
+      recovery.context.entries[retainedImage.imageId().Hash] =
+        figdraw.rect(0, 0, 1.0'f32 / 64.0'f32, 1.0'f32 / 64.0'f32)
+      recovery.context.entries[releasedImage.imageId().Hash] =
+        figdraw.rect(0, 0, 0.5, 0.5)
+      recovery.context.entryMetadata[retainedImage.imageId().Hash] =
+        AtlasEntryMeta(kind: aekImage, imageId: retainedImage.imageId())
+      recovery.context.entryMetadata[releasedImage.imageId().Hash] =
+        AtlasEntryMeta(kind: aekImage, imageId: releasedImage.imageId())
+      recovery.context.packedArea = 1024
+      manager.prepare(recovery.renderer)
+      check recovery.context.atlasSizeValue == 64
+
+      releasedManifest = nil
+      manager.prepare(recovery.renderer)
+      check recovery.context.atlasSizeValue == 16
+      check retainedImage.imageId().Hash in recovery.context.entries
+      check releasedImage.imageId().Hash notin recovery.context.entries
+      check manager.metrics.atlasShrinkRebuildCount == 1
