@@ -7,8 +7,8 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
-    filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen, settings,
-    shortcuts,
+    cli, filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen,
+    settings, shortcuts,
   ]
 import pkg/celina as celina
 
@@ -87,6 +87,9 @@ type
 
   KosmoPaneIndicator = ref object of nimkit.View
 
+  KosmoMarkdownView = ref object of nimkit.MarkdownView
+    editorView: WeakRef[KosmoEditorView]
+
   KosmoMarkdownControls* = ref object of nimkit.Box
     modeButton*: nimkit.Button
     colorModeButton*: nimkit.Button
@@ -124,7 +127,7 @@ type
     documentTabs*: nimkit.DocumentTabs
     editorView*: KosmoEditorView
     commandBar*: KosmoCommandBar
-    markdownView*: nimkit.MarkdownView
+    markdownView*: KosmoMarkdownView
     markdownControls*: KosmoMarkdownControls
     contentView*: nimkit.View
     activeIndicator: KosmoPaneIndicator
@@ -244,6 +247,7 @@ proc newTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.}
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
+proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
 proc groupForView(
   controller: KosmoDockController, view: KosmoEditorView
 ): KosmoEditorGroup
@@ -1251,6 +1255,8 @@ proc openPaneDocument(
   controller: KosmoDockController, group: KosmoEditorGroup, document: KosmoPaneDocument
 ): bool
 
+proc openPath(view: KosmoEditorView, tree: KosmoFileTree, path: string): bool
+
 proc selectRelativePaneTab(
   controller: KosmoDockController, group: KosmoEditorGroup, offset: int
 )
@@ -1350,6 +1356,30 @@ proc handlePendingPaneKey(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   discard view.editor.handleKeyOutcome("C-w")
   discard view.sendKeyDownToMoe(event)
   true
+
+proc handleMarkdownPaneKey(view: KosmoMarkdownView, event: nimkit.KeyEvent): bool =
+  ## Route scoped pane commands from a focused Markdown preview.
+  if view.isNil or view.editorView.isNil:
+    return false
+  let editorView = view.editorView[]
+  if editorView.tabsDelegate.isNil or editorView.tabsDelegate.dockController.isNil or
+      editorView.dockGroup.isNil:
+    return false
+  if editorView.pendingPanePrefix:
+    editorView.pendingPanePrefix = false
+    if event.key == nimkit.keyEscape:
+      return true
+    let command = event.paneCommand()
+    if command != kpcNone:
+      discard editorView.tabsDelegate.dockController[].performPaneCommand(
+        editorView.dockGroup[], command
+      )
+      return true
+    return false
+  if event.key == nimkit.keyForText("w") and event.modifiers == {nimkit.kmControl}:
+    editorView.pendingPanePrefix = true
+    return true
+  false
 
 proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool =
   if event.kind == nimkit.mtreMouseDown and not view.tabsDelegate.dockController.isNil:
@@ -1575,6 +1605,23 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
       elif not view.editor.selectTab(id):
         view.lastTabs.setLen(0)
       view.refresh()
+
+  method didDoubleClickDocumentTab(
+      handler: KosmoEditorTabsHandler,
+      tabs: nimkit.DocumentTabs,
+      item: nimkit.DocumentTabItem,
+  ) =
+    discard tabs
+    let view = handler.targetView()
+    if view.isNil or view.syncingTabs:
+      return
+    var id: KosmoBufferId
+    if not item.identifier.parseTabIdentifier(id):
+      return
+    for tab in view.editor.tabs():
+      if tab.id == id and tab.temporary and tab.filePath.isSome:
+        discard view.openFile(tab.filePath.get)
+        return
 
   method shouldCloseDocumentTab(
       handler: KosmoEditorTabsHandler,
@@ -2222,12 +2269,46 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
       return false
     true
 
+proc localMarkdownLinkPath(pane: KosmoEditorPane, link: string): string =
+  let url = nimkit.initUrl(link)
+  if not url.isFileUrl() or (not url.hasScheme() and url.host().len > 0):
+    return
+  let path = url.localFilePath(pane.markdownView.imageBasePath)
+  if path.len > 0:
+    result = absolutePath(path)
+
+protocol KosmoMarkdownLinkDelegate of nimkit.TextViewDelegateProtocol:
+  method tvClickedLink(
+      pane: KosmoEditorPane,
+      textView: nimkit.TextView,
+      link: string,
+      range: nimkit.TextRange,
+  ): bool =
+    if textView.attachmentAtIndex(int(range.location)).attachment.identifier.len > 0:
+      return true
+    let path = pane.localMarkdownLinkPath(link)
+    if path.len == 0:
+      return link.len > 0
+    if not fileExists(path) and not dirExists(path):
+      return false
+    if pane.dockGroup.isNil:
+      return false
+    let group = pane.dockGroup[]
+    if group.editorView.tabsDelegate.dockController.isNil:
+      return false
+    let controller = group.editorView.tabsDelegate.dockController[]
+    if controller.frontend.isNil:
+      return false
+    group.editorView.openPath(controller.frontend[].fileTree, path)
+
 proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   let
     commandBar = newKosmoCommandBar(editorView)
-    markdownView = nimkit.newMarkdownView(syntaxHighlighter = moeSyntaxHighlighter)
+    markdownView = KosmoMarkdownView()
     markdownControls = newKosmoMarkdownControls(editorView)
     activeIndicator = newKosmoPaneIndicator()
+  markdownView.initMarkdownViewFields(syntaxHighlighter = moeSyntaxHighlighter)
+  markdownView.editorView = editorView.unsafeWeakRef()
   result = KosmoEditorPane(
     documentTabs: editorView.documentTabs,
     editorView: editorView,
@@ -2246,6 +2327,20 @@ proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   result.addSubview(markdownControls)
   discard result.withProtocol(KosmoEditorPaneLayout)
   discard result.withProtocol(KosmoEditorPaneCommandDispatch)
+  discard result.withProtocol(KosmoMarkdownLinkDelegate)
+  let keyEquivalentMethod: nimkit.DynamicMethod = proc(
+      self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+  ) =
+    let event = invocation.argsAs(nimkit.KeyEvent)
+    let markdownView = KosmoMarkdownView(self)
+    if markdownView.handleMarkdownPaneKey(event):
+      invocation.setResult(true)
+    else:
+      invocation.setResult(markdownView.handleMarkdownNavigationKey(event))
+  discard result.markdownView.replaceMethod(
+    nimkitSelectors.performKeyEquivalent(), keyEquivalentMethod
+  )
+  result.markdownView.textView().delegate = nimkit.DynamicAgent(result)
 
 proc groupForView(
     controller: KosmoDockController, view: KosmoEditorView
@@ -2398,7 +2493,7 @@ proc focusPanel(controller: KosmoDockController, panelNumber: int): bool =
 
   let responder =
     if document.isNil or document.preferredFirstResponder.isNil:
-      nimkit.Responder(group.editorView)
+      group.preferredPaneResponder()
     else:
       nimkit.Responder(document.preferredFirstResponder)
   result = group.window.makeFirstResponder(responder)
@@ -2745,11 +2840,17 @@ proc splitNewBufferBelow(
   controller.activatePaneTab(target, bufferId.get.tabIdentifier)
   true
 
+proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder =
+  if group.pane.contentView == nimkit.View(group.pane.markdownView):
+    nimkit.Responder(group.pane.markdownView)
+  else:
+    nimkit.Responder(group.editorView)
+
 proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool =
   if controller.isNil or group.isNil:
     return
   controller.activateGroup(group.editorView)
-  discard group.window.makeFirstResponder(group.editorView)
+  discard group.window.makeFirstResponder(group.preferredPaneResponder())
   group.editorView.refresh()
   true
 
@@ -3909,9 +4010,10 @@ proc runKosmo*(filePath = "") =
   frontend.application.run()
 
 when isMainModule:
-  let filePath =
-    if paramCount() > 0:
-      paramStr(1)
-    else:
-      ""
-  runKosmo(filePath)
+  let commandLine = parseKosmoCommandLine(commandLineParams())
+  if commandLine.help:
+    echo KosmoUsage
+  elif commandLine.background:
+    launchKosmoInBackground(commandLine.arguments)
+  else:
+    runKosmo(commandLine.filePath)

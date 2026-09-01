@@ -137,6 +137,10 @@ protocol DocumentTabsDelegate {.selectorScope: protocol.}:
 
   method didSelectDocumentTab*(tabs: DocumentTabs, item: DocumentTabItem) {.optional.}
 
+  method didDoubleClickDocumentTab*(
+    tabs: DocumentTabs, item: DocumentTabItem
+  ) {.optional.}
+
   method shouldCloseDocumentTab*(
     tabs: DocumentTabs, item: DocumentTabItem, index: int
   ): bool {.optional.}
@@ -1046,6 +1050,12 @@ proc didSelect(tabs: DocumentTabs, item: DocumentTabItem) =
     discard
       delegate.sendLocalIfHandled(didSelectDocumentTab(), (tabs: tabs, item: item))
 
+proc didDoubleClick(tabs: DocumentTabs, item: DocumentTabItem) =
+  let delegate = tabs.delegate()
+  if not delegate.isNil:
+    discard
+      delegate.sendLocalIfHandled(didDoubleClickDocumentTab(), (tabs: tabs, item: item))
+
 proc shouldClose(tabs: DocumentTabs, item: DocumentTabItem, index: int): bool =
   if item.isNil or not tabs.allowsClosing() or not item.closeable():
     return false
@@ -1931,7 +1941,10 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
       true
     of dthTab:
       if pressed == tabs.documentTabIndexAtPoint(event.location):
+        let item = tabs.xItems[pressed]
         discard tabs.selectDocumentTabAtIndex(pressed)
+        if event.clickCount >= 2 and pressed >= 0 and pressed < tabs.xItems.len:
+          tabs.didDoubleClick(item)
       else:
         tabs.needsDisplay = true
       true

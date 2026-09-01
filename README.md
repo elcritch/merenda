@@ -595,6 +595,13 @@ panels in creation order. For example:
 }
 ```
 
+Run `kosmo --bg [file-or-folder]` to launch the standalone editor detached from
+the invoking shell. Kosmo preserves the current working directory, forwards the
+remaining command-line arguments to its detached process, and disconnects its
+standard input, output, and error streams. Use `kosmo --help` to see the
+available standalone options. Use `kosmo --bg -- --dash-prefixed-path` when the
+path itself starts with a dash.
+
 Kosmo Settings includes a Moe Themes tab. It provides Catppuccin Mocha and
 Latte, Tokyo Night Moon, Kanagawa Wave, and One Dark alongside Moe's default
 theme. It also lists every `.toml` theme installed in `~/.config/moe/themes`,

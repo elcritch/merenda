@@ -30,6 +30,25 @@ proc renderedTexts(view: View): seq[string] =
     if node.kind == nkText:
       result.add node.renderedText()
 
+proc clickMarkdownLink(view: MarkdownView, label: string): bool =
+  let index = view.textStorage.stringValue.find(label)
+  doAssert index >= 0, "Markdown preview should contain link: " & label
+  let caret = view.textView().layoutManager().caretRect(index)
+  view.textView().clickTextAtPoint(
+    initPoint(caret.origin.x, caret.origin.y + caret.size.height * 0.5'f32)
+  )
+
+proc clickMarkdownImage(view: MarkdownView, url: string): bool =
+  let storage = view.textStorage
+  for index in 0 ..< storage.len:
+    let attachment = storage.attributesAt(index).attachment
+    if attachment.identifier.len > 0 and attachment.fileUrl == url:
+      let caret = view.textView().layoutManager().caretRect(index)
+      return view.textView().clickTextAtPoint(
+          initPoint(caret.origin.x, caret.origin.y + caret.size.height * 0.5'f32)
+        )
+  doAssert false, "Markdown preview should contain image: " & url
+
 suite "Kosmo":
   test "recognizes conventional Markdown file extensions":
     for path in ["README.md", "guide.MARKDOWN", "notes.mkd", "manual.mdtext"]:
@@ -86,6 +105,68 @@ suite "Kosmo":
     check frontend.documentTabs.documentTabModels().len == 1
     check "NORMAL" in frontend.statusLabel.text
     check "second.txt" in frontend.statusLabel.text
+
+  test "double clicking a preview tab promotes it":
+    let
+      root = createTempDir("merenda-kosmo-preview-tab-promotion-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+      thirdPath = root / "third.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    writeFile(thirdPath, "third")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeFile(thirdPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Preview Tab Promotion"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 640, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    check frontend.editorView.previewFile(firstPath)
+    check frontend.editorView.previewFile(secondPath)
+    var tabs = frontend.editorView.editor.tabs()
+    check tabs.len == 1
+    check tabs[0].title == "second.txt"
+    check tabs[0].temporary
+
+    check frontend.editorView.previewFile(firstPath)
+    tabs = frontend.editorView.editor.tabs()
+    check tabs.len == 1
+    check tabs[0].title == "first.txt"
+    check tabs[0].temporary
+    check KosmoPreviewTabStyleClass in
+      frontend.documentTabs.documentTabModels()[0].styleClasses
+
+    let tabPoint = frontend.documentTabs.pointToWindow(
+      frontend.documentTabs.documentTabRect(0).center()
+    )
+    check frontend.window.mouseDownAt(tabPoint, clickCount = 2)
+    check frontend.window.mouseUpAt(tabPoint, clickCount = 2)
+    tabs = frontend.editorView.editor.tabs()
+    check tabs.len == 1
+    check tabs[0].title == "first.txt"
+    check not tabs[0].temporary
+    check KosmoPreviewTabStyleClass notin
+      frontend.documentTabs.documentTabModels()[0].styleClasses
+
+    check frontend.window.mouseDownAt(tabPoint, clickCount = 2)
+    check frontend.window.mouseUpAt(tabPoint, clickCount = 2)
+    check frontend.editorView.editor.tabs().len == 1
+    check not frontend.editorView.editor.tabs()[0].temporary
+
+    check frontend.editorView.previewFile(thirdPath)
+    tabs = frontend.editorView.editor.tabs()
+    check tabs.len == 2
+    check tabs[0].title == "first.txt"
+    check not tabs[0].temporary
+    check tabs[1].title == "third.txt"
+    check tabs[1].temporary
 
   test "Markdown tabs preview live Moe buffers and toggle to syntax":
     let
@@ -196,6 +277,87 @@ suite "Kosmo":
     check frontend.editorPane.contentView == View(frontend.editorView)
     check frontend.editorPane.markdownView.markdown == ""
     check controls.hidden
+
+  test "Markdown preview opens local links through Kosmo tabs":
+    let
+      root = createTempDir("merenda-kosmo-markdown-links-", "")
+      docs = root / "docs"
+      markdownPath = root / "README.md"
+      relativeTarget = docs / "target file.md"
+      absoluteTarget = root / "absolute.txt"
+      fileUrlTarget = root / "file target.txt"
+      imagePath = root / "preview.png"
+      fileUrl = "file://" & absolutePath(fileUrlTarget).replace(" ", "%20")
+      source = """
+[relative](docs/target%20file.md#details)
+[absolute]($1#details)
+[file URL]($2#details)
+[missing](docs/missing.txt)
+[fragment](#details)
+[web](https://example.test/guide)
+[mail](mailto:reader@example.test)
+[other](vscode://file/example)
+[directory](docs/)
+![Local image](preview.png)
+"""
+        .replace("$1", absolutePath(absoluteTarget))
+        .replace("$2", fileUrl)
+    createDir(docs)
+    writeFile(relativeTarget, "# Relative target\n")
+    writeFile(absoluteTarget, "absolute target")
+    writeFile(fileUrlTarget, "file URL target")
+    copyFile(TestImagePath, imagePath)
+    writeFile(markdownPath, source)
+    defer:
+      removeFile(markdownPath)
+      removeFile(relativeTarget)
+      removeFile(absoluteTarget)
+      removeFile(fileUrlTarget)
+      removeFile(imagePath)
+      removeDir(docs)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Markdown Links Test"))
+    defer:
+      frontend.close()
+    frontend.contentView.frame = rect(0, 0, 720, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(markdownPath)
+    require frontend.editorPane.markdownView.waitForMarkdownParsing()
+
+    let preview = frontend.editorPane.markdownView
+    check not preview.clickMarkdownLink("missing")
+    check preview.clickMarkdownLink("fragment")
+    check preview.clickMarkdownLink("web")
+    check preview.clickMarkdownLink("mail")
+    check preview.clickMarkdownLink("other")
+    check preview.clickMarkdownLink("directory")
+    check preview.clickMarkdownImage("preview.png")
+    check frontend.editorView.editor.tabs().len == 1
+    check normalizedPath(frontend.fileTree.rootPath) ==
+      normalizedPath(absolutePath(docs))
+
+    check preview.clickMarkdownLink("relative")
+    check frontend.editorView.editor.tabs().len == 2
+    check frontend.editorView.editor.tabs()[^1].filePath.get ==
+      absolutePath(relativeTarget)
+    require preview.waitForMarkdownParsing()
+    check frontend.editorPane.contentView == View(preview)
+    check preview.markdown.strip() == "# Relative target"
+
+    check frontend.openPath(markdownPath)
+    require preview.waitForMarkdownParsing()
+    check preview.clickMarkdownLink("absolute")
+    check frontend.editorView.editor.tabs().len == 3
+    check frontend.editorView.editor.tabs()[^1].filePath.get ==
+      absolutePath(absoluteTarget)
+
+    check frontend.openPath(markdownPath)
+    require preview.waitForMarkdownParsing()
+    check preview.clickMarkdownLink("file URL")
+    check frontend.editorView.editor.tabs().len == 4
+    check frontend.editorView.editor.tabs()[^1].filePath.get ==
+      absolutePath(fileUrlTarget)
 
   test "closing the last Markdown tab releases its rendered images":
     let

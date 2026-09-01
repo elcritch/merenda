@@ -19,6 +19,8 @@ import sigils/[core, threads]
 import threading/smartptrs
 
 import ../accessibility/accessibility
+import ../app/[animationproperties, animations]
+from ../app/windows import Window, startAnimation, stopAnimation
 import ../drawing
 import ../foundation/events
 import ../foundation/mainthreadwork
@@ -188,10 +190,15 @@ type
     xMarkdownTableColumnLimit: int
     xMarkdownTableResizeGeneration: uint64
     xMarkdownTableResizePending: bool
+    xKeyboardScrollAnimation: Animation
+    xKeyboardScrollTarget: Point
 
 const
   MarkdownRenderBlocksPerChunk = 16
   MarkdownRenderChunkBudgetNanoseconds = 4_000_000'i64
+  MarkdownKeyboardScrollDuration = initDuration(milliseconds = 140)
+  MarkdownKeyboardScrollRows = 4.0'f32
+  MarkdownKeyboardPageFraction = 0.25'f32
 
 var defaultMarkdownUrlAssetLoader {.threadvar.}: UrlAssetLoader
 
@@ -1621,7 +1628,61 @@ proc selectable*(view: MarkdownView): bool =
   discard view
   true
 
-proc handleMarkdownNavigationKey(view: MarkdownView, event: KeyEvent): bool =
+proc clampMarkdownKeyboardScrollTarget(scrollView: ScrollView, target: Point): Point =
+  let maximum = scrollView.maximumContentOffset()
+  initPoint(
+    min(max(target.x, 0.0'f32), maximum.x), min(max(target.y, 0.0'f32), maximum.y)
+  )
+
+proc finishMarkdownKeyboardScroll(view: MarkdownView) {.slot.} =
+  view.xKeyboardScrollAnimation = nil
+
+proc stopMarkdownKeyboardScroll(view: MarkdownView) =
+  let animation = view.xKeyboardScrollAnimation
+  if animation.isNil:
+    return
+  view.xKeyboardScrollAnimation = nil
+  let owner = view.window()
+  if owner of Window:
+    discard Window(owner).stopAnimation(animation)
+  else:
+    animation.stop()
+
+proc scrollMarkdownBy(view: MarkdownView, delta: Point) =
+  let scrollView = view.scrollView()
+  if scrollView.isNil:
+    return
+  let
+    current = scrollView.contentOffset()
+    start =
+      if not view.xKeyboardScrollAnimation.isNil and
+          view.xKeyboardScrollAnimation.isRunning:
+        view.xKeyboardScrollTarget
+      else:
+        current
+    target = scrollView.clampMarkdownKeyboardScrollTarget(
+      initPoint(start.x + delta.x, start.y + delta.y)
+    )
+  view.stopMarkdownKeyboardScroll()
+  if target == current:
+    return
+
+  let animation = newContentOffsetAnimation(
+    scrollView,
+    current,
+    target,
+    duration = MarkdownKeyboardScrollDuration,
+    timing = easeOutTiming(),
+  )
+  view.xKeyboardScrollTarget = target
+  view.xKeyboardScrollAnimation = Animation(animation)
+  animation.connect(finished, view, finishMarkdownKeyboardScroll)
+  let owner = view.window()
+  if not (owner of Window) or not Window(owner).startAnimation(animation):
+    view.xKeyboardScrollAnimation = nil
+    scrollView.contentOffset = target
+
+proc handleMarkdownNavigationKey*(view: MarkdownView, event: KeyEvent): bool =
   if view.isNil or event.modifiers != {}:
     return
   let scrollView = view.scrollView()
@@ -1630,18 +1691,30 @@ proc handleMarkdownNavigationKey(view: MarkdownView, event: KeyEvent): bool =
   let delta =
     case event.key
     of keyArrowLeft:
-      initPoint(-scrollView.lineScroll(laHorizontal), 0.0'f32)
+      initPoint(
+        -scrollView.lineScroll(laHorizontal) * MarkdownKeyboardScrollRows, 0.0'f32
+      )
     of keyArrowRight:
-      initPoint(scrollView.lineScroll(laHorizontal), 0.0'f32)
-    of keyArrowUp, keyK:
+      initPoint(
+        scrollView.lineScroll(laHorizontal) * MarkdownKeyboardScrollRows, 0.0'f32
+      )
+    of keyArrowUp:
+      initPoint(
+        0.0'f32, -scrollView.lineScroll(laVertical) * MarkdownKeyboardScrollRows
+      )
+    of keyArrowDown:
+      initPoint(0.0'f32, scrollView.lineScroll(laVertical) * MarkdownKeyboardScrollRows)
+    of keyK:
       initPoint(0.0'f32, -scrollView.lineScroll(laVertical))
-    of keyArrowDown, keyJ:
+    of keyJ:
       initPoint(0.0'f32, scrollView.lineScroll(laVertical))
     of keySpace:
-      initPoint(0.0'f32, scrollView.pageScroll(laVertical))
+      initPoint(
+        0.0'f32, scrollView.viewportSize().height * MarkdownKeyboardPageFraction
+      )
     else:
       return
-  scrollView.scrollBy(delta)
+  view.scrollMarkdownBy(delta)
   true
 
 protocol MarkdownViewKeyEquivalents of ResponderCommandDispatchProtocol:

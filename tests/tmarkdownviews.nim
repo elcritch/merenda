@@ -767,7 +767,7 @@ Press <kbd>Enter</kbd>.
     require view.waitForMarkdownParsing()
     check view.textStorage().stringValue() == "~~literal~~"
 
-  test "markdown view scrolls with arrows j k and space":
+  test "markdown view keyboard scrolling is smooth, accumulated, and bounded":
     let
       source = (("wide markdown row ".repeat(40)) & "\n\n").repeat(60)
       view = newMarkdownView(source, frame = rect(0, 0, 260, 120))
@@ -782,32 +782,59 @@ Press <kbd>Enter</kbd>.
       scrollView = view.scrollView()
       lineX = scrollView.lineScroll(laHorizontal)
       lineY = scrollView.lineScroll(laVertical)
-      pageY = scrollView.pageScroll(laVertical)
-    require scrollView.maximumContentOffset().x > lineX
-    require scrollView.maximumContentOffset().y > pageY
+      arrowX = lineX * 4.0'f32
+      arrowY = lineY * 4.0'f32
+      pageY = scrollView.viewportSize().height * 0.25'f32
+    require scrollView.maximumContentOffset().x > arrowX * 2.0'f32
+    require scrollView.maximumContentOffset().y > arrowY * 8.0'f32 + pageY
     require window.makeFirstResponder(view)
 
     check window.dispatchKeyDown(
       KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
     )
-    check scrollView.contentOffset().x == lineX
-    check window.dispatchKeyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
     check scrollView.contentOffset().x == 0.0'f32
+    check window.animationScheduler().tick(70.ms) == 1
+    check scrollView.contentOffset().x > 0.0'f32
+    check scrollView.contentOffset().x < arrowX
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
+    )
+    check window.animationScheduler().tick(140.ms) == 1
+    check scrollView.contentOffset().x == arrowX * 2.0'f32
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
+    check window.animationScheduler().tick(140.ms) == 1
+    check scrollView.contentOffset().x == arrowX
 
     check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
-    check scrollView.contentOffset().y == lineY
+    check window.animationScheduler().tick(70.ms) == 1
+    check scrollView.contentOffset().y > 0.0'f32
+    check scrollView.contentOffset().y < arrowY
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check window.animationScheduler().tick(140.ms) == 1
+    check scrollView.contentOffset().y == arrowY * 2.0'f32
     check window.dispatchKeyDown(KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord))
-    check scrollView.contentOffset().y == 0.0'f32
+    check window.animationScheduler().tick(140.ms) == 1
+    check scrollView.contentOffset().y == arrowY
 
     check window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ, keyCode: keyJ.ord))
-    check scrollView.contentOffset().y == lineY
+    check window.animationScheduler().tick(140.ms) == 1
+    check scrollView.contentOffset().y == arrowY + lineY
     check window.dispatchKeyDown(KeyEvent(text: "k", key: keyK, keyCode: keyK.ord))
-    check scrollView.contentOffset().y == 0.0'f32
+    check window.animationScheduler().tick(140.ms) == 1
+    check scrollView.contentOffset().y == arrowY
 
     check window.dispatchKeyDown(
       KeyEvent(text: " ", key: keySpace, keyCode: keySpace.ord)
     )
-    check scrollView.contentOffset().y == pageY
+    check window.animationScheduler().tick(140.ms) == 1
+    check scrollView.contentOffset().y == arrowY + pageY
+
+    scrollView.contentOffset = scrollView.maximumContentOffset()
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
+    check scrollView.contentOffset() == scrollView.maximumContentOffset()
+    scrollView.contentOffset = initPoint(0.0, 0.0)
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord))
+    check scrollView.contentOffset() == initPoint(0.0, 0.0)
 
   test "repository README renders and responds to clicks":
     let

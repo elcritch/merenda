@@ -14,6 +14,7 @@ type
     denyMoveTo: int
     shouldSelectCount: int
     didSelectCount: int
+    didDoubleClickCount: int
     shouldCloseCount: int
     didCloseCount: int
     shouldMoveCount: int
@@ -72,6 +73,13 @@ protocol DocumentTabDelegateSpyMethods of DocumentTabsDelegate:
   ) =
     discard tabs
     inc spy.didSelectCount
+    spy.lastItem = item
+
+  method didDoubleClickDocumentTab(
+      spy: DocumentTabDelegateSpy, tabs: DocumentTabs, item: DocumentTabItem
+  ) =
+    discard tabs
+    inc spy.didDoubleClickCount
     spy.lastItem = item
 
   method shouldCloseDocumentTab(
@@ -742,6 +750,28 @@ suite "nimkit document tabs":
     check signals.dragChangeCount == 1
     check signals.dragEndCount == 1
     check signals.lastDragInfo.item == first
+
+  test "double clicking a tab selects and notifies its delegate":
+    let
+      window = newWindow("Document tab double click", frame = rect(0, 0, 420, 120))
+      root = newView(frame = rect(0, 0, 420, 120))
+      tabs = newDocumentTabs(frame = rect(0, 0, 420, 34))
+      delegate = newDelegateSpy()
+      first = newDocumentTabItem("First", "first")
+      second = newDocumentTabItem("Second", "second")
+    window.setContentView(root)
+    root.addSubview(tabs)
+    tabs.delegate = delegate
+    discard tabs.addDocumentTabItem(first)
+    discard tabs.addDocumentTabItem(second)
+
+    let point = tabs.pointToWindow(tabs.documentTabRect(1).center())
+    check window.mouseDownAt(point, clickCount = 2)
+    check window.mouseUpAt(point, clickCount = 2)
+    check tabs.selectedDocumentTabItem == second
+    check delegate.didSelectCount == 1
+    check delegate.didDoubleClickCount == 1
+    check delegate.lastItem == second
 
   test "overflow tabs scroll with buttons and mouse wheel without visible scrollbar":
     let

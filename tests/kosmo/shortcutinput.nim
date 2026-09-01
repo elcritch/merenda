@@ -1,10 +1,17 @@
-import std/[os, tempfiles, unittest]
+import std/[os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
 
 proc pressControlKey(window: Window, key: Key): bool =
   window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: {kmControl}))
+
+proc pressPaneKey(
+    window: Window, key: Key, text: string, modifiers: set[nimkit.KeyModifier]
+): bool =
+  window.dispatchKeyDown(
+    KeyEvent(text: text, key: key, keyCode: key.ord, modifiers: modifiers)
+  )
 
 suite "Kosmo synthetic shortcut input":
   test "close tab defaults do not consume the Vim control-W namespace":
@@ -235,6 +242,108 @@ suite "Kosmo synthetic shortcut input":
     check frontend.window.pressControlKey(keyC)
     check frontend.editorGroups().len == 1
     check frontend.window.firstResponder == groups[0].editorView
+
+  test "Markdown previews share Vim pane commands and retain navigation":
+    let
+      root = createTempDir("merenda-kosmo-markdown-pane-", "")
+      path = root / "README.md"
+      source = "# Preview\n\n" & "scrollable line\n".repeat(120)
+      frontend = newKosmoApplication(newApplication("Kosmo Markdown Pane Test"))
+    writeFile(path, source)
+    defer:
+      frontend.close()
+      removeFile(path)
+      removeDir(root)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 720, 480)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.openPath(path)
+    let preview = frontend.editorPane.markdownView
+    require preview.waitForMarkdownParsing()
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.window.makeFirstResponder(preview)
+
+    let beforeNavigation = preview.scrollView().contentOffset().y
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "j", key: keyJ, keyCode: keyJ.ord)
+    )
+    check frontend.window.animationScheduler().tick(140.ms) == 1
+    check preview.scrollView().contentOffset().y > beforeNavigation
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
+    )
+    let afterEscape = preview.scrollView().contentOffset().y
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
+    )
+    check frontend.window.animationScheduler().tick(140.ms) == 1
+    check preview.scrollView().contentOffset().y > afterEscape
+
+    let afterCancelledNavigation = preview.scrollView().contentOffset().y
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
+    )
+    check frontend.window.animationScheduler().tick(140.ms) == 1
+    check frontend.editorGroups().len == 1
+    check preview.scrollView().contentOffset().y > afterCancelledNavigation
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyV, "v", {})
+    frontend.contentView.layoutSubtreeIfNeeded()
+    var groups = frontend.editorGroups()
+    require groups.len == 2
+    check frontend.window.firstResponder == groups[1].pane.markdownView
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyW, "w", {})
+    check frontend.window.firstResponder == groups[0].pane.markdownView
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyJ, "j", {})
+    check frontend.window.firstResponder == groups[0].pane.markdownView
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyK, "k", {})
+    check frontend.window.firstResponder == groups[0].pane.markdownView
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyL, "l", {})
+    check frontend.window.firstResponder == groups[1].pane.markdownView
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyH, "h", {})
+    check frontend.window.firstResponder == groups[0].pane.markdownView
+
+    let splitView = SplitView(frontend.dockView.rootView())
+    let beforeResize = splitView.positionOfDivider(0)
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyDot, ">", {nimkit.kmShift})
+    check splitView.positionOfDivider(0) > beforeResize
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyComma, "<", {nimkit.kmShift})
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyEqual, "=", {})
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyS, "s", {})
+    frontend.contentView.layoutSubtreeIfNeeded()
+    groups = frontend.editorGroups()
+    require groups.len == 3
+    check frontend.window.firstResponder == groups[^1].pane.markdownView
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyEqual, "+", {nimkit.kmShift})
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyMinus, "-", {})
+
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyN, "n", {})
+    groups = frontend.editorGroups()
+    require groups.len == 4
+    check groups[^1].pane.documentTabs.documentTabModels()[0].title == "No Name"
+
+    require frontend.window.makeFirstResponder(groups[0].pane.markdownView)
+    check frontend.window.pressControlKey(keyW)
+    check frontend.window.pressPaneKey(keyC, "c", {})
+    check frontend.editorGroups().len == 3
 
   test "hybrid input keeps insert-mode control-W in Moe":
     let frontend = newKosmoApplication(newApplication("Kosmo Insert Control-W Test"))

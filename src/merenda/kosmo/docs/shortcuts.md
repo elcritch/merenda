@@ -280,13 +280,17 @@ and Linux `Ctrl-F4` is the reliable fallback when the active input policy
 reserves physical `Ctrl-W` for Moe.
 
 The current implementation recognizes these commands at the focused Kosmo
-editor boundary, only in the applicable Moe mode, and translates them into
-semantic dock operations such as `splitBelow`, `focusLeft`, and `closePane`.
-It deliberately does not install a window-wide `Ctrl-W` prefix: terminals,
-sidebars, dialogs, and unrelated controls keep their own input. Moe receives
-unclaimed editor input, so this scoped bridge can later be replaced by a
-fully configurable Moe frontend pane-request API without changing Kosmo's
-panel semantics.
+editor boundary in the applicable Moe mode, and at a focused Markdown preview.
+Markdown previews use the same pane parser and semantic dock operations,
+including `Ctrl-W n` to create an empty-buffer split. It deliberately does not
+install a window-wide `Ctrl-W` prefix: terminals, sidebars, dialogs, and
+unrelated controls keep their own input. Moe receives unclaimed editor input,
+so this scoped bridge can later be replaced by a fully configurable Moe
+frontend pane-request API without changing Kosmo's panel semantics.
+
+Within a focused Markdown preview, arrow keys scroll smoothly by four lines,
+while `j` and `k` retain one-line movement. `Space` scrolls smoothly by one
+quarter of the visible preview height.
 
 `Command-W` must remain a complete, immediate close command; it must never be
 a sequence prefix. Kosmo should not define `Command-W Command-W`,
