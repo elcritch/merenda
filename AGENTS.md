@@ -28,7 +28,10 @@
 
 ## Testing Guidelines
 - Framework: `unittest` with descriptive `suite` and `test` names.
-- Location: add new tests under `tests/`, mirroring module names (e.g., `tslots.nim` for `slots.nim`).
+- Kosmo tests belong in `tests/kosmo/` and must be imported by the shared `tests/tkosmo.nim` runner.
+- NimKit tests belong in `tests/nimkit/` and must be imported by the shared `tests/tnimkit.nim` runner.
+- Do not add a separate top-level `tests/t*.nim` runner for Kosmo or NimKit tests. A separate runner recompiles their large dependency graphs and slows focused and full test runs.
+- Use a separate top-level test only when the test cannot safely share its common runner because it requires conflicting compiler settings, process isolation, or another documented incompatibility.
 - Requirements: CI (`atlas-run tests`) must pass; include tests for new behavior and update `README.md`/`CHANGES.md` as needed.
 
 ## Security & Configuration Tips
