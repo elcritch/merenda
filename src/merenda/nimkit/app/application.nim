@@ -25,6 +25,11 @@ import ./workspaces
 import ../app/windows
 
 type
+  ApplicationAboutInfo* = object
+    version*: string
+    buildVersion*: string
+    credits*: string
+
   MainMenuPresentation* = enum
     mmpAutomatic
     mmpNative
@@ -50,6 +55,7 @@ type
 
   Application* = ref object of Responder
     xApplicationName: string
+    xAboutInfo: ApplicationAboutInfo
     xIcon: ImageResource
     xWindows: seq[Window]
     xOrderedWindows: seq[Window]
@@ -132,8 +138,11 @@ proc installApplicationCommandMethods(app: Application) =
   let aboutMethod: DynamicMethod = proc(
       self: DynamicAgent, invocation: var Invocation
   ) =
-    discard self
-    nativeMenus.showStandardAboutPanel()
+    let application = Application(self)
+    nativeMenus.showStandardAboutPanel(
+      application.xApplicationName, application.xAboutInfo.version,
+      application.xAboutInfo.buildVersion, application.xAboutInfo.credits,
+    )
     invocation.setResult(())
   discard app.replaceMethod(actionSelector("orderFrontStandardAboutPanel"), aboutMethod)
 
@@ -261,6 +270,12 @@ proc sharedApplication*(): Application =
 
 func applicationName*(app: Application): string =
   app.xApplicationName
+
+func aboutInfo*(app: Application): ApplicationAboutInfo =
+  app.xAboutInfo
+
+proc `aboutInfo=`*(app: Application, info: ApplicationAboutInfo) =
+  app.xAboutInfo = info
 
 proc icon*(app: Application): ImageResource =
   app.xIcon

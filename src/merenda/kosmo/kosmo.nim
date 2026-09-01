@@ -19,6 +19,26 @@ export
 const
   KosmoIconPng =
     staticRead(currentSourcePath().parentDir / "../../../data/kosmo-icon.png")
+  KosmoVersion* {.strdefine.} = "0.14.0"
+  KosmoGitHashOverride* {.strdefine.} = ""
+  KosmoGitHash* =
+    when KosmoGitHashOverride.len > 0:
+      KosmoGitHashOverride
+    else:
+      block:
+        const repositoryRoot = currentSourcePath().parentDir / "../../.."
+        const revision =
+          gorgeEx("git -C " & quoteShell(repositoryRoot) & " rev-parse --short=12 HEAD")
+        if revision.exitCode == 0:
+          revision.output.strip()
+        else:
+          "unknown"
+  KosmoAboutCredits =
+    """
+Powered by Moe, the Vim-like text editor.
+https://github.com/fox0430/moe
+
+Licensed under the GNU General Public License v3.0 (GPL-3.0)."""
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
@@ -3636,6 +3656,11 @@ proc newKosmoWindowManager*(
     app = nimkit.sharedApplication(), keyBindingsPath = ""
 ): KosmoWindowManager =
   ## Create the owner for all project and file windows in a Kosmo session.
+  if not app.isNil:
+    app.icon = nimkit.newImageResourceFromData(KosmoIconPng, name = "kosmo-icon")
+    app.aboutInfo = nimkit.ApplicationAboutInfo(
+      version: KosmoVersion, buildVersion: KosmoGitHash, credits: KosmoAboutCredits
+    )
   KosmoWindowManager(application: app, keyBindingsPath: keyBindingsPath)
 
 func hasFileBrowser*(frontend: KosmoApplication): bool =
@@ -4274,7 +4299,6 @@ proc runKosmo*(filePath = "") =
     manager = newKosmoWindowManager(
       app, keyBindingsPath = if fileExists(keyBindingsPath): keyBindingsPath else: ""
     )
-  app.icon = nimkit.newImageResourceFromData(KosmoIconPng, name = "kosmo-icon")
   let frontend = newKosmoApplication(
     manager, filePath, hasFileBrowser = filePath.len == 0 or not fileExists(filePath)
   )

@@ -40,6 +40,8 @@ suite "Kosmo":
       applicationMenu = mainMenu[0].submenu()
       fileMenu = mainMenu[1].submenu()
       windowMenu = mainMenu[3].submenu()
+      aboutItem = applicationMenu[0]
+      aboutInfo = app.aboutInfo()
       settingsItem = applicationMenu[2]
     let newItem = fileMenu.menuItemWithIdentifier(KosmoNewFileAction)
     let openItem = fileMenu.menuItemWithIdentifier(KosmoOpenFileAction)
@@ -52,6 +54,13 @@ suite "Kosmo":
     check mainMenu[2].title == "Edit"
     check mainMenu[3].title == "Window"
     check mainMenu[4].title == "Help"
+    check aboutItem.title == "About Kosmo Test"
+    check not app.icon().isNil
+    check aboutInfo.version == KosmoVersion
+    check aboutInfo.buildVersion == KosmoGitHash
+    check "Moe" in aboutInfo.credits
+    check "https://github.com/fox0430/moe" in aboutInfo.credits
+    check "GPL-3.0" in aboutInfo.credits
     check settingsItem.title == "Settings…"
     check settingsItem.action().name == actionSelector(KosmoShowSettingsAction).name
     var includesMerendaSettings = false

@@ -618,6 +618,9 @@ files in the current window and appends selected folders to that window's
 ordered top-level browser roots. If no Kosmo window is available, opening a file
 creates an editor-only window without a file-browser sidebar.
 
+About Kosmo shows the Kosmo icon, release version, build Git hash, Moe project
+reference, and Kosmo's GNU GPL-3.0 license notice.
+
 Kosmo Settings includes a Moe Themes tab. It provides Catppuccin Mocha and
 Latte, Tokyo Night Moon, Kanagawa Wave, and One Dark alongside Moe's default
 theme. It also lists every `.toml` theme installed in `~/.config/moe/themes`,

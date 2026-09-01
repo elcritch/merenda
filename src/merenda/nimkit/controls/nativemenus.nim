@@ -177,8 +177,8 @@ proc toNativeState*(state: ButtonState): NativeMenuItemState =
 when defined(macosx):
   import std/tables
 
-  import darwin/app_kit/[nsapplication, nsevent, nsmenu]
-  import darwin/foundation/nsstring
+  import darwin/app_kit/[nsapplication, nsevent, nsimage, nsmenu]
+  import darwin/foundation/[nsattributedstring, nsdictionary, nsstring]
   import darwin/objc/runtime
 
   {.passL: "-framework AppKit".}
@@ -193,6 +193,21 @@ when defined(macosx):
   proc orderFrontStandardAboutPanel(
     application: NSApplication, sender: ID
   ) {.objc: "orderFrontStandardAboutPanel:".}
+
+  proc orderFrontStandardAboutPanelWithOptions(
+    application: NSApplication, options: NSDictionary[NSString, NSObject]
+  ) {.objc: "orderFrontStandardAboutPanelWithOptions:".}
+
+  proc applicationIconImage(
+    application: NSApplication
+  ): NSImage {.objc: "applicationIconImage".}
+
+  var
+    NSAboutPanelOptionApplicationIcon {.importc.}: NSString
+    NSAboutPanelOptionApplicationName {.importc.}: NSString
+    NSAboutPanelOptionApplicationVersion {.importc.}: NSString
+    NSAboutPanelOptionCredits {.importc.}: NSString
+    NSAboutPanelOptionVersion {.importc.}: NSString
 
   proc hideOtherApplications(
     application: NSApplication, sender: ID
@@ -361,8 +376,32 @@ when defined(macosx):
       targetClass.registerClassPair()
     nativeMenuTarget = cast[NSObject](targetClass.new())
 
-  proc showStandardAboutPanel*() =
-    NSApplication.sharedApplication().orderFrontStandardAboutPanel(cast[ID](nil))
+  proc showStandardAboutPanel*(
+      applicationName = "", applicationVersion = "", buildVersion = "", credits = ""
+  ) =
+    let application = NSApplication.sharedApplication()
+    if applicationName.len == 0 and applicationVersion.len == 0 and buildVersion.len == 0 and
+        credits.len == 0:
+      application.orderFrontStandardAboutPanel(cast[ID](nil))
+      return
+    let options = newMutableDictionary[NSString, NSObject]()
+    defer:
+      options.release()
+    if applicationName.len > 0:
+      options[NSAboutPanelOptionApplicationName] =
+        cast[NSObject](toNSString(applicationName))
+    let icon = application.applicationIconImage()
+    if not icon.isNil:
+      options[NSAboutPanelOptionApplicationIcon] = cast[NSObject](icon)
+    if applicationVersion.len > 0:
+      options[NSAboutPanelOptionApplicationVersion] =
+        cast[NSObject](toNSString(applicationVersion))
+    if buildVersion.len > 0:
+      options[NSAboutPanelOptionVersion] = cast[NSObject](toNSString(buildVersion))
+    if credits.len > 0:
+      options[NSAboutPanelOptionCredits] =
+        cast[NSObject](NSAttributedString.attributedStringWithString(credits))
+    application.orderFrontStandardAboutPanelWithOptions(options)
 
   proc hideOtherNativeApplications*() =
     NSApplication.sharedApplication().hideOtherApplications(cast[ID](nil))
@@ -412,7 +451,13 @@ when defined(macosx):
       nativeRoot.release()
 
 else:
-  proc showStandardAboutPanel*() =
+  proc showStandardAboutPanel*(
+      applicationName = "", applicationVersion = "", buildVersion = "", credits = ""
+  ) =
+    discard applicationName
+    discard applicationVersion
+    discard buildVersion
+    discard credits
     discard
 
   proc hideOtherNativeApplications*() =
