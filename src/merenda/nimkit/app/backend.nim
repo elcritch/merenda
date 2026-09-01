@@ -16,6 +16,7 @@ else:
   import figdraw/windowing/siwinshim as siwinshim
 when not defined(useNativeDynlib):
   import pkg/pixie/fileformats/png
+  import siwin/colorutils as siwinColors
 import siwin/clipboards as siwinClipboards
 import sigils/selectors
 from sigils/threadBase import SigilThreadPtr
@@ -1336,6 +1337,26 @@ proc setMaximumSize*(host: HostWindow, size: Size) =
 proc setTitle*(host: HostWindow, title: string) =
   if host.isReady:
     host.xNativeWindow.title = title
+
+proc setIcon*(host: HostWindow, icon: ImageResource) =
+  if not host.isReady:
+    return
+  if icon.isNil:
+    host.xNativeWindow.icon = nil
+    return
+
+  var pixels = icon.pixels()
+  when defined(useNativeDynlib):
+    host.xNativeWindow.icon = pixels
+  else:
+    if pixels.isNil or pixels.data.len == 0:
+      host.xNativeWindow.icon = nil
+    else:
+      host.xNativeWindow.icon = siwinColors.PixelBuffer(
+        data: pixels.data[0].addr,
+        size: ivec2(pixels.width.int32, pixels.height.int32),
+        format: siwinColors.rgbx_32bit,
+      )
 
 proc setVisible*(host: HostWindow, visible: bool) =
   if not host.isReady:

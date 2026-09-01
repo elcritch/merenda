@@ -9,6 +9,7 @@ import ../foundation/mainthreadwork
 import ../foundation/notifications
 import ../controls/menus
 import ../controls/nativemenus as nativeMenus
+import ../drawing/images
 import ../responder/keybindings
 import ../responder/responders
 import ../foundation/selectors as nimkitSelectors
@@ -49,6 +50,7 @@ type
 
   Application* = ref object of Responder
     xApplicationName: string
+    xIcon: ImageResource
     xWindows: seq[Window]
     xOrderedWindows: seq[Window]
     xDelegate: DynamicAgent
@@ -259,6 +261,15 @@ proc sharedApplication*(): Application =
 
 func applicationName*(app: Application): string =
   app.xApplicationName
+
+proc icon*(app: Application): ImageResource =
+  app.xIcon
+
+proc `icon=`*(app: Application, icon: ImageResource) =
+  app.xIcon = icon
+  for window in app.xWindows:
+    if not window.isNil:
+      window.icon = icon
 
 proc userDefaults*(app: Application): UserDefaults =
   if app.xUserDefaults.isNil:
@@ -846,6 +857,8 @@ proc addWindow*(app: Application, window: Window) =
   app.includeOrderedWindow(window)
   window.setNextResponder(app)
   window.setInheritedAppearance(app.effectiveAppearance())
+  if not app.xIcon.isNil:
+    window.icon = app.xIcon
   if not app.xThreadRenderer.isNil:
     window.useThreadRenderer(app.xThreadRenderer)
   if app.xMainWindow.isNil:

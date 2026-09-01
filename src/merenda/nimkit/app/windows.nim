@@ -15,6 +15,7 @@ import ./backend as nimkitBackend
 import ./animations
 import ../responder/keybindings
 import ../drawing/drawing
+import ../drawing/images
 import ../drawing/rendering as nimkitRendering
 import ../foundation/events
 import ../foundation/notifications
@@ -122,6 +123,7 @@ type
   Window* = ref object of Responder
     xFrame: Rect
     xTitle: string
+    xIcon: ImageResource
     xStyleMask: set[WindowStyleMask]
     xLevel: WindowLevel
     xDelegate: DynamicAgent
@@ -771,6 +773,14 @@ proc `frame=`*(window: Window, frame: Rect) =
 
 proc title*(window: Window): string =
   window.xTitle
+
+proc icon*(window: Window): ImageResource =
+  window.xIcon
+
+proc `icon=`*(window: Window, icon: ImageResource) =
+  window.xIcon = icon
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.setIcon(icon)
 
 proc styleMask*(window: Window): set[WindowStyleMask] =
   window.xStyleMask
@@ -2924,6 +2934,7 @@ proc ensureNativeWindow*(window: Window) =
   window.xHostFocused = window.xHostWindow.isFocused()
   if not window.xHostFocused:
     window.stopInsertionPointBlink()
+  window.xHostWindow.setIcon(window.xIcon)
   window.syncNativeSizeLimits()
   window.xBackdropActive = false
   if window.xBackdrop.kind != wbekNone:

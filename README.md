@@ -100,6 +100,13 @@ window without entering the application run loop. Pass an initial responder as
 the third argument, such as `app.runWindow(window, root, textField)`, when a
 specific control should receive focus first.
 
+Set an application icon before showing the first window. NimKit applies it to
+existing native windows and automatically carries it to windows added later:
+
+```nim
+app.icon = newImageResourceFromData(staticRead("data/my-app-icon.png"))
+```
+
 ## Native Markdown Viewer
 
 `MarkdownView` parses CommonMark or GitHub-flavored Markdown on a Sigils pool

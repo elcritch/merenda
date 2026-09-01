@@ -17,6 +17,8 @@ export
   shortcuts
 
 const
+  KosmoIconPng =
+    staticRead(currentSourcePath().parentDir / "../../../data/kosmo-icon.png")
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
@@ -3998,8 +4000,12 @@ proc close*(frontend: KosmoApplication) =
 
 proc runKosmo*(filePath = "") =
   ## Run Kosmo as a standalone NimKit text-editor application.
-  let keyBindingsPath = defaultKosmoKeyBindingsPath()
+  let
+    app = nimkit.sharedApplication()
+    keyBindingsPath = defaultKosmoKeyBindingsPath()
+  app.icon = nimkit.newImageResourceFromData(KosmoIconPng, name = "kosmo-icon")
   let frontend = newKosmoApplication(
+    app = app,
     filePath = filePath,
     keyBindingsPath = if fileExists(keyBindingsPath): keyBindingsPath else: "",
   )
