@@ -1,3 +1,4 @@
+## Application icon behavior shared by the NimKit test runner.
 import std/[base64, unittest]
 
 import merenda/nimkit

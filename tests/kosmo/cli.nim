@@ -1,4 +1,4 @@
-## Kosmo standalone command-line handling.
+## Kosmo standalone command-line handling shared by the Kosmo test runner.
 import std/[os, tempfiles, times, unittest]
 
 import merenda/kosmo/cli

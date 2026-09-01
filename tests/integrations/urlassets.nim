@@ -1,3 +1,4 @@
+## URL asset loading integration behavior.
 import
   std/[
     appdirs, atomics, monotimes, nativesockets, net, os, paths, strutils, tempfiles,
@@ -9,7 +10,7 @@ import merenda/nimkit/foundation/urls
 import merenda/nimkit/text/markdownviews
 
 const
-  RepositoryRoot = currentSourcePath().parentDir.parentDir
+  RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
   TestImagePath = RepositoryRoot / "data" / "img1.png"
   TestBody = "cached asset payload"
   LargeTestBody = "asset body larger than four bytes"

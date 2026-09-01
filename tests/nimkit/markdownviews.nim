@@ -1,3 +1,4 @@
+## Markdown view behavior shared by the NimKit test runner.
 import std/[monotimes, os, strformat, strutils, times, unicode, unittest]
 
 import figdraw
@@ -8,7 +9,7 @@ when not defined(useNativeDynlib):
 import merenda/nimkit
 
 const
-  RepositoryRoot = currentSourcePath().parentDir.parentDir
+  RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
   RepositoryReadme = RepositoryRoot / "README.md"
   TestImagePath = RepositoryRoot / "data" / "img1.png"
 

@@ -30,8 +30,10 @@
 - Framework: `unittest` with descriptive `suite` and `test` names.
 - Kosmo tests belong in `tests/kosmo/` and must be imported by the shared `tests/tkosmo.nim` runner.
 - NimKit tests belong in `tests/nimkit/` and must be imported by the shared `tests/tnimkit.nim` runner.
-- Do not add a separate top-level `tests/t*.nim` runner for Kosmo or NimKit tests. A separate runner recompiles their large dependency graphs and slows focused and full test runs.
-- Use a separate top-level test only when the test cannot safely share its common runner because it requires conflicting compiler settings, process isolation, or another documented incompatibility.
+- Tekton tests belong in `tests/tekton/` and must be imported by the shared `tests/ttekton.nim` runner.
+- Cross-component tests and tests requiring process isolation belong in `tests/integrations/` and must be imported by the shared `tests/tintegrations.nim` runner.
+- Do not add a separate top-level `tests/t*.nim` runner for an individual Kosmo, NimKit, Tekton, or integration test. Separate runners recompile large dependency graphs and slow focused and full test runs.
+- Use another top-level test only when it cannot safely share any common runner because it requires conflicting compiler settings, stronger process isolation, or another documented incompatibility.
 - Requirements: CI (`atlas-run tests`) must pass; include tests for new behavior and update `README.md`/`CHANGES.md` as needed.
 
 ## Security & Configuration Tips

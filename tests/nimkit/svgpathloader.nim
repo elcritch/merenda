@@ -1,3 +1,4 @@
+## SVG path loader behavior shared by the NimKit test runner.
 import std/unittest
 
 import merenda/nimkit/drawing/svgpathloader

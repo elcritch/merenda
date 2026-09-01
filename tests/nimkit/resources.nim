@@ -1,3 +1,4 @@
+## Resource behavior shared by the NimKit test runner.
 import std/[options, os, strutils, unittest]
 
 import merenda/nimkit

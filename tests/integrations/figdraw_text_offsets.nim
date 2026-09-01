@@ -1,3 +1,4 @@
+## Figdraw text positioning integration behavior.
 import std/unittest
 
 import figdraw

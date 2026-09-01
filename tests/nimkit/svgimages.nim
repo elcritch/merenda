@@ -1,3 +1,4 @@
+## SVG image behavior shared by the NimKit test runner.
 import std/unittest
 
 import figdraw

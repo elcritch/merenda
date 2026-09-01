@@ -1,3 +1,4 @@
+## ARC back-reference behavior shared by the NimKit test runner.
 import std/unittest
 
 import merenda/nimkit

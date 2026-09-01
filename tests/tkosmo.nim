@@ -3,6 +3,7 @@ import std/[strutils, unicode, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import kosmo/cli
 import kosmo/panelshortcuts
 import kosmo/terminalclipboard
 

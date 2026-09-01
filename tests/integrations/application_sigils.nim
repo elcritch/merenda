@@ -1,3 +1,4 @@
+## Application and Sigils scheduler integration behavior.
 import std/unittest
 
 import sigils/threadBase
