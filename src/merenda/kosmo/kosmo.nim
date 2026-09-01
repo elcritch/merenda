@@ -3670,6 +3670,18 @@ func hasFileBrowser*(frontend: KosmoApplication): bool =
   ## Return whether this window displays a project file browser.
   not frontend.isNil and frontend.xHasFileBrowser
 
+func projectWindowTitle(rootPaths: openArray[string]): string =
+  result = "Kosmo"
+  if rootPaths.len > 0:
+    result.add " (" & nimkit.fileBrowserDisplayName(rootPaths[0])
+    if rootPaths.len > 1:
+      result.add " + " & $(rootPaths.len - 1)
+    result.add ")"
+
+proc updateProjectWindowTitle(frontend: KosmoApplication) =
+  if not frontend.isNil and not frontend.window.isNil and not frontend.fileTree.isNil:
+    frontend.window.title = projectWindowTitle(frontend.fileTree.rootPaths)
+
 proc managedWindows*(manager: KosmoWindowManager): seq[KosmoApplication] =
   ## Return the live Kosmo windows owned by this session.
   if manager.isNil:
@@ -3933,7 +3945,9 @@ proc newKosmoApplication(
   editorView.syncChrome()
   result = KosmoApplication(
     application: app,
-    window: nimkit.newWindow("Kosmo", nimkit.rect(120, 100, 1024, 720)),
+    window: nimkit.newWindow(
+      projectWindowTitle(fileTree.rootPaths), nimkit.rect(120, 100, 1024, 720)
+    ),
     editorView: editorView,
     editorPane: editorPane,
     documentTabs: editorView.documentTabs,
@@ -4209,8 +4223,10 @@ proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
     result = root in frontend.fileTree.rootPaths or frontend.fileTree.addRootPath(root)
   elif fileExists(path):
     result = frontend.dockController.activeEditorView().openFile(path)
-  if result and dirExists(path) and not frontend.searchPanel.isNil:
-    frontend.searchPanel.rootPath = frontend.fileTree.rootPath
+  if result and dirExists(path):
+    frontend.updateProjectWindowTitle()
+    if not frontend.searchPanel.isNil:
+      frontend.searchPanel.rootPath = frontend.fileTree.rootPath
 
 proc openDocument*(
     frontend: KosmoApplication, document: KosmoPaneDocument

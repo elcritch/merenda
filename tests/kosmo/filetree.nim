@@ -315,22 +315,33 @@ suite "Kosmo":
     let
       root = createTempDir("merenda-kosmo-open-path-", "")
       folder = root / "folder"
+      secondFolder = root / "second-folder"
       filePath = root / "document.txt"
     createDir(folder)
+    createDir(secondFolder)
     writeFile(filePath, "document body")
     defer:
       removeFile(filePath)
+      removeDir(secondFolder)
       removeDir(folder)
       removeDir(root)
 
     let
       frontend = newKosmoApplication(newApplication("Kosmo Open Path Test"))
       initialRoot = frontend.fileTree.rootPath
+      initialRootName = initialRoot.fileBrowserDisplayName()
+    check frontend.window.title == "Kosmo (" & initialRootName & ")"
     check frontend.openPath(filePath)
     check frontend.fileTree.rootPaths == @[initialRoot]
 
     check frontend.openPath(folder)
     check frontend.fileTree.rootPaths == @[initialRoot, absolutePath(folder)]
+    check frontend.window.title == "Kosmo (" & initialRootName & " + 1)"
+
+    check frontend.openPath(secondFolder)
+    check frontend.fileTree.rootPaths ==
+      @[initialRoot, absolutePath(folder), absolutePath(secondFolder)]
+    check frontend.window.title == "Kosmo (" & initialRootName & " + 2)"
     frontend.close()
 
   test "opening a project creates a new window with its own file browser":
@@ -345,6 +356,7 @@ suite "Kosmo":
     require not frontend.isNil
     check frontend.hasFileBrowser()
     check frontend.fileTree.rootPaths == @[absolutePath(folder)]
+    check frontend.window.title == "Kosmo (" & folder.fileBrowserDisplayName() & ")"
     check frontend.splitView.panes() ==
       @[View(frontend.sidebarPane), View(frontend.dockView)]
     check manager.managedWindows() == @[frontend]
@@ -370,6 +382,7 @@ suite "Kosmo":
     let frontend = windows[0]
     check not frontend.hasFileBrowser()
     check frontend.fileTree.rootPaths.len == 0
+    check frontend.window.title == "Kosmo"
     check frontend.splitView.panes() == @[View(frontend.dockView)]
     check not frontend.showFileExplorer()
     check frontend.window in app.windows()

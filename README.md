@@ -616,7 +616,9 @@ File > New… opens a blank tab in the active editor pane. File > Open Project�
 opens a folder in a new window with its own file browser. File > Open… opens
 files in the current window and appends selected folders to that window's
 ordered top-level browser roots. If no Kosmo window is available, opening a file
-creates an editor-only window without a file-browser sidebar.
+creates an editor-only window without a file-browser sidebar. Project window
+titles show `Kosmo (first-root)` and add `+ N` inside the parentheses when more
+top-level roots are open.
 
 About Kosmo shows the Kosmo icon, release version, build Git hash, Moe project
 reference, and Kosmo's GNU GPL-3.0 license notice.
