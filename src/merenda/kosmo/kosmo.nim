@@ -1519,6 +1519,9 @@ proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bo
   if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
     return false
   let controller = view.tabsDelegate.dockController[]
+  if event.key == nimkit.keyTab and event.modifiers - {nimkit.kmShift} == {} and
+      view.editor.mode() in {KosmoEditorMode.Insert, KosmoEditorMode.Replace}:
+    return view.sendKeyDownToMoe(event)
   if event.key == nimkit.keyForText("w") and event.modifiers == {nimkit.kmControl} and
       controller.editorInputPolicy != KosmoEditorInputPolicy.Native:
     if view.editor.mode() == KosmoEditorMode.Normal:

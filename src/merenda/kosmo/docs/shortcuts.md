@@ -92,6 +92,9 @@ these actions by injecting synthetic keys.
 Outside of a registered Kosmo shortcut, an editor pane forwards the input to
 Moe. Its normal Vim-style input therefore remains active, including `v`, `V`,
 and `Ctrl-V` for visual selections and Moe's normal-mode `Ctrl` commands.
+`Tab` and `Shift-Tab` follow the same rule in Insert and Replace modes, so Moe
+handles indentation instead of Kosmo moving focus to another panel. In Normal
+mode, they remain available for Kosmo's focus traversal.
 
 Mode-aware routing makes that decision explicit. The selected editor input
 policy determines whether a conflicting chord is dispatched to the semantic

@@ -243,6 +243,24 @@ suite "Kosmo synthetic shortcut input":
     check frontend.editorGroups().len == 1
     check frontend.window.firstResponder == groups[0].editorView
 
+  test "Tab stays available for focus traversal until Moe enters insert mode":
+    let frontend = newKosmoApplication(newApplication("Kosmo Insert Tab Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    let tabEvent = KeyEvent(key: keyTab, keyCode: keyTab.ord)
+
+    check not frontend.editorView.performKeyEquivalentInChain(tabEvent)
+    check frontend.editorView.editor.handleKey("i")
+    check frontend.editorView.editor.mode() == KosmoEditorMode.Insert
+    check frontend.editorView.performKeyEquivalentInChain(tabEvent)
+    check frontend.window.firstResponder == frontend.editorView
+    check frontend.editorView.editor.handleKey("Esc")
+    let tab = frontend.editorView.editor.tabs()[0]
+    check frontend.editorView.editor.bufferText(tab.id).get == "\t"
+
   test "Markdown previews share Vim pane commands and retain navigation":
     let
       root = createTempDir("merenda-kosmo-markdown-pane-", "")
