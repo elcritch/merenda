@@ -399,8 +399,11 @@ when defined(macosx):
     if buildVersion.len > 0:
       options[NSAboutPanelOptionVersion] = cast[NSObject](toNSString(buildVersion))
     if credits.len > 0:
-      options[NSAboutPanelOptionCredits] =
-        cast[NSObject](NSAttributedString.attributedStringWithString(credits))
+      let attributedCredits =
+        NSAttributedString.alloc().initWithString(toNSString(credits))
+      defer:
+        attributedCredits.release()
+      options[NSAboutPanelOptionCredits] = cast[NSObject](attributedCredits)
     application.orderFrontStandardAboutPanelWithOptions(options)
 
   proc hideOtherNativeApplications*() =

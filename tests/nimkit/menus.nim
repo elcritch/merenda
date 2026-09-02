@@ -1,9 +1,10 @@
 import std/unittest
 
 when defined(macosx):
-  import darwin/app_kit/[nsapplication, nsevent, nsmenu]
-  import darwin/foundation/nsstring
+  import darwin/app_kit/[nsapplication, nsevent, nsmenu, nswindow]
+  import darwin/foundation/[nsarray, nsstring]
   import darwin/objc/runtime
+  import merenda/nimkit/controls/nativemenus as nativeMenus
 
 import figdraw
 import sigils/selectors
@@ -21,6 +22,8 @@ when defined(macosx):
   proc keyEquivalentModifierMask(
     item: NSMenuItem
   ): NSEventModifierFlags {.objc: "keyEquivalentModifierMask".}
+
+  proc windows(application: NSApplication): NSArray[NSWindow] {.objc: "windows".}
 
 func center(rect: Rect): Point =
   initPoint(
@@ -91,6 +94,22 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
 
 suite "nimkit menus":
   when defined(macosx):
+    test "standard About panel accepts attributed credits":
+      let application = NSApplication.sharedApplication()
+      var existingWindows: seq[pointer]
+      for window in application.windows():
+        existingWindows.add cast[pointer](window)
+
+      nativeMenus.showStandardAboutPanel(
+        "NimKit Test", "1.0", "test-build", "NimKit test credits"
+      )
+
+      let currentWindows = application.windows()
+      check currentWindows.len > existingWindows.len
+      for window in currentWindows:
+        if cast[pointer](window) notin existingWindows:
+          window.close()
+
     test "application main menus use the native macOS menu bar":
       let
         app = newApplication()
