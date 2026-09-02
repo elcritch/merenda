@@ -243,15 +243,24 @@ FigDraw's legacy `HDI` variable remains a fallback.
 Text rendering and measurement use two global font roles: `frUI` for normal
 interface text and `frMonospace` for code and fixed-width text. Applications and
 the settings panel only choose those two fonts. Script, symbol, and emoji faces
-are selected automatically from the bundled and installed system fonts.
+are selected automatically from installed system fonts.
+
+The default role fonts come from the operating system and do not require a
+FigDraw `data` directory:
+
+| Platform | Interface | Monospace |
+| --- | --- | --- |
+| macOS | SFNS.ttf | SFNSMono.ttf |
+| Windows | Segoe UI | Consolas |
+| Linux/BSD | Noto Sans | Noto Sans Mono |
 
 Set `NIMKIT_FONT` and `NIMKIT_MONOSPACE_FONT` to seed the two roles with a
-bundled font name, system font name, or font file path. `NIMKIT_FONT_SIZE`
-overrides the default size used by text and `em` layout lengths:
+system font name or font file path. `NIMKIT_FONT_SIZE` overrides the default
+size used by text and `em` layout lengths:
 
 ```sh
-NIMKIT_FONT=IBMPlexSans-Regular.ttf \
-NIMKIT_MONOSPACE_FONT=HackNerdFont-Regular.ttf \
+NIMKIT_FONT=SFNS.ttf \
+NIMKIT_MONOSPACE_FONT=SFNSMono.ttf \
 NIMKIT_FONT_SIZE=15 nim r examples/quick_start.nim
 ```
 
@@ -261,8 +270,8 @@ be configured while deriving an immutable theme snapshot:
 
 ```nim
 var builder = initThemeBuilder(initTheme())
-builder.setFontName(frUI, "IBMPlexSans-Regular.ttf")
-builder.setFontName(frMonospace, "HackNerdFont-Regular.ttf")
+builder.setFontName(frUI, "SFNS.ttf")
+builder.setFontName(frMonospace, "SFNSMono.ttf")
 root.appearance = initAppearance(builder.finish())
 ```
 

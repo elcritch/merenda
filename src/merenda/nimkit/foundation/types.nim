@@ -214,8 +214,22 @@ const
   LayoutPriorityHigh* = LayoutPriority(750.0'f32)
   LayoutPriorityRequired* = LayoutPriority(1000.0'f32)
   DefaultFontSize* = 13.0'f32
-  DefaultFontName* = "IBMPlexSans-Regular.ttf"
-  DefaultMonospaceFontName* = "HackNerdFont-Regular.ttf"
+  # Use standalone macOS faces so every FigDraw backend can both shape and
+  # rasterize the defaults; Helvetica and Menlo resolve to font collections.
+  DefaultFontName* =
+    when defined(macosx):
+      "SFNS.ttf"
+    elif defined(windows):
+      "Segoe UI"
+    else:
+      "Noto Sans"
+  DefaultMonospaceFontName* =
+    when defined(macosx):
+      "SFNSMono.ttf"
+    elif defined(windows):
+      "Consolas"
+    else:
+      "Noto Sans Mono"
   NimKitEnvOverridePrefix* = "NIMKIT_"
   NimKitIgnoreEnvOverridesDefine* = "nimkitIgnoreEnvOverrides"
   NimKitFontEnv* = "NIMKIT_FONT"
@@ -285,7 +299,7 @@ proc fontOverrideFromEnv*(role = frUI): Option[FontOverride] =
   none(FontOverride)
 
 proc defaultFontName*(role = frUI): string =
-  ## Returns the environment override or bundled default for a font role.
+  ## Returns the environment override or platform default for a font role.
   let override = fontOverrideFromEnv(role)
   if override.isSome:
     override.get().name

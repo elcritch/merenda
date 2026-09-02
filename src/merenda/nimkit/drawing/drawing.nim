@@ -44,17 +44,20 @@ const
   FocusRingDrawLevel* = 90.ZLevel
   PopupDrawLevel* = 100.ZLevel
   TooltipDrawLevel* = 110.ZLevel
-  DefaultTypefaceFallbackNames* = ["Ubuntu.ttf", "HackNerdFont-Regular.ttf"]
+  DefaultTypefaceFallbackNames* =
+    when defined(macosx):
+      ["SFNS.ttf", "Arial"]
+    elif defined(windows):
+      ["Arial", "Tahoma"]
+    else:
+      ["DejaVu Sans", "Liberation Sans"]
   MonospaceTypefaceFallbackNames =
     when defined(macosx):
-      ["SFNSMono.ttf", "Menlo.ttc", "Monaco.ttf", "Courier New.ttf"]
+      ["SFNSMono.ttf", "Monaco", "Courier New"]
     elif defined(windows):
-      ["consola.ttf", "lucon.ttf", "cour.ttf"]
+      ["Cascadia Mono", "Lucida Console", "Courier New"]
     else:
-      [
-        "NotoSansMono-Regular.ttf", "DejaVuSansMono.ttf", "LiberationMono-Regular.ttf",
-        "UbuntuMono-R.ttf",
-      ]
+      ["DejaVu Sans Mono", "Liberation Mono", "Ubuntu Mono"]
   SlantedTypefaceFallbackNames =
     when defined(macosx):
       ["SFNSItalic.ttf", "Arial Italic.ttf", "Helvetica Oblique"]

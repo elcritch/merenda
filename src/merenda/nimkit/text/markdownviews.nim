@@ -337,7 +337,15 @@ proc imageLineFontSize(attributes: TextAttributes, imageHeight: float32): float3
   if probeLineHeight <= 0.0'f32:
     return max(imageHeight + MarkdownImageBlockSpacing, probeFontSize)
   let targetLineHeight = max(imageHeight + MarkdownImageBlockSpacing, probeLineHeight)
-  probeFontSize * targetLineHeight / probeLineHeight
+  result = probeFontSize * targetLineHeight / probeLineHeight
+  var measuredStyle = probeStyle
+  for _ in 0 ..< 2:
+    measuredStyle.fontSize = result
+    let measuredLineHeight = textNaturalSize("", measuredStyle).height
+    if measuredLineHeight <= 0.0'f32 or
+        abs(measuredLineHeight - targetLineHeight) <= 0.5'f32:
+      break
+    result *= targetLineHeight / measuredLineHeight
 
 proc resolvedImageContentType(builder: MarkdownBuilder, url: string): string =
   if not builder.imageContentTypeLoader.isNil:

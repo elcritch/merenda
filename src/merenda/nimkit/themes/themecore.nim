@@ -1490,7 +1490,7 @@ proc fontName*(theme: Theme, role: FontRole): string =
     defaultFontName(role)
 
 proc setFontName*(theme: var ThemeBuilder, role: FontRole, name: string) =
-  ## Sets a font role, or restores its environment/bundled default when empty.
+  ## Sets a font role, or restores its environment/platform default when empty.
   let resolved =
     if name.len > 0:
       name

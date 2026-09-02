@@ -1,8 +1,10 @@
-import std/[options, os, unicode, unittest]
+import std/[options, os, strutils, unittest]
 
 import figdraw
+import figdraw/common/fontglyphs
 import figdraw/common/typefaces
 import pkg/bumpy
+import pkg/pixie
 
 import merenda/nimkit/drawing
 import merenda/nimkit/foundation/types
@@ -77,6 +79,53 @@ proc selectionBounds(layout: GlyphArrangement): tuple[x, y, w, h: float32] =
   (minX, minY, maxX - minX, maxY - minY)
 
 suite "nimkit font layout":
+  test "default font roles use platform system font names":
+    withCleanFontEnv(
+      proc() =
+        withCleanMonospaceFontEnv(
+          proc() =
+            when defined(macosx):
+              check defaultFontName(frUI) == "SFNS.ttf"
+              check defaultFontName(frMonospace) == "SFNSMono.ttf"
+            elif defined(windows):
+              check defaultFontName(frUI) == "Segoe UI"
+              check defaultFontName(frMonospace) == "Consolas"
+            else:
+              check defaultFontName(frUI) == "Noto Sans"
+              check defaultFontName(frMonospace) == "Noto Sans Mono"
+        )
+    )
+
+  when defined(macosx) and not defined(useNativeDynlib):
+    test "macOS default fonts load shape and rasterize without figDataDir":
+      let previousDataDir = figDataDir()
+      setFigDataDir(getTempDir() / "__merenda_missing_font_data__")
+      defer:
+        setFigDataDir(previousDataDir)
+
+      for role in FontRole:
+        let
+          style = TextStyle(fontName: defaultFontName(role), fontSize: 14.0'f32)
+          font = style.textFont(role)
+          source = getTypefaceSource(font.font.typefaceId)
+          layout = typeset(
+            bumpy.rect(0, 0, 200, 40),
+            font.font,
+            "Readable",
+            minContent = false,
+            wrap = false,
+          )
+        check source.name.startsWith("/System/Library/Fonts/")
+        check fileExists(source.name)
+        require layout.arrangedGlyphs.len == 8
+        for glyph in layout.arrangedGlyphs:
+          check glyph.glyphId != FontGlyphId(0)
+        for glyph in layout.glyphs():
+          let image = glyph.generateGlyph(force = true, upload = false)
+          require not image.isNil
+          check image.opaqueBounds().w > 0
+          check image.opaqueBounds().h > 0
+
   test "font fallback groups are runtime customizable by language and script":
     setFontFallbackGroups("x-test", "Test", @[@["Example Sans"]])
     check fontFallbackGroups("x-test-region", "test")[0] == @["Example Sans"]
@@ -84,32 +133,6 @@ suite "nimkit font layout":
     addFontFallbackGroup("x-test", "Test", ["Preferred Sans"], prepend = true)
     check fontFallbackGroups("x-test", "test")[0] == @["Preferred Sans"]
     setFontFallbackGroups("x-test", "Test", newSeq[seq[string]]())
-
-  when not defined(useNativeDynlib) and
-      (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
-    test "runtime language table lazily resolves bundled symbol fonts":
-      setFontFallbackGroups("x-symbol-test", "symbols", @[@[DefaultMonospaceFontName]])
-      defer:
-        setFontFallbackGroups("x-symbol-test", "symbols", newSeq[seq[string]]())
-
-      var font = loadTypeface(DefaultFontName).fontWithSize(18)
-      font.language = "x-symbol-test"
-      check font.fallbackTypefaceIds.len == 0
-
-      let layout = typeset(
-        bumpy.rect(0, 0, 60, 30),
-        font,
-        Rune(0xF135).toUTF8(),
-        minContent = false,
-        wrap = false,
-      )
-      require layout.arrangedGlyphs.len == 1
-      require layout.fonts.len == 1
-      let fallbackId = getFigFont(layout.fonts[0].fontId).typefaceId
-      check fallbackId != font.typefaceId
-      check getTypefaceSource(fallbackId).name.extractFilename() ==
-        DefaultMonospaceFontName
-      check layout.arrangedGlyphs[0].glyphId != FontGlyphId(0)
 
   test "theme text style uses font env override precedence":
     withCleanFontEnv(
