@@ -666,6 +666,21 @@ echo "fenced"
         check node.screenBox.h > 20.0'f32
     check panelCount == 2
 
+  test "selecting text retains unchanged Markdown underlays":
+    let
+      root = newView(frame = rect(0, 0, 520, 320))
+      view = newMarkdownView(
+        "Before.\n\n```nim\necho \"selected\"\n```", frame = rect(0, 0, 520, 320)
+      )
+    root.addSubview(view)
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    root.layoutSubtreeIfNeeded()
+    discard root.buildRenderScene()
+
+    view.textView().selectedRange = initTextRange(0, 6)
+    discard root.buildRenderScene()
+
   test "code block panels in ordered lists do not overlap item labels":
     var style = initMarkdownStyle()
     style.codeBlockStyle.padding = insets(7.0'f32, 10.0'f32)

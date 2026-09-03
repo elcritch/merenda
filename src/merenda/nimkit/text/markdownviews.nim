@@ -46,6 +46,7 @@ export syntaxhighlighting
 export texttypes
 
 const
+  MarkdownUnderlayRenderSlot = initRenderSlotId(0x4d41524b'u32, 1)
   MarkdownImageBlockSpacing = 12.0'f32
     ## Fixed separation around image attachment lines, independent of image size.
   MarkdownTableDefaultColumnLimit = 100
@@ -1517,30 +1518,32 @@ protocol MarkdownTextViewLayout of ViewLayoutProtocol:
 
 protocol MarkdownTextViewDrawing of ViewDrawingProtocol:
   method drawUnderlay(textView: MarkdownTextView, context: DrawContext) =
-    let style = textView.codeBlockStyle
-    if style.backgroundColor.a > 0.0'f32 or
-        (style.outlineColor.a > 0.0'f32 and style.outlineWidth > 0.0'f32):
-      var blockRects: seq[Rect]
-      for range in textView.codeBlockRanges:
-        let blockRect = textView.codeBlockRect(range, style)
-        if not blockRect.isEmpty:
-          blockRects.add blockRect
-      blockRects.sort(
-        proc(left, right: Rect): int =
-          cmp(left.minY, right.minY)
-      )
-      for blockRect in blockRects:
-        discard context.addRenderRectangle(
-          context.renderRectFor(blockRect),
-          fill(style.backgroundColor),
-          style.outlineColor,
-          max(style.outlineWidth, 0.0'f32),
-          max(style.cornerRadius, 0.0'f32),
+    let revision = textView.renderSlotRevision(MarkdownUnderlayRenderSlot)
+    if context.beginRenderSlot(MarkdownUnderlayRenderSlot, revision):
+      let style = textView.codeBlockStyle
+      if style.backgroundColor.a > 0.0'f32 or
+          (style.outlineColor.a > 0.0'f32 and style.outlineWidth > 0.0'f32):
+        var blockRects: seq[Rect]
+        for range in textView.codeBlockRanges:
+          let blockRect = textView.codeBlockRect(range, style)
+          if not blockRect.isEmpty:
+            blockRects.add blockRect
+        blockRects.sort(
+          proc(left, right: Rect): int =
+            cmp(left.minY, right.minY)
         )
-    for presentation in textView.markdownImages:
-      let rect = textView.imageRect(presentation)
-      if not rect.isEmpty:
-        discard context.addImage(rect, presentation.image)
+        for blockRect in blockRects:
+          discard context.addRenderRectangle(
+            context.renderRectFor(blockRect),
+            fill(style.backgroundColor),
+            style.outlineColor,
+            max(style.outlineWidth, 0.0'f32),
+            max(style.cornerRadius, 0.0'f32),
+          )
+      for presentation in textView.markdownImages:
+        let rect = textView.imageRect(presentation)
+        if not rect.isEmpty:
+          discard context.addImage(rect, presentation.image)
     TextView(textView).drawTextViewUnderlay(context)
 
   method draw(textView: MarkdownTextView, context: DrawContext) =
