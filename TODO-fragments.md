@@ -466,31 +466,39 @@ NimKit reconciliation should therefore use an isolated move for isolated
 changes and the bulk APIs whenever it already knows a complete sibling order.
 
 `tests/benchmark_markdown_scroll.nim` profiles a more realistic dirty-frame
-workload: the repository's 35,919-byte README in a 760 x 540 `MarkdownView`,
+workload: the repository's 36,005-byte README in a 760 x 540 `MarkdownView`,
 scrolled bidirectionally over 240 measured frames after 20 warmup frames. It
 measures CPU-side view drawing/reconciliation, bounded-channel handoff,
-renderer-replica application, and acknowledgement; GPU execution is deliberately
-excluded. The renderer stages are serialized in the diagnostic so its CPU total
-is comparable even though production runs them on separate threads.
+renderer-replica application, acknowledgement, and a direct walk of the
+renderer-facing topology; GPU execution is deliberately excluded. The renderer
+stages are serialized in the diagnostic so its CPU total is comparable even
+though production runs them on separate threads. The table reports the median of
+five complete benchmark runs.
 
 On the same Apple M3 Pro, the pre-PR monolithic path and completed fragment-native
 path measured:
 
-| Pipeline | wall median | wall p95 | CPU median | CPU p95 | prepare median | transfer median | apply/ack median |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| pre-PR monolithic | 11.439 ms | 12.165 ms | 11.437 ms | 12.144 ms | 11.366 ms | 0.001 ms | 0.001 ms |
-| fragment-native | 15.182 ms | 16.573 ms | 15.181 ms | 16.571 ms | 12.414 ms | 2.245 ms | 0.478 ms |
+| Pipeline | wall median | wall p95 | CPU median | CPU p95 | prepare median | transfer median | apply/ack median | traversal median |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| pre-PR monolithic | 11.545 ms | 12.308 ms | 11.544 ms | 12.306 ms | 11.023 ms | 0.000 ms | 0.001 ms | 0.455 ms |
+| fragment-native | 1.483 ms | 1.937 ms | 1.483 ms | 1.935 ms | 1.108 ms | 0.344 ms | 0.006 ms | 0.012 ms |
 
-The median CPU cost is 32.7% higher and p95 is 36.4% higher in this continuously
-dirty scrolling workload. View preparation itself is 9.2% higher; including the
-deep, ARC-isolated transfer clone, total application-thread preparation is 29.0%
-higher.
-Of 1,200 view placements, 714 (59.5%) carried changed contributions; the other
-40.5% reused retained fragments. The result remains in the same order of
-magnitude, and the flat 10,000-view benchmark above confirms linear scaling with
-no population-dependent cliff. The remaining constant-factor cost is primarily
-the independent cross-thread clone of nested text/drawable data plus
-renderer-replica application.
+The retained placement-transform design reduces median CPU cost by 87.2% and
+p95 by 84.3% in this continuously dirty scrolling workload. The Markdown text
+view was captured zero times during the 240 measured frames: scrolling changes
+its ancestor placement, but does not clone or rebuild the document's text nodes.
+Of 1,200 view placements, 476 (39.7%) carried changed contributions for the
+scroll container and its small chrome; all other contributions were reused.
+
+FigDraw's `renderRoot(RenderFragments)` iterates `levels`, `roots`, and recursive
+`children` cursors directly. Fragment attachment builds its `RenderEntries`
+tracking metadata eagerly, and the child iterator only rebuilds that metadata if
+it is not ready. The renderer does not call `pairs`, clone a `RenderList`, or call
+`materialize`; that separate API remains limited to compatibility and diagnostic
+paths. The benchmark walked 13,200 retained nodes (55 per frame, including five
+placement transforms) in 0.012 ms/frame median. The monolithic comparison walked
+12,000 nodes (50 per frame) in 0.455 ms/frame median, so retained traversal itself
+does not hide a whole-tree construction or introduce a traversal cliff.
 
 ## Delivery sequence
 
