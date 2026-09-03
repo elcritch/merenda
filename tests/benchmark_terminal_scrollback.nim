@@ -30,7 +30,7 @@ proc elapsedMicroseconds(startedAt: MonoTime, iterations: int): float =
   nanoseconds / 1_000.0 / iterations.float
 
 let
-  session = newTerminalSession(Columns, Rows, HistoryLines)
+  session = newCompactTerminalSession(Columns, Rows, HistoryLines)
   view = newTerminalView(session, frame = rect(0, 0, 1_200, 640))
   window = newWindow("Terminal scrollback benchmark", frame = rect(0, 0, 1_200, 640))
 var startedAt = getMonoTime()

@@ -421,7 +421,7 @@ declared on macOS or Windows, and they require a Wayland session at runtime.
 
 `TerminalView` is a native NimKit terminal widget backed by Terminex. It provides
 Unicode wide-cell handling, 256-color and true-color rendering, text attributes,
-primary and alternate screens, ring-buffered scrollback, selection, clipboard
+primary and alternate screens, compact encoded scrollback, selection, clipboard
 commands, bracketed paste, application cursor keys, focus reporting, and xterm
 mouse tracking. It resizes its pseudo-terminal to the visible monospace grid and
 polls the child automatically while attached to a window.
@@ -438,9 +438,11 @@ app.runWindow(window, terminal, terminal)
 ```
 
 Passing a `command` runs it through the selected shell; leaving it empty starts
-an interactive shell. `TerminexSession` is also public for applications that
-want to drive the parser and PTY transport separately from the view. The PTY
-backend currently supports POSIX platforms (macOS, Linux, and FreeBSD).
+an interactive shell. Terminal views use Terminex's `CompactTerminalSession`
+backend to reduce the memory retained by large histories. Terminex session APIs
+are also public for applications that want to drive the parser and PTY transport
+separately from the view. The PTY backend currently supports POSIX platforms
+(macOS, Linux, and FreeBSD).
 
 OSC 52 clipboard writes are disabled by default because terminal output should
 not silently replace user clipboard contents. Enable them for a trusted child

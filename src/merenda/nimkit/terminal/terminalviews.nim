@@ -3,7 +3,7 @@
 import std/[math, strutils, times, unicode]
 
 import sigils/core
-import terminex/[ringbuffer, terminput, termscreen, termsessions]
+import terminex/[compactscrollback, terminput, termscreen, termsessions]
 
 import ../app/[animations, pasteboards]
 import ../app/windows except performKeyEquivalent
@@ -30,8 +30,10 @@ type
     target: string
     row, firstColumn, lastColumn: int
 
+  TerminalViewSession* = CompactTerminalSession[TerminexCell]
+
   TerminalView* = ref object of MonoTextView
-    xSession: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]]
+    xSession: TerminalViewSession
     xPalette: TerminalPalette
     xSelection: TerminalSelection
     xHasSelection: bool
@@ -262,7 +264,7 @@ func toTerminexMouseButton(button: MouseButton): TerminexMouseButton =
   of mbSecondary: tmbSecondary
 
 func encodeMouseInput(
-    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]],
+    session: TerminalViewSession,
     row, column: int,
     button: TerminexMouseButton,
     release, motion: bool,
@@ -281,9 +283,7 @@ func encodeMouseInput(
     motion,
   )
 
-func session*(
-    view: TerminalView
-): TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]] =
+func session*(view: TerminalView): TerminalViewSession =
   view.xSession
 
 proc syncTerminalScreen(view: TerminalView)
@@ -291,13 +291,10 @@ proc refreshHoveredLink(view: TerminalView): bool
 proc startTerminalPolling(view: TerminalView)
 proc stopTerminalPolling(view: TerminalView)
 
-proc `session=`*(
-    view: TerminalView,
-    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]],
-) =
+proc `session=`*(view: TerminalView, session: TerminalViewSession) =
   let next =
     if session.isNil:
-      newTerminalSession()
+      newCompactTerminalSession()
     else:
       session
   if view.xSession == next:
@@ -538,9 +535,7 @@ proc clearHoveredLink(view: TerminalView) =
     view.syncTerminalScreen()
 
 proc terminalRowsToMonoTextCells(
-    view: TerminalView,
-    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]],
-    columns, firstRow, rowCount: int,
+    view: TerminalView, session: TerminalViewSession, columns, firstRow, rowCount: int
 ): seq[MonoTextCell] =
   result = newSeq[MonoTextCell](max(rowCount, 0) * columns)
   for row in 0 ..< max(rowCount, 0):
@@ -572,7 +567,7 @@ proc renderedGridDimensionsMatch(view: TerminalView, rows, columns: int): bool =
 
 proc synchronizeTerminalGrid(
     view: TerminalView,
-    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]],
+    session: TerminalViewSession,
     info: TerminexScreenInfo,
     start: int,
 ) =
@@ -1054,14 +1049,14 @@ protocol TerminalViewLifecycle of ViewLifecycleProtocol:
 
 proc initTerminalViewFields*(
     view: TerminalView,
-    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]] = nil,
+    session: TerminalViewSession = nil,
     frame: Rect = AutoRect,
     palette = initTerminalPalette(),
 ) =
   initMonoTextViewFields(view, frame = frame)
   view.xSession =
     if session.isNil:
-      newTerminalSession()
+      newCompactTerminalSession()
     else:
       session
   view.xPalette = palette
@@ -1096,7 +1091,7 @@ proc initTerminalViewFields*(
   view.applyInitialFrame(frame)
 
 proc newTerminalView*(
-    session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]] = nil,
+    session: TerminalViewSession = nil,
     frame: Rect = AutoRect,
     palette = initTerminalPalette(),
 ): TerminalView =
