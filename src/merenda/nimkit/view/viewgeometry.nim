@@ -277,8 +277,7 @@ proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
   view.xFrame = frame
   view.xBounds = rect(view.xBounds.origin, frame.size)
   view.xNeedsLayout = true
-  view.xNeedsDisplay = true
-  view.xInvalidRects.setLen(0)
+  view.markLocalNeedsDisplay(propagateAncestors = true)
   case origin
   of lfoAuthored:
     view.invalidateLayoutItemGeometry(lirFrame)
