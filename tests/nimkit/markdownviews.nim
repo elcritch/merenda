@@ -622,6 +622,63 @@ echo "fenced"
         check node.screenBox.h > 20.0'f32
     check panelCount == 2
 
+  test "code block panels in ordered lists do not overlap item labels":
+    var style = initMarkdownStyle()
+    style.codeBlockStyle.padding = insets(7.0'f32, 10.0'f32)
+    let source =
+      """
+1. Install dependencies:
+
+   ```bash
+   atlas install
+   ```
+
+2. Build:
+
+   ```bash
+   nim build
+   ```
+
+3. Run tests:
+
+   ```bash
+   nim test
+   ```
+"""
+    let view = newMarkdownView(source, frame = rect(0, 0, 520, 480), style = style)
+    require view.waitForMarkdownParsing()
+    let renders = buildRenders(view)
+    require DefaultDrawLevel in renders
+
+    var panelFrames: seq[Rect]
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == style.codeBlockStyle.backgroundColor.rgba:
+        panelFrames.add rect(
+          node.screenBox.x, node.screenBox.y, node.screenBox.w, node.screenBox.h
+        )
+    require panelFrames.len == 3
+
+    let storage = view.textStorage()
+    proc renderedTextFrame(text: string): Rect =
+      let index = storage.stringValue().runeIndexOf(text)
+      require index >= 0
+      for selectionRect in view.textView().selectionRects(
+        initTextRange(index, text.runeLen)
+      ):
+        if result.isEmpty:
+          result = selectionRect
+        else:
+          result = result.union(selectionRect)
+
+    let labels = ["Install dependencies:", "Build:", "Run tests:"]
+    for index, label in labels:
+      let labelFrame = renderedTextFrame(label)
+      check panelFrames[index].minY >= labelFrame.maxY
+      if index < labels.high:
+        let nextLabelFrame = renderedTextFrame(labels[index + 1])
+        check nextLabelFrame.minY >= panelFrames[index].maxY
+
   test "raw inline and block HTML remain inert and visibly muted":
     let
       style = initMarkdownStyle()
