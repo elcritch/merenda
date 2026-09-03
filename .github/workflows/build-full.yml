@@ -37,7 +37,12 @@ jobs:
 
     - name: Install GrabNim
       run: |
-        curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
+        grabnimInstaller="$(mktemp)"
+        curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
+          https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
+          -o "$grabnimInstaller"
+        sh "$grabnimInstaller"
+        rm -f "$grabnimInstaller"
         echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
         echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
 
@@ -142,7 +147,12 @@ jobs:
 
     - name: Install GrabNim
       run: |
-        curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
+        grabnimInstaller="$(mktemp)"
+        curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
+          https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
+          -o "$grabnimInstaller"
+        sh "$grabnimInstaller"
+        rm -f "$grabnimInstaller"
         echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
         echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
 
