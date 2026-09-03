@@ -1,5 +1,15 @@
 ## A synchronous NimKit frontend for the Moe editor engine.
 
+when not defined(features.merenda.kosmo):
+  {.
+    error:
+      """
+Kosmo requires the "kosmo" feature. Enable it with Atlas:
+
+  atlas install -tuk --features:kosmo
+"""
+  .}
+
 import std/[math, options, os, strutils, unicode]
 
 import ../nimkit as nimkit
