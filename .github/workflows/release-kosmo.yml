@@ -87,6 +87,7 @@ jobs:
             --debugger:off \
             --lineTrace:off \
             --stackTrace:off \
+            -d:moe.embedded \
             -d:KosmoVersion="$version" \
             -d:KosmoGitHashOverride="$revision" \
             --out:build/kosmo \
@@ -245,6 +246,7 @@ jobs:
             --debugger:off \
             --lineTrace:off \
             --stackTrace:off \
+            -d:moe.embedded \
             -d:KosmoVersion="$version" \
             -d:KosmoGitHashOverride="$revision" \
             --out:"$app_path/Contents/MacOS/kosmo" \
@@ -360,6 +362,7 @@ jobs:
             --lineTrace:off `
             --stackTrace:off `
             --app:gui `
+            -d:moe.embedded `
             "-d:KosmoVersion=$version" `
             "-d:KosmoGitHashOverride=$revision" `
             --passL:build/kosmo.res `
