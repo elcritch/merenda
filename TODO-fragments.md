@@ -56,7 +56,7 @@ rewrites.
 - [x] Store one fragment edge per attachment rather than one edge per root.
 - [x] Add equivalent persistent slots to each layer's root sequence.
 - [x] Allow fragment edges beneath base nodes and nodes inside fragments.
-- [ ] Detect attachment cycles.
+- [x] Detect attachment cycles.
 - [x] Give each mutable fragment exactly one attachment. Reusing content in more
       than one location should require a distinct fragment instance.
 
@@ -104,7 +104,7 @@ proc removeFragment*(
 
 - [x] Use explicit `attachChildFragment` and `attachRootFragment` naming.
 - [x] Keep physical node/list insertion under separate, clearly named APIs.
-- [ ] Support atomic movement/reordering without a transient detached state.
+- [x] Support atomic movement/reordering without a transient detached state.
 - [x] Return a refreshed handle from every operation that advances its version.
 
 ### Tree-owned, generation-stamped handles
@@ -359,7 +359,7 @@ frame/resource generation
 - [x] Replace a fragment with zero roots and later restore one or many roots at
       the same position.
 - [x] Cover fragments beneath base nodes and beneath nodes in other fragments.
-- [ ] Cover root fragments, multiple layers, physical node insertions, movement,
+- [x] Cover root fragments, multiple layers, physical node insertions, movement,
       removal, and reordering.
 - [x] Ensure public APIs cannot make traversal metadata stale.
 
@@ -390,6 +390,50 @@ Fig indexes.
 - [ ] Coalesced thread updates apply the newest valid replacement.
 - [ ] Clear and target-replacement barriers discard stale queued updates.
 - [ ] Resource leases survive until the corresponding renderer acknowledgement.
+
+## Performance baseline
+
+`tests/benchmark_render_fragments.nim` is a release-mode diagnostic benchmark,
+not a timing-threshold test. It measures flat trees from 100 through 10,000
+views, uses the median of seven samples, and separately exercises clean frames,
+root-dirty frames, leaf-dirty frames, scene materialization, layer replacement,
+and fragment reordering.
+
+On an Apple M3 Pro (12 cores), macOS 15.6, Nim 2.2.10, ARC with threads enabled,
+the following medians were observed. Times are microseconds per operation:
+
+| Views | `main` cached | branch cached | `main` dirty | branch dirty | scene dirty | materialize |
+|------:|--------------:|--------------:|-------------:|-------------:|------------:|------------:|
+| 100 | 14.17 | 13.72 | 482.25 | 478.65 | 486.19 | 7.90 |
+| 1,000 | 116.38 | 113.08 | 5,145.57 | 4,757.77 | 4,948.35 | 71.05 |
+| 5,000 | 775.84 | 748.62 | 30,782.15 | 28,560.73 | 30,617.60 | 413.71 |
+| 10,000 | 3,039.03 | 1,502.67 | 63,707.30 | 61,254.53 | 63,341.55 | 1,149.50 |
+
+The important result is scaling, not the favorable absolute variation between
+separate branch runs. The existing monolithic path did not regress in these
+samples. Updating the opt-in scene added at most about 7% over the branch's
+monolithic dirty path, and materialization remained linear at roughly 71--115
+ns per node. Replacing a 10,000-node scene took 1.11 ms with one layer and 0.90
+ms with 32 layers, showing no layer-count cliff at that scale.
+
+Leaf invalidation remains a full-tree redraw in this foundation PR: at 10,000
+views the branch took 61.18 ms through `buildRenders` and 62.83 ms through
+`buildRenderScene`, versus 63.61 ms on `main`. Per-view contribution caching is
+still required to turn that operation into a narrow fragment replacement.
+
+The benchmark exposed two FigDraw usage cliffs and drove API changes before the
+dependency pin was advanced:
+
+- Materialization had accidentally copied the fragment-entry table once per
+  visited node. It now traverses borrowed internal topology and is linear.
+- Reversing every sibling with individual `moveFragment` calls is quadratic,
+  because each isolated move performs a linear sequence edit. At 5,000 slots a
+  two-way reversal took 1,251.12 ms. The new `reorderChildFragments` and
+  `reorderRootFragments` operations reconcile the complete sibling order in a
+  single linear pass; the same 5,000-slot two-way reversal took 0.90 ms.
+
+NimKit reconciliation should therefore use an isolated move for isolated
+changes and the bulk APIs whenever it already knows a complete sibling order.
 
 ## Delivery sequence
 
