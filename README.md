@@ -180,9 +180,10 @@ Language-tagged fenced code blocks use the same frontend-neutral
 `SyntaxTokenSpan` values; `MarkdownStyle.syntaxTokenColors` maps their classes to
 presentation colors. The Markdown parser still owns all document structure and
 inline styling—the syntax highlighter never receives the Markdown source outside
-the contents of a tagged fence. NimKit's built-in SynEdit classifier is the
-default, while a nil highlighter or unknown language retains the ordinary
-monospace `codeColor`.
+the contents of a tagged fence. Matter's bundled TextMate grammars are the
+default in both NimKit and Kosmo, while SynEdit and Moe remain available as
+alternative highlighters. A nil highlighter or unknown language retains the
+ordinary monospace `codeColor`.
 
 ## Cached URL Assets
 
