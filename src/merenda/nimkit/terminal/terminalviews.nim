@@ -7,7 +7,7 @@ import terminex/[ringbuffer, terminput, termscreen, termsessions]
 
 import ../app/[animations, pasteboards]
 import ../app/windows except performKeyEquivalent
-import ../foundation/[events, selectors, types]
+import ../foundation/[events, selectors, types, urls]
 import ../responder/responders
 from ../text/textviews import isInsertableText
 import ../text/monotextviews
@@ -26,6 +26,10 @@ type
   TerminalSelection* = object
     anchor*, extent*: TerminexPosition
 
+  TerminalLink = object
+    target: string
+    row, firstColumn, lastColumn: int
+
   TerminalView* = ref object of MonoTextView
     xSession: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]]
     xPalette: TerminalPalette
@@ -42,8 +46,13 @@ type
     xLastBellCount: uint64
     xExitNotified: bool
     xAllowsClipboardWrites: bool
+    xAllowsLinkActivation: bool
     xOptionAsMeta: bool
     xSuppressOptionTextInput: bool
+    xHasHoverPosition: bool
+    xLinkModifierHeld: bool
+    xHoverRow, xHoverColumn: int
+    xHoveredLink: TerminalLink
     xLastInputError: string
     xBlinkElapsed: Duration
     xBlinkVisible: bool
@@ -236,6 +245,16 @@ func terminalShortcutModifiers*(): set[KeyModifier] =
   else:
     {kmControl, kmShift}
 
+func terminalLinkModifiers*(): set[KeyModifier] =
+  ## Modifier that reveals and activates links in a terminal.
+  when defined(macosx) or defined(macos):
+    {kmCommand}
+  else:
+    {kmControl}
+
+func hasTerminalLinkModifier(modifiers: set[KeyModifier]): bool =
+  terminalLinkModifiers() <= modifiers
+
 func toTerminexMouseButton(button: MouseButton): TerminexMouseButton =
   case button
   of mbPrimary: tmbPrimary
@@ -268,6 +287,7 @@ func session*(
   view.xSession
 
 proc syncTerminalScreen(view: TerminalView)
+proc refreshHoveredLink(view: TerminalView): bool
 proc startTerminalPolling(view: TerminalView)
 proc stopTerminalPolling(view: TerminalView)
 
@@ -310,6 +330,19 @@ func allowsClipboardWrites*(view: TerminalView): bool =
 
 proc `allowsClipboardWrites=`*(view: TerminalView, value: bool) =
   view.xAllowsClipboardWrites = value
+
+func allowsLinkActivation*(view: TerminalView): bool =
+  ## Whether modifier-hover and modifier-click reveal and activate terminal links.
+  not view.isNil and view.xAllowsLinkActivation
+
+proc `allowsLinkActivation=`*(view: TerminalView, value: bool) =
+  ## Enable or disable modifier-hover and modifier-click terminal links.
+  if view.isNil or view.xAllowsLinkActivation == value:
+    return
+  view.xAllowsLinkActivation = value
+  if view.refreshHoveredLink():
+    view.xLastGeneration = high(uint64)
+    view.syncTerminalScreen()
 
 func optionAsMeta*(view: TerminalView): bool =
   ## Whether Option/Alt prefixes terminal input with Escape (Meta).
@@ -412,6 +445,98 @@ proc viewportStart(view: TerminalView): int =
   let info = view.xSession.screenInfo()
   max(info.totalLineCount - info.rows - view.viewportOffset(), 0)
 
+func isTerminalLinkSeparator(cell: TerminexCell): bool =
+  cell.text.len == 0 or cell.text.strip().len == 0
+
+func terminalLinkText(line: TerminexLine, firstColumn, lastColumn: int): string =
+  for column in firstColumn ..< lastColumn:
+    if not line[column].continuation:
+      result.add line[column].text
+
+func contains(link: TerminalLink, row, column: int): bool =
+  link.target.len > 0 and link.row == row and
+    column in link.firstColumn ..< link.lastColumn
+
+proc terminalLinkAt(view: TerminalView, row, column: int): TerminalLink =
+  if view.isNil or view.xSession.isNil:
+    return
+  let info = view.xSession.screenInfo()
+  if row notin 0 ..< info.totalLineCount:
+    return
+  let line = view.xSession.lineAtAbsolute(row)
+  if column notin 0 ..< line.len:
+    return
+
+  let explicitTarget = line[column].style.hyperlink
+  if explicitTarget.len > 0:
+    var
+      firstColumn = column
+      lastColumn = column + 1
+    while firstColumn > 0 and line[firstColumn - 1].style.hyperlink == explicitTarget:
+      dec firstColumn
+    while lastColumn < line.len and line[lastColumn].style.hyperlink == explicitTarget:
+      inc lastColumn
+    return TerminalLink(
+      target: explicitTarget, row: row, firstColumn: firstColumn, lastColumn: lastColumn
+    )
+  if line[column].isTerminalLinkSeparator():
+    return
+
+  var
+    tokenFirst = column
+    tokenLast = column + 1
+  while tokenFirst > 0 and not line[tokenFirst - 1].isTerminalLinkSeparator():
+    dec tokenFirst
+  while tokenLast < line.len and not line[tokenLast].isTerminalLinkSeparator():
+    inc tokenLast
+  const
+    LeadingLinkPunctuation = {'(', '[', '{', '<', '"'}
+    TrailingLinkPunctuation = {'.', ',', ';', ':', '!', '?', ')', ']', '}', '>', '"'}
+  while tokenFirst < tokenLast and line[tokenFirst].text.len == 1 and
+      line[tokenFirst].text[0] in LeadingLinkPunctuation:
+    inc tokenFirst
+  while tokenLast > tokenFirst and line[tokenLast - 1].text.len == 1 and
+      line[tokenLast - 1].text[0] in TrailingLinkPunctuation:
+    dec tokenLast
+  if column notin tokenFirst ..< tokenLast:
+    return
+  for firstColumn in tokenFirst .. column:
+    let target = line.terminalLinkText(firstColumn, tokenLast)
+    if (target.startsWith("http://") or target.startsWith("https://")) and
+        target.initUrl().isHttpUrl():
+      return TerminalLink(
+        target: target, row: row, firstColumn: firstColumn, lastColumn: tokenLast
+      )
+
+proc refreshHoveredLink(view: TerminalView): bool =
+  let next =
+    if view.xAllowsLinkActivation and view.xHasHoverPosition and view.xLinkModifierHeld:
+      view.terminalLinkAt(view.viewportStart() + view.xHoverRow, view.xHoverColumn)
+    else:
+      TerminalLink()
+  if view.xHoveredLink == next:
+    return
+  view.xHoveredLink = next
+  true
+
+proc updateHoveredLink(
+    view: TerminalView, row, column: int, modifiers: set[KeyModifier]
+) =
+  view.xHasHoverPosition = true
+  view.xHoverRow = row
+  view.xHoverColumn = column
+  view.xLinkModifierHeld = modifiers.hasTerminalLinkModifier()
+  if view.refreshHoveredLink():
+    view.xLastGeneration = high(uint64)
+    view.syncTerminalScreen()
+
+proc clearHoveredLink(view: TerminalView) =
+  view.xHasHoverPosition = false
+  view.xLinkModifierHeld = false
+  if view.refreshHoveredLink():
+    view.xLastGeneration = high(uint64)
+    view.syncTerminalScreen()
+
 proc terminalRowsToMonoTextCells(
     view: TerminalView,
     session: TerminexSession[TerminexCell, TerminexLine, RingBuffer[TerminexLine]],
@@ -423,7 +548,7 @@ proc terminalRowsToMonoTextCells(
       absoluteRow = firstRow + row
       line = session.lineAtAbsolute(absoluteRow)
     for column in 0 ..< columns:
-      result[row * columns + column] = terminalCellToMonoTextCell(
+      var cell = terminalCellToMonoTextCell(
         if column < line.len:
           line[column]
         else:
@@ -432,6 +557,9 @@ proc terminalRowsToMonoTextCells(
         selected = view.xHasSelection and view.xSelection.contains(absoluteRow, column),
         blinkVisible = view.xBlinkVisible,
       )
+      if view.xHoveredLink.contains(absoluteRow, column):
+        cell.decorations.incl mtdUnderline
+      result[row * columns + column] = cell
 
 proc renderedGridDimensionsMatch(view: TerminalView, rows, columns: int): bool =
   if view.xRenderedRows != rows or view.xRenderedColumns != columns or
@@ -500,6 +628,8 @@ proc syncTerminalScreen(view: TerminalView) =
   view.xLastScrollbackCount = nextScrollbackCount
   view.xScrollPosition =
     clamp(view.xScrollPosition, 0.0'f32, nextScrollbackCount.float32)
+  if view.refreshHoveredLink():
+    view.xLastGeneration = high(uint64)
 
   let
     start = max(info.totalLineCount - info.rows - view.viewportOffset(), 0)
@@ -628,11 +758,10 @@ proc handleLocalMouse(view: TerminalView, event: MonoTextRawEvent): bool =
     if owner of Window:
       discard Window(owner).makeFirstResponder(view, focusVisible = false)
     let position = view.absolutePosition(event.row, event.column)
-    if kmCommand in mouse.modifiers:
-      let line = view.xSession.lineAtAbsolute(position.row)
-      if position.column in 0 ..< line.len and
-          line[position.column].style.hyperlink.len > 0:
-        emit view.terminalHyperlinkWasActivated(line[position.column].style.hyperlink)
+    if view.xAllowsLinkActivation and mouse.modifiers.hasTerminalLinkModifier():
+      let link = view.terminalLinkAt(position.row, position.column)
+      if link.target.len > 0:
+        emit view.terminalHyperlinkWasActivated(link.target)
         return true
     if mouse.clickCount >= 3:
       view.selectLine(position)
@@ -679,8 +808,11 @@ proc mouseTrackingAccepts(modes: TerminexModes, kind: MonoTextRawEventKind): boo
     false
 
 proc handleTrackedMouse(view: TerminalView, event: MonoTextRawEvent): bool =
-  if kmShift in event.mouseEvent.modifiers or
-      not view.xSession.screenInfo().modes.mouseTrackingAccepts(event.kind):
+  let position = view.absolutePosition(event.row, event.column)
+  if kmShift in event.mouseEvent.modifiers or (
+    view.xAllowsLinkActivation and event.mouseEvent.modifiers.hasTerminalLinkModifier() and
+    view.terminalLinkAt(position.row, position.column).target.len > 0
+  ) or not view.xSession.screenInfo().modes.mouseTrackingAccepts(event.kind):
     return false
   let input = view.xSession.encodeMouseInput(
     event.row,
@@ -779,6 +911,10 @@ proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
   of mtreKeyDown:
     view.handleTerminalKeyDown(event.keyEvent)
   of mtreFlagsChanged:
+    view.xLinkModifierHeld = event.keyEvent.modifiers.hasTerminalLinkModifier()
+    if view.refreshHoveredLink():
+      view.xLastGeneration = high(uint64)
+      view.syncTerminalScreen()
     true
 
 proc terminalTicked(view: TerminalView, delta: Duration) {.slot.} =
@@ -892,6 +1028,18 @@ protocol TerminalViewLayout of ViewLayoutProtocol:
   method layoutSubviews(view: TerminalView) =
     view.resizeToFit()
 
+protocol TerminalViewHoverEvents of ResponderEventProtocol:
+  method mouseMoved(view: TerminalView, event: MouseEvent): bool =
+    let position = view.rowColumnAtPoint(event.location)
+    view.updateHoveredLink(position.row, position.column, event.modifiers)
+    view.xHoveredLink.target.len > 0
+
+  method mouseExited(view: TerminalView, event: MouseEvent): bool =
+    discard event
+    let hadLink = view.xHoveredLink.target.len > 0
+    view.clearHoveredLink()
+    hadLink
+
 protocol TerminalViewLifecycle of ViewLifecycleProtocol:
   proc terminalViewWillMoveToWindow(
       view: TerminalView, window: Responder
@@ -917,6 +1065,7 @@ proc initTerminalViewFields*(
     else:
       session
   view.xPalette = palette
+  view.xAllowsLinkActivation = true
   view.xOptionAsMeta = true
   view.xLastGeneration = high(uint64)
   view.xLastScrollbackCount = view.xSession.screenInfo().scrollbackCount
@@ -941,6 +1090,7 @@ proc initTerminalViewFields*(
   discard view.withProtocol(TerminalViewEditingCommands)
   discard view.withProtocol(TerminalViewFocus)
   discard view.withProtocol(TerminalViewLayout)
+  discard view.withProtocol(TerminalViewHoverEvents)
   view.observeProtocol(view, TerminalViewLifecycle)
   view.syncTerminalScreen()
   view.applyInitialFrame(frame)

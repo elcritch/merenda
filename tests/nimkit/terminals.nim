@@ -680,6 +680,12 @@ suite "nimkit terminal views":
     else:
       check terminalShortcutModifiers() == {kmControl, kmShift}
 
+  test "terminal links use the platform link modifier":
+    when defined(macosx) or defined(macos):
+      check terminalLinkModifiers() == {kmCommand}
+    else:
+      check terminalLinkModifiers() == {kmControl}
+
   test "view renders an idle session and resizes its screen to cell geometry":
     let
       session = newTerminalSession(columns = 12, rows = 3)
@@ -702,6 +708,7 @@ suite "nimkit terminal views":
   test "terminal views suppress the outer focus ring":
     let view = newTerminalView(frame = rect(0, 0, 240, 100))
     check view.focusRingType == frtNone
+    check view.allowsLinkActivation
     check view.optionAsMeta
     view.optionAsMeta = false
     check not view.optionAsMeta
@@ -1849,7 +1856,7 @@ suite "nimkit terminal views":
       check session.pollUntilExit()
       check "1b 5b 49 1b 5b 4f" in session.normalizedTerminalOutput()
 
-  test "Command-click activates terminal hyperlinks through mouse dispatch":
+  test "modifier-click activates OSC hyperlinks through mouse dispatch":
     let
       session = newTerminalSession(columns = 24, rows = 2)
       view = newTerminalView(session, frame = rect(0, 0, 300, 80))
@@ -1863,8 +1870,49 @@ suite "nimkit terminal views":
     window.setContentView(view)
     let point = view.terminalCellPoint(0, 3)
 
-    check window.mouseDownAt(point, clickCount = 1, modifiers = {kmCommand})
-    check window.mouseUpAt(point, clickCount = 1, modifiers = {kmCommand})
+    discard window.mouseMovedAt(point, modifiers = terminalLinkModifiers())
+    check mtdUnderline in view.cellAt(0, 3).decorations
+    check window.mouseDownAt(point, clickCount = 1, modifiers = terminalLinkModifiers())
+    check window.mouseUpAt(point, clickCount = 1, modifiers = terminalLinkModifiers())
+    check spy.links == @["https://example.com/docs"]
+
+  test "modifier-hover reveals plain URLs and link activation can be disabled":
+    let
+      session = newTerminalSession(columns = 40, rows = 2)
+      view = newTerminalView(session, frame = rect(0, 0, 480, 80))
+      window = newWindow("Terminal URL", frame = rect(0, 0, 480, 80))
+      spy = TerminalInteractionSpy()
+    session.processOutput("\x1b[?1000;1006hSee (https://example.com/docs).")
+    discard view.poll()
+    view.connect(terminalHyperlinkWasActivated, spy, rememberTerminalLink)
+    window.setContentView(view)
+    check window.makeFirstResponder(view)
+    let
+      point = view.terminalCellPoint(0, 10)
+      modifierKey =
+        when defined(macosx) or defined(macos): keyLeftCommand else: keyLeftControl
+
+    discard window.mouseMovedAt(point)
+    check mtdUnderline notin view.cellAt(0, 10).decorations
+    check window.dispatchFlagsChanged(
+      KeyEvent(
+        key: modifierKey, keyCode: modifierKey.ord, modifiers: terminalLinkModifiers()
+      )
+    )
+    check mtdUnderline notin view.cellAt(0, 4).decorations
+    check mtdUnderline in view.cellAt(0, 5).decorations
+    check mtdUnderline in view.cellAt(0, 28).decorations
+    check mtdUnderline notin view.cellAt(0, 29).decorations
+    check window.mouseDownAt(point, clickCount = 1, modifiers = terminalLinkModifiers())
+    check window.mouseUpAt(point, clickCount = 1, modifiers = terminalLinkModifiers())
+    check spy.links == @["https://example.com/docs"]
+
+    view.allowsLinkActivation = false
+    check not view.allowsLinkActivation
+    check mtdUnderline notin view.cellAt(0, 10).decorations
+    discard window.mouseMovedAt(point, modifiers = terminalLinkModifiers())
+    check mtdUnderline notin view.cellAt(0, 10).decorations
+    check window.mouseDownAt(point, clickCount = 1, modifiers = terminalLinkModifiers())
     check spy.links == @["https://example.com/docs"]
 
   test "OSC clipboard writes remain opt-in":

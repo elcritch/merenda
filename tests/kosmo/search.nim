@@ -349,19 +349,34 @@ suite "Kosmo":
       settingsPanel.contentView().viewWithIdentifier(KosmoOptionAsMetaIdentifier)
     require not optionView.isNil
     require optionView of Button
-    let optionButton = Button(optionView)
+    let
+      optionButton = Button(optionView)
+      terminalLinksView =
+        settingsPanel.contentView().viewWithIdentifier(KosmoTerminalLinksIdentifier)
+    require not terminalLinksView.isNil
+    require terminalLinksView of Button
+    let terminalLinksButton = Button(terminalLinksView)
     check frontend.terminalOptionAsMeta
     check optionButton.state == bsOn
+    check frontend.terminalLinksEnabled
+    check terminalLinksButton.state == bsOn
 
     let terminalView = newTerminalView()
     check frontend.openDocument(
       newKosmoPaneDocument("kosmo.test.terminal", "Terminal", terminalView)
     )
     check terminalView.optionAsMeta
+    check terminalView.allowsLinkActivation
     check optionButton.tryToPerform(performClick(), DynamicAgent(optionButton))
     check optionButton.state == bsOff
     check not frontend.terminalOptionAsMeta
     check not terminalView.optionAsMeta
+    check terminalLinksButton.tryToPerform(
+      performClick(), DynamicAgent(terminalLinksButton)
+    )
+    check terminalLinksButton.state == bsOff
+    check not frontend.terminalLinksEnabled
+    check not terminalView.allowsLinkActivation
     settingsPanel.close()
     frontend.window.close()
 
@@ -847,7 +862,9 @@ suite "Kosmo":
       check frontend.window.makeFirstResponder(frontend.editorView)
 
       check frontend.terminalOptionAsMeta
+      check frontend.terminalLinksEnabled
       frontend.terminalOptionAsMeta = false
+      frontend.terminalLinksEnabled = false
       check terminalItem.perform(Responder(frontend.editorView))
       check frontend.editorGroups().len == 1
       check frontend.editorGroups()[0].documents.len == 1
@@ -856,6 +873,7 @@ suite "Kosmo":
       check frontend.editorPane.contentView of TerminalView
       let terminalView = TerminalView(frontend.editorPane.contentView)
       check not terminalView.optionAsMeta
+      check not terminalView.allowsLinkActivation
       check terminalView.session().running()
       check frontend.window.firstResponder() == Responder(terminalView)
       check terminalView.focusVisible

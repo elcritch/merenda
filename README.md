@@ -431,9 +431,12 @@ backend currently supports POSIX platforms (macOS, Linux, and FreeBSD).
 
 OSC 52 clipboard writes are disabled by default because terminal output should
 not silently replace user clipboard contents. Enable them for a trusted child
-with `terminal.allowsClipboardWrites = true`. Title, working-directory, bell,
-process-exit, and hyperlink activation changes are available as NimKit signals.
-The complete runnable example is `examples/terminal_demo.nim`.
+with `terminal.allowsClipboardWrites = true`. Holding Command on macOS or Control
+on other platforms reveals OSC 8 hyperlinks and plain HTTP(S) URLs; clicking
+emits `terminalHyperlinkWasActivated`, even when the child has enabled mouse
+tracking. Set `terminal.allowsLinkActivation = false` to disable this behavior.
+Title, working-directory, bell, and process-exit changes are also available as
+NimKit signals. The complete runnable example is `examples/terminal_demo.nim`.
 
 Controls use Cocoa-style target/action for commands:
 
@@ -656,7 +659,8 @@ editor group. Terminal and text tabs share selection, closing, reordering,
 split-pane dragging, detached windows, and tab-navigation shortcuts. Other
 content can use the same lifecycle by constructing a `KosmoPaneDocument` with
 a content view, preferred first responder, and optional save and close
-callbacks.
+callbacks. Kosmo opens terminal links in the system browser; this can be enabled
+or disabled from the Terminal settings page.
 
 ## Workspace And Services
 

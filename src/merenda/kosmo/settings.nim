@@ -12,6 +12,7 @@ const
   KosmoShortcutsSettingsTabIdentifier* = "kosmo.settings.shortcuts"
   KosmoMoeThemesSettingsTabIdentifier* = "kosmo.settings.moeThemes"
   KosmoOptionAsMetaIdentifier* = "kosmo.settings.terminal.optionAsMeta"
+  KosmoTerminalLinksIdentifier* = "kosmo.settings.terminal.links"
   KosmoShortcutsTableIdentifier* = "kosmo.settings.shortcuts.table"
   KosmoShortcutProfileIdentifier* = "kosmo.settings.shortcuts.profile"
   KosmoEditorInputPolicyIdentifier* = "kosmo.settings.shortcuts.editorInput"
@@ -29,6 +30,7 @@ const
 
 type
   KosmoOptionAsMetaHandler* = proc(enabled: bool) {.closure.}
+  KosmoTerminalLinksHandler* = proc(enabled: bool) {.closure.}
   KosmoMoeThemeHandler* = proc(identifier: string): bool {.closure.}
   KosmoShortcutProfileHandler* = proc(profile: KosmoShortcutProfile) {.closure.}
   KosmoEditorInputPolicyHandler* = proc(policy: KosmoEditorInputPolicy) {.closure.}
@@ -60,6 +62,8 @@ type
     xFirstResponder: nimkit.Responder
     xOptionAsMetaButton: nimkit.Button
     xOptionAsMetaHandler: KosmoOptionAsMetaHandler
+    xTerminalLinksButton: nimkit.Button
+    xTerminalLinksHandler: KosmoTerminalLinksHandler
     xTabs: nimkit.TabView
     xShortcutsTable: nimkit.TableView
     xShortcutsSource: KosmoShortcutsTableSource
@@ -281,6 +285,15 @@ proc `optionAsMeta=`*(settings: KosmoSettingsWindow, enabled: bool) =
   if not settings.isNil:
     settings.xOptionAsMetaButton.state = if enabled: nimkit.bsOn else: nimkit.bsOff
 
+proc terminalLinksEnabled*(settings: KosmoSettingsWindow): bool =
+  ## Return whether modifier-hover and modifier-click terminal links are enabled.
+  not settings.isNil and settings.xTerminalLinksButton.state == nimkit.bsOn
+
+proc `terminalLinksEnabled=`*(settings: KosmoSettingsWindow, enabled: bool) =
+  ## Synchronize terminal link activation without invoking its action.
+  if not settings.isNil:
+    settings.xTerminalLinksButton.state = if enabled: nimkit.bsOn else: nimkit.bsOff
+
 proc `shortcuts=`*(
     settings: KosmoSettingsWindow, shortcuts: openArray[KosmoShortcutSetting]
 ) =
@@ -355,6 +368,8 @@ proc updateMoeThemes*(
 proc newKosmoSettingsWindow*(
     optionAsMeta = true,
     optionAsMetaHandler: KosmoOptionAsMetaHandler = nil,
+    terminalLinksEnabled = true,
+    terminalLinksHandler: KosmoTerminalLinksHandler = nil,
     shortcutProfile = defaultKosmoShortcutProfile(),
     shortcutProfileHandler: KosmoShortcutProfileHandler = nil,
     editorInputPolicy = defaultKosmoEditorInputPolicy(),
@@ -372,6 +387,7 @@ proc newKosmoSettingsWindow*(
     xWindow: nimkit.newPanel("Kosmo Settings", nimkit.rect(180, 160, 760, 420)),
     xContentView: nimkit.newView(),
     xOptionAsMetaHandler: optionAsMetaHandler,
+    xTerminalLinksHandler: terminalLinksHandler,
     xShortcutProfileHandler: shortcutProfileHandler,
     xEditorInputPolicyHandler: editorInputPolicyHandler,
     xShortcutsSource: shortcutsSource,
@@ -386,14 +402,22 @@ proc newKosmoSettingsWindow*(
     shortcutsPage = newSettingsPage()
     moeThemesPage = newSettingsPage()
     optionButton = nimkit.newCheckBox("Use Option/Alt as Meta")
+    terminalLinksButton = nimkit.newCheckBox(
+      when defined(macosx) or defined(macos):
+        "Open terminal links with Command-click"
+      else:
+        "Open terminal links with Control-click"
+    )
     shortcutProfileChoice = nimkit.newComboBox(["Platform", "macOS-style"])
     editorInputPolicyChoice = nimkit.newComboBox(["Vim", "Native", "Hybrid"])
     shortcutsTable = nimkit.newTableView()
     moeThemesTable = nimkit.newTableView()
     optionChanged = nimkit.actionSelector("kosmo.optionAsMetaChanged")
+    terminalLinksChanged = nimkit.actionSelector("kosmo.terminalLinksChanged")
     shortcutProfileChanged = nimkit.actionSelector("kosmo.shortcutProfileChanged")
     editorInputPolicyChanged = nimkit.actionSelector("kosmo.editorInputPolicyChanged")
   result.xOptionAsMetaButton = optionButton
+  result.xTerminalLinksButton = terminalLinksButton
   result.xFirstResponder = optionButton
   result.xTabs = tabs
   result.xShortcutsTable = shortcutsTable
@@ -412,12 +436,27 @@ proc newKosmoSettingsWindow*(
       settings.xOptionAsMetaHandler(settings.optionAsMeta())
   optionButton.action = optionChanged
 
+  terminalLinksButton.identifier = KosmoTerminalLinksIdentifier
+  terminalLinksButton.accessibilityLabel = "Open links from terminal output"
+  terminalLinksButton.state = if terminalLinksEnabled: nimkit.bsOn else: nimkit.bsOff
+  terminalLinksButton.target = nimkit.newActionTarget(terminalLinksChanged) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    if not settings.xTerminalLinksHandler.isNil:
+      settings.xTerminalLinksHandler(settings.terminalLinksEnabled())
+  terminalLinksButton.action = terminalLinksChanged
+
   terminalPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Terminal"),
     optionButton,
     nimkit.newLabel(
       "Send Option/Alt-B and Option/Alt-F as Bash backward-word and forward-word " &
         "shortcuts."
+    ),
+    terminalLinksButton,
+    nimkit.newLabel(
+      "Hold the platform link modifier while hovering a URL to reveal and open it."
     ),
   )
   terminalPage.stack.addFlexibleSpacer()

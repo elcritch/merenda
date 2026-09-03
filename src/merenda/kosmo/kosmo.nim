@@ -238,6 +238,7 @@ type
     dockController: KosmoDockController
     xSettingsWindow: KosmoSettingsWindow
     xTerminalOptionAsMeta: bool
+    xTerminalLinksEnabled: bool
     xWindowManager: WeakRef[KosmoWindowManager]
     xWindowLifecycle: KosmoWindowLifecycle
     xHasFileBrowser: bool
@@ -3254,12 +3255,24 @@ proc openPaneDocument(
   controller.activatePaneTab(group, document.identifier)
   true
 
+proc openTerminalLink(lifecycle: KosmoWindowLifecycle, link: string) {.slot.} =
+  if lifecycle.isNil or lifecycle.frontend.isNil:
+    return
+  let frontend = lifecycle.frontend[]
+  if not frontend.isNil and not frontend.application.isNil:
+    discard frontend.application.workspace().openUrl(link)
+
 proc newTerminalDocument(
     controller: KosmoDockController, options: nimkit.TerminexSpawnOptions
 ): KosmoPaneDocument =
   let terminalView = nimkit.newTerminalView()
   if not controller.frontend.isNil:
-    terminalView.optionAsMeta = controller.frontend[].xTerminalOptionAsMeta
+    let frontend = controller.frontend[]
+    terminalView.optionAsMeta = frontend.xTerminalOptionAsMeta
+    terminalView.allowsLinkActivation = frontend.xTerminalLinksEnabled
+    terminalView.connect(
+      nimkit.terminalHyperlinkWasActivated, frontend.xWindowLifecycle, openTerminalLink
+    )
   try:
     terminalView.start(options)
   except nimkit.TerminexSessionError:
@@ -3476,6 +3489,24 @@ proc `terminalOptionAsMeta=`*(frontend: KosmoApplication, enabled: bool) =
       if document.contentView of nimkit.TerminalView:
         nimkit.TerminalView(document.contentView).optionAsMeta = enabled
 
+func terminalLinksEnabled*(frontend: KosmoApplication): bool =
+  ## Return whether modifier-hover and modifier-click terminal links are enabled.
+  not frontend.isNil and frontend.xTerminalLinksEnabled
+
+proc `terminalLinksEnabled=`*(frontend: KosmoApplication, enabled: bool) =
+  ## Apply terminal link activation to current and future terminals.
+  if frontend.isNil:
+    return
+  frontend.xTerminalLinksEnabled = enabled
+  if not frontend.xSettingsWindow.isNil:
+    frontend.xSettingsWindow.terminalLinksEnabled = enabled
+  if frontend.dockController.isNil:
+    return
+  for group in frontend.dockController.groups:
+    for document in group.documents:
+      if document.contentView of nimkit.TerminalView:
+        nimkit.TerminalView(document.contentView).allowsLinkActivation = enabled
+
 func moeThemeSettings(themes: openArray[KosmoMoeTheme]): seq[KosmoMoeThemeSetting] =
   for theme in themes:
     result.add KosmoMoeThemeSetting(
@@ -3589,6 +3620,11 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
         if not weakFrontend.isNil:
           weakFrontend[].terminalOptionAsMeta = enabled
       ,
+      terminalLinksEnabled = frontend.xTerminalLinksEnabled,
+      terminalLinksHandler = proc(enabled: bool) =
+        if not weakFrontend.isNil:
+          weakFrontend[].terminalLinksEnabled = enabled
+      ,
       shortcutProfile = frontend.dockController.shortcutProfile,
       shortcutProfileHandler = proc(profile: KosmoShortcutProfile) =
         if not weakFrontend.isNil:
@@ -3609,6 +3645,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     )
   else:
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
+    frontend.xSettingsWindow.terminalLinksEnabled = frontend.xTerminalLinksEnabled
     frontend.updateShortcutSettingsWindow()
     frontend.xSettingsWindow.updateMoeThemes(
       moeThemeSettings, selectedMoeThemeIdentifier
@@ -3970,6 +4007,7 @@ proc newKosmoApplication*(
     contentView: contentView,
     documentView: documentView,
     xTerminalOptionAsMeta: true,
+    xTerminalLinksEnabled: true,
     xWindowManager: manager.unsafeWeakRef(),
     xHasFileBrowser: hasFileBrowser,
   )
