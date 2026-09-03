@@ -831,7 +831,6 @@ Press <kbd>Enter</kbd>.
     let narrowLineCount = view.textStorage().stringValue().splitLines().len
 
     view.frame = rect(0, 0, 900, 240)
-    view.layoutSubtreeIfNeeded()
     require view.waitForMarkdownRendering()
     let wideLineCount = view.textStorage().stringValue().splitLines().len
 

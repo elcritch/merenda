@@ -1348,11 +1348,7 @@ proc markdownTableColumnLimit(view: MarkdownView): int =
     return MarkdownTableDefaultColumnLimit
   let
     characterWidth = view.markdownTableCharacterWidth()
-    viewportWidth =
-      if view.scrollView().isNil:
-        view.bounds().size.width
-      else:
-        view.scrollView().viewportSize().width
+    viewportWidth = view.bounds().size.width
     availableWidth =
       max(viewportWidth - view.xMarkdownStyle.documentInsets.horizontal, characterWidth)
     measuredLimit = int(availableWidth * MarkdownTableViewportFraction / characterWidth)
@@ -1366,7 +1362,7 @@ proc markdownTableOverflowWidth(view: MarkdownView, tableColumnWidth: int): floa
   if view.isNil or tableColumnWidth <= view.xMarkdownTableColumnLimit:
     return
   let
-    viewportWidth = view.scrollView().viewportSize().width
+    viewportWidth = view.bounds().size.width
     contentWidth =
       float32(tableColumnWidth) * view.markdownTableCharacterWidth() /
       MarkdownTableViewportFraction
