@@ -2,18 +2,9 @@
 
 import std/[monotimes, os, osproc, streams, strutils, times]
 
-import sigils/[core, threadProxies, threads]
-when defined(windows):
-  import sigils/threadChronos
-else:
-  import sigils/threadSelectors
+import sigils/[core, threadChronos, threadProxies, threads]
 
 const DefaultGitStatusRefreshInterval*: Duration = initDuration(seconds = 3)
-
-when defined(windows):
-  type GitStatusTimerThreadPtr = SigilChronosThreadPtr
-else:
-  type GitStatusTimerThreadPtr = SigilSelectorThreadPtr
 
 type
   GitFileState* = enum
@@ -49,7 +40,7 @@ type
   GitStatusService* = ref object of Agent
     xPool: SigilThreadPoolPtr
     xWorker: AgentProxy[GitStatusWorker]
-    xTimerThread: GitStatusTimerThreadPtr
+    xTimerThread: SigilChronosThreadPtr
     xTicker: AgentProxy[GitStatusRefreshTicker]
     xTimer: SigilTimer
     xRootPath: string
@@ -279,10 +270,7 @@ proc newGitStatusService*(
   )
 
   if refreshInterval.inNanoseconds > 0:
-    when defined(windows):
-      result.xTimerThread = newSigilChronosThread()
-    else:
-      result.xTimerThread = newSigilSelectorThread()
+    result.xTimerThread = newSigilChronosThread()
     result.xTimerThread.start()
     var ticker = GitStatusRefreshTicker()
     result.xTicker = ticker.moveToThread(result.xTimerThread)
@@ -330,8 +318,6 @@ proc close*(service: GitStatusService) =
   if not service.xTimerThread.isNil:
     service.xTimerThread.stop(immediate = true)
     service.xTimerThread.join()
-    when not defined(windows):
-      service.xTimerThread.closeSelectorThread()
   service.xPool.stop(immediate = true)
   service.xPool.join()
   discard service.poll()
