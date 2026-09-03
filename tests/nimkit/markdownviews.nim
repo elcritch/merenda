@@ -32,6 +32,11 @@ proc attributesFor(storage: TextStorage, needle: string): TextAttributes =
   doAssert index >= 0, "rendered Markdown should contain: " & needle
   storage.attributesAt(index)
 
+proc tableScrollViews(view: MarkdownView): seq[ScrollView] =
+  for subview in view.textView().subviews():
+    if subview of ScrollView:
+      result.add ScrollView(subview)
+
 proc unavailableMarkdownImage(url: string): ImageResource =
   discard url
 
@@ -802,7 +807,7 @@ Press <kbd>Enter</kbd>.
     check storage.attributesFor("Metric").fontSize == style.bodyFontSize * 0.9'f32
     check storage.attributesFor("CPU p95").fontSize == style.bodyFontSize * 0.9'f32
 
-  test "wide GFM tables use horizontal overflow while Markdown still wraps":
+  test "wide GFM tables scroll independently while the Markdown document fits":
     let
       source =
         "A deliberately long paragraph that should continue to use wrapped text " &
@@ -814,15 +819,31 @@ Press <kbd>Enter</kbd>.
     require view.waitForMarkdownParsing()
     discard buildRenders(view)
     require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
 
     check view.wraps
-    check view.scrollView().hasHorizontalScroller
-    check view.scrollView().maximumContentOffset().x > 0.0'f32
     let
+      tableScrollViews = view.tableScrollViews()
       rendered = view.textStorage().stringValue()
       paragraphStop = rendered.runeIndexOf("\n\n")
       tableStart = paragraphStop + 2
       tableLineLength = rendered.runeSubStr(tableStart).runeIndexOf("\n")
+
+    check not view.scrollView().hasHorizontalScroller
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+    check view.textView().frame().size.width <=
+      view.scrollView().viewportSize().width + 0.001'f32
+    require tableScrollViews.len == 1
+    let tableScrollView = tableScrollViews[0]
+    check tableScrollView.hasHorizontalScroller
+    check tableScrollView.maximumContentOffset().x > 0.0'f32
+    check tableScrollView.frame().maxX <=
+      view.scrollView().viewportSize().width + 0.001'f32
+
+    tableScrollView.contentOffset =
+      initPoint(tableScrollView.maximumContentOffset().x, 0.0'f32)
+    check tableScrollView.contentOffset().x > 0.0'f32
+    check view.scrollView().contentOffset().x == 0.0'f32
 
     require paragraphStop > 0
     require tableLineLength > 0
@@ -838,6 +859,13 @@ Press <kbd>Enter</kbd>.
     check tableRects.len == 1
     check tableRects[0].maxX > viewportWidth
 
+    view.markdown = "The replacement document has no table."
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+    check view.tableScrollViews().len == 0
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+
   test "compact GFM tables stay within the Markdown viewport":
     let view = newMarkdownView(
       "| Metric | Value |\n| - | - |\n| CPU | 42% |", frame = rect(0, 0, 420, 200)
@@ -846,6 +874,32 @@ Press <kbd>Enter</kbd>.
     discard buildRenders(view)
     require view.waitForMarkdownLayout()
 
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+    check view.tableScrollViews().len == 0
+
+  test "each overflowing GFM table gets its own horizontal scroll view":
+    let
+      wideTable =
+        "| A | B | C | D | E | F | G | H |\n" & "| - | - | - | - | - | - | - | - |\n" &
+        "| CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | " &
+        "CPU p95 | CPU p95 |"
+      view = newMarkdownView(
+        wideTable & "\n\nBetween the tables.\n\n" & wideTable,
+        frame = rect(0, 0, 300, 320),
+      )
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let tableScrollViews = view.tableScrollViews()
+    require tableScrollViews.len == 2
+    for tableScrollView in tableScrollViews:
+      check tableScrollView.maximumContentOffset().x > 0.0'f32
+    tableScrollViews[0].contentOffset =
+      initPoint(tableScrollViews[0].maximumContentOffset().x, 0.0'f32)
+    check tableScrollViews[0].contentOffset().x > 0.0'f32
+    check tableScrollViews[1].contentOffset().x == 0.0'f32
     check view.scrollView().maximumContentOffset().x == 0.0'f32
 
   test "GFM tables reflow once the Markdown viewport settles":

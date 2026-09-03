@@ -29,6 +29,7 @@ import ../foundation/types
 import ../foundation/urlassets
 import ../foundation/urls
 import ../themes
+from ../view/viewgeometry import setFrameFromLayout
 import ../view/views
 import ./markdownhtmlimages
 import ./markdownparsing
@@ -109,18 +110,29 @@ type
     image: ImageResource
     displaySize: Size
 
+  MarkdownTablePresentation = object
+    range: TextRange
+    storage: TextStorage
+    overflowing: bool
+
+  MarkdownTableScrollPresentation = object
+    range: TextRange
+    scrollView: ScrollView
+    textView: TextView
+
   MarkdownTextView = ref object of TextView
     codeBlockRanges: seq[TextRange]
     codeBlockStyle: MarkdownBlockStyle
     markdownImages: seq[MarkdownImagePresentation]
+    markdownTables: seq[MarkdownTableScrollPresentation]
 
   MarkdownDocument = object
     storage: TextStorage
     codeBlockRanges: seq[TextRange]
     images: seq[MarkdownImagePresentation]
     imageUrls: seq[string]
+    tables: seq[MarkdownTablePresentation]
     hasTables: bool
-    tableColumnWidth: int
 
   MarkdownBuilder = object
     text: string
@@ -134,7 +146,7 @@ type
     imageContentTypeLoader: MarkdownImageContentTypeLoader
     syntaxHighlighter: SyntaxHighlighter
     tableColumnLimit: int
-    tableColumnWidth: int
+    tables: seq[MarkdownTablePresentation]
     hasTables: bool
 
   MarkdownTableAlignment = enum
@@ -415,7 +427,6 @@ proc addBlockBreak(builder: var MarkdownBuilder, attributes: TextAttributes) =
 proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
   let offset = builder.runeLength
   builder.hasTables = builder.hasTables or rendered.hasTables
-  builder.tableColumnWidth = max(builder.tableColumnWidth, rendered.tableColumnWidth)
   builder.imageUrls.add(rendered.imageUrls)
   builder.text.add rendered.text
   builder.runeLength += rendered.runeLength
@@ -440,6 +451,12 @@ proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
       offset + int(presentation.range.location), int(presentation.range.length)
     )
     builder.images.add shifted
+  for presentation in rendered.tables:
+    var shifted = presentation
+    shifted.range = initTextRange(
+      offset + int(presentation.range.location), int(presentation.range.length)
+    )
+    builder.tables.add shifted
 
 proc renderInline(
   builder: var MarkdownBuilder, token: markdownParser.Token, attributes: TextAttributes
@@ -945,7 +962,7 @@ proc renderTable(
   var tableColumnWidth = MarkdownTableSeparatorWidth * (columnCount - 1)
   for width in widths:
     tableColumnWidth += width
-  builder.tableColumnWidth = max(builder.tableColumnWidth, tableColumnWidth)
+  let tableStart = builder.runeLength
   var separatorAttributes = tableAttributes
   separatorAttributes.foregroundColor = builder.style.ruleColor
 
@@ -997,6 +1014,14 @@ proc renderTable(
         if columnIndex > 0:
           builder.add("─┼─", separatorAttributes)
         builder.add("─".repeat(width), separatorAttributes)
+  let overflowing = tableColumnWidth > builder.tableColumnLimit
+  let tableRange = initTextRange(tableStart, builder.runeLength - tableStart)
+  var presentation =
+    MarkdownTablePresentation(range: tableRange, overflowing: overflowing)
+  if overflowing:
+    presentation.storage =
+      newTextStorage(builder.text, builder.runs).sliceTextStorage(tableRange)
+  builder.tables.add move presentation
   builder.hasTables = true
 
 proc renderContainerChild(
@@ -1082,8 +1107,14 @@ proc renderBlockquote(
       stop = sourceToDestination[presentation.range.maxIndex]
     mapped.range = initTextRange(start, stop - start)
     builder.images.add mapped
+  for presentation in quoted.tables:
+    var mapped = presentation
+    let
+      start = sourceToDestination[int(presentation.range.location)]
+      stop = sourceToDestination[presentation.range.maxIndex]
+    mapped.range = initTextRange(start, stop - start)
+    builder.tables.add mapped
   builder.hasTables = builder.hasTables or quoted.hasTables
-  builder.tableColumnWidth = max(builder.tableColumnWidth, quoted.tableColumnWidth)
 
 proc addHighlightedCode(
     builder: var MarkdownBuilder, source, language: string, attributes: TextAttributes
@@ -1174,8 +1205,8 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
     codeBlockRanges: builder.codeBlockRanges,
     images: builder.images,
     imageUrls: builder.imageUrls,
+    tables: builder.tables,
     hasTables: builder.hasTables,
-    tableColumnWidth: builder.tableColumnWidth,
   )
 
 proc parseMarkdownRoot(
@@ -1258,6 +1289,95 @@ proc imageRect(
     return
   rect(anchor.origin.x, anchor.origin.y, drawSize.width, drawSize.height)
 
+proc textRangeRect(textView: TextView, range: TextRange): Rect =
+  for selectionRect in textView.selectionRects(range):
+    if result.isEmpty:
+      result = selectionRect
+    else:
+      result = result.union(selectionRect)
+
+proc layoutMarkdownTables(textView: MarkdownTextView) =
+  let contentRect = textView.textContainer().layoutRect()
+  if contentRect.size.width <= 0.0'f32:
+    return
+  for presentation in textView.markdownTables:
+    let selectionRects = textView.selectionRects(presentation.range)
+    if selectionRects.len == 0:
+      continue
+    let
+      tableRect = textView.textRangeRect(presentation.range)
+      tableOrigin = selectionRects[0].origin
+    let
+      scrollView = presentation.scrollView
+      tableTextView = presentation.textView
+      tableHeight = max(tableRect.maxY - tableOrigin.y, tableRect.size.height)
+      viewportWidth = max(contentRect.maxX - tableOrigin.x, 0.0'f32)
+      frameHeight = tableHeight + scrollView.scrollerThickness()
+      initialDocumentWidth = max(tableRect.size.width, viewportWidth + 1.0'f32)
+    scrollView.setFrameFromLayout(
+      rect(tableOrigin.x, tableOrigin.y, viewportWidth, frameHeight)
+    )
+    tableTextView.setFrameFromLayout(
+      rect(0.0'f32, 0.0'f32, initialDocumentWidth, tableHeight)
+    )
+    let tableContentRect =
+      tableTextView.textRangeRect(initTextRange(0, tableTextView.textStorage().len))
+    if tableContentRect.size.width > initialDocumentWidth:
+      tableTextView.setFrameFromLayout(
+        rect(0.0'f32, 0.0'f32, tableContentRect.size.width, tableHeight)
+      )
+    scrollView.tile()
+
+proc clearMarkdownTables(textView: MarkdownTextView) =
+  for presentation in textView.markdownTables:
+    presentation.scrollView.removeFromSuperview()
+  textView.markdownTables.setLen(0)
+
+proc installMarkdownTables(
+    textView: MarkdownTextView,
+    tables: openArray[MarkdownTablePresentation],
+    backgroundColor: Color,
+) =
+  textView.clearMarkdownTables()
+  for table in tables:
+    if not table.overflowing:
+      continue
+    let
+      tableTextView = newTextView()
+      scrollView = newScrollView(documentView = tableTextView)
+    tableTextView.propagatesIntrinsicContentSizeChanges = false
+    tableTextView.richText = true
+    tableTextView.editable = false
+    tableTextView.selectable = true
+    tableTextView.backgroundColor = backgroundColor
+    tableTextView.textContainer = initTextContainer(
+      wraps = false, widthTracksTextView = true, heightTracksTextView = true
+    )
+    tableTextView.textStorage = table.storage
+    tableTextView.accessibilityLabel = "Markdown table"
+    scrollView.hasHorizontalScroller = true
+    scrollView.hasVerticalScroller = false
+    scrollView.autohidePolicy = sapWhenNeeded
+    scrollView.borderType = svbNoBorder
+    scrollView.drawsBackground = false
+    scrollView.clipView().backgroundColor = backgroundColor
+    scrollView.clipView().drawsBackground = true
+    textView.addSubview(scrollView)
+    textView.markdownTables.add MarkdownTableScrollPresentation(
+      range: table.range, scrollView: scrollView, textView: tableTextView
+    )
+  textView.setNeedsLayout()
+
+proc markdownTextLayoutDidComplete(
+    textView: MarkdownTextView, snapshot: TextLayoutSnapshot
+) {.slot.} =
+  discard snapshot
+  textView.setNeedsLayout()
+
+protocol MarkdownTextViewLayout of ViewLayoutProtocol:
+  method layoutSubviews(textView: MarkdownTextView) =
+    textView.layoutMarkdownTables()
+
 protocol MarkdownTextViewDrawing of ViewDrawingProtocol:
   method draw(textView: MarkdownTextView, context: DrawContext) =
     let style = textView.codeBlockStyle
@@ -1280,7 +1400,6 @@ protocol MarkdownTextViewDrawing of ViewDrawingProtocol:
     TextView(textView).drawTextViewContents(context)
 
 func markdownImageCacheKey(view: MarkdownView, url: string): string
-proc markdownTableOverflowWidth(view: MarkdownView, tableColumnWidth: int): float32
 
 proc pruneMarkdownImageCache(view: MarkdownView, imageUrls: openArray[string]) =
   var activeKeys = initTable[string, bool]()
@@ -1314,9 +1433,9 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
   textView.codeBlockStyle = view.xMarkdownStyle.codeBlockStyle
   textView.markdownImages = document.images
   view.xHasMarkdownTables = document.hasTables
-  view.minimumWrappedDocumentWidth =
-    view.markdownTableOverflowWidth(document.tableColumnWidth)
+  view.minimumWrappedDocumentWidth = 0.0'f32
   view.textStorage = document.storage
+  textView.installMarkdownTables(document.tables, view.xMarkdownStyle.backgroundColor)
   view.pruneMarkdownImageCache(document.imageUrls)
   textView.needsDisplay = true
 
@@ -1360,19 +1479,6 @@ proc markdownTableColumnLimit(view: MarkdownView): int =
       (measuredLimit div MarkdownTableColumnQuantum) * MarkdownTableColumnQuantum
   clamp(
     quantizedLimit, MarkdownTableMinimumColumnLimit, MarkdownTableMaximumColumnLimit
-  )
-
-proc markdownTableOverflowWidth(view: MarkdownView, tableColumnWidth: int): float32 =
-  if view.isNil or tableColumnWidth <= view.xMarkdownTableColumnLimit:
-    return
-  let
-    viewportWidth = view.bounds().size.width
-    contentWidth =
-      float32(tableColumnWidth) * view.markdownTableCharacterWidth() /
-      MarkdownTableViewportFraction
-  max(
-    viewportWidth + 1.0'f32,
-    contentWidth + view.xMarkdownStyle.documentInsets.horizontal,
   )
 
 proc scheduleMarkdownTableResize(view: MarkdownView) =
@@ -1905,6 +2011,7 @@ proc initMarkdownViewFields*(
   ## HTTP(S) images use `urlAssetLoader`, or a lazy shared loader when it is nil.
   let textView = MarkdownTextView()
   textView.initTextViewFields()
+  discard textView.withProtocol(MarkdownTextViewLayout)
   discard textView.withProtocol(MarkdownTextViewDrawing)
   initTextEditorFields(
     view, frame = frame, richText = true, wraps = true, textView = textView
@@ -1935,6 +2042,9 @@ proc initMarkdownViewFields*(
     view.xMarkdownRoot.markdownDocument(style, syntaxHighlighter = syntaxHighlighter)
   )
   view.textView().layoutManager().usesBackgroundLayout = true
+  textView.layoutManager().connect(
+    layoutDidComplete, textView, markdownTextLayoutDidComplete
+  )
   view.scheduleMarkdownParse()
 
 proc newMarkdownView*(
