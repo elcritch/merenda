@@ -66,6 +66,25 @@ proc addImage*(manifest: var RenderResourceManifest, image: ImageResource) =
   let owned = image.renderingRef()
   manifest.images[owned.id] = owned
 
+proc addResources*(
+    manifest: var RenderResourceManifest, resources: RenderResourceManifest
+) =
+  ## Merges retained font and image resources into `manifest` by identity.
+  if resources.isNil:
+    return
+  manifest.ensureManifest()
+  for id, font in resources.fonts:
+    manifest.fonts[id] = font
+  for id, image in resources.images:
+    manifest.images[id] = image
+
+proc mergeRenderResources*(
+    manifests: openArray[RenderResourceManifest]
+): RenderResourceManifest =
+  result = initRenderResourceManifest()
+  for manifest in manifests:
+    result.addResources(manifest)
+
 proc fontCount*(manifest: RenderResourceManifest): Natural =
   if manifest.isNil: 0 else: manifest.fonts.len.Natural
 

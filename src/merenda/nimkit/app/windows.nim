@@ -17,6 +17,8 @@ import ../responder/keybindings
 import ../drawing/drawing
 import ../drawing/images
 import ../drawing/rendering as nimkitRendering
+when not defined(useNativeDynlib):
+  import ../drawing/renderscenes
 import ../foundation/events
 import ../foundation/notifications
 import ../text/fieldeditors
@@ -1495,6 +1497,22 @@ proc buildRenders*(window: Window, theme: Theme): Renders =
   window.prepareToolTipForDisplay()
   window.refreshAutomaticContentMinSize()
   nimkitRendering.buildRenders(window.xContentView, theme)
+
+when not defined(useNativeDynlib):
+  proc buildRenderScene*(window: Window): RenderScene =
+    window.prepareToolTipForDisplay()
+    window.refreshAutomaticContentMinSize()
+    nimkitRendering.buildRenderScene(window.xContentView, window.effectiveAppearance())
+
+  proc buildRenderScene*(window: Window, appearance: Appearance): RenderScene =
+    window.prepareToolTipForDisplay()
+    window.refreshAutomaticContentMinSize()
+    nimkitRendering.buildRenderScene(window.xContentView, appearance)
+
+  proc buildRenderScene*(window: Window, theme: Theme): RenderScene =
+    window.prepareToolTipForDisplay()
+    window.refreshAutomaticContentMinSize()
+    nimkitRendering.buildRenderScene(window.xContentView, theme)
 
 proc nativeWindowOrNil*(window: Window): siwinshim.Window =
   if window.xHostWindow.isNil:

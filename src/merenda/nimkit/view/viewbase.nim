@@ -4,6 +4,9 @@ import ../foundation/backrefs
 import ../foundation/types
 import ../drawing/renderresources
 
+when not defined(useNativeDynlib):
+  import ../drawing/renderscenes
+
 when defined(useNativeDynlib):
   from figdraw/dynlib import Renders
 else:
@@ -209,6 +212,9 @@ type
     xRegisteredDraggedTypes*: seq[string]
     xContextMenu*: Responder
     xContextMenuHandlerInstalled*: bool
+    when not defined(useNativeDynlib):
+      xRenderViewId*: RenderViewId
+      xCachedRenderScene*: RenderScene
     xCachedRenders*: Renders
     xCachedRenderResources*: RenderResourceManifest
     xCachedAppearance*: Appearance
