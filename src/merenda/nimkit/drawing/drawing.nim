@@ -1,4 +1,4 @@
-import std/[os, strutils, tables, unicode]
+import std/[hashes, os, strutils, tables, unicode]
 
 import pkg/bumpy
 
@@ -386,6 +386,120 @@ proc normalizeLineAdvances(layout: var GlyphArrangement) =
     layout.bounding.h = max(maximumY - minimumY, 0.0'f32)
     layout.maxSize.y = max(layout.maxSize.y, layout.bounding.h)
 
+func paragraphIndices(runes: openArray[Rune]): seq[int] =
+  result = newSeq[int](runes.len + 1)
+  var
+    paragraphIndex = 0
+    previousWasCarriageReturn = false
+  for index, rune in runes:
+    result[index] = paragraphIndex
+    if rune == Rune('\r'):
+      inc paragraphIndex
+    elif rune == Rune('\n') and not previousWasCarriageReturn:
+      inc paragraphIndex
+    previousWasCarriageReturn = rune == Rune('\r')
+  result[^1] = paragraphIndex
+
+func lineSourceIndex(layout: GlyphArrangement, line: Slice[int]): int =
+  result = layout.sourceRunes.len
+  for glyphIndex in line:
+    result = min(result, layout.arrangedGlyphs[glyphIndex].source.runeStart)
+  result = clamp(result, 0, layout.sourceRunes.len)
+
+func linesByParagraph(
+    layout: GlyphArrangement, indices: openArray[int]
+): seq[seq[Slice[int]]] =
+  let paragraphCount =
+    if indices.len == 0:
+      1
+    else:
+      indices[^1] + 1
+  result = newSeq[seq[Slice[int]]](paragraphCount)
+  for line in layout.lineGlyphRanges():
+    let sourceIndex = layout.lineSourceIndex(line)
+    result[indices[sourceIndex]].add line
+
+func paragraphStarts(indices: openArray[int]): seq[int] =
+  let paragraphCount =
+    if indices.len == 0:
+      1
+    else:
+      indices[^1] + 1
+  result = newSeq[int](paragraphCount)
+  var paragraphIndex = 1
+  for sourceIndex in 1 ..< indices.len:
+    if indices[sourceIndex] != indices[sourceIndex - 1]:
+      result[paragraphIndex] = sourceIndex
+      inc paragraphIndex
+
+proc paragraphLineBreakModes(
+    storage: TextStorage, indices: openArray[int]
+): seq[TextLineBreakMode] =
+  let starts = indices.paragraphStarts()
+  result = newSeq[TextLineBreakMode](starts.len)
+  for paragraphIndex, start in starts:
+    if not storage.isNil and storage.len > 0:
+      result[paragraphIndex] =
+        storage.attributesAt(min(start, storage.len - 1)).paragraphStyle.lineBreakMode
+    else:
+      result[paragraphIndex] = tlbmWordWrapping
+
+func canCombineLineBreakLayouts(wrapped, unwrapped: GlyphArrangement): bool =
+  wrapped.sourceRunes == unwrapped.sourceRunes and
+    wrapped.arrangedGlyphs.len == unwrapped.arrangedGlyphs.len and
+    wrapped.positions.len == unwrapped.positions.len and
+    wrapped.selectionRects.len == unwrapped.selectionRects.len
+
+proc mixedLineBreakLayout(
+    wrapped, unwrapped: GlyphArrangement, storage: TextStorage
+): GlyphArrangement =
+  if not wrapped.canCombineLineBreakLayouts(unwrapped) or
+      unwrapped.arrangedGlyphs.len == 0:
+    return wrapped
+
+  let
+    indices = unwrapped.sourceRunes.paragraphIndices()
+    modes = storage.paragraphLineBreakModes(indices)
+    wrappedLines = wrapped.linesByParagraph(indices)
+    unwrappedLines = unwrapped.linesByParagraph(indices)
+  result = unwrapped
+  result.lines = @[]
+  result.arrangedGlyphs = newSeq[ArrangedGlyph](wrapped.arrangedGlyphs.len)
+  result.positions = newSeq[Vec2](wrapped.positions.len)
+  result.selectionRects = newSeq[bumpy.Rect](wrapped.selectionRects.len)
+  var visited = newSeq[bool](wrapped.arrangedGlyphs.len)
+
+  for paragraphIndex, mode in modes:
+    let selectedLines =
+      if mode == tlbmClipping:
+        unwrappedLines[paragraphIndex]
+      else:
+        wrappedLines[paragraphIndex]
+    let source = if mode == tlbmClipping: unwrapped else: wrapped
+    for line in selectedLines:
+      result.lines.add line
+      for glyphIndex in line:
+        result.arrangedGlyphs[glyphIndex] = source.arrangedGlyphs[glyphIndex]
+        result.positions[glyphIndex] = source.positions[glyphIndex]
+        result.selectionRects[glyphIndex] = source.selectionRects[glyphIndex]
+        visited[glyphIndex] = true
+
+  for wasVisited in visited:
+    if not wasVisited:
+      return wrapped
+
+  var layoutHash = hash((wrapped.contentHash, result.contentHash))
+  for mode in modes:
+    layoutHash = layoutHash !& hash(mode)
+  result.contentHash = !$layoutHash
+
+proc usesMixedLineBreakModes(storage: TextStorage): bool =
+  if storage.isNil:
+    return
+  for run in storage.runs:
+    if run.attributes.paragraphStyle.lineBreakMode == tlbmClipping:
+      return true
+
 proc textLayoutImpl(
     rect: nimkitTypes.Rect,
     storage: TextStorage,
@@ -415,7 +529,48 @@ proc textLayoutImpl(
       font.underline = attributes.hasUnderline
       font.strikethrough = attributes.hasStrikethrough
       spans.add((fs(font, fill(attributes.foregroundColor.rgba)), text))
-  if rasterize:
+  if wrap and storage.usesMixedLineBreakModes():
+    let
+      wrapped =
+        if rasterize:
+          typeset(
+            rect.toFigRect,
+            spans,
+            hAlign = alignment.toFontHorizontal,
+            vAlign = Top,
+            minContent = false,
+            wrap = true,
+          )
+        else:
+          typesetForMeasurement(
+            rect.toFigRect,
+            spans,
+            hAlign = alignment.toFontHorizontal,
+            vAlign = Top,
+            minContent = false,
+            wrap = true,
+          )
+      unwrapped =
+        if rasterize:
+          typeset(
+            rect.toFigRect,
+            spans,
+            hAlign = alignment.toFontHorizontal,
+            vAlign = Top,
+            minContent = false,
+            wrap = false,
+          )
+        else:
+          typesetForMeasurement(
+            rect.toFigRect,
+            spans,
+            hAlign = alignment.toFontHorizontal,
+            vAlign = Top,
+            minContent = false,
+            wrap = false,
+          )
+    result = mixedLineBreakLayout(wrapped, unwrapped, storage)
+  elif rasterize:
     result = typeset(
       rect.toFigRect,
       spans,

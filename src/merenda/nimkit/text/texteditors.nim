@@ -280,11 +280,7 @@ proc textDocumentSize(
 
   let
     insets = editor.xTextInsets
-    width =
-      if editor.xWraps:
-        max(viewportWidth, editor.xMinimumWrappedDocumentWidth)
-      else:
-        DefaultTextEditorMeasureWidth
+    width = if editor.xWraps: viewportWidth else: DefaultTextEditorMeasureWidth
     measurement = editor.measuredText(width)
     textWidth =
       if measurement.hasText:
@@ -298,7 +294,7 @@ proc textDocumentSize(
         defaultFontSize()
     documentWidth =
       if editor.xWraps:
-        max(viewportWidth, editor.xMinimumWrappedDocumentWidth)
+        max(max(viewportWidth, editor.xMinimumWrappedDocumentWidth), textWidth)
       else:
         max(max(textWidth, viewportWidth), editor.xMinimumDocumentSize.width)
   initSize(
@@ -313,14 +309,19 @@ func closeEnough(left, right: Size): bool =
   abs(left.width - right.width) <= TextEditorLayoutEpsilon and
     abs(left.height - right.height) <= TextEditorLayoutEpsilon
 
-proc applyTextEditorLayout(editor: TextEditor, frame: Rect, documentSize: Size) =
+proc applyTextEditorLayout(
+    editor: TextEditor, frame: Rect, viewportSize, documentSize: Size
+) =
   editor.xScrollView.setFrameFromLayout(frame)
   editor.xTextView.setFrameFromLayout(
     rect(0.0, 0.0, documentSize.width, documentSize.height)
   )
   if not editor.xTextView.layoutManager().usesBackgroundLayout():
+    let textContainerSize = initSize(
+      if editor.xWraps: viewportSize.width else: documentSize.width, documentSize.height
+    )
     editor.xTextView.textContainer =
-      initTextContainer(documentSize, editor.xTextInsets, editor.xWraps)
+      initTextContainer(textContainerSize, editor.xTextInsets, editor.xWraps)
   editor.xScrollView.tile()
 
 proc updateTextEditorLayout(editor: TextEditor) =
@@ -339,7 +340,7 @@ proc updateTextEditorLayout(editor: TextEditor) =
     if nextSize.closeEnough(documentSize):
       break
     documentSize = nextSize
-  editor.applyTextEditorLayout(frame, documentSize)
+  editor.applyTextEditorLayout(frame, viewport, documentSize)
 
 protocol DefaultTextEditorLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(editor: TextEditor): IntrinsicSize =

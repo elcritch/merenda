@@ -790,6 +790,18 @@ Press <kbd>Enter</kbd>.
       .splitLines()
     check wordLines[^1].contains(longWord)
 
+  test "GFM tables use a smaller font than Markdown body text":
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage(
+        "Body prose.\n\n| Metric | Value |\n| - | - |\n| CPU p95 | 42 ms |",
+        style = style,
+      )
+
+    check storage.attributesFor("Body prose").fontSize == style.bodyFontSize
+    check storage.attributesFor("Metric").fontSize == style.bodyFontSize * 0.9'f32
+    check storage.attributesFor("CPU p95").fontSize == style.bodyFontSize * 0.9'f32
+
   test "wide GFM tables use horizontal overflow while Markdown still wraps":
     let
       source =
@@ -806,8 +818,25 @@ Press <kbd>Enter</kbd>.
     check view.wraps
     check view.scrollView().hasHorizontalScroller
     check view.scrollView().maximumContentOffset().x > 0.0'f32
-    check view.textView().layoutManager().lineCount() >
-      view.textStorage().stringValue().splitLines().len.Natural
+    let
+      rendered = view.textStorage().stringValue()
+      paragraphStop = rendered.runeIndexOf("\n\n")
+      tableStart = paragraphStop + 2
+      tableLineLength = rendered.runeSubStr(tableStart).runeIndexOf("\n")
+
+    require paragraphStop > 0
+    require tableLineLength > 0
+    let
+      paragraphRects = view.textView().selectionRects(initTextRange(0, paragraphStop))
+      tableRects =
+        view.textView().selectionRects(initTextRange(tableStart, tableLineLength))
+      viewportWidth = view.scrollView().viewportSize().width
+
+    check paragraphRects.len > 1
+    for rect in paragraphRects:
+      check rect.maxX <= viewportWidth + 0.001'f32
+    check tableRects.len == 1
+    check tableRects[0].maxX > viewportWidth
 
   test "compact GFM tables stay within the Markdown viewport":
     let view = newMarkdownView(
