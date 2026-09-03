@@ -1,4 +1,4 @@
-version       = "0.15.3"
+version       = "0.15.4"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -17,7 +17,7 @@ requires "cborious"
 requires "unicodedb >= 0.14.0"
 requires "faststreams >= 0.5.1"
 requires "gh:elcritch/nim-markdown#devel[regex]"
-requires "gh:elcritch/terminex >= 0.2.0"
+requires "gh:elcritch/terminex >= 0.2.1"
 requires "https://github.com/Araq/iconbundler"
 
 feature "libbacktrace":
