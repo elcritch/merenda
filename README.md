@@ -46,10 +46,22 @@ requires "https://github.com/elcritch/merenda"
 Then install dependencies with Atlas:
 
 ```sh
-atlas install --update
+atlas install -tuk
 ```
 
-Note: You'll want to install the most recent [Atlas](https://github.com/nim-lang/atlas#installation), where curl install is the easiest. Nimble should also work but it's not tested currently.
+Note: You'll want to install the most recent [Atlas](https://github.com/nim-lang/atlas#installation), where curl install is the easiest. 
+
+## Kosmo Install
+
+To run Kosmo you need to install the "kosmo" feature's deps with Atlas:
+
+```sh
+atlas install -tuk --features:kosmo
+```
+
+## Nimble
+
+Nimble has a couple of outstanding bugs regarding features. Until they're fixed Atlas is the only way to install the appropriate deps.
 
 ## Quick Start
 
