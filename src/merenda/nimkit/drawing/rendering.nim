@@ -7,6 +7,8 @@ else:
   import figdraw
 
 import ./drawing
+when not defined(useNativeDynlib):
+  import ./renderscenes
 import ../foundation/selectors
 import ../themes
 import ../foundation/types
@@ -18,6 +20,11 @@ type RenderPlacement = object
   rootRect: types.Rect
   contentOrigin: types.Point
   contentParent: FigIdx
+
+when defined(useNativeDynlib):
+  type SeenRenderViews = object
+else:
+  type SeenRenderViews = seq[RenderViewId]
 
 proc addPoints(a, b: types.Point): types.Point =
   initPoint(a.x + b.x, a.y + b.y)
@@ -129,9 +136,13 @@ proc renderViewInto(
     parent = (-1).FigIdx,
     parentLevel = DefaultDrawLevel,
     parentOrigin = ZeroPoint,
+    seenViews: var SeenRenderViews,
 ) =
   if view.visibleRect.isEmpty:
     return
+
+  when not defined(useNativeDynlib):
+    seenViews.add view.renderViewId()
 
   let
     appearance = view.resolvedAppearance(inheritedAppearance)
@@ -171,7 +182,7 @@ proc renderViewInto(
   for child in view.subviews:
     renderViewInto(
       context, child, appearance, placement.contentParent, level,
-      placement.contentOrigin,
+      placement.contentOrigin, seenViews,
     )
 
 proc emptyRenders(): Renders =
@@ -179,7 +190,8 @@ proc emptyRenders(): Renders =
   result.layers[DefaultDrawLevel] = RenderList()
 
 proc cacheCanReuse(root: View, appearance: Appearance): bool =
-  root.xHasCachedRenders and not root.needsDisplayInSubtree() and
+  result =
+    root.xHasCachedRenders and not root.needsDisplayInSubtree() and
     root.xCachedAppearance.sameAppearanceGeneration(appearance)
 
 proc invalidateRenderCache*(root: View) =
@@ -187,6 +199,8 @@ proc invalidateRenderCache*(root: View) =
     return
   root.xCachedRenders = nil
   root.xCachedRenderResources = nil
+  when not defined(useNativeDynlib):
+    root.xCachedRenderScene = nil
   root.xHasCachedRenders = false
 
 proc buildRenders*(root: View, appearance: Appearance): Renders =
@@ -195,8 +209,12 @@ proc buildRenders*(root: View, appearance: Appearance): Renders =
     return root.xCachedRenders
 
   let context = initDrawContext()
-  renderViewInto(context, root, appearance)
+  var seenViews: SeenRenderViews
+  renderViewInto(context, root, appearance, seenViews = seenViews)
   result = context.renders
+  when not defined(useNativeDynlib):
+    if not root.xCachedRenderScene.isNil:
+      root.xCachedRenderScene.replaceContents(result, context.resources, seenViews)
   root.xCachedRenders = result
   root.xCachedRenderResources = context.resources
   root.xCachedAppearance = appearance
@@ -208,6 +226,31 @@ proc buildRenders*(root: View, theme: Theme): Renders =
 
 proc buildRenders*(root: View): Renders =
   buildRenders(root, root.effectiveAppearance())
+
+when not defined(useNativeDynlib):
+  proc collectRenderedViewIds(view: View, ids: var seq[RenderViewId]) =
+    if view.visibleRect.isEmpty:
+      return
+    ids.add view.renderViewId()
+    for child in view.subviews:
+      child.collectRenderedViewIds(ids)
+
+  proc buildRenderScene*(root: View, appearance: Appearance): RenderScene =
+    discard root.buildRenders(appearance)
+    if root.xCachedRenderScene.isNil:
+      var seenViews: seq[RenderViewId]
+      root.collectRenderedViewIds(seenViews)
+      root.xCachedRenderScene = newRenderScene()
+      root.xCachedRenderScene.replaceContents(
+        root.xCachedRenders, root.xCachedRenderResources, seenViews
+      )
+    root.xCachedRenderScene
+
+  proc buildRenderScene*(root: View, theme: Theme): RenderScene =
+    root.buildRenderScene(initAppearance(theme))
+
+  proc buildRenderScene*(root: View): RenderScene =
+    root.buildRenderScene(root.effectiveAppearance())
 
 proc renderResources*(root: View): RenderResourceManifest =
   if root.isNil:

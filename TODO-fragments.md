@@ -1,5 +1,12 @@
 # Incremental Render Fragments
 
+## Implementation status
+
+Implementation began with [FigDraw PR #72](https://github.com/elcritch/figdraw/pull/72)
+and the initial NimKit scene foundation on `feature/incremental-render-fragments`.
+Checked items below are covered by those branches; unchecked items remain follow-up
+work, including per-view contribution caching and renderer-thread deltas.
+
 ## Recommendation
 
 Modify FigDraw's fragment model first, then use fragments as NimKit's per-view
@@ -46,11 +53,11 @@ Traversal expands the roots of `F` in place. This preserves identity and sibling
 order across empty and multi-root replacements and avoids graph-wide reference
 rewrites.
 
-- [ ] Store one fragment edge per attachment rather than one edge per root.
-- [ ] Add equivalent persistent slots to each layer's root sequence.
-- [ ] Allow fragment edges beneath base nodes and nodes inside fragments.
+- [x] Store one fragment edge per attachment rather than one edge per root.
+- [x] Add equivalent persistent slots to each layer's root sequence.
+- [x] Allow fragment edges beneath base nodes and nodes inside fragments.
 - [ ] Detect attachment cycles.
-- [ ] Give each mutable fragment exactly one attachment. Reusing content in more
+- [x] Give each mutable fragment exactly one attachment. Reusing content in more
       than one location should require a distinct fragment instance.
 
 ### Explicit attachment APIs
@@ -95,10 +102,10 @@ proc removeFragment*(
 )
 ```
 
-- [ ] Use explicit `attachChildFragment` and `attachRootFragment` naming.
-- [ ] Keep physical node/list insertion under separate, clearly named APIs.
+- [x] Use explicit `attachChildFragment` and `attachRootFragment` naming.
+- [x] Keep physical node/list insertion under separate, clearly named APIs.
 - [ ] Support atomic movement/reordering without a transient detached state.
-- [ ] Return a refreshed handle from every operation that advances its version.
+- [x] Return a refreshed handle from every operation that advances its version.
 
 ### Tree-owned, generation-stamped handles
 
@@ -136,12 +143,12 @@ Generation scopes should remain independent:
 Do not use a single global version for ordinary fragment replacements; changing
 one view must not invalidate every other view's handle.
 
-- [ ] Reject handles from another tree.
-- [ ] Reject stale tree, layer, and fragment generations.
-- [ ] Reject detached handles.
-- [ ] Reject node cursors from an older fragment version.
-- [ ] Return a structured rejection status for expected stale-message handling.
-- [ ] Do not rely on `assert` for public validation, because danger builds remove
+- [x] Reject handles from another tree.
+- [x] Reject stale tree, layer, and fragment generations.
+- [x] Reject detached handles.
+- [x] Reject node cursors from an older fragment version.
+- [x] Return a structured rejection status for expected stale-message handling.
+- [x] Do not rely on `assert` for public validation, because danger builds remove
       assertions.
 
 ### Controlled topology mutation
@@ -149,12 +156,12 @@ one view must not invalidate every other view's handle.
 Raw access to `RenderList.nodes`, `rootIds`, `Renders.layers`, mutable fragment
 layers, or mutable nodes can leave fragment traversal metadata stale.
 
-- [ ] Do not return `var RenderList` from a fragment tree.
-- [ ] Expose node reads as immutable values or lent read-only references.
-- [ ] Add a controlled `updateNode` operation for changing visual properties.
-- [ ] Preserve or reject changes to topology fields such as `parent`,
+- [x] Do not return `var RenderList` from a fragment tree.
+- [x] Expose node reads as immutable values or lent read-only references.
+- [x] Add a controlled `updateNode` operation for changing visual properties.
+- [x] Preserve or reject changes to topology fields such as `parent`,
       `childCount`, and `zlevel` in `updateNode`.
-- [ ] Copy an existing `Renders` when wrapping it unless exclusive ownership can
+- [x] Copy an existing `Renders` when wrapping it unless exclusive ownership can
       genuinely be enforced.
 - [ ] Add debug validation for roots, parents, child ordering, attachment state,
       and cycles.
@@ -175,9 +182,9 @@ It should produce a fresh monolithic tree by traversing logical fragment edges,
 then recompute physical indexes, parents, roots, and child counts. It must
 preserve exact layer, root, sibling, clipping, and transform order.
 
-- [ ] Make materialization deterministic.
-- [ ] Keep the returned tree independent of subsequent fragment mutations.
-- [ ] Use materialization for diagnostics, differential tests, public
+- [x] Make materialization deterministic.
+- [x] Keep the returned tree independent of subsequent fragment mutations.
+- [x] Use materialization for diagnostics, differential tests, public
       `buildRenders`, and initial threaded rendering.
 
 ## NimKit retained render scene
@@ -196,9 +203,9 @@ scene's `ViewRenderEntry`, not directly on the view: handles belong to one
 fragment tree, while a view can move between windows or be rendered by a
 diagnostic scene.
 
-- [ ] Assign stable view IDs without retaining removed views.
-- [ ] Mark entries encountered during each scene reconciliation.
-- [ ] Detach and sweep entries not encountered in the completed traversal.
+- [x] Assign stable view IDs without retaining removed views.
+- [x] Mark entries encountered during each scene reconciliation.
+- [x] Detach and sweep entries not encountered in the completed traversal.
 - [ ] Reuse a view ID in a different scene by creating scene-local fragments.
 
 ### Composite view contribution
@@ -291,11 +298,11 @@ build it. At the frame boundary, create a fresh merged manifest from all live,
 attached contributions rather than maintaining incremental resource reference
 counts initially.
 
-- [ ] Add manifest merge support.
-- [ ] Associate fragment/resource versions with the scene frame generation.
+- [x] Add manifest merge support.
+- [x] Associate fragment/resource versions with the scene frame generation.
 - [ ] Exclude manifests belonging only to removed or replaced fragments from the
       new live merge.
-- [ ] Retain replaced manifests until the frame that could reference them has
+- [x] Retain replaced manifests until the frame that could reference them has
       completed or been acknowledged.
 - [ ] Replay the current merged live manifest after atlas recovery.
 - [ ] Keep atlas generation separate from UI fragment-handle generations.
@@ -345,16 +352,16 @@ frame/resource generation
 
 ### FigDraw safety and structure
 
-- [ ] Reject a fragment handle used with a foreign tree.
-- [ ] Reject handles retained across `clear` and layer replacement.
-- [ ] Reject an older handle after a successful replacement.
-- [ ] Reject detached and removed fragment handles.
-- [ ] Replace a fragment with zero roots and later restore one or many roots at
+- [x] Reject a fragment handle used with a foreign tree.
+- [x] Reject handles retained across `clear` and layer replacement.
+- [x] Reject an older handle after a successful replacement.
+- [x] Reject detached and removed fragment handles.
+- [x] Replace a fragment with zero roots and later restore one or many roots at
       the same position.
-- [ ] Cover fragments beneath base nodes and beneath nodes in other fragments.
+- [x] Cover fragments beneath base nodes and beneath nodes in other fragments.
 - [ ] Cover root fragments, multiple layers, physical node insertions, movement,
       removal, and reordering.
-- [ ] Ensure public APIs cannot make traversal metadata stale.
+- [x] Ensure public APIs cannot make traversal metadata stale.
 
 ### NimKit equivalence
 
@@ -362,8 +369,8 @@ Build scenes through both the legacy monolithic path and the fragment path, then
 compare a canonical traversal or renderer-operation stream rather than physical
 Fig indexes.
 
-- [ ] Nested view updates and sibling ordering.
-- [ ] Same-layer versus cross-layer descendants.
+- [x] Nested view updates and sibling ordering.
+- [x] Same-layer versus cross-layer descendants.
 - [ ] Clips, transforms, shadows, and inherited visibility.
 - [ ] Exterior focus rings and other escaped sibling content.
 - [ ] Inline popups, tooltip layers, focus-ring layers, and overlay ordering.
@@ -375,7 +382,7 @@ Fig indexes.
 ### Operation counts and threads
 
 - [ ] Initial frame draws every participating view once.
-- [ ] A clean frame invokes no view `draw` methods.
+- [x] A clean frame invokes no view `draw` methods.
 - [ ] A leaf display invalidation rebuilds only the leaf's own dirty fragments.
 - [ ] Structural reconciliation does not redraw unaffected view content.
 - [ ] Fragment-backed and monolithic rendering emit equivalent renderer

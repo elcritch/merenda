@@ -5,6 +5,7 @@ import nimkit/application_icon
 import nimkit/backrefs_arc
 import nimkit/font_layout
 import nimkit/markdownviews
+import nimkit/renderfragments
 import nimkit/resources
 import nimkit/svgimages
 import nimkit/svgpathloader
