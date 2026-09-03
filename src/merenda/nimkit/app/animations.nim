@@ -1542,7 +1542,8 @@ proc stop*(clock: AnimationSchedulerClock) =
   if clock.xOwnsThread and not clock.xThread.isNil:
     clock.xThread.stop()
     clock.xThread.join()
-    clock.xThread.closeSelectorThread()
+    when not defined(windows):
+      clock.xThread.closeSelectorThread()
   clock.xTimer = nil
   clock.xTicker = nil
   clock.xThread = nil
