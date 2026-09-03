@@ -77,8 +77,6 @@ type
   AnimationSchedulerClock* = ref object of Agent
     xFrameInterval: Duration
     xThread: SigilChronosThreadPtr
-    xOwnsThread: bool
-    xUsesSharedThread: bool
     xTimer: SigilTimer
     xTicker: AgentProxy[AnimationClockTicker]
     xPendingDeltas: seq[Duration]
@@ -1494,20 +1492,12 @@ proc pollQueuedTicks*(clock: AnimationSchedulerClock): int {.discardable.} =
   ensureLocalAnimationDispatchThread()
   getCurrentSigilThread().pollAll(NonBlocking)
 
-proc start*(clock: AnimationSchedulerClock, thread: SigilChronosThreadPtr = nil) =
+proc start*(clock: AnimationSchedulerClock) =
   if clock.isRunning:
     return
   ensureLocalAnimationDispatchThread()
 
-  if thread.isNil:
-    clock.xThread = acquireSharedAnimationThread()
-    clock.xOwnsThread = false
-    clock.xUsesSharedThread = true
-  else:
-    clock.xThread = thread
-    clock.xOwnsThread = false
-    clock.xUsesSharedThread = false
-
+  clock.xThread = acquireSharedAnimationThread()
   var ticker = AnimationClockTicker(xFrameInterval: clock.xFrameInterval)
   clock.xTicker = ticker.moveToThread(clock.xThread)
   clock.xTimer = newSigilTimer(clock.xFrameInterval)
@@ -1524,16 +1514,11 @@ proc stop*(clock: AnimationSchedulerClock) =
     return
   if not clock.xThread.isNil:
     clock.xTimer.cancel(clock.xThread)
-  if clock.xUsesSharedThread and not clock.xThread.isNil:
+  if not clock.xThread.isNil:
     releaseSharedAnimationThread(clock.xThread)
-  if clock.xOwnsThread and not clock.xThread.isNil:
-    clock.xThread.stop()
-    clock.xThread.join()
   clock.xTimer = nil
   clock.xTicker = nil
   clock.xThread = nil
-  clock.xOwnsThread = false
-  clock.xUsesSharedThread = false
 
 proc drain*(
     scheduler: AnimationScheduler, clock: AnimationSchedulerClock, pollSignals = true
