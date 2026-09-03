@@ -293,8 +293,8 @@ when not defined(useNativeDynlib):
 
   proc updateRenderScene(root: View, appearance: Appearance): RenderScene =
     root.layoutSubtreeIfNeeded()
-    if not root.xCachedRenderScene.isNil and root.xHasCachedRenders and
-        not root.xNeedsDisplay and
+    if not root.xCachedRenderScene.isNil and
+        root.xCachedRenderScene.frameGeneration() > 0 and not root.xNeedsDisplay and
         root.xCachedAppearance.sameAppearanceGeneration(appearance):
       return root.xCachedRenderScene
     if root.xCachedRenderScene.isNil:
@@ -309,11 +309,11 @@ when not defined(useNativeDynlib):
       snapshot.view.acknowledgeDisplayRevision(snapshot.revision)
     root.refreshDisplayStateSubtree()
 
-    if changed or not root.xHasCachedRenders:
-      root.xCachedRenders = root.xCachedRenderScene.materialize()
+    if changed:
+      root.xCachedRenders = nil
+      root.xHasCachedRenders = false
     root.xCachedRenderResources = root.xCachedRenderScene.renderResources()
     root.xCachedAppearance = appearance
-    root.xHasCachedRenders = true
     root.xCachedRenderScene
 
 proc cacheCanReuse(root: View, appearance: Appearance): bool =
@@ -333,7 +333,10 @@ proc invalidateRenderCache*(root: View) =
 proc buildRenders*(root: View, appearance: Appearance): Renders =
   when not defined(useNativeDynlib):
     if not root.xCachedRenderScene.isNil:
-      discard root.updateRenderScene(appearance)
+      let scene = root.updateRenderScene(appearance)
+      if not root.xHasCachedRenders:
+        root.xCachedRenders = scene.materialize()
+        root.xHasCachedRenders = true
       return root.xCachedRenders
 
   discard root.prepareDisplaySubtree()

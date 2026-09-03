@@ -13,5 +13,5 @@ export drawing, rendering, images, svgimages, renderresources
 when not defined(useNativeDynlib):
   export renderscenes except
     RenderLayerContribution, RenderViewCacheKey, RenderViewFrame, needsViewCapture,
-    reconcile
+    reconcile, renderFrame, renderRoot
 export chrome, aquachrome, flattransparentchrome

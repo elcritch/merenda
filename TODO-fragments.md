@@ -5,8 +5,8 @@
 Implementation began with [FigDraw PR #72](https://github.com/elcritch/figdraw/pull/72)
 and the initial NimKit scene foundation on `feature/incremental-render-fragments`.
 Checked items below are covered by those branches; unchecked items remain follow-up
-work, primarily fragment-native renderer integration and renderer-thread deltas.
-Per-view contribution caching continues on `feature/per-view-render-fragment-cache`.
+work, primarily renderer-thread deltas. Per-view contribution caching and direct
+fragment-native rendering continue on `feature/per-view-render-fragment-cache`.
 
 ## Recommendation
 
@@ -305,8 +305,8 @@ counts initially.
       new live merge.
 - [x] Retain replaced manifests until the frame that could reference them has
       completed or been acknowledged.
-- [ ] Replay the current merged live manifest after atlas recovery.
-- [ ] Keep atlas generation separate from UI fragment-handle generations.
+- [x] Replay the current merged live manifest after atlas recovery.
+- [x] Keep atlas generation separate from UI fragment-handle generations.
 
 For direct synchronous rendering, old resources can be released after the frame
 boundary. For threaded rendering, use the existing render-ID acknowledgement and
@@ -320,10 +320,10 @@ storage across threads.
 
 Initial behavior:
 
-- Direct static rendering reconciles the scene and consumes its cached
-  monolithic materialization synchronously.
-- Public/diagnostic `buildRenders` retains compatibility by returning the cached
-  monolithic materialization.
+- Direct static rendering reconciles and renders the mutable application-thread
+  fragment graph synchronously without materializing `Renders`.
+- Public/diagnostic `buildRenders` retains compatibility by materializing lazily
+  and caching the monolithic result until the scene changes.
 - The dedicated renderer continues receiving moved monolithic snapshots and
   invalidates the submitted root cache.
 - No mutable fragment graph crosses the renderer-thread boundary.
@@ -375,13 +375,13 @@ Fig indexes.
 
 - [x] Nested view updates and sibling ordering.
 - [x] Same-layer versus cross-layer descendants.
-- [ ] Clips, transforms, shadows, and inherited visibility.
+- [x] Clips, transforms, shadows, and inherited visibility.
 - [x] Exterior focus rings and other escaped sibling content.
 - [x] Inline popups, tooltip layers, focus-ring layers, and overlay ordering.
 - [x] Hidden, removed, reinserted, and reordered views.
 - [x] Appearance-generation and ancestor-geometry changes.
-- [ ] Font and image replacement and removed-view resources.
-- [ ] Atlas recovery using only the current live manifest.
+- [x] Font and image replacement and removed-view resources.
+- [x] Atlas recovery using only the current live manifest.
 
 ### Operation counts and threads
 
@@ -389,7 +389,7 @@ Fig indexes.
 - [x] A clean frame invokes no view `draw` methods.
 - [x] A leaf display invalidation rebuilds only the leaf's own dirty fragments.
 - [x] Structural reconciliation does not redraw unaffected view content.
-- [ ] Fragment-backed and monolithic rendering emit equivalent renderer
+- [x] Fragment-backed and monolithic rendering emit equivalent renderer
       operations.
 - [ ] Coalesced thread updates apply the newest valid replacement.
 - [ ] Clear and target-replacement barriers discard stale queued updates.
@@ -406,44 +406,29 @@ and fragment reordering.
 On an Apple M3 Pro (12 cores), macOS 15.6, Nim 2.2.10, ARC with threads enabled,
 the following medians were observed. Times are microseconds per operation:
 
-| Views | `main` cached | branch cached | `main` dirty | branch dirty | scene dirty | materialize |
-|------:|--------------:|--------------:|-------------:|-------------:|------------:|------------:|
-| 100 | 14.17 | 13.72 | 482.25 | 478.65 | 486.19 | 7.90 |
-| 1,000 | 116.38 | 113.08 | 5,145.57 | 4,757.77 | 4,948.35 | 71.05 |
-| 5,000 | 775.84 | 748.62 | 30,782.15 | 28,560.73 | 30,617.60 | 413.71 |
-| 10,000 | 3,039.03 | 1,502.67 | 63,707.30 | 61,254.53 | 63,341.55 | 1,149.50 |
+| Views | monolithic cached | monolithic root dirty | monolithic leaf dirty | scene cached | scene root dirty | scene leaf dirty | materialize |
+|------:|------------------:|----------------------:|----------------------:|-------------:|-----------------:|-----------------:|------------:|
+| 100 | 13.87 | 471.83 | 467.30 | 2.97 | 411.43 | 413.58 | 12.35 |
+| 1,000 | 114.31 | 5,002.16 | 4,761.46 | 4.73 | 4,190.01 | 4,207.23 | 109.66 |
+| 5,000 | 725.07 | 29,584.12 | 29,409.19 | 28.18 | 26,306.13 | 25,819.05 | 629.54 |
+| 10,000 | 1,527.02 | 61,390.76 | 61,047.55 | 55.23 | 54,694.61 | 55,140.80 | 1,383.33 |
 
-The important result is scaling, not the favorable absolute variation between
-separate branch runs. The existing monolithic path did not regress in these
-samples. Updating the opt-in scene added at most about 7% over the branch's
-monolithic dirty path, and materialization remained linear at roughly 71--115
-ns per node. Replacing a 10,000-node scene took 1.11 ms with one layer and 0.90
-ms with 32 layers, showing no layer-count cliff at that scale.
-
-Fragment density did not change the complexity: 10,000 independent one-node
-fragment slots materialized in 1.39 ms (139 ns/node), versus 1.17 ms for the
-single-fragment scene. A chain 5,000 nested fragments deep materialized in 0.69
-ms (139 ns/node). Replacing one leaf fragment remained roughly 0.14--0.20 us as
-the sibling population grew from 100 to 10,000.
-
-The per-view cache follow-up keeps the same linear frame cost while narrowing
-`draw` calls and fragment replacement to the dirty contributions. On the same
-class of machine, a follow-up run produced these medians for empty views:
-
-| Views | monolithic dirty | scene root dirty | scene leaf dirty | scene cached |
-|------:|-----------------:|-----------------:|-----------------:|-------------:|
-| 100 | 476 us | 427 us | 425 us | 3 us |
-| 1,000 | 4.80 ms | 4.28 ms | 4.31 ms | 5 us |
-| 5,000 | 29.60 ms | 26.93 ms | 27.38 ms | 29 us |
-| 10,000 | 62.41 ms | 58.80 ms | 57.15 ms | 52 us |
+The completed direct-renderer path keeps the same linear reconciliation cost
+while narrowing `draw` calls and fragment replacement to dirty contributions.
+Scene-update timings no longer include monolithic materialization.
 
 The root- and leaf-dirty timings remain similar for these deliberately empty
-views because both still traverse the view hierarchy, merge live manifests, and
-materialize a renderer-compatible snapshot. The leaf path now runs `draw` only
-for the leaf, so views with text layout, images, SVGs, or other meaningful draw
-work avoid rebuilding those clean contributions. The benchmark shows no new
-complexity cliff through 10,000 view fragments and remains in the same order of
-magnitude as monolithic rebuilding.
+views because both still traverse the view hierarchy and merge live manifests.
+The leaf path runs `draw` only for the leaf, so views with text layout, images,
+SVGs, or other meaningful draw work avoid rebuilding those clean contributions.
+The benchmark shows no new complexity cliff through 10,000 view fragments,
+remains in the same order of magnitude as monolithic rebuilding, and removes the
+71--138 ns/node materialization pass from normal synchronous rendering.
+
+On this run, replacing a 10,000-node compatibility scene took 1.10 ms with one
+layer and 0.84 ms with 32 layers. Materializing 10,000 independent fragment
+slots took 1.24 ms, a 5,000-deep nested fragment chain took 0.80 ms, and replacing
+one leaf remained 0.14--0.20 us across populations of 100 through 10,000.
 
 The benchmark exposed two FigDraw usage cliffs and drove API changes before the
 dependency pin was advanced:
@@ -452,9 +437,9 @@ dependency pin was advanced:
   visited node. It now traverses borrowed internal topology and is linear.
 - Reversing every sibling with individual `moveFragment` calls is quadratic,
   because each isolated move performs a linear sequence edit. At 5,000 slots a
-  two-way reversal took 1,251.12 ms. The new `reorderChildFragments` and
+  two-way reversal took 1,169.11 ms. The new `reorderChildFragments` and
   `reorderRootFragments` operations reconcile the complete sibling order in a
-  single linear pass; the same 5,000-slot two-way reversal took 0.90 ms.
+  single linear pass; the same 5,000-slot two-way reversal took 0.94 ms.
 
 NimKit reconciliation should therefore use an isolated move for isolated
 changes and the bulk APIs whenever it already knows a complete sibling order.
@@ -479,6 +464,5 @@ changes and the bulk APIs whenever it already knows a complete sibling order.
 
 - Rasterized view/texture caching.
 - Local-coordinate and transform-based movement optimization.
-- Partial GPU redraw or damage-only rendering.
 - Mutable fragment graphs shared across threads.
 - Dynlib fragment integration.

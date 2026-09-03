@@ -31,6 +31,8 @@ when defined(macosx) and not defined(useNativeDynlib):
 
 import ../drawing/images
 import ../drawing/renderresources
+when not defined(useNativeDynlib):
+  import ../drawing/renderscenes
 import ../foundation/types
 import ../foundation/events
 import ./pasteboards
@@ -1379,6 +1381,22 @@ proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
     host.xRenderer.renderFrame(renders, size)
   host.xRenderer.endFrame()
   inc host.xRenderCount
+
+when not defined(useNativeDynlib):
+  proc render*(host: HostWindow, scene: RenderScene, logicalSize: Size) =
+    if not host.isReady or host.xRenderer.isNil or not host.xNativeWindow.opened():
+      return
+    host.xRenderRequested = false
+    host.refreshContentScale()
+    host.xResources.prepare(host.xRenderer, scene.renderResources())
+    let size = vec2(logicalSize.width, logicalSize.height)
+    host.xRenderer.beginFrame()
+    if host.xTransparent:
+      scene.renderFrame(host.xRenderer, size, clearFrameColor = clearColor)
+    else:
+      scene.renderFrame(host.xRenderer, size)
+    host.xRenderer.endFrame()
+    inc host.xRenderCount
 
 proc dedicatedRendererSupported*(): bool =
   when not defined(useNativeDynlib):

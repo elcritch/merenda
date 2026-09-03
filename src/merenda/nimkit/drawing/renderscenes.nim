@@ -493,6 +493,26 @@ proc materialize*(scene: RenderScene): Renders =
     raise newException(ValueError, "cannot materialize a nil render scene")
   scene.tree.materialize()
 
+proc renderRoot*(scene: RenderScene, context: BackendContext) =
+  ## Sends the retained fragment graph directly through FigDraw's renderer traversal.
+  if scene.isNil:
+    raise newException(ValueError, "cannot render a nil render scene")
+  context.renderRoot(scene.tree)
+
+proc renderFrame*[BackendState](
+    scene: RenderScene,
+    renderer: FigRenderer[BackendState],
+    frameSize: Vec2,
+    clearMain = true,
+    clearFrameColor = color(1.0, 1.0, 1.0, 1.0),
+) =
+  ## Renders the retained fragment graph without creating a monolithic snapshot.
+  if scene.isNil:
+    raise newException(ValueError, "cannot render a nil render scene")
+  renderer.renderFrame(
+    scene.tree, frameSize, clearMain = clearMain, clearColor = clearFrameColor
+  )
+
 proc frameGeneration*(scene: RenderScene): uint64 =
   if not scene.isNil:
     result = scene.generation

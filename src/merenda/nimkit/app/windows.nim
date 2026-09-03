@@ -2190,9 +2190,14 @@ proc renderNativeWindow*(window: Window) =
   window.xHostWindow.refreshContentScale()
   let logicalSize = window.syncNativeGeometry()
   when not defined(useNativeDynlib):
-    var renderScene: RenderScene
     if window.xThreadHost.isNil:
-      renderScene = window.buildRenderScene()
+      let renderScene = window.buildRenderScene()
+      let needsFollowUpRender = window.needsDisplayUpdate()
+      window.xHostWindow.render(renderScene, logicalSize)
+      renderScene.acknowledgeRenderGeneration(renderScene.frameGeneration())
+      if needsFollowUpRender:
+        window.requestNativeDisplayUpdate()
+      return
   var renders = window.buildRenders()
   let needsFollowUpRender = window.needsDisplayUpdate()
   if not window.xThreadHost.isNil:
@@ -2204,8 +2209,6 @@ proc renderNativeWindow*(window: Window) =
     window.xHostWindow.renderSubmitted()
   else:
     window.xHostWindow.render(renders, logicalSize)
-    when not defined(useNativeDynlib):
-      renderScene.acknowledgeRenderGeneration(renderScene.frameGeneration())
   if needsFollowUpRender:
     window.requestNativeDisplayUpdate()
 

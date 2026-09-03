@@ -1,9 +1,10 @@
-import std/unittest
+import std/[hashes, tables, unittest]
 
 import figdraw
 import pkg/pixie except draw
 
 import merenda/nimkit
+import merenda/nimkit/drawing/renderscenes as retainedScenes
 
 type
   SceneDrawView = ref object of View
@@ -17,6 +18,18 @@ type
     escapedRootCount: int
     drawsPopup: bool
     drawsTooltip: bool
+
+  TransformedSceneView = ref object of View
+    translation: Point
+
+  ResourceSceneView = ref object of View
+    image: ImageResource
+    style: TextStyle
+
+  RenderOperationContext = ref object of BackendContext
+    operations: seq[string]
+    entries: Table[Hash, figdraw.Rect]
+    entryMetadata: Table[Hash, AtlasEntryMeta]
 
   CanonicalRenderNode = object
     level: ZLevel
@@ -70,6 +83,112 @@ protocol MultiOutputSceneDrawing of ViewDrawingProtocol:
         color(0.2, 0.3, 0.8),
       )
 
+protocol TransformedSceneDrawing of ViewDrawingProtocol:
+  method draw(view: TransformedSceneView, context: DrawContext) =
+    let transform = context.addFig(
+      context.renderLayer,
+      context.renderParent,
+      Fig(
+        kind: nkTransform,
+        screenBox: figdraw.rect(1, 2, 20, 18),
+        transform: TransformStyle(
+          translation: vec2(view.translation.x, view.translation.y),
+          matrix: scale(vec3(1.25'f32, 0.75'f32, 1.0'f32)),
+          useMatrix: true,
+        ),
+      ),
+    )
+    discard context.addRenderRectangle(
+      context.renderLayer,
+      transform,
+      context.renderRectFor(rect(3, 4, 12, 9)),
+      color(0.6, 0.2, 0.8),
+    )
+
+protocol ResourceSceneDrawing of ViewDrawingProtocol:
+  method draw(view: ResourceSceneView, context: DrawContext) =
+    discard context.addImage(rect(2, 3, 10, 8), view.image)
+    discard context.addText(rect(2, 14, 50, 18), "cached", view.style)
+
+method drawRoundedRectSdf*(
+    context: RenderOperationContext,
+    rect: figdraw.Rect,
+    colors: array[4, ColorRGBA],
+    radii: CornerRadii2D[float32],
+    mode: SdfMode,
+    factor: float32,
+    spread: float32,
+    shapeSize: Vec2,
+) =
+  context.operations.add(
+    "rectangle:" & repr((rect, colors, radii, mode, factor, spread, shapeSize))
+  )
+
+method beginMask*(
+    context: RenderOperationContext,
+    clipRect: figdraw.Rect,
+    radii: CornerRadii2D[float32],
+) =
+  context.operations.add("beginMask:" & repr((clipRect, radii)))
+
+method endMask*(context: RenderOperationContext) =
+  context.operations.add("endMask")
+
+method popMask*(context: RenderOperationContext) =
+  context.operations.add("popMask")
+
+method saveTransform*(context: RenderOperationContext) =
+  context.operations.add("saveTransform")
+
+method restoreTransform*(context: RenderOperationContext) =
+  context.operations.add("restoreTransform")
+
+method translate*(context: RenderOperationContext, value: Vec2) =
+  context.operations.add("translate:" & repr(value))
+
+method applyTransform*(context: RenderOperationContext, value: Mat4) =
+  context.operations.add("applyTransform:" & repr(value))
+
+method supportsAtlasUsage*(context: RenderOperationContext): bool =
+  discard context
+
+method entriesPtr*(context: RenderOperationContext): ptr Table[Hash, figdraw.Rect] =
+  context.entries.addr
+
+method atlasEntryMetaPtr*(
+    context: RenderOperationContext
+): var Table[Hash, AtlasEntryMeta] =
+  context.entryMetadata
+
+method atlasSize*(context: RenderOperationContext): int =
+  discard context
+  64
+
+method atlasPackedArea*(context: RenderOperationContext): int =
+  discard context
+
+method putImage*(context: RenderOperationContext, key: Hash, image: Image) =
+  context.entries[key] = figdraw.rect(
+    0,
+    0,
+    image.width.float32 / context.atlasSize().float32,
+    image.height.float32 / context.atlasSize().float32,
+  )
+
+method putImage*(context: RenderOperationContext, image: ImgObj) =
+  case image.kind
+  of PixieImg:
+    context.putImage(image.id.Hash, image.pimg)
+  of FlippyImg:
+    if image.flippy.mipmaps.len > 0:
+      let pixels = image.flippy.mipmaps[0]
+      context.entries[image.id.Hash] = figdraw.rect(
+        0,
+        0,
+        pixels.width.float32 / context.atlasSize().float32,
+        pixels.height.float32 / context.atlasSize().float32,
+      )
+
 proc newSceneDrawView(frame: Rect): SceneDrawView =
   result = SceneDrawView()
   result.initViewFields(frame)
@@ -89,6 +208,34 @@ proc newMultiOutputSceneView(frame: Rect): MultiOutputSceneView =
   result = MultiOutputSceneView()
   result.initViewFields(frame)
   discard result.withProtocol(MultiOutputSceneDrawing)
+
+proc newTransformedSceneView(frame: Rect, translation: Point): TransformedSceneView =
+  result = TransformedSceneView(translation: translation)
+  result.initViewFields(frame)
+  discard result.withProtocol(TransformedSceneDrawing)
+
+proc newResourceSceneView(
+    frame: Rect, image: ImageResource, style: TextStyle
+): ResourceSceneView =
+  result = ResourceSceneView(image: image, style: style)
+  result.initViewFields(frame)
+  discard result.withProtocol(ResourceSceneDrawing)
+
+proc renderedOperations(renders: var Renders): seq[string] =
+  let context = RenderOperationContext(
+    entries: initTable[Hash, figdraw.Rect](),
+    entryMetadata: initTable[Hash, AtlasEntryMeta](),
+  )
+  context.renderRoot(renders)
+  context.operations
+
+proc renderedOperations(scene: RenderScene): seq[string] =
+  let context = RenderOperationContext(
+    entries: initTable[Hash, figdraw.Rect](),
+    entryMetadata: initTable[Hash, AtlasEntryMeta](),
+  )
+  retainedScenes.renderRoot(scene, context)
+  context.operations
 
 proc renderLevels(renders: Renders): seq[ZLevel] =
   for level, _ in renders.pairs():
@@ -367,6 +514,73 @@ suite "NimKit render fragments":
     output.needsDisplay = true
     discard root.buildRenderScene()
     check scene.materialize().renderLevels() == @[DefaultDrawLevel]
+
+  test "fragment traversal preserves clips transforms and shadows":
+    let
+      root = newView(frame = rect(0, 0, 120, 80))
+      transformed = newTransformedSceneView(rect(8, 9, 60, 40), initPoint(6, -3))
+      firstShadow = dropShadow(color(0, 0, 0, 0.4), y = 3.0, blur = 7.0)
+    root.clipsToBounds = true
+    transformed.shadow = @[firstShadow]
+    root.addSubview(transformed)
+
+    var monolithic = root.buildRenders()
+    let scene = root.buildRenderScene()
+    check scene.renderedOperations() == monolithic.renderedOperations()
+
+    transformed.translation = initPoint(-2, 5)
+    transformed.shadow = @[dropShadow(color(0.1, 0.2, 0.3, 0.5), x = 2.0, blur = 4.0)]
+    transformed.needsDisplay = true
+    discard root.buildRenderScene()
+
+    let
+      expectedRoot = newView(frame = rect(0, 0, 120, 80))
+      expectedTransformed =
+        newTransformedSceneView(rect(8, 9, 60, 40), initPoint(-2, 5))
+    expectedRoot.clipsToBounds = true
+    expectedTransformed.shadow =
+      @[dropShadow(color(0.1, 0.2, 0.3, 0.5), x = 2.0, blur = 4.0)]
+    expectedRoot.addSubview(expectedTransformed)
+    monolithic = expectedRoot.buildRenders()
+    check scene.renderedOperations() == monolithic.renderedOperations()
+
+  test "font and image replacement updates the live manifest":
+    clearImageCache()
+    let
+      firstImage = newImageResource(testImage(5, 5))
+      secondImage = newImageResource(testImage(7, 6))
+      firstStyle = TextStyle(
+        color: color(0.1, 0.2, 0.3), fontName: defaultFontName(), fontSize: 11.0
+      )
+      secondStyle = TextStyle(
+        color: color(0.7, 0.2, 0.1), fontName: defaultFontName(), fontSize: 17.0
+      )
+      firstFont = firstStyle.textFont()
+      secondFont = secondStyle.textFont()
+      view = newResourceSceneView(rect(0, 0, 80, 40), firstImage, firstStyle)
+    var monolithic = view.buildRenders()
+    let scene = view.buildRenderScene()
+
+    check scene.materialize().canonicalNodes() == monolithic.canonicalNodes()
+    check scene.renderResources().containsImage(firstImage.imageId())
+    check not scene.renderResources().containsImage(secondImage.imageId())
+    check scene.renderResources().containsFont(firstFont.fontId())
+    check not scene.renderResources().containsFont(secondFont.fontId())
+
+    view.image = secondImage
+    view.style = secondStyle
+    view.needsDisplay = true
+    discard view.buildRenderScene()
+
+    let expected = newResourceSceneView(rect(0, 0, 80, 40), secondImage, secondStyle)
+    monolithic = expected.buildRenders()
+
+    check scene.materialize().canonicalNodes() == monolithic.canonicalNodes()
+    check not scene.renderResources().containsImage(firstImage.imageId())
+    check scene.renderResources().containsImage(secondImage.imageId())
+    check not scene.renderResources().containsFont(firstFont.fontId())
+    check scene.renderResources().containsFont(secondFont.fontId())
+    check scene.retiredResourceCount() == 1
 
   test "resource manifests merge and retain their union":
     clearImageCache()
