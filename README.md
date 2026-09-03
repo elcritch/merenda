@@ -127,7 +127,9 @@ bounded chunks between application frames. The displayed document is replaced
 atomically after the final chunk, keeping the main thread responsive without
 showing a partial document. It supports headings, inline styles, links, code,
 quotes, lists, thematic breaks, GFM tables, and native local images without
-embedding an HTML engine:
+embedding an HTML engine. Tables preserve short phrases and whole words, wrap
+longer cell prose to a 90%-of-viewport target, and scroll horizontally when
+their minimum readable width exceeds that target:
 
 ```nim
 import merenda/nimkit
