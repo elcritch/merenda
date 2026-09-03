@@ -1033,6 +1033,7 @@ proc addFig*(context: DrawContext, parent: FigIdx, node: Fig): FigIdx {.discarda
   context.addFig(context.xLayer, parent, node)
 
 proc addFig*(context: DrawContext, node: Fig): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
   context.addFig(context.xParent, node)
 
 proc addRenderRectangle*(
@@ -1094,6 +1095,7 @@ proc addRenderRectangle*(
     lightMaskContent = false,
     cornerRadii = initCornerRadii(0.0'f32),
 ): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
   context.addRenderRectangle(
     context.xParent, rect, fillValue, strokeColor, strokeWidth, cornerRadius, shadows,
     clips, maskContent, roundedCorners, lightMaskContent, cornerRadii,
@@ -1174,6 +1176,7 @@ proc addRenderLine*(
     fillValue: Fill,
     weight: float32,
 ): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
   context.addRenderLine(context.xParent, start, stop, fillValue, weight)
 
 proc addRenderCircle*(
@@ -1203,6 +1206,7 @@ proc addRenderCircle*(
 proc addRenderCircle*(
     context: DrawContext, center: nimkitTypes.Point, fillValue: Fill, radius: float32
 ): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
   context.addRenderCircle(context.xParent, center, fillValue, radius)
 
 proc addRenderDrawable*(
@@ -1254,6 +1258,7 @@ proc addRenderDrawable*(
     drawSteps = 0'u16,
     drawAa = 0.0'f32,
 ): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
   context.addRenderDrawable(
     context.xParent, rect, drawOps, fillValue, stroke, drawSteps, drawAa
   )
@@ -1604,6 +1609,7 @@ proc addSvgMtsdf*(
     sdThreshold = 0.5'f32,
 ): FigIdx {.discardable.} =
   ## Draws an SVG using its source fill and stroke colors.
+  context.ensureDefaultRenderSlot()
   context.addSvgMtsdf(
     context.xLayer, context.xParent, rect, svg, strokeWeight, sdThreshold
   )
@@ -1617,6 +1623,7 @@ proc addSvgMtsdf*(
     sdThreshold = 0.5'f32,
 ): FigIdx {.discardable.} =
   ## Draws an SVG with one caller-selected tint replacing its source paints.
+  context.ensureDefaultRenderSlot()
   context.addSvgMtsdf(
     context.xLayer, context.xParent, rect, svg, fillValue, strokeWeight, sdThreshold
   )
@@ -1658,6 +1665,7 @@ proc addFocusRing*(
   )
 
 proc addFocusRing*(context: DrawContext, rect: nimkitTypes.Rect, box: ControlBoxStyle) =
+  context.ensureDefaultRenderSlot()
   let parent =
     if box.focusRingInset < 0.0'f32: context.xViewParent else: context.xParent
   context.addFocusRing(context.xLayer, parent, rect, box)
@@ -1697,4 +1705,5 @@ proc addComboBoxArrow*(
 proc addComboBoxArrow*(
     context: DrawContext, rect: nimkitTypes.Rect, color: nimkitTypes.Color
 ) =
+  context.ensureDefaultRenderSlot()
   context.addComboBoxArrow(context.xParent, rect, color)

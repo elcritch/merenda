@@ -1,4 +1,4 @@
-import std/[hashes, tables, unittest]
+import std/[hashes, tables, unicode, unittest]
 
 import figdraw
 import pkg/pixie except draw
@@ -14,6 +14,9 @@ type
     drawColor: Color
     drawLevelValue: ZLevel
     invalidatesDuringDraw: bool
+
+  SurfaceSceneView = ref object of View
+    drawColor: Color
 
   VisibleRectSceneView = ref object of View
     drawCount: int
@@ -77,6 +80,12 @@ protocol CountedSceneDrawing of ViewDrawingProtocol:
     if view.invalidatesDuringDraw:
       view.invalidatesDuringDraw = false
       view.needsDisplay = true
+
+protocol SurfaceSceneDrawing of ViewDrawingProtocol:
+  method draw(view: SurfaceSceneView, context: DrawContext) =
+    discard context.addRenderRectangle(
+      context.renderRectFor(rect(1, 2, 9, 7)), fill(view.drawColor)
+    )
 
 protocol VisibleRectSceneDrawing of ViewDrawingProtocol:
   method draw(view: VisibleRectSceneView, context: DrawContext) =
@@ -245,6 +254,11 @@ proc newCountedSceneView(frame: Rect, drawColor: Color): CountedSceneView =
   result = CountedSceneView(drawColor: drawColor)
   result.initViewFields(frame)
   discard result.withProtocol(CountedSceneDrawing)
+
+proc newSurfaceSceneView(frame: Rect, drawColor: Color): SurfaceSceneView =
+  result = SurfaceSceneView(drawColor: drawColor)
+  result.initViewFields(frame)
+  discard result.withProtocol(SurfaceSceneDrawing)
 
 proc newVisibleRectSceneView(frame: Rect): VisibleRectSceneView =
   result = VisibleRectSceneView()
@@ -437,6 +451,28 @@ suite "NimKit render fragments":
     discard root.buildRenderScene()
     check not scene.containsView(removedId)
     check scene.viewEntryCount() == 3
+
+  test "first implicit slot node stays before subviews":
+    let
+      surfaceColor = color(0.74, 0.12, 0.18)
+      childColor = color(0.16, 0.68, 0.28)
+      root = newSurfaceSceneView(rect(0, 0, 120, 80), surfaceColor)
+      child = newSurfaceSceneView(rect(8, 9, 40, 24), childColor)
+    root.addSubview(child)
+
+    let nodes = root.buildRenderScene().materialize()[DefaultDrawLevel].nodes
+    var
+      surfaceIndex = -1
+      childIndex = -1
+    for index, node in nodes:
+      if node.kind == nkRectangle and node.fill == fill(surfaceColor):
+        surfaceIndex = index
+      elif node.kind == nkRectangle and node.fill == fill(childColor):
+        childIndex = index
+
+    check surfaceIndex >= 0
+    check childIndex >= 0
+    check surfaceIndex < childIndex
 
   test "leaf invalidation preserves ancestor and sibling contributions":
     let
@@ -640,6 +676,15 @@ suite "NimKit render fragments":
     check scene.viewRenderSlotChangeGeneration(textView.renderViewId(), thirdLine) ==
       thirdLineGeneration
     check retainedScenes.capturedRenderSlotCount(dirtyUpdate) == 3
+
+    var renderedLines: seq[string]
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        var renderedLine: string
+        for rune in node.textLayout.runes:
+          renderedLine.add rune
+        renderedLines.add renderedLine
+    check renderedLines == @["alpha\n", "Beta\n", "gamma"]
 
     let
       secondGeneration = scene.frameGeneration()

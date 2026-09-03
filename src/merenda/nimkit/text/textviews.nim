@@ -2644,9 +2644,11 @@ proc glyphLineArrangement(
   result.bounding = layout.bounding
   if layout.arrangedGlyphs.len > 0:
     result.arrangedGlyphs = layout.arrangedGlyphs[glyphRange.a .. glyphRange.b]
-  else:
+  if layout.runes.len > glyphRange.b:
     result.runes = layout.runes[glyphRange.a .. glyphRange.b]
+  if layout.positions.len > glyphRange.b:
     result.positions = layout.positions[glyphRange.a .. glyphRange.b]
+  if layout.selectionRects.len > glyphRange.b:
     result.selectionRects = layout.selectionRects[glyphRange.a .. glyphRange.b]
   for spanIndex, span in layout.spans:
     let

@@ -27,7 +27,41 @@ proc rendersFill(view: View, fillValue: Fill): bool =
     if node.kind == nkRectangle and node.fill == fillValue:
       return true
 
+proc rendersTextWithColor(view: View, text: string, textColor: Color): bool =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkText and node.renderedText() == text:
+      for spanColor in node.textLayout.spanColors:
+        if spanColor.kind == flColor and spanColor.color == textColor.rgba:
+          return true
+
 suite "Kosmo file tree interactions":
+  test "Git status refresh redraws retained file rows":
+    let
+      root = createTempDir("merenda-kosmo-tree-git-redraw-", "")
+      ignoredPath = root / "ignored.log"
+      ignoredColor = color(0.50, 0.52, 0.56, 0.72)
+    writeFile(ignoredPath, "ignored")
+    let tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 120))
+    defer:
+      removeFile(ignoredPath)
+      removeDir(root)
+
+    discard buildRenders(tree)
+    check not tree.rendersTextWithColor("ignored.log", ignoredColor)
+
+    tree.applyGitStatus(
+      GitStatusSnapshot(
+        rootPath: absolutePath(root),
+        isRepository: true,
+        entries: @[GitStatusEntry(path: ignoredPath, state: gfsIgnored)],
+      )
+    )
+
+    check tree.rendersTextWithColor("ignored.log", ignoredColor)
+
   test "hover input redraws the highlighted row":
     let
       root = createTempDir("merenda-kosmo-tree-hover-", "")
