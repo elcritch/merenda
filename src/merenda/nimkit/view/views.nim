@@ -18,7 +18,7 @@ export responders
 export viewbase except
   AutoresizingState, LayoutInputKind, LayoutTerm, LayoutEquation, LayoutInput,
   LayoutInputCache, LayoutTransactionState, activeLayoutTransaction,
-  nextLayoutGeneration, noteLayoutInvalidation
+  markLocalNeedsDisplay, nextLayoutGeneration, noteLayoutInvalidation
 export viewconstraints except generatedLayoutInputs, applyConstraintsForSubtree
 export viewgeometry except
   resetAutoresizingState, refreshAutoresizingReference,
@@ -360,6 +360,25 @@ proc finishDisplaySubtree*(view: View) =
   for child in view.xSubviews:
     child.finishDisplaySubtree()
 
+proc acknowledgeDisplayRevision*(view: View, revision: uint64) =
+  ## Marks one captured local drawing revision complete without losing a newer one.
+  if view.isNil or view.xDisplayRevision != revision:
+    return
+  view.xNeedsLocalDisplay = false
+
+proc refreshDisplayStateSubtree*(view: View): bool {.discardable.} =
+  ## Rebuilds aggregate descendant-dirty state after revision acknowledgement.
+  if view.isNil:
+    return
+  var hasDirtyDescendant = false
+  for child in view.xSubviews:
+    if child.refreshDisplayStateSubtree():
+      hasDirtyDescendant = true
+  view.xNeedsDisplay = view.xNeedsLocalDisplay or hasDirtyDescendant
+  if not view.xNeedsDisplay:
+    view.xInvalidRects.setLen(0)
+  view.xNeedsDisplay
+
 proc moveToWindowOwner*(view: View, window: Responder) =
   if view.windowBacklink() == window:
     return
@@ -391,6 +410,8 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.xFlipped = true
   view.xAlphaValue = 1.0'f32
   view.xNeedsDisplay = true
+  view.xNeedsLocalDisplay = true
+  view.xDisplayRevision = 1
   view.xNeedsLayout = true
   view.xAutoresizingMaskConstraints = not frame.hasAutoMetric
   view.xHuggingPriority[laHorizontal] = LayoutPriorityLow

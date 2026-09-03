@@ -5,7 +5,8 @@
 Implementation began with [FigDraw PR #72](https://github.com/elcritch/figdraw/pull/72)
 and the initial NimKit scene foundation on `feature/incremental-render-fragments`.
 Checked items below are covered by those branches; unchecked items remain follow-up
-work, including per-view contribution caching and renderer-thread deltas.
+work, primarily fragment-native renderer integration and renderer-thread deltas.
+Per-view contribution caching continues on `feature/per-view-render-fragment-cache`.
 
 ## Recommendation
 
@@ -206,7 +207,7 @@ diagnostic scene.
 - [x] Assign stable view IDs without retaining removed views.
 - [x] Mark entries encountered during each scene reconciliation.
 - [x] Detach and sweep entries not encountered in the completed traversal.
-- [ ] Reuse a view ID in a different scene by creating scene-local fragments.
+- [x] Reuse a view ID in a different scene by creating scene-local fragments.
 
 ### Composite view contribution
 
@@ -256,11 +257,11 @@ Temporary internal anchor nodes are an acceptable first implementation if they
 are removed while finalizing each captured `RenderList`. Existing public drawing
 helpers should continue to return usable local `FigIdx` values during the draw.
 
-- [ ] Build or reuse the shell during scene reconciliation.
-- [ ] Run `view.draw` only when its local contribution is dirty or its render
+- [x] Build or reuse the shell during scene reconciliation.
+- [x] Run `view.draw` only when its local contribution is dirty or its render
       context changed.
-- [ ] Replace each affected output fragment atomically after a successful draw.
-- [ ] Reconcile child, sibling, root, and layer slots independently of redrawing
+- [x] Replace each affected output fragment atomically after a successful draw.
+- [x] Reconcile child, sibling, root, and layer slots independently of redrawing
       clean view content.
 
 ### Display invalidation
@@ -278,12 +279,12 @@ Replace recursive blanket dirty-flag clearing with revision acknowledgement:
 capture the revision before drawing and mark only that revision as rendered. An
 invalidation raised during layout or drawing must remain pending.
 
-- [ ] Make local invalidation advance only the target view's drawing revision.
-- [ ] Propagate damage/descendant state without advancing ancestor drawing
+- [x] Make local invalidation advance only the target view's drawing revision.
+- [x] Propagate damage/descendant state without advancing ancestor drawing
       revisions.
-- [ ] Include effective appearance, absolute origin, visible rectangle, draw
+- [x] Include effective appearance, absolute origin, visible rectangle, draw
       level, and relevant geometry in the view cache key.
-- [ ] Invalidate/reconcile descendants when an ancestor changes an inherited
+- [x] Invalidate/reconcile descendants when an ancestor changes an inherited
       render context.
 
 Keep absolute coordinates for the first implementation. Local coordinates and
@@ -300,7 +301,7 @@ counts initially.
 
 - [x] Add manifest merge support.
 - [x] Associate fragment/resource versions with the scene frame generation.
-- [ ] Exclude manifests belonging only to removed or replaced fragments from the
+- [x] Exclude manifests belonging only to removed or replaced fragments from the
       new live merge.
 - [x] Retain replaced manifests until the frame that could reference them has
       completed or been acknowledged.
@@ -319,10 +320,13 @@ storage across threads.
 
 Initial behavior:
 
-- Direct static rendering consumes the scene's `RenderFragments` synchronously.
-- Public/diagnostic `buildRenders` materializes a fresh monolithic value.
-- The dedicated renderer continues receiving moved monolithic snapshots.
-- The UI retains and incrementally updates its own scene after submission.
+- Direct static rendering reconciles the scene and consumes its cached
+  monolithic materialization synchronously.
+- Public/diagnostic `buildRenders` retains compatibility by returning the cached
+  monolithic materialization.
+- The dedicated renderer continues receiving moved monolithic snapshots and
+  invalidates the submitted root cache.
+- No mutable fragment graph crosses the renderer-thread boundary.
 
 This path captures the main CPU benefit while retaining the existing safe thread
 ownership boundary.
@@ -372,19 +376,19 @@ Fig indexes.
 - [x] Nested view updates and sibling ordering.
 - [x] Same-layer versus cross-layer descendants.
 - [ ] Clips, transforms, shadows, and inherited visibility.
-- [ ] Exterior focus rings and other escaped sibling content.
-- [ ] Inline popups, tooltip layers, focus-ring layers, and overlay ordering.
-- [ ] Hidden, removed, reinserted, and reordered views.
-- [ ] Appearance-generation and ancestor-geometry changes.
+- [x] Exterior focus rings and other escaped sibling content.
+- [x] Inline popups, tooltip layers, focus-ring layers, and overlay ordering.
+- [x] Hidden, removed, reinserted, and reordered views.
+- [x] Appearance-generation and ancestor-geometry changes.
 - [ ] Font and image replacement and removed-view resources.
 - [ ] Atlas recovery using only the current live manifest.
 
 ### Operation counts and threads
 
-- [ ] Initial frame draws every participating view once.
+- [x] Initial frame draws every participating view once.
 - [x] A clean frame invokes no view `draw` methods.
-- [ ] A leaf display invalidation rebuilds only the leaf's own dirty fragments.
-- [ ] Structural reconciliation does not redraw unaffected view content.
+- [x] A leaf display invalidation rebuilds only the leaf's own dirty fragments.
+- [x] Structural reconciliation does not redraw unaffected view content.
 - [ ] Fragment-backed and monolithic rendering emit equivalent renderer
       operations.
 - [ ] Coalesced thread updates apply the newest valid replacement.
@@ -422,10 +426,24 @@ single-fragment scene. A chain 5,000 nested fragments deep materialized in 0.69
 ms (139 ns/node). Replacing one leaf fragment remained roughly 0.14--0.20 us as
 the sibling population grew from 100 to 10,000.
 
-Leaf invalidation remains a full-tree redraw in this foundation PR: at 10,000
-views the branch took 61.18 ms through `buildRenders` and 62.83 ms through
-`buildRenderScene`, versus 63.61 ms on `main`. Per-view contribution caching is
-still required to turn that operation into a narrow fragment replacement.
+The per-view cache follow-up keeps the same linear frame cost while narrowing
+`draw` calls and fragment replacement to the dirty contributions. On the same
+class of machine, a follow-up run produced these medians for empty views:
+
+| Views | monolithic dirty | scene root dirty | scene leaf dirty | scene cached |
+|------:|-----------------:|-----------------:|-----------------:|-------------:|
+| 100 | 476 us | 427 us | 425 us | 3 us |
+| 1,000 | 4.80 ms | 4.28 ms | 4.31 ms | 5 us |
+| 5,000 | 29.60 ms | 26.93 ms | 27.38 ms | 29 us |
+| 10,000 | 62.41 ms | 58.80 ms | 57.15 ms | 52 us |
+
+The root- and leaf-dirty timings remain similar for these deliberately empty
+views because both still traverse the view hierarchy, merge live manifests, and
+materialize a renderer-compatible snapshot. The leaf path now runs `draw` only
+for the leaf, so views with text layout, images, SVGs, or other meaningful draw
+work avoid rebuilding those clean contributions. The benchmark shows no new
+complexity cliff through 10,000 view fragments and remains in the same order of
+magnitude as monolithic rebuilding.
 
 The benchmark exposed two FigDraw usage cliffs and drove API changes before the
 dependency pin was advanced:
