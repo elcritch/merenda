@@ -6,7 +6,7 @@
 
 import std/[algorithm, options, os, strutils, unicode]
 
-import pkg/celina
+import moepkg/celina_backend as celina
 from pkg/figdraw import figDataDir
 import pkg/results as pkgResults
 
@@ -27,8 +27,9 @@ import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
 import moepkg/types as moeTypes
 
-when hasAsyncSupport:
-  {.error: "Merenda's Moe facade requires Celina's synchronous backend".}
+when not defined(moe.embedded):
+  when hasAsyncSupport:
+    {.error: "Merenda's Moe facade requires Celina's synchronous backend".}
 
 type
   KosmoEditor* = ref object
