@@ -2189,19 +2189,27 @@ proc renderNativeWindow*(window: Window) =
 
   window.xHostWindow.refreshContentScale()
   let logicalSize = window.syncNativeGeometry()
-  var renders = window.buildRenders()
-  let needsFollowUpRender = window.needsDisplayUpdate()
-  if not window.xThreadHost.isNil:
-    var resources = nimkitRendering.renderResources(window.xContentView)
-    window.xContentView.invalidateRenderCache()
-    discard window.xThreadHost.submitRenders(
-      ensureMove renders, logicalSize, ensureMove resources
-    )
-    window.xHostWindow.renderSubmitted()
+  when not defined(useNativeDynlib):
+    if window.xThreadHost.isNil:
+      let renderScene = window.buildRenderScene()
+      let needsFollowUpRender = window.needsDisplayUpdate()
+      window.xHostWindow.render(renderScene, logicalSize)
+      renderScene.acknowledgeRenderGeneration(renderScene.frameGeneration())
+      if needsFollowUpRender:
+        window.requestNativeDisplayUpdate()
+    else:
+      let renderScene = window.buildRenderScene()
+      let needsFollowUpRender = window.needsDisplayUpdate()
+      discard window.xThreadHost.submitRenderScene(renderScene, logicalSize)
+      window.xHostWindow.renderSubmitted()
+      if needsFollowUpRender:
+        window.requestNativeDisplayUpdate()
   else:
+    var renders = window.buildRenders()
+    let needsFollowUpRender = window.needsDisplayUpdate()
     window.xHostWindow.render(renders, logicalSize)
-  if needsFollowUpRender:
-    window.requestNativeDisplayUpdate()
+    if needsFollowUpRender:
+      window.requestNativeDisplayUpdate()
 
 proc contentPoint(window: Window, windowPoint: Point): Point =
   window.xContentView.pointFromWindow(windowPoint)
@@ -2877,6 +2885,9 @@ proc drainThreadHostEvents(window: Window): int =
       window.xThreadHost.acknowledgeRender(event.renderId)
       window.xThreadHost.renderCount = event.renderCount
       window.xThreadHost.renderRequested = false
+    of theRenderUpdateRejected:
+      window.xThreadHost.rejectRenderUpdate(event.renderId)
+      window.requestNativeDisplayUpdate()
     of theRenderTargetReleased:
       window.xThreadHost.clearRenderResources()
       window.xThreadHost.acknowledgeRenderTargetRelease()

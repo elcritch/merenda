@@ -590,7 +590,9 @@ proc reflectScrolledClipView*(scrollView: ScrollView, clipView: ClipView) =
   if clipView.isNil or clipView != scrollView.xClipView:
     return
   scrollView.tile()
-  scrollView.needsDisplay = true
+  for scroller in scrollView.xScroller:
+    if not scroller.isNil and not scroller.isHidden():
+      scroller.needsDisplay = true
 
 proc hasScroller*(scrollView: ScrollView, axis: LayoutAxis): bool =
   scrollView.xHasScroller[axis]

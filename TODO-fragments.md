@@ -4,8 +4,11 @@
 
 Implementation began with [FigDraw PR #72](https://github.com/elcritch/figdraw/pull/72)
 and the initial NimKit scene foundation on `feature/incremental-render-fragments`.
-Checked items below are covered by those branches; unchecked items remain follow-up
-work, including per-view contribution caching and renderer-thread deltas.
+FigDraw support shipped in 0.36.0, and the initial NimKit scene foundation was
+merged on `feature/incremental-render-fragments`. Per-view contribution caching,
+direct fragment rendering, and the dedicated-renderer update protocol are complete
+on `feature/per-view-render-fragment-cache`. The unchecked FigDraw validator and
+items under Deferred Work are not part of the NimKit implementation.
 
 ## Recommendation
 
@@ -18,9 +21,9 @@ render cache.
   many roots.
 - NimKit should cache vector/render-tree fragments at this stage. It should not
   add a separate rasterized-view or texture cache yet.
-- Enable fragment-native rendering first on the direct static renderer.
+- Enable fragment-native rendering on both direct and dedicated static renderers.
 - Preserve monolithic `Renders` through a flattening/materialization API for
-  compatibility, diagnostics, and the initial renderer-thread implementation.
+  compatibility and diagnostics.
 - Do not share a mutable fragment graph between the application and renderer
   threads.
 - Dynlib integration is outside the scope of this work.
@@ -185,7 +188,7 @@ preserve exact layer, root, sibling, clipping, and transform order.
 - [x] Make materialization deterministic.
 - [x] Keep the returned tree independent of subsequent fragment mutations.
 - [x] Use materialization for diagnostics, differential tests, public
-      `buildRenders`, and initial threaded rendering.
+      `buildRenders`, and compatibility rendering.
 
 ## NimKit retained render scene
 
@@ -206,7 +209,7 @@ diagnostic scene.
 - [x] Assign stable view IDs without retaining removed views.
 - [x] Mark entries encountered during each scene reconciliation.
 - [x] Detach and sweep entries not encountered in the completed traversal.
-- [ ] Reuse a view ID in a different scene by creating scene-local fragments.
+- [x] Reuse a view ID in a different scene by creating scene-local fragments.
 
 ### Composite view contribution
 
@@ -216,24 +219,30 @@ Use a composite entry:
 
 ```text
 view slot
-└── stable shell node              background, shadow, clipping
-    ├── replaceable self fragment
-    ├── child view slot
-    ├── child view slot
-    └── ...
+└── stable placement transform fragment
+    ├── stable shell fragment      background, shadow, clipping
+    │   └── stable content transform fragment
+    │       ├── replaceable self fragment
+    │       ├── child view slot
+    │       └── child view slot
+    └── stable escaped-content transform fragment
+        └── escaped fragment       exterior focus ring or chrome
 
-escaped sibling fragment           exterior focus ring or chrome
-layer-root fragments               popup, focus, tooltip, future overlays
+layer-root transform fragments     popup, focus, tooltip, future overlays
 ```
 
-The stable shell remains the structural and clipping parent. Its Fig can be
-updated through the controlled node API. Rebuilding a view's own drawing replaces
-the self fragment without disturbing its child-view slots.
+The placement and content fragments each contain one `nkTransform` node updated
+through the controlled node API. Placement tracks the view frame; clipped and
+escaped content transforms track the negative bounds origin. Their fragment IDs,
+the shell, self drawing, escaped drawing, and child slots remain attached when a
+view or ancestor moves or scrolls. The shell remains the background and clipping
+parent. Rebuilding a view's own drawing replaces the self fragment without
+disturbing its child-view slots.
 
 Preserve these existing semantics:
 
 - Normal view content and same-layer descendants are children of the shell and
-  inherit its clipping and transform state.
+  inherit its clipping and placement transform.
 - Exterior focus rings and similar content using `renderViewParent` remain
   siblings following the view slot, outside the view's own clip.
 - A view whose effective draw level differs from its parent is a layer root.
@@ -256,11 +265,11 @@ Temporary internal anchor nodes are an acceptable first implementation if they
 are removed while finalizing each captured `RenderList`. Existing public drawing
 helpers should continue to return usable local `FigIdx` values during the draw.
 
-- [ ] Build or reuse the shell during scene reconciliation.
-- [ ] Run `view.draw` only when its local contribution is dirty or its render
+- [x] Build or reuse the shell during scene reconciliation.
+- [x] Run `view.draw` only when its local contribution is dirty or its render
       context changed.
-- [ ] Replace each affected output fragment atomically after a successful draw.
-- [ ] Reconcile child, sibling, root, and layer slots independently of redrawing
+- [x] Replace each affected output fragment atomically after a successful draw.
+- [x] Reconcile child, sibling, root, and layer slots independently of redrawing
       clean view content.
 
 ### Display invalidation
@@ -278,18 +287,21 @@ Replace recursive blanket dirty-flag clearing with revision acknowledgement:
 capture the revision before drawing and mark only that revision as rendered. An
 invalidation raised during layout or drawing must remain pending.
 
-- [ ] Make local invalidation advance only the target view's drawing revision.
-- [ ] Propagate damage/descendant state without advancing ancestor drawing
+- [x] Make local invalidation advance only the target view's drawing revision.
+- [x] Propagate damage/descendant state without advancing ancestor drawing
       revisions.
-- [ ] Include effective appearance, absolute origin, visible rectangle, draw
-      level, and relevant geometry in the view cache key.
-- [ ] Invalidate/reconcile descendants when an ancestor changes an inherited
+- [x] Include effective appearance, local placement, draw level, and relevant
+      geometry in the view cache key. Include the visible rectangle only for
+      drawing that reads it.
+- [x] Invalidate/reconcile descendants when an ancestor changes an inherited
       render context.
 
-Keep absolute coordinates for the first implementation. Local coordinates and
-view transforms may later reduce rebuilds when ancestors move, but combining that
-change with initial fragment adoption would make equivalence substantially harder
-to establish.
+The completed implementation captures drawing in bounds coordinates and keeps
+frame placement and bounds-origin scrolling in stable transform fragments.
+`DrawContext.visibleRect` records a dependency when drawing reads it, so
+virtualized drawing is recaptured as its clip moves while ordinary drawing remains
+cached. Explicit-layer output is rooted under an equivalent absolute content
+transform.
 
 ## Resource manifests
 
@@ -300,12 +312,12 @@ counts initially.
 
 - [x] Add manifest merge support.
 - [x] Associate fragment/resource versions with the scene frame generation.
-- [ ] Exclude manifests belonging only to removed or replaced fragments from the
+- [x] Exclude manifests belonging only to removed or replaced fragments from the
       new live merge.
 - [x] Retain replaced manifests until the frame that could reference them has
       completed or been acknowledged.
-- [ ] Replay the current merged live manifest after atlas recovery.
-- [ ] Keep atlas generation separate from UI fragment-handle generations.
+- [x] Replay the current merged live manifest after atlas recovery.
+- [x] Keep atlas generation separate from UI fragment-handle generations.
 
 For direct synchronous rendering, old resources can be released after the frame
 boundary. For threaded rendering, use the existing render-ID acknowledgement and
@@ -317,35 +329,51 @@ Do not move a `RenderFragments` graph to the renderer thread while the UI scene
 retains handles into it. That would alias mutable fragment objects and node
 storage across threads.
 
-Initial behavior:
+Implemented behavior:
 
-- Direct static rendering consumes the scene's `RenderFragments` synchronously.
-- Public/diagnostic `buildRenders` materializes a fresh monolithic value.
-- The dedicated renderer continues receiving moved monolithic snapshots.
-- The UI retains and incrementally updates its own scene after submission.
+- Direct static rendering reconciles and renders the mutable application-thread
+  fragment graph synchronously without materializing `Renders`.
+- Public/diagnostic `buildRenders` retains compatibility by materializing lazily
+  and caching the monolithic result until the scene changes.
+- The application scene builds a cumulative update from the last acknowledged
+  scene generation. Every update contains the complete view placement order and
+  node payloads only for contributions changed after that baseline.
+- Updates are move-only and carry copied dirty node sequences plus font/image IDs.
+  Placement-only updates carry value-type cache keys and mutate the renderer's
+  retained transform nodes. They never carry application-thread resource handles
+  or FigDraw fragment handles.
+- The dedicated renderer owns a separate `RenderScene` and moves received node
+  payloads into its own fragment graph before rendering it directly.
+- The bounded two-entry channel coalesces superseded frames. Because the newest
+  update is cumulative from the acknowledged generation, dropping an intermediate
+  update cannot omit one of its fragment replacements.
+- Target, render, scene, and baseline generations are checked before mutating the
+  renderer replica. New scenes, changed layer sets, target replacement, and an
+  explicitly forced recovery are full-update ordering barriers.
+- Render acknowledgement advances the application's cumulative baseline and
+  releases retired fragment resource manifests. Rejection clears that baseline,
+  drops rejected leases, and forces the next update to be full.
+- Atlas recovery uses the transferred live font/image ID set to replay and retain
+  only resources referenced by the accepted scene.
+- No mutable fragment graph crosses the renderer-thread boundary.
 
-This path captures the main CPU benefit while retaining the existing safe thread
-ownership boundary.
-
-A later threaded fragment protocol should make the renderer own a separate graph
-and accept move-only immutable replacement batches stamped with:
+The complete threaded update is stamped with the equivalent of:
 
 ```text
-hostId
 targetGeneration
-scene/tree epoch
-layer epoch
-fragmentId and version
-frame/resource generation
+renderId
+scene identity
+acknowledged base generation
+current scene/resource generation
 ```
 
-- [ ] Bound and coalesce queued replacements by fragment and generation.
-- [ ] Treat clear, layer replacement, target replacement, and full snapshots as
+- [x] Bound and coalesce queued replacements by fragment and generation.
+- [x] Treat clear, layer replacement, target replacement, and full snapshots as
       ordering barriers.
-- [ ] Reject obsolete target, scene, layer, atlas, and fragment generations.
-- [ ] Acknowledge the applied frame/update generation before releasing payloads
+- [x] Reject obsolete target, scene, layer, atlas, and fragment generations.
+- [x] Acknowledge the applied frame/update generation before releasing payloads
       and resources.
-- [ ] Send a full current snapshot after target replacement or when a delta chain
+- [x] Send a full current snapshot after target replacement or when a delta chain
       cannot be applied safely.
 
 ## Tests
@@ -371,25 +399,27 @@ Fig indexes.
 
 - [x] Nested view updates and sibling ordering.
 - [x] Same-layer versus cross-layer descendants.
-- [ ] Clips, transforms, shadows, and inherited visibility.
-- [ ] Exterior focus rings and other escaped sibling content.
-- [ ] Inline popups, tooltip layers, focus-ring layers, and overlay ordering.
-- [ ] Hidden, removed, reinserted, and reordered views.
-- [ ] Appearance-generation and ancestor-geometry changes.
-- [ ] Font and image replacement and removed-view resources.
-- [ ] Atlas recovery using only the current live manifest.
+- [x] Clips, transforms, shadows, and inherited visibility.
+- [x] Exterior focus rings and other escaped sibling content.
+- [x] Inline popups, tooltip layers, focus-ring layers, and overlay ordering.
+- [x] Hidden, removed, reinserted, and reordered views.
+- [x] Appearance-generation and ancestor-geometry changes.
+- [x] Scrolling updates placement transforms without recapturing drawing that does
+      not read `visibleRect`, while visibility-dependent drawing is recaptured.
+- [x] Font and image replacement and removed-view resources.
+- [x] Atlas recovery using only the current live manifest.
 
 ### Operation counts and threads
 
-- [ ] Initial frame draws every participating view once.
+- [x] Initial frame draws every participating view once.
 - [x] A clean frame invokes no view `draw` methods.
-- [ ] A leaf display invalidation rebuilds only the leaf's own dirty fragments.
-- [ ] Structural reconciliation does not redraw unaffected view content.
-- [ ] Fragment-backed and monolithic rendering emit equivalent renderer
+- [x] A leaf display invalidation rebuilds only the leaf's own dirty fragments.
+- [x] Structural reconciliation does not redraw unaffected view content.
+- [x] Fragment-backed and monolithic rendering emit equivalent renderer
       operations.
-- [ ] Coalesced thread updates apply the newest valid replacement.
-- [ ] Clear and target-replacement barriers discard stale queued updates.
-- [ ] Resource leases survive until the corresponding renderer acknowledgement.
+- [x] Coalesced thread updates apply the newest valid replacement.
+- [x] Clear and target-replacement barriers discard stale queued updates.
+- [x] Resource leases survive until the corresponding renderer acknowledgement.
 
 ## Performance baseline
 
@@ -402,30 +432,29 @@ and fragment reordering.
 On an Apple M3 Pro (12 cores), macOS 15.6, Nim 2.2.10, ARC with threads enabled,
 the following medians were observed. Times are microseconds per operation:
 
-| Views | `main` cached | branch cached | `main` dirty | branch dirty | scene dirty | materialize |
-|------:|--------------:|--------------:|-------------:|-------------:|------------:|------------:|
-| 100 | 14.17 | 13.72 | 482.25 | 478.65 | 486.19 | 7.90 |
-| 1,000 | 116.38 | 113.08 | 5,145.57 | 4,757.77 | 4,948.35 | 71.05 |
-| 5,000 | 775.84 | 748.62 | 30,782.15 | 28,560.73 | 30,617.60 | 413.71 |
-| 10,000 | 3,039.03 | 1,502.67 | 63,707.30 | 61,254.53 | 63,341.55 | 1,149.50 |
+| Views | monolithic cached | monolithic root dirty | monolithic leaf dirty | scene cached | scene root dirty | scene leaf dirty | materialize |
+|------:|------------------:|----------------------:|----------------------:|-------------:|-----------------:|-----------------:|------------:|
+| 100 | 13.87 | 471.83 | 467.30 | 2.97 | 411.43 | 413.58 | 12.35 |
+| 1,000 | 114.31 | 5,002.16 | 4,761.46 | 4.73 | 4,190.01 | 4,207.23 | 109.66 |
+| 5,000 | 725.07 | 29,584.12 | 29,409.19 | 28.18 | 26,306.13 | 25,819.05 | 629.54 |
+| 10,000 | 1,527.02 | 61,390.76 | 61,047.55 | 55.23 | 54,694.61 | 55,140.80 | 1,383.33 |
 
-The important result is scaling, not the favorable absolute variation between
-separate branch runs. The existing monolithic path did not regress in these
-samples. Updating the opt-in scene added at most about 7% over the branch's
-monolithic dirty path, and materialization remained linear at roughly 71--115
-ns per node. Replacing a 10,000-node scene took 1.11 ms with one layer and 0.90
-ms with 32 layers, showing no layer-count cliff at that scale.
+The completed direct-renderer path keeps the same linear reconciliation cost
+while narrowing `draw` calls and fragment replacement to dirty contributions.
+Scene-update timings no longer include monolithic materialization.
 
-Fragment density did not change the complexity: 10,000 independent one-node
-fragment slots materialized in 1.39 ms (139 ns/node), versus 1.17 ms for the
-single-fragment scene. A chain 5,000 nested fragments deep materialized in 0.69
-ms (139 ns/node). Replacing one leaf fragment remained roughly 0.14--0.20 us as
-the sibling population grew from 100 to 10,000.
+The root- and leaf-dirty timings remain similar for these deliberately empty
+views because both still traverse the view hierarchy and merge live manifests.
+The leaf path runs `draw` only for the leaf, so views with text layout, images,
+SVGs, or other meaningful draw work avoid rebuilding those clean contributions.
+The benchmark shows no new complexity cliff through 10,000 view fragments,
+remains in the same order of magnitude as monolithic rebuilding, and removes the
+71--138 ns/node materialization pass from normal synchronous rendering.
 
-Leaf invalidation remains a full-tree redraw in this foundation PR: at 10,000
-views the branch took 61.18 ms through `buildRenders` and 62.83 ms through
-`buildRenderScene`, versus 63.61 ms on `main`. Per-view contribution caching is
-still required to turn that operation into a narrow fragment replacement.
+On this run, replacing a 10,000-node compatibility scene took 1.10 ms with one
+layer and 0.84 ms with 32 layers. Materializing 10,000 independent fragment
+slots took 1.24 ms, a 5,000-deep nested fragment chain took 0.80 ms, and replacing
+one leaf remained 0.14--0.20 us across populations of 100 through 10,000.
 
 The benchmark exposed two FigDraw usage cliffs and drove API changes before the
 dependency pin was advanced:
@@ -434,12 +463,67 @@ dependency pin was advanced:
   visited node. It now traverses borrowed internal topology and is linear.
 - Reversing every sibling with individual `moveFragment` calls is quadratic,
   because each isolated move performs a linear sequence edit. At 5,000 slots a
-  two-way reversal took 1,251.12 ms. The new `reorderChildFragments` and
+  two-way reversal took 1,169.11 ms. The new `reorderChildFragments` and
   `reorderRootFragments` operations reconcile the complete sibling order in a
-  single linear pass; the same 5,000-slot two-way reversal took 0.90 ms.
+  single linear pass; the same 5,000-slot two-way reversal took 0.94 ms.
 
 NimKit reconciliation should therefore use an isolated move for isolated
 changes and the bulk APIs whenever it already knows a complete sibling order.
+
+`tests/benchmark_markdown_scroll.nim` profiles a more realistic dirty-frame
+workload: the repository's 36,005-byte README in a 760 x 540 `MarkdownView`,
+scrolled bidirectionally over 240 measured frames after 20 warmup frames. It
+measures CPU-side view drawing/reconciliation, bounded-channel handoff,
+renderer-replica application, acknowledgement, and a direct walk of the
+renderer-facing topology; GPU execution is deliberately excluded. The renderer
+stages are serialized in the diagnostic so its CPU total is comparable even
+though production runs them on separate threads. The table reports the median of
+five complete benchmark runs.
+
+On the same Apple M3 Pro, the pre-PR monolithic path and completed fragment-native
+path measured:
+
+| Pipeline | wall median | wall p95 | CPU median | CPU p95 | prepare median | transfer median | apply/ack median | traversal median |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| pre-PR monolithic | 11.545 ms | 12.308 ms | 11.544 ms | 12.306 ms | 11.023 ms | 0.000 ms | 0.001 ms | 0.455 ms |
+| fragment-native | 0.047 ms | 0.051 ms | 0.047 ms | 0.050 ms | 0.024 ms | 0.001 ms | 0.002 ms | 0.014 ms |
+
+The retained transform design reduces median CPU cost by 99.6%, about 246x, in
+this continuously dirty scrolling workload. The Markdown text view was captured
+zero times during the 240 measured frames: scrolling changes its ancestor content
+transform, but does not clone or rebuild the document's text nodes. Of 1,200 view
+placements, 238 (19.8%) carried a changed drawing contribution for the moving
+scrollbar; the clip view, document, scroll-view background, and other drawing were
+reused.
+
+The follow-up profile found that the initial 1.483 ms fragment result was not
+fragment traversal overhead. Reading a `ViewRenderEntry` out of a Nim `Table` by
+value deep-copied its cached `RenderList`, including the clean Markdown glyph
+arrays, in capture checks, reconciliation, and update transfer. Reconciliation now
+mutates table entries in place. The same view walk also copied the immutable
+`Appearance` theme snapshot for every view and retained a whole snapshot merely to
+compare generations; the render walk now borrows appearances synchronously and
+caches only `ThemeGeneration`.
+
+A second view-design pass separated bounds-origin movement from self drawing.
+Stable clipped and escaped content transforms now absorb scrolling, and scroll
+invalidation targets the moving scroller rather than the unchanged scroll-view
+background. A focused test verifies that a layout-owned bounds-origin update can
+reach an independent renderer replica with zero view captures, while a descendant
+that reads `DrawContext.visibleRect` is still recaptured.
+
+FigDraw's `renderRoot(RenderFragments)` iterates `levels`, `roots`, and recursive
+`children` cursors directly. Fragment attachment builds its `RenderEntries`
+tracking metadata eagerly, and the child iterator only rebuilds that metadata if
+it is not ready. The renderer does not call `pairs`, clone a `RenderList`, or call
+`materialize`; that separate API remains limited to compatibility and diagnostic
+paths. The benchmark walked 15,600 retained nodes (65 per frame, including
+placement and content transforms) in 0.014 ms/frame median. FigDraw's child
+iterator currently copies small `RenderChild` metadata sequences returned by its
+lookup table; the long-running sample identifies that as the main remaining
+traversal micro-cost. It does not copy `Fig` nodes or build a render tree, and at
+0.014 ms here it is not a Merenda-side performance cliff. Avoiding that metadata
+copy is a separate FigDraw optimization.
 
 ## Delivery sequence
 
@@ -454,13 +538,11 @@ changes and the bulk APIs whenever it already knows a complete sibling order.
 5. Add per-contribution manifests, live-frame merging, and retirement by frame or
    acknowledgement.
 6. Enable fragment-native rendering for the direct static renderer.
-7. Keep the renderer thread on materialized snapshots until immutable fragment
-   replacement batches and acknowledgements are complete.
+7. Send cumulative move-only fragment updates to a renderer-owned scene and
+   acknowledge applied generations before releasing resources.
 
 ## Deferred work
 
 - Rasterized view/texture caching.
-- Local-coordinate and transform-based movement optimization.
-- Partial GPU redraw or damage-only rendering.
 - Mutable fragment graphs shared across threads.
 - Dynlib fragment integration.
