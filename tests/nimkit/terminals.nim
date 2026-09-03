@@ -44,7 +44,7 @@ proc feed(screen: var TerminexScreen, parser: var TerminexParser, value: string)
   parser.feed(screen, value)
 
 proc pollUntilExit(
-    session: TerminexSession, timeout = initDuration(seconds = 3)
+    session: CompactTerminalSession[TerminexCell], timeout = initDuration(seconds = 3)
 ): bool =
   let deadline = getMonoTime() + timeout
   while session.running() and getMonoTime() < deadline:
@@ -54,7 +54,9 @@ proc pollUntilExit(
   not session.running()
 
 proc pollUntilText(
-    session: TerminexSession, expected: string, timeout = initDuration(seconds = 3)
+    session: CompactTerminalSession[TerminexCell],
+    expected: string,
+    timeout = initDuration(seconds = 3),
 ): bool =
   let deadline = getMonoTime() + timeout
   while getMonoTime() < deadline:
@@ -86,7 +88,7 @@ proc terminalCellPoint(view: TerminalView, row, column: int): Point =
     )
   )
 
-func normalizedTerminalOutput(session: TerminexSession): string =
+func normalizedTerminalOutput(session: CompactTerminalSession[TerminexCell]): string =
   session.screen().plainText().replace("\n", " ").splitWhitespace().join(" ")
 
 func terminalLineText(screen: TerminexScreen, row: int): string =
@@ -97,7 +99,7 @@ func terminalLineText(screen: TerminexScreen, row: int): string =
       result.add(if cell.text.len > 0: cell.text else: " ")
   result = result.strip(leading = false, trailing = true, chars = {' '})
 
-func currentTerminalLine(session: TerminexSession): string =
+func currentTerminalLine(session: CompactTerminalSession[TerminexCell]): string =
   let screen = session.screen()
   screen.terminalLineText(screen.cursor.position.row)
 
@@ -469,7 +471,7 @@ suite "nimkit terminal screen and parser":
 
 suite "nimkit terminal sessions":
   test "session can parse supplied output before starting a process":
-    let session = newTerminalSession(12, 2)
+    let session = newCompactTerminalSession(12, 2)
 
     session.processOutput("plain \x1b[32mgreen")
 
@@ -481,7 +483,7 @@ suite "nimkit terminal sessions":
 
   when defined(posix):
     test "PTY drains styled output and reports the child exit status":
-      let session = spawnTerminalSession(
+      let session = spawnCompactTerminalSession(
         initTerminalSpawnOptions(command = "printf '\\033[31mred\\033[0m\\n'; exit 7"),
         columns = 20,
         rows = 4,
@@ -499,7 +501,7 @@ suite "nimkit terminal sessions":
       let root = createTempDir("merenda-terminal-session-", "")
       defer:
         removeDir(root)
-      let session = spawnTerminalSession(
+      let session = spawnCompactTerminalSession(
         initTerminalSpawnOptions(
           command =
             "printf '%s\\n%s\\n%s\\n' \"$(basename \"$PWD\")\" \"$TERM\" " &
@@ -521,7 +523,7 @@ suite "nimkit terminal sessions":
       check "7 80" in output
 
     test "PTY accepts interactive input without blocking the caller":
-      let session = spawnTerminalSession(
+      let session = spawnCompactTerminalSession(
         initTerminalSpawnOptions(
           command = "IFS= read -r value; printf 'reply:%s' \"$value\""
         ),
@@ -537,7 +539,7 @@ suite "nimkit terminal sessions":
       check session.exitCode == 0
 
     test "PTY resize reaches the child process":
-      let session = spawnTerminalSession(
+      let session = spawnCompactTerminalSession(
         initTerminalSpawnOptions(command = "sleep 0.05; stty size"),
         columns = 10,
         rows = 3,
@@ -552,7 +554,7 @@ suite "nimkit terminal sessions":
       check "7 33" in session.screen().plainText()
 
     test "closing a live PTY reaps its owned child":
-      let session = spawnTerminalSession(
+      let session = spawnCompactTerminalSession(
         initTerminalSpawnOptions(command = "sleep 30"), columns = 10, rows = 3
       )
 
@@ -563,7 +565,7 @@ suite "nimkit terminal sessions":
       session.close()
   else:
     test "unsupported platforms report a catchable spawn error":
-      let session = newTerminalSession()
+      let session = newCompactTerminalSession()
       expect TerminexSessionError:
         session.start()
       check session.state == tssFailed
@@ -688,7 +690,7 @@ suite "nimkit terminal views":
 
   test "view renders an idle session and resizes its screen to cell geometry":
     let
-      session = newTerminalSession(columns = 12, rows = 3)
+      session = newCompactTerminalSession(columns = 12, rows = 3)
       view = newTerminalView(session, frame = rect(0, 0, 240, 100))
     session.processOutput("plain \x1b[31mred")
 
@@ -705,6 +707,11 @@ suite "nimkit terminal views":
     check view.lineCount == session.screen().rows
     check view.maxColumnCount == session.screen().columns
 
+  test "terminal views use compact scrollback sessions":
+    let view = newTerminalView(frame = rect(0, 0, 240, 100))
+    let session: TerminalViewSession = view.session()
+    check not session.isNil
+
   test "terminal views suppress the outer focus ring":
     let view = newTerminalView(frame = rect(0, 0, 240, 100))
     check view.focusRingType == frtNone
@@ -716,7 +723,7 @@ suite "nimkit terminal views":
   test "window text and key dispatch reach an interactive child process":
     when defined(posix):
       let
-        session = spawnTerminalSession(
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(
             command = "stty -echo; IFS= read -r value; printf 'reply:%s' \"$value\""
           ),
@@ -739,7 +746,7 @@ suite "nimkit terminal views":
   test "window dispatch sends navigation control keys and ordinary paste":
     when defined(posix):
       let
-        session = spawnTerminalSession(
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(
             command =
               "stty raw -echo min 0 time 10; printf ready; " &
@@ -788,7 +795,7 @@ suite "nimkit terminal views":
   test "terminal captures basic input and editing keys before application commands":
     when defined(posix):
       let
-        session = spawnTerminalSession(
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(
             command =
               "stty raw -echo; printf ready; " &
@@ -831,7 +838,7 @@ suite "nimkit terminal views":
   test "focus regain modifier release keeps terminal editing keys usable":
     when defined(posix):
       let
-        session = spawnTerminalSession(
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(
             command =
               "stty raw -echo; printf ready; " &
@@ -886,7 +893,7 @@ suite "nimkit terminal views":
             "export PS1='bash-input$ ' PS2='> ' HISTFILE=/dev/null " &
             "INPUTRC=/dev/null LC_ALL=C; exec " & quoteShell(bashPath) &
             " --noprofile --norc -i"
-          session = spawnTerminalSession(
+          session = spawnCompactTerminalSession(
             initTerminalSpawnOptions(command = command, shell = bashPath),
             columns = 100,
             rows = 8,
@@ -1043,7 +1050,7 @@ suite "nimkit terminal views":
             "export PS1='bash-common$ ' PS2='> ' HISTFILE=/dev/null " &
             "INPUTRC=/dev/null LC_ALL=C; exec " & quoteShell(bashPath) &
             " --noprofile --norc -i"
-          session = spawnTerminalSession(
+          session = spawnCompactTerminalSession(
             initTerminalSpawnOptions(
               command = command, shell = bashPath, workingDirectory = root
             ),
@@ -1253,7 +1260,7 @@ suite "nimkit terminal views":
             "export PS1='bash-test$ ' PS2='> ' HISTFILE=/dev/null " &
             "INPUTRC=/dev/null LC_ALL=C; exec " & quoteShell(bashPath) &
             " --noprofile --norc -i"
-          session = spawnTerminalSession(
+          session = spawnCompactTerminalSession(
             initTerminalSpawnOptions(command = command, shell = bashPath),
             columns = 100,
             rows = 8,
@@ -1318,7 +1325,7 @@ suite "nimkit terminal views":
   test "attached running views poll from the window animation scheduler":
     when defined(posix):
       let
-        session = spawnTerminalSession(
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(command = "printf automatic"), columns = 20, rows = 3
         )
         view = newTerminalView(session, frame = rect(0, 0, 260, 90))
@@ -1339,7 +1346,7 @@ suite "nimkit terminal views":
   test "resizing the window updates the visible grid and child PTY":
     when defined(posix):
       let
-        session = spawnTerminalSession(
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(
             command = "stty -echo; printf ready; IFS= read -r ignored; stty size"
           ),
@@ -1371,7 +1378,7 @@ suite "nimkit terminal views":
 
   test "mouse drag word line and select-all interactions use responder commands":
     let
-      session = newTerminalSession(columns = 20, rows = 3)
+      session = newCompactTerminalSession(columns = 20, rows = 3)
       view = newTerminalView(session, frame = rect(0, 0, 300, 90))
       window = newWindow("Terminal selection", frame = rect(0, 0, 300, 90))
     session.processOutput("alpha beta\r\nsecond line")
@@ -1414,7 +1421,7 @@ suite "nimkit terminal views":
 
   test "single click focuses the terminal and clears selection without selecting a cell":
     let
-      session = newTerminalSession(columns = 20, rows = 3)
+      session = newCompactTerminalSession(columns = 20, rows = 3)
       view = newTerminalView(session, frame = rect(0, 0, 300, 90))
       peer = newView(frame = rect(300, 0, 60, 90))
       root = newView(frame = rect(0, 0, 360, 90))
@@ -1442,7 +1449,7 @@ suite "nimkit terminal views":
   test "selection copy and backspace keep working during live terminal output":
     when defined(posix):
       let
-        session = spawnTerminalSession(
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(
             command =
               "stty raw -echo; printf 'copy target\\033[2;1Hready'; " &
@@ -1497,7 +1504,7 @@ suite "nimkit terminal views":
 
   test "scrolling moves only the viewport with a fractional grid offset":
     let
-      session = newTerminalSession(columns = 10, rows = 3)
+      session = newCompactTerminalSession(columns = 10, rows = 3)
       view = newTerminalView(session, frame = rect(0, 0, 180, 80))
       window = newWindow("Terminal scroll", frame = rect(0, 0, 180, 80))
       spy = TerminalInteractionSpy()
@@ -1544,7 +1551,7 @@ suite "nimkit terminal views":
             "printf 'alternate-0\\r\\nalternate-1\\r\\nalternate-2\\r\\n" &
             "alternate-3\\r\\nalternate-4\\r\\nalternate-ready'; " &
             "IFS= read -r value; " & "printf '\\033[?1049lrestored:%s' \"$value\""
-          session = spawnTerminalSession(
+          session = spawnCompactTerminalSession(
             initTerminalSpawnOptions(command = command, shell = bashPath),
             columns = 24,
             rows = 4,
@@ -1585,7 +1592,7 @@ suite "nimkit terminal views":
           command =
             "stty raw -echo; printf '\\033[?1;1007;1049hready'; " &
             "dd bs=1 count=6 2>/dev/null | od -An -tx1"
-          session = spawnTerminalSession(
+          session = spawnCompactTerminalSession(
             initTerminalSpawnOptions(command = command, shell = bashPath),
             columns = 40,
             rows = 4,
@@ -1615,7 +1622,7 @@ suite "nimkit terminal views":
 
   test "window scrolling stays correct with a full scrollback buffer":
     let
-      session = newTerminalSession(columns = 24, rows = 5, maxScrollback = 1_000)
+      session = newCompactTerminalSession(columns = 24, rows = 5, maxScrollback = 1_000)
       view = newTerminalView(session, frame = rect(0, 0, 320, 120))
       window = newWindow("Terminal large scrollback", frame = rect(0, 0, 320, 120))
     var output = newStringOfCap(16_000)
@@ -1653,7 +1660,7 @@ suite "nimkit terminal views":
 
   test "terminal shortcut and Control-L clear scrollback through window input":
     let
-      session = newTerminalSession(columns = 8, rows = 2)
+      session = newCompactTerminalSession(columns = 8, rows = 2)
       view = newTerminalView(session, frame = rect(0, 0, 180, 70))
       window = newWindow("Terminal clear scrollback", frame = rect(0, 0, 180, 70))
     window.setContentView(view)
@@ -1683,7 +1690,7 @@ suite "nimkit terminal views":
 
   test "Shift preserves local selection and scrolling during mouse tracking":
     let
-      session = newTerminalSession(columns = 12, rows = 3)
+      session = newCompactTerminalSession(columns = 12, rows = 3)
       view = newTerminalView(session, frame = rect(0, 0, 220, 90))
       window = newWindow("Terminal Shift mouse", frame = rect(0, 0, 220, 90))
     session.processOutput("\x1b[?1003;1006hone\r\ntwo\r\nthree\r\nfour\r\nfive")
@@ -1709,7 +1716,7 @@ suite "nimkit terminal views":
   test "scrollback remains the default after an application enables mouse tracking":
     for usesAlternateScreen in [false, true]:
       let
-        session = newTerminalSession(columns = 12, rows = 3)
+        session = newCompactTerminalSession(columns = 12, rows = 3)
         view = newTerminalView(session, frame = rect(0, 0, 220, 90))
         window = newWindow("Terminal application history", frame = rect(0, 0, 220, 90))
         alternateScreenInput = if usesAlternateScreen: "\x1b[?1049h" else: ""
@@ -1732,7 +1739,7 @@ suite "nimkit terminal views":
   test "Codex resume history inserted above its composer remains scrollable":
     for usesAlternateScreen in [false, true]:
       let
-        session = newTerminalSession(columns = 24, rows = 5)
+        session = newCompactTerminalSession(columns = 24, rows = 5)
         view = newTerminalView(session, frame = rect(0, 0, 320, 120))
         window = newWindow("Codex resume history", frame = rect(0, 0, 320, 120))
         alternateScreenInput = if usesAlternateScreen: "\x1b[?1049h\x1b[?1007h" else: ""
@@ -1760,7 +1767,7 @@ suite "nimkit terminal views":
     when defined(posix):
       let
         expected = "\x1b[200~pasted\x1b[201~"
-        session = spawnTerminalSession(
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(
             command =
               "stty raw -echo; printf ready; dd bs=1 count=" & $expected.len &
@@ -1790,7 +1797,7 @@ suite "nimkit terminal views":
     when defined(posix):
       let
         expectedBytes = 28
-        session = spawnTerminalSession(
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(
             command =
               "stty raw -echo; printf ready; dd bs=1 count=" & $expectedBytes &
@@ -1829,7 +1836,7 @@ suite "nimkit terminal views":
     when defined(posix):
       let
         expectedBytes = 6
-        session = spawnTerminalSession(
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(
             command =
               "stty raw -echo; printf ready; dd bs=1 count=" & $expectedBytes &
@@ -1858,7 +1865,7 @@ suite "nimkit terminal views":
 
   test "modifier-click activates OSC hyperlinks through mouse dispatch":
     let
-      session = newTerminalSession(columns = 24, rows = 2)
+      session = newCompactTerminalSession(columns = 24, rows = 2)
       view = newTerminalView(session, frame = rect(0, 0, 300, 80))
       window = newWindow("Terminal hyperlink", frame = rect(0, 0, 300, 80))
       spy = TerminalInteractionSpy()
@@ -1878,7 +1885,7 @@ suite "nimkit terminal views":
 
   test "modifier-hover reveals plain URLs and link activation can be disabled":
     let
-      session = newTerminalSession(columns = 40, rows = 2)
+      session = newCompactTerminalSession(columns = 40, rows = 2)
       view = newTerminalView(session, frame = rect(0, 0, 480, 80))
       window = newWindow("Terminal URL", frame = rect(0, 0, 480, 80))
       spy = TerminalInteractionSpy()
@@ -1917,7 +1924,7 @@ suite "nimkit terminal views":
 
   test "OSC clipboard writes remain opt-in":
     let
-      session = newTerminalSession(columns = 20, rows = 2)
+      session = newCompactTerminalSession(columns = 20, rows = 2)
       view = newTerminalView(session, frame = rect(0, 0, 240, 80))
     discard generalPasteboard().setPlainText("existing")
     session.processOutput("\x1b]52;c;bmV3IHZhbHVl\x07")

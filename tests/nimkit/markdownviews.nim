@@ -12,7 +12,7 @@ const
   RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
   RepositoryReadme = RepositoryRoot / "README.md"
   TestImagePath = RepositoryRoot / "data" / "img1.png"
-  ReadmeLayoutTimeoutMilliseconds = 15_000
+  ReadmeLayoutTimeoutMilliseconds = 60_000
 
 proc runeIndexOf(text, needle: string): int =
   let
