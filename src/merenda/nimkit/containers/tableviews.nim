@@ -5015,7 +5015,10 @@ proc visibleContentRows(contentView: TableContentView): tuple[first, last: int] 
 
 proc configureRowView(rowView: TableRowView, itemIndex: int) =
   let tableView = rowView.xTableView
-  rowView.xRow = tableView.tableRowState(itemIndex)
+  let nextRow = tableView.tableRowState(itemIndex)
+  if rowView.xRow != nextRow:
+    rowView.xRow = nextRow
+    rowView.needsDisplay = true
   rowView.setFrameFromLayout(tableView.xContentView.tableContentItemRect(itemIndex))
 
 proc removeLastRowView(contentView: TableContentView) =
@@ -5211,7 +5214,7 @@ protocol DefaultTableRowViewAccessibility of AccessibilityProtocol:
 
 protocol DefaultTableContentViewDrawing of ViewDrawingProtocol:
   method draw(contentView: TableContentView, context: DrawContext) =
-    discard context
+    discard context.visibleRect()
     contentView.syncVisibleRowViews()
     contentView.tableView().syncVisibleTableCells()
 
