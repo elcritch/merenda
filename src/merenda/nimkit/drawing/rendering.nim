@@ -196,6 +196,21 @@ when not defined(useNativeDynlib):
     for child in source.nodes.childIndex(sourceRoot):
       source.appendSubtree(child, destination, destinationRoot)
 
+  proc placementNode(cacheKey: RenderViewCacheKey, absolute = false): Fig =
+    let origin = if absolute: cacheKey.frame.origin else: cacheKey.placement
+    Fig(
+      kind: nkTransform,
+      screenBox: figdraw.rect(
+        0.0'f32, 0.0'f32, cacheKey.frame.size.width, cacheKey.frame.size.height
+      ),
+      transform: TransformStyle(translation: vec2(origin.x, origin.y)),
+    )
+
+  proc wrapInPlacement(source: RenderList, placement: Fig): RenderList =
+    let root = result.addRoot(placement)
+    for sourceRoot in source.rootIds:
+      source.appendSubtree(sourceRoot, result, root)
+
   proc takeOnlyRootChildren(
       source: var RenderList,
       sourceRoot: FigIdx,
@@ -225,10 +240,12 @@ when not defined(useNativeDynlib):
       appearance: Appearance,
   ): RenderViewFrame =
     let context = initDrawContext()
+    let localFrame =
+      rect(0.0'f32, 0.0'f32, cacheKey.frame.size.width, cacheKey.frame.size.height)
     let rootIdx = context.addRenderRectangle(
       cacheKey.level,
       (-1).FigIdx,
-      cacheKey.frame,
+      localFrame,
       view.viewBackgroundFill(appearance, cacheKey.isRoot),
       shadows = view.shadow,
       clips = view.clipsToBounds,
@@ -236,11 +253,10 @@ when not defined(useNativeDynlib):
 
     if view.usesThemedRootBackground(cacheKey.isRoot):
       context.addRootBackgroundPinstripes(
-        view, cacheKey.level, rootIdx, cacheKey.frame, appearance
+        view, cacheKey.level, rootIdx, localFrame, appearance
       )
 
-    let contentOrigin =
-      cacheKey.frame.origin.addPoints(view.bounds().boundsTranslation())
+    let contentOrigin = view.bounds().boundsTranslation()
     context.beginDraw(
       view, cacheKey.level, rootIdx, (-1).FigIdx, contentOrigin, appearance
     )
@@ -250,8 +266,11 @@ when not defined(useNativeDynlib):
       viewId: viewId,
       parentViewId: parentViewId,
       cacheKey: cacheKey,
+      placementChanged: true,
       captured: true,
+      placement: cacheKey.placementNode(),
       resources: context.resources,
+      usesVisibleRect: context.drawingDependsOnVisibleRect(),
     )
     var ownLayer = move context.renders.layers[cacheKey.level]
     if rootIdx.int == 0 and ownLayer.rootIds == @[rootIdx]:
@@ -267,7 +286,10 @@ when not defined(useNativeDynlib):
           ownLayer.appendSubtree(escapedRoot, result.escapedContents)
     for level, list in context.renders.pairs():
       if level != cacheKey.level and list.nodes.len > 0:
-        result.extraLayers.add RenderLayerContribution(level: level, contents: list)
+        result.extraLayers.add RenderLayerContribution(
+          level: level,
+          contents: list.wrapInPlacement(cacheKey.placementNode(absolute = true)),
+        )
 
   proc collectRenderFrames(
       scene: RenderScene,
@@ -278,6 +300,7 @@ when not defined(useNativeDynlib):
       parentViewId = 0.RenderViewId,
       parentLevel = DefaultDrawLevel,
       parentOrigin = ZeroPoint,
+      parentBoundsOrigin = ZeroPoint,
   ) =
     if view.visibleRect.isEmpty:
       view.finishDisplaySubtree()
@@ -288,21 +311,30 @@ when not defined(useNativeDynlib):
       level = view.trySendLocal(drawLevel()).get(parentLevel)
       viewId = view.renderViewId()
       absoluteFrame = view.renderFrameRect(parentOrigin)
+      viewFrame = view.frame()
       cacheKey = RenderViewCacheKey(
         displayRevision: view.xDisplayRevision,
         appearanceGeneration: uint64(appearance.theme.generation()),
         frame: absoluteFrame,
+        placement: initPoint(
+          viewFrame.origin.x - parentBoundsOrigin.x,
+          viewFrame.origin.y - parentBoundsOrigin.y,
+        ),
         bounds: view.bounds(),
         visibleRect: view.visibleRect(),
         level: level,
         isRoot: parentViewId.uint64 == 0,
       )
 
-    if scene.needsViewCapture(viewId, cacheKey):
+    let capture = scene.needsViewCapture(viewId, cacheKey)
+    if capture:
       frames.add view.captureViewFrame(viewId, parentViewId, cacheKey, appearance)
     else:
       frames.add RenderViewFrame(
-        viewId: viewId, parentViewId: parentViewId, cacheKey: cacheKey
+        viewId: viewId,
+        parentViewId: parentViewId,
+        cacheKey: cacheKey,
+        placementChanged: scene.needsViewPlacementUpdate(viewId, cacheKey),
       )
     revisions.add DisplayRevisionSnapshot(
       view: view, revision: cacheKey.displayRevision
@@ -312,7 +344,14 @@ when not defined(useNativeDynlib):
       absoluteFrame.origin.addPoints(view.bounds().boundsTranslation())
     for child in view.subviews:
       scene.collectRenderFrames(
-        child, appearance, frames, revisions, viewId, level, contentOrigin
+        child,
+        appearance,
+        frames,
+        revisions,
+        viewId,
+        level,
+        contentOrigin,
+        view.bounds().origin,
       )
 
   proc updateRenderScene(root: View, appearance: Appearance): RenderScene =
@@ -356,25 +395,25 @@ proc invalidateRenderCache*(root: View) =
 
 proc buildRenders*(root: View, appearance: Appearance): Renders =
   when not defined(useNativeDynlib):
-    if not root.xCachedRenderScene.isNil:
-      let scene = root.updateRenderScene(appearance)
-      if not root.xHasCachedRenders:
-        root.xCachedRenders = scene.materialize()
-        root.xHasCachedRenders = true
+    let scene = root.updateRenderScene(appearance)
+    if not root.xHasCachedRenders:
+      root.xCachedRenders = scene.materialize()
+      root.xHasCachedRenders = true
+    scene.acknowledgeRenderGeneration(scene.frameGeneration())
+    result = root.xCachedRenders
+  else:
+    discard root.prepareDisplaySubtree()
+    if root.cacheCanReuse(appearance):
       return root.xCachedRenders
 
-  discard root.prepareDisplaySubtree()
-  if root.cacheCanReuse(appearance):
-    return root.xCachedRenders
-
-  let context = initDrawContext()
-  renderViewInto(context, root, appearance)
-  result = context.renders
-  root.xCachedRenders = result
-  root.xCachedRenderResources = context.resources
-  root.xCachedAppearance = appearance
-  root.xHasCachedRenders = true
-  root.finishDisplaySubtree()
+    let context = initDrawContext()
+    renderViewInto(context, root, appearance)
+    result = context.renders
+    root.xCachedRenders = result
+    root.xCachedRenderResources = context.resources
+    root.xCachedAppearance = appearance
+    root.xHasCachedRenders = true
+    root.finishDisplaySubtree()
 
 proc buildRenders*(root: View, theme: Theme): Renders =
   buildRenders(root, initAppearance(theme))

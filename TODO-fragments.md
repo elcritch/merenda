@@ -219,24 +219,26 @@ Use a composite entry:
 
 ```text
 view slot
-└── stable shell node              background, shadow, clipping
-    ├── replaceable self fragment
-    ├── child view slot
-    ├── child view slot
-    └── ...
+└── stable placement transform fragment
+    ├── stable shell fragment      background, shadow, clipping
+    │   ├── replaceable self fragment
+    │   ├── child view slot
+    │   └── child view slot
+    └── escaped fragment           exterior focus ring or chrome
 
-escaped sibling fragment           exterior focus ring or chrome
-layer-root fragments               popup, focus, tooltip, future overlays
+layer-root transform fragments     popup, focus, tooltip, future overlays
 ```
 
-The stable shell remains the structural and clipping parent. Its Fig can be
-updated through the controlled node API. Rebuilding a view's own drawing replaces
-the self fragment without disturbing its child-view slots.
+The placement fragment contains one `nkTransform` node updated through the
+controlled node API. Its fragment ID, shell, self drawing, escaped drawing, and
+child slots remain attached when a view or ancestor moves. The shell remains the
+background and clipping parent. Rebuilding a view's own drawing replaces the self
+fragment without disturbing its child-view slots.
 
 Preserve these existing semantics:
 
 - Normal view content and same-layer descendants are children of the shell and
-  inherit its clipping and transform state.
+  inherit its clipping and placement transform.
 - Exterior focus rings and similar content using `renderViewParent` remain
   siblings following the view slot, outside the view's own clip.
 - A view whose effective draw level differs from its parent is a layer root.
@@ -284,15 +286,17 @@ invalidation raised during layout or drawing must remain pending.
 - [x] Make local invalidation advance only the target view's drawing revision.
 - [x] Propagate damage/descendant state without advancing ancestor drawing
       revisions.
-- [x] Include effective appearance, absolute origin, visible rectangle, draw
-      level, and relevant geometry in the view cache key.
+- [x] Include effective appearance, local placement, draw level, and relevant
+      geometry in the view cache key. Include the visible rectangle only for
+      drawing that reads it.
 - [x] Invalidate/reconcile descendants when an ancestor changes an inherited
       render context.
 
-Keep absolute coordinates for the first implementation. Local coordinates and
-view transforms may later reduce rebuilds when ancestors move, but combining that
-change with initial fragment adoption would make equivalence substantially harder
-to establish.
+The completed implementation captures drawing in view-local coordinates and keeps
+placement in the stable transform fragment. `DrawContext.visibleRect` records a
+dependency when drawing reads it, so virtualized drawing is recaptured as its clip
+moves while ordinary drawing remains cached. Explicit-layer output is rooted under
+an equivalent absolute placement transform.
 
 ## Resource manifests
 
@@ -329,8 +333,10 @@ Implemented behavior:
 - The application scene builds a cumulative update from the last acknowledged
   scene generation. Every update contains the complete view placement order and
   node payloads only for contributions changed after that baseline.
-- Updates are move-only and carry copied node sequences plus font/image IDs. They
-  never carry application-thread resource handles or FigDraw fragment handles.
+- Updates are move-only and carry copied dirty node sequences plus font/image IDs.
+  Placement-only updates carry value-type cache keys and mutate the renderer's
+  retained transform nodes. They never carry application-thread resource handles
+  or FigDraw fragment handles.
 - The dedicated renderer owns a separate `RenderScene` and moves received node
   payloads into its own fragment graph before rendering it directly.
 - The bounded two-entry channel coalesces superseded frames. Because the newest
@@ -393,6 +399,8 @@ Fig indexes.
 - [x] Inline popups, tooltip layers, focus-ring layers, and overlay ordering.
 - [x] Hidden, removed, reinserted, and reordered views.
 - [x] Appearance-generation and ancestor-geometry changes.
+- [x] Scrolling updates placement transforms without recapturing drawing that does
+      not read `visibleRect`, while visibility-dependent drawing is recaptured.
 - [x] Font and image replacement and removed-view resources.
 - [x] Atlas recovery using only the current live manifest.
 
@@ -503,6 +511,5 @@ renderer-replica application.
 ## Deferred work
 
 - Rasterized view/texture caching.
-- Local-coordinate and transform-based movement optimization.
 - Mutable fragment graphs shared across threads.
 - Dynlib fragment integration.

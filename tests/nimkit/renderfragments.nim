@@ -15,6 +15,9 @@ type
     drawLevelValue: ZLevel
     invalidatesDuringDraw: bool
 
+  VisibleRectSceneView = ref object of View
+    drawCount: int
+
   MultiOutputSceneView = ref object of View
     escapedRootCount: int
     drawsPopup: bool
@@ -61,6 +64,12 @@ protocol CountedSceneDrawing of ViewDrawingProtocol:
     if view.invalidatesDuringDraw:
       view.invalidatesDuringDraw = false
       view.needsDisplay = true
+
+protocol VisibleRectSceneDrawing of ViewDrawingProtocol:
+  method draw(view: VisibleRectSceneView, context: DrawContext) =
+    inc view.drawCount
+    discard context.visibleRect()
+    context.addRectangle(rect(1, 2, 9, 7), color(0.2, 0.4, 0.8))
 
 protocol MultiOutputSceneDrawing of ViewDrawingProtocol:
   method draw(view: MultiOutputSceneView, context: DrawContext) =
@@ -207,6 +216,11 @@ proc newCountedSceneView(frame: Rect, drawColor: Color): CountedSceneView =
   result = CountedSceneView(drawColor: drawColor)
   result.initViewFields(frame)
   discard result.withProtocol(CountedSceneDrawing)
+
+proc newVisibleRectSceneView(frame: Rect): VisibleRectSceneView =
+  result = VisibleRectSceneView()
+  result.initViewFields(frame)
+  discard result.withProtocol(VisibleRectSceneDrawing)
 
 proc newMultiOutputSceneView(frame: Rect): MultiOutputSceneView =
   result = MultiOutputSceneView()
@@ -363,7 +377,7 @@ suite "NimKit render fragments":
       firstFragmentIds = scene.rootFragmentIds()
       materialized = scene.materialize()
 
-    check sceneDrawCount == 2
+    check sceneDrawCount == 1
     check materialized.renderLevels() == monolithic.renderLevels()
     check materialized.canonicalNodes() == monolithic.canonicalNodes()
     check scene.viewEntryCount() == 4
@@ -373,14 +387,14 @@ suite "NimKit render fragments":
     let cachedScene = root.buildRenderScene()
     check cachedScene == scene
     check cachedScene.frameGeneration() == firstGeneration
-    check sceneDrawCount == 2
+    check sceneDrawCount == 1
 
     custom.needsDisplay = true
     let updatedScene = root.buildRenderScene()
     check updatedScene == scene
     check updatedScene.frameGeneration() == firstGeneration + 1
     check updatedScene.rootFragmentIds() == firstFragmentIds
-    check sceneDrawCount == 3
+    check sceneDrawCount == 2
     check updatedScene.materialize().canonicalNodes() ==
       root.buildRenders().canonicalNodes()
 
@@ -470,6 +484,52 @@ suite "NimKit render fragments":
     check scene.viewCaptureGeneration(root.renderViewId()) == 1
     check scene.viewCaptureGeneration(parent.renderViewId()) == 2
     check scene.viewCaptureGeneration(child.renderViewId()) == 2
+
+  test "scroll placement preserves drawing that does not read the visible rect":
+    let
+      root = newView(frame = rect(0, 0, 180, 120))
+      viewport = newCountedSceneView(rect(0, 0, 100, 80), color(0.2, 0.3, 0.4))
+      document = newCountedSceneView(rect(0, 0, 100, 240), color(0.7, 0.2, 0.1))
+    viewport.clipsToBounds = true
+    viewport.addSubview(document)
+    root.addSubview(viewport)
+    let scene = root.buildRenderScene()
+    let
+      sceneIdentity = retainedScenes.sceneIdentity(scene)
+      initialGeneration = scene.frameGeneration()
+      documentFragments = scene.viewFragmentIds(document.renderViewId())
+      replica = retainedScenes.newRenderSceneReplica()
+    var initial = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+    retainedScenes.apply(replica, initial)
+
+    viewport.bounds = rect(0, 24, 100, 80)
+    discard root.buildRenderScene()
+    var update =
+      retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, initialGeneration)
+
+    check viewport.drawCount == 2
+    check document.drawCount == 1
+    check scene.viewCaptureGeneration(document.renderViewId()) == 1
+    check scene.viewFragmentIds(document.renderViewId()) == documentFragments
+    check retainedScenes.capturedViewCount(update) == 1
+    retainedScenes.apply(replica, update)
+    check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
+
+  test "visible-rect drawing recaptures when scrolling changes its clip":
+    let
+      root = newView(frame = rect(0, 0, 180, 120))
+      viewport = newCountedSceneView(rect(0, 0, 100, 80), color(0.2, 0.3, 0.4))
+      document = newVisibleRectSceneView(rect(0, 0, 100, 240))
+    viewport.clipsToBounds = true
+    viewport.addSubview(document)
+    root.addSubview(viewport)
+    let scene = root.buildRenderScene()
+
+    viewport.bounds = rect(0, 24, 100, 80)
+    discard root.buildRenderScene()
+
+    check document.drawCount == 2
+    check scene.viewCaptureGeneration(document.renderViewId()) == 2
 
   test "appearance generation changes recapture inherited contributions":
     let

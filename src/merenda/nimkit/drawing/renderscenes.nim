@@ -1,9 +1,20 @@
 ## Retained, per-view render scenes built on FigDraw fragment attachments.
 ##
-## Each visible view owns a stable shell fragment, a replaceable self-drawing
-## fragment, an escaped-sibling fragment, and zero or more extra-layer root
-## fragments. Child view shells attach beneath their parent's shell, so replacing
-## one view's self drawing cannot detach descendant or sibling identities.
+## Each visible view owns a one-node placement transform fragment. That transform
+## owns a stable background/clip shell, a replaceable self-drawing fragment,
+## escaped drawing outside the clip, and child placement fragments::
+##
+##   placement transform
+##   +-- background/clip shell
+##   |   +-- self drawing
+##   |   +-- child placement transform
+##   +-- escaped drawing
+##
+## Scrolling or moving an ancestor updates only placement transform nodes. It does
+## not rebuild a descendant's drawing unless that drawing read
+## `DrawContext.visibleRect`; that dependency is recorded during capture. Explicit
+## layers use equivalent layer-root transforms. Stable fragment IDs and nested
+## attachments therefore survive placement-only updates.
 
 import std/[hashes, tables]
 
@@ -17,10 +28,11 @@ type
     ## Stable application-thread identity for a NimKit view.
 
   RenderViewCacheKey* = object
-    ## Inputs that can change one view's captured drawing without changing its ID.
+    ## Drawing and placement inputs for one stable view identity.
     displayRevision*: uint64
     appearanceGeneration*: uint64
     frame*: Rect
+    placement*: Point
     bounds*: Rect
     visibleRect*: Rect
     level*: ZLevel
@@ -32,16 +44,19 @@ type
     contents*: RenderList
 
   RenderViewFrame* = object
-    ## One visible view's placement and optional freshly captured contribution.
+    ## One visible view's changed placement and optional drawing contribution.
     viewId*: RenderViewId
     parentViewId*: RenderViewId
     cacheKey*: RenderViewCacheKey
+    placementChanged*: bool
     captured*: bool
+    placement*: Fig
     shell*: Fig
     selfContents*: RenderList
     escapedContents*: RenderList
     extraLayers*: seq[RenderLayerContribution]
     resources*: RenderResourceManifest
+    usesVisibleRect*: bool
 
   ViewPlacement = object
     viewId: RenderViewId
@@ -50,11 +65,15 @@ type
 
   ViewRenderEntry = object
     cacheKey: RenderViewCacheKey
+    placement: Fig
     shell: Fig
     selfContents: RenderList
     escapedContents: RenderList
     extraLayers: seq[RenderLayerContribution]
     resources: RenderResourceManifest
+    usesVisibleRect: bool
+    placementHandle: RenderFragmentHandle
+    placementCursor: RenderCursor
     shellHandle: RenderFragmentHandle
     shellCursor: RenderCursor
     selfHandle: RenderFragmentHandle
@@ -63,6 +82,7 @@ type
     externalParent: RenderViewId
     captureGeneration: uint64
     changeGeneration: uint64
+    captureChangeGeneration: uint64
 
   RetiredRenderResources = object
     releaseGeneration: uint64
@@ -88,8 +108,9 @@ type
     ## Move-only cumulative update for a renderer-owned scene replica.
     ##
     ## Every update contains the complete current placement order, but only
-    ## contributions changed after `baseGeneration` carry node payloads. A full
-    ## update carries every payload and acts as an ordering barrier.
+    ## contributions changed after `baseGeneration` carry drawing payloads.
+    ## Placement-only changes carry cache keys and update retained transform nodes.
+    ## A full update carries every payload and acts as an ordering barrier.
     sceneIdentity: uint64
     baseGeneration: uint64
     generation: uint64
@@ -187,7 +208,7 @@ proc isolateRenderList(list: RenderList): RenderList =
     result.nodes.add node.isolateFig()
   result.rootIds = list.rootIds.isolateSequence()
 
-proc shellRenderList(node: Fig): RenderList =
+proc nodeRenderList(node: Fig): RenderList =
   discard result.addRoot(node)
 
 proc buildFragmentTree(
@@ -253,7 +274,20 @@ proc needsViewCapture*(
   ## Reports whether this scene lacks a current contribution for `viewId`.
   if scene.isNil or not scene.perViewMode or viewId notin scene.viewEntries:
     return true
-  scene.viewEntries[viewId].cacheKey != cacheKey
+  let entry = scene.viewEntries[viewId]
+  let cached = entry.cacheKey
+  cached.displayRevision != cacheKey.displayRevision or
+    cached.appearanceGeneration != cacheKey.appearanceGeneration or
+    cached.frame.size != cacheKey.frame.size or cached.bounds != cacheKey.bounds or
+    (entry.usesVisibleRect and cached.visibleRect != cacheKey.visibleRect) or
+    cached.level != cacheKey.level or cached.isRoot != cacheKey.isRoot
+
+proc needsViewPlacementUpdate*(
+    scene: RenderScene, viewId: RenderViewId, cacheKey: RenderViewCacheKey
+): bool =
+  ## Reports whether the view's retained transform placement changed.
+  scene.isNil or not scene.perViewMode or viewId notin scene.viewEntries or
+    scene.viewEntries[viewId].cacheKey != cacheKey
 
 proc externalParent(
     frame: RenderViewFrame, levels: Table[RenderViewId, ZLevel]
@@ -328,25 +362,29 @@ proc attachChild(
 proc attachViewEntry(
     scene: RenderScene, entry: var ViewRenderEntry, parent: RenderViewId
 ) =
-  var shellList = entry.shell.shellRenderList()
+  var placementList = entry.placement.nodeRenderList()
   if parent.uint64 == 0:
-    entry.shellHandle = scene.attachRoot(entry.cacheKey.level, shellList)
+    entry.placementHandle = scene.attachRoot(entry.cacheKey.level, placementList)
   else:
-    entry.shellHandle =
-      scene.attachChild(scene.viewEntries[parent].shellCursor, shellList)
+    entry.placementHandle =
+      scene.attachChild(scene.viewEntries[parent].shellCursor, placementList)
 
-  let roots = scene.tree.fragmentRoots(entry.shellHandle)
+  let roots = scene.tree.fragmentRoots(entry.placementHandle)
   if roots.len != 1:
+    raise newException(
+      ValueError, "a view placement fragment must contain exactly one root"
+    )
+  entry.placementCursor = roots[0]
+
+  var shellList = entry.shell.nodeRenderList()
+  entry.shellHandle = scene.attachChild(entry.placementCursor, shellList)
+  let shellRoots = scene.tree.fragmentRoots(entry.shellHandle)
+  if shellRoots.len != 1:
     raise
       newException(ValueError, "a view shell fragment must contain exactly one root")
-  entry.shellCursor = roots[0]
+  entry.shellCursor = shellRoots[0]
   entry.selfHandle = scene.attachChild(entry.shellCursor, entry.selfContents)
-
-  if parent.uint64 == 0:
-    entry.escapedHandle = scene.attachRoot(entry.cacheKey.level, entry.escapedContents)
-  else:
-    entry.escapedHandle =
-      scene.attachChild(scene.viewEntries[parent].shellCursor, entry.escapedContents)
+  entry.escapedHandle = scene.attachChild(entry.placementCursor, entry.escapedContents)
 
   entry.extraHandles = initTable[ZLevel, RenderFragmentHandle]()
   for extra in entry.extraLayers.mitems:
@@ -357,10 +395,8 @@ proc detachEntry(scene: RenderScene, entry: ViewRenderEntry) =
   for _, handle in entry.extraHandles:
     if scene.tree.isValid(handle):
       scene.tree.removeFragment(handle)
-  if scene.tree.isValid(entry.escapedHandle):
-    scene.tree.removeFragment(entry.escapedHandle)
-  if scene.tree.isValid(entry.shellHandle):
-    scene.tree.removeFragment(entry.shellHandle)
+  if scene.tree.isValid(entry.placementHandle):
+    scene.tree.removeFragment(entry.placementHandle)
 
 proc rebuildTree(
     scene: RenderScene, frames: openArray[RenderViewFrame], levels: seq[ZLevel]
@@ -377,7 +413,30 @@ proc rebuildTree(
     scene.attachViewEntry(entry, frame.externalParent(viewLevels))
     scene.viewEntries[frame.viewId] = entry
 
+proc refreshPlacementNodes(entry: var ViewRenderEntry, cacheKey: RenderViewCacheKey) =
+  entry.cacheKey = cacheKey
+  entry.placement.transform.translation =
+    vec2(cacheKey.placement.x, cacheKey.placement.y)
+  for extra in entry.extraLayers.mitems:
+    if extra.contents.rootIds.len != 1:
+      raise newException(ValueError, "an extra-layer placement must have one root")
+    let root = extra.contents.rootIds[0]
+    if extra.contents.nodes[root.int].kind != nkTransform:
+      raise
+        newException(ValueError, "an extra-layer placement root must be a transform")
+    extra.contents.nodes[root.int].transform.translation =
+      vec2(cacheKey.frame.origin.x, cacheKey.frame.origin.y)
+
+proc updatePlacementEntry(scene: RenderScene, entry: var ViewRenderEntry) =
+  scene.tree.updateNode(entry.placementCursor, entry.placement)
+  for extra in entry.extraLayers:
+    let roots = scene.tree.fragmentRoots(entry.extraHandles[extra.level])
+    if roots.len != 1:
+      raise newException(ValueError, "an extra-layer fragment must have one root")
+    scene.tree.updateNode(roots[0], extra.contents.nodes[extra.contents.rootIds[0].int])
+
 proc updateCapturedEntry(scene: RenderScene, entry: var ViewRenderEntry) =
+  scene.tree.updateNode(entry.placementCursor, entry.placement)
   scene.tree.updateNode(entry.shellCursor, entry.shell)
   if scene.replicaMode:
     entry.selfHandle =
@@ -422,14 +481,12 @@ proc moveViewEntry(
   if entry.externalParent == parent:
     return
   if parent.uint64 == 0:
-    entry.shellHandle =
-      scene.tree.moveFragmentToRoot(entry.shellHandle, entry.cacheKey.level, 0)
-    entry.escapedHandle =
-      scene.tree.moveFragmentToRoot(entry.escapedHandle, entry.cacheKey.level, 0)
+    entry.placementHandle =
+      scene.tree.moveFragmentToRoot(entry.placementHandle, entry.cacheKey.level, 0)
   else:
     let parentCursor = scene.viewEntries[parent].shellCursor
-    entry.shellHandle = scene.tree.moveFragment(entry.shellHandle, parentCursor, 0)
-    entry.escapedHandle = scene.tree.moveFragment(entry.escapedHandle, parentCursor, 0)
+    entry.placementHandle =
+      scene.tree.moveFragment(entry.placementHandle, parentCursor, 0)
   entry.externalParent = parent
 
 proc reconcileOrders(
@@ -451,16 +508,17 @@ proc reconcileOrders(
       entry = scene.viewEntries[frame.viewId]
       parent = frame.externalParent(viewLevels)
     if parent.uint64 == 0:
-      rootOrders[frame.cacheKey.level].add entry.shellHandle
-      rootOrders[frame.cacheKey.level].add entry.escapedHandle
+      rootOrders[frame.cacheKey.level].add entry.placementHandle
     else:
-      childOrders[parent].add entry.shellHandle
-      childOrders[parent].add entry.escapedHandle
+      childOrders[parent].add entry.placementHandle
     for extra in entry.extraLayers:
       rootOrders[extra.level].add entry.extraHandles[extra.level]
 
   for frame in frames:
     let entry = scene.viewEntries[frame.viewId]
+    scene.tree.reorderChildFragments(
+      entry.placementCursor, [entry.shellHandle, entry.escapedHandle]
+    )
     scene.tree.reorderChildFragments(entry.shellCursor, childOrders[frame.viewId])
   scene.rootFragments.setLen(0)
   for level in levels:
@@ -480,8 +538,9 @@ proc reconcile*(
   ## Reconciles one frame while retaining clean per-view drawing fragments.
   ##
   ## `frames` must be in depth-first view order, with parents before children.
-  ## A captured entry atomically updates its shell, self, escaped, and extra-layer
-  ## outputs. Clean entries only participate in placement and ordering.
+  ## A captured entry atomically updates its placement, shell, self, escaped, and
+  ## extra-layer outputs. Placement-only entries update retained transforms. Clean
+  ## entries only participate in ordering.
   if scene.isNil:
     raise newException(ValueError, "cannot update a nil render scene")
   frames.validateFrames()
@@ -493,12 +552,15 @@ proc reconcile*(
     levelChanged = false
     seen = initTable[RenderViewId, bool]()
     changedViews: seq[RenderViewId]
+    capturedViews: seq[RenderViewId]
 
   for frame in frames.mitems:
     seen[frame.viewId] = true
     let existed = frame.viewId in scene.viewEntries and scene.perViewMode
     if not existed and not frame.captured:
       raise newException(ValueError, "a new render view must include a capture")
+    if frame.captured and not frame.placementChanged:
+      raise newException(ValueError, "a captured render view must include placement")
     if not existed:
       topologyChanged = true
     if existed and scene.viewEntries[frame.viewId].cacheKey.level != frame.cacheKey.level:
@@ -513,17 +575,24 @@ proc reconcile*(
       if existed and not entry.extraLayers.sameLayerShape(frame.extraLayers):
         topologyChanged = true
       entry.cacheKey = frame.cacheKey
+      entry.placement = move frame.placement
       entry.shell = move frame.shell
       entry.selfContents = move frame.selfContents
       entry.escapedContents = move frame.escapedContents
       entry.extraLayers = move frame.extraLayers
       entry.resources = move frame.resources
+      entry.usesVisibleRect = frame.usesVisibleRect
       entry.captureGeneration.advance()
+      capturedViews.add frame.viewId
+      changedViews.add frame.viewId
+      changed = true
+    elif frame.placementChanged:
+      entry.refreshPlacementNodes(frame.cacheKey)
       changedViews.add frame.viewId
       changed = true
     elif entry.cacheKey != frame.cacheKey:
-      raise newException(ValueError, "a changed render view must include a capture")
-    if frame.captured:
+      raise newException(ValueError, "a changed render view must include an update")
+    if frame.captured or frame.placementChanged:
       scene.viewEntries[frame.viewId] = entry
 
   var removed: seq[RenderViewId]
@@ -544,6 +613,8 @@ proc reconcile*(
 
   for viewId in changedViews:
     scene.viewEntries[viewId].changeGeneration = nextGeneration
+  for viewId in capturedViews:
+    scene.viewEntries[viewId].captureChangeGeneration = nextGeneration
   if rebuild:
     scene.fullTransferGeneration = nextGeneration
 
@@ -559,18 +630,24 @@ proc reconcile*(
     if topologyChanged:
       for frame in frames:
         var entry = scene.viewEntries[frame.viewId]
-        if not scene.tree.isValid(entry.shellHandle):
+        if not scene.tree.isValid(entry.placementHandle):
           scene.attachViewEntry(entry, frame.externalParent(viewLevels))
         else:
           scene.moveViewEntry(entry, frame.externalParent(viewLevels))
           if frame.captured:
             scene.updateCapturedEntry(entry)
+          elif frame.placementChanged:
+            scene.updatePlacementEntry(entry)
         scene.viewEntries[frame.viewId] = entry
     else:
       for frame in frames:
         if frame.captured:
           var entry = scene.viewEntries[frame.viewId]
           scene.updateCapturedEntry(entry)
+          scene.viewEntries[frame.viewId] = entry
+        elif frame.placementChanged:
+          var entry = scene.viewEntries[frame.viewId]
+          scene.updatePlacementEntry(entry)
           scene.viewEntries[frame.viewId] = entry
 
     for viewId in removed:
@@ -602,19 +679,25 @@ proc copyLayerContributions(
     )
 
 proc transferFrame(
-    entry: ViewRenderEntry, placement: ViewPlacement, captured: bool
+    entry: ViewRenderEntry,
+    placement: ViewPlacement,
+    placementChanged: bool,
+    captured: bool,
 ): RenderViewFrame =
   result = RenderViewFrame(
     viewId: placement.viewId,
     parentViewId: placement.parentViewId,
     cacheKey: entry.cacheKey,
+    placementChanged: placementChanged,
     captured: captured,
   )
   if captured:
+    result.placement = entry.placement.isolateFig()
     result.shell = entry.shell.isolateFig()
     result.selfContents = entry.selfContents.isolateRenderList()
     result.escapedContents = entry.escapedContents.isolateRenderList()
     result.extraLayers = entry.extraLayers.copyLayerContributions()
+    result.usesVisibleRect = entry.usesVisibleRect
 
 proc newRenderSceneUpdate*(
     scene: RenderScene,
@@ -645,7 +728,9 @@ proc newRenderSceneUpdate*(
   for placement in scene.placements:
     let entry = scene.viewEntries[placement.viewId]
     result.frames.add entry.transferFrame(
-      placement, full or entry.changeGeneration > acknowledgedGeneration
+      placement,
+      full or entry.changeGeneration > acknowledgedGeneration,
+      full or entry.captureChangeGeneration > acknowledgedGeneration,
     )
   result.resources = scene.liveResources.snapshot()
 
@@ -720,6 +805,19 @@ proc renderRoot*(scene: RenderScene, context: BackendContext) =
     raise newException(ValueError, "cannot render a nil render scene")
   context.renderRoot(scene.tree)
 
+proc countTraversalNodes(tree: RenderFragments, cursor: RenderCursor): Natural =
+  result = 1
+  for child in tree.children(cursor):
+    result += tree.countTraversalNodes(child)
+
+proc traversalNodeCount*(scene: RenderScene): Natural =
+  ## Traverses retained fragment edges without materializing a render tree.
+  if scene.isNil:
+    return
+  for level in scene.tree.levels():
+    for root in scene.tree.roots(level):
+      result += scene.tree.countTraversalNodes(root)
+
 proc renderFrame*[BackendState](
     scene: RenderScene,
     renderer: FigRenderer[BackendState],
@@ -752,11 +850,13 @@ proc viewCaptureGeneration*(scene: RenderScene, id: RenderViewId): uint64 =
     result = scene.viewEntries[id].captureGeneration
 
 proc viewFragmentIds*(scene: RenderScene, id: RenderViewId): seq[uint64] =
-  ## Returns the stable shell, self, and escaped fragment IDs for diagnostics.
+  ## Returns stable placement, shell, self, and escaped IDs for diagnostics.
   if scene.isNil or id notin scene.viewEntries:
     return
   let entry = scene.viewEntries[id]
-  for handle in [entry.shellHandle, entry.selfHandle, entry.escapedHandle]:
+  for handle in [
+    entry.placementHandle, entry.shellHandle, entry.selfHandle, entry.escapedHandle
+  ]:
     if scene.tree.isValid(handle):
       result.add handle.fragmentId()
 
