@@ -32,7 +32,7 @@ import ../themes
 import ../view/views
 import ./markdownhtmlimages
 import ./markdownparsing
-import ./syneditviews
+import ./matterhighlighting
 import ./syntaxhighlighting
 import ./texteditors
 import ./textstorage
@@ -40,6 +40,7 @@ import ./texttypes
 
 export texteditors
 export textstorage
+export matterhighlighting
 export syntaxhighlighting
 export texttypes
 
@@ -1152,7 +1153,7 @@ proc markdownDocument(
     style = initMarkdownStyle(),
     imageLoader: MarkdownImageLoader = nil,
     imageContentTypeLoader: MarkdownImageContentTypeLoader = nil,
-    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
+    syntaxHighlighter: SyntaxHighlighter = matterSyntaxHighlighter,
 ): MarkdownDocument =
   var builder = MarkdownBuilder(
     style: style,
@@ -1171,7 +1172,7 @@ proc markdownDocument(
     config: MarkdownParserConfig = nil,
     imageLoader: MarkdownImageLoader = nil,
     imageContentTypeLoader: MarkdownImageContentTypeLoader = nil,
-    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
+    syntaxHighlighter: SyntaxHighlighter = matterSyntaxHighlighter,
 ): MarkdownDocument =
   source.parseMarkdownRoot(config).markdownDocument(
     style, imageLoader, imageContentTypeLoader, syntaxHighlighter
@@ -1181,7 +1182,7 @@ proc markdownTextStorage*(
     source: string,
     style = initMarkdownStyle(),
     config: MarkdownParserConfig = nil,
-    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
+    syntaxHighlighter: SyntaxHighlighter = matterSyntaxHighlighter,
 ): TextStorage =
   ## Parses `source` and returns native attributed text without creating a view.
   ## A nil configuration selects GFM so tables and strikethrough work by default.
@@ -1846,7 +1847,7 @@ proc initMarkdownViewFields*(
     imageBasePath = "",
     imageLoader: MarkdownImageLoader = nil,
     urlAssetLoader: UrlAssetLoader = nil,
-    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
+    syntaxHighlighter: SyntaxHighlighter = matterSyntaxHighlighter,
 ) =
   ## Initializes a custom `MarkdownView` subtype.
   ##
@@ -1893,7 +1894,7 @@ proc newMarkdownView*(
     imageBasePath = "",
     imageLoader: MarkdownImageLoader = nil,
     urlAssetLoader: UrlAssetLoader = nil,
-    syntaxHighlighter: SyntaxHighlighter = synEditSyntaxHighlighter,
+    syntaxHighlighter: SyntaxHighlighter = matterSyntaxHighlighter,
 ): MarkdownView =
   ## Creates a scrollable, selectable, read-only Markdown document view.
   ##

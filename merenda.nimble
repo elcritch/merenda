@@ -17,6 +17,7 @@ requires "cborious"
 requires "unicodedb >= 0.14.0"
 requires "faststreams >= 0.5.1"
 requires "gh:elcritch/nim-markdown#devel[regex]"
+requires "gh:elcritch/matter >= 0.2.2"
 requires "gh:elcritch/terminex >= 0.2.1"
 requires "https://github.com/Araq/iconbundler"
 

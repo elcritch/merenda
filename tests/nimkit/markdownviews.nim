@@ -563,6 +563,26 @@ fencedToken value
       style.syntaxTokenColors[stcKeyword]
     check storage.attributesFor("indentedToken").foregroundColor == style.codeColor
 
+  test "Matter maps TextMate scopes and language aliases to neutral rune spans":
+    let
+      source = "proc answer = 42\n#[ first\ncontinued ]#\necho \"κόσμος\""
+      spans = matterSyntaxHighlighter(source, "nims")
+
+    check spans.syntaxTokenAt(source.runeIndexOf("proc")) == stcKeyword
+    check spans.syntaxTokenAt(source.runeIndexOf("answer")) == stcIdentifier
+    check spans.syntaxTokenAt(source.runeIndexOf("42")) == stcNumber
+    check spans.syntaxTokenAt(source.runeIndexOf("continued")) == stcComment
+    check spans.syntaxTokenAt(source.runeIndexOf("\"κόσμος\"")) == stcString
+    check matterSyntaxHighlighter("value", "not-a-language").len == 0
+
+  test "Markdown uses Matter for fenced languages outside SynEdit's classifier":
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage("```go\nfunc main() {}\n```")
+
+    check storage.attributesFor("func").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+
   test "unknown fenced languages retain the ordinary code color":
     let
       style = initMarkdownStyle()

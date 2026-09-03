@@ -2370,7 +2370,9 @@ proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
     markdownView = KosmoMarkdownView()
     markdownControls = newKosmoMarkdownControls(editorView)
     activeIndicator = newKosmoPaneIndicator()
-  markdownView.initMarkdownViewFields(syntaxHighlighter = moeSyntaxHighlighter)
+  markdownView.initMarkdownViewFields(
+    syntaxHighlighter = nimkit.matterSyntaxHighlighter
+  )
   markdownView.editorView = editorView.unsafeWeakRef()
   result = KosmoEditorPane(
     documentTabs: editorView.documentTabs,
