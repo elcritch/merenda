@@ -994,7 +994,7 @@ Press <kbd>Enter</kbd>.
     let
       singleElapsed = getMonoTime() - singleStarted
       singleSettleStarted = getMonoTime()
-    require first.waitForMarkdownLayout()
+    require first.waitForMarkdownLayout(timeoutMilliseconds = 60_000)
     discard buildRenders(first)
     let
       singleSettleElapsed = getMonoTime() - singleSettleStarted
@@ -1013,8 +1013,8 @@ Press <kbd>Enter</kbd>.
     let
       pairElapsed = getMonoTime() - pairStarted
       pairSettleStarted = getMonoTime()
-    require first.waitForMarkdownLayout()
-    require second.waitForMarkdownLayout()
+    require first.waitForMarkdownLayout(timeoutMilliseconds = 60_000)
+    require second.waitForMarkdownLayout(timeoutMilliseconds = 60_000)
     discard buildRenders(first)
     discard buildRenders(second)
     let pairSettleElapsed = getMonoTime() - pairSettleStarted
