@@ -372,10 +372,14 @@ protocol DefaultClipViewGeometry of ViewProtocol:
     let constrained = rect(clipView.constrainScrollPoint(bounds.origin), bounds.size)
     if clipView.xBounds == constrained:
       return
+    let previousBounds = clipView.xBounds
     clipView.xBounds = rect(constrained.origin, constrained.size)
     emit clipView.layoutInputChanged(lirBounds)
     emit clipView.geometryDidChange()
-    clipView.needsDisplay = true
+    if previousBounds.size == constrained.size:
+      clipView.markRenderStructureChanged()
+    else:
+      clipView.needsDisplay = true
     clipView.xScrollView.reflectScrolledClipView(clipView)
 
 proc horizontalHeaderRect(scrollView: ScrollView): Rect =

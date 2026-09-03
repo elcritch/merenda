@@ -1,4 +1,4 @@
-import std/[math, unicode]
+import std/[hashes, math, unicode]
 
 when defined(useNativeDynlib):
   from figdraw/dynlib import
@@ -26,6 +26,14 @@ const
   DefaultMonoFontName* = DefaultMonospaceFontName
   DefaultMonoTabWidth* = 2
   DefaultMonoPadding* = 6.0'f32
+  MonoTextSurfaceRenderSlot* = initRenderSlotId(0x4d4f4e4f'u32, 1)
+  MonoTextViewportRenderSlot* = initRenderSlotId(0x4d4f4e4f'u32, 2)
+  MonoTextCursorRenderSlot* = initRenderSlotId(0x4d4f4e4f'u32, 3)
+  MonoTextRowRenderSlotNamespace = 0x4d524f57'u32
+
+func monoTextRowRenderSlotId*(row: int): RenderSlotId =
+  ## Returns the stable retained-render slot for one grid row.
+  initRenderSlotId(MonoTextRowRenderSlotNamespace, max(row, 0).uint32)
 
 type
   MonoTextTrait* = enum
@@ -241,7 +249,11 @@ proc recomputeMaxColumns(view: MonoTextView) =
 proc invalidateTextGeometry(view: MonoTextView) =
   view.recomputeMaxColumns()
   view.invalidateIntrinsicContentSize()
-  view.needsDisplay = true
+  view.setNeedsDisplayInRenderSlot(MonoTextViewportRenderSlot)
+  view.setNeedsDisplayInRenderSlot(MonoTextCursorRenderSlot)
+
+proc invalidateCursorDrawing(view: MonoTextView) =
+  view.setNeedsDisplayInRenderSlot(MonoTextCursorRenderSlot)
 
 proc ensureLine(view: MonoTextView, row: int) =
   if row < 0:
@@ -545,7 +557,7 @@ proc replaceGrid*(
   if dimensionsChanged:
     view.invalidateTextGeometry()
   else:
-    view.needsDisplay = true
+    view.setNeedsDisplayInRenderSlot(MonoTextViewportRenderSlot)
   view.postAccessibilityNotification(anValueChanged)
   view.postCursorSelectionChanged(previousCursor)
 
@@ -627,7 +639,7 @@ proc scrollGridRows*(
       cells[column] = replacementCells[replacementRow * columnCount + column]
     view.xLines[firstReplacementRow + replacementRow] = MonoTextLine(cells: move(cells))
 
-  view.needsDisplay = true
+  view.setNeedsDisplayInRenderSlot(MonoTextViewportRenderSlot)
   view.postAccessibilityNotification(anValueChanged)
 
 proc setLine*(view: MonoTextView, row: int, text: string) =
@@ -742,7 +754,7 @@ proc setCursorPosition*(view: MonoTextView, row, column: int) =
   view.xCursorRow = row
   view.xCursorColumn = column
   view.clampCursor()
-  view.needsDisplay = true
+  view.invalidateCursorDrawing()
   view.postCursorSelectionChanged(previousCursor)
 
 proc cursorVisible*(view: MonoTextView): bool =
@@ -752,7 +764,7 @@ proc `cursorVisible=`*(view: MonoTextView, value: bool) =
   if view.xCursorVisible == value:
     return
   view.xCursorVisible = value
-  view.needsDisplay = true
+  view.invalidateCursorDrawing()
 
 proc cursorStyle*(view: MonoTextView): MonoTextCursorStyle =
   view.xCursorStyle
@@ -761,7 +773,7 @@ proc `cursorStyle=`*(view: MonoTextView, style: MonoTextCursorStyle) =
   if view.xCursorStyle == style:
     return
   view.xCursorStyle = style
-  view.needsDisplay = true
+  view.invalidateCursorDrawing()
 
 proc tabWidth*(view: MonoTextView): int =
   view.xTabWidth
@@ -779,7 +791,7 @@ proc `textColor=`*(view: MonoTextView, color: nimkitTypes.Color) =
   if view.xTextColor == color:
     return
   view.xTextColor = color
-  view.needsDisplay = true
+  view.setNeedsDisplayInRenderSlot(MonoTextViewportRenderSlot)
 
 proc cursorColor*(view: MonoTextView): nimkitTypes.Color =
   if view.xCursorColor.a > 0.0'f32:
@@ -791,7 +803,7 @@ proc `cursorColor=`*(view: MonoTextView, color: nimkitTypes.Color) =
   if view.xCursorColor == color:
     return
   view.xCursorColor = color
-  view.needsDisplay = true
+  view.invalidateCursorDrawing()
 
 proc gridOffset*(view: MonoTextView): nimkitTypes.Point =
   ## Return the visual translation applied to the cell grid and cursor.
@@ -802,7 +814,8 @@ proc `gridOffset=`*(view: MonoTextView, offset: nimkitTypes.Point) =
   if view.xGridOffset == offset:
     return
   view.xGridOffset = offset
-  view.needsDisplay = true
+  view.setNeedsDisplayInRenderSlot(MonoTextViewportRenderSlot)
+  view.invalidateCursorDrawing()
 
 proc fontName*(view: MonoTextView): string =
   if view.xFontName.len > 0:
@@ -1119,7 +1132,7 @@ proc moveCursorHorizontal(view: MonoTextView, delta: int) =
     elif view.xCursorRow + 1 < view.xLines.len:
       inc view.xCursorRow
       view.xCursorColumn = 0
-  view.needsDisplay = true
+  view.invalidateCursorDrawing()
   view.postCursorSelectionChanged(previousCursor)
 
 proc moveCursorVertical(view: MonoTextView, delta: int) =
@@ -1127,7 +1140,7 @@ proc moveCursorVertical(view: MonoTextView, delta: int) =
   view.xCursorRow = (view.xCursorRow + delta).clampIndex(0, view.xLines.high)
   view.xCursorColumn =
     view.xCursorColumn.clampIndex(0, view.xLines[view.xCursorRow].cells.len)
-  view.needsDisplay = true
+  view.invalidateCursorDrawing()
   view.postCursorSelectionChanged(previousCursor)
 
 proc handleEditorKey(view: MonoTextView, event: KeyEvent): bool =
@@ -1147,13 +1160,13 @@ proc handleEditorKey(view: MonoTextView, event: KeyEvent): bool =
   of keyHome:
     let previousCursor = view.cursorTextIndex()
     view.xCursorColumn = 0
-    view.needsDisplay = true
+    view.invalidateCursorDrawing()
     view.postCursorSelectionChanged(previousCursor)
     true
   of keyEnd:
     let previousCursor = view.cursorTextIndex()
     view.xCursorColumn = view.xLines[view.xCursorRow].cells.len
-    view.needsDisplay = true
+    view.invalidateCursorDrawing()
     view.postCursorSelectionChanged(previousCursor)
     true
   of keyBackspace:
@@ -1397,6 +1410,34 @@ proc drawMonoTextSurface(
   if view.isFocusVisible() and view.focusRingType() != frtNone:
     context.addFocusRing(frame, style.box)
 
+proc monoTextRowRevision(
+    view: MonoTextView,
+    row: int,
+    font: FigFont,
+    metrics: MonoTextMetrics,
+    textInsets: EdgeInsets,
+    textColor: nimkitTypes.Color,
+): uint64 =
+  var value = hash(row)
+  value = value !& hash(repr(font))
+  value = value !& hash(metrics.cellWidth)
+  value = value !& hash(metrics.lineHeight)
+  value = value !& hash(repr(textInsets))
+  value = value !& hash(repr(textColor))
+  for cell in view.xLines[row].cells:
+    value = value !& hash(cell.text)
+    value = value !& hash(repr(cell.foregroundColor))
+    value = value !& hash(repr(cell.backgroundColor))
+    value = value !& hash(repr(cell.decorationColor))
+    value = value !& hash(cell.hasForegroundColor)
+    value = value !& hash(cell.hasBackgroundColor)
+    value = value !& hash(cell.hasDecorationColor)
+    value = value !& hash(cell.traits)
+    value = value !& hash(cell.decorations)
+  result = uint64(cast[uint](!$value))
+  if result == 0:
+    result = 1
+
 proc drawMonoText(view: MonoTextView, context: DrawContext) =
   if view.xLines.len == 0:
     return
@@ -1404,9 +1445,16 @@ proc drawMonoText(view: MonoTextView, context: DrawContext) =
     style = context.appearance.resolveMonoTextStyle(view.monoTextStyleContext())
     textInsets = view.monoTextGridInsets(style)
     textColor = view.resolvedTextColor(style)
-    cursorColor = view.resolvedCursorColor(style)
     metrics = view.monoTextMetrics()
     font = view.monoFont()
+
+  let surfaceRevision = view.renderSlotRevision(MonoTextSurfaceRenderSlot)
+  if context.beginRenderSlot(MonoTextSurfaceRenderSlot, surfaceRevision):
+    view.drawMonoTextSurface(context, style)
+
+  let viewportRevision = view.renderSlotRevision(MonoTextViewportRenderSlot)
+  discard context.beginRenderSlot(MonoTextViewportRenderSlot, viewportRevision)
+  let
     visible = context.visibleRect()
     rowStart = max(
       int(floor(max(visible.origin.y - textInsets.top, 0.0'f32) / metrics.lineHeight)),
@@ -1425,23 +1473,34 @@ proc drawMonoText(view: MonoTextView, context: DrawContext) =
       colStart,
     )
 
-  view.drawMonoTextSurface(context, style)
-
   for row in rowStart ..< rowStop:
-    let line = view.xLines[row]
-    var column = min(colStart, line.cells.len)
-    let lastColumn = min(max(colStop, column), line.cells.len)
-    while column < lastColumn:
-      let startColumn = column
-      inc column
-      while column < lastColumn and
-          line.cells[startColumn].sameRunStyle(line.cells[column], textColor):
+    let slot = monoTextRowRenderSlotId(row)
+    if context.beginRenderSlot(
+      slot, view.monoTextRowRevision(row, font, metrics, textInsets, textColor)
+    ):
+      let line = view.xLines[row]
+      var column = min(colStart, line.cells.len)
+      let lastColumn = min(max(colStop, column), line.cells.len)
+      while column < lastColumn:
+        let startColumn = column
         inc column
-      view.drawRun(
-        context, font, row, startColumn, column, metrics, textInsets, textColor
-      )
+        while column < lastColumn and
+            line.cells[startColumn].sameRunStyle(line.cells[column], textColor):
+          inc column
+        view.drawRun(
+          context, font, row, startColumn, column, metrics, textInsets, textColor
+        )
 
+proc drawMonoTextCursor(view: MonoTextView, context: DrawContext) =
+  let revision = view.renderSlotRevision(MonoTextCursorRenderSlot)
+  if not context.beginRenderSlot(MonoTextCursorRenderSlot, revision, rspAfterSubviews):
+    return
   if view.xCursorVisible and view.isFocused():
+    let
+      style = context.appearance.resolveMonoTextStyle(view.monoTextStyleContext())
+      textInsets = view.monoTextGridInsets(style)
+      cursorColor = view.resolvedCursorColor(style)
+      metrics = view.monoTextMetrics()
     discard
       context.addRectangle(view.cursorRect(metrics, textInsets), fill(cursorColor.rgba))
 
@@ -1462,6 +1521,9 @@ proc monoTextIntrinsicSize(view: MonoTextView): IntrinsicSize =
 protocol DefaultMonoTextViewDrawing of ViewDrawingProtocol:
   method draw(view: MonoTextView, context: DrawContext) =
     view.drawMonoText(context)
+
+  method drawOverlay(view: MonoTextView, context: DrawContext) =
+    view.drawMonoTextCursor(context)
 
 protocol DefaultMonoTextViewLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: MonoTextView): IntrinsicSize =

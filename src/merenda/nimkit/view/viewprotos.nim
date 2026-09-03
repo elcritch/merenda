@@ -67,12 +67,16 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
   method `bounds=`(self: View, bounds: Rect) =
     if self.xBounds == bounds:
       return
+    let previousBounds = self.xBounds
     discard
       recordPropertyAnimation(DynamicAgent(self), `bounds=`(), self.xBounds, bounds)
     self.xBounds = rect(bounds.origin, bounds.size)
     emit self.layoutInputChanged(lirBounds)
     emit self.geometryDidChange()
-    self.needsDisplay = true
+    if previousBounds.size == bounds.size:
+      self.markRenderStructureChanged()
+    else:
+      self.needsDisplay = true
 
   method needsDisplay(self: View): bool =
     self.xNeedsDisplay
@@ -418,6 +422,15 @@ proc propagateNeedsDisplayInRect(view: View, rect: Rect) =
   let parent = view.superviewBacklink()
   if not parent.isNil:
     parent.propagateNeedsDisplayInRect(view.rectToView(clipped, parent))
+
+proc setNeedsDisplayInRenderSlot*(view: View, slot: RenderSlotId) =
+  ## Invalidates one stable drawing slot without rebuilding sibling slots.
+  if view.isNil:
+    return
+  view.markRenderSlotNeedsDisplay(slot)
+  let parent = view.superviewBacklink()
+  if not parent.isNil:
+    parent.propagateNeedsDisplayInRect(view.rectToView(view.bounds(), parent))
 
 protocol ViewLifecycleProtocol:
   proc viewWillMoveToSuperview*(view: View, superview: View) {.signal.}

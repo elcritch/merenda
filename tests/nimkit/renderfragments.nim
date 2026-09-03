@@ -30,6 +30,14 @@ type
     image: ImageResource
     style: TextStyle
 
+  SlottedSceneView = ref object of View
+    underlayRevision: uint64
+    contentRevision: uint64
+    overlayRevision: uint64
+    underlayDrawCount: int
+    contentDrawCount: int
+    overlayDrawCount: int
+
   RenderOperationContext = ref object of BackendContext
     operations: seq[string]
     entries: Table[Hash, figdraw.Rect]
@@ -41,6 +49,11 @@ type
     node: string
 
 var sceneDrawCount: int
+
+const
+  TestUnderlaySlot = initRenderSlotId(0x54455354'u32, 1)
+  TestContentSlot = initRenderSlotId(0x54455354'u32, 2)
+  TestOverlaySlot = initRenderSlotId(0x54455354'u32, 3)
 
 protocol SceneDrawing of ViewDrawingProtocol:
   method draw(view: SceneDrawView, context: DrawContext) =
@@ -122,6 +135,22 @@ protocol ResourceSceneDrawing of ViewDrawingProtocol:
   method draw(view: ResourceSceneView, context: DrawContext) =
     discard context.addImage(rect(2, 3, 10, 8), view.image)
     discard context.addText(rect(2, 14, 50, 18), "cached", view.style)
+
+protocol SlottedSceneDrawing of ViewDrawingProtocol:
+  method drawUnderlay(view: SlottedSceneView, context: DrawContext) =
+    if context.beginRenderSlot(TestUnderlaySlot, view.underlayRevision):
+      inc view.underlayDrawCount
+      context.addRectangle(rect(1, 1, 20, 10), color(0.8, 0.1, 0.1))
+
+  method draw(view: SlottedSceneView, context: DrawContext) =
+    if context.beginRenderSlot(TestContentSlot, view.contentRevision):
+      inc view.contentDrawCount
+      context.addRectangle(rect(1, 12, 20, 10), color(0.1, 0.8, 0.1))
+
+  method drawOverlay(view: SlottedSceneView, context: DrawContext) =
+    if context.beginRenderSlot(TestOverlaySlot, view.overlayRevision, rspAfterSubviews):
+      inc view.overlayDrawCount
+      context.addRectangle(rect(1, 23, 20, 10), color(0.1, 0.1, 0.8))
 
 method drawRoundedRectSdf*(
     context: RenderOperationContext,
@@ -238,6 +267,11 @@ proc newResourceSceneView(
   result = ResourceSceneView(image: image, style: style)
   result.initViewFields(frame)
   discard result.withProtocol(ResourceSceneDrawing)
+
+proc newSlottedSceneView(frame: Rect): SlottedSceneView =
+  result = SlottedSceneView(underlayRevision: 1, contentRevision: 1, overlayRevision: 1)
+  result.initViewFields(frame)
+  discard result.withProtocol(SlottedSceneDrawing)
 
 proc renderedOperations(renders: var Renders): seq[string] =
   let context = RenderOperationContext(
@@ -485,7 +519,7 @@ suite "NimKit render fragments":
     check scene.viewCaptureGeneration(parent.renderViewId()) == 2
     check scene.viewCaptureGeneration(child.renderViewId()) == 2
 
-  test "scroll placement preserves drawing that does not read the visible rect":
+  test "bounds-origin scrolling preserves drawing that does not read the visible rect":
     let
       root = newView(frame = rect(0, 0, 180, 120))
       viewport = newCountedSceneView(rect(0, 0, 100, 80), color(0.2, 0.3, 0.4))
@@ -502,7 +536,7 @@ suite "NimKit render fragments":
     var initial = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
     retainedScenes.apply(replica, initial)
 
-    viewport.setBoundsOriginFromLayout(initPoint(0, 24))
+    viewport.bounds = rect(0, 24, 100, 80)
     discard root.buildRenderScene()
     var update =
       retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, initialGeneration)
@@ -515,6 +549,158 @@ suite "NimKit render fragments":
     check retainedScenes.capturedViewCount(update) == 0
     retainedScenes.apply(replica, update)
     check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
+
+  test "named view slots update independently around child content":
+    let
+      root = newView(frame = rect(0, 0, 180, 120))
+      slotted = newSlottedSceneView(rect(4, 5, 80, 70))
+      child = newSceneDrawView(rect(25, 20, 30, 20))
+    slotted.addSubview(child)
+    root.addSubview(slotted)
+
+    let scene = root.buildRenderScene()
+    let
+      sceneIdentity = retainedScenes.sceneIdentity(scene)
+      initialGeneration = scene.frameGeneration()
+      underlayId =
+        scene.viewRenderSlotFragmentId(slotted.renderViewId(), TestUnderlaySlot)
+      contentId =
+        scene.viewRenderSlotFragmentId(slotted.renderViewId(), TestContentSlot)
+      overlayId =
+        scene.viewRenderSlotFragmentId(slotted.renderViewId(), TestOverlaySlot)
+      underlayGeneration =
+        scene.viewRenderSlotChangeGeneration(slotted.renderViewId(), TestUnderlaySlot)
+      overlayGeneration =
+        scene.viewRenderSlotChangeGeneration(slotted.renderViewId(), TestOverlaySlot)
+      replica = retainedScenes.newRenderSceneReplica()
+    var initial = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+    retainedScenes.apply(replica, initial)
+
+    check slotted.underlayDrawCount == 1
+    check slotted.contentDrawCount == 1
+    check slotted.overlayDrawCount == 1
+
+    slotted.contentRevision = 2
+    slotted.setNeedsDisplayInRenderSlot(TestContentSlot)
+    discard root.buildRenderScene()
+    var update =
+      retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, initialGeneration)
+
+    check slotted.underlayDrawCount == 1
+    check slotted.contentDrawCount == 2
+    check slotted.overlayDrawCount == 1
+    check scene.viewRenderSlotFragmentId(slotted.renderViewId(), TestUnderlaySlot) ==
+      underlayId
+    check scene.viewRenderSlotFragmentId(slotted.renderViewId(), TestContentSlot) ==
+      contentId
+    check scene.viewRenderSlotFragmentId(slotted.renderViewId(), TestOverlaySlot) ==
+      overlayId
+    check scene.viewRenderSlotChangeGeneration(slotted.renderViewId(), TestUnderlaySlot) ==
+      underlayGeneration
+    check scene.viewRenderSlotChangeGeneration(slotted.renderViewId(), TestContentSlot) ==
+      scene.frameGeneration()
+    check scene.viewRenderSlotChangeGeneration(slotted.renderViewId(), TestOverlaySlot) ==
+      overlayGeneration
+    check retainedScenes.capturedViewCount(update) == 1
+    check retainedScenes.capturedRenderSlotCount(update) == 1
+
+    retainedScenes.apply(replica, update)
+    check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
+    check scene.materialize().canonicalNodes() == root.buildRenders().canonicalNodes()
+
+  test "dirty text updates retain unaffected visual-line fragments":
+    let
+      root = newView(frame = rect(0, 0, 260, 140))
+      textView = newTextView("alpha\nbeta\ngamma", frame = rect(0, 0, 240, 120))
+    root.addSubview(textView)
+
+    let scene = root.buildRenderScene()
+    let
+      sceneIdentity = retainedScenes.sceneIdentity(scene)
+      firstGeneration = scene.frameGeneration()
+      firstLine = textLineRenderSlotId(0)
+      secondLine = textLineRenderSlotId(1)
+      thirdLine = textLineRenderSlotId(2)
+      firstLineGeneration =
+        scene.viewRenderSlotChangeGeneration(textView.renderViewId(), firstLine)
+      secondLineGeneration =
+        scene.viewRenderSlotChangeGeneration(textView.renderViewId(), secondLine)
+      thirdLineGeneration =
+        scene.viewRenderSlotChangeGeneration(textView.renderViewId(), thirdLine)
+
+    textView.stringValue = "alpha\nBeta\ngamma"
+    discard root.buildRenderScene()
+    var dirtyUpdate =
+      retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, firstGeneration)
+
+    check scene.viewRenderSlotChangeGeneration(textView.renderViewId(), firstLine) ==
+      firstLineGeneration
+    check scene.viewRenderSlotChangeGeneration(textView.renderViewId(), secondLine) >
+      secondLineGeneration
+    check scene.viewRenderSlotChangeGeneration(textView.renderViewId(), thirdLine) ==
+      thirdLineGeneration
+    check retainedScenes.capturedRenderSlotCount(dirtyUpdate) == 3
+
+    let
+      secondGeneration = scene.frameGeneration()
+      firstLineAfterEdit =
+        scene.viewRenderSlotChangeGeneration(textView.renderViewId(), firstLine)
+      secondLineAfterEdit =
+        scene.viewRenderSlotChangeGeneration(textView.renderViewId(), secondLine)
+      thirdLineAfterEdit =
+        scene.viewRenderSlotChangeGeneration(textView.renderViewId(), thirdLine)
+    textView.selectedRange = initTextRange(1, 2)
+    discard root.buildRenderScene()
+    var selectionUpdate =
+      retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, secondGeneration)
+
+    check scene.viewRenderSlotChangeGeneration(textView.renderViewId(), firstLine) ==
+      firstLineAfterEdit
+    check scene.viewRenderSlotChangeGeneration(textView.renderViewId(), secondLine) ==
+      secondLineAfterEdit
+    check scene.viewRenderSlotChangeGeneration(textView.renderViewId(), thirdLine) ==
+      thirdLineAfterEdit
+    check retainedScenes.capturedRenderSlotCount(selectionUpdate) == 2
+
+  test "mono text rendering retains unchanged rows and isolates cursor updates":
+    let
+      root = newView(frame = rect(0, 0, 240, 120))
+      monoView = newMonoTextViewer("alpha\nbeta\ngamma", frame = rect(0, 0, 240, 120))
+    root.addSubview(monoView)
+
+    let scene = root.buildRenderScene()
+    let
+      sceneIdentity = retainedScenes.sceneIdentity(scene)
+      firstGeneration = scene.frameGeneration()
+      row0 = monoTextRowRenderSlotId(0)
+      row1 = monoTextRowRenderSlotId(1)
+      row2 = monoTextRowRenderSlotId(2)
+      row0Generation =
+        scene.viewRenderSlotChangeGeneration(monoView.renderViewId(), row0)
+      row1Generation =
+        scene.viewRenderSlotChangeGeneration(monoView.renderViewId(), row1)
+      row2Generation =
+        scene.viewRenderSlotChangeGeneration(monoView.renderViewId(), row2)
+
+    monoView.replaceCells(1, 0, [initMonoTextCell("B")])
+    discard root.buildRenderScene()
+    var rowUpdate =
+      retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, firstGeneration)
+
+    check scene.viewRenderSlotChangeGeneration(monoView.renderViewId(), row0) ==
+      row0Generation
+    check scene.viewRenderSlotChangeGeneration(monoView.renderViewId(), row1) >
+      row1Generation
+    check scene.viewRenderSlotChangeGeneration(monoView.renderViewId(), row2) ==
+      row2Generation
+    check retainedScenes.capturedRenderSlotCount(rowUpdate) == 3
+
+    let secondGeneration = scene.frameGeneration()
+    monoView.setCursorPosition(2, 2)
+    discard root.buildRenderScene()
+    var cursorUpdate =
+      retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, secondGeneration)
+    check retainedScenes.capturedRenderSlotCount(cursorUpdate) == 1
 
   test "visible-rect drawing recaptures when scrolling changes its clip":
     let

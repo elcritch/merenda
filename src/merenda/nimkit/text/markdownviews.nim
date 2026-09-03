@@ -7,7 +7,7 @@
 ## explicitly, remote images load through a Chronos worker, and unavailable
 ## images use linked alt text.
 
-import std/[lists, math, monotimes, os, strutils, tables, times, unicode]
+import std/[algorithm, lists, math, monotimes, os, strutils, tables, times, unicode]
 
 when not defined(useNativeDynlib):
   import std/hashes
@@ -1259,25 +1259,38 @@ proc imageRect(
   rect(anchor.origin.x, anchor.origin.y, drawSize.width, drawSize.height)
 
 protocol MarkdownTextViewDrawing of ViewDrawingProtocol:
-  method draw(textView: MarkdownTextView, context: DrawContext) =
+  method drawUnderlay(textView: MarkdownTextView, context: DrawContext) =
     let style = textView.codeBlockStyle
     if style.backgroundColor.a > 0.0'f32 or
         (style.outlineColor.a > 0.0'f32 and style.outlineWidth > 0.0'f32):
+      var blockRects: seq[Rect]
       for range in textView.codeBlockRanges:
         let blockRect = textView.codeBlockRect(range, style.padding)
         if not blockRect.isEmpty:
-          discard context.addRenderRectangle(
-            context.renderRectFor(blockRect),
-            fill(style.backgroundColor),
-            style.outlineColor,
-            max(style.outlineWidth, 0.0'f32),
-            max(style.cornerRadius, 0.0'f32),
-          )
+          blockRects.add blockRect
+      blockRects.sort(
+        proc(left, right: Rect): int =
+          cmp(left.minY, right.minY)
+      )
+      for blockRect in blockRects:
+        discard context.addRenderRectangle(
+          context.renderRectFor(blockRect),
+          fill(style.backgroundColor),
+          style.outlineColor,
+          max(style.outlineWidth, 0.0'f32),
+          max(style.cornerRadius, 0.0'f32),
+        )
     for presentation in textView.markdownImages:
       let rect = textView.imageRect(presentation)
       if not rect.isEmpty:
         discard context.addImage(rect, presentation.image)
-    TextView(textView).drawTextViewContents(context)
+    TextView(textView).drawTextViewUnderlay(context)
+
+  method draw(textView: MarkdownTextView, context: DrawContext) =
+    TextView(textView).drawTextViewText(context)
+
+  method drawOverlay(textView: MarkdownTextView, context: DrawContext) =
+    TextView(textView).drawTextViewOverlay(context)
 
 func markdownImageCacheKey(view: MarkdownView, url: string): string
 proc markdownTableOverflowWidth(view: MarkdownView, tableColumnWidth: int): float32

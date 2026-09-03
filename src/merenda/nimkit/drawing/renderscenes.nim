@@ -44,6 +44,18 @@ type
     level*: ZLevel
     contents*: RenderList
 
+  RenderViewSlotFrame* = object
+    ## One ordered, independently replaceable part of a view's own drawing.
+    slotId*: RenderSlotId
+    position*: RenderSlotPosition
+    revision*: uint64
+    captured*: bool
+    contents*: RenderList
+    escapedContents*: RenderList
+    extraLayers*: seq[RenderLayerContribution]
+    resources*: RenderResourceManifest
+    usesVisibleRect*: bool
+
   RenderViewFrame* = object
     ## One visible view's changed placement and optional drawing contribution.
     viewId*: RenderViewId
@@ -55,16 +67,25 @@ type
     shell*: Fig
     contentTransform*: Fig
     escapedTransform*: Fig
-    selfContents*: RenderList
-    escapedContents*: RenderList
-    extraLayers*: seq[RenderLayerContribution]
-    resources*: RenderResourceManifest
-    usesVisibleRect*: bool
+    slots*: seq[RenderViewSlotFrame]
 
   ViewPlacement = object
     viewId: RenderViewId
     parentViewId: RenderViewId
     level: ZLevel
+
+  ViewRenderSlotEntry = object
+    position: RenderSlotPosition
+    revision: uint64
+    contents: RenderList
+    escapedContents: RenderList
+    extraLayers: seq[RenderLayerContribution]
+    resources: RenderResourceManifest
+    usesVisibleRect: bool
+    handle: RenderFragmentHandle
+    escapedHandle: RenderFragmentHandle
+    extraHandles: Table[ZLevel, RenderFragmentHandle]
+    changeGeneration: uint64
 
   ViewRenderEntry = object
     cacheKey: RenderViewCacheKey
@@ -72,11 +93,8 @@ type
     shell: Fig
     contentTransform: Fig
     escapedTransform: Fig
-    selfContents: RenderList
-    escapedContents: RenderList
-    extraLayers: seq[RenderLayerContribution]
-    resources: RenderResourceManifest
-    usesVisibleRect: bool
+    slots: Table[RenderSlotId, ViewRenderSlotEntry]
+    slotOrder: seq[RenderSlotId]
     placementHandle: RenderFragmentHandle
     placementCursor: RenderCursor
     shellHandle: RenderFragmentHandle
@@ -85,13 +103,17 @@ type
     contentCursor: RenderCursor
     escapedTransformHandle: RenderFragmentHandle
     escapedTransformCursor: RenderCursor
-    selfHandle: RenderFragmentHandle
-    escapedHandle: RenderFragmentHandle
-    extraHandles: Table[ZLevel, RenderFragmentHandle]
     externalParent: RenderViewId
     captureGeneration: uint64
     changeGeneration: uint64
     captureChangeGeneration: uint64
+
+  RenderSlotCacheState* = object
+    ## Cached slot metadata used to plan a partial view recapture.
+    slotId*: RenderSlotId
+    position*: RenderSlotPosition
+    revision*: uint64
+    usesVisibleRect*: bool
 
   RetiredRenderResources = object
     releaseGeneration: uint64
@@ -277,20 +299,59 @@ proc replaceContents*(
   scene.perViewMode = false
   scene.liveResources = resources
 
+proc requiresFullViewCapture*(
+    scene: RenderScene, viewId: RenderViewId, cacheKey: RenderViewCacheKey
+): bool =
+  ## Reports whether every drawing slot must be recaptured for this view.
+  if scene.isNil or not scene.perViewMode or viewId notin scene.viewEntries:
+    return true
+  let cached = scene.viewEntries[viewId].cacheKey
+  cached.appearanceGeneration != cacheKey.appearanceGeneration or
+    cached.frame.size != cacheKey.frame.size or
+    cached.bounds.size != cacheKey.bounds.size or cached.level != cacheKey.level or
+    cached.isRoot != cacheKey.isRoot
+
+proc viewSlotCacheStates*(
+    scene: RenderScene, viewId: RenderViewId
+): seq[RenderSlotCacheState] =
+  ## Returns slot revisions in their current drawing order.
+  if scene.isNil or not scene.perViewMode or viewId notin scene.viewEntries:
+    return
+  let entry = addr scene.viewEntries[viewId]
+  result = newSeqOfCap[RenderSlotCacheState](entry[].slotOrder.len)
+  for slotId in entry[].slotOrder:
+    let slot = addr entry[].slots[slotId]
+    result.add RenderSlotCacheState(
+      slotId: slotId,
+      position: slot[].position,
+      revision: slot[].revision,
+      usesVisibleRect: slot[].usesVisibleRect,
+    )
+
+proc forcedVisibleRectSlots*(
+    scene: RenderScene, viewId: RenderViewId, visibleRect: Rect
+): seq[RenderSlotId] =
+  ## Returns cached slots whose drawing depends on a changed visible rectangle.
+  if scene.isNil or not scene.perViewMode or viewId notin scene.viewEntries:
+    return
+  let entry = addr scene.viewEntries[viewId]
+  if entry[].cacheKey.visibleRect == visibleRect:
+    return
+  for slotId in entry[].slotOrder:
+    if entry[].slots[slotId].usesVisibleRect:
+      result.add slotId
+
 proc needsViewCapture*(
     scene: RenderScene, viewId: RenderViewId, cacheKey: RenderViewCacheKey
 ): bool =
-  ## Reports whether this scene lacks a current contribution for `viewId`.
-  if scene.isNil or not scene.perViewMode or viewId notin scene.viewEntries:
+  ## Reports whether this scene needs at least one current drawing slot.
+  if scene.requiresFullViewCapture(viewId, cacheKey):
     return true
   let entry = addr scene.viewEntries[viewId]
-  let cached = entry[].cacheKey
-  cached.displayRevision != cacheKey.displayRevision or
-    cached.appearanceGeneration != cacheKey.appearanceGeneration or
-    cached.frame.size != cacheKey.frame.size or
-    cached.bounds.size != cacheKey.bounds.size or
-    (entry[].usesVisibleRect and cached.visibleRect != cacheKey.visibleRect) or
-    cached.level != cacheKey.level or cached.isRoot != cacheKey.isRoot
+  entry[].cacheKey.displayRevision != cacheKey.displayRevision or (
+    entry[].cacheKey.visibleRect != cacheKey.visibleRect and
+    scene.forcedVisibleRectSlots(viewId, cacheKey.visibleRect).len > 0
+  )
 
 proc needsViewPlacementUpdate*(
     scene: RenderScene, viewId: RenderViewId, cacheKey: RenderViewCacheKey
@@ -315,6 +376,11 @@ proc validateFrames(frames: openArray[RenderViewFrame]) =
       raise newException(ValueError, "render frame contains a duplicate view identity")
     if frame.parentViewId.uint64 != 0 and frame.parentViewId notin levels:
       raise newException(ValueError, "render frame parent must precede its child")
+    var slots = initTable[RenderSlotId, bool]()
+    for slot in frame.slots:
+      if slot.slotId in slots:
+        raise newException(ValueError, "render frame contains a duplicate slot")
+      slots[slot.slotId] = true
     levels[frame.viewId] = frame.cacheKey.level
 
 proc nextPlacements(frames: openArray[RenderViewFrame]): seq[ViewPlacement] =
@@ -349,9 +415,11 @@ proc desiredLevels(
   for frame in frames:
     if not result.containsLevel(frame.cacheKey.level):
       result.add frame.cacheKey.level
-    for extra in scene.viewEntries[frame.viewId].extraLayers:
-      if not result.containsLevel(extra.level):
-        result.add extra.level
+    let entry = addr scene.viewEntries[frame.viewId]
+    for slotId in entry[].slotOrder:
+      for extra in entry[].slots[slotId].extraLayers:
+        if not result.containsLevel(extra.level):
+          result.add extra.level
 
 proc attachRoot(
     scene: RenderScene, level: ZLevel, contents: var RenderList
@@ -401,7 +469,6 @@ proc attachViewEntry(
     raise
       newException(ValueError, "a view content fragment must contain exactly one root")
   entry.contentCursor = contentRoots[0]
-  entry.selfHandle = scene.attachChild(entry.contentCursor, entry.selfContents)
 
   var escapedTransformList = entry.escapedTransform.nodeRenderList()
   entry.escapedTransformHandle =
@@ -412,18 +479,22 @@ proc attachViewEntry(
       ValueError, "an escaped content fragment must contain exactly one root"
     )
   entry.escapedTransformCursor = escapedTransformRoots[0]
-  entry.escapedHandle =
-    scene.attachChild(entry.escapedTransformCursor, entry.escapedContents)
-
-  entry.extraHandles = initTable[ZLevel, RenderFragmentHandle]()
-  for extra in entry.extraLayers.mitems:
-    entry.extraHandles[extra.level] = scene.attachRoot(extra.level, extra.contents)
+  for slotId in entry.slotOrder:
+    let slot = addr entry.slots[slotId]
+    slot[].handle = scene.attachChild(entry.contentCursor, slot[].contents)
+    slot[].escapedHandle =
+      scene.attachChild(entry.escapedTransformCursor, slot[].escapedContents)
+    slot[].extraHandles = initTable[ZLevel, RenderFragmentHandle]()
+    for extra in slot[].extraLayers.mitems:
+      slot[].extraHandles[extra.level] = scene.attachRoot(extra.level, extra.contents)
   entry.externalParent = parent
 
 proc detachEntry(scene: RenderScene, entry: ViewRenderEntry) =
-  for _, handle in entry.extraHandles:
-    if scene.tree.isValid(handle):
-      scene.tree.removeFragment(handle)
+  for slotId in entry.slotOrder:
+    let slot = entry.slots[slotId]
+    for _, handle in slot.extraHandles:
+      if scene.tree.isValid(handle):
+        scene.tree.removeFragment(handle)
   if scene.tree.isValid(entry.placementHandle):
     scene.tree.removeFragment(entry.placementHandle)
 
@@ -450,69 +521,81 @@ proc refreshPlacementNodes(entry: var ViewRenderEntry, cacheKey: RenderViewCache
     vec2(-contentTranslation.x, -contentTranslation.y)
   entry.escapedTransform.transform.translation =
     entry.contentTransform.transform.translation
-  for extra in entry.extraLayers.mitems:
-    if extra.contents.rootIds.len != 1:
-      raise newException(ValueError, "an extra-layer placement must have one root")
-    let root = extra.contents.rootIds[0]
-    if extra.contents.nodes[root.int].kind != nkTransform:
-      raise
-        newException(ValueError, "an extra-layer placement root must be a transform")
-    extra.contents.nodes[root.int].transform.translation = vec2(
-      cacheKey.frame.origin.x - cacheKey.bounds.origin.x,
-      cacheKey.frame.origin.y - cacheKey.bounds.origin.y,
-    )
+  for slotId in entry.slotOrder:
+    for extra in entry.slots[slotId].extraLayers.mitems:
+      if extra.contents.rootIds.len != 1:
+        raise newException(ValueError, "an extra-layer placement must have one root")
+      let root = extra.contents.rootIds[0]
+      if extra.contents.nodes[root.int].kind != nkTransform:
+        raise
+          newException(ValueError, "an extra-layer placement root must be a transform")
+      extra.contents.nodes[root.int].transform.translation = vec2(
+        cacheKey.frame.origin.x - cacheKey.bounds.origin.x,
+        cacheKey.frame.origin.y - cacheKey.bounds.origin.y,
+      )
 
 proc updatePlacementEntry(scene: RenderScene, entry: var ViewRenderEntry) =
   scene.tree.updateNode(entry.placementCursor, entry.placement)
   scene.tree.updateNode(entry.contentCursor, entry.contentTransform)
   scene.tree.updateNode(entry.escapedTransformCursor, entry.escapedTransform)
-  for extra in entry.extraLayers:
-    let roots = scene.tree.fragmentRoots(entry.extraHandles[extra.level])
-    if roots.len != 1:
-      raise newException(ValueError, "an extra-layer fragment must have one root")
-    scene.tree.updateNode(roots[0], extra.contents.nodes[extra.contents.rootIds[0].int])
+  for slotId in entry.slotOrder:
+    let slot = addr entry.slots[slotId]
+    for extra in slot[].extraLayers:
+      let roots = scene.tree.fragmentRoots(slot[].extraHandles[extra.level])
+      if roots.len != 1:
+        raise newException(ValueError, "an extra-layer fragment must have one root")
+      scene.tree.updateNode(
+        roots[0], extra.contents.nodes[extra.contents.rootIds[0].int]
+      )
 
-proc updateCapturedEntry(scene: RenderScene, entry: var ViewRenderEntry) =
+proc updateCapturedSlot(scene: RenderScene, slot: var ViewRenderSlotEntry) =
+  if scene.replicaMode:
+    slot.handle = scene.tree.replaceFragment(slot.handle, move slot.contents)
+    slot.escapedHandle =
+      scene.tree.replaceFragment(slot.escapedHandle, move slot.escapedContents)
+  else:
+    slot.handle =
+      scene.tree.replaceFragment(slot.handle, slot.contents.copyRenderList())
+    slot.escapedHandle = scene.tree.replaceFragment(
+      slot.escapedHandle, slot.escapedContents.copyRenderList()
+    )
+
+  var retained = initTable[ZLevel, bool]()
+  for extra in slot.extraLayers.mitems:
+    retained[extra.level] = true
+    if extra.level in slot.extraHandles:
+      if scene.replicaMode:
+        slot.extraHandles[extra.level] = scene.tree.replaceFragment(
+          slot.extraHandles[extra.level], move extra.contents
+        )
+      else:
+        slot.extraHandles[extra.level] = scene.tree.replaceFragment(
+          slot.extraHandles[extra.level], extra.contents.copyRenderList()
+        )
+    else:
+      slot.extraHandles[extra.level] = scene.attachRoot(extra.level, extra.contents)
+
+  var removed: seq[ZLevel]
+  for level in slot.extraHandles.keys:
+    if level notin retained:
+      removed.add level
+  for level in removed:
+    let handle = slot.extraHandles[level]
+    if scene.tree.isValid(handle):
+      scene.tree.removeFragment(handle)
+    slot.extraHandles.del(level)
+
+proc updateCapturedEntry(
+    scene: RenderScene,
+    entry: var ViewRenderEntry,
+    capturedSlots: openArray[RenderSlotId],
+) =
   scene.tree.updateNode(entry.placementCursor, entry.placement)
   scene.tree.updateNode(entry.shellCursor, entry.shell)
   scene.tree.updateNode(entry.contentCursor, entry.contentTransform)
   scene.tree.updateNode(entry.escapedTransformCursor, entry.escapedTransform)
-  if scene.replicaMode:
-    entry.selfHandle =
-      scene.tree.replaceFragment(entry.selfHandle, move entry.selfContents)
-    entry.escapedHandle =
-      scene.tree.replaceFragment(entry.escapedHandle, move entry.escapedContents)
-  else:
-    entry.selfHandle =
-      scene.tree.replaceFragment(entry.selfHandle, entry.selfContents.copyRenderList())
-    entry.escapedHandle = scene.tree.replaceFragment(
-      entry.escapedHandle, entry.escapedContents.copyRenderList()
-    )
-
-  var retained = initTable[ZLevel, bool]()
-  for extra in entry.extraLayers.mitems:
-    retained[extra.level] = true
-    if extra.level in entry.extraHandles:
-      if scene.replicaMode:
-        entry.extraHandles[extra.level] = scene.tree.replaceFragment(
-          entry.extraHandles[extra.level], move extra.contents
-        )
-      else:
-        entry.extraHandles[extra.level] = scene.tree.replaceFragment(
-          entry.extraHandles[extra.level], extra.contents.copyRenderList()
-        )
-    else:
-      entry.extraHandles[extra.level] = scene.attachRoot(extra.level, extra.contents)
-
-  var removed: seq[ZLevel]
-  for level in entry.extraHandles.keys:
-    if level notin retained:
-      removed.add level
-  for level in removed:
-    let handle = entry.extraHandles[level]
-    if scene.tree.isValid(handle):
-      scene.tree.removeFragment(handle)
-    entry.extraHandles.del(level)
+  for slotId in capturedSlots:
+    scene.updateCapturedSlot(entry.slots[slotId])
 
 proc moveViewEntry(
     scene: RenderScene, entry: var ViewRenderEntry, parent: RenderViewId
@@ -540,7 +623,11 @@ proc reconcileOrders(
     rootOrders[level] = @[]
   for frame in frames:
     viewLevels[frame.viewId] = frame.cacheKey.level
-    childOrders[frame.viewId] = @[scene.viewEntries[frame.viewId].selfHandle]
+    childOrders[frame.viewId] = @[]
+    let entry = addr scene.viewEntries[frame.viewId]
+    for slotId in entry[].slotOrder:
+      if entry[].slots[slotId].position == rspBeforeSubviews:
+        childOrders[frame.viewId].add entry[].slots[slotId].handle
 
   for frame in frames:
     let
@@ -550,19 +637,25 @@ proc reconcileOrders(
       rootOrders[frame.cacheKey.level].add entry[].placementHandle
     else:
       childOrders[parent].add entry[].placementHandle
-    for extra in entry[].extraLayers:
-      rootOrders[extra.level].add entry[].extraHandles[extra.level]
+    for slotId in entry[].slotOrder:
+      let slot = addr entry[].slots[slotId]
+      for extra in slot[].extraLayers:
+        rootOrders[extra.level].add slot[].extraHandles[extra.level]
 
   for frame in frames:
     let entry = addr scene.viewEntries[frame.viewId]
+    var escapedOrder: seq[RenderFragmentHandle]
+    for slotId in entry[].slotOrder:
+      let slot = addr entry[].slots[slotId]
+      if slot[].position == rspAfterSubviews:
+        childOrders[frame.viewId].add slot[].handle
+      escapedOrder.add slot[].escapedHandle
     scene.tree.reorderChildFragments(
       entry[].placementCursor, [entry[].shellHandle, entry[].escapedTransformHandle]
     )
     scene.tree.reorderChildFragments(entry[].shellCursor, [entry[].contentHandle])
     scene.tree.reorderChildFragments(entry[].contentCursor, childOrders[frame.viewId])
-    scene.tree.reorderChildFragments(
-      entry[].escapedTransformCursor, [entry[].escapedHandle]
-    )
+    scene.tree.reorderChildFragments(entry[].escapedTransformCursor, escapedOrder)
   scene.rootFragments.setLen(0)
   for level in levels:
     scene.tree.reorderRootFragments(level, rootOrders[level])
@@ -573,7 +666,38 @@ proc mergeEntryResources(
 ): RenderResourceManifest =
   result = initRenderResourceManifest()
   for frame in frames:
-    result.addResources(scene.viewEntries[frame.viewId].resources)
+    let entry = addr scene.viewEntries[frame.viewId]
+    for slotId in entry[].slotOrder:
+      result.addResources(entry[].slots[slotId].resources)
+
+proc detachSlot(scene: RenderScene, slot: ViewRenderSlotEntry) =
+  for _, handle in slot.extraHandles:
+    if scene.tree.isValid(handle):
+      scene.tree.removeFragment(handle)
+  if scene.tree.isValid(slot.handle):
+    scene.tree.removeFragment(slot.handle)
+  if scene.tree.isValid(slot.escapedHandle):
+    scene.tree.removeFragment(slot.escapedHandle)
+
+proc attachEmptySlot(
+    scene: RenderScene, entry: var ViewRenderEntry, slotId: RenderSlotId
+) =
+  let slot = addr entry.slots[slotId]
+  var contents = RenderList()
+  slot[].handle = scene.attachChild(entry.contentCursor, contents)
+  var escaped = RenderList()
+  slot[].escapedHandle = scene.attachChild(entry.escapedTransformCursor, escaped)
+  slot[].extraHandles = initTable[ZLevel, RenderFragmentHandle]()
+
+proc frameSlotIds(frame: RenderViewFrame): seq[RenderSlotId] =
+  result = newSeqOfCap[RenderSlotId](frame.slots.len)
+  for slot in frame.slots:
+    result.add slot.slotId
+
+proc capturedSlotIds(frame: RenderViewFrame): seq[RenderSlotId] =
+  for slot in frame.slots:
+    if slot.captured:
+      result.add slot.slotId
 
 proc reconcile*(
     scene: RenderScene, frames: var seq[RenderViewFrame], baseLevel: ZLevel
@@ -581,9 +705,9 @@ proc reconcile*(
   ## Reconciles one frame while retaining clean per-view drawing fragments.
   ##
   ## `frames` must be in depth-first view order, with parents before children.
-  ## A captured entry atomically updates its placement, shell, self, escaped, and
-  ## extra-layer outputs. Placement-only entries update retained transforms. Clean
-  ## entries only participate in ordering.
+  ## A captured entry atomically updates only its changed named slots. Placement-
+  ## only entries update retained transforms. Clean entries only participate in
+  ## ordering.
   if scene.isNil:
     raise newException(ValueError, "cannot update a nil render scene")
   frames.validateFrames()
@@ -596,6 +720,8 @@ proc reconcile*(
     seen = initTable[RenderViewId, bool]()
     changedViews: seq[RenderViewId]
     capturedViews: seq[RenderViewId]
+    addedSlots = initTable[RenderViewId, seq[RenderSlotId]]()
+    removedSlots = initTable[RenderViewId, seq[RenderSlotId]]()
 
   for frame in frames.mitems:
     seen[frame.viewId] = true
@@ -611,21 +737,51 @@ proc reconcile*(
 
     if not existed:
       scene.viewEntries[frame.viewId] =
-        ViewRenderEntry(extraHandles: initTable[ZLevel, RenderFragmentHandle]())
+        ViewRenderEntry(slots: initTable[RenderSlotId, ViewRenderSlotEntry]())
     let entry = addr scene.viewEntries[frame.viewId]
     if frame.captured:
-      if existed and not entry[].extraLayers.sameLayerShape(frame.extraLayers):
+      let nextSlotOrder = frame.frameSlotIds()
+      if existed and entry[].slotOrder != nextSlotOrder:
         topologyChanged = true
+      if existed:
+        for slotId in entry[].slotOrder:
+          if slotId notin nextSlotOrder:
+            removedSlots.mgetOrPut(frame.viewId, @[]).add slotId
+        for slot in frame.slots:
+          if slot.slotId notin entry[].slots:
+            if not slot.captured:
+              raise newException(ValueError, "a new render slot must include a capture")
+            addedSlots.mgetOrPut(frame.viewId, @[]).add slot.slotId
+          else:
+            let cachedSlot = addr entry[].slots[slot.slotId]
+            if cachedSlot[].position != slot.position or
+                slot.captured and
+                not cachedSlot[].extraLayers.sameLayerShape(slot.extraLayers):
+              topologyChanged = true
+      else:
+        for slot in frame.slots:
+          if not slot.captured:
+            raise newException(ValueError, "a new render view needs every slot capture")
+
       entry[].cacheKey = frame.cacheKey
       entry[].placement = move frame.placement
       entry[].shell = move frame.shell
       entry[].contentTransform = move frame.contentTransform
       entry[].escapedTransform = move frame.escapedTransform
-      entry[].selfContents = move frame.selfContents
-      entry[].escapedContents = move frame.escapedContents
-      entry[].extraLayers = move frame.extraLayers
-      entry[].resources = move frame.resources
-      entry[].usesVisibleRect = frame.usesVisibleRect
+      entry[].slotOrder = nextSlotOrder
+      for slot in frame.slots.mitems:
+        if slot.slotId notin entry[].slots:
+          entry[].slots[slot.slotId] =
+            ViewRenderSlotEntry(extraHandles: initTable[ZLevel, RenderFragmentHandle]())
+        let cachedSlot = addr entry[].slots[slot.slotId]
+        cachedSlot[].position = slot.position
+        cachedSlot[].revision = slot.revision
+        if slot.captured:
+          cachedSlot[].contents = move slot.contents
+          cachedSlot[].escapedContents = move slot.escapedContents
+          cachedSlot[].extraLayers = move slot.extraLayers
+          cachedSlot[].resources = move slot.resources
+          cachedSlot[].usesVisibleRect = slot.usesVisibleRect
       entry[].captureGeneration.advance()
       capturedViews.add frame.viewId
       changedViews.add frame.viewId
@@ -657,14 +813,31 @@ proc reconcile*(
     scene.viewEntries[viewId].changeGeneration = nextGeneration
   for viewId in capturedViews:
     scene.viewEntries[viewId].captureChangeGeneration = nextGeneration
+  for frame in frames:
+    if frame.captured:
+      for slot in frame.slots:
+        if slot.captured:
+          scene.viewEntries[frame.viewId].slots[slot.slotId].changeGeneration =
+            nextGeneration
   if rebuild:
     scene.fullTransferGeneration = nextGeneration
 
   if rebuild:
+    for viewId, slotIds in removedSlots:
+      for slotId in slotIds:
+        scene.viewEntries[viewId].slots.del(slotId)
     for viewId in removed:
       scene.viewEntries.del(viewId)
     scene.rebuildTree(frames, levels)
   else:
+    for viewId, slotIds in removedSlots:
+      for slotId in slotIds:
+        scene.detachSlot(scene.viewEntries[viewId].slots[slotId])
+        scene.viewEntries[viewId].slots.del(slotId)
+    for viewId, slotIds in addedSlots:
+      for slotId in slotIds:
+        scene.attachEmptySlot(scene.viewEntries[viewId], slotId)
+
     if topologyChanged:
       var viewLevels = initTable[RenderViewId, ZLevel]()
       for frame in frames:
@@ -676,13 +849,15 @@ proc reconcile*(
         else:
           scene.moveViewEntry(entry[], frame.externalParent(viewLevels))
           if frame.captured:
-            scene.updateCapturedEntry(entry[])
+            scene.updateCapturedEntry(entry[], frame.capturedSlotIds())
           elif frame.placementChanged:
             scene.updatePlacementEntry(entry[])
     else:
       for frame in frames:
         if frame.captured:
-          scene.updateCapturedEntry(scene.viewEntries[frame.viewId])
+          scene.updateCapturedEntry(
+            scene.viewEntries[frame.viewId], frame.capturedSlotIds()
+          )
         elif frame.placementChanged:
           scene.updatePlacementEntry(scene.viewEntries[frame.viewId])
 
@@ -718,8 +893,10 @@ proc transferFrame(
     entry: ViewRenderEntry,
     placement: ViewPlacement,
     placementChanged: bool,
-    captured: bool,
+    acknowledgedGeneration: uint64,
+    full: bool,
 ): RenderViewFrame =
+  let captured = full or entry.captureChangeGeneration > acknowledgedGeneration
   result = RenderViewFrame(
     viewId: placement.viewId,
     parentViewId: placement.parentViewId,
@@ -732,10 +909,22 @@ proc transferFrame(
     result.shell = entry.shell.isolateFig()
     result.contentTransform = entry.contentTransform.isolateFig()
     result.escapedTransform = entry.escapedTransform.isolateFig()
-    result.selfContents = entry.selfContents.isolateRenderList()
-    result.escapedContents = entry.escapedContents.isolateRenderList()
-    result.extraLayers = entry.extraLayers.copyLayerContributions()
-    result.usesVisibleRect = entry.usesVisibleRect
+    result.slots = newSeqOfCap[RenderViewSlotFrame](entry.slotOrder.len)
+    for slotId in entry.slotOrder:
+      let slot = entry.slots[slotId]
+      let slotCaptured = full or slot.changeGeneration > acknowledgedGeneration
+      var frameSlot = RenderViewSlotFrame(
+        slotId: slotId,
+        position: slot.position,
+        revision: slot.revision,
+        captured: slotCaptured,
+        usesVisibleRect: slot.usesVisibleRect,
+      )
+      if slotCaptured:
+        frameSlot.contents = slot.contents.isolateRenderList()
+        frameSlot.escapedContents = slot.escapedContents.isolateRenderList()
+        frameSlot.extraLayers = slot.extraLayers.copyLayerContributions()
+      result.slots.add move frameSlot
 
 proc newRenderSceneUpdate*(
     scene: RenderScene,
@@ -768,7 +957,8 @@ proc newRenderSceneUpdate*(
     result.frames.add entry[].transferFrame(
       placement,
       full or entry[].changeGeneration > acknowledgedGeneration,
-      full or entry[].captureChangeGeneration > acknowledgedGeneration,
+      acknowledgedGeneration,
+      full,
     )
   result.resources = scene.liveResources.snapshot()
 
@@ -791,6 +981,13 @@ func capturedViewCount*(update: RenderSceneUpdate): Natural =
   for frame in update.frames:
     if frame.captured:
       inc result
+
+func capturedRenderSlotCount*(update: RenderSceneUpdate): Natural =
+  ## Counts independently transferred view slots in this update.
+  for frame in update.frames:
+    for slot in frame.slots:
+      if slot.captured:
+        inc result
 
 func viewCount*(update: RenderSceneUpdate): Natural =
   update.frames.len.Natural
@@ -823,6 +1020,11 @@ proc apply*(scene: RenderScene, update: var RenderSceneUpdate) =
       if not frame.captured:
         raise
           newException(ValueError, "a full render-scene update must capture every view")
+      for slot in frame.slots:
+        if not slot.captured:
+          raise newException(
+            ValueError, "a full render-scene update must capture every view slot"
+          )
   discard scene.reconcile(update.frames, update.baseLevel)
   scene.identity = update.sceneIdentity
   scene.generation = update.generation
@@ -888,7 +1090,7 @@ proc viewCaptureGeneration*(scene: RenderScene, id: RenderViewId): uint64 =
     result = scene.viewEntries[id].captureGeneration
 
 proc viewFragmentIds*(scene: RenderScene, id: RenderViewId): seq[uint64] =
-  ## Returns stable placement, shell, content, self, and escaped IDs for diagnostics.
+  ## Returns stable transform and ordered slot IDs for diagnostics.
   if scene.isNil or id notin scene.viewEntries:
     return
   let entry = addr scene.viewEntries[id]
@@ -896,12 +1098,33 @@ proc viewFragmentIds*(scene: RenderScene, id: RenderViewId): seq[uint64] =
     entry[].placementHandle,
     entry[].shellHandle,
     entry[].contentHandle,
-    entry[].selfHandle,
     entry[].escapedTransformHandle,
-    entry[].escapedHandle,
   ]:
     if scene.tree.isValid(handle):
       result.add handle.fragmentId()
+  for slotId in entry[].slotOrder:
+    for handle in [entry[].slots[slotId].handle, entry[].slots[slotId].escapedHandle]:
+      if scene.tree.isValid(handle):
+        result.add handle.fragmentId()
+
+proc viewRenderSlotFragmentId*(
+    scene: RenderScene, id: RenderViewId, slotId: RenderSlotId
+): uint64 =
+  ## Returns the stable normal-content fragment identity for one view slot.
+  if scene.isNil or id notin scene.viewEntries or
+      slotId notin scene.viewEntries[id].slots:
+    return
+  let handle = scene.viewEntries[id].slots[slotId].handle
+  if scene.tree.isValid(handle):
+    result = handle.fragmentId()
+
+proc viewRenderSlotChangeGeneration*(
+    scene: RenderScene, id: RenderViewId, slotId: RenderSlotId
+): uint64 =
+  ## Returns the scene generation that most recently replaced one slot.
+  if not scene.isNil and id in scene.viewEntries and
+      slotId in scene.viewEntries[id].slots:
+    result = scene.viewEntries[id].slots[slotId].changeGeneration
 
 proc viewEntryCount*(scene: RenderScene): Natural =
   if not scene.isNil:

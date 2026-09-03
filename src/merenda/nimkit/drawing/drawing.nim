@@ -80,17 +80,36 @@ const
       ]
   TextEllipsis = "…"
 
-type DrawContext* = ref object
-  xRenders: Renders
-  xLayer: ZLevel
-  xParent: FigIdx
-  xViewParent: FigIdx
-  xRenderOrigin: nimkitTypes.Point
-  xBounds: nimkitTypes.Rect
-  xVisibleRect: nimkitTypes.Rect
-  xUsesVisibleRect: bool
-  xAppearance: Appearance
-  xResources: RenderResourceManifest
+type
+  RenderSlotCapture* = object
+    ## Captured or retained drawing for one stable slot inside a view.
+    slotId*: RenderSlotId
+    position*: RenderSlotPosition
+    revision*: uint64
+    captured*: bool
+    renders*: Renders
+    resources*: RenderResourceManifest
+    usesVisibleRect*: bool
+
+  DrawContext* = ref object
+    xRenders: Renders
+    xLayer: ZLevel
+    xParent: FigIdx
+    xViewParent: FigIdx
+    xRenderOrigin: nimkitTypes.Point
+    xBounds: nimkitTypes.Rect
+    xVisibleRect: nimkitTypes.Rect
+    xUsesVisibleRect: bool
+    xAppearance: Appearance
+    xResources: RenderResourceManifest
+    xCapturesSlots: bool
+    xSlotShell: Fig
+    xDefaultSlotRevision: uint64
+    xCachedSlotRevisions: Table[RenderSlotId, uint64]
+    xForcedSlots: Table[RenderSlotId, bool]
+    xForceAllSlots: bool
+    xSlotCaptures: seq[RenderSlotCapture]
+    xActiveSlot: int
 
 var defaultTypefaceIds {.threadvar.}: Table[string, TypefaceId]
 
@@ -798,6 +817,7 @@ proc initDrawContext*(): DrawContext =
     xRenders: Renders(layers: initOrderedTable[ZLevel, RenderList]()),
     xLayer: DefaultDrawLevel,
     xResources: initRenderResourceManifest(),
+    xActiveSlot: -1,
   )
   result.xRenders.layers[DefaultDrawLevel] = RenderList()
 
@@ -811,6 +831,9 @@ proc beginDraw*(
     appearance: Appearance,
     layer = DefaultDrawLevel,
 ) =
+  context.xCapturesSlots = false
+  context.xSlotCaptures.setLen(0)
+  context.xActiveSlot = -1
   context.xLayer = layer
   context.xParent = parent
   context.xViewParent = viewParent
@@ -820,24 +843,149 @@ proc beginDraw*(
   context.xUsesVisibleRect = false
   context.xAppearance = appearance
 
+proc beginRenderSlotCapture*(
+    context: DrawContext,
+    shell: Fig,
+    renderOrigin: nimkitTypes.Point,
+    bounds: nimkitTypes.Rect,
+    visibleRect: nimkitTypes.Rect,
+    appearance: Appearance,
+    defaultRevision: uint64,
+    cachedRevisions: Table[RenderSlotId, uint64],
+    forcedSlots: openArray[RenderSlotId],
+    forceAll = false,
+    layer = DefaultDrawLevel,
+) =
+  ## Prepares a view draw whose named outputs become independently retained slots.
+  context.xRenders = nil
+  context.xResources = nil
+  context.xLayer = layer
+  context.xParent = (-1).FigIdx
+  context.xViewParent = (-1).FigIdx
+  context.xRenderOrigin = renderOrigin
+  context.xBounds = bounds
+  context.xVisibleRect = visibleRect
+  context.xUsesVisibleRect = false
+  context.xAppearance = appearance
+  context.xCapturesSlots = true
+  context.xSlotShell = shell
+  context.xDefaultSlotRevision = defaultRevision
+  context.xCachedSlotRevisions = cachedRevisions
+  context.xForcedSlots = initTable[RenderSlotId, bool]()
+  for slot in forcedSlots:
+    context.xForcedSlots[slot] = true
+  context.xForceAllSlots = forceAll
+  context.xSlotCaptures.setLen(0)
+  context.xActiveSlot = -1
+
+proc renderSlotIndex(context: DrawContext, slot: RenderSlotId): int =
+  for index, capture in context.xSlotCaptures:
+    if capture.slotId == slot:
+      return index
+  -1
+
+proc activateRenderSlot(context: DrawContext, index: int) =
+  context.xActiveSlot = index
+  if index < 0 or not context.xSlotCaptures[index].captured:
+    context.xRenders = nil
+    context.xResources = nil
+    context.xParent = (-1).FigIdx
+    context.xViewParent = (-1).FigIdx
+    return
+  context.xRenders = context.xSlotCaptures[index].renders
+  context.xResources = context.xSlotCaptures[index].resources
+  context.xParent = context.xRenders.layers[context.xLayer].rootIds[0]
+  context.xViewParent = (-1).FigIdx
+
+proc beginRenderSlot*(
+    context: DrawContext,
+    slot: RenderSlotId,
+    revision: uint64,
+    position = rspBeforeSubviews,
+): bool =
+  ## Selects one stable drawing slot and reports whether it needs recapturing.
+  ##
+  ## Callers must only emit drawing operations when this returns `true`. Every
+  ## draw must enumerate all of its current slots so removed slots can be detached.
+  if context.isNil:
+    raise newException(ValueError, "cannot draw a render slot with a nil context")
+  if not context.xCapturesSlots:
+    return true
+  var index = context.renderSlotIndex(slot)
+  if index >= 0:
+    let capture = context.xSlotCaptures[index]
+    if capture.revision != revision or capture.position != position:
+      raise newException(
+        ValueError, "a render slot cannot change revision or position within one draw"
+      )
+  else:
+    let captured =
+      context.xForceAllSlots or slot in context.xForcedSlots or
+      slot notin context.xCachedSlotRevisions or
+      context.xCachedSlotRevisions[slot] != revision
+    var renders: Renders
+    var resources: RenderResourceManifest
+    if captured:
+      renders = Renders(layers: initOrderedTable[ZLevel, RenderList]())
+      renders.layers[context.xLayer] = RenderList()
+      discard renders.addRoot(context.xLayer, context.xSlotShell)
+      resources = initRenderResourceManifest()
+    context.xSlotCaptures.add RenderSlotCapture(
+      slotId: slot,
+      position: position,
+      revision: revision,
+      captured: captured,
+      renders: renders,
+      resources: resources,
+    )
+    index = context.xSlotCaptures.high
+  context.activateRenderSlot(index)
+  context.xSlotCaptures[index].captured
+
+proc ensureDefaultRenderSlot(context: DrawContext) =
+  if context.xCapturesSlots and context.xActiveSlot < 0:
+    discard context.beginRenderSlot(
+      0.RenderSlotId, context.xDefaultSlotRevision, rspBeforeSubviews
+    )
+
+proc takeRenderSlotCaptures*(context: DrawContext): seq[RenderSlotCapture] =
+  ## Moves the ordered slot captures out of a completed retained view draw.
+  if context.isNil or not context.xCapturesSlots:
+    return
+  if context.xSlotCaptures.len == 0:
+    discard context.beginRenderSlot(
+      0.RenderSlotId, context.xDefaultSlotRevision, rspBeforeSubviews
+    )
+  result = move context.xSlotCaptures
+  context.xActiveSlot = -1
+  context.xRenders = nil
+  context.xResources = nil
+
 proc renderList*(context: DrawContext): RenderList =
+  context.ensureDefaultRenderSlot()
+  if context.xRenders.isNil:
+    return RenderList()
   if DefaultDrawLevel in context.xRenders.layers:
     return context.xRenders.layers[DefaultDrawLevel]
   RenderList()
 
 proc renderParent*(context: DrawContext): FigIdx =
+  context.ensureDefaultRenderSlot()
   context.xParent
 
 proc renderLayer*(context: DrawContext): ZLevel =
   context.xLayer
 
 proc renderViewParent*(context: DrawContext): FigIdx =
+  context.ensureDefaultRenderSlot()
   context.xViewParent
 
 proc renders*(context: DrawContext): Renders =
+  context.ensureDefaultRenderSlot()
   context.xRenders
 
 proc resources*(context: DrawContext): RenderResourceManifest =
+  context.ensureDefaultRenderSlot()
   context.xResources
 
 proc appearance*(context: DrawContext): Appearance =
@@ -860,7 +1008,10 @@ proc bounds*(context: DrawContext): nimkitTypes.Rect =
   context.xBounds
 
 proc visibleRect*(context: DrawContext): nimkitTypes.Rect =
+  context.ensureDefaultRenderSlot()
   context.xUsesVisibleRect = true
+  if context.xCapturesSlots and context.xActiveSlot >= 0:
+    context.xSlotCaptures[context.xActiveSlot].usesVisibleRect = true
   context.xVisibleRect
 
 proc drawingDependsOnVisibleRect*(context: DrawContext): bool =
@@ -870,6 +1021,9 @@ proc drawingDependsOnVisibleRect*(context: DrawContext): bool =
 proc addFig*(
     context: DrawContext, layer: ZLevel, parent: FigIdx, node: Fig
 ): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
+  if context.xRenders.isNil:
+    raise newException(ValueError, "cannot draw an unchanged render slot")
   if parent == (-1).FigIdx:
     context.xRenders.addRoot(layer, node)
   else:
@@ -1133,6 +1287,7 @@ proc addText*(
     style: TextStyle,
     alignment = taLeft,
 ): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
   let renderedRect = context.renderRectFor(rect)
   let layout = textLayout(renderedRect, text, style, alignment)
   context.xResources.addFonts(layout)
@@ -1161,6 +1316,7 @@ proc addText*(
     style: TextStyle,
     alignment = taLeft,
 ): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
   let renderedRect = context.renderRectFor(rect)
   let layout = textLayout(renderedRect, text, style, alignment)
   context.xResources.addFonts(layout)
@@ -1187,6 +1343,7 @@ proc addText*(
 proc addText*(
     context: DrawContext, rect: nimkitTypes.Rect, layout: GlyphArrangement
 ): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
   context.xResources.addFonts(layout)
   context.addFig(textNode(context.renderRectFor(rect), layout))
 
@@ -1198,6 +1355,7 @@ proc addImage*(
 ): FigIdx {.discardable.} =
   if image.isNil:
     return (-1).FigIdx
+  context.ensureDefaultRenderSlot()
   context.xResources.addImage(image)
   context.addFig(imageNode(context.renderRectFor(rect), image, fill(tint.rgba)))
 
@@ -1211,6 +1369,7 @@ proc addImage*(
 ): FigIdx {.discardable.} =
   if image.isNil:
     return (-1).FigIdx
+  context.ensureDefaultRenderSlot()
   context.xResources.addImage(image)
   context.addFig(
     layer, parent, imageNode(context.renderRectFor(rect), image, fill(tint.rgba))
@@ -1354,6 +1513,7 @@ proc addSvgMtsdfLayers(
   if svg.layers.len == 0 or svg.size.width <= 0.0'f32 or svg.size.height <= 0.0'f32:
     return (-1).FigIdx
 
+  context.ensureDefaultRenderSlot()
   let target = context.renderRectFor(rect)
   result = (-1).FigIdx
   for svgLayer in svg.layers:
@@ -1468,6 +1628,7 @@ proc addSelectedText*(
     selectedLocation, selectedLength: int,
     selectionColor: nimkitTypes.Color,
 ): FigIdx {.discardable.} =
+  context.ensureDefaultRenderSlot()
   context.xResources.addFonts(layout)
   var node = textNode(context.renderRectFor(rect), layout)
   node.selectTextNode(selectedLocation, selectedLength, selectionColor)
