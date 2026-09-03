@@ -54,6 +54,7 @@ const
   MarkdownTableMinimumColumnWidth = 3
   MarkdownTablePreferredCellWidth = 12
   MarkdownTableSeparatorWidth = 3
+  MarkdownTableFontScale = 0.9'f32
   MarkdownTableViewportFraction = 0.9'f32
 
 type
@@ -891,6 +892,9 @@ proc renderTable(
 ) =
   var tableAttributes = attributes
   tableAttributes.fontName = builder.style.codeFontName
+  tableAttributes.fontSize =
+    max(builder.style.bodyFontSize * MarkdownTableFontScale, 1.0'f32)
+  tableAttributes.paragraphStyle.lineBreakMode = tlbmClipping
   var rows: seq[MarkdownTableRow]
   for section in table.children:
     let isHeader = section of markdownParser.THead
@@ -1339,7 +1343,7 @@ proc markdownTableCharacterWidth(view: MarkdownView): float32 =
   let codeStyle = TextStyle(
     color: view.xMarkdownStyle.textColor,
     fontName: view.xMarkdownStyle.codeFontName,
-    fontSize: max(view.xMarkdownStyle.bodyFontSize, 1.0'f32),
+    fontSize: max(view.xMarkdownStyle.bodyFontSize * MarkdownTableFontScale, 1.0'f32),
   )
   max(textNaturalSize("M", codeStyle).width, 1.0'f32)
 
