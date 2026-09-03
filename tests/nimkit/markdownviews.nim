@@ -769,6 +769,55 @@ Press <kbd>Enter</kbd>.
         foundContinuation = true
     check foundContinuation
 
+  test "GFM table wrapping preserves short phrases and whole words":
+    let
+      source =
+        "| A | B | C | D | E | F | G | H | I | J | K | L |\n" &
+        "| - | - | - | - | - | - | - | - | - | - | - | - |\n" &
+        "| CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | " &
+        "CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 |"
+      lines = markdownTextStorage(source).stringValue().splitLines()
+
+    check lines[0].runeLen > 100
+    check lines[^1].count("CPU p95") == 12
+
+    let longWord = "uninterrupted_identifier_that_must_remain_whole"
+    let wordLines = markdownTextStorage(
+        "| Name | Value |\n| - | - |\n| key | " & longWord & " |"
+      )
+      .stringValue()
+      .splitLines()
+    check wordLines[^1].contains(longWord)
+
+  test "wide GFM tables use horizontal overflow while Markdown still wraps":
+    let
+      source =
+        "A deliberately long paragraph that should continue to use wrapped text " &
+        "layout even when the table below needs horizontal overflow. ".repeat(4) & "\n\n" &
+        "| A | B | C | D | E | F | G | H |\n" & "| - | - | - | - | - | - | - | - |\n" &
+        "| CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | " &
+        "CPU p95 | CPU p95 |"
+      view = newMarkdownView(source, frame = rect(0, 0, 300, 240))
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+
+    check view.wraps
+    check view.scrollView().hasHorizontalScroller
+    check view.scrollView().maximumContentOffset().x > 0.0'f32
+    check view.textView().layoutManager().lineCount() >
+      view.textStorage().stringValue().splitLines().len.Natural
+
+  test "compact GFM tables stay within the Markdown viewport":
+    let view = newMarkdownView(
+      "| Metric | Value |\n| - | - |\n| CPU | 42% |", frame = rect(0, 0, 420, 200)
+    )
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+
   test "GFM tables reflow once the Markdown viewport settles":
     let
       source =

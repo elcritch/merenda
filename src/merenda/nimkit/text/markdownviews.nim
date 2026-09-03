@@ -52,7 +52,9 @@ const
   MarkdownTableMaximumColumnLimit = 160
   MarkdownTableColumnQuantum = 4
   MarkdownTableMinimumColumnWidth = 3
+  MarkdownTablePreferredCellWidth = 12
   MarkdownTableSeparatorWidth = 3
+  MarkdownTableViewportFraction = 0.9'f32
 
 type
   MarkdownImageLoader* = proc(url: string): ImageResource {.closure.}
@@ -117,6 +119,7 @@ type
     images: seq[MarkdownImagePresentation]
     imageUrls: seq[string]
     hasTables: bool
+    tableColumnWidth: int
 
   MarkdownBuilder = object
     text: string
@@ -130,6 +133,7 @@ type
     imageContentTypeLoader: MarkdownImageContentTypeLoader
     syntaxHighlighter: SyntaxHighlighter
     tableColumnLimit: int
+    tableColumnWidth: int
     hasTables: bool
 
   MarkdownTableAlignment = enum
@@ -410,6 +414,7 @@ proc addBlockBreak(builder: var MarkdownBuilder, attributes: TextAttributes) =
 proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
   let offset = builder.runeLength
   builder.hasTables = builder.hasTables or rendered.hasTables
+  builder.tableColumnWidth = max(builder.tableColumnWidth, rendered.tableColumnWidth)
   builder.imageUrls.add(rendered.imageUrls)
   builder.text.add rendered.text
   builder.runeLength += rendered.runeLength
@@ -709,6 +714,19 @@ func naturalTableCellWidth(content: openArray[MarkdownTableRune]): int =
       pendingSpace = false
   max(result, lineWidth)
 
+func minimumTableCellWidth(content: openArray[MarkdownTableRune]): int =
+  var wordWidth = 0
+  for unit in content:
+    if unit.value == Rune('\n') or
+        (unit.value.isWhiteSpace and not unit.attributes.hasAttachment):
+      result = max(result, wordWidth)
+      wordWidth = 0
+    else:
+      inc wordWidth
+  result = max(result, wordWidth)
+  result =
+    max(result, min(content.naturalTableCellWidth(), MarkdownTablePreferredCellWidth))
+
 proc finishTableLine(
     lines: var seq[seq[MarkdownTableRune]],
     line: var seq[MarkdownTableRune],
@@ -732,19 +750,9 @@ proc appendTableWord(
   if line.len > 0 and line.len + spacing + word.len > limit:
     lines.finishTableLine(line, hasPendingSpace)
 
-  if word.len > limit:
-    if line.len > 0:
-      lines.finishTableLine(line, hasPendingSpace)
-    var offset = 0
-    while word.len - offset > limit:
-      lines.add word[offset ..< offset + limit]
-      offset += limit
-    if offset < word.len:
-      line = word[offset ..< word.len]
-  else:
-    if line.len > 0 and hasPendingSpace:
-      line.add pendingSpace
-    line.add word
+  if line.len > 0 and hasPendingSpace:
+    line.add pendingSpace
+  line.add word
   word = @[]
   hasPendingSpace = false
 
@@ -774,7 +782,9 @@ proc wrapTableCell(
   if line.len > 0 or result.len == 0:
     result.add move line
 
-func fittedTableWidths(naturalWidths: openArray[int], columnLimit: int): seq[int] =
+func fittedTableWidths(
+    naturalWidths, minimumWidths: openArray[int], columnLimit: int
+): seq[int] =
   if naturalWidths.len == 0:
     return
   let
@@ -785,25 +795,34 @@ func fittedTableWidths(naturalWidths: openArray[int], columnLimit: int): seq[int
     )
   var
     maximumWidth = MarkdownTableMinimumColumnWidth
+    minimumTotal = 0
     naturalTotal = 0
-  for width in naturalWidths:
-    let resolved = max(width, MarkdownTableMinimumColumnWidth)
-    maximumWidth = max(maximumWidth, resolved)
-    naturalTotal += resolved
+  for index, width in naturalWidths:
+    let
+      minimumWidth = max(minimumWidths[index], MarkdownTableMinimumColumnWidth)
+      naturalWidth = max(width, minimumWidth)
+    maximumWidth = max(maximumWidth, naturalWidth)
+    minimumTotal += minimumWidth
+    naturalTotal += naturalWidth
   if naturalTotal <= contentLimit:
-    for width in naturalWidths:
+    for index, width in naturalWidths:
+      result.add max(max(width, minimumWidths[index]), MarkdownTableMinimumColumnWidth)
+    return
+  if minimumTotal >= contentLimit:
+    for width in minimumWidths:
       result.add max(width, MarkdownTableMinimumColumnWidth)
     return
 
   var
-    low = MarkdownTableMinimumColumnWidth
+    low = 0
     high = maximumWidth
-    cap = low
+    cap = 0
   while low <= high:
     let candidate = (low + high) div 2
     var used = 0
-    for width in naturalWidths:
-      used += min(max(width, MarkdownTableMinimumColumnWidth), candidate)
+    for index, width in naturalWidths:
+      let minimumWidth = max(minimumWidths[index], MarkdownTableMinimumColumnWidth)
+      used += max(min(max(width, minimumWidth), candidate), minimumWidth)
     if used <= contentLimit:
       cap = candidate
       low = candidate + 1
@@ -811,15 +830,17 @@ func fittedTableWidths(naturalWidths: openArray[int], columnLimit: int): seq[int
       high = candidate - 1
 
   var used = 0
-  for width in naturalWidths:
-    let fitted = min(max(width, MarkdownTableMinimumColumnWidth), cap)
+  for index, width in naturalWidths:
+    let
+      minimumWidth = max(minimumWidths[index], MarkdownTableMinimumColumnWidth)
+      fitted = max(min(max(width, minimumWidth), cap), minimumWidth)
     result.add fitted
     used += fitted
   var remaining = contentLimit - used
   while remaining > 0:
     var distributed = false
     for index, naturalWidth in naturalWidths:
-      let target = max(naturalWidth, MarkdownTableMinimumColumnWidth)
+      let target = max(naturalWidth, minimumWidths[index])
       if result[index] < target and remaining > 0:
         inc result[index]
         dec remaining
@@ -901,17 +922,26 @@ proc renderTable(
   if columnCount == 0:
     return
 
-  var naturalWidths = newSeq[int](columnCount)
+  var
+    naturalWidths = newSeq[int](columnCount)
+    minimumWidths = newSeq[int](columnCount)
   for row in rows:
     for index, cell in row.cells:
       naturalWidths[index] =
         max(naturalWidths[index], cell.content.naturalTableCellWidth())
+      minimumWidths[index] =
+        max(minimumWidths[index], cell.content.minimumTableCellWidth())
   let widths = naturalWidths.fittedTableWidths(
+    minimumWidths,
     if builder.tableColumnLimit > 0:
       builder.tableColumnLimit
     else:
-      MarkdownTableDefaultColumnLimit
+      MarkdownTableDefaultColumnLimit,
   )
+  var tableColumnWidth = MarkdownTableSeparatorWidth * (columnCount - 1)
+  for width in widths:
+    tableColumnWidth += width
+  builder.tableColumnWidth = max(builder.tableColumnWidth, tableColumnWidth)
   var separatorAttributes = tableAttributes
   separatorAttributes.foregroundColor = builder.style.ruleColor
 
@@ -1049,6 +1079,7 @@ proc renderBlockquote(
     mapped.range = initTextRange(start, stop - start)
     builder.images.add mapped
   builder.hasTables = builder.hasTables or quoted.hasTables
+  builder.tableColumnWidth = max(builder.tableColumnWidth, quoted.tableColumnWidth)
 
 proc addHighlightedCode(
     builder: var MarkdownBuilder, source, language: string, attributes: TextAttributes
@@ -1140,6 +1171,7 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
     images: builder.images,
     imageUrls: builder.imageUrls,
     hasTables: builder.hasTables,
+    tableColumnWidth: builder.tableColumnWidth,
   )
 
 proc parseMarkdownRoot(
@@ -1244,6 +1276,7 @@ protocol MarkdownTextViewDrawing of ViewDrawingProtocol:
     TextView(textView).drawTextViewContents(context)
 
 func markdownImageCacheKey(view: MarkdownView, url: string): string
+proc markdownTableOverflowWidth(view: MarkdownView, tableColumnWidth: int): float32
 
 proc pruneMarkdownImageCache(view: MarkdownView, imageUrls: openArray[string]) =
   var activeKeys = initTable[string, bool]()
@@ -1277,6 +1310,8 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
   textView.codeBlockStyle = view.xMarkdownStyle.codeBlockStyle
   textView.markdownImages = document.images
   view.xHasMarkdownTables = document.hasTables
+  view.minimumWrappedDocumentWidth =
+    view.markdownTableOverflowWidth(document.tableColumnWidth)
   view.textStorage = document.storage
   view.pruneMarkdownImageCache(document.imageUrls)
   textView.needsDisplay = true
@@ -1300,16 +1335,19 @@ proc resolvedDefaultMarkdownUrlAssetLoader(): UrlAssetLoader =
 
 proc renderCurrentMarkdownDocument(view: MarkdownView)
 
+proc markdownTableCharacterWidth(view: MarkdownView): float32 =
+  let codeStyle = TextStyle(
+    color: view.xMarkdownStyle.textColor,
+    fontName: view.xMarkdownStyle.codeFontName,
+    fontSize: max(view.xMarkdownStyle.bodyFontSize, 1.0'f32),
+  )
+  max(textNaturalSize("M", codeStyle).width, 1.0'f32)
+
 proc markdownTableColumnLimit(view: MarkdownView): int =
   if view.isNil:
     return MarkdownTableDefaultColumnLimit
   let
-    codeStyle = TextStyle(
-      color: view.xMarkdownStyle.textColor,
-      fontName: view.xMarkdownStyle.codeFontName,
-      fontSize: max(view.xMarkdownStyle.bodyFontSize, 1.0'f32),
-    )
-    characterWidth = max(textNaturalSize("M", codeStyle).width, 1.0'f32)
+    characterWidth = view.markdownTableCharacterWidth()
     viewportWidth =
       if view.scrollView().isNil:
         view.bounds().size.width
@@ -1317,11 +1355,24 @@ proc markdownTableColumnLimit(view: MarkdownView): int =
         view.scrollView().viewportSize().width
     availableWidth =
       max(viewportWidth - view.xMarkdownStyle.documentInsets.horizontal, characterWidth)
-    measuredLimit = int(availableWidth / characterWidth)
+    measuredLimit = int(availableWidth * MarkdownTableViewportFraction / characterWidth)
     quantizedLimit =
       (measuredLimit div MarkdownTableColumnQuantum) * MarkdownTableColumnQuantum
   clamp(
     quantizedLimit, MarkdownTableMinimumColumnLimit, MarkdownTableMaximumColumnLimit
+  )
+
+proc markdownTableOverflowWidth(view: MarkdownView, tableColumnWidth: int): float32 =
+  if view.isNil or tableColumnWidth <= view.xMarkdownTableColumnLimit:
+    return
+  let
+    viewportWidth = view.scrollView().viewportSize().width
+    contentWidth =
+      float32(tableColumnWidth) * view.markdownTableCharacterWidth() /
+      MarkdownTableViewportFraction
+  max(
+    viewportWidth + 1.0'f32,
+    contentWidth + view.xMarkdownStyle.documentInsets.horizontal,
   )
 
 proc scheduleMarkdownTableResize(view: MarkdownView) =

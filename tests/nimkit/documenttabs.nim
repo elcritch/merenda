@@ -274,6 +274,13 @@ proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
     result.add rune
 
+func hasDrawableOp(node: Fig, kind: DrawableKind): bool =
+  if node.kind != nkDrawable:
+    return
+  for op in node.drawOps:
+    if op.kind == kind:
+      return true
+
 proc renderedRect(node: Fig): nimkitTypes.Rect =
   nimkitTypes.rect(
     node.screenBox.x.float32, node.screenBox.y.float32, node.screenBox.w.float32,
@@ -648,19 +655,45 @@ suite "nimkit document tabs":
 
     discard tabs.addDocumentTabItem(selected)
 
-    proc closeSymbolRect(theme: Theme): nimkitTypes.Rect =
+    proc closeMarkRect(theme: Theme): nimkitTypes.Rect =
       let renders = buildRenders(tabs, initAppearance(theme))
       for node in renders[DefaultDrawLevel].nodes:
-        if node.kind == nkText and node.renderedText() == "×":
+        if node.hasDrawableOp(dkLine):
           return node.renderedRect()
 
     let tabRect = tabs.documentTabRect(0)
     for theme in [initTheme(), initMacOSTheme(), initMacOSDarkTheme()]:
-      check closeSymbolRect(theme).center().x < tabRect.center().x
+      check closeMarkRect(theme).center().x < tabRect.center().x
 
     var builder = initThemeBuilder(initTheme())
     builder[srDocumentTab, StyleCloseButtonPosition] = styleKeyword(dtcbRight)
-    check closeSymbolRect(builder.finish()).center().x > tabRect.center().x
+    check closeMarkRect(builder.finish()).center().x > tabRect.center().x
+
+  test "document tab close marks use centered vector lines":
+    let
+      tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
+      selected = newDocumentTabItem("Selected", "selected")
+    discard tabs.addDocumentTabItem(selected)
+
+    let
+      renders = buildRenders(tabs)
+      tabCenter = tabs.documentTabRect(0).center()
+    var
+      markRects: seq[nimkitTypes.Rect]
+      closeTextFound = false
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkText and node.renderedText() in ["x", "×"]:
+        closeTextFound = true
+      elif node.hasDrawableOp(dkLine):
+        markRects.add node.renderedRect()
+        check node.drawStroke.weight > 0.0'f32
+
+    require markRects.len == 2
+    check not closeTextFound
+    for markRect in markRects:
+      check abs(markRect.center().y - tabCenter.y) <= 0.01'f32
+    check abs(markRects[0].center().x - markRects[1].center().x) <= 0.01'f32
+    check abs(markRects[0].center().y - markRects[1].center().y) <= 0.01'f32
 
   test "delegates can veto selection closing and moving while signals fire":
     let
@@ -825,7 +858,7 @@ suite "nimkit document tabs":
       planFound = false
       budgetFound = false
       nextFound = false
-      closeSymbolFound = false
+      closeMarkFound = false
       closeTextFound = false
 
     for node in renders[DefaultDrawLevel].nodes:
@@ -837,15 +870,15 @@ suite "nimkit document tabs":
           budgetFound = true
         elif text == ">":
           nextFound = true
-        elif text == "×":
-          closeSymbolFound = true
-        elif text == "x":
+        elif text in ["x", "×"]:
           closeTextFound = true
+      elif node.hasDrawableOp(dkLine):
+        closeMarkFound = true
 
     check planFound
     check budgetFound
     check nextFound
-    check closeSymbolFound
+    check closeMarkFound
     check not closeTextFound
 
   test "document tab scroll buttons resolve document tab button theme fill":
