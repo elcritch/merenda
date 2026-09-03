@@ -88,6 +88,7 @@ type DrawContext* = ref object
   xRenderOrigin: nimkitTypes.Point
   xBounds: nimkitTypes.Rect
   xVisibleRect: nimkitTypes.Rect
+  xUsesVisibleRect: bool
   xAppearance: Appearance
   xResources: RenderResourceManifest
 
@@ -661,6 +662,7 @@ proc beginDraw*(
   context.xRenderOrigin = renderOrigin
   context.xBounds = bounds
   context.xVisibleRect = visibleRect
+  context.xUsesVisibleRect = false
   context.xAppearance = appearance
 
 proc renderList*(context: DrawContext): RenderList =
@@ -703,7 +705,12 @@ proc bounds*(context: DrawContext): nimkitTypes.Rect =
   context.xBounds
 
 proc visibleRect*(context: DrawContext): nimkitTypes.Rect =
+  context.xUsesVisibleRect = true
   context.xVisibleRect
+
+proc drawingDependsOnVisibleRect*(context: DrawContext): bool =
+  ## Reports whether the current drawing read its dynamically clipped bounds.
+  not context.isNil and context.xUsesVisibleRect
 
 proc addFig*(
     context: DrawContext, layer: ZLevel, parent: FigIdx, node: Fig

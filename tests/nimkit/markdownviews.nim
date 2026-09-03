@@ -12,6 +12,7 @@ const
   RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
   RepositoryReadme = RepositoryRoot / "README.md"
   TestImagePath = RepositoryRoot / "data" / "img1.png"
+  ReadmeLayoutTimeoutMilliseconds = 15_000
 
 proc runeIndexOf(text, needle: string): int =
   let
@@ -1042,7 +1043,7 @@ Press <kbd>Enter</kbd>.
     let
       singleElapsed = getMonoTime() - singleStarted
       singleSettleStarted = getMonoTime()
-    require first.waitForMarkdownLayout()
+    require first.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
     discard buildRenders(first)
     let
       singleSettleElapsed = getMonoTime() - singleSettleStarted
@@ -1061,8 +1062,8 @@ Press <kbd>Enter</kbd>.
     let
       pairElapsed = getMonoTime() - pairStarted
       pairSettleStarted = getMonoTime()
-    require first.waitForMarkdownLayout()
-    require second.waitForMarkdownLayout()
+    require first.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
+    require second.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
     discard buildRenders(first)
     discard buildRenders(second)
     let pairSettleElapsed = getMonoTime() - pairSettleStarted
