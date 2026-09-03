@@ -37,6 +37,13 @@ proc tableScrollViews(view: MarkdownView): seq[ScrollView] =
     if subview of ScrollView:
       result.add ScrollView(subview)
 
+proc textRangeRect(textView: TextView, range: TextRange): Rect =
+  for selectionRect in textView.selectionRects(range):
+    if result.isEmpty:
+      result = selectionRect
+    else:
+      result = result.union(selectionRect)
+
 proc unavailableMarkdownImage(url: string): ImageResource =
   discard url
 
@@ -837,8 +844,7 @@ Press <kbd>Enter</kbd>.
     let tableScrollView = tableScrollViews[0]
     check tableScrollView.hasHorizontalScroller
     check tableScrollView.maximumContentOffset().x > 0.0'f32
-    check tableScrollView.frame().maxX <=
-      view.scrollView().viewportSize().width + 0.001'f32
+    check abs(tableScrollView.frame().maxX - view.textView().bounds().maxX) <= 0.001'f32
 
     tableScrollView.contentOffset =
       initPoint(tableScrollView.maximumContentOffset().x, 0.0'f32)
@@ -852,12 +858,21 @@ Press <kbd>Enter</kbd>.
       tableRects =
         view.textView().selectionRects(initTextRange(tableStart, tableLineLength))
       viewportWidth = view.scrollView().viewportSize().width
+      tableRange = initTextRange(tableStart, rendered.runeLen - tableStart)
+      mainTableRect = view.textView().textRangeRect(tableRange)
+      tableTextView = TextView(tableScrollView.documentView())
+      localTableRect =
+        tableTextView.textRangeRect(initTextRange(0, tableTextView.textStorage().len))
 
     check paragraphRects.len > 1
     for rect in paragraphRects:
       check rect.maxX <= viewportWidth + 0.001'f32
     check tableRects.len == 1
     check tableRects[0].maxX > viewportWidth
+    check tableScrollView.frame().origin.y <= mainTableRect.minY + 0.001'f32
+    check tableScrollView.frame().origin.y + tableScrollView.viewportSize().height >=
+      mainTableRect.maxY - 0.001'f32
+    check localTableRect.maxY <= tableScrollView.viewportSize().height + 0.001'f32
 
     view.markdown = "The replacement document has no table."
     require view.waitForMarkdownParsing()
@@ -876,6 +891,46 @@ Press <kbd>Enter</kbd>.
 
     check view.scrollView().maximumContentOffset().x == 0.0'f32
     check view.tableScrollViews().len == 0
+
+  test "table scroller hides once the resized panel contains the table":
+    var
+      headers: seq[string]
+      dividers: seq[string]
+      values: seq[string]
+    for index in 0 ..< 20:
+      headers.add "Column " & $index
+      dividers.add "---"
+      values.add "CPU p95"
+    let
+      source =
+        "| " & headers.join(" | ") & " |\n| " & dividers.join(" | ") & " |\n| " &
+        values.join(" | ") & " |"
+      view = newMarkdownView(source, frame = rect(0, 0, 300, 200))
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let narrowScrollViews = view.tableScrollViews()
+    require narrowScrollViews.len == 1
+    require narrowScrollViews[0].maximumContentOffset().x > 0.0'f32
+    let fittingWidth = narrowScrollViews[0].documentSize().width + 100.0'f32
+
+    view.frame = rect(0, 0, fittingWidth, 200)
+    require view.waitForMarkdownRendering()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let fittingScrollViews = view.tableScrollViews()
+    require fittingScrollViews.len == 1
+    let fittingScrollView = fittingScrollViews[0]
+    check fittingScrollView.maximumContentOffset().x <= 0.001'f32
+    check fittingScrollView.horizontalScroller().hidden
+    check abs(
+      fittingScrollView.frame().size.height -
+        fittingScrollView.documentView().frame().size.height
+    ) <= 0.001'f32
 
   test "each overflowing GFM table gets its own horizontal scroll view":
     let

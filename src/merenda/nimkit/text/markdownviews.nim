@@ -1297,8 +1297,8 @@ proc textRangeRect(textView: TextView, range: TextRange): Rect =
       result = result.union(selectionRect)
 
 proc layoutMarkdownTables(textView: MarkdownTextView) =
-  let contentRect = textView.textContainer().layoutRect()
-  if contentRect.size.width <= 0.0'f32:
+  let tableViewportRight = textView.bounds().maxX
+  if tableViewportRight <= 0.0'f32:
     return
   for presentation in textView.markdownTables:
     let selectionRects = textView.selectionRects(presentation.range)
@@ -1310,22 +1310,28 @@ proc layoutMarkdownTables(textView: MarkdownTextView) =
     let
       scrollView = presentation.scrollView
       tableTextView = presentation.textView
-      tableHeight = max(tableRect.maxY - tableOrigin.y, tableRect.size.height)
-      viewportWidth = max(contentRect.maxX - tableOrigin.x, 0.0'f32)
-      frameHeight = tableHeight + scrollView.scrollerThickness()
-      initialDocumentWidth = max(tableRect.size.width, viewportWidth + 1.0'f32)
-    scrollView.setFrameFromLayout(
-      rect(tableOrigin.x, tableOrigin.y, viewportWidth, frameHeight)
-    )
+      parentTableHeight = max(tableRect.maxY - tableOrigin.y, tableRect.size.height)
+      viewportWidth = max(tableViewportRight - tableOrigin.x, 0.0'f32)
+      initialDocumentWidth = max(tableRect.size.width, viewportWidth)
     tableTextView.setFrameFromLayout(
-      rect(0.0'f32, 0.0'f32, initialDocumentWidth, tableHeight)
+      rect(0.0'f32, 0.0'f32, initialDocumentWidth, parentTableHeight)
     )
     let tableContentRect =
       tableTextView.textRangeRect(initTextRange(0, tableTextView.textStorage().len))
-    if tableContentRect.size.width > initialDocumentWidth:
-      tableTextView.setFrameFromLayout(
-        rect(0.0'f32, 0.0'f32, tableContentRect.size.width, tableHeight)
-      )
+    let
+      tableWidth = max(tableContentRect.maxX, tableContentRect.size.width)
+      tableHeight =
+        max(parentTableHeight, max(tableContentRect.maxY, tableContentRect.size.height))
+      documentWidth = max(tableWidth, viewportWidth)
+      scrollerHeight =
+        if tableWidth > viewportWidth:
+          scrollView.scrollerThickness()
+        else:
+          0.0'f32
+    scrollView.setFrameFromLayout(
+      rect(tableOrigin.x, tableOrigin.y, viewportWidth, tableHeight + scrollerHeight)
+    )
+    tableTextView.setFrameFromLayout(rect(0.0'f32, 0.0'f32, documentWidth, tableHeight))
     scrollView.tile()
 
 proc clearMarkdownTables(textView: MarkdownTextView) =
