@@ -371,13 +371,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
+          $helpOutput = Join-Path $env:RUNNER_TEMP 'kosmo-help.txt'
           $process = Start-Process `
             -FilePath "$PWD/dist/kosmo.exe" `
             -ArgumentList '--help' `
+            -RedirectStandardOutput $helpOutput `
             -Wait `
             -PassThru
           if ($process.ExitCode -ne 0) {
             exit $process.ExitCode
+          }
+          if ((Get-Content -Raw $helpOutput) -notmatch 'Usage: kosmo') {
+            throw 'Kosmo --help did not write the expected usage text.'
           }
 
       - name: Package Kosmo

@@ -27,6 +27,21 @@ type KosmoStandaloneCommandLine* = object ## Parsed standalone command-line opti
   arguments*: seq[string]
   filePath*: string
 
+proc writeKosmoUsage*() =
+  ## Write standalone usage when the process has an attached output handle.
+  when defined(windows):
+    let
+      output = getStdHandle(STD_OUTPUT_HANDLE)
+      usage = KosmoUsage
+    if output != INVALID_HANDLE_VALUE and output != Handle(0):
+      var bytesWritten: int32
+      discard winlean.writeFile(
+        output, unsafeAddr usage[0], usage.len.int32, addr bytesWritten, nil
+      )
+  else:
+    stdout.write KosmoUsage
+    stdout.flushFile()
+
 proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneCommandLine =
   ## Parse standalone Kosmo options while retaining every non-option argument.
   var
