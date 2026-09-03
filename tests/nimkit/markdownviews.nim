@@ -37,6 +37,17 @@ proc tableScrollViews(view: MarkdownView): seq[ScrollView] =
     if subview of ScrollView:
       result.add ScrollView(subview)
 
+proc codeBlockScrollViews(view: MarkdownView, includeHidden = false): seq[ScrollView] =
+  for subview in view.textView().subviews():
+    if subview of ScrollView:
+      let
+        scrollView = ScrollView(subview)
+        documentView = scrollView.documentView()
+      if documentView of TextView and
+          documentView.accessibilityLabel() == "Markdown code block" and
+          (includeHidden or not scrollView.hidden):
+        result.add scrollView
+
 proc textRangeRect(textView: TextView, range: TextRange): Rect =
   for selectionRect in textView.selectionRects(range):
     if result.isEmpty:
@@ -711,6 +722,77 @@ echo "fenced"
       if index < labels.high:
         let nextLabelFrame = renderedTextFrame(labels[index + 1])
         check nextLabelFrame.minY >= panelFrames[index].maxY
+
+  test "wide fenced and indented code blocks scroll within the Markdown document":
+    let
+      longLine = "let payload = \"" & "abcdefghij".repeat(18) & "\""
+      style = initMarkdownStyle()
+      source =
+        "A prose paragraph that should wrap to the Markdown viewport while code " &
+        "blocks below retain their source lines. ".repeat(3) & "\n\n```nim\n" & longLine &
+        "\n```\n\nBetween blocks.\n\n    " & longLine
+      view = newMarkdownView(source, frame = rect(0, 0, 320, 320), style = style)
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let
+      codeScrollViews = view.codeBlockScrollViews()
+      rendered = view.textStorage().stringValue()
+      codeStart = rendered.runeIndexOf(longLine)
+      paragraphStop = rendered.runeIndexOf("\n\n")
+    require codeScrollViews.len == 2
+    require codeStart >= 0
+    require paragraphStop > 0
+    for codeScrollView in codeScrollViews:
+      check codeScrollView.hasHorizontalScroller
+      check codeScrollView.maximumContentOffset().x > 0.0'f32
+      let expectedRightEdge =
+        view.textView().bounds().maxX - style.codeBlockStyle.outlineWidth
+      check abs(codeScrollView.frame().maxX - expectedRightEdge) <= 0.001'f32
+      let
+        codeTextView = TextView(codeScrollView.documentView())
+        localCodeRect =
+          codeTextView.textRangeRect(initTextRange(0, codeTextView.textStorage().len))
+      check localCodeRect.maxY <= codeScrollView.viewportSize().height + 0.001'f32
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+    let
+      sourceCodeAttributes = view.textStorage().attributesFor("payload")
+      localCodeAttributes = TextView(codeScrollViews[0].documentView())
+        .textStorage()
+        .attributesFor("payload")
+    check localCodeAttributes == sourceCodeAttributes
+
+    let
+      paragraphRects = view.textView().selectionRects(initTextRange(0, paragraphStop))
+      codeRects =
+        view.textView().selectionRects(initTextRange(codeStart, longLine.runeLen))
+      viewportWidth = view.scrollView().viewportSize().width
+    check paragraphRects.len > 1
+    for rect in paragraphRects:
+      check rect.maxX <= viewportWidth + 0.001'f32
+    check codeRects.len == 1
+    check codeRects[0].maxX > viewportWidth
+
+    codeScrollViews[0].contentOffset =
+      initPoint(codeScrollViews[0].maximumContentOffset().x, 0.0'f32)
+    check codeScrollViews[0].contentOffset().x > 0.0'f32
+    check codeScrollViews[1].contentOffset().x == 0.0'f32
+    check view.scrollView().contentOffset().x == 0.0'f32
+
+    var fittingWidth = 0.0'f32
+    for codeScrollView in codeScrollViews:
+      fittingWidth = max(fittingWidth, codeScrollView.documentSize().width)
+    view.frame = rect(0, 0, fittingWidth + 100.0'f32, 320)
+    view.layoutSubtreeIfNeeded()
+
+    check view.codeBlockScrollViews().len == 0
+    let hiddenCodeScrollViews = view.codeBlockScrollViews(includeHidden = true)
+    require hiddenCodeScrollViews.len == 2
+    for codeScrollView in hiddenCodeScrollViews:
+      check codeScrollView.horizontalScroller().hidden
+      check codeScrollView.maximumContentOffset().x <= 0.001'f32
 
   test "raw inline and block HTML remain inert and visibly muted":
     let
