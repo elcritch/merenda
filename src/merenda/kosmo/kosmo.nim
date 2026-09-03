@@ -4332,8 +4332,7 @@ proc runKosmo*(filePath = "") =
 when isMainModule:
   let commandLine = parseKosmoCommandLine(commandLineParams())
   if commandLine.help:
-    writeKosmoUsage()
-    quit(QuitSuccess)
+    echo KosmoUsage
   elif commandLine.background:
     launchKosmoInBackground(commandLine.arguments)
   else:

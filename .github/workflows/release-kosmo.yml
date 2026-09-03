@@ -371,18 +371,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
-          $helpOutput = Join-Path $env:RUNNER_TEMP 'kosmo-help.txt'
           $process = Start-Process `
             -FilePath "$PWD/dist/kosmo.exe" `
-            -ArgumentList '--help' `
-            -RedirectStandardOutput $helpOutput `
-            -Wait `
             -PassThru
-          if ($process.ExitCode -ne 0) {
-            exit $process.ExitCode
+          try {
+            if (-not $process.WaitForInputIdle(30000)) {
+              throw 'Kosmo did not become ready within 30 seconds.'
+            }
+            if ($process.HasExited) {
+              throw "Kosmo exited unexpectedly with code $($process.ExitCode)."
+            }
           }
-          if ((Get-Content -Raw $helpOutput) -notmatch 'Usage: kosmo') {
-            throw 'Kosmo --help did not write the expected usage text.'
+          finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+              $process.WaitForExit()
+            }
           }
 
       - name: Package Kosmo
