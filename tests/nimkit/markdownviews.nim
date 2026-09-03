@@ -32,6 +32,29 @@ proc attributesFor(storage: TextStorage, needle: string): TextAttributes =
   doAssert index >= 0, "rendered Markdown should contain: " & needle
   storage.attributesAt(index)
 
+proc tableScrollViews(view: MarkdownView): seq[ScrollView] =
+  for subview in view.textView().subviews():
+    if subview of ScrollView:
+      result.add ScrollView(subview)
+
+proc codeBlockScrollViews(view: MarkdownView, includeHidden = false): seq[ScrollView] =
+  for subview in view.textView().subviews():
+    if subview of ScrollView:
+      let
+        scrollView = ScrollView(subview)
+        documentView = scrollView.documentView()
+      if documentView of TextView and
+          documentView.accessibilityLabel() == "Markdown code block" and
+          (includeHidden or not scrollView.hidden):
+        result.add scrollView
+
+proc textRangeRect(textView: TextView, range: TextRange): Rect =
+  for selectionRect in textView.selectionRects(range):
+    if result.isEmpty:
+      result = selectionRect
+    else:
+      result = result.union(selectionRect)
+
 proc unavailableMarkdownImage(url: string): ImageResource =
   discard url
 
@@ -704,6 +727,77 @@ echo "fenced"
         let nextLabelFrame = renderedTextFrame(labels[index + 1])
         check nextLabelFrame.minY >= panelFrames[index].maxY
 
+  test "wide fenced and indented code blocks scroll within the Markdown document":
+    let
+      longLine = "let payload = \"" & "abcdefghij".repeat(18) & "\""
+      style = initMarkdownStyle()
+      source =
+        "A prose paragraph that should wrap to the Markdown viewport while code " &
+        "blocks below retain their source lines. ".repeat(3) & "\n\n```nim\n" & longLine &
+        "\n```\n\nBetween blocks.\n\n    " & longLine
+      view = newMarkdownView(source, frame = rect(0, 0, 320, 320), style = style)
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let
+      codeScrollViews = view.codeBlockScrollViews()
+      rendered = view.textStorage().stringValue()
+      codeStart = rendered.runeIndexOf(longLine)
+      paragraphStop = rendered.runeIndexOf("\n\n")
+    require codeScrollViews.len == 2
+    require codeStart >= 0
+    require paragraphStop > 0
+    for codeScrollView in codeScrollViews:
+      check codeScrollView.hasHorizontalScroller
+      check codeScrollView.maximumContentOffset().x > 0.0'f32
+      let expectedRightEdge =
+        view.textView().bounds().maxX - style.codeBlockStyle.outlineWidth
+      check abs(codeScrollView.frame().maxX - expectedRightEdge) <= 0.001'f32
+      let
+        codeTextView = TextView(codeScrollView.documentView())
+        localCodeRect =
+          codeTextView.textRangeRect(initTextRange(0, codeTextView.textStorage().len))
+      check localCodeRect.maxY <= codeScrollView.viewportSize().height + 0.001'f32
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+    let
+      sourceCodeAttributes = view.textStorage().attributesFor("payload")
+      localCodeAttributes = TextView(codeScrollViews[0].documentView())
+        .textStorage()
+        .attributesFor("payload")
+    check localCodeAttributes == sourceCodeAttributes
+
+    let
+      paragraphRects = view.textView().selectionRects(initTextRange(0, paragraphStop))
+      codeRects =
+        view.textView().selectionRects(initTextRange(codeStart, longLine.runeLen))
+      viewportWidth = view.scrollView().viewportSize().width
+    check paragraphRects.len > 1
+    for rect in paragraphRects:
+      check rect.maxX <= viewportWidth + 0.001'f32
+    check codeRects.len == 1
+    check codeRects[0].maxX > viewportWidth
+
+    codeScrollViews[0].contentOffset =
+      initPoint(codeScrollViews[0].maximumContentOffset().x, 0.0'f32)
+    check codeScrollViews[0].contentOffset().x > 0.0'f32
+    check codeScrollViews[1].contentOffset().x == 0.0'f32
+    check view.scrollView().contentOffset().x == 0.0'f32
+
+    var fittingWidth = 0.0'f32
+    for codeScrollView in codeScrollViews:
+      fittingWidth = max(fittingWidth, codeScrollView.documentSize().width)
+    view.frame = rect(0, 0, fittingWidth + 100.0'f32, 320)
+    view.layoutSubtreeIfNeeded()
+
+    check view.codeBlockScrollViews().len == 0
+    let hiddenCodeScrollViews = view.codeBlockScrollViews(includeHidden = true)
+    require hiddenCodeScrollViews.len == 2
+    for codeScrollView in hiddenCodeScrollViews:
+      check codeScrollView.horizontalScroller().hidden
+      check codeScrollView.maximumContentOffset().x <= 0.001'f32
+
   test "raw inline and block HTML remain inert and visibly muted":
     let
       style = initMarkdownStyle()
@@ -806,7 +900,7 @@ Press <kbd>Enter</kbd>.
     check storage.attributesFor("Metric").fontSize == style.bodyFontSize * 0.9'f32
     check storage.attributesFor("CPU p95").fontSize == style.bodyFontSize * 0.9'f32
 
-  test "wide GFM tables use horizontal overflow while Markdown still wraps":
+  test "wide GFM tables scroll independently while the Markdown document fits":
     let
       source =
         "A deliberately long paragraph that should continue to use wrapped text " &
@@ -818,15 +912,30 @@ Press <kbd>Enter</kbd>.
     require view.waitForMarkdownParsing()
     discard buildRenders(view)
     require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
 
     check view.wraps
-    check view.scrollView().hasHorizontalScroller
-    check view.scrollView().maximumContentOffset().x > 0.0'f32
     let
+      tableScrollViews = view.tableScrollViews()
       rendered = view.textStorage().stringValue()
       paragraphStop = rendered.runeIndexOf("\n\n")
       tableStart = paragraphStop + 2
       tableLineLength = rendered.runeSubStr(tableStart).runeIndexOf("\n")
+
+    check not view.scrollView().hasHorizontalScroller
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+    check view.textView().frame().size.width <=
+      view.scrollView().viewportSize().width + 0.001'f32
+    require tableScrollViews.len == 1
+    let tableScrollView = tableScrollViews[0]
+    check tableScrollView.hasHorizontalScroller
+    check tableScrollView.maximumContentOffset().x > 0.0'f32
+    check abs(tableScrollView.frame().maxX - view.textView().bounds().maxX) <= 0.001'f32
+
+    tableScrollView.contentOffset =
+      initPoint(tableScrollView.maximumContentOffset().x, 0.0'f32)
+    check tableScrollView.contentOffset().x > 0.0'f32
+    check view.scrollView().contentOffset().x == 0.0'f32
 
     require paragraphStop > 0
     require tableLineLength > 0
@@ -835,12 +944,28 @@ Press <kbd>Enter</kbd>.
       tableRects =
         view.textView().selectionRects(initTextRange(tableStart, tableLineLength))
       viewportWidth = view.scrollView().viewportSize().width
+      tableRange = initTextRange(tableStart, rendered.runeLen - tableStart)
+      mainTableRect = view.textView().textRangeRect(tableRange)
+      tableTextView = TextView(tableScrollView.documentView())
+      localTableRect =
+        tableTextView.textRangeRect(initTextRange(0, tableTextView.textStorage().len))
 
     check paragraphRects.len > 1
     for rect in paragraphRects:
       check rect.maxX <= viewportWidth + 0.001'f32
     check tableRects.len == 1
     check tableRects[0].maxX > viewportWidth
+    check tableScrollView.frame().origin.y <= mainTableRect.minY + 0.001'f32
+    check tableScrollView.frame().origin.y + tableScrollView.viewportSize().height >=
+      mainTableRect.maxY - 0.001'f32
+    check localTableRect.maxY <= tableScrollView.viewportSize().height + 0.001'f32
+
+    view.markdown = "The replacement document has no table."
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+    check view.tableScrollViews().len == 0
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
 
   test "compact GFM tables stay within the Markdown viewport":
     let view = newMarkdownView(
@@ -850,6 +975,72 @@ Press <kbd>Enter</kbd>.
     discard buildRenders(view)
     require view.waitForMarkdownLayout()
 
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+    check view.tableScrollViews().len == 0
+
+  test "table scroller hides once the resized panel contains the table":
+    var
+      headers: seq[string]
+      dividers: seq[string]
+      values: seq[string]
+    for index in 0 ..< 20:
+      headers.add "Column " & $index
+      dividers.add "---"
+      values.add "CPU p95"
+    let
+      source =
+        "| " & headers.join(" | ") & " |\n| " & dividers.join(" | ") & " |\n| " &
+        values.join(" | ") & " |"
+      view = newMarkdownView(source, frame = rect(0, 0, 300, 200))
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let narrowScrollViews = view.tableScrollViews()
+    require narrowScrollViews.len == 1
+    require narrowScrollViews[0].maximumContentOffset().x > 0.0'f32
+    let fittingWidth = narrowScrollViews[0].documentSize().width + 100.0'f32
+
+    view.frame = rect(0, 0, fittingWidth, 200)
+    require view.waitForMarkdownRendering()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let fittingScrollViews = view.tableScrollViews()
+    require fittingScrollViews.len == 1
+    let fittingScrollView = fittingScrollViews[0]
+    check fittingScrollView.maximumContentOffset().x <= 0.001'f32
+    check fittingScrollView.horizontalScroller().hidden
+    check abs(
+      fittingScrollView.frame().size.height -
+        fittingScrollView.documentView().frame().size.height
+    ) <= 0.001'f32
+
+  test "each overflowing GFM table gets its own horizontal scroll view":
+    let
+      wideTable =
+        "| A | B | C | D | E | F | G | H |\n" & "| - | - | - | - | - | - | - | - |\n" &
+        "| CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | " &
+        "CPU p95 | CPU p95 |"
+      view = newMarkdownView(
+        wideTable & "\n\nBetween the tables.\n\n" & wideTable,
+        frame = rect(0, 0, 300, 320),
+      )
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let tableScrollViews = view.tableScrollViews()
+    require tableScrollViews.len == 2
+    for tableScrollView in tableScrollViews:
+      check tableScrollView.maximumContentOffset().x > 0.0'f32
+    tableScrollViews[0].contentOffset =
+      initPoint(tableScrollViews[0].maximumContentOffset().x, 0.0'f32)
+    check tableScrollViews[0].contentOffset().x > 0.0'f32
+    check tableScrollViews[1].contentOffset().x == 0.0'f32
     check view.scrollView().maximumContentOffset().x == 0.0'f32
 
   test "GFM tables reflow once the Markdown viewport settles":

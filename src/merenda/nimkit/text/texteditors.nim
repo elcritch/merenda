@@ -294,7 +294,7 @@ proc textDocumentSize(
         defaultFontSize()
     documentWidth =
       if editor.xWraps:
-        max(max(viewportWidth, editor.xMinimumWrappedDocumentWidth), textWidth)
+        max(viewportWidth, editor.xMinimumWrappedDocumentWidth)
       else:
         max(max(textWidth, viewportWidth), editor.xMinimumDocumentSize.width)
   initSize(
