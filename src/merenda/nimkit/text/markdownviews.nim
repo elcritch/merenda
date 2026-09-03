@@ -587,6 +587,10 @@ proc renderList(
   attributes: TextAttributes,
 )
 
+func endsWithCodeBlock(builder: MarkdownBuilder): bool =
+  builder.codeBlockRanges.len > 0 and
+    builder.codeBlockRanges[^1].maxIndex == builder.runeLength
+
 proc renderListItem(
     builder: var MarkdownBuilder,
     item: markdownParser.Li,
@@ -604,10 +608,16 @@ proc renderListItem(
   var first = true
   for child in item.children:
     if child of markdownParser.Ul or child of markdownParser.Ol:
-      builder.add("\n", attributes)
+      if builder.endsWithCodeBlock():
+        builder.addBlockBreak(attributes)
+      else:
+        builder.add("\n", attributes)
       builder.renderList(child, depth + 1, attributes)
     else:
-      if not first:
+      if child of markdownParser.CodeBlock or builder.endsWithCodeBlock():
+        builder.addBlockBreak(attributes)
+        builder.add(continuation, attributes)
+      elif not first:
         builder.add("\n" & continuation, attributes)
       builder.renderBlock(child, attributes)
     first = false
@@ -627,7 +637,10 @@ proc renderList(
   for child in token.children:
     if child of markdownParser.Li:
       if not first:
-        builder.add("\n", attributes)
+        if builder.endsWithCodeBlock():
+          builder.addBlockBreak(attributes)
+        else:
+          builder.add("\n", attributes)
       let marker =
         if token of markdownParser.Ol:
           $index & "."

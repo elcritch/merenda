@@ -1,4 +1,4 @@
-import std/[os, strutils, tempfiles, unittest]
+import std/[os, osproc, strutils, tempfiles, unittest]
 
 import regex
 import sigils/core
@@ -75,6 +75,82 @@ suite "nimkit memory-mapped file search":
       check searchResult.stats.mappedFileCount == 2
       check searchResult.stats.bytesSearched > 0
       check spy.finishedIdentifiers == @[handle.identifier()]
+    finally:
+      service.close()
+      removeDir(root)
+
+  test "uses Git tracked and untracked non-ignored files by default":
+    let
+      root = createTempDir("merenda-file-search-git-ignore-", "")
+      ignoredDirectory = root / "build"
+      service = newFileSearchService(workers = 1)
+    createDir(ignoredDirectory)
+    writeFile(root / ".gitignore", "build/\n")
+    writeFile(root / "tracked.nim", "tracked needle\n")
+    writeFile(root / "untracked.nim", "untracked needle\n")
+    writeFile(ignoredDirectory / "generated.nim", "ignored needle\n")
+    discard execProcess(
+      "git",
+      workingDir = root,
+      args = ["init", "-q"],
+      options = {poUsePath, poStdErrToStdOut},
+    )
+    discard execProcess(
+      "git",
+      workingDir = root,
+      args = ["add", "tracked.nim"],
+      options = {poUsePath, poStdErrToStdOut},
+    )
+    require dirExists(root / ".git")
+
+    try:
+      block defaultOptions:
+        let searchResult = service.runSearch(root, "needle").result()
+        check searchResult.reason == fsfrCompleted
+        check searchResult.matches.len == 2
+        check searchResult.matches[0].path == root / "tracked.nim"
+        check searchResult.matches[1].path == root / "untracked.nim"
+
+      block includeIgnored:
+        let
+          options = initFileSearchOptions(respectGitIgnore = false)
+          searchResult = service.runSearch(root, "needle", options).result()
+        check searchResult.reason == fsfrCompleted
+        check searchResult.matches.len == 3
+        check searchResult.matches[^1].path == ignoredDirectory / "generated.nim"
+    finally:
+      service.close()
+      removeDir(root)
+
+  test "skips non-text MIME types and unsupported encodings by default":
+    let
+      root = createTempDir("merenda-file-search-content-type-", "")
+      service = newFileSearchService(workers = 1)
+    writeFile(root / "plain.txt", "plain needle\n")
+    writeFile(root / "source.dart", "source needle\n")
+    writeFile(root / "misleading.png", "image needle\n")
+    writeFile(root / "binary.dat", "blob\0needle\n")
+    writeFile(root / "invalid.txt", "\xffneedle\n")
+
+    try:
+      block defaultOptions:
+        let searchResult = service.runSearch(root, "needle").result()
+        check searchResult.reason == fsfrCompleted
+        check searchResult.matches.len == 2
+        check searchResult.matches[0].path == root / "plain.txt"
+        check searchResult.matches[1].path == root / "source.dart"
+        check searchResult.stats.discoveredFileCount == 5
+        check searchResult.stats.searchedFileCount == 2
+        check searchResult.stats.skippedNonTextFileCount == 3
+
+      block includeBinaryFiles:
+        let
+          options = initFileSearchOptions(includeBinaryFiles = true)
+          searchResult = service.runSearch(root, "needle", options).result()
+        check searchResult.reason == fsfrCompleted
+        check searchResult.matches.len == 5
+        check searchResult.stats.searchedFileCount == 5
+        check searchResult.stats.skippedNonTextFileCount == 0
     finally:
       service.close()
       removeDir(root)
