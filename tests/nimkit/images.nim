@@ -365,3 +365,29 @@ suite "nimkit image resources":
       manager.prepare(recovery.renderer, liveManifest)
       check retainedImage.imageId().Hash in recovery.context.entries
       check unrelatedImage.imageId().Hash notin recovery.context.entries
+
+    test "renderer-thread atlas recovery filters by transferred resource IDs":
+      clearImageCache()
+      let
+        retainedImage = newImageResource(testImage(3, 2))
+        unrelatedImage = newImageResource(testImage(4, 3))
+        manager = newRenderResourceManager()
+        recovery = newRecoveryRenderer()
+      recovery.context.resetOnSecondUpload = false
+      recovery.context.packedArea = 0
+      var
+        liveManifest = initRenderResourceManifest()
+        unrelatedManifest = initRenderResourceManifest()
+      liveManifest.addImage(retainedImage)
+      unrelatedManifest.addImage(unrelatedImage)
+      let liveSnapshot = liveManifest.snapshot()
+
+      manager.prepare(recovery.renderer)
+      check retainedImage.imageId().Hash in recovery.context.entries
+      check unrelatedImage.imageId().Hash in recovery.context.entries
+
+      recovery.renderer.rebuildImageAtlas()
+      manager.prepare(recovery.renderer, liveSnapshot)
+      check retainedImage.imageId().Hash in recovery.context.entries
+      check unrelatedImage.imageId().Hash notin recovery.context.entries
+      check manager.metrics.generationRecoveryCount >= 1

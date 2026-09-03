@@ -62,6 +62,7 @@ type
     extraHandles: Table[ZLevel, RenderFragmentHandle]
     externalParent: RenderViewId
     captureGeneration: uint64
+    changeGeneration: uint64
 
   RetiredRenderResources = object
     releaseGeneration: uint64
@@ -78,8 +79,31 @@ type
     perViewMode: bool
     liveResources: RenderResourceManifest
     retiredResources: seq[RetiredRenderResources]
+    identity: uint64
+    baseLevel: ZLevel
+    replicaMode: bool
+    fullTransferGeneration: uint64
 
-var renderViewIdCounter: uint64
+  RenderSceneUpdate* = object
+    ## Move-only cumulative update for a renderer-owned scene replica.
+    ##
+    ## Every update contains the complete current placement order, but only
+    ## contributions changed after `baseGeneration` carry node payloads. A full
+    ## update carries every payload and acts as an ordering barrier.
+    sceneIdentity: uint64
+    baseGeneration: uint64
+    generation: uint64
+    full: bool
+    baseLevel: ZLevel
+    frames: seq[RenderViewFrame]
+    resources: RenderResourceSnapshot
+
+var
+  renderViewIdCounter: uint64
+  renderSceneIdCounter: uint64
+
+proc `=copy`*(destination: var RenderSceneUpdate, source: RenderSceneUpdate) {.error.}
+proc `=dup`*(source: RenderSceneUpdate): RenderSceneUpdate {.error.}
 
 func `==`*(a, b: RenderViewId): bool {.borrow.}
 func hash*(id: RenderViewId): Hash {.borrow.}
@@ -94,10 +118,24 @@ proc nextRenderViewId*(): RenderViewId =
   renderViewIdCounter.advance()
   renderViewIdCounter.RenderViewId
 
-proc newRenderScene*(): RenderScene =
+proc nextRenderSceneId(): uint64 =
+  renderSceneIdCounter.advance()
+  renderSceneIdCounter
+
+proc initRenderScene(identity: uint64): RenderScene =
   RenderScene(
-    tree: newRenderFragments(), viewEntries: initTable[RenderViewId, ViewRenderEntry]()
+    tree: newRenderFragments(),
+    viewEntries: initTable[RenderViewId, ViewRenderEntry](),
+    identity: identity,
   )
+
+proc newRenderScene*(): RenderScene =
+  initRenderScene(nextRenderSceneId())
+
+proc newRenderSceneReplica*(): RenderScene =
+  ## Creates renderer-owned storage whose application identity comes from updates.
+  result = initRenderScene(0)
+  result.replicaMode = true
 
 proc copyRenderList(list: RenderList): RenderList =
   result.nodes = newSeqOfCap[Fig](list.nodes.len)
@@ -106,6 +144,48 @@ proc copyRenderList(list: RenderList): RenderList =
   result.rootIds = newSeqOfCap[FigIdx](list.rootIds.len)
   for root in list.rootIds:
     result.rootIds.add root
+
+proc isolateSequence[T](values: openArray[T]): seq[T] =
+  result = newSeqOfCap[T](values.len)
+  for value in values:
+    result.add value
+
+proc isolateGlyphArrangement(layout: GlyphArrangement): GlyphArrangement =
+  result = layout
+  result.lines = layout.lines.isolateSequence()
+  result.spans = layout.spans.isolateSequence()
+  result.fonts = layout.fonts.isolateSequence()
+  result.spanColors = layout.spanColors.isolateSequence()
+  result.sourceRunes = layout.sourceRunes.isolateSequence()
+  result.arrangedGlyphs = layout.arrangedGlyphs.isolateSequence()
+  result.runes = layout.runes.isolateSequence()
+  result.positions = layout.positions.isolateSequence()
+  result.selectionRects = layout.selectionRects.isolateSequence()
+
+proc isolateDrawableOp(operation: DrawableOp): DrawableOp =
+  result = operation
+  if operation.kind == dkBezier:
+    result.controls = operation.controls.isolateSequence()
+
+proc isolateFig(node: Fig): Fig =
+  result = node
+  case node.kind
+  of nkText:
+    result.textLayout = node.textLayout.isolateGlyphArrangement()
+  of nkDrawable:
+    result.drawOps = newSeqOfCap[DrawableOp](node.drawOps.len)
+    for operation in node.drawOps:
+      result.drawOps.add operation.isolateDrawableOp()
+  else:
+    discard
+
+proc isolateRenderList(list: RenderList): RenderList =
+  ## Clones nested glyph/drawable sequences as well as the outer node storage.
+  ## Renderer updates must not share ARC-managed payloads with the UI scene.
+  result.nodes = newSeqOfCap[Fig](list.nodes.len)
+  for node in list.nodes:
+    result.nodes.add node.isolateFig()
+  result.rootIds = list.rootIds.isolateSequence()
 
 proc shellRenderList(node: Fig): RenderList =
   discard result.addRoot(node)
@@ -230,19 +310,25 @@ proc desiredLevels(
         result.add extra.level
 
 proc attachRoot(
-    scene: RenderScene, level: ZLevel, contents: RenderList
+    scene: RenderScene, level: ZLevel, contents: var RenderList
 ): RenderFragmentHandle =
-  scene.tree.attachRootFragment(level, 0, contents.copyRenderList())
+  if scene.replicaMode:
+    scene.tree.attachRootFragment(level, 0, move contents)
+  else:
+    scene.tree.attachRootFragment(level, 0, contents.copyRenderList())
 
 proc attachChild(
-    scene: RenderScene, parent: RenderCursor, contents: RenderList
+    scene: RenderScene, parent: RenderCursor, contents: var RenderList
 ): RenderFragmentHandle =
-  scene.tree.attachChildFragment(parent, 0, contents.copyRenderList())
+  if scene.replicaMode:
+    scene.tree.attachChildFragment(parent, 0, move contents)
+  else:
+    scene.tree.attachChildFragment(parent, 0, contents.copyRenderList())
 
 proc attachViewEntry(
     scene: RenderScene, entry: var ViewRenderEntry, parent: RenderViewId
 ) =
-  let shellList = entry.shell.shellRenderList()
+  var shellList = entry.shell.shellRenderList()
   if parent.uint64 == 0:
     entry.shellHandle = scene.attachRoot(entry.cacheKey.level, shellList)
   else:
@@ -263,7 +349,7 @@ proc attachViewEntry(
       scene.attachChild(scene.viewEntries[parent].shellCursor, entry.escapedContents)
 
   entry.extraHandles = initTable[ZLevel, RenderFragmentHandle]()
-  for extra in entry.extraLayers:
+  for extra in entry.extraLayers.mitems:
     entry.extraHandles[extra.level] = scene.attachRoot(extra.level, extra.contents)
   entry.externalParent = parent
 
@@ -293,19 +379,30 @@ proc rebuildTree(
 
 proc updateCapturedEntry(scene: RenderScene, entry: var ViewRenderEntry) =
   scene.tree.updateNode(entry.shellCursor, entry.shell)
-  entry.selfHandle =
-    scene.tree.replaceFragment(entry.selfHandle, entry.selfContents.copyRenderList())
-  entry.escapedHandle = scene.tree.replaceFragment(
-    entry.escapedHandle, entry.escapedContents.copyRenderList()
-  )
+  if scene.replicaMode:
+    entry.selfHandle =
+      scene.tree.replaceFragment(entry.selfHandle, move entry.selfContents)
+    entry.escapedHandle =
+      scene.tree.replaceFragment(entry.escapedHandle, move entry.escapedContents)
+  else:
+    entry.selfHandle =
+      scene.tree.replaceFragment(entry.selfHandle, entry.selfContents.copyRenderList())
+    entry.escapedHandle = scene.tree.replaceFragment(
+      entry.escapedHandle, entry.escapedContents.copyRenderList()
+    )
 
   var retained = initTable[ZLevel, bool]()
-  for extra in entry.extraLayers:
+  for extra in entry.extraLayers.mitems:
     retained[extra.level] = true
     if extra.level in entry.extraHandles:
-      entry.extraHandles[extra.level] = scene.tree.replaceFragment(
-        entry.extraHandles[extra.level], extra.contents.copyRenderList()
-      )
+      if scene.replicaMode:
+        entry.extraHandles[extra.level] = scene.tree.replaceFragment(
+          entry.extraHandles[extra.level], move extra.contents
+        )
+      else:
+        entry.extraHandles[extra.level] = scene.tree.replaceFragment(
+          entry.extraHandles[extra.level], extra.contents.copyRenderList()
+        )
     else:
       entry.extraHandles[extra.level] = scene.attachRoot(extra.level, extra.contents)
 
@@ -378,7 +475,7 @@ proc mergeEntryResources(
     result.addResources(scene.viewEntries[frame.viewId].resources)
 
 proc reconcile*(
-    scene: RenderScene, frames: openArray[RenderViewFrame], baseLevel: ZLevel
+    scene: RenderScene, frames: var seq[RenderViewFrame], baseLevel: ZLevel
 ): bool {.discardable.} =
   ## Reconciles one frame while retaining clean per-view drawing fragments.
   ##
@@ -395,8 +492,9 @@ proc reconcile*(
     changed = topologyChanged
     levelChanged = false
     seen = initTable[RenderViewId, bool]()
+    changedViews: seq[RenderViewId]
 
-  for frame in frames:
+  for frame in frames.mitems:
     seen[frame.viewId] = true
     let existed = frame.viewId in scene.viewEntries and scene.perViewMode
     if not existed and not frame.captured:
@@ -415,12 +513,13 @@ proc reconcile*(
       if existed and not entry.extraLayers.sameLayerShape(frame.extraLayers):
         topologyChanged = true
       entry.cacheKey = frame.cacheKey
-      entry.shell = frame.shell
-      entry.selfContents = frame.selfContents.copyRenderList()
-      entry.escapedContents = frame.escapedContents.copyRenderList()
-      entry.extraLayers = frame.extraLayers
-      entry.resources = frame.resources
+      entry.shell = move frame.shell
+      entry.selfContents = move frame.selfContents
+      entry.escapedContents = move frame.escapedContents
+      entry.extraLayers = move frame.extraLayers
+      entry.resources = move frame.resources
       entry.captureGeneration.advance()
+      changedViews.add frame.viewId
       changed = true
     elif entry.cacheKey != frame.cacheKey:
       raise newException(ValueError, "a changed render view must include a capture")
@@ -442,6 +541,11 @@ proc reconcile*(
 
   var nextGeneration = scene.generation
   nextGeneration.advance()
+
+  for viewId in changedViews:
+    scene.viewEntries[viewId].changeGeneration = nextGeneration
+  if rebuild:
+    scene.fullTransferGeneration = nextGeneration
 
   if rebuild:
     for viewId in removed:
@@ -483,9 +587,126 @@ proc reconcile*(
   scene.liveResources = resources
   scene.placements = placements
   scene.rootLevels = levels
+  scene.baseLevel = baseLevel
   scene.generation = nextGeneration
   scene.perViewMode = true
   true
+
+proc copyLayerContributions(
+    layers: openArray[RenderLayerContribution]
+): seq[RenderLayerContribution] =
+  result = newSeqOfCap[RenderLayerContribution](layers.len)
+  for layer in layers:
+    result.add RenderLayerContribution(
+      level: layer.level, contents: layer.contents.isolateRenderList()
+    )
+
+proc transferFrame(
+    entry: ViewRenderEntry, placement: ViewPlacement, captured: bool
+): RenderViewFrame =
+  result = RenderViewFrame(
+    viewId: placement.viewId,
+    parentViewId: placement.parentViewId,
+    cacheKey: entry.cacheKey,
+    captured: captured,
+  )
+  if captured:
+    result.shell = entry.shell.isolateFig()
+    result.selfContents = entry.selfContents.isolateRenderList()
+    result.escapedContents = entry.escapedContents.isolateRenderList()
+    result.extraLayers = entry.extraLayers.copyLayerContributions()
+
+proc newRenderSceneUpdate*(
+    scene: RenderScene,
+    acknowledgedSceneIdentity: uint64,
+    acknowledgedGeneration: uint64,
+    forceFull = false,
+): RenderSceneUpdate =
+  ## Builds a self-contained cumulative update from an acknowledged baseline.
+  ##
+  ## The update owns independent node sequences. It can therefore be moved to a
+  ## renderer thread without sharing the mutable application scene or its
+  ## FigDraw fragment handles.
+  if scene.isNil:
+    raise newException(ValueError, "cannot transfer a nil render scene")
+  if not scene.perViewMode:
+    raise newException(ValueError, "only reconciled per-view scenes can be transferred")
+
+  let full =
+    forceFull or acknowledgedSceneIdentity != scene.identity or
+    acknowledgedGeneration == 0 or acknowledgedGeneration > scene.generation or
+    scene.fullTransferGeneration > acknowledgedGeneration
+  result.sceneIdentity = scene.identity
+  result.baseGeneration = if full: 0 else: acknowledgedGeneration
+  result.generation = scene.generation
+  result.full = full
+  result.baseLevel = scene.baseLevel
+  result.frames = newSeqOfCap[RenderViewFrame](scene.placements.len)
+  for placement in scene.placements:
+    let entry = scene.viewEntries[placement.viewId]
+    result.frames.add entry.transferFrame(
+      placement, full or entry.changeGeneration > acknowledgedGeneration
+    )
+  result.resources = scene.liveResources.snapshot()
+
+func sceneIdentity*(scene: RenderScene): uint64 =
+  if scene.isNil: 0 else: scene.identity
+
+func sceneIdentity*(update: RenderSceneUpdate): uint64 =
+  update.sceneIdentity
+
+func baseGeneration*(update: RenderSceneUpdate): uint64 =
+  update.baseGeneration
+
+func generation*(update: RenderSceneUpdate): uint64 =
+  update.generation
+
+func fullSnapshot*(update: RenderSceneUpdate): bool =
+  update.full
+
+func capturedViewCount*(update: RenderSceneUpdate): Natural =
+  for frame in update.frames:
+    if frame.captured:
+      inc result
+
+func viewCount*(update: RenderSceneUpdate): Natural =
+  update.frames.len.Natural
+
+func canApply*(
+    update: RenderSceneUpdate, currentSceneIdentity, currentGeneration: uint64
+): bool =
+  ## Checks ordering without consulting renderer-local fragment generations.
+  ##
+  ## Cumulative updates can apply to a renderer newer than their baseline, but
+  ## never to an older one. Full updates establish a new ordering epoch.
+  if update.sceneIdentity == 0 or update.generation == 0:
+    return false
+  if update.full:
+    return
+      update.sceneIdentity != currentSceneIdentity or
+      update.generation >= currentGeneration
+  update.sceneIdentity == currentSceneIdentity and
+    update.baseGeneration <= currentGeneration and update.generation >= currentGeneration
+
+proc apply*(scene: RenderScene, update: var RenderSceneUpdate) =
+  ## Applies an accepted update to renderer-owned scene storage.
+  if scene.isNil:
+    raise newException(ValueError, "cannot update a nil renderer scene")
+  if not update.canApply(scene.identity, scene.generation):
+    raise
+      newException(ValueError, "render-scene update is stale or has a generation gap")
+  if update.full:
+    for frame in update.frames:
+      if not frame.captured:
+        raise
+          newException(ValueError, "a full render-scene update must capture every view")
+  discard scene.reconcile(update.frames, update.baseLevel)
+  scene.identity = update.sceneIdentity
+  scene.generation = update.generation
+
+proc takeResources*(update: var RenderSceneUpdate): RenderResourceSnapshot =
+  ## Moves the update's thread-safe live-resource identities to its receiver.
+  result = move update.resources
 
 proc materialize*(scene: RenderScene): Renders =
   ## Returns an independent monolithic snapshot for diagnostics and transfer.

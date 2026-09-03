@@ -11,9 +11,13 @@ import merenda/nimkit/app/windows
 import merenda/nimkit/foundation/selectors
 import merenda/nimkit/foundation/types as nimkitTypes
 import merenda/nimkit/drawing
+import merenda/nimkit/drawing/renderscenes as retainedScenes
 import merenda/nimkit/view/views
 
-type RaisingDrawView = ref object of View
+type
+  RaisingDrawView = ref object of View
+  ThreadResourceView = ref object of View
+    image: ImageResource
 
 protocol RaisingDrawing of ViewDrawingProtocol:
   method draw(view: RaisingDrawView, context: DrawContext) =
@@ -21,10 +25,21 @@ protocol RaisingDrawing of ViewDrawingProtocol:
     discard context
     raise newException(ValueError, "intentional drawing failure")
 
+protocol ThreadResourceDrawing of ViewDrawingProtocol:
+  method draw(view: ThreadResourceView, context: DrawContext) =
+    discard context.addImage(nimkitTypes.rect(2, 3, 12, 8), view.image)
+
 proc newRaisingDrawView(frame: nimkitTypes.Rect): RaisingDrawView =
   result = RaisingDrawView()
   initViewFields(result, frame)
   discard result.withProtocol(RaisingDrawing)
+
+proc newThreadResourceView(
+    frame: nimkitTypes.Rect, image: ImageResource
+): ThreadResourceView =
+  result = ThreadResourceView(image: image)
+  initViewFields(result, frame)
+  discard result.withProtocol(ThreadResourceDrawing)
 
 proc waitForRendererThread(client: nimkitBackend.ThreadRendererClient): int =
   for _ in 0 ..< 100:
@@ -109,6 +124,76 @@ suite "NimKit threading":
     require host.channels.pollLatestRender(latest)
     check latest.logicalSize == nimkitTypes.initSize(100.0, 20.0)
     check not host.channels.renders.tryRecv(latest)
+
+  test "fragment updates coalesce cumulatively from the acknowledged generation":
+    let
+      runtime = nimkitBackend.newThreadRenderer()
+      host = nimkitBackend.newThreadHostClient(runtime.client)
+      root = newView(frame = nimkitTypes.rect(0, 0, 180, 100))
+      first = newView(frame = nimkitTypes.rect(5, 5, 50, 30))
+      second = newView(frame = nimkitTypes.rect(60, 5, 50, 30))
+      logicalSize = nimkitTypes.initSize(180.0, 100.0)
+    root.addSubview(first)
+    root.addSubview(second)
+
+    let scene = root.buildRenderScene()
+    doAssert host.submitRenderScene(scene, logicalSize)
+    var initial: nimkitBackend.ThreadRenderSnapshot
+    require host.channels.renders.tryRecv(initial)
+    check initial.usesFragments
+    check initial.targetGeneration == 1
+    check retainedScenes.fullSnapshot(initial.sceneUpdate)
+    check retainedScenes.capturedViewCount(initial.sceneUpdate) == 3
+    check initial.status(1, 0, 0, 0) == nimkitBackend.trssAccepted
+    check initial.status(2, 0, 0, 0) == nimkitBackend.trssStaleTarget
+    check initial.status(1, initial.renderId, 0, 0) == nimkitBackend.trssStaleRender
+
+    let replica = retainedScenes.newRenderSceneReplica()
+    var initialUpdate = move initial.sceneUpdate
+    retainedScenes.apply(replica, initialUpdate)
+    host.acknowledgeRender(initial.renderId)
+    let acknowledgedGeneration = scene.frameGeneration()
+
+    first.backgroundColor = color(0.8, 0.2, 0.1)
+    first.needsDisplay = true
+    discard root.buildRenderScene()
+    doAssert host.submitRenderScene(scene, logicalSize)
+
+    second.backgroundColor = color(0.1, 0.7, 0.3)
+    second.needsDisplay = true
+    discard root.buildRenderScene()
+    doAssert host.submitRenderScene(scene, logicalSize)
+
+    var latest: nimkitBackend.ThreadRenderSnapshot
+    require host.channels.pollLatestRender(latest)
+    check latest.usesFragments
+    check not retainedScenes.fullSnapshot(latest.sceneUpdate)
+    check retainedScenes.baseGeneration(latest.sceneUpdate) == acknowledgedGeneration
+    check retainedScenes.capturedViewCount(latest.sceneUpdate) == 2
+    check latest.status(1, initial.renderId, retainedScenes.sceneIdentity(scene), 0) ==
+      nimkitBackend.trssSceneGap
+    check not host.channels.renders.tryRecv(latest)
+
+    var latestUpdate = move latest.sceneUpdate
+    check retainedScenes.canApply(
+      latestUpdate, retainedScenes.sceneIdentity(scene), acknowledgedGeneration
+    )
+    retainedScenes.apply(replica, latestUpdate)
+    check replica.materialize().len(0.ZLevel) == scene.materialize().len(0.ZLevel)
+    host.acknowledgeRender(latest.renderId)
+
+    let replacement = newView(frame = nimkitTypes.rect(0, 0, 180, 100))
+    let replacementScene = replacement.buildRenderScene()
+    doAssert host.submitRenderScene(replacementScene, logicalSize)
+    var barrier: nimkitBackend.ThreadRenderSnapshot
+    require host.channels.pollLatestRender(barrier)
+    check retainedScenes.fullSnapshot(barrier.sceneUpdate)
+
+    host.rejectRenderUpdate(barrier.renderId)
+    doAssert host.submitRenderScene(replacementScene, logicalSize)
+    var recovery: nimkitBackend.ThreadRenderSnapshot
+    require host.channels.pollLatestRender(recovery)
+    check retainedScenes.fullSnapshot(recovery.sceneUpdate)
 
   test "application loop stays on the platform thread when rendering is direct":
     let
@@ -210,3 +295,39 @@ suite "NimKit threading":
     check hasImage(second.imageId())
     host.clearRenderResources()
     check not hasImage(second.imageId())
+
+  test "fragment acknowledgements release the originating scene resources":
+    clearImageCache()
+    let
+      runtime = nimkitBackend.newThreadRenderer()
+      host = nimkitBackend.newThreadHostClient(runtime.client)
+      first = newImageResource(pixie.newImage(2, 2))
+      second = newImageResource(pixie.newImage(3, 3))
+      view = newThreadResourceView(nimkitTypes.rect(0, 0, 40, 30), first)
+      logicalSize = nimkitTypes.initSize(40.0, 30.0)
+    var scene = view.buildRenderScene()
+
+    doAssert host.submitRenderScene(scene, logicalSize)
+    var initial: nimkitBackend.ThreadRenderSnapshot
+    require host.channels.pollLatestRender(initial)
+    host.acknowledgeRender(initial.renderId)
+    check hasImage(first.imageId())
+
+    view.image = second
+    view.needsDisplay = true
+    discard view.buildRenderScene()
+    check scene.retiredResourceCount() == 1
+    doAssert host.submitRenderScene(scene, logicalSize)
+    var replacement: nimkitBackend.ThreadRenderSnapshot
+    require host.channels.pollLatestRender(replacement)
+    check hasImage(first.imageId())
+    check hasImage(second.imageId())
+
+    host.acknowledgeRender(replacement.renderId)
+    check scene.retiredResourceCount() == 0
+    check not hasImage(first.imageId())
+    check hasImage(second.imageId())
+    host.clearRenderResources()
+    view.invalidateRenderCache()
+    scene = nil
+    clearImageCache()

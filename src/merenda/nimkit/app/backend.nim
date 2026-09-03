@@ -132,6 +132,7 @@ type
 
   ThreadHostEventKind* = enum
     theRendered
+    theRenderUpdateRejected
     theRenderTargetReleased
 
   ThreadHostEvent* = object
@@ -153,6 +154,16 @@ type
     renders*: Renders
     logicalSize*: Size
     renderId*: uint64
+    targetGeneration*: uint64
+    when not defined(useNativeDynlib):
+      usesFragments*: bool
+      sceneUpdate*: RenderSceneUpdate
+
+  ThreadRenderSnapshotStatus* = enum
+    trssAccepted
+    trssStaleTarget
+    trssStaleRender
+    trssSceneGap
 
   ThreadHostChannels* = object
     events*: ThreadHostEventQueue
@@ -178,6 +189,10 @@ type
   ThreadRenderResourceLease = object
     renderId: uint64
     resources: RenderResourceManifest
+    when not defined(useNativeDynlib):
+      scene: RenderScene
+      sceneIdentity: uint64
+      sceneGeneration: uint64
 
   ThreadHostClient* = ref object
     id*: ThreadHostId
@@ -187,6 +202,10 @@ type
     nextRenderId: uint64
     renderTargetAttached: bool
     renderTargetReleasePending: bool
+    targetGeneration: uint64
+    acknowledgedSceneIdentity: uint64
+    acknowledgedSceneGeneration: uint64
+    forceFullSceneUpdate: bool
     activeResources: RenderResourceManifest
     pendingResources: Deque[ThreadRenderResourceLease]
     rendererWakeups: Chan[bool]
@@ -213,9 +232,15 @@ type
     channels: ThreadHostChannels
     lastRenders: Renders
     lastRenderId: uint64
+    targetGeneration: uint64
     logicalSize: Size
     transparent: bool
     renderCount: Natural
+    when not defined(useNativeDynlib):
+      lastScene: RenderScene
+      lastSceneIdentity: uint64
+      lastSceneGeneration: uint64
+      lastFragmentResources: RenderResourceSnapshot
 
   ThreadRenderer* = ref object
     commands: Chan[ThreadRendererCommand]
@@ -405,6 +430,8 @@ proc newThreadHostClient*(renderer: ThreadRendererClient): ThreadHostClient =
     ),
     rendererWakeups: renderer.wakeups,
     pendingResources: initDeque[ThreadRenderResourceLease](),
+    targetGeneration: 1,
+    forceFullSceneUpdate: true,
   )
   inc renderer.nextHostId
 
@@ -423,12 +450,54 @@ proc submitRenders*(
   )
   host.channels.renders.pushLatest(
     ThreadRenderSnapshot(
-      renders: ensureMove renders, logicalSize: logicalSize, renderId: renderId
+      renders: ensureMove renders,
+      logicalSize: logicalSize,
+      renderId: renderId,
+      targetGeneration: host.targetGeneration,
     )
   )
   host.rendererWakeups.wakeRenderer()
   host.renderRequested = true
   true
+
+when not defined(useNativeDynlib):
+  proc submitRenderScene*(
+      host: ThreadHostClient, scene: RenderScene, logicalSize: Size
+  ): bool {.discardable.} =
+    ## Submits a cumulative, independently owned fragment update.
+    if host.isNil or scene.isNil:
+      return false
+
+    inc host.nextRenderId
+    let
+      renderId = host.nextRenderId
+      sceneIdentity = scene.sceneIdentity()
+      sceneGeneration = scene.frameGeneration()
+    var update = scene.newRenderSceneUpdate(
+      host.acknowledgedSceneIdentity, host.acknowledgedSceneGeneration,
+      host.forceFullSceneUpdate,
+    )
+    host.pendingResources.addLast(
+      ThreadRenderResourceLease(
+        renderId: renderId,
+        resources: scene.renderResources(),
+        scene: scene,
+        sceneIdentity: sceneIdentity,
+        sceneGeneration: sceneGeneration,
+      )
+    )
+    host.channels.renders.pushLatest(
+      ThreadRenderSnapshot(
+        logicalSize: logicalSize,
+        renderId: renderId,
+        targetGeneration: host.targetGeneration,
+        usesFragments: true,
+        sceneUpdate: ensureMove update,
+      )
+    )
+    host.rendererWakeups.wakeRenderer()
+    host.renderRequested = true
+    true
 
 proc acknowledgeRender*(host: ThreadHostClient, renderId: uint64) =
   if host.isNil or renderId == 0:
@@ -437,12 +506,33 @@ proc acknowledgeRender*(host: ThreadHostClient, renderId: uint64) =
       host.pendingResources.peekFirst().renderId <= renderId:
     var lease = host.pendingResources.popFirst()
     host.activeResources = move lease.resources
+    when not defined(useNativeDynlib):
+      if not lease.scene.isNil:
+        lease.scene.acknowledgeRenderGeneration(lease.sceneGeneration)
+        host.acknowledgedSceneIdentity = lease.sceneIdentity
+        host.acknowledgedSceneGeneration = lease.sceneGeneration
+        host.forceFullSceneUpdate = false
+
+proc rejectRenderUpdate*(host: ThreadHostClient, renderId: uint64) =
+  ## Drops rejected leases and forces the next fragment submission to be full.
+  if host.isNil:
+    return
+  while host.pendingResources.len > 0 and
+      host.pendingResources.peekFirst().renderId <= renderId:
+    discard host.pendingResources.popFirst()
+  host.acknowledgedSceneIdentity = 0
+  host.acknowledgedSceneGeneration = 0
+  host.forceFullSceneUpdate = true
+  host.renderRequested = false
 
 proc clearRenderResources*(host: ThreadHostClient) =
   if host.isNil:
     return
   host.activeResources = nil
   host.pendingResources.clear()
+  host.acknowledgedSceneIdentity = 0
+  host.acknowledgedSceneGeneration = 0
+  host.forceFullSceneUpdate = true
 
 proc pollEvent*(host: ThreadHostClient, event: var ThreadHostEvent): bool =
   not host.isNil and host.channels.events.poll(event)
@@ -454,6 +544,21 @@ proc pollLatestRender*(
   while channels.renders.tryRecv(pending):
     snapshot = move pending
     result = true
+
+func status*(
+    snapshot: ThreadRenderSnapshot,
+    targetGeneration, lastRenderId, sceneIdentity, sceneGeneration: uint64,
+): ThreadRenderSnapshotStatus =
+  ## Validates target and scene ordering before a renderer mutates its replica.
+  if snapshot.targetGeneration != targetGeneration:
+    return trssStaleTarget
+  if snapshot.renderId <= lastRenderId:
+    return trssStaleRender
+  when not defined(useNativeDynlib):
+    if snapshot.usesFragments and
+        not snapshot.sceneUpdate.canApply(sceneIdentity, sceneGeneration):
+      return trssSceneGap
+  trssAccepted
 
 type UiScaleOverride* = object
   envName*: string
@@ -1431,6 +1536,7 @@ proc attachThreadRenderer*(
       renderer: move host.xRenderer,
       resources: move host.xResources,
       channels: result.channels,
+      targetGeneration: result.targetGeneration,
       logicalSize: logicalSize,
       transparent: host.xTransparent,
     )
@@ -1446,6 +1552,9 @@ proc detachThreadRenderer*(
     return
   client.renderTargetAttached = false
   client.renderTargetReleasePending = true
+  inc client.targetGeneration
+  if client.targetGeneration == 0:
+    client.targetGeneration = 1
   client.clearRenderResources()
   if not renderer.isNil:
     renderer.sendCommand(
@@ -1798,21 +1907,88 @@ proc acceptPendingRender(state: ThreadRendererHost): bool =
   var snapshot: ThreadRenderSnapshot
   if not state.channels.pollLatestRender(snapshot):
     return
-  state.lastRenders = move snapshot.renders
+  when not defined(useNativeDynlib):
+    let snapshotStatus = snapshot.status(
+      state.targetGeneration, state.lastRenderId, state.lastSceneIdentity,
+      state.lastSceneGeneration,
+    )
+  else:
+    let snapshotStatus =
+      snapshot.status(state.targetGeneration, state.lastRenderId, 0, 0)
+  if snapshotStatus != trssAccepted:
+    state.postEvent(
+      ThreadHostEvent(kind: theRenderUpdateRejected, renderId: snapshot.renderId)
+    )
+    return
+
+  when not defined(useNativeDynlib):
+    if snapshot.usesFragments:
+      var update = move snapshot.sceneUpdate
+      let destination =
+        if update.fullSnapshot():
+          newRenderSceneReplica()
+        else:
+          state.lastScene
+      if destination.isNil:
+        state.postEvent(
+          ThreadHostEvent(kind: theRenderUpdateRejected, renderId: snapshot.renderId)
+        )
+        return
+      try:
+        destination.apply(update)
+      except CatchableError:
+        state.postEvent(
+          ThreadHostEvent(kind: theRenderUpdateRejected, renderId: snapshot.renderId)
+        )
+        return
+      state.lastScene = destination
+      state.lastSceneIdentity = update.sceneIdentity()
+      state.lastSceneGeneration = update.generation()
+      state.lastFragmentResources = update.takeResources()
+      state.lastRenders = nil
+    else:
+      state.lastRenders = move snapshot.renders
+      state.lastScene = nil
+      state.lastSceneIdentity = 0
+      state.lastSceneGeneration = 0
+      state.lastFragmentResources = default(RenderResourceSnapshot)
+  else:
+    state.lastRenders = move snapshot.renders
   state.lastRenderId = snapshot.renderId
   state.logicalSize = snapshot.logicalSize
   true
 
 proc renderLatest(state: ThreadRendererHost) =
-  if state.isNil or state.renderer.isNil or state.lastRenders.isNil:
+  if state.isNil or state.renderer.isNil:
     return
-  state.resources.prepare(state.renderer)
+  when not defined(useNativeDynlib):
+    if state.lastScene.isNil and state.lastRenders.isNil:
+      return
+    if state.lastScene.isNil:
+      state.resources.prepare(state.renderer)
+    else:
+      state.resources.prepare(state.renderer, state.lastFragmentResources)
+  else:
+    if state.lastRenders.isNil:
+      return
+    state.resources.prepare(state.renderer)
   let size = vec2(state.logicalSize.width, state.logicalSize.height)
   state.renderer.beginFrame()
-  if state.transparent:
-    state.renderer.renderFrame(state.lastRenders, size, clearColor = clearColor)
+  when not defined(useNativeDynlib):
+    if not state.lastScene.isNil:
+      if state.transparent:
+        state.lastScene.renderFrame(state.renderer, size, clearFrameColor = clearColor)
+      else:
+        state.lastScene.renderFrame(state.renderer, size)
+    elif state.transparent:
+      state.renderer.renderFrame(state.lastRenders, size, clearColor = clearColor)
+    else:
+      state.renderer.renderFrame(state.lastRenders, size)
   else:
-    state.renderer.renderFrame(state.lastRenders, size)
+    if state.transparent:
+      state.renderer.renderFrame(state.lastRenders, size, clearColor = clearColor)
+    else:
+      state.renderer.renderFrame(state.lastRenders, size)
   state.renderer.endFrame()
   inc state.renderCount
   state.postEvent(

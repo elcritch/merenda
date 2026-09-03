@@ -9,9 +9,12 @@ import ./drawing/chrome
 import ./drawing/chromes/aquachrome
 import ./drawing/chromes/flattransparentchrome
 
-export drawing, rendering, images, svgimages, renderresources
+export drawing, rendering, images, svgimages
+export renderresources except RenderResourceSnapshot, snapshot
 when not defined(useNativeDynlib):
   export renderscenes except
     RenderLayerContribution, RenderViewCacheKey, RenderViewFrame, needsViewCapture,
-    reconcile, renderFrame, renderRoot
+    RenderSceneUpdate, apply, baseGeneration, canApply, capturedViewCount, generation,
+    fullSnapshot, newRenderSceneReplica, newRenderSceneUpdate, reconcile, renderFrame,
+    renderRoot, sceneIdentity, takeResources, viewCount
 export chrome, aquachrome, flattransparentchrome

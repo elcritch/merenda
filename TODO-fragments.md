@@ -4,9 +4,11 @@
 
 Implementation began with [FigDraw PR #72](https://github.com/elcritch/figdraw/pull/72)
 and the initial NimKit scene foundation on `feature/incremental-render-fragments`.
-Checked items below are covered by those branches; unchecked items remain follow-up
-work, primarily renderer-thread deltas. Per-view contribution caching and direct
-fragment-native rendering continue on `feature/per-view-render-fragment-cache`.
+FigDraw support shipped in 0.36.0, and the initial NimKit scene foundation was
+merged on `feature/incremental-render-fragments`. Per-view contribution caching,
+direct fragment rendering, and the dedicated-renderer update protocol are complete
+on `feature/per-view-render-fragment-cache`. The unchecked FigDraw validator and
+items under Deferred Work are not part of the NimKit implementation.
 
 ## Recommendation
 
@@ -19,9 +21,9 @@ render cache.
   many roots.
 - NimKit should cache vector/render-tree fragments at this stage. It should not
   add a separate rasterized-view or texture cache yet.
-- Enable fragment-native rendering first on the direct static renderer.
+- Enable fragment-native rendering on both direct and dedicated static renderers.
 - Preserve monolithic `Renders` through a flattening/materialization API for
-  compatibility, diagnostics, and the initial renderer-thread implementation.
+  compatibility and diagnostics.
 - Do not share a mutable fragment graph between the application and renderer
   threads.
 - Dynlib integration is outside the scope of this work.
@@ -186,7 +188,7 @@ preserve exact layer, root, sibling, clipping, and transform order.
 - [x] Make materialization deterministic.
 - [x] Keep the returned tree independent of subsequent fragment mutations.
 - [x] Use materialization for diagnostics, differential tests, public
-      `buildRenders`, and initial threaded rendering.
+      `buildRenders`, and compatibility rendering.
 
 ## NimKit retained render scene
 
@@ -318,38 +320,49 @@ Do not move a `RenderFragments` graph to the renderer thread while the UI scene
 retains handles into it. That would alias mutable fragment objects and node
 storage across threads.
 
-Initial behavior:
+Implemented behavior:
 
 - Direct static rendering reconciles and renders the mutable application-thread
   fragment graph synchronously without materializing `Renders`.
 - Public/diagnostic `buildRenders` retains compatibility by materializing lazily
   and caching the monolithic result until the scene changes.
-- The dedicated renderer continues receiving moved monolithic snapshots and
-  invalidates the submitted root cache.
+- The application scene builds a cumulative update from the last acknowledged
+  scene generation. Every update contains the complete view placement order and
+  node payloads only for contributions changed after that baseline.
+- Updates are move-only and carry copied node sequences plus font/image IDs. They
+  never carry application-thread resource handles or FigDraw fragment handles.
+- The dedicated renderer owns a separate `RenderScene` and moves received node
+  payloads into its own fragment graph before rendering it directly.
+- The bounded two-entry channel coalesces superseded frames. Because the newest
+  update is cumulative from the acknowledged generation, dropping an intermediate
+  update cannot omit one of its fragment replacements.
+- Target, render, scene, and baseline generations are checked before mutating the
+  renderer replica. New scenes, changed layer sets, target replacement, and an
+  explicitly forced recovery are full-update ordering barriers.
+- Render acknowledgement advances the application's cumulative baseline and
+  releases retired fragment resource manifests. Rejection clears that baseline,
+  drops rejected leases, and forces the next update to be full.
+- Atlas recovery uses the transferred live font/image ID set to replay and retain
+  only resources referenced by the accepted scene.
 - No mutable fragment graph crosses the renderer-thread boundary.
 
-This path captures the main CPU benefit while retaining the existing safe thread
-ownership boundary.
-
-A later threaded fragment protocol should make the renderer own a separate graph
-and accept move-only immutable replacement batches stamped with:
+The complete threaded update is stamped with the equivalent of:
 
 ```text
-hostId
 targetGeneration
-scene/tree epoch
-layer epoch
-fragmentId and version
-frame/resource generation
+renderId
+scene identity
+acknowledged base generation
+current scene/resource generation
 ```
 
-- [ ] Bound and coalesce queued replacements by fragment and generation.
-- [ ] Treat clear, layer replacement, target replacement, and full snapshots as
+- [x] Bound and coalesce queued replacements by fragment and generation.
+- [x] Treat clear, layer replacement, target replacement, and full snapshots as
       ordering barriers.
-- [ ] Reject obsolete target, scene, layer, atlas, and fragment generations.
-- [ ] Acknowledge the applied frame/update generation before releasing payloads
+- [x] Reject obsolete target, scene, layer, atlas, and fragment generations.
+- [x] Acknowledge the applied frame/update generation before releasing payloads
       and resources.
-- [ ] Send a full current snapshot after target replacement or when a delta chain
+- [x] Send a full current snapshot after target replacement or when a delta chain
       cannot be applied safely.
 
 ## Tests
@@ -391,9 +404,9 @@ Fig indexes.
 - [x] Structural reconciliation does not redraw unaffected view content.
 - [x] Fragment-backed and monolithic rendering emit equivalent renderer
       operations.
-- [ ] Coalesced thread updates apply the newest valid replacement.
-- [ ] Clear and target-replacement barriers discard stale queued updates.
-- [ ] Resource leases survive until the corresponding renderer acknowledgement.
+- [x] Coalesced thread updates apply the newest valid replacement.
+- [x] Clear and target-replacement barriers discard stale queued updates.
+- [x] Resource leases survive until the corresponding renderer acknowledgement.
 
 ## Performance baseline
 
@@ -444,6 +457,33 @@ dependency pin was advanced:
 NimKit reconciliation should therefore use an isolated move for isolated
 changes and the bulk APIs whenever it already knows a complete sibling order.
 
+`tests/benchmark_markdown_scroll.nim` profiles a more realistic dirty-frame
+workload: the repository's 35,919-byte README in a 760 x 540 `MarkdownView`,
+scrolled bidirectionally over 240 measured frames after 20 warmup frames. It
+measures CPU-side view drawing/reconciliation, bounded-channel handoff,
+renderer-replica application, and acknowledgement; GPU execution is deliberately
+excluded. The renderer stages are serialized in the diagnostic so its CPU total
+is comparable even though production runs them on separate threads.
+
+On the same Apple M3 Pro, the pre-PR monolithic path and completed fragment-native
+path measured:
+
+| Pipeline | wall median | wall p95 | CPU median | CPU p95 | prepare median | transfer median | apply/ack median |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| pre-PR monolithic | 11.439 ms | 12.165 ms | 11.437 ms | 12.144 ms | 11.366 ms | 0.001 ms | 0.001 ms |
+| fragment-native | 15.182 ms | 16.573 ms | 15.181 ms | 16.571 ms | 12.414 ms | 2.245 ms | 0.478 ms |
+
+The median CPU cost is 32.7% higher and p95 is 36.4% higher in this continuously
+dirty scrolling workload. View preparation itself is 9.2% higher; including the
+deep, ARC-isolated transfer clone, total application-thread preparation is 29.0%
+higher.
+Of 1,200 view placements, 714 (59.5%) carried changed contributions; the other
+40.5% reused retained fragments. The result remains in the same order of
+magnitude, and the flat 10,000-view benchmark above confirms linear scaling with
+no population-dependent cliff. The remaining constant-factor cost is primarily
+the independent cross-thread clone of nested text/drawable data plus
+renderer-replica application.
+
 ## Delivery sequence
 
 1. Add failing FigDraw tests for foreign, stale, detached, empty, and raw-mutation
@@ -457,8 +497,8 @@ changes and the bulk APIs whenever it already knows a complete sibling order.
 5. Add per-contribution manifests, live-frame merging, and retirement by frame or
    acknowledgement.
 6. Enable fragment-native rendering for the direct static renderer.
-7. Keep the renderer thread on materialized snapshots until immutable fragment
-   replacement batches and acknowledgements are complete.
+7. Send cumulative move-only fragment updates to a renderer-owned scene and
+   acknowledge applied generations before releasing resources.
 
 ## Deferred work
 

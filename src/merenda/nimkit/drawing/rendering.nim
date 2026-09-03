@@ -196,6 +196,27 @@ when not defined(useNativeDynlib):
     for child in source.nodes.childIndex(sourceRoot):
       source.appendSubtree(child, destination, destinationRoot)
 
+  proc takeOnlyRootChildren(
+      source: var RenderList,
+      sourceRoot: FigIdx,
+      shell: var Fig,
+      contents: var RenderList,
+  ) =
+    ## Splits the common single-root capture without copying every `Fig`.
+    ## `captureViewFrame` creates the shell first, so its index is zero.
+    shell = source.nodes[sourceRoot.int]
+    shell.parent = (-1).FigIdx
+    shell.childCount = 0
+    contents.nodes = move source.nodes
+    for index in 1 ..< contents.nodes.len:
+      if contents.nodes[index].parent == sourceRoot:
+        contents.nodes[index].parent = (-1).FigIdx
+        contents.rootIds.add (index - 1).FigIdx
+      else:
+        contents.nodes[index].parent = (contents.nodes[index].parent.int - 1).FigIdx
+    contents.nodes.delete(0)
+    source.rootIds.setLen(0)
+
   proc captureViewFrame(
       view: View,
       viewId: RenderViewId,
@@ -232,15 +253,18 @@ when not defined(useNativeDynlib):
       captured: true,
       resources: context.resources,
     )
-    let ownLayer = context.renders.layers[cacheKey.level]
-    result.shell = ownLayer.nodes[rootIdx.int]
-    result.shell.parent = (-1).FigIdx
-    result.shell.childCount = 0
-    for child in ownLayer.nodes.childIndex(rootIdx):
-      ownLayer.appendSubtree(child, result.selfContents)
-    for escapedRoot in ownLayer.rootIds:
-      if escapedRoot != rootIdx:
-        ownLayer.appendSubtree(escapedRoot, result.escapedContents)
+    var ownLayer = move context.renders.layers[cacheKey.level]
+    if rootIdx.int == 0 and ownLayer.rootIds == @[rootIdx]:
+      ownLayer.takeOnlyRootChildren(rootIdx, result.shell, result.selfContents)
+    else:
+      result.shell = ownLayer.nodes[rootIdx.int]
+      result.shell.parent = (-1).FigIdx
+      result.shell.childCount = 0
+      for child in ownLayer.nodes.childIndex(rootIdx):
+        ownLayer.appendSubtree(child, result.selfContents)
+      for escapedRoot in ownLayer.rootIds:
+        if escapedRoot != rootIdx:
+          ownLayer.appendSubtree(escapedRoot, result.escapedContents)
     for level, list in context.renders.pairs():
       if level != cacheKey.level and list.nodes.len > 0:
         result.extraLayers.add RenderLayerContribution(level: level, contents: list)

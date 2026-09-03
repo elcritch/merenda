@@ -12,6 +12,7 @@ type
   CountedSceneView = ref object of View
     drawCount: int
     drawColor: Color
+    drawLevelValue: ZLevel
     invalidatesDuringDraw: bool
 
   MultiOutputSceneView = ref object of View
@@ -51,6 +52,9 @@ protocol ScenePopupDrawing of ViewDrawingProtocol:
     context.addRectangle(rect(1, 1, 8, 6), color(0.2, 0.5, 0.9))
 
 protocol CountedSceneDrawing of ViewDrawingProtocol:
+  method drawLevel(view: CountedSceneView): ZLevel =
+    view.drawLevelValue
+
   method draw(view: CountedSceneView, context: DrawContext) =
     inc view.drawCount
     context.addRectangle(rect(1, 2, 9, 7), view.drawColor)
@@ -265,6 +269,80 @@ proc testImage(width, height: int): Image =
   result.fill(rgba(64, 128, 192, 255))
 
 suite "NimKit render fragments":
+  test "cumulative scene updates apply after coalescing and reject stale baselines":
+    let
+      root = newView(frame = rect(0, 0, 180, 120))
+      first = newCountedSceneView(rect(5, 6, 50, 30), color(0.2, 0.3, 0.4))
+      second = newCountedSceneView(rect(62, 6, 50, 30), color(0.5, 0.6, 0.7))
+    root.addSubview(first)
+    root.addSubview(second)
+
+    let scene = root.buildRenderScene()
+    let
+      sceneIdentity = retainedScenes.sceneIdentity(scene)
+      acknowledgedGeneration = scene.frameGeneration()
+      replica = retainedScenes.newRenderSceneReplica()
+    var full = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+    check retainedScenes.fullSnapshot(full)
+    check retainedScenes.baseGeneration(full) == 0
+    check retainedScenes.capturedViewCount(full) == 3
+    check retainedScenes.canApply(full, 0, 0)
+    retainedScenes.apply(replica, full)
+    check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
+
+    first.drawColor = color(0.8, 0.1, 0.2)
+    first.needsDisplay = true
+    discard root.buildRenderScene()
+    let skippedGeneration = scene.frameGeneration()
+
+    second.drawColor = color(0.1, 0.8, 0.3)
+    second.needsDisplay = true
+    discard root.buildRenderScene()
+    let latestGeneration = scene.frameGeneration()
+    var cumulative =
+      retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, acknowledgedGeneration)
+
+    check not retainedScenes.fullSnapshot(cumulative)
+    check retainedScenes.baseGeneration(cumulative) == acknowledgedGeneration
+    check retainedScenes.generation(cumulative) == latestGeneration
+    check skippedGeneration > acknowledgedGeneration
+    check latestGeneration > skippedGeneration
+    check retainedScenes.capturedViewCount(cumulative) == 2
+    check retainedScenes.canApply(cumulative, sceneIdentity, acknowledgedGeneration)
+    retainedScenes.apply(replica, cumulative)
+    check replica.frameGeneration() == latestGeneration
+    check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
+    check not retainedScenes.canApply(full, sceneIdentity, latestGeneration)
+    expect ValueError:
+      retainedScenes.apply(replica, full)
+
+    let replacement = newView(frame = rect(0, 0, 180, 120)).buildRenderScene()
+    var barrier =
+      retainedScenes.newRenderSceneUpdate(replacement, sceneIdentity, latestGeneration)
+    check retainedScenes.fullSnapshot(barrier)
+    check retainedScenes.canApply(barrier, sceneIdentity, latestGeneration)
+
+  test "layer changes force a full renderer-scene ordering barrier":
+    let
+      root = newView(frame = rect(0, 0, 180, 120))
+      child = newCountedSceneView(rect(5, 6, 50, 30), color(0.2, 0.3, 0.4))
+    root.addSubview(child)
+
+    let scene = root.buildRenderScene()
+    let
+      sceneIdentity = retainedScenes.sceneIdentity(scene)
+      acknowledgedGeneration = scene.frameGeneration()
+
+    child.drawLevelValue = PopupDrawLevel
+    child.needsDisplay = true
+    discard root.buildRenderScene()
+    var barrier =
+      retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, acknowledgedGeneration)
+
+    check retainedScenes.fullSnapshot(barrier)
+    check retainedScenes.baseGeneration(barrier) == 0
+    check retainedScenes.capturedViewCount(barrier) == 2
+
   test "scene materializes monolithic order and sweeps removed views":
     let
       root = newView(frame = rect(0, 0, 160, 120))
