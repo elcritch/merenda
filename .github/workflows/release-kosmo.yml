@@ -1,0 +1,430 @@
+name: release-kosmo
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version embedded in manual-build binaries
+        required: false
+        default: 0.0.0
+        type: string
+      notarize_macos:
+        description: Sign and notarize the manual macOS build
+        required: false
+        default: false
+        type: boolean
+  pull_request:
+    paths:
+      - .github/workflows/release-kosmo.yml
+      - packaging/macos/Info.plist
+
+permissions:
+  contents: read
+
+env:
+  NIM_VERSION: 2.2.10
+  KOSMO_RELEASE_VERSION: ${{ github.event.release.tag_name || inputs.version || '0.0.0' }}
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Linux build libraries
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libegl1-mesa-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libvulkan-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
+            libxcursor-dev \
+            libxkbcommon-dev \
+            libxrender-dev
+
+      - name: Install GrabNim
+        run: |
+          curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
+          echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
+
+      - name: Install Nim
+        run: |
+          grabnim "$NIM_VERSION"
+          nim -v
+
+      - name: Install Atlas
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          atlas -v
+
+      - name: Cache packages
+        uses: actions/cache@v4
+        with:
+          path: deps/
+          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
+
+      - name: Install dependencies
+        run: atlas install -tuk --features:kosmo
+
+      - name: Build Kosmo
+        run: |
+          version="${KOSMO_RELEASE_VERSION#v}"
+          revision="${GITHUB_SHA:0:12}"
+          mkdir -p build dist
+          nim c \
+            --opt:size \
+            --debugger:off \
+            --lineTrace:off \
+            --stackTrace:off \
+            -d:KosmoVersion="$version" \
+            -d:KosmoGitHashOverride="$revision" \
+            --out:build/kosmo \
+            src/merenda/kosmo/kosmo.nim
+          strip build/kosmo
+          build/kosmo --help
+          if ldd build/kosmo | grep -q 'not found'; then
+            ldd build/kosmo
+            exit 1
+          fi
+
+      - name: Package Kosmo
+        run: tar -czf dist/kosmo-linux-amd64.tar.gz -C build kosmo
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: kosmo-linux-amd64
+          path: dist/kosmo-linux-amd64.tar.gz
+          if-no-files-found: error
+
+  build-macos:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: 13.0
+      NOTARIZE_MACOS: ${{ github.event_name == 'release' || inputs.notarize_macos == true }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install GrabNim
+        run: |
+          curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
+          echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
+
+      - name: Install Nim
+        run: |
+          grabnim "$NIM_VERSION"
+          nim -v
+
+      - name: Install Atlas
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          atlas -v
+
+      - name: Cache packages
+        uses: actions/cache@v4
+        with:
+          path: deps/
+          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
+
+      - name: Install dependencies
+        run: atlas install -tuk --features:kosmo
+
+      - name: Validate signing credentials
+        if: env.NOTARIZE_MACOS == 'true'
+        env:
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          missing=()
+          for name in \
+            APPLE_DEVELOPER_ID_P12_BASE64 \
+            APPLE_DEVELOPER_ID_P12_PASSWORD \
+            APPLE_ID \
+            APPLE_TEAM_ID \
+            APPLE_APP_SPECIFIC_PASSWORD
+          do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} != 0 )); then
+            printf 'Missing required macOS release secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Import Developer ID certificate
+        if: env.NOTARIZE_MACOS == 'true'
+        env:
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          certificate_path="$RUNNER_TEMP/kosmo-developer-id.p12"
+          keychain_path="$RUNNER_TEMP/kosmo-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+
+          printf '%s' "$APPLE_DEVELOPER_ID_P12_BASE64" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$keychain_path"
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+
+          signing_identity="$(
+            security find-identity -v -p codesigning "$keychain_path" |
+              awk '/Developer ID Application/ { print $2; exit }'
+          )"
+          if [[ -z "$signing_identity" ]]; then
+            echo 'The imported archive contains no Developer ID Application identity.' >&2
+            exit 1
+          fi
+          rm -f "$certificate_path"
+          echo "KOSMO_SIGNING_IDENTITY=$signing_identity" >> "$GITHUB_ENV"
+          echo "KOSMO_SIGNING_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
+
+      - name: Build Kosmo app
+        run: |
+          version="${KOSMO_RELEASE_VERSION#v}"
+          revision="${GITHUB_SHA:0:12}"
+          app_path="$PWD/build/Kosmo.app"
+          iconset_path="$RUNNER_TEMP/Kosmo.iconset"
+
+          mkdir -p \
+            "$app_path/Contents/MacOS" \
+            "$app_path/Contents/Resources" \
+            "$iconset_path" \
+            dist
+          cp packaging/macos/Info.plist "$app_path/Contents/Info.plist"
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleShortVersionString $version" \
+            "$app_path/Contents/Info.plist"
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleVersion $GITHUB_RUN_NUMBER" \
+            "$app_path/Contents/Info.plist"
+
+          for size in 16 32 128 256 512; do
+            retina_size=$((size * 2))
+            sips -z "$size" "$size" data/kosmo-icon.png \
+              --out "$iconset_path/icon_${size}x${size}.png" >/dev/null
+            sips -z "$retina_size" "$retina_size" data/kosmo-icon.png \
+              --out "$iconset_path/icon_${size}x${size}@2x.png" >/dev/null
+          done
+          iconutil -c icns "$iconset_path" \
+            -o "$app_path/Contents/Resources/Kosmo.icns"
+
+          nim c \
+            --opt:size \
+            --debugger:off \
+            --lineTrace:off \
+            --stackTrace:off \
+            -d:KosmoVersion="$version" \
+            -d:KosmoGitHashOverride="$revision" \
+            --out:"$app_path/Contents/MacOS/kosmo" \
+            src/merenda/kosmo/kosmo.nim
+          strip -x "$app_path/Contents/MacOS/kosmo"
+          "$app_path/Contents/MacOS/kosmo" --help
+          plutil -lint "$app_path/Contents/Info.plist"
+
+      - name: Sign Kosmo with Developer ID
+        if: env.NOTARIZE_MACOS == 'true'
+        run: |
+          codesign \
+            --force \
+            --options runtime \
+            --timestamp \
+            --sign "$KOSMO_SIGNING_IDENTITY" \
+            build/Kosmo.app
+          codesign --verify --deep --strict --verbose=2 build/Kosmo.app
+
+      - name: Ad-hoc sign test build
+        if: env.NOTARIZE_MACOS != 'true'
+        run: |
+          codesign --force --options runtime --sign - build/Kosmo.app
+          codesign --verify --deep --strict --verbose=2 build/Kosmo.app
+
+      - name: Package Kosmo app
+        run: |
+          ditto \
+            -c \
+            -k \
+            --sequesterRsrc \
+            --keepParent \
+            build/Kosmo.app \
+            dist/kosmo-macos-arm64.zip
+
+      - name: Notarize and staple Kosmo app
+        if: env.NOTARIZE_MACOS == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          xcrun notarytool submit dist/kosmo-macos-arm64.zip \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+          xcrun stapler staple build/Kosmo.app
+          xcrun stapler validate build/Kosmo.app
+          spctl --assess --type execute --verbose=4 build/Kosmo.app
+          rm -f dist/kosmo-macos-arm64.zip
+          ditto \
+            -c \
+            -k \
+            --sequesterRsrc \
+            --keepParent \
+            build/Kosmo.app \
+            dist/kosmo-macos-arm64.zip
+
+      - name: Upload macOS app
+        uses: actions/upload-artifact@v4
+        with:
+          name: kosmo-macos-arm64
+          path: dist/kosmo-macos-arm64.zip
+          if-no-files-found: error
+
+      - name: Delete temporary signing keychain
+        if: always() && env.KOSMO_SIGNING_KEYCHAIN != ''
+        run: security delete-keychain "$KOSMO_SIGNING_KEYCHAIN"
+
+  build-windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: ${{ env.NIM_VERSION }}
+
+      - name: Install Atlas
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          atlas -v
+
+      - name: Cache packages
+        uses: actions/cache@v4
+        with:
+          path: deps/
+          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
+
+      - name: Install dependencies
+        shell: bash
+        run: atlas install -tuk --features:kosmo
+
+      - name: Build Kosmo
+        shell: pwsh
+        run: |
+          $version = $env:KOSMO_RELEASE_VERSION.TrimStart('v')
+          $revision = $env:GITHUB_SHA.Substring(0, 12)
+          New-Item -ItemType Directory -Force -Path build, dist | Out-Null
+          Push-Location data
+          windres kosmo.rc -O coff -o ../build/kosmo.res
+          Pop-Location
+          nim c `
+            --opt:size `
+            --debugger:off `
+            --lineTrace:off `
+            --stackTrace:off `
+            --app:gui `
+            "-d:KosmoVersion=$version" `
+            "-d:KosmoGitHashOverride=$revision" `
+            --passL:build/kosmo.res `
+            --out:dist/kosmo.exe `
+            src/merenda/kosmo/kosmo.nim
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          $process = Start-Process `
+            -FilePath "$PWD/dist/kosmo.exe" `
+            -ArgumentList '--help' `
+            -Wait `
+            -PassThru
+          if ($process.ExitCode -ne 0) {
+            exit $process.ExitCode
+          }
+
+      - name: Package Kosmo
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path dist/kosmo.exe `
+            -DestinationPath dist/kosmo-windows-amd64.zip `
+            -Force
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: kosmo-windows-amd64
+          path: dist/kosmo-windows-amd64.zip
+          if-no-files-found: error
+
+  publish-release-assets:
+    if: github.event_name == 'release'
+    needs:
+      - build-linux
+      - build-macos
+      - build-windows
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create checksums
+        working-directory: dist
+        run: |
+          sha256sum \
+            kosmo-linux-amd64.tar.gz \
+            kosmo-macos-arm64.zip \
+            kosmo-windows-amd64.zip \
+            > SHA256SUMS.txt
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            dist/kosmo-linux-amd64.tar.gz \
+            dist/kosmo-macos-arm64.zip \
+            dist/kosmo-windows-amd64.zip \
+            dist/SHA256SUMS.txt \
+            --clobber
