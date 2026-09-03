@@ -48,6 +48,9 @@ proc report(name: string, viewCount: int, nanoseconds: float) =
   echo &"{name:<28} {viewCount:>6} views  {microseconds:>11.2f} us/op  " &
     &"{nanosecondsPerView:>9.2f} ns/view"
 
+proc reportPopulationOperation(name: string, population: int, nanoseconds: float) =
+  echo &"{name:<28} {population:>6} slots  {nanoseconds / 1_000.0:>11.2f} us/op"
+
 proc makeFlatTree(viewCount: int): View =
   result = newView(frame = rect(0, 0, 1_000, 1_000))
   for index in 1 ..< viewCount:
@@ -155,6 +158,70 @@ when declared(RenderScene):
     let label = &"scene replace/{layerCount} layers"
     report(label, nodeCount, elapsed)
 
+  proc makePopulatedFragmentSiblings(
+      fragmentCount: int
+  ): tuple[fragments: RenderFragments, handles: seq[RenderFragmentHandle]] =
+    result.fragments = newRenderFragments()
+    let root = result.fragments.addRoot(0.ZLevel, Fig(kind: nkRectangle))
+    let parent = result.fragments.nodeCursor(0.ZLevel, root)
+    result.handles = newSeqOfCap[RenderFragmentHandle](fragmentCount)
+    for index in 0 ..< fragmentCount:
+      var contents = RenderList()
+      discard contents.addRoot(
+        Fig(
+          kind: nkRectangle,
+          screenBox:
+            figdraw.rect((index mod 100).float32, (index div 100).float32, 20.0, 10.0),
+        )
+      )
+      result.handles.add result.fragments.attachChildFragment(
+        parent, index.Natural, move contents
+      )
+
+  proc benchmarkFragmentDensity(benchmarkCase: BenchmarkCase) =
+    let siblings = makePopulatedFragmentSiblings(benchmarkCase.viewCount)
+
+    let materializeTime = medianNanoseconds(
+      benchmarkCase.iterations,
+      proc() =
+        let renders = siblings.fragments.materialize()
+        benchmarkSink = benchmarkSink xor renders.len(DefaultDrawLevel).uint64,
+    )
+    report("materialize/fragment slots", benchmarkCase.viewCount, materializeTime)
+
+    var current = siblings.handles[siblings.handles.len div 2]
+    var replacement = RenderList()
+    discard replacement.addRoot(Fig(kind: nkRectangle))
+    let replacementTime = medianNanoseconds(
+      benchmarkCase.iterations,
+      proc() =
+        current = siblings.fragments.replaceFragment(current, replacement)
+        benchmarkSink = benchmarkSink xor current.fragmentId(),
+    )
+    reportPopulationOperation(
+      "replace one fragment slot", benchmarkCase.viewCount, replacementTime
+    )
+
+  proc makeNestedFragmentChain(depth: int): RenderFragments =
+    result = newRenderFragments()
+    let root = result.addRoot(0.ZLevel, Fig(kind: nkRectangle))
+    var parent = result.nodeCursor(0.ZLevel, root)
+    for _ in 0 ..< depth:
+      var contents = RenderList()
+      discard contents.addRoot(Fig(kind: nkRectangle))
+      let handle = result.attachChildFragment(parent, 0, move contents)
+      parent = result.fragmentRoots(handle)[0]
+
+  proc benchmarkNestedMaterialize(depth, iterations: int) =
+    let fragments = makeNestedFragmentChain(depth)
+    let elapsed = medianNanoseconds(
+      iterations,
+      proc() =
+        let renders = fragments.materialize()
+        benchmarkSink = benchmarkSink xor renders.len(DefaultDrawLevel).uint64,
+    )
+    report("materialize/nested slots", depth, elapsed)
+
   proc makeFragmentSiblings(
       fragmentCount: int
   ): tuple[
@@ -220,6 +287,13 @@ when declared(RenderScene):
   echo "\nRenderScene replacement topology"
   benchmarkSceneReplacement(10_000, 1, 10)
   benchmarkSceneReplacement(10_000, 32, 10)
+
+  echo "\nFragment density and nesting"
+  for benchmarkCase in BenchmarkCases:
+    benchmarkFragmentDensity(benchmarkCase)
+  benchmarkNestedMaterialize(100, 1_000)
+  benchmarkNestedMaterialize(1_000, 100)
+  benchmarkNestedMaterialize(5_000, 20)
 
   echo "\nFragment sibling reorder scaling"
   benchmarkSingleMoveReorder(100, 100)

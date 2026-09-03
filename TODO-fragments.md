@@ -416,6 +416,12 @@ monolithic dirty path, and materialization remained linear at roughly 71--115
 ns per node. Replacing a 10,000-node scene took 1.11 ms with one layer and 0.90
 ms with 32 layers, showing no layer-count cliff at that scale.
 
+Fragment density did not change the complexity: 10,000 independent one-node
+fragment slots materialized in 1.39 ms (139 ns/node), versus 1.17 ms for the
+single-fragment scene. A chain 5,000 nested fragments deep materialized in 0.69
+ms (139 ns/node). Replacing one leaf fragment remained roughly 0.14--0.20 us as
+the sibling population grew from 100 to 10,000.
+
 Leaf invalidation remains a full-tree redraw in this foundation PR: at 10,000
 views the branch took 61.18 ms through `buildRenders` and 62.83 ms through
 `buildRenderScene`, versus 63.61 ms on `main`. Per-view contribution caching is
