@@ -180,6 +180,14 @@ when not defined(useNativeDynlib):
     view: View
     revision: uint64
 
+  proc renderAppearance(view: View, inherited: ptr Appearance): ptr Appearance =
+    ## Keeps immutable theme snapshots borrowed during a synchronous scene walk.
+    if view.xHasAppearance:
+      return addr view.xAppearance
+    if view.xHasInheritedAppearance and view.superviewBacklink().isNil:
+      return addr view.xInheritedAppearance
+    inherited
+
   proc appendSubtree(
       source: RenderList,
       sourceRoot: FigIdx,
@@ -196,14 +204,23 @@ when not defined(useNativeDynlib):
     for child in source.nodes.childIndex(sourceRoot):
       source.appendSubtree(child, destination, destinationRoot)
 
-  proc placementNode(cacheKey: RenderViewCacheKey, absolute = false): Fig =
-    let origin = if absolute: cacheKey.frame.origin else: cacheKey.placement
+  proc transformNode(origin: Point, size: Size): Fig =
     Fig(
       kind: nkTransform,
-      screenBox: figdraw.rect(
-        0.0'f32, 0.0'f32, cacheKey.frame.size.width, cacheKey.frame.size.height
-      ),
+      screenBox: figdraw.rect(0.0'f32, 0.0'f32, size.width, size.height),
       transform: TransformStyle(translation: vec2(origin.x, origin.y)),
+    )
+
+  proc placementNode(cacheKey: RenderViewCacheKey): Fig =
+    transformNode(cacheKey.placement, cacheKey.frame.size)
+
+  proc contentTransformNode(cacheKey: RenderViewCacheKey): Fig =
+    transformNode(cacheKey.bounds.boundsTranslation(), cacheKey.frame.size)
+
+  proc layerTransformNode(cacheKey: RenderViewCacheKey): Fig =
+    transformNode(
+      cacheKey.frame.origin.addPoints(cacheKey.bounds.boundsTranslation()),
+      cacheKey.frame.size,
     )
 
   proc wrapInPlacement(source: RenderList, placement: Fig): RenderList =
@@ -237,7 +254,7 @@ when not defined(useNativeDynlib):
       viewId: RenderViewId,
       parentViewId: RenderViewId,
       cacheKey: RenderViewCacheKey,
-      appearance: Appearance,
+      appearance: ptr Appearance,
   ): RenderViewFrame =
     let context = initDrawContext()
     let localFrame =
@@ -246,19 +263,18 @@ when not defined(useNativeDynlib):
       cacheKey.level,
       (-1).FigIdx,
       localFrame,
-      view.viewBackgroundFill(appearance, cacheKey.isRoot),
+      view.viewBackgroundFill(appearance[], cacheKey.isRoot),
       shadows = view.shadow,
       clips = view.clipsToBounds,
     )
 
     if view.usesThemedRootBackground(cacheKey.isRoot):
       context.addRootBackgroundPinstripes(
-        view, cacheKey.level, rootIdx, localFrame, appearance
+        view, cacheKey.level, rootIdx, localFrame, appearance[]
       )
 
-    let contentOrigin = view.bounds().boundsTranslation()
     context.beginDraw(
-      view, cacheKey.level, rootIdx, (-1).FigIdx, contentOrigin, appearance
+      view, cacheKey.level, rootIdx, (-1).FigIdx, ZeroPoint, appearance[]
     )
     discard view.sendLocalIfHandled(draw(), context)
 
@@ -269,6 +285,8 @@ when not defined(useNativeDynlib):
       placementChanged: true,
       captured: true,
       placement: cacheKey.placementNode(),
+      contentTransform: cacheKey.contentTransformNode(),
+      escapedTransform: cacheKey.contentTransformNode(),
       resources: context.resources,
       usesVisibleRect: context.drawingDependsOnVisibleRect(),
     )
@@ -287,39 +305,38 @@ when not defined(useNativeDynlib):
     for level, list in context.renders.pairs():
       if level != cacheKey.level and list.nodes.len > 0:
         result.extraLayers.add RenderLayerContribution(
-          level: level,
-          contents: list.wrapInPlacement(cacheKey.placementNode(absolute = true)),
+          level: level, contents: list.wrapInPlacement(cacheKey.layerTransformNode())
         )
 
   proc collectRenderFrames(
       scene: RenderScene,
       view: View,
-      inheritedAppearance: Appearance,
+      inheritedAppearance: ptr Appearance,
       frames: var seq[RenderViewFrame],
       revisions: var seq[DisplayRevisionSnapshot],
       parentViewId = 0.RenderViewId,
       parentLevel = DefaultDrawLevel,
       parentOrigin = ZeroPoint,
-      parentBoundsOrigin = ZeroPoint,
   ) =
     if view.visibleRect.isEmpty:
       view.finishDisplaySubtree()
       return
 
     let
-      appearance = view.resolvedAppearance(inheritedAppearance)
+      appearance = view.renderAppearance(inheritedAppearance)
       level = view.trySendLocal(drawLevel()).get(parentLevel)
       viewId = view.renderViewId()
       absoluteFrame = view.renderFrameRect(parentOrigin)
       viewFrame = view.frame()
       cacheKey = RenderViewCacheKey(
         displayRevision: view.xDisplayRevision,
-        appearanceGeneration: uint64(appearance.theme.generation()),
+        appearanceGeneration: uint64(appearance[].theme.generation()),
         frame: absoluteFrame,
-        placement: initPoint(
-          viewFrame.origin.x - parentBoundsOrigin.x,
-          viewFrame.origin.y - parentBoundsOrigin.y,
-        ),
+        placement:
+          if parentViewId.uint64 == 0 or level != parentLevel:
+            absoluteFrame.origin
+          else:
+            viewFrame.origin,
         bounds: view.bounds(),
         visibleRect: view.visibleRect(),
         level: level,
@@ -344,21 +361,14 @@ when not defined(useNativeDynlib):
       absoluteFrame.origin.addPoints(view.bounds().boundsTranslation())
     for child in view.subviews:
       scene.collectRenderFrames(
-        child,
-        appearance,
-        frames,
-        revisions,
-        viewId,
-        level,
-        contentOrigin,
-        view.bounds().origin,
+        child, appearance, frames, revisions, viewId, level, contentOrigin
       )
 
   proc updateRenderScene(root: View, appearance: Appearance): RenderScene =
     root.layoutSubtreeIfNeeded()
     if not root.xCachedRenderScene.isNil and
         root.xCachedRenderScene.frameGeneration() > 0 and not root.xNeedsDisplay and
-        root.xCachedAppearance.sameAppearanceGeneration(appearance):
+        root.xCachedAppearanceGeneration == appearance.theme.generation():
       return root.xCachedRenderScene
     if root.xCachedRenderScene.isNil:
       root.xCachedRenderScene = newRenderScene()
@@ -366,7 +376,9 @@ when not defined(useNativeDynlib):
     var
       frames: seq[RenderViewFrame]
       revisions: seq[DisplayRevisionSnapshot]
-    root.xCachedRenderScene.collectRenderFrames(root, appearance, frames, revisions)
+    root.xCachedRenderScene.collectRenderFrames(
+      root, unsafeAddr appearance, frames, revisions
+    )
     let changed = root.xCachedRenderScene.reconcile(frames, DefaultDrawLevel)
     for snapshot in revisions:
       snapshot.view.acknowledgeDisplayRevision(snapshot.revision)
@@ -376,13 +388,13 @@ when not defined(useNativeDynlib):
       root.xCachedRenders = nil
       root.xHasCachedRenders = false
     root.xCachedRenderResources = root.xCachedRenderScene.renderResources()
-    root.xCachedAppearance = appearance
+    root.xCachedAppearanceGeneration = appearance.theme.generation()
     root.xCachedRenderScene
 
 proc cacheCanReuse(root: View, appearance: Appearance): bool =
   result =
     root.xHasCachedRenders and not root.needsDisplayInSubtree() and
-    root.xCachedAppearance.sameAppearanceGeneration(appearance)
+    root.xCachedAppearanceGeneration == appearance.theme.generation()
 
 proc invalidateRenderCache*(root: View) =
   if root.isNil:
@@ -411,7 +423,7 @@ proc buildRenders*(root: View, appearance: Appearance): Renders =
     result = context.renders
     root.xCachedRenders = result
     root.xCachedRenderResources = context.resources
-    root.xCachedAppearance = appearance
+    root.xCachedAppearanceGeneration = appearance.theme.generation()
     root.xHasCachedRenders = true
     root.finishDisplaySubtree()
 

@@ -219,7 +219,7 @@ type
       xCachedRenderScene*: RenderScene
     xCachedRenders*: Renders
     xCachedRenderResources*: RenderResourceManifest
-    xCachedAppearance*: Appearance
+    xCachedAppearanceGeneration*: ThemeGeneration
     xHasCachedRenders*: bool
 
 proc superviewBacklink*(view: View): View {.inline.} =
@@ -244,6 +244,19 @@ proc markLocalNeedsDisplay*(view: View, wholeView = true, propagateAncestors = f
   if wholeView:
     view.xInvalidRects.setLen(0)
   if propagateAncestors:
+    var ancestor = view.superviewBacklink()
+    while not ancestor.isNil:
+      ancestor.xNeedsDisplay = true
+      ancestor = ancestor.superviewBacklink()
+
+proc markRenderStructureChanged*(view: View) =
+  ## Schedules retained-transform reconciliation without dirtying view drawing.
+  if view.isNil:
+    return
+  when defined(useNativeDynlib):
+    view.markLocalNeedsDisplay(propagateAncestors = true)
+  else:
+    view.xNeedsDisplay = true
     var ancestor = view.superviewBacklink()
     while not ancestor.isNil:
       ancestor.xNeedsDisplay = true

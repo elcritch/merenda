@@ -502,16 +502,17 @@ suite "NimKit render fragments":
     var initial = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
     retainedScenes.apply(replica, initial)
 
-    viewport.bounds = rect(0, 24, 100, 80)
+    viewport.setBoundsOriginFromLayout(initPoint(0, 24))
     discard root.buildRenderScene()
     var update =
       retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, initialGeneration)
 
-    check viewport.drawCount == 2
+    check viewport.drawCount == 1
     check document.drawCount == 1
+    check scene.viewCaptureGeneration(viewport.renderViewId()) == 1
     check scene.viewCaptureGeneration(document.renderViewId()) == 1
     check scene.viewFragmentIds(document.renderViewId()) == documentFragments
-    check retainedScenes.capturedViewCount(update) == 1
+    check retainedScenes.capturedViewCount(update) == 0
     retainedScenes.apply(replica, update)
     check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
 
@@ -525,9 +526,10 @@ suite "NimKit render fragments":
     root.addSubview(viewport)
     let scene = root.buildRenderScene()
 
-    viewport.bounds = rect(0, 24, 100, 80)
+    viewport.setBoundsOriginFromLayout(initPoint(0, 24))
     discard root.buildRenderScene()
 
+    check viewport.drawCount == 1
     check document.drawCount == 2
     check scene.viewCaptureGeneration(document.renderViewId()) == 2
 

@@ -221,19 +221,23 @@ Use a composite entry:
 view slot
 └── stable placement transform fragment
     ├── stable shell fragment      background, shadow, clipping
-    │   ├── replaceable self fragment
-    │   ├── child view slot
-    │   └── child view slot
-    └── escaped fragment           exterior focus ring or chrome
+    │   └── stable content transform fragment
+    │       ├── replaceable self fragment
+    │       ├── child view slot
+    │       └── child view slot
+    └── stable escaped-content transform fragment
+        └── escaped fragment       exterior focus ring or chrome
 
 layer-root transform fragments     popup, focus, tooltip, future overlays
 ```
 
-The placement fragment contains one `nkTransform` node updated through the
-controlled node API. Its fragment ID, shell, self drawing, escaped drawing, and
-child slots remain attached when a view or ancestor moves. The shell remains the
-background and clipping parent. Rebuilding a view's own drawing replaces the self
-fragment without disturbing its child-view slots.
+The placement and content fragments each contain one `nkTransform` node updated
+through the controlled node API. Placement tracks the view frame; clipped and
+escaped content transforms track the negative bounds origin. Their fragment IDs,
+the shell, self drawing, escaped drawing, and child slots remain attached when a
+view or ancestor moves or scrolls. The shell remains the background and clipping
+parent. Rebuilding a view's own drawing replaces the self fragment without
+disturbing its child-view slots.
 
 Preserve these existing semantics:
 
@@ -292,11 +296,12 @@ invalidation raised during layout or drawing must remain pending.
 - [x] Invalidate/reconcile descendants when an ancestor changes an inherited
       render context.
 
-The completed implementation captures drawing in view-local coordinates and keeps
-placement in the stable transform fragment. `DrawContext.visibleRect` records a
-dependency when drawing reads it, so virtualized drawing is recaptured as its clip
-moves while ordinary drawing remains cached. Explicit-layer output is rooted under
-an equivalent absolute placement transform.
+The completed implementation captures drawing in bounds coordinates and keeps
+frame placement and bounds-origin scrolling in stable transform fragments.
+`DrawContext.visibleRect` records a dependency when drawing reads it, so
+virtualized drawing is recaptured as its clip moves while ordinary drawing remains
+cached. Explicit-layer output is rooted under an equivalent absolute content
+transform.
 
 ## Resource manifests
 
@@ -481,24 +486,44 @@ path measured:
 | Pipeline | wall median | wall p95 | CPU median | CPU p95 | prepare median | transfer median | apply/ack median | traversal median |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | pre-PR monolithic | 11.545 ms | 12.308 ms | 11.544 ms | 12.306 ms | 11.023 ms | 0.000 ms | 0.001 ms | 0.455 ms |
-| fragment-native | 1.483 ms | 1.937 ms | 1.483 ms | 1.935 ms | 1.108 ms | 0.344 ms | 0.006 ms | 0.012 ms |
+| fragment-native | 0.047 ms | 0.051 ms | 0.047 ms | 0.050 ms | 0.024 ms | 0.001 ms | 0.002 ms | 0.014 ms |
 
-The retained placement-transform design reduces median CPU cost by 87.2% and
-p95 by 84.3% in this continuously dirty scrolling workload. The Markdown text
-view was captured zero times during the 240 measured frames: scrolling changes
-its ancestor placement, but does not clone or rebuild the document's text nodes.
-Of 1,200 view placements, 476 (39.7%) carried changed contributions for the
-scroll container and its small chrome; all other contributions were reused.
+The retained transform design reduces median CPU cost by 99.6%, about 246x, in
+this continuously dirty scrolling workload. The Markdown text view was captured
+zero times during the 240 measured frames: scrolling changes its ancestor content
+transform, but does not clone or rebuild the document's text nodes. Of 1,200 view
+placements, 238 (19.8%) carried a changed drawing contribution for the moving
+scrollbar; the clip view, document, scroll-view background, and other drawing were
+reused.
+
+The follow-up profile found that the initial 1.483 ms fragment result was not
+fragment traversal overhead. Reading a `ViewRenderEntry` out of a Nim `Table` by
+value deep-copied its cached `RenderList`, including the clean Markdown glyph
+arrays, in capture checks, reconciliation, and update transfer. Reconciliation now
+mutates table entries in place. The same view walk also copied the immutable
+`Appearance` theme snapshot for every view and retained a whole snapshot merely to
+compare generations; the render walk now borrows appearances synchronously and
+caches only `ThemeGeneration`.
+
+A second view-design pass separated bounds-origin movement from self drawing.
+Stable clipped and escaped content transforms now absorb scrolling, and scroll
+invalidation targets the moving scroller rather than the unchanged scroll-view
+background. A focused test verifies that a layout-owned bounds-origin update can
+reach an independent renderer replica with zero view captures, while a descendant
+that reads `DrawContext.visibleRect` is still recaptured.
 
 FigDraw's `renderRoot(RenderFragments)` iterates `levels`, `roots`, and recursive
 `children` cursors directly. Fragment attachment builds its `RenderEntries`
 tracking metadata eagerly, and the child iterator only rebuilds that metadata if
 it is not ready. The renderer does not call `pairs`, clone a `RenderList`, or call
 `materialize`; that separate API remains limited to compatibility and diagnostic
-paths. The benchmark walked 13,200 retained nodes (55 per frame, including five
-placement transforms) in 0.012 ms/frame median. The monolithic comparison walked
-12,000 nodes (50 per frame) in 0.455 ms/frame median, so retained traversal itself
-does not hide a whole-tree construction or introduce a traversal cliff.
+paths. The benchmark walked 15,600 retained nodes (65 per frame, including
+placement and content transforms) in 0.014 ms/frame median. FigDraw's child
+iterator currently copies small `RenderChild` metadata sequences returned by its
+lookup table; the long-running sample identifies that as the main remaining
+traversal micro-cost. It does not copy `Fig` nodes or build a render tree, and at
+0.014 ms here it is not a Merenda-side performance cliff. Avoiding that metadata
+copy is a separate FigDraw optimization.
 
 ## Delivery sequence
 

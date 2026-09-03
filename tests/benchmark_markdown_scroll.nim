@@ -22,8 +22,8 @@ when defined(fragmentNativeProfile):
 const
   RepositoryRoot = currentSourcePath().parentDir.parentDir
   RepositoryReadme = RepositoryRoot / "README.md"
-  WarmupFrames = 20
-  ProfileFrames = 240
+  WarmupFrames {.intdefine.} = 20
+  ProfileFrames {.intdefine.} = 240
 
 proc unavailableMarkdownImage(url: string): ImageResource =
   discard url

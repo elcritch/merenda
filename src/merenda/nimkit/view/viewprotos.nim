@@ -463,11 +463,11 @@ proc setHiddenFromLayout*(view: View, hidden: bool) =
     parent.propagateNeedsDisplayInRect(view.rectToView(view.bounds(), parent))
 
 proc setBoundsOriginFromLayout*(view: View, origin: Point) =
-  ## Apply a container-owned content offset without invalidating constraints.
+  ## Apply a container-owned content offset without invalidating drawing.
   if view.isNil or view.xBounds.origin == origin:
     return
   view.xBounds.origin = origin
-  view.needsDisplay = true
+  view.markRenderStructureChanged()
 
 proc viewCanBecomeKeyView*(view: View): bool =
   view.acceptsFirstResponder() and not view.isHiddenOrHasHiddenAncestor()
