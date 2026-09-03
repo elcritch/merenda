@@ -1617,6 +1617,16 @@ func isMarkdownRendering*(view: MarkdownView): bool =
   not view.isNil and
     (view.xActiveMarkdownRenderGeneration != 0 or view.xMarkdownTableResizePending)
 
+proc scheduleMarkdownTableReflowIfNeeded(view: MarkdownView) =
+  ## Keep the rendered table budget in sync when a geometry notification was
+  ## delivered before the next owner-thread poll.
+  if view.isNil or view.xMarkdownTableResizePending or
+      view.xActiveMarkdownGeneration != 0 or view.xActiveMarkdownRenderGeneration != 0 or
+      not view.xHasMarkdownTables:
+    return
+  if view.markdownTableColumnLimit() != view.xMarkdownTableColumnLimit:
+    view.scheduleMarkdownTableResize()
+
 func isMarkdownParsing*(view: MarkdownView): bool =
   ## Return whether parsing or incremental AST application is in progress.
   not view.isNil and (view.xActiveMarkdownGeneration != 0 or view.isMarkdownRendering())
@@ -1653,6 +1663,7 @@ proc pollMarkdownParsing*(view: MarkdownView): int {.discardable.} =
   if not view.isNil:
     result = getCurrentSigilThread().pollAll()
     result += drainMainThreadWork()
+    view.scheduleMarkdownTableReflowIfNeeded()
 
 proc waitForMarkdownRendering*(
     view: MarkdownView, timeoutMilliseconds: Natural = 5_000
