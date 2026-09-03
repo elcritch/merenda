@@ -27,12 +27,13 @@ suite "Kosmo terminal clipboard commands":
     test "Edit menu copy rejoins a wrapped terminal line":
       let
         app = newApplication("Kosmo Wrapped Terminal Clipboard Test")
-        frontend = newKosmoApplication(app)
+        frontend = newKosmoApplication(app, monitorsGitStatus = false)
         session = newTerminalSession(columns = 12, rows = 4)
         terminal = newTerminalView(session, frame = rect(0, 0, 400, 120))
         pasteboard = generalPasteboard()
         previousClipboard = pasteboard.plainText()
       defer:
+        terminal.close()
         discard pasteboard.setPlainText(previousClipboard)
         frontend.close()
         frontend.window.close()
@@ -70,7 +71,7 @@ suite "Kosmo terminal clipboard commands":
     test "Edit menu copy and paste target the focused terminal":
       let
         app = newApplication("Kosmo Terminal Clipboard Test")
-        frontend = newKosmoApplication(app)
+        frontend = newKosmoApplication(app, monitorsGitStatus = false)
         session = spawnTerminalSession(
           initTerminalSpawnOptions(
             command =
@@ -84,6 +85,7 @@ suite "Kosmo terminal clipboard commands":
         pasteboard = generalPasteboard()
         previousClipboard = pasteboard.plainText()
       defer:
+        terminal.close()
         discard pasteboard.setPlainText(previousClipboard)
         frontend.close()
         frontend.window.close()

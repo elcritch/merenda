@@ -3848,9 +3848,14 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
   discard windowMenu.addItem(focusMenuItem)
 
 proc newKosmoApplication*(
-    manager: KosmoWindowManager, filePath = "", hasFileBrowser = true
+    manager: KosmoWindowManager,
+    filePath = "",
+    hasFileBrowser = true,
+    monitorsGitStatus = true,
 ): KosmoApplication =
   ## Create an unpresented Kosmo window owned by `manager`.
+  ## Disable `monitorsGitStatus` for short-lived frontends that do not need repository
+  ## decorations.
   let
     app = manager.application
     keyBindingsPath = manager.keyBindingsPath
@@ -4103,16 +4108,18 @@ proc newKosmoApplication*(
     statusLabel.text = absolutePath(filePath)
   if keyBindingErrors.len > 0:
     statusLabel.text = keyBindingErrors.join("; ")
-  discard fileTree.startGitStatusMonitoring()
+  if monitorsGitStatus:
+    discard fileTree.startGitStatusMonitoring()
 
 proc newKosmoApplication*(
     app = nimkit.sharedApplication(),
     filePath = "",
     keyBindingsPath = "",
     hasFileBrowser = true,
+    monitorsGitStatus = true,
 ): KosmoApplication =
   let manager = newKosmoWindowManager(app, keyBindingsPath)
-  result = newKosmoApplication(manager, filePath, hasFileBrowser)
+  result = newKosmoApplication(manager, filePath, hasFileBrowser, monitorsGitStatus)
 
 proc openProject*(
     manager: KosmoWindowManager, path: string

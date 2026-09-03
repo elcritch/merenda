@@ -25,14 +25,16 @@ suite "Kosmo synthetic panel shortcuts":
       secondRoot = createTempDir("merenda-kosmo-panel-second-", "")
       app = newApplication("Kosmo Panel Focus Test")
       manager = newKosmoWindowManager(app)
-      first = newKosmoApplication(manager, firstRoot)
-      second = newKosmoApplication(manager, secondRoot)
+      first = newKosmoApplication(manager, firstRoot, monitorsGitStatus = false)
+      second = newKosmoApplication(manager, secondRoot, monitorsGitStatus = false)
     defer:
       manager.close()
       removeDir(firstRoot)
       removeDir(secondRoot)
     require not first.isNil
     require not second.isNil
+    check not first.fileTree.refreshGitStatus()
+    check not second.fileTree.refreshGitStatus()
     app.presentSyntheticWindow(first)
     app.presentSyntheticWindow(second)
     check first.window.firstResponderIs(first.editorView)
@@ -50,8 +52,8 @@ suite "Kosmo synthetic panel shortcuts":
       secondRoot = createTempDir("merenda-kosmo-editor-second-", "")
       app = newApplication("Kosmo Editor Focus Test")
       manager = newKosmoWindowManager(app)
-      first = newKosmoApplication(manager, firstRoot)
-      second = newKosmoApplication(manager, secondRoot)
+      first = newKosmoApplication(manager, firstRoot, monitorsGitStatus = false)
+      second = newKosmoApplication(manager, secondRoot, monitorsGitStatus = false)
     defer:
       manager.close()
       removeDir(firstRoot)
