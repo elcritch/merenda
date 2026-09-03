@@ -1,3 +1,5 @@
+import std/tables
+
 import sigils/core
 
 import ../app/animations
@@ -18,7 +20,8 @@ export responders
 export viewbase except
   AutoresizingState, LayoutInputKind, LayoutTerm, LayoutEquation, LayoutInput,
   LayoutInputCache, LayoutTransactionState, activeLayoutTransaction,
-  markLocalNeedsDisplay, nextLayoutGeneration, noteLayoutInvalidation
+  markLocalNeedsDisplay, markRenderSlotNeedsDisplay, nextLayoutGeneration,
+  noteLayoutInvalidation
 export viewconstraints except generatedLayoutInputs, applyConstraintsForSubtree
 export viewgeometry except
   resetAutoresizingState, refreshAutoresizingReference,
@@ -412,6 +415,7 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.xNeedsDisplay = true
   view.xNeedsLocalDisplay = true
   view.xDisplayRevision = 1
+  view.xRenderSlotRevisions = initTable[RenderSlotId, uint64]()
   view.xNeedsLayout = true
   view.xAutoresizingMaskConstraints = not frame.hasAutoMetric
   view.xHuggingPriority[laHorizontal] = LayoutPriorityLow

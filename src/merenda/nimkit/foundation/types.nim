@@ -20,6 +20,13 @@ when not defined(gcArc) and not defined(gcOrc) and not defined(gcAtomicArc) and
   {.error: "NimKit requires --mm:arc, --mm:orc, or --mm:atomicArc".}
 
 type
+  RenderSlotId* = distinct uint64
+    ## Stable identity for one independently replaceable part of a view's drawing.
+
+  RenderSlotPosition* = enum
+    rspBeforeSubviews
+    rspAfterSubviews
+
   Point* = object
     x*: float32
     y*: float32
@@ -262,6 +269,13 @@ func initLanguageTag*(value: string): LanguageTag =
   LanguageTag(normalized.replace('_', '-'))
 
 func `$`*(language: LanguageTag): string {.borrow.}
+func `==`*(a, b: RenderSlotId): bool {.borrow.}
+func hash*(slot: RenderSlotId): Hash {.borrow.}
+
+func initRenderSlotId*(namespace, index: uint32): RenderSlotId =
+  ## Combines an application-defined namespace and local index without hashing.
+  RenderSlotId((uint64(namespace) shl 32) or uint64(index))
+
 func `==`*(a, b: LanguageTag): bool {.borrow.}
 func hash*(language: LanguageTag): Hash {.borrow.}
 

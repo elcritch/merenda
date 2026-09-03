@@ -228,7 +228,9 @@ protocol CollectionCommandProtocol:
 
 protocol ViewDrawingProtocol:
   method drawLevel*(): ZLevel {.optional.}
+  method drawUnderlay*(context: DrawContext) {.optional.}
   method draw*(context: DrawContext) {.optional.}
+  method drawOverlay*(context: DrawContext) {.optional.}
 
 protocol ViewLayoutProtocol:
   method layoutIntrinsicContentSize*(): IntrinsicSize {.optional.}

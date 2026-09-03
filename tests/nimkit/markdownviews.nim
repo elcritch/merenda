@@ -1,5 +1,5 @@
 ## Markdown view behavior shared by the NimKit test runner.
-import std/[monotimes, os, strformat, strutils, times, unicode, unittest]
+import std/[algorithm, monotimes, os, strformat, strutils, times, unicode, unittest]
 
 import figdraw
 
@@ -678,6 +678,10 @@ echo "fenced"
         panelFrames.add rect(
           node.screenBox.x, node.screenBox.y, node.screenBox.w, node.screenBox.h
         )
+    panelFrames.sort(
+      proc(left, right: Rect): int =
+        cmp(left.minY, right.minY)
+    )
     require panelFrames.len == 3
 
     let storage = view.textStorage()

@@ -506,11 +506,25 @@ compare generations; the render walk now borrows appearances synchronously and
 caches only `ThemeGeneration`.
 
 A second view-design pass separated bounds-origin movement from self drawing.
-Stable clipped and escaped content transforms now absorb scrolling, and scroll
-invalidation targets the moving scroller rather than the unchanged scroll-view
-background. A focused test verifies that a layout-owned bounds-origin update can
-reach an independent renderer replica with zero view captures, while a descendant
-that reads `DrawContext.visibleRect` is still recaptured.
+Stable clipped and escaped content transforms now absorb scrolling through the
+generic `View.bounds=` path as well as `ClipView`, rather than relying on a
+Markdown-specific call site. A focused test verifies that a normal bounds-origin
+update can reach an independent renderer replica with zero view captures, while a
+descendant slot that reads `DrawContext.visibleRect` is still recaptured.
+
+Each view now owns an ordered set of stable render slots. Existing widgets
+automatically draw into a default content slot, while composite widgets can split
+their drawing across `drawUnderlay`, `draw`, and `drawOverlay` phases to implement
+patterns such as `[header] [content] [footer]` around child views. Slot revisions,
+resource manifests, escaped roots, explicit layers, replica updates, and fragment
+identities are all retained independently.
+
+Text views use one slot per visual glyph line, with separate selection/find and
+caret slots. Dirty Markdown and editor updates therefore replace only visually
+changed lines instead of transferring the complete glyph arrangement. Monospaced
+text views similarly retain their surface, viewport dependency, visible rows, and
+cursor independently; terminal cell changes and cursor motion no longer rebuild
+unchanged rows.
 
 FigDraw's `renderRoot(RenderFragments)` iterates `levels`, `roots`, and recursive
 `children` cursors directly. Fragment attachment builds its `RenderEntries`
@@ -524,6 +538,19 @@ lookup table; the long-running sample identifies that as the main remaining
 traversal micro-cost. It does not copy `Fig` nodes or build a render tree, and at
 0.014 ms here it is not a Merenda-side performance cliff. Avoiding that metadata
 copy is a separate FigDraw optimization.
+
+## Follow-up work
+
+- [x] Generalize the Markdown viewer's retained translate-node scrolling
+      optimization and apply it consistently to every scrolling view.
+- [x] Investigate whether monospaced text views, including editors and terminals,
+      can use Fig fragments to make updates cheaper.
+- [x] Audit the view implementations for every current widget and adopt stable
+      fragment slots where appropriate, following patterns such as `[header]
+      [content] [footer]`.
+- [x] Optimize dirty Markdown updates with visual-line render fragments. Scrolling
+      and selection changes retain unchanged glyph lines, and renderer updates
+      transfer only the line, underlay, or caret slots that actually changed.
 
 ## Delivery sequence
 

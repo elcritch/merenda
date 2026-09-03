@@ -2300,6 +2300,8 @@ proc invalidateTableRows(tableView: TableView) =
   if not scroller.isNil:
     scroller.needsDisplay = true
   tableView.xContentView.needsDisplay = true
+  for rowView in tableView.xContentView.xRowViews:
+    rowView.needsDisplay = true
   tableView.needsDisplay = true
 
 proc uncachedRowHeightForRow(tableView: TableView, index: int): float32 =

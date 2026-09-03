@@ -1,4 +1,4 @@
-import std/options
+import std/[options, tables]
 
 when defined(useNativeDynlib):
   import figdraw/dynlib
@@ -167,6 +167,7 @@ proc renderViewInto(
     view, level, placement.contentParent, nodeParent, placement.contentOrigin,
     appearance,
   )
+  discard view.sendLocalIfHandled(drawUnderlay(), context)
   discard view.sendLocalIfHandled(draw(), context)
 
   for child in view.subviews:
@@ -174,6 +175,12 @@ proc renderViewInto(
       context, child, appearance, placement.contentParent, level,
       placement.contentOrigin,
     )
+
+  context.beginDraw(
+    view, level, placement.contentParent, nodeParent, placement.contentOrigin,
+    appearance,
+  )
+  discard view.sendLocalIfHandled(drawOverlay(), context)
 
 when not defined(useNativeDynlib):
   type DisplayRevisionSnapshot = object
@@ -250,16 +257,17 @@ when not defined(useNativeDynlib):
     source.rootIds.setLen(0)
 
   proc captureViewFrame(
+      scene: RenderScene,
       view: View,
       viewId: RenderViewId,
       parentViewId: RenderViewId,
       cacheKey: RenderViewCacheKey,
       appearance: ptr Appearance,
   ): RenderViewFrame =
-    let context = initDrawContext()
     let localFrame =
       rect(0.0'f32, 0.0'f32, cacheKey.frame.size.width, cacheKey.frame.size.height)
-    let rootIdx = context.addRenderRectangle(
+    let shellContext = initDrawContext()
+    let shellRoot = shellContext.addRenderRectangle(
       cacheKey.level,
       (-1).FigIdx,
       localFrame,
@@ -267,16 +275,38 @@ when not defined(useNativeDynlib):
       shadows = view.shadow,
       clips = view.clipsToBounds,
     )
+    let shell = shellContext.renders.layers[cacheKey.level].nodes[shellRoot.int]
+
+    var cachedRevisions = initTable[RenderSlotId, uint64]()
+    for state in scene.viewSlotCacheStates(viewId):
+      cachedRevisions[state.slotId] = state.revision
+    let
+      forceAll = scene.requiresFullViewCapture(viewId, cacheKey)
+      forcedSlots = scene.forcedVisibleRectSlots(viewId, cacheKey.visibleRect)
+      context = initDrawContext()
+      defaultRevision = view.renderSlotRevision(0.RenderSlotId)
+    context.beginRenderSlotCapture(
+      shell,
+      ZeroPoint,
+      view.bounds,
+      view.visibleRect,
+      appearance[],
+      defaultRevision,
+      cachedRevisions,
+      forcedSlots,
+      forceAll,
+      cacheKey.level,
+    )
 
     if view.usesThemedRootBackground(cacheKey.isRoot):
-      context.addRootBackgroundPinstripes(
-        view, cacheKey.level, rootIdx, localFrame, appearance[]
-      )
+      if context.beginRenderSlot(0.RenderSlotId, defaultRevision):
+        context.addRootBackgroundPinstripes(
+          view, cacheKey.level, context.renderParent, localFrame, appearance[]
+        )
 
-    context.beginDraw(
-      view, cacheKey.level, rootIdx, (-1).FigIdx, ZeroPoint, appearance[]
-    )
+    discard view.sendLocalIfHandled(drawUnderlay(), context)
     discard view.sendLocalIfHandled(draw(), context)
+    discard view.sendLocalIfHandled(drawOverlay(), context)
 
     result = RenderViewFrame(
       viewId: viewId,
@@ -285,28 +315,40 @@ when not defined(useNativeDynlib):
       placementChanged: true,
       captured: true,
       placement: cacheKey.placementNode(),
+      shell: shell,
       contentTransform: cacheKey.contentTransformNode(),
       escapedTransform: cacheKey.contentTransformNode(),
-      resources: context.resources,
-      usesVisibleRect: context.drawingDependsOnVisibleRect(),
     )
-    var ownLayer = move context.renders.layers[cacheKey.level]
-    if rootIdx.int == 0 and ownLayer.rootIds == @[rootIdx]:
-      ownLayer.takeOnlyRootChildren(rootIdx, result.shell, result.selfContents)
-    else:
-      result.shell = ownLayer.nodes[rootIdx.int]
-      result.shell.parent = (-1).FigIdx
-      result.shell.childCount = 0
-      for child in ownLayer.nodes.childIndex(rootIdx):
-        ownLayer.appendSubtree(child, result.selfContents)
-      for escapedRoot in ownLayer.rootIds:
-        if escapedRoot != rootIdx:
-          ownLayer.appendSubtree(escapedRoot, result.escapedContents)
-    for level, list in context.renders.pairs():
-      if level != cacheKey.level and list.nodes.len > 0:
-        result.extraLayers.add RenderLayerContribution(
-          level: level, contents: list.wrapInPlacement(cacheKey.layerTransformNode())
-        )
+    var captures = context.takeRenderSlotCaptures()
+    result.slots = newSeqOfCap[RenderViewSlotFrame](captures.len)
+    for capture in captures.mitems:
+      var frameSlot = RenderViewSlotFrame(
+        slotId: capture.slotId,
+        position: capture.position,
+        revision: capture.revision,
+        captured: capture.captured,
+        resources: move capture.resources,
+        usesVisibleRect: capture.usesVisibleRect,
+      )
+      if capture.captured:
+        var ownLayer = move capture.renders.layers[cacheKey.level]
+        let rootIdx = ownLayer.rootIds[0]
+        if rootIdx.int == 0 and ownLayer.rootIds == @[rootIdx]:
+          var ignoredShell: Fig
+          ownLayer.takeOnlyRootChildren(rootIdx, ignoredShell, frameSlot.contents)
+        else:
+          for child in ownLayer.nodes.childIndex(rootIdx):
+            ownLayer.appendSubtree(child, frameSlot.contents)
+          for escapedRoot in ownLayer.rootIds:
+            if escapedRoot != rootIdx:
+              ownLayer.appendSubtree(escapedRoot, frameSlot.escapedContents)
+        for level, list in capture.renders.pairs():
+          if level != cacheKey.level and list.nodes.len > 0:
+            frameSlot.extraLayers.add RenderLayerContribution(
+              level: level,
+              contents: list.wrapInPlacement(cacheKey.layerTransformNode()),
+            )
+      result.slots.add move frameSlot
 
   proc collectRenderFrames(
       scene: RenderScene,
@@ -345,7 +387,9 @@ when not defined(useNativeDynlib):
 
     let capture = scene.needsViewCapture(viewId, cacheKey)
     if capture:
-      frames.add view.captureViewFrame(viewId, parentViewId, cacheKey, appearance)
+      frames.add scene.captureViewFrame(
+        view, viewId, parentViewId, cacheKey, appearance
+      )
     else:
       frames.add RenderViewFrame(
         viewId: viewId,
