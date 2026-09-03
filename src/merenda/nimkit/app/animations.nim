@@ -2,12 +2,20 @@ import std/[algorithm, locks, math, monotimes, options, times]
 
 import sigils/reactive
 import sigils/threadProxies
-import sigils/threadSelectors
+when defined(windows):
+  import sigils/threadChronos
+else:
+  import sigils/threadSelectors
 
 import ../foundation/selectors
 import ../foundation/types
 
 export reactive
+
+when defined(windows):
+  type AnimationClockThreadPtr = SigilChronosThreadPtr
+else:
+  type AnimationClockThreadPtr = SigilSelectorThreadPtr
 
 type
   AnimationState* = enum
@@ -76,7 +84,7 @@ type
 
   AnimationSchedulerClock* = ref object of Agent
     xFrameInterval: Duration
-    xThread: SigilSelectorThreadPtr
+    xThread: AnimationClockThreadPtr
     xOwnsThread: bool
     xUsesSharedThread: bool
     xTimer: SigilTimer
@@ -145,7 +153,7 @@ var
   animationTransactionStack {.threadvar.}: seq[AnimationTransaction]
   animationTransactionApplyDepth {.threadvar.}: int
   sharedAnimationThreadLock: Lock
-  sharedAnimationThread: SigilSelectorThreadPtr
+  sharedAnimationThread: AnimationClockThreadPtr
   sharedAnimationThreadUseCount: int
 
 sharedAnimationThreadLock.initLock()
@@ -1469,16 +1477,19 @@ proc ensureLocalAnimationDispatchThread() =
   if not hasLocalSigilThread():
     discard getCurrentSigilThread()
 
-proc acquireSharedAnimationThread(): SigilSelectorThreadPtr =
+proc acquireSharedAnimationThread(): AnimationClockThreadPtr =
   withLock sharedAnimationThreadLock:
     if sharedAnimationThread.isNil:
-      sharedAnimationThread = newSigilSelectorThread()
+      when defined(windows):
+        sharedAnimationThread = newSigilChronosThread()
+      else:
+        sharedAnimationThread = newSigilSelectorThread()
       sharedAnimationThread.start()
     inc sharedAnimationThreadUseCount
     result = sharedAnimationThread
 
-proc releaseSharedAnimationThread(thread: SigilSelectorThreadPtr) =
-  var toStop: SigilSelectorThreadPtr
+proc releaseSharedAnimationThread(thread: AnimationClockThreadPtr) =
+  var toStop: AnimationClockThreadPtr
   withLock sharedAnimationThreadLock:
     if not thread.isNil and thread == sharedAnimationThread:
       if sharedAnimationThreadUseCount > 0:
@@ -1489,13 +1500,14 @@ proc releaseSharedAnimationThread(thread: SigilSelectorThreadPtr) =
   if not toStop.isNil:
     toStop.stop()
     toStop.join()
-    toStop.closeSelectorThread()
+    when not defined(windows):
+      toStop.closeSelectorThread()
 
 proc pollQueuedTicks*(clock: AnimationSchedulerClock): int {.discardable.} =
   ensureLocalAnimationDispatchThread()
   getCurrentSigilThread().pollAll(NonBlocking)
 
-proc start*(clock: AnimationSchedulerClock, thread: SigilSelectorThreadPtr = nil) =
+proc start*(clock: AnimationSchedulerClock, thread: AnimationClockThreadPtr = nil) =
   if clock.isRunning:
     return
   ensureLocalAnimationDispatchThread()
