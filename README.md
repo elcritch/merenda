@@ -658,7 +658,9 @@ the invoking shell. Kosmo preserves the current working directory, forwards the
 remaining command-line arguments to its detached process, and disconnects its
 standard input, output, and error streams. Use `kosmo --help` to see the
 available standalone options. Use `kosmo --bg -- --dash-prefixed-path` when the
-path itself starts with a dash.
+path itself starts with a dash. Tagged releases provide Linux, macOS, and Windows
+binaries; see [Releasing Kosmo binaries](docs/releasing-kosmo.md) for artifact and
+macOS signing details.
 
 File > New… opens a blank tab in the active editor pane. File > Open Project…
 opens a folder in a new window with its own file browser. File > Open… opens

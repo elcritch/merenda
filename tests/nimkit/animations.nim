@@ -495,7 +495,7 @@ suite "NimKit animations":
     check group.state{} == asStopped
     check scheduler.animationCount == 0
 
-  test "selector clock queues ticks and scheduler drains them locally":
+  test "Chronos clock queues ticks and scheduler drains them locally":
     let
       scheduler = newAnimationScheduler(frameInterval = initDuration(milliseconds = 2))
       animation = newValueAnimation[float32](
@@ -540,7 +540,7 @@ suite "NimKit animations":
       discard app.stopAnimation(animation)
       app.stopAnimationClock()
 
-  test "repeated selector clock lifetimes do not leak selector file descriptors":
+  test "repeated Chronos clock lifetimes do not leak file descriptors":
     let before = openFileDescriptorCount()
     for _ in 0 ..< 12:
       let clock = newAnimationSchedulerClock(frameInterval = 2.ms)
@@ -551,7 +551,7 @@ suite "NimKit animations":
     if before >= 0 and after >= 0:
       check after <= before + 1
 
-  test "shared selector clock remains alive until all clock users stop":
+  test "shared Chronos clock remains alive until all clock users stop":
     let
       first = newAnimationSchedulerClock(frameInterval = 2.ms)
       second = newAnimationSchedulerClock(frameInterval = 2.ms)

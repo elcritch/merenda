@@ -20,7 +20,7 @@ import
     cli, config, filesearchpanel, filetree, moe, moehighlighting, panedocuments,
     quickopen, settings, shortcuts,
   ]
-import pkg/celina as celina
+import moepkg/celina_backend as celina
 
 export
   config, filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen,
