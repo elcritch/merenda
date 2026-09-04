@@ -369,8 +369,14 @@ protocol DefaultFieldEditorMenuCommands of MenuCommandProtocol:
     discard editor.finishEditing(terCancel)
 
 protocol DefaultFieldEditorDrawing of ViewDrawingProtocol:
+  method drawUnderlay(editor: FieldEditor, context: DrawContext) =
+    TextView(editor).drawTextViewUnderlay(context)
+
   method draw(editor: FieldEditor, context: DrawContext) =
-    TextView(editor).drawTextViewContents(context)
+    TextView(editor).drawTextViewText(context)
+
+  method drawOverlay(editor: FieldEditor, context: DrawContext) =
+    TextView(editor).drawTextViewOverlay(context)
 
 proc initFieldEditorFields*(editor: FieldEditor) =
   initTextViewFields(editor, installDefaultProtocols = false)

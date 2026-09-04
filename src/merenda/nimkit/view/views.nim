@@ -1,3 +1,6 @@
+import std/tables
+
+import pkg/chronicles
 import sigils/core
 
 import ../app/animations
@@ -7,6 +10,8 @@ import ../foundation/types
 import ./viewconstraints
 import ../foundation/events
 import ../themes
+when not defined(useNativeDynlib):
+  import ../drawing/renderscenes
 import ./viewgeometry
 import ./viewprotos
 import ./viewbase
@@ -16,7 +21,8 @@ export responders
 export viewbase except
   AutoresizingState, LayoutInputKind, LayoutTerm, LayoutEquation, LayoutInput,
   LayoutInputCache, LayoutTransactionState, activeLayoutTransaction,
-  nextLayoutGeneration, noteLayoutInvalidation
+  markLocalNeedsDisplay, markRenderSlotNeedsDisplay, nextLayoutGeneration,
+  noteLayoutInvalidation
 export viewconstraints except generatedLayoutInputs, applyConstraintsForSubtree
 export viewgeometry except
   resetAutoresizingState, refreshAutoresizingReference,
@@ -313,10 +319,13 @@ proc layoutSubtreeIfNeeded*(view: View) =
     )
   if view.xLayoutFeedbackCycles == LayoutFeedbackDiagnosticThreshold:
     let diagnostic = view.xLastLayoutInvalidation
-    debugEcho "NimKit repeated layout feedback after ",
-      view.xLayoutFeedbackCycles, " update cycles: generation=", diagnostic.generation,
-      " invalidatingView=", diagnostic.invalidatingView, " target=",
-      diagnostic.targetView, " phase=", diagnostic.phase, " reason=", diagnostic.reason
+    warn "NimKit repeated layout feedback",
+      updateCycles = view.xLayoutFeedbackCycles,
+      generation = diagnostic.generation,
+      invalidatingView = diagnostic.invalidatingView,
+      target = diagnostic.targetView,
+      phase = diagnostic.phase,
+      reason = diagnostic.reason
 
 proc layoutGeneration*(view: View): Natural =
   view.xLayoutGeneration
@@ -358,6 +367,25 @@ proc finishDisplaySubtree*(view: View) =
   for child in view.xSubviews:
     child.finishDisplaySubtree()
 
+proc acknowledgeDisplayRevision*(view: View, revision: uint64) =
+  ## Marks one captured local drawing revision complete without losing a newer one.
+  if view.isNil or view.xDisplayRevision != revision:
+    return
+  view.xNeedsLocalDisplay = false
+
+proc refreshDisplayStateSubtree*(view: View): bool {.discardable.} =
+  ## Rebuilds aggregate descendant-dirty state after revision acknowledgement.
+  if view.isNil:
+    return
+  var hasDirtyDescendant = false
+  for child in view.xSubviews:
+    if child.refreshDisplayStateSubtree():
+      hasDirtyDescendant = true
+  view.xNeedsDisplay = view.xNeedsLocalDisplay or hasDirtyDescendant
+  if not view.xNeedsDisplay:
+    view.xInvalidRects.setLen(0)
+  view.xNeedsDisplay
+
 proc moveToWindowOwner*(view: View, window: Responder) =
   if view.windowBacklink() == window:
     return
@@ -381,12 +409,17 @@ proc containsView*(view, candidate: View): bool =
 
 proc initViewFields*(view: View, frame: Rect = AutoRect) =
   initResponder(view)
+  when not defined(useNativeDynlib):
+    view.xRenderViewId = nextRenderViewId()
   view.initLayoutSignalBus()
   view.xFrame = frame.resolveAutoRect(rect(0.0, 0.0, 0.0, 0.0))
   view.xBounds = rect(0.0, 0.0, view.xFrame.size.width, view.xFrame.size.height)
   view.xFlipped = true
   view.xAlphaValue = 1.0'f32
   view.xNeedsDisplay = true
+  view.xNeedsLocalDisplay = true
+  view.xDisplayRevision = 1
+  view.xRenderSlotRevisions = initTable[RenderSlotId, uint64]()
   view.xNeedsLayout = true
   view.xAutoresizingMaskConstraints = not frame.hasAutoMetric
   view.xHuggingPriority[laHorizontal] = LayoutPriorityLow
@@ -399,6 +432,14 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   discard view.withProtocol(DefaultViewResponder)
   discard view.withProtocol(DefaultAccessibilityProtocol)
   view.observeProtocol(view, ViewSuperviewLifecycleSlots)
+
+when not defined(useNativeDynlib):
+  proc renderViewId*(view: View): RenderViewId =
+    if view.isNil:
+      return 0.RenderViewId
+    if view.xRenderViewId.uint64 == 0:
+      view.xRenderViewId = nextRenderViewId()
+    view.xRenderViewId
 
 proc newView*(frame: Rect = AutoRect): View =
   result = View()

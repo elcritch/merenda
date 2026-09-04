@@ -1,4 +1,9 @@
-import std/[math, options, strutils, unicode]
+import std/[hashes, math, options, strutils, unicode]
+
+when defined(useNativeDynlib):
+  from figdraw/dynlib import GlyphArrangement, lineGlyphRanges
+else:
+  from figdraw import GlyphArrangement, lineGlyphRanges
 
 import sigils/core
 
@@ -193,6 +198,20 @@ type
     xSelectingWithMouse: bool
     xDraggingSession: DraggingSession
 
+const
+  TextUnderlayRenderSlot* = initRenderSlotId(0x54455854'u32, 1)
+  TextLineRenderSlotNamespace = 0x544c494e'u32
+  TextOverlayRenderSlot* = initRenderSlotId(0x54455854'u32, 2)
+  TextViewportRenderSlot* = initRenderSlotId(0x54455854'u32, 3)
+
+func textLineRenderSlotId*(line: int): RenderSlotId =
+  ## Returns the stable retained-render slot for one visual text line.
+  initRenderSlotId(TextLineRenderSlotNamespace, max(line, 0).uint32)
+
+proc invalidateTextSelectionDrawing(textView: TextView) =
+  textView.setNeedsDisplayInRenderSlot(TextUnderlayRenderSlot)
+  textView.setNeedsDisplayInRenderSlot(TextOverlayRenderSlot)
+
 proc syncLayout(textView: TextView)
 proc clearMarkedText(textView: TextView)
 proc textViewStringValue(textView: TextView): string
@@ -349,7 +368,7 @@ proc showInsertionPoint(textView: TextView) =
   if textView.xInsertionPointVisible:
     return
   textView.xInsertionPointVisible = true
-  textView.needsDisplay = true
+  textView.setNeedsDisplayInRenderSlot(TextOverlayRenderSlot)
 
 proc isControlInput(rune: Rune): bool =
   let code = rune.int
@@ -708,13 +727,13 @@ proc `selectionColor=`*(textView: TextView, color: Color) =
     return
   textView.xSelectionColor = color
   textView.xHasSelectionColorOverride = true
-  textView.needsDisplay = true
+  textView.setNeedsDisplayInRenderSlot(TextUnderlayRenderSlot)
 
 proc clearSelectionColorOverride*(textView: TextView) =
   if not textView.xHasSelectionColorOverride:
     return
   textView.xHasSelectionColorOverride = false
-  textView.needsDisplay = true
+  textView.setNeedsDisplayInRenderSlot(TextUnderlayRenderSlot)
 
 proc selectedTextAttributes*(textView: TextView): TextAttributes =
   if not textView.xHasSelectedTextAttributes:
@@ -749,7 +768,7 @@ proc `insertionPointColor=`*(textView: TextView, color: Color) =
   if textView.xInsertionPointColor == color:
     return
   textView.xInsertionPointColor = color
-  textView.needsDisplay = true
+  textView.setNeedsDisplayInRenderSlot(TextOverlayRenderSlot)
 
 proc insertionPointVisible*(textView: TextView): bool =
   textView.xInsertionPointVisible
@@ -758,7 +777,7 @@ proc `insertionPointVisible=`*(textView: TextView, visible: bool) =
   if textView.xInsertionPointVisible == visible:
     return
   textView.xInsertionPointVisible = visible
-  textView.needsDisplay = true
+  textView.setNeedsDisplayInRenderSlot(TextOverlayRenderSlot)
 
 proc insertionPointBlinkPeriod*(textView: TextView): float32 =
   textView.xInsertionPointBlinkPeriod
@@ -936,7 +955,7 @@ proc setTextViewSelectedRange(textView: TextView, value: TextRange) =
   textView.xSelectedRanges = @[clamped]
   textView.updateTypingAttributesForSelection()
   textView.showInsertionPoint()
-  textView.needsDisplay = true
+  textView.invalidateTextSelectionDrawing()
   textView.dispatchSelectionChanged(previousRanges)
 
 proc stringValue*(textView: TextView): string =
@@ -973,7 +992,7 @@ proc setSelectedRanges*(textView: TextView, ranges: openArray[TextRange]) =
   textView.xInsertionPoint = nextRanges[0].maxIndex
   textView.updateTypingAttributesForSelection()
   textView.showInsertionPoint()
-  textView.needsDisplay = true
+  textView.invalidateTextSelectionDrawing()
   textView.dispatchSelectionChanged(previousRanges)
 
 proc `selectedRanges=`*(textView: TextView, ranges: seq[TextRange]) =
@@ -1272,13 +1291,13 @@ proc setFindIndicators*(
         color: color,
         visible: true,
       )
-  textView.needsDisplay = true
+  textView.setNeedsDisplayInRenderSlot(TextUnderlayRenderSlot)
 
 proc clearFindIndicators*(textView: TextView) =
   if textView.xFindIndicators.len == 0:
     return
   textView.xFindIndicators.setLen(0)
-  textView.needsDisplay = true
+  textView.setNeedsDisplayInRenderSlot(TextUnderlayRenderSlot)
 
 proc findTextRanges*(
     textView: TextView, needle: string, caseSensitive = true
@@ -2035,7 +2054,7 @@ proc setCursor*(textView: TextView, index: int, extending = false) =
   textView.xSelectedRanges = @[initTextRange(start, stop - start)]
   textView.updateTypingAttributesForSelection()
   textView.showInsertionPoint()
-  textView.needsDisplay = true
+  textView.invalidateTextSelectionDrawing()
   textView.dispatchSelectionChanged(previousRanges)
 
 proc selectAllText*(textView: TextView) =
@@ -2045,7 +2064,7 @@ proc selectAllText*(textView: TextView) =
   textView.xSelectedRanges = @[initTextRange(0, textView.xTextStorage.len)]
   textView.updateTypingAttributesForSelection()
   textView.showInsertionPoint()
-  textView.needsDisplay = true
+  textView.invalidateTextSelectionDrawing()
   textView.dispatchSelectionChanged(previousRanges)
 
 proc replaceSelectedText*(textView: TextView, insertion: string) =
@@ -2569,7 +2588,133 @@ proc layoutStabilitySnapshot*(
   for fragment in snapshot.lineFragments:
     result.lineFragments.add fragment.roundLineFragmentToScale(scale)
 
-proc drawTextViewContents*(textView: TextView, context: DrawContext) =
+proc nonzeroRevision(value: Hash): uint64 =
+  result = uint64(cast[uint](value))
+  if result == 0:
+    result = 1
+
+proc glyphLineRevision(layout: GlyphArrangement, glyphRange: Slice[int]): uint64 =
+  var value: Hash
+  value = value !& hash(glyphRange.b - glyphRange.a + 1)
+  if layout.arrangedGlyphs.len > 0:
+    for glyphIndex in glyphRange:
+      let glyph = layout.arrangedGlyphs[glyphIndex]
+      value = value !& hash(glyph.fontId)
+      value = value !& hash(uint32(glyph.glyphId))
+      value = value !& hash(glyph.isWhitespace)
+      value = value !& hash(repr(glyph.pos))
+      value = value !& hash(repr(glyph.imageOffset))
+      value = value !& hash(glyph.rect.x)
+      value = value !& hash(glyph.rect.y)
+      value = value !& hash(glyph.rect.w)
+      value = value !& hash(glyph.rect.h)
+  else:
+    for glyphIndex in glyphRange:
+      value = value !& hash(layout.runes[glyphIndex])
+      value = value !& hash(repr(layout.positions[glyphIndex]))
+      value = value !& hash(layout.selectionRects[glyphIndex].x)
+      value = value !& hash(layout.selectionRects[glyphIndex].y)
+      value = value !& hash(layout.selectionRects[glyphIndex].w)
+      value = value !& hash(layout.selectionRects[glyphIndex].h)
+  for spanIndex, span in layout.spans:
+    let
+      first = max(span.a, glyphRange.a)
+      last = min(span.b, glyphRange.b)
+    if first <= last:
+      let font = layout.fonts[spanIndex]
+      value = value !& hash(font.fontId)
+      value = value !& hash(font.size)
+      value = value !& hash(font.lineHeight)
+      value = value !& hash(font.descentAdj)
+      value = value !& hash(font.underline)
+      value = value !& hash(font.strikethrough)
+      if spanIndex < layout.spanColors.len:
+        value = value !& hash(repr(layout.spanColors[spanIndex]))
+  nonzeroRevision(!$value)
+
+proc glyphLineArrangement(
+    layout: GlyphArrangement, glyphRange: Slice[int]
+): GlyphArrangement =
+  let count = glyphRange.b - glyphRange.a + 1
+  if count <= 0:
+    return
+  result.contentHash = cast[Hash](layout.glyphLineRevision(glyphRange))
+  result.lines = @[0 .. count - 1]
+  result.maxSize = layout.maxSize
+  result.minSize = layout.minSize
+  result.bounding = layout.bounding
+  if layout.arrangedGlyphs.len > 0:
+    result.arrangedGlyphs = layout.arrangedGlyphs[glyphRange.a .. glyphRange.b]
+  if layout.runes.len > glyphRange.b:
+    result.runes = layout.runes[glyphRange.a .. glyphRange.b]
+  if layout.positions.len > glyphRange.b:
+    result.positions = layout.positions[glyphRange.a .. glyphRange.b]
+  if layout.selectionRects.len > glyphRange.b:
+    result.selectionRects = layout.selectionRects[glyphRange.a .. glyphRange.b]
+  for spanIndex, span in layout.spans:
+    let
+      first = max(span.a, glyphRange.a)
+      last = min(span.b, glyphRange.b)
+    if first <= last:
+      result.spans.add first - glyphRange.a .. last - glyphRange.a
+      result.fonts.add layout.fonts[spanIndex]
+      if spanIndex < layout.spanColors.len:
+        result.spanColors.add layout.spanColors[spanIndex]
+
+func verticallyBuffered(source: Rect, screens: float32): Rect =
+  let padding = source.size.height * max(screens, 0.0'f32)
+  result = rect(
+    source.origin.x,
+    source.origin.y - padding,
+    source.size.width,
+    source.size.height + padding * 2.0'f32,
+  )
+
+proc drawTextViewUnderlay*(textView: TextView, context: DrawContext) =
+  let revision = textView.renderSlotRevision(TextUnderlayRenderSlot)
+  if not context.beginRenderSlot(TextUnderlayRenderSlot, revision):
+    return
+  textView.updateTextContainer()
+  for indicator in textView.xFindIndicators:
+    if indicator.visible:
+      let rects =
+        if indicator.rects.len > 0:
+          indicator.rects
+        else:
+          textView.xLayoutManager.selectionRects(indicator.range)
+      for rect in rects:
+        discard context.addRectangle(rect, indicator.color)
+  for selected in textView.selectedRanges():
+    if selected.length > 0:
+      for rect in textView.xLayoutManager.selectionRects(selected):
+        discard context.addRectangle(rect, textView.selectionColor())
+
+proc drawTextViewUnderlayInViewport*(
+    textView: TextView, context: DrawContext, verticalBufferScreens = 1.0'f32
+) =
+  ## Draws find and selection decorations only near the clipped viewport.
+  let revision = textView.renderSlotRevision(TextUnderlayRenderSlot)
+  if not context.beginRenderSlot(TextUnderlayRenderSlot, revision):
+    return
+  let visible = context.visibleRect().verticallyBuffered(verticalBufferScreens)
+  textView.updateTextContainer()
+  for indicator in textView.xFindIndicators:
+    if indicator.visible:
+      let rects =
+        if indicator.rects.len > 0:
+          indicator.rects
+        else:
+          textView.xLayoutManager.selectionRects(indicator.range)
+      for indicatorRect in rects:
+        if not indicatorRect.intersection(visible).isEmpty:
+          discard context.addRectangle(indicatorRect, indicator.color)
+  for selected in textView.selectedRanges():
+    if selected.length > 0:
+      for selectionRect in textView.xLayoutManager.selectionRects(selected):
+        if not selectionRect.intersection(visible).isEmpty:
+          discard context.addRectangle(selectionRect, textView.selectionColor())
+
+proc drawTextViewText*(textView: TextView, context: DrawContext) =
   textView.updateTextContainer()
   let
     textRect = textView.bounds.inset(textView.xTextContainer.insets)
@@ -2585,27 +2730,89 @@ proc drawTextViewContents*(textView: TextView, context: DrawContext) =
           textView.alignment(),
           textView.xTextContainer.wraps,
         )
-  for indicator in textView.xFindIndicators:
-    if indicator.visible:
-      let rects =
-        if indicator.rects.len > 0:
-          indicator.rects
-        else:
-          textView.xLayoutManager.selectionRects(indicator.range)
-      for rect in rects:
-        discard context.addRectangle(rect, indicator.color)
-  for selected in textView.selectedRanges():
-    if selected.length > 0:
-      for rect in textView.xLayoutManager.selectionRects(selected):
-        discard context.addRectangle(rect, textView.selectionColor())
+    lineRanges = layout.lineGlyphRanges()
+  if lineRanges.len == 0:
+    let slot = textLineRenderSlotId(0)
+    discard context.beginRenderSlot(slot, 0x9e3779b97f4a7c15'u64)
+  else:
+    for lineIndex, glyphRange in lineRanges:
+      let
+        slot = textLineRenderSlotId(lineIndex)
+        revision = layout.glyphLineRevision(glyphRange)
+      if context.beginRenderSlot(slot, revision):
+        discard context.addText(textRect, layout.glyphLineArrangement(glyphRange))
+
+func firstFragmentEndingAfter(
+    fragments: openArray[TextLineFragment], minimumY: float32
+): int =
+  var
+    low = 0
+    high = fragments.len
+  while low < high:
+    let middle = low + (high - low) div 2
+    if fragments[middle].fragmentRect.maxY < minimumY:
+      low = middle + 1
+    else:
+      high = middle
+  low
+
+proc drawTextViewTextInViewport*(
+    textView: TextView, context: DrawContext, verticalBufferScreens = 1.0'f32
+) =
+  ## Draws only visual lines near the clipped viewport while retaining full layout.
+  ## The viewport slot causes scrolling to reconcile entering and leaving line slots.
+  textView.updateTextContainer()
+  let
+    viewportRevision = textView.renderSlotRevision(TextViewportRenderSlot)
+    displayStorage = textView.displayTextStorage()
+  discard context.beginRenderSlot(TextViewportRenderSlot, viewportRevision)
+  let visible = context.visibleRect().verticallyBuffered(verticalBufferScreens)
+
+  if displayStorage != textView.xTextStorage:
+    textView.drawTextViewText(context)
+    return
+
+  let
+    textRect = textView.bounds.inset(textView.xTextContainer.insets)
+    manager = textView.xLayoutManager
+    layout = manager.glyphArrangement()
+    fragments = manager.layoutSnapshot().lineFragments
+    glyphCount =
+      if layout.arrangedGlyphs.len > 0: layout.arrangedGlyphs.len else: layout.runes.len
+  var index = fragments.firstFragmentEndingAfter(visible.minY)
+  while index < fragments.len and fragments[index].fragmentRect.minY <= visible.maxY:
+    let fragment = fragments[index]
+    if fragment.glyphRange.length > 0:
+      let
+        start = fragment.glyphRange.location.toInt
+        stop = min(fragment.glyphRange.maxIndex, glyphCount)
+      if start < stop:
+        let
+          glyphRange = start .. stop - 1
+          slot = textLineRenderSlotId(fragment.lineIndex.toInt)
+          revision = layout.glyphLineRevision(glyphRange)
+        if context.beginRenderSlot(slot, revision):
+          discard context.addText(textRect, layout.glyphLineArrangement(glyphRange))
+    inc index
+
+proc drawTextViewOverlay*(textView: TextView, context: DrawContext) =
+  let revision = textView.renderSlotRevision(TextOverlayRenderSlot)
+  if not context.beginRenderSlot(TextOverlayRenderSlot, revision, rspAfterSubviews):
+    return
+  textView.updateTextContainer()
   let selected = textView.textViewSelectedRange()
-  discard context.addText(textRect, layout)
   if textView.editable and selected.length == 0 and textView.isFocused and
       textView.xInsertionPointVisible:
     context.addRectangle(
       textView.xLayoutManager.caretRect(textView.textViewInsertionPoint()),
       textView.insertionPointColor(),
     )
+
+proc drawTextViewContents*(textView: TextView, context: DrawContext) =
+  ## Draws all text stages for callers outside normal view-scene traversal.
+  textView.drawTextViewUnderlay(context)
+  textView.drawTextViewText(context)
+  textView.drawTextViewOverlay(context)
 
 proc hasSelectedText(textView: TextView): bool =
   for range in textView.selectedRanges():
@@ -2680,8 +2887,14 @@ protocol DefaultTextViewCommandDispatch of ResponderCommandDispatchProtocol:
     textView.performTextInputCommand(args.selector, args.sender)
 
 protocol DefaultTextViewDrawing of ViewDrawingProtocol:
+  method drawUnderlay(textView: TextView, context: DrawContext) =
+    textView.drawTextViewUnderlay(context)
+
   method draw(textView: TextView, context: DrawContext) =
-    textView.drawTextViewContents(context)
+    textView.drawTextViewText(context)
+
+  method drawOverlay(textView: TextView, context: DrawContext) =
+    textView.drawTextViewOverlay(context)
 
 protocol DefaultTextViewEvents of ResponderEventProtocol:
   method mouseDown(textView: TextView, event: MouseEvent): bool =

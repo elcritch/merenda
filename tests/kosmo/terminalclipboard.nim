@@ -4,7 +4,7 @@ import merenda/nimkit
 import merenda/kosmo/kosmo
 
 proc pollUntilText(
-    session: TerminexSession, expected: string, timeout = initDuration(seconds = 3)
+    session: TerminalViewSession, expected: string, timeout = initDuration(seconds = 3)
 ): bool =
   let deadline = getMonoTime() + timeout
   while getMonoTime() < deadline:
@@ -27,12 +27,13 @@ suite "Kosmo terminal clipboard commands":
     test "Edit menu copy rejoins a wrapped terminal line":
       let
         app = newApplication("Kosmo Wrapped Terminal Clipboard Test")
-        frontend = newKosmoApplication(app)
-        session = newTerminalSession(columns = 12, rows = 4)
+        frontend = newKosmoApplication(app, monitorsGitStatus = false)
+        session = newCompactTerminalSession(columns = 12, rows = 4)
         terminal = newTerminalView(session, frame = rect(0, 0, 400, 120))
         pasteboard = generalPasteboard()
         previousClipboard = pasteboard.plainText()
       defer:
+        terminal.close()
         discard pasteboard.setPlainText(previousClipboard)
         frontend.close()
         frontend.window.close()
@@ -70,8 +71,8 @@ suite "Kosmo terminal clipboard commands":
     test "Edit menu copy and paste target the focused terminal":
       let
         app = newApplication("Kosmo Terminal Clipboard Test")
-        frontend = newKosmoApplication(app)
-        session = spawnTerminalSession(
+        frontend = newKosmoApplication(app, monitorsGitStatus = false)
+        session = spawnCompactTerminalSession(
           initTerminalSpawnOptions(
             command =
               "stty raw -echo; printf 'copy target\\nready\\n'; " &
@@ -84,6 +85,7 @@ suite "Kosmo terminal clipboard commands":
         pasteboard = generalPasteboard()
         previousClipboard = pasteboard.plainText()
       defer:
+        terminal.close()
         discard pasteboard.setPlainText(previousClipboard)
         frontend.close()
         frontend.window.close()

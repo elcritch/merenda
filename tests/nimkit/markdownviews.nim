@@ -1,5 +1,5 @@
 ## Markdown view behavior shared by the NimKit test runner.
-import std/[monotimes, os, strformat, strutils, times, unicode, unittest]
+import std/[algorithm, monotimes, os, strformat, strutils, times, unicode, unittest]
 
 import figdraw
 
@@ -12,6 +12,7 @@ const
   RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
   RepositoryReadme = RepositoryRoot / "README.md"
   TestImagePath = RepositoryRoot / "data" / "img1.png"
+  ReadmeLayoutTimeoutMilliseconds = 60_000
 
 proc runeIndexOf(text, needle: string): int =
   let
@@ -30,6 +31,34 @@ proc attributesFor(storage: TextStorage, needle: string): TextAttributes =
   let index = storage.stringValue().runeIndexOf(needle)
   doAssert index >= 0, "rendered Markdown should contain: " & needle
   storage.attributesAt(index)
+
+proc tableScrollViews(view: MarkdownView): seq[ScrollView] =
+  for subview in view.textView().subviews():
+    if subview of ScrollView:
+      let
+        scrollView = ScrollView(subview)
+        documentView = scrollView.documentView()
+      if documentView of TextView and
+          documentView.accessibilityLabel() == "Markdown table":
+        result.add scrollView
+
+proc codeBlockScrollViews(view: MarkdownView, includeHidden = false): seq[ScrollView] =
+  for subview in view.textView().subviews():
+    if subview of ScrollView:
+      let
+        scrollView = ScrollView(subview)
+        documentView = scrollView.documentView()
+      if documentView of TextView and
+          documentView.accessibilityLabel() == "Markdown code block" and
+          (includeHidden or not scrollView.hidden):
+        result.add scrollView
+
+proc textRangeRect(textView: TextView, range: TextRange): Rect =
+  for selectionRect in textView.selectionRects(range):
+    if result.isEmpty:
+      result = selectionRect
+    else:
+      result = result.union(selectionRect)
 
 proc unavailableMarkdownImage(url: string): ImageResource =
   discard url
@@ -563,6 +592,26 @@ fencedToken value
       style.syntaxTokenColors[stcKeyword]
     check storage.attributesFor("indentedToken").foregroundColor == style.codeColor
 
+  test "Matter maps TextMate scopes and language aliases to neutral rune spans":
+    let
+      source = "proc answer = 42\n#[ first\ncontinued ]#\necho \"κόσμος\""
+      spans = matterSyntaxHighlighter(source, "nims")
+
+    check spans.syntaxTokenAt(source.runeIndexOf("proc")) == stcKeyword
+    check spans.syntaxTokenAt(source.runeIndexOf("answer")) == stcIdentifier
+    check spans.syntaxTokenAt(source.runeIndexOf("42")) == stcNumber
+    check spans.syntaxTokenAt(source.runeIndexOf("continued")) == stcComment
+    check spans.syntaxTokenAt(source.runeIndexOf("\"κόσμος\"")) == stcString
+    check matterSyntaxHighlighter("value", "not-a-language").len == 0
+
+  test "Markdown uses Matter for fenced languages outside SynEdit's classifier":
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage("```go\nfunc main() {}\n```")
+
+    check storage.attributesFor("func").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+
   test "unknown fenced languages retain the ordinary code color":
     let
       style = initMarkdownStyle()
@@ -621,6 +670,223 @@ echo "fenced"
         check node.screenBox.w > 20.0'f32
         check node.screenBox.h > 20.0'f32
     check panelCount == 2
+
+  test "selecting text retains unchanged Markdown underlays":
+    let
+      root = newView(frame = rect(0, 0, 520, 320))
+      view = newMarkdownView(
+        "Before.\n\n```nim\necho \"selected\"\n```", frame = rect(0, 0, 520, 320)
+      )
+    root.addSubview(view)
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    root.layoutSubtreeIfNeeded()
+    discard root.buildRenderScene()
+
+    view.textView().selectedRange = initTextRange(0, 6)
+    discard root.buildRenderScene()
+
+  test "large documents retain only buffered visible text lines":
+    var source: string
+    for index in 0 ..< 240:
+      source.add &"paragraph {index:03}\n\n"
+    let view = newMarkdownView(source, frame = rect(0, 0, 360, 180))
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+
+    let
+      scene = view.buildRenderScene()
+      totalLines = view.textView().layoutManager().lineCount()
+    var firstRendered: seq[string]
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        var text: string
+        for rune in node.textLayout.runes:
+          text.add rune
+        firstRendered.add text
+
+    check totalLines > 200
+    check firstRendered.len < totalLines div 3
+    check firstRendered.join().contains("paragraph 000")
+    check not firstRendered.join().contains("paragraph 239")
+
+    view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
+    discard view.buildRenderScene()
+    var lastRendered: seq[string]
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        var text: string
+        for rune in node.textLayout.runes:
+          text.add rune
+        lastRendered.add text
+
+    check lastRendered.len < totalLines div 3
+    check not lastRendered.join().contains("paragraph 000")
+    check lastRendered.join().contains("paragraph 239")
+
+    view.textView().selectedRange = initTextRange(0, view.textStorage().len)
+    discard view.buildRenderScene()
+    var selectionRectCount = 0
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == view.selectionColor().rgba:
+        inc selectionRectCount
+    check selectionRectCount < totalLines div 3
+
+  test "offscreen code and table scroll views are created near the viewport":
+    let source =
+      "introductory paragraph\n\n".repeat(160) & "```text\n" & "wide code ".repeat(80) &
+      "\n```\n\n" & "| A | B | C | D | E | F | G | H | I | J | K | L |\n" &
+      "| - | - | - | - | - | - | - | - | - | - | - | - |\n" &
+      "| CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU |"
+    let view = newMarkdownView(source, frame = rect(0, 0, 300, 180))
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    discard view.buildRenderScene()
+
+    check view.codeBlockScrollViews(includeHidden = true).len == 0
+    check view.tableScrollViews().len == 0
+
+    view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
+    discard view.buildRenderScene()
+    discard view.pollMarkdownParsing()
+    view.layoutSubtreeIfNeeded()
+    discard view.buildRenderScene()
+
+    check view.codeBlockScrollViews(includeHidden = true).len == 1
+    check view.tableScrollViews().len == 1
+
+  test "code block panels in ordered lists do not overlap item labels":
+    var style = initMarkdownStyle()
+    style.codeBlockStyle.padding = insets(7.0'f32, 10.0'f32)
+    let source =
+      """
+1. Install dependencies:
+
+   ```bash
+   atlas install
+   ```
+
+2. Build:
+
+   ```bash
+   nim build
+   ```
+
+3. Run tests:
+
+   ```bash
+   nim test
+   ```
+"""
+    let view = newMarkdownView(source, frame = rect(0, 0, 520, 480), style = style)
+    require view.waitForMarkdownParsing()
+    let renders = buildRenders(view)
+    require DefaultDrawLevel in renders
+
+    var panelFrames: seq[Rect]
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == style.codeBlockStyle.backgroundColor.rgba:
+        panelFrames.add rect(
+          node.screenBox.x, node.screenBox.y, node.screenBox.w, node.screenBox.h
+        )
+    panelFrames.sort(
+      proc(left, right: Rect): int =
+        cmp(left.minY, right.minY)
+    )
+    require panelFrames.len == 3
+
+    let storage = view.textStorage()
+    proc renderedTextFrame(text: string): Rect =
+      let index = storage.stringValue().runeIndexOf(text)
+      require index >= 0
+      for selectionRect in view.textView().selectionRects(
+        initTextRange(index, text.runeLen)
+      ):
+        if result.isEmpty:
+          result = selectionRect
+        else:
+          result = result.union(selectionRect)
+
+    let labels = ["Install dependencies:", "Build:", "Run tests:"]
+    for index, label in labels:
+      let labelFrame = renderedTextFrame(label)
+      check panelFrames[index].minY >= labelFrame.maxY
+      if index < labels.high:
+        let nextLabelFrame = renderedTextFrame(labels[index + 1])
+        check nextLabelFrame.minY >= panelFrames[index].maxY
+
+  test "wide fenced and indented code blocks scroll within the Markdown document":
+    let
+      longLine = "let payload = \"" & "abcdefghij".repeat(18) & "\""
+      style = initMarkdownStyle()
+      source =
+        "A prose paragraph that should wrap to the Markdown viewport while code " &
+        "blocks below retain their source lines. ".repeat(3) & "\n\n```nim\n" & longLine &
+        "\n```\n\nBetween blocks.\n\n    " & longLine
+      view = newMarkdownView(source, frame = rect(0, 0, 320, 320), style = style)
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let
+      codeScrollViews = view.codeBlockScrollViews()
+      rendered = view.textStorage().stringValue()
+      codeStart = rendered.runeIndexOf(longLine)
+      paragraphStop = rendered.runeIndexOf("\n\n")
+    require codeScrollViews.len == 2
+    require codeStart >= 0
+    require paragraphStop > 0
+    for codeScrollView in codeScrollViews:
+      check codeScrollView.hasHorizontalScroller
+      check codeScrollView.maximumContentOffset().x > 0.0'f32
+      let expectedRightEdge =
+        view.textView().bounds().maxX - style.codeBlockStyle.outlineWidth
+      check abs(codeScrollView.frame().maxX - expectedRightEdge) <= 0.001'f32
+      let
+        codeTextView = TextView(codeScrollView.documentView())
+        localCodeRect =
+          codeTextView.textRangeRect(initTextRange(0, codeTextView.textStorage().len))
+      check localCodeRect.maxY <= codeScrollView.viewportSize().height + 0.001'f32
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+    let
+      sourceCodeAttributes = view.textStorage().attributesFor("payload")
+      localCodeAttributes = TextView(codeScrollViews[0].documentView())
+        .textStorage()
+        .attributesFor("payload")
+    check localCodeAttributes == sourceCodeAttributes
+
+    let
+      paragraphRects = view.textView().selectionRects(initTextRange(0, paragraphStop))
+      codeRects =
+        view.textView().selectionRects(initTextRange(codeStart, longLine.runeLen))
+      viewportWidth = view.scrollView().viewportSize().width
+    check paragraphRects.len > 1
+    for rect in paragraphRects:
+      check rect.maxX <= viewportWidth + 0.001'f32
+    check codeRects.len == 1
+    check codeRects[0].maxX > viewportWidth
+
+    codeScrollViews[0].contentOffset =
+      initPoint(codeScrollViews[0].maximumContentOffset().x, 0.0'f32)
+    check codeScrollViews[0].contentOffset().x > 0.0'f32
+    check codeScrollViews[1].contentOffset().x == 0.0'f32
+    check view.scrollView().contentOffset().x == 0.0'f32
+
+    var fittingWidth = 0.0'f32
+    for codeScrollView in codeScrollViews:
+      fittingWidth = max(fittingWidth, codeScrollView.documentSize().width)
+    view.frame = rect(0, 0, fittingWidth + 100.0'f32, 320)
+    view.layoutSubtreeIfNeeded()
+
+    check view.codeBlockScrollViews().len == 0
+    let hiddenCodeScrollViews = view.codeBlockScrollViews(includeHidden = true)
+    require hiddenCodeScrollViews.len == 2
+    for codeScrollView in hiddenCodeScrollViews:
+      check codeScrollView.horizontalScroller().hidden
+      check codeScrollView.maximumContentOffset().x <= 0.001'f32
 
   test "raw inline and block HTML remain inert and visibly muted":
     let
@@ -692,6 +958,181 @@ Press <kbd>Enter</kbd>.
         foundContinuation = true
     check foundContinuation
 
+  test "GFM table wrapping preserves short phrases and whole words":
+    let
+      source =
+        "| A | B | C | D | E | F | G | H | I | J | K | L |\n" &
+        "| - | - | - | - | - | - | - | - | - | - | - | - |\n" &
+        "| CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | " &
+        "CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 |"
+      lines = markdownTextStorage(source).stringValue().splitLines()
+
+    check lines[0].runeLen > 100
+    check lines[^1].count("CPU p95") == 12
+
+    let longWord = "uninterrupted_identifier_that_must_remain_whole"
+    let wordLines = markdownTextStorage(
+        "| Name | Value |\n| - | - |\n| key | " & longWord & " |"
+      )
+      .stringValue()
+      .splitLines()
+    check wordLines[^1].contains(longWord)
+
+  test "GFM tables use a smaller font than Markdown body text":
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage(
+        "Body prose.\n\n| Metric | Value |\n| - | - |\n| CPU p95 | 42 ms |",
+        style = style,
+      )
+
+    check storage.attributesFor("Body prose").fontSize == style.bodyFontSize
+    check storage.attributesFor("Metric").fontSize == style.bodyFontSize * 0.9'f32
+    check storage.attributesFor("CPU p95").fontSize == style.bodyFontSize * 0.9'f32
+
+  test "wide GFM tables scroll independently while the Markdown document fits":
+    let
+      source =
+        "A deliberately long paragraph that should continue to use wrapped text " &
+        "layout even when the table below needs horizontal overflow. ".repeat(4) & "\n\n" &
+        "| A | B | C | D | E | F | G | H |\n" & "| - | - | - | - | - | - | - | - |\n" &
+        "| CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | " &
+        "CPU p95 | CPU p95 |"
+      view = newMarkdownView(source, frame = rect(0, 0, 300, 240))
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    check view.wraps
+    let
+      tableScrollViews = view.tableScrollViews()
+      rendered = view.textStorage().stringValue()
+      paragraphStop = rendered.runeIndexOf("\n\n")
+      tableStart = paragraphStop + 2
+      tableLineLength = rendered.runeSubStr(tableStart).runeIndexOf("\n")
+
+    check not view.scrollView().hasHorizontalScroller
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+    check view.textView().frame().size.width <=
+      view.scrollView().viewportSize().width + 0.001'f32
+    require tableScrollViews.len == 1
+    let tableScrollView = tableScrollViews[0]
+    check tableScrollView.hasHorizontalScroller
+    check tableScrollView.maximumContentOffset().x > 0.0'f32
+    check abs(tableScrollView.frame().maxX - view.textView().bounds().maxX) <= 0.001'f32
+
+    tableScrollView.contentOffset =
+      initPoint(tableScrollView.maximumContentOffset().x, 0.0'f32)
+    check tableScrollView.contentOffset().x > 0.0'f32
+    check view.scrollView().contentOffset().x == 0.0'f32
+
+    require paragraphStop > 0
+    require tableLineLength > 0
+    let
+      paragraphRects = view.textView().selectionRects(initTextRange(0, paragraphStop))
+      tableRects =
+        view.textView().selectionRects(initTextRange(tableStart, tableLineLength))
+      viewportWidth = view.scrollView().viewportSize().width
+      tableRange = initTextRange(tableStart, rendered.runeLen - tableStart)
+      mainTableRect = view.textView().textRangeRect(tableRange)
+      tableTextView = TextView(tableScrollView.documentView())
+      localTableRect =
+        tableTextView.textRangeRect(initTextRange(0, tableTextView.textStorage().len))
+
+    check paragraphRects.len > 1
+    for rect in paragraphRects:
+      check rect.maxX <= viewportWidth + 0.001'f32
+    check tableRects.len == 1
+    check tableRects[0].maxX > viewportWidth
+    check tableScrollView.frame().origin.y <= mainTableRect.minY + 0.001'f32
+    check tableScrollView.frame().origin.y + tableScrollView.viewportSize().height >=
+      mainTableRect.maxY - 0.001'f32
+    check localTableRect.maxY <= tableScrollView.viewportSize().height + 0.001'f32
+
+    view.markdown = "The replacement document has no table."
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+    check view.tableScrollViews().len == 0
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+
+  test "compact GFM tables stay within the Markdown viewport":
+    let view = newMarkdownView(
+      "| Metric | Value |\n| - | - |\n| CPU | 42% |", frame = rect(0, 0, 420, 200)
+    )
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+    check view.tableScrollViews().len == 0
+
+  test "table scroller hides once the resized panel contains the table":
+    var
+      headers: seq[string]
+      dividers: seq[string]
+      values: seq[string]
+    for index in 0 ..< 20:
+      headers.add "Column " & $index
+      dividers.add "---"
+      values.add "CPU p95"
+    let
+      source =
+        "| " & headers.join(" | ") & " |\n| " & dividers.join(" | ") & " |\n| " &
+        values.join(" | ") & " |"
+      view = newMarkdownView(source, frame = rect(0, 0, 300, 200))
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let narrowScrollViews = view.tableScrollViews()
+    require narrowScrollViews.len == 1
+    require narrowScrollViews[0].maximumContentOffset().x > 0.0'f32
+    let fittingWidth = narrowScrollViews[0].documentSize().width + 100.0'f32
+
+    view.frame = rect(0, 0, fittingWidth, 200)
+    require view.waitForMarkdownRendering()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let fittingScrollViews = view.tableScrollViews()
+    require fittingScrollViews.len == 1
+    let fittingScrollView = fittingScrollViews[0]
+    check fittingScrollView.maximumContentOffset().x <= 0.001'f32
+    check fittingScrollView.horizontalScroller().hidden
+    check abs(
+      fittingScrollView.frame().size.height -
+        fittingScrollView.documentView().frame().size.height
+    ) <= 0.001'f32
+
+  test "each overflowing GFM table gets its own horizontal scroll view":
+    let
+      wideTable =
+        "| A | B | C | D | E | F | G | H |\n" & "| - | - | - | - | - | - | - | - |\n" &
+        "| CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | CPU p95 | " &
+        "CPU p95 | CPU p95 |"
+      view = newMarkdownView(
+        wideTable & "\n\nBetween the tables.\n\n" & wideTable,
+        frame = rect(0, 0, 300, 320),
+      )
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    require view.waitForMarkdownLayout()
+    view.layoutSubtreeIfNeeded()
+
+    let tableScrollViews = view.tableScrollViews()
+    require tableScrollViews.len == 2
+    for tableScrollView in tableScrollViews:
+      check tableScrollView.maximumContentOffset().x > 0.0'f32
+    tableScrollViews[0].contentOffset =
+      initPoint(tableScrollViews[0].maximumContentOffset().x, 0.0'f32)
+    check tableScrollViews[0].contentOffset().x > 0.0'f32
+    check tableScrollViews[1].contentOffset().x == 0.0'f32
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+
   test "GFM tables reflow once the Markdown viewport settles":
     let
       source =
@@ -704,8 +1145,8 @@ Press <kbd>Enter</kbd>.
     require view.waitForMarkdownParsing()
     let narrowLineCount = view.textStorage().stringValue().splitLines().len
 
-    view.frame = rect(0, 0, 900, 240)
-    view.layoutSubtreeIfNeeded()
+    # Crosses the first whole-word wrap threshold even with wide fallback fonts.
+    view.frame = rect(0, 0, 1_600, 240)
     require view.waitForMarkdownRendering()
     let wideLineCount = view.textStorage().stringValue().splitLines().len
 
@@ -852,6 +1293,10 @@ Press <kbd>Enter</kbd>.
       parsingElapsed = getMonoTime() - parsingStarted
       parsingChunkCount = view.markdownRenderChunkCount()
       maximumParsingChunk = view.markdownMaximumRenderChunkDuration()
+      layoutStarted = getMonoTime()
+    require view.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
+    let
+      layoutElapsed = getMonoTime() - layoutStarted
       renderingStarted = getMonoTime()
     discard buildRenders(view)
     let
@@ -876,6 +1321,7 @@ Press <kbd>Enter</kbd>.
     darkStyle.codeBlockStyle.backgroundColor = color(0.08, 0.10, 0.14, 1.0)
     view.markdownStyle = darkStyle
     require view.waitForMarkdownRendering()
+    require view.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
     discard buildRenders(view)
     let
       styleElapsed = getMonoTime() - styleStarted
@@ -885,7 +1331,8 @@ Press <kbd>Enter</kbd>.
     echo &"README MarkdownView timing: dispatch " &
       &"{constructionElapsed.inMilliseconds} ms, parse and apply " &
       &"{parsingElapsed.inMilliseconds} ms in {parsingChunkCount} chunks " &
-      &"(max {maximumParsingChunk.inMilliseconds} ms), render " &
+      &"(max {maximumParsingChunk.inMilliseconds} ms), layout " &
+      &"{layoutElapsed.inMilliseconds} ms, render " &
       &"{renderingElapsed.inMilliseconds} ms, click " &
       &"{clickElapsed.inMilliseconds} ms, restyle and render " &
       &"{styleElapsed.inMilliseconds} ms in {styleChunkCount} chunks " &
@@ -917,7 +1364,7 @@ Press <kbd>Enter</kbd>.
     let
       singleElapsed = getMonoTime() - singleStarted
       singleSettleStarted = getMonoTime()
-    require first.waitForMarkdownLayout()
+    require first.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
     discard buildRenders(first)
     let
       singleSettleElapsed = getMonoTime() - singleSettleStarted
@@ -936,8 +1383,8 @@ Press <kbd>Enter</kbd>.
     let
       pairElapsed = getMonoTime() - pairStarted
       pairSettleStarted = getMonoTime()
-    require first.waitForMarkdownLayout()
-    require second.waitForMarkdownLayout()
+    require first.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
+    require second.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
     discard buildRenders(first)
     discard buildRenders(second)
     let pairSettleElapsed = getMonoTime() - pairSettleStarted

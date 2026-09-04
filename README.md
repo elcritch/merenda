@@ -46,10 +46,22 @@ requires "https://github.com/elcritch/merenda"
 Then install dependencies with Atlas:
 
 ```sh
-atlas install --update
+atlas install -tuk
 ```
 
-Note: You'll want to install the most recent [Atlas](https://github.com/nim-lang/atlas#installation), where curl install is the easiest. Nimble should also work but it's not tested currently.
+Note: You'll want to install the most recent [Atlas](https://github.com/nim-lang/atlas#installation), where curl install is the easiest. 
+
+## Kosmo Install
+
+To run Kosmo you need to install the "kosmo" feature's deps with Atlas:
+
+```sh
+atlas install -tuk --features:kosmo
+```
+
+## Nimble
+
+Nimble has a couple of outstanding bugs regarding features. Until they're fixed Atlas is the only way to install the appropriate deps.
 
 ## Quick Start
 
@@ -115,7 +127,9 @@ bounded chunks between application frames. The displayed document is replaced
 atomically after the final chunk, keeping the main thread responsive without
 showing a partial document. It supports headings, inline styles, links, code,
 quotes, lists, thematic breaks, GFM tables, and native local images without
-embedding an HTML engine:
+embedding an HTML engine. Tables preserve short phrases and whole words, wrap
+longer cell prose to a 90%-of-viewport target, and scroll horizontally when
+their minimum readable width exceeds that target:
 
 ```nim
 import merenda/nimkit
@@ -139,8 +153,11 @@ viewer.markdownStyle = style
 GFM is the default. Pass `initMarkdownParserConfig(mddCommonMark)` when strict
 CommonMark parsing is preferable. Table columns share measured widths, honor
 GFM alignment, and wrap long cell contents to the Markdown viewport; a settled
-pane resize coalesces one table reflow. Raw HTML is shown as inert monospace text,
-except for `<img>` tags, which use the same native image path as Markdown image
+pane resize coalesces one table reflow. Large documents keep their full text
+layout for scrolling and selection, while retaining Fig text nodes,
+decorations, images, and embedded code or table views only near the visible
+viewport. Raw HTML is shown as inert monospace text, except for `<img>` tags,
+which use the same native image path as Markdown image
 syntax and honor `src`, `alt`, `title`, `width`, and `height`. Relative and
 absolute local image destinations are loaded when `imageBasePath` is set. HTTP
 and HTTPS images load asynchronously through `UrlAssetLoader`, first appearing
@@ -168,9 +185,10 @@ Language-tagged fenced code blocks use the same frontend-neutral
 `SyntaxTokenSpan` values; `MarkdownStyle.syntaxTokenColors` maps their classes to
 presentation colors. The Markdown parser still owns all document structure and
 inline styling—the syntax highlighter never receives the Markdown source outside
-the contents of a tagged fence. NimKit's built-in SynEdit classifier is the
-default, while a nil highlighter or unknown language retains the ordinary
-monospace `codeColor`.
+the contents of a tagged fence. Matter's bundled TextMate grammars are the
+default in both NimKit and Kosmo, while SynEdit and Moe remain available as
+alternative highlighters. A nil highlighter or unknown language retains the
+ordinary monospace `codeColor`.
 
 ## Cached URL Assets
 
@@ -408,7 +426,7 @@ declared on macOS or Windows, and they require a Wayland session at runtime.
 
 `TerminalView` is a native NimKit terminal widget backed by Terminex. It provides
 Unicode wide-cell handling, 256-color and true-color rendering, text attributes,
-primary and alternate screens, ring-buffered scrollback, selection, clipboard
+primary and alternate screens, compact encoded scrollback, selection, clipboard
 commands, bracketed paste, application cursor keys, focus reporting, and xterm
 mouse tracking. It resizes its pseudo-terminal to the visible monospace grid and
 polls the child automatically while attached to a window.
@@ -425,15 +443,20 @@ app.runWindow(window, terminal, terminal)
 ```
 
 Passing a `command` runs it through the selected shell; leaving it empty starts
-an interactive shell. `TerminexSession` is also public for applications that
-want to drive the parser and PTY transport separately from the view. The PTY
-backend currently supports POSIX platforms (macOS, Linux, and FreeBSD).
+an interactive shell. Terminal views use Terminex's `CompactTerminalSession`
+backend to reduce the memory retained by large histories. Terminex session APIs
+are also public for applications that want to drive the parser and PTY transport
+separately from the view. The PTY backend currently supports POSIX platforms
+(macOS, Linux, and FreeBSD).
 
 OSC 52 clipboard writes are disabled by default because terminal output should
 not silently replace user clipboard contents. Enable them for a trusted child
-with `terminal.allowsClipboardWrites = true`. Title, working-directory, bell,
-process-exit, and hyperlink activation changes are available as NimKit signals.
-The complete runnable example is `examples/terminal_demo.nim`.
+with `terminal.allowsClipboardWrites = true`. Holding Command on macOS or Control
+on other platforms reveals OSC 8 hyperlinks and plain HTTP(S) URLs; clicking
+emits `terminalHyperlinkWasActivated`, even when the child has enabled mouse
+tracking. Set `terminal.allowsLinkActivation = false` to disable this behavior.
+Title, working-directory, bell, and process-exit changes are also available as
+NimKit signals. The complete runnable example is `examples/terminal_demo.nim`.
 
 Controls use Cocoa-style target/action for commands:
 
@@ -614,6 +637,22 @@ For example:
 }
 ```
 
+Kosmo also loads `config.json` from that directory
+(`defaultKosmoConfigPath()`). It contains the selected Moe theme plus optional
+Merenda theme, interface-font, monospace-font, and font-size preferences.
+Invalid configuration is ignored. Selecting a Moe theme in Kosmo Settings
+updates this file.
+
+```json
+{
+  "moeTheme": "default",
+  "merendaTheme": "darkbsd",
+  "merendaFont": "Iosevka",
+  "merendaMonoFont": "JetBrains Mono",
+  "merendaFontSize": 14.0
+}
+```
+
 Run `kosmo --bg [file-or-folder]` to launch the standalone editor detached from
 the invoking shell. Kosmo preserves the current working directory, forwards the
 remaining command-line arguments to its detached process, and disconnects its
@@ -631,8 +670,8 @@ creates an editor-only window without a file-browser sidebar. Project window
 titles show `Kosmo (first-root)` and add `+ N` inside the parentheses when more
 top-level roots are open.
 
-About Kosmo shows the Kosmo icon, release version, build Git hash, Moe project
-reference, and Kosmo's GNU GPL-3.0 license notice.
+About Kosmo shows the Kosmo icon, the package version from `merenda.nimble`, build
+Git hash, clickable Moe project link, and Kosmo's GNU GPL-3.0 license notice.
 
 Kosmo Settings includes a Moe Themes tab. It provides Catppuccin Mocha and
 Latte, Tokyo Night Moon, Kanagawa Wave, and One Dark alongside Moe's default
@@ -644,8 +683,11 @@ Settings refreshes the list, so new themes appear without restarting Kosmo.
 Kosmo's sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
 double-clicking promotes it to a permanent editor tab. Git-ignored files and
-dot-directories remain visible in the file tree with muted gray text. Holding
-Control while scrolling over an editor accelerates the wheel movement threefold.
+dot-directories remain visible in the file tree with muted gray text. Find in Files
+searches Git tracked and untracked non-ignored files and skips binary or unsupported
+text encodings by default; both filters are configurable through `FileSearchOptions`.
+Holding Control while scrolling over an editor accelerates the wheel movement
+threefold.
 
 Markdown files open in Kosmo's native pretty viewer by default. A compact
 floating control group in the document switches between the rendered preview
@@ -658,7 +700,8 @@ editor group. Terminal and text tabs share selection, closing, reordering,
 split-pane dragging, detached windows, and tab-navigation shortcuts. Other
 content can use the same lifecycle by constructing a `KosmoPaneDocument` with
 a content view, preferred first responder, and optional save and close
-callbacks.
+callbacks. Kosmo opens terminal links in the system browser; this can be enabled
+or disabled from the Terminal settings page.
 
 ## Workspace And Services
 

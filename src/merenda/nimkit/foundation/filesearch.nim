@@ -1,6 +1,10 @@
 ## Asynchronous, memory-mapped regular-expression search for local files.
 
-import std/[algorithm, atomics, monotimes, os, tables, times]
+import
+  std/[
+    algorithm, atomics, mimetypes, monotimes, os, osproc, sets, streams, strutils,
+    tables, times, unicode,
+  ]
 
 import faststreams/inputs
 import regex
@@ -12,6 +16,7 @@ const
   DefaultFileSearchMaxMatchesPerFile* = 1_000
   DefaultFileSearchMaxFiles* = 100_000
   DefaultFileSearchMaxFileSizeBytes* = 16'i64 * 1024 * 1024
+  FileSearchEncodingSampleSize = 8 * 1024
   FileSearchMatchBatchSize = 64
   FileSearchMatchBatchMaxDelayMilliseconds = 50
 
@@ -25,6 +30,8 @@ type
   FileSearchOptions* = object
     recursive*: bool
     includeHidden*: bool
+    respectGitIgnore*: bool
+    includeBinaryFiles*: bool
     caseSensitive*: bool
     maxResults*: int
     maxMatchesPerFile*: int
@@ -49,6 +56,7 @@ type
     searchedFileCount*: int
     mappedFileCount*: int
     skippedLargeFileCount*: int
+    skippedNonTextFileCount*: int
     failedFileCount*: int
     limitedFileCount*: int
     bytesSearched*: int64
@@ -129,11 +137,15 @@ func initFileSearchOptions*(
     maxMatchesPerFile: Positive = DefaultFileSearchMaxMatchesPerFile,
     maxFiles: Positive = DefaultFileSearchMaxFiles,
     maxFileSizeBytes: Positive = DefaultFileSearchMaxFileSizeBytes,
+    respectGitIgnore = true,
+    includeBinaryFiles = false,
 ): FileSearchOptions =
-  ## Configure traversal and resource limits for one search.
+  ## Configure traversal, content filtering, and resource limits for one search.
   FileSearchOptions(
     recursive: recursive,
     includeHidden: includeHidden,
+    respectGitIgnore: respectGitIgnore,
+    includeBinaryFiles: includeBinaryFiles,
     caseSensitive: caseSensitive,
     maxResults: maxResults,
     maxMatchesPerFile: maxMatchesPerFile,
@@ -196,6 +208,74 @@ func hiddenPath(path: string): bool =
   let name = path.extractFilename()
   name.len > 0 and name[0] == '.'
 
+func hiddenPathComponent(path: string): bool =
+  var componentStart = true
+  for value in path:
+    if componentStart and value == '.':
+      return true
+    componentStart = value == DirSep or value == AltSep
+
+func nestedPath(path: string): bool =
+  DirSep in path or AltSep in path
+
+func nextNulField(value: string, cursor: var int): string =
+  if cursor >= value.len:
+    return
+  let fieldEnd = value.find('\0', cursor)
+  if fieldEnd < 0:
+    result = value[cursor ..^ 1]
+    cursor = value.len
+  else:
+    result = value[cursor ..< fieldEnd]
+    cursor = fieldEnd + 1
+
+type GitFileList = object
+  succeeded: bool
+  paths: seq[string]
+
+proc gitSearchFiles(
+    rootPath: string, options: FileSearchOptions, control: SharedPtr[FileSearchControl]
+): GitFileList =
+  var process: Process
+  try:
+    process = startProcess(
+      "git",
+      workingDir = rootPath,
+      args = [
+        "--no-optional-locks", "ls-files", "--cached", "--others", "--exclude-standard",
+        "-z", "--", ".",
+      ],
+      options = {poUsePath, poStdErrToStdOut},
+    )
+    let output = process.outputStream().readAll()
+    if process.waitForExit() != 0:
+      return
+    result.succeeded = true
+
+    var
+      cursor = 0
+      seen = initHashSet[string]()
+    while cursor < output.len and not control.cancellationRequested():
+      let relativePath = output.nextNulField(cursor)
+      if relativePath.len == 0 or relativePath in seen:
+        continue
+      if not options.includeHidden and relativePath.hiddenPathComponent():
+        continue
+      if not options.recursive and relativePath.nestedPath():
+        continue
+      let path = rootPath / relativePath
+      if fileExists(path) and not symlinkExists(path):
+        seen.incl relativePath
+        result.paths.add path
+        if result.paths.len > options.maxFiles:
+          break
+    result.paths.sort()
+  except CatchableError:
+    discard
+  finally:
+    if not process.isNil:
+      process.close()
+
 type FileSearchTraversalState = object
   options: FileSearchOptions
   control: SharedPtr[FileSearchControl]
@@ -206,9 +286,14 @@ type FileSearchTraversalState = object
 proc initFileSearchTraversal(
     rootPath: string, options: FileSearchOptions, control: SharedPtr[FileSearchControl]
 ): FileSearchTraversalState =
-  FileSearchTraversalState(
-    options: options, control: control, pendingDirectories: @[absolutePath(rootPath)]
-  )
+  result = FileSearchTraversalState(options: options, control: control)
+  let root = absolutePath(rootPath)
+  if options.respectGitIgnore:
+    let gitFiles = gitSearchFiles(root, options, control)
+    if gitFiles.succeeded:
+      result.pendingFiles = gitFiles.paths
+      return
+  result.pendingDirectories = @[root]
 
 proc nextSearchFile(
     traversal: var FileSearchTraversalState,
@@ -293,11 +378,71 @@ proc addLineMatches(
       return false
   true
 
+func mediaTypeIsKnownBinary(mediaType: string): bool =
+  (mediaType.startsWith("image/") and not mediaType.endsWith("+xml")) or
+    mediaType.startsWith("audio/") or mediaType.startsWith("video/") or
+    mediaType.startsWith("font/") or
+    mediaType in [
+      "application/gzip", "application/java-archive", "application/java-vm",
+      "application/msword", "application/octet-stream", "application/pdf",
+      "application/vnd.rar", "application/wasm", "application/x-7z-compressed",
+      "application/x-bzip", "application/x-bzip2", "application/x-rar-compressed",
+      "application/x-tar", "application/zip",
+    ]
+
+func validUtf8Sample(sample: string, complete: bool): bool =
+  let invalidIndex = sample.validateUtf8()
+  if invalidIndex < 0:
+    return true
+  if complete or invalidIndex < sample.len - 3:
+    return false
+
+  let firstByte = ord(sample[invalidIndex])
+  let expectedLength =
+    if (firstByte and 0xe0) == 0xc0:
+      2
+    elif (firstByte and 0xf0) == 0xe0:
+      3
+    elif (firstByte and 0xf8) == 0xf0:
+      4
+    else:
+      0
+  if expectedLength == 0 or sample.len - invalidIndex >= expectedLength:
+    return false
+  for index in invalidIndex + 1 ..< sample.len:
+    if (ord(sample[index]) and 0xc0) != 0x80:
+      return false
+  true
+
+proc readEncodingSample(path: string, fileSize: int64): string =
+  let sampleLength = min(fileSize, FileSearchEncodingSampleSize.int64).int
+  if sampleLength == 0:
+    return
+  var file: File
+  if not open(file, path, fmRead):
+    raise newException(IOError, "unable to open file for type detection: " & path)
+  defer:
+    file.close()
+  result = newString(sampleLength)
+  result.setLen(file.readBuffer(addr result[0], sampleLength))
+
+proc isSearchableTextFile(path: string, fileSize: int64, mimeTypes: MimeDB): bool =
+  let mediaType = mimeTypes.getMimetype(splitFile(path).ext, default = "")
+  if mediaType.mediaTypeIsKnownBinary():
+    return
+  let sample = path.readEncodingSample(fileSize)
+  if sample.len == 0:
+    return true
+  if '\0' in sample:
+    return
+  sample.validUtf8Sample(complete = sample.len.int64 == fileSize)
+
 proc searchMappedFile(
     batchState: var FileSearchBatchState,
     path: string,
     pattern: Regex2,
     options: FileSearchOptions,
+    mimeTypes: MimeDB,
     control: SharedPtr[FileSearchControl],
     searchResult: var FileSearchResult,
 ) =
@@ -307,6 +452,10 @@ proc searchMappedFile(
     return
   if control.cancellationRequested():
     searchResult.reason = fsfrCancelled
+    return
+  if not options.includeBinaryFiles and
+      not path.isSearchableTextFile(fileSize, mimeTypes):
+    inc searchResult.stats.skippedNonTextFileCount
     return
 
   var stream =
@@ -369,12 +518,15 @@ proc performFileSearch(
   result.reason = fsfrCompleted
   result.stats.workerThreadId = getThreadId()
   let pattern = query.searchPattern()
+  let mimeTypes = newMimetypes()
   var
     traversal = initFileSearchTraversal(query.rootPath, query.options, control)
     path: string
   while traversal.nextSearchFile(result.stats, result.reason, path):
     try:
-      searchMappedFile(batchState, path, pattern, query.options, control, result)
+      searchMappedFile(
+        batchState, path, pattern, query.options, mimeTypes, control, result
+      )
     except IOError, OSError:
       inc result.stats.failedFileCount
     if result.reason != fsfrCompleted:

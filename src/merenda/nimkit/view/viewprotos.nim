@@ -9,6 +9,8 @@ import ./viewgeometry
 import ./viewbase
 import sigils/core
 
+proc propagateNeedsDisplayInRect(view: View, rect: Rect)
+
 protocol ViewProtocol {.setterStyle: nim.} from View:
   property tag -> int
   property identifier -> string
@@ -65,12 +67,16 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
   method `bounds=`(self: View, bounds: Rect) =
     if self.xBounds == bounds:
       return
+    let previousBounds = self.xBounds
     discard
       recordPropertyAnimation(DynamicAgent(self), `bounds=`(), self.xBounds, bounds)
     self.xBounds = rect(bounds.origin, bounds.size)
     emit self.layoutInputChanged(lirBounds)
     emit self.geometryDidChange()
-    self.needsDisplay = true
+    if previousBounds.size == bounds.size:
+      self.markRenderStructureChanged()
+    else:
+      self.needsDisplay = true
 
   method needsDisplay(self: View): bool =
     self.xNeedsDisplay
@@ -78,30 +84,29 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
   method `needsDisplay=`(self: View, value: bool) =
     if not value:
       self.xNeedsDisplay = false
+      self.xNeedsLocalDisplay = false
       self.xInvalidRects.setLen(0)
       return
 
-    self.xNeedsDisplay = true
-    self.xInvalidRects.setLen(0)
+    self.markLocalNeedsDisplay()
     let parent = self.superviewBacklink()
     if not parent.isNil:
-      parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
+      parent.propagateNeedsDisplayInRect(self.rectToView(self.bounds, parent))
 
   method setNeedsDisplayInRect*(self: View, rect: Rect) =
     let clipped = rect.intersection(self.visibleRect())
     if clipped.isEmpty:
       return
-
-    if not self.xNeedsDisplay:
-      self.xNeedsDisplay = true
+    let wasDirty = self.xNeedsDisplay
+    self.markLocalNeedsDisplay(wholeView = false)
+    if not wasDirty:
       self.xInvalidRects = @[clipped]
     elif self.xInvalidRects.len > 0:
       self.xInvalidRects[0] = self.xInvalidRects[0].union(clipped)
       self.xInvalidRects.setLen(1)
-
     let parent = self.superviewBacklink()
     if not parent.isNil:
-      parent.setNeedsDisplayInRect(self.rectToView(clipped, parent))
+      parent.propagateNeedsDisplayInRect(self.rectToView(clipped, parent))
 
   method invalidRect*(self: View): Rect =
     if not self.xNeedsDisplay:
@@ -334,7 +339,7 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
       parent.xSubviews.delete(idx)
       emit self.layoutInputChanged(lirSuperview)
       emit parent.layoutInputChanged(lirHierarchy)
-      parent.setNeedsDisplayInRect(self.rectToView(self.bounds, parent))
+      parent.propagateNeedsDisplayInRect(self.rectToView(self.bounds, parent))
     self.xSuperview[] = nil
     self.resetAutoresizingState()
     self.clearNextResponder()
@@ -369,7 +374,7 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
       child.propagateDidMoveToWindow()
     emit child.layoutInputChanged(lirSuperview)
     emit self.layoutInputChanged(lirHierarchy)
-    self.setNeedsDisplayInRect(child.rectToView(child.bounds, self))
+    self.propagateNeedsDisplayInRect(child.rectToView(child.bounds, self))
 
   method pointInside*(self: View, point: Point): bool =
     self.xBounds.contains(point)
@@ -401,6 +406,31 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
         return bestHit
 
     if inside: self else: nil
+
+proc propagateNeedsDisplayInRect(view: View, rect: Rect) =
+  let clipped = rect.intersection(view.visibleRect())
+  if clipped.isEmpty:
+    return
+
+  if not view.xNeedsDisplay:
+    view.xNeedsDisplay = true
+    view.xInvalidRects = @[clipped]
+  elif view.xInvalidRects.len > 0:
+    view.xInvalidRects[0] = view.xInvalidRects[0].union(clipped)
+    view.xInvalidRects.setLen(1)
+
+  let parent = view.superviewBacklink()
+  if not parent.isNil:
+    parent.propagateNeedsDisplayInRect(view.rectToView(clipped, parent))
+
+proc setNeedsDisplayInRenderSlot*(view: View, slot: RenderSlotId) =
+  ## Invalidates one stable drawing slot without rebuilding sibling slots.
+  if view.isNil:
+    return
+  view.markRenderSlotNeedsDisplay(slot)
+  let parent = view.superviewBacklink()
+  if not parent.isNil:
+    parent.propagateNeedsDisplayInRect(view.rectToView(view.bounds(), parent))
 
 protocol ViewLifecycleProtocol:
   proc viewWillMoveToSuperview*(view: View, superview: View) {.signal.}
@@ -436,22 +466,21 @@ proc setHiddenFromLayout*(view: View, hidden: bool) =
     return
   let parent = view.superviewBacklink()
   if not parent.isNil:
-    parent.setNeedsDisplayInRect(view.rectToView(view.bounds(), parent))
+    parent.propagateNeedsDisplayInRect(view.rectToView(view.bounds(), parent))
   if hidden:
     view.xWidgetStates.incl ssHidden
   else:
     view.xWidgetStates.excl ssHidden
-  view.xNeedsDisplay = true
-  view.xInvalidRects.setLen(0)
+  view.needsDisplay = true
   if not hidden and not parent.isNil:
-    parent.setNeedsDisplayInRect(view.rectToView(view.bounds(), parent))
+    parent.propagateNeedsDisplayInRect(view.rectToView(view.bounds(), parent))
 
 proc setBoundsOriginFromLayout*(view: View, origin: Point) =
-  ## Apply a container-owned content offset without invalidating constraints.
+  ## Apply a container-owned content offset without invalidating drawing.
   if view.isNil or view.xBounds.origin == origin:
     return
   view.xBounds.origin = origin
-  view.needsDisplay = true
+  view.markRenderStructureChanged()
 
 proc viewCanBecomeKeyView*(view: View): bool =
   view.acceptsFirstResponder() and not view.isHiddenOrHasHiddenAncestor()
@@ -556,7 +585,7 @@ proc attachSubviewAt(view, child: View, index: Natural) =
     child.propagateDidMoveToWindow()
   emit child.layoutInputChanged(lirSuperview)
   emit view.layoutInputChanged(lirHierarchy)
-  view.setNeedsDisplayInRect(child.rectToView(child.bounds, view))
+  view.propagateNeedsDisplayInRect(child.rectToView(child.bounds, view))
 
 proc insertSubview*(view, child: View, index: Natural) =
   if view.isNil:

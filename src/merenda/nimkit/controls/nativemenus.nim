@@ -5,6 +5,11 @@ import ../foundation/types
 import ../responder/keybindings
 
 type
+  AboutPanelLink* = object
+    ## A clickable text range in an application's About-panel credits.
+    text*: string
+    url*: string
+
   NativeMenuModifier* = enum
     nmmShift
     nmmControl
@@ -178,7 +183,7 @@ when defined(macosx):
   import std/tables
 
   import darwin/app_kit/[nsapplication, nsevent, nsimage, nsmenu]
-  import darwin/foundation/[nsattributedstring, nsdictionary, nsstring]
+  import darwin/foundation/[nsattributedstring, nsdictionary, nsrange, nsstring]
   import darwin/objc/runtime
 
   {.passL: "-framework AppKit".}
@@ -208,6 +213,9 @@ when defined(macosx):
     NSAboutPanelOptionApplicationVersion {.importc.}: NSString
     NSAboutPanelOptionCredits {.importc.}: NSString
     NSAboutPanelOptionVersion {.importc.}: NSString
+    NSLinkAttributeName {.importc.}: NSString
+
+  proc rangeOfString(value, substring: NSString): NSRange {.objc: "rangeOfString:".}
 
   proc hideOtherApplications(
     application: NSApplication, sender: ID
@@ -377,7 +385,11 @@ when defined(macosx):
     nativeMenuTarget = cast[NSObject](targetClass.new())
 
   proc showStandardAboutPanel*(
-      applicationName = "", applicationVersion = "", buildVersion = "", credits = ""
+      applicationName = "",
+      applicationVersion = "",
+      buildVersion = "",
+      credits = "",
+      creditLinks: openArray[AboutPanelLink] = [],
   ) =
     let application = NSApplication.sharedApplication()
     if applicationName.len == 0 and applicationVersion.len == 0 and buildVersion.len == 0 and
@@ -399,10 +411,18 @@ when defined(macosx):
     if buildVersion.len > 0:
       options[NSAboutPanelOptionVersion] = cast[NSObject](toNSString(buildVersion))
     if credits.len > 0:
+      let creditsText = toNSString(credits)
       let attributedCredits =
-        NSAttributedString.alloc().initWithString(toNSString(credits))
+        NSMutableAttributedString.alloc().initWithString(creditsText)
       defer:
         attributedCredits.release()
+      for link in creditLinks:
+        if link.text.len > 0 and link.url.len > 0:
+          let range = creditsText.rangeOfString(toNSString(link.text))
+          if range.location != cast[NSUInteger](NSNotFound):
+            attributedCredits.addAttributeValueRange(
+              NSLinkAttributeName, cast[NSObject](toNSString(link.url)), range
+            )
       options[NSAboutPanelOptionCredits] = cast[NSObject](attributedCredits)
     application.orderFrontStandardAboutPanelWithOptions(options)
 
@@ -455,12 +475,17 @@ when defined(macosx):
 
 else:
   proc showStandardAboutPanel*(
-      applicationName = "", applicationVersion = "", buildVersion = "", credits = ""
+      applicationName = "",
+      applicationVersion = "",
+      buildVersion = "",
+      credits = "",
+      creditLinks: openArray[AboutPanelLink] = [],
   ) =
     discard applicationName
     discard applicationVersion
     discard buildVersion
     discard credits
+    discard creditLinks
     discard
 
   proc hideOtherNativeApplications*() =

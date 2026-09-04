@@ -1,5 +1,7 @@
 import std/[math, monotimes, options, os, tables, times]
 
+import pkg/chronicles
+
 when defined(useNativeDynlib):
   import figdraw/dynlib as figrender
   from figdraw/dynlib import Renders, ZLevel
@@ -13,10 +15,13 @@ import sigils/core
 import ../accessibility/accessibility
 import ./backend as nimkitBackend
 import ./animations
+import ./diagnostics
 import ../responder/keybindings
 import ../drawing/drawing
 import ../drawing/images
 import ../drawing/rendering as nimkitRendering
+when not defined(useNativeDynlib):
+  import ../drawing/renderscenes
 import ../foundation/events
 import ../foundation/notifications
 import ../text/fieldeditors
@@ -1496,6 +1501,22 @@ proc buildRenders*(window: Window, theme: Theme): Renders =
   window.refreshAutomaticContentMinSize()
   nimkitRendering.buildRenders(window.xContentView, theme)
 
+when not defined(useNativeDynlib):
+  proc buildRenderScene*(window: Window): RenderScene =
+    window.prepareToolTipForDisplay()
+    window.refreshAutomaticContentMinSize()
+    nimkitRendering.buildRenderScene(window.xContentView, window.effectiveAppearance())
+
+  proc buildRenderScene*(window: Window, appearance: Appearance): RenderScene =
+    window.prepareToolTipForDisplay()
+    window.refreshAutomaticContentMinSize()
+    nimkitRendering.buildRenderScene(window.xContentView, appearance)
+
+  proc buildRenderScene*(window: Window, theme: Theme): RenderScene =
+    window.prepareToolTipForDisplay()
+    window.refreshAutomaticContentMinSize()
+    nimkitRendering.buildRenderScene(window.xContentView, theme)
+
 proc nativeWindowOrNil*(window: Window): siwinshim.Window =
   if window.xHostWindow.isNil:
     return nil
@@ -2171,19 +2192,27 @@ proc renderNativeWindow*(window: Window) =
 
   window.xHostWindow.refreshContentScale()
   let logicalSize = window.syncNativeGeometry()
-  var renders = window.buildRenders()
-  let needsFollowUpRender = window.needsDisplayUpdate()
-  if not window.xThreadHost.isNil:
-    var resources = nimkitRendering.renderResources(window.xContentView)
-    window.xContentView.invalidateRenderCache()
-    discard window.xThreadHost.submitRenders(
-      ensureMove renders, logicalSize, ensureMove resources
-    )
-    window.xHostWindow.renderSubmitted()
+  when not defined(useNativeDynlib):
+    if window.xThreadHost.isNil:
+      let renderScene = window.buildRenderScene()
+      let needsFollowUpRender = window.needsDisplayUpdate()
+      window.xHostWindow.render(renderScene, logicalSize)
+      renderScene.acknowledgeRenderGeneration(renderScene.frameGeneration())
+      if needsFollowUpRender:
+        window.requestNativeDisplayUpdate()
+    else:
+      let renderScene = window.buildRenderScene()
+      let needsFollowUpRender = window.needsDisplayUpdate()
+      discard window.xThreadHost.submitRenderScene(renderScene, logicalSize)
+      window.xHostWindow.renderSubmitted()
+      if needsFollowUpRender:
+        window.requestNativeDisplayUpdate()
   else:
+    var renders = window.buildRenders()
+    let needsFollowUpRender = window.needsDisplayUpdate()
     window.xHostWindow.render(renders, logicalSize)
-  if needsFollowUpRender:
-    window.requestNativeDisplayUpdate()
+    if needsFollowUpRender:
+      window.requestNativeDisplayUpdate()
 
 proc contentPoint(window: Window, windowPoint: Point): Point =
   window.xContentView.pointFromWindow(windowPoint)
@@ -2848,6 +2877,68 @@ proc ensureThreadHost(window: Window) =
     window.xHostWindow.attachThreadRenderer(window.xThreadRenderer, window.xFrame.size)
   window.xThreadHost.installNativeEventLoopWaker()
 
+proc logNativeWindowState(window: Window, message: static string) =
+  if not window.nativeReady:
+    return
+  let
+    host = window.xHostWindow
+    nativeWindow = host.nativeWindowOrNil()
+    renderer = host.rendererOrNil()
+    nativePosition = nativeWindow.pos()
+    nativeSize = nativeWindow.size()
+    backingSize = nativeWindow.backingSize()
+    logicalSize = nativeWindow.logicalSize()
+    nativeMinSize = nativeWindow.minSize()
+    nativeMaxSize = nativeWindow.maxSize()
+  info message,
+    title = window.xTitle,
+    popup = window.xIsPopup,
+    transparent = window.xTransparent,
+    rendererBackend = renderer.backendName(),
+    requestedX = window.xFrame.origin.x,
+    requestedY = window.xFrame.origin.y,
+    requestedWidth = window.xFrame.size.width,
+    requestedHeight = window.xFrame.size.height,
+    nativeX = nativePosition.x,
+    nativeY = nativePosition.y,
+    nativeWidth = nativeSize.x,
+    nativeHeight = nativeSize.y,
+    backingWidth = backingSize.x,
+    backingHeight = backingSize.y,
+    logicalWidth = logicalSize.x,
+    logicalHeight = logicalSize.y,
+    contentScale = host.contentScale(),
+    minimumWidth = window.xMinSize.width,
+    minimumHeight = window.xMinSize.height,
+    maximumWidth = window.xMaxSize.width,
+    maximumHeight = window.xMaxSize.height,
+    nativeMinimumWidth = nativeMinSize.x,
+    nativeMinimumHeight = nativeMinSize.y,
+    nativeMaximumWidth = nativeMaxSize.x,
+    nativeMaximumHeight = nativeMaxSize.y
+
+proc logNativeResize(window: Window) =
+  if not window.nativeReady:
+    return
+  let
+    nativeWindow = window.xHostWindow.nativeWindowOrNil()
+    nativeSize = nativeWindow.size()
+    logicalSize = nativeWindow.logicalSize()
+  if nativeSize.x <= 1 or nativeSize.y <= 1:
+    warn "Merenda window received suspicious native resize",
+      title = window.xTitle,
+      nativeWidth = nativeSize.x,
+      nativeHeight = nativeSize.y,
+      logicalWidth = logicalSize.x,
+      logicalHeight = logicalSize.y
+  else:
+    debug "Merenda native window resized",
+      title = window.xTitle,
+      nativeWidth = nativeSize.x,
+      nativeHeight = nativeSize.y,
+      logicalWidth = logicalSize.x,
+      logicalHeight = logicalSize.y
+
 proc drainThreadHostEvents(window: Window): int =
   if window.xThreadHost.isNil:
     return
@@ -2859,6 +2950,9 @@ proc drainThreadHostEvents(window: Window): int =
       window.xThreadHost.acknowledgeRender(event.renderId)
       window.xThreadHost.renderCount = event.renderCount
       window.xThreadHost.renderRequested = false
+    of theRenderUpdateRejected:
+      window.xThreadHost.rejectRenderUpdate(event.renderId)
+      window.requestNativeDisplayUpdate()
     of theRenderTargetReleased:
       window.xThreadHost.clearRenderResources()
       window.xThreadHost.acknowledgeRenderTargetRelease()
@@ -2881,11 +2975,13 @@ proc ensureNativeWindow*(window: Window) =
     window.ensureThreadHost()
     return
 
+  logRuntimeEnvironment()
   let callbacks = HostWindowCallbacks(
     onClose: proc() =
       window.markHostClosed(),
     onResize: proc() =
-      discard window.syncNativeGeometry(),
+      discard window.syncNativeGeometry()
+      window.logNativeResize(),
     onMove: proc(pos: Point) =
       window.xFrame.origin = pos
       discard window.saveFrameUsingName(),
@@ -2944,6 +3040,7 @@ proc ensureNativeWindow*(window: Window) =
   window.xBackdropActive = false
   if window.xBackdrop.kind != wbekNone:
     window.xBackdropActive = window.xHostWindow.trySetBackdrop(window.xBackdrop)
+  window.logNativeWindowState("Initialized Merenda native window")
   window.ensureThreadHost()
   if window.xVisibleRequested:
     window.xHostWindow.setVisible(true)

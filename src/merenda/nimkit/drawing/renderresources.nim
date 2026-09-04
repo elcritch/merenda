@@ -1,4 +1,4 @@
-import std/tables
+import std/[sets, tables]
 
 when defined(useNativeDynlib):
   {.error: "FigDraw managed resources require the static FigDraw build".}
@@ -14,9 +14,25 @@ const
   ImageAtlasShrinkWorkingSetDivisor* = 4
 
 type
+  RenderImageResource = object
+    ## Retains both renderer ownership and the pixels needed after atlas loss.
+    source: ImageResource
+    owned: ImageRef
+
   RenderResourceManifest* = ref object
+    ## Fonts and images referenced by one live render contribution or scene.
     fonts: Table[FontId, FontRef]
-    images: Table[ImageId, ImageRef]
+    images: Table[ImageId, RenderImageResource]
+
+  RenderResourceSnapshot* = object
+    ## Thread-transferable identities for one live render resource working set.
+    ##
+    ## Managed `FontRef`, `ImageRef`, and `ImageResource` handles remain on the
+    ## application thread. FigDraw's retained image replay supplies pixels to
+    ## the renderer thread, while this snapshot limits replay to live IDs.
+    present: bool
+    fonts: HashSet[FontId]
+    images: HashSet[ImageId]
 
   RenderResourceMetrics* = object
     replayCount*: uint64
@@ -36,11 +52,13 @@ type
     pressureCooldown: int
     initialAtlasSize: int
     atlasHighWaterUsedArea: int
+    atlasGeneration: uint64
     metricsValue: RenderResourceMetrics
 
 proc initRenderResourceManifest*(): RenderResourceManifest =
   RenderResourceManifest(
-    fonts: initTable[FontId, FontRef](), images: initTable[ImageId, ImageRef]()
+    fonts: initTable[FontId, FontRef](),
+    images: initTable[ImageId, RenderImageResource](),
   )
 
 proc ensureManifest(manifest: var RenderResourceManifest) =
@@ -64,13 +82,70 @@ proc addImage*(manifest: var RenderResourceManifest, image: ImageResource) =
     return
   manifest.ensureManifest()
   let owned = image.renderingRef()
-  manifest.images[owned.id] = owned
+  manifest.images[owned.id] = RenderImageResource(source: image, owned: owned)
+
+proc addResources*(
+    manifest: var RenderResourceManifest, resources: RenderResourceManifest
+) =
+  ## Merges retained font and image resources into `manifest` by identity.
+  if resources.isNil:
+    return
+  manifest.ensureManifest()
+  for id, font in resources.fonts:
+    manifest.fonts[id] = font
+  for id, image in resources.images:
+    manifest.images[id] = image
+
+proc mergeRenderResources*(
+    manifests: openArray[RenderResourceManifest]
+): RenderResourceManifest =
+  result = initRenderResourceManifest()
+  for manifest in manifests:
+    result.addResources(manifest)
+
+proc snapshot*(manifest: RenderResourceManifest): RenderResourceSnapshot =
+  ## Copies only thread-safe resource identities, never managed resource handles.
+  if manifest.isNil:
+    return
+  result.present = true
+  result.fonts = initHashSet[FontId]()
+  result.images = initHashSet[ImageId]()
+  for id in manifest.fonts.keys:
+    result.fonts.incl id
+  for id in manifest.images.keys:
+    result.images.incl id
 
 proc fontCount*(manifest: RenderResourceManifest): Natural =
   if manifest.isNil: 0 else: manifest.fonts.len.Natural
 
 proc imageCount*(manifest: RenderResourceManifest): Natural =
   if manifest.isNil: 0 else: manifest.images.len.Natural
+
+proc fontCount*(snapshot: RenderResourceSnapshot): Natural =
+  snapshot.fonts.len.Natural
+
+proc imageCount*(snapshot: RenderResourceSnapshot): Natural =
+  snapshot.images.len.Natural
+
+proc containsFont*(manifest: RenderResourceManifest, id: FontId): bool =
+  ## Reports whether `manifest` retains `id` for rendering.
+  not manifest.isNil and id in manifest.fonts
+
+proc containsImage*(manifest: RenderResourceManifest, id: ImageId): bool =
+  ## Reports whether `manifest` retains `id` and its recovery source.
+  not manifest.isNil and id in manifest.images
+
+proc containsFont*(snapshot: RenderResourceSnapshot, id: FontId): bool =
+  snapshot.present and id in snapshot.fonts
+
+proc containsImage*(snapshot: RenderResourceSnapshot, id: ImageId): bool =
+  snapshot.present and id in snapshot.images
+
+proc hasResourceFilter(resources: RenderResourceManifest): bool =
+  not resources.isNil
+
+proc hasResourceFilter(resources: RenderResourceSnapshot): bool =
+  resources.present
 
 proc newRenderResourceManager*(
     pressureThreshold = ImageAtlasPressureThreshold,
@@ -85,22 +160,64 @@ proc metrics*(manager: RenderResourceManager): RenderResourceMetrics =
   if not manager.isNil:
     result = manager.metricsValue
 
+proc removeResourcesOutsideManifest[BackendState](
+    renderer: FigRenderer[BackendState], resources: auto
+) =
+  if not resources.hasResourceFilter():
+    return
+
+  var removed: seq[Hash]
+  for key, metadata in renderer.ctx.atlasEntryMetaPtr().pairs:
+    let retained =
+      case metadata.kind
+      of aekImage:
+        resources.containsImage(metadata.imageId)
+      of aekGlyph:
+        resources.containsFont(metadata.fontId)
+      of aekGenerated:
+        ImageId(key) in resources.images
+    if not retained:
+      removed.add key
+  for key in removed:
+    renderer.ctx.removeAtlasEntry(key)
+
+proc restoreManifestImages[BackendState](
+    renderer: FigRenderer[BackendState], resources: RenderResourceManifest
+) =
+  if resources.isNil:
+    return
+  for id, resource in resources.images:
+    let pixels = resource.source.pixels()
+    discard renderer.ensureImage(id, pixels)
+
+proc restoreManifestImages[BackendState](
+    renderer: FigRenderer[BackendState], resources: RenderResourceSnapshot
+) =
+  ## Image pixels are replayed by FigDraw's cross-thread retained-image store.
+  discard renderer
+  discard resources
+
 proc replayWorkingSet[BackendState](
-    manager: RenderResourceManager, renderer: FigRenderer[BackendState]
+    manager: RenderResourceManager, renderer: FigRenderer[BackendState], resources: auto
 ) =
   var attempts = 0
   while attempts < 8:
     let generation = renderer.atlasGeneration()
-    renderer.ctx.imageMessages = newImageMessageSubscription()
+    renderer.ctx.ensureImageMessageSubscription()
+    replayImageMessages(renderer.ctx.imageMessages)
     renderer.processImageMessages()
+    renderer.removeResourcesOutsideManifest(resources)
+    renderer.restoreManifestImages(resources)
     inc manager.metricsValue.replayCount
     if renderer.atlasGeneration() == generation:
       break
     inc manager.metricsValue.generationRecoveryCount
     inc attempts
 
-proc prepare*[BackendState](
-    manager: RenderResourceManager, renderer: FigRenderer[BackendState]
+proc prepareWithResources[BackendState, Resources](
+    manager: RenderResourceManager,
+    renderer: FigRenderer[BackendState],
+    resources: Resources,
 ) =
   if manager.isNil or renderer.isNil:
     return
@@ -108,11 +225,14 @@ proc prepare*[BackendState](
   if manager.initialAtlasSize <= 0:
     manager.initialAtlasSize = renderer.atlasUsage().atlasSize
 
-  let generationBefore = renderer.atlasGeneration()
+  let
+    generationBefore = renderer.atlasGeneration()
+    generationChanged =
+      manager.atlasGeneration != 0 and manager.atlasGeneration != generationBefore
   renderer.processImageMessages()
-  if renderer.atlasGeneration() != generationBefore:
+  if generationChanged or renderer.atlasGeneration() != generationBefore:
     inc manager.metricsValue.generationRecoveryCount
-    manager.replayWorkingSet(renderer)
+    manager.replayWorkingSet(renderer, resources)
 
   var usage = renderer.atlasUsage()
   manager.atlasHighWaterUsedArea = max(manager.atlasHighWaterUsedArea, usage.usedArea)
@@ -129,7 +249,7 @@ proc prepare*[BackendState](
   if shouldShrink:
     let previousAtlasSize = usage.atlasSize
     renderer.rebuildImageAtlas(manager.initialAtlasSize)
-    manager.replayWorkingSet(renderer)
+    manager.replayWorkingSet(renderer, resources)
     usage = renderer.atlasUsage()
     if usage.atlasSize < previousAtlasSize:
       inc manager.metricsValue.atlasShrinkRebuildCount
@@ -151,7 +271,7 @@ proc prepare*[BackendState](
       renderer.rebuildImageAtlas(minimumSize)
       inc manager.metricsValue.pressureRebuildCount
       manager.pressureCooldown = manager.pressureCooldownFrames.int
-      manager.replayWorkingSet(renderer)
+      manager.replayWorkingSet(renderer, resources)
       usage = renderer.atlasUsage()
       manager.atlasHighWaterUsedArea =
         max(manager.atlasHighWaterUsedArea, usage.usedArea)
@@ -160,7 +280,29 @@ proc prepare*[BackendState](
   manager.metricsValue.atlasPackedRatio = usage.packedRatio()
   manager.metricsValue.atlasGeneration = usage.generation
   manager.metricsValue.atlasRebuildCount = usage.rebuildCount
+  manager.atlasGeneration = usage.generation
+
+proc prepare*[BackendState](
+    manager: RenderResourceManager,
+    renderer: FigRenderer[BackendState],
+    resources: RenderResourceManifest = nil,
+) =
+  ## Applies pending resource messages and repairs atlas loss or pressure.
+  ##
+  ## When `resources` is present, recovery restores only that live manifest.
+  ## Passing `nil` retains the global replay behavior used by compatibility
+  ## monolithic snapshots.
+  manager.prepareWithResources(renderer, resources)
+
+proc prepare*[BackendState](
+    manager: RenderResourceManager,
+    renderer: FigRenderer[BackendState],
+    resources: RenderResourceSnapshot,
+) =
+  ## Repairs renderer-thread atlas state using only the transferred live IDs.
+  manager.prepareWithResources(renderer, resources)
 
 proc clear*(manager: RenderResourceManager) =
   if not manager.isNil:
+    manager.atlasGeneration = 0
     manager.metricsValue = default(RenderResourceMetrics)

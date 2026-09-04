@@ -1,8 +1,13 @@
+import std/tables
+
 import ../responder/responders
 import ../themes
 import ../foundation/backrefs
 import ../foundation/types
 import ../drawing/renderresources
+
+when not defined(useNativeDynlib):
+  import ../drawing/renderscenes
 
 when defined(useNativeDynlib):
   from figdraw/dynlib import Renders
@@ -155,6 +160,9 @@ type
     xBounds*: Rect
     xFlipped*: bool
     xNeedsDisplay*: bool
+    xNeedsLocalDisplay*: bool
+    xDisplayRevision*: uint64
+    xRenderSlotRevisions*: Table[RenderSlotId, uint64]
     xInvalidRects*: seq[Rect]
     xBackgroundColor*: Color
     xUsesThemedRootBackground*: bool
@@ -209,9 +217,12 @@ type
     xRegisteredDraggedTypes*: seq[string]
     xContextMenu*: Responder
     xContextMenuHandlerInstalled*: bool
+    when not defined(useNativeDynlib):
+      xRenderViewId*: RenderViewId
+      xCachedRenderScene*: RenderScene
     xCachedRenders*: Renders
     xCachedRenderResources*: RenderResourceManifest
-    xCachedAppearance*: Appearance
+    xCachedAppearanceGeneration*: ThemeGeneration
     xHasCachedRenders*: bool
 
 proc superviewBacklink*(view: View): View {.inline.} =
@@ -224,6 +235,66 @@ proc windowBacklink*(view: View): Responder {.inline.} =
 
 var activeLayoutTransaction* {.threadvar.}: ptr LayoutTransactionState
 var layoutGenerationCounter {.threadvar.}: Natural
+
+proc advanceRevision(value: var uint64) =
+  inc value
+  if value == 0:
+    value = 1
+
+proc renderSlotRevision*(view: View, slot: RenderSlotId): uint64 =
+  ## Returns a view-local revision, creating the slot on first use.
+  if view.isNil:
+    return
+  if slot notin view.xRenderSlotRevisions:
+    view.xRenderSlotRevisions[slot] = 1
+  view.xRenderSlotRevisions[slot]
+
+proc markLocalNeedsDisplay*(view: View, wholeView = true, propagateAncestors = false) =
+  if view.isNil:
+    return
+  view.xDisplayRevision.advanceRevision()
+  for revision in view.xRenderSlotRevisions.mvalues:
+    revision.advanceRevision()
+  view.xNeedsDisplay = true
+  view.xNeedsLocalDisplay = true
+  if wholeView:
+    view.xInvalidRects.setLen(0)
+  if propagateAncestors:
+    var ancestor = view.superviewBacklink()
+    while not ancestor.isNil:
+      ancestor.xNeedsDisplay = true
+      ancestor = ancestor.superviewBacklink()
+
+proc markRenderSlotNeedsDisplay*(
+    view: View, slot: RenderSlotId, propagateAncestors = false
+) =
+  ## Invalidates one registered drawing slot while retaining the other slots.
+  if view.isNil:
+    return
+  view.xDisplayRevision.advanceRevision()
+  discard view.renderSlotRevision(slot)
+  view.xRenderSlotRevisions[slot].advanceRevision()
+  view.xNeedsDisplay = true
+  view.xNeedsLocalDisplay = true
+  view.xInvalidRects.setLen(0)
+  if propagateAncestors:
+    var ancestor = view.superviewBacklink()
+    while not ancestor.isNil:
+      ancestor.xNeedsDisplay = true
+      ancestor = ancestor.superviewBacklink()
+
+proc markRenderStructureChanged*(view: View) =
+  ## Schedules retained-transform reconciliation without dirtying view drawing.
+  if view.isNil:
+    return
+  when defined(useNativeDynlib):
+    view.markLocalNeedsDisplay(propagateAncestors = true)
+  else:
+    view.xNeedsDisplay = true
+    var ancestor = view.superviewBacklink()
+    while not ancestor.isNil:
+      ancestor.xNeedsDisplay = true
+      ancestor = ancestor.superviewBacklink()
 
 proc nextLayoutGeneration*(): Natural =
   inc layoutGenerationCounter

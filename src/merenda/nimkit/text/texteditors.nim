@@ -39,6 +39,7 @@ type
     xTextView: TextView
     xTextInsets: EdgeInsets
     xWraps: bool
+    xMinimumWrappedDocumentWidth: float32
     xMinimumDocumentSize: Size
     xMeasurement: TextEditorMeasurement
 
@@ -101,7 +102,21 @@ proc `wraps=`*(editor: TextEditor, wraps: bool) =
   if editor.xWraps == wraps:
     return
   editor.xWraps = wraps
-  editor.xScrollView.hasHorizontalScroller = not wraps
+  editor.xScrollView.hasHorizontalScroller =
+    not wraps or editor.xMinimumWrappedDocumentWidth > 0.0'f32
+  editor.updateTextEditorLayout()
+
+proc minimumWrappedDocumentWidth*(editor: TextEditor): float32 =
+  ## Return the minimum document width retained while text wrapping stays enabled.
+  editor.xMinimumWrappedDocumentWidth
+
+proc `minimumWrappedDocumentWidth=`*(editor: TextEditor, width: float32) =
+  ## Allow wrapped content to overflow horizontally when `width` exceeds the viewport.
+  let normalized = max(width, 0.0'f32)
+  if editor.xMinimumWrappedDocumentWidth == normalized:
+    return
+  editor.xMinimumWrappedDocumentWidth = normalized
+  editor.xScrollView.hasHorizontalScroller = not editor.xWraps or normalized > 0.0'f32
   editor.updateTextEditorLayout()
 
 proc minimumDocumentSize*(editor: TextEditor): Size =
@@ -279,7 +294,7 @@ proc textDocumentSize(
         defaultFontSize()
     documentWidth =
       if editor.xWraps:
-        viewportWidth
+        max(viewportWidth, editor.xMinimumWrappedDocumentWidth)
       else:
         max(max(textWidth, viewportWidth), editor.xMinimumDocumentSize.width)
   initSize(
@@ -294,14 +309,19 @@ func closeEnough(left, right: Size): bool =
   abs(left.width - right.width) <= TextEditorLayoutEpsilon and
     abs(left.height - right.height) <= TextEditorLayoutEpsilon
 
-proc applyTextEditorLayout(editor: TextEditor, frame: Rect, documentSize: Size) =
+proc applyTextEditorLayout(
+    editor: TextEditor, frame: Rect, viewportSize, documentSize: Size
+) =
   editor.xScrollView.setFrameFromLayout(frame)
   editor.xTextView.setFrameFromLayout(
     rect(0.0, 0.0, documentSize.width, documentSize.height)
   )
   if not editor.xTextView.layoutManager().usesBackgroundLayout():
+    let textContainerSize = initSize(
+      if editor.xWraps: viewportSize.width else: documentSize.width, documentSize.height
+    )
     editor.xTextView.textContainer =
-      initTextContainer(documentSize, editor.xTextInsets, editor.xWraps)
+      initTextContainer(textContainerSize, editor.xTextInsets, editor.xWraps)
   editor.xScrollView.tile()
 
 proc updateTextEditorLayout(editor: TextEditor) =
@@ -320,7 +340,7 @@ proc updateTextEditorLayout(editor: TextEditor) =
     if nextSize.closeEnough(documentSize):
       break
     documentSize = nextSize
-  editor.applyTextEditorLayout(frame, documentSize)
+  editor.applyTextEditorLayout(frame, viewport, documentSize)
 
 protocol DefaultTextEditorLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(editor: TextEditor): IntrinsicSize =
@@ -633,6 +653,7 @@ proc initTextEditorFields*(
   editor.background = color(0.0, 0.0, 0.0, 0.0)
   editor.xTextInsets = insets(6.0, 7.0, 6.0, 7.0)
   editor.xWraps = wraps
+  editor.xMinimumWrappedDocumentWidth = 0.0'f32
   editor.xMinimumDocumentSize =
     initSize(DefaultTextEditorWidth, DefaultTextEditorHeight)
   editor.acceptsFirstResponder = true
@@ -649,7 +670,8 @@ proc initTextEditorFields*(
     initTextContainer(initSize(0.0, 0.0), editor.xTextInsets, wraps)
   editor.xScrollView = newScrollView(documentView = editor.xTextView)
   editor.xScrollView.hasVerticalScroller = true
-  editor.xScrollView.hasHorizontalScroller = not wraps
+  editor.xScrollView.hasHorizontalScroller =
+    not wraps or editor.xMinimumWrappedDocumentWidth > 0.0'f32
   editor.xScrollView.autohidePolicy = sapWhenNeeded
   editor.xScrollView.borderType = svbBezelBorder
   editor.xScrollView.drawsBackground = true

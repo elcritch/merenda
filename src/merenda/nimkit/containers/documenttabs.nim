@@ -123,6 +123,8 @@ const
   DocumentTabHorizontalInset = 12.0'f32
   DocumentTabCloseWidth = 16.0'f32
   DocumentTabCloseSpacing = 7.0'f32
+  DocumentTabCloseMarkSize = 7.0'f32
+  DocumentTabCloseMarkWeight = 1.25'f32
   DocumentTabIndicatorSize = 2.0'f32
   DocumentTabAccentAlpha = 0.72'f32
   DocumentTabModifiedAccentAlpha = 0.52'f32
@@ -1528,9 +1530,12 @@ proc drawCloseButton(
       states,
     )
     markColor = context.appearance.resolveColor(styleContext, StyleMarkColor, textColor)
-    markStyle = context.appearance.tabTextStyle(styleContext, markColor)
-    markRect =
-      rect(rect.origin.x, rect.origin.y - 0.5'f32, rect.size.width, rect.size.height)
+    markCenter = initPoint(
+      rect.origin.x + rect.size.width * 0.5'f32,
+      rect.origin.y + rect.size.height * 0.5'f32,
+    )
+    markRadius = DocumentTabCloseMarkSize * 0.5'f32
+    markFill = fill(markColor)
     renderRect = context.renderRectFor(rect)
     buttonRoot = context.addRenderRectangle(
       DefaultDrawLevel,
@@ -1544,8 +1549,21 @@ proc drawCloseButton(
   context.drawChromeExtras(
     chrome, initChromeExtras(buttonRoot, renderRect, cornerRadius = radius)
   )
-  context.addText(
-    DefaultDrawLevel, parent, markRect, "×", markStyle, alignment = taCenter
+  discard context.addRenderLine(
+    DefaultDrawLevel,
+    parent,
+    initPoint(markCenter.x - markRadius, markCenter.y - markRadius),
+    initPoint(markCenter.x + markRadius, markCenter.y + markRadius),
+    markFill,
+    DocumentTabCloseMarkWeight,
+  )
+  discard context.addRenderLine(
+    DefaultDrawLevel,
+    parent,
+    initPoint(markCenter.x + markRadius, markCenter.y - markRadius),
+    initPoint(markCenter.x - markRadius, markCenter.y + markRadius),
+    markFill,
+    DocumentTabCloseMarkWeight,
   )
 
 proc drawDocumentTab(

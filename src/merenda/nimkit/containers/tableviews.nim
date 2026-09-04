@@ -2300,6 +2300,8 @@ proc invalidateTableRows(tableView: TableView) =
   if not scroller.isNil:
     scroller.needsDisplay = true
   tableView.xContentView.needsDisplay = true
+  for rowView in tableView.xContentView.xRowViews:
+    rowView.needsDisplay = true
   tableView.needsDisplay = true
 
 proc uncachedRowHeightForRow(tableView: TableView, index: int): float32 =
@@ -5015,7 +5017,10 @@ proc visibleContentRows(contentView: TableContentView): tuple[first, last: int] 
 
 proc configureRowView(rowView: TableRowView, itemIndex: int) =
   let tableView = rowView.xTableView
-  rowView.xRow = tableView.tableRowState(itemIndex)
+  let nextRow = tableView.tableRowState(itemIndex)
+  if rowView.xRow != nextRow:
+    rowView.xRow = nextRow
+    rowView.needsDisplay = true
   rowView.setFrameFromLayout(tableView.xContentView.tableContentItemRect(itemIndex))
 
 proc removeLastRowView(contentView: TableContentView) =
@@ -5211,7 +5216,7 @@ protocol DefaultTableRowViewAccessibility of AccessibilityProtocol:
 
 protocol DefaultTableContentViewDrawing of ViewDrawingProtocol:
   method draw(contentView: TableContentView, context: DrawContext) =
-    discard context
+    discard context.visibleRect()
     contentView.syncVisibleRowViews()
     contentView.tableView().syncVisibleTableCells()
 
@@ -6674,12 +6679,12 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
         let focusClip = context.addRenderRectangle(
           FocusRingDrawLevel,
           (-1).FigIdx,
-          tableView.rectToWindow(focusClipRect),
+          context.renderRectFor(focusClipRect),
           fill(color(0.0, 0.0, 0.0, 0.0)),
           clips = true,
         )
         context.addFocusRing(
-          FocusRingDrawLevel, focusClip, tableView.rectToWindow(focusRect), focusBox
+          FocusRingDrawLevel, focusClip, context.renderRectFor(focusRect), focusBox
         )
 
 protocol DefaultTableViewAccessibility of AccessibilityProtocol:

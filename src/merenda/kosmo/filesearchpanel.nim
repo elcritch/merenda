@@ -42,6 +42,7 @@ type
     progressIndicator*: nimkit.ProgressIndicator
     cancelButton*: nimkit.Button
     xRootPath: string
+    xSearchOptions: nimkit.FileSearchOptions
     xService: nimkit.FileSearchService
     xActiveSearch: nimkit.FileSearchHandle
 
@@ -382,9 +383,7 @@ proc performSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
   try:
     panel.ensureSearchService()
     panel.xActiveSearch = panel.xService.search(
-      nimkit.initFileSearchQuery(
-        panel.xRootPath, pattern, nimkit.initFileSearchOptions(caseSensitive = false)
-      )
+      nimkit.initFileSearchQuery(panel.xRootPath, pattern, panel.xSearchOptions)
     )
     result = true
   except CatchableError as error:
@@ -471,6 +470,14 @@ proc `rootPath=`*(panel: KosmoFileSearchPanel, rootPath: string) =
 proc activeSearch*(panel: KosmoFileSearchPanel): nimkit.FileSearchHandle =
   panel.xActiveSearch
 
+proc searchOptions*(panel: KosmoFileSearchPanel): nimkit.FileSearchOptions =
+  ## Return the options applied to future searches from this panel.
+  panel.xSearchOptions
+
+proc `searchOptions=`*(panel: KosmoFileSearchPanel, options: nimkit.FileSearchOptions) =
+  ## Configure future searches without interrupting the current search.
+  panel.xSearchOptions = options
+
 proc waitForSearch*(
     panel: KosmoFileSearchPanel, timeoutMilliseconds: Natural = 5_000
 ): bool {.discardable.} =
@@ -515,6 +522,7 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
     statusLabel: statusLabel,
     progressIndicator: progressIndicator,
     cancelButton: cancelButton,
+    xSearchOptions: nimkit.initFileSearchOptions(caseSensitive = false),
   )
   result.initViewFields()
   result.addSubview(queryField)

@@ -43,6 +43,7 @@ import ./nimkit/controls/matrices
 import ./nimkit/controls/menus
 import ./nimkit/app/modelcontrollers
 import ./nimkit/text/markdownviews
+import ./nimkit/text/matterhighlighting
 import ./nimkit/text/monotextviews
 import ./nimkit/text/syneditviews
 import ./nimkit/text/syntaxhighlighting
@@ -130,6 +131,7 @@ export matrices
 export menus
 export modelcontrollers
 export markdownviews
+export matterhighlighting
 export monotextviews
 export syneditviews
 export syntaxhighlighting
