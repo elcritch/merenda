@@ -111,14 +111,23 @@ type
     image: ImageResource
     displaySize: Size
 
+  MarkdownRangeLayout = object
+    layoutHash: int
+    rect: Rect
+    resolved: bool
+
   MarkdownCodeBlockPresentation = object
     range: TextRange
     storage: TextStorage
 
   MarkdownCodeBlockScrollPresentation = object
     range: TextRange
+    storage: TextStorage
     scrollView: ScrollView
     textView: TextView
+    rangeLayout: MarkdownRangeLayout
+    contentSize: Size
+    contentSizeValid: bool
 
   MarkdownTablePresentation = object
     range: TextRange
@@ -127,19 +136,24 @@ type
 
   MarkdownTableScrollPresentation = object
     range: TextRange
+    storage: TextStorage
     scrollView: ScrollView
     textView: TextView
+    rangeLayout: MarkdownRangeLayout
+    contentSize: Size
+    contentSizeValid: bool
 
   MarkdownTextView = ref object of TextView
-    codeBlockRanges: seq[TextRange]
     codeBlockStyle: MarkdownBlockStyle
     markdownImages: seq[MarkdownImagePresentation]
     markdownCodeBlocks: seq[MarkdownCodeBlockScrollPresentation]
     markdownTables: seq[MarkdownTableScrollPresentation]
+    markdownEmbeddedViewport: Rect
+    hasMarkdownEmbeddedViewport: bool
+    markdownViewportLayoutPending: bool
 
   MarkdownDocument = object
     storage: TextStorage
-    codeBlockRanges: seq[TextRange]
     codeBlocks: seq[MarkdownCodeBlockPresentation]
     images: seq[MarkdownImagePresentation]
     imageUrls: seq[string]
@@ -218,14 +232,16 @@ type
     xPendingUrlAssets: Table[string, UrlAssetHandle]
     xHasMarkdownTables: bool
     xMarkdownTableColumnLimit: int
-    xMarkdownTableResizeGeneration: uint64
     xMarkdownTableResizePending: bool
+    xMarkdownTableResizeDeadline: MonoTime
     xKeyboardScrollAnimation: Animation
     xKeyboardScrollTarget: Point
 
 const
   MarkdownRenderBlocksPerChunk = 16
   MarkdownRenderChunkBudgetNanoseconds = 4_000_000'i64
+  MarkdownBackgroundLayoutMinimumLength = 4_096
+  MarkdownTableResizeDebounce = initDuration(milliseconds = 120)
   MarkdownKeyboardScrollDuration = initDuration(milliseconds = 140)
   MarkdownKeyboardScrollRows = 4.0'f32
   MarkdownKeyboardPageFraction = 0.25'f32
@@ -1235,8 +1251,6 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
     tables: builder.tables,
     hasTables: builder.hasTables,
   )
-  for presentation in result.codeBlocks:
-    result.codeBlockRanges.add presentation.range
 
 proc parseMarkdownRoot(
     source: string, config: MarkdownParserConfig
@@ -1285,14 +1299,10 @@ proc markdownTextStorage*(
   source.markdownDocument(style, config, syntaxHighlighter = syntaxHighlighter).storage
 
 proc codeBlockRect(
-    textView: MarkdownTextView, range: TextRange, style: MarkdownBlockStyle
+    textView: MarkdownTextView, contentRect: Rect, style: MarkdownBlockStyle
 ): Rect =
-  for lineRect in textView.selectionRects(range):
-    if result.isEmpty:
-      result = lineRect
-    else:
-      result = result.union(lineRect)
-  if not result.isEmpty:
+  result = contentRect
+  if not contentRect.isEmpty:
     let
       padding = style.padding
       outlineInset = max(style.outlineWidth, 0.0'f32) / 2.0'f32
@@ -1331,40 +1341,139 @@ proc imageRect(
     return
   rect(anchor.origin.x, anchor.origin.y, drawSize.width, drawSize.height)
 
-proc textRangeRect(textView: TextView, range: TextRange): Rect =
-  for selectionRect in textView.selectionRects(range):
-    if result.isEmpty:
-      result = selectionRect
-    else:
-      result = result.union(selectionRect)
+func verticallyBuffered(source: Rect, screens = 1.0'f32): Rect =
+  let padding = source.size.height * max(screens, 0.0'f32)
+  rect(
+    source.origin.x,
+    source.origin.y - padding,
+    source.size.width,
+    source.size.height + padding * 2.0'f32,
+  )
+
+func textRangesIntersect(left, right: TextRange): bool =
+  let
+    leftStart = int(left.location)
+    rightStart = int(right.location)
+  if left.length == 0:
+    return leftStart >= rightStart and leftStart <= right.maxIndex
+  if right.length == 0:
+    return rightStart >= leftStart and rightStart <= left.maxIndex
+  leftStart < right.maxIndex and rightStart < left.maxIndex
+
+func textRangeIntersectsRect(
+    range: TextRange, snapshot: TextLayoutSnapshot, bounds: Rect
+): bool =
+  for fragment in snapshot.lineFragments:
+    if fragment.textRange.textRangesIntersect(range) and
+        not fragment.fragmentRect.intersection(bounds).isEmpty:
+      return true
+
+proc resolveMarkdownRangeLayout(
+    presentation: var MarkdownRangeLayout,
+    range: TextRange,
+    snapshot: TextLayoutSnapshot,
+) =
+  let layoutHash = int(snapshot.layoutHash)
+  if presentation.resolved and presentation.layoutHash == layoutHash:
+    return
+
+  presentation = MarkdownRangeLayout(layoutHash: layoutHash, resolved: true)
+  for fragment in snapshot.lineFragments:
+    if fragment.textRange.textRangesIntersect(range):
+      let fragmentRect =
+        if fragment.usedRect.isEmpty: fragment.fragmentRect else: fragment.usedRect
+      if presentation.rect.isEmpty:
+        presentation.rect = fragmentRect
+      else:
+        presentation.rect = presentation.rect.union(fragmentRect)
+
+proc configureMarkdownEmbeddedTextView(
+    storage: TextStorage, backgroundColor: Color, accessibilityLabel: string
+): tuple[scrollView: ScrollView, textView: TextView] =
+  result.textView = newTextView()
+  result.scrollView = newScrollView(documentView = result.textView)
+  result.textView.propagatesIntrinsicContentSizeChanges = false
+  result.textView.richText = true
+  result.textView.editable = false
+  result.textView.selectable = true
+  result.textView.backgroundColor = backgroundColor
+  result.textView.textContainer = initTextContainer(
+    wraps = false, widthTracksTextView = true, heightTracksTextView = true
+  )
+  result.textView.textStorage = storage
+  result.textView.accessibilityLabel = accessibilityLabel
+  result.scrollView.hasHorizontalScroller = true
+  result.scrollView.hasVerticalScroller = false
+  result.scrollView.autohidePolicy = sapWhenNeeded
+  result.scrollView.borderType = svbNoBorder
+  result.scrollView.drawsBackground = false
+  result.scrollView.clipView().backgroundColor = backgroundColor
+  result.scrollView.clipView().drawsBackground = true
+
+proc cachedMarkdownContentSize(
+    textView: TextView, initialSize: Size, cachedSize: var Size, cacheValid: var bool
+): Size =
+  if not cacheValid:
+    textView.setFrameFromLayout(rect(initPoint(0.0'f32, 0.0'f32), initialSize))
+    let snapshot = textView.layoutManager().layoutSnapshot()
+    cachedSize = initSize(
+      max(snapshot.contentSize.width, snapshot.usedRect.maxX),
+      max(snapshot.contentSize.height, snapshot.usedRect.maxY),
+    )
+    cacheValid = true
+  cachedSize
+
+proc ensureMarkdownCodeBlockView(
+    textView: MarkdownTextView, presentation: var MarkdownCodeBlockScrollPresentation
+) =
+  if not presentation.scrollView.isNil:
+    return
+  let embedded = configureMarkdownEmbeddedTextView(
+    presentation.storage, textView.codeBlockStyle.backgroundColor, "Markdown code block"
+  )
+  presentation.scrollView = embedded.scrollView
+  presentation.textView = embedded.textView
+  presentation.scrollView.setHiddenFromLayout(true)
+  textView.addSubview(presentation.scrollView)
+
+proc ensureMarkdownTableView(
+    textView: MarkdownTextView, presentation: var MarkdownTableScrollPresentation
+) =
+  if not presentation.scrollView.isNil:
+    return
+  let embedded = configureMarkdownEmbeddedTextView(
+    presentation.storage, textView.backgroundColor(), "Markdown table"
+  )
+  presentation.scrollView = embedded.scrollView
+  presentation.textView = embedded.textView
+  textView.addSubview(presentation.scrollView)
 
 proc layoutMarkdownCodeBlock(
     textView: MarkdownTextView,
-    presentation: MarkdownCodeBlockScrollPresentation,
+    presentation: var MarkdownCodeBlockScrollPresentation,
     viewportRight: float32,
     rightPadding: float32,
 ) =
-  let selectionRects = textView.selectionRects(presentation.range)
-  if selectionRects.len == 0:
+  let codeRect = presentation.rangeLayout.rect
+  if codeRect.isEmpty:
     return
+  textView.ensureMarkdownCodeBlockView(presentation)
   let
-    codeRect = textView.textRangeRect(presentation.range)
-    codeOrigin = selectionRects[0].origin
+    codeOrigin = codeRect.origin
     scrollView = presentation.scrollView
     codeTextView = presentation.textView
     parentCodeHeight = max(codeRect.maxY - codeOrigin.y, codeRect.size.height)
     viewportWidth = max(viewportRight - codeOrigin.x, 0.0'f32)
     initialDocumentWidth = max(codeRect.size.width, viewportWidth)
-  codeTextView.setFrameFromLayout(
-    rect(0.0'f32, 0.0'f32, initialDocumentWidth, parentCodeHeight)
-  )
-  let codeContentRect =
-    codeTextView.textRangeRect(initTextRange(0, codeTextView.textStorage().len))
+    contentSize = codeTextView.cachedMarkdownContentSize(
+      initSize(initialDocumentWidth, parentCodeHeight),
+      presentation.contentSize,
+      presentation.contentSizeValid,
+    )
   let
-    codeWidth = max(codeContentRect.maxX, codeContentRect.size.width)
+    codeWidth = contentSize.width
     paddedCodeWidth = codeWidth + max(rightPadding, 0.0'f32)
-    codeHeight =
-      max(parentCodeHeight, max(codeContentRect.maxY, codeContentRect.size.height))
+    codeHeight = max(parentCodeHeight, contentSize.height)
     overflowing = paddedCodeWidth > viewportWidth
     documentWidth = max(paddedCodeWidth, viewportWidth)
     scrollerHeight =
@@ -1379,130 +1488,100 @@ proc layoutMarkdownCodeBlock(
   scrollView.tile()
   scrollView.setHiddenFromLayout(not overflowing)
 
-proc layoutMarkdownCodeBlocks(textView: MarkdownTextView) =
+proc layoutMarkdownCodeBlocks(
+    textView: MarkdownTextView, snapshot: TextLayoutSnapshot, bufferedVisible: Rect
+) =
   let
     style = textView.codeBlockStyle
     viewportRight = textView.bounds().maxX - max(style.outlineWidth, 0.0'f32)
   if viewportRight <= 0.0'f32:
     return
-  for presentation in textView.markdownCodeBlocks:
-    textView.layoutMarkdownCodeBlock(presentation, viewportRight, style.padding.right)
+  for presentation in textView.markdownCodeBlocks.mitems:
+    presentation.rangeLayout.resolveMarkdownRangeLayout(presentation.range, snapshot)
+    if presentation.rangeLayout.rect.intersection(bufferedVisible).isEmpty:
+      if not presentation.scrollView.isNil:
+        presentation.scrollView.setHiddenFromLayout(true)
+    else:
+      textView.layoutMarkdownCodeBlock(presentation, viewportRight, style.padding.right)
 
-proc layoutMarkdownTables(textView: MarkdownTextView) =
+proc layoutMarkdownTables(
+    textView: MarkdownTextView, snapshot: TextLayoutSnapshot, bufferedVisible: Rect
+) =
   let tableViewportRight = textView.bounds().maxX
   if tableViewportRight <= 0.0'f32:
     return
-  for presentation in textView.markdownTables:
-    let selectionRects = textView.selectionRects(presentation.range)
-    if selectionRects.len == 0:
-      continue
-    let
-      tableRect = textView.textRangeRect(presentation.range)
-      tableOrigin = selectionRects[0].origin
-    let
-      scrollView = presentation.scrollView
-      tableTextView = presentation.textView
-      parentTableHeight = max(tableRect.maxY - tableOrigin.y, tableRect.size.height)
-      viewportWidth = max(tableViewportRight - tableOrigin.x, 0.0'f32)
-      initialDocumentWidth = max(tableRect.size.width, viewportWidth)
-    tableTextView.setFrameFromLayout(
-      rect(0.0'f32, 0.0'f32, initialDocumentWidth, parentTableHeight)
-    )
-    let tableContentRect =
-      tableTextView.textRangeRect(initTextRange(0, tableTextView.textStorage().len))
-    let
-      tableWidth = max(tableContentRect.maxX, tableContentRect.size.width)
-      tableHeight =
-        max(parentTableHeight, max(tableContentRect.maxY, tableContentRect.size.height))
-      documentWidth = max(tableWidth, viewportWidth)
-      scrollerHeight =
-        if tableWidth > viewportWidth:
-          scrollView.scrollerThickness()
-        else:
-          0.0'f32
-    scrollView.setFrameFromLayout(
-      rect(tableOrigin.x, tableOrigin.y, viewportWidth, tableHeight + scrollerHeight)
-    )
-    tableTextView.setFrameFromLayout(rect(0.0'f32, 0.0'f32, documentWidth, tableHeight))
-    scrollView.tile()
+  for presentation in textView.markdownTables.mitems:
+    presentation.rangeLayout.resolveMarkdownRangeLayout(presentation.range, snapshot)
+    let tableRect = presentation.rangeLayout.rect
+    if tableRect.intersection(bufferedVisible).isEmpty:
+      if not presentation.scrollView.isNil:
+        presentation.scrollView.setHiddenFromLayout(true)
+    elif not tableRect.isEmpty:
+      textView.ensureMarkdownTableView(presentation)
+      let
+        tableOrigin = tableRect.origin
+        scrollView = presentation.scrollView
+        tableTextView = presentation.textView
+        parentTableHeight = max(tableRect.maxY - tableOrigin.y, tableRect.size.height)
+        viewportWidth = max(tableViewportRight - tableOrigin.x, 0.0'f32)
+        initialDocumentWidth = max(tableRect.size.width, viewportWidth)
+        contentSize = tableTextView.cachedMarkdownContentSize(
+          initSize(initialDocumentWidth, parentTableHeight),
+          presentation.contentSize,
+          presentation.contentSizeValid,
+        )
+      let
+        tableWidth = contentSize.width
+        tableHeight = max(parentTableHeight, contentSize.height)
+        documentWidth = max(tableWidth, viewportWidth)
+        scrollerHeight =
+          if tableWidth > viewportWidth:
+            scrollView.scrollerThickness()
+          else:
+            0.0'f32
+      scrollView.setFrameFromLayout(
+        rect(tableOrigin.x, tableOrigin.y, viewportWidth, tableHeight + scrollerHeight)
+      )
+      tableTextView.setFrameFromLayout(
+        rect(0.0'f32, 0.0'f32, documentWidth, tableHeight)
+      )
+      scrollView.tile()
+      scrollView.setHiddenFromLayout(false)
 
 proc clearMarkdownTables(textView: MarkdownTextView) =
   for presentation in textView.markdownTables:
-    presentation.scrollView.removeFromSuperview()
+    if not presentation.scrollView.isNil:
+      presentation.scrollView.removeFromSuperview()
   textView.markdownTables.setLen(0)
 
 proc clearMarkdownCodeBlocks(textView: MarkdownTextView) =
   for presentation in textView.markdownCodeBlocks:
-    presentation.scrollView.removeFromSuperview()
+    if not presentation.scrollView.isNil:
+      presentation.scrollView.removeFromSuperview()
   textView.markdownCodeBlocks.setLen(0)
 
 proc installMarkdownCodeBlocks(
-    textView: MarkdownTextView,
-    codeBlocks: openArray[MarkdownCodeBlockPresentation],
-    backgroundColor: Color,
+    textView: MarkdownTextView, codeBlocks: openArray[MarkdownCodeBlockPresentation]
 ) =
   textView.clearMarkdownCodeBlocks()
   for codeBlock in codeBlocks:
-    let
-      codeTextView = newTextView()
-      scrollView = newScrollView(documentView = codeTextView)
-    codeTextView.propagatesIntrinsicContentSizeChanges = false
-    codeTextView.richText = true
-    codeTextView.editable = false
-    codeTextView.selectable = true
-    codeTextView.backgroundColor = backgroundColor
-    codeTextView.textContainer = initTextContainer(
-      wraps = false, widthTracksTextView = true, heightTracksTextView = true
-    )
-    codeTextView.textStorage = codeBlock.storage
-    codeTextView.accessibilityLabel = "Markdown code block"
-    scrollView.hasHorizontalScroller = true
-    scrollView.hasVerticalScroller = false
-    scrollView.autohidePolicy = sapWhenNeeded
-    scrollView.borderType = svbNoBorder
-    scrollView.drawsBackground = false
-    scrollView.clipView().backgroundColor = backgroundColor
-    scrollView.clipView().drawsBackground = true
-    scrollView.setHiddenFromLayout(true)
-    textView.addSubview(scrollView)
     textView.markdownCodeBlocks.add MarkdownCodeBlockScrollPresentation(
-      range: codeBlock.range, scrollView: scrollView, textView: codeTextView
+      range: codeBlock.range, storage: codeBlock.storage
     )
+  textView.hasMarkdownEmbeddedViewport = false
   textView.setNeedsLayout()
 
 proc installMarkdownTables(
-    textView: MarkdownTextView,
-    tables: openArray[MarkdownTablePresentation],
-    backgroundColor: Color,
+    textView: MarkdownTextView, tables: openArray[MarkdownTablePresentation]
 ) =
   textView.clearMarkdownTables()
   for table in tables:
     if not table.overflowing:
       continue
-    let
-      tableTextView = newTextView()
-      scrollView = newScrollView(documentView = tableTextView)
-    tableTextView.propagatesIntrinsicContentSizeChanges = false
-    tableTextView.richText = true
-    tableTextView.editable = false
-    tableTextView.selectable = true
-    tableTextView.backgroundColor = backgroundColor
-    tableTextView.textContainer = initTextContainer(
-      wraps = false, widthTracksTextView = true, heightTracksTextView = true
-    )
-    tableTextView.textStorage = table.storage
-    tableTextView.accessibilityLabel = "Markdown table"
-    scrollView.hasHorizontalScroller = true
-    scrollView.hasVerticalScroller = false
-    scrollView.autohidePolicy = sapWhenNeeded
-    scrollView.borderType = svbNoBorder
-    scrollView.drawsBackground = false
-    scrollView.clipView().backgroundColor = backgroundColor
-    scrollView.clipView().drawsBackground = true
-    textView.addSubview(scrollView)
     textView.markdownTables.add MarkdownTableScrollPresentation(
-      range: table.range, scrollView: scrollView, textView: tableTextView
+      range: table.range, storage: table.storage
     )
+  textView.hasMarkdownEmbeddedViewport = false
   textView.setNeedsLayout()
 
 proc markdownTextLayoutDidComplete(
@@ -1511,22 +1590,59 @@ proc markdownTextLayoutDidComplete(
   discard snapshot
   textView.setNeedsLayout()
 
+func containsRect(outer, inner: Rect): bool =
+  inner.minX >= outer.minX and inner.maxX <= outer.maxX and inner.minY >= outer.minY and
+    inner.maxY <= outer.maxY
+
+proc markdownViewportGeometryDidChange(textView: MarkdownTextView) {.slot.} =
+  if textView.markdownCodeBlocks.len == 0 and textView.markdownTables.len == 0:
+    return
+  let visible = textView.visibleRect()
+  if textView.markdownViewportLayoutPending or
+      textView.hasMarkdownEmbeddedViewport and
+      textView.markdownEmbeddedViewport.containsRect(visible):
+    return
+  textView.markdownViewportLayoutPending = true
+  scheduleMainThreadWork(
+    proc(): bool =
+      textView.markdownViewportLayoutPending = false
+      let currentVisible = textView.visibleRect()
+      if not textView.hasMarkdownEmbeddedViewport or
+          not textView.markdownEmbeddedViewport.containsRect(currentVisible):
+        textView.setNeedsLayout()
+      false
+  )
+
 protocol MarkdownTextViewLayout of ViewLayoutProtocol:
   method layoutSubviews(textView: MarkdownTextView) =
-    textView.layoutMarkdownCodeBlocks()
-    textView.layoutMarkdownTables()
+    if textView.markdownCodeBlocks.len == 0 and textView.markdownTables.len == 0:
+      return
+    let
+      snapshot = textView.layoutManager().layoutSnapshot()
+      bufferedVisible = textView.visibleRect().verticallyBuffered()
+    textView.markdownEmbeddedViewport = bufferedVisible
+    textView.hasMarkdownEmbeddedViewport = true
+    textView.layoutMarkdownCodeBlocks(snapshot, bufferedVisible)
+    textView.layoutMarkdownTables(snapshot, bufferedVisible)
 
 protocol MarkdownTextViewDrawing of ViewDrawingProtocol:
   method drawUnderlay(textView: MarkdownTextView, context: DrawContext) =
     let revision = textView.renderSlotRevision(MarkdownUnderlayRenderSlot)
     if context.beginRenderSlot(MarkdownUnderlayRenderSlot, revision):
-      let style = textView.codeBlockStyle
+      let
+        bufferedVisible = context.visibleRect().verticallyBuffered()
+        snapshot = textView.layoutManager().layoutSnapshot()
+        style = textView.codeBlockStyle
+      textView.markdownViewportGeometryDidChange()
       if style.backgroundColor.a > 0.0'f32 or
           (style.outlineColor.a > 0.0'f32 and style.outlineWidth > 0.0'f32):
         var blockRects: seq[Rect]
-        for range in textView.codeBlockRanges:
-          let blockRect = textView.codeBlockRect(range, style)
-          if not blockRect.isEmpty:
+        for presentation in textView.markdownCodeBlocks.mitems:
+          presentation.rangeLayout.resolveMarkdownRangeLayout(
+            presentation.range, snapshot
+          )
+          let blockRect = textView.codeBlockRect(presentation.rangeLayout.rect, style)
+          if not blockRect.intersection(bufferedVisible).isEmpty:
             blockRects.add blockRect
         blockRects.sort(
           proc(left, right: Rect): int =
@@ -1541,13 +1657,14 @@ protocol MarkdownTextViewDrawing of ViewDrawingProtocol:
             max(style.cornerRadius, 0.0'f32),
           )
       for presentation in textView.markdownImages:
-        let rect = textView.imageRect(presentation)
-        if not rect.isEmpty:
-          discard context.addImage(rect, presentation.image)
-    TextView(textView).drawTextViewUnderlay(context)
+        if presentation.range.textRangeIntersectsRect(snapshot, bufferedVisible):
+          let imageRect = textView.imageRect(presentation)
+          if not imageRect.isEmpty:
+            discard context.addImage(imageRect, presentation.image)
+    TextView(textView).drawTextViewUnderlayInViewport(context)
 
   method draw(textView: MarkdownTextView, context: DrawContext) =
-    TextView(textView).drawTextViewText(context)
+    TextView(textView).drawTextViewTextInViewport(context)
 
   method drawOverlay(textView: MarkdownTextView, context: DrawContext) =
     TextView(textView).drawTextViewOverlay(context)
@@ -1582,16 +1699,19 @@ proc pruneMarkdownImageCache(view: MarkdownView, imageUrls: openArray[string]) =
 
 proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) =
   let textView = MarkdownTextView(view.textView())
-  textView.codeBlockRanges = document.codeBlockRanges
   textView.codeBlockStyle = view.xMarkdownStyle.codeBlockStyle
   textView.markdownImages = document.images
   view.xHasMarkdownTables = document.hasTables
   view.minimumWrappedDocumentWidth = 0.0'f32
-  view.textStorage = document.storage
-  textView.installMarkdownCodeBlocks(
-    document.codeBlocks, view.xMarkdownStyle.codeBlockStyle.backgroundColor
-  )
-  textView.installMarkdownTables(document.tables, view.xMarkdownStyle.backgroundColor)
+  if document.storage.len >= MarkdownBackgroundLayoutMinimumLength and
+      textView.layoutManager().usesBackgroundLayout():
+    textView.textStorage = document.storage
+    textView.layoutManager().requestBackgroundLayout(allowUncachedLayout = true)
+    view.setNeedsLayout()
+  else:
+    view.textStorage = document.storage
+  textView.installMarkdownCodeBlocks(document.codeBlocks)
+  textView.installMarkdownTables(document.tables)
   view.pruneMarkdownImageCache(document.imageUrls)
   textView.needsDisplay = true
 
@@ -1640,22 +1760,14 @@ proc markdownTableColumnLimit(view: MarkdownView): int =
 proc scheduleMarkdownTableResize(view: MarkdownView) =
   if view.isNil or not view.xHasMarkdownTables:
     return
-  inc view.xMarkdownTableResizeGeneration
+  view.xMarkdownTableResizeDeadline = getMonoTime() + MarkdownTableResizeDebounce
   if view.xMarkdownTableResizePending:
     return
 
   view.xMarkdownTableResizePending = true
-  var
-    observedGeneration = view.xMarkdownTableResizeGeneration
-    stableCycles = 0
   scheduleMainThreadWork(
     proc(): bool =
-      if observedGeneration != view.xMarkdownTableResizeGeneration:
-        observedGeneration = view.xMarkdownTableResizeGeneration
-        stableCycles = 0
-        return true
-      inc stableCycles
-      if stableCycles < 2:
+      if getMonoTime() < view.xMarkdownTableResizeDeadline:
         return true
 
       view.xMarkdownTableResizePending = false

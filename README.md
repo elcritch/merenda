@@ -153,8 +153,11 @@ viewer.markdownStyle = style
 GFM is the default. Pass `initMarkdownParserConfig(mddCommonMark)` when strict
 CommonMark parsing is preferable. Table columns share measured widths, honor
 GFM alignment, and wrap long cell contents to the Markdown viewport; a settled
-pane resize coalesces one table reflow. Raw HTML is shown as inert monospace text,
-except for `<img>` tags, which use the same native image path as Markdown image
+pane resize coalesces one table reflow. Large documents keep their full text
+layout for scrolling and selection, while retaining Fig text nodes,
+decorations, images, and embedded code or table views only near the visible
+viewport. Raw HTML is shown as inert monospace text, except for `<img>` tags,
+which use the same native image path as Markdown image
 syntax and honor `src`, `alt`, `title`, `width`, and `height`. Relative and
 absolute local image destinations are loaded when `imageBasePath` is set. HTTP
 and HTTPS images load asynchronously through `UrlAssetLoader`, first appearing

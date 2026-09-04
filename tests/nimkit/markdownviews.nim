@@ -35,7 +35,12 @@ proc attributesFor(storage: TextStorage, needle: string): TextAttributes =
 proc tableScrollViews(view: MarkdownView): seq[ScrollView] =
   for subview in view.textView().subviews():
     if subview of ScrollView:
-      result.add ScrollView(subview)
+      let
+        scrollView = ScrollView(subview)
+        documentView = scrollView.documentView()
+      if documentView of TextView and
+          documentView.accessibilityLabel() == "Markdown table":
+        result.add scrollView
 
 proc codeBlockScrollViews(view: MarkdownView, includeHidden = false): seq[ScrollView] =
   for subview in view.textView().subviews():
@@ -681,6 +686,76 @@ echo "fenced"
     view.textView().selectedRange = initTextRange(0, 6)
     discard root.buildRenderScene()
 
+  test "large documents retain only buffered visible text lines":
+    var source: string
+    for index in 0 ..< 240:
+      source.add &"paragraph {index:03}\n\n"
+    let view = newMarkdownView(source, frame = rect(0, 0, 360, 180))
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+
+    let
+      scene = view.buildRenderScene()
+      totalLines = view.textView().layoutManager().lineCount()
+    var firstRendered: seq[string]
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        var text: string
+        for rune in node.textLayout.runes:
+          text.add rune
+        firstRendered.add text
+
+    check totalLines > 200
+    check firstRendered.len < totalLines div 3
+    check firstRendered.join().contains("paragraph 000")
+    check not firstRendered.join().contains("paragraph 239")
+
+    view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
+    discard view.buildRenderScene()
+    var lastRendered: seq[string]
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        var text: string
+        for rune in node.textLayout.runes:
+          text.add rune
+        lastRendered.add text
+
+    check lastRendered.len < totalLines div 3
+    check not lastRendered.join().contains("paragraph 000")
+    check lastRendered.join().contains("paragraph 239")
+
+    view.textView().selectedRange = initTextRange(0, view.textStorage().len)
+    discard view.buildRenderScene()
+    var selectionRectCount = 0
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == view.selectionColor().rgba:
+        inc selectionRectCount
+    check selectionRectCount < totalLines div 3
+
+  test "offscreen code and table scroll views are created near the viewport":
+    let source =
+      "introductory paragraph\n\n".repeat(160) & "```text\n" & "wide code ".repeat(80) &
+      "\n```\n\n" & "| A | B | C | D | E | F | G | H | I | J | K | L |\n" &
+      "| - | - | - | - | - | - | - | - | - | - | - | - |\n" &
+      "| CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU |"
+    let view = newMarkdownView(source, frame = rect(0, 0, 300, 180))
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    discard view.buildRenderScene()
+
+    check view.codeBlockScrollViews(includeHidden = true).len == 0
+    check view.tableScrollViews().len == 0
+
+    view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
+    discard view.buildRenderScene()
+    discard view.pollMarkdownParsing()
+    view.layoutSubtreeIfNeeded()
+    discard view.buildRenderScene()
+
+    check view.codeBlockScrollViews(includeHidden = true).len == 1
+    check view.tableScrollViews().len == 1
+
   test "code block panels in ordered lists do not overlap item labels":
     var style = initMarkdownStyle()
     style.codeBlockStyle.padding = insets(7.0'f32, 10.0'f32)
@@ -1218,6 +1293,10 @@ Press <kbd>Enter</kbd>.
       parsingElapsed = getMonoTime() - parsingStarted
       parsingChunkCount = view.markdownRenderChunkCount()
       maximumParsingChunk = view.markdownMaximumRenderChunkDuration()
+      layoutStarted = getMonoTime()
+    require view.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
+    let
+      layoutElapsed = getMonoTime() - layoutStarted
       renderingStarted = getMonoTime()
     discard buildRenders(view)
     let
@@ -1242,6 +1321,7 @@ Press <kbd>Enter</kbd>.
     darkStyle.codeBlockStyle.backgroundColor = color(0.08, 0.10, 0.14, 1.0)
     view.markdownStyle = darkStyle
     require view.waitForMarkdownRendering()
+    require view.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
     discard buildRenders(view)
     let
       styleElapsed = getMonoTime() - styleStarted
@@ -1251,7 +1331,8 @@ Press <kbd>Enter</kbd>.
     echo &"README MarkdownView timing: dispatch " &
       &"{constructionElapsed.inMilliseconds} ms, parse and apply " &
       &"{parsingElapsed.inMilliseconds} ms in {parsingChunkCount} chunks " &
-      &"(max {maximumParsingChunk.inMilliseconds} ms), render " &
+      &"(max {maximumParsingChunk.inMilliseconds} ms), layout " &
+      &"{layoutElapsed.inMilliseconds} ms, render " &
       &"{renderingElapsed.inMilliseconds} ms, click " &
       &"{clickElapsed.inMilliseconds} ms, restyle and render " &
       &"{styleElapsed.inMilliseconds} ms in {styleChunkCount} chunks " &
