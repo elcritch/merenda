@@ -1393,7 +1393,8 @@ proc drawMonoTextSurface(
         fill(backgroundColor.rgba)
       else:
         style.box.fill
-    chrome = chromeContext(style.chrome, crPopupList, cpFace, surfaceFill, states)
+    chromeName = if backgroundColor.a > 0.0'f32: DefaultChromeName else: style.chrome
+    chrome = chromeContext(chromeName, crPopupList, cpFace, surfaceFill, states)
     surfaceRoot = context.addRenderRectangle(
       frame,
       context.appearance.chromeFill(chrome),

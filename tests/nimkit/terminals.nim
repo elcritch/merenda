@@ -707,7 +707,7 @@ suite "nimkit terminal views":
     check view.lineCount == session.screen().rows
     check view.maxColumnCount == session.screen().columns
 
-  test "terminal grid covers partial rows and columns while resizing":
+  test "terminal grid fits complete rows and columns while resizing":
     let
       session = newCompactTerminalSession(columns = 1, rows = 1)
       view = newTerminalView(session, frame = rect(0, 0, 120, 80))
@@ -721,10 +721,10 @@ suite "nimkit terminal views":
     )
     view.resizeToFit()
 
-    check session.screen().columns == 3
-    check session.screen().rows == 4
-    check view.lineCount == 4
-    check view.maxColumnCount == 3
+    check session.screen().columns == 2
+    check session.screen().rows == 3
+    check view.lineCount == 3
+    check view.maxColumnCount == 2
 
   test "terminal views use compact scrollback sessions":
     let view = newTerminalView(frame = rect(0, 0, 240, 100))

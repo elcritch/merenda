@@ -727,8 +727,8 @@ proc resizeToFit*(view: TerminalView) =
     bounds = view.bounds()
     availableWidth = max(bounds.w - view.padding() * 2.0'f32, metrics.cellWidth)
     availableHeight = max(bounds.h - view.padding() * 2.0'f32, metrics.lineHeight)
-    columns = max(int(ceil(availableWidth / metrics.cellWidth)), 1)
-    rows = max(int(ceil(availableHeight / metrics.lineHeight)), 1)
+    columns = max(int(floor(availableWidth / metrics.cellWidth)), 1)
+    rows = max(int(floor(availableHeight / metrics.lineHeight)), 1)
     info = view.xSession.screenInfo()
   if columns != info.columns or rows != info.rows:
     view.xSession.resize(columns, rows)
