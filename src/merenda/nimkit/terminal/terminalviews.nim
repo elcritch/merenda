@@ -36,6 +36,7 @@ type
     xSession: TerminalViewSession
     xPalette: TerminalPalette
     xSelection: TerminalSelection
+    xSelectionOrigin: TerminexPosition
     xHasSelection: bool
     xSelecting: bool
     xScrollPosition: float32
@@ -765,6 +766,7 @@ proc handleLocalMouse(view: TerminalView, event: MonoTextRawEvent): bool =
       view.selectWord(position)
       view.xSelecting = false
     else:
+      view.xSelectionOrigin = position
       view.xSelection = TerminalSelection(
         anchor: position,
         extent: initTerminalPosition(position.row, position.column + 1),
@@ -778,7 +780,18 @@ proc handleLocalMouse(view: TerminalView, event: MonoTextRawEvent): bool =
     if mouse.button != mbPrimary or not view.xSelecting:
       return false
     let position = view.absolutePosition(event.row, event.column)
-    view.xSelection.extent = initTerminalPosition(position.row, position.column + 1)
+    if position.positionLess(view.xSelectionOrigin):
+      view.xSelection = TerminalSelection(
+        anchor: initTerminalPosition(
+          view.xSelectionOrigin.row, view.xSelectionOrigin.column + 1
+        ),
+        extent: position,
+      )
+    else:
+      view.xSelection = TerminalSelection(
+        anchor: view.xSelectionOrigin,
+        extent: initTerminalPosition(position.row, position.column + 1),
+      )
     view.xHasSelection = true
     view.xLastGeneration = high(uint64)
     view.syncTerminalScreen()

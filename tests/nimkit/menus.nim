@@ -94,14 +94,22 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
 
 suite "nimkit menus":
   when defined(macosx):
-    test "standard About panel accepts attributed credits":
+    test "standard About panel accepts linked attributed credits":
       let application = NSApplication.sharedApplication()
       var existingWindows: seq[pointer]
       for window in application.windows():
         existingWindows.add cast[pointer](window)
 
       nativeMenus.showStandardAboutPanel(
-        "NimKit Test", "1.0", "test-build", "NimKit test credits"
+        "NimKit Test",
+        "1.0",
+        "test-build",
+        "NimKit test credits\nProject page",
+        [
+          nativeMenus.AboutPanelLink(
+            text: "Project page", url: "https://example.test/nimkit"
+          )
+        ],
       )
 
       let currentWindows = application.windows()

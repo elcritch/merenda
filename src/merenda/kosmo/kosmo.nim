@@ -17,19 +17,30 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
-    cli, filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen,
-    settings, shortcuts,
+    cli, config, filesearchpanel, filetree, moe, moehighlighting, panedocuments,
+    quickopen, settings, shortcuts,
   ]
 import pkg/celina as celina
 
 export
-  filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen, settings,
-  shortcuts
+  config, filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen,
+  settings, shortcuts
+
+func nimblePackageVersion(manifest: string): string =
+  for line in manifest.splitLines():
+    let fields = line.split('=', maxsplit = 1)
+    if fields.len == 2 and fields[0].strip() == "version":
+      let value = fields[1].strip()
+      if value.len >= 2 and value[0] == '"' and value[^1] == '"':
+        return value[1 ..^ 2]
+  raise newException(ValueError, "merenda.nimble does not declare a package version")
 
 const
+  MerendaNimbleManifest =
+    staticRead(currentSourcePath().parentDir / "../../../merenda.nimble")
   KosmoIconPng =
     staticRead(currentSourcePath().parentDir / "../../../data/kosmo-icon.png")
-  KosmoVersion* {.strdefine.} = "0.14.0"
+  KosmoVersion* = nimblePackageVersion(MerendaNimbleManifest)
   KosmoGitHashOverride* {.strdefine.} = ""
   KosmoGitHash* =
     when KosmoGitHashOverride.len > 0:
@@ -43,12 +54,14 @@ const
           revision.output.strip()
         else:
           "unknown"
+  KosmoMoeUrl* = "https://github.com/fox0430/moe"
   KosmoAboutCredits =
     """
 Powered by Moe, the Vim-like text editor.
-https://github.com/fox0430/moe
+$1
 
-Licensed under the GNU General Public License v3.0 (GPL-3.0)."""
+Licensed under the GNU General Public License v3.0 (GPL-3.0).""" %
+    [KosmoMoeUrl]
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
@@ -224,6 +237,8 @@ type
   KosmoWindowManager* = ref object
     application*: nimkit.Application
     keyBindingsPath: string
+    configPath: string
+    config: KosmoConfig
     frontends: seq[KosmoApplication]
 
   KosmoWindowLifecycle = ref object of nimkit.Responder
@@ -3537,6 +3552,10 @@ proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
       group.editorView.refresh()
     if not outcome.applied and not frontend.statusLabel.isNil:
       frontend.statusLabel.text = outcome.message
+    if outcome.applied and not frontend.xWindowManager.isNil:
+      let manager = frontend.xWindowManager[]
+      manager.config.moeTheme = identifier
+      discard manager.config.saveKosmoConfig(manager.configPath)
     return outcome.applied
 
 proc menuItemWithIdentifier(menu: nimkit.Menu, identifier: string): nimkit.MenuItem =
@@ -3704,16 +3723,55 @@ protocol KosmoWindowLifecycleDelegate of nimkit.WindowDelegateProtocol:
     if not lifecycle.frontend.isNil:
       lifecycle.frontend[].close()
 
+const KosmoConfigTextStyleRoles = [
+  nimkit.srBox, nimkit.srButton, nimkit.srCheckBox, nimkit.srRadioButton,
+  nimkit.srTextField, nimkit.srTextView, nimkit.srComboBox, nimkit.srComboBoxItem,
+  nimkit.srTab, nimkit.srTableHeaderCell, nimkit.srRowItem, nimkit.srCascadingRowItem,
+  nimkit.srTooltip, nimkit.srMonoTextView,
+]
+
+proc applyKosmoAppearance(app: nimkit.Application, config: KosmoConfig) =
+  if app.isNil or (
+    config.merendaTheme.len == 0 and config.merendaFont.len == 0 and
+    config.merendaMonoFont.len == 0 and config.merendaFontSize <= 0.0'f32
+  ):
+    return
+  var appearance =
+    if config.merendaTheme.len > 0:
+      nimkit.initAppearance(nimkit.initThemeByName(config.merendaTheme))
+    else:
+      app.effectiveAppearance()
+  var builder = nimkit.initThemeBuilder(appearance.theme)
+  if config.merendaFont.len > 0:
+    builder.setFontName(nimkit.frUI, config.merendaFont)
+  if config.merendaMonoFont.len > 0:
+    builder.setFontName(nimkit.frMonospace, config.merendaMonoFont)
+  if config.merendaFontSize > 0.0'f32:
+    for role in KosmoConfigTextStyleRoles:
+      builder[role, nimkit.StyleFontSize] = config.merendaFontSize
+  appearance.theme = builder.finish()
+  app.setAppearance(appearance)
+
 proc newKosmoWindowManager*(
-    app = nimkit.sharedApplication(), keyBindingsPath = ""
+    app = nimkit.sharedApplication(), keyBindingsPath = "", configPath = ""
 ): KosmoWindowManager =
   ## Create the owner for all project and file windows in a Kosmo session.
+  let config = loadKosmoConfig(configPath)
   if not app.isNil:
+    app.applyKosmoAppearance(config)
     app.icon = nimkit.newImageResourceFromData(KosmoIconPng, name = "kosmo-icon")
     app.aboutInfo = nimkit.ApplicationAboutInfo(
-      version: KosmoVersion, buildVersion: KosmoGitHash, credits: KosmoAboutCredits
+      version: KosmoVersion,
+      buildVersion: KosmoGitHash,
+      credits: KosmoAboutCredits,
+      creditLinks: @[nimkit.ApplicationAboutLink(text: KosmoMoeUrl, url: KosmoMoeUrl)],
     )
-  KosmoWindowManager(application: app, keyBindingsPath: keyBindingsPath)
+  KosmoWindowManager(
+    application: app,
+    keyBindingsPath: keyBindingsPath,
+    configPath: configPath,
+    config: config,
+  )
 
 func hasFileBrowser*(frontend: KosmoApplication): bool =
   ## Return whether this window displays a project file browser.
@@ -3927,7 +3985,15 @@ proc newKosmoApplication*(
         absolutePath(filePath)
       else:
         getCurrentDir()
-    editorView = newKosmoEditorView()
+    editorWorkingDirectory =
+      if initialRootPath.len > 0:
+        initialRootPath
+      elif fileExists(filePath):
+        absolutePath(filePath).parentDir()
+      else:
+        getCurrentDir()
+    editorView =
+      newKosmoEditorView(newKosmoEditor(workingDirectory = editorWorkingDirectory))
     editorPane = newKosmoEditorPane(editorView)
     fileTree = newKosmoFileTree(initialRootPath)
     searchPanel = newKosmoFileSearchPanel(fileTree.rootPath)
@@ -4158,6 +4224,8 @@ proc newKosmoApplication*(
     statusLabel.text = absolutePath(filePath)
   if keyBindingErrors.len > 0:
     statusLabel.text = keyBindingErrors.join("; ")
+  if manager.config.moeTheme.len > 0:
+    discard result.setMoeTheme(manager.config.moeTheme)
   if monitorsGitStatus:
     discard fileTree.startGitStatusMonitoring()
 
@@ -4167,8 +4235,11 @@ proc newKosmoApplication*(
     keyBindingsPath = "",
     hasFileBrowser = true,
     monitorsGitStatus = true,
+    configPath = "",
 ): KosmoApplication =
-  let manager = newKosmoWindowManager(app, keyBindingsPath)
+  let manager = newKosmoWindowManager(
+    app, keyBindingsPath = keyBindingsPath, configPath = configPath
+  )
   result = newKosmoApplication(manager, filePath, hasFileBrowser, monitorsGitStatus)
 
 proc openProject*(
@@ -4375,8 +4446,11 @@ proc runKosmo*(filePath = "") =
   let
     app = nimkit.sharedApplication()
     keyBindingsPath = defaultKosmoKeyBindingsPath()
+    configPath = defaultKosmoConfigPath()
     manager = newKosmoWindowManager(
-      app, keyBindingsPath = if fileExists(keyBindingsPath): keyBindingsPath else: ""
+      app,
+      keyBindingsPath = if fileExists(keyBindingsPath): keyBindingsPath else: "",
+      configPath = configPath,
     )
   let frontend = newKosmoApplication(
     manager, filePath, hasFileBrowser = filePath.len == 0 or not fileExists(filePath)

@@ -34,6 +34,7 @@ type
   KosmoEditor* = ref object
     editor: Editor
     temporaryBufferId: Option[BufferId]
+    workingDirectory: string
 
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
@@ -409,13 +410,39 @@ proc applyMoeTheme*(
   result.message = "Theme changed to: " & theme.name
   editor.editor.state.statusMessage = result.message
 
-proc newKosmoEditor*(text = ""): KosmoEditor =
+proc `workingDirectory=`*(editor: KosmoEditor, path: string) =
+  ## Set the directory used to resolve Moe's relative file commands.
+  if not editor.isNil:
+    editor.workingDirectory =
+      if path.len > 0 and dirExists(path):
+        absolutePath(path)
+      else:
+        ""
+
+func workingDirectory*(editor: KosmoEditor): string =
+  ## Return the directory used to resolve Moe's relative file commands.
+  if not editor.isNil:
+    result = editor.workingDirectory
+
+template inWorkingDirectory(editor: KosmoEditor, body: untyped): untyped =
+  if editor.workingDirectory.len == 0 or not dirExists(editor.workingDirectory):
+    body
+  else:
+    let previousDirectory = getCurrentDir()
+    try:
+      setCurrentDir(editor.workingDirectory)
+      body
+    finally:
+      setCurrentDir(previousDirectory)
+
+proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   ## Create an editor with Moe's default configuration and optional initial text.
   var config = newEditorConfig()
   config.standard.mouse = true
   config.standard.statusLine = false
   config.tabLine.enable = false
   result = KosmoEditor(editor: newEditor(config))
+  result.workingDirectory = workingDirectory
   discard result.editor.addCommandAlias("x", claSaveAndQuit)
   result.editor.setFrontendGitStatusEnabled(true)
   if text.len > 0:
@@ -1020,7 +1047,8 @@ proc handleKeyOutcome*(editor: KosmoEditor, key: string): KosmoKeyOutcome =
     return
   let command = editor.commandLine()
   result.valid = true
-  result.continueRunning = editor.editor.handleKeyCombo(combo.get)
+  result.continueRunning = editor.inWorkingDirectory:
+    editor.editor.handleKeyCombo(combo.get)
   result.closeTabRequested =
     not result.continueRunning and command.visible and command.text.requestsTabClose()
 
@@ -1039,10 +1067,12 @@ proc handleTextInput*(editor: KosmoEditor, text: string): bool =
   ## Send committed text, including IME and composed Unicode input.
   if editor.isNil or editor.editor.isNil:
     return false
-  editor.editor.handleTextInput(text)
+  editor.inWorkingDirectory:
+    editor.editor.handleTextInput(text)
 
 proc handlePaste*(editor: KosmoEditor, text: string): bool =
   ## Insert pasted text without interpreting it as physical key input.
   if editor.isNil or editor.editor.isNil:
     return false
-  editor.editor.handlePaste(text)
+  editor.inWorkingDirectory:
+    editor.editor.handlePaste(text)

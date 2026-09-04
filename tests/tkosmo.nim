@@ -4,6 +4,7 @@ import std/[strutils, unicode, unittest]
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import kosmo/cli
+import kosmo/config
 import kosmo/filetreeinteractions
 import kosmo/matterhighlighting
 import kosmo/panelshortcuts

@@ -637,6 +637,22 @@ For example:
 }
 ```
 
+Kosmo also loads `config.json` from that directory
+(`defaultKosmoConfigPath()`). It contains the selected Moe theme plus optional
+Merenda theme, interface-font, monospace-font, and font-size preferences.
+Invalid configuration is ignored. Selecting a Moe theme in Kosmo Settings
+updates this file.
+
+```json
+{
+  "moeTheme": "default",
+  "merendaTheme": "darkbsd",
+  "merendaFont": "Iosevka",
+  "merendaMonoFont": "JetBrains Mono",
+  "merendaFontSize": 14.0
+}
+```
+
 Run `kosmo --bg [file-or-folder]` to launch the standalone editor detached from
 the invoking shell. Kosmo preserves the current working directory, forwards the
 remaining command-line arguments to its detached process, and disconnects its
@@ -652,8 +668,8 @@ creates an editor-only window without a file-browser sidebar. Project window
 titles show `Kosmo (first-root)` and add `+ N` inside the parentheses when more
 top-level roots are open.
 
-About Kosmo shows the Kosmo icon, release version, build Git hash, Moe project
-reference, and Kosmo's GNU GPL-3.0 license notice.
+About Kosmo shows the Kosmo icon, the package version from `merenda.nimble`, build
+Git hash, clickable Moe project link, and Kosmo's GNU GPL-3.0 license notice.
 
 Kosmo Settings includes a Moe Themes tab. It provides Catppuccin Mocha and
 Latte, Tokyo Night Moon, Kanagawa Wave, and One Dark alongside Moe's default

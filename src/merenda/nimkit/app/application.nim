@@ -25,10 +25,13 @@ import ./workspaces
 import ../app/windows
 
 type
+  ApplicationAboutLink* = nativeMenus.AboutPanelLink
+
   ApplicationAboutInfo* = object
     version*: string
     buildVersion*: string
     credits*: string
+    creditLinks*: seq[ApplicationAboutLink]
 
   MainMenuPresentation* = enum
     mmpAutomatic
@@ -142,6 +145,7 @@ proc installApplicationCommandMethods(app: Application) =
     nativeMenus.showStandardAboutPanel(
       application.xApplicationName, application.xAboutInfo.version,
       application.xAboutInfo.buildVersion, application.xAboutInfo.credits,
+      application.xAboutInfo.creditLinks,
     )
     invocation.setResult(())
   discard app.replaceMethod(actionSelector("orderFrontStandardAboutPanel"), aboutMethod)
