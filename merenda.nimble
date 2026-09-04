@@ -27,7 +27,6 @@ feature "uirelays":
 
 feature "kosmo":
   requires "gh:elcritch/moe#develop"
-  # requires "gh:elcritch/moe#integration-improvements"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
