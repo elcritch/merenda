@@ -188,7 +188,6 @@ proc newKosmoTerminalView*(
     newKosmoSearchBar("terminal output", onQueryChanged, onPrevious, onNext, onClose)
   result.addSubview(result.searchBar)
   result.syncSearchControls()
-  result.searchBar.applyKosmoSearchAppearance(result.effectiveAppearance())
 
 func searchField*(view: KosmoTerminalView): nimkit.TextField =
   if not view.isNil and not view.searchBar.isNil:

@@ -1,20 +1,22 @@
 ## Shared floating search controls for Kosmo content views.
 
+import std/options
+
 import sigils/core
 
-import ../nimkit as nimkit
+import ../nimkit as nimkit except performKeyEquivalent
+from ../nimkit/foundation/selectors import performKeyEquivalent
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
 const
   KosmoSearchBarWidth* = 520.0'f32
-  KosmoSearchBarHeight* = 56.0'f32
+  KosmoSearchBarHeight* = 48.0'f32
   KosmoSearchBarInset* = 16.0'f32
-  SearchControlInset = 10.0'f32
+  SearchBarContentInset = 6.0'f32
+  SearchBarBlurRadius = 20.0'f32
+  SearchBarTintOpacity = 0.18'f32
   SearchControlSpacing = 6.0'f32
-  SearchButtonWidth = 30.0'f32
-  SearchBarStyleId = "kosmo.search.bar"
-  SearchFieldStyleId = "kosmo.search.field"
-  SearchButtonStyleId = "kosmo.search.button"
+  SearchButtonWidth = 40.0'f32
 
 type
   KosmoSearchQueryAction* = proc(query: string) {.closure.}
@@ -75,20 +77,62 @@ protocol KosmoSearchEditorCancellation of nimkit.MenuCommandProtocol:
     if not editor.searchBar.isNil:
       editor.searchBar[].activateClose()
 
+protocol KosmoSearchEditorKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
+  method performKeyEquivalent(
+      editor: KosmoSearchFieldEditor, event: nimkit.KeyEvent
+  ): bool =
+    let owner = editor.window()
+    if not (owner of nimkit.Window):
+      return
+    let command = nimkit.Window(owner).keyBindings().commandFor(event)
+    if command.isNone:
+      return
+    editor.tryToPerform(command.get(), nimkit.DynamicAgent(editor))
+
 proc searchQueryDidChange(bar: KosmoSearchBar, sender: nimkit.DynamicAgent) {.slot.} =
   discard sender
   bar.promptLabel.hidden = bar.xQueryField.text().len > 0
   if not bar.onQueryChanged.isNil:
     bar.onQueryChanged(bar.xQueryField.text())
 
+func tint(fill: nimkit.Fill, opacity: float32): nimkit.Fill =
+  let base = fill.centerColor()
+  nimkit.fill(nimkit.color(base.r, base.g, base.b, opacity))
+
+protocol KosmoSearchBarDrawing of nimkit.ViewDrawingProtocol:
+  method draw(bar: KosmoSearchBar, context: nimkit.DrawContext) =
+    let bounds = bar.bounds()
+    if context.isNil or bounds.isEmpty:
+      return
+    let
+      style = context.appearance.resolveBoxStyle(nimkit.controlStyle(nimkit.srBox))
+      frame = context.renderRectFor(bounds)
+    discard context.addRenderBackdropBlur(
+      context.renderLayer(),
+      context.renderParent(),
+      frame,
+      style.box.fill.tint(SearchBarTintOpacity),
+      SearchBarBlurRadius,
+      style.box.cornerRadius,
+      style.box.cornerRadii,
+    )
+    discard context.addRenderRectangle(
+      frame,
+      nimkit.fill(nimkit.color(0.0, 0.0, 0.0, 0.0)),
+      style.box.borderColor,
+      style.box.borderWidth,
+      style.box.cornerRadius,
+      style.box.shadows,
+      cornerRadii = style.box.cornerRadii,
+    )
+
 protocol KosmoSearchBarLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(bar: KosmoSearchBar) =
     let
-      contentFrame = bar.contentRect()
+      contentFrame = bar.bounds().inset(nimkit.insets(SearchBarContentInset))
       availableWidth = contentFrame.size.width
       availableHeight = contentFrame.size.height
-      controlHeight =
-        min(max(availableHeight - SearchControlInset * 2.0'f32, 1.0'f32), 34.0'f32)
+      controlHeight = min(max(availableHeight, 1.0'f32), 34.0'f32)
       buttonWidth = min(SearchButtonWidth, availableWidth / 4.0'f32)
       buttonsWidth = buttonWidth * 3.0'f32 + SearchControlSpacing * 3.0'f32
       fieldWidth = max(availableWidth - buttonsWidth, 1.0'f32)
@@ -121,53 +165,6 @@ protocol KosmoSearchBarLayout of nimkit.ViewLayoutProtocol:
       )
     )
 
-proc applyKosmoSearchAppearance*(bar: KosmoSearchBar, base: nimkit.Appearance) =
-  var appearance = base
-  let
-    barSelector = nimkit.initStyleSelector(nimkit.srBox, id = SearchBarStyleId)
-    fieldSelector =
-      nimkit.initStyleSelector(nimkit.srTextField, id = SearchFieldStyleId)
-    buttonSelector = nimkit.initStyleSelector(nimkit.srButton, id = SearchButtonStyleId)
-    highlightedButtonSelector = nimkit.initStyleSelector(
-      nimkit.srButton, {nimkit.ssHighlighted}, id = SearchButtonStyleId
-    )
-  appearance.setStyle(
-    barSelector, nimkit.StyleFill, nimkit.fill(nimkit.color(0.08, 0.08, 0.075, 0.96))
-  )
-  appearance.setStyle(barSelector, nimkit.StyleBorderWidth, 0.0'f32)
-  appearance.setStyle(barSelector, nimkit.StyleCornerRadius, 12.0'f32)
-  appearance.setStyle(
-    fieldSelector, nimkit.StyleFill, nimkit.fill(nimkit.color(0.18, 0.18, 0.17, 1.0))
-  )
-  appearance.setStyle(fieldSelector, nimkit.StyleBorderWidth, 0.0'f32)
-  appearance.setStyle(fieldSelector, nimkit.StyleCornerRadius, 8.0'f32)
-  appearance.setStyle(
-    fieldSelector, nimkit.StyleChrome, nimkit.styleKeyword(nimkit.DefaultChromeName)
-  )
-  appearance.setStyle(
-    fieldSelector, nimkit.StyleTextColor, nimkit.color(0.85, 0.85, 0.84)
-  )
-  appearance.setStyle(
-    buttonSelector, nimkit.StyleFill, nimkit.fill(nimkit.color(0.0, 0.0, 0.0, 0.0))
-  )
-  appearance.setStyle(buttonSelector, nimkit.StyleBorderWidth, 0.0'f32)
-  appearance.setStyle(buttonSelector, nimkit.StyleCornerRadius, 6.0'f32)
-  appearance.setStyle(buttonSelector, nimkit.StyleTextInsets, nimkit.insets(0.0, 2.0))
-  appearance.setStyle(
-    buttonSelector, nimkit.StyleTextColor, nimkit.color(0.68, 0.68, 0.67)
-  )
-  appearance.setStyle(
-    buttonSelector,
-    nimkit.StyleChrome,
-    nimkit.styleKeyword(nimkit.FlatTransparentChromeName),
-  )
-  appearance.setStyle(
-    highlightedButtonSelector,
-    nimkit.StyleFill,
-    nimkit.fill(nimkit.color(1.0, 1.0, 1.0, 0.10)),
-  )
-  bar.appearance = appearance
-
 proc newKosmoSearchBar*(
     accessibilitySubject: string,
     onQueryChanged: KosmoSearchQueryAction,
@@ -180,7 +177,7 @@ proc newKosmoSearchBar*(
     onClose: onClose,
   )
   result.initBoxFields()
-  result.styleId = SearchBarStyleId
+  discard result.withProtocol(KosmoSearchBarDrawing)
 
   let
     searchBar = result.unsafeWeakRef()
@@ -189,21 +186,18 @@ proc newKosmoSearchBar*(
   discard editor.withProtocol(KosmoSearchEditorMovement)
   discard editor.withProtocol(KosmoSearchEditorActivation)
   discard editor.withProtocol(KosmoSearchEditorCancellation)
+  discard editor.withProtocol(KosmoSearchEditorKeyEquivalents)
   let cell = KosmoSearchFieldCell(editor: editor)
   cell.initTextFieldCellFields()
   discard cell.withProtocol(KosmoSearchFieldCellEditing)
 
   result.xQueryField = nimkit.newTextField()
   result.xQueryField.setCell(cell)
-  result.xQueryField.styleId = SearchFieldStyleId
   result.xQueryField.accessibilityLabel = "Search " & accessibilitySubject
   result.promptLabel = nimkit.newLabel("Search")
-  result.promptLabel.textColor = nimkit.color(0.42, 0.42, 0.41)
-  result.previousButton = nimkit.newButton("⌃")
-  result.nextButton = nimkit.newButton("⌄")
+  result.previousButton = nimkit.newButton("^")
+  result.nextButton = nimkit.newButton("v")
   result.closeButton = nimkit.newButton("×")
-  for button in [result.previousButton, result.nextButton, result.closeButton]:
-    button.styleId = SearchButtonStyleId
   result.previousButton.accessibilityLabel =
     "Previous " & accessibilitySubject & " match"
   result.previousButton.toolTip = "Previous match"

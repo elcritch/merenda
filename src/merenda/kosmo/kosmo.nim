@@ -1083,8 +1083,6 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     view.documentTabs.appearance = appearance
   if not view.commandBar.isNil:
     view.commandBar.appearance = appearance
-  if not view.searchBar.isNil:
-    view.searchBar.applyKosmoSearchAppearance(appearance)
   if not view.dockGroup.isNil:
     let pane = view.dockGroup[].pane
     if not pane.activeIndicator.isNil:
@@ -1937,11 +1935,9 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
     onClose: KosmoSearchAction = proc() =
       if not searchOwner.isNil:
         searchOwner[].dismissSearch()
-  result.searchBar = newKosmoSearchBar(
-    "editor text", onQueryChanged, onPrevious, onNext, onClose
-  )
+  result.searchBar =
+    newKosmoSearchBar("editor text", onQueryChanged, onPrevious, onNext, onClose)
   result.addSubview(result.searchBar)
-  result.searchBar.applyKosmoSearchAppearance(result.effectiveAppearance())
   result.syncChrome()
 
 protocol KosmoCommandBarHitTesting of nimkit.ViewProtocol:

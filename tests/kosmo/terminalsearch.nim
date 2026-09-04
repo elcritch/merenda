@@ -1,9 +1,31 @@
 ## Terminal scrollback search and Kosmo's floating search controls.
 
-import std/unittest
+import std/[unicode, unittest]
+
+import figdraw
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add rune
+
+proc rendersText(view: View, text: string): bool =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkText and node.renderedText() == text:
+      return true
+
+proc rendersBackdropBlur(view: View): bool =
+  let renders = buildRenders(view)
+  if DefaultDrawLevel notin renders:
+    return
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkBackdropBlur and node.backdropBlur.blur > 0.0'f32:
+      return true
 
 suite "Kosmo terminal search":
   test "matching is case insensitive and retains terminal cell positions":
@@ -42,7 +64,24 @@ suite "Kosmo terminal search":
     check searchFieldFrame.origin.x > 100.0'f32
     check searchFieldFrame.origin.y <= 40.0'f32
     check searchFieldFrame.size.width > 300.0'f32
+    check searchFieldFrame.size.height >= 30.0'f32
     check window.dispatchTextInput("alpha")
+    check terminal.searchField().selectedRange() == initTextRange(5, 0)
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
+    check terminal.searchField().selectedRange() == initTextRange(4, 0)
+    check window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
+    check terminal.searchField().text() == "alpa"
+    check terminal.searchField().selectedRange() == initTextRange(3, 0)
+    check window.dispatchTextInput("h")
+    check terminal.searchField().text() == "alpha"
+    check window.dispatchKeyDown(
+      KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
+    )
+    check terminal.searchField().selectedRange() == initTextRange(5, 0)
+    check terminal.rendersText("^")
+    check terminal.rendersText("v")
+    check terminal.rendersText("×")
+    check terminal.rendersBackdropBlur()
     check terminal.searchMatchCount() == 2
     check terminal.selectedSearchMatch() == 1
     check terminal.selectionText() == "ALPHA"
