@@ -1,4 +1,4 @@
-version       = "0.16.1"
+version       = "0.16.2"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -9,8 +9,8 @@ requires "nim >= 2.2.6"
 requires "msgpack4nim"
 requires "chronicles >= 0.4"
 requires "crunchy >= 0.1.11"
-requires "https://github.com/elcritch/siwin#fix-x11-unbounded-size-limits"
-requires "figdraw >= 0.36.0 [siwin, sharedlib, harfbuzz]"
+requires "gh:elcritch/siwin#fix-x11-popup-border-pixel"
+requires "figdraw >= 0.36.1 [siwin, sharedlib, harfbuzz]"
 requires "sigils >= 0.27.4 [sigNameAsString, closures, siwin, chronos]"
 requires "kiwiberry"
 requires "cborious"
@@ -20,9 +20,7 @@ requires "gh:elcritch/nim-markdown#devel[regex]"
 requires "gh:elcritch/matter >= 0.2.2"
 requires "gh:elcritch/terminex >= 0.3"
 requires "https://github.com/Araq/iconbundler"
-
-feature "libbacktrace":
-  requires "libbacktrace"
+requires "libbacktrace"
 
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
