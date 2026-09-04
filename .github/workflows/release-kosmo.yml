@@ -49,16 +49,11 @@ jobs:
             libxkbcommon-dev \
             libxrender-dev
 
-      - name: Install GrabNim
-        run: |
-          curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
-          echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-      - name: Install Nim
-        run: |
-          grabnim "$NIM_VERSION"
-          nim -v
+      - name: Cache packages
+        uses: actions/cache@v4
+        with:
+          path: deps/
+          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
       - name: Install Atlas
         run: |
@@ -68,11 +63,11 @@ jobs:
             ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
           atlas -v
 
-      - name: Cache packages
-        uses: actions/cache@v4
-        with:
-          path: deps/
-          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
+      - name: Set up Nim
+        run: atlas --github-path env "$NIM_VERSION"
+
+      - name: Verify Nim
+        run: nim -v
 
       - name: Install dependencies
         run: atlas install -tuk --features:kosmo
@@ -118,16 +113,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install GrabNim
-        run: |
-          curl -fsSL https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh | sh
-          echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-      - name: Install Nim
-        run: |
-          grabnim "$NIM_VERSION"
-          nim -v
+      - name: Cache packages
+        uses: actions/cache@v4
+        with:
+          path: deps/
+          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
       - name: Install Atlas
         run: |
@@ -137,11 +127,11 @@ jobs:
             ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
           atlas -v
 
-      - name: Cache packages
-        uses: actions/cache@v4
-        with:
-          path: deps/
-          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
+      - name: Set up Nim
+        run: atlas --github-path env "$NIM_VERSION"
+
+      - name: Verify Nim
+        run: nim -v
 
       - name: Install dependencies
         run: atlas install -tuk --features:kosmo

@@ -35,26 +35,16 @@ jobs:
         path: deps/
         key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
-    - name: Install GrabNim
+    - name: Install Atlas
       run: |
-        grabnimInstaller="$(mktemp)"
-        curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-          https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-          -o "$grabnimInstaller"
-        sh "$grabnimInstaller"
-        rm -f "$grabnimInstaller"
-        echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-        echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
+        mkdir -p "$HOME/.local/bin"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+          ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+        atlas -v
 
-    - name: Install Nim
-      run: |
-        grabnim "${{ matrix.nimversion }}"
-
-    - name: Set up GrabNim (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        grabnim setup
-        echo "$LOCALAPPDATA/grabnim/current/bin" >> "$GITHUB_PATH"
+    - name: Set up Nim
+      run: atlas --github-path env "${{ matrix.nimversion }}"
 
     - name: Verify Nim
       run: nim -v
@@ -83,17 +73,6 @@ jobs:
           libegl-mesa0 \
           libgles2
 
-    - name: Install Atlas
-      run: |
-        mkdir -p "$HOME/.local/bin"
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-        curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-          ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
-        echo "Nim:: "
-        nim -v
-        echo "Atlas:: "
-        atlas -v
-
     - name: Install Deps
       run: |
         # sync deps
@@ -110,8 +89,13 @@ jobs:
       run: |
         if [[ "$RUNNER_OS" == "Linux" ]]; then
           # NimKit test targets emit hundreds of large C translation units. Keep
-          # test builds quick and within the hosted runner's memory budget.
-          atlas-run tests --jobs:1 --compiler-output -- --opt:none --debugger:off
+          # test builds quick and within the hosted runner's memory budget. GCC
+          # 15 also promotes a harmless incompatible-pointer warning in Nim's
+          # generated C for Siwin's typed empty sequence to an error.
+          atlas-run tests --jobs:1 --compiler-output -- \
+            --opt:none \
+            --debugger:off \
+            --passC:-Wno-error=incompatible-pointer-types
         else
           atlas-run tests --jobs:1 --compiler-output
         fi
@@ -145,40 +129,19 @@ jobs:
         path: deps/
         key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
-    - name: Install GrabNim
-      run: |
-        grabnimInstaller="$(mktemp)"
-        curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-          https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-          -o "$grabnimInstaller"
-        sh "$grabnimInstaller"
-        rm -f "$grabnimInstaller"
-        echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-        echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-    - name: Install Nim
-      run: |
-        grabnim "${{ matrix.nimversion }}"
-
-    - name: Set up GrabNim (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        grabnim setup
-        echo "$LOCALAPPDATA/grabnim/current/bin" >> "$GITHUB_PATH"
-
-    - name: Verify Nim
-      run: nim -v
-
     - name: Install Atlas
       run: |
         mkdir -p "$HOME/.local/bin"
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
           ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
-        echo "Nim:: "
-        nim -v
-        echo "Atlas:: "
         atlas -v
+
+    - name: Set up Nim
+      run: atlas --github-path env "${{ matrix.nimversion }}"
+
+    - name: Verify Nim
+      run: nim -v
 
     - name: Install Deps
       run: |
