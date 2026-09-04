@@ -3920,22 +3920,6 @@ proc configureKosmoSettingsMenu(frontend: KosmoApplication) =
         if not active.isNil:
           discard active.showSettings()
 
-  let windowMenu = frontend.application.windowsMenu()
-  if windowMenu.isNil:
-    return
-  var merendaSettingsIndex = -1
-  for index, item in windowMenu.items():
-    if not item.isNil and
-        item.action().name == nimkit.actionSelector("showMerendaSettings").name:
-      merendaSettingsIndex = index
-      break
-  if merendaSettingsIndex < 0:
-    return
-  discard windowMenu.removeItem(windowMenu[merendaSettingsIndex])
-  if merendaSettingsIndex < windowMenu.len and
-      windowMenu[merendaSettingsIndex].isSeparatorItem():
-    discard windowMenu.removeItem(windowMenu[merendaSettingsIndex])
-
 proc configureKosmoStandardActionMenus(frontend: KosmoApplication) =
   let mainMenu = frontend.application.mainMenu()
   if mainMenu.isNil or mainMenu.len < 3:
