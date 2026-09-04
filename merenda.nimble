@@ -26,7 +26,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:elcritch/moe#d230e3faf84d"
+  requires "gh:elcritch/moe#d272bd2adc4a18e2394009195934b7c5ed181aee"
   # requires "gh:elcritch/moe#integration-improvements"
 
 feature "references":
