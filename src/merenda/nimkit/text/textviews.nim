@@ -202,6 +202,7 @@ const
   TextUnderlayRenderSlot* = initRenderSlotId(0x54455854'u32, 1)
   TextLineRenderSlotNamespace = 0x544c494e'u32
   TextOverlayRenderSlot* = initRenderSlotId(0x54455854'u32, 2)
+  TextViewportRenderSlot* = initRenderSlotId(0x54455854'u32, 3)
 
 func textLineRenderSlotId*(line: int): RenderSlotId =
   ## Returns the stable retained-render slot for one visual text line.
@@ -2660,6 +2661,15 @@ proc glyphLineArrangement(
       if spanIndex < layout.spanColors.len:
         result.spanColors.add layout.spanColors[spanIndex]
 
+func verticallyBuffered(source: Rect, screens: float32): Rect =
+  let padding = source.size.height * max(screens, 0.0'f32)
+  result = rect(
+    source.origin.x,
+    source.origin.y - padding,
+    source.size.width,
+    source.size.height + padding * 2.0'f32,
+  )
+
 proc drawTextViewUnderlay*(textView: TextView, context: DrawContext) =
   let revision = textView.renderSlotRevision(TextUnderlayRenderSlot)
   if not context.beginRenderSlot(TextUnderlayRenderSlot, revision):
@@ -2678,6 +2688,31 @@ proc drawTextViewUnderlay*(textView: TextView, context: DrawContext) =
     if selected.length > 0:
       for rect in textView.xLayoutManager.selectionRects(selected):
         discard context.addRectangle(rect, textView.selectionColor())
+
+proc drawTextViewUnderlayInViewport*(
+    textView: TextView, context: DrawContext, verticalBufferScreens = 1.0'f32
+) =
+  ## Draws find and selection decorations only near the clipped viewport.
+  let revision = textView.renderSlotRevision(TextUnderlayRenderSlot)
+  if not context.beginRenderSlot(TextUnderlayRenderSlot, revision):
+    return
+  let visible = context.visibleRect().verticallyBuffered(verticalBufferScreens)
+  textView.updateTextContainer()
+  for indicator in textView.xFindIndicators:
+    if indicator.visible:
+      let rects =
+        if indicator.rects.len > 0:
+          indicator.rects
+        else:
+          textView.xLayoutManager.selectionRects(indicator.range)
+      for indicatorRect in rects:
+        if not indicatorRect.intersection(visible).isEmpty:
+          discard context.addRectangle(indicatorRect, indicator.color)
+  for selected in textView.selectedRanges():
+    if selected.length > 0:
+      for selectionRect in textView.xLayoutManager.selectionRects(selected):
+        if not selectionRect.intersection(visible).isEmpty:
+          discard context.addRectangle(selectionRect, textView.selectionColor())
 
 proc drawTextViewText*(textView: TextView, context: DrawContext) =
   textView.updateTextContainer()
@@ -2706,6 +2741,59 @@ proc drawTextViewText*(textView: TextView, context: DrawContext) =
         revision = layout.glyphLineRevision(glyphRange)
       if context.beginRenderSlot(slot, revision):
         discard context.addText(textRect, layout.glyphLineArrangement(glyphRange))
+
+func firstFragmentEndingAfter(
+    fragments: openArray[TextLineFragment], minimumY: float32
+): int =
+  var
+    low = 0
+    high = fragments.len
+  while low < high:
+    let middle = low + (high - low) div 2
+    if fragments[middle].fragmentRect.maxY < minimumY:
+      low = middle + 1
+    else:
+      high = middle
+  low
+
+proc drawTextViewTextInViewport*(
+    textView: TextView, context: DrawContext, verticalBufferScreens = 1.0'f32
+) =
+  ## Draws only visual lines near the clipped viewport while retaining full layout.
+  ## The viewport slot causes scrolling to reconcile entering and leaving line slots.
+  textView.updateTextContainer()
+  let
+    viewportRevision = textView.renderSlotRevision(TextViewportRenderSlot)
+    displayStorage = textView.displayTextStorage()
+  discard context.beginRenderSlot(TextViewportRenderSlot, viewportRevision)
+  let visible = context.visibleRect().verticallyBuffered(verticalBufferScreens)
+
+  if displayStorage != textView.xTextStorage:
+    textView.drawTextViewText(context)
+    return
+
+  let
+    textRect = textView.bounds.inset(textView.xTextContainer.insets)
+    manager = textView.xLayoutManager
+    layout = manager.glyphArrangement()
+    fragments = manager.layoutSnapshot().lineFragments
+    glyphCount =
+      if layout.arrangedGlyphs.len > 0: layout.arrangedGlyphs.len else: layout.runes.len
+  var index = fragments.firstFragmentEndingAfter(visible.minY)
+  while index < fragments.len and fragments[index].fragmentRect.minY <= visible.maxY:
+    let fragment = fragments[index]
+    if fragment.glyphRange.length > 0:
+      let
+        start = fragment.glyphRange.location.toInt
+        stop = min(fragment.glyphRange.maxIndex, glyphCount)
+      if start < stop:
+        let
+          glyphRange = start .. stop - 1
+          slot = textLineRenderSlotId(fragment.lineIndex.toInt)
+          revision = layout.glyphLineRevision(glyphRange)
+        if context.beginRenderSlot(slot, revision):
+          discard context.addText(textRect, layout.glyphLineArrangement(glyphRange))
+    inc index
 
 proc drawTextViewOverlay*(textView: TextView, context: DrawContext) =
   let revision = textView.renderSlotRevision(TextOverlayRenderSlot)

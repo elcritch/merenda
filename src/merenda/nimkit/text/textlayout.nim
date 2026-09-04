@@ -864,9 +864,12 @@ proc updateLayoutForContainer*(manager: TextLayoutManager, index: TextContainerI
   discard index
   manager.updateLayout()
 
-proc requestBackgroundLayout*(manager: TextLayoutManager) =
+proc requestBackgroundLayout*(manager: TextLayoutManager, allowUncachedLayout = false) =
+  ## Requests worker layout when enabled, optionally without a reusable snapshot.
   if not manager.xUsesBackgroundLayout:
     return
+  if allowUncachedLayout:
+    manager.xCanUseBackgroundLayout = true
   manager.updateLayout()
 
 func clampTextRange(total: int, range: TextRange): TextRange =
