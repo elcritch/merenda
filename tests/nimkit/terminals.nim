@@ -1396,6 +1396,11 @@ suite "nimkit terminal views":
     check window.mouseUpAt(dragEnd, clickCount = 1)
     check view.selectionText() == "alpha"
 
+    check window.mouseDownAt(dragEnd, clickCount = 1)
+    check window.mouseDraggedAt(dragStart)
+    check window.mouseUpAt(dragStart, clickCount = 1)
+    check view.selectionText() == "alpha"
+
     check window.mouseDownAt(wordPoint, clickCount = 2)
     check window.mouseUpAt(wordPoint, clickCount = 2)
     check view.hasSelection()
