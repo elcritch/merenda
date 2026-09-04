@@ -5,10 +5,12 @@ import merenda/nimkit
 import merenda/kosmo/kosmo
 import kosmo/cli
 import kosmo/config
+import kosmo/editorsearch
 import kosmo/filetreeinteractions
 import kosmo/matterhighlighting
 import kosmo/panelshortcuts
 import kosmo/terminalclipboard
+import kosmo/terminalsearch
 
 proc runeIndexOf(source, needle: string): int =
   let byteIndex = source.find(needle)

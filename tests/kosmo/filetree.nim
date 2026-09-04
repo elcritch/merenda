@@ -191,8 +191,10 @@ suite "Kosmo":
       folderItem = tree.outlineItemWithIdentifier(folder)
     check modifiedDecoration.badge == "M"
     check modifiedDecoration.color == some(modifiedColor)
+    check modifiedDecoration.badgePlacement == oibpLeading
     check untrackedDecoration.badge == "U"
     check untrackedDecoration.color == some(addedColor)
+    check untrackedDecoration.badgePlacement == oibpLeading
     check gitItem.decoration.color == some(ignoredColor)
     check gitItem.tooltip.endsWith("Ignored")
     check githubItem.decoration.color == some(ignoredColor)

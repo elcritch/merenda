@@ -405,6 +405,31 @@ suite "nimkit mono text views":
 
     check foundSurface
 
+  test "explicit view background drives mono text chrome surface":
+    let
+      themeFill = color(0.88, 0.90, 0.94, 1.0)
+      viewFill = color(0.08, 0.09, 0.11, 1.0)
+      view = newMonoTextViewer("background", frame = rect(0, 0, 220, 80))
+    var builder = initThemeBuilder(initTheme())
+    builder[srMonoTextView, StyleFill] = fill(themeFill)
+    builder[srMonoTextView, StyleChrome] = styleKeyword(DefaultChromeName)
+    view.backgroundColor = viewFill
+
+    let list = buildRenders(view, initAppearance(builder.finish()))[DefaultDrawLevel]
+
+    var
+      viewFillCount = 0
+      foundThemeFill = false
+    for node in list.nodes:
+      if node.kind != nkRectangle or node.fill.kind != flColor:
+        continue
+      if node.fill.color == viewFill.rgba:
+        inc viewFillCount
+      if node.fill.color == themeFill.rgba:
+        foundThemeFill = true
+    check viewFillCount >= 2
+    check not foundThemeFill
+
   test "focus ring type none suppresses the mono text focus ring":
     let
       focusColor = color(0.93, 0.17, 0.61, 0.84)

@@ -113,6 +113,7 @@ proc gitDecoration(tree: KosmoFileTree, path: string): nimkit.OutlineItemDecorat
       badge = state.gitStateBadge(),
       color = some(state.gitStateColor()),
       tooltip = state.gitStateTitle(),
+      badgePlacement = nimkit.oibpLeading,
     )
   var parentPath = path.parentDir()
   while parentPath.len > 0:

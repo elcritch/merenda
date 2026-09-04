@@ -1387,7 +1387,13 @@ proc drawMonoTextSurface(
   let
     states = view.widgetStateSet()
     frame = context.renderRectFor(context.bounds())
-    chrome = chromeContext(style.chrome, crPopupList, cpFace, style.box.fill, states)
+    backgroundColor = view.backgroundColor()
+    surfaceFill =
+      if backgroundColor.a > 0.0'f32:
+        fill(backgroundColor.rgba)
+      else:
+        style.box.fill
+    chrome = chromeContext(style.chrome, crPopupList, cpFace, surfaceFill, states)
     surfaceRoot = context.addRenderRectangle(
       frame,
       context.appearance.chromeFill(chrome),

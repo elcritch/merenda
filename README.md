@@ -701,7 +701,12 @@ split-pane dragging, detached windows, and tab-navigation shortcuts. Other
 content can use the same lifecycle by constructing a `KosmoPaneDocument` with
 a content view, preferred first responder, and optional save and close
 callbacks. Kosmo opens terminal links in the system browser; this can be enabled
-or disabled from the Terminal settings page.
+or disabled from the Terminal settings page. Press Command-F on macOS or
+Control-Shift-F elsewhere in a terminal tab to search its screen and scrollback.
+The floating search bar supports previous/next navigation with the arrow keys or
+buttons and closes with Escape. Moe editor panes use the same floating search
+bar with the platform Find shortcut (Command-F on macOS and Control-F elsewhere),
+while matching, highlighting, and navigation remain owned by Moe.
 
 ## Workspace And Services
 

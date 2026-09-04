@@ -18,13 +18,13 @@ import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
     cli, config, filesearchpanel, filetree, moe, moehighlighting, panedocuments,
-    quickopen, settings, shortcuts,
+    quickopen, searchbar, settings, shortcuts, terminalsearch,
   ]
 import moepkg/celina_backend as celina
 
 export
   config, filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen,
-  settings, shortcuts
+  settings, shortcuts, terminalsearch
 
 func nimblePackageVersion(manifest: string): string =
   for line in manifest.splitLines():
@@ -148,6 +148,8 @@ type
   KosmoEditorView* = ref object of nimkit.MonoTextView
     editor*: KosmoEditor
     documentTabs*: nimkit.DocumentTabs
+    searchBar: KosmoSearchBar
+    searchOrigin: KosmoBufferCursor
     renderBuffer: RenderBuffer
     statusLabel: nimkit.Label
     commandBar: KosmoCommandBar
@@ -1081,6 +1083,8 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     view.documentTabs.appearance = appearance
   if not view.commandBar.isNil:
     view.commandBar.appearance = appearance
+  if not view.searchBar.isNil:
+    view.searchBar.applyKosmoSearchAppearance(appearance)
   if not view.dockGroup.isNil:
     let pane = view.dockGroup[].pane
     if not pane.activeIndicator.isNil:
@@ -1508,6 +1512,79 @@ proc editorPaste(view: KosmoEditorView) =
   discard view.editor.handlePaste(nimkit.generalPasteboard().plainText())
   view.refresh()
 
+proc refreshEditorSearch(
+    view: KosmoEditorView,
+    start: KosmoBufferCursor,
+    direction = KosmoSearchDirection.Forward,
+) =
+  let query = view.searchBar.query()
+  if query.len == 0:
+    discard view.editor.revealLocation(view.searchOrigin.line, view.searchOrigin.column)
+    view.editor.clearSearch()
+    view.searchBar.hasMatches = false
+  else:
+    view.searchBar.hasMatches = view.editor.searchFrom(query, start, direction)
+  view.refresh()
+
+proc editorSearchQueryDidChange(view: KosmoEditorView, query: string) =
+  discard query
+  view.refreshEditorSearch(view.searchOrigin)
+
+proc findPrevious*(view: KosmoEditorView) =
+  ## Find the previous Moe match while retaining the floating search field.
+  if not view.isNil and not view.searchBar.isNil:
+    view.refreshEditorSearch(view.editor.bufferCursor(), KosmoSearchDirection.Backward)
+
+proc findNext*(view: KosmoEditorView) =
+  ## Find the next Moe match while retaining the floating search field.
+  if not view.isNil and not view.searchBar.isNil:
+    view.refreshEditorSearch(view.editor.bufferCursor())
+
+proc dismissSearch*(view: KosmoEditorView) =
+  ## Hide editor search, clear Moe's highlights, and return focus to the editor.
+  if view.isNil or view.searchBar.isNil:
+    return
+  view.searchBar.hidden = true
+  view.editor.clearSearch()
+  view.refresh()
+  let owner = view.window()
+  if owner of nimkit.Window:
+    discard nimkit.Window(owner).makeFirstResponder(view)
+
+proc showSearch*(view: KosmoEditorView): bool {.discardable.} =
+  ## Show the editor search widget and focus its query field.
+  if view.isNil or view.searchBar.isNil:
+    return
+  let owner = view.window()
+  if not (owner of nimkit.Window):
+    return
+  if view.searchBar.hidden():
+    view.searchOrigin = view.editor.bufferCursor()
+    view.searchBar.query = ""
+    view.editor.clearSearch()
+    view.searchBar.hasMatches = false
+    view.searchBar.hidden = false
+    view.setNeedsLayout()
+    view.layoutSubtreeIfNeeded()
+  else:
+    view.searchBar.queryField().selectedRange =
+      nimkit.initTextRange(0, view.searchBar.query().runeLen)
+  result = nimkit.Window(owner).makeFirstResponder(view.searchBar.queryField())
+
+func searchField*(view: KosmoEditorView): nimkit.TextField =
+  if not view.isNil and not view.searchBar.isNil:
+    result = view.searchBar.queryField()
+
+proc searchVisible*(view: KosmoEditorView): bool =
+  not view.isNil and not view.searchBar.isNil and not view.searchBar.hidden()
+
+func editorSearchShortcutModifiers*(): set[nimkit.KeyModifier] =
+  ## Return the platform-native Find modifiers used by Moe editor panes.
+  when defined(macosx) or defined(macos):
+    {nimkit.kmCommand}
+  else:
+    {nimkit.kmControl}
+
 protocol KosmoEditorEditingCommands of nimkit.TextEditingCommandProtocol:
   method copy(view: KosmoEditorView, args: nimkit.ActionArgs) =
     discard args
@@ -1542,6 +1619,8 @@ func isEditingAction(action: string): bool =
 proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   if view.handlePendingPaneKey(event):
     return true
+  if event.key == nimkit.keyF and event.modifiers == editorSearchShortcutModifiers():
+    return view.showSearch()
   if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
     return false
   let controller = view.tabsDelegate.dockController[]
@@ -1805,6 +1884,11 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
     if not handler.dockController.isNil:
       handler.dockController[].finishDockDrag(tabs, info.item, info.location)
 
+protocol KosmoEditorViewLayout of nimkit.ViewLayoutProtocol:
+  method layoutSubviews(view: KosmoEditorView) =
+    if not view.searchBar.isNil:
+      view.searchBar.layoutInBounds(view.bounds())
+
 proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result = KosmoEditorView(
     editor: editor,
@@ -1828,6 +1912,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   discard result.withProtocol(KosmoEditorInput)
   discard result.withProtocol(KosmoEditorEditingCommands)
   discard result.withProtocol(KosmoEditorCommandDispatch)
+  discard result.withProtocol(KosmoEditorViewLayout)
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =
@@ -1838,6 +1923,25 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result.tabsDelegate = KosmoEditorTabsHandler(editorView: result.unsafeWeakRef())
   discard result.tabsDelegate.withProtocol(KosmoEditorTabsDelegate)
   result.documentTabs.delegate = result.tabsDelegate
+  let
+    searchOwner = result.unsafeWeakRef()
+    onQueryChanged: KosmoSearchQueryAction = proc(query: string) =
+      if not searchOwner.isNil:
+        searchOwner[].editorSearchQueryDidChange(query)
+    onPrevious: KosmoSearchAction = proc() =
+      if not searchOwner.isNil:
+        searchOwner[].findPrevious()
+    onNext: KosmoSearchAction = proc() =
+      if not searchOwner.isNil:
+        searchOwner[].findNext()
+    onClose: KosmoSearchAction = proc() =
+      if not searchOwner.isNil:
+        searchOwner[].dismissSearch()
+  result.searchBar = newKosmoSearchBar(
+    "editor text", onQueryChanged, onPrevious, onNext, onClose
+  )
+  result.addSubview(result.searchBar)
+  result.searchBar.applyKosmoSearchAppearance(result.effectiveAppearance())
   result.syncChrome()
 
 protocol KosmoCommandBarHitTesting of nimkit.ViewProtocol:
@@ -3292,7 +3396,7 @@ proc openTerminalLink(lifecycle: KosmoWindowLifecycle, link: string) {.slot.} =
 proc newTerminalDocument(
     controller: KosmoDockController, options: nimkit.TerminexSpawnOptions
 ): KosmoPaneDocument =
-  let terminalView = nimkit.newTerminalView()
+  let terminalView = newKosmoTerminalView()
   if not controller.frontend.isNil:
     let frontend = controller.frontend[]
     terminalView.optionAsMeta = frontend.xTerminalOptionAsMeta
