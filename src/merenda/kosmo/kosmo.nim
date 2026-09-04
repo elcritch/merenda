@@ -3975,7 +3975,15 @@ proc newKosmoApplication*(
         absolutePath(filePath)
       else:
         getCurrentDir()
-    editorView = newKosmoEditorView()
+    editorWorkingDirectory =
+      if initialRootPath.len > 0:
+        initialRootPath
+      elif fileExists(filePath):
+        absolutePath(filePath).parentDir()
+      else:
+        getCurrentDir()
+    editorView =
+      newKosmoEditorView(newKosmoEditor(workingDirectory = editorWorkingDirectory))
     editorPane = newKosmoEditorPane(editorView)
     fileTree = newKosmoFileTree(initialRootPath)
     searchPanel = newKosmoFileSearchPanel(fileTree.rootPath)
