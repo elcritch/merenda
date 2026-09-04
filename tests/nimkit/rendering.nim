@@ -31,6 +31,20 @@ func rgbaColor(r, g, b, a: int): Color =
     a.float32 / 255.0'f32,
   )
 
+proc translatedScreenRect(list: RenderList, index: int): nimkitTypes.Rect =
+  let node = list.nodes[index]
+  var
+    x = node.screenBox.x
+    y = node.screenBox.y
+    parent = node.parent
+  while parent != (-1).FigIdx:
+    let ancestor = list.nodes[parent.int]
+    if ancestor.kind == nkTransform:
+      x += ancestor.transform.translation.x
+      y += ancestor.transform.translation.y
+    parent = ancestor.parent
+  nimkitTypes.rect(x, y, node.screenBox.w, node.screenBox.h)
+
 func aquaChoiceSelectedFill(): Fill =
   linear(rgbaColor(122, 232, 255, 255), rgbaColor(0, 124, 238, 255), fgaDiagTLBR)
 
@@ -1172,17 +1186,20 @@ suite "nimkit rendering":
       bodyFocusRingFound = false
       fullTableFocusRingFound = false
 
-    for node in list.nodes:
+    for index, node in list.nodes:
       if node.kind == nkRectangle and node.stroke.weight == 3.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         check node.parent != (-1).FigIdx
-        let clipNode = list.nodes[int(node.parent)]
+        let
+          clipNode = list.nodes[int(node.parent)]
+          clipRect = list.translatedScreenRect(node.parent.int)
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
-        check clipNode.screenBox.x == 7.5
-        check clipNode.screenBox.y == 41.5
-        check clipNode.screenBox.w == 135.0
-        check clipNode.screenBox.h == 49.0
+        check clipRect.x == 7.5
+        check clipRect.y == 41.5
+        check clipRect.w == 135.0
+        check clipRect.h == 49.0
+        check list.translatedScreenRect(index).y == 43.0
         if node.screenBox.h >= tableView.frame.size.height:
           fullTableFocusRingFound = true
         if node.screenBox.h <=
@@ -1216,22 +1233,25 @@ suite "nimkit rendering":
     let list = buildRenders(root, initAppearance(builder.finish()))[FocusRingDrawLevel]
     var focusRingFound = false
 
-    for node in list.nodes:
+    for index, node in list.nodes:
       if node.kind == nkRectangle and node.stroke.weight == 3.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
         check node.parent != (-1).FigIdx
-        check node.screenBox.x == 5.0
-        check node.screenBox.y == 15.0
-        check node.screenBox.w == 140.0
-        check node.screenBox.h == 78.0
-        let clipNode = list.nodes[int(node.parent)]
+        let
+          ringRect = list.translatedScreenRect(index)
+          clipNode = list.nodes[int(node.parent)]
+          clipRect = list.translatedScreenRect(node.parent.int)
+        check ringRect.x == 5.0
+        check ringRect.y == 15.0
+        check ringRect.w == 140.0
+        check ringRect.h == 78.0
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
-        check clipNode.screenBox.x == 3.5
-        check clipNode.screenBox.y == 13.5
-        check clipNode.screenBox.w == 143.0
-        check clipNode.screenBox.h == 81.0
+        check clipRect.x == 3.5
+        check clipRect.y == 13.5
+        check clipRect.w == 143.0
+        check clipRect.h == 81.0
 
     check focusRingFound
 
@@ -1254,22 +1274,25 @@ suite "nimkit rendering":
     let list = buildRenders(root, initAppearance(builder.finish()))[FocusRingDrawLevel]
     var focusRingFound = false
 
-    for node in list.nodes:
+    for index, node in list.nodes:
       if node.kind == nkRectangle and node.stroke.weight == 4.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
         check node.parent != (-1).FigIdx
-        let clipNode = list.nodes[int(node.parent)]
+        let
+          ringRect = list.translatedScreenRect(index)
+          clipNode = list.nodes[int(node.parent)]
+          clipRect = list.translatedScreenRect(node.parent.int)
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
-        check clipNode.screenBox.x == 10.0
-        check clipNode.screenBox.y == 20.0
-        check clipNode.screenBox.w == 130.0
-        check clipNode.screenBox.h == 68.0
-        check node.screenBox.x == 12.0
-        check node.screenBox.y == 22.0
-        check node.screenBox.w == 126.0
-        check node.screenBox.h == 64.0
+        check clipRect.x == 10.0
+        check clipRect.y == 20.0
+        check clipRect.w == 130.0
+        check clipRect.h == 68.0
+        check ringRect.x == 12.0
+        check ringRect.y == 22.0
+        check ringRect.w == 126.0
+        check ringRect.h == 64.0
 
     check focusRingFound
 
@@ -1299,13 +1322,15 @@ suite "nimkit rendering":
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
         check node.parent != (-1).FigIdx
-        let clipNode = list.nodes[int(node.parent)]
+        let
+          clipNode = list.nodes[int(node.parent)]
+          clipRect = list.translatedScreenRect(node.parent.int)
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
-        check clipNode.screenBox.x == 66.5
-        check clipNode.screenBox.y == 20.0
-        check clipNode.screenBox.w == 23.5
-        check clipNode.screenBox.h == 63.5
+        check clipRect.x == 66.5
+        check clipRect.y == 20.0
+        check clipRect.w == 23.5
+        check clipRect.h == 63.5
 
     check focusRingFound
 
@@ -1337,13 +1362,15 @@ suite "nimkit rendering":
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
         check node.parent != (-1).FigIdx
-        let clipNode = list.nodes[int(node.parent)]
+        let
+          clipNode = list.nodes[int(node.parent)]
+          clipRect = list.translatedScreenRect(node.parent.int)
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
-        check clipNode.screenBox.x == 36.5
-        check clipNode.screenBox.y == 20.0
-        check clipNode.screenBox.w == 97.0
-        check clipNode.screenBox.h == 63.5
+        check clipRect.x == 36.5
+        check clipRect.y == 20.0
+        check clipRect.w == 97.0
+        check clipRect.h == 63.5
 
     check focusRingFound
 

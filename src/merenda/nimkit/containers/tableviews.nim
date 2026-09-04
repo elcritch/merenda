@@ -6679,12 +6679,12 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
         let focusClip = context.addRenderRectangle(
           FocusRingDrawLevel,
           (-1).FigIdx,
-          tableView.rectToWindow(focusClipRect),
+          context.renderRectFor(focusClipRect),
           fill(color(0.0, 0.0, 0.0, 0.0)),
           clips = true,
         )
         context.addFocusRing(
-          FocusRingDrawLevel, focusClip, tableView.rectToWindow(focusRect), focusBox
+          FocusRingDrawLevel, focusClip, context.renderRectFor(focusRect), focusBox
         )
 
 protocol DefaultTableViewAccessibility of AccessibilityProtocol:
