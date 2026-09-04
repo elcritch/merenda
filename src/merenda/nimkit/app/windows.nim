@@ -1,5 +1,7 @@
 import std/[math, monotimes, options, os, tables, times]
 
+import pkg/chronicles
+
 when defined(useNativeDynlib):
   import figdraw/dynlib as figrender
   from figdraw/dynlib import Renders, ZLevel
@@ -13,6 +15,7 @@ import sigils/core
 import ../accessibility/accessibility
 import ./backend as nimkitBackend
 import ./animations
+import ./diagnostics
 import ../responder/keybindings
 import ../drawing/drawing
 import ../drawing/images
@@ -2874,6 +2877,68 @@ proc ensureThreadHost(window: Window) =
     window.xHostWindow.attachThreadRenderer(window.xThreadRenderer, window.xFrame.size)
   window.xThreadHost.installNativeEventLoopWaker()
 
+proc logNativeWindowState(window: Window, message: static string) =
+  if not window.nativeReady:
+    return
+  let
+    host = window.xHostWindow
+    nativeWindow = host.nativeWindowOrNil()
+    renderer = host.rendererOrNil()
+    nativePosition = nativeWindow.pos()
+    nativeSize = nativeWindow.size()
+    backingSize = nativeWindow.backingSize()
+    logicalSize = nativeWindow.logicalSize()
+    nativeMinSize = nativeWindow.minSize()
+    nativeMaxSize = nativeWindow.maxSize()
+  info message,
+    title = window.xTitle,
+    popup = window.xIsPopup,
+    transparent = window.xTransparent,
+    rendererBackend = renderer.backendName(),
+    requestedX = window.xFrame.origin.x,
+    requestedY = window.xFrame.origin.y,
+    requestedWidth = window.xFrame.size.width,
+    requestedHeight = window.xFrame.size.height,
+    nativeX = nativePosition.x,
+    nativeY = nativePosition.y,
+    nativeWidth = nativeSize.x,
+    nativeHeight = nativeSize.y,
+    backingWidth = backingSize.x,
+    backingHeight = backingSize.y,
+    logicalWidth = logicalSize.x,
+    logicalHeight = logicalSize.y,
+    contentScale = host.contentScale(),
+    minimumWidth = window.xMinSize.width,
+    minimumHeight = window.xMinSize.height,
+    maximumWidth = window.xMaxSize.width,
+    maximumHeight = window.xMaxSize.height,
+    nativeMinimumWidth = nativeMinSize.x,
+    nativeMinimumHeight = nativeMinSize.y,
+    nativeMaximumWidth = nativeMaxSize.x,
+    nativeMaximumHeight = nativeMaxSize.y
+
+proc logNativeResize(window: Window) =
+  if not window.nativeReady:
+    return
+  let
+    nativeWindow = window.xHostWindow.nativeWindowOrNil()
+    nativeSize = nativeWindow.size()
+    logicalSize = nativeWindow.logicalSize()
+  if nativeSize.x <= 1 or nativeSize.y <= 1:
+    warn "Merenda window received suspicious native resize",
+      title = window.xTitle,
+      nativeWidth = nativeSize.x,
+      nativeHeight = nativeSize.y,
+      logicalWidth = logicalSize.x,
+      logicalHeight = logicalSize.y
+  else:
+    debug "Merenda native window resized",
+      title = window.xTitle,
+      nativeWidth = nativeSize.x,
+      nativeHeight = nativeSize.y,
+      logicalWidth = logicalSize.x,
+      logicalHeight = logicalSize.y
+
 proc drainThreadHostEvents(window: Window): int =
   if window.xThreadHost.isNil:
     return
@@ -2910,11 +2975,13 @@ proc ensureNativeWindow*(window: Window) =
     window.ensureThreadHost()
     return
 
+  logRuntimeEnvironment()
   let callbacks = HostWindowCallbacks(
     onClose: proc() =
       window.markHostClosed(),
     onResize: proc() =
-      discard window.syncNativeGeometry(),
+      discard window.syncNativeGeometry()
+      window.logNativeResize(),
     onMove: proc(pos: Point) =
       window.xFrame.origin = pos
       discard window.saveFrameUsingName(),
@@ -2973,6 +3040,7 @@ proc ensureNativeWindow*(window: Window) =
   window.xBackdropActive = false
   if window.xBackdrop.kind != wbekNone:
     window.xBackdropActive = window.xHostWindow.trySetBackdrop(window.xBackdrop)
+  window.logNativeWindowState("Initialized Merenda native window")
   window.ensureThreadHost()
   if window.xVisibleRequested:
     window.xHostWindow.setVisible(true)
