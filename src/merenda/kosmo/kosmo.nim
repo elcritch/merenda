@@ -3723,10 +3723,17 @@ protocol KosmoWindowLifecycleDelegate of nimkit.WindowDelegateProtocol:
     if not lifecycle.frontend.isNil:
       lifecycle.frontend[].close()
 
+const KosmoConfigTextStyleRoles = [
+  nimkit.srBox, nimkit.srButton, nimkit.srCheckBox, nimkit.srRadioButton,
+  nimkit.srTextField, nimkit.srTextView, nimkit.srComboBox, nimkit.srComboBoxItem,
+  nimkit.srTab, nimkit.srTableHeaderCell, nimkit.srRowItem, nimkit.srCascadingRowItem,
+  nimkit.srTooltip, nimkit.srMonoTextView,
+]
+
 proc applyKosmoAppearance(app: nimkit.Application, config: KosmoConfig) =
   if app.isNil or (
     config.merendaTheme.len == 0 and config.merendaFont.len == 0 and
-    config.merendaMonoFont.len == 0
+    config.merendaMonoFont.len == 0 and config.merendaFontSize <= 0.0'f32
   ):
     return
   var appearance =
@@ -3739,6 +3746,9 @@ proc applyKosmoAppearance(app: nimkit.Application, config: KosmoConfig) =
     builder.setFontName(nimkit.frUI, config.merendaFont)
   if config.merendaMonoFont.len > 0:
     builder.setFontName(nimkit.frMonospace, config.merendaMonoFont)
+  if config.merendaFontSize > 0.0'f32:
+    for role in KosmoConfigTextStyleRoles:
+      builder[role, nimkit.StyleFontSize] = config.merendaFontSize
   appearance.theme = builder.finish()
   app.setAppearance(appearance)
 

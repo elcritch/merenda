@@ -13,6 +13,7 @@ suite "Kosmo configuration":
         merendaTheme: "aqua",
         merendaFont: "Iosevka",
         merendaMonoFont: "JetBrains Mono",
+        merendaFontSize: 17.0'f32,
       )
     defer:
       removeDir(root)
@@ -23,6 +24,7 @@ suite "Kosmo configuration":
     check node["merendaTheme"].getStr() == "aqua"
     check node["merendaFont"].getStr() == "Iosevka"
     check node["merendaMonoFont"].getStr() == "JetBrains Mono"
+    check node["merendaFontSize"].getFloat() == float(config.merendaFontSize)
     check loadKosmoConfig(path) == config
 
   test "ignores malformed JSON configuration":
@@ -44,6 +46,7 @@ suite "Kosmo configuration":
         merendaTheme: "aqua",
         merendaFont: "Iosevka",
         merendaMonoFont: "JetBrains Mono",
+        merendaFontSize: 17.0'f32,
       )
       app = newApplication("Kosmo Config Test")
     defer:
@@ -57,6 +60,14 @@ suite "Kosmo configuration":
 
     check app.appearance().fontName(frUI) == config.merendaFont
     check app.appearance().fontName(frMonospace) == config.merendaMonoFont
+    check app
+    .appearance()
+    .resolveTextStyle(controlStyle(srTextView), color(0.0, 0.0, 0.0), insets(0.0)).fontSize ==
+      config.merendaFontSize
+    check app
+    .appearance()
+    .resolveTextStyle(controlStyle(srMonoTextView), color(0.0, 0.0, 0.0), insets(0.0)).fontSize ==
+      config.merendaFontSize
     check frontend.editorView.editor.activeMoeThemeIdentifier() == config.moeTheme
 
   test "persists a selected Moe theme":

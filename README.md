@@ -639,15 +639,17 @@ For example:
 
 Kosmo also loads `config.json` from that directory
 (`defaultKosmoConfigPath()`). It contains the selected Moe theme plus optional
-Merenda theme, interface-font, and monospace-font names. Invalid configuration
-is ignored. Selecting a Moe theme in Kosmo Settings updates this file.
+Merenda theme, interface-font, monospace-font, and font-size preferences.
+Invalid configuration is ignored. Selecting a Moe theme in Kosmo Settings
+updates this file.
 
 ```json
 {
   "moeTheme": "default",
   "merendaTheme": "darkbsd",
   "merendaFont": "Iosevka",
-  "merendaMonoFont": "JetBrains Mono"
+  "merendaMonoFont": "JetBrains Mono",
+  "merendaFontSize": 14.0
 }
 ```
 
