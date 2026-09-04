@@ -1,5 +1,6 @@
 import std/tables
 
+import pkg/chronicles
 import sigils/core
 
 import ../app/animations
@@ -318,10 +319,13 @@ proc layoutSubtreeIfNeeded*(view: View) =
     )
   if view.xLayoutFeedbackCycles == LayoutFeedbackDiagnosticThreshold:
     let diagnostic = view.xLastLayoutInvalidation
-    debugEcho "NimKit repeated layout feedback after ",
-      view.xLayoutFeedbackCycles, " update cycles: generation=", diagnostic.generation,
-      " invalidatingView=", diagnostic.invalidatingView, " target=",
-      diagnostic.targetView, " phase=", diagnostic.phase, " reason=", diagnostic.reason
+    warn "NimKit repeated layout feedback",
+      updateCycles = view.xLayoutFeedbackCycles,
+      generation = diagnostic.generation,
+      invalidatingView = diagnostic.invalidatingView,
+      target = diagnostic.targetView,
+      phase = diagnostic.phase,
+      reason = diagnostic.reason
 
 proc layoutGeneration*(view: View): Natural =
   view.xLayoutGeneration
