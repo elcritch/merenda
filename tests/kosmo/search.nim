@@ -8,6 +8,9 @@ import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 
+const MerendaNimbleManifest =
+  staticRead(currentSourcePath().parentDir / "../../merenda.nimble")
+
 proc renderedFigText(node: Fig): string =
   for rune in node.textLayout.runes:
     result.add rune.toUTF8()
@@ -57,9 +60,12 @@ suite "Kosmo":
     check aboutItem.title == "About Kosmo Test"
     check not app.icon().isNil
     check aboutInfo.version == KosmoVersion
+    check ("version       = \"" & aboutInfo.version & "\"") in MerendaNimbleManifest
     check aboutInfo.buildVersion == KosmoGitHash
     check "Moe" in aboutInfo.credits
-    check "https://github.com/fox0430/moe" in aboutInfo.credits
+    check KosmoMoeUrl in aboutInfo.credits
+    check aboutInfo.creditLinks ==
+      @[ApplicationAboutLink(text: KosmoMoeUrl, url: KosmoMoeUrl)]
     check "GPL-3.0" in aboutInfo.credits
     check settingsItem.title == "Settings…"
     check settingsItem.action().name == actionSelector(KosmoShowSettingsAction).name

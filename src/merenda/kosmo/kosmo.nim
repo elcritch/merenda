@@ -26,10 +26,21 @@ export
   filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen, settings,
   shortcuts
 
+func nimblePackageVersion(manifest: string): string =
+  for line in manifest.splitLines():
+    let fields = line.split('=', maxsplit = 1)
+    if fields.len == 2 and fields[0].strip() == "version":
+      let value = fields[1].strip()
+      if value.len >= 2 and value[0] == '"' and value[^1] == '"':
+        return value[1 ..^ 2]
+  raise newException(ValueError, "merenda.nimble does not declare a package version")
+
 const
+  MerendaNimbleManifest =
+    staticRead(currentSourcePath().parentDir / "../../../merenda.nimble")
   KosmoIconPng =
     staticRead(currentSourcePath().parentDir / "../../../data/kosmo-icon.png")
-  KosmoVersion* {.strdefine.} = "0.14.0"
+  KosmoVersion* = nimblePackageVersion(MerendaNimbleManifest)
   KosmoGitHashOverride* {.strdefine.} = ""
   KosmoGitHash* =
     when KosmoGitHashOverride.len > 0:
@@ -43,12 +54,14 @@ const
           revision.output.strip()
         else:
           "unknown"
+  KosmoMoeUrl* = "https://github.com/fox0430/moe"
   KosmoAboutCredits =
     """
 Powered by Moe, the Vim-like text editor.
-https://github.com/fox0430/moe
+$1
 
-Licensed under the GNU General Public License v3.0 (GPL-3.0)."""
+Licensed under the GNU General Public License v3.0 (GPL-3.0).""" %
+    [KosmoMoeUrl]
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
@@ -3711,7 +3724,10 @@ proc newKosmoWindowManager*(
   if not app.isNil:
     app.icon = nimkit.newImageResourceFromData(KosmoIconPng, name = "kosmo-icon")
     app.aboutInfo = nimkit.ApplicationAboutInfo(
-      version: KosmoVersion, buildVersion: KosmoGitHash, credits: KosmoAboutCredits
+      version: KosmoVersion,
+      buildVersion: KosmoGitHash,
+      credits: KosmoAboutCredits,
+      creditLinks: @[nimkit.ApplicationAboutLink(text: KosmoMoeUrl, url: KosmoMoeUrl)],
     )
   KosmoWindowManager(application: app, keyBindingsPath: keyBindingsPath)
 
