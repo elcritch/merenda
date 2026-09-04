@@ -1,23 +1,17 @@
 ## Terminal scrollback search and Kosmo's floating search controls.
 
-import std/[unicode, unittest]
+import std/unittest
 
 import figdraw
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
 
-proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune
-
-proc rendersText(view: View, text: string): bool =
-  let renders = buildRenders(view)
-  if DefaultDrawLevel notin renders:
-    return
-  for node in renders[DefaultDrawLevel].nodes:
-    if node.kind == nkText and node.renderedText() == text:
-      return true
+func center(rect: Rect): Point =
+  initPoint(
+    rect.origin.x + rect.size.width / 2.0'f32,
+    rect.origin.y + rect.size.height / 2.0'f32,
+  )
 
 proc rendersBackdropBlur(view: View): bool =
   let renders = buildRenders(view)
@@ -26,6 +20,16 @@ proc rendersBackdropBlur(view: View): bool =
   for node in renders[DefaultDrawLevel].nodes:
     if node.kind == nkBackdropBlur and node.backdropBlur.blur > 0.0'f32:
       return true
+
+proc searchButton(view: View, label: string): Button =
+  if view.isNil:
+    return
+  if view of Button and view.accessibilityLabel() == label:
+    return Button(view)
+  for child in view.subviews:
+    let button = child.searchButton(label)
+    if not button.isNil:
+      return button
 
 suite "Kosmo terminal search":
   test "matching is case insensitive and retains terminal cell positions":
@@ -78,9 +82,19 @@ suite "Kosmo terminal search":
       KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
     )
     check terminal.searchField().selectedRange() == initTextRange(5, 0)
-    check terminal.rendersText("^")
-    check terminal.rendersText("v")
-    check terminal.rendersText("×")
+    let
+      previousButton = terminal.searchButton("Previous terminal output match")
+      nextButton = terminal.searchButton("Next terminal output match")
+      closeButton = terminal.searchButton("Close terminal output search")
+    require not previousButton.isNil
+    require not nextButton.isNil
+    require not closeButton.isNil
+    check previousButton.title() == "^"
+    check nextButton.title() == "v"
+    check closeButton.title() == "×"
+    check not previousButton.bounds().isEmpty
+    check not nextButton.bounds().isEmpty
+    check not closeButton.bounds().isEmpty
     check terminal.rendersBackdropBlur()
     check terminal.searchMatchCount() == 2
     check terminal.selectedSearchMatch() == 1
@@ -96,9 +110,23 @@ suite "Kosmo terminal search":
     check terminal.selectedSearchMatch() == 1
     check terminal.selectionText() == "ALPHA"
 
-    check window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
+    check window.clickAt(previousButton.pointToWindow(previousButton.bounds().center()))
+    check terminal.selectedSearchMatch() == 0
+    check terminal.selectionText() == "alpha"
+    check terminal.scrollPosition() > 0.0'f32
+
+    check window.clickAt(nextButton.pointToWindow(nextButton.bounds().center()))
+    check terminal.selectedSearchMatch() == 1
+    check terminal.selectionText() == "ALPHA"
+
+    check window.clickAt(closeButton.pointToWindow(closeButton.bounds().center()))
     check not terminal.searchVisible()
     check not terminal.hasSelection()
+    check window.firstResponder() == terminal
+
+    check terminal.showSearch()
+    check window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
+    check not terminal.searchVisible()
     check window.firstResponder() == terminal
 
   test "the terminal-local Find shortcut opens search in a terminal tab":
