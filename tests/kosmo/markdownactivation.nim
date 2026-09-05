@@ -3,19 +3,25 @@ import std/[options, os, strutils, tempfiles, unittest]
 import merenda/nimkit
 import merenda/kosmo/kosmo
 
-const RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
+const FixtureDirectory = currentSourcePath().parentDir / "fixtures"
 
 suite "Kosmo Markdown activation":
   test "returning to an unchanged Markdown tab reuses its rendered preview":
-    let frontend = newKosmoApplication(
-      newApplication("Markdown activation"), monitorsGitStatus = false
-    )
+    let
+      root = createTempDir("kosmo-markdown-activation-", "")
+      secondPath = root / "second.md"
+      frontend = newKosmoApplication(
+        newApplication("Markdown activation"), monitorsGitStatus = false
+      )
+    writeFile(secondPath, "# Second preview\n\nA separate cached document.\n")
     defer:
       frontend.close()
+      removeFile(secondPath)
+      removeDir(root)
     frontend.window.setContentView(frontend.contentView)
     frontend.contentView.frame = rect(0, 0, 1000, 700)
     frontend.contentView.layoutSubtreeIfNeeded()
-    require frontend.openPath(RepositoryRoot / "TODO-fragments.md")
+    require frontend.openPath(FixtureDirectory / "markdown-activation.md")
     let first = frontend.editorPane.markdownView
     require first.waitForMarkdownParsing()
     discard buildRenders(first)
@@ -24,7 +30,7 @@ suite "Kosmo Markdown activation":
     let firstScrollOffset = first.scrollView().contentOffset()
     check firstScrollOffset.y > 0
     let identifier = frontend.documentTabs.selectedDocumentTabIdentifier
-    require frontend.openPath(RepositoryRoot / "README.md")
+    require frontend.openPath(secondPath)
     let second = frontend.editorPane.markdownView
     let distinctPreviews = second != first
     require distinctPreviews

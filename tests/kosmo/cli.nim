@@ -58,8 +58,10 @@ suite "Kosmo command line":
       writeFile(
         helperPath,
         """#!/bin/sh
-printf '%s\n' "$PWD" > "$1"
-printf '%s\n' "$2" >> "$1"
+printf '%s\n' "$PWD" > "$1.tmp"
+sleep 0.1
+printf '%s\n' "$2" >> "$1.tmp"
+mv "$1.tmp" "$1"
 """,
       )
       launchKosmoInBackground("/bin/sh", commandLine.arguments, root)

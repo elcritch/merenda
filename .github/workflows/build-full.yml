@@ -21,9 +21,11 @@ jobs:
           - os: macos-15
             nimversion: '2.2.10'
             display: none
+            compiler: clang
           - os: ubuntu-26.04
             nimversion: '2.2.10'
             display: x11
+            compiler: gcc
           # - os: ubuntu-24.04
           #   display: wayland
     steps:
@@ -98,9 +100,12 @@ jobs:
 
     - name: Build Tests
       run: |
+        compilerOptions=(--debugger:off "--cc:${{ matrix.compiler }}")
+        if [[ "$RUNNER_OS" == "Linux" && "${{ matrix.compiler }}" == "gcc" ]]; then
+          compilerOptions+=(--opt:none)
+        fi
         atlas-run tests --jobs:1 --compiler-output -- \
-            --opt:none \
-            --debugger:off
+            "${compilerOptions[@]}"
 
     - name: Build Integration Tests
       if: runner.os == 'macOS'
