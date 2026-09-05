@@ -5,10 +5,12 @@ import merenda/nimkit
 import merenda/kosmo/kosmo
 import kosmo/cli
 import kosmo/config
+import kosmo/editorsearch
 import kosmo/filetreeinteractions
 import kosmo/matterhighlighting
 import kosmo/panelshortcuts
 import kosmo/terminalclipboard
+import kosmo/terminalsearch
 
 proc runeIndexOf(source, needle: string): int =
   let byteIndex = source.find(needle)
@@ -16,6 +18,20 @@ proc runeIndexOf(source, needle: string): int =
     result = source[0 ..< byteIndex].runeLen
 
 suite "Kosmo public adapters":
+  test "main menu keeps both Kosmo and Merenda settings":
+    let app = newApplication("Kosmo Test")
+    let frontend = newKosmoApplication(app)
+    defer:
+      frontend.close()
+    let settingsItem = app.mainMenu()[0].submenu()[2]
+    check settingsItem.action().name == actionSelector(KosmoShowSettingsAction).name
+    var includesMerendaSettings = false
+    for item in app.windowsMenu().items():
+      if item.action().name == actionSelector("showMerendaSettings").name:
+        check item.title == "Merenda Settings"
+        includesMerendaSettings = true
+    check includesMerendaSettings
+
   test "Moe syntax highlighting maps broad languages to neutral rune spans":
     let
       nimSource = "proc π(): int = 42 # answer"

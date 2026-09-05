@@ -96,8 +96,8 @@ suite "nimkit font layout":
         )
     )
 
-  when defined(macosx) and not defined(useNativeDynlib):
-    test "macOS default fonts load shape and rasterize without figDataDir":
+  when defined(posix) and not defined(useNativeDynlib):
+    test "platform default fonts load shape and rasterize without figDataDir":
       let previousDataDir = figDataDir()
       setFigDataDir(getTempDir() / "__merenda_missing_font_data__")
       defer:
@@ -115,7 +115,8 @@ suite "nimkit font layout":
             minContent = false,
             wrap = false,
           )
-        check source.name.startsWith("/System/Library/Fonts/")
+        when defined(macosx):
+          check source.name.startsWith("/System/Library/Fonts/")
         check fileExists(source.name)
         require layout.arrangedGlyphs.len == 8
         for glyph in layout.arrangedGlyphs:

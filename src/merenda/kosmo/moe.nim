@@ -17,12 +17,14 @@ import
     config_loader, editor_window, encoding, motion,
   ]
 import moepkg/buffer/undo as moeUndo
+import moepkg/buffer/search as moeSearch
 from moepkg/buffer/core import BufferId, getLine, getTextString, len
 from moepkg/command_handlers/visual_commands import visualDelete
 from moepkg/registers import setYankedRegister
 from moepkg/color import EditorColorPairIndex, Rgb, ThemeColors, isTermDefaultColor
 from moepkg/theme import DefaultColors
 from moepkg/render_utils import steadyBottomAreaHeight
+from moepkg/search_utils import shouldIgnoreCase
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
 import moepkg/types as moeTypes
@@ -73,6 +75,10 @@ type
   KosmoBufferCursor* = object ## Zero-based cursor position in the active text buffer.
     line*: int
     column*: int
+
+  KosmoSearchDirection* {.pure.} = enum
+    Forward
+    Backward
 
   KosmoSelectionKind* {.pure.} = enum
     Character
@@ -867,6 +873,59 @@ proc revealLocation*(
   editor.editor.syncActiveWindow()
   editor.editor.setActiveWindowScreenCursor(window)
   result = true
+
+proc searchFrom*(
+    editor: KosmoEditor,
+    query: string,
+    start: KosmoBufferCursor,
+    direction = KosmoSearchDirection.Forward,
+): bool {.discardable.} =
+  ## Search the active buffer with Moe's regex, case, highlight, and viewport state.
+  if editor.isNil or editor.editor.isNil or query.len == 0:
+    return
+  if not editor.revealLocation(start.line, start.column):
+    return
+  let
+    state = editor.editor.state
+    ignoreCase = shouldIgnoreCase(
+      query, state.input.search.ignorecase, state.input.search.smartcase
+    )
+  if moeSearch.compileSearchRegex(query, ignoreCase).isNone:
+    state.input.search.lastText = ""
+    state.input.search.hlsearchTempDisabled = true
+    state.statusMessage = "Invalid regex: " & query
+    return
+  state.input.search.lastText = query
+  state.input.search.wholeWord = false
+  state.input.search.hlsearchTempDisabled = false
+  let
+    buffer = editor.editor.activeBuffer()
+    startPosition = editor.editor.cursor
+    match =
+      case direction
+      of KosmoSearchDirection.Forward:
+        buffer.findNext(query, startPosition, ignoreCase)
+      of KosmoSearchDirection.Backward:
+        buffer.findPrev(query, startPosition, ignoreCase)
+  if match.isNone:
+    state.statusMessage = "Pattern not found: " & query
+    return
+  let position = match.get
+  editor.editor.cursor = position
+  editor.editor.updateViewportForCursor(position)
+  state.statusMessage = "Found: " & query
+  true
+
+proc clearSearch*(editor: KosmoEditor) =
+  ## Clear Moe's active search query and rendered match highlights.
+  if not editor.isNil and not editor.editor.isNil:
+    editor.editor.state.input.search.lastText = ""
+    editor.editor.state.input.search.hlsearchTempDisabled = true
+
+func searchQuery*(editor: KosmoEditor): string =
+  ## Return the query currently used by Moe's search highlighting and n/N commands.
+  if not editor.isNil and not editor.editor.isNil:
+    result = editor.editor.state.input.search.lastText
 
 proc commandLine*(editor: KosmoEditor): KosmoCommandLine =
   ## Return command input for a frontend-owned command bar.

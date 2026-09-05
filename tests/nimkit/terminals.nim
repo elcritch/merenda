@@ -707,10 +707,59 @@ suite "nimkit terminal views":
     check view.lineCount == session.screen().rows
     check view.maxColumnCount == session.screen().columns
 
+  test "terminal grid fits complete rows and columns while resizing":
+    let
+      session = newCompactTerminalSession(columns = 1, rows = 1)
+      view = newTerminalView(session, frame = rect(0, 0, 120, 80))
+      metrics = view.monoTextMetrics()
+      padding = view.padding()
+    view.frame = rect(
+      0,
+      0,
+      padding * 2.0'f32 + metrics.cellWidth * 2.25'f32,
+      padding * 2.0'f32 + metrics.lineHeight * 3.25'f32,
+    )
+    view.resizeToFit()
+
+    check session.screen().columns == 2
+    check session.screen().rows == 3
+    check view.lineCount == 3
+    check view.maxColumnCount == 2
+
   test "terminal views use compact scrollback sessions":
     let view = newTerminalView(frame = rect(0, 0, 240, 100))
     let session: TerminalViewSession = view.session()
     check not session.isNil
+
+  test "absolute terminal selections reveal screen and scrollback ranges":
+    let
+      session = newCompactTerminalSession(columns = 12, rows = 2)
+      view = newTerminalView(session, frame = rect(0, 0, 120, 40))
+    session.processOutput("old text\r\nmiddle\r\nnew text")
+    discard view.poll()
+
+    view.selectTerminalRange(
+      TerminalSelection(
+        anchor: initTerminalPosition(0, 0), extent: initTerminalPosition(0, 3)
+      )
+    )
+    check view.selectionText() == "old"
+    check view.scrollPosition() == 1.0'f32
+
+    view.selectTerminalRange(
+      TerminalSelection(
+        anchor: initTerminalPosition(2, 0), extent: initTerminalPosition(2, 3)
+      )
+    )
+    check view.selectionText() == "new"
+    check view.scrollPosition() == 0.0'f32
+
+    view.selectTerminalRange(
+      TerminalSelection(
+        anchor: initTerminalPosition(1, 2), extent: initTerminalPosition(1, 2)
+      )
+    )
+    check not view.hasSelection()
 
   test "terminal views suppress the outer focus ring":
     let view = newTerminalView(frame = rect(0, 0, 240, 100))

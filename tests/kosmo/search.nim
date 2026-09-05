@@ -73,7 +73,7 @@ suite "Kosmo":
     for item in windowMenu.items():
       if item.action().name == actionSelector("showMerendaSettings").name:
         includesMerendaSettings = true
-    check not includesMerendaSettings
+    check includesMerendaSettings
     check not newItem.isNil
     check newItem.title == "New…"
     check not openItem.isNil

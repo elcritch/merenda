@@ -281,6 +281,36 @@ suite "NimKit OutlineView":
     check outlineView.outlineItemWithIdentifier("changed").decoration.tooltip ==
       "Modified"
 
+  test "outline item decorations can render badges in the leading hierarchy gutter":
+    let outlineView = newOutlineView(frame = rect(0, 0, 220, 80))
+    outlineView.showsHeader = false
+    outlineView.outlineItems = [
+      initOutlineItem("root", "Root", expandable = true),
+      initOutlineItem(
+        "changed",
+        "changed.nim",
+        parentIdentifier = "root",
+        decoration =
+          initOutlineItemDecoration(badge = "M", badgePlacement = oibpLeading),
+      ),
+    ]
+    outlineView.expandItem("root")
+
+    let list = buildRenders(outlineView)[DefaultDrawLevel]
+    var
+      titleFound = false
+      badgeFound = false
+    for node in list.nodes:
+      if node.kind == nkText and node.renderedText() == "changed.nim":
+        titleFound = true
+        check node.screenBox.x >= 40.0'f32
+      if node.kind == nkText and node.renderedText() == "M":
+        badgeFound = true
+        check abs(node.screenBox.x + node.screenBox.w * 0.5'f32 - 18.0'f32) < 0.01'f32
+
+    check titleFound
+    check badgeFound
+
   test "outline column can be replaced and remains a table column":
     let
       outlineView = newOutlineView()

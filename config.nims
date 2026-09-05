@@ -14,11 +14,24 @@
   native
 --exceptions:
   setjmp
+--stacktrace:
+  off
+--define:
+  nimStackTraceOverride
+switch("import", "libbacktrace")
+
+when defined(freebsd):
+  --define:
+    libbacktraceUseSystemLibs
+
+when defined(linux) and defined(gcc):
+  # GCC 15 promotes Siwin's generated typed-empty-sequence pointer warning to an error.
+  switch("passC", "-Wno-error=incompatible-pointer-types")
+
+switch("define", "features.markdown.regex") # temporary hack until we get atlas 0.15.1
 
 import std/strutils
 import std/os
-
-switch("define", "features.markdown.regex") # temporary hack until we get atlas 0.15.1
 
 when defined(useNativeDynlib):
   switch("path", "../figdraw/bin")
@@ -31,15 +44,6 @@ const
   referenceDir = "docs/reference"
   openStepSpecUrl = "https://levenez.com/NeXTSTEP/OpenStepSpec.pdf"
 
-when defined(feature.merenda.libbacktrace):
-  --stacktrace:
-    off
-  --define:
-    nimStackTraceOverride
-  switch("import", "libbacktrace")
-  when defined(freebsd):
-    --define:
-      libbacktraceUseSystemLibs
 
 when defined(macosx) and defined(figdraw.moltenvkBrew):
   let moltenVkPrefix = gorgeEx("brew --prefix molten-vk").output.strip()

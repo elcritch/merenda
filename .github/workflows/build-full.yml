@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-15
             nimversion: '2.2.10'
             display: none
           - os: ubuntu-26.04
@@ -33,28 +33,26 @@ jobs:
       uses: actions/cache@v4
       with:
         path: deps/
-        key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
+        key: atlas-env-v2-${{ runner.os }}-${{ runner.arch }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg', 'config.nims') }}
 
-    - name: Install GrabNim
+    - name: Install Atlas
       run: |
-        grabnimInstaller="$(mktemp)"
-        curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-          https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-          -o "$grabnimInstaller"
-        sh "$grabnimInstaller"
-        rm -f "$grabnimInstaller"
-        echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-        echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
+        mkdir -p "$HOME/.local/bin"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+          ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+        atlas -v
 
-    - name: Install Nim
+    - name: Set up Nim
       run: |
-        grabnim "${{ matrix.nimversion }}"
-
-    - name: Set up GrabNim (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        grabnim setup
-        echo "$LOCALAPPDATA/grabnim/current/bin" >> "$GITHUB_PATH"
+        if [[ "$RUNNER_OS" == "macOS" && "$RUNNER_ARCH" == "ARM64" ]]; then
+          # Atlas 0.15.2's universal binary reports amd64 from its arm64 slice.
+          atlas --source \
+            --git-ref="v${{ matrix.nimversion }}" \
+            --github-path env "${{ matrix.nimversion }}-arm64"
+        else
+          atlas --github-path env "${{ matrix.nimversion }}"
+        fi
 
     - name: Verify Nim
       run: nim -v
@@ -83,21 +81,10 @@ jobs:
           libegl-mesa0 \
           libgles2
 
-    - name: Install Atlas
-      run: |
-        mkdir -p "$HOME/.local/bin"
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-        curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-          ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
-        echo "Nim:: "
-        nim -v
-        echo "Atlas:: "
-        atlas -v
-
     - name: Install Deps
       run: |
         # sync deps
-        atlas -t --update --features:kosmo install
+        atlas -tu --features:kosmo install
 
     - name: Clean generated examples
       run: |
@@ -108,13 +95,9 @@ jobs:
 
     - name: Build Tests
       run: |
-        if [[ "$RUNNER_OS" == "Linux" ]]; then
-          # NimKit test targets emit hundreds of large C translation units. Keep
-          # test builds quick and within the hosted runner's memory budget.
-          atlas-run tests --jobs:1 --compiler-output -- --opt:none --debugger:off
-        else
-          atlas-run tests --jobs:1 --compiler-output
-        fi
+        atlas-run tests --jobs:1 --compiler-output -- \
+            --opt:none \
+            --debugger:off
 
     - name: Build Integration Tests
       if: runner.os == 'macOS'
@@ -143,42 +126,29 @@ jobs:
       uses: actions/cache@v4
       with:
         path: deps/
-        key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
-
-    - name: Install GrabNim
-      run: |
-        grabnimInstaller="$(mktemp)"
-        curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-          https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-          -o "$grabnimInstaller"
-        sh "$grabnimInstaller"
-        rm -f "$grabnimInstaller"
-        echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-        echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-    - name: Install Nim
-      run: |
-        grabnim "${{ matrix.nimversion }}"
-
-    - name: Set up GrabNim (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        grabnim setup
-        echo "$LOCALAPPDATA/grabnim/current/bin" >> "$GITHUB_PATH"
-
-    - name: Verify Nim
-      run: nim -v
+        key: atlas-env-v2-${{ runner.os }}-${{ runner.arch }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg', 'config.nims') }}
 
     - name: Install Atlas
       run: |
         mkdir -p "$HOME/.local/bin"
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
           ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
-        echo "Nim:: "
-        nim -v
-        echo "Atlas:: "
         atlas -v
+
+    - name: Set up Nim
+      run: |
+        if [[ "$RUNNER_OS" == "macOS" && "$RUNNER_ARCH" == "ARM64" ]]; then
+          # Atlas 0.15.2's universal binary reports amd64 from its arm64 slice.
+          atlas --source \
+            --git-ref="v${{ matrix.nimversion }}" \
+            --github-path env "${{ matrix.nimversion }}-arm64"
+        else
+          atlas --github-path env "${{ matrix.nimversion }}"
+        fi
+
+    - name: Verify Nim
+      run: nim -v
 
     - name: Install Deps
       run: |

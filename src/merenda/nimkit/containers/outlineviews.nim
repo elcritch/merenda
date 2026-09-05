@@ -21,10 +21,15 @@ import ../view/viewprotos
 export tableviews
 
 type
+  OutlineItemBadgePlacement* = enum
+    oibpTrailing
+    oibpLeading
+
   OutlineItemDecoration* = object
     badge*: string
     color*: Option[Color]
     tooltip*: string
+    badgePlacement*: OutlineItemBadgePlacement
 
   OutlineItem* = object
     identifier*: string
@@ -274,10 +279,12 @@ proc initOutlineItem*(
   )
 
 func initOutlineItemDecoration*(
-    badge = "", color = none(Color), tooltip = ""
+    badge = "", color = none(Color), tooltip = "", badgePlacement = oibpTrailing
 ): OutlineItemDecoration =
-  ## Describe optional trailing text and color for an outline row.
-  OutlineItemDecoration(badge: badge, color: color, tooltip: tooltip)
+  ## Describe optional badge text, placement, and color for an outline row.
+  OutlineItemDecoration(
+    badge: badge, color: color, tooltip: tooltip, badgePlacement: badgePlacement
+  )
 
 proc outlineColumn*(outlineView: OutlineView): TableColumn =
   outlineView.xOutlineColumn
@@ -1076,6 +1083,7 @@ proc drawOutlineRowText(
     if not column.hidden() and not isEditingCell:
       let
         text = outlineView.outlineCellText(row.index, column)
+        cellFrame = outlineView.outlineColumnRectForRow(column, rowBounds)
         textRect = outlineView.outlineTextRectForCell(
           row.index, column, rowBounds, rowTextStyle.insets
         )
@@ -1085,8 +1093,13 @@ proc drawOutlineRowText(
           else:
             OutlineItemDecoration()
       if (text.len > 0 or decoration.badge.len > 0) and not textRect.isEmpty:
+        let clipRect =
+          if decoration.badge.len > 0 and decoration.badgePlacement == oibpLeading:
+            cellFrame
+          else:
+            textRect
         let textRoot = context.addRenderRectangle(
-          context.renderRectFor(textRect), fill(color(0.0, 0.0, 0.0, 0.0)), clips = true
+          context.renderRectFor(clipRect), fill(color(0.0, 0.0, 0.0, 0.0)), clips = true
         )
         var textStyle = rowTextStyle
         if decoration.color.isSome:
@@ -1094,16 +1107,32 @@ proc drawOutlineRowText(
         var titleRect = textRect
         if decoration.badge.len > 0:
           let badgeWidth = min(max(textStyle.fontSize * 1.8'f32, 18.0'f32), textRect.w)
-          titleRect.w = max(textRect.w - badgeWidth - 4.0'f32, 0.0'f32)
-          let badgeRect =
-            rect(textRect.maxX - badgeWidth, textRect.y, badgeWidth, textRect.h)
+          var
+            badgeRect: Rect
+            badgeAlignment = taRight
+          case decoration.badgePlacement
+          of oibpTrailing:
+            titleRect.w = max(textRect.w - badgeWidth - 4.0'f32, 0.0'f32)
+            badgeRect =
+              rect(textRect.maxX - badgeWidth, textRect.y, badgeWidth, textRect.h)
+          of oibpLeading:
+            let leadingWidth = min(
+              OutlineIndentStep + OutlineTextLeading - OutlineDisclosureLeading,
+              cellFrame.w,
+            )
+            badgeRect = rect(cellFrame.x, textRect.y, leadingWidth, textRect.h)
+            badgeAlignment = taCenter
+            let titleMinX = min(badgeRect.maxX + 4.0'f32, textRect.maxX)
+            if titleRect.x < titleMinX:
+              titleRect.x = titleMinX
+              titleRect.w = max(textRect.maxX - titleMinX, 0.0'f32)
           discard context.addText(
             DefaultDrawLevel,
             textRoot,
             badgeRect,
             clippedText(decoration.badge, badgeRect.w, textStyle),
             textStyle,
-            taRight,
+            badgeAlignment,
           )
         if text.len > 0 and titleRect.w > 0.0'f32:
           discard context.addText(

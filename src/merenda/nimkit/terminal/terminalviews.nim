@@ -443,6 +443,49 @@ proc viewportStart(view: TerminalView): int =
   let info = view.xSession.screenInfo()
   max(info.totalLineCount - info.rows - view.viewportOffset(), 0)
 
+proc selectTerminalRange*(
+    view: TerminalView, selection: TerminalSelection, reveal = true
+) =
+  ## Select an absolute range in the terminal buffer and optionally reveal it.
+  if view.isNil or view.xSession.isNil:
+    return
+  let info = view.xSession.screenInfo()
+  if info.totalLineCount <= 0:
+    view.clearSelection()
+    return
+  let
+    firstRow = clamp(selection.anchor.row, 0, info.totalLineCount - 1)
+    lastRow = clamp(selection.extent.row, 0, info.totalLineCount - 1)
+    firstColumn = clamp(selection.anchor.column, 0, info.columns)
+    lastColumn = clamp(selection.extent.column, 0, info.columns)
+    normalized = TerminalSelection(
+      anchor: initTerminalPosition(firstRow, firstColumn),
+      extent: initTerminalPosition(lastRow, lastColumn),
+    )
+  if normalized.anchor == normalized.extent:
+    view.clearSelection()
+    return
+  view.xSelection = normalized
+  view.xHasSelection = true
+  view.xSelecting = false
+  if reveal:
+    let
+      bounds = normalized.orderedSelection()
+      maximumStart = max(info.totalLineCount - info.rows, 0)
+      currentStart = maximumStart - view.viewportOffset()
+      targetRow = bounds.first.row
+      nextStart =
+        if targetRow < currentStart:
+          targetRow
+        elif targetRow >= currentStart + info.rows:
+          targetRow - info.rows + 1
+        else:
+          currentStart
+    view.xScrollPosition =
+      clamp(maximumStart - nextStart, 0, info.scrollbackCount).float32
+  view.xLastGeneration = high(uint64)
+  view.syncTerminalScreen()
+
 func isTerminalLinkSeparator(cell: TerminexCell): bool =
   cell.text.len == 0 or cell.text.strip().len == 0
 
@@ -883,6 +926,10 @@ proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
     view.xSuppressOptionTextInput = true
   view.sendInput(input)
 
+proc performTerminalKeyEquivalent*(view: TerminalView, event: KeyEvent): bool =
+  ## Handle a terminal-local shortcut or translate the key into terminal input.
+  view.handleTerminalKeyDown(event)
+
 proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
   case event.kind
   of mtreMouseDown, mtreMouseDragged, mtreMouseUp:
@@ -963,7 +1010,7 @@ proc startTerminalPolling(view: TerminalView) =
 
 protocol TerminalViewKeyEquivalents of ResponderCommandDispatchProtocol:
   method performKeyEquivalent(view: TerminalView, event: KeyEvent): bool =
-    view.handleTerminalKeyDown(event)
+    view.performTerminalKeyEquivalent(event)
 
 protocol TerminalViewInput of TextInputProtocol:
   method insertText(view: TerminalView, text: string) =
