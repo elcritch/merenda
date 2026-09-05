@@ -116,7 +116,7 @@ jobs:
         nimversion:
           - '2.2.10'
         os:
-          - macos-latest
+          - macos-15
           - ubuntu-latest
           # - windows-2022
     steps:
