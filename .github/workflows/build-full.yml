@@ -94,13 +94,14 @@ jobs:
           -delete
 
     - name: Build Tests
+      if: runner.os == 'macOS'
       run: |
-        compilerOptions=(--debugger:off "--cc:${{ matrix.compiler }}")
-        if [[ "$RUNNER_OS" == "Linux" && "${{ matrix.compiler }}" == "gcc" ]]; then
-          compilerOptions+=(--opt:none)
-        fi
-        atlas-run tests --jobs:1 --compiler-output -- \
-            "${compilerOptions[@]}"
+        atlas-run tests --jobs:1 --compiler-output
+
+    - name: Build Tests
+      if: runner.os == 'Linux'
+      run: |
+        atlas-run tests --jobs:1 --compiler-output -- --opt:none
 
     - name: Build Integration Tests
       if: runner.os == 'macOS'
