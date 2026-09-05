@@ -70,6 +70,27 @@ suite "Kosmo configuration":
       config.merendaFontSize
     check frontend.editorView.editor.activeMoeThemeIdentifier() == config.moeTheme
 
+  test "live monospace appearance changes reach the editor and terminal":
+    let
+      app = newApplication("Kosmo Live Font Test")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    frontend.show()
+    require frontend.newTerminal()
+    require frontend.editorPane.contentView of KosmoTerminalView
+    let terminal = KosmoTerminalView(frontend.editorPane.contentView)
+
+    var
+      appearance = app.effectiveAppearance()
+      builder = initThemeBuilder(appearance.theme)
+    builder.setFontName(frMonospace, "Kosmo Test Mono")
+    appearance.theme = builder.finish()
+    app.setAppearance(appearance)
+
+    check frontend.editorView.fontName == "Kosmo Test Mono"
+    check terminal.fontName == "Kosmo Test Mono"
+
   test "persists a selected Moe theme":
     let
       root = createTempDir("merenda-kosmo-save-config-", "")

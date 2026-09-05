@@ -1948,7 +1948,6 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result.initMonoTextViewFields(editable = true)
   result.clipsToBounds = true
   result.padding = 0.0'f32
-  result.fontName = nimkit.DefaultMonoFontName
   result.fontSize = 14.0'f32
   result.textColor = nimkit.color(0.88, 0.9, 0.94, 1.0)
   result.backgroundColor = nimkit.color(0.04, 0.05, 0.07, 1.0)
@@ -2002,7 +2001,6 @@ proc newKosmoCommandBar(view: KosmoEditorView): KosmoCommandBar =
   result.initMonoTextViewFields()
   result.clipsToBounds = true
   result.padding = 0.0'f32
-  result.fontName = view.fontName()
   result.fontSize = view.fontSize()
   result.textColor = nimkit.color(0.88, 0.9, 0.94, 1.0)
   result.cursorVisible = false
