@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-15
             nimversion: '2.2.10'
             display: none
           - os: ubuntu-26.04
