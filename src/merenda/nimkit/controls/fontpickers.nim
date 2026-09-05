@@ -3,6 +3,7 @@ import std/[algorithm, locks, os, strutils, tables]
 import sigils/core
 from figdraw/common/typefaceinfos import
   TypefaceInfo, parseTypefaceInfo, supportedCodepointCount
+import figdraw/extras/systemfonts as figSystemFonts
 
 import ./comboboxes
 import ../foundation/selectors
@@ -24,6 +25,8 @@ type
     language*: string
     languages*: seq[string]
     path*: string
+    faceIndex*: int
+    fontName*: string
     identifier*: string
     weightClass*: uint16
     widthClass*: uint16
@@ -603,7 +606,7 @@ func fontStyleSortRank(face: FontCatalogFace): int =
     face.style.fontStyleSortRank()
 
 func initFontCatalogFace*(
-    style, language, path: string, identifier = ""
+    style, language, path: string, identifier = "", faceIndex = 0, fontName = ""
 ): FontCatalogFace =
   let
     normalizedStyle = style.normalizedFontStyle()
@@ -613,9 +616,13 @@ func initFontCatalogFace*(
     language: if language.len > 0: language else: DefaultFontLanguage,
     languages: @[if language.len > 0: language else: DefaultFontLanguage],
     path: path,
+    faceIndex: faceIndex,
+    fontName: if fontName.len > 0: fontName else: path,
     identifier:
       if identifier.len > 0:
         identifier
+      elif faceIndex > 0:
+        "system-font-face:" & path & ":" & $faceIndex
       else:
         "system-font-face:" & path,
     weightClass: normalizedStyle.inferredFontWeight(),
@@ -667,12 +674,14 @@ func preferredFaceRank(face: ParsedFontFace): int =
   (if DefaultFontLanguage in face.face.languages: 0 else: 100) +
     face.face.preferredFontStyleRank()
 
-proc fontInfoForPath(path: string): tuple[info: TypefaceInfo, available: bool] =
-  result.info = parseTypefaceInfo(path, "")
+proc fontInfoForPath(
+    path: string, faceIndex = 0
+): tuple[info: TypefaceInfo, available: bool] =
+  result.info = parseTypefaceInfo(path, "", faceIndex)
   if not fileExists(path):
     return
   try:
-    result.info = parseTypefaceInfo(path, readFile(path))
+    result.info = parseTypefaceInfo(path, readFile(path), faceIndex)
     result.available = result.info.localizedNames.len > 0 or result.info.weightClass > 0
   except IOError:
     discard
@@ -737,10 +746,44 @@ proc parsedFontFace(path: string): ParsedFontFace =
     result.face.variable = info.variationAxes.len > 0
     result.searchText.add " " & info.fontMetadataSearchText()
 
+func preferredFontName(info: figSystemFonts.SystemTypefaceInfo): string =
+  if info.postScriptName.len > 0:
+    info.postScriptName
+  elif info.fullName.len > 0:
+    info.fullName
+  else:
+    info.file.path
+
+proc parsedSystemFontFace(info: figSystemFonts.SystemTypefaceInfo): ParsedFontFace =
+  let
+    fallbackName = info.file.path.splitFontFamilyAndStyle()
+    rawFamily = if info.family.len > 0: info.family else: fallbackName.family
+    style =
+      if info.subfamily.len > 0:
+        info.subfamily.normalizedFontStyle()
+      else:
+        fallbackName.style
+    family = rawFamily.splitFontFamilyAndLanguage()
+  result = ParsedFontFace(
+    rawFamily: rawFamily,
+    candidateFamily: family.baseFamily,
+    searchText: info.file.path.splitFile().name.humanizedFontStem(),
+    face: initFontCatalogFace(
+      style,
+      family.language,
+      info.file.path,
+      faceIndex = info.file.faceIndex,
+      fontName = info.preferredFontName(),
+    ),
+  )
+  for name in [info.family, info.subfamily, info.fullName, info.postScriptName]:
+    if name.len > 0:
+      result.searchText.add " " & name
+
 proc loadFontCatalogFaceMetadata*(face: var FontCatalogFace) =
   if face.metadataLoaded:
     return
-  let metadata = face.path.fontInfoForPath()
+  let metadata = face.path.fontInfoForPath(face.faceIndex)
   face.metadataLoaded = true
   if not metadata.available:
     return
@@ -765,41 +808,16 @@ func copyFontCatalogEntry(entry: FontCatalogEntry): FontCatalogEntry =
   for face in entry.faces:
     result.faces.add face
 
-proc buildFontCatalog*(
-    paths: openArray[string], metadataMode = fcmmEager
-): seq[FontCatalogEntry] =
+proc groupFontCatalog(parsedFaces: openArray[ParsedFontFace]): seq[FontCatalogEntry] =
   var
-    sortedPaths = @paths
-    parsedFaces: seq[ParsedFontFace]
     rawFamilies = initTable[string, bool]()
     candidateCounts = initCountTable[string]()
     familyIndexes = initTable[string, int]()
-  sortedPaths.sort(
-    proc(left, right: string): int =
-      result = cmp(left.toLowerAscii(), right.toLowerAscii())
-      if result == 0:
-        result = cmp(left, right)
-  )
-
-  for path in sortedPaths:
+  for parsedFace in parsedFaces:
     let
-      parsedFace =
-        if metadataMode == fcmmEager:
-          path.parsedFontFace()
-        else:
-          let
-            name = path.splitFontFamilyAndStyle()
-            family = name.family.splitFontFamilyAndLanguage()
-          ParsedFontFace(
-            rawFamily: name.family,
-            candidateFamily: family.baseFamily,
-            searchText: path.splitFile().name.humanizedFontStem(),
-            face: initFontCatalogFace(name.style, family.language, path),
-          )
       rawFamilyKey = parsedFace.rawFamily.normalizedFontText()
       candidateKey = parsedFace.candidateFamily.normalizedFontText()
     if rawFamilyKey.len > 0:
-      parsedFaces.add parsedFace
       rawFamilies[rawFamilyKey] = true
       candidateCounts.inc(candidateKey)
 
@@ -812,6 +830,8 @@ proc buildFontCatalog*(
         (candidateKey in rawFamilies or candidateCounts.getOrDefault(candidateKey) > 1)
       family = if useCandidate: parsedFace.candidateFamily else: parsedFace.rawFamily
       familyKey = family.normalizedFontText()
+    if rawFamilyKey.len == 0:
+      continue
     if familyKey notin familyIndexes:
       familyIndexes[familyKey] = result.len
       result.add FontCatalogEntry(
@@ -852,12 +872,52 @@ proc buildFontCatalog*(
           result = cmp(left.style.toLowerAscii(), right.style.toLowerAscii())
         if result == 0:
           result = cmp(left.path, right.path)
+        if result == 0:
+          result = cmp(left.faceIndex, right.faceIndex)
     )
+
+proc buildFontCatalog*(
+    paths: openArray[string], metadataMode = fcmmEager
+): seq[FontCatalogEntry] =
+  var
+    sortedPaths = @paths
+    parsedFaces: seq[ParsedFontFace]
+  sortedPaths.sort(
+    proc(left, right: string): int =
+      result = cmp(left.toLowerAscii(), right.toLowerAscii())
+      if result == 0:
+        result = cmp(left, right)
+  )
+
+  for path in sortedPaths:
+    let parsedFace =
+      if metadataMode == fcmmEager:
+        path.parsedFontFace()
+      else:
+        let
+          name = path.splitFontFamilyAndStyle()
+          family = name.family.splitFontFamilyAndLanguage()
+        ParsedFontFace(
+          rawFamily: name.family,
+          candidateFamily: family.baseFamily,
+          searchText: path.splitFile().name.humanizedFontStem(),
+          face: initFontCatalogFace(name.style, family.language, path),
+        )
+    if parsedFace.rawFamily.normalizedFontText().len > 0:
+      parsedFaces.add parsedFace
+  result = groupFontCatalog(parsedFaces)
+
+proc buildSystemFontCatalog*(): seq[FontCatalogEntry] =
+  ## Builds a display catalog from the host font database iterator.
+  var parsedFaces: seq[ParsedFontFace]
+  for info in figSystemFonts.systemTypefaces():
+    parsedFaces.add info.parsedSystemFontFace()
+  result = groupFontCatalog(parsedFaces)
 
 proc systemFontCatalog*(): seq[FontCatalogEntry] =
   withLock systemFontCatalogLock:
     if not systemFontCatalogCached:
-      cachedSystemFontCatalog = buildFontCatalog(systemFontFiles(), fcmmDeferred)
+      cachedSystemFontCatalog = buildSystemFontCatalog()
       systemFontCatalogCached = true
     result = newSeqOfCap[FontCatalogEntry](cachedSystemFontCatalog.len)
     for entry in cachedSystemFontCatalog:

@@ -38,7 +38,7 @@ type
     stSynthwave83
 
   AppearanceHandler* = proc(appearance: Appearance) {.closure.}
-  FontSelectionProc = proc(path: string) {.closure.}
+  FontSelectionProc = proc(name: string) {.closure.}
   FontLoadingProgressProc = proc(message: string) {.closure.}
 
   FontCatalogLoader = ref object of AgentActor
@@ -57,7 +57,7 @@ type
     fontPicker: CascadingView
     needsFontPickerReload: bool
     pendingFontPickerBatchCount: int
-    desiredSelectedFontPath: string
+    desiredSelectedFontName: string
     selectionHandler: FontSelectionProc
     progressHandler: FontLoadingProgressProc
 
@@ -72,9 +72,9 @@ type
     applyAppearanceHandler: AppearanceHandler
     activeTheme: SettingsTheme
     activeFontRole: FontRole
-    previewFontPaths: array[FontRole, string]
+    previewFontNames: array[FontRole, string]
     previewFontSize: float32
-    appliedFontPaths: array[FontRole, string]
+    appliedFontNames: array[FontRole, string]
     appliedFontSize: float32
     fontLoadingStatus: string
     preview: Label
@@ -166,11 +166,11 @@ func fontPickerFaceTitle(face: FontCatalogFace): string =
 func defaultFontPickerPath(): seq[string] =
   @[DefaultFontLanguage.fontPickerLanguageIdentifier(), DefaultSystemFontIdentifier]
 
-proc selectionPathForFont(controller: FontPickerController, path: string): seq[string] =
-  if path.len == 0:
+proc selectionPathForFont(controller: FontPickerController, name: string): seq[string] =
+  if name.len == 0:
     return defaultFontPickerPath()
   for identifier, face in controller.faces:
-    if face.path != path:
+    if face.fontName != name:
       continue
     let
       faceItem = controller.items.getOrDefault(identifier)
@@ -183,14 +183,14 @@ proc selectionPathForFont(controller: FontPickerController, path: string): seq[s
 proc restoreFontPickerSelection(controller: FontPickerController) =
   if controller.fontPicker.isNil:
     return
-  let path = controller.selectionPathForFont(controller.desiredSelectedFontPath)
+  let path = controller.selectionPathForFont(controller.desiredSelectedFontName)
   if path.len > 0:
     controller.fontPicker.selectedPath = path
-  elif controller.desiredSelectedFontPath.len > 0:
+  elif controller.desiredSelectedFontName.len > 0:
     controller.fontPicker.selectedPath = defaultFontPickerPath()
 
-proc selectFontPath(controller: FontPickerController, path: string) =
-  controller.desiredSelectedFontPath = path
+proc selectFontName(controller: FontPickerController, name: string) =
+  controller.desiredSelectedFontName = name
   controller.restoreFontPickerSelection()
 
 proc addFontPickerLanguage(controller: FontPickerController, language: string): string =
@@ -224,7 +224,7 @@ proc addFontCatalogEntry(controller: FontPickerController, entry: FontCatalogEnt
           face.fontPickerFaceTitle(),
           parentIdentifier = familyIdentifier,
           leaf = true,
-          objectValue = toObj(face.path),
+          objectValue = toObj(face.fontName),
         )
       )
       controller.faces[faceIdentifier] = face
@@ -380,10 +380,10 @@ protocol FontPickerDelegate of CascadingDelegate:
     let item = view.cascadingItemWithIdentifier(identifier)
     if not item.leaf or controller.selectionHandler.isNil:
       return
-    let path = item.objectValue.getString()
-    if path.isSome:
-      controller.desiredSelectedFontPath = path.get()
-      controller.selectionHandler(path.get())
+    let name = item.objectValue.getString()
+    if name.isSome:
+      controller.desiredSelectedFontName = name.get()
+      controller.selectionHandler(name.get())
 
 proc newFontPickerController(): FontPickerController =
   result = FontPickerController(
@@ -422,11 +422,11 @@ func title(theme: SettingsTheme): string =
   of stPeachy: "Peachy"
   of stSynthwave83: "Synthwave '83"
 
-proc fontTitle(path: string): string =
-  if path.len == 0:
+proc fontTitle(name: string): string =
+  if name.len == 0:
     "Default"
   else:
-    path.extractFilename()
+    name.extractFilename()
 
 func fontSizeTitle(size: float32): string =
   $size.int & " pt"
@@ -438,7 +438,7 @@ func title(role: FontRole): string =
 
 proc appearanceFor(
     theme: SettingsTheme,
-    fontPaths: array[FontRole, string],
+    fontNames: array[FontRole, string],
     fontSize: float32,
     previewRole = frUI,
 ): Appearance =
@@ -463,8 +463,8 @@ proc appearanceFor(
     selectedFonts: array[FontRole, string]
   for role in FontRole:
     let selectedFont =
-      if fontPaths[role].len > 0:
-        fontPaths[role]
+      if fontNames[role].len > 0:
+        fontNames[role]
       else:
         defaultFontName(role)
     selectedFonts[role] = selectedFont
@@ -490,10 +490,10 @@ proc newSettingsPage(): tuple[view: View, stack: StackView] =
 proc updateStatus(settings: MerendaSettingsWindow) =
   settings.status.text =
     "Previewing " & settings.activeFontRole.title() & ": " &
-    settings.previewFontPaths[settings.activeFontRole].fontTitle() & " · " &
+    settings.previewFontNames[settings.activeFontRole].fontTitle() & " · " &
     settings.previewFontSize.fontSizeTitle() & " — UI: " &
-    settings.appliedFontPaths[frUI].fontTitle() & " · mono: " &
-    settings.appliedFontPaths[frMonospace].fontTitle() & " · " &
+    settings.appliedFontNames[frUI].fontTitle() & " · mono: " &
+    settings.appliedFontNames[frMonospace].fontTitle() & " · " &
     settings.fontLoadingStatus
 
 proc updateFontRoleButtons(settings: MerendaSettingsWindow) =
@@ -501,7 +501,7 @@ proc updateFontRoleButtons(settings: MerendaSettingsWindow) =
     let button = settings.fontRoleButtons[role]
     if button.isNil:
       continue
-    button.title = settings.previewFontPaths[role].fontTitle()
+    button.title = settings.previewFontNames[role].fontTitle()
     button.state = if role == settings.activeFontRole: bsOn else: bsOff
 
 proc updatePreview(settings: MerendaSettingsWindow) =
@@ -509,7 +509,7 @@ proc updatePreview(settings: MerendaSettingsWindow) =
     settings.fontSizeValue.text = settings.previewFontSize.fontSizeTitle()
   settings.updateFontRoleButtons()
   settings.preview.appearance = settings.activeTheme.appearanceFor(
-    settings.previewFontPaths, settings.previewFontSize, settings.activeFontRole
+    settings.previewFontNames, settings.previewFontSize, settings.activeFontRole
   )
   settings.updateStatus()
 
@@ -517,7 +517,7 @@ proc applyAppearance(settings: MerendaSettingsWindow) =
   if not settings.applyAppearanceHandler.isNil:
     settings.applyAppearanceHandler(
       settings.activeTheme.appearanceFor(
-        settings.appliedFontPaths, settings.appliedFontSize
+        settings.appliedFontNames, settings.appliedFontSize
       )
     )
   settings.updatePreview()
@@ -536,7 +536,7 @@ proc fontSizeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
 
 proc selectFontRole(settings: MerendaSettingsWindow, role: FontRole) =
   settings.activeFontRole = role
-  settings.fontPickerController.selectFontPath(settings.previewFontPaths[role])
+  settings.fontPickerController.selectFontName(settings.previewFontNames[role])
   settings.updatePreview()
 
 proc fontRoleDidClick(
@@ -547,18 +547,18 @@ proc fontRoleDidClick(
 
 proc applyFontDidClick(settings: MerendaSettingsWindow, sender: DynamicAgent) =
   if sender of Button:
-    settings.appliedFontPaths = settings.previewFontPaths
+    settings.appliedFontNames = settings.previewFontNames
     settings.appliedFontSize = settings.previewFontSize
     settings.applyAppearance()
 
 proc resetSelections*(settings: MerendaSettingsWindow) =
   ## Restores the controls to the currently applied appearance when the panel opens.
-  settings.previewFontPaths = settings.appliedFontPaths
+  settings.previewFontNames = settings.appliedFontNames
   settings.previewFontSize = settings.appliedFontSize
   if not settings.fontSizeStepper.isNil:
     settings.fontSizeStepper.value = settings.previewFontSize
-  settings.fontPickerController.selectFontPath(
-    settings.previewFontPaths[settings.activeFontRole]
+  settings.fontPickerController.selectFontName(
+    settings.previewFontNames[settings.activeFontRole]
   )
   settings.updatePreview()
 
@@ -678,8 +678,8 @@ proc newMerendaSettingsWindow*(
   fontPicker.accessibilityLabel = "Font"
   fontPicker.identifier = SettingsFontPickerIdentifier
   result.fontPickerController.fontPicker = fontPicker
-  result.fontPickerController.selectionHandler = proc(path: string) =
-    settings.previewFontPaths[settings.activeFontRole] = path
+  result.fontPickerController.selectionHandler = proc(name: string) =
+    settings.previewFontNames[settings.activeFontRole] = name
     settings.updatePreview()
   result.fontPickerController.progressHandler = proc(message: string) =
     settings.fontLoadingStatus = message

@@ -1,6 +1,7 @@
-import std/[os, sequtils, strutils, unittest]
+import std/[os, sequtils, sets, strutils, unittest]
 
 from figdraw/common/typefaceinfos import TypefaceCodepointRange, TypefaceInfo
+from figdraw/common/typefaces import getTypefaceInfo, loadTypeface
 import merenda/nimkit
 
 suite "NimKit font pickers":
@@ -161,6 +162,54 @@ suite "NimKit font pickers":
     check face.weightClass == 400
     check face.regular
     check DefaultFontLanguage in face.languages
+
+  test "font catalog metadata loads the selected collection face":
+    let collectionPath = getCurrentDir() / "deps/pixie/tests/fonts/PTSans.ttc"
+    if fileExists(collectionPath):
+      var face = initFontCatalogFace(
+        "Regular",
+        DefaultFontLanguage,
+        collectionPath,
+        faceIndex = 1,
+        fontName = "PTSans-Italic",
+      )
+      face.loadFontCatalogFaceMetadata()
+
+      check face.metadataLoaded
+      check face.faceIndex == 1
+      check face.fontName == "PTSans-Italic"
+      check face.italic
+      check face.style == "Italic"
+
+  test "system font catalog consumes native face identities":
+    let catalog = buildSystemFontCatalog()
+    var identities = initHashSet[(string, int)]()
+    check catalog.len > 0
+    for entry in catalog:
+      for face in entry.faces:
+        let identity = (face.path, face.faceIndex)
+        check face.path.fileExists()
+        check face.faceIndex >= 0
+        check face.fontName.len > 0
+        if face.faceIndex > 0:
+          check face.identifier.endsWith(":" & $face.faceIndex)
+        check identity notin identities
+        identities.incl(identity)
+    check identities.len > 0
+
+  when defined(macosx):
+    test "system font selection reloads the exact collection face":
+      var loadedCollectionFace = false
+      block selected:
+        for entry in buildSystemFontCatalog():
+          for face in entry.faces:
+            if face.faceIndex <= 0 or face.fontName == face.path:
+              continue
+            let typefaceId = loadTypeface(face.fontName)
+            check getTypefaceInfo(typefaceId).faceIndex == face.faceIndex
+            loadedCollectionFace = true
+            break selected
+      check loadedCollectionFace
 
   test "loaded Arabic metadata classifies the face without its filename":
     let fontPath =
