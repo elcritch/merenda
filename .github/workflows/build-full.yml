@@ -33,7 +33,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: deps/
-        key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
+        key: atlas-env-v2-${{ runner.os }}-${{ runner.arch }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg', 'config.nims') }}
 
     - name: Install Atlas
       run: |
@@ -44,7 +44,15 @@ jobs:
         atlas -v
 
     - name: Set up Nim
-      run: atlas --github-path env "${{ matrix.nimversion }}"
+      run: |
+        if [[ "$RUNNER_OS" == "macOS" && "$RUNNER_ARCH" == "ARM64" ]]; then
+          # Atlas 0.15.2's universal binary reports amd64 from its arm64 slice.
+          atlas --source \
+            --git-ref="v${{ matrix.nimversion }}" \
+            --github-path env "${{ matrix.nimversion }}-arm64"
+        else
+          atlas --github-path env "${{ matrix.nimversion }}"
+        fi
 
     - name: Verify Nim
       run: nim -v
@@ -118,7 +126,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: deps/
-        key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
+        key: atlas-env-v2-${{ runner.os }}-${{ runner.arch }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg', 'config.nims') }}
 
     - name: Install Atlas
       run: |
@@ -129,7 +137,15 @@ jobs:
         atlas -v
 
     - name: Set up Nim
-      run: atlas --github-path env "${{ matrix.nimversion }}"
+      run: |
+        if [[ "$RUNNER_OS" == "macOS" && "$RUNNER_ARCH" == "ARM64" ]]; then
+          # Atlas 0.15.2's universal binary reports amd64 from its arm64 slice.
+          atlas --source \
+            --git-ref="v${{ matrix.nimversion }}" \
+            --github-path env "${{ matrix.nimversion }}-arm64"
+        else
+          atlas --github-path env "${{ matrix.nimversion }}"
+        fi
 
     - name: Verify Nim
       run: nim -v

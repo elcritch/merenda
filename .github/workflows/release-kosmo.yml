@@ -117,7 +117,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: deps/
-          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
+          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-atlas-env-v2-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble', 'nim.cfg', 'config.nims') }}
 
       - name: Install Atlas
         run: |
@@ -128,7 +128,15 @@ jobs:
           atlas -v
 
       - name: Set up Nim
-        run: atlas --github-path env "$NIM_VERSION"
+        run: |
+          if [[ "$RUNNER_ARCH" == "ARM64" ]]; then
+            # Atlas 0.15.2's universal binary reports amd64 from its arm64 slice.
+            atlas --source \
+              --git-ref="v$NIM_VERSION" \
+              --github-path env "$NIM_VERSION-arm64"
+          else
+            atlas --github-path env "$NIM_VERSION"
+          fi
 
       - name: Verify Nim
         run: nim -v
