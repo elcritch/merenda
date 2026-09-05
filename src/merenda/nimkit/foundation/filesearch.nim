@@ -40,6 +40,7 @@ type
 
   FileSearchQuery* = object
     rootPath*: string
+    rootPaths*: seq[string] ## When nonempty, search these roots instead of `rootPath`.
     pattern*: string
     options*: FileSearchOptions
 
@@ -159,6 +160,25 @@ func initFileSearchQuery*(
   ## Create a regular-expression search rooted at `rootPath`.
   FileSearchQuery(rootPath: rootPath, pattern: pattern, options: options)
 
+func initFileSearchQuery*(
+    rootPaths: openArray[string], pattern: string, options = initFileSearchOptions()
+): FileSearchQuery =
+  ## Search multiple folders with shared limits and no duplicate file results.
+  FileSearchQuery(rootPaths: @rootPaths, pattern: pattern, options: options)
+
+proc searchRoots(query: FileSearchQuery): seq[string] =
+  let roots =
+    if query.rootPaths.len > 0:
+      query.rootPaths
+    else:
+      @[query.rootPath]
+  for root in roots:
+    if root.len == 0:
+      raise newException(IOError, "file search root cannot be empty")
+    let path = normalizedPath(absolutePath(root))
+    if path notin result:
+      result.add path
+
 func identifier*(handle: FileSearchHandle): uint64 =
   if not handle.isNil:
     result = handle.xIdentifier
@@ -184,9 +204,9 @@ func cancellationRequested(control: SharedPtr[FileSearchControl]): bool =
   control[].cancelled.load(moAcquire)
 
 proc validate(query: FileSearchQuery) =
-  if not dirExists(query.rootPath):
-    raise
-      newException(IOError, "file search root is not a directory: " & query.rootPath)
+  for root in query.searchRoots():
+    if not dirExists(root):
+      raise newException(IOError, "file search root is not a directory: " & root)
   if query.pattern.len == 0:
     raise newException(ValueError, "file search pattern cannot be empty")
   if query.options.maxResults <= 0:
@@ -240,10 +260,9 @@ proc gitSearchFiles(
   try:
     process = startProcess(
       "git",
-      workingDir = rootPath,
       args = [
-        "--no-optional-locks", "ls-files", "--cached", "--others", "--exclude-standard",
-        "-z", "--", ".",
+        "-C", rootPath, "--no-optional-locks", "ls-files", "--cached", "--others",
+        "--exclude-standard", "-z", "--", ".",
       ],
       options = {poUsePath, poStdErrToStdOut},
     )
@@ -336,12 +355,8 @@ proc nextSearchFile(
     for entryPath in directories:
       traversal.pendingDirectories.add entryPath
 
-  if stats.discoveredFileCount == traversal.options.maxFiles:
-    reason = fsfrFileLimitReached
-    return
   path = traversal.pendingFiles[traversal.nextFileIndex]
   inc traversal.nextFileIndex
-  inc stats.discoveredFileCount
   result = true
 
 proc addLineMatches(
@@ -519,19 +534,29 @@ proc performFileSearch(
   result.stats.workerThreadId = getThreadId()
   let pattern = query.searchPattern()
   let mimeTypes = newMimetypes()
-  var
-    traversal = initFileSearchTraversal(query.rootPath, query.options, control)
-    path: string
-  while traversal.nextSearchFile(result.stats, result.reason, path):
-    try:
-      searchMappedFile(
-        batchState, path, pattern, query.options, mimeTypes, control, result
-      )
-    except IOError, OSError:
-      inc result.stats.failedFileCount
+  var seen = initHashSet[string]()
+  for root in query.searchRoots():
+    var
+      traversal = initFileSearchTraversal(root, query.options, control)
+      path: string
+    while traversal.nextSearchFile(result.stats, result.reason, path):
+      if path notin seen:
+        if result.stats.discoveredFileCount == query.options.maxFiles:
+          result.reason = fsfrFileLimitReached
+          return
+        seen.incl path
+        inc result.stats.discoveredFileCount
+        try:
+          searchMappedFile(
+            batchState, path, pattern, query.options, mimeTypes, control, result
+          )
+        except IOError, OSError:
+          inc result.stats.failedFileCount
+        if result.reason != fsfrCompleted:
+          return
+        batchState.publishIfDue()
     if result.reason != fsfrCompleted:
       return
-    batchState.publishIfDue()
 
 proc executeFileSearch(
   worker: AgentProxy[FileSearchWorker],

@@ -621,6 +621,12 @@ Command-Shift-E selects and focuses the file explorer. Command-Shift-F selects
 the find-in-files sidebar and focuses its query field. Command-1 focuses the
 file browser, while Command-2 through Command-8 focus editor panels in their
 current split-tree order, visiting top or left panes before bottom or right panes.
+Panel focus follows the displayed document, including terminals and Markdown
+previews. In Vim-style editor navigation, Control-W followed by h/j/k/l or w
+focuses the neighboring or next pane; leaving the editor cancels an unfinished
+Control-W prefix. Control-W in a focused terminal remains available to the shell.
+Show Files and Find in Files invoked from a detached pane bring its project's
+browser window forward.
 For example:
 
 ```json
@@ -670,6 +676,12 @@ creates an editor-only window without a file-browser sidebar. Project window
 titles show `Kosmo (first-root)` and add `+ N` inside the parentheses when more
 top-level roots are open.
 
+Quick Open and Find in Files search every browser root, respecting each folder's
+Git ignore rules and returning overlapping files only once. Quick Open labels
+results by root when several folders are open, including folders with the same
+name. Git decorations refresh for every root independently. The first root remains
+the default working directory for new terminals and relative editor paths.
+
 About Kosmo shows the Kosmo icon, the package version from `merenda.nimble`, build
 Git hash, clickable Moe project link, and Kosmo's GNU GPL-3.0 license notice.
 
@@ -694,6 +706,11 @@ floating control group in the document switches between the rendered preview
 and Moe's syntax editor, selects a light or dark page, and decreases or increases
 the preview font size. Both modes share the same in-memory Moe buffer, so the
 preview includes unsaved edits.
+Each pane retains its three most recently used rendered Markdown previews, including
+their selection and scroll position, so switching among recent unchanged previews
+does not parse and lay them out again. The rendered view is read-only: edit commands
+cannot change the hidden source buffer, and a tab's modified indicator means that its
+Markdown source has unsaved edits.
 
 Kosmo's File > New Terminal command opens a `TerminalView` in the focused
 editor group. Terminal and text tabs share selection, closing, reordering,

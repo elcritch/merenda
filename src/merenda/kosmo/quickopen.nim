@@ -1,6 +1,6 @@
 ## Fuzzy project-file picker used by Kosmo's quick-open command.
 
-import std/[algorithm, math, os, osproc, sets, streams, strutils]
+import std/[algorithm, math, os, osproc, sets, streams, strutils, tables]
 
 import sigils/core
 
@@ -34,6 +34,8 @@ type
     queryField*: nimkit.TextField
     resultsView*: nimkit.PopupListView
     xRootPath: string
+    xRootPaths: seq[string]
+    xFilePaths: Table[string, string]
     xProjectFiles: seq[string]
     xFilteredFiles: seq[string]
     xHighlightedIndex: int
@@ -304,7 +306,7 @@ proc activateIndex(panel: KosmoQuickOpenPanel, index: int) =
   if panel.isNil or index notin 0 ..< panel.xFilteredFiles.len:
     return
   let
-    path = panel.xRootPath / panel.xFilteredFiles[index]
+    path = panel.xFilePaths[panel.xFilteredFiles[index]]
     handler = panel.xOnOpen
   panel.dismiss()
   if not handler.isNil:
@@ -666,6 +668,11 @@ proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
 proc rootPath*(panel: KosmoQuickOpenPanel): string =
   if panel.isNil: "" else: panel.xRootPath
 
+proc rootPaths*(panel: KosmoQuickOpenPanel): seq[string] =
+  ## Return the indexed folders in browser order.
+  if not panel.isNil:
+    result = panel.xRootPaths
+
 proc projectFiles*(panel: KosmoQuickOpenPanel): seq[string] =
   if not panel.isNil:
     result = panel.xProjectFiles
@@ -684,14 +691,53 @@ proc highlightedFile*(panel: KosmoQuickOpenPanel): string =
 proc isOpen*(panel: KosmoQuickOpenPanel): bool =
   not panel.isNil and not panel.hidden()
 
-proc reloadProjectFiles*(panel: KosmoQuickOpenPanel, rootPath = "") =
-  ## Refresh the picker index for a project root.
+proc reloadProjectFiles*(panel: KosmoQuickOpenPanel, rootPaths: openArray[string]) =
+  ## Index all roots, preserving distinct names and deduplicating overlapping files.
   if panel.isNil:
     return
-  if rootPath.len > 0:
-    panel.xRootPath = absolutePath(rootPath)
-  panel.xProjectFiles = projectFiles(panel.xRootPath)
+  var roots: seq[string]
+  for root in rootPaths:
+    if root.len > 0 and dirExists(root):
+      let path = normalizedPath(absolutePath(root))
+      if path notin roots:
+        roots.add path
+  panel.xRootPaths = roots
+  panel.xRootPath =
+    if roots.len > 0:
+      roots[0]
+    else:
+      ""
+  panel.xProjectFiles.setLen(0)
+  panel.xFilePaths.clear()
+  var seen = initHashSet[string]()
+  for root in roots:
+    var prefix = root.extractFilename()
+    for other in roots:
+      if other != root and other.extractFilename() == prefix:
+        prefix = root
+        break
+    for relative in projectFiles(root):
+      let path = normalizedPath(root / relative)
+      if path notin seen:
+        seen.incl path
+        let label =
+          if roots.len == 1:
+            relative
+          else:
+            prefix / relative
+        panel.xProjectFiles.add label
+        panel.xFilePaths[label] = path
   panel.filterFiles()
+
+proc reloadProjectFiles*(panel: KosmoQuickOpenPanel, rootPath = "") =
+  ## Refresh a single root, or the current roots when no argument is supplied.
+  if not panel.isNil:
+    if rootPath.len > 0:
+      panel.reloadProjectFiles([rootPath])
+    elif panel.xRootPaths.len > 0:
+      panel.reloadProjectFiles(panel.xRootPaths)
+    else:
+      panel.reloadProjectFiles([panel.xRootPath])
 
 proc startPresentationAnimation(panel: KosmoQuickOpenPanel, window: nimkit.Window) =
   if panel.isNil or window.isNil:
@@ -728,7 +774,7 @@ proc startPresentationAnimation(panel: KosmoQuickOpenPanel, window: nimkit.Windo
 proc present*(
     panel: KosmoQuickOpenPanel,
     window: nimkit.Window,
-    rootPath: string,
+    rootPaths: openArray[string],
     onOpen: KosmoQuickOpenHandler,
 ): bool {.discardable.} =
   ## Show the picker, focus its query, and preserve the previous responder.
@@ -736,10 +782,12 @@ proc present*(
     return
   panel.xOnOpen = onOpen
   if panel.isOpen():
+    if @rootPaths != panel.xRootPaths:
+      panel.reloadProjectFiles(rootPaths)
     return window.makeFirstResponder(panel.queryField)
 
   panel.queryField.text = ""
-  panel.reloadProjectFiles(rootPath)
+  panel.reloadProjectFiles(rootPaths)
   panel.hidden = false
   panel.needsDisplay = true
   let weakPanel = panel.unsafeWeakRef()
@@ -757,3 +805,12 @@ proc present*(
     panel.finishDismiss()
   else:
     panel.startPresentationAnimation(window)
+
+proc present*(
+    panel: KosmoQuickOpenPanel,
+    window: nimkit.Window,
+    rootPath: string,
+    onOpen: KosmoQuickOpenHandler,
+): bool {.discardable.} =
+  ## Show a picker for one folder.
+  panel.present(window, [rootPath], onOpen)

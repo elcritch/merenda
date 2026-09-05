@@ -18,12 +18,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-15
+          - os: macos-latest
             nimversion: '2.2.10'
             display: none
+            compiler: clang
           - os: ubuntu-26.04
             nimversion: '2.2.10'
             display: x11
+            compiler: gcc
           # - os: ubuntu-24.04
           #   display: wayland
     steps:
@@ -35,30 +37,25 @@ jobs:
         path: deps/
         key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
-    - name: Install GrabNim
-      run: |
-        grabnimInstaller="$(mktemp)"
-        curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-          https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-          -o "$grabnimInstaller"
-        sh "$grabnimInstaller"
-        rm -f "$grabnimInstaller"
-        echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-        echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-    - name: Install Nim
-      run: grabnim "${{ matrix.nimversion }}"
-
-    - name: Install latest Atlas
+    - name: Install latest Atlas and set up Nim
       run: |
         mkdir -p "$HOME/.local/bin"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
           ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
-        atlas -v
+        "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
 
     - name: Verify Nim
-      run: nim -v
+      run: |
+        atlas -v
+        uname -m
+        nimPath="$(command -v nim)"
+        echo "$nimPath"
+        nim -v
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          file "$nimPath"
+          lipo -archs "$nimPath"
+        fi
 
     - name: Setup software OpenGL/Vulkan (Mesa) + Xvfb (X11)
       if: runner.os == 'Linux' && matrix.display == 'x11'
@@ -97,15 +94,14 @@ jobs:
           -delete
 
     - name: Build Tests
-      run: |
-        atlas-run tests --jobs:1 --compiler-output -- \
-            --opt:none \
-            --debugger:off
-
-    - name: Build Integration Tests
       if: runner.os == 'macOS'
       run: |
-        atlas-run tests --jobs:2 --only-errors "tests/integration*.nim"
+        atlas-run tests --jobs:1 --compiler-output
+
+    - name: Build Tests
+      if: runner.os == 'Linux'
+      run: |
+        atlas-run tests --jobs:1 --compiler-output -- --opt:none
 
   examples:
     runs-on: ${{ matrix.os }}
@@ -119,7 +115,7 @@ jobs:
         nimversion:
           - '2.2.10'
         os:
-          - macos-15
+          - macos-latest
           - ubuntu-latest
           # - windows-2022
     steps:
@@ -131,30 +127,25 @@ jobs:
         path: deps/
         key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
-    - name: Install GrabNim
-      run: |
-        grabnimInstaller="$(mktemp)"
-        curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-          https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-          -o "$grabnimInstaller"
-        sh "$grabnimInstaller"
-        rm -f "$grabnimInstaller"
-        echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-        echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-    - name: Install Nim
-      run: grabnim "${{ matrix.nimversion }}"
-
-    - name: Install latest Atlas
+    - name: Install latest Atlas and set up Nim
       run: |
         mkdir -p "$HOME/.local/bin"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
           ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
-        atlas -v
+        "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
 
     - name: Verify Nim
-      run: nim -v
+      run: |
+        atlas -v
+        uname -m
+        nimPath="$(command -v nim)"
+        echo "$nimPath"
+        nim -v
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          file "$nimPath"
+          lipo -archs "$nimPath"
+        fi
 
     - name: Install Deps
       run: |

@@ -20,6 +20,7 @@ type
     xOnOpenFile: FileTreeOpenHandler
     xOpenDisposition: FileTreeOpenDisposition
     xGitStatusService: nimkit.GitStatusService
+    xGitSnapshots: Table[string, nimkit.GitStatusSnapshot]
     xGitFileStates: Table[string, nimkit.GitFileState]
     xGitDescendantStates: Table[string, nimkit.GitFileState]
 
@@ -216,7 +217,7 @@ proc fileTreeRowWasActivated(
     tree.xOnOpenFile(path, tree.xOpenDisposition)
 
 proc rootPath*(tree: KosmoFileTree): string =
-  ## Return the first project root, used by single-root services such as Git.
+  ## Return the first project root, used as the default working directory.
   tree.xRootPath
 
 proc rootPaths*(tree: KosmoFileTree): lent seq[string] =
@@ -233,7 +234,7 @@ proc reloadRoots(tree: KosmoFileTree, expanded: seq[string]) =
 proc `rootPath=`*(tree: KosmoFileTree, path: string) =
   let next =
     if path.len > 0 and dirExists(path):
-      absolutePath(path)
+      normalizedPath(absolutePath(path))
     else:
       ""
   let nextRoots =
@@ -247,8 +248,9 @@ proc `rootPath=`*(tree: KosmoFileTree, path: string) =
   tree.xRootPaths = nextRoots
   tree.xGitFileStates.clear()
   tree.xGitDescendantStates.clear()
+  tree.xGitSnapshots.clear()
   if not tree.xGitStatusService.isNil:
-    tree.xGitStatusService.rootPath = next
+    tree.xGitStatusService.rootPaths = nextRoots
   let expanded =
     if next.len > 0:
       @[next]
@@ -260,16 +262,16 @@ proc addRootPath*(tree: KosmoFileTree, path: string): bool {.discardable.} =
   ## Append a directory to the browser's ordered top-level folders.
   if tree.isNil or path.len == 0 or not dirExists(path):
     return
-  let next = absolutePath(path)
+  let next = normalizedPath(absolutePath(path))
   if next in tree.xRootPaths:
     return
   if tree.xRootPath.len == 0:
     tree.xRootPath = next
     tree.xGitFileStates.clear()
     tree.xGitDescendantStates.clear()
-    if not tree.xGitStatusService.isNil:
-      tree.xGitStatusService.rootPath = next
   tree.xRootPaths.add next
+  if not tree.xGitStatusService.isNil:
+    tree.xGitStatusService.rootPaths = tree.xRootPaths
   var expanded = tree.expandedItemIdentifiers()
   expanded.add next
   tree.reloadRoots(expanded)
@@ -282,25 +284,27 @@ proc refresh*(tree: KosmoFileTree) =
   tree.reloadOutlineData()
 
 proc applyGitStatus*(tree: KosmoFileTree, snapshot: nimkit.GitStatusSnapshot) =
-  ## Replace file and descendant decorations from one completed status snapshot.
-  if tree.isNil or snapshot.rootPath != tree.xRootPath:
+  ## Replace one root's decorations while retaining snapshots for the other roots.
+  if tree.isNil or snapshot.rootPath notin tree.xRootPaths:
     return
+  tree.xGitSnapshots[snapshot.rootPath] = snapshot
   var
     fileStates = initTable[string, nimkit.GitFileState]()
     descendantStates = initTable[string, nimkit.GitFileState]()
-  if snapshot.isRepository:
-    for entry in snapshot.entries:
-      fileStates.includeGitState(entry.path, entry.state)
-      if entry.state != nimkit.gfsIgnored:
-        var parentPath = entry.path.parentDir()
-        while parentPath.len > 0:
-          descendantStates.includeGitState(parentPath, entry.state)
-          if parentPath == tree.xRootPath:
-            break
-          let nextParent = parentPath.parentDir()
-          if nextParent == parentPath:
-            break
-          parentPath = nextParent
+  for root, rootSnapshot in tree.xGitSnapshots:
+    if rootSnapshot.isRepository:
+      for entry in rootSnapshot.entries:
+        fileStates.includeGitState(entry.path, entry.state)
+        if entry.state != nimkit.gfsIgnored:
+          var parentPath = entry.path.parentDir()
+          while parentPath.len > 0:
+            descendantStates.includeGitState(parentPath, entry.state)
+            if parentPath == root:
+              break
+            let nextParent = parentPath.parentDir()
+            if nextParent == parentPath:
+              break
+            parentPath = nextParent
   if tree.xGitFileStates == fileStates and tree.xGitDescendantStates == descendantStates:
     return
   tree.xGitFileStates = fileStates
@@ -324,7 +328,7 @@ proc startGitStatusMonitoring*(
   result = nimkit.newGitStatusService(refreshInterval = refreshInterval)
   result.connect(nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus)
   tree.xGitStatusService = result
-  result.rootPath = tree.xRootPath
+  result.rootPaths = tree.xRootPaths
 
 proc refreshGitStatus*(tree: KosmoFileTree): bool {.discardable.} =
   ## Request an immediate status refresh in addition to the periodic schedule.

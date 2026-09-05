@@ -219,6 +219,10 @@ suite "Kosmo quick open":
     )
     check frontend.quickOpenPanel.highlightedFile() == "tests/main_spec.nim"
     check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyP, keyCode: keyP.ord, modifiers: shortcutModifiers())
+    )
+    check frontend.quickOpenPanel.highlightedFile() == "tests/main_spec.nim"
+    check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyEnter, keyCode: keyEnter.ord, text: "\n")
     )
     check not frontend.quickOpenPanel.isOpen()

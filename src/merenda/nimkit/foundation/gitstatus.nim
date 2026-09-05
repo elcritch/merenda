@@ -43,7 +43,7 @@ type
     xTimerThread: SigilChronosThreadPtr
     xTicker: AgentProxy[GitStatusRefreshTicker]
     xTimer: SigilTimer
-    xRootPath: string
+    xRootPaths: seq[string]
     xLastSnapshot: GitStatusSnapshot
     xNextIdentifier: uint64
     xActiveIdentifier: uint64
@@ -129,10 +129,11 @@ proc parseGitStatusPorcelain*(
 
 proc runGit(rootPath: string, args: openArray[string]): GitCommandResult =
   var process: Process
+  var arguments = @["-C", rootPath, "--no-optional-locks"]
+  arguments.add args
   try:
-    process = startProcess(
-      "git", workingDir = rootPath, args = args, options = {poUsePath, poStdErrToStdOut}
-    )
+    process =
+      startProcess("git", args = arguments, options = {poUsePath, poStdErrToStdOut})
     result.output = process.outputStream().readAll()
     result.exitCode = process.waitForExit()
   finally:
@@ -176,17 +177,20 @@ proc readGitStatus(rootPath: string): GitStatusSnapshot =
     result.errorMessage = getCurrentExceptionMsg()
 
 proc executeGitStatus(
-  worker: AgentProxy[GitStatusWorker], identifier: uint64, rootPath: string
+  worker: AgentProxy[GitStatusWorker], identifier: uint64, rootPaths: seq[string]
 ) {.signal.}
 
 proc gitStatusFinished(
-  worker: GitStatusWorker, identifier: uint64, snapshot: GitStatusSnapshot
+  worker: GitStatusWorker, identifier: uint64, snapshots: seq[GitStatusSnapshot]
 ) {.signal.}
 
 proc executeGitStatus(
-    worker: GitStatusWorker, identifier: uint64, rootPath: string
+    worker: GitStatusWorker, identifier: uint64, rootPaths: seq[string]
 ) {.slot.} =
-  emit worker.gitStatusFinished(identifier, readGitStatus(rootPath))
+  var snapshots: seq[GitStatusSnapshot]
+  for root in rootPaths:
+    snapshots.add readGitStatus(root)
+  emit worker.gitStatusFinished(identifier, snapshots)
 
 proc gitStatusRefreshTicked(ticker: GitStatusRefreshTicker) {.signal.}
 
@@ -200,44 +204,61 @@ proc gitStatusDidRefresh*(
 proc refresh*(service: GitStatusService): bool {.discardable.}
 
 proc completeGitStatus(
-    service: GitStatusService, identifier: uint64, snapshot: GitStatusSnapshot
+    service: GitStatusService, identifier: uint64, snapshots: seq[GitStatusSnapshot]
 ) {.slot.} =
   if service.xClosed or identifier != service.xActiveIdentifier:
     return
   service.xActiveIdentifier = 0
-  if snapshot.rootPath == service.xRootPath:
-    service.xLastSnapshot = snapshot
-    emit service.gitStatusDidRefresh(snapshot)
+  for snapshot in snapshots:
+    if snapshot.rootPath in service.xRootPaths:
+      if snapshot.rootPath == service.xRootPaths[0]:
+        service.xLastSnapshot = snapshot
+      emit service.gitStatusDidRefresh(snapshot)
   let refreshPending = service.xRefreshPending
   service.xRefreshPending = false
   if refreshPending:
     discard service.refresh()
 
 proc requestPeriodicGitStatusRefresh(service: GitStatusService) {.slot.} =
-  discard service.refresh()
+  # A slow scan must finish before the next periodic scan is requested.
+  if service.xActiveIdentifier == 0:
+    discard service.refresh()
 
 proc rootPath*(service: GitStatusService): string =
-  if not service.isNil:
-    result = service.xRootPath
+  ## Return the first monitored root.
+  if not service.isNil and service.xRootPaths.len > 0:
+    result = service.xRootPaths[0]
 
-proc `rootPath=`*(service: GitStatusService, rootPath: string) =
+proc rootPaths*(service: GitStatusService): seq[string] =
+  ## Return the folders refreshed by this service's single worker.
+  if not service.isNil:
+    result = service.xRootPaths
+
+proc `rootPaths=`*(service: GitStatusService, rootPaths: openArray[string]) =
+  ## Replace the monitored roots, coalescing updates with any active refresh.
   if service.isNil or service.xClosed:
     return
-  let next =
-    if rootPath.len > 0:
-      absolutePath(rootPath)
-    else:
-      ""
-  if service.xRootPath == next:
+  var next: seq[string]
+  for root in rootPaths:
+    if root.len > 0:
+      let path = normalizedPath(absolutePath(root))
+      if path notin next:
+        next.add path
+  if service.xRootPaths == next:
     return
-  service.xRootPath = next
-  service.xLastSnapshot = GitStatusSnapshot(rootPath: next)
+  service.xRootPaths = next
+  service.xLastSnapshot = GitStatusSnapshot(rootPath: service.rootPath())
   if service.xActiveIdentifier != 0:
     service.xRefreshPending = next.len > 0
   elif next.len > 0:
     discard service.refresh()
 
+proc `rootPath=`*(service: GitStatusService, rootPath: string) =
+  ## Replace the monitored folders with a single root; empty clears them.
+  service.rootPaths = [rootPath]
+
 proc lastSnapshot*(service: GitStatusService): lent GitStatusSnapshot =
+  ## Return the most recent completed snapshot for the first monitored root.
   service.xLastSnapshot
 
 func isRefreshing*(service: GitStatusService): bool =
@@ -245,14 +266,14 @@ func isRefreshing*(service: GitStatusService): bool =
 
 proc refresh*(service: GitStatusService): bool {.discardable.} =
   ## Request one status refresh, coalescing requests while Git is already running.
-  if service.isNil or service.xClosed or service.xRootPath.len == 0:
+  if service.isNil or service.xClosed or service.xRootPaths.len == 0:
     return
   if service.xActiveIdentifier != 0:
     service.xRefreshPending = true
     return
   inc service.xNextIdentifier
   service.xActiveIdentifier = service.xNextIdentifier
-  emit service.xWorker.executeGitStatus(service.xActiveIdentifier, service.xRootPath)
+  emit service.xWorker.executeGitStatus(service.xActiveIdentifier, service.xRootPaths)
   true
 
 proc newGitStatusService*(

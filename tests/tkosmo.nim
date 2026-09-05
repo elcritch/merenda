@@ -8,9 +8,12 @@ import kosmo/config
 import kosmo/editorsearch
 import kosmo/filetreeinteractions
 import kosmo/matterhighlighting
+import kosmo/markdownactivation
 import kosmo/panelshortcuts
+import kosmo/quickopen
 import kosmo/terminalclipboard
 import kosmo/terminalsearch
+import kosmo/workspaceroots
 
 proc runeIndexOf(source, needle: string): int =
   let byteIndex = source.find(needle)

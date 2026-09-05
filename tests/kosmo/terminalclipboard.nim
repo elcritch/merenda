@@ -136,3 +136,47 @@ suite "Kosmo terminal clipboard commands":
       require session.pollUntilText("70 61 73 74 65 03")
       check "70 61 73 74 65 03" in
         session.screen().plainText().splitWhitespace().join(" ")
+
+suite "Kosmo terminal focus input":
+  when defined(posix):
+    test "numbered panel switches restore focus reporting and shell input":
+      let
+        app = newApplication("Kosmo Live Terminal Focus Test")
+        frontend = newKosmoApplication(app, monitorsGitStatus = false)
+        session = spawnCompactTerminalSession(
+          initTerminalSpawnOptions(
+            command =
+              "stty raw -echo; printf ready; " &
+              "dd bs=1 count=8 2>/dev/null | od -An -tx1"
+          )
+        )
+        terminal = newKosmoTerminalView(session)
+      defer:
+        terminal.close()
+        frontend.close()
+        frontend.window.close()
+      app.addWindow(frontend.window)
+      frontend.window.setContentView(frontend.contentView)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      app.activateWindow(frontend.window)
+      require frontend.openDocument(
+        newKosmoPaneDocument("kosmo.test.focus-terminal", "Terminal", terminal)
+      )
+      require session.pollUntilText("ready")
+      session.processOutput("\x1b[?1004h")
+
+      let primary = frontend.shortcutProfile().primaryModifiers()
+      require app.performMenuKeyEquivalent(
+        KeyEvent(key: key1, keyCode: key1.ord, modifiers: primary)
+      )
+      require app.performMenuKeyEquivalent(
+        KeyEvent(key: key2, keyCode: key2.ord, modifiers: primary)
+      )
+      let terminalFocused = frontend.window.firstResponder() == Responder(terminal)
+      check terminalFocused
+      require frontend.window.dispatchTextInput("x")
+      require frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+      )
+      # Focus-out, focus-in, x, and the shell's Control-W arrive exactly once.
+      check session.pollUntilText("1b 5b 4f 1b 5b 49 78 17")
