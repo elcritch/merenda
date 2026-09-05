@@ -117,7 +117,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: deps/
-          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-atlas-env-v2-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble', 'nim.cfg', 'config.nims') }}
+          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-atlas-env-v3-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble', 'nim.cfg', 'config.nims') }}
 
       - name: Install Atlas
         run: |
@@ -127,16 +127,32 @@ jobs:
             ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
           atlas -v
 
-      - name: Set up Nim
+      - name: Install bootstrap amd64 Nim
         run: |
-          if [[ "$RUNNER_ARCH" == "ARM64" ]]; then
-            # Atlas 0.15.2's universal binary reports amd64 from its arm64 slice.
-            atlas --source \
-              --git-ref="v$NIM_VERSION" \
-              --github-path env "$NIM_VERSION-arm64"
-          else
-            atlas --github-path env "$NIM_VERSION"
-          fi
+          atlas --deps="$RUNNER_TEMP/atlas-bootstrap" \
+            --github-path env "$NIM_VERSION"
+
+      - name: Rebuild Atlas for ARM64
+        run: |
+          git clone --depth 1 --branch 0.15.2 https://github.com/nim-lang/atlas.git \
+            "$RUNNER_TEMP/atlas-source"
+          cd "$RUNNER_TEMP/atlas-source"
+          nim -v
+          nim installSat
+          atlas_arm64_args="-target arm64-apple-macos11 -arch arm64 -DARCH=arm64"
+          nim c -d:release --cpu:arm64 \
+            --passC:"$atlas_arm64_args" --passL:"$atlas_arm64_args" \
+            --out:"$RUNNER_TEMP/atlas-arm64" src/atlas.nim
+          nim c -d:release --cpu:arm64 \
+            --passC:"$atlas_arm64_args" --passL:"$atlas_arm64_args" \
+            --out:"$RUNNER_TEMP/atlas-run-arm64" src/atlasrun.nim
+          install -m 755 "$RUNNER_TEMP/atlas-arm64" "$HOME/.local/bin/atlas"
+          install -m 755 "$RUNNER_TEMP/atlas-run-arm64" "$HOME/.local/bin/atlas-run"
+          file "$HOME/.local/bin/atlas"
+          atlas -v
+
+      - name: Install Nim binaries
+        run: atlas --github-path env "$NIM_VERSION"
 
       - name: Verify Nim
         run: nim -v
