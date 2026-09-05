@@ -24,6 +24,10 @@ when defined(freebsd):
   --define:
     libbacktraceUseSystemLibs
 
+when defined(linux) and defined(gcc):
+  # GCC 15 promotes Siwin's generated typed-empty-sequence pointer warning to an error.
+  switch("passC", "-Wno-error=incompatible-pointer-types")
+
 switch("define", "features.markdown.regex") # temporary hack until we get atlas 0.15.1
 
 import std/strutils
