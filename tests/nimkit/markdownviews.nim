@@ -12,7 +12,7 @@ const
   RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
   RepositoryReadme = RepositoryRoot / "README.md"
   TestImagePath = RepositoryRoot / "data" / "img1.png"
-  ReadmeLayoutTimeoutMilliseconds = 60_000
+  ReadmeAsyncTimeoutMilliseconds = 60_000
 
 proc runeIndexOf(text, needle: string): int =
   let
@@ -1287,14 +1287,14 @@ Press <kbd>Enter</kbd>.
       )
       constructionElapsed = getMonoTime() - constructionStarted
       parsingStarted = getMonoTime()
-    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownParsing(ReadmeAsyncTimeoutMilliseconds)
     check view.markdownParseError() == ""
     let
       parsingElapsed = getMonoTime() - parsingStarted
       parsingChunkCount = view.markdownRenderChunkCount()
       maximumParsingChunk = view.markdownMaximumRenderChunkDuration()
       layoutStarted = getMonoTime()
-    require view.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
+    require view.waitForMarkdownLayout(ReadmeAsyncTimeoutMilliseconds)
     let
       layoutElapsed = getMonoTime() - layoutStarted
       renderingStarted = getMonoTime()
@@ -1320,8 +1320,8 @@ Press <kbd>Enter</kbd>.
     darkStyle.headingColor = color(0.96, 0.97, 0.99, 1.0)
     darkStyle.codeBlockStyle.backgroundColor = color(0.08, 0.10, 0.14, 1.0)
     view.markdownStyle = darkStyle
-    require view.waitForMarkdownRendering()
-    require view.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
+    require view.waitForMarkdownRendering(ReadmeAsyncTimeoutMilliseconds)
+    require view.waitForMarkdownLayout(ReadmeAsyncTimeoutMilliseconds)
     discard buildRenders(view)
     let
       styleElapsed = getMonoTime() - styleStarted
@@ -1349,8 +1349,8 @@ Press <kbd>Enter</kbd>.
       second = newMarkdownView(
         source, frame = rect(0, 0, 760, 540), imageLoader = unavailableMarkdownImage
       )
-    require first.waitForMarkdownParsing()
-    require second.waitForMarkdownParsing()
+    require first.waitForMarkdownParsing(ReadmeAsyncTimeoutMilliseconds)
+    require second.waitForMarkdownParsing(ReadmeAsyncTimeoutMilliseconds)
     discard buildRenders(first)
     discard buildRenders(second)
 
@@ -1364,7 +1364,7 @@ Press <kbd>Enter</kbd>.
     let
       singleElapsed = getMonoTime() - singleStarted
       singleSettleStarted = getMonoTime()
-    require first.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
+    require first.waitForMarkdownLayout(ReadmeAsyncTimeoutMilliseconds)
     discard buildRenders(first)
     let
       singleSettleElapsed = getMonoTime() - singleSettleStarted
@@ -1383,8 +1383,8 @@ Press <kbd>Enter</kbd>.
     let
       pairElapsed = getMonoTime() - pairStarted
       pairSettleStarted = getMonoTime()
-    require first.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
-    require second.waitForMarkdownLayout(ReadmeLayoutTimeoutMilliseconds)
+    require first.waitForMarkdownLayout(ReadmeAsyncTimeoutMilliseconds)
+    require second.waitForMarkdownLayout(ReadmeAsyncTimeoutMilliseconds)
     discard buildRenders(first)
     discard buildRenders(second)
     let pairSettleElapsed = getMonoTime() - pairSettleStarted
