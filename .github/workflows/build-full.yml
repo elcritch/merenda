@@ -76,7 +76,7 @@ jobs:
     - name: Install Deps
       run: |
         # sync deps
-        atlas -t --update --features:kosmo install
+        atlas -tu --features:kosmo install
 
     - name: Clean generated examples
       run: |
