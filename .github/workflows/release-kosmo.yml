@@ -55,14 +55,6 @@ jobs:
           path: deps/
           key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
-      - name: Install Atlas
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
-          atlas -v
-
       - name: Install GrabNim
         run: |
           grabnimInstaller="$(mktemp)"
@@ -76,6 +68,14 @@ jobs:
 
       - name: Install Nim
         run: grabnim "$NIM_VERSION"
+
+      - name: Install latest Atlas
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          atlas -v
 
       - name: Verify Nim
         run: nim -v
@@ -130,14 +130,6 @@ jobs:
           path: deps/
           key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
-      - name: Install Atlas
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
-          atlas -v
-
       - name: Install GrabNim
         run: |
           grabnimInstaller="$(mktemp)"
@@ -151,6 +143,14 @@ jobs:
 
       - name: Install Nim
         run: grabnim "$NIM_VERSION"
+
+      - name: Install latest Atlas
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          atlas -v
 
       - name: Verify Nim
         run: nim -v
