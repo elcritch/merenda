@@ -37,30 +37,25 @@ jobs:
         path: deps/
         key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
-    - name: Install GrabNim
-      run: |
-        grabnimInstaller="$(mktemp)"
-        curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-          https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-          -o "$grabnimInstaller"
-        sh "$grabnimInstaller"
-        rm -f "$grabnimInstaller"
-        echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-        echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-    - name: Install Nim
-      run: grabnim "${{ matrix.nimversion }}"
-
-    - name: Install latest Atlas
+    - name: Install latest Atlas and set up Nim
       run: |
         mkdir -p "$HOME/.local/bin"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
           ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
-        atlas -v
+        "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
 
     - name: Verify Nim
-      run: nim -v
+      run: |
+        atlas -v
+        uname -m
+        nimPath="$(command -v nim)"
+        echo "$nimPath"
+        nim -v
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          file "$nimPath"
+          lipo -archs "$nimPath"
+        fi
 
     - name: Setup software OpenGL/Vulkan (Mesa) + Xvfb (X11)
       if: runner.os == 'Linux' && matrix.display == 'x11'
@@ -136,30 +131,25 @@ jobs:
         path: deps/
         key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
 
-    - name: Install GrabNim
-      run: |
-        grabnimInstaller="$(mktemp)"
-        curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-          https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-          -o "$grabnimInstaller"
-        sh "$grabnimInstaller"
-        rm -f "$grabnimInstaller"
-        echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-        echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-    - name: Install Nim
-      run: grabnim "${{ matrix.nimversion }}"
-
-    - name: Install latest Atlas
+    - name: Install latest Atlas and set up Nim
       run: |
         mkdir -p "$HOME/.local/bin"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
           ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
-        atlas -v
+        "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
 
     - name: Verify Nim
-      run: nim -v
+      run: |
+        atlas -v
+        uname -m
+        nimPath="$(command -v nim)"
+        echo "$nimPath"
+        nim -v
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          file "$nimPath"
+          lipo -archs "$nimPath"
+        fi
 
     - name: Install Deps
       run: |
