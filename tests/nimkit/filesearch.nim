@@ -42,6 +42,37 @@ proc runSearch(
   check service.waitFor(result, timeoutMilliseconds = 10_000)
 
 suite "nimkit memory-mapped file search":
+  test "multiple overlapping roots share result and file limits":
+    let
+      workspace = createTempDir("merenda-search-roots-", "")
+      first = workspace / "first"
+      second = workspace / "second"
+      service = newFileSearchService()
+    createDir(first / "nested")
+    createDir(second)
+    writeFile(first / "nested" / "a.txt", "needle")
+    writeFile(second / "b.txt", "needle")
+    defer:
+      service.close()
+      removeDir(workspace)
+    let roots = @[first, first / "nested", second, second / "."]
+    let all = service.search(initFileSearchQuery(roots, "needle"))
+    require service.waitFor(all)
+    check all.result().matches.len == 2
+    check all.result().stats.discoveredFileCount == 2
+    let limited = service.search(
+      initFileSearchQuery(roots, "needle", initFileSearchOptions(maxResults = 1))
+    )
+    require service.waitFor(limited)
+    check limited.result().matches.len == 1
+    check limited.result().reason == fsfrResultLimitReached
+    let fileLimited = service.search(
+      initFileSearchQuery(roots, "needle", initFileSearchOptions(maxFiles = 1))
+    )
+    require service.waitFor(fileLimited)
+    check fileLimited.result().stats.discoveredFileCount == 1
+    check fileLimited.result().reason == fsfrFileLimitReached
+
   test "searches nested files on a Sigils worker and reports mmap usage":
     let
       root = createTempDir("merenda-file-search-", "")

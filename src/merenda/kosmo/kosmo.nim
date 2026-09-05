@@ -205,6 +205,7 @@ type
     contentView: nimkit.View
     statusLabel: nimkit.Label
     primary: bool
+    activeGroup: KosmoEditorGroup
 
   KosmoDockController = ref object
     frontend: WeakRef[KosmoApplication]
@@ -288,6 +289,10 @@ proc `activeGroup=`(controller: KosmoDockController, group: KosmoEditorGroup) =
   if controller.xActiveGroup == group:
     return
   controller.xActiveGroup = group
+  if not group.isNil:
+    for host in controller.hosts:
+      if host.workspace == group.workspace:
+        host.activeGroup = group
   for candidate in controller.groups:
     candidate.updateActivePaneIndicator(
       candidate == group and not controller.xSidebarFocused
@@ -314,6 +319,7 @@ proc show*(frontend: KosmoApplication)
 proc close*(frontend: KosmoApplication)
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
+proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
 proc groupForView(
   controller: KosmoDockController, view: KosmoEditorView
@@ -1100,6 +1106,10 @@ protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
       handler.editorView[].refresh()
 
 protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
+  proc didResignKeyWindow(handler: KosmoEditorTabsHandler) {.slot.} =
+    if not handler.editorView.isNil:
+      handler.editorView[].pendingPanePrefix = false
+
   proc didChangeFirstResponder(
       handler: KosmoEditorTabsHandler, previous: nimkit.Responder
   ) {.slot.} =
@@ -1109,6 +1119,7 @@ protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
     let
       view = handler.editorView[]
       controller = handler.dockController[]
+    view.pendingPanePrefix = false
     if view.dockGroup.isNil:
       return
     let group = view.dockGroup[]
@@ -2361,6 +2372,15 @@ protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
 proc setContentView(pane: KosmoEditorPane, contentView: nimkit.View) =
   if pane.isNil or contentView.isNil or pane.contentView == contentView:
     return
+  let owner = pane.window()
+  var transferFocus = false
+  if owner of nimkit.Window and not pane.contentView.isNil:
+    var responder = nimkit.Window(owner).firstResponder()
+    while not responder.isNil:
+      if responder == nimkit.Responder(pane.contentView):
+        transferFocus = true
+        break
+      responder = responder.nextResponder()
   if pane.contentView == nimkit.View(pane.markdownView) and
       contentView != nimkit.View(pane.markdownView):
     pane.markdownView.markdown = ""
@@ -2372,6 +2392,15 @@ proc setContentView(pane: KosmoEditorPane, contentView: nimkit.View) =
   if contentView != nimkit.View(pane.editorView):
     pane.commandBar.hidden = true
   pane.setNeedsLayout()
+  if transferFocus:
+    var responder = nimkit.Responder(contentView)
+    if not pane.dockGroup.isNil:
+      let group = pane.dockGroup[]
+      let document = group.documentForIdentifier(group.selectedTabIdentifier)
+      if not document.isNil and document.contentView == contentView and
+          not document.preferredFirstResponder.isNil:
+        responder = nimkit.Responder(document.preferredFirstResponder)
+    discard nimkit.Window(owner).makeFirstResponder(responder)
 
 protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(pane: KosmoEditorPane, args: nimkit.TryToPerformArgs): bool =
@@ -2572,7 +2601,7 @@ proc focusedEditorGroup(controller: KosmoDockController): KosmoEditorGroup =
   if controller.isNil or controller.frontend.isNil:
     return
   let window = controller.frontend[].application.keyWindow()
-  if window.isNil:
+  if window.isNil or window.isClosed():
     return
   var responder = window.firstResponder()
   while not responder.isNil:
@@ -2582,11 +2611,30 @@ proc focusedEditorGroup(controller: KosmoDockController): KosmoEditorGroup =
     responder = responder.nextResponder()
 
 proc activePaneGroup(controller: KosmoDockController): KosmoEditorGroup =
+  if controller.isNil or controller.frontend.isNil or controller.frontend[].xClosed:
+    return
   result = controller.focusedEditorGroup()
-  if result.isNil:
-    result = controller.activeGroup
-  if result.isNil and controller.groups.len > 0:
-    result = controller.groups[0]
+  if not result.isNil:
+    return
+  let window =
+    if controller.frontend.isNil:
+      nil
+    else:
+      controller.frontend[].application.keyWindow()
+  for host in controller.hosts:
+    if host.window == window and not window.isNil and not window.isClosed():
+      if host.activeGroup in controller.groups:
+        return host.activeGroup
+      for group in controller.groups:
+        if group.window == window:
+          return group
+  let active = controller.activeGroup
+  if not active.isNil and active in controller.groups and not active.window.isNil and
+      not active.window.isClosed():
+    return active
+  for group in controller.groups:
+    if not group.window.isNil and not group.window.isClosed():
+      return group
 
 proc activeEditorView(controller: KosmoDockController): KosmoEditorView =
   let group = controller.activePaneGroup()
@@ -2671,7 +2719,6 @@ proc focusPanel(controller: KosmoDockController, panelNumber: int): bool =
     if controller.frontend.isNil:
       return
     let frontend = controller.frontend[]
-    controller.activatePanelWindow(frontend.window)
     return frontend.showFileExplorer()
 
   let
@@ -2679,24 +2726,7 @@ proc focusPanel(controller: KosmoDockController, panelNumber: int): bool =
     groups = controller.groupsInPanelOrder()
   if groupIndex notin 0 ..< groups.len:
     return
-  let group = groups[groupIndex]
-  if group.window.isNil or group.window.isClosed():
-    return
-
-  controller.activatePanelWindow(group.window)
-  controller.activateGroup(group.editorView)
-  let document = group.documentForIdentifier(group.selectedTabIdentifier)
-  if group.selectedTabIdentifier.len > 0:
-    controller.activatePaneTab(group, group.selectedTabIdentifier, focus = false)
-  else:
-    group.pane.setContentView(group.editorView)
-
-  let responder =
-    if document.isNil or document.preferredFirstResponder.isNil:
-      group.preferredPaneResponder()
-    else:
-      nimkit.Responder(document.preferredFirstResponder)
-  result = group.window.makeFirstResponder(responder)
+  controller.focusGroup(groups[groupIndex])
 
 proc initialBufferIds(editor: KosmoEditor): seq[KosmoBufferId] =
   for tab in editor.tabs():
@@ -3041,18 +3071,21 @@ proc splitNewBufferBelow(
   true
 
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder =
-  if group.pane.contentView == nimkit.View(group.pane.markdownView):
+  let document = group.documentForIdentifier(group.selectedTabIdentifier)
+  if not document.isNil and not document.preferredFirstResponder.isNil:
+    nimkit.Responder(document.preferredFirstResponder)
+  elif group.pane.contentView == nimkit.View(group.pane.markdownView):
     nimkit.Responder(group.pane.markdownView)
   else:
     nimkit.Responder(group.editorView)
 
 proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool =
-  if controller.isNil or group.isNil:
+  if controller.isNil or group.isNil or group.window.isNil or group.window.isClosed():
     return
+  controller.activatePanelWindow(group.window)
   controller.activateGroup(group.editorView)
-  discard group.window.makeFirstResponder(group.preferredPaneResponder())
+  result = group.window.makeFirstResponder(group.preferredPaneResponder())
   group.editorView.refresh()
-  true
 
 proc focusNextGroup(controller: KosmoDockController, source: KosmoEditorGroup): bool =
   var candidates: seq[KosmoEditorGroup]
@@ -3570,16 +3603,20 @@ proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.} =
   if not frontend.sidebarTabs.selectCompactTabAtIndex(0):
     return
   result = frontend.window.makeFirstResponder(frontend.fileTree)
+  if result:
+    frontend.dockController.activatePanelWindow(frontend.window)
 
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.} =
   ## Select the find sidebar tab and focus its search query.
   if frontend.isNil or not frontend.hasFileBrowser() or frontend.sidebarTabs.isNil or
       frontend.searchPanel.isNil:
     return
-  frontend.searchPanel.rootPath = frontend.fileTree.rootPath
+  frontend.searchPanel.rootPaths = frontend.fileTree.rootPaths
   if not frontend.sidebarTabs.selectCompactTabAtIndex(1):
     return
   result = frontend.searchPanel.focusQuery()
+  if result:
+    frontend.dockController.activatePanelWindow(frontend.window)
 
 proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.} =
   ## Present the fuzzy project-file picker and open its selected file.
@@ -3588,7 +3625,7 @@ proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.} =
   let weakFrontend = frontend.unsafeWeakRef()
   result = frontend.quickOpenPanel.present(
     frontend.window,
-    frontend.fileTree.rootPath,
+    frontend.fileTree.rootPaths,
     proc(path: string) =
       if weakFrontend.isNil:
         return
@@ -4367,6 +4404,8 @@ proc chooseFile(frontend: KosmoApplication) =
   if frontend.isNil:
     return
   let panel = nimkit.newOpenPanel()
+  defer:
+    panel.window.close()
   panel.message = "Open a file or add a folder to this window."
   panel.canChooseDirectories = true
   panel.directoryUrl = frontend.fileTree.rootPath
@@ -4381,6 +4420,8 @@ proc chooseFile(manager: KosmoWindowManager) =
     frontend.chooseFile()
     return
   let panel = nimkit.newOpenPanel()
+  defer:
+    panel.window.close()
   panel.message = "Open a file or folder in Kosmo."
   panel.canChooseDirectories = true
   panel.directoryUrl = getCurrentDir()
@@ -4394,6 +4435,8 @@ proc chooseProject(manager: KosmoWindowManager) =
   let
     frontend = manager.activeFrontend()
     panel = nimkit.newOpenPanel()
+  defer:
+    panel.window.close()
   panel.window.title = "Open Project"
   panel.message = "Choose a folder to open in a new Kosmo window."
   panel.prompt = "Open Project"
@@ -4427,21 +4470,23 @@ proc loadKosmoKeyBindings*(
 
 proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
   ## Open a file here, or add a folder to this window's visible browser.
-  if frontend.isNil or frontend.dockController.isNil:
+  if frontend.isNil or frontend.xClosed or frontend.dockController.isNil:
     return
   if dirExists(path):
     if not frontend.hasFileBrowser():
       if frontend.xWindowManager.isNil:
         return
       return not frontend.xWindowManager[].openProject(path).isNil
-    let root = absolutePath(path)
+    let root = normalizedPath(absolutePath(path))
     result = root in frontend.fileTree.rootPaths or frontend.fileTree.addRootPath(root)
   elif fileExists(path):
-    result = frontend.dockController.activeEditorView().openFile(path)
+    let view = frontend.dockController.activeEditorView()
+    if not view.isNil:
+      result = view.openFile(path)
   if result and dirExists(path):
     frontend.updateProjectWindowTitle()
     if not frontend.searchPanel.isNil:
-      frontend.searchPanel.rootPath = frontend.fileTree.rootPath
+      frontend.searchPanel.rootPaths = frontend.fileTree.rootPaths
 
 proc openDocument*(
     frontend: KosmoApplication, document: KosmoPaneDocument

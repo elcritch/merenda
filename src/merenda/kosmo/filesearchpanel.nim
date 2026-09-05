@@ -43,6 +43,7 @@ type
     cancelButton*: nimkit.Button
     xRootPath: string
     xSearchOptions: nimkit.FileSearchOptions
+    xRootPaths: seq[string]
     xService: nimkit.FileSearchService
     xActiveSearch: nimkit.FileSearchHandle
 
@@ -383,7 +384,7 @@ proc performSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
   try:
     panel.ensureSearchService()
     panel.xActiveSearch = panel.xService.search(
-      nimkit.initFileSearchQuery(panel.xRootPath, pattern, panel.xSearchOptions)
+      nimkit.initFileSearchQuery(panel.xRootPaths, pattern, panel.xSearchOptions)
     )
     result = true
   except CatchableError as error:
@@ -451,21 +452,35 @@ protocol KosmoFileSearchPanelLayout of nimkit.ViewLayoutProtocol:
 proc rootPath*(panel: KosmoFileSearchPanel): string =
   panel.xRootPath
 
-proc `rootPath=`*(panel: KosmoFileSearchPanel, rootPath: string) =
-  let next =
-    if rootPath.len > 0 and dirExists(rootPath):
-      absolutePath(rootPath)
-    else:
-      ""
-  if panel.xRootPath == next:
+proc rootPaths*(panel: KosmoFileSearchPanel): seq[string] =
+  ## Return all folders included in subsequent searches.
+  panel.xRootPaths
+
+proc `rootPaths=`*(panel: KosmoFileSearchPanel, rootPaths: openArray[string]) =
+  ## Replace the search roots and discard results from the previous workspace.
+  var next: seq[string]
+  for root in rootPaths:
+    if root.len > 0 and dirExists(root):
+      let path = normalizedPath(absolutePath(root))
+      if path notin next:
+        next.add path
+  if panel.xRootPaths == next:
     return
   if not panel.xActiveSearch.isNil and not panel.xActiveSearch.isFinished():
     panel.xActiveSearch.cancel()
   panel.xActiveSearch = nil
   panel.updateSearchControls(false)
-  panel.xRootPath = next
-  panel.resultsView.setMatches(next, [])
+  panel.xRootPaths = next
+  panel.xRootPath =
+    if next.len > 0:
+      next[0]
+    else:
+      ""
+  panel.resultsView.setMatches(panel.xRootPath, [])
   panel.statusLabel.text = "Enter a regular expression"
+
+proc `rootPath=`*(panel: KosmoFileSearchPanel, rootPath: string) =
+  panel.rootPaths = [rootPath]
 
 proc activeSearch*(panel: KosmoFileSearchPanel): nimkit.FileSearchHandle =
   panel.xActiveSearch
