@@ -275,7 +275,7 @@ suite "Kosmo":
     )
     check frontend.editorView.markdownMode(markdownId) == kmmSyntax
     check frontend.editorPane.contentView == View(frontend.editorView)
-    check frontend.editorPane.markdownView.markdown == ""
+    check frontend.editorPane.markdownView.markdown.strip() == source.strip()
     check not controls.hidden
     check controls.modeButton.title == "MD"
 
@@ -295,7 +295,7 @@ suite "Kosmo":
 
     check frontend.openPath(textPath)
     check frontend.editorPane.contentView == View(frontend.editorView)
-    check frontend.editorPane.markdownView.markdown == ""
+    check "## Unsaved" in frontend.editorPane.markdownView.markdown
     check controls.hidden
 
   test "Markdown preview opens local links through Kosmo tabs":
@@ -346,7 +346,7 @@ suite "Kosmo":
     check frontend.openPath(markdownPath)
     require frontend.editorPane.markdownView.waitForMarkdownParsing()
 
-    let preview = frontend.editorPane.markdownView
+    var preview = frontend.editorPane.markdownView
     check not preview.clickMarkdownLink("missing")
     check preview.clickMarkdownLink("fragment")
     check preview.clickMarkdownLink("web")
@@ -361,11 +361,13 @@ suite "Kosmo":
     check frontend.editorView.editor.tabs().len == 2
     check frontend.editorView.editor.tabs()[^1].filePath.get ==
       absolutePath(relativeTarget)
+    preview = frontend.editorPane.markdownView
     require preview.waitForMarkdownParsing()
     check frontend.editorPane.contentView == View(preview)
     check preview.markdown.strip() == "# Relative target"
 
     check frontend.openPath(markdownPath)
+    preview = frontend.editorPane.markdownView
     require preview.waitForMarkdownParsing()
     check preview.clickMarkdownLink("absolute")
     check frontend.editorView.editor.tabs().len == 3
@@ -373,6 +375,7 @@ suite "Kosmo":
       absolutePath(absoluteTarget)
 
     check frontend.openPath(markdownPath)
+    preview = frontend.editorPane.markdownView
     require preview.waitForMarkdownParsing()
     check preview.clickMarkdownLink("file URL")
     check frontend.editorView.editor.tabs().len == 4

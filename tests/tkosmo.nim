@@ -8,6 +8,7 @@ import kosmo/config
 import kosmo/editorsearch
 import kosmo/filetreeinteractions
 import kosmo/matterhighlighting
+import kosmo/markdownactivation
 import kosmo/panelshortcuts
 import kosmo/quickopen
 import kosmo/terminalclipboard

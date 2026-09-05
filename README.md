@@ -706,6 +706,11 @@ floating control group in the document switches between the rendered preview
 and Moe's syntax editor, selects a light or dark page, and decreases or increases
 the preview font size. Both modes share the same in-memory Moe buffer, so the
 preview includes unsaved edits.
+Each pane retains its three most recently used rendered Markdown previews, including
+their selection and scroll position, so switching among recent unchanged previews
+does not parse and lay them out again. The rendered view is read-only: edit commands
+cannot change the hidden source buffer, and a tab's modified indicator means that its
+Markdown source has unsaved edits.
 
 Kosmo's File > New Terminal command opens a `TerminalView` in the focused
 editor group. Terminal and text tabs share selection, closing, reordering,

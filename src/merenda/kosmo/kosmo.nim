@@ -73,6 +73,7 @@ Licensed under the GNU General Public License v3.0 (GPL-3.0).""" %
   KosmoMarkdownControlButtonStyleClass = "kosmo-markdown-control-button"
   KosmoPreviewTabStyleClass* = "kosmo-preview"
   KosmoMarkdownDefaultFontSize* = 14.0'f32
+  KosmoMarkdownPreviewCacheLimit = 3
   KosmoMarkdownMinimumFontSize* = 9.0'f32
   KosmoMarkdownMaximumFontSize* = 28.0'f32
   KosmoInactivePaneStyleClass* = "kosmo-inactive-pane"
@@ -135,6 +136,10 @@ type
   KosmoMarkdownView = ref object of nimkit.MarkdownView
     editorView: WeakRef[KosmoEditorView]
 
+  KosmoMarkdownPreview = object
+    bufferId: KosmoBufferId
+    view: KosmoMarkdownView
+
   KosmoMarkdownControls* = ref object of nimkit.Box
     modeButton*: nimkit.Button
     colorModeButton*: nimkit.Button
@@ -175,6 +180,7 @@ type
     editorView*: KosmoEditorView
     commandBar*: KosmoCommandBar
     markdownView*: KosmoMarkdownView
+    markdownPreviews: seq[KosmoMarkdownPreview]
     markdownControls*: KosmoMarkdownControls
     contentView*: nimkit.View
     activeIndicator: KosmoPaneIndicator
@@ -717,6 +723,38 @@ proc documentForIdentifier(
   if index >= 0:
     result = group.documents[index]
 
+proc markdownViewForBuffer(pane: KosmoEditorPane, id: KosmoBufferId): KosmoMarkdownView
+
+proc removeMarkdownPreview(pane: KosmoEditorPane, id: KosmoBufferId) =
+  if pane.isNil:
+    return
+  for index, preview in pane.markdownPreviews:
+    if preview.bufferId == id:
+      preview.view.markdown = ""
+      pane.markdownPreviews.delete(index)
+      return
+
+proc pruneMarkdownPreviews(pane: KosmoEditorPane, tabs: openArray[KosmoTab]) =
+  if pane.isNil:
+    return
+  var index = pane.markdownPreviews.high
+  while index >= 0:
+    var retained = false
+    for tab in tabs:
+      if tab.id == pane.markdownPreviews[index].bufferId:
+        retained = true
+        break
+    if not retained:
+      pane.removeMarkdownPreview(pane.markdownPreviews[index].bufferId)
+    dec index
+
+proc clearMarkdownPreviews(pane: KosmoEditorPane) =
+  if pane.isNil:
+    return
+  for preview in pane.markdownPreviews:
+    preview.view.markdown = ""
+  pane.markdownPreviews.setLen(0)
+
 func documents*(group: KosmoEditorGroup): lent seq[KosmoPaneDocument] =
   ## Return the non-Moe documents currently owned by this pane group.
   group.documents
@@ -1151,6 +1189,7 @@ proc syncSelectedEditorContent(
   if view.dockGroup.isNil:
     return keckSyntax
   let group = view.dockGroup[]
+  group.pane.pruneMarkdownPreviews(tabs)
   var selectedId: KosmoBufferId
   if not group.selectedTabIdentifier.parseTabIdentifier(selectedId):
     group.pane.syncMarkdownControls(false)
@@ -1169,11 +1208,13 @@ proc syncSelectedEditorContent(
       if source.isNone:
         group.pane.setContentView(view)
         return keckSyntax
-      group.pane.markdownView.imageBasePath = tab.filePath.get.parentDir
-      group.pane.markdownView.markdownStyle =
+      let markdownView = group.pane.markdownViewForBuffer(selectedId)
+      group.pane.markdownView = markdownView
+      markdownView.imageBasePath = tab.filePath.get.parentDir
+      markdownView.markdownStyle =
         group.pane.markdownControls.markdownPresentationStyle()
-      group.pane.markdownView.markdown = source.get
-      group.pane.setContentView(group.pane.markdownView)
+      markdownView.markdown = source.get
+      group.pane.setContentView(markdownView)
       return keckMarkdownPreview
     group.pane.setContentView(view)
     return keckSyntax
@@ -2381,9 +2422,6 @@ proc setContentView(pane: KosmoEditorPane, contentView: nimkit.View) =
         transferFocus = true
         break
       responder = responder.nextResponder()
-  if pane.contentView == nimkit.View(pane.markdownView) and
-      contentView != nimkit.View(pane.markdownView):
-    pane.markdownView.markdown = ""
   if pane.contentView.isNil:
     pane.addSubview(contentView, positioned = nimkit.svpBelow)
   elif not pane.replaceSubview(pane.contentView, contentView):
@@ -2411,6 +2449,25 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
         group.editorView.tabsDelegate.dockController.isNil:
       return false
     let controller = group.editorView.tabsDelegate.dockController[]
+    if pane.contentView == nimkit.View(pane.markdownView):
+      let firstResponder = group.window.firstResponder()
+      let previewTextView =
+        if firstResponder of nimkit.TextView:
+          nimkit.TextView(firstResponder)
+        else:
+          pane.markdownView.textView()
+      case $args.selector.name
+      of KosmoCopyAction, "copy":
+        discard previewTextView.copyText()
+        return true
+      of KosmoCutAction, KosmoPasteAction, KosmoUndoAction, KosmoRedoAction, "cut",
+          "paste", "undo", "redo":
+        return true
+      of KosmoSelectAllAction, "selectAll":
+        previewTextView.selectAllText()
+        return true
+      else:
+        discard
     let panelNumber = args.selector.focusPanelNumber()
     if panelNumber > 0:
       discard controller.focusPanel(panelNumber)
@@ -2508,16 +2565,48 @@ protocol KosmoMarkdownLinkDelegate of nimkit.TextViewDelegateProtocol:
       return false
     controller.frontend[].openPath(path)
 
+proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
+  result = KosmoMarkdownView()
+  result.initMarkdownViewFields(syntaxHighlighter = nimkit.matterSyntaxHighlighter)
+  result.editorView = editorView.unsafeWeakRef()
+  let keyEquivalentMethod: nimkit.DynamicMethod = proc(
+      self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+  ) =
+    let event = invocation.argsAs(nimkit.KeyEvent)
+    let markdownView = KosmoMarkdownView(self)
+    if markdownView.handleMarkdownPaneKey(event):
+      invocation.setResult(true)
+    else:
+      invocation.setResult(markdownView.handleMarkdownNavigationKey(event))
+  discard
+    result.replaceMethod(nimkitSelectors.performKeyEquivalent(), keyEquivalentMethod)
+
+proc markdownViewForBuffer(
+    pane: KosmoEditorPane, id: KosmoBufferId
+): KosmoMarkdownView =
+  for index in 0 ..< pane.markdownPreviews.len:
+    if pane.markdownPreviews[index].bufferId == id:
+      let cached = pane.markdownPreviews[index]
+      result = cached.view
+      pane.markdownPreviews.delete(index)
+      pane.markdownPreviews.add cached
+      return
+  if pane.markdownPreviews.len >= KosmoMarkdownPreviewCacheLimit:
+    pane.markdownPreviews[0].view.markdown = ""
+    pane.markdownPreviews.delete(0)
+  if pane.markdownPreviews.len == 0:
+    result = pane.markdownView
+  else:
+    result = newKosmoMarkdownView(pane.editorView)
+    result.textView().delegate = nimkit.DynamicAgent(pane)
+  pane.markdownPreviews.add KosmoMarkdownPreview(bufferId: id, view: result)
+
 proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   let
     commandBar = newKosmoCommandBar(editorView)
-    markdownView = KosmoMarkdownView()
+    markdownView = newKosmoMarkdownView(editorView)
     markdownControls = newKosmoMarkdownControls(editorView)
     activeIndicator = newKosmoPaneIndicator()
-  markdownView.initMarkdownViewFields(
-    syntaxHighlighter = nimkit.matterSyntaxHighlighter
-  )
-  markdownView.editorView = editorView.unsafeWeakRef()
   result = KosmoEditorPane(
     documentTabs: editorView.documentTabs,
     editorView: editorView,
@@ -2537,18 +2626,6 @@ proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   discard result.withProtocol(KosmoEditorPaneLayout)
   discard result.withProtocol(KosmoEditorPaneCommandDispatch)
   discard result.withProtocol(KosmoMarkdownLinkDelegate)
-  let keyEquivalentMethod: nimkit.DynamicMethod = proc(
-      self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
-  ) =
-    let event = invocation.argsAs(nimkit.KeyEvent)
-    let markdownView = KosmoMarkdownView(self)
-    if markdownView.handleMarkdownPaneKey(event):
-      invocation.setResult(true)
-    else:
-      invocation.setResult(markdownView.handleMarkdownNavigationKey(event))
-  discard result.markdownView.replaceMethod(
-    nimkitSelectors.performKeyEquivalent(), keyEquivalentMethod
-  )
   result.markdownView.textView().delegate = nimkit.DynamicAgent(result)
 
 proc groupForView(
@@ -2678,7 +2755,6 @@ proc activatePaneTab(
   controller.activateGroup(group.editorView)
   var id: KosmoBufferId
   if identifier.parseTabIdentifier(id):
-    group.pane.setContentView(group.editorView)
     group.editorView.saveViewState()
     group.editorView.editor.dismissCompletionPopup()
     group.editorView.editor.dismissCommandLine()
@@ -2813,6 +2889,7 @@ proc removeBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
   group.editorView.forgetMarkdownMode(id)
   group.editorView.selectedBufferId = none(KosmoBufferId)
   group.editorView.lastTabs.setLen(0)
+  group.pane.removeMarkdownPreview(id)
   let orderIndex = group.tabOrder.find(id.tabIdentifier)
   if orderIndex >= 0:
     group.tabOrder.delete(orderIndex)
@@ -2832,6 +2909,7 @@ proc removeGroup(controller: KosmoDockController, group: KosmoEditorGroup) =
   group.editorView.tabsDelegate.dockController = default(WeakRef[KosmoDockController])
   group.editorView.dockGroup = default(WeakRef[KosmoEditorGroup])
   group.pane.dockGroup = default(WeakRef[KosmoEditorGroup])
+  group.pane.clearMarkdownPreviews()
   let wasActive = controller.activeGroup == group
   discard group.workspace.removePanel(group.panel)
   let index = controller.groups.find(group)
@@ -4542,6 +4620,7 @@ proc close*(frontend: KosmoApplication) =
   if not frontend.dockController.isNil:
     for group in frontend.dockController.groups:
       group.editorView.tabsDelegate.stopObservingWindow()
+      group.pane.clearMarkdownPreviews()
       for document in group.documents:
         discard document.close()
     let hosts = frontend.dockController.hosts
