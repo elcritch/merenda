@@ -6,6 +6,10 @@ import figdraw/common/typefaces
 import pkg/bumpy
 import pkg/pixie
 
+when defined(macosx) and not defined(useNativeDynlib) and
+    (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
+  import figdraw/extras/systemfonts
+
 import merenda/nimkit/drawing
 import merenda/nimkit/foundation/types
 import merenda/nimkit/themes
@@ -126,6 +130,36 @@ suite "nimkit font layout":
           require not image.isNil
           check image.opaqueBounds().w > 0
           check image.opaqueBounds().h > 0
+
+  when defined(macosx) and not defined(useNativeDynlib) and
+      (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
+    test "automatic fallback retains the native collection face index":
+      const
+        TestLanguage = "x-native-font-face"
+        TestScript = "latn"
+      let systemTypeface = findSystemTypefaceFile(["Helvetica Bold"])
+      require systemTypeface.isSome
+
+      setFontFallbackGroups(TestLanguage, TestScript, @[@["Helvetica Bold"]])
+      defer:
+        setFontFallbackGroups(TestLanguage, TestScript, newSeq[seq[string]]())
+
+      let resolver = fontFallbackResolver()
+      require resolver != nil
+      let
+        primaryTypefaceId = loadTypeface("Menlo")
+        resolved = resolver(
+          FontFallbackRequest(
+            primaryTypefaceId: primaryTypefaceId,
+            language: TestLanguage,
+            script: TestScript,
+            codepoints: @[uint32(ord('A'))],
+          )
+        )
+      require resolved.len == 1
+      let source = getTypefaceSource(resolved[0])
+      check source.name == systemTypeface.get().path
+      check source.faceIndex == systemTypeface.get().faceIndex
 
   test "font fallback groups are runtime customizable by language and script":
     setFontFallbackGroups("x-test", "Test", @[@["Example Sans"]])
