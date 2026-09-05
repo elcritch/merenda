@@ -38,26 +38,35 @@ suite "nimkit settings":
         settings.contentView().viewWithIdentifier("settings-ui-font-button")
       monospaceView =
         settings.contentView().viewWithIdentifier("settings-monospace-font-button")
+      onlyMonospaceFontsView =
+        settings.contentView().viewWithIdentifier("settings-only-monospace-fonts")
 
     require not interfaceView.isNil
     require interfaceView of Button
     require not monospaceView.isNil
     require monospaceView of Button
+    require not onlyMonospaceFontsView.isNil
+    require onlyMonospaceFontsView of Button
     let
       interfaceButton = Button(interfaceView)
       monospaceButton = Button(monospaceView)
+      onlyMonospaceFonts = Button(onlyMonospaceFontsView)
     check interfaceButton.title == "Default"
     check interfaceButton.state == bsOn
     check monospaceButton.title == "Default"
     check monospaceButton.state == bsOff
+    check onlyMonospaceFonts.title == "Only monospace fonts"
+    check onlyMonospaceFonts.state == bsOff
 
     check monospaceButton.sendAction()
     check interfaceButton.state == bsOff
     check monospaceButton.state == bsOn
+    check onlyMonospaceFonts.state == bsOn
 
     check interfaceButton.sendAction()
     check interfaceButton.state == bsOn
     check monospaceButton.state == bsOff
+    check onlyMonospaceFonts.state == bsOff
 
   test "font size stepper previews within bounds and applies on request":
     var appliedCount = 0

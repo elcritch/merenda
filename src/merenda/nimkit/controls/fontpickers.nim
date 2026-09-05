@@ -1,4 +1,5 @@
 import std/[algorithm, locks, os, strutils, tables]
+from std/unicode import runes
 
 import sigils/core
 from figdraw/common/typefaceinfos import
@@ -36,6 +37,7 @@ type
     regular*: bool
     monospace*: bool
     variable*: bool
+    supportsPreviewText*: bool
     metadataLoaded*: bool
 
   FontCatalogEntry* = object
@@ -60,6 +62,7 @@ const
   DefaultFontLanguage* = "Default"
   OtherFontLanguage* = "Other"
   DefaultFontPickerContentWidth* = 260.0'f32
+  FontCatalogPreviewText* = "The quick brown fox jumps over the lazy dog."
 
   FontLanguageSuffixes = [
     ("Thai Looped", "Thai Looped"),
@@ -300,6 +303,20 @@ var
   systemFontCatalogLock: Lock
 
 initLock(systemFontCatalogLock)
+
+func supportsFontCatalogPreview*(
+    info: TypefaceInfo, text = FontCatalogPreviewText
+): bool =
+  ## Returns whether a face's cmap covers every character in the picker preview.
+  if text.len == 0:
+    return true
+  if info.codepointRanges.len == 0:
+    return false
+  for rune in text.runes:
+    let codepoint = rune.int.uint32
+    if info.supportedCodepointCount(codepoint, codepoint) == 0:
+      return false
+  true
 
 func normalizedFontText(text: string): string =
   result = newStringOfCap(text.len)
@@ -744,6 +761,7 @@ proc parsedFontFace(path: string): ParsedFontFace =
     result.face.regular = info.regular
     result.face.monospace = info.monospace
     result.face.variable = info.variationAxes.len > 0
+    result.face.supportsPreviewText = info.supportsFontCatalogPreview()
     result.searchText.add " " & info.fontMetadataSearchText()
 
 func preferredFontName(info: figSystemFonts.SystemTypefaceInfo): string =
@@ -801,6 +819,7 @@ proc loadFontCatalogFaceMetadata*(face: var FontCatalogFace) =
   face.regular = info.regular
   face.monospace = info.monospace
   face.variable = info.variationAxes.len > 0
+  face.supportsPreviewText = info.supportsFontCatalogPreview()
 
 func copyFontCatalogEntry(entry: FontCatalogEntry): FontCatalogEntry =
   result = entry

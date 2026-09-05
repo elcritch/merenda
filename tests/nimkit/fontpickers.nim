@@ -5,6 +5,26 @@ from figdraw/common/typefaces import getTypefaceInfo, loadTypeface
 import merenda/nimkit
 
 suite "NimKit font pickers":
+  test "font preview coverage requires every displayed character":
+    let
+      basicLatin = TypefaceInfo(
+        codepointRanges: @[TypefaceCodepointRange(first: 0x0020'u32, last: 0x007e'u32)]
+      )
+      missingPeriod = TypefaceInfo(
+        codepointRanges:
+          @[
+            TypefaceCodepointRange(first: 0x0020'u32, last: 0x002d'u32),
+            TypefaceCodepointRange(first: 0x002f'u32, last: 0x007e'u32),
+          ]
+      )
+      symbols = TypefaceInfo(
+        codepointRanges: @[TypefaceCodepointRange(first: 0x2190'u32, last: 0x22ff'u32)]
+      )
+
+    check basicLatin.supportsFontCatalogPreview()
+    check not missingPeriod.supportsFontCatalogPreview()
+    check not symbols.supportsFontCatalogPreview()
+
   test "font languages prefer OpenType metadata over family-name heuristics":
     var layoutInfo =
       TypefaceInfo(layoutScripts: @["latn", "arab"], layoutLanguages: @["URD"])
@@ -178,6 +198,7 @@ suite "NimKit font pickers":
       check face.metadataLoaded
       check face.faceIndex == 1
       check face.fontName == "PTSans-Italic"
+      check face.supportsPreviewText
       check face.italic
       check face.style == "Italic"
 

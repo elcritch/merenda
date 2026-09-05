@@ -50,6 +50,7 @@ type
     finished: bool
 
   FontPickerController = ref object of Responder
+    catalogEntries: seq[FontCatalogEntry]
     items: Table[string, CascadingItem]
     faces: Table[string, FontCatalogFace]
     childIdentifiers: Table[string, seq[string]]
@@ -58,6 +59,7 @@ type
     needsFontPickerReload: bool
     pendingFontPickerBatchCount: int
     desiredSelectedFontName: string
+    onlyMonospaceFonts: bool
     selectionHandler: FontSelectionProc
     progressHandler: FontLoadingProgressProc
 
@@ -82,6 +84,7 @@ type
     fontSizeValue: Label
     fontSizeStepper: Stepper
     fontRoleButtons: array[FontRole, Button]
+    onlyMonospaceFontsCheckbox: Button
 
 const
   FontCatalogBatchSize = 8
@@ -94,6 +97,7 @@ const
   SettingsMonospaceFontButtonIdentifier = "settings-monospace-font-button"
   SettingsFontPickerIdentifier = "settings-font-picker"
   SettingsFontPreviewIdentifier = "settings-font-preview"
+  SettingsOnlyMonospaceFontsIdentifier = "settings-only-monospace-fonts"
 
 proc fontCatalogLoadRequested(controller: FontPickerController) {.signal.}
 proc fontCatalogBatchLoaded(
@@ -199,35 +203,68 @@ proc addFontPickerLanguage(controller: FontPickerController, language: string): 
     controller.addFontPickerItem(cascadeItem(result, language))
     controller.sortFontPickerLanguages()
 
+proc addDefaultFontPickerItem(controller: FontPickerController) =
+  let defaultLanguageIdentifier = controller.addFontPickerLanguage(DefaultFontLanguage)
+  controller.addFontPickerItem(
+    cascadeItem(
+      DefaultSystemFontIdentifier,
+      "System Default",
+      parentIdentifier = defaultLanguageIdentifier,
+      leaf = true,
+      objectValue = toObj(""),
+    )
+  )
+
 proc addFontCatalogEntry(controller: FontPickerController, entry: FontCatalogEntry) =
   for face in entry.faces:
-    let languages =
-      if face.languages.len > 0:
-        face.languages
-      else:
-        @[face.language]
-    for language in languages:
-      let
-        languageIdentifier = controller.addFontPickerLanguage(language)
-        familyIdentifier =
-          languageIdentifier.fontPickerFamilyIdentifier(entry.identifier)
-        faceIdentifier = languageIdentifier.fontPickerFaceIdentifier(face.identifier)
-      if familyIdentifier notin controller.items:
+    if not controller.onlyMonospaceFonts or face.monospace:
+      let languages =
+        if face.languages.len > 0:
+          face.languages
+        else:
+          @[face.language]
+      for language in languages:
+        let
+          languageIdentifier = controller.addFontPickerLanguage(language)
+          familyIdentifier =
+            languageIdentifier.fontPickerFamilyIdentifier(entry.identifier)
+          faceIdentifier = languageIdentifier.fontPickerFaceIdentifier(face.identifier)
+        if familyIdentifier notin controller.items:
+          controller.addFontPickerItem(
+            cascadeItem(
+              familyIdentifier, entry.family, parentIdentifier = languageIdentifier
+            )
+          )
         controller.addFontPickerItem(
           cascadeItem(
-            familyIdentifier, entry.family, parentIdentifier = languageIdentifier
+            faceIdentifier,
+            face.fontPickerFaceTitle(),
+            parentIdentifier = familyIdentifier,
+            leaf = true,
+            objectValue = toObj(face.fontName),
           )
         )
-      controller.addFontPickerItem(
-        cascadeItem(
-          faceIdentifier,
-          face.fontPickerFaceTitle(),
-          parentIdentifier = familyIdentifier,
-          leaf = true,
-          objectValue = toObj(face.fontName),
-        )
-      )
-      controller.faces[faceIdentifier] = face
+        controller.faces[faceIdentifier] = face
+
+proc rebuildFontPickerItems(controller: FontPickerController) =
+  controller.items.clear()
+  controller.faces.clear()
+  controller.childIdentifiers.clear()
+  controller.childIndexes.clear()
+  controller.addDefaultFontPickerItem()
+  for entry in controller.catalogEntries:
+    controller.addFontCatalogEntry(entry)
+
+proc setOnlyMonospaceFonts(controller: FontPickerController, value: bool) =
+  if controller.onlyMonospaceFonts == value:
+    return
+  controller.onlyMonospaceFonts = value
+  controller.rebuildFontPickerItems()
+  if not controller.fontPicker.isNil:
+    controller.fontPicker.reloadData()
+    controller.restoreFontPickerSelection()
+  controller.needsFontPickerReload = false
+  controller.pendingFontPickerBatchCount = 0
 
 proc reportFontLoadingProgress(
     controller: FontPickerController,
@@ -262,11 +299,16 @@ proc loadFontCatalog(loader: FontCatalogLoader) {.slot.} =
       inc loader.nextEntryIndex
       if loadedEntry.family == "Last Resort":
         continue
+      var supportedFaces = newSeqOfCap[FontCatalogFace](loadedEntry.faces.len)
       for face in loadedEntry.faces.mitems:
         face.loadFontCatalogFaceMetadata()
-        inc loader.loadedFaceCount
-      batch.add move loadedEntry
-      inc loader.loadedEntryCount
+        if face.supportsPreviewText:
+          supportedFaces.add face
+          inc loader.loadedFaceCount
+      loadedEntry.faces = move supportedFaces
+      if loadedEntry.faces.len > 0:
+        batch.add move loadedEntry
+        inc loader.loadedEntryCount
 
     if batch.len > 0:
       emit loader.fontCatalogBatchLoaded(
@@ -289,7 +331,8 @@ proc didLoadFontCatalogBatch(
     loadedFaceCount: int,
 ) {.slot.} =
   for entry in entries:
-    controller.addFontCatalogEntry(entry)
+    controller.catalogEntries.add entry
+    controller.addFontCatalogEntry(controller.catalogEntries[^1])
   controller.restoreFontPickerSelection()
   controller.needsFontPickerReload = true
   inc controller.pendingFontPickerBatchCount
@@ -392,16 +435,7 @@ proc newFontPickerController(): FontPickerController =
     childIdentifiers: initTable[string, seq[string]](),
     childIndexes: initTable[string, Table[string, int]](),
   )
-  let defaultLanguageIdentifier = result.addFontPickerLanguage(DefaultFontLanguage)
-  result.addFontPickerItem(
-    cascadeItem(
-      DefaultSystemFontIdentifier,
-      "System Default",
-      parentIdentifier = defaultLanguageIdentifier,
-      leaf = true,
-      objectValue = toObj(""),
-    )
-  )
+  result.addDefaultFontPickerItem()
   initResponder(result)
   discard result.withProtocol(FontPickerDataSource)
   discard result.withProtocol(FontPickerDelegate)
@@ -536,6 +570,10 @@ proc fontSizeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
 
 proc selectFontRole(settings: MerendaSettingsWindow, role: FontRole) =
   settings.activeFontRole = role
+  let onlyMonospaceFonts = role == frMonospace
+  if not settings.onlyMonospaceFontsCheckbox.isNil:
+    settings.onlyMonospaceFontsCheckbox.state = if onlyMonospaceFonts: bsOn else: bsOff
+  settings.fontPickerController.setOnlyMonospaceFonts(onlyMonospaceFonts)
   settings.fontPickerController.selectFontName(settings.previewFontNames[role])
   settings.updatePreview()
 
@@ -544,6 +582,12 @@ proc fontRoleDidClick(
 ) =
   if sender of Button:
     settings.selectFontRole(role)
+
+proc onlyMonospaceFontsDidChange(
+    settings: MerendaSettingsWindow, sender: DynamicAgent
+) =
+  if sender of Button:
+    settings.fontPickerController.setOnlyMonospaceFonts(Button(sender).state == bsOn)
 
 proc applyFontDidClick(settings: MerendaSettingsWindow, sender: DynamicAgent) =
   if sender of Button:
@@ -604,6 +648,7 @@ proc newMerendaSettingsWindow*(
     interfaceFontLabel = newFormLabel("Interface Font")
     monospaceFontLabel = newFormLabel("Monospace Font")
     fontLabel = newFormLabel("Browse Fonts")
+    fontFilterLabel = newFormLabel("Filter")
     fontSizeLabel = newFormLabel("Size")
     themePicker = newComboBox(
       [
@@ -619,6 +664,7 @@ proc newMerendaSettingsWindow*(
     interfaceFontButton = newRadioButton("Default")
     monospaceFontButton = newRadioButton("Default")
     fontPicker = newCascadingView()
+    onlyMonospaceFontsCheckbox = newCheckBox("Only monospace fonts")
     fontSizeControl = newStackView(laHorizontal)
     fontSizeValue = newLabel(SettingsDefaultFontSize.fontSizeTitle())
     fontSizeStepper = newStepper(
@@ -631,15 +677,17 @@ proc newMerendaSettingsWindow*(
     themeChanged = actionSelector("themeChanged")
     interfaceFontSelected = actionSelector("interfaceFontSelected")
     monospaceFontSelected = actionSelector("monospaceFontSelected")
+    onlyMonospaceFontsChanged = actionSelector("onlyMonospaceFontsChanged")
     fontSizeChanged = actionSelector("fontSizeChanged")
     applyFont = actionSelector("applyFont")
 
-  result.preview = newLabel("The quick brown fox jumps over the lazy dog.")
+  result.preview = newLabel(FontCatalogPreviewText)
   result.status = newStatusLabel()
   result.fontSizeValue = fontSizeValue
   result.fontSizeStepper = fontSizeStepper
   result.fontRoleButtons[frUI] = interfaceFontButton
   result.fontRoleButtons[frMonospace] = monospaceFontButton
+  result.onlyMonospaceFontsCheckbox = onlyMonospaceFontsCheckbox
   result.xFirstResponder = themePicker
   tabs.identifier = "settings-tabs"
 
@@ -687,6 +735,14 @@ proc newMerendaSettingsWindow*(
   fontPicker.dataSource = result.fontPickerController
   fontPicker.delegate = result.fontPickerController
   fontPicker.selectedPath = defaultFontPickerPath()
+  onlyMonospaceFontsCheckbox.identifier = SettingsOnlyMonospaceFontsIdentifier
+  onlyMonospaceFontsCheckbox.accessibilityLabel = "Only monospace fonts"
+  onlyMonospaceFontsCheckbox.target = newActionTarget(
+    onlyMonospaceFontsChanged,
+    proc(sender: DynamicAgent) =
+      settings.onlyMonospaceFontsDidChange(sender),
+  )
+  onlyMonospaceFontsCheckbox.action = onlyMonospaceFontsChanged
   fontSizeControl.spacing = 8.0
   fontSizeControl.alignment = svaCenter
   fontSizeValue.setHuggingPriority(LayoutPriorityHigh, laHorizontal)
@@ -720,6 +776,7 @@ proc newMerendaSettingsWindow*(
   typographyForm.addRow(interfaceFontLabel, interfaceFontButton)
   typographyForm.addRow(monospaceFontLabel, monospaceFontButton)
   typographyForm.addRow(fontLabel, fontPicker)
+  typographyForm.addRow(fontFilterLabel, onlyMonospaceFontsCheckbox)
   typographyForm.addRow(fontSizeLabel, fontSizeControl)
   typographyPage.stack.addArrangedSubview(
     newHeadingLabel("Typography"),
