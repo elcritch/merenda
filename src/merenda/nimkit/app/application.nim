@@ -853,7 +853,8 @@ proc showMerendaSettings*(app: Application) =
   if app.xMerendaSettingsWindow.isNil or app.xMerendaSettingsWindow.window.isClosed:
     app.xMerendaSettingsWindow = newMerendaSettingsWindow(
       proc(appearance: Appearance) =
-        app.setAppearance(appearance)
+        app.setAppearance(appearance),
+      initialAppearance = app.effectiveAppearance(),
     )
   app.xMerendaSettingsWindow.resetSelections()
   discard app.showWindow(

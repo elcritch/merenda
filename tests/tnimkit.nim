@@ -2,6 +2,7 @@
 import merenda/nimkit
 
 import nimkit/application_icon
+import nimkit/assetcache
 import nimkit/backrefs_arc
 import nimkit/diagnostics
 import nimkit/filesearch

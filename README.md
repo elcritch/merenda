@@ -226,6 +226,27 @@ default per-asset limit is 64 MiB and can be changed with `maximumAssetBytes`.
 Call `removeCachedAsset` to evict one completed download or `clearCachedAssets`
 to remove all recognized entries while preserving unrelated and in-flight files.
 
+NimKit can also install a file from a ZIP archive compiled into an application.
+`installEmbeddedZipAsset` extracts with Zippy into the same platform application
+cache, verifies the uncompressed SHA-256, and returns a failure result instead of
+raising when extraction or writing fails:
+
+```nim
+const archive = staticRead("assets/example.dat.zip")
+let asset = initEmbeddedZipAsset(
+  "example.dat",
+  archive,
+  # SHA-256 of the uncompressed `example.dat` member:
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+)
+let installed = installEmbeddedZipAsset(asset, "com.example.application")
+if installed.succeeded():
+  echo installed.path
+```
+
+Existing cache files are reused only when their checksum matches. Applications
+opt into embedded assets explicitly; NimKit does not install any by default.
+
 The application run loop keeps NimKit views, responders, signal-slot dispatch,
 animations, native windows, and platform services on the main thread. When the
 selected FigDraw backend supports it, rendering runs on a dedicated thread and
@@ -663,6 +684,14 @@ Kosmo also loads `config.json` from that directory
 Merenda theme, interface-font, monospace-font, and font-size preferences.
 Invalid configuration is ignored. Selecting a Moe theme in Kosmo Settings
 updates this file.
+
+Kosmo embeds IBM Plex Sans Regular and Hack Nerd Font Regular as compressed
+resources. On startup it verifies and extracts them into NimKit's `kosmo/assets`
+cache, then uses them as the default interface and monospace faces on every
+platform. A configured font or font environment override takes precedence. If a
+bundled font cannot be extracted or written, that role falls back to the normal
+platform font. Merenda Settings keeps “System Default” available for switching a
+role back to its operating-system default.
 
 ```json
 {

@@ -1,9 +1,63 @@
-import std/[json, os, tempfiles, unittest]
+import std/[json, os, strutils, tempfiles, unittest]
+
+import crunchy/[common, sha256]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
 
 suite "Kosmo configuration":
+  test "installs bundled fonts as Kosmo defaults":
+    let
+      root = createTempDir("merenda-kosmo-fonts-", "")
+      app = newApplication("Kosmo Bundled Fonts Test")
+      manager = newKosmoWindowManager(app, assetCacheDirectory = root)
+    defer:
+      manager.close()
+      removeDir(root)
+
+    let
+      interfaceFace = app.appearance().fontFace(frUI)
+      monospaceFace = app.appearance().fontFace(frMonospace)
+    check app.appearance().fontName(frUI) == KosmoInterfaceFontName
+    check app.appearance().fontName(frMonospace) == KosmoMonospaceFontName
+    check interfaceFace.file.path.extractFilename().endsWith(KosmoInterfaceFontFileName)
+    check monospaceFace.file.path.extractFilename().endsWith(KosmoMonospaceFontFileName)
+    check sha256(readFile(interfaceFace.file.path)).toHex().toLowerAscii() ==
+      KosmoInterfaceFontSha256
+    check sha256(readFile(monospaceFace.file.path)).toHex().toLowerAscii() ==
+      KosmoMonospaceFontSha256
+    let
+      interfaceStyle = app.appearance().resolveTextStyle(
+          controlStyle(srTextView), color(0.0, 0.0, 0.0), insets(0.0)
+        )
+      monospaceStyle = app.appearance().resolveTextStyle(
+          controlStyle(srMonoTextView), color(0.0, 0.0, 0.0), insets(0.0)
+        )
+    discard interfaceStyle.textFont(frUI)
+    discard monospaceStyle.textFont(frMonospace)
+
+    app.showMerendaSettings()
+    check app.appearance().fontFace(frUI) == interfaceFace
+    check app.appearance().fontFace(frMonospace) == monospaceFace
+    app.windows[^1].close()
+
+  test "falls back to system fonts when the asset cache cannot be written":
+    let
+      root = createTempDir("merenda-kosmo-font-fallback-", "")
+      cachePath = root / "not-a-directory"
+      app = newApplication("Kosmo Font Fallback Test")
+    defer:
+      removeDir(root)
+    writeFile(cachePath, "occupied")
+
+    let manager = newKosmoWindowManager(app, assetCacheDirectory = cachePath)
+    defer:
+      manager.close()
+    check app.appearance().fontName(frUI) == defaultFontName(frUI)
+    check app.appearance().fontName(frMonospace) == defaultFontName(frMonospace)
+    check app.appearance().fontFace(frUI).file.path.len == 0
+    check app.appearance().fontFace(frMonospace).file.path.len == 0
+
   test "round trips the persisted appearance choices as JSON":
     let
       root = createTempDir("merenda-kosmo-config-", "")
@@ -60,6 +114,8 @@ suite "Kosmo configuration":
 
     check app.appearance().fontName(frUI) == config.merendaFont
     check app.appearance().fontName(frMonospace) == config.merendaMonoFont
+    check app.appearance().fontFace(frUI).file.path.len == 0
+    check app.appearance().fontFace(frMonospace).file.path.len == 0
     check app
     .appearance()
     .resolveTextStyle(controlStyle(srTextView), color(0.0, 0.0, 0.0), insets(0.0)).fontSize ==

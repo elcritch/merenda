@@ -12,6 +12,8 @@ Kosmo requires the "kosmo" feature. Enable it with Atlas:
 
 import std/[math, options, os, strutils, unicode]
 
+from figdraw/extras/systemfonttypes import SystemTypeface, initSystemTypeface
+
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
@@ -40,6 +42,12 @@ const
     staticRead(currentSourcePath().parentDir / "../../../merenda.nimble")
   KosmoIconPng =
     staticRead(currentSourcePath().parentDir / "../../../data/kosmo-icon.png")
+  KosmoInterfaceFontZip = staticRead(
+    currentSourcePath().parentDir / "../../../data/IBMPlexSans-Regular.ttf.zip"
+  )
+  KosmoMonospaceFontZip = staticRead(
+    currentSourcePath().parentDir / "../../../data/HackNerdFont-Regular.ttf.zip"
+  )
   KosmoVersion* = nimblePackageVersion(MerendaNimbleManifest)
   KosmoGitHashOverride* {.strdefine.} = ""
   KosmoGitHash* =
@@ -55,6 +63,15 @@ const
         else:
           "unknown"
   KosmoMoeUrl* = "https://github.com/fox0430/moe"
+  KosmoApplicationIdentifier* = "kosmo"
+  KosmoInterfaceFontFileName* = "IBMPlexSans-Regular.ttf"
+  KosmoInterfaceFontName* = "IBM Plex Sans"
+  KosmoInterfaceFontSha256* =
+    "f1090ad34ee3187c3360cc2a5dfb0fa21441adb1c1a80408b161d290451aa891"
+  KosmoMonospaceFontFileName* = "HackNerdFont-Regular.ttf"
+  KosmoMonospaceFontName* = "Hack Nerd Font"
+  KosmoMonospaceFontSha256* =
+    "98076ca3ed3535f5d5c38ffc50eb2b059bfda35d7b72a2f2758b15ff8695d0e5"
   KosmoAboutCredits =
     """
 Powered by Moe, the Vim-like text editor.
@@ -99,6 +116,11 @@ Licensed under the GNU General Public License v3.0 (GPL-3.0).""" %
     """<svg width="24" height="24" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6" fill="none" stroke="#000" stroke-width="2.4"/><path fill="#000" d="M14.2 13l7 7-1.7 1.7-7-7z"/></svg>"""
 
 type
+  KosmoBundledFontInstall* = object
+    ## Cache installation results for Kosmo's bundled default fonts.
+    interfaceFont*: nimkit.EmbeddedAssetInstallResult
+    monospaceFont*: nimkit.EmbeddedAssetInstallResult
+
   KosmoMarkdownMode* = enum
     kmmPreview
     kmmSyntax
@@ -3943,22 +3965,76 @@ const KosmoConfigTextStyleRoles = [
   nimkit.srTooltip, nimkit.srMonoTextView,
 ]
 
+proc installKosmoBundledFonts*(cacheDirectory = ""): KosmoBundledFontInstall =
+  ## Install Kosmo's statically embedded fonts in NimKit's application cache.
+  result.interfaceFont = nimkit.installEmbeddedZipAsset(
+    nimkit.initEmbeddedZipAsset(
+      KosmoInterfaceFontFileName, KosmoInterfaceFontZip, KosmoInterfaceFontSha256
+    ),
+    KosmoApplicationIdentifier,
+    cacheDirectory,
+  )
+  result.monospaceFont = nimkit.installEmbeddedZipAsset(
+    nimkit.initEmbeddedZipAsset(
+      KosmoMonospaceFontFileName, KosmoMonospaceFontZip, KosmoMonospaceFontSha256
+    ),
+    KosmoApplicationIdentifier,
+    cacheDirectory,
+  )
+
+proc applyKosmoBundledFontDefaults(
+    app: nimkit.Application, fonts: KosmoBundledFontInstall
+) =
+  if app.isNil:
+    return
+  var
+    appearance = app.effectiveAppearance()
+    builder = nimkit.initThemeBuilder(appearance.theme)
+  for role in nimkit.FontRole:
+    let
+      installed =
+        case role
+        of nimkit.frUI: fonts.interfaceFont
+        of nimkit.frMonospace: fonts.monospaceFont
+      bundledFontName =
+        case role
+        of nimkit.frUI: KosmoInterfaceFontName
+        of nimkit.frMonospace: KosmoMonospaceFontName
+    if nimkit.fontOverrideFromEnv(role).isSome:
+      builder.setFontName(role, nimkit.defaultFontName(role))
+      builder.setFontFace(role, SystemTypeface())
+    elif installed.succeeded():
+      builder.setFontName(role, bundledFontName)
+      builder.setFontFace(role, initSystemTypeface(installed.path))
+    else:
+      builder.setFontName(role, nimkit.defaultFontName(role))
+      builder.setFontFace(role, SystemTypeface())
+  appearance.theme = builder.finish()
+  app.setAppearance(appearance)
+
 proc applyKosmoAppearance(app: nimkit.Application, config: KosmoConfig) =
   if app.isNil or (
     config.merendaTheme.len == 0 and config.merendaFont.len == 0 and
     config.merendaMonoFont.len == 0 and config.merendaFontSize <= 0.0'f32
   ):
     return
+  let inheritedAppearance = app.effectiveAppearance()
   var appearance =
     if config.merendaTheme.len > 0:
       nimkit.initAppearance(nimkit.initThemeByName(config.merendaTheme))
     else:
-      app.effectiveAppearance()
+      inheritedAppearance
   var builder = nimkit.initThemeBuilder(appearance.theme)
+  if config.merendaTheme.len > 0:
+    for role in nimkit.FontRole:
+      builder.setFontName(role, inheritedAppearance.fontName(role))
+      builder.setFontFace(role, inheritedAppearance.fontFace(role))
   if config.merendaFont.len > 0:
     builder.setFontName(nimkit.frUI, config.merendaFont)
+    builder.setFontFace(nimkit.frUI, SystemTypeface())
   if config.merendaMonoFont.len > 0:
     builder.setFontName(nimkit.frMonospace, config.merendaMonoFont)
+    builder.setFontFace(nimkit.frMonospace, SystemTypeface())
   if config.merendaFontSize > 0.0'f32:
     for role in KosmoConfigTextStyleRoles:
       builder[role, nimkit.StyleFontSize] = config.merendaFontSize
@@ -3966,11 +4042,17 @@ proc applyKosmoAppearance(app: nimkit.Application, config: KosmoConfig) =
   app.setAppearance(appearance)
 
 proc newKosmoWindowManager*(
-    app = nimkit.sharedApplication(), keyBindingsPath = "", configPath = ""
+    app = nimkit.sharedApplication(),
+    keyBindingsPath = "",
+    configPath = "",
+    assetCacheDirectory = "",
 ): KosmoWindowManager =
   ## Create the owner for all project and file windows in a Kosmo session.
-  let config = loadKosmoConfig(configPath)
+  let
+    config = loadKosmoConfig(configPath)
+    bundledFonts = installKosmoBundledFonts(assetCacheDirectory)
   if not app.isNil:
+    app.applyKosmoBundledFontDefaults(bundledFonts)
     app.applyKosmoAppearance(config)
     app.icon = nimkit.newImageResourceFromData(KosmoIconPng, name = "kosmo-icon")
     app.aboutInfo = nimkit.ApplicationAboutInfo(

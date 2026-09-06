@@ -31,11 +31,14 @@ suite "nimkit settings":
     let themePicker = ComboBox(themeView)
     check themePicker.selectedIndex == 0
     check themePicker.stringValue == "DarkBSD"
-    check appliedAppearance.resolveChromeName(controlStyle(srButton)) ==
+    check settings.preview.appearance.resolveChromeName(controlStyle(srButton)) ==
       RubyAquaChromeName
+    check not appliedAppearance.theme.isInitialized
 
     themePicker.selectedIndex = 1
     check themePicker.stringValue == "Aqua"
+    check themePicker.sendAction()
+    check appliedAppearance.theme.isInitialized
 
   test "typography settings expose independent interface and monospace fonts":
     let settings = newMerendaSettingsWindow()
@@ -434,6 +437,49 @@ suite "nimkit settings":
 
     app.showMerendaSettings()
 
-    check fontSizeStepper.value == 14.0'f32
+    check fontSizeStepper.value == defaultFontSize()
     check fontPicker.selectedPath.len == 2
     check fontPicker.selectedPath[^1] == DefaultSystemFontIdentifier
+
+  test "bundled exact fonts can be replaced with system defaults":
+    let
+      interfaceFace = TestSystemTypeface(
+        file: typeof(default(TestSystemTypeface).file)(path: "/cache/Interface.ttf")
+      )
+      monospaceFace = TestSystemTypeface(
+        file: typeof(default(TestSystemTypeface).file)(path: "/cache/Monospace.ttf")
+      )
+    var
+      initialAppearance = initAppearance()
+      builder = initThemeBuilder(initialAppearance.theme)
+      appliedAppearance: Appearance
+    builder.setFontName(frUI, "Bundled Interface")
+    builder.setFontFace(frUI, interfaceFace)
+    builder.setFontName(frMonospace, "Bundled Monospace")
+    builder.setFontFace(frMonospace, monospaceFace)
+    initialAppearance.theme = builder.finish()
+
+    let settings = newMerendaSettingsWindow(
+      proc(appearance: Appearance) =
+        appliedAppearance = appearance,
+      initialAppearance = initialAppearance,
+    )
+    defer:
+      settings.window().close()
+    check settings.appliedFonts[frUI].name == "Bundled Interface"
+    check settings.appliedFonts[frUI].face == interfaceFace
+    check settings.appliedFonts[frMonospace].name == "Bundled Monospace"
+    check settings.appliedFonts[frMonospace].face == monospaceFace
+    check not appliedAppearance.theme.isInitialized
+
+    let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require not tabsView.isNil
+    require tabsView of TabView
+    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    settings.fontPickerController.selectionHandler(TestSelectedFont())
+    let applyFontView = settings.contentView().viewWithIdentifier("settings-apply-font")
+    require not applyFontView.isNil
+    require applyFontView of Button
+    check Button(applyFontView).sendAction()
+    check appliedAppearance.fontName(frUI) == defaultFontName(frUI)
+    check appliedAppearance.fontFace(frUI).file.path.len == 0

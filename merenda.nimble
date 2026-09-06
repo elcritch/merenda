@@ -21,6 +21,7 @@ requires "gh:elcritch/matter >= 0.2.2"
 requires "gh:elcritch/terminex >= 0.3"
 requires "https://github.com/Araq/iconbundler"
 requires "libbacktrace"
+requires "zippy >= 0.10.20"
 
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"

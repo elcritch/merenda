@@ -538,6 +538,12 @@ func title(role: FontRole): string =
   of frUI: "Interface"
   of frMonospace: "Monospace"
 
+func selectedFont(appearance: Appearance, role: FontRole): SelectedFont =
+  result.face = appearance.fontFace(role)
+  let name = appearance.fontName(role)
+  if result.face.file.path.len > 0 or name != defaultFontName(role):
+    result.name = name
+
 proc appearanceFor(
     theme: SettingsTheme,
     fonts: array[FontRole, SelectedFont],
@@ -705,8 +711,9 @@ protocol MerendaSettingsWindowDelegate of WindowDelegateProtocol:
     settings.stopFontLoading()
 
 proc newMerendaSettingsWindow*(
-    appearanceHandler: AppearanceHandler = nil
+    appearanceHandler: AppearanceHandler = nil, initialAppearance = Appearance()
 ): MerendaSettingsWindow =
+  ## Create a settings panel initialized from an application's appearance.
   result = MerendaSettingsWindow(
     xWindow: newPanel("Merenda Settings", frame = rect(180, 160, 520, 390)),
     xContentView: newView(),
@@ -718,6 +725,14 @@ proc newMerendaSettingsWindow*(
     appliedFontSize: SettingsDefaultFontSize,
     fontLoadingStatus: "Loading system fonts…",
   )
+  if initialAppearance.theme.isInitialized:
+    for role in FontRole:
+      result.appliedFonts[role] = initialAppearance.selectedFont(role)
+      result.previewFonts[role] = result.appliedFonts[role]
+    result.appliedFontSize = initialAppearance.resolveLength(
+      controlStyle(srTextView), StyleFontSize, SettingsDefaultFontSize
+    )
+    result.previewFontSize = result.appliedFontSize
   initResponder(result)
   discard result.withProtocol(MerendaSettingsWindowDelegate)
   let settings = result
@@ -914,7 +929,8 @@ proc newMerendaSettingsWindow*(
   result.xWindow.automaticallyAdjustsContentMinSize = true
   result.xWindow.delegate = result
 
-  result.applyAppearance()
+  result.fontPickerController.selectFont(result.previewFonts[result.activeFontRole])
+  result.updatePreview()
   result.fontLoadingPool = newSigilThreadPool(workers = 2)
   result.fontLoadingPool.start()
   var fontCatalogLoader = FontCatalogLoader()
