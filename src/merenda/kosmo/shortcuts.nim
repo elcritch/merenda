@@ -9,6 +9,7 @@ const
   KosmoOpenFileAction* = "kosmo.openFile"
   KosmoOpenProjectAction* = "kosmo.openProject"
   KosmoNewTerminalAction* = "kosmo.newTerminal"
+  KosmoShowGitDiffAction* = "kosmo.showGitDiff"
   KosmoSaveAction* = "kosmo.save"
   KosmoCloseTabAction* = "kosmo.closeTab"
   KosmoCloseWindowAction* = "kosmo.closeWindow"
@@ -157,6 +158,11 @@ func kosmoActions*(): seq[KosmoAction] =
         identifier: KosmoNewTerminalAction,
         title: "New Terminal",
         description: "Open a new terminal tab.",
+      ),
+      KosmoAction(
+        identifier: KosmoShowGitDiffAction,
+        title: "Show Git Diff",
+        description: "Open the current Git diff in a tab.",
       ),
       KosmoAction(
         identifier: KosmoSaveAction,
@@ -341,6 +347,7 @@ proc initKosmoKeyBindings*(
   result.addBinding("primary-shift-o", KosmoOpenProjectAction, profile, platform)
   result.addBinding("primary-p", KosmoQuickOpenAction, profile, platform)
   result.addBinding("primary-shift-t", KosmoNewTerminalAction, profile, platform)
+  result.addBinding("primary-shift-g", KosmoShowGitDiffAction, profile, platform)
   result.addBinding("primary-s", KosmoSaveAction, profile, platform)
   result.addBinding("primary-w", KosmoCloseTabAction, profile, platform)
   if platform != KosmoShortcutPlatform.MacOS:

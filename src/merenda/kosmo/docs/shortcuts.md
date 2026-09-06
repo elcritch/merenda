@@ -54,6 +54,7 @@ uses `primary`; Settings and menus show its resolved physical spelling.
 | `primary-Shift-E` / `primary-Shift-F` | Show and focus Files / Find in Files | |
 | `primary-P` | Quick Open | |
 | `primary-Shift-T` | New terminal tab | |
+| `primary-Shift-G` | Show Git diff tab | |
 | `primary-1` through `primary-8` | Focus panel 1 through 8 | Panel 1 is the file browser; editor panels follow in split-tree order, with top or left panes first. |
 
 The scoped Vim pane commands are described below. They are handled only by a
@@ -78,8 +79,8 @@ semantic editor bridge when a Kosmo editor is focused.
 | `Shortcut-A` | Select all |
 
 The File menu is populated from the same registry, so Open, Save, Quick Open,
-New Terminal, and Close Tab show the resolved key equivalents rather than
-separate hard-coded shortcuts.
+New Terminal, Show Git Diff, and Close Tab show the resolved key equivalents
+rather than separate hard-coded shortcuts.
 
 The standard Edit menu is a responder-chain facility. Kosmo bridges its Copy,
 Cut, Paste, Select All, Undo, and Redo commands to semantic Moe operations:
@@ -131,6 +132,7 @@ native editing actions. The original command IDs remain valid, including:
 
 ```text
 kosmo.newTerminal
+kosmo.showGitDiff
 kosmo.save
 kosmo.closeTab
 kosmo.quit
@@ -335,6 +337,7 @@ the physical spelling shown by the active profile:
 | Close window | `primary-Shift-W`; also `Alt-F4` on Windows/Linux |
 | Quit | `primary-Q` |
 | New terminal | `primary-Shift-T` |
+| Show Git diff | `primary-Shift-G` |
 | Previous / next tab | `primary-Shift-[` / `primary-Shift-]`; also `gt` / `gT` through Moe |
 | Files / Find in Files | `primary-Shift-E` / `primary-Shift-F` |
 | Focus panel | `primary-1` through `primary-8` |

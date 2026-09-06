@@ -739,9 +739,23 @@ Settings refreshes the list, so new themes appear without restarting Kosmo.
 Kosmo's sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
 double-clicking promotes it to a permanent editor tab. Git-ignored files and
-dot-directories remain visible in the file tree with muted gray text. Find in Files
-searches Git tracked and untracked non-ignored files and skips binary or unsupported
-text encodings by default; both filters are configurable through `FileSearchOptions`.
+dot-directories remain visible in the file tree with muted gray text. The Files tab's
+bottom popup switches among All Files, Visible Files, and Changed Files.
+With the file tree focused, Shift-F selects Visible Files, Shift-A selects All Files,
+and Shift-G selects Changed Files. Shift-H toggles between All Files and Visible Files
+(from Changed Files, it switches to All Files). These keys remain normal typing keys
+in the file-name filter and other text fields.
+Shift-E expands all folders in the current view; when all are expanded, it collapses
+the whole tree.
+Command-F on macOS or Control-F elsewhere opens a live file-name filter; matching files
+remain nested beneath their folder hierarchy. Find in Files searches Git tracked and
+untracked non-ignored files and skips binary or unsupported text encodings by default;
+both filters are configurable through `FileSearchOptions`.
+File → Show Git Diff (Command-Shift-G on macOS) opens a tab showing staged,
+unstaged, and untracked changes with full-file context. Additions and deletions use
+the active Markdown theme's syntax colors. Click a file heading to collapse or expand
+its diff, or use Expand All and Collapse All. Refresh reloads the saved changes from
+Git; unsaved editor buffers are not included.
 Holding Control while scrolling over an editor accelerates the wheel movement
 threefold.
 

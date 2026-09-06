@@ -19,14 +19,14 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
-    cli, config, filesearchpanel, filetree, moe, moehighlighting, panedocuments,
-    quickopen, searchbar, settings, shortcuts, terminalsearch,
+    cli, config, filesearchpanel, filetree, gitdiff, moe, moehighlighting,
+    panedocuments, quickopen, searchbar, settings, shortcuts, terminalsearch,
   ]
 import moepkg/celina_backend as celina
 
 export
-  config, filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen,
-  settings, shortcuts, terminalsearch
+  config, filesearchpanel, filetree, gitdiff, moe, moehighlighting, panedocuments,
+  quickopen, settings, shortcuts, terminalsearch
 
 func nimblePackageVersion(manifest: string): string =
   for line in manifest.splitLines():
@@ -275,6 +275,9 @@ type
   KosmoWindowLifecycle = ref object of nimkit.Responder
     frontend: WeakRef[KosmoApplication]
 
+  KosmoDetachedWindowLifecycle = ref object of nimkit.Responder
+    controller: WeakRef[KosmoDockController]
+
   KosmoApplication* = ref object
     application*: nimkit.Application
     window*: nimkit.Window
@@ -283,6 +286,8 @@ type
     documentTabs*: nimkit.DocumentTabs
     statusLabel*: nimkit.Label
     fileTree*: KosmoFileTree
+    fileBrowserPanel*: KosmoFileBrowserPanel
+    gitDiffPanel*: KosmoGitDiffPanel
     sidebarPane*: KosmoSidebarPane
     sidebarTabs*: nimkit.CompactTabView
     searchPanel*: KosmoFileSearchPanel
@@ -339,6 +344,7 @@ proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
 func hasFileBrowser*(frontend: KosmoApplication): bool
 proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.}
+proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.}
 proc newEditorTab*(frontend: KosmoApplication): bool {.discardable.}
 proc newTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.}
@@ -673,7 +679,7 @@ proc syncMarkdownColorMode(
   controls.xThemeColorMode = mode
   controls.syncMarkdownColorButton()
 
-func markdownPresentationStyle(controls: KosmoMarkdownControls): nimkit.MarkdownStyle =
+func markdownPresentationStyle*(controls: KosmoMarkdownControls): nimkit.MarkdownStyle =
   result = nimkit.initMarkdownStyle()
   if not controls.isNil and controls.xColorMode == kmcmDark:
     result.backgroundColor = nimkit.color(0.055, 0.065, 0.085, 1.0)
@@ -1215,6 +1221,10 @@ proc syncSelectedEditorContent(
   var selectedId: KosmoBufferId
   if not group.selectedTabIdentifier.parseTabIdentifier(selectedId):
     group.pane.syncMarkdownControls(false)
+    let document = group.documentForIdentifier(group.selectedTabIdentifier)
+    if not document.isNil and document.contentView of KosmoGitDiffPanel:
+      KosmoGitDiffPanel(document.contentView).markdownStyle =
+        group.pane.markdownControls.markdownPresentationStyle()
     return keckOther
   for tab in tabs:
     if tab.id != selectedId:
@@ -1498,14 +1508,13 @@ proc handlePendingPaneKey(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   discard view.sendKeyDownToMoe(event)
   true
 
-proc handleMarkdownPaneKey(view: KosmoMarkdownView, event: nimkit.KeyEvent): bool =
-  ## Route scoped pane commands from a focused Markdown preview.
-  if view.isNil or view.editorView.isNil:
-    return false
-  let editorView = view.editorView[]
+proc handlePaneKey(editorView: KosmoEditorView, event: nimkit.KeyEvent): bool =
+  ## Route scoped pane commands from focused non-editor pane content.
+  if editorView.isNil:
+    return
   if editorView.tabsDelegate.isNil or editorView.tabsDelegate.dockController.isNil or
       editorView.dockGroup.isNil:
-    return false
+    return
   if editorView.pendingPanePrefix:
     editorView.pendingPanePrefix = false
     if event.key == nimkit.keyEscape:
@@ -1520,7 +1529,12 @@ proc handleMarkdownPaneKey(view: KosmoMarkdownView, event: nimkit.KeyEvent): boo
   if event.key == nimkit.keyForText("w") and event.modifiers == {nimkit.kmControl}:
     editorView.pendingPanePrefix = true
     return true
-  false
+
+proc handleMarkdownPaneKey(view: KosmoMarkdownView, event: nimkit.KeyEvent): bool =
+  ## Route scoped pane commands from a focused Markdown preview.
+  if view.isNil or view.editorView.isNil:
+    return
+  view.editorView[].handlePaneKey(event)
 
 proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool =
   if event.kind == nimkit.mtreMouseDown and not view.tabsDelegate.dockController.isNil:
@@ -1747,6 +1761,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoNewTerminalAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].newTerminal()
+    of KosmoShowGitDiffAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showGitDiff()
     of KosmoSaveAction:
       controller.saveCurrentTab(view)
     of KosmoCloseTabAction:
@@ -2508,6 +2525,9 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
     of KosmoNewTerminalAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].newTerminal()
+    of KosmoShowGitDiffAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showGitDiff()
     of KosmoSaveAction:
       controller.saveCurrentPaneTab(group)
     of KosmoCloseTabAction:
@@ -2936,7 +2956,8 @@ proc removeGroup(controller: KosmoDockController, group: KosmoEditorGroup) =
   if index >= 0:
     controller.groups.delete(index)
   let host = controller.hostForWorkspace(group.workspace)
-  if not host.isNil and group.workspace.len == 0 and not host.primary:
+  if not host.isNil and group.workspace.len == 0 and not host.primary and
+      not host.window.isClosed():
     host.window.close()
   if wasActive:
     controller.activeGroup = nil
@@ -3406,6 +3427,27 @@ proc newKosmoDetachedContentView(
   result.addSubview(statusLabel)
   discard result.withProtocol(KosmoDetachedContentLayout)
 
+protocol KosmoDetachedWindowLifecycleDelegate of nimkit.WindowDelegateProtocol:
+  method windowDidClose(
+      lifecycle: KosmoDetachedWindowLifecycle, window: nimkit.Window
+  ) =
+    if lifecycle.controller.isNil:
+      return
+    let controller = lifecycle.controller[]
+    var hostedGroups: seq[KosmoEditorGroup]
+    for group in controller.groups:
+      if group.window == window:
+        hostedGroups.add group
+    let closeDocuments = controller.frontend.isNil or not controller.frontend[].xClosed
+    for group in hostedGroups:
+      if closeDocuments:
+        for document in group.documents:
+          discard document.close()
+      controller.removeGroup(group)
+    for index in countdown(controller.hosts.high, 0):
+      if controller.hosts[index].window == window:
+        controller.hosts.delete(index)
+
 proc detachPaneTab(
     controller: KosmoDockController,
     source: KosmoEditorGroup,
@@ -3429,6 +3471,10 @@ proc detachPaneTab(
       contentView: contentView,
       statusLabel: statusLabel,
     )
+    lifecycle = KosmoDetachedWindowLifecycle(controller: controller.unsafeWeakRef())
+  lifecycle.initResponder()
+  discard lifecycle.withProtocol(KosmoDetachedWindowLifecycleDelegate)
+  window.delegate = lifecycle
   controller.hosts.add host
   controller.installShortcutBindings(window)
   var
@@ -3922,6 +3968,70 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       frontend.xSettingsWindow.firstResponder,
     ).isNil
 
+proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Show full-file Git changes for the active project's repository.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  let controller = frontend.dockController
+  for group in controller.groups:
+    let document = group.documentForIdentifier(KosmoGitDiffTabIdentifier)
+    if not document.isNil:
+      if not group.window.isNil and not group.window.isClosed():
+        if document.contentView of KosmoGitDiffPanel:
+          frontend.gitDiffPanel = KosmoGitDiffPanel(document.contentView)
+          frontend.gitDiffPanel.refresh()
+        controller.activatePanelWindow(group.window)
+        controller.activatePaneTab(group, document.identifier)
+        return true
+      discard document.close()
+      let documentIndex = group.documentIndex(document.identifier)
+      if documentIndex >= 0:
+        group.documents.delete(documentIndex)
+      let orderIndex = group.tabOrder.find(document.identifier)
+      if orderIndex >= 0:
+        group.tabOrder.delete(orderIndex)
+
+  let group = controller.activePaneGroup()
+  if group.isNil:
+    return
+  let root =
+    if frontend.fileTree.rootPath.len > 0:
+      frontend.fileTree.rootPath
+    else:
+      getCurrentDir()
+  let
+    panel = newKosmoGitDiffPanel(
+      root, group.pane.markdownControls.markdownPresentationStyle()
+    )
+    weakFrontend = frontend.unsafeWeakRef()
+    weakPanel = panel.unsafeWeakRef()
+    document = newKosmoPaneDocument(
+      identifier = KosmoGitDiffTabIdentifier,
+      title = "Git Diff",
+      contentView = panel,
+      preferredFirstResponder = panel.markdownView.textView(),
+      tooltip = "Current Git diff",
+      onClose = proc(document: KosmoPaneDocument): bool =
+        discard document
+        panel.close()
+        if not weakFrontend.isNil and weakFrontend[].gitDiffPanel == panel:
+          weakFrontend[].gitDiffPanel = nil
+        true,
+    )
+  panel.keyEquivalentHandler = proc(event: nimkit.KeyEvent): bool =
+    if weakFrontend.isNil or weakPanel.isNil or weakFrontend[].dockController.isNil:
+      return
+    for candidate in weakFrontend[].dockController.groups:
+      let candidateDocument = candidate.documentForIdentifier(KosmoGitDiffTabIdentifier)
+      if not candidateDocument.isNil and
+          candidateDocument.contentView == nimkit.View(weakPanel[]):
+        return candidate.editorView.handlePaneKey(event)
+  frontend.gitDiffPanel = panel
+  if controller.openPaneDocument(group, document):
+    return true
+  panel.close()
+  frontend.gitDiffPanel = nil
+
 func ownsWindow(frontend: KosmoApplication, window: nimkit.Window): bool =
   if frontend.isNil or window.isNil or frontend.dockController.isNil:
     return
@@ -4275,6 +4385,7 @@ proc newKosmoApplication*(
       newKosmoEditorView(newKosmoEditor(workingDirectory = editorWorkingDirectory))
     editorPane = newKosmoEditorPane(editorView)
     fileTree = newKosmoFileTree(initialRootPath)
+    fileBrowserPanel = newKosmoFileBrowserPanel(fileTree)
     searchPanel = newKosmoFileSearchPanel(fileTree.rootPath)
     quickOpenPanel = newKosmoQuickOpenPanel(fileTree.rootPath)
     sidebarTabs = nimkit.newCompactTabView(
@@ -4283,7 +4394,7 @@ proc newKosmoApplication*(
           KosmoFilesTabIdentifier,
           "Files",
           nimkit.newSvgMtsdfResource(KosmoFilesIconSvg, "kosmo-files"),
-          fileTree,
+          fileBrowserPanel,
         ),
         nimkit.initCompactTabItem(
           KosmoFindTabIdentifier,
@@ -4308,6 +4419,8 @@ proc newKosmoApplication*(
       nimkit.newMenuItem("Open Quickly…", nimkit.actionSelector(KosmoQuickOpenAction))
     terminalItem =
       nimkit.newMenuItem("New Terminal", nimkit.actionSelector(KosmoNewTerminalAction))
+    gitDiffItem =
+      nimkit.newMenuItem("Show Git Diff", nimkit.actionSelector(KosmoShowGitDiffAction))
     saveItem = nimkit.newMenuItem("Save", nimkit.actionSelector(KosmoSaveAction))
     closeTabItem =
       nimkit.newMenuItem("Close Tab", nimkit.actionSelector(KosmoCloseTabAction))
@@ -4319,6 +4432,8 @@ proc newKosmoApplication*(
   openProjectItem.identifier = KosmoOpenProjectAction
   quickOpenItem.identifier = KosmoQuickOpenAction
   terminalItem.identifier = KosmoNewTerminalAction
+  gitDiffItem.identifier = KosmoShowGitDiffAction
+  gitDiffItem.validates = false
   saveItem.identifier = KosmoSaveAction
   closeTabItem.identifier = KosmoCloseTabAction
   closeWindowItem.identifier = KosmoCloseWindowAction
@@ -4329,6 +4444,7 @@ proc newKosmoApplication*(
   fileMenu.addSeparator()
   discard fileMenu.addItem(quickOpenItem)
   discard fileMenu.addItem(terminalItem)
+  discard fileMenu.addItem(gitDiffItem)
   fileMenu.addSeparator()
   discard fileMenu.addItem(saveItem)
   fileMenu.addSeparator()
@@ -4355,6 +4471,7 @@ proc newKosmoApplication*(
     documentTabs: editorView.documentTabs,
     statusLabel: statusLabel,
     fileTree: fileTree,
+    fileBrowserPanel: fileBrowserPanel,
     sidebarPane: sidebarPane,
     sidebarTabs: sidebarTabs,
     searchPanel: searchPanel,
@@ -4453,6 +4570,13 @@ proc newKosmoApplication*(
     let active = manager.activeFrontend()
     if not active.isNil:
       discard active.newTerminal()
+  gitDiffItem.target = nimkit.newActionTarget(
+    nimkit.actionSelector(KosmoShowGitDiffAction)
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    let active = manager.activeFrontend()
+    if not active.isNil:
+      discard active.showGitDiff()
   saveItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoSaveAction)) do(
     sender: nimkit.DynamicAgent
   ):
