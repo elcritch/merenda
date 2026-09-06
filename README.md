@@ -697,6 +697,10 @@ find-in-files results. A single click on a result opens it as a temporary previe
 double-clicking promotes it to a permanent editor tab. Git-ignored files and
 dot-directories remain visible in the file tree with muted gray text. The Files tab's
 bottom popup switches among All Files, Visible Files, and Changed Files.
+With the file tree focused, Shift-F selects Visible Files, Shift-A selects All Files,
+and Shift-G selects Changed Files. Shift-H toggles between All Files and Visible Files
+(from Changed Files, it switches to All Files). These keys remain normal typing keys
+in the file-name filter and other text fields.
 Command-F on macOS or Control-F elsewhere opens a live file-name filter; matching files
 remain nested beneath their folder hierarchy. Find in Files searches Git tracked and
 untracked non-ignored files and skips binary or unsupported text encodings by default;

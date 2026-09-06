@@ -38,6 +38,48 @@ proc rendersTextWithColor(view: View, text: string, textColor: Color): bool =
           return true
 
 suite "Kosmo file tree interactions":
+  test "display shortcuts are scoped to the focused file tree":
+    let root = createTempDir("kosmo-browser-shortcuts-", "")
+    let
+      tree = newKosmoFileTree(root)
+      panel = newKosmoFileBrowserPanel(tree)
+      window = newWindow("Browser shortcuts", rect(0, 0, 300, 400))
+    defer:
+      window.close()
+      removeDir(root)
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    require window.makeFirstResponder(tree)
+    for (key, expected) in [
+      (keyF, FileTreeDisplayMode.VisibleFiles),
+      (keyH, FileTreeDisplayMode.AllFiles),
+      (keyH, FileTreeDisplayMode.VisibleFiles),
+      (keyG, FileTreeDisplayMode.SourceControlChanges),
+      (keyH, FileTreeDisplayMode.AllFiles),
+      (keyG, FileTreeDisplayMode.SourceControlChanges),
+      (keyA, FileTreeDisplayMode.AllFiles),
+    ]:
+      check window.dispatchKeyDown(
+        KeyEvent(key: key, keyCode: key.ord, modifiers: {kmShift})
+      )
+      check tree.displayMode == expected
+      check panel.scopeButton.title == expected.title()
+      check panel.scopeButton.menu()[expected.ord].state == bsOn
+    require panel.showFilter()
+    for key in [keyH, keyG, keyF, keyA]:
+      check not panel.performKeyEquivalent(
+        KeyEvent(key: key, keyCode: key.ord, modifiers: {kmShift})
+      )
+      check tree.displayMode == FileTreeDisplayMode.AllFiles
+    panel.dismissFilter()
+    let other = newTextField()
+    panel.addSubview(other)
+    require window.makeFirstResponder(other)
+    check not panel.performKeyEquivalent(
+      KeyEvent(key: keyG, keyCode: keyG.ord, modifiers: {kmShift})
+    )
+    check tree.displayMode == FileTreeDisplayMode.AllFiles
+
   test "Git status refresh redraws retained file rows":
     let
       root = createTempDir("merenda-kosmo-tree-git-redraw-", "")

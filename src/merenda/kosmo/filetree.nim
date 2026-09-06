@@ -685,6 +685,25 @@ protocol KosmoFileBrowserPanelCommands of nimkit.ResponderCommandDispatchProtoco
   ): bool =
     if event.key == nimkit.keyF and event.modifiers == nimkit.shortcutModifiers():
       return panel.showFilter()
+    if event.modifiers == {nimkit.kmShift} and panel.window() of nimkit.Window and
+        nimkit.Window(panel.window()).firstResponder == panel.fileTree:
+      case event.key
+      of nimkit.keyH:
+        panel.selectScope(
+          if panel.fileTree.displayMode() == FileTreeDisplayMode.AllFiles:
+            FileTreeDisplayMode.VisibleFiles
+          else:
+            FileTreeDisplayMode.AllFiles
+        )
+      of nimkit.keyG:
+        panel.selectScope(FileTreeDisplayMode.SourceControlChanges)
+      of nimkit.keyF:
+        panel.selectScope(FileTreeDisplayMode.VisibleFiles)
+      of nimkit.keyA:
+        panel.selectScope(FileTreeDisplayMode.AllFiles)
+      else:
+        return
+      return true
 
 protocol KosmoFileBrowserPanelMenuCommands of nimkit.MenuCommandProtocol:
   method cancelOperation(panel: KosmoFileBrowserPanel, args: nimkit.ActionArgs) =
