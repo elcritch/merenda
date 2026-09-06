@@ -1,4 +1,4 @@
-import std/[importutils, unittest]
+import std/[importutils, tables, unittest]
 
 import merenda/nimkit
 import merenda/nimkit/app/settings
@@ -67,17 +67,19 @@ suite "nimkit settings":
     check interfaceButton.state == bsOn
     check monospaceButton.title == "Default"
     check monospaceButton.state == bsOff
-    check onlyMonospaceFonts.title == "Only monospace fonts"
+    check onlyMonospaceFonts.title == "Show monospace fonts"
     check onlyMonospaceFonts.state == bsOff
 
     check monospaceButton.sendAction()
     check interfaceButton.state == bsOff
     check monospaceButton.state == bsOn
+    check onlyMonospaceFonts.title == "Only monospace fonts"
     check onlyMonospaceFonts.state == bsOn
 
     check interfaceButton.sendAction()
     check interfaceButton.state == bsOn
     check monospaceButton.state == bsOff
+    check onlyMonospaceFonts.title == "Show monospace fonts"
     check onlyMonospaceFonts.state == bsOff
 
   test "monospace filtering hides and restores an exact proportional face":
@@ -147,10 +149,21 @@ suite "nimkit settings":
 
     onlyMonospaceFonts.state = bsOn
     check onlyMonospaceFonts.sendAction()
+    check settings.fontPickerController.faces.hasKey(
+      languageIdentifier & ":face:test-monospace"
+    )
+    check settings.fontPickerController.faces.hasKey(proportionalFaceIdentifier)
+    onlyMonospaceFonts.state = bsOff
+    check onlyMonospaceFonts.sendAction()
+    check not settings.fontPickerController.faces.hasKey(
+      languageIdentifier & ":face:test-monospace"
+    )
+    check settings.fontPickerController.faces.hasKey(proportionalFaceIdentifier)
+    check settings.fontRoleButtons[frMonospace].sendAction()
     onlyMonospaceFonts.state = bsOff
     check onlyMonospaceFonts.sendAction()
     settings.fontPickerController.desiredSelectedFont = proportionalFont
-    settings.previewFonts[frUI] = proportionalFont
+    settings.previewFonts[frMonospace] = proportionalFont
     fontPicker.selectedPath =
       [languageIdentifier, familyIdentifier, proportionalFaceIdentifier]
     check fontPicker.selectedPath[^1] == proportionalFaceIdentifier
@@ -158,12 +171,12 @@ suite "nimkit settings":
     onlyMonospaceFonts.state = bsOn
     check onlyMonospaceFonts.sendAction()
     check fontPicker.selectedPath.len == 0
-    check settings.previewFonts[frUI].name == proportionalFont.name
-    check settings.previewFonts[frUI].face == proportionalFile
+    check settings.previewFonts[frMonospace].name == proportionalFont.name
+    check settings.previewFonts[frMonospace].face == proportionalFile
 
     check applyFont.sendAction()
-    check appliedAppearance.fontName(frUI) == proportionalFont.name
-    check appliedAppearance.fontFace(frUI) == proportionalFile
+    check appliedAppearance.fontName(frMonospace) == proportionalFont.name
+    check appliedAppearance.fontFace(frMonospace) == proportionalFile
 
     onlyMonospaceFonts.state = bsOff
     check onlyMonospaceFonts.sendAction()

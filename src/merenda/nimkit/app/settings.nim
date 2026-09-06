@@ -46,6 +46,11 @@ type
   FontSelectionProc = proc(font: SelectedFont) {.closure.}
   FontLoadingProgressProc = proc(message: string) {.closure.}
 
+  FontPickerFilter = enum
+    fpfProportional
+    fpfAll
+    fpfMonospace
+
   FontCatalogLoader = ref object of AgentActor
     entries: seq[FontCatalogEntry]
     nextEntryIndex: int
@@ -64,7 +69,7 @@ type
     needsFontPickerReload: bool
     pendingFontPickerBatchCount: int
     desiredSelectedFont: SelectedFont
-    onlyMonospaceFonts: bool
+    fontFilter: FontPickerFilter
     selectionHandler: FontSelectionProc
     progressHandler: FontLoadingProgressProc
 
@@ -230,7 +235,8 @@ proc addDefaultFontPickerItem(controller: FontPickerController) =
 
 proc addFontCatalogEntry(controller: FontPickerController, entry: FontCatalogEntry) =
   for face in entry.faces:
-    if not controller.onlyMonospaceFonts or face.monospace:
+    if controller.fontFilter == fpfAll or
+        face.monospace == (controller.fontFilter == fpfMonospace):
       let languages =
         if face.languages.len > 0:
           face.languages
@@ -268,10 +274,10 @@ proc rebuildFontPickerItems(controller: FontPickerController) =
   for entry in controller.catalogEntries:
     controller.addFontCatalogEntry(entry)
 
-proc setOnlyMonospaceFonts(controller: FontPickerController, value: bool) =
-  if controller.onlyMonospaceFonts == value:
+proc setFontFilter(controller: FontPickerController, value: FontPickerFilter) =
+  if controller.fontFilter == value:
     return
-  controller.onlyMonospaceFonts = value
+  controller.fontFilter = value
   controller.rebuildFontPickerItems()
   if not controller.fontPicker.isNil:
     controller.fontPicker.reloadData()
@@ -592,8 +598,14 @@ proc selectFontRole(settings: MerendaSettingsWindow, role: FontRole) =
   settings.activeFontRole = role
   let onlyMonospaceFonts = role == frMonospace
   if not settings.onlyMonospaceFontsCheckbox.isNil:
+    let title =
+      if onlyMonospaceFonts: "Only monospace fonts" else: "Show monospace fonts"
+    settings.onlyMonospaceFontsCheckbox.title = title
+    settings.onlyMonospaceFontsCheckbox.accessibilityLabel = title
     settings.onlyMonospaceFontsCheckbox.state = if onlyMonospaceFonts: bsOn else: bsOff
-  settings.fontPickerController.setOnlyMonospaceFonts(onlyMonospaceFonts)
+  settings.fontPickerController.setFontFilter(
+    if onlyMonospaceFonts: fpfMonospace else: fpfProportional
+  )
   settings.fontPickerController.selectFont(settings.previewFonts[role])
   settings.updatePreview()
 
@@ -607,7 +619,13 @@ proc onlyMonospaceFontsDidChange(
     settings: MerendaSettingsWindow, sender: DynamicAgent
 ) =
   if sender of Button:
-    settings.fontPickerController.setOnlyMonospaceFonts(Button(sender).state == bsOn)
+    let enabled = Button(sender).state == bsOn
+    settings.fontPickerController.setFontFilter(
+      if settings.activeFontRole == frMonospace:
+        (if enabled: fpfMonospace else: fpfAll)
+      else:
+        (if enabled: fpfAll else: fpfProportional)
+    )
 
 proc applyFontDidClick(settings: MerendaSettingsWindow, sender: DynamicAgent) =
   if sender of Button:
@@ -684,7 +702,7 @@ proc newMerendaSettingsWindow*(
     interfaceFontButton = newRadioButton("Default")
     monospaceFontButton = newRadioButton("Default")
     fontPicker = newCascadingView()
-    onlyMonospaceFontsCheckbox = newCheckBox("Only monospace fonts")
+    onlyMonospaceFontsCheckbox = newCheckBox("Show monospace fonts")
     fontSizeControl = newStackView(laHorizontal)
     fontSizeValue = newLabel(SettingsDefaultFontSize.fontSizeTitle())
     fontSizeStepper = newStepper(
@@ -756,7 +774,7 @@ proc newMerendaSettingsWindow*(
   fontPicker.delegate = result.fontPickerController
   fontPicker.selectedPath = defaultFontPickerPath()
   onlyMonospaceFontsCheckbox.identifier = SettingsOnlyMonospaceFontsIdentifier
-  onlyMonospaceFontsCheckbox.accessibilityLabel = "Only monospace fonts"
+  onlyMonospaceFontsCheckbox.accessibilityLabel = "Show monospace fonts"
   onlyMonospaceFontsCheckbox.target = newActionTarget(
     onlyMonospaceFontsChanged,
     proc(sender: DynamicAgent) =
