@@ -123,12 +123,35 @@ Setext two
     check emphasis.foregroundColor == style.emphasisColor
     check emphasis.fontName == style.emphasisFontName
     check strong.foregroundColor == style.strongColor
-    check strong.fontName == style.emphasisFontName
+    check strong.fontName == style.strongFontName
     check strong.fontSize == style.bodyFontSize
-    check both.fontName == style.emphasisFontName
+    check both.fontName == style.strongFontName
     check both.fontSize == style.bodyFontSize
     check storage.attributesFor("code").fontName == style.codeFontName
     check storage.attributesFor("removed").hasStrikethrough()
+
+  test "Markdown attributes retain exact regular italic and bold faces":
+    var style = initMarkdownStyle()
+    let
+      regular = initSystemTypeface("/fonts/Interface-Regular.ttf")
+      italic = initSystemTypeface("/fonts/Interface-Italic.ttf")
+      bold = initSystemTypeface("/fonts/Interface-Bold.ttf")
+      code = initSystemTypeface("/fonts/Monospace-Regular.ttf")
+    style.bodyFontName = "Interface"
+    style.bodyFontFace = regular
+    style.emphasisFontName = "Interface"
+    style.emphasisFontFace = italic
+    style.strongFontName = "Interface"
+    style.strongFontFace = bold
+    style.codeFontName = "Monospace"
+    style.codeFontFace = code
+    let storage =
+      markdownTextStorage("Plain *emphasis*, **strong**, and `code`.", style = style)
+
+    check storage.attributesFor("Plain").fontFace == regular
+    check storage.attributesFor("emphasis").fontFace == italic
+    check storage.attributesFor("strong").fontFace == bold
+    check storage.attributesFor("code").fontFace == code
 
   test "inline, reference, URI, and email links retain native link metadata":
     let storage = markdownTextStorage(
@@ -926,10 +949,10 @@ Press <kbd>Enter</kbd>.
     check rendered.contains(
       "─────────┼────────┼──────"
     )
-    check header.fontName == style.codeFontName
+    check header.fontName == style.strongCodeFontName
     check header.foregroundColor == style.headingColor
     check header.underlineStyle == tldsNone
-    check bold.fontName == style.emphasisCodeFontName
+    check bold.fontName == style.strongCodeFontName
     check bold.foregroundColor == style.strongColor
     check storage.attributesFor("code").fontName == style.codeFontName
     check storage.attributesFor("link").link == "https://example.test"
@@ -1175,7 +1198,7 @@ Press <kbd>Enter</kbd>.
     check empty.stringValue() == ""
     check empty.len == 0
     check unicode.stringValue() == "Καλημέρα 🌍\n\nПривет мир"
-    check unicode.attributesFor("мир").fontName == style.emphasisFontName
+    check unicode.attributesFor("мир").fontName == style.strongFontName
 
   test "markdown view is reusable, read-only, selectable, and styleable":
     let view = newMarkdownView("# First", frame = rect(0, 0, 480, 320))

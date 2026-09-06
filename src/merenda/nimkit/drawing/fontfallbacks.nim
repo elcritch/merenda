@@ -1,4 +1,4 @@
-import std/[hashes, os, strutils, tables]
+import std/[hashes, options, os, strutils, tables]
 
 import figdraw
 import figdraw/extras/systemfonts
@@ -9,9 +9,13 @@ type
   FontFallbackGroups* = seq[seq[string]]
     ## Ordered font-name groups. Names within one group are alternatives.
 
+  FallbackTypefaceCandidate = object
+    file: SystemTypefaceFile
+    exactFace: bool
+
   AutomaticFallbackState = object
     typefaceIds: seq[TypefaceId]
-    attemptedPaths: seq[string]
+    attemptedFiles: seq[SystemTypefaceFile]
     nextGroup: int
 
 var
@@ -188,14 +192,44 @@ proc automaticFallbackCacheKey(request: FontFallbackRequest): string =
     result.add '\0'
     result.add category
 
-proc findFallbackFontPath(fontNames: openArray[string]): string =
+proc findFallbackTypefaceFile(
+    fontNames: openArray[string]
+): Option[FallbackTypefaceCandidate] =
   for fontName in fontNames:
     let dataPath = figDataDir() / fontName
     if fileExists(dataPath):
-      return dataPath
+      return some(
+        FallbackTypefaceCandidate(
+          file: SystemTypefaceFile(path: dataPath, faceIndex: 0)
+        )
+      )
     if fileExists(fontName):
-      return fontName
-  findSystemFontFile(fontNames)
+      return some(
+        FallbackTypefaceCandidate(
+          file: SystemTypefaceFile(path: fontName, faceIndex: 0)
+        )
+      )
+
+  for fontName in fontNames:
+    if splitFile(fontName).ext.len > 0:
+      let path = findSystemFontFile([fontName])
+      if path.len > 0:
+        return some(
+          FallbackTypefaceCandidate(file: SystemTypefaceFile(path: path, faceIndex: 0))
+        )
+
+    let systemTypeface = findSystemTypeface([fontName])
+    if systemTypeface.isSome:
+      return some(
+        FallbackTypefaceCandidate(file: systemTypeface.get().file, exactFace: true)
+      )
+
+    # Retain FigDraw's legacy aliases when no native face-name match exists.
+    let path = findSystemFontFile([fontName])
+    if path.len > 0:
+      return some(
+        FallbackTypefaceCandidate(file: SystemTypefaceFile(path: path, faceIndex: 0))
+      )
 
 proc resolveAutomaticFontFallback(request: FontFallbackRequest): seq[TypefaceId] =
   if automaticFallbackStates.len == 0:
@@ -218,13 +252,20 @@ proc resolveAutomaticFontFallback(request: FontFallbackRequest): seq[TypefaceId]
   while state.nextGroup < groups.len:
     let group = groups[state.nextGroup]
     inc state.nextGroup
-    let path = findFallbackFontPath(group)
-    if path.len == 0 or path in state.attemptedPaths:
+    let candidate = findFallbackTypefaceFile(group)
+    if candidate.isNone or candidate.get().file in state.attemptedFiles:
       continue
-    state.attemptedPaths.add path
+    let
+      fallback = candidate.get()
+      file = fallback.file
+    state.attemptedFiles.add file
 
     try:
-      let typefaceId = loadTypeface(path)
+      let typefaceId =
+        if fallback.exactFace:
+          loadTypeface(file)
+        else:
+          loadTypeface(file.path)
       if typefaceId != request.primaryTypefaceId and typefaceId notin state.typefaceIds:
         state.typefaceIds.add typefaceId
       automaticFallbackStates[cacheKey] = state

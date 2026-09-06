@@ -344,6 +344,7 @@ proc monoFont(view: MonoTextView, italic = false): FigFont =
   if not view.isNil:
     if view.xFontName.len > 0:
       style.fontName = view.xFontName
+      style.fontFace = default(typeof(style.fontFace))
     style.fontSize = view.xFontSize
   if italic:
     style.fontSlant = fsItalic
