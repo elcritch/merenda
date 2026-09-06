@@ -135,7 +135,6 @@ suite "nimkit settings":
     proportionalFace.metadataLoaded = true
     proportionalFace.supportsPreviewText = true
     monospaceFace.metadataLoaded = true
-    monospaceFace.monospace = true
     monospaceFace.supportsPreviewText = true
     settings.fontPickerController.catalogEntries =
       @[

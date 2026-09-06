@@ -233,10 +233,15 @@ proc addDefaultFontPickerItem(controller: FontPickerController) =
     )
   )
 
+func isMonospaceCandidate(entry: FontCatalogEntry, face: FontCatalogFace): bool =
+  face.monospace or entry.family.toLowerAscii().contains("mono") or
+    face.fontName.toLowerAscii().contains("mono")
+
 proc addFontCatalogEntry(controller: FontPickerController, entry: FontCatalogEntry) =
   for face in entry.faces:
+    let isMonospace = entry.isMonospaceCandidate(face)
     if controller.fontFilter == fpfAll or
-        face.monospace == (controller.fontFilter == fpfMonospace):
+        isMonospace == (controller.fontFilter == fpfMonospace):
       let languages =
         if face.languages.len > 0:
           face.languages
