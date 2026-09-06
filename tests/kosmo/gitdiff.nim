@@ -19,6 +19,73 @@ proc firstResponderIs(window: Window, expected: Responder): bool =
   window.firstResponder == expected
 
 suite "Kosmo Git diff":
+  test "diff highlighting is reused across collapse theme and unchanged refresh":
+    let root = createTempDir("kosmo-diff-cache-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "one.nim", "let one = 1\n")
+    writeFile(root / "two.nim", "let two = 2\r\n")
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 600, 400)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    require panel.markdownView.waitForMarkdownParsing()
+    let initialCount = panel.highlightBuildCount()
+    check initialCount == 2
+    panel.toggleFile(0)
+    require panel.markdownView.waitForMarkdownParsing()
+    panel.toggleFile(0)
+    require panel.markdownView.waitForMarkdownParsing()
+    check panel.highlightBuildCount() == initialCount
+    var style = panel.markdownView.markdownStyle()
+    style.syntaxTokenColors[stcKeyword] = color(0.2, 0.7, 0.3, 1)
+    panel.markdownStyle = style
+    require panel.markdownView.waitForMarkdownParsing()
+    check panel.highlightBuildCount() == initialCount
+    panel.refresh()
+    require panel.waitForDiff()
+    require panel.markdownView.waitForMarkdownParsing()
+    check panel.highlightBuildCount() == initialCount
+    writeFile(root / "one.nim", "let one = 10\n")
+    panel.refresh()
+    require panel.waitForDiff()
+    require panel.markdownView.waitForMarkdownParsing()
+    check panel.highlightBuildCount() == initialCount + 1
+
+  test "Matter highlights both file versions independently beneath diff tints":
+    let root = createTempDir("kosmo-diff-matter-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "source.nim", "let text = \"\"\"\nold café\n\"\"\"\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "Initial")
+    writeFile(root / "source.nim", "let text = 42\n")
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 600, 500)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    require panel.markdownView.waitForMarkdownParsing()
+    let
+      storage = panel.markdownView.textStorage()
+      text = storage.stringValue()
+      style = panel.markdownView.markdownStyle()
+    for (needle, token) in [
+      ("+let", stcKeyword), ("42", stcNumber), ("old café", stcString)
+    ]:
+      let location = text.find(needle)
+      require location >= 0
+      let index = text[0 ..< location].runeLen + (if needle[0] == '+': 1 else: 0)
+      check storage.attributesAt(index).foregroundColor == style.syntaxTokenColors[
+        token
+      ]
+      check storage.attributesAt(index).lineBackgroundColor.a > 0
+
   test "full context includes staged unstaged untracked deleted and binary files":
     let root = createTempDir("kosmo-git-diff-", "")
     defer:
@@ -113,10 +180,14 @@ suite "Kosmo Git diff":
     check "+new text" in rendered
     let addedIndex = rendered[0 ..< rendered.find("+new text")].runeLen
     let deletedIndex = rendered[0 ..< rendered.find("-old text")].runeLen
-    check panel.markdownView.textStorage().attributesAt(addedIndex).foregroundColor ==
-      panel.markdownView.markdownStyle().syntaxTokenColors[stcString]
-    check panel.markdownView.textStorage().attributesAt(deletedIndex).foregroundColor ==
-      panel.markdownView.markdownStyle().syntaxTokenColors[stcKeyword]
+    let addedTint =
+      panel.markdownView.textStorage().attributesAt(addedIndex).lineBackgroundColor
+    let deletedTint =
+      panel.markdownView.textStorage().attributesAt(deletedIndex).lineBackgroundColor
+    check addedTint.a > 0
+    check addedTint.g > addedTint.r
+    check deletedTint.a > 0
+    check deletedTint.r > deletedTint.g
     let headingIndex = rendered[0 ..< rendered.find("source.txt")].runeLen
     check panel.markdownView.textView().openLinkAtIndex(headingIndex)
     require panel.markdownView.waitForMarkdownParsing()

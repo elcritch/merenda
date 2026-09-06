@@ -708,8 +708,10 @@ remain nested beneath their folder hierarchy. Find in Files searches Git tracked
 untracked non-ignored files and skips binary or unsupported text encodings by default;
 both filters are configurable through `FileSearchOptions`.
 File → Show Git Diff (Command-Shift-G on macOS) opens a tab showing staged,
-unstaged, and untracked changes with full-file context. Additions and deletions use
-the active Markdown theme's syntax colors. Click a file heading to collapse or expand
+unstaged, and untracked changes with full-file context. Matter highlights each file's
+language using the active Markdown syntax colors, with subtle green/red backgrounds
+and markers for added/deleted lines. Unknown languages retain plain diff text.
+Click a file heading to collapse or expand
 its diff, or use Expand All and Collapse All. Refresh reloads the saved changes from
 Git; unsaved editor buffers are not included.
 Holding Control while scrolling over an editor accelerates the wheel movement
@@ -734,8 +736,11 @@ a content view, preferred first responder, and optional save and close
 callbacks. Kosmo opens terminal links in the system browser; this can be enabled
 or disabled from the Terminal settings page. Press Command-F on macOS or
 Control-Shift-F elsewhere in a terminal tab to search its screen and scrollback.
-The floating search bar supports previous/next navigation with the arrow keys or
-buttons and closes with Escape. Moe editor panes use the same floating search
+Terminal search starts at the newest match at the bottom. Command-G (Control-G
+elsewhere) and Return move toward older output; Command-Shift-G (Control-Shift-G
+elsewhere) moves toward newer output, wrapping at either end. The arrow keys and
+buttons move up/down, and Escape closes the search. Moe editor panes use the same
+floating search
 bar with the platform Find shortcut (Command-F on macOS and Control-F elsewhere),
 while matching, highlighting, and navigation remain owned by Moe.
 

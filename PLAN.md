@@ -55,6 +55,18 @@ The main established layers are:
 4. Profile text storage and layout before committing to virtual or
    visible-range-only layout.
 
+## Open Reliability Issues
+
+- [ ] Investigate and fix Kosmo subprocess-resource exhaustion that prevents new
+  terminals from opening after extended use. Observed on macOS with two windows
+  and five terminals: 255 open file descriptors (219 pipes) and 78 unreaped child
+  processes, against a launch-default descriptor limit of 256. The menu activates
+  but no terminal appears; ordinary file operations still work. Audit subprocess
+  cleanup and child reaping, including recurring Git commands; the leaking caller
+  is not yet confirmed. Add a repeated-operation regression checking descriptor
+  and child-process counts, and make terminal-start errors visibly actionable
+  instead of only assigning an editor status label.
+
 ## Recently Completed — Consolidated July 2026
 
 ### Resource System and Tekton

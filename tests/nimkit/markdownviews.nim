@@ -592,6 +592,41 @@ fencedToken value
       style.syntaxTokenColors[stcKeyword]
     check storage.attributesFor("indentedToken").foregroundColor == style.codeColor
 
+  test "diff backgrounds span code rows while preserving syntax palette colors":
+    let highlighter: SyntaxHighlighter = proc(
+        source, language: string
+    ): seq[SyntaxTokenSpan] =
+      @[
+        SyntaxTokenSpan(
+          range: initTextRange(0, source.runeLen),
+          tokenClass: stcOther,
+          changeKind: sckAdded,
+        )
+      ]
+    var style = initMarkdownStyle()
+    style.syntaxTokenColors[stcOther] = color(0.3, 0.4, 0.8, 1)
+    for width in [8, 160]:
+      let view = newMarkdownView(
+        "```diff\n+é\n+" & "x".repeat(width) & "\n```",
+        frame = rect(0, 0, 400, 240),
+        style = style,
+        syntaxHighlighter = highlighter,
+      )
+      require view.waitForMarkdownParsing()
+      let
+        attributes = view.textStorage().attributesFor("+é")
+        renders = buildRenders(view)
+      check attributes.foregroundColor == style.syntaxTokenColors[stcOther]
+      check attributes.lineBackgroundColor.a > 0
+      require DefaultDrawLevel in renders
+      var tintedRows = 0
+      for node in renders[DefaultDrawLevel].nodes:
+        if node.kind == nkRectangle and node.fill.kind == flColor and
+            node.fill.color == attributes.lineBackgroundColor.rgba:
+          inc tintedRows
+          check node.screenBox.w > 200
+      check tintedRows >= 2
+
   test "Matter maps TextMate scopes and language aliases to neutral rune spans":
     let
       source = "proc answer = 42\n#[ first\ncontinued ]#\necho \"κόσμος\""
@@ -732,6 +767,22 @@ echo "fenced"
           node.fill.color == view.selectionColor().rgba:
         inc selectionRectCount
     check selectionRectCount < totalLines div 3
+
+  test "fitting code blocks do not allocate embedded text views":
+    let view =
+      newMarkdownView("```nim\nlet count = 42\n```", frame = rect(0, 0, 600, 240))
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    discard view.buildRenderScene()
+    check view.codeBlockScrollViews(includeHidden = true).len == 0
+    view.frame = rect(0, 0, 120, 240)
+    view.layoutSubtreeIfNeeded()
+    discard view.buildRenderScene()
+    check view.codeBlockScrollViews().len == 1
+    view.frame = rect(0, 0, 600, 240)
+    view.layoutSubtreeIfNeeded()
+    discard view.buildRenderScene()
+    check view.codeBlockScrollViews().len == 0
 
   test "offscreen code and table scroll views are created near the viewport":
     let source =
@@ -1354,13 +1405,22 @@ Press <kbd>Enter</kbd>.
     discard buildRenders(first)
     discard buildRenders(second)
 
+    proc renderResize(view: MarkdownView) =
+      let existingBlocks = view.codeBlockScrollViews(includeHidden = true).len
+      discard buildRenders(view)
+      if view.needsUpdateConstraints or view.needsLayout:
+        # Crossing the overflow threshold creates a child hierarchy for the first
+        # time. Permit one structural follow-up pass, never continuing feedback.
+        check view.codeBlockScrollViews(includeHidden = true).len > existingBlocks
+        discard buildRenders(view)
+      check not view.needsUpdateConstraints
+      check not view.needsLayout
+      check view.layoutFeedbackCycles() == 0
+
     let singleStarted = getMonoTime()
     for width in [680.0'f32, 600.0'f32, 520.0'f32, 440.0'f32]:
       first.frame = rect(0, 0, width, 540)
-      discard buildRenders(first)
-      check not first.needsUpdateConstraints
-      check not first.needsLayout
-      check first.layoutFeedbackCycles() == 0
+      renderResize(first)
     let
       singleElapsed = getMonoTime() - singleStarted
       singleSettleStarted = getMonoTime()
@@ -1372,14 +1432,8 @@ Press <kbd>Enter</kbd>.
     for width in [680.0'f32, 600.0'f32, 520.0'f32, 440.0'f32]:
       first.frame = rect(0, 0, width, 540)
       second.frame = rect(0, 0, width, 540)
-      discard buildRenders(first)
-      discard buildRenders(second)
-      check not first.needsUpdateConstraints
-      check not first.needsLayout
-      check first.layoutFeedbackCycles() == 0
-      check not second.needsUpdateConstraints
-      check not second.needsLayout
-      check second.layoutFeedbackCycles() == 0
+      renderResize(first)
+      renderResize(second)
     let
       pairElapsed = getMonoTime() - pairStarted
       pairSettleStarted = getMonoTime()

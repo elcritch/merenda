@@ -18,9 +18,16 @@ type
     stcPreprocessor
     stcOther
 
+  SyntaxChangeKind* = enum
+    sckUnchanged
+    sckAdded
+    sckDeleted
+
   SyntaxTokenSpan* = object
     range*: TextRange ## Rune-based half-open source range.
     tokenClass*: SyntaxTokenClass
+    changeKind*: SyntaxChangeKind ## Optional diff decoration, independent of syntax.
+    changeMarker*: bool ## The leading diff marker, rather than source code.
 
   SyntaxHighlighter* = proc(source, language: string): seq[SyntaxTokenSpan] {.closure.}
     ## Classify rune ranges in `source` for a language name or code-fence tag.

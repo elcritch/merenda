@@ -1162,7 +1162,12 @@ proc addHighlightedCode(
     builder.add(source, attributes)
     return
 
-  let runeCount = source.runeLen
+  var byteOffsets = @[0]
+  var byteOffset = 0
+  while byteOffset < source.len:
+    byteOffset += max(source.runeLenAt(byteOffset), 1)
+    byteOffsets.add min(byteOffset, source.len)
+  let runeCount = byteOffsets.len - 1
   var position = 0
   for span in spans:
     let
@@ -1170,13 +1175,23 @@ proc addHighlightedCode(
       stop = max(start, min(span.range.maxIndex, runeCount))
     if stop > start:
       if start > position:
-        builder.add(source.runeSubStr(position, start - position), attributes)
+        builder.add(source[byteOffsets[position] ..< byteOffsets[start]], attributes)
       var tokenAttributes = attributes
       tokenAttributes.foregroundColor = builder.style.syntaxTokenColors[span.tokenClass]
-      builder.add(source.runeSubStr(start, stop - start), tokenAttributes)
+      if span.changeKind != sckUnchanged:
+        let changeColor =
+          if span.changeKind == sckAdded:
+            color(0.20, 0.65, 0.35, 1.0)
+          else:
+            color(0.85, 0.25, 0.30, 1.0)
+        tokenAttributes.lineBackgroundColor = changeColor
+        tokenAttributes.lineBackgroundColor.a = 0.13
+        if span.changeMarker:
+          tokenAttributes.foregroundColor = changeColor
+      builder.add(source[byteOffsets[start] ..< byteOffsets[stop]], tokenAttributes)
       position = stop
   if position < runeCount:
-    builder.add(source.runeSubStr(position), attributes)
+    builder.add(source[byteOffsets[position] ..< source.len], attributes)
 
 proc renderBlock(
     builder: var MarkdownBuilder,
@@ -1456,6 +1471,11 @@ proc layoutMarkdownCodeBlock(
 ) =
   let codeRect = presentation.rangeLayout.rect
   if codeRect.isEmpty:
+    return
+  # The parent already measured these unwrapped lines. Only allocate and lay out
+  # a second text view when a horizontal viewport is actually necessary.
+  if presentation.scrollView.isNil and
+      codeRect.maxX + max(rightPadding, 0.0'f32) <= viewportRight:
     return
   textView.ensureMarkdownCodeBlockView(presentation)
   let

@@ -13,6 +13,8 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 const KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
 
 type
+  GitDiffHighlightKey = tuple[source, language: string]
+
   GitFileDiff* = object
     path*: string
     patch*: string
@@ -55,6 +57,8 @@ type
     control: SharedPtr[GitDiffControl]
     disclosureButtons: Table[string, GitDiffDisclosureButton]
     keyEquivalentHandler: GitDiffKeyEquivalentHandler
+    highlightCache: Table[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]
+    xHighlightBuildCount: int
 
 proc executeGit(
     root: string, args: openArray[string], control: SharedPtr[GitDiffControl]
@@ -197,31 +201,111 @@ proc markdownLabel(value: string): string =
     else:
       result.add ch
 
-proc fencedPatch(patch: string): string =
+proc fencedPatch(patch: string, language = ""): string =
   var fence = "```"
   while fence in patch:
     fence.add '`'
-  fence & "diff\n" & patch & "\n" & fence & "\n\n"
+  fence & "diff" & (if language.len > 0: ":" & language else: "") & "\n" & patch & "\n" &
+    fence & "\n\n"
+
+proc diffLanguage(path: string): string =
+  if path.lastPathPart().toLowerAscii() == "dockerfile":
+    "dockerfile"
+  else:
+    path.splitFile().ext.strip(chars = {'.'}).toLowerAscii()
 
 proc diffHighlight(source, language: string): seq[nimkit.SyntaxTokenSpan] =
-  discard language
-  var offset = 0
+  type DiffRow = object
+    start, length, oldStart, newStart: int
+    kind: char
+
+  var
+    rows: seq[DiffRow]
+    oldSource, newSource: string
+    oldOffset, newOffset, offset: int
+    inHunk: bool
   for line in source.splitLines(keepEol = true):
     let length = line.runeLen
-    if line.len > 0 and line[0] in {'+', '-', '@'}:
-      let token =
-        case line[0]
-        of '+': nimkit.stcString
-        of '-': nimkit.stcKeyword
-        else: nimkit.stcComment
-      if result.len > 0 and result[^1].tokenClass == token and
-          result[^1].range.location + result[^1].range.length == offset:
-        result[^1].range.length += length
+    if line.startsWith("@@ "):
+      inHunk = true
+    let kind =
+      if inHunk and line.len > 0 and line[0] in {' ', '+', '-'}:
+        line[0]
       else:
-        result.add nimkit.SyntaxTokenSpan(
-          range: nimkit.initTextRange(offset, length), tokenClass: token
-        )
+        '@'
+    rows.add DiffRow(
+      start: offset,
+      length: length,
+      oldStart: oldOffset,
+      newStart: newOffset,
+      kind: kind,
+    )
+    if kind in {' ', '+', '-'}:
+      if kind != '+':
+        oldSource.add line[1 .. ^1]
+        oldOffset += length - 1
+      if kind != '-':
+        newSource.add line[1 .. ^1]
+        newOffset += length - 1
     offset += length
+  let sourceLanguage =
+    if language.startsWith("diff:"):
+      language[5 .. ^1]
+    else:
+      ""
+  var
+    oldClasses = newSeq[nimkit.SyntaxTokenClass](oldOffset)
+    newClasses = newSeq[nimkit.SyntaxTokenClass](newOffset)
+  for classes in [addr oldClasses, addr newClasses]:
+    for token in classes[].mitems:
+      token = nimkit.stcOther
+  for span in nimkit.matterSyntaxHighlighter(oldSource, sourceLanguage):
+    for index in int(span.range.location) ..< span.range.maxIndex:
+      oldClasses[index] = span.tokenClass
+  for span in nimkit.matterSyntaxHighlighter(newSource, sourceLanguage):
+    for index in int(span.range.location) ..< span.range.maxIndex:
+      newClasses[index] = span.tokenClass
+  for row in rows:
+    let change =
+      case row.kind
+      of '+': nimkit.sckAdded
+      of '-': nimkit.sckDeleted
+      else: nimkit.sckUnchanged
+    if row.kind == '@':
+      result.add nimkit.SyntaxTokenSpan(
+        range: nimkit.initTextRange(row.start, row.length),
+        tokenClass: nimkit.stcComment,
+      )
+    elif row.length > 0:
+      result.add nimkit.SyntaxTokenSpan(
+        range: nimkit.initTextRange(row.start, 1),
+        tokenClass: nimkit.stcOther,
+        changeKind: change,
+        changeMarker: true,
+      )
+      var index = 1
+      while index < row.length:
+        let token =
+          if row.kind == '-':
+            oldClasses[row.oldStart + index - 1]
+          else:
+            newClasses[row.newStart + index - 1]
+        let start = index
+        inc index
+        while index < row.length and
+            (
+              if row.kind == '-':
+                oldClasses[row.oldStart + index - 1]
+              else:
+                newClasses[row.newStart + index - 1]
+            ) == token
+        :
+          inc index
+        result.add nimkit.SyntaxTokenSpan(
+          range: nimkit.initTextRange(row.start + start, index - start),
+          tokenClass: token,
+          changeKind: change,
+        )
 
 proc clearDisclosureButtons(panel: KosmoGitDiffPanel) =
   for button in panel.disclosureButtons.values:
@@ -268,7 +352,7 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
       document.add "## [" & (if collapsed: "▸ " else: "▾ ") &
         file.path.markdownLabel() & "](kosmo-diff:" & $index & ")\n\n"
       if not collapsed:
-        document.add file.patch.fencedPatch()
+        document.add file.patch.fencedPatch(file.path.diffLanguage())
   panel.markdownView.markdown = document
 
 proc toggleFile*(panel: KosmoGitDiffPanel, index: int) =
@@ -582,6 +666,26 @@ proc executeDiff(
 
 proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
   if not panel.closed:
+    var retained = initTable[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]()
+    for file in snapshot.files:
+      let
+        language = file.path.diffLanguage()
+        key = (
+          # Match Markdown's preprocessing before it calls the highlighter.
+          # Patch lines have a diff prefix, so leading-tab expansion is irrelevant.
+          source: file.patch
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .replace("\u2424", " ")
+            .replace("\0", "\uFFFD")
+            .replace("&#0;", "&#XFFFD;")
+            .strip(chars = {'\n'}),
+          language: "diff" & (if language.len > 0: ":" & language
+          else: ""),
+        )
+      if panel.highlightCache.hasKey(key):
+        retained[key] = panel.highlightCache[key]
+    panel.highlightCache = move retained
     panel.loading = false
     panel.snapshot = snapshot
     panel.refreshButton.enabled = true
@@ -607,6 +711,7 @@ proc waitForDiff*(panel: KosmoGitDiffPanel, timeoutMilliseconds = 10000): bool =
 proc close*(panel: KosmoGitDiffPanel) {.slot.} =
   if not panel.closed:
     panel.closed = true
+    panel.highlightCache.clear()
     panel.clearDisclosureButtons()
     panel.control[].cancelled.store(true, moRelease)
     panel.pool.stop(immediate = true)
@@ -639,13 +744,17 @@ proc `markdownStyle=`*(panel: KosmoGitDiffPanel, style: nimkit.MarkdownStyle) =
   diffStyle.headingFontSizes[1] = style.bodyFontSize
   panel.markdownView.markdownStyle = diffStyle
 
+proc highlightBuildCount*(panel: KosmoGitDiffPanel): int =
+  ## Number of uncached diff highlighting passes, for performance diagnostics.
+  panel.xHighlightBuildCount
+
 proc newKosmoGitDiffPanel*(
     rootPath: string, markdownStyle = nimkit.initMarkdownStyle()
 ): KosmoGitDiffPanel =
   ## Construct a full-file diff reader with collapsible file headings.
   startLocalThreadDefault()
   result = KosmoGitDiffPanel(
-    markdownView: nimkit.newMarkdownView(syntaxHighlighter = diffHighlight),
+    markdownView: nimkit.newMarkdownView(),
     refreshButton: nimkit.newButton("Refresh"),
     expandButton: nimkit.newButton("Expand All"),
     collapseButton: nimkit.newButton("Collapse All"),
@@ -664,6 +773,16 @@ proc newKosmoGitDiffPanel*(
   result.markdownStyle = markdownStyle
   result.markdownView.toolTip = rootPath
   let weakPanel = result.unsafeWeakRef()
+  result.markdownView.syntaxHighlighter = proc(
+      source, language: string
+  ): seq[nimkit.SyntaxTokenSpan] =
+    if weakPanel.isNil or weakPanel[].closed:
+      return
+    let key = (source: source, language: language)
+    if not weakPanel[].highlightCache.hasKey(key):
+      weakPanel[].highlightCache[key] = diffHighlight(source, language)
+      inc weakPanel[].xHighlightBuildCount
+    weakPanel[].highlightCache[key]
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =
