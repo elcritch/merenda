@@ -132,9 +132,13 @@ jobs:
           testName="$(basename "${testFile%.nim}")"
           testCache="deps/.nimcache/github-actions/${testName}"
           mkdir -p "$testCache"
+          diagnosticFlags=()
+          if [[ "$testName" == "tkosmo" ]]; then
+            diagnosticFlags+=("-d:macosTimeoutDiagnostics")
+          fi
           testBinary="$testCache/$testName"
           nim c --opt:none \
-            -d:macosTimeoutDiagnostics \
+            "${diagnosticFlags[@]}" \
             --nimcache:"$testCache" \
             --out:"$testBinary" \
             "$testFile"
