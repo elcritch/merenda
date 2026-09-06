@@ -92,8 +92,8 @@ type
     onlyMonospaceFontsCheckbox: Button
 
 const
-  FontCatalogBatchSize = 8
-  FontCatalogBatchesPerReload = 10
+  FontCatalogBatchSize = 1
+  FontCatalogBatchesPerReload = 1
   SettingsMinimumFontSize = 6.0'f32
   SettingsMaximumFontSize = 120.0'f32
   SettingsDefaultFontSize = 14.0'f32
@@ -307,7 +307,8 @@ proc loadFontCatalog(loader: FontCatalogLoader) {.slot.} =
       loader.started = true
 
     var batch = newSeqOfCap[FontCatalogEntry](FontCatalogBatchSize)
-    while loader.nextEntryIndex < loader.entries.len and batch.len < FontCatalogBatchSize:
+    let batchEnd = min(loader.nextEntryIndex + FontCatalogBatchSize, loader.entries.len)
+    while loader.nextEntryIndex < batchEnd:
       var loadedEntry = move loader.entries[loader.nextEntryIndex]
       inc loader.nextEntryIndex
       if loadedEntry.family == "Last Resort":
@@ -323,7 +324,7 @@ proc loadFontCatalog(loader: FontCatalogLoader) {.slot.} =
         batch.add move loadedEntry
         inc loader.loadedEntryCount
 
-    if batch.len > 0:
+    if batch.len > 0 or loader.nextEntryIndex < loader.entries.len:
       emit loader.fontCatalogBatchLoaded(
         move batch, loader.loadedEntryCount, loader.loadedFaceCount
       )
@@ -346,12 +347,13 @@ proc didLoadFontCatalogBatch(
   for entry in entries:
     controller.catalogEntries.add entry
     controller.addFontCatalogEntry(controller.catalogEntries[^1])
-  controller.restoreFontPickerSelection()
-  controller.needsFontPickerReload = true
-  inc controller.pendingFontPickerBatchCount
-  if controller.pendingFontPickerBatchCount >= FontCatalogBatchesPerReload:
-    controller.reloadFontPickerIfVisible()
-  controller.reportFontLoadingProgress(loadedEntryCount, loadedFaceCount)
+  if entries.len > 0:
+    controller.restoreFontPickerSelection()
+    controller.needsFontPickerReload = true
+    inc controller.pendingFontPickerBatchCount
+    if controller.pendingFontPickerBatchCount >= FontCatalogBatchesPerReload:
+      controller.reloadFontPickerIfVisible()
+    controller.reportFontLoadingProgress(loadedEntryCount, loadedFaceCount)
   emit controller.fontCatalogLoadRequested()
 
 proc didFinishLoadingFontCatalog(
