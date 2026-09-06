@@ -86,6 +86,9 @@ suite "Kosmo Git diff":
       panel.close()
     panel.frame = rect(0, 0, 800, 600)
     panel.layoutSubtreeIfNeeded()
+    panel.frame = rect(0, 0, 300, 600)
+    panel.layoutSubtreeIfNeeded()
+    check panel.collapseButton.frame().maxX <= panel.bounds().maxX
     require panel.waitForDiff()
     require panel.markdownView.waitForMarkdownParsing()
     check panel.snapshot.errorMessage == ""
@@ -124,28 +127,91 @@ suite "Kosmo Git diff":
       frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
     defer:
       frontend.close()
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 1000, 700)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
     let item =
       app.mainMenu()[1].submenu().menuItemWithIdentifier(KosmoShowGitDiffAction)
     require not item.isNil
     check item.title == "Show Git Diff"
+    check item.keyEquivalent().key == keyG
+    check item.modifierMask() == shortcutModifiers() + {nimkit.kmShift}
     check not item.target.isNil
     check item.perform(frontend.window)
     require not frontend.gitDiffPanel.isNil
     require frontend.gitDiffPanel.waitForDiff()
-    check frontend.gitDiffWindow.isVisible()
-    check wsmResizable in frontend.gitDiffWindow.styleMask
+    check frontend.documentTabs.selectedDocumentTabIdentifier ==
+      KosmoGitDiffTabIdentifier
+    check frontend.editorPane.contentView == View(frontend.gitDiffPanel)
     check frontend.gitDiffPanel.snapshot.files.len == 1
-    let originalWindow = frontend.gitDiffWindow
+    let
+      originalPanel = frontend.gitDiffPanel
+      expectedStyle = frontend.editorPane.markdownControls.markdownPresentationStyle()
+      actualStyle = originalPanel.markdownView.markdownStyle()
+    check actualStyle.backgroundColor == expectedStyle.backgroundColor
+    check actualStyle.textColor == expectedStyle.textColor
+    check actualStyle.syntaxTokenColors[stcString] ==
+      expectedStyle.syntaxTokenColors[stcString]
+    check actualStyle.syntaxTokenColors[stcKeyword] ==
+      expectedStyle.syntaxTokenColors[stcKeyword]
+    app.setAppearance(initAppearance(initMacOSDarkTheme()))
+    let darkStyle = frontend.editorPane.markdownControls.markdownPresentationStyle()
+    check originalPanel.markdownView.markdownStyle().backgroundColor ==
+      darkStyle.backgroundColor
+    check originalPanel.markdownView.markdownStyle().syntaxTokenColors[stcString] ==
+      darkStyle.syntaxTokenColors[stcString]
     check item.perform(frontend.window)
-    check frontend.gitDiffWindow == originalWindow
+    check frontend.gitDiffPanel == originalPanel
     require frontend.gitDiffPanel.waitForDiff()
     let closeItem =
-      app.mainMenu()[1].submenu().menuItemWithIdentifier(KosmoCloseWindowAction)
-    check closeItem.perform(originalWindow)
-    check originalWindow.isClosed()
+      app.mainMenu()[1].submenu().menuItemWithIdentifier(KosmoCloseTabAction)
+    check closeItem.perform(frontend.window)
+    check frontend.gitDiffPanel.isNil
     check not frontend.window.isClosed()
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(
+        key: keyG, keyCode: keyG.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
+      )
+    )
+    require not frontend.gitDiffPanel.isNil
+    check frontend.gitDiffPanel != originalPanel
+    check frontend.documentTabs.selectedDocumentTabIdentifier ==
+      KosmoGitDiffTabIdentifier
+    require frontend.gitDiffPanel.waitForDiff()
+
+    let tabIndex =
+      frontend.documentTabs.indexOfDocumentTabIdentifier(KosmoGitDiffTabIdentifier)
+    require tabIndex >= 0
+    let
+      tabBounds = frontend.documentTabs.documentTabRect(tabIndex)
+      dragStart = frontend.documentTabs.pointToWindow(
+        initPoint(tabBounds.minX + 30, tabBounds.minY + 12)
+      )
+      dragEnd = initPoint(
+        frontend.window.frame().size.width + 180,
+        frontend.window.frame().size.height + 180,
+      )
+      detachedPanel = frontend.gitDiffPanel
+    require frontend.window.mouseDownAt(dragStart)
+    require frontend.window.mouseDraggedAt(dragEnd)
+    require frontend.window.mouseUpAt(dragEnd)
+    require frontend.detachedEditorWindows().len == 1
+    let detachedWindow = frontend.detachedEditorWindows()[0]
+    app.activateWindow(frontend.window)
     check item.perform(frontend.window)
-    check frontend.gitDiffWindow != originalWindow
+    check app.keyWindow() == detachedWindow
+    check frontend.gitDiffPanel == detachedPanel
+    detachedWindow.close()
+    check frontend.gitDiffPanel.isNil
+    check frontend.detachedEditorWindows().len == 0
+    app.activateWindow(frontend.window)
+    check item.perform(frontend.window)
+    require not frontend.gitDiffPanel.isNil
+    check frontend.gitDiffPanel != detachedPanel
+    check frontend.documentTabs.selectedDocumentTabIdentifier ==
+      KosmoGitDiffTabIdentifier
     require frontend.gitDiffPanel.waitForDiff()
 
   when defined(posix):

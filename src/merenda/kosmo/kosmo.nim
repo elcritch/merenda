@@ -253,6 +253,9 @@ type
   KosmoWindowLifecycle = ref object of nimkit.Responder
     frontend: WeakRef[KosmoApplication]
 
+  KosmoDetachedWindowLifecycle = ref object of nimkit.Responder
+    controller: WeakRef[KosmoDockController]
+
   KosmoApplication* = ref object
     application*: nimkit.Application
     window*: nimkit.Window
@@ -263,7 +266,6 @@ type
     fileTree*: KosmoFileTree
     fileBrowserPanel*: KosmoFileBrowserPanel
     gitDiffPanel*: KosmoGitDiffPanel
-    gitDiffWindow*: nimkit.Window
     sidebarPane*: KosmoSidebarPane
     sidebarTabs*: nimkit.CompactTabView
     searchPanel*: KosmoFileSearchPanel
@@ -320,6 +322,7 @@ proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
 func hasFileBrowser*(frontend: KosmoApplication): bool
 proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.}
+proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.}
 proc newEditorTab*(frontend: KosmoApplication): bool {.discardable.}
 proc newTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.}
@@ -654,7 +657,7 @@ proc syncMarkdownColorMode(
   controls.xThemeColorMode = mode
   controls.syncMarkdownColorButton()
 
-func markdownPresentationStyle(controls: KosmoMarkdownControls): nimkit.MarkdownStyle =
+func markdownPresentationStyle*(controls: KosmoMarkdownControls): nimkit.MarkdownStyle =
   result = nimkit.initMarkdownStyle()
   if not controls.isNil and controls.xColorMode == kmcmDark:
     result.backgroundColor = nimkit.color(0.055, 0.065, 0.085, 1.0)
@@ -1196,6 +1199,10 @@ proc syncSelectedEditorContent(
   var selectedId: KosmoBufferId
   if not group.selectedTabIdentifier.parseTabIdentifier(selectedId):
     group.pane.syncMarkdownControls(false)
+    let document = group.documentForIdentifier(group.selectedTabIdentifier)
+    if not document.isNil and document.contentView of KosmoGitDiffPanel:
+      KosmoGitDiffPanel(document.contentView).markdownView.markdownStyle =
+        group.pane.markdownControls.markdownPresentationStyle()
     return keckOther
   for tab in tabs:
     if tab.id != selectedId:
@@ -1728,6 +1735,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoNewTerminalAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].newTerminal()
+    of KosmoShowGitDiffAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showGitDiff()
     of KosmoSaveAction:
       controller.saveCurrentTab(view)
     of KosmoCloseTabAction:
@@ -2489,6 +2499,9 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
     of KosmoNewTerminalAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].newTerminal()
+    of KosmoShowGitDiffAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showGitDiff()
     of KosmoSaveAction:
       controller.saveCurrentPaneTab(group)
     of KosmoCloseTabAction:
@@ -2917,7 +2930,8 @@ proc removeGroup(controller: KosmoDockController, group: KosmoEditorGroup) =
   if index >= 0:
     controller.groups.delete(index)
   let host = controller.hostForWorkspace(group.workspace)
-  if not host.isNil and group.workspace.len == 0 and not host.primary:
+  if not host.isNil and group.workspace.len == 0 and not host.primary and
+      not host.window.isClosed():
     host.window.close()
   if wasActive:
     controller.activeGroup = nil
@@ -3387,6 +3401,27 @@ proc newKosmoDetachedContentView(
   result.addSubview(statusLabel)
   discard result.withProtocol(KosmoDetachedContentLayout)
 
+protocol KosmoDetachedWindowLifecycleDelegate of nimkit.WindowDelegateProtocol:
+  method windowDidClose(
+      lifecycle: KosmoDetachedWindowLifecycle, window: nimkit.Window
+  ) =
+    if lifecycle.controller.isNil:
+      return
+    let controller = lifecycle.controller[]
+    var hostedGroups: seq[KosmoEditorGroup]
+    for group in controller.groups:
+      if group.window == window:
+        hostedGroups.add group
+    let closeDocuments = controller.frontend.isNil or not controller.frontend[].xClosed
+    for group in hostedGroups:
+      if closeDocuments:
+        for document in group.documents:
+          discard document.close()
+      controller.removeGroup(group)
+    for index in countdown(controller.hosts.high, 0):
+      if controller.hosts[index].window == window:
+        controller.hosts.delete(index)
+
 proc detachPaneTab(
     controller: KosmoDockController,
     source: KosmoEditorGroup,
@@ -3410,6 +3445,10 @@ proc detachPaneTab(
       contentView: contentView,
       statusLabel: statusLabel,
     )
+    lifecycle = KosmoDetachedWindowLifecycle(controller: controller.unsafeWeakRef())
+  lifecycle.initResponder()
+  discard lifecycle.withProtocol(KosmoDetachedWindowLifecycleDelegate)
+  window.delegate = lifecycle
   controller.hosts.add host
   controller.installShortcutBindings(window)
   var
@@ -3905,38 +3944,62 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
 
 proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
   ## Show full-file Git changes for the active project's repository.
-  if frontend.isNil:
+  if frontend.isNil or frontend.dockController.isNil:
     return
-  if frontend.gitDiffWindow.isNil or frontend.gitDiffWindow.isClosed():
-    if not frontend.gitDiffPanel.isNil:
-      frontend.gitDiffPanel.close()
-    let root =
-      if frontend.fileTree.rootPath.len > 0:
-        frontend.fileTree.rootPath
-      else:
-        getCurrentDir()
-    frontend.gitDiffPanel = newKosmoGitDiffPanel(root)
-    frontend.gitDiffWindow =
-      nimkit.newPanel("Git Diff", nimkit.rect(160, 120, 960, 720))
-    frontend.gitDiffWindow.contentMinSize = nimkit.initSize(380, 240)
-    frontend.gitDiffWindow.styleMask =
-      frontend.gitDiffWindow.styleMask + {nimkit.wsmResizable}
-    frontend.gitDiffWindow.connect(
-      nimkit.didClose, frontend.gitDiffPanel, gitdiff.close
+  let controller = frontend.dockController
+  for group in controller.groups:
+    let document = group.documentForIdentifier(KosmoGitDiffTabIdentifier)
+    if not document.isNil:
+      if not group.window.isNil and not group.window.isClosed():
+        if document.contentView of KosmoGitDiffPanel:
+          frontend.gitDiffPanel = KosmoGitDiffPanel(document.contentView)
+          frontend.gitDiffPanel.refresh()
+        controller.activatePanelWindow(group.window)
+        controller.activatePaneTab(group, document.identifier)
+        return true
+      discard document.close()
+      let documentIndex = group.documentIndex(document.identifier)
+      if documentIndex >= 0:
+        group.documents.delete(documentIndex)
+      let orderIndex = group.tabOrder.find(document.identifier)
+      if orderIndex >= 0:
+        group.tabOrder.delete(orderIndex)
+
+  let group = controller.activePaneGroup()
+  if group.isNil:
+    return
+  let root =
+    if frontend.fileTree.rootPath.len > 0:
+      frontend.fileTree.rootPath
+    else:
+      getCurrentDir()
+  let
+    panel = newKosmoGitDiffPanel(
+      root, group.pane.markdownControls.markdownPresentationStyle()
     )
-  else:
-    frontend.gitDiffPanel.refresh()
-  not frontend.application.showWindow(
-    frontend.gitDiffWindow,
-    frontend.gitDiffPanel,
-    frontend.gitDiffPanel.markdownView.textView(),
-  ).isNil
+    weakFrontend = frontend.unsafeWeakRef()
+    document = newKosmoPaneDocument(
+      identifier = KosmoGitDiffTabIdentifier,
+      title = "Git Diff",
+      contentView = panel,
+      preferredFirstResponder = panel.markdownView.textView(),
+      tooltip = "Current Git diff",
+      onClose = proc(document: KosmoPaneDocument): bool =
+        discard document
+        panel.close()
+        if not weakFrontend.isNil and weakFrontend[].gitDiffPanel == panel:
+          weakFrontend[].gitDiffPanel = nil
+        true,
+    )
+  frontend.gitDiffPanel = panel
+  if controller.openPaneDocument(group, document):
+    return true
+  panel.close()
+  frontend.gitDiffPanel = nil
 
 func ownsWindow(frontend: KosmoApplication, window: nimkit.Window): bool =
   if frontend.isNil or window.isNil or frontend.dockController.isNil:
     return
-  if window == frontend.gitDiffWindow:
-    return true
   for host in frontend.dockController.hosts:
     if host.window == window:
       return true
@@ -4433,23 +4496,17 @@ proc newKosmoApplication*(
     discard sender
     let active = manager.activeFrontend()
     if not active.isNil:
-      if not active.gitDiffWindow.isNil and app.keyWindow() == active.gitDiffWindow:
-        active.gitDiffWindow.close()
-      else:
-        let controller = active.dockController
-        controller.closeCurrentPaneTab(controller.activePaneGroup())
+      let controller = active.dockController
+      controller.closeCurrentPaneTab(controller.activePaneGroup())
   closeWindowItem.target = nimkit.newActionTarget(
     nimkit.actionSelector(KosmoCloseWindowAction)
   ) do(sender: nimkit.DynamicAgent):
     discard sender
     let active = manager.activeFrontend()
     if not active.isNil:
-      if not active.gitDiffWindow.isNil and app.keyWindow() == active.gitDiffWindow:
-        active.gitDiffWindow.close()
-      else:
-        let group = active.dockController.activePaneGroup()
-        if not group.isNil:
-          group.window.close()
+      let group = active.dockController.activePaneGroup()
+      if not group.isNil:
+        group.window.close()
   fileTree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
     if frontend.isNil:
       return
@@ -4664,10 +4721,6 @@ proc close*(frontend: KosmoApplication) =
   if frontend.isNil or frontend.xClosed:
     return
   frontend.xClosed = true
-  if not frontend.gitDiffWindow.isNil and not frontend.gitDiffWindow.isClosed():
-    frontend.gitDiffWindow.close()
-  if not frontend.gitDiffPanel.isNil:
-    frontend.gitDiffPanel.close()
   if not frontend.quickOpenPanel.isNil and frontend.quickOpenPanel.isOpen():
     frontend.quickOpenPanel.dismiss()
   if not frontend.xSettingsWindow.isNil and

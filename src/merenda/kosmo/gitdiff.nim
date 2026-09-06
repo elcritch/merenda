@@ -8,7 +8,7 @@ when defined(posix):
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
-const KosmoShowGitDiffAction* = "kosmo.showGitDiff"
+const KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
 
 type
   GitFileDiff* = object
@@ -202,7 +202,7 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
     document.add "No changes. Your working tree matches HEAD.\n"
   else:
     document.add "Staged and unstaged changes against HEAD, including untracked files. " &
-      "Full-file context; additions are green and deletions are red.\n\n"
+      "Full-file context using the current Markdown syntax colors.\n\n"
     for index, file in panel.snapshot.files:
       let collapsed = file.path in panel.collapsed
       document.add "## [" & (if collapsed: "▸ " else: "▾ ") &
@@ -285,15 +285,26 @@ proc close*(panel: KosmoGitDiffPanel) {.slot.} =
 
 protocol GitDiffLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(panel: KosmoGitDiffPanel) =
-    let bounds = panel.bounds()
-    panel.refreshButton.setFrameFromLayout(nimkit.rect(12, 8, 90, 28))
-    panel.expandButton.setFrameFromLayout(nimkit.rect(110, 8, 110, 28))
-    panel.collapseButton.setFrameFromLayout(nimkit.rect(228, 8, 110, 28))
+    let
+      bounds = panel.bounds()
+      inset = min(12.0'f32, bounds.size.width * 0.05'f32)
+      gap = min(8.0'f32, bounds.size.width * 0.03'f32)
+      availableWidth = max(bounds.size.width - inset * 2.0'f32 - gap * 2.0'f32, 0)
+      scale = min(availableWidth / 310.0'f32, 1.0'f32)
+      refreshWidth = 90.0'f32 * scale
+      actionWidth = 110.0'f32 * scale
+      expandX = inset + refreshWidth + gap
+      collapseX = expandX + actionWidth + gap
+    panel.refreshButton.setFrameFromLayout(nimkit.rect(inset, 8, refreshWidth, 28))
+    panel.expandButton.setFrameFromLayout(nimkit.rect(expandX, 8, actionWidth, 28))
+    panel.collapseButton.setFrameFromLayout(nimkit.rect(collapseX, 8, actionWidth, 28))
     panel.markdownView.setFrameFromLayout(
       nimkit.rect(0, 44, bounds.size.width, max(bounds.size.height - 44, 0))
     )
 
-proc newKosmoGitDiffPanel*(rootPath: string): KosmoGitDiffPanel =
+proc newKosmoGitDiffPanel*(
+    rootPath: string, markdownStyle = nimkit.initMarkdownStyle()
+): KosmoGitDiffPanel =
   ## Construct a full-file diff reader with collapsible file headings.
   startLocalThreadDefault()
   result = KosmoGitDiffPanel(
@@ -306,15 +317,13 @@ proc newKosmoGitDiffPanel*(rootPath: string): KosmoGitDiffPanel =
     control: newSharedPtr(GitDiffControl),
   )
   result.initViewFields()
+  result.clipsToBounds = true
   discard result.withProtocol(GitDiffLayout)
   let linkDelegate = GitDiffLinkDelegate(panel: result.unsafeWeakRef())
   linkDelegate.initResponder()
   discard linkDelegate.withProtocol(GitDiffLinks)
   result.markdownView.textView().delegate = linkDelegate
-  var style = result.markdownView.markdownStyle()
-  style.syntaxTokenColors[nimkit.stcString] = nimkit.color(0.12, 0.55, 0.25)
-  style.syntaxTokenColors[nimkit.stcKeyword] = nimkit.color(0.78, 0.19, 0.21)
-  result.markdownView.markdownStyle = style
+  result.markdownView.markdownStyle = markdownStyle
   for view in [
     nimkit.View(result.refreshButton), result.expandButton, result.collapseButton,
     result.markdownView,
