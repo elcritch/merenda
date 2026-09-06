@@ -406,6 +406,7 @@ proc imageLineFontSize(attributes: TextAttributes, imageHeight: float32): float3
     probeStyle = TextStyle(
       color: attributes.foregroundColor,
       fontName: attributes.fontName,
+      fontFace: attributes.fontFace,
       fontSize: probeFontSize,
       language: attributes.language,
     )

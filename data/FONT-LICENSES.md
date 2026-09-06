@@ -23,8 +23,15 @@ The copyright and license notice is also present in the font's OpenType metadata
 
 The versioned upstream audit and available glyph license texts are included in
 `font-licenses/nerd-fonts-v3.5.1/` and accompany release packages.
-Kosmo does not modify the font bytes. Upstream still lists Font Logos as
-“Unlicensed”; these notices do not resolve that upstream licensing gap.
+
+### Redistribution caveat
+
+Kosmo does not modify the upstream patched font bytes. Nerd Fonts' own 3.5.1
+license audit labels the Font Logos glyph source as “Unlicensed.” Consequently,
+the notices bundled with Kosmo do not establish redistribution permission for
+those glyphs. Anyone redistributing Kosmo must assess that unresolved upstream
+licensing gap or replace the bundled patched font with an artifact whose glyph
+sources have established redistribution terms.
 
 ## IBM Plex License Text
 

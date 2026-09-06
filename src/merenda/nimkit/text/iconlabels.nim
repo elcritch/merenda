@@ -70,13 +70,11 @@ proc iconLabelMetrics(
       context, StyleIndicatorSize, textStyle.fontSize + 4.0'f32
     )
     spacing = appearance.resolveLength(context, StyleIndicatorSpacing, 8.0'f32)
-    iconStyle = TextStyle(
-      color: label.resolvedIconColor(appearance, context, textStyle.color),
-      insets: insets(0.0),
-      fontName: textStyle.fontName,
-      fontSize: iconSize,
-      language: textStyle.language,
-    )
+  var iconStyle = textStyle
+  iconStyle.color = label.resolvedIconColor(appearance, context, textStyle.color)
+  iconStyle.insets = insets(0.0)
+  iconStyle.fontSize = iconSize
+  let
     iconNaturalSize = label.xIcon.textNaturalSize(iconStyle)
     iconWidth =
       if label.xIcon.len > 0:

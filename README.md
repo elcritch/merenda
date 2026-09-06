@@ -701,13 +701,16 @@ Merenda theme, interface-font, monospace-font, and font-size preferences.
 Invalid configuration is ignored. Selecting a Moe theme in Kosmo Settings
 updates this file.
 
-Kosmo embeds IBM Plex Sans Regular and JetBrains Mono Nerd Font Mono Regular as
-compressed resources. On startup it verifies and extracts them into NimKit's
-`kosmo/assets` cache, then uses them as the default interface and monospace faces
-on every platform. A configured font or font environment override takes
-precedence. If a bundled font cannot be extracted or written, that role falls
-back to the normal platform font. Merenda Settings keeps “System Default”
-available for switching a role back to its operating-system default.
+Kosmo embeds IBM Plex Sans Regular, Italic, and Bold plus JetBrains Mono Nerd
+Font Mono Regular as compressed resources. On startup it verifies and extracts
+them into NimKit's `kosmo/assets` cache, then uses them as the default interface
+and monospace faces on every platform. A configured font or font environment
+override takes precedence. If a bundled font cannot be extracted or written,
+that role falls back to the normal platform font. Merenda Settings keeps “System
+Default” available for switching a role back to its operating-system default.
+Nerd Fonts' own 3.5.1 license audit labels its Font Logos glyph source as
+“Unlicensed”; the notices shipped with Kosmo do not establish redistribution
+rights for those glyphs. See `data/FONT-LICENSES.md` before redistributing Kosmo.
 
 ```json
 {
