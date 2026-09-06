@@ -122,7 +122,7 @@ type
     of svShadows:
       shadows*: seq[BoxShadow]
     of svFontFace:
-      fontFace*: SystemTypefaceFile
+      fontFace*: SystemTypeface
     of svToken:
       token*: string
     of svKeyword:
@@ -182,7 +182,7 @@ type
     color*: Color
     insets*: EdgeInsets
     fontName*: string
-    fontFace*: SystemTypefaceFile
+    fontFace*: SystemTypeface
     fontSize*: float32
     fontSlant*: FontSlant
     language*: LanguageTag
@@ -321,7 +321,7 @@ const
   StyleColumnHoverFill* = StyleKey[Fill]("column.hover.fill")
   StyleTextColor* = StyleKey[Color]("text.color")
   StyleFontName* = StyleKey[string]("font.name")
-  StyleFontFace* = StyleKey[SystemTypefaceFile]("font.face")
+  StyleFontFace* = StyleKey[SystemTypeface]("font.face")
   StyleFontSize* = StyleKey[float32]("font.size")
   StyleFontSlant* = StyleKey[string]("font.slant")
   StyleLanguage* = StyleKey[string]("text.language")
@@ -558,7 +558,7 @@ func styleInsets*(insets: EdgeInsets): StyleValue =
 func styleShadows*(shadows: openArray[BoxShadow]): StyleValue =
   StyleValue(kind: svShadows, shadows: @shadows)
 
-func styleFontFace*(fontFace: SystemTypefaceFile): StyleValue =
+func styleFontFace*(fontFace: SystemTypeface): StyleValue =
   StyleValue(kind: svFontFace, fontFace: fontFace)
 
 func styleToken*(name: string): StyleValue =
@@ -637,9 +637,17 @@ proc clone(value: StyleValue): StyleValue =
   of svShadows:
     styleShadows(value.shadows)
   of svFontFace:
+    var variations =
+      newSeqOfCap[typeof(value.fontFace.variations[0])](value.fontFace.variations.len)
+    for variation in value.fontFace.variations:
+      variations.add variation
     styleFontFace(
-      SystemTypefaceFile(
-        path: value.fontFace.path.cloneText, faceIndex: value.fontFace.faceIndex
+      SystemTypeface(
+        file: typeof(value.fontFace.file)(
+          path: value.fontFace.file.path.cloneText,
+          faceIndex: value.fontFace.file.faceIndex,
+        ),
+        variations: move variations,
       )
     )
   of svToken:
@@ -1433,9 +1441,9 @@ proc shadowsRule(
 proc fontFaceRule(
     theme: Theme,
     context: StyleContext,
-    key: StyleKey[SystemTypefaceFile],
-    fallback: SystemTypefaceFile,
-): SystemTypefaceFile =
+    key: StyleKey[SystemTypeface],
+    fallback: SystemTypeface,
+): SystemTypeface =
   let value = theme.ruleValue(context, key.keyName, styleFontFace(fallback))
   if value.kind == svFontFace: value.fontFace else: fallback
 
@@ -1528,15 +1536,13 @@ proc setFontName*(theme: var ThemeBuilder, role: FontRole, name: string) =
       defaultFontName(role)
   theme[role.fontNameToken()] = styleKeyword(resolved)
 
-proc fontFace*(theme: Theme, role: FontRole): SystemTypefaceFile =
+proc fontFace*(theme: Theme, role: FontRole): SystemTypeface =
   ## Resolves the exact local face selected for a user-configurable font role.
   let value = theme.styleValue(role.fontFaceToken(), styleFontFace(result))
   if value.kind == svFontFace:
     result = value.fontFace
 
-proc setFontFace*(
-    theme: var ThemeBuilder, role: FontRole, fontFace: SystemTypefaceFile
-) =
+proc setFontFace*(theme: var ThemeBuilder, role: FontRole, fontFace: SystemTypeface) =
   ## Sets the exact local face for a role; an empty path restores name lookup.
   theme[role.fontFaceToken()] = styleFontFace(fontFace)
 
@@ -1544,7 +1550,7 @@ proc fontName*(appearance: Appearance, role: FontRole): string =
   ## Resolves a user-configurable font role from an appearance.
   appearance.theme.fontName(role)
 
-proc fontFace*(appearance: Appearance, role: FontRole): SystemTypefaceFile =
+proc fontFace*(appearance: Appearance, role: FontRole): SystemTypeface =
   ## Resolves the exact local face selected for a user-configurable font role.
   appearance.theme.fontFace(role)
 
@@ -1645,7 +1651,7 @@ proc resolveTextStyle*(
     color: theme.colorRule(context, StyleTextColor, colorFallback),
     insets: theme.insetsRule(context, StyleTextInsets, insetsFallback),
     fontName: theme.keywordRule(context, StyleFontName, defaultFontName()),
-    fontFace: theme.fontFaceRule(context, StyleFontFace, SystemTypefaceFile()),
+    fontFace: theme.fontFaceRule(context, StyleFontFace, SystemTypeface()),
     fontSize: max(theme.lengthRule(context, StyleFontSize, defaultFontSize()), 1.0'f32),
     fontSlant: theme.keywordRule(context, StyleFontSlant, "normal").fontSlant,
     language:

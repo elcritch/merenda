@@ -41,7 +41,7 @@ type
 
   SelectedFont = object
     name: string
-    face: SystemTypefaceFile
+    face: SystemTypeface
 
   FontSelectionProc = proc(font: SelectedFont) {.closure.}
   FontLoadingProgressProc = proc(message: string) {.closure.}
@@ -190,9 +190,8 @@ proc selectionPathForFont(
     return defaultFontPickerPath()
   for identifier, face in controller.faces:
     let matches =
-      if selectedFont.face.path.len > 0:
-        face.path == selectedFont.face.path and
-          face.faceIndex == selectedFont.face.faceIndex
+      if selectedFont.face.file.path.len > 0:
+        face.typeface == selectedFont.face
       else:
         face.fontName == selectedFont.name
     if not matches:
@@ -339,6 +338,13 @@ proc reloadFontPickerIfVisible(controller: FontPickerController) =
   controller.needsFontPickerReload = false
   controller.pendingFontPickerBatchCount = 0
 
+when defined(merendaTests):
+  proc rebuildFontPickerItemsForTests*(controller: FontPickerController) =
+    controller.rebuildFontPickerItems()
+
+  proc reloadFontPickerIfVisibleForTests*(controller: FontPickerController) =
+    controller.reloadFontPickerIfVisible()
+
 proc loadFontCatalog(loader: FontCatalogLoader) {.slot.} =
   if loader.finished:
     return
@@ -478,10 +484,7 @@ protocol FontPickerDelegate of CascadingDelegate:
     var selectedFont: SelectedFont
     if identifier in controller.faces:
       let face = controller.faces[identifier]
-      selectedFont = SelectedFont(
-        name: face.fontName,
-        face: SystemTypefaceFile(path: face.path, faceIndex: face.faceIndex),
-      )
+      selectedFont = SelectedFont(name: face.fontName, face: face.typeface)
     controller.desiredSelectedFont = selectedFont
     controller.selectionHandler(selectedFont)
 

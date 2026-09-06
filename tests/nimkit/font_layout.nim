@@ -137,7 +137,7 @@ suite "nimkit font layout":
       const
         TestLanguage = "x-native-font-face"
         TestScript = "latn"
-      let systemTypeface = findSystemTypefaceFile(["Helvetica Bold"])
+      let systemTypeface = findSystemTypeface(["Helvetica Bold"])
       require systemTypeface.isSome
 
       setFontFallbackGroups(TestLanguage, TestScript, @[@["Helvetica Bold"]])
@@ -158,8 +158,8 @@ suite "nimkit font layout":
         )
       require resolved.len == 1
       let source = getTypefaceSource(resolved[0])
-      check source.name == systemTypeface.get().path
-      check source.faceIndex == systemTypeface.get().faceIndex
+      check source.name == systemTypeface.get().file.path
+      check source.faceIndex == systemTypeface.get().file.faceIndex
 
   test "font fallback groups are runtime customizable by language and script":
     setFontFallbackGroups("x-test", "Test", @[@["Example Sans"]])
@@ -223,8 +223,7 @@ suite "nimkit font layout":
       var typefaceIds: array[2, TypefaceId]
 
       for faceIndex in 0 .. 1:
-        let selectedFace =
-          SystemTypefaceFile(path: collectionPath, faceIndex: faceIndex)
+        let selectedFace = initSystemTypeface(collectionPath, faceIndex)
         var builder = initThemeBuilder(initTheme())
         builder.setFontName(frUI, "PT Sans")
         builder.setFontFace(frUI, selectedFace)
@@ -243,6 +242,28 @@ suite "nimkit font layout":
         check source.faceIndex == faceIndex
 
       check typefaceIds[0] != typefaceIds[1]
+
+    test "theme text styles preserve exact variable font coordinates":
+      let fontPath =
+        getCurrentDir() / "deps/figdraw/examples/fonts/NotoNaskhArabic-wght.ttf"
+      require fileExists(fontPath)
+      let selectedFace =
+        initSystemTypeface(fontPath, variations = [fontVariation("wght", 650.0'f32)])
+      var builder = initThemeBuilder(initTheme())
+      builder.setFontName(frUI, "Noto Naskh Arabic")
+      builder.setFontFace(frUI, selectedFace)
+      let
+        appearance = initAppearance(builder.finish())
+        style = appearance.resolveTextStyle(
+          controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
+        )
+        font = style.textFont().font
+
+      check appearance.fontFace(frUI) == selectedFace
+      check style.fontFace == selectedFace
+      check font.variations.len == 1
+      check font.variations[0].tag == "wght"
+      check font.variations[0].value == 650.0'f32
 
   test "monospace font environment override is independent":
     withCleanMonospaceFontEnv(

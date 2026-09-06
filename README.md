@@ -293,6 +293,21 @@ builder.setFontName(frMonospace, "SFNSMono.ttf")
 root.appearance = initAppearance(builder.finish())
 ```
 
+Installed collection faces and named variable-font instances can also be kept
+exactly. `SystemTypeface` carries the physical file and face index together with
+canonical variation coordinates:
+
+```nim
+let semibold = initSystemTypeface(
+  "/path/to/VariableFont.ttf",
+  variations = [fontVariation("wght", 650.0'f32)],
+)
+builder.setFontFace(frUI, semibold)
+```
+
+The settings font picker uses this identity so selecting two named instances
+that share one variable-font file does not collapse them into the same face.
+
 Merenda follows FigDraw's resolved `figdrawTextBackend` constant. The default
 Pixie backend is lightweight and supports the Interface and Monospace roles.
 The HarfBuzzy and hybrid backends additionally detect Unicode scripts, preserve

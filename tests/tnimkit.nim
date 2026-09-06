@@ -7,10 +7,12 @@ import nimkit/diagnostics
 import nimkit/filesearch
 import nimkit/gitstatus
 import nimkit/font_layout
+import nimkit/fontpickers
 import nimkit/images
 import nimkit/markdownviews
 import nimkit/renderfragments
 import nimkit/resources
+import nimkit/settings
 import nimkit/svgimages
 import nimkit/svgpathloader
 import nimkit/threading

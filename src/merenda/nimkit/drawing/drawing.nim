@@ -168,11 +168,16 @@ proc defaultTypefaceRequest(
     result.fallbackNames.add MonospaceTypefaceFallbackNames
 
 proc defaultTypefaceCacheKey(
-    request: tuple[name: string, fallbackNames: seq[string]],
-    fontFace: SystemTypefaceFile,
+    request: tuple[name: string, fallbackNames: seq[string]], fontFace: SystemTypeface
 ): string =
-  if fontFace.path.len > 0:
-    return "face\0" & fontFace.path & "\0" & $fontFace.faceIndex
+  if fontFace.file.path.len > 0:
+    result = "face\0" & fontFace.file.path & "\0" & $fontFace.file.faceIndex
+    for variation in fontFace.variations:
+      result.add '\0'
+      result.add variation.tag
+      result.add '='
+      result.add $cast[uint32](variation.value)
+    return
   result = request.name
   for fallbackName in request.fallbackNames:
     result.add '\0'
@@ -187,7 +192,7 @@ proc defaultFont(
     language = defaultLanguageTag(),
     slant = fsUpright,
     role = frUI,
-    fontFace = SystemTypefaceFile(),
+    fontFace = SystemTypeface(),
 ): FontRef =
   let
     resolvedLanguage =
@@ -200,17 +205,24 @@ proc defaultFont(
       if slant == fsUpright:
         fontFace
       else:
-        SystemTypefaceFile()
+        SystemTypeface()
     cacheKey = request.defaultTypefaceCacheKey(exactFontFace)
   if defaultTypefaceIds.len == 0:
     defaultTypefaceIds = initTable[string, TypefaceId]()
   if cacheKey notin defaultTypefaceIds:
     defaultTypefaceIds[cacheKey] =
-      if exactFontFace.path.len > 0:
-        loadTypeface(exactFontFace)
+      if exactFontFace.file.path.len > 0:
+        exactFontFace.fontWithSize(size).typefaceId
       else:
         loadTypeface(request.name, request.fallbackNames)
   var font = defaultTypefaceIds[cacheKey].fontWithSize(size)
+  if exactFontFace.file.path.len > 0:
+    font.variations =
+      newSeqOfCap[typeof(font.variations[0])](exactFontFace.variations.len)
+    for variation in exactFontFace.variations:
+      font.variations.add typeof(font.variations[0])(
+        tag: variation.tag, value: variation.value
+      )
   when AutomaticFontFallbackEnabled:
     font.language = $resolvedLanguage
   fontRef(font)
@@ -567,7 +579,7 @@ proc textLayoutImpl(
           if fontName == style.fontName:
             style.fontFace
           else:
-            SystemTypefaceFile()
+            SystemTypeface()
       var font = defaultFont(
         attributes.fontSize, fontName, language, style.fontSlant, fontFace = fontFace
       ).font

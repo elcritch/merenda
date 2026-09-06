@@ -13,7 +13,7 @@ type
 privateAccess(TestFontPickerController)
 privateAccess(TestSelectedFont)
 
-type TestSystemTypefaceFile = typeof(default(TestSelectedFont).face)
+type TestSystemTypeface = typeof(default(TestSelectedFont).face)
 
 suite "nimkit settings":
   test "DarkBSD is selected by default and Aqua is named explicitly":
@@ -124,17 +124,25 @@ suite "nimkit settings":
       languageIdentifier = "system-font-language:english"
       familyIdentifier = languageIdentifier & ":family:test-font-family"
       proportionalFaceIdentifier = languageIdentifier & ":face:test-proportional"
-      proportionalFile =
-        TestSystemTypefaceFile(path: "/fonts/TestCollection.ttc", faceIndex: 3)
+      proportionalFile = TestSystemTypeface(
+        file: typeof(default(TestSystemTypeface).file)(
+          path: "/fonts/TestCollection.ttc", faceIndex: 3
+        ),
+        variations:
+          @[
+            typeof(default(TestSystemTypeface).variations[0])(
+              tag: "wght", value: 650.0'f32
+            )
+          ],
+      )
       proportionalFont =
         TestSelectedFont(name: "Test Proportional", face: proportionalFile)
     var
       proportionalFace = initFontCatalogFace(
         "Regular",
         "English",
-        proportionalFile.path,
+        proportionalFile,
         identifier = "test-proportional",
-        faceIndex = proportionalFile.faceIndex,
         fontName = proportionalFont.name,
       )
       monospaceFace = initFontCatalogFace(
@@ -160,7 +168,7 @@ suite "nimkit settings":
       @[
         initFontCatalogEntry(
           "Test Fonts",
-          proportionalFile.path,
+          proportionalFile.file.path,
           identifier = "test-font-family",
           faces = [proportionalFace, monospaceFace, unavailableFace],
         )
@@ -248,7 +256,7 @@ suite "nimkit settings":
         ],
       )
     settings.fontPickerController.catalogEntries = entries
-    settings.fontPickerController.rebuildFontPickerItems()
+    settings.fontPickerController.rebuildFontPickerItemsForTests()
     fontPicker.frame = rect(0, 0, 360, 120)
     fontPicker.reloadData()
     fontPicker.selectedPath =
@@ -260,7 +268,7 @@ suite "nimkit settings":
     check browsedOffset.y > 0.0'f32
 
     settings.fontPickerController.needsFontPickerReload = true
-    settings.fontPickerController.reloadFontPickerIfVisible()
+    settings.fontPickerController.reloadFontPickerIfVisibleForTests()
 
     check familyColumn.scrollView().contentOffset() == browsedOffset
 
