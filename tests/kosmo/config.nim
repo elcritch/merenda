@@ -16,7 +16,8 @@ suite "Kosmo configuration":
       removeDir(root)
 
     let
-      interfaceFace = app.appearance().fontFace(frUI)
+      interfaceFaces = app.appearance().fontFaces(frUI)
+      interfaceFace = interfaceFaces.regular
       monospaceFace = app.appearance().fontFace(frMonospace)
     check app.appearance().fontName(frUI) == KosmoInterfaceFontName
     check app.appearance().fontName(frMonospace) == KosmoMonospaceFontName
@@ -24,6 +25,11 @@ suite "Kosmo configuration":
     check monospaceFace.file.path.extractFilename().endsWith(KosmoMonospaceFontFileName)
     check sha256(readFile(interfaceFace.file.path)).toHex().toLowerAscii() ==
       KosmoInterfaceFontSha256
+    check sha256(readFile(interfaceFaces.italic.file.path)).toHex().toLowerAscii() ==
+      KosmoInterfaceItalicFontSha256
+    check sha256(readFile(interfaceFaces.bold.file.path)).toHex().toLowerAscii() ==
+      KosmoInterfaceBoldFontSha256
+    check interfaceFaces.boldItalic.file.path.len == 0
     check sha256(readFile(monospaceFace.file.path)).toHex().toLowerAscii() ==
       KosmoMonospaceFontSha256
     let
@@ -53,10 +59,54 @@ suite "Kosmo configuration":
     let manager = newKosmoWindowManager(app, assetCacheDirectory = cachePath)
     defer:
       manager.close()
-    check app.appearance().fontName(frUI) == defaultFontName(frUI)
-    check app.appearance().fontName(frMonospace) == defaultFontName(frMonospace)
+    check app.appearance().fontName(frUI) == platformDefaultFontName(frUI)
+    check app.appearance().fontName(frMonospace) == platformDefaultFontName(frMonospace)
     check app.appearance().fontFace(frUI).file.path.len == 0
     check app.appearance().fontFace(frMonospace).file.path.len == 0
+
+  test "defers unused bundled font installation until settings requests it":
+    let
+      root = createTempDir("merenda-kosmo-deferred-fonts-", "")
+      cachePath = root / "assets"
+      configPath = root / "config.json"
+      config = KosmoConfig(
+        merendaFont: "Configured Interface", merendaMonoFont: "Configured Monospace"
+      )
+      app = newApplication("Kosmo Deferred Fonts Test")
+    defer:
+      removeDir(root)
+    require config.saveKosmoConfig(configPath)
+
+    let manager = newKosmoWindowManager(
+      app, configPath = configPath, assetCacheDirectory = cachePath
+    )
+    defer:
+      manager.close()
+    check not dirExists(cachePath)
+
+    app.showMerendaSettings()
+    check dirExists(cachePath)
+    for fileName in [
+      KosmoInterfaceFontFileName, KosmoInterfaceItalicFontFileName,
+      KosmoInterfaceBoldFontFileName, KosmoMonospaceFontFileName,
+    ]:
+      var found = false
+      for path in walkDirRec(cachePath):
+        if path.extractFilename().endsWith(fileName):
+          found = true
+      check found
+    app.windows[^1].close()
+
+  test "does not install bundled fonts without an application":
+    let
+      root = createTempDir("merenda-kosmo-no-app-fonts-", "")
+      cachePath = root / "assets"
+      manager = newKosmoWindowManager(app = nil, assetCacheDirectory = cachePath)
+    defer:
+      manager.close()
+      removeDir(root)
+
+    check not dirExists(cachePath)
 
   test "round trips the persisted appearance choices as JSON":
     let

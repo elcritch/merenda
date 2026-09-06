@@ -13,6 +13,11 @@ when not defined(useNativeDynlib):
   import std/hashes
   from pkg/pixie import resize
 
+when defined(useNativeDynlib):
+  from figdraw/dynlib import SystemTypeface
+else:
+  from figdraw import SystemTypeface
+
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8
 import sigils/[core, threads]
@@ -92,9 +97,17 @@ type
     syntaxTokenColors*: array[SyntaxTokenClass, Color]
       ## Fenced-code colors keyed by frontend-neutral token class.
     bodyFontName*: string ## Proportional document font.
-    emphasisFontName*: string ## Bold proportional font for inline emphasis.
+    bodyFontFace*: SystemTypeface ## Exact proportional face, when available.
+    emphasisFontName*: string ## Italic proportional font for inline emphasis.
+    emphasisFontFace*: SystemTypeface ## Exact italic proportional face, when available.
+    strongFontName*: string ## Bold proportional font for strong text.
+    strongFontFace*: SystemTypeface ## Exact bold proportional face, when available.
     codeFontName*: string ## Monospace font for code and tables.
-    emphasisCodeFontName*: string ## Bold monospace font for emphasized table text.
+    codeFontFace*: SystemTypeface ## Exact monospace face, when available.
+    emphasisCodeFontName*: string ## Italic monospace font for inline emphasis.
+    emphasisCodeFontFace*: SystemTypeface ## Exact italic monospace face, when available.
+    strongCodeFontName*: string ## Bold monospace font for strong text.
+    strongCodeFontFace*: SystemTypeface ## Exact bold monospace face, when available.
     codeBlockStyle*: MarkdownBlockStyle ## Fenced and indented code-block panel.
     maximumImageSize*: Size
       ## Largest rendered image size; non-positive axes are unlimited.
@@ -273,6 +286,21 @@ func boldFontVariant(fontName: string): string =
       break
   parts.dir / (stem & "-Bold" & parts.ext)
 
+func italicFontVariant(fontName: string): string =
+  if fontName.len == 0:
+    return
+  let parts = fontName.splitFile()
+  var stem = parts.name
+  let lowerStem = stem.toLowerAscii()
+  for suffix in ["-italic", "_italic", " italic", "italic"]:
+    if lowerStem.endsWith(suffix):
+      return fontName
+  for suffix in ["-regular", "_regular", " regular", "regular"]:
+    if lowerStem.endsWith(suffix):
+      stem.setLen(stem.len - suffix.len)
+      break
+  parts.dir / (stem & "-Italic" & parts.ext)
+
 proc initMarkdownStyle*(): MarkdownStyle =
   ## Returns the light paper-style default presentation.
   let
@@ -290,9 +318,11 @@ proc initMarkdownStyle*(): MarkdownStyle =
     mutedColor: color(0.43, 0.48, 0.56, 1.0),
     ruleColor: color(0.58, 0.62, 0.68, 1.0),
     bodyFontName: bodyFontName,
-    emphasisFontName: bodyFontName.boldFontVariant(),
+    emphasisFontName: bodyFontName.italicFontVariant(),
+    strongFontName: bodyFontName.boldFontVariant(),
     codeFontName: codeFontName,
-    emphasisCodeFontName: codeFontName.boldFontVariant(),
+    emphasisCodeFontName: codeFontName.italicFontVariant(),
+    strongCodeFontName: codeFontName.boldFontVariant(),
     codeBlockStyle: initMarkdownBlockStyle(),
     maximumImageSize: initSize(640.0'f32, 420.0'f32),
     bodyFontSize: 14.0'f32,
@@ -403,30 +433,49 @@ proc resolvedImageContentType(builder: MarkdownBuilder, url: string): string =
 
 func bodyAttributes(style: MarkdownStyle): TextAttributes =
   defaultTextAttributes(
-    style.textColor, max(style.bodyFontSize, 1.0'f32), style.bodyFontName
+    style.textColor,
+    max(style.bodyFontSize, 1.0'f32),
+    style.bodyFontName,
+    fontFace = style.bodyFontFace,
   )
 
 func codeAttributes(style: MarkdownStyle, base: TextAttributes): TextAttributes =
   result = base
   result.foregroundColor = style.codeColor
   result.fontName = style.codeFontName
+  result.fontFace = style.codeFontFace
 
 func mutedCodeAttributes(style: MarkdownStyle, base: TextAttributes): TextAttributes =
   result = base
   result.foregroundColor = style.mutedColor
   result.fontName = style.codeFontName
+  result.fontFace = style.codeFontFace
   result.fontSize = max(base.fontSize - 1.0'f32, 1.0'f32)
 
-func emphasizedFontName(style: MarkdownStyle, baseFontName: string): string =
+func emphasizedFontName(
+    style: MarkdownStyle, baseFontName: string, strong: bool
+): string =
   let configured =
-    if baseFontName in [style.codeFontName, style.emphasisCodeFontName]:
-      style.emphasisCodeFontName
+    if baseFontName in
+        [style.codeFontName, style.emphasisCodeFontName, style.strongCodeFontName]:
+      if strong: style.strongCodeFontName else: style.emphasisCodeFontName
     else:
-      style.emphasisFontName
+      if strong: style.strongFontName else: style.emphasisFontName
   if configured.len > 0:
     configured
-  else:
+  elif strong:
     baseFontName.boldFontVariant()
+  else:
+    baseFontName.italicFontVariant()
+
+func emphasizedFontFace(
+    style: MarkdownStyle, baseFontName: string, strong: bool
+): SystemTypeface =
+  if baseFontName in
+      [style.codeFontName, style.emphasisCodeFontName, style.strongCodeFontName]:
+    if strong: style.strongCodeFontFace else: style.emphasisCodeFontFace
+  else:
+    if strong: style.strongFontFace else: style.emphasisFontFace
 
 proc add(builder: var MarkdownBuilder, value: string, attributes: TextAttributes) =
   let length = value.runeLen
@@ -599,13 +648,17 @@ proc renderInline(
     var emphasisAttributes = attributes
     emphasisAttributes.foregroundColor = builder.style.emphasisColor
     emphasisAttributes.fontName =
-      builder.style.emphasizedFontName(emphasisAttributes.fontName)
+      builder.style.emphasizedFontName(emphasisAttributes.fontName, strong = false)
+    emphasisAttributes.fontFace =
+      builder.style.emphasizedFontFace(emphasisAttributes.fontName, strong = false)
     builder.renderInlineChildren(token, emphasisAttributes)
   elif token of markdownParser.Strong:
     var strongAttributes = attributes
     strongAttributes.foregroundColor = builder.style.strongColor
     strongAttributes.fontName =
-      builder.style.emphasizedFontName(strongAttributes.fontName)
+      builder.style.emphasizedFontName(strongAttributes.fontName, strong = true)
+    strongAttributes.fontFace =
+      builder.style.emphasizedFontFace(strongAttributes.fontName, strong = true)
     builder.renderInlineChildren(token, strongAttributes)
   elif token of markdownParser.Link:
     var linkAttributes = attributes
@@ -939,6 +992,7 @@ proc renderTable(
 ) =
   var tableAttributes = attributes
   tableAttributes.fontName = builder.style.codeFontName
+  tableAttributes.fontFace = builder.style.codeFontFace
   tableAttributes.fontSize =
     max(builder.style.bodyFontSize * MarkdownTableFontScale, 1.0'f32)
   tableAttributes.paragraphStyle.lineBreakMode = tlbmClipping
@@ -949,6 +1003,8 @@ proc renderTable(
       var rowAttributes = tableAttributes
       if isHeader:
         rowAttributes.foregroundColor = builder.style.headingColor
+        rowAttributes.fontName = builder.style.strongCodeFontName
+        rowAttributes.fontFace = builder.style.strongCodeFontFace
       var renderedRow = MarkdownTableRow(header: isHeader)
       for cell in row.children:
         var renderedCell = MarkdownBuilder(
@@ -1191,6 +1247,8 @@ proc renderBlock(
     let heading = markdownParser.Heading(token)
     var headingAttributes = attributes
     headingAttributes.foregroundColor = builder.style.headingColor
+    headingAttributes.fontName = builder.style.strongFontName
+    headingAttributes.fontFace = builder.style.strongFontFace
     let level = min(max(heading.level, 1), 6)
     headingAttributes.fontSize = max(builder.style.headingFontSizes[level - 1], 1.0'f32)
     builder.renderInlineChildren(token, headingAttributes)
@@ -1738,6 +1796,7 @@ proc markdownTableCharacterWidth(view: MarkdownView): float32 =
   let codeStyle = TextStyle(
     color: view.xMarkdownStyle.textColor,
     fontName: view.xMarkdownStyle.codeFontName,
+    fontFace: view.xMarkdownStyle.codeFontFace,
     fontSize: max(view.xMarkdownStyle.bodyFontSize * MarkdownTableFontScale, 1.0'f32),
   )
   max(textNaturalSize("M", codeStyle).width, 1.0'f32)

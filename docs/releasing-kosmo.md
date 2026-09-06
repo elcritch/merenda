@@ -8,8 +8,8 @@ The `release-kosmo` GitHub Actions workflow builds these artifacts:
 - `SHA256SUMS.txt`
 
 Each platform archive also includes the notices for Kosmo's bundled IBM Plex
-Sans and Hack Nerd Font resources. On macOS the notices live in the app's
-`Contents/Resources` directory.
+Sans and JetBrains Mono Nerd Font Mono resources. On macOS the notices live in
+the app's `Contents/Resources` directory.
 
 Publishing a GitHub release runs all three builds and uploads the resulting archives to
 that release. The release tag should use the `vX.Y.Z` form; the version without the `v`

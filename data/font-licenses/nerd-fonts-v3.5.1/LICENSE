@@ -1,46 +1,48 @@
-# Bundled Font Notices
+# Nerd Fonts Licensing
 
-## IBM Plex Sans
+There are various sources used under various licenses:
 
-- Files: `IBMPlexSans-Regular.ttf`, `IBMPlexSans-Italic.ttf`, `IBMPlexSans-Bold.ttf`.
-- Copyright © 2017 IBM Corp. with Reserved Font Name “Plex”.
-- License: SIL Open Font License 1.1.
-- Source and complete license: <https://github.com/IBM/plex/blob/master/LICENSE.txt>
+* Nerd Fonts source fonts, patched fonts, and folders with explict OFL SIL files are licensed under SIL OPEN FONT LICENSE Version 1.1 (see below).
+* Nerd Fonts original source code files (such as `.sh`, `.py`, `font-patcher` and others) are licensed under the MIT License (MIT) (see below).
+* Many other licenses are present in this project for even more detailed breakdown see: [License Audit](https://github.com/ryanoasis/nerd-fonts/blob/-/license-audit.md).
 
-The copyright and license notice is also present in the font's OpenType metadata.
+## Source files not in folders containing an explicit license are using the MIT License (MIT)
 
-## JetBrains Mono Nerd Font Mono
+The MIT License (MIT)
 
-- File: `JetBrainsMonoNerdFontMono-Regular.ttf` (distributed as a ZIP resource).
-- Base font: JetBrains Mono 2.304.
-- Copyright 2020 The JetBrains Mono Project Authors.
-- Base license: SIL Open Font License 1.1, with no Reserved Font Names declared.
-- Complete license: `font-licenses/JetBrainsMono-OFL.txt`.
-- Source: <https://github.com/JetBrains/JetBrainsMono>.
-- Nerd Fonts patch version: 3.5.1.
-- Patch sources and glyph notices:
-  <https://github.com/ryanoasis/nerd-fonts/tree/v3.5.1>.
+Copyright (c) 2014 Ryan L McIntyre
 
-The versioned upstream audit and available glyph license texts are included in
-`font-licenses/nerd-fonts-v3.5.1/` and accompany release packages.
-Kosmo does not modify the font bytes. Upstream still lists Font Logos as
-“Unlicensed”; these notices do not resolve that upstream licensing gap.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-## IBM Plex License Text
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## Various Fonts, Patched Fonts, SVGs, Glyph Fonts, and any files in a folder with explicit SIL OFL 1.1 License
+
+Copyright (c) 2014, Ryan L McIntyre (https://ryanlmcintyre.com).
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
-
 This license is copied below, and is also available with a FAQ at:
-<http://scripts.sil.org/OFL>
+http://scripts.sil.org/OFL
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 -----------------------------------------------------------
 
 PREAMBLE
-
 The goals of the Open Font License (OFL) are to stimulate worldwide
 development of collaborative font projects, to support the font creation
 efforts of academic and linguistic communities, and to provide a free and
@@ -57,7 +59,6 @@ requirement for fonts to remain under this license does not apply
 to any document created using the fonts or their derivatives.
 
 DEFINITIONS
-
 "Font Software" refers to the set of files released by the Copyright
 Holder(s) under this license and clearly marked as such. This may
 include source files, build scripts and documentation.
@@ -77,7 +78,6 @@ new environment.
 writer or other person who contributed to the Font Software.
 
 PERMISSION & CONDITIONS
-
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of the Font Software, to use, study, copy, merge, embed, modify,
 redistribute, and sell modified and unmodified copies of the Font
@@ -111,12 +111,10 @@ remain under this license does not apply to any document created
 using the Font Software.
 
 TERMINATION
-
 This license becomes null and void if any of the above conditions are
 not met.
 
 DISCLAIMER
-
 THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
 MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT

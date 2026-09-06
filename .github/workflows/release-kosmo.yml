@@ -100,6 +100,7 @@ jobs:
             src/merenda/kosmo/kosmo.nim
           strip build/kosmo
           cp data/FONT-LICENSES.md build/FONT-LICENSES.md
+          cp -R data/font-licenses build/font-licenses
           build/kosmo --help
           if ldd build/kosmo | grep -q 'not found'; then
             ldd build/kosmo
@@ -107,7 +108,7 @@ jobs:
           fi
 
       - name: Package Kosmo
-        run: tar -czf dist/kosmo-linux-amd64.tar.gz -C build kosmo FONT-LICENSES.md
+        run: tar -czf dist/kosmo-linux-amd64.tar.gz -C build kosmo FONT-LICENSES.md font-licenses
 
       - name: Upload Linux binary
         uses: actions/upload-artifact@v4
@@ -239,6 +240,7 @@ jobs:
           cp packaging/macos/Info.plist "$app_path/Contents/Info.plist"
           cp data/FONT-LICENSES.md \
             "$app_path/Contents/Resources/FONT-LICENSES.md"
+          cp -R data/font-licenses "$app_path/Contents/Resources/font-licenses"
           /usr/libexec/PlistBuddy \
             -c "Set :CFBundleShortVersionString $version" \
             "$app_path/Contents/Info.plist"
@@ -408,8 +410,9 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item data/FONT-LICENSES.md dist/FONT-LICENSES.md
+          Copy-Item -Recurse data/font-licenses dist/font-licenses
           Compress-Archive `
-            -Path dist/kosmo.exe, dist/FONT-LICENSES.md `
+            -Path dist/kosmo.exe, dist/FONT-LICENSES.md, dist/font-licenses `
             -DestinationPath dist/kosmo-windows-amd64.zip `
             -Force
 

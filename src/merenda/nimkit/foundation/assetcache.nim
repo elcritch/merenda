@@ -5,7 +5,9 @@ import std/[appdirs, os, paths, strutils, tempfiles]
 import crunchy/[common, sha256]
 import zippy/ziparchives
 
-const NimKitAssetCacheDirectoryName* = "assets"
+const
+  NimKitAssetCacheDirectoryName* = "assets"
+  DefaultMaximumEmbeddedAssetBytes* = 64'i64 * 1024'i64 * 1024'i64
 
 type
   EmbeddedZipAsset* = object ## One file stored in an embedded ZIP archive.
@@ -13,6 +15,7 @@ type
     archiveMember*: string
     archiveContents*: string
     contentSha256*: string
+    maximumContentBytes*: int64
 
   EmbeddedAssetInstallState* = enum
     eaisFailed
@@ -40,18 +43,27 @@ func validateSha256(value: string) =
       raise newException(ValueError, "embedded asset SHA-256 must be hexadecimal")
 
 func initEmbeddedZipAsset*(
-    fileName, archiveContents, contentSha256: string, archiveMember = ""
+    fileName, archiveContents, contentSha256: string,
+    archiveMember = "",
+    maximumContentBytes = DefaultMaximumEmbeddedAssetBytes,
 ): EmbeddedZipAsset =
-  ## Describe one statically embedded ZIP member and its expected contents.
+  ## Describe one trusted, statically embedded ZIP member and its expected contents.
+  ##
+  ## `maximumContentBytes` rejects an oversized member after Zippy extracts it.
+  ## Callers must still treat the compiled archive itself as trusted because Zippy's
+  ## reader does not expose a pre-extraction uncompressed-size query.
   fileName.validateFileName()
   contentSha256.validateSha256()
   if archiveContents.len == 0:
     raise newException(ValueError, "embedded ZIP archive cannot be empty")
+  if maximumContentBytes <= 0:
+    raise newException(ValueError, "embedded asset size limit must be positive")
   result = EmbeddedZipAsset(
     fileName: fileName,
     archiveMember: if archiveMember.len > 0: archiveMember else: fileName,
     archiveContents: archiveContents,
     contentSha256: contentSha256.toLowerAscii(),
+    maximumContentBytes: maximumContentBytes,
   )
 
 func succeeded*(installResult: EmbeddedAssetInstallResult): bool =
@@ -70,10 +82,14 @@ proc nimkitAssetCacheDirectory*(applicationIdentifier: string): string =
 func embeddedAssetCachePath(asset: EmbeddedZipAsset, cacheDirectory: string): string =
   cacheDirectory / (asset.contentSha256.toLowerAscii() & "-" & asset.fileName)
 
-proc cachedAssetIsValid(path, expectedSha256: string): bool =
+proc cachedAssetIsValid(
+    path, expectedSha256: string, maximumContentBytes: int64
+): bool =
   if not fileExists(path):
     return
   try:
+    if getFileSize(path) > maximumContentBytes:
+      return
     result = sha256(readFile(path)).toHex().toLowerAscii() == expectedSha256
   except OSError:
     discard
@@ -85,8 +101,12 @@ proc removeFileIfPresent(path: string) =
     except OSError:
       discard
 
-proc installEmbeddedZipAsset*(
-    asset: EmbeddedZipAsset, applicationIdentifier: string, cacheDirectory = ""
+proc installZipAsset(
+    asset: EmbeddedZipAsset,
+    applicationIdentifier: string,
+    cacheDirectory = "",
+    extractedContents = "",
+    hasExtractedContents = false,
 ): EmbeddedAssetInstallResult =
   ## Extract and verify an embedded ZIP member in the application asset cache.
   ##
@@ -99,10 +119,12 @@ proc installEmbeddedZipAsset*(
   try:
     asset.fileName.validateFileName()
     asset.contentSha256.validateSha256()
-    if asset.archiveContents.len == 0:
+    if not hasExtractedContents and asset.archiveContents.len == 0:
       raise newException(ValueError, "embedded ZIP archive cannot be empty")
     if asset.archiveMember.len == 0:
       raise newException(ValueError, "embedded ZIP member cannot be empty")
+    if asset.maximumContentBytes <= 0:
+      raise newException(ValueError, "embedded asset size limit must be positive")
 
     let
       expectedSha256 = asset.contentSha256.toLowerAscii()
@@ -114,7 +136,7 @@ proc installEmbeddedZipAsset*(
       targetPath = asset.embeddedAssetCachePath(resolvedCacheDirectory)
     createDir(resolvedCacheDirectory)
 
-    if targetPath.cachedAssetIsValid(expectedSha256):
+    if targetPath.cachedAssetIsValid(expectedSha256, asset.maximumContentBytes):
       return EmbeddedAssetInstallResult(
         state: eaisReady,
         path: targetPath,
@@ -122,16 +144,19 @@ proc installEmbeddedZipAsset*(
         cacheHit: true,
       )
 
-    let archiveFile =
-      createTempFile(".nimkit-embedded-", ".zip", resolvedCacheDirectory)
-    archivePath = archiveFile.path
-    archiveFile.cfile.close()
-    writeFile(archivePath, asset.archiveContents)
-
-    reader = openZipArchive(archivePath)
-    let contents = reader.extractFile(asset.archiveMember)
-    reader.close()
-    reader = nil
+    var contents = extractedContents
+    if not hasExtractedContents:
+      let archiveFile =
+        createTempFile(".nimkit-embedded-", ".zip", resolvedCacheDirectory)
+      archivePath = archiveFile.path
+      archiveFile.cfile.close()
+      writeFile(archivePath, asset.archiveContents)
+      reader = openZipArchive(archivePath)
+      contents = reader.extractFile(asset.archiveMember)
+      reader.close()
+      reader = nil
+    if contents.len.int64 > asset.maximumContentBytes:
+      raise newException(ValueError, "embedded asset exceeds its size limit")
     if sha256(contents).toHex().toLowerAscii() != expectedSha256:
       raise newException(ValueError, "embedded asset SHA-256 does not match")
 
@@ -140,9 +165,17 @@ proc installEmbeddedZipAsset*(
     outputPath = outputFile.path
     outputFile.cfile.close()
     writeFile(outputPath, contents)
-    if fileExists(targetPath):
-      removeFile(targetPath)
-    moveFile(outputPath, targetPath)
+    try:
+      moveFile(outputPath, targetPath)
+    except OSError:
+      if targetPath.cachedAssetIsValid(expectedSha256, asset.maximumContentBytes):
+        return EmbeddedAssetInstallResult(
+          state: eaisReady,
+          path: targetPath,
+          byteLength: getFileSize(targetPath),
+          cacheHit: true,
+        )
+      raise
     outputPath.setLen(0)
 
     result = EmbeddedAssetInstallResult(
@@ -158,3 +191,58 @@ proc installEmbeddedZipAsset*(
         discard
     archivePath.removeFileIfPresent()
     outputPath.removeFileIfPresent()
+
+proc installEmbeddedZipAsset*(
+    asset: EmbeddedZipAsset, applicationIdentifier: string, cacheDirectory = ""
+): EmbeddedAssetInstallResult =
+  ## Installs a trusted embedded member, verifying its expected SHA-256.
+  installZipAsset(asset, applicationIdentifier, cacheDirectory)
+
+proc installZipAssetFile*(
+    archivePath, applicationIdentifier: string,
+    cacheDirectory = "",
+    archiveMember = "",
+    maximumContentBytes = DefaultMaximumEmbeddedAssetBytes,
+): EmbeddedAssetInstallResult =
+  ## Installs a member of a trusted local ZIP into the embedded-asset cache.
+  ## By default `Font.ttf.zip` selects the member `Font.ttf`.
+  ## The extracted bytes determine the cache key; this does not authenticate the ZIP.
+  ## As with embedded archives, the size check occurs after decompression.
+  var reader: ZipArchiveReader
+  try:
+    if maximumContentBytes <= 0:
+      raise newException(ValueError, "ZIP asset size limit must be positive")
+    if getFileSize(archivePath) > maximumContentBytes:
+      raise newException(ValueError, "ZIP asset archive exceeds its size limit")
+    let member =
+      if archiveMember.len > 0:
+        archiveMember
+      else:
+        archivePath.extractFilename().changeFileExt("")
+    reader = openZipArchive(archivePath)
+    let contents = reader.extractFile(member)
+    reader.close()
+    reader = nil
+    if contents.len.int64 > maximumContentBytes:
+      raise newException(ValueError, "ZIP asset member exceeds its size limit")
+    let asset = EmbeddedZipAsset(
+      fileName: member.extractFilename(),
+      archiveMember: member,
+      contentSha256: sha256(contents).toHex().toLowerAscii(),
+      maximumContentBytes: maximumContentBytes,
+    )
+    result = installZipAsset(
+      asset,
+      applicationIdentifier,
+      cacheDirectory,
+      contents,
+      hasExtractedContents = true,
+    )
+  except CatchableError as error:
+    result.errorMessage = error.msg
+  finally:
+    if not reader.isNil:
+      try:
+        reader.close()
+      except OSError:
+        discard

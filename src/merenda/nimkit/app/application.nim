@@ -8,6 +8,7 @@ import ../foundation/events
 import ../foundation/mainthreadwork
 import ../foundation/notifications
 import ../controls/menus
+import ../controls/fontpickers
 import ../controls/nativemenus as nativeMenus
 import ../drawing/images
 import ../responder/keybindings
@@ -25,6 +26,9 @@ import ./workspaces
 import ../app/windows
 
 type
+  SupplementalFontCatalogProvider* = proc(): seq[FontCatalogEntry] {.closure.}
+    ## Supplies application-private fonts when Merenda Settings is first opened.
+
   ApplicationAboutLink* = nativeMenus.AboutPanelLink
 
   ApplicationAboutInfo* = object
@@ -90,6 +94,7 @@ type
     xApplicationThreadId: int
     xAutomaticallyStartsLocalSigilThread: bool
     xMerendaSettingsWindow: MerendaSettingsWindow
+    xSupplementalFontCatalogProvider: SupplementalFontCatalogProvider
 
 const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
@@ -302,6 +307,18 @@ proc workspace*(app: Application): Workspace =
 
 proc `workspace=`*(app: Application, workspace: Workspace) =
   app.xWorkspace = workspace
+
+proc supplementalFontCatalogProvider*(
+    app: Application
+): SupplementalFontCatalogProvider =
+  ## Returns the provider for fonts that are not registered with the host OS.
+  app.xSupplementalFontCatalogProvider
+
+proc `supplementalFontCatalogProvider=`*(
+    app: Application, provider: SupplementalFontCatalogProvider
+) =
+  ## Sets a lazy provider used by subsequently created settings panels.
+  app.xSupplementalFontCatalogProvider = provider
 
 proc animationScheduler*(app: Application): AnimationScheduler =
   if app.xAnimationScheduler.isNil:
@@ -851,10 +868,17 @@ proc showWindow*(
 proc showMerendaSettings*(app: Application) =
   ## Opens Merenda's built-in appearance and typography settings panel.
   if app.xMerendaSettingsWindow.isNil or app.xMerendaSettingsWindow.window.isClosed:
+    var supplementalFonts: seq[FontCatalogEntry]
+    if not app.xSupplementalFontCatalogProvider.isNil:
+      try:
+        supplementalFonts = app.xSupplementalFontCatalogProvider()
+      except CatchableError:
+        discard
     app.xMerendaSettingsWindow = newMerendaSettingsWindow(
       proc(appearance: Appearance) =
         app.setAppearance(appearance),
       initialAppearance = app.effectiveAppearance(),
+      supplementalFonts = supplementalFonts,
     )
   app.xMerendaSettingsWindow.resetSelections()
   discard app.showWindow(

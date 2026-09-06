@@ -236,7 +236,7 @@ const archive = staticRead("assets/example.dat.zip")
 let asset = initEmbeddedZipAsset(
   "example.dat",
   archive,
-  # SHA-256 of the uncompressed `example.dat` member:
+  # Placeholder: replace with the SHA-256 of your uncompressed member.
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 )
 let installed = installEmbeddedZipAsset(asset, "com.example.application")
@@ -246,6 +246,22 @@ if installed.succeeded():
 
 Existing cache files are reused only when their checksum matches. Applications
 opt into embedded assets explicitly; NimKit does not install any by default.
+Archives must be trusted application resources. `maximumContentBytes` defaults
+to 64 MiB and is checked after extraction; it is not a decompression memory limit.
+`installZipAssetFile` installs a trusted local archive using the same cache format.
+For `Font.ttf.zip`, the default member is `Font.ttf`. NimKit's text font loader
+accepts these ZIP paths directly (including paths relative to `figDataDir`),
+extracts them on first use, and falls back to the normal system font if extraction
+fails. Kosmo's embedded archives use its application cache; directly loaded ZIP
+fonts use the shared NimKit asset cache.
+
+Kosmo enables bundled IBM Plex Sans (regular, italic, and bold) and JetBrains
+Mono Nerd Font Mono (regular). Fonts are installed only for roles without
+configuration or environment overrides. The Settings font catalog also includes
+these private fonts so they can be selected again. “System Default” selects the
+platform font independently of environment overrides. Other NimKit applications
+can supply private fonts through `Application.supplementalFontCatalogProvider`
+and configure related exact faces with `ThemeBuilder.setFontFaces`.
 
 The application run loop keeps NimKit views, responders, signal-slot dispatch,
 animations, native windows, and platform services on the main thread. When the
@@ -685,13 +701,13 @@ Merenda theme, interface-font, monospace-font, and font-size preferences.
 Invalid configuration is ignored. Selecting a Moe theme in Kosmo Settings
 updates this file.
 
-Kosmo embeds IBM Plex Sans Regular and Hack Nerd Font Regular as compressed
-resources. On startup it verifies and extracts them into NimKit's `kosmo/assets`
-cache, then uses them as the default interface and monospace faces on every
-platform. A configured font or font environment override takes precedence. If a
-bundled font cannot be extracted or written, that role falls back to the normal
-platform font. Merenda Settings keeps “System Default” available for switching a
-role back to its operating-system default.
+Kosmo embeds IBM Plex Sans Regular and JetBrains Mono Nerd Font Mono Regular as
+compressed resources. On startup it verifies and extracts them into NimKit's
+`kosmo/assets` cache, then uses them as the default interface and monospace faces
+on every platform. A configured font or font environment override takes
+precedence. If a bundled font cannot be extracted or written, that role falls
+back to the normal platform font. Merenda Settings keeps “System Default”
+available for switching a role back to its operating-system default.
 
 ```json
 {

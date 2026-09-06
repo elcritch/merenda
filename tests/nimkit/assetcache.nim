@@ -1,10 +1,33 @@
-import std/[os, tables, tempfiles, unittest]
+import std/[os, strutils, tables, tempfiles, unittest]
 
 import crunchy/[common, sha256]
 import merenda/nimkit
 import zippy/ziparchives
 
 suite "nimkit embedded asset cache":
+  test "local and embedded ZIPs share a content-addressed cache file":
+    let root = createTempDir("merenda-local-zip-", "")
+    defer:
+      removeDir(root)
+    let contents = "shared asset contents"
+    var entries = {"fixture.txt": contents}.toTable()
+    let archive = createZipArchive(entries)
+    let archivePath = root / "fixture.txt.zip"
+    writeFile(archivePath, archive)
+    let local = installZipAssetFile(archivePath, "nimkit-tests", root / "cache")
+    require local.succeeded()
+    let embedded = installEmbeddedZipAsset(
+      initEmbeddedZipAsset("fixture.txt", archive, sha256(contents).toHex()),
+      "nimkit-tests",
+      root / "cache",
+    )
+    check embedded.succeeded()
+    check embedded.cacheHit
+    check embedded.path == local.path
+    check readFile(local.path) == contents
+    writeFile(archivePath, "corrupt ZIP")
+    check not installZipAssetFile(archivePath, "nimkit-tests", root / "cache").succeeded()
+
   test "installs and reuses a verified ZIP member":
     let
       root = createTempDir("merenda-embedded-assets-", "")
@@ -51,3 +74,37 @@ suite "nimkit embedded asset cache":
       if kind == pcFile:
         inc cachedFiles
     check cachedFiles == 0
+
+  test "rejects members larger than the configured trusted-resource limit":
+    let
+      root = createTempDir("merenda-oversized-assets-", "")
+      contents = "too large"
+    defer:
+      removeDir(root)
+    var entries = {"fixture.txt": contents}.toTable()
+    let asset = initEmbeddedZipAsset(
+      "fixture.txt",
+      createZipArchive(entries),
+      sha256(contents).toHex(),
+      maximumContentBytes = 3,
+    )
+
+    let installed = installEmbeddedZipAsset(asset, "nimkit-tests", root)
+    check not installed.succeeded()
+    check installed.errorMessage.contains("size limit")
+
+  test "revalidates public asset descriptors before installing":
+    let
+      root = createTempDir("merenda-invalid-assets-", "")
+      contents = "embedded asset contents"
+    defer:
+      removeDir(root)
+    var entries = {"fixture.txt": contents}.toTable()
+    var asset = initEmbeddedZipAsset(
+      "fixture.txt", createZipArchive(entries), sha256(contents).toHex()
+    )
+    asset.maximumContentBytes = 0
+
+    let installed = installEmbeddedZipAsset(asset, "nimkit-tests", root)
+    check not installed.succeeded()
+    check installed.errorMessage.contains("positive")

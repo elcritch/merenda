@@ -2,6 +2,7 @@ import std/[importutils, strutils, tables, unittest]
 
 import merenda/nimkit
 import merenda/nimkit/app/settings
+from figdraw/extras/systemfonttypes import initSystemTypeface
 
 privateAccess(MerendaSettingsWindow)
 
@@ -13,7 +14,7 @@ type
 privateAccess(TestFontPickerController)
 privateAccess(TestSelectedFont)
 
-type TestSystemTypeface = typeof(default(TestSelectedFont).face)
+type TestSystemTypeface = typeof(default(TestSelectedFont).faces.regular)
 
 suite "nimkit settings":
   test "DarkBSD is selected by default and Aqua is named explicitly":
@@ -138,8 +139,9 @@ suite "nimkit settings":
             )
           ],
       )
-      proportionalFont =
-        TestSelectedFont(name: "Test Proportional", face: proportionalFile)
+      proportionalFont = TestSelectedFont(
+        name: "Test Proportional", faces: FontFaceSet(regular: proportionalFile)
+      )
     var
       proportionalFace = initFontCatalogFace(
         "Regular",
@@ -215,7 +217,7 @@ suite "nimkit settings":
     check onlyMonospaceFonts.sendAction()
     check fontPicker.selectedPath.len == 0
     check settings.previewFonts[frMonospace].name == proportionalFont.name
-    check settings.previewFonts[frMonospace].face == proportionalFile
+    check settings.previewFonts[frMonospace].faces.regular == proportionalFile
 
     check applyFont.sendAction()
     check appliedAppearance.fontName(frMonospace) == proportionalFont.name
@@ -467,9 +469,9 @@ suite "nimkit settings":
     defer:
       settings.window().close()
     check settings.appliedFonts[frUI].name == "Bundled Interface"
-    check settings.appliedFonts[frUI].face == interfaceFace
+    check settings.appliedFonts[frUI].faces.regular == interfaceFace
     check settings.appliedFonts[frMonospace].name == "Bundled Monospace"
-    check settings.appliedFonts[frMonospace].face == monospaceFace
+    check settings.appliedFonts[frMonospace].faces.regular == monospaceFace
     check not appliedAppearance.theme.isInitialized
 
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
@@ -483,3 +485,86 @@ suite "nimkit settings":
     check Button(applyFontView).sendAction()
     check appliedAppearance.fontName(frUI) == defaultFontName(frUI)
     check appliedAppearance.fontFace(frUI).file.path.len == 0
+
+  test "applying typography preserves a caller-provided theme":
+    let preservedColor = color(0.13, 0.37, 0.71, 1.0)
+    var
+      themeBuilder = initThemeBuilder(initDarkBSDTheme())
+      appliedAppearance: Appearance
+    themeBuilder["settings.test.preserved"] = styleColor(preservedColor)
+    let initialAppearance = initAppearance(themeBuilder.finish())
+    let settings = newMerendaSettingsWindow(
+      proc(appearance: Appearance) =
+        appliedAppearance = appearance,
+      initialAppearance = initialAppearance,
+    )
+    defer:
+      settings.window().close()
+    let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require tabsView of TabView
+    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    let applyFontView = settings.contentView().viewWithIdentifier("settings-apply-font")
+    require not applyFontView.isNil
+    require applyFontView of Button
+
+    check Button(applyFontView).sendAction()
+    check appliedAppearance.colorToken("settings.test.preserved", color(0.0, 0.0, 0.0)) ==
+      preservedColor
+
+  test "supplemental families restore exact styled face selections":
+    let
+      regular = initSystemTypeface("/cache/IBM-Plex-Sans-Regular.ttf")
+      italic = initSystemTypeface("/cache/IBM-Plex-Sans-Italic.ttf")
+      bold = initSystemTypeface("/cache/IBM-Plex-Sans-Bold.ttf")
+      regularFace = initFontCatalogFace(
+        "Regular",
+        DefaultFontLanguage,
+        regular,
+        identifier = "bundled-regular",
+        fontName = "IBM Plex Sans",
+      )
+      italicFace = initFontCatalogFace(
+        "Italic",
+        DefaultFontLanguage,
+        italic,
+        identifier = "bundled-italic",
+        fontName = "IBM Plex Sans",
+      )
+      boldFace = initFontCatalogFace(
+        "Bold",
+        DefaultFontLanguage,
+        bold,
+        identifier = "bundled-bold",
+        fontName = "IBM Plex Sans",
+      )
+      entry = initFontCatalogEntry(
+        "IBM Plex Sans",
+        regular.file.path,
+        identifier = "bundled-ibm-plex-sans",
+        faces = [regularFace, italicFace, boldFace],
+      )
+    var
+      initialAppearance = initAppearance()
+      builder = initThemeBuilder(initialAppearance.theme)
+    builder.setFontName(frUI, "IBM Plex Sans")
+    builder.setFontFaces(
+      frUI, FontFaceSet(regular: regular, italic: italic, bold: bold)
+    )
+    initialAppearance.theme = builder.finish()
+    let settings = newMerendaSettingsWindow(
+      initialAppearance = initialAppearance, supplementalFonts = [entry]
+    )
+    defer:
+      settings.window().close()
+
+    check settings.fontPickerController.desiredSelectedFont.faces.regular == regular
+    let familyIdentifier = "system-font-language:default:family:bundled-ibm-plex-sans"
+    let regularIdentifier = "system-font-language:default:face:bundled-regular"
+    require regularIdentifier in settings.fontPickerController.faces
+    settings.fontPickerController.didSelectCascadingItem(
+      settings.fontPickerController.fontPicker, 2, 0, regularIdentifier
+    )
+    check settings.previewFonts[frUI].faces.regular == regular
+    check settings.previewFonts[frUI].faces.italic == italic
+    check settings.previewFonts[frUI].faces.bold == bold
+    check familyIdentifier in settings.fontPickerController.items

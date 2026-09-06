@@ -41,7 +41,7 @@ type
 
   SelectedFont = object
     name: string
-    face: SystemTypeface
+    faces: FontFaceSet
 
   FontSelectionProc = proc(font: SelectedFont) {.closure.}
   FontLoadingProgressProc = proc(message: string) {.closure.}
@@ -84,6 +84,7 @@ type
     fontLoadingStopped: bool
     applyAppearanceHandler: AppearanceHandler
     activeTheme: SettingsTheme
+    baseAppearance: Appearance
     activeFontRole: FontRole
     previewFonts: array[FontRole, SelectedFont]
     previewFontSize: float32
@@ -190,8 +191,8 @@ proc selectionPathForFont(
     return defaultFontPickerPath()
   for identifier, face in controller.faces:
     let matches =
-      if selectedFont.face.file.path.len > 0:
-        face.typeface == selectedFont.face
+      if selectedFont.faces.regular.file.path.len > 0:
+        face.typeface == selectedFont.faces.regular
       else:
         face.fontName == selectedFont.name
     if not matches:
@@ -492,7 +493,22 @@ protocol FontPickerDelegate of CascadingDelegate:
     var selectedFont: SelectedFont
     if identifier in controller.faces:
       let face = controller.faces[identifier]
-      selectedFont = SelectedFont(name: face.fontName, face: face.typeface)
+      selectedFont.name = face.fontName
+      selectedFont.faces.regular = face.typeface
+      if face.regular:
+        let familyIdentifier = controller.items[identifier].parentIdentifier
+        for childIdentifier in controller.childIdentifiers.getOrDefault(
+          familyIdentifier
+        ):
+          if childIdentifier notin controller.faces:
+            continue
+          let familyFace = controller.faces[childIdentifier]
+          if familyFace.bold and (familyFace.italic or familyFace.oblique):
+            selectedFont.faces.boldItalic = familyFace.typeface
+          elif familyFace.bold:
+            selectedFont.faces.bold = familyFace.typeface
+          elif familyFace.italic or familyFace.oblique:
+            selectedFont.faces.italic = familyFace.typeface
     controller.desiredSelectedFont = selectedFont
     controller.selectionHandler(selectedFont)
 
@@ -539,32 +555,39 @@ func title(role: FontRole): string =
   of frMonospace: "Monospace"
 
 func selectedFont(appearance: Appearance, role: FontRole): SelectedFont =
-  result.face = appearance.fontFace(role)
+  result.faces = appearance.fontFaces(role)
   let name = appearance.fontName(role)
-  if result.face.file.path.len > 0 or name != defaultFontName(role):
+  if result.faces.regular.file.path.len > 0 or name != platformDefaultFontName(role):
     result.name = name
 
+proc appearance(theme: SettingsTheme): Appearance =
+  case theme
+  of stDarkBSD:
+    initAppearance(initDarkBSDTheme())
+  of stAqua:
+    initAppearance(initAquaTheme())
+  of stMacOS:
+    initAppearance(initMacOSTheme())
+  of stMacOSDark:
+    initAppearance(initMacOSDarkTheme())
+  of stNebula:
+    initAppearance(initNebulaTheme())
+  of stPeachy:
+    initAppearance(initPeachyTheme())
+  of stSynthwave83:
+    initAppearance(initSynthwave83Theme())
+
 proc appearanceFor(
-    theme: SettingsTheme,
+    baseAppearance: Appearance,
     fonts: array[FontRole, SelectedFont],
     fontSize: float32,
     previewRole = frUI,
 ): Appearance =
-  case theme
-  of stDarkBSD:
-    result = initAppearance(initDarkBSDTheme())
-  of stAqua:
-    result = initAppearance(initAquaTheme())
-  of stMacOS:
-    result = initAppearance(initMacOSTheme())
-  of stMacOSDark:
-    result = initAppearance(initMacOSDarkTheme())
-  of stNebula:
-    result = initAppearance(initNebulaTheme())
-  of stPeachy:
-    result = initAppearance(initPeachyTheme())
-  of stSynthwave83:
-    result = initAppearance(initSynthwave83Theme())
+  result =
+    if baseAppearance.theme.isInitialized:
+      baseAppearance
+    else:
+      stDarkBSD.appearance()
 
   var
     builder = initThemeBuilder(result.theme)
@@ -572,15 +595,22 @@ proc appearanceFor(
   for role in FontRole:
     var selectedFont = fonts[role]
     if selectedFont.name.len == 0:
-      selectedFont.name = defaultFontName(role)
+      selectedFont.name = platformDefaultFontName(role)
     selectedFonts[role] = selectedFont
     builder.setFontName(role, selectedFont.name)
-    builder.setFontFace(role, selectedFont.face)
+    builder.setFontFaces(role, selectedFont.faces)
   for role in TextStyleRoles:
     builder[role, StyleFontSize] = fontSize
   let preview = initStyleSelector(srTextField, id = SettingsFontPreviewIdentifier)
   builder[preview, StyleFontName] = styleKeyword(selectedFonts[previewRole].name)
-  builder[preview, StyleFontFace] = styleFontFace(selectedFonts[previewRole].face)
+  builder[preview, StyleFontFace] =
+    styleFontFace(selectedFonts[previewRole].faces.regular)
+  builder[preview, StyleItalicFontFace] =
+    styleFontFace(selectedFonts[previewRole].faces.italic)
+  builder[preview, StyleBoldFontFace] =
+    styleFontFace(selectedFonts[previewRole].faces.bold)
+  builder[preview, StyleBoldItalicFontFace] =
+    styleFontFace(selectedFonts[previewRole].faces.boldItalic)
   builder[preview, StyleFontSize] = fontSize
   result.theme = builder.finish()
 
@@ -616,7 +646,7 @@ proc updatePreview(settings: MerendaSettingsWindow) =
   if not settings.fontSizeValue.isNil:
     settings.fontSizeValue.text = settings.previewFontSize.fontSizeTitle()
   settings.updateFontRoleButtons()
-  settings.preview.appearance = settings.activeTheme.appearanceFor(
+  settings.preview.appearance = settings.baseAppearance.appearanceFor(
     settings.previewFonts, settings.previewFontSize, settings.activeFontRole
   )
   settings.updateStatus()
@@ -624,7 +654,7 @@ proc updatePreview(settings: MerendaSettingsWindow) =
 proc applyAppearance(settings: MerendaSettingsWindow) =
   if not settings.applyAppearanceHandler.isNil:
     settings.applyAppearanceHandler(
-      settings.activeTheme.appearanceFor(
+      settings.baseAppearance.appearanceFor(
         settings.appliedFonts, settings.appliedFontSize
       )
     )
@@ -635,6 +665,7 @@ proc themeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
     let index = ComboBox(sender).selectedIndex()
     if index >= ord(low(SettingsTheme)) and index <= ord(high(SettingsTheme)):
       settings.activeTheme = SettingsTheme(index)
+      settings.baseAppearance = settings.activeTheme.appearance()
       settings.applyAppearance()
 
 proc fontSizeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
@@ -711,7 +742,9 @@ protocol MerendaSettingsWindowDelegate of WindowDelegateProtocol:
     settings.stopFontLoading()
 
 proc newMerendaSettingsWindow*(
-    appearanceHandler: AppearanceHandler = nil, initialAppearance = Appearance()
+    appearanceHandler: AppearanceHandler = nil,
+    initialAppearance = Appearance(),
+    supplementalFonts: openArray[FontCatalogEntry] = [],
 ): MerendaSettingsWindow =
   ## Create a settings panel initialized from an application's appearance.
   result = MerendaSettingsWindow(
@@ -720,12 +753,14 @@ proc newMerendaSettingsWindow*(
     fontPickerController: newFontPickerController(),
     applyAppearanceHandler: appearanceHandler,
     activeTheme: stDarkBSD,
+    baseAppearance: stDarkBSD.appearance(),
     activeFontRole: frUI,
     previewFontSize: SettingsDefaultFontSize,
     appliedFontSize: SettingsDefaultFontSize,
     fontLoadingStatus: "Loading system fonts…",
   )
   if initialAppearance.theme.isInitialized:
+    result.baseAppearance = initialAppearance
     for role in FontRole:
       result.appliedFonts[role] = initialAppearance.selectedFont(role)
       result.previewFonts[role] = result.appliedFonts[role]
@@ -840,6 +875,9 @@ proc newMerendaSettingsWindow*(
     settings.updateStatus()
   fontPicker.dataSource = result.fontPickerController
   fontPicker.delegate = result.fontPickerController
+  for entry in supplementalFonts:
+    result.fontPickerController.catalogEntries.add entry
+    result.fontPickerController.addFontCatalogEntry(entry)
   fontPicker.selectedPath = defaultFontPickerPath()
   onlyMonospaceFontsCheckbox.identifier = SettingsOnlyMonospaceFontsIdentifier
   onlyMonospaceFontsCheckbox.accessibilityLabel = "Show monospace fonts"

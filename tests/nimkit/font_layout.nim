@@ -1,4 +1,4 @@
-import std/[options, os, strutils, unittest]
+import std/[options, os, strutils, tempfiles, unittest]
 
 import figdraw
 import figdraw/common/fontglyphs
@@ -12,6 +12,7 @@ when defined(macosx) and not defined(useNativeDynlib) and
 
 import merenda/nimkit/drawing
 import merenda/nimkit/foundation/types
+import merenda/nimkit/foundation/assetcache
 import merenda/nimkit/themes
 import merenda/nimkit/text/texttypes
 
@@ -216,7 +217,89 @@ suite "nimkit font layout":
       controlStyle(srMonoTextView), color(0.0, 0.0, 0.0), insets(0.0)
     ).fontName == "HackNerdFont-Regular.ttf"
 
+  test "theme keeps exact regular italic bold and bold-italic faces together":
+    let faces = FontFaceSet(
+      regular: initSystemTypeface("/fonts/Interface-Regular.ttf"),
+      italic: initSystemTypeface("/fonts/Interface-Italic.ttf"),
+      bold: initSystemTypeface("/fonts/Interface-Bold.ttf"),
+      boldItalic: initSystemTypeface("/fonts/Interface-BoldItalic.ttf"),
+    )
+    var builder = initThemeBuilder(initTheme())
+    builder.setFontName(frUI, "Interface")
+    builder.setFontFaces(frUI, faces)
+    let
+      appearance = initAppearance(builder.finish())
+      style = appearance.resolveTextStyle(
+        controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
+      )
+
+    check appearance.fontFaces(frUI) == faces
+    check style.fontFace == faces.regular
+    check style.italicFontFace == faces.italic
+    check style.boldFontFace == faces.bold
+    check style.boldItalicFontFace == faces.boldItalic
+
+  test "platform font defaults ignore environment overrides":
+    withCleanFontEnv(
+      proc() =
+        let expected = platformDefaultFontName(frUI)
+        putEnv(NimKitFontEnv, "Environment Override")
+        when not defined(nimkitIgnoreEnvOverrides):
+          check defaultFontName(frUI) == "Environment Override"
+        check platformDefaultFontName(frUI) == expected
+    )
+
   when not defined(useNativeDynlib):
+    test "font loader extracts a ZIP path into the asset cache":
+      let path = getCurrentDir() / "data/IBMPlexSans-Regular.ttf.zip"
+      let style = TextStyle(fontName: path, fontSize: 14.0)
+      let source = getTypefaceSource(style.textFont().font.typefaceId)
+      check source.name.endsWith("-IBMPlexSans-Regular.ttf")
+      check source.name.parentDir == nimkitAssetCacheDirectory("nimkit")
+      check fileExists(source.name)
+
+    test "font loader falls back when a ZIP cannot be extracted":
+      let
+        root = createTempDir("merenda-invalid-font-zip-", "")
+        path = root / "Missing.ttf.zip"
+      defer:
+        removeDir(root)
+      writeFile(path, "not a ZIP")
+      let source = getTypefaceSource(
+        TextStyle(fontName: path, fontSize: 14.0).textFont().font.typefaceId
+      )
+      check source.name != path
+      check source.name.len > 0
+
+    test "italic text loads its exact bundled face":
+      let
+        root = createTempDir("merenda-exact-italic-", "")
+        regular = installZipAssetFile(
+          getCurrentDir() / "data/IBMPlexSans-Regular.ttf.zip", "nimkit-tests", root
+        )
+        italic = installZipAssetFile(
+          getCurrentDir() / "data/IBMPlexSans-Italic.ttf.zip", "nimkit-tests", root
+        )
+      defer:
+        removeDir(root)
+      require regular.succeeded()
+      require italic.succeeded()
+      var builder = initThemeBuilder(initTheme())
+      builder.setFontName(frUI, "Private Interface")
+      builder.setFontFaces(
+        frUI,
+        FontFaceSet(
+          regular: initSystemTypeface(regular.path),
+          italic: initSystemTypeface(italic.path),
+        ),
+      )
+      var style = initAppearance(builder.finish()).resolveTextStyle(
+          controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
+        )
+      style.fontSlant = fsItalic
+      let source = getTypefaceSource(style.textFont().font.typefaceId)
+      check source.name == italic.path
+
     test "theme text styles load exact collection faces":
       let collectionPath = getCurrentDir() / "deps/pixie/tests/fonts/PTSans.ttc"
       require fileExists(collectionPath)

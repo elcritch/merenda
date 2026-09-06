@@ -1,46 +1,19 @@
-# Bundled Font Notices
-
-## IBM Plex Sans
-
-- Files: `IBMPlexSans-Regular.ttf`, `IBMPlexSans-Italic.ttf`, `IBMPlexSans-Bold.ttf`.
-- Copyright © 2017 IBM Corp. with Reserved Font Name “Plex”.
-- License: SIL Open Font License 1.1.
-- Source and complete license: <https://github.com/IBM/plex/blob/master/LICENSE.txt>
-
-The copyright and license notice is also present in the font's OpenType metadata.
-
-## JetBrains Mono Nerd Font Mono
-
-- File: `JetBrainsMonoNerdFontMono-Regular.ttf` (distributed as a ZIP resource).
-- Base font: JetBrains Mono 2.304.
-- Copyright 2020 The JetBrains Mono Project Authors.
-- Base license: SIL Open Font License 1.1, with no Reserved Font Names declared.
-- Complete license: `font-licenses/JetBrainsMono-OFL.txt`.
-- Source: <https://github.com/JetBrains/JetBrainsMono>.
-- Nerd Fonts patch version: 3.5.1.
-- Patch sources and glyph notices:
-  <https://github.com/ryanoasis/nerd-fonts/tree/v3.5.1>.
-
-The versioned upstream audit and available glyph license texts are included in
-`font-licenses/nerd-fonts-v3.5.1/` and accompany release packages.
-Kosmo does not modify the font bytes. Upstream still lists Font Logos as
-“Unlicensed”; these notices do not resolve that upstream licensing gap.
-
-## IBM Plex License Text
-
-Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+Copyright (c) <dates>, <Erik Flowers> (<URL|email>),
+with Reserved Font Name <Reserved Font Name>.
+Copyright (c) <dates>, <additional Copyright Holder> (<URL|email>),
+with Reserved Font Name <additional Reserved Font Name>.
+Copyright (c) <dates>, <additional Copyright Holder> (<URL|email>).
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
-
 This license is copied below, and is also available with a FAQ at:
-<http://scripts.sil.org/OFL>
+http://scripts.sil.org/OFL
+
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 -----------------------------------------------------------
 
 PREAMBLE
-
 The goals of the Open Font License (OFL) are to stimulate worldwide
 development of collaborative font projects, to support the font creation
 efforts of academic and linguistic communities, and to provide a free and
@@ -57,7 +30,6 @@ requirement for fonts to remain under this license does not apply
 to any document created using the fonts or their derivatives.
 
 DEFINITIONS
-
 "Font Software" refers to the set of files released by the Copyright
 Holder(s) under this license and clearly marked as such. This may
 include source files, build scripts and documentation.
@@ -77,7 +49,6 @@ new environment.
 writer or other person who contributed to the Font Software.
 
 PERMISSION & CONDITIONS
-
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of the Font Software, to use, study, copy, merge, embed, modify,
 redistribute, and sell modified and unmodified copies of the Font
@@ -111,12 +82,10 @@ remain under this license does not apply to any document created
 using the Font Software.
 
 TERMINATION
-
 This license becomes null and void if any of the above conditions are
 not met.
 
 DISCLAIMER
-
 THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
 MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
