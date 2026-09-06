@@ -212,8 +212,7 @@ proc hideDisclosureButtons(panel: KosmoGitDiffPanel) =
 
 proc renderDiff(panel: KosmoGitDiffPanel) =
   panel.hideDisclosureButtons()
-  var document = "# Git Diff\n\n"
-  document.add panel.snapshot.rootPath.markdownLabel() & "\n\n"
+  var document = "# " & panel.snapshot.rootPath.lastPathPart().markdownLabel() & "\n\n"
   if panel.loading:
     document.add "Loading changes…\n"
   elif panel.snapshot.errorMessage.len > 0:
@@ -222,8 +221,6 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
   elif panel.snapshot.files.len == 0:
     document.add "No changes. Your working tree matches HEAD.\n"
   else:
-    document.add "Staged and unstaged changes against HEAD, including untracked files. " &
-      "Full-file context using the current Markdown syntax colors.\n\n"
     for index, file in panel.snapshot.files:
       let collapsed = file.path in panel.collapsed
       document.add "## [" & (if collapsed: "▸ " else: "▾ ") &
@@ -256,22 +253,29 @@ proc activateDisclosure(button: GitDiffDisclosureButton): bool =
 
 protocol GitDiffDisclosureDrawing of nimkit.ViewDrawingProtocol:
   method draw(button: GitDiffDisclosureButton, context: nimkit.DrawContext) =
-    if button.isFocusVisible():
-      let style = context.appearance.resolveButtonStyle(
-        nimkit.controlStyle(
-          nimkit.srButton,
-          button.widgetStateSet(),
-          id = button.styleId(),
-          classes = button.styleClasses(),
-        )
+    let style = context.appearance.resolveButtonStyle(
+      nimkit.controlStyle(
+        nimkit.srButton,
+        button.widgetStateSet(),
+        id = button.styleId(),
+        classes = button.styleClasses(),
       )
-      context.addFocusRing(context.renderRectFor(button.bounds()), style.box)
-
-protocol GitDiffDisclosureHitTesting of nimkit.ViewProtocol:
-  method pointInside(button: GitDiffDisclosureButton, point: nimkit.Point): bool =
-    discard button
-    discard point
-    false
+    )
+    let frame = context.renderRectFor(button.bounds())
+    if not button.panel.isNil:
+      discard context.addRenderRectangle(
+        frame, button.panel[].markdownView.markdownStyle().backgroundColor
+      )
+    discard context.addRenderRectangle(
+      frame, style.box.fill, style.box.borderColor, style.box.borderWidth,
+      style.box.cornerRadius, style.box.shadows,
+    )
+    let textRect = style.buttonTextRect(button.bounds())
+    context.addText(
+      textRect, button.title.clippedText(textRect.size.width, style.text), style.text
+    )
+    if button.isFocusVisible():
+      context.addFocusRing(frame, style.box)
 
 protocol GitDiffDisclosureFocus of nimkit.ResponderProtocol:
   method didBecomeFirstResponder(button: GitDiffDisclosureButton) =
@@ -331,9 +335,15 @@ proc newDisclosureButton(
   )
   result.initButtonFields("", frame)
   discard result.withProtocol(GitDiffDisclosureDrawing)
-  discard result.withProtocol(GitDiffDisclosureHitTesting)
   discard result.withProtocol(GitDiffDisclosureFocus)
   discard result.withProtocol(GitDiffDisclosureAccessibility)
+  let weakButton = result.unsafeWeakRef()
+  let toggleAction = nimkit.actionSelector("kosmo.toggleGitDiffFile")
+  result.action = toggleAction
+  result.target = nimkit.newActionTarget(toggleAction) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if not weakButton.isNil:
+      discard weakButton[].activateDisclosure()
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =
@@ -426,7 +436,14 @@ proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
             panel.disclosureButtons[filePath] = created
             created
         button.fileIndex = fileIndex
-        button.frame = headingFrame.inset(nimkit.insets(-2.0'f32))
+        button.frame = nimkit.rect(
+          headingFrame.minX - 2,
+          headingFrame.minY - 2,
+          max(textView.bounds().size.width - 2 * headingFrame.minX + 4, 0),
+          max(headingFrame.size.height + 4, 28),
+        )
+        button.title =
+          (if panel.isFileCollapsed(fileIndex): "▸  " else: "▾  ") & filePath
         button.hidden = false
         button.toolTip =
           (if panel.isFileCollapsed(fileIndex): "Expand " else: "Collapse ") & filePath
@@ -549,6 +566,12 @@ protocol GitDiffLayout of nimkit.ViewLayoutProtocol:
     )
     panel.syncDisclosureButtons()
 
+proc `markdownStyle=`*(panel: KosmoGitDiffPanel, style: nimkit.MarkdownStyle) =
+  ## Apply the shared Markdown palette while keeping file controls compact.
+  var diffStyle = style
+  diffStyle.headingFontSizes[1] = style.bodyFontSize
+  panel.markdownView.markdownStyle = diffStyle
+
 proc newKosmoGitDiffPanel*(
     rootPath: string, markdownStyle = nimkit.initMarkdownStyle()
 ): KosmoGitDiffPanel =
@@ -571,7 +594,8 @@ proc newKosmoGitDiffPanel*(
   linkDelegate.initResponder()
   discard linkDelegate.withProtocol(GitDiffLinks)
   result.markdownView.textView().delegate = linkDelegate
-  result.markdownView.markdownStyle = markdownStyle
+  result.markdownStyle = markdownStyle
+  result.markdownView.toolTip = rootPath
   let weakPanel = result.unsafeWeakRef()
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation

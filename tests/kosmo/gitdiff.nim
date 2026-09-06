@@ -179,6 +179,7 @@ suite "Kosmo Git diff":
       actualStyle = originalPanel.markdownView.markdownStyle()
     check actualStyle.backgroundColor == expectedStyle.backgroundColor
     check actualStyle.textColor == expectedStyle.textColor
+    check actualStyle.headingFontSizes[1] == expectedStyle.bodyFontSize
     check actualStyle.syntaxTokenColors[stcString] ==
       expectedStyle.syntaxTokenColors[stcString]
     check actualStyle.syntaxTokenColors[stcKeyword] ==
@@ -187,6 +188,8 @@ suite "Kosmo Git diff":
     let darkStyle = frontend.editorPane.markdownControls.markdownPresentationStyle()
     check originalPanel.markdownView.markdownStyle().backgroundColor ==
       darkStyle.backgroundColor
+    check originalPanel.markdownView.markdownStyle().headingFontSizes[1] ==
+      darkStyle.bodyFontSize
     check originalPanel.markdownView.markdownStyle().syntaxTokenColors[stcString] ==
       darkStyle.syntaxTokenColors[stcString]
     check item.perform(frontend.window)

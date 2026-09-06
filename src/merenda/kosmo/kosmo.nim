@@ -1201,7 +1201,7 @@ proc syncSelectedEditorContent(
     group.pane.syncMarkdownControls(false)
     let document = group.documentForIdentifier(group.selectedTabIdentifier)
     if not document.isNil and document.contentView of KosmoGitDiffPanel:
-      KosmoGitDiffPanel(document.contentView).markdownView.markdownStyle =
+      KosmoGitDiffPanel(document.contentView).markdownStyle =
         group.pane.markdownControls.markdownPresentationStyle()
     return keckOther
   for tab in tabs:
