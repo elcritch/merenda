@@ -600,6 +600,27 @@ proc selectScope(panel: KosmoFileBrowserPanel, mode: FileTreeDisplayMode) =
   panel.fileTree.displayMode = mode
   panel.syncScopeControl()
 
+proc toggleTreeExpansion(tree: KosmoFileTree) =
+  var
+    pending = @[""]
+    directories: seq[string]
+    seen = initHashSet[string]()
+    hasCollapsedDirectory = false
+  while pending.len > 0:
+    let parent = pending.pop()
+    for path in tree.filteredChildPaths(parent):
+      if path notin seen and tree.isTreeDirectory(path):
+        seen.incl path
+        directories.add path
+        pending.add path
+        if not tree.isItemExpanded(path):
+          hasCollapsedDirectory = true
+  tree.expandedItemIdentifiers =
+    if hasCollapsedDirectory:
+      directories
+    else:
+      @[]
+
 proc newScopeMenuItem(
     panel: WeakRef[KosmoFileBrowserPanel], mode: FileTreeDisplayMode
 ): nimkit.MenuItem =
@@ -688,6 +709,8 @@ protocol KosmoFileBrowserPanelCommands of nimkit.ResponderCommandDispatchProtoco
     if event.modifiers == {nimkit.kmShift} and panel.window() of nimkit.Window and
         nimkit.Window(panel.window()).firstResponder == panel.fileTree:
       case event.key
+      of nimkit.keyE:
+        panel.fileTree.toggleTreeExpansion()
       of nimkit.keyH:
         panel.selectScope(
           if panel.fileTree.displayMode() == FileTreeDisplayMode.AllFiles:

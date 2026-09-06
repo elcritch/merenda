@@ -701,6 +701,8 @@ With the file tree focused, Shift-F selects Visible Files, Shift-A selects All F
 and Shift-G selects Changed Files. Shift-H toggles between All Files and Visible Files
 (from Changed Files, it switches to All Files). These keys remain normal typing keys
 in the file-name filter and other text fields.
+Shift-E expands all folders in the current view; when all are expanded, it collapses
+the whole tree.
 Command-F on macOS or Control-F elsewhere opens a live file-name filter; matching files
 remain nested beneath their folder hierarchy. Find in Files searches Git tracked and
 untracked non-ignored files and skips binary or unsupported text encodings by default;

@@ -40,6 +40,8 @@ proc rendersTextWithColor(view: View, text: string, textColor: Color): bool =
 suite "Kosmo file tree interactions":
   test "display shortcuts are scoped to the focused file tree":
     let root = createTempDir("kosmo-browser-shortcuts-", "")
+    createDir(root / "folder" / "nested")
+    writeFile(root / "folder" / "nested" / "file.txt", "test")
     let
       tree = newKosmoFileTree(root)
       panel = newKosmoFileBrowserPanel(tree)
@@ -65,12 +67,23 @@ suite "Kosmo file tree interactions":
       check tree.displayMode == expected
       check panel.scopeButton.title == expected.title()
       check panel.scopeButton.menu()[expected.ord].state == bsOn
+    let expandKey = KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmShift})
+    check window.dispatchKeyDown(expandKey)
+    check tree.isItemExpanded(root)
+    check tree.isItemExpanded(root / "folder")
+    check tree.isItemExpanded(root / "folder" / "nested")
+    check tree.rowForItem(root / "folder" / "nested" / "file.txt") >= 0
+    check window.dispatchKeyDown(expandKey)
+    check tree.expandedItemIdentifiers().len == 0
+    check window.dispatchKeyDown(expandKey)
+    check tree.isItemExpanded(root / "folder" / "nested")
     require panel.showFilter()
-    for key in [keyH, keyG, keyF, keyA]:
+    for key in [keyH, keyG, keyF, keyA, keyE]:
       check not panel.performKeyEquivalent(
         KeyEvent(key: key, keyCode: key.ord, modifiers: {kmShift})
       )
       check tree.displayMode == FileTreeDisplayMode.AllFiles
+      check tree.isItemExpanded(root / "folder" / "nested")
     panel.dismissFilter()
     let other = newTextField()
     panel.addSubview(other)
