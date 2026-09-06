@@ -30,6 +30,7 @@ suite "Kosmo Git diff":
     writeFile(root / "binary.dat", "\0before")
     git(root, "add", ".")
     git(root, "commit", "-qm", "Initial")
+    git(root, "branch", "-M", "diff-preview")
     writeFile(root / "source.nim", original.replace("old value", "new value"))
     writeFile(root / "staged.txt", "staged content\n")
     git(root, "add", "staged.txt")
@@ -39,9 +40,12 @@ suite "Kosmo Git diff":
     let snapshot = readGitDiff(root)
     check snapshot.errorMessage == ""
     check snapshot.files.len == 5
+    check snapshot.branch == "diff-preview"
     for file in snapshot.files:
       case file.path
       of "source.nim":
+        check file.additions == 1
+        check file.deletions == 1
         check " first line" in file.patch
         check " last line" in file.patch
         check "-old value" in file.patch
@@ -51,8 +55,12 @@ suite "Kosmo Git diff":
       of "staged.txt":
         check "+staged content" in file.patch
       of "new [file].txt":
+        check file.additions == 3
+        check file.deletions == 0
         check "+untracked" in file.patch
       of "binary.dat":
+        check file.binary
+        check file.additions == 0
         check "Binary files" in file.patch
       else:
         check false
@@ -70,10 +78,14 @@ suite "Kosmo Git diff":
     check initial.errorMessage == ""
     require initial.files.len == 1
     check "+first commit content" in initial.files[0].patch
+    check initial.branch.len > 0
+    check initial.files[0].additions == 1
     git(root, "commit", "-qm", "Initial")
     let clean = readGitDiff(root)
     check clean.errorMessage == ""
     check clean.files.len == 0
+    git(root, "checkout", "--detach", "-q")
+    check readGitDiff(root).branch.startsWith("Detached HEAD · ")
 
   test "file heading links collapse and expand complete highlighted code blocks":
     let root = createTempDir("kosmo-git-diff-panel-", "")

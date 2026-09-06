@@ -16,9 +16,13 @@ type
   GitFileDiff* = object
     path*: string
     patch*: string
+    additions*, deletions*: int
+    binary*: bool
 
   GitDiffSnapshot* = object
     rootPath*: string
+    branch*: string
+    hasHead*: bool
     files*: seq[GitFileDiff]
     errorMessage*: string
 
@@ -116,6 +120,13 @@ proc readGitDiff(
       return
     result.rootPath = repository.output.strip()
     let hasHead = runGit(result.rootPath, ["rev-parse", "--verify", "HEAD"]).code == 0
+    result.hasHead = hasHead
+    let branch = runGit(result.rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"])
+    if branch.code == 0:
+      result.branch = branch.output.strip()
+    elif hasHead:
+      let commit = runGit(result.rootPath, ["rev-parse", "--short", "HEAD"])
+      result.branch = "Detached HEAD · " & commit.output.strip()
     let names =
       if hasHead:
         runGit(
@@ -152,7 +163,18 @@ proc readGitDiff(
           let patch = runGit(result.rootPath, args)
           if patch.code == 0 or (isAddition and patch.code == 1):
             if patch.output.len > 0:
-              result.files.add GitFileDiff(path: path, patch: patch.output)
+              var file = GitFileDiff(path: path, patch: patch.output)
+              var inHunk = false
+              for line in patch.output.splitLines():
+                if line.startsWith("@@ "):
+                  inHunk = true
+                elif inHunk and line.startsWith("+"):
+                  inc file.additions
+                elif inHunk and line.startsWith("-"):
+                  inc file.deletions
+                elif line.startsWith("Binary files "):
+                  file.binary = true
+              result.files.add file
           else:
             result.errorMessage =
               "Could not read diff for " & path & ":\n" & patch.output
@@ -167,7 +189,7 @@ proc readGitDiff*(rootPath: string): GitDiffSnapshot =
 proc markdownLabel(value: string): string =
   for ch in value:
     case ch
-    of '\\', '[', ']', '*', '_', '`', '<', '>':
+    of '\\', '[', ']', '*', '_', '`', '<', '>', '|':
       result.add '\\'
       result.add ch
     of '\n', '\r':
@@ -212,7 +234,27 @@ proc hideDisclosureButtons(panel: KosmoGitDiffPanel) =
 
 proc renderDiff(panel: KosmoGitDiffPanel) =
   panel.hideDisclosureButtons()
-  var document = "# " & panel.snapshot.rootPath.lastPathPart().markdownLabel() & "\n\n"
+  var document = "# Git Diff\n\n"
+  var additions, deletions, binaries: int
+  for file in panel.snapshot.files:
+    additions += file.additions
+    deletions += file.deletions
+    if file.binary:
+      inc binaries
+  document.add "| Repository | " & panel.snapshot.rootPath.lastPathPart().markdownLabel() &
+    " |\n| --- | --- |\n"
+  if panel.snapshot.branch.len > 0:
+    document.add "| Branch | " & panel.snapshot.branch.markdownLabel() & " |\n"
+  document.add "| Location | " & panel.snapshot.rootPath.markdownLabel() & " |\n"
+  if not panel.loading and panel.snapshot.errorMessage.len == 0:
+    document.add "| Changes | " & $panel.snapshot.files.len & " files · +" & $additions &
+      " / −" & $deletions
+    if binaries > 0:
+      document.add " · " & $binaries & " binary"
+    document.add " |\n| Compare | Working tree ↔ " &
+      (if panel.snapshot.hasHead: "HEAD" else: "empty tree") &
+      " · includes untracked files |\n"
+  document.add "\n"
   if panel.loading:
     document.add "Loading changes…\n"
   elif panel.snapshot.errorMessage.len > 0:
@@ -262,17 +304,37 @@ protocol GitDiffDisclosureDrawing of nimkit.ViewDrawingProtocol:
       )
     )
     let frame = context.renderRectFor(button.bounds())
-    if not button.panel.isNil:
-      discard context.addRenderRectangle(
-        frame, button.panel[].markdownView.markdownStyle().backgroundColor
-      )
+    if button.panel.isNil:
+      return
+    let palette = button.panel[].markdownView.markdownStyle()
+    discard context.addRenderRectangle(frame, palette.backgroundColor)
+    let disclosure = nimkit.rect(0, (button.bounds().size.height - 16) / 2, 16, 16)
     discard context.addRenderRectangle(
-      frame, style.box.fill, style.box.borderColor, style.box.borderWidth,
-      style.box.cornerRadius, style.box.shadows,
+      context.renderRectFor(disclosure),
+      (if button.highlighted(): palette.ruleColor else: palette.backgroundColor),
+      palette.ruleColor,
+      0.6,
+      3,
     )
-    let textRect = style.buttonTextRect(button.bounds())
+    let arrowStyle = nimkit.TextStyle(
+      color: palette.mutedColor, fontName: palette.bodyFontName, fontSize: 12
+    )
     context.addText(
-      textRect, button.title.clippedText(textRect.size.width, style.text), style.text
+      disclosure,
+      (if button.panel[].isFileCollapsed(button.fileIndex): "▸" else: "▾"),
+      arrowStyle,
+      alignment = nimkit.taCenter,
+    )
+    let textRect = nimkit.rect(
+      24, 0, max(button.bounds().size.width - 24, 0), button.bounds().size.height
+    )
+    let textStyle = nimkit.TextStyle(
+      color: palette.headingColor,
+      fontName: palette.emphasisFontName,
+      fontSize: palette.bodyFontSize,
+    )
+    context.addText(
+      textRect, button.title.clippedText(textRect.size.width, textStyle), textStyle
     )
     if button.isFocusVisible():
       context.addFocusRing(frame, style.box)
@@ -442,8 +504,13 @@ proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
           max(textView.bounds().size.width - 2 * headingFrame.minX + 4, 0),
           max(headingFrame.size.height + 4, 28),
         )
+        let file = panel.snapshot.files[fileIndex]
         button.title =
-          (if panel.isFileCollapsed(fileIndex): "▸  " else: "▾  ") & filePath
+          filePath & (
+            if file.binary: "   binary"
+            else:
+              "   +" & $file.additions & " / −" & $file.deletions
+          )
         button.hidden = false
         button.toolTip =
           (if panel.isFileCollapsed(fileIndex): "Expand " else: "Collapse ") & filePath
