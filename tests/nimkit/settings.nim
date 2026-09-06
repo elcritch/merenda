@@ -1,4 +1,4 @@
-import std/[importutils, tables, unittest]
+import std/[importutils, strutils, tables, unittest]
 
 import merenda/nimkit
 import merenda/nimkit/app/settings
@@ -52,6 +52,8 @@ suite "nimkit settings":
         settings.contentView().viewWithIdentifier("settings-monospace-font-button")
       onlyMonospaceFontsView =
         settings.contentView().viewWithIdentifier("settings-only-monospace-fonts")
+      onlyDisplayableFontsView =
+        settings.contentView().viewWithIdentifier("settings-only-displayable-fonts")
 
     require not interfaceView.isNil
     require interfaceView of Button
@@ -59,16 +61,21 @@ suite "nimkit settings":
     require monospaceView of Button
     require not onlyMonospaceFontsView.isNil
     require onlyMonospaceFontsView of Button
+    require not onlyDisplayableFontsView.isNil
+    require onlyDisplayableFontsView of Button
     let
       interfaceButton = Button(interfaceView)
       monospaceButton = Button(monospaceView)
       onlyMonospaceFonts = Button(onlyMonospaceFontsView)
+      onlyDisplayableFonts = Button(onlyDisplayableFontsView)
     check interfaceButton.title == "Default"
     check interfaceButton.state == bsOn
     check monospaceButton.title == "Default"
     check monospaceButton.state == bsOff
     check onlyMonospaceFonts.title == "Show monospace fonts"
     check onlyMonospaceFonts.state == bsOff
+    check onlyDisplayableFonts.title == "Only displayable fonts"
+    check onlyDisplayableFonts.state == bsOff
 
     check monospaceButton.sendAction()
     check interfaceButton.state == bsOff
@@ -96,18 +103,23 @@ suite "nimkit settings":
       fontPickerView = settings.contentView().viewWithIdentifier("settings-font-picker")
       onlyMonospaceFontsView =
         settings.contentView().viewWithIdentifier("settings-only-monospace-fonts")
+      onlyDisplayableFontsView =
+        settings.contentView().viewWithIdentifier("settings-only-displayable-fonts")
       applyFontView = settings.contentView().viewWithIdentifier("settings-apply-font")
 
     require not fontPickerView.isNil
     require fontPickerView of CascadingView
     require not onlyMonospaceFontsView.isNil
     require onlyMonospaceFontsView of Button
+    require not onlyDisplayableFontsView.isNil
+    require onlyDisplayableFontsView of Button
     require not applyFontView.isNil
     require applyFontView of Button
     settings.window().close()
     let
       fontPicker = CascadingView(fontPickerView)
       onlyMonospaceFonts = Button(onlyMonospaceFontsView)
+      onlyDisplayableFonts = Button(onlyDisplayableFontsView)
       applyFont = Button(applyFontView)
       languageIdentifier = "system-font-language:english"
       familyIdentifier = languageIdentifier & ":family:test-font-family"
@@ -132,17 +144,25 @@ suite "nimkit settings":
         identifier = "test-monospace",
         fontName = "Test Monospace",
       )
+      unavailableFace = initFontCatalogFace(
+        "Regular",
+        "English",
+        "/fonts/TestUnavailable.ttf",
+        identifier = "test-unavailable",
+        fontName = "Test Unavailable Mono",
+      )
     proportionalFace.metadataLoaded = true
     proportionalFace.supportsPreviewText = true
     monospaceFace.metadataLoaded = true
     monospaceFace.supportsPreviewText = true
+    unavailableFace.metadataLoaded = true
     settings.fontPickerController.catalogEntries =
       @[
         initFontCatalogEntry(
           "Test Fonts",
           proportionalFile.path,
           identifier = "test-font-family",
-          faces = [proportionalFace, monospaceFace],
+          faces = [proportionalFace, monospaceFace, unavailableFace],
         )
       ]
 
@@ -152,6 +172,19 @@ suite "nimkit settings":
       languageIdentifier & ":face:test-monospace"
     )
     check settings.fontPickerController.faces.hasKey(proportionalFaceIdentifier)
+    check settings.fontPickerController.faces.hasKey(
+      languageIdentifier & ":face:test-unavailable"
+    )
+    onlyDisplayableFonts.state = bsOn
+    check onlyDisplayableFonts.sendAction()
+    check not settings.fontPickerController.faces.hasKey(
+      languageIdentifier & ":face:test-unavailable"
+    )
+    onlyDisplayableFonts.state = bsOff
+    check onlyDisplayableFonts.sendAction()
+    check settings.fontPickerController.faces.hasKey(
+      languageIdentifier & ":face:test-unavailable"
+    )
     onlyMonospaceFonts.state = bsOff
     check onlyMonospaceFonts.sendAction()
     check not settings.fontPickerController.faces.hasKey(
@@ -180,6 +213,56 @@ suite "nimkit settings":
     onlyMonospaceFonts.state = bsOff
     check onlyMonospaceFonts.sendAction()
     check fontPicker.selectedPath[^1] == proportionalFaceIdentifier
+
+  test "background font reloads preserve the browsed family position":
+    let settings = newMerendaSettingsWindow()
+    let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require not tabsView.isNil
+    require tabsView of TabView
+    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    let fontPickerView =
+      settings.contentView().viewWithIdentifier("settings-font-picker")
+    require not fontPickerView.isNil
+    require fontPickerView of CascadingView
+    settings.window().close()
+    let
+      fontPicker = CascadingView(fontPickerView)
+      languageIdentifier = DefaultFontLanguage.toLowerAscii()
+      firstFamilyIdentifier =
+        "system-font-language:" & languageIdentifier & ":family:test-family-00"
+    var entries: seq[FontCatalogEntry]
+    for index in 0 ..< 24:
+      let suffix = align($index, 2, '0')
+      entries.add initFontCatalogEntry(
+        "Test Family " & suffix,
+        "/fonts/TestFamily" & suffix & ".ttf",
+        identifier = "test-family-" & suffix,
+        faces = [
+          initFontCatalogFace(
+            "Regular",
+            DefaultFontLanguage,
+            "/fonts/TestFamily" & suffix & ".ttf",
+            identifier = "test-face-" & suffix,
+            fontName = "Test Family " & suffix,
+          )
+        ],
+      )
+    settings.fontPickerController.catalogEntries = entries
+    settings.fontPickerController.rebuildFontPickerItems()
+    fontPicker.frame = rect(0, 0, 360, 120)
+    fontPicker.reloadData()
+    fontPicker.selectedPath =
+      @["system-font-language:" & languageIdentifier, firstFamilyIdentifier]
+    discard buildRenders(fontPicker)
+    let familyColumn = fontPicker.tableViewForColumn(1)
+    familyColumn.scrollRows(10)
+    let browsedOffset = familyColumn.scrollView().contentOffset()
+    check browsedOffset.y > 0.0'f32
+
+    settings.fontPickerController.needsFontPickerReload = true
+    settings.fontPickerController.reloadFontPickerIfVisible()
+
+    check familyColumn.scrollView().contentOffset() == browsedOffset
 
   test "font size stepper previews within bounds and applies on request":
     var appliedCount = 0

@@ -77,6 +77,7 @@ type
     xColumnWidth: float32
     xColumnSpacing: float32
     xMinColumnWidth: float32
+    xFitsColumnsToWidth: bool
     xShowsColumnHeaders: bool
     xSyncingColumnSelection: bool
     xBatchUpdateDepth: int
@@ -124,6 +125,7 @@ proc syncCascadingStyle(view: CascadingView)
 proc `columnWidth=`*(view: CascadingView, width: float32)
 proc `minColumnWidth=`*(view: CascadingView, width: float32)
 proc `columnSpacing=`*(view: CascadingView, spacing: float32)
+proc `fitsColumnsToWidth=`*(view: CascadingView, fits: bool)
 
 protocol CascadingDataSource {.selectorScope: protocol.}:
   method cascadingNumberOfChildren*(
@@ -360,6 +362,17 @@ proc `columnSpacing=`*(view: CascadingView, spacing: float32) =
   view.setNeedsLayout()
   view.needsDisplay = true
 
+proc fitsColumnsToWidth*(view: CascadingView): bool =
+  view.xFitsColumnsToWidth
+
+proc `fitsColumnsToWidth=`*(view: CascadingView, fits: bool) =
+  if view.xFitsColumnsToWidth == fits:
+    return
+  view.xFitsColumnsToWidth = fits
+  view.invalidateIntrinsicContentSize()
+  view.setNeedsLayout()
+  view.needsDisplay = true
+
 proc showsColumnHeaders*(view: CascadingView): bool =
   view.xShowsColumnHeaders
 
@@ -390,6 +403,7 @@ protocol CascadingViewProtocol {.selectorScope: protocol, setterStyle: nim.} fro
   property cascadingColumnWidth -> float32
   property cascadingMinColumnWidth -> float32
   property cascadingColumnSpacing -> float32
+  property cascadingFitsColumnsToWidth -> bool
   property cascadingShowsHeaders -> bool
 
   method cascadingSelectionPath(view: CascadingView): seq[string] =
@@ -415,6 +429,12 @@ protocol CascadingViewProtocol {.selectorScope: protocol, setterStyle: nim.} fro
 
   method `cascadingColumnSpacing=`(view: CascadingView, spacing: float32) =
     view.columnSpacing = spacing
+
+  method cascadingFitsColumnsToWidth(view: CascadingView): bool =
+    view.xFitsColumnsToWidth
+
+  method `cascadingFitsColumnsToWidth=`(view: CascadingView, fits: bool) =
+    view.fitsColumnsToWidth = fits
 
   method cascadingShowsHeaders(view: CascadingView): bool =
     view.xShowsColumnHeaders
@@ -912,8 +932,23 @@ proc columnsContentWidth(view: CascadingView): float32 =
 proc syncCascadingLayout(view: CascadingView) =
   view.syncCascadingStyle()
   let bounds = view.bounds()
+  let style = view.cascadingRowItemStyle(view.effectiveAppearance())
+  var columnWidths = newSeqOfCap[float32](view.xColumns.len)
+  for column in 0 ..< view.xColumns.len:
+    columnWidths.add view.widthForColumn(column, style)
+  let spacing = view.xColumnSpacing * max(view.xColumns.len - 1, 0).float32
+  var contentWidth = spacing
+  for width in columnWidths:
+    contentWidth += width
+  if view.xFitsColumnsToWidth and view.xColumns.len > 0 and
+      contentWidth > bounds.size.width:
+    let fittedWidth =
+      max((bounds.size.width - spacing) / view.xColumns.len.float32, 1.0'f32)
+    contentWidth = spacing
+    for index in 0 ..< columnWidths.len:
+      columnWidths[index] = min(columnWidths[index], fittedWidth)
+      contentWidth += columnWidths[index]
   let
-    contentWidth = view.columnsContentWidth()
     documentWidth = max(contentWidth, bounds.size.width)
     oldOffset = view.xScrollView.contentOffset()
   view.xScrollView.frame = bounds
@@ -923,7 +958,6 @@ proc syncCascadingLayout(view: CascadingView) =
   let
     viewport = view.xScrollView.viewportSize()
     documentHeight = viewport.height
-    style = view.cascadingRowItemStyle(view.effectiveAppearance())
   view.xColumnContainer.frame =
     rect(0.0'f32, 0.0'f32, max(contentWidth, viewport.width), documentHeight)
   if view.xColumns.len == 0:
@@ -932,7 +966,7 @@ proc syncCascadingLayout(view: CascadingView) =
     return
   var x = 0.0'f32
   for index, tableView in view.xColumns:
-    let columnWidth = view.widthForColumn(index, style)
+    let columnWidth = columnWidths[index]
     tableView.frame = rect(x, 0.0'f32, columnWidth, documentHeight)
     let column = tableView.columnAt(0)
     if not column.isNil:
