@@ -216,6 +216,34 @@ suite "nimkit font layout":
       controlStyle(srMonoTextView), color(0.0, 0.0, 0.0), insets(0.0)
     ).fontName == "HackNerdFont-Regular.ttf"
 
+  when not defined(useNativeDynlib):
+    test "theme text styles load exact collection faces":
+      let collectionPath = getCurrentDir() / "deps/pixie/tests/fonts/PTSans.ttc"
+      require fileExists(collectionPath)
+      var typefaceIds: array[2, TypefaceId]
+
+      for faceIndex in 0 .. 1:
+        let selectedFace =
+          SystemTypefaceFile(path: collectionPath, faceIndex: faceIndex)
+        var builder = initThemeBuilder(initTheme())
+        builder.setFontName(frUI, "PT Sans")
+        builder.setFontFace(frUI, selectedFace)
+        let
+          appearance = initAppearance(builder.finish())
+          style = appearance.resolveTextStyle(
+            controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
+          )
+          font = style.textFont()
+          source = getTypefaceSource(font.font.typefaceId)
+        typefaceIds[faceIndex] = font.font.typefaceId
+
+        check appearance.fontFace(frUI) == selectedFace
+        check style.fontFace == selectedFace
+        check source.name == collectionPath
+        check source.faceIndex == faceIndex
+
+      check typefaceIds[0] != typefaceIds[1]
+
   test "monospace font environment override is independent":
     withCleanMonospaceFontEnv(
       proc() =

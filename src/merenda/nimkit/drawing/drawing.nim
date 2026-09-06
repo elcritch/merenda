@@ -168,8 +168,11 @@ proc defaultTypefaceRequest(
     result.fallbackNames.add MonospaceTypefaceFallbackNames
 
 proc defaultTypefaceCacheKey(
-    request: tuple[name: string, fallbackNames: seq[string]]
+    request: tuple[name: string, fallbackNames: seq[string]],
+    fontFace: SystemTypefaceFile,
 ): string =
+  if fontFace.path.len > 0:
+    return "face\0" & fontFace.path & "\0" & $fontFace.faceIndex
   result = request.name
   for fallbackName in request.fallbackNames:
     result.add '\0'
@@ -184,6 +187,7 @@ proc defaultFont(
     language = defaultLanguageTag(),
     slant = fsUpright,
     role = frUI,
+    fontFace = SystemTypefaceFile(),
 ): FontRef =
   let
     resolvedLanguage =
@@ -192,18 +196,30 @@ proc defaultFont(
       else:
         language
     request = defaultTypefaceRequest(fontName, slant, role)
-    cacheKey = request.defaultTypefaceCacheKey()
+    exactFontFace =
+      if slant == fsUpright:
+        fontFace
+      else:
+        SystemTypefaceFile()
+    cacheKey = request.defaultTypefaceCacheKey(exactFontFace)
   if defaultTypefaceIds.len == 0:
     defaultTypefaceIds = initTable[string, TypefaceId]()
   if cacheKey notin defaultTypefaceIds:
-    defaultTypefaceIds[cacheKey] = loadTypeface(request.name, request.fallbackNames)
+    defaultTypefaceIds[cacheKey] =
+      if exactFontFace.path.len > 0:
+        loadTypeface(exactFontFace)
+      else:
+        loadTypeface(request.name, request.fallbackNames)
   var font = defaultTypefaceIds[cacheKey].fontWithSize(size)
   when AutomaticFontFallbackEnabled:
     font.language = $resolvedLanguage
   fontRef(font)
 
 proc textFont*(style: TextStyle, role = frUI): FontRef =
-  defaultFont(style.fontSize, style.fontName, style.language, style.fontSlant, role)
+  defaultFont(
+    style.fontSize, style.fontName, style.language, style.fontSlant, role,
+    style.fontFace,
+  )
 
 proc fontFor(style: TextStyle): FontRef =
   style.textFont()
@@ -531,7 +547,11 @@ proc textLayoutImpl(
   if storage.isNil or storage.len == 0:
     let attributes = defaultTextAttributes(style.color, style.fontSize)
     var font = defaultFont(
-      attributes.fontSize, style.fontName, style.language, style.fontSlant
+      attributes.fontSize,
+      style.fontName,
+      style.language,
+      style.fontSlant,
+      fontFace = style.fontFace,
     ).font
     font.underline = attributes.hasUnderline
     font.strikethrough = attributes.hasStrikethrough
@@ -543,8 +563,14 @@ proc textLayoutImpl(
           if attributes.fontName.len > 0: attributes.fontName else: style.fontName
         language =
           if attributes.language.isAutomatic: style.language else: attributes.language
-      var font =
-        defaultFont(attributes.fontSize, fontName, language, style.fontSlant).font
+        fontFace =
+          if fontName == style.fontName:
+            style.fontFace
+          else:
+            SystemTypefaceFile()
+      var font = defaultFont(
+        attributes.fontSize, fontName, language, style.fontSlant, fontFace = fontFace
+      ).font
       font.underline = attributes.hasUnderline
       font.strikethrough = attributes.hasStrikethrough
       spans.add((fs(font, fill(attributes.foregroundColor.rgba)), text))

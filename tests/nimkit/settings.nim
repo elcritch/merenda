@@ -1,7 +1,19 @@
-import std/unittest
+import std/[importutils, unittest]
 
 import merenda/nimkit
 import merenda/nimkit/app/settings
+
+privateAccess(MerendaSettingsWindow)
+
+type
+  TestFontPickerController =
+    typeof(default(MerendaSettingsWindow).fontPickerController[])
+  TestSelectedFont = typeof(default(MerendaSettingsWindow).previewFonts[frUI])
+
+privateAccess(TestFontPickerController)
+privateAccess(TestSelectedFont)
+
+type TestSystemTypefaceFile = typeof(default(TestSelectedFont).face)
 
 suite "nimkit settings":
   test "DarkBSD is selected by default and Aqua is named explicitly":
@@ -67,6 +79,95 @@ suite "nimkit settings":
     check interfaceButton.state == bsOn
     check monospaceButton.state == bsOff
     check onlyMonospaceFonts.state == bsOff
+
+  test "monospace filtering hides and restores an exact proportional face":
+    var appliedAppearance: Appearance
+    let settings = newMerendaSettingsWindow(
+      proc(appearance: Appearance) =
+        appliedAppearance = appearance
+    )
+    let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require not tabsView.isNil
+    require tabsView of TabView
+    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    let
+      fontPickerView = settings.contentView().viewWithIdentifier("settings-font-picker")
+      onlyMonospaceFontsView =
+        settings.contentView().viewWithIdentifier("settings-only-monospace-fonts")
+      applyFontView = settings.contentView().viewWithIdentifier("settings-apply-font")
+
+    require not fontPickerView.isNil
+    require fontPickerView of CascadingView
+    require not onlyMonospaceFontsView.isNil
+    require onlyMonospaceFontsView of Button
+    require not applyFontView.isNil
+    require applyFontView of Button
+    settings.window().close()
+    let
+      fontPicker = CascadingView(fontPickerView)
+      onlyMonospaceFonts = Button(onlyMonospaceFontsView)
+      applyFont = Button(applyFontView)
+      languageIdentifier = "system-font-language:english"
+      familyIdentifier = languageIdentifier & ":family:test-font-family"
+      proportionalFaceIdentifier = languageIdentifier & ":face:test-proportional"
+      proportionalFile =
+        TestSystemTypefaceFile(path: "/fonts/TestCollection.ttc", faceIndex: 3)
+      proportionalFont =
+        TestSelectedFont(name: "Test Proportional", face: proportionalFile)
+    var
+      proportionalFace = initFontCatalogFace(
+        "Regular",
+        "English",
+        proportionalFile.path,
+        identifier = "test-proportional",
+        faceIndex = proportionalFile.faceIndex,
+        fontName = proportionalFont.name,
+      )
+      monospaceFace = initFontCatalogFace(
+        "Regular",
+        "English",
+        "/fonts/TestMono.ttf",
+        identifier = "test-monospace",
+        fontName = "Test Monospace",
+      )
+    proportionalFace.metadataLoaded = true
+    proportionalFace.supportsPreviewText = true
+    monospaceFace.metadataLoaded = true
+    monospaceFace.monospace = true
+    monospaceFace.supportsPreviewText = true
+    settings.fontPickerController.catalogEntries =
+      @[
+        initFontCatalogEntry(
+          "Test Fonts",
+          proportionalFile.path,
+          identifier = "test-font-family",
+          faces = [proportionalFace, monospaceFace],
+        )
+      ]
+
+    onlyMonospaceFonts.state = bsOn
+    check onlyMonospaceFonts.sendAction()
+    onlyMonospaceFonts.state = bsOff
+    check onlyMonospaceFonts.sendAction()
+    settings.fontPickerController.desiredSelectedFont = proportionalFont
+    settings.previewFonts[frUI] = proportionalFont
+    fontPicker.selectedPath =
+      [languageIdentifier, familyIdentifier, proportionalFaceIdentifier]
+    check fontPicker.selectedPath[^1] == proportionalFaceIdentifier
+
+    onlyMonospaceFonts.state = bsOn
+    check onlyMonospaceFonts.sendAction()
+    check fontPicker.selectedPath.len == 0
+    check settings.previewFonts[frUI].name == proportionalFont.name
+    check settings.previewFonts[frUI].face == proportionalFile
+
+    check applyFont.sendAction()
+    check appliedAppearance.fontName(frUI) == proportionalFont.name
+    check appliedAppearance.fontFace(frUI) == proportionalFile
+
+    onlyMonospaceFonts.state = bsOff
+    check onlyMonospaceFonts.sendAction()
+    check fontPicker.selectedPath[^1] == proportionalFaceIdentifier
 
   test "font size stepper previews within bounds and applies on request":
     var appliedCount = 0

@@ -397,8 +397,10 @@ proc buildAquaTheme(): ThemeBuilder =
   result.setFontName(frMonospace, defaultFontName(frMonospace))
   for role in TextStyleRoles:
     result[role, StyleFontName] = styleToken(UIFontNameToken)
+    result[role, StyleFontFace] = styleToken(UIFontFaceToken)
     result[role, StyleFontSize] = defaultFontSize()
   result[srMonoTextView, StyleFontName] = styleToken(MonospaceFontNameToken)
+  result[srMonoTextView, StyleFontFace] = styleToken(MonospaceFontFaceToken)
   result[srMonoTextView, StyleFontSize] = defaultFontSize()
   result["accent"] = styleColor(rgbaColor(0, 124, 238, 255))
   result["accent.pressed"] = styleColor(rgbaColor(0, 82, 191, 255))

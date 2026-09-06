@@ -103,6 +103,7 @@ type
     svShadows
     svToken
     svKeyword
+    svFontFace
 
   StyleValue* = object
     case kind*: StyleValueKind
@@ -120,6 +121,8 @@ type
       insets*: EdgeInsets
     of svShadows:
       shadows*: seq[BoxShadow]
+    of svFontFace:
+      fontFace*: SystemTypefaceFile
     of svToken:
       token*: string
     of svKeyword:
@@ -179,6 +182,7 @@ type
     color*: Color
     insets*: EdgeInsets
     fontName*: string
+    fontFace*: SystemTypefaceFile
     fontSize*: float32
     fontSlant*: FontSlant
     language*: LanguageTag
@@ -317,6 +321,7 @@ const
   StyleColumnHoverFill* = StyleKey[Fill]("column.hover.fill")
   StyleTextColor* = StyleKey[Color]("text.color")
   StyleFontName* = StyleKey[string]("font.name")
+  StyleFontFace* = StyleKey[SystemTypefaceFile]("font.face")
   StyleFontSize* = StyleKey[float32]("font.size")
   StyleFontSlant* = StyleKey[string]("font.slant")
   StyleLanguage* = StyleKey[string]("text.language")
@@ -553,6 +558,9 @@ func styleInsets*(insets: EdgeInsets): StyleValue =
 func styleShadows*(shadows: openArray[BoxShadow]): StyleValue =
   StyleValue(kind: svShadows, shadows: @shadows)
 
+func styleFontFace*(fontFace: SystemTypefaceFile): StyleValue =
+  StyleValue(kind: svFontFace, fontFace: fontFace)
+
 func styleToken*(name: string): StyleValue =
   StyleValue(kind: svToken, token: name)
 
@@ -628,6 +636,12 @@ proc clone(value: StyleValue): StyleValue =
     styleInsets(value.insets)
   of svShadows:
     styleShadows(value.shadows)
+  of svFontFace:
+    styleFontFace(
+      SystemTypefaceFile(
+        path: value.fontFace.path.cloneText, faceIndex: value.fontFace.faceIndex
+      )
+    )
   of svToken:
     styleToken(value.token.cloneText)
   of svKeyword:
@@ -1416,6 +1430,15 @@ proc shadowsRule(
   let value = theme.ruleValue(context, key.keyName, styleShadows(fallback))
   if value.kind == svShadows: value.shadows else: fallback
 
+proc fontFaceRule(
+    theme: Theme,
+    context: StyleContext,
+    key: StyleKey[SystemTypefaceFile],
+    fallback: SystemTypefaceFile,
+): SystemTypefaceFile =
+  let value = theme.ruleValue(context, key.keyName, styleFontFace(fallback))
+  if value.kind == svFontFace: value.fontFace else: fallback
+
 proc keywordRule(
     theme: Theme, context: StyleContext, key: StyleKey[string], fallback: string
 ): string =
@@ -1474,11 +1497,18 @@ proc styleValue*(
 const
   UIFontNameToken* = "font.ui.name"
   MonospaceFontNameToken* = "font.monospace.name"
+  UIFontFaceToken* = "font.ui.face"
+  MonospaceFontFaceToken* = "font.monospace.face"
 
 func fontNameToken(role: FontRole): string =
   case role
   of frUI: UIFontNameToken
   of frMonospace: MonospaceFontNameToken
+
+func fontFaceToken(role: FontRole): string =
+  case role
+  of frUI: UIFontFaceToken
+  of frMonospace: MonospaceFontFaceToken
 
 proc fontName*(theme: Theme, role: FontRole): string =
   ## Resolves a user-configurable font role from the theme token store.
@@ -1498,9 +1528,25 @@ proc setFontName*(theme: var ThemeBuilder, role: FontRole, name: string) =
       defaultFontName(role)
   theme[role.fontNameToken()] = styleKeyword(resolved)
 
+proc fontFace*(theme: Theme, role: FontRole): SystemTypefaceFile =
+  ## Resolves the exact local face selected for a user-configurable font role.
+  let value = theme.styleValue(role.fontFaceToken(), styleFontFace(result))
+  if value.kind == svFontFace:
+    result = value.fontFace
+
+proc setFontFace*(
+    theme: var ThemeBuilder, role: FontRole, fontFace: SystemTypefaceFile
+) =
+  ## Sets the exact local face for a role; an empty path restores name lookup.
+  theme[role.fontFaceToken()] = styleFontFace(fontFace)
+
 proc fontName*(appearance: Appearance, role: FontRole): string =
   ## Resolves a user-configurable font role from an appearance.
   appearance.theme.fontName(role)
+
+proc fontFace*(appearance: Appearance, role: FontRole): SystemTypefaceFile =
+  ## Resolves the exact local face selected for a user-configurable font role.
+  appearance.theme.fontFace(role)
 
 proc colorToken*(appearance: Appearance, name: string, fallback: Color): Color =
   appearance.theme.colorToken(name, fallback)
@@ -1599,6 +1645,7 @@ proc resolveTextStyle*(
     color: theme.colorRule(context, StyleTextColor, colorFallback),
     insets: theme.insetsRule(context, StyleTextInsets, insetsFallback),
     fontName: theme.keywordRule(context, StyleFontName, defaultFontName()),
+    fontFace: theme.fontFaceRule(context, StyleFontFace, SystemTypefaceFile()),
     fontSize: max(theme.lengthRule(context, StyleFontSize, defaultFontSize()), 1.0'f32),
     fontSlant: theme.keywordRule(context, StyleFontSlant, "normal").fontSlant,
     language:
