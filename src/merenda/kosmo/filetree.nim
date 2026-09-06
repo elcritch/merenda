@@ -600,6 +600,18 @@ proc selectScope(panel: KosmoFileBrowserPanel, mode: FileTreeDisplayMode) =
   panel.fileTree.displayMode = mode
   panel.syncScopeControl()
 
+proc newScopeMenuItem(
+    panel: WeakRef[KosmoFileBrowserPanel], mode: FileTreeDisplayMode
+): nimkit.MenuItem =
+  # A separate call gives each callback its own captured mode.
+  let action = nimkit.actionSelector(FileTreeScopeAction)
+  result = nimkit.newMenuItem(mode.title(), action)
+  result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if not panel.isNil:
+      panel[].selectScope(mode)
+  result.validates = false
+
 proc filterTextDidChange(
     panel: KosmoFileBrowserPanel, sender: nimkit.DynamicAgent
 ) {.slot.} =
@@ -800,17 +812,9 @@ proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
   discard result.withProtocol(KosmoFileBrowserPanelMenuCommands)
   discard result.withProtocol(KosmoFileBrowserPanelLayout)
 
-  let
-    scopeAction = nimkit.actionSelector(FileTreeScopeAction)
-    closeAction = nimkit.actionSelector(FileTreeCloseFilterAction)
+  let closeAction = nimkit.actionSelector(FileTreeCloseFilterAction)
   for mode in FileTreeDisplayMode:
-    let selectedMode = mode
-    let item = scopeMenu.addItem(nimkit.newMenuItem(mode.title(), scopeAction))
-    item.target = nimkit.newActionTarget(scopeAction) do(sender: nimkit.DynamicAgent):
-      discard sender
-      if not panel.isNil:
-        panel[].selectScope(selectedMode)
-    item.validates = false
+    discard scopeMenu.addItem(newScopeMenuItem(panel, mode))
   closeFilterButton.target = nimkit.newActionTarget(closeAction) do(
     sender: nimkit.DynamicAgent
   ):

@@ -372,3 +372,27 @@ suite "Kosmo file tree interactions":
     check panel.scopeButton.toolTip == "Changed Files"
     check panel.scopeButton.accessibilityValue() == "Changed Files"
     check panel.scopeButton.menu()[2].state == bsOn
+
+    for mode in [
+      FileTreeDisplayMode.AllFiles, FileTreeDisplayMode.VisibleFiles,
+      FileTreeDisplayMode.SourceControlChanges, FileTreeDisplayMode.AllFiles,
+    ]:
+      panel.scopeButton.openPopup()
+      require panel.subviews()[^1] of PopupListView
+      let
+        scopePopup = PopupListView(panel.subviews()[^1])
+        choiceBounds = scopePopup.popupListItemRect(scopePopup.bounds(), mode.ord)
+      check window.clickAt(
+        scopePopup.pointToWindow(
+          initPoint(
+            choiceBounds.origin.x + choiceBounds.size.width * 0.5'f32,
+            choiceBounds.origin.y + choiceBounds.size.height * 0.5'f32,
+          )
+        )
+      )
+      check tree.displayMode == mode
+      check panel.scopeButton.title == mode.title()
+      for index, item in panel.scopeButton.menu().items():
+        check item.state == (if index == mode.ord: bsOn else: bsOff)
+      if mode != FileTreeDisplayMode.SourceControlChanges:
+        check tree.rowForItem(otherFile) >= 0
