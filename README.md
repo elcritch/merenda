@@ -695,9 +695,12 @@ Settings refreshes the list, so new themes appear without restarting Kosmo.
 Kosmo's sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
 double-clicking promotes it to a permanent editor tab. Git-ignored files and
-dot-directories remain visible in the file tree with muted gray text. Find in Files
-searches Git tracked and untracked non-ignored files and skips binary or unsupported
-text encodings by default; both filters are configurable through `FileSearchOptions`.
+dot-directories remain visible in the file tree with muted gray text. The Files tab's
+bottom popup switches among All Files, Visible Files, and Changed Files.
+Command-F on macOS or Control-F elsewhere opens a live file-name filter; matching files
+remain nested beneath their folder hierarchy. Find in Files searches Git tracked and
+untracked non-ignored files and skips binary or unsupported text encodings by default;
+both filters are configurable through `FileSearchOptions`.
 Holding Control while scrolling over an editor accelerates the wheel movement
 threefold.
 

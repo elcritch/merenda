@@ -1,16 +1,28 @@
 ## A lazy filesystem tree for Kosmo frontends.
 
-import std/[options, os, strutils, tables, times]
+import std/[algorithm, options, os, sets, strutils, tables, times, unicode]
 
-import ../nimkit as nimkit
+import ../nimkit as nimkit except performKeyEquivalent
+from ../nimkit/foundation/selectors import performKeyEquivalent
+from ../nimkit/view/viewgeometry import setFrameFromLayout
 
 type
+  FileTreeDisplayMode* {.pure.} = enum
+    AllFiles
+    VisibleFiles
+    SourceControlChanges
+
   FileTreeOpenDisposition* = enum
     fodPermanent
     fodTemporary
 
   FileTreeOpenHandler* =
     proc(path: string, disposition: FileTreeOpenDisposition) {.closure.}
+
+  FileTreeSearchEntry = object
+    path: string
+    normalizedName: string
+    hidden: bool
 
   KosmoFileTree* = ref object of nimkit.OutlineView
     xRootPath: string
@@ -23,6 +35,29 @@ type
     xGitSnapshots: Table[string, nimkit.GitStatusSnapshot]
     xGitFileStates: Table[string, nimkit.GitFileState]
     xGitDescendantStates: Table[string, nimkit.GitFileState]
+    xGitChildren: Table[string, seq[string]]
+    xVisibleChildren: Table[string, seq[string]]
+    xMatchingPaths: HashSet[string]
+    xFilterText: string
+    xDisplayMode: FileTreeDisplayMode
+    xExpandedBeforeFilter: seq[string]
+    xSearchEntries: seq[FileTreeSearchEntry]
+    xSearchIndexValid: bool
+
+  KosmoFileBrowserPanel* = ref object of nimkit.View
+    fileTree*: KosmoFileTree
+    filterField*: nimkit.TextField
+    scopeButton*: nimkit.PopupMenuButton
+    closeFilterButton*: nimkit.Button
+    promptLabel: nimkit.Label
+
+  KosmoFileFilterFieldEditor = ref object of nimkit.FieldEditor
+    panel: WeakRef[KosmoFileBrowserPanel]
+
+  KosmoFileFilterFieldCell = ref object of nimkit.TextFieldCell
+    editor: KosmoFileFilterFieldEditor
+
+  KosmoFileFilterPromptLabel = ref object of nimkit.Label
 
 const
   GitModifiedColor = nimkit.color(0.82, 0.62, 0.20, 1.0)
@@ -31,6 +66,17 @@ const
   GitRenamedColor = nimkit.color(0.32, 0.64, 0.88, 1.0)
   GitConflictedColor = nimkit.color(0.94, 0.30, 0.36, 1.0)
   GitIgnoredColor = nimkit.color(0.50, 0.52, 0.56, 0.72)
+  FileTreeScopeAction = "kosmo.fileTreeScope"
+  FileTreeCloseFilterAction = "kosmo.fileTreeCloseFilter"
+  FileBrowserControlInset = 8.0'f32
+  FileBrowserControlHeight = 26.0'f32
+  FileBrowserControlRowHeight = 42.0'f32
+
+func title*(mode: FileTreeDisplayMode): string =
+  case mode
+  of FileTreeDisplayMode.AllFiles: "All Files"
+  of FileTreeDisplayMode.VisibleFiles: "Visible Files"
+  of FileTreeDisplayMode.SourceControlChanges: "Changed Files"
 
 proc expandableDirectory(path: string): bool =
   path.isBrowsableDirectory()
@@ -46,9 +92,154 @@ proc loadChildPaths(tree: KosmoFileTree, parentIdentifier: string) =
       children.add entry.path
   tree.xChildren[parentIdentifier] = children
 
-proc childPaths(tree: KosmoFileTree, parentIdentifier: string): lent seq[string] =
+proc rawChildPaths(tree: KosmoFileTree, parentIdentifier: string): lent seq[string] =
   tree.loadChildPaths(parentIdentifier)
   tree.xChildren[parentIdentifier]
+
+proc hiddenPath(tree: KosmoFileTree, path: string): bool =
+  var currentPath = path
+  while currentPath.len > 0 and currentPath notin tree.xRootPaths:
+    if currentPath.extractFilename().startsWith("."):
+      return true
+    let parentPath = currentPath.parentDir()
+    if parentPath == currentPath:
+      break
+    currentPath = parentPath
+
+proc isTreeDirectory(tree: KosmoFileTree, path: string): bool =
+  path.expandableDirectory() or path in tree.xGitDescendantStates
+
+proc compareTreePaths(tree: KosmoFileTree, left, right: string): int =
+  let
+    leftDirectory = tree.isTreeDirectory(left)
+    rightDirectory = tree.isTreeDirectory(right)
+  if leftDirectory != rightDirectory:
+    return if leftDirectory: -1 else: 1
+  cmpIgnoreCase(left.fileBrowserDisplayName(), right.fileBrowserDisplayName())
+
+proc changedChildPaths(tree: KosmoFileTree, parentIdentifier: string): seq[string] =
+  if parentIdentifier in tree.xGitChildren:
+    result = tree.xGitChildren[parentIdentifier]
+
+proc rebuildGitChildren(tree: KosmoFileTree) =
+  tree.xGitChildren.clear()
+  var seenChildren = initTable[string, HashSet[string]]()
+  for path, state in tree.xGitFileStates:
+    if state == nimkit.gfsIgnored:
+      continue
+    var childPath = path
+    while childPath.len > 0:
+      let parentPath = childPath.parentDir()
+      if parentPath == childPath:
+        break
+      if childPath notin seenChildren.mgetOrPut(parentPath, initHashSet[string]()):
+        seenChildren[parentPath].incl childPath
+        tree.xGitChildren.mgetOrPut(parentPath, @[]).add childPath
+      childPath = parentPath
+  for parentPath, children in tree.xGitChildren.mpairs:
+    discard parentPath
+    children.sort(
+      proc(left, right: string): int =
+        tree.compareTreePaths(left, right)
+    )
+
+proc displayModeIncludes(tree: KosmoFileTree, path: string): bool =
+  case tree.xDisplayMode
+  of FileTreeDisplayMode.AllFiles:
+    true
+  of FileTreeDisplayMode.VisibleFiles:
+    not tree.hiddenPath(path)
+  of FileTreeDisplayMode.SourceControlChanges:
+    (path in tree.xGitFileStates and tree.xGitFileStates[path] != nimkit.gfsIgnored) or
+      path in tree.xGitDescendantStates
+
+proc filteredChildPaths(
+    tree: KosmoFileTree, parentIdentifier: string
+): lent seq[string] =
+  if parentIdentifier notin tree.xVisibleChildren:
+    var candidates: seq[string]
+    if parentIdentifier.len == 0:
+      candidates.add tree.xRootPaths
+    elif tree.xDisplayMode == FileTreeDisplayMode.SourceControlChanges:
+      candidates = tree.changedChildPaths(parentIdentifier)
+    else:
+      candidates.add tree.rawChildPaths(parentIdentifier)
+    var children: seq[string]
+    for path in candidates:
+      if tree.displayModeIncludes(path) and
+          (tree.xFilterText.strip().len == 0 or path in tree.xMatchingPaths):
+        children.add path
+    tree.xVisibleChildren[parentIdentifier] = children
+  tree.xVisibleChildren[parentIdentifier]
+
+proc includePathAndAncestors(
+    tree: KosmoFileTree, path: string, expanded: var seq[string]
+) =
+  for root in tree.xRootPaths:
+    if not path.isRelativeTo(root):
+      continue
+    var currentPath = path
+    while currentPath.len > 0:
+      tree.xMatchingPaths.incl currentPath
+      if currentPath == root:
+        if currentPath notin expanded:
+          expanded.add currentPath
+        break
+      currentPath = currentPath.parentDir()
+      if currentPath.len > 0 and currentPath notin expanded:
+        expanded.add currentPath
+
+proc collectSearchEntries(
+    tree: KosmoFileTree, parentIdentifier: string, seen: var HashSet[string]
+) =
+  for path in tree.rawChildPaths(parentIdentifier):
+    if path.expandableDirectory():
+      tree.collectSearchEntries(path, seen)
+    elif path notin seen:
+      seen.incl path
+      tree.xSearchEntries.add FileTreeSearchEntry(
+        path: path,
+        normalizedName: path.fileBrowserDisplayName().toLower(),
+        hidden: tree.hiddenPath(path),
+      )
+
+proc ensureSearchIndex(tree: KosmoFileTree) =
+  if tree.xSearchIndexValid:
+    return
+  tree.xSearchEntries.setLen(0)
+  var seen = initHashSet[string]()
+  for root in tree.xRootPaths:
+    tree.collectSearchEntries(root, seen)
+  tree.xSearchIndexValid = true
+
+proc invalidateSearchIndex(tree: KosmoFileTree) =
+  tree.xSearchEntries.setLen(0)
+  tree.xSearchIndexValid = false
+
+proc rebuildMatchingPaths(tree: KosmoFileTree): seq[string] =
+  tree.xMatchingPaths.clear()
+  let needle = tree.xFilterText.strip().toLower()
+  if needle.len == 0:
+    return
+  if tree.xDisplayMode == FileTreeDisplayMode.SourceControlChanges:
+    for path, state in tree.xGitFileStates:
+      if state != nimkit.gfsIgnored and
+          path.fileBrowserDisplayName().toLower().contains(needle):
+        tree.includePathAndAncestors(path, result)
+  else:
+    tree.ensureSearchIndex()
+    for entry in tree.xSearchEntries:
+      if (tree.xDisplayMode != FileTreeDisplayMode.VisibleFiles or not entry.hidden) and
+          entry.normalizedName.contains(needle):
+        tree.includePathAndAncestors(entry.path, result)
+
+proc reloadFilteredTree(tree: KosmoFileTree, updateSearchExpansion = true) =
+  tree.xVisibleChildren.clear()
+  if tree.xFilterText.strip().len > 0:
+    let expanded = tree.rebuildMatchingPaths()
+    if updateSearchExpansion:
+      tree.expandedItemIdentifiers = expanded
+  tree.reloadOutlineData()
 
 func gitStatePriority(state: nimkit.GitFileState): int =
   case state
@@ -145,7 +336,7 @@ protocol KosmoFileTreeDataSource of nimkit.OutlineViewDataSource:
       tree: KosmoFileTree, outlineView: nimkit.OutlineView, parentIdentifier: string
   ): int =
     discard outlineView
-    tree.childPaths(parentIdentifier).len
+    tree.filteredChildPaths(parentIdentifier).len
 
   method childIdentifier(
       tree: KosmoFileTree,
@@ -154,7 +345,7 @@ protocol KosmoFileTreeDataSource of nimkit.OutlineViewDataSource:
       index: int,
   ): string =
     discard outlineView
-    let children = tree.childPaths(parentIdentifier)
+    let children = tree.filteredChildPaths(parentIdentifier)
     if index in 0 ..< children.len:
       children[index]
     else:
@@ -167,7 +358,7 @@ protocol KosmoFileTreeDataSource of nimkit.OutlineViewDataSource:
     if identifier.len == 0:
       return
     let
-      expandable = identifier.expandableDirectory()
+      expandable = tree.isTreeDirectory(identifier)
       decoration = tree.gitDecoration(identifier)
     nimkit.initOutlineItem(
       identifier,
@@ -210,7 +401,7 @@ proc fileTreeRowWasActivated(
   if sender != nimkit.DynamicAgent(tree):
     return
   let path = tree.selectedItemIdentifier()
-  if path.expandableDirectory():
+  if tree.isTreeDirectory(path):
     if tree.xOpenDisposition == fodPermanent:
       tree.toggleItem(path)
   elif fileExists(path) and not tree.xOnOpenFile.isNil:
@@ -224,10 +415,47 @@ proc rootPaths*(tree: KosmoFileTree): lent seq[string] =
   ## Return the file browser's ordered top-level folders.
   tree.xRootPaths
 
+func displayMode*(tree: KosmoFileTree): FileTreeDisplayMode =
+  tree.xDisplayMode
+
+proc `displayMode=`*(tree: KosmoFileTree, mode: FileTreeDisplayMode) =
+  ## Choose whether the tree shows every file, non-hidden files, or Git changes.
+  if tree.isNil or tree.xDisplayMode == mode:
+    return
+  tree.xDisplayMode = mode
+  tree.reloadFilteredTree()
+
+proc filterText*(tree: KosmoFileTree): string =
+  tree.xFilterText
+
+proc `filterText=`*(tree: KosmoFileTree, text: string) =
+  ## Filter file names case-insensitively while retaining their ancestor folders.
+  if tree.isNil or tree.xFilterText == text:
+    return
+  let wasFiltering = tree.xFilterText.strip().len > 0
+  tree.xFilterText = text
+  let isFiltering = tree.xFilterText.strip().len > 0
+  if not wasFiltering and isFiltering:
+    tree.xExpandedBeforeFilter = tree.expandedItemIdentifiers()
+  elif wasFiltering and not isFiltering:
+    tree.xMatchingPaths.clear()
+    tree.xVisibleChildren.clear()
+    tree.expandedItemIdentifiers = tree.xExpandedBeforeFilter
+    tree.reloadOutlineData()
+    return
+  tree.reloadFilteredTree()
+
 proc reloadRoots(tree: KosmoFileTree, expanded: seq[string]) =
   tree.xFileSystem.invalidate()
   tree.xChildren.clear()
-  tree.expandedItemIdentifiers = expanded
+  tree.invalidateSearchIndex()
+  tree.xVisibleChildren.clear()
+  tree.xExpandedBeforeFilter = expanded
+  if tree.xFilterText.strip().len > 0:
+    tree.xMatchingPaths.clear()
+    tree.expandedItemIdentifiers = tree.rebuildMatchingPaths()
+  else:
+    tree.expandedItemIdentifiers = expanded
   tree.selectedItemIdentifier = ""
   tree.reloadOutlineData()
 
@@ -248,6 +476,7 @@ proc `rootPath=`*(tree: KosmoFileTree, path: string) =
   tree.xRootPaths = nextRoots
   tree.xGitFileStates.clear()
   tree.xGitDescendantStates.clear()
+  tree.xGitChildren.clear()
   tree.xGitSnapshots.clear()
   if not tree.xGitStatusService.isNil:
     tree.xGitStatusService.rootPaths = nextRoots
@@ -269,6 +498,7 @@ proc addRootPath*(tree: KosmoFileTree, path: string): bool {.discardable.} =
     tree.xRootPath = next
     tree.xGitFileStates.clear()
     tree.xGitDescendantStates.clear()
+    tree.xGitChildren.clear()
   tree.xRootPaths.add next
   if not tree.xGitStatusService.isNil:
     tree.xGitStatusService.rootPaths = tree.xRootPaths
@@ -281,7 +511,8 @@ proc refresh*(tree: KosmoFileTree) =
   ## Discard cached directory listings and reload the visible hierarchy.
   tree.xFileSystem.invalidate()
   tree.xChildren.clear()
-  tree.reloadOutlineData()
+  tree.invalidateSearchIndex()
+  tree.reloadFilteredTree()
 
 proc applyGitStatus*(tree: KosmoFileTree, snapshot: nimkit.GitStatusSnapshot) =
   ## Replace one root's decorations while retaining snapshots for the other roots.
@@ -309,7 +540,8 @@ proc applyGitStatus*(tree: KosmoFileTree, snapshot: nimkit.GitStatusSnapshot) =
     return
   tree.xGitFileStates = fileStates
   tree.xGitDescendantStates = descendantStates
-  tree.reloadOutlineData()
+  tree.rebuildGitChildren()
+  tree.reloadFilteredTree()
 
 proc applyRefreshedGitStatus(
     tree: KosmoFileTree, snapshot: nimkit.GitStatusSnapshot
@@ -357,6 +589,149 @@ proc onOpenFile*(tree: KosmoFileTree): FileTreeOpenHandler =
 proc `onOpenFile=`*(tree: KosmoFileTree, handler: FileTreeOpenHandler) =
   tree.xOnOpenFile = handler
 
+proc syncScopeControl(panel: KosmoFileBrowserPanel) =
+  let mode = panel.fileTree.displayMode()
+  panel.scopeButton.title = mode.title()
+  panel.scopeButton.toolTip = mode.title()
+  for index, item in panel.scopeButton.menu().items():
+    item.state = if index == mode.ord: nimkit.bsOn else: nimkit.bsOff
+
+proc selectScope(panel: KosmoFileBrowserPanel, mode: FileTreeDisplayMode) =
+  panel.fileTree.displayMode = mode
+  panel.syncScopeControl()
+
+proc filterTextDidChange(
+    panel: KosmoFileBrowserPanel, sender: nimkit.DynamicAgent
+) {.slot.} =
+  discard sender
+  panel.promptLabel.hidden = panel.filterField.text().len > 0
+  panel.fileTree.filterText = panel.filterField.text()
+
+proc showFilter*(panel: KosmoFileBrowserPanel): bool {.discardable.} =
+  ## Reveal and focus the live file-name filter.
+  if panel.isNil or not (panel.window() of nimkit.Window):
+    return
+  if panel.filterField.hidden():
+    panel.filterField.hidden = false
+    panel.promptLabel.hidden = panel.filterField.text().len > 0
+    panel.closeFilterButton.hidden = false
+    panel.setNeedsLayout()
+    panel.layoutSubtreeIfNeeded()
+  else:
+    panel.filterField.selectedRange =
+      nimkit.initTextRange(0, panel.filterField.text().runeLen)
+  nimkit.Window(panel.window()).makeFirstResponder(panel.filterField)
+
+proc dismissFilter*(panel: KosmoFileBrowserPanel) =
+  ## Clear and hide the live filter, returning keyboard focus to the tree.
+  if panel.isNil:
+    return
+  panel.filterField.text = ""
+  panel.fileTree.filterText = ""
+  panel.promptLabel.hidden = true
+  panel.filterField.hidden = true
+  panel.closeFilterButton.hidden = true
+  panel.setNeedsLayout()
+  let owner = panel.window()
+  if owner of nimkit.Window:
+    discard nimkit.Window(owner).makeFirstResponder(panel.fileTree)
+
+proc closeFileFilter(panel: KosmoFileBrowserPanel, sender: nimkit.DynamicAgent) =
+  discard sender
+  panel.dismissFilter()
+
+protocol KosmoFileFilterFieldCellEditing of nimkit.CellEditingProtocol:
+  method fieldEditorForView(
+      cell: KosmoFileFilterFieldCell, controlView: nimkit.View
+  ): nimkit.FieldEditor =
+    discard controlView
+    cell.editor
+
+protocol KosmoFileFilterPromptHitTesting of nimkit.ViewProtocol:
+  method pointInside(label: KosmoFileFilterPromptLabel, point: nimkit.Point): bool =
+    discard label
+    discard point
+    false
+
+protocol KosmoFileFilterEditorCancellation of nimkit.MenuCommandProtocol:
+  method cancelOperation(editor: KosmoFileFilterFieldEditor, args: nimkit.ActionArgs) =
+    discard args
+    if not editor.panel.isNil:
+      editor.panel[].dismissFilter()
+
+protocol KosmoFileFilterEditorKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
+  method performKeyEquivalent(
+      editor: KosmoFileFilterFieldEditor, event: nimkit.KeyEvent
+  ): bool =
+    if event.key == nimkit.keyF and event.modifiers == nimkit.shortcutModifiers() and
+        not editor.panel.isNil:
+      return editor.panel[].showFilter()
+
+protocol KosmoFileBrowserPanelCommands of nimkit.ResponderCommandDispatchProtocol:
+  method performKeyEquivalent(
+      panel: KosmoFileBrowserPanel, event: nimkit.KeyEvent
+  ): bool =
+    if event.key == nimkit.keyF and event.modifiers == nimkit.shortcutModifiers():
+      return panel.showFilter()
+
+protocol KosmoFileBrowserPanelMenuCommands of nimkit.MenuCommandProtocol:
+  method cancelOperation(panel: KosmoFileBrowserPanel, args: nimkit.ActionArgs) =
+    discard args
+    if not panel.filterField.hidden():
+      panel.dismissFilter()
+
+protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
+  method layoutSubviews(panel: KosmoFileBrowserPanel) =
+    let
+      bounds = panel.bounds()
+      searchHeight =
+        if panel.filterField.hidden:
+          0.0'f32
+        else:
+          min(FileBrowserControlRowHeight, bounds.size.height)
+      scopeHeight = min(
+        FileBrowserControlRowHeight, max(bounds.size.height - searchHeight, 0.0'f32)
+      )
+      treeHeight = max(bounds.size.height - searchHeight - scopeHeight, 0.0'f32)
+      contentWidth = max(bounds.size.width - FileBrowserControlInset * 2.0'f32, 0.0'f32)
+      closeWidth = min(FileBrowserControlHeight, contentWidth)
+      filterWidth = max(contentWidth - closeWidth - 6.0'f32, 0.0'f32)
+    panel.fileTree.setFrameFromLayout(
+      nimkit.rect(0.0'f32, searchHeight, bounds.size.width, treeHeight)
+    )
+    panel.filterField.setFrameFromLayout(
+      nimkit.rect(
+        FileBrowserControlInset,
+        FileBrowserControlInset,
+        filterWidth,
+        min(FileBrowserControlHeight, searchHeight),
+      )
+    )
+    panel.promptLabel.setFrameFromLayout(
+      nimkit.rect(
+        FileBrowserControlInset + 10.0'f32,
+        FileBrowserControlInset,
+        max(filterWidth - 20.0'f32, 0.0'f32),
+        min(FileBrowserControlHeight, searchHeight),
+      )
+    )
+    panel.closeFilterButton.setFrameFromLayout(
+      nimkit.rect(
+        FileBrowserControlInset + filterWidth + 6.0'f32,
+        FileBrowserControlInset,
+        closeWidth,
+        min(FileBrowserControlHeight, searchHeight),
+      )
+    )
+    panel.scopeButton.setFrameFromLayout(
+      nimkit.rect(
+        FileBrowserControlInset,
+        searchHeight + treeHeight + FileBrowserControlInset,
+        contentWidth,
+        min(FileBrowserControlHeight, scopeHeight),
+      )
+    )
+
 proc newKosmoFileTree*(
     rootPath = "", frame: nimkit.Rect = nimkit.AutoRect
 ): KosmoFileTree =
@@ -365,6 +740,9 @@ proc newKosmoFileTree*(
   result.xFileSystem = nimkit.initFileSystemBrowserModel()
   result.xGitFileStates = initTable[string, nimkit.GitFileState]()
   result.xGitDescendantStates = initTable[string, nimkit.GitFileState]()
+  result.xGitChildren = initTable[string, seq[string]]()
+  result.xVisibleChildren = initTable[string, seq[string]]()
+  result.xMatchingPaths = initHashSet[string]()
   discard result.withProtocol(KosmoFileTreeDataSource)
   discard result.withProtocol(KosmoFileTreeTableDelegate)
   discard nimkit.DynamicAgent(result).pushMethods(KosmoFileTreeEvents.init())
@@ -380,3 +758,71 @@ proc newKosmoFileTree*(
   result.showsRowSeparators = false
   result.connect(nimkit.rowWasActivated, result, fileTreeRowWasActivated)
   result.rootPath = rootPath
+
+proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
+  ## Wrap a file tree with live filtering and a persistent display-scope popup.
+  let
+    filterField = nimkit.newTextField()
+    scopeMenu = nimkit.newMenu("Files Shown")
+    scopeButton =
+      nimkit.newPopupMenuButton(FileTreeDisplayMode.AllFiles.title(), scopeMenu)
+    closeFilterButton = nimkit.newButton("×")
+    promptLabel = KosmoFileFilterPromptLabel()
+  promptLabel.initLabelFields("Filter Files")
+  discard promptLabel.withProtocol(KosmoFileFilterPromptHitTesting)
+  result = KosmoFileBrowserPanel(
+    fileTree: tree,
+    filterField: filterField,
+    scopeButton: scopeButton,
+    closeFilterButton: closeFilterButton,
+    promptLabel: promptLabel,
+  )
+  result.initViewFields()
+  result.clipsToBounds = true
+
+  let
+    panel = result.unsafeWeakRef()
+    editor = KosmoFileFilterFieldEditor(panel: panel)
+  editor.initFieldEditorFields()
+  discard editor.withProtocol(KosmoFileFilterEditorCancellation)
+  discard editor.withProtocol(KosmoFileFilterEditorKeyEquivalents)
+  let cell = KosmoFileFilterFieldCell(editor: editor)
+  cell.initTextFieldCellFields()
+  discard cell.withProtocol(KosmoFileFilterFieldCellEditing)
+  filterField.setCell(cell)
+
+  result.addSubview(tree)
+  result.addSubview(filterField)
+  result.addSubview(promptLabel)
+  result.addSubview(closeFilterButton)
+  result.addSubview(scopeButton)
+  discard result.withProtocol(KosmoFileBrowserPanelCommands)
+  discard result.withProtocol(KosmoFileBrowserPanelMenuCommands)
+  discard result.withProtocol(KosmoFileBrowserPanelLayout)
+
+  let
+    scopeAction = nimkit.actionSelector(FileTreeScopeAction)
+    closeAction = nimkit.actionSelector(FileTreeCloseFilterAction)
+  for mode in FileTreeDisplayMode:
+    let selectedMode = mode
+    let item = scopeMenu.addItem(nimkit.newMenuItem(mode.title(), scopeAction))
+    item.target = nimkit.newActionTarget(scopeAction) do(sender: nimkit.DynamicAgent):
+      discard sender
+      if not panel.isNil:
+        panel[].selectScope(selectedMode)
+    item.validates = false
+  closeFilterButton.target = nimkit.newActionTarget(closeAction) do(
+    sender: nimkit.DynamicAgent
+  ):
+    if not panel.isNil:
+      panel[].closeFileFilter(sender)
+  closeFilterButton.action = closeAction
+  closeFilterButton.accessibilityLabel = "Close file filter"
+  closeFilterButton.toolTip = "Close file filter"
+  filterField.accessibilityLabel = "Filter files"
+  scopeButton.accessibilityLabel = "Files shown"
+  filterField.hidden = true
+  promptLabel.hidden = true
+  closeFilterButton.hidden = true
+  filterField.connect(nimkit.textDidChange, result, filterTextDidChange)
+  result.syncScopeControl()

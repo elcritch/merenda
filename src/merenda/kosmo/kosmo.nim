@@ -261,6 +261,7 @@ type
     documentTabs*: nimkit.DocumentTabs
     statusLabel*: nimkit.Label
     fileTree*: KosmoFileTree
+    fileBrowserPanel*: KosmoFileBrowserPanel
     sidebarPane*: KosmoSidebarPane
     sidebarTabs*: nimkit.CompactTabView
     searchPanel*: KosmoFileSearchPanel
@@ -4193,6 +4194,7 @@ proc newKosmoApplication*(
       newKosmoEditorView(newKosmoEditor(workingDirectory = editorWorkingDirectory))
     editorPane = newKosmoEditorPane(editorView)
     fileTree = newKosmoFileTree(initialRootPath)
+    fileBrowserPanel = newKosmoFileBrowserPanel(fileTree)
     searchPanel = newKosmoFileSearchPanel(fileTree.rootPath)
     quickOpenPanel = newKosmoQuickOpenPanel(fileTree.rootPath)
     sidebarTabs = nimkit.newCompactTabView(
@@ -4201,7 +4203,7 @@ proc newKosmoApplication*(
           KosmoFilesTabIdentifier,
           "Files",
           nimkit.newSvgMtsdfResource(KosmoFilesIconSvg, "kosmo-files"),
-          fileTree,
+          fileBrowserPanel,
         ),
         nimkit.initCompactTabItem(
           KosmoFindTabIdentifier,
@@ -4273,6 +4275,7 @@ proc newKosmoApplication*(
     documentTabs: editorView.documentTabs,
     statusLabel: statusLabel,
     fileTree: fileTree,
+    fileBrowserPanel: fileBrowserPanel,
     sidebarPane: sidebarPane,
     sidebarTabs: sidebarTabs,
     searchPanel: searchPanel,

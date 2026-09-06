@@ -446,6 +446,7 @@ suite "nimkit accessibility":
 
     check button.accessibilityRole() == arPopupButton
     check button.accessibilityLabel() == "Actions"
+    check button.accessibilityValue() == "Actions"
     check button.accessibilityActionNames() == @[AccessibilityActionShowMenu]
 
   test "combo boxes popup lists and scroll areas expose roles and traits":

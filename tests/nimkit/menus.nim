@@ -351,6 +351,29 @@ suite "nimkit menus":
     )
     check spy.events == @["activate:two"]
 
+  test "inline popup flips above a button at the bottom edge":
+    let
+      window = newWindow("Menu popup placement", frame = rect(0, 0, 240, 140))
+      root = newView(frame = rect(0, 0, 240, 140))
+      menu = newMenu("Choices")
+      button = newPopupMenuButton("Choices", menu, rect(8, 108, 160, 24))
+
+    discard menu.addItem(newMenuItem("One"))
+    discard menu.addItem(newMenuItem("Two"))
+    discard menu.addItem(newMenuItem("Three"))
+    button.popupPresentation = ppInline
+    root.addSubview(button)
+    window.setContentView(root)
+
+    button.openPopup()
+
+    require root.subviews().len == 2
+    require root.subviews()[1] of PopupListView
+    let popupList = PopupListView(root.subviews()[1])
+    check popupList.frame().maxY <= button.frame().minY
+    check popupList.frame().minY >= root.bounds().minY
+    button.closePopup()
+
   test "window popup preference falls back to an inline menu without a native host":
     let
       window = newWindow("Menu popup fallback", frame = rect(0, 0, 240, 140))
