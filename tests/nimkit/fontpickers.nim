@@ -213,6 +213,18 @@ suite "NimKit font pickers":
     check face.weightClass == 400
     check face.regular
     check DefaultFontLanguage in face.languages
+    check not face.displayabilityChecked
+
+  test "font catalog defers displayability checks until requested":
+    let fontPath = getCurrentDir() / "data/Ubuntu.ttf"
+    var face = initFontCatalogFace("Regular", DefaultFontLanguage, fontPath)
+    face.loadFontCatalogFaceMetadata()
+
+    check not face.displayabilityChecked
+    check not face.supportsPreviewText
+    face.checkFontCatalogFaceDisplayability()
+    check face.displayabilityChecked
+    check face.supportsPreviewText
 
   test "font catalog metadata loads the selected collection face":
     let collectionPath = getCurrentDir() / "deps/pixie/tests/fonts/PTSans.ttc"
@@ -225,6 +237,8 @@ suite "NimKit font pickers":
         fontName = "PTSans-Italic",
       )
       face.loadFontCatalogFaceMetadata()
+      check not face.displayabilityChecked
+      face.checkFontCatalogFaceDisplayability()
 
       check face.metadataLoaded
       check face.faceIndex == 1

@@ -277,13 +277,19 @@ proc addFontCatalogEntry(controller: FontPickerController, entry: FontCatalogEnt
         )
         controller.faces[faceIdentifier] = face
 
+proc checkFontCatalogEntryDisplayability(entry: var FontCatalogEntry) =
+  for face in entry.faces.mitems:
+    face.checkFontCatalogFaceDisplayability()
+
 proc rebuildFontPickerItems(controller: FontPickerController) =
   controller.items.clear()
   controller.faces.clear()
   controller.childIdentifiers.clear()
   controller.childIndexes.clear()
   controller.addDefaultFontPickerItem()
-  for entry in controller.catalogEntries:
+  for entry in controller.catalogEntries.mitems:
+    if controller.onlyDisplayableFonts:
+      entry.checkFontCatalogEntryDisplayability()
     controller.addFontCatalogEntry(entry)
 
 proc setFontFilter(controller: FontPickerController, value: FontPickerFilter) =
@@ -389,6 +395,8 @@ proc didLoadFontCatalogBatch(
 ) {.slot.} =
   for entry in entries:
     controller.catalogEntries.add entry
+    if controller.onlyDisplayableFonts:
+      controller.catalogEntries[^1].checkFontCatalogEntryDisplayability()
     controller.addFontCatalogEntry(controller.catalogEntries[^1])
   if entries.len > 0:
     controller.restoreFontPickerSelection()

@@ -39,6 +39,8 @@ type
     variable*: bool
     supportsPreviewText*: bool
     metadataLoaded*: bool
+    previewCodepointsSupported: bool
+    previewDisplayabilityChecked: bool
 
   FontCatalogEntry* = object
     family*: string
@@ -680,6 +682,10 @@ func faceIndex*(face: FontCatalogFace): int {.inline.} =
   ## Returns the physical face index for this catalog face.
   face.typeface.file.faceIndex
 
+func displayabilityChecked*(face: FontCatalogFace): bool {.inline.} =
+  ## Returns whether visible preview rendering has been checked for this face.
+  face.previewDisplayabilityChecked
+
 func fontCatalogFaceIdentifier(typeface: figSystemFonts.SystemTypeface): string =
   result = "system-font-face:" & typeface.file.path
   if typeface.file.faceIndex > 0 or typeface.variations.len > 0:
@@ -841,8 +847,11 @@ proc parsedFontFace(path: string): ParsedFontFace =
     result.face.regular = info.regular
     result.face.monospace = info.monospace
     result.face.variable = info.variationAxes.len > 0
+    result.face.previewCodepointsSupported = info.supportsFontCatalogPreview()
     result.face.supportsPreviewText =
-      info.supportsFontCatalogPreview() and result.face.canRenderFontCatalogPreview()
+      result.face.previewCodepointsSupported and
+      result.face.canRenderFontCatalogPreview()
+    result.face.previewDisplayabilityChecked = true
     result.searchText.add " " & info.fontMetadataSearchText()
 
 func preferredFontName(info: figSystemFonts.SystemTypefaceInfo): string =
@@ -911,8 +920,19 @@ proc loadFontCatalogFaceMetadata*(face: var FontCatalogFace) =
     face.regular =
       face.style.normalizedFontText() in ["regular", "normal", "roman", "book"] and
       not face.bold and not face.italic and not face.oblique
+  face.previewCodepointsSupported = info.supportsFontCatalogPreview()
+
+proc checkFontCatalogFaceDisplayability*(face: var FontCatalogFace) =
+  ## Checks whether the exact face can visibly render the catalog preview text.
+  ## This is deliberately separate from metadata loading because rasterizing every
+  ## installed face is too expensive unless displayability filtering is requested.
+  if face.previewDisplayabilityChecked:
+    return
+  if not face.metadataLoaded:
+    face.loadFontCatalogFaceMetadata()
+  face.previewDisplayabilityChecked = true
   face.supportsPreviewText =
-    info.supportsFontCatalogPreview() and face.canRenderFontCatalogPreview()
+    face.previewCodepointsSupported and face.canRenderFontCatalogPreview()
 
 func copyFontCatalogEntry(entry: FontCatalogEntry): FontCatalogEntry =
   result = entry

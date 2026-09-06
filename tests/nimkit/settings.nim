@@ -222,6 +222,59 @@ suite "nimkit settings":
     check onlyMonospaceFonts.sendAction()
     check fontPicker.selectedPath[^1] == proportionalFaceIdentifier
 
+  test "JetBrains Mono names survive the default font filters":
+    let settings = newMerendaSettingsWindow()
+    let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require not tabsView.isNil
+    require tabsView of TabView
+    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    let
+      monospaceFontView =
+        settings.contentView().viewWithIdentifier("settings-monospace-font-button")
+      onlyMonospaceFontsView =
+        settings.contentView().viewWithIdentifier("settings-only-monospace-fonts")
+      onlyDisplayableFontsView =
+        settings.contentView().viewWithIdentifier("settings-only-displayable-fonts")
+    require not monospaceFontView.isNil
+    require monospaceFontView of Button
+    require not onlyMonospaceFontsView.isNil
+    require onlyMonospaceFontsView of Button
+    require not onlyDisplayableFontsView.isNil
+    require onlyDisplayableFontsView of Button
+    settings.window().close()
+    let
+      monospaceFont = Button(monospaceFontView)
+      onlyMonospaceFonts = Button(onlyMonospaceFontsView)
+      onlyDisplayableFonts = Button(onlyDisplayableFontsView)
+      languageIdentifier = "system-font-language:default"
+      faceIdentifier = languageIdentifier & ":face:jetbrains-mono-regular"
+    var jetBrainsFace = initFontCatalogFace(
+      "Regular",
+      DefaultFontLanguage,
+      "/fonts/JetBrainsMono-Regular.ttf",
+      identifier = "jetbrains-mono-regular",
+      fontName = "JetBrainsMono-Regular",
+    )
+    jetBrainsFace.metadataLoaded = true
+    settings.fontPickerController.catalogEntries =
+      @[
+        initFontCatalogEntry(
+          "JetBrains Mono",
+          jetBrainsFace.path,
+          identifier = "jetbrains-mono",
+          faces = [jetBrainsFace],
+        )
+      ]
+
+    check monospaceFont.sendAction()
+    check onlyMonospaceFonts.state == bsOn
+    check onlyDisplayableFonts.state == bsOff
+    check settings.fontPickerController.faces.hasKey(faceIdentifier)
+
+    onlyDisplayableFonts.state = bsOn
+    check onlyDisplayableFonts.sendAction()
+    check not settings.fontPickerController.faces.hasKey(faceIdentifier)
+
   test "background font reloads preserve the browsed family position":
     let settings = newMerendaSettingsWindow()
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
