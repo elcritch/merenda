@@ -91,10 +91,26 @@ jobs:
           ! -name '*.nims' \
           -delete
 
-    - name: Build Tests
+    - name: Build and run tests with Nim
       if: runner.os == 'macOS'
+      timeout-minutes: 15
       run: |
-        atlas-run tests --jobs:1 --compiler-output -- --opt:none
+        # Run each shared runner directly so unittest output identifies a
+        # long-running test instead of being buffered by atlas-run.
+        for testFile in \
+          tests/tnimkit.nim \
+          tests/tkosmo.nim \
+          tests/ttekton.nim \
+          tests/tintegrations.nim
+        do
+          testName="$(basename "${testFile%.nim}")"
+          testCache="deps/.nimcache/github-actions/${testName}"
+          mkdir -p "$testCache"
+          nim c -r --opt:none \
+            --nimcache:"$testCache" \
+            --out:"$testCache/$testName" \
+            "$testFile"
+        done
 
     - name: Build Tests
       if: runner.os == 'Linux'
