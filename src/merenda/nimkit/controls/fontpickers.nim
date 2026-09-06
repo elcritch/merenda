@@ -1,7 +1,8 @@
 import std/[algorithm, locks, os, strutils, tables]
-from std/unicode import runes
+from std/unicode import runes, `$`
 
 import sigils/core
+import pixie as fontRaster
 from figdraw/common/typefaceinfos import
   TypefaceInfo, parseTypefaceInfo, supportedCodepointCount
 import figdraw/extras/systemfonts as figSystemFonts
@@ -317,6 +318,40 @@ func supportsFontCatalogPreview*(
     if info.supportedCodepointCount(codepoint, codepoint) == 0:
       return false
   true
+
+proc canRenderFontCatalogPreview*(face: FontCatalogFace): bool =
+  ## Checks the exact face with the outline renderer, without font fallbacks.
+  ## Parsed fonts and probe images stay local to the calling worker.
+  try:
+    var typeface: fontRaster.Typeface
+    if face.path.splitFile().ext.toLowerAscii() in [".ttc", ".otc"]:
+      let faces = fontRaster.readTypefaces(face.path)
+      if face.faceIndex notin 0 ..< faces.len:
+        return
+      typeface = faces[face.faceIndex]
+    else:
+      if face.faceIndex != 0:
+        return
+      typeface = fontRaster.readTypeface(face.path)
+    let font = fontRaster.newFont(typeface)
+    font.size = 24
+    for rune in FontCatalogPreviewText.runes:
+      if rune.int == ord(' '):
+        continue
+      if not typeface.hasGlyph(rune):
+        return
+      let probe = fontRaster.newImage(96, 96)
+      probe.fillText(font, $rune)
+      var visible = false
+      for pixel in probe.data:
+        if pixel.a > 0:
+          visible = true
+          break
+      if not visible:
+        return
+    result = true
+  except CatchableError:
+    discard
 
 func normalizedFontText(text: string): string =
   result = newStringOfCap(text.len)
@@ -761,7 +796,8 @@ proc parsedFontFace(path: string): ParsedFontFace =
     result.face.regular = info.regular
     result.face.monospace = info.monospace
     result.face.variable = info.variationAxes.len > 0
-    result.face.supportsPreviewText = info.supportsFontCatalogPreview()
+    result.face.supportsPreviewText =
+      info.supportsFontCatalogPreview() and result.face.canRenderFontCatalogPreview()
     result.searchText.add " " & info.fontMetadataSearchText()
 
 func preferredFontName(info: figSystemFonts.SystemTypefaceInfo): string =
@@ -819,7 +855,8 @@ proc loadFontCatalogFaceMetadata*(face: var FontCatalogFace) =
   face.regular = info.regular
   face.monospace = info.monospace
   face.variable = info.variationAxes.len > 0
-  face.supportsPreviewText = info.supportsFontCatalogPreview()
+  face.supportsPreviewText =
+    info.supportsFontCatalogPreview() and face.canRenderFontCatalogPreview()
 
 func copyFontCatalogEntry(entry: FontCatalogEntry): FontCatalogEntry =
   result = entry

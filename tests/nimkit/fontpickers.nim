@@ -1,10 +1,39 @@
-import std/[os, sequtils, sets, strutils, unittest]
+import std/[os, sequtils, sets, strutils, tempfiles, unittest]
 
 from figdraw/common/typefaceinfos import TypefaceCodepointRange, TypefaceInfo
 from figdraw/common/typefaces import getTypefaceInfo, loadTypeface
 import merenda/nimkit
 
 suite "NimKit font pickers":
+  test "preview rendering rejects blank outlines and invalid exact faces":
+    let root = createTempDir("merenda-font-preview-", "")
+    defer:
+      removeDir(root)
+    let path = root / "blank.svg"
+    var glyphs: string
+    for ch in "The quick brown fox jumps over the lazy dog.":
+      glyphs.add "<glyph unicode=\"" & $ch & "\" horiz-adv-x=\"600\" d=\"\"/>"
+    writeFile(
+      path,
+      "<svg><defs><font id=\"Blank\" horiz-adv-x=\"600\">" &
+        "<font-face font-family=\"Blank\" units-per-em=\"1000\" ascent=\"800\" descent=\"-200\"/>" &
+        glyphs & "</font></defs></svg>",
+    )
+    check not initFontCatalogFace("Regular", DefaultFontLanguage, path)
+    .canRenderFontCatalogPreview()
+    writeFile(
+      path, readFile(path).replace("d=\"\"", "d=\"M0 0 L500 0 L500 700 L0 700 Z\"")
+    )
+    check initFontCatalogFace("Regular", DefaultFontLanguage, path)
+    .canRenderFontCatalogPreview()
+    let validPath = getCurrentDir() / "data/Ubuntu.ttf"
+    check initFontCatalogFace("Regular", DefaultFontLanguage, validPath)
+    .canRenderFontCatalogPreview()
+    check not initFontCatalogFace(
+      "Regular", DefaultFontLanguage, validPath, faceIndex = 3
+    )
+    .canRenderFontCatalogPreview()
+
   test "font preview coverage requires every displayed character":
     let
       basicLatin = TypefaceInfo(
