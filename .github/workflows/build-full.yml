@@ -97,32 +97,6 @@ jobs:
       run: |
         # Run each shared runner directly so unittest output identifies a
         # long-running test instead of being buffered by atlas-run.
-        runKosmoWithWatchdog() {
-          local testBinary="$1"
-          "$testBinary" &
-          local testPid=$!
-          (
-            sleep 90
-            if kill -0 "$testPid" 2>/dev/null; then
-              echo "MACOS_TIMEOUT_DIAGNOSTIC tkosmo still running pid=$testPid"
-              ps -Ao pid,ppid,state,etime,pcpu,command || true
-              sampleOutput="$RUNNER_TEMP/tkosmo-sample.txt"
-              sample "$testPid" 10 -file "$sampleOutput" || true
-              if [[ -f "$sampleOutput" ]]; then
-                cat "$sampleOutput"
-              fi
-            fi
-          ) &
-          local watchdogPid=$!
-          set +e
-          wait "$testPid"
-          local testStatus=$?
-          set -e
-          kill "$watchdogPid" 2>/dev/null || true
-          wait "$watchdogPid" 2>/dev/null || true
-          return "$testStatus"
-        }
-
         for testFile in \
           tests/tnimkit.nim \
           tests/tkosmo.nim \
@@ -132,21 +106,9 @@ jobs:
           testName="$(basename "${testFile%.nim}")"
           testCache="deps/.nimcache/github-actions/${testName}"
           mkdir -p "$testCache"
-          diagnosticFlags=()
-          if [[ "$testName" == "tkosmo" ]]; then
-            diagnosticFlags+=("-d:macosTimeoutDiagnostics")
-          fi
-          testBinary="$testCache/$testName"
-          nim c --opt:none \
-            "${diagnosticFlags[@]}" \
+          nim c -r --opt:none \
             --nimcache:"$testCache" \
-            --out:"$testBinary" \
             "$testFile"
-          if [[ "$testName" == "tkosmo" ]]; then
-            runKosmoWithWatchdog "$testBinary"
-          else
-            "$testBinary"
-          fi
         done
 
     - name: Build Tests
