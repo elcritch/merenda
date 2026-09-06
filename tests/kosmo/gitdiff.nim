@@ -15,6 +15,9 @@ proc initRepository(root: string) =
   git(root, "config", "user.name", "Kosmo Diff Test")
   git(root, "config", "user.email", "kosmo-test@example.invalid")
 
+proc firstResponderIs(window: Window, expected: Responder): bool =
+  window.firstResponder == expected
+
 suite "Kosmo Git diff":
   test "full context includes staged unstaged untracked deleted and binary files":
     let root = createTempDir("kosmo-git-diff-", "")
@@ -107,10 +110,33 @@ suite "Kosmo Git diff":
     require panel.markdownView.waitForMarkdownParsing()
     check panel.isFileCollapsed(0)
     check "new text" notin panel.markdownView.textStorage().stringValue()
-    panel.toggleFile(0)
+    let collapsedDisclosure = panel.disclosureButtonForFile(0)
+    require not collapsedDisclosure.isNil
+    check collapsedDisclosure.accessibilityRole() == arDisclosureButton
+    check collapsedDisclosure.accessibilityLabel() == "source.txt"
+    check collapsedDisclosure.accessibilityValue() == "collapsed"
+    check collapsedDisclosure.accessibilitySupportsAction(AccessibilityActionPress)
+    check collapsedDisclosure.accessibilitySupportsAction(AccessibilityActionExpand)
+    check collapsedDisclosure.accessibilityPerformAction(AccessibilityActionExpand)
     require panel.markdownView.waitForMarkdownParsing()
     check not panel.isFileCollapsed(0)
     check "+new text" in panel.markdownView.textStorage().stringValue()
+    let expandedDisclosure = panel.disclosureButtonForFile(0)
+    require not expandedDisclosure.isNil
+    check expandedDisclosure.accessibilityValue() == "expanded"
+    check expandedDisclosure.accessibilitySupportsAction(AccessibilityActionCollapse)
+    check expandedDisclosure.performKeyEquivalentInChain(
+      KeyEvent(key: keySpace, keyCode: keySpace.ord)
+    )
+    require panel.markdownView.waitForMarkdownParsing()
+    check panel.isFileCollapsed(0)
+    let keyboardDisclosure = panel.disclosureButtonForFile(0)
+    require not keyboardDisclosure.isNil
+    check keyboardDisclosure.performKeyEquivalentInChain(
+      KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
+    )
+    require panel.markdownView.waitForMarkdownParsing()
+    check not panel.isFileCollapsed(0)
     writeFile(root / "source.txt", "refreshed text\n")
     panel.refresh()
     require panel.waitForDiff()
@@ -142,6 +168,7 @@ suite "Kosmo Git diff":
     check item.perform(frontend.window)
     require not frontend.gitDiffPanel.isNil
     require frontend.gitDiffPanel.waitForDiff()
+
     check frontend.documentTabs.selectedDocumentTabIdentifier ==
       KosmoGitDiffTabIdentifier
     check frontend.editorPane.contentView == View(frontend.gitDiffPanel)
@@ -213,6 +240,99 @@ suite "Kosmo Git diff":
     check frontend.documentTabs.selectedDocumentTabIdentifier ==
       KosmoGitDiffTabIdentifier
     require frontend.gitDiffPanel.waitForDiff()
+
+  test "Git diff tab participates in control-W pane navigation":
+    let root = createTempDir("kosmo-git-diff-pane-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "pane.txt", "pane diff\n")
+    let
+      app = newApplication("Kosmo Diff Pane Navigation")
+      frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require frontend.window.sendAction(actionSelector(KosmoSplitVerticalAction))
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.editorGroups().len == 2
+    require frontend.showGitDiff()
+    let groups = frontend.editorGroups()
+    var
+      diffGroup: KosmoEditorGroup
+      otherGroup: KosmoEditorGroup
+    for group in groups:
+      if group.pane.contentView == View(frontend.gitDiffPanel):
+        diffGroup = group
+      else:
+        otherGroup = group
+    require not diffGroup.isNil
+    require not otherGroup.isNil
+    require frontend.window.makeFirstResponder(
+      frontend.gitDiffPanel.markdownView.textView()
+    )
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    check frontend.window.firstResponder == otherGroup.editorView
+
+  test "keyboard focus reveals disclosure headings in long diffs":
+    let root = createTempDir("kosmo-git-diff-disclosure-focus-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    let original = "old value\n" & "context line\n".repeat(160)
+    writeFile(root / "aardvark.txt", "unchanged first\n")
+    writeFile(root / "first.txt", original)
+    writeFile(root / "second.txt", "old second\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "Initial")
+    writeFile(root / "first.txt", original.replace("old value", "new value"))
+    writeFile(root / "second.txt", "new second\n")
+    let
+      window = newWindow("Git Diff Disclosure Focus", frame = rect(0, 0, 600, 280))
+      panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+      window.close()
+    panel.frame = rect(0, 0, 600, 280)
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    require panel.markdownView.waitForMarkdownParsing()
+    require panel.snapshot.files.len == 2
+    let
+      firstDisclosure = panel.disclosureButtonForFile(0)
+      secondDisclosure = panel.disclosureButtonForFile(1)
+      textView = panel.markdownView.textView()
+    require not firstDisclosure.isNil
+    require not secondDisclosure.isNil
+    check secondDisclosure.frame().intersection(textView.visibleRect()).isEmpty
+    window.recalculateKeyViewLoop()
+    require window.makeFirstResponder(firstDisclosure)
+    require window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check window.firstResponderIs(secondDisclosure)
+    check not secondDisclosure.frame().intersection(textView.visibleRect()).isEmpty
+    writeFile(root / "aardvark.txt", "new first\n")
+    panel.refresh()
+    require panel.waitForDiff()
+    require panel.markdownView.waitForMarkdownParsing()
+    check window.firstResponderIs(secondDisclosure)
+    require panel.snapshot.files.len == 3
+    check panel.snapshot.files[0].path == "aardvark.txt"
+    let newFirstDisclosure = panel.disclosureButtonForFile(0)
+    require not newFirstDisclosure.isNil
+    require window.makeFirstResponder(textView)
+    window.recalculateKeyViewLoop()
+    require window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+    check window.firstResponderIs(newFirstDisclosure)
 
   when defined(posix):
     test "closing interrupts an in-flight Git process":

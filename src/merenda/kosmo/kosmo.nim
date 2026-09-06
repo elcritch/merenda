@@ -1486,14 +1486,13 @@ proc handlePendingPaneKey(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   discard view.sendKeyDownToMoe(event)
   true
 
-proc handleMarkdownPaneKey(view: KosmoMarkdownView, event: nimkit.KeyEvent): bool =
-  ## Route scoped pane commands from a focused Markdown preview.
-  if view.isNil or view.editorView.isNil:
-    return false
-  let editorView = view.editorView[]
+proc handlePaneKey(editorView: KosmoEditorView, event: nimkit.KeyEvent): bool =
+  ## Route scoped pane commands from focused non-editor pane content.
+  if editorView.isNil:
+    return
   if editorView.tabsDelegate.isNil or editorView.tabsDelegate.dockController.isNil or
       editorView.dockGroup.isNil:
-    return false
+    return
   if editorView.pendingPanePrefix:
     editorView.pendingPanePrefix = false
     if event.key == nimkit.keyEscape:
@@ -1508,7 +1507,12 @@ proc handleMarkdownPaneKey(view: KosmoMarkdownView, event: nimkit.KeyEvent): boo
   if event.key == nimkit.keyForText("w") and event.modifiers == {nimkit.kmControl}:
     editorView.pendingPanePrefix = true
     return true
-  false
+
+proc handleMarkdownPaneKey(view: KosmoMarkdownView, event: nimkit.KeyEvent): bool =
+  ## Route scoped pane commands from a focused Markdown preview.
+  if view.isNil or view.editorView.isNil:
+    return
+  view.editorView[].handlePaneKey(event)
 
 proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool =
   if event.kind == nimkit.mtreMouseDown and not view.tabsDelegate.dockController.isNil:
@@ -3978,6 +3982,7 @@ proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
       root, group.pane.markdownControls.markdownPresentationStyle()
     )
     weakFrontend = frontend.unsafeWeakRef()
+    weakPanel = panel.unsafeWeakRef()
     document = newKosmoPaneDocument(
       identifier = KosmoGitDiffTabIdentifier,
       title = "Git Diff",
@@ -3991,6 +3996,14 @@ proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
           weakFrontend[].gitDiffPanel = nil
         true,
     )
+  panel.keyEquivalentHandler = proc(event: nimkit.KeyEvent): bool =
+    if weakFrontend.isNil or weakPanel.isNil or weakFrontend[].dockController.isNil:
+      return
+    for candidate in weakFrontend[].dockController.groups:
+      let candidateDocument = candidate.documentForIdentifier(KosmoGitDiffTabIdentifier)
+      if not candidateDocument.isNil and
+          candidateDocument.contentView == nimkit.View(weakPanel[]):
+        return candidate.editorView.handlePaneKey(event)
   frontend.gitDiffPanel = panel
   if controller.openPaneDocument(group, document):
     return true
