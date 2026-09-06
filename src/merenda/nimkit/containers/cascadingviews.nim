@@ -1006,9 +1006,12 @@ proc initCascadingTableView(view: CascadingView): TableView =
   result.showsHeader = view.xShowsColumnHeaders
   result.usesAlternatingRowBackgrounds = false
   result.selectionMode = tsmSingle
+  result.columnSizing = tvcsFill
   result.dataSource = DynamicAgent(view)
   result.delegate = DynamicAgent(view)
-  let column = newTableColumn("item", width = view.xColumnWidth)
+  let column = newTableColumn(
+    "item", width = view.xColumnWidth, minWidth = 0.0, sizingPolicy = tcspFlexible
+  )
   column.resizePolicy = tcrFixed
   result.addColumn(column)
   `hasHorizontalScroller=`(result.scrollView(), false)
