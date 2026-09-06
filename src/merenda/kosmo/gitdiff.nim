@@ -1,12 +1,16 @@
 ## Full-context Git patches presented as collapsible Markdown code blocks.
 
 import
-  std/[atomics, monotimes, os, osproc, sets, streams, strutils, tables, times, unicode]
+  std/[
+    atomics, isolation, monotimes, os, osproc, sets, streams, strutils, tables, times,
+    unicode,
+  ]
 import sigils/[core, threadProxies, threads]
 import threading/smartptrs
 when defined(posix):
   import std/posix
 import ../nimkit as nimkit
+import ../nimkit/foundation/backgroundworkers
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
@@ -30,6 +34,16 @@ type
 
   GitDiffWorker = ref object of AgentActor
 
+  GitDiffHighlightWorker = ref object of AgentActor
+    cache: Table[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]
+    buildCount: int
+
+  GitDiffHighlightResult = object
+    snapshot: GitDiffSnapshot
+    cache: Table[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]
+    generation: uint64
+    buildCount, threadId: int
+
   GitDiffControl = object
     cancelled: Atomic[bool]
 
@@ -52,6 +66,8 @@ type
     collapsed: HashSet[string]
     pool: SigilThreadPoolPtr
     worker: AgentProxy[GitDiffWorker]
+    highlightWorker: AgentProxy[GitDiffHighlightWorker]
+    generation: uint64
     loading: bool
     closed: bool
     control: SharedPtr[GitDiffControl]
@@ -59,6 +75,7 @@ type
     keyEquivalentHandler: GitDiffKeyEquivalentHandler
     highlightCache: Table[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]
     xHighlightBuildCount: int
+    xHighlightThreadId: int
 
 proc executeGit(
     root: string, args: openArray[string], control: SharedPtr[GitDiffControl]
@@ -664,10 +681,30 @@ proc executeDiff(
 ) {.slot.} =
   emit worker.diffFinished(readGitDiff(root, control))
 
-proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
-  if not panel.closed:
-    var retained = initTable[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]()
+proc highlightDiff(
+  worker: AgentProxy[GitDiffHighlightWorker],
+  snapshot: GitDiffSnapshot,
+  generation: uint64,
+  control: SharedPtr[GitDiffControl],
+) {.signal.}
+
+proc highlightingFinished(
+  worker: GitDiffHighlightWorker, highlighted: SharedPtr[GitDiffHighlightResult]
+) {.signal.}
+
+proc highlightDiff(
+    worker: GitDiffHighlightWorker,
+    snapshot: GitDiffSnapshot,
+    generation: uint64,
+    control: SharedPtr[GitDiffControl],
+) {.slot.} =
+  if control[].cancelled.load(moAcquire):
+    return
+  var retained = initTable[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]()
+  try:
     for file in snapshot.files:
+      if control[].cancelled.load(moAcquire):
+        return
       let
         language = file.path.diffLanguage()
         key = (
@@ -683,17 +720,53 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
           language: "diff" & (if language.len > 0: ":" & language
           else: ""),
         )
-      if panel.highlightCache.hasKey(key):
-        retained[key] = panel.highlightCache[key]
-    panel.highlightCache = move retained
+      if not retained.hasKey(key):
+        if worker.cache.hasKey(key):
+          retained[key] = worker.cache[key]
+        else:
+          retained[key] = diffHighlight(key.source, key.language)
+          inc worker.buildCount
+    worker.cache = retained
+    if not control[].cancelled.load(moAcquire):
+      var highlighted = GitDiffHighlightResult(
+        snapshot: snapshot,
+        cache: move retained,
+        generation: generation,
+        buildCount: worker.buildCount,
+        threadId: getThreadId(),
+      )
+      emit worker.highlightingFinished(newSharedPtr(unsafeIsolate(move highlighted)))
+  except CatchableError as error:
+    if not control[].cancelled.load(moAcquire):
+      var highlighted = GitDiffHighlightResult(
+        snapshot: snapshot,
+        generation: generation,
+        buildCount: worker.buildCount,
+        threadId: getThreadId(),
+      )
+      highlighted.snapshot.errorMessage = "Syntax highlighting failed: " & error.msg
+      emit worker.highlightingFinished(newSharedPtr(unsafeIsolate(move highlighted)))
+
+proc applyHighlighting(
+    panel: KosmoGitDiffPanel, highlighted: SharedPtr[GitDiffHighlightResult]
+) {.slot.} =
+  if not panel.closed and highlighted[].generation == panel.generation:
+    panel.highlightCache = highlighted[].cache
+    panel.xHighlightBuildCount = highlighted[].buildCount
+    panel.xHighlightThreadId = highlighted[].threadId
     panel.loading = false
-    panel.snapshot = snapshot
+    panel.snapshot = highlighted[].snapshot
     panel.refreshButton.enabled = true
     panel.renderDiff()
+
+proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
+  if not panel.closed:
+    emit panel.highlightWorker.highlightDiff(snapshot, panel.generation, panel.control)
 
 proc refresh*(panel: KosmoGitDiffPanel) =
   ## Refresh the current repository on a worker thread.
   if not panel.closed and not panel.loading:
+    inc panel.generation
     panel.loading = true
     panel.refreshButton.enabled = false
     panel.renderDiff()
@@ -711,6 +784,8 @@ proc waitForDiff*(panel: KosmoGitDiffPanel, timeoutMilliseconds = 10000): bool =
 proc close*(panel: KosmoGitDiffPanel) {.slot.} =
   if not panel.closed:
     panel.closed = true
+    inc panel.generation
+    panel.loading = false
     panel.highlightCache.clear()
     panel.clearDisclosureButtons()
     panel.control[].cancelled.store(true, moRelease)
@@ -748,6 +823,10 @@ proc highlightBuildCount*(panel: KosmoGitDiffPanel): int =
   ## Number of uncached diff highlighting passes, for performance diagnostics.
   panel.xHighlightBuildCount
 
+proc highlightThreadId*(panel: KosmoGitDiffPanel): int =
+  ## Thread that prepared the latest highlighted snapshot; zero before completion.
+  panel.xHighlightThreadId
+
 proc newKosmoGitDiffPanel*(
     rootPath: string, markdownStyle = nimkit.initMarkdownStyle()
 ): KosmoGitDiffPanel =
@@ -779,10 +858,9 @@ proc newKosmoGitDiffPanel*(
     if weakPanel.isNil or weakPanel[].closed:
       return
     let key = (source: source, language: language)
-    if not weakPanel[].highlightCache.hasKey(key):
-      weakPanel[].highlightCache[key] = diffHighlight(source, language)
-      inc weakPanel[].xHighlightBuildCount
-    weakPanel[].highlightCache[key]
+    # The worker prepares every file before publishing the snapshot. Never
+    # fall back to Matter here: Markdown invokes this callback on the UI thread.
+    weakPanel[].highlightCache.getOrDefault(key)
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =
@@ -849,4 +927,15 @@ proc newKosmoGitDiffPanel*(
   result.worker = worker.moveToThread(result.pool)
   connectThreaded(result.worker, executeDiff, result.worker, executeDiff)
   connectThreaded(result.worker, diffFinished, result, KosmoGitDiffPanel.applyDiff())
+  var highlighter = GitDiffHighlightWorker()
+  result.highlightWorker = highlighter.moveToThread(nimkitWorkerPool())
+  connectThreaded(
+    result.highlightWorker, highlightDiff, result.highlightWorker, highlightDiff
+  )
+  connectThreaded(
+    result.highlightWorker,
+    highlightingFinished,
+    result,
+    KosmoGitDiffPanel.applyHighlighting(),
+  )
   result.refresh()

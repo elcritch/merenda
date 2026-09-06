@@ -167,10 +167,14 @@ application loop applies completed parses automatically. Tests and command-line
 tools can call `viewer.waitForMarkdownParsing()` when they need the rendered text
 immediately; `isMarkdownRendering()` and `waitForMarkdownRendering()` expose the
 application phase separately. Width-only reflow keeps the last complete layout
-visible and runs on a coalescing Sigils worker pool, so live pane resizing does not
+visible and runs on NimKit's shared Sigils worker pool, so live pane resizing does not
 block the GUI. Tests can use `waitForMarkdownLayout()` when they need the settled
 post-resize geometry. See `examples/markdown_viewer_demo.nim` for a
 complete window.
+
+Markdown parsing, built-in Matter highlighting, and text reflow share the same
+NimKit worker pool. Highlighted spans are reused when the theme changes. Custom
+syntax callbacks and parser configurations remain on the owning thread.
 
 Each applied document retains only its own decoded images. Markdown downsamples
 large sources to their maximum display size before publishing them to the static
@@ -709,7 +713,8 @@ untracked non-ignored files and skips binary or unsupported text encodings by de
 both filters are configurable through `FileSearchOptions`.
 File → Show Git Diff (Command-Shift-G on macOS) opens a tab showing staged,
 unstaged, and untracked changes with full-file context. Matter highlights each file's
-language using the active Markdown syntax colors, with subtle green/red backgrounds
+language on NimKit's shared worker pool using the active Markdown syntax colors,
+with subtle green/red backgrounds
 and markers for added/deleted lines. Unknown languages retain plain diff text.
 Click a file heading to collapse or expand
 its diff, or use Expand All and Collapse All. Refresh reloads the saved changes from

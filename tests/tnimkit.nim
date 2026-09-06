@@ -13,6 +13,7 @@ import nimkit/renderfragments
 import nimkit/resources
 import nimkit/svgimages
 import nimkit/svgpathloader
+import nimkit/styledruns
 import nimkit/threading
 import nimkit/terminalgeometry
 import nimkit/urls

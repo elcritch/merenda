@@ -841,5 +841,18 @@ iterator styledRuns*(
 ): tuple[attributes: TextAttributes, text: string] =
   if not storage.isNil:
     storage.materialize()
+    let source = storage.storageString()
+    # Runs use rune offsets. Index the snapshot once instead of scanning its
+    # prefix again for every syntax token (also works for gap-backed storage).
+    var byteOffsets: seq[int]
+    var offset = 0
+    while offset < source.len:
+      byteOffsets.add offset
+      offset += source.runeLenAt(offset)
+    byteOffsets.add source.len
     for run in storage.xRuns:
-      yield (run.attributes, storage.substring(run.range))
+      let range = clampTextRange(byteOffsets.len - 1, run.range)
+      yield (
+        run.attributes,
+        source[byteOffsets[int(range.location)] ..< byteOffsets[range.maxIndex]],
+      )

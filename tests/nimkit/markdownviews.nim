@@ -647,6 +647,31 @@ fencedToken value
     check storage.attributesFor("func").foregroundColor ==
       style.syntaxTokenColors[stcKeyword]
 
+  test "Markdown viewer receives Matter colors from its parse worker":
+    let view = newMarkdownView("```nim\nlet obsolete = 1\n```")
+    view.markdown = "```go\nfunc main() {}\n```"
+    require view.waitForMarkdownParsing()
+    check view.markdownParseWorkerThreadId() != getThreadId()
+    check view.markdownParseError() == ""
+    check "obsolete" notin view.textStorage().stringValue()
+    check view.textStorage().attributesFor("func").foregroundColor ==
+      view.markdownStyle().syntaxTokenColors[stcKeyword]
+    var style = view.markdownStyle()
+    style.syntaxTokenColors[stcKeyword] = color(0.2, 0.6, 0.3, 1)
+    view.markdownStyle = style
+    require view.waitForMarkdownParsing()
+    check view.textStorage().attributesFor("func").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+    var customThreadId = 0
+    view.syntaxHighlighter = proc(source, language: string): seq[SyntaxTokenSpan] =
+      customThreadId = getThreadId()
+    require view.waitForMarkdownParsing()
+    check customThreadId == getThreadId()
+    view.syntaxHighlighter = matterSyntaxHighlighter
+    require view.waitForMarkdownParsing()
+    check view.textStorage().attributesFor("func").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+
   test "unknown fenced languages retain the ordinary code color":
     let
       style = initMarkdownStyle()

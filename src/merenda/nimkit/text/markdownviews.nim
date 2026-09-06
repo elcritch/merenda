@@ -224,6 +224,7 @@ type
     xMarkdownRenderChunkCount: int
     xMarkdownMaximumRenderChunkDuration: Duration
     xSyntaxHighlighter: SyntaxHighlighter
+    xMatterHighlights: Table[tuple[source, language: string], seq[SyntaxTokenSpan]]
     xImageBasePath: string
     xImageLoader: MarkdownImageLoader
     xUrlAssetLoader: UrlAssetLoader
@@ -1917,6 +1918,14 @@ proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
     emit view.markdownDidFinishParsing(view.xMarkdownParseWorkerThreadId)
 
 proc scheduleMarkdownRendering(view: MarkdownView) =
+  var highlighter = view.xSyntaxHighlighter
+  var dialect: MarkdownParseDialect
+  if highlighter == SyntaxHighlighter(matterSyntaxHighlighter) and
+      view.xMarkdownConfig.builtInMarkdownDialect(dialect):
+    let weakView = view.unsafeWeakRef()
+    highlighter = proc(source, language: string): seq[SyntaxTokenSpan] =
+      if not weakView.isNil:
+        result = weakView[].xMatterHighlights.getOrDefault((source, language))
   inc view.xMarkdownRenderGeneration
   let
     generation = view.xMarkdownRenderGeneration
@@ -1930,7 +1939,7 @@ proc scheduleMarkdownRendering(view: MarkdownView) =
     nextBlock: view.xMarkdownRoot.children.head,
     builder: MarkdownBuilder(
       style: view.xMarkdownStyle,
-      syntaxHighlighter: view.xSyntaxHighlighter,
+      syntaxHighlighter: highlighter,
       tableColumnLimit: tableColumnLimit,
     ),
     attributes: view.xMarkdownStyle.bodyAttributes(),
@@ -1958,6 +1967,7 @@ proc completeMarkdownParse(
     view.xMarkdownParseError = parseResult.errorMessage
     if parseResult.errorMessage.len == 0:
       view.xMarkdownRoot = move parseResult.root
+      view.xMatterHighlights = move parseResult.highlights
       view.xMarkdownRootGeneration = parseResult.generation
       view.xPendingMarkdownCompletionGeneration = parseResult.generation
       view.scheduleMarkdownRendering()
@@ -1987,8 +1997,12 @@ proc startLatestMarkdownParse(view: MarkdownView) =
     view.ensureMarkdownParseWorker()
     view.xActiveMarkdownGeneration = view.xMarkdownGeneration
     emit view.xMarkdownParseWorker.requestMarkdownParse(
-      view.xActiveMarkdownGeneration, view.xMarkdown, dialect,
-      view.xMarkdownConfig.escape, view.xMarkdownConfig.keepHtml,
+      view.xActiveMarkdownGeneration,
+      view.xMarkdown,
+      dialect,
+      view.xMarkdownConfig.escape,
+      view.xMarkdownConfig.keepHtml,
+      view.xSyntaxHighlighter == SyntaxHighlighter(matterSyntaxHighlighter),
     )
   else:
     # Arbitrary parser subclasses are thread-affine reference objects. Preserve
@@ -2252,7 +2266,10 @@ proc syntaxHighlighter*(view: MarkdownView): SyntaxHighlighter =
 proc `syntaxHighlighter=`*(view: MarkdownView, highlighter: SyntaxHighlighter) =
   ## Replace the classifier and rerender fenced code blocks.
   view.xSyntaxHighlighter = highlighter
-  view.renderCurrentMarkdownDocument()
+  if highlighter == SyntaxHighlighter(matterSyntaxHighlighter):
+    view.scheduleMarkdownParse()
+  else:
+    view.renderCurrentMarkdownDocument()
 
 proc markdownStyle*(view: MarkdownView): MarkdownStyle =
   ## Returns a copy of the current document presentation.

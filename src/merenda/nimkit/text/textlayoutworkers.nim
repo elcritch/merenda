@@ -1,6 +1,6 @@
 ## Internal Sigils worker for expensive attributed-text reflow.
 
-import std/[exitprocs, isolation]
+import std/isolation
 
 import sigils/[core, threads]
 import threading/smartptrs
@@ -12,6 +12,7 @@ else:
 
 import ../drawing
 import ../foundation/types
+import ../foundation/backgroundworkers
 import ../themes
 import ./textstorage
 import ./texttypes
@@ -22,10 +23,6 @@ type
     arrangement*: GlyphArrangement
 
   TextLayoutWorker* = ref object of AgentActor
-
-var
-  defaultTextLayoutPool {.threadvar.}: SigilThreadPoolPtr
-  defaultTextLayoutPoolExitRegistered {.threadvar.}: bool
 
 proc requestTextLayout*(
   worker: AgentProxy[TextLayoutWorker],
@@ -60,23 +57,7 @@ proc requestTextLayout(
   layoutResult.arrangement = textLayout(layoutRect, storage, style, alignment, wraps)
   emit worker.textLayoutFinished(newSharedPtr(unsafeIsolate(move layoutResult)))
 
-proc stopDefaultTextLayoutPool() {.noconv.} =
-  if not defaultTextLayoutPool.isNil:
-    defaultTextLayoutPool.stop(immediate = true)
-    defaultTextLayoutPool.join()
-    defaultTextLayoutPool = nil
-
-proc resolvedDefaultTextLayoutPool(): SigilThreadPoolPtr =
-  startLocalThreadDefault()
-  if defaultTextLayoutPool.isNil:
-    defaultTextLayoutPool = newSigilThreadPool(workers = 2)
-    defaultTextLayoutPool.start()
-  if not defaultTextLayoutPoolExitRegistered:
-    addExitProc(stopDefaultTextLayoutPool)
-    defaultTextLayoutPoolExitRegistered = true
-  defaultTextLayoutPool
-
 proc newTextLayoutWorker*(): AgentProxy[TextLayoutWorker] =
   var worker = TextLayoutWorker()
-  result = worker.moveToThread(resolvedDefaultTextLayoutPool())
+  result = worker.moveToThread(nimkitWorkerPool())
   connectThreaded(result, requestTextLayout, result, requestTextLayout)

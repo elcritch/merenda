@@ -19,6 +19,25 @@ proc firstResponderIs(window: Window, expected: Responder): bool =
   window.firstResponder == expected
 
 suite "Kosmo Git diff":
+  test "closing one diff does not stop shared Markdown and highlighting workers":
+    let root = createTempDir("kosmo-diff-shared-workers-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "one.nim", "let one = 1\n")
+    let closedPanel = newKosmoGitDiffPanel(root)
+    closedPanel.close()
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    let markdown = newMarkdownView("```go\nfunc main() {}\n```")
+    require panel.waitForDiff()
+    require markdown.waitForMarkdownParsing()
+    check panel.highlightBuildCount() == 1
+    check panel.highlightThreadId() != getThreadId()
+    check markdown.markdownParseWorkerThreadId() != getThreadId()
+    check closedPanel.snapshot.files.len == 0
+
   test "diff highlighting is reused across collapse theme and unchanged refresh":
     let root = createTempDir("kosmo-diff-cache-", "")
     defer:
@@ -35,6 +54,8 @@ suite "Kosmo Git diff":
     require panel.markdownView.waitForMarkdownParsing()
     let initialCount = panel.highlightBuildCount()
     check initialCount == 2
+    check panel.highlightThreadId() != 0
+    check panel.highlightThreadId() != getThreadId()
     panel.toggleFile(0)
     require panel.markdownView.waitForMarkdownParsing()
     panel.toggleFile(0)
