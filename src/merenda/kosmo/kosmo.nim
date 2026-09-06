@@ -17,14 +17,14 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
-    cli, config, filesearchpanel, filetree, moe, moehighlighting, panedocuments,
-    quickopen, searchbar, settings, shortcuts, terminalsearch,
+    cli, config, filesearchpanel, filetree, gitdiff, moe, moehighlighting,
+    panedocuments, quickopen, searchbar, settings, shortcuts, terminalsearch,
   ]
 import moepkg/celina_backend as celina
 
 export
-  config, filesearchpanel, filetree, moe, moehighlighting, panedocuments, quickopen,
-  settings, shortcuts, terminalsearch
+  config, filesearchpanel, filetree, gitdiff, moe, moehighlighting, panedocuments,
+  quickopen, settings, shortcuts, terminalsearch
 
 func nimblePackageVersion(manifest: string): string =
   for line in manifest.splitLines():
@@ -262,6 +262,8 @@ type
     statusLabel*: nimkit.Label
     fileTree*: KosmoFileTree
     fileBrowserPanel*: KosmoFileBrowserPanel
+    gitDiffPanel*: KosmoGitDiffPanel
+    gitDiffWindow*: nimkit.Window
     sidebarPane*: KosmoSidebarPane
     sidebarTabs*: nimkit.CompactTabView
     searchPanel*: KosmoFileSearchPanel
@@ -3901,9 +3903,40 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       frontend.xSettingsWindow.firstResponder,
     ).isNil
 
+proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Show full-file Git changes for the active project's repository.
+  if frontend.isNil:
+    return
+  if frontend.gitDiffWindow.isNil or frontend.gitDiffWindow.isClosed():
+    if not frontend.gitDiffPanel.isNil:
+      frontend.gitDiffPanel.close()
+    let root =
+      if frontend.fileTree.rootPath.len > 0:
+        frontend.fileTree.rootPath
+      else:
+        getCurrentDir()
+    frontend.gitDiffPanel = newKosmoGitDiffPanel(root)
+    frontend.gitDiffWindow =
+      nimkit.newPanel("Git Diff", nimkit.rect(160, 120, 960, 720))
+    frontend.gitDiffWindow.contentMinSize = nimkit.initSize(380, 240)
+    frontend.gitDiffWindow.styleMask =
+      frontend.gitDiffWindow.styleMask + {nimkit.wsmResizable}
+    frontend.gitDiffWindow.connect(
+      nimkit.didClose, frontend.gitDiffPanel, gitdiff.close
+    )
+  else:
+    frontend.gitDiffPanel.refresh()
+  not frontend.application.showWindow(
+    frontend.gitDiffWindow,
+    frontend.gitDiffPanel,
+    frontend.gitDiffPanel.markdownView.textView(),
+  ).isNil
+
 func ownsWindow(frontend: KosmoApplication, window: nimkit.Window): bool =
   if frontend.isNil or window.isNil or frontend.dockController.isNil:
     return
+  if window == frontend.gitDiffWindow:
+    return true
   for host in frontend.dockController.hosts:
     if host.window == window:
       return true
@@ -4228,6 +4261,8 @@ proc newKosmoApplication*(
       nimkit.newMenuItem("Open Quickly…", nimkit.actionSelector(KosmoQuickOpenAction))
     terminalItem =
       nimkit.newMenuItem("New Terminal", nimkit.actionSelector(KosmoNewTerminalAction))
+    gitDiffItem =
+      nimkit.newMenuItem("Show Git Diff", nimkit.actionSelector(KosmoShowGitDiffAction))
     saveItem = nimkit.newMenuItem("Save", nimkit.actionSelector(KosmoSaveAction))
     closeTabItem =
       nimkit.newMenuItem("Close Tab", nimkit.actionSelector(KosmoCloseTabAction))
@@ -4239,6 +4274,8 @@ proc newKosmoApplication*(
   openProjectItem.identifier = KosmoOpenProjectAction
   quickOpenItem.identifier = KosmoQuickOpenAction
   terminalItem.identifier = KosmoNewTerminalAction
+  gitDiffItem.identifier = KosmoShowGitDiffAction
+  gitDiffItem.validates = false
   saveItem.identifier = KosmoSaveAction
   closeTabItem.identifier = KosmoCloseTabAction
   closeWindowItem.identifier = KosmoCloseWindowAction
@@ -4249,6 +4286,7 @@ proc newKosmoApplication*(
   fileMenu.addSeparator()
   discard fileMenu.addItem(quickOpenItem)
   discard fileMenu.addItem(terminalItem)
+  discard fileMenu.addItem(gitDiffItem)
   fileMenu.addSeparator()
   discard fileMenu.addItem(saveItem)
   fileMenu.addSeparator()
@@ -4374,6 +4412,13 @@ proc newKosmoApplication*(
     let active = manager.activeFrontend()
     if not active.isNil:
       discard active.newTerminal()
+  gitDiffItem.target = nimkit.newActionTarget(
+    nimkit.actionSelector(KosmoShowGitDiffAction)
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    let active = manager.activeFrontend()
+    if not active.isNil:
+      discard active.showGitDiff()
   saveItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoSaveAction)) do(
     sender: nimkit.DynamicAgent
   ):
@@ -4388,17 +4433,23 @@ proc newKosmoApplication*(
     discard sender
     let active = manager.activeFrontend()
     if not active.isNil:
-      let controller = active.dockController
-      controller.closeCurrentPaneTab(controller.activePaneGroup())
+      if not active.gitDiffWindow.isNil and app.keyWindow() == active.gitDiffWindow:
+        active.gitDiffWindow.close()
+      else:
+        let controller = active.dockController
+        controller.closeCurrentPaneTab(controller.activePaneGroup())
   closeWindowItem.target = nimkit.newActionTarget(
     nimkit.actionSelector(KosmoCloseWindowAction)
   ) do(sender: nimkit.DynamicAgent):
     discard sender
     let active = manager.activeFrontend()
     if not active.isNil:
-      let group = active.dockController.activePaneGroup()
-      if not group.isNil:
-        group.window.close()
+      if not active.gitDiffWindow.isNil and app.keyWindow() == active.gitDiffWindow:
+        active.gitDiffWindow.close()
+      else:
+        let group = active.dockController.activePaneGroup()
+        if not group.isNil:
+          group.window.close()
   fileTree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
     if frontend.isNil:
       return
@@ -4613,6 +4664,10 @@ proc close*(frontend: KosmoApplication) =
   if frontend.isNil or frontend.xClosed:
     return
   frontend.xClosed = true
+  if not frontend.gitDiffWindow.isNil and not frontend.gitDiffWindow.isClosed():
+    frontend.gitDiffWindow.close()
+  if not frontend.gitDiffPanel.isNil:
+    frontend.gitDiffPanel.close()
   if not frontend.quickOpenPanel.isNil and frontend.quickOpenPanel.isOpen():
     frontend.quickOpenPanel.dismiss()
   if not frontend.xSettingsWindow.isNil and

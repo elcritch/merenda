@@ -7,6 +7,7 @@ import kosmo/cli
 import kosmo/config
 import kosmo/editorsearch
 import kosmo/filetreeinteractions
+import kosmo/gitdiff
 import kosmo/matterhighlighting
 import kosmo/markdownactivation
 import kosmo/panelshortcuts

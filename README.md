@@ -701,6 +701,10 @@ Command-F on macOS or Control-F elsewhere opens a live file-name filter; matchin
 remain nested beneath their folder hierarchy. Find in Files searches Git tracked and
 untracked non-ignored files and skips binary or unsupported text encodings by default;
 both filters are configurable through `FileSearchOptions`.
+File → Show Git Diff opens a separate panel showing staged, unstaged, and untracked
+changes with full-file context. Additions are green and deletions red. Click a file
+heading to collapse or expand its diff, or use Expand All and Collapse All. Refresh
+reloads the saved changes from Git; unsaved editor buffers are not included.
 Holding Control while scrolling over an editor accelerates the wheel movement
 threefold.
 
