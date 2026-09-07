@@ -265,6 +265,33 @@ suite "Kosmo Git diff":
       ]
       check storage.attributesAt(index).lineBackgroundColor.a > 0
 
+  test "Terraform HCL changes use Matter syntax highlighting":
+    let root = createTempDir("kosmo-diff-terraform-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(
+      root / "main.hcl", "resource \"aws_instance\" \"web\" {\n  ami = \"ami-old\"\n}\n"
+    )
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "Initial")
+    writeFile(
+      root / "main.hcl", "resource \"aws_instance\" \"web\" {\n  ami = \"ami-new\"\n}\n"
+    )
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    require panel.waitForDiff()
+    let
+      storage = panel.textViewForFile(0).textStorage()
+      text = storage.stringValue()
+      location = text.find("ami-new")
+    require location >= 0
+    let index = text[0 ..< location].runeLen
+    check storage.attributesAt(index).foregroundColor ==
+      panel.markdownView.markdownStyle().syntaxTokenColors[stcString]
+    check storage.attributesAt(index).lineBackgroundColor.a > 0
+
   test "standard hunks include staged unstaged untracked deleted and binary files":
     let root = createTempDir("kosmo-git-diff-", "")
     defer:

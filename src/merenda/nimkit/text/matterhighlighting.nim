@@ -67,6 +67,8 @@ const EmbeddedGrammarArchives = [
   embedGrammarArchive(lispPackage),
   embedGrammarArchive(astroPackage),
   embedGrammarArchive(tclPackage),
+  embedGrammarArchive(terraformSyntaxPackage),
+  embedGrammarArchive(terraformPlanPackage),
 ]
 
 var
@@ -140,10 +142,26 @@ func normalizedMatterLanguage(language: string): string =
   of "py": "python"
   of "rs": "rust"
   of "sh", "bash": "shell"
+  of "hcl", "tf": "terraform"
   of "tex": "latex"
   of "ts": "typescript"
   of "yml": "yaml"
   else: name
+
+func primaryMatterGrammar(modeName: string): Option[GrammarContribution] =
+  result = findMoeGrammar(modeName)
+  if result.isSome:
+    return
+  for contribution in knownGrammars:
+    if contribution.isPrimary and contribution.languageId == modeName:
+      return some(contribution)
+
+iterator relatedMatterGrammars(primary: GrammarContribution): GrammarContribution =
+  yield primary
+  for contribution in knownGrammars:
+    if contribution.packageKey == primary.packageKey and
+        contribution.scopeName != primary.scopeName:
+      yield contribution
 
 proc grammarForLanguage(language: string): Grammar =
   let modeName = language.normalizedMatterLanguage()
@@ -155,13 +173,13 @@ proc grammarForLanguage(language: string): Grammar =
   if matterGrammarCache.hasKey(modeName):
     return matterGrammarCache[modeName]
 
-  let primary = findMoeGrammar(modeName)
+  let primary = primaryMatterGrammar(modeName)
   if primary.isNone:
     matterGrammarCache[modeName] = nil
     return
 
   let registry = newRegistry()
-  for contribution in importedGrammars(modeName):
+  for contribution in relatedMatterGrammars(primary.get()):
     let archive = archiveContents(contribution.dataArchivePath)
     if archive.len == 0:
       raise newException(
