@@ -7,21 +7,29 @@ import sigils/[core, threadChronos, threadProxies, threads]
 import ../nimkit/foundation/backgroundworkers
 
 const
-  KosmoCliProtocolVersion* = 1
+  KosmoCliProtocolVersion* = 2
   KosmoCliEndpointEnvironment* = "KOSMO_CLI_ENDPOINT"
   KosmoCliWindowEnvironment* = "KOSMO_CLI_WINDOW"
   KosmoCliMaxPaths* = 64
-  KosmoCliMaxMessageBytes* = 1024 * 1024
+  KosmoCliMaxDiffBytes* = 8 * 1024 * 1024
+  KosmoCliMaxMessageBytes* = KosmoCliMaxDiffBytes * 6 + 64 * 1024
   KosmoCliConnectTimeoutMilliseconds* = 2_000
   KosmoCliResponseTimeoutMilliseconds* = 10_000
   KosmoCliPollInterval = initDuration(milliseconds = 50)
   KosmoCliCurrentEndpointName = "current.json"
 
 type
+  KosmoCliRequestKind* = enum
+    kcrOpenPaths
+    kcrShowDiff
+
   KosmoCliOpenRequest* = object
     requestId*: string
+    kind*: KosmoCliRequestKind
     paths*: seq[string]
     originWindow*: string
+    workingDirectory*: string
+    diffText*: string
 
   KosmoCliOpenResponse* = object
     delivered*: bool
@@ -116,8 +124,11 @@ proc requestJson(endpoint: KosmoCliEndpoint, request: KosmoCliOpenRequest): Json
     "instanceId": endpoint.instanceId,
     "token": endpoint.token,
     "requestId": request.requestId,
+    "kind": request.kind.ord,
     "paths": request.paths,
     "originWindow": request.originWindow,
+    "workingDirectory": request.workingDirectory,
+    "diffText": request.diffText,
   }
 
 proc parseRequest(content: string, endpoint: KosmoCliEndpoint): KosmoCliOpenRequest =
@@ -127,15 +138,29 @@ proc parseRequest(content: string, endpoint: KosmoCliEndpoint): KosmoCliOpenRequ
       node["token"].getStr() != endpoint.token:
     raise newException(ValueError, "Kosmo CLI authentication failed")
   result.requestId = node["requestId"].getStr()
+  let kind = node["kind"].getInt()
+  if kind notin KosmoCliRequestKind.low.ord .. KosmoCliRequestKind.high.ord:
+    raise newException(ValueError, "Invalid Kosmo CLI request kind")
+  result.kind = KosmoCliRequestKind(kind)
   result.originWindow = node{"originWindow"}.getStr()
+  result.workingDirectory = node{"workingDirectory"}.getStr()
+  result.diffText = node{"diffText"}.getStr()
   for path in node["paths"]:
     result.paths.add path.getStr()
-  if result.requestId.len == 0 or result.paths.len == 0 or
-      result.paths.len > KosmoCliMaxPaths:
+  if result.requestId.len == 0:
     raise newException(ValueError, "Invalid Kosmo CLI open request")
-  for path in result.paths:
-    if path.len == 0 or not path.isAbsolute():
-      raise newException(ValueError, "Kosmo CLI paths must be absolute")
+  case result.kind
+  of kcrOpenPaths:
+    if result.paths.len == 0 or result.paths.len > KosmoCliMaxPaths:
+      raise newException(ValueError, "Invalid Kosmo CLI open request")
+    for path in result.paths:
+      if path.len == 0 or not path.isAbsolute():
+        raise newException(ValueError, "Kosmo CLI paths must be absolute")
+  of kcrShowDiff:
+    if result.paths.len > 0 or result.workingDirectory.len == 0 or
+        not result.workingDirectory.isAbsolute() or
+        result.diffText.len > KosmoCliMaxDiffBytes:
+      raise newException(ValueError, "Invalid Kosmo CLI diff request")
 
 func responseJson(response: KosmoCliOpenResponse): JsonNode =
   %*{
@@ -200,6 +225,20 @@ proc sendRequest(
     result.delivered = true
     result.errors.add "Kosmo did not confirm the CLI open request"
 
+proc sendToRunningKosmo(
+    request: KosmoCliOpenRequest,
+    preferredEndpoint = getEnv(KosmoCliEndpointEnvironment),
+    registryDirectory = defaultKosmoCliRegistryDirectory(),
+): KosmoCliOpenResponse =
+  for path in endpointCandidates(registryDirectory, preferredEndpoint):
+    try:
+      let endpoint = readEndpoint(path)
+      result = endpoint.sendRequest(request)
+      if result.delivered:
+        return
+    except CatchableError:
+      discard
+
 proc openInRunningKosmo*(
     paths: openArray[string],
     preferredEndpoint = getEnv(KosmoCliEndpointEnvironment),
@@ -211,17 +250,41 @@ proc openInRunningKosmo*(
   if paths.len == 0 or paths.len > KosmoCliMaxPaths:
     result.errors.add "A Kosmo CLI request must contain 1 to 64 paths"
     return
-  let request = KosmoCliOpenRequest(
-    requestId: randomIdentifier(), paths: @paths, originWindow: originWindow
+  result = sendToRunningKosmo(
+    KosmoCliOpenRequest(
+      requestId: randomIdentifier(),
+      kind: kcrOpenPaths,
+      paths: @paths,
+      originWindow: originWindow,
+    ),
+    preferredEndpoint,
+    registryDirectory,
   )
-  for path in endpointCandidates(registryDirectory, preferredEndpoint):
-    try:
-      let endpoint = readEndpoint(path)
-      result = endpoint.sendRequest(request)
-      if result.delivered:
-        return
-    except CatchableError:
-      discard
+
+proc showDiffInRunningKosmo*(
+    diffText, workingDirectory: string,
+    preferredEndpoint = getEnv(KosmoCliEndpointEnvironment),
+    originWindow = getEnv(KosmoCliWindowEnvironment),
+    registryDirectory = defaultKosmoCliRegistryDirectory(),
+): KosmoCliOpenResponse =
+  ## Forward a bounded unified diff to a responsive Kosmo process.
+  if workingDirectory.len == 0 or not workingDirectory.isAbsolute():
+    result.errors.add "Kosmo CLI diff working directory must be absolute"
+    return
+  if diffText.len > KosmoCliMaxDiffBytes:
+    result.errors.add "Kosmo diff input exceeds the 8 MiB limit"
+    return
+  result = sendToRunningKosmo(
+    KosmoCliOpenRequest(
+      requestId: randomIdentifier(),
+      kind: kcrShowDiff,
+      originWindow: originWindow,
+      workingDirectory: workingDirectory,
+      diffText: diffText,
+    ),
+    preferredEndpoint,
+    registryDirectory,
+  )
 
 proc removeEndpointIfOwned(path, token: string) =
   try:

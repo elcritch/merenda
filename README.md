@@ -772,6 +772,13 @@ a path starts with a dash. Tagged releases provide Linux, macOS, and Windows
 binaries; see [Releasing Kosmo binaries](docs/releasing-kosmo.md) for artifact and
 macOS signing details.
 
+Pipe unified Git output to `kosmo --diff` to render a static snapshot in Kosmo's
+Git Diff view, for example `git diff some-folder | kosmo --diff`. The same process
+and embedded-terminal routing rules apply. Piped diffs are limited to 8 MiB and
+do not enable the repository Refresh action. If no Kosmo process is running, the
+command opens an editor-only window; start Kosmo first when combining `--diff`
+with `--bg`.
+
 File > New… opens a blank tab in the active editor pane. File > Open Project…
 opens a folder in a new window with its own file browser. File > Open… opens
 files in the current window and appends selected folders to that window's

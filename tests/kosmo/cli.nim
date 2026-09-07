@@ -54,6 +54,13 @@ suite "Kosmo command line":
     check commandLine.arguments.len == 0
     check commandLine.filePath.len == 0
 
+  test "diff input is selected without becoming a path":
+    let commandLine = parseKosmoCommandLine(@["--bg", "--diff"])
+    check commandLine.background
+    check commandLine.diff
+    check commandLine.arguments.len == 0
+    check commandLine.paths.len == 0
+
   test "double dash preserves a literal version path":
     let commandLine = parseKosmoCommandLine(@["--", "--version"])
     check not commandLine.version
@@ -86,6 +93,25 @@ suite "Kosmo command line":
     check paths.errors[0] == "Kosmo cannot open an empty path"
     check paths.errors[1].endsWith("missing")
     check paths.errors[2].endsWith("missing/child.txt")
+
+  test "diff input is read exactly and bounded":
+    let root = createTempDir("merenda-kosmo-cli-diff-", "")
+    defer:
+      removeDir(root)
+    let path = root / "input.diff"
+    writeFile(path, "@@ -1 +1 @@\n-old\n+new\n")
+    let input = open(path, fmRead)
+    defer:
+      input.close()
+    check input.readKosmoCliDiff() == "@@ -1 +1 @@\n-old\n+new\n"
+
+    let oversizedPath = root / "oversized.diff"
+    writeFile(oversizedPath, "12345")
+    let oversized = open(oversizedPath, fmRead)
+    defer:
+      oversized.close()
+    expect ValueError:
+      discard oversized.readKosmoCliDiff(maxBytes = 4)
 
   when not defined(windows):
     test "detached launcher preserves the requested directory and arguments":

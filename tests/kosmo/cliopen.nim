@@ -86,3 +86,42 @@ suite "Kosmo CLI window routing":
     require windows.len == 1
     check not windows[0].hasFileBrowser()
     check windows[0].hasOpenPath(filePath)
+
+  test "a piped diff targets its originating window and opens the Git Diff tab":
+    let
+      root = createTempDir("merenda-kosmo-cli-piped-diff-", "")
+      app = newApplication("Kosmo CLI piped diff")
+      manager = newKosmoWindowManager(app)
+      origin = newKosmoApplication(manager, root, monitorsGitStatus = false)
+      active = newKosmoApplication(manager, monitorsGitStatus = false)
+      diffText =
+        "diff --git a/source.nim b/source.nim\n" & "--- a/source.nim\n+++ b/source.nim\n" &
+        "@@ -1 +1 @@\n-let value = 1\n+let value = 2\n"
+    defer:
+      manager.close()
+      removeDir(root)
+    origin.show()
+    active.show()
+
+    let response = manager.openCliRequestForTesting(
+      KosmoCliOpenRequest(
+        requestId: "piped-diff",
+        kind: kcrShowDiff,
+        originWindow: origin.cliWindowId(),
+        workingDirectory: root,
+        diffText: diffText,
+      )
+    )
+    check response.delivered
+    check response.errors.len == 0
+    require not origin.gitDiffPanel.isNil
+    require origin.gitDiffPanel.waitForDiff()
+    check active.gitDiffPanel.isNil
+    check origin.gitDiffPanel.snapshot.source == gdsStandardInput
+    check origin.gitDiffPanel.snapshot.rootPath == root
+    require origin.gitDiffPanel.snapshot.files.len == 1
+    check origin.gitDiffPanel.snapshot.files[0].path == "source.nim"
+    check origin.gitDiffPanel.snapshot.files[0].additions == 1
+    check origin.gitDiffPanel.snapshot.files[0].deletions == 1
+    check not origin.gitDiffPanel.refreshButton.enabled
+    check origin.documentTabs.selectedDocumentTabIdentifier == KosmoGitDiffTabIdentifier

@@ -10,9 +10,12 @@ const ClientValueCapacity = 2048
 
 type CliClientState = object
   path: array[ClientValueCapacity, char]
+  diffText: array[ClientValueCapacity, char]
+  workingDirectory: array[ClientValueCapacity, char]
   endpoint: array[ClientValueCapacity, char]
   registry: array[ClientValueCapacity, char]
   origin: array[ClientValueCapacity, char]
+  showsDiff: bool
   delivered: Atomic[bool]
   errorCount: Atomic[int]
   done: Atomic[bool]
@@ -27,12 +30,22 @@ proc load(buffer: ptr array[ClientValueCapacity, char]): string =
 
 proc sendOpenRequest(state: ptr CliClientState) {.thread.} =
   try:
-    let response = openInRunningKosmo(
-      [state.path.addr.load()],
-      preferredEndpoint = state.endpoint.addr.load(),
-      originWindow = state.origin.addr.load(),
-      registryDirectory = state.registry.addr.load(),
-    )
+    let response =
+      if state.showsDiff:
+        showDiffInRunningKosmo(
+          state.diffText.addr.load(),
+          state.workingDirectory.addr.load(),
+          preferredEndpoint = state.endpoint.addr.load(),
+          originWindow = state.origin.addr.load(),
+          registryDirectory = state.registry.addr.load(),
+        )
+      else:
+        openInRunningKosmo(
+          [state.path.addr.load()],
+          preferredEndpoint = state.endpoint.addr.load(),
+          originWindow = state.origin.addr.load(),
+          registryDirectory = state.registry.addr.load(),
+        )
     state.delivered.store(response.delivered, moRelease)
     state.errorCount.store(response.errors.len, moRelease)
   except CatchableError:
@@ -40,15 +53,22 @@ proc sendOpenRequest(state: ptr CliClientState) {.thread.} =
   state.done.store(true, moRelease)
 
 proc requestWhilePumping(
-    path, endpoint, registry: string, origin = ""
+    path, endpoint, registry: string,
+    origin = "",
+    diffText = "",
+    workingDirectory = "",
+    showsDiff = false,
 ): tuple[delivered: bool, errorCount: int] =
   let state = cast[ptr CliClientState](allocShared0(sizeof(CliClientState)))
   defer:
     deallocShared(state)
   path.store(state.path)
+  diffText.store(state.diffText)
+  workingDirectory.store(state.workingDirectory)
   endpoint.store(state.endpoint)
   registry.store(state.registry)
   origin.store(state.origin)
+  state.showsDiff = showsDiff
   var thread: Thread[ptr CliClientState]
   createThread(thread, sendOpenRequest, state)
   let deadline = getMonoTime() + initDuration(seconds = 5)
@@ -138,6 +158,40 @@ suite "Kosmo CLI open transport":
     check response.delivered
     check firstOrigin == "owning-window"
     check secondRequests == 0
+
+  test "piped diffs preserve their content directory and origin window":
+    let
+      registry = createTempDir("merenda-kosmo-cli-diff-", "")
+      diffText = "diff --git a/a.nim b/a.nim\n@@ -1 +1 @@\n-old\n+new\n"
+    defer:
+      removeDir(registry)
+    var received: seq[KosmoCliOpenRequest]
+    let server = startKosmoCliOpenServer(
+      proc(request: KosmoCliOpenRequest): KosmoCliOpenResponse =
+        received.add request
+        KosmoCliOpenResponse(),
+      registry,
+    )
+    defer:
+      server.close()
+
+    let response = requestWhilePumping(
+      "",
+      server.endpointPath(),
+      registry,
+      origin = "diff-window",
+      diffText = diffText,
+      workingDirectory = registry,
+      showsDiff = true,
+    )
+    check response.delivered
+    check response.errorCount == 0
+    require received.len == 1
+    check received[0].kind == kcrShowDiff
+    check received[0].paths.len == 0
+    check received[0].diffText == diffText
+    check received[0].workingDirectory == registry
+    check received[0].originWindow == "diff-window"
 
   test "wrong credentials are rejected and endpoint files are removed on close":
     let registry = createTempDir("merenda-kosmo-cli-auth-", "")
