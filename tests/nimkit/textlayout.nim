@@ -984,8 +984,11 @@ suite "nimkit text layout":
 
     check narrow.lineFragments.len > wide.lineFragments.len
     check narrow.contentSize.height > wide.contentSize.height
-    checkClose(wide.contentSize.width, wide.containerRect.size.width)
-    checkClose(narrow.contentSize.width, narrow.containerRect.size.width)
+    for snapshot in [wide, narrow]:
+      let expectedWidth =
+        max(snapshot.containerRect.maxX, snapshot.usedRect.maxX) -
+        min(snapshot.containerRect.minX, snapshot.usedRect.minX)
+      checkClose(snapshot.contentSize.width, expectedWidth)
     checkClose(
       narrow.contentSize.height,
       narrow.lineFragments[^1].fragmentRect.maxY -

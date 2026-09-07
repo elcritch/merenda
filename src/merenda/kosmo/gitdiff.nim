@@ -101,6 +101,10 @@ type
     xHighlightBuildCount: int
     xHighlightThreadId: int
 
+proc newGitDiffControl(): SharedPtr[GitDiffControl] =
+  result = newSharedPtr(GitDiffControl)
+  result[].cancelled.store(false, moRelaxed)
+
 proc executeGitOnce(
     root: string, args: openArray[string], control: SharedPtr[GitDiffControl]
 ): tuple[output: string, code: int] =
@@ -247,7 +251,7 @@ proc readGitDiff(
 
 proc readGitDiff*(rootPath: string): GitDiffSnapshot =
   ## Read standard diff hunks plus full-file patches for syntax classification.
-  readGitDiff(rootPath, newSharedPtr(GitDiffControl))
+  readGitDiff(rootPath, newGitDiffControl())
 
 proc markdownLabel(value: string): string =
   for ch in value:
@@ -699,12 +703,12 @@ proc scheduleSectionLayout(panel: KosmoGitDiffPanel) =
   if panel.closed or panel.relayoutPending:
     return
   panel.relayoutPending = true
-  let weakPanel = panel.unsafeWeakRef()
+  let retainedPanel = panel
   scheduleMainThreadWork(
     proc(): bool =
-      if not weakPanel.isNil and not weakPanel[].closed:
-        weakPanel[].relayoutPending = false
-        weakPanel[].syncDisclosureButtons()
+      if not retainedPanel.closed:
+        retainedPanel.relayoutPending = false
+        retainedPanel.syncDisclosureButtons()
   )
 
 protocol GitDiffTextDrawing of nimkit.ViewDrawingProtocol:
@@ -1077,7 +1081,7 @@ proc newKosmoGitDiffPanel*(
     snapshot: GitDiffSnapshot(rootPath: rootPath),
     disclosureButtons: initTable[string, GitDiffDisclosureButton](),
     pool: newSigilThreadPool(workers = 1),
-    control: newSharedPtr(GitDiffControl),
+    control: newGitDiffControl(),
   )
   result.initViewFields()
   let document = GitDiffDocumentView(panel: result.unsafeWeakRef())

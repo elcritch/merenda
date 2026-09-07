@@ -677,6 +677,7 @@ fencedToken value
     check spans.syntaxTokenAt(source.runeIndexOf("continued")) == stcComment
     check spans.syntaxTokenAt(source.runeIndexOf("\"κόσμος\"")) == stcString
     check matterSyntaxHighlighter("value", "not-a-language").len == 0
+    check matterSyntaxHighlighter("let value = \"" & "x".repeat(120), "nim").len == 0
 
   test "Markdown uses Matter for fenced languages outside SynEdit's classifier":
     let
