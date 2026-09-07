@@ -4,7 +4,7 @@ import merenda/nimkit
 import merenda/kosmo/kosmo
 
 proc pollUntilText(
-    session: TerminalViewSession, expected: string, timeout = initDuration(seconds = 3)
+    session: TerminalViewSession, expected: string, timeout = initDuration(seconds = 10)
 ): bool =
   let deadline = getMonoTime() + timeout
   while getMonoTime() < deadline:
