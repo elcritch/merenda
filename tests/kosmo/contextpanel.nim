@@ -4,7 +4,7 @@ import merenda/nimkit
 import merenda/kosmo/kosmo
 
 suite "Kosmo context panel":
-  test "context stays above Files and Find and preserves its height on resize":
+  test "context starts collapsed and can restore its expanded height":
     let frontend =
       newKosmoApplication(newApplication("Context Test"), monitorsGitStatus = false)
     defer:
@@ -18,8 +18,25 @@ suite "Kosmo context panel":
     check split.splitAxis == laVertical
     check split.paneCount() == 2
     check context.frame().minY == 0
-    check abs(context.frame().size.height - KosmoContextPanelHeight) < 1
+    check not context.expanded()
+    check abs(context.frame().size.height - KosmoContextPanelHeaderHeight) < 1
+    check context.headerButton.title() == "Context"
+    check context.headerButton.accessibilityRole() == arDisclosureButton
+    check context.headerButton.accessibilityValue() == "collapsed"
+    check context.headerButton.accessibilityActionNames() ==
+      @[AccessibilityActionPress, AccessibilityActionExpand]
     check frontend.sidebarTabs.superview.frame().minY > context.frame().maxY
+    let headerBounds = context.headerButton.bounds()
+    require frontend.window.clickAt(
+      context.headerButton.pointToWindow(
+        initPoint(headerBounds.size.width / 2, headerBounds.size.height / 2)
+      )
+    )
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check context.expanded()
+    check context.headerButton.accessibilityValue() == "expanded"
+    check abs(context.frame().size.height - KosmoContextPanelHeight) < 1
+
     require frontend.showFindInFiles()
     frontend.contentView.layoutSubtreeIfNeeded()
     check not context.isHidden
@@ -46,6 +63,15 @@ suite "Kosmo context panel":
     frontend.contentView.layoutSubtreeIfNeeded()
     check abs(context.frame().size.height - resizedHeight) < 1
     check frontend.sidebarTabs.superview.frame().minY > context.frame().maxY
+
+    require context.headerButton.accessibilityPerformAction(AccessibilityActionCollapse)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check not context.expanded()
+    check abs(context.frame().size.height - KosmoContextPanelHeaderHeight) < 1
+    require context.headerButton.accessibilityPerformAction(AccessibilityActionExpand)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check context.expanded()
+    check abs(context.frame().size.height - resizedHeight) < 1
 
     frontend.contentView.frame = rect(0, 0, 640, 240)
     frontend.contentView.layoutSubtreeIfNeeded()

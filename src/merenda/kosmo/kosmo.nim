@@ -2437,7 +2437,7 @@ protocol KosmoSidebarPaneLayout of nimkit.ViewLayoutProtocol:
         if pane.setInitialDivider:
           pane.splitView.positionOfDivider(0)
         else:
-          min(KosmoContextPanelHeight, bounds.size.height * 0.35'f32)
+          pane.contextPanel.preferredHeight()
     pane.splitView.setFrameFromLayout(bounds)
     if bounds.size.height > 0 and
         (
@@ -2462,7 +2462,11 @@ proc newKosmoSidebarPane(
   browserArea.addSubview(tabs)
   browserArea.addSubview(activeIndicator)
   discard browserArea.withProtocol(KosmoSidebarBrowserLayout)
-  splitView.addPane(contextPanel, minSize = 48.0'f32)
+  splitView.addPane(
+    contextPanel,
+    minSize = KosmoContextPanelHeaderHeight,
+    maxSize = KosmoContextPanelHeaderHeight,
+  )
   splitView.addPane(browserArea, minSize = 160.0'f32)
   result = KosmoSidebarPane(
     contextPanel: contextPanel,

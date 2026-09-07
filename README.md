@@ -789,10 +789,12 @@ with an installed theme taking precedence over a bundled theme of the same
 name. Choosing one applies it immediately to all Kosmo editor panes. Reopening
 Settings refreshes the list, so new themes appear without restarting Kosmo.
 
-Kosmo's sidebar keeps a Context panel above the Files and Find area. It starts
-at roughly twelve compact text lines high; drag the horizontal divider to resize
-it. Context currently provides an empty area for future contextual content and
-remains visible when switching between Files and Find.
+Kosmo's sidebar keeps a collapsible Context panel above the Files and Find area.
+It starts collapsed with only the Context disclosure header visible. Activate the
+header to open it for testing; the expanded panel starts at roughly twelve compact
+text lines high and remembers divider resizing when it is closed and reopened.
+Context currently provides an empty area for future contextual content and remains
+visible when switching between Files and Find.
 
 The lower sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
