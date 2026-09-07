@@ -2,8 +2,7 @@
 
 when not defined(features.merenda.kosmo):
   {.
-    error:
-      """
+    error: """
 Kosmo requires the "kosmo" feature. Enable it with Atlas:
 
   atlas install -tuk --features:kosmo
@@ -21,6 +20,7 @@ import
   ./[
     cli, config, contextpanel, filesearchpanel, filetree, gitdiff, moe, moehighlighting,
     panedocuments, quickopen, searchbar, settings, shortcuts, terminalsearch,
+    workspacefiles,
   ]
 import moepkg/celina_backend as celina
 
@@ -3640,6 +3640,20 @@ proc openTerminalLink(lifecycle: KosmoWindowLifecycle, link: string) {.slot.} =
   if not frontend.isNil and not frontend.application.isNil:
     discard frontend.application.workspace().openUrl(link)
 
+proc workspaceGitChanged(lifecycle: KosmoWindowLifecycle) {.slot.} =
+  if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
+    # All panes share one Moe engine. Invalidate once, not once per pane.
+    lifecycle.frontend[].dockController.editor.notifyGitRepositoryChanged()
+
+proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
+  if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
+    let frontend = lifecycle.frontend[]
+    let controller = frontend.dockController
+    frontend.fileTree.workspaceFiles.setGitRoots(controller.editor.gitWatchRoots())
+    if controller.editor.pollGitStatus():
+      for group in controller.groups:
+        group.editorView.refresh()
+
 proc newTerminalDocument(
     controller: KosmoDockController, options: nimkit.TerminexSpawnOptions
 ): KosmoPaneDocument =
@@ -4036,11 +4050,10 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     frontend.xSettingsWindow.updateMoeThemes(
       moeThemeSettings, selectedMoeThemeIdentifier
     )
-  result =
-    not frontend.application.showWindow(
-      frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
-      frontend.xSettingsWindow.firstResponder,
-    ).isNil
+  result = not frontend.application.showWindow(
+    frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
+    frontend.xSettingsWindow.firstResponder,
+  ).isNil
 
 proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
   ## Show full-file Git changes for the active project's repository.
@@ -4353,11 +4366,7 @@ proc configureKosmoSettingsMenu(frontend: KosmoApplication) =
   let applicationMenu = mainMenu[0].submenu()
   if not applicationMenu.isNil and applicationMenu.len > 2:
     let settingsItem = applicationMenu[2]
-    let manager =
-      if frontend.xWindowManager.isNil:
-        nil
-      else:
-        frontend.xWindowManager[]
+    let manager = if frontend.xWindowManager.isNil: nil else: frontend.xWindowManager[]
     settingsItem.identifier = KosmoShowSettingsAction
     settingsItem.action = nimkit.actionSelector(KosmoShowSettingsAction)
     settingsItem.target = nimkit.newActionTarget(
@@ -4412,11 +4421,7 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
   let windowMenu = frontend.application.windowsMenu()
   if windowMenu.isNil or not windowMenu.menuItemWithIdentifier(KosmoNextTabAction).isNil:
     return
-  let manager =
-    if frontend.xWindowManager.isNil:
-      nil
-    else:
-      frontend.xWindowManager[]
+  let manager = if frontend.xWindowManager.isNil: nil else: frontend.xWindowManager[]
 
   proc addAction(title, identifier: string) =
     let item = nimkit.newMenuItem(title, nimkit.actionSelector(identifier))
@@ -4531,7 +4536,7 @@ proc newKosmoApplication*(
     fileTree = newKosmoFileTree(initialRootPath)
     fileBrowserPanel = newKosmoFileBrowserPanel(fileTree)
     searchPanel = newKosmoFileSearchPanel(fileTree.rootPath)
-    quickOpenPanel = newKosmoQuickOpenPanel(fileTree.rootPath)
+    quickOpenPanel = newKosmoQuickOpenPanel(fileTree.rootPath, fileTree.workspaceFiles)
     sidebarTabs = nimkit.newCompactTabView(
       [
         nimkit.initCompactTabItem(
@@ -4774,6 +4779,13 @@ proc newKosmoApplication*(
   if manager.config.moeTheme.len > 0:
     discard result.setMoeTheme(manager.config.moeTheme)
   if monitorsGitStatus:
+    result.dockController.editor.useEventDrivenGit()
+    fileTree.workspaceFiles.connect(
+      workspaceRepositoryDidChange, result.xWindowLifecycle, workspaceGitChanged
+    )
+    fileTree.workspaceFiles.connect(
+      workspacePulse, result.xWindowLifecycle, pollWorkspaceGit
+    )
     discard fileTree.startGitStatusMonitoring()
 
 proc newKosmoApplication*(
@@ -4985,6 +4997,7 @@ proc close*(frontend: KosmoApplication) =
     frontend.searchPanel.close()
   if not frontend.fileTree.isNil:
     frontend.fileTree.stopGitStatusMonitoring()
+    frontend.fileTree.workspaceFiles.close()
   if not frontend.xWindowManager.isNil:
     frontend.xWindowManager[].unregister(frontend)
 

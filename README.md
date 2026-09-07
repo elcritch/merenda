@@ -80,6 +80,10 @@ Atlas:
 atlas install -tuk --features:kosmo
 ```
 
+Kosmo's browser and quick open share a background file inventory. See
+[workspace updates](docs/kosmo-workspace.md) for file/Git watching, process
+lifetime, and the current Linux polling fallback.
+
 ## Nimble
 
 Nimble has a couple of outstanding bugs regarding features. Until they're fixed Atlas is the only way to install the appropriate deps.

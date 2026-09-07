@@ -3,6 +3,7 @@
 import std/[algorithm, options, os, sets, strutils, tables, times, unicode]
 
 import ../nimkit as nimkit except performKeyEquivalent
+import ./workspacefiles
 from ../nimkit/foundation/selectors import performKeyEquivalent
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
@@ -27,7 +28,7 @@ type
   KosmoFileTree* = ref object of nimkit.OutlineView
     xRootPath: string
     xRootPaths: seq[string]
-    xFileSystem: nimkit.FileSystemBrowserModel
+    xWorkspaceFiles: WorkspaceFiles
     xChildren: Table[string, seq[string]]
     xOnOpenFile: FileTreeOpenHandler
     xOpenDisposition: FileTreeOpenDisposition
@@ -88,7 +89,7 @@ proc loadChildPaths(tree: KosmoFileTree, parentIdentifier: string) =
   if parentIdentifier.len == 0:
     children.add tree.xRootPaths
   elif parentIdentifier.expandableDirectory():
-    for entry in tree.xFileSystem.entries(parentIdentifier):
+    for entry in tree.xWorkspaceFiles.entries(parentIdentifier):
       children.add entry.path
   tree.xChildren[parentIdentifier] = children
 
@@ -446,7 +447,7 @@ proc `filterText=`*(tree: KosmoFileTree, text: string) =
   tree.reloadFilteredTree()
 
 proc reloadRoots(tree: KosmoFileTree, expanded: seq[string]) =
-  tree.xFileSystem.invalidate()
+  tree.xWorkspaceFiles.setRoots(tree.xRootPaths)
   tree.xChildren.clear()
   tree.invalidateSearchIndex()
   tree.xVisibleChildren.clear()
@@ -509,7 +510,16 @@ proc addRootPath*(tree: KosmoFileTree, path: string): bool {.discardable.} =
 
 proc refresh*(tree: KosmoFileTree) =
   ## Discard cached directory listings and reload the visible hierarchy.
-  tree.xFileSystem.invalidate()
+  tree.xWorkspaceFiles.refresh()
+  tree.xChildren.clear()
+  tree.invalidateSearchIndex()
+  tree.reloadFilteredTree()
+
+proc workspaceFiles*(tree: KosmoFileTree): WorkspaceFiles =
+  ## The shared workspace inventory, also used by quick open.
+  tree.xWorkspaceFiles
+
+proc applyWorkspaceFiles(tree: KosmoFileTree) {.slot.} =
   tree.xChildren.clear()
   tree.invalidateSearchIndex()
   tree.reloadFilteredTree()
@@ -548,11 +558,15 @@ proc applyRefreshedGitStatus(
 ) {.slot.} =
   tree.applyGitStatus(snapshot)
 
+proc workspaceGitChanged(tree: KosmoFileTree) {.slot.} =
+  if not tree.xGitStatusService.isNil:
+    discard tree.xGitStatusService.refresh()
+
 proc startGitStatusMonitoring*(
-    tree: KosmoFileTree,
-    refreshInterval: Duration = nimkit.DefaultGitStatusRefreshInterval,
+    tree: KosmoFileTree, refreshInterval: Duration = initDuration()
 ): nimkit.GitStatusService =
-  ## Start periodic asynchronous Git decorations for this tree.
+  ## Watch workspace changes and refresh Git on demand. A positive interval
+  ## explicitly opts into additional periodic refreshes for compatibility.
   if tree.isNil:
     return
   if not tree.xGitStatusService.isNil:
@@ -561,6 +575,8 @@ proc startGitStatusMonitoring*(
   result.connect(nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus)
   tree.xGitStatusService = result
   result.rootPaths = tree.xRootPaths
+  tree.xWorkspaceFiles.connect(workspaceRepositoryDidChange, tree, workspaceGitChanged)
+  tree.xWorkspaceFiles.startMonitoring()
 
 proc refreshGitStatus*(tree: KosmoFileTree): bool {.discardable.} =
   ## Request an immediate status refresh in addition to the periodic schedule.
@@ -574,9 +590,15 @@ proc waitForGitStatus*(
     tree.xGitStatusService.waitForIdle(timeoutMilliseconds)
 
 proc stopGitStatusMonitoring*(tree: KosmoFileTree) =
-  ## Stop and join the Git status worker owned by this tree.
-  if tree.isNil or tree.xGitStatusService.isNil:
+  ## Release workspace watches and this tree's Git subscription.
+  if tree.isNil:
     return
+  tree.xWorkspaceFiles.stopMonitoring()
+  if tree.xGitStatusService.isNil:
+    return
+  tree.xWorkspaceFiles.disconnect(
+    workspaceRepositoryDidChange, tree, workspaceGitChanged
+  )
   tree.xGitStatusService.disconnect(
     nimkit.gitStatusDidRefresh, tree, applyRefreshedGitStatus
   )
@@ -791,7 +813,8 @@ proc newKosmoFileTree*(
 ): KosmoFileTree =
   result = KosmoFileTree()
   result.initOutlineViewFields(frame)
-  result.xFileSystem = nimkit.initFileSystemBrowserModel()
+  result.xWorkspaceFiles = newWorkspaceFiles()
+  result.xWorkspaceFiles.connect(workspaceFilesDidChange, result, applyWorkspaceFiles)
   result.xGitFileStates = initTable[string, nimkit.GitFileState]()
   result.xGitDescendantStates = initTable[string, nimkit.GitFileState]()
   result.xGitChildren = initTable[string, seq[string]]()

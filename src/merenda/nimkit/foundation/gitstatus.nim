@@ -1,8 +1,10 @@
 ## Asynchronous Git work-tree status snapshots backed by a Sigils worker pool.
 
-import std/[monotimes, os, osproc, streams, strutils, times]
+import std/[monotimes, os, strutils, times]
 
 import sigils/[core, threadChronos, threadProxies, threads]
+import ./backgroundworkers
+import ./gitprocesses
 
 const DefaultGitStatusRefreshInterval*: Duration = initDuration(seconds = 3)
 
@@ -29,10 +31,6 @@ type
     isRepository*: bool
     errorMessage*: string
     workerThreadId*: int
-
-  GitCommandResult = object
-    output: string
-    exitCode: int
 
   GitStatusWorker = ref object of AgentActor
   GitStatusRefreshTicker = ref object of AgentActor
@@ -127,19 +125,6 @@ proc parseGitStatusPorcelain*(
         workTreeCode: code[1],
       )
 
-proc runGit(rootPath: string, args: openArray[string]): GitCommandResult =
-  var process: Process
-  var arguments = @["-C", rootPath, "--no-optional-locks"]
-  arguments.add args
-  try:
-    process =
-      startProcess("git", args = arguments, options = {poUsePath, poStdErrToStdOut})
-    result.output = process.outputStream().readAll()
-    result.exitCode = process.waitForExit()
-  finally:
-    if not process.isNil:
-      process.close()
-
 proc readGitStatus(rootPath: string): GitStatusSnapshot =
   result.rootPath = absolutePath(rootPath)
   result.workerThreadId = getThreadId()
@@ -148,13 +133,13 @@ proc readGitStatus(rootPath: string): GitStatusSnapshot =
     return
 
   try:
-    let repository = runGit(result.rootPath, ["rev-parse", "--show-prefix"])
+    let repository = runGitCommand(result.rootPath, ["rev-parse", "--show-prefix"])
     if repository.exitCode != 0:
       result.errorMessage = repository.output.strip()
       return
     let
       repositoryPrefix = repository.output.strip()
-      status = runGit(
+      status = runGitCommand(
         result.rootPath,
         [
           "status", "--porcelain=v1", "-z", "--untracked-files=all",
@@ -210,7 +195,7 @@ proc completeGitStatus(
     return
   service.xActiveIdentifier = 0
   for snapshot in snapshots:
-    if snapshot.rootPath in service.xRootPaths:
+    if not service.xRefreshPending and snapshot.rootPath in service.xRootPaths:
       if snapshot.rootPath == service.xRootPaths[0]:
         service.xLastSnapshot = snapshot
       emit service.gitStatusDidRefresh(snapshot)
@@ -281,8 +266,7 @@ proc newGitStatusService*(
 ): GitStatusService =
   ## Start a one-worker Git service and optionally refresh it on an interval.
   startLocalThreadDefault()
-  result = GitStatusService(xPool: newSigilThreadPool(workers = 1))
-  result.xPool.start()
+  result = GitStatusService(xPool: nimkitWorkerPool())
   var worker = GitStatusWorker()
   result.xWorker = worker.moveToThread(result.xPool)
   connectThreaded(result.xWorker, executeGitStatus, result.xWorker, executeGitStatus)
@@ -291,8 +275,7 @@ proc newGitStatusService*(
   )
 
   if refreshInterval.inNanoseconds > 0:
-    result.xTimerThread = newSigilChronosThread()
-    result.xTimerThread.start()
+    result.xTimerThread = nimkitTimerThread()
     var ticker = GitStatusRefreshTicker()
     result.xTicker = ticker.moveToThread(result.xTimerThread)
     result.xTimer = newSigilTimer(refreshInterval)
@@ -330,20 +313,17 @@ proc waitForIdle*(
   not service.isRefreshing() and not service.xRefreshPending
 
 proc close*(service: GitStatusService) =
-  ## Stop the refresh timer and join the Git worker.
+  ## Cancel this subscription, leaving the shared workers available to other clients.
   if service.isNil or service.xClosed:
     return
   service.xClosed = true
   if not service.xTimer.isNil and not service.xTimerThread.isNil:
     service.xTimer.cancel(service.xTimerThread)
-  if not service.xTimerThread.isNil:
-    service.xTimerThread.stop(immediate = true)
-    service.xTimerThread.join()
-  service.xPool.stop(immediate = true)
-  service.xPool.join()
   discard service.poll()
   service.xTimer = nil
   service.xTicker = nil
   service.xTimerThread = nil
+  service.xWorker = nil
+  service.xPool = nil
   service.xActiveIdentifier = 0
   service.xRefreshPending = false

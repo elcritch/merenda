@@ -4,6 +4,7 @@ import figdraw
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import merenda/kosmo/workspacefiles
 
 proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
@@ -63,6 +64,19 @@ suite "Kosmo quick open":
       removeDir(root)
 
     check projectFiles(root) == @[".gitignore", "README.md", "notes.private"]
+
+  test "standalone quick open retains its root for no-argument reloads":
+    let root = createTempDir("merenda-kosmo-quick-open-root-", "")
+    writeFile(root / "retained.nim", "discard\n")
+    let panel = newKosmoQuickOpenPanel(root)
+    defer:
+      panel.workspaceFiles.close()
+      removeDir(root)
+
+    check panel.rootPath() == root
+    panel.reloadProjectFiles()
+    check panel.rootPath() == root
+    check panel.projectFiles() == @["retained.nim"]
 
   test "popup blurs translucent panel input and result row surfaces":
     let

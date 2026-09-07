@@ -2,14 +2,14 @@
 
 import
   std/[
-    algorithm, atomics, mimetypes, monotimes, os, osproc, sets, streams, strutils,
-    tables, times, unicode,
+    algorithm, atomics, mimetypes, monotimes, os, sets, strutils, tables, times, unicode
   ]
 
 import faststreams/inputs
 import regex
 import sigils/[core, threads]
 import threading/smartptrs
+import ./gitprocesses
 
 const
   DefaultFileSearchMaxResults* = 10_000
@@ -256,18 +256,15 @@ type GitFileList = object
 proc gitSearchFiles(
     rootPath: string, options: FileSearchOptions, control: SharedPtr[FileSearchControl]
 ): GitFileList =
-  var process: Process
   try:
-    process = startProcess(
-      "git",
-      args = [
-        "-C", rootPath, "--no-optional-locks", "ls-files", "--cached", "--others",
-        "--exclude-standard", "-z", "--", ".",
-      ],
-      options = {poUsePath, poStdErrToStdOut},
+    let listing = runGitCommand(
+      rootPath,
+      ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "."],
+      cancelled = proc(): bool =
+        control.cancellationRequested(),
     )
-    let output = process.outputStream().readAll()
-    if process.waitForExit() != 0:
+    let output = listing.output
+    if listing.exitCode != 0:
       return
     result.succeeded = true
 
@@ -291,9 +288,6 @@ proc gitSearchFiles(
     result.paths.sort()
   except CatchableError:
     discard
-  finally:
-    if not process.isNil:
-      process.close()
 
 type FileSearchTraversalState = object
   options: FileSearchOptions

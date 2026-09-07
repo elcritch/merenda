@@ -463,6 +463,24 @@ proc close*(editor: KosmoEditor) =
     editor.editor.releaseExternalResources()
     editor.editor = nil
 
+proc useEventDrivenGit*(editor: KosmoEditor) =
+  ## Enable after the frontend installs workspace notifications and idle ticks.
+  if not editor.isNil and not editor.editor.isNil:
+    editor.editor.setFrontendGitRefreshMode(grmEventDriven)
+
+proc notifyGitRepositoryChanged*(editor: KosmoEditor, rootPath = "") =
+  ## Invalidate Moe's Git cache on the editor's owning thread.
+  if not editor.isNil and not editor.editor.isNil:
+    editor.editor.notifyGitRepositoryChanged(rootPath)
+
+proc pollGitStatus*(editor: KosmoEditor): bool =
+  ## Advance pending work; report published Git changes requiring a repaint.
+  if not editor.isNil and not editor.editor.isNil:
+    let previous = editor.editor.frontendGitStatusRevision()
+    editor.inWorkingDirectory:
+      editor.editor.tick()
+    result = previous != editor.editor.frontendGitStatusRevision()
+
 proc readEncodingSample(path: string): string =
   let sampleLength = min(getFileSize(path), (EncodingDetectionSampleSize + 4).int64).int
   if sampleLength == 0:
@@ -650,6 +668,22 @@ proc tabs*(editor: KosmoEditor): seq[KosmoTab] =
       temporary:
         editor.temporaryBufferId.isSome and buffer.id == editor.temporaryBufferId.get,
     )
+
+proc gitWatchRoots*(editor: KosmoEditor): seq[string] =
+  ## Parent directories of open files, resolving relative paths in editor context.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let base =
+    if editor.workingDirectory.len > 0:
+      editor.workingDirectory
+    else:
+      getCurrentDir()
+  for tab in editor.tabs():
+    if tab.filePath.isSome:
+      let root = absolutePath(tab.filePath.get, base).parentDir()
+      if root notin result:
+        result.add root
+  result.sort()
 
 proc bufferText*(editor: KosmoEditor, id: KosmoBufferId): Option[string] =
   ## Return the current in-memory text for a buffer, including unsaved edits.
