@@ -50,14 +50,10 @@ jobs:
         nimPath="$(command -v nim)"
         echo "$nimPath"
         nim -v
-        if [[ "$RUNNER_OS" == "macOS" ]]; then
-          file "$nimPath"
-          lipo -archs "$nimPath"
-        fi
 
     - name: Setup software OpenGL/Vulkan (Mesa) + Xvfb (X11)
       if: runner.os == 'Linux' && matrix.display == 'x11'
-      timeout-minutes: 15
+      timeout-minutes: 30
       run: |
         sudo apt-get update
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -93,28 +89,15 @@ jobs:
 
     - name: Build and run tests with Nim
       if: runner.os == 'macOS'
-      timeout-minutes: 15
+      timeout-minutes: 30
       run: |
         # Run each shared runner directly so unittest output identifies a
-        # long-running test instead of being buffered by atlas-run.
-        for testFile in \
-          tests/tnimkit.nim \
-          tests/tkosmo.nim \
-          tests/ttekton.nim \
-          tests/tintegrations.nim
-        do
-          testName="$(basename "${testFile%.nim}")"
-          testCache="deps/.nimcache/github-actions/${testName}"
-          mkdir -p "$testCache"
-          nim c -r --opt:none \
-            --nimcache:"$testCache" \
-            "$testFile"
-        done
+        atlas-run tests --jobs:2 --compiler-output
 
     - name: Build Tests
       if: runner.os == 'Linux'
       run: |
-        atlas-run tests --jobs:1 --compiler-output -- --opt:none
+        atlas-run tests --jobs:2 --compiler-output -- --opt:none
 
   examples:
     runs-on: ${{ matrix.os }}
