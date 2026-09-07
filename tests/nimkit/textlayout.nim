@@ -1,6 +1,8 @@
-import std/[hashes, options, unicode, unittest]
+import std/[hashes, monotimes, options, os, sets, strutils, times, unicode, unittest]
 
 import sigils/core
+import sigils/threads
+import merenda/nimkit/foundation/mainthreadwork
 
 import merenda/nimkit
 
@@ -30,6 +32,7 @@ type
     hyphenate: bool
     shouldGenerateCalls: int
     lineSpacing: float32
+    spacingThreadId: int
     paragraphBefore: float32
     paragraphAfter: float32
     completionCount: int
@@ -117,6 +120,7 @@ protocol TextLayoutDelegateSpyProtocol of TextLayoutDelegateProtocol:
   ): float32 =
     discard manager
     discard glyphIndex
+    spy.spacingThreadId = getThreadId()
     spy.lineSpacing
 
   method paragraphSpacingBeforeGlyph(
@@ -486,7 +490,104 @@ proc newContractBackend(charWidth = 10.0'f32, lineHeight = 12.0'f32): ContractBa
   result = ContractBackend(charWidth: charWidth, lineHeight: lineHeight)
   discard result.withProtocol(ContractBackendProtocol)
 
+proc waitForBackgroundSnapshot(manager: TextLayoutManager): bool =
+  let deadline = getMonoTime() + initDuration(seconds = 10)
+  while manager.isBackgroundLayoutPending() and getMonoTime() < deadline:
+    discard drainMainThreadWork()
+    discard getCurrentSigilThread().pollAll(NonBlocking)
+    if manager.isBackgroundLayoutPending():
+      sleep(1)
+  not manager.isBackgroundLayoutPending()
+
 suite "nimkit text layout":
+  test "worker snapshots match synchronous Unicode wrapping and container geometry":
+    for source in ["", "αβ\n\nZ\n", repeat("hello κόσμος ", 30) & "\n"]:
+      for wraps in [false, true]:
+        let containers =
+          @[
+            initTextContainer(initSize(120, 60), insets(3), wraps = wraps),
+            initTextContainer(
+              initSize(120, 4000), insets(3), wraps = wraps, origin = initPoint(150, 0)
+            ),
+          ]
+        let storage = newTextStorage(source)
+        let synchronous = newTextLayoutManager(storage, containers[0])
+        synchronous.textContainers = containers
+        let expected = synchronous.layoutSnapshot()
+        let background = newTextLayoutManager(storage, containers[0])
+        background.textContainers = containers
+        background.usesBackgroundLayout = true
+        background.requestBackgroundLayout(allowUncachedLayout = true)
+        require background.waitForBackgroundSnapshot()
+        let actual = background.layoutSnapshot()
+        check background.snapshotBuildThreadId() != 0
+        check background.snapshotBuildThreadId() != getThreadId()
+        check actual.textHash == expected.textHash
+        check actual.layoutHash == expected.layoutHash
+        check actual.lineFragments == expected.lineFragments
+        check actual.containerRects == expected.containerRects
+        check actual.usedRect == expected.usedRect
+        check actual.contentSize == expected.contentSize
+
+  test "background layout keeps snapshot delegate calls on the owning thread":
+    let manager = newTextLayoutManager(
+      newTextStorage("one\ntwo\n"), initTextContainer(initSize(180, 100), insets(0))
+    )
+    let delegate = newTextLayoutDelegateSpy()
+    manager.delegate = delegate
+    manager.usesBackgroundLayout = true
+    manager.requestBackgroundLayout(allowUncachedLayout = true)
+    require manager.waitForBackgroundSnapshot()
+    check manager.snapshotBuildThreadId() == getThreadId()
+    check delegate.spacingThreadId == getThreadId()
+
+  test "text view clients receive worker snapshots and reject obsolete reflows":
+    let view =
+      newTextView("hello κόσμος\n".repeat(100), frame = rect(0, 0, 200, 100))
+    let manager = view.layoutManager()
+    manager.usesBackgroundLayout = true
+    discard manager.layoutSnapshot()
+    view.frame = rect(0, 0, 120, 100)
+    manager.invalidateLayout()
+    manager.requestBackgroundLayout(allowUncachedLayout = true)
+    discard drainMainThreadWork()
+    discard drainMainThreadWork()
+    # The old request is queued, but no worker completion has been delivered.
+    view.frame = rect(0, 0, 300, 100)
+    manager.invalidateLayout()
+    manager.requestBackgroundLayout(allowUncachedLayout = true)
+    require manager.waitForBackgroundSnapshot()
+    let actual = manager.layoutSnapshot()
+    check manager.snapshotBuildThreadId() != getThreadId()
+    manager.usesBackgroundLayout = false
+    manager.invalidateLayout()
+    let expected = manager.layoutSnapshot()
+    check actual.lineFragments == expected.lineFragments
+    check actual.contentSize == expected.contentSize
+    check actual.containerRects == expected.containerRects
+
+  test "large line fragment passes preserve Unicode blank and trailing lines":
+    const blockCount = 256
+    let storage = newTextStorage(repeat("αβ\n\nZ\n", blockCount))
+    let manager = newTextLayoutManager(
+      storage, initTextContainer(initSize(900, 100000), insets(0), wraps = false)
+    )
+    let snapshot = manager.layoutSnapshot()
+    var starts = initHashSet[int]()
+    for fragment in snapshot.lineFragments:
+      let start = int(fragment.textRange.location)
+      check start notin starts
+      starts.incl start
+      check not fragment.wrapped
+      if start < storage.len:
+        check fragment.hardBreak
+    check snapshot.lineFragments.len == blockCount * 3 + 1
+    for index in 0 ..< blockCount:
+      check index * 6 in starts
+      check index * 6 + 3 in starts
+      check index * 6 + 4 in starts
+    check snapshot.lineFragments[^1].textRange == initTextRange(blockCount * 6, 0)
+
   test "text storage editing protocol emits mutation signals":
     let
       storage = newTextStorage("Alpha")
@@ -639,12 +740,14 @@ suite "nimkit text layout":
     spy.observeProtocol(manager, TextLayoutEvents)
     manager.textContainers = @[first, second]
     check spy.containerChanges == 1
+    check spy.containerInvalidations == 2
     check spy.lastContainers.len == 2
     discard manager.layoutSnapshot()
 
     manager.replaceTextContainer(initTextContainerIndex(1), replacement)
     check spy.containerChanges == 2
-    check spy.containerInvalidations == 1
+    # List replacement invalidates both entries, then explicitly the target.
+    check spy.containerInvalidations == 5
     check spy.lastContainerIndex == initTextContainerIndex(1)
     check not manager.hasValidLayout()
 
@@ -881,8 +984,11 @@ suite "nimkit text layout":
 
     check narrow.lineFragments.len > wide.lineFragments.len
     check narrow.contentSize.height > wide.contentSize.height
-    checkClose(wide.contentSize.width, wide.containerRect.size.width)
-    checkClose(narrow.contentSize.width, narrow.containerRect.size.width)
+    for snapshot in [wide, narrow]:
+      let expectedWidth =
+        max(snapshot.containerRect.maxX, snapshot.usedRect.maxX) -
+        min(snapshot.containerRect.minX, snapshot.usedRect.minX)
+      checkClose(snapshot.contentSize.width, expectedWidth)
     checkClose(
       narrow.contentSize.height,
       narrow.lineFragments[^1].fragmentRect.maxY -

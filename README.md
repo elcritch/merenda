@@ -188,10 +188,17 @@ application loop applies completed parses automatically. Tests and command-line
 tools can call `viewer.waitForMarkdownParsing()` when they need the rendered text
 immediately; `isMarkdownRendering()` and `waitForMarkdownRendering()` expose the
 application phase separately. Width-only reflow keeps the last complete layout
-visible and runs on a coalescing Sigils worker pool, so live pane resizing does not
+visible and runs on NimKit's shared Sigils worker pool, so live pane resizing does not
 block the GUI. Tests can use `waitForMarkdownLayout()` when they need the settled
 post-resize geometry. See `examples/markdown_viewer_demo.nim` for a
 complete window.
+
+Markdown parsing, built-in Matter highlighting, and text reflow share the same
+NimKit worker pool. Highlighted spans are reused when the theme changes. Custom
+syntax callbacks and parser configurations remain on the owning thread.
+Eligible background layouts also build their line-fragment snapshots on the
+worker; layout delegate callbacks and completion notifications stay on the UI
+thread. Fragment construction decodes text once and borrows the retained glyphs.
 
 Each applied document retains only its own decoded images. Markdown downsamples
 large sources to their maximum display size before publishing them to the static
@@ -761,7 +768,9 @@ titles show `Kosmo (first-root)` and add `+ N` inside the parentheses when more
 top-level roots are open.
 
 Quick Open and Find in Files search every browser root, respecting each folder's
-Git ignore rules and returning overlapping files only once. Quick Open labels
+Git ignore rules and returning overlapping files only once. Quick Open slides in
+immediately, then shows an animated loading state while its file index is built on
+NimKit's shared worker pool. Quick Open labels
 results by root when several folders are open, including folders with the same
 name. Git decorations refresh for every root independently. The first root remains
 the default working directory for new terminals and relative editor paths.
@@ -779,9 +788,30 @@ Settings refreshes the list, so new themes appear without restarting Kosmo.
 Kosmo's sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
 double-clicking promotes it to a permanent editor tab. Git-ignored files and
-dot-directories remain visible in the file tree with muted gray text. Find in Files
-searches Git tracked and untracked non-ignored files and skips binary or unsupported
-text encodings by default; both filters are configurable through `FileSearchOptions`.
+dot-directories remain visible in the file tree with muted gray text. The Files tab's
+bottom popup switches among All Files, Visible Files, and Changed Files.
+With the file tree focused, Shift-F selects Visible Files, Shift-A selects All Files,
+and Shift-G selects Changed Files. Shift-H toggles between All Files and Visible Files
+(from Changed Files, it switches to All Files). These keys remain normal typing keys
+in the file-name filter and other text fields.
+Shift-E expands all folders in the current view; when all are expanded, it collapses
+the whole tree.
+Command-F on macOS or Control-F elsewhere opens a live file-name filter; matching files
+remain nested beneath their folder hierarchy. Find in Files searches Git tracked and
+untracked non-ignored files and skips binary or unsupported text encodings by default;
+both filters are configurable through `FileSearchOptions`.
+File → Show Git Diff (Command-Shift-G on macOS) opens a tab showing staged,
+unstaged, and untracked changes as standard three-line-context diff hunks. Matter
+uses full-file context to preserve language syntax, but only the displayed hunks
+are laid out. Each file is prepared independently on NimKit's shared worker pool
+using the active Markdown syntax colors,
+with subtle green/red backgrounds
+and markers for added/deleted lines. Unknown languages retain plain diff text.
+Files start collapsed. Click a file heading to expand or collapse its cached diff,
+or use Expand All and Collapse All. File sections share one scrolling surface;
+expanding a file schedules its text layout without repeating syntax highlighting.
+Refresh preserves existing expansion states and reloads the saved changes from
+Git; unsaved editor buffers are not included.
 Holding Control while scrolling over an editor accelerates the wheel movement
 threefold.
 
@@ -804,8 +834,11 @@ a content view, preferred first responder, and optional save and close
 callbacks. Kosmo opens terminal links in the system browser; this can be enabled
 or disabled from the Terminal settings page. Press Command-F on macOS or
 Control-Shift-F elsewhere in a terminal tab to search its screen and scrollback.
-The floating search bar supports previous/next navigation with the arrow keys or
-buttons and closes with Escape. Moe editor panes use the same floating search
+Terminal search starts at the newest match at the bottom. Command-G (Control-G
+elsewhere) and Return move toward older output; Command-Shift-G (Control-Shift-G
+elsewhere) moves toward newer output, wrapping at either end. The arrow keys and
+buttons move up/down, and Escape closes the search. Moe editor panes use the same
+floating search
 bar with the platform Find shortcut (Command-F on macOS and Control-F elsewhere),
 while matching, highlighting, and navigation remain owned by Moe.
 

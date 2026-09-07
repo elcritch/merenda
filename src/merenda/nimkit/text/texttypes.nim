@@ -123,6 +123,7 @@ type
     ligatureLevel*: TextLigatureLevel
     expansion*: float32
     backgroundColor*: Color
+    lineBackgroundColor*: Color ## Fill the whole visual line behind this text.
     shadow*: TextShadow
     link*: string
     underlineStyle*: TextLineDecorationStyle

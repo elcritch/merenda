@@ -223,7 +223,7 @@ protocol PopupMenuButtonAccessibility of AccessibilityProtocol:
     if button.xAccessibilityLabel.len > 0: button.xAccessibilityLabel else: button.xTitle
 
   method accessibilityValue(button: PopupMenuButton): string =
-    if button.popupOpen(): "open" else: "closed"
+    button.xTitle
 
   method accessibilityTraits(button: PopupMenuButton): AccessibilityTraits =
     result = button.xAccessibilityTraits + {atButton}
@@ -1190,7 +1190,16 @@ proc popupFrameInSuperview(button: PopupMenuButton): Rect =
       button.xCascadeFrame.origin.x, button.xCascadeFrame.origin.y, size.width,
       size.height,
     )
-  rect(button.frame.origin.x, button.frame.maxY, size.width, size.height)
+  let
+    below = rect(button.frame.origin.x, button.frame.maxY, size.width, size.height)
+    parent = button.superview()
+  if not parent.isNil and below.maxY > parent.bounds().maxY:
+    let above = rect(
+      button.frame.origin.x, button.frame.minY - size.height, size.width, size.height
+    )
+    if above.minY >= parent.bounds().minY:
+      return above
+  below
 
 proc rootPopup(button: PopupMenuButton): PopupMenuButton =
   result = button
@@ -1530,7 +1539,12 @@ proc openPopupWindow(button: PopupMenuButton) =
   let
     anchorFrame = button.rectToWindow(button.bounds)
     size = button.popupSize()
-    popupWindow = owner.newPopupWindow(anchorFrame, size, button.title & " Menu")
+    contentBounds = owner.contentView().bounds()
+    placeAbove =
+      anchorFrame.maxY + size.height > contentBounds.maxY and
+      anchorFrame.minY - size.height >= contentBounds.minY
+    popupWindow =
+      owner.newPopupWindow(anchorFrame, size, button.title & " Menu", placeAbove)
     popupView = button.popupList()
   popupView.frame = rect(0.0, 0.0, size.width, size.height)
   popupWindow.setContentView(popupView)
@@ -1722,7 +1736,12 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
         context.appearance.chromeFill(separatorChrome),
       )
       context.drawPopupButtonArrow(arrowRoot, arrowFrame, style.arrowColor)
-      context.addText(style.comboBoxTextRect(button.bounds), button.title(), style.text)
+      let textRect = style.comboBoxTextRect(button.bounds)
+      context.addText(
+        textRect,
+        button.title().clippedText(textRect.size.width, style.text),
+        style.text,
+      )
       return
 
     let fillColor =

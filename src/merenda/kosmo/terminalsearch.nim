@@ -151,6 +151,13 @@ protocol KosmoTerminalKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
   method performKeyEquivalent(view: KosmoTerminalView, event: nimkit.KeyEvent): bool =
     if event.key == nimkit.keyF and event.modifiers == nimkit.terminalShortcutModifiers():
       return view.showSearch()
+    if not view.searchBar.hidden() and event.key == nimkit.keyG:
+      if event.modifiers == nimkit.shortcutModifiers():
+        view.findPrevious()
+        return true
+      if event.modifiers == nimkit.shortcutModifiers() + {nimkit.kmShift}:
+        view.findNext()
+        return true
     nimkit.performTerminalKeyEquivalent(nimkit.TerminalView(view), event)
 
 protocol KosmoTerminalViewLayout of nimkit.ViewLayoutProtocol:
@@ -186,6 +193,7 @@ proc newKosmoTerminalView*(
         terminal[].dismissSearch()
   result.searchBar =
     newKosmoSearchBar("terminal output", onQueryChanged, onPrevious, onNext, onClose)
+  result.searchBar.backwardsSearch = true
   result.addSubview(result.searchBar)
   result.syncSearchControls()
 

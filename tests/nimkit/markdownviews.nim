@@ -475,6 +475,22 @@ Setext two
     check imageLoaderThreadId == ownerThreadId
     check view.textStorage().stringValue().startsWith("Worker parse\n\nparagraph")
 
+  test "shared pool safely parses multiple Markdown views alongside synchronous callers":
+    var views: seq[MarkdownView]
+    for index in 0 ..< 8:
+      views.add newMarkdownView(
+        "# Document " & $index & "\n\n" &
+          "Paragraph with **bold**, `code`, and [link](https://example.com).\n\n".repeat(
+            100
+          )
+      )
+    for index, view in views:
+      let synchronous = markdownTextStorage("# Synchronous " & $index & "\n\n**text**")
+      check synchronous.stringValue().startsWith("Synchronous " & $index)
+      require view.waitForMarkdownParsing()
+      check view.markdownParseError() == ""
+      check view.textStorage().stringValue().startsWith("Document " & $index)
+
   test "applies large Markdown ASTs in resumable owner-thread chunks":
     var source: string
     for index in 0 ..< 256:
@@ -615,6 +631,41 @@ fencedToken value
       style.syntaxTokenColors[stcKeyword]
     check storage.attributesFor("indentedToken").foregroundColor == style.codeColor
 
+  test "diff backgrounds span code rows while preserving syntax palette colors":
+    let highlighter: SyntaxHighlighter = proc(
+        source, language: string
+    ): seq[SyntaxTokenSpan] =
+      @[
+        SyntaxTokenSpan(
+          range: initTextRange(0, source.runeLen),
+          tokenClass: stcOther,
+          changeKind: sckAdded,
+        )
+      ]
+    var style = initMarkdownStyle()
+    style.syntaxTokenColors[stcOther] = color(0.3, 0.4, 0.8, 1)
+    for width in [8, 160]:
+      let view = newMarkdownView(
+        "```diff\n+é\n+" & "x".repeat(width) & "\n```",
+        frame = rect(0, 0, 400, 240),
+        style = style,
+        syntaxHighlighter = highlighter,
+      )
+      require view.waitForMarkdownParsing()
+      let
+        attributes = view.textStorage().attributesFor("+é")
+        renders = buildRenders(view)
+      check attributes.foregroundColor == style.syntaxTokenColors[stcOther]
+      check attributes.lineBackgroundColor.a > 0
+      require DefaultDrawLevel in renders
+      var tintedRows = 0
+      for node in renders[DefaultDrawLevel].nodes:
+        if node.kind == nkRectangle and node.fill.kind == flColor and
+            node.fill.color == attributes.lineBackgroundColor.rgba:
+          inc tintedRows
+          check node.screenBox.w > 200
+      check tintedRows >= 2
+
   test "Matter maps TextMate scopes and language aliases to neutral rune spans":
     let
       source = "proc answer = 42\n#[ first\ncontinued ]#\necho \"κόσμος\""
@@ -626,6 +677,7 @@ fencedToken value
     check spans.syntaxTokenAt(source.runeIndexOf("continued")) == stcComment
     check spans.syntaxTokenAt(source.runeIndexOf("\"κόσμος\"")) == stcString
     check matterSyntaxHighlighter("value", "not-a-language").len == 0
+    check matterSyntaxHighlighter("let value = \"" & "x".repeat(120), "nim").len == 0
 
   test "Markdown uses Matter for fenced languages outside SynEdit's classifier":
     let
@@ -633,6 +685,31 @@ fencedToken value
       storage = markdownTextStorage("```go\nfunc main() {}\n```")
 
     check storage.attributesFor("func").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+
+  test "Markdown viewer receives Matter colors from its parse worker":
+    let view = newMarkdownView("```nim\nlet obsolete = 1\n```")
+    view.markdown = "```go\nfunc main() {}\n```"
+    require view.waitForMarkdownParsing()
+    check view.markdownParseWorkerThreadId() != getThreadId()
+    check view.markdownParseError() == ""
+    check "obsolete" notin view.textStorage().stringValue()
+    check view.textStorage().attributesFor("func").foregroundColor ==
+      view.markdownStyle().syntaxTokenColors[stcKeyword]
+    var style = view.markdownStyle()
+    style.syntaxTokenColors[stcKeyword] = color(0.2, 0.6, 0.3, 1)
+    view.markdownStyle = style
+    require view.waitForMarkdownParsing()
+    check view.textStorage().attributesFor("func").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+    var customThreadId = 0
+    view.syntaxHighlighter = proc(source, language: string): seq[SyntaxTokenSpan] =
+      customThreadId = getThreadId()
+    require view.waitForMarkdownParsing()
+    check customThreadId == getThreadId()
+    view.syntaxHighlighter = matterSyntaxHighlighter
+    require view.waitForMarkdownParsing()
+    check view.textStorage().attributesFor("func").foregroundColor ==
       style.syntaxTokenColors[stcKeyword]
 
   test "unknown fenced languages retain the ordinary code color":
@@ -755,6 +832,22 @@ echo "fenced"
           node.fill.color == view.selectionColor().rgba:
         inc selectionRectCount
     check selectionRectCount < totalLines div 3
+
+  test "fitting code blocks do not allocate embedded text views":
+    let view =
+      newMarkdownView("```nim\nlet count = 42\n```", frame = rect(0, 0, 600, 240))
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    discard view.buildRenderScene()
+    check view.codeBlockScrollViews(includeHidden = true).len == 0
+    view.frame = rect(0, 0, 120, 240)
+    view.layoutSubtreeIfNeeded()
+    discard view.buildRenderScene()
+    check view.codeBlockScrollViews().len == 1
+    view.frame = rect(0, 0, 600, 240)
+    view.layoutSubtreeIfNeeded()
+    discard view.buildRenderScene()
+    check view.codeBlockScrollViews().len == 0
 
   test "offscreen code and table scroll views are created near the viewport":
     let source =
@@ -1377,13 +1470,22 @@ Press <kbd>Enter</kbd>.
     discard buildRenders(first)
     discard buildRenders(second)
 
+    proc renderResize(view: MarkdownView) =
+      let existingBlocks = view.codeBlockScrollViews(includeHidden = true).len
+      discard buildRenders(view)
+      if view.needsUpdateConstraints or view.needsLayout:
+        # Crossing the overflow threshold creates a child hierarchy for the first
+        # time. Permit one structural follow-up pass, never continuing feedback.
+        check view.codeBlockScrollViews(includeHidden = true).len > existingBlocks
+        discard buildRenders(view)
+      check not view.needsUpdateConstraints
+      check not view.needsLayout
+      check view.layoutFeedbackCycles() == 0
+
     let singleStarted = getMonoTime()
     for width in [680.0'f32, 600.0'f32, 520.0'f32, 440.0'f32]:
       first.frame = rect(0, 0, width, 540)
-      discard buildRenders(first)
-      check not first.needsUpdateConstraints
-      check not first.needsLayout
-      check first.layoutFeedbackCycles() == 0
+      renderResize(first)
     let
       singleElapsed = getMonoTime() - singleStarted
       singleSettleStarted = getMonoTime()
@@ -1395,14 +1497,8 @@ Press <kbd>Enter</kbd>.
     for width in [680.0'f32, 600.0'f32, 520.0'f32, 440.0'f32]:
       first.frame = rect(0, 0, width, 540)
       second.frame = rect(0, 0, width, 540)
-      discard buildRenders(first)
-      discard buildRenders(second)
-      check not first.needsUpdateConstraints
-      check not first.needsLayout
-      check first.layoutFeedbackCycles() == 0
-      check not second.needsUpdateConstraints
-      check not second.needsLayout
-      check second.layoutFeedbackCycles() == 0
+      renderResize(first)
+      renderResize(second)
     let
       pairElapsed = getMonoTime() - pairStarted
       pairSettleStarted = getMonoTime()

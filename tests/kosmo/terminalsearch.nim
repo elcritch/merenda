@@ -32,6 +32,38 @@ proc searchButton(view: View, label: string): Button =
       return button
 
 suite "Kosmo terminal search":
+  test "find shortcuts start at the bottom and traverse older output first":
+    let
+      session = newCompactTerminalSession(columns = 20, rows = 4)
+      terminal = newKosmoTerminalView(session, frame = rect(0, 0, 640, 320))
+      window = newWindow("Terminal find direction", frame = rect(0, 0, 640, 320))
+    defer:
+      window.close()
+    session.processOutput("hit old\r\nhit middle\r\nhit newest")
+    window.setContentView(terminal)
+    terminal.layoutSubtreeIfNeeded()
+    require terminal.showSearch()
+    require window.dispatchTextInput("hit")
+    check terminal.selectedSearchMatch() == 2
+    let
+      next = KeyEvent(key: keyG, keyCode: keyG.ord, modifiers: shortcutModifiers())
+      previous = KeyEvent(
+        key: keyG, keyCode: keyG.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
+      )
+    for expected in [1, 0, 2]:
+      check window.dispatchKeyDown(next)
+      check terminal.selectedSearchMatch() == expected
+    for expected in [0, 1, 2]:
+      check window.dispatchKeyDown(previous)
+      check terminal.selectedSearchMatch() == expected
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check terminal.selectedSearchMatch() == 1
+    require window.makeFirstResponder(terminal)
+    check window.dispatchKeyDown(next)
+    check terminal.selectedSearchMatch() == 0
+    check window.dispatchKeyDown(previous)
+    check terminal.selectedSearchMatch() == 1
+
   test "matching is case insensitive and retains terminal cell positions":
     let session = newCompactTerminalSession(columns = 12, rows = 3)
     session.processOutput("alpha one\r\nbeta\r\nALPHA two")

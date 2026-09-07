@@ -669,6 +669,31 @@ suite "nimkit rendering":
 
     check clippedTitleFound
 
+  test "popup menu button rendering clips labels before the arrow":
+    let
+      root = newView(frame = rect(0, 0, 160, 80))
+      button =
+        newPopupMenuButton("Source Control Changes", frame = rect(8, 20, 144, 26))
+      appearance = initAppearance()
+      style = appearance.resolveComboBoxStyle(controlStyle(srComboBox))
+
+    root.addSubview(button)
+
+    let
+      textRect = style.comboBoxTextRect(button.bounds())
+      expectedTitle = button.title().clippedText(textRect.size.width, style.text)
+      list = buildRenders(root, appearance)[DefaultDrawLevel]
+
+    check expectedTitle.len > 0
+    check expectedTitle != button.title()
+
+    var clippedTitleFound = false
+    for node in list.nodes:
+      if node.kind == nkText and node.renderedText() == expectedTitle:
+        clippedTitleFound = true
+
+    check clippedTitleFound
+
   test "buildRenders uses installed chrome extras selected per button":
     let
       root = newView(frame = rect(0, 0, 260, 120))

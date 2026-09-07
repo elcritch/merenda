@@ -359,7 +359,7 @@ proc endTransientSession*(
 proc nativeContentScale*(window: Window): float32
 proc useThreadRenderer*(window: Window, renderer: ThreadRendererClient)
 proc newPopupWindow*(
-  owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup"
+  owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup", placeAbove = false
 ): Window
 
 proc needsDisplayUpdate*(window: Window): bool
@@ -707,7 +707,7 @@ proc popupPixels(value: float32, scale: float32, minimum: int32): int32 {.inline
   max((value * scale).round().int32, minimum)
 
 proc popupPlacement(
-    anchorFrame: Rect, popupSize: Size, scale: float32
+    anchorFrame: Rect, popupSize: Size, scale: float32, placeAbove: bool
 ): siwinshim.PopupPlacement =
   siwinshim.PopupPlacement(
     anchorRectPos: siwinshim.ivec2(
@@ -721,8 +721,8 @@ proc popupPlacement(
     size: siwinshim.ivec2(
       popupPixels(popupSize.width, scale, 1), popupPixels(popupSize.height, scale, 1)
     ),
-    anchor: siwinshim.Edge.bottomLeft,
-    gravity: siwinshim.Edge.topLeft,
+    anchor: if placeAbove: siwinshim.Edge.topLeft else: siwinshim.Edge.bottomLeft,
+    gravity: if placeAbove: siwinshim.Edge.bottomLeft else: siwinshim.Edge.topLeft,
     offset: siwinshim.ivec2(0, 0),
     constraintAdjustment: {
       siwinshim.PopupConstraintAdjustment.pcaFlipY,
@@ -2014,18 +2014,25 @@ proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.}) =
   window.xOnPopupDone = handler
 
 proc newPopupWindow*(
-    owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup"
+    owner: Window,
+    anchorFrame: Rect,
+    popupSize: Size,
+    title = "Popup",
+    placeAbove = false,
 ): Window =
   let frame = rect(
     anchorFrame.origin.x,
-    anchorFrame.origin.y + anchorFrame.size.height,
+    if placeAbove:
+      anchorFrame.origin.y - popupSize.height
+    else:
+      anchorFrame.origin.y + anchorFrame.size.height,
     max(popupSize.width, 1.0'f32),
     max(popupSize.height, 1.0'f32),
   )
   result = newWindow(title, frame)
   result.xIsPopup = true
   result.xPopupPlacement =
-    popupPlacement(anchorFrame, popupSize, owner.nativeContentScale())
+    popupPlacement(anchorFrame, popupSize, owner.nativeContentScale(), placeAbove)
   owner.attachAuxiliaryWindow(result)
   result.xPopupPresentation = owner.popupPresentation()
   result.setInheritedAppearance(owner.effectiveAppearance())
