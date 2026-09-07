@@ -44,10 +44,12 @@ jobs:
             apt_arch: amd64
             nim_cpu: amd64
             pkg_config_libdir: /usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
-          - release_arch: x32
-            apt_arch: i386
-            nim_cpu: i386
-            pkg_config_libdir: /usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+          # Disabled until Sigils converts Duration.inMilliseconds from int64
+          # to the native int required by asyncdispatch.addTimer on i386.
+          # - release_arch: x32
+          #   apt_arch: i386
+          #   nim_cpu: i386
+          #   pkg_config_libdir: /usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
     env:
       APT_ARCH: ${{ matrix.apt_arch }}
       NIM_CPU: ${{ matrix.nim_cpu }}
@@ -488,9 +490,9 @@ jobs:
       - name: Create checksums
         working-directory: dist
         run: |
+          # Add kosmo-linux-x32.tar.gz when the disabled matrix entry is restored.
           sha256sum \
             kosmo-linux-amd64.tar.gz \
-            kosmo-linux-x32.tar.gz \
             kosmo-macos-arm64.zip \
             kosmo-windows-amd64.zip \
             > SHA256SUMS.txt
@@ -501,9 +503,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name || (github.event_name == 'push' && github.ref == 'refs/heads/ci/update-release-binaries' && 'v0.17.0') }}
         run: |
+          # Add dist/kosmo-linux-x32.tar.gz when the matrix entry is restored.
           gh release upload "$RELEASE_TAG" \
             dist/kosmo-linux-amd64.tar.gz \
-            dist/kosmo-linux-x32.tar.gz \
             dist/kosmo-macos-arm64.zip \
             dist/kosmo-windows-amd64.zip \
             dist/SHA256SUMS.txt \
