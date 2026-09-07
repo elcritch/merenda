@@ -69,6 +69,59 @@ proc textRangeRect(textView: TextView, range: TextRange): Rect =
     else:
       result = result.union(selectionRect)
 
+proc markdownHeadingDisclosure(view: MarkdownView, title: string): Button =
+  for subview in view.textView().subviews():
+    if subview of Button:
+      let button = Button(subview)
+      if button.accessibilityRole() == arDisclosureButton and
+          button.accessibilityLabel() == title:
+        return button
+
+proc translatedRenderRect(list: RenderList, index: int): Rect =
+  let node = list.nodes[index]
+  var
+    x = node.screenBox.x
+    y = node.screenBox.y
+    parent = node.parent
+  while parent != (-1).FigIdx:
+    let ancestor = list.nodes[parent.int]
+    if ancestor.kind == nkTransform:
+      x += ancestor.transform.translation.x
+      y += ancestor.transform.translation.y
+    parent = ancestor.parent
+  rect(x, y, node.screenBox.w, node.screenBox.h)
+
+proc rendersDisclosureArrow(root, disclosure: View, expanded: bool): bool =
+  let renders = root.buildRenders()
+  if DefaultDrawLevel notin renders:
+    return
+  let
+    list = renders[DefaultDrawLevel]
+    disclosureRect = disclosure.rectToView(disclosure.bounds(), root)
+  var bars: set[1 .. 3]
+  for index, node in list.nodes:
+    if node.kind != nkRectangle:
+      continue
+    let renderedRect = list.translatedRenderRect(index)
+    if not disclosureRect.contains(
+      initPoint(
+        renderedRect.origin.x + renderedRect.size.width * 0.5'f32,
+        renderedRect.origin.y + renderedRect.size.height * 0.5'f32,
+      )
+    ):
+      continue
+    let
+      length = if expanded: renderedRect.size.width else: renderedRect.size.height
+      thickness = if expanded: renderedRect.size.height else: renderedRect.size.width
+    if abs(thickness - 1.0'f32) < 0.01'f32:
+      if abs(length - 7.0'f32) < 0.01'f32:
+        bars.incl 1
+      elif abs(length - 5.0'f32) < 0.01'f32:
+        bars.incl 2
+      elif abs(length - 3.0'f32) < 0.01'f32:
+        bars.incl 3
+  bars == {1, 2, 3}
+
 proc unavailableMarkdownImage(url: string): ImageResource =
   discard url
 
@@ -103,6 +156,84 @@ Setext two
     check storage.attributesFor("Setext one").fontSize == style.headingFontSizes[0]
     check storage.attributesFor("Setext two").fontSize == style.headingFontSizes[1]
     check rendered.contains("ATX one\n\nATX two")
+
+  test "heading disclosures collapse their Markdown section hierarchy":
+    let view = newMarkdownView(
+      """
+# Parent
+
+parent body
+
+## Child
+
+child body
+
+# Sibling
+
+sibling body
+""",
+      frame = rect(0, 0, 480, 320),
+    )
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    discard view.buildRenders()
+    let
+      parent = view.markdownHeadingDisclosure("Parent")
+      child = view.markdownHeadingDisclosure("Child")
+      sibling = view.markdownHeadingDisclosure("Sibling")
+      parentRange = initTextRange(
+        view.textStorage().stringValue().runeIndexOf("Parent"), "Parent".runeLen
+      )
+      parentTextRect = view.textView().textRangeRect(parentRange)
+    require not parent.isNil
+    require not child.isNil
+    require not sibling.isNil
+    check parent.accessibilityValue() == "expanded"
+    check parent.accessibilitySupportsAction(AccessibilityActionCollapse)
+    check parent.frame().maxX <= parentTextRect.minX
+    check view.rendersDisclosureArrow(parent, expanded = true)
+
+    check parent.accessibilityPerformAction(AccessibilityActionCollapse)
+    require view.waitForMarkdownRendering()
+    require view.waitForMarkdownLayout()
+    let collapsed = view.textStorage().stringValue()
+    check "parent body" notin collapsed
+    check "Child" notin collapsed
+    check "child body" notin collapsed
+    check "Sibling" in collapsed
+    check "sibling body" in collapsed
+    check view.markdownHeadingDisclosure("Parent") == parent
+    check parent.accessibilityValue() == "collapsed"
+    check view.rendersDisclosureArrow(parent, expanded = false)
+
+    check parent.accessibilityPerformAction(AccessibilityActionExpand)
+    require view.waitForMarkdownRendering()
+    let restoredChild = view.markdownHeadingDisclosure("Child")
+    require not restoredChild.isNil
+    var headingOrder: seq[string]
+    for subview in view.textView().subviews():
+      if subview of Button and subview.accessibilityRole() == arDisclosureButton:
+        headingOrder.add subview.accessibilityLabel()
+    check headingOrder == @["Parent", "Child", "Sibling"]
+    check restoredChild.accessibilityPerformAction(AccessibilityActionCollapse)
+    require view.waitForMarkdownRendering()
+    check "parent body" in view.textStorage().stringValue()
+    check "child body" notin view.textStorage().stringValue()
+    check "sibling body" in view.textStorage().stringValue()
+
+    var style = view.markdownStyle
+    style.headingColor = color(0.7, 0.2, 0.3, 1.0)
+    view.markdownStyle = style
+    require view.waitForMarkdownRendering()
+    check "child body" notin view.textStorage().stringValue()
+
+    view.markdown = "# Replacement\n\nreplacement body"
+    check not parent.accessibilityPerformAction(AccessibilityActionCollapse)
+    require view.waitForMarkdownParsing()
+    let replacement = view.markdownHeadingDisclosure("Replacement")
+    require not replacement.isNil
+    check replacement.accessibilityValue() == "expanded"
+    check "replacement body" in view.textStorage().stringValue()
 
   test "paragraphs, soft breaks, hard breaks, escapes, and entities render as text":
     let
@@ -1498,12 +1629,9 @@ Press <kbd>Enter</kbd>.
     discard buildRenders(second)
 
     proc renderResize(view: MarkdownView) =
-      let existingBlocks = view.codeBlockScrollViews(includeHidden = true).len
       discard buildRenders(view)
       if view.needsUpdateConstraints or view.needsLayout:
-        # Crossing the overflow threshold creates a child hierarchy for the first
-        # time. Permit one structural follow-up pass, never continuing feedback.
-        check view.codeBlockScrollViews(includeHidden = true).len > existingBlocks
+        # Embedded controls may require one structural or geometry follow-up pass.
         discard buildRenders(view)
       check not view.needsUpdateConstraints
       check not view.needsLayout

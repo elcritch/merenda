@@ -7,7 +7,8 @@
 ## explicitly, remote images load through a Chronos worker, and unavailable
 ## images use linked alt text.
 
-import std/[algorithm, lists, math, monotimes, os, sets, strutils, tables, times, unicode]
+import
+  std/[algorithm, lists, math, monotimes, os, sets, strutils, tables, times, unicode]
 
 when not defined(useNativeDynlib):
   import std/hashes
@@ -131,6 +132,7 @@ type
   MarkdownRangeLayout = object
     layoutHash: int
     rect: Rect
+    firstLineRect: Rect
     resolved: bool
 
   MarkdownCodeBlockPresentation = object
@@ -168,6 +170,7 @@ type
 
   MarkdownHeadingDisclosureButton = ref object of Button
     markdownView: WeakRef[MarkdownView]
+    documentGeneration: uint64
     headingIdentifier: string
     headingTitle: string
 
@@ -297,9 +300,7 @@ var
 
 proc renderCurrentMarkdownDocument(view: MarkdownView)
 
-func headingCollapsed(
-    view: MarkdownView, headingIdentifier: string
-): bool =
+func headingCollapsed(view: MarkdownView, headingIdentifier: string): bool =
   not view.isNil and headingIdentifier in view.xCollapsedMarkdownHeadings
 
 proc toggleHeading(view: MarkdownView, headingIdentifier: string): bool =
@@ -309,13 +310,24 @@ proc toggleHeading(view: MarkdownView, headingIdentifier: string): bool =
     view.xCollapsedMarkdownHeadings.excl headingIdentifier
   else:
     view.xCollapsedMarkdownHeadings.incl headingIdentifier
+  let textView = MarkdownTextView(view.textView())
+  if headingIdentifier in textView.markdownHeadingButtons:
+    textView.markdownHeadingButtons[headingIdentifier].needsDisplay = true
   view.renderCurrentMarkdownDocument()
   true
 
 proc activateDisclosure(button: MarkdownHeadingDisclosureButton): bool =
   if button.isNil or button.markdownView.isNil:
     return
-  button.markdownView[].toggleHeading(button.headingIdentifier)
+  let
+    view = button.markdownView[]
+    textView = MarkdownTextView(view.textView())
+  if view.xActiveMarkdownGeneration != 0 or
+      button.documentGeneration != view.xMarkdownRootGeneration or
+      button.headingIdentifier notin textView.markdownHeadingButtons or
+      textView.markdownHeadingButtons[button.headingIdentifier] != button:
+    return
+  view.toggleHeading(button.headingIdentifier)
 
 protocol MarkdownHeadingDisclosureDrawing of ViewDrawingProtocol:
   method draw(button: MarkdownHeadingDisclosureButton, context: DrawContext) =
@@ -338,9 +350,7 @@ protocol MarkdownHeadingDisclosureDrawing of ViewDrawingProtocol:
       context.addFocusRing(context.renderRectFor(button.bounds()), style.box)
 
 protocol MarkdownHeadingDisclosureAccessibility of AccessibilityProtocol:
-  method accessibilityRole(
-      button: MarkdownHeadingDisclosureButton
-  ): AccessibilityRole =
+  method accessibilityRole(button: MarkdownHeadingDisclosureButton): AccessibilityRole =
     arDisclosureButton
 
   method accessibilityLabel(button: MarkdownHeadingDisclosureButton): string =
@@ -380,8 +390,7 @@ protocol MarkdownHeadingDisclosureAccessibility of AccessibilityProtocol:
       return button.activateDisclosure()
     if button.markdownView.isNil:
       return
-    let collapsed =
-      button.markdownView[].headingCollapsed(button.headingIdentifier)
+    let collapsed = button.markdownView[].headingCollapsed(button.headingIdentifier)
     if action == AccessibilityActionExpand and collapsed or
         action == AccessibilityActionCollapse and not collapsed:
       return button.activateDisclosure()
@@ -391,10 +400,13 @@ proc newMarkdownHeadingDisclosureButton(
 ): MarkdownHeadingDisclosureButton =
   result = MarkdownHeadingDisclosureButton(
     markdownView: view.unsafeWeakRef(),
+    documentGeneration: view.xMarkdownRootGeneration,
     headingIdentifier: heading.identifier,
     headingTitle: heading.title,
   )
-  result.initButtonFields("", rect(0, 0, MarkdownHeadingDisclosureSize, MarkdownHeadingDisclosureSize))
+  result.initButtonFields(
+    "", rect(0, 0, MarkdownHeadingDisclosureSize, MarkdownHeadingDisclosureSize)
+  )
   discard result.withProtocol(MarkdownHeadingDisclosureDrawing)
   discard result.withProtocol(MarkdownHeadingDisclosureAccessibility)
   let weakButton = result.unsafeWeakRef()
@@ -1636,15 +1648,9 @@ proc resolveMarkdownRangeLayout(
         if fragment.usedRect.isEmpty: fragment.fragmentRect else: fragment.usedRect
       if presentation.rect.isEmpty:
         presentation.rect = fragmentRect
+        presentation.firstLineRect = fragmentRect
       else:
         presentation.rect = presentation.rect.union(fragmentRect)
-
-func firstMarkdownRangeLineRect(
-    range: TextRange, snapshot: TextLayoutSnapshot
-): Rect =
-  for fragment in snapshot.lineFragments:
-    if fragment.textRange.textRangesIntersect(range):
-      return if fragment.usedRect.isEmpty: fragment.fragmentRect else: fragment.usedRect
 
 proc configureMarkdownEmbeddedTextView(
     storage: TextStorage, backgroundColor: Color, accessibilityLabel: string
@@ -1812,14 +1818,12 @@ proc layoutMarkdownTables(
       scrollView.tile()
       scrollView.setHiddenFromLayout(false)
 
-proc layoutMarkdownHeadings(
-    textView: MarkdownTextView, snapshot: TextLayoutSnapshot
-) =
+proc layoutMarkdownHeadings(textView: MarkdownTextView, snapshot: TextLayoutSnapshot) =
   for presentation in textView.markdownHeadings.mitems:
     presentation.rangeLayout.resolveMarkdownRangeLayout(
       presentation.heading.range, snapshot
     )
-    let lineRect = presentation.heading.range.firstMarkdownRangeLineRect(snapshot)
+    let lineRect = presentation.rangeLayout.firstLineRect
     if lineRect.isEmpty:
       presentation.button.setHiddenFromLayout(true)
     else:
@@ -1828,8 +1832,7 @@ proc layoutMarkdownHeadings(
           max(lineRect.origin.x - MarkdownHeadingDisclosureIndent, 0.0'f32),
           lineRect.origin.y +
             max(
-              (lineRect.size.height - MarkdownHeadingDisclosureSize) * 0.5'f32,
-              0.0'f32,
+              (lineRect.size.height - MarkdownHeadingDisclosureSize) * 0.5'f32, 0.0'f32
             ),
           MarkdownHeadingDisclosureSize,
           MarkdownHeadingDisclosureSize,
@@ -1868,6 +1871,7 @@ proc installMarkdownHeadings(
         textView.addSubview(created)
         created
     button.headingTitle = heading.title
+    button.documentGeneration = view.xMarkdownRootGeneration
     button.accessibilityIdentifier = heading.identifier
     button.toolTip =
       (if view.headingCollapsed(heading.identifier): "Expand " else: "Collapse ") &
@@ -1884,6 +1888,9 @@ proc installMarkdownHeadings(
   for identifier in obsolete:
     textView.markdownHeadingButtons[identifier].removeFromSuperview()
     textView.markdownHeadingButtons.del identifier
+  for index, presentation in textView.markdownHeadings:
+    if textView.subviews().find(View(presentation.button)) != index:
+      textView.insertSubview(presentation.button, index)
   textView.setNeedsLayout()
 
 proc installMarkdownCodeBlocks(
@@ -2061,8 +2068,6 @@ proc resolvedDefaultMarkdownUrlAssetLoader(): UrlAssetLoader =
       newUrlAssetLoader(if executableName.len > 0: executableName else: "merenda")
   defaultMarkdownUrlAssetLoader
 
-proc renderCurrentMarkdownDocument(view: MarkdownView)
-
 proc markdownTableCharacterWidth(view: MarkdownView): float32 =
   let codeStyle = TextStyle(
     color: view.xMarkdownStyle.textColor,
@@ -2212,7 +2217,10 @@ proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
         else:
           0
       headingIdentifier =
-        if headingLevel > 0: "markdown-heading-" & $blockIndex else: ""
+        if headingLevel > 0:
+          "markdown-heading-" & $blockIndex
+        else:
+          ""
     inc job.blockIndex
     var renderBlock = true
     if job.collapsedHeadingLevel > 0:
@@ -2664,8 +2672,7 @@ proc initMarkdownViewFields*(
   ## HTTP(S) images use `urlAssetLoader`, or a lazy shared loader when it is nil.
   let textView = MarkdownTextView()
   textView.initTextViewFields()
-  textView.markdownHeadingButtons =
-    initTable[string, MarkdownHeadingDisclosureButton]()
+  textView.markdownHeadingButtons = initTable[string, MarkdownHeadingDisclosureButton]()
   discard textView.withProtocol(MarkdownTextViewLayout)
   discard textView.withProtocol(MarkdownTextViewDrawing)
   initTextEditorFields(
