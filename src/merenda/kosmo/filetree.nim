@@ -107,6 +107,9 @@ proc hiddenPath(tree: KosmoFileTree, path: string): bool =
       break
     currentPath = parentPath
 
+proc treePathExists(path: string): bool =
+  fileExists(path) or dirExists(path) or symlinkExists(path)
+
 proc isTreeDirectory(tree: KosmoFileTree, path: string): bool =
   path.expandableDirectory() or path in tree.xGitDescendantStates
 
@@ -147,9 +150,9 @@ proc rebuildGitChildren(tree: KosmoFileTree) =
 proc displayModeIncludes(tree: KosmoFileTree, path: string): bool =
   case tree.xDisplayMode
   of FileTreeDisplayMode.AllFiles:
-    true
+    path.treePathExists()
   of FileTreeDisplayMode.VisibleFiles:
-    not tree.hiddenPath(path)
+    path.treePathExists() and not tree.hiddenPath(path)
   of FileTreeDisplayMode.SourceControlChanges:
     (path in tree.xGitFileStates and tree.xGitFileStates[path] != nimkit.gfsIgnored) or
       path in tree.xGitDescendantStates

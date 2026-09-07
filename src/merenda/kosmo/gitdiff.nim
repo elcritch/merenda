@@ -456,21 +456,10 @@ protocol GitDiffDisclosureDrawing of nimkit.ViewDrawingProtocol:
     let palette = button.panel[].markdownView.markdownStyle()
     discard context.addRenderRectangle(frame, palette.backgroundColor)
     let disclosure = nimkit.rect(0, (button.bounds().size.height - 16) / 2, 16, 16)
-    discard context.addRenderRectangle(
-      context.renderRectFor(disclosure),
-      (if button.highlighted(): palette.ruleColor else: palette.backgroundColor),
-      palette.ruleColor,
-      0.6,
-      3,
-    )
-    let arrowStyle = nimkit.TextStyle(
-      color: palette.mutedColor, fontName: palette.bodyFontName, fontSize: 12
-    )
-    context.addText(
+    context.drawDisclosureAffordance(
       disclosure,
-      (if button.panel[].isFileCollapsed(button.fileIndex): "▸" else: "▾"),
-      arrowStyle,
-      alignment = nimkit.taCenter,
+      not button.panel[].isFileCollapsed(button.fileIndex),
+      button.highlighted(),
     )
     let textRect = nimkit.rect(
       24, 0, max(button.bounds().size.width - 24, 0), button.bounds().size.height

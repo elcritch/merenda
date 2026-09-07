@@ -5037,6 +5037,8 @@ when isMainModule:
   let commandLine = parseKosmoCommandLine(commandLineParams())
   if commandLine.help:
     echo KosmoUsage
+  elif commandLine.version:
+    echo KosmoVersion
   elif commandLine.background:
     launchKosmoInBackground(commandLine.arguments)
   else:

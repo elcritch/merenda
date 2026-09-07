@@ -24,9 +24,11 @@ suite "Kosmo shared workspace inventory":
     defer:
       removeDir(root)
     createDir(root / "build")
+    createDir(root / ".hidden")
     writeFile(root / ".gitignore", "build/\n")
     writeFile(root / "main.nim", "discard\n")
     writeFile(root / "build" / "ignored.nim", "discard\n")
+    writeFile(root / ".hidden" / "secret.nim", "discard\n")
     require runGitCommand(root, ["init", "-q"]).exitCode == 0
     let frontend = newKosmoApplication(
       newApplication("Shared inventory"), root, monitorsGitStatus = false
@@ -40,11 +42,49 @@ suite "Kosmo shared workspace inventory":
     check "build/ignored.nim" notin frontend.quickOpenPanel.projectFiles()
     frontend.fileTree.expandItem(root / "build")
     check frontend.fileTree.rowForItem(root / "build" / "ignored.nim") >= 0
+    frontend.fileTree.expandItem(root / ".hidden")
+    check frontend.fileTree.rowForItem(root / ".hidden" / "secret.nim") >= 0
+    frontend.fileTree.displayMode = FileTreeDisplayMode.VisibleFiles
+    check frontend.fileTree.rowForItem(root / "main.nim") >= 0
+    check frontend.fileTree.rowForItem(root / ".hidden") < 0
     writeFile(root / "new.nim", "discard\n")
     files.refresh()
     require files.waitForFiles()
     check "new.nim" in frontend.quickOpenPanel.projectFiles()
     check frontend.fileTree.rowForItem(root / "new.nim") >= 0
+    check frontend.fileTree.rowForItem(root / ".hidden") < 0
+    frontend.fileTree.displayMode = FileTreeDisplayMode.AllFiles
+    check frontend.fileTree.rowForItem(root / ".hidden") >= 0
+    check frontend.fileTree.rowForItem(root / "build" / "ignored.nim") >= 0
+
+  test "Git refresh hides stale deleted files outside the changed-files scope":
+    let
+      root = createTempDir("kosmo-stale-browser-listing-", "")
+      folder = root / "source"
+      deletedFile = folder / "deleted.nim"
+    defer:
+      removeDir(root)
+    createDir(folder)
+    writeFile(deletedFile, "discard\n")
+    let tree = newKosmoFileTree(root)
+    defer:
+      tree.workspaceFiles.close()
+    require tree.workspaceFiles.waitForFiles()
+
+    removeFile(deletedFile)
+    tree.applyGitStatus(
+      GitStatusSnapshot(
+        rootPath: absolutePath(root),
+        isRepository: true,
+        entries: @[GitStatusEntry(path: deletedFile, state: gfsDeleted)],
+      )
+    )
+    tree.expandItem(folder)
+    check tree.rowForItem(deletedFile) < 0
+    tree.displayMode = FileTreeDisplayMode.VisibleFiles
+    check tree.rowForItem(deletedFile) < 0
+    tree.displayMode = FileTreeDisplayMode.SourceControlChanges
+    check tree.rowForItem(deletedFile) >= 0
 
   test "root replacement rejects queued snapshots and coalesces refreshes":
     let first = createTempDir("kosmo-inventory-first-", "")
