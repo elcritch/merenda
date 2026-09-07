@@ -34,6 +34,9 @@
 - Cross-component tests and tests requiring process isolation belong in `tests/integrations/` and must be imported by the shared `tests/tintegrations.nim` runner.
 - Do not add a separate top-level `tests/t*.nim` runner for an individual Kosmo, NimKit, Tekton, or integration test. Separate runners recompile large dependency graphs and slow focused and full test runs.
 - Use another top-level test only when it cannot safely share any common runner because it requires conflicting compiler settings, stronger process isolation, or another documented incompatibility.
+- Event-driven and asynchronous tests must wait for an observable condition with an explicit monotonic deadline. Use a cap of about 60 seconds unless the behavior has a documented reason to need longer, and assert the condition after the deadline so timeouts fail visibly.
+- While waiting for GUI, Sigil, watcher, or worker results, pump the owning event loop non-blockingly and use only a short sleep between polls. Establish and assert required subscriptions or readiness before triggering the event. Do not use a fixed sleep as a substitute for readiness.
+- Keep process lifecycle coverage in focused integration tests. Do not start unrelated shells or other long-lived processes in shared component tests, and always terminate and reap child processes during teardown.
 - Requirements: CI (`atlas-run tests`) must pass; include tests for new behavior and update `README.md`/`CHANGES.md` as needed.
 
 ## Security & Configuration Tips

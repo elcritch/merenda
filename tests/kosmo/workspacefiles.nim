@@ -16,7 +16,7 @@ proc changed(spy: InventorySpy) {.slot.} =
 
 template eventually(condition: untyped) =
   block:
-    let deadline = getMonoTime() + initDuration(seconds = 10)
+    let deadline = getMonoTime() + initDuration(seconds = 60)
     while not (condition) and getMonoTime() < deadline:
       discard getCurrentSigilThread().pollAll(NonBlocking)
       sleep(10)
@@ -276,6 +276,7 @@ suite "Kosmo shared workspace inventory":
       frontend.close()
     require frontend.openPath(externalRoot / "external.nim")
     eventually(frontend.editorView.editor.status().gitBranch == "external-start")
+    eventually(externalRoot in frontend.fileTree.workspaceFiles.gitRoots)
 
     require runGitCommand(externalRoot, ["checkout", "-qb", "external-next"]).exitCode ==
       0
