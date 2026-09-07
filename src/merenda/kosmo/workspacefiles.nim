@@ -1,7 +1,7 @@
 ## Shared, asynchronous file inventory for Kosmo's browser and quick open.
 ## GUI consumers borrow one controller; worker snapshots contain only value data.
 
-import std/[algorithm, isolation, monotimes, os, sets, strutils, tables, times]
+import std/[algorithm, isolation, monotimes, os, sets, strutils, times]
 import sigils/[core, threadProxies, threads]
 import threading/smartptrs
 import ../nimkit/containers/filebrowsers
@@ -9,12 +9,20 @@ import ../nimkit/foundation/backgroundworkers
 import ./workspacewatch
 import ../nimkit/foundation/gitprocesses
 
+const
+  DefaultWorkspaceDepth* = 8
+  DefaultWorkspaceEntryLimit* = 10_000
+
+proc isFilesystemRoot*(path: string): bool =
+  let normalized = normalizedPath(absolutePath(path))
+  normalized.parentDir().len == 0 or normalized.parentDir() == normalized
+
 type
   WorkspaceFileSnapshot* = object
     roots*: seq[string]
     labels*: seq[string]
     paths*: seq[string]
-    listings: Table[string, seq[FileBrowserEntry]]
+    directories: seq[string]
     generation: uint64
 
   WorkspaceFileWorker = ref object of AgentActor
@@ -44,7 +52,7 @@ proc nextNulField(value: string, cursor: var int): string =
     cursor = fieldEnd + 1
 
 proc gitProjectFiles(
-    rootPath: string
+    rootPath: string, maxEntries: Positive
 ): tuple[isRepository, succeeded: bool, files: seq[string]] =
   let listing = runGitCommand(
     rootPath,
@@ -58,7 +66,7 @@ proc gitProjectFiles(
   var
     cursor = 0
     seen = initHashSet[string]()
-  while cursor < listing.output.len:
+  while cursor < listing.output.len and result.files.len < maxEntries:
     let relativePath = listing.output.nextNulField(cursor)
     if relativePath.len == 0:
       continue
@@ -66,39 +74,53 @@ proc gitProjectFiles(
       seen.incl relativePath
       result.files.add relativePath
 
-proc filesystemProjectFiles(rootPath: string): seq[string] =
+proc filesystemProjectFiles(
+    rootPath: string, maxDepth: Natural, maxEntries: Positive
+): seq[string] =
   var
-    directories = @[rootPath]
-    seen = initHashSet[string]()
-  while directories.len > 0:
+    directories = @[(path: rootPath, depth: 0)]
+    visited: int
+  let deadline = getMonoTime() + initDuration(seconds = 1)
+  while directories.len > 0 and visited < maxEntries and getMonoTime() < deadline:
     let directory = directories.pop()
     try:
-      for kind, path in walkDir(directory):
+      for kind, path in walkDir(directory.path):
+        if visited >= maxEntries or getMonoTime() >= deadline:
+          return
+        inc visited
         case kind
         of pcDir:
-          if path.extractFilename() != ".git":
-            directories.add path
+          if directory.depth < maxDepth and path.extractFilename() != ".git":
+            directories.add (path: path, depth: directory.depth + 1)
         of pcLinkToDir:
           discard
         of pcFile, pcLinkToFile:
-          let relativePath = relativePath(path, rootPath)
-          if relativePath notin seen:
-            seen.incl relativePath
-            result.add relativePath
+          result.add relativePath(path, rootPath)
     except OSError:
       discard
 
-proc projectFiles*(rootPath: string): seq[string] =
-  ## List project files, respecting Git's standard ignore rules in work trees.
+proc projectFiles*(
+    rootPath: string,
+    maxDepth: Natural = DefaultWorkspaceDepth,
+    maxEntries: Positive = DefaultWorkspaceEntryLimit,
+    includeIgnored = false,
+): seq[string] =
+  ## Bound automatic discovery; non-Git scans stop at the depth, entry, or time
+  ## budget. Filesystem roots are shallow. Explicit folder browsing remains lazy.
   if rootPath.len == 0 or not dirExists(rootPath):
     return
   let root = absolutePath(rootPath)
-  let gitFiles = gitProjectFiles(root)
-  if gitFiles.isRepository:
-    if gitFiles.succeeded:
-      result = gitFiles.files
+  if root.isFilesystemRoot():
+    result = filesystemProjectFiles(root, 0, maxEntries)
+  elif includeIgnored:
+    result = filesystemProjectFiles(root, maxDepth, maxEntries)
   else:
-    result = filesystemProjectFiles(root)
+    let gitFiles = gitProjectFiles(root, maxEntries)
+    if gitFiles.isRepository:
+      if gitFiles.succeeded:
+        result = gitFiles.files
+    else:
+      result = filesystemProjectFiles(root, maxDepth, maxEntries)
   result.sort(system.cmp[string])
 
 proc normalizedRoots(rootPaths: openArray[string]): seq[string] =
@@ -111,7 +133,7 @@ proc normalizedRoots(rootPaths: openArray[string]): seq[string] =
 proc readWorkspaceFiles(roots: seq[string], generation: uint64): WorkspaceFileSnapshot =
   result = WorkspaceFileSnapshot(roots: roots, generation: generation)
   var seen = initHashSet[string]()
-  var model = initFileSystemBrowserModel()
+  var seenDirectories = initHashSet[string]()
   for root in roots:
     var prefix = root.extractFilename()
     for other in roots:
@@ -129,15 +151,13 @@ proc readWorkspaceFiles(roots: seq[string], generation: uint64): WorkspaceFileSn
             prefix / relative
         )
         result.paths.add path
-      # Seed the browser from the same inventory, retaining ignored siblings and
-      # empty directories. Ignored subtrees remain lazy, not recursively scanned.
+      # Watch a bounded set of indexed parents without eagerly listing them.
       var parent = path.parentDir()
-      while parent.len > 0 and not model.isDirectoryLoaded(parent):
-        result.listings[parent] = model.entries(parent)
-        if parent == root:
-          break
+      while parent.len > 0 and parent != root and result.directories.len < 48:
+        if parent notin seenDirectories:
+          seenDirectories.incl parent
+          result.directories.add parent
         parent = parent.parentDir()
-    result.listings[root] = model.entries(root)
 
 proc workspaceFilesDidChange*(files: WorkspaceFiles) {.signal.}
 proc workspaceRepositoryDidChange*(files: WorkspaceFiles) {.signal.}
@@ -172,7 +192,7 @@ proc startMonitoring*(files: WorkspaceFiles) =
     files.watch = newWorkspaceWatch(files.reconciliationInterval)
     files.watch.connect(workspaceWatchChanged, files, watchChanged)
     files.watch.connect(workspaceWatchPulse, files, watchPulse)
-    files.watch.setRoots(files.roots & files.gitRoots)
+    files.watch.setRoots(files.roots & files.gitRoots, files.current.directories)
 
 proc setGitRoots*(files: WorkspaceFiles, roots: openArray[string]) =
   ## Cover open buffers outside the browser's roots without indexing their folders.
@@ -180,7 +200,7 @@ proc setGitRoots*(files: WorkspaceFiles, roots: openArray[string]) =
     return
   files.gitRoots = @roots
   if not files.watch.isNil:
-    files.watch.setRoots(files.roots & files.gitRoots)
+    files.watch.setRoots(files.roots & files.gitRoots, files.current.directories)
 
 proc stopMonitoring*(files: WorkspaceFiles) =
   if not files.watch.isNil:
@@ -195,6 +215,8 @@ proc receiveFiles(
   files.active = false
   if snapshot[].generation == files.generation:
     files.current = move snapshot[]
+    if not files.watch.isNil:
+      files.watch.setRoots(files.roots & files.gitRoots, files.current.directories)
     files.fallback.invalidate()
     if not files.watch.isNil:
       files.watch.markReconciled()
@@ -221,17 +243,13 @@ proc isLoading*(files: WorkspaceFiles): bool =
 
 proc entries*(files: WorkspaceFiles, directory: string): seq[FileBrowserEntry] =
   ## Shared browser listings; unindexed (including ignored) folders load lazily.
-  if directory in files.current.listings:
-    files.current.listings[directory]
-  else:
-    files.fallback.entries(directory)
+  files.fallback.entries(directory)
 
 proc refresh*(files: WorkspaceFiles) =
   ## Invalidate in-flight work and coalesce changes into one follow-up scan.
   if files.closed:
     return
   inc files.generation
-  files.current.listings.clear()
   files.fallback.invalidate()
   if files.active:
     files.pending = true
@@ -257,10 +275,11 @@ proc reload*(files: WorkspaceFiles, roots: openArray[string]) =
   files.pending = false
   files.roots = normalizedRoots(roots)
   if not files.watch.isNil:
-    files.watch.setRoots(files.roots & files.gitRoots)
+    files.watch.setRoots(files.roots & files.gitRoots, files.current.directories)
   files.current = readWorkspaceFiles(files.roots, files.generation)
   files.fallback.invalidate()
   if not files.watch.isNil:
+    files.watch.setRoots(files.roots & files.gitRoots, files.current.directories)
     files.watch.markReconciled()
   emit files.workspaceFilesDidChange()
 

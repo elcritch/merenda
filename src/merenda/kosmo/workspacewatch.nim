@@ -14,8 +14,11 @@ type
   WorkspaceWatch* = ref object of Agent
     token: uint
     roots: seq[string]
+    folders: seq[string]
+    metadata: seq[string]
     directories: seq[string]
     watches: seq[WatchId]
+    handles: Table[string, WatchId]
     timer: SigilTimer
     ticker: AgentProxy[WorkspaceWatchTicker]
     active: bool
@@ -59,7 +62,9 @@ proc pulsed(ticker: WorkspaceWatchTicker) {.signal.}
 proc pulse(ticker: WorkspaceWatchTicker) {.slot.} =
   emit ticker.pulsed()
 
-proc setRoots*(watch: WorkspaceWatch, roots: openArray[string])
+proc setRoots*(
+  watch: WorkspaceWatch, roots: openArray[string], folders: openArray[string] = []
+)
 
 proc deliver(watch: WorkspaceWatch) {.slot.} =
   if not watch.active:
@@ -83,7 +88,7 @@ proc deliver(watch: WorkspaceWatch) {.slot.} =
     if reconciliationDue:
       watch.reconciliationPending = true
     # A .git file can appear or change targets after the project was opened.
-    watch.setRoots(watch.roots)
+    watch.setRoots(watch.roots, watch.folders)
     emit watch.workspaceWatchChanged()
   emit watch.workspaceWatchPulse()
 
@@ -116,57 +121,90 @@ proc metadataDirectories(root: string): seq[string] =
       return
     current = parent
 
-proc setRoots*(watch: WorkspaceWatch, roots: openArray[string]) =
-  ## Also cover linked worktree metadata and shared refs outside project roots.
+proc watchedMetadataDirectories(root: string): seq[string] =
+  for metadata in metadataDirectories(root):
+    if metadata notin result:
+      result.add metadata
+    # HEAD/index live directly in the Git directory. Watch refs separately so
+    # native backends never recurse through the object database or ignored files.
+    var pending = @[metadata / "refs"]
+    var visited: int
+    while pending.len > 0 and result.len < 16 and visited < 64:
+      let directory = pending.pop()
+      if dirExists(directory):
+        result.add directory
+        try:
+          for kind, path in walkDir(directory):
+            if visited >= 64:
+              break
+            inc visited
+            if kind == pcDir:
+              pending.add path
+        except OSError:
+          discard
+
+proc setRoots*(
+    watch: WorkspaceWatch, roots: openArray[string], folders: openArray[string] = []
+) =
+  ## Project directories and Git metadata use shallow, bounded watches.
+  ## Filesystem roots are never watched, and each workspace has at most 64 paths.
   if not watch.active:
     return
-  var directories: seq[string]
+  var
+    directories: seq[string]
+    metadataPaths: seq[string]
   for root in roots:
-    if root notin directories:
-      directories.add root
-    for metadata in metadataDirectories(root):
-      if metadata notin directories:
-        directories.add metadata
-  var minimal: seq[string]
-  for directory in directories:
-    var covered = false
-    for parent in directories:
-      if parent != directory:
-        let prefix = parent & (if parent[^1] in {DirSep, AltSep}: ""
-        else: $DirSep)
-        if directory.startsWith(prefix):
-          covered = true
-          break
-    if not covered:
-      minimal.add directory
-  directories = minimal
+    let path = normalizedPath(absolutePath(root))
+    if path.parentDir().len > 0 and path.parentDir() != path:
+      if path notin directories and directories.len < 64:
+        directories.add path
+      for metadata in watchedMetadataDirectories(path):
+        if metadata notin directories and directories.len < 64:
+          directories.add metadata
+          metadataPaths.add metadata
+  for folder in folders:
+    let path = normalizedPath(absolutePath(folder))
+    if path.parentDir().len > 0 and path.parentDir() != path and path notin directories and
+        directories.len < 64:
+      directories.add path
   directories.sort()
+  metadataPaths.sort()
   watch.roots = @roots
-  if directories == watch.directories:
+  watch.folders = @folders
+  if directories == watch.directories and metadataPaths == watch.metadata:
     return
-  for id in watch.watches:
-    unwatch(id)
-  watch.watches.setLen(0)
+  var removed: seq[string]
+  for directory, id in watch.handles:
+    if directory notin directories:
+      unwatch(id)
+      removed.add directory
+  for directory in removed:
+    watch.handles.del(directory)
+  watch.metadata = metadataPaths
   watch.directories = directories
   watch.fallback = false
   when defined(linux):
     # dmon 0.5.0 concatenates absolute event paths when watching newly created
     # directories, asserting in its monitor thread. Do not crash the application.
-    watch.fallback = true
+    watch.fallback = directories.len > 0
   else:
     for directory in directories:
-      if dirExists(directory):
+      if directory in watch.handles:
+        discard
+      elif dirExists(directory):
         if dmonInst.numWatches >= 64:
           watch.fallback = true
         else:
           try:
-            watch.watches.add dmon.watch(
-              directory, didChange, {Recursive}, cast[pointer](watch.token)
-            )
+            watch.handles[directory] =
+              dmon.watch(directory, didChange, {}, cast[pointer](watch.token))
           except CatchableError:
             watch.fallback = true
       else:
         watch.fallback = true
+  watch.watches.setLen(0)
+  for id in watch.handles.values:
+    watch.watches.add id
   if watch.fallback:
     warn "Kosmo workspace watcher using periodic fallback", roots = watch.roots
   withLock inboxLock:

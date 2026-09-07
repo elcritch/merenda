@@ -3,7 +3,7 @@ import std/[os, strutils, tempfiles, unicode, unittest]
 import figdraw
 
 import merenda/nimkit
-import merenda/kosmo/kosmo
+import merenda/kosmo/[kosmo, workspacefiles]
 
 proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
@@ -49,6 +49,8 @@ suite "Kosmo file tree interactions":
     defer:
       window.close()
       removeDir(root)
+    check tree.displayMode == FileTreeDisplayMode.VisibleFiles
+    check panel.scopeButton.title == "Visible Files"
     window.setContentView(panel)
     panel.layoutSubtreeIfNeeded()
     require window.makeFirstResponder(tree)
@@ -104,6 +106,7 @@ suite "Kosmo file tree interactions":
       removeFile(ignoredPath)
       removeDir(root)
 
+    tree.displayMode = FileTreeDisplayMode.AllFiles
     discard buildRenders(tree)
     check not tree.rendersTextWithColor("ignored.log", ignoredColor)
 
@@ -200,7 +203,10 @@ suite "Kosmo file tree interactions":
       removeDir(root)
 
     let tree = newKosmoFileTree(root)
-    check tree.displayMode == FileTreeDisplayMode.AllFiles
+    check tree.displayMode == FileTreeDisplayMode.VisibleFiles
+    check tree.rowForItem(hiddenFile) < 0
+    check tree.rowForItem(hiddenFolder) < 0
+    tree.displayMode = FileTreeDisplayMode.AllFiles
     check tree.rowForItem(hiddenFile) >= 0
     check tree.rowForItem(hiddenFolder) >= 0
 
@@ -235,6 +241,60 @@ suite "Kosmo file tree interactions":
     check tree.rowForItem(unicodeDeletedFile) >= 0
     check tree.rowForItem(deletedFile) < 0
     tree.filterText = ""
+
+  test "visible scope excludes ignored paths and refreshes cached searches":
+    let
+      root = createTempDir("merenda-kosmo-tree-ignored-", "")
+      ignoredFolder = root / "build"
+      ignoredFile = root / "needle.log"
+      ignoredChild = ignoredFolder / "needle.nim"
+      visibleFolder = root / "source"
+      visibleFile = visibleFolder / "needle.nim"
+    defer:
+      removeDir(root)
+    createDir(ignoredFolder)
+    createDir(visibleFolder)
+    for path in [ignoredFile, ignoredChild, visibleFile]:
+      writeFile(path, "content")
+    let tree = newKosmoFileTree(root)
+    defer:
+      tree.workspaceFiles.close()
+    tree.displayMode = FileTreeDisplayMode.VisibleFiles
+    tree.filterText = "needle"
+    check tree.rowForItem(ignoredChild) >= 0
+    check tree.rowForItem(ignoredFile) >= 0
+
+    tree.applyGitStatus(
+      GitStatusSnapshot(
+        rootPath: absolutePath(root),
+        isRepository: true,
+        entries:
+          @[
+            GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
+            GitStatusEntry(path: ignoredFile, state: gfsIgnored),
+          ],
+      )
+    )
+    check tree.rowForItem(ignoredFolder) < 0
+    check tree.rowForItem(ignoredChild) < 0
+    check tree.rowForItem(ignoredFile) < 0
+    check tree.rowForItem(visibleFolder) >= 0
+    check tree.rowForItem(visibleFile) >= 0
+
+    tree.displayMode = FileTreeDisplayMode.AllFiles
+    check tree.rowForItem(ignoredChild) >= 0
+    check tree.rowForItem(ignoredFile) >= 0
+    tree.displayMode = FileTreeDisplayMode.VisibleFiles
+    tree.filterText = ""
+    check tree.rowForItem(ignoredFolder) < 0
+    check tree.rowForItem(ignoredFile) < 0
+    tree.filterText = "needle"
+    tree.applyGitStatus(
+      GitStatusSnapshot(rootPath: absolutePath(root), isRepository: true)
+    )
+    check tree.rowForItem(ignoredFolder) >= 0
+    check tree.rowForItem(ignoredChild) >= 0
+    check tree.rowForItem(ignoredFile) >= 0
 
   test "double clicking a deleted ancestor folder toggles it":
     let
@@ -362,12 +422,12 @@ suite "Kosmo file tree interactions":
     window.setContentView(panel)
     panel.layoutSubtreeIfNeeded()
 
-    check panel.scopeButton.title == "All Files"
+    check panel.scopeButton.title == "Visible Files"
     check panel.scopeButton.menu().items().len == 3
     check panel.scopeButton.menu()[0].title == "All Files"
     check panel.scopeButton.menu()[1].title == "Visible Files"
     check panel.scopeButton.menu()[2].title == "Changed Files"
-    check panel.scopeButton.menu()[0].state == bsOn
+    check panel.scopeButton.menu()[1].state == bsOn
     check panel.scopeButton.frame().minY >= panel.fileTree.frame().maxY
     check panel.filterField.hidden
 
