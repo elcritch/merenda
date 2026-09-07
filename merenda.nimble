@@ -22,6 +22,7 @@ requires "gh:elcritch/terminex#fix/bounded-pty-shutdown"
 requires "https://github.com/Araq/iconbundler"
 requires "libbacktrace"
 requires "zippy >= 0.10.20"
+requires "dmon >= 0.5.0"
 
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
