@@ -92,12 +92,12 @@ jobs:
       timeout-minutes: 30
       run: |
         # Run each shared runner directly so unittest output identifies a
-        atlas-run tests --jobs:2 --compiler-output
+        atlas-run tests --jobs:1 --compiler-output
 
     - name: Build Tests
       if: runner.os == 'Linux'
       run: |
-        atlas-run tests --jobs:2 --compiler-output -- --opt:none
+        atlas-run tests --jobs:1 --compiler-output -- --opt:none
 
   examples:
     runs-on: ${{ matrix.os }}
