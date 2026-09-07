@@ -1271,8 +1271,7 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
 proc parseMarkdownRoot(
     source: string, config: MarkdownParserConfig
 ): markdownParser.Document =
-  result = markdownParser.Document()
-  discard markdownParser.markdown(source, config.resolvedConfig(), result)
+  markdownparsing.parseMarkdownRoot(source, config.resolvedConfig())
 
 proc markdownDocument(
     root: markdownParser.Token,

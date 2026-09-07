@@ -1,4 +1,4 @@
-## Full-context Git patches presented as collapsible Markdown code blocks.
+## Standard Git hunks in retained native sections with full-context syntax highlighting.
 
 import
   std/[
@@ -13,6 +13,7 @@ import ../nimkit as nimkit
 import ../nimkit/foundation/backgroundworkers
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
+import ../nimkit/foundation/mainthreadwork
 
 const KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
 
@@ -21,7 +22,8 @@ type
 
   GitFileDiff* = object
     path*: string
-    patch*: string
+    patch*: string ## Standard three-line-context patch displayed by the viewer.
+    syntaxPatch*: string ## Full-context patch used only for language highlighting.
     additions*, deletions*: int
     binary*: bool
 
@@ -35,30 +37,48 @@ type
   GitDiffWorker = ref object of AgentActor
 
   GitDiffHighlightWorker = ref object of AgentActor
-    cache: Table[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]
-    buildCount: int
+    key: GitDiffHighlightKey
+    spans: seq[nimkit.SyntaxTokenSpan]
+    cached: bool
 
   GitDiffHighlightResult = object
-    snapshot: GitDiffSnapshot
-    cache: Table[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]
+    path: string
+    source: string
+    runs: seq[nimkit.TextAttributeRun]
+    errorMessage: string
     generation: uint64
-    buildCount, threadId: int
+    built: bool
+    threadId: int
 
   GitDiffControl = object
     cancelled: Atomic[bool]
-
-  GitDiffLinkDelegate = ref object of nimkit.Responder
-    panel: WeakRef[KosmoGitDiffPanel]
 
   GitDiffDisclosureButton = ref object of nimkit.Button
     panel: WeakRef[KosmoGitDiffPanel]
     fileIndex: int
     filePath: string
 
+  GitDiffTextView = ref object of nimkit.TextView
+
+  GitDiffDocumentView = ref object of nimkit.View
+    panel: WeakRef[KosmoGitDiffPanel]
+
+  GitDiffSection = object
+    worker: AgentProxy[GitDiffHighlightWorker]
+    textView: GitDiffTextView
+    patch: string
+    syntaxPatch: string
+    generation: uint64
+    pending: bool
+    ready: bool
+    layoutStarted: bool
+
   GitDiffKeyEquivalentHandler* = proc(event: nimkit.KeyEvent): bool {.closure.}
 
   KosmoGitDiffPanel* = ref object of nimkit.View
     markdownView*: nimkit.MarkdownView
+    scrollView*: nimkit.ScrollView
+    documentView*: nimkit.View
     refreshButton*: nimkit.Button
     expandButton*: nimkit.Button
     collapseButton*: nimkit.Button
@@ -66,14 +86,15 @@ type
     collapsed: HashSet[string]
     pool: SigilThreadPoolPtr
     worker: AgentProxy[GitDiffWorker]
-    highlightWorker: AgentProxy[GitDiffHighlightWorker]
+    sections: Table[string, GitDiffSection]
+    readingGit: bool
+    relayoutPending: bool
     generation: uint64
     loading: bool
     closed: bool
     control: SharedPtr[GitDiffControl]
     disclosureButtons: Table[string, GitDiffDisclosureButton]
     keyEquivalentHandler: GitDiffKeyEquivalentHandler
-    highlightCache: Table[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]
     xHighlightBuildCount: int
     xHighlightThreadId: int
 
@@ -185,6 +206,13 @@ proc readGitDiff(
           if patch.code == 0 or (isAddition and patch.code == 1):
             if patch.output.len > 0:
               var file = GitFileDiff(path: path, patch: patch.output)
+              file.syntaxPatch = patch.output
+              if not isAddition:
+                args[5] = "--unified=3"
+                let visible = runGit(result.rootPath, args)
+                if visible.code != 0:
+                  raise newException(IOError, "Could not read diff hunks for " & path)
+                file.patch = visible.output
               var inHunk = false
               for line in patch.output.splitLines():
                 if line.startsWith("@@ "):
@@ -204,7 +232,7 @@ proc readGitDiff(
     result.errorMessage = getCurrentExceptionMsg()
 
 proc readGitDiff*(rootPath: string): GitDiffSnapshot =
-  ## Read the saved working tree against HEAD with full-file context.
+  ## Read standard diff hunks plus full-file patches for syntax classification.
   readGitDiff(rootPath, newSharedPtr(GitDiffControl))
 
 proc markdownLabel(value: string): string =
@@ -324,17 +352,72 @@ proc diffHighlight(source, language: string): seq[nimkit.SyntaxTokenSpan] =
           changeKind: change,
         )
 
+iterator patchRows(
+    source: string
+): tuple[key: tuple[kind: char, oldLine, newLine: int], start, length: int] =
+  var oldLine, newLine, offset: int
+  var inHunk = false
+  for line in source.splitLines(keepEol = true):
+    if line.startsWith("@@ "):
+      let parts = strutils.splitWhitespace(line)
+      oldLine = parseInt(parts[1][1 .. ^1].split(',')[0])
+      newLine = parseInt(parts[2][1 .. ^1].split(',')[0])
+      inHunk = true
+    let kind =
+      if inHunk and line.len > 0 and line[0] in {' ', '+', '-'}:
+        line[0]
+      else:
+        '@'
+    let length = line.runeLen
+    yield ((kind, oldLine, newLine), offset, length)
+    if kind in {' ', '-'}:
+      inc oldLine
+    if kind in {' ', '+'}:
+      inc newLine
+    offset += length
+
+proc visibleSpans(
+    fullSource, visibleSource: string, spans: seq[nimkit.SyntaxTokenSpan]
+): seq[nimkit.SyntaxTokenSpan] =
+  var positions = initTable[tuple[kind: char, oldLine, newLine: int], int]()
+  for row in fullSource.patchRows():
+    if row.key.kind != '@':
+      positions[row.key] = row.start
+  for row in visibleSource.patchRows():
+    if row.key.kind == '@' or not positions.hasKey(row.key):
+      result.add nimkit.SyntaxTokenSpan(
+        range: nimkit.initTextRange(row.start, row.length),
+        tokenClass: nimkit.stcComment,
+      )
+    else:
+      let start = positions[row.key]
+      let stop = start + row.length
+      var low = 0
+      var high = spans.len
+      while low < high:
+        let middle = (low + high) div 2
+        if spans[middle].range.maxIndex <= start:
+          low = middle + 1
+        else:
+          high = middle
+      while low < spans.len and int(spans[low].range.location) < stop:
+        var span = spans[low]
+        let a = max(start, int(span.range.location))
+        let b = min(stop, span.range.maxIndex)
+        span.range = nimkit.initTextRange(row.start + a - start, b - a)
+        result.add span
+        inc low
+
 proc clearDisclosureButtons(panel: KosmoGitDiffPanel) =
   for button in panel.disclosureButtons.values:
     button.removeFromSuperview()
   panel.disclosureButtons.clear()
 
-proc hideDisclosureButtons(panel: KosmoGitDiffPanel) =
-  for button in panel.disclosureButtons.values:
-    button.hidden = true
+proc syncDisclosureButtons(panel: KosmoGitDiffPanel)
+proc scheduleSectionLayout(panel: KosmoGitDiffPanel)
+proc handleSharedKeys(panel: KosmoGitDiffPanel, event: nimkit.KeyEvent): bool
 
 proc renderDiff(panel: KosmoGitDiffPanel) =
-  panel.hideDisclosureButtons()
   var document = "# Git Diff\n\n"
   var additions, deletions, binaries: int
   for file in panel.snapshot.files:
@@ -347,7 +430,7 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
   if panel.snapshot.branch.len > 0:
     document.add "| Branch | " & panel.snapshot.branch.markdownLabel() & " |\n"
   document.add "| Location | " & panel.snapshot.rootPath.markdownLabel() & " |\n"
-  if not panel.loading and panel.snapshot.errorMessage.len == 0:
+  if not panel.readingGit and panel.snapshot.errorMessage.len == 0:
     document.add "| Changes | " & $panel.snapshot.files.len & " files · +" & $additions &
       " / −" & $deletions
     if binaries > 0:
@@ -356,21 +439,15 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
       (if panel.snapshot.hasHead: "HEAD" else: "empty tree") &
       " · includes untracked files |\n"
   document.add "\n"
-  if panel.loading:
+  if panel.readingGit:
     document.add "Loading changes…\n"
   elif panel.snapshot.errorMessage.len > 0:
     document.add "Could not load Git diff.\n\n" &
       panel.snapshot.errorMessage.fencedPatch()
   elif panel.snapshot.files.len == 0:
     document.add "No changes. Your working tree matches HEAD.\n"
-  else:
-    for index, file in panel.snapshot.files:
-      let collapsed = file.path in panel.collapsed
-      document.add "## [" & (if collapsed: "▸ " else: "▾ ") &
-        file.path.markdownLabel() & "](kosmo-diff:" & $index & ")\n\n"
-      if not collapsed:
-        document.add file.patch.fencedPatch(file.path.diffLanguage())
   panel.markdownView.markdown = document
+  panel.scheduleSectionLayout()
 
 proc toggleFile*(panel: KosmoGitDiffPanel, index: int) =
   ## Toggle a file section without rereading Git.
@@ -380,7 +457,11 @@ proc toggleFile*(panel: KosmoGitDiffPanel, index: int) =
       panel.collapsed.excl path
     else:
       panel.collapsed.incl path
-    panel.renderDiff()
+      let owner = panel.window()
+      if owner of nimkit.Window and
+          nimkit.Window(owner).firstResponder == panel.sections[path].textView:
+        discard nimkit.Window(owner).makeFirstResponder(panel.disclosureButtons[path])
+    panel.scheduleSectionLayout()
 
 proc isFileCollapsed*(panel: KosmoGitDiffPanel, index: int): bool =
   index in 0 ..< panel.snapshot.files.len and
@@ -443,7 +524,7 @@ protocol GitDiffDisclosureDrawing of nimkit.ViewDrawingProtocol:
 protocol GitDiffDisclosureFocus of nimkit.ResponderProtocol:
   method didBecomeFirstResponder(button: GitDiffDisclosureButton) =
     if not button.panel.isNil:
-      let scrollView = button.panel[].markdownView.scrollView()
+      let scrollView = button.panel[].scrollView
       if not scrollView.isNil:
         discard
           scrollView.scrollRectToVisible(button.frame().inset(nimkit.insets(-8.0'f32)))
@@ -517,18 +598,24 @@ proc newDisclosureButton(
       invocation.setResult(button.activateDisclosure())
     elif event.key == nimkit.keyTab and event.modifiers in [{}, {nimkit.kmShift}]:
       let owner = button.window()
-      if owner of nimkit.Window:
+      if owner of nimkit.Window and not button.panel.isNil:
         let window = nimkit.Window(owner)
-        invocation.setResult(
-          if nimkit.kmShift in event.modifiers:
-            window.selectKeyViewPrecedingView(button)
+        let panel = button.panel[]
+        let next = button.fileIndex + (if nimkit.kmShift in event.modifiers: -1 else: 1)
+        let target: nimkit.Responder =
+          if next < 0:
+            panel.markdownView.textView()
+          elif next >= panel.snapshot.files.len:
+            panel.refreshButton
           else:
-            window.selectKeyViewFollowingView(button)
-        )
+            panel.disclosureButtons[panel.snapshot.files[next].path]
+        invocation.setResult(window.makeFirstResponder(target))
       else:
         invocation.setResult(false)
     else:
-      invocation.setResult(false)
+      invocation.setResult(
+        not button.panel.isNil and button.panel[].handleSharedKeys(event)
+      )
   discard
     result.replaceMethod(nimkitSelectors.performKeyEquivalent(), keyEquivalentMethod)
   result.accessibilityIdentifier = "kosmo.gitDiff.file." & $fileIndex
@@ -537,101 +624,117 @@ proc newDisclosureButton(
     panel.snapshot.files[fileIndex].path
 
 proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
-  if panel.loading or panel.snapshot.errorMessage.len > 0:
+  if panel.closed or panel.scrollView.isNil:
     return
-  let
-    textView = panel.markdownView.textView()
-    storage = panel.markdownView.textStorage()
-  var linkRanges = newSeq[nimkit.TextRange](panel.snapshot.files.len)
-  for run in storage.attributeRuns():
-    let link = run.attributes.link
-    if link.startsWith("kosmo-diff:"):
-      try:
-        let fileIndex = parseInt(link[11 .. ^1])
-        if fileIndex in 0 ..< linkRanges.len:
-          let
-            runStart = int(run.range.location)
-            runStop = runStart + int(run.range.length)
-            currentStart = int(linkRanges[fileIndex].location)
-            currentStop = currentStart + int(linkRanges[fileIndex].length)
-          if linkRanges[fileIndex].length == 0:
-            linkRanges[fileIndex] = run.range
-          else:
-            linkRanges[fileIndex] = nimkit.initTextRange(
-              min(currentStart, runStart),
-              max(currentStop, runStop) - min(currentStart, runStart),
-            )
-      except ValueError:
-        discard
-  var retainedPaths = initHashSet[string]()
-  for fileIndex in 0 ..< panel.snapshot.files.len:
-    let
-      filePath = panel.snapshot.files[fileIndex].path
-      linkRange = linkRanges[fileIndex]
-    retainedPaths.incl filePath
-    if linkRange.length > 0:
-      var headingFrame = nimkit.rect(0, 0, 0, 0)
-      for selectionRect in textView.selectionRects(linkRange):
-        if not selectionRect.isEmpty:
-          headingFrame = headingFrame.union(selectionRect)
-      if not headingFrame.isEmpty:
-        let button =
-          if panel.disclosureButtons.hasKey(filePath):
-            panel.disclosureButtons[filePath]
-          else:
-            let created = panel.newDisclosureButton(
-              fileIndex, filePath, headingFrame.inset(nimkit.insets(-2.0'f32))
-            )
-            var
-              nextIndex = fileIndex + 1
-              nextButton: GitDiffDisclosureButton
-            while nextButton.isNil and nextIndex < panel.snapshot.files.len:
-              nextButton = panel.disclosureButtons.getOrDefault(
-                panel.snapshot.files[nextIndex].path
-              )
-              inc nextIndex
-            if nextButton.isNil:
-              textView.addSubview(created)
-            else:
-              textView.addSubview(
-                created, positioned = nimkit.svpBelow, relativeTo = nextButton
-              )
-            panel.disclosureButtons[filePath] = created
-            created
-        button.fileIndex = fileIndex
-        button.frame = nimkit.rect(
-          headingFrame.minX - 2,
-          headingFrame.minY - 2,
-          max(textView.bounds().size.width - 2 * headingFrame.minX + 4, 0),
-          max(headingFrame.size.height + 4, 28),
-        )
-        let file = panel.snapshot.files[fileIndex]
-        button.title =
-          filePath & (
-            if file.binary: "   binary"
-            else:
-              "   +" & $file.additions & " / −" & $file.deletions
+  let viewport = panel.scrollView.viewportSize()
+  let width = max(viewport.width - 48, 1)
+  let summary = panel.markdownView.textView().layoutManager().layoutSnapshot()
+  let summaryHeight =
+    max(summary.contentSize.height + panel.markdownView.textInsets().vertical, 80)
+  panel.markdownView.setFrameFromLayout(
+    nimkit.rect(0, 0, viewport.width, summaryHeight)
+  )
+  var y = summaryHeight + 16
+  var documentWidth = viewport.width
+  for index, file in panel.snapshot.files:
+    if panel.sections.hasKey(file.path):
+      let section = addr panel.sections[file.path]
+      let button = panel.disclosureButtons[file.path]
+      button.fileIndex = index
+      button.title =
+        file.path & (
+          if file.binary: "   binary"
+          else: "   +" & $file.additions & " / −" & $file.deletions
+        ) & (if section[].pending: "   preparing…" else: "")
+      button.setFrameFromLayout(nimkit.rect(24, y, width, 30))
+      button.hidden = false
+      button.needsDisplay = true
+      let collapsed = file.path in panel.collapsed
+      button.toolTip = (if collapsed: "Expand " else: "Collapse ") & file.path
+      y += 38
+      section[].textView.setHiddenFromLayout(collapsed)
+      if not collapsed:
+        if section[].ready and not section[].layoutStarted:
+          section[].textView.setFrameFromLayout(
+            nimkit.rect(34, y, max(width - 20, 1), 1)
           )
-        button.hidden = false
-        button.toolTip =
-          (if panel.isFileCollapsed(fileIndex): "Expand " else: "Collapse ") & filePath
-  var stalePaths: seq[string]
-  for filePath in panel.disclosureButtons.keys:
-    if filePath notin retainedPaths:
-      stalePaths.add filePath
-  for filePath in stalePaths:
-    panel.disclosureButtons[filePath].removeFromSuperview()
-    panel.disclosureButtons.del filePath
+          section[].textView.layoutManager().requestBackgroundLayout(
+            allowUncachedLayout = true
+          )
+          section[].layoutStarted = true
+        let snapshot = section[].textView.layoutManager().layoutSnapshot()
+        let size = nimkit.initSize(
+          max(snapshot.contentSize.width, snapshot.usedRect.maxX),
+          max(snapshot.contentSize.height, snapshot.usedRect.maxY),
+        )
+        let codeWidth = max(max(width - 20, size.width), 1)
+        section[].textView.setFrameFromLayout(
+          nimkit.rect(34, y, codeWidth, max(size.height, 24))
+        )
+        documentWidth = max(documentWidth, codeWidth + 68)
+        y += max(size.height, 24) + 24
+      else:
+        y += 8
+  panel.documentView.setFrameFromLayout(
+    nimkit.rect(0, 0, documentWidth, max(y, viewport.height))
+  )
+  panel.documentView.needsDisplay = true
+  panel.scrollView.tile()
+
+proc scheduleSectionLayout(panel: KosmoGitDiffPanel) =
+  if panel.closed or panel.relayoutPending:
+    return
+  panel.relayoutPending = true
+  let weakPanel = panel.unsafeWeakRef()
+  scheduleMainThreadWork(
+    proc(): bool =
+      if not weakPanel.isNil and not weakPanel[].closed:
+        weakPanel[].relayoutPending = false
+        weakPanel[].syncDisclosureButtons()
+  )
+
+protocol GitDiffTextDrawing of nimkit.ViewDrawingProtocol:
+  method drawUnderlay(view: GitDiffTextView, context: nimkit.DrawContext) =
+    view.drawTextViewUnderlayInViewport(context)
+
+  method draw(view: GitDiffTextView, context: nimkit.DrawContext) =
+    view.drawTextViewTextInViewport(context)
+
+  method drawOverlay(view: GitDiffTextView, context: nimkit.DrawContext) =
+    view.drawTextViewOverlay(context)
+
+protocol GitDiffDocumentDrawing of nimkit.ViewDrawingProtocol:
+  method draw(view: GitDiffDocumentView, context: nimkit.DrawContext) =
+    if view.panel.isNil:
+      return
+    let panel = view.panel[]
+    let visible = context.visibleRect()
+    discard context.addRenderRectangle(
+      context.renderRectFor(view.bounds()),
+      panel.markdownView.markdownStyle().backgroundColor,
+    )
+    let style = panel.markdownView.markdownStyle().codeBlockStyle
+    for path, section in panel.sections:
+      if path notin panel.collapsed:
+        let frame = section.textView.frame().inset(nimkit.insets(-8.0'f32, -10.0'f32))
+        if not frame.intersection(visible).isEmpty:
+          discard context.addRenderRectangle(
+            context.renderRectFor(frame),
+            style.backgroundColor,
+            style.outlineColor,
+            style.outlineWidth,
+            style.cornerRadius,
+          )
 
 proc layoutDisclosureButtons(
     panel: KosmoGitDiffPanel, snapshot: nimkit.TextLayoutSnapshot
 ) {.slot.} =
   discard snapshot
-  panel.syncDisclosureButtons()
+  panel.scheduleSectionLayout()
 
 proc markdownParsingFinished(panel: KosmoGitDiffPanel, workerThreadId: int) {.slot.} =
   discard workerThreadId
-  panel.syncDisclosureButtons()
+  panel.scheduleSectionLayout()
 
 proc disclosureButtonForFile*(panel: KosmoGitDiffPanel, fileIndex: int): nimkit.Button =
   ## Return the keyboard and accessibility disclosure control for a rendered file.
@@ -655,21 +758,27 @@ proc `keyEquivalentHandler=`*(
   ## Route application-specific key equivalents before Markdown navigation.
   panel.keyEquivalentHandler = handler
 
-protocol GitDiffLinks of nimkit.TextViewDelegateProtocol:
-  method tvClickedLink(
-      delegate: GitDiffLinkDelegate,
-      view: nimkit.TextView,
-      link: string,
-      range: nimkit.TextRange,
-  ): bool =
-    discard view
-    discard range
-    if link.startsWith("kosmo-diff:") and not delegate.panel.isNil:
-      try:
-        delegate.panel[].toggleFile(parseInt(link[11 .. ^1]))
-      except ValueError:
-        discard
-      return true
+proc handleSharedKeys(panel: KosmoGitDiffPanel, event: nimkit.KeyEvent): bool =
+  if not panel.keyEquivalentHandler.isNil and panel.keyEquivalentHandler(event):
+    return true
+  if event.key == nimkit.keyTab and event.modifiers == {}:
+    return panel.focusFirstDisclosure()
+  if event.modifiers == {}:
+    var delta: float32
+    case event.key
+    of nimkit.keyArrowDown:
+      delta = 32
+    of nimkit.keyArrowUp:
+      delta = -32
+    of nimkit.keyPageDown, nimkit.keySpace:
+      delta = panel.scrollView.viewportSize().height * 0.85
+    of nimkit.keyPageUp:
+      delta = -panel.scrollView.viewportSize().height * 0.85
+    else:
+      return false
+    let offset = panel.scrollView.contentOffset()
+    panel.scrollView.contentOffset = nimkit.initPoint(offset.x, offset.y + delta)
+    return true
 
 proc executeDiff(
   worker: AgentProxy[GitDiffWorker], root: string, control: SharedPtr[GitDiffControl]
@@ -683,7 +792,10 @@ proc executeDiff(
 
 proc highlightDiff(
   worker: AgentProxy[GitDiffHighlightWorker],
-  snapshot: GitDiffSnapshot,
+  path: string,
+  key: GitDiffHighlightKey,
+  visibleSource: string,
+  style: nimkit.MarkdownStyle,
   generation: uint64,
   control: SharedPtr[GitDiffControl],
 ) {.signal.}
@@ -694,80 +806,172 @@ proc highlightingFinished(
 
 proc highlightDiff(
     worker: GitDiffHighlightWorker,
-    snapshot: GitDiffSnapshot,
+    path: string,
+    key: GitDiffHighlightKey,
+    visibleSource: string,
+    style: nimkit.MarkdownStyle,
     generation: uint64,
     control: SharedPtr[GitDiffControl],
 ) {.slot.} =
   if control[].cancelled.load(moAcquire):
     return
-  var retained = initTable[GitDiffHighlightKey, seq[nimkit.SyntaxTokenSpan]]()
+  var prepared = GitDiffHighlightResult(
+    path: path, source: visibleSource, generation: generation, threadId: getThreadId()
+  )
   try:
-    for file in snapshot.files:
-      if control[].cancelled.load(moAcquire):
-        return
-      let
-        language = file.path.diffLanguage()
-        key = (
-          # Match Markdown's preprocessing before it calls the highlighter.
-          # Patch lines have a diff prefix, so leading-tab expansion is irrelevant.
-          source: file.patch
-            .replace("\r\n", "\n")
-            .replace("\r", "\n")
-            .replace("\u2424", " ")
-            .replace("\0", "\uFFFD")
-            .replace("&#0;", "&#XFFFD;")
-            .strip(chars = {'\n'}),
-          language: "diff" & (if language.len > 0: ":" & language
-          else: ""),
+    if not worker.cached or worker.key != key:
+      worker.spans = diffHighlight(key.source, key.language)
+      worker.key = key
+      worker.cached = true
+      prepared.built = true
+    var attributes = nimkit.defaultTextAttributes()
+    attributes.fontName = style.codeFontName
+    attributes.fontSize = style.bodyFontSize
+    attributes.foregroundColor = style.codeColor
+    attributes.paragraphStyle.lineBreakMode = nimkit.tlbmClipping
+    for span in visibleSpans(key.source, visibleSource, worker.spans):
+      var token = attributes
+      token.foregroundColor = style.syntaxTokenColors[span.tokenClass]
+      if span.changeKind != nimkit.sckUnchanged:
+        let tint = (
+          if span.changeKind == nimkit.sckAdded:
+            nimkit.color(0.20, 0.65, 0.35, 1)
+          else: nimkit.color(0.85, 0.25, 0.30, 1)
         )
-      if not retained.hasKey(key):
-        if worker.cache.hasKey(key):
-          retained[key] = worker.cache[key]
-        else:
-          retained[key] = diffHighlight(key.source, key.language)
-          inc worker.buildCount
-    worker.cache = retained
-    if not control[].cancelled.load(moAcquire):
-      var highlighted = GitDiffHighlightResult(
-        snapshot: snapshot,
-        cache: move retained,
-        generation: generation,
-        buildCount: worker.buildCount,
-        threadId: getThreadId(),
-      )
-      emit worker.highlightingFinished(newSharedPtr(unsafeIsolate(move highlighted)))
+        token.lineBackgroundColor = tint
+        token.lineBackgroundColor.a = 0.13
+        if span.changeMarker:
+          token.foregroundColor = tint
+      prepared.runs.add nimkit.TextAttributeRun(range: span.range, attributes: token)
   except CatchableError as error:
-    if not control[].cancelled.load(moAcquire):
-      var highlighted = GitDiffHighlightResult(
-        snapshot: snapshot,
-        generation: generation,
-        buildCount: worker.buildCount,
-        threadId: getThreadId(),
-      )
-      highlighted.snapshot.errorMessage = "Syntax highlighting failed: " & error.msg
-      emit worker.highlightingFinished(newSharedPtr(unsafeIsolate(move highlighted)))
+    prepared.errorMessage = error.msg
+  if not control[].cancelled.load(moAcquire):
+    emit worker.highlightingFinished(newSharedPtr(unsafeIsolate(move prepared)))
+
+proc updateLoading(panel: KosmoGitDiffPanel) =
+  panel.loading = panel.readingGit
+  for section in panel.sections.values:
+    panel.loading = panel.loading or section.pending
+  panel.refreshButton.enabled = not panel.loading
 
 proc applyHighlighting(
     panel: KosmoGitDiffPanel, highlighted: SharedPtr[GitDiffHighlightResult]
 ) {.slot.} =
-  if not panel.closed and highlighted[].generation == panel.generation:
-    panel.highlightCache = highlighted[].cache
-    panel.xHighlightBuildCount = highlighted[].buildCount
-    panel.xHighlightThreadId = highlighted[].threadId
-    panel.loading = false
-    panel.snapshot = highlighted[].snapshot
-    panel.refreshButton.enabled = true
-    panel.renderDiff()
+  if panel.closed or not panel.sections.hasKey(highlighted[].path):
+    return
+  var section = addr panel.sections[highlighted[].path]
+  if section[].generation != highlighted[].generation or not section[].pending:
+    return
+  var prepared = move highlighted[]
+  section[].pending = false
+  section[].ready = true
+  section[].layoutStarted = false
+  if prepared.built:
+    inc panel.xHighlightBuildCount
+  panel.xHighlightThreadId = prepared.threadId
+  if prepared.errorMessage.len > 0:
+    section[].textView.textStorage =
+      nimkit.newTextStorage("Could not prepare this diff: " & prepared.errorMessage)
+  else:
+    section[].textView.textStorage =
+      nimkit.newTextStorage(move prepared.source, move prepared.runs)
+  panel.updateLoading()
+  panel.scheduleSectionLayout()
+
+proc queueSection(panel: KosmoGitDiffPanel, path: string) =
+  inc panel.generation
+  panel.sections[path].generation = panel.generation
+  panel.sections[path].pending = true
+  let key = (
+    source: panel.sections[path].syntaxPatch.replace("\r\n", "\n"),
+    language: "diff:" & path.diffLanguage(),
+  )
+  emit panel.sections[path].worker.highlightDiff(
+    path,
+    key,
+    panel.sections[path].patch.replace("\r\n", "\n"),
+    panel.markdownView.markdownStyle(),
+    panel.generation,
+    panel.control,
+  )
 
 proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
-  if not panel.closed:
-    emit panel.highlightWorker.highlightDiff(snapshot, panel.generation, panel.control)
+  if panel.closed:
+    return
+  panel.readingGit = false
+  panel.snapshot = snapshot
+  var retained = initHashSet[string]()
+  for index, file in snapshot.files:
+    retained.incl file.path
+    if not panel.sections.hasKey(file.path):
+      var highlighter = GitDiffHighlightWorker()
+      let worker = highlighter.moveToThread(nimkitWorkerPool())
+      connectThreaded(worker, highlightDiff, worker, highlightDiff)
+      connectThreaded(
+        worker, highlightingFinished, panel, KosmoGitDiffPanel.applyHighlighting()
+      )
+      let code = GitDiffTextView()
+      code.initTextViewFields()
+      code.editable = false
+      code.selectable = true
+      code.propagatesIntrinsicContentSizeChanges = false
+      code.textContainer =
+        nimkit.initTextContainer(wraps = false, widthTracksTextView = true)
+      code.layoutManager().usesBackgroundLayout = true
+      code.accessibilityLabel = "Diff for " & file.path
+      discard code.withProtocol(GitDiffTextDrawing)
+      let weakPanel = panel.unsafeWeakRef()
+      let keys: nimkit.DynamicMethod = proc(
+          self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+      ) =
+        invocation.setResult(
+          not weakPanel.isNil and
+            weakPanel[].handleSharedKeys(invocation.argsAs(nimkit.KeyEvent))
+        )
+      discard code.replaceMethod(nimkitSelectors.performKeyEquivalent(), keys)
+      code.layoutManager().connect(
+        nimkit.layoutDidComplete, panel, layoutDisclosureButtons
+      )
+      panel.sections[file.path] = GitDiffSection(worker: worker, textView: code)
+      let button =
+        panel.newDisclosureButton(index, file.path, nimkit.rect(0, 0, 100, 30))
+      panel.disclosureButtons[file.path] = button
+      panel.documentView.addSubview(button)
+      panel.documentView.addSubview(code)
+      panel.collapsed.incl file.path
+      code.setHiddenFromLayout(true)
+    if panel.sections[file.path].patch != file.patch or
+        panel.sections[file.path].syntaxPatch != file.syntaxPatch or
+        not panel.sections[file.path].ready:
+      panel.sections[file.path].patch = file.patch
+      panel.sections[file.path].syntaxPatch = file.syntaxPatch
+      panel.queueSection(file.path)
+  var stale: seq[string]
+  for path in panel.sections.keys:
+    if path notin retained:
+      stale.add path
+  for path in stale:
+    let owner = panel.window()
+    if owner of nimkit.Window and
+        nimkit.Window(owner).firstResponder in [
+          nimkit.Responder(panel.sections[path].textView),
+          nimkit.Responder(panel.disclosureButtons[path]),
+        ]:
+      discard nimkit.Window(owner).makeFirstResponder(panel.markdownView.textView())
+    panel.sections[path].textView.removeFromSuperview()
+    panel.disclosureButtons[path].removeFromSuperview()
+    panel.sections.del path
+    panel.disclosureButtons.del path
+    panel.collapsed.excl path
+  panel.updateLoading()
+  panel.renderDiff()
 
 proc refresh*(panel: KosmoGitDiffPanel) =
   ## Refresh the current repository on a worker thread.
   if not panel.closed and not panel.loading:
     inc panel.generation
     panel.loading = true
+    panel.readingGit = true
     panel.refreshButton.enabled = false
     panel.renderDiff()
     emit panel.worker.executeDiff(panel.snapshot.rootPath, panel.control)
@@ -775,18 +979,29 @@ proc refresh*(panel: KosmoGitDiffPanel) =
 proc waitForDiff*(panel: KosmoGitDiffPanel, timeoutMilliseconds = 10000): bool =
   ## Deliver worker results until the diff finishes, for callers without an event loop.
   let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
-  while panel.loading and getMonoTime() < deadline:
+  while getMonoTime() < deadline:
     discard getCurrentSigilThread().pollAll(NonBlocking)
-    if panel.loading:
-      sleep(1)
-  not panel.loading
+    discard drainMainThreadWork()
+    var pending =
+      panel.loading or panel.relayoutPending or panel.markdownView.isMarkdownParsing() or
+      panel.markdownView.isMarkdownRendering() or
+      panel.markdownView.textView().layoutManager().isBackgroundLayoutPending()
+    for path, section in panel.sections:
+      if path notin panel.collapsed:
+        pending =
+          pending or section.textView.layoutManager().isBackgroundLayoutPending()
+    if not pending:
+      return true
+    sleep(1)
 
 proc close*(panel: KosmoGitDiffPanel) {.slot.} =
   if not panel.closed:
     panel.closed = true
     inc panel.generation
     panel.loading = false
-    panel.highlightCache.clear()
+    for section in panel.sections.values:
+      section.textView.removeFromSuperview()
+    panel.sections.clear()
     panel.clearDisclosureButtons()
     panel.control[].cancelled.store(true, moRelease)
     panel.pool.stop(immediate = true)
@@ -808,7 +1023,7 @@ protocol GitDiffLayout of nimkit.ViewLayoutProtocol:
     panel.refreshButton.setFrameFromLayout(nimkit.rect(inset, 8, refreshWidth, 28))
     panel.expandButton.setFrameFromLayout(nimkit.rect(expandX, 8, actionWidth, 28))
     panel.collapseButton.setFrameFromLayout(nimkit.rect(collapseX, 8, actionWidth, 28))
-    panel.markdownView.setFrameFromLayout(
+    panel.scrollView.setFrameFromLayout(
       nimkit.rect(0, 44, bounds.size.width, max(bounds.size.height - 44, 0))
     )
     panel.syncDisclosureButtons()
@@ -818,6 +1033,9 @@ proc `markdownStyle=`*(panel: KosmoGitDiffPanel, style: nimkit.MarkdownStyle) =
   var diffStyle = style
   diffStyle.headingFontSizes[1] = style.bodyFontSize
   panel.markdownView.markdownStyle = diffStyle
+  for path in panel.sections.keys:
+    panel.queueSection(path)
+  panel.updateLoading()
 
 proc highlightBuildCount*(panel: KosmoGitDiffPanel): int =
   ## Number of uncached diff highlighting passes, for performance diagnostics.
@@ -827,10 +1045,15 @@ proc highlightThreadId*(panel: KosmoGitDiffPanel): int =
   ## Thread that prepared the latest highlighted snapshot; zero before completion.
   panel.xHighlightThreadId
 
+proc textViewForFile*(panel: KosmoGitDiffPanel, index: int): nimkit.TextView =
+  ## Retained per-file text; collapsed sections keep their prepared storage.
+  if index in 0 ..< panel.snapshot.files.len:
+    return panel.sections[panel.snapshot.files[index].path].textView
+
 proc newKosmoGitDiffPanel*(
     rootPath: string, markdownStyle = nimkit.initMarkdownStyle()
 ): KosmoGitDiffPanel =
-  ## Construct a full-file diff reader with collapsible file headings.
+  ## Construct a syntax-highlighted hunk reader with initially collapsed files.
   startLocalThreadDefault()
   result = KosmoGitDiffPanel(
     markdownView: nimkit.newMarkdownView(),
@@ -843,24 +1066,29 @@ proc newKosmoGitDiffPanel*(
     control: newSharedPtr(GitDiffControl),
   )
   result.initViewFields()
+  let document = GitDiffDocumentView(panel: result.unsafeWeakRef())
+  document.initViewFields()
+  discard document.withProtocol(GitDiffDocumentDrawing)
+  result.documentView = document
+  result.scrollView = nimkit.newScrollView(documentView = document)
+  result.scrollView.hasVerticalScroller = true
+  result.scrollView.hasHorizontalScroller = true
+  document.addSubview(result.markdownView)
+  let summaryScroll = result.markdownView.scrollView()
+  summaryScroll.hasVerticalScroller = false
+  summaryScroll.hasHorizontalScroller = false
+  let forwardSummaryScroll: nimkit.DynamicMethod = proc(
+      self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+  ) =
+    invocation.setResult(true)
+  discard summaryScroll.replaceMethod(
+    nimkitSelectors.wantsForwardedScrollEvents(), forwardSummaryScroll
+  )
   result.clipsToBounds = true
   discard result.withProtocol(GitDiffLayout)
-  let linkDelegate = GitDiffLinkDelegate(panel: result.unsafeWeakRef())
-  linkDelegate.initResponder()
-  discard linkDelegate.withProtocol(GitDiffLinks)
-  result.markdownView.textView().delegate = linkDelegate
   result.markdownStyle = markdownStyle
   result.markdownView.toolTip = rootPath
   let weakPanel = result.unsafeWeakRef()
-  result.markdownView.syntaxHighlighter = proc(
-      source, language: string
-  ): seq[nimkit.SyntaxTokenSpan] =
-    if weakPanel.isNil or weakPanel[].closed:
-      return
-    let key = (source: source, language: language)
-    # The worker prepares every file before publishing the snapshot. Never
-    # fall back to Matter here: Markdown invokes this callback on the UI thread.
-    weakPanel[].highlightCache.getOrDefault(key)
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =
@@ -879,7 +1107,7 @@ proc newKosmoGitDiffPanel*(
         weakPanel[].keyEquivalentHandler(event):
       invocation.setResult(true)
     else:
-      invocation.setResult(markdownView.handleMarkdownNavigationKey(event))
+      invocation.setResult(not weakPanel.isNil and weakPanel[].handleSharedKeys(event))
   discard result.markdownView.replaceMethod(
     nimkitSelectors.performKeyEquivalent(), keyEquivalentMethod
   )
@@ -891,7 +1119,7 @@ proc newKosmoGitDiffPanel*(
   )
   for view in [
     nimkit.View(result.refreshButton), result.expandButton, result.collapseButton,
-    result.markdownView,
+    result.scrollView,
   ]:
     result.addSubview(view)
   let panel = result.unsafeWeakRef()
@@ -911,7 +1139,7 @@ proc newKosmoGitDiffPanel*(
     discard sender
     if not panel.isNil:
       panel[].collapsed.clear()
-      panel[].renderDiff()
+      panel[].scheduleSectionLayout()
   let collapseAction = nimkit.actionSelector("kosmo.collapseGitDiff")
   result.collapseButton.action = collapseAction
   result.collapseButton.target = nimkit.newActionTarget(collapseAction) do(
@@ -921,21 +1149,16 @@ proc newKosmoGitDiffPanel*(
     if not panel.isNil:
       for file in panel[].snapshot.files:
         panel[].collapsed.incl file.path
-      panel[].renderDiff()
+        let owner = panel[].window()
+        if owner of nimkit.Window and
+            nimkit.Window(owner).firstResponder == panel[].sections[file.path].textView:
+          discard nimkit.Window(owner).makeFirstResponder(
+              panel[].disclosureButtons[file.path]
+            )
+      panel[].scheduleSectionLayout()
   result.pool.start()
   var worker = GitDiffWorker()
   result.worker = worker.moveToThread(result.pool)
   connectThreaded(result.worker, executeDiff, result.worker, executeDiff)
   connectThreaded(result.worker, diffFinished, result, KosmoGitDiffPanel.applyDiff())
-  var highlighter = GitDiffHighlightWorker()
-  result.highlightWorker = highlighter.moveToThread(nimkitWorkerPool())
-  connectThreaded(
-    result.highlightWorker, highlightDiff, result.highlightWorker, highlightDiff
-  )
-  connectThreaded(
-    result.highlightWorker,
-    highlightingFinished,
-    result,
-    KosmoGitDiffPanel.applyHighlighting(),
-  )
   result.refresh()

@@ -175,6 +175,9 @@ complete window.
 Markdown parsing, built-in Matter highlighting, and text reflow share the same
 NimKit worker pool. Highlighted spans are reused when the theme changes. Custom
 syntax callbacks and parser configurations remain on the owning thread.
+Eligible background layouts also build their line-fragment snapshots on the
+worker; layout delegate callbacks and completion notifications stay on the UI
+thread. Fragment construction decodes text once and borrows the retained glyphs.
 
 Each applied document retains only its own decoded images. Markdown downsamples
 large sources to their maximum display size before publishing them to the static
@@ -712,12 +715,16 @@ remain nested beneath their folder hierarchy. Find in Files searches Git tracked
 untracked non-ignored files and skips binary or unsupported text encodings by default;
 both filters are configurable through `FileSearchOptions`.
 File → Show Git Diff (Command-Shift-G on macOS) opens a tab showing staged,
-unstaged, and untracked changes with full-file context. Matter highlights each file's
-language on NimKit's shared worker pool using the active Markdown syntax colors,
+unstaged, and untracked changes as standard three-line-context diff hunks. Matter
+uses full-file context to preserve language syntax, but only the displayed hunks
+are laid out. Each file is prepared independently on NimKit's shared worker pool
+using the active Markdown syntax colors,
 with subtle green/red backgrounds
 and markers for added/deleted lines. Unknown languages retain plain diff text.
-Click a file heading to collapse or expand
-its diff, or use Expand All and Collapse All. Refresh reloads the saved changes from
+Files start collapsed. Click a file heading to expand or collapse its cached diff,
+or use Expand All and Collapse All. File sections share one scrolling surface;
+expanding a file schedules its text layout without repeating syntax highlighting.
+Refresh preserves existing expansion states and reloads the saved changes from
 Git; unsaved editor buffers are not included.
 Holding Control while scrolling over an editor accelerates the wheel movement
 threefold.

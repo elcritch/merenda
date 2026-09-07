@@ -16,13 +16,25 @@ import ../foundation/backgroundworkers
 import ../themes
 import ./textstorage
 import ./texttypes
+import ./textlayouttypes
 
 type
   TextLayoutWorkerResult* = object
     generation*: uint64
     arrangement*: GlyphArrangement
+    snapshot*: TextLayoutSnapshot
+    snapshotThreadId*: int
+
+  TextLayoutSnapshotBuilder* = proc(
+    arrangement: var GlyphArrangement,
+    storage: TextStorage,
+    containers: seq[TextContainer],
+    style: TextStyle,
+    alignment: TextAlignment,
+  ): TextLayoutSnapshot {.nimcall.}
 
   TextLayoutWorker* = ref object of AgentActor
+    snapshotBuilder: TextLayoutSnapshotBuilder
 
 proc requestTextLayout*(
   worker: AgentProxy[TextLayoutWorker],
@@ -33,6 +45,8 @@ proc requestTextLayout*(
   style: TextStyle,
   alignment: TextAlignment,
   wraps: bool,
+  containers: seq[TextContainer],
+  buildSnapshot: bool,
 ) {.signal.}
 
 proc textLayoutFinished*(
@@ -48,6 +62,8 @@ proc requestTextLayout(
     style: TextStyle,
     alignment: TextAlignment,
     wraps: bool,
+    containers: seq[TextContainer],
+    buildSnapshot: bool,
 ) {.slot.} =
   var
     ownedSource = source
@@ -55,9 +71,16 @@ proc requestTextLayout(
     layoutResult = TextLayoutWorkerResult(generation: generation)
   let storage = newTextStorage(move ownedSource, move ownedRuns)
   layoutResult.arrangement = textLayout(layoutRect, storage, style, alignment, wraps)
+  if buildSnapshot and not worker.snapshotBuilder.isNil:
+    layoutResult.snapshot = worker.snapshotBuilder(
+      layoutResult.arrangement, storage, containers, style, alignment
+    )
+    layoutResult.snapshotThreadId = getThreadId()
   emit worker.textLayoutFinished(newSharedPtr(unsafeIsolate(move layoutResult)))
 
-proc newTextLayoutWorker*(): AgentProxy[TextLayoutWorker] =
-  var worker = TextLayoutWorker()
+proc newTextLayoutWorker*(
+    snapshotBuilder: TextLayoutSnapshotBuilder
+): AgentProxy[TextLayoutWorker] =
+  var worker = TextLayoutWorker(snapshotBuilder: snapshotBuilder)
   result = worker.moveToThread(nimkitWorkerPool())
   connectThreaded(result, requestTextLayout, result, requestTextLayout)

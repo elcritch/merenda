@@ -1,6 +1,6 @@
 ## Internal Sigils worker for moving complete nim-markdown ASTs between threads.
 
-import std/[isolation, lists, os, strutils, tables]
+import std/[isolation, lists, locks, os, strutils, tables]
 
 import markdown as markdownParser
 import sigils/[core, threads]
@@ -106,9 +106,24 @@ func builtInMarkdownDialect*(
   else:
     false
 
-proc parseMarkdownRoot(
+var
+  markdownParserLock: Lock
+  markdownParserDepth {.threadvar.}: int
+initLock(markdownParserLock)
+
+proc parseMarkdownRoot*(
     source: string, config: markdownParser.MarkdownConfig
 ): markdownParser.Document =
+  # nim-markdown's global skipParsing ref is not safe for concurrent ARC
+  # reference-count updates. Serialize parser entry, not highlighting/layout.
+  # Nested parses from a custom parser on this same thread remain supported.
+  if markdownParserDepth == 0:
+    acquire(markdownParserLock)
+  inc markdownParserDepth
+  defer:
+    dec markdownParserDepth
+    if markdownParserDepth == 0:
+      release(markdownParserLock)
   result = markdownParser.Document()
   discard markdownParser.markdown(source, config, result)
 

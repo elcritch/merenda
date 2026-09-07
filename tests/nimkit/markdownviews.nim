@@ -452,6 +452,22 @@ Setext two
     check imageLoaderThreadId == ownerThreadId
     check view.textStorage().stringValue().startsWith("Worker parse\n\nparagraph")
 
+  test "shared pool safely parses multiple Markdown views alongside synchronous callers":
+    var views: seq[MarkdownView]
+    for index in 0 ..< 8:
+      views.add newMarkdownView(
+        "# Document " & $index & "\n\n" &
+          "Paragraph with **bold**, `code`, and [link](https://example.com).\n\n".repeat(
+            100
+          )
+      )
+    for index, view in views:
+      let synchronous = markdownTextStorage("# Synchronous " & $index & "\n\n**text**")
+      check synchronous.stringValue().startsWith("Synchronous " & $index)
+      require view.waitForMarkdownParsing()
+      check view.markdownParseError() == ""
+      check view.textStorage().stringValue().startsWith("Document " & $index)
+
   test "applies large Markdown ASTs in resumable owner-thread chunks":
     var source: string
     for index in 0 ..< 256:

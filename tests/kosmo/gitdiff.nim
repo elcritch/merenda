@@ -19,6 +19,121 @@ proc firstResponderIs(window: Window, expected: Responder): bool =
   window.firstResponder == expected
 
 suite "Kosmo Git diff":
+  test "summary and expanded files share wheel scrolling":
+    let root = createTempDir("kosmo-diff-scroll-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "one.nim", "let value = 1\n".repeat(100))
+    writeFile(root / "two.nim", "let other = 2\n")
+    let window = newWindow("Git Diff Scrolling", frame = rect(0, 0, 700, 280))
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+      window.close()
+    panel.frame = rect(0, 0, 700, 280)
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    panel.layoutSubtreeIfNeeded()
+    check not panel.markdownView.scrollView().hasVerticalScroller()
+    check panel.markdownView.scrollView().maximumContentOffset().y == 0
+    require panel.scrollView.maximumContentOffset().y > 0
+    require window.scrollWheelAt(initPoint(100, 150), deltaY = -3)
+    check panel.scrollView.contentOffset().y > 0
+    check panel.markdownView.scrollView().contentOffset().y == 0
+    panel.toggleFile(0)
+    require panel.waitForDiff()
+    panel.layoutSubtreeIfNeeded()
+    let code = panel.textViewForFile(0)
+    panel.scrollView.contentOffset = initPoint(0, code.frame().origin.y)
+    let before = panel.scrollView.contentOffset().y
+    require window.scrollWheelAt(initPoint(100, 150), deltaY = -3)
+    check panel.scrollView.contentOffset().y > before
+    let after = panel.scrollView.contentOffset().y
+    require window.scrollWheelAt(initPoint(100, 150), deltaY = 2)
+    check panel.scrollView.contentOffset().y < after
+    let momentumStart = panel.scrollView.contentOffset().y
+    require window.dispatchScrollWheel(
+      ScrollEvent(location: initPoint(100, 150), deltaY: -2, momentumPhase: sepBegan)
+    )
+    require window.dispatchScrollWheel(
+      ScrollEvent(location: initPoint(100, 150), deltaY: -2, momentumPhase: sepChanged)
+    )
+    discard window.dispatchScrollWheel(
+      ScrollEvent(location: initPoint(100, 150), momentumPhase: sepEnded)
+    )
+    check panel.scrollView.contentOffset().y > momentumStart
+    panel.scrollView.contentOffset = initPoint(0, 0)
+    require window.scrollWheelAt(initPoint(100, 150), deltaY = -3)
+    check panel.scrollView.contentOffset().y > 0
+    check panel.markdownView.scrollView().contentOffset().y == 0
+
+  test "standard hunks retain syntax from omitted full-file context":
+    let root = createTempDir("kosmo-diff-hunks-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    var original = "#[\n"
+    for index in 0 ..< 60:
+      original.add "comment line " & $index & "\n"
+    original.add "]#\n"
+    writeFile(root / "source.nim", original)
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "base")
+    writeFile(
+      root / "source.nim",
+      original.replace("comment line 20\n", "changed twenty\n").replace(
+        "comment line 45\n", "changed forty five\n"
+      ),
+    )
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 700, 500)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    require panel.snapshot.files.len == 1
+    check panel.isFileCollapsed(0)
+    let storage = panel.textViewForFile(0).textStorage()
+    let shown = storage.stringValue()
+    check "comment line 0\n" notin shown
+    check " #[\n" notin shown
+    check "+changed twenty" in shown
+    check "+changed forty five" in shown
+    let at = shown[0 ..< shown.find("changed twenty")].runeLen
+    check storage.attributesAt(at).foregroundColor ==
+      panel.markdownView.markdownStyle().syntaxTokenColors[stcComment]
+    panel.toggleFile(0)
+    require panel.waitForDiff()
+    check panel.textViewForFile(0).layoutManager().snapshotBuildThreadId() !=
+      getThreadId()
+
+  test "file sections are retained independently and new files start collapsed":
+    let root = createTempDir("kosmo-diff-sections-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "one.nim", "let one = 1\n")
+    writeFile(root / "two.nim", "let two = 2\n")
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 700, 500)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    check panel.isFileCollapsed(0)
+    check panel.isFileCollapsed(1)
+    let retained = panel.textViewForFile(1).textStorage()
+    panel.toggleFile(0)
+    require panel.waitForDiff()
+    writeFile(root / "one.nim", "let one = 3\n")
+    panel.refresh()
+    require panel.waitForDiff()
+    check not panel.isFileCollapsed(0)
+    check panel.isFileCollapsed(1)
+    check panel.textViewForFile(1).textStorage() == retained
+    check panel.highlightBuildCount() == 3
   test "closing one diff does not stop shared Markdown and highlighting workers":
     let root = createTempDir("kosmo-diff-shared-workers-", "")
     defer:
@@ -51,29 +166,26 @@ suite "Kosmo Git diff":
     panel.frame = rect(0, 0, 600, 400)
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
-    require panel.markdownView.waitForMarkdownParsing()
     let initialCount = panel.highlightBuildCount()
     check initialCount == 2
     check panel.highlightThreadId() != 0
     check panel.highlightThreadId() != getThreadId()
     panel.toggleFile(0)
-    require panel.markdownView.waitForMarkdownParsing()
+    require panel.waitForDiff()
     panel.toggleFile(0)
-    require panel.markdownView.waitForMarkdownParsing()
+    require panel.waitForDiff()
     check panel.highlightBuildCount() == initialCount
     var style = panel.markdownView.markdownStyle()
     style.syntaxTokenColors[stcKeyword] = color(0.2, 0.7, 0.3, 1)
     panel.markdownStyle = style
-    require panel.markdownView.waitForMarkdownParsing()
+    require panel.waitForDiff()
     check panel.highlightBuildCount() == initialCount
     panel.refresh()
     require panel.waitForDiff()
-    require panel.markdownView.waitForMarkdownParsing()
     check panel.highlightBuildCount() == initialCount
     writeFile(root / "one.nim", "let one = 10\n")
     panel.refresh()
     require panel.waitForDiff()
-    require panel.markdownView.waitForMarkdownParsing()
     check panel.highlightBuildCount() == initialCount + 1
 
   test "Matter highlights both file versions independently beneath diff tints":
@@ -91,9 +203,8 @@ suite "Kosmo Git diff":
     panel.frame = rect(0, 0, 600, 500)
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
-    require panel.markdownView.waitForMarkdownParsing()
     let
-      storage = panel.markdownView.textStorage()
+      storage = panel.textViewForFile(0).textStorage()
       text = storage.stringValue()
       style = panel.markdownView.markdownStyle()
     for (needle, token) in [
@@ -107,7 +218,7 @@ suite "Kosmo Git diff":
       ]
       check storage.attributesAt(index).lineBackgroundColor.a > 0
 
-  test "full context includes staged unstaged untracked deleted and binary files":
+  test "standard hunks include staged unstaged untracked deleted and binary files":
     let root = createTempDir("kosmo-git-diff-", "")
     defer:
       removeDir(root)
@@ -134,7 +245,8 @@ suite "Kosmo Git diff":
       of "source.nim":
         check file.additions == 1
         check file.deletions == 1
-        check " first line" in file.patch
+        check " first line" notin file.patch
+        check " first line" in file.syntaxPatch
         check " last line" in file.patch
         check "-old value" in file.patch
         check "+new value" in file.patch
@@ -175,7 +287,7 @@ suite "Kosmo Git diff":
     git(root, "checkout", "--detach", "-q")
     check readGitDiff(root).branch.startsWith("Detached HEAD · ")
 
-  test "file heading links collapse and expand complete highlighted code blocks":
+  test "native file headings collapse and expand retained highlighted sections":
     let root = createTempDir("kosmo-git-diff-panel-", "")
     defer:
       removeDir(root)
@@ -193,27 +305,34 @@ suite "Kosmo Git diff":
     panel.layoutSubtreeIfNeeded()
     check panel.collapseButton.frame().maxX <= panel.bounds().maxX
     require panel.waitForDiff()
-    require panel.markdownView.waitForMarkdownParsing()
     check panel.snapshot.errorMessage == ""
     require panel.snapshot.files.len == 1
-    let rendered = panel.markdownView.textStorage().stringValue()
+    check panel.isFileCollapsed(0)
+    panel.toggleFile(0)
+    require panel.waitForDiff()
+    let rendered = panel.textViewForFile(0).textStorage().stringValue()
     check "-old text" in rendered
     check "+new text" in rendered
     let addedIndex = rendered[0 ..< rendered.find("+new text")].runeLen
     let deletedIndex = rendered[0 ..< rendered.find("-old text")].runeLen
-    let addedTint =
-      panel.markdownView.textStorage().attributesAt(addedIndex).lineBackgroundColor
-    let deletedTint =
-      panel.markdownView.textStorage().attributesAt(deletedIndex).lineBackgroundColor
+    let addedTint = panel
+      .textViewForFile(0)
+      .textStorage()
+      .attributesAt(addedIndex).lineBackgroundColor
+    let deletedTint = panel
+      .textViewForFile(0)
+      .textStorage()
+      .attributesAt(deletedIndex).lineBackgroundColor
     check addedTint.a > 0
     check addedTint.g > addedTint.r
     check deletedTint.a > 0
     check deletedTint.r > deletedTint.g
-    let headingIndex = rendered[0 ..< rendered.find("source.txt")].runeLen
-    check panel.markdownView.textView().openLinkAtIndex(headingIndex)
-    require panel.markdownView.waitForMarkdownParsing()
+    check panel.disclosureButtonForFile(0).accessibilityPerformAction(
+      AccessibilityActionPress
+    )
+    require panel.waitForDiff()
     check panel.isFileCollapsed(0)
-    check "new text" notin panel.markdownView.textStorage().stringValue()
+    check panel.textViewForFile(0).hidden
     let collapsedDisclosure = panel.disclosureButtonForFile(0)
     require not collapsedDisclosure.isNil
     check collapsedDisclosure.accessibilityRole() == arDisclosureButton
@@ -222,9 +341,9 @@ suite "Kosmo Git diff":
     check collapsedDisclosure.accessibilitySupportsAction(AccessibilityActionPress)
     check collapsedDisclosure.accessibilitySupportsAction(AccessibilityActionExpand)
     check collapsedDisclosure.accessibilityPerformAction(AccessibilityActionExpand)
-    require panel.markdownView.waitForMarkdownParsing()
+    require panel.waitForDiff()
     check not panel.isFileCollapsed(0)
-    check "+new text" in panel.markdownView.textStorage().stringValue()
+    check "+new text" in panel.textViewForFile(0).textStorage().stringValue()
     let expandedDisclosure = panel.disclosureButtonForFile(0)
     require not expandedDisclosure.isNil
     check expandedDisclosure.accessibilityValue() == "expanded"
@@ -232,14 +351,14 @@ suite "Kosmo Git diff":
     check expandedDisclosure.performKeyEquivalentInChain(
       KeyEvent(key: keySpace, keyCode: keySpace.ord)
     )
-    require panel.markdownView.waitForMarkdownParsing()
+    require panel.waitForDiff()
     check panel.isFileCollapsed(0)
     let keyboardDisclosure = panel.disclosureButtonForFile(0)
     require not keyboardDisclosure.isNil
     check keyboardDisclosure.performKeyEquivalentInChain(
       KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
     )
-    require panel.markdownView.waitForMarkdownParsing()
+    require panel.waitForDiff()
     check not panel.isFileCollapsed(0)
     writeFile(root / "source.txt", "refreshed text\n")
     panel.refresh()
@@ -413,24 +532,28 @@ suite "Kosmo Git diff":
     window.setContentView(panel)
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
-    require panel.markdownView.waitForMarkdownParsing()
     require panel.snapshot.files.len == 2
+    panel.toggleFile(0)
+    require panel.waitForDiff()
     let
       firstDisclosure = panel.disclosureButtonForFile(0)
       secondDisclosure = panel.disclosureButtonForFile(1)
       textView = panel.markdownView.textView()
     require not firstDisclosure.isNil
     require not secondDisclosure.isNil
-    check secondDisclosure.frame().intersection(textView.visibleRect()).isEmpty
+    check secondDisclosure
+    .frame()
+    .intersection(panel.documentView.visibleRect()).isEmpty
     window.recalculateKeyViewLoop()
     require window.makeFirstResponder(firstDisclosure)
     require window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
     check window.firstResponderIs(secondDisclosure)
-    check not secondDisclosure.frame().intersection(textView.visibleRect()).isEmpty
+    check not secondDisclosure
+    .frame()
+    .intersection(panel.documentView.visibleRect()).isEmpty
     writeFile(root / "aardvark.txt", "new first\n")
     panel.refresh()
     require panel.waitForDiff()
-    require panel.markdownView.waitForMarkdownParsing()
     check window.firstResponderIs(secondDisclosure)
     require panel.snapshot.files.len == 3
     check panel.snapshot.files[0].path == "aardvark.txt"
