@@ -176,6 +176,7 @@ suite "Kosmo":
           ],
       )
     )
+    tree.displayMode = FileTreeDisplayMode.AllFiles
     tree.expandItem(folder)
     tree.expandItem(githubFolder)
     tree.expandItem(ignoredFolder)

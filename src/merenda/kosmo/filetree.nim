@@ -107,6 +107,17 @@ proc hiddenPath(tree: KosmoFileTree, path: string): bool =
       break
     currentPath = parentPath
 
+proc ignoredPath(tree: KosmoFileTree, path: string): bool =
+  var currentPath = path
+  while currentPath.len > 0 and currentPath notin tree.xRootPaths:
+    if currentPath in tree.xGitFileStates and
+        tree.xGitFileStates[currentPath] == nimkit.gfsIgnored:
+      return true
+    let parentPath = currentPath.parentDir()
+    if parentPath == currentPath:
+      break
+    currentPath = parentPath
+
 proc treePathExists(path: string): bool =
   fileExists(path) or dirExists(path) or symlinkExists(path)
 
@@ -152,7 +163,7 @@ proc displayModeIncludes(tree: KosmoFileTree, path: string): bool =
   of FileTreeDisplayMode.AllFiles:
     path.treePathExists()
   of FileTreeDisplayMode.VisibleFiles:
-    path.treePathExists() and not tree.hiddenPath(path)
+    path.treePathExists() and not tree.hiddenPath(path) and not tree.ignoredPath(path)
   of FileTreeDisplayMode.SourceControlChanges:
     (path in tree.xGitFileStates and tree.xGitFileStates[path] != nimkit.gfsIgnored) or
       path in tree.xGitDescendantStates
@@ -233,8 +244,10 @@ proc rebuildMatchingPaths(tree: KosmoFileTree): seq[string] =
   else:
     tree.ensureSearchIndex()
     for entry in tree.xSearchEntries:
-      if (tree.xDisplayMode != FileTreeDisplayMode.VisibleFiles or not entry.hidden) and
-          entry.normalizedName.contains(needle):
+      if (
+        tree.xDisplayMode != FileTreeDisplayMode.VisibleFiles or
+        (not entry.hidden and not tree.ignoredPath(entry.path))
+      ) and entry.normalizedName.contains(needle):
         tree.includePathAndAncestors(entry.path, result)
 
 proc reloadFilteredTree(tree: KosmoFileTree, updateSearchExpansion = true) =
@@ -423,7 +436,7 @@ func displayMode*(tree: KosmoFileTree): FileTreeDisplayMode =
   tree.xDisplayMode
 
 proc `displayMode=`*(tree: KosmoFileTree, mode: FileTreeDisplayMode) =
-  ## Choose whether the tree shows every file, non-hidden files, or Git changes.
+  ## Choose whether the tree shows every file, non-hidden/non-ignored files, or Git changes.
   if tree.isNil or tree.xDisplayMode == mode:
     return
   tree.xDisplayMode = mode
@@ -814,7 +827,7 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
 proc newKosmoFileTree*(
     rootPath = "", frame: nimkit.Rect = nimkit.AutoRect
 ): KosmoFileTree =
-  result = KosmoFileTree()
+  result = KosmoFileTree(xDisplayMode: FileTreeDisplayMode.VisibleFiles)
   result.initOutlineViewFields(frame)
   result.xWorkspaceFiles = newWorkspaceFiles()
   result.xWorkspaceFiles.connect(workspaceFilesDidChange, result, applyWorkspaceFiles)
@@ -844,8 +857,7 @@ proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
   let
     filterField = nimkit.newTextField()
     scopeMenu = nimkit.newMenu("Files Shown")
-    scopeButton =
-      nimkit.newPopupMenuButton(FileTreeDisplayMode.AllFiles.title(), scopeMenu)
+    scopeButton = nimkit.newPopupMenuButton(tree.displayMode().title(), scopeMenu)
     closeFilterButton = nimkit.newButton("×")
     promptLabel = KosmoFileFilterPromptLabel()
   promptLabel.initLabelFields("Filter Files")

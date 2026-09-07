@@ -34,9 +34,7 @@ suite "Kosmo shared workspace inventory":
     writeFile(root / "build" / "ignored.nim", "discard\n")
     writeFile(root / ".hidden" / "secret.nim", "discard\n")
     require runGitCommand(root, ["init", "-q"]).exitCode == 0
-    let frontend = newKosmoApplication(
-      newApplication("Shared inventory"), root, monitorsGitStatus = false
-    )
+    let frontend = newKosmoApplication(newApplication("Shared inventory"), root)
     defer:
       frontend.close()
     let files = frontend.fileTree.workspaceFiles
@@ -44,6 +42,11 @@ suite "Kosmo shared workspace inventory":
     require files.waitForFiles()
     check "main.nim" in frontend.quickOpenPanel.projectFiles()
     check "build/ignored.nim" notin frontend.quickOpenPanel.projectFiles()
+    require frontend.fileTree.waitForGitStatus()
+    check frontend.fileTree.displayMode == FileTreeDisplayMode.VisibleFiles
+    check frontend.fileTree.rowForItem(root / "build") < 0
+    check frontend.fileTree.rowForItem(root / ".hidden") < 0
+    frontend.fileTree.displayMode = FileTreeDisplayMode.AllFiles
     frontend.fileTree.expandItem(root / "build")
     check frontend.fileTree.rowForItem(root / "build" / "ignored.nim") >= 0
     frontend.fileTree.expandItem(root / ".hidden")
@@ -51,6 +54,7 @@ suite "Kosmo shared workspace inventory":
     frontend.fileTree.displayMode = FileTreeDisplayMode.VisibleFiles
     check frontend.fileTree.rowForItem(root / "main.nim") >= 0
     check frontend.fileTree.rowForItem(root / ".hidden") < 0
+    check frontend.fileTree.rowForItem(root / "build") < 0
     writeFile(root / "new.nim", "discard\n")
     files.refresh()
     require files.waitForFiles()

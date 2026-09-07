@@ -801,9 +801,11 @@ visible when switching between Files and Find.
 
 The lower sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
-double-clicking promotes it to a permanent editor tab. Git-ignored files and
-dot-directories remain visible in the file tree with muted gray text. The Files tab's
-bottom popup switches among All Files, Visible Files, and Changed Files.
+double-clicking promotes it to a permanent editor tab. The file tree defaults to Visible Files, which hides dotfiles, dot-directories,
+and Git-ignored files and directories, including in filename searches. Git ignore
+filtering updates when repository status refreshes. The Files tab's bottom popup
+switches among All Files, Visible Files, and Changed Files. All Files reveals hidden
+and ignored entries, with ignored files and dot-directories shown in muted gray text.
 With the file tree focused, Shift-F selects Visible Files, Shift-A selects All Files,
 and Shift-G selects Changed Files. Shift-H toggles between All Files and Visible Files
 (from Changed Files, it switches to All Files). These keys remain normal typing keys
