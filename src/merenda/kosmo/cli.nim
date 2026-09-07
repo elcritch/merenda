@@ -1,6 +1,6 @@
 ## Command-line handling and detached launching for standalone Kosmo.
 
-import std/os
+import std/[os, sets]
 
 when defined(windows):
   import std/[widestrs, winlean]
@@ -14,7 +14,7 @@ const
   KosmoVersionFlag* = "--version"
   KosmoUsage* =
     """
-Usage: kosmo [--bg] [--version] [--] [file-or-folder]
+Usage: kosmo [--bg] [--version] [--] [file-or-folder ...]
 
 Options:
   --bg        Start Kosmo detached from the invoking shell.
@@ -29,6 +29,12 @@ type KosmoStandaloneCommandLine* = object ## Parsed standalone command-line opti
   version*: bool
   arguments*: seq[string]
   filePath*: string
+  paths*: seq[string]
+
+type KosmoCliPathResolution* = object
+  ## Absolute paths ready for local opening or transport to another process.
+  paths*: seq[string]
+  errors*: seq[string]
 
 proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneCommandLine =
   ## Parse standalone Kosmo options while retaining every non-option argument.
@@ -41,6 +47,7 @@ proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneComman
       if not hasFilePath:
         result.filePath = argument
         hasFilePath = true
+      result.paths.add argument
     else:
       case argument
       of "--":
@@ -57,6 +64,30 @@ proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneComman
         if not hasFilePath:
           result.filePath = argument
           hasFilePath = true
+        result.paths.add argument
+
+proc resolveKosmoCliPaths*(
+    paths: openArray[string], workingDirectory = getCurrentDir()
+): KosmoCliPathResolution =
+  ## Resolve CLI paths against the invoking shell. Existing directories and
+  ## regular files are accepted; a missing file is accepted when its parent
+  ## directory exists. Missing directory-shaped paths are rejected.
+  var seen = initHashSet[string]()
+  for original in paths:
+    if original.len == 0:
+      result.errors.add "Kosmo cannot open an empty path"
+      continue
+    let path = normalizedPath(absolutePath(original, workingDirectory))
+    let directoryShaped = original[^1] in {DirSep, AltSep}
+    if dirExists(path) or fileExists(path) or
+        (not directoryShaped and dirExists(path.parentDir())):
+      if path notin seen:
+        seen.incl path
+        result.paths.add path
+    elif directoryShaped:
+      result.errors.add "Kosmo project folder does not exist: " & path
+    else:
+      result.errors.add "Kosmo cannot open path: " & path
 
 when defined(windows):
   const CreateNewProcessGroup = 0x00000200'i32

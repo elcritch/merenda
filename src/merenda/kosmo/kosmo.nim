@@ -18,15 +18,15 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
-    cli, config, contextpanel, filesearchpanel, filetree, gitdiff, moe, moehighlighting,
-    panedocuments, quickopen, searchbar, settings, shortcuts, terminalsearch,
-    workspacefiles,
+    cli, cliopen, config, contextpanel, filesearchpanel, filetree, gitdiff, moe,
+    moehighlighting, panedocuments, quickopen, searchbar, settings, shortcuts,
+    terminalsearch, workspacefiles,
   ]
 import moepkg/celina_backend as celina
 
 export
-  config, contextpanel, filesearchpanel, filetree, gitdiff, moe, moehighlighting,
-  panedocuments, quickopen, settings, shortcuts, terminalsearch
+  cliopen, config, contextpanel, filesearchpanel, filetree, gitdiff, moe,
+  moehighlighting, panedocuments, quickopen, settings, shortcuts, terminalsearch
 
 func nimblePackageVersion(manifest: string): string =
   for line in manifest.splitLines():
@@ -292,6 +292,7 @@ type
     configPath: string
     config: KosmoConfig
     frontends: seq[KosmoApplication]
+    cliServer: KosmoCliOpenServer
 
   KosmoWindowLifecycle = ref object of nimkit.Responder
     frontend: WeakRef[KosmoApplication]
@@ -323,6 +324,7 @@ type
     xTerminalLinksEnabled: bool
     xWindowManager: WeakRef[KosmoWindowManager]
     xWindowLifecycle: KosmoWindowLifecycle
+    xCliWindowId: string
     xHasFileBrowser: bool
     xClosed: bool
 
@@ -3658,10 +3660,20 @@ proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
       for group in controller.groups:
         group.editorView.refresh()
 
+proc setTerminalEnvironment(
+    options: var nimkit.TerminexSpawnOptions, name, value: string
+) =
+  for variable in options.environment.mitems:
+    if variable.name == name:
+      variable.value = value
+      return
+  options.environment.add nimkit.initTerminalEnvironmentVariable(name, value)
+
 proc newTerminalDocument(
     controller: KosmoDockController, options: nimkit.TerminexSpawnOptions
 ): KosmoPaneDocument =
   let terminalView = newKosmoTerminalView()
+  var resolvedOptions = options
   if not controller.frontend.isNil:
     let frontend = controller.frontend[]
     terminalView.optionAsMeta = frontend.xTerminalOptionAsMeta
@@ -3669,8 +3681,17 @@ proc newTerminalDocument(
     terminalView.connect(
       nimkit.terminalHyperlinkWasActivated, frontend.xWindowLifecycle, openTerminalLink
     )
+    if not frontend.xWindowManager.isNil:
+      let manager = frontend.xWindowManager[]
+      if not manager.cliServer.isNil:
+        resolvedOptions.setTerminalEnvironment(
+          KosmoCliEndpointEnvironment, manager.cliServer.endpointPath()
+        )
+        resolvedOptions.setTerminalEnvironment(
+          KosmoCliWindowEnvironment, frontend.xCliWindowId
+        )
   try:
-    terminalView.start(options)
+    terminalView.start(resolvedOptions)
   except nimkit.TerminexSessionError:
     terminalView.close()
     raise
@@ -3689,7 +3710,7 @@ proc newTerminalDocument(
     onDuplicate = proc(document: KosmoPaneDocument): KosmoPaneDocument =
       discard document
       if not weakController.isNil:
-        result = weakController[].newTerminalDocument(options)
+        result = weakController[].newTerminalDocument(resolvedOptions)
     ,
   )
 
@@ -4343,6 +4364,11 @@ func hasFileBrowser*(frontend: KosmoApplication): bool =
   ## Return whether this window displays a project file browser.
   not frontend.isNil and frontend.xHasFileBrowser
 
+func cliWindowId*(frontend: KosmoApplication): string =
+  ## Return the private routing identifier inherited by terminals from this window.
+  if not frontend.isNil:
+    result = frontend.xCliWindowId
+
 func projectWindowTitle(rootPaths: openArray[string]): string =
   result = "Kosmo"
   if rootPaths.len > 0:
@@ -4637,6 +4663,7 @@ proc newKosmoApplication*(
     xTerminalLinksEnabled: true,
     xWindowManager: manager.unsafeWeakRef(),
     xHasFileBrowser: hasFileBrowser,
+    xCliWindowId: randomIdentifier(),
   )
   let
     controller = KosmoDockController(
@@ -4921,7 +4948,7 @@ proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
       return not frontend.xWindowManager[].openProject(path).isNil
     let root = normalizedPath(absolutePath(path))
     result = root in frontend.fileTree.rootPaths or frontend.fileTree.addRootPath(root)
-  elif fileExists(path):
+  elif fileExists(path) or (not dirExists(path) and dirExists(path.parentDir())):
     let view = frontend.dockController.activeEditorView()
     if not view.isNil:
       result = view.openFile(path)
@@ -4929,6 +4956,59 @@ proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
     frontend.updateProjectWindowTitle()
     if not frontend.searchPanel.isNil:
       frontend.searchPanel.rootPaths = frontend.fileTree.rootPaths
+
+proc frontendForCliRequest(
+    manager: KosmoWindowManager, originWindow: string
+): KosmoApplication =
+  if originWindow.len > 0:
+    for frontend in manager.frontends:
+      if not frontend.xClosed and frontend.xCliWindowId == originWindow:
+        return frontend
+  manager.activeFrontend()
+
+proc openCliRequest(
+    manager: KosmoWindowManager, request: KosmoCliOpenRequest
+): KosmoCliOpenResponse =
+  if manager.isNil:
+    result.errors.add "Kosmo has no active window manager"
+    return
+  var
+    folders: seq[string]
+    files: seq[string]
+  for path in request.paths:
+    if dirExists(path):
+      folders.add path
+    elif fileExists(path) or dirExists(path.parentDir()):
+      files.add path
+    else:
+      result.errors.add "Kosmo cannot open path: " & path
+
+  var destination: KosmoApplication
+  if folders.len > 0:
+    destination = manager.openProject(folders[0])
+    if destination.isNil:
+      result.errors.add "Kosmo could not open project folder: " & folders[0]
+    else:
+      for index in 1 ..< folders.len:
+        if not destination.openPath(folders[index]):
+          result.errors.add "Kosmo could not add project folder: " & folders[index]
+  elif files.len > 0:
+    destination = manager.frontendForCliRequest(request.originWindow)
+    if destination.isNil:
+      destination = newKosmoApplication(manager, hasFileBrowser = false)
+
+  if not destination.isNil:
+    for path in files:
+      if not destination.openPath(path):
+        result.errors.add "Kosmo could not open file: " & path
+    destination.show()
+  result.delivered = true
+
+when defined(merendaTests):
+  proc openCliRequestForTesting*(
+      manager: KosmoWindowManager, request: KosmoCliOpenRequest
+  ): KosmoCliOpenResponse =
+    manager.openCliRequest(request)
 
 proc openDocument*(
     frontend: KosmoApplication, document: KosmoPaneDocument
@@ -5014,7 +5094,7 @@ proc close*(manager: KosmoWindowManager) =
   for frontend in frontends:
     frontend.close()
 
-proc runKosmo*(filePath = "") =
+proc runKosmo*(paths: openArray[string]) =
   ## Run Kosmo as a standalone NimKit text-editor application.
   let
     app = nimkit.sharedApplication()
@@ -5025,13 +5105,39 @@ proc runKosmo*(filePath = "") =
       keyBindingsPath = if fileExists(keyBindingsPath): keyBindingsPath else: "",
       configPath = configPath,
     )
-  let frontend = newKosmoApplication(
-    manager, filePath, hasFileBrowser = filePath.len == 0 or not fileExists(filePath)
-  )
   defer:
     manager.close()
-  frontend.show()
-  frontend.application.run()
+  try:
+    manager.cliServer = startKosmoCliOpenServer(
+      proc(request: KosmoCliOpenRequest): KosmoCliOpenResponse =
+        manager.openCliRequest(request)
+    )
+  except CatchableError as error:
+    stderr.writeLine("Kosmo CLI routing is unavailable: " & error.msg)
+  defer:
+    if not manager.cliServer.isNil:
+      manager.cliServer.close()
+
+  if paths.len == 0:
+    newKosmoApplication(manager).show()
+  else:
+    let response = manager.openCliRequest(
+      KosmoCliOpenRequest(requestId: randomIdentifier(), paths: @paths)
+    )
+    for message in response.errors:
+      stderr.writeLine(message)
+  app.run()
+
+proc runKosmo*(filePath = "") =
+  ## Compatibility overload for callers opening one initial path.
+  if filePath.len > 0:
+    runKosmo([filePath])
+  else:
+    runKosmo(newSeq[string]())
+
+proc reportCliErrors(errors: openArray[string]) =
+  for message in errors:
+    stderr.writeLine(message)
 
 when isMainModule:
   let commandLine = parseKosmoCommandLine(commandLineParams())
@@ -5039,7 +5145,21 @@ when isMainModule:
     echo KosmoUsage
   elif commandLine.version:
     echo KosmoVersion
-  elif commandLine.background:
-    launchKosmoInBackground(commandLine.arguments)
   else:
-    runKosmo(commandLine.filePath)
+    let paths = resolveKosmoCliPaths(commandLine.paths)
+    if paths.errors.len > 0:
+      reportCliErrors(paths.errors)
+      quit(1)
+    if paths.paths.len > 0:
+      let response = openInRunningKosmo(paths.paths)
+      if response.delivered:
+        reportCliErrors(response.errors)
+        quit(if response.errors.len == 0: 0 else: 1)
+    if commandLine.background:
+      var arguments: seq[string]
+      if paths.paths.len > 0:
+        arguments.add "--"
+        arguments.add paths.paths
+      launchKosmoInBackground(arguments)
+    else:
+      runKosmo(paths.paths)

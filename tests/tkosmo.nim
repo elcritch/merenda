@@ -4,6 +4,7 @@ import std/[strutils, unicode, unittest]
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import kosmo/cli
+import kosmo/cliopen
 import kosmo/config
 import kosmo/contextpanel
 import kosmo/editorsearch
