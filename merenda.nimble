@@ -28,7 +28,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:fox0430/moe#18f2e9d"
+  requires "gh:elcritch/moe#fix/git-refresh-lifecycle"
   # requires "gh:elcritch/moe#integration-improvements"
 
 feature "references":
