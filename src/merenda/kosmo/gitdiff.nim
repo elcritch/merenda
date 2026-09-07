@@ -1,24 +1,16 @@
 ## Standard Git hunks in retained native sections with full-context syntax highlighting.
 
-import
-  std/[
-    atomics, isolation, monotimes, os, osproc, sets, streams, strutils, tables, times,
-    unicode,
-  ]
+import std/[atomics, isolation, monotimes, os, sets, strutils, tables, times, unicode]
 import sigils/[core, threadProxies, threads]
 import threading/smartptrs
-when defined(posix):
-  import std/posix
 import ../nimkit as nimkit
 import ../nimkit/foundation/backgroundworkers
+import ../nimkit/foundation/gitprocesses
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/mainthreadwork
 
 const KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
-const
-  GitProcessStartAttempts = 20
-  GitProcessStartRetryMilliseconds = 25
 
 type
   GitDiffHighlightKey = tuple[source, language: string]
@@ -105,62 +97,18 @@ proc newGitDiffControl(): SharedPtr[GitDiffControl] =
   result = newSharedPtr(GitDiffControl)
   result[].cancelled.store(false, moRelaxed)
 
-proc executeGitOnce(
-    root: string, args: openArray[string], control: SharedPtr[GitDiffControl]
-): tuple[output: string, code: int] =
-  if control[].cancelled.load(moAcquire):
-    raise newException(IOError, "Git diff cancelled")
-  var arguments = @["--no-optional-locks", "--literal-pathspecs", "-C", root]
-  arguments.add args
-  let process =
-    startProcess("git", args = arguments, options = {poUsePath, poStdErrToStdOut})
-  defer:
-    if process.peekExitCode() == -1:
-      process.kill()
-      discard process.waitForExit()
-    process.close()
-  var buffer: array[16384, char]
-  while true:
-    if control[].cancelled.load(moAcquire):
-      raise newException(IOError, "Git diff cancelled")
-    when defined(posix):
-      var ready = TPollfd(fd: process.outputHandle(), events: POLLIN)
-      if posix.poll(addr ready, 1, 25) > 0:
-        let count = posix.read(process.outputHandle(), addr buffer[0], buffer.len)
-        if count == 0:
-          break
-        if count < 0:
-          raise newException(IOError, "Could not read Git output")
-        let offset = result.output.len
-        result.output.setLen(offset + count)
-        copyMem(addr result.output[offset], addr buffer[0], count)
-    else:
-      if process.hasData():
-        let count = process.outputStream().readData(addr buffer[0], buffer.len)
-        if count > 0:
-          let offset = result.output.len
-          result.output.setLen(offset + count)
-          copyMem(addr result.output[offset], addr buffer[0], count)
-      elif process.peekExitCode() != -1:
-        break
-      else:
-        sleep(25)
-  while process.peekExitCode() == -1:
-    if control[].cancelled.load(moAcquire):
-      raise newException(IOError, "Git diff cancelled")
-    sleep(25)
-  result.code = process.peekExitCode()
-
 proc executeGit(
     root: string, args: openArray[string], control: SharedPtr[GitDiffControl]
 ): tuple[output: string, code: int] =
-  for attempt in 0 ..< GitProcessStartAttempts:
-    try:
-      return executeGitOnce(root, args, control)
-    except CatchableError:
-      if control[].cancelled.load(moAcquire) or attempt + 1 == GitProcessStartAttempts:
-        raise
-      sleep(GitProcessStartRetryMilliseconds)
+  var arguments = @["--literal-pathspecs"]
+  arguments.add args
+  let command = runGitCommand(
+    root,
+    arguments,
+    cancelled = proc(): bool =
+      control[].cancelled.load(moAcquire),
+  )
+  (command.output, command.exitCode)
 
 proc readGitDiff(
     rootPath: string, control: SharedPtr[GitDiffControl]
@@ -211,11 +159,10 @@ proc readGitDiff(
         if path.len > 0 and path notin seen:
           seen.incl path
           let isAddition = not hasHead or path in untrackedPaths
-          var args =
-            @[
-              "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames",
-              "--unified=2147483647",
-            ]
+          var args = @[
+            "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames",
+            "--unified=2147483647",
+          ]
           if isAddition:
             args.add ["--no-index", "--", "/dev/null", path]
           else:

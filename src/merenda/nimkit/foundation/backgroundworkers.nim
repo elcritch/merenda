@@ -3,12 +3,18 @@
 
 import std/exitprocs
 import sigils/threads
+import sigils/threadChronos
 
 var
   backgroundPool {.threadvar.}: SigilThreadPoolPtr
+  backgroundTimers {.threadvar.}: SigilChronosThreadPtr
   exitRegistered {.threadvar.}: bool
 
 proc stopBackgroundPool() {.noconv.} =
+  if not backgroundTimers.isNil:
+    backgroundTimers.stop(immediate = true)
+    backgroundTimers.join()
+    backgroundTimers = nil
   if not backgroundPool.isNil:
     backgroundPool.stop(immediate = true)
     backgroundPool.join()
@@ -24,3 +30,11 @@ proc nimkitWorkerPool*(): SigilThreadPoolPtr =
     addExitProc(stopBackgroundPool)
     exitRegistered = true
   backgroundPool
+
+proc nimkitTimerThread*(): SigilChronosThreadPtr =
+  ## Borrow the application-lifetime timer thread; clients cancel their own timers.
+  discard nimkitWorkerPool()
+  if backgroundTimers.isNil:
+    backgroundTimers = newSigilChronosThread()
+    backgroundTimers.start()
+  backgroundTimers

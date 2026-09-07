@@ -1,4 +1,4 @@
-version       = "0.17.2"
+version       = "0.17.3"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -22,12 +22,13 @@ requires "gh:elcritch/terminex#fix/bounded-pty-shutdown"
 requires "https://github.com/Araq/iconbundler"
 requires "libbacktrace"
 requires "zippy >= 0.10.20"
+requires "dmon >= 0.5.0"
 
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:fox0430/moe#18f2e9d"
+  requires "gh:elcritch/moe#fix/git-refresh-lifecycle"
   # requires "gh:elcritch/moe#integration-improvements"
 
 feature "references":
