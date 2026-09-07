@@ -355,13 +355,10 @@ proc drawStepperSegment(
     states = stepper.stepperSegmentStates(part)
     style = context.appearance.resolveButtonStyle(stepper.stepperStyleContext(states))
     rect = stepper.partRect(part)
-    textStyle = TextStyle(
-      color: style.text.color,
-      insets: insets(0.0),
-      fontName: style.text.fontName,
-      fontSize: max(style.text.fontSize, min(22.0'f32, rect.size.height - 6.0'f32)),
-      language: style.text.language,
-    )
+  var textStyle = style.text
+  textStyle.insets = insets(0.0)
+  textStyle.fontSize =
+    max(style.text.fontSize, min(22.0'f32, rect.size.height - 6.0'f32))
   context.addText(rect, label, textStyle, alignment = taCenter)
 
 protocol DefaultStepperDrawing of ViewDrawingProtocol:

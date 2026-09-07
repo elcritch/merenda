@@ -1,7 +1,8 @@
 import std/[algorithm, locks, os, strutils, tables]
-from std/unicode import runes
+from std/unicode import runes, `$`
 
 import sigils/core
+import pixie as fontRaster
 from figdraw/common/typefaceinfos import
   TypefaceInfo, parseTypefaceInfo, supportedCodepointCount
 import figdraw/extras/systemfonts as figSystemFonts
@@ -25,8 +26,7 @@ type
     style*: string
     language*: string
     languages*: seq[string]
-    path*: string
-    faceIndex*: int
+    typeface*: figSystemFonts.SystemTypeface
     fontName*: string
     identifier*: string
     weightClass*: uint16
@@ -39,6 +39,8 @@ type
     variable*: bool
     supportsPreviewText*: bool
     metadataLoaded*: bool
+    previewCodepointsSupported: bool
+    previewDisplayabilityChecked: bool
 
   FontCatalogEntry* = object
     family*: string
@@ -317,6 +319,56 @@ func supportsFontCatalogPreview*(
     if info.supportedCodepointCount(codepoint, codepoint) == 0:
       return false
   true
+
+proc isTypefaceCollection(path: string): bool =
+  if path.splitFile().ext.toLowerAscii() in [".ttc", ".otc"]:
+    return true
+  var fontFile: File
+  try:
+    if not fontFile.open(path, fmRead):
+      return
+    defer:
+      fontFile.close()
+    var magic: array[4, char]
+    result =
+      fontFile.readBuffer(magic[0].addr, magic.len) == magic.len and
+      magic == ['t', 't', 'c', 'f']
+  except IOError:
+    discard
+
+proc canRenderFontCatalogPreview*(face: FontCatalogFace): bool =
+  ## Checks the exact face with the outline renderer, without font fallbacks.
+  ## Parsed fonts and probe images stay local to the calling worker.
+  try:
+    var typeface: fontRaster.Typeface
+    if face.typeface.file.path.isTypefaceCollection():
+      let faces = fontRaster.readTypefaces(face.typeface.file.path)
+      if face.typeface.file.faceIndex notin 0 ..< faces.len:
+        return
+      typeface = faces[face.typeface.file.faceIndex]
+    else:
+      if face.typeface.file.faceIndex != 0:
+        return
+      typeface = fontRaster.readTypeface(face.typeface.file.path)
+    let font = fontRaster.newFont(typeface)
+    font.size = 24
+    for rune in FontCatalogPreviewText.runes:
+      if rune.int == ord(' '):
+        continue
+      if not typeface.hasGlyph(rune):
+        return
+      let probe = fontRaster.newImage(96, 96)
+      probe.fillText(font, $rune)
+      var visible = false
+      for pixel in probe.data:
+        if pixel.a > 0:
+          visible = true
+          break
+      if not visible:
+        return
+    result = true
+  except CatchableError:
+    discard
 
 func normalizedFontText(text: string): string =
   result = newStringOfCap(text.len)
@@ -622,8 +674,30 @@ func fontStyleSortRank(face: FontCatalogFace): int =
   else:
     face.style.fontStyleSortRank()
 
+func path*(face: FontCatalogFace): string {.inline.} =
+  ## Returns the local file path for this catalog face.
+  face.typeface.file.path
+
+func faceIndex*(face: FontCatalogFace): int {.inline.} =
+  ## Returns the physical face index for this catalog face.
+  face.typeface.file.faceIndex
+
+func displayabilityChecked*(face: FontCatalogFace): bool {.inline.} =
+  ## Returns whether visible preview rendering has been checked for this face.
+  face.previewDisplayabilityChecked
+
+func fontCatalogFaceIdentifier(typeface: figSystemFonts.SystemTypeface): string =
+  result = "system-font-face:" & typeface.file.path
+  if typeface.file.faceIndex > 0 or typeface.variations.len > 0:
+    result.add ":" & $typeface.file.faceIndex
+  for variation in typeface.variations:
+    result.add ":" & variation.tag & "=" & $cast[uint32](variation.value)
+
 func initFontCatalogFace*(
-    style, language, path: string, identifier = "", faceIndex = 0, fontName = ""
+    style, language: string,
+    typeface: figSystemFonts.SystemTypeface,
+    identifier = "",
+    fontName = "",
 ): FontCatalogFace =
   let
     normalizedStyle = style.normalizedFontStyle()
@@ -632,22 +706,34 @@ func initFontCatalogFace*(
     style: normalizedStyle,
     language: if language.len > 0: language else: DefaultFontLanguage,
     languages: @[if language.len > 0: language else: DefaultFontLanguage],
-    path: path,
-    faceIndex: faceIndex,
-    fontName: if fontName.len > 0: fontName else: path,
+    typeface: typeface,
+    fontName: if fontName.len > 0: fontName else: typeface.file.path,
     identifier:
       if identifier.len > 0:
         identifier
-      elif faceIndex > 0:
-        "system-font-face:" & path & ":" & $faceIndex
       else:
-        "system-font-face:" & path,
+        typeface.fontCatalogFaceIdentifier(),
     weightClass: normalizedStyle.inferredFontWeight(),
     widthClass: 5,
     bold: styleKey.contains("bold") or styleKey in ["heavy", "black"],
     italic: styleKey.contains("italic"),
     oblique: styleKey.contains("oblique"),
     regular: styleKey in ["regular", "normal", "roman", "book"],
+    variable: typeface.variations.len > 0,
+  )
+
+func initFontCatalogFace*(
+    style, language, path: string,
+    identifier = "",
+    faceIndex: Natural = 0,
+    fontName = "",
+): FontCatalogFace =
+  initFontCatalogFace(
+    style,
+    language,
+    figSystemFonts.initSystemTypeface(path, faceIndex),
+    identifier,
+    fontName,
   )
 
 func initFontCatalogEntry*(
@@ -761,7 +847,11 @@ proc parsedFontFace(path: string): ParsedFontFace =
     result.face.regular = info.regular
     result.face.monospace = info.monospace
     result.face.variable = info.variationAxes.len > 0
-    result.face.supportsPreviewText = info.supportsFontCatalogPreview()
+    result.face.previewCodepointsSupported = info.supportsFontCatalogPreview()
+    result.face.supportsPreviewText =
+      result.face.previewCodepointsSupported and
+      result.face.canRenderFontCatalogPreview()
+    result.face.previewDisplayabilityChecked = true
     result.searchText.add " " & info.fontMetadataSearchText()
 
 func preferredFontName(info: figSystemFonts.SystemTypefaceInfo): string =
@@ -770,11 +860,11 @@ func preferredFontName(info: figSystemFonts.SystemTypefaceInfo): string =
   elif info.fullName.len > 0:
     info.fullName
   else:
-    info.file.path
+    info.typeface.file.path
 
 proc parsedSystemFontFace(info: figSystemFonts.SystemTypefaceInfo): ParsedFontFace =
   let
-    fallbackName = info.file.path.splitFontFamilyAndStyle()
+    fallbackName = info.typeface.file.path.splitFontFamilyAndStyle()
     rawFamily = if info.family.len > 0: info.family else: fallbackName.family
     style =
       if info.subfamily.len > 0:
@@ -785,13 +875,9 @@ proc parsedSystemFontFace(info: figSystemFonts.SystemTypefaceInfo): ParsedFontFa
   result = ParsedFontFace(
     rawFamily: rawFamily,
     candidateFamily: family.baseFamily,
-    searchText: info.file.path.splitFile().name.humanizedFontStem(),
+    searchText: info.typeface.file.path.splitFile().name.humanizedFontStem(),
     face: initFontCatalogFace(
-      style,
-      family.language,
-      info.file.path,
-      faceIndex = info.file.faceIndex,
-      fontName = info.preferredFontName(),
+      style, family.language, info.typeface, fontName = info.preferredFontName()
     ),
   )
   for name in [info.family, info.subfamily, info.fullName, info.postScriptName]:
@@ -807,7 +893,7 @@ proc loadFontCatalogFaceMetadata*(face: var FontCatalogFace) =
     return
 
   let info = metadata.info
-  if info.subfamily.len > 0:
+  if info.subfamily.len > 0 and face.typeface.variations.len == 0:
     face.style = info.subfamily.normalizedFontStyle()
   face.languages = info.fontCatalogLanguages(info.family)
   face.language = face.languages.primaryFontLanguage()
@@ -818,8 +904,35 @@ proc loadFontCatalogFaceMetadata*(face: var FontCatalogFace) =
   face.oblique = info.oblique
   face.regular = info.regular
   face.monospace = info.monospace
-  face.variable = info.variationAxes.len > 0
-  face.supportsPreviewText = info.supportsFontCatalogPreview()
+  face.variable = info.variationAxes.len > 0 or face.typeface.variations.len > 0
+  for variation in face.typeface.variations:
+    case variation.tag
+    of "wght":
+      face.weightClass = uint16(clamp(variation.value.int, 1, 1000))
+      face.bold = variation.value >= 700.0'f32
+    of "ital":
+      face.italic = variation.value != 0.0'f32
+    of "slnt":
+      face.oblique = variation.value != 0.0'f32
+    else:
+      discard
+  if face.typeface.variations.len > 0:
+    face.regular =
+      face.style.normalizedFontText() in ["regular", "normal", "roman", "book"] and
+      not face.bold and not face.italic and not face.oblique
+  face.previewCodepointsSupported = info.supportsFontCatalogPreview()
+
+proc checkFontCatalogFaceDisplayability*(face: var FontCatalogFace) =
+  ## Checks whether the exact face can visibly render the catalog preview text.
+  ## This is deliberately separate from metadata loading because rasterizing every
+  ## installed face is too expensive unless displayability filtering is requested.
+  if face.previewDisplayabilityChecked:
+    return
+  if not face.metadataLoaded:
+    face.loadFontCatalogFaceMetadata()
+  face.previewDisplayabilityChecked = true
+  face.supportsPreviewText =
+    face.previewCodepointsSupported and face.canRenderFontCatalogPreview()
 
 func copyFontCatalogEntry(entry: FontCatalogEntry): FontCatalogEntry =
   result = entry

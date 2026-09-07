@@ -24,6 +24,7 @@ import ../themes/themecore as themeCore
 import ../text/textstorage
 import ../text/texttypes
 import ../foundation/types as nimkitTypes
+import ../foundation/assetcache
 
 when defined(useNativeDynlib):
   export
@@ -168,11 +169,16 @@ proc defaultTypefaceRequest(
     result.fallbackNames.add MonospaceTypefaceFallbackNames
 
 proc defaultTypefaceCacheKey(
-    request: tuple[name: string, fallbackNames: seq[string]],
-    fontFace: SystemTypefaceFile,
+    request: tuple[name: string, fallbackNames: seq[string]], fontFace: SystemTypeface
 ): string =
-  if fontFace.path.len > 0:
-    return "face\0" & fontFace.path & "\0" & $fontFace.faceIndex
+  if fontFace.file.path.len > 0:
+    result = "face\0" & fontFace.file.path & "\0" & $fontFace.file.faceIndex
+    for variation in fontFace.variations:
+      result.add '\0'
+      result.add variation.tag
+      result.add '='
+      result.add $cast[uint32](variation.value)
+    return
   result = request.name
   for fallbackName in request.fallbackNames:
     result.add '\0'
@@ -187,7 +193,8 @@ proc defaultFont(
     language = defaultLanguageTag(),
     slant = fsUpright,
     role = frUI,
-    fontFace = SystemTypefaceFile(),
+    fontFace = SystemTypeface(),
+    italicFontFace = SystemTypeface(),
 ): FontRef =
   let
     resolvedLanguage =
@@ -199,18 +206,54 @@ proc defaultFont(
     exactFontFace =
       if slant == fsUpright:
         fontFace
+      elif italicFontFace.file.path.len > 0:
+        italicFontFace
       else:
-        SystemTypefaceFile()
+        fontFace
     cacheKey = request.defaultTypefaceCacheKey(exactFontFace)
   if defaultTypefaceIds.len == 0:
     defaultTypefaceIds = initTable[string, TypefaceId]()
   if cacheKey notin defaultTypefaceIds:
-    defaultTypefaceIds[cacheKey] =
-      if exactFontFace.path.len > 0:
-        loadTypeface(exactFontFace)
+    var
+      loadedFace = exactFontFace
+      fallbackName = request.name
+      fallbackNames = request.fallbackNames
+    let zipName = if loadedFace.file.path.len > 0: loadedFace.file.path else: fontName
+    if zipName.toLowerAscii().endsWith(".zip"):
+      let zipPath =
+        if fileExists(zipName):
+          zipName
+        else:
+          figDataDir() / zipName
+      let installed = installZipAssetFile(zipPath, "nimkit")
+      if installed.succeeded():
+        loadedFace.file.path = installed.path
       else:
-        loadTypeface(request.name, request.fallbackNames)
+        loadedFace = SystemTypeface()
+        var candidates: seq[string]
+        for candidate in @[request.name] & request.fallbackNames:
+          if not candidate.toLowerAscii().endsWith(".zip"):
+            candidates.add candidate
+        if candidates.len > 0:
+          fallbackName = candidates[0]
+          fallbackNames =
+            if candidates.len > 1:
+              candidates[1 ..^ 1]
+            else:
+              @[]
+    defaultTypefaceIds[cacheKey] =
+      if loadedFace.file.path.len > 0:
+        loadedFace.fontWithSize(size).typefaceId
+      else:
+        loadTypeface(fallbackName, fallbackNames)
   var font = defaultTypefaceIds[cacheKey].fontWithSize(size)
+  if exactFontFace.file.path.len > 0:
+    font.variations =
+      newSeqOfCap[typeof(font.variations[0])](exactFontFace.variations.len)
+    for variation in exactFontFace.variations:
+      font.variations.add typeof(font.variations[0])(
+        tag: variation.tag, value: variation.value
+      )
   when AutomaticFontFallbackEnabled:
     font.language = $resolvedLanguage
   fontRef(font)
@@ -218,7 +261,7 @@ proc defaultFont(
 proc textFont*(style: TextStyle, role = frUI): FontRef =
   defaultFont(
     style.fontSize, style.fontName, style.language, style.fontSlant, role,
-    style.fontFace,
+    style.fontFace, style.italicFontFace,
   )
 
 proc fontFor(style: TextStyle): FontRef =
@@ -552,6 +595,7 @@ proc textLayoutImpl(
       style.language,
       style.fontSlant,
       fontFace = style.fontFace,
+      italicFontFace = style.italicFontFace,
     ).font
     font.underline = attributes.hasUnderline
     font.strikethrough = attributes.hasStrikethrough
@@ -564,12 +608,26 @@ proc textLayoutImpl(
         language =
           if attributes.language.isAutomatic: style.language else: attributes.language
         fontFace =
-          if fontName == style.fontName:
+          if attributes.fontFace.file.path.len > 0:
+            attributes.fontFace
+          elif fontName == style.fontName:
             style.fontFace
           else:
-            SystemTypefaceFile()
+            SystemTypeface()
+        italicFontFace =
+          if attributes.fontFace.file.path.len > 0:
+            attributes.fontFace
+          elif fontName == style.fontName:
+            style.italicFontFace
+          else:
+            SystemTypeface()
       var font = defaultFont(
-        attributes.fontSize, fontName, language, style.fontSlant, fontFace = fontFace
+        attributes.fontSize,
+        fontName,
+        language,
+        style.fontSlant,
+        fontFace = fontFace,
+        italicFontFace = italicFontFace,
       ).font
       font.underline = attributes.hasUnderline
       font.strikethrough = attributes.hasStrikethrough

@@ -4,3 +4,5 @@
   "figdraw.vulkanReadback"
 --define:
   "nimkitIgnoreEnvOverrides"
+--define:
+  "merendaTests"

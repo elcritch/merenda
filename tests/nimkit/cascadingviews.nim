@@ -544,6 +544,43 @@ suite "NimKit CascadingView":
 
     check view.tableViewForColumn(1).frame.size.width == view.columnWidth()
 
+  test "columns can fit the viewport instead of scrolling horizontally":
+    let
+      root = newView(frame = rect(0, 0, 360, 120))
+      view = newCascadingView(frame = rect(0, 0, 360, 120))
+
+    view.columnWidth = 170.0
+    view.minColumnWidth = 120.0
+    view.fitsColumnsToWidth = true
+    var items =
+      @[
+        cascadeItem("root", "A long root category"),
+        cascadeItem("child", "A long font family", parentIdentifier = "root"),
+        cascadeItem(
+          "grandchild", "A long font face", parentIdentifier = "child", leaf = true
+        ),
+      ]
+    for index in 0 ..< 20:
+      items.add cascadeItem(
+        "family-" & $index,
+        "Additional family " & $index,
+        parentIdentifier = "root",
+        leaf = true,
+      )
+    view.cascadingItems = items
+    root.addSubview(view)
+    view.selectItem(0, 0)
+    view.selectItem(1, 0)
+    discard buildRenders(root)
+
+    check view.columnCount == 3
+    check view.scrollView().maximumContentOffset().x == 0.0'f32
+    check view.tableViewForColumn(2).frame().maxX <= view.bounds().maxX
+    for column in 0 ..< view.columnCount:
+      let tableView = view.tableViewForColumn(column)
+      check tableView.columnAt(0).width() == tableView.scrollView().viewportSize().width
+      check tableView.scrollView().maximumContentOffset().x == 0.0'f32
+
   test "horizontal scroll moves column chrome and row text together":
     let
       root = newView(frame = rect(0, 0, 300, 120))

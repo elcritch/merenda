@@ -1,10 +1,41 @@
-import std/[os, sequtils, sets, strutils, unittest]
+import std/[os, sequtils, sets, strutils, tempfiles, unittest]
 
 from figdraw/common/typefaceinfos import TypefaceCodepointRange, TypefaceInfo
-from figdraw/common/typefaces import getTypefaceInfo, loadTypeface
+from figdraw/common/fonttypes import fontVariation
+from figdraw/common/typefaces import fontWithSize, getTypefaceInfo
+from figdraw/extras/systemfonttypes import SystemTypeface, initSystemTypeface
 import merenda/nimkit
 
 suite "NimKit font pickers":
+  test "preview rendering rejects blank outlines and invalid exact faces":
+    let root = createTempDir("merenda-font-preview-", "")
+    defer:
+      removeDir(root)
+    let path = root / "blank.svg"
+    var glyphs: string
+    for ch in "The quick brown fox jumps over the lazy dog.":
+      glyphs.add "<glyph unicode=\"" & $ch & "\" horiz-adv-x=\"600\" d=\"\"/>"
+    writeFile(
+      path,
+      "<svg><defs><font id=\"Blank\" horiz-adv-x=\"600\">" &
+        "<font-face font-family=\"Blank\" units-per-em=\"1000\" ascent=\"800\" descent=\"-200\"/>" &
+        glyphs & "</font></defs></svg>",
+    )
+    check not initFontCatalogFace("Regular", DefaultFontLanguage, path)
+    .canRenderFontCatalogPreview()
+    writeFile(
+      path, readFile(path).replace("d=\"\"", "d=\"M0 0 L500 0 L500 700 L0 700 Z\"")
+    )
+    check initFontCatalogFace("Regular", DefaultFontLanguage, path)
+    .canRenderFontCatalogPreview()
+    let validPath = getCurrentDir() / "data/Ubuntu.ttf"
+    check initFontCatalogFace("Regular", DefaultFontLanguage, validPath)
+    .canRenderFontCatalogPreview()
+    check not initFontCatalogFace(
+      "Regular", DefaultFontLanguage, validPath, faceIndex = 3
+    )
+    .canRenderFontCatalogPreview()
+
   test "font preview coverage requires every displayed character":
     let
       basicLatin = TypefaceInfo(
@@ -182,6 +213,18 @@ suite "NimKit font pickers":
     check face.weightClass == 400
     check face.regular
     check DefaultFontLanguage in face.languages
+    check not face.displayabilityChecked
+
+  test "font catalog defers displayability checks until requested":
+    let fontPath = getCurrentDir() / "data/Ubuntu.ttf"
+    var face = initFontCatalogFace("Regular", DefaultFontLanguage, fontPath)
+    face.loadFontCatalogFaceMetadata()
+
+    check not face.displayabilityChecked
+    check not face.supportsPreviewText
+    face.checkFontCatalogFaceDisplayability()
+    check face.displayabilityChecked
+    check face.supportsPreviewText
 
   test "font catalog metadata loads the selected collection face":
     let collectionPath = getCurrentDir() / "deps/pixie/tests/fonts/PTSans.ttc"
@@ -194,6 +237,8 @@ suite "NimKit font pickers":
         fontName = "PTSans-Italic",
       )
       face.loadFontCatalogFaceMetadata()
+      check not face.displayabilityChecked
+      face.checkFontCatalogFaceDisplayability()
 
       check face.metadataLoaded
       check face.faceIndex == 1
@@ -202,20 +247,32 @@ suite "NimKit font pickers":
       check face.italic
       check face.style == "Italic"
 
+      let extensionlessRoot = createTempDir("merenda-font-collection-", "")
+      defer:
+        removeDir(extensionlessRoot)
+      let extensionlessPath = extensionlessRoot / "PTSans"
+      copyFile(collectionPath, extensionlessPath)
+      check initFontCatalogFace(
+        "Italic", DefaultFontLanguage, extensionlessPath, faceIndex = 1
+      )
+      .canRenderFontCatalogPreview()
+
   test "system font catalog consumes native face identities":
     let catalog = buildSystemFontCatalog()
-    var identities = initHashSet[(string, int)]()
+    var
+      identities = initHashSet[SystemTypeface]()
+      identifiers = initHashSet[string]()
     check catalog.len > 0
     for entry in catalog:
       for face in entry.faces:
-        let identity = (face.path, face.faceIndex)
         check face.path.fileExists()
         check face.faceIndex >= 0
         check face.fontName.len > 0
-        if face.faceIndex > 0:
-          check face.identifier.endsWith(":" & $face.faceIndex)
-        check identity notin identities
-        identities.incl(identity)
+        check face.identifier.len > 0
+        check face.typeface notin identities
+        check face.identifier notin identifiers
+        identities.incl(face.typeface)
+        identifiers.incl(face.identifier)
     check identities.len > 0
 
   when defined(macosx):
@@ -226,11 +283,32 @@ suite "NimKit font pickers":
           for face in entry.faces:
             if face.faceIndex <= 0 or face.fontName == face.path:
               continue
-            let typefaceId = loadTypeface(face.fontName)
-            check getTypefaceInfo(typefaceId).faceIndex == face.faceIndex
+            let font = face.typeface.fontWithSize(14)
+            check getTypefaceInfo(font.typefaceId).faceIndex == face.faceIndex
             loadedCollectionFace = true
             break selected
       check loadedCollectionFace
+
+  test "font catalog identities distinguish variable font instances":
+    let
+      fontPath = getCurrentDir() / "../figdraw/examples/fonts/NotoNaskhArabic-wght.ttf"
+      regularTypeface =
+        initSystemTypeface(fontPath, variations = [fontVariation("wght", 400.0'f32)])
+      semiboldTypeface =
+        initSystemTypeface(fontPath, variations = [fontVariation("wght", 650.0'f32)])
+      regularFace = initFontCatalogFace("Regular", DefaultFontLanguage, regularTypeface)
+    var semiboldFace =
+      initFontCatalogFace("SemiBold", DefaultFontLanguage, semiboldTypeface)
+
+    check regularFace.typeface != semiboldFace.typeface
+    check regularFace.identifier != semiboldFace.identifier
+    if fileExists(fontPath):
+      semiboldFace.loadFontCatalogFaceMetadata()
+      check semiboldFace.metadataLoaded
+      check semiboldFace.style == "SemiBold"
+      check semiboldFace.weightClass == 650
+      check not semiboldFace.regular
+      check semiboldFace.variable
 
   test "loaded Arabic metadata classifies the face without its filename":
     let fontPath =

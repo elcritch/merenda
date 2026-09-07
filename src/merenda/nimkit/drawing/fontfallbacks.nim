@@ -218,10 +218,11 @@ proc findFallbackTypefaceFile(
           FallbackTypefaceCandidate(file: SystemTypefaceFile(path: path, faceIndex: 0))
         )
 
-    let systemTypeface = findSystemTypefaceFile([fontName])
+    let systemTypeface = findSystemTypeface([fontName])
     if systemTypeface.isSome:
-      return
-        some(FallbackTypefaceCandidate(file: systemTypeface.get(), exactFace: true))
+      return some(
+        FallbackTypefaceCandidate(file: systemTypeface.get().file, exactFace: true)
+      )
 
     # Retain FigDraw's legacy aliases when no native face-name match exists.
     let path = findSystemFontFile([fontName])
