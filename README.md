@@ -785,7 +785,12 @@ with an installed theme taking precedence over a bundled theme of the same
 name. Choosing one applies it immediately to all Kosmo editor panes. Reopening
 Settings refreshes the list, so new themes appear without restarting Kosmo.
 
-Kosmo's sidebar uses compact SVG tabs for the lazy file tree and regular-expression
+Kosmo's sidebar keeps a Context panel above the Files and Find area. It starts
+at roughly twelve compact text lines high; drag the horizontal divider to resize
+it. Context currently provides an empty area for future contextual content and
+remains visible when switching between Files and Find.
+
+The lower sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
 double-clicking promotes it to a permanent editor tab. Git-ignored files and
 dot-directories remain visible in the file tree with muted gray text. The Files tab's

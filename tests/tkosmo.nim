@@ -5,6 +5,7 @@ import merenda/nimkit
 import merenda/kosmo/kosmo
 import kosmo/cli
 import kosmo/config
+import kosmo/contextpanel
 import kosmo/editorsearch
 import kosmo/filetreeinteractions
 import kosmo/gitdiff
