@@ -19,11 +19,14 @@ repository directory. Open buffers outside the browser roots get watch coverage
 without adding their folders to the file inventory.
 
 A 100 ms timer delivers queued notifications on the GUI thread; it does not scan
-the filesystem or periodically invoke Git. Notifications refresh the shared file
-inventory and Git decorations and invalidate Moe's event-driven Git cache. Idle
+the filesystem itself. Notifications refresh the shared file inventory and Git
+decorations and invalidate Moe's event-driven Git cache. As protection against
+missed notifications, a quiet workspace requests the same full refresh two minutes
+after its last successfully accepted inventory snapshot. The deadline includes
+time spent asleep, so an overdue workspace refreshes promptly after waking. Idle
 ticks collect Moe's asynchronous results and repaint changed Git status without
-requiring keyboard input. Closing a window removes its subscriptions, while
-other windows retain their shared worker and timer threads.
+requiring keyboard input. Closing a window removes its subscriptions, while other
+windows retain their shared worker and timer threads.
 
 The current dmon 0.5.0 Linux recursive backend has an invalid path concatenation
 when watching newly created directories and can assert in its monitor thread.

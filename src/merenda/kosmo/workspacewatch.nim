@@ -1,11 +1,13 @@
 ## Dmon invalidation delivered on the GUI thread. Callbacks touch only a locked
 ## inbox, never GUI objects or dmon's watch list (callbacks can hold its lock).
 
-import std/[algorithm, exitprocs, locks, os, strutils, tables, times]
+import std/[algorithm, exitprocs, locks, monotimes, os, strutils, tables, times]
 import chronicles
 import dmon
 import sigils/[core, threadChronos, threadProxies, threads]
 import ../nimkit/foundation/backgroundworkers
+
+const DefaultWorkspaceReconciliationInterval* = initDuration(minutes = 2)
 
 type
   WorkspaceWatchTicker = ref object of AgentActor
@@ -19,6 +21,10 @@ type
     active: bool
     fallback: bool
     elapsed: int
+    reconciliationInterval: Duration
+    lastReconciledMonoTime: MonoTime
+    lastReconciledTime: Time
+    reconciliationPending: bool
 
 var
   watchUsers: int
@@ -65,8 +71,17 @@ proc deliver(watch: WorkspaceWatch) {.slot.} =
     inbox[watch.token] = false
   # A timer drains notifications, not the filesystem. Fall back only when
   # native coverage cannot be established (including dmon's Linux recursion bug).
-  if dirty or (watch.fallback and watch.elapsed >= 30):
+  let
+    reconciliationInterval = watch.reconciliationInterval
+    reconciliationDue =
+      not watch.reconciliationPending and reconciliationInterval.inNanoseconds > 0 and (
+        getMonoTime() - watch.lastReconciledMonoTime >= reconciliationInterval or
+        getTime() - watch.lastReconciledTime >= reconciliationInterval
+      )
+  if dirty or reconciliationDue or (watch.fallback and watch.elapsed >= 30):
     watch.elapsed = 0
+    if reconciliationDue:
+      watch.reconciliationPending = true
     # A .git file can appear or change targets after the project was opened.
     watch.setRoots(watch.roots)
     emit watch.workspaceWatchChanged()
@@ -157,7 +172,9 @@ proc setRoots*(watch: WorkspaceWatch, roots: openArray[string]) =
   withLock inboxLock:
     inbox[watch.token] = true
 
-proc newWorkspaceWatch*(): WorkspaceWatch =
+proc newWorkspaceWatch*(
+    reconciliationInterval = DefaultWorkspaceReconciliationInterval
+): WorkspaceWatch =
   ## Own a subscription; all lifecycle calls belong on the GUI thread.
   if watchUsers == 0 and not dmonInst.initialized:
     initDmon()
@@ -168,7 +185,13 @@ proc newWorkspaceWatch*(): WorkspaceWatch =
     addExitProc(stopWatchBackend)
   inc watchUsers
   inc nextToken
-  result = WorkspaceWatch(active: true, token: nextToken)
+  result = WorkspaceWatch(
+    active: true,
+    token: nextToken,
+    reconciliationInterval: reconciliationInterval,
+    lastReconciledMonoTime: getMonoTime(),
+    lastReconciledTime: getTime(),
+  )
   withLock inboxLock:
     inbox[result.token] = true
   let timerThread = nimkitTimerThread()
@@ -181,6 +204,13 @@ proc newWorkspaceWatch*(): WorkspaceWatch =
 
 proc usesPollingFallback*(watch: WorkspaceWatch): bool =
   watch.fallback
+
+proc markReconciled*(watch: WorkspaceWatch) =
+  ## Restart the backup deadline after a full workspace snapshot was accepted.
+  if not watch.isNil and watch.active:
+    watch.lastReconciledMonoTime = getMonoTime()
+    watch.lastReconciledTime = getTime()
+    watch.reconciliationPending = false
 
 proc close*(watch: WorkspaceWatch) =
   if watch.isNil or not watch.active:

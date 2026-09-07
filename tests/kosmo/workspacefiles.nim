@@ -1,8 +1,12 @@
-import std/[monotimes, os, tempfiles, times, unittest]
+import std/[importutils, monotimes, os, tempfiles, times, unittest]
+import dmon
 import sigils/[core, threads]
 import merenda/nimkit
 import merenda/nimkit/foundation/gitprocesses
-import merenda/kosmo/[kosmo, workspacefiles]
+import merenda/kosmo/[kosmo, workspacefiles, workspacewatch]
+
+privateAccess(WorkspaceFiles)
+privateAccess(WorkspaceWatch)
 
 type InventorySpy = ref object of Agent
   changes: int
@@ -111,6 +115,78 @@ suite "Kosmo shared workspace inventory":
     files.close()
     files.refresh()
     check not files.isLoading()
+
+  test "missed events recover through recurring workspace reconciliation":
+    let root = createTempDir("kosmo-periodic-reconciliation-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "main.nim", "discard\n")
+    let files =
+      newWorkspaceFiles(reconciliationInterval = initDuration(milliseconds = 500))
+    defer:
+      files.close()
+    let
+      inventorySpy = InventorySpy()
+      repositorySpy = InventorySpy()
+    files.connect(workspaceFilesDidChange, inventorySpy, changed)
+    files.connect(workspaceRepositoryDidChange, repositorySpy, changed)
+    files.setRoots([root])
+    files.startMonitoring()
+    require files.waitForFiles()
+
+    # Drain the initial dirty notification, then detach native coverage to model
+    # filesystem notifications that never arrive.
+    let settle = getMonoTime() + initDuration(milliseconds = 300)
+    while getMonoTime() < settle:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      sleep(10)
+    require files.waitForFiles()
+    require not files.watch.isNil
+    for id in files.watch.watches:
+      unwatch(id)
+    files.watch.watches.setLen(0)
+    files.watch.fallback = false
+    files.watch.markReconciled()
+
+    # A suspend-inclusive wall deadline recovers the first missed change even
+    # when little monotonic time has passed, as after waking from sleep.
+    files.watch.lastReconciledMonoTime = getMonoTime() + initDuration(seconds = 10)
+    files.watch.lastReconciledTime = getTime() - initDuration(seconds = 1)
+    let
+      firstInventoryBaseline = inventorySpy.changes
+      firstRepositoryBaseline = repositorySpy.changes
+      firstPath = root / "missed-first.nim"
+    writeFile(firstPath, "discard\n")
+    let firstDeadline = getMonoTime() + initDuration(seconds = 2)
+    while (
+      "missed-first.nim" notin files.snapshot().labels or
+      repositorySpy.changes == firstRepositoryBaseline
+    ) and getMonoTime() < firstDeadline
+    :
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      sleep(10)
+    check "missed-first.nim" in files.snapshot().labels
+    check inventorySpy.changes > firstInventoryBaseline
+    check repositorySpy.changes > firstRepositoryBaseline
+    require files.waitForFiles()
+
+    # Acceptance rearms the latch, allowing a later missed change to recover too.
+    let
+      secondInventoryBaseline = inventorySpy.changes
+      secondRepositoryBaseline = repositorySpy.changes
+      secondPath = root / "missed-second.nim"
+    writeFile(secondPath, "discard\n")
+    let secondDeadline = getMonoTime() + initDuration(seconds = 2)
+    while (
+      "missed-second.nim" notin files.snapshot().labels or
+      repositorySpy.changes == secondRepositoryBaseline
+    ) and getMonoTime() < secondDeadline
+    :
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      sleep(10)
+    check "missed-second.nim" in files.snapshot().labels
+    check inventorySpy.changes > secondInventoryBaseline
+    check repositorySpy.changes > secondRepositoryBaseline
 
   test "filesystem notifications update both views and Moe without typing":
     let root = createTempDir("kosmo-watched-inventory-", "")
