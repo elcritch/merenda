@@ -8,6 +8,15 @@ when not defined(useNativeDynlib):
 
 import merenda/nimkit
 
+type MarkdownParseCompletionSpy = ref object of Agent
+  completions: int
+
+proc rememberMarkdownParseCompletion(
+    spy: MarkdownParseCompletionSpy, workerThreadId: int
+) {.slot.} =
+  discard workerThreadId
+  inc spy.completions
+
 const
   RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
   RepositoryReadme = RepositoryRoot / "README.md"
@@ -474,6 +483,24 @@ Setext two
     check view.markdownParseWorkerThreadId() != ownerThreadId
     check imageLoaderThreadId == ownerThreadId
     check view.textStorage().stringValue().startsWith("Worker parse\n\nparagraph")
+
+  test "an in-flight parse retains its view through owner-thread delivery":
+    let spy = MarkdownParseCompletionSpy()
+    block:
+      var view = newMarkdownView("# Retained parse")
+      view.connect(markdownDidFinishParsing, spy, rememberMarkdownParseCompletion)
+      check view.isMarkdownParsing()
+      view = nil
+
+    let driver = newMarkdownView("")
+    let deadline = getMonoTime() + initDuration(seconds = 5)
+    while spy.completions == 0 and getMonoTime() < deadline:
+      discard driver.pollMarkdownParsing()
+      if spy.completions == 0:
+        sleep(1)
+
+    check spy.completions == 1
+    require driver.waitForMarkdownParsing()
 
   test "shared pool safely parses multiple Markdown views alongside synchronous callers":
     var views: seq[MarkdownView]

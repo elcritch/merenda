@@ -260,7 +260,9 @@ const
   MarkdownKeyboardScrollRows = 4.0'f32
   MarkdownKeyboardPageFraction = 0.25'f32
 
-var defaultMarkdownUrlAssetLoader {.threadvar.}: UrlAssetLoader
+var
+  defaultMarkdownUrlAssetLoader {.threadvar.}: UrlAssetLoader
+  inFlightMarkdownViews {.threadvar.}: seq[MarkdownView]
 
 func initMarkdownBlockStyle*(): MarkdownBlockStyle =
   ## Returns the default light code-block panel presentation.
@@ -1919,6 +1921,18 @@ proc markdownDidFinishParsing*(view: MarkdownView, workerThreadId: int) {.signal
 
 proc startLatestMarkdownParse(view: MarkdownView)
 
+proc retainMarkdownViewForParsing(view: MarkdownView) =
+  for inFlightView in inFlightMarkdownViews:
+    if inFlightView == view:
+      return
+  inFlightMarkdownViews.add view
+
+proc releaseMarkdownViewAfterParsing(view: MarkdownView) =
+  for index, inFlightView in inFlightMarkdownViews:
+    if inFlightView == view:
+      inFlightMarkdownViews.delete(index)
+      break
+
 proc configureMarkdownImageLoaders(view: MarkdownView, builder: var MarkdownBuilder) =
   builder.imageLoader = proc(url: string): ImageResource =
     view.loadMarkdownImage(url)
@@ -2035,6 +2049,8 @@ proc completeMarkdownParse(
       emit view.markdownDidFinishParsing(parseResult.workerThreadId)
   if parseResult.generation != view.xMarkdownGeneration:
     view.startLatestMarkdownParse()
+  if view.xActiveMarkdownGeneration == 0:
+    view.releaseMarkdownViewAfterParsing()
 
 proc ensureMarkdownParseWorker(view: MarkdownView) =
   if not view.xMarkdownParseWorker.isNil:
@@ -2054,6 +2070,7 @@ proc startLatestMarkdownParse(view: MarkdownView) =
   var dialect: MarkdownParseDialect
   if view.xMarkdownConfig.builtInMarkdownDialect(dialect):
     view.ensureMarkdownParseWorker()
+    view.retainMarkdownViewForParsing()
     view.xActiveMarkdownGeneration = view.xMarkdownGeneration
     emit view.xMarkdownParseWorker.requestMarkdownParse(
       view.xActiveMarkdownGeneration,
