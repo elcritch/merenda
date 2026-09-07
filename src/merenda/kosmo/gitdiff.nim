@@ -16,6 +16,9 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/mainthreadwork
 
 const KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
+const
+  GitProcessStartAttempts = 20
+  GitProcessStartRetryMilliseconds = 25
 
 type
   GitDiffHighlightKey = tuple[source, language: string]
@@ -98,7 +101,7 @@ type
     xHighlightBuildCount: int
     xHighlightThreadId: int
 
-proc executeGit(
+proc executeGitOnce(
     root: string, args: openArray[string], control: SharedPtr[GitDiffControl]
 ): tuple[output: string, code: int] =
   if control[].cancelled.load(moAcquire):
@@ -143,6 +146,17 @@ proc executeGit(
       raise newException(IOError, "Git diff cancelled")
     sleep(25)
   result.code = process.peekExitCode()
+
+proc executeGit(
+    root: string, args: openArray[string], control: SharedPtr[GitDiffControl]
+): tuple[output: string, code: int] =
+  for attempt in 0 ..< GitProcessStartAttempts:
+    try:
+      return executeGitOnce(root, args, control)
+    except CatchableError:
+      if control[].cancelled.load(moAcquire) or attempt + 1 == GitProcessStartAttempts:
+        raise
+      sleep(GitProcessStartRetryMilliseconds)
 
 proc readGitDiff(
     rootPath: string, control: SharedPtr[GitDiffControl]

@@ -747,7 +747,9 @@ titles show `Kosmo (first-root)` and add `+ N` inside the parentheses when more
 top-level roots are open.
 
 Quick Open and Find in Files search every browser root, respecting each folder's
-Git ignore rules and returning overlapping files only once. Quick Open labels
+Git ignore rules and returning overlapping files only once. Quick Open slides in
+immediately, then shows an animated loading state while its file index is built on
+NimKit's shared worker pool. Quick Open labels
 results by root when several folders are open, including folders with the same
 name. Git decorations refresh for every root independently. The first root remains
 the default working directory for new terminals and relative editor paths.

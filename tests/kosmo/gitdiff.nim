@@ -35,6 +35,7 @@ suite "Kosmo Git diff":
     window.setContentView(panel)
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
+    require panel.snapshot.files.len == 2
     panel.layoutSubtreeIfNeeded()
     check not panel.markdownView.scrollView().hasVerticalScroller()
     check panel.markdownView.scrollView().maximumContentOffset().y == 0

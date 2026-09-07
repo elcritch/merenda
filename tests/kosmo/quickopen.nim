@@ -42,6 +42,8 @@ suite "Kosmo quick open":
       options = {poUsePath, poStdErrToStdOut},
     )
     require dirExists(root / ".git")
+    writeFile(root / ".git" / "info" / "exclude", "*.private\n")
+    writeFile(root / "credentials.private", "ignored\n")
     defer:
       removeDir(root)
 
@@ -49,7 +51,18 @@ suite "Kosmo quick open":
     check "src/main.nim" in files
     check "tests/main_spec.nim" in files
     check "build/main-generated.nim" notin files
+    check "credentials.private" notin files
     check fuzzyFilterFiles(files, "smn")[0] == "src/main.nim"
+
+  test "project files fall back to the filesystem when Git listing fails":
+    let root = createTempDir("merenda-kosmo-quick-open-fallback-", "")
+    writeFile(root / ".gitignore", "*.private\n")
+    writeFile(root / "notes.private", "included by fallback\n")
+    writeFile(root / "README.md", "# Fallback\n")
+    defer:
+      removeDir(root)
+
+    check projectFiles(root) == @[".gitignore", "README.md", "notes.private"]
 
   test "popup blurs translucent panel input and result row surfaces":
     let
@@ -197,12 +210,24 @@ suite "Kosmo quick open":
     )
     check frontend.quickOpenPanel.isOpen()
     check frontend.window.fieldEditorClient() == frontend.quickOpenPanel.queryField
-    check "build/main-generated.nim" notin frontend.quickOpenPanel.projectFiles()
+    check frontend.quickOpenPanel.isLoading()
+    check frontend.quickOpenPanel.progressIndicator.animating()
+    let loadingRenders = buildRenders(frontend.contentView)
+    var loadingDots = 0
+    for node in loadingRenders[PopupDrawLevel].nodes:
+      if node.kind == nkDrawable:
+        for operation in node.drawOps:
+          if operation.kind == dkCircle:
+            inc loadingDots
+    check loadingDots >= 12
     let startFrame = frontend.quickOpenPanel.frame()
     check startFrame.origin.y + startFrame.size.height <=
       frontend.contentView.bounds().origin.y
     check frontend.quickOpenPanel.presentationOffset() < 0.0'f32
     check frontend.window.animationScheduler().animationCount() > initialAnimationCount
+    require frontend.quickOpenPanel.waitForProjectFiles()
+    check not frontend.quickOpenPanel.progressIndicator.animating()
+    check "build/main-generated.nim" notin frontend.quickOpenPanel.projectFiles()
 
     check frontend.window.dispatchTextInput("mainx")
     check frontend.quickOpenPanel.filteredFiles().len == 0

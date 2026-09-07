@@ -97,6 +97,7 @@ suite "Kosmo workspace roots":
       require frontend.openPath(root)
     check frontend.fileTree.rootPaths == roots
     require frontend.showQuickOpen()
+    require frontend.quickOpenPanel.waitForProjectFiles()
     check frontend.quickOpenPanel.projectFiles().len == 3
     frontend.quickOpenPanel.dismiss()
     require frontend.showFindInFiles()
@@ -155,6 +156,7 @@ suite "Kosmo workspace roots":
     require frontend.openPath(second)
     require frontend.openPath(first / "nested")
     require frontend.showQuickOpen()
+    require frontend.quickOpenPanel.waitForProjectFiles()
     check frontend.quickOpenPanel.projectFiles().len == 3
     require frontend.window.dispatchTextInput(second / "same.txt")
     require frontend.quickOpenPanel.filteredFiles().len == 1
