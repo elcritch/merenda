@@ -461,6 +461,7 @@ jobs:
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name || (github.event_name == 'push' && github.ref == 'refs/heads/ci/update-release-binaries' && 'v0.17.0') }}
         run: |
           gh release upload "$RELEASE_TAG" \
