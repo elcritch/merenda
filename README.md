@@ -53,7 +53,28 @@ Note: You'll want to install the most recent [Atlas](https://github.com/nim-lang
 
 ## Kosmo Install
 
-To run Kosmo you need to install the "kosmo" feature's deps with Atlas:
+Install the latest standalone Kosmo release with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/elcritch/merenda/HEAD/install.sh | bash
+```
+
+On Linux and Windows (from Git Bash), this installs the command in
+`~/.local/bin`. On macOS it installs `Kosmo.app` in `~/Applications` and adds a
+`~/.local/bin/kosmo` command link. Add `~/.local/bin` to `PATH` if necessary.
+The installer verifies the archive against the release's `SHA256SUMS.txt`.
+
+Set `KOSMO_INSTALL_DIR` to override the application or binary directory. On
+macOS, set `KOSMO_BIN_DIR` separately to move the command link. To install a
+specific release rather than the latest one, provide its tag, for example:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/elcritch/merenda/HEAD/install.sh | \
+  KOSMO_VERSION=v0.17.0 bash
+```
+
+To build Kosmo from source, install the "kosmo" feature's dependencies with
+Atlas:
 
 ```sh
 atlas install -tuk --features:kosmo

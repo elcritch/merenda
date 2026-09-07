@@ -1,6 +1,9 @@
 name: release-kosmo
 
 on:
+  push:
+    branches:
+      - ci/update-release-binaries
   release:
     types:
       - published
@@ -26,7 +29,7 @@ permissions:
 
 env:
   NIM_VERSION: 2.2.10
-  KOSMO_RELEASE_VERSION: ${{ github.event.release.tag_name || inputs.version || '0.0.0' }}
+  KOSMO_RELEASE_VERSION: ${{ github.event.release.tag_name || (github.event_name == 'push' && github.ref == 'refs/heads/ci/update-release-binaries' && 'v0.17.0') || inputs.version || '0.0.0' }}
 
 jobs:
   build-linux:
@@ -122,7 +125,9 @@ jobs:
     timeout-minutes: 60
     env:
       MACOSX_DEPLOYMENT_TARGET: 13.0
-      NOTARIZE_MACOS: ${{ github.event_name == 'release' || inputs.notarize_macos == true }}
+      # Developer ID signing is temporarily opt-in while the signing path is
+      # being repaired. Published releases use the ad-hoc validation path.
+      NOTARIZE_MACOS: ${{ github.event_name == 'workflow_dispatch' && inputs.notarize_macos == true }}
     steps:
       - uses: actions/checkout@v5
 
@@ -424,7 +429,12 @@ jobs:
           if-no-files-found: error
 
   publish-release-assets:
-    if: github.event_name == 'release'
+    # Temporary exception: pushes to the release-repair branch replace the
+    # assets on v0.17.0 without requiring another GitHub release.
+    if: >-
+      github.event_name == 'release' ||
+      (github.event_name == 'push' &&
+      github.ref == 'refs/heads/ci/update-release-binaries')
     needs:
       - build-linux
       - build-macos
@@ -451,7 +461,7 @@ jobs:
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || (github.event_name == 'push' && github.ref == 'refs/heads/ci/update-release-binaries' && 'v0.17.0') }}
         run: |
           gh release upload "$RELEASE_TAG" \
             dist/kosmo-linux-amd64.tar.gz \

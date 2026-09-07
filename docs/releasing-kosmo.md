@@ -11,13 +11,29 @@ Each platform archive also includes the notices for Kosmo's bundled IBM Plex
 Sans and JetBrains Mono Nerd Font Mono resources. On macOS the notices live in
 the app's `Contents/Resources` directory.
 
+The root `install.sh` downloads the archive for the current operating system and
+architecture, verifies it against `SHA256SUMS.txt`, and installs it without root
+access. Its defaults are `~/.local/bin` on Linux and Windows, and
+`~/Applications/Kosmo.app` plus a `~/.local/bin/kosmo` command link on macOS.
+`KOSMO_INSTALL_DIR`, `KOSMO_BIN_DIR` (macOS), and `KOSMO_DOC_DIR` (Linux and
+Windows) override those destinations. `KOSMO_VERSION` selects a release tag;
+when unset, the installer downloads the latest release.
+
 Publishing a GitHub release runs all three builds and uploads the resulting archives to
 that release. The release tag should use the `vX.Y.Z` form; the version without the `v`
 is embedded in the executable and the macOS bundle.
 
-The workflow can also be run manually. Manual runs upload Actions artifacts but do not
-modify a GitHub release. By default, a manual macOS build is ad-hoc signed for CI
-validation only. Select `notarize_macos` to test the complete release-signing path.
+The workflow can also be run manually. Manual runs upload Actions artifacts without
+modifying a GitHub release. As a temporary release-repair exception, every push to
+`ci/update-release-binaries` embeds version `0.17.0` and replaces the assets on the
+existing `v0.17.0` release. Remove that branch/tag exception after release testing.
+Published and manual macOS builds are currently ad-hoc signed for CI validation only.
+Select `notarize_macos` on a manual run to test the disabled Developer ID signing and
+notarization path while it is being repaired.
+Because an ad-hoc-signed app can be rejected when a browser marks it as
+quarantined, direct browser downloads are not a substitute for notarized
+distribution. Use the checksum-verifying `install.sh` path for these temporary
+releases.
 
 ## macOS signing requirements
 
@@ -29,9 +45,10 @@ do not receive an automatic waiver; Apple limits fee waivers to qualifying nonpr
 organizations, accredited educational institutions, and government entities.
 
 Kosmo does not need an App Store listing, installer certificate, provisioning profile,
-or paid-app agreement. It currently uses no restricted entitlements. Its release app is
-signed with the hardened runtime and a secure timestamp, submitted with `notarytool`,
-and stapled before the final ZIP is created.
+or paid-app agreement. It currently uses no restricted entitlements. The workflow has
+an opt-in path that signs with the hardened runtime and a secure timestamp, submits the
+app with `notarytool`, and staples it before creating the final ZIP. Published releases
+temporarily skip that path and use an ad-hoc signature instead.
 
 Apple references:
 
@@ -55,7 +72,8 @@ Configure these GitHub Actions repository secrets:
 - `APPLE_TEAM_ID`: ten-character Developer Program team ID
 - `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password for `notarytool`
 
-The workflow imports the certificate into an ephemeral keychain, derives the signing
-identity from the imported Developer ID certificate, and deletes the keychain at the end
-of the job. Published releases fail before building the app if any required credential
-is absent; they never fall back to an ad-hoc signature.
+When `notarize_macos` is selected on a manual run, the workflow imports the certificate
+into an ephemeral keychain, derives the signing identity from the imported Developer ID
+certificate, and deletes the keychain at the end of the job. That opt-in run fails before
+building the app if any required credential is absent. Normal published releases do not
+read these secrets while Developer ID signing is disabled.
