@@ -7,6 +7,8 @@
 import std/[compilesettings, options, os, strutils, tables, unicode]
 
 import matter
+import zippy
+import zippy/crc
 
 import ./syntaxhighlighting
 import ./texttypes
@@ -74,32 +76,51 @@ var
 func littleEndian16(contents: string, offset: int): int =
   ord(contents[offset]) or (ord(contents[offset + 1]) shl 8)
 
-func littleEndian32(contents: string, offset: int): int =
-  ord(contents[offset]) or (ord(contents[offset + 1]) shl 8) or
-    (ord(contents[offset + 2]) shl 16) or (ord(contents[offset + 3]) shl 24)
+func littleEndian32(contents: string, offset: int): uint32 =
+  uint32(ord(contents[offset])) or (uint32(ord(contents[offset + 1])) shl 8) or
+    (uint32(ord(contents[offset + 2])) shl 16) or
+    (uint32(ord(contents[offset + 3])) shl 24)
 
 func archiveContents(path: string): string =
   for archive in EmbeddedGrammarArchives:
     if archive.path == path:
       return archive.contents
 
-proc readStoredZipMember(contents, member: string): string =
+proc readZipMember(contents, member: string): string =
   var offset = 0
   while offset + 30 <= contents.len and
       contents[offset ..< offset + ZipLocalHeader.len] == ZipLocalHeader:
     let
       flags = contents.littleEndian16(offset + 6)
       compression = contents.littleEndian16(offset + 8)
-      compressedSize = contents.littleEndian32(offset + 18)
+      expectedCrc32 = contents.littleEndian32(offset + 14)
+      compressedSize = contents.littleEndian32(offset + 18).int
+      uncompressedSize = contents.littleEndian32(offset + 22).int
       nameSize = contents.littleEndian16(offset + 26)
       extraSize = contents.littleEndian16(offset + 28)
       nameStart = offset + 30
       dataStart = nameStart + nameSize + extraSize
       dataStop = dataStart + compressedSize
-    if flags != 0 or compression != 0 or dataStop > contents.len:
+    if flags != 0 or compression notin [0, 8] or dataStart > contents.len or
+        dataStop > contents.len:
       raise newException(MatterError, "invalid bundled Matter grammar archive")
     if contents[nameStart ..< nameStart + nameSize] == member:
-      return contents[dataStart ..< dataStop]
+      let compressed = contents[dataStart ..< dataStop]
+      try:
+        case compression
+        of 0:
+          result = compressed
+        of 8:
+          result = zippy.uncompress(compressed, zippy.dfDeflate)
+        else:
+          discard
+      except zippy.ZippyError as error:
+        raise newException(
+          MatterError, "invalid bundled Matter grammar archive: " & error.msg
+        )
+      if result.len != uncompressedSize or crc32(result) != expectedCrc32:
+        raise newException(MatterError, "invalid bundled Matter grammar archive")
+      return
     offset = dataStop
   raise newException(MatterError, "missing bundled Matter grammar: " & member)
 
@@ -148,8 +169,7 @@ proc grammarForLanguage(language: string): Grammar =
       )
     registry.addGrammar(
       parseRawGrammar(
-        archive.readStoredZipMember(contribution.archiveMember),
-        contribution.archiveMember,
+        archive.readZipMember(contribution.archiveMember), contribution.archiveMember
       )
     )
   result = registry.loadGrammar(primary.get.scopeName)
