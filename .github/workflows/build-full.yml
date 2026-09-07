@@ -11,6 +11,8 @@ jobs:
     name: tests (${{ matrix.os }}, ${{ matrix.nimversion }}, ${{ matrix.display }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
+    env:
+      ATLAS_TEST_NIM_ARGS: ${{ runner.os == 'Linux' && '-- --opt:none' || '' }}
     defaults:
       run:
         shell: bash
@@ -87,17 +89,45 @@ jobs:
           ! -name '*.nims' \
           -delete
 
-    - name: Build and run tests with Nim
-      if: runner.os == 'macOS'
-      timeout-minutes: 30
+    - name: Compile NimKit tests
       run: |
-        # Run each shared runner directly so unittest output identifies a
-        atlas-run tests --jobs:1 --compiler-output
+        atlas-run tests --compile-only --compiler-output tnimkit.nim \
+          $ATLAS_TEST_NIM_ARGS
 
-    - name: Build Tests
-      if: runner.os == 'Linux'
+    - name: Run NimKit tests
+      timeout-minutes: 5
       run: |
-        atlas-run tests --jobs:1 --compiler-output -- --opt:none
+        ./deps/.nimcache/atlas-run/tests/tnimkit/tnimkit
+
+    - name: Compile Kosmo tests
+      run: |
+        atlas-run tests --compile-only --compiler-output tkosmo.nim \
+          $ATLAS_TEST_NIM_ARGS
+
+    - name: Run Kosmo tests
+      timeout-minutes: 5
+      run: |
+        ./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo
+
+    - name: Compile Tekton tests
+      run: |
+        atlas-run tests --compile-only --compiler-output ttekton.nim \
+          $ATLAS_TEST_NIM_ARGS
+
+    - name: Run Tekton tests
+      timeout-minutes: 5
+      run: |
+        ./deps/.nimcache/atlas-run/tests/ttekton/ttekton
+
+    - name: Compile integration tests
+      run: |
+        atlas-run tests --compile-only --compiler-output tintegrations.nim \
+          $ATLAS_TEST_NIM_ARGS
+
+    - name: Run integration tests
+      timeout-minutes: 5
+      run: |
+        ./deps/.nimcache/atlas-run/tests/tintegrations/tintegrations
 
   examples:
     runs-on: ${{ matrix.os }}
