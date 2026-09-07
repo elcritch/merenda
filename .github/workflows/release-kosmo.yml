@@ -33,30 +33,57 @@ env:
 
 jobs:
   build-linux:
+    name: build-linux (${{ matrix.release_arch }})
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - release_arch: amd64
+            apt_arch: amd64
+            nim_cpu: amd64
+            pkg_config_libdir: /usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+          # Disabled until Sigils converts Duration.inMilliseconds from int64
+          # to the native int required by asyncdispatch.addTimer on i386.
+          # - release_arch: x32
+          #   apt_arch: i386
+          #   nim_cpu: i386
+          #   pkg_config_libdir: /usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+    env:
+      APT_ARCH: ${{ matrix.apt_arch }}
+      NIM_CPU: ${{ matrix.nim_cpu }}
+      PKG_CONFIG_LIBDIR: ${{ matrix.pkg_config_libdir }}
+      RELEASE_ARCH: ${{ matrix.release_arch }}
     steps:
       - uses: actions/checkout@v5
 
       - name: Install Linux build libraries
         run: |
+          compiler_packages=()
+          if [[ "$APT_ARCH" == i386 ]]; then
+            sudo dpkg --add-architecture i386
+            compiler_packages=(gcc-multilib g++-multilib)
+          fi
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            libegl1-mesa-dev \
-            libgl1-mesa-dev \
-            libgles2-mesa-dev \
-            libvulkan-dev \
-            libx11-xcb-dev \
-            libxcb1-dev \
-            libxcursor-dev \
-            libxkbcommon-dev \
-            libxrender-dev
+            file \
+            "${compiler_packages[@]}" \
+            "libegl1-mesa-dev:$APT_ARCH" \
+            "libgl1-mesa-dev:$APT_ARCH" \
+            "libgles2-mesa-dev:$APT_ARCH" \
+            "libvulkan-dev:$APT_ARCH" \
+            "libx11-xcb-dev:$APT_ARCH" \
+            "libxcb1-dev:$APT_ARCH" \
+            "libxcursor-dev:$APT_ARCH" \
+            "libxkbcommon-dev:$APT_ARCH" \
+            "libxrender-dev:$APT_ARCH"
 
       - name: Cache packages
         uses: actions/cache@v4
         with:
           path: deps/
-          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
+          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-${{ matrix.release_arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
       - name: Install GrabNim
         run: |
@@ -90,8 +117,13 @@ jobs:
         run: |
           version="${KOSMO_RELEASE_VERSION#v}"
           revision="${GITHUB_SHA:0:12}"
+          arch_flags=(--cpu:"$NIM_CPU")
+          if [[ "$NIM_CPU" == i386 ]]; then
+            arch_flags+=(--passC:-m32 --passL:-m32)
+          fi
           mkdir -p build dist
           nim c \
+            "${arch_flags[@]}" \
             --opt:size \
             --debugger:off \
             --lineTrace:off \
@@ -102,6 +134,12 @@ jobs:
             --out:build/kosmo \
             src/merenda/kosmo/kosmo.nim
           strip build/kosmo
+          binary_description="$(file -b build/kosmo)"
+          echo "$binary_description"
+          case "$RELEASE_ARCH" in
+            amd64) grep -q 'ELF 64-bit.*x86-64' <<< "$binary_description" ;;
+            x32) grep -q 'ELF 32-bit.*Intel 80386' <<< "$binary_description" ;;
+          esac
           cp data/FONT-LICENSES.md build/FONT-LICENSES.md
           cp -R data/font-licenses build/font-licenses
           build/kosmo --help
@@ -111,13 +149,13 @@ jobs:
           fi
 
       - name: Package Kosmo
-        run: tar -czf dist/kosmo-linux-amd64.tar.gz -C build kosmo FONT-LICENSES.md font-licenses
+        run: tar -czf "dist/kosmo-linux-$RELEASE_ARCH.tar.gz" -C build kosmo FONT-LICENSES.md font-licenses
 
       - name: Upload Linux binary
         uses: actions/upload-artifact@v4
         with:
-          name: kosmo-linux-amd64
-          path: dist/kosmo-linux-amd64.tar.gz
+          name: kosmo-linux-${{ matrix.release_arch }}
+          path: dist/kosmo-linux-${{ matrix.release_arch }}.tar.gz
           if-no-files-found: error
 
   build-macos:
@@ -452,6 +490,7 @@ jobs:
       - name: Create checksums
         working-directory: dist
         run: |
+          # Add kosmo-linux-x32.tar.gz when the disabled matrix entry is restored.
           sha256sum \
             kosmo-linux-amd64.tar.gz \
             kosmo-macos-arm64.zip \
@@ -464,6 +503,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name || (github.event_name == 'push' && github.ref == 'refs/heads/ci/update-release-binaries' && 'v0.17.0') }}
         run: |
+          # Add dist/kosmo-linux-x32.tar.gz when the matrix entry is restored.
           gh release upload "$RELEASE_TAG" \
             dist/kosmo-linux-amd64.tar.gz \
             dist/kosmo-macos-arm64.zip \

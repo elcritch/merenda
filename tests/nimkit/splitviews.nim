@@ -125,6 +125,22 @@ suite "nimkit split views":
     check left.frame().size.width == 210.0
     check right.frame().size.width == 90.0
 
+  test "panes stay within an undersized split view":
+    let
+      splitView = newSplitView(laVertical, rect(0.0, 0.0, 200.0, 190.0))
+      top = newFixedIntrinsicView(80.0, 24.0)
+      bottom = newFixedIntrinsicView(90.0, 160.0)
+
+    splitView.appearance = initAppearance(initDarkBsdTheme())
+    splitView.addPane(top, minSize = 24.0, maxSize = 24.0)
+    splitView.addPane(bottom, minSize = 160.0)
+    splitView.layoutSubtreeIfNeeded()
+
+    check top.frame().size.height == 24.0
+    check splitView.dividerRect(0).size.height == 8.0
+    check bottom.frame().size.height == 158.0
+    check bottom.frame().maxY == splitView.bounds().maxY
+
   test "dragging divider uses mouse-down size snapshot":
     let
       splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))

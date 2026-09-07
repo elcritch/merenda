@@ -44,6 +44,19 @@ suite "Kosmo command line":
     check commandLine.arguments.len == 0
     check commandLine.filePath.len == 0
 
+  test "version does not become an editor path or background child argument":
+    let commandLine = parseKosmoCommandLine(@["--bg", "--version"])
+    check commandLine.background
+    check commandLine.version
+    check commandLine.arguments.len == 0
+    check commandLine.filePath.len == 0
+
+  test "double dash preserves a literal version path":
+    let commandLine = parseKosmoCommandLine(@["--", "--version"])
+    check not commandLine.version
+    check commandLine.arguments == @["--", "--version"]
+    check commandLine.filePath == "--version"
+
   when not defined(windows):
     test "detached launcher preserves the requested directory and arguments":
       let root = createTempDir("merenda-kosmo-bg-", "")

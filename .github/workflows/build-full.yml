@@ -11,6 +11,8 @@ jobs:
     name: tests (${{ matrix.os }}, ${{ matrix.nimversion }}, ${{ matrix.display }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
+    env:
+      ATLAS_TEST_NIM_ARGS: ${{ matrix.nimargs }}
     defaults:
       run:
         shell: bash
@@ -21,9 +23,11 @@ jobs:
           - os: macos-latest
             nimversion: '2.2.10'
             display: none
+            nimargs: ''
           - os: ubuntu-26.04
             nimversion: '2.2.10'
             display: x11
+            nimargs: '-- --opt:none'
           # - os: ubuntu-24.04
           #   display: wayland
     steps:
@@ -50,14 +54,10 @@ jobs:
         nimPath="$(command -v nim)"
         echo "$nimPath"
         nim -v
-        if [[ "$RUNNER_OS" == "macOS" ]]; then
-          file "$nimPath"
-          lipo -archs "$nimPath"
-        fi
 
     - name: Setup software OpenGL/Vulkan (Mesa) + Xvfb (X11)
       if: runner.os == 'Linux' && matrix.display == 'x11'
-      timeout-minutes: 15
+      timeout-minutes: 30
       run: |
         sudo apt-get update
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -91,30 +91,45 @@ jobs:
           ! -name '*.nims' \
           -delete
 
-    - name: Build and run tests with Nim
-      if: runner.os == 'macOS'
-      timeout-minutes: 15
+    - name: Compile NimKit tests
       run: |
-        # Run each shared runner directly so unittest output identifies a
-        # long-running test instead of being buffered by atlas-run.
-        for testFile in \
-          tests/tnimkit.nim \
-          tests/tkosmo.nim \
-          tests/ttekton.nim \
-          tests/tintegrations.nim
-        do
-          testName="$(basename "${testFile%.nim}")"
-          testCache="deps/.nimcache/github-actions/${testName}"
-          mkdir -p "$testCache"
-          nim c -r --opt:none \
-            --nimcache:"$testCache" \
-            "$testFile"
-        done
+        atlas-run tests --compile-only --compiler-output tnimkit.nim \
+          $ATLAS_TEST_NIM_ARGS
 
-    - name: Build Tests
-      if: runner.os == 'Linux'
+    - name: Run NimKit tests
+      timeout-minutes: 5
       run: |
-        atlas-run tests --jobs:1 --compiler-output -- --opt:none
+        ./deps/.nimcache/atlas-run/tests/tnimkit/tnimkit
+
+    - name: Compile Kosmo tests
+      run: |
+        atlas-run tests --compile-only --compiler-output tkosmo.nim \
+          $ATLAS_TEST_NIM_ARGS
+
+    - name: Run Kosmo tests
+      timeout-minutes: 5
+      run: |
+        ./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo
+
+    - name: Compile Tekton tests
+      run: |
+        atlas-run tests --compile-only --compiler-output ttekton.nim \
+          $ATLAS_TEST_NIM_ARGS
+
+    - name: Run Tekton tests
+      timeout-minutes: 5
+      run: |
+        ./deps/.nimcache/atlas-run/tests/ttekton/ttekton
+
+    - name: Compile integration tests
+      run: |
+        atlas-run tests --compile-only --compiler-output tintegrations.nim \
+          $ATLAS_TEST_NIM_ARGS
+
+    - name: Run integration tests
+      timeout-minutes: 5
+      run: |
+        ./deps/.nimcache/atlas-run/tests/tintegrations/tintegrations
 
   examples:
     runs-on: ${{ matrix.os }}

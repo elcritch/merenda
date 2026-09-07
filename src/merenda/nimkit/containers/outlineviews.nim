@@ -946,15 +946,13 @@ proc outlineSelectionDidChange*(
   discard sender
   outlineView.xSelectedIdentifiers = outlineView.selectedItemIdentifiersFromRows()
 
-proc drawDisclosureAffordance(
-    outlineView: OutlineView, context: DrawContext, row: int, rect: Rect
+proc drawDisclosureAffordance*(
+    context: DrawContext, rect: Rect, expanded: bool, pressed = false
 ) =
+  ## Draw the standard outline disclosure shell and directional arrow.
   if context.isNil or rect.isEmpty:
     return
   let
-    item = outlineView.itemAtRow(row)
-    pressed = row == outlineView.xPressedDisclosureRow
-    expanded = outlineView.isItemExpanded(item.identifier)
     color = color(0.22, 0.26, 0.32, 1.0)
     borderAlpha = if pressed: 1.0'f32 else: 0.42'f32
     shellFill =
@@ -998,6 +996,16 @@ proc drawDisclosureAffordance(
         ),
         fill(color),
       )
+
+proc drawDisclosureAffordance(
+    outlineView: OutlineView, context: DrawContext, row: int, rect: Rect
+) =
+  let item = outlineView.itemAtRow(row)
+  context.drawDisclosureAffordance(
+    rect,
+    outlineView.isItemExpanded(item.identifier),
+    row == outlineView.xPressedDisclosureRow,
+  )
 
 proc drawOutlineDisclosures*(outlineView: OutlineView, context: DrawContext) =
   if context.isNil:

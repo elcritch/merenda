@@ -30,6 +30,7 @@ type
     pending: bool
     closed: bool
     watch: WorkspaceWatch
+    reconciliationInterval: Duration
 
 proc nextNulField(value: string, cursor: var int): string =
   if cursor >= value.len:
@@ -168,7 +169,7 @@ proc watchPulse(files: WorkspaceFiles) {.slot.} =
 
 proc startMonitoring*(files: WorkspaceFiles) =
   if files.watch.isNil and not files.closed:
-    files.watch = newWorkspaceWatch()
+    files.watch = newWorkspaceWatch(files.reconciliationInterval)
     files.watch.connect(workspaceWatchChanged, files, watchChanged)
     files.watch.connect(workspaceWatchPulse, files, watchPulse)
     files.watch.setRoots(files.roots & files.gitRoots)
@@ -195,14 +196,18 @@ proc receiveFiles(
   if snapshot[].generation == files.generation:
     files.current = move snapshot[]
     files.fallback.invalidate()
+    if not files.watch.isNil:
+      files.watch.markReconciled()
     emit files.workspaceFilesDidChange()
   if files.pending:
     files.pending = false
     files.refresh()
 
-proc newWorkspaceFiles*(): WorkspaceFiles =
+proc newWorkspaceFiles*(
+    reconciliationInterval = DefaultWorkspaceReconciliationInterval
+): WorkspaceFiles =
   ## Create an owner-thread controller borrowing NimKit's shared worker pool.
-  result = WorkspaceFiles()
+  result = WorkspaceFiles(reconciliationInterval: reconciliationInterval)
   var worker = WorkspaceFileWorker()
   result.worker = worker.moveToThread(nimkitWorkerPool())
   connectThreaded(result.worker, loadFiles, result.worker, loadFiles)
@@ -255,6 +260,8 @@ proc reload*(files: WorkspaceFiles, roots: openArray[string]) =
     files.watch.setRoots(files.roots & files.gitRoots)
   files.current = readWorkspaceFiles(files.roots, files.generation)
   files.fallback.invalidate()
+  if not files.watch.isNil:
+    files.watch.markReconciled()
   emit files.workspaceFilesDidChange()
 
 proc waitForFiles*(files: WorkspaceFiles, timeoutMilliseconds: Natural = 10_000): bool =

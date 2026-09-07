@@ -18,15 +18,15 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
-    cli, config, filesearchpanel, filetree, gitdiff, moe, moehighlighting,
+    cli, config, contextpanel, filesearchpanel, filetree, gitdiff, moe, moehighlighting,
     panedocuments, quickopen, searchbar, settings, shortcuts, terminalsearch,
     workspacefiles,
   ]
 import moepkg/celina_backend as celina
 
 export
-  config, filesearchpanel, filetree, gitdiff, moe, moehighlighting, panedocuments,
-  quickopen, settings, shortcuts, terminalsearch
+  config, contextpanel, filesearchpanel, filetree, gitdiff, moe, moehighlighting,
+  panedocuments, quickopen, settings, shortcuts, terminalsearch
 
 func nimblePackageVersion(manifest: string): string =
   for line in manifest.splitLines():
@@ -222,7 +222,14 @@ type
     activeIndicator: KosmoPaneIndicator
     dockGroup: WeakRef[KosmoEditorGroup]
 
+  KosmoSidebarBrowserArea = ref object of nimkit.View
+    tabs: nimkit.CompactTabView
+    activeIndicator: KosmoPaneIndicator
+
   KosmoSidebarPane* = ref object of nimkit.View
+    contextPanel*: KosmoContextPanel
+    splitView*: nimkit.SplitView
+    setInitialDivider: bool
     tabs*: nimkit.CompactTabView
     fileTree: KosmoFileTree
     searchPanel: KosmoFileSearchPanel
@@ -2409,28 +2416,61 @@ proc observeWindow(pane: KosmoSidebarPane, window: nimkit.Window) =
   pane.applyKosmoSidebarStyle(window.effectiveAppearance())
   pane.updateSidebarFocus()
 
+protocol KosmoSidebarBrowserLayout of nimkit.ViewLayoutProtocol:
+  method layoutSubviews(area: KosmoSidebarBrowserArea) =
+    let
+      bounds = area.bounds()
+      tabHeight = min(area.tabs.tabBarHeight, bounds.size.height)
+    area.tabs.setFrameFromLayout(bounds)
+    area.activeIndicator.setFrameFromLayout(
+      nimkit.rect(
+        0, tabHeight, bounds.size.width, max(bounds.size.height - tabHeight, 0)
+      )
+    )
+
 protocol KosmoSidebarPaneLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(pane: KosmoSidebarPane) =
     let
       bounds = pane.bounds()
-      tabHeight = min(pane.tabs.tabBarHeight, bounds.size.height)
-    pane.tabs.setFrameFromLayout(bounds)
-    pane.activeIndicator.setFrameFromLayout(
-      nimkit.rect(
-        0.0'f32,
-        tabHeight,
-        bounds.size.width,
-        max(bounds.size.height - tabHeight, 0.0'f32),
-      )
-    )
+      previousHeight = pane.splitView.bounds().size.height
+      contextHeight =
+        if pane.setInitialDivider:
+          pane.splitView.positionOfDivider(0)
+        else:
+          pane.contextPanel.preferredHeight()
+    pane.splitView.setFrameFromLayout(bounds)
+    if bounds.size.height > 0 and
+        (
+          not pane.setInitialDivider or
+          abs(previousHeight - bounds.size.height) > 0.001'f32
+        ):
+      pane.splitView.setPositionOfDivider(0, contextHeight)
+      pane.setInitialDivider = true
 
 proc newKosmoSidebarPane(
     tabs: nimkit.CompactTabView,
     fileTree: KosmoFileTree,
     searchPanel: KosmoFileSearchPanel,
 ): KosmoSidebarPane =
-  let activeIndicator = newKosmoPaneIndicator()
+  let
+    activeIndicator = newKosmoPaneIndicator()
+    contextPanel = newKosmoContextPanel()
+    splitView = nimkit.newSplitView(nimkit.laVertical)
+    browserArea = KosmoSidebarBrowserArea(tabs: tabs, activeIndicator: activeIndicator)
+  browserArea.initViewFields()
+  browserArea.clipsToBounds = true
+  browserArea.addSubview(tabs)
+  browserArea.addSubview(activeIndicator)
+  discard browserArea.withProtocol(KosmoSidebarBrowserLayout)
+  splitView.addPane(
+    contextPanel,
+    minSize = KosmoContextPanelHeaderHeight,
+    maxSize = KosmoContextPanelHeaderHeight,
+  )
+  splitView.addPane(browserArea, minSize = 160.0'f32)
   result = KosmoSidebarPane(
+    contextPanel: contextPanel,
+    splitView: splitView,
     tabs: tabs,
     fileTree: fileTree,
     searchPanel: searchPanel,
@@ -2438,8 +2478,7 @@ proc newKosmoSidebarPane(
   )
   result.initViewFields()
   result.clipsToBounds = true
-  result.addSubview(tabs)
-  result.addSubview(activeIndicator)
+  result.addSubview(splitView)
   discard result.withProtocol(KosmoSidebarPaneLayout)
   result.updateSidebarFocus()
 
@@ -4998,6 +5037,8 @@ when isMainModule:
   let commandLine = parseKosmoCommandLine(commandLineParams())
   if commandLine.help:
     echo KosmoUsage
+  elif commandLine.version:
+    echo KosmoVersion
   elif commandLine.background:
     launchKosmoInBackground(commandLine.arguments)
   else:

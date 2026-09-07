@@ -11,19 +11,22 @@ const
   KosmoBackgroundFlag* = "--bg"
   KosmoHelpFlag* = "--help"
   KosmoShortHelpFlag* = "-h"
+  KosmoVersionFlag* = "--version"
   KosmoUsage* =
     """
-Usage: kosmo [--bg] [--] [file-or-folder]
+Usage: kosmo [--bg] [--version] [--] [file-or-folder]
 
 Options:
-  --bg       Start Kosmo detached from the invoking shell.
-  --         Stop parsing options.
-  -h, --help Show this help text.
+  --bg        Start Kosmo detached from the invoking shell.
+  --version   Show the Kosmo version.
+  --          Stop parsing options.
+  -h, --help  Show this help text.
 """
 
 type KosmoStandaloneCommandLine* = object ## Parsed standalone command-line options.
   background*: bool
   help*: bool
+  version*: bool
   arguments*: seq[string]
   filePath*: string
 
@@ -47,6 +50,8 @@ proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneComman
         result.background = true
       of KosmoHelpFlag, KosmoShortHelpFlag:
         result.help = true
+      of KosmoVersionFlag:
+        result.version = true
       else:
         result.arguments.add argument
         if not hasFilePath:

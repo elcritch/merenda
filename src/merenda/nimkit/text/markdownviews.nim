@@ -7,7 +7,8 @@
 ## explicitly, remote images load through a Chronos worker, and unavailable
 ## images use linked alt text.
 
-import std/[algorithm, lists, math, monotimes, os, strutils, tables, times, unicode]
+import
+  std/[algorithm, lists, math, monotimes, os, sets, strutils, tables, times, unicode]
 
 when not defined(useNativeDynlib):
   import std/hashes
@@ -26,6 +27,8 @@ import threading/smartptrs
 import ../accessibility/accessibility
 import ../app/[animationproperties, animations]
 from ../app/windows import Window, startAnimation, stopAnimation
+import ../containers/outlineviews
+import ../controls/buttons
 import ../drawing
 import ../foundation/events
 import ../foundation/mainthreadwork
@@ -63,6 +66,8 @@ const
   MarkdownTableSeparatorWidth = 3
   MarkdownTableFontScale = 0.9'f32
   MarkdownTableViewportFraction = 0.9'f32
+  MarkdownHeadingDisclosureIndent = 24.0'f32
+  MarkdownHeadingDisclosureSize = 16.0'f32
 
 type
   MarkdownImageLoader* = proc(url: string): ImageResource {.closure.}
@@ -127,6 +132,7 @@ type
   MarkdownRangeLayout = object
     layoutHash: int
     rect: Rect
+    firstLineRect: Rect
     resolved: bool
 
   MarkdownCodeBlockPresentation = object
@@ -156,11 +162,31 @@ type
     contentSize: Size
     contentSizeValid: bool
 
+  MarkdownHeadingPresentation = object
+    identifier: string
+    title: string
+    level: int
+    range: TextRange
+
+  MarkdownHeadingDisclosureButton = ref object of Button
+    markdownView: WeakRef[MarkdownView]
+    documentGeneration: uint64
+    headingIdentifier: string
+    headingTitle: string
+
+  MarkdownHeadingControlPresentation = object
+    heading: MarkdownHeadingPresentation
+    button: MarkdownHeadingDisclosureButton
+    rangeLayout: MarkdownRangeLayout
+
   MarkdownTextView = ref object of TextView
+    markdownView: WeakRef[MarkdownView]
     codeBlockStyle: MarkdownBlockStyle
     markdownImages: seq[MarkdownImagePresentation]
     markdownCodeBlocks: seq[MarkdownCodeBlockScrollPresentation]
     markdownTables: seq[MarkdownTableScrollPresentation]
+    markdownHeadings: seq[MarkdownHeadingControlPresentation]
+    markdownHeadingButtons: Table[string, MarkdownHeadingDisclosureButton]
     markdownEmbeddedViewport: Rect
     hasMarkdownEmbeddedViewport: bool
     markdownViewportLayoutPending: bool
@@ -171,6 +197,7 @@ type
     images: seq[MarkdownImagePresentation]
     imageUrls: seq[string]
     tables: seq[MarkdownTablePresentation]
+    headings: seq[MarkdownHeadingPresentation]
     hasTables: bool
 
   MarkdownBuilder = object
@@ -186,6 +213,9 @@ type
     syntaxHighlighter: SyntaxHighlighter
     tableColumnLimit: int
     tables: seq[MarkdownTablePresentation]
+    headings: seq[MarkdownHeadingPresentation]
+    headingIdentifier: string
+    headingDisclosureIndent: float32
     hasTables: bool
 
   MarkdownTableAlignment = enum
@@ -216,6 +246,9 @@ type
     builder: MarkdownBuilder
     attributes: TextAttributes
     wroteBlock: bool
+    blockIndex: int
+    collapsedHeadingLevel: int
+    collapsedHeadings: HashSet[string]
     chunkCount: int
     maximumChunkDuration: Duration
 
@@ -244,6 +277,7 @@ type
     xImageCache: Table[string, ImageResource]
     xImageMediaTypes: Table[string, string]
     xPendingUrlAssets: Table[string, UrlAssetHandle]
+    xCollapsedMarkdownHeadings: HashSet[string]
     xHasMarkdownTables: bool
     xMarkdownTableColumnLimit: int
     xMarkdownTableResizePending: bool
@@ -263,6 +297,136 @@ const
 var
   defaultMarkdownUrlAssetLoader {.threadvar.}: UrlAssetLoader
   inFlightMarkdownViews {.threadvar.}: seq[MarkdownView]
+
+proc renderCurrentMarkdownDocument(view: MarkdownView)
+
+func headingCollapsed(view: MarkdownView, headingIdentifier: string): bool =
+  not view.isNil and headingIdentifier in view.xCollapsedMarkdownHeadings
+
+proc toggleHeading(view: MarkdownView, headingIdentifier: string): bool =
+  if view.isNil or headingIdentifier.len == 0:
+    return
+  if view.headingCollapsed(headingIdentifier):
+    view.xCollapsedMarkdownHeadings.excl headingIdentifier
+  else:
+    view.xCollapsedMarkdownHeadings.incl headingIdentifier
+  let textView = MarkdownTextView(view.textView())
+  if headingIdentifier in textView.markdownHeadingButtons:
+    textView.markdownHeadingButtons[headingIdentifier].needsDisplay = true
+  view.renderCurrentMarkdownDocument()
+  true
+
+proc activateDisclosure(button: MarkdownHeadingDisclosureButton): bool =
+  if button.isNil or button.markdownView.isNil:
+    return
+  let
+    view = button.markdownView[]
+    textView = MarkdownTextView(view.textView())
+  if view.xActiveMarkdownGeneration != 0 or
+      button.documentGeneration != view.xMarkdownRootGeneration or
+      button.headingIdentifier notin textView.markdownHeadingButtons or
+      textView.markdownHeadingButtons[button.headingIdentifier] != button:
+    return
+  view.toggleHeading(button.headingIdentifier)
+
+protocol MarkdownHeadingDisclosureDrawing of ViewDrawingProtocol:
+  method draw(button: MarkdownHeadingDisclosureButton, context: DrawContext) =
+    if button.markdownView.isNil:
+      return
+    let style = context.appearance.resolveButtonStyle(
+      controlStyle(
+        srButton,
+        button.widgetStateSet(),
+        id = button.styleId(),
+        classes = button.styleClasses(),
+      )
+    )
+    context.drawDisclosureAffordance(
+      button.bounds(),
+      not button.markdownView[].headingCollapsed(button.headingIdentifier),
+      button.highlighted(),
+    )
+    if button.isFocusVisible():
+      context.addFocusRing(context.renderRectFor(button.bounds()), style.box)
+
+protocol MarkdownHeadingDisclosureAccessibility of AccessibilityProtocol:
+  method accessibilityRole(button: MarkdownHeadingDisclosureButton): AccessibilityRole =
+    arDisclosureButton
+
+  method accessibilityLabel(button: MarkdownHeadingDisclosureButton): string =
+    if button.headingTitle.len > 0: button.headingTitle else: "Markdown heading"
+
+  method accessibilityValue(button: MarkdownHeadingDisclosureButton): string =
+    if not button.markdownView.isNil and
+        button.markdownView[].headingCollapsed(button.headingIdentifier):
+      "collapsed"
+    else:
+      "expanded"
+
+  method accessibilityTraits(
+      button: MarkdownHeadingDisclosureButton
+  ): AccessibilityTraits =
+    result = {atButton}
+    if button.focused():
+      result.incl atFocused
+
+  method isAccessibilityElement(button: MarkdownHeadingDisclosureButton): bool =
+    not button.isNil
+
+  method accessibilityActionNames(
+      button: MarkdownHeadingDisclosureButton
+  ): seq[string] =
+    result = @[AccessibilityActionPress]
+    if not button.markdownView.isNil and
+        button.markdownView[].headingCollapsed(button.headingIdentifier):
+      result.add AccessibilityActionExpand
+    else:
+      result.add AccessibilityActionCollapse
+
+  method accessibilityPerformAction(
+      button: MarkdownHeadingDisclosureButton, action: string
+  ): bool =
+    if action == AccessibilityActionPress:
+      return button.activateDisclosure()
+    if button.markdownView.isNil:
+      return
+    let collapsed = button.markdownView[].headingCollapsed(button.headingIdentifier)
+    if action == AccessibilityActionExpand and collapsed or
+        action == AccessibilityActionCollapse and not collapsed:
+      return button.activateDisclosure()
+
+proc newMarkdownHeadingDisclosureButton(
+    view: MarkdownView, heading: MarkdownHeadingPresentation
+): MarkdownHeadingDisclosureButton =
+  result = MarkdownHeadingDisclosureButton(
+    markdownView: view.unsafeWeakRef(),
+    documentGeneration: view.xMarkdownRootGeneration,
+    headingIdentifier: heading.identifier,
+    headingTitle: heading.title,
+  )
+  result.initButtonFields(
+    "", rect(0, 0, MarkdownHeadingDisclosureSize, MarkdownHeadingDisclosureSize)
+  )
+  discard result.withProtocol(MarkdownHeadingDisclosureDrawing)
+  discard result.withProtocol(MarkdownHeadingDisclosureAccessibility)
+  let weakButton = result.unsafeWeakRef()
+  let toggleAction = actionSelector("nimkit.toggleMarkdownHeading")
+  result.action = toggleAction
+  result.target = newActionTarget(toggleAction) do(sender: DynamicAgent):
+    discard sender
+    if not weakButton.isNil:
+      discard weakButton[].activateDisclosure()
+  let keyEquivalentMethod: DynamicMethod = proc(
+      self: DynamicAgent, invocation: var Invocation
+  ) =
+    let
+      button = MarkdownHeadingDisclosureButton(self)
+      event = invocation.argsAs(KeyEvent)
+    if event.modifiers == {} and event.key in {keyEnter, keySpace}:
+      invocation.setResult(button.activateDisclosure())
+    else:
+      invocation.setResult(false)
+  discard result.replaceMethod(selectors.performKeyEquivalent(), keyEquivalentMethod)
 
 func initMarkdownBlockStyle*(): MarkdownBlockStyle =
   ## Returns the default light code-block panel presentation.
@@ -540,6 +704,12 @@ proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
       offset + int(presentation.range.location), int(presentation.range.length)
     )
     builder.tables.add shifted
+  for presentation in rendered.headings:
+    var shifted = presentation
+    shifted.range = initTextRange(
+      offset + int(presentation.range.location), int(presentation.range.length)
+    )
+    builder.headings.add shifted
 
 proc renderInline(
   builder: var MarkdownBuilder, token: markdownParser.Token, attributes: TextAttributes
@@ -1119,6 +1289,7 @@ proc renderContainerChild(
     child: markdownParser.Token,
     attributes: TextAttributes,
     wroteBlock: var bool,
+    headingIdentifier = "",
 ) =
   var rendered = MarkdownBuilder(
     style: builder.style,
@@ -1126,6 +1297,8 @@ proc renderContainerChild(
     imageContentTypeLoader: builder.imageContentTypeLoader,
     syntaxHighlighter: builder.syntaxHighlighter,
     tableColumnLimit: builder.tableColumnLimit,
+    headingIdentifier: headingIdentifier,
+    headingDisclosureIndent: builder.headingDisclosureIndent,
   )
   rendered.renderBlock(child, attributes)
   if rendered.text.len > 0:
@@ -1270,7 +1443,21 @@ proc renderBlock(
     headingAttributes.fontFace = builder.style.strongFontFace
     let level = min(max(heading.level, 1), 6)
     headingAttributes.fontSize = max(builder.style.headingFontSizes[level - 1], 1.0'f32)
+    if builder.headingIdentifier.len > 0:
+      headingAttributes.paragraphStyle.firstLineHeadIndent +=
+        builder.headingDisclosureIndent
+      headingAttributes.paragraphStyle.headIndent += builder.headingDisclosureIndent
+    let
+      headingStart = builder.runeLength
+      titleStart = builder.text.len
     builder.renderInlineChildren(token, headingAttributes)
+    if builder.headingIdentifier.len > 0 and builder.runeLength > headingStart:
+      builder.headings.add MarkdownHeadingPresentation(
+        identifier: builder.headingIdentifier,
+        title: builder.text[titleStart ..< builder.text.len],
+        level: level,
+        range: initTextRange(headingStart, builder.runeLength - headingStart),
+      )
   elif token of markdownParser.CodeBlock:
     let code = markdownParser.CodeBlock(token)
     var renderedCode = MarkdownBuilder(
@@ -1326,6 +1513,7 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
     images: builder.images,
     imageUrls: builder.imageUrls,
     tables: builder.tables,
+    headings: builder.headings,
     hasTables: builder.hasTables,
   )
 
@@ -1460,6 +1648,7 @@ proc resolveMarkdownRangeLayout(
         if fragment.usedRect.isEmpty: fragment.fragmentRect else: fragment.usedRect
       if presentation.rect.isEmpty:
         presentation.rect = fragmentRect
+        presentation.firstLineRect = fragmentRect
       else:
         presentation.rect = presentation.rect.union(fragmentRect)
 
@@ -1629,6 +1818,28 @@ proc layoutMarkdownTables(
       scrollView.tile()
       scrollView.setHiddenFromLayout(false)
 
+proc layoutMarkdownHeadings(textView: MarkdownTextView, snapshot: TextLayoutSnapshot) =
+  for presentation in textView.markdownHeadings.mitems:
+    presentation.rangeLayout.resolveMarkdownRangeLayout(
+      presentation.heading.range, snapshot
+    )
+    let lineRect = presentation.rangeLayout.firstLineRect
+    if lineRect.isEmpty:
+      presentation.button.setHiddenFromLayout(true)
+    else:
+      presentation.button.setFrameFromLayout(
+        rect(
+          max(lineRect.origin.x - MarkdownHeadingDisclosureIndent, 0.0'f32),
+          lineRect.origin.y +
+            max(
+              (lineRect.size.height - MarkdownHeadingDisclosureSize) * 0.5'f32, 0.0'f32
+            ),
+          MarkdownHeadingDisclosureSize,
+          MarkdownHeadingDisclosureSize,
+        )
+      )
+      presentation.button.setHiddenFromLayout(false)
+
 proc clearMarkdownTables(textView: MarkdownTextView) =
   for presentation in textView.markdownTables:
     if not presentation.scrollView.isNil:
@@ -1640,6 +1851,47 @@ proc clearMarkdownCodeBlocks(textView: MarkdownTextView) =
     if not presentation.scrollView.isNil:
       presentation.scrollView.removeFromSuperview()
   textView.markdownCodeBlocks.setLen(0)
+
+proc installMarkdownHeadings(
+    textView: MarkdownTextView, headings: openArray[MarkdownHeadingPresentation]
+) =
+  textView.markdownHeadings.setLen(0)
+  if textView.markdownView.isNil:
+    return
+  let view = textView.markdownView[]
+  var active = initHashSet[string]()
+  for heading in headings:
+    active.incl heading.identifier
+    let button =
+      if heading.identifier in textView.markdownHeadingButtons:
+        textView.markdownHeadingButtons[heading.identifier]
+      else:
+        let created = view.newMarkdownHeadingDisclosureButton(heading)
+        textView.markdownHeadingButtons[heading.identifier] = created
+        textView.addSubview(created)
+        created
+    button.headingTitle = heading.title
+    button.documentGeneration = view.xMarkdownRootGeneration
+    button.accessibilityIdentifier = heading.identifier
+    button.toolTip =
+      (if view.headingCollapsed(heading.identifier): "Expand " else: "Collapse ") &
+      heading.title
+    button.needsDisplay = true
+    button.setHiddenFromLayout(true)
+    textView.markdownHeadings.add MarkdownHeadingControlPresentation(
+      heading: heading, button: button
+    )
+  var obsolete: seq[string]
+  for identifier in textView.markdownHeadingButtons.keys:
+    if identifier notin active:
+      obsolete.add identifier
+  for identifier in obsolete:
+    textView.markdownHeadingButtons[identifier].removeFromSuperview()
+    textView.markdownHeadingButtons.del identifier
+  for index, presentation in textView.markdownHeadings:
+    if textView.subviews().find(View(presentation.button)) != index:
+      textView.insertSubview(presentation.button, index)
+  textView.setNeedsLayout()
 
 proc installMarkdownCodeBlocks(
     textView: MarkdownTextView, codeBlocks: openArray[MarkdownCodeBlockPresentation]
@@ -1696,13 +1948,15 @@ proc markdownViewportGeometryDidChange(textView: MarkdownTextView) {.slot.} =
 
 protocol MarkdownTextViewLayout of ViewLayoutProtocol:
   method layoutSubviews(textView: MarkdownTextView) =
-    if textView.markdownCodeBlocks.len == 0 and textView.markdownTables.len == 0:
+    if textView.markdownCodeBlocks.len == 0 and textView.markdownTables.len == 0 and
+        textView.markdownHeadings.len == 0:
       return
     let
       snapshot = textView.layoutManager().layoutSnapshot()
       bufferedVisible = textView.visibleRect().verticallyBuffered()
     textView.markdownEmbeddedViewport = bufferedVisible
     textView.hasMarkdownEmbeddedViewport = true
+    textView.layoutMarkdownHeadings(snapshot)
     textView.layoutMarkdownCodeBlocks(snapshot, bufferedVisible)
     textView.layoutMarkdownTables(snapshot, bufferedVisible)
 
@@ -1791,6 +2045,7 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
     view.setNeedsLayout()
   else:
     view.textStorage = document.storage
+  textView.installMarkdownHeadings(document.headings)
   textView.installMarkdownCodeBlocks(document.codeBlocks)
   textView.installMarkdownTables(document.tables)
   view.pruneMarkdownImageCache(document.imageUrls)
@@ -1812,8 +2067,6 @@ proc resolvedDefaultMarkdownUrlAssetLoader(): UrlAssetLoader =
     defaultMarkdownUrlAssetLoader =
       newUrlAssetLoader(if executableName.len > 0: executableName else: "merenda")
   defaultMarkdownUrlAssetLoader
-
-proc renderCurrentMarkdownDocument(view: MarkdownView)
 
 proc markdownTableCharacterWidth(view: MarkdownView): float32 =
   let codeStyle = TextStyle(
@@ -1956,7 +2209,31 @@ proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
   while not job.nextBlock.isNil and processedBlocks < MarkdownRenderBlocksPerChunk:
     let child = job.nextBlock.value
     job.nextBlock = job.nextBlock.next
-    job.builder.renderContainerChild(child, job.attributes, job.wroteBlock)
+    let
+      blockIndex = job.blockIndex
+      headingLevel =
+        if child of markdownParser.Heading:
+          min(max(markdownParser.Heading(child).level, 1), 6)
+        else:
+          0
+      headingIdentifier =
+        if headingLevel > 0:
+          "markdown-heading-" & $blockIndex
+        else:
+          ""
+    inc job.blockIndex
+    var renderBlock = true
+    if job.collapsedHeadingLevel > 0:
+      if headingLevel == 0 or headingLevel > job.collapsedHeadingLevel:
+        renderBlock = false
+      else:
+        job.collapsedHeadingLevel = 0
+    if renderBlock:
+      job.builder.renderContainerChild(
+        child, job.attributes, job.wroteBlock, headingIdentifier
+      )
+      if headingIdentifier in job.collapsedHeadings:
+        job.collapsedHeadingLevel = headingLevel
     inc processedBlocks
     if (getMonoTime() - chunkStarted).inNanoseconds >=
         MarkdownRenderChunkBudgetNanoseconds:
@@ -2014,8 +2291,10 @@ proc scheduleMarkdownRendering(view: MarkdownView) =
       style: view.xMarkdownStyle,
       syntaxHighlighter: highlighter,
       tableColumnLimit: tableColumnLimit,
+      headingDisclosureIndent: MarkdownHeadingDisclosureIndent,
     ),
     attributes: view.xMarkdownStyle.bodyAttributes(),
+    collapsedHeadings: view.xCollapsedMarkdownHeadings,
   )
   scheduleMainThreadWork(
     proc(): bool =
@@ -2287,6 +2566,7 @@ proc `markdown=`*(view: MarkdownView, source: string) =
   if view.xMarkdown == source:
     return
   view.xPendingUrlAssets.clear()
+  view.xCollapsedMarkdownHeadings.clear()
   view.xMarkdown = source
   view.scheduleMarkdownParse()
 
@@ -2392,11 +2672,13 @@ proc initMarkdownViewFields*(
   ## HTTP(S) images use `urlAssetLoader`, or a lazy shared loader when it is nil.
   let textView = MarkdownTextView()
   textView.initTextViewFields()
+  textView.markdownHeadingButtons = initTable[string, MarkdownHeadingDisclosureButton]()
   discard textView.withProtocol(MarkdownTextViewLayout)
   discard textView.withProtocol(MarkdownTextViewDrawing)
   initTextEditorFields(
     view, frame = frame, richText = true, wraps = true, textView = textView
   )
+  textView.markdownView = view.unsafeWeakRef()
   view.xMarkdownStyle = style
   view.xMarkdownConfig = config.resolvedConfig()
   view.xMarkdownRoot = markdownParser.Document()
@@ -2409,6 +2691,7 @@ proc initMarkdownViewFields*(
   view.xImageCache = initTable[string, ImageResource]()
   view.xImageMediaTypes = initTable[string, string]()
   view.xPendingUrlAssets = initTable[string, UrlAssetHandle]()
+  view.xCollapsedMarkdownHeadings = initHashSet[string]()
   view.xMarkdownTableColumnLimit = view.markdownTableColumnLimit()
   view.xMarkdown = source
   view.editable = false

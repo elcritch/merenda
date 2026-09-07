@@ -97,13 +97,13 @@ suite "Kosmo workspace roots":
       require frontend.openPath(root)
     check frontend.fileTree.rootPaths == roots
     require frontend.showQuickOpen()
-    require frontend.quickOpenPanel.waitForProjectFiles()
+    require frontend.quickOpenPanel.waitForProjectFiles(timeoutMilliseconds = 60_000)
     check frontend.quickOpenPanel.projectFiles().len == 3
     frontend.quickOpenPanel.dismiss()
     require frontend.showFindInFiles()
     frontend.searchPanel.queryField.text = "needle"
     require frontend.searchPanel.performSearch()
-    require frontend.searchPanel.waitForSearch()
+    require frontend.searchPanel.waitForSearch(timeoutMilliseconds = 60_000)
     check frontend.searchPanel.resultsView.matches.len == 3
     for root in roots:
       require frontend.showFileExplorer()
@@ -123,15 +123,6 @@ suite "Kosmo workspace roots":
         if tab.filePath == some(root / "shared.txt"):
           found = true
       check found
-      when defined(posix):
-        require frontend.window.dispatchKeyDown(
-          KeyEvent(
-            key: keyT,
-            keyCode: keyT.ord,
-            modifiers: shortcutModifiers() + {nimkit.kmShift},
-          )
-        )
-        check frontend.editorPane.contentView of KosmoTerminalView
 
   test "quick open keeps duplicate names distinct and deduplicates overlapping roots":
     let

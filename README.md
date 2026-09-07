@@ -152,8 +152,11 @@ bounded chunks between application frames. The displayed document is replaced
 atomically after the final chunk, keeping the main thread responsive without
 showing a partial document. It supports headings, inline styles, links, code,
 quotes, lists, thematic breaks, GFM tables, and native local images without
-embedding an HTML engine. Tables preserve short phrases and whole words, wrap
-longer cell prose to a 90%-of-viewport target, and scroll horizontally when
+embedding an HTML engine. Each heading has a native disclosure button that
+collapses its content through the next heading at the same or a higher level;
+collapsed sections stay closed during restyling and resize reflow, and reset
+when the Markdown source changes. Tables preserve short phrases and whole words,
+wrap longer cell prose to a 90%-of-viewport target, and scroll horizontally when
 their minimum readable width exceeds that target:
 
 ```nim
@@ -789,7 +792,14 @@ with an installed theme taking precedence over a bundled theme of the same
 name. Choosing one applies it immediately to all Kosmo editor panes. Reopening
 Settings refreshes the list, so new themes appear without restarting Kosmo.
 
-Kosmo's sidebar uses compact SVG tabs for the lazy file tree and regular-expression
+Kosmo's sidebar keeps a collapsible Context panel above the Files and Find area.
+It starts collapsed with only the Context disclosure header visible. Activate the
+header to open it for testing; the expanded panel starts at roughly twelve compact
+text lines high and remembers divider resizing when it is closed and reopened.
+Context currently provides an empty area for future contextual content and remains
+visible when switching between Files and Find.
+
+The lower sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
 double-clicking promotes it to a permanent editor tab. Git-ignored files and
 dot-directories remain visible in the file tree with muted gray text. The Files tab's

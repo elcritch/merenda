@@ -1,4 +1,5 @@
 import std/[monotimes, os, osproc, strutils, tempfiles, times, unicode, unittest]
+import figdraw
 import merenda/nimkit
 import merenda/kosmo/kosmo
 
@@ -17,6 +18,26 @@ proc initRepository(root: string) =
 
 proc firstResponderIs(window: Window, expected: Responder): bool =
   window.firstResponder == expected
+
+proc rendersDisclosureArrow(view: View, expanded: bool): bool =
+  let renders = view.buildRenders()
+  if DefaultDrawLevel notin renders:
+    return
+  var bars: set[1 .. 3]
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind != nkRectangle:
+      continue
+    let
+      length = if expanded: node.screenBox.w else: node.screenBox.h
+      thickness = if expanded: node.screenBox.h else: node.screenBox.w
+    if abs(thickness - 1.0'f32) < 0.01'f32:
+      if abs(length - 7.0'f32) < 0.01'f32:
+        bars.incl 1
+      elif abs(length - 5.0'f32) < 0.01'f32:
+        bars.incl 2
+      elif abs(length - 3.0'f32) < 0.01'f32:
+        bars.incl 3
+  bars == {1, 2, 3}
 
 suite "Kosmo Git diff":
   test "summary and expanded files share wheel scrolling":
@@ -310,8 +331,10 @@ suite "Kosmo Git diff":
     check panel.snapshot.errorMessage == ""
     require panel.snapshot.files.len == 1
     check panel.isFileCollapsed(0)
+    check panel.disclosureButtonForFile(0).rendersDisclosureArrow(expanded = false)
     panel.toggleFile(0)
     require panel.waitForDiff()
+    check panel.disclosureButtonForFile(0).rendersDisclosureArrow(expanded = true)
     let rendered = panel.textViewForFile(0).textStorage().stringValue()
     check "-old text" in rendered
     check "+new text" in rendered

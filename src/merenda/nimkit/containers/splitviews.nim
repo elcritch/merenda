@@ -437,6 +437,13 @@ proc constrainedPaneLengths(
           adjustable = true
           if delta <= SplitViewEpsilon:
             break
+    if delta > SplitViewEpsilon:
+      for index in countdown(result.len - 1, 0):
+        let shrink = min(delta, result[index])
+        result[index] -= shrink
+        delta -= shrink
+        if delta <= SplitViewEpsilon:
+          break
 
 proc saveFractionsFromLengths(
     splitView: SplitView, visible: openArray[int], lengths: openArray[float32]
