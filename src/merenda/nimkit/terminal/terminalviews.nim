@@ -1128,7 +1128,6 @@ proc initTerminalViewFields*(
   view.clipsToBounds = true
   view.focusRingType = frtNone
   view.padding = DefaultTerminalPadding
-  view.fontName = DefaultMonoFontName
   view.fontSize = DefaultTerminalFontSize
   view.textColor = palette.foreground
   view.cursorColor = palette.cursor

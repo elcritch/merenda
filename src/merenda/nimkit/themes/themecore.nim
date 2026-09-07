@@ -103,6 +103,7 @@ type
     svShadows
     svToken
     svKeyword
+    svFontFace
 
   StyleValue* = object
     case kind*: StyleValueKind
@@ -120,6 +121,8 @@ type
       insets*: EdgeInsets
     of svShadows:
       shadows*: seq[BoxShadow]
+    of svFontFace:
+      fontFace*: SystemTypeface
     of svToken:
       token*: string
     of svKeyword:
@@ -159,6 +162,12 @@ type
   Appearance* = object
     theme*: Theme
 
+  FontFaceSet* = object ## Exact local faces for the common styles in one font family.
+    regular*: SystemTypeface
+    italic*: SystemTypeface
+    bold*: SystemTypeface
+    boldItalic*: SystemTypeface
+
   ControlBoxStyle* = object
     fill*: Fill
     borderColor*: Color
@@ -179,6 +188,10 @@ type
     color*: Color
     insets*: EdgeInsets
     fontName*: string
+    fontFace*: SystemTypeface
+    italicFontFace*: SystemTypeface
+    boldFontFace*: SystemTypeface
+    boldItalicFontFace*: SystemTypeface
     fontSize*: float32
     fontSlant*: FontSlant
     language*: LanguageTag
@@ -317,6 +330,10 @@ const
   StyleColumnHoverFill* = StyleKey[Fill]("column.hover.fill")
   StyleTextColor* = StyleKey[Color]("text.color")
   StyleFontName* = StyleKey[string]("font.name")
+  StyleFontFace* = StyleKey[SystemTypeface]("font.face")
+  StyleItalicFontFace* = StyleKey[SystemTypeface]("font.face.italic")
+  StyleBoldFontFace* = StyleKey[SystemTypeface]("font.face.bold")
+  StyleBoldItalicFontFace* = StyleKey[SystemTypeface]("font.face.boldItalic")
   StyleFontSize* = StyleKey[float32]("font.size")
   StyleFontSlant* = StyleKey[string]("font.slant")
   StyleLanguage* = StyleKey[string]("text.language")
@@ -553,6 +570,9 @@ func styleInsets*(insets: EdgeInsets): StyleValue =
 func styleShadows*(shadows: openArray[BoxShadow]): StyleValue =
   StyleValue(kind: svShadows, shadows: @shadows)
 
+func styleFontFace*(fontFace: SystemTypeface): StyleValue =
+  StyleValue(kind: svFontFace, fontFace: fontFace)
+
 func styleToken*(name: string): StyleValue =
   StyleValue(kind: svToken, token: name)
 
@@ -628,6 +648,20 @@ proc clone(value: StyleValue): StyleValue =
     styleInsets(value.insets)
   of svShadows:
     styleShadows(value.shadows)
+  of svFontFace:
+    var variations =
+      newSeqOfCap[typeof(value.fontFace.variations[0])](value.fontFace.variations.len)
+    for variation in value.fontFace.variations:
+      variations.add variation
+    styleFontFace(
+      SystemTypeface(
+        file: typeof(value.fontFace.file)(
+          path: value.fontFace.file.path.cloneText,
+          faceIndex: value.fontFace.file.faceIndex,
+        ),
+        variations: move variations,
+      )
+    )
   of svToken:
     styleToken(value.token.cloneText)
   of svKeyword:
@@ -1416,6 +1450,15 @@ proc shadowsRule(
   let value = theme.ruleValue(context, key.keyName, styleShadows(fallback))
   if value.kind == svShadows: value.shadows else: fallback
 
+proc fontFaceRule(
+    theme: Theme,
+    context: StyleContext,
+    key: StyleKey[SystemTypeface],
+    fallback: SystemTypeface,
+): SystemTypeface =
+  let value = theme.ruleValue(context, key.keyName, styleFontFace(fallback))
+  if value.kind == svFontFace: value.fontFace else: fallback
+
 proc keywordRule(
     theme: Theme, context: StyleContext, key: StyleKey[string], fallback: string
 ): string =
@@ -1474,11 +1517,39 @@ proc styleValue*(
 const
   UIFontNameToken* = "font.ui.name"
   MonospaceFontNameToken* = "font.monospace.name"
+  UIFontFaceToken* = "font.ui.face"
+  MonospaceFontFaceToken* = "font.monospace.face"
+  UIFontItalicFaceToken* = "font.ui.face.italic"
+  MonospaceFontItalicFaceToken* = "font.monospace.face.italic"
+  UIFontBoldFaceToken* = "font.ui.face.bold"
+  MonospaceFontBoldFaceToken* = "font.monospace.face.bold"
+  UIFontBoldItalicFaceToken* = "font.ui.face.boldItalic"
+  MonospaceFontBoldItalicFaceToken* = "font.monospace.face.boldItalic"
 
 func fontNameToken(role: FontRole): string =
   case role
   of frUI: UIFontNameToken
   of frMonospace: MonospaceFontNameToken
+
+func fontFaceToken(role: FontRole): string =
+  case role
+  of frUI: UIFontFaceToken
+  of frMonospace: MonospaceFontFaceToken
+
+func italicFontFaceToken(role: FontRole): string =
+  case role
+  of frUI: UIFontItalicFaceToken
+  of frMonospace: MonospaceFontItalicFaceToken
+
+func boldFontFaceToken(role: FontRole): string =
+  case role
+  of frUI: UIFontBoldFaceToken
+  of frMonospace: MonospaceFontBoldFaceToken
+
+func boldItalicFontFaceToken(role: FontRole): string =
+  case role
+  of frUI: UIFontBoldItalicFaceToken
+  of frMonospace: MonospaceFontBoldItalicFaceToken
 
 proc fontName*(theme: Theme, role: FontRole): string =
   ## Resolves a user-configurable font role from the theme token store.
@@ -1498,9 +1569,49 @@ proc setFontName*(theme: var ThemeBuilder, role: FontRole, name: string) =
       defaultFontName(role)
   theme[role.fontNameToken()] = styleKeyword(resolved)
 
+proc fontFace*(theme: Theme, role: FontRole): SystemTypeface =
+  ## Resolves the exact local face selected for a user-configurable font role.
+  let value = theme.styleValue(role.fontFaceToken(), styleFontFace(result))
+  if value.kind == svFontFace:
+    result = value.fontFace
+
+proc fontFaces*(theme: Theme, role: FontRole): FontFaceSet =
+  ## Resolves all exact local faces configured for a font role.
+  result.regular = theme.fontFace(role)
+  let
+    italic = theme.styleValue(role.italicFontFaceToken(), styleFontFace(result.italic))
+    bold = theme.styleValue(role.boldFontFaceToken(), styleFontFace(result.bold))
+    boldItalic =
+      theme.styleValue(role.boldItalicFontFaceToken(), styleFontFace(result.boldItalic))
+  if italic.kind == svFontFace:
+    result.italic = italic.fontFace
+  if bold.kind == svFontFace:
+    result.bold = bold.fontFace
+  if boldItalic.kind == svFontFace:
+    result.boldItalic = boldItalic.fontFace
+
+proc setFontFaces*(theme: var ThemeBuilder, role: FontRole, fontFaces: FontFaceSet) =
+  ## Sets the exact local faces for a user-configurable font role.
+  theme[role.fontFaceToken()] = styleFontFace(fontFaces.regular)
+  theme[role.italicFontFaceToken()] = styleFontFace(fontFaces.italic)
+  theme[role.boldFontFaceToken()] = styleFontFace(fontFaces.bold)
+  theme[role.boldItalicFontFaceToken()] = styleFontFace(fontFaces.boldItalic)
+
+proc setFontFace*(theme: var ThemeBuilder, role: FontRole, fontFace: SystemTypeface) =
+  ## Sets one face and clears styled alternatives; missing styles use this face.
+  theme.setFontFaces(role, FontFaceSet(regular: fontFace))
+
 proc fontName*(appearance: Appearance, role: FontRole): string =
   ## Resolves a user-configurable font role from an appearance.
   appearance.theme.fontName(role)
+
+proc fontFace*(appearance: Appearance, role: FontRole): SystemTypeface =
+  ## Resolves the exact local face selected for a user-configurable font role.
+  appearance.theme.fontFace(role)
+
+proc fontFaces*(appearance: Appearance, role: FontRole): FontFaceSet =
+  ## Resolves all exact local faces configured for a font role.
+  appearance.theme.fontFaces(role)
 
 proc colorToken*(appearance: Appearance, name: string, fallback: Color): Color =
   appearance.theme.colorToken(name, fallback)
@@ -1595,12 +1706,18 @@ proc resolveTextStyle*(
     colorFallback: Color,
     insetsFallback: EdgeInsets,
 ): TextStyle =
+  let fontSlant = theme.keywordRule(context, StyleFontSlant, "normal").fontSlant
   TextStyle(
     color: theme.colorRule(context, StyleTextColor, colorFallback),
     insets: theme.insetsRule(context, StyleTextInsets, insetsFallback),
     fontName: theme.keywordRule(context, StyleFontName, defaultFontName()),
+    fontFace: theme.fontFaceRule(context, StyleFontFace, SystemTypeface()),
+    italicFontFace: theme.fontFaceRule(context, StyleItalicFontFace, SystemTypeface()),
+    boldFontFace: theme.fontFaceRule(context, StyleBoldFontFace, SystemTypeface()),
+    boldItalicFontFace:
+      theme.fontFaceRule(context, StyleBoldItalicFontFace, SystemTypeface()),
     fontSize: max(theme.lengthRule(context, StyleFontSize, defaultFontSize()), 1.0'f32),
-    fontSlant: theme.keywordRule(context, StyleFontSlant, "normal").fontSlant,
+    fontSlant: fontSlant,
     language:
       theme.keywordRule(context, StyleLanguage, $defaultLanguageTag()).initLanguageTag(),
   )

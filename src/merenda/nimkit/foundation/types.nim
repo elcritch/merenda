@@ -312,15 +312,19 @@ proc fontOverrideFromEnv*(role = frUI): Option[FontOverride] =
         return some(FontOverride(envName: envName, name: value))
   none(FontOverride)
 
+func platformDefaultFontName*(role = frUI): string =
+  ## Returns the host platform's default name for a font role, ignoring overrides.
+  case role
+  of frUI: DefaultFontName
+  of frMonospace: DefaultMonospaceFontName
+
 proc defaultFontName*(role = frUI): string =
   ## Returns the environment override or platform default for a font role.
   let override = fontOverrideFromEnv(role)
   if override.isSome:
     override.get().name
   else:
-    case role
-    of frUI: DefaultFontName
-    of frMonospace: DefaultMonospaceFontName
+    platformDefaultFontName(role)
 
 proc fontSizeOverrideFromEnv*(): Option[FontSizeOverride] =
   for envName in FontSizeEnvVars:

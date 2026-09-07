@@ -633,15 +633,9 @@ proc drawChoiceButtonCell*(
   )
   if selected:
     if cell.buttonType() == btCheckBox and cell.state() == bsOn:
-      let
-        markRect = indicatorRect.checkmarkTextRect()
-        markTextStyle = TextStyle(
-          color: style.markColor,
-          insets: style.text.insets,
-          fontName: style.text.fontName,
-          fontSize: style.text.fontSize,
-          language: style.text.language,
-        )
+      let markRect = indicatorRect.checkmarkTextRect()
+      var markTextStyle = style.text
+      markTextStyle.color = style.markColor
       context.addText(markRect, CheckboxCheckmark, markTextStyle, alignment = taCenter)
       context.addText(
         markRect.offsetRect(0.45'f32, 0.0'f32),
@@ -704,30 +698,16 @@ proc drawPushButtonCell*(
   let textRect = style.buttonTextRect(rect)
   let title = cell.title().clippedText(textRect.size.width, style.text)
   if style.textHighlightColor.a > 0.0:
+    var highlightStyle = style.text
+    highlightStyle.color = style.textHighlightColor
     context.addText(
-      textRect.offsetRect(0.0, 1.0),
-      title,
-      TextStyle(
-        color: style.textHighlightColor,
-        insets: style.text.insets,
-        fontName: style.text.fontName,
-        fontSize: style.text.fontSize,
-        language: style.text.language,
-      ),
-      alignment = taCenter,
+      textRect.offsetRect(0.0, 1.0), title, highlightStyle, alignment = taCenter
     )
   if style.textShadowColor.a > 0.0:
+    var shadowStyle = style.text
+    shadowStyle.color = style.textShadowColor
     context.addText(
-      textRect.offsetRect(0.0, -0.6'f32),
-      title,
-      TextStyle(
-        color: style.textShadowColor,
-        insets: style.text.insets,
-        fontName: style.text.fontName,
-        fontSize: style.text.fontSize,
-        language: style.text.language,
-      ),
-      alignment = taCenter,
+      textRect.offsetRect(0.0, -0.6'f32), title, shadowStyle, alignment = taCenter
     )
   context.addText(textRect, title, style.text, alignment = taCenter)
 
@@ -782,15 +762,9 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       )
       if selected:
         if button.buttonType == btCheckBox and button.state == bsOn:
-          let
-            markRect = indicatorRect.checkmarkTextRect()
-            markTextStyle = TextStyle(
-              color: style.markColor,
-              insets: style.text.insets,
-              fontName: style.text.fontName,
-              fontSize: style.text.fontSize,
-              language: style.text.language,
-            )
+          let markRect = indicatorRect.checkmarkTextRect()
+          var markTextStyle = style.text
+          markTextStyle.color = style.markColor
           context.addText(
             markRect, CheckboxCheckmark, markTextStyle, alignment = taCenter
           )
@@ -841,30 +815,16 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       let textRect = style.buttonTextRect(button.bounds)
       let title = button.title.clippedText(textRect.size.width, style.text)
       if style.textHighlightColor.a > 0.0:
+        var highlightStyle = style.text
+        highlightStyle.color = style.textHighlightColor
         context.addText(
-          textRect.offsetRect(0.0, 1.0),
-          title,
-          TextStyle(
-            color: style.textHighlightColor,
-            insets: style.text.insets,
-            fontName: style.text.fontName,
-            fontSize: style.text.fontSize,
-            language: style.text.language,
-          ),
-          alignment = taCenter,
+          textRect.offsetRect(0.0, 1.0), title, highlightStyle, alignment = taCenter
         )
       if style.textShadowColor.a > 0.0:
+        var shadowStyle = style.text
+        shadowStyle.color = style.textShadowColor
         context.addText(
-          textRect.offsetRect(0.0, -0.6'f32),
-          title,
-          TextStyle(
-            color: style.textShadowColor,
-            insets: style.text.insets,
-            fontName: style.text.fontName,
-            fontSize: style.text.fontSize,
-            language: style.text.language,
-          ),
-          alignment = taCenter,
+          textRect.offsetRect(0.0, -0.6'f32), title, shadowStyle, alignment = taCenter
         )
       context.addText(textRect, title, style.text, alignment = taCenter)
 

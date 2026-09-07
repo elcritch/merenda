@@ -226,6 +226,43 @@ default per-asset limit is 64 MiB and can be changed with `maximumAssetBytes`.
 Call `removeCachedAsset` to evict one completed download or `clearCachedAssets`
 to remove all recognized entries while preserving unrelated and in-flight files.
 
+NimKit can also install a file from a ZIP archive compiled into an application.
+`installEmbeddedZipAsset` extracts with Zippy into the same platform application
+cache, verifies the uncompressed SHA-256, and returns a failure result instead of
+raising when extraction or writing fails:
+
+```nim
+const archive = staticRead("assets/example.dat.zip")
+let asset = initEmbeddedZipAsset(
+  "example.dat",
+  archive,
+  # Placeholder: replace with the SHA-256 of your uncompressed member.
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+)
+let installed = installEmbeddedZipAsset(asset, "com.example.application")
+if installed.succeeded():
+  echo installed.path
+```
+
+Existing cache files are reused only when their checksum matches. Applications
+opt into embedded assets explicitly; NimKit does not install any by default.
+Archives must be trusted application resources. `maximumContentBytes` defaults
+to 64 MiB and is checked after extraction; it is not a decompression memory limit.
+`installZipAssetFile` installs a trusted local archive using the same cache format.
+For `Font.ttf.zip`, the default member is `Font.ttf`. NimKit's text font loader
+accepts these ZIP paths directly (including paths relative to `figDataDir`),
+extracts them on first use, and falls back to the normal system font if extraction
+fails. Kosmo's embedded archives use its application cache; directly loaded ZIP
+fonts use the shared NimKit asset cache.
+
+Kosmo enables bundled IBM Plex Sans (regular, italic, and bold) and JetBrains
+Mono Nerd Font Mono (regular). Fonts are installed only for roles without
+configuration or environment overrides. The Settings font catalog also includes
+these private fonts so they can be selected again. “System Default” selects the
+platform font independently of environment overrides. Other NimKit applications
+can supply private fonts through `Application.supplementalFontCatalogProvider`
+and configure related exact faces with `ThemeBuilder.setFontFaces`.
+
 The application run loop keeps NimKit views, responders, signal-slot dispatch,
 animations, native windows, and platform services on the main thread. When the
 selected FigDraw backend supports it, rendering runs on a dedicated thread and
@@ -292,6 +329,21 @@ builder.setFontName(frUI, "SFNS.ttf")
 builder.setFontName(frMonospace, "SFNSMono.ttf")
 root.appearance = initAppearance(builder.finish())
 ```
+
+Installed collection faces and named variable-font instances can also be kept
+exactly. `SystemTypeface` carries the physical file and face index together with
+canonical variation coordinates:
+
+```nim
+let semibold = initSystemTypeface(
+  "/path/to/VariableFont.ttf",
+  variations = [fontVariation("wght", 650.0'f32)],
+)
+builder.setFontFace(frUI, semibold)
+```
+
+The settings font picker uses this identity so selecting two named instances
+that share one variable-font file does not collapse them into the same face.
 
 Merenda follows FigDraw's resolved `figdrawTextBackend` constant. The default
 Pixie backend is lightweight and supports the Interface and Monospace roles.
@@ -648,6 +700,17 @@ Kosmo also loads `config.json` from that directory
 Merenda theme, interface-font, monospace-font, and font-size preferences.
 Invalid configuration is ignored. Selecting a Moe theme in Kosmo Settings
 updates this file.
+
+Kosmo embeds IBM Plex Sans Regular, Italic, and Bold plus JetBrains Mono Nerd
+Font Mono Regular as compressed resources. On startup it verifies and extracts
+them into NimKit's `kosmo/assets` cache, then uses them as the default interface
+and monospace faces on every platform. A configured font or font environment
+override takes precedence. If a bundled font cannot be extracted or written,
+that role falls back to the normal platform font. Merenda Settings keeps “System
+Default” available for switching a role back to its operating-system default.
+Nerd Fonts' own 3.5.1 license audit labels its Font Logos glyph source as
+“Unlicensed”; the notices shipped with Kosmo do not establish redistribution
+rights for those glyphs. See `data/FONT-LICENSES.md` before redistributing Kosmo.
 
 ```json
 {

@@ -1,6 +1,11 @@
 import ../foundation/types
 import ../foundation/urls
 
+when defined(useNativeDynlib):
+  from figdraw/dynlib import SystemTypeface
+else:
+  from figdraw import SystemTypeface
+
 type
   TextIndex* = distinct Natural
 
@@ -109,6 +114,7 @@ type
   TextAttributes* = object
     foregroundColor*: Color
     fontName*: string
+    fontFace*: SystemTypeface
     fontSize*: float32
     language*: LanguageTag
     paragraphStyle*: TextParagraphStyle
@@ -272,6 +278,7 @@ proc defaultTextAttributes*(
     fontSize = AutoMetric,
     fontName = "",
     language = LanguageTag(""),
+    fontFace = SystemTypeface(),
 ): TextAttributes =
   let resolvedFontSize =
     if fontSize.isAutoMetric:
@@ -281,6 +288,7 @@ proc defaultTextAttributes*(
   TextAttributes(
     foregroundColor: color,
     fontName: fontName,
+    fontFace: fontFace,
     fontSize: max(resolvedFontSize, 1.0'f32),
     language: language,
     paragraphStyle: initTextParagraphStyle(),
