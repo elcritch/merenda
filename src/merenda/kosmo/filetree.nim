@@ -204,27 +204,23 @@ proc includePathAndAncestors(
       if currentPath.len > 0 and currentPath notin expanded:
         expanded.add currentPath
 
-proc collectSearchEntries(
-    tree: KosmoFileTree, parentIdentifier: string, seen: var HashSet[string]
-) =
-  for path in tree.rawChildPaths(parentIdentifier):
-    if path.expandableDirectory():
-      tree.collectSearchEntries(path, seen)
-    elif path notin seen:
-      seen.incl path
-      tree.xSearchEntries.add FileTreeSearchEntry(
-        path: path,
-        normalizedName: path.fileBrowserDisplayName().toLower(),
-        hidden: tree.hiddenPath(path),
-      )
-
 proc ensureSearchIndex(tree: KosmoFileTree) =
   if tree.xSearchIndexValid:
     return
   tree.xSearchEntries.setLen(0)
   var seen = initHashSet[string]()
   for root in tree.xRootPaths:
-    tree.collectSearchEntries(root, seen)
+    for relative in projectFiles(
+      root, includeIgnored = tree.xDisplayMode == FileTreeDisplayMode.AllFiles
+    ):
+      let path = root / relative
+      if path notin seen:
+        seen.incl path
+        tree.xSearchEntries.add FileTreeSearchEntry(
+          path: path,
+          normalizedName: path.fileBrowserDisplayName().toLower(),
+          hidden: tree.hiddenPath(path),
+        )
   tree.xSearchIndexValid = true
 
 proc invalidateSearchIndex(tree: KosmoFileTree) =
@@ -440,6 +436,7 @@ proc `displayMode=`*(tree: KosmoFileTree, mode: FileTreeDisplayMode) =
   if tree.isNil or tree.xDisplayMode == mode:
     return
   tree.xDisplayMode = mode
+  tree.invalidateSearchIndex()
   tree.reloadFilteredTree()
 
 proc filterText*(tree: KosmoFileTree): string =
@@ -566,6 +563,7 @@ proc applyGitStatus*(tree: KosmoFileTree, snapshot: nimkit.GitStatusSnapshot) =
     return
   tree.xGitFileStates = fileStates
   tree.xGitDescendantStates = descendantStates
+  tree.invalidateSearchIndex()
   tree.rebuildGitChildren()
   tree.reloadFilteredTree()
 
@@ -640,17 +638,22 @@ proc selectScope(panel: KosmoFileBrowserPanel, mode: FileTreeDisplayMode) =
 
 proc toggleTreeExpansion(tree: KosmoFileTree) =
   var
-    pending = @[""]
+    pending = @[(path: "", depth: -1)]
     directories: seq[string]
     seen = initHashSet[string]()
     hasCollapsedDirectory = false
-  while pending.len > 0:
+    visited: int
+  while pending.len > 0 and visited < DefaultWorkspaceEntryLimit:
     let parent = pending.pop()
-    for path in tree.filteredChildPaths(parent):
+    for path in tree.filteredChildPaths(parent.path):
+      if visited >= DefaultWorkspaceEntryLimit:
+        break
+      inc visited
       if path notin seen and tree.isTreeDirectory(path):
         seen.incl path
         directories.add path
-        pending.add path
+        if parent.depth + 1 < DefaultWorkspaceDepth and not path.isFilesystemRoot():
+          pending.add (path: path, depth: parent.depth + 1)
         if not tree.isItemExpanded(path):
           hasCollapsedDirectory = true
   tree.expandedItemIdentifiers =
