@@ -1,17 +1,13 @@
 ## Fuzzy project-file picker used by Kosmo's quick-open command.
 
-import
-  std/[
-    algorithm, isolation, math, monotimes, os, osproc, sets, streams, strutils, tables,
-    times,
-  ]
+import std/[algorithm, math, monotimes, os, strutils, tables, times]
 
-import sigils/[core, threadProxies, threads]
-import threading/smartptrs
+import sigils/[core, threads]
 from figdraw import ZLevel
 
 import ../nimkit as nimkit
-import ../nimkit/foundation/backgroundworkers
+import ./workspacefiles
+export workspacefiles.projectFiles
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
 const
@@ -32,21 +28,11 @@ const
   QuickOpenResultsStyleId = "kosmo.quick-open.results"
   NoMatchingFilesTitle = "No matching files"
   LoadingFilesTitle = "Loading files…"
-  GitProcessStartAttempts = 20
-  GitProcessStartRetryMilliseconds = 25
 
 type
   KosmoQuickOpenHandler* = proc(path: string) {.closure.}
 
-  QuickOpenFileWorker = ref object of AgentActor
-
   QuickOpenProgressIndicator = ref object of nimkit.ProgressIndicator
-
-  QuickOpenFileResult = object
-    roots: seq[string]
-    labels: seq[string]
-    paths: seq[string]
-    generation: uint64
 
   KosmoQuickOpenPanel* = ref object of nimkit.Box
     queryField*: nimkit.TextField
@@ -63,8 +49,7 @@ type
     xObservedWindow: WeakRef[nimkit.Window]
     xPresentationOffset: float32
     xPresentationAnimation: nimkit.Animation
-    xFileWorker: AgentProxy[QuickOpenFileWorker]
-    xLoadGeneration: uint64
+    xWorkspaceFiles: WorkspaceFiles
     xLoading: bool
 
   KosmoQuickOpenFieldEditor = ref object of nimkit.FieldEditor
@@ -72,10 +57,6 @@ type
 
   KosmoQuickOpenFieldCell = ref object of nimkit.TextFieldCell
     editor: KosmoQuickOpenFieldEditor
-
-  GitCommandResult = object
-    output: string
-    exitCode: int
 
   RankedFile = object
     path: string
@@ -106,6 +87,7 @@ protocol QuickOpenProgressDrawing of nimkit.ViewDrawingProtocol:
 proc moveHighlight(panel: KosmoQuickOpenPanel, delta: int)
 proc activateHighlighted(panel: KosmoQuickOpenPanel)
 proc filterFiles(panel: KosmoQuickOpenPanel)
+proc scrollHighlightedToVisible(panel: KosmoQuickOpenPanel)
 
 func fuzzyFileScore*(candidate, query: string): int =
   ## Score a case-insensitive fuzzy subsequence match.
@@ -164,177 +146,53 @@ proc fuzzyFilterFiles*(files: openArray[string], query: string): seq[string] =
   for match in ranked:
     result.add match.path
 
-proc runGit(rootPath: string, arguments: openArray[string]): GitCommandResult =
-  var gitArguments = @["-C", rootPath, "--no-optional-locks"]
-  gitArguments.add arguments
-  for attempt in 0 ..< GitProcessStartAttempts:
-    result = GitCommandResult(exitCode: -1)
-    var
-      process: Process
-      processStarted = false
-    try:
-      process = startProcess(
-        "git", args = gitArguments, options = {poUsePath, poStdErrToStdOut}
-      )
-      processStarted = true
-      result.output = process.outputStream().readAll()
-      result.exitCode = process.waitForExit()
-    except CatchableError:
-      result.output = getCurrentExceptionMsg()
-    finally:
-      if not process.isNil:
-        process.close()
-    if processStarted:
-      return
-    if attempt + 1 < GitProcessStartAttempts:
-      sleep(GitProcessStartRetryMilliseconds)
+proc applyProjectFiles(panel: KosmoQuickOpenPanel) {.slot.} =
+  template files(): untyped =
+    panel.xWorkspaceFiles.snapshot()
 
-proc nextNulField(value: string, cursor: var int): string =
-  if cursor >= value.len:
-    return
-  let fieldEnd = value.find('\0', cursor)
-  if fieldEnd < 0:
-    result = value[cursor ..^ 1]
-    cursor = value.len
-  else:
-    result = value[cursor ..< fieldEnd]
-    cursor = fieldEnd + 1
-
-proc gitProjectFiles(
-    rootPath: string
-): tuple[isRepository, succeeded: bool, files: seq[string]] =
-  let listing = runGit(
-    rootPath,
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "."],
-  )
-  if listing.exitCode != 0:
-    return
-  result.isRepository = true
-  result.succeeded = true
-
-  var
-    cursor = 0
-    seen = initHashSet[string]()
-  while cursor < listing.output.len:
-    let relativePath = listing.output.nextNulField(cursor)
-    if relativePath.len == 0:
-      continue
-    if relativePath notin seen and fileExists(rootPath / relativePath):
-      seen.incl relativePath
-      result.files.add relativePath
-
-proc filesystemProjectFiles(rootPath: string): seq[string] =
-  var
-    directories = @[rootPath]
-    seen = initHashSet[string]()
-  while directories.len > 0:
-    let directory = directories.pop()
-    try:
-      for kind, path in walkDir(directory):
-        case kind
-        of pcDir:
-          if path.extractFilename() != ".git":
-            directories.add path
-        of pcLinkToDir:
-          discard
-        of pcFile, pcLinkToFile:
-          let relativePath = relativePath(path, rootPath)
-          if relativePath notin seen:
-            seen.incl relativePath
-            result.add relativePath
-    except OSError:
-      discard
-
-proc projectFiles*(rootPath: string): seq[string] =
-  ## List project files, respecting Git's standard ignore rules in work trees.
-  if rootPath.len == 0 or not dirExists(rootPath):
-    return
-  let root = absolutePath(rootPath)
-  let gitFiles = gitProjectFiles(root)
-  if gitFiles.isRepository:
-    if gitFiles.succeeded:
-      result = gitFiles.files
-  else:
-    result = filesystemProjectFiles(root)
-  result.sort(system.cmp[string])
-
-proc normalizedRoots(rootPaths: openArray[string]): seq[string] =
-  for root in rootPaths:
-    if root.len > 0 and dirExists(root):
-      let path = normalizedPath(absolutePath(root))
-      if path notin result:
-        result.add path
-
-proc loadProjectFiles(
-  worker: AgentProxy[QuickOpenFileWorker], roots: seq[string], generation: uint64
-) {.signal.}
-
-proc projectFilesLoaded(
-  worker: QuickOpenFileWorker, files: SharedPtr[QuickOpenFileResult]
-) {.signal.}
-
-proc loadProjectFiles(
-    worker: QuickOpenFileWorker, roots: seq[string], generation: uint64
-) {.slot.} =
-  var loaded = QuickOpenFileResult(roots: roots, generation: generation)
-  var seen = initHashSet[string]()
-  for root in roots:
-    var prefix = root.extractFilename()
-    for other in roots:
-      if other != root and other.extractFilename() == prefix:
-        prefix = root
-        break
-    for relative in projectFiles(root):
-      let path = normalizedPath(root / relative)
-      if path notin seen:
-        seen.incl path
-        loaded.labels.add(
-          if roots.len == 1:
-            relative
-          else:
-            prefix / relative
-        )
-        loaded.paths.add path
-  emit worker.projectFilesLoaded(newSharedPtr(unsafeIsolate(move loaded)))
-
-proc applyProjectFiles(
-    panel: KosmoQuickOpenPanel, loaded: SharedPtr[QuickOpenFileResult]
-) {.slot.} =
-  if loaded[].generation != panel.xLoadGeneration:
-    return
-  var files = move loaded[]
-  panel.xRootPaths = move files.roots
-  panel.xRootPath =
-    if panel.xRootPaths.len > 0:
-      panel.xRootPaths[0]
+  let highlighted =
+    if panel.xHighlightedIndex in 0 ..< panel.xFilteredFiles.len:
+      panel.xFilteredFiles[panel.xHighlightedIndex]
     else:
       ""
-  panel.xProjectFiles = move files.labels
+  panel.xRootPaths = files.roots
+  panel.xRootPath =
+    if files.roots.len > 0:
+      files.roots[0]
+    else:
+      ""
+  panel.xProjectFiles = files.labels
   panel.xFilePaths.clear()
-  for index, label in panel.xProjectFiles:
+  for index, label in files.labels:
     panel.xFilePaths[label] = files.paths[index]
   panel.xLoading = false
   panel.progressIndicator.stopAnimation()
   panel.filterFiles()
+  let selected = panel.xFilteredFiles.find(highlighted)
+  if selected >= 0:
+    panel.xHighlightedIndex = selected
+    panel.scrollHighlightedToVisible()
+
+proc workspaceFiles*(panel: KosmoQuickOpenPanel): WorkspaceFiles =
+  panel.xWorkspaceFiles
+
+proc `workspaceFiles=`*(panel: KosmoQuickOpenPanel, files: WorkspaceFiles) =
+  ## Borrow the browser's controller, rather than maintaining a second index.
+  if files.isNil or panel.xWorkspaceFiles == files:
+    return
+  if not panel.xWorkspaceFiles.isNil:
+    panel.xWorkspaceFiles.disconnect(workspaceFilesDidChange, panel, applyProjectFiles)
+  panel.xWorkspaceFiles = files
+  files.connect(workspaceFilesDidChange, panel, applyProjectFiles)
+  panel.applyProjectFiles()
 
 proc beginProjectFileLoad(panel: KosmoQuickOpenPanel, rootPaths: openArray[string]) =
-  let roots = normalizedRoots(rootPaths)
-  inc panel.xLoadGeneration
-  panel.xRootPaths = roots
-  panel.xRootPath =
-    if roots.len > 0:
-      roots[0]
-    else:
-      ""
-  panel.xProjectFiles.setLen(0)
-  panel.xFilteredFiles.setLen(0)
-  panel.xFilePaths.clear()
-  panel.xHighlightedIndex = -1
-  panel.xFirstIndex = 0
-  panel.xLoading = true
-  panel.progressIndicator.startAnimation()
+  panel.xWorkspaceFiles.setRoots(rootPaths)
+  panel.applyProjectFiles()
+  panel.xLoading = panel.xWorkspaceFiles.isLoading()
+  if panel.xLoading:
+    panel.progressIndicator.startAnimation()
   panel.resultsView.needsDisplay = true
-  emit panel.xFileWorker.loadProjectFiles(roots, panel.xLoadGeneration)
 
 proc visibleItemCount(panel: KosmoQuickOpenPanel): int =
   let availableRows =
@@ -715,17 +573,11 @@ proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
         else:
           panel[].visibleItemCount(),
       firstIndex: proc(): int =
-        if panel.isNil:
-          0
-        else:
-          panel[].xFirstIndex,
+        if panel.isNil: 0 else: panel[].xFirstIndex,
       selectedIndex: proc(): int =
         -1,
       highlightedIndex: proc(): int =
-        if panel.isNil:
-          -1
-        else:
-          panel[].xHighlightedIndex,
+        if panel.isNil: -1 else: panel[].xHighlightedIndex,
       rowHeight: proc(): float32 =
         QuickOpenRowHeight,
       itemText: proc(index: int): string =
@@ -790,17 +642,7 @@ proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
   result.hidden = true
   result.filterFiles()
 
-  var worker = QuickOpenFileWorker()
-  result.xFileWorker = worker.moveToThread(nimkitWorkerPool())
-  connectThreaded(
-    result.xFileWorker, loadProjectFiles, result.xFileWorker, loadProjectFiles
-  )
-  connectThreaded(
-    result.xFileWorker,
-    projectFilesLoaded,
-    result,
-    KosmoQuickOpenPanel.applyProjectFiles(),
-  )
+  result.workspaceFiles = newWorkspaceFiles()
 
 proc rootPath*(panel: KosmoQuickOpenPanel): string =
   if panel.isNil: "" else: panel.xRootPath
@@ -846,42 +688,7 @@ proc reloadProjectFiles*(panel: KosmoQuickOpenPanel, rootPaths: openArray[string
   ## Index all roots, preserving distinct names and deduplicating overlapping files.
   if panel.isNil:
     return
-  inc panel.xLoadGeneration
-  panel.xLoading = false
-  panel.progressIndicator.stopAnimation()
-  var roots: seq[string]
-  for root in rootPaths:
-    if root.len > 0 and dirExists(root):
-      let path = normalizedPath(absolutePath(root))
-      if path notin roots:
-        roots.add path
-  panel.xRootPaths = roots
-  panel.xRootPath =
-    if roots.len > 0:
-      roots[0]
-    else:
-      ""
-  panel.xProjectFiles.setLen(0)
-  panel.xFilePaths.clear()
-  var seen = initHashSet[string]()
-  for root in roots:
-    var prefix = root.extractFilename()
-    for other in roots:
-      if other != root and other.extractFilename() == prefix:
-        prefix = root
-        break
-    for relative in projectFiles(root):
-      let path = normalizedPath(root / relative)
-      if path notin seen:
-        seen.incl path
-        let label =
-          if roots.len == 1:
-            relative
-          else:
-            prefix / relative
-        panel.xProjectFiles.add label
-        panel.xFilePaths[label] = path
-  panel.filterFiles()
+  panel.xWorkspaceFiles.reload(rootPaths)
 
 proc reloadProjectFiles*(panel: KosmoQuickOpenPanel, rootPath = "") =
   ## Refresh a single root, or the current roots when no argument is supplied.
@@ -936,7 +743,7 @@ proc present*(
     return
   panel.xOnOpen = onOpen
   if panel.isOpen():
-    if normalizedRoots(rootPaths) != panel.xRootPaths:
+    if @rootPaths != panel.xRootPaths:
       panel.beginProjectFileLoad(rootPaths)
     return window.makeFirstResponder(panel.queryField)
 

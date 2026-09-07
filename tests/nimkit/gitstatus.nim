@@ -1,8 +1,12 @@
-import std/[monotimes, os, osproc, streams, tempfiles, times, unittest]
+import std/[monotimes, os, osproc, streams, strutils, tempfiles, times, unittest]
+
+when defined(posix):
+  import std/posix
 
 import sigils/core
 
 import merenda/nimkit/foundation/gitstatus
+import merenda/nimkit/foundation/gitprocesses
 
 type GitStatusSpy = ref object of Agent
   snapshots: seq[GitStatusSnapshot]
@@ -41,6 +45,66 @@ func entryForPath(
       return (true, entry)
 
 suite "nimkit Git status service":
+  test "Git commands drain output larger than a pipe buffer":
+    let root = createTempDir("merenda-git-process-output-", "")
+    defer:
+      removeDir(root)
+    discard runGit(root, ["init", "-q"])
+    let payload = repeat("0123456789abcdef\n", 32 * 1024)
+    writeFile(root / "large.txt", payload)
+    let stored = runGitCommand(root, ["hash-object", "-w", "large.txt"])
+    require stored.exitCode == 0
+
+    let loaded = runGitCommand(root, ["cat-file", "blob", stored.output.strip()])
+    check loaded.exitCode == 0
+    check loaded.output == payload
+
+  test "Git command failures retain diagnostics and permit later commands":
+    let root = createTempDir("merenda-git-process-error-", "")
+    defer:
+      removeDir(root)
+    discard runGit(root, ["init", "-q"])
+
+    let failed = runGitCommand(root, ["definitely-not-a-git-command"])
+    check failed.exitCode != 0
+    check "not a git command" in failed.output
+    let recovered = runGitCommand(root, ["rev-parse", "--is-inside-work-tree"])
+    check recovered.exitCode == 0
+    check recovered.output.strip() == "true"
+
+  when defined(posix):
+    test "timed out Git commands are bounded and reaped":
+      let root = createTempDir("merenda-git-process-timeout-", "")
+      var helperPid: Pid
+      defer:
+        if helperPid > 0 and posix.kill(helperPid, 0) == 0:
+          discard posix.kill(helperPid, SIGKILL)
+        removeDir(root)
+      discard runGit(root, ["init", "-q"])
+      let
+        pidPath = root / "git-command.pid"
+        alias =
+          "alias.waitforever=!printf '%s %s' \"$PPID\" \"$$\" > " & quoteShell(pidPath) &
+          "; exec sleep 30"
+        started = getMonoTime()
+        timedOut =
+          runGitCommand(root, ["-c", alias, "waitforever"], timeoutMilliseconds = 250)
+      check timedOut.exitCode == -1
+      check timedOut.output == "Git workspace command timed out"
+      check getMonoTime() - started < initDuration(seconds = 5)
+      require fileExists(pidPath)
+
+      let pids = readFile(pidPath).splitWhitespace()
+      require pids.len == 2
+      let gitPid = Pid(pids[0].parseInt())
+      helperPid = Pid(pids[1].parseInt())
+      let reapDeadline = getMonoTime() + initDuration(seconds = 2)
+      while posix.kill(gitPid, 0) == 0 and getMonoTime() < reapDeadline:
+        sleep(10)
+      check posix.kill(gitPid, 0) != 0
+      check errno == ESRCH
+      check runGitCommand(root, ["status", "--short"]).exitCode == 0
+
   test "parses modified untracked renamed conflicted and ignored records":
     let
       root = absolutePath("parser-root")
