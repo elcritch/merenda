@@ -814,15 +814,28 @@ visible when switching between Files and Find.
 
 The lower sidebar uses compact SVG tabs for the lazy file tree and regular-expression
 find-in-files results. A single click on a result opens it as a temporary preview;
-double-clicking promotes it to a permanent editor tab. Git-ignored files and
-dot-directories remain visible in the file tree with muted gray text. The Files tab's
-bottom popup switches among All Files, Visible Files, and Changed Files.
+double-clicking promotes it to a permanent editor tab. The file tree defaults to Visible Files, which hides dotfiles, dot-directories,
+and Git-ignored files and directories, including in filename searches. Git ignore
+filtering updates when repository status refreshes. The Files tab's bottom popup
+switches among All Files, Visible Files, and Changed Files. All Files reveals hidden
+and ignored entries, with ignored files and dot-directories shown in muted gray text.
 With the file tree focused, Shift-F selects Visible Files, Shift-A selects All Files,
 and Shift-G selects Changed Files. Shift-H toggles between All Files and Visible Files
 (from Changed Files, it switches to All Files). These keys remain normal typing keys
 in the file-name filter and other text fields.
-Shift-E expands all folders in the current view; when all are expanded, it collapses
-the whole tree.
+Shift-E expands folders within the automatic depth and entry limits; repeating it
+collapses the tree. You can expand individual folders beyond those limits.
+Workspace discovery is bounded: non-Git indexing scans at most eight folder levels
+and 10,000 directory entries, with a one-second traversal deadline. Git inventories
+retain at most 10,000 files. Quick Open and filename search can therefore show a
+partial inventory in large workspaces; open a narrower project folder for complete
+results. Folder contents load on demand when expanded. Filesystem roots such as `/`
+are only indexed at their top level and are never watched. Launching without a path
+from `/` starts with an empty workspace; use File > Open Folder… to choose a project.
+Native project watches are shallow and limited to 64 paths per workspace (including
+shallow Git metadata watches that exclude the object database); periodic reconciliation refreshes the bounded inventory for
+paths outside that coverage.
+
 Command-F on macOS or Control-F elsewhere opens a live file-name filter; matching files
 remain nested beneath their folder hierarchy. Find in Files searches Git tracked and
 untracked non-ignored files and skips binary or unsupported text encodings by default;

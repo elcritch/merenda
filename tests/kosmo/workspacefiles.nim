@@ -1,4 +1,4 @@
-import std/[importutils, monotimes, os, tempfiles, times, unittest]
+import std/[importutils, monotimes, os, tables, tempfiles, times, unittest]
 import dmon
 import sigils/[core, threads]
 import merenda/nimkit
@@ -23,6 +23,80 @@ template eventually(condition: untyped) =
     check condition
 
 suite "Kosmo shared workspace inventory":
+  test "non-Git discovery limits depth and entries while browsing stays lazy":
+    let root = createTempDir("kosmo-bounded-inventory-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "top.txt", "top")
+    var deep = root
+    for index in 0 ..< DefaultWorkspaceDepth + 2:
+      deep = deep / "nested"
+      createDir(deep)
+    writeFile(deep / "deep.txt", "deep")
+    check "top.txt" in projectFiles(root)
+    check relativePath(deep / "deep.txt", root) notin projectFiles(root)
+    check relativePath(deep / "deep.txt", root) in
+      projectFiles(root, maxDepth = DefaultWorkspaceDepth + 2)
+    check projectFiles(root, maxDepth = 0) == @["top.txt"]
+
+    let files = newWorkspaceFiles()
+    defer:
+      files.close()
+    files.reload([root])
+    check files.fallback.cachedDirectoryCount() == 0
+    check files.entries(deep).len == 1
+    check files.entries(deep)[0].path == deep / "deep.txt"
+    check files.fallback.cachedDirectoryCount() == 1
+
+    let flat = root / "flat"
+    createDir(flat)
+    for index in 0 ..< 12:
+      writeFile(flat / ($index & ".txt"), "file")
+    check projectFiles(flat, maxEntries = 3).len == 3
+    # Directories count toward the budget even when they contain no files.
+    check projectFiles(root / "nested", maxEntries = 3).len == 0
+
+  test "filesystem roots are shallow and have no native workspace watches":
+    var root = getCurrentDir()
+    while root.parentDir().len > 0 and root.parentDir() != root:
+      root = root.parentDir()
+    check root.isFilesystemRoot()
+    for path in projectFiles(root, maxEntries = 20):
+      check path.extractFilename() == path
+    let watch = newWorkspaceWatch()
+    defer:
+      watch.close()
+    watch.setRoots([root], [root])
+    check watch.directories.len == 0
+    check watch.watches.len == 0
+    check not watch.usesPollingFallback()
+
+  test "workspace directory watches are shallow and capped":
+    let root = createTempDir("kosmo-bounded-watches-", "")
+    defer:
+      removeDir(root)
+    var folders: seq[string]
+    for index in 0 ..< 70:
+      let folder = root / $index
+      createDir(folder)
+      folders.add folder
+    let watch = newWorkspaceWatch()
+    defer:
+      watch.close()
+    watch.setRoots([root], folders)
+    check watch.directories.len == 64
+    check watch.metadata.len == 0
+    check watch.watches.len <= 64
+    let rootHandle = watch.handles.getOrDefault(root)
+    createDir(root / ".git" / "objects" / "pack")
+    createDir(root / ".git" / "refs" / "heads" / "feature")
+    watch.setRoots([root], folders)
+    check root / ".git" in watch.metadata
+    check root / ".git" / "refs" / "heads" / "feature" in watch.metadata
+    check root / ".git" / "objects" notin watch.directories
+    when not defined(linux):
+      check uint32(watch.handles[root]) == uint32(rootHandle)
+
   test "browser and quick open share updates and keep their visibility policies":
     let root = createTempDir("kosmo-shared-inventory-", "")
     defer:
@@ -34,9 +108,7 @@ suite "Kosmo shared workspace inventory":
     writeFile(root / "build" / "ignored.nim", "discard\n")
     writeFile(root / ".hidden" / "secret.nim", "discard\n")
     require runGitCommand(root, ["init", "-q"]).exitCode == 0
-    let frontend = newKosmoApplication(
-      newApplication("Shared inventory"), root, monitorsGitStatus = false
-    )
+    let frontend = newKosmoApplication(newApplication("Shared inventory"), root)
     defer:
       frontend.close()
     let files = frontend.fileTree.workspaceFiles
@@ -44,6 +116,11 @@ suite "Kosmo shared workspace inventory":
     require files.waitForFiles()
     check "main.nim" in frontend.quickOpenPanel.projectFiles()
     check "build/ignored.nim" notin frontend.quickOpenPanel.projectFiles()
+    require frontend.fileTree.waitForGitStatus()
+    check frontend.fileTree.displayMode == FileTreeDisplayMode.VisibleFiles
+    check frontend.fileTree.rowForItem(root / "build") < 0
+    check frontend.fileTree.rowForItem(root / ".hidden") < 0
+    frontend.fileTree.displayMode = FileTreeDisplayMode.AllFiles
     frontend.fileTree.expandItem(root / "build")
     check frontend.fileTree.rowForItem(root / "build" / "ignored.nim") >= 0
     frontend.fileTree.expandItem(root / ".hidden")
@@ -51,6 +128,7 @@ suite "Kosmo shared workspace inventory":
     frontend.fileTree.displayMode = FileTreeDisplayMode.VisibleFiles
     check frontend.fileTree.rowForItem(root / "main.nim") >= 0
     check frontend.fileTree.rowForItem(root / ".hidden") < 0
+    check frontend.fileTree.rowForItem(root / "build") < 0
     writeFile(root / "new.nim", "discard\n")
     files.refresh()
     require files.waitForFiles()

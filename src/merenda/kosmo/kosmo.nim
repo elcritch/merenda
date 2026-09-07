@@ -4577,6 +4577,8 @@ proc newKosmoApplication*(
         ""
       elif dirExists(filePath):
         absolutePath(filePath)
+      elif getCurrentDir().isFilesystemRoot():
+        ""
       else:
         getCurrentDir()
     editorWorkingDirectory =
