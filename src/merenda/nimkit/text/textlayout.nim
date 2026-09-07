@@ -4,9 +4,9 @@ import sigils/[core, threads]
 import threading/smartptrs
 
 when defined(useNativeDynlib):
-  import figdraw/dynlib except Hash
+  import figdraw/dynlib except Hash, TextCaretPosition
 else:
-  import figdraw
+  import figdraw except TextCaretPosition
   from figdraw/common/typefaces import getFigFont
 from pkg/vmath import vec2, x, y
 
@@ -15,121 +15,13 @@ import ../foundation/mainthreadwork
 import ../foundation/selectors
 import ./textstorage
 import ./textlayoutworkers
+import ./textlayouttypes
+export textlayouttypes
 import ./texttypes
 import ../themes
 import ../foundation/types
 
 type
-  GlyphIndex* = distinct Natural
-  TextLineIndex* = distinct Natural
-  TextContainerIndex* = distinct Natural
-
-  GlyphRange* = object
-    location*: GlyphIndex
-    length*: Natural
-
-  TextLineRange* = object
-    location*: TextLineIndex
-    length*: Natural
-
-  GlyphProperty* = enum
-    gpControl
-    gpElastic
-    gpAttachment
-    gpNull
-
-  GlyphProperties* = set[GlyphProperty]
-
-  TextGlyphPropertyRun* = object
-    range*: GlyphRange
-    properties*: GlyphProperties
-
-  TextLayoutInvalidationKind* = enum
-    tlikCharacters
-    tlikGlyphs
-    tlikLayout
-    tlikDisplay
-    tlikContainer
-
-  TextLayoutInvalidation* = object
-    kind*: TextLayoutInvalidationKind
-    textRange*: TextRange
-    glyphRange*: GlyphRange
-    containerIndex*: Option[TextContainerIndex]
-
-  TextCaretPositionKind* = enum
-    tcpLeading
-    tcpInside
-    tcpTrailing
-
-  TextCaretPosition* = object
-    textIndex*: TextIndex
-    glyphIndex*: Option[GlyphIndex]
-    lineIndex*: TextLineIndex
-    containerIndex*: TextContainerIndex
-    kind*: TextCaretPositionKind
-    rect*: Rect
-
-  TextLineFragment* = object
-    lineIndex*: TextLineIndex
-    containerIndex*: TextContainerIndex
-    glyphRange*: GlyphRange
-    textRange*: TextRange
-    fragmentRect*: Rect
-    usedRect*: Rect
-    baseline*: float32
-    ascent*: float32
-    descent*: float32
-    leading*: float32
-    hardBreak*: bool
-    wrapped*: bool
-
-  TextLineFragmentMetrics* = object
-    fragment*: TextLineFragment
-    lineSpacing*: float32
-    paragraphSpacingBefore*: float32
-    paragraphSpacingAfter*: float32
-    extraLineFragment*: bool
-
-  TextGlyph* = object
-    index*: GlyphIndex
-    textRange*: TextRange
-    properties*: GlyphProperties
-    bounds*: Rect
-    lineIndex*: TextLineIndex
-    containerIndex*: TextContainerIndex
-
-  TextLayoutSnapshot* = object
-    textHash*: Hash
-    layoutHash*: Hash
-    containerRect*: Rect
-    containers*: seq[TextContainer]
-    containerRects*: seq[Rect]
-    lineFragments*: seq[TextLineFragment]
-    glyphCount*: Natural
-    usedRect*: Rect
-    contentSize*: Size
-
-  TextContainer* = object
-    origin*: Point
-    size*: Size
-    insets*: EdgeInsets
-    lineFragmentPadding*: float32
-    widthTracksTextView*: bool
-    heightTracksTextView*: bool
-    maximumNumberOfLines*: Natural
-    lineBreakMode*: TextLineBreakMode
-    wraps*: bool
-    exclusionPaths*: seq[Rect]
-
-  TextHitTestResult* = object
-    point*: Point
-    textIndex*: TextIndex
-    textRange*: TextRange
-    glyphIndex*: Option[GlyphIndex]
-    lineIndex*: Option[TextLineIndex]
-    containerIndex*: Option[TextContainerIndex]
-
   TextLayoutBackend* = ref object of DynamicAgent
 
   FigDrawTextTypesetter* = ref object of TextLayoutBackend
@@ -180,6 +72,7 @@ type
     xPendingBackgroundGeneration: uint64
     xBackgroundSchedulePending: bool
     xBackgroundWorker: AgentProxy[TextLayoutWorker]
+    xSnapshotThreadId: int
 
 proc `==`*(a, b: GlyphIndex): bool {.borrow.}
 proc `$`*(index: GlyphIndex): string {.borrow.}
@@ -202,6 +95,14 @@ proc defaultCaretRect(manager: TextLayoutManager, insertionPoint: int): Rect
 proc defaultSelectionRects(manager: TextLayoutManager, range: TextRange): seq[Rect]
 proc defaultTextIndexAtPoint(manager: TextLayoutManager, point: Point): int
 proc snapshotFromCurrentLayout(manager: TextLayoutManager): TextLayoutSnapshot
+proc workerLayoutSnapshot(
+  arrangement: var GlyphArrangement,
+  storage: TextStorage,
+  containers: seq[TextContainer],
+  style: TextStyle,
+  alignment: TextAlignment,
+): TextLayoutSnapshot {.nimcall.}
+
 proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult
 proc completeBackgroundTextLayout(
   manager: TextLayoutManager, layoutResultBox: SharedPtr[TextLayoutWorkerResult]
@@ -657,7 +558,7 @@ proc initTextLayoutManagerFields*(
 proc ensureBackgroundWorker(manager: TextLayoutManager) =
   if not manager.xBackgroundWorker.isNil:
     return
-  manager.xBackgroundWorker = newTextLayoutWorker()
+  manager.xBackgroundWorker = newTextLayoutWorker(workerLayoutSnapshot)
   connectThreaded(
     manager.xBackgroundWorker,
     textLayoutFinished,
@@ -798,7 +699,10 @@ proc delegate*(manager: TextLayoutManager): DynamicAgent =
   manager.xDelegate
 
 proc `delegate=`*(manager: TextLayoutManager, delegate: DynamicAgent) =
+  if manager.xDelegate == delegate:
+    return
   manager.xDelegate = delegate
+  manager.invalidateLayout()
 
 proc usesBackgroundLayout*(manager: TextLayoutManager): bool =
   manager.xUsesBackgroundLayout
@@ -1145,14 +1049,19 @@ proc finishLayout(
     arrangement: sink GlyphArrangement,
     snapshot: sink TextLayoutSnapshot,
     fontRefs: sink seq[FontRef],
+    snapshotThreadId = 0,
 ) =
   let
-    oldSnapshot = manager.xSnapshot
-    oldUsedRect = oldSnapshot.usedRect
-    oldContentSize = oldSnapshot.contentSize
+    oldUsedRect = manager.xSnapshot.usedRect
+    oldContentSize = manager.xSnapshot.contentSize
   manager.xFontRefs = fontRefs
   manager.xLayout = arrangement
   manager.xSnapshot = snapshot
+  manager.xSnapshotThreadId =
+    if snapshotThreadId == 0:
+      getThreadId()
+    else:
+      snapshotThreadId
   manager.xHasLayout = true
   manager.xHasCachedLayout = true
   manager.xCanUseBackgroundLayout = false
@@ -1196,6 +1105,9 @@ proc startBackgroundTextLayout(manager: TextLayoutManager) =
     request.style,
     request.alignment,
     request.wraps or containers.anyContainerWraps(),
+    containers,
+    # Client inputs were resolved into request values on this thread already.
+    manager.xDelegate.isNil,
   )
 
 proc scheduleBackgroundTextLayout(manager: TextLayoutManager) =
@@ -1236,11 +1148,20 @@ proc completeBackgroundTextLayout(
 
   manager.xLayoutRect = manager.effectiveContainers().virtualLayoutRect()
   var fontRefs = layoutResult.arrangement.retainedFonts()
-  manager.xLayout = move layoutResult.arrangement
-  var
-    snapshot = manager.snapshotFromCurrentLayout()
-    arrangement = move manager.xLayout
-  manager.finishLayout(move arrangement, move snapshot, move fontRefs)
+  if layoutResult.snapshotThreadId != 0 and manager.xDelegate.isNil:
+    manager.finishLayout(
+      move layoutResult.arrangement,
+      move layoutResult.snapshot,
+      move fontRefs,
+      layoutResult.snapshotThreadId,
+    )
+  else:
+    # Delegates are UI-owned; never send their callbacks to workers.
+    manager.xLayout = move layoutResult.arrangement
+    var
+      snapshot = manager.snapshotFromCurrentLayout()
+      arrangement = move manager.xLayout
+    manager.finishLayout(move arrangement, move snapshot, move fontRefs)
 
 proc defaultUpdateLayout(manager: TextLayoutManager) =
   manager.applyClientInputs()
@@ -1271,18 +1192,9 @@ proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult =
   result.arrangement =
     textLayout(rect, request.storage, request.style, request.alignment, wraps)
   result.fontRefs = result.arrangement.retainedFonts()
-  let manager = TextLayoutManager(
-    xTextStorage: request.storage,
-    xTextContainer: containers[0],
-    xTextContainers: containers,
-    xTextStyle: request.style,
-    xAlignment: request.alignment,
-    xLayout: result.arrangement,
-    xFontRefs: result.fontRefs,
-    xLayoutRect: rect,
-    xHasLayout: true,
+  result.snapshot = workerLayoutSnapshot(
+    result.arrangement, request.storage, containers, request.style, request.alignment
   )
-  result.snapshot = manager.snapshotFromCurrentLayout()
 
 proc glyphArrangement*(manager: TextLayoutManager): GlyphArrangement =
   manager.updateLayout()
@@ -1301,18 +1213,17 @@ proc glyphCount*(manager: TextLayoutManager): Natural =
   manager.currentGlyphCount().Natural
 
 proc lineFragment(
-    manager: TextLayoutManager, visualIndex: int, line: Slice[int], lineCount: int
+    manager: TextLayoutManager,
+    visualIndex: int,
+    line: Slice[int],
+    lineCount: int,
+    sourceRunes: openArray[Rune],
 ): TextLineFragment =
   let
     containers = manager.effectiveContainers()
-    layout = manager.xLayout
     glyphRange = initGlyphRange(line.a, line.b - line.a + 1)
-    sourceRunes =
-      if manager.xTextStorage.isNil:
-        @[]
-      else:
-        manager.xTextStorage.stringValue().toRunes()
-  var textRange = layout.textRangeForGlyphLine(line)
+  # Read the retained arrangement directly; a local value copies every glyph.
+  var textRange = manager.xLayout.textRangeForGlyphLine(line)
   if textRange.maxIndex < sourceRunes.len and
       sourceRunes[textRange.maxIndex] in [Rune('\n'), Rune('\r')]:
     inc textRange.length
@@ -1326,8 +1237,9 @@ proc lineFragment(
 
   for glyphIndex in line:
     let
-      glyphBounds = layout.glyphRect(glyphIndex).toContainerRect(manager.xLayoutRect)
-      font = layout.glyphFont(glyphIndex)
+      glyphBounds =
+        manager.xLayout.glyphRect(glyphIndex).toContainerRect(manager.xLayoutRect)
+      font = manager.xLayout.glyphFont(glyphIndex)
     if not glyphBounds.isEmpty:
       if hasUsedRect:
         virtualUsedRect = virtualUsedRect.union(glyphBounds)
@@ -1384,18 +1296,10 @@ proc lineFragment(
   )
 
 proc emptyLineFragment(
-    manager: TextLayoutManager, visualIndex: int, sourceIndex: int
+    manager: TextLayoutManager, visualIndex: int, sourceIndex: int, hardBreak = false
 ): TextLineFragment =
   let
     containers = manager.effectiveContainers()
-    sourceRunes =
-      if manager.xTextStorage.isNil:
-        @[]
-      else:
-        manager.xTextStorage.stringValue().toRunes()
-    hardBreak =
-      sourceIndex < sourceRunes.len and
-      sourceRunes[sourceIndex] in [Rune('\n'), Rune('\r')]
     caret = manager.virtualCaretRect(sourceIndex)
     lineHeight = max(caret.size.height, defaultFontSize())
     containerIndex = containers.containerIndexForVirtualY(caret.origin.y)
@@ -1425,11 +1329,6 @@ proc emptyLineFragment(
     hardBreak: hardBreak,
   )
 
-func startsAtTextIndex(fragments: openArray[TextLineFragment], index: int): bool =
-  for fragment in fragments:
-    if int(fragment.textRange.location) == index:
-      return true
-
 proc reindexLineFragments(fragments: var seq[TextLineFragment]) =
   fragments.sort(
     proc(a, b: TextLineFragment): int =
@@ -1442,30 +1341,46 @@ proc reindexLineFragments(fragments: var seq[TextLineFragment]) =
   for index in 0 ..< fragments.len:
     fragments[index].lineIndex = initTextLineIndex(index)
 
+iterator currentLineFragments(manager: TextLayoutManager): TextLineFragment =
+  # One decoded source per pass; only small fragment values leave the iterator.
+  let sourceRunes =
+    if manager.xTextStorage.isNil:
+      @[]
+    else:
+      manager.xTextStorage.stringValue().toRunes()
+  if manager.xLayout.glyphCount() == 0:
+    yield manager.emptyLineFragment(
+      0, 0, sourceRunes.len > 0 and sourceRunes[0] in [Rune('\n'), Rune('\r')]
+    )
+  else:
+    let lines = manager.xLayout.lineGlyphRanges()
+    var lineStarts = initHashSet[int]()
+    var fragmentCount = 0
+    for visualIndex, rawLine in lines:
+      if rawLine.a <= rawLine.b:
+        let fragment =
+          manager.lineFragment(visualIndex, rawLine, lines.len, sourceRunes)
+        lineStarts.incl int(fragment.textRange.location)
+        inc fragmentCount
+        yield fragment
+    for index, rune in sourceRunes:
+      if rune == Rune('\n'):
+        let nextIndex = index + 1
+        if nextIndex notin lineStarts:
+          yield manager.emptyLineFragment(
+            fragmentCount,
+            nextIndex,
+            nextIndex < sourceRunes.len and
+              sourceRunes[nextIndex] in [Rune('\n'), Rune('\r')],
+          )
+          inc fragmentCount
+          lineStarts.incl nextIndex
+
 proc defaultLineFragments(manager: TextLayoutManager): seq[TextLineFragment] =
   if not manager.xHasLayout:
     manager.updateLayout()
-
-  let count = manager.xLayout.glyphCount()
-  if count == 0:
-    result.add manager.emptyLineFragment(0, 0)
-    result = result.enforceLineLimits(manager.effectiveContainers())
-    return
-
-  let lines = manager.xLayout.lineGlyphRanges()
-
-  for visualIndex, rawLine in lines:
-    if rawLine.a <= rawLine.b:
-      result.add manager.lineFragment(visualIndex, rawLine, lines.len)
-
-  if not manager.xTextStorage.isNil:
-    var index = 0
-    for rune in manager.xTextStorage.stringValue().runes:
-      if rune == Rune('\n'):
-        let nextIndex = index + 1
-        if not result.startsAtTextIndex(nextIndex):
-          result.add manager.emptyLineFragment(result.len, nextIndex)
-      inc index
+  for fragment in manager.currentLineFragments():
+    result.add fragment
   result = result.enforceLineLimits(manager.effectiveContainers())
   result.reindexLineFragments()
 
@@ -1522,6 +1437,31 @@ proc snapshotFromCurrentLayout(manager: TextLayoutManager): TextLayoutSnapshot =
 proc defaultLayoutSnapshot(manager: TextLayoutManager): TextLayoutSnapshot =
   manager.updateLayout()
   manager.xSnapshot
+
+proc workerLayoutSnapshot(
+    arrangement: var GlyphArrangement,
+    storage: TextStorage,
+    containers: seq[TextContainer],
+    style: TextStyle,
+    alignment: TextAlignment,
+): TextLayoutSnapshot =
+  # This temporary manager owns only worker-local inputs and has no UI hooks.
+  let manager = TextLayoutManager(
+    xTextStorage: storage,
+    xTextContainer: containers[0],
+    xTextContainers: containers,
+    xTextStyle: style,
+    xAlignment: alignment,
+    xLayout: move arrangement,
+    xLayoutRect: containers.virtualLayoutRect(),
+    xHasLayout: true,
+  )
+  result = manager.snapshotFromCurrentLayout()
+  arrangement = move manager.xLayout
+
+proc snapshotBuildThreadId*(manager: TextLayoutManager): int =
+  ## Thread that built the last applied snapshot; zero before the first layout.
+  manager.xSnapshotThreadId
 
 proc layoutSnapshot*(manager: TextLayoutManager): TextLayoutSnapshot =
   manager.lmSnapshot()

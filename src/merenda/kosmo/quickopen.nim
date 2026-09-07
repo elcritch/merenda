@@ -1,10 +1,17 @@
 ## Fuzzy project-file picker used by Kosmo's quick-open command.
 
-import std/[algorithm, math, os, osproc, sets, streams, strutils, tables]
+import
+  std/[
+    algorithm, isolation, math, monotimes, os, osproc, sets, streams, strutils, tables,
+    times,
+  ]
 
-import sigils/core
+import sigils/[core, threadProxies, threads]
+import threading/smartptrs
+from figdraw import ZLevel
 
 import ../nimkit as nimkit
+import ../nimkit/foundation/backgroundworkers
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
 const
@@ -24,15 +31,27 @@ const
   QuickOpenFieldStyleId = "kosmo.quick-open.field"
   QuickOpenResultsStyleId = "kosmo.quick-open.results"
   NoMatchingFilesTitle = "No matching files"
+  LoadingFilesTitle = "Loading files…"
   GitProcessStartAttempts = 20
   GitProcessStartRetryMilliseconds = 25
 
 type
   KosmoQuickOpenHandler* = proc(path: string) {.closure.}
 
+  QuickOpenFileWorker = ref object of AgentActor
+
+  QuickOpenProgressIndicator = ref object of nimkit.ProgressIndicator
+
+  QuickOpenFileResult = object
+    roots: seq[string]
+    labels: seq[string]
+    paths: seq[string]
+    generation: uint64
+
   KosmoQuickOpenPanel* = ref object of nimkit.Box
     queryField*: nimkit.TextField
     resultsView*: nimkit.PopupListView
+    progressIndicator*: nimkit.ProgressIndicator
     xRootPath: string
     xRootPaths: seq[string]
     xFilePaths: Table[string, string]
@@ -44,6 +63,9 @@ type
     xObservedWindow: WeakRef[nimkit.Window]
     xPresentationOffset: float32
     xPresentationAnimation: nimkit.Animation
+    xFileWorker: AgentProxy[QuickOpenFileWorker]
+    xLoadGeneration: uint64
+    xLoading: bool
 
   KosmoQuickOpenFieldEditor = ref object of nimkit.FieldEditor
     panel: WeakRef[KosmoQuickOpenPanel]
@@ -77,8 +99,13 @@ protocol DefaultKosmoQuickOpenPresentation of KosmoQuickOpenPresentationProtocol
       parent.needsLayout = true
     panel.needsDisplay = true
 
+protocol QuickOpenProgressDrawing of nimkit.ViewDrawingProtocol:
+  method drawLevel(indicator: QuickOpenProgressIndicator): ZLevel =
+    nimkit.PopupDrawLevel
+
 proc moveHighlight(panel: KosmoQuickOpenPanel, delta: int)
 proc activateHighlighted(panel: KosmoQuickOpenPanel)
+proc filterFiles(panel: KosmoQuickOpenPanel)
 
 func fuzzyFileScore*(candidate, query: string): int =
   ## Score a case-insensitive fuzzy subsequence match.
@@ -231,6 +258,84 @@ proc projectFiles*(rootPath: string): seq[string] =
     result = filesystemProjectFiles(root)
   result.sort(system.cmp[string])
 
+proc normalizedRoots(rootPaths: openArray[string]): seq[string] =
+  for root in rootPaths:
+    if root.len > 0 and dirExists(root):
+      let path = normalizedPath(absolutePath(root))
+      if path notin result:
+        result.add path
+
+proc loadProjectFiles(
+  worker: AgentProxy[QuickOpenFileWorker], roots: seq[string], generation: uint64
+) {.signal.}
+
+proc projectFilesLoaded(
+  worker: QuickOpenFileWorker, files: SharedPtr[QuickOpenFileResult]
+) {.signal.}
+
+proc loadProjectFiles(
+    worker: QuickOpenFileWorker, roots: seq[string], generation: uint64
+) {.slot.} =
+  var loaded = QuickOpenFileResult(roots: roots, generation: generation)
+  var seen = initHashSet[string]()
+  for root in roots:
+    var prefix = root.extractFilename()
+    for other in roots:
+      if other != root and other.extractFilename() == prefix:
+        prefix = root
+        break
+    for relative in projectFiles(root):
+      let path = normalizedPath(root / relative)
+      if path notin seen:
+        seen.incl path
+        loaded.labels.add(
+          if roots.len == 1:
+            relative
+          else:
+            prefix / relative
+        )
+        loaded.paths.add path
+  emit worker.projectFilesLoaded(newSharedPtr(unsafeIsolate(move loaded)))
+
+proc applyProjectFiles(
+    panel: KosmoQuickOpenPanel, loaded: SharedPtr[QuickOpenFileResult]
+) {.slot.} =
+  if loaded[].generation != panel.xLoadGeneration:
+    return
+  var files = move loaded[]
+  panel.xRootPaths = move files.roots
+  panel.xRootPath =
+    if panel.xRootPaths.len > 0:
+      panel.xRootPaths[0]
+    else:
+      ""
+  panel.xProjectFiles = move files.labels
+  panel.xFilePaths.clear()
+  for index, label in panel.xProjectFiles:
+    panel.xFilePaths[label] = files.paths[index]
+  panel.xLoading = false
+  panel.progressIndicator.stopAnimation()
+  panel.filterFiles()
+
+proc beginProjectFileLoad(panel: KosmoQuickOpenPanel, rootPaths: openArray[string]) =
+  let roots = normalizedRoots(rootPaths)
+  inc panel.xLoadGeneration
+  panel.xRootPaths = roots
+  panel.xRootPath =
+    if roots.len > 0:
+      roots[0]
+    else:
+      ""
+  panel.xProjectFiles.setLen(0)
+  panel.xFilteredFiles.setLen(0)
+  panel.xFilePaths.clear()
+  panel.xHighlightedIndex = -1
+  panel.xFirstIndex = 0
+  panel.xLoading = true
+  panel.progressIndicator.startAnimation()
+  panel.resultsView.needsDisplay = true
+  emit panel.xFileWorker.loadProjectFiles(roots, panel.xLoadGeneration)
+
 proc visibleItemCount(panel: KosmoQuickOpenPanel): int =
   let availableRows =
     max(int(floor(panel.resultsView.bounds().size.height / QuickOpenRowHeight)), 1)
@@ -372,6 +477,14 @@ protocol KosmoQuickOpenLayout of nimkit.ViewLayoutProtocol:
     panel.resultsView.setFrameFromLayout(
       nimkit.rect(
         0, resultsY, bounds.size.width, max(bounds.size.height - resultsY, 0.0'f32)
+      )
+    )
+    panel.progressIndicator.setFrameFromLayout(
+      nimkit.rect(
+        max(bounds.size.width - 28, 0),
+        resultsY + 2,
+        20,
+        min(20, max(bounds.size.height - resultsY - 4, 0)),
       )
     )
     panel.clampFirstIndex()
@@ -616,14 +729,17 @@ proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
       rowHeight: proc(): float32 =
         QuickOpenRowHeight,
       itemText: proc(index: int): string =
-        if panel.isNil or panel[].xFilteredFiles.len == 0:
+        if not panel.isNil and panel[].xLoading:
+          LoadingFilesTitle
+        elif panel.isNil or panel[].xFilteredFiles.len == 0:
           NoMatchingFilesTitle
         elif index in 0 ..< panel[].xFilteredFiles.len:
           panel[].xFilteredFiles[index]
         else:
           "",
       itemIsEnabled: proc(index: int): bool =
-        not panel.isNil and index in 0 ..< panel[].xFilteredFiles.len,
+        not panel.isNil and not panel[].xLoading and
+          index in 0 ..< panel[].xFilteredFiles.len,
       focused: proc(): bool =
         if panel.isNil:
           false
@@ -657,13 +773,34 @@ proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
       ,
     ),
   )
+  let progressIndicator = QuickOpenProgressIndicator()
+  progressIndicator.initProgressIndicatorFields()
+  discard progressIndicator.withProtocol(QuickOpenProgressDrawing)
+  result.progressIndicator = progressIndicator
+  result.progressIndicator.indeterminate = true
+  result.progressIndicator.displayedWhenStopped = false
+  result.progressIndicator.progressIndicatorStyle = nimkit.pisSpinning
+  result.progressIndicator.accessibilityLabel = LoadingFilesTitle
   result.contentView().addSubview(result.queryField)
   result.contentView().addSubview(result.resultsView)
+  result.contentView().addSubview(result.progressIndicator)
   discard result.withProtocol(KosmoQuickOpenLayout)
   result.queryField.connect(nimkit.textDidChange, result, quickOpenQueryDidChange)
   result.applyQuickOpenAppearance(result.effectiveAppearance())
   result.hidden = true
   result.filterFiles()
+
+  var worker = QuickOpenFileWorker()
+  result.xFileWorker = worker.moveToThread(nimkitWorkerPool())
+  connectThreaded(
+    result.xFileWorker, loadProjectFiles, result.xFileWorker, loadProjectFiles
+  )
+  connectThreaded(
+    result.xFileWorker,
+    projectFilesLoaded,
+    result,
+    KosmoQuickOpenPanel.applyProjectFiles(),
+  )
 
 proc rootPath*(panel: KosmoQuickOpenPanel): string =
   if panel.isNil: "" else: panel.xRootPath
@@ -691,10 +828,27 @@ proc highlightedFile*(panel: KosmoQuickOpenPanel): string =
 proc isOpen*(panel: KosmoQuickOpenPanel): bool =
   not panel.isNil and not panel.hidden()
 
+proc isLoading*(panel: KosmoQuickOpenPanel): bool =
+  ## Return whether the picker is indexing its current project roots.
+  not panel.isNil and panel.xLoading
+
+proc waitForProjectFiles*(
+    panel: KosmoQuickOpenPanel, timeoutMilliseconds = 10_000
+): bool =
+  ## Deliver worker results until project indexing finishes in tests or tools.
+  let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
+  while panel.isLoading() and getMonoTime() < deadline:
+    discard getCurrentSigilThread().pollAll(NonBlocking)
+    sleep(1)
+  not panel.isLoading()
+
 proc reloadProjectFiles*(panel: KosmoQuickOpenPanel, rootPaths: openArray[string]) =
   ## Index all roots, preserving distinct names and deduplicating overlapping files.
   if panel.isNil:
     return
+  inc panel.xLoadGeneration
+  panel.xLoading = false
+  panel.progressIndicator.stopAnimation()
   var roots: seq[string]
   for root in rootPaths:
     if root.len > 0 and dirExists(root):
@@ -782,13 +936,13 @@ proc present*(
     return
   panel.xOnOpen = onOpen
   if panel.isOpen():
-    if @rootPaths != panel.xRootPaths:
-      panel.reloadProjectFiles(rootPaths)
+    if normalizedRoots(rootPaths) != panel.xRootPaths:
+      panel.beginProjectFileLoad(rootPaths)
     return window.makeFirstResponder(panel.queryField)
 
   panel.queryField.text = ""
-  panel.reloadProjectFiles(rootPaths)
   panel.hidden = false
+  panel.beginProjectFileLoad(rootPaths)
   panel.needsDisplay = true
   let weakPanel = panel.unsafeWeakRef()
   window.beginTransientSession(

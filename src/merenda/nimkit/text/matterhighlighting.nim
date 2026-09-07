@@ -13,7 +13,10 @@ import ./texttypes
 
 type EmbeddedGrammarArchive = tuple[path, contents: string]
 
-const ZipLocalHeader = "PK\x03\x04"
+const
+  ZipLocalHeader = "PK\x03\x04"
+  MatterMaximumTokenizedLineBytes = 96
+    ## Keep recursive TextMate regex matching within Nim's worker-thread stack.
 
 proc findMatterPackageRoot(): string {.compileTime.} =
   for searchPath in querySettingSeq(MultipleValueSetting.searchPaths):
@@ -239,6 +242,13 @@ proc matterSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
     var contentStop = lineStop
     if contentStop > lineStart and source[contentStop - 1] == '\r':
       dec contentStop
+
+    if contentStop - lineStart > MatterMaximumTokenizedLineBytes:
+      # Reni's continuation matcher can consume several native frames per byte.
+      # A plain long line is preferable to losing the background worker.
+      ruleStack = nil
+      lineStart = lineStop + 1
+      continue
 
     let tokenized = grammar.tokenizeLine(source[lineStart ..< contentStop], ruleStack)
     for token in tokenized.tokens:

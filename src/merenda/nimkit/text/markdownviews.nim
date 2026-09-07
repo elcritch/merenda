@@ -237,6 +237,7 @@ type
     xMarkdownRenderChunkCount: int
     xMarkdownMaximumRenderChunkDuration: Duration
     xSyntaxHighlighter: SyntaxHighlighter
+    xMatterHighlights: Table[tuple[source, language: string], seq[SyntaxTokenSpan]]
     xImageBasePath: string
     xImageLoader: MarkdownImageLoader
     xUrlAssetLoader: UrlAssetLoader
@@ -1219,7 +1220,12 @@ proc addHighlightedCode(
     builder.add(source, attributes)
     return
 
-  let runeCount = source.runeLen
+  var byteOffsets = @[0]
+  var byteOffset = 0
+  while byteOffset < source.len:
+    byteOffset += max(source.runeLenAt(byteOffset), 1)
+    byteOffsets.add min(byteOffset, source.len)
+  let runeCount = byteOffsets.len - 1
   var position = 0
   for span in spans:
     let
@@ -1227,13 +1233,23 @@ proc addHighlightedCode(
       stop = max(start, min(span.range.maxIndex, runeCount))
     if stop > start:
       if start > position:
-        builder.add(source.runeSubStr(position, start - position), attributes)
+        builder.add(source[byteOffsets[position] ..< byteOffsets[start]], attributes)
       var tokenAttributes = attributes
       tokenAttributes.foregroundColor = builder.style.syntaxTokenColors[span.tokenClass]
-      builder.add(source.runeSubStr(start, stop - start), tokenAttributes)
+      if span.changeKind != sckUnchanged:
+        let changeColor =
+          if span.changeKind == sckAdded:
+            color(0.20, 0.65, 0.35, 1.0)
+          else:
+            color(0.85, 0.25, 0.30, 1.0)
+        tokenAttributes.lineBackgroundColor = changeColor
+        tokenAttributes.lineBackgroundColor.a = 0.13
+        if span.changeMarker:
+          tokenAttributes.foregroundColor = changeColor
+      builder.add(source[byteOffsets[start] ..< byteOffsets[stop]], tokenAttributes)
       position = stop
   if position < runeCount:
-    builder.add(source.runeSubStr(position), attributes)
+    builder.add(source[byteOffsets[position] ..< source.len], attributes)
 
 proc renderBlock(
     builder: var MarkdownBuilder,
@@ -1314,8 +1330,7 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
 proc parseMarkdownRoot(
     source: string, config: MarkdownParserConfig
 ): markdownParser.Document =
-  result = markdownParser.Document()
-  discard markdownParser.markdown(source, config.resolvedConfig(), result)
+  markdownparsing.parseMarkdownRoot(source, config.resolvedConfig())
 
 proc markdownDocument(
     root: markdownParser.Token,
@@ -1515,6 +1530,11 @@ proc layoutMarkdownCodeBlock(
 ) =
   let codeRect = presentation.rangeLayout.rect
   if codeRect.isEmpty:
+    return
+  # The parent already measured these unwrapped lines. Only allocate and lay out
+  # a second text view when a horizontal viewport is actually necessary.
+  if presentation.scrollView.isNil and
+      codeRect.maxX + max(rightPadding, 0.0'f32) <= viewportRight:
     return
   textView.ensureMarkdownCodeBlockView(presentation)
   let
@@ -1957,6 +1977,14 @@ proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
     emit view.markdownDidFinishParsing(view.xMarkdownParseWorkerThreadId)
 
 proc scheduleMarkdownRendering(view: MarkdownView) =
+  var highlighter = view.xSyntaxHighlighter
+  var dialect: MarkdownParseDialect
+  if highlighter == SyntaxHighlighter(matterSyntaxHighlighter) and
+      view.xMarkdownConfig.builtInMarkdownDialect(dialect):
+    let weakView = view.unsafeWeakRef()
+    highlighter = proc(source, language: string): seq[SyntaxTokenSpan] =
+      if not weakView.isNil:
+        result = weakView[].xMatterHighlights.getOrDefault((source, language))
   inc view.xMarkdownRenderGeneration
   let
     generation = view.xMarkdownRenderGeneration
@@ -1970,7 +1998,7 @@ proc scheduleMarkdownRendering(view: MarkdownView) =
     nextBlock: view.xMarkdownRoot.children.head,
     builder: MarkdownBuilder(
       style: view.xMarkdownStyle,
-      syntaxHighlighter: view.xSyntaxHighlighter,
+      syntaxHighlighter: highlighter,
       tableColumnLimit: tableColumnLimit,
     ),
     attributes: view.xMarkdownStyle.bodyAttributes(),
@@ -1998,6 +2026,7 @@ proc completeMarkdownParse(
     view.xMarkdownParseError = parseResult.errorMessage
     if parseResult.errorMessage.len == 0:
       view.xMarkdownRoot = move parseResult.root
+      view.xMatterHighlights = move parseResult.highlights
       view.xMarkdownRootGeneration = parseResult.generation
       view.xPendingMarkdownCompletionGeneration = parseResult.generation
       view.scheduleMarkdownRendering()
@@ -2027,8 +2056,12 @@ proc startLatestMarkdownParse(view: MarkdownView) =
     view.ensureMarkdownParseWorker()
     view.xActiveMarkdownGeneration = view.xMarkdownGeneration
     emit view.xMarkdownParseWorker.requestMarkdownParse(
-      view.xActiveMarkdownGeneration, view.xMarkdown, dialect,
-      view.xMarkdownConfig.escape, view.xMarkdownConfig.keepHtml,
+      view.xActiveMarkdownGeneration,
+      view.xMarkdown,
+      dialect,
+      view.xMarkdownConfig.escape,
+      view.xMarkdownConfig.keepHtml,
+      view.xSyntaxHighlighter == SyntaxHighlighter(matterSyntaxHighlighter),
     )
   else:
     # Arbitrary parser subclasses are thread-affine reference objects. Preserve
@@ -2292,7 +2325,10 @@ proc syntaxHighlighter*(view: MarkdownView): SyntaxHighlighter =
 proc `syntaxHighlighter=`*(view: MarkdownView, highlighter: SyntaxHighlighter) =
   ## Replace the classifier and rerender fenced code blocks.
   view.xSyntaxHighlighter = highlighter
-  view.renderCurrentMarkdownDocument()
+  if highlighter == SyntaxHighlighter(matterSyntaxHighlighter):
+    view.scheduleMarkdownParse()
+  else:
+    view.renderCurrentMarkdownDocument()
 
 proc markdownStyle*(view: MarkdownView): MarkdownStyle =
   ## Returns a copy of the current document presentation.

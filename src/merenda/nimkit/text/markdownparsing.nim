@@ -1,10 +1,12 @@
 ## Internal Sigils worker for moving complete nim-markdown ASTs between threads.
 
-import std/[exitprocs, isolation, os]
+import std/[isolation, lists, locks, os, strutils, tables]
 
 import markdown as markdownParser
 import sigils/[core, threads]
 import threading/smartptrs
+import ../foundation/backgroundworkers
+import ./[matterhighlighting, syntaxhighlighting]
 
 type
   MarkdownParseDialect* = enum
@@ -16,12 +18,25 @@ type
     root*: markdownParser.Document
     workerThreadId*: int
     errorMessage*: string
+    highlights*: Table[tuple[source, language: string], seq[SyntaxTokenSpan]]
 
   MarkdownParseWorker* = ref object of AgentActor
 
-var
-  defaultMarkdownParsePool {.threadvar.}: SigilThreadPoolPtr
-  defaultMarkdownParsePoolExitRegistered {.threadvar.}: bool
+proc highlightCodeBlocks(
+    token: markdownParser.Token,
+    highlights: var Table[tuple[source, language: string], seq[SyntaxTokenSpan]],
+) =
+  if token of markdownParser.CodeBlock:
+    let code = markdownParser.CodeBlock(token)
+    let key = (source: code.doc.strip(chars = {'\n'}), language: code.info)
+    if not highlights.hasKey(key):
+      try:
+        highlights[key] = matterSyntaxHighlighter(key.source, key.language)
+      except CatchableError:
+        # A classifier failure must not discard the rest of the document.
+        highlights[key] = @[]
+  for child in token.children:
+    child.highlightCodeBlocks(highlights)
 
 func isCommonMarkConfig(config: markdownParser.MarkdownConfig): bool =
   let
@@ -91,9 +106,24 @@ func builtInMarkdownDialect*(
   else:
     false
 
-proc parseMarkdownRoot(
+var
+  markdownParserLock: Lock
+  markdownParserDepth {.threadvar.}: int
+initLock(markdownParserLock)
+
+proc parseMarkdownRoot*(
     source: string, config: markdownParser.MarkdownConfig
 ): markdownParser.Document =
+  # nim-markdown's global skipParsing ref is not safe for concurrent ARC
+  # reference-count updates. Serialize parser entry, not highlighting/layout.
+  # Nested parses from a custom parser on this same thread remain supported.
+  if markdownParserDepth == 0:
+    acquire(markdownParserLock)
+  inc markdownParserDepth
+  defer:
+    dec markdownParserDepth
+    if markdownParserDepth == 0:
+      release(markdownParserLock)
   result = markdownParser.Document()
   discard markdownParser.markdown(source, config, result)
 
@@ -104,6 +134,7 @@ proc requestMarkdownParse*(
   dialect: MarkdownParseDialect,
   escape: bool,
   keepHtml: bool,
+  highlightMatter: bool,
 ) {.signal.}
 
 proc markdownParseFinished*(
@@ -117,6 +148,7 @@ proc requestMarkdownParse(
     dialect: MarkdownParseDialect,
     escape: bool,
     keepHtml: bool,
+    highlightMatter: bool,
 ) {.slot.} =
   var parseResult =
     MarkdownParseResult(generation: generation, workerThreadId: getThreadId())
@@ -128,29 +160,15 @@ proc requestMarkdownParse(
       of mpdGitHub:
         markdownParser.initGfmConfig(escape = escape, keepHtml = keepHtml)
     parseResult.root = source.parseMarkdownRoot(config)
+    if highlightMatter:
+      parseResult.root.highlightCodeBlocks(parseResult.highlights)
   except CatchableError as error:
     parseResult.errorMessage = error.msg
   # The parser created this entire graph on the worker and retains no aliases
   # after this signal. Transfer that one ownership unit back to the view thread.
   emit worker.markdownParseFinished(newSharedPtr(unsafeIsolate(move parseResult)))
 
-proc stopDefaultMarkdownParsePool() {.noconv.} =
-  if not defaultMarkdownParsePool.isNil:
-    defaultMarkdownParsePool.stop(immediate = true)
-    defaultMarkdownParsePool.join()
-    defaultMarkdownParsePool = nil
-
-proc resolvedDefaultMarkdownParsePool(): SigilThreadPoolPtr =
-  startLocalThreadDefault()
-  if defaultMarkdownParsePool.isNil:
-    defaultMarkdownParsePool = newSigilThreadPool(workers = 1)
-    defaultMarkdownParsePool.start()
-  if not defaultMarkdownParsePoolExitRegistered:
-    addExitProc(stopDefaultMarkdownParsePool)
-    defaultMarkdownParsePoolExitRegistered = true
-  defaultMarkdownParsePool
-
 proc newMarkdownParseWorker*(): AgentProxy[MarkdownParseWorker] =
   var worker = MarkdownParseWorker()
-  result = worker.moveToThread(resolvedDefaultMarkdownParsePool())
+  result = worker.moveToThread(nimkitWorkerPool())
   connectThreaded(result, requestMarkdownParse, result, requestMarkdownParse)

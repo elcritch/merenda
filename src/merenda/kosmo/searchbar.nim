@@ -23,6 +23,7 @@ type
   KosmoSearchAction* = proc() {.closure.}
 
   KosmoSearchBar* = ref object of nimkit.Box
+    backwardsSearch*: bool ## Find-next follows older output; arrows remain spatial.
     xQueryField: nimkit.TextField
     promptLabel: nimkit.Label
     previousButton, nextButton, closeButton: nimkit.Button
@@ -69,7 +70,10 @@ protocol KosmoSearchEditorActivation of nimkit.KeyViewCommandProtocol:
   method insertNewline(editor: KosmoSearchFieldEditor, args: nimkit.ActionArgs) =
     discard args
     if not editor.searchBar.isNil:
-      editor.searchBar[].activateNext()
+      if editor.searchBar[].backwardsSearch:
+        editor.searchBar[].activatePrevious()
+      else:
+        editor.searchBar[].activateNext()
 
 protocol KosmoSearchEditorCancellation of nimkit.MenuCommandProtocol:
   method cancelOperation(editor: KosmoSearchFieldEditor, args: nimkit.ActionArgs) =
@@ -81,6 +85,14 @@ protocol KosmoSearchEditorKeyEquivalents of nimkit.ResponderCommandDispatchProto
   method performKeyEquivalent(
       editor: KosmoSearchFieldEditor, event: nimkit.KeyEvent
   ): bool =
+    if not editor.searchBar.isNil and editor.searchBar[].backwardsSearch and
+        event.key == nimkit.keyG:
+      if event.modifiers == nimkit.shortcutModifiers():
+        editor.searchBar[].activatePrevious()
+        return true
+      if event.modifiers == nimkit.shortcutModifiers() + {nimkit.kmShift}:
+        editor.searchBar[].activateNext()
+        return true
     let owner = editor.window()
     if not (owner of nimkit.Window):
       return

@@ -17,6 +17,8 @@ import nimkit/resources
 import nimkit/settings
 import nimkit/svgimages
 import nimkit/svgpathloader
+import nimkit/styledruns
 import nimkit/threading
+import nimkit/textlayout
 import nimkit/terminalgeometry
 import nimkit/urls

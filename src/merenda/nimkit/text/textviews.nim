@@ -2670,11 +2670,39 @@ func verticallyBuffered(source: Rect, screens: float32): Rect =
     source.size.height + padding * 2.0'f32,
   )
 
+func firstFragmentEndingAfter(
+  fragments: openArray[TextLineFragment], minimumY: float32
+): int
+
+proc drawLineBackgrounds(textView: TextView, context: DrawContext, visible: Rect) =
+  let
+    snapshot = textView.xLayoutManager.layoutSnapshot()
+    storage = textView.displayTextStorage()
+    textRect = textView.bounds.inset(textView.xTextContainer.insets)
+  var index = snapshot.lineFragments.firstFragmentEndingAfter(visible.minY)
+  while index < snapshot.lineFragments.len and
+      snapshot.lineFragments[index].fragmentRect.minY <= visible.maxY:
+    let fragment = snapshot.lineFragments[index]
+    if fragment.textRange.length > 0 and
+        not fragment.fragmentRect.intersection(visible).isEmpty:
+      let tint =
+        storage.attributesAt(int(fragment.textRange.location)).lineBackgroundColor
+      if tint.a > 0:
+        discard context.addRectangle(
+          rect(
+            textRect.minX, fragment.fragmentRect.minY, textRect.size.width,
+            fragment.fragmentRect.size.height,
+          ),
+          tint,
+        )
+    inc index
+
 proc drawTextViewUnderlay*(textView: TextView, context: DrawContext) =
   let revision = textView.renderSlotRevision(TextUnderlayRenderSlot)
   if not context.beginRenderSlot(TextUnderlayRenderSlot, revision):
     return
   textView.updateTextContainer()
+  textView.drawLineBackgrounds(context, textView.bounds)
   for indicator in textView.xFindIndicators:
     if indicator.visible:
       let rects =
@@ -2698,6 +2726,7 @@ proc drawTextViewUnderlayInViewport*(
     return
   let visible = context.visibleRect().verticallyBuffered(verticalBufferScreens)
   textView.updateTextContainer()
+  textView.drawLineBackgrounds(context, visible)
   for indicator in textView.xFindIndicators:
     if indicator.visible:
       let rects =
