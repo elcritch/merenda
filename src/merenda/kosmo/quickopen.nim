@@ -538,7 +538,9 @@ proc observeWindow*(panel: KosmoQuickOpenPanel, window: nimkit.Window) =
   panel.observeProtocol(window, nimkit.WindowAppearanceEvents)
   panel.applyQuickOpenAppearance(window.effectiveAppearance())
 
-proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
+proc newKosmoQuickOpenPanel*(
+    rootPath = "", files: WorkspaceFiles = nil
+): KosmoQuickOpenPanel =
   result = KosmoQuickOpenPanel(xRootPath: rootPath)
   result.initBoxFields("Open File")
   result.styleId = QuickOpenPanelStyleId
@@ -642,7 +644,14 @@ proc newKosmoQuickOpenPanel*(rootPath = ""): KosmoQuickOpenPanel =
   result.hidden = true
   result.filterFiles()
 
-  result.workspaceFiles = newWorkspaceFiles()
+  result.workspaceFiles =
+    if files.isNil:
+      newWorkspaceFiles()
+    else:
+      files
+  if files.isNil:
+    # Standalone pickers retain their initial root until the first load.
+    result.xRootPath = rootPath
 
 proc rootPath*(panel: KosmoQuickOpenPanel): string =
   if panel.isNil: "" else: panel.xRootPath

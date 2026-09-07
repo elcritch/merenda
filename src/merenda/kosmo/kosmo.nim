@@ -4501,7 +4501,7 @@ proc newKosmoApplication*(
     fileTree = newKosmoFileTree(initialRootPath)
     fileBrowserPanel = newKosmoFileBrowserPanel(fileTree)
     searchPanel = newKosmoFileSearchPanel(fileTree.rootPath)
-    quickOpenPanel = newKosmoQuickOpenPanel(fileTree.rootPath)
+    quickOpenPanel = newKosmoQuickOpenPanel(fileTree.rootPath, fileTree.workspaceFiles)
     sidebarTabs = nimkit.newCompactTabView(
       [
         nimkit.initCompactTabItem(
@@ -4622,7 +4622,6 @@ proc newKosmoApplication*(
   controller.frontend = result.unsafeWeakRef()
   sidebarPane.dockController = controller.unsafeWeakRef()
   sidebarPane.observeWindow(result.window)
-  quickOpenPanel.workspaceFiles = fileTree.workspaceFiles
   quickOpenPanel.observeWindow(result.window)
   documentView.onShowFileExplorer = proc() =
     if not controller.frontend.isNil:
