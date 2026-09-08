@@ -453,6 +453,11 @@ proc newKosmoMatterGrammarSet(): moeMatter.MatterGrammarSet =
     sources.add moeMatter.MatterGrammarSource(
       content: contribution.bundledMatterGrammarContents(),
       path: contribution.archiveMember,
+      fileTypes:
+        if contribution.scopeName == matterPackages.terraformGrammar.scopeName:
+          @["hcl"]
+        else:
+          @[],
     )
   moeMatter.newMatterGrammarSet(sources)
 

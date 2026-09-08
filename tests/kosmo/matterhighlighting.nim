@@ -22,6 +22,33 @@ proc renderedLocation(buffer: RenderBuffer, needle: string): tuple[column, row: 
     if column >= 0:
       return (column: column, row: row)
 
+proc renderMoeFile(fileName, source: string): RenderBuffer =
+  let
+    root = createTempDir("kosmo-moe-matter-", "")
+    path = root / fileName
+  writeFile(path, source)
+  defer:
+    removeFile(path)
+    removeDir(root)
+
+  let editor = newKosmoEditor()
+  defer:
+    editor.close()
+  doAssert editor.openFile(path).loaded
+  result = newRenderBuffer(48, 8)
+  editor.render(result)
+
+template checkDistinctHighlight(fileName, source, firstNeedle, secondNeedle: string) =
+  block:
+    let
+      buffer = renderMoeFile(fileName, source)
+      first = buffer.renderedLocation(firstNeedle)
+      second = buffer.renderedLocation(secondNeedle)
+    require first.column >= 0
+    require second.column >= 0
+    check buffer.cell(first.column, first.row).style.fg !=
+      buffer.cell(second.column, second.row).style.fg
+
 suite "Kosmo Matter highlighting":
   test "Moe editors use Matter highlighting by default":
     let
@@ -50,6 +77,20 @@ suite "Kosmo Matter highlighting":
       buffer.cell(explicit.column, explicit.row).style.fg
     check buffer.cell(parameterless.column, parameterless.row).style.fg !=
       buffer.cell(keyword.column, keyword.row).style.fg
+
+  test "Moe highlights JavaScript files":
+    checkDistinctHighlight("matter.js", "const answer = \"kosmo\";\n", "const", "kosmo")
+
+  test "Moe highlights Python files":
+    checkDistinctHighlight(
+      "matter.py", "def answer():\n  return \"kosmo\"\n", "def", "kosmo"
+    )
+
+  test "Moe highlights Terraform HCL files":
+    checkDistinctHighlight(
+      "matter.hcl", "resource \"thing\" \"example\" {\n  enabled = true\n}\n", "thing",
+      "true",
+    )
 
   test "Markdown previews use Matter for fenced code":
     let frontend = newKosmoApplication(
