@@ -28,8 +28,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:elcritch/moe#fix/git-refresh-lifecycle"
-  # requires "gh:elcritch/moe#integration-improvements"
+  requires "gh:elcritch/moe#develop"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
