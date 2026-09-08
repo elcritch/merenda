@@ -215,6 +215,8 @@ syntax callbacks and parser configurations remain on the owning thread.
 Eligible background layouts also build their line-fragment snapshots on the
 worker; layout delegate callbacks and completion notifications stay on the UI
 thread. Fragment construction decodes text once and borrows the retained glyphs.
+Worker modules join the pool before their dependencies' globals are destroyed,
+including when imported directly without the `merenda/nimkit` umbrella module.
 
 Each applied document retains only its own decoded images. Markdown downsamples
 large sources to their maximum display size before publishing them to the static
@@ -234,6 +236,13 @@ default for NimKit Markdown and Kosmo's Moe editor. Moe falls back to its
 built-in tokenizer when a mode has no bundled grammar; a nil Markdown
 highlighter or unknown fenced language retains the ordinary monospace
 `codeColor`.
+The Matter adapters leave lines above a configurable UTF-8 byte limit uncolored
+and restart grammar state on the next line. The limit defaults to 256 bytes and
+can be lowered with `KosmoMatterMaximumLineBytes` and
+`NimkitMatterMaximumLineBytes` for builds with smaller worker stacks. This can
+interrupt highlighting inside multiline constructs. Linux CI lowers both to 96
+because unoptimized recursive-regex frames can exhaust the standard worker stack
+on a known 125-byte input; other unoptimized Linux builds should do the same.
 
 ## Cached URL Assets
 

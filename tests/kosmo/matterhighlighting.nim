@@ -4,6 +4,7 @@ import std/[monotimes, os, strutils, tempfiles, unicode, unittest]
 import celina/core/colors as celinaColors
 
 import merenda/kosmo/kosmo
+import merenda/kosmo/matterworkers
 import merenda/nimkit
 
 const RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
@@ -20,7 +21,7 @@ proc renderedLocation(buffer: RenderBuffer, needle: string): tuple[column, row: 
     var line: string
     for column in 0 ..< buffer.width:
       line.add buffer.cell(column, row).symbol
-    let column = line.find(needle)
+    let column = line.runeIndexOf(needle)
     if column >= 0:
       return (column: column, row: row)
 
@@ -127,6 +128,28 @@ suite "Kosmo Matter highlighting":
     let body = buffer.renderedLocation("Native Nim")
     require heading.column >= 0
     require body.column >= 0
+    check buffer.cell(heading.column, heading.row).style.fg !=
+      buffer.cell(body.column, body.row).style.fg
+
+  test "Moe covers long UTF-8 lines and resumes Markdown highlighting":
+    let
+      longLine =
+        "# " & "é".repeat(KosmoMatterMaximumLineBytes div "é".len + 1) & " END"
+      buffer = renderMoeFile(
+        "long.md", longLine & "\n# Recovered\nPlain body\n", longLine.runeLen + 8, 8
+      )
+      first = buffer.renderedLocation("é")
+      last = buffer.renderedLocation("END")
+      heading = buffer.renderedLocation("Recovered")
+      body = buffer.renderedLocation("Plain body")
+    require first.column >= 0
+    require last.column >= 0
+    require heading.column >= 0
+    require body.column >= 0
+    check buffer.cell(first.column, first.row).style.fg ==
+      buffer.cell(body.column, body.row).style.fg
+    check buffer.cell(last.column, last.row).style.fg ==
+      buffer.cell(body.column, body.row).style.fg
     check buffer.cell(heading.column, heading.row).style.fg !=
       buffer.cell(body.column, body.row).style.fg
 

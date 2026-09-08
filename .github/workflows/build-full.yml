@@ -27,7 +27,10 @@ jobs:
           - os: ubuntu-26.04
             nimversion: '2.2.10'
             display: x11
-            nimargs: '-- --opt:none'
+            nimargs: >-
+              -- --opt:none
+              -d:KosmoMatterMaximumLineBytes=96
+              -d:NimkitMatterMaximumLineBytes=96
           # - os: ubuntu-24.04
           #   display: wayland
     steps:
@@ -130,6 +133,17 @@ jobs:
       timeout-minutes: 5
       run: |
         ./deps/.nimcache/atlas-run/tests/tintegrations/tintegrations
+
+    - name: Compile background worker shutdown test
+      run: |
+        atlas-run tests --compile-only \
+          --compiler-output tbackgroundworkershutdown.nim \
+          $ATLAS_TEST_NIM_ARGS
+
+    - name: Run background worker shutdown test
+      timeout-minutes: 5
+      run: |
+        ./deps/.nimcache/atlas-run/tests/tbackgroundworkershutdown/tbackgroundworkershutdown
 
   examples:
     runs-on: ${{ matrix.os }}

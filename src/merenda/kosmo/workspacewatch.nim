@@ -263,3 +263,5 @@ proc close*(watch: WorkspaceWatch) =
     inbox.del(watch.token)
   watch.timer = nil
   watch.ticker = nil
+
+var workspaceWatchWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime

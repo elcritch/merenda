@@ -327,3 +327,5 @@ proc close*(service: GitStatusService) =
   service.xPool = nil
   service.xActiveIdentifier = 0
   service.xRefreshPending = false
+
+var gitStatusWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime

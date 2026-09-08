@@ -4626,11 +4626,12 @@ proc configureKosmoStandardActionMenus(frontend: KosmoApplication) =
       let app = frontend.application
       item.identifier = KosmoQuitAction
       item.action = nimkit.actionSelector(KosmoQuitAction)
-      item.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoQuitAction)) do(
+      let quitTarget = nimkit.newActionTarget(nimkit.actionSelector(KosmoQuitAction)) do(
         sender: nimkit.DynamicAgent
       ):
         discard sender
         discard app.terminate()
+      item.target = quitTarget
       break
 
 proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =

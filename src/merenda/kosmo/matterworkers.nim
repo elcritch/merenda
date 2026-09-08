@@ -17,9 +17,9 @@ import ../nimkit/foundation/backgroundworkers
 const KosmoMatterTimeLimitMs* {.intdefine.} = 100
   ## Soft per-line deadline used by the asynchronous adapter. A zero value
   ## disables the deadline for deterministic equivalence tests.
-const KosmoMatterMaximumLineBytes* {.intdefine.} = 96
-  ## Lines above this limit are left plain because Matter's recursive regex
-  ## engine can exhaust the smaller stack of a Nim worker thread.
+const KosmoMatterMaximumLineBytes* {.intdefine.} = 256
+  ## Maximum line size passed to Matter's recursive TextMate regex engine.
+  ## Builds with smaller worker stacks can lower this value.
 
 static:
   doAssert KosmoMatterTimeLimitMs >= 0, "KosmoMatterTimeLimitMs must be non-negative"
@@ -358,3 +358,5 @@ proc close*(highlighting: MatterHighlighting) =
   highlighting.completed.clear()
   highlighting.pending.setLen(0)
   highlighting.worker = nil
+
+var matterWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime

@@ -12,8 +12,13 @@ import ./mattergrammarassets
 import ./syntaxhighlighting
 import ./texttypes
 
-const MatterMaximumTokenizedLineBytes = 96
-  ## Keep recursive TextMate regex matching within Nim's worker-thread stack.
+const NimkitMatterMaximumLineBytes* {.intdefine.} = 256
+  ## Maximum line size passed to Matter's recursive TextMate regex engine.
+  ## Builds with smaller worker stacks can lower this value.
+
+static:
+  doAssert NimkitMatterMaximumLineBytes > 0,
+    "NimkitMatterMaximumLineBytes must be positive"
 
 var
   matterGrammarCache {.threadvar.}: Table[string, Grammar]
@@ -169,7 +174,7 @@ proc matterSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
     if contentStop > lineStart and source[contentStop - 1] == '\r':
       dec contentStop
 
-    if contentStop - lineStart > MatterMaximumTokenizedLineBytes:
+    if contentStop - lineStart > NimkitMatterMaximumLineBytes:
       # Reni's continuation matcher can consume several native frames per byte.
       # A plain long line is preferable to losing the background worker.
       ruleStack = nil

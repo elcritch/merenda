@@ -88,14 +88,6 @@ import ./nimkit/app/windows
 import ./nimkit/app/workspaces
 import ./nimkit/resources
 
-type NimkitLifetime = object
-
-proc `=destroy`(lifetime: var NimkitLifetime) =
-  discard lifetime
-  shutdownNimkitBackgroundWorkers()
-
-var nimkitLifetime {.used.}: NimkitLifetime
-
 export application
 export chroma
 export accessibility
@@ -185,3 +177,5 @@ export windowcontrollers
 export windoweffects
 export windows
 export workspaces
+
+var nimkitLifetime {.used.}: NimkitBackgroundWorkerLifetime

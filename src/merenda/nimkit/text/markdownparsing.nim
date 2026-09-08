@@ -172,3 +172,5 @@ proc newMarkdownParseWorker*(): AgentProxy[MarkdownParseWorker] =
   var worker = MarkdownParseWorker()
   result = worker.moveToThread(nimkitWorkerPool())
   connectThreaded(result, requestMarkdownParse, result, requestMarkdownParse)
+
+var markdownWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
