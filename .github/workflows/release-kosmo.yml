@@ -22,6 +22,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/release-kosmo.yml
+      - packaging/macos/debug.entitlements
       - packaging/macos/Info.plist
 
 permissions:
@@ -326,11 +327,29 @@ jobs:
             build/Kosmo.app
           codesign --verify --deep --strict --verbose=2 build/Kosmo.app
 
-      - name: Ad-hoc sign test build
+      - name: Ad-hoc sign debuggable build
         if: env.NOTARIZE_MACOS != 'true'
         run: |
-          codesign --force --options runtime --sign - build/Kosmo.app
+          codesign \
+            --force \
+            --options runtime \
+            --sign - \
+            --entitlements packaging/macos/debug.entitlements \
+            build/Kosmo.app
           codesign --verify --deep --strict --verbose=2 build/Kosmo.app
+          entitlements="$(
+            codesign --display --entitlements - --xml build/Kosmo.app 2>/dev/null
+          )"
+          if [[ "$(
+            plutil \
+              -extract 'com\.apple\.security\.get-task-allow' \
+              raw \
+              -o - \
+              - <<< "$entitlements"
+          )" != true ]]; then
+            echo 'Kosmo is missing the debugger attachment entitlement.' >&2
+            exit 1
+          fi
 
       - name: Package Kosmo app
         run: |
