@@ -10,7 +10,8 @@ var
   backgroundTimers {.threadvar.}: SigilChronosThreadPtr
   exitRegistered {.threadvar.}: bool
 
-proc stopBackgroundPool() {.noconv.} =
+proc shutdownNimkitBackgroundWorkers*() {.noconv.} =
+  ## Stop and join the shared pool before imported module globals are destroyed.
   if not backgroundTimers.isNil:
     backgroundTimers.stop(immediate = true)
     backgroundTimers.join()
@@ -27,7 +28,7 @@ proc nimkitWorkerPool*(): SigilThreadPoolPtr =
     backgroundPool = newSigilThreadPool(workers = 2)
     backgroundPool.start()
   if not exitRegistered:
-    addExitProc(stopBackgroundPool)
+    addExitProc(shutdownNimkitBackgroundWorkers)
     exitRegistered = true
   backgroundPool
 

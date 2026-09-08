@@ -25,6 +25,7 @@ import ./nimkit/debug/viewselection
 import ./nimkit/debug/viewinspectors
 import ./nimkit/app/dragging
 import ./nimkit/foundation/assetcache
+import ./nimkit/foundation/backgroundworkers
 import ./nimkit/foundation/events
 import ./nimkit/foundation/filesearch
 import ./nimkit/foundation/gitstatus
@@ -86,6 +87,14 @@ import ./nimkit/app/windoweffects
 import ./nimkit/app/windows
 import ./nimkit/app/workspaces
 import ./nimkit/resources
+
+type NimkitLifetime = object
+
+proc `=destroy`(lifetime: var NimkitLifetime) =
+  discard lifetime
+  shutdownNimkitBackgroundWorkers()
+
+var nimkitLifetime {.used.}: NimkitLifetime
 
 export application
 export chroma
