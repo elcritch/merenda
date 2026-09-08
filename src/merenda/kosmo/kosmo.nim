@@ -276,6 +276,7 @@ type
     lastSplitWidth: float32
     fileTreeWidth: float32
     onShowFileExplorer: proc() {.closure.}
+    onRevealActiveFile: proc() {.closure.}
     onFindInFiles: proc() {.closure.}
     onQuickOpen: proc() {.closure.}
     onNewTerminal: proc() {.closure.}
@@ -364,6 +365,7 @@ proc `sidebarFocused=`(controller: KosmoDockController, focused: bool) =
     )
 
 proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
+proc revealActiveFile*(frontend: KosmoApplication): bool {.discardable.}
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
 func hasFileBrowser*(frontend: KosmoApplication): bool
 proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.}
@@ -844,6 +846,14 @@ proc selectEditorContent(view: KosmoEditorView, id: KosmoBufferId) =
   group.selectedTabIdentifier = id.tabIdentifier
   group.pane.setContentView(view)
 
+proc resolvedEditorFilePath(path, workingDirectory: string): string =
+  let basePath =
+    if workingDirectory.len > 0:
+      absolutePath(workingDirectory)
+    else:
+      getCurrentDir()
+  normalizedPath(absolutePath(path, basePath))
+
 proc statusText(
     status: KosmoStatus, tabs: openArray[KosmoTab], workingDirectory: string
 ): string =
@@ -868,14 +878,7 @@ proc statusText(
       git.add " -" & $status.gitDeleted
     parts.add git
   if activeFilePath.isSome:
-    let
-      filePath = activeFilePath.get
-      basePath =
-        if workingDirectory.len > 0:
-          absolutePath(workingDirectory)
-        else:
-          getCurrentDir()
-    parts.add normalizedPath(absolutePath(filePath, basePath))
+    parts.add resolvedEditorFilePath(activeFilePath.get, workingDirectory)
   parts.join("  •  ")
 
 proc visibleTabs(view: KosmoEditorView, tabs: openArray[KosmoTab]): seq[KosmoTab] =
@@ -1849,6 +1852,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoShowFileExplorerAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFileExplorer()
+    of KosmoRevealActiveFileAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].revealActiveFile()
     of KosmoFindInFilesAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFindInFiles()
@@ -2641,6 +2647,9 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
     of KosmoShowFileExplorerAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFileExplorer()
+    of KosmoRevealActiveFileAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].revealActiveFile()
     of KosmoFindInFilesAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFindInFiles()
@@ -3838,6 +3847,10 @@ protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       if content.onShowFileExplorer.isNil:
         return false
       content.onShowFileExplorer()
+    of KosmoRevealActiveFileAction:
+      if content.onRevealActiveFile.isNil:
+        return false
+      content.onRevealActiveFile()
     of KosmoFindInFilesAction:
       if content.onFindInFiles.isNil:
         return false
@@ -3875,6 +3888,27 @@ proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.} =
   result = frontend.window.makeFirstResponder(frontend.fileTree)
   if result:
     frontend.dockController.activatePanelWindow(frontend.window)
+
+proc revealActiveFile*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Reveal the selected editor tab when it is visible in the file-browser scope.
+  if frontend.isNil or not frontend.hasFileBrowser() or frontend.fileTree.isNil or
+      frontend.sidebarTabs.isNil or frontend.dockController.isNil:
+    return
+  let
+    controller = frontend.dockController
+    group = controller.activePaneGroup()
+  if group.isNil:
+    return
+  var bufferId: KosmoBufferId
+  if not group.selectedTabIdentifier.parseTabIdentifier(bufferId):
+    return
+  for tab in controller.editor.tabs():
+    if tab.id == bufferId and tab.filePath.isSome:
+      let path =
+        resolvedEditorFilePath(tab.filePath.get, controller.editor.workingDirectory())
+      if frontend.fileTree.revealPath(path):
+        result = frontend.showFileExplorer()
+      return
 
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.} =
   ## Select the find sidebar tab and focus its search query.
@@ -4518,6 +4552,8 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
         discard controller.splitCurrentPaneTab(group, nimkit.dpRight)
       of KosmoShowFileExplorerAction:
         discard active.showFileExplorer()
+      of KosmoRevealActiveFileAction:
+        discard active.revealActiveFile()
       of KosmoFindInFilesAction:
         discard active.showFindInFiles()
       else:
@@ -4534,6 +4570,7 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
   addAction("Split Right", KosmoSplitVerticalAction)
   windowMenu.addSeparator()
   addAction("Show Files", KosmoShowFileExplorerAction)
+  addAction("Reveal Active File", KosmoRevealActiveFileAction)
   addAction("Find in Files", KosmoFindInFilesAction)
 
   let
@@ -4733,6 +4770,9 @@ proc newKosmoApplication*(
   documentView.onShowFileExplorer = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showFileExplorer()
+  documentView.onRevealActiveFile = proc() =
+    if not controller.frontend.isNil:
+      discard controller.frontend[].revealActiveFile()
   documentView.onFindInFiles = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showFindInFiles()

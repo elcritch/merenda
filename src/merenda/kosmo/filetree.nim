@@ -459,6 +459,38 @@ proc `filterText=`*(tree: KosmoFileTree, text: string) =
     return
   tree.reloadFilteredTree()
 
+proc revealPath*(tree: KosmoFileTree, path: string): bool {.discardable.} =
+  ## Expand, select, and scroll to a path visible in the current roots and scope.
+  if tree.isNil or path.len == 0:
+    return
+  let targetPath = normalizedPath(absolutePath(path))
+  var rootPath: string
+  for root in tree.xRootPaths:
+    if targetPath == root or targetPath.isRelativeTo(root):
+      rootPath = root
+      break
+  if rootPath.len == 0 or not tree.displayModeIncludes(targetPath):
+    return
+  if tree.xFilterText.strip().len > 0 and targetPath notin tree.xMatchingPaths:
+    return
+
+  var ancestors: seq[string]
+  var currentPath = targetPath.parentDir()
+  while currentPath.len > 0:
+    ancestors.add currentPath
+    if currentPath == rootPath:
+      break
+    let parentPath = currentPath.parentDir()
+    if parentPath == currentPath:
+      return
+    currentPath = parentPath
+  if ancestors.len == 0 or ancestors[^1] != rootPath:
+    return
+  ancestors.reverse()
+  for ancestor in ancestors:
+    tree.expandItem(ancestor)
+  result = tree.selectItemWithIdentifier(targetPath)
+
 proc reloadRoots(tree: KosmoFileTree, expanded: seq[string]) =
   tree.xWorkspaceFiles.setRoots(tree.xRootPaths)
   tree.xChildren.clear()

@@ -19,6 +19,7 @@ const
   KosmoSplitHorizontalAction* = "kosmo.splitHorizontal"
   KosmoSplitVerticalAction* = "kosmo.splitVertical"
   KosmoShowFileExplorerAction* = "kosmo.showFileExplorer"
+  KosmoRevealActiveFileAction* = "kosmo.revealActiveFile"
   KosmoFindInFilesAction* = "kosmo.findInFiles"
   KosmoQuickOpenAction* = "kosmo.quickOpen"
   KosmoShowSettingsAction* = "kosmo.showSettings"
@@ -210,6 +211,11 @@ func kosmoActions*(): seq[KosmoAction] =
         description: "Show and focus the file explorer.",
       ),
       KosmoAction(
+        identifier: KosmoRevealActiveFileAction,
+        title: "Reveal Active File",
+        description: "Reveal the active editor file in the file explorer.",
+      ),
+      KosmoAction(
         identifier: KosmoFindInFilesAction,
         title: "Find in Files",
         description: "Show and focus Find in Files.",
@@ -357,6 +363,7 @@ proc initKosmoKeyBindings*(
   result.addBinding("primary-shift-[", KosmoPreviousTabAction, profile, platform)
   result.addBinding("primary-shift-]", KosmoNextTabAction, profile, platform)
   result.addBinding("primary-shift-e", KosmoShowFileExplorerAction, profile, platform)
+  result.addBinding("primary-shift-l", KosmoRevealActiveFileAction, profile, platform)
   result.addBinding("primary-shift-f", KosmoFindInFilesAction, profile, platform)
   result.addBinding("primary-,", KosmoShowSettingsAction, profile, platform)
   result.addBinding("primary-z", KosmoUndoAction, profile, platform)

@@ -62,6 +62,13 @@ suite "Kosmo shortcut profiles":
       actionSelector(8.focusPanelAction())
     check bindings.match([keyEvent(key9, {kmCommand})]).kind == kbmNone
 
+  test "macOS profile maps command-shift-L to reveal the active file":
+    let bindings =
+      initKosmoKeyBindings(KosmoShortcutProfile.MacOS, KosmoShortcutPlatform.MacOS)
+
+    check bindings.bindingFor([keyEvent(keyL, {kmCommand, kmShift})]) ==
+      actionSelector(KosmoRevealActiveFileAction)
+
   test "structured configuration resolves profile, editor mode, and symbolic bindings":
     let loaded = applyKosmoShortcutConfigurationJson(
       """{
