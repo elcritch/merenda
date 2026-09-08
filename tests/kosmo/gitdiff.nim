@@ -235,6 +235,33 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     check panel.highlightBuildCount() == initialCount + 1
 
+  test "repository change bursts trigger one trailing refresh":
+    let root = createTempDir("kosmo-diff-debounce-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    for index in 0 ..< 8:
+      writeFile(root / ("file" & $index & ".nim"), "let value = 0\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "base")
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    require panel.waitForDiff()
+    let initialReads = panel.repositoryReadCount()
+    check initialReads == 1
+
+    for index in 0 ..< 8:
+      writeFile(root / ("file" & $index & ".nim"), "let value = " & $(index + 1) & "\n")
+      panel.scheduleRepositoryRefresh()
+      discard panel.pollRepositoryRefresh()
+      sleep(10)
+    check panel.repositoryReadCount() == initialReads
+
+    require panel.waitForDiff()
+    check panel.repositoryReadCount() == initialReads + 1
+    check panel.snapshot.files.len == 8
+
   test "Matter highlights both file versions independently beneath diff tints":
     let root = createTempDir("kosmo-diff-matter-", "")
     defer:
