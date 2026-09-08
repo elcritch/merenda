@@ -28,7 +28,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:elcritch/moe#develop"
+  requires "gh:elcritch/moe#feature/matter-highlighting"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"

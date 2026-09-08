@@ -4,7 +4,7 @@
 ## translate their input and paint the returned cells; Moe implementation types
 ## remain private to this module.
 
-import std/[algorithm, options, os, strutils, unicode]
+import std/[algorithm, options, os, strutils, tables, unicode]
 
 import matter/grammarpackages as matterPackages
 import moepkg/celina_backend as celina
@@ -19,6 +19,8 @@ import
   ]
 import moepkg/buffer/undo as moeUndo
 import moepkg/buffer/search as moeSearch
+import moepkg/buffer/highlight as moeBufferHighlight
+import moepkg/highlight as moeHighlight
 from moepkg/buffer/file_io import loadFileWithContent
 from moepkg/buffer/core import BufferId, getLine, getTextString, len
 from moepkg/command_handlers/visual_commands import visualDelete
@@ -31,8 +33,10 @@ import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
 import moepkg/syntax/matter_backend as moeMatter
 import moepkg/types as moeTypes
+import sigils/threads
 
 import ../nimkit/text/mattergrammarassets
+import ./matterworkers
 
 when not defined(moe.embedded):
   when hasAsyncSupport:
@@ -54,6 +58,8 @@ type
     temporaryBufferId: Option[BufferId]
     workingDirectory: string
     textMateGrammars: seq[KosmoTextMateGrammar]
+    matterHighlighting: MatterHighlighting
+    matterRequests: Table[BufferId, tuple[contentVersion: int, requestId: uint64]]
 
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
@@ -458,20 +464,22 @@ template inWorkingDirectory(editor: KosmoEditor, body: untyped): untyped =
     finally:
       setCurrentDir(previousDirectory)
 
-proc newKosmoMatterGrammarSet(): moeMatter.MatterGrammarSet =
+proc newKosmoMatterGrammarSources(): seq[moeMatter.MatterGrammarSource] =
   var sources =
     newSeqOfCap[moeMatter.MatterGrammarSource](matterPackages.knownGrammars.len)
   for contribution in matterPackages.knownGrammars:
-    sources.add moeMatter.MatterGrammarSource(
+    var source = moeMatter.MatterGrammarSource(
       content: contribution.bundledMatterGrammarContents(),
       path: contribution.archiveMember,
-      fileTypes:
-        if contribution.scopeName == matterPackages.terraformGrammar.scopeName:
-          @["hcl"]
-        else:
-          @[],
     )
-  moeMatter.newMatterGrammarSet(sources)
+    when compiles(source.fileTypes = @[]):
+      source.fileTypes =
+        if contribution.scopeName == matterPackages.terraformGrammar.scopeName:
+          @["hcl", "tf", "tfvars"]
+        else:
+          @[]
+    sources.add move source
+  sources
 
 proc builtInTextMateGrammars(): seq[KosmoTextMateGrammar] =
   for contribution in matterPackages.knownGrammars:
@@ -502,10 +510,15 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   config.standard.statusLine = false
   config.standard.colorMode = cm24bit
   config.tabLine.enable = false
-  config.highlight.backend = hbMatter
-  config.highlight.matterGrammarSet = newKosmoMatterGrammarSet()
-  result =
-    KosmoEditor(editor: newEditor(config), textMateGrammars: builtInTextMateGrammars())
+  # Matter parsing is owned by Kosmo's asynchronous adapter. Keep Moe on its
+  # built-in backend so opening, editing, and rendering never parse a live
+  # buffer through Matter on the UI thread.
+  config.highlight.backend = hbBuiltin
+  result = KosmoEditor(
+    editor: newEditor(config),
+    textMateGrammars: builtInTextMateGrammars(),
+    matterRequests: initTable[BufferId, tuple[contentVersion: int, requestId: uint64]](),
+  )
   result.workingDirectory = workingDirectory
   discard result.editor.addCommandAlias("x", claSaveAndQuit)
   result.editor.setFrontendGitStatusEnabled(true)
@@ -516,27 +529,37 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
 
 proc close*(editor: KosmoEditor) =
   ## Release Moe-owned processes and language-server resources.
-  if not editor.isNil and not editor.editor.isNil:
+  if editor.isNil:
+    return
+  editor.matterHighlighting.close()
+  editor.matterHighlighting = nil
+  if not editor.editor.isNil:
     editor.editor.releaseExternalResources()
     editor.editor = nil
 
 proc useEventDrivenGit*(editor: KosmoEditor) =
   ## Enable after the frontend installs workspace notifications and idle ticks.
   if not editor.isNil and not editor.editor.isNil:
-    editor.editor.setFrontendGitRefreshMode(grmEventDriven)
+    when compiles(editor.editor.setFrontendGitRefreshMode(grmEventDriven)):
+      editor.editor.setFrontendGitRefreshMode(grmEventDriven)
 
 proc notifyGitRepositoryChanged*(editor: KosmoEditor, rootPath = "") =
   ## Invalidate Moe's Git cache on the editor's owning thread.
   if not editor.isNil and not editor.editor.isNil:
-    editor.editor.notifyGitRepositoryChanged(rootPath)
+    when compiles(editor.editor.notifyGitRepositoryChanged(rootPath)):
+      editor.editor.notifyGitRepositoryChanged(rootPath)
 
 proc pollGitStatus*(editor: KosmoEditor): bool =
   ## Advance pending work; report published Git changes requiring a repaint.
   if not editor.isNil and not editor.editor.isNil:
-    let previous = editor.editor.frontendGitStatusRevision()
-    editor.inWorkingDirectory:
-      editor.editor.tick()
-    result = previous != editor.editor.frontendGitStatusRevision()
+    when compiles(editor.editor.frontendGitStatusRevision()):
+      let previous = editor.editor.frontendGitStatusRevision()
+      editor.inWorkingDirectory:
+        editor.editor.tick()
+      result = previous != editor.editor.frontendGitStatusRevision()
+    else:
+      editor.inWorkingDirectory:
+        editor.editor.tick()
 
 proc readEncodingSample(path: string): string =
   let sampleLength = min(getFileSize(path), (EncodingDetectionSampleSize + 4).int64).int
@@ -1139,11 +1162,112 @@ func cell*(buffer: RenderBuffer, column, row: int): RenderCell {.inline.} =
   ## Return a rendered Celina cell, including its symbol, style, and hyperlink.
   buffer.buffer.getCell(column, row)
 
+proc matterBufferCandidate(buffer: TextBuffer): bool =
+  if not buffer.allowsTextTransforms:
+    return false
+  let extension =
+    if buffer.filePath.isSome:
+      buffer.filePath.get.splitFile.ext.toLowerAscii()
+    else:
+      ""
+  extension in [".hcl", ".tf", ".tfvars"] or
+    buffer.language notin {
+      moeHighlight.SourceLanguage.langNone, moeHighlight.SourceLanguage.langDiff,
+      moeHighlight.SourceLanguage.langLog,
+    }
+
+proc applyMatterHighlightResult(
+    editor: KosmoEditor, completed: var MatterHighlightResult
+) =
+  let buffer = editor.editor.bufferById(BufferId(completed.bufferId))
+  if buffer.isNone:
+    return
+  let current = buffer.get
+  if not editor.matterRequests.hasKey(current.id):
+    return
+  let request = editor.matterRequests[current.id]
+  if request.requestId != completed.requestId or
+      request.contentVersion != completed.contentVersion or
+      current.contentVersion != completed.contentVersion:
+    return
+  if completed.errorMessage.len > 0:
+    return
+
+  if current.highlight.isNil:
+    current.highlight = moeHighlight.Highlight(colorSegments: @[])
+  current.highlight.colorSegments = move completed.segments
+  # The built-in cache may still contain a partial frame from before the
+  # worker result arrived. Discard it so it cannot append or replace the
+  # worker-owned syntax on a later frame. Edits will create a fresh built-in
+  # cache while the next Matter request is in flight.
+  current.incrementalHighlight = nil
+  current.highlightNeedsUpdate = false
+  current.uriScanParsedUpTo = -1
+  if current.allowsTextTransforms and current.len > 0:
+    discard current.scanAndApplyUriUnderlines(0, current.len - 1)
+    current.uriScanParsedUpTo = current.len - 1
+
+proc pollMatterHighlighting(editor: KosmoEditor) =
+  if editor.isNil or editor.editor.isNil or editor.matterHighlighting.isNil:
+    return
+  discard getCurrentSigilThread().pollAll(NonBlocking)
+  var completed = editor.matterHighlighting.takeMatterHighlightResults()
+  for index in 0 ..< completed.len:
+    editor.applyMatterHighlightResult(completed[index])
+
+proc matterHighlightingReady*(editor: KosmoEditor): bool =
+  ## Return whether every open buffer eligible for asynchronous Matter
+  ## highlighting has received its current snapshot result.
+  if editor.isNil or editor.editor.isNil:
+    return true
+  editor.pollMatterHighlighting()
+  for buffer in editor.editor.buffers:
+    if not buffer.matterBufferCandidate:
+      continue
+    if editor.matterHighlighting.isNil:
+      return false
+    if not editor.matterRequests.hasKey(buffer.id):
+      return false
+    let request = editor.matterRequests[buffer.id]
+    if not editor.matterHighlighting.matterHighlightingReady(
+      int(buffer.id), request.requestId
+    ):
+      return false
+  true
+
+proc scheduleMatterHighlighting(editor: KosmoEditor) =
+  if editor.isNil or editor.editor.isNil:
+    return
+  for buffer in editor.editor.buffers:
+    if not buffer.matterBufferCandidate:
+      continue
+    if editor.matterHighlighting.isNil:
+      editor.matterHighlighting = newMatterHighlighting(newKosmoMatterGrammarSources())
+    if buffer.highlightBackend != hbBuiltin:
+      buffer.setHighlightBackend(hbBuiltin)
+    if editor.matterRequests.hasKey(buffer.id) and
+        editor.matterRequests[buffer.id].contentVersion == buffer.contentVersion:
+      continue
+    let requestId = editor.matterHighlighting.requestMatterHighlight(
+      int(buffer.id),
+      buffer.contentVersion,
+      buffer.getTextString(),
+      buffer.language,
+      if buffer.filePath.isSome: buffer.filePath.get else: "",
+    )
+    editor.matterRequests[buffer.id] =
+      (contentVersion: buffer.contentVersion, requestId: requestId)
+
 proc render*(editor: KosmoEditor, buffer: var RenderBuffer) =
   ## Advance Moe and draw the editor into `buffer`.
   if editor.isNil or editor.editor.isNil:
     return
+  editor.pollMatterHighlighting()
+  editor.scheduleMatterHighlighting()
   editor.editor.render(buffer.buffer)
+  # A worker can finish while Moe is rendering the frame. Delivering here
+  # makes the result visible on the next frame without blocking this one.
+  editor.pollMatterHighlighting()
 
 proc render*(
     editor: KosmoEditor, buffer: var RenderBuffer, state: KosmoEditorViewState
@@ -1159,7 +1283,10 @@ proc render*(
   if wasResized:
     editor.editor.advanceLayoutForFrame(buffer.buffer, true)
     editor.applyViewState(state)
+  editor.pollMatterHighlighting()
+  editor.scheduleMatterHighlighting()
   editor.editor.render(buffer.buffer)
+  editor.pollMatterHighlighting()
 
 func toMoeModifiers(modifiers: set[KeyModifier]): set[frontend_input.KeyModifier] =
   if kmControl in modifiers:
