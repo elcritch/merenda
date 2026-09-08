@@ -40,6 +40,30 @@ proc rendersDisclosureArrow(view: View, expanded: bool): bool =
   bars == {1, 2, 3}
 
 suite "Kosmo Git diff":
+  test "piped Git output becomes static per-file diff sections":
+    let snapshot = parseGitDiff(
+      "diff --git a/src/main.nim b/src/main.nim\n" & "index 1234567..abcdef0 100644\n" &
+        "--- a/src/main.nim\n+++ b/src/main.nim\n" &
+        "@@ -1,2 +1,2 @@\n-let value = 1\n+let value = 2\n unchanged\n" &
+        "diff --git a/assets/logo.bin b/assets/logo.bin\n" &
+        "Binary files a/assets/logo.bin and b/assets/logo.bin differ\n",
+      getCurrentDir(),
+    )
+    check snapshot.source == gdsStandardInput
+    check snapshot.rootPath == getCurrentDir()
+    check snapshot.errorMessage.len == 0
+    require snapshot.files.len == 2
+    check snapshot.files[0].path == "src/main.nim"
+    check snapshot.files[0].additions == 1
+    check snapshot.files[0].deletions == 1
+    check snapshot.files[0].syntaxPatch == snapshot.files[0].patch
+    check snapshot.files[1].path == "assets/logo.bin"
+    check snapshot.files[1].binary
+
+    let malformed = parseGitDiff("not a diff\n", getCurrentDir())
+    check malformed.files.len == 0
+    check malformed.errorMessage == "Standard input is not a unified Git diff."
+
   test "summary and expanded files share wheel scrolling":
     let root = createTempDir("kosmo-diff-scroll-", "")
     defer:
@@ -240,6 +264,33 @@ suite "Kosmo Git diff":
         token
       ]
       check storage.attributesAt(index).lineBackgroundColor.a > 0
+
+  test "Terraform HCL changes use Matter syntax highlighting":
+    let root = createTempDir("kosmo-diff-terraform-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(
+      root / "main.hcl", "resource \"aws_instance\" \"web\" {\n  ami = \"ami-old\"\n}\n"
+    )
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "Initial")
+    writeFile(
+      root / "main.hcl", "resource \"aws_instance\" \"web\" {\n  ami = \"ami-new\"\n}\n"
+    )
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    require panel.waitForDiff()
+    let
+      storage = panel.textViewForFile(0).textStorage()
+      text = storage.stringValue()
+      location = text.find("ami-new")
+    require location >= 0
+    let index = text[0 ..< location].runeLen
+    check storage.attributesAt(index).foregroundColor ==
+      panel.markdownView.markdownStyle().syntaxTokenColors[stcString]
+    check storage.attributesAt(index).lineBackgroundColor.a > 0
 
   test "standard hunks include staged unstaged untracked deleted and binary files":
     let root = createTempDir("kosmo-git-diff-", "")

@@ -1,6 +1,6 @@
 ## Command-line handling and detached launching for standalone Kosmo.
 
-import std/os
+import std/[os, sets, terminal]
 
 when defined(windows):
   import std/[widestrs, winlean]
@@ -12,12 +12,16 @@ const
   KosmoHelpFlag* = "--help"
   KosmoShortHelpFlag* = "-h"
   KosmoVersionFlag* = "--version"
+  KosmoDiffFlag* = "--diff"
+  KosmoCliDiffInputLimit* = 8 * 1024 * 1024
   KosmoUsage* =
     """
-Usage: kosmo [--bg] [--version] [--] [file-or-folder]
+Usage: kosmo [--bg] [--version] [--] [file-or-folder ...]
+       command-producing-diff | kosmo --diff
 
 Options:
   --bg        Start Kosmo detached from the invoking shell.
+  --diff      Render a unified Git diff read from standard input.
   --version   Show the Kosmo version.
   --          Stop parsing options.
   -h, --help  Show this help text.
@@ -27,8 +31,15 @@ type KosmoStandaloneCommandLine* = object ## Parsed standalone command-line opti
   background*: bool
   help*: bool
   version*: bool
+  diff*: bool
   arguments*: seq[string]
   filePath*: string
+  paths*: seq[string]
+
+type KosmoCliPathResolution* = object
+  ## Absolute paths ready for local opening or transport to another process.
+  paths*: seq[string]
+  errors*: seq[string]
 
 proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneCommandLine =
   ## Parse standalone Kosmo options while retaining every non-option argument.
@@ -41,6 +52,7 @@ proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneComman
       if not hasFilePath:
         result.filePath = argument
         hasFilePath = true
+      result.paths.add argument
     else:
       case argument
       of "--":
@@ -52,11 +64,55 @@ proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneComman
         result.help = true
       of KosmoVersionFlag:
         result.version = true
+      of KosmoDiffFlag:
+        result.diff = true
       else:
         result.arguments.add argument
         if not hasFilePath:
           result.filePath = argument
           hasFilePath = true
+        result.paths.add argument
+
+proc resolveKosmoCliPaths*(
+    paths: openArray[string], workingDirectory = getCurrentDir()
+): KosmoCliPathResolution =
+  ## Resolve CLI paths against the invoking shell. Existing directories and
+  ## regular files are accepted; a missing file is accepted when its parent
+  ## directory exists. Missing directory-shaped paths are rejected.
+  var seen = initHashSet[string]()
+  for original in paths:
+    if original.len == 0:
+      result.errors.add "Kosmo cannot open an empty path"
+      continue
+    let path = normalizedPath(absolutePath(original, workingDirectory))
+    let directoryShaped = original[^1] in {DirSep, AltSep}
+    if dirExists(path) or fileExists(path) or
+        (not directoryShaped and dirExists(path.parentDir())):
+      if path notin seen:
+        seen.incl path
+        result.paths.add path
+    elif directoryShaped:
+      result.errors.add "Kosmo project folder does not exist: " & path
+    else:
+      result.errors.add "Kosmo cannot open path: " & path
+
+proc kosmoCliInputIsTerminal*(): bool =
+  ## Return whether `--diff` would read interactively instead of from a pipe.
+  stdin.isatty()
+
+proc readKosmoCliDiff*(input: File, maxBytes = KosmoCliDiffInputLimit): string =
+  ## Read a bounded diff payload, including an empty diff from a clean work tree.
+  const ChunkSize = 64 * 1024
+  var buffer: array[ChunkSize, char]
+  while true:
+    let count = input.readChars(buffer)
+    if count == 0:
+      break
+    if result.len + count > maxBytes:
+      raise newException(ValueError, "Kosmo diff input exceeds the 8 MiB limit")
+    let start = result.len
+    result.setLen(start + count)
+    copyMem(addr result[start], addr buffer[0], count)
 
 when defined(windows):
   const CreateNewProcessGroup = 0x00000200'i32

@@ -18,15 +18,15 @@ from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
-    cli, config, contextpanel, filesearchpanel, filetree, gitdiff, moe, moehighlighting,
-    panedocuments, quickopen, searchbar, settings, shortcuts, terminalsearch,
-    workspacefiles,
+    cli, cliopen, config, contextpanel, filesearchpanel, filetree, gitdiff, moe,
+    moehighlighting, panedocuments, quickopen, searchbar, settings, shortcuts,
+    terminalsearch, workspacefiles,
   ]
 import moepkg/celina_backend as celina
 
 export
-  config, contextpanel, filesearchpanel, filetree, gitdiff, moe, moehighlighting,
-  panedocuments, quickopen, settings, shortcuts, terminalsearch
+  cliopen, config, contextpanel, filesearchpanel, filetree, gitdiff, moe,
+  moehighlighting, panedocuments, quickopen, settings, shortcuts, terminalsearch
 
 func nimblePackageVersion(manifest: string): string =
   for line in manifest.splitLines():
@@ -292,6 +292,7 @@ type
     configPath: string
     config: KosmoConfig
     frontends: seq[KosmoApplication]
+    cliServer: KosmoCliOpenServer
 
   KosmoWindowLifecycle = ref object of nimkit.Responder
     frontend: WeakRef[KosmoApplication]
@@ -323,6 +324,7 @@ type
     xTerminalLinksEnabled: bool
     xWindowManager: WeakRef[KosmoWindowManager]
     xWindowLifecycle: KosmoWindowLifecycle
+    xCliWindowId: string
     xHasFileBrowser: bool
     xClosed: bool
 
@@ -3658,10 +3660,20 @@ proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
       for group in controller.groups:
         group.editorView.refresh()
 
+proc setTerminalEnvironment(
+    options: var nimkit.TerminexSpawnOptions, name, value: string
+) =
+  for variable in options.environment.mitems:
+    if variable.name == name:
+      variable.value = value
+      return
+  options.environment.add nimkit.initTerminalEnvironmentVariable(name, value)
+
 proc newTerminalDocument(
     controller: KosmoDockController, options: nimkit.TerminexSpawnOptions
 ): KosmoPaneDocument =
   let terminalView = newKosmoTerminalView()
+  var resolvedOptions = options
   if not controller.frontend.isNil:
     let frontend = controller.frontend[]
     terminalView.optionAsMeta = frontend.xTerminalOptionAsMeta
@@ -3669,8 +3681,17 @@ proc newTerminalDocument(
     terminalView.connect(
       nimkit.terminalHyperlinkWasActivated, frontend.xWindowLifecycle, openTerminalLink
     )
+    if not frontend.xWindowManager.isNil:
+      let manager = frontend.xWindowManager[]
+      if not manager.cliServer.isNil:
+        resolvedOptions.setTerminalEnvironment(
+          KosmoCliEndpointEnvironment, manager.cliServer.endpointPath()
+        )
+        resolvedOptions.setTerminalEnvironment(
+          KosmoCliWindowEnvironment, frontend.xCliWindowId
+        )
   try:
-    terminalView.start(options)
+    terminalView.start(resolvedOptions)
   except nimkit.TerminexSessionError:
     terminalView.close()
     raise
@@ -3689,7 +3710,7 @@ proc newTerminalDocument(
     onDuplicate = proc(document: KosmoPaneDocument): KosmoPaneDocument =
       discard document
       if not weakController.isNil:
-        result = weakController[].newTerminalDocument(options)
+        result = weakController[].newTerminalDocument(resolvedOptions)
     ,
   )
 
@@ -4059,8 +4080,9 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     frontend.xSettingsWindow.firstResponder,
   ).isNil
 
-proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
-  ## Show full-file Git changes for the active project's repository.
+proc showGitDiffSnapshot(
+    frontend: KosmoApplication, snapshot: GitDiffSnapshot, refreshesRepository: bool
+): bool =
   if frontend.isNil or frontend.dockController.isNil:
     return
   let controller = frontend.dockController
@@ -4070,7 +4092,10 @@ proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
       if not group.window.isNil and not group.window.isClosed():
         if document.contentView of KosmoGitDiffPanel:
           frontend.gitDiffPanel = KosmoGitDiffPanel(document.contentView)
-          frontend.gitDiffPanel.refresh()
+          if refreshesRepository:
+            frontend.gitDiffPanel.displayRepositoryDiff(snapshot.rootPath)
+          else:
+            frontend.gitDiffPanel.displayDiff(snapshot)
         controller.activatePanelWindow(group.window)
         controller.activatePaneTab(group, document.identifier)
         return true
@@ -4085,15 +4110,16 @@ proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
   let group = controller.activePaneGroup()
   if group.isNil:
     return
-  let root =
-    if frontend.fileTree.rootPath.len > 0:
-      frontend.fileTree.rootPath
-    else:
-      getCurrentDir()
   let
-    panel = newKosmoGitDiffPanel(
-      root, group.pane.markdownControls.markdownPresentationStyle()
-    )
+    panel =
+      if refreshesRepository:
+        newKosmoGitDiffPanel(
+          snapshot.rootPath, group.pane.markdownControls.markdownPresentationStyle()
+        )
+      else:
+        newKosmoGitDiffPanel(
+          snapshot, group.pane.markdownControls.markdownPresentationStyle()
+        )
     weakFrontend = frontend.unsafeWeakRef()
     weakPanel = panel.unsafeWeakRef()
     document = newKosmoPaneDocument(
@@ -4101,7 +4127,7 @@ proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
       title = "Git Diff",
       contentView = panel,
       preferredFirstResponder = panel.markdownView.textView(),
-      tooltip = "Current Git diff",
+      tooltip = if refreshesRepository: "Current Git diff" else: "Piped Git diff",
       onClose = proc(document: KosmoPaneDocument): bool =
         discard document
         panel.close()
@@ -4122,6 +4148,27 @@ proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
     return true
   panel.close()
   frontend.gitDiffPanel = nil
+
+proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Show full-file Git changes for the active project's repository.
+  if frontend.isNil:
+    return
+  let root =
+    if frontend.fileTree.rootPath.len > 0:
+      frontend.fileTree.rootPath
+    else:
+      getCurrentDir()
+  frontend.showGitDiffSnapshot(
+    GitDiffSnapshot(source: gdsRepository, rootPath: root), refreshesRepository = true
+  )
+
+proc showPipedGitDiff*(
+    frontend: KosmoApplication, content, workingDirectory: string
+): bool {.discardable.} =
+  ## Show a static unified diff received through standard input.
+  frontend.showGitDiffSnapshot(
+    parseGitDiff(content, workingDirectory), refreshesRepository = false
+  )
 
 func ownsWindow(frontend: KosmoApplication, window: nimkit.Window): bool =
   if frontend.isNil or window.isNil or frontend.dockController.isNil:
@@ -4342,6 +4389,11 @@ proc newKosmoWindowManager*(
 func hasFileBrowser*(frontend: KosmoApplication): bool =
   ## Return whether this window displays a project file browser.
   not frontend.isNil and frontend.xHasFileBrowser
+
+func cliWindowId*(frontend: KosmoApplication): string =
+  ## Return the private routing identifier inherited by terminals from this window.
+  if not frontend.isNil:
+    result = frontend.xCliWindowId
 
 func projectWindowTitle(rootPaths: openArray[string]): string =
   result = "Kosmo"
@@ -4639,6 +4691,7 @@ proc newKosmoApplication*(
     xTerminalLinksEnabled: true,
     xWindowManager: manager.unsafeWeakRef(),
     xHasFileBrowser: hasFileBrowser,
+    xCliWindowId: randomIdentifier(),
   )
   let
     controller = KosmoDockController(
@@ -4923,7 +4976,7 @@ proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
       return not frontend.xWindowManager[].openProject(path).isNil
     let root = normalizedPath(absolutePath(path))
     result = root in frontend.fileTree.rootPaths or frontend.fileTree.addRootPath(root)
-  elif fileExists(path):
+  elif fileExists(path) or (not dirExists(path) and dirExists(path.parentDir())):
     let view = frontend.dockController.activeEditorView()
     if not view.isNil:
       result = view.openFile(path)
@@ -4931,6 +4984,71 @@ proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
     frontend.updateProjectWindowTitle()
     if not frontend.searchPanel.isNil:
       frontend.searchPanel.rootPaths = frontend.fileTree.rootPaths
+
+proc frontendForCliRequest(
+    manager: KosmoWindowManager, originWindow: string
+): KosmoApplication =
+  if originWindow.len > 0:
+    for frontend in manager.frontends:
+      if not frontend.xClosed and frontend.xCliWindowId == originWindow:
+        return frontend
+  manager.activeFrontend()
+
+proc openCliRequest(
+    manager: KosmoWindowManager, request: KosmoCliOpenRequest
+): KosmoCliOpenResponse =
+  if manager.isNil:
+    result.errors.add "Kosmo has no active window manager"
+    return
+  if request.kind == kcrShowDiff:
+    var destination = manager.frontendForCliRequest(request.originWindow)
+    if destination.isNil:
+      destination = newKosmoApplication(manager, hasFileBrowser = false)
+      destination.show()
+    let snapshot = parseGitDiff(request.diffText, request.workingDirectory)
+    if not destination.showGitDiffSnapshot(snapshot, refreshesRepository = false):
+      result.errors.add "Kosmo could not open the piped Git diff"
+    elif snapshot.errorMessage.len > 0:
+      result.errors.add snapshot.errorMessage
+    result.delivered = true
+    return
+  var
+    folders: seq[string]
+    files: seq[string]
+  for path in request.paths:
+    if dirExists(path):
+      folders.add path
+    elif fileExists(path) or dirExists(path.parentDir()):
+      files.add path
+    else:
+      result.errors.add "Kosmo cannot open path: " & path
+
+  var destination: KosmoApplication
+  if folders.len > 0:
+    destination = manager.openProject(folders[0])
+    if destination.isNil:
+      result.errors.add "Kosmo could not open project folder: " & folders[0]
+    else:
+      for index in 1 ..< folders.len:
+        if not destination.openPath(folders[index]):
+          result.errors.add "Kosmo could not add project folder: " & folders[index]
+  elif files.len > 0:
+    destination = manager.frontendForCliRequest(request.originWindow)
+    if destination.isNil:
+      destination = newKosmoApplication(manager, hasFileBrowser = false)
+
+  if not destination.isNil:
+    for path in files:
+      if not destination.openPath(path):
+        result.errors.add "Kosmo could not open file: " & path
+    destination.show()
+  result.delivered = true
+
+when defined(merendaTests):
+  proc openCliRequestForTesting*(
+      manager: KosmoWindowManager, request: KosmoCliOpenRequest
+  ): KosmoCliOpenResponse =
+    manager.openCliRequest(request)
 
 proc openDocument*(
     frontend: KosmoApplication, document: KosmoPaneDocument
@@ -5016,8 +5134,7 @@ proc close*(manager: KosmoWindowManager) =
   for frontend in frontends:
     frontend.close()
 
-proc runKosmo*(filePath = "") =
-  ## Run Kosmo as a standalone NimKit text-editor application.
+proc runKosmoRequest(initialRequest: Option[KosmoCliOpenRequest]) =
   let
     app = nimkit.sharedApplication()
     keyBindingsPath = defaultKosmoKeyBindingsPath()
@@ -5027,13 +5144,63 @@ proc runKosmo*(filePath = "") =
       keyBindingsPath = if fileExists(keyBindingsPath): keyBindingsPath else: "",
       configPath = configPath,
     )
-  let frontend = newKosmoApplication(
-    manager, filePath, hasFileBrowser = filePath.len == 0 or not fileExists(filePath)
-  )
   defer:
     manager.close()
-  frontend.show()
-  frontend.application.run()
+  try:
+    manager.cliServer = startKosmoCliOpenServer(
+      proc(request: KosmoCliOpenRequest): KosmoCliOpenResponse =
+        manager.openCliRequest(request)
+    )
+  except CatchableError as error:
+    stderr.writeLine("Kosmo CLI routing is unavailable: " & error.msg)
+  defer:
+    if not manager.cliServer.isNil:
+      manager.cliServer.close()
+
+  if initialRequest.isNone:
+    newKosmoApplication(manager).show()
+  else:
+    let response = manager.openCliRequest(initialRequest.get())
+    for message in response.errors:
+      stderr.writeLine(message)
+  app.run()
+
+proc runKosmo*(paths: openArray[string]) =
+  ## Run Kosmo as a standalone NimKit text-editor application.
+  if paths.len == 0:
+    runKosmoRequest(none(KosmoCliOpenRequest))
+  else:
+    runKosmoRequest(
+      some(
+        KosmoCliOpenRequest(
+          requestId: randomIdentifier(), kind: kcrOpenPaths, paths: @paths
+        )
+      )
+    )
+
+proc runKosmoDiff*(content: string, workingDirectory = getCurrentDir()) =
+  ## Run Kosmo with a static Git Diff view populated from standard input.
+  runKosmoRequest(
+    some(
+      KosmoCliOpenRequest(
+        requestId: randomIdentifier(),
+        kind: kcrShowDiff,
+        workingDirectory: workingDirectory,
+        diffText: content,
+      )
+    )
+  )
+
+proc runKosmo*(filePath = "") =
+  ## Compatibility overload for callers opening one initial path.
+  if filePath.len > 0:
+    runKosmo([filePath])
+  else:
+    runKosmo(newSeq[string]())
+
+proc reportCliErrors(errors: openArray[string]) =
+  for message in errors:
+    stderr.writeLine(message)
 
 when isMainModule:
   let commandLine = parseKosmoCommandLine(commandLineParams())
@@ -5041,7 +5208,45 @@ when isMainModule:
     echo KosmoUsage
   elif commandLine.version:
     echo KosmoVersion
-  elif commandLine.background:
-    launchKosmoInBackground(commandLine.arguments)
+  elif commandLine.diff:
+    if commandLine.paths.len > 0:
+      stderr.writeLine("Kosmo --diff does not accept file or folder arguments")
+      quit(1)
+    if kosmoCliInputIsTerminal():
+      stderr.writeLine("Kosmo --diff reads a unified Git diff from standard input")
+      quit(1)
+    var content: string
+    try:
+      content = stdin.readKosmoCliDiff()
+    except CatchableError as error:
+      stderr.writeLine(error.msg)
+      quit(1)
+    let workingDirectory = getCurrentDir()
+    let response = showDiffInRunningKosmo(content, workingDirectory)
+    if response.delivered:
+      reportCliErrors(response.errors)
+      quit(if response.errors.len == 0: 0 else: 1)
+    if commandLine.background:
+      stderr.writeLine(
+        "Kosmo --bg --diff requires a running Kosmo instance to receive the pipe"
+      )
+      quit(1)
+    runKosmoDiff(content, workingDirectory)
   else:
-    runKosmo(commandLine.filePath)
+    let paths = resolveKosmoCliPaths(commandLine.paths)
+    if paths.errors.len > 0:
+      reportCliErrors(paths.errors)
+      quit(1)
+    if paths.paths.len > 0:
+      let response = openInRunningKosmo(paths.paths)
+      if response.delivered:
+        reportCliErrors(response.errors)
+        quit(if response.errors.len == 0: 0 else: 1)
+    if commandLine.background:
+      var arguments: seq[string]
+      if paths.paths.len > 0:
+        arguments.add "--"
+        arguments.add paths.paths
+      launchKosmoInBackground(arguments)
+    else:
+      runKosmo(paths.paths)

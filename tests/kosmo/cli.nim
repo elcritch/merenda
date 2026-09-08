@@ -1,5 +1,5 @@
 ## Kosmo standalone command-line handling shared by the Kosmo test runner.
-import std/[os, tempfiles, times, unittest]
+import std/[os, strutils, tempfiles, times, unittest]
 
 import merenda/kosmo/cli
 
@@ -12,6 +12,7 @@ suite "Kosmo command line":
     check not commandLine.help
     check commandLine.arguments == @["notes.md", "--literal", "with spaces.md"]
     check commandLine.filePath == "notes.md"
+    check commandLine.paths == @["notes.md", "--literal", "with spaces.md"]
 
   test "background child arguments cannot request another background launch":
     let parent = parseKosmoCommandLine(@["project", "--bg", "README.md"])
@@ -30,12 +31,14 @@ suite "Kosmo command line":
     check not child.background
     check child.arguments == @["--", "--bg"]
     check child.filePath == "--bg"
+    check child.paths == @["--bg"]
 
   test "the first non-option remains the target path":
     let commandLine = parseKosmoCommandLine(@["", "later", "--bg"])
     check commandLine.background
     check commandLine.arguments == @["", "later"]
     check commandLine.filePath == ""
+    check commandLine.paths == @["", "later"]
 
   test "help does not become an editor path":
     let commandLine = parseKosmoCommandLine(@["--bg", "--help"])
@@ -51,11 +54,64 @@ suite "Kosmo command line":
     check commandLine.arguments.len == 0
     check commandLine.filePath.len == 0
 
+  test "diff input is selected without becoming a path":
+    let commandLine = parseKosmoCommandLine(@["--bg", "--diff"])
+    check commandLine.background
+    check commandLine.diff
+    check commandLine.arguments.len == 0
+    check commandLine.paths.len == 0
+
   test "double dash preserves a literal version path":
     let commandLine = parseKosmoCommandLine(@["--", "--version"])
     check not commandLine.version
     check commandLine.arguments == @["--", "--version"]
     check commandLine.filePath == "--version"
+    check commandLine.paths == @["--version"]
+
+  test "CLI paths resolve against the invoking shell and retain input order":
+    let
+      root = createTempDir("merenda-kosmo-cli-paths-", "")
+      folder = root / "project"
+      filePath = root / "notes.md"
+    defer:
+      removeDir(root)
+    createDir(folder)
+    writeFile(filePath, "notes")
+    let paths =
+      resolveKosmoCliPaths(@["notes.md", "project", "new.md", "./notes.md"], root)
+    check paths.errors.len == 0
+    check paths.paths == @[filePath, folder, root / "new.md"]
+
+  test "CLI path validation distinguishes new files from missing folders":
+    let root = createTempDir("merenda-kosmo-cli-errors-", "")
+    defer:
+      removeDir(root)
+    let paths =
+      resolveKosmoCliPaths(@["", "missing/", "missing/child.txt", "new.txt"], root)
+    check paths.paths == @[root / "new.txt"]
+    check paths.errors.len == 3
+    check paths.errors[0] == "Kosmo cannot open an empty path"
+    check paths.errors[1].endsWith("missing")
+    check paths.errors[2].endsWith("missing/child.txt")
+
+  test "diff input is read exactly and bounded":
+    let root = createTempDir("merenda-kosmo-cli-diff-", "")
+    defer:
+      removeDir(root)
+    let path = root / "input.diff"
+    writeFile(path, "@@ -1 +1 @@\n-old\n+new\n")
+    let input = open(path, fmRead)
+    defer:
+      input.close()
+    check input.readKosmoCliDiff() == "@@ -1 +1 @@\n-old\n+new\n"
+
+    let oversizedPath = root / "oversized.diff"
+    writeFile(oversizedPath, "12345")
+    let oversized = open(oversizedPath, fmRead)
+    defer:
+      oversized.close()
+    expect ValueError:
+      discard oversized.readKosmoCliDiff(maxBytes = 4)
 
   when not defined(windows):
     test "detached launcher preserves the requested directory and arguments":

@@ -757,14 +757,27 @@ rights for those glyphs. See `data/FONT-LICENSES.md` before redistributing Kosmo
 }
 ```
 
-Run `kosmo --bg [file-or-folder]` to launch the standalone editor detached from
-the invoking shell. Kosmo preserves the current working directory, forwards the
-remaining command-line arguments to its detached process, and disconnects its
-standard input, output, and error streams. Use `kosmo --help` to see the
-available standalone options. Use `kosmo --bg -- --dash-prefixed-path` when the
-path itself starts with a dash. Tagged releases provide Linux, macOS, and Windows
+Run `kosmo file-or-folder` from a shell to reuse a running Kosmo process. Files
+open as permanent tabs in the active window, while folders open as project roots
+in new windows. Multiple paths are accepted; when a request contains folders,
+Kosmo creates one project window, adds each folder as a root, and opens the files
+there. Relative paths are resolved from the invoking shell, and missing file
+paths open as new named buffers when their parent folder exists.
+
+Kosmo terminals route the command back to the window that created that terminal.
+Commands from other shells use the newest responsive Kosmo process. If none is
+running, Kosmo starts normally; add `--bg` to detach it from the invoking shell.
+Use `kosmo --help` to see the standalone options, and use `kosmo -- --name` when
+a path starts with a dash. Tagged releases provide Linux, macOS, and Windows
 binaries; see [Releasing Kosmo binaries](docs/releasing-kosmo.md) for artifact and
 macOS signing details.
+
+Pipe unified Git output to `kosmo --diff` to render a static snapshot in Kosmo's
+Git Diff view, for example `git diff some-folder | kosmo --diff`. The same process
+and embedded-terminal routing rules apply. Piped diffs are limited to 8 MiB and
+do not enable the repository Refresh action. If no Kosmo process is running, the
+command opens an editor-only window; start Kosmo first when combining `--diff`
+with `--bg`.
 
 File > New… opens a blank tab in the active editor pane. File > Open Project…
 opens a folder in a new window with its own file browser. File > Open… opens

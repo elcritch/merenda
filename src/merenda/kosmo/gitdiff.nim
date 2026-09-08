@@ -15,6 +15,10 @@ const KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
 type
   GitDiffHighlightKey = tuple[source, language: string]
 
+  GitDiffSource* = enum
+    gdsRepository
+    gdsStandardInput
+
   GitFileDiff* = object
     path*: string
     patch*: string ## Standard three-line-context patch displayed by the viewer.
@@ -23,6 +27,7 @@ type
     binary*: bool
 
   GitDiffSnapshot* = object
+    source*: GitDiffSource
     rootPath*: string
     branch*: string
     hasHead*: bool
@@ -85,6 +90,7 @@ type
     readingGit: bool
     relayoutPending: bool
     generation: uint64
+    readGeneration: uint64
     loading: bool
     closed: bool
     control: SharedPtr[GitDiffControl]
@@ -199,6 +205,92 @@ proc readGitDiff(
 proc readGitDiff*(rootPath: string): GitDiffSnapshot =
   ## Read standard diff hunks plus full-file patches for syntax classification.
   readGitDiff(rootPath, newGitDiffControl())
+
+func normalizedPipedDiffPath(rawPath: string): string =
+  var path = rawPath.strip()
+  let tab = path.find('\t')
+  if tab >= 0:
+    path.setLen(tab)
+  if path.len >= 2 and path[0] == '"' and path[^1] == '"':
+    path = path[1 .. ^2]
+  if path.startsWith("a/") or path.startsWith("b/"):
+    path = path[2 .. ^1]
+  if path != "/dev/null":
+    result = path
+
+func pathFromGitDiffHeader(line: string): string =
+  var marker = line.rfind(" \"b/")
+  if marker >= 0:
+    return normalizedPipedDiffPath(line[marker + 1 .. ^1])
+  marker = line.rfind(" b/")
+  if marker >= 0:
+    result = normalizedPipedDiffPath(line[marker + 1 .. ^1])
+
+func withoutLineEnd(value: string): string =
+  result = value
+  result.stripLineEnd()
+
+proc summarizePipedFile(file: var GitFileDiff) =
+  file.syntaxPatch = file.patch
+  var inHunk: bool
+  for line in file.patch.splitLines():
+    if line.startsWith("@@ "):
+      inHunk = true
+    elif inHunk and line.startsWith("+"):
+      inc file.additions
+    elif inHunk and line.startsWith("-"):
+      inc file.deletions
+    elif line.startsWith("Binary files ") or line.startsWith("GIT binary patch"):
+      file.binary = true
+
+proc finishPipedFile(
+    snapshot: var GitDiffSnapshot,
+    current: var GitFileDiff,
+    oldPath: var string,
+    active: var bool,
+) =
+  if not active:
+    return
+  if current.path.len == 0:
+    current.path = oldPath
+  if current.path.len == 0:
+    current.path = "Patch " & $(snapshot.files.len + 1)
+  current.summarizePipedFile()
+  snapshot.files.add current
+  current = GitFileDiff()
+  oldPath.setLen(0)
+  active = false
+
+proc parseGitDiff*(
+    content: string, workingDirectory = getCurrentDir()
+): GitDiffSnapshot =
+  ## Parse ordinary `git diff` output into the retained Git Diff view model.
+  result.source = gdsStandardInput
+  result.rootPath = normalizedPath(absolutePath(workingDirectory))
+  var
+    current: GitFileDiff
+    oldPath: string
+    active: bool
+
+  for line in content.splitLines(keepEol = true):
+    if line.startsWith("diff --git "):
+      result.finishPipedFile(current, oldPath, active)
+      active = true
+      current.path = pathFromGitDiffHeader(line.withoutLineEnd())
+    elif not active and line.startsWith("--- "):
+      active = true
+    if not active:
+      continue
+    current.patch.add line
+    if line.startsWith("--- "):
+      oldPath = normalizedPipedDiffPath(line[4 .. ^1].withoutLineEnd())
+    elif line.startsWith("+++ "):
+      let newPath = normalizedPipedDiffPath(line[4 .. ^1].withoutLineEnd())
+      if newPath.len > 0:
+        current.path = newPath
+  result.finishPipedFile(current, oldPath, active)
+  if content.strip().len > 0 and result.files.len == 0:
+    result.errorMessage = "Standard input is not a unified Git diff."
 
 proc markdownLabel(value: string): string =
   for ch in value:
@@ -390,19 +482,25 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
     deletions += file.deletions
     if file.binary:
       inc binaries
-  document.add "| Repository | " & panel.snapshot.rootPath.lastPathPart().markdownLabel() &
-    " |\n| --- | --- |\n"
-  if panel.snapshot.branch.len > 0:
-    document.add "| Branch | " & panel.snapshot.branch.markdownLabel() & " |\n"
+  if panel.snapshot.source == gdsStandardInput:
+    document.add "| Source | Standard input |\n| --- | --- |\n"
+  else:
+    document.add "| Repository | " &
+      panel.snapshot.rootPath.lastPathPart().markdownLabel() & " |\n| --- | --- |\n"
+    if panel.snapshot.branch.len > 0:
+      document.add "| Branch | " & panel.snapshot.branch.markdownLabel() & " |\n"
   document.add "| Location | " & panel.snapshot.rootPath.markdownLabel() & " |\n"
   if not panel.readingGit and panel.snapshot.errorMessage.len == 0:
     document.add "| Changes | " & $panel.snapshot.files.len & " files · +" & $additions &
       " / −" & $deletions
     if binaries > 0:
       document.add " · " & $binaries & " binary"
-    document.add " |\n| Compare | Working tree ↔ " &
-      (if panel.snapshot.hasHead: "HEAD" else: "empty tree") &
-      " · includes untracked files |\n"
+    if panel.snapshot.source == gdsStandardInput:
+      document.add " |\n| Compare | Piped unified diff |\n"
+    else:
+      document.add " |\n| Compare | Working tree ↔ " &
+        (if panel.snapshot.hasHead: "HEAD" else: "empty tree") &
+        " · includes untracked files |\n"
   document.add "\n"
   if panel.readingGit:
     document.add "Loading changes…\n"
@@ -410,7 +508,10 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
     document.add "Could not load Git diff.\n\n" &
       panel.snapshot.errorMessage.fencedPatch()
   elif panel.snapshot.files.len == 0:
-    document.add "No changes. Your working tree matches HEAD.\n"
+    if panel.snapshot.source == gdsStandardInput:
+      document.add "The piped diff contains no changes.\n"
+    else:
+      document.add "No changes. Your working tree matches HEAD.\n"
   panel.markdownView.markdown = document
   panel.scheduleSectionLayout()
 
@@ -735,14 +836,23 @@ proc handleSharedKeys(panel: KosmoGitDiffPanel, event: nimkit.KeyEvent): bool =
     return true
 
 proc executeDiff(
-  worker: AgentProxy[GitDiffWorker], root: string, control: SharedPtr[GitDiffControl]
+  worker: AgentProxy[GitDiffWorker],
+  root: string,
+  generation: uint64,
+  control: SharedPtr[GitDiffControl],
 ) {.signal.}
 
-proc diffFinished(worker: GitDiffWorker, snapshot: GitDiffSnapshot) {.signal.}
+proc diffFinished(
+  worker: GitDiffWorker, snapshot: GitDiffSnapshot, generation: uint64
+) {.signal.}
+
 proc executeDiff(
-    worker: GitDiffWorker, root: string, control: SharedPtr[GitDiffControl]
+    worker: GitDiffWorker,
+    root: string,
+    generation: uint64,
+    control: SharedPtr[GitDiffControl],
 ) {.slot.} =
-  emit worker.diffFinished(readGitDiff(root, control))
+  emit worker.diffFinished(readGitDiff(root, control), generation)
 
 proc highlightDiff(
   worker: AgentProxy[GitDiffHighlightWorker],
@@ -806,7 +916,8 @@ proc updateLoading(panel: KosmoGitDiffPanel) =
   panel.loading = panel.readingGit
   for section in panel.sections.values:
     panel.loading = panel.loading or section.pending
-  panel.refreshButton.enabled = not panel.loading
+  panel.refreshButton.enabled =
+    not panel.loading and panel.snapshot.source == gdsRepository
 
 proc applyHighlighting(
     panel: KosmoGitDiffPanel, highlighted: SharedPtr[GitDiffHighlightResult]
@@ -920,15 +1031,41 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
   panel.updateLoading()
   panel.renderDiff()
 
+proc repositoryDiffFinished(
+    panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot, generation: uint64
+) {.slot.} =
+  if not panel.closed and generation == panel.readGeneration:
+    panel.applyDiff(snapshot)
+
+proc displayDiff*(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) =
+  ## Replace the current contents with an already prepared, static snapshot.
+  if panel.isNil or panel.closed:
+    return
+  inc panel.readGeneration
+  panel.readingGit = false
+  panel.applyDiff(snapshot)
+
+proc refresh*(panel: KosmoGitDiffPanel)
+
+proc displayRepositoryDiff*(panel: KosmoGitDiffPanel, rootPath: string) =
+  ## Replace static input if needed, then refresh the selected repository.
+  if panel.isNil or panel.closed:
+    return
+  if panel.snapshot.source != gdsRepository or panel.snapshot.rootPath != rootPath:
+    panel.displayDiff(GitDiffSnapshot(source: gdsRepository, rootPath: rootPath))
+  panel.refresh()
+
 proc refresh*(panel: KosmoGitDiffPanel) =
   ## Refresh the current repository on a worker thread.
-  if not panel.closed and not panel.loading:
-    inc panel.generation
+  if not panel.closed and not panel.loading and panel.snapshot.source == gdsRepository:
+    inc panel.readGeneration
     panel.loading = true
     panel.readingGit = true
     panel.refreshButton.enabled = false
     panel.renderDiff()
-    emit panel.worker.executeDiff(panel.snapshot.rootPath, panel.control)
+    emit panel.worker.executeDiff(
+      panel.snapshot.rootPath, panel.readGeneration, panel.control
+    )
 
 proc waitForDiff*(panel: KosmoGitDiffPanel, timeoutMilliseconds = 10000): bool =
   ## Deliver worker results until the diff finishes, for callers without an event loop.
@@ -1004,8 +1141,8 @@ proc textViewForFile*(panel: KosmoGitDiffPanel, index: int): nimkit.TextView =
   if index in 0 ..< panel.snapshot.files.len:
     return panel.sections[panel.snapshot.files[index].path].textView
 
-proc newKosmoGitDiffPanel*(
-    rootPath: string, markdownStyle = nimkit.initMarkdownStyle()
+proc newKosmoGitDiffPanel(
+    rootPath: string, markdownStyle: nimkit.MarkdownStyle, refreshesRepository: bool
 ): KosmoGitDiffPanel =
   ## Construct a syntax-highlighted hunk reader with initially collapsed files.
   startLocalThreadDefault()
@@ -1114,5 +1251,24 @@ proc newKosmoGitDiffPanel*(
   var worker = GitDiffWorker()
   result.worker = worker.moveToThread(result.pool)
   connectThreaded(result.worker, executeDiff, result.worker, executeDiff)
-  connectThreaded(result.worker, diffFinished, result, KosmoGitDiffPanel.applyDiff())
-  result.refresh()
+  connectThreaded(
+    result.worker, diffFinished, result, KosmoGitDiffPanel.repositoryDiffFinished()
+  )
+  if refreshesRepository:
+    result.refresh()
+  else:
+    result.renderDiff()
+
+proc newKosmoGitDiffPanel*(
+    rootPath: string, markdownStyle = nimkit.initMarkdownStyle()
+): KosmoGitDiffPanel =
+  ## Construct a repository-backed Git Diff view.
+  newKosmoGitDiffPanel(rootPath, markdownStyle, refreshesRepository = true)
+
+proc newKosmoGitDiffPanel*(
+    snapshot: GitDiffSnapshot, markdownStyle = nimkit.initMarkdownStyle()
+): KosmoGitDiffPanel =
+  ## Construct a Git Diff view from a static snapshot such as piped input.
+  result =
+    newKosmoGitDiffPanel(snapshot.rootPath, markdownStyle, refreshesRepository = false)
+  result.displayDiff(snapshot)
