@@ -35,7 +35,7 @@ proc renderMoeFile(fileName, source: string): RenderBuffer =
   defer:
     editor.close()
   doAssert editor.openFile(path).loaded
-  result = newRenderBuffer(48, 8)
+  result = newRenderBuffer(48, 16)
   editor.render(result)
 
 template checkDistinctHighlight(fileName, source, firstNeedle, secondNeedle: string) =
@@ -89,8 +89,15 @@ suite "Kosmo Matter highlighting":
 
   test "Moe highlights Terraform HCL files":
     checkDistinctHighlight(
-      "matter.hcl", "resource \"thing\" \"example\" {\n  enabled = true\n}\n", "thing",
-      "true",
+      "root.hcl",
+      "# =============================================================================\n" &
+        "# Root Terragrunt Configuration\n" &
+        "# =============================================================================\n" &
+        "# This is the root terragrunt.hcl that all environments include.\n" &
+        "# It defines the common S3 backend pattern and generates the AWS provider block.\n" &
+        "\n" & "terragrunt_version_constraint = \">= 1.1.2, < 2.0.0\"\n",
+      "Root",
+      "1.1.2",
     )
 
   test "Moe highlights Markdown headings and inline code":
