@@ -126,21 +126,25 @@ jobs:
           nim c \
             "${arch_flags[@]}" \
             --opt:size \
-            --debugger:off \
+            --debugger:native \
             --lineTrace:off \
             --stackTrace:off \
+            -d:nimStackTraceOverride \
             -d:moe.embedded \
             -d:KosmoVersion="$version" \
             -d:KosmoGitHashOverride="$revision" \
             --out:build/kosmo \
             src/merenda/kosmo/kosmo.nim
-          strip build/kosmo
           binary_description="$(file -b build/kosmo)"
           echo "$binary_description"
           case "$RELEASE_ARCH" in
             amd64) grep -q 'ELF 64-bit.*x86-64' <<< "$binary_description" ;;
             x32) grep -q 'ELF 32-bit.*Intel 80386' <<< "$binary_description" ;;
           esac
+          readelf --sections build/kosmo |
+            awk '/\.debug_info/ { found = 1 } END { exit !found }'
+          nm build/kosmo |
+            awk '$NF == "backtrace_create_state" { found = 1 } END { exit !found }'
           cp data/FONT-LICENSES.md build/FONT-LICENSES.md
           cp -R data/font-licenses build/font-licenses
           build/kosmo --help
@@ -274,6 +278,7 @@ jobs:
           version="${KOSMO_RELEASE_VERSION#v}"
           revision="${GITHUB_SHA:0:12}"
           app_path="$PWD/build/Kosmo.app"
+          dsym_path="$app_path/Contents/MacOS/kosmo.dSYM"
           iconset_path="$RUNNER_TEMP/Kosmo.iconset"
 
           mkdir -p \
@@ -304,15 +309,32 @@ jobs:
 
           nim c \
             --opt:size \
-            --debugger:off \
+            --debugger:native \
             --lineTrace:off \
             --stackTrace:off \
+            -d:nimStackTraceOverride \
             -d:moe.embedded \
             -d:KosmoVersion="$version" \
             -d:KosmoGitHashOverride="$revision" \
             --out:"$app_path/Contents/MacOS/kosmo" \
             src/merenda/kosmo/kosmo.nim
-          strip -x "$app_path/Contents/MacOS/kosmo"
+          xcrun dsymutil \
+            "$app_path/Contents/MacOS/kosmo" \
+            -o "$dsym_path"
+          binary_uuid="$(
+            xcrun dwarfdump --uuid "$app_path/Contents/MacOS/kosmo" |
+              awk '{ print $2 }'
+          )"
+          dsym_uuid="$(
+            xcrun dwarfdump --uuid "$dsym_path" |
+              awk '{ print $2 }'
+          )"
+          if [[ -z "$binary_uuid" || "$binary_uuid" != "$dsym_uuid" ]]; then
+            echo 'Kosmo binary and bundled dSYM UUIDs do not match.' >&2
+            exit 1
+          fi
+          nm "$app_path/Contents/MacOS/kosmo" |
+            awk '$NF == "_backtrace_create_state" { found = 1 } END { exit !found }'
           "$app_path/Contents/MacOS/kosmo" --help
           plutil -lint "$app_path/Contents/Info.plist"
 
@@ -437,9 +459,10 @@ jobs:
           Pop-Location
           nim c `
             --opt:size `
-            --debugger:off `
+            --debugger:native `
             --lineTrace:off `
             --stackTrace:off `
+            -d:nimStackTraceOverride `
             --app:gui `
             -d:moe.embedded `
             "-d:KosmoVersion=$version" `
@@ -449,6 +472,12 @@ jobs:
             src/merenda/kosmo/kosmo.nim
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
+          }
+          if (-not (& objdump -h dist/kosmo.exe | Select-String -Quiet '\.debug_info')) {
+            throw 'Kosmo executable is missing native debug information.'
+          }
+          if (-not (& nm dist/kosmo.exe | Select-String -Quiet 'backtrace_create_state')) {
+            throw 'Kosmo executable is missing libbacktrace.'
           }
           $process = Start-Process `
             -FilePath "$PWD/dist/kosmo.exe" `
