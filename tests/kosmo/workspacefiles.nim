@@ -362,16 +362,19 @@ suite "Kosmo shared workspace inventory":
     eventually(frontend.editorView.editor.status().gitBranch == "external-start")
     eventually(externalRoot in frontend.fileTree.workspaceFiles.gitRoots)
 
-    # The root list is published before the native backend finishes registering
-    # every Git metadata directory. Wait for the exact handles before changing
-    # HEAD, then drain the initial dirty pulse so the checkout event cannot be
-    # coalesced with watcher setup.
+    # The root list is published before the watcher backend finishes registering
+    # every Git metadata directory. Native backends need all handles before
+    # changing HEAD; Linux intentionally uses the polling fallback instead.
+    # Drain the initial dirty pulse so the checkout event cannot be coalesced
+    # with watcher setup.
     eventually(
       not frontend.fileTree.workspaceFiles.watch.isNil and
         externalRoot in frontend.fileTree.workspaceFiles.watch.directories and
-        externalRoot / ".git" in frontend.fileTree.workspaceFiles.watch.metadata and
+        externalRoot / ".git" in frontend.fileTree.workspaceFiles.watch.metadata and (
+        frontend.fileTree.workspaceFiles.watch.fallback or
         frontend.fileTree.workspaceFiles.watch.handles.len ==
         frontend.fileTree.workspaceFiles.watch.directories.len
+      )
     )
     pumpFor(500)
 
