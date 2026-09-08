@@ -6,6 +6,7 @@
 
 import std/[algorithm, options, os, strutils, unicode]
 
+import matter/grammarpackages as matterPackages
 import moepkg/celina_backend as celina
 from pkg/figdraw import figDataDir
 import pkg/results as pkgResults
@@ -27,7 +28,10 @@ from moepkg/render_utils import steadyBottomAreaHeight
 from moepkg/search_utils import shouldIgnoreCase
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
+import moepkg/syntax/matter_backend as moeMatter
 import moepkg/types as moeTypes
+
+import ../nimkit/text/mattergrammarassets
 
 when not defined(moe.embedded):
   when hasAsyncSupport:
@@ -442,12 +446,24 @@ template inWorkingDirectory(editor: KosmoEditor, body: untyped): untyped =
     finally:
       setCurrentDir(previousDirectory)
 
+proc newKosmoMatterGrammarSet(): moeMatter.MatterGrammarSet =
+  var sources =
+    newSeqOfCap[moeMatter.MatterGrammarSource](matterPackages.knownGrammars.len)
+  for contribution in matterPackages.knownGrammars:
+    sources.add moeMatter.MatterGrammarSource(
+      content: contribution.bundledMatterGrammarContents(),
+      path: contribution.archiveMember,
+    )
+  moeMatter.newMatterGrammarSet(sources)
+
 proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   ## Create an editor with Moe's default configuration and optional initial text.
   var config = newEditorConfig()
   config.standard.mouse = true
   config.standard.statusLine = false
   config.tabLine.enable = false
+  config.highlight.backend = hbMatter
+  config.highlight.matterGrammarSet = newKosmoMatterGrammarSet()
   result = KosmoEditor(editor: newEditor(config))
   result.workingDirectory = workingDirectory
   discard result.editor.addCommandAlias("x", claSaveAndQuit)

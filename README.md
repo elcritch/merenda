@@ -80,6 +80,15 @@ Atlas:
 atlas install -tuk --features:kosmo
 ```
 
+Merenda's `config.nims` enables Moe's optional Matter backend for repository
+builds. Applications that consume Merenda as an Atlas dependency must add the
+same conditional define to their own `config.nims`:
+
+```nim
+when defined(features.merenda.kosmo):
+  switch("define", "features.moe.matter")
+```
+
 Kosmo's browser and quick open share a background file inventory. See
 [workspace updates](docs/kosmo-workspace.md) for file/Git watching, process
 lifetime, and the current Linux polling fallback.
@@ -221,9 +230,10 @@ Language-tagged fenced code blocks use the same frontend-neutral
 presentation colors. The Markdown parser still owns all document structure and
 inline styling—the syntax highlighter never receives the Markdown source outside
 the contents of a tagged fence. Matter's bundled TextMate grammars are the
-default in both NimKit and Kosmo, while SynEdit and Moe remain available as
-alternative highlighters. A nil highlighter or unknown language retains the
-ordinary monospace `codeColor`.
+default for NimKit Markdown and Kosmo's Moe editor. Moe falls back to its
+built-in tokenizer when a mode has no bundled grammar; a nil Markdown
+highlighter or unknown fenced language retains the ordinary monospace
+`codeColor`.
 
 ## Cached URL Assets
 

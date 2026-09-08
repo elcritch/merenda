@@ -1,5 +1,7 @@
-## Matter highlighting in Kosmo Markdown previews.
-import std/[strutils, unicode, unittest]
+## Matter highlighting in Kosmo editors and Markdown previews.
+import std/[os, strutils, tempfiles, unicode, unittest]
+
+import celina/core/colors as celinaColors
 
 import merenda/kosmo/kosmo
 import merenda/nimkit
@@ -10,7 +12,45 @@ proc runeIndexOf(source, needle: string): int =
   if byteIndex >= 0:
     result = source[0 ..< byteIndex].runeLen
 
+proc renderedLocation(buffer: RenderBuffer, needle: string): tuple[column, row: int] =
+  result = (column: -1, row: -1)
+  for row in 0 ..< buffer.height:
+    var line: string
+    for column in 0 ..< buffer.width:
+      line.add buffer.cell(column, row).symbol
+    let column = line.find(needle)
+    if column >= 0:
+      return (column: column, row: row)
+
 suite "Kosmo Matter highlighting":
+  test "Moe editors use Matter highlighting by default":
+    let
+      root = createTempDir("kosmo-moe-matter-", "")
+      path = root / "matter-default.nim"
+    writeFile(path, "proc answer = discard\nproc explicit() = discard\n")
+    defer:
+      removeFile(path)
+      removeDir(root)
+
+    let editor = newKosmoEditor()
+    defer:
+      editor.close()
+    require editor.openFile(path).loaded
+
+    var buffer = newRenderBuffer(32, 8)
+    editor.render(buffer)
+    let
+      keyword = buffer.renderedLocation("proc")
+      parameterless = buffer.renderedLocation("answer")
+      explicit = buffer.renderedLocation("explicit")
+    require keyword.column >= 0
+    require parameterless.column >= 0
+    require explicit.column >= 0
+    check buffer.cell(parameterless.column, parameterless.row).style.fg ==
+      buffer.cell(explicit.column, explicit.row).style.fg
+    check buffer.cell(parameterless.column, parameterless.row).style.fg !=
+      buffer.cell(keyword.column, keyword.row).style.fg
+
   test "Markdown previews use Matter for fenced code":
     let frontend = newKosmoApplication(
       newApplication("Kosmo Matter Highlighting Test"), monitorsGitStatus = false
