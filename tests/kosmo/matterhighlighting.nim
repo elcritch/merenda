@@ -92,6 +92,14 @@ suite "Kosmo Matter highlighting":
       "true",
     )
 
+  test "Moe highlights Markdown headings and inline code":
+    checkDistinctHighlight(
+      "matter.md", "# Matter heading\nUse `kosmo` here.\n", "Matter heading", "Use"
+    )
+    checkDistinctHighlight(
+      "matter.md", "# Matter heading\nUse `kosmo` here.\n", "Use", "kosmo"
+    )
+
   test "Markdown previews use Matter for fenced code":
     let frontend = newKosmoApplication(
       newApplication("Kosmo Matter Highlighting Test"), monitorsGitStatus = false
