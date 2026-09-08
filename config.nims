@@ -31,6 +31,7 @@ when defined(linux) and defined(gcc):
 switch("define", "features.markdown.regex") # temporary hack until we get atlas 0.15.1
 
 when defined(features.merenda.kosmo):
+  switch("define", "moe.embedded")
   switch("define", "features.moe.matter")
 
 import std/strutils

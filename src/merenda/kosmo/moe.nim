@@ -499,6 +499,7 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   var config = newEditorConfig()
   config.standard.mouse = true
   config.standard.statusLine = false
+  config.standard.colorMode = cm24bit
   config.tabLine.enable = false
   config.highlight.backend = hbMatter
   config.highlight.matterGrammarSet = newKosmoMatterGrammarSet()

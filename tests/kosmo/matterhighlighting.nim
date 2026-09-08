@@ -73,6 +73,7 @@ suite "Kosmo Matter highlighting":
     require keyword.column >= 0
     require parameterless.column >= 0
     require explicit.column >= 0
+    check buffer.cell(keyword.column, keyword.row).style.fg.kind == celinaColors.Rgb
     check buffer.cell(parameterless.column, parameterless.row).style.fg ==
       buffer.cell(explicit.column, explicit.row).style.fg
     check buffer.cell(parameterless.column, parameterless.row).style.fg !=
