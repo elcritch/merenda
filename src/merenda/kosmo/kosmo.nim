@@ -2,7 +2,8 @@
 
 when not defined(features.merenda.kosmo):
   {.
-    error: """
+    error:
+      """
 Kosmo requires the "kosmo" feature. Enable it with Atlas:
 
   atlas install -tuk --features:kosmo
@@ -276,6 +277,7 @@ type
     lastSplitWidth: float32
     fileTreeWidth: float32
     onShowFileExplorer: proc() {.closure.}
+    onRevealActiveFile: proc() {.closure.}
     onFindInFiles: proc() {.closure.}
     onQuickOpen: proc() {.closure.}
     onNewTerminal: proc() {.closure.}
@@ -364,6 +366,7 @@ proc `sidebarFocused=`(controller: KosmoDockController, focused: bool) =
     )
 
 proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
+proc revealActiveFile*(frontend: KosmoApplication): bool {.discardable.}
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
 func hasFileBrowser*(frontend: KosmoApplication): bool
 proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.}
@@ -844,13 +847,25 @@ proc selectEditorContent(view: KosmoEditorView, id: KosmoBufferId) =
   group.selectedTabIdentifier = id.tabIdentifier
   group.pane.setContentView(view)
 
-func statusText(status: KosmoStatus, tabs: openArray[KosmoTab]): string =
+proc resolvedEditorFilePath(path, workingDirectory: string): string =
+  let basePath =
+    if workingDirectory.len > 0:
+      absolutePath(workingDirectory)
+    else:
+      getCurrentDir()
+  normalizedPath(absolutePath(path, basePath))
+
+proc statusText(
+    status: KosmoStatus, tabs: openArray[KosmoTab], workingDirectory: string
+): string =
   var parts: seq[string]
+  var activeFilePath: Option[string]
   if status.modeLabel.len > 0:
     parts.add status.modeLabel
   for tab in tabs:
     if tab.active:
       parts.add tab.title
+      activeFilePath = tab.filePath
       break
   if status.message.len > 0:
     parts.add status.message
@@ -863,6 +878,8 @@ func statusText(status: KosmoStatus, tabs: openArray[KosmoTab]): string =
     if status.gitDeleted != 0:
       git.add " -" & $status.gitDeleted
     parts.add git
+  if activeFilePath.isSome:
+    parts.add resolvedEditorFilePath(activeFilePath.get, workingDirectory)
   parts.join("  •  ")
 
 proc visibleTabs(view: KosmoEditorView, tabs: openArray[KosmoTab]): seq[KosmoTab] =
@@ -1091,7 +1108,7 @@ proc syncChrome(view: KosmoEditorView) =
   let tabs = view.visibleTabs(view.editor.tabs())
   view.syncTabs(tabs)
   if not view.statusLabel.isNil and view.isActiveEditorGroup():
-    let text = view.editor.status().statusText(tabs)
+    let text = view.editor.status().statusText(tabs, view.editor.workingDirectory())
     if view.statusLabel.text != text:
       view.statusLabel.text = text
   let command = view.editor.commandLine()
@@ -1836,6 +1853,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoShowFileExplorerAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFileExplorer()
+    of KosmoRevealActiveFileAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].revealActiveFile()
     of KosmoFindInFilesAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFindInFiles()
@@ -2628,6 +2648,9 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
     of KosmoShowFileExplorerAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFileExplorer()
+    of KosmoRevealActiveFileAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].revealActiveFile()
     of KosmoFindInFilesAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showFindInFiles()
@@ -3649,12 +3672,17 @@ proc openTerminalLink(lifecycle: KosmoWindowLifecycle, link: string) {.slot.} =
 proc workspaceGitChanged(lifecycle: KosmoWindowLifecycle) {.slot.} =
   if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
     # All panes share one Moe engine. Invalidate once, not once per pane.
-    lifecycle.frontend[].dockController.editor.notifyGitRepositoryChanged()
+    let frontend = lifecycle.frontend[]
+    frontend.dockController.editor.notifyGitRepositoryChanged()
+    if not frontend.gitDiffPanel.isNil:
+      frontend.gitDiffPanel.scheduleRepositoryRefresh()
 
 proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
   if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
     let frontend = lifecycle.frontend[]
     let controller = frontend.dockController
+    if not frontend.gitDiffPanel.isNil:
+      discard frontend.gitDiffPanel.pollRepositoryRefresh()
     frontend.fileTree.workspaceFiles.setGitRoots(controller.editor.gitWatchRoots())
     if controller.editor.pollGitStatus():
       for group in controller.groups:
@@ -3825,6 +3853,10 @@ protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       if content.onShowFileExplorer.isNil:
         return false
       content.onShowFileExplorer()
+    of KosmoRevealActiveFileAction:
+      if content.onRevealActiveFile.isNil:
+        return false
+      content.onRevealActiveFile()
     of KosmoFindInFilesAction:
       if content.onFindInFiles.isNil:
         return false
@@ -3862,6 +3894,27 @@ proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.} =
   result = frontend.window.makeFirstResponder(frontend.fileTree)
   if result:
     frontend.dockController.activatePanelWindow(frontend.window)
+
+proc revealActiveFile*(frontend: KosmoApplication): bool {.discardable.} =
+  ## Reveal the selected editor tab when it is visible in the file-browser scope.
+  if frontend.isNil or not frontend.hasFileBrowser() or frontend.fileTree.isNil or
+      frontend.sidebarTabs.isNil or frontend.dockController.isNil:
+    return
+  let
+    controller = frontend.dockController
+    group = controller.activePaneGroup()
+  if group.isNil:
+    return
+  var bufferId: KosmoBufferId
+  if not group.selectedTabIdentifier.parseTabIdentifier(bufferId):
+    return
+  for tab in controller.editor.tabs():
+    if tab.id == bufferId and tab.filePath.isSome:
+      let path =
+        resolvedEditorFilePath(tab.filePath.get, controller.editor.workingDirectory())
+      if frontend.fileTree.revealPath(path):
+        result = frontend.showFileExplorer()
+      return
 
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.} =
   ## Select the find sidebar tab and focus its search query.
@@ -4035,6 +4088,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     shortcuts = frontend.dockController.shortcutBindings.kosmoShortcutSettings()
     moeThemes = frontend.dockController.editor.availableMoeThemes()
     moeThemeSettings = moeThemes.moeThemeSettings()
+    textMateGrammars = frontend.dockController.editor.availableTextMateGrammars()
     selectedMoeThemeIdentifier =
       frontend.dockController.editor.activeMoeThemeIdentifier()
   if frontend.xSettingsWindow.isNil or frontend.xSettingsWindow.window.isClosed():
@@ -4067,6 +4121,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
         if not weakFrontend.isNil:
           return weakFrontend[].setMoeTheme(identifier)
       ,
+      textMateGrammars = textMateGrammars,
     )
   else:
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
@@ -4075,10 +4130,12 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     frontend.xSettingsWindow.updateMoeThemes(
       moeThemeSettings, selectedMoeThemeIdentifier
     )
-  result = not frontend.application.showWindow(
-    frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
-    frontend.xSettingsWindow.firstResponder,
-  ).isNil
+    frontend.xSettingsWindow.textMateGrammars = textMateGrammars
+  result =
+    not frontend.application.showWindow(
+      frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
+      frontend.xSettingsWindow.firstResponder,
+    ).isNil
 
 proc showGitDiffSnapshot(
     frontend: KosmoApplication, snapshot: GitDiffSnapshot, refreshesRepository: bool
@@ -4422,7 +4479,11 @@ proc configureKosmoSettingsMenu(frontend: KosmoApplication) =
   let applicationMenu = mainMenu[0].submenu()
   if not applicationMenu.isNil and applicationMenu.len > 2:
     let settingsItem = applicationMenu[2]
-    let manager = if frontend.xWindowManager.isNil: nil else: frontend.xWindowManager[]
+    let manager =
+      if frontend.xWindowManager.isNil:
+        nil
+      else:
+        frontend.xWindowManager[]
     settingsItem.identifier = KosmoShowSettingsAction
     settingsItem.action = nimkit.actionSelector(KosmoShowSettingsAction)
     settingsItem.target = nimkit.newActionTarget(
@@ -4477,7 +4538,11 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
   let windowMenu = frontend.application.windowsMenu()
   if windowMenu.isNil or not windowMenu.menuItemWithIdentifier(KosmoNextTabAction).isNil:
     return
-  let manager = if frontend.xWindowManager.isNil: nil else: frontend.xWindowManager[]
+  let manager =
+    if frontend.xWindowManager.isNil:
+      nil
+    else:
+      frontend.xWindowManager[]
 
   proc addAction(title, identifier: string) =
     let item = nimkit.newMenuItem(title, nimkit.actionSelector(identifier))
@@ -4505,6 +4570,8 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
         discard controller.splitCurrentPaneTab(group, nimkit.dpRight)
       of KosmoShowFileExplorerAction:
         discard active.showFileExplorer()
+      of KosmoRevealActiveFileAction:
+        discard active.revealActiveFile()
       of KosmoFindInFilesAction:
         discard active.showFindInFiles()
       else:
@@ -4521,6 +4588,7 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
   addAction("Split Right", KosmoSplitVerticalAction)
   windowMenu.addSeparator()
   addAction("Show Files", KosmoShowFileExplorerAction)
+  addAction("Reveal Active File", KosmoRevealActiveFileAction)
   addAction("Find in Files", KosmoFindInFilesAction)
 
   let
@@ -4720,6 +4788,9 @@ proc newKosmoApplication*(
   documentView.onShowFileExplorer = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showFileExplorer()
+  documentView.onRevealActiveFile = proc() =
+    if not controller.frontend.isNil:
+      discard controller.frontend[].revealActiveFile()
   documentView.onFindInFiles = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showFindInFiles()
@@ -5000,6 +5071,23 @@ proc openCliRequest(
   if manager.isNil:
     result.errors.add "Kosmo has no active window manager"
     return
+  if request.kind == kcrOpenStdin:
+    var destination = manager.frontendForCliRequest(request.originWindow)
+    if destination.isNil:
+      destination = newKosmoApplication(manager, hasFileBrowser = false)
+    let controller = destination.dockController
+    let group = controller.activePaneGroup()
+    let id = controller.editor.newStdinBuffer(
+      request.stdinName, request.stdinText, request.workingDirectory
+    )
+    if id.isNone:
+      result.errors.add "Kosmo could not create the stdin buffer"
+    else:
+      group.addBuffer(id.get)
+      controller.activatePaneTab(group, id.get.tabIdentifier)
+      destination.show()
+    result.delivered = true
+    return
   if request.kind == kcrShowDiff:
     var destination = manager.frontendForCliRequest(request.originWindow)
     if destination.isNil:
@@ -5208,6 +5296,38 @@ when isMainModule:
     echo KosmoUsage
   elif commandLine.version:
     echo KosmoVersion
+  elif commandLine.errors.len > 0:
+    reportCliErrors(commandLine.errors)
+    quit(1)
+  elif commandLine.stdinName.len > 0:
+    if kosmoCliInputIsTerminal():
+      stderr.writeLine("Kosmo --file reads text from standard input")
+      quit(1)
+    var content: string
+    try:
+      content = stdin.readKosmoCliText()
+    except CatchableError as error:
+      stderr.writeLine(error.msg)
+      quit(1)
+    let directory = getCurrentDir()
+    let response = openStdinInRunningKosmo(commandLine.stdinName, content, directory)
+    if response.delivered:
+      reportCliErrors(response.errors)
+      quit(if response.errors.len == 0: 0 else: 1)
+    if commandLine.background:
+      stderr.writeLine("Kosmo --bg --file requires a running Kosmo instance")
+      quit(1)
+    runKosmoRequest(
+      some(
+        KosmoCliOpenRequest(
+          requestId: randomIdentifier(),
+          kind: kcrOpenStdin,
+          stdinName: commandLine.stdinName,
+          stdinText: content,
+          workingDirectory: directory,
+        )
+      )
+    )
   elif commandLine.diff:
     if commandLine.paths.len > 0:
       stderr.writeLine("Kosmo --diff does not accept file or folder arguments")

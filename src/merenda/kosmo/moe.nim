@@ -6,6 +6,7 @@
 
 import std/[algorithm, options, os, strutils, unicode]
 
+import matter/grammarpackages as matterPackages
 import moepkg/celina_backend as celina
 from pkg/figdraw import figDataDir
 import pkg/results as pkgResults
@@ -18,6 +19,7 @@ import
   ]
 import moepkg/buffer/undo as moeUndo
 import moepkg/buffer/search as moeSearch
+from moepkg/buffer/file_io import loadFileWithContent
 from moepkg/buffer/core import BufferId, getLine, getTextString, len
 from moepkg/command_handlers/visual_commands import visualDelete
 from moepkg/registers import setYankedRegister
@@ -27,17 +29,31 @@ from moepkg/render_utils import steadyBottomAreaHeight
 from moepkg/search_utils import shouldIgnoreCase
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
+import moepkg/syntax/matter_backend as moeMatter
 import moepkg/types as moeTypes
+
+import ../nimkit/text/mattergrammarassets
 
 when not defined(moe.embedded):
   when hasAsyncSupport:
     {.error: "Merenda's Moe facade requires Celina's synchronous backend".}
 
 type
+  KosmoTextMateGrammarOrigin* {.pure.} = enum
+    BuiltIn
+    Added
+
+  KosmoTextMateGrammar* = object
+    ## A TextMate grammar available to Kosmo without exposing Matter types.
+    name*: string
+    scopeName*: string
+    origin*: KosmoTextMateGrammarOrigin
+
   KosmoEditor* = ref object
     editor: Editor
     temporaryBufferId: Option[BufferId]
     workingDirectory: string
+    textMateGrammars: seq[KosmoTextMateGrammar]
 
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
@@ -442,13 +458,54 @@ template inWorkingDirectory(editor: KosmoEditor, body: untyped): untyped =
     finally:
       setCurrentDir(previousDirectory)
 
+proc newKosmoMatterGrammarSet(): moeMatter.MatterGrammarSet =
+  var sources =
+    newSeqOfCap[moeMatter.MatterGrammarSource](matterPackages.knownGrammars.len)
+  for contribution in matterPackages.knownGrammars:
+    sources.add moeMatter.MatterGrammarSource(
+      content: contribution.bundledMatterGrammarContents(),
+      path: contribution.archiveMember,
+      fileTypes:
+        if contribution.scopeName == matterPackages.terraformGrammar.scopeName:
+          @["hcl"]
+        else:
+          @[],
+    )
+  moeMatter.newMatterGrammarSet(sources)
+
+proc builtInTextMateGrammars(): seq[KosmoTextMateGrammar] =
+  for contribution in matterPackages.knownGrammars:
+    result.add KosmoTextMateGrammar(
+      name: contribution.displayName,
+      scopeName: contribution.scopeName,
+      origin: KosmoTextMateGrammarOrigin.BuiltIn,
+    )
+  result.sort do(left, right: KosmoTextMateGrammar) -> int:
+    result = cmpIgnoreCase(left.name, right.name)
+    if result == 0:
+      result = cmp(left.scopeName, right.scopeName)
+
+func title*(origin: KosmoTextMateGrammarOrigin): string =
+  case origin
+  of KosmoTextMateGrammarOrigin.BuiltIn: "Built-in"
+  of KosmoTextMateGrammarOrigin.Added: "Added"
+
+proc availableTextMateGrammars*(editor: KosmoEditor): seq[KosmoTextMateGrammar] =
+  ## Return the TextMate grammars currently installed for Moe highlighting.
+  if not editor.isNil and not editor.editor.isNil:
+    result = editor.textMateGrammars
+
 proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   ## Create an editor with Moe's default configuration and optional initial text.
   var config = newEditorConfig()
   config.standard.mouse = true
   config.standard.statusLine = false
+  config.standard.colorMode = cm24bit
   config.tabLine.enable = false
-  result = KosmoEditor(editor: newEditor(config))
+  config.highlight.backend = hbMatter
+  config.highlight.matterGrammarSet = newKosmoMatterGrammarSet()
+  result =
+    KosmoEditor(editor: newEditor(config), textMateGrammars: builtInTextMateGrammars())
   result.workingDirectory = workingDirectory
   discard result.editor.addCommandAlias("x", claSaveAndQuit)
   result.editor.setFrontendGitStatusEnabled(true)
@@ -882,6 +939,21 @@ proc newEmptyBuffer*(editor: KosmoEditor): Option[KosmoBufferId] =
     editor.editor.state.statusMessage = outcome.error
     return
   some(editor.editor.activeBuffer.id.toKosmoBufferId)
+
+proc newStdinBuffer*(
+    editor: KosmoEditor, name, content, directory: string
+): Option[KosmoBufferId] =
+  ## Create a separate modified buffer; stdin never reads or writes the named file.
+  result = editor.newEmptyBuffer()
+  if result.isNone:
+    return
+  let buffer = editor.editor.activeBuffer
+  let loaded = buffer.loadFileWithContent(absolutePath(name, directory), content)
+  if loaded.isErr:
+    editor.editor.state.statusMessage = loaded.error
+    return none(KosmoBufferId)
+  buffer.savedChangeId = -1
+  buffer.highlightNeedsUpdate = true
 
 proc revealLocation*(
     editor: KosmoEditor, line, column: int, centered = false

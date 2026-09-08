@@ -4,6 +4,21 @@ import std/[os, strutils, tempfiles, times, unittest]
 import merenda/kosmo/cli
 
 suite "Kosmo command line":
+  test "stdin file names are distinct from paths and reject conflicting modes":
+    let parsed = parseKosmoCommandLine(@["--file:log"])
+    check parsed.stdinName == "stdin.log"
+    check parsed.paths.len == 0
+    check parsed.errors.len == 0
+    for args in [
+      @["--file"],
+      @["--file:"],
+      @["--file:log", "--diff"],
+      @["--file:log", "other.txt"],
+      @["--file:../txt"],
+      @["--file:txt", "--file:log"],
+    ]:
+      check parseKosmoCommandLine(args).errors.len > 0
+
   test "background launch removes every background flag and keeps other arguments":
     let commandLine = parseKosmoCommandLine(
       @["--bg", "notes.md", "--literal", "--bg", "with spaces.md"]

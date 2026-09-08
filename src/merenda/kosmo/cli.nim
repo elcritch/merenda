@@ -1,6 +1,6 @@
 ## Command-line handling and detached launching for standalone Kosmo.
 
-import std/[os, sets, terminal]
+import std/[os, sequtils, sets, strutils, terminal]
 
 when defined(windows):
   import std/[widestrs, winlean]
@@ -18,10 +18,12 @@ const
     """
 Usage: kosmo [--bg] [--version] [--] [file-or-folder ...]
        command-producing-diff | kosmo --diff
+       command-producing-text | kosmo --file:txt
 
 Options:
   --bg        Start Kosmo detached from the invoking shell.
   --diff      Render a unified Git diff read from standard input.
+  --file:type Open stdin as stdin.type (e.g. --file:txt; maximum 8 MiB).
   --version   Show the Kosmo version.
   --          Stop parsing options.
   -h, --help  Show this help text.
@@ -32,6 +34,8 @@ type KosmoStandaloneCommandLine* = object ## Parsed standalone command-line opti
   help*: bool
   version*: bool
   diff*: bool
+  stdinName*: string
+  errors*: seq[string]
   arguments*: seq[string]
   filePath*: string
   paths*: seq[string]
@@ -66,12 +70,28 @@ proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneComman
         result.version = true
       of KosmoDiffFlag:
         result.diff = true
+      of "--file":
+        result.errors.add "Use --file:type, for example --file:txt"
       else:
+        if argument.startsWith("--file:"):
+          let fileType = argument[7 .. ^1]
+          if fileType.len == 0 or fileType.len > 64 or
+              fileType.anyIt(
+                it notin {'a' .. 'z', 'A' .. 'Z', '0' .. '9', '_', '-', '.'}
+              ) or fileType[0] == '.' or fileType[^1] == '.' or ".." in fileType:
+            result.errors.add "--file:type requires a file extension such as txt or log"
+          elif result.stdinName.len > 0:
+            result.errors.add "Specify --file:type only once"
+          else:
+            result.stdinName = "stdin." & fileType
+          continue
         result.arguments.add argument
         if not hasFilePath:
           result.filePath = argument
           hasFilePath = true
         result.paths.add argument
+  if result.stdinName.len > 0 and (result.diff or result.paths.len > 0):
+    result.errors.add "--file cannot be combined with --diff or file/folder arguments"
 
 proc resolveKosmoCliPaths*(
     paths: openArray[string], workingDirectory = getCurrentDir()
@@ -100,8 +120,8 @@ proc kosmoCliInputIsTerminal*(): bool =
   ## Return whether `--diff` would read interactively instead of from a pipe.
   stdin.isatty()
 
-proc readKosmoCliDiff*(input: File, maxBytes = KosmoCliDiffInputLimit): string =
-  ## Read a bounded diff payload, including an empty diff from a clean work tree.
+proc readKosmoCliText*(input: File, maxBytes = KosmoCliDiffInputLimit): string =
+  ## Read stdin through EOF, preserving bytes and enforcing the input limit.
   const ChunkSize = 64 * 1024
   var buffer: array[ChunkSize, char]
   while true:
@@ -109,10 +129,14 @@ proc readKosmoCliDiff*(input: File, maxBytes = KosmoCliDiffInputLimit): string =
     if count == 0:
       break
     if result.len + count > maxBytes:
-      raise newException(ValueError, "Kosmo diff input exceeds the 8 MiB limit")
+      raise newException(ValueError, "Kosmo stdin input exceeds the size limit")
     let start = result.len
     result.setLen(start + count)
     copyMem(addr result[start], addr buffer[0], count)
+
+proc readKosmoCliDiff*(input: File, maxBytes = KosmoCliDiffInputLimit): string =
+  ## Read a bounded diff payload, including an empty diff from a clean work tree.
+  input.readKosmoCliText(maxBytes)
 
 when defined(windows):
   const CreateNewProcessGroup = 0x00000200'i32

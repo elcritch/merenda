@@ -106,6 +106,39 @@ suite "Kosmo":
     check "NORMAL" in frontend.statusLabel.text
     check "second.txt" in frontend.statusLabel.text
 
+  test "status bar shows the active full file path after Git status":
+    let
+      root = createTempDir("merenda-kosmo-status-path-", "")
+      nested = root / "nested"
+      filePath = nested / "status.txt"
+    createDir(nested)
+    writeFile(filePath, "status")
+    require execShellCmd("git -C " & quoteShell(root) & " init -qb status-path") == 0
+    defer:
+      removeFile(filePath)
+      removeDir(nested)
+      removeDir(root)
+
+    let frontend =
+      newKosmoApplication(newApplication("Kosmo Status Path Test"), filePath = root)
+    defer:
+      frontend.close()
+    require frontend.openPath(filePath)
+
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while "Git: status-path" notin frontend.statusLabel.text and getMonoTime() < deadline:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      frontend.editorView.refresh()
+      sleep(10)
+
+    let
+      statusText = frontend.statusLabel.text
+      gitPosition = statusText.find("Git: status-path")
+      pathPosition = statusText.find(absolutePath(filePath))
+    check gitPosition >= 0
+    check pathPosition > gitPosition
+    check statusText.endsWith(absolutePath(filePath))
+
   test "File menu opens a new blank editor tab":
     let
       frontend = newKosmoApplication(newApplication("Kosmo New Tab Test"))

@@ -3,6 +3,7 @@ import std/[os, tempfiles, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import merenda/kosmo/workspacefiles
 
 proc commandNumberEvent(number: range[1 .. 8]): KeyEvent =
   let key = Key(key1.ord + number - 1)
@@ -23,6 +24,11 @@ proc keyWindowIs(app: Application, expected: Window): bool =
 
 proc controlKeyEvent(key: Key): KeyEvent =
   KeyEvent(key: key, keyCode: key.ord, modifiers: {kmControl})
+
+proc primaryShiftKeyEvent(key: Key): KeyEvent =
+  KeyEvent(
+    key: key, keyCode: key.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
+  )
 
 suite "Kosmo synthetic panel shortcuts":
   test "pane navigation focuses a displayed terminal instead of its detached editor":
@@ -132,6 +138,43 @@ suite "Kosmo synthetic panel shortcuts":
     let searchFocused =
       frontend.window.fieldEditorClient() == frontend.searchPanel.queryField
     check searchFocused
+
+  test "primary-shift-L reveals the active file only when it is in the browser":
+    let
+      root = createTempDir("merenda-kosmo-reveal-root-", "")
+      outsideRoot = createTempDir("merenda-kosmo-reveal-outside-", "")
+      firstFolder = root / "first"
+      secondFolder = firstFolder / "second"
+      activePath = secondFolder / "active.nim"
+      outsidePath = outsideRoot / "outside.nim"
+      app = newApplication("Kosmo Reveal Active File Test")
+      frontend = newKosmoApplication(app, root, monitorsGitStatus = false)
+    createDir(firstFolder)
+    createDir(secondFolder)
+    writeFile(activePath, "discard\n")
+    writeFile(outsidePath, "discard\n")
+    defer:
+      frontend.close()
+      removeDir(root)
+      removeDir(outsideRoot)
+    app.presentSyntheticWindow(frontend)
+    require frontend.fileTree.workspaceFiles.waitForFiles()
+    require frontend.openPath(activePath)
+    require frontend.showFindInFiles()
+
+    require app.performMenuKeyEquivalent(primaryShiftKeyEvent(keyL))
+    check frontend.sidebarTabs.selectedIndex == 0
+    check frontend.fileTree.selectedItemIdentifier == absolutePath(activePath)
+    check frontend.fileTree.isItemExpanded(absolutePath(root))
+    check frontend.fileTree.isItemExpanded(absolutePath(firstFolder))
+    check frontend.fileTree.isItemExpanded(absolutePath(secondFolder))
+    check frontend.window.firstResponderIs(frontend.fileTree)
+
+    require frontend.openPath(outsidePath)
+    require frontend.showFindInFiles()
+    require app.performMenuKeyEquivalent(primaryShiftKeyEvent(keyL))
+    check frontend.sidebarTabs.selectedIndex == 1
+    check frontend.fileTree.selectedItemIdentifier == absolutePath(activePath)
 
   test "relative Moe saves use the active project's directory":
     let

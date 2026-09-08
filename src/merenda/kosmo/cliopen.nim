@@ -22,6 +22,7 @@ type
   KosmoCliRequestKind* = enum
     kcrOpenPaths
     kcrShowDiff
+    kcrOpenStdin
 
   KosmoCliOpenRequest* = object
     requestId*: string
@@ -30,6 +31,8 @@ type
     originWindow*: string
     workingDirectory*: string
     diffText*: string
+    stdinName*: string
+    stdinText*: string
 
   KosmoCliOpenResponse* = object
     delivered*: bool
@@ -129,6 +132,8 @@ proc requestJson(endpoint: KosmoCliEndpoint, request: KosmoCliOpenRequest): Json
     "originWindow": request.originWindow,
     "workingDirectory": request.workingDirectory,
     "diffText": request.diffText,
+    "stdinName": request.stdinName,
+    "stdinText": request.stdinText,
   }
 
 proc parseRequest(content: string, endpoint: KosmoCliEndpoint): KosmoCliOpenRequest =
@@ -145,6 +150,8 @@ proc parseRequest(content: string, endpoint: KosmoCliEndpoint): KosmoCliOpenRequ
   result.originWindow = node{"originWindow"}.getStr()
   result.workingDirectory = node{"workingDirectory"}.getStr()
   result.diffText = node{"diffText"}.getStr()
+  result.stdinName = node{"stdinName"}.getStr()
+  result.stdinText = node{"stdinText"}.getStr()
   for path in node["paths"]:
     result.paths.add path.getStr()
   if result.requestId.len == 0:
@@ -161,6 +168,10 @@ proc parseRequest(content: string, endpoint: KosmoCliEndpoint): KosmoCliOpenRequ
         not result.workingDirectory.isAbsolute() or
         result.diffText.len > KosmoCliMaxDiffBytes:
       raise newException(ValueError, "Invalid Kosmo CLI diff request")
+  of kcrOpenStdin:
+    if result.stdinName.len == 0 or result.stdinText.len > KosmoCliMaxDiffBytes or
+        not result.workingDirectory.isAbsolute() or result.paths.len > 0:
+      raise newException(ValueError, "Invalid Kosmo CLI stdin request")
 
 func responseJson(response: KosmoCliOpenResponse): JsonNode =
   %*{
@@ -281,6 +292,30 @@ proc showDiffInRunningKosmo*(
       originWindow: originWindow,
       workingDirectory: workingDirectory,
       diffText: diffText,
+    ),
+    preferredEndpoint,
+    registryDirectory,
+  )
+
+proc openStdinInRunningKosmo*(
+    name, content, workingDirectory: string,
+    preferredEndpoint = getEnv(KosmoCliEndpointEnvironment),
+    originWindow = getEnv(KosmoCliWindowEnvironment),
+    registryDirectory = defaultKosmoCliRegistryDirectory(),
+): KosmoCliOpenResponse =
+  ## Forward stdin as a named, unsaved editor buffer.
+  if name.len == 0 or content.len > KosmoCliMaxDiffBytes or
+      not workingDirectory.isAbsolute():
+    result.errors.add "Invalid Kosmo stdin input (maximum 8 MiB)"
+    return
+  sendToRunningKosmo(
+    KosmoCliOpenRequest(
+      requestId: randomIdentifier(),
+      kind: kcrOpenStdin,
+      stdinName: name,
+      stdinText: content,
+      workingDirectory: workingDirectory,
+      originWindow: originWindow,
     ),
     preferredEndpoint,
     registryDirectory,

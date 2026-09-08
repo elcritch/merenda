@@ -16,6 +16,7 @@ type CliClientState = object
   registry: array[ClientValueCapacity, char]
   origin: array[ClientValueCapacity, char]
   showsDiff: bool
+  opensStdin: bool
   delivered: Atomic[bool]
   errorCount: Atomic[int]
   done: Atomic[bool]
@@ -31,7 +32,16 @@ proc load(buffer: ptr array[ClientValueCapacity, char]): string =
 proc sendOpenRequest(state: ptr CliClientState) {.thread.} =
   try:
     let response =
-      if state.showsDiff:
+      if state.opensStdin:
+        openStdinInRunningKosmo(
+          state.path.addr.load(),
+          state.diffText.addr.load(),
+          state.workingDirectory.addr.load(),
+          preferredEndpoint = state.endpoint.addr.load(),
+          originWindow = state.origin.addr.load(),
+          registryDirectory = state.registry.addr.load(),
+        )
+      elif state.showsDiff:
         showDiffInRunningKosmo(
           state.diffText.addr.load(),
           state.workingDirectory.addr.load(),
@@ -58,6 +68,7 @@ proc requestWhilePumping(
     diffText = "",
     workingDirectory = "",
     showsDiff = false,
+    opensStdin = false,
 ): tuple[delivered: bool, errorCount: int] =
   let state = cast[ptr CliClientState](allocShared0(sizeof(CliClientState)))
   defer:
@@ -69,6 +80,7 @@ proc requestWhilePumping(
   registry.store(state.registry)
   origin.store(state.origin)
   state.showsDiff = showsDiff
+  state.opensStdin = opensStdin
   var thread: Thread[ptr CliClientState]
   createThread(thread, sendOpenRequest, state)
   let deadline = getMonoTime() + initDuration(seconds = 5)
@@ -83,6 +95,36 @@ proc requestWhilePumping(
   )
 
 suite "Kosmo CLI open transport":
+  test "stdin preserves text name and originating window across transport":
+    let registry = createTempDir("kosmo-stdin-transport-", "")
+    defer:
+      removeDir(registry)
+    var received: seq[KosmoCliOpenRequest]
+    let server = startKosmoCliOpenServer(
+      proc(request: KosmoCliOpenRequest): KosmoCliOpenResponse =
+        received.add request
+        KosmoCliOpenResponse(),
+      registry,
+    )
+    defer:
+      server.close()
+    let response = requestWhilePumping(
+      "output.log",
+      server.endpointPath(),
+      registry,
+      origin = "stdin-window",
+      diffText = "hello λ\nworld\n",
+      workingDirectory = registry,
+      opensStdin = true,
+    )
+    check response.delivered
+    check response.errorCount == 0
+    require received.len == 1
+    check received[0].kind == kcrOpenStdin
+    check received[0].stdinName == "output.log"
+    check received[0].stdinText == "hello λ\nworld\n"
+    check received[0].originWindow == "stdin-window"
+
   test "authenticated requests reach the newest responsive process":
     let
       registry = createTempDir("merenda-kosmo-cli-registry-", "")

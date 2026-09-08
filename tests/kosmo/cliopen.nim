@@ -1,6 +1,6 @@
 ## Kosmo window-routing behavior for command-line open requests.
 
-import std/[options, os, tempfiles, unittest]
+import std/[options, os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
@@ -11,6 +11,47 @@ proc hasOpenPath(frontend: KosmoApplication, path: string): bool =
       return true
 
 suite "Kosmo CLI window routing":
+  test "stdin creates separate modified buffers without changing existing files":
+    let root = createTempDir("kosmo-stdin-", "")
+    let manager = newKosmoWindowManager(newApplication("Stdin files"))
+    let frontend = newKosmoApplication(manager, root, monitorsGitStatus = false)
+    defer:
+      manager.close()
+      removeDir(root)
+    writeFile(root / "output.py", "original\n")
+    require frontend.openPath(root / "output.py")
+    let originalCount = frontend.editorView.editor.tabs().len
+    for content in ["def answer():\n  return 42\n", ""]:
+      let response = manager.openCliRequestForTesting(
+        KosmoCliOpenRequest(
+          requestId: "stdin",
+          kind: kcrOpenStdin,
+          stdinName: "output.py",
+          stdinText: content,
+          workingDirectory: root,
+          originWindow: frontend.cliWindowId(),
+        )
+      )
+      check response.delivered
+      check response.errors.len == 0
+      let tabs = frontend.editorView.editor.tabs()
+      for tab in tabs:
+        if tab.active:
+          check tab.modified
+          check tab.filePath == some(root / "output.py")
+          # Moe stores the final newline in its endOfLine flag, outside the lines.
+          var lines = content
+          lines.removeSuffix("\n")
+          check frontend.editorView.editor.bufferText(tab.id) == some(lines)
+      check readFile(root / "output.py") == "original\n"
+    check frontend.editorView.editor.tabs().len == originalCount + 2
+    let editor = frontend.editorView.editor
+    for content in ["hello\n", "hello", ""]:
+      require editor.newStdinBuffer("saved.txt", content, root).isSome
+      discard editor.save()
+      require fileExists(root / "saved.txt")
+      check readFile(root / "saved.txt") == content
+
   test "an embedded terminal targets its owning project window":
     let
       firstRoot = createTempDir("merenda-kosmo-cli-first-", "")

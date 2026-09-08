@@ -22,6 +22,12 @@ template eventually(condition: untyped) =
       sleep(10)
     check condition
 
+proc pumpFor(milliseconds: int) =
+  let deadline = getMonoTime() + initDuration(milliseconds = milliseconds)
+  while getMonoTime() < deadline:
+    discard getCurrentSigilThread().pollAll(NonBlocking)
+    sleep(10)
+
 suite "Kosmo shared workspace inventory":
   test "non-Git discovery limits depth and entries while browsing stays lazy":
     let root = createTempDir("kosmo-bounded-inventory-", "")
@@ -355,6 +361,22 @@ suite "Kosmo shared workspace inventory":
     require frontend.openPath(externalRoot / "external.nim")
     eventually(frontend.editorView.editor.status().gitBranch == "external-start")
     eventually(externalRoot in frontend.fileTree.workspaceFiles.gitRoots)
+
+    # The root list is published before the watcher backend finishes registering
+    # every Git metadata directory. Native backends need all handles before
+    # changing HEAD; Linux intentionally uses the polling fallback instead.
+    # Drain the initial dirty pulse so the checkout event cannot be coalesced
+    # with watcher setup.
+    eventually(
+      not frontend.fileTree.workspaceFiles.watch.isNil and
+        externalRoot in frontend.fileTree.workspaceFiles.watch.directories and
+        externalRoot / ".git" in frontend.fileTree.workspaceFiles.watch.metadata and (
+        frontend.fileTree.workspaceFiles.watch.fallback or
+        frontend.fileTree.workspaceFiles.watch.handles.len ==
+        frontend.fileTree.workspaceFiles.watch.directories.len
+      )
+    )
+    pumpFor(500)
 
     require runGitCommand(externalRoot, ["checkout", "-qb", "external-next"]).exitCode ==
       0
