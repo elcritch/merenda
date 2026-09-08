@@ -887,7 +887,9 @@ editor group. Terminal and text tabs share selection, closing, reordering,
 split-pane dragging, detached windows, and tab-navigation shortcuts. Other
 content can use the same lifecycle by constructing a `KosmoPaneDocument` with
 a content view, preferred first responder, and optional save and close
-callbacks. Kosmo opens terminal links in the system browser; this can be enabled
+callbacks. On macOS, interactive terminals initialize through the login shell so
+apps opened from Launchpad or the Dock receive PATH updates from the user's login
+profile. Kosmo opens terminal links in the system browser; this can be enabled
 or disabled from the Terminal settings page. Press Command-F on macOS or
 Control-Shift-F elsewhere in a terminal tab to search its screen and scrollback.
 Terminal search starts at the newest match at the bottom. Command-G (Control-G

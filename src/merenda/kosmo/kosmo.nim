@@ -3783,11 +3783,24 @@ proc setTerminalEnvironment(
       return
   options.environment.add nimkit.initTerminalEnvironmentVariable(name, value)
 
+proc prepareInteractiveTerminal(options: var nimkit.TerminexSpawnOptions) =
+  when defined(macosx):
+    if options.command.len == 0:
+      var shell = options.shell
+      if shell.len == 0:
+        shell = getEnv("SHELL")
+      if shell.len == 0:
+        shell = "/bin/sh"
+      # Apps opened by Launch Services inherit a minimal environment. Let the
+      # login shell rebuild it, then replace that shell with the interactive one.
+      options.command = "exec " & quoteShell(shell)
+
 proc newTerminalDocument(
     controller: KosmoDockController, options: nimkit.TerminexSpawnOptions
 ): KosmoPaneDocument =
   let terminalView = newKosmoTerminalView()
   var resolvedOptions = options
+  resolvedOptions.prepareInteractiveTerminal()
   if not controller.frontend.isNil:
     let frontend = controller.frontend[]
     terminalView.optionAsMeta = frontend.xTerminalOptionAsMeta
