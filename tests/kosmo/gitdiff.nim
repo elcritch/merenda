@@ -116,6 +116,35 @@ suite "Kosmo Git diff":
     check panel.scrollView.contentOffset().y > 0
     check panel.markdownView.scrollView().contentOffset().y == 0
 
+  test "Git diff header keeps its height while refreshing":
+    let root = createTempDir("kosmo-diff-header-height-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "source.txt", "old text\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "Initial")
+    writeFile(root / "source.txt", "new text\n")
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 700, 400)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    panel.layoutSubtreeIfNeeded()
+    let settledHeight = panel.markdownView.frame().size.height
+
+    writeFile(root / "source.txt", "refreshed text\n")
+    panel.refresh()
+    require panel.markdownView.waitForMarkdownParsing()
+    require panel.markdownView.waitForMarkdownLayout()
+    panel.layoutSubtreeIfNeeded()
+    check abs(panel.markdownView.frame().size.height - settledHeight) < 0.01'f32
+
+    require panel.waitForDiff()
+    panel.layoutSubtreeIfNeeded()
+    check abs(panel.markdownView.frame().size.height - settledHeight) < 0.01'f32
+
   test "standard hunks retain syntax from omitted full-file context":
     let root = createTempDir("kosmo-diff-hunks-", "")
     defer:
@@ -488,7 +517,7 @@ suite "Kosmo Git diff":
       app.mainMenu()[1].submenu().menuItemWithIdentifier(KosmoShowGitDiffAction)
     require not item.isNil
     check item.title == "Show Git Diff"
-    check item.keyEquivalent().key == keyG
+    check item.keyEquivalent().key == keyD
     check item.modifierMask() == shortcutModifiers() + {nimkit.kmShift}
     check not item.target.isNil
     check item.perform(frontend.window)
@@ -528,7 +557,7 @@ suite "Kosmo Git diff":
     check not frontend.window.isClosed()
     check frontend.window.dispatchKeyDown(
       KeyEvent(
-        key: keyG, keyCode: keyG.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
+        key: keyD, keyCode: keyD.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
       )
     )
     require not frontend.gitDiffPanel.isNil

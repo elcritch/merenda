@@ -353,7 +353,7 @@ proc initKosmoKeyBindings*(
   result.addBinding("primary-shift-o", KosmoOpenProjectAction, profile, platform)
   result.addBinding("primary-p", KosmoQuickOpenAction, profile, platform)
   result.addBinding("primary-shift-t", KosmoNewTerminalAction, profile, platform)
-  result.addBinding("primary-shift-g", KosmoShowGitDiffAction, profile, platform)
+  result.addBinding("primary-shift-d", KosmoShowGitDiffAction, profile, platform)
   result.addBinding("primary-s", KosmoSaveAction, profile, platform)
   result.addBinding("primary-w", KosmoCloseTabAction, profile, platform)
   if platform != KosmoShortcutPlatform.MacOS:
