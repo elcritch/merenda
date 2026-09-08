@@ -17,7 +17,7 @@ requires "cborious"
 requires "unicodedb >= 0.14.0"
 requires "faststreams >= 0.5.1"
 requires "gh:elcritch/nim-markdown#devel[regex]"
-requires "gh:elcritch/matter >= 0.4.1"
+requires "gh:elcritch/matter#333b79c75fa883a3ebb5ddd7d4fdbd7a11819b94"
 requires "gh:elcritch/terminex >= 0.3.0"
 requires "gh:Araq/iconbundler"
 requires "libbacktrace"
@@ -28,7 +28,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:elcritch/moe#develop"
+  requires "gh:elcritch/moe#5e39a1bc8184809641542c1cb2c2d08b82854c81"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
