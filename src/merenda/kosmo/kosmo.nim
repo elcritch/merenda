@@ -1451,7 +1451,12 @@ proc scrollBy*(
 
 proc closeCurrentTab(controller: KosmoDockController, view: KosmoEditorView)
 proc finishTabClose(controller: KosmoDockController, view: KosmoEditorView)
-proc saveCurrentTab(controller: KosmoDockController, view: KosmoEditorView)
+proc saveCurrentTab(
+  controller: KosmoDockController,
+  view: KosmoEditorView,
+  savePanel: nimkit.SavePanel = nil,
+): bool {.discardable.}
+
 proc selectRelativeTab(
   controller: KosmoDockController, view: KosmoEditorView, offset: int
 )
@@ -1465,7 +1470,11 @@ proc activatePaneTab(
 
 proc closeCurrentPaneTab(controller: KosmoDockController, group: KosmoEditorGroup)
 
-proc saveCurrentPaneTab(controller: KosmoDockController, group: KosmoEditorGroup)
+proc saveCurrentPaneTab(
+  controller: KosmoDockController,
+  group: KosmoEditorGroup,
+  savePanel: nimkit.SavePanel = nil,
+): bool {.discardable.}
 
 proc removeBuffer(group: KosmoEditorGroup, id: KosmoBufferId)
 
@@ -3113,24 +3122,101 @@ proc closeCurrentTab(controller: KosmoDockController, view: KosmoEditorView) =
   view.editor.dismissCommandLine()
   view.refresh()
 
-proc saveCurrentPaneTab(controller: KosmoDockController, group: KosmoEditorGroup) =
+proc saveDirectory(frontend: KosmoApplication, view: KosmoEditorView): string =
+  let workingDirectory = view.editor.workingDirectory()
+  if workingDirectory.len > 0 and dirExists(workingDirectory):
+    return workingDirectory
+  if not frontend.isNil and not frontend.fileTree.isNil:
+    let rootPath = frontend.fileTree.rootPath
+    if rootPath.len > 0 and dirExists(rootPath):
+      return rootPath
+  getCurrentDir()
+
+proc saveUntitledTab(
+    controller: KosmoDockController,
+    group: KosmoEditorGroup,
+    view: KosmoEditorView,
+    savePanel: nimkit.SavePanel = nil,
+): KosmoSaveResult =
+  if controller.isNil or view.isNil or controller.frontend.isNil:
+    return KosmoSaveResult(message: "Kosmo has no active editor window.")
+  let frontend = controller.frontend[]
+  if frontend.isNil or frontend.application.isNil:
+    return KosmoSaveResult(message: "Kosmo has no active application.")
+
+  let ownsPanel = savePanel.isNil
+  let panel =
+    if ownsPanel:
+      nimkit.newSavePanel()
+    else:
+      savePanel
+  if ownsPanel:
+    defer:
+      panel.window.close()
+  panel.window.title = "Save As"
+  panel.prompt = "Save"
+  panel.message = "Save the untitled editor as a file."
+  panel.directoryUrl = frontend.saveDirectory(view)
+  if panel.nameFieldStringValue.len == 0:
+    panel.nameFieldStringValue = "No Name"
+  if not group.isNil and not group.window.isNil:
+    panel.window.setInheritedAppearance(group.window.effectiveAppearance())
+  discard panel.rebuildSavePanelView()
+
+  if ownsPanel:
+    discard panel.window.makeFirstResponder(panel.nameField)
+    if frontend.application.runModal(panel) != nimkit.PanelResponseOk:
+      return
+  elif not panel.validateSelection():
+    return
+
+  let path = nimkit.filePathFromUrl(panel.selectedUrl())
+  if path.len == 0:
+    return KosmoSaveResult(message: "No save path specified.")
+  view.editor.saveAs(path)
+
+proc saveCurrentPaneTab(
+    controller: KosmoDockController,
+    group: KosmoEditorGroup,
+    savePanel: nimkit.SavePanel,
+): bool {.discardable.} =
   if controller.isNil or group.isNil:
     return
   let document = group.documentForIdentifier(group.selectedTabIdentifier)
   if not document.isNil:
     controller.activeGroup = group
-    discard document.save()
+    result = document.save()
     return
-  controller.saveCurrentTab(group.editorView)
+  result = controller.saveCurrentTab(group.editorView, savePanel)
 
-proc saveCurrentTab(controller: KosmoDockController, view: KosmoEditorView) =
+proc saveCurrentTab(
+    controller: KosmoDockController, view: KosmoEditorView, savePanel: nimkit.SavePanel
+): bool {.discardable.} =
   controller.activateGroup(view)
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+  let tabs = view.editor.tabs()
+  var activeTab: KosmoTab
+  var hasActiveTab = false
+  for tab in tabs:
+    if tab.active:
+      activeTab = tab
+      hasActiveTab = true
+      break
+  if hasActiveTab and activeTab.filePath.isNone:
+    let outcome =
+      controller.saveUntitledTab(controller.groupForView(view), view, savePanel)
+    view.lastTabs.setLen(0)
+    view.refresh()
+    if not outcome.saved and outcome.message.len > 0 and not view.statusLabel.isNil:
+      view.statusLabel.text = outcome.message
+    return outcome.saved
+
   let outcome = view.editor.save()
   view.lastTabs.setLen(0)
   view.refresh()
   if not outcome.saved and not view.statusLabel.isNil:
     view.statusLabel.text = outcome.message
+  outcome.saved
 
 proc selectRelativeTab(
     controller: KosmoDockController, view: KosmoEditorView, offset: int
@@ -5137,6 +5223,15 @@ when defined(merendaTests):
       manager: KosmoWindowManager, request: KosmoCliOpenRequest
   ): KosmoCliOpenResponse =
     manager.openCliRequest(request)
+
+  proc saveActiveTabForTesting*(
+      frontend: KosmoApplication, panel: nimkit.SavePanel
+  ): bool {.discardable.} =
+    if frontend.isNil or frontend.dockController.isNil:
+      return
+    frontend.dockController.saveCurrentPaneTab(
+      frontend.dockController.activePaneGroup(), panel
+    )
 
 proc openDocument*(
     frontend: KosmoApplication, document: KosmoPaneDocument

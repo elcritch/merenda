@@ -13,6 +13,7 @@ import ../nimkit/foundation/mainthreadwork
 const
   KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
   GitDiffRefreshDebounceInterval = initDuration(milliseconds = 300)
+  GitDiffReservedSummaryHeight = 240.0'f32
 
 type
   GitDiffHighlightKey = tuple[source, language: string]
@@ -171,10 +172,11 @@ proc readGitDiff(
         if path.len > 0 and path notin seen:
           seen.incl path
           let isAddition = not hasHead or path in untrackedPaths
-          var args = @[
-            "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames",
-            "--unified=2147483647",
-          ]
+          var args =
+            @[
+              "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames",
+              "--unified=2147483647",
+            ]
           if isAddition:
             args.add ["--no-index", "--", "/dev/null", path]
           else:
@@ -690,8 +692,10 @@ proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
   let viewport = panel.scrollView.viewportSize()
   let width = max(viewport.width - 48, 1)
   let summary = panel.markdownView.textView().layoutManager().layoutSnapshot()
-  let summaryHeight =
-    max(summary.contentSize.height + panel.markdownView.textInsets().vertical, 80)
+  let summaryHeight = max(
+    summary.contentSize.height + panel.markdownView.textInsets().vertical,
+    GitDiffReservedSummaryHeight,
+  )
   panel.markdownView.setFrameFromLayout(
     nimkit.rect(0, 0, viewport.width, summaryHeight)
   )

@@ -1,5 +1,5 @@
 ## Synthetic user-input coverage for Kosmo's numbered panel shortcuts.
-import std/[os, tempfiles, unittest]
+import std/[options, os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
@@ -31,6 +31,40 @@ proc primaryShiftKeyEvent(key: Key): KeyEvent =
   )
 
 suite "Kosmo synthetic panel shortcuts":
+  test "saving a new editor tab writes through a Save As panel":
+    let
+      root = createTempDir("merenda-kosmo-save-untitled-", "")
+      path = root / "saved.txt"
+      frontend = newKosmoApplication(
+        newApplication("Kosmo Save Untitled Test"),
+        filePath = root,
+        monitorsGitStatus = false,
+      )
+      panel = newSavePanel()
+    defer:
+      panel.window.close()
+      frontend.close()
+      if fileExists(path):
+        removeFile(path)
+      removeDir(root)
+
+    require frontend.newEditorTab()
+    require frontend.editorView.editor.handleKey("i")
+    require frontend.editorView.editor.handleTextInput("saved from a new tab")
+    require frontend.editorView.editor.handleKey("Esc")
+    panel.nameFieldStringValue = "saved.txt"
+
+    check frontend.saveActiveTabForTesting(panel)
+    check panel.window.title == "Save As"
+    check panel.prompt == "Save"
+    check panel.directoryUrl == absolutePath(root)
+    check fileExists(path)
+    check readFile(path).strip() == "saved from a new tab"
+    let savedTab = frontend.editorView.editor.tabs()[^1]
+    check savedTab.filePath.isSome
+    check savedTab.filePath.get == absolutePath(path)
+    check not savedTab.modified
+
   test "pane navigation focuses a displayed terminal instead of its detached editor":
     let
       app = newApplication("Kosmo Terminal Pane Focus Test")

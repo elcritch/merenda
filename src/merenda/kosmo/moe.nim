@@ -776,6 +776,24 @@ proc save*(editor: KosmoEditor): KosmoSaveResult =
     return KosmoSaveResult(message: outcome.error)
   KosmoSaveResult(saved: true)
 
+proc saveAs*(editor: KosmoEditor, path: string): KosmoSaveResult =
+  ## Save the active buffer to `path` and make it the buffer's current path.
+  if editor.isNil or editor.editor.isNil:
+    return KosmoSaveResult(message: "The editor is closed.")
+  if path.len == 0:
+    return KosmoSaveResult(message: "No save path specified.")
+  let savePath =
+    if path.isAbsolute:
+      path
+    elif editor.workingDirectory.len > 0:
+      absolutePath(path, editor.workingDirectory)
+    else:
+      absolutePath(path)
+  let outcome = editor.editor.saveFile(some(savePath))
+  if pkgResults.isErr(outcome):
+    return KosmoSaveResult(message: outcome.error)
+  KosmoSaveResult(saved: true)
+
 proc moveTab*(
     editor: KosmoEditor, id: KosmoBufferId, destination: Natural
 ): bool {.discardable.} =
