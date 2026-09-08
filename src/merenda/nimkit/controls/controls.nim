@@ -277,7 +277,8 @@ proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = n
 
 proc cell*(control: Control): Cell =
   if control.xCell.isNil:
-    control.setCell(newActionCell())
+    let defaultCell = newActionCell()
+    control.setCell(defaultCell)
   control.xCell
 
 proc setCell*(control: Control, cell: Cell) =
