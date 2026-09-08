@@ -38,10 +38,21 @@ when not defined(moe.embedded):
     {.error: "Merenda's Moe facade requires Celina's synchronous backend".}
 
 type
+  KosmoTextMateGrammarOrigin* {.pure.} = enum
+    BuiltIn
+    Added
+
+  KosmoTextMateGrammar* = object
+    ## A TextMate grammar available to Kosmo without exposing Matter types.
+    name*: string
+    scopeName*: string
+    origin*: KosmoTextMateGrammarOrigin
+
   KosmoEditor* = ref object
     editor: Editor
     temporaryBufferId: Option[BufferId]
     workingDirectory: string
+    textMateGrammars: seq[KosmoTextMateGrammar]
 
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
@@ -461,6 +472,28 @@ proc newKosmoMatterGrammarSet(): moeMatter.MatterGrammarSet =
     )
   moeMatter.newMatterGrammarSet(sources)
 
+proc builtInTextMateGrammars(): seq[KosmoTextMateGrammar] =
+  for contribution in matterPackages.knownGrammars:
+    result.add KosmoTextMateGrammar(
+      name: contribution.displayName,
+      scopeName: contribution.scopeName,
+      origin: KosmoTextMateGrammarOrigin.BuiltIn,
+    )
+  result.sort do(left, right: KosmoTextMateGrammar) -> int:
+    result = cmpIgnoreCase(left.name, right.name)
+    if result == 0:
+      result = cmp(left.scopeName, right.scopeName)
+
+func title*(origin: KosmoTextMateGrammarOrigin): string =
+  case origin
+  of KosmoTextMateGrammarOrigin.BuiltIn: "Built-in"
+  of KosmoTextMateGrammarOrigin.Added: "Added"
+
+proc availableTextMateGrammars*(editor: KosmoEditor): seq[KosmoTextMateGrammar] =
+  ## Return the TextMate grammars currently installed for Moe highlighting.
+  if not editor.isNil and not editor.editor.isNil:
+    result = editor.textMateGrammars
+
 proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   ## Create an editor with Moe's default configuration and optional initial text.
   var config = newEditorConfig()
@@ -469,7 +502,8 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   config.tabLine.enable = false
   config.highlight.backend = hbMatter
   config.highlight.matterGrammarSet = newKosmoMatterGrammarSet()
-  result = KosmoEditor(editor: newEditor(config))
+  result =
+    KosmoEditor(editor: newEditor(config), textMateGrammars: builtInTextMateGrammars())
   result.workingDirectory = workingDirectory
   discard result.editor.addCommandAlias("x", claSaveAndQuit)
   result.editor.setFrontendGitStatusEnabled(true)

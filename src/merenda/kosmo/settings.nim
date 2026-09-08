@@ -11,6 +11,7 @@ const
   KosmoTerminalSettingsTabIdentifier* = "kosmo.settings.terminal"
   KosmoShortcutsSettingsTabIdentifier* = "kosmo.settings.shortcuts"
   KosmoMoeThemesSettingsTabIdentifier* = "kosmo.settings.moeThemes"
+  KosmoTextMateGrammarsSettingsTabIdentifier* = "kosmo.settings.textMateGrammars"
   KosmoOptionAsMetaIdentifier* = "kosmo.settings.terminal.optionAsMeta"
   KosmoTerminalLinksIdentifier* = "kosmo.settings.terminal.links"
   KosmoShortcutsTableIdentifier* = "kosmo.settings.shortcuts.table"
@@ -18,11 +19,15 @@ const
   KosmoEditorInputPolicyIdentifier* = "kosmo.settings.shortcuts.editorInput"
   KosmoMoeThemesTableIdentifier* = "kosmo.settings.moeThemes.table"
   KosmoMoeThemeSelectorIdentifier* = KosmoMoeThemesTableIdentifier
+  KosmoTextMateGrammarsTableIdentifier* = "kosmo.settings.textMateGrammars.table"
   KosmoShortcutActionColumnIdentifier* = "action"
   KosmoShortcutDescriptionColumnIdentifier* = "description"
   KosmoShortcutKeysColumnIdentifier* = "keys"
   KosmoMoeThemeNameColumnIdentifier* = "theme"
   KosmoMoeThemePreviewColumnIdentifier* = "preview"
+  KosmoTextMateGrammarNameColumnIdentifier* = "grammar"
+  KosmoTextMateGrammarScopeColumnIdentifier* = "scope"
+  KosmoTextMateGrammarOriginColumnIdentifier* = "origin"
   KosmoMoeThemePreviewText* = "let fn = \"text\" #"
   KosmoShortcutActionColumnWidth = 175.0'f32
   KosmoShortcutDescriptionColumnWidth = 310.0'f32
@@ -56,6 +61,9 @@ type
     selectedIdentifier: string
     handler: KosmoMoeThemeHandler
 
+  KosmoTextMateGrammarsTableSource = ref object of nimkit.Responder
+    grammars: seq[KosmoTextMateGrammar]
+
   KosmoSettingsWindow* = ref object of nimkit.Responder
     xWindow: nimkit.Panel
     xContentView: nimkit.View
@@ -73,6 +81,8 @@ type
     xEditorInputPolicyHandler: KosmoEditorInputPolicyHandler
     xMoeThemesTable: nimkit.TableView
     xMoeThemesSource: KosmoMoeThemesTableSource
+    xTextMateGrammarsTable: nimkit.TableView
+    xTextMateGrammarsSource: KosmoTextMateGrammarsTableSource
 
 protocol KosmoShortcutsTableDataSource of nimkit.TableViewDataSource:
   method numberOfRows(
@@ -269,6 +279,62 @@ proc newKosmoMoeThemesTableSource(
   discard result.withProtocol(KosmoMoeThemesTableDataSource)
   discard result.withProtocol(KosmoMoeThemesTableDelegate)
 
+protocol KosmoTextMateGrammarsTableDataSource of nimkit.TableViewDataSource:
+  method numberOfRows(
+      source: KosmoTextMateGrammarsTableSource, tableView: nimkit.TableView
+  ): int =
+    discard tableView
+    source.grammars.len
+
+  method textForCell(
+      source: KosmoTextMateGrammarsTableSource,
+      tableView: nimkit.TableView,
+      row: int,
+      column: nimkit.TableColumn,
+  ): string =
+    discard tableView
+    if row notin 0 ..< source.grammars.len:
+      return
+    let grammar = source.grammars[row]
+    case column.identifier()
+    of KosmoTextMateGrammarNameColumnIdentifier:
+      grammar.name
+    of KosmoTextMateGrammarScopeColumnIdentifier:
+      grammar.scopeName
+    of KosmoTextMateGrammarOriginColumnIdentifier:
+      grammar.origin.title()
+    else:
+      ""
+
+protocol KosmoTextMateGrammarsTableDelegate of nimkit.TableViewDelegate:
+  method shouldSelectTableRow(
+      source: KosmoTextMateGrammarsTableSource, tableView: nimkit.TableView, row: int
+  ): bool =
+    discard source
+    discard tableView
+    discard row
+    false
+
+  method shouldEditCell(
+      source: KosmoTextMateGrammarsTableSource,
+      tableView: nimkit.TableView,
+      row: int,
+      column: nimkit.TableColumn,
+  ): bool =
+    discard source
+    discard tableView
+    discard row
+    discard column
+    false
+
+proc newKosmoTextMateGrammarsTableSource(
+    grammars: openArray[KosmoTextMateGrammar]
+): KosmoTextMateGrammarsTableSource =
+  result = KosmoTextMateGrammarsTableSource(grammars: @grammars)
+  nimkit.initResponder(result)
+  discard result.withProtocol(KosmoTextMateGrammarsTableDataSource)
+  discard result.withProtocol(KosmoTextMateGrammarsTableDelegate)
+
 proc newSettingsPage(): tuple[view: nimkit.View, stack: nimkit.StackView] =
   result.stack = nimkit.newStackView(nimkit.laVertical)
   result.stack.spacing = 12.0
@@ -365,6 +431,16 @@ proc updateMoeThemes*(
       ""
   settings.xMoeThemesTable.selectedIndex = selectedRow
 
+proc `textMateGrammars=`*(
+    settings: KosmoSettingsWindow, grammars: openArray[KosmoTextMateGrammar]
+) =
+  ## Replace the read-only list of TextMate grammars available to Kosmo.
+  if settings.isNil or settings.xTextMateGrammarsSource.isNil or
+      settings.xTextMateGrammarsTable.isNil:
+    return
+  settings.xTextMateGrammarsSource.grammars = @grammars
+  settings.xTextMateGrammarsTable.reloadData()
+
 proc newKosmoSettingsWindow*(
     optionAsMeta = true,
     optionAsMetaHandler: KosmoOptionAsMetaHandler = nil,
@@ -378,11 +454,13 @@ proc newKosmoSettingsWindow*(
     moeThemes: openArray[KosmoMoeThemeSetting] = [],
     selectedMoeThemeIdentifier = "",
     moeThemeHandler: KosmoMoeThemeHandler = nil,
+    textMateGrammars: openArray[KosmoTextMateGrammar] = [],
 ): KosmoSettingsWindow =
   ## Create Kosmo's settings panel, which intentionally contains no Merenda settings.
   let
     shortcutsSource = newKosmoShortcutsTableSource(shortcuts)
     moeThemesSource = newKosmoMoeThemesTableSource(moeThemeHandler)
+    textMateGrammarsSource = newKosmoTextMateGrammarsTableSource(textMateGrammars)
   result = KosmoSettingsWindow(
     xWindow: nimkit.newPanel("Kosmo Settings", nimkit.rect(180, 160, 760, 420)),
     xContentView: nimkit.newView(),
@@ -392,6 +470,7 @@ proc newKosmoSettingsWindow*(
     xEditorInputPolicyHandler: editorInputPolicyHandler,
     xShortcutsSource: shortcutsSource,
     xMoeThemesSource: moeThemesSource,
+    xTextMateGrammarsSource: textMateGrammarsSource,
   )
   nimkit.initResponder(result)
   let
@@ -401,6 +480,7 @@ proc newKosmoSettingsWindow*(
     terminalPage = newSettingsPage()
     shortcutsPage = newSettingsPage()
     moeThemesPage = newSettingsPage()
+    textMateGrammarsPage = newSettingsPage()
     optionButton = nimkit.newCheckBox("Use Option/Alt as Meta")
     terminalLinksButton = nimkit.newCheckBox(
       when defined(macosx) or defined(macos):
@@ -412,6 +492,7 @@ proc newKosmoSettingsWindow*(
     editorInputPolicyChoice = nimkit.newComboBox(["Vim", "Native", "Hybrid"])
     shortcutsTable = nimkit.newTableView()
     moeThemesTable = nimkit.newTableView()
+    textMateGrammarsTable = nimkit.newTableView()
     optionChanged = nimkit.actionSelector("kosmo.optionAsMetaChanged")
     terminalLinksChanged = nimkit.actionSelector("kosmo.terminalLinksChanged")
     shortcutProfileChanged = nimkit.actionSelector("kosmo.shortcutProfileChanged")
@@ -424,6 +505,7 @@ proc newKosmoSettingsWindow*(
   result.xShortcutProfileChoice = shortcutProfileChoice
   result.xEditorInputPolicyChoice = editorInputPolicyChoice
   result.xMoeThemesTable = moeThemesTable
+  result.xTextMateGrammarsTable = textMateGrammarsTable
 
   optionButton.identifier = KosmoOptionAsMetaIdentifier
   optionButton.accessibilityLabel = "Use Option or Alt as Meta"
@@ -558,6 +640,48 @@ proc newKosmoSettingsWindow*(
   )
   moeThemesPage.stack.fillAvailableSpace(moeThemesTable)
 
+  textMateGrammarsTable.identifier = KosmoTextMateGrammarsTableIdentifier
+  textMateGrammarsTable.accessibilityLabel = "Available TextMate grammars"
+  textMateGrammarsTable.columnSizing = nimkit.tvcsFill
+  textMateGrammarsTable.selectionMode = nimkit.tsmNone
+  textMateGrammarsTable.usesAlternatingRowBackgrounds = true
+  textMateGrammarsTable.showsRowSeparators = true
+  textMateGrammarsTable.addColumn(
+    nimkit.newTableColumn(
+      KosmoTextMateGrammarNameColumnIdentifier,
+      "Grammar",
+      width = 250.0,
+      minWidth = 180.0,
+      sizingPolicy = nimkit.tcspFlexible,
+    )
+  )
+  textMateGrammarsTable.addColumn(
+    nimkit.newTableColumn(
+      KosmoTextMateGrammarScopeColumnIdentifier,
+      "Scope",
+      width = 330.0,
+      minWidth = 220.0,
+      sizingPolicy = nimkit.tcspFlexible,
+    )
+  )
+  textMateGrammarsTable.addColumn(
+    nimkit.newTableColumn(
+      KosmoTextMateGrammarOriginColumnIdentifier,
+      "Origin",
+      width = 100.0,
+      sizingPolicy = nimkit.tcspFixed,
+    )
+  )
+  textMateGrammarsTable.dataSource = textMateGrammarsSource
+  textMateGrammarsTable.delegate = textMateGrammarsSource
+  textMateGrammarsPage.stack.addArrangedSubview(
+    nimkit.newHeadingLabel("TextMate Grammars"),
+    nimkit.newLabel(
+      "These grammars are available to Moe and Markdown syntax highlighting."
+    ),
+  )
+  textMateGrammarsPage.stack.fillAvailableSpace(textMateGrammarsTable)
+
   tabs.identifier = KosmoSettingsTabsIdentifier
   discard tabs.addTabViewItem(
     nimkit.newTabViewItem(
@@ -572,6 +696,12 @@ proc newKosmoSettingsWindow*(
   discard tabs.addTabViewItem(
     nimkit.newTabViewItem(
       "Moe Themes", moeThemesPage.view, KosmoMoeThemesSettingsTabIdentifier
+    )
+  )
+  discard tabs.addTabViewItem(
+    nimkit.newTabViewItem(
+      "TextMate Grammars", textMateGrammarsPage.view,
+      KosmoTextMateGrammarsSettingsTabIdentifier,
     )
   )
   layout.spacing = 12.0

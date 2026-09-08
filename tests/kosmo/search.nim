@@ -104,13 +104,15 @@ suite "Kosmo":
     require not tabsView.isNil
     require tabsView of TabView
     let settingsTabs = TabView(tabsView)
-    check settingsTabs.len == 3
+    check settingsTabs.len == 4
     check settingsTabs[0].label == "Terminal"
     check settingsTabs[0].identifier == KosmoTerminalSettingsTabIdentifier
     check settingsTabs[1].label == "Shortcuts"
     check settingsTabs[1].identifier == KosmoShortcutsSettingsTabIdentifier
     check settingsTabs[2].label == "Moe Themes"
     check settingsTabs[2].identifier == KosmoMoeThemesSettingsTabIdentifier
+    check settingsTabs[3].label == "TextMate Grammars"
+    check settingsTabs[3].identifier == KosmoTextMateGrammarsSettingsTabIdentifier
     check settingsTabs.selectedIndex == 0
 
     discard settingsPanel.buildRenders()
@@ -349,6 +351,56 @@ suite "Kosmo":
       KosmoMoeDefaultThemeIdentifier
     check frontend.settingsWindow().selectedMoeThemeIdentifier() ==
       KosmoMoeDefaultThemeIdentifier
+    check settingsTabs.selectTabViewItemAtIndex(3)
+    discard settingsPanel.buildRenders()
+
+    let textMateGrammarsView = settingsPanel.contentView().viewWithIdentifier(
+        KosmoTextMateGrammarsTableIdentifier
+      )
+    require not textMateGrammarsView.isNil
+    require textMateGrammarsView of TableView
+    let
+      textMateGrammarsTable = TableView(textMateGrammarsView)
+      grammarColumn = textMateGrammarsTable.columnWithIdentifier(
+        KosmoTextMateGrammarNameColumnIdentifier
+      )
+      scopeColumn = textMateGrammarsTable.columnWithIdentifier(
+        KosmoTextMateGrammarScopeColumnIdentifier
+      )
+      originColumn = textMateGrammarsTable.columnWithIdentifier(
+        KosmoTextMateGrammarOriginColumnIdentifier
+      )
+      availableGrammars = frontend.editorView.editor.availableTextMateGrammars()
+    check textMateGrammarsTable.columnCount == 3
+    check textMateGrammarsTable.selectionMode == tsmNone
+    check textMateGrammarsTable.rowCount == availableGrammars.len
+    require not grammarColumn.isNil
+    require not scopeColumn.isNil
+    require not originColumn.isNil
+    check grammarColumn.title == "Grammar"
+    check scopeColumn.title == "Scope"
+    check originColumn.title == "Origin"
+    var foundTerraform = false
+    for row in 0 ..< textMateGrammarsTable.rowCount:
+      check textMateGrammarsTable.tableCellText(row, grammarColumn).len > 0
+      check textMateGrammarsTable.tableCellText(row, scopeColumn).len > 0
+      check textMateGrammarsTable.tableCellText(row, originColumn) == "Built-in"
+      if textMateGrammarsTable.tableCellText(row, scopeColumn) == "source.hcl.terraform":
+        check textMateGrammarsTable.tableCellText(row, grammarColumn) == "Terraform"
+        foundTerraform = true
+    check foundTerraform
+
+    var grammarsWithAddition = availableGrammars
+    grammarsWithAddition.add KosmoTextMateGrammar(
+      name: "Example Added Grammar",
+      scopeName: "source.example-added",
+      origin: KosmoTextMateGrammarOrigin.Added,
+    )
+    frontend.settingsWindow().textMateGrammars = grammarsWithAddition
+    check textMateGrammarsTable.rowCount == availableGrammars.len + 1
+    check textMateGrammarsTable.tableCellText(
+      textMateGrammarsTable.rowCount - 1, originColumn
+    ) == "Added"
     check settingsTabs.selectTabViewItemAtIndex(0)
 
     let optionView =

@@ -4082,6 +4082,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     shortcuts = frontend.dockController.shortcutBindings.kosmoShortcutSettings()
     moeThemes = frontend.dockController.editor.availableMoeThemes()
     moeThemeSettings = moeThemes.moeThemeSettings()
+    textMateGrammars = frontend.dockController.editor.availableTextMateGrammars()
     selectedMoeThemeIdentifier =
       frontend.dockController.editor.activeMoeThemeIdentifier()
   if frontend.xSettingsWindow.isNil or frontend.xSettingsWindow.window.isClosed():
@@ -4114,6 +4115,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
         if not weakFrontend.isNil:
           return weakFrontend[].setMoeTheme(identifier)
       ,
+      textMateGrammars = textMateGrammars,
     )
   else:
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
@@ -4122,6 +4124,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     frontend.xSettingsWindow.updateMoeThemes(
       moeThemeSettings, selectedMoeThemeIdentifier
     )
+    frontend.xSettingsWindow.textMateGrammars = textMateGrammars
   result = not frontend.application.showWindow(
     frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
     frontend.xSettingsWindow.firstResponder,
