@@ -844,13 +844,17 @@ proc selectEditorContent(view: KosmoEditorView, id: KosmoBufferId) =
   group.selectedTabIdentifier = id.tabIdentifier
   group.pane.setContentView(view)
 
-func statusText(status: KosmoStatus, tabs: openArray[KosmoTab]): string =
+proc statusText(
+    status: KosmoStatus, tabs: openArray[KosmoTab], workingDirectory: string
+): string =
   var parts: seq[string]
+  var activeFilePath: Option[string]
   if status.modeLabel.len > 0:
     parts.add status.modeLabel
   for tab in tabs:
     if tab.active:
       parts.add tab.title
+      activeFilePath = tab.filePath
       break
   if status.message.len > 0:
     parts.add status.message
@@ -863,6 +867,15 @@ func statusText(status: KosmoStatus, tabs: openArray[KosmoTab]): string =
     if status.gitDeleted != 0:
       git.add " -" & $status.gitDeleted
     parts.add git
+  if activeFilePath.isSome:
+    let
+      filePath = activeFilePath.get
+      basePath =
+        if workingDirectory.len > 0:
+          absolutePath(workingDirectory)
+        else:
+          getCurrentDir()
+    parts.add normalizedPath(absolutePath(filePath, basePath))
   parts.join("  •  ")
 
 proc visibleTabs(view: KosmoEditorView, tabs: openArray[KosmoTab]): seq[KosmoTab] =
@@ -1091,7 +1104,7 @@ proc syncChrome(view: KosmoEditorView) =
   let tabs = view.visibleTabs(view.editor.tabs())
   view.syncTabs(tabs)
   if not view.statusLabel.isNil and view.isActiveEditorGroup():
-    let text = view.editor.status().statusText(tabs)
+    let text = view.editor.status().statusText(tabs, view.editor.workingDirectory())
     if view.statusLabel.text != text:
       view.statusLabel.text = text
   let command = view.editor.commandLine()
