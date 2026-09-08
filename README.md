@@ -782,6 +782,12 @@ a path starts with a dash. Tagged releases provide Linux, macOS, and Windows
 binaries; see [Releasing Kosmo binaries](docs/releasing-kosmo.md) for artifact and
 macOS signing details.
 
+For arbitrary text, use `sometool | kosmo --file:txt` (or `--file:log`,
+`--file:hcl`, etc.). This opens a separate modified editor buffer named `stdin.txt`
+after stdin reaches EOF. The extension selects syntax highlighting; saving uses the invoking
+directory. No file is read or written until you explicitly save. Input is limited
+to 8 MiB, and `--bg --file:txt` requires an already running Kosmo instance.
+
 Pipe unified Git output to `kosmo --diff` to render a static snapshot in Kosmo's
 Git Diff view, for example `git diff some-folder | kosmo --diff`. The same process
 and embedded-terminal routing rules apply. Piped diffs are limited to 8 MiB and

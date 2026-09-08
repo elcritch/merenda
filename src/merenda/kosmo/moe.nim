@@ -19,6 +19,7 @@ import
   ]
 import moepkg/buffer/undo as moeUndo
 import moepkg/buffer/search as moeSearch
+from moepkg/buffer/file_io import loadFileWithContent
 from moepkg/buffer/core import BufferId, getLine, getTextString, len
 from moepkg/command_handlers/visual_commands import visualDelete
 from moepkg/registers import setYankedRegister
@@ -938,6 +939,21 @@ proc newEmptyBuffer*(editor: KosmoEditor): Option[KosmoBufferId] =
     editor.editor.state.statusMessage = outcome.error
     return
   some(editor.editor.activeBuffer.id.toKosmoBufferId)
+
+proc newStdinBuffer*(
+    editor: KosmoEditor, name, content, directory: string
+): Option[KosmoBufferId] =
+  ## Create a separate modified buffer; stdin never reads or writes the named file.
+  result = editor.newEmptyBuffer()
+  if result.isNone:
+    return
+  let buffer = editor.editor.activeBuffer
+  let loaded = buffer.loadFileWithContent(absolutePath(name, directory), content)
+  if loaded.isErr:
+    editor.editor.state.statusMessage = loaded.error
+    return none(KosmoBufferId)
+  buffer.savedChangeId = -1
+  buffer.highlightNeedsUpdate = true
 
 proc revealLocation*(
     editor: KosmoEditor, line, column: int, centered = false

@@ -2,7 +2,8 @@
 
 when not defined(features.merenda.kosmo):
   {.
-    error: """
+    error:
+      """
 Kosmo requires the "kosmo" feature. Enable it with Atlas:
 
   atlas install -tuk --features:kosmo
@@ -4130,10 +4131,11 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       moeThemeSettings, selectedMoeThemeIdentifier
     )
     frontend.xSettingsWindow.textMateGrammars = textMateGrammars
-  result = not frontend.application.showWindow(
-    frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
-    frontend.xSettingsWindow.firstResponder,
-  ).isNil
+  result =
+    not frontend.application.showWindow(
+      frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
+      frontend.xSettingsWindow.firstResponder,
+    ).isNil
 
 proc showGitDiffSnapshot(
     frontend: KosmoApplication, snapshot: GitDiffSnapshot, refreshesRepository: bool
@@ -4477,7 +4479,11 @@ proc configureKosmoSettingsMenu(frontend: KosmoApplication) =
   let applicationMenu = mainMenu[0].submenu()
   if not applicationMenu.isNil and applicationMenu.len > 2:
     let settingsItem = applicationMenu[2]
-    let manager = if frontend.xWindowManager.isNil: nil else: frontend.xWindowManager[]
+    let manager =
+      if frontend.xWindowManager.isNil:
+        nil
+      else:
+        frontend.xWindowManager[]
     settingsItem.identifier = KosmoShowSettingsAction
     settingsItem.action = nimkit.actionSelector(KosmoShowSettingsAction)
     settingsItem.target = nimkit.newActionTarget(
@@ -4532,7 +4538,11 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
   let windowMenu = frontend.application.windowsMenu()
   if windowMenu.isNil or not windowMenu.menuItemWithIdentifier(KosmoNextTabAction).isNil:
     return
-  let manager = if frontend.xWindowManager.isNil: nil else: frontend.xWindowManager[]
+  let manager =
+    if frontend.xWindowManager.isNil:
+      nil
+    else:
+      frontend.xWindowManager[]
 
   proc addAction(title, identifier: string) =
     let item = nimkit.newMenuItem(title, nimkit.actionSelector(identifier))
@@ -5061,6 +5071,23 @@ proc openCliRequest(
   if manager.isNil:
     result.errors.add "Kosmo has no active window manager"
     return
+  if request.kind == kcrOpenStdin:
+    var destination = manager.frontendForCliRequest(request.originWindow)
+    if destination.isNil:
+      destination = newKosmoApplication(manager, hasFileBrowser = false)
+    let controller = destination.dockController
+    let group = controller.activePaneGroup()
+    let id = controller.editor.newStdinBuffer(
+      request.stdinName, request.stdinText, request.workingDirectory
+    )
+    if id.isNone:
+      result.errors.add "Kosmo could not create the stdin buffer"
+    else:
+      group.addBuffer(id.get)
+      controller.activatePaneTab(group, id.get.tabIdentifier)
+      destination.show()
+    result.delivered = true
+    return
   if request.kind == kcrShowDiff:
     var destination = manager.frontendForCliRequest(request.originWindow)
     if destination.isNil:
@@ -5269,6 +5296,38 @@ when isMainModule:
     echo KosmoUsage
   elif commandLine.version:
     echo KosmoVersion
+  elif commandLine.errors.len > 0:
+    reportCliErrors(commandLine.errors)
+    quit(1)
+  elif commandLine.stdinName.len > 0:
+    if kosmoCliInputIsTerminal():
+      stderr.writeLine("Kosmo --file reads text from standard input")
+      quit(1)
+    var content: string
+    try:
+      content = stdin.readKosmoCliText()
+    except CatchableError as error:
+      stderr.writeLine(error.msg)
+      quit(1)
+    let directory = getCurrentDir()
+    let response = openStdinInRunningKosmo(commandLine.stdinName, content, directory)
+    if response.delivered:
+      reportCliErrors(response.errors)
+      quit(if response.errors.len == 0: 0 else: 1)
+    if commandLine.background:
+      stderr.writeLine("Kosmo --bg --file requires a running Kosmo instance")
+      quit(1)
+    runKosmoRequest(
+      some(
+        KosmoCliOpenRequest(
+          requestId: randomIdentifier(),
+          kind: kcrOpenStdin,
+          stdinName: commandLine.stdinName,
+          stdinText: content,
+          workingDirectory: directory,
+        )
+      )
+    )
   elif commandLine.diff:
     if commandLine.paths.len > 0:
       stderr.writeLine("Kosmo --diff does not accept file or folder arguments")
