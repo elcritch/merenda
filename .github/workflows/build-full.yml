@@ -28,7 +28,7 @@ jobs:
             nimversion: '2.2.10'
             display: x11
             nimargs: >-
-              -- -d:debug
+              -- --opt:none
               -d:KosmoMatterMaximumLineBytes=96
               -d:NimkitMatterMaximumLineBytes=96
           # - os: ubuntu-24.04
