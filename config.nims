@@ -13,7 +13,7 @@
 --debugger:
   native
 --exceptions:
-  setjmp
+  goto
 --stacktrace:
   off
 --define:
@@ -33,14 +33,6 @@ switch("define", "features.markdown.regex") # temporary hack until we get atlas 
 when defined(features.merenda.kosmo):
   switch("define", "moe.embedded")
   switch("define", "features.moe.matter")
-
-when compileOption("opt", "none"):
-  # Matter's recursive TextMate regex frames need a lower line cap on the
-  # smaller worker stacks used by unoptimized CI builds.
-  when not defined(KosmoMatterMaximumLineBytes):
-    switch("define", "KosmoMatterMaximumLineBytes=96")
-  when not defined(NimkitMatterMaximumLineBytes):
-    switch("define", "NimkitMatterMaximumLineBytes=96")
 
 import std/strutils
 import std/os
