@@ -254,12 +254,28 @@ suite "Kosmo Matter highlighting":
     test "Moe highlights the complete workflow YAML sequence":
       let source = readFile(RepositoryRoot / ".github/workflows/build-full.yml")
       let rendered = renderMoeFileAcross(
-        "build-full.yml", source, ["on:", "jobs:", "runs-on:", "Compile Examples"]
+        "build-full.yml",
+        source,
+        ["on:", "jobs:", "runs-on:", "steps:", "uses:", "Compile Examples"],
       )
+      require rendered.len == 6
+      for index in 1 .. 4:
+        check rendered[0].style.fg == rendered[index].style.fg
+      check rendered[5].style.fg != rendered[0].style.fg
+
+  test "Moe ends YAML block scalars on dedent":
+    for indicator in [">-", "|", ">", "|+"]:
+      let
+        source =
+          "jobs:\n  nimargs: " & indicator &
+          "\n    --opt:none\n    -d:Example=96\n  # after scalar\n  steps:\n  - uses: actions/checkout@v5\n"
+        rendered = renderMoeFileAcross(
+          "build.yml", source, ["jobs:", "--opt:none", "steps:", "uses:"]
+        )
       require rendered.len == 4
-      check rendered[0].style.fg == rendered[1].style.fg
-      check rendered[1].style.fg == rendered[2].style.fg
-      check rendered[3].style.fg != rendered[2].style.fg
+      check rendered[0].style.fg != rendered[1].style.fg
+      check rendered[0].style.fg == rendered[2].style.fg
+      check rendered[0].style.fg == rendered[3].style.fg
 
   test "Moe resumes YAML after dense GitHub Actions expressions":
     let
