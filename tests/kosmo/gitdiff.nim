@@ -133,9 +133,25 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     panel.layoutSubtreeIfNeeded()
     let settledHeight = panel.markdownView.frame().size.height
+    let settledMarkdown = panel.markdownView.markdown()
+    let settledStorage = panel.markdownView.textView().textStorage()
+    let reads = panel.repositoryReadCount()
+    panel.scheduleRepositoryRefresh()
+    require panel.waitForDiff()
+    check panel.repositoryReadCount() == reads + 1
+    check panel.refreshButton.enabled()
+    check panel.markdownView.markdown() == settledMarkdown
+    check panel.markdownView.textView().textStorage() == settledStorage
+    panel.refresh()
+    check panel.refreshButton.enabled()
+    check panel.markdownView.markdown() == settledMarkdown
+    require panel.waitForDiff()
+    check panel.markdownView.textView().textStorage() == settledStorage
 
     writeFile(root / "source.txt", "refreshed text\n")
     panel.refresh()
+    check panel.refreshButton.enabled()
+    check panel.markdownView.markdown() == settledMarkdown
     require panel.markdownView.waitForMarkdownParsing()
     require panel.markdownView.waitForMarkdownLayout()
     panel.layoutSubtreeIfNeeded()
@@ -528,6 +544,19 @@ suite "Kosmo Git diff":
       KosmoGitDiffTabIdentifier
     check frontend.editorPane.contentView == View(frontend.gitDiffPanel)
     check frontend.gitDiffPanel.snapshot.files.len == 1
+    let diffTabIndex =
+      frontend.documentTabs.indexOfDocumentTabIdentifier(KosmoGitDiffTabIdentifier)
+    require diffTabIndex >= 0
+    check frontend.documentTabs.documentTabModels()[diffTabIndex].title ==
+      "Git Diff · " & root.lastPathPart()
+    require frontend.showPipedGitDiff("", root)
+    require frontend.gitDiffPanel.waitForDiff()
+    check frontend.documentTabs.documentTabModels()[diffTabIndex].title ==
+      "Git Diff · stdin"
+    require frontend.showGitDiff()
+    require frontend.gitDiffPanel.waitForDiff()
+    check frontend.documentTabs.documentTabModels()[diffTabIndex].title ==
+      "Git Diff · " & root.lastPathPart()
     let
       originalPanel = frontend.gitDiffPanel
       expectedStyle = frontend.editorPane.markdownControls.markdownPresentationStyle()

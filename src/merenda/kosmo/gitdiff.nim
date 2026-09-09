@@ -90,6 +90,7 @@ type
     pool: SigilThreadPoolPtr
     worker: AgentProxy[GitDiffWorker]
     sections: Table[string, GitDiffSection]
+    hasSnapshot: bool
     readingGit: bool
     refreshPending: bool
     refreshDeadline: MonoTime
@@ -498,7 +499,7 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
     if panel.snapshot.branch.len > 0:
       document.add "| Branch | " & panel.snapshot.branch.markdownLabel() & " |\n"
   document.add "| Location | " & panel.snapshot.rootPath.markdownLabel() & " |\n"
-  if not panel.readingGit and panel.snapshot.errorMessage.len == 0:
+  if (panel.hasSnapshot or not panel.readingGit) and panel.snapshot.errorMessage.len == 0:
     document.add "| Changes | " & $panel.snapshot.files.len & " files · +" & $additions &
       " / −" & $deletions
     if binaries > 0:
@@ -510,7 +511,7 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
         (if panel.snapshot.hasHead: "HEAD" else: "empty tree") &
         " · includes untracked files |\n"
   document.add "\n"
-  if panel.readingGit:
+  if panel.readingGit and not panel.hasSnapshot:
     document.add "Loading changes…\n"
   elif panel.snapshot.errorMessage.len > 0:
     document.add "Could not load Git diff.\n\n" &
@@ -924,10 +925,11 @@ proc highlightDiff(
 
 proc updateLoading(panel: KosmoGitDiffPanel) =
   panel.loading = panel.readingGit
+  var preparing = panel.readingGit and not panel.hasSnapshot
   for section in panel.sections.values:
     panel.loading = panel.loading or section.pending
-  panel.refreshButton.enabled =
-    not panel.loading and panel.snapshot.source == gdsRepository
+    preparing = preparing or section.pending
+  panel.refreshButton.enabled = not preparing and panel.snapshot.source == gdsRepository
 
 proc applyHighlighting(
     panel: KosmoGitDiffPanel, highlighted: SharedPtr[GitDiffHighlightResult]
@@ -974,6 +976,10 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
   if panel.closed:
     return
   panel.readingGit = false
+  if panel.hasSnapshot and panel.snapshot == snapshot:
+    panel.updateLoading()
+    return
+  panel.hasSnapshot = true
   panel.snapshot = snapshot
   var retained = initHashSet[string]()
   for index, file in snapshot.files:
@@ -1089,8 +1095,9 @@ proc refresh*(panel: KosmoGitDiffPanel) =
     inc panel.xRepositoryReadCount
     panel.loading = true
     panel.readingGit = true
-    panel.refreshButton.enabled = false
-    panel.renderDiff()
+    if not panel.hasSnapshot:
+      panel.refreshButton.enabled = false
+      panel.renderDiff()
     emit panel.worker.executeDiff(
       panel.snapshot.rootPath, panel.readGeneration, panel.control
     )

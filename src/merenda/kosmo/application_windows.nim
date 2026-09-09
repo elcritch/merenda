@@ -308,7 +308,12 @@ proc showGitDiffSnapshot(
 ): bool =
   if frontend.isNil or frontend.dockController.isNil:
     return
-  let controller = frontend.dockController
+  let
+    controller = frontend.dockController
+    title =
+      "Git Diff · " &
+      (if refreshesRepository: snapshot.rootPath.lastPathPart()
+      else: "stdin")
   for group in controller.groups:
     let document = group.documentForIdentifier(KosmoGitDiffTabIdentifier)
     if not document.isNil:
@@ -319,6 +324,9 @@ proc showGitDiffSnapshot(
             frontend.gitDiffPanel.displayRepositoryDiff(snapshot.rootPath)
           else:
             frontend.gitDiffPanel.displayDiff(snapshot)
+        document.title = title
+        document.tooltip =
+          if refreshesRepository: "Current Git diff" else: "Piped Git diff"
         controller.activatePanelWindow(group.window)
         controller.activatePaneTab(group, document.identifier)
         return true
@@ -347,7 +355,7 @@ proc showGitDiffSnapshot(
     weakPanel = panel.unsafeWeakRef()
     document = newKosmoPaneDocument(
       identifier = KosmoGitDiffTabIdentifier,
-      title = "Git Diff",
+      title = title,
       contentView = panel,
       preferredFirstResponder = panel.markdownView.textView(),
       tooltip = if refreshesRepository: "Current Git diff" else: "Piped Git diff",
