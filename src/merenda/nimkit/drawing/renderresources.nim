@@ -175,7 +175,11 @@ proc removeResourcesOutsideManifest[BackendState](
       of aekGlyph:
         resources.containsFont(metadata.fontId)
       of aekGenerated:
-        ImageId(key) in resources.images
+        # FigDraw owns generated atlas entries such as its solid rectangle and
+        # rasterized drawing primitives. They have no application resource ID
+        # to include in a render manifest, and evicting them here makes every
+        # frame allocate the same entries again until the atlas is exhausted.
+        true
     if not retained:
       removed.add key
   for key in removed:
