@@ -473,14 +473,29 @@ suite "Kosmo shared workspace inventory":
       let frontend = newKosmoApplication(newApplication("Idle inventory"), root)
       defer:
         frontend.close()
-      let spy = InventorySpy()
-      frontend.fileTree.workspaceFiles.connect(workspaceFilesDidChange, spy, changed)
-      require frontend.fileTree.workspaceFiles.waitForFiles()
-      # Drain the initial dmon notification and then observe a full old poll period.
-      let settle = getMonoTime() + initDuration(seconds = 1)
-      while getMonoTime() < settle:
+      let
+        spy = InventorySpy()
+        files = frontend.fileTree.workspaceFiles
+      files.connect(workspaceFilesDidChange, spy, changed)
+      require files.waitForFiles()
+      require not files.watch.isNil
+      eventually(files.watch.nativeReady)
+      require files.watch.nativeReady
+
+      # Wait for the startup notification and its scan to become observably
+      # quiet before measuring a full old polling period.
+      var
+        observedChanges = spy.changes
+        quietDeadline = getMonoTime() + initDuration(milliseconds = 500)
+      let settleDeadline = getMonoTime() + initDuration(seconds = 10)
+      while getMonoTime() < quietDeadline and getMonoTime() < settleDeadline:
         discard getCurrentSigilThread().pollAll(NonBlocking)
+        if files.isLoading() or spy.changes != observedChanges:
+          observedChanges = spy.changes
+          quietDeadline = getMonoTime() + initDuration(milliseconds = 500)
         sleep(10)
+      require not files.isLoading()
+      require getMonoTime() >= quietDeadline
       let baseline = spy.changes
       let deadline = getMonoTime() + initDuration(milliseconds = 3500)
       while getMonoTime() < deadline:

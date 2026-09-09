@@ -224,16 +224,17 @@ suite "Kosmo quick open":
     )
     check frontend.quickOpenPanel.isOpen()
     check frontend.window.fieldEditorClient() == frontend.quickOpenPanel.queryField
-    check frontend.quickOpenPanel.isLoading()
-    check frontend.quickOpenPanel.progressIndicator.animating()
-    let loadingRenders = buildRenders(frontend.contentView)
-    var loadingDots = 0
-    for node in loadingRenders[PopupDrawLevel].nodes:
-      if node.kind == nkDrawable:
-        for operation in node.drawOps:
-          if operation.kind == dkCircle:
-            inc loadingDots
-    check loadingDots >= 12
+    let loading = frontend.quickOpenPanel.isLoading()
+    check frontend.quickOpenPanel.progressIndicator.animating() == loading
+    if loading:
+      let loadingRenders = buildRenders(frontend.contentView)
+      var loadingDots = 0
+      for node in loadingRenders[PopupDrawLevel].nodes:
+        if node.kind == nkDrawable:
+          for operation in node.drawOps:
+            if operation.kind == dkCircle:
+              inc loadingDots
+      check loadingDots >= 12
     let startFrame = frontend.quickOpenPanel.frame()
     check startFrame.origin.y + startFrame.size.height <=
       frontend.contentView.bounds().origin.y

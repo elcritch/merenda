@@ -182,11 +182,11 @@ suite "Kosmo synthetic panel shortcuts":
       activePath = secondFolder / "active.nim"
       outsidePath = outsideRoot / "outside.nim"
       app = newApplication("Kosmo Reveal Active File Test")
-      frontend = newKosmoApplication(app, root, monitorsGitStatus = false)
     createDir(firstFolder)
     createDir(secondFolder)
     writeFile(activePath, "discard\n")
     writeFile(outsidePath, "discard\n")
+    let frontend = newKosmoApplication(app, root, monitorsGitStatus = false)
     defer:
       frontend.close()
       removeDir(root)
