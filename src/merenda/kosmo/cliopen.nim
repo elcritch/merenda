@@ -457,3 +457,5 @@ proc close*(server: KosmoCliOpenServer) =
   )
   server.timer = nil
   server.ticker = nil
+
+var cliOpenWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime

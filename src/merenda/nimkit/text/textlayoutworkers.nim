@@ -84,3 +84,5 @@ proc newTextLayoutWorker*(
   var worker = TextLayoutWorker(snapshotBuilder: snapshotBuilder)
   result = worker.moveToThread(nimkitWorkerPool())
   connectThreaded(result, requestTextLayout, result, requestTextLayout)
+
+var textLayoutWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime

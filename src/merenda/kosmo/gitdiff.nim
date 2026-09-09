@@ -1307,3 +1307,5 @@ proc newKosmoGitDiffPanel*(
   result =
     newKosmoGitDiffPanel(snapshot.rootPath, markdownStyle, refreshesRepository = false)
   result.displayDiff(snapshot)
+
+var gitDiffWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime

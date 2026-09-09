@@ -297,3 +297,5 @@ proc close*(files: WorkspaceFiles) =
     files.closed = true
     files.pending = false
     files.active = false
+
+var workspaceFilesWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime

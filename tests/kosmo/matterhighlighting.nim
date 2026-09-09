@@ -1,10 +1,13 @@
 ## Matter highlighting in Kosmo editors and Markdown previews.
-import std/[os, strutils, tempfiles, unicode, unittest]
+import std/[monotimes, os, strutils, tempfiles, unicode, unittest]
 
 import celina/core/colors as celinaColors
 
 import merenda/kosmo/kosmo
+import merenda/kosmo/matterworkers
 import merenda/nimkit
+
+const RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
 
 proc runeIndexOf(source, needle: string): int =
   result = -1
@@ -18,11 +21,21 @@ proc renderedLocation(buffer: RenderBuffer, needle: string): tuple[column, row: 
     var line: string
     for column in 0 ..< buffer.width:
       line.add buffer.cell(column, row).symbol
-    let column = line.find(needle)
+    let column = line.runeIndexOf(needle)
     if column >= 0:
       return (column: column, row: row)
 
-proc renderMoeFile(fileName, source: string): RenderBuffer =
+proc renderUntilMatterHighlightingReady(
+    editor: KosmoEditor, buffer: var RenderBuffer
+): bool =
+  let deadline = getMonoTime() + initDuration(seconds = 5)
+  while not editor.matterHighlightingReady() and getMonoTime() < deadline:
+    editor.render(buffer)
+    sleep(1)
+  editor.render(buffer)
+  editor.matterHighlightingReady()
+
+proc renderMoeFile(fileName, source: string, width = 48, height = 16): RenderBuffer =
   let
     root = createTempDir("kosmo-moe-matter-", "")
     path = root / fileName
@@ -35,8 +48,8 @@ proc renderMoeFile(fileName, source: string): RenderBuffer =
   defer:
     editor.close()
   doAssert editor.openFile(path).loaded
-  result = newRenderBuffer(48, 16)
-  editor.render(result)
+  result = newRenderBuffer(width, height)
+  doAssert editor.renderUntilMatterHighlightingReady(result)
 
 template checkDistinctHighlight(fileName, source, firstNeedle, secondNeedle: string) =
   block:
@@ -65,7 +78,7 @@ suite "Kosmo Matter highlighting":
     require editor.openFile(path).loaded
 
     var buffer = newRenderBuffer(32, 8)
-    editor.render(buffer)
+    require editor.renderUntilMatterHighlightingReady(buffer)
     let
       keyword = buffer.renderedLocation("proc")
       parameterless = buffer.renderedLocation("answer")
@@ -107,6 +120,38 @@ suite "Kosmo Matter highlighting":
     checkDistinctHighlight(
       "matter.md", "# Matter heading\nUse `kosmo` here.\n", "Use", "kosmo"
     )
+
+  test "Moe keeps Markdown highlighting after a long HTML line":
+    let buffer =
+      renderMoeFile("README.md", readFile(RepositoryRoot / "README.md"), 1024, 32)
+    let heading = buffer.renderedLocation("Why Try It?")
+    let body = buffer.renderedLocation("Native Nim")
+    require heading.column >= 0
+    require body.column >= 0
+    check buffer.cell(heading.column, heading.row).style.fg !=
+      buffer.cell(body.column, body.row).style.fg
+
+  test "Moe covers long UTF-8 lines and resumes Markdown highlighting":
+    let
+      longLine =
+        "# " & "é".repeat(KosmoMatterMaximumLineBytes div "é".len + 1) & " END"
+      buffer = renderMoeFile(
+        "long.md", longLine & "\n# Recovered\nPlain body\n", longLine.runeLen + 8, 8
+      )
+      first = buffer.renderedLocation("é")
+      last = buffer.renderedLocation("END")
+      heading = buffer.renderedLocation("Recovered")
+      body = buffer.renderedLocation("Plain body")
+    require first.column >= 0
+    require last.column >= 0
+    require heading.column >= 0
+    require body.column >= 0
+    check buffer.cell(first.column, first.row).style.fg ==
+      buffer.cell(body.column, body.row).style.fg
+    check buffer.cell(last.column, last.row).style.fg ==
+      buffer.cell(body.column, body.row).style.fg
+    check buffer.cell(heading.column, heading.row).style.fg !=
+      buffer.cell(body.column, body.row).style.fg
 
   test "Markdown previews use Matter for fenced code":
     let frontend = newKosmoApplication(

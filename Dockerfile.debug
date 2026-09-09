@@ -1,0 +1,7 @@
+FROM merenda-ci-all-fixed:latest
+
+COPY . /workspace
+
+WORKDIR /workspace
+
+CMD ["bash"]

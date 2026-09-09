@@ -25,6 +25,7 @@ import ./nimkit/debug/viewselection
 import ./nimkit/debug/viewinspectors
 import ./nimkit/app/dragging
 import ./nimkit/foundation/assetcache
+import ./nimkit/foundation/backgroundworkers
 import ./nimkit/foundation/events
 import ./nimkit/foundation/filesearch
 import ./nimkit/foundation/gitstatus
@@ -176,3 +177,5 @@ export windowcontrollers
 export windoweffects
 export windows
 export workspaces
+
+var nimkitLifetime {.used.}: NimkitBackgroundWorkerLifetime

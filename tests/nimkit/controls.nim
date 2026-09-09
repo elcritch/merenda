@@ -51,6 +51,17 @@ suite "nimkit controls":
     cell.sendsActionOnEndEditing = true
     check cell.sendsActionOnEndEditing()
 
+  test "controls retain lazily-created action cells":
+    let control = Control()
+
+    initControlFields(control)
+    control.setCell(nil)
+    let cell = control.cell()
+
+    check not cell.isNil
+    check cell of ActionCell
+    check control.cell() == cell
+
   test "control activation feedback restarts and cancels one shared pulse":
     let
       window = newWindow("Control feedback", frame = rect(0, 0, 120, 80))

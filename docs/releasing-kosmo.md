@@ -7,9 +7,24 @@ The `release-kosmo` GitHub Actions workflow builds these artifacts:
 - `kosmo-windows-amd64.zip`
 - `SHA256SUMS.txt`
 
-Each platform archive also includes the notices for Kosmo's bundled IBM Plex
+Each executable archive also includes the notices for Kosmo's bundled IBM Plex
 Sans and JetBrains Mono Nerd Font Mono resources. On macOS the notices live in
 the app's `Contents/Resources` directory.
+
+Release executables retain native debug information and link the `libbacktrace`
+stack-trace override. Nim's instrumented stack tracing remains disabled because
+`libbacktrace` uses the compiler's native debug information without its runtime
+overhead. `libbacktrace` is an unconditional package dependency, and the project
+configuration imports it globally; release builds also define
+`nimStackTraceOverride` explicitly. Each platform job verifies both the native
+debug data and linked libbacktrace backend before packaging.
+
+Linux and Windows keep the debug information in the executable. The macOS app
+bundles its matching symbols at
+`Contents/MacOS/kosmo.dSYM`. This is the location libbacktrace checks beside the
+running executable, so release stack traces retain file and line information.
+LLDB can load the same symbols explicitly with
+`target symbols add /path/to/Kosmo.app/Contents/MacOS/kosmo.dSYM`.
 
 The root `install.sh` downloads the archive for the current operating system and
 architecture, verifies it against `SHA256SUMS.txt`, and installs it without root
@@ -27,9 +42,12 @@ The workflow can also be run manually. Manual runs upload Actions artifacts with
 modifying a GitHub release. As a temporary release-repair exception, every push to
 `ci/update-release-binaries` embeds version `0.17.0` and replaces the assets on the
 existing `v0.17.0` release. Remove that branch/tag exception after release testing.
-Published and manual macOS builds are currently ad-hoc signed for CI validation only.
-Select `notarize_macos` on a manual run to test the disabled Developer ID signing and
-notarization path while it is being repaired.
+Published and ordinary manual macOS builds are currently ad-hoc signed for CI
+validation only. They include the `com.apple.security.get-task-allow` entitlement so
+LLDB can attach after Developer Tools access is enabled on the Mac. Select
+`notarize_macos` on a manual run to test the disabled Developer ID signing and
+notarization path while it is being repaired. The notarized artifact omits
+`get-task-allow` because Apple's notary service rejects that entitlement.
 Because an ad-hoc-signed app can be rejected when a browser marks it as
 quarantined, direct browser downloads are not a substitute for notarized
 distribution. Use the checksum-verifying `install.sh` path for these temporary
@@ -45,10 +63,10 @@ do not receive an automatic waiver; Apple limits fee waivers to qualifying nonpr
 organizations, accredited educational institutions, and government entities.
 
 Kosmo does not need an App Store listing, installer certificate, provisioning profile,
-or paid-app agreement. It currently uses no restricted entitlements. The workflow has
-an opt-in path that signs with the hardened runtime and a secure timestamp, submits the
-app with `notarytool`, and staples it before creating the final ZIP. Published releases
-temporarily skip that path and use an ad-hoc signature instead.
+or paid-app agreement. The workflow has an opt-in path that signs with the hardened
+runtime and a secure timestamp, submits the app with `notarytool`, and staples it before
+creating the final ZIP. Published releases temporarily skip that path and use an ad-hoc
+signature with `get-task-allow` instead.
 
 Apple references:
 
