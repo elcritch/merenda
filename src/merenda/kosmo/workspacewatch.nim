@@ -6,10 +6,16 @@ import chronicles
 import dmon
 import sigils/[core, threadChronos, threadProxies, threads]
 import ../nimkit/foundation/backgroundworkers
+import ./workspacechanges
 
 const DefaultWorkspaceReconciliationInterval* = initDuration(minutes = 2)
 
 type
+  WorkspaceChanges = object
+    rescan: bool
+    paths: seq[string]
+
+  WorkspaceWatchFilter = ref object of AgentActor
   WorkspaceWatchTicker = ref object of AgentActor
   WorkspaceWatch* = ref object of Agent
     token: uint
@@ -21,6 +27,8 @@ type
     handles: Table[string, WatchId]
     timer: SigilTimer
     ticker: AgentProxy[WorkspaceWatchTicker]
+    filter: AgentProxy[WorkspaceWatchFilter]
+    filtering: bool
     active: bool
     fallback: bool
     nativeReady: bool
@@ -35,7 +43,7 @@ var
   ownsDmon: bool
   nextToken: uint
   inboxLock: Lock
-  inbox: Table[uint, bool]
+  inbox: Table[uint, WorkspaceChanges]
 
 initLock(inboxLock)
 
@@ -99,9 +107,20 @@ proc didChange(
   let token = cast[uint](userData)
   withLock inboxLock:
     if token in inbox:
-      inbox[token] = true
+      var changes = addr inbox[token]
+      for relative in [filepath, oldfilepath]:
+        if relative.len > 0 and not changes[].rescan:
+          let path = normalizedPath(absolutePath(relative, rootDir))
+          if path notin changes[].paths:
+            if changes[].paths.len < 1024:
+              changes[].paths.add path
+            else:
+              changes[] = WorkspaceChanges(rescan: true)
+      if filepath.len == 0:
+        changes[] = WorkspaceChanges(rescan: true)
 
 proc workspaceWatchChanged*(watch: WorkspaceWatch) {.signal.}
+proc workspaceWatchIgnoredChange*(watch: WorkspaceWatch) {.signal.}
 proc workspaceWatchPulse*(watch: WorkspaceWatch) {.signal.}
 proc pulsed(ticker: WorkspaceWatchTicker) {.signal.}
 proc pulse(ticker: WorkspaceWatchTicker) {.slot.} =
@@ -111,20 +130,48 @@ proc setRoots*(
   watch: WorkspaceWatch, roots: openArray[string], folders: openArray[string] = []
 )
 
+proc filterChanges(
+  worker: AgentProxy[WorkspaceWatchFilter],
+  paths: seq[string],
+  roots: seq[string],
+  metadata: seq[string],
+) {.signal.}
+
+proc changesFiltered(worker: WorkspaceWatchFilter, relevant: bool) {.signal.}
+
+proc filterChanges(
+    worker: WorkspaceWatchFilter,
+    paths: seq[string],
+    roots: seq[string],
+    metadata: seq[string],
+) {.slot.} =
+  emit worker.changesFiltered(hasRelevantRepositoryChanges(paths, roots, metadata))
+
+proc notifyChanged(watch: WorkspaceWatch) =
+  # A .git file can appear or change targets after the project was opened.
+  watch.setRoots(watch.roots, watch.folders)
+  emit watch.workspaceWatchChanged()
+
+proc changesFiltered(watch: WorkspaceWatch, relevant: bool) {.slot.} =
+  watch.filtering = false
+  if watch.active:
+    if relevant:
+      watch.notifyChanged()
+    else:
+      emit watch.workspaceWatchIgnoredChange()
+
 proc deliver(watch: WorkspaceWatch) {.slot.} =
   if not watch.active:
     return
   watch.elapsed = min(watch.elapsed + 1, 30)
   let watchesReady = watch.nativeWatchesReady()
-  var dirty: bool
-  withLock inboxLock:
-    dirty = inbox.getOrDefault(watch.token)
-    # Keep the setup notification armed until FSEvents is listening. A change
-    # made after setRoots but before stream startup is otherwise invisible
-    # until the two-minute reconciliation pass.
-    inbox[watch.token] = dirty and not watchesReady
-  if dirty and not watchesReady:
-    dirty = false
+  var changes: WorkspaceChanges
+  if watchesReady and not watch.filtering:
+    withLock inboxLock:
+      # Keep setup and native events queued until the backend is listening and
+      # the previous batch has finished filtering on the worker.
+      changes = move inbox[watch.token]
+      inbox[watch.token] = WorkspaceChanges()
   # A timer drains notifications, not the filesystem. Fall back only when
   # native coverage cannot be established (including dmon's Linux recursion bug).
   let
@@ -134,13 +181,15 @@ proc deliver(watch: WorkspaceWatch) {.slot.} =
         getMonoTime() - watch.lastReconciledMonoTime >= reconciliationInterval or
         getTime() - watch.lastReconciledTime >= reconciliationInterval
       )
-  if dirty or reconciliationDue or (watch.fallback and watch.elapsed >= 30):
+  if changes.rescan or reconciliationDue or (watch.fallback and watch.elapsed >= 30):
     watch.elapsed = 0
     if reconciliationDue:
       watch.reconciliationPending = true
-    # A .git file can appear or change targets after the project was opened.
-    watch.setRoots(watch.roots, watch.folders)
-    emit watch.workspaceWatchChanged()
+    watch.notifyChanged()
+  elif changes.paths.len > 0:
+    watch.elapsed = 0
+    watch.filtering = true
+    emit watch.filter.filterChanges(changes.paths, watch.roots, watch.metadata)
   emit watch.workspaceWatchPulse()
 
 proc metadataDirectories(root: string): seq[string] =
@@ -260,7 +309,7 @@ proc setRoots*(
   if watch.fallback:
     warn "Kosmo workspace watcher using periodic fallback", roots = watch.roots
   withLock inboxLock:
-    inbox[watch.token] = true
+    inbox[watch.token] = WorkspaceChanges(rescan: true)
 
 proc newWorkspaceWatch*(
     reconciliationInterval = DefaultWorkspaceReconciliationInterval
@@ -283,7 +332,13 @@ proc newWorkspaceWatch*(
     lastReconciledTime: getTime(),
   )
   withLock inboxLock:
-    inbox[result.token] = true
+    inbox[result.token] = WorkspaceChanges(rescan: true)
+  var filter = WorkspaceWatchFilter()
+  result.filter = filter.moveToThread(nimkitWorkerPool())
+  connectThreaded(result.filter, filterChanges, result.filter, filterChanges)
+  connectThreaded(
+    result.filter, changesFiltered, result, WorkspaceWatch.changesFiltered()
+  )
   let timerThread = nimkitTimerThread()
   var ticker = WorkspaceWatchTicker()
   result.ticker = ticker.moveToThread(timerThread)
@@ -315,5 +370,6 @@ proc close*(watch: WorkspaceWatch) =
     inbox.del(watch.token)
   watch.timer = nil
   watch.ticker = nil
+  watch.filter = nil
 
 var workspaceWatchWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime

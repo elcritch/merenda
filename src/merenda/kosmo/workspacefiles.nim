@@ -183,6 +183,13 @@ proc watchChanged(files: WorkspaceFiles) {.slot.} =
     files.refresh()
     emit files.workspaceRepositoryDidChange()
 
+proc ignoredContentsChanged(files: WorkspaceFiles) {.slot.} =
+  if not files.closed:
+    # Ignored folders may be expanded in the browser even though they do not
+    # belong to the indexed inventory or repository diff.
+    files.fallback.invalidate()
+    emit files.workspaceFilesDidChange()
+
 proc watchPulse(files: WorkspaceFiles) {.slot.} =
   if not files.closed:
     emit files.workspacePulse()
@@ -191,6 +198,7 @@ proc startMonitoring*(files: WorkspaceFiles) =
   if files.watch.isNil and not files.closed:
     files.watch = newWorkspaceWatch(files.reconciliationInterval)
     files.watch.connect(workspaceWatchChanged, files, watchChanged)
+    files.watch.connect(workspaceWatchIgnoredChange, files, ignoredContentsChanged)
     files.watch.connect(workspaceWatchPulse, files, watchPulse)
     files.watch.setRoots(files.roots & files.gitRoots, files.current.directories)
 

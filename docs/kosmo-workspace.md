@@ -19,8 +19,16 @@ repository directory. Open buffers outside the browser roots get watch coverage
 without adding their folders to the file inventory.
 
 A 100 ms timer delivers queued notifications on the GUI thread; it does not scan
-the filesystem itself. Notifications refresh the shared file inventory and Git
-decorations and invalidate Moe's event-driven Git cache. As protection against
+the filesystem itself. Native notifications retain both paths of a rename and
+are checked against Git's ignore rules on a background worker. Changes confined
+to ignored, untracked paths do not rescan the inventory or refresh the Git Diff
+panel; cached browser listings are invalidated so expanded ignored folders can
+still update.
+Tracked files, including tracked descendants of an ignored directory, Git metadata,
+and `.gitignore` changes still invalidate the workspace. Unknown paths, unavailable
+Git checks, and notification overflow conservatively request a refresh.
+Relevant notifications refresh the shared file inventory and Git decorations and
+invalidate Moe's event-driven Git cache. As protection against
 missed notifications, a quiet workspace requests the same full refresh two minutes
 after its last successfully accepted inventory snapshot. The deadline includes
 time spent asleep, so an overdue workspace refreshes promptly after waking. Idle
