@@ -877,7 +877,9 @@ Files start collapsed. Click a file heading to expand or collapse its cached dif
 or use Expand All and Collapse All. File sections share one scrolling surface;
 expanding a file schedules its text layout without repeating syntax highlighting.
 Refresh preserves existing expansion states and reloads the saved changes from
-Git; unsaved editor buffers are not included.
+Git; unsaved editor buffers are not included. Background checks keep the current
+summary visible and leave the view unchanged when the diff has not changed.
+Diff tabs include the repository name, or `stdin` for piped input.
 Holding Control while scrolling over an editor accelerates the wheel movement
 threefold.
 
