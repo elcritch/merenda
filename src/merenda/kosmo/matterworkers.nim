@@ -6,6 +6,7 @@
 
 import std/[atomics, isolation, os, strutils, tables, unicode]
 
+from matter/engine import hasActiveScope
 import sigils/[core, threadProxies, threads]
 import threading/smartptrs
 
@@ -17,7 +18,8 @@ import ../nimkit/foundation/backgroundworkers
 const KosmoMatterTimeLimitMs* {.intdefine.} = 100
   ## Soft per-line deadline used by the asynchronous adapter. A zero value
   ## disables the deadline for deterministic equivalence tests.
-const KosmoMatterMaximumLineBytes* {.intdefine.} = 256
+const KosmoMatterMaximumLineBytes* {.intdefine.} =
+  when compileOption("opt", "none"): 96 else: 256
   ## Maximum line size passed to Matter's recursive TextMate regex engine.
   ## Builds with smaller worker stacks can lower this value.
 
@@ -36,6 +38,7 @@ type
     contentVersion*: int
     workerThreadId*: int
     segments*: seq[moeHighlight.ColorSegment]
+    markdownCodeBlockStates*: seq[bool]
     errorMessage*: string
 
   MatterHighlightWorker = ref object of AgentActor
@@ -50,6 +53,8 @@ type
     completed: Table[int, uint64]
     nextRequestId: uint64
     closed: bool
+
+proc matterHighlightCompleted*(highlighting: MatterHighlighting) {.signal.}
 
 proc newMatterHighlightControl*(): SharedPtr[MatterHighlightControl] =
   result = newSharedPtr(MatterHighlightControl)
@@ -102,10 +107,93 @@ proc requestGrammar(
 proc scopeMatches(scope, prefix: string): bool {.inline.} =
   scope == prefix or scope.startsWith(prefix & ".")
 
+proc isYamlMappingKey(scopes: openArray[string]): bool {.inline.} =
+  for scope in scopes:
+    if scope.scopeMatches("entity.name.tag"):
+      return true
+
+proc isYamlSimpleMappingKey(line: string, firstByte, lastByte: int): bool {.inline.} =
+  ## The stock VS Code YAML grammar applies YAML 1.1 implicit scalar rules
+  ## before its mapping-key scope, so keys such as `on:` arrive as booleans.
+  ## A plain block key immediately followed by `:` is still a property in the
+  ## editor, regardless of the scalar spelling.
+  if firstByte < 0 or lastByte <= firstByte or lastByte >= line.len or
+      line[lastByte] != ':' or
+      (lastByte + 1 < line.len and not line[lastByte + 1].isSpaceAscii):
+    return
+  var keyStart: int
+  while keyStart < line.len and line[keyStart] in {' ', '\t'}:
+    inc keyStart
+  if keyStart < line.len and line[keyStart] == '-' and keyStart + 1 < line.len and
+      line[keyStart + 1].isSpaceAscii:
+    inc keyStart, 2
+    while keyStart < line.len and line[keyStart] in {' ', '\t'}:
+      inc keyStart
+  firstByte == keyStart
+
 proc isHeading(scopes: openArray[string]): bool =
   for scope in scopes:
     if scope.scopeMatches("entity.name.section") or scope.scopeMatches("markup.heading"):
       return true
+
+proc shouldRestartMarkdownListState(
+    language: moeHighlight.SourceLanguage,
+    line: string,
+    state: moeMatter.MatterLineState,
+): bool =
+  ## The VS Code Markdown grammar keeps list state only for blank or indented
+  ## continuation lines. Matter currently leaves that begin/while state active
+  ## when the first unindented block arrives, making the rest of the document
+  ## look like list text. Restart at the same boundary the grammar declares.
+  language == moeHighlight.SourceLanguage.langMarkdown and line.len > 0 and
+    not line[0].isSpaceAscii and not state.isMatterCodeBlock and
+    state.stack.hasActiveScope("markup.list")
+
+type MarkdownFence = object
+  marker: char
+  length: int
+
+proc markdownFence(line: string): MarkdownFence =
+  var first: int
+  while first < line.len and line[first] in {' ', '\t'}:
+    inc first
+  if first > 3 or first >= line.len or line[first] notin {'`', '~'}:
+    return
+  result.marker = line[first]
+  var last = first
+  while last < line.len and line[last] == result.marker:
+    inc last
+  if last - first < 3:
+    result = default(MarkdownFence)
+    return
+  result.length = last - first
+
+proc closes(fence: MarkdownFence, line: string): bool =
+  if fence.length < 3:
+    return
+  let candidate = line.markdownFence()
+  if candidate.marker != fence.marker or candidate.length < fence.length:
+    return
+  var last: int
+  while last < line.len and line[last] in {' ', '\t'}:
+    inc last
+  last += candidate.length
+  while last < line.len:
+    if line[last] notin {' ', '\t'}:
+      return
+    inc last
+  true
+
+proc continuingMatterState(
+    grammars: moeMatter.MatterGrammarSet, language: moeHighlight.SourceLanguage
+): moeMatter.MatterLineState =
+  ## A parsed blank line gives recovery a root state that cannot re-enable
+  ## document-start-only rules such as Markdown frontmatter in mid-document.
+  let initial = moeMatter.initialMatterState(grammars, language)
+
+  moeMatter.tokenizeMatterLine(
+    "", language, initial, timeLimitMs = 0, grammars = grammars
+  ).nextState
 
 proc matterColor(
     category: moeMatter.MatterColorCategory
@@ -165,6 +253,7 @@ proc addLineSegments(
     segments: var seq[moeHighlight.ColorSegment],
     row: int,
     line: string,
+    language: moeHighlight.SourceLanguage,
     spans: openArray[moeMatter.MatterSpan],
 ) =
   let columns = line.runeColumns()
@@ -192,7 +281,12 @@ proc addLineSegments(
       )
     if lastByte > firstByte:
       let color =
-        if span.category == moeMatter.mccDefault and span.scopes.isHeading:
+        if language == moeHighlight.SourceLanguage.langYaml and (
+          span.scopes.isYamlMappingKey or
+          line.isYamlSimpleMappingKey(firstByte, lastByte)
+        ):
+          moeHighlight.EditorColorPairIndex.property
+        elif span.category == moeMatter.mccDefault and span.scopes.isHeading:
           moeHighlight.EditorColorPairIndex.builtin
         else:
           span.category.matterColor
@@ -212,21 +306,68 @@ proc highlightMatter(
     language: moeHighlight.SourceLanguage,
     fileName: string,
     control: SharedPtr[MatterHighlightControl],
-): tuple[segments: seq[moeHighlight.ColorSegment], errorMessage: string] =
+): tuple[
+  segments: seq[moeHighlight.ColorSegment],
+  markdownCodeBlockStates: seq[bool],
+  errorMessage: string,
+] =
   let selected = worker.requestGrammar(language, fileName)
-  var state = moeMatter.initialMatterState(selected.grammars, selected.language)
   if not selected.grammars.matterSupports(selected.language):
-    return (segments: @[], errorMessage: "No Matter grammar for " & $selected.language)
+    return (
+      segments: @[],
+      markdownCodeBlockStates: @[],
+      errorMessage: "No Matter grammar for " & $selected.language,
+    )
+  let
+    initialState = moeMatter.initialMatterState(selected.grammars, selected.language)
+    continuingState = continuingMatterState(selected.grammars, selected.language)
+  var state = initialState
+  var fence: MarkdownFence
 
   let lines = source.split('\n')
   result.segments = newSeqOfCap[moeHighlight.ColorSegment](max(lines.len, 1))
+  if selected.language == moeHighlight.SourceLanguage.langMarkdown:
+    result.markdownCodeBlockStates = newSeqOfCap[bool](lines.len)
   for row, line in lines:
     if control.cancelled:
-      return (segments: @[], errorMessage: "")
+      return (segments: @[], markdownCodeBlockStates: @[], errorMessage: "")
     if line.len > KosmoMatterMaximumLineBytes:
-      result.segments.addLineSegments(row, line, [])
-      state = moeMatter.initialMatterState(selected.grammars, selected.language)
+      let
+        closesSkippedFence =
+          selected.language == moeHighlight.SourceLanguage.langMarkdown and
+          fence.closes(line)
+        skippedOpeningFence =
+          if selected.language == moeHighlight.SourceLanguage.langMarkdown and
+              fence.length < 3:
+            line.markdownFence()
+          else:
+            default(MarkdownFence)
+      result.segments.addLineSegments(row, line, selected.language, [])
+      if closesSkippedFence:
+        state = continuingState
+        fence = default(MarkdownFence)
+      elif fence.length >= 3:
+        # Keep the enclosing grammar state. Skipping one oversized embedded
+        # line must not turn all following code into Markdown prose.
+        discard
+      else:
+        state = continuingState
+        fence = skippedOpeningFence
+      if selected.language == moeHighlight.SourceLanguage.langMarkdown:
+        result.markdownCodeBlockStates.add fence.length >= 3
       continue
+    if shouldRestartMarkdownListState(selected.language, line, state):
+      state = continuingState
+    let
+      wasInMarkdownFence =
+        selected.language == moeHighlight.SourceLanguage.langMarkdown and
+        (fence.length >= 3 or state.stack.hasActiveScope("markup.fenced_code.block"))
+      openingFence =
+        if wasInMarkdownFence:
+          default(MarkdownFence)
+        else:
+          line.markdownFence()
+      closesMarkdownFence = wasInMarkdownFence and fence.closes(line)
     let parsed = moeMatter.tokenizeMatterLine(
       line,
       selected.language,
@@ -234,14 +375,28 @@ proc highlightMatter(
       timeLimitMs = KosmoMatterTimeLimitMs,
       grammars = selected.grammars,
     )
-    result.segments.addLineSegments(row, line, parsed.spans)
-    if parsed.nextState.failed:
+    result.segments.addLineSegments(row, line, selected.language, parsed.spans)
+    if closesMarkdownFence:
+      state = continuingState
+      fence = default(MarkdownFence)
+    elif parsed.nextState.failed:
       # A soft timeout must not poison every later line. The failed line is
-      # covered plainly above; restart from a fresh grammar state so headings
-      # and later independent constructs can recover on the next line.
-      state = moeMatter.initialMatterState(selected.grammars, selected.language)
+      # covered plainly above; restart from a continuation root so headings
+      # and later independent constructs can recover without re-enabling
+      # document-start-only rules.
+      state = continuingState
+      if not wasInMarkdownFence:
+        fence = default(MarkdownFence)
     else:
       state = parsed.nextState
+      if not wasInMarkdownFence and
+          state.stack.hasActiveScope("markup.fenced_code.block"):
+        fence = openingFence
+      elif fence.length < 3 and
+          not state.stack.hasActiveScope("markup.fenced_code.block"):
+        fence = default(MarkdownFence)
+    if selected.language == moeHighlight.SourceLanguage.langMarkdown:
+      result.markdownCodeBlockStates.add fence.length >= 3 or state.isMatterCodeBlock
 
 proc matterHighlightFinished*(
   worker: MatterHighlightWorker, highlighted: SharedPtr[MatterHighlightResult]
@@ -281,6 +436,7 @@ proc requestMatterHighlight(
     if control.cancelled:
       return
     highlightResult.segments = move parsed.segments
+    highlightResult.markdownCodeBlockStates = move parsed.markdownCodeBlockStates
     highlightResult.errorMessage = move parsed.errorMessage
   except CatchableError as error:
     if control.cancelled:
@@ -294,6 +450,7 @@ proc receiveMatterHighlight(
   if not highlighting.closed:
     highlighting.completed[result[].bufferId] = result[].requestId
     highlighting.pending.add move result[]
+    emit highlighting.matterHighlightCompleted()
 
 proc newMatterHighlighting*(
     sources: sink seq[moeMatter.MatterGrammarSource]

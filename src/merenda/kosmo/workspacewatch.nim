@@ -23,6 +23,7 @@ type
     ticker: AgentProxy[WorkspaceWatchTicker]
     active: bool
     fallback: bool
+    nativeReady: bool
     elapsed: int
     reconciliationInterval: Duration
     lastReconciledMonoTime: MonoTime
@@ -42,6 +43,50 @@ proc stopWatchBackend() {.noconv.} =
   if ownsDmon and dmonInst.initialized:
     deinitDmon()
     ownsDmon = false
+
+proc startWatchBackend() =
+  ## Start dmon without losing its one-shot readiness signal. The upstream
+  ## helper creates the thread before entering the condition wait, allowing a
+  ## fast monitor thread to signal before the caller is waiting and deadlock
+  ## application startup. Holding the mutex across thread creation makes the
+  ## wait-and-signal handoff deterministic.
+  withLock dmonInst.threadLock:
+    createThread(dmonInst.threadHandle, monitorThread)
+    wait(dmonInst.threadSem, dmonInst.threadLock)
+  for index in 0 ..< dmonInst.freeList.len:
+    dmonInst.freeList[index] = dmonInst.freeList.len - index - 1
+  dmonInst.initialized = true
+
+proc nativeWatchesReady(watch: WorkspaceWatch): bool =
+  ## macOS creates FSEvents streams synchronously but schedules and starts them
+  ## later on dmon's monitor thread. Other supported backends finish
+  ## registration before `watch` returns (or use our polling fallback).
+  if watch.nativeReady:
+    return true
+  when defined(macosx):
+    if not dmonInst.initialized:
+      return
+    # The backend holds this mutex while its CoreFoundation loop polls for up
+    # to half a second. Never make the GUI timer wait for it.
+    if not tryAcquire(dmonInst.threadLock):
+      return
+    defer:
+      release(dmonInst.threadLock)
+    var failed: bool
+    block:
+      for id in watch.watches:
+        let index = int(uint32(id)) - 1
+        if index < 0 or index >= dmonInst.watches.len or dmonInst.watches[index].isNil or
+            not dmonInst.watches[index].init:
+          return
+        if not dmonInst.watches[index].started:
+          failed = true
+    if failed:
+      watch.fallback = true
+      warn "Kosmo workspace watcher using periodic fallback after FSEvents startup failure",
+        roots = watch.roots
+  watch.nativeReady = true
+  result = true
 
 proc didChange(
     watchId: WatchId,
@@ -70,10 +115,16 @@ proc deliver(watch: WorkspaceWatch) {.slot.} =
   if not watch.active:
     return
   watch.elapsed = min(watch.elapsed + 1, 30)
+  let watchesReady = watch.nativeWatchesReady()
   var dirty: bool
   withLock inboxLock:
     dirty = inbox.getOrDefault(watch.token)
-    inbox[watch.token] = false
+    # Keep the setup notification armed until FSEvents is listening. A change
+    # made after setRoots but before stream startup is otherwise invisible
+    # until the two-minute reconciliation pass.
+    inbox[watch.token] = dirty and not watchesReady
+  if dirty and not watchesReady:
+    dirty = false
   # A timer drains notifications, not the filesystem. Fall back only when
   # native coverage cannot be established (including dmon's Linux recursion bug).
   let
@@ -183,6 +234,7 @@ proc setRoots*(
   watch.metadata = metadataPaths
   watch.directories = directories
   watch.fallback = false
+  watch.nativeReady = false
   when defined(linux):
     # dmon 0.5.0 concatenates absolute event paths when watching newly created
     # directories, asserting in its monitor thread. Do not crash the application.
@@ -216,7 +268,7 @@ proc newWorkspaceWatch*(
   ## Own a subscription; all lifecycle calls belong on the GUI thread.
   if watchUsers == 0 and not dmonInst.initialized:
     initDmon()
-    startDmonThread()
+    startWatchBackend()
     ownsDmon = true
     # Keep dmon's global backend at application lifetime, like the worker pool.
     # Windows only own watches, avoiding backend reinitialization on every close.

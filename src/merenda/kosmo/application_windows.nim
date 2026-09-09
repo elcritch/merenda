@@ -1203,6 +1203,7 @@ proc close*(frontend: KosmoApplication) =
     frontend.xSettingsWindow.window.close()
   if not frontend.dockController.isNil:
     for group in frontend.dockController.groups:
+      group.editorView.stopMatterHighlightRefresh()
       group.editorView.tabsDelegate.stopObservingWindow()
       group.pane.clearMarkdownPreviews()
       for document in group.documents:

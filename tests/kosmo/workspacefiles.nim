@@ -1,4 +1,4 @@
-import std/[importutils, monotimes, os, tables, tempfiles, times, unittest]
+import std/[importutils, locks, monotimes, os, tables, tempfiles, times, unittest]
 import dmon
 import sigils/[core, threads]
 import merenda/nimkit
@@ -389,19 +389,81 @@ suite "Kosmo shared workspace inventory":
       manager = newKosmoWindowManager(newApplication("Multiple watchers"))
       first = newKosmoApplication(manager, firstRoot, monitorsGitStatus = false)
       second = newKosmoApplication(manager, secondRoot, monitorsGitStatus = false)
+      secondFiles = second.fileTree.workspaceFiles
+      spy = InventorySpy()
     defer:
       first.close()
       second.close()
       removeDir(firstRoot)
       removeDir(secondRoot)
     first.fileTree.workspaceFiles.startMonitoring()
-    second.fileTree.workspaceFiles.startMonitoring()
+    secondFiles.connect(workspaceFilesDidChange, spy, changed)
+    secondFiles.startMonitoring()
     require first.fileTree.workspaceFiles.waitForFiles()
-    require second.fileTree.workspaceFiles.waitForFiles()
+    require secondFiles.waitForFiles()
+    require not secondFiles.watch.isNil
+    require secondRoot in secondFiles.watch.directories
+    let secondWatch = secondFiles.watch
     first.close()
+    check secondFiles.watch == secondWatch
+    check secondWatch.active
+    check secondRoot in secondWatch.directories
 
     writeFile(secondRoot / "survives.nim", "discard\n")
+    when defined(linux):
+      require secondWatch.fallback
+    else:
+      eventually(secondWatch.nativeReady)
+      require secondWatch.nativeReady
+      require not secondWatch.fallback
     eventually("survives.nim" in second.quickOpenPanel.projectFiles())
+    require "survives.nim" in second.quickOpenPanel.projectFiles()
+    require secondFiles.waitForFiles()
+
+    # The setup refresh above closes the registration gap. A second change now
+    # has to arrive through the surviving native watch (or Linux fallback), not
+    # through that deferred refresh or the two-minute reconciliation deadline.
+    let
+      nativePath = secondRoot / "after-ready.nim"
+      changesBeforeNativeEvent = spy.changes
+    writeFile(nativePath, "discard\n")
+    eventually(
+      "after-ready.nim" in second.quickOpenPanel.projectFiles() and
+        spy.changes > changesBeforeNativeEvent
+    )
+    require secondFiles.waitForFiles()
+    let changesBeforeDelete = spy.changes
+    removeFile(nativePath)
+    eventually(
+      "after-ready.nim" notin second.quickOpenPanel.projectFiles() and
+        spy.changes > changesBeforeDelete
+    )
+    when not defined(linux):
+      require not secondWatch.fallback
+
+  when defined(macosx):
+    test "failed FSEvents startup activates polling fallback":
+      let root = createTempDir("kosmo-failed-native-watch-", "")
+      defer:
+        removeDir(root)
+      let watch = newWorkspaceWatch()
+      defer:
+        watch.close()
+      watch.setRoots([root])
+      eventually(watch.nativeReady)
+      require watch.nativeReady
+      require watch.watches.len == 1
+
+      withLock dmonInst.threadLock:
+        let index = int(uint32(watch.watches[0])) - 1
+        require index >= 0
+        require index < dmonInst.watches.len
+        require not dmonInst.watches[index].isNil
+        dmonInst.watches[index].started = false
+      watch.nativeReady = false
+
+      eventually(watch.usesPollingFallback())
+      require watch.usesPollingFallback()
 
   when not defined(linux):
     test "idle monitoring does not repeatedly scan the workspace":

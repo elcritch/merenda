@@ -71,6 +71,8 @@ type
     viewStates: seq[KosmoEditorViewState]
     dockGroup: WeakRef[KosmoEditorGroup]
     pendingPanePrefix: bool
+    matterRefreshPending: bool
+    matterRefreshActive: bool
 
   KosmoEditorTabsHandler = ref object of nimkit.Responder
     editorView: WeakRef[KosmoEditorView]

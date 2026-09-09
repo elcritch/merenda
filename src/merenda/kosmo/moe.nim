@@ -60,6 +60,7 @@ type
     textMateGrammars: seq[KosmoTextMateGrammar]
     matterHighlighting: MatterHighlighting
     matterRequests: Table[BufferId, tuple[contentVersion: int, requestId: uint64]]
+    matterLineStateVersions: Table[BufferId, int]
 
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
@@ -518,6 +519,7 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
     editor: newEditor(config),
     textMateGrammars: builtInTextMateGrammars(),
     matterRequests: initTable[BufferId, tuple[contentVersion: int, requestId: uint64]](),
+    matterLineStateVersions: initTable[BufferId, int](),
   )
   result.workingDirectory = workingDirectory
   discard result.editor.addCommandAlias("x", claSaveAndQuit)
@@ -1178,7 +1180,7 @@ proc matterBufferCandidate(buffer: TextBuffer): bool =
 
 proc applyMatterHighlightResult(
     editor: KosmoEditor, completed: var MatterHighlightResult
-) =
+): bool =
   let buffer = editor.editor.bufferById(BufferId(completed.bufferId))
   if buffer.isNone:
     return
@@ -1196,31 +1198,64 @@ proc applyMatterHighlightResult(
   if current.highlight.isNil:
     current.highlight = moeHighlight.Highlight(colorSegments: @[])
   current.highlight.colorSegments = move completed.segments
-  # The built-in cache may still contain a partial frame from before the
-  # worker result arrived. Discard it so it cannot append or replace the
-  # worker-owned syntax on a later frame. Edits will create a fresh built-in
-  # cache while the next Matter request is in flight.
-  current.incrementalHighlight = nil
+  # Matter's worker also returns one plain code-block flag per Markdown line.
+  # Install those flags as a complete line-state cache so fenced backgrounds
+  # do not depend on Moe's progressive built-in tokenizer reaching EOF before
+  # the asynchronous result. Cached built-in segments remain available as the
+  # edit-time fallback; scheduleMatterHighlighting discards these synthetic
+  # states before that cache is used for a later version.
+  let canKeepLineStateCache =
+    current.incrementalHighlight != nil and
+    current.incrementalHighlight.pendingReparse == nil and
+    current.incrementalHighlight.lineStates.states.len >= current.len and
+    current.incrementalHighlight.parsedUpTo >= current.len - 1
+  if current.language == moeHighlight.SourceLanguage.langMarkdown and
+      completed.markdownCodeBlockStates.len >= current.len:
+    var
+      initialState = current.newBufferTokenizerState()
+      fallbackSegments: seq[moeHighlight.ColorSegment]
+    if current.incrementalHighlight != nil:
+      initialState = current.incrementalHighlight.initialState
+      fallbackSegments = move current.incrementalHighlight.segments
+    var lineStates = newSeq[moeHighlight.TokenizerState](current.len)
+    for row in 0 ..< current.len:
+      lineStates[row].backend = hbBuiltin
+      lineStates[row].lang.markdown.inCodeBlock = completed.markdownCodeBlockStates[row]
+    current.incrementalHighlight = moeHighlight.IncrementalHighlight(
+      backend: hbBuiltin,
+      initialState: initialState,
+      segments: move fallbackSegments,
+      lineStates: moeHighlight.LineStateCache(states: move lineStates),
+      parsedUpTo: current.len - 1,
+    )
+    editor.matterLineStateVersions[current.id] = current.contentVersion
+  elif canKeepLineStateCache:
+    current.incrementalHighlight.parsedUpTo = current.len - 1
+  else:
+    current.incrementalHighlight = nil
+    editor.matterLineStateVersions.del(current.id)
   current.highlightNeedsUpdate = false
   current.uriScanParsedUpTo = -1
   if current.allowsTextTransforms and current.len > 0:
     discard current.scanAndApplyUriUnderlines(0, current.len - 1)
     current.uriScanParsedUpTo = current.len - 1
+  true
 
-proc pollMatterHighlighting(editor: KosmoEditor) =
+proc pollMatterHighlighting(editor: KosmoEditor): bool =
   if editor.isNil or editor.editor.isNil or editor.matterHighlighting.isNil:
     return
   discard getCurrentSigilThread().pollAll(NonBlocking)
   var completed = editor.matterHighlighting.takeMatterHighlightResults()
   for index in 0 ..< completed.len:
-    editor.applyMatterHighlightResult(completed[index])
+    if editor.applyMatterHighlightResult(completed[index]):
+      result = true
 
 proc matterHighlightingReady*(editor: KosmoEditor): bool =
   ## Return whether every open buffer eligible for asynchronous Matter
   ## highlighting has received its current snapshot result.
   if editor.isNil or editor.editor.isNil:
     return true
-  editor.pollMatterHighlighting()
+  discard editor.pollMatterHighlighting()
   for buffer in editor.editor.buffers:
     if not buffer.matterBufferCandidate:
       continue
@@ -1229,24 +1264,40 @@ proc matterHighlightingReady*(editor: KosmoEditor): bool =
     if not editor.matterRequests.hasKey(buffer.id):
       return false
     let request = editor.matterRequests[buffer.id]
+    if request.contentVersion != buffer.contentVersion:
+      return false
     if not editor.matterHighlighting.matterHighlightingReady(
       int(buffer.id), request.requestId
     ):
       return false
   true
 
+proc matterHighlightingController*(editor: KosmoEditor): MatterHighlighting =
+  ## Return the shared asynchronous highlighter, creating it before a frontend
+  ## subscribes so completion can invalidate the retained cell grid.
+  if not editor.isNil and not editor.editor.isNil and editor.matterHighlighting.isNil:
+    editor.matterHighlighting = newMatterHighlighting(newKosmoMatterGrammarSources())
+  if not editor.isNil and not editor.editor.isNil:
+    result = editor.matterHighlighting
+
 proc scheduleMatterHighlighting(editor: KosmoEditor) =
   if editor.isNil or editor.editor.isNil:
     return
   for buffer in editor.editor.buffers:
+    if editor.matterLineStateVersions.hasKey(buffer.id) and (
+      editor.matterLineStateVersions[buffer.id] != buffer.contentVersion or
+      buffer.highlightNeedsUpdate
+    ):
+      buffer.incrementalHighlight = nil
+      editor.matterLineStateVersions.del(buffer.id)
     if not buffer.matterBufferCandidate:
       continue
-    if editor.matterHighlighting.isNil:
-      editor.matterHighlighting = newMatterHighlighting(newKosmoMatterGrammarSources())
+    discard editor.matterHighlightingController()
     if buffer.highlightBackend != hbBuiltin:
       buffer.setHighlightBackend(hbBuiltin)
     if editor.matterRequests.hasKey(buffer.id) and
-        editor.matterRequests[buffer.id].contentVersion == buffer.contentVersion:
+        editor.matterRequests[buffer.id].contentVersion == buffer.contentVersion and
+        not buffer.highlightNeedsUpdate:
       continue
     let requestId = editor.matterHighlighting.requestMatterHighlight(
       int(buffer.id),
@@ -1262,12 +1313,14 @@ proc render*(editor: KosmoEditor, buffer: var RenderBuffer) =
   ## Advance Moe and draw the editor into `buffer`.
   if editor.isNil or editor.editor.isNil:
     return
-  editor.pollMatterHighlighting()
+  discard editor.pollMatterHighlighting()
   editor.scheduleMatterHighlighting()
   editor.editor.render(buffer.buffer)
   # A worker can finish while Moe is rendering the frame. Delivering here
-  # makes the result visible on the next frame without blocking this one.
-  editor.pollMatterHighlighting()
+  # and repainting once makes the result visible without waiting for a separate
+  # frontend invalidation (for example, the refresh caused by Save).
+  if editor.pollMatterHighlighting():
+    editor.editor.render(buffer.buffer)
 
 proc render*(
     editor: KosmoEditor, buffer: var RenderBuffer, state: KosmoEditorViewState
@@ -1283,10 +1336,11 @@ proc render*(
   if wasResized:
     editor.editor.advanceLayoutForFrame(buffer.buffer, true)
     editor.applyViewState(state)
-  editor.pollMatterHighlighting()
+  discard editor.pollMatterHighlighting()
   editor.scheduleMatterHighlighting()
   editor.editor.render(buffer.buffer)
-  editor.pollMatterHighlighting()
+  if editor.pollMatterHighlighting():
+    editor.editor.render(buffer.buffer)
 
 func toMoeModifiers(modifiers: set[KeyModifier]): set[frontend_input.KeyModifier] =
   if kmControl in modifiers:
