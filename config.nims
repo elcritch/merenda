@@ -13,7 +13,7 @@
 --debugger:
   native
 --exceptions:
-  setjmp
+  goto
 --stacktrace:
   off
 --define:

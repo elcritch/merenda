@@ -270,6 +270,7 @@ proc addBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
 proc removeGroup(controller: KosmoDockController, group: KosmoEditorGroup) =
   if group.isNil:
     return
+  group.editorView.stopMatterHighlightRefresh()
   group.editorView.tabsDelegate.stopObservingWindow()
   group.editorView.tabsDelegate.dockController = default(WeakRef[KosmoDockController])
   group.editorView.dockGroup = default(WeakRef[KosmoEditorGroup])

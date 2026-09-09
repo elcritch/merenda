@@ -13,13 +13,15 @@ Kosmo requires the "kosmo" feature. Enable it with Atlas:
 import std/[math, options, os, strutils, unicode]
 
 import ../nimkit as nimkit
+from ../nimkit/foundation/mainthreadwork import scheduleMainThreadWork
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
 import
   ./[
     applicationassets, cliopen, config, contextpanel, filesearchpanel, filetree,
-    gitdiff, inputtranslation, moe, moehighlighting, panedocuments, quickopen,
-    searchbar, settings, shortcutpresentation, shortcuts, terminalsearch, workspacefiles,
+    gitdiff, inputtranslation, matterworkers, moe, moehighlighting, panedocuments,
+    quickopen, searchbar, settings, shortcutpresentation, shortcuts, terminalsearch,
+    workspacefiles,
   ]
 
 export

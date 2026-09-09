@@ -1,12 +1,17 @@
-import std/[importutils, monotimes, os, tables, tempfiles, times, unittest]
+import
+  std/[
+    importutils, locks, monotimes, os, sequtils, strutils, tables, tempfiles, times,
+    unittest,
+  ]
 import dmon
 import sigils/[core, threads]
 import merenda/nimkit
 import merenda/nimkit/foundation/gitprocesses
-import merenda/kosmo/[kosmo, workspacefiles, workspacewatch]
+import merenda/kosmo/[kosmo, workspacefiles, workspacewatch, workspacechanges]
 
 privateAccess(WorkspaceFiles)
 privateAccess(WorkspaceWatch)
+privateAccess(KosmoGitDiffPanel)
 
 type InventorySpy = ref object of Agent
   changes: int
@@ -29,6 +34,49 @@ proc pumpFor(milliseconds: int) =
     sleep(10)
 
 suite "Kosmo shared workspace inventory":
+  test "repository notifications respect ignore rules and tracked descendants":
+    let root = createTempDir("kosmo-ignore-notifications-", "")
+    defer:
+      removeDir(root)
+    require runGitCommand(root, ["init", "-q"]).exitCode == 0
+    writeFile(root / ".gitignore", "build/\n*.log\n!keep.log\n")
+    createDir(root / "build")
+    let ignored = root / "build" / "output.txt"
+    writeFile(ignored, "output")
+    check not hasRelevantRepositoryChanges([ignored], [root], [])
+    check not hasRelevantRepositoryChanges([expandFilename(ignored)], [root], [])
+    check not hasRelevantRepositoryChanges([root / "build"], [root], [])
+    check hasRelevantRepositoryChanges([root / "build" / ".gitignore"], [root], [])
+    check not hasRelevantRepositoryChanges([root / "odd\nname.log"], [root], [])
+    check hasRelevantRepositoryChanges([ignored, root / "keep.log"], [root], [])
+    check hasRelevantRepositoryChanges([root / "deleted.txt"], [root], [])
+    check hasRelevantRepositoryChanges([root / ".gitignore"], [root], [])
+    # Both sides of a move must be checked: visible -> ignored and vice versa.
+    check hasRelevantRepositoryChanges([root / "source.txt", ignored], [root], [])
+    check hasRelevantRepositoryChanges([ignored, root / "source.txt"], [root], [])
+
+    require runGitCommand(root, ["add", "-f", "build/output.txt"]).exitCode == 0
+    check hasRelevantRepositoryChanges([ignored], [root], [])
+    check hasRelevantRepositoryChanges([root / "build"], [root], [])
+    removeFile(ignored)
+    check hasRelevantRepositoryChanges([ignored], [root], [])
+    check hasRelevantRepositoryChanges([root / "build"], [root], [])
+
+    createDir(root / "nested")
+    writeFile(root / "nested" / ".gitignore", "*.tmp\n!keep.tmp\n")
+    check not hasRelevantRepositoryChanges([root / "nested" / "out.tmp"], [root], [])
+    check hasRelevantRepositoryChanges([root / "nested" / "keep.tmp"], [root], [])
+    let metadata = root / "build" / "git-dir"
+    check hasRelevantRepositoryChanges([metadata / "HEAD"], [root], [metadata])
+    check hasRelevantRepositoryChanges([root.parentDir / "external"], [root], [])
+
+  test "non-Git notification filtering retains ordinary changes":
+    let root = createTempDir("kosmo-nongit-notifications-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / ".gitignore", "build/\n")
+    check hasRelevantRepositoryChanges([root / "build" / "out.txt"], [root], [])
+
   test "non-Git discovery limits depth and entries while browsing stays lazy":
     let root = createTempDir("kosmo-bounded-inventory-", "")
     defer:
@@ -389,21 +437,167 @@ suite "Kosmo shared workspace inventory":
       manager = newKosmoWindowManager(newApplication("Multiple watchers"))
       first = newKosmoApplication(manager, firstRoot, monitorsGitStatus = false)
       second = newKosmoApplication(manager, secondRoot, monitorsGitStatus = false)
+      secondFiles = second.fileTree.workspaceFiles
+      spy = InventorySpy()
     defer:
       first.close()
       second.close()
       removeDir(firstRoot)
       removeDir(secondRoot)
     first.fileTree.workspaceFiles.startMonitoring()
-    second.fileTree.workspaceFiles.startMonitoring()
+    secondFiles.connect(workspaceFilesDidChange, spy, changed)
+    secondFiles.startMonitoring()
     require first.fileTree.workspaceFiles.waitForFiles()
-    require second.fileTree.workspaceFiles.waitForFiles()
+    require secondFiles.waitForFiles()
+    require not secondFiles.watch.isNil
+    require secondRoot in secondFiles.watch.directories
+    let secondWatch = secondFiles.watch
     first.close()
+    check secondFiles.watch == secondWatch
+    check secondWatch.active
+    check secondRoot in secondWatch.directories
 
     writeFile(secondRoot / "survives.nim", "discard\n")
+    when defined(linux):
+      require secondWatch.fallback
+    else:
+      eventually(secondWatch.nativeReady)
+      require secondWatch.nativeReady
+      require not secondWatch.fallback
     eventually("survives.nim" in second.quickOpenPanel.projectFiles())
+    require "survives.nim" in second.quickOpenPanel.projectFiles()
+    require secondFiles.waitForFiles()
+
+    # The setup refresh above closes the registration gap. A second change now
+    # has to arrive through the surviving native watch (or Linux fallback), not
+    # through that deferred refresh or the two-minute reconciliation deadline.
+    let
+      nativePath = secondRoot / "after-ready.nim"
+      changesBeforeNativeEvent = spy.changes
+    writeFile(nativePath, "discard\n")
+    eventually(
+      "after-ready.nim" in second.quickOpenPanel.projectFiles() and
+        spy.changes > changesBeforeNativeEvent
+    )
+    require secondFiles.waitForFiles()
+    let changesBeforeDelete = spy.changes
+    removeFile(nativePath)
+    eventually(
+      "after-ready.nim" notin second.quickOpenPanel.projectFiles() and
+        spy.changes > changesBeforeDelete
+    )
+    when not defined(linux):
+      require not secondWatch.fallback
+
+  when defined(macosx):
+    test "failed FSEvents startup activates polling fallback":
+      let root = createTempDir("kosmo-failed-native-watch-", "")
+      defer:
+        removeDir(root)
+      let watch = newWorkspaceWatch()
+      defer:
+        watch.close()
+      watch.setRoots([root])
+      eventually(watch.nativeReady)
+      require watch.nativeReady
+      require watch.watches.len == 1
+
+      withLock dmonInst.threadLock:
+        let index = int(uint32(watch.watches[0])) - 1
+        require index >= 0
+        require index < dmonInst.watches.len
+        require not dmonInst.watches[index].isNil
+        dmonInst.watches[index].started = false
+      watch.nativeReady = false
+
+      eventually(watch.usesPollingFallback())
+      require watch.usesPollingFallback()
 
   when not defined(linux):
+    test "file reads and ignored writes do not refresh Git diff":
+      let root = createTempDir("kosmo-diff-read-watch-", "")
+      defer:
+        removeDir(root)
+      require runGitCommand(root, ["init", "-q"]).exitCode == 0
+      let path = root / "source.txt"
+      writeFile(path, "startup text\n")
+      writeFile(root / ".gitignore", "build/\n")
+      createDir(root / "build")
+      let ignored = root / "build" / "output.txt"
+      writeFile(ignored, "initial\n")
+      let frontend = newKosmoApplication(newApplication("Diff read watch"), root)
+      defer:
+        frontend.close()
+      let files = frontend.fileTree.workspaceFiles
+      require files.waitForFiles()
+      require not files.watch.isNil
+      eventually(files.watch.nativeReady)
+      require files.watch.nativeReady
+      require not files.watch.usesPollingFallback()
+      # This test measures native notifications, not periodic reconciliation.
+      files.watch.reconciliationInterval = initDuration(seconds = 0)
+      require frontend.showGitDiff()
+      let panel = frontend.gitDiffPanel
+      require panel.waitForDiff(timeoutMilliseconds = 60_000)
+      # Prove the complete native notification -> worker -> panel path is ready
+      # before asserting that reads and ignored writes leave it quiet.
+      writeFile(path, "original text\n")
+      eventually(
+        panel.snapshot.files.anyIt(
+          it.path == "source.txt" and "+original text" in it.patch
+        )
+      )
+      require panel.snapshot.files.anyIt(
+        it.path == "source.txt" and "+original text" in it.patch
+      )
+
+      var
+        observedReads = panel.repositoryReadCount()
+        quietDeadline = getMonoTime() + initDuration(milliseconds = 1000)
+      let settleDeadline = getMonoTime() + initDuration(seconds = 60)
+      while getMonoTime() < quietDeadline and getMonoTime() < settleDeadline:
+        discard getCurrentSigilThread().pollAll(NonBlocking)
+        if files.isLoading() or panel.loading or panel.refreshPending or
+            files.watch.filtering or panel.repositoryReadCount() != observedReads:
+          observedReads = panel.repositoryReadCount()
+          quietDeadline = getMonoTime() + initDuration(milliseconds = 1000)
+        sleep(10)
+      require getMonoTime() >= quietDeadline
+      let baseline = panel.repositoryReadCount()
+      let readDeadline = getMonoTime() + initDuration(milliseconds = 3500)
+      while getMonoTime() < readDeadline:
+        check readFile(path) == "original text\n"
+        discard getFileInfo(path)
+        discard getCurrentSigilThread().pollAll(NonBlocking)
+        sleep(10)
+      check panel.repositoryReadCount() == baseline
+
+      let ignoredSpy = InventorySpy()
+      files.watch.connect(workspaceWatchIgnoredChange, ignoredSpy, changed)
+      require files.entries(root / "build").len == 1
+      writeFile(ignored, "rebuilt\n")
+      writeFile(root / "build" / "new.txt", "new output\n")
+      eventually(ignoredSpy.changes > 0)
+      require ignoredSpy.changes > 0
+      eventually(files.entries(root / "build").len == 2)
+      # Let the owning loop process several native event/debounce periods.
+      # A quiet observation window is intentional: any refresh is a failure.
+      let ignoredDeadline = getMonoTime() + initDuration(milliseconds = 3500)
+      while getMonoTime() < ignoredDeadline:
+        discard getCurrentSigilThread().pollAll(NonBlocking)
+        sleep(10)
+      check panel.repositoryReadCount() == baseline
+
+      let writeBaseline = panel.repositoryReadCount()
+      writeFile(path, "changed text\n")
+      eventually(
+        panel.snapshot.files.anyIt(
+          it.path == "source.txt" and "+changed text" in it.patch
+        )
+      )
+      check panel.repositoryReadCount() > writeBaseline
+      check not panel.snapshot.files.anyIt(it.path.startsWith("build/"))
+
     test "idle monitoring does not repeatedly scan the workspace":
       let root = createTempDir("kosmo-idle-inventory-", "")
       defer:
@@ -411,14 +605,29 @@ suite "Kosmo shared workspace inventory":
       let frontend = newKosmoApplication(newApplication("Idle inventory"), root)
       defer:
         frontend.close()
-      let spy = InventorySpy()
-      frontend.fileTree.workspaceFiles.connect(workspaceFilesDidChange, spy, changed)
-      require frontend.fileTree.workspaceFiles.waitForFiles()
-      # Drain the initial dmon notification and then observe a full old poll period.
-      let settle = getMonoTime() + initDuration(seconds = 1)
-      while getMonoTime() < settle:
+      let
+        spy = InventorySpy()
+        files = frontend.fileTree.workspaceFiles
+      files.connect(workspaceFilesDidChange, spy, changed)
+      require files.waitForFiles()
+      require not files.watch.isNil
+      eventually(files.watch.nativeReady)
+      require files.watch.nativeReady
+
+      # Wait for the startup notification and its scan to become observably
+      # quiet before measuring a full old polling period.
+      var
+        observedChanges = spy.changes
+        quietDeadline = getMonoTime() + initDuration(milliseconds = 500)
+      let settleDeadline = getMonoTime() + initDuration(seconds = 10)
+      while getMonoTime() < quietDeadline and getMonoTime() < settleDeadline:
         discard getCurrentSigilThread().pollAll(NonBlocking)
+        if files.isLoading() or spy.changes != observedChanges:
+          observedChanges = spy.changes
+          quietDeadline = getMonoTime() + initDuration(milliseconds = 500)
         sleep(10)
+      require not files.isLoading()
+      require getMonoTime() >= quietDeadline
       let baseline = spy.changes
       let deadline = getMonoTime() + initDuration(milliseconds = 3500)
       while getMonoTime() < deadline:

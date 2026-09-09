@@ -588,6 +588,27 @@ proc installKosmoMarkdownControlsStyle(appearance: var nimkit.Appearance) =
 
 proc refresh*(view: KosmoEditorView)
 
+proc stopMatterHighlightRefresh(view: KosmoEditorView) =
+  if not view.isNil:
+    view.matterRefreshActive = false
+    view.matterRefreshPending = false
+
+proc refreshMatterHighlighting(view: KosmoEditorView) {.slot.} =
+  ## Completion can arrive after the last input/layout refresh. Coalesce a
+  ## retained-grid update onto the next application frame without re-entering
+  ## rendering from inside Sigils result delivery.
+  if not view.matterRefreshActive or view.matterRefreshPending:
+    return
+  view.matterRefreshPending = true
+  # The main-thread queue owns this reference until the callback runs. Sigils'
+  # WeakRef is intentionally non-retaining but also non-invalidating, so it is
+  # not safe for work that can outlive a detached pane.
+  let owner = view
+  scheduleMainThreadWork do() -> bool:
+    owner.matterRefreshPending = false
+    if owner.matterRefreshActive:
+      owner.refresh()
+
 proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   var appearance = base
   let
@@ -1493,6 +1514,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
     editor: editor,
     documentTabs: nimkit.newDocumentTabs(),
     renderBuffer: newRenderBuffer(80, 24),
+    matterRefreshActive: true,
   )
   result.initMonoTextViewFields(editable = true)
   result.clipsToBounds = true
@@ -1521,6 +1543,12 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result.tabsDelegate = KosmoEditorTabsHandler(editorView: result.unsafeWeakRef())
   discard result.tabsDelegate.withProtocol(KosmoEditorTabsDelegate)
   result.documentTabs.delegate = result.tabsDelegate
+  connect(
+    result.editor.matterHighlightingController(),
+    matterHighlightCompleted,
+    result,
+    KosmoEditorView.refreshMatterHighlighting(),
+  )
   let
     searchOwner = result.unsafeWeakRef()
     onQueryChanged: KosmoSearchQueryAction = proc(query: string) =
