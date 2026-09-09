@@ -391,3 +391,20 @@ suite "nimkit image resources":
       check retainedImage.imageId().Hash in recovery.context.entries
       check unrelatedImage.imageId().Hash notin recovery.context.entries
       check manager.metrics.generationRecoveryCount >= 1
+
+    test "live manifests retain renderer-generated atlas entries":
+      let
+        manager = newRenderResourceManager()
+        recovery = newRecoveryRenderer()
+        generatedKey = hash("figdraw-generated-rectangle")
+      recovery.context.resetOnSecondUpload = false
+      recovery.context.packedArea = 1
+      recovery.context.entries[generatedKey] = figdraw.rect(0, 0, 0.25, 0.25)
+      recovery.context.entryMetadata[generatedKey] = AtlasEntryMeta(kind: aekGenerated)
+
+      let liveManifest = initRenderResourceManifest()
+      manager.prepare(recovery.renderer, liveManifest)
+      manager.prepare(recovery.renderer, liveManifest.snapshot())
+
+      check generatedKey in recovery.context.entries
+      check recovery.context.entryMetadata[generatedKey].kind == aekGenerated
