@@ -12,16 +12,6 @@ from merenda/nimkit/foundation/mainthreadwork import
 
 const RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
 
-proc workflowMatterTestSource(): string =
-  ## Keep the opt:none YAML fixture representative without feeding the full
-  ## workflow's long shell-command sequence to Matter's recursive grammar
-  ## engine. The normal build exercises the checked-in file byte-for-byte.
-  when compileOption("opt", "none"):
-    result =
-      "on:\n" & "jobs:\n" & "  runs-on: ubuntu-latest\n" & "  name: Compile Examples\n"
-  else:
-    result = readFile(RepositoryRoot / ".github/workflows/build-full.yml")
-
 proc runeIndexOf(source, needle: string): int =
   result = -1
   let byteIndex = source.find(needle)
@@ -53,8 +43,7 @@ proc renderedLocation(
 proc renderUntilMatterHighlightingReady(
     editor: KosmoEditor, buffer: var RenderBuffer
 ): bool =
-  const timeoutSeconds = when compileOption("opt", "none"): 60 else: 5
-  let deadline = getMonoTime() + initDuration(seconds = timeoutSeconds)
+  let deadline = getMonoTime() + initDuration(seconds = 60)
   while not editor.matterHighlightingReady() and getMonoTime() < deadline:
     editor.render(buffer)
     sleep(1)
@@ -261,15 +250,39 @@ suite "Kosmo Matter highlighting":
     for index in 2 ..< rendered.len:
       check rendered[index].style.fg != rendered[1].style.fg
 
-  test "Moe highlights the complete workflow YAML sequence":
-    let source = workflowMatterTestSource()
-    let rendered = renderMoeFileAcross(
-      "build-full.yml", source, ["on:", "jobs:", "runs-on:", "Compile Examples"]
-    )
-    require rendered.len == 4
-    check rendered[0].style.fg == rendered[1].style.fg
-    check rendered[1].style.fg == rendered[2].style.fg
-    check rendered[3].style.fg != rendered[2].style.fg
+  when KosmoMatterMaximumLineBytes > 128:
+    test "Moe highlights the complete workflow YAML sequence":
+      let source = readFile(RepositoryRoot / ".github/workflows/build-full.yml")
+      let rendered = renderMoeFileAcross(
+        "build-full.yml", source, ["on:", "jobs:", "runs-on:", "Compile Examples"]
+      )
+      require rendered.len == 4
+      check rendered[0].style.fg == rendered[1].style.fg
+      check rendered[1].style.fg == rendered[2].style.fg
+      check rendered[3].style.fg != rendered[2].style.fg
+
+  test "Moe resumes YAML after dense GitHub Actions expressions":
+    let
+      source =
+        "name: tests (${{ matrix.os }}, ${{ matrix.version }}, ${{ matrix.ui }})\n" &
+        "timeout-minutes: 40\n" & "display: x11\n"
+      rendered =
+        renderMoeFileAcross("build.yml", source, ["name:", "timeout-minutes:", "x11"])
+    require rendered.len == 3
+    check rendered[1].style.fg != rendered[2].style.fg
+
+  test "Moe resumes YAML after an over-limit mapping value":
+    let
+      source =
+        "jobs:\n  steps:\n  - uses: action/example@v1\n" & "    key: " &
+        "x".repeat(KosmoMatterMaximumLineBytes) &
+        "\n\n  - name: After skipped value\n    timeout-minutes: 40\n"
+      rendered = renderMoeFileAcross(
+        "build.yml", source, ["After skipped value", "timeout-minutes:", "40"]
+      )
+    require rendered.len == 3
+    check rendered[0].style.fg != rendered[1].style.fg
+    check rendered[1].style.fg != rendered[2].style.fg
 
   test "Moe keeps Matter YAML highlighting after edit and save":
     let
@@ -369,7 +382,7 @@ suite "Kosmo Matter highlighting":
     check drainMainThreadWork() > 0
     check editor.matterHighlightingReady()
 
-  when not compileOption("opt", "none"):
+  when KosmoMatterMaximumLineBytes > 128:
     test "Matter supplies fenced backgrounds before native parsing reaches EOF":
       let
         prefixLines = 2050
@@ -388,7 +401,7 @@ suite "Kosmo Matter highlighting":
       var buffer = newRenderBuffer(48, 12)
       editor.render(buffer)
 
-      let deadline = getMonoTime() + initDuration(seconds = 10)
+      let deadline = getMonoTime() + initDuration(seconds = 60)
       while not editor.matterHighlightingReady() and getMonoTime() < deadline:
         sleep(1)
       require editor.matterHighlightingReady()

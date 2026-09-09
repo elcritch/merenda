@@ -12,8 +12,7 @@ import ./mattergrammarassets
 import ./syntaxhighlighting
 import ./texttypes
 
-const NimkitMatterMaximumLineBytes* {.intdefine.} =
-  when compileOption("opt", "none"): 96 else: 256
+const NimkitMatterMaximumLineBytes* {.intdefine.} = 256
   ## Maximum line size passed to Matter's recursive TextMate regex engine.
   ## Builds with smaller worker stacks can lower this value.
 

@@ -236,13 +236,14 @@ default for NimKit Markdown and Kosmo's Moe editor. Moe falls back to its
 built-in tokenizer when a mode has no bundled grammar; a nil Markdown
 highlighter or unknown fenced language retains the ordinary monospace
 `codeColor`.
-The Matter adapters leave lines above a configurable UTF-8 byte limit uncolored
-and restart grammar state on the next line. The limit defaults to 256 bytes in
-optimized builds and 96 bytes with `--opt:none`; it can also be set explicitly
-with `KosmoMatterMaximumLineBytes` and `NimkitMatterMaximumLineBytes` for builds
-with smaller worker stacks. This can interrupt highlighting inside multiline
-constructs. Linux CI passes 96 explicitly because unoptimized recursive-regex
-frames can exhaust the standard worker stack on a known 125-byte input.
+The Matter adapters leave lines above a configurable UTF-8 byte limit uncolored.
+The limit defaults to 256 bytes and can be set explicitly with
+`KosmoMatterMaximumLineBytes` and `NimkitMatterMaximumLineBytes` for builds with
+smaller worker stacks. Kosmo preserves the surrounding parser state when it
+skips an ordinary line and separately tracks Markdown fences so later lines can
+resume highlighting. Linux CI passes 96 explicitly because unoptimized
+recursive-regex frames can exhaust the standard worker stack on a known
+125-byte input.
 
 ## Cached URL Assets
 

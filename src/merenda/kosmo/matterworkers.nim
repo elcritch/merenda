@@ -18,8 +18,7 @@ import ../nimkit/foundation/backgroundworkers
 const KosmoMatterTimeLimitMs* {.intdefine.} = 100
   ## Soft per-line deadline used by the asynchronous adapter. A zero value
   ## disables the deadline for deterministic equivalence tests.
-const KosmoMatterMaximumLineBytes* {.intdefine.} =
-  when compileOption("opt", "none"): 96 else: 256
+const KosmoMatterMaximumLineBytes* {.intdefine.} = 256
   ## Maximum line size passed to Matter's recursive TextMate regex engine.
   ## Builds with smaller worker stacks can lower this value.
 
@@ -148,6 +147,9 @@ proc shouldRestartMarkdownListState(
   language == moeHighlight.SourceLanguage.langMarkdown and line.len > 0 and
     not line[0].isSpaceAscii and not state.isMatterCodeBlock and
     state.stack.hasActiveScope("markup.list")
+
+proc exceedsMatterParsingBudget(line: string): bool =
+  line.len > KosmoMatterMaximumLineBytes
 
 type MarkdownFence = object
   marker: char
@@ -321,6 +323,11 @@ proc highlightMatter(
   let
     initialState = moeMatter.initialMatterState(selected.grammars, selected.language)
     continuingState = continuingMatterState(selected.grammars, selected.language)
+    recoveryState =
+      if selected.language == moeHighlight.SourceLanguage.langMarkdown:
+        continuingState
+      else:
+        initialState
   var state = initialState
   var fence: MarkdownFence
 
@@ -331,7 +338,7 @@ proc highlightMatter(
   for row, line in lines:
     if control.cancelled:
       return (segments: @[], markdownCodeBlockStates: @[], errorMessage: "")
-    if line.len > KosmoMatterMaximumLineBytes:
+    if line.exceedsMatterParsingBudget():
       let
         closesSkippedFence =
           selected.language == moeHighlight.SourceLanguage.langMarkdown and
@@ -343,15 +350,20 @@ proc highlightMatter(
           else:
             default(MarkdownFence)
       result.segments.addLineSegments(row, line, selected.language, [])
-      if closesSkippedFence:
-        state = continuingState
+      if selected.language != moeHighlight.SourceLanguage.langMarkdown:
+        # A skipped YAML scalar does not change the surrounding indentation or
+        # block structure. Retaining the prior stack lets the next line unwind
+        # naturally instead of injecting a synthetic document root mid-file.
+        discard
+      elif closesSkippedFence:
+        state = recoveryState
         fence = default(MarkdownFence)
       elif fence.length >= 3:
         # Keep the enclosing grammar state. Skipping one oversized embedded
         # line must not turn all following code into Markdown prose.
         discard
       else:
-        state = continuingState
+        state = recoveryState
         fence = skippedOpeningFence
       if selected.language == moeHighlight.SourceLanguage.langMarkdown:
         result.markdownCodeBlockStates.add fence.length >= 3
@@ -377,14 +389,14 @@ proc highlightMatter(
     )
     result.segments.addLineSegments(row, line, selected.language, parsed.spans)
     if closesMarkdownFence:
-      state = continuingState
+      state = recoveryState
       fence = default(MarkdownFence)
     elif parsed.nextState.failed:
       # A soft timeout must not poison every later line. The failed line is
       # covered plainly above; restart from a continuation root so headings
       # and later independent constructs can recover without re-enabling
       # document-start-only rules.
-      state = continuingState
+      state = recoveryState
       if not wasInMarkdownFence:
         fence = default(MarkdownFence)
     else:
