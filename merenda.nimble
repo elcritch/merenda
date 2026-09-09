@@ -22,7 +22,7 @@ requires "gh:elcritch/terminex >= 0.3.1"
 requires "gh:Araq/iconbundler"
 requires "libbacktrace"
 requires "zippy >= 0.10.20"
-requires "gh:elcritch/dmon-nim#ec1d385c723672c8af40047958fdb39721faa267"
+requires "gh:elcritch/dmon-nim >= 0.5.1"
 
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
