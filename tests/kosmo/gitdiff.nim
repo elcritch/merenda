@@ -280,7 +280,7 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     check panel.highlightBuildCount() == initialCount + 1
 
-  test "repository changes wait for an explicit refresh":
+  test "repository changes wait for an explicit refresh by default":
     let root = createTempDir("kosmo-diff-manual-refresh-", "")
     defer:
       removeDir(root)
@@ -295,6 +295,7 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     let initialReads = panel.repositoryReadCount()
     check initialReads == 1
+    check not panel.autoRefreshSwitch.on
 
     for index in 0 ..< 8:
       writeFile(root / ("file" & $index & ".nim"), "let value = " & $(index + 1) & "\n")

@@ -986,11 +986,15 @@ proc workspaceGitChanged(lifecycle: KosmoWindowLifecycle) {.slot.} =
     # All panes share one Moe engine. Invalidate once, not once per pane.
     let frontend = lifecycle.frontend[]
     frontend.dockController.editor.notifyGitRepositoryChanged()
+    if not frontend.gitDiffPanel.isNil:
+      frontend.gitDiffPanel.scheduleRepositoryRefresh()
 
 proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
   if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
     let frontend = lifecycle.frontend[]
     let controller = frontend.dockController
+    if not frontend.gitDiffPanel.isNil:
+      discard frontend.gitDiffPanel.pollRepositoryRefresh()
     frontend.fileTree.workspaceFiles.setGitRoots(controller.editor.gitWatchRoots())
     if controller.editor.pollGitStatus():
       for group in controller.groups:

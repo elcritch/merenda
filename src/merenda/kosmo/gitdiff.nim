@@ -12,6 +12,7 @@ import ../nimkit/foundation/mainthreadwork
 
 const
   KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
+  GitDiffRefreshDebounceInterval = initDuration(milliseconds = 300)
   GitDiffReservedSummaryHeight = 240.0'f32
 
 type
@@ -85,6 +86,8 @@ type
     refreshButton*: nimkit.Button
     expandButton*: nimkit.Button
     collapseButton*: nimkit.Button
+    autoRefreshLabel: nimkit.Label
+    autoRefreshSwitch*: nimkit.SwitchButton
     snapshot*: GitDiffSnapshot
     collapsed: HashSet[string]
     pool: SigilThreadPoolPtr
@@ -92,6 +95,9 @@ type
     sections: Table[string, GitDiffSection]
     hasSnapshot: bool
     readingGit: bool
+    refreshPending: bool
+    refreshDeadline: MonoTime
+    refreshDebounce: Duration
     repositoryBacked: bool
     repositoryRootPath: string
     repositoryScopePath: string
@@ -958,6 +964,7 @@ proc updateLoading(panel: KosmoGitDiffPanel) =
     panel.loading = panel.loading or section.pending
     preparing = preparing or section.pending
   panel.refreshButton.enabled = not preparing and panel.repositoryBacked
+  panel.autoRefreshSwitch.enabled = panel.repositoryBacked
 
 proc applyHighlighting(
     panel: KosmoGitDiffPanel, highlighted: SharedPtr[GitDiffHighlightResult]
@@ -1094,6 +1101,28 @@ proc displayDiff*(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) =
 
 proc refresh*(panel: KosmoGitDiffPanel)
 
+proc pollRepositoryRefresh*(panel: KosmoGitDiffPanel): bool {.discardable.} =
+  ## Start a trailing repository refresh once its quiet period has elapsed.
+  if panel.isNil or panel.closed or panel.autoRefreshSwitch.isNil:
+    return
+  if not panel.autoRefreshSwitch.on:
+    panel.refreshPending = false
+    return
+  if not panel.repositoryBacked or not panel.refreshPending or panel.loading:
+    return
+  if getMonoTime() >= panel.refreshDeadline:
+    panel.refreshPending = false
+    panel.refresh()
+    result = true
+
+proc scheduleRepositoryRefresh*(panel: KosmoGitDiffPanel) =
+  ## Coalesce repository notifications until the workspace has been quiet.
+  if panel.isNil or panel.closed or panel.autoRefreshSwitch.isNil or
+      not panel.autoRefreshSwitch.on or not panel.repositoryBacked:
+    return
+  panel.refreshPending = true
+  panel.refreshDeadline = getMonoTime() + panel.refreshDebounce
+
 proc displayRepositoryDiff*(
     panel: KosmoGitDiffPanel, rootPath: string, scopePath = ""
 ) =
@@ -1115,6 +1144,7 @@ proc displayRepositoryDiff*(
 proc refresh*(panel: KosmoGitDiffPanel) =
   ## Refresh the current repository on a worker thread.
   if not panel.closed and not panel.readingGit and panel.repositoryBacked:
+    panel.refreshPending = false
     inc panel.readGeneration
     inc panel.xRepositoryReadCount
     panel.loading = true
@@ -1131,11 +1161,12 @@ proc waitForDiff*(panel: KosmoGitDiffPanel, timeoutMilliseconds = 10000): bool =
   ## Deliver worker results until the diff finishes, for callers without an event loop.
   let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
   while getMonoTime() < deadline:
+    discard panel.pollRepositoryRefresh()
     discard getCurrentSigilThread().pollAll(NonBlocking)
     discard drainMainThreadWork()
     var pending =
-      panel.loading or panel.relayoutPending or panel.markdownView.isMarkdownParsing() or
-      panel.markdownView.isMarkdownRendering() or
+      panel.loading or panel.refreshPending or panel.relayoutPending or
+      panel.markdownView.isMarkdownParsing() or panel.markdownView.isMarkdownRendering() or
       panel.markdownView.textView().layoutManager().isBackgroundLayoutPending()
     for path, section in panel.sections:
       if path notin panel.collapsed:
@@ -1150,6 +1181,7 @@ proc close*(panel: KosmoGitDiffPanel) {.slot.} =
     panel.closed = true
     inc panel.generation
     panel.loading = false
+    panel.refreshPending = false
     for section in panel.sections.values:
       section.textView.removeFromSuperview()
     panel.sections.clear()
@@ -1165,15 +1197,26 @@ protocol GitDiffLayout of nimkit.ViewLayoutProtocol:
       bounds = panel.bounds()
       inset = min(12.0'f32, bounds.size.width * 0.05'f32)
       gap = min(8.0'f32, bounds.size.width * 0.03'f32)
-      availableWidth = max(bounds.size.width - inset * 2.0'f32 - gap * 2.0'f32, 0)
-      scale = min(availableWidth / 310.0'f32, 1.0'f32)
+      availableWidth =
+        max(bounds.size.width - inset * 2.0'f32 - gap * 3.0'f32 - 4.0'f32, 0)
+      scale = min(availableWidth / 446.0'f32, 1.0'f32)
       refreshWidth = 90.0'f32 * scale
       actionWidth = 110.0'f32 * scale
+      autoRefreshLabelWidth = 82.0'f32 * scale
+      autoRefreshWidth = 54.0'f32 * scale
       expandX = inset + refreshWidth + gap
       collapseX = expandX + actionWidth + gap
+      autoRefreshLabelX = collapseX + actionWidth + gap
+      autoRefreshX = autoRefreshLabelX + autoRefreshLabelWidth + 4.0'f32
     panel.refreshButton.setFrameFromLayout(nimkit.rect(inset, 8, refreshWidth, 28))
     panel.expandButton.setFrameFromLayout(nimkit.rect(expandX, 8, actionWidth, 28))
     panel.collapseButton.setFrameFromLayout(nimkit.rect(collapseX, 8, actionWidth, 28))
+    panel.autoRefreshLabel.setFrameFromLayout(
+      nimkit.rect(autoRefreshLabelX, 8, autoRefreshLabelWidth, 28)
+    )
+    panel.autoRefreshSwitch.setFrameFromLayout(
+      nimkit.rect(autoRefreshX, 8, autoRefreshWidth, 28)
+    )
     panel.scrollView.setFrameFromLayout(
       nimkit.rect(0, 44, bounds.size.width, max(bounds.size.height - 44, 0))
     )
@@ -1218,7 +1261,10 @@ proc newKosmoGitDiffPanel(
     refreshButton: nimkit.newButton("Refresh"),
     expandButton: nimkit.newButton("Expand All"),
     collapseButton: nimkit.newButton("Collapse All"),
+    autoRefreshLabel: nimkit.newLabel("Auto-refresh"),
+    autoRefreshSwitch: nimkit.newSwitchButton(),
     snapshot: GitDiffSnapshot(rootPath: rootPath, scopePath: scopePath),
+    refreshDebounce: GitDiffRefreshDebounceInterval,
     repositoryBacked: refreshesRepository,
     repositoryRootPath: if refreshesRepository: rootPath else: "",
     repositoryScopePath: if refreshesRepository: scopePath else: "",
@@ -1249,6 +1295,9 @@ proc newKosmoGitDiffPanel(
   discard result.withProtocol(GitDiffLayout)
   result.markdownStyle = markdownStyle
   result.markdownView.toolTip = rootPath
+  result.autoRefreshSwitch.accessibilityLabel = "Automatically refresh Git diff"
+  result.autoRefreshSwitch.toolTip = "Automatically refresh Git diff when files change"
+  result.autoRefreshSwitch.accessibilityIdentifier = "kosmo.gitDiff.autoRefresh"
   let weakPanel = result.unsafeWeakRef()
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
@@ -1280,7 +1329,7 @@ proc newKosmoGitDiffPanel(
   )
   for view in [
     nimkit.View(result.refreshButton), result.expandButton, result.collapseButton,
-    result.scrollView,
+    result.autoRefreshLabel, result.autoRefreshSwitch, result.scrollView,
   ]:
     result.addSubview(view)
   let panel = result.unsafeWeakRef()
@@ -1292,6 +1341,14 @@ proc newKosmoGitDiffPanel(
     discard sender
     if not panel.isNil:
       panel[].refresh()
+  let autoRefreshAction = nimkit.actionSelector("kosmo.toggleGitDiffAutoRefresh")
+  result.autoRefreshSwitch.action = autoRefreshAction
+  result.autoRefreshSwitch.target = nimkit.newActionTarget(autoRefreshAction) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    if not panel.isNil and not panel[].autoRefreshSwitch.on:
+      panel[].refreshPending = false
   let expandAction = nimkit.actionSelector("kosmo.expandGitDiff")
   result.expandButton.action = expandAction
   result.expandButton.target = nimkit.newActionTarget(expandAction) do(

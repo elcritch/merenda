@@ -513,7 +513,7 @@ suite "Kosmo shared workspace inventory":
       require watch.usesPollingFallback()
 
   when not defined(linux):
-    test "repository changes do not refresh Git diff automatically":
+    test "repository changes refresh Git diff only when the toolbar switch is on":
       let root = createTempDir("kosmo-diff-read-watch-", "")
       defer:
         removeDir(root)
@@ -538,6 +538,7 @@ suite "Kosmo shared workspace inventory":
       require frontend.showGitDiff()
       let panel = frontend.gitDiffPanel
       require panel.waitForDiff(timeoutMilliseconds = 60_000)
+      check not panel.autoRefreshSwitch.on
       let repositorySpy = InventorySpy()
       files.connect(workspaceRepositoryDidChange, repositorySpy, changed)
 
@@ -583,11 +584,14 @@ suite "Kosmo shared workspace inventory":
         sleep(10)
       check panel.repositoryReadCount() == baseline
 
+      check panel.autoRefreshSwitch.tryToPerform(
+        performClick(), DynamicAgent(panel.autoRefreshSwitch)
+      )
+      check panel.autoRefreshSwitch.on
+      let notificationBaseline = repositorySpy.changes
       writeFile(path, "changed text\n")
-      eventually(repositorySpy.changes > 1)
-      check panel.repositoryReadCount() == baseline
-      panel.refresh()
-      require panel.waitForDiff()
+      eventually(repositorySpy.changes > notificationBaseline)
+      require panel.waitForDiff(timeoutMilliseconds = 60_000)
       check panel.repositoryReadCount() == baseline + 1
       check panel.snapshot.files.anyIt(
         it.path == "source.txt" and "+changed text" in it.patch
