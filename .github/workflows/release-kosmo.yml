@@ -345,7 +345,7 @@ jobs:
           zigCompiler="$RUNNER_TEMP/zigcc"
           printf '%s\n' \
             '#!/usr/bin/env bash' \
-            "exec \"$zigDirectory/zig\" cc -target x86_64-linux-musl \"\$@\"" \
+            "exec \"$zigDirectory/zig\" cc -target x86_64-linux-musl \"\$@\" -lunwind" \
             > "$zigCompiler"
           chmod +x "$zigCompiler"
           echo "MUSL_CC=$zigCompiler" \
