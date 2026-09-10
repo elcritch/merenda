@@ -101,6 +101,11 @@ Mode-aware routing makes that decision explicit. The selected editor input
 policy determines whether a conflicting chord is dispatched to the semantic
 native-edit bridge or forwarded to Moe.
 
+Kosmo also provides an optional **Force input mode** setting on the Shortcuts
+page. It is off by default. When enabled, editable buffers remain in Moe's
+Input mode, while `Ctrl-O` still opens Moe's command line for commands that
+need it.
+
 ## Configuration and Settings
 
 Kosmo loads application shortcut overrides from its configuration directory:
@@ -174,9 +179,10 @@ Existing flat overrides for split commands remain valid. On Linux or Windows,
 
 The Shortcuts page in Kosmo Settings has selectors for **Shortcut profile**
 (`platform` or `macos`) and **Editor input** (`hybrid`, `vim`, or `native`),
-followed by a read-only list of the resolved action bindings. Changing a
-selector applies the choice immediately; the list and menu key equivalents
-then show the physical shortcuts for that choice.
+as well as an optional **Force input mode** checkbox, followed by a read-only
+list of the resolved action bindings. Changing a control applies the choice
+immediately; the list and menu key equivalents then show the physical
+shortcuts for that choice.
 
 ## Profiles and input policies
 

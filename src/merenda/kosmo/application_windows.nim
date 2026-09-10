@@ -206,6 +206,7 @@ proc updateShortcutSettingsWindow(frontend: KosmoApplication) =
   let controller = frontend.dockController
   frontend.xSettingsWindow.shortcutProfile = controller.shortcutProfile
   frontend.xSettingsWindow.editorInputPolicy = controller.editorInputPolicy
+  frontend.xSettingsWindow.forceInputMode = controller.editor.forceInputMode()
   frontend.xSettingsWindow.shortcuts =
     controller.shortcutBindings.kosmoShortcutSettings()
 
@@ -240,6 +241,21 @@ func editorInputPolicy*(frontend: KosmoApplication): KosmoEditorInputPolicy =
     defaultKosmoEditorInputPolicy()
   else:
     frontend.dockController.editorInputPolicy
+
+proc setForceInputMode*(frontend: KosmoApplication, enabled: bool) =
+  ## Apply Moe's forced Input mode policy to every current and future buffer.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  frontend.dockController.editor.forceInputMode = enabled
+  for group in frontend.dockController.groups:
+    group.editorView.refresh()
+  frontend.updateShortcutSettingsWindow()
+
+func forceInputMode*(frontend: KosmoApplication): bool =
+  if frontend.isNil or frontend.dockController.isNil:
+    false
+  else:
+    frontend.dockController.editor.forceInputMode()
 
 func settingsWindow*(frontend: KosmoApplication): KosmoSettingsWindow =
   ## Return Kosmo's settings controller after the panel has been created.
@@ -279,6 +295,11 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       editorInputPolicyHandler = proc(policy: KosmoEditorInputPolicy) =
         if not weakFrontend.isNil:
           weakFrontend[].setEditorInputPolicy(policy)
+      ,
+      forceInputMode = frontend.dockController.editor.forceInputMode(),
+      forceInputModeHandler = proc(enabled: bool) =
+        if not weakFrontend.isNil:
+          weakFrontend[].setForceInputMode(enabled)
       ,
       shortcuts = shortcuts,
       moeThemes = moeThemeSettings,

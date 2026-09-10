@@ -906,6 +906,18 @@ proc mode*(editor: KosmoEditor): KosmoEditorMode =
   else:
     KosmoEditorMode.Other
 
+proc forceInputMode*(editor: KosmoEditor): bool =
+  ## Return whether Moe keeps editable buffers in Input mode.
+  not editor.isNil and not editor.editor.isNil and
+    editor.editor.config.standard.forceInsertMode
+
+proc `forceInputMode=`*(editor: KosmoEditor, enabled: bool) =
+  ## Keep editable buffers in Input mode when enabled.
+  if editor.isNil or editor.editor.isNil:
+    return
+  editor.editor.config.standard.forceInsertMode = enabled
+  editor.editor.enforceModePolicy()
+
 proc copySelection*(editor: KosmoEditor): string =
   ## Copy the active selection into Moe's yank and unnamed registers.
   if editor.isNil or editor.editor.isNil or editor.currentSelection().isNone:
