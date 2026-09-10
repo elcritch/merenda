@@ -503,8 +503,6 @@ proc performFileTreeAction(
       discard frontend.fileTree.renameItem(path, nameField.text())
     else:
       frontend.fileTree.deleteItem(path)
-    if not frontend.gitDiffPanel.isNil:
-      frontend.gitDiffPanel.scheduleRepositoryRefresh()
   except CatchableError as error:
     let failure = nimkit.newAlert("Could not " & title.toLowerAscii(), error.msg)
     defer:

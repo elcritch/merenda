@@ -12,7 +12,6 @@ import ../nimkit/foundation/mainthreadwork
 
 const
   KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
-  GitDiffRefreshDebounceInterval = initDuration(milliseconds = 300)
   GitDiffReservedSummaryHeight = 240.0'f32
 
 type
@@ -93,9 +92,6 @@ type
     sections: Table[string, GitDiffSection]
     hasSnapshot: bool
     readingGit: bool
-    refreshPending: bool
-    refreshDeadline: MonoTime
-    refreshDebounce: Duration
     repositoryBacked: bool
     repositoryRootPath: string
     repositoryScopePath: string
@@ -1098,22 +1094,6 @@ proc displayDiff*(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) =
 
 proc refresh*(panel: KosmoGitDiffPanel)
 
-proc pollRepositoryRefresh*(panel: KosmoGitDiffPanel): bool {.discardable.} =
-  ## Start a trailing repository refresh once its quiet period has elapsed.
-  if panel.isNil or panel.closed or not panel.refreshPending or panel.loading:
-    return
-  if getMonoTime() >= panel.refreshDeadline:
-    panel.refreshPending = false
-    panel.refresh()
-    result = true
-
-proc scheduleRepositoryRefresh*(panel: KosmoGitDiffPanel) =
-  ## Coalesce repository notifications until the workspace has been quiet.
-  if panel.isNil or panel.closed or not panel.repositoryBacked:
-    return
-  panel.refreshPending = true
-  panel.refreshDeadline = getMonoTime() + panel.refreshDebounce
-
 proc displayRepositoryDiff*(
     panel: KosmoGitDiffPanel, rootPath: string, scopePath = ""
 ) =
@@ -1135,7 +1115,6 @@ proc displayRepositoryDiff*(
 proc refresh*(panel: KosmoGitDiffPanel) =
   ## Refresh the current repository on a worker thread.
   if not panel.closed and not panel.readingGit and panel.repositoryBacked:
-    panel.refreshPending = false
     inc panel.readGeneration
     inc panel.xRepositoryReadCount
     panel.loading = true
@@ -1152,12 +1131,11 @@ proc waitForDiff*(panel: KosmoGitDiffPanel, timeoutMilliseconds = 10000): bool =
   ## Deliver worker results until the diff finishes, for callers without an event loop.
   let deadline = getMonoTime() + initDuration(milliseconds = timeoutMilliseconds)
   while getMonoTime() < deadline:
-    discard panel.pollRepositoryRefresh()
     discard getCurrentSigilThread().pollAll(NonBlocking)
     discard drainMainThreadWork()
     var pending =
-      panel.loading or panel.refreshPending or panel.relayoutPending or
-      panel.markdownView.isMarkdownParsing() or panel.markdownView.isMarkdownRendering() or
+      panel.loading or panel.relayoutPending or panel.markdownView.isMarkdownParsing() or
+      panel.markdownView.isMarkdownRendering() or
       panel.markdownView.textView().layoutManager().isBackgroundLayoutPending()
     for path, section in panel.sections:
       if path notin panel.collapsed:
@@ -1172,7 +1150,6 @@ proc close*(panel: KosmoGitDiffPanel) {.slot.} =
     panel.closed = true
     inc panel.generation
     panel.loading = false
-    panel.refreshPending = false
     for section in panel.sections.values:
       section.textView.removeFromSuperview()
     panel.sections.clear()
@@ -1242,7 +1219,6 @@ proc newKosmoGitDiffPanel(
     expandButton: nimkit.newButton("Expand All"),
     collapseButton: nimkit.newButton("Collapse All"),
     snapshot: GitDiffSnapshot(rootPath: rootPath, scopePath: scopePath),
-    refreshDebounce: GitDiffRefreshDebounceInterval,
     repositoryBacked: refreshesRepository,
     repositoryRootPath: if refreshesRepository: rootPath else: "",
     repositoryScopePath: if refreshesRepository: scopePath else: "",

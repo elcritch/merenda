@@ -116,7 +116,7 @@ suite "Kosmo Git diff":
     check panel.scrollView.contentOffset().y > 0
     check panel.markdownView.scrollView().contentOffset().y == 0
 
-  test "Git diff header keeps its height while refreshing":
+  test "Git diff header keeps its height while manually refreshing":
     let root = createTempDir("kosmo-diff-header-height-", "")
     defer:
       removeDir(root)
@@ -136,7 +136,7 @@ suite "Kosmo Git diff":
     let settledMarkdown = panel.markdownView.markdown()
     let settledStorage = panel.markdownView.textView().textStorage()
     let reads = panel.repositoryReadCount()
-    panel.scheduleRepositoryRefresh()
+    panel.refresh()
     require panel.waitForDiff()
     check panel.repositoryReadCount() == reads + 1
     check panel.refreshButton.enabled()
@@ -280,8 +280,8 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     check panel.highlightBuildCount() == initialCount + 1
 
-  test "repository change bursts trigger one trailing refresh":
-    let root = createTempDir("kosmo-diff-debounce-", "")
+  test "repository changes wait for an explicit refresh":
+    let root = createTempDir("kosmo-diff-manual-refresh-", "")
     defer:
       removeDir(root)
     initRepository(root)
@@ -298,11 +298,10 @@ suite "Kosmo Git diff":
 
     for index in 0 ..< 8:
       writeFile(root / ("file" & $index & ".nim"), "let value = " & $(index + 1) & "\n")
-      panel.scheduleRepositoryRefresh()
-      discard panel.pollRepositoryRefresh()
-      sleep(10)
     check panel.repositoryReadCount() == initialReads
+    check panel.snapshot.files.len == 0
 
+    panel.refresh()
     require panel.waitForDiff()
     check panel.repositoryReadCount() == initialReads + 1
     check panel.snapshot.files.len == 8
@@ -763,7 +762,7 @@ suite "Kosmo Git diff":
         check (getMonoTime() - started).inMilliseconds < 2000
 
 suite "Kosmo scoped Git diff":
-  test "file and folder scopes survive manual and scheduled refreshes":
+  test "file and folder scopes survive manual refreshes":
     let root = createTempDir("kosmo-scoped-diff-", "")
     defer:
       removeDir(root)
@@ -784,7 +783,7 @@ suite "Kosmo scoped Git diff":
     require panel.snapshot.files.len == 1
     check panel.snapshot.files[0].path == "folder/one.txt"
     writeFile(root / "folder" / "untracked.txt", "added\n")
-    panel.scheduleRepositoryRefresh()
+    panel.refresh()
     require panel.waitForDiff()
     check panel.snapshot.files.len == 2
     panel.displayRepositoryDiff(root, root / "folder" / "one.txt")
