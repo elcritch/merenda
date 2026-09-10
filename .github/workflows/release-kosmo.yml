@@ -296,6 +296,7 @@ jobs:
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             file \
+            linux-libc-dev \
             musl-tools \
             pkg-config \
             libegl1-mesa-dev \
@@ -446,7 +447,7 @@ jobs:
               xorgproto
           run: |
             set -eu
-            export PATH="$HOME/.local/bin:$PATH"
+            export PATH="/usr/local/bin:$HOME/.local/bin:$PATH"
             mkdir -p "$HOME/.local/bin"
             curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
               ATLAS_INSTALL_DIR="$HOME/.local/bin" /usr/local/bin/bash -
