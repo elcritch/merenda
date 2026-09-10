@@ -3,6 +3,7 @@
 import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
 import merenda/nimkit
+import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 
 const KosmoLoginPathMarker = "/kosmo/login-profile/bin"
@@ -46,3 +47,28 @@ suite "Kosmo terminal environment":
 
       require session.pollUntilExit()
       check KosmoLoginPathMarker in session.screen().plainText().replace("\n", "")
+
+suite "Terminal scrollback input":
+  when defined(posix):
+    test "Enter returns scrolled history to the live screen immediately":
+      let
+        session = newCompactTerminalSession(columns = 16, rows = 2, maxScrollback = 4)
+        view = newTerminalView(session)
+      defer:
+        view.close()
+      session.start(initTerminalSpawnOptions(command = "cat"))
+      require session.running()
+      session.processOutput("old\r\nmiddle\r\ncurrent")
+      discard view.poll()
+      view.selectTerminalRange(
+        TerminalSelection(
+          anchor: initTerminalPosition(0, 0), extent: initTerminalPosition(0, 3)
+        )
+      )
+      view.clearSelection()
+      require view.scrollPosition() > 0
+      require view.performTerminalKeyEquivalent(
+        KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
+      )
+      check view.scrollPosition() == 0
+      check monoTextViews.stringValue(view).startsWith("middle")

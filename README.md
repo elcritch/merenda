@@ -551,7 +551,9 @@ app.runWindow(window, terminal, terminal)
 
 Passing a `command` runs it through the selected shell; leaving it empty starts
 an interactive shell. Terminal views use Terminex's `CompactTerminalSession`
-backend to reduce the memory retained by large histories. Terminex session APIs
+backend to reduce the memory retained by large histories. Scrolling into history
+keeps the visible lines stable as output arrives, until those lines age out of the
+history buffer. Typing or pressing Enter returns to the live prompt. Terminex session APIs
 are also public for applications that want to drive the parser and PTY transport
 separately from the view. The PTY backend currently supports POSIX platforms
 (macOS, Linux, and FreeBSD).

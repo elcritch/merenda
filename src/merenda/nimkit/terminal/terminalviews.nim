@@ -41,6 +41,7 @@ type
     xSelecting: bool
     xScrollPosition: float32
     xLastScrollbackCount: int
+    xLastScrollbackLinesAdded, xLastScrollbackResetCount: uint64
     xLastGeneration: uint64
     xRenderedStart, xRenderedRows, xRenderedColumns: int
     xCachedLineHeight, xCachedFontSize: float32
@@ -304,6 +305,8 @@ proc `session=`*(view: TerminalView, session: TerminalViewSession) =
   view.xSession = next
   view.xLastGeneration = high(uint64)
   view.xLastScrollbackCount = next.screenInfo().scrollbackCount
+  view.xLastScrollbackLinesAdded = next.screenInfo().scrollbackLinesAdded
+  view.xLastScrollbackResetCount = next.screenInfo().scrollbackResetCount
   view.xExitNotified = false
   view.xScrollPosition = 0.0'f32
   view.xHasSelection = false
@@ -392,6 +395,7 @@ proc sendInput*(view: TerminalView, input: string): bool {.discardable.} =
     view.xLastInputError.setLen(0)
     view.xScrollPosition = 0.0'f32
     view.clearSelection()
+    view.syncTerminalScreen()
     true
   except TerminexSessionError as error:
     view.xLastInputError = error.msg
@@ -659,11 +663,26 @@ proc syncTerminalScreen(view: TerminalView) =
   let
     info = view.xSession.screenInfo()
     nextScrollbackCount = info.scrollbackCount
-  if view.xScrollPosition > 0.0'f32 and nextScrollbackCount > view.xLastScrollbackCount:
-    view.xScrollPosition = min(
-      view.xScrollPosition + (nextScrollbackCount - view.xLastScrollbackCount).float32,
-      nextScrollbackCount.float32,
-    )
+  let added = info.scrollbackLinesAdded - view.xLastScrollbackLinesAdded
+  if info.scrollbackResetCount != view.xLastScrollbackResetCount:
+    view.xScrollPosition = 0.0'f32
+    view.xHasSelection = false
+    view.xSelecting = false
+  else:
+    if view.xScrollPosition > 0.0'f32:
+      view.xScrollPosition =
+        min(view.xScrollPosition + added.float32, nextScrollbackCount.float32)
+    let evicted = max(added.int - (nextScrollbackCount - view.xLastScrollbackCount), 0)
+    if view.xHasSelection and evicted > 0:
+      if min(view.xSelection.anchor.row, view.xSelection.extent.row) < evicted:
+        view.xHasSelection = false
+        view.xSelecting = false
+      else:
+        view.xSelection.anchor.row -= evicted
+        view.xSelection.extent.row -= evicted
+        view.xSelectionOrigin.row = max(view.xSelectionOrigin.row - evicted, 0)
+  view.xLastScrollbackLinesAdded = info.scrollbackLinesAdded
+  view.xLastScrollbackResetCount = info.scrollbackResetCount
   view.xLastScrollbackCount = nextScrollbackCount
   view.xScrollPosition =
     clamp(view.xScrollPosition, 0.0'f32, nextScrollbackCount.float32)
@@ -1124,6 +1143,8 @@ proc initTerminalViewFields*(
   view.xOptionAsMeta = true
   view.xLastGeneration = high(uint64)
   view.xLastScrollbackCount = view.xSession.screenInfo().scrollbackCount
+  view.xLastScrollbackLinesAdded = view.xSession.screenInfo().scrollbackLinesAdded
+  view.xLastScrollbackResetCount = view.xSession.screenInfo().scrollbackResetCount
   view.xBlinkVisible = true
   view.clipsToBounds = true
   view.focusRingType = frtNone
