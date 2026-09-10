@@ -329,16 +329,28 @@ jobs:
       - name: Install Nim
         run: grabnim "$NIM_VERSION"
 
-      - name: Install musl toolchain
+      - name: Install Zig musl toolchain
         run: |
-          toolchainArchive="$RUNNER_TEMP/x86_64-linux-musl-cross.tgz"
-          curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-            https://musl.cc/x86_64-linux-musl-cross.tgz \
-            -o "$toolchainArchive"
-          tar -xzf "$toolchainArchive" -C "$RUNNER_TEMP"
-          echo "MUSL_CC=$RUNNER_TEMP/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc" \
+          zigVersion=0.14.1
+          zigArchive="$RUNNER_TEMP/zig-x86_64-linux-$zigVersion.tar.xz"
+          zigDirectory="$RUNNER_TEMP/zig-x86_64-linux-$zigVersion"
+          curl --connect-timeout 30 --max-time 180 \
+            --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
+            "https://ziglang.org/download/$zigVersion/zig-x86_64-linux-$zigVersion.tar.xz" \
+            -o "$zigArchive"
+          printf '%s  %s\n' \
+            '24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c' \
+            "$zigArchive" | sha256sum --check --status
+          tar -xJf "$zigArchive" -C "$RUNNER_TEMP"
+          zigCompiler="$RUNNER_TEMP/zigcc"
+          printf '%s\n' \
+            '#!/usr/bin/env bash' \
+            "exec \"$zigDirectory/zig\" cc -target x86_64-linux-musl \"\$@\"" \
+            > "$zigCompiler"
+          chmod +x "$zigCompiler"
+          echo "MUSL_CC=$zigCompiler" \
             >> "$GITHUB_ENV"
-          "$RUNNER_TEMP/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc" --version
+          "$zigDirectory/zig" version
 
       - name: Install latest Atlas
         run: |
