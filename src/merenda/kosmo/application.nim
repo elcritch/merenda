@@ -52,9 +52,7 @@ const
   KosmoInactiveTabAccentOpacity = 0.18'f32
   KosmoInactiveTabTextOpacity = 0.72'f32
   KosmoPaneOutlineWidth = 1.0'f32
-  KosmoMarkdownControlsWidth = 184.0'f32
-  KosmoMarkdownControlsHeight = 38.0'f32
-  KosmoMarkdownControlsInset = 10.0'f32
+  KosmoMarkdownControlsHeight = 44.0'f32
   KosmoMarkdownFontSizeIncrement = 1.0'f32
   KosmoControlScrollMultiplier = 3.0'f32
   KosmoGridOverscanRows = 1

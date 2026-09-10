@@ -576,11 +576,10 @@ proc installKosmoMarkdownControlsStyle(appearance: var nimkit.Appearance) =
       nimkit.srButton, classes = @[KosmoMarkdownControlButtonStyleClass]
     )
   appearance.setStyle(controlsSelector, nimkit.StylePadding, nimkit.insets(4.0'f32))
-  appearance.setStyle(controlsSelector, nimkit.StyleCornerRadius, 8.0'f32)
+  appearance.setStyle(controlsSelector, nimkit.StyleBorderWidth, 0.0'f32)
+  appearance.setStyle(controlsSelector, nimkit.StyleCornerRadius, 0.0'f32)
   appearance.setStyle(
-    controlsSelector,
-    nimkit.StyleBoxShadows,
-    @[nimkit.dropShadow(nimkit.color(0.0, 0.0, 0.0, 0.28), y = 2.0, blur = 7.0)],
+    controlsSelector, nimkit.StyleBoxShadows, newSeq[nimkit.BoxShadow]()
   )
   appearance.setStyle(
     buttonSelector, nimkit.StyleTextInsets, nimkit.insets(0.0'f32, 2.0'f32)
@@ -1982,40 +1981,37 @@ protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
     let
       bounds = pane.bounds()
       tabHeight = min(KosmoTabBarHeight, bounds.size.height)
-      editorHeight = max(bounds.size.height - KosmoTabBarHeight, 1.0'f32)
-      commandBarHeight = min(KosmoCommandBarHeight, editorHeight)
+      markdownToolbarVisible =
+        not pane.markdownControls.isNil and not pane.markdownControls.hidden
+      markdownToolbarHeight =
+        if markdownToolbarVisible:
+          min(KosmoMarkdownControlsHeight, max(bounds.size.height - tabHeight, 0.0'f32))
+        else:
+          0.0'f32
+      contentTop = tabHeight + markdownToolbarHeight
+      contentHeight = max(bounds.size.height - contentTop, 1.0'f32)
+      commandBarHeight = min(KosmoCommandBarHeight, contentHeight)
     pane.documentTabs.setFrameFromLayout(
       nimkit.rect(0, 0, bounds.size.width, tabHeight)
     )
     if not pane.contentView.isNil:
       pane.contentView.setFrameFromLayout(
-        nimkit.rect(0, tabHeight, bounds.size.width, editorHeight)
+        nimkit.rect(0, contentTop, bounds.size.width, contentHeight)
       )
     pane.commandBar.setFrameFromLayout(
       nimkit.rect(
         0,
-        max(tabHeight, bounds.size.height - commandBarHeight),
+        max(contentTop, bounds.size.height - commandBarHeight),
         bounds.size.width,
         commandBarHeight,
       )
     )
     pane.activeIndicator.setFrameFromLayout(
-      nimkit.rect(0, tabHeight, bounds.size.width, editorHeight)
+      nimkit.rect(0, contentTop, bounds.size.width, contentHeight)
     )
     if not pane.markdownControls.isNil:
-      let
-        controlsWidth = min(
-          KosmoMarkdownControlsWidth,
-          max(bounds.size.width - KosmoMarkdownControlsInset * 2.0'f32, 1.0'f32),
-        )
-        controlsHeight = min(KosmoMarkdownControlsHeight, editorHeight)
       pane.markdownControls.setFrameFromLayout(
-        nimkit.rect(
-          max(bounds.size.width - controlsWidth - KosmoMarkdownControlsInset, 0.0'f32),
-          tabHeight + KosmoMarkdownControlsInset,
-          controlsWidth,
-          controlsHeight,
-        )
+        nimkit.rect(0, tabHeight, bounds.size.width, markdownToolbarHeight)
       )
     if pane.contentView == nimkit.View(pane.editorView):
       pane.editorView.refresh()
