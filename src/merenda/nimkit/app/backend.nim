@@ -659,7 +659,12 @@ proc usesScaledBackingSize(host: HostWindow, window: siwinshim.Window): bool =
   if host.xHasUiScaleOverride:
     return true
   let scale = host.configuredUiScale()
-  scale != 1.0'f32 and not window.inputUsesBackingPixels()
+  when defined(linux) or defined(bsd):
+    # X11 size setters use backing pixels. Wayland size setters use logical
+    # surface units even though their reported render size is in backing pixels.
+    scale != 1.0'f32 and window.siwinDisplayServerName() == "x11"
+  else:
+    scale != 1.0'f32 and not window.inputUsesBackingPixels()
 
 proc logicalSizeForBacking(host: HostWindow, window: siwinshim.Window): Vec2 =
   let

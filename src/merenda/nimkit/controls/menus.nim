@@ -1102,9 +1102,6 @@ func menuBarHorizontalInset(): float32 =
 func menuBarItemGap(): float32 =
   2.0'f32
 
-func menuBarItemPadding(): float32 =
-  24.0'f32
-
 proc title*(button: PopupMenuButton): string =
   button.xTitle
 
@@ -1744,40 +1741,20 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
       )
       return
 
-    let fillColor =
-      if isPullDown and (ssOpen in states or ssActive in states):
-        color(0.58, 0.66, 0.82)
-      elif isPullDown and ssHovered in states:
-        color(0.76, 0.81, 0.91)
-      elif ssOpen in states or ssActive in states:
-        color(0.78, 0.84, 0.96)
-      elif ssHovered in states:
-        color(0.88, 0.91, 0.97)
-      else:
-        color(0.0, 0.0, 0.0, 0.0)
-    let borderColor =
-      if isPullDown and (ssOpen in states or ssActive in states):
-        color(0.30, 0.36, 0.48)
-      elif isPullDown and ssHovered in states:
-        color(0.45, 0.50, 0.62)
-      elif ssOpen in states or ssHovered in states:
-        color(0.50, 0.54, 0.62)
-      else:
-        color(0.0, 0.0, 0.0, 0.0)
+    let style = context.appearance.resolveButtonStyle(
+      controlStyle(
+        srMenuBarItem, states, id = button.styleId, classes = button.styleClasses
+      )
+    )
     discard context.addRenderRectangle(
       context.renderRectFor(button.bounds),
-      fill(fillColor),
-      borderColor,
-      if ssOpen in states or ssHovered in states: 1.0'f32 else: 0.0'f32,
-      4.0'f32,
+      style.box.fill,
+      style.box.borderColor,
+      style.box.borderWidth,
+      style.box.cornerRadius,
+      style.box.shadows,
     )
-    context.addText(
-      button.bounds.inset(insets(6.0, 10.0, 2.0, 10.0)),
-      button.title(),
-      context.appearance.resolveTextStyle(
-        controlStyle(srComboBox), color(0.08, 0.09, 0.11), insets(0.0)
-      ),
-    )
+    context.addText(button.bounds.inset(style.text.insets), button.title(), style.text)
 
 protocol PopupMenuButtonEvents of ResponderEventProtocol:
   method mouseEntered(button: PopupMenuButton, event: MouseEvent): bool =
@@ -1963,15 +1940,20 @@ proc menu*(menuBar: MenuBar): Menu =
 proc syncMenuBarPresentation(menuBar: MenuBar) =
   menuBar.hidden = menuBar.xMenu.presentedNatively()
 
-proc menuBarItemWidth(item: MenuItem): float32 =
-  max(textNaturalSize(item.title()).width + menuBarItemPadding(), 44.0'f32)
+proc menuBarItemWidth(menuBar: MenuBar, item: MenuItem): float32 =
+  let style =
+    menuBar.effectiveAppearance().resolveButtonStyle(controlStyle(srMenuBarItem))
+  max(
+    textNaturalSize(item.title(), style.text).width + style.text.insets.horizontal,
+    style.minSize.width,
+  )
 
 proc menuBarNaturalSize(menuBar: MenuBar): Size =
   var width = menuBarHorizontalInset()
   if not menuBar.xMenu.isNil:
     for item in menuBar.xMenu.items:
       if not item.hidden():
-        width += menuBarItemWidth(item) + menuBarItemGap()
+        width += menuBar.menuBarItemWidth(item) + menuBarItemGap()
   initSize(width + menuBarHorizontalInset(), menuBarDefaultHeight())
 
 proc clearMenuBarButtons(menuBar: MenuBar) =
@@ -2017,7 +1999,7 @@ proc tileMenuBarItems(menuBar: MenuBar) =
     if not item.hidden():
       if buttonIndex < menuBar.xButtons.len:
         let button = menuBar.xButtons[buttonIndex]
-        let width = menuBarItemWidth(item)
+        let width = menuBar.menuBarItemWidth(item)
         button.title = item.title()
         button.menu = item.submenu()
         button.enabled = not item.submenu().isNil
@@ -2030,9 +2012,27 @@ protocol MenuBarDrawing of ViewDrawingProtocol:
     let bounds = menuBar.bounds()
     if bounds.isEmpty:
       return
+    let style = context.appearance.resolveBoxStyle(
+      controlStyle(
+        srMenuBar,
+        menuBar.widgetStateSet(),
+        id = menuBar.styleId,
+        classes = menuBar.styleClasses,
+      )
+    )
+    discard context.addRenderRectangle(context.renderRectFor(bounds), style.box.fill)
+    if style.box.borderWidth <= 0.0'f32:
+      return
     discard context.addRenderRectangle(
-      rect(0.0'f32, bounds.maxY - 1.0'f32, bounds.size.width, 1.0'f32),
-      fill(color(0.76, 0.78, 0.82)),
+      context.renderRectFor(
+        rect(
+          0.0'f32,
+          bounds.maxY - style.box.borderWidth,
+          bounds.size.width,
+          style.box.borderWidth,
+        )
+      ),
+      fill(style.box.borderColor),
     )
 
 protocol MenuBarLayout of ViewLayoutProtocol:
@@ -2044,7 +2044,7 @@ protocol MenuBarLayout of ViewLayoutProtocol:
 
 proc initMenuBarFields*(menuBar: MenuBar, menu: Menu = nil, frame: Rect = AutoRect) =
   initViewFields(menuBar, frame)
-  menuBar.background = color(0.91, 0.92, 0.94)
+  menuBar.background = color(0.0, 0.0, 0.0, 0.0)
   discard menuBar.withProto()
   discard menuBar.withProtocol(MenuBarDrawing)
   discard menuBar.withProtocol(MenuBarLayout)
