@@ -386,16 +386,48 @@ proc showGitDiffSnapshot(
   panel.close()
   frontend.gitDiffPanel = nil
 
+proc nearestGitDirectory(directory: string): string =
+  var parent = absolutePath(directory)
+  while true:
+    if dirExists(parent / ".git") or fileExists(parent / ".git"):
+      return parent
+    let next = parent.parentDir()
+    if next == parent:
+      break
+    parent = next
+  # Let the worker report that this path is outside a repository.
+  absolutePath(directory)
+
+proc editorGitDirectory(frontend: KosmoApplication): string =
+  let group = frontend.dockController.activePaneGroup()
+  if group.isNil:
+    return
+  var id: KosmoBufferId
+  if not group.selectedTabIdentifier.parseTabIdentifier(id):
+    return
+  for tab in group.editorView.editor.tabs():
+    if tab.id == id and tab.filePath.isSome:
+      return nearestGitDirectory(absolutePath(tab.filePath.get).parentDir())
+
 proc showGitDiff*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
-  ## Show full-file Git changes for the active project's repository.
+  ## Show the selected editor file's repository, or a scoped diff for an explicit path.
   if frontend.isNil:
     return
+  let editorRoot =
+    if path.len == 0:
+      frontend.editorGitDirectory()
+    else:
+      ""
   let root =
     if path.len > 0:
-      if dirExists(path):
-        path
-      else:
-        path.parentDir()
+      nearestGitDirectory(
+        if dirExists(path):
+          path
+        else:
+          absolutePath(path).parentDir()
+      )
+    elif editorRoot.len > 0:
+      editorRoot
     elif frontend.fileTree.rootPath.len > 0:
       frontend.fileTree.rootPath
     else:

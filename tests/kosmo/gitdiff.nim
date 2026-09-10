@@ -799,3 +799,111 @@ suite "Kosmo scoped Git diff":
     panel.displayRepositoryDiff(root)
     require panel.waitForDiff()
     check panel.snapshot.files.len == 3
+
+suite "Kosmo editor repository diff":
+  test "diff shortcut finds the nearest repository of the selected editor file":
+    let workspace = createTempDir("kosmo-active-repository-", "")
+    defer:
+      removeDir(workspace)
+    let
+      first = workspace / "first"
+      second = workspace / "second"
+      nested = second / "nested"
+      linked = workspace / "linked"
+    for root in [first, second, nested, linked]:
+      createDir(root)
+      initRepository(root)
+      createDir(root / "src")
+      writeFile(root / "src" / "file.txt", "file\n")
+      writeFile(root / "sibling.txt", "sibling\n")
+    writeFile(second / ".git" / "info" / "exclude", "nested/\n")
+    git(linked, "init", "-q", "--separate-git-dir", workspace / "metadata")
+    require fileExists(linked / ".git")
+    let
+      app = newApplication("Active Repository Diff")
+      frontend = newKosmoApplication(app, first, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    app.activateWindow(frontend.window)
+    require frontend.openPath(second)
+    for root in [second, first, nested, linked]:
+      require frontend.openPath(root / "src" / "file.txt")
+      require frontend.window.makeFirstResponder(frontend.editorView)
+      require frontend.window.dispatchKeyDown(
+        KeyEvent(
+          key: keyD,
+          keyCode: keyD.ord,
+          modifiers: shortcutModifiers() + {nimkit.kmShift},
+        )
+      )
+      require not frontend.gitDiffPanel.isNil
+      require frontend.gitDiffPanel.waitForDiff()
+      check frontend.gitDiffPanel.snapshot.rootPath == expandFilename(root)
+      check frontend.gitDiffPanel.snapshot.scopePath.len == 0
+      var siblingIncluded = false
+      for file in frontend.gitDiffPanel.snapshot.files:
+        if file.path == "sibling.txt":
+          siblingIncluded = true
+      check siblingIncluded
+      let index =
+        frontend.documentTabs.indexOfDocumentTabIdentifier(KosmoGitDiffTabIdentifier)
+      require index >= 0
+      check frontend.documentTabs.documentTabModels()[index].title ==
+        "Git Diff · " & root.lastPathPart()
+
+suite "Kosmo file context diff":
+  test "clicking Git Diff opens and refreshes only the clicked file":
+    let root = createTempDir("kosmo-context-diff-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    createDir(root / "src")
+    let target = root / "src" / "target.txt"
+    writeFile(target, "target\n")
+    writeFile(root / "other.txt", "other\n")
+    let
+      app = newApplication("File Context Diff")
+      frontend = newKosmoApplication(app, root, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 1000, 700)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
+    require frontend.showGitDiff()
+    require frontend.gitDiffPanel.waitForDiff()
+    for index in 0 ..< frontend.gitDiffPanel.snapshot.files.len:
+      frontend.gitDiffPanel.toggleFile(index)
+    require frontend.gitDiffPanel.waitForDiff()
+    require frontend.window.makeFirstResponder(frontend.gitDiffPanel.textViewForFile(0))
+    require frontend.fileTree.revealPath(target)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let row = frontend.fileTree.rowItemRect(frontend.fileTree.rowForItem(target))
+    let click =
+      frontend.fileTree.pointToWindow(initPoint(row.minX + 120, row.minY + 12))
+    require frontend.window.rightMouseDownAt(click)
+    var popup: PopupListView
+    for view in frontend.contentView.subviews():
+      if view of PopupListView:
+        popup = PopupListView(view)
+    require not popup.isNil
+    let itemRect = popup.popupListItemRect(popup.bounds(), 2)
+    let itemPoint =
+      popup.pointToWindow(initPoint(itemRect.minX + 20, itemRect.minY + 12))
+    require frontend.window.mouseDownAt(itemPoint)
+    require frontend.window.mouseUpAt(itemPoint)
+    require not frontend.gitDiffPanel.isNil
+    require frontend.gitDiffPanel.waitForDiff()
+    check frontend.gitDiffPanel.snapshot.errorMessage.len == 0
+    check frontend.gitDiffPanel.snapshot.rootPath == expandFilename(root)
+    check frontend.gitDiffPanel.snapshot.scopePath == target
+    require frontend.gitDiffPanel.snapshot.files.len == 1
+    check frontend.gitDiffPanel.snapshot.files[0].path == "src/target.txt"
+    writeFile(target, "updated\n")
+    frontend.gitDiffPanel.scheduleRepositoryRefresh()
+    require frontend.gitDiffPanel.waitForDiff()
+    require frontend.gitDiffPanel.snapshot.files.len == 1
+    check "+updated" in frontend.gitDiffPanel.snapshot.files[0].patch

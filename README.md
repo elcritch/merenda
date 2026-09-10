@@ -866,7 +866,8 @@ Command-F on macOS or Control-F elsewhere opens a live file-name filter; matchin
 remain nested beneath their folder hierarchy. Find in Files searches Git tracked and
 untracked non-ignored files and skips binary or unsupported text encodings by default;
 both filters are configurable through `FileSearchOptions`.
-File → Show Git Diff (Command-Shift-D on macOS) opens a tab showing staged,
+File → Show Git Diff (Command-Shift-D on macOS) uses the selected editor file’s
+nearest Git repository, including when multiple project roots are open. It opens a tab showing staged,
 unstaged, and untracked changes as standard three-line-context diff hunks. Matter
 uses full-file context to preserve language syntax, but only the displayed hunks
 are laid out. Each file is prepared independently on NimKit's shared worker pool
