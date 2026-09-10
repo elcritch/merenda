@@ -13,16 +13,6 @@ proc pollUntilText(
       return true
     sleep(5)
 
-proc pollUntilDirectory(
-    session: TerminalViewSession, expected: string, timeout = initDuration(seconds = 10)
-): bool =
-  let deadline = getMonoTime() + timeout
-  while getMonoTime() < deadline:
-    discard session.poll()
-    if expected in session.screenInfo().currentDirectory:
-      return true
-    sleep(5)
-
 proc terminalCellPoint(view: TerminalView, row, column: int): Point =
   let metrics = view.monoTextMetrics()
   view.pointToWindow(
@@ -154,6 +144,7 @@ suite "Kosmo terminal clipboard commands":
         app = newApplication("Kosmo Terminal Directory Test")
         frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
       createDir(nested)
+      let expectedDirectory = expandFilename(nested)
       defer:
         frontend.close()
         removeDir(root)
@@ -182,7 +173,11 @@ suite "Kosmo terminal clipboard commands":
       let secondIndex =
         frontend.documentTabs.indexOfDocumentTabIdentifier(secondIdentifier)
       check secondIndex == firstIndex + 1
-      check secondTerminal.session().pollUntilDirectory(nested)
+      let checkDirectoryCommand =
+        "if [ \"$PWD\" = " & quoteShell(expectedDirectory) &
+        " ]; then printf KOSMO_CWD_MATCH; else printf KOSMO_CWD_MISMATCH; fi\n"
+      require secondTerminal.sendInput(checkDirectoryCommand)
+      check secondTerminal.session().pollUntilText("KOSMO_CWD_MATCH")
 
 suite "Kosmo terminal focus input":
   when defined(posix):
