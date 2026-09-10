@@ -29,6 +29,8 @@ const
   KosmoTextMateGrammarScopeColumnIdentifier* = "scope"
   KosmoTextMateGrammarOriginColumnIdentifier* = "origin"
   KosmoMoeThemePreviewText* = "let fn = \"text\" #"
+  KosmoSettingsMinimumWidth* = 620.0'f32
+  KosmoSettingsMinimumHeight* = 340.0'f32
   KosmoShortcutActionColumnWidth = 175.0'f32
   KosmoShortcutDescriptionColumnWidth = 310.0'f32
   KosmoShortcutKeysColumnWidth = 155.0'f32
@@ -337,9 +339,9 @@ proc newKosmoTextMateGrammarsTableSource(
 
 proc newSettingsPage(): tuple[view: nimkit.View, stack: nimkit.StackView] =
   result.stack = nimkit.newStackView(nimkit.laVertical)
-  result.stack.spacing = 12.0
+  result.stack.spacing = 10.0
   result.stack.alignment = nimkit.svaFill
-  result.stack.edgeInsets = nimkit.insets(18.0, 20.0)
+  result.stack.edgeInsets = nimkit.insets(14.0, 16.0)
   result.view = result.stack
 
 proc optionAsMeta*(settings: KosmoSettingsWindow): bool =
@@ -490,6 +492,7 @@ proc newKosmoSettingsWindow*(
     )
     shortcutProfileChoice = nimkit.newComboBox(["Platform", "macOS-style"])
     editorInputPolicyChoice = nimkit.newComboBox(["Vim", "Native", "Hybrid"])
+    shortcutsForm = nimkit.newFormView()
     shortcutsTable = nimkit.newTableView()
     moeThemesTable = nimkit.newTableView()
     textMateGrammarsTable = nimkit.newTableView()
@@ -532,10 +535,7 @@ proc newKosmoSettingsWindow*(
   terminalPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Terminal"),
     optionButton,
-    nimkit.newLabel(
-      "Send Option/Alt-B and Option/Alt-F as Bash backward-word and forward-word " &
-        "shortcuts."
-    ),
+    nimkit.newLabel("Use Option/Alt-B and Option/Alt-F to move by words in Bash."),
     terminalLinksButton,
     nimkit.newLabel(
       "Hold the platform link modifier while hovering a URL to reveal and open it."
@@ -605,16 +605,16 @@ proc newKosmoSettingsWindow*(
   )
   shortcutsTable.dataSource = shortcutsSource
   shortcutsTable.delegate = shortcutsSource
+  shortcutsForm.edgeInsets = nimkit.insets(0.0)
+  shortcutsForm.spacing[nimkit.dcol] = 12.0
+  shortcutsForm.spacing[nimkit.drow] = 8.0
+  shortcutsForm.minFieldWidth = 180.0
+  shortcutsForm.addRow(nimkit.newFormLabel("Shortcut profile"), shortcutProfileChoice)
+  shortcutsForm.addRow(nimkit.newFormLabel("Editor input"), editorInputPolicyChoice)
   shortcutsPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Active Shortcuts"),
-    nimkit.newLabel("Shortcut profile"),
-    shortcutProfileChoice,
-    nimkit.newLabel("Editor input"),
-    editorInputPolicyChoice,
-    nimkit.newLabel(
-      "Profiles and input routing apply immediately. Individual bindings are " &
-        "configured in keybindings.json."
-    ),
+    shortcutsForm,
+    nimkit.newLabel("Changes apply immediately; edit bindings in keybindings.json."),
   )
   shortcutsPage.stack.fillAvailableSpace(shortcutsTable)
 
@@ -714,7 +714,8 @@ proc newKosmoSettingsWindow*(
     edges = {nimkit.leLeft, nimkit.leTop, nimkit.leRight, nimkit.leBottom},
   )
   result.xWindow.styleMask = result.xWindow.styleMask + {nimkit.wsmResizable}
-  result.xWindow.automaticallyAdjustsContentMinSize = true
+  result.xWindow.contentMinSize =
+    nimkit.initSize(KosmoSettingsMinimumWidth, KosmoSettingsMinimumHeight)
 
 proc window*(settings: KosmoSettingsWindow): nimkit.Panel =
   ## Return the settings panel window.
