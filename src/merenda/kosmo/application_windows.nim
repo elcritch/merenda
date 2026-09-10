@@ -488,6 +488,10 @@ proc performFileTreeAction(
     alert.window.close()
   alert.window.setInheritedAppearance(frontend.window.effectiveAppearance())
   if renaming:
+    alert.window.frame = nimkit.rect(
+      alert.window.frame().origin,
+      nimkit.initSize(alert.window.frame().size.width, KosmoRenameAlertHeight),
+    )
     alert.accessoryView = nameField
   discard alert.rebuildAlertView()
   if renaming:

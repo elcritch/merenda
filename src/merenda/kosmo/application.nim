@@ -34,6 +34,7 @@ const
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
+  KosmoRenameAlertHeight* = 240.0'f32
   KosmoQuickOpenTopInset = 96.0'f32
   KosmoQuickOpenBottomInset = 24.0'f32
   KosmoEditorStyleId* = "kosmo.editor"

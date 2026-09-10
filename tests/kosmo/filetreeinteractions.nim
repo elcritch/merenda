@@ -576,6 +576,23 @@ suite "Kosmo file browser item actions":
     expect ValueError:
       tree.deleteItem(root)
 
+  test "rename alert shows its accessory and action buttons":
+    let alert =
+      newAlert("Rename file.txt", "/tmp/file.txt", buttons = ["Rename", "Cancel"])
+    defer:
+      alert.window.close()
+    alert.window.frame = rect(
+      alert.window.frame().origin,
+      initSize(alert.window.frame().size.width, KosmoRenameAlertHeight),
+    )
+    alert.accessoryView = View(newTextField("file.txt"))
+    discard alert.rebuildAlertView()
+    alert.contentView.layoutSubtreeIfNeeded()
+    let contentBounds = alert.contentView.bounds()
+    require alert.buttonViews.len == 2
+    for buttonView in alert.buttonViews:
+      check buttonView.frame().maxY <= contentBounds.maxY
+
   test "deleting a directory symlink preserves its target":
     let root = createTempDir("kosmo-symlink-", "")
     defer:
