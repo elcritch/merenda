@@ -489,7 +489,8 @@ jobs:
               awk '$NF == "backtrace_create_state" { found = 1 } END { exit !found }'
             cp data/FONT-LICENSES.md build/FONT-LICENSES.md
             cp -R data/font-licenses build/font-licenses
-            build/kosmo --help
+            LD_LIBRARY_PATH="/usr/local/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+              build/kosmo --help
             if ldd build/kosmo | grep -qi 'not found'; then
               ldd build/kosmo
               exit 1
