@@ -20,6 +20,11 @@ on:
         required: false
         default: false
         type: boolean
+      build_windows:
+        description: Enable the temporarily disabled Windows release build
+        required: false
+        default: false
+        type: boolean
   pull_request:
     branches:
       - main
@@ -745,6 +750,9 @@ jobs:
         run: security delete-keychain "$KOSMO_SIGNING_KEYCHAIN"
 
   build-windows:
+    # Temporarily disabled while the Atlas Windows toolchain is repaired.
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.build_windows == true
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
@@ -853,7 +861,6 @@ jobs:
       - build-linux-musl
       - build-freebsd
       - build-macos
-      - build-windows
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -873,7 +880,6 @@ jobs:
             kosmo-linux-arm64.tar.gz \
             kosmo-freebsd-amd64.tar.gz \
             kosmo-macos-arm64.zip \
-            kosmo-windows-amd64.zip \
             > SHA256SUMS.txt
 
       - name: Upload release assets
@@ -888,6 +894,5 @@ jobs:
             dist/kosmo-linux-arm64.tar.gz \
             dist/kosmo-freebsd-amd64.tar.gz \
             dist/kosmo-macos-arm64.zip \
-            dist/kosmo-windows-amd64.zip \
             dist/SHA256SUMS.txt \
             --clobber
