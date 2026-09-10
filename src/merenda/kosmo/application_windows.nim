@@ -311,9 +311,11 @@ proc showGitDiffSnapshot(
   let
     controller = frontend.dockController
     title =
-      "Git Diff · " &
-      (if refreshesRepository: snapshot.rootPath.lastPathPart()
-      else: "stdin")
+      "Git Diff · " & (
+        if snapshot.scopePath.len > 0: snapshot.scopePath.lastPathPart()
+        elif refreshesRepository: snapshot.rootPath.lastPathPart()
+        else: "stdin"
+      )
   for group in controller.groups:
     let document = group.documentForIdentifier(KosmoGitDiffTabIdentifier)
     if not document.isNil:
@@ -321,7 +323,9 @@ proc showGitDiffSnapshot(
         if document.contentView of KosmoGitDiffPanel:
           frontend.gitDiffPanel = KosmoGitDiffPanel(document.contentView)
           if refreshesRepository:
-            frontend.gitDiffPanel.displayRepositoryDiff(snapshot.rootPath)
+            frontend.gitDiffPanel.displayRepositoryDiff(
+              snapshot.rootPath, snapshot.scopePath
+            )
           else:
             frontend.gitDiffPanel.displayDiff(snapshot)
         document.title = title
@@ -345,7 +349,9 @@ proc showGitDiffSnapshot(
     panel =
       if refreshesRepository:
         newKosmoGitDiffPanel(
-          snapshot.rootPath, group.pane.markdownControls.markdownPresentationStyle()
+          snapshot.rootPath,
+          group.pane.markdownControls.markdownPresentationStyle(),
+          snapshot.scopePath,
         )
       else:
         newKosmoGitDiffPanel(
@@ -380,18 +386,73 @@ proc showGitDiffSnapshot(
   panel.close()
   frontend.gitDiffPanel = nil
 
-proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
+proc showGitDiff*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
   ## Show full-file Git changes for the active project's repository.
   if frontend.isNil:
     return
   let root =
-    if frontend.fileTree.rootPath.len > 0:
+    if path.len > 0:
+      if dirExists(path):
+        path
+      else:
+        path.parentDir()
+    elif frontend.fileTree.rootPath.len > 0:
       frontend.fileTree.rootPath
     else:
       getCurrentDir()
   frontend.showGitDiffSnapshot(
-    GitDiffSnapshot(source: gdsRepository, rootPath: root), refreshesRepository = true
+    GitDiffSnapshot(
+      source: gdsRepository,
+      rootPath: root,
+      scopePath:
+        if path.len > 0:
+          normalizedPath(absolutePath(path))
+        else:
+          "",
+    ),
+    refreshesRepository = true,
   )
+
+proc performFileTreeAction(
+    frontend: KosmoApplication, path: string, action: FileTreeItemAction
+) =
+  if action == ftiaGitDiff:
+    discard frontend.showGitDiff(path)
+    return
+  let
+    renaming = action == ftiaRename
+    title = if renaming: "Rename" else: "Delete"
+    alert = nimkit.newAlert(
+      title & " " & path.lastPathPart(),
+      if renaming:
+        path
+      else:
+        "Permanently delete " & path & "?",
+      buttons = [title, "Cancel"],
+    )
+    nameField = nimkit.newTextField(path.lastPathPart())
+  defer:
+    alert.window.close()
+  alert.window.setInheritedAppearance(frontend.window.effectiveAppearance())
+  if renaming:
+    alert.accessoryView = nameField
+  discard alert.rebuildAlertView()
+  if renaming:
+    discard alert.window.makeFirstResponder(nameField)
+  if frontend.application.runModal(alert) != 1:
+    return
+  try:
+    if renaming:
+      discard frontend.fileTree.renameItem(path, nameField.text())
+    else:
+      frontend.fileTree.deleteItem(path)
+    if not frontend.gitDiffPanel.isNil:
+      frontend.gitDiffPanel.scheduleRepositoryRefresh()
+  except CatchableError as error:
+    let failure = nimkit.newAlert("Could not " & title.toLowerAscii(), error.msg)
+    defer:
+      failure.window.close()
+    discard frontend.application.runModal(failure)
 
 proc showPipedGitDiff*(
     frontend: KosmoApplication, content, workingDirectory: string
@@ -903,6 +964,9 @@ proc newKosmoApplication*(
       discard activeView.previewFile(path)
     of fodPermanent:
       discard activeView.openFile(path)
+  fileTree.onItemAction = proc(path: string, action: FileTreeItemAction) =
+    if not frontend.isNil:
+      frontend[].performFileTreeAction(path, action)
   searchPanel.onOpenResult = proc(
       match: nimkit.FileSearchMatch, disposition: FileTreeOpenDisposition
   ) =

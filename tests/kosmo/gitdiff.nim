@@ -557,6 +557,13 @@ suite "Kosmo Git diff":
     require frontend.gitDiffPanel.waitForDiff()
     check frontend.documentTabs.documentTabModels()[diffTabIndex].title ==
       "Git Diff · " & root.lastPathPart()
+    require frontend.showGitDiff(root / "menu.txt")
+    require frontend.gitDiffPanel.waitForDiff()
+    check frontend.documentTabs.documentTabModels()[diffTabIndex].title ==
+      "Git Diff · menu.txt"
+    check frontend.gitDiffPanel.snapshot.scopePath == root / "menu.txt"
+    require frontend.showGitDiff()
+    require frontend.gitDiffPanel.waitForDiff()
     let
       originalPanel = frontend.gitDiffPanel
       expectedStyle = frontend.editorPane.markdownControls.markdownPresentationStyle()
@@ -754,3 +761,41 @@ suite "Kosmo Git diff":
         let started = getMonoTime()
         panel.close()
         check (getMonoTime() - started).inMilliseconds < 2000
+
+suite "Kosmo scoped Git diff":
+  test "file and folder scopes survive manual and scheduled refreshes":
+    let root = createTempDir("kosmo-scoped-diff-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    createDir(root / "folder")
+    createDir(root / "folder-other")
+    writeFile(root / "folder" / "one.txt", "old\n")
+    writeFile(root / "folder-other" / "other.txt", "old\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "Initial")
+    writeFile(root / "folder" / "one.txt", "new\n")
+    writeFile(root / "folder-other" / "other.txt", "new\n")
+    let panel = newKosmoGitDiffPanel(root, scopePath = root / "folder")
+    defer:
+      panel.close()
+    require panel.waitForDiff()
+    check panel.snapshot.scopePath == root / "folder"
+    require panel.snapshot.files.len == 1
+    check panel.snapshot.files[0].path == "folder/one.txt"
+    writeFile(root / "folder" / "untracked.txt", "added\n")
+    panel.scheduleRepositoryRefresh()
+    require panel.waitForDiff()
+    check panel.snapshot.files.len == 2
+    panel.displayRepositoryDiff(root, root / "folder" / "one.txt")
+    require panel.waitForDiff()
+    require panel.snapshot.files.len == 1
+    removeFile(root / "folder" / "one.txt")
+    panel.refresh()
+    require panel.waitForDiff()
+    require panel.snapshot.files.len == 1
+    check panel.snapshot.files[0].path == "folder/one.txt"
+    check panel.snapshot.files[0].deletions == 1
+    panel.displayRepositoryDiff(root)
+    require panel.waitForDiff()
+    check panel.snapshot.files.len == 3

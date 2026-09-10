@@ -31,6 +31,37 @@ proc primaryShiftKeyEvent(key: Key): KeyEvent =
   )
 
 suite "Kosmo synthetic panel shortcuts":
+  test "Save makes an unchanged temporary tab permanent":
+    let root = createTempDir("kosmo-save-preview-", "")
+    defer:
+      removeDir(root)
+    let
+      first = root / "first.txt"
+      second = root / "second.txt"
+    writeFile(first, "first")
+    writeFile(second, "second")
+    let
+      app = newApplication("Save Preview")
+      frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    app.presentSyntheticWindow(frontend)
+    require frontend.editorView.previewFile(first)
+    let id = frontend.editorView.editor.tabs()[^1].id
+    check frontend.editorView.editor.tabs()[^1].temporary
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyS, keyCode: keyS.ord, modifiers: shortcutModifiers())
+    )
+    check not frontend.editorView.editor.tabs()[^1].temporary
+    require frontend.editorView.previewFile(second)
+    var retained = false
+    for tab in frontend.editorView.editor.tabs():
+      if tab.id == id:
+        retained = true
+        check not tab.temporary
+    check retained
+    check readFile(first) == "first"
+
   test "saving a new editor tab writes through a Save As panel":
     let
       root = createTempDir("merenda-kosmo-save-untitled-", "")

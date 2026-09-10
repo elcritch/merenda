@@ -20,6 +20,14 @@ type
   FileTreeOpenHandler* =
     proc(path: string, disposition: FileTreeOpenDisposition) {.closure.}
 
+  FileTreeItemAction* = enum
+    ftiaRename
+    ftiaDelete
+    ftiaGitDiff
+
+  FileTreeItemActionHandler* =
+    proc(path: string, action: FileTreeItemAction) {.closure.}
+
   FileTreeSearchEntry = object
     path: string
     normalizedName: string
@@ -31,6 +39,7 @@ type
     xWorkspaceFiles: WorkspaceFiles
     xChildren: Table[string, seq[string]]
     xOnOpenFile: FileTreeOpenHandler
+    onItemAction*: FileTreeItemActionHandler
     xOpenDisposition: FileTreeOpenDisposition
     xGitStatusService: nimkit.GitStatusService
     xGitSnapshots: Table[string, nimkit.GitStatusSnapshot]
@@ -400,7 +409,82 @@ protocol KosmoFileTreeTableDelegate of nimkit.TableViewDelegate:
   ): bool =
     false
 
+proc refreshAfterMutation(tree: KosmoFileTree) =
+  tree.xChildren.clear()
+  tree.invalidateSearchIndex()
+  tree.xWorkspaceFiles.refresh()
+  tree.reloadFilteredTree()
+
+proc renameItem*(tree: KosmoFileTree, path, name: string): string =
+  ## Rename an item within its parent. Reject empty names and existing destinations.
+  if path in tree.xRootPaths or name.len == 0 or name in [".", ".."] or
+      name.contains('/') or name.contains('\\') or name.contains('\0'):
+    raise newException(ValueError, "Enter a single file or folder name.")
+  result = path.parentDir() / name
+  if result == path:
+    return
+  if fileExists(result) or dirExists(result) or symlinkExists(result):
+    raise newException(IOError, "An item with that name already exists.")
+  if dirExists(path) and not symlinkExists(path):
+    moveDir(path, result)
+  else:
+    moveFile(path, result)
+  tree.refreshAfterMutation()
+  discard tree.selectItemWithIdentifier(result)
+
+proc deleteItem*(tree: KosmoFileTree, path: string) =
+  ## Permanently remove an item after the caller obtains confirmation.
+  if path.len == 0 or path in tree.xRootPaths:
+    raise newException(ValueError, "Project roots cannot be deleted from the browser.")
+  if symlinkExists(path) or fileExists(path):
+    removeFile(path)
+  elif dirExists(path):
+    removeDir(path)
+  else:
+    raise newException(IOError, "The item no longer exists.")
+  tree.refreshAfterMutation()
+
+proc itemContextMenu*(tree: KosmoFileTree, path: string): nimkit.Menu =
+  ## Build actions for the clicked item, retaining its path while the menu is open.
+  if path.len == 0:
+    return
+  result = nimkit.newMenu("File Actions")
+  for action in FileTreeItemAction:
+    let
+      title =
+        case action
+        of ftiaRename: "Rename…"
+        of ftiaDelete: "Delete…"
+        of ftiaGitDiff: "Git Diff"
+      selector = nimkit.actionSelector("kosmo.fileTree." & $action)
+      item = nimkit.newMenuItem(title, selector)
+      weakTree = tree.unsafeWeakRef()
+    item.validates = false
+    item.enabled =
+      not tree.onItemAction.isNil and
+      (action == ftiaGitDiff or path notin tree.xRootPaths)
+    proc makeTarget(
+        action: FileTreeItemAction, selector: nimkit.ActionSelector
+    ): nimkit.ClosureTarget =
+      nimkit.newActionTarget(selector) do(sender: nimkit.DynamicAgent):
+        discard sender
+        if not weakTree.isNil and not weakTree[].onItemAction.isNil:
+          weakTree[].onItemAction(path, action)
+
+    item.target = makeTarget(action, selector)
+    discard result.addItem(item)
+
 protocol KosmoFileTreeEvents of nimkit.ResponderEventProtocol:
+  method rightMouseDown(tree: KosmoFileTree, event: nimkit.MouseEvent): bool =
+    let row = tree.rowItemIndexAtPoint(event.location)
+    if row < 0:
+      tree.menu = nil
+      return true
+    let path = tree.itemIdentifierForRow(row)
+    discard tree.selectItemWithIdentifier(path)
+    tree.menu = tree.itemContextMenu(path)
+    not tree.menu().popUpContextMenu(tree, event).isNil
+
   method mouseUp(tree: KosmoFileTree, event: nimkit.MouseEvent): bool =
     tree.xOpenDisposition = if event.clickCount >= 2: fodPermanent else: fodTemporary
     defer:

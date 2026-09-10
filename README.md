@@ -839,8 +839,8 @@ Context currently provides an empty area for future contextual content and remai
 visible when switching between Files and Find.
 
 The lower sidebar uses compact SVG tabs for the lazy file tree and regular-expression
-find-in-files results. A single click on a result opens it as a temporary preview;
-double-clicking promotes it to a permanent editor tab. The file tree defaults to Visible Files, which hides dotfiles, dot-directories,
+find-in-files results. A single click on a result opens it as a temporary preview.
+Double-clicking or successfully saving it promotes it to a permanent editor tab. The file tree defaults to Visible Files, which hides dotfiles, dot-directories,
 and Git-ignored files and directories, including in filename searches. Git ignore
 filtering updates when repository status refreshes. The Files tab's bottom popup
 switches among All Files, Visible Files, and Changed Files. All Files reveals hidden
@@ -880,6 +880,9 @@ Refresh preserves existing expansion states and reloads the saved changes from
 Git; unsaved editor buffers are not included. Background checks keep the current
 summary visible and leave the view unchanged when the diff has not changed.
 Diff tabs include the repository name, or `stdin` for piped input.
+Right-click a file or folder in the browser to Rename, Delete, or open Git Diff.
+Delete asks for confirmation before permanently removing the item. Path-specific
+diff tabs show the file or folder name and keep that scope during refreshes.
 Holding Control while scrolling over an editor accelerates the wheel movement
 threefold.
 

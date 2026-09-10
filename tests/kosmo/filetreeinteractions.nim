@@ -511,3 +511,79 @@ suite "Kosmo file tree interactions":
         check item.state == (if index == mode.ord: bsOn else: bsOff)
       if mode != FileTreeDisplayMode.SourceControlChanges:
         check tree.rowForItem(otherFile) >= 0
+
+suite "Kosmo file browser item actions":
+  test "secondary click selects the clicked row and retains its action target":
+    let root = createTempDir("kosmo-context-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "one.txt", "one")
+    writeFile(root / "two.txt", "two")
+    let
+      window = newWindow("Context", frame = rect(0, 0, 400, 240))
+      tree = newKosmoFileTree(root, frame = rect(20, 20, 340, 180))
+      content = newView(frame = rect(0, 0, 400, 240))
+    defer:
+      window.close()
+    content.addSubview(tree)
+    window.setContentView(content)
+    var actions: seq[tuple[path: string, action: FileTreeItemAction]]
+    tree.onItemAction = proc(path: string, action: FileTreeItemAction) =
+      actions.add (path, action)
+    content.layoutSubtreeIfNeeded()
+    discard tree.selectItemWithIdentifier(root / "two.txt")
+    let bounds = tree.rowItemRect(tree.rowForItem(root / "one.txt"))
+    let point = tree.pointToWindow(initPoint(bounds.minX + 120, bounds.minY + 12))
+    require window.rightMouseDownAt(point)
+    check tree.selectedItemIdentifier() == root / "one.txt"
+    let menu = tree.menu()
+    require not menu.isNil
+    check menu.isOpen()
+    require menu.items().len == 3
+    discard tree.selectItemWithIdentifier(root / "two.txt")
+    for index, item in menu.items():
+      check item.perform(window)
+      check actions[^1] == (root / "one.txt", FileTreeItemAction(index))
+    require window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
+    check not window.hasActiveTransientSession()
+    discard window.rightMouseDownAt(tree.pointToWindow(initPoint(120, 170)))
+    check tree.menu().isNil
+
+  test "rename and delete update files and reject overwriting":
+    let root = createTempDir("kosmo-mutations-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "one.txt", "one")
+    writeFile(root / "two.txt", "two")
+    createDir(root / "folder")
+    writeFile(root / "folder" / "child.txt", "child")
+    let tree = newKosmoFileTree(root)
+    expect ValueError:
+      discard tree.renameItem(root / "one.txt", "../escape")
+    expect IOError:
+      discard tree.renameItem(root / "one.txt", "two.txt")
+    let renamed = tree.renameItem(root / "one.txt", "renamed.txt")
+    check readFile(renamed) == "one"
+    check not fileExists(root / "one.txt")
+    check tree.rowForItem(renamed) >= 0
+    let folder = tree.renameItem(root / "folder", "renamed-folder")
+    check fileExists(folder / "child.txt")
+    tree.deleteItem(folder)
+    check not dirExists(folder)
+    tree.deleteItem(renamed)
+    check not fileExists(renamed)
+    check readFile(root / "two.txt") == "two"
+    expect ValueError:
+      tree.deleteItem(root)
+
+  test "deleting a directory symlink preserves its target":
+    let root = createTempDir("kosmo-symlink-", "")
+    defer:
+      removeDir(root)
+    createDir(root / "target")
+    writeFile(root / "target" / "child.txt", "keep")
+    createSymlink(root / "target", root / "link")
+    let tree = newKosmoFileTree(root)
+    tree.deleteItem(root / "link")
+    check not symlinkExists(root / "link")
+    check readFile(root / "target" / "child.txt") == "keep"
