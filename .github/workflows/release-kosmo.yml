@@ -470,6 +470,7 @@ jobs:
               --os:freebsd \
               --cpu:amd64 \
               --opt:size \
+              --passL:-Wl,-rpath,/usr/local/lib \
               --debugger:native \
               --lineTrace:off \
               --stackTrace:off \
