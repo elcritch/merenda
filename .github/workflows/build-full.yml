@@ -31,6 +31,10 @@ jobs:
               -- --opt:none
               -d:KosmoMatterMaximumLineBytes=96
               -d:NimkitMatterMaximumLineBytes=96
+          - os: windows-2022
+            nimversion: '2.2.10'
+            display: none
+            nimargs: ''
           # - os: ubuntu-24.04
           #   display: wayland
     steps:
@@ -102,7 +106,11 @@ jobs:
     - name: Run NimKit tests
       timeout-minutes: 5
       run: |
-        ./deps/.nimcache/atlas-run/tests/tnimkit/tnimkit
+        testExecutable=./deps/.nimcache/atlas-run/tests/tnimkit/tnimkit
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          testExecutable+=".exe"
+        fi
+        "$testExecutable"
 
     - name: Compile Kosmo tests
       run: |
@@ -112,7 +120,11 @@ jobs:
     - name: Run Kosmo tests
       timeout-minutes: 5
       run: |
-        ./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo
+        testExecutable=./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          testExecutable+=".exe"
+        fi
+        "$testExecutable"
 
     - name: Compile Tekton tests
       run: |
@@ -122,7 +134,11 @@ jobs:
     - name: Run Tekton tests
       timeout-minutes: 5
       run: |
-        ./deps/.nimcache/atlas-run/tests/ttekton/ttekton
+        testExecutable=./deps/.nimcache/atlas-run/tests/ttekton/ttekton
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          testExecutable+=".exe"
+        fi
+        "$testExecutable"
 
     - name: Compile integration tests
       run: |
@@ -132,7 +148,11 @@ jobs:
     - name: Run integration tests
       timeout-minutes: 5
       run: |
-        ./deps/.nimcache/atlas-run/tests/tintegrations/tintegrations
+        testExecutable=./deps/.nimcache/atlas-run/tests/tintegrations/tintegrations
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          testExecutable+=".exe"
+        fi
+        "$testExecutable"
 
   examples:
     runs-on: ${{ matrix.os }}
@@ -148,7 +168,7 @@ jobs:
         os:
           - macos-latest
           - ubuntu-latest
-          # - windows-2022
+          - windows-2022
     steps:
     - uses: actions/checkout@v5
 
