@@ -406,7 +406,10 @@ jobs:
             awk '$NF == "backtrace_create_state" { found = 1 } END { exit !found }'
           cp data/FONT-LICENSES.md build/FONT-LICENSES.md
           cp -R data/font-licenses build/font-licenses
-          build/kosmo --help
+          # The static binary still loads the graphics backends through dynlib.
+          # The Ubuntu runner only has glibc graphics libraries, which a musl
+          # binary cannot load. The ELF, symbol, and ldd checks above validate
+          # the artifact without requiring a musl graphics runtime here.
           if ldd build/kosmo 2>&1 | grep -q 'not a dynamic executable'; then
             :
           else
