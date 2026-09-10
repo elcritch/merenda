@@ -39,12 +39,19 @@ detect_release_archive() {
     Linux)
       case "$arch" in
         x86_64 | amd64) echo "linux:kosmo-linux-amd64.tar.gz" ;;
+        arm64 | aarch64) echo "linux:kosmo-linux-arm64.tar.gz" ;;
         *) return 1 ;;
       esac
       ;;
     Darwin)
       case "$arch" in
         arm64 | aarch64) echo "macos:kosmo-macos-arm64.zip" ;;
+        *) return 1 ;;
+      esac
+      ;;
+    FreeBSD)
+      case "$arch" in
+        x86_64 | amd64) echo "freebsd:kosmo-freebsd-amd64.tar.gz" ;;
         *) return 1 ;;
       esac
       ;;
@@ -208,7 +215,7 @@ echo "install.sh: verified SHA-256 checksum" >&2
 
 mkdir -p "$extract_dir"
 case "$platform" in
-  linux)
+  linux | freebsd)
     need_cmd tar
     tar -xzf "$archive_path" -C "$extract_dir"
     if [ ! -f "$extract_dir/kosmo" ]; then

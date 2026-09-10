@@ -799,9 +799,9 @@ Kosmo terminals route the command back to the window that created that terminal.
 Commands from other shells use the newest responsive Kosmo process. If none is
 running, Kosmo starts normally; add `--bg` to detach it from the invoking shell.
 Use `kosmo --help` to see the standalone options, and use `kosmo -- --name` when
-a path starts with a dash. Tagged releases provide Linux, macOS, and Windows
-binaries; see [Releasing Kosmo binaries](docs/releasing-kosmo.md) for artifact and
-macOS signing details.
+a path starts with a dash. Tagged releases provide Linux amd64 (glibc and musl),
+Linux arm64, FreeBSD amd64, macOS, and Windows binaries; see [Releasing Kosmo
+binaries](docs/releasing-kosmo.md) for artifact and macOS signing details.
 
 For arbitrary text, use `sometool | kosmo --file:txt` (or `--file:log`,
 `--file:hcl`, etc.). This opens a separate modified editor buffer named `stdin.txt`
