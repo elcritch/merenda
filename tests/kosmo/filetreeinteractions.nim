@@ -513,6 +513,49 @@ suite "Kosmo file tree interactions":
         check tree.rowForItem(otherFile) >= 0
 
 suite "Kosmo file browser item actions":
+  test "secondary click activates the window containing the file tree":
+    let
+      firstRoot = createTempDir("kosmo-context-first-", "")
+      secondRoot = createTempDir("kosmo-context-second-", "")
+      app = newApplication("Kosmo Context Window Test")
+      firstWindow = newWindow("First", frame = rect(0, 0, 400, 240))
+      secondWindow = newWindow("Second", frame = rect(20, 20, 400, 240))
+      firstContent = newView(frame = rect(0, 0, 400, 240))
+      secondContent = newView(frame = rect(0, 0, 400, 240))
+    defer:
+      firstWindow.close()
+      secondWindow.close()
+      removeDir(firstRoot)
+      removeDir(secondRoot)
+    writeFile(firstRoot / "first.txt", "first")
+    writeFile(secondRoot / "second.txt", "second")
+    let
+      firstTree = newKosmoFileTree(firstRoot, frame = rect(20, 20, 340, 180))
+      secondTree = newKosmoFileTree(secondRoot, frame = rect(20, 20, 340, 180))
+    firstContent.addSubview(firstTree)
+    secondContent.addSubview(secondTree)
+    firstWindow.setContentView(firstContent)
+    secondWindow.setContentView(secondContent)
+    firstContent.layoutSubtreeIfNeeded()
+    secondContent.layoutSubtreeIfNeeded()
+    app.addWindow(firstWindow)
+    app.addWindow(secondWindow)
+    app.activateWindow(firstWindow)
+
+    require firstTree.workspaceFiles.waitForFiles()
+    require secondTree.workspaceFiles.waitForFiles()
+    let row = secondTree.rowForItem(secondRoot / "second.txt")
+    require row >= 0
+    let bounds = secondTree.rowItemRect(row)
+    let point = secondTree.pointToWindow(initPoint(bounds.minX + 120, bounds.minY + 12))
+    require secondWindow.rightMouseDownAt(point)
+    check app.keyWindow() == secondWindow
+    check secondTree.menu().isOpen()
+    check firstTree.menu().isNil
+    require secondWindow.dispatchKeyDown(
+      KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
+    )
+
   test "secondary click selects the clicked row and retains its action target":
     let root = createTempDir("kosmo-context-", "")
     defer:

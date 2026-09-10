@@ -1849,6 +1849,9 @@ proc popUpContextMenu*(
   let content = owner.contentView()
   if content.isNil:
     return nil
+  # A secondary click on an inactive window can reach the view before its native
+  # focus notification. Make the context-menu owner current before presenting it.
+  owner.makeKeyAndOrderFront()
 
   let
     windowPoint = view.pointToWindow(event.location)
