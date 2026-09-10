@@ -364,7 +364,7 @@ jobs:
             --cc:gcc \
             --gcc.exe:"$MUSL_CC" \
             --gcc.linkerexe:"$MUSL_CC" \
-            --passC:-I/usr/include \
+            --passC:"-idirafter /usr/include" \
             --passL:-static \
             --opt:size \
             --debugger:native \
