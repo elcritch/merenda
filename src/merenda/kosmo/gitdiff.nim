@@ -96,6 +96,9 @@ type
     refreshPending: bool
     refreshDeadline: MonoTime
     refreshDebounce: Duration
+    repositoryBacked: bool
+    repositoryRootPath: string
+    repositoryScopePath: string
     relayoutPending: bool
     generation: uint64
     readGeneration: uint64
@@ -151,23 +154,6 @@ proc readGitDiff(
     elif hasHead:
       let commit = runGit(result.rootPath, ["rev-parse", "--short", "HEAD"])
       result.branch = "Detached HEAD · " & commit.output.strip()
-    let names =
-      if hasHead:
-        runGit(
-          result.rootPath,
-          [
-            "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-only",
-            "-z", "HEAD", "--",
-          ],
-        )
-      else:
-        runGit(result.rootPath, ["ls-files", "--cached", "-z"])
-    let untracked =
-      runGit(result.rootPath, ["ls-files", "--others", "--exclude-standard", "-z"])
-    if names.code != 0 or untracked.code != 0:
-      result.errorMessage =
-        "Could not list changed files.\n" & names.output & untracked.output
-      return
     var scope = scopePath
     if scope.len > 0:
       # Git canonicalizes repository roots (for example /var to /private/var).
@@ -178,6 +164,31 @@ proc readGitDiff(
       scope = normalizedPath(
         expandFilename(parent) / relativePath(absolutePath(scope), parent)
       )
+    var pathspec: seq[string]
+    if scope.len > 0 and scope != normalizedPath(result.rootPath):
+      if not scope.isRelativeTo(result.rootPath):
+        return
+      pathspec.add relativePath(scope, result.rootPath)
+    let names =
+      if hasHead:
+        var args =
+          @[
+            "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-only",
+            "-z", "HEAD", "--",
+          ]
+        args.add pathspec
+        runGit(result.rootPath, args)
+      else:
+        var args = @["ls-files", "--cached", "-z", "--"]
+        args.add pathspec
+        runGit(result.rootPath, args)
+    var untrackedArgs = @["ls-files", "--others", "--exclude-standard", "-z", "--"]
+    untrackedArgs.add pathspec
+    let untracked = runGit(result.rootPath, untrackedArgs)
+    if names.code != 0 or untracked.code != 0:
+      result.errorMessage =
+        "Could not list changed files.\n" & names.output & untracked.output
+      return
     let untrackedPaths = untracked.output.split('\0').toHashSet()
     var seen = initHashSet[string]()
     for group in [names.output, untracked.output]:
@@ -950,7 +961,7 @@ proc updateLoading(panel: KosmoGitDiffPanel) =
   for section in panel.sections.values:
     panel.loading = panel.loading or section.pending
     preparing = preparing or section.pending
-  panel.refreshButton.enabled = not preparing and panel.snapshot.source == gdsRepository
+  panel.refreshButton.enabled = not preparing and panel.repositoryBacked
 
 proc applyHighlighting(
     panel: KosmoGitDiffPanel, highlighted: SharedPtr[GitDiffHighlightResult]
@@ -1078,6 +1089,9 @@ proc displayDiff*(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) =
   ## Replace the current contents with an already prepared, static snapshot.
   if panel.isNil or panel.closed:
     return
+  panel.repositoryBacked = false
+  panel.repositoryRootPath = ""
+  panel.repositoryScopePath = ""
   inc panel.readGeneration
   panel.readingGit = false
   panel.applyDiff(snapshot)
@@ -1095,7 +1109,7 @@ proc pollRepositoryRefresh*(panel: KosmoGitDiffPanel): bool {.discardable.} =
 
 proc scheduleRepositoryRefresh*(panel: KosmoGitDiffPanel) =
   ## Coalesce repository notifications until the workspace has been quiet.
-  if panel.isNil or panel.closed or panel.snapshot.source != gdsRepository:
+  if panel.isNil or panel.closed or not panel.repositoryBacked:
     return
   panel.refreshPending = true
   panel.refreshDeadline = getMonoTime() + panel.refreshDebounce
@@ -1103,19 +1117,24 @@ proc scheduleRepositoryRefresh*(panel: KosmoGitDiffPanel) =
 proc displayRepositoryDiff*(
     panel: KosmoGitDiffPanel, rootPath: string, scopePath = ""
 ) =
-  ## Replace static input if needed, then refresh the selected repository.
+  ## Refresh a repository or path without clearing the displayed snapshot.
   if panel.isNil or panel.closed:
     return
-  if panel.snapshot.source != gdsRepository or panel.snapshot.rootPath != rootPath or
-      panel.snapshot.scopePath != scopePath:
-    panel.displayDiff(
-      GitDiffSnapshot(source: gdsRepository, rootPath: rootPath, scopePath: scopePath)
-    )
+  let changed =
+    not panel.repositoryBacked or panel.repositoryRootPath != rootPath or
+    panel.repositoryScopePath != scopePath
+  panel.repositoryBacked = true
+  panel.repositoryRootPath = rootPath
+  panel.repositoryScopePath = scopePath
+  if changed and panel.readingGit:
+    inc panel.readGeneration
+    panel.readingGit = false
+    panel.updateLoading()
   panel.refresh()
 
 proc refresh*(panel: KosmoGitDiffPanel) =
   ## Refresh the current repository on a worker thread.
-  if not panel.closed and not panel.loading and panel.snapshot.source == gdsRepository:
+  if not panel.closed and not panel.readingGit and panel.repositoryBacked:
     panel.refreshPending = false
     inc panel.readGeneration
     inc panel.xRepositoryReadCount
@@ -1125,7 +1144,7 @@ proc refresh*(panel: KosmoGitDiffPanel) =
       panel.refreshButton.enabled = false
       panel.renderDiff()
     emit panel.worker.executeDiff(
-      panel.snapshot.rootPath, panel.snapshot.scopePath, panel.readGeneration,
+      panel.repositoryRootPath, panel.repositoryScopePath, panel.readGeneration,
       panel.control,
     )
 
@@ -1224,6 +1243,9 @@ proc newKosmoGitDiffPanel(
     collapseButton: nimkit.newButton("Collapse All"),
     snapshot: GitDiffSnapshot(rootPath: rootPath, scopePath: scopePath),
     refreshDebounce: GitDiffRefreshDebounceInterval,
+    repositoryBacked: refreshesRepository,
+    repositoryRootPath: if refreshesRepository: rootPath else: "",
+    repositoryScopePath: if refreshesRepository: scopePath else: "",
     disclosureButtons: initTable[string, GitDiffDisclosureButton](),
     pool: newSigilThreadPool(workers = 1),
     control: newGitDiffControl(),
