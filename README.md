@@ -339,6 +339,11 @@ window from becoming smaller than that fitting size. Tab views include the
 largest fitting width and height required by any of their pages, so switching
 pages does not reveal clipped content.
 
+Set `window.contentMinSize` explicitly when a scroll view or table has a useful
+preferred size larger than the smallest usable window. This lets the viewport
+compress and scroll instead of turning preferred rows or columns into a hard
+resize floor.
+
 Merenda apps automatically use the native window content scale. To force a
 specific UI scale for development or display debugging, set `UISCALE` or
 `NIMKIT_UISCALE`:
@@ -605,6 +610,10 @@ choice. For a standard window, wrap its content with
 or shows it as the presentation changes. Standalone `newMenuBar` presenters
 follow the same policy, and layout containers such as `StackView` automatically
 omit the hidden menu bar.
+
+In-window menu bars resolve the `srMenuBar` and `srMenuBarItem` style roles.
+Their `menuBar.*` tokens inherit the active theme's tab palette by default, so
+the bar, item labels, and hover/open states all follow the selected theme.
 
 Popup presentation stays local to each window and popup-capable control. Use
 `window.setPopupPresentation(ppInline)` for a window-wide preference, or assign

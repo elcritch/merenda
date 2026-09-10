@@ -1,4 +1,4 @@
-import std/unittest
+import std/[unicode, unittest]
 
 when defined(macosx):
   import darwin/app_kit/[nsapplication, nsevent, nsmenu, nswindow]
@@ -30,6 +30,10 @@ func center(rect: Rect): Point =
     rect.origin.x + rect.size.width / 2.0'f32,
     rect.origin.y + rect.size.height / 2.0'f32,
   )
+
+proc renderedText(node: Fig): string =
+  for rune in node.textLayout.runes:
+    result.add rune
 
 type ContextSpyView = ref object of View
   rightDownCount: int
@@ -232,6 +236,58 @@ suite "nimkit menus":
     let replacementMenu = newMenu("Replacement")
     root.mainMenu = replacementMenu
     check root.menuBar().menu() == replacementMenu
+
+  test "in-window menu bars render their active appearance theme":
+    for theme in [
+      initAquaTheme(),
+      initDarkBSDTheme(),
+      initMacOSTheme(),
+      initMacOSDarkTheme(),
+      initNebulaTheme(),
+      initPeachyTheme(),
+      initSynthwave83Theme(),
+    ]:
+      let
+        root = newView(frame = rect(0, 0, 240, 80))
+        mainMenu = newMenu("Main")
+        actionsMenu = newMenu("Actions")
+        actionsItem = newMenuItem("Actions")
+        menuBar = newMenuBar(mainMenu, rect(0, 0, 240, 28))
+        appearance = initAppearance(theme)
+
+      actionsItem.submenu = actionsMenu
+      discard mainMenu.addItem(actionsItem)
+      menuBar.appearance = appearance
+      menuBar.reload()
+      root.addSubview(menuBar)
+      root.layoutSubtreeIfNeeded()
+      require menuBar.subviews().len == 1
+      menuBar.subviews()[0].hovered = true
+
+      let
+        renders = buildRenders(root)
+        barStyle = appearance.resolveBoxStyle(controlStyle(srMenuBar))
+        itemStyle =
+          appearance.resolveButtonStyle(controlStyle(srMenuBarItem, {ssHovered}))
+        itemBounds = menuBar.subviews()[0].bounds()
+      var
+        barFillFound = false
+        itemFillFound = false
+        itemTextFound = false
+      for node in renders[DefaultDrawLevel].nodes:
+        if node.kind == nkRectangle and node.screenBox.w == 240.0 and
+            node.screenBox.h == 28.0 and node.fill == barStyle.box.fill:
+          barFillFound = true
+        elif node.kind == nkRectangle and node.screenBox == itemBounds and
+            node.fill == itemStyle.box.fill:
+          itemFillFound = true
+        elif node.kind == nkText and node.renderedText() == "Actions":
+          require node.textLayout.spanColors.len > 0
+          itemTextFound = node.textLayout.spanColors[0] == fill(itemStyle.text.color)
+
+      check barFillFound
+      check itemFillFound
+      check itemTextFound
 
   test "popup list keeps transparent view backing behind rounded chrome":
     let popup = newPopupListView(frame = rect(0, 0, 120, 60))

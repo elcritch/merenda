@@ -13,6 +13,7 @@ import nimkit/font_layout
 import nimkit/fontpickers
 import nimkit/images
 import nimkit/markdownviews
+import nimkit/menus
 import nimkit/renderfragments
 import nimkit/resources
 import nimkit/settings

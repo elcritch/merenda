@@ -527,6 +527,20 @@ proc buildAquaTheme(): ThemeBuilder =
   result["tab.border.color.highlighted"] = styleColor(rgbaColor(70, 116, 178, 224))
   result["tab.border.color.selected"] = styleColor(rgbaColor(34, 102, 210, 232))
   result["tab.border.color.disabled"] = styleColor(rgbaColor(150, 156, 166, 148))
+  result["menuBar.fill"] = styleToken("tab.panel.fill")
+  result["menuBar.border.color"] = styleToken("tab.panel.border.color")
+  result["menuBar.item.fill"] = styleFill(color(0.0, 0.0, 0.0, 0.0))
+  result["menuBar.item.fill.hovered"] = styleToken("tab.fill.highlighted")
+  result["menuBar.item.fill.active"] = styleToken("tab.fill.selected")
+  result["menuBar.item.fill.disabled"] = styleToken("tab.fill.disabled")
+  result["menuBar.item.border.color"] = styleColor(color(0.0, 0.0, 0.0, 0.0))
+  result["menuBar.item.border.color.hovered"] =
+    styleToken("tab.border.color.highlighted")
+  result["menuBar.item.border.color.active"] = styleToken("tab.border.color.selected")
+  result["menuBar.item.border.color.disabled"] = styleToken("tab.border.color.disabled")
+  result["menuBar.item.text.color"] = styleToken("tab.text.color")
+  result["menuBar.item.text.color.active"] = styleToken("tab.text.color.selected")
+  result["menuBar.item.text.color.disabled"] = styleToken("tab.text.color.disabled")
   result["documentTab.bar.fill"] = aquaDocumentTabBarFill()
   result["documentTab.bar.border.color"] = styleColor(color(0.45, 0.54, 0.68, 0.52))
   result["documentTab.fill"] = aquaDocumentTabFill()
@@ -731,6 +745,43 @@ proc buildAquaTheme(): ThemeBuilder =
   result[srProgressIndicator, StyleKnobBorderColor] = rgbaColor(82, 116, 170, 220)
   result[srProgressIndicator, StyleKnobShadows] = aquaKnobShadows()
   result[srProgressIndicator, StyleChrome] = styleKeyword(AquaChromeName)
+
+  result[srMenuBar, StyleFill] = styleToken("menuBar.fill")
+  result[srMenuBar, StyleBorderColor] = styleToken("menuBar.border.color")
+  result[srMenuBar, StyleBorderWidth] = 1.0
+  result.addRoleRule(
+    srMenuBarItem,
+    {},
+    styleToken("menuBar.item.fill"),
+    styleToken("menuBar.item.border.color"),
+    styleToken("menuBar.item.text.color"),
+  )
+  result.addRoleRule(
+    srMenuBarItem,
+    {ssHovered},
+    styleToken("menuBar.item.fill.hovered"),
+    styleToken("menuBar.item.border.color.hovered"),
+    styleToken("menuBar.item.text.color"),
+  )
+  for state in [ssHighlighted, ssActive, ssOpen]:
+    result.addRoleRule(
+      srMenuBarItem,
+      {state},
+      styleToken("menuBar.item.fill.active"),
+      styleToken("menuBar.item.border.color.active"),
+      styleToken("menuBar.item.text.color.active"),
+    )
+  result.addRoleRule(
+    srMenuBarItem,
+    {ssDisabled},
+    styleToken("menuBar.item.fill.disabled"),
+    styleToken("menuBar.item.border.color.disabled"),
+    styleToken("menuBar.item.text.color.disabled"),
+  )
+  result[srMenuBarItem, StyleBorderWidth] = 1.0
+  result[srMenuBarItem, StyleCornerRadius] = 4.0
+  result[srMenuBarItem, StyleTextInsets] = insets(3.0, 10.0)
+  result[srMenuBarItem, StyleMinimumSize] = initSize(44.0, 24.0)
 
   result.addRoleRule(
     srTab,

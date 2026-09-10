@@ -331,11 +331,10 @@ suite "nimkit rendering":
       buttonBorder = color(0.11, 0.12, 0.13, 1.0)
       fieldFill = color(0.91, 0.92, 0.93, 1.0)
       fieldBorder = color(0.21, 0.22, 0.23, 1.0)
-      buttonShadows =
-        @[
-          dropShadow(color(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
-          insetShadow(color(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
-        ]
+      buttonShadows = @[
+        dropShadow(color(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
+        insetShadow(color(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
+      ]
 
     var builder = initThemeBuilder(initTheme())
     builder[srButton, StyleFill] = buttonFill
@@ -1055,15 +1054,17 @@ suite "nimkit rendering":
     check menuBar.subviews.len == 1
     menuBar.subviews[0].hovered = true
 
-    let renders = buildRenders(root)
+    let
+      renders = buildRenders(root)
+      hoverStyle =
+        initAppearance().resolveButtonStyle(controlStyle(srMenuBarItem, {ssHovered}))
     var hoverFound = false
 
     for node in renders[DefaultDrawLevel].nodes:
       if node.kind == nkRectangle and node.screenBox.y == 2.0 and
-          node.screenBox.h == 24.0 and node.fill.kind == flColor and
-          node.fill.color == color(0.76, 0.81, 0.91).rgba:
+          node.screenBox.h == 24.0 and node.fill == hoverStyle.box.fill:
         hoverFound = true
-        check node.stroke.weight == 1.0
+        check node.stroke.weight == hoverStyle.box.borderWidth
         check node.corners[dcTopLeft] == 4'u16
 
     check hoverFound
