@@ -5,3 +5,4 @@ import integrations/kosmocliopen
 import integrations/kosmoterminalenvironment
 import integrations/nativewindowscale
 import integrations/urlassets
+import integrations/backgroundworkershutdown
