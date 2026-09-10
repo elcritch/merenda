@@ -36,6 +36,8 @@ access. Its defaults are `~/.local/bin` on Linux and Windows, and
 `KOSMO_INSTALL_DIR`, `KOSMO_BIN_DIR` (macOS), and `KOSMO_DOC_DIR` (Linux, FreeBSD,
 and Windows) override those destinations. `KOSMO_VERSION` selects a release tag;
 when unset, the installer downloads the latest release.
+On Linux amd64, pass `--static` to install `kosmo-linux-amd64-musl.tar.gz`, the
+statically linked musl variant.
 
 Publishing a GitHub release runs all platform builds and uploads the resulting archives
 to that release. The Linux amd64 musl build is statically linked for the C runtime; the

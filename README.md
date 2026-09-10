@@ -64,6 +64,13 @@ On Linux and Windows (from Git Bash), this installs the command in
 `~/.local/bin/kosmo` command link. Add `~/.local/bin` to `PATH` if necessary.
 The installer verifies the archive against the release's `SHA256SUMS.txt`.
 
+On Linux amd64, pass `--static` to install the statically linked musl build:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/elcritch/merenda/HEAD/install.sh | \
+  bash -s -- --static
+```
+
 Set `KOSMO_INSTALL_DIR` to override the application or binary directory. On
 macOS, set `KOSMO_BIN_DIR` separately to move the command link. To install a
 specific release rather than the latest one, provide its tag, for example:
