@@ -424,6 +424,7 @@ jobs:
         with:
           release: "15.0"
           sync: rsync
+          disable-cache: true
           cache-after-prepare: true
           mem: 8192
           envs: NIM_VERSION KOSMO_RELEASE_VERSION GITHUB_SHA
@@ -446,6 +447,7 @@ jobs:
               libbacktrace \
               libxcb \
               libxkbcommon \
+              libglvnd \
               mesa-libs \
               nim \
               pkgconf \
