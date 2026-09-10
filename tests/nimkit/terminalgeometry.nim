@@ -1,8 +1,9 @@
-import std/unittest
+import std/[strutils, unittest]
 
 import figdraw
 
 import merenda/nimkit
+import merenda/nimkit/text/monotextviews as monoTextViews
 
 suite "Terminal geometry":
   test "partial cell space stays outside the terminal grid and wrap boundary":
@@ -43,3 +44,51 @@ suite "Terminal geometry":
           check node.fill.kind == flColor
           check node.fill.color == background.rgba
       check foundSurface
+
+suite "Terminal scrollback stability":
+  test "output preserves visible history before and after the buffer fills":
+    for capacity in [4, 20]:
+      let
+        session =
+          newCompactTerminalSession(columns = 16, rows = 3, maxScrollback = capacity)
+        view = newTerminalView(session, frame = rect(0, 0, 180, 60))
+      defer:
+        view.close()
+      session.processOutput("row0\r\nrow1\r\nrow2\r\nrow3\r\nrow4\r\nrow5\r\nrow6")
+      discard view.poll()
+      view.selectTerminalRange(
+        TerminalSelection(
+          anchor: initTerminalPosition(1, 0), extent: initTerminalPosition(1, 4)
+        )
+      )
+      let visible = monoTextViews.stringValue(view)
+      let offset = view.scrollPosition()
+      session.processOutput("\r\nrow7")
+      discard view.poll()
+      check monoTextViews.stringValue(view) == visible
+      check view.scrollPosition() == offset + 1
+      check view.selectionText() == "row1"
+      session.processOutput("\r\nrow8")
+      discard view.poll()
+      if capacity == 4:
+        check monoTextViews.stringValue(view).startsWith("row2")
+        check not view.hasSelection()
+      else:
+        check monoTextViews.stringValue(view) == visible
+      session.processOutput("\e[3J")
+      discard view.poll()
+      check view.scrollPosition() == 0
+
+  test "live terminal output continues to follow the prompt":
+    let
+      session = newCompactTerminalSession(columns = 16, rows = 2, maxScrollback = 2)
+      view = newTerminalView(session)
+    defer:
+      view.close()
+    session.processOutput("one\r\ntwo\r\nthree\r\nfour")
+    discard view.poll()
+    check view.scrollPosition() == 0
+    session.processOutput("\r\nfive")
+    discard view.poll()
+    check view.scrollPosition() == 0
+    check monoTextViews.stringValue(view).startsWith("four")

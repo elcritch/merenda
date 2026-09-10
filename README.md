@@ -556,7 +556,9 @@ app.runWindow(window, terminal, terminal)
 
 Passing a `command` runs it through the selected shell; leaving it empty starts
 an interactive shell. Terminal views use Terminex's `CompactTerminalSession`
-backend to reduce the memory retained by large histories. Terminex session APIs
+backend to reduce the memory retained by large histories. Scrolling into history
+keeps the visible lines stable as output arrives, until those lines age out of the
+history buffer. Typing or pressing Enter returns to the live prompt. Terminex session APIs
 are also public for applications that want to drive the parser and PTY transport
 separately from the view. The PTY backend currently supports POSIX platforms
 (macOS, Linux, and FreeBSD).
@@ -848,8 +850,8 @@ Context currently provides an empty area for future contextual content and remai
 visible when switching between Files and Find.
 
 The lower sidebar uses compact SVG tabs for the lazy file tree and regular-expression
-find-in-files results. A single click on a result opens it as a temporary preview;
-double-clicking promotes it to a permanent editor tab. The file tree defaults to Visible Files, which hides dotfiles, dot-directories,
+find-in-files results. A single click on a result opens it as a temporary preview.
+Double-clicking or successfully saving it promotes it to a permanent editor tab. The file tree defaults to Visible Files, which hides dotfiles, dot-directories,
 and Git-ignored files and directories, including in filename searches. Git ignore
 filtering updates when repository status refreshes. The Files tab's bottom popup
 switches among All Files, Visible Files, and Changed Files. All Files reveals hidden
@@ -875,7 +877,8 @@ Command-F on macOS or Control-F elsewhere opens a live file-name filter; matchin
 remain nested beneath their folder hierarchy. Find in Files searches Git tracked and
 untracked non-ignored files and skips binary or unsupported text encodings by default;
 both filters are configurable through `FileSearchOptions`.
-File → Show Git Diff (Command-Shift-D on macOS) opens a tab showing staged,
+File → Show Git Diff (Command-Shift-D on macOS) uses the selected editor file’s
+nearest Git repository, including when multiple project roots are open. It opens a tab showing staged,
 unstaged, and untracked changes as standard three-line-context diff hunks. Matter
 uses full-file context to preserve language syntax, but only the displayed hunks
 are laid out. Each file is prepared independently on NimKit's shared worker pool
@@ -886,7 +889,12 @@ Files start collapsed. Click a file heading to expand or collapse its cached dif
 or use Expand All and Collapse All. File sections share one scrolling surface;
 expanding a file schedules its text layout without repeating syntax highlighting.
 Refresh preserves existing expansion states and reloads the saved changes from
-Git; unsaved editor buffers are not included.
+Git; unsaved editor buffers are not included. Background checks keep the current
+summary visible and leave the view unchanged when the diff has not changed.
+Diff tabs include the repository name, or `stdin` for piped input.
+Right-click a file or folder in the browser to Rename, Delete, or open Git Diff.
+Delete asks for confirmation before permanently removing the item. Path-specific
+diff tabs show the file or folder name and keep that scope during refreshes.
 Holding Control while scrolling over an editor accelerates the wheel movement
 threefold.
 

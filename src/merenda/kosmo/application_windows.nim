@@ -308,7 +308,14 @@ proc showGitDiffSnapshot(
 ): bool =
   if frontend.isNil or frontend.dockController.isNil:
     return
-  let controller = frontend.dockController
+  let
+    controller = frontend.dockController
+    title =
+      "Git Diff · " & (
+        if snapshot.scopePath.len > 0: snapshot.scopePath.lastPathPart()
+        elif refreshesRepository: snapshot.rootPath.lastPathPart()
+        else: "stdin"
+      )
   for group in controller.groups:
     let document = group.documentForIdentifier(KosmoGitDiffTabIdentifier)
     if not document.isNil:
@@ -316,9 +323,14 @@ proc showGitDiffSnapshot(
         if document.contentView of KosmoGitDiffPanel:
           frontend.gitDiffPanel = KosmoGitDiffPanel(document.contentView)
           if refreshesRepository:
-            frontend.gitDiffPanel.displayRepositoryDiff(snapshot.rootPath)
+            frontend.gitDiffPanel.displayRepositoryDiff(
+              snapshot.rootPath, snapshot.scopePath
+            )
           else:
             frontend.gitDiffPanel.displayDiff(snapshot)
+        document.title = title
+        document.tooltip =
+          if refreshesRepository: "Current Git diff" else: "Piped Git diff"
         controller.activatePanelWindow(group.window)
         controller.activatePaneTab(group, document.identifier)
         return true
@@ -337,7 +349,9 @@ proc showGitDiffSnapshot(
     panel =
       if refreshesRepository:
         newKosmoGitDiffPanel(
-          snapshot.rootPath, group.pane.markdownControls.markdownPresentationStyle()
+          snapshot.rootPath,
+          group.pane.markdownControls.markdownPresentationStyle(),
+          snapshot.scopePath,
         )
       else:
         newKosmoGitDiffPanel(
@@ -347,7 +361,7 @@ proc showGitDiffSnapshot(
     weakPanel = panel.unsafeWeakRef()
     document = newKosmoPaneDocument(
       identifier = KosmoGitDiffTabIdentifier,
-      title = "Git Diff",
+      title = title,
       contentView = panel,
       preferredFirstResponder = panel.markdownView.textView(),
       tooltip = if refreshesRepository: "Current Git diff" else: "Piped Git diff",
@@ -372,18 +386,105 @@ proc showGitDiffSnapshot(
   panel.close()
   frontend.gitDiffPanel = nil
 
-proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.} =
-  ## Show full-file Git changes for the active project's repository.
+proc nearestGitDirectory(directory: string): string =
+  var parent = absolutePath(directory)
+  while true:
+    if dirExists(parent / ".git") or fileExists(parent / ".git"):
+      return parent
+    let next = parent.parentDir()
+    if next == parent:
+      break
+    parent = next
+  # Let the worker report that this path is outside a repository.
+  absolutePath(directory)
+
+proc editorGitDirectory(frontend: KosmoApplication): string =
+  let group = frontend.dockController.activePaneGroup()
+  if group.isNil:
+    return
+  var id: KosmoBufferId
+  if not group.selectedTabIdentifier.parseTabIdentifier(id):
+    return
+  for tab in group.editorView.editor.tabs():
+    if tab.id == id and tab.filePath.isSome:
+      return nearestGitDirectory(absolutePath(tab.filePath.get).parentDir())
+
+proc showGitDiff*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
+  ## Show the selected editor file's repository, or a scoped diff for an explicit path.
   if frontend.isNil:
     return
+  let editorRoot =
+    if path.len == 0:
+      frontend.editorGitDirectory()
+    else:
+      ""
   let root =
-    if frontend.fileTree.rootPath.len > 0:
+    if path.len > 0:
+      nearestGitDirectory(
+        if dirExists(path):
+          path
+        else:
+          absolutePath(path).parentDir()
+      )
+    elif editorRoot.len > 0:
+      editorRoot
+    elif frontend.fileTree.rootPath.len > 0:
       frontend.fileTree.rootPath
     else:
       getCurrentDir()
   frontend.showGitDiffSnapshot(
-    GitDiffSnapshot(source: gdsRepository, rootPath: root), refreshesRepository = true
+    GitDiffSnapshot(
+      source: gdsRepository,
+      rootPath: root,
+      scopePath:
+        if path.len > 0:
+          normalizedPath(absolutePath(path))
+        else:
+          "",
+    ),
+    refreshesRepository = true,
   )
+
+proc performFileTreeAction(
+    frontend: KosmoApplication, path: string, action: FileTreeItemAction
+) =
+  if action == ftiaGitDiff:
+    discard frontend.showGitDiff(path)
+    return
+  let
+    renaming = action == ftiaRename
+    title = if renaming: "Rename" else: "Delete"
+    alert = nimkit.newAlert(
+      title & " " & path.lastPathPart(),
+      if renaming:
+        path
+      else:
+        "Permanently delete " & path & "?",
+      buttons = [title, "Cancel"],
+    )
+    nameField = nimkit.newTextField(path.lastPathPart())
+  defer:
+    alert.window.close()
+  alert.window.setInheritedAppearance(frontend.window.effectiveAppearance())
+  if renaming:
+    alert.accessoryView = nameField
+  discard alert.rebuildAlertView()
+  if renaming:
+    discard alert.window.makeFirstResponder(nameField)
+  if frontend.application.runModal(alert) != 1:
+    return
+  try:
+    if renaming:
+      discard frontend.fileTree.renameItem(path, nameField.text())
+    else:
+      frontend.fileTree.deleteItem(path)
+    if not frontend.gitDiffPanel.isNil:
+      frontend.gitDiffPanel.scheduleRepositoryRefresh()
+  except CatchableError as error:
+    let failure = nimkit.newAlert("Could not " & title.toLowerAscii(), error.msg)
+    defer:
+      failure.window.close()
+    discard frontend.application.runModal(failure)
 
 proc showPipedGitDiff*(
     frontend: KosmoApplication, content, workingDirectory: string
@@ -895,6 +996,9 @@ proc newKosmoApplication*(
       discard activeView.previewFile(path)
     of fodPermanent:
       discard activeView.openFile(path)
+  fileTree.onItemAction = proc(path: string, action: FileTreeItemAction) =
+    if not frontend.isNil:
+      frontend[].performFileTreeAction(path, action)
   searchPanel.onOpenResult = proc(
       match: nimkit.FileSearchMatch, disposition: FileTreeOpenDisposition
   ) =

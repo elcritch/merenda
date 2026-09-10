@@ -32,6 +32,7 @@ type
   GitDiffSnapshot* = object
     source*: GitDiffSource
     rootPath*: string
+    scopePath*: string ## Absolute file or folder path; empty for the whole repository.
     branch*: string
     hasHead*: bool
     files*: seq[GitFileDiff]
@@ -90,10 +91,14 @@ type
     pool: SigilThreadPoolPtr
     worker: AgentProxy[GitDiffWorker]
     sections: Table[string, GitDiffSection]
+    hasSnapshot: bool
     readingGit: bool
     refreshPending: bool
     refreshDeadline: MonoTime
     refreshDebounce: Duration
+    repositoryBacked: bool
+    repositoryRootPath: string
+    repositoryScopePath: string
     relayoutPending: bool
     generation: uint64
     readGeneration: uint64
@@ -124,12 +129,13 @@ proc executeGit(
   (command.output, command.exitCode)
 
 proc readGitDiff(
-    rootPath: string, control: SharedPtr[GitDiffControl]
+    rootPath: string, control: SharedPtr[GitDiffControl], scopePath = ""
 ): GitDiffSnapshot =
   ## Read staged and unstaged changes against HEAD, plus untracked files.
   ## Unborn repositories treat their files as additions. Git runs without shell,
   ## external diff drivers, text conversion, or modifications to the index.
   result.rootPath = rootPath
+  result.scopePath = scopePath
   proc runGit(root: string, args: openArray[string]): tuple[output: string, code: int] =
     executeGit(root, args, control)
 
@@ -148,19 +154,37 @@ proc readGitDiff(
     elif hasHead:
       let commit = runGit(result.rootPath, ["rev-parse", "--short", "HEAD"])
       result.branch = "Detached HEAD · " & commit.output.strip()
+    var scope = scopePath
+    if scope.len > 0:
+      # Git canonicalizes repository roots (for example /var to /private/var).
+      # Resolve an existing parent so deleted paths and symlinks themselves work.
+      var parent = absolutePath(scope).parentDir()
+      while not dirExists(parent) and parent.parentDir() != parent:
+        parent = parent.parentDir()
+      scope = normalizedPath(
+        expandFilename(parent) / relativePath(absolutePath(scope), parent)
+      )
+    var pathspec: seq[string]
+    if scope.len > 0 and scope != normalizedPath(result.rootPath):
+      if not scope.isRelativeTo(result.rootPath):
+        return
+      pathspec.add relativePath(scope, result.rootPath)
     let names =
       if hasHead:
-        runGit(
-          result.rootPath,
-          [
+        var args =
+          @[
             "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-only",
             "-z", "HEAD", "--",
-          ],
-        )
+          ]
+        args.add pathspec
+        runGit(result.rootPath, args)
       else:
-        runGit(result.rootPath, ["ls-files", "--cached", "-z"])
-    let untracked =
-      runGit(result.rootPath, ["ls-files", "--others", "--exclude-standard", "-z"])
+        var args = @["ls-files", "--cached", "-z", "--"]
+        args.add pathspec
+        runGit(result.rootPath, args)
+    var untrackedArgs = @["ls-files", "--others", "--exclude-standard", "-z", "--"]
+    untrackedArgs.add pathspec
+    let untracked = runGit(result.rootPath, untrackedArgs)
     if names.code != 0 or untracked.code != 0:
       result.errorMessage =
         "Could not list changed files.\n" & names.output & untracked.output
@@ -169,7 +193,10 @@ proc readGitDiff(
     var seen = initHashSet[string]()
     for group in [names.output, untracked.output]:
       for path in group.split('\0'):
-        if path.len > 0 and path notin seen:
+        let absoluteFile = normalizedPath(result.rootPath / path)
+        let inScope =
+          scope.len == 0 or absoluteFile == scope or absoluteFile.isRelativeTo(scope)
+        if path.len > 0 and path notin seen and inScope:
           seen.incl path
           let isAddition = not hasHead or path in untrackedPaths
           var args =
@@ -210,9 +237,9 @@ proc readGitDiff(
   except CatchableError:
     result.errorMessage = getCurrentExceptionMsg()
 
-proc readGitDiff*(rootPath: string): GitDiffSnapshot =
+proc readGitDiff*(rootPath: string, scopePath = ""): GitDiffSnapshot =
   ## Read standard diff hunks plus full-file patches for syntax classification.
-  readGitDiff(rootPath, newGitDiffControl())
+  readGitDiff(rootPath, newGitDiffControl(), scopePath)
 
 func normalizedPipedDiffPath(rawPath: string): string =
   var path = rawPath.strip()
@@ -497,8 +524,10 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
       panel.snapshot.rootPath.lastPathPart().markdownLabel() & " |\n| --- | --- |\n"
     if panel.snapshot.branch.len > 0:
       document.add "| Branch | " & panel.snapshot.branch.markdownLabel() & " |\n"
+  if panel.snapshot.scopePath.len > 0:
+    document.add "| Path | " & panel.snapshot.scopePath.markdownLabel() & " |\n"
   document.add "| Location | " & panel.snapshot.rootPath.markdownLabel() & " |\n"
-  if not panel.readingGit and panel.snapshot.errorMessage.len == 0:
+  if (panel.hasSnapshot or not panel.readingGit) and panel.snapshot.errorMessage.len == 0:
     document.add "| Changes | " & $panel.snapshot.files.len & " files · +" & $additions &
       " / −" & $deletions
     if binaries > 0:
@@ -510,7 +539,7 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
         (if panel.snapshot.hasHead: "HEAD" else: "empty tree") &
         " · includes untracked files |\n"
   document.add "\n"
-  if panel.readingGit:
+  if panel.readingGit and not panel.hasSnapshot:
     document.add "Loading changes…\n"
   elif panel.snapshot.errorMessage.len > 0:
     document.add "Could not load Git diff.\n\n" &
@@ -518,6 +547,8 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
   elif panel.snapshot.files.len == 0:
     if panel.snapshot.source == gdsStandardInput:
       document.add "The piped diff contains no changes.\n"
+    elif panel.snapshot.scopePath.len > 0:
+      document.add "No changes in this path.\n"
     else:
       document.add "No changes. Your working tree matches HEAD.\n"
   panel.markdownView.markdown = document
@@ -848,6 +879,7 @@ proc handleSharedKeys(panel: KosmoGitDiffPanel, event: nimkit.KeyEvent): bool =
 proc executeDiff(
   worker: AgentProxy[GitDiffWorker],
   root: string,
+  scopePath: string,
   generation: uint64,
   control: SharedPtr[GitDiffControl],
 ) {.signal.}
@@ -859,10 +891,11 @@ proc diffFinished(
 proc executeDiff(
     worker: GitDiffWorker,
     root: string,
+    scopePath: string,
     generation: uint64,
     control: SharedPtr[GitDiffControl],
 ) {.slot.} =
-  emit worker.diffFinished(readGitDiff(root, control), generation)
+  emit worker.diffFinished(readGitDiff(root, control, scopePath), generation)
 
 proc highlightDiff(
   worker: AgentProxy[GitDiffHighlightWorker],
@@ -924,10 +957,11 @@ proc highlightDiff(
 
 proc updateLoading(panel: KosmoGitDiffPanel) =
   panel.loading = panel.readingGit
+  var preparing = panel.readingGit and not panel.hasSnapshot
   for section in panel.sections.values:
     panel.loading = panel.loading or section.pending
-  panel.refreshButton.enabled =
-    not panel.loading and panel.snapshot.source == gdsRepository
+    preparing = preparing or section.pending
+  panel.refreshButton.enabled = not preparing and panel.repositoryBacked
 
 proc applyHighlighting(
     panel: KosmoGitDiffPanel, highlighted: SharedPtr[GitDiffHighlightResult]
@@ -974,6 +1008,10 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
   if panel.closed:
     return
   panel.readingGit = false
+  if panel.hasSnapshot and panel.snapshot == snapshot:
+    panel.updateLoading()
+    return
+  panel.hasSnapshot = true
   panel.snapshot = snapshot
   var retained = initHashSet[string]()
   for index, file in snapshot.files:
@@ -1051,6 +1089,9 @@ proc displayDiff*(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) =
   ## Replace the current contents with an already prepared, static snapshot.
   if panel.isNil or panel.closed:
     return
+  panel.repositoryBacked = false
+  panel.repositoryRootPath = ""
+  panel.repositoryScopePath = ""
   inc panel.readGeneration
   panel.readingGit = false
   panel.applyDiff(snapshot)
@@ -1068,31 +1109,43 @@ proc pollRepositoryRefresh*(panel: KosmoGitDiffPanel): bool {.discardable.} =
 
 proc scheduleRepositoryRefresh*(panel: KosmoGitDiffPanel) =
   ## Coalesce repository notifications until the workspace has been quiet.
-  if panel.isNil or panel.closed or panel.snapshot.source != gdsRepository:
+  if panel.isNil or panel.closed or not panel.repositoryBacked:
     return
   panel.refreshPending = true
   panel.refreshDeadline = getMonoTime() + panel.refreshDebounce
 
-proc displayRepositoryDiff*(panel: KosmoGitDiffPanel, rootPath: string) =
-  ## Replace static input if needed, then refresh the selected repository.
+proc displayRepositoryDiff*(
+    panel: KosmoGitDiffPanel, rootPath: string, scopePath = ""
+) =
+  ## Refresh a repository or path without clearing the displayed snapshot.
   if panel.isNil or panel.closed:
     return
-  if panel.snapshot.source != gdsRepository or panel.snapshot.rootPath != rootPath:
-    panel.displayDiff(GitDiffSnapshot(source: gdsRepository, rootPath: rootPath))
+  let changed =
+    not panel.repositoryBacked or panel.repositoryRootPath != rootPath or
+    panel.repositoryScopePath != scopePath
+  panel.repositoryBacked = true
+  panel.repositoryRootPath = rootPath
+  panel.repositoryScopePath = scopePath
+  if changed and panel.readingGit:
+    inc panel.readGeneration
+    panel.readingGit = false
+    panel.updateLoading()
   panel.refresh()
 
 proc refresh*(panel: KosmoGitDiffPanel) =
   ## Refresh the current repository on a worker thread.
-  if not panel.closed and not panel.loading and panel.snapshot.source == gdsRepository:
+  if not panel.closed and not panel.readingGit and panel.repositoryBacked:
     panel.refreshPending = false
     inc panel.readGeneration
     inc panel.xRepositoryReadCount
     panel.loading = true
     panel.readingGit = true
-    panel.refreshButton.enabled = false
-    panel.renderDiff()
+    if not panel.hasSnapshot:
+      panel.refreshButton.enabled = false
+      panel.renderDiff()
     emit panel.worker.executeDiff(
-      panel.snapshot.rootPath, panel.readGeneration, panel.control
+      panel.repositoryRootPath, panel.repositoryScopePath, panel.readGeneration,
+      panel.control,
     )
 
 proc waitForDiff*(panel: KosmoGitDiffPanel, timeoutMilliseconds = 10000): bool =
@@ -1176,7 +1229,10 @@ proc textViewForFile*(panel: KosmoGitDiffPanel, index: int): nimkit.TextView =
     return panel.sections[panel.snapshot.files[index].path].textView
 
 proc newKosmoGitDiffPanel(
-    rootPath: string, markdownStyle: nimkit.MarkdownStyle, refreshesRepository: bool
+    rootPath: string,
+    markdownStyle: nimkit.MarkdownStyle,
+    refreshesRepository: bool,
+    scopePath = "",
 ): KosmoGitDiffPanel =
   ## Construct a syntax-highlighted hunk reader with initially collapsed files.
   startLocalThreadDefault()
@@ -1185,8 +1241,11 @@ proc newKosmoGitDiffPanel(
     refreshButton: nimkit.newButton("Refresh"),
     expandButton: nimkit.newButton("Expand All"),
     collapseButton: nimkit.newButton("Collapse All"),
-    snapshot: GitDiffSnapshot(rootPath: rootPath),
+    snapshot: GitDiffSnapshot(rootPath: rootPath, scopePath: scopePath),
     refreshDebounce: GitDiffRefreshDebounceInterval,
+    repositoryBacked: refreshesRepository,
+    repositoryRootPath: if refreshesRepository: rootPath else: "",
+    repositoryScopePath: if refreshesRepository: scopePath else: "",
     disclosureButtons: initTable[string, GitDiffDisclosureButton](),
     pool: newSigilThreadPool(workers = 1),
     control: newGitDiffControl(),
@@ -1295,10 +1354,12 @@ proc newKosmoGitDiffPanel(
     result.renderDiff()
 
 proc newKosmoGitDiffPanel*(
-    rootPath: string, markdownStyle = nimkit.initMarkdownStyle()
+    rootPath: string, markdownStyle = nimkit.initMarkdownStyle(), scopePath = ""
 ): KosmoGitDiffPanel =
   ## Construct a repository-backed Git Diff view.
-  newKosmoGitDiffPanel(rootPath, markdownStyle, refreshesRepository = true)
+  newKosmoGitDiffPanel(
+    rootPath, markdownStyle, refreshesRepository = true, scopePath = scopePath
+  )
 
 proc newKosmoGitDiffPanel*(
     snapshot: GitDiffSnapshot, markdownStyle = nimkit.initMarkdownStyle()

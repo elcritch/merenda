@@ -40,7 +40,7 @@ proc revealActiveFile*(frontend: KosmoApplication): bool {.discardable.}
 proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
 func hasFileBrowser*(frontend: KosmoApplication): bool
 proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.}
-proc showGitDiff*(frontend: KosmoApplication): bool {.discardable.}
+proc showGitDiff*(frontend: KosmoApplication, path = ""): bool {.discardable.}
 proc newEditorTab*(frontend: KosmoApplication): bool {.discardable.}
 proc newTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.}

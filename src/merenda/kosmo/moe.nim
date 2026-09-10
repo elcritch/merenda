@@ -799,6 +799,8 @@ proc save*(editor: KosmoEditor): KosmoSaveResult =
   let outcome = editor.editor.saveFile()
   if pkgResults.isErr(outcome):
     return KosmoSaveResult(message: outcome.error)
+  if editor.temporaryBufferId == editor.activeBufferId():
+    editor.temporaryBufferId = none(BufferId)
   KosmoSaveResult(saved: true)
 
 proc saveAs*(editor: KosmoEditor, path: string): KosmoSaveResult =
@@ -817,6 +819,8 @@ proc saveAs*(editor: KosmoEditor, path: string): KosmoSaveResult =
   let outcome = editor.editor.saveFile(some(savePath))
   if pkgResults.isErr(outcome):
     return KosmoSaveResult(message: outcome.error)
+  if editor.temporaryBufferId == editor.activeBufferId():
+    editor.temporaryBufferId = none(BufferId)
   KosmoSaveResult(saved: true)
 
 proc moveTab*(
