@@ -286,7 +286,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      MUSL_CC: x86_64-linux-musl-gcc
       PKG_CONFIG_LIBDIR: /usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
     steps:
       - uses: actions/checkout@v5
@@ -296,8 +295,6 @@ jobs:
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             file \
-            linux-libc-dev \
-            musl-tools \
             pkg-config \
             libegl1-mesa-dev \
             libgl1-mesa-dev \
@@ -332,6 +329,17 @@ jobs:
       - name: Install Nim
         run: grabnim "$NIM_VERSION"
 
+      - name: Install musl toolchain
+        run: |
+          toolchainArchive="$RUNNER_TEMP/x86_64-linux-musl-cross.tgz"
+          curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
+            https://musl.cc/x86_64-linux-musl-cross.tgz \
+            -o "$toolchainArchive"
+          tar -xzf "$toolchainArchive" -C "$RUNNER_TEMP"
+          echo "MUSL_CC=$RUNNER_TEMP/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc" \
+            >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/x86_64-linux-musl-cross/bin/x86_64-linux-musl-gcc" --version
+
       - name: Install latest Atlas
         run: |
           mkdir -p "$HOME/.local/bin"
@@ -364,7 +372,6 @@ jobs:
             --cc:gcc \
             --gcc.exe:"$MUSL_CC" \
             --gcc.linkerexe:"$MUSL_CC" \
-            --passC:"-idirafter /usr/include" \
             --passL:-static \
             --opt:size \
             --debugger:native \
