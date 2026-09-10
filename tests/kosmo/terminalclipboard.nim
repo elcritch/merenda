@@ -1,4 +1,4 @@
-import std/[monotimes, os, strutils, times, unittest]
+import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
@@ -10,6 +10,16 @@ proc pollUntilText(
   while getMonoTime() < deadline:
     discard session.poll()
     if expected in session.screen().plainText().splitWhitespace().join(" "):
+      return true
+    sleep(5)
+
+proc pollUntilDirectory(
+    session: TerminalViewSession, expected: string, timeout = initDuration(seconds = 10)
+): bool =
+  let deadline = getMonoTime() + timeout
+  while getMonoTime() < deadline:
+    discard session.poll()
+    if expected in session.screenInfo().currentDirectory:
       return true
     sleep(5)
 
@@ -136,6 +146,43 @@ suite "Kosmo terminal clipboard commands":
       require session.pollUntilText("70 61 73 74 65 03")
       check "70 61 73 74 65 03" in
         session.screen().plainText().splitWhitespace().join(" ")
+
+    test "new terminals inherit the current terminal directory and follow it":
+      let
+        root = createTempDir("merenda-kosmo-terminal-cwd-", "")
+        nested = root / "nested"
+        app = newApplication("Kosmo Terminal Directory Test")
+        frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+      createDir(nested)
+      defer:
+        frontend.close()
+        removeDir(root)
+      app.addWindow(frontend.window)
+      frontend.window.setContentView(frontend.contentView)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      app.activateWindow(frontend.window)
+      require frontend.window.makeFirstResponder(frontend.editorView)
+
+      require frontend.newTerminal()
+      require frontend.editorPane.contentView of TerminalView
+      let firstTerminal = TerminalView(frontend.editorPane.contentView)
+      let firstIdentifier = frontend.documentTabs.selectedDocumentTabIdentifier
+      firstTerminal.session().processOutput(
+        "\x1b]7;file://kosmo-test-host" & nested & "\x07"
+      )
+      check firstTerminal.session().screenInfo().currentDirectory ==
+        "file://kosmo-test-host" & nested
+
+      require frontend.newTerminal()
+      require frontend.editorPane.contentView of TerminalView
+      let secondTerminal = TerminalView(frontend.editorPane.contentView)
+      let secondIdentifier = frontend.documentTabs.selectedDocumentTabIdentifier
+      let firstIndex =
+        frontend.documentTabs.indexOfDocumentTabIdentifier(firstIdentifier)
+      let secondIndex =
+        frontend.documentTabs.indexOfDocumentTabIdentifier(secondIdentifier)
+      check secondIndex == firstIndex + 1
+      check secondTerminal.session().pollUntilDirectory(nested)
 
 suite "Kosmo terminal focus input":
   when defined(posix):

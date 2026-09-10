@@ -941,6 +941,7 @@ proc openPaneDocument(
     controller: KosmoDockController,
     group: KosmoEditorGroup,
     document: KosmoPaneDocument,
+    insertAfterSelected = false,
 ): bool =
   if controller.isNil or group.isNil or document.isNil or document.identifier.len == 0 or
       document.contentView.isNil:
@@ -955,7 +956,18 @@ proc openPaneDocument(
   if document.preferredFirstResponder.isNil:
     document.preferredFirstResponder = document.contentView
   group.documents.add document
-  group.tabOrder.add document.identifier
+  let selectedIndex =
+    if insertAfterSelected:
+      group.tabOrder.find(group.selectedTabIdentifier)
+    else:
+      -1
+  group.tabOrder.insert(
+    document.identifier,
+    if selectedIndex >= 0:
+      selectedIndex + 1
+    else:
+      group.tabOrder.len,
+  )
   group.selectedTabIdentifier = document.identifier
   group.editorView.lastTabs.setLen(0)
   group.editorView.refresh()
@@ -1055,21 +1067,54 @@ proc newTerminalDocument(
     ,
   )
 
+proc terminalWorkingDirectory(group: KosmoEditorGroup): string =
+  if group.isNil:
+    return
+  let document = group.documentForIdentifier(group.selectedTabIdentifier)
+  if document.isNil or document.contentView.isNil or
+      not (document.contentView of nimkit.TerminalView):
+    return
+  let currentDirectory =
+    nimkit.TerminalView(document.contentView).session().screenInfo().currentDirectory
+  let url = nimkit.initUrl(currentDirectory)
+  var path = url.localFilePath()
+  when defined(posix):
+    # Local shells may include the machine name in OSC 7 file URLs. Treat
+    # that host as metadata rather than a UNC path on POSIX.
+    if url.isFileUrl() and url.host().len > 0:
+      path = url.decodedPath()
+  if path.len > 0 and dirExists(path):
+    return absolutePath(path)
+
+proc defaultTerminalWorkingDirectory(
+    frontend: KosmoApplication, group: KosmoEditorGroup
+): string =
+  result = group.terminalWorkingDirectory()
+  if result.len == 0 and not frontend.isNil and not frontend.fileTree.isNil:
+    result = frontend.fileTree.rootPath
+  if result.len == 0:
+    result = getCurrentDir()
+
 proc openTerminal(
     controller: KosmoDockController,
     group: KosmoEditorGroup,
-    options: nimkit.TerminexSpawnOptions,
+    options: nimkit.TerminexSpawnOptions = nimkit.initTerminalSpawnOptions(),
+    insertAfterSelected = true,
 ): bool =
   if controller.isNil or group.isNil:
     return
+  var resolvedOptions = options
+  if resolvedOptions.workingDirectory.len == 0 and not controller.frontend.isNil:
+    resolvedOptions.workingDirectory =
+      controller.frontend[].defaultTerminalWorkingDirectory(group)
   var document: KosmoPaneDocument
   try:
-    document = controller.newTerminalDocument(options)
+    document = controller.newTerminalDocument(resolvedOptions)
   except nimkit.TerminexSessionError as error:
     if not group.editorView.statusLabel.isNil:
       group.editorView.statusLabel.text = error.msg
     return
-  if controller.openPaneDocument(group, document):
+  if controller.openPaneDocument(group, document, insertAfterSelected):
     return true
   discard document.close()
 
@@ -1091,14 +1136,12 @@ proc newEditorTab*(frontend: KosmoApplication): bool {.discardable.} =
 
 proc newTerminal*(frontend: KosmoApplication): bool {.discardable.} =
   ## Open a terminal in the active editor pane.
-  if frontend.isNil or frontend.dockController.isNil or frontend.fileTree.isNil:
+  if frontend.isNil or frontend.dockController.isNil:
     return
   let
     controller = frontend.dockController
     group = controller.activePaneGroup()
-    options =
-      nimkit.initTerminalSpawnOptions(workingDirectory = frontend.fileTree.rootPath)
-  result = controller.openTerminal(group, options)
+  result = controller.openTerminal(group)
 
 protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(content: KosmoContentView) =

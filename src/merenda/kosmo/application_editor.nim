@@ -933,7 +933,10 @@ proc saveCurrentPaneTab(
 proc removeBuffer(group: KosmoEditorGroup, id: KosmoBufferId)
 
 proc openPaneDocument(
-  controller: KosmoDockController, group: KosmoEditorGroup, document: KosmoPaneDocument
+  controller: KosmoDockController,
+  group: KosmoEditorGroup,
+  document: KosmoPaneDocument,
+  insertAfterSelected = false,
 ): bool
 
 proc selectRelativePaneTab(

@@ -1294,11 +1294,8 @@ proc openTerminal*(
   ## Open a terminal document in the currently focused pane.
   if frontend.isNil or frontend.dockController.isNil:
     return
-  var resolvedOptions = options
-  if resolvedOptions.workingDirectory.len == 0:
-    resolvedOptions.workingDirectory = frontend.fileTree.rootPath
   let group = frontend.dockController.activePaneGroup()
-  frontend.dockController.openTerminal(group, resolvedOptions)
+  frontend.dockController.openTerminal(group, options)
 
 proc editorGroups*(frontend: KosmoApplication): seq[KosmoEditorGroup] =
   ## Return the editor groups currently hosted by Kosmo dock workspaces.
