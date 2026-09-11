@@ -3,6 +3,9 @@
 The `release-kosmo` GitHub Actions workflow builds these artifacts:
 
 - `kosmo-linux-amd64.tar.gz`
+- `kosmo-linux-amd64-musl.tar.gz`
+- `kosmo-linux-arm64.tar.gz`
+- `kosmo-freebsd-amd64.tar.gz`
 - `kosmo-macos-arm64.zip`, containing `Kosmo.app`
 - `kosmo-windows-amd64.zip`
 - `SHA256SUMS.txt`
@@ -30,13 +33,17 @@ The root `install.sh` downloads the archive for the current operating system and
 architecture, verifies it against `SHA256SUMS.txt`, and installs it without root
 access. Its defaults are `~/.local/bin` on Linux and Windows, and
 `~/Applications/Kosmo.app` plus a `~/.local/bin/kosmo` command link on macOS.
-`KOSMO_INSTALL_DIR`, `KOSMO_BIN_DIR` (macOS), and `KOSMO_DOC_DIR` (Linux and
-Windows) override those destinations. `KOSMO_VERSION` selects a release tag;
+`KOSMO_INSTALL_DIR`, `KOSMO_BIN_DIR` (macOS), and `KOSMO_DOC_DIR` (Linux, FreeBSD,
+and Windows) override those destinations. `KOSMO_VERSION` selects a release tag;
 when unset, the installer downloads the latest release.
+On Linux amd64, pass `--static` to install `kosmo-linux-amd64-musl.tar.gz`, the
+statically linked musl variant.
 
-Publishing a GitHub release runs all three builds and uploads the resulting archives to
-that release. The release tag should use the `vX.Y.Z` form; the version without the `v`
-is embedded in the executable and the macOS bundle.
+Publishing a GitHub release runs all platform builds and uploads the resulting archives
+to that release. The Linux amd64 musl build is statically linked for the C runtime; the
+other Linux and FreeBSD builds use their platform's shared system libraries. The
+release tag should use the `vX.Y.Z` form; the version without the `v` is embedded in the
+executable and the macOS bundle.
 
 The workflow can also be run manually. Manual runs upload Actions artifacts without
 modifying a GitHub release. As a temporary release-repair exception, every push to

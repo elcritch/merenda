@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - ci/update-release-binaries
+      - fix/more-fixes
   release:
     types:
       - published
@@ -20,10 +21,17 @@ on:
         default: false
         type: boolean
   pull_request:
+    branches:
+      - main
     paths:
       - .github/workflows/release-kosmo.yml
+      - atlas.lock
+      - config.nims
+      - data/**
+      - merenda.nimble
       - packaging/macos/debug.entitlements
       - packaging/macos/Info.plist
+      - src/**
 
 permissions:
   contents: read
@@ -86,20 +94,6 @@ jobs:
           path: deps/
           key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-${{ matrix.release_arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
-      - name: Install GrabNim
-        run: |
-          grabnimInstaller="$(mktemp)"
-          curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-            https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-            -o "$grabnimInstaller"
-          sh "$grabnimInstaller"
-          rm -f "$grabnimInstaller"
-          echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-      - name: Install Nim
-        run: grabnim "$NIM_VERSION"
-
       - name: Install latest Atlas
         run: |
           mkdir -p "$HOME/.local/bin"
@@ -107,6 +101,9 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
             ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
           atlas -v
+
+      - name: Install Nim
+        run: atlas env "$NIM_VERSION" --binary --github-path
 
       - name: Verify Nim
         run: nim -v
@@ -163,6 +160,327 @@ jobs:
           path: dist/kosmo-linux-${{ matrix.release_arch }}.tar.gz
           if-no-files-found: error
 
+  build-linux-arm64:
+    name: build-linux (arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      PKG_CONFIG_LIBDIR: /usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Linux build libraries
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            file \
+            libegl1-mesa-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libvulkan-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
+            libxcursor-dev \
+            libxkbcommon-dev \
+            libxrender-dev
+
+      - name: Cache packages
+        uses: actions/cache@v4
+        with:
+          path: deps/
+          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-linux-arm64-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
+
+      - name: Install latest Atlas
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          atlas -v
+
+      - name: Install Nim
+        run: atlas env "$NIM_VERSION" --binary --github-path
+
+      - name: Verify Nim
+        run: |
+          uname -m
+          nim -v
+
+      - name: Install dependencies
+        run: atlas install -tuk --features:kosmo
+
+      - name: Build Kosmo
+        run: |
+          version="${KOSMO_RELEASE_VERSION#v}"
+          revision="${GITHUB_SHA:0:12}"
+          mkdir -p build dist
+          nim c \
+            --cpu:arm64 \
+            --opt:size \
+            --debugger:native \
+            --lineTrace:off \
+            --stackTrace:off \
+            -d:nimStackTraceOverride \
+            -d:moe.embedded \
+            -d:KosmoVersion="$version" \
+            -d:KosmoGitHashOverride="$revision" \
+            --out:build/kosmo \
+            src/merenda/kosmo/kosmo.nim
+          binary_description="$(file -b build/kosmo)"
+          echo "$binary_description"
+          grep -q 'ELF 64-bit.*ARM aarch64' <<< "$binary_description"
+          readelf --sections build/kosmo |
+            awk '/\.debug_info/ { found = 1 } END { exit !found }'
+          nm build/kosmo |
+            awk '$NF == "backtrace_create_state" { found = 1 } END { exit !found }'
+          cp data/FONT-LICENSES.md build/FONT-LICENSES.md
+          cp -R data/font-licenses build/font-licenses
+          build/kosmo --help
+          if ldd build/kosmo | grep -q 'not found'; then
+            ldd build/kosmo
+            exit 1
+          fi
+
+      - name: Package Kosmo
+        run: tar -czf dist/kosmo-linux-arm64.tar.gz -C build kosmo FONT-LICENSES.md font-licenses
+
+      - name: Upload Linux arm64 binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: kosmo-linux-arm64
+          path: dist/kosmo-linux-arm64.tar.gz
+          if-no-files-found: error
+
+  build-linux-musl:
+    name: build-linux (amd64-musl)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PKG_CONFIG_LIBDIR: /usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install static Linux build libraries
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            file \
+            pkg-config \
+            libegl1-mesa-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libharfbuzz-dev \
+            libfribidi-dev \
+            libvulkan-dev \
+            libwayland-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
+            libxcursor-dev \
+            libxkbcommon-dev \
+            libxrender-dev
+
+      - name: Cache packages
+        uses: actions/cache@v4
+        with:
+          path: deps/
+          key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-linux-amd64-musl-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
+
+      - name: Install Zig musl toolchain
+        run: |
+          zigVersion=0.14.1
+          zigArchive="$RUNNER_TEMP/zig-x86_64-linux-$zigVersion.tar.xz"
+          zigDirectory="$RUNNER_TEMP/zig-x86_64-linux-$zigVersion"
+          curl --connect-timeout 30 --max-time 180 \
+            --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
+            "https://ziglang.org/download/$zigVersion/zig-x86_64-linux-$zigVersion.tar.xz" \
+            -o "$zigArchive"
+          printf '%s  %s\n' \
+            '24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c' \
+            "$zigArchive" | sha256sum --check --status
+          tar -xJf "$zigArchive" -C "$RUNNER_TEMP"
+          zigCompiler="$RUNNER_TEMP/zigcc"
+          printf '%s\n' \
+            '#!/usr/bin/env bash' \
+            "exec \"$zigDirectory/zig\" cc -target x86_64-linux-musl \"\$@\" -lunwind" \
+            > "$zigCompiler"
+          chmod +x "$zigCompiler"
+          echo "MUSL_CC=$zigCompiler" \
+            >> "$GITHUB_ENV"
+          "$zigDirectory/zig" version
+
+      - name: Install latest Atlas
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          atlas -v
+
+      - name: Install Nim
+        run: atlas env "$NIM_VERSION" --binary --github-path
+
+      - name: Verify Nim
+        run: nim -v
+
+      - name: Install dependencies
+        run: atlas install -tuk --features:kosmo
+
+      - name: Avoid shared-only graphics linker flags
+        run: |
+          # FigDraw loads the graphics libraries through dynlib. The Ubuntu
+          # GLVND packages do not provide static archives, so do not let
+          # pkg-config inject their shared-only -l flags into this static link.
+          staticPkgConfigDir="$RUNNER_TEMP/kosmo-empty-pkgconfig"
+          mkdir -p "$staticPkgConfigDir"
+          echo "PKG_CONFIG_LIBDIR=$staticPkgConfigDir" >> "$GITHUB_ENV"
+
+      - name: Build Kosmo
+        run: |
+          version="${KOSMO_RELEASE_VERSION#v}"
+          revision="${GITHUB_SHA:0:12}"
+          mkdir -p build dist
+          nim c \
+            --cc:gcc \
+            --gcc.exe:"$MUSL_CC" \
+            --gcc.linkerexe:"$MUSL_CC" \
+            --passL:-static \
+            --opt:size \
+            --debugger:native \
+            --lineTrace:off \
+            --stackTrace:off \
+            -d:nimStackTraceOverride \
+            -d:libbacktraceDemangle=false \
+            -d:moe.embedded \
+            -d:KosmoVersion="$version" \
+            -d:KosmoGitHashOverride="$revision" \
+            --out:build/kosmo \
+            src/merenda/kosmo/kosmo.nim
+          binary_description="$(file -b build/kosmo)"
+          echo "$binary_description"
+          grep -q 'ELF 64-bit.*x86-64' <<< "$binary_description"
+          grep -q 'statically linked' <<< "$binary_description"
+          readelf --sections build/kosmo |
+            awk '/\.debug_info/ { found = 1 } END { exit !found }'
+          nm build/kosmo |
+            awk '$NF == "backtrace_create_state" { found = 1 } END { exit !found }'
+          cp data/FONT-LICENSES.md build/FONT-LICENSES.md
+          cp -R data/font-licenses build/font-licenses
+          # The static binary still loads the graphics backends through dynlib.
+          # The Ubuntu runner only has glibc graphics libraries, which a musl
+          # binary cannot load. The ELF, symbol, and ldd checks above validate
+          # the artifact without requiring a musl graphics runtime here.
+          if ldd build/kosmo 2>&1 | grep -q 'not a dynamic executable'; then
+            :
+          else
+            ldd build/kosmo
+            exit 1
+          fi
+
+      - name: Package Kosmo
+        run: tar -czf dist/kosmo-linux-amd64-musl.tar.gz -C build kosmo FONT-LICENSES.md font-licenses
+
+      - name: Upload Linux musl binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: kosmo-linux-amd64-musl
+          path: dist/kosmo-linux-amd64-musl.tar.gz
+          if-no-files-found: error
+
+  build-freebsd:
+    name: build-freebsd (amd64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build Kosmo in FreeBSD 15
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "15.0"
+          sync: rsync
+          disable-cache: true
+          cache-after-prepare: true
+          mem: 8192
+          envs: NIM_VERSION KOSMO_RELEASE_VERSION GITHUB_SHA
+          prepare: |
+            pkg update -f
+            pkg install -y \
+              binutils \
+              bash \
+              curl \
+              file \
+              fontconfig \
+              fribidi \
+              git \
+              harfbuzz \
+              libX11 \
+              libXcursor \
+              libXext \
+              libXinerama \
+              libXrender \
+              libbacktrace \
+              libxcb \
+              libxkbcommon \
+              libglvnd \
+              mesa-libs \
+              nim \
+              pkgconf \
+              vulkan-headers \
+              vulkan-loader \
+              wayland \
+              xorgproto
+          run: |
+            set -eu
+            export PATH="/usr/local/nim/bin:/usr/local/bin:$HOME/.local/bin:$PATH"
+            mkdir -p "$HOME/.local/bin"
+            curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+              ATLAS_INSTALL_DIR="$HOME/.local/bin" /usr/local/bin/bash -
+            export PKG_CONFIG_PATH="/usr/local/libdata/pkgconfig:/usr/local/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+            atlas -v
+            nim -v
+            atlas install -tuk --features:kosmo
+            version="${KOSMO_RELEASE_VERSION#v}"
+            revision="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+            mkdir -p build dist
+            nim c \
+              --os:freebsd \
+              --cpu:amd64 \
+              --opt:size \
+              --passL:-Wl,-rpath,/usr/local/lib \
+              --debugger:native \
+              --lineTrace:off \
+              --stackTrace:off \
+              -d:nimStackTraceOverride \
+              -d:moe.embedded \
+              -d:KosmoVersion="$version" \
+              -d:KosmoGitHashOverride="$revision" \
+              --out:build/kosmo \
+              src/merenda/kosmo/kosmo.nim
+            binary_description="$(file -b build/kosmo)"
+            echo "$binary_description"
+            printf '%s\n' "$binary_description" | grep -q 'ELF 64-bit.*x86-64'
+            readelf --sections build/kosmo |
+              awk '/\.debug_info/ { found = 1 } END { exit !found }'
+            nm build/kosmo |
+              awk '$NF == "backtrace_create_state" { found = 1 } END { exit !found }'
+            cp data/FONT-LICENSES.md build/FONT-LICENSES.md
+            cp -R data/font-licenses build/font-licenses
+            LD_LIBRARY_PATH="/usr/local/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+              build/kosmo --help
+            if ldd build/kosmo | grep -qi 'not found'; then
+              ldd build/kosmo
+              exit 1
+            fi
+            tar -czf dist/kosmo-freebsd-amd64.tar.gz \
+              -C build kosmo FONT-LICENSES.md font-licenses
+
+      - name: Upload FreeBSD binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: kosmo-freebsd-amd64
+          path: dist/kosmo-freebsd-amd64.tar.gz
+          if-no-files-found: error
+
   build-macos:
     runs-on: macos-latest
     timeout-minutes: 60
@@ -180,20 +498,6 @@ jobs:
           path: deps/
           key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
-      - name: Install GrabNim
-        run: |
-          grabnimInstaller="$(mktemp)"
-          curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-            https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-            -o "$grabnimInstaller"
-          sh "$grabnimInstaller"
-          rm -f "$grabnimInstaller"
-          echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-      - name: Install Nim
-        run: grabnim "$NIM_VERSION"
-
       - name: Install latest Atlas
         run: |
           mkdir -p "$HOME/.local/bin"
@@ -201,6 +505,9 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
             ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
           atlas -v
+
+      - name: Install Nim
+        run: atlas env "$NIM_VERSION" --binary --github-path
 
       - name: Verify Nim
         run: nim -v
@@ -523,6 +830,9 @@ jobs:
       github.ref == 'refs/heads/ci/update-release-binaries')
     needs:
       - build-linux
+      - build-linux-arm64
+      - build-linux-musl
+      - build-freebsd
       - build-macos
       - build-windows
     runs-on: ubuntu-24.04
@@ -538,9 +848,11 @@ jobs:
       - name: Create checksums
         working-directory: dist
         run: |
-          # Add kosmo-linux-x32.tar.gz when the disabled matrix entry is restored.
           sha256sum \
             kosmo-linux-amd64.tar.gz \
+            kosmo-linux-amd64-musl.tar.gz \
+            kosmo-linux-arm64.tar.gz \
+            kosmo-freebsd-amd64.tar.gz \
             kosmo-macos-arm64.zip \
             kosmo-windows-amd64.zip \
             > SHA256SUMS.txt
@@ -551,9 +863,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name || (github.event_name == 'push' && github.ref == 'refs/heads/ci/update-release-binaries' && 'v0.17.0') }}
         run: |
-          # Add dist/kosmo-linux-x32.tar.gz when the matrix entry is restored.
           gh release upload "$RELEASE_TAG" \
             dist/kosmo-linux-amd64.tar.gz \
+            dist/kosmo-linux-amd64-musl.tar.gz \
+            dist/kosmo-linux-arm64.tar.gz \
+            dist/kosmo-freebsd-amd64.tar.gz \
             dist/kosmo-macos-arm64.zip \
             dist/kosmo-windows-amd64.zip \
             dist/SHA256SUMS.txt \

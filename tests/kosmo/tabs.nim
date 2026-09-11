@@ -260,8 +260,14 @@ suite "Kosmo":
     check controls.colorModeButton.title == "Dark"
     check controls.markdownColorMode == kmcmLight
     check controls.markdownFontSize == KosmoMarkdownDefaultFontSize
-    check controls.frame().maxX < frontend.editorPane.bounds().maxX
-    check controls.frame().minY > KosmoTabBarHeight
+    let
+      controlsFrame = controls.frame()
+      previewFrame = frontend.editorPane.markdownView.frame()
+      paneBounds = frontend.editorPane.bounds()
+    check abs(controlsFrame.minX) < 0.01'f32
+    check abs(controlsFrame.maxX - paneBounds.maxX) < 0.01'f32
+    check abs(controlsFrame.minY - KosmoTabBarHeight) < 0.01'f32
+    check controlsFrame.maxY <= previewFrame.minY
     let controlTitles = View(controls).renderedTexts()
     for title in ["</>", "Dark", "-", "+"]:
       check title in controlTitles

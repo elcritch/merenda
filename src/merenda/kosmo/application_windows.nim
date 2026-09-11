@@ -206,6 +206,7 @@ proc updateShortcutSettingsWindow(frontend: KosmoApplication) =
   let controller = frontend.dockController
   frontend.xSettingsWindow.shortcutProfile = controller.shortcutProfile
   frontend.xSettingsWindow.editorInputPolicy = controller.editorInputPolicy
+  frontend.xSettingsWindow.forceInputMode = controller.editor.forceInputMode()
   frontend.xSettingsWindow.shortcuts =
     controller.shortcutBindings.kosmoShortcutSettings()
 
@@ -240,6 +241,21 @@ func editorInputPolicy*(frontend: KosmoApplication): KosmoEditorInputPolicy =
     defaultKosmoEditorInputPolicy()
   else:
     frontend.dockController.editorInputPolicy
+
+proc setForceInputMode*(frontend: KosmoApplication, enabled: bool) =
+  ## Apply Moe's forced Input mode policy to every current and future buffer.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  frontend.dockController.editor.forceInputMode = enabled
+  for group in frontend.dockController.groups:
+    group.editorView.refresh()
+  frontend.updateShortcutSettingsWindow()
+
+func forceInputMode*(frontend: KosmoApplication): bool =
+  if frontend.isNil or frontend.dockController.isNil:
+    false
+  else:
+    frontend.dockController.editor.forceInputMode()
 
 func settingsWindow*(frontend: KosmoApplication): KosmoSettingsWindow =
   ## Return Kosmo's settings controller after the panel has been created.
@@ -279,6 +295,11 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       editorInputPolicyHandler = proc(policy: KosmoEditorInputPolicy) =
         if not weakFrontend.isNil:
           weakFrontend[].setEditorInputPolicy(policy)
+      ,
+      forceInputMode = frontend.dockController.editor.forceInputMode(),
+      forceInputModeHandler = proc(enabled: bool) =
+        if not weakFrontend.isNil:
+          weakFrontend[].setForceInputMode(enabled)
       ,
       shortcuts = shortcuts,
       moeThemes = moeThemeSettings,
@@ -467,6 +488,10 @@ proc performFileTreeAction(
     alert.window.close()
   alert.window.setInheritedAppearance(frontend.window.effectiveAppearance())
   if renaming:
+    alert.window.frame = nimkit.rect(
+      alert.window.frame().origin,
+      nimkit.initSize(alert.window.frame().size.width, KosmoRenameAlertHeight),
+    )
     alert.accessoryView = nameField
   discard alert.rebuildAlertView()
   if renaming:
@@ -1269,11 +1294,8 @@ proc openTerminal*(
   ## Open a terminal document in the currently focused pane.
   if frontend.isNil or frontend.dockController.isNil:
     return
-  var resolvedOptions = options
-  if resolvedOptions.workingDirectory.len == 0:
-    resolvedOptions.workingDirectory = frontend.fileTree.rootPath
   let group = frontend.dockController.activePaneGroup()
-  frontend.dockController.openTerminal(group, resolvedOptions)
+  frontend.dockController.openTerminal(group, options)
 
 proc editorGroups*(frontend: KosmoApplication): seq[KosmoEditorGroup] =
   ## Return the editor groups currently hosted by Kosmo dock workspaces.

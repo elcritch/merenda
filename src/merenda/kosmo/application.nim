@@ -34,6 +34,7 @@ const
   KosmoTabBarHeight* = 34.0'f32
   KosmoStatusBarHeight* = 22.0'f32
   KosmoCommandBarHeight* = 24.0'f32
+  KosmoRenameAlertHeight* = 240.0'f32
   KosmoQuickOpenTopInset = 96.0'f32
   KosmoQuickOpenBottomInset = 24.0'f32
   KosmoEditorStyleId* = "kosmo.editor"
@@ -51,9 +52,7 @@ const
   KosmoInactiveTabAccentOpacity = 0.18'f32
   KosmoInactiveTabTextOpacity = 0.72'f32
   KosmoPaneOutlineWidth = 1.0'f32
-  KosmoMarkdownControlsWidth = 184.0'f32
-  KosmoMarkdownControlsHeight = 38.0'f32
-  KosmoMarkdownControlsInset = 10.0'f32
+  KosmoMarkdownControlsHeight = 44.0'f32
   KosmoMarkdownFontSizeIncrement = 1.0'f32
   KosmoControlScrollMultiplier = 3.0'f32
   KosmoGridOverscanRows = 1

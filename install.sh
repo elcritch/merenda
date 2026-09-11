@@ -7,6 +7,36 @@ KOSMO_VERSION="${KOSMO_VERSION:-}"
 KOSMO_RELEASE_BASE_URL="${KOSMO_RELEASE_BASE_URL:-}"
 KOSMO_TMP_ROOT="${KOSMO_TMP_ROOT:-${TMPDIR:-/tmp}}"
 KOSMO_STAGED_PATH=""
+KOSMO_STATIC=0
+
+usage() {
+  cat <<'EOF'
+Usage: install.sh [--static]
+
+Options:
+  --static  Install the statically linked Linux amd64 (musl) build.
+  -h, --help
+            Show this help.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --static)
+      KOSMO_STATIC=1
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "install.sh: unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -35,16 +65,38 @@ detect_release_archive() {
   os="$(uname -s 2>/dev/null || true)"
   arch="$(uname -m 2>/dev/null || true)"
 
+  if [ "$KOSMO_STATIC" -eq 1 ] && [ "$os" != Linux ]; then
+    return 1
+  fi
+
   case "$os" in
     Linux)
       case "$arch" in
-        x86_64 | amd64) echo "linux:kosmo-linux-amd64.tar.gz" ;;
+        x86_64 | amd64)
+          if [ "$KOSMO_STATIC" -eq 1 ]; then
+            echo "linux:kosmo-linux-amd64-musl.tar.gz"
+          else
+            echo "linux:kosmo-linux-amd64.tar.gz"
+          fi
+          ;;
+        arm64 | aarch64)
+          if [ "$KOSMO_STATIC" -eq 1 ]; then
+            return 1
+          fi
+          echo "linux:kosmo-linux-arm64.tar.gz"
+          ;;
         *) return 1 ;;
       esac
       ;;
     Darwin)
       case "$arch" in
         arm64 | aarch64) echo "macos:kosmo-macos-arm64.zip" ;;
+        *) return 1 ;;
+      esac
+      ;;
+    FreeBSD)
+      case "$arch" in
+        x86_64 | amd64) echo "freebsd:kosmo-freebsd-amd64.tar.gz" ;;
         *) return 1 ;;
       esac
       ;;
@@ -149,7 +201,11 @@ need_cmd rm
 need_cmd tr
 
 platform_archive="$(detect_release_archive)" || {
-  echo "install.sh: no Kosmo release is available for $(uname -s)/$(uname -m)" >&2
+  if [ "$KOSMO_STATIC" -eq 1 ]; then
+    echo "install.sh: --static is currently available only for Linux amd64" >&2
+  else
+    echo "install.sh: no Kosmo release is available for $(uname -s)/$(uname -m)" >&2
+  fi
   exit 1
 }
 platform="${platform_archive%%:*}"
@@ -208,7 +264,7 @@ echo "install.sh: verified SHA-256 checksum" >&2
 
 mkdir -p "$extract_dir"
 case "$platform" in
-  linux)
+  linux | freebsd)
     need_cmd tar
     tar -xzf "$archive_path" -C "$extract_dir"
     if [ ! -f "$extract_dir/kosmo" ]; then

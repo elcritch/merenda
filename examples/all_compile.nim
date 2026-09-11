@@ -1,4 +1,5 @@
 import animation_demo
+import carousel_demo
 import "7gui/cells"
 import "7gui/circle_drawer"
 import "7gui/counter"

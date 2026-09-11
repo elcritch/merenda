@@ -1,4 +1,4 @@
-import std/[monotimes, os, strutils, times, unittest]
+import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
@@ -136,6 +136,48 @@ suite "Kosmo terminal clipboard commands":
       require session.pollUntilText("70 61 73 74 65 03")
       check "70 61 73 74 65 03" in
         session.screen().plainText().splitWhitespace().join(" ")
+
+    test "new terminals inherit the current terminal directory and follow it":
+      let
+        root = createTempDir("merenda-kosmo-terminal-cwd-", "")
+        nested = root / "nested"
+        app = newApplication("Kosmo Terminal Directory Test")
+        frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+      createDir(nested)
+      let expectedDirectory = expandFilename(nested)
+      defer:
+        frontend.close()
+        removeDir(root)
+      app.addWindow(frontend.window)
+      frontend.window.setContentView(frontend.contentView)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      app.activateWindow(frontend.window)
+      require frontend.window.makeFirstResponder(frontend.editorView)
+
+      require frontend.newTerminal()
+      require frontend.editorPane.contentView of TerminalView
+      let firstTerminal = TerminalView(frontend.editorPane.contentView)
+      let firstIdentifier = frontend.documentTabs.selectedDocumentTabIdentifier
+      firstTerminal.session().processOutput(
+        "\x1b]7;file://kosmo-test-host" & nested & "\x07"
+      )
+      check firstTerminal.session().screenInfo().currentDirectory ==
+        "file://kosmo-test-host" & nested
+
+      require frontend.newTerminal()
+      require frontend.editorPane.contentView of TerminalView
+      let secondTerminal = TerminalView(frontend.editorPane.contentView)
+      let secondIdentifier = frontend.documentTabs.selectedDocumentTabIdentifier
+      let firstIndex =
+        frontend.documentTabs.indexOfDocumentTabIdentifier(firstIdentifier)
+      let secondIndex =
+        frontend.documentTabs.indexOfDocumentTabIdentifier(secondIdentifier)
+      check secondIndex == firstIndex + 1
+      let checkDirectoryCommand =
+        "if [ \"$PWD\" = " & quoteShell(expectedDirectory) &
+        " ]; then printf KOSMO_CWD_MATCH; else printf KOSMO_CWD_MISMATCH; fi\n"
+      require secondTerminal.sendInput(checkDirectoryCommand)
+      check secondTerminal.session().pollUntilText("KOSMO_CWD_MATCH")
 
 suite "Kosmo terminal focus input":
   when defined(posix):

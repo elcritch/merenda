@@ -86,6 +86,8 @@ type
     refreshButton*: nimkit.Button
     expandButton*: nimkit.Button
     collapseButton*: nimkit.Button
+    autoRefreshLabel: nimkit.Label
+    autoRefreshSwitch*: nimkit.SwitchButton
     snapshot*: GitDiffSnapshot
     collapsed: HashSet[string]
     pool: SigilThreadPoolPtr
@@ -128,6 +130,38 @@ proc executeGit(
   )
   (command.output, command.exitCode)
 
+proc sameGitPath(left, right: string): bool =
+  when defined(windows):
+    cmpIgnoreCase(left, right) == 0
+  else:
+    left == right
+
+proc gitScopeRelativePath(
+    repositoryRoot, scopePath: string, control: SharedPtr[GitDiffControl]
+): tuple[path: string, valid: bool] =
+  if scopePath.len == 0:
+    return (path: "", valid: true)
+  var scope = absolutePath(scopePath)
+  var leaf = ""
+  if not dirExists(scope):
+    leaf = lastPathPart(scope)
+    scope = parentDir(scope)
+  let scopeRepository = executeGit(scope, ["rev-parse", "--show-toplevel"], control)
+  if scopeRepository.code != 0:
+    return
+  let canonicalScopeRepository = normalizedPath(scopeRepository.output.strip())
+  if not sameGitPath(canonicalScopeRepository, repositoryRoot):
+    return
+  let prefix = executeGit(scope, ["rev-parse", "--show-prefix"], control)
+  if prefix.code != 0:
+    return
+  result.valid = true
+  result.path = prefix.output.strip().replace('\\', '/').strip(chars = {'/'})
+  if leaf.len > 0:
+    if result.path.len > 0:
+      result.path.add '/'
+    result.path.add leaf.replace('\\', '/')
+
 proc readGitDiff(
     rootPath: string, control: SharedPtr[GitDiffControl], scopePath = ""
 ): GitDiffSnapshot =
@@ -145,7 +179,12 @@ proc readGitDiff(
       result.errorMessage =
         "This folder is not a Git working tree.\n" & repository.output.strip()
       return
-    result.rootPath = repository.output.strip()
+    result.rootPath = normalizedPath(repository.output.strip())
+    if dirExists(result.rootPath):
+      try:
+        result.rootPath = normalizedPath(expandFilename(result.rootPath))
+      except CatchableError:
+        discard
     let hasHead = runGit(result.rootPath, ["rev-parse", "--verify", "HEAD"]).code == 0
     result.hasHead = hasHead
     let branch = runGit(result.rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"])
@@ -154,48 +193,38 @@ proc readGitDiff(
     elif hasHead:
       let commit = runGit(result.rootPath, ["rev-parse", "--short", "HEAD"])
       result.branch = "Detached HEAD · " & commit.output.strip()
-    var scope = scopePath
-    if scope.len > 0:
-      # Git canonicalizes repository roots (for example /var to /private/var).
-      # Resolve an existing parent so deleted paths and symlinks themselves work.
-      var parent = absolutePath(scope).parentDir()
-      while not dirExists(parent) and parent.parentDir() != parent:
-        parent = parent.parentDir()
-      scope = normalizedPath(
-        expandFilename(parent) / relativePath(absolutePath(scope), parent)
-      )
-    var pathspec: seq[string]
-    if scope.len > 0 and scope != normalizedPath(result.rootPath):
-      if not scope.isRelativeTo(result.rootPath):
-        return
-      pathspec.add relativePath(scope, result.rootPath)
+    let scopeResult = gitScopeRelativePath(result.rootPath, scopePath, control)
+    if not scopeResult.valid:
+      return
+    let scopeRelativePath = scopeResult.path
     let names =
       if hasHead:
-        var args =
-          @[
+        runGit(
+          result.rootPath,
+          [
             "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-only",
             "-z", "HEAD", "--",
-          ]
-        args.add pathspec
-        runGit(result.rootPath, args)
+          ],
+        )
       else:
-        var args = @["ls-files", "--cached", "-z", "--"]
-        args.add pathspec
-        runGit(result.rootPath, args)
-    var untrackedArgs = @["ls-files", "--others", "--exclude-standard", "-z", "--"]
-    untrackedArgs.add pathspec
-    let untracked = runGit(result.rootPath, untrackedArgs)
+        runGit(result.rootPath, ["ls-files", "--cached", "-z", "--"])
+    let untracked = runGit(
+      result.rootPath, ["ls-files", "--others", "--exclude-standard", "-z", "--"]
+    )
     if names.code != 0 or untracked.code != 0:
       result.errorMessage =
         "Could not list changed files.\n" & names.output & untracked.output
       return
-    let untrackedPaths = untracked.output.split('\0').toHashSet()
+    var untrackedPaths = initHashSet[string]()
+    for path in untracked.output.split('\0'):
+      untrackedPaths.incl path.replace('\\', '/')
     var seen = initHashSet[string]()
     for group in [names.output, untracked.output]:
-      for path in group.split('\0'):
-        let absoluteFile = normalizedPath(result.rootPath / path)
+      for rawPath in group.split('\0'):
+        let path = rawPath.replace('\\', '/')
         let inScope =
-          scope.len == 0 or absoluteFile == scope or absoluteFile.isRelativeTo(scope)
+          scopeRelativePath.len == 0 or path == scopeRelativePath or
+          path.startsWith(scopeRelativePath & "/")
         if path.len > 0 and path notin seen and inScope:
           seen.incl path
           let isAddition = not hasHead or path in untrackedPaths
@@ -962,6 +991,7 @@ proc updateLoading(panel: KosmoGitDiffPanel) =
     panel.loading = panel.loading or section.pending
     preparing = preparing or section.pending
   panel.refreshButton.enabled = not preparing and panel.repositoryBacked
+  panel.autoRefreshSwitch.enabled = panel.repositoryBacked
 
 proc applyHighlighting(
     panel: KosmoGitDiffPanel, highlighted: SharedPtr[GitDiffHighlightResult]
@@ -1100,7 +1130,12 @@ proc refresh*(panel: KosmoGitDiffPanel)
 
 proc pollRepositoryRefresh*(panel: KosmoGitDiffPanel): bool {.discardable.} =
   ## Start a trailing repository refresh once its quiet period has elapsed.
-  if panel.isNil or panel.closed or not panel.refreshPending or panel.loading:
+  if panel.isNil or panel.closed or panel.autoRefreshSwitch.isNil:
+    return
+  if not panel.autoRefreshSwitch.on:
+    panel.refreshPending = false
+    return
+  if not panel.repositoryBacked or not panel.refreshPending or panel.loading:
     return
   if getMonoTime() >= panel.refreshDeadline:
     panel.refreshPending = false
@@ -1109,7 +1144,8 @@ proc pollRepositoryRefresh*(panel: KosmoGitDiffPanel): bool {.discardable.} =
 
 proc scheduleRepositoryRefresh*(panel: KosmoGitDiffPanel) =
   ## Coalesce repository notifications until the workspace has been quiet.
-  if panel.isNil or panel.closed or not panel.repositoryBacked:
+  if panel.isNil or panel.closed or panel.autoRefreshSwitch.isNil or
+      not panel.autoRefreshSwitch.on or not panel.repositoryBacked:
     return
   panel.refreshPending = true
   panel.refreshDeadline = getMonoTime() + panel.refreshDebounce
@@ -1188,15 +1224,26 @@ protocol GitDiffLayout of nimkit.ViewLayoutProtocol:
       bounds = panel.bounds()
       inset = min(12.0'f32, bounds.size.width * 0.05'f32)
       gap = min(8.0'f32, bounds.size.width * 0.03'f32)
-      availableWidth = max(bounds.size.width - inset * 2.0'f32 - gap * 2.0'f32, 0)
-      scale = min(availableWidth / 310.0'f32, 1.0'f32)
+      availableWidth =
+        max(bounds.size.width - inset * 2.0'f32 - gap * 3.0'f32 - 4.0'f32, 0)
+      scale = min(availableWidth / 446.0'f32, 1.0'f32)
       refreshWidth = 90.0'f32 * scale
       actionWidth = 110.0'f32 * scale
+      autoRefreshLabelWidth = 82.0'f32 * scale
+      autoRefreshWidth = 54.0'f32 * scale
       expandX = inset + refreshWidth + gap
       collapseX = expandX + actionWidth + gap
+      autoRefreshLabelX = collapseX + actionWidth + gap
+      autoRefreshX = autoRefreshLabelX + autoRefreshLabelWidth + 4.0'f32
     panel.refreshButton.setFrameFromLayout(nimkit.rect(inset, 8, refreshWidth, 28))
     panel.expandButton.setFrameFromLayout(nimkit.rect(expandX, 8, actionWidth, 28))
     panel.collapseButton.setFrameFromLayout(nimkit.rect(collapseX, 8, actionWidth, 28))
+    panel.autoRefreshLabel.setFrameFromLayout(
+      nimkit.rect(autoRefreshLabelX, 8, autoRefreshLabelWidth, 28)
+    )
+    panel.autoRefreshSwitch.setFrameFromLayout(
+      nimkit.rect(autoRefreshX, 8, autoRefreshWidth, 28)
+    )
     panel.scrollView.setFrameFromLayout(
       nimkit.rect(0, 44, bounds.size.width, max(bounds.size.height - 44, 0))
     )
@@ -1241,6 +1288,8 @@ proc newKosmoGitDiffPanel(
     refreshButton: nimkit.newButton("Refresh"),
     expandButton: nimkit.newButton("Expand All"),
     collapseButton: nimkit.newButton("Collapse All"),
+    autoRefreshLabel: nimkit.newLabel("Auto-refresh"),
+    autoRefreshSwitch: nimkit.newSwitchButton(),
     snapshot: GitDiffSnapshot(rootPath: rootPath, scopePath: scopePath),
     refreshDebounce: GitDiffRefreshDebounceInterval,
     repositoryBacked: refreshesRepository,
@@ -1273,6 +1322,9 @@ proc newKosmoGitDiffPanel(
   discard result.withProtocol(GitDiffLayout)
   result.markdownStyle = markdownStyle
   result.markdownView.toolTip = rootPath
+  result.autoRefreshSwitch.accessibilityLabel = "Automatically refresh Git diff"
+  result.autoRefreshSwitch.toolTip = "Automatically refresh Git diff when files change"
+  result.autoRefreshSwitch.accessibilityIdentifier = "kosmo.gitDiff.autoRefresh"
   let weakPanel = result.unsafeWeakRef()
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
@@ -1304,7 +1356,7 @@ proc newKosmoGitDiffPanel(
   )
   for view in [
     nimkit.View(result.refreshButton), result.expandButton, result.collapseButton,
-    result.scrollView,
+    result.autoRefreshLabel, result.autoRefreshSwitch, result.scrollView,
   ]:
     result.addSubview(view)
   let panel = result.unsafeWeakRef()
@@ -1316,6 +1368,14 @@ proc newKosmoGitDiffPanel(
     discard sender
     if not panel.isNil:
       panel[].refresh()
+  let autoRefreshAction = nimkit.actionSelector("kosmo.toggleGitDiffAutoRefresh")
+  result.autoRefreshSwitch.action = autoRefreshAction
+  result.autoRefreshSwitch.target = nimkit.newActionTarget(autoRefreshAction) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    if not panel.isNil and not panel[].autoRefreshSwitch.on:
+      panel[].refreshPending = false
   let expandAction = nimkit.actionSelector("kosmo.expandGitDiff")
   result.expandButton.action = expandAction
   result.expandButton.target = nimkit.newActionTarget(expandAction) do(

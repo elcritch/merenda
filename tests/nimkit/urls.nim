@@ -1,5 +1,5 @@
 ## URL behavior shared by the NimKit test runner.
-import std/unittest
+import std/[os, unittest]
 
 import merenda/nimkit/app/documents
 import merenda/nimkit/app/panels
@@ -25,9 +25,35 @@ suite "Foundation URLs":
 
   test "resolves file URLs and relative paths":
     check initUrl("images/icon%202.png?scale=2").localFilePath("/tmp/assets") ==
-      "/tmp/assets/images/icon 2.png"
+      "/tmp/assets" / "images" / "icon 2.png"
     check initUrl("file:///tmp/icon%202.png").localFilePath() == "/tmp/icon 2.png"
     check initUrl("https://example.com/icon.png").localFilePath("/tmp") == ""
+
+  test "treats Windows drive paths as local files":
+    let
+      drivePath = r"C:\Users\tester\project\file.txt"
+      url = initUrl(drivePath)
+
+    check url.scheme() == ""
+    check url.host() == ""
+    check not url.hasScheme()
+    check url.isFileUrl()
+    check url.decodedPath() == drivePath
+    check url.localFilePath() == drivePath
+    check url.pathExtension() == "txt"
+
+  when defined(windows):
+    test "joins Save panel filenames to Windows directories":
+      let
+        directory = r"C:\Users\tester\project"
+        panel = newSavePanel()
+      defer:
+        panel.window.close()
+
+      panel.directoryUrl = directory
+      panel.nameFieldStringValue = "saved.txt"
+
+      check filePathFromUrl(panel.selectedUrl()) == directory / "saved.txt"
 
   test "normalizes media types and recognizes common content":
     check normalizedMediaType(" Image/PNG; charset=binary ") == "image/png"

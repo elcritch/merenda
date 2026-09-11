@@ -149,17 +149,25 @@ suite "Kosmo":
         settingsPanel.contentView().viewWithIdentifier(KosmoShortcutProfileIdentifier)
       editorInputPolicyView =
         settingsPanel.contentView().viewWithIdentifier(KosmoEditorInputPolicyIdentifier)
+      forceInputModeView =
+        settingsPanel.contentView().viewWithIdentifier(KosmoForceInputModeIdentifier)
     require not shortcutProfileView.isNil
     require shortcutProfileView of ComboBox
     require not editorInputPolicyView.isNil
     require editorInputPolicyView of ComboBox
+    require not forceInputModeView.isNil
+    require forceInputModeView of Button
     let
       shortcutProfileChoice = ComboBox(shortcutProfileView)
       editorInputPolicyChoice = ComboBox(editorInputPolicyView)
+      forceInputModeButton = Button(forceInputModeView)
     check shortcutProfileChoice.selectedIndex ==
       (if frontend.shortcutProfile() == KosmoShortcutProfile.MacOS: 1 else: 0)
     check editorInputPolicyChoice.selectedIndex == 2
     check frontend.editorInputPolicy() == KosmoEditorInputPolicy.Hybrid
+    check not frontend.forceInputMode()
+    check not frontend.settingsWindow().forceInputMode
+    check forceInputModeButton.state == bsOff
 
     shortcutProfileChoice.activateItemAtIndex(1)
     check frontend.shortcutProfile() == KosmoShortcutProfile.MacOS
@@ -177,6 +185,19 @@ suite "Kosmo":
     editorInputPolicyChoice.activateItemAtIndex(2)
     check frontend.editorInputPolicy() == KosmoEditorInputPolicy.Hybrid
     check frontend.settingsWindow().editorInputPolicy == KosmoEditorInputPolicy.Hybrid
+
+    check forceInputModeButton.tryToPerform(
+      performClick(), DynamicAgent(forceInputModeButton)
+    )
+    check forceInputModeButton.state == bsOn
+    check frontend.forceInputMode()
+    check frontend.settingsWindow().forceInputMode
+    check frontend.editorView.editor.mode() == KosmoEditorMode.Insert
+    check forceInputModeButton.tryToPerform(
+      performClick(), DynamicAgent(forceInputModeButton)
+    )
+    check forceInputModeButton.state == bsOff
+    check not frontend.forceInputMode()
 
     let shortcutsView =
       settingsPanel.contentView().viewWithIdentifier(KosmoShortcutsTableIdentifier)

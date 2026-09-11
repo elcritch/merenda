@@ -17,6 +17,7 @@ const
   KosmoShortcutsTableIdentifier* = "kosmo.settings.shortcuts.table"
   KosmoShortcutProfileIdentifier* = "kosmo.settings.shortcuts.profile"
   KosmoEditorInputPolicyIdentifier* = "kosmo.settings.shortcuts.editorInput"
+  KosmoForceInputModeIdentifier* = "kosmo.settings.shortcuts.forceInputMode"
   KosmoMoeThemesTableIdentifier* = "kosmo.settings.moeThemes.table"
   KosmoMoeThemeSelectorIdentifier* = KosmoMoeThemesTableIdentifier
   KosmoTextMateGrammarsTableIdentifier* = "kosmo.settings.textMateGrammars.table"
@@ -41,6 +42,7 @@ type
   KosmoMoeThemeHandler* = proc(identifier: string): bool {.closure.}
   KosmoShortcutProfileHandler* = proc(profile: KosmoShortcutProfile) {.closure.}
   KosmoEditorInputPolicyHandler* = proc(policy: KosmoEditorInputPolicy) {.closure.}
+  KosmoForceInputModeHandler* = proc(enabled: bool) {.closure.}
 
   KosmoShortcutSetting* = object
     action*: string
@@ -79,8 +81,10 @@ type
     xShortcutsSource: KosmoShortcutsTableSource
     xShortcutProfileChoice: nimkit.ComboBox
     xEditorInputPolicyChoice: nimkit.ComboBox
+    xForceInputModeButton: nimkit.Button
     xShortcutProfileHandler: KosmoShortcutProfileHandler
     xEditorInputPolicyHandler: KosmoEditorInputPolicyHandler
+    xForceInputModeHandler: KosmoForceInputModeHandler
     xMoeThemesTable: nimkit.TableView
     xMoeThemesSource: KosmoMoeThemesTableSource
     xTextMateGrammarsTable: nimkit.TableView
@@ -407,6 +411,16 @@ proc `editorInputPolicy=`*(
       of KosmoEditorInputPolicy.Native: 1
       of KosmoEditorInputPolicy.Hybrid: 2
 
+proc forceInputMode*(settings: KosmoSettingsWindow): bool =
+  ## Return whether editable Moe buffers are kept in Input mode.
+  not settings.isNil and not settings.xForceInputModeButton.isNil and
+    settings.xForceInputModeButton.state == nimkit.bsOn
+
+proc `forceInputMode=`*(settings: KosmoSettingsWindow, enabled: bool) =
+  ## Synchronize the forced Input mode control without invoking its action.
+  if not settings.isNil and not settings.xForceInputModeButton.isNil:
+    settings.xForceInputModeButton.state = if enabled: nimkit.bsOn else: nimkit.bsOff
+
 proc selectedMoeThemeIdentifier*(settings: KosmoSettingsWindow): string =
   ## Return the theme selected in the Moe Themes settings tab.
   if not settings.isNil and not settings.xMoeThemesSource.isNil:
@@ -452,6 +466,8 @@ proc newKosmoSettingsWindow*(
     shortcutProfileHandler: KosmoShortcutProfileHandler = nil,
     editorInputPolicy = defaultKosmoEditorInputPolicy(),
     editorInputPolicyHandler: KosmoEditorInputPolicyHandler = nil,
+    forceInputMode = false,
+    forceInputModeHandler: KosmoForceInputModeHandler = nil,
     shortcuts: openArray[KosmoShortcutSetting] = [],
     moeThemes: openArray[KosmoMoeThemeSetting] = [],
     selectedMoeThemeIdentifier = "",
@@ -470,6 +486,7 @@ proc newKosmoSettingsWindow*(
     xTerminalLinksHandler: terminalLinksHandler,
     xShortcutProfileHandler: shortcutProfileHandler,
     xEditorInputPolicyHandler: editorInputPolicyHandler,
+    xForceInputModeHandler: forceInputModeHandler,
     xShortcutsSource: shortcutsSource,
     xMoeThemesSource: moeThemesSource,
     xTextMateGrammarsSource: textMateGrammarsSource,
@@ -492,6 +509,7 @@ proc newKosmoSettingsWindow*(
     )
     shortcutProfileChoice = nimkit.newComboBox(["Platform", "macOS-style"])
     editorInputPolicyChoice = nimkit.newComboBox(["Vim", "Native", "Hybrid"])
+    forceInputModeButton = nimkit.newCheckBox("Force input mode")
     shortcutsForm = nimkit.newFormView()
     shortcutsTable = nimkit.newTableView()
     moeThemesTable = nimkit.newTableView()
@@ -507,6 +525,7 @@ proc newKosmoSettingsWindow*(
   result.xShortcutsTable = shortcutsTable
   result.xShortcutProfileChoice = shortcutProfileChoice
   result.xEditorInputPolicyChoice = editorInputPolicyChoice
+  result.xForceInputModeButton = forceInputModeButton
   result.xMoeThemesTable = moeThemesTable
   result.xTextMateGrammarsTable = textMateGrammarsTable
 
@@ -572,6 +591,17 @@ proc newKosmoSettingsWindow*(
       settings.xEditorInputPolicyHandler(settings.editorInputPolicy())
   editorInputPolicyChoice.action = editorInputPolicyChanged
 
+  forceInputModeButton.identifier = KosmoForceInputModeIdentifier
+  forceInputModeButton.accessibilityLabel = "Force input mode"
+  forceInputModeButton.state = if forceInputMode: nimkit.bsOn else: nimkit.bsOff
+  forceInputModeButton.target = nimkit.newActionTarget(
+    nimkit.actionSelector("kosmo.forceInputModeChanged")
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if not settings.xForceInputModeHandler.isNil:
+      settings.xForceInputModeHandler(settings.forceInputMode())
+  forceInputModeButton.action = nimkit.actionSelector("kosmo.forceInputModeChanged")
+
   shortcutsTable.identifier = KosmoShortcutsTableIdentifier
   shortcutsTable.accessibilityLabel = "Active Kosmo shortcuts"
   shortcutsTable.columnSizing = nimkit.tvcsFill
@@ -614,6 +644,10 @@ proc newKosmoSettingsWindow*(
   shortcutsPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Active Shortcuts"),
     shortcutsForm,
+    forceInputModeButton,
+    nimkit.newLabel(
+      "Keep editable buffers in input mode; use Ctrl-O to open Moe's command line."
+    ),
     nimkit.newLabel("Changes apply immediately; edit bindings in keybindings.json."),
   )
   shortcutsPage.stack.fillAvailableSpace(shortcutsTable)

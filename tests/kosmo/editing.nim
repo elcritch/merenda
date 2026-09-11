@@ -195,6 +195,24 @@ suite "Kosmo":
     check "λ" in buffer.renderedText
     editor.close()
 
+  test "force input mode keeps editable buffers out of Normal mode":
+    let editor = newKosmoEditor()
+    defer:
+      editor.close()
+
+    check not editor.forceInputMode()
+    check editor.mode() == KosmoEditorMode.Normal
+    editor.forceInputMode = true
+    check editor.forceInputMode()
+    check editor.mode() == KosmoEditorMode.Insert
+    check editor.handleKey("Esc")
+    check editor.mode() == KosmoEditorMode.Insert
+
+    editor.forceInputMode = false
+    check not editor.forceInputMode()
+    check editor.handleKey("Esc")
+    check editor.mode() == KosmoEditorMode.Normal
+
   test "native shifted text enters Moe command mode without invalid key notation":
     let frontend = newKosmoApplication(newApplication("Kosmo Command Input Test"))
     defer:

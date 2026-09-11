@@ -52,7 +52,9 @@ suite "nimkit Git status service":
     discard runGit(root, ["init", "-q"])
     let payload = repeat("0123456789abcdef\n", 32 * 1024)
     writeFile(root / "large.txt", payload)
-    let stored = runGitCommand(root, ["hash-object", "-w", "large.txt"])
+    let stored = runGitCommand(
+      root, ["-c", "core.autocrlf=false", "hash-object", "-w", "large.txt"]
+    )
     require stored.exitCode == 0
 
     let loaded = runGitCommand(root, ["cat-file", "blob", stored.output.strip()])

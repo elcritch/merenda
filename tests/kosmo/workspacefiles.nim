@@ -11,7 +11,6 @@ import merenda/kosmo/[kosmo, workspacefiles, workspacewatch, workspacechanges]
 
 privateAccess(WorkspaceFiles)
 privateAccess(WorkspaceWatch)
-privateAccess(KosmoGitDiffPanel)
 
 type InventorySpy = ref object of Agent
   changes: int
@@ -514,7 +513,7 @@ suite "Kosmo shared workspace inventory":
       require watch.usesPollingFallback()
 
   when not defined(linux):
-    test "file reads and ignored writes do not refresh Git diff":
+    test "repository changes refresh Git diff only when the toolbar switch is on":
       let root = createTempDir("kosmo-diff-read-watch-", "")
       defer:
         removeDir(root)
@@ -539,31 +538,28 @@ suite "Kosmo shared workspace inventory":
       require frontend.showGitDiff()
       let panel = frontend.gitDiffPanel
       require panel.waitForDiff(timeoutMilliseconds = 60_000)
-      # Prove the complete native notification -> worker -> panel path is ready
-      # before asserting that reads and ignored writes leave it quiet.
-      writeFile(path, "original text\n")
-      eventually(
-        panel.snapshot.files.anyIt(
-          it.path == "source.txt" and "+original text" in it.patch
-        )
-      )
-      require panel.snapshot.files.anyIt(
-        it.path == "source.txt" and "+original text" in it.patch
-      )
+      check not panel.autoRefreshSwitch.on
+      let repositorySpy = InventorySpy()
+      files.connect(workspaceRepositoryDidChange, repositorySpy, changed)
 
-      var
-        observedReads = panel.repositoryReadCount()
+      # Prove the complete native notification path is ready before asserting
+      # that the Git diff remains unchanged.
+      writeFile(path, "original text\n")
+      eventually(repositorySpy.changes > 0)
+
+      let
+        baseline = panel.repositoryReadCount()
         quietDeadline = getMonoTime() + initDuration(milliseconds = 1000)
       let settleDeadline = getMonoTime() + initDuration(seconds = 60)
       while getMonoTime() < quietDeadline and getMonoTime() < settleDeadline:
         discard getCurrentSigilThread().pollAll(NonBlocking)
-        if files.isLoading() or panel.loading or panel.refreshPending or
-            files.watch.filtering or panel.repositoryReadCount() != observedReads:
-          observedReads = panel.repositoryReadCount()
-          quietDeadline = getMonoTime() + initDuration(milliseconds = 1000)
         sleep(10)
       require getMonoTime() >= quietDeadline
-      let baseline = panel.repositoryReadCount()
+      check panel.repositoryReadCount() == baseline
+      check panel.snapshot.files.anyIt(
+        it.path == "source.txt" and "+startup text" in it.patch
+      )
+
       let readDeadline = getMonoTime() + initDuration(milliseconds = 3500)
       while getMonoTime() < readDeadline:
         check readFile(path) == "original text\n"
@@ -588,14 +584,18 @@ suite "Kosmo shared workspace inventory":
         sleep(10)
       check panel.repositoryReadCount() == baseline
 
-      let writeBaseline = panel.repositoryReadCount()
-      writeFile(path, "changed text\n")
-      eventually(
-        panel.snapshot.files.anyIt(
-          it.path == "source.txt" and "+changed text" in it.patch
-        )
+      check panel.autoRefreshSwitch.tryToPerform(
+        performClick(), DynamicAgent(panel.autoRefreshSwitch)
       )
-      check panel.repositoryReadCount() > writeBaseline
+      check panel.autoRefreshSwitch.on
+      let notificationBaseline = repositorySpy.changes
+      writeFile(path, "changed text\n")
+      eventually(repositorySpy.changes > notificationBaseline)
+      require panel.waitForDiff(timeoutMilliseconds = 60_000)
+      check panel.repositoryReadCount() == baseline + 1
+      check panel.snapshot.files.anyIt(
+        it.path == "source.txt" and "+changed text" in it.patch
+      )
       check not panel.snapshot.files.anyIt(it.path.startsWith("build/"))
 
     test "idle monitoring does not repeatedly scan the workspace":

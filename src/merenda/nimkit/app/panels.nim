@@ -205,8 +205,12 @@ proc validateSelection*(panel: OpenPanel): bool =
 proc urlFromDirectory(directoryUrl, name: string): string =
   if name.len == 0:
     return ""
-  if name.contains("://") or name.startsWith("/") or directoryUrl.len == 0:
+  let nameUrl = initUrl(name)
+  if nameUrl.hasScheme() or name.isAbsolute or nameUrl.localFilePath().len > 0 or
+      directoryUrl.len == 0:
     return name
+  if not initUrl(directoryUrl).hasScheme():
+    return directoryUrl / name
   if directoryUrl.endsWith("/") or directoryUrl.endsWith("\\"):
     directoryUrl & name
   else:

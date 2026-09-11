@@ -10,6 +10,10 @@ type Url* = object ## Parsed URL value that preserves its original spelling.
   xAbsoluteString: string
   xUri: Uri
 
+func isWindowsDrivePath(value: string): bool =
+  value.len >= 3 and value[0].isAlphaAscii and value[1] == ':' and
+    value[2] in {'/', '\\'}
+
 proc initUrl*(value: string): Url =
   ## Parse `value` without requiring it to be absolute.
   ##
@@ -31,15 +35,18 @@ func isEmpty*(url: Url): bool =
 
 func scheme*(url: Url): string =
   ## Return the normalized URL scheme without a trailing colon.
-  url.xUri.scheme.toLowerAscii()
+  if url.xAbsoluteString.isWindowsDrivePath():
+    ""
+  else:
+    url.xUri.scheme.toLowerAscii()
 
 func host*(url: Url): string =
   ## Return the URL hostname.
-  url.xUri.hostname
+  if url.xAbsoluteString.isWindowsDrivePath(): "" else: url.xUri.hostname
 
 func hasScheme*(url: Url): bool =
   ## Return whether the URL contains a scheme.
-  url.xUri.scheme.len > 0
+  url.scheme().len > 0
 
 func isHttpUrl*(url: Url): bool =
   ## Return whether the URL uses HTTP or HTTPS and has a hostname.
@@ -51,7 +58,10 @@ func isFileUrl*(url: Url): bool =
 
 proc decodedPath*(url: Url): string =
   ## Return the percent-decoded URL path without its query or fragment.
-  decodeUrl(url.xUri.path, decodePlus = false)
+  if url.xAbsoluteString.isWindowsDrivePath():
+    decodeUrl(url.xAbsoluteString, decodePlus = false)
+  else:
+    decodeUrl(url.xUri.path, decodePlus = false)
 
 proc localFilePath*(url: Url, basePath = ""): string =
   ## Resolve a file URL or scheme-less path to a local filesystem path.
@@ -61,6 +71,8 @@ proc localFilePath*(url: Url, basePath = ""): string =
   if not url.isFileUrl():
     return
   var path = url.decodedPath()
+  if path.isWindowsDrivePath():
+    return path
   if url.scheme() == "file" and url.host().len > 0 and
       url.host().toLowerAscii() != "localhost":
     path = "//" & url.host() & "/" & path.strip(chars = {'/'}, leading = true)
@@ -80,7 +92,7 @@ func normalizedFileType*(fileType: string): string =
 
 func pathExtension*(url: Url): string =
   ## Return the normalized extension of the URL path without a leading dot.
-  splitFile(url.xUri.path).ext.normalizedFileType()
+  splitFile(url.decodedPath()).ext.normalizedFileType()
 
 proc lastPathComponent*(url: Url): string =
   ## Return the decoded final component of the URL path.

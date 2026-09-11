@@ -15,7 +15,11 @@ proc `=destroy`(release: var ReleaseWorkerAtExit) =
   discard release
   exitStarted.store(true, moRelease)
 
-var releaseWorkerAtExit {.used.}: ReleaseWorkerAtExit
+var
+  # Keep a lifetime guard in this module so the shared integration runner
+  # stops the worker pool before the fixture checks it during teardown.
+  integrationWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime
+  releaseWorkerAtExit {.used.}: ReleaseWorkerAtExit
 
 proc parseAtExit(worker: AgentProxy[ExitParseWorker]) {.signal.}
 
