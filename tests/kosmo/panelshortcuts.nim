@@ -269,8 +269,8 @@ suite "Kosmo synthetic panel shortcuts":
     let
       app = newApplication("Kosmo Project Save Test")
       manager = newKosmoWindowManager(app)
-      first = manager.openProject(firstRoot)
-      second = manager.openProject(secondRoot)
+      first = newKosmoApplication(manager, firstRoot, monitorsGitStatus = false)
+      second = newKosmoApplication(manager, secondRoot, monitorsGitStatus = false)
     defer:
       manager.close()
     require not first.isNil
