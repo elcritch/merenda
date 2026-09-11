@@ -1720,6 +1720,7 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
   increaseFontButton.toolTip = "Increase Markdown font size"
   for button in [modeButton, colorModeButton, decreaseFontButton, increaseFontButton]:
     button.addStyleClass(KosmoMarkdownControlButtonStyleClass)
+    button.setHuggingPriority(nimkit.LayoutPriorityHigh, nimkit.laHorizontal)
 
   row.spacing = 2.0'f32
   row.distribution = nimkit.svdNatural
