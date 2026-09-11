@@ -34,7 +34,8 @@ jobs:
           - os: windows-2022
             nimversion: '2.2.10'
             display: none
-            nimargs: ''
+            nimargs: >-
+              -- -d:figdraw.vulkan=off
           # - os: ubuntu-24.04
           #   display: wayland
     steps:
