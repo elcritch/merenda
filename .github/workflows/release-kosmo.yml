@@ -94,20 +94,6 @@ jobs:
           path: deps/
           key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-${{ matrix.release_arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
-      - name: Install GrabNim
-        run: |
-          grabnimInstaller="$(mktemp)"
-          curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-            https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-            -o "$grabnimInstaller"
-          sh "$grabnimInstaller"
-          rm -f "$grabnimInstaller"
-          echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-      - name: Install Nim
-        run: grabnim "$NIM_VERSION"
-
       - name: Install latest Atlas
         run: |
           mkdir -p "$HOME/.local/bin"
@@ -115,6 +101,9 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
             ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
           atlas -v
+
+      - name: Install Nim
+        run: atlas env "$NIM_VERSION" --binary --github-path
 
       - name: Verify Nim
         run: nim -v
@@ -201,23 +190,6 @@ jobs:
           path: deps/
           key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-linux-arm64-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
-      - name: Install GrabNim
-        run: |
-          grabnimInstaller="$(mktemp)"
-          curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-            https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-            -o "$grabnimInstaller"
-          sh "$grabnimInstaller"
-          rm -f "$grabnimInstaller"
-          echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-      - name: Install Nim
-        run: |
-          if ! grabnim "$NIM_VERSION"; then
-            grabnim compile "$NIM_VERSION"
-          fi
-
       - name: Install latest Atlas
         run: |
           mkdir -p "$HOME/.local/bin"
@@ -225,6 +197,9 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
             ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
           atlas -v
+
+      - name: Install Nim
+        run: atlas env "$NIM_VERSION" --binary --github-path
 
       - name: Verify Nim
         run: |
@@ -310,20 +285,6 @@ jobs:
           path: deps/
           key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-linux-amd64-musl-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
-      - name: Install GrabNim
-        run: |
-          grabnimInstaller="$(mktemp)"
-          curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-            https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-            -o "$grabnimInstaller"
-          sh "$grabnimInstaller"
-          rm -f "$grabnimInstaller"
-          echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-      - name: Install Nim
-        run: grabnim "$NIM_VERSION"
-
       - name: Install Zig musl toolchain
         run: |
           zigVersion=0.14.1
@@ -354,6 +315,9 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
             ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
           atlas -v
+
+      - name: Install Nim
+        run: atlas env "$NIM_VERSION" --binary --github-path
 
       - name: Verify Nim
         run: nim -v
@@ -534,20 +498,6 @@ jobs:
           path: deps/
           key: kosmo-release-${{ runner.os }}-${{ runner.arch }}-nim${{ env.NIM_VERSION }}-${{ hashFiles('merenda.nimble') }}
 
-      - name: Install GrabNim
-        run: |
-          grabnimInstaller="$(mktemp)"
-          curl --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-            https://codeberg.org/janAkali/grabnim/raw/branch/master/misc/install.sh \
-            -o "$grabnimInstaller"
-          sh "$grabnimInstaller"
-          rm -f "$grabnimInstaller"
-          echo "$HOME/.local/share/grabnim/current/bin" >> "$GITHUB_PATH"
-          echo "$HOME/.nimble/bin" >> "$GITHUB_PATH"
-
-      - name: Install Nim
-        run: grabnim "$NIM_VERSION"
-
       - name: Install latest Atlas
         run: |
           mkdir -p "$HOME/.local/bin"
@@ -555,6 +505,9 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
             ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
           atlas -v
+
+      - name: Install Nim
+        run: atlas env "$NIM_VERSION" --binary --github-path
 
       - name: Verify Nim
         run: nim -v
