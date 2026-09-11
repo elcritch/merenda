@@ -1722,10 +1722,10 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
     button.addStyleClass(KosmoMarkdownControlButtonStyleClass)
 
   row.spacing = 2.0'f32
-  row.distribution = nimkit.svdFillEqually
-  row.addArrangedSubview(
-    modeButton, colorModeButton, decreaseFontButton, increaseFontButton
-  )
+  row.distribution = nimkit.svdNatural
+  row.addArrangedSubview(modeButton, colorModeButton)
+  row.addFlexibleSpacer()
+  row.addArrangedSubview(decreaseFontButton, increaseFontButton)
   result.contentView = row
 
   let weakControls = result.unsafeWeakRef()
