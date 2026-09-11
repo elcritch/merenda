@@ -31,10 +31,10 @@ jobs:
               -- --opt:none
               -d:KosmoMatterMaximumLineBytes=96
               -d:NimkitMatterMaximumLineBytes=96
-          # - os: windows-2022
-          #   nimversion: '2.2.10'
-          #   display: none
-          #   nimargs: ''
+          - os: windows-2022
+            nimversion: '2.2.10'
+            display: none
+            nimargs: ''
           # - os: ubuntu-24.04
           #   display: wayland
     steps:
@@ -168,7 +168,7 @@ jobs:
         os:
           - macos-latest
           - ubuntu-latest
-          # - windows-2022
+          - windows-2022
     steps:
     - uses: actions/checkout@v5
 
