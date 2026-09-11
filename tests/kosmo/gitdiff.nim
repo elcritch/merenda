@@ -841,7 +841,7 @@ suite "Kosmo editor repository diff":
       )
       require not frontend.gitDiffPanel.isNil
       require frontend.gitDiffPanel.waitForDiff()
-      check frontend.gitDiffPanel.snapshot.rootPath == expandFilename(root)
+      check sameFile(frontend.gitDiffPanel.snapshot.rootPath, root)
       check frontend.gitDiffPanel.snapshot.scopePath.len == 0
       var siblingIncluded = false
       for file in frontend.gitDiffPanel.snapshot.files:
