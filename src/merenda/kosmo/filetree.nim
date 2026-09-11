@@ -2,6 +2,9 @@
 
 import std/[algorithm, options, os, sets, strutils, tables, times, unicode]
 
+when defined(windows):
+  import winim/lean
+
 import ../nimkit as nimkit except performKeyEquivalent
 import ./workspacefiles
 from ../nimkit/foundation/selectors import performKeyEquivalent
@@ -129,6 +132,29 @@ proc ignoredPath(tree: KosmoFileTree, path: string): bool =
 
 proc treePathExists(path: string): bool =
   fileExists(path) or dirExists(path) or symlinkExists(path)
+
+when defined(windows):
+  proc removeDirectorySymlink(path: string) =
+    if RemoveDirectoryW(newWideCString(path)) == 0:
+      raiseOSError(osLastError(), path)
+
+proc removeFileTreeItem(path: string) =
+  when defined(windows):
+    if symlinkExists(path) and dirExists(path):
+      removeDirectorySymlink(path)
+    elif symlinkExists(path) or fileExists(path):
+      removeFile(path)
+    elif dirExists(path):
+      removeDir(path)
+    else:
+      raise newException(IOError, "The item no longer exists.")
+  else:
+    if symlinkExists(path) or fileExists(path):
+      removeFile(path)
+    elif dirExists(path):
+      removeDir(path)
+    else:
+      raise newException(IOError, "The item no longer exists.")
 
 proc isTreeDirectory(tree: KosmoFileTree, path: string): bool =
   path.expandableDirectory() or path in tree.xGitDescendantStates
@@ -436,12 +462,7 @@ proc deleteItem*(tree: KosmoFileTree, path: string) =
   ## Permanently remove an item after the caller obtains confirmation.
   if path.len == 0 or path in tree.xRootPaths:
     raise newException(ValueError, "Project roots cannot be deleted from the browser.")
-  if symlinkExists(path) or fileExists(path):
-    removeFile(path)
-  elif dirExists(path):
-    removeDir(path)
-  else:
-    raise newException(IOError, "The item no longer exists.")
+  removeFileTreeItem(path)
   tree.refreshAfterMutation()
 
 proc itemContextMenu*(tree: KosmoFileTree, path: string): nimkit.Menu =
