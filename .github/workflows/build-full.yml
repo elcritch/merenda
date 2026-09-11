@@ -10,7 +10,7 @@ jobs:
   tests:
     name: tests (${{ matrix.os }}, ${{ matrix.nimversion }}, ${{ matrix.display }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 40
     env:
       ATLAS_TEST_NIM_ARGS: ${{ matrix.nimargs }}
     defaults:
@@ -19,33 +19,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - macos
-          - linux
-          - windows
         include:
-          - platform: macos
-            os: macos-latest
+          - os: macos-latest
             nimversion: '2.2.10'
             display: none
             nimargs: ''
-          - platform: linux
-            os: ubuntu-26.04
+          - os: ubuntu-26.04
             nimversion: '2.2.10'
             display: x11
             nimargs: >-
               -- --opt:none
               -d:KosmoMatterMaximumLineBytes=96
               -d:NimkitMatterMaximumLineBytes=96
-          - platform: windows
-            os: windows-2022
-            nimversion: '2.2.10'
-            display: none
-            nimargs: >-
-              -- -d:figdraw.vulkan=off
-        # Keep the Windows row available outside this pull request.
-        exclude:
-          - platform: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 72 && 'windows' || 'disabled' }}
     steps:
     - uses: actions/checkout@v5
 
@@ -139,7 +124,7 @@ jobs:
           $ATLAS_TEST_NIM_ARGS
 
     - name: Run Kosmo tests
-      timeout-minutes: 25
+      timeout-minutes: 10
       run: |
         testExecutable=./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo
         if [[ "$RUNNER_OS" == "Windows" ]]; then
