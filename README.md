@@ -1,113 +1,99 @@
 # Merenda
 
-<img width="2172" height="724" alt="merenda-github-banner-robot-chocolate" src="https://github.com/user-attachments/assets/f0a429f0-c5b5-49a4-819b-32d2cc454ac7" />
+<img width="2172" height="724" alt="Merenda banner" src="https://github.com/user-attachments/assets/f0a429f0-c5b5-49a4-819b-32d2cc454ac7" />
 
-Merenda is a modern desktop GUI toolkit based on Cocoa and OpenStep, written in pure Nim. It uses [FigDraw](https://github.com/elcritch/figdraw/) for fast 2D rendering with shadows and gloss, and [siwin](https://github.com/levovix0/siwin) for cross-platform windowing and events. It currently aims to support macOS, FreeBSD, Linux, and Windows.
+Merenda is a desktop GUI toolkit written in Nim, inspired by Cocoa and OpenStep.
+It gives you buttons, text editors, tables, menus, and layouts for building desktop
+apps, with themes you can change to suit your app. Its public module is called
+NimKit: `import merenda/nimkit`.
 
-The main public module is `merenda/nimkit`. NimKit is designed around [Sigils](https://github.com/elcritch/sigils), which provides Objective-C-style dynamic selectors and protocols along with Qt-style signals and slots. NimKit uses selectors to build Cocoa-style responder/action patterns, while signals and slots cover observable control events. It also provides model controllers, a theme system, and custom chrome for desktop application workflows.
+The project is under active development, targeting macOS, Linux, FreeBSD, and
+Windows. [Kosmo](#kosmo), a code editor built with Merenda, is a way to try it
+without writing any code.
 
-Eye candy:
+## How it looks
 
-<img width="800" alt="modern macos" src="https://github.com/user-attachments/assets/4289a99e-be27-4e06-9d42-3d1a57e82987" />
-<img width="400" alt="aqua macosx" src="https://github.com/user-attachments/assets/f2d8143b-e6ac-4ce0-b2eb-90b5c2fa0183" />
-<img width="400" alt="synthwave83" src="https://github.com/user-attachments/assets/5b81393b-ce0a-439f-98c4-da0f721ad57d" />
-<img width="400" alt="peeachy" src="https://github.com/user-attachments/assets/04f6dea9-c695-481a-a53a-b7f3f0eb61a1" />
-<img width="400" alt="darkbsd2" src="https://github.com/user-attachments/assets/70674e38-e678-4fb6-8b0b-93da41d9f7fd" />
+Merenda draws its own controls, so you can use the same theme across platforms.
+Choose a familiar macOS look, glossy Aqua buttons, or something more colorful.
+DarkBSD is the default.
 
+<img width="800" alt="Merenda with the modern macOS theme" src="https://github.com/user-attachments/assets/4289a99e-be27-4e06-9d42-3d1a57e82987" />
+<img width="400" alt="Merenda with the Aqua theme" src="https://github.com/user-attachments/assets/f2d8143b-e6ac-4ce0-b2eb-90b5c2fa0183" />
+<img width="400" alt="Merenda with the Synthwave83 theme" src="https://github.com/user-attachments/assets/5b81393b-ce0a-439f-98c4-da0f721ad57d" />
+<img width="400" alt="Merenda with the Peachy theme" src="https://github.com/user-attachments/assets/04f6dea9-c695-481a-a53a-b7f3f0eb61a1" />
+<img width="400" alt="Merenda with the DarkBSD theme" src="https://github.com/user-attachments/assets/70674e38-e678-4fb6-8b0b-93da41d9f7fd" />
 
+## Install and run Merenda
 
-## Why Try It?
+You'll need Nim 2.2.6 or newer, a C compiler, Git, and
+[Atlas](https://github.com/nim-lang/atlas#installation) to install the Nim
+dependencies. On Linux and FreeBSD, you'll also need the system libraries for
+your windowing and graphics backend; Merenda uses Siwin for windows and FigDraw
+for rendering.
 
-- **Native Nim**: The power and structure of Cocoa and OpenStep, implemented in a modern systems language.
-- **Useful controls already work**: buttons, toggle buttons, checkboxes, radio
-  buttons, text fields, combo boxes, menus, sliders, steppers, switches,
-  scroll views, tabs, tables, outlines, collection views, matrices, and
-  document tabs.
-- **Model-backed views**: array, tree, and selection controllers can drive
-  tables, outlines, cascading views, combo boxes, document tabs, menus, and
-  matrices.
-- **Custom chrome and theming**: built-in controls use theme rules and chrome
-  modules to support first-class visual customization.
-- **OpenStep based interaction model**: target/action, responders, first
-  responder, key-view tabbing, focus rings, and platform key bindings are built in.
-- **Custom drawing is direct**: views can provide their own draw hook and render into a `DrawContext`.
-- **FigDraw rendering**: controls render into a FigDraw tree, making drawing
-  testable and portable across supported FigDraw backends.
-- **Cassowary constraint engine**: [kiwiberry](https://github.com/elcritch/kiwiberry) is a full port of the Kiwi C++ Cassowary engine. NimKit provides a convenient layout DSL on top.
+To try the examples, clone the repository and run the controls showcase:
 
-## Install
+```sh
+git clone https://github.com/elcritch/merenda.git
+cd merenda
+atlas install -tuk
+nim r examples/controls_showcase.nim
+```
 
-Add Merenda to your package:
+The showcase lets you try the controls together in one window. To see another
+theme, run it with `NIMKIT_THEME` set (in a POSIX shell):
+
+```sh
+NIMKIT_THEME=macos nim r examples/controls_showcase.nim
+NIMKIT_THEME=aqua nim r examples/controls_showcase.nim
+```
+
+To use Merenda in your own project, add this dependency to your `.nimble` file
+and run `atlas install -tuk` from that project:
 
 ```nim
 requires "https://github.com/elcritch/merenda"
 ```
 
-Then install dependencies with Atlas:
+Build your app with threads enabled and ARC or ORC, for example
+`nim r --threads:on --mm:arc main.nim`. The examples in this repository already
+have those settings.
 
-```sh
-atlas install -tuk
-```
+## A few small apps
 
-Note: You'll want to install the most recent [Atlas](https://github.com/nim-lang/atlas#installation), where curl install is the easiest. 
+### Hello, Merenda
 
-## Kosmo Install
-
-Install the latest standalone Kosmo release with:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/elcritch/merenda/HEAD/install.sh | bash
-```
-
-On Linux and Windows (from Git Bash), this installs the command in
-`~/.local/bin`. On macOS it installs `Kosmo.app` in `~/Applications` and adds a
-`~/.local/bin/kosmo` command link. Add `~/.local/bin` to `PATH` if necessary.
-The installer verifies the archive against the release's `SHA256SUMS.txt`.
-
-On Linux amd64, pass `--static` to install the statically linked musl build:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/elcritch/merenda/HEAD/install.sh | \
-  bash -s -- --static
-```
-
-Set `KOSMO_INSTALL_DIR` to override the application or binary directory. On
-macOS, set `KOSMO_BIN_DIR` separately to move the command link. To install a
-specific release rather than the latest one, provide its tag, for example:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/elcritch/merenda/HEAD/install.sh | \
-  KOSMO_VERSION=v0.17.0 bash
-```
-
-To build Kosmo from source, install the "kosmo" feature's dependencies with
-Atlas:
-
-```sh
-atlas install -tuk --features:kosmo
-```
-
-Merenda's `config.nims` enables Moe's optional Matter backend for repository
-builds. Applications that consume Merenda as an Atlas dependency must add the
-same conditional define to their own `config.nims`:
-
-```nim
-when defined(features.merenda.kosmo):
-  switch("define", "features.moe.matter")
-```
-
-Kosmo's browser and quick open share a background file inventory. See
-[workspace updates](docs/kosmo-workspace.md) for file/Git watching, process
-lifetime, and the current Linux polling fallback.
-
-## Nimble
-
-Nimble has a couple of outstanding bugs regarding features. Until they're fixed Atlas is the only way to install the appropriate deps.
-
-## Quick Start
+A window, a label, and an application loop:
 
 ```nim
 import merenda/nimkit
+
+let
+  app = sharedApplication()
+  window = newWindow("Hello", frame = rect(100, 100, 360, 180))
+  root = newView()
+  greeting = newTitleLabel("Hello, Merenda!")
+
+root.addSubview(greeting)
+greeting.pinEdges(
+  toGuide = root.contentLayoutGuide(insets(24.0)),
+  edges = {leLeft, leTop, leRight},
+)
+
+app.runWindow(window, root)
+```
+
+Save this as `examples/greeting.nim` in your checkout and run
+`nim r examples/greeting.nim`.
+
+### A button that does something
+
+Here's a counter. A stack view arranges the controls, and the button's action
+updates the label.
+
+```nim
+import merenda/nimkit
+
 import sigils/selectors
 
 let
@@ -142,982 +128,128 @@ layout.pinEdges(
 app.runWindow(window, root)
 ```
 
-The same example lives in `examples/quick_start.nim` and can be run with:
+This is [examples/quick_start.nim](examples/quick_start.nim). Run it with:
 
 ```sh
 nim r examples/quick_start.nim
 ```
 
-Use `app.showWindow(window, root)` instead when you want to install and show a
-window without entering the application run loop. Pass an initial responder as
-the third argument, such as `app.runWindow(window, root, textField)`, when a
-specific control should receive focus first.
+### A Markdown reader in a handful of lines
 
-Set an application icon before showing the first window. NimKit applies it to
-existing native windows and automatically carries it to windows added later:
+NimKit's larger controls handle more of the work for you. This app opens a
+Markdown file with selectable text, links, code blocks, tables, and images.
+The view handles scrolling and layout as you resize the window.
 
 ```nim
-app.icon = newImageResourceFromData(staticRead("data/my-app-icon.png"))
-```
-
-## Native Markdown Viewer
-
-`MarkdownView` parses CommonMark or GitHub-flavored Markdown on a Sigils pool
-worker, moves the completed AST back to its owning thread, and renders it in
-bounded chunks between application frames. The displayed document is replaced
-atomically after the final chunk, keeping the main thread responsive without
-showing a partial document. It supports headings, inline styles, links, code,
-quotes, lists, thematic breaks, GFM tables, and native local images without
-embedding an HTML engine. Each heading has a native disclosure button that
-collapses its content through the next heading at the same or a higher level;
-collapsed sections stay closed during restyling and resize reflow, and reset
-when the Markdown source changes. Tables preserve short phrases and whole words,
-wrap longer cell prose to a 90%-of-viewport target, and scroll horizontally when
-their minimum readable width exceeds that target:
-
-```nim
+import std/os
 import merenda/nimkit
 
-let viewer = newMarkdownView("""
-# Release notes
-
-Read the [full changelog](https://example.com) or copy this text directly.
-
-![Build overview](images/build-overview.png)
-""", imageBasePath = "/path/to/project")
-
-viewer.markdown = "## Updated without replacing the view"
-
-var style = viewer.markdownStyle
-style.documentInsets = insets(18.0, 24.0, 18.0, 24.0)
-style.linkColor = color(0.1, 0.55, 0.9, 1.0)
-viewer.markdownStyle = style
-```
-
-GFM is the default. Pass `initMarkdownParserConfig(mddCommonMark)` when strict
-CommonMark parsing is preferable. Table columns share measured widths, honor
-GFM alignment, and wrap long cell contents to the Markdown viewport; a settled
-pane resize coalesces one table reflow. Large documents keep their full text
-layout for scrolling and selection, while retaining Fig text nodes,
-decorations, images, and embedded code or table views only near the visible
-viewport. Raw HTML is shown as inert monospace text, except for `<img>` tags,
-which use the same native image path as Markdown image
-syntax and honor `src`, `alt`, `title`, `width`, and `height`. Relative and
-absolute local image destinations are loaded when `imageBasePath` is set. HTTP
-and HTTPS images load asynchronously through `UrlAssetLoader`, first appearing
-as linked alt text and then rerendering from the platform disk cache. Set
-`viewer.imageLoader` for data URLs or application-specific image schemes. The
-application loop applies completed parses automatically. Tests and command-line
-tools can call `viewer.waitForMarkdownParsing()` when they need the rendered text
-immediately; `isMarkdownRendering()` and `waitForMarkdownRendering()` expose the
-application phase separately. Width-only reflow keeps the last complete layout
-visible and runs on NimKit's shared Sigils worker pool, so live pane resizing does not
-block the GUI. Tests can use `waitForMarkdownLayout()` when they need the settled
-post-resize geometry. See `examples/markdown_viewer_demo.nim` for a
-complete window.
-
-Markdown parsing, built-in Matter highlighting, and text reflow share the same
-NimKit worker pool. Highlighted spans are reused when the theme changes. Custom
-syntax callbacks and parser configurations remain on the owning thread.
-Eligible background layouts also build their line-fragment snapshots on the
-worker; layout delegate callbacks and completion notifications stay on the UI
-thread. Fragment construction decodes text once and borrows the retained glyphs.
-Worker modules join the pool before their dependencies' globals are destroyed,
-including when imported directly without the `merenda/nimkit` umbrella module.
-
-Each applied document retains only its own decoded images. Markdown downsamples
-large sources to their maximum display size before publishing them to the static
-FigDraw renderer. Replacing the source drops stale image resources, allowing
-FigDraw's managed render refs to remove unused atlas entries. When the live
-working set contracts, NimKit shrinks an expanded atlas back toward its initial
-size and replays the resources that remain. Under atlas pressure, it first purges
-optional automatic preloads before rebuilding the live render working set.
-
-Language-tagged fenced code blocks use the same frontend-neutral
-`SyntaxHighlighter` boundary as `SynEditView`. A highlighter returns rune-based
-`SyntaxTokenSpan` values; `MarkdownStyle.syntaxTokenColors` maps their classes to
-presentation colors. The Markdown parser still owns all document structure and
-inline styling—the syntax highlighter never receives the Markdown source outside
-the contents of a tagged fence. Matter's bundled TextMate grammars are the
-default for NimKit Markdown and Kosmo's Moe editor. Moe falls back to its
-built-in tokenizer when a mode has no bundled grammar; a nil Markdown
-highlighter or unknown fenced language retains the ordinary monospace
-`codeColor`.
-The Matter adapters leave lines above a configurable UTF-8 byte limit uncolored.
-The limit defaults to 256 bytes and can be set explicitly with
-`KosmoMatterMaximumLineBytes` and `NimkitMatterMaximumLineBytes` for builds with
-smaller worker stacks. Kosmo preserves the surrounding parser state when it
-skips an ordinary line and separately tracks Markdown fences so later lines can
-resume highlighting. Linux CI passes 96 explicitly because unoptimized
-recursive-regex frames can exhaust the standard worker stack on a known
-125-byte input.
-
-## Cached URL Assets
-
-`UrlAssetLoader` fetches HTTP and HTTPS assets away from the UI thread and keeps
-them in the operating system's application cache directory. Concurrent requests
-for the same URL share one download, and later requests return the cached file
-immediately:
-
-```nim
-import merenda/nimkit
-
-let assets = newUrlAssetLoader("com.example.photo-browser")
-defer:
-  assets.close()
-
-let latestImage = initUrl("https://example.com/images/latest.png")
-let request = assets.load(latestImage)
-let viewer = newMarkdownView(
-  "![Latest photo](" & latestImage.absoluteString() & ")",
-  urlAssetLoader = assets,
-)
-```
-
-The default cache root follows the host platform: `LocalAppData` on Windows,
-`~/Library/Caches` on macOS, and `XDG_CACHE_HOME` (falling back to `~/.cache`) on
-Linux and BSD. URLs are stored under an application-specific `url-assets`
-directory using deterministic SHA-256 names. `MarkdownView` observes
-`urlAssetDidFinish` and refreshes itself on the loader's owning thread. Other GUI
-code can connect to the same signal, while command-line tools can use `waitFor`.
-Each completed result includes the normalized HTTP `mediaType`; it is retained
-beside the cached asset and falls back to the URL extension when the server omits
-it. The Foundation-style `Url` value is also accepted by workspace, pasteboard,
-document, and panel handlers while existing string APIs remain supported. The
-default per-asset limit is 64 MiB and can be changed with `maximumAssetBytes`.
-Call `removeCachedAsset` to evict one completed download or `clearCachedAssets`
-to remove all recognized entries while preserving unrelated and in-flight files.
-
-NimKit can also install a file from a ZIP archive compiled into an application.
-`installEmbeddedZipAsset` extracts with Zippy into the same platform application
-cache, verifies the uncompressed SHA-256, and returns a failure result instead of
-raising when extraction or writing fails:
-
-```nim
-const archive = staticRead("assets/example.dat.zip")
-let asset = initEmbeddedZipAsset(
-  "example.dat",
-  archive,
-  # Placeholder: replace with the SHA-256 of your uncompressed member.
-  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-)
-let installed = installEmbeddedZipAsset(asset, "com.example.application")
-if installed.succeeded():
-  echo installed.path
-```
-
-Existing cache files are reused only when their checksum matches. Applications
-opt into embedded assets explicitly; NimKit does not install any by default.
-Archives must be trusted application resources. `maximumContentBytes` defaults
-to 64 MiB and is checked after extraction; it is not a decompression memory limit.
-`installZipAssetFile` installs a trusted local archive using the same cache format.
-For `Font.ttf.zip`, the default member is `Font.ttf`. NimKit's text font loader
-accepts these ZIP paths directly (including paths relative to `figDataDir`),
-extracts them on first use, and falls back to the normal system font if extraction
-fails. Kosmo's embedded archives use its application cache; directly loaded ZIP
-fonts use the shared NimKit asset cache.
-
-Kosmo enables bundled IBM Plex Sans (regular, italic, and bold) and JetBrains
-Mono Nerd Font Mono (regular). Fonts are installed only for roles without
-configuration or environment overrides. The Settings font catalog also includes
-these private fonts so they can be selected again. “System Default” selects the
-platform font independently of environment overrides. Other NimKit applications
-can supply private fonts through `Application.supplementalFontCatalogProvider`
-and configure related exact faces with `ThemeBuilder.setFontFaces`.
-
-The application run loop keeps NimKit views, responders, signal-slot dispatch,
-animations, native windows, and platform services on the main thread. When the
-selected FigDraw backend supports it, rendering runs on a dedicated thread and
-receives moved render trees through bounded latest-frame channels; unsupported
-backends render directly on the main thread. Merenda builds with threads and ARC
-enabled, as configured by the repository's `config.nims`.
-
-Animation scheduling is deadline-driven. Value and property animations use the
-display cadence by default, while pause animations and animation groups wake only
-for child events or completion. Less frequent animations can opt into an aligned
-interval with `animation.cadence = intervalCadence(100.ms)`. Event-only animations
-can use `eventCadence()` together with `progressMarks`; finite completion is always
-scheduled even when no cadence sample is due. With no native, Sigils, renderer, or
-animation deadline pending, the application blocks indefinitely in Siwin.
-
-Constraint-wrapped views expose their minimum layout through `fittingSize()`.
-Set `window.automaticallyAdjustsContentMinSize = true` to keep a resizable
-window from becoming smaller than that fitting size. Tab views include the
-largest fitting width and height required by any of their pages, so switching
-pages does not reveal clipped content.
-
-Set `window.contentMinSize` explicitly when a scroll view or table has a useful
-preferred size larger than the smallest usable window. This lets the viewport
-compress and scroll instead of turning preferred rows or columns into a hard
-resize floor.
-
-Merenda apps automatically use the native window content scale. To force a
-specific UI scale for development or display debugging, set `UISCALE` or
-`NIMKIT_UISCALE`:
-
-```sh
-UISCALE=1.5 nim r examples/quick_start.nim
-```
-
-`NIMKIT_UISCALE` and `MERENDA_UISCALE` take priority over `UISCALE`, and
-FigDraw's legacy `HDI` variable remains a fallback.
-
-Text rendering and measurement use two global font roles: `frUI` for normal
-interface text and `frMonospace` for code and fixed-width text. Applications and
-the settings panel only choose those two fonts. Script, symbol, and emoji faces
-are selected automatically from installed system fonts.
-
-The default role fonts come from the operating system and do not require a
-FigDraw `data` directory:
-
-| Platform | Interface | Monospace |
-| --- | --- | --- |
-| macOS | SFNS.ttf | SFNSMono.ttf |
-| Windows | Segoe UI | Consolas |
-| Linux/BSD | Noto Sans | Noto Sans Mono |
-
-Set `NIMKIT_FONT` and `NIMKIT_MONOSPACE_FONT` to seed the two roles with a
-system font name or font file path. `NIMKIT_FONT_SIZE` overrides the default
-size used by text and `em` layout lengths:
-
-```sh
-NIMKIT_FONT=SFNS.ttf \
-NIMKIT_MONOSPACE_FONT=SFNSMono.ttf \
-NIMKIT_FONT_SIZE=15 nim r examples/quick_start.nim
-```
-
-The `NIMKIT_` variables take priority over their `MERENDA_FONT`,
-`MERENDA_MONOSPACE_FONT`, and `MERENDA_FONT_SIZE` aliases. Font roles can also
-be configured while deriving an immutable theme snapshot:
-
-```nim
-var builder = initThemeBuilder(initTheme())
-builder.setFontName(frUI, "SFNS.ttf")
-builder.setFontName(frMonospace, "SFNSMono.ttf")
-root.appearance = initAppearance(builder.finish())
-```
-
-Installed collection faces and named variable-font instances can also be kept
-exactly. `SystemTypeface` carries the physical file and face index together with
-canonical variation coordinates:
-
-```nim
-let semibold = initSystemTypeface(
-  "/path/to/VariableFont.ttf",
-  variations = [fontVariation("wght", 650.0'f32)],
-)
-builder.setFontFace(frUI, semibold)
-```
-
-The settings font picker uses this identity so selecting two named instances
-that share one variable-font file does not collapse them into the same face.
-
-Merenda follows FigDraw's resolved `figdrawTextBackend` constant. The default
-Pixie backend is lightweight and supports the Interface and Monospace roles.
-The HarfBuzzy and hybrid backends additionally detect Unicode scripts, preserve
-bidirectional runs, and choose fallback faces automatically. A FigDraw package
-feature or string-define can select a backend; application code should inspect
-`figdrawTextBackend` rather than the selection mechanism.
-
-The process locale supplies the default BCP 47 language preference. Attributed
-text can override it when the selected backend supports language-specific
-shaping or CJK font choice:
-
-```nim
-var attributes = defaultTextAttributes(language = initLanguageTag("ja-JP"))
-textView.textStorage().setAttributes(initTextRange(0, 5), attributes)
-```
-
-With the HarfBuzzy backend, HarfBuzz reads the font tables, detects scripts,
-chooses fallbacks, and shapes glyph ids. FigDraw obtains their outlines through
-HarfBuzz draw callbacks and uses Pixie's path/image machinery to rasterize them.
-This currently produces monochrome outlines; bitmap, SVG, and COLR color emoji
-paint is not yet rendered. Per-role or per-class rules can still override
-`StyleFontName`, `StyleFontSize`, and `StyleLanguage`.
-
-Fallback fonts are loaded lazily, only after the selected UI or monospace font
-is missing a codepoint. Applications can extend or replace the runtime BCP 47
-language/script table. Categories use lowercase ISO 15924 script tags, plus
-`symbols`, `emoji`, and `*`:
-
-```nim
-addFontFallbackGroup(
-  "th", "thai", ["Noto Sans Thai", "Leelawadee UI"], prepend = true
-)
-setFontFallbackGroups("x-demo", "latn", @[@["Demo Latin"]])
-```
-
-Each inner group contains alternative names for one font choice. Groups are
-tried in order, one at a time, until the missing text is covered. Language keys
-match BCP 47 prefixes, so a rule for `th` also applies to `th-TH`.
-
-Run the font fallback example to see both user-selectable roles alongside
-automatic language, symbol, and outline-emoji fallback:
-
-```sh
-nim r -d:figdrawTextBackend=harfbuzzy examples/font_fallback_demo.nim
-```
-
-DarkBSD is the default theme. It uses dark platform-neutral surfaces, ruby-red
-Aqua buttons, and a deep red accent palette:
-
-```nim
-root.appearance = initAppearance()
-```
-
-The previous default is available as the `aqua` theme or through
-`initAquaTheme()`:
-
-```sh
-NIMKIT_THEME=aqua nim r examples/controls_showcase.nim
-```
-
-```nim
-root.appearance = initAppearance(initAquaTheme())
-```
-
-For a flatter, modern macOS-style appearance, select the built-in `macos` theme
-at startup or construct it directly:
-
-```sh
-NIMKIT_THEME=macos nim r examples/controls_showcase.nim
-```
-
-```nim
-root.appearance = initAppearance(initMacOSTheme())
-```
-
-The `mac` and `modern-macos` names are aliases. The theme is platform-neutral,
-so Linux applications can use the same look while macOS continues to use its
-native application menu bar.
-
-Use `macos-dark` for the matching dark appearance:
-
-```sh
-NIMKIT_THEME=macos-dark nim r examples/controls_showcase.nim
-```
-
-```nim
-root.appearance = initAppearance(initMacOSDarkTheme())
-```
-
-The `dark-macos` and `modern-macos-dark` names are aliases.
-
-To select the default DarkBSD theme explicitly, use `darkbsd`:
-
-```sh
-NIMKIT_THEME=darkbsd nim r examples/controls_showcase.nim
-```
-
-```nim
-root.appearance = initAppearance(initDarkBSDTheme())
-```
-
-The `dark-bsd` and `ruby-bsd` names are aliases.
-
-Compose Finder-style icon rows with `IconLabel`. The icon is a Unicode glyph,
-rendered through the same FigDraw glyph atlas as other text, and can have an
-independent semantic tint:
-
-```nim
-let downloads = newIconLabel("↓", "Downloads", color(0.04, 0.52, 1.0))
-let shared = newIconLabel("⌘", "Shared", color(0.0, 0.62, 0.78))
-```
-
-Omit the color to use the active theme's icon accent.
-
-## Controls
-
-NimKit ships the core controls needed for desktop-style interfaces:
-
-- Windows and views: `newApplication`, `sharedApplication`, `newWindow`, `newView`
-- Layout and containers: `newStackView`, `newGridView`, `newFormView`, `newSplitView`, `newScrollView`, `newTabView`, `newBox`, `newGroupBox`, `newSeparatorBox`
-- Text: `newTextField`, `newLabel`, `newTitleLabel`, `newStatusLabel`, `newTextEditor`, `newMonoTextEditor`, `newTerminalView`
-- Buttons and choices: `newButton`, `newCheckBox`, `newRadioButton`, `newComboBox`, `newPopupMenuButton`, `newMenu`, `newMenuItem`
-- Value and status controls: `newSlider`, `newStepper`, `newSwitchButton`, `newProgressIndicator`
-- Data and navigation views: `newTableView`, `newOutlineView`, `newFileBrowser`, `newCascadingView`, `newCollectionView`, `newDocumentTabs`, `newButtonMatrix`, `newRadioMatrix`
-
-Linux and BSD builds also expose `newLayerSurfaceWindow` and the
-`LayerSurfaceConfig` types for Wayland layer-shell surfaces. These APIs are not
-declared on macOS or Windows, and they require a Wayland session at runtime.
-
-### Terminal emulator
-
-`TerminalView` is a native NimKit terminal widget backed by Terminex. It provides
-Unicode wide-cell handling, 256-color and true-color rendering, text attributes,
-primary and alternate screens, compact encoded scrollback, selection, clipboard
-commands, bracketed paste, application cursor keys, focus reporting, and xterm
-mouse tracking. It resizes its pseudo-terminal to the visible monospace grid and
-polls the child automatically while attached to a window.
-
-```nim
-let terminal = newTerminalView(
-  initTerminalSpawnOptions(
-    workingDirectory = getCurrentDir(),
-    environment = [initTerminalEnvironmentVariable("APP_MODE", "development")],
-  )
-)
-
-app.runWindow(window, terminal, terminal)
-```
-
-Passing a `command` runs it through the selected shell; leaving it empty starts
-an interactive shell. Terminal views use Terminex's `CompactTerminalSession`
-backend to reduce the memory retained by large histories. Scrolling into history
-keeps the visible lines stable as output arrives, until those lines age out of the
-history buffer. Typing or pressing Enter returns to the live prompt. Terminex session APIs
-are also public for applications that want to drive the parser and PTY transport
-separately from the view. The PTY backend currently supports POSIX platforms
-(macOS, Linux, and FreeBSD).
-
-OSC 52 clipboard writes are disabled by default because terminal output should
-not silently replace user clipboard contents. Enable them for a trusted child
-with `terminal.allowsClipboardWrites = true`. Holding Command on macOS or Control
-on other platforms reveals OSC 8 hyperlinks and plain HTTP(S) URLs; clicking
-emits `terminalHyperlinkWasActivated`, even when the child has enabled mouse
-tracking. Set `terminal.allowsLinkActivation = false` to disable this behavior.
-Title, working-directory, bell, and process-exit changes are also available as
-NimKit signals. The complete runnable example is `examples/terminal_demo.nim`.
-
-Controls use Cocoa-style target/action for commands:
-
-```nim
-let action = actionSelector("saveClicked")
-
-proc save(sender: DynamicAgent) =
-  if not sender.isNil:
-    echo "save"
-
-button.target = newActionTarget(action, save)
-button.action = action
-```
-
-Application menus use the same `Menu` and `MenuItem` tree on every platform.
-Assigning the tree to `app.mainMenu` publishes a native menu in the macOS menu
-bar, including submenus, separators, validation, state, and key equivalents.
-On macOS, `newApplication` and `sharedApplication` start with the standard
-application, File, Edit, Window, and Help menus. The application menu includes
-About, Services, Hide, and Quit; the Window menu retains Minimize and Zoom while
-automatically listing open windows. Pass an application name to
-`newApplication("My App")` when the executable name is not the desired display
-name. Call `app.installStandardMainMenu()` to restore the standard tree after
-replacing `app.mainMenu`, or add application-specific top-level menus directly
-to the existing tree.
-
-When an application first pumps a frame, NimKit installs a default local Sigils
-scheduler unless the thread already has one. Set
-`app.automaticallyStartsLocalSigilThread = false` before running to opt out;
-NimKit never replaces or removes an existing local scheduler.
-
-The default `mmpAutomatic` presentation uses that native menu when available.
-Applications can switch `app.mainMenuPresentation` at runtime between
-`mmpNative` and `mmpInWindow`; `app.usesNativeMainMenu()` reports the effective
-choice. For a standard window, wrap its content with
-`newMenuRootView(app.mainMenu(), content)`. The root owns a `MenuBar` and hides
-or shows it as the presentation changes. Standalone `newMenuBar` presenters
-follow the same policy, and layout containers such as `StackView` automatically
-omit the hidden menu bar.
-
-In-window menu bars resolve the `srMenuBar` and `srMenuBarItem` style roles.
-Their `menuBar.*` tokens inherit the active theme's tab palette by default, so
-the bar, item labels, and hover/open states all follow the selected theme.
-
-Popup presentation stays local to each window and popup-capable control. Use
-`window.setPopupPresentation(ppInline)` for a window-wide preference, or assign
-`popupPresentation` on a combo box, popup menu button, or color well to override
-it. `ppWindow` prefers a native popup, but automatically retains the inline
-FigDraw path when the current window backend cannot create popup windows.
-
-Buttons can behave as push, toggle, checkbox, or radio controls:
-
-```nim
-let toggle = newButton("Enable Sync")
-toggle.buttonType = btToggle
-toggle.allowsMixedState = true
-toggle.state = bsOn
-```
-
-Controls that expose continuous state can also emit signals:
-
-```nim
-let volume = newSlider(0.0, 100.0, 42.0)
-let label = newStatusLabel("Volume: 42")
-
-proc updateVolume(slider: Slider, sender: DynamicAgent) {.slot.} =
-  discard sender
-  label.text = "Volume: " & $slider.value.int
-
-volume.connect(actionDidSend, volume, updateVolume)
-```
-
-Tables and choice controls can share `ArrayController` data:
-
-```nim
 let
-  items = @[
-    modelItem(
-      "ada",
-      objectValue = toObj("Ada"),
-      fields = [
-        modelField("name", toObj("Ada")),
-        modelField("score", toObj(31)),
-      ],
-    ),
-    modelItem(
-      "grace",
-      objectValue = toObj("Grace"),
-      fields = [
-        modelField("name", toObj("Grace")),
-        modelField("score", toObj(45)),
-      ],
-    ),
-  ]
-  columns = @[
-    modelColumn("person", "Person", "name", 120.0),
-    modelColumn("rank", "Score", "score", 64.0),
-  ]
-  controller = newArrayController(items, columns)
-  table = newTableView()
-  combo = newComboBox()
+  path = absolutePath(paramStr(1))
+  app = sharedApplication()
+  window = newWindow(path.extractFilename(), frame = rect(120, 80, 820, 700))
+  root = newView()
+  viewer = newMarkdownView(readFile(path), imageBasePath = path.parentDir)
 
-bindTableView(table, controller)
-bindComboBox(combo, controller)
+root.addSubview(viewer)
+viewer.pinEdges(toGuide = root.contentLayoutGuide(insets(20.0)))
+
+app.runWindow(window, root, viewer)
 ```
 
-`FileBrowser` lazily caches directory listings and presents them in a table by
-default. A single click selects an entry; double-clicking a folder navigates
-into it, and double-clicking or pressing Enter on a file emits
-`fileBrowserEntryWasActivated`. Its default toolbar provides Back, Forward, Up,
-Home, and Refresh. Add reusable file- or folder-only buttons with a selection
-policy:
-
-```nim
-let browser = newFileBrowser()
-discard browser.addOperationButton(
-  initFileBrowserOperation("example.inspect", "Inspect", selection = fbosFiles)
-) do(browser: FileBrowser, entries: seq[FileBrowserEntry]):
-  for entry in entries:
-    echo entry.path
-```
-
-`newOpenPanel` uses this browser and keeps its Open button synchronized with
-the selected files, folders, multiple-selection policy, and allowed file types.
-
-For larger examples, see:
-
-- `examples/controls_showcase.nim`
-- `examples/modelcontrollers_demo.nim`
-- `examples/preferences_demo.nim`
-- `examples/table_demo.nim`
-- `examples/tabview_demo.nim`
-
-## Keyboard And Focus
-
-NimKit supports first responder focus, tab navigation, and platform-aware text
-editing shortcuts. macOS defaults to Cocoa-style bindings such as control-A,
-control-E, option-left, and option-right. Windows and Linux/BSD use their own
-default binding profiles.
-
-```nim
-discard window.selectNextKeyView()
-discard window.makeFirstResponder(textField)
-```
-
-Buttons can be tab-selected and activated from the keyboard.
-
-Application commands can use `KeyBindingTable` and load user overrides from a
-JSON command-to-shortcut map. A string assigns one shortcut, an array assigns
-several alternatives, and `null` or an empty array disables that command.
-Whitespace joins strokes into a sequence, so shortcut names can use forms such
-as `cmd-s`, `cmd-shift-p`, `cmd-{`, and `ctrl-w ctrl-s`. A sequence prefix is
-consumed until its next stroke; Escape, a focus change, or a binding-table change
-cancels it.
-
-Standalone Kosmo reads `keybindings.json` from the `kosmo` directory beneath
-the platform configuration directory (`defaultKosmoKeyBindingsPath()`). Its
-defaults are Command-N for a new blank tab, Command-O to open, and
-Command-Shift-O to open a project in a new window. Command-S saves and Command-Q
-quits. Command-W closes the active tab on macOS. Command-{ / Command-} select
-the previous or next tab.
-Control-W Control-S moves the active tab into a new panel below, while
-Control-W Control-V moves it into a new panel on the right. On Linux and
-Windows, Control-W Control-W closes the active tab instead of Command-W.
-Command-Shift-E selects and focuses the file explorer. Command-Shift-F selects
-the find-in-files sidebar and focuses its query field. Command-1 focuses the
-file browser, while Command-2 through Command-8 focus editor panels in their
-current split-tree order, visiting top or left panes before bottom or right panes.
-Panel focus follows the displayed document, including terminals and Markdown
-previews. In Vim-style editor navigation, Control-W followed by h/j/k/l or w
-focuses the neighboring or next pane; leaving the editor cancels an unfinished
-Control-W prefix. Control-W in a focused terminal remains available to the shell.
-Show Files and Find in Files invoked from a detached pane bring its project's
-browser window forward.
-For example:
-
-```json
-{
-  "kosmo.save": "cmd-shift-s",
-  "kosmo.closeTab": ["cmd-w", "cmd-shift-w"],
-  "kosmo.quit": "cmd-q",
-  "kosmo.previousTab": "cmd-{",
-  "kosmo.nextTab": "cmd-}",
-  "kosmo.showFileExplorer": "cmd-shift-e",
-  "kosmo.findInFiles": ["cmd-shift-f", "ctrl-w ctrl-f"],
-  "kosmo.focusPanel1": "cmd-1",
-  "kosmo.focusPanel2": "cmd-2"
-}
-```
-
-Kosmo also loads `config.json` from that directory
-(`defaultKosmoConfigPath()`). It contains the selected Moe theme plus optional
-Merenda theme, interface-font, monospace-font, and font-size preferences.
-Invalid configuration is ignored. Selecting a Moe theme in Kosmo Settings
-updates this file.
-
-Kosmo embeds IBM Plex Sans Regular, Italic, and Bold plus JetBrains Mono Nerd
-Font Mono Regular as compressed resources. On startup it verifies and extracts
-them into NimKit's `kosmo/assets` cache, then uses them as the default interface
-and monospace faces on every platform. A configured font or font environment
-override takes precedence. If a bundled font cannot be extracted or written,
-that role falls back to the normal platform font. Merenda Settings keeps “System
-Default” available for switching a role back to its operating-system default.
-Nerd Fonts' own 3.5.1 license audit labels its Font Logos glyph source as
-“Unlicensed”; the notices shipped with Kosmo do not establish redistribution
-rights for those glyphs. See `data/FONT-LICENSES.md` before redistributing Kosmo.
-
-```json
-{
-  "moeTheme": "default",
-  "merendaTheme": "darkbsd",
-  "merendaFont": "Iosevka",
-  "merendaMonoFont": "JetBrains Mono",
-  "merendaFontSize": 14.0
-}
-```
-
-Run `kosmo file-or-folder` from a shell to reuse a running Kosmo process. Files
-open as permanent tabs in the active window, while folders open as project roots
-in new windows. Multiple paths are accepted; when a request contains folders,
-Kosmo creates one project window, adds each folder as a root, and opens the files
-there. Relative paths are resolved from the invoking shell, and missing file
-paths open as new named buffers when their parent folder exists.
-
-Kosmo terminals route the command back to the window that created that terminal.
-Commands from other shells use the newest responsive Kosmo process. If none is
-running, Kosmo starts normally; add `--bg` to detach it from the invoking shell.
-Use `kosmo --help` to see the standalone options, and use `kosmo -- --name` when
-a path starts with a dash. Tagged releases provide Linux amd64 (glibc and musl),
-Linux arm64, FreeBSD amd64, macOS, and Windows binaries; see [Releasing Kosmo
-binaries](docs/releasing-kosmo.md) for artifact and macOS signing details.
-
-For arbitrary text, use `sometool | kosmo --file:txt` (or `--file:log`,
-`--file:hcl`, etc.). This opens a separate modified editor buffer named `stdin.txt`
-after stdin reaches EOF. The extension selects syntax highlighting; saving uses the invoking
-directory. No file is read or written until you explicitly save. Input is limited
-to 8 MiB, and `--bg --file:txt` requires an already running Kosmo instance.
-
-Pipe unified Git output to `kosmo --diff` to render a static snapshot in Kosmo's
-Git Diff view, for example `git diff some-folder | kosmo --diff`. The same process
-and embedded-terminal routing rules apply. Piped diffs are limited to 8 MiB and
-do not enable the repository Refresh action. If no Kosmo process is running, the
-command opens an editor-only window; start Kosmo first when combining `--diff`
-with `--bg`.
-
-File > New… opens a blank tab in the active editor pane. File > Open Project…
-opens a folder in a new window with its own file browser. File > Open… opens
-files in the current window and appends selected folders to that window's
-ordered top-level browser roots. If no Kosmo window is available, opening a file
-creates an editor-only window without a file-browser sidebar. Project window
-titles show `Kosmo (first-root)` and add `+ N` inside the parentheses when more
-top-level roots are open.
-
-Quick Open and Find in Files search every browser root, respecting each folder's
-Git ignore rules and returning overlapping files only once. Quick Open slides in
-immediately, then shows an animated loading state while its file index is built on
-NimKit's shared worker pool. Quick Open labels
-results by root when several folders are open, including folders with the same
-name. Git decorations refresh for every root independently. The first root remains
-the default working directory for new terminals and relative editor paths.
-
-About Kosmo shows the Kosmo icon, the package version from `merenda.nimble`, build
-Git hash, clickable Moe project link, and Kosmo's GNU GPL-3.0 license notice.
-
-Kosmo Settings includes a Moe Themes tab. It provides Catppuccin Mocha and
-Latte, Tokyo Night Moon, Kanagawa Wave, and One Dark alongside Moe's default
-theme. It also lists every `.toml` theme installed in `~/.config/moe/themes`,
-with an installed theme taking precedence over a bundled theme of the same
-name. Choosing one applies it immediately to all Kosmo editor panes. Reopening
-Settings refreshes the list, so new themes appear without restarting Kosmo.
-
-Kosmo's sidebar keeps a collapsible Context panel above the Files and Find area.
-It starts collapsed with only the Context disclosure header visible. Activate the
-header to open it for testing; the expanded panel starts at roughly twelve compact
-text lines high and remembers divider resizing when it is closed and reopened.
-Context currently provides an empty area for future contextual content and remains
-visible when switching between Files and Find.
-
-The lower sidebar uses compact SVG tabs for the lazy file tree and regular-expression
-find-in-files results. A single click on a result opens it as a temporary preview.
-Double-clicking or successfully saving it promotes it to a permanent editor tab. The file tree defaults to Visible Files, which hides dotfiles, dot-directories,
-and Git-ignored files and directories, including in filename searches. Git ignore
-filtering updates when repository status refreshes. The Files tab's bottom popup
-switches among All Files, Visible Files, and Changed Files. All Files reveals hidden
-and ignored entries, with ignored files and dot-directories shown in muted gray text.
-With the file tree focused, Shift-F selects Visible Files, Shift-A selects All Files,
-and Shift-G selects Changed Files. Shift-H toggles between All Files and Visible Files
-(from Changed Files, it switches to All Files). These keys remain normal typing keys
-in the file-name filter and other text fields.
-Shift-E expands folders within the automatic depth and entry limits; repeating it
-collapses the tree. You can expand individual folders beyond those limits.
-Workspace discovery is bounded: non-Git indexing scans at most eight folder levels
-and 10,000 directory entries, with a one-second traversal deadline. Git inventories
-retain at most 10,000 files. Quick Open and filename search can therefore show a
-partial inventory in large workspaces; open a narrower project folder for complete
-results. Folder contents load on demand when expanded. Filesystem roots such as `/`
-are only indexed at their top level and are never watched. Launching without a path
-from `/` starts with an empty workspace; use File > Open Folder… to choose a project.
-Native project watches are shallow and limited to 64 paths per workspace (including
-shallow Git metadata watches that exclude the object database); periodic reconciliation refreshes the bounded inventory for
-paths outside that coverage.
-
-Command-F on macOS or Control-F elsewhere opens a live file-name filter; matching files
-remain nested beneath their folder hierarchy. Find in Files searches Git tracked and
-untracked non-ignored files and skips binary or unsupported text encodings by default;
-both filters are configurable through `FileSearchOptions`.
-File → Show Git Diff (Command-Shift-D on macOS) uses the selected editor file’s
-nearest Git repository, including when multiple project roots are open. It opens a tab showing staged,
-unstaged, and untracked changes as standard three-line-context diff hunks. Matter
-uses full-file context to preserve language syntax, but only the displayed hunks
-are laid out. Each file is prepared independently on NimKit's shared worker pool
-using the active Markdown syntax colors,
-with subtle green/red backgrounds
-and markers for added/deleted lines. Unknown languages retain plain diff text.
-Files start collapsed. Click a file heading to expand or collapse its cached diff,
-or use Expand All and Collapse All. File sections share one scrolling surface;
-expanding a file schedules its text layout without repeating syntax highlighting.
-Refresh preserves existing expansion states and reloads the saved changes from
-Git; unsaved editor buffers are not included. Background checks keep the current
-summary visible and leave the view unchanged when the diff has not changed.
-Diff tabs include the repository name, or `stdin` for piped input.
-Right-click a file or folder in the browser to Rename, Delete, or open Git Diff.
-Delete asks for confirmation before permanently removing the item. Path-specific
-diff tabs show the file or folder name and keep that scope during refreshes.
-Holding Control while scrolling over an editor accelerates the wheel movement
-threefold.
-
-Markdown files open in Kosmo's native pretty viewer by default. A compact
-floating control group in the document switches between the rendered preview
-and Moe's syntax editor, selects a light or dark page, and decreases or increases
-the preview font size. Both modes share the same in-memory Moe buffer, so the
-preview includes unsaved edits.
-Each pane retains its three most recently used rendered Markdown previews, including
-their selection and scroll position, so switching among recent unchanged previews
-does not parse and lay them out again. The rendered view is read-only: edit commands
-cannot change the hidden source buffer, and a tab's modified indicator means that its
-Markdown source has unsaved edits.
-
-Kosmo's File > New Terminal command opens a `TerminalView` in the focused
-editor group. Terminal and text tabs share selection, closing, reordering,
-split-pane dragging, detached windows, and tab-navigation shortcuts. Other
-content can use the same lifecycle by constructing a `KosmoPaneDocument` with
-a content view, preferred first responder, and optional save and close
-callbacks. On macOS, interactive terminals initialize through the login shell so
-apps opened from Launchpad or the Dock receive PATH updates from the user's login
-profile. Kosmo opens terminal links in the system browser; this can be enabled
-or disabled from the Terminal settings page. Press Command-F on macOS or
-Control-Shift-F elsewhere in a terminal tab to search its screen and scrollback.
-Terminal search starts at the newest match at the bottom. Command-G (Control-G
-elsewhere) and Return move toward older output; Command-Shift-G (Control-Shift-G
-elsewhere) moves toward newer output, wrapping at either end. The arrow keys and
-buttons move up/down, and Escape closes the search. Moe editor panes use the same
-floating search
-bar with the platform Find shortcut (Command-F on macOS and Control-F elsewhere),
-while matching, highlighting, and navigation remain owned by Moe.
-
-## Workspace And Services
-
-Applications expose a backend-optional `Workspace` for opening and revealing
-resources, locating common directories, integrating recent documents, and routing
-Services-style requests. Check a feature before presenting platform-specific UI:
-
-```nim
-let workspace = app.workspace()
-if workspace.supports(wfOpenUrls):
-  let response = workspace.openUrl("https://nim-lang.org")
-  if response.handled and not response.succeeded:
-    echo response.message
-
-let documents = workspace.findLocation(wslDocuments)
-if documents.found:
-  echo documents.path
-```
-
-Attach a `WorkspaceProviderProtocol` implementation to enable host operations and
-typed selected-text, selected-file, pasteboard, promised-file, recent-document,
-and drag/drop handoff services. Providerless workspaces retain portable directory
-lookup and leave all host operations explicitly unsupported.
-
-## Resource-Backed UI
-
-NimKit can encode plain resource records as canonical CBOR, validate them without
-constructing UI identities, and explicitly instantiate view/controller trees,
-windows, panels, menus, commands, images, localized strings, key bindings, theme
-fragments, layout guides, and constraints.
-
-```nim
-import merenda/nimkit/resources
-
-let loaded = loadResourceBundle("ui/main.cbor")
-if loaded.loaded:
-  let context = initResourceInstantiationContext(
-    locale = "en", assetBasePath = "ui"
-  )
-  let construction = loaded.bundle.instantiateResources(context)
-  if construction.instantiated:
-    let window = construction.instance.window(resourceId("main.window"))
-```
-
-Custom view/controller kinds and Sigils property protocols can be added through
-`ResourceRegistry`; compatible property getter/setter pairs are discovered and bound
-automatically. The built-in resource-editor palette includes views, controls,
-buttons, check/radio buttons, text fields, labels, image/stack views, switches,
-progress indicators, boxes, and split views. Its inspector uses checkboxes for
-booleans, registry-backed combo boxes for enum properties, and popup color wells for
-colors. The Tekton builder and its reusable editor API live under
-`src/merenda/tekton/`. See
-[docs/resources.md](docs/resources.md) and `examples/resource_ui_demo.nim` for the
-format and construction workflow.
-
-## Styling
-
-Use an `Appearance` to override theme tokens or style selectors. Views can carry
-style classes, giving the theme system stable targets without requiring CSS.
-
-```nim
-let titleStyle = initStyleSelector(srTextField, classes = @["title"])
-var appearance = initAppearance()
-
-appearance.setStyle(titleStyle, StyleFill, fill(color(0.88, 0.92, 0.98)))
-appearance.setStyle(titleStyle, StyleTextColor, color(0.09, 0.14, 0.26))
-appearance.setStyle(titleStyle, StyleCornerRadius, 6.0)
-
-title.styleClasses = ["title"]
-root.appearance = appearance
-```
-
-Appearance inherits through the app, window, and view hierarchy, so local
-overrides can be scoped to a whole window or a single subtree.
-
-Document tabs expose their active marker and close-button placement through the
-same look-and-feel rules:
-
-```nim
-var appearance = initAppearance()
-let documentTab = initStyleSelector(srDocumentTab)
-
-appearance.setStyle(
-  documentTab, StyleSelectionIndicatorPosition, styleKeyword(dtipTop)
-)
-appearance.setStyle(
-  documentTab, StyleSelectionIndicatorInsets, insets(3.0, 12.0, 0.0, 12.0)
-)
-appearance.setStyle(documentTab, StyleSelectionIndicatorSize, 2.0)
-appearance.setStyle(
-  documentTab, StyleCloseButtonPosition, styleKeyword(dtcbRight)
-)
-```
-
-The marker position can be `dtipTop`, `dtipBottom`, `dtipLeft`, `dtipRight`, or
-`dtipNone`. Set `StyleSelectionIndicatorFill` and
-`StyleSelectionIndicatorCornerRadius` to customize its color and shape. With
-`dtipNone`, the selected `StyleFill`, `StyleBorderColor`, `StyleBorderWidth`,
-and `StyleCornerRadius` rules can provide filled, outlined, pill, or segmented
-tab styles without an additional marker. The default and macOS themes place
-close buttons on the left.
-
-## Drawing
-
-Custom views draw through a `DrawContext`, which wraps the active FigDraw render
-list, local bounds, visible rect, and coordinate conversion helpers.
-
-```nim
-type BadgeView = ref object of View
-
-protocol BadgeDrawing of ViewDrawingProtocol:
-  method draw(view: BadgeView, context: DrawContext) =
-    context.addRectangle(
-      rect(0, 0, 120, 32),
-      fill(color(0.18, 0.32, 0.55)),
-    )
-    context.addText(
-      rect(12, 0, 96, 32),
-      "Ready",
-      color(1, 1, 1),
-      taCenter,
-    )
-
-proc newBadgeView(frame: Rect): BadgeView =
-  result = BadgeView()
-  initViewFields(result, frame)
-  discard result.withProtocol(BadgeDrawing)
-```
-
-For retained, browser-style drawing, use `CanvasView` and its `"2d"` context:
-
-```nim
-let
-  canvas = newCanvasView(rect(0, 0, 640, 420))
-  context = canvas.getContext("2d")
-
-context.fillStyle = "rebeccapurple"
-context.fillRect(24, 24, 120, 72)
-context.beginPath()
-context.moveTo(220, 30)
-context.lineTo(280, 130)
-context.lineTo(170, 100)
-context.closePath()
-context.fill()
-```
-
-Primitive operations are retained as FigDraw drawables, arbitrary filled paths
-are converted to MTSDF resources, and `drawImage` retains an `ImageResource`.
-Run `nim r examples/canvas_demo.nim` for a tool palette with drag drawing,
-color and stroke controls, image stamping, clearing, and undo.
-
-## Examples
-
-Run the combined controls demo:
+Save it as `examples/reader.nim`, then run
+`nim r examples/reader.nim README.md`. It expects a readable file path.
+For a version with a built-in sample document, run:
 
 ```sh
-nim r examples/controls_showcase.nim
+nim r examples/markdown_viewer_demo.nim README.md
 ```
 
-Current examples are mirrored by `examples/all_compile.nim`:
+That is the kind of efficiency NimKit aims for: you write the app's behavior,
+while the controls take care of text selection, focus, drawing, and layout.
+For an app with more interaction, try the [to-do list](examples/todo_basic.nim)
+or its [table-based version](examples/todo_table.nim), which adds row selection
+and drag reordering.
 
-- Basics: `quick_start`, `hello`, `button_counter`, `button_demo`, `todo_basic`, `todo_stack_drag`, `todo_table`, `controls_showcase`
-- Controls: `textfield_demo`, `checkbox_demo`, `radio_demo`, `combobox_demo`, `combo_scroll_demo`, `stepper_demo`, `progress_indicator_demo`
-- Layout and containers: `box_demo`, `splitview_demo`, `scrollview_demo`, `tabview_demo`, `layout_showcase`, `constraint_playground_demo`, `grid_preferences`
-- Data and models: `table_demo`, `treeview_demo`, `outline_demo`, `cascading_demo`, `collectionview_demo`, `documenttabs_demo`, `matrix_demo`, `menu_demo`, `modelcontrollers_demo`
-- Application workflows: `panel_demo`, `document_workspace_demo`, `preferences_demo`, `viewcontroller_demo`, `view_inspector_demo`
-- Drawing and media: `canvas_demo`, `svg_viewer_demo`, `image_resources_demo`
-- Text and animation: `texteditor_demo`, `synedit_demo`, `monotext_demo`, `terminal_demo`, `animation_demo`
+## Kosmo
 
-Run any focused example with:
+Kosmo is a code editor built with Merenda and Moe's Vim-style editing engine.
+It brings together a file browser, split panes, terminal tabs, Markdown previews,
+and Git diffs. You can use it on its own or explore its source to see how a
+larger Merenda app fits together.
+
+### Install and open a project
+
+You don't need Nim to use a prebuilt Kosmo release. Run the installer from a
+shell (Git Bash on Windows):
 
 ```sh
-nim r examples/<name>.nim
+curl -fsSL https://raw.githubusercontent.com/elcritch/merenda/HEAD/install.sh | bash
 ```
 
-## Tests
+On macOS, it installs `Kosmo.app` in `~/Applications` and a `kosmo` command in
+`~/.local/bin`. On Linux, FreeBSD, and Windows, the command goes in
+`~/.local/bin`. Make sure that directory is on your `PATH`.
 
-Run the NimKit test suite through Atlas:
+Open the current folder or a file:
 
 ```sh
-atlas-run tests
+kosmo .
+kosmo README.md
 ```
 
-Compile-check the example import bundle with:
+These commands reuse a running Kosmo instance. Add `--bg` to start Kosmo detached
+from your shell. On macOS, you can also open `Kosmo.app` from Finder.
+
+Use Quick Open to find a file, drag tabs to arrange your panes, or choose
+File → New Terminal to open a shell. Markdown files open as previews, with a
+control to switch to the source editor. Themes, fonts, and keyboard shortcuts
+are available in Settings.
+
+You can also send a Git diff straight to Kosmo:
 
 ```sh
-atlas-run tests --compile-only examples/all_compile.nim
+git diff | kosmo --diff
 ```
+
+Run `kosmo --help` for command-line options. See the
+[keyboard shortcut guide](src/merenda/kosmo/docs/shortcuts.md) for navigation
+and Vim bindings, or [release and installer details](docs/releasing-kosmo.md)
+for supported builds, custom install locations, and the static Linux build.
+
+### Build from source
+
+From your Merenda checkout, install the extra Kosmo dependencies, then build
+and launch it:
+
+```sh
+atlas install -tuk --features:kosmo
+nim c -o:kosmo src/merenda/kosmo/kosmo.nim
+./kosmo .
+```
+
+On Windows, run `./kosmo.exe .` after compiling.
+
+## Explore more
+
+The [examples directory](examples/) has complete apps you can run and change.
+These are good places to go once you've tried the basics:
+
+- Layouts: [stacks and constraints](examples/layout_showcase.nim),
+  [constraint playground](examples/constraint_playground_demo.nim), and the
+  [layout guide](docs/layout.md).
+- Tables and trees: [table example](examples/table_demo.nim),
+  [outline example](examples/outline_demo.nim), and
+  [model controllers](examples/modelcontrollers_demo.nim).
+- App workflows: [documents and windows](examples/document_workspace_demo.nim),
+  [preferences](examples/preferences_demo.nim), and
+  [settings and themes](examples/merenda_settings_demo.nim).
+- Text and drawing: [Markdown viewer](examples/markdown_viewer_demo.nim),
+  [canvas](examples/canvas_demo.nim), and [terminal](examples/terminal_demo.nim).
+- Building UI from resources: [resource guide](docs/resources.md) and
+  [example](examples/resource_ui_demo.nim).
+- Under the hood: [NimKit design](docs/design.md),
+  [Kosmo workspace updates](docs/kosmo-workspace.md),
+  [FigDraw](https://github.com/elcritch/figdraw/),
+  [Siwin](https://github.com/levovix0/siwin), and
+  [Sigils](https://github.com/elcritch/sigils).
