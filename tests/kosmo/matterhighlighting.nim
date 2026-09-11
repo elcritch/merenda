@@ -240,10 +240,13 @@ suite "Kosmo Matter highlighting":
         "README.md",
         source,
         [
-          "## Why Try It?", "Native Nim", "## Install", "## Kosmo Install",
-          "## Quick Start", "## Native Markdown Viewer", "## Cached URL Assets",
-          "## Controls", "## Keyboard And Focus", "## Workspace And Services",
-          "## Examples", "## Tests",
+          "## How it looks", "desktop GUI toolkit", "## Install and run Merenda",
+          "## A few small apps", "### Hello, Merenda",
+          "### A button that does something",
+          "### A Markdown reader in a handful of lines",
+          "### A table with model–view–presenter",
+          "### Change a view's behavior with a protocol", "### Slide between panels",
+          "## Kosmo", "## Explore more",
         ],
       )
     require rendered.len == 12
