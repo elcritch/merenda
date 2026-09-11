@@ -147,7 +147,12 @@ proc readGitDiff(
       result.errorMessage =
         "This folder is not a Git working tree.\n" & repository.output.strip()
       return
-    result.rootPath = repository.output.strip()
+    result.rootPath = normalizedPath(repository.output.strip())
+    if dirExists(result.rootPath):
+      try:
+        result.rootPath = normalizedPath(expandFilename(result.rootPath))
+      except CatchableError:
+        discard
     let hasHead = runGit(result.rootPath, ["rev-parse", "--verify", "HEAD"]).code == 0
     result.hasHead = hasHead
     let branch = runGit(result.rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"])
@@ -167,10 +172,13 @@ proc readGitDiff(
         expandFilename(parent) / relativePath(absolutePath(scope), parent)
       )
     var pathspec: seq[string]
-    if scope.len > 0 and scope != normalizedPath(result.rootPath):
-      if not scope.isRelativeTo(result.rootPath):
+    if scope.len > 0:
+      let relativeScope = relativePath(scope, result.rootPath, '/')
+      if relativeScope == ".." or relativeScope.startsWith("../") or
+          relativeScope.isAbsolute:
         return
-      pathspec.add relativePath(scope, result.rootPath)
+      if relativeScope != ".":
+        pathspec.add relativeScope
     let names =
       if hasHead:
         var args =
