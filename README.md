@@ -225,6 +225,71 @@ action specific to your app. For a larger version, see the
 [table-based to-do app](examples/todo_table.nim) or the
 [model controller examples](examples/modelcontrollers_demo.nim).
 
+### Change a view's behavior with a protocol
+
+Sigils protocols let you attach methods to an individual object, even when its
+type comes from a library. Here, an ordinary `View` gets a custom drawing method.
+Click **Inspect layout** to replace that method with one that displays the
+view's dimensions; click again to restore the preview.
+
+```nim
+import merenda/nimkit
+import sigils/selectors
+
+protocol PreviewDrawing of ViewDrawingProtocol:
+  method draw(view: View, context: DrawContext) =
+    context.addRectangle(view.bounds, fill(color(0.18, 0.32, 0.55)))
+    context.addText(view.bounds, "Design preview", color(1, 1, 1), taCenter)
+
+protocol LayoutDrawing of ViewDrawingProtocol:
+  method draw(view: View, context: DrawContext) =
+    context.addRectangle(view.bounds, fill(color(0.12, 0.22, 0.24)))
+    let size = view.bounds.size
+    context.addText(
+      view.bounds, $size.width & " x " & $size.height,
+      color(1, 1, 1), taCenter,
+    )
+
+let
+  app = sharedApplication()
+  window = newWindow("Dynamic drawing", frame = rect(100, 100, 420, 260))
+  root = newView()
+  preview = newView(frame = rect(24, 24, 372, 140))
+  button = newButton("Inspect layout", frame = rect(24, 188, 160, 32))
+  inspectAction = actionSelector("toggleLayoutDrawing")
+
+preview.withProtocol(PreviewDrawing)
+var inspecting = false
+
+proc toggleLayout(sender: DynamicAgent) =
+  discard sender
+  inspecting = not inspecting
+  if inspecting:
+    preview.withProtocol(LayoutDrawing)
+  else:
+    preview.withProtocol(PreviewDrawing)
+  preview.needsDisplay = true
+
+button.target = newActionTarget(inspectAction, toggleLayout)
+button.action = inspectAction
+root.addSubview(preview)
+root.addSubview(button)
+app.runWindow(window, root)
+```
+
+Save this as `examples/protocol_drawing.nim` and run
+`nim r examples/protocol_drawing.nim`.
+
+Both implementations are compiled Nim code with typed `View` and `DrawContext`
+arguments. NimKit calls the drawing protocol, and Sigils dispatches to the method
+currently installed on `preview`. Replacing it leaves other views alone and
+keeps this view's identity, layout, and place in the window intact.
+
+This is useful for adding diagnostics, swapping rendering strategies, or
+customizing a library object without introducing a subclass for every variation.
+The same pattern works for [view controller loading](examples/viewcontroller_demo.nim)
+and [table delegates](examples/table_demo.nim).
+
 ## Kosmo
 
 Kosmo is a code editor built with Merenda and Moe's Vim-style editing engine.
