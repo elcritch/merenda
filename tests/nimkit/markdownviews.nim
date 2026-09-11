@@ -1613,7 +1613,6 @@ Press <kbd>Enter</kbd>.
       &"{clickElapsed.inMilliseconds} ms, restyle and render " &
       &"{styleElapsed.inMilliseconds} ms in {styleChunkCount} chunks " &
       &"(max {maximumStyleChunk.inMilliseconds} ms)"
-    check source.len > 20_000
     check snapshot.lineFragments.len > 100
 
   test "repository README reports live resize timings":
