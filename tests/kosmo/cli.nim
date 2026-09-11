@@ -107,7 +107,7 @@ suite "Kosmo command line":
     check paths.errors.len == 3
     check paths.errors[0] == "Kosmo cannot open an empty path"
     check paths.errors[1].endsWith("missing")
-    check paths.errors[2].endsWith("missing/child.txt")
+    check paths.errors[2].endsWith("missing" / "child.txt")
 
   test "diff input is read exactly and bounded":
     let root = createTempDir("merenda-kosmo-cli-diff-", "")
