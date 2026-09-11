@@ -19,25 +19,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        platform:
+          - macos
+          - linux
+          - windows
         include:
-          - os: macos-latest
+          - platform: macos
+            os: macos-latest
             nimversion: '2.2.10'
             display: none
             nimargs: ''
-          - os: ubuntu-26.04
+          - platform: linux
+            os: ubuntu-26.04
             nimversion: '2.2.10'
             display: x11
             nimargs: >-
               -- --opt:none
               -d:KosmoMatterMaximumLineBytes=96
               -d:NimkitMatterMaximumLineBytes=96
-          - os: windows-2022
+          - platform: windows
+            os: windows-2022
             nimversion: '2.2.10'
             display: none
             nimargs: >-
               -- -d:figdraw.vulkan=off
-          # - os: ubuntu-24.04
-          #   display: wayland
+        # Keep the Windows row available outside this pull request.
+        exclude:
+          - platform: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 72 && 'windows' || 'disabled' }}
     steps:
     - uses: actions/checkout@v5
 
