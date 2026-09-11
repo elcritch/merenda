@@ -1,5 +1,5 @@
 ## URL behavior shared by the NimKit test runner.
-import std/unittest
+import std/[os, unittest]
 
 import merenda/nimkit/app/documents
 import merenda/nimkit/app/panels
@@ -25,7 +25,7 @@ suite "Foundation URLs":
 
   test "resolves file URLs and relative paths":
     check initUrl("images/icon%202.png?scale=2").localFilePath("/tmp/assets") ==
-      "/tmp/assets/images/icon 2.png"
+      "/tmp/assets" / "images" / "icon 2.png"
     check initUrl("file:///tmp/icon%202.png").localFilePath() == "/tmp/icon 2.png"
     check initUrl("https://example.com/icon.png").localFilePath("/tmp") == ""
 
