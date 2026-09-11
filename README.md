@@ -230,7 +230,10 @@ action specific to your app. For a larger version, see the
 Sigils protocols let you attach methods to an individual object, even when its
 type comes from a library. Here, an ordinary `View` gets a custom drawing method.
 Click **Inspect layout** to replace that method with one that displays the
-view's dimensions; click again to restore the preview.
+view's dimensions; click again to restore the preview. The panels slide together
+over 800 ms with linear motion, reversing direction on the return trip. A clipped
+container keeps the slide inside the panel, and the button stays disabled until
+the transition completes.
 
 ```nim
 import merenda/nimkit
@@ -246,33 +249,75 @@ protocol LayoutDrawing of ViewDrawingProtocol:
     context.addRectangle(view.bounds, fill(color(0.12, 0.22, 0.24)))
     let size = view.bounds.size
     context.addText(
-      view.bounds, $size.width & " x " & $size.height,
-      color(1, 1, 1), taCenter,
+      view.bounds, $size.width & " x " & $size.height, color(1, 1, 1), taCenter
     )
 
 let
   app = sharedApplication()
   window = newWindow("Dynamic drawing", frame = rect(100, 100, 420, 260))
   root = newView()
-  preview = newView(frame = rect(24, 24, 372, 140))
+  viewport = newView(frame = rect(24, 24, 372, 140))
+  outgoing = newView(frame = rect(0, 0, 372, 140))
+  preview = newView(frame = rect(0, 0, 372, 140))
   button = newButton("Inspect layout", frame = rect(24, 188, 160, 32))
   inspectAction = actionSelector("toggleLayoutDrawing")
 
 preview.withProtocol(PreviewDrawing)
+viewport.clipsToBounds = true
+outgoing.hidden = true
 var inspecting = false
+
+proc finishTransition(button: Button) {.slot.} =
+  outgoing.hidden = true
+  button.enabled = true
 
 proc toggleLayout(sender: DynamicAgent) =
   discard sender
-  inspecting = not inspecting
-  if inspecting:
-    preview.withProtocol(LayoutDrawing)
-  else:
-    preview.withProtocol(PreviewDrawing)
-  preview.needsDisplay = true
+  if button.enabled:
+    button.enabled = false
+    inspecting = not inspecting
+    if inspecting:
+      outgoing.withProtocol(PreviewDrawing)
+      preview.withProtocol(LayoutDrawing)
+    else:
+      outgoing.withProtocol(LayoutDrawing)
+      preview.withProtocol(PreviewDrawing)
+
+    let
+      size = viewport.bounds.size
+      offset =
+        if inspecting:
+          size.width
+        else:
+          -size.width
+    outgoing.frame = rect(0, 0, size.width, size.height)
+    outgoing.hidden = false
+    outgoing.needsDisplay = true
+    preview.frame = rect(offset, 0, size.width, size.height)
+    preview.needsDisplay = true
+
+    let slide = newParallelAnimationGroup(
+      [
+        Animation(
+          newFrameAnimation(
+            outgoing, rect(-offset, 0, size.width, size.height), duration = 800.ms
+          )
+        ),
+        Animation(
+          newFrameAnimation(
+            preview, rect(0, 0, size.width, size.height), duration = 800.ms
+          )
+        ),
+      ]
+    )
+    slide.connect(finished, button, finishTransition)
+    discard app.startAnimation(slide)
 
 button.target = newActionTarget(inspectAction, toggleLayout)
 button.action = inspectAction
-root.addSubview(preview)
+viewport.addSubview(outgoing)
+viewport.addSubview(preview)
+root.addSubview(viewport)
 root.addSubview(button)
 app.runWindow(window, root)
 ```
@@ -283,7 +328,8 @@ Save this as `examples/protocol_drawing.nim` and run
 Both implementations are compiled Nim code with typed `View` and `DrawContext`
 arguments. NimKit calls the drawing protocol, and Sigils dispatches to the method
 currently installed on `preview`. Replacing it leaves other views alone and
-keeps this view's identity, layout, and place in the window intact.
+keeps this view's identity and place in the window intact. A second view draws
+the outgoing content during the slide, then hides when the animation finishes.
 
 This is useful for adding diagnostics, swapping rendering strategies, or
 customizing a library object without introducing a subclass for every variation.
