@@ -130,6 +130,38 @@ proc executeGit(
   )
   (command.output, command.exitCode)
 
+proc sameGitPath(left, right: string): bool =
+  when defined(windows):
+    cmpIgnoreCase(left, right) == 0
+  else:
+    left == right
+
+proc gitScopeRelativePath(
+    repositoryRoot, scopePath: string, control: SharedPtr[GitDiffControl]
+): tuple[path: string, valid: bool] =
+  if scopePath.len == 0:
+    return (path: "", valid: true)
+  var scope = absolutePath(scopePath)
+  var leaf = ""
+  if not dirExists(scope):
+    leaf = lastPathPart(scope)
+    scope = parentDir(scope)
+  let scopeRepository = executeGit(scope, ["rev-parse", "--show-toplevel"], control)
+  if scopeRepository.code != 0:
+    return
+  let canonicalScopeRepository = normalizedPath(scopeRepository.output.strip())
+  if not sameGitPath(canonicalScopeRepository, repositoryRoot):
+    return
+  let prefix = executeGit(scope, ["rev-parse", "--show-prefix"], control)
+  if prefix.code != 0:
+    return
+  result.valid = true
+  result.path = prefix.output.strip().replace('\\', '/').strip(chars = {'/'})
+  if leaf.len > 0:
+    if result.path.len > 0:
+      result.path.add '/'
+    result.path.add leaf.replace('\\', '/')
+
 proc readGitDiff(
     rootPath: string, control: SharedPtr[GitDiffControl], scopePath = ""
 ): GitDiffSnapshot =
@@ -161,24 +193,10 @@ proc readGitDiff(
     elif hasHead:
       let commit = runGit(result.rootPath, ["rev-parse", "--short", "HEAD"])
       result.branch = "Detached HEAD · " & commit.output.strip()
-    var scope = scopePath
-    if scope.len > 0:
-      # Git canonicalizes repository roots (for example /var to /private/var).
-      # Resolve an existing parent so deleted paths and symlinks themselves work.
-      var parent = absolutePath(scope).parentDir()
-      while not dirExists(parent) and parent.parentDir() != parent:
-        parent = parent.parentDir()
-      scope = normalizedPath(
-        expandFilename(parent) / relativePath(absolutePath(scope), parent)
-      )
-    var scopeRelativePath = ""
-    if scope.len > 0:
-      let relativeScope = relativePath(scope, result.rootPath, '/')
-      if relativeScope == ".." or relativeScope.startsWith("../") or
-          relativeScope.isAbsolute:
-        return
-      if relativeScope != ".":
-        scopeRelativePath = relativeScope
+    let scopeResult = gitScopeRelativePath(result.rootPath, scopePath, control)
+    if not scopeResult.valid:
+      return
+    let scopeRelativePath = scopeResult.path
     let names =
       if hasHead:
         runGit(
