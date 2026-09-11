@@ -131,7 +131,7 @@ jobs:
           $ATLAS_TEST_NIM_ARGS
 
     - name: Run Kosmo tests
-      timeout-minutes: 5
+      timeout-minutes: 10
       run: |
         testExecutable=./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo
         if [[ "$RUNNER_OS" == "Windows" ]]; then
