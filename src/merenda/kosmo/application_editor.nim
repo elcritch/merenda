@@ -1723,7 +1723,7 @@ proc newKosmoMarkdownControls(view: KosmoEditorView): KosmoMarkdownControls =
     button.setHuggingPriority(nimkit.LayoutPriorityHigh, nimkit.laHorizontal)
 
   row.spacing = 2.0'f32
-  row.distribution = nimkit.svdNatural
+  row.distribution = nimkit.svdFill
   row.addArrangedSubview(modeButton, colorModeButton)
   row.addFlexibleSpacer()
   row.addArrangedSubview(decreaseFontButton, increaseFontButton)

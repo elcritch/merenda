@@ -188,3 +188,26 @@ suite "Kosmo Markdown activation":
     discard frontend.window.sendAction(actionSelector(KosmoSaveAction))
     check not frontend.editorView.editor.tabs()[0].modified
     check "Updated" in readFile(path)
+
+  test "Markdown toolbar keeps zoom controls on the trailing side":
+    let frontend = newKosmoApplication(
+      newApplication("Markdown toolbar layout"), monitorsGitStatus = false
+    )
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 1000, 700)
+    frontend.editorPane.markdownControls.hidden = false
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let
+      controls = frontend.editorPane.markdownControls
+      row = StackView(controls.contentView)
+      arranged = row.arrangedSubviews()
+    check arranged.len == 5
+    check arranged[0] == View(controls.modeButton)
+    check arranged[1] == View(controls.colorModeButton)
+    check arranged[3] == View(controls.decreaseFontButton)
+    check arranged[4] == View(controls.increaseFontButton)
+    check arranged[2].frame().size.width > 0.0
+    check arranged[2].frame().origin.x > arranged[1].frame().maxX()
+    check arranged[3].frame().origin.x > arranged[2].frame().maxX()
