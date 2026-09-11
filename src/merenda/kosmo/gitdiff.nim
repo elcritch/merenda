@@ -171,41 +171,42 @@ proc readGitDiff(
       scope = normalizedPath(
         expandFilename(parent) / relativePath(absolutePath(scope), parent)
       )
-    var pathspec: seq[string]
+    var scopeRelativePath = ""
     if scope.len > 0:
       let relativeScope = relativePath(scope, result.rootPath, '/')
       if relativeScope == ".." or relativeScope.startsWith("../") or
           relativeScope.isAbsolute:
         return
       if relativeScope != ".":
-        pathspec.add relativeScope
+        scopeRelativePath = relativeScope
     let names =
       if hasHead:
-        var args =
-          @[
+        runGit(
+          result.rootPath,
+          [
             "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-only",
             "-z", "HEAD", "--",
-          ]
-        args.add pathspec
-        runGit(result.rootPath, args)
+          ],
+        )
       else:
-        var args = @["ls-files", "--cached", "-z", "--"]
-        args.add pathspec
-        runGit(result.rootPath, args)
-    var untrackedArgs = @["ls-files", "--others", "--exclude-standard", "-z", "--"]
-    untrackedArgs.add pathspec
-    let untracked = runGit(result.rootPath, untrackedArgs)
+        runGit(result.rootPath, ["ls-files", "--cached", "-z", "--"])
+    let untracked = runGit(
+      result.rootPath, ["ls-files", "--others", "--exclude-standard", "-z", "--"]
+    )
     if names.code != 0 or untracked.code != 0:
       result.errorMessage =
         "Could not list changed files.\n" & names.output & untracked.output
       return
-    let untrackedPaths = untracked.output.split('\0').toHashSet()
+    var untrackedPaths = initHashSet[string]()
+    for path in untracked.output.split('\0'):
+      untrackedPaths.incl path.replace('\\', '/')
     var seen = initHashSet[string]()
     for group in [names.output, untracked.output]:
-      for path in group.split('\0'):
-        let absoluteFile = normalizedPath(result.rootPath / path)
+      for rawPath in group.split('\0'):
+        let path = rawPath.replace('\\', '/')
         let inScope =
-          scope.len == 0 or absoluteFile == scope or absoluteFile.isRelativeTo(scope)
+          scopeRelativePath.len == 0 or path == scopeRelativePath or
+          path.startsWith(scopeRelativePath & "/")
         if path.len > 0 and path notin seen and inScope:
           seen.incl path
           let isAddition = not hasHead or path in untrackedPaths
