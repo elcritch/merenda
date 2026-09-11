@@ -171,6 +171,60 @@ For an app with more interaction, try the [to-do list](examples/todo_basic.nim)
 or its [table-based version](examples/todo_table.nim), which adds row selection
 and drag reordering.
 
+### A table with model–view–presenter
+
+For a small app, MVP doesn't need a class hierarchy. Here, `tasks` holds the
+model data in an `ArrayController`, the table and button are the view, and
+`markDone` acts as the presenter. Select a row and click **Mark done**: the
+presenter updates the model and refreshes the table.
+
+```nim
+import merenda/nimkit
+import sigils/selectors
+
+let
+  app = sharedApplication()
+  window = newWindow("Tasks", frame = rect(100, 100, 460, 320))
+  root = newView()
+  table = newTableView(frame = rect(24, 24, 412, 200))
+  doneButton = newButton("Mark done", frame = rect(24, 244, 140, 32))
+  tasks = newArrayController(columns = [
+    modelColumn("task", "Task", "task", 260.0),
+    modelColumn("state", "State", "state", 100.0),
+  ])
+
+for index, title in ["Write release notes", "Try the demo"]:
+  tasks.addItem(modelItem($index, fields = [
+    modelField("task", toObj(title)),
+    modelField("state", toObj("To do")),
+  ]))
+
+table.bindTableView(tasks)
+table.selectionMode = tsmSingle
+
+# The presenter turns a user action into a model update.
+proc markDone(sender: DynamicAgent) =
+  discard sender
+  let selected = tasks.selectionController().selectedIdentifier()
+  if selected.len > 0:
+    tasks.setValue(selected, "state", toObj("Done"))
+    table.reloadData()
+
+let doneAction = actionSelector("markTaskDone")
+doneButton.target = newActionTarget(doneAction, markDone)
+doneButton.action = doneAction
+
+root.addSubview(table)
+root.addSubview(doneButton)
+app.runWindow(window, root, table)
+```
+
+Save this as `examples/tasks_mvp.nim` and run `nim r examples/tasks_mvp.nim`.
+The table binding supplies the columns and row values, so you only write the
+action specific to your app. For a larger version, see the
+[table-based to-do app](examples/todo_table.nim) or the
+[model controller examples](examples/modelcontrollers_demo.nim).
+
 ## Kosmo
 
 Kosmo is a code editor built with Merenda and Moe's Vim-style editing engine.
