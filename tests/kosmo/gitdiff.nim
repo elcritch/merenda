@@ -13,6 +13,7 @@ proc git(root: string, args: varargs[string]) =
 
 proc initRepository(root: string) =
   git(root, "init", "-q")
+  git(root, "config", "core.autocrlf", "false")
   git(root, "config", "user.name", "Kosmo Diff Test")
   git(root, "config", "user.email", "kosmo-test@example.invalid")
 
