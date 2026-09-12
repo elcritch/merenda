@@ -131,6 +131,14 @@ proc prepareApplicationEventLoop(app: Application)
 proc pollApplicationEvents(app: Application)
 proc waitForApplicationEvents(app: Application)
 
+proc requestNativeDisplayRefresh(app: Application) =
+  ## Some native backends report an event without marking its surface dirty.
+  ## Refresh every visible host after native activity so exposed content is
+  ## rebuilt even when the backend omits a dedicated expose callback.
+  for window in app.xWindows:
+    if not window.isNil and window.isVisible:
+      window.requestNativeDisplayUpdate()
+
 proc resolvedApplicationName(name: string): string =
   if name.len > 0:
     return name
@@ -1206,7 +1214,8 @@ proc prepareApplicationEventLoop(app: Application) =
 proc pollApplicationEvents(app: Application) =
   for window in app.xWindows:
     if not window.isNil and window.isVisible and window.nativeReady:
-      nimkitBackend.pollNativeEvents()
+      if nimkitBackend.pollNativeEvents():
+        app.requestNativeDisplayRefresh()
       break
 
 proc waitForApplicationEvents(app: Application) =
@@ -1217,16 +1226,19 @@ proc waitForApplicationEvents(app: Application) =
   let
     now = getMonoTime()
     deadline = app.nextAnimationDeadline(now)
+  var eventActivity: bool
   if deadline.isSome:
     let timeout = deadline.get() - now
-    nimkitBackend.waitForNativeEvents(
+    eventActivity = nimkitBackend.waitForNativeEvents(
       if timeout.inNanoseconds > 0:
         timeout
       else:
         initDuration()
     )
   else:
-    nimkitBackend.waitForNativeEvents()
+    eventActivity = nimkitBackend.waitForNativeEvents()
+  if eventActivity:
+    app.requestNativeDisplayRefresh()
 
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:
