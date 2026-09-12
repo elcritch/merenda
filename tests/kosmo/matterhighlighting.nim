@@ -4,6 +4,7 @@ import std/[monotimes, os, strutils, tempfiles, unicode, unittest]
 import celina/core/colors as celinaColors
 import sigils/threads
 
+import moepkg/highlight as moeHighlight
 import merenda/kosmo/kosmo
 import merenda/kosmo/matterworkers
 import merenda/nimkit
@@ -337,6 +338,62 @@ suite "Kosmo Matter highlighting":
     let saved = buffer.renderedLocation("jobs:")
     require saved.column >= 0
     check buffer.cell(saved.column, saved.row).style.fg == initialColor
+
+  test "Moe retains Matter colours while an edited snapshot is pending":
+    let
+      root = createTempDir("kosmo-moe-matter-", "")
+      path = root / "pending.nim"
+    writeFile(path, "proc answer = discard\n")
+    defer:
+      removeFile(path)
+      removeDir(root)
+
+    let editor = newKosmoEditor()
+    defer:
+      editor.close()
+    require editor.openFile(path).loaded
+
+    var buffer = newRenderBuffer(48, 12)
+    require editor.renderUntilMatterHighlightingReady(buffer)
+    let initial = buffer.renderedLocation("answer")
+    require initial.column >= 0
+    let initialColor = buffer.cell(initial.column, initial.row).style.fg
+
+    # The highlighter has one actor. Queue a deliberately long unrelated
+    # request so the edited buffer's result cannot arrive in this frame.
+    let highlighter = editor.matterHighlightingController()
+    discard highlighter.requestMatterHighlight(
+      0,
+      0,
+      "# queued\n".repeat(100_000),
+      moeHighlight.SourceLanguage.langNim,
+      "queued.nim",
+    )
+    require editor.handleKey("i")
+    require editor.handleTextInput(" ")
+    require editor.handleKey("Esc")
+    editor.render(buffer)
+    require not editor.matterHighlightingReady()
+
+    let retained = buffer.renderedLocation("answer")
+    require retained.column >= 0
+    check buffer.cell(retained.column, retained.row).style.fg == initialColor
+
+    require editor.handleKey("i")
+    require editor.handleTextInput("# touched\n")
+    require editor.handleKey("Esc")
+    editor.render(buffer)
+    require not editor.matterHighlightingReady()
+
+    let shifted = buffer.renderedLocation("answer")
+    require shifted.column >= 0
+    check buffer.cell(shifted.column, shifted.row).style.fg == initialColor
+
+    # Cancel the test-only blocker, then leave the shared actor cleanly idle.
+    discard highlighter.requestMatterHighlight(
+      0, 1, "", moeHighlight.SourceLanguage.langNim, "queued.nim"
+    )
+    require editor.renderUntilMatterHighlightingReady(buffer)
 
   test "Matter completion refreshes the retained editor grid":
     let

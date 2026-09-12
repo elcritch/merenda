@@ -1,5 +1,3 @@
---nimcache:
-  ".nimcache/"
 --define:
   useMalloc
 --mm:
