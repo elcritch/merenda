@@ -764,11 +764,15 @@ jobs:
           Push-Location data
           windres kosmo.rc -O coff -o ../build/kosmo.res
           Pop-Location
+          # The setup action uses MinGW. Link its exception runtime into the
+          # executable so the release ZIP does not require libgcc_s_seh-1.dll
+          # beside kosmo.exe.
           nim c `
             --opt:size `
             --debugger:native `
             --lineTrace:off `
             --stackTrace:off `
+            --passL:-static-libgcc `
             -d:nimStackTraceOverride `
             --app:gui `
             -d:moe.embedded `
@@ -785,6 +789,10 @@ jobs:
           }
           if (-not (& nm dist/kosmo.exe | Select-String -Quiet 'backtrace_create_state')) {
             throw 'Kosmo executable is missing libbacktrace.'
+          }
+          $imports = & objdump -p dist/kosmo.exe
+          if ($imports -match '(?im)^\s*DLL Name:\s+libgcc_s.*\.dll\s*$') {
+            throw 'Kosmo executable must not depend on a MinGW GCC runtime DLL.'
           }
           $process = Start-Process `
             -FilePath "$PWD/dist/kosmo.exe" `
