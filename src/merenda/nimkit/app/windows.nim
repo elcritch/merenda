@@ -2849,13 +2849,21 @@ proc dispatchHostFocusChanged*(window: Window, focused: bool) =
   discard window.requestNativeDisplayUpdateIfNeeded()
 
 proc markHostClosed(window: Window) =
+  if window.xClosed:
+    return
+  window.sendWindowDelegate(windowWillClose(), window)
+  emit window.willClose()
+  window.postWindowNotification(nkWindowWillClose)
   window.clearToolTip()
   window.releaseThreadRenderer(waitForRelease = true)
   window.stopInsertionPointBlink()
   window.stopAnimationClock()
+  discard window.saveFrameUsingName()
   window.xClosed = true
   window.xVisibleRequested = false
   window.xMiniaturized = false
+  window.xIsKeyWindow = false
+  window.xIsMainWindow = false
   window.xBackdropActive = false
   if window.xTransientSession.active:
     discard window.dismissTransientSession(tdrOwnerClosed)
@@ -2864,6 +2872,12 @@ proc markHostClosed(window: Window) =
   if not window.xOwnerWindow.isNil:
     window.xOwnerWindow.detachAuxiliaryWindow(window)
     window.xOwnerWindow = nil
+  if not window.xSheetParent.isNil and window.xSheetParent.xSheet == window:
+    window.xSheetParent.xSheet = nil
+    window.xSheetParent = nil
+  emit window.didClose()
+  window.postWindowNotification(nkWindowDidClose)
+  window.sendWindowDelegate(windowDidClose(), window)
   window.notifyApplication(WindowDidCloseSelector)
 
 proc useThreadRenderer*(window: Window, renderer: ThreadRendererClient) =
