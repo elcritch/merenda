@@ -20,6 +20,7 @@ import
 import moepkg/buffer/undo as moeUndo
 import moepkg/buffer/search as moeSearch
 import moepkg/buffer/highlight as moeBufferHighlight
+import moepkg/buffer/core as moeBufferCore
 import moepkg/highlight as moeHighlight
 from moepkg/buffer/file_io import loadFileWithContent
 from moepkg/buffer/core import BufferId, getLine, getTextString, len
@@ -53,6 +54,10 @@ type
     scopeName*: string
     origin*: KosmoTextMateGrammarOrigin
 
+  MatterSyntaxFallbackState = ref object
+    highlightVersions: Table[BufferId, int]
+    remappers: Table[BufferId, bool]
+
   KosmoEditor* = ref object
     editor: Editor
     temporaryBufferId: Option[BufferId]
@@ -60,7 +65,14 @@ type
     textMateGrammars: seq[KosmoTextMateGrammar]
     matterHighlighting: MatterHighlighting
     matterRequests: Table[BufferId, tuple[contentVersion: int, requestId: uint64]]
+    matterSyntaxFallback: MatterSyntaxFallbackState
     matterLineStateVersions: Table[BufferId, int]
+
+  MatterSyntaxFallback = object
+    buffer: TextBuffer
+    contentVersion: int
+    requestId: uint64
+    colorSegments: seq[moeHighlight.ColorSegment]
 
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
@@ -519,6 +531,10 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
     editor: newEditor(config),
     textMateGrammars: builtInTextMateGrammars(),
     matterRequests: initTable[BufferId, tuple[contentVersion: int, requestId: uint64]](),
+    matterSyntaxFallback: MatterSyntaxFallbackState(
+      highlightVersions: initTable[BufferId, int](),
+      remappers: initTable[BufferId, bool](),
+    ),
     matterLineStateVersions: initTable[BufferId, int](),
   )
   result.workingDirectory = workingDirectory
@@ -535,6 +551,9 @@ proc close*(editor: KosmoEditor) =
     return
   editor.matterHighlighting.close()
   editor.matterHighlighting = nil
+  if not editor.matterSyntaxFallback.isNil:
+    editor.matterSyntaxFallback.highlightVersions.clear()
+    editor.matterSyntaxFallback.remappers.clear()
   if not editor.editor.isNil:
     editor.editor.releaseExternalResources()
     editor.editor = nil
@@ -1194,6 +1213,190 @@ proc matterBufferCandidate(buffer: TextBuffer): bool =
       moeHighlight.SourceLanguage.langLog,
     }
 
+proc matterFallbackDefaultSegment(
+    row, firstColumn, lastColumn: int
+): moeHighlight.ColorSegment =
+  moeHighlight.ColorSegment(
+    firstRow: row,
+    firstColumn: firstColumn,
+    lastRow: row,
+    lastColumn: lastColumn,
+    color: moeHighlight.EditorColorPairIndex.default,
+    style: moeHighlight.defaultStyle,
+  )
+
+proc matterFallbackDefaultSegment(
+    buffer: TextBuffer, row: int
+): moeHighlight.ColorSegment =
+  matterFallbackDefaultSegment(row, 0, max(buffer.getLine(row).runeLen - 1, 0))
+
+proc addMatterFallbackPiece(
+    target: var seq[moeHighlight.ColorSegment],
+    segment: moeHighlight.ColorSegment,
+    firstColumn, lastColumn, columnOffset: int,
+) =
+  let
+    first = max(segment.firstColumn, firstColumn)
+    last = min(segment.lastColumn, lastColumn)
+  if first > last:
+    return
+  var piece = segment
+  piece.firstColumn = first + columnOffset
+  piece.lastColumn = last + columnOffset
+  target.add move piece
+
+proc replaceMatterFallbackRows(
+    buffer: TextBuffer,
+    segments: sink seq[moeHighlight.ColorSegment],
+    firstRow, lastRow: int,
+): seq[moeHighlight.ColorSegment] =
+  ## Replace changed rows with plain spans while retaining unaffected Matter spans.
+  let
+    first = max(firstRow, 0)
+    last = min(lastRow, buffer.len - 1)
+  if first > last:
+    return move segments
+  result = newSeqOfCap[moeHighlight.ColorSegment](segments.len + last - first + 1)
+  var nextDefaultRow = first
+  for segment in segments:
+    while nextDefaultRow <= last and nextDefaultRow <= segment.firstRow:
+      result.add buffer.matterFallbackDefaultSegment(nextDefaultRow)
+      inc nextDefaultRow
+    if segment.firstRow < first or segment.firstRow > last:
+      result.add segment
+  while nextDefaultRow <= last:
+    result.add buffer.matterFallbackDefaultSegment(nextDefaultRow)
+    inc nextDefaultRow
+
+proc remapMatterFallbackSingleLine(
+    buffer: TextBuffer,
+    segments: sink seq[moeHighlight.ColorSegment],
+    event: moeBufferCore.RowColRemapEvent,
+): seq[moeHighlight.ColorSegment] =
+  ## Preserve Matter colours on the unchanged side of a same-line edit.
+  ##
+  ## Matter emits a complete, single-row projection, so its segments can be
+  ## split at the edit point and shifted without asking the worker to run on
+  ## the UI thread. New text is deliberately plain until the replacement
+  ## snapshot arrives.
+  if event.colDelta == 0:
+    return buffer.replaceMatterFallbackRows(move segments, event.row, event.row)
+  let
+    oldLineLength = event.lineCharLenAfter - event.colDelta
+    editColumn = event.editCol.clamp(0, max(oldLineLength, 0))
+  if oldLineLength <= 0 or event.lineCharLenAfter <= 0:
+    return buffer.replaceMatterFallbackRows(move segments, event.row, event.row)
+
+  result = newSeqOfCap[moeHighlight.ColorSegment](segments.len + 2)
+  var inserted = false
+  for segment in segments:
+    if segment.firstRow < event.row:
+      result.add segment
+      continue
+    if segment.firstRow > event.row:
+      if event.colDelta > 0 and not inserted:
+        result.add matterFallbackDefaultSegment(
+          event.row, editColumn, editColumn + event.colDelta - 1
+        )
+        inserted = true
+      result.add segment
+      continue
+
+    if event.colDelta > 0:
+      result.addMatterFallbackPiece(segment, 0, editColumn - 1, 0)
+      if not inserted and segment.lastColumn >= editColumn:
+        result.add matterFallbackDefaultSegment(
+          event.row, editColumn, editColumn + event.colDelta - 1
+        )
+        inserted = true
+      result.addMatterFallbackPiece(
+        segment, editColumn, oldLineLength - 1, event.colDelta
+      )
+    else:
+      result.addMatterFallbackPiece(segment, 0, editColumn - 1, 0)
+      result.addMatterFallbackPiece(
+        segment, editColumn - event.colDelta, oldLineLength - 1, event.colDelta
+      )
+
+  if event.colDelta > 0 and not inserted:
+    result.add matterFallbackDefaultSegment(
+      event.row, editColumn, editColumn + event.colDelta - 1
+    )
+
+proc remapMatterSyntaxFallback(
+    state: MatterSyntaxFallbackState,
+    buffer: TextBuffer,
+    event: moeBufferCore.RowColRemapEvent,
+) =
+  ## Keep the previous Matter projection aligned with edits until its replacement arrives.
+  if state.isNil or not state.highlightVersions.hasKey(buffer.id) or
+      buffer.highlight.isNil:
+    return
+  case event.kind
+  of moeBufferCore.rrekClear:
+    state.highlightVersions.del(buffer.id)
+  of moeBufferCore.rrekSingleLine:
+    var segments = move buffer.highlight.colorSegments
+    buffer.highlight.colorSegments =
+      buffer.remapMatterFallbackSingleLine(move segments, event)
+  of moeBufferCore.rrekMultiLine:
+    let
+      delta = event.lastAffectedRowAfter - event.lastAffectedRowBefore
+      firstRow = event.firstAffectedRow
+      lastRowBefore = event.lastAffectedRowBefore
+      lastRowAfter = event.lastAffectedRowAfter
+      segments = move buffer.highlight.colorSegments
+    var
+      shifted = newSeqOfCap[moeHighlight.ColorSegment](segments.len)
+      replacementFirst = 0
+      replacementLast = -1
+    for segment in segments:
+      var
+        remapped = segment
+        keep = false
+      if delta > 0:
+        if event.preservesFirstRow:
+          keep = remapped.firstRow < firstRow or remapped.firstRow > lastRowBefore
+          if keep and remapped.firstRow > lastRowBefore:
+            remapped.firstRow += delta
+            remapped.lastRow += delta
+          replacementFirst = firstRow
+          replacementLast = lastRowAfter
+        else:
+          keep = true
+          if remapped.firstRow >= firstRow:
+            remapped.firstRow += delta
+            remapped.lastRow += delta
+          replacementFirst = firstRow
+          replacementLast = firstRow + delta - 1
+      elif delta < 0:
+        keep = remapped.firstRow < firstRow or remapped.firstRow > lastRowBefore
+        if keep and remapped.firstRow > lastRowBefore:
+          remapped.firstRow += delta
+          remapped.lastRow += delta
+        if event.preservesFirstRow:
+          replacementFirst = firstRow
+          replacementLast = lastRowAfter
+      else:
+        keep = remapped.firstRow < firstRow or remapped.firstRow > lastRowBefore
+        replacementFirst = firstRow
+        replacementLast = lastRowAfter
+      if keep:
+        shifted.add move remapped
+    buffer.highlight.colorSegments =
+      buffer.replaceMatterFallbackRows(move shifted, replacementFirst, replacementLast)
+
+proc installMatterSyntaxFallbackRemapper(editor: KosmoEditor, buffer: TextBuffer) =
+  let state = editor.matterSyntaxFallback
+  if state.isNil or state.remappers.hasKey(buffer.id):
+    return
+  state.remappers[buffer.id] = true
+  moeBufferCore.registerRowColRemapCallback(
+    buffer,
+    proc(changed: TextBuffer, event: moeBufferCore.RowColRemapEvent) =
+      state.remapMatterSyntaxFallback(changed, event),
+  )
+
 proc applyMatterHighlightResult(
     editor: KosmoEditor, completed: var MatterHighlightResult
 ): bool =
@@ -1209,11 +1412,14 @@ proc applyMatterHighlightResult(
       current.contentVersion != completed.contentVersion:
     return
   if completed.errorMessage.len > 0:
+    editor.matterSyntaxFallback.highlightVersions.del(current.id)
     return
 
   if current.highlight.isNil:
     current.highlight = moeHighlight.Highlight(colorSegments: @[])
   current.highlight.colorSegments = move completed.segments
+  editor.installMatterSyntaxFallbackRemapper(current)
+  editor.matterSyntaxFallback.highlightVersions[current.id] = completed.contentVersion
   # Matter's worker also returns one plain code-block flag per Markdown line.
   # Install those flags as a complete line-state cache so fenced backgrounds
   # do not depend on Moe's progressive built-in tokenizer reaching EOF before
@@ -1296,6 +1502,88 @@ proc matterHighlightingController*(editor: KosmoEditor): MatterHighlighting =
   if not editor.isNil and not editor.editor.isNil:
     result = editor.matterHighlighting
 
+proc matterSyntaxFallbackNeedsRestore(buffer: TextBuffer): bool =
+  ## Whether Moe's next frame can mutate a retained Matter projection.
+  buffer.highlightNeedsUpdate or buffer.uriScanParsedUpTo < buffer.len - 1 or (
+    buffer.incrementalHighlight != nil and (
+      buffer.incrementalHighlight.pendingReparse != nil or
+      buffer.incrementalHighlight.parsedUpTo < buffer.len - 1
+    )
+  )
+
+proc pendingMatterSyntaxFallbacks(editor: KosmoEditor): seq[MatterSyntaxFallback] =
+  ## Return the previous Matter projection for buffers awaiting a newer result.
+  if editor.isNil or editor.editor.isNil or editor.matterHighlighting.isNil:
+    return
+  for buffer in editor.editor.buffers:
+    if editor.matterSyntaxFallback.isNil or
+        not editor.matterSyntaxFallback.highlightVersions.hasKey(buffer.id) or
+        not editor.matterRequests.hasKey(buffer.id) or buffer.highlight.isNil:
+      continue
+    let request = editor.matterRequests[buffer.id]
+    if request.contentVersion != buffer.contentVersion or
+        editor.matterHighlighting.matterHighlightingReady(
+          int(buffer.id), request.requestId
+        ) or not buffer.matterSyntaxFallbackNeedsRestore:
+      continue
+    result.add MatterSyntaxFallback(
+      buffer: buffer,
+      contentVersion: buffer.contentVersion,
+      requestId: request.requestId,
+      colorSegments: buffer.highlight.colorSegments,
+    )
+
+proc restoreMatterSyntaxFallbacks(
+    editor: KosmoEditor, fallbacks: openArray[MatterSyntaxFallback]
+): bool =
+  ## Retain Matter colours while a newer asynchronous request is still running.
+  if editor.isNil or editor.editor.isNil or editor.matterHighlighting.isNil:
+    return
+  for fallback in fallbacks:
+    let current = fallback.buffer
+    if current.contentVersion != fallback.contentVersion or
+        editor.matterSyntaxFallback.isNil or
+        not editor.matterSyntaxFallback.highlightVersions.hasKey(current.id) or
+        not editor.matterRequests.hasKey(current.id):
+      continue
+    let request = editor.matterRequests[current.id]
+    if request.contentVersion != fallback.contentVersion or
+        request.requestId != fallback.requestId or
+        editor.matterHighlighting.matterHighlightingReady(
+          int(current.id), request.requestId
+        ):
+      continue
+    if current.highlight.isNil:
+      current.highlight = moeHighlight.Highlight(colorSegments: fallback.colorSegments)
+    else:
+      current.highlight.colorSegments = fallback.colorSegments
+    # A partial built-in cache would overwrite this projection on the repaint
+    # below. Keep a complete cache, though: it will not reparse and Markdown
+    # uses its line states for fenced-code backgrounds until Matter replies.
+    let cacheComplete =
+      current.incrementalHighlight != nil and
+      current.incrementalHighlight.pendingReparse == nil and
+      current.incrementalHighlight.lineStates.states.len >= current.len and
+      current.incrementalHighlight.parsedUpTo >= current.len - 1
+    if cacheComplete:
+      current.incrementalHighlight.parsedUpTo = current.len - 1
+    else:
+      current.incrementalHighlight = nil
+    current.highlightNeedsUpdate = false
+    current.uriScanParsedUpTo = current.len - 1
+    result = true
+
+proc renderMatterFrame(editor: KosmoEditor, buffer: var RenderBuffer) =
+  ## Render one frame without exposing Moe's built-in edit-time fallback.
+  let fallbacks = editor.pendingMatterSyntaxFallbacks()
+  editor.editor.render(buffer.buffer)
+  let matterApplied = editor.pollMatterHighlighting()
+  let fallbackRestored = editor.restoreMatterSyntaxFallbacks(fallbacks)
+  if matterApplied or fallbackRestored:
+    # Kosmo only publishes this grid after this proc returns, so Moe's
+    # built-in pass above remains invisible while Matter catches up.
+    editor.editor.render(buffer.buffer)
+
 proc scheduleMatterHighlighting(editor: KosmoEditor) =
   if editor.isNil or editor.editor.isNil:
     return
@@ -1307,6 +1595,7 @@ proc scheduleMatterHighlighting(editor: KosmoEditor) =
       buffer.incrementalHighlight = nil
       editor.matterLineStateVersions.del(buffer.id)
     if not buffer.matterBufferCandidate:
+      editor.matterSyntaxFallback.highlightVersions.del(buffer.id)
       continue
     discard editor.matterHighlightingController()
     if buffer.highlightBackend != hbBuiltin:
@@ -1331,12 +1620,7 @@ proc render*(editor: KosmoEditor, buffer: var RenderBuffer) =
     return
   discard editor.pollMatterHighlighting()
   editor.scheduleMatterHighlighting()
-  editor.editor.render(buffer.buffer)
-  # A worker can finish while Moe is rendering the frame. Delivering here
-  # and repainting once makes the result visible without waiting for a separate
-  # frontend invalidation (for example, the refresh caused by Save).
-  if editor.pollMatterHighlighting():
-    editor.editor.render(buffer.buffer)
+  editor.renderMatterFrame(buffer)
 
 proc render*(
     editor: KosmoEditor, buffer: var RenderBuffer, state: KosmoEditorViewState
@@ -1354,9 +1638,7 @@ proc render*(
     editor.applyViewState(state)
   discard editor.pollMatterHighlighting()
   editor.scheduleMatterHighlighting()
-  editor.editor.render(buffer.buffer)
-  if editor.pollMatterHighlighting():
-    editor.editor.render(buffer.buffer)
+  editor.renderMatterFrame(buffer)
 
 func toMoeModifiers(modifiers: set[KeyModifier]): set[frontend_input.KeyModifier] =
   if kmControl in modifiers:
