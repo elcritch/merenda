@@ -495,6 +495,28 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     check panel.highlightBuildCount() == loadedCount + 1
 
+  test "reapplying the current style preserves rendered diff storage":
+    let panel = newKosmoGitDiffPanel(
+      parseGitDiff(
+        "diff --git a/source.nim b/source.nim\n" & "--- a/source.nim\n+++ b/source.nim\n" &
+          "@@ -1 +1 @@\n-let value = 1\n+let value = 2\n"
+      )
+    )
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 600, 400)
+    panel.layoutSubtreeIfNeeded()
+    panel.toggleFile(0)
+    require panel.waitForDiff()
+    let
+      textView = panel.textViewForFile(0)
+      storage = textView.textStorage()
+
+    panel.markdownStyle = panel.markdownView.markdownStyle()
+    require panel.waitForDiff()
+
+    check textView.textStorage() == storage
+
   test "closing active highlighting releases request and cache accounting":
     let
       syntaxPatch = "@@ -1,50000 +1,50000 @@\n" & "+let value = 1\n".repeat(50000)
