@@ -69,6 +69,7 @@ type
     xDelegate: DynamicAgent
     xAppearance: Appearance
     xHasAppearance: bool
+    xInvertScrolling: bool
     xCurrentEvent: KeyEvent
     xHasCurrentEvent: bool
     xKeyWindow: Window
@@ -299,6 +300,19 @@ proc userDefaults*(app: Application): UserDefaults =
   if app.xUserDefaults.isNil:
     app.xUserDefaults = sharedUserDefaults()
   app.xUserDefaults
+
+proc invertScrolling*(app: Application): bool =
+  ## Whether wheel scrolling is inverted for the application's windows.
+  app.xInvertScrolling
+
+proc `invertScrolling=`*(app: Application, inverted: bool) =
+  ## Set the wheel-scrolling direction for existing and future windows.
+  app.xInvertScrolling = inverted
+  for window in app.xWindows:
+    if not window.isNil:
+      window.invertScrolling = inverted
+  if not app.xMerendaSettingsWindow.isNil:
+    app.xMerendaSettingsWindow.invertScrolling = inverted
 
 proc workspace*(app: Application): Workspace =
   if app.xWorkspace.isNil:
@@ -866,7 +880,7 @@ proc showWindow*(
   window
 
 proc showMerendaSettings*(app: Application) =
-  ## Opens Merenda's built-in appearance and typography settings panel.
+  ## Opens Merenda's built-in appearance, typography, and behavior settings panel.
   if app.xMerendaSettingsWindow.isNil or app.xMerendaSettingsWindow.window.isClosed:
     var supplementalFonts: seq[FontCatalogEntry]
     if not app.xSupplementalFontCatalogProvider.isNil:
@@ -879,6 +893,9 @@ proc showMerendaSettings*(app: Application) =
         app.setAppearance(appearance),
       initialAppearance = app.effectiveAppearance(),
       supplementalFonts = supplementalFonts,
+      invertScrolling = app.invertScrolling(),
+      invertScrollingHandler = proc(inverted: bool) =
+        app.invertScrolling = inverted,
     )
   app.xMerendaSettingsWindow.resetSelections()
   discard app.showWindow(
@@ -900,6 +917,7 @@ proc addWindow*(app: Application, window: Window) =
     app.xWindows.add window
   app.includeOrderedWindow(window)
   window.setNextResponder(app)
+  window.invertScrolling = app.xInvertScrolling
   window.setInheritedAppearance(app.effectiveAppearance())
   if not app.xIcon.isNil:
     window.icon = app.xIcon

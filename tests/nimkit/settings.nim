@@ -41,6 +41,77 @@ suite "nimkit settings":
     check themePicker.sendAction()
     check appliedAppearance.theme.isInitialized
 
+  test "behavior settings expose and notify inverted scrolling":
+    var appliedValue = false
+    let settings = newMerendaSettingsWindow(
+      invertScrollingHandler = proc(inverted: bool) =
+        appliedValue = inverted
+    )
+    defer:
+      settings.window().close()
+    let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require not tabsView.isNil
+    require tabsView of TabView
+    let tabs = TabView(tabsView)
+    check tabs.len == 3
+    check tabs[2].identifier == SettingsBehaviorTabIdentifier
+    check tabs.selectTabViewItemAtIndex(2)
+
+    let invertView =
+      settings.contentView().viewWithIdentifier(SettingsInvertScrollingIdentifier)
+    require not invertView.isNil
+    require invertView of Button
+    let invertButton = Button(invertView)
+    check invertButton.title == "Invert scrolling direction"
+    check invertButton.state == bsOff
+    check not settings.invertScrolling
+
+    settings.invertScrolling = true
+    check invertButton.state == bsOn
+    check not appliedValue
+
+    check invertButton.sendAction()
+    check appliedValue
+
+  test "application scrolling preference reaches existing and new windows":
+    let
+      app = newApplication("Scrolling Preference Test")
+      firstWindow = newWindow("First")
+      secondWindow = newWindow("Second")
+    app.addWindow(firstWindow)
+    check not app.invertScrolling
+    check not firstWindow.invertScrolling
+
+    app.invertScrolling = true
+    check app.invertScrolling
+    check firstWindow.invertScrolling
+
+    app.addWindow(secondWindow)
+    check secondWindow.invertScrolling
+
+    app.showMerendaSettings()
+    let settingsWindow = app.windows[^1]
+    let settingsTabsView =
+      settingsWindow.contentView().viewWithIdentifier("settings-tabs")
+    require not settingsTabsView.isNil
+    require settingsTabsView of TabView
+    check TabView(settingsTabsView).selectTabViewItemAtIndex(2)
+    let invertView =
+      settingsWindow.contentView().viewWithIdentifier(SettingsInvertScrollingIdentifier)
+    require not invertView.isNil
+    require invertView of Button
+    let invertButton = Button(invertView)
+    check invertButton.state == bsOn
+    invertButton.state = bsOff
+    check invertButton.sendAction()
+    check not app.invertScrolling
+    check not firstWindow.invertScrolling
+    check not secondWindow.invertScrolling
+
+    settingsWindow.close()
+    firstWindow.close()
+    secondWindow.close()
+
   test "typography settings expose independent interface and monospace fonts":
     let settings = newMerendaSettingsWindow()
     defer:

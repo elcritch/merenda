@@ -135,6 +135,7 @@ type
     xContentView: View
     xAppearance: Appearance
     xHasAppearance: bool
+    xInvertScrolling: bool
     xInheritedAppearance: Appearance
     xHasInheritedAppearance: bool
     xPopupPresentation: PopupPresentation
@@ -821,6 +822,14 @@ proc `undoManager=`*(window: Window, undoManager: UndoManager) =
 
 proc contentView*(window: Window): View =
   window.xContentView
+
+proc invertScrolling*(window: Window): bool =
+  ## Whether wheel scrolling is inverted for this window.
+  window.xInvertScrolling
+
+proc `invertScrolling=`*(window: Window, inverted: bool) =
+  ## Set whether wheel scrolling is inverted for this window.
+  window.xInvertScrolling = inverted
 
 proc isKeyWindow*(window: Window): bool =
   window.xIsKeyWindow
@@ -2621,20 +2630,24 @@ proc dispatchScrollWheel*(window: Window, event: events.ScrollEvent): bool =
   window.clearToolTip()
   if window.xContentView.isNil:
     return false
-  var contentPoint = window.contentPoint(event.location)
+  var scrollEvent = event
+  if window.xInvertScrolling:
+    scrollEvent.deltaX = -scrollEvent.deltaX
+    scrollEvent.deltaY = -scrollEvent.deltaY
+  var contentPoint = window.contentPoint(scrollEvent.location)
   var target = window.contentHitTest(contentPoint)
-  if event.momentumPhase == sepBegan:
+  if scrollEvent.momentumPhase == sepBegan:
     window.xMomentumScrollTarget = target
     window.xMomentumScrollContentPoint = contentPoint
-  elif event.momentumPhase != sepNone and not window.xMomentumScrollTarget.isNil:
+  elif scrollEvent.momentumPhase != sepNone and not window.xMomentumScrollTarget.isNil:
     target = window.xMomentumScrollTarget
     contentPoint = window.xMomentumScrollContentPoint
-  elif event.momentumPhase == sepNone:
+  elif scrollEvent.momentumPhase == sepNone:
     window.xMomentumScrollTarget = nil
   if target.isNil:
     return false
-  result = window.dispatchScrollEventInChain(target, contentPoint, event).handled
-  if event.momentumPhase in {sepEnded, sepCancelled}:
+  result = window.dispatchScrollEventInChain(target, contentPoint, scrollEvent).handled
+  if scrollEvent.momentumPhase in {sepEnded, sepCancelled}:
     window.xMomentumScrollTarget = nil
 
 proc mouseDownAt*(

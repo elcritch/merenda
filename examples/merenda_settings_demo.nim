@@ -6,7 +6,10 @@ import merenda/nimkit/app/settings
 let app = sharedApplication()
 let settingsWindow = newMerendaSettingsWindow(
   proc(appearance: Appearance) =
-    app.setAppearance(appearance)
+    app.setAppearance(appearance),
+  invertScrolling = app.invertScrolling(),
+  invertScrollingHandler = proc(inverted: bool) =
+    app.invertScrolling = inverted,
 )
 
 app.runWindow(

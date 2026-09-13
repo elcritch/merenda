@@ -38,6 +38,7 @@ type
     stSynthwave83
 
   AppearanceHandler* = proc(appearance: Appearance) {.closure.}
+  InvertScrollingHandler* = proc(inverted: bool) {.closure.}
 
   SelectedFont = object
     name: string
@@ -91,6 +92,7 @@ type
     appliedFonts: array[FontRole, SelectedFont]
     appliedFontSize: float32
     fontLoadingStatus: string
+    invertScrollingHandler: InvertScrollingHandler
     preview: Label
     status: Label
     fontSizeValue: Label
@@ -98,6 +100,7 @@ type
     fontRoleButtons: array[FontRole, Button]
     onlyMonospaceFontsCheckbox: Button
     onlyDisplayableFontsCheckbox: Button
+    invertScrollingButton: Button
 
 const
   FontCatalogBatchSize = 1
@@ -112,6 +115,8 @@ const
   SettingsFontPreviewIdentifier = "settings-font-preview"
   SettingsOnlyMonospaceFontsIdentifier = "settings-only-monospace-fonts"
   SettingsOnlyDisplayableFontsIdentifier = "settings-only-displayable-fonts"
+  SettingsBehaviorTabIdentifier* = "behavior"
+  SettingsInvertScrollingIdentifier* = "settings-invert-scrolling"
 
 proc fontCatalogLoadRequested(controller: FontPickerController) {.signal.}
 proc fontCatalogBatchLoaded(
@@ -625,6 +630,16 @@ proc newSettingsPage(): tuple[view: View, stack: StackView] =
     edges = {leLeft, leTop, leRight, leBottom},
   )
 
+proc invertScrolling*(settings: MerendaSettingsWindow): bool =
+  ## Return whether wheel scrolling is inverted in the settings panel.
+  not settings.isNil and not settings.invertScrollingButton.isNil and
+    settings.invertScrollingButton.state == bsOn
+
+proc `invertScrolling=`*(settings: MerendaSettingsWindow, inverted: bool) =
+  ## Synchronize the wheel-scrolling preference without invoking its action.
+  if not settings.isNil and not settings.invertScrollingButton.isNil:
+    settings.invertScrollingButton.state = if inverted: bsOn else: bsOff
+
 proc updateStatus(settings: MerendaSettingsWindow) =
   settings.status.text =
     "Previewing " & settings.activeFontRole.title() & ": " &
@@ -745,6 +760,8 @@ proc newMerendaSettingsWindow*(
     appearanceHandler: AppearanceHandler = nil,
     initialAppearance = Appearance(),
     supplementalFonts: openArray[FontCatalogEntry] = [],
+    invertScrolling = false,
+    invertScrollingHandler: InvertScrollingHandler = nil,
 ): MerendaSettingsWindow =
   ## Create a settings panel initialized from an application's appearance.
   result = MerendaSettingsWindow(
@@ -752,6 +769,7 @@ proc newMerendaSettingsWindow*(
     xContentView: newView(),
     fontPickerController: newFontPickerController(),
     applyAppearanceHandler: appearanceHandler,
+    invertScrollingHandler: invertScrollingHandler,
     activeTheme: stDarkBSD,
     baseAppearance: stDarkBSD.appearance(),
     activeFontRole: frUI,
@@ -777,6 +795,7 @@ proc newMerendaSettingsWindow*(
     tabs = newTabView()
     appearancePage = newSettingsPage()
     typographyPage = newSettingsPage()
+    behaviorPage = newSettingsPage()
     appearanceForm = newFormView()
     typographyForm = newFormView()
     titleLabel = newTitleLabel("Merenda Settings")
@@ -812,6 +831,7 @@ proc newMerendaSettingsWindow*(
       increment = 1.0,
     )
     applyFontButton = newButton("Apply font")
+    invertScrollingButton = newCheckBox("Invert scrolling direction")
     themeChanged = actionSelector("themeChanged")
     interfaceFontSelected = actionSelector("interfaceFontSelected")
     monospaceFontSelected = actionSelector("monospaceFontSelected")
@@ -819,6 +839,7 @@ proc newMerendaSettingsWindow*(
     onlyDisplayableFontsChanged = actionSelector("onlyDisplayableFontsChanged")
     fontSizeChanged = actionSelector("fontSizeChanged")
     applyFont = actionSelector("applyFont")
+    invertScrollingChanged = actionSelector("invertScrollingChanged")
 
   result.preview = newLabel(FontCatalogPreviewText)
   result.status = newStatusLabel()
@@ -828,6 +849,7 @@ proc newMerendaSettingsWindow*(
   result.fontRoleButtons[frMonospace] = monospaceFontButton
   result.onlyMonospaceFontsCheckbox = onlyMonospaceFontsCheckbox
   result.onlyDisplayableFontsCheckbox = onlyDisplayableFontsCheckbox
+  result.invertScrollingButton = invertScrollingButton
   result.xFirstResponder = themePicker
   tabs.identifier = "settings-tabs"
 
@@ -921,6 +943,19 @@ proc newMerendaSettingsWindow*(
   )
   applyFontButton.action = applyFont
 
+  invertScrollingButton.identifier = SettingsInvertScrollingIdentifier
+  invertScrollingButton.accessibilityLabel = "Invert scrolling direction"
+  invertScrollingButton.state = if invertScrolling: bsOn else: bsOff
+  invertScrollingButton.target = newActionTarget(
+    invertScrollingChanged,
+    proc(sender: DynamicAgent) =
+      discard sender
+      if not settings.invertScrollingHandler.isNil:
+        settings.invertScrollingHandler(settings.invertScrolling())
+    ,
+  )
+  invertScrollingButton.action = invertScrollingChanged
+
   appearanceForm.addRow(themeLabel, themePicker)
   appearancePage.stack.addArrangedSubview(
     newHeadingLabel("Appearance"),
@@ -947,10 +982,20 @@ proc newMerendaSettingsWindow*(
   applyFontButton.identifier = "settings-apply-font"
   typographyPage.stack.addFlexibleSpacer()
 
+  behaviorPage.stack.addArrangedSubview(
+    newHeadingLabel("Behavior"),
+    newLabel("Customize how Merenda responds to input."),
+    invertScrollingButton,
+  )
+  behaviorPage.stack.addFlexibleSpacer()
+
   discard
     tabs.addTabViewItem(newTabViewItem("Appearance", appearancePage.view, "appearance"))
   discard
     tabs.addTabViewItem(newTabViewItem("Typography", typographyPage.view, "typography"))
+  discard tabs.addTabViewItem(
+    newTabViewItem("Behavior", behaviorPage.view, SettingsBehaviorTabIdentifier)
+  )
   tabs.delegate = result.fontPickerController
 
   layout.spacing = 12.0
