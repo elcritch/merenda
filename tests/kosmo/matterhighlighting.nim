@@ -111,15 +111,18 @@ template checkDistinctHighlight(fileName, source, firstNeedle, secondNeedle: str
 suite "Kosmo Matter highlighting":
   test "bounded Matter highlighting honors cancellation":
     var checks = 0
-    let spans = matterSyntaxHighlighterBounded(
+    var completed = true
+    let spans = matterSyntaxHighlighterBoundedWithStatus(
       "let value = 1\n",
       "nim",
       cancelled = proc(): bool =
         inc checks
         true,
+      completed = completed,
     )
     check spans.len == 0
     check checks > 0
+    check not completed
 
   test "Moe editors use Matter highlighting by default":
     let

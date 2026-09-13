@@ -281,6 +281,57 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     check panel.highlightBuildCount() == initialCount + 1
 
+  test "pending highlighting follows the latest visible patch":
+    let
+      syntaxPatch = "@@ -1,60000 +1,60000 @@\n" & "+let value = 1\n".repeat(60000)
+      first = GitDiffSnapshot(
+        source: gdsStandardInput,
+        rootPath: getCurrentDir(),
+        files:
+          @[
+            GitFileDiff(
+              path: "source.txt",
+              patch: "@@ -1,1 +1,1 @@\n-old\n+first\n",
+              syntaxPatch: syntaxPatch,
+            )
+          ],
+      )
+      latestPatch = "@@ -1,1 +1,1 @@\n-old\n+latest\n"
+      latest = GitDiffSnapshot(
+        source: gdsStandardInput,
+        rootPath: getCurrentDir(),
+        files:
+          @[
+            GitFileDiff(
+              path: "source.txt", patch: latestPatch, syntaxPatch: syntaxPatch
+            )
+          ],
+      )
+      panel = newKosmoGitDiffPanel(first)
+    defer:
+      panel.close()
+
+    panel.displayDiff(latest)
+    require panel.waitForDiff()
+    check panel.textViewForFile(0).textStorage().stringValue() == latestPatch
+
+  test "oversized diffs keep configured plain code attributes":
+    let
+      patch = "@@ -1,1 +1,1 @@\n+" & "x".repeat(1_100_000) & "\n"
+      panel = newKosmoGitDiffPanel(
+        GitDiffSnapshot(
+          source: gdsStandardInput,
+          rootPath: getCurrentDir(),
+          files: @[GitFileDiff(path: "source.txt", patch: patch, syntaxPatch: patch)],
+        )
+      )
+    defer:
+      panel.close()
+    require panel.waitForDiff()
+    let attributes = panel.textViewForFile(0).textStorage().attributesAt(0)
+    check attributes.fontName == panel.markdownView.markdownStyle().codeFontName
+    check attributes.foregroundColor == panel.markdownView.markdownStyle().codeColor
+
   test "repository changes wait for an explicit refresh by default":
     let root = createTempDir("kosmo-diff-manual-refresh-", "")
     defer:

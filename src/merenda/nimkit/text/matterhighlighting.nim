@@ -156,10 +156,11 @@ proc addSpan(
       range: initTextRange(startRune, stopRune - startRune), tokenClass: tokenClass
     )
 
-proc matterSyntaxHighlighterBounded*(
+proc matterSyntaxHighlighterBoundedWithStatus*(
     source, language: string,
     timeLimitMs = 0,
     cancelled: MatterHighlightCancellation = nil,
+    completed: var bool,
 ): seq[SyntaxTokenSpan] =
   ## Classify `source` with Matter's bundled TextMate grammar for `language`.
   ## Unknown language names return no spans. Returned ranges use rune offsets.
@@ -167,6 +168,9 @@ proc matterSyntaxHighlighterBounded*(
   ## ``timeLimitMs`` covers the complete source, not just one grammar line.
   ## ``cancelled`` is checked between lines and before/after the recursive
   ## grammar call so callers can stop stale worker requests promptly.
+  ## ``completed`` is false when cancellation, the deadline, or Matter's own
+  ## early-stop result prevents reaching the end of `source`.
+  completed = true
   let startedAt = getMonoTime()
   if source.len == 0:
     return
@@ -186,6 +190,7 @@ proc matterSyntaxHighlighterBounded*(
     ruleStack: StateStack
   while lineStart < source.len:
     if shouldStop():
+      completed = false
       return
     var lineStop = source.find('\n', lineStart)
     if lineStop < 0:
@@ -202,6 +207,7 @@ proc matterSyntaxHighlighterBounded*(
       continue
 
     if shouldStop():
+      completed = false
       return
     let remainingMilliseconds =
       if timeLimitMs > 0:
@@ -211,7 +217,8 @@ proc matterSyntaxHighlighterBounded*(
     let tokenized = grammar.tokenizeLine(
       source[lineStart ..< contentStop], ruleStack, remainingMilliseconds
     )
-    if shouldStop():
+    if tokenized.stoppedEarly or shouldStop():
+      completed = false
       return
     for token in tokenized.tokens:
       result.addSpan(
@@ -222,6 +229,16 @@ proc matterSyntaxHighlighterBounded*(
       )
     ruleStack = tokenized.ruleStack
     lineStart = lineStop + 1
+
+proc matterSyntaxHighlighterBounded*(
+    source, language: string,
+    timeLimitMs = 0,
+    cancelled: MatterHighlightCancellation = nil,
+): seq[SyntaxTokenSpan] =
+  var completed: bool
+  result = matterSyntaxHighlighterBoundedWithStatus(
+    source, language, timeLimitMs, cancelled, completed
+  )
 
 proc matterSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
   ## Classify a source with no explicit deadline or cancellation callback.
