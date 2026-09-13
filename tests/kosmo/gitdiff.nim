@@ -1,7 +1,9 @@
 import std/[monotimes, os, osproc, strutils, tempfiles, times, unicode, unittest]
 import figdraw
+import sigils/[core, threads]
 import merenda/nimkit
 import merenda/kosmo/kosmo
+from merenda/nimkit/foundation/mainthreadwork import drainMainThreadWork
 
 proc git(root: string, args: varargs[string]) =
   var arguments = @["-C", root]
@@ -147,6 +149,109 @@ suite "Kosmo Git diff":
     panel.scrollView.contentOffset = panel.scrollView.maximumContentOffset()
     panel.layoutSubtreeIfNeeded()
     check panel.materializedViewCount() < panel.snapshot.files.len
+
+  test "Git diff metadata caps file rows":
+    let root = createTempDir("kosmo-diff-file-limit-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    for index in 0 ..< 5:
+      writeFile(root / ("file" & $index & ".txt"), "value\n")
+
+    let snapshot = readGitDiff(root, fileLimit = 3)
+    check snapshot.errorMessage == ""
+    check snapshot.files.len == 3
+    check snapshot.fileLimitReached
+    for file in snapshot.files:
+      check file.patchState == gdpsUnloaded
+      check file.patch.len == 0
+
+    let panel = newKosmoGitDiffPanel(snapshot)
+    defer:
+      panel.close()
+    check "Only the first listed files are shown." in panel.markdownView.markdown()
+
+  test "expanding many files keeps views bounded and generated diffs unloaded":
+    let root = createTempDir("kosmo-diff-expand-limit-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    for index in 0 ..< 80:
+      writeFile(root / ("normal-" & $index & ".txt"), "value " & $index & "\n")
+    createDir(root / "nifcache")
+    writeFile(root / "nifcache" / "generated.nim.c", "generated output\n")
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 600, 400)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    require panel.snapshot.files.len == 81
+
+    require panel.expandButton.sendAction()
+    panel.layoutSubtreeIfNeeded()
+    let deadline = getMonoTime() + initDuration(seconds = 5)
+    while panel.materializedViewCount() == 0 and getMonoTime() < deadline:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      discard drainMainThreadWork()
+      panel.layoutSubtreeIfNeeded()
+      sleep(1)
+    require panel.materializedViewCount() > 0
+    check panel.materializedViewCount() <= GitDiffMaterializedSectionLimit * 2
+    var foundGenerated = false
+    for file in panel.snapshot.files:
+      if file.path == "nifcache/generated.nim.c":
+        foundGenerated = true
+        check file.patchState == gdpsUnloaded
+    check foundGenerated
+
+  test "lazy patch loading uses the canonical repository root":
+    let
+      root = createTempDir("kosmo-diff-nested-root-", "")
+      nested = root / "nested"
+      filePath = nested / "source.txt"
+    defer:
+      removeDir(root)
+    createDir(nested)
+    initRepository(root)
+    writeFile(filePath, "old value\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "Initial")
+    writeFile(filePath, "new value\n")
+
+    let panel = newKosmoGitDiffPanel(nested)
+    defer:
+      panel.close()
+    require panel.waitForDiff()
+    require sameFile(panel.snapshot.rootPath, root)
+    require panel.snapshot.files.len == 1
+    require panel.requestFilePatch(0)
+    require panel.waitForDiff()
+    check "+new value" in panel.snapshot.files[0].patch
+
+  test "replacing a piped diff refreshes an already materialized section":
+    let initial = parseGitDiff(
+      "diff --git a/source.nim b/source.nim\n" & "--- a/source.nim\n+++ b/source.nim\n" &
+        "@@ -1 +1 @@\n-old value\n+first value\n"
+    )
+    let updated = parseGitDiff(
+      "diff --git a/source.nim b/source.nim\n" & "--- a/source.nim\n+++ b/source.nim\n" &
+        "@@ -1 +1 @@\n-old value\n+second value\n"
+    )
+    let panel = newKosmoGitDiffPanel(initial)
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 600, 400)
+    panel.layoutSubtreeIfNeeded()
+    panel.toggleFile(0)
+    require panel.waitForDiff()
+    check "+first value" in panel.textViewForFile(0).textStorage().stringValue()
+
+    panel.displayDiff(updated)
+    require panel.waitForDiff()
+    let rendered = panel.textViewForFile(0).textStorage().stringValue()
+    check "+second value" in rendered
+    check "+first value" notin rendered
 
   test "generated diffs require an explicit patch request":
     let root = createTempDir("kosmo-diff-generated-", "")
@@ -308,9 +413,11 @@ suite "Kosmo Git diff":
     check panel.isFileCollapsed(1)
     require panel.requestFilePatch(1)
     require panel.waitForDiff()
+    let retainedAdditions = panel.snapshot.files[1].additions
+    require retainedAdditions > 0
     discard panel.textViewForFile(1)
     require panel.waitForDiff()
-    let retained = panel.textViewForFile(1).textStorage()
+    let retained = panel.textViewForFile(1).textStorage().stringValue()
     panel.toggleFile(0)
     require panel.waitForDiff()
     writeFile(root / "one.nim", "let one = 3\n")
@@ -318,8 +425,10 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     check not panel.isFileCollapsed(0)
     check panel.isFileCollapsed(1)
-    check panel.textViewForFile(1).textStorage() == retained
-    check panel.highlightBuildCount() == 3
+    check panel.snapshot.files[1].additions == retainedAdditions
+    discard panel.textViewForFile(1)
+    require panel.waitForDiff()
+    check panel.textViewForFile(1).textStorage().stringValue() == retained
   test "closing one diff does not stop shared Markdown and highlighting workers":
     let root = createTempDir("kosmo-diff-shared-workers-", "")
     defer:

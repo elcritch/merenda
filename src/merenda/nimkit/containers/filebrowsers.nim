@@ -315,7 +315,7 @@ proc refresh*(browser: FileBrowser) =
   browser.xFileSystem.invalidate(browser.xDirectoryPath)
   browser.xTableView.reloadData()
   browser.selectPaths(selectedPaths)
-  browser.updateOperationButtons()
+  browser.syncLocation()
 
 proc selectPaths*(browser: FileBrowser, paths: openArray[string]) =
   let entries = browser.entries()
