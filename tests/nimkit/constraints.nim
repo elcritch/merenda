@@ -1069,6 +1069,34 @@ suite "nimkit constraints":
     check root.xLastLayoutSolveDiagnostic == diagnostic
     check child.frame == initialFrame
 
+  test "failed parent solve does not block independent child fitting":
+    let
+      root = newView(frame = rect(0, 0, 200, 120))
+      child = newView(frame = rect(12, 18, 40, 24))
+    root.addSubview(child)
+    activate(cx(child[atWidth] == 80.0))
+
+    check child.fittingSize().width == 80.0'f32
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 1)
+    root.layoutSubtreeIfNeeded()
+
+    check root.xLastLayoutSolveDiagnostic.failed
+    check child.fittingSize().width == 80.0'f32
+
+  test "projected memory limit preserves frames and reports diagnostics":
+    let
+      root = newView(frame = rect(0, 0, 200, 120))
+      child = newView(frame = rect(12, 18, 40, 24))
+      initialFrame = child.frame
+    root.addSubview(child)
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxMemoryBytes: 1)
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame == initialFrame
+    check root.xLastLayoutSolveDiagnostic.failed
+    check root.xLastLayoutSolveDiagnostic.limit == lslMemory
+    check root.xLastLayoutSolveDiagnostic.estimatedMemoryBytes > 1
+
   test "layout solve budget retries after an input change":
     let
       root = newView(frame = rect(0, 0, 200, 120))

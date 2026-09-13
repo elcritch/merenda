@@ -280,8 +280,6 @@ proc suppressLayoutRetry(view: View) =
   view.xNeedsLayout = false
   view.xLayoutSolveBlocked = true
   view.xLayoutSolveBlockedLimits = view.xLayoutSolveLimits
-  for child in view.xSubviews:
-    suppressLayoutRetry(child)
 
 proc layoutSubtreeIfNeeded*(view: View) =
   if view.hasActiveLayoutAncestor() or not view.hasPendingLayoutInSubtree():

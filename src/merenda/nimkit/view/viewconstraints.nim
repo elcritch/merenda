@@ -1013,13 +1013,41 @@ func solverStrength(priority: LayoutPriority): Strength =
 proc elapsedMilliseconds(state: LayoutSolveState): Natural =
   Natural(max(0, int((getMonoTime() - state.startedAt).inMilliseconds)))
 
-proc estimatedMemoryBytes(state: LayoutSolveState): Natural =
-  ## This is deliberately a conservative accounting estimate, not an
-  ## allocator measurement. It bounds the amount of solver state we are
-  ## willing to construct before Kiwiberry starts allocating dense rows.
-  let estimate =
-    int64(state.items.len) * 256'i64 + int64(state.constraintCount) * 160'i64 +
-    int64(state.coefficientCount) * 48'i64
+func saturatingAdd(left, right: int64): int64 =
+  ## Add non-negative counters without allowing integer wraparound.
+  if left > high(int64) - right:
+    return high(int64)
+  left + right
+
+func saturatingMultiply(left, right: int64): int64 =
+  if left <= 0 or right <= 0:
+    return 0
+  if left > high(int64) div right:
+    return high(int64)
+  left * right
+
+func estimatedMemoryBytes(state: LayoutSolveState): Natural =
+  ## This is deliberately a conservative projected tableau estimate, not an
+  ## allocator measurement. Kiwiberry substitutes sparse rows into other rows,
+  ## so a small input expression can become dense while the temporary solver
+  ## is built. Account for the worst-case row/symbol matrix before each insert.
+  let
+    viewSymbols = saturatingMultiply(int64(state.items.len), 4)
+    auxiliarySymbols = saturatingMultiply(int64(state.constraintCount), 2)
+    symbolCount = max(
+      saturatingAdd(saturatingAdd(viewSymbols, auxiliarySymbols), 1),
+      int64(state.coefficientCount),
+    )
+    rowCount = saturatingAdd(int64(state.constraintCount), 1)
+    tableauCells = saturatingMultiply(rowCount, symbolCount)
+    itemBytes = saturatingMultiply(int64(state.items.len), 512)
+    constraintBytes = saturatingMultiply(int64(state.constraintCount), 256)
+    coefficientBytes = saturatingMultiply(int64(state.coefficientCount), 64)
+    tableauBytes = saturatingMultiply(tableauCells, 64)
+    estimate = saturatingAdd(
+      saturatingAdd(saturatingAdd(itemBytes, constraintBytes), coefficientBytes),
+      tableauBytes,
+    )
   Natural(min(estimate, int64(high(Natural))))
 
 proc solveDiagnostic(state: LayoutSolveState, limit = lslNone): LayoutSolveDiagnostic =
@@ -1115,10 +1143,12 @@ proc collectConstraintItems(state: var LayoutSolveState, owner: View) =
   if owner.isNil:
     return
   for constraint in owner.xConstraints:
+    state.checkSolveBudget()
     if not constraint.isNil and constraint.xActive:
       state.addConstraintItem(constraint.xFirstItem)
       state.addConstraintItem(constraint.xSecondItem)
   for child in owner.xSubviews:
+    state.checkSolveBudget()
     state.collectConstraintItems(child)
 
 proc addSolverConstraint(
@@ -1132,6 +1162,7 @@ proc addStay(
 
 proc addGeometryStays(state: var LayoutSolveState, root: View) =
   for solverView in state.items:
+    state.checkSolveBudget()
     if solverView.item != root:
       let rect = solverView.item.alignmentRect()
       state.addStay(solverView.width, rect.size.width, Weak)
@@ -1175,6 +1206,7 @@ proc constraintExpressionFor(
   of atLeft, atRight, atLeading, atTrailing, atCenterX:
     var ancestor = item.superviewBacklink()
     while not ancestor.isNil and state.hasSolverView(ancestor):
+      state.checkSolveBudget()
       let ancestorView = state.solverView(ancestor)
       result =
         result + ancestorView.left -
@@ -1183,6 +1215,7 @@ proc constraintExpressionFor(
   of atTop, atBottom, atCenterY, atFirstBaseline, atLastBaseline:
     var ancestor = item.superviewBacklink()
     while not ancestor.isNil and state.hasSolverView(ancestor):
+      state.checkSolveBudget()
       let
         ancestorView = state.solverView(ancestor)
         frameTop = ancestorView.top - ancestor.xAlignmentInsets.top.solverValue
@@ -1260,10 +1293,16 @@ proc addSolverConstraint(
     priority = LayoutPriorityRequired,
 ) =
   inc state.constraintCount
-  state.coefficientCount += Natural(constraint.expression.len)
+  state.coefficientCount = Natural(
+    min(
+      int64(high(Natural)),
+      saturatingAdd(int64(state.coefficientCount), int64(constraint.expression.len)),
+    )
+  )
   state.checkSolveBudget()
   try:
     state.solver.addConstraint(constraint.strengthened(priority))
+    state.checkSolveBudget()
   except UnsatisfiableConstraintError:
     discard
 
@@ -1314,11 +1353,13 @@ proc addLayoutEquation(state: var LayoutSolveState, equation: LayoutEquation) =
   if equation.terms.len == 0:
     return
   for term in equation.terms:
+    state.checkSolveBudget()
     if term.item.isNil or not state.hasSolverView(term.item):
       return
 
   var left = toExpression(0.KiwiScalar)
   for term in equation.terms:
+    state.checkSolveBudget()
     left = left + state.expressionFor(term)
   state.addRelation(
     left,
@@ -1339,6 +1380,7 @@ proc addNonNegativeSizeConstraints(state: var LayoutSolveState) =
 proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
   if item.isNil:
     return
+  state.checkSolveBudget()
 
   if not item.xAutoresizingMaskConstraints or state.hasConstraintItem(item):
     let intrinsicSize = item.resolvedIntrinsicContentSize()
@@ -1382,6 +1424,7 @@ proc addIntrinsicConstraints(state: var LayoutSolveState, item: View) =
       )
 
   for child in item.xSubviews:
+    state.checkSolveBudget()
     state.addIntrinsicConstraints(child)
 
 proc addAutoresizingAxisConstraints(
@@ -1432,6 +1475,7 @@ proc addAutoresizingMaskConstraints(state: var LayoutSolveState, owner: View) =
     return
 
   for child in owner.xSubviews:
+    state.checkSolveBudget()
     if child.xAutoresizingMaskConstraints and not state.hasConstraintItem(child):
       child.refreshAutoresizingReferenceIfNeeded()
       if child.xAutoresizingState.hasReference and state.hasSolverView(child) and
@@ -1470,14 +1514,17 @@ proc addLayoutInput(state: var LayoutSolveState, input: LayoutInput) =
 
 proc addLayoutInputs(state: var LayoutSolveState, inputs: openArray[LayoutInput]) =
   for input in inputs:
+    state.checkSolveBudget()
     state.addLayoutInput(input)
 
 proc addOwnedConstraints(state: var LayoutSolveState, owner: View) =
   if owner.isNil:
     return
   for constraint in owner.xConstraints:
+    state.checkSolveBudget()
     state.addLayoutInput(constraint.layoutConstraintInput())
   for child in owner.xSubviews:
+    state.checkSolveBudget()
     state.addOwnedConstraints(child)
 
 proc solvedFloat(variable: Variable): float32 =
@@ -1490,6 +1537,7 @@ type SolvedFrame = object
 proc solvedFrames(state: LayoutSolveState): seq[SolvedFrame] =
   result = newSeqOfCap[SolvedFrame](state.items.len)
   for solverView in state.items:
+    state.checkSolveBudget()
     if not solverView.item.isNil:
       let alignmentRect = rect(
         solverView.left.solvedFloat(),

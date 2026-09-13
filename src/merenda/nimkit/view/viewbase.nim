@@ -64,7 +64,9 @@ type
     maxViews*: Natural
     maxConstraints*: Natural
     maxCoefficients*: Natural
+    ## Conservative projected tableau bound; not an allocator sample.
     maxMemoryBytes*: Natural
+    ## Cooperative deadline checked between solver operations.
     maxMilliseconds*: Natural
 
   LayoutSolveDiagnostic* = object
