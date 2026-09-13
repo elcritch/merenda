@@ -1281,7 +1281,7 @@ proc newGitDiffTextView(panel: KosmoGitDiffPanel): GitDiffTextView =
 proc clearQueuedHighlight(section: var GitDiffSection) =
   section.pending = false
   section.queuedKey = default(GitDiffHighlightKey)
-  section.queuedVisibleSource.setLen(0)
+  section.queuedVisibleSource = ""
   section.queuedStyleGeneration = 0
 
 proc cancelHighlight(section: var GitDiffSection) =
@@ -1750,7 +1750,7 @@ proc highlightDiff(
       if not withinBudget():
         fallbackPlain = true
     if fallbackPlain:
-      prepared.runs.setLen(0)
+      prepared.runs = default(seq[nimkit.TextAttributeRun])
       let sourceLength = visibleSource.runeLen
       if sourceLength > 0:
         prepared.runs.add nimkit.TextAttributeRun(
