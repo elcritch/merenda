@@ -51,23 +51,25 @@ proc installNativeEventLoopWaker*(thread: SigilThreadPtr) =
       thread.installSiwinEventLoopWaker(siwinshim.sharedSiwinGlobals())
       nativeEventLoopSigilThread = thread
 
-proc waitForNativeEvents*() =
+proc waitForNativeEvents*(): bool =
   when defined(useNativeDynlib):
     sleep(8)
   else:
-    siwinshim.sharedSiwinGlobals().waitEvents()
+    result =
+      siwinshim.sharedSiwinGlobals().waitEvents(Duration.high) == siwinshim.eventActivity
 
-proc waitForNativeEvents*(timeout: Duration) =
+proc waitForNativeEvents*(timeout: Duration): bool =
   when defined(useNativeDynlib):
     let nanoseconds = max(timeout.inNanoseconds, 0'i64)
     let milliseconds = nanoseconds div 1_000_000 + ord(nanoseconds mod 1_000_000 != 0)
     sleep(min(milliseconds, int.high.int64).int)
   else:
-    discard siwinshim.sharedSiwinGlobals().waitEvents(timeout)
+    result =
+      siwinshim.sharedSiwinGlobals().waitEvents(timeout) == siwinshim.eventActivity
 
-proc pollNativeEvents*() =
+proc pollNativeEvents*(): bool =
   when not defined(useNativeDynlib):
-    discard siwinshim.sharedSiwinGlobals().pollEvents()
+    result = siwinshim.sharedSiwinGlobals().pollEvents()
 
 type RenderExecutionMode* = enum
   remAutomatic
