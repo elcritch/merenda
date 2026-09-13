@@ -1639,9 +1639,11 @@ proc fittingSize*(view: View): Size =
       max(solverView.width.solvedFloat(), 0.0'f32),
       max(solverView.height.solvedFloat(), 0.0'f32),
     )
+    view.xLastLayoutSolveDiagnostic = LayoutSolveDiagnostic()
   except LayoutSolveBudgetExceeded as error:
     view.xLayoutInputCache = previousCache
     view.xLastLayoutSolveDiagnostic = error.diagnostic
+    view.xLayoutSolveBlocked = true
     result = view.alignmentRect().size
   except CatchableError:
     view.xLayoutInputCache = previousCache

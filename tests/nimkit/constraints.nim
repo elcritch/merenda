@@ -1086,6 +1086,26 @@ suite "nimkit constraints":
     check not root.xLastLayoutSolveDiagnostic.failed
     check root.layoutInputGeneration() > 0
 
+  test "fitting size suppresses an unchanged budget failure":
+    let
+      root = newView(frame = rect(0, 0, 200, 120))
+      child = newView(frame = rect(12, 18, 40, 24))
+    root.addSubview(child)
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 1)
+
+    discard root.fittingSize()
+    check root.xLastLayoutSolveDiagnostic.failed
+    let diagnostic = root.xLastLayoutSolveDiagnostic
+    discard root.fittingSize()
+    check root.xLastLayoutSolveDiagnostic == diagnostic
+
+    root.xLayoutSolveLimits = defaultLayoutSolveLimits()
+    child.frame = rect(20, 24, 50, 30)
+    let fitting = root.fittingSize()
+    check not root.xLastLayoutSolveDiagnostic.failed
+    check fitting.width >= 0
+    check fitting.height >= 0
+
   test "explicit storage can move constraints between views":
     let
       firstOwner = newView(frame = rect(0, 0, 100, 80))
