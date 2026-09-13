@@ -9,6 +9,7 @@ elif defined(windows):
 type GitCommandResult* = object
   output*: string
   exitCode*: int
+  outputLimitExceeded*: bool
 
 proc releaseProcess(process: var Process) =
   if process.isNil:
@@ -32,6 +33,7 @@ proc runGitCommand*(
     args: openArray[string],
     timeoutMilliseconds: Positive = 10_000,
     cancelled: proc(): bool {.closure, gcsafe.} = nil,
+    maxOutputBytes: Natural = 128 * 1024 * 1024,
 ): GitCommandResult =
   ## Drain output while the child runs, avoiding pipe-capacity deadlocks. Never
   ## enable filesystem-monitor hooks: workspace monitoring already belongs to us.
@@ -74,8 +76,9 @@ proc runGitCommand*(
             raiseOSError(osLastError())
           count = bytesRead.int
       if count > 0:
-        if result.output.len + count > 128 * 1024 * 1024:
-          raise newException(IOError, "Git output exceeded the workspace limit")
+        if maxOutputBytes > 0 and result.output.len + count > maxOutputBytes:
+          result.outputLimitExceeded = true
+          raise newException(IOError, "Git output exceeded the configured limit")
         let offset = result.output.len
         result.output.setLen(offset + count)
         copyMem(addr result.output[offset], addr buffer[0], count)

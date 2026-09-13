@@ -82,6 +82,32 @@ suite "File browsers":
     model.invalidate(root)
     check model.entries(root).len == 2
 
+  test "filesystem listings cap entries and report truncation":
+    let root = createTempDir("merenda-file-browser-limit-", "")
+    var paths: seq[string]
+    for index in 0 ..< 5:
+      let path = root / ("entry-" & $index & ".txt")
+      writeFile(path, "entry")
+      paths.add path
+    defer:
+      for path in paths:
+        removeFile(path)
+      removeDir(root)
+
+    var model = initFileSystemBrowserModel(entryLimit = 3)
+    check model.entryLimit() == 3
+    check model.entries(root).len == 3
+    check model.isDirectoryTruncated(root)
+
+    let browser = newFileBrowser(root, entryLimit = 3)
+    check browser.entries().len == 3
+    check browser.isDirectoryListingTruncated()
+    check "showing up to 3 entries" in browser.locationLabel().text
+
+    browser.entryLimit = 5
+    check browser.entries().len == 5
+    check not browser.isDirectoryListingTruncated()
+
   test "pointer keyboard and toolbar interactions drive the file browser":
     let
       root = createTempDir("merenda-file-browser-input-", "")

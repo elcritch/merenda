@@ -237,7 +237,10 @@ proc newWorkspaceFiles*(
     reconciliationInterval = DefaultWorkspaceReconciliationInterval
 ): WorkspaceFiles =
   ## Create an owner-thread controller borrowing NimKit's shared worker pool.
-  result = WorkspaceFiles(reconciliationInterval: reconciliationInterval)
+  result = WorkspaceFiles(
+    fallback: initFileSystemBrowserModel(),
+    reconciliationInterval: reconciliationInterval,
+  )
   var worker = WorkspaceFileWorker()
   result.worker = worker.moveToThread(nimkitWorkerPool())
   connectThreaded(result.worker, loadFiles, result.worker, loadFiles)
