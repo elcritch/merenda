@@ -3,7 +3,7 @@ import std/[hashes, math, options, strutils, unicode]
 when defined(useNativeDynlib):
   from figdraw/dynlib import GlyphArrangement, lineGlyphRanges
 else:
-  from figdraw import GlyphArrangement, lineGlyphRanges
+  from figdraw import GlyphArrangement, lineGlyphRanges, len, `[]`
 
 import sigils/core
 

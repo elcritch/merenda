@@ -464,7 +464,7 @@ proc normalizeLineAdvances(layout: var GlyphArrangement) =
     layout.bounding.h = max(maximumY - minimumY, 0.0'f32)
     layout.maxSize.y = max(layout.maxSize.y, layout.bounding.h)
 
-func paragraphIndices(runes: openArray[Rune]): seq[int] =
+func paragraphIndices[T](runes: T): seq[int] =
   result = newSeq[int](runes.len + 1)
   var
     paragraphIndex = 0
