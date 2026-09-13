@@ -9,6 +9,7 @@ import nimkit/constraints
 import nimkit/controlfontfaces
 import nimkit/diagnostics
 import nimkit/filesearch
+import nimkit/filebrowsers
 import nimkit/gitstatus
 import nimkit/font_layout
 import nimkit/fontpickers

@@ -203,6 +203,42 @@ proc displayModeIncludes(tree: KosmoFileTree, path: string): bool =
     (path in tree.xGitFileStates and tree.xGitFileStates[path] != nimkit.gfsIgnored) or
       path in tree.xGitDescendantStates
 
+proc directChildPath(parentPath, path: string): string =
+  if path == parentPath or not path.isRelativeTo(parentPath):
+    return
+  var child = path
+  while child.parentDir() != parentPath:
+    let next = child.parentDir()
+    if next.len == 0 or next == child:
+      return
+    child = next
+  result = child
+
+proc addMatchingPathsBeyondListing(
+    tree: KosmoFileTree, parentIdentifier: string, candidates: var seq[string]
+) =
+  if tree.xFilterText.strip().len == 0 or
+      not tree.xWorkspaceFiles.isDirectoryTruncated(parentIdentifier):
+    return
+  var included = initHashSet[string]()
+  for path in candidates:
+    included.incl path
+  var added: bool
+  for entry in tree.xSearchEntries:
+    if candidates.len >= DefaultWorkspaceEntryLimit:
+      break
+    let path = directChildPath(parentIdentifier, entry.path)
+    if path.len > 0 and path in tree.xMatchingPaths and path notin included:
+      included.incl path
+      candidates.add path
+      added = true
+  if not added:
+    return
+  candidates.sort(
+    proc(left, right: string): int =
+      tree.compareTreePaths(left, right)
+  )
+
 proc filteredChildPaths(
     tree: KosmoFileTree, parentIdentifier: string
 ): lent seq[string] =
@@ -214,6 +250,7 @@ proc filteredChildPaths(
       candidates = tree.changedChildPaths(parentIdentifier)
     else:
       candidates.add tree.rawChildPaths(parentIdentifier)
+      tree.addMatchingPathsBeyondListing(parentIdentifier, candidates)
     var children: seq[string]
     for path in candidates:
       if tree.displayModeIncludes(path) and
@@ -965,11 +1002,13 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
     )
 
 proc newKosmoFileTree*(
-    rootPath = "", frame: nimkit.Rect = nimkit.AutoRect
+    rootPath = "",
+    frame: nimkit.Rect = nimkit.AutoRect,
+    directoryEntryLimit: Positive = nimkit.DefaultFileBrowserEntryLimit,
 ): KosmoFileTree =
   result = KosmoFileTree(xDisplayMode: FileTreeDisplayMode.VisibleFiles)
   result.initOutlineViewFields(frame)
-  result.xWorkspaceFiles = newWorkspaceFiles()
+  result.xWorkspaceFiles = newWorkspaceFiles(entryLimit = directoryEntryLimit)
   result.xWorkspaceFiles.connect(workspaceFilesDidChange, result, applyWorkspaceFiles)
   result.xGitFileStates = initTable[string, nimkit.GitFileState]()
   result.xGitDescendantStates = initTable[string, nimkit.GitFileState]()

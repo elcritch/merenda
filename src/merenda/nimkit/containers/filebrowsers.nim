@@ -21,6 +21,7 @@ const
   FileBrowserUpOperation* = "file-browser.up"
   FileBrowserHomeOperation* = "file-browser.home"
   FileBrowserRefreshOperation* = "file-browser.refresh"
+  DefaultFileBrowserEntryLimit* = 1_000
 
 type
   FileBrowserEntryKind* = enum
@@ -33,8 +34,14 @@ type
     name*: string
     kind*: FileBrowserEntryKind
 
+  FileBrowserDirectoryListing = object
+    entries: seq[FileBrowserEntry]
+    truncated: bool
+
   FileSystemBrowserModel* = object
     xListings: Table[string, seq[FileBrowserEntry]]
+    xListingTruncation: Table[string, bool]
+    xEntryLimit: int
 
   FileBrowserOperationSelection* = enum
     fbosAny
@@ -102,36 +109,57 @@ func compareFileBrowserEntries(left, right: FileBrowserEntry): int =
     return if left.isDirectory(): -1 else: 1
   cmpIgnoreCase(left.name, right.name)
 
-proc loadDirectoryEntries(directoryPath: string): seq[FileBrowserEntry] =
+proc loadDirectoryEntries(
+    directoryPath: string, maxEntries: int
+): FileBrowserDirectoryListing =
   if not directoryPath.isBrowsableDirectory():
     return
+  let entryLimit = max(maxEntries, 1)
   try:
     for component, path in walkDir(directoryPath, relative = false):
+      if result.entries.len >= entryLimit:
+        result.truncated = true
+        break
       let kind =
         case component
         of pcFile: fbekFile
         of pcDir: fbekDirectory
         of pcLinkToFile, pcLinkToDir: fbekSymbolicLink
-      result.add FileBrowserEntry(
+      result.entries.add FileBrowserEntry(
         path: path, name: path.fileBrowserDisplayName(), kind: kind
       )
-    result.sort(compareFileBrowserEntries)
+    result.entries.sort(compareFileBrowserEntries)
   except OSError:
     discard
 
-func initFileSystemBrowserModel*(): FileSystemBrowserModel =
-  FileSystemBrowserModel(xListings: initTable[string, seq[FileBrowserEntry]]())
+func initFileSystemBrowserModel*(
+    entryLimit: Positive = DefaultFileBrowserEntryLimit
+): FileSystemBrowserModel =
+  FileSystemBrowserModel(
+    xListings: initTable[string, seq[FileBrowserEntry]](),
+    xListingTruncation: initTable[string, bool](),
+    xEntryLimit: entryLimit.int,
+  )
+
+func entryLimit*(model: FileSystemBrowserModel): int =
+  if model.xEntryLimit > 0: model.xEntryLimit else: DefaultFileBrowserEntryLimit
 
 proc entries*(
     model: var FileSystemBrowserModel, directoryPath: string
 ): lent seq[FileBrowserEntry] =
   ## Return a cached listing, loading this directory on first access.
   if not model.xListings.hasKey(directoryPath):
-    model.xListings[directoryPath] = directoryPath.loadDirectoryEntries()
+    let listing = directoryPath.loadDirectoryEntries(model.entryLimit())
+    model.xListings[directoryPath] = listing.entries
+    model.xListingTruncation[directoryPath] = listing.truncated
   model.xListings[directoryPath]
 
 proc isDirectoryLoaded*(model: FileSystemBrowserModel, directoryPath: string): bool =
   model.xListings.hasKey(directoryPath)
+
+proc isDirectoryTruncated*(model: FileSystemBrowserModel, directoryPath: string): bool =
+  if model.xListingTruncation.hasKey(directoryPath):
+    result = model.xListingTruncation[directoryPath]
 
 proc cachedDirectoryCount*(model: FileSystemBrowserModel): int =
   model.xListings.len
@@ -140,8 +168,16 @@ proc invalidate*(model: var FileSystemBrowserModel, directoryPath = "") =
   ## Drop one cached listing, or every listing when no path is supplied.
   if directoryPath.len == 0:
     model.xListings.clear()
+    model.xListingTruncation.clear()
   else:
     model.xListings.del(directoryPath)
+    model.xListingTruncation.del(directoryPath)
+
+proc `entryLimit=`*(model: var FileSystemBrowserModel, value: Positive) =
+  if model.xEntryLimit == value.int:
+    return
+  model.xEntryLimit = value.int
+  model.invalidate()
 
 protocol FileBrowserEvents:
   proc fileBrowserSelectionDidChange*(
@@ -154,6 +190,12 @@ protocol FileBrowserEvents:
 
 proc entries*(browser: FileBrowser): seq[FileBrowserEntry] =
   browser.xFileSystem.entries(browser.xDirectoryPath)
+
+proc entryLimit*(browser: FileBrowser): int =
+  browser.xFileSystem.entryLimit()
+
+proc isDirectoryListingTruncated*(browser: FileBrowser): bool =
+  browser.xFileSystem.isDirectoryTruncated(browser.xDirectoryPath)
 
 proc entryAt*(browser: FileBrowser, index: int): FileBrowserEntry =
   let entries = browser.entries()
@@ -211,6 +253,10 @@ proc updateOperationButtons(browser: FileBrowser) =
 
 proc syncLocation(browser: FileBrowser) =
   browser.xLocationLabel.text = browser.xDirectoryPath
+  if browser.isDirectoryListingTruncated():
+    browser.xLocationLabel.text =
+      browser.xLocationLabel.text & " (showing up to " & $browser.entryLimit() &
+      " entries)"
   browser.xLocationLabel.toolTip = browser.xDirectoryPath
   browser.updateOperationButtons()
 
@@ -269,7 +315,7 @@ proc refresh*(browser: FileBrowser) =
   browser.xFileSystem.invalidate(browser.xDirectoryPath)
   browser.xTableView.reloadData()
   browser.selectPaths(selectedPaths)
-  browser.updateOperationButtons()
+  browser.syncLocation()
 
 proc selectPaths*(browser: FileBrowser, paths: openArray[string]) =
   let entries = browser.entries()
@@ -410,6 +456,11 @@ proc toolbar*(browser: FileBrowser): StackView =
 proc locationLabel*(browser: FileBrowser): Label =
   browser.xLocationLabel
 
+proc `entryLimit=`*(browser: FileBrowser, value: Positive) =
+  browser.xFileSystem.entryLimit = value
+  browser.xTableView.reloadData()
+  browser.syncLocation()
+
 proc allowsMultipleSelection*(browser: FileBrowser): bool =
   browser.xTableView.selectionMode() in {tsmMultiple, tsmExtended}
 
@@ -474,10 +525,13 @@ proc installDefaultOperations(browser: FileBrowser) =
   )
 
 proc initFileBrowserFields*(
-    browser: FileBrowser, directoryPath = "", frame: Rect = AutoRect
+    browser: FileBrowser,
+    directoryPath = "",
+    frame: Rect = AutoRect,
+    entryLimit: Positive = DefaultFileBrowserEntryLimit,
 ) =
   initViewFields(browser, frame)
-  browser.xFileSystem = initFileSystemBrowserModel()
+  browser.xFileSystem = initFileSystemBrowserModel(entryLimit)
   browser.xHistoryIndex = -1
   browser.xLayout = newStackView(laVertical)
   browser.xLayout.spacing = 8.0'f32
@@ -519,6 +573,10 @@ proc initFileBrowserFields*(
   discard browser.setDirectoryPath(initialDirectory, recordHistory = true)
   browser.applyInitialFrame(frame)
 
-proc newFileBrowser*(directoryPath = "", frame: Rect = AutoRect): FileBrowser =
+proc newFileBrowser*(
+    directoryPath = "",
+    frame: Rect = AutoRect,
+    entryLimit: Positive = DefaultFileBrowserEntryLimit,
+): FileBrowser =
   result = FileBrowser()
-  result.initFileBrowserFields(directoryPath, frame)
+  result.initFileBrowserFields(directoryPath, frame, entryLimit)

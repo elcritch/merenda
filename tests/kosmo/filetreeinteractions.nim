@@ -403,6 +403,37 @@ suite "Kosmo file tree interactions":
     check not tree.isItemExpanded(folder)
     check tree.rowForItem(otherFile) >= 0
 
+  test "search reveals matches beyond a capped folder listing":
+    let root = createTempDir("merenda-kosmo-tree-listing-limit-", "")
+    var paths: seq[string]
+    for index in 0 ..< 6:
+      let path = root / ("entry-" & $index & ".txt")
+      writeFile(path, "entry")
+      paths.add path
+    let tree = newKosmoFileTree(root, directoryEntryLimit = 3)
+    defer:
+      tree.workspaceFiles.close()
+      for path in paths:
+        removeFile(path)
+      removeDir(root)
+
+    let listed = tree.workspaceFiles.entries(root)
+    require listed.len == 3
+    var omittedPath: string
+    for path in paths:
+      var listedPath: bool
+      for entry in listed:
+        if entry.path == path:
+          listedPath = true
+          break
+      if not listedPath:
+        omittedPath = path
+        break
+    require omittedPath.len > 0
+
+    tree.filterText = omittedPath.extractFilename()
+    check tree.rowForItem(omittedPath) >= 0
+
   test "file browser controls occupy expected rows and Cmd-F filters the tree":
     let
       root = createTempDir("merenda-kosmo-browser-controls-", "")

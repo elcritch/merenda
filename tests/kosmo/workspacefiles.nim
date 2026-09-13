@@ -538,6 +538,10 @@ suite "Kosmo shared workspace inventory":
       require frontend.showGitDiff()
       let panel = frontend.gitDiffPanel
       require panel.waitForDiff(timeoutMilliseconds = 60_000)
+      let initialSourceIndex = panel.snapshot.files.findIt(it.path == "source.txt")
+      require initialSourceIndex >= 0
+      require panel.requestFilePatch(initialSourceIndex)
+      require panel.waitForDiff(timeoutMilliseconds = 60_000)
       check not panel.autoRefreshSwitch.on
       let repositorySpy = InventorySpy()
       files.connect(workspaceRepositoryDidChange, repositorySpy, changed)
@@ -593,6 +597,10 @@ suite "Kosmo shared workspace inventory":
       eventually(repositorySpy.changes > notificationBaseline)
       require panel.waitForDiff(timeoutMilliseconds = 60_000)
       check panel.repositoryReadCount() == baseline + 1
+      let refreshedSourceIndex = panel.snapshot.files.findIt(it.path == "source.txt")
+      require refreshedSourceIndex >= 0
+      require panel.requestFilePatch(refreshedSourceIndex)
+      require panel.waitForDiff(timeoutMilliseconds = 60_000)
       check panel.snapshot.files.anyIt(
         it.path == "source.txt" and "+changed text" in it.patch
       )
