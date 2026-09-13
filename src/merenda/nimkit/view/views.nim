@@ -195,10 +195,16 @@ protocol DefaultViewResponder of ResponderProtocol:
 proc needsUpdateConstraints*(view: View): bool =
   view.xNeedsUpdateConstraints
 
+proc invalidateLayoutSolveFailures(view: View) =
+  var current = view
+  while not current.isNil:
+    inc current.xLayoutInputRevision
+    current = current.superviewBacklink()
+
 proc setNeedsUpdateConstraints*(view: View, value: bool) =
   if not value:
     return
-  inc view.xLayoutInputRevision
+  view.invalidateLayoutSolveFailures()
   view.noteLayoutInvalidation(lirConstraints, affectsConstraints = true)
   view.xNeedsUpdateConstraints = true
 
@@ -220,7 +226,7 @@ proc needsLayout*(view: View): bool =
 
 proc `needsLayout=`*(view: View, value: bool) =
   if value:
-    inc view.xLayoutInputRevision
+    view.invalidateLayoutSolveFailures()
     view.noteLayoutInvalidation(lirExplicit, affectsConstraints = false)
   view.xNeedsLayout = value
 
@@ -357,12 +363,7 @@ proc needsDisplayInSubtree*(view: View): bool =
   false
 
 proc needsDisplayUpdateInSubtree*(view: View): bool =
-  if view.xNeedsDisplay or view.xNeedsLayout or view.xNeedsUpdateConstraints:
-    return true
-  for child in view.xSubviews:
-    if child.needsDisplayUpdateInSubtree():
-      return true
-  false
+  view.needsDisplayInSubtree() or view.hasPendingLayoutInSubtree()
 
 proc prepareDisplaySubtree*(view: View): bool =
   view.layoutSubtreeIfNeeded()
