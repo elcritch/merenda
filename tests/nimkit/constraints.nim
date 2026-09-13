@@ -1062,7 +1062,7 @@ suite "nimkit constraints":
     check child.frame == initialFrame
     check root.xLastLayoutSolveDiagnostic.failed
     check root.xLastLayoutSolveDiagnostic.limit == lslViews
-    check not root.needsLayout
+    check root.needsLayout
 
     let diagnostic = root.xLastLayoutSolveDiagnostic
     root.layoutSubtreeIfNeeded()

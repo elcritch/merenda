@@ -65,7 +65,6 @@ type
     solver: Solver
     items: seq[SolverView]
     itemIndexes: Table[pointer, int]
-    constraintItems: seq[View]
     constraintItemIndexes: HashSet[pointer]
     generatedInputs: seq[LayoutInput]
     limits: LayoutSolveLimits
@@ -1116,7 +1115,6 @@ proc addConstraintItem(state: var LayoutSolveState, item: View) =
   let key = cast[pointer](item)
   if key in state.constraintItemIndexes:
     return
-  state.constraintItems.add item
   state.constraintItemIndexes.incl key
 
 proc hasConstraintItem(state: LayoutSolveState, item: View): bool =
@@ -1610,7 +1608,7 @@ proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
         default(array[LayoutInputSource, Natural])
       solverView.item.xLayoutInputCache.generation = 0
 
-proc solveBlocked(view: View, mode: LayoutSolveMode): bool =
+proc solveBlocked*(view: View, mode: LayoutSolveMode): bool =
   let failure = view.xLayoutSolveFailures[mode]
   failure.blocked and failure.limits == view.xLayoutSolveLimits and
     failure.inputRevision == view.xLayoutInputRevision

@@ -20,10 +20,11 @@ import ../accessibility/accessibilityprotocols
 export responders
 export viewbase except
   AutoresizingState, LayoutInputKind, LayoutTerm, LayoutEquation, LayoutInput,
-  LayoutInputCache, LayoutTransactionState, activeLayoutTransaction,
-  markLocalNeedsDisplay, markRenderSlotNeedsDisplay, nextLayoutGeneration,
-  noteLayoutInvalidation
-export viewconstraints except generatedLayoutInputs, applyConstraintsForSubtree
+  LayoutInputCache, LayoutSolveMode, LayoutSolveFailure, LayoutTransactionState,
+  activeLayoutTransaction, markLocalNeedsDisplay, markRenderSlotNeedsDisplay,
+  nextLayoutGeneration, noteLayoutInvalidation
+export viewconstraints except
+  generatedLayoutInputs, solveBlocked, applyConstraintsForSubtree
 export viewgeometry except
   resetAutoresizingState, refreshAutoresizingReference,
   refreshAutoresizingReferenceIfNeeded, applyLayoutFrame, setFrameFromLayout,
@@ -229,12 +230,9 @@ proc setNeedsLayout*(view: View) =
 const LayoutFeedbackDiagnosticThreshold = 3
 
 proc hasPendingLayoutInSubtree(view: View): bool =
-  let failure = view.xLayoutSolveFailures[lsmLayout]
-  if view.xNeedsUpdateConstraints or view.xNeedsLayout or
-      failure.blocked and (
-        failure.limits != view.xLayoutSolveLimits or
-        failure.inputRevision != view.xLayoutInputRevision
-      ):
+  if view.solveBlocked(lsmLayout):
+    return false
+  if view.xNeedsUpdateConstraints or view.xNeedsLayout:
     return true
   for child in view.xSubviews:
     if child.hasPendingLayoutInSubtree():
@@ -275,14 +273,6 @@ proc hasActiveLayoutAncestor(view: View): bool =
       return true
     current = current.superviewBacklink()
 
-proc suppressLayoutRetry(view: View) =
-  if view.isNil:
-    return
-  view.xNeedsUpdateConstraints = false
-  view.xNeedsLayout = false
-  for child in view.xSubviews:
-    child.suppressLayoutRetry()
-
 proc layoutSubtreeIfNeeded*(view: View) =
   if view.hasActiveLayoutAncestor() or not view.hasPendingLayoutInSubtree():
     return
@@ -305,7 +295,6 @@ proc layoutSubtreeIfNeeded*(view: View) =
   transaction.phase = ltpSolvingConstraints
   view.xLayoutPhase = transaction.phase
   if not view.applyConstraintsForSubtree():
-    suppressLayoutRetry(view)
     return
 
   transaction.phase = ltpLayingOut
