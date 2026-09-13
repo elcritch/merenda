@@ -46,6 +46,8 @@ suite "NimKit native window lifecycle":
         siwinshim.close(nativeWindow)
         check window.isClosed
         check delegate.events == @["willClose", "didClose"]
+        window.close()
+        check delegate.events == @["willClose", "didClose"]
       except CatchableError:
         skip()
         break nativeDelegateClose
