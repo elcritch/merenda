@@ -1080,6 +1080,8 @@ suite "nimkit constraints":
     check root.xLastLayoutSolveDiagnostic.failed
 
     root.xLayoutSolveLimits = defaultLayoutSolveLimits()
+    root.layoutSubtreeIfNeeded()
+    check not root.xLastLayoutSolveDiagnostic.failed
     child.frame = rect(20, 24, 50, 30)
     root.layoutSubtreeIfNeeded()
 

@@ -1573,8 +1573,10 @@ proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
       solverView.item.xLayoutInputCache.generation = 0
 
 proc needsConstraintSolve(view: View): bool =
-  if view.xLayoutSolveBlocked:
+  if view.xLayoutSolveBlocked and
+      view.xLayoutSolveBlockedLimits == view.xLayoutSolveLimits:
     return false
+  view.xLayoutSolveBlocked = false
   let cache = view.xLayoutInputCache
   cache.generation == 0 or cache.structureDirty or cache.aggregateStructureDirty or
     cache.dirtySources != {} or cache.aggregateDirtySources != {}
@@ -1607,6 +1609,7 @@ proc applyConstraintsForSubtree*(view: View): bool =
     view.xLayoutInputCache = previousCache
     view.xLastLayoutSolveDiagnostic = error.diagnostic
     view.xLayoutSolveBlocked = true
+    view.xLayoutSolveBlockedLimits = view.xLayoutSolveLimits
     false
   except CatchableError:
     view.xLayoutInputCache = previousCache
@@ -1644,6 +1647,7 @@ proc fittingSize*(view: View): Size =
     view.xLayoutInputCache = previousCache
     view.xLastLayoutSolveDiagnostic = error.diagnostic
     view.xLayoutSolveBlocked = true
+    view.xLayoutSolveBlockedLimits = view.xLayoutSolveLimits
     result = view.alignmentRect().size
   except CatchableError:
     view.xLayoutInputCache = previousCache

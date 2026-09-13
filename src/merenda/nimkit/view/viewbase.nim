@@ -228,6 +228,7 @@ type
     xLayoutSolveLimits*: LayoutSolveLimits
     xLastLayoutSolveDiagnostic*: LayoutSolveDiagnostic
     xLayoutSolveBlocked*: bool
+    xLayoutSolveBlockedLimits*: LayoutSolveLimits
     xAutoresizingMask*: AutoresizingMask
     xAutoresizingMaskConstraints*: bool
     xAutoresizingState*: AutoresizingState

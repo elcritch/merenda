@@ -229,7 +229,10 @@ proc setNeedsLayout*(view: View) =
 const LayoutFeedbackDiagnosticThreshold = 3
 
 proc hasPendingLayoutInSubtree(view: View): bool =
-  if view.xNeedsUpdateConstraints or view.xNeedsLayout:
+  if view.xNeedsUpdateConstraints or view.xNeedsLayout or (
+    view.xLayoutSolveBlocked and
+    view.xLayoutSolveBlockedLimits != view.xLayoutSolveLimits
+  ):
     return true
   for child in view.xSubviews:
     if child.hasPendingLayoutInSubtree():
@@ -276,6 +279,7 @@ proc suppressLayoutRetry(view: View) =
   view.xNeedsUpdateConstraints = false
   view.xNeedsLayout = false
   view.xLayoutSolveBlocked = true
+  view.xLayoutSolveBlockedLimits = view.xLayoutSolveLimits
   for child in view.xSubviews:
     suppressLayoutRetry(child)
 
