@@ -180,6 +180,11 @@ suite "Kosmo Matter highlighting":
       "matter.md", "# Matter heading\nUse `kosmo` here.\n", "Use", "kosmo"
     )
 
+  test "Moe highlights Nim inside Markdown fences":
+    checkDistinctHighlight(
+      "matter.md", "```nim\nproc answer() =\n  let value = 42\n```\n", "proc", "answer"
+    )
+
   test "Moe keeps Markdown highlighting after a long HTML line":
     let
       longHtml = "<div>" & "x".repeat(KosmoMatterMaximumLineBytes) & "</div>"

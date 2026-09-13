@@ -12,6 +12,7 @@ import threading/smartptrs
 
 import moepkg/highlight as moeHighlight
 import moepkg/syntax/matter_backend as moeMatter
+import moepkg/syntax/tokenizer as moeTokenizer
 
 import ../nimkit/foundation/backgroundworkers
 
@@ -154,6 +155,7 @@ proc exceedsMatterParsingBudget(line: string): bool =
 type MarkdownFence = object
   marker: char
   length: int
+  language: moeHighlight.SourceLanguage
 
 proc markdownFence(line: string): MarkdownFence =
   var first: int
@@ -169,6 +171,15 @@ proc markdownFence(line: string): MarkdownFence =
     result = default(MarkdownFence)
     return
   result.length = last - first
+  var languageStart = last
+  while languageStart < line.len and line[languageStart].isSpaceAscii:
+    inc languageStart
+  var languageStop = languageStart
+  while languageStop < line.len and not line[languageStop].isSpaceAscii:
+    inc languageStop
+  if languageStop > languageStart:
+    result.language =
+      moeTokenizer.getSourceLanguage(line[languageStart ..< languageStop])
 
 proc closes(fence: MarkdownFence, line: string): bool =
   if fence.length < 3:
@@ -177,11 +188,11 @@ proc closes(fence: MarkdownFence, line: string): bool =
   if candidate.marker != fence.marker or candidate.length < fence.length:
     return
   var last: int
-  while last < line.len and line[last] in {' ', '\t'}:
+  while last < line.len and line[last].isSpaceAscii:
     inc last
   last += candidate.length
   while last < line.len:
-    if line[last] notin {' ', '\t'}:
+    if not line[last].isSpaceAscii:
       return
     inc last
   true
@@ -196,6 +207,19 @@ proc continuingMatterState(
   moeMatter.tokenizeMatterLine(
     "", language, initial, timeLimitMs = 0, grammars = grammars
   ).nextState
+
+proc supportsEmbeddedMatterLanguage(
+    grammars: moeMatter.MatterGrammarSet, language: moeHighlight.SourceLanguage
+): bool {.inline.} =
+  language notin
+    {moeHighlight.SourceLanguage.langNone, moeHighlight.SourceLanguage.langMarkdown} and
+    grammars.matterSupports(language)
+
+proc initialEmbeddedMatterState(
+    grammars: moeMatter.MatterGrammarSet, language: moeHighlight.SourceLanguage
+): moeMatter.MatterLineState =
+  if grammars.supportsEmbeddedMatterLanguage(language):
+    return moeMatter.initialMatterState(grammars, language)
 
 proc matterColor(
     category: moeMatter.MatterColorCategory
@@ -328,8 +352,10 @@ proc highlightMatter(
         continuingState
       else:
         initialState
-  var state = initialState
-  var fence: MarkdownFence
+  var
+    state = initialState
+    fence: MarkdownFence
+    embeddedState: moeMatter.MatterLineState
 
   let lines = source.split('\n')
   result.segments = newSeqOfCap[moeHighlight.ColorSegment](max(lines.len, 1))
@@ -358,6 +384,7 @@ proc highlightMatter(
       elif closesSkippedFence:
         state = recoveryState
         fence = default(MarkdownFence)
+        embeddedState = default(moeMatter.MatterLineState)
       elif fence.length >= 3:
         # Keep the enclosing grammar state. Skipping one oversized embedded
         # line must not turn all following code into Markdown prose.
@@ -365,6 +392,7 @@ proc highlightMatter(
       else:
         state = recoveryState
         fence = skippedOpeningFence
+        embeddedState = selected.grammars.initialEmbeddedMatterState(fence.language)
       if selected.language == moeHighlight.SourceLanguage.langMarkdown:
         result.markdownCodeBlockStates.add fence.length >= 3
       continue
@@ -387,10 +415,34 @@ proc highlightMatter(
       timeLimitMs = KosmoMatterTimeLimitMs,
       grammars = selected.grammars,
     )
-    result.segments.addLineSegments(row, line, selected.language, parsed.spans)
+    var
+      lineLanguage = selected.language
+      lineSpans = parsed.spans
+    if selected.language == moeHighlight.SourceLanguage.langMarkdown and
+        wasInMarkdownFence and not closesMarkdownFence and
+        selected.grammars.supportsEmbeddedMatterLanguage(fence.language):
+      let embedded = moeMatter.tokenizeMatterLine(
+        line,
+        fence.language,
+        embeddedState,
+        timeLimitMs = KosmoMatterTimeLimitMs,
+        grammars = selected.grammars,
+      )
+      if embedded.nextState.failed:
+        # Keep a slow or malformed embedded line plain without poisoning the
+        # rest of the fenced block. The next line gets a fresh continuation
+        # root, matching the outer Markdown recovery behavior above.
+        embeddedState = selected.grammars.continuingMatterState(fence.language)
+        lineSpans = @[]
+      else:
+        embeddedState = embedded.nextState
+        lineLanguage = fence.language
+        lineSpans = embedded.spans
+    result.segments.addLineSegments(row, line, lineLanguage, lineSpans)
     if closesMarkdownFence:
       state = recoveryState
       fence = default(MarkdownFence)
+      embeddedState = default(moeMatter.MatterLineState)
     elif parsed.nextState.failed:
       # A soft timeout must not poison every later line. The failed line is
       # covered plainly above; restart from a continuation root so headings
@@ -399,14 +451,17 @@ proc highlightMatter(
       state = recoveryState
       if not wasInMarkdownFence:
         fence = default(MarkdownFence)
+        embeddedState = default(moeMatter.MatterLineState)
     else:
       state = parsed.nextState
       if not wasInMarkdownFence and
           state.stack.hasActiveScope("markup.fenced_code.block"):
         fence = openingFence
+        embeddedState = selected.grammars.initialEmbeddedMatterState(fence.language)
       elif fence.length < 3 and
           not state.stack.hasActiveScope("markup.fenced_code.block"):
         fence = default(MarkdownFence)
+        embeddedState = default(moeMatter.MatterLineState)
     if selected.language == moeHighlight.SourceLanguage.langMarkdown:
       result.markdownCodeBlockStates.add fence.length >= 3 or state.isMatterCodeBlock
 
