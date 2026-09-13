@@ -1619,8 +1619,10 @@ proc fittingSize*(view: View): Size =
   if view.isNil:
     return initSize()
 
-  if view.xLayoutSolveBlocked:
+  if view.xLayoutSolveBlocked and
+      view.xLayoutSolveBlockedLimits == view.xLayoutSolveLimits:
     return view.alignmentRect().size
+  view.xLayoutSolveBlocked = false
 
   let previousCache = view.xLayoutInputCache
   var state = initLayoutSolveState(view.xLayoutSolveLimits)

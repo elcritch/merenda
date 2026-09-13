@@ -1102,8 +1102,10 @@ suite "nimkit constraints":
     check root.xLastLayoutSolveDiagnostic == diagnostic
 
     root.xLayoutSolveLimits = defaultLayoutSolveLimits()
-    child.frame = rect(20, 24, 50, 30)
     let fitting = root.fittingSize()
+    check not root.xLastLayoutSolveDiagnostic.failed
+    child.frame = rect(20, 24, 50, 30)
+    root.layoutSubtreeIfNeeded()
     check not root.xLastLayoutSolveDiagnostic.failed
     check fitting.width >= 0
     check fitting.height >= 0
