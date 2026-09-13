@@ -439,6 +439,25 @@ suite "nimkit views":
     root.finishDisplaySubtree()
     check not root.needsDisplay
 
+  test "blocked layout consistently suppresses descendant callbacks":
+    let
+      root = newView(frame = rect(0, 0, 200, 160))
+      child = newLayoutSpyView(rect(20, 30, 80, 40))
+    root.addSubview(child)
+    child.events.setLen(0)
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 1)
+
+    root.layoutSubtreeIfNeeded()
+
+    check root.xLastLayoutSolveDiagnostic.failed
+    check child.events.len == 0
+    check not root.needsLayout
+    check not child.needsLayout
+
+    root.layoutSubtreeIfNeeded()
+
+    check child.events.len == 0
+
   test "layout subtree defers invalidations of an already visited view":
     let
       root = newView(frame = rect(0, 0, 200, 160))

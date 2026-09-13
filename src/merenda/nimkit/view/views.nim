@@ -197,7 +197,7 @@ proc needsUpdateConstraints*(view: View): bool =
 proc setNeedsUpdateConstraints*(view: View, value: bool) =
   if not value:
     return
-  view.xLayoutSolveBlocked = false
+  inc view.xLayoutInputRevision
   view.noteLayoutInvalidation(lirConstraints, affectsConstraints = true)
   view.xNeedsUpdateConstraints = true
 
@@ -219,7 +219,7 @@ proc needsLayout*(view: View): bool =
 
 proc `needsLayout=`*(view: View, value: bool) =
   if value:
-    view.xLayoutSolveBlocked = false
+    inc view.xLayoutInputRevision
     view.noteLayoutInvalidation(lirExplicit, affectsConstraints = false)
   view.xNeedsLayout = value
 
@@ -229,10 +229,12 @@ proc setNeedsLayout*(view: View) =
 const LayoutFeedbackDiagnosticThreshold = 3
 
 proc hasPendingLayoutInSubtree(view: View): bool =
-  if view.xNeedsUpdateConstraints or view.xNeedsLayout or (
-    view.xLayoutSolveBlocked and
-    view.xLayoutSolveBlockedLimits != view.xLayoutSolveLimits
-  ):
+  let failure = view.xLayoutSolveFailures[lsmLayout]
+  if view.xNeedsUpdateConstraints or view.xNeedsLayout or
+      failure.blocked and (
+        failure.limits != view.xLayoutSolveLimits or
+        failure.inputRevision != view.xLayoutInputRevision
+      ):
     return true
   for child in view.xSubviews:
     if child.hasPendingLayoutInSubtree():
@@ -278,8 +280,8 @@ proc suppressLayoutRetry(view: View) =
     return
   view.xNeedsUpdateConstraints = false
   view.xNeedsLayout = false
-  view.xLayoutSolveBlocked = true
-  view.xLayoutSolveBlockedLimits = view.xLayoutSolveLimits
+  for child in view.xSubviews:
+    child.suppressLayoutRetry()
 
 proc layoutSubtreeIfNeeded*(view: View) =
   if view.hasActiveLayoutAncestor() or not view.hasPendingLayoutInSubtree():

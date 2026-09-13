@@ -136,7 +136,7 @@ proc markAggregateLayoutInputDirty(
 ) =
   var current = view
   while not current.isNil:
-    current.xLayoutSolveBlocked = false
+    inc current.xLayoutInputRevision
     current.xLayoutInputCache.aggregateDirtySources.incl source
     if structureDirty:
       current.xLayoutInputCache.aggregateStructureDirty = true
@@ -150,7 +150,6 @@ protocol ViewLayoutInputSlots of ViewLayoutInputEvents:
     let
       source = reason.sourceFor()
       structureDirty = reason.isStructureDirtyReason()
-    view.xLayoutSolveBlocked = false
     view.xLayoutInputCache.dirtySources.incl source
     if structureDirty:
       view.xLayoutInputCache.structureDirty = true

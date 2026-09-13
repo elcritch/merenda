@@ -1027,27 +1027,17 @@ func saturatingMultiply(left, right: int64): int64 =
   left * right
 
 func estimatedMemoryBytes(state: LayoutSolveState): Natural =
-  ## This is deliberately a conservative projected tableau estimate, not an
-  ## allocator measurement. Kiwiberry substitutes sparse rows into other rows,
-  ## so a small input expression can become dense while the temporary solver
-  ## is built. Account for the worst-case row/symbol matrix before each insert.
+  ## Estimate the temporary solver working set from admitted sparse inputs.
+  ## This is an admission heuristic rather than an allocator measurement.
+  ## Reserve substantial headroom for row expansion without assuming that
+  ## every tableau row contains every symbol.
   let
-    viewSymbols = saturatingMultiply(int64(state.items.len), 4)
-    auxiliarySymbols = saturatingMultiply(int64(state.constraintCount), 2)
-    symbolCount = max(
-      saturatingAdd(saturatingAdd(viewSymbols, auxiliarySymbols), 1),
-      int64(state.coefficientCount),
-    )
-    rowCount = saturatingAdd(int64(state.constraintCount), 1)
-    tableauCells = saturatingMultiply(rowCount, symbolCount)
     itemBytes = saturatingMultiply(int64(state.items.len), 512)
-    constraintBytes = saturatingMultiply(int64(state.constraintCount), 256)
-    coefficientBytes = saturatingMultiply(int64(state.coefficientCount), 64)
-    tableauBytes = saturatingMultiply(tableauCells, 64)
-    estimate = saturatingAdd(
-      saturatingAdd(saturatingAdd(itemBytes, constraintBytes), coefficientBytes),
-      tableauBytes,
-    )
+    constraintBytes = saturatingMultiply(int64(state.constraintCount), 512)
+    inputCoefficientBytes = saturatingMultiply(int64(state.coefficientCount), 64)
+    expandedCoefficientBytes = saturatingMultiply(inputCoefficientBytes, 8)
+    estimate =
+      saturatingAdd(saturatingAdd(itemBytes, constraintBytes), expandedCoefficientBytes)
   Natural(min(estimate, int64(high(Natural))))
 
 proc solveDiagnostic(state: LayoutSolveState, limit = lslNone): LayoutSolveDiagnostic =
@@ -1620,44 +1610,69 @@ proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
         default(array[LayoutInputSource, Natural])
       solverView.item.xLayoutInputCache.generation = 0
 
+proc solveBlocked(view: View, mode: LayoutSolveMode): bool =
+  let failure = view.xLayoutSolveFailures[mode]
+  failure.blocked and failure.limits == view.xLayoutSolveLimits and
+    failure.inputRevision == view.xLayoutInputRevision
+
+proc clearSolveFailure(view: View, mode: LayoutSolveMode) =
+  view.xLayoutSolveFailures[mode] = LayoutSolveFailure()
+
+proc recordSolveFailure(view: View, mode: LayoutSolveMode) =
+  view.xLayoutSolveFailures[mode] = LayoutSolveFailure(
+    blocked: true,
+    limits: view.xLayoutSolveLimits,
+    inputRevision: view.xLayoutInputRevision,
+  )
+
 proc needsConstraintSolve(view: View): bool =
-  if view.xLayoutSolveBlocked and
-      view.xLayoutSolveBlockedLimits == view.xLayoutSolveLimits:
-    return false
-  view.xLayoutSolveBlocked = false
   let cache = view.xLayoutInputCache
   cache.generation == 0 or cache.structureDirty or cache.aggregateStructureDirty or
     cache.dirtySources != {} or cache.aggregateDirtySources != {}
 
+proc buildAndSolveConstraints(
+    state: var LayoutSolveState, view: View, mode: LayoutSolveMode
+) =
+  state.collectSolverViews(view)
+  state.collectConstraintItems(view)
+  case mode
+  of lsmLayout:
+    state.addRootGeometryConstraints(view)
+  of lsmFitting:
+    state.addConstraintItem(view)
+    state.addRootFittingConstraints(view)
+  state.addOwnedConstraints(view)
+  state.refreshGeneratedLayoutInputs(view)
+  state.addNonNegativeSizeConstraints()
+  state.addGeometryStays(view)
+  state.checkSolveBudget()
+  state.solver.updateVariables()
+  state.checkSolveBudget()
+
 proc applyConstraintsForSubtree*(view: View): bool =
-  if view.isNil or not view.needsConstraintSolve():
+  if view.isNil:
+    return true
+  if view.solveBlocked(lsmLayout):
+    return false
+  if not view.needsConstraintSolve():
     return true
 
   let previousCache = view.xLayoutInputCache
   var state = initLayoutSolveState(view.xLayoutSolveLimits)
   try:
-    state.collectSolverViews(view)
-    state.collectConstraintItems(view)
-    state.addRootGeometryConstraints(view)
-    state.addOwnedConstraints(view)
-    state.refreshGeneratedLayoutInputs(view)
-    state.addNonNegativeSizeConstraints()
-    state.addGeometryStays(view)
-    state.checkSolveBudget()
-    state.solver.updateVariables()
-    state.checkSolveBudget()
+    state.buildAndSolveConstraints(view, lsmLayout)
     let frames = state.solvedFrames()
     state.checkSolveBudget()
     applySolvedFrames(frames)
     state.refreshAutoresizingStates()
     state.refreshLayoutInputCaches(view)
+    view.clearSolveFailure(lsmLayout)
     view.xLastLayoutSolveDiagnostic = LayoutSolveDiagnostic()
     return true
   except LayoutSolveBudgetExceeded as error:
     view.xLayoutInputCache = previousCache
     view.xLastLayoutSolveDiagnostic = error.diagnostic
-    view.xLayoutSolveBlocked = true
-    view.xLayoutSolveBlockedLimits = view.xLayoutSolveLimits
+    view.recordSolveFailure(lsmLayout)
     false
   except CatchableError:
     view.xLayoutInputCache = previousCache
@@ -1667,37 +1682,25 @@ proc fittingSize*(view: View): Size =
   if view.isNil:
     return initSize()
 
-  if view.xLayoutSolveBlocked and
-      view.xLayoutSolveBlockedLimits == view.xLayoutSolveLimits:
+  if view.solveBlocked(lsmFitting):
     return view.alignmentRect().size
-  view.xLayoutSolveBlocked = false
 
   let previousCache = view.xLayoutInputCache
   var state = initLayoutSolveState(view.xLayoutSolveLimits)
   try:
-    state.collectSolverViews(view)
-    state.collectConstraintItems(view)
-    state.addConstraintItem(view)
-    state.addRootFittingConstraints(view)
-    state.addOwnedConstraints(view)
-    state.refreshGeneratedLayoutInputs(view)
-    state.addNonNegativeSizeConstraints()
-    state.addGeometryStays(view)
-    state.checkSolveBudget()
-    state.solver.updateVariables()
-    state.checkSolveBudget()
+    state.buildAndSolveConstraints(view, lsmFitting)
 
     let solverView = state.solverView(view)
     result = initSize(
       max(solverView.width.solvedFloat(), 0.0'f32),
       max(solverView.height.solvedFloat(), 0.0'f32),
     )
+    view.clearSolveFailure(lsmFitting)
     view.xLastLayoutSolveDiagnostic = LayoutSolveDiagnostic()
   except LayoutSolveBudgetExceeded as error:
     view.xLayoutInputCache = previousCache
     view.xLastLayoutSolveDiagnostic = error.diagnostic
-    view.xLayoutSolveBlocked = true
-    view.xLayoutSolveBlockedLimits = view.xLayoutSolveLimits
+    view.recordSolveFailure(lsmFitting)
     result = view.alignmentRect().size
   except CatchableError:
     view.xLayoutInputCache = previousCache

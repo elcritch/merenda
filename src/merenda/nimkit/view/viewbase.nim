@@ -64,10 +64,20 @@ type
     maxViews*: Natural
     maxConstraints*: Natural
     maxCoefficients*: Natural
-    ## Conservative projected tableau bound; not an allocator sample.
+    ## Projected sparse solver working-set bound; not an allocator sample.
     maxMemoryBytes*: Natural
     ## Cooperative deadline checked between solver operations.
     maxMilliseconds*: Natural
+
+  LayoutSolveMode* = enum
+    lsmLayout
+    lsmFitting
+
+  LayoutSolveFailure* = object
+    ## Failed-attempt signature used to suppress only an unchanged solve.
+    blocked*: bool
+    limits*: LayoutSolveLimits
+    inputRevision*: uint64
 
   LayoutSolveDiagnostic* = object
     ## Snapshot of a solve that was stopped before it could commit frames.
@@ -229,8 +239,8 @@ type
     xLastLayoutInvalidation*: LayoutInvalidationDiagnostic
     xLayoutSolveLimits*: LayoutSolveLimits
     xLastLayoutSolveDiagnostic*: LayoutSolveDiagnostic
-    xLayoutSolveBlocked*: bool
-    xLayoutSolveBlockedLimits*: LayoutSolveLimits
+    xLayoutSolveFailures*: array[LayoutSolveMode, LayoutSolveFailure]
+    xLayoutInputRevision*: uint64
     xAutoresizingMask*: AutoresizingMask
     xAutoresizingMaskConstraints*: bool
     xAutoresizingState*: AutoresizingState

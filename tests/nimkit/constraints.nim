@@ -1083,6 +1083,32 @@ suite "nimkit constraints":
     check root.xLastLayoutSolveDiagnostic.failed
     check child.fittingSize().width == 80.0'f32
 
+  test "failed fitting solve does not suppress fixed-frame layout":
+    let root = newButton("Intrinsic", frame = rect(0, 0, 100, 50))
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxConstraints: 6)
+
+    discard root.fittingSize()
+    check root.xLastLayoutSolveDiagnostic.failed
+    check root.xLastLayoutSolveDiagnostic.limit == lslConstraints
+    check root.layoutInputGeneration() == 0
+
+    root.layoutSubtreeIfNeeded()
+
+    check not root.xLastLayoutSolveDiagnostic.failed
+    check root.layoutInputGeneration() == 1
+
+  test "default memory estimate admits ordinary sparse view trees":
+    let root = newView(frame = rect(0, 0, 500, 500))
+    for index in 0 ..< 140:
+      root.addSubview(
+        newView(frame = rect(float32(index mod 20), float32(index div 20), 10, 10))
+      )
+
+    root.layoutSubtreeIfNeeded()
+
+    check not root.xLastLayoutSolveDiagnostic.failed
+    check root.layoutInputGeneration() == 1
+
   test "projected memory limit preserves frames and reports diagnostics":
     let
       root = newView(frame = rect(0, 0, 200, 120))
