@@ -381,8 +381,8 @@ from your shell. On macOS, you can also open `Kosmo.app` from Finder.
 
 Use Quick Open to find a file, drag tabs to arrange your panes, or choose
 File → New Terminal to open a shell. Markdown files open as previews, with a
-control to switch to the source editor. Themes, fonts, and keyboard shortcuts
-are available in Settings.
+control to switch to the source editor. Themes, fonts, keyboard shortcuts, and
+scrolling behavior are available in Settings.
 
 You can also send a Git diff straight to Kosmo:
 

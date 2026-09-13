@@ -14,6 +14,12 @@ const
   KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
   GitDiffRefreshDebounceInterval = initDuration(milliseconds = 300)
   GitDiffReservedSummaryHeight = 240.0'f32
+  GitDiffDefaultPerFileByteLimit* = 2 * 1024 * 1024
+  GitDiffDefaultTotalByteLimit* = 32 * 1024 * 1024
+  GitDiffDefaultFileLimit* = 10_000
+  GitDiffMetadataOutputByteLimit = 16 * 1024 * 1024
+  GitDiffMaterializedSectionLimit* = 32
+  GitDiffViewPoolLimit = GitDiffMaterializedSectionLimit
 
 type
   GitDiffHighlightKey = tuple[source, language: string]
@@ -22,12 +28,43 @@ type
     gdsRepository
     gdsStandardInput
 
+  GitDiffFileStatus* = enum
+    gdfsModified
+    gdfsAdded
+    gdfsDeleted
+    gdfsRenamed
+    gdfsCopied
+    gdfsTypeChanged
+    gdfsConflicted
+    gdfsUntracked
+
+  GitDiffPatchState* = enum
+    gdpsUnloaded
+    gdpsLoaded
+    gdpsSkipped
+    gdpsFailed
+
+  GitDiffPatchLimits* = object
+    perFileBytes*: int
+    totalBytes*: int
+
+  GitDiffPatchRequest = object
+    path: string
+    generation: uint64
+    explicit: bool
+
   GitFileDiff* = object
     path*: string
     patch*: string ## Standard three-line-context patch displayed by the viewer.
     syntaxPatch*: string ## Full-context patch used only for language highlighting.
     additions*, deletions*: int
     binary*: bool
+    status*: GitDiffFileStatus
+    patchState*: GitDiffPatchState
+    requiresExplicitLoad*: bool
+    patchBytes*: int
+    errorMessage*: string
+    revision*: string
 
   GitDiffSnapshot* = object
     source*: GitDiffSource
@@ -36,7 +73,9 @@ type
     branch*: string
     hasHead*: bool
     files*: seq[GitFileDiff]
+    fileLimitReached*: bool
     errorMessage*: string
+    revision*: string
 
   GitDiffWorker = ref object of AgentActor
 
@@ -57,6 +96,11 @@ type
   GitDiffControl = object
     cancelled: Atomic[bool]
 
+  GitDiffFileLoadResult = object
+    file: GitFileDiff
+    generation: uint64
+    threadId: int
+
   GitDiffDisclosureButton = ref object of nimkit.Button
     panel: WeakRef[KosmoGitDiffPanel]
     fileIndex: int
@@ -68,14 +112,26 @@ type
     panel: WeakRef[KosmoGitDiffPanel]
 
   GitDiffSection = object
-    worker: AgentProxy[GitDiffHighlightWorker]
     textView: GitDiffTextView
+    disclosureButton: GitDiffDisclosureButton
+    status: GitDiffFileStatus
+    revision: string
     patch: string
     syntaxPatch: string
+    patchState: GitDiffPatchState
+    requiresExplicitLoad: bool
+    patchError: string
+    patchBytes: int
+    additions: int
+    deletions: int
+    binary: bool
     generation: uint64
+    loadGeneration: uint64
+    patchPending: bool
     pending: bool
     ready: bool
     layoutStarted: bool
+    contentHeight: float32
 
   GitDiffKeyEquivalentHandler* = proc(event: nimkit.KeyEvent): bool {.closure.}
 
@@ -92,7 +148,9 @@ type
     collapsed: HashSet[string]
     pool: SigilThreadPoolPtr
     worker: AgentProxy[GitDiffWorker]
+    highlightWorker: AgentProxy[GitDiffHighlightWorker]
     sections: Table[string, GitDiffSection]
+    snapshotFileIndexes: Table[string, int]
     hasSnapshot: bool
     readingGit: bool
     refreshPending: bool
@@ -108,6 +166,16 @@ type
     closed: bool
     control: SharedPtr[GitDiffControl]
     disclosureButtons: Table[string, GitDiffDisclosureButton]
+    textViewPool: seq[GitDiffTextView]
+    disclosureButtonPool: seq[GitDiffDisclosureButton]
+    forcedDisclosurePaths: HashSet[string]
+    forcedTextPaths: HashSet[string]
+    explicitPatchPaths: HashSet[string]
+    patchLimits*: GitDiffPatchLimits
+    patchBytesUsed: int
+    activePatchPath: string
+    patchQueue: seq[GitDiffPatchRequest]
+    patchGeneration: uint64
     keyEquivalentHandler: GitDiffKeyEquivalentHandler
     xHighlightBuildCount: int
     xHighlightThreadId: int
@@ -118,17 +186,29 @@ proc newGitDiffControl(): SharedPtr[GitDiffControl] =
   result[].cancelled.store(false, moRelaxed)
 
 proc executeGit(
-    root: string, args: openArray[string], control: SharedPtr[GitDiffControl]
-): tuple[output: string, code: int] =
+    root: string,
+    args: openArray[string],
+    control: SharedPtr[GitDiffControl],
+    maxOutputBytes: Natural = 128 * 1024 * 1024,
+): tuple[output: string, code: int, limitExceeded: bool] =
   var arguments = @["--literal-pathspecs"]
   arguments.add args
   let command = runGitCommand(
     root,
     arguments,
+    maxOutputBytes = maxOutputBytes,
     cancelled = proc(): bool =
       control[].cancelled.load(moAcquire),
   )
-  (command.output, command.exitCode)
+  (command.output, command.exitCode, command.outputLimitExceeded)
+
+proc initGitDiffPatchLimits*(
+    perFileBytes = GitDiffDefaultPerFileByteLimit,
+    totalBytes = GitDiffDefaultTotalByteLimit,
+): GitDiffPatchLimits =
+  ## Return bounded patch storage limits for repository-backed diffs.
+  result.perFileBytes = max(perFileBytes, 1)
+  result.totalBytes = max(totalBytes, 1)
 
 proc sameGitPath(left, right: string): bool =
   when defined(windows):
@@ -162,16 +242,90 @@ proc gitScopeRelativePath(
       result.path.add '/'
     result.path.add leaf.replace('\\', '/')
 
+func generatedDiffPath(path: string): bool =
+  let normalized = path.replace('\\', '/').toLowerAscii()
+  (normalized.startsWith("nifcache/") or normalized.startsWith("nimcache/")) and
+    normalized.endsWith(".nim.c")
+
+func inGitDiffScope(path, scopePath, scopePrefix: string): bool =
+  scopePath.len == 0 or path == scopePath or path.startsWith(scopePrefix)
+
+func gitDiffFileStatus(code: string): GitDiffFileStatus =
+  if code.len == 0:
+    return gdfsModified
+  case code[0]
+  of 'A': gdfsAdded
+  of 'D': gdfsDeleted
+  of 'R': gdfsRenamed
+  of 'C': gdfsCopied
+  of 'T': gdfsTypeChanged
+  of 'U': gdfsConflicted
+  else: gdfsModified
+
+proc nextGitField(value: string, cursor: var int): string =
+  if cursor >= value.len:
+    return
+  let fieldEnd = value.find('\0', cursor)
+  if fieldEnd < 0:
+    result = value[cursor ..^ 1]
+    cursor = value.len
+  else:
+    result = value[cursor ..< fieldEnd]
+    cursor = fieldEnd + 1
+
+proc untrackedFileRevision(rootPath, path: string): string =
+  result = "untracked:" & path
+  try:
+    let info = getFileInfo(rootPath / path)
+    result.add ":" & $info.size & ":" & $info.lastWriteTime.toUnix() & ":" &
+      $info.lastWriteTime.nanosecond
+  except CatchableError:
+    discard
+
+proc fileMetadataRevision(rootPath, path: string): string =
+  result = "file:" & path
+  try:
+    let info = getFileInfo(rootPath / path)
+    result.add ":" & $info.size & ":" & $info.lastWriteTime.toUnix() & ":" &
+      $info.lastWriteTime.nanosecond & ":" & $info.permissions
+  except CatchableError:
+    result.add ":missing"
+
+proc appendGitDiffFile(
+    snapshot: var GitDiffSnapshot,
+    seen: var HashSet[string],
+    path: string,
+    status: GitDiffFileStatus,
+    revision: string,
+    fileLimit: int,
+): bool =
+  if snapshot.files.len >= fileLimit:
+    snapshot.fileLimitReached = true
+    return
+  seen.incl path
+  snapshot.files.add GitFileDiff(
+    path: path,
+    status: status,
+    patchState: gdpsUnloaded,
+    requiresExplicitLoad: generatedDiffPath(path),
+    revision: revision,
+  )
+  true
+
 proc readGitDiff(
-    rootPath: string, control: SharedPtr[GitDiffControl], scopePath = ""
+    rootPath: string,
+    control: SharedPtr[GitDiffControl],
+    scopePath = "",
+    fileLimit: Positive = GitDiffDefaultFileLimit,
 ): GitDiffSnapshot =
-  ## Read staged and unstaged changes against HEAD, plus untracked files.
-  ## Unborn repositories treat their files as additions. Git runs without shell,
-  ## external diff drivers, text conversion, or modifications to the index.
+  ## Read changed filenames and status against HEAD, plus untracked files.
+  ## Patch contents are fetched only after a file is explicitly expanded.
   result.rootPath = rootPath
   result.scopePath = scopePath
-  proc runGit(root: string, args: openArray[string]): tuple[output: string, code: int] =
-    executeGit(root, args, control)
+  proc runGit(
+      root: string, args: openArray[string]
+  ): tuple[output: string, code: int, limitExceeded: bool] =
+    executeGit(root, args, control, maxOutputBytes = GitDiffMetadataOutputByteLimit)
 
   try:
     let repository = runGit(rootPath, ["rev-parse", "--show-toplevel"])
@@ -196,79 +350,99 @@ proc readGitDiff(
     let scopeResult = gitScopeRelativePath(result.rootPath, scopePath, control)
     if not scopeResult.valid:
       return
-    let scopeRelativePath = scopeResult.path
-    let names =
-      if hasHead:
-        runGit(
-          result.rootPath,
-          [
-            "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-only",
-            "-z", "HEAD", "--",
-          ],
-        )
-      else:
-        runGit(result.rootPath, ["ls-files", "--cached", "-z", "--"])
-    let untracked = runGit(
-      result.rootPath, ["ls-files", "--others", "--exclude-standard", "-z", "--"]
-    )
+    let
+      scopeRelativePath = scopeResult.path
+      scopePrefix = scopeRelativePath & "/"
+      pathspec =
+        if scopeRelativePath.len > 0:
+          @[scopeRelativePath]
+        else:
+          @[]
+    var namesArguments: seq[string]
+    if hasHead:
+      namesArguments =
+        @[
+          "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status",
+          "-z", "HEAD", "--",
+        ]
+    else:
+      namesArguments = @["ls-files", "--cached", "-z", "--"]
+    namesArguments.add pathspec
+    let names = runGit(result.rootPath, namesArguments)
+    var untrackedArguments = @["ls-files", "--others", "--exclude-standard", "-z", "--"]
+    untrackedArguments.add pathspec
+    let untracked = runGit(result.rootPath, untrackedArguments)
+    if names.limitExceeded or untracked.limitExceeded:
+      result.errorMessage =
+        "The changed-file listing exceeded the safety limit. " &
+        "Narrow the Git Diff path and try again."
+      return
     if names.code != 0 or untracked.code != 0:
       result.errorMessage =
         "Could not list changed files.\n" & names.output & untracked.output
       return
-    var untrackedPaths = initHashSet[string]()
-    for path in untracked.output.split('\0'):
-      untrackedPaths.incl path.replace('\\', '/')
     var seen = initHashSet[string]()
-    for group in [names.output, untracked.output]:
-      for rawPath in group.split('\0'):
+    if hasHead:
+      var cursor: int
+      while cursor < names.output.len:
+        let statusCode = nextGitField(names.output, cursor)
+        let path = nextGitField(names.output, cursor).replace('\\', '/')
+        if statusCode.len > 0 and path.len > 0 and path notin seen and
+            path.inGitDiffScope(scopeRelativePath, scopePrefix):
+          if not appendGitDiffFile(
+            result,
+            seen,
+            path,
+            gitDiffFileStatus(statusCode),
+            statusCode & "|" & fileMetadataRevision(result.rootPath, path),
+            fileLimit.int,
+          ):
+            break
+    else:
+      for rawPath in names.output.split('\0'):
         let path = rawPath.replace('\\', '/')
-        let inScope =
-          scopeRelativePath.len == 0 or path == scopeRelativePath or
-          path.startsWith(scopeRelativePath & "/")
-        if path.len > 0 and path notin seen and inScope:
-          seen.incl path
-          let isAddition = not hasHead or path in untrackedPaths
-          var args =
-            @[
-              "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames",
-              "--unified=2147483647",
-            ]
-          if isAddition:
-            args.add ["--no-index", "--", "/dev/null", path]
-          else:
-            args.add ["HEAD", "--", path]
-          let patch = runGit(result.rootPath, args)
-          if patch.code == 0 or (isAddition and patch.code == 1):
-            if patch.output.len > 0:
-              var file = GitFileDiff(path: path, patch: patch.output)
-              file.syntaxPatch = patch.output
-              if not isAddition:
-                args[5] = "--unified=3"
-                let visible = runGit(result.rootPath, args)
-                if visible.code != 0:
-                  raise newException(IOError, "Could not read diff hunks for " & path)
-                file.patch = visible.output
-              var inHunk = false
-              for line in patch.output.splitLines():
-                if line.startsWith("@@ "):
-                  inHunk = true
-                elif inHunk and line.startsWith("+"):
-                  inc file.additions
-                elif inHunk and line.startsWith("-"):
-                  inc file.deletions
-                elif line.startsWith("Binary files "):
-                  file.binary = true
-              result.files.add file
-          else:
-            result.errorMessage =
-              "Could not read diff for " & path & ":\n" & patch.output
-            return
+        if path.len > 0 and path notin seen and
+            path.inGitDiffScope(scopeRelativePath, scopePrefix):
+          if not appendGitDiffFile(
+            result,
+            seen,
+            path,
+            gdfsAdded,
+            "index:" & path & "|" & fileMetadataRevision(result.rootPath, path),
+            fileLimit.int,
+          ):
+            break
+    if not result.fileLimitReached:
+      for rawPath in untracked.output.split('\0'):
+        let path = rawPath.replace('\\', '/')
+        if path.len > 0 and path notin seen and
+            path.inGitDiffScope(scopeRelativePath, scopePrefix):
+          if not appendGitDiffFile(
+            result,
+            seen,
+            path,
+            gdfsUntracked,
+            untrackedFileRevision(result.rootPath, path),
+            fileLimit.int,
+          ):
+            break
+    if result.fileLimitReached:
+      result.revision.add "file-limit\0"
+    for file in result.files:
+      result.revision.add file.path
+      result.revision.add '\0'
+      result.revision.add $file.status
+      result.revision.add '\0'
+      result.revision.add file.revision
+      result.revision.add '\0'
   except CatchableError:
     result.errorMessage = getCurrentExceptionMsg()
 
-proc readGitDiff*(rootPath: string, scopePath = ""): GitDiffSnapshot =
-  ## Read standard diff hunks plus full-file patches for syntax classification.
-  readGitDiff(rootPath, newGitDiffControl(), scopePath)
+proc readGitDiff*(
+    rootPath: string, scopePath = "", fileLimit: Positive = GitDiffDefaultFileLimit
+): GitDiffSnapshot =
+  ## Read changed filenames and status without loading patch contents.
+  readGitDiff(rootPath, newGitDiffControl(), scopePath, fileLimit)
 
 func normalizedPipedDiffPath(rawPath: string): string =
   var path = rawPath.strip()
@@ -294,10 +468,11 @@ func withoutLineEnd(value: string): string =
   result = value
   result.stripLineEnd()
 
-proc summarizePipedFile(file: var GitFileDiff) =
-  file.syntaxPatch = file.patch
+proc summarizePatch(file: var GitFileDiff, source: string) =
+  file.patchState = gdpsLoaded
+  file.patchBytes = file.patch.len + file.syntaxPatch.len
   var inHunk: bool
-  for line in file.patch.splitLines():
+  for line in source.splitLines():
     if line.startsWith("@@ "):
       inHunk = true
     elif inHunk and line.startsWith("+"):
@@ -306,6 +481,11 @@ proc summarizePipedFile(file: var GitFileDiff) =
       inc file.deletions
     elif line.startsWith("Binary files ") or line.startsWith("GIT binary patch"):
       file.binary = true
+
+proc summarizePipedFile(file: var GitFileDiff) =
+  file.syntaxPatch = file.patch
+  file.status = gdfsModified
+  file.summarizePatch(file.patch)
 
 proc finishPipedFile(
     snapshot: var GitDiffSnapshot,
@@ -355,6 +535,112 @@ proc parseGitDiff*(
   result.finishPipedFile(current, oldPath, active)
   if content.strip().len > 0 and result.files.len == 0:
     result.errorMessage = "Standard input is not a unified Git diff."
+
+proc gitDiffArguments(file: GitFileDiff, hasHead: bool, unified: int): seq[string] =
+  result =
+    @[
+      "diff",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--no-color",
+      "--no-renames",
+      "--unified=" & $unified,
+    ]
+  if not hasHead or file.status == gdfsUntracked:
+    result.add ["--no-index", "--", "/dev/null", file.path]
+  else:
+    result.add ["HEAD", "--", file.path]
+
+proc patchLimitError(path: string, limit: int, total: bool): string =
+  if total:
+    return
+      "The Git diff byte limit for this panel was reached before " & path &
+      " could be loaded."
+  "The diff for " & path & " exceeds the per-file limit of " & $limit & " bytes."
+
+proc loadGitDiffFile(
+    rootPath: string,
+    hasHead: bool,
+    file: GitFileDiff,
+    limits: GitDiffPatchLimits,
+    usedBytes: int,
+    explicit: bool,
+    control: SharedPtr[GitDiffControl],
+): GitDiffFileLoadResult =
+  result.file = file
+  result.file.patch.setLen(0)
+  result.file.syntaxPatch.setLen(0)
+  result.file.additions = 0
+  result.file.deletions = 0
+  result.file.binary = false
+  result.file.errorMessage.setLen(0)
+  let
+    perFileLimit = max(limits.perFileBytes, 1)
+    remaining = limits.totalBytes - usedBytes
+  if file.requiresExplicitLoad and not explicit:
+    result.file.patchState = gdpsSkipped
+    result.file.errorMessage =
+      "Large generated files are not loaded automatically. Expand this file to request its diff."
+    return
+  if remaining <= 0:
+    result.file.patchState = gdpsSkipped
+    result.file.errorMessage = patchLimitError(file.path, perFileLimit, total = true)
+    return
+  let syntax = executeGit(
+    rootPath,
+    file.gitDiffArguments(hasHead, 2_147_483_647),
+    control,
+    maxOutputBytes = min(perFileLimit, remaining),
+  )
+  if syntax.limitExceeded:
+    result.file.patchState = gdpsSkipped
+    result.file.errorMessage =
+      patchLimitError(file.path, perFileLimit, total = remaining <= perFileLimit)
+    return
+  if syntax.code != 0 and
+      not ((not hasHead or file.status == gdfsUntracked) and syntax.code == 1):
+    result.file.patchState = gdpsFailed
+    result.file.errorMessage =
+      "Could not read diff for " & file.path & ":\n" & syntax.output
+    return
+  if syntax.output.len == 0:
+    result.file.patchState = gdpsLoaded
+    result.file.patchBytes = 0
+    result.threadId = getThreadId()
+    return
+  let
+    visibleRemaining = remaining - syntax.output.len
+    perFileRemaining = perFileLimit - syntax.output.len
+  if visibleRemaining <= 0:
+    result.file.patchState = gdpsSkipped
+    result.file.errorMessage = patchLimitError(file.path, perFileLimit, total = true)
+    return
+  if perFileRemaining <= 0:
+    result.file.patchState = gdpsSkipped
+    result.file.errorMessage = patchLimitError(file.path, perFileLimit, total = false)
+    return
+  let visible = executeGit(
+    rootPath,
+    file.gitDiffArguments(hasHead, 3),
+    control,
+    maxOutputBytes = min(perFileRemaining, visibleRemaining),
+  )
+  if visible.limitExceeded:
+    result.file.patchState = gdpsSkipped
+    result.file.errorMessage = patchLimitError(
+      file.path, perFileLimit, total = visibleRemaining <= perFileRemaining
+    )
+    return
+  if visible.code != 0 and
+      not ((not hasHead or file.status == gdfsUntracked) and visible.code == 1):
+    result.file.patchState = gdpsFailed
+    result.file.errorMessage =
+      "Could not read diff hunks for " & file.path & ":\n" & visible.output
+    return
+  result.file.patch = visible.output
+  result.file.syntaxPatch = syntax.output
+  result.file.summarizePatch(syntax.output)
+  result.threadId = getThreadId()
 
 proc markdownLabel(value: string): string =
   for ch in value:
@@ -529,23 +815,58 @@ proc visibleSpans(
         result.add span
         inc low
 
-proc clearDisclosureButtons(panel: KosmoGitDiffPanel) =
-  for button in panel.disclosureButtons.values:
-    button.removeFromSuperview()
-  panel.disclosureButtons.clear()
+proc includeMaterializedPath(paths: var HashSet[string], path: string): bool =
+  if path in paths:
+    return true
+  if paths.len >= GitDiffMaterializedSectionLimit:
+    return
+  paths.incl path
+  true
+
+proc includeMaterializedTextView(
+    buttons, textViews: var HashSet[string], path: string
+): bool =
+  if path notin textViews and textViews.len >= GitDiffMaterializedSectionLimit:
+    return
+  if not buttons.includeMaterializedPath(path):
+    return
+  textViews.incl path
+  true
 
 proc syncDisclosureButtons(panel: KosmoGitDiffPanel)
 proc scheduleSectionLayout(panel: KosmoGitDiffPanel)
 proc handleSharedKeys(panel: KosmoGitDiffPanel, event: nimkit.KeyEvent): bool
+proc ensureFileMaterialized(panel: KosmoGitDiffPanel, index: int, forceText = false)
+proc queueFilePatch(
+  panel: KosmoGitDiffPanel, path: string, explicit: bool, retry = false
+)
+
+proc queueSection(panel: KosmoGitDiffPanel, path: string)
+proc layoutDisclosureButtons(
+  panel: KosmoGitDiffPanel, snapshot: nimkit.TextLayoutSnapshot
+) {.slot.}
+
+func gitDiffStatusLabel(status: GitDiffFileStatus): string =
+  case status
+  of gdfsModified: "modified"
+  of gdfsAdded: "added"
+  of gdfsDeleted: "deleted"
+  of gdfsRenamed: "renamed"
+  of gdfsCopied: "copied"
+  of gdfsTypeChanged: "type changed"
+  of gdfsConflicted: "conflicted"
+  of gdfsUntracked: "untracked"
 
 proc renderDiff(panel: KosmoGitDiffPanel) =
   var document = "# Git Diff\n\n"
-  var additions, deletions, binaries: int
+  var additions, deletions, binaries, loadedFiles: int
   for file in panel.snapshot.files:
-    additions += file.additions
-    deletions += file.deletions
-    if file.binary:
-      inc binaries
+    if file.patchState == gdpsLoaded:
+      inc loadedFiles
+      additions += file.additions
+      deletions += file.deletions
+      if file.binary:
+        inc binaries
   if panel.snapshot.source == gdsStandardInput:
     document.add "| Source | Standard input |\n| --- | --- |\n"
   else:
@@ -557,10 +878,14 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
     document.add "| Path | " & panel.snapshot.scopePath.markdownLabel() & " |\n"
   document.add "| Location | " & panel.snapshot.rootPath.markdownLabel() & " |\n"
   if (panel.hasSnapshot or not panel.readingGit) and panel.snapshot.errorMessage.len == 0:
-    document.add "| Changes | " & $panel.snapshot.files.len & " files · +" & $additions &
-      " / −" & $deletions
-    if binaries > 0:
-      document.add " · " & $binaries & " binary"
+    document.add "| Changes | " & $panel.snapshot.files.len & " files"
+    if panel.snapshot.fileLimitReached:
+      document.add " · showing the first " & $panel.snapshot.files.len
+    if loadedFiles > 0:
+      document.add " · " & $loadedFiles & " loaded · +" & $additions & " / −" &
+        $deletions
+      if binaries > 0:
+        document.add " · " & $binaries & " binary"
     if panel.snapshot.source == gdsStandardInput:
       document.add " |\n| Compare | Piped unified diff |\n"
     else:
@@ -568,6 +893,9 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
         (if panel.snapshot.hasHead: "HEAD" else: "empty tree") &
         " · includes untracked files |\n"
   document.add "\n"
+  if panel.snapshot.fileLimitReached:
+    document.add "Only the first listed files are shown. " &
+      "Narrow the Git Diff path to inspect more changes.\n\n"
   if panel.readingGit and not panel.hasSnapshot:
     document.add "Loading changes…\n"
   elif panel.snapshot.errorMessage.len > 0:
@@ -584,17 +912,28 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
   panel.scheduleSectionLayout()
 
 proc toggleFile*(panel: KosmoGitDiffPanel, index: int) =
-  ## Toggle a file section without rereading Git.
+  ## Toggle a file section and request its patch when it is expanded.
   if index in 0 ..< panel.snapshot.files.len:
     let path = panel.snapshot.files[index].path
     if path in panel.collapsed:
       panel.collapsed.excl path
+      panel.forcedDisclosurePaths.clear()
+      panel.forcedDisclosurePaths.incl path
+      panel.forcedTextPaths.clear()
+      panel.forcedTextPaths.incl path
+      panel.explicitPatchPaths.incl path
+      panel.ensureFileMaterialized(index, forceText = true)
+      panel.queueFilePatch(path, explicit = true, retry = true)
     else:
       panel.collapsed.incl path
+      panel.forcedTextPaths.excl path
+      let section = addr panel.sections[path]
       let owner = panel.window()
-      if owner of nimkit.Window and
-          nimkit.Window(owner).firstResponder == panel.sections[path].textView:
-        discard nimkit.Window(owner).makeFirstResponder(panel.disclosureButtons[path])
+      if owner of nimkit.Window and not section[].textView.isNil and
+          nimkit.Window(owner).firstResponder == section[].textView:
+        panel.ensureFileMaterialized(index)
+        if not section[].disclosureButton.isNil:
+          discard nimkit.Window(owner).makeFirstResponder(section[].disclosureButton)
     panel.scheduleSectionLayout()
 
 proc isFileCollapsed*(panel: KosmoGitDiffPanel, index: int): bool =
@@ -725,13 +1064,22 @@ proc newDisclosureButton(
         let window = nimkit.Window(owner)
         let panel = button.panel[]
         let next = button.fileIndex + (if nimkit.kmShift in event.modifiers: -1 else: 1)
-        let target: nimkit.Responder =
-          if next < 0:
-            panel.markdownView.textView()
-          elif next >= panel.snapshot.files.len:
-            panel.refreshButton
-          else:
-            panel.disclosureButtons[panel.snapshot.files[next].path]
+        var target: nimkit.Responder
+        if next < 0:
+          panel.forcedDisclosurePaths.clear()
+          panel.syncDisclosureButtons()
+          target = panel.markdownView.textView()
+        elif next >= panel.snapshot.files.len:
+          panel.forcedDisclosurePaths.clear()
+          panel.syncDisclosureButtons()
+          target = panel.refreshButton
+        else:
+          let path = panel.snapshot.files[next].path
+          panel.forcedDisclosurePaths.clear()
+          panel.forcedDisclosurePaths.incl path
+          panel.ensureFileMaterialized(next)
+          panel.syncDisclosureButtons()
+          target = panel.disclosureButtons.getOrDefault(path)
         invocation.setResult(window.makeFirstResponder(target))
       else:
         invocation.setResult(false)
@@ -746,11 +1094,143 @@ proc newDisclosureButton(
     (if panel.isFileCollapsed(fileIndex): "Expand " else: "Collapse ") &
     panel.snapshot.files[fileIndex].path
 
+proc bindDisclosureButton(
+    panel: KosmoGitDiffPanel,
+    button: GitDiffDisclosureButton,
+    fileIndex: int,
+    filePath: string,
+) =
+  button.panel = panel.unsafeWeakRef()
+  button.fileIndex = fileIndex
+  button.filePath = filePath
+  button.accessibilityIdentifier = "kosmo.gitDiff.file." & $fileIndex
+
+protocol GitDiffTextDrawing of nimkit.ViewDrawingProtocol:
+  method drawUnderlay(view: GitDiffTextView, context: nimkit.DrawContext) =
+    view.drawTextViewUnderlayInViewport(context)
+
+  method draw(view: GitDiffTextView, context: nimkit.DrawContext) =
+    view.drawTextViewTextInViewport(context)
+
+  method drawOverlay(view: GitDiffTextView, context: nimkit.DrawContext) =
+    view.drawTextViewOverlay(context)
+
+proc newGitDiffTextView(panel: KosmoGitDiffPanel): GitDiffTextView =
+  var fresh = false
+  if panel.textViewPool.len > 0:
+    result = panel.textViewPool[^1]
+    panel.textViewPool.setLen(panel.textViewPool.len - 1)
+  else:
+    fresh = true
+    result = GitDiffTextView()
+    result.initTextViewFields()
+  result.editable = false
+  result.selectable = true
+  result.propagatesIntrinsicContentSizeChanges = false
+  result.textContainer =
+    nimkit.initTextContainer(wraps = false, widthTracksTextView = true)
+  result.layoutManager().usesBackgroundLayout = true
+  if fresh:
+    let weakPanel = panel.unsafeWeakRef()
+    let keys: nimkit.DynamicMethod = proc(
+        self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+    ) =
+      invocation.setResult(
+        not weakPanel.isNil and
+          weakPanel[].handleSharedKeys(invocation.argsAs(nimkit.KeyEvent))
+      )
+    discard result.withProtocol(GitDiffTextDrawing)
+    discard result.replaceMethod(nimkitSelectors.performKeyEquivalent(), keys)
+    result.layoutManager().connect(
+      nimkit.layoutDidComplete, panel, layoutDisclosureButtons
+    )
+  result.textStorage = nimkit.newTextStorage()
+
+proc releaseFileTextView(panel: KosmoGitDiffPanel, path: string) =
+  if not panel.sections.hasKey(path):
+    return
+  let section = addr panel.sections[path]
+  if section[].textView.isNil:
+    return
+  let textView = section[].textView
+  textView.removeFromSuperview()
+  textView.setHiddenFromLayout(true)
+  section[].textView = nil
+  section[].ready = false
+  section[].layoutStarted = false
+  if panel.textViewPool.len < GitDiffViewPoolLimit:
+    panel.textViewPool.add textView
+
+proc releaseFileDisclosureButton(panel: KosmoGitDiffPanel, path: string) =
+  if not panel.sections.hasKey(path):
+    return
+  let section = addr panel.sections[path]
+  if section[].disclosureButton.isNil:
+    return
+  let button = section[].disclosureButton
+  button.removeFromSuperview()
+  button.setHiddenFromLayout(true)
+  section[].disclosureButton = nil
+  panel.disclosureButtons.del path
+  if panel.disclosureButtonPool.len < GitDiffViewPoolLimit:
+    panel.disclosureButtonPool.add button
+
+proc ensureFileMaterialized(panel: KosmoGitDiffPanel, index: int, forceText = false) =
+  if panel.closed or index notin 0 ..< panel.snapshot.files.len:
+    return
+  let
+    file = panel.snapshot.files[index]
+    path = file.path
+  if not panel.sections.hasKey(path):
+    return
+  let section = addr panel.sections[path]
+  if section[].disclosureButton.isNil:
+    let button =
+      if panel.disclosureButtonPool.len > 0:
+        let next = panel.disclosureButtonPool[^1]
+        panel.disclosureButtonPool.setLen(panel.disclosureButtonPool.len - 1)
+        next
+      else:
+        panel.newDisclosureButton(index, path, nimkit.rect(0, 0, 100, 30))
+    panel.bindDisclosureButton(button, index, path)
+    section[].disclosureButton = button
+    panel.disclosureButtons[path] = button
+    panel.documentView.addSubview(button)
+  if forceText or path notin panel.collapsed:
+    if section[].textView.isNil:
+      let textView = panel.newGitDiffTextView()
+      textView.accessibilityLabel = "Diff for " & path
+      section[].textView = textView
+      panel.documentView.addSubview(textView)
+      if section[].patchState in {gdpsSkipped, gdpsFailed}:
+        textView.textStorage = nimkit.newTextStorage(
+          if section[].patchError.len > 0:
+            section[].patchError
+          else:
+            "This diff could not be loaded."
+        )
+        section[].ready = true
+      elif section[].patchState == gdpsLoaded and not section[].pending:
+        section[].ready = false
+        panel.queueSection(path)
+      else:
+        textView.textStorage = nimkit.newTextStorage("Loading diff…")
+
 proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
   if panel.closed or panel.scrollView.isNil:
     return
-  let viewport = panel.scrollView.viewportSize()
-  let width = max(viewport.width - 48, 1)
+  let
+    viewport = panel.scrollView.viewportSize()
+    width = max(viewport.width - 48, 1)
+    offset = panel.scrollView.contentOffset()
+    visible = nimkit.rect(nimkit.initPoint(offset.x, offset.y), viewport)
+    buffer = max(viewport.height, 120.0'f32)
+    materializedRect = nimkit.rect(
+      0,
+      max(visible.minY - buffer, 0.0'f32),
+      max(viewport.width, 1.0'f32),
+      visible.size.height + buffer * 2,
+    )
   let summary = panel.markdownView.textView().layoutManager().layoutSnapshot()
   let summaryHeight = max(
     summary.contentSize.height + panel.markdownView.textInsets().vertical,
@@ -759,47 +1239,108 @@ proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
   panel.markdownView.setFrameFromLayout(
     nimkit.rect(0, 0, viewport.width, summaryHeight)
   )
-  var y = summaryHeight + 16
-  var documentWidth = viewport.width
+  var
+    desiredButtons = initHashSet[string]()
+    desiredTextViews = initHashSet[string]()
+    y = summaryHeight + 16
+    documentWidth = viewport.width
+    focusedDisclosurePath: string
+  let owner = panel.window()
+  if owner of nimkit.Window:
+    for path, section in panel.sections:
+      if nimkit.Window(owner).firstResponder == section.disclosureButton:
+        focusedDisclosurePath = path
+        break
+  if focusedDisclosurePath.len > 0:
+    discard desiredButtons.includeMaterializedPath(focusedDisclosurePath)
+  for path in panel.forcedDisclosurePaths:
+    if panel.sections.hasKey(path):
+      discard desiredButtons.includeMaterializedPath(path)
+  for path in panel.forcedTextPaths:
+    if panel.sections.hasKey(path):
+      discard includeMaterializedTextView(desiredButtons, desiredTextViews, path)
+  for file in panel.snapshot.files:
+    let
+      path = file.path
+      section = addr panel.sections[path]
+      headingFrame = nimkit.rect(24, y, width, 30)
+      expanded = path notin panel.collapsed
+      contentHeight = max(section[].contentHeight, 24.0'f32)
+      contentFrame = nimkit.rect(34, y + 38, max(width - 20, 1), contentHeight)
+    if not headingFrame.intersection(materializedRect).isEmpty:
+      discard desiredButtons.includeMaterializedPath(path)
+    if expanded and not contentFrame.intersection(materializedRect).isEmpty:
+      discard includeMaterializedTextView(desiredButtons, desiredTextViews, path)
+    if expanded:
+      y += 38 + contentHeight + 24
+    else:
+      y += 46
+  for path in desiredTextViews:
+    let section = addr panel.sections[path]
+    if section[].patchState == gdpsUnloaded and not section[].patchPending:
+      let explicit = path in panel.explicitPatchPaths
+      if not section[].requiresExplicitLoad or explicit:
+        panel.queueFilePatch(path, explicit)
+  for path, section in panel.sections:
+    if not desiredTextViews.contains(path) and not section.textView.isNil:
+      panel.releaseFileTextView(path)
+    if not desiredButtons.contains(path) and not section.disclosureButton.isNil:
+      panel.releaseFileDisclosureButton(path)
+  y = summaryHeight + 16
   for index, file in panel.snapshot.files:
-    if panel.sections.hasKey(file.path):
-      let section = addr panel.sections[file.path]
-      let button = panel.disclosureButtons[file.path]
+    let path = file.path
+    let section = addr panel.sections[path]
+    if path in desiredButtons:
+      panel.ensureFileMaterialized(index, forceText = path in desiredTextViews)
+    let button = section[].disclosureButton
+    if not button.isNil:
       button.fileIndex = index
       button.title =
         file.path & (
-          if file.binary: "   binary"
-          else: "   +" & $file.additions & " / −" & $file.deletions
-        ) & (if section[].pending: "   preparing…" else: "")
+          if section[].patchState == gdpsLoaded:
+            if file.binary: "   binary"
+            else:
+              "   +" & $file.additions & " / −" & $file.deletions
+          elif section[].patchPending:
+            "   preparing…"
+          elif section[].patchState in {gdpsSkipped, gdpsFailed}:
+            "   diff unavailable"
+          else:
+            "   " & gitDiffStatusLabel(file.status)
+        )
       button.setFrameFromLayout(nimkit.rect(24, y, width, 30))
       button.hidden = false
       button.needsDisplay = true
       let collapsed = file.path in panel.collapsed
       button.toolTip = (if collapsed: "Expand " else: "Collapse ") & file.path
-      y += 38
-      section[].textView.setHiddenFromLayout(collapsed)
-      if not collapsed:
+    let expanded = path notin panel.collapsed
+    y += 38
+    if expanded:
+      let textView = section[].textView
+      if not textView.isNil:
+        textView.setHiddenFromLayout(false)
         if section[].ready and not section[].layoutStarted:
-          section[].textView.setFrameFromLayout(
-            nimkit.rect(34, y, max(width - 20, 1), 1)
-          )
-          section[].textView.layoutManager().requestBackgroundLayout(
-            allowUncachedLayout = true
-          )
+          textView.setFrameFromLayout(nimkit.rect(34, y, max(width - 20, 1), 1))
+          textView.layoutManager().requestBackgroundLayout(allowUncachedLayout = true)
           section[].layoutStarted = true
-        let snapshot = section[].textView.layoutManager().layoutSnapshot()
+        let snapshot = textView.layoutManager().layoutSnapshot()
         let size = nimkit.initSize(
           max(snapshot.contentSize.width, snapshot.usedRect.maxX),
           max(snapshot.contentSize.height, snapshot.usedRect.maxY),
         )
-        let codeWidth = max(max(width - 20, size.width), 1)
-        section[].textView.setFrameFromLayout(
-          nimkit.rect(34, y, codeWidth, max(size.height, 24))
-        )
+        let codeHeight = max(size.height, 24.0'f32)
+        let codeWidth = max(max(width - 20, size.width), 1.0'f32)
+        textView.setFrameFromLayout(nimkit.rect(34, y, codeWidth, codeHeight))
+        section[].contentHeight = codeHeight
         documentWidth = max(documentWidth, codeWidth + 68)
-        y += max(size.height, 24) + 24
+        y += codeHeight + 24
       else:
-        y += 8
+        y += max(section[].contentHeight, 24.0'f32) + 24
+    else:
+      let textView = section[].textView
+      if not textView.isNil:
+        textView.setHiddenFromLayout(true)
+      y += 8
   panel.documentView.setFrameFromLayout(
     nimkit.rect(0, 0, documentWidth, max(y, viewport.height))
   )
@@ -818,15 +1359,8 @@ proc scheduleSectionLayout(panel: KosmoGitDiffPanel) =
         retainedPanel.syncDisclosureButtons()
   )
 
-protocol GitDiffTextDrawing of nimkit.ViewDrawingProtocol:
-  method drawUnderlay(view: GitDiffTextView, context: nimkit.DrawContext) =
-    view.drawTextViewUnderlayInViewport(context)
-
-  method draw(view: GitDiffTextView, context: nimkit.DrawContext) =
-    view.drawTextViewTextInViewport(context)
-
-  method drawOverlay(view: GitDiffTextView, context: nimkit.DrawContext) =
-    view.drawTextViewOverlay(context)
+proc diffScrollGeometryChanged(panel: KosmoGitDiffPanel) {.slot.} =
+  panel.scheduleSectionLayout()
 
 protocol GitDiffDocumentDrawing of nimkit.ViewDrawingProtocol:
   method draw(view: GitDiffDocumentView, context: nimkit.DrawContext) =
@@ -840,7 +1374,7 @@ protocol GitDiffDocumentDrawing of nimkit.ViewDrawingProtocol:
     )
     let style = panel.markdownView.markdownStyle().codeBlockStyle
     for path, section in panel.sections:
-      if path notin panel.collapsed:
+      if path notin panel.collapsed and not section.textView.isNil:
         let frame = section.textView.frame().inset(nimkit.insets(-8.0'f32, -10.0'f32))
         if not frame.intersection(visible).isEmpty:
           discard context.addRenderRectangle(
@@ -862,10 +1396,14 @@ proc markdownParsingFinished(panel: KosmoGitDiffPanel, workerThreadId: int) {.sl
   panel.scheduleSectionLayout()
 
 proc disclosureButtonForFile*(panel: KosmoGitDiffPanel, fileIndex: int): nimkit.Button =
-  ## Return the keyboard and accessibility disclosure control for a rendered file.
-  panel.syncDisclosureButtons()
+  ## Return a disclosure control, materializing that row when necessary.
   if fileIndex in 0 ..< panel.snapshot.files.len:
-    return panel.disclosureButtons.getOrDefault(panel.snapshot.files[fileIndex].path)
+    let path = panel.snapshot.files[fileIndex].path
+    panel.forcedDisclosurePaths.clear()
+    panel.forcedDisclosurePaths.incl path
+    panel.ensureFileMaterialized(fileIndex)
+    panel.syncDisclosureButtons()
+    return panel.disclosureButtons.getOrDefault(path)
 
 proc focusFirstDisclosure(panel: KosmoGitDiffPanel): bool =
   panel.syncDisclosureButtons()
@@ -917,6 +1455,24 @@ proc diffFinished(
   worker: GitDiffWorker, snapshot: GitDiffSnapshot, generation: uint64
 ) {.signal.}
 
+proc executeFileDiff(
+  worker: AgentProxy[GitDiffWorker],
+  root: string,
+  path: string,
+  status: GitDiffFileStatus,
+  requiresExplicitLoad: bool,
+  hasHead: bool,
+  limits: GitDiffPatchLimits,
+  usedBytes: int,
+  explicit: bool,
+  generation: uint64,
+  control: SharedPtr[GitDiffControl],
+) {.signal.}
+
+proc fileDiffFinished(
+  worker: GitDiffWorker, loaded: SharedPtr[GitDiffFileLoadResult]
+) {.signal.}
+
 proc executeDiff(
     worker: GitDiffWorker,
     root: string,
@@ -925,6 +1481,27 @@ proc executeDiff(
     control: SharedPtr[GitDiffControl],
 ) {.slot.} =
   emit worker.diffFinished(readGitDiff(root, control, scopePath), generation)
+
+proc executeFileDiff(
+    worker: GitDiffWorker,
+    root: string,
+    path: string,
+    status: GitDiffFileStatus,
+    requiresExplicitLoad: bool,
+    hasHead: bool,
+    limits: GitDiffPatchLimits,
+    usedBytes: int,
+    explicit: bool,
+    generation: uint64,
+    control: SharedPtr[GitDiffControl],
+) {.slot.} =
+  let file =
+    GitFileDiff(path: path, status: status, requiresExplicitLoad: requiresExplicitLoad)
+  var loaded =
+    loadGitDiffFile(root, hasHead, file, limits, usedBytes, explicit, control)
+  loaded.generation = generation
+  loaded.threadId = getThreadId()
+  emit worker.fileDiffFinished(newSharedPtr(unsafeIsolate(move loaded)))
 
 proc highlightDiff(
   worker: AgentProxy[GitDiffHighlightWorker],
@@ -988,8 +1565,8 @@ proc updateLoading(panel: KosmoGitDiffPanel) =
   panel.loading = panel.readingGit
   var preparing = panel.readingGit and not panel.hasSnapshot
   for section in panel.sections.values:
-    panel.loading = panel.loading or section.pending
-    preparing = preparing or section.pending
+    panel.loading = panel.loading or section.patchPending or section.pending
+    preparing = preparing or section.patchPending or section.pending
   panel.refreshButton.enabled = not preparing and panel.repositoryBacked
   panel.autoRefreshSwitch.enabled = panel.repositoryBacked
 
@@ -1003,21 +1580,24 @@ proc applyHighlighting(
     return
   var prepared = move highlighted[]
   section[].pending = false
-  section[].ready = true
+  section[].ready = not section[].textView.isNil
   section[].layoutStarted = false
   if prepared.built:
     inc panel.xHighlightBuildCount
   panel.xHighlightThreadId = prepared.threadId
-  if prepared.errorMessage.len > 0:
-    section[].textView.textStorage =
-      nimkit.newTextStorage("Could not prepare this diff: " & prepared.errorMessage)
-  else:
-    section[].textView.textStorage =
-      nimkit.newTextStorage(move prepared.source, move prepared.runs)
+  if not section[].textView.isNil:
+    if prepared.errorMessage.len > 0:
+      section[].textView.textStorage =
+        nimkit.newTextStorage("Could not prepare this diff: " & prepared.errorMessage)
+    else:
+      section[].textView.textStorage =
+        nimkit.newTextStorage(move prepared.source, move prepared.runs)
   panel.updateLoading()
   panel.scheduleSectionLayout()
 
 proc queueSection(panel: KosmoGitDiffPanel, path: string) =
+  if not panel.sections.hasKey(path) or panel.sections[path].textView.isNil:
+    return
   inc panel.generation
   panel.sections[path].generation = panel.generation
   panel.sections[path].pending = true
@@ -1025,7 +1605,7 @@ proc queueSection(panel: KosmoGitDiffPanel, path: string) =
     source: panel.sections[path].syntaxPatch.replace("\r\n", "\n"),
     language: "diff:" & path.diffLanguage(),
   )
-  emit panel.sections[path].worker.highlightDiff(
+  emit panel.highlightWorker.highlightDiff(
     path,
     key,
     panel.sections[path].patch.replace("\r\n", "\n"),
@@ -1033,61 +1613,293 @@ proc queueSection(panel: KosmoGitDiffPanel, path: string) =
     panel.generation,
     panel.control,
   )
+  panel.updateLoading()
+
+proc updateSnapshotFile(panel: KosmoGitDiffPanel, file: GitFileDiff) =
+  let index = panel.snapshotFileIndexes.getOrDefault(file.path, -1)
+  if index >= 0:
+    panel.snapshot.files[index] = file
+
+func snapshotFileIndex(panel: KosmoGitDiffPanel, path: string): int =
+  panel.snapshotFileIndexes.getOrDefault(path, -1)
+
+proc skipQueuedPatch(panel: KosmoGitDiffPanel, path, message: string) =
+  if not panel.sections.hasKey(path):
+    return
+  var section = addr panel.sections[path]
+  section[].patchPending = false
+  section[].patchState = gdpsSkipped
+  section[].patchError = message
+  let index = panel.snapshotFileIndex(path)
+  if index >= 0:
+    panel.snapshot.files[index].patchState = gdpsSkipped
+    panel.snapshot.files[index].errorMessage = message
+    panel.snapshot.files[index].patchBytes = 0
+
+proc startNextPatch(panel: KosmoGitDiffPanel) =
+  if panel.closed or panel.activePatchPath.len > 0:
+    return
+  while panel.patchQueue.len > 0:
+    let request = panel.patchQueue.pop()
+    if not panel.sections.hasKey(request.path):
+      continue
+    let section = addr panel.sections[request.path]
+    if section[].loadGeneration != request.generation or not section[].patchPending:
+      continue
+    if not panel.repositoryBacked:
+      section[].patchPending = false
+      continue
+    if panel.patchBytesUsed >= panel.patchLimits.totalBytes:
+      panel.skipQueuedPatch(
+        request.path,
+        patchLimitError(request.path, panel.patchLimits.perFileBytes, total = true),
+      )
+      continue
+    panel.activePatchPath = request.path
+    let fileIndex = panel.snapshotFileIndex(request.path)
+    if fileIndex < 0:
+      section[].patchPending = false
+      panel.activePatchPath.setLen(0)
+      continue
+    let file = panel.snapshot.files[fileIndex]
+    let rootPath =
+      if panel.snapshot.rootPath.len > 0:
+        panel.snapshot.rootPath
+      else:
+        panel.repositoryRootPath
+    emit panel.worker.executeFileDiff(
+      rootPath, request.path, file.status, file.requiresExplicitLoad,
+      panel.snapshot.hasHead, panel.patchLimits, panel.patchBytesUsed, request.explicit,
+      request.generation, panel.control,
+    )
+    return
+  panel.updateLoading()
+  panel.renderDiff()
+  panel.scheduleSectionLayout()
+
+proc queueFilePatch(
+    panel: KosmoGitDiffPanel, path: string, explicit: bool, retry = false
+) =
+  if panel.closed or not panel.sections.hasKey(path) or not panel.repositoryBacked:
+    return
+  let section = addr panel.sections[path]
+  if section[].patchPending or section[].patchState == gdpsLoaded:
+    return
+  if section[].patchState in {gdpsSkipped, gdpsFailed} and not retry:
+    return
+  inc panel.patchGeneration
+  section[].patchPending = true
+  section[].loadGeneration = panel.patchGeneration
+  panel.patchQueue.add GitDiffPatchRequest(
+    path: path, generation: panel.patchGeneration, explicit: explicit
+  )
+  panel.updateLoading()
+  panel.startNextPatch()
+
+proc repositoryFileDiffFinished(
+    panel: KosmoGitDiffPanel, loaded: SharedPtr[GitDiffFileLoadResult]
+) {.slot.} =
+  if panel.closed:
+    return
+  let path = loaded[].file.path
+  if panel.activePatchPath == path:
+    panel.activePatchPath.setLen(0)
+  if not panel.sections.hasKey(path):
+    panel.startNextPatch()
+    return
+  let section = addr panel.sections[path]
+  if section[].loadGeneration != loaded[].generation:
+    panel.startNextPatch()
+    return
+  let previousBytes = section[].patchBytes
+  section[].patchPending = false
+  section[].patchState = loaded[].file.patchState
+  section[].patchError = loaded[].file.errorMessage
+  section[].patchBytes = loaded[].file.patchBytes
+  section[].additions = loaded[].file.additions
+  section[].deletions = loaded[].file.deletions
+  section[].binary = loaded[].file.binary
+  if previousBytes > 0:
+    panel.patchBytesUsed -= previousBytes
+  if loaded[].file.patchState == gdpsLoaded:
+    section[].patch = move loaded[].file.patch
+    section[].syntaxPatch = move loaded[].file.syntaxPatch
+    section[].requiresExplicitLoad = loaded[].file.requiresExplicitLoad
+    panel.patchBytesUsed += section[].patchBytes
+  else:
+    section[].patch.setLen(0)
+    section[].syntaxPatch.setLen(0)
+  var snapshotFile = loaded[].file
+  snapshotFile.revision = section[].revision
+  snapshotFile.patch = section[].patch
+  snapshotFile.syntaxPatch = section[].syntaxPatch
+  snapshotFile.patchState = section[].patchState
+  snapshotFile.patchBytes = section[].patchBytes
+  snapshotFile.errorMessage = section[].patchError
+  snapshotFile.additions = section[].additions
+  snapshotFile.deletions = section[].deletions
+  snapshotFile.binary = section[].binary
+  panel.updateSnapshotFile(snapshotFile)
+  if not section[].textView.isNil:
+    if section[].patchState == gdpsLoaded:
+      section[].ready = false
+      section[].layoutStarted = false
+      panel.queueSection(path)
+    else:
+      section[].textView.textStorage = nimkit.newTextStorage(
+        if section[].patchError.len > 0:
+          section[].patchError
+        else:
+          "This diff could not be loaded."
+      )
+      section[].ready = true
+      section[].layoutStarted = false
+  panel.updateLoading()
+  panel.renderDiff()
+  panel.scheduleSectionLayout()
+  panel.startNextPatch()
+
+func sameGitDiffMetadata(left, right: GitDiffSnapshot): bool =
+  if left.source != right.source or left.rootPath != right.rootPath or
+      left.scopePath != right.scopePath or left.branch != right.branch or
+      left.hasHead != right.hasHead or left.errorMessage != right.errorMessage or
+      left.revision != right.revision or left.fileLimitReached != right.fileLimitReached or
+      left.files.len != right.files.len:
+    return false
+  for index, file in left.files:
+    let other = right.files[index]
+    if file.path != other.path or file.status != other.status or
+        file.requiresExplicitLoad != other.requiresExplicitLoad:
+      return false
+  true
+
+proc clearSectionContent(panel: KosmoGitDiffPanel, path: string) =
+  if not panel.sections.hasKey(path):
+    return
+  let section = addr panel.sections[path]
+  if section[].patchBytes > 0:
+    panel.patchBytesUsed = max(panel.patchBytesUsed - section[].patchBytes, 0)
+  section[].patch.setLen(0)
+  section[].syntaxPatch.setLen(0)
+  section[].patchState = gdpsUnloaded
+  section[].patchError.setLen(0)
+  section[].patchBytes = 0
+  section[].additions = 0
+  section[].deletions = 0
+  section[].binary = false
+  section[].loadGeneration = 0
+  section[].patchPending = false
+  section[].pending = false
+  section[].ready = false
+  section[].layoutStarted = false
+  if not section[].textView.isNil:
+    section[].textView.textStorage = nimkit.newTextStorage("Loading diff…")
+
+func sameGitDiffFileMetadata(left, right: GitFileDiff): bool =
+  left.path == right.path and left.status == right.status and
+    left.requiresExplicitLoad == right.requiresExplicitLoad and left.revision.len > 0 and
+    left.revision == right.revision
+
+proc rebuildSnapshotFileIndexes(panel: KosmoGitDiffPanel) =
+  panel.snapshotFileIndexes.clear()
+  for index, file in panel.snapshot.files:
+    panel.snapshotFileIndexes[file.path] = index
+
+proc mergeSectionIntoSnapshot(panel: KosmoGitDiffPanel, index: int, path: string) =
+  let section = addr panel.sections[path]
+  if index notin 0 ..< panel.snapshot.files.len:
+    return
+  panel.snapshot.files[index].patch = section[].patch
+  panel.snapshot.files[index].syntaxPatch = section[].syntaxPatch
+  panel.snapshot.files[index].patchState = section[].patchState
+  panel.snapshot.files[index].patchBytes = section[].patchBytes
+  panel.snapshot.files[index].errorMessage = section[].patchError
+  panel.snapshot.files[index].additions = section[].additions
+  panel.snapshot.files[index].deletions = section[].deletions
+  panel.snapshot.files[index].binary = section[].binary
 
 proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
   if panel.closed:
     return
   panel.readingGit = false
-  if panel.hasSnapshot and panel.snapshot == snapshot:
+  if panel.hasSnapshot and (
+    if snapshot.source == gdsRepository:
+      sameGitDiffMetadata(panel.snapshot, snapshot)
+    else:
+      panel.snapshot == snapshot
+  ):
     panel.updateLoading()
+    panel.scheduleSectionLayout()
     return
+  let
+    previousSnapshot = panel.snapshot
+    revisionChanged =
+      panel.hasSnapshot and snapshot.source == gdsRepository and (
+        previousSnapshot.source != gdsRepository or
+        previousSnapshot.rootPath != snapshot.rootPath or
+        previousSnapshot.revision != snapshot.revision
+      )
+  if revisionChanged:
+    panel.patchQueue.setLen(0)
   panel.hasSnapshot = true
   panel.snapshot = snapshot
+  panel.rebuildSnapshotFileIndexes()
+  var previousFileIndexes = initTable[string, int]()
+  if revisionChanged and previousSnapshot.source == gdsRepository:
+    for index, file in previousSnapshot.files:
+      previousFileIndexes[file.path] = index
   var retained = initHashSet[string]()
   for index, file in snapshot.files:
     retained.incl file.path
     if not panel.sections.hasKey(file.path):
-      var highlighter = GitDiffHighlightWorker()
-      let worker = highlighter.moveToThread(nimkitWorkerPool())
-      connectThreaded(worker, highlightDiff, worker, highlightDiff)
-      connectThreaded(
-        worker, highlightingFinished, panel, KosmoGitDiffPanel.applyHighlighting()
-      )
-      let code = GitDiffTextView()
-      code.initTextViewFields()
-      code.editable = false
-      code.selectable = true
-      code.propagatesIntrinsicContentSizeChanges = false
-      code.textContainer =
-        nimkit.initTextContainer(wraps = false, widthTracksTextView = true)
-      code.layoutManager().usesBackgroundLayout = true
-      code.accessibilityLabel = "Diff for " & file.path
-      discard code.withProtocol(GitDiffTextDrawing)
-      let weakPanel = panel.unsafeWeakRef()
-      let keys: nimkit.DynamicMethod = proc(
-          self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
-      ) =
-        invocation.setResult(
-          not weakPanel.isNil and
-            weakPanel[].handleSharedKeys(invocation.argsAs(nimkit.KeyEvent))
-        )
-      discard code.replaceMethod(nimkitSelectors.performKeyEquivalent(), keys)
-      code.layoutManager().connect(
-        nimkit.layoutDidComplete, panel, layoutDisclosureButtons
-      )
-      panel.sections[file.path] = GitDiffSection(worker: worker, textView: code)
-      let button =
-        panel.newDisclosureButton(index, file.path, nimkit.rect(0, 0, 100, 30))
-      panel.disclosureButtons[file.path] = button
-      panel.documentView.addSubview(button)
-      panel.documentView.addSubview(code)
+      panel.sections[file.path] = GitDiffSection(contentHeight: 24.0'f32)
       panel.collapsed.incl file.path
-      code.setHiddenFromLayout(true)
-    if panel.sections[file.path].patch != file.patch or
-        panel.sections[file.path].syntaxPatch != file.syntaxPatch or
-        not panel.sections[file.path].ready:
-      panel.sections[file.path].patch = file.patch
-      panel.sections[file.path].syntaxPatch = file.syntaxPatch
+    let section = addr panel.sections[file.path]
+    var previousFile: GitFileDiff
+    var foundPreviousFile: bool
+    if revisionChanged and previousSnapshot.source == gdsRepository and
+        previousFileIndexes.hasKey(file.path):
+      previousFile = previousSnapshot.files[previousFileIndexes[file.path]]
+      foundPreviousFile = true
+    let preservePatch =
+      revisionChanged and foundPreviousFile and
+      sameGitDiffFileMetadata(previousFile, file) and section[].patchState == gdpsLoaded and
+      not section[].patchPending
+    if revisionChanged and not preservePatch:
+      panel.clearSectionContent(file.path)
+    let incomingLoaded = file.patchState == gdpsLoaded or file.patch.len > 0
+    var contentChanged: bool
+    if incomingLoaded:
+      contentChanged =
+        section[].patchState != gdpsLoaded or section[].patch != file.patch or
+        section[].syntaxPatch != file.syntaxPatch
+      if contentChanged:
+        panel.clearSectionContent(file.path)
+        section[].patch = file.patch
+        section[].syntaxPatch = file.syntaxPatch
+        section[].patchState = gdpsLoaded
+        section[].patchBytes =
+          if file.patchBytes > 0:
+            file.patchBytes
+          else:
+            file.patch.len + file.syntaxPatch.len
+        panel.patchBytesUsed += section[].patchBytes
+      section[].additions = file.additions
+      section[].deletions = file.deletions
+      section[].binary = file.binary
+    section[].requiresExplicitLoad = file.requiresExplicitLoad
+    section[].revision = file.revision
+    if file.status != section[].status:
+      section[].status = file.status
+    section[].patchError = file.errorMessage
+    if file.patchState in {gdpsSkipped, gdpsFailed}:
+      section[].patchState = file.patchState
+      section[].additions = file.additions
+      section[].deletions = file.deletions
+      section[].binary = file.binary
+    panel.mergeSectionIntoSnapshot(index, file.path)
+    if contentChanged and not section[].textView.isNil:
+      section[].ready = false
       panel.queueSection(file.path)
   var stale: seq[string]
   for path in panel.sections.keys:
@@ -1098,14 +1910,17 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
     if owner of nimkit.Window and
         nimkit.Window(owner).firstResponder in [
           nimkit.Responder(panel.sections[path].textView),
-          nimkit.Responder(panel.disclosureButtons[path]),
+          nimkit.Responder(panel.sections[path].disclosureButton),
         ]:
       discard nimkit.Window(owner).makeFirstResponder(panel.markdownView.textView())
-    panel.sections[path].textView.removeFromSuperview()
-    panel.disclosureButtons[path].removeFromSuperview()
+    panel.releaseFileTextView(path)
+    panel.releaseFileDisclosureButton(path)
+    panel.clearSectionContent(path)
     panel.sections.del path
-    panel.disclosureButtons.del path
     panel.collapsed.excl path
+    panel.forcedDisclosurePaths.excl path
+    panel.forcedTextPaths.excl path
+    panel.explicitPatchPaths.excl path
   panel.updateLoading()
   panel.renderDiff()
 
@@ -1196,7 +2011,8 @@ proc waitForDiff*(panel: KosmoGitDiffPanel, timeoutMilliseconds = 10000): bool =
       panel.markdownView.isMarkdownParsing() or panel.markdownView.isMarkdownRendering() or
       panel.markdownView.textView().layoutManager().isBackgroundLayoutPending()
     for path, section in panel.sections:
-      if path notin panel.collapsed:
+      pending = pending or section.patchPending or section.pending
+      if path notin panel.collapsed and not section.textView.isNil:
         pending =
           pending or section.textView.layoutManager().isBackgroundLayoutPending()
     if not pending:
@@ -1209,10 +2025,22 @@ proc close*(panel: KosmoGitDiffPanel) {.slot.} =
     inc panel.generation
     panel.loading = false
     panel.refreshPending = false
-    for section in panel.sections.values:
-      section.textView.removeFromSuperview()
+    var paths: seq[string]
+    for path in panel.sections.keys:
+      paths.add path
+    for path in paths:
+      panel.releaseFileTextView(path)
+      panel.releaseFileDisclosureButton(path)
     panel.sections.clear()
-    panel.clearDisclosureButtons()
+    panel.snapshotFileIndexes.clear()
+    panel.disclosureButtons.clear()
+    panel.textViewPool.setLen(0)
+    panel.disclosureButtonPool.setLen(0)
+    panel.forcedDisclosurePaths.clear()
+    panel.forcedTextPaths.clear()
+    panel.explicitPatchPaths.clear()
+    panel.patchQueue.setLen(0)
+    panel.activePatchPath.setLen(0)
     panel.control[].cancelled.store(true, moRelease)
     panel.pool.stop(immediate = true)
     panel.pool.join()
@@ -1254,8 +2082,9 @@ proc `markdownStyle=`*(panel: KosmoGitDiffPanel, style: nimkit.MarkdownStyle) =
   var diffStyle = style
   diffStyle.headingFontSizes[1] = style.bodyFontSize
   panel.markdownView.markdownStyle = diffStyle
-  for path in panel.sections.keys:
-    panel.queueSection(path)
+  for path, section in panel.sections:
+    if not section.textView.isNil:
+      panel.queueSection(path)
   panel.updateLoading()
 
 proc highlightBuildCount*(panel: KosmoGitDiffPanel): int =
@@ -1270,16 +2099,44 @@ proc repositoryReadCount*(panel: KosmoGitDiffPanel): int =
   ## Number of repository snapshots requested, for refresh diagnostics.
   panel.xRepositoryReadCount
 
+proc materializedViewCount*(panel: KosmoGitDiffPanel): int =
+  ## Number of file controls currently attached to the document view.
+  for section in panel.sections.values:
+    if not section.disclosureButton.isNil:
+      inc result
+    if not section.textView.isNil:
+      inc result
+
+proc requestFilePatch*(panel: KosmoGitDiffPanel, index: int): bool =
+  ## Explicitly request a repository file patch without expanding its row.
+  if panel.isNil or panel.closed or index notin 0 ..< panel.snapshot.files.len:
+    return
+  if not panel.repositoryBacked:
+    return
+  let path = panel.snapshot.files[index].path
+  panel.explicitPatchPaths.incl path
+  panel.queueFilePatch(path, explicit = true, retry = true)
+  result = true
+
 proc textViewForFile*(panel: KosmoGitDiffPanel, index: int): nimkit.TextView =
-  ## Retained per-file text; collapsed sections keep their prepared storage.
+  ## Return a requested file's text view, materializing and loading it as needed.
   if index in 0 ..< panel.snapshot.files.len:
-    return panel.sections[panel.snapshot.files[index].path].textView
+    let path = panel.snapshot.files[index].path
+    panel.forcedDisclosurePaths.clear()
+    panel.forcedDisclosurePaths.incl path
+    panel.forcedTextPaths.clear()
+    panel.forcedTextPaths.incl path
+    panel.explicitPatchPaths.incl path
+    panel.ensureFileMaterialized(index, forceText = true)
+    panel.syncDisclosureButtons()
+    return panel.sections[path].textView
 
 proc newKosmoGitDiffPanel(
     rootPath: string,
     markdownStyle: nimkit.MarkdownStyle,
     refreshesRepository: bool,
     scopePath = "",
+    patchLimits = initGitDiffPatchLimits(),
 ): KosmoGitDiffPanel =
   ## Construct a syntax-highlighted hunk reader with initially collapsed files.
   startLocalThreadDefault()
@@ -1296,6 +2153,12 @@ proc newKosmoGitDiffPanel(
     repositoryRootPath: if refreshesRepository: rootPath else: "",
     repositoryScopePath: if refreshesRepository: scopePath else: "",
     disclosureButtons: initTable[string, GitDiffDisclosureButton](),
+    snapshotFileIndexes: initTable[string, int](),
+    forcedDisclosurePaths: initHashSet[string](),
+    forcedTextPaths: initHashSet[string](),
+    explicitPatchPaths: initHashSet[string](),
+    patchLimits:
+      initGitDiffPatchLimits(patchLimits.perFileBytes, patchLimits.totalBytes),
     pool: newSigilThreadPool(workers = 1),
     control: newGitDiffControl(),
   )
@@ -1307,6 +2170,9 @@ proc newKosmoGitDiffPanel(
   result.scrollView = nimkit.newScrollView(documentView = document)
   result.scrollView.hasVerticalScroller = true
   result.scrollView.hasHorizontalScroller = true
+  result.scrollView.clipView().connect(
+    nimkit.geometryDidChange, result, diffScrollGeometryChanged
+  )
   document.addSubview(result.markdownView)
   let summaryScroll = result.markdownView.scrollView()
   summaryScroll.hasVerticalScroller = false
@@ -1392,21 +2258,42 @@ proc newKosmoGitDiffPanel(
   ):
     discard sender
     if not panel.isNil:
-      for file in panel[].snapshot.files:
+      for index, file in panel[].snapshot.files:
         panel[].collapsed.incl file.path
         let owner = panel[].window()
-        if owner of nimkit.Window and
+        if owner of nimkit.Window and not panel[].sections[file.path].textView.isNil and
             nimkit.Window(owner).firstResponder == panel[].sections[file.path].textView:
+          panel[].forcedDisclosurePaths.clear()
+          panel[].forcedDisclosurePaths.incl file.path
+          panel[].ensureFileMaterialized(index)
           discard nimkit.Window(owner).makeFirstResponder(
-              panel[].disclosureButtons[file.path]
+              panel[].sections[file.path].disclosureButton
             )
       panel[].scheduleSectionLayout()
   result.pool.start()
   var worker = GitDiffWorker()
   result.worker = worker.moveToThread(result.pool)
   connectThreaded(result.worker, executeDiff, result.worker, executeDiff)
+  connectThreaded(result.worker, executeFileDiff, result.worker, executeFileDiff)
   connectThreaded(
     result.worker, diffFinished, result, KosmoGitDiffPanel.repositoryDiffFinished()
+  )
+  connectThreaded(
+    result.worker,
+    fileDiffFinished,
+    result,
+    KosmoGitDiffPanel.repositoryFileDiffFinished(),
+  )
+  var highlighter = GitDiffHighlightWorker()
+  result.highlightWorker = highlighter.moveToThread(nimkitWorkerPool())
+  connectThreaded(
+    result.highlightWorker, highlightDiff, result.highlightWorker, highlightDiff
+  )
+  connectThreaded(
+    result.highlightWorker,
+    highlightingFinished,
+    result,
+    KosmoGitDiffPanel.applyHighlighting(),
   )
   if refreshesRepository:
     result.refresh()
@@ -1414,11 +2301,18 @@ proc newKosmoGitDiffPanel(
     result.renderDiff()
 
 proc newKosmoGitDiffPanel*(
-    rootPath: string, markdownStyle = nimkit.initMarkdownStyle(), scopePath = ""
+    rootPath: string,
+    markdownStyle = nimkit.initMarkdownStyle(),
+    scopePath = "",
+    patchLimits = initGitDiffPatchLimits(),
 ): KosmoGitDiffPanel =
   ## Construct a repository-backed Git Diff view.
   newKosmoGitDiffPanel(
-    rootPath, markdownStyle, refreshesRepository = true, scopePath = scopePath
+    rootPath,
+    markdownStyle,
+    refreshesRepository = true,
+    scopePath = scopePath,
+    patchLimits = patchLimits,
   )
 
 proc newKosmoGitDiffPanel*(

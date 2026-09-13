@@ -1,4 +1,4 @@
-import std/[os, tempfiles, unittest]
+import std/[os, strutils, tempfiles, unittest]
 
 import figdraw
 import sigils/core
@@ -81,6 +81,62 @@ suite "File browsers":
     check model.entries(root).len == 1
     model.invalidate(root)
     check model.entries(root).len == 2
+
+  test "filesystem listings cap entries and report truncation":
+    let root = createTempDir("merenda-file-browser-limit-", "")
+    var paths: seq[string]
+    for index in 0 ..< 5:
+      let path = root / ("entry-" & $index & ".txt")
+      writeFile(path, "entry")
+      paths.add path
+    defer:
+      for path in paths:
+        removeFile(path)
+      removeDir(root)
+
+    var model = initFileSystemBrowserModel(entryLimit = 3)
+    check model.entryLimit() == 3
+    check model.entries(root).len == 3
+    check model.isDirectoryTruncated(root)
+
+    let browser = newFileBrowser(root, entryLimit = 3)
+    check browser.entries().len == 3
+    check browser.isDirectoryListingTruncated()
+    check "showing up to 3 entries" in browser.locationLabel().text
+
+    browser.entryLimit = 5
+    check browser.entries().len == 5
+    check not browser.isDirectoryListingTruncated()
+
+  test "refresh updates the directory truncation notice":
+    let root = createTempDir("merenda-file-browser-refresh-limit-", "")
+    var paths: seq[string]
+    for index in 0 ..< 3:
+      let path = root / ("entry-" & $index & ".txt")
+      writeFile(path, "entry")
+      paths.add path
+    let overflow = root / "overflow.txt"
+    defer:
+      for path in paths:
+        if fileExists(path):
+          removeFile(path)
+      if fileExists(overflow):
+        removeFile(overflow)
+      removeDir(root)
+
+    let browser = newFileBrowser(root, entryLimit = 3)
+    check not browser.isDirectoryListingTruncated()
+    check "showing up to" notin browser.locationLabel().text
+
+    writeFile(overflow, "overflow")
+    browser.refresh()
+    check browser.isDirectoryListingTruncated()
+    check "showing up to 3 entries" in browser.locationLabel().text
+
+    removeFile(overflow)
+    browser.refresh()
+    check not browser.isDirectoryListingTruncated()
+    check "showing up to" notin browser.locationLabel().text
 
   test "pointer keyboard and toolbar interactions drive the file browser":
     let

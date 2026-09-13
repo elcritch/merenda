@@ -234,10 +234,14 @@ proc receiveFiles(
     files.refresh()
 
 proc newWorkspaceFiles*(
-    reconciliationInterval = DefaultWorkspaceReconciliationInterval
+    reconciliationInterval = DefaultWorkspaceReconciliationInterval,
+    entryLimit: Positive = DefaultFileBrowserEntryLimit,
 ): WorkspaceFiles =
   ## Create an owner-thread controller borrowing NimKit's shared worker pool.
-  result = WorkspaceFiles(reconciliationInterval: reconciliationInterval)
+  result = WorkspaceFiles(
+    fallback: initFileSystemBrowserModel(entryLimit),
+    reconciliationInterval: reconciliationInterval,
+  )
   var worker = WorkspaceFileWorker()
   result.worker = worker.moveToThread(nimkitWorkerPool())
   connectThreaded(result.worker, loadFiles, result.worker, loadFiles)
@@ -252,6 +256,12 @@ proc isLoading*(files: WorkspaceFiles): bool =
 proc entries*(files: WorkspaceFiles, directory: string): seq[FileBrowserEntry] =
   ## Shared browser listings; unindexed (including ignored) folders load lazily.
   files.fallback.entries(directory)
+
+proc isDirectoryTruncated*(files: WorkspaceFiles, directory: string): bool =
+  ## Report whether a lazy browser listing reached its entry safety limit.
+  if files.isNil:
+    return
+  files.fallback.isDirectoryTruncated(directory)
 
 proc refresh*(files: WorkspaceFiles) =
   ## Invalidate in-flight work and coalesce changes into one follow-up scan.

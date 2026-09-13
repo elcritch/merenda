@@ -443,6 +443,26 @@ suite "nimkit scroll views":
     check visible.contains(initPoint(160, 150))
     check visible.contains(initPoint(199.99, 189.99))
 
+  test "window inversion reverses wheel movement on both axes":
+    let
+      window = newWindow("Inverted scroll", frame = rect(0, 0, 220, 160))
+      root = newView(frame = rect(0, 0, 220, 160))
+      document = newView(frame = rect(0, 0, 300, 260))
+      scrollView = newScrollView(frame = rect(10, 10, 100, 80), documentView = document)
+
+    scrollView.lineScroll = 10.0
+    root.addSubview(scrollView)
+    window.setContentView(root)
+    scrollView.scrollTo(initPoint(80, 80))
+    window.invertScrolling = true
+
+    check window.scrollWheelAt(initPoint(20, 20), deltaX = 2.0, deltaY = -2.0)
+    check scrollView.contentOffset() == initPoint(60, 60)
+
+    window.invertScrolling = false
+    check window.scrollWheelAt(initPoint(20, 20), deltaX = 2.0, deltaY = -2.0)
+    check scrollView.contentOffset() == initPoint(80, 80)
+
   test "scroll rect ignores axes with empty viewport":
     let
       document = newView(frame = rect(0, 0, 300, 260))
