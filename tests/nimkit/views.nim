@@ -35,6 +35,10 @@ type
     name: string
     constraintTarget: View
 
+  ConstraintRemovingView = ref object of View
+    target: View
+    updateCount: int
+
 var
   spyMouseDownPoint: Point
   spyMouseUpPoint: Point
@@ -127,6 +131,13 @@ protocol ConstraintSpyHooks of ViewLayoutProtocol:
   method layout(spy: ConstraintSpyView) =
     constraintEvents.add spy.name & ".layout"
 
+protocol ConstraintRemovingHooks of ViewLayoutProtocol:
+  method updateConstraints(view: ConstraintRemovingView) =
+    inc view.updateCount
+    if not view.target.isNil:
+      view.target.removeFromSuperview()
+      view.target = nil
+
 proc newMouseSpyView(frame: Rect): MouseSpyView =
   result = MouseSpyView()
   initViewFields(result, frame)
@@ -168,6 +179,11 @@ proc newConstraintSpyView(
   result = ConstraintSpyView(name: name, constraintTarget: constraintTarget)
   initViewFields(result, frame)
   discard result.withProtocol(ConstraintSpyHooks)
+
+proc newConstraintRemovingView(frame: Rect, target: View): ConstraintRemovingView =
+  result = ConstraintRemovingView(target: target)
+  initViewFields(result, frame)
+  discard result.withProtocol(ConstraintRemovingHooks)
 
 suite "nimkit views":
   test "layer surface window API is limited to Wayland platforms":
@@ -438,6 +454,61 @@ suite "nimkit views":
     check root.needsLayout
     root.finishDisplaySubtree()
     check not root.needsDisplay
+
+  test "blocked layout consistently suppresses descendant callbacks":
+    let
+      root = newLayoutSpyView(rect(0, 0, 200, 160))
+      child = newLayoutSpyView(rect(20, 30, 80, 40))
+    root.addSubview(child)
+    root.events.setLen(0)
+    child.events.setLen(0)
+    root.finishDisplaySubtree()
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 1)
+
+    root.layoutSubtreeIfNeeded()
+
+    check root.xLastLayoutSolveDiagnostic.failed
+    check root.events.len == 0
+    check child.events.len == 0
+    check root.needsLayout
+    check child.needsLayout
+    check not root.needsDisplayUpdateInSubtree()
+
+    root.layoutSubtreeIfNeeded()
+
+    check root.events.len == 0
+    check child.events.len == 0
+
+    root.xLayoutSolveLimits = defaultLayoutSolveLimits()
+    check root.needsDisplayUpdateInSubtree()
+    root.layoutSubtreeIfNeeded()
+
+    check not root.xLastLayoutSolveDiagnostic.failed
+    check root.events == @["layoutSubviews", "layout"]
+    check child.events == @["layoutSubviews", "layout"]
+    check not root.needsLayout
+    check not child.needsLayout
+
+  test "descendant constraint updates retry a blocked ancestor":
+    let
+      root = newView(frame = rect(0, 0, 200, 160))
+      extra = newView(frame = rect(0, 0, 20, 20))
+      updater = newConstraintRemovingView(rect(20, 30, 80, 40), extra)
+    updater.addSubview(extra)
+    root.addSubview(updater)
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 2)
+
+    root.layoutSubtreeIfNeeded()
+
+    check root.xLastLayoutSolveDiagnostic.failed
+    check extra.superview == updater
+
+    updater.setNeedsUpdateConstraints()
+    root.layoutSubtreeIfNeeded()
+
+    check updater.updateCount == 1
+    check extra.superview.isNil
+    check not root.xLastLayoutSolveDiagnostic.failed
 
   test "layout subtree defers invalidations of an already visited view":
     let

@@ -20,10 +20,11 @@ import ../accessibility/accessibilityprotocols
 export responders
 export viewbase except
   AutoresizingState, LayoutInputKind, LayoutTerm, LayoutEquation, LayoutInput,
-  LayoutInputCache, LayoutTransactionState, activeLayoutTransaction,
-  markLocalNeedsDisplay, markRenderSlotNeedsDisplay, nextLayoutGeneration,
-  noteLayoutInvalidation
-export viewconstraints except generatedLayoutInputs, applyConstraintsForSubtree
+  LayoutInputCache, LayoutSolveMode, LayoutSolveFailure, LayoutTransactionState,
+  activeLayoutTransaction, markLocalNeedsDisplay, markRenderSlotNeedsDisplay,
+  nextLayoutGeneration, noteLayoutInvalidation
+export viewconstraints except
+  generatedLayoutInputs, solveBlocked, applyConstraintsForSubtree
 export viewgeometry except
   resetAutoresizingState, refreshAutoresizingReference,
   refreshAutoresizingReferenceIfNeeded, applyLayoutFrame, setFrameFromLayout,
@@ -194,9 +195,16 @@ protocol DefaultViewResponder of ResponderProtocol:
 proc needsUpdateConstraints*(view: View): bool =
   view.xNeedsUpdateConstraints
 
+proc invalidateLayoutSolveFailures(view: View) =
+  var current = view
+  while not current.isNil:
+    inc current.xLayoutInputRevision
+    current = current.superviewBacklink()
+
 proc setNeedsUpdateConstraints*(view: View, value: bool) =
   if not value:
     return
+  view.invalidateLayoutSolveFailures()
   view.noteLayoutInvalidation(lirConstraints, affectsConstraints = true)
   view.xNeedsUpdateConstraints = true
 
@@ -218,6 +226,7 @@ proc needsLayout*(view: View): bool =
 
 proc `needsLayout=`*(view: View, value: bool) =
   if value:
+    view.invalidateLayoutSolveFailures()
     view.noteLayoutInvalidation(lirExplicit, affectsConstraints = false)
   view.xNeedsLayout = value
 
@@ -227,6 +236,8 @@ proc setNeedsLayout*(view: View) =
 const LayoutFeedbackDiagnosticThreshold = 3
 
 proc hasPendingLayoutInSubtree(view: View): bool =
+  if view.solveBlocked(lsmLayout):
+    return false
   if view.xNeedsUpdateConstraints or view.xNeedsLayout:
     return true
   for child in view.xSubviews:
@@ -289,7 +300,8 @@ proc layoutSubtreeIfNeeded*(view: View) =
   transaction.currentView = nil
   transaction.phase = ltpSolvingConstraints
   view.xLayoutPhase = transaction.phase
-  view.applyConstraintsForSubtree()
+  if not view.applyConstraintsForSubtree():
+    return
 
   transaction.phase = ltpLayingOut
   view.xLayoutPhase = transaction.phase
@@ -351,12 +363,7 @@ proc needsDisplayInSubtree*(view: View): bool =
   false
 
 proc needsDisplayUpdateInSubtree*(view: View): bool =
-  if view.xNeedsDisplay or view.xNeedsLayout or view.xNeedsUpdateConstraints:
-    return true
-  for child in view.xSubviews:
-    if child.needsDisplayUpdateInSubtree():
-      return true
-  false
+  view.needsDisplayInSubtree() or view.hasPendingLayoutInSubtree()
 
 proc prepareDisplaySubtree*(view: View): bool =
   view.layoutSubtreeIfNeeded()
@@ -421,6 +428,7 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.xDisplayRevision = 1
   view.xRenderSlotRevisions = initTable[RenderSlotId, uint64]()
   view.xNeedsLayout = true
+  view.xLayoutSolveLimits = defaultLayoutSolveLimits()
   view.xAutoresizingMaskConstraints = not frame.hasAutoMetric
   view.xHuggingPriority[laHorizontal] = LayoutPriorityLow
   view.xHuggingPriority[laVertical] = LayoutPriorityLow

@@ -14,6 +14,10 @@ const
   KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
   GitDiffRefreshDebounceInterval = initDuration(milliseconds = 300)
   GitDiffReservedSummaryHeight = 240.0'f32
+  GitDiffHighlightTimeBudgetMs = 1000
+  GitDiffMaximumHighlightSourceBytes = 1 * 1024 * 1024
+  GitDiffMaximumHighlightQueuedBytes = 8 * 1024 * 1024
+  GitDiffMaximumHighlightCachedBytes = 16 * 1024 * 1024
   GitDiffDefaultPerFileByteLimit* = 2 * 1024 * 1024
   GitDiffDefaultTotalByteLimit* = 32 * 1024 * 1024
   GitDiffDefaultFileLimit* = 10_000
@@ -23,6 +27,10 @@ const
 
 type
   GitDiffHighlightKey = tuple[source, language: string]
+
+  GitDiffReservationKind = enum
+    gdrQueued
+    gdrCached
 
   GitDiffSource* = enum
     gdsRepository
@@ -77,12 +85,45 @@ type
     errorMessage*: string
     revision*: string
 
+  GitDiffControl = object
+    cancelled: Atomic[bool]
+    highlightQueuedBytes: Atomic[int64]
+    highlightCachedBytes: Atomic[int64]
+
+  GitDiffHighlightRequestState = object
+    generation: Atomic[uint64]
+
+  GitDiffByteReservation = object
+    control: SharedPtr[GitDiffControl]
+    kind: GitDiffReservationKind
+    bytes: int64
+
+template releaseReservationAccounting(
+    reservation: GitDiffByteReservation, reservedBytes: int64
+) =
+  if reservedBytes > 0 and not reservation.control.isNil:
+    case reservation.kind
+    of gdrQueued:
+      discard reservation.control[].highlightQueuedBytes.fetchSub(
+        reservedBytes, moAcquireRelease
+      )
+    of gdrCached:
+      discard reservation.control[].highlightCachedBytes.fetchSub(
+        reservedBytes, moAcquireRelease
+      )
+
+proc `=destroy`(reservation: var GitDiffByteReservation) =
+  releaseReservationAccounting(reservation, reservation.bytes)
+  `=destroy`(reservation.control)
+
+type
   GitDiffWorker = ref object of AgentActor
 
   GitDiffHighlightWorker = ref object of AgentActor
     key: GitDiffHighlightKey
     spans: seq[nimkit.SyntaxTokenSpan]
     cached: bool
+    cacheReservation: SharedPtr[GitDiffByteReservation]
 
   GitDiffHighlightResult = object
     path: string
@@ -92,9 +133,6 @@ type
     generation: uint64
     built: bool
     threadId: int
-
-  GitDiffControl = object
-    cancelled: Atomic[bool]
 
   GitDiffFileLoadResult = object
     file: GitFileDiff
@@ -118,6 +156,10 @@ type
     revision: string
     patch: string
     syntaxPatch: string
+    queuedKey: GitDiffHighlightKey
+    queuedVisibleSource: string
+    queuedStyleGeneration: uint64
+    highlightRequestState: SharedPtr[GitDiffHighlightRequestState]
     patchState: GitDiffPatchState
     requiresExplicitLoad: bool
     patchError: string
@@ -161,6 +203,7 @@ type
     repositoryScopePath: string
     relayoutPending: bool
     generation: uint64
+    styleGeneration: uint64
     readGeneration: uint64
     loading: bool
     closed: bool
@@ -184,6 +227,44 @@ type
 proc newGitDiffControl(): SharedPtr[GitDiffControl] =
   result = newSharedPtr(GitDiffControl)
   result[].cancelled.store(false, moRelaxed)
+  result[].highlightQueuedBytes.store(0, moRelaxed)
+  result[].highlightCachedBytes.store(0, moRelaxed)
+
+proc reserveHighlightBytes(control: SharedPtr[GitDiffControl], bytes: int): bool =
+  if bytes <= 0:
+    return true
+  let requested = int64(bytes)
+  let previous = control[].highlightQueuedBytes.fetchAdd(requested, moAcquireRelease)
+  if previous + requested <= GitDiffMaximumHighlightQueuedBytes:
+    return true
+  discard control[].highlightQueuedBytes.fetchSub(requested, moAcquireRelease)
+
+proc reserveHighlightCacheBytes(
+    control: SharedPtr[GitDiffControl], bytes: int64
+): bool =
+  if bytes <= 0:
+    return true
+  let previous = control[].highlightCachedBytes.fetchAdd(bytes, moAcquireRelease)
+  if previous + bytes <= GitDiffMaximumHighlightCachedBytes:
+    return true
+  discard control[].highlightCachedBytes.fetchSub(bytes, moAcquireRelease)
+  false
+
+proc releaseHighlightCacheBytes(control: SharedPtr[GitDiffControl], bytes: int64) =
+  if bytes > 0:
+    discard control[].highlightCachedBytes.fetchSub(bytes, moAcquireRelease)
+
+proc newGitDiffByteReservation(
+    control: SharedPtr[GitDiffControl], kind: GitDiffReservationKind, bytes: int64 = 0
+): SharedPtr[GitDiffByteReservation] =
+  newSharedPtr(GitDiffByteReservation(control: control, kind: kind, bytes: bytes))
+
+proc completeGitDiffByteReservation(reservation: SharedPtr[GitDiffByteReservation]) =
+  if reservation.isNil:
+    return
+  let reservedBytes = reservation[].bytes
+  reservation[].bytes = 0
+  releaseReservationAccounting(reservation[], reservedBytes)
 
 proc executeGit(
     root: string,
@@ -666,7 +747,12 @@ proc diffLanguage(path: string): string =
   else:
     path.splitFile().ext.strip(chars = {'.'}).toLowerAscii()
 
-proc diffHighlight(source, language: string): seq[nimkit.SyntaxTokenSpan] =
+proc diffHighlight(
+    source, language: string,
+    timeLimitMs: int,
+    cancelled: nimkit.MatterHighlightCancellation,
+    completed: var bool,
+): seq[nimkit.SyntaxTokenSpan] =
   type DiffRow = object
     start, length, oldStart, newStart: int
     kind: char
@@ -676,7 +762,18 @@ proc diffHighlight(source, language: string): seq[nimkit.SyntaxTokenSpan] =
     oldSource, newSource: string
     oldOffset, newOffset, offset: int
     inHunk: bool
+    startedAt = getMonoTime()
+  completed = false
+  proc shouldStop(): bool =
+    let cancelledNow = not cancelled.isNil and cancelled()
+    let timedOut =
+      timeLimitMs > 0 and
+      getMonoTime() - startedAt >= initDuration(milliseconds = timeLimitMs)
+    cancelledNow or timedOut
+
   for line in source.splitLines(keepEol = true):
+    if shouldStop():
+      return
     let length = line.runeLen
     if line.startsWith("@@ "):
       inHunk = true
@@ -711,13 +808,31 @@ proc diffHighlight(source, language: string): seq[nimkit.SyntaxTokenSpan] =
   for classes in [addr oldClasses, addr newClasses]:
     for token in classes[].mitems:
       token = nimkit.stcOther
-  for span in nimkit.matterSyntaxHighlighter(oldSource, sourceLanguage):
+  if shouldStop():
+    return
+  let oldRemainingMs =
+    max(1, timeLimitMs - int((getMonoTime() - startedAt).inMilliseconds))
+  let oldHighlight = nimkit.matterSyntaxHighlighterBounded(
+    oldSource, sourceLanguage, oldRemainingMs, shouldStop
+  )
+  for span in oldHighlight.spans:
     for index in int(span.range.location) ..< span.range.maxIndex:
       oldClasses[index] = span.tokenClass
-  for span in nimkit.matterSyntaxHighlighter(newSource, sourceLanguage):
+  if not oldHighlight.completed or shouldStop():
+    return
+  let newRemainingMs =
+    max(1, timeLimitMs - int((getMonoTime() - startedAt).inMilliseconds))
+  let newHighlight = nimkit.matterSyntaxHighlighterBounded(
+    newSource, sourceLanguage, newRemainingMs, shouldStop
+  )
+  for span in newHighlight.spans:
     for index in int(span.range.location) ..< span.range.maxIndex:
       newClasses[index] = span.tokenClass
+  if not newHighlight.completed or shouldStop():
+    return
   for row in rows:
+    if shouldStop():
+      return
     let change =
       case row.kind
       of '+': nimkit.sckAdded
@@ -758,6 +873,14 @@ proc diffHighlight(source, language: string): seq[nimkit.SyntaxTokenSpan] =
           tokenClass: token,
           changeKind: change,
         )
+  completed = true
+
+proc diffTextAttributes(style: nimkit.MarkdownStyle): nimkit.TextAttributes =
+  result = nimkit.defaultTextAttributes()
+  result.fontName = style.codeFontName
+  result.fontSize = style.bodyFontSize
+  result.foregroundColor = style.codeColor
+  result.paragraphStyle.lineBreakMode = nimkit.tlbmClipping
 
 iterator patchRows(
     source: string
@@ -783,37 +906,46 @@ iterator patchRows(
       inc newLine
     offset += length
 
-proc visibleSpans(
-    fullSource, visibleSource: string, spans: seq[nimkit.SyntaxTokenSpan]
-): seq[nimkit.SyntaxTokenSpan] =
-  var positions = initTable[tuple[kind: char, oldLine, newLine: int], int]()
-  for row in fullSource.patchRows():
-    if row.key.kind != '@':
-      positions[row.key] = row.start
-  for row in visibleSource.patchRows():
-    if row.key.kind == '@' or not positions.hasKey(row.key):
-      result.add nimkit.SyntaxTokenSpan(
-        range: nimkit.initTextRange(row.start, row.length),
-        tokenClass: nimkit.stcComment,
-      )
-    else:
-      let start = positions[row.key]
-      let stop = start + row.length
-      var low = 0
-      var high = spans.len
-      while low < high:
-        let middle = (low + high) div 2
-        if spans[middle].range.maxIndex <= start:
-          low = middle + 1
-        else:
-          high = middle
-      while low < spans.len and int(spans[low].range.location) < stop:
-        var span = spans[low]
-        let a = max(start, int(span.range.location))
-        let b = min(stop, span.range.maxIndex)
-        span.range = nimkit.initTextRange(row.start + a - start, b - a)
-        result.add span
-        inc low
+iterator visibleSpans(
+    fullSource, visibleSource: string,
+    spans: seq[nimkit.SyntaxTokenSpan],
+    cancelled: proc(): bool {.closure.},
+): nimkit.SyntaxTokenSpan =
+  block scan:
+    var positions = initTable[tuple[kind: char, oldLine, newLine: int], int]()
+    for row in fullSource.patchRows():
+      if cancelled():
+        break scan
+      if row.key.kind != '@':
+        positions[row.key] = row.start
+    for row in visibleSource.patchRows():
+      if cancelled():
+        break scan
+      if row.key.kind == '@' or not positions.hasKey(row.key):
+        yield nimkit.SyntaxTokenSpan(
+          range: nimkit.initTextRange(row.start, row.length),
+          tokenClass: nimkit.stcComment,
+        )
+      else:
+        let start = positions[row.key]
+        let stop = start + row.length
+        var low = 0
+        var high = spans.len
+        while low < high:
+          let middle = (low + high) div 2
+          if spans[middle].range.maxIndex <= start:
+            low = middle + 1
+          else:
+            high = middle
+        while low < spans.len and int(spans[low].range.location) < stop:
+          if cancelled():
+            break scan
+          var span = spans[low]
+          let a = max(start, int(span.range.location))
+          let b = min(stop, span.range.maxIndex)
+          span.range = nimkit.initTextRange(row.start + a - start, b - a)
+          yield span
+          inc low
 
 proc includeMaterializedPath(paths: var HashSet[string], path: string): bool =
   if path in paths:
@@ -1146,6 +1278,17 @@ proc newGitDiffTextView(panel: KosmoGitDiffPanel): GitDiffTextView =
     )
   result.textStorage = nimkit.newTextStorage()
 
+proc clearQueuedHighlight(section: var GitDiffSection) =
+  section.pending = false
+  section.queuedKey = default(GitDiffHighlightKey)
+  section.queuedVisibleSource = ""
+  section.queuedStyleGeneration = 0
+
+proc cancelHighlight(section: var GitDiffSection) =
+  if not section.highlightRequestState.isNil:
+    section.highlightRequestState[].generation.store(0, moRelease)
+  section.clearQueuedHighlight()
+
 proc releaseFileTextView(panel: KosmoGitDiffPanel, path: string) =
   if not panel.sections.hasKey(path):
     return
@@ -1156,6 +1299,7 @@ proc releaseFileTextView(panel: KosmoGitDiffPanel, path: string) =
   textView.removeFromSuperview()
   textView.setHiddenFromLayout(true)
   section[].textView = nil
+  section[].cancelHighlight()
   section[].ready = false
   section[].layoutStarted = false
   if panel.textViewPool.len < GitDiffViewPoolLimit:
@@ -1511,6 +1655,8 @@ proc highlightDiff(
   style: nimkit.MarkdownStyle,
   generation: uint64,
   control: SharedPtr[GitDiffControl],
+  requestState: SharedPtr[GitDiffHighlightRequestState],
+  reservation: SharedPtr[GitDiffByteReservation],
 ) {.signal.}
 
 proc highlightingFinished(
@@ -1525,40 +1671,95 @@ proc highlightDiff(
     style: nimkit.MarkdownStyle,
     generation: uint64,
     control: SharedPtr[GitDiffControl],
+    requestState: SharedPtr[GitDiffHighlightRequestState],
+    reservation: SharedPtr[GitDiffByteReservation],
 ) {.slot.} =
-  if control[].cancelled.load(moAcquire):
+  let startedAt = getMonoTime()
+  defer:
+    reservation.completeGitDiffByteReservation()
+
+  proc requestCurrent(): bool =
+    not control[].cancelled.load(moAcquire) and
+      requestState[].generation.load(moAcquire) == generation
+
+  proc withinBudget(): bool =
+    getMonoTime() - startedAt < initDuration(
+      milliseconds = GitDiffHighlightTimeBudgetMs
+    )
+
+  proc cancelledRequest(): bool =
+    not requestCurrent() or not withinBudget()
+
+  if not requestCurrent():
     return
   var prepared = GitDiffHighlightResult(
     path: path, source: visibleSource, generation: generation, threadId: getThreadId()
   )
+  var fallbackPlain: bool
   try:
-    if not worker.cached or worker.key != key:
-      worker.spans = diffHighlight(key.source, key.language)
-      worker.key = key
-      worker.cached = true
-      prepared.built = true
-    var attributes = nimkit.defaultTextAttributes()
-    attributes.fontName = style.codeFontName
-    attributes.fontSize = style.bodyFontSize
-    attributes.foregroundColor = style.codeColor
-    attributes.paragraphStyle.lineBreakMode = nimkit.tlbmClipping
-    for span in visibleSpans(key.source, visibleSource, worker.spans):
-      var token = attributes
-      token.foregroundColor = style.syntaxTokenColors[span.tokenClass]
-      if span.changeKind != nimkit.sckUnchanged:
-        let tint = (
-          if span.changeKind == nimkit.sckAdded:
-            nimkit.color(0.20, 0.65, 0.35, 1)
-          else: nimkit.color(0.85, 0.25, 0.30, 1)
+    var spans: seq[nimkit.SyntaxTokenSpan]
+    if not withinBudget():
+      fallbackPlain = true
+    elif worker.cached and worker.key == key:
+      spans = worker.spans
+    else:
+      var complete = false
+      spans = diffHighlight(
+        key.source, key.language, GitDiffHighlightTimeBudgetMs, cancelledRequest,
+        complete,
+      )
+      if not requestCurrent():
+        return
+      if not complete or not withinBudget():
+        fallbackPlain = true
+      else:
+        let cacheBytes =
+          int64(key.source.len) + int64(spans.len * sizeof(nimkit.SyntaxTokenSpan))
+        let previousCacheBytes = worker.cacheReservation[].bytes
+        let cacheDelta = cacheBytes - previousCacheBytes
+        var cache = cacheDelta <= 0
+        if cacheDelta > 0:
+          cache = control.reserveHighlightCacheBytes(cacheDelta)
+        if cache:
+          if cacheDelta < 0:
+            control.releaseHighlightCacheBytes(-cacheDelta)
+          worker.cacheReservation[].bytes = cacheBytes
+          worker.spans = move spans
+          worker.key = key
+          worker.cached = true
+          spans = worker.spans
+        prepared.built = true
+    if not fallbackPlain:
+      let attributes = diffTextAttributes(style)
+      for span in visibleSpans(key.source, visibleSource, spans, cancelledRequest):
+        var token = attributes
+        token.foregroundColor = style.syntaxTokenColors[span.tokenClass]
+        if span.changeKind != nimkit.sckUnchanged:
+          let tint = (
+            if span.changeKind == nimkit.sckAdded:
+              nimkit.color(0.20, 0.65, 0.35, 1)
+            else: nimkit.color(0.85, 0.25, 0.30, 1)
+          )
+          token.lineBackgroundColor = tint
+          token.lineBackgroundColor.a = 0.13
+          if span.changeMarker:
+            token.foregroundColor = tint
+        prepared.runs.add nimkit.TextAttributeRun(range: span.range, attributes: token)
+      if not requestCurrent():
+        return
+      if not withinBudget():
+        fallbackPlain = true
+    if fallbackPlain:
+      prepared.runs = default(seq[nimkit.TextAttributeRun])
+      let sourceLength = visibleSource.runeLen
+      if sourceLength > 0:
+        prepared.runs.add nimkit.TextAttributeRun(
+          range: nimkit.initTextRange(0, sourceLength),
+          attributes: diffTextAttributes(style),
         )
-        token.lineBackgroundColor = tint
-        token.lineBackgroundColor.a = 0.13
-        if span.changeMarker:
-          token.foregroundColor = tint
-      prepared.runs.add nimkit.TextAttributeRun(range: span.range, attributes: token)
   except CatchableError as error:
     prepared.errorMessage = error.msg
-  if not control[].cancelled.load(moAcquire):
+  if requestCurrent():
     emit worker.highlightingFinished(newSharedPtr(unsafeIsolate(move prepared)))
 
 proc updateLoading(panel: KosmoGitDiffPanel) =
@@ -1579,7 +1780,7 @@ proc applyHighlighting(
   if section[].generation != highlighted[].generation or not section[].pending:
     return
   var prepared = move highlighted[]
-  section[].pending = false
+  section[].clearQueuedHighlight()
   section[].ready = not section[].textView.isNil
   section[].layoutStarted = false
   if prepared.built:
@@ -1595,23 +1796,58 @@ proc applyHighlighting(
   panel.updateLoading()
   panel.scheduleSectionLayout()
 
+proc finishPlainHighlighting(panel: KosmoGitDiffPanel, path: string) =
+  var section = addr panel.sections[path]
+  section[].clearQueuedHighlight()
+  section[].ready = not section[].textView.isNil
+  section[].layoutStarted = false
+  if not section[].textView.isNil:
+    section[].textView.textStorage = nimkit.newTextStorage(
+      section[].patch.replace("\r\n", "\n"),
+      diffTextAttributes(panel.markdownView.markdownStyle()),
+    )
+  panel.updateLoading()
+  panel.scheduleSectionLayout()
+
 proc queueSection(panel: KosmoGitDiffPanel, path: string) =
   if not panel.sections.hasKey(path) or panel.sections[path].textView.isNil:
     return
-  inc panel.generation
-  panel.sections[path].generation = panel.generation
-  panel.sections[path].pending = true
+  let section = addr panel.sections[path]
   let key = (
-    source: panel.sections[path].syntaxPatch.replace("\r\n", "\n"),
+    source: section[].syntaxPatch.replace("\r\n", "\n"),
     language: "diff:" & path.diffLanguage(),
   )
+  let visibleSource = section[].patch.replace("\r\n", "\n")
+  if section[].pending and section[].queuedKey == key and
+      section[].queuedVisibleSource == visibleSource and
+      section[].queuedStyleGeneration == panel.styleGeneration:
+    return
+
+  inc panel.generation
+  section[].generation = panel.generation
+  section[].pending = true
+  section[].queuedKey = key
+  section[].queuedVisibleSource = visibleSource
+  section[].queuedStyleGeneration = panel.styleGeneration
+  if section[].highlightRequestState.isNil:
+    section[].highlightRequestState = newSharedPtr(GitDiffHighlightRequestState)
+  section[].highlightRequestState[].generation.store(panel.generation, moRelease)
+  let reservedBytes = key.source.len + visibleSource.len
+  if key.source.len > GitDiffMaximumHighlightSourceBytes or
+      not panel.control.reserveHighlightBytes(reservedBytes):
+    panel.finishPlainHighlighting(path)
+    return
+  let reservation =
+    newGitDiffByteReservation(panel.control, gdrQueued, int64(reservedBytes))
   emit panel.highlightWorker.highlightDiff(
     path,
     key,
-    panel.sections[path].patch.replace("\r\n", "\n"),
+    visibleSource,
     panel.markdownView.markdownStyle(),
     panel.generation,
     panel.control,
+    section[].highlightRequestState,
+    reservation,
   )
   panel.updateLoading()
 
@@ -1789,7 +2025,7 @@ proc clearSectionContent(panel: KosmoGitDiffPanel, path: string) =
   section[].binary = false
   section[].loadGeneration = 0
   section[].patchPending = false
-  section[].pending = false
+  section[].cancelHighlight()
   section[].ready = false
   section[].layoutStarted = false
   if not section[].textView.isNil:
@@ -2025,8 +2261,10 @@ proc close*(panel: KosmoGitDiffPanel) {.slot.} =
     inc panel.generation
     panel.loading = false
     panel.refreshPending = false
+    panel.control[].cancelled.store(true, moRelease)
     var paths: seq[string]
-    for path in panel.sections.keys:
+    for path, section in panel.sections.mpairs:
+      section.cancelHighlight()
       paths.add path
     for path in paths:
       panel.releaseFileTextView(path)
@@ -2041,7 +2279,7 @@ proc close*(panel: KosmoGitDiffPanel) {.slot.} =
     panel.explicitPatchPaths.clear()
     panel.patchQueue.setLen(0)
     panel.activePatchPath.setLen(0)
-    panel.control[].cancelled.store(true, moRelease)
+    panel.highlightWorker = default(AgentProxy[GitDiffHighlightWorker])
     panel.pool.stop(immediate = true)
     panel.pool.join()
     discard getCurrentSigilThread().pollAll(NonBlocking)
@@ -2082,6 +2320,7 @@ proc `markdownStyle=`*(panel: KosmoGitDiffPanel, style: nimkit.MarkdownStyle) =
   var diffStyle = style
   diffStyle.headingFontSizes[1] = style.bodyFontSize
   panel.markdownView.markdownStyle = diffStyle
+  inc panel.styleGeneration
   for path, section in panel.sections:
     if not section.textView.isNil:
       panel.queueSection(path)
@@ -2090,6 +2329,14 @@ proc `markdownStyle=`*(panel: KosmoGitDiffPanel, style: nimkit.MarkdownStyle) =
 proc highlightBuildCount*(panel: KosmoGitDiffPanel): int =
   ## Number of uncached diff highlighting passes, for performance diagnostics.
   panel.xHighlightBuildCount
+
+proc highlightQueuedBytes*(panel: KosmoGitDiffPanel): int64 =
+  ## Source bytes retained by queued or active highlighting requests.
+  panel.control[].highlightQueuedBytes.load(moAcquire)
+
+proc highlightCachedBytes*(panel: KosmoGitDiffPanel): int64 =
+  ## Source and span bytes retained by the highlighting worker cache.
+  panel.control[].highlightCachedBytes.load(moAcquire)
 
 proc highlightThreadId*(panel: KosmoGitDiffPanel): int =
   ## Thread that prepared the latest highlighted snapshot; zero before completion.
@@ -2284,7 +2531,9 @@ proc newKosmoGitDiffPanel(
     result,
     KosmoGitDiffPanel.repositoryFileDiffFinished(),
   )
-  var highlighter = GitDiffHighlightWorker()
+  var highlighter = GitDiffHighlightWorker(
+    cacheReservation: newGitDiffByteReservation(result.control, gdrCached)
+  )
   result.highlightWorker = highlighter.moveToThread(nimkitWorkerPool())
   connectThreaded(
     result.highlightWorker, highlightDiff, result.highlightWorker, highlightDiff

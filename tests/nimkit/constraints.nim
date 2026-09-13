@@ -1049,6 +1049,121 @@ suite "nimkit constraints":
     check root.xLayoutInputCache.sourceGenerations[lisContainer] ==
       initialContainerGeneration
 
+  test "layout solve limits preserve frames and suppress unchanged retries":
+    let
+      root = newView(frame = rect(0, 0, 200, 120))
+      child = newView(frame = rect(12, 18, 40, 24))
+      initialFrame = child.frame
+
+    root.addSubview(child)
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 1)
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame == initialFrame
+    check root.xLastLayoutSolveDiagnostic.failed
+    check root.xLastLayoutSolveDiagnostic.limit == lslViews
+    check root.needsLayout
+
+    let diagnostic = root.xLastLayoutSolveDiagnostic
+    root.layoutSubtreeIfNeeded()
+    check root.xLastLayoutSolveDiagnostic == diagnostic
+    check child.frame == initialFrame
+
+  test "failed parent solve does not block independent child fitting":
+    let
+      root = newView(frame = rect(0, 0, 200, 120))
+      child = newView(frame = rect(12, 18, 40, 24))
+    root.addSubview(child)
+    activate(cx(child[atWidth] == 80.0))
+
+    check child.fittingSize().width == 80.0'f32
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 1)
+    root.layoutSubtreeIfNeeded()
+
+    check root.xLastLayoutSolveDiagnostic.failed
+    check child.fittingSize().width == 80.0'f32
+
+  test "failed fitting solve does not suppress fixed-frame layout":
+    let root = newButton("Intrinsic", frame = rect(0, 0, 100, 50))
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxConstraints: 6)
+
+    discard root.fittingSize()
+    check root.xLastLayoutSolveDiagnostic.failed
+    check root.xLastLayoutSolveDiagnostic.limit == lslConstraints
+    check root.layoutInputGeneration() == 0
+
+    root.layoutSubtreeIfNeeded()
+
+    check not root.xLastLayoutSolveDiagnostic.failed
+    check root.layoutInputGeneration() == 1
+
+  test "default memory estimate admits ordinary sparse view trees":
+    let root = newView(frame = rect(0, 0, 500, 500))
+    for index in 0 ..< 140:
+      root.addSubview(
+        newView(frame = rect(float32(index mod 20), float32(index div 20), 10, 10))
+      )
+
+    root.layoutSubtreeIfNeeded()
+
+    check not root.xLastLayoutSolveDiagnostic.failed
+    check root.layoutInputGeneration() == 1
+
+  test "projected memory limit preserves frames and reports diagnostics":
+    let
+      root = newView(frame = rect(0, 0, 200, 120))
+      child = newView(frame = rect(12, 18, 40, 24))
+      initialFrame = child.frame
+    root.addSubview(child)
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxMemoryBytes: 1)
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame == initialFrame
+    check root.xLastLayoutSolveDiagnostic.failed
+    check root.xLastLayoutSolveDiagnostic.limit == lslMemory
+    check root.xLastLayoutSolveDiagnostic.estimatedMemoryBytes > 1
+
+  test "layout solve budget retries after an input change":
+    let
+      root = newView(frame = rect(0, 0, 200, 120))
+      child = newView(frame = rect(12, 18, 40, 24))
+
+    root.addSubview(child)
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 1)
+    root.layoutSubtreeIfNeeded()
+    check root.xLastLayoutSolveDiagnostic.failed
+
+    root.xLayoutSolveLimits = defaultLayoutSolveLimits()
+    root.layoutSubtreeIfNeeded()
+    check not root.xLastLayoutSolveDiagnostic.failed
+    child.frame = rect(20, 24, 50, 30)
+    root.layoutSubtreeIfNeeded()
+
+    check not root.xLastLayoutSolveDiagnostic.failed
+    check root.layoutInputGeneration() > 0
+
+  test "fitting size suppresses an unchanged budget failure":
+    let
+      root = newView(frame = rect(0, 0, 200, 120))
+      child = newView(frame = rect(12, 18, 40, 24))
+    root.addSubview(child)
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 1)
+
+    discard root.fittingSize()
+    check root.xLastLayoutSolveDiagnostic.failed
+    let diagnostic = root.xLastLayoutSolveDiagnostic
+    discard root.fittingSize()
+    check root.xLastLayoutSolveDiagnostic == diagnostic
+
+    root.xLayoutSolveLimits = defaultLayoutSolveLimits()
+    let fitting = root.fittingSize()
+    check not root.xLastLayoutSolveDiagnostic.failed
+    child.frame = rect(20, 24, 50, 30)
+    root.layoutSubtreeIfNeeded()
+    check not root.xLastLayoutSolveDiagnostic.failed
+    check fitting.width >= 0
+    check fitting.height >= 0
+
   test "explicit storage can move constraints between views":
     let
       firstOwner = newView(frame = rect(0, 0, 100, 80))

@@ -136,6 +136,7 @@ proc markAggregateLayoutInputDirty(
 ) =
   var current = view
   while not current.isNil:
+    inc current.xLayoutInputRevision
     current.xLayoutInputCache.aggregateDirtySources.incl source
     if structureDirty:
       current.xLayoutInputCache.aggregateStructureDirty = true
