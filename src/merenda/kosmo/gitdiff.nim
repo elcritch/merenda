@@ -54,7 +54,7 @@ type
   GitDiffByteReservation = object
     control: SharedPtr[GitDiffControl]
     kind: GitDiffReservationKind
-    bytes: Atomic[int64]
+    bytes: int64
 
 template releaseReservationAccounting(
     reservation: GitDiffByteReservation, reservedBytes: int64
@@ -71,8 +71,7 @@ template releaseReservationAccounting(
       )
 
 proc `=destroy`(reservation: var GitDiffByteReservation) =
-  let reservedBytes = reservation.bytes.load(moAcquire)
-  releaseReservationAccounting(reservation, reservedBytes)
+  releaseReservationAccounting(reservation, reservation.bytes)
   `=destroy`(reservation.control)
 
 type
@@ -113,8 +112,6 @@ type
     queuedKey: GitDiffHighlightKey
     queuedVisibleSource: string
     queuedStyleGeneration: uint64
-    queuedReservation: SharedPtr[GitDiffByteReservation]
-    cacheReservation: SharedPtr[GitDiffByteReservation]
     generation: uint64
     pending: bool
     ready: bool
@@ -190,19 +187,13 @@ proc releaseHighlightCacheBytes(control: SharedPtr[GitDiffControl], bytes: int64
 proc newGitDiffByteReservation(
     control: SharedPtr[GitDiffControl], kind: GitDiffReservationKind, bytes: int64 = 0
 ): SharedPtr[GitDiffByteReservation] =
-  result = newSharedPtr(GitDiffByteReservation(control: control, kind: kind))
-  result[].bytes.store(bytes, moRelaxed)
+  newSharedPtr(GitDiffByteReservation(control: control, kind: kind, bytes: bytes))
 
 proc completeGitDiffByteReservation(reservation: SharedPtr[GitDiffByteReservation]) =
   if reservation.isNil:
     return
-  let reservedBytes = reservation[].bytes.exchange(0, moAcquireRelease)
-  releaseReservationAccounting(reservation[], reservedBytes)
-
-proc retireGitDiffByteReservation(reservation: SharedPtr[GitDiffByteReservation]) =
-  if reservation.isNil:
-    return
-  let reservedBytes = reservation[].bytes.exchange(-1, moAcquireRelease)
+  let reservedBytes = reservation[].bytes
+  reservation[].bytes = 0
   releaseReservationAccounting(reservation[], reservedBytes)
 
 proc executeGit(
@@ -533,23 +524,23 @@ proc diffHighlight(
     return
   let oldRemainingMs =
     max(1, timeLimitMs - int((getMonoTime() - startedAt).inMilliseconds))
-  var oldComplete = false
-  for span in nimkit.matterSyntaxHighlighterBoundedWithStatus(
-    oldSource, sourceLanguage, oldRemainingMs, shouldStop, oldComplete
-  ):
+  let oldHighlight = nimkit.matterSyntaxHighlighterBounded(
+    oldSource, sourceLanguage, oldRemainingMs, shouldStop
+  )
+  for span in oldHighlight.spans:
     for index in int(span.range.location) ..< span.range.maxIndex:
       oldClasses[index] = span.tokenClass
-  if not oldComplete or shouldStop():
+  if not oldHighlight.completed or shouldStop():
     return
   let newRemainingMs =
     max(1, timeLimitMs - int((getMonoTime() - startedAt).inMilliseconds))
-  var newComplete = false
-  for span in nimkit.matterSyntaxHighlighterBoundedWithStatus(
-    newSource, sourceLanguage, newRemainingMs, shouldStop, newComplete
-  ):
+  let newHighlight = nimkit.matterSyntaxHighlighterBounded(
+    newSource, sourceLanguage, newRemainingMs, shouldStop
+  )
+  for span in newHighlight.spans:
     for index in int(span.range.location) ..< span.range.maxIndex:
       newClasses[index] = span.tokenClass
-  if not newComplete or shouldStop():
+  if not newHighlight.completed or shouldStop():
     return
   for row in rows:
     if shouldStop():
@@ -1128,32 +1119,21 @@ proc highlightDiff(
       if not complete or not withinBudget():
         prepared.fallbackPlain = true
       else:
-        let cacheBytes = int64(key.source.len) + int64(spans.len * 24)
-        let previousCacheBytes =
-          if worker.cacheReservation.isNil:
-            0'i64
-          else:
-            worker.cacheReservation[].bytes.load(moAcquire)
+        let cacheBytes =
+          int64(key.source.len) + int64(spans.len * sizeof(nimkit.SyntaxTokenSpan))
+        let previousCacheBytes = worker.cacheReservation[].bytes
         let cacheDelta = cacheBytes - previousCacheBytes
-        var cache = previousCacheBytes >= 0 and cacheDelta <= 0
-        if previousCacheBytes >= 0 and cacheDelta > 0:
+        var cache = cacheDelta <= 0
+        if cacheDelta > 0:
           cache = control.reserveHighlightCacheBytes(cacheDelta)
         if cache:
-          var expected = previousCacheBytes
-          if worker.cacheReservation.isNil or
-              not worker.cacheReservation[].bytes.compareExchange(
-                expected, cacheBytes, moAcquireRelease, moAcquire
-              ):
-            if cacheDelta > 0:
-              control.releaseHighlightCacheBytes(cacheDelta)
-            cache = false
-          else:
-            if cacheDelta < 0:
-              control.releaseHighlightCacheBytes(-cacheDelta)
-            worker.spans = move spans
-            worker.key = key
-            worker.cached = true
-            spans = worker.spans
+          if cacheDelta < 0:
+            control.releaseHighlightCacheBytes(-cacheDelta)
+          worker.cacheReservation[].bytes = cacheBytes
+          worker.spans = move spans
+          worker.key = key
+          worker.cached = true
+          spans = worker.spans
         prepared.built = true
     if not prepared.fallbackPlain:
       let attributes = diffTextAttributes(style)
@@ -1206,8 +1186,10 @@ proc applyHighlighting(
   if section[].generation != highlighted[].generation or not section[].pending:
     return
   var prepared = move highlighted[]
-  section[].queuedReservation = default(SharedPtr[GitDiffByteReservation])
   section[].pending = false
+  section[].queuedKey = default(GitDiffHighlightKey)
+  section[].queuedVisibleSource.setLen(0)
+  section[].queuedStyleGeneration = 0
   section[].ready = true
   section[].layoutStarted = false
   if prepared.built:
@@ -1228,6 +1210,9 @@ proc applyHighlighting(
 proc finishPlainHighlighting(panel: KosmoGitDiffPanel, path: string) =
   var section = addr panel.sections[path]
   section[].pending = false
+  section[].queuedKey = default(GitDiffHighlightKey)
+  section[].queuedVisibleSource.setLen(0)
+  section[].queuedStyleGeneration = 0
   section[].ready = true
   section[].layoutStarted = false
   section[].textView.textStorage = nimkit.newTextStorage(
@@ -1249,7 +1234,6 @@ proc queueSection(panel: KosmoGitDiffPanel, path: string) =
       section[].queuedStyleGeneration == panel.styleGeneration:
     return
 
-  section[].queuedReservation = default(SharedPtr[GitDiffByteReservation])
   inc panel.generation
   section[].generation = panel.generation
   section[].pending = true
@@ -1264,7 +1248,6 @@ proc queueSection(panel: KosmoGitDiffPanel, path: string) =
     return
   let reservation =
     newGitDiffByteReservation(panel.control, gdrQueued, int64(reservedBytes))
-  section[].queuedReservation = reservation
   emit section[].worker.highlightDiff(
     path,
     key,
@@ -1288,8 +1271,9 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
   for index, file in snapshot.files:
     retained.incl file.path
     if not panel.sections.hasKey(file.path):
-      let cacheReservation = newGitDiffByteReservation(panel.control, gdrCached)
-      var highlighter = GitDiffHighlightWorker(cacheReservation: cacheReservation)
+      var highlighter = GitDiffHighlightWorker(
+        cacheReservation: newGitDiffByteReservation(panel.control, gdrCached)
+      )
       let worker = highlighter.moveToThread(nimkitWorkerPool())
       connectThreaded(worker, highlightDiff, worker, highlightDiff)
       connectThreaded(
@@ -1317,9 +1301,7 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
       code.layoutManager().connect(
         nimkit.layoutDidComplete, panel, layoutDisclosureButtons
       )
-      panel.sections[file.path] = GitDiffSection(
-        worker: worker, textView: code, cacheReservation: cacheReservation
-      )
+      panel.sections[file.path] = GitDiffSection(worker: worker, textView: code)
       let button =
         panel.newDisclosureButton(index, file.path, nimkit.rect(0, 0, 100, 30))
       panel.disclosureButtons[file.path] = button
@@ -1341,7 +1323,6 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
     let staleSection = panel.sections[path]
     let staleButton = panel.disclosureButtons[path]
     staleSection.worker.getRemote()[].requestedGeneration.store(0, moRelease)
-    staleSection.cacheReservation.retireGitDiffByteReservation()
     let owner = panel.window()
     if owner of nimkit.Window and
         nimkit.Window(owner).firstResponder in
@@ -1458,7 +1439,6 @@ proc close*(panel: KosmoGitDiffPanel) {.slot.} =
     panel.control[].cancelled.store(true, moRelease)
     for section in panel.sections.values:
       section.worker.getRemote()[].requestedGeneration.store(0, moRelease)
-      section.cacheReservation.retireGitDiffByteReservation()
       section.textView.removeFromSuperview()
     panel.sections.clear()
     panel.clearDisclosureButtons()

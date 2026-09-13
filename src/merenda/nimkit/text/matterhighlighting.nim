@@ -20,8 +20,13 @@ static:
   doAssert NimkitMatterMaximumLineBytes > 0,
     "NimkitMatterMaximumLineBytes must be positive"
 
-type MatterHighlightCancellation* = proc(): bool {.closure.}
-  ## Return true when the caller wants the current highlighting pass to stop.
+type
+  MatterHighlightCancellation* = proc(): bool {.closure.}
+    ## Return true when the caller wants the current highlighting pass to stop.
+
+  MatterHighlightResult* = object
+    spans*: seq[SyntaxTokenSpan]
+    completed*: bool
 
 var
   matterGrammarCache {.threadvar.}: Table[string, Grammar]
@@ -156,21 +161,20 @@ proc addSpan(
       range: initTextRange(startRune, stopRune - startRune), tokenClass: tokenClass
     )
 
-proc matterSyntaxHighlighterBoundedWithStatus*(
+proc matterSyntaxHighlighterBounded*(
     source, language: string,
     timeLimitMs = 0,
     cancelled: MatterHighlightCancellation = nil,
-    completed: var bool,
-): seq[SyntaxTokenSpan] =
+): MatterHighlightResult =
   ## Classify `source` with Matter's bundled TextMate grammar for `language`.
   ## Unknown language names return no spans. Returned ranges use rune offsets.
   ##
   ## ``timeLimitMs`` covers the complete source, not just one grammar line.
   ## ``cancelled`` is checked between lines and before/after the recursive
   ## grammar call so callers can stop stale worker requests promptly.
-  ## ``completed`` is false when cancellation, the deadline, or Matter's own
+  ## ``result.completed`` is false when cancellation, the deadline, or Matter's own
   ## early-stop result prevents reaching the end of `source`.
-  completed = true
+  result.completed = true
   let startedAt = getMonoTime()
   if source.len == 0:
     return
@@ -190,7 +194,7 @@ proc matterSyntaxHighlighterBoundedWithStatus*(
     ruleStack: StateStack
   while lineStart < source.len:
     if shouldStop():
-      completed = false
+      result.completed = false
       return
     var lineStop = source.find('\n', lineStart)
     if lineStop < 0:
@@ -207,7 +211,7 @@ proc matterSyntaxHighlighterBoundedWithStatus*(
       continue
 
     if shouldStop():
-      completed = false
+      result.completed = false
       return
     let remainingMilliseconds =
       if timeLimitMs > 0:
@@ -218,10 +222,10 @@ proc matterSyntaxHighlighterBoundedWithStatus*(
       source[lineStart ..< contentStop], ruleStack, remainingMilliseconds
     )
     if tokenized.stoppedEarly or shouldStop():
-      completed = false
+      result.completed = false
       return
     for token in tokenized.tokens:
-      result.addSpan(
+      result.spans.addSpan(
         byteToRune,
         lineStart + token.startIndex,
         lineStart + token.endIndex,
@@ -230,16 +234,6 @@ proc matterSyntaxHighlighterBoundedWithStatus*(
     ruleStack = tokenized.ruleStack
     lineStart = lineStop + 1
 
-proc matterSyntaxHighlighterBounded*(
-    source, language: string,
-    timeLimitMs = 0,
-    cancelled: MatterHighlightCancellation = nil,
-): seq[SyntaxTokenSpan] =
-  var completed: bool
-  result = matterSyntaxHighlighterBoundedWithStatus(
-    source, language, timeLimitMs, cancelled, completed
-  )
-
 proc matterSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
   ## Classify a source with no explicit deadline or cancellation callback.
-  matterSyntaxHighlighterBounded(source, language)
+  matterSyntaxHighlighterBounded(source, language).spans
