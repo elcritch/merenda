@@ -1049,6 +1049,43 @@ suite "nimkit constraints":
     check root.xLayoutInputCache.sourceGenerations[lisContainer] ==
       initialContainerGeneration
 
+  test "layout solve limits preserve frames and suppress unchanged retries":
+    let
+      root = newView(frame = rect(0, 0, 200, 120))
+      child = newView(frame = rect(12, 18, 40, 24))
+      initialFrame = child.frame
+
+    root.addSubview(child)
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 1)
+    root.layoutSubtreeIfNeeded()
+
+    check child.frame == initialFrame
+    check root.xLastLayoutSolveDiagnostic.failed
+    check root.xLastLayoutSolveDiagnostic.limit == lslViews
+    check not root.needsLayout
+
+    let diagnostic = root.xLastLayoutSolveDiagnostic
+    root.layoutSubtreeIfNeeded()
+    check root.xLastLayoutSolveDiagnostic == diagnostic
+    check child.frame == initialFrame
+
+  test "layout solve budget retries after an input change":
+    let
+      root = newView(frame = rect(0, 0, 200, 120))
+      child = newView(frame = rect(12, 18, 40, 24))
+
+    root.addSubview(child)
+    root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 1)
+    root.layoutSubtreeIfNeeded()
+    check root.xLastLayoutSolveDiagnostic.failed
+
+    root.xLayoutSolveLimits = defaultLayoutSolveLimits()
+    child.frame = rect(20, 24, 50, 30)
+    root.layoutSubtreeIfNeeded()
+
+    check not root.xLastLayoutSolveDiagnostic.failed
+    check root.layoutInputGeneration() > 0
+
   test "explicit storage can move constraints between views":
     let
       firstOwner = newView(frame = rect(0, 0, 100, 80))

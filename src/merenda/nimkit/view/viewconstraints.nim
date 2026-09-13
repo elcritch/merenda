@@ -1,4 +1,4 @@
-import std/macros
+import std/[macros, monotimes, sets, tables, times]
 
 import pkg/kiwiberry
 
@@ -64,8 +64,17 @@ type
   LayoutSolveState = object
     solver: Solver
     items: seq[SolverView]
+    itemIndexes: Table[pointer, int]
     constraintItems: seq[View]
+    constraintItemIndexes: HashSet[pointer]
     generatedInputs: seq[LayoutInput]
+    limits: LayoutSolveLimits
+    startedAt: MonoTime
+    constraintCount: Natural
+    coefficientCount: Natural
+
+  LayoutSolveBudgetExceeded = object of CatchableError
+    diagnostic: LayoutSolveDiagnostic
 
 const
   AllLayoutEdges* = {leLeft, leTop, leRight, leBottom}
@@ -1001,16 +1010,69 @@ func solverStrength(priority: LayoutPriority): Strength =
   else:
     createStrength(0, 0, 1, max(priority.priorityValue, 1.0'f32).solverValue)
 
-proc initLayoutSolveState(): LayoutSolveState =
-  LayoutSolveState(solver: initSolver())
+proc elapsedMilliseconds(state: LayoutSolveState): Natural =
+  Natural(max(0, int((getMonoTime() - state.startedAt).inMilliseconds)))
+
+proc estimatedMemoryBytes(state: LayoutSolveState): Natural =
+  ## This is deliberately a conservative accounting estimate, not an
+  ## allocator measurement. It bounds the amount of solver state we are
+  ## willing to construct before Kiwiberry starts allocating dense rows.
+  let estimate =
+    int64(state.items.len) * 256'i64 + int64(state.constraintCount) * 160'i64 +
+    int64(state.coefficientCount) * 48'i64
+  Natural(min(estimate, int64(high(Natural))))
+
+proc solveDiagnostic(state: LayoutSolveState, limit = lslNone): LayoutSolveDiagnostic =
+  LayoutSolveDiagnostic(
+    failed: limit != lslNone,
+    limit: limit,
+    views: Natural(state.items.len),
+    constraints: state.constraintCount,
+    coefficients: state.coefficientCount,
+    estimatedMemoryBytes: state.estimatedMemoryBytes(),
+    elapsedMilliseconds: state.elapsedMilliseconds(),
+  )
+
+proc raiseBudgetExceeded(
+    state: LayoutSolveState, limit: LayoutSolveLimitKind
+) {.noreturn.} =
+  let diagnostic = state.solveDiagnostic(limit)
+  var error = newException(LayoutSolveBudgetExceeded, "layout solver budget exceeded")
+  error.diagnostic = diagnostic
+  raise error
+
+proc checkSolveBudget(state: LayoutSolveState) =
+  if state.limits.maxViews > 0 and state.items.len > state.limits.maxViews:
+    state.raiseBudgetExceeded(lslViews)
+  if state.limits.maxConstraints > 0 and
+      state.constraintCount > state.limits.maxConstraints:
+    state.raiseBudgetExceeded(lslConstraints)
+  if state.limits.maxCoefficients > 0 and
+      state.coefficientCount > state.limits.maxCoefficients:
+    state.raiseBudgetExceeded(lslCoefficients)
+  if state.limits.maxMemoryBytes > 0 and
+      state.estimatedMemoryBytes() > state.limits.maxMemoryBytes:
+    state.raiseBudgetExceeded(lslMemory)
+  if state.limits.maxMilliseconds > 0 and
+      state.elapsedMilliseconds() >= state.limits.maxMilliseconds:
+    state.raiseBudgetExceeded(lslTime)
+
+proc initLayoutSolveState(limits: LayoutSolveLimits): LayoutSolveState =
+  LayoutSolveState(
+    solver: initSolver(),
+    itemIndexes: initTable[pointer, int](),
+    constraintItemIndexes: initHashSet[pointer](),
+    limits: limits,
+    startedAt: getMonoTime(),
+  )
 
 proc solverViewName(index: int, suffix: string): string =
   "v" & $index & "." & suffix
 
 proc ensureSolverView(state: var LayoutSolveState, item: View): int =
-  for index, solverView in state.items:
-    if solverView.item == item:
-      return index
+  let key = cast[pointer](item)
+  if state.itemIndexes.hasKey(key):
+    return state.itemIndexes[key]
 
   let index = state.items.len
   state.items.add SolverView(
@@ -1020,30 +1082,27 @@ proc ensureSolverView(state: var LayoutSolveState, item: View): int =
     width: newVariable(index.solverViewName("width")),
     height: newVariable(index.solverViewName("height")),
   )
+  state.itemIndexes[key] = index
+  state.checkSolveBudget()
   index
 
 proc solverView(state: var LayoutSolveState, item: View): SolverView =
   state.items[state.ensureSolverView(item)]
 
 proc hasSolverView(state: LayoutSolveState, item: View): bool =
-  for solverView in state.items:
-    if solverView.item == item:
-      return true
-  false
+  not item.isNil and state.itemIndexes.hasKey(cast[pointer](item))
 
 proc addConstraintItem(state: var LayoutSolveState, item: View) =
   if item.isNil or not state.hasSolverView(item):
     return
-  for existing in state.constraintItems:
-    if existing == item:
-      return
+  let key = cast[pointer](item)
+  if key in state.constraintItemIndexes:
+    return
   state.constraintItems.add item
+  state.constraintItemIndexes.incl key
 
 proc hasConstraintItem(state: LayoutSolveState, item: View): bool =
-  for existing in state.constraintItems:
-    if existing == item:
-      return true
-  false
+  not item.isNil and cast[pointer](item) in state.constraintItemIndexes
 
 proc collectSolverViews(state: var LayoutSolveState, item: View) =
   if item.isNil:
@@ -1200,6 +1259,9 @@ proc addSolverConstraint(
     constraint: Constraint,
     priority = LayoutPriorityRequired,
 ) =
+  inc state.constraintCount
+  state.coefficientCount += Natural(constraint.expression.len)
+  state.checkSolveBudget()
   try:
     state.solver.addConstraint(constraint.strengthened(priority))
   except UnsatisfiableConstraintError:
@@ -1267,6 +1329,7 @@ proc addLayoutEquation(state: var LayoutSolveState, equation: LayoutEquation) =
 
 proc addGeneratedEquation(state: var LayoutSolveState, equation: LayoutEquation) =
   state.generatedInputs.add equation.layoutEquationInput()
+  state.checkSolveBudget()
 
 proc addNonNegativeSizeConstraints(state: var LayoutSolveState) =
   for solverView in state.items:
@@ -1420,7 +1483,12 @@ proc addOwnedConstraints(state: var LayoutSolveState, owner: View) =
 proc solvedFloat(variable: Variable): float32 =
   float32(variable.value)
 
-proc applySolvedFrames(state: LayoutSolveState) =
+type SolvedFrame = object
+  item: View
+  frame: Rect
+
+proc solvedFrames(state: LayoutSolveState): seq[SolvedFrame] =
+  result = newSeqOfCap[SolvedFrame](state.items.len)
   for solverView in state.items:
     if not solverView.item.isNil:
       let alignmentRect = rect(
@@ -1429,9 +1497,14 @@ proc applySolvedFrames(state: LayoutSolveState) =
         max(solverView.width.solvedFloat(), 0.0'f32),
         max(solverView.height.solvedFloat(), 0.0'f32),
       )
-      solverView.item.applyLayoutFrame(
-        solverView.item.frameForAlignmentRect(alignmentRect), lfoSolver
+      result.add SolvedFrame(
+        item: solverView.item,
+        frame: solverView.item.frameForAlignmentRect(alignmentRect),
       )
+
+proc applySolvedFrames(frames: openArray[SolvedFrame]) =
+  for solved in frames:
+    solved.item.applyLayoutFrame(solved.frame, lfoSolver)
 
 proc refreshAutoresizingStates(state: LayoutSolveState) =
   for solverView in state.items:
@@ -1500,43 +1573,76 @@ proc refreshLayoutInputCaches(state: LayoutSolveState, root: View) =
       solverView.item.xLayoutInputCache.generation = 0
 
 proc needsConstraintSolve(view: View): bool =
+  if view.xLayoutSolveBlocked:
+    return false
   let cache = view.xLayoutInputCache
   cache.generation == 0 or cache.structureDirty or cache.aggregateStructureDirty or
     cache.dirtySources != {} or cache.aggregateDirtySources != {}
 
-proc applyConstraintsForSubtree*(view: View) =
-  if not view.needsConstraintSolve():
-    return
-  var state = initLayoutSolveState()
-  state.collectSolverViews(view)
-  state.collectConstraintItems(view)
-  state.addRootGeometryConstraints(view)
-  state.addOwnedConstraints(view)
-  state.refreshGeneratedLayoutInputs(view)
-  state.addNonNegativeSizeConstraints()
-  state.addGeometryStays(view)
-  state.solver.updateVariables()
-  state.applySolvedFrames()
-  state.refreshAutoresizingStates()
-  state.refreshLayoutInputCaches(view)
+proc applyConstraintsForSubtree*(view: View): bool =
+  if view.isNil or not view.needsConstraintSolve():
+    return true
+
+  let previousCache = view.xLayoutInputCache
+  var state = initLayoutSolveState(view.xLayoutSolveLimits)
+  try:
+    state.collectSolverViews(view)
+    state.collectConstraintItems(view)
+    state.addRootGeometryConstraints(view)
+    state.addOwnedConstraints(view)
+    state.refreshGeneratedLayoutInputs(view)
+    state.addNonNegativeSizeConstraints()
+    state.addGeometryStays(view)
+    state.checkSolveBudget()
+    state.solver.updateVariables()
+    state.checkSolveBudget()
+    let frames = state.solvedFrames()
+    state.checkSolveBudget()
+    applySolvedFrames(frames)
+    state.refreshAutoresizingStates()
+    state.refreshLayoutInputCaches(view)
+    view.xLastLayoutSolveDiagnostic = LayoutSolveDiagnostic()
+    return true
+  except LayoutSolveBudgetExceeded as error:
+    view.xLayoutInputCache = previousCache
+    view.xLastLayoutSolveDiagnostic = error.diagnostic
+    view.xLayoutSolveBlocked = true
+    false
+  except CatchableError:
+    view.xLayoutInputCache = previousCache
+    raise
 
 proc fittingSize*(view: View): Size =
   if view.isNil:
     return initSize()
 
-  var state = initLayoutSolveState()
-  state.collectSolverViews(view)
-  state.collectConstraintItems(view)
-  state.addConstraintItem(view)
-  state.addRootFittingConstraints(view)
-  state.addOwnedConstraints(view)
-  state.refreshGeneratedLayoutInputs(view)
-  state.addNonNegativeSizeConstraints()
-  state.addGeometryStays(view)
-  state.solver.updateVariables()
+  if view.xLayoutSolveBlocked:
+    return view.alignmentRect().size
 
-  let solverView = state.solverView(view)
-  initSize(
-    max(solverView.width.solvedFloat(), 0.0'f32),
-    max(solverView.height.solvedFloat(), 0.0'f32),
-  )
+  let previousCache = view.xLayoutInputCache
+  var state = initLayoutSolveState(view.xLayoutSolveLimits)
+  try:
+    state.collectSolverViews(view)
+    state.collectConstraintItems(view)
+    state.addConstraintItem(view)
+    state.addRootFittingConstraints(view)
+    state.addOwnedConstraints(view)
+    state.refreshGeneratedLayoutInputs(view)
+    state.addNonNegativeSizeConstraints()
+    state.addGeometryStays(view)
+    state.checkSolveBudget()
+    state.solver.updateVariables()
+    state.checkSolveBudget()
+
+    let solverView = state.solverView(view)
+    result = initSize(
+      max(solverView.width.solvedFloat(), 0.0'f32),
+      max(solverView.height.solvedFloat(), 0.0'f32),
+    )
+  except LayoutSolveBudgetExceeded as error:
+    view.xLayoutInputCache = previousCache
+    view.xLastLayoutSolveDiagnostic = error.diagnostic
+    result = view.alignmentRect().size
+  except CatchableError:
+    view.xLayoutInputCache = previousCache
+    raise

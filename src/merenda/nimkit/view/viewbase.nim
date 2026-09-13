@@ -48,6 +48,35 @@ type
 
   LayoutInputSources* = set[LayoutInputSource]
 
+  LayoutSolveLimitKind* = enum
+    lslNone
+    lslViews
+    lslConstraints
+    lslCoefficients
+    lslMemory
+    lslTime
+
+  LayoutSolveLimits* = object
+    ## Bounds applied to one temporary constraint solve.
+    ##
+    ## A zero value disables an individual bound. The default limits are
+    ## installed on every new view and can be replaced on a solve root.
+    maxViews*: Natural
+    maxConstraints*: Natural
+    maxCoefficients*: Natural
+    maxMemoryBytes*: Natural
+    maxMilliseconds*: Natural
+
+  LayoutSolveDiagnostic* = object
+    ## Snapshot of a solve that was stopped before it could commit frames.
+    failed*: bool
+    limit*: LayoutSolveLimitKind
+    views*: Natural
+    constraints*: Natural
+    coefficients*: Natural
+    estimatedMemoryBytes*: Natural
+    elapsedMilliseconds*: Natural
+
   LayoutInputKind* = enum
     likConstraint
     likEquation
@@ -196,6 +225,9 @@ type
     xLayoutPhase*: LayoutTransactionPhase
     xLayoutFeedbackCycles*: Natural
     xLastLayoutInvalidation*: LayoutInvalidationDiagnostic
+    xLayoutSolveLimits*: LayoutSolveLimits
+    xLastLayoutSolveDiagnostic*: LayoutSolveDiagnostic
+    xLayoutSolveBlocked*: bool
     xAutoresizingMask*: AutoresizingMask
     xAutoresizingMaskConstraints*: bool
     xAutoresizingState*: AutoresizingState
@@ -224,6 +256,20 @@ type
     xCachedRenderResources*: RenderResourceManifest
     xCachedAppearanceGeneration*: ThemeGeneration
     xHasCachedRenders*: bool
+
+proc defaultLayoutSolveLimits*(): LayoutSolveLimits =
+  ## Conservative interactive defaults for a single layout transaction.
+  ##
+  ## Callers that intentionally manage a larger solve can replace these on
+  ## the solve root with ``xLayoutSolveLimits``. Keeping the limits on the
+  ## view avoids a process-global setting and makes tests deterministic.
+  LayoutSolveLimits(
+    maxViews: 8_192,
+    maxConstraints: 50_000,
+    maxCoefficients: 250_000,
+    maxMemoryBytes: 256 * 1024 * 1024,
+    maxMilliseconds: 500,
+  )
 
 proc superviewBacklink*(view: View): View {.inline.} =
   if not view.isNil and not view.xSuperview.isNil:

@@ -197,6 +197,7 @@ proc needsUpdateConstraints*(view: View): bool =
 proc setNeedsUpdateConstraints*(view: View, value: bool) =
   if not value:
     return
+  view.xLayoutSolveBlocked = false
   view.noteLayoutInvalidation(lirConstraints, affectsConstraints = true)
   view.xNeedsUpdateConstraints = true
 
@@ -218,6 +219,7 @@ proc needsLayout*(view: View): bool =
 
 proc `needsLayout=`*(view: View, value: bool) =
   if value:
+    view.xLayoutSolveBlocked = false
     view.noteLayoutInvalidation(lirExplicit, affectsConstraints = false)
   view.xNeedsLayout = value
 
@@ -268,6 +270,15 @@ proc hasActiveLayoutAncestor(view: View): bool =
       return true
     current = current.superviewBacklink()
 
+proc suppressLayoutRetry(view: View) =
+  if view.isNil:
+    return
+  view.xNeedsUpdateConstraints = false
+  view.xNeedsLayout = false
+  view.xLayoutSolveBlocked = true
+  for child in view.xSubviews:
+    suppressLayoutRetry(child)
+
 proc layoutSubtreeIfNeeded*(view: View) =
   if view.hasActiveLayoutAncestor() or not view.hasPendingLayoutInSubtree():
     return
@@ -289,7 +300,9 @@ proc layoutSubtreeIfNeeded*(view: View) =
   transaction.currentView = nil
   transaction.phase = ltpSolvingConstraints
   view.xLayoutPhase = transaction.phase
-  view.applyConstraintsForSubtree()
+  if not view.applyConstraintsForSubtree():
+    suppressLayoutRetry(view)
+    return
 
   transaction.phase = ltpLayingOut
   view.xLayoutPhase = transaction.phase
@@ -421,6 +434,7 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   view.xDisplayRevision = 1
   view.xRenderSlotRevisions = initTable[RenderSlotId, uint64]()
   view.xNeedsLayout = true
+  view.xLayoutSolveLimits = defaultLayoutSolveLimits()
   view.xAutoresizingMaskConstraints = not frame.hasAutoMetric
   view.xHuggingPriority[laHorizontal] = LayoutPriorityLow
   view.xHuggingPriority[laVertical] = LayoutPriorityLow
