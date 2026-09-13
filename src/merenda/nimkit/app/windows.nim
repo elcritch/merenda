@@ -1966,6 +1966,8 @@ proc endTransientSession*(
   window.finishTransientSession(reason, notifyDismiss = false)
 
 proc close*(window: Window) =
+  if window.xClosed:
+    return
   let shouldClose =
     if window.xDelegate.isNil:
       true
