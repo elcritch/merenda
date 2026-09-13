@@ -4,7 +4,7 @@
 ## not need to locate Matter's package data at runtime. Each thread lazily
 ## compiles and caches only the grammars it uses.
 
-import std/[options, strutils, tables, unicode]
+import std/[monotimes, options, strutils, tables, times, unicode]
 
 import matter
 
@@ -19,6 +19,9 @@ const NimkitMatterMaximumLineBytes* {.intdefine.} = 256
 static:
   doAssert NimkitMatterMaximumLineBytes > 0,
     "NimkitMatterMaximumLineBytes must be positive"
+
+type MatterHighlightCancellation* = proc(): bool {.closure.}
+  ## Return true when the caller wants the current highlighting pass to stop.
 
 var
   matterGrammarCache {.threadvar.}: Table[string, Grammar]
@@ -153,9 +156,18 @@ proc addSpan(
       range: initTextRange(startRune, stopRune - startRune), tokenClass: tokenClass
     )
 
-proc matterSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
+proc matterSyntaxHighlighterBounded*(
+    source, language: string,
+    timeLimitMs = 0,
+    cancelled: MatterHighlightCancellation = nil,
+): seq[SyntaxTokenSpan] =
   ## Classify `source` with Matter's bundled TextMate grammar for `language`.
   ## Unknown language names return no spans. Returned ranges use rune offsets.
+  ##
+  ## ``timeLimitMs`` covers the complete source, not just one grammar line.
+  ## ``cancelled`` is checked between lines and before/after the recursive
+  ## grammar call so callers can stop stale worker requests promptly.
+  let startedAt = getMonoTime()
   if source.len == 0:
     return
   let grammar = grammarForLanguage(language)
@@ -163,10 +175,18 @@ proc matterSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
     return
 
   let byteToRune = source.byteRuneMap()
+  proc shouldStop(): bool =
+    (not cancelled.isNil and cancelled()) or (
+      timeLimitMs > 0 and
+      getMonoTime() - startedAt >= initDuration(milliseconds = timeLimitMs)
+    )
+
   var
     lineStart = 0
     ruleStack: StateStack
   while lineStart < source.len:
+    if shouldStop():
+      return
     var lineStop = source.find('\n', lineStart)
     if lineStop < 0:
       lineStop = source.len
@@ -181,7 +201,18 @@ proc matterSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
       lineStart = lineStop + 1
       continue
 
-    let tokenized = grammar.tokenizeLine(source[lineStart ..< contentStop], ruleStack)
+    if shouldStop():
+      return
+    let remainingMilliseconds =
+      if timeLimitMs > 0:
+        max(1, timeLimitMs - int((getMonoTime() - startedAt).inMilliseconds))
+      else:
+        0
+    let tokenized = grammar.tokenizeLine(
+      source[lineStart ..< contentStop], ruleStack, remainingMilliseconds
+    )
+    if shouldStop():
+      return
     for token in tokenized.tokens:
       result.addSpan(
         byteToRune,
@@ -191,3 +222,7 @@ proc matterSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
       )
     ruleStack = tokenized.ruleStack
     lineStart = lineStop + 1
+
+proc matterSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
+  ## Classify a source with no explicit deadline or cancellation callback.
+  matterSyntaxHighlighterBounded(source, language)

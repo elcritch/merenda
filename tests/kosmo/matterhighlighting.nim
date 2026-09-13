@@ -109,6 +109,18 @@ template checkDistinctHighlight(fileName, source, firstNeedle, secondNeedle: str
       buffer.cell(second.column, second.row).style.fg
 
 suite "Kosmo Matter highlighting":
+  test "bounded Matter highlighting honors cancellation":
+    var checks = 0
+    let spans = matterSyntaxHighlighterBounded(
+      "let value = 1\n",
+      "nim",
+      cancelled = proc(): bool =
+        inc checks
+        true,
+    )
+    check spans.len == 0
+    check checks > 0
+
   test "Moe editors use Matter highlighting by default":
     let
       root = createTempDir("kosmo-moe-matter-", "")
