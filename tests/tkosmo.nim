@@ -15,6 +15,7 @@ import kosmo/markdownactivation
 import kosmo/panelshortcuts
 import kosmo/quickopen
 import kosmo/settings_layout
+import kosmo/shortcutinput
 import kosmo/terminalclipboard
 import kosmo/terminalsearch
 import kosmo/workspaceroots
