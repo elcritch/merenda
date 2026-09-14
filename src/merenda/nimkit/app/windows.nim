@@ -2468,6 +2468,12 @@ proc shouldDismissTransientForMouse(window: Window, target: View): bool =
   not responderChainContains(Responder(target), session.ownerResponder)
 
 proc dispatchMouseButton(window: Window, event: MouseEvent, pressed: bool): bool =
+  if pressed and event.button == mbSecondary and not window.xIsPopup:
+    # Native backends can deliver a secondary click before their focus
+    # notification. Activate the receiving window before hit testing or
+    # assigning a first responder, so context-menu focus cannot use a stale
+    # application key window.
+    window.makeKeyAndOrderFront()
   if pressed:
     window.clearToolTip()
   if pressed and window.hasActiveTransientSession() and window.xContentView.isNil:
