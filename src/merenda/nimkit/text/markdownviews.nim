@@ -22,7 +22,6 @@ else:
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8
 import sigils/[core, threads]
-import threading/smartptrs
 
 import ../accessibility/accessibility
 import ../app/[animationproperties, animations]
@@ -2307,9 +2306,8 @@ proc cancelMarkdownRendering(view: MarkdownView) =
   view.xMarkdownRenderJob = default(MarkdownRenderJob)
 
 proc completeMarkdownParse(
-    view: MarkdownView, parseResultBox: SharedPtr[MarkdownParseResult]
+    view: MarkdownView, parseResult: sink MarkdownParseResult
 ) {.slot.} =
-  var parseResult = move parseResultBox[]
   if parseResult.generation != view.xActiveMarkdownGeneration:
     return
 

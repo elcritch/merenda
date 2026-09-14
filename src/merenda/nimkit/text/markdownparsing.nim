@@ -1,10 +1,9 @@
 ## Internal Sigils worker for moving complete nim-markdown ASTs between threads.
 
-import std/[isolation, lists, locks, os, strutils, tables]
+import std/[lists, locks, os, strutils, tables]
 
 import markdown as markdownParser
 import sigils/[core, threads]
-import threading/smartptrs
 import ../foundation/backgroundworkers
 import ./[matterhighlighting, syntaxhighlighting]
 
@@ -138,7 +137,7 @@ proc requestMarkdownParse*(
 ) {.signal.}
 
 proc markdownParseFinished*(
-  worker: MarkdownParseWorker, parseResult: SharedPtr[MarkdownParseResult]
+  worker: MarkdownParseWorker, parseResult: sink MarkdownParseResult
 ) {.signal.}
 
 proc requestMarkdownParse(
@@ -166,7 +165,7 @@ proc requestMarkdownParse(
     parseResult.errorMessage = error.msg
   # The parser created this entire graph on the worker and retains no aliases
   # after this signal. Transfer that one ownership unit back to the view thread.
-  emit worker.markdownParseFinished(newSharedPtr(unsafeIsolate(move parseResult)))
+  emit worker.markdownParseFinished(move parseResult)
 
 proc newMarkdownParseWorker*(): AgentProxy[MarkdownParseWorker] =
   var worker = MarkdownParseWorker()
