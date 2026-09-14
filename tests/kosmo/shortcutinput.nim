@@ -94,6 +94,42 @@ suite "Kosmo synthetic shortcut input":
       check frontend.editorView.editor.bufferText(activeTab.id).get == inserted[index]
       check group.editorView.displayedGridText().contains(inserted[index])
 
+  test "inactive pane refreshes preserve the focused pane insert session":
+    let frontend = newKosmoApplication(newApplication("Kosmo Pane Refresh Input Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    for _ in 0 ..< 2:
+      check frontend.window.pressControlKey(keyW)
+      check frontend.window.pressControlKey(keyN)
+    let groups = frontend.editorGroups()
+    require groups.len == 3
+    require frontend.window.makeFirstResponder(groups[0].editorView)
+
+    frontend.window.typeNativeText("i")
+    require frontend.editorView.editor.mode() == KosmoEditorMode.Insert
+    var targetTab: KosmoTab
+    for tab in frontend.editorView.editor.tabs():
+      if tab.active:
+        targetTab = tab
+        break
+    groups[1].editorView.refresh()
+    require frontend.editorView.editor.mode() == KosmoEditorMode.Insert
+
+    for character in "alpha":
+      frontend.window.typeNativeText($character)
+      require frontend.editorView.editor.mode() == KosmoEditorMode.Insert
+      groups[1].editorView.refresh()
+      require frontend.editorView.editor.mode() == KosmoEditorMode.Insert
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
+    )
+    check frontend.editorView.editor.bufferText(targetTab.id).get == "alpha"
+
   test "close tab defaults do not consume the Vim control-W namespace":
     let
       bindings = initKosmoKeyBindings(
