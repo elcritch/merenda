@@ -379,6 +379,12 @@ kosmo README.md
 These commands reuse a running Kosmo instance. Add `--bg` to start Kosmo detached
 from your shell. On macOS, you can also open `Kosmo.app` from Finder.
 
+Add one or more folders to the existing Kosmo window with `--add`:
+
+```sh
+kosmo --add ../shared-library
+```
+
 Use Quick Open to find a file, drag tabs to arrange your panes, or choose
 File → New Terminal to open a shell. Markdown files open as previews, with a
 control to switch to the source editor. Themes, fonts, keyboard shortcuts, and

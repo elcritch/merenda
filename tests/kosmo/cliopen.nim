@@ -109,6 +109,37 @@ suite "Kosmo CLI window routing":
     check project.hasOpenPath(filePath)
     check not existing.hasOpenPath(filePath)
 
+  test "add requests append folders to the existing project window":
+    let
+      firstRoot = createTempDir("merenda-kosmo-cli-add-first-", "")
+      secondRoot = createTempDir("merenda-kosmo-cli-add-second-", "")
+      addedRoot = createTempDir("merenda-kosmo-cli-add-folder-", "")
+      app = newApplication("Kosmo CLI add folders")
+      manager = newKosmoWindowManager(app)
+      first = newKosmoApplication(manager, firstRoot, monitorsGitStatus = false)
+      second = newKosmoApplication(manager, secondRoot, monitorsGitStatus = false)
+    defer:
+      manager.close()
+      removeDir(firstRoot)
+      removeDir(secondRoot)
+      removeDir(addedRoot)
+    second.show()
+
+    let response = manager.openCliRequestForTesting(
+      KosmoCliOpenRequest(
+        requestId: "add-folder",
+        kind: kcrOpenPaths,
+        add: true,
+        paths: @[addedRoot],
+        originWindow: first.cliWindowId(),
+      )
+    )
+    check response.delivered
+    check response.errors.len == 0
+    check manager.managedWindows().len == 2
+    check first.fileTree.rootPaths == @[firstRoot, addedRoot]
+    check second.fileTree.rootPaths == @[secondRoot]
+
   test "a file request without a window creates an editor-only destination":
     let
       root = createTempDir("merenda-kosmo-cli-file-window-", "")

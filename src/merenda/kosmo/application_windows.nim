@@ -1232,6 +1232,20 @@ proc openCliRequest(
       result.errors.add snapshot.errorMessage
     result.delivered = true
     return
+  if request.add:
+    let destination = manager.frontendForCliRequest(request.originWindow)
+    if not destination.isNil:
+      for path in request.paths:
+        if dirExists(path) and not destination.hasFileBrowser():
+          result.errors.add "Kosmo cannot add a folder to an editor-only window: " & path
+        elif fileExists(path) or dirExists(path) or dirExists(path.parentDir()):
+          if not destination.openPath(path):
+            result.errors.add "Kosmo could not add path: " & path
+        else:
+          result.errors.add "Kosmo cannot open path: " & path
+      destination.show()
+      result.delivered = true
+      return
   var
     folders: seq[string]
     files: seq[string]

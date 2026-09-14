@@ -17,6 +17,7 @@ type CliClientState = object
   origin: array[ClientValueCapacity, char]
   showsDiff: bool
   opensStdin: bool
+  addsPaths: bool
   delivered: Atomic[bool]
   errorCount: Atomic[int]
   done: Atomic[bool]
@@ -55,6 +56,7 @@ proc sendOpenRequest(state: ptr CliClientState) {.thread.} =
           preferredEndpoint = state.endpoint.addr.load(),
           originWindow = state.origin.addr.load(),
           registryDirectory = state.registry.addr.load(),
+          add = state.addsPaths,
         )
     state.delivered.store(response.delivered, moRelease)
     state.errorCount.store(response.errors.len, moRelease)
@@ -69,6 +71,7 @@ proc requestWhilePumping(
     workingDirectory = "",
     showsDiff = false,
     opensStdin = false,
+    addsPaths = false,
 ): tuple[delivered: bool, errorCount: int] =
   let state = cast[ptr CliClientState](allocShared0(sizeof(CliClientState)))
   defer:
@@ -81,6 +84,7 @@ proc requestWhilePumping(
   origin.store(state.origin)
   state.showsDiff = showsDiff
   state.opensStdin = opensStdin
+  state.addsPaths = addsPaths
   var thread: Thread[ptr CliClientState]
   createThread(thread, sendOpenRequest, state)
   let deadline = getMonoTime() + initDuration(seconds = 5)
@@ -167,6 +171,30 @@ suite "Kosmo CLI open transport":
     check fallback.errorCount == 0
     require firstRequests.len == 1
     check firstRequests[0].paths == @[target]
+
+  test "add mode survives CLI transport":
+    let
+      registry = createTempDir("merenda-kosmo-cli-add-transport-", "")
+      target = registry / "project"
+    defer:
+      removeDir(registry)
+    var received: seq[KosmoCliOpenRequest]
+    let server = startKosmoCliOpenServer(
+      proc(request: KosmoCliOpenRequest): KosmoCliOpenResponse =
+        received.add request
+        KosmoCliOpenResponse(),
+      registry,
+    )
+    defer:
+      server.close()
+
+    let response =
+      requestWhilePumping(target, server.endpointPath(), registry, addsPaths = true)
+    check response.delivered
+    check response.errorCount == 0
+    require received.len == 1
+    check received[0].add
+    check received[0].paths == @[target]
 
   test "an embedded-terminal endpoint takes precedence over the newest process":
     let
