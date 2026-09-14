@@ -13,27 +13,108 @@ proc pressPaneKey(
     KeyEvent(text: text, key: key, keyCode: key.ord, modifiers: modifiers)
   )
 
+proc typeNativeText(window: Window, text: string) =
+  for character in text:
+    let value = $character
+    discard window.dispatchKeyDown(
+      KeyEvent(key: keyForText(value), keyCode: keyCodeForText(value))
+    )
+    check window.dispatchTextInput(value)
+
+proc typeCoalescedNativeText(window: Window, text: string) =
+  for character in text:
+    let value = $character
+    discard window.dispatchKeyDown(
+      KeyEvent(key: keyForText(value), keyCode: keyCodeForText(value))
+    )
+  check window.dispatchTextInput(text)
+
+proc displayedGridText(view: MonoTextView): string =
+  for row in 0 ..< view.lineCount():
+    for column in 0 ..< view.columnCount(row):
+      result.add view.cellAt(row, column).text
+    result.add '\n'
+
 suite "Kosmo synthetic shortcut input":
+  test "three editor panes preserve native insert input in every pane":
+    let frontend = newKosmoApplication(newApplication("Kosmo Multi-Pane Input Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    for _ in 0 ..< 2:
+      check frontend.window.pressControlKey(keyW)
+      check frontend.window.pressControlKey(keyN)
+    let groups = frontend.editorGroups()
+    require groups.len == 3
+
+    let inserted = ["iiii", "alpha", "xyz"]
+    for index, group in groups:
+      require frontend.window.makeFirstResponder(group.editorView)
+      frontend.window.typeNativeText("i" & inserted[index])
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
+      )
+      var activeTab: KosmoTab
+      for tab in frontend.editorView.editor.tabs():
+        if tab.active:
+          activeTab = tab
+          break
+      check frontend.editorView.editor.bufferText(activeTab.id).get == inserted[index]
+      check group.editorView.displayedGridText().contains(inserted[index])
+
+  test "three editor panes preserve coalesced committed insert input":
+    let frontend = newKosmoApplication(newApplication("Kosmo Batched Input Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    for _ in 0 ..< 2:
+      check frontend.window.pressControlKey(keyW)
+      check frontend.window.pressControlKey(keyN)
+    let groups = frontend.editorGroups()
+    require groups.len == 3
+
+    let inserted = ["iiii", "alpha", "xyz"]
+    for index, group in groups:
+      require frontend.window.makeFirstResponder(group.editorView)
+      frontend.window.typeCoalescedNativeText("i" & inserted[index])
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
+      )
+      var activeTab: KosmoTab
+      for tab in frontend.editorView.editor.tabs():
+        if tab.active:
+          activeTab = tab
+          break
+      check frontend.editorView.editor.bufferText(activeTab.id).get == inserted[index]
+      check group.editorView.displayedGridText().contains(inserted[index])
+
   test "close tab defaults do not consume the Vim control-W namespace":
     let
-      bindings = initKosmoKeyBindings()
+      bindings = initKosmoKeyBindings(
+        KosmoShortcutProfile.Platform, KosmoShortcutPlatform.LinuxBsd
+      )
+      macBindings =
+        initKosmoKeyBindings(KosmoShortcutProfile.MacOS, KosmoShortcutPlatform.MacOS)
       controlW = KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
       commandW = KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
       controlF4 = KeyEvent(key: keyF4, keyCode: keyF4.ord, modifiers: {kmControl})
       firstStroke = bindings.match([controlW])
       closeSequence = bindings.match([controlW, controlW])
-      commandShortcut = bindings.match([commandW])
+      commandShortcut = macBindings.match([commandW])
       fallbackShortcut = bindings.match([controlF4])
 
     check firstStroke.kind == kbmNone
     check closeSequence.kind == kbmNone
-    when defined(macosx) or defined(macos):
-      check commandShortcut.kind == kbmCommand
-      check commandShortcut.selector == actionSelector(KosmoCloseTabAction)
-      check fallbackShortcut.kind == kbmNone
-    else:
-      check fallbackShortcut.kind == kbmCommand
-      check fallbackShortcut.selector == actionSelector(KosmoCloseTabAction)
+    check commandShortcut.kind == kbmCommand
+    check commandShortcut.selector == actionSelector(KosmoCloseTabAction)
+    check fallbackShortcut.kind == kbmCommand
+    check fallbackShortcut.selector == actionSelector(KosmoCloseTabAction)
 
   test "split sequences duplicate a lone empty editor tab":
     let frontend = newKosmoApplication(newApplication("Kosmo Empty Split Test"))
