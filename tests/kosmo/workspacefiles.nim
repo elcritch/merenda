@@ -542,6 +542,9 @@ suite "Kosmo shared workspace inventory":
       require initialSourceIndex >= 0
       require panel.requestFilePatch(initialSourceIndex)
       require panel.waitForDiff(timeoutMilliseconds = 60_000)
+      let initialTextView = panel.textViewForFile(initialSourceIndex)
+      require panel.waitForDiff(timeoutMilliseconds = 60_000)
+      let initialStorage = initialTextView.textStorage()
       check not panel.autoRefreshSwitch.on
       let repositorySpy = InventorySpy()
       files.connect(workspaceRepositoryDidChange, repositorySpy, changed)
@@ -571,6 +574,7 @@ suite "Kosmo shared workspace inventory":
         discard getCurrentSigilThread().pollAll(NonBlocking)
         sleep(10)
       check panel.repositoryReadCount() == baseline
+      check initialTextView.textStorage() == initialStorage
 
       let ignoredSpy = InventorySpy()
       files.watch.connect(workspaceWatchIgnoredChange, ignoredSpy, changed)
@@ -587,6 +591,7 @@ suite "Kosmo shared workspace inventory":
         discard getCurrentSigilThread().pollAll(NonBlocking)
         sleep(10)
       check panel.repositoryReadCount() == baseline
+      check initialTextView.textStorage() == initialStorage
 
       check panel.autoRefreshSwitch.tryToPerform(
         performClick(), DynamicAgent(panel.autoRefreshSwitch)

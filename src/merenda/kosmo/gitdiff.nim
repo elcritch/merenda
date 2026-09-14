@@ -2319,6 +2319,8 @@ proc `markdownStyle=`*(panel: KosmoGitDiffPanel, style: nimkit.MarkdownStyle) =
   ## Apply the shared Markdown palette while keeping file controls compact.
   var diffStyle = style
   diffStyle.headingFontSizes[1] = style.bodyFontSize
+  if panel.markdownView.markdownStyle() == diffStyle:
+    return
   panel.markdownView.markdownStyle = diffStyle
   inc panel.styleGeneration
   for path, section in panel.sections:
