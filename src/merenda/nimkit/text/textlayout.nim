@@ -814,7 +814,7 @@ func textRangeForGlyphLine(layout: GlyphArrangement, line: Slice[int]): TextRang
   else:
     initTextRange(0, 0)
 
-func containsHardBreak(runes: openArray[Rune], range: TextRange): bool =
+func containsHardBreak[T](runes: T, range: TextRange): bool =
   if runes.len == 0:
     return false
   let
@@ -1212,12 +1212,12 @@ proc glyphCount*(manager: TextLayoutManager): Natural =
   manager.updateLayout()
   manager.currentGlyphCount().Natural
 
-proc lineFragment(
+proc lineFragment[T](
     manager: TextLayoutManager,
     visualIndex: int,
     line: Slice[int],
     lineCount: int,
-    sourceRunes: openArray[Rune],
+    sourceRunes: T,
 ): TextLineFragment =
   let
     containers = manager.effectiveContainers()
@@ -1342,12 +1342,7 @@ proc reindexLineFragments(fragments: var seq[TextLineFragment]) =
     fragments[index].lineIndex = initTextLineIndex(index)
 
 iterator currentLineFragments(manager: TextLayoutManager): TextLineFragment =
-  # One decoded source per pass; only small fragment values leave the iterator.
-  let sourceRunes =
-    if manager.xTextStorage.isNil:
-      @[]
-    else:
-      manager.xTextStorage.stringValue().toRunes()
+  let sourceRunes = manager.xLayout.sourceRunes
   if manager.xLayout.glyphCount() == 0:
     yield manager.emptyLineFragment(
       0, 0, sourceRunes.len > 0 and sourceRunes[0] in [Rune('\n'), Rune('\r')]
