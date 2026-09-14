@@ -355,7 +355,8 @@ proc initKosmoKeyBindings*(
   result.addBinding("primary-shift-t", KosmoNewTerminalAction, profile, platform)
   result.addBinding("primary-shift-d", KosmoShowGitDiffAction, profile, platform)
   result.addBinding("primary-s", KosmoSaveAction, profile, platform)
-  result.addBinding("primary-w", KosmoCloseTabAction, profile, platform)
+  if nimkit.kmControl notin profile.primaryModifiers(platform):
+    result.addBinding("primary-w", KosmoCloseTabAction, profile, platform)
   if platform != KosmoShortcutPlatform.MacOS:
     result.addBinding("ctrl-f4", KosmoCloseTabAction, profile, platform)
   result.addBinding("primary-shift-w", KosmoCloseWindowAction, profile, platform)

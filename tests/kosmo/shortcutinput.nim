@@ -96,24 +96,25 @@ suite "Kosmo synthetic shortcut input":
 
   test "close tab defaults do not consume the Vim control-W namespace":
     let
-      bindings = initKosmoKeyBindings()
+      bindings = initKosmoKeyBindings(
+        KosmoShortcutProfile.Platform, KosmoShortcutPlatform.LinuxBsd
+      )
+      macBindings =
+        initKosmoKeyBindings(KosmoShortcutProfile.MacOS, KosmoShortcutPlatform.MacOS)
       controlW = KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
       commandW = KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
       controlF4 = KeyEvent(key: keyF4, keyCode: keyF4.ord, modifiers: {kmControl})
       firstStroke = bindings.match([controlW])
       closeSequence = bindings.match([controlW, controlW])
-      commandShortcut = bindings.match([commandW])
+      commandShortcut = macBindings.match([commandW])
       fallbackShortcut = bindings.match([controlF4])
 
     check firstStroke.kind == kbmNone
     check closeSequence.kind == kbmNone
-    when defined(macosx) or defined(macos):
-      check commandShortcut.kind == kbmCommand
-      check commandShortcut.selector == actionSelector(KosmoCloseTabAction)
-      check fallbackShortcut.kind == kbmNone
-    else:
-      check fallbackShortcut.kind == kbmCommand
-      check fallbackShortcut.selector == actionSelector(KosmoCloseTabAction)
+    check commandShortcut.kind == kbmCommand
+    check commandShortcut.selector == actionSelector(KosmoCloseTabAction)
+    check fallbackShortcut.kind == kbmCommand
+    check fallbackShortcut.selector == actionSelector(KosmoCloseTabAction)
 
   test "split sequences duplicate a lone empty editor tab":
     let frontend = newKosmoApplication(newApplication("Kosmo Empty Split Test"))
