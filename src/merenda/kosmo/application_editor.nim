@@ -640,6 +640,7 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     tabContext = nimkit.controlStyle(nimkit.srDocumentTab)
     cursorColor =
       base.resolveMonoTextStyle(nimkit.controlStyle(nimkit.srMonoTextView)).cursorColor
+    monoFontSize = base.resolveMonoTextStyle(nimkit.controlStyle(nimkit.srMonoTextView)).text.fontSize
     accentColor = base.resolveColor(
       tabContext, nimkit.StyleMarkColor, nimkit.color(0.20, 0.45, 0.92, 1.0)
     )
@@ -686,9 +687,11 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   appearance.installKosmoMarkdownControlsStyle()
   view.styleId = KosmoEditorStyleId
   view.appearance = appearance
+  view.fontSize = monoFontSize
   if not view.documentTabs.isNil:
     view.documentTabs.appearance = appearance
   if not view.commandBar.isNil:
+    view.commandBar.fontSize = view.fontSize()
     view.commandBar.appearance = appearance
   if not view.dockGroup.isNil:
     let pane = view.dockGroup[].pane

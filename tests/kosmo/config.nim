@@ -174,6 +174,7 @@ suite "Kosmo configuration":
     .appearance()
     .resolveTextStyle(controlStyle(srMonoTextView), color(0.0, 0.0, 0.0), insets(0.0)).fontSize ==
       config.merendaFontSize
+    check frontend.editorView.fontSize == config.merendaFontSize
     check frontend.editorView.editor.activeMoeThemeIdentifier() == config.moeTheme
 
   when defined(posix):
@@ -192,10 +193,12 @@ suite "Kosmo configuration":
         appearance = app.effectiveAppearance()
         builder = initThemeBuilder(appearance.theme)
       builder.setFontName(frMonospace, "Kosmo Test Mono")
+      builder[srMonoTextView, StyleFontSize] = 19.0'f32
       appearance.theme = builder.finish()
       app.setAppearance(appearance)
 
       check frontend.editorView.fontName == "Kosmo Test Mono"
+      check frontend.editorView.fontSize == 19.0'f32
       check terminal.fontName == "Kosmo Test Mono"
 
   test "persists a selected Moe theme":
