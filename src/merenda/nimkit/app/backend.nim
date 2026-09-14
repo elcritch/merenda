@@ -1357,6 +1357,18 @@ proc supportsPopupWindows*(host: HostWindow): bool =
 proc nativeWindowOrNil*(host: HostWindow): siwinshim.Window =
   host.xNativeWindow
 
+proc nativeEventsNeedDisplayRefresh*(window: siwinshim.Window): bool =
+  ## Whether this backend needs a blanket refresh after native event activity.
+  ## X11 Expose and same-size WinAPI WM_PAINT events do not currently request a
+  ## render themselves. Cocoa retains presented content, and Wayland configure
+  ## paths explicitly request redraws.
+  when defined(macosx):
+    discard window
+  elif defined(linux) or defined(bsd):
+    result = not window.isNil and window.siwinDisplayServerName() == "x11"
+  else:
+    result = true
+
 proc rendererOrNil*(
     host: HostWindow
 ): figrender.FigRenderer[siwinshim.SiwinRenderBackend] =
