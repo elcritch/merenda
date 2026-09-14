@@ -8,6 +8,7 @@ srcDir        = "src"
 requires "nim >= 2.2.6"
 requires "msgpack4nim"
 requires "chronicles >= 0.4"
+requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
 # Native damage must request onRender: https://github.com/levovix0/siwin/pull/55
 requires "gh:elcritch/siwin#fix/native-damage-redraw"
