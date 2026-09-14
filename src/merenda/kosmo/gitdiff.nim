@@ -14,7 +14,8 @@ const
   KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
   GitDiffRefreshDebounceInterval = initDuration(milliseconds = 300)
   GitDiffReservedSummaryHeight = 240.0'f32
-  GitDiffHighlightTimeBudgetMs = 1000
+  # Highlighting runs on nimkitWorkerPool, so this deadline does not block the UI.
+  GitDiffHighlightTimeBudgetMs = 3000
   GitDiffMaximumHighlightSourceBytes = 1 * 1024 * 1024
   GitDiffMaximumHighlightQueuedBytes = 8 * 1024 * 1024
   GitDiffMaximumHighlightCachedBytes = 16 * 1024 * 1024

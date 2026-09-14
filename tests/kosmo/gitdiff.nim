@@ -597,6 +597,29 @@ suite "Kosmo Git diff":
     check attributes.fontName == panel.markdownView.markdownStyle().codeFontName
     check attributes.foregroundColor == panel.markdownView.markdownStyle().codeColor
 
+  test "new Nim files retain syntax highlighting":
+    let panel = newKosmoGitDiffPanel(
+      parseGitDiff(
+        "diff --git a/windows.nim b/windows.nim\n" &
+          "new file mode 100644\n--- /dev/null\n+++ b/windows.nim\n" &
+          "@@ -0,0 +1,2 @@\n+import os\n+let answer = 42\n"
+      )
+    )
+    defer:
+      panel.close()
+    require panel.waitForDiff()
+    discard panel.textViewForFile(0)
+    require panel.waitForDiff()
+    check panel.highlightBuildCount() == 1
+    let
+      storage = panel.textViewForFile(0).textStorage()
+      rendered = storage.stringValue()
+      location = rendered.find("+import")
+    require location >= 0
+    let importIndex = rendered[0 ..< location].runeLen + 1
+    check storage.attributesAt(importIndex).foregroundColor ==
+      panel.markdownView.markdownStyle().syntaxTokenColors[stcKeyword]
+
   test "repository changes wait for an explicit refresh by default":
     let root = createTempDir("kosmo-diff-manual-refresh-", "")
     defer:
