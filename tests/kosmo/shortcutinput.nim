@@ -35,6 +35,14 @@ proc displayedGridText(view: MonoTextView): string =
       result.add view.cellAt(row, column).text
     result.add '\n'
 
+proc buttonWithTitle(view: View, title: string): Button =
+  if view of Button and Button(view).title == title:
+    return Button(view)
+  for child in view.subviews():
+    result = child.buttonWithTitle(title)
+    if not result.isNil:
+      return
+
 suite "Kosmo synthetic shortcut input":
   test "three editor panes preserve native insert input in every pane":
     let frontend = newKosmoApplication(newApplication("Kosmo Multi-Pane Input Test"))
@@ -151,6 +159,110 @@ suite "Kosmo synthetic shortcut input":
     check commandShortcut.selector == actionSelector(KosmoCloseTabAction)
     check fallbackShortcut.kind == kbmCommand
     check fallbackShortcut.selector == actionSelector(KosmoCloseTabAction)
+
+  test "close tab confirms before discarding modified files":
+    let
+      root = createTempDir("merenda-kosmo-close-tab-confirm-", "")
+      path = root / "modified.txt"
+      frontend = newKosmoApplication(
+        newApplication("Kosmo Close Tab Confirmation Test"),
+        root,
+        monitorsGitStatus = false,
+      )
+    writeFile(path, "original")
+    defer:
+      frontend.close()
+      removeFile(path)
+      removeDir(root)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.openPath(path)
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require frontend.editorView.editor.handleKey("i")
+    require frontend.editorView.editor.handleTextInput("!")
+    require frontend.editorView.editor.handleKey("Esc")
+    require frontend.editorView.editor.tabs()[0].modified
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers())
+    )
+    let session = frontend.application.modalSession()
+    require not session.isNil
+    check session.window.title == "Unsaved Changes"
+    let cancelButton = session.window.contentView().buttonWithTitle("Cancel")
+    require not cancelButton.isNil
+    check cancelButton.tryToPerform(performClick(), DynamicAgent(cancelButton))
+    check frontend.application.modalSession().isNil
+    check not frontend.window.isClosed
+    check frontend.editorView.editor.tabs()[0].modified
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers())
+    )
+    let discardButton = frontend.application
+      .modalSession().window
+      .contentView()
+      .buttonWithTitle("Discard")
+    require not discardButton.isNil
+    check discardButton.tryToPerform(performClick(), DynamicAgent(discardButton))
+    check frontend.application.modalSession().isNil
+    check not frontend.window.isClosed
+    var modifiedFileStillOpen = false
+    for tab in frontend.editorView.editor.tabs():
+      if tab.filePath.isSome and tab.filePath.get == path:
+        modifiedFileStillOpen = true
+    check not modifiedFileStillOpen
+
+  test "close window confirms before discarding modified files":
+    let
+      root = createTempDir("merenda-kosmo-close-window-confirm-", "")
+      path = root / "modified.txt"
+      frontend = newKosmoApplication(
+        newApplication("Kosmo Close Window Confirmation Test"),
+        root,
+        monitorsGitStatus = false,
+      )
+    writeFile(path, "original")
+    defer:
+      frontend.close()
+      removeFile(path)
+      removeDir(root)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.openPath(path)
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require frontend.editorView.editor.handleKey("i")
+    require frontend.editorView.editor.handleTextInput("!")
+    require frontend.editorView.editor.handleKey("Esc")
+    require frontend.editorView.editor.tabs()[0].modified
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(
+        key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
+      )
+    )
+    let session = frontend.application.modalSession()
+    require not session.isNil
+    check session.window.title == "Unsaved Changes"
+    let cancel = session.window.contentView().buttonWithTitle("Cancel")
+    require not cancel.isNil
+    check cancel.tryToPerform(performClick(), DynamicAgent(cancel))
+    check frontend.application.modalSession().isNil
+    check not frontend.window.isClosed
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(
+        key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
+      )
+    )
+    let discardButton = frontend.application
+      .modalSession().window
+      .contentView()
+      .buttonWithTitle("Discard")
+    require not discardButton.isNil
+    check discardButton.tryToPerform(performClick(), DynamicAgent(discardButton))
+    check frontend.application.modalSession().isNil
+    check frontend.window.isClosed
 
   test "split sequences duplicate a lone empty editor tab":
     let frontend = newKosmoApplication(newApplication("Kosmo Empty Split Test"))

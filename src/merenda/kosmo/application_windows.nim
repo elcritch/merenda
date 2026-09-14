@@ -1009,7 +1009,7 @@ proc newKosmoApplication*(
     if not active.isNil:
       let group = active.dockController.activePaneGroup()
       if not group.isNil:
-        group.window.close()
+        discard active.dockController.closeWindow(group.window)
   fileTree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
     if frontend.isNil:
       return
