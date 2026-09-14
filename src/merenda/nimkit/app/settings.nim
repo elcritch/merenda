@@ -39,6 +39,7 @@ type
 
   AppearanceHandler* = proc(appearance: Appearance) {.closure.}
   InvertScrollingHandler* = proc(inverted: bool) {.closure.}
+  UiScaleHandler* = proc(scale: float32) {.closure.}
 
   SelectedFont = object
     name: string
@@ -93,10 +94,15 @@ type
     appliedFontSize: float32
     fontLoadingStatus: string
     invertScrollingHandler: InvertScrollingHandler
+    uiScaleHandler: UiScaleHandler
+    previewUiScale: float32
+    appliedUiScale: float32
     preview: Label
     status: Label
     fontSizeValue: Label
     fontSizeStepper: Stepper
+    uiScaleValue: Label
+    uiScaleStepper: Stepper
     fontRoleButtons: array[FontRole, Button]
     onlyMonospaceFontsCheckbox: Button
     onlyDisplayableFontsCheckbox: Button
@@ -108,6 +114,9 @@ const
   SettingsMinimumFontSize = 6.0'f32
   SettingsMaximumFontSize = 120.0'f32
   SettingsDefaultFontSize = 14.0'f32
+  SettingsMinimumUiScale = 0.5'f32
+  SettingsMaximumUiScale = 3.0'f32
+  SettingsDefaultUiScale = 1.0'f32
   SettingsThemePickerIdentifier = "settings-theme-picker"
   SettingsUIFontButtonIdentifier = "settings-ui-font-button"
   SettingsMonospaceFontButtonIdentifier = "settings-monospace-font-button"
@@ -117,6 +126,7 @@ const
   SettingsOnlyDisplayableFontsIdentifier = "settings-only-displayable-fonts"
   SettingsBehaviorTabIdentifier* = "behavior"
   SettingsInvertScrollingIdentifier* = "settings-invert-scrolling"
+  SettingsUiScaleIdentifier* = "settings-ui-scale-stepper"
 
 proc fontCatalogLoadRequested(controller: FontPickerController) {.signal.}
 proc fontCatalogBatchLoaded(
@@ -554,6 +564,9 @@ proc fontTitle(name: string): string =
 func fontSizeTitle(size: float32): string =
   $size.int & " pt"
 
+func uiScaleTitle(scale: float32): string =
+  formatFloat(scale, ffDecimal, 1) & "x"
+
 func title(role: FontRole): string =
   case role
   of frUI: "Interface"
@@ -640,6 +653,24 @@ proc `invertScrolling=`*(settings: MerendaSettingsWindow, inverted: bool) =
   if not settings.isNil and not settings.invertScrollingButton.isNil:
     settings.invertScrollingButton.state = if inverted: bsOn else: bsOff
 
+proc uiScale*(settings: MerendaSettingsWindow): float32 =
+  ## Return the UI scale selected in the settings panel.
+  if settings.isNil or settings.uiScaleStepper.isNil:
+    return SettingsDefaultUiScale
+  settings.uiScaleStepper.value
+
+proc `uiScale=`*(settings: MerendaSettingsWindow, scale: float32) =
+  ## Synchronize the UI scale without invoking its action.
+  if settings.isNil:
+    return
+  let boundedScale = min(max(scale, SettingsMinimumUiScale), SettingsMaximumUiScale)
+  settings.previewUiScale = boundedScale
+  settings.appliedUiScale = boundedScale
+  if not settings.uiScaleStepper.isNil:
+    settings.uiScaleStepper.value = boundedScale
+  if not settings.uiScaleValue.isNil:
+    settings.uiScaleValue.text = boundedScale.uiScaleTitle()
+
 proc updateStatus(settings: MerendaSettingsWindow) =
   settings.status.text =
     "Previewing " & settings.activeFontRole.title() & ": " &
@@ -660,6 +691,8 @@ proc updateFontRoleButtons(settings: MerendaSettingsWindow) =
 proc updatePreview(settings: MerendaSettingsWindow) =
   if not settings.fontSizeValue.isNil:
     settings.fontSizeValue.text = settings.previewFontSize.fontSizeTitle()
+  if not settings.uiScaleValue.isNil:
+    settings.uiScaleValue.text = settings.previewUiScale.uiScaleTitle()
   settings.updateFontRoleButtons()
   settings.preview.appearance = settings.baseAppearance.appearanceFor(
     settings.previewFonts, settings.previewFontSize, settings.activeFontRole
@@ -687,6 +720,14 @@ proc fontSizeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
   if sender of Stepper:
     settings.previewFontSize = Stepper(sender).value
     settings.updatePreview()
+
+proc uiScaleDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
+  if sender of Stepper:
+    settings.previewUiScale = Stepper(sender).value
+    settings.appliedUiScale = settings.previewUiScale
+    settings.updatePreview()
+    if not settings.uiScaleHandler.isNil:
+      settings.uiScaleHandler(settings.previewUiScale)
 
 proc selectFontRole(settings: MerendaSettingsWindow, role: FontRole) =
   settings.activeFontRole = role
@@ -737,8 +778,11 @@ proc resetSelections*(settings: MerendaSettingsWindow) =
   ## Restores the controls to the currently applied appearance when the panel opens.
   settings.previewFonts = settings.appliedFonts
   settings.previewFontSize = settings.appliedFontSize
+  settings.previewUiScale = settings.appliedUiScale
   if not settings.fontSizeStepper.isNil:
     settings.fontSizeStepper.value = settings.previewFontSize
+  if not settings.uiScaleStepper.isNil:
+    settings.uiScaleStepper.value = settings.previewUiScale
   settings.fontPickerController.selectFont(
     settings.previewFonts[settings.activeFontRole]
   )
@@ -762,6 +806,8 @@ proc newMerendaSettingsWindow*(
     supplementalFonts: openArray[FontCatalogEntry] = [],
     invertScrolling = false,
     invertScrollingHandler: InvertScrollingHandler = nil,
+    initialUiScale = SettingsDefaultUiScale,
+    uiScaleHandler: UiScaleHandler = nil,
 ): MerendaSettingsWindow =
   ## Create a settings panel initialized from an application's appearance.
   result = MerendaSettingsWindow(
@@ -770,11 +816,14 @@ proc newMerendaSettingsWindow*(
     fontPickerController: newFontPickerController(),
     applyAppearanceHandler: appearanceHandler,
     invertScrollingHandler: invertScrollingHandler,
+    uiScaleHandler: uiScaleHandler,
     activeTheme: stDarkBSD,
     baseAppearance: stDarkBSD.appearance(),
     activeFontRole: frUI,
     previewFontSize: SettingsDefaultFontSize,
     appliedFontSize: SettingsDefaultFontSize,
+    previewUiScale: initialUiScale,
+    appliedUiScale: initialUiScale,
     fontLoadingStatus: "Loading system fonts…",
   )
   if initialAppearance.theme.isInitialized:
@@ -798,6 +847,7 @@ proc newMerendaSettingsWindow*(
     behaviorPage = newSettingsPage()
     appearanceForm = newFormView()
     typographyForm = newFormView()
+    behaviorForm = newFormView()
     titleLabel = newTitleLabel("Merenda Settings")
     themeLabel = newFormLabel("Theme")
     interfaceFontLabel = newFormLabel("Interface Font")
@@ -831,6 +881,15 @@ proc newMerendaSettingsWindow*(
       increment = 1.0,
     )
     applyFontButton = newButton("Apply font")
+    uiScaleLabel = newFormLabel("Scale UI")
+    uiScaleControl = newStackView(laHorizontal)
+    uiScaleValue = newLabel(result.previewUiScale.uiScaleTitle())
+    uiScaleStepper = newStepper(
+      SettingsMinimumUiScale,
+      SettingsMaximumUiScale,
+      result.previewUiScale,
+      increment = 0.1,
+    )
     invertScrollingButton = newCheckBox("Invert scrolling direction")
     themeChanged = actionSelector("themeChanged")
     interfaceFontSelected = actionSelector("interfaceFontSelected")
@@ -839,12 +898,17 @@ proc newMerendaSettingsWindow*(
     onlyDisplayableFontsChanged = actionSelector("onlyDisplayableFontsChanged")
     fontSizeChanged = actionSelector("fontSizeChanged")
     applyFont = actionSelector("applyFont")
+    uiScaleChanged = actionSelector("uiScaleChanged")
     invertScrollingChanged = actionSelector("invertScrollingChanged")
 
   result.preview = newLabel(FontCatalogPreviewText)
   result.status = newStatusLabel()
   result.fontSizeValue = fontSizeValue
   result.fontSizeStepper = fontSizeStepper
+  result.uiScaleValue = uiScaleValue
+  result.uiScaleStepper = uiScaleStepper
+  result.previewUiScale = uiScaleStepper.value
+  result.appliedUiScale = uiScaleStepper.value
   result.fontRoleButtons[frUI] = interfaceFontButton
   result.fontRoleButtons[frMonospace] = monospaceFontButton
   result.onlyMonospaceFontsCheckbox = onlyMonospaceFontsCheckbox
@@ -853,7 +917,7 @@ proc newMerendaSettingsWindow*(
   result.xFirstResponder = themePicker
   tabs.identifier = "settings-tabs"
 
-  for form in [appearanceForm, typographyForm]:
+  for form in [appearanceForm, typographyForm, behaviorForm]:
     form.edgeInsets = insets(0.0)
     form.spacing[dcol] = 12.0
     form.spacing[drow] = 10.0
@@ -943,6 +1007,22 @@ proc newMerendaSettingsWindow*(
   )
   applyFontButton.action = applyFont
 
+  uiScaleControl.spacing = 8.0
+  uiScaleControl.alignment = svaCenter
+  uiScaleValue.setHuggingPriority(LayoutPriorityHigh, laHorizontal)
+  uiScaleStepper.accessibilityLabel = "Scale UI"
+  uiScaleStepper.valueFormatter = proc(value: float32): string =
+    value.uiScaleTitle()
+  uiScaleStepper.target = newActionTarget(
+    uiScaleChanged,
+    proc(sender: DynamicAgent) =
+      settings.uiScaleDidChange(sender),
+  )
+  uiScaleStepper.action = uiScaleChanged
+  uiScaleStepper.identifier = SettingsUiScaleIdentifier
+  uiScaleControl.addArrangedSubview(uiScaleValue, uiScaleStepper)
+  uiScaleControl.addFlexibleSpacer()
+
   invertScrollingButton.identifier = SettingsInvertScrollingIdentifier
   invertScrollingButton.accessibilityLabel = "Invert scrolling direction"
   invertScrollingButton.state = if invertScrolling: bsOn else: bsOff
@@ -982,9 +1062,11 @@ proc newMerendaSettingsWindow*(
   applyFontButton.identifier = "settings-apply-font"
   typographyPage.stack.addFlexibleSpacer()
 
+  behaviorForm.addRow(uiScaleLabel, uiScaleControl)
   behaviorPage.stack.addArrangedSubview(
     newHeadingLabel("Behavior"),
     newLabel("Customize how Merenda responds to input."),
+    behaviorForm,
     invertScrollingButton,
   )
   behaviorPage.stack.addFlexibleSpacer()

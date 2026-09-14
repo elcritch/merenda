@@ -7,11 +7,11 @@ when not compileOption("threads") and not defined(nimdoc):
   {.error: "NimKit's split renderer runtime requires --threads:on".}
 
 when defined(useNativeDynlib):
-  from figdraw/dynlib import clearColor, setFigUiScale, Renders
+  from figdraw/dynlib import clearColor, figUiScale, setFigUiScale, Renders
   import figdraw/dynlib as figrender
   import figdraw/dynlib as siwinshim
 else:
-  from figdraw import clearColor, setFigUiScale, Renders
+  from figdraw import clearColor, figUiScale, setFigUiScale, Renders
   import figdraw as figrender
   import figdraw/windowing/siwinshim as siwinshim
 when not defined(useNativeDynlib):
@@ -584,6 +584,14 @@ proc uiScaleOverrideFromEnv*(): Option[UiScaleOverride] =
       raise newException(ValueError, message)
     return some(UiScaleOverride(envName: envName, scale: scale))
   none(UiScaleOverride)
+
+proc validatedUiScale*(scale: float32): float32 =
+  if scale <= 0.0'f32 or scale != scale or scale > float32.high:
+    raise newException(ValueError, "UI scale must be a finite number greater than zero")
+  scale
+
+proc currentUiScale*(): float32 =
+  max(figUiScale(), 0.0001'f32)
 
 proc nativePixels(value: float32, scale: float32): int32 =
   max((max(value, 1.0'f32) * scale).round().int32, 1)
@@ -1402,6 +1410,15 @@ proc contentScale*(host: HostWindow): float32 =
     return 1.0'f32
   max(host.xNativeWindow.contentScale(), 1.0'f32)
 
+proc setUiScaleOverride*(host: HostWindow, scale: float32) =
+  if host.isNil:
+    return
+  let normalizedScale = validatedUiScale(scale)
+  host.xHasUiScaleOverride = true
+  host.xUiScaleOverride = normalizedScale
+  host.xAutoScale = false
+  setFigUiScale(normalizedScale)
+
 proc refreshContentScale*(host: HostWindow) =
   if host.xHasUiScaleOverride:
     setFigUiScale(host.xUiScaleOverride)
@@ -1764,10 +1781,18 @@ proc installEventHandlers(host: HostWindow) =
   )
 
 proc createHostWindow*(
-    frame: Rect, title: string, callbacks: HostWindowCallbacks, transparent = false
+    frame: Rect,
+    title: string,
+    callbacks: HostWindowCallbacks,
+    transparent = false,
+    uiScaleOverride: Option[float32] = none(float32),
 ): HostWindow =
   let
-    scaleOverride = uiScaleOverrideFromEnv()
+    scaleOverride =
+      if uiScaleOverride.isSome:
+        some(UiScaleOverride(scale: validatedUiScale(uiScaleOverride.get())))
+      else:
+        uiScaleOverrideFromEnv()
     size = nativeWindowSize(frame.size, scaleOverride.overrideScale())
   result = HostWindow(
     xCallbacks: callbacks,
@@ -1806,6 +1831,7 @@ when defined(linux) or defined(bsd):
       callbacks: HostWindowCallbacks,
       config: LayerSurfaceConfig,
       transparent = false,
+      uiScaleOverride: Option[float32] = none(float32),
   ): HostWindow =
     when defined(useNativeDynlib):
       raise newException(
@@ -1813,7 +1839,11 @@ when defined(linux) or defined(bsd):
       )
     else:
       let
-        scaleOverride = uiScaleOverrideFromEnv()
+        scaleOverride =
+          if uiScaleOverride.isSome:
+            some(UiScaleOverride(scale: validatedUiScale(uiScaleOverride.get())))
+          else:
+            uiScaleOverrideFromEnv()
         size = nativeWindowSize(frame.size, scaleOverride.overrideScale())
       result = HostWindow(
         xCallbacks: callbacks,

@@ -387,8 +387,8 @@ kosmo --add ../shared-library
 
 Use Quick Open to find a file, drag tabs to arrange your panes, or choose
 File → New Terminal to open a shell. Markdown files open as previews, with a
-control to switch to the source editor. Themes, fonts, keyboard shortcuts, and
-scrolling behavior are available in Settings.
+control to switch to the source editor. Themes, fonts, keyboard shortcuts, UI
+scale, and scrolling behavior are available in Settings.
 
 You can also send a Git diff straight to Kosmo:
 
