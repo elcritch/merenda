@@ -132,12 +132,13 @@ proc prepareApplicationEventLoop(app: Application)
 proc pollApplicationEvents(app: Application)
 proc waitForApplicationEvents(app: Application)
 
-proc requestNativeDisplayRefresh(app: Application) =
-  ## Some native backends report an event without marking its surface dirty.
-  ## Refresh every visible host after native activity so exposed content is
-  ## rebuilt even when the backend omits a dedicated expose callback.
+proc requestNativeDisplayRefreshAfterEvent(app: Application) =
+  ## Refresh only backends whose damage events do not request their own render.
+  ## Siwin currently reports event-loop wake notifications as native activity,
+  ## so applying this fallback to retained-surface backends causes idle redraws.
   for window in app.xWindows:
-    if not window.isNil and window.isVisible:
+    if not window.isNil and window.isVisible and
+        nimkitBackend.nativeEventsNeedDisplayRefresh(window.nativeWindowOrNil()):
       window.requestNativeDisplayUpdate()
 
 proc resolvedApplicationName(name: string): string =
@@ -1233,7 +1234,7 @@ proc pollApplicationEvents(app: Application) =
   for window in app.xWindows:
     if not window.isNil and window.isVisible and window.nativeReady:
       if nimkitBackend.pollNativeEvents():
-        app.requestNativeDisplayRefresh()
+        app.requestNativeDisplayRefreshAfterEvent()
       break
 
 proc waitForApplicationEvents(app: Application) =
@@ -1256,7 +1257,7 @@ proc waitForApplicationEvents(app: Application) =
   else:
     eventActivity = nimkitBackend.waitForNativeEvents()
   if eventActivity:
-    app.requestNativeDisplayRefresh()
+    app.requestNativeDisplayRefreshAfterEvent()
 
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:
