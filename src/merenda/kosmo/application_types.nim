@@ -73,6 +73,7 @@ type
     pendingPanePrefix: bool
     matterRefreshPending: bool
     matterRefreshActive: bool
+    inactiveRefreshDeferred: bool
 
   KosmoEditorTabsHandler = ref object of nimkit.Responder
     editorView: WeakRef[KosmoEditorView]
