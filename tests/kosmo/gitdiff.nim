@@ -205,6 +205,37 @@ suite "Kosmo Git diff":
         check file.patchState == gdpsUnloaded
     check foundGenerated
 
+  test "Expand All redraws completed background diff layouts":
+    let panel = newKosmoGitDiffPanel(
+      parseGitDiff(
+        "diff --git a/one.nim b/one.nim\n" & "--- a/one.nim\n+++ b/one.nim\n" &
+          "@@ -1 +1 @@\n-let one = 1\n+let one = 2\n" &
+          "diff --git a/two.nim b/two.nim\n" & "--- a/two.nim\n+++ b/two.nim\n" &
+          "@@ -1 +1 @@\n-let two = 1\n+let two = 2\n"
+      )
+    )
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 700, 600)
+    panel.layoutSubtreeIfNeeded()
+    require panel.expandButton.sendAction()
+    require panel.waitForDiff()
+
+    let textView = panel.textViewForFile(1)
+    require panel.waitForDiff()
+    let manager = textView.layoutManager()
+    panel.layoutSubtreeIfNeeded()
+    discard manager.layoutSnapshot()
+    panel.layoutSubtreeIfNeeded()
+    discard panel.buildRenders()
+    let viewportRevision = textView.renderSlotRevision(TextViewportRenderSlot)
+    manager.invalidateLayout()
+    textView.needsDisplay = false
+    manager.requestBackgroundLayout(allowUncachedLayout = true)
+
+    require panel.waitForDiff()
+    check textView.renderSlotRevision(TextViewportRenderSlot) > viewportRevision
+
   test "lazy patch loading uses the canonical repository root":
     let
       root = createTempDir("kosmo-diff-nested-root-", "")
