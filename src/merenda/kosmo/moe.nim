@@ -1726,12 +1726,28 @@ proc dismissCommandLine*(editor: KosmoEditor) =
   if editor.commandLine().visible:
     discard editor.handleKey("Esc")
 
+proc handleCommittedTextInput(editor: KosmoEditor, text: string): bool =
+  if text.len == 0:
+    return true
+  var byteOffset = 0
+  for rune in text.runes:
+    # Normal and Visual modes decode one physical character at a time. Once a
+    # leading command enters a text mode, preserve the rest as one IME commit.
+    if editor.mode() in
+        {KosmoEditorMode.Insert, KosmoEditorMode.Replace, KosmoEditorMode.Command}:
+      return editor.editor.handleTextInput(text[byteOffset .. ^1])
+    let value = $rune
+    if not editor.editor.handleTextInput(value):
+      return false
+    byteOffset += value.len
+  true
+
 proc handleTextInput*(editor: KosmoEditor, text: string): bool =
   ## Send committed text, including IME and composed Unicode input.
   if editor.isNil or editor.editor.isNil:
     return false
   editor.inWorkingDirectory:
-    editor.editor.handleTextInput(text)
+    editor.handleCommittedTextInput(text)
 
 proc handlePaste*(editor: KosmoEditor, text: string): bool =
   ## Insert pasted text without interpreting it as physical key input.
