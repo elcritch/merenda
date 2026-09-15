@@ -1882,7 +1882,13 @@ proc createPopupHostWindow*(
   result.configureTransparentPresentation()
   result.registerHost()
   result.installEventHandlers()
-  result.xNativeWindow.firstStep(makeVisible = true)
+  when defined(macosx):
+    # Cocoa's visible first step raises every existing window in creation order.
+    # Show only the popup so its owner's document stacking order is preserved.
+    result.xNativeWindow.firstStep(makeVisible = false)
+    result.xNativeWindow.visible = true
+  else:
+    result.xNativeWindow.firstStep(makeVisible = true)
   result.xNativeWindow.reposition(placement)
   result.xNativeWindow.refreshUiScale(result.xAutoScale)
   result.xReady = true

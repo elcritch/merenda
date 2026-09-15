@@ -581,6 +581,8 @@ suite "Kosmo file browser item actions":
     let point = secondTree.pointToWindow(initPoint(bounds.minX + 120, bounds.minY + 12))
     require secondWindow.rightMouseDownAt(point)
     check app.keyWindow() == secondWindow
+    check not firstWindow.hasActiveTransientSession()
+    check secondWindow.hasActiveTransientSession()
     check secondTree.menu().isOpen()
     check firstTree.menu().isNil
     require secondWindow.dispatchKeyDown(

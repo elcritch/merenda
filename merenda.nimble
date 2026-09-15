@@ -13,7 +13,7 @@ requires "crunchy >= 0.1.11"
 # Native damage must request onRender: https://github.com/levovix0/siwin/pull/55
 requires "gh:elcritch/siwin#fix/native-damage-redraw"
 requires "figdraw >= 0.39.0 [siwin, sharedlib, harfbuzz]"
-requires "sigils >= 0.28.1 [sigNameAsString, closures, siwin, chronos]"
+requires "sigils >= 0.28.2 & < 0.29.0 [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
 requires "kiwiberry"
 requires "cborious"
