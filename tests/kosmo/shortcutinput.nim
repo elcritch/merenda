@@ -6,6 +6,12 @@ import merenda/kosmo/kosmo
 proc pressControlKey(window: Window, key: Key): bool =
   window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: {kmControl}))
 
+proc closeTabShortcutEvent(): KeyEvent =
+  when defined(macosx) or defined(macos):
+    KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers())
+  else:
+    KeyEvent(key: keyF4, keyCode: keyF4.ord, modifiers: {kmControl})
+
 proc pressPaneKey(
     window: Window, key: Key, text: string, modifiers: set[nimkit.KeyModifier]
 ): bool =
@@ -183,9 +189,7 @@ suite "Kosmo synthetic shortcut input":
     require frontend.editorView.editor.handleKey("Esc")
     require frontend.editorView.editor.tabs()[0].modified
 
-    check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers())
-    )
+    check frontend.window.dispatchKeyDown(closeTabShortcutEvent())
     let session = frontend.application.modalSession()
     require not session.isNil
     check session.window.title == "Unsaved Changes"
@@ -196,9 +200,7 @@ suite "Kosmo synthetic shortcut input":
     check not frontend.window.isClosed
     check frontend.editorView.editor.tabs()[0].modified
 
-    check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers())
-    )
+    check frontend.window.dispatchKeyDown(closeTabShortcutEvent())
     let discardButton = frontend.application
       .modalSession().window
       .contentView()
