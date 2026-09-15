@@ -70,6 +70,8 @@ type
     xAppearance: Appearance
     xHasAppearance: bool
     xInvertScrolling: bool
+    xUiScale: float32
+    xHasUiScale: bool
     xCurrentEvent: KeyEvent
     xHasCurrentEvent: bool
     xKeyWindow: Window
@@ -96,6 +98,11 @@ type
     xAutomaticallyStartsLocalSigilThread: bool
     xMerendaSettingsWindow: MerendaSettingsWindow
     xSupplementalFontCatalogProvider: SupplementalFontCatalogProvider
+    xMerendaSettingsThemeIdentifier: string
+    xMerendaSettingsSaveHandler: SettingsSaveHandler
+    xMerendaSettingsAutoSaveDefaults: bool
+    xMerendaSettingsDefaults: MerendaSettings
+    xHasMerendaSettingsDefaults: bool
 
 const WindowDidOrderFrontSelector = "_nimkitWindowDidOrderFront"
 const WindowDidOrderBackSelector = "_nimkitWindowDidOrderBack"
@@ -301,6 +308,54 @@ proc userDefaults*(app: Application): UserDefaults =
     app.xUserDefaults = sharedUserDefaults()
   app.xUserDefaults
 
+proc merendaSettingsThemeIdentifier*(app: Application): string =
+  ## Return the built-in theme identifier shown by Merenda Settings.
+  if not app.isNil:
+    result = app.xMerendaSettingsThemeIdentifier
+
+proc `merendaSettingsThemeIdentifier=`*(app: Application, identifier: string) =
+  ## Set the built-in theme identifier shown by Merenda Settings.
+  if app.isNil:
+    return
+  app.xMerendaSettingsThemeIdentifier = identifier
+
+proc merendaSettingsSaveHandler*(app: Application): SettingsSaveHandler =
+  ## Return the handler used by Save as Default in Merenda Settings.
+  if not app.isNil:
+    result = app.xMerendaSettingsSaveHandler
+
+proc `merendaSettingsSaveHandler=`*(app: Application, handler: SettingsSaveHandler) =
+  ## Set the handler used by Save as Default in Merenda Settings.
+  if not app.isNil:
+    app.xMerendaSettingsSaveHandler = handler
+
+proc merendaSettingsDefaults*(app: Application): MerendaSettings =
+  ## Return the saved baseline used by Reset in Merenda Settings.
+  if not app.isNil and app.xHasMerendaSettingsDefaults:
+    result = app.xMerendaSettingsDefaults
+
+func hasMerendaSettingsBaseline(defaults: MerendaSettings): bool =
+  defaults.theme.len > 0 or defaults.appearance.theme.isInitialized
+
+proc `merendaSettingsDefaults=`*(app: Application, defaults: MerendaSettings) =
+  ## Set the saved baseline used by Reset in Merenda Settings.
+  if app.isNil:
+    return
+  app.xMerendaSettingsDefaults = defaults
+  app.xHasMerendaSettingsDefaults = defaults.hasMerendaSettingsBaseline()
+
+proc merendaSettingsAutoSaveDefaults*(app: Application): bool =
+  ## Whether Merenda Settings automatically saves committed changes.
+  not app.isNil and app.xMerendaSettingsAutoSaveDefaults
+
+proc `merendaSettingsAutoSaveDefaults=`*(app: Application, enabled: bool) =
+  ## Set whether Merenda Settings automatically saves committed changes.
+  if app.isNil:
+    return
+  app.xMerendaSettingsAutoSaveDefaults = enabled
+  if not app.xMerendaSettingsWindow.isNil:
+    app.xMerendaSettingsWindow.autoSaveDefaults = enabled
+
 proc invertScrolling*(app: Application): bool =
   ## Whether wheel scrolling is inverted for the application's windows.
   app.xInvertScrolling
@@ -313,6 +368,24 @@ proc `invertScrolling=`*(app: Application, inverted: bool) =
       window.invertScrolling = inverted
   if not app.xMerendaSettingsWindow.isNil:
     app.xMerendaSettingsWindow.invertScrolling = inverted
+
+proc uiScale*(app: Application): float32 =
+  if app.xHasUiScale:
+    return app.xUiScale
+  for window in app.xWindows:
+    if not window.isNil and window.nativeReady:
+      return window.uiScale()
+  nimkitBackend.currentUiScale()
+
+proc `uiScale=`*(app: Application, scale: float32) =
+  let normalizedScale = nimkitBackend.validatedUiScale(scale)
+  app.xUiScale = normalizedScale
+  app.xHasUiScale = true
+  for window in app.xWindows:
+    if not window.isNil:
+      window.uiScale = normalizedScale
+  if not app.xMerendaSettingsWindow.isNil:
+    app.xMerendaSettingsWindow.uiScale = normalizedScale
 
 proc workspace*(app: Application): Workspace =
   if app.xWorkspace.isNil:
@@ -888,6 +961,14 @@ proc showMerendaSettings*(app: Application) =
         supplementalFonts = app.xSupplementalFontCatalogProvider()
       except CatchableError:
         discard
+    var panelSaveHandler: SettingsSaveHandler
+    let configuredSaveHandler = app.xMerendaSettingsSaveHandler
+    if not configuredSaveHandler.isNil:
+      panelSaveHandler = proc(values: MerendaSettings): bool =
+        result = configuredSaveHandler(values)
+        if result:
+          app.xMerendaSettingsDefaults = values
+          app.xHasMerendaSettingsDefaults = true
     app.xMerendaSettingsWindow = newMerendaSettingsWindow(
       proc(appearance: Appearance) =
         app.setAppearance(appearance),
@@ -896,7 +977,25 @@ proc showMerendaSettings*(app: Application) =
       invertScrolling = app.invertScrolling(),
       invertScrollingHandler = proc(inverted: bool) =
         app.invertScrolling = inverted,
+      initialUiScale = app.uiScale(),
+      uiScaleHandler = proc(scale: float32) =
+        app.uiScale = scale,
+      initialTheme = app.merendaSettingsThemeIdentifier(),
+      saveDefaultsHandler = panelSaveHandler,
+      autoSaveDefaults = app.merendaSettingsAutoSaveDefaults(),
+      autoSaveDefaultsHandler = proc(enabled: bool) =
+        app.merendaSettingsAutoSaveDefaults = enabled,
+      themeHandler = proc(theme: string) =
+        app.merendaSettingsThemeIdentifier = theme,
+      initialDefaults =
+        if app.xHasMerendaSettingsDefaults:
+          app.xMerendaSettingsDefaults
+        else:
+          MerendaSettings(),
     )
+    if not app.xHasMerendaSettingsDefaults:
+      app.xMerendaSettingsDefaults = app.xMerendaSettingsWindow.currentSettings()
+      app.xHasMerendaSettingsDefaults = true
   app.xMerendaSettingsWindow.resetSelections()
   discard app.showWindow(
     app.xMerendaSettingsWindow.window,
@@ -918,6 +1017,8 @@ proc addWindow*(app: Application, window: Window) =
   app.includeOrderedWindow(window)
   window.setNextResponder(app)
   window.invertScrolling = app.xInvertScrolling
+  if app.xHasUiScale:
+    window.uiScale = app.xUiScale
   window.setInheritedAppearance(app.effectiveAppearance())
   if not app.xIcon.isNil:
     window.icon = app.xIcon

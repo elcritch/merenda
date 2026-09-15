@@ -555,6 +555,38 @@ protocol KosmoWindowLifecycleDelegate of nimkit.WindowDelegateProtocol:
     if not lifecycle.frontend.isNil:
       lifecycle.frontend[].close()
 
+func persistedFontName(appearance: nimkit.Appearance, role: nimkit.FontRole): string =
+  appearance.fontName(role)
+
+proc saveMerendaSettings(
+    manager: KosmoWindowManager, settings: nimkit.MerendaSettings
+): bool =
+  if manager.isNil or manager.configPath.len == 0:
+    return
+  var config = manager.config
+  config.merendaTheme = settings.theme
+  config.merendaFont = settings.appearance.persistedFontName(nimkit.frUI)
+  config.merendaMonoFont = settings.appearance.persistedFontName(nimkit.frMonospace)
+  if config.merendaFont == KosmoInterfaceFontName:
+    config.merendaFont = ""
+  if config.merendaMonoFont == KosmoMonospaceFontName:
+    config.merendaMonoFont = ""
+  config.merendaFontSize = settings.appearance.resolveLength(
+    nimkit.controlStyle(nimkit.srTextView),
+    nimkit.StyleFontSize,
+    nimkit.defaultFontSize(),
+  )
+  config.merendaInvertScrolling = settings.invertScrolling
+  config.merendaUiScale = settings.uiScale
+  config.merendaAutoSaveDefaults = settings.autoSaveDefaults
+  if not config.saveKosmoConfig(manager.configPath):
+    return
+  manager.config = config
+  if not manager.application.isNil:
+    manager.application.merendaSettingsThemeIdentifier = settings.theme
+    manager.application.merendaSettingsAutoSaveDefaults = settings.autoSaveDefaults
+  true
+
 proc newKosmoWindowManager*(
     app = nimkit.sharedApplication(),
     keyBindingsPath = "",
@@ -564,12 +596,21 @@ proc newKosmoWindowManager*(
   ## Create the owner for all project and file windows in a Kosmo session.
   let config = loadKosmoConfig(configPath)
   app.configureKosmoApplicationAssets(config, assetCacheDirectory)
-  KosmoWindowManager(
+  result = KosmoWindowManager(
     application: app,
     keyBindingsPath: keyBindingsPath,
     configPath: configPath,
     config: config,
   )
+  if not app.isNil:
+    if configPath.len > 0:
+      let weakManager = result.unsafeWeakRef()
+      app.merendaSettingsSaveHandler = proc(settings: nimkit.MerendaSettings): bool =
+        if weakManager.isNil:
+          return
+        weakManager[].saveMerendaSettings(settings)
+    else:
+      app.merendaSettingsSaveHandler = nil
 
 func hasFileBrowser*(frontend: KosmoApplication): bool =
   ## Return whether this window displays a project file browser.
@@ -1009,7 +1050,7 @@ proc newKosmoApplication*(
     if not active.isNil:
       let group = active.dockController.activePaneGroup()
       if not group.isNil:
-        group.window.close()
+        discard active.dockController.closeWindow(group.window)
   fileTree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
     if frontend.isNil:
       return
@@ -1232,6 +1273,20 @@ proc openCliRequest(
       result.errors.add snapshot.errorMessage
     result.delivered = true
     return
+  if request.add:
+    let destination = manager.frontendForCliRequest(request.originWindow)
+    if not destination.isNil:
+      for path in request.paths:
+        if dirExists(path) and not destination.hasFileBrowser():
+          result.errors.add "Kosmo cannot add a folder to an editor-only window: " & path
+        elif fileExists(path) or dirExists(path) or dirExists(path.parentDir()):
+          if not destination.openPath(path):
+            result.errors.add "Kosmo could not add path: " & path
+        else:
+          result.errors.add "Kosmo cannot open path: " & path
+      destination.show()
+      result.delivered = true
+      return
   var
     folders: seq[string]
     files: seq[string]

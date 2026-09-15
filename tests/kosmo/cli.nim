@@ -29,6 +29,14 @@ suite "Kosmo command line":
     check commandLine.filePath == "notes.md"
     check commandLine.paths == @["notes.md", "--literal", "with spaces.md"]
 
+  test "add mode is parsed without becoming a path":
+    let commandLine = parseKosmoCommandLine(@["--add", "project"])
+    check commandLine.add
+    check commandLine.paths == @["project"]
+    check commandLine.errors.len == 0
+    for args in [@["--add", "--diff"], @["--add", "--file:txt"], @["--add"]]:
+      check parseKosmoCommandLine(args).errors.len > 0
+
   test "background child arguments cannot request another background launch":
     let parent = parseKosmoCommandLine(@["project", "--bg", "README.md"])
     let child = parseKosmoCommandLine(parent.arguments)

@@ -1,4 +1,4 @@
-import std/[importutils, strutils, tables, unittest]
+import std/[importutils, math, strutils, tables, unittest]
 
 import merenda/nimkit
 import merenda/nimkit/app/settings
@@ -73,6 +73,180 @@ suite "nimkit settings":
     check invertButton.sendAction()
     check appliedValue
 
+  test "appearance settings scale the UI in tenths":
+    var appliedScale = 0.0'f32
+    let settings = newMerendaSettingsWindow(
+      initialUiScale = 1.0'f32,
+      uiScaleHandler = proc(scale: float32) =
+        appliedScale = scale,
+    )
+    defer:
+      settings.window().close()
+    let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require not tabsView.isNil
+    require tabsView of TabView
+    let tabs = TabView(tabsView)
+    check tabs.selectTabViewItemAtIndex(0)
+
+    let scaleView = settings.contentView().viewWithIdentifier(SettingsUiScaleIdentifier)
+    require not scaleView.isNil
+    require scaleView of Stepper
+    let scaleStepper = Stepper(scaleView)
+    check scaleStepper.minValue == 0.5'f32
+    check scaleStepper.maxValue == 3.0'f32
+    check scaleStepper.value == 1.0'f32
+    check scaleStepper.increment == 0.1'f32
+    check scaleStepper.formattedValue() == "1.0x"
+
+    check scaleStepper.incrementValue()
+    check abs(scaleStepper.value - 1.1'f32) < 0.0001'f32
+    check abs(appliedScale - 1.1'f32) < 0.0001'f32
+    check settings.uiScale == scaleStepper.value
+
+    check scaleStepper.decrementValue()
+    check abs(scaleStepper.value - 1.0'f32) < 0.0001'f32
+    check abs(appliedScale - 1.0'f32) < 0.0001'f32
+
+  test "settings save committed values and reset to the saved baseline":
+    var
+      appliedAppearance: Appearance
+      appliedInvertScrolling = false
+      appliedScale = 1.0'f32
+      savedSettings: MerendaSettings
+      saveCount = 0
+    let settings = newMerendaSettingsWindow(
+      appearanceHandler = proc(appearance: Appearance) =
+        appliedAppearance = appearance,
+      invertScrollingHandler = proc(inverted: bool) =
+        appliedInvertScrolling = inverted,
+      initialUiScale = 1.0'f32,
+      uiScaleHandler = proc(scale: float32) =
+        appliedScale = scale,
+      initialTheme = "darkbsd",
+      saveDefaultsHandler = proc(values: MerendaSettings): bool =
+        savedSettings = values
+        inc saveCount
+        true,
+    )
+    defer:
+      settings.window().close()
+
+    let
+      themeView = settings.contentView().viewWithIdentifier("settings-theme-picker")
+      tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require themeView of ComboBox
+    require tabsView of TabView
+    let tabs = TabView(tabsView)
+    check tabs.selectTabViewItemAtIndex(1)
+    let
+      fontSizeView =
+        settings.contentView().viewWithIdentifier("settings-font-size-stepper")
+      applyFontView = settings.contentView().viewWithIdentifier("settings-apply-font")
+    require fontSizeView of Stepper
+    require applyFontView of Button
+    check tabs.selectTabViewItemAtIndex(0)
+    let scaleView = settings.contentView().viewWithIdentifier(SettingsUiScaleIdentifier)
+    require scaleView of Stepper
+    check tabs.selectTabViewItemAtIndex(2)
+    let
+      invertView =
+        settings.contentView().viewWithIdentifier(SettingsInvertScrollingIdentifier)
+      saveView =
+        settings.contentView().viewWithIdentifier(SettingsSaveDefaultsIdentifier)
+      resetView = settings.contentView().viewWithIdentifier(SettingsResetIdentifier)
+      autoSaveView =
+        settings.contentView().viewWithIdentifier(SettingsAutoSaveDefaultsIdentifier)
+    require invertView of Button
+    require saveView of Button
+    require resetView of Button
+    require autoSaveView of Button
+    let
+      themePicker = ComboBox(themeView)
+      invertButton = Button(invertView)
+      scaleStepper = Stepper(scaleView)
+      fontSizeStepper = Stepper(fontSizeView)
+      applyFontButton = Button(applyFontView)
+      saveButton = Button(saveView)
+      resetButton = Button(resetView)
+      autoSaveButton = Button(autoSaveView)
+
+    themePicker.selectedIndex = 1
+    check themePicker.sendAction()
+    invertButton.state = bsOn
+    check invertButton.sendAction()
+    check scaleStepper.incrementValue()
+    check saveButton.sendAction()
+    check saveCount == 1
+    check savedSettings.theme == "aqua"
+    check savedSettings.invertScrolling
+    check abs(savedSettings.uiScale - 1.1'f32) < 0.0001'f32
+    check appliedInvertScrolling
+    check abs(appliedScale - 1.1'f32) < 0.0001'f32
+
+    check fontSizeStepper.incrementValue()
+    check applyFontButton.sendAction()
+    check saveButton.sendAction()
+    check saveCount == 2
+    check fontSizeStepper.incrementValue()
+    check fontSizeStepper.value == 16.0'f32
+
+    themePicker.selectedIndex = 0
+    check themePicker.sendAction()
+    invertButton.state = bsOff
+    check invertButton.sendAction()
+    check scaleStepper.decrementValue()
+    check resetButton.sendAction()
+    check themePicker.selectedIndex == 1
+    check invertButton.state == bsOn
+    check abs(scaleStepper.value - 1.1'f32) < 0.0001'f32
+    check fontSizeStepper.value == 15.0'f32
+    check appliedAppearance.resolveChromeName(controlStyle(srButton)) == AquaChromeName
+    check appliedInvertScrolling
+    check abs(appliedScale - 1.1'f32) < 0.0001'f32
+    check saveCount == 2
+
+    autoSaveButton.state = bsOn
+    check autoSaveButton.sendAction()
+    check savedSettings.autoSaveDefaults
+    check saveCount == 3
+    check scaleStepper.incrementValue()
+    check saveCount == 4
+    check abs(savedSettings.uiScale - 1.2'f32) < 0.0001'f32
+
+  test "application UI scale reaches existing and new windows":
+    let
+      app = newApplication("UI Scale Test")
+      firstWindow = newWindow("First")
+      secondWindow = newWindow("Second")
+    app.addWindow(firstWindow)
+    app.uiScale = 1.2'f32
+    check app.uiScale == 1.2'f32
+    check firstWindow.uiScale == 1.2'f32
+
+    app.addWindow(secondWindow)
+    check secondWindow.uiScale == 1.2'f32
+
+    app.showMerendaSettings()
+    let settingsWindow = app.windows[^1]
+    let tabsView = settingsWindow.contentView().viewWithIdentifier("settings-tabs")
+    require not tabsView.isNil
+    require tabsView of TabView
+    check TabView(tabsView).selectTabViewItemAtIndex(0)
+    let scaleView =
+      settingsWindow.contentView().viewWithIdentifier(SettingsUiScaleIdentifier)
+    require not scaleView.isNil
+    require scaleView of Stepper
+    let scaleStepper = Stepper(scaleView)
+    check abs(scaleStepper.value - 1.2'f32) < 0.0001'f32
+    check scaleStepper.incrementValue()
+    check abs(app.uiScale - 1.3'f32) < 0.0001'f32
+    check abs(firstWindow.uiScale - 1.3'f32) < 0.0001'f32
+    check abs(secondWindow.uiScale - 1.3'f32) < 0.0001'f32
+
+    settingsWindow.close()
+    firstWindow.close()
+    secondWindow.close()
+
   test "application scrolling preference reaches existing and new windows":
     let
       app = newApplication("Scrolling Preference Test")
@@ -111,6 +285,44 @@ suite "nimkit settings":
     settingsWindow.close()
     firstWindow.close()
     secondWindow.close()
+
+  test "application settings reset remembers defaults across panel reopenings":
+    var savedCount = 0
+    let app = newApplication("Settings Default Baseline Test")
+    app.merendaSettingsThemeIdentifier = "darkbsd"
+    app.merendaSettingsSaveHandler = proc(values: MerendaSettings): bool =
+      discard values
+      inc savedCount
+      true
+    app.showMerendaSettings()
+    let firstPanel = app.windows[^1]
+    let firstThemeView =
+      firstPanel.contentView().viewWithIdentifier("settings-theme-picker")
+    require firstThemeView of ComboBox
+    let firstThemePicker = ComboBox(firstThemeView)
+    firstThemePicker.selectedIndex = 1
+    check firstThemePicker.sendAction()
+    firstPanel.close()
+
+    app.showMerendaSettings()
+    let secondPanel = app.windows[^1]
+    defer:
+      secondPanel.close()
+    let
+      secondThemeView =
+        secondPanel.contentView().viewWithIdentifier("settings-theme-picker")
+      secondResetView =
+        secondPanel.contentView().viewWithIdentifier(SettingsResetIdentifier)
+    require secondThemeView of ComboBox
+    require secondResetView of Button
+    let
+      secondThemePicker = ComboBox(secondThemeView)
+      resetButton = Button(secondResetView)
+    check secondThemePicker.selectedIndex == 1
+    check resetButton.sendAction()
+    check secondThemePicker.selectedIndex == 0
+    check app.appearance.resolveChromeName(controlStyle(srButton)) == RubyAquaChromeName
+    check savedCount == 0
 
   test "typography settings expose independent interface and monospace fonts":
     let settings = newMerendaSettingsWindow()

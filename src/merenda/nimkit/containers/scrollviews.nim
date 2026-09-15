@@ -334,6 +334,9 @@ proc scrollToPoint*(clipView: ClipView, point: Point) =
   if clipView.bounds() == nextBounds:
     return
   clipView.setBoundsOriginFromLayout(nextPoint)
+  # Scrolling bypasses the regular bounds setter, so notify observers that
+  # depend on the visible region, including lazy content containers.
+  emit clipView.geometryDidChange()
   clipView.xScrollView.reflectScrolledClipView(clipView)
 
 proc autoscroll*(clipView: ClipView, event: MouseEvent): bool =

@@ -27,6 +27,7 @@ type
   KosmoCliOpenRequest* = object
     requestId*: string
     kind*: KosmoCliRequestKind
+    add*: bool
     paths*: seq[string]
     originWindow*: string
     workingDirectory*: string
@@ -128,6 +129,7 @@ proc requestJson(endpoint: KosmoCliEndpoint, request: KosmoCliOpenRequest): Json
     "token": endpoint.token,
     "requestId": request.requestId,
     "kind": request.kind.ord,
+    "add": request.add,
     "paths": request.paths,
     "originWindow": request.originWindow,
     "workingDirectory": request.workingDirectory,
@@ -147,6 +149,8 @@ proc parseRequest(content: string, endpoint: KosmoCliEndpoint): KosmoCliOpenRequ
   if kind notin KosmoCliRequestKind.low.ord .. KosmoCliRequestKind.high.ord:
     raise newException(ValueError, "Invalid Kosmo CLI request kind")
   result.kind = KosmoCliRequestKind(kind)
+  if node.hasKey("add"):
+    result.add = node["add"].getBool()
   result.originWindow = node{"originWindow"}.getStr()
   result.workingDirectory = node{"workingDirectory"}.getStr()
   result.diffText = node{"diffText"}.getStr()
@@ -255,6 +259,7 @@ proc openInRunningKosmo*(
     preferredEndpoint = getEnv(KosmoCliEndpointEnvironment),
     originWindow = getEnv(KosmoCliWindowEnvironment),
     registryDirectory = defaultKosmoCliRegistryDirectory(),
+    add = false,
 ): KosmoCliOpenResponse =
   ## Forward absolute paths to a responsive Kosmo process. `delivered` remains
   ## false when no usable process was found.
@@ -265,6 +270,7 @@ proc openInRunningKosmo*(
     KosmoCliOpenRequest(
       requestId: randomIdentifier(),
       kind: kcrOpenPaths,
+      add: add,
       paths: @paths,
       originWindow: originWindow,
     ),

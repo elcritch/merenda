@@ -1,6 +1,7 @@
 import pkg/chroma
 
 import ./nimkit/app/application
+import ./nimkit/app/settings
 import ./nimkit/accessibility/accessibility
 import ./nimkit/app/animations
 import ./nimkit/app/animationproperties
@@ -89,6 +90,7 @@ import ./nimkit/app/workspaces
 import ./nimkit/resources
 
 export application
+export settings
 export chroma
 export accessibility
 export animations

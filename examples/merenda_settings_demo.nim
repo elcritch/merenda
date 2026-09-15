@@ -10,6 +10,9 @@ let settingsWindow = newMerendaSettingsWindow(
   invertScrolling = app.invertScrolling(),
   invertScrollingHandler = proc(inverted: bool) =
     app.invertScrolling = inverted,
+  initialUiScale = app.uiScale(),
+  uiScaleHandler = proc(scale: float32) =
+    app.uiScale = scale,
 )
 
 app.runWindow(

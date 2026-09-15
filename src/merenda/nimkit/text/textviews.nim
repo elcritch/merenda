@@ -3246,6 +3246,12 @@ protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
     discard ranges
     textView.needsDisplay = true
 
+  proc layoutDidComplete(textView: TextView, snapshot: TextLayoutSnapshot) {.slot.} =
+    ## A completed background layout can keep the same geometry while replacing
+    ## the glyph arrangement used by a retained render.
+    discard snapshot
+    textView.needsDisplay = true
+
   proc containersDidChange(
       textView: TextView, containers: seq[TextContainer]
   ) {.slot.} =
