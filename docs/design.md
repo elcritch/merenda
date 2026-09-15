@@ -96,6 +96,18 @@ Rendering is FigDraw-based and selector-driven:
 - `buildRenders` keeps render construction testable without a live native
   window.
 
+The application event loop drains native events and queued application work
+without requesting a redraw merely because the loop woke up. View display or
+layout invalidation requests a render for the affected window. Siwin also
+requests `onRender` for native surface damage, including X11 `Expose` and
+same-size WinAPI `WM_PAINT` damage; those backend handlers must schedule renders
+before Merenda can rely on this contract.
+
+An `onRender` callback is honored even when the view tree is clean: the native
+surface may need its existing content presented again. Clean view contributions
+reuse their cached render fragments. Unhandled events and worker notifications
+that leave the UI unchanged do not request a frame.
+
 ## Intrinsic Sizing
 
 NimKit follows the Cocoa-style split where controls ask cells and resolved

@@ -139,15 +139,6 @@ proc prepareApplicationEventLoop(app: Application)
 proc pollApplicationEvents(app: Application)
 proc waitForApplicationEvents(app: Application)
 
-proc requestNativeDisplayRefreshAfterEvent(app: Application) =
-  ## Refresh only backends whose damage events do not request their own render.
-  ## Siwin currently reports event-loop wake notifications as native activity,
-  ## so applying this fallback to retained-surface backends causes idle redraws.
-  for window in app.xWindows:
-    if not window.isNil and window.isVisible and
-        nimkitBackend.nativeEventsNeedDisplayRefresh(window.nativeWindowOrNil()):
-      window.requestNativeDisplayUpdate()
-
 proc resolvedApplicationName(name: string): string =
   if name.len > 0:
     return name
@@ -1332,10 +1323,10 @@ proc prepareApplicationEventLoop(app: Application) =
     startLocalThreadDefault()
 
 proc pollApplicationEvents(app: Application) =
+  # Native damage schedules onRender; event activity alone does not dirty views.
   for window in app.xWindows:
     if not window.isNil and window.isVisible and window.nativeReady:
-      if nimkitBackend.pollNativeEvents():
-        app.requestNativeDisplayRefreshAfterEvent()
+      discard nimkitBackend.pollNativeEvents()
       break
 
 proc waitForApplicationEvents(app: Application) =
@@ -1346,19 +1337,16 @@ proc waitForApplicationEvents(app: Application) =
   let
     now = getMonoTime()
     deadline = app.nextAnimationDeadline(now)
-  var eventActivity: bool
   if deadline.isSome:
     let timeout = deadline.get() - now
-    eventActivity = nimkitBackend.waitForNativeEvents(
+    discard nimkitBackend.waitForNativeEvents(
       if timeout.inNanoseconds > 0:
         timeout
       else:
         initDuration()
     )
   else:
-    eventActivity = nimkitBackend.waitForNativeEvents()
-  if eventActivity:
-    app.requestNativeDisplayRefreshAfterEvent()
+    discard nimkitBackend.waitForNativeEvents()
 
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:

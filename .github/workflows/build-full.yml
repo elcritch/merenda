@@ -75,6 +75,7 @@ jobs:
         sudo apt-get update
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           xvfb \
+          xauth \
           libx11-xcb-dev \
           libxcb1-dev \
           libxcursor-dev \
@@ -158,7 +159,11 @@ jobs:
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
-        "$testExecutable"
+        if [[ "${{ matrix.display }}" == "x11" ]]; then
+          xvfb-run -a -s "-screen 0 1280x1024x24" "$testExecutable"
+        else
+          "$testExecutable"
+        fi
 
   examples:
     runs-on: ${{ matrix.os }}
