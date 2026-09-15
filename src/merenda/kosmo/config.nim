@@ -9,6 +9,9 @@ type KosmoConfig* = object
   merendaFont*: string
   merendaMonoFont*: string
   merendaFontSize*: float32
+  merendaInvertScrolling*: bool
+  merendaUiScale*: float32
+  merendaAutoSaveDefaults*: bool
 
 func defaultKosmoConfigPath*(): string =
   ## Return the standalone editor's JSON configuration file path.

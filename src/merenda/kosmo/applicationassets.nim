@@ -195,33 +195,36 @@ proc applyKosmoBundledFontDefaults(
   app.setAppearance(appearance)
 
 proc applyKosmoAppearance(app: nimkit.Application, config: KosmoConfig) =
-  if app.isNil or (
-    config.merendaTheme.len == 0 and config.merendaFont.len == 0 and
-    config.merendaMonoFont.len == 0 and config.merendaFontSize <= 0.0'f32
-  ):
+  if app.isNil:
     return
-  let inheritedAppearance = app.effectiveAppearance()
-  var appearance =
+  if config.merendaTheme.len > 0 or config.merendaFont.len > 0 or
+      config.merendaMonoFont.len > 0 or config.merendaFontSize > 0.0'f32:
+    let inheritedAppearance = app.effectiveAppearance()
+    var appearance =
+      if config.merendaTheme.len > 0:
+        nimkit.initAppearance(nimkit.initThemeByName(config.merendaTheme))
+      else:
+        inheritedAppearance
+    var builder = nimkit.initThemeBuilder(appearance.theme)
     if config.merendaTheme.len > 0:
-      nimkit.initAppearance(nimkit.initThemeByName(config.merendaTheme))
-    else:
-      inheritedAppearance
-  var builder = nimkit.initThemeBuilder(appearance.theme)
-  if config.merendaTheme.len > 0:
-    for role in nimkit.FontRole:
-      builder.setFontName(role, inheritedAppearance.fontName(role))
-      builder.setFontFaces(role, inheritedAppearance.fontFaces(role))
-  if config.merendaFont.len > 0:
-    builder.setFontName(nimkit.frUI, config.merendaFont)
-    builder.setFontFace(nimkit.frUI, SystemTypeface())
-  if config.merendaMonoFont.len > 0:
-    builder.setFontName(nimkit.frMonospace, config.merendaMonoFont)
-    builder.setFontFace(nimkit.frMonospace, SystemTypeface())
-  if config.merendaFontSize > 0.0'f32:
-    for role in KosmoConfigTextStyleRoles:
-      builder[role, nimkit.StyleFontSize] = config.merendaFontSize
-  appearance.theme = builder.finish()
-  app.setAppearance(appearance)
+      for role in nimkit.FontRole:
+        builder.setFontName(role, inheritedAppearance.fontName(role))
+        builder.setFontFaces(role, inheritedAppearance.fontFaces(role))
+    if config.merendaFont.len > 0:
+      builder.setFontName(nimkit.frUI, config.merendaFont)
+      builder.setFontFace(nimkit.frUI, SystemTypeface())
+    if config.merendaMonoFont.len > 0:
+      builder.setFontName(nimkit.frMonospace, config.merendaMonoFont)
+      builder.setFontFace(nimkit.frMonospace, SystemTypeface())
+    if config.merendaFontSize > 0.0'f32:
+      for role in KosmoConfigTextStyleRoles:
+        builder[role, nimkit.StyleFontSize] = config.merendaFontSize
+    appearance.theme = builder.finish()
+    app.setAppearance(appearance)
+  app.invertScrolling = config.merendaInvertScrolling
+  if config.merendaUiScale > 0.0'f32:
+    app.uiScale = config.merendaUiScale
+  app.merendaSettingsAutoSaveDefaults = config.merendaAutoSaveDefaults
 
 proc configureKosmoApplicationAssets*(
     app: nimkit.Application, config: KosmoConfig, assetCacheDirectory: string
@@ -237,6 +240,35 @@ proc configureKosmoApplicationAssets*(
   let bundledFonts = installKosmoBundledFonts(assetCacheDirectory, roles)
   app.applyKosmoBundledFontDefaults(bundledFonts)
   app.applyKosmoAppearance(config)
+  let configuredTheme =
+    if config.merendaTheme.len > 0:
+      config.merendaTheme
+    else:
+      nimkit.themeNameFromEnv()
+  let normalizedTheme =
+    case configuredTheme.strip().toLowerAscii()
+    of "aqua":
+      "aqua"
+    of "macos", "mac-os", "mac", "modern-macos":
+      "macos"
+    of "macos-dark", "macosdark", "mac-os-dark", "dark-macos", "modern-macos-dark":
+      "macos-dark"
+    of "nebula", "nebula-glass":
+      "nebula"
+    of "peachy", "peach", "peachy83":
+      "peachy"
+    of "synthwave83", "synthwave-83", "synthwave":
+      "synthwave83"
+    else:
+      "darkbsd"
+  app.merendaSettingsThemeIdentifier = normalizedTheme
+  app.merendaSettingsDefaults = nimkit.MerendaSettings(
+    theme: normalizedTheme,
+    appearance: app.effectiveAppearance(),
+    invertScrolling: app.invertScrolling(),
+    uiScale: app.uiScale(),
+    autoSaveDefaults: config.merendaAutoSaveDefaults,
+  )
   app.supplementalFontCatalogProvider = proc(): seq[nimkit.FontCatalogEntry] =
     installKosmoBundledFonts(assetCacheDirectory).kosmoBundledFontCatalog()
   app.icon = nimkit.newImageResourceFromData(KosmoIconPng, name = "kosmo-icon")

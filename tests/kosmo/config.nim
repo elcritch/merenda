@@ -1,4 +1,4 @@
-import std/[json, os, strutils, tempfiles, unittest]
+import std/[json, math, os, strutils, tempfiles, unittest]
 
 import crunchy/[common, sha256]
 
@@ -118,6 +118,9 @@ suite "Kosmo configuration":
         merendaFont: "Iosevka",
         merendaMonoFont: "JetBrains Mono",
         merendaFontSize: 17.0'f32,
+        merendaInvertScrolling: true,
+        merendaUiScale: 1.25'f32,
+        merendaAutoSaveDefaults: true,
       )
     defer:
       removeDir(root)
@@ -129,6 +132,9 @@ suite "Kosmo configuration":
     check node["merendaFont"].getStr() == "Iosevka"
     check node["merendaMonoFont"].getStr() == "JetBrains Mono"
     check node["merendaFontSize"].getFloat() == float(config.merendaFontSize)
+    check node["merendaInvertScrolling"].getBool()
+    check node["merendaUiScale"].getFloat() == float(config.merendaUiScale)
+    check node["merendaAutoSaveDefaults"].getBool()
     check loadKosmoConfig(path) == config
 
   test "ignores malformed JSON configuration":
@@ -151,6 +157,9 @@ suite "Kosmo configuration":
         merendaFont: "Iosevka",
         merendaMonoFont: "JetBrains Mono",
         merendaFontSize: 17.0'f32,
+        merendaInvertScrolling: true,
+        merendaUiScale: 1.25'f32,
+        merendaAutoSaveDefaults: true,
       )
       app = newApplication("Kosmo Config Test")
     defer:
@@ -176,6 +185,77 @@ suite "Kosmo configuration":
       config.merendaFontSize
     check frontend.editorView.fontSize == config.merendaFontSize
     check frontend.editorView.editor.activeMoeThemeIdentifier() == config.moeTheme
+    check app.invertScrolling == config.merendaInvertScrolling
+    check abs(app.uiScale - config.merendaUiScale) < 0.0001'f32
+    check app.merendaSettingsAutoSaveDefaults == config.merendaAutoSaveDefaults
+    check app.merendaSettingsThemeIdentifier == config.merendaTheme
+
+  test "saves Merenda settings for the next Kosmo launch":
+    let
+      root = createTempDir("merenda-kosmo-settings-save-", "")
+      path = root / "config.json"
+      assetCache = root / "assets"
+      app = newApplication("Kosmo Settings Save Test")
+      manager =
+        newKosmoWindowManager(app, configPath = path, assetCacheDirectory = assetCache)
+      frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+    defer:
+      manager.close()
+      removeDir(root)
+
+    app.showMerendaSettings()
+    let settingsWindow = app.windows[^1]
+    let
+      themeView =
+        settingsWindow.contentView().viewWithIdentifier("settings-theme-picker")
+      tabsView = settingsWindow.contentView().viewWithIdentifier("settings-tabs")
+    require themeView of ComboBox
+    require tabsView of TabView
+    let themePicker = ComboBox(themeView)
+    themePicker.selectedIndex = 1
+    check themePicker.sendAction()
+    let tabs = TabView(tabsView)
+    check tabs.selectTabViewItemAtIndex(0)
+    let scaleView =
+      settingsWindow.contentView().viewWithIdentifier(SettingsUiScaleIdentifier)
+    require scaleView of Stepper
+    check tabs.selectTabViewItemAtIndex(2)
+    let
+      invertView = settingsWindow.contentView().viewWithIdentifier(
+          SettingsInvertScrollingIdentifier
+        )
+      saveView =
+        settingsWindow.contentView().viewWithIdentifier(SettingsSaveDefaultsIdentifier)
+    require invertView of Button
+    require saveView of Button
+    let
+      scaleStepper = Stepper(scaleView)
+      invertButton = Button(invertView)
+      saveButton = Button(saveView)
+    check scaleStepper.incrementValue()
+    invertButton.state = bsOn
+    check invertButton.sendAction()
+    check saveButton.sendAction()
+
+    let saved = loadKosmoConfig(path)
+    check saved.merendaTheme == "aqua"
+    check abs(saved.merendaUiScale - 1.1'f32) < 0.0001'f32
+    check saved.merendaInvertScrolling
+    check saved.merendaAutoSaveDefaults == false
+    check saved.merendaFont.len == 0
+    check saved.merendaMonoFont.len == 0
+
+    settingsWindow.close()
+    let
+      app2 = newApplication("Kosmo Settings Reload Test")
+      manager2 = newKosmoWindowManager(
+        app2, configPath = path, assetCacheDirectory = root / "assets-reload"
+      )
+    defer:
+      manager2.close()
+    check app2.merendaSettingsThemeIdentifier == "aqua"
+    check abs(app2.uiScale - 1.1'f32) < 0.0001'f32
+    check app2.invertScrolling
 
   when defined(posix):
     test "live monospace appearance changes reach the editor and terminal":

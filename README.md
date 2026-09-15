@@ -387,8 +387,14 @@ kosmo --add ../shared-library
 
 Use Quick Open to find a file, drag tabs to arrange your panes, or choose
 File → New Terminal to open a shell. Markdown files open as previews, with a
-control to switch to the source editor. Themes, fonts, keyboard shortcuts, UI
-scale, and scrolling behavior are available in Settings.
+control to switch to the source editor. Merenda Settings places the theme and
+UI scale in Appearance, fonts in Typography, and scrolling in Behavior.
+
+Settings changes apply to the current Kosmo instance immediately. Choose
+**Save as Default** to use the committed theme, fonts, scale, and scrolling
+choices on the next launch; **Reset** restores the last saved values. You can
+also enable **Remember changes for future launches** to save each committed
+change automatically.
 
 You can also send a Git diff straight to Kosmo:
 
