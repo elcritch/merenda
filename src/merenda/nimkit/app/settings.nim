@@ -40,6 +40,18 @@ type
   AppearanceHandler* = proc(appearance: Appearance) {.closure.}
   InvertScrollingHandler* = proc(inverted: bool) {.closure.}
   UiScaleHandler* = proc(scale: float32) {.closure.}
+  SettingsThemeHandler* = proc(theme: string) {.closure.}
+  SettingsAutoSaveHandler* = proc(enabled: bool) {.closure.}
+
+  MerendaSettings* = object
+    ## The committed Merenda settings presented to a persistence handler.
+    theme*: string
+    appearance*: Appearance
+    invertScrolling*: bool
+    uiScale*: float32
+    autoSaveDefaults*: bool
+
+  SettingsSaveHandler* = proc(settings: MerendaSettings): bool {.closure.}
 
   SelectedFont = object
     name: string
@@ -95,6 +107,12 @@ type
     fontLoadingStatus: string
     invertScrollingHandler: InvertScrollingHandler
     uiScaleHandler: UiScaleHandler
+    themeHandler: SettingsThemeHandler
+    saveDefaultsHandler: SettingsSaveHandler
+    autoSaveDefaultsHandler: SettingsAutoSaveHandler
+    defaultSettings: MerendaSettings
+    settingsMessage: string
+    autoSaveDefaults: bool
     previewUiScale: float32
     appliedUiScale: float32
     preview: Label
@@ -107,6 +125,10 @@ type
     onlyMonospaceFontsCheckbox: Button
     onlyDisplayableFontsCheckbox: Button
     invertScrollingButton: Button
+    themePicker: ComboBox
+    resetButton: Button
+    saveDefaultsButton: Button
+    autoSaveDefaultsButton: Button
 
 const
   FontCatalogBatchSize = 1
@@ -124,6 +146,9 @@ const
   SettingsFontPreviewIdentifier = "settings-font-preview"
   SettingsOnlyMonospaceFontsIdentifier = "settings-only-monospace-fonts"
   SettingsOnlyDisplayableFontsIdentifier = "settings-only-displayable-fonts"
+  SettingsResetIdentifier* = "settings-reset"
+  SettingsSaveDefaultsIdentifier* = "settings-save-defaults"
+  SettingsAutoSaveDefaultsIdentifier* = "settings-auto-save-defaults"
   SettingsBehaviorTabIdentifier* = "behavior"
   SettingsInvertScrollingIdentifier* = "settings-invert-scrolling"
   SettingsUiScaleIdentifier* = "settings-ui-scale-stepper"
@@ -555,6 +580,29 @@ func title(theme: SettingsTheme): string =
   of stPeachy: "Peachy"
   of stSynthwave83: "Synthwave '83"
 
+func themeIdentifier(theme: SettingsTheme): string =
+  case theme
+  of stDarkBSD: "darkbsd"
+  of stAqua: "aqua"
+  of stMacOS: "macos"
+  of stMacOSDark: "macos-dark"
+  of stNebula: "nebula"
+  of stPeachy: "peachy"
+  of stSynthwave83: "synthwave83"
+
+func settingsTheme(identifier: string): SettingsTheme =
+  case identifier.strip().toLowerAscii()
+  of "aqua": stAqua
+  of "macos", "mac-os", "mac": stMacOS
+  of "macos-dark", "macosdark", "mac-os-dark", "dark-macos": stMacOSDark
+  of "nebula": stNebula
+  of "peachy": stPeachy
+  of "synthwave83", "synthwave-83", "synthwave": stSynthwave83
+  else: stDarkBSD
+
+func hasSettingsBaseline(settings: MerendaSettings): bool =
+  settings.theme.len > 0 or settings.appearance.theme.isInitialized
+
 proc fontTitle(name: string): string =
   if name.len == 0:
     "Default"
@@ -653,6 +701,18 @@ proc `invertScrolling=`*(settings: MerendaSettingsWindow, inverted: bool) =
   if not settings.isNil and not settings.invertScrollingButton.isNil:
     settings.invertScrollingButton.state = if inverted: bsOn else: bsOff
 
+proc autoSaveDefaults*(settings: MerendaSettingsWindow): bool =
+  ## Return whether committed changes are saved automatically.
+  not settings.isNil and settings.autoSaveDefaults
+
+proc `autoSaveDefaults=`*(settings: MerendaSettingsWindow, enabled: bool) =
+  ## Synchronize automatic saving without invoking its action.
+  if settings.isNil:
+    return
+  settings.autoSaveDefaults = enabled
+  if not settings.autoSaveDefaultsButton.isNil:
+    settings.autoSaveDefaultsButton.state = if enabled: bsOn else: bsOff
+
 proc uiScale*(settings: MerendaSettingsWindow): float32 =
   ## Return the UI scale selected in the settings panel.
   if settings.isNil or settings.uiScaleStepper.isNil:
@@ -672,13 +732,57 @@ proc `uiScale=`*(settings: MerendaSettingsWindow, scale: float32) =
     settings.uiScaleValue.text = boundedScale.uiScaleTitle()
 
 proc updateStatus(settings: MerendaSettingsWindow) =
-  settings.status.text =
+  var statusText =
     "Previewing " & settings.activeFontRole.title() & ": " &
     settings.previewFonts[settings.activeFontRole].name.fontTitle() & " · " &
     settings.previewFontSize.fontSizeTitle() & " — UI: " &
     settings.appliedFonts[frUI].name.fontTitle() & " · mono: " &
-    settings.appliedFonts[frMonospace].name.fontTitle() & " · " &
-    settings.fontLoadingStatus
+    settings.appliedFonts[frMonospace].name.fontTitle()
+  if settings.settingsMessage.len > 0:
+    statusText.add " · " & settings.settingsMessage
+  if settings.fontLoadingStatus.len > 0:
+    statusText.add " · " & settings.fontLoadingStatus
+  settings.status.text = statusText
+
+proc committedSettings(settings: MerendaSettingsWindow): MerendaSettings =
+  ## Return the values that have been applied to the running application.
+  result.theme = settings.activeTheme.themeIdentifier()
+  result.appearance = settings.baseAppearance.appearanceFor(
+    settings.appliedFonts, settings.appliedFontSize
+  )
+  result.invertScrolling = settings.invertScrolling()
+  result.uiScale = settings.appliedUiScale
+  result.autoSaveDefaults = settings.autoSaveDefaults
+
+proc currentSettings*(settings: MerendaSettingsWindow): MerendaSettings =
+  ## Return the committed values currently represented by the panel.
+  if not settings.isNil:
+    result = settings.committedSettings()
+
+proc saveAsDefault*(settings: MerendaSettingsWindow): bool {.discardable.} =
+  ## Persist the panel's committed values through its optional application handler.
+  if settings.isNil or settings.saveDefaultsHandler.isNil:
+    return
+  let values = settings.committedSettings()
+  try:
+    result = settings.saveDefaultsHandler(values)
+  except CatchableError:
+    result = false
+  if result:
+    settings.defaultSettings = values
+    settings.settingsMessage = "Saved as default."
+  else:
+    settings.settingsMessage = "Could not save settings as default."
+  settings.updateStatus()
+
+proc noteSessionChange(settings: MerendaSettingsWindow) =
+  if settings.saveDefaultsHandler.isNil:
+    return
+  if settings.autoSaveDefaults:
+    discard settings.saveAsDefault()
+  else:
+    settings.settingsMessage = "Session changes are not saved."
+    settings.updateStatus()
 
 proc updateFontRoleButtons(settings: MerendaSettingsWindow) =
   for role in FontRole:
@@ -715,6 +819,9 @@ proc themeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
       settings.activeTheme = SettingsTheme(index)
       settings.baseAppearance = settings.activeTheme.appearance()
       settings.applyAppearance()
+      if not settings.themeHandler.isNil:
+        settings.themeHandler(settings.activeTheme.themeIdentifier())
+      settings.noteSessionChange()
 
 proc fontSizeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
   if sender of Stepper:
@@ -728,6 +835,7 @@ proc uiScaleDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
     settings.updatePreview()
     if not settings.uiScaleHandler.isNil:
       settings.uiScaleHandler(settings.previewUiScale)
+    settings.noteSessionChange()
 
 proc selectFontRole(settings: MerendaSettingsWindow, role: FontRole) =
   settings.activeFontRole = role
@@ -773,6 +881,71 @@ proc applyFontDidClick(settings: MerendaSettingsWindow, sender: DynamicAgent) =
     settings.appliedFonts = settings.previewFonts
     settings.appliedFontSize = settings.previewFontSize
     settings.applyAppearance()
+    settings.noteSessionChange()
+
+proc autoSaveDefaultsDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
+  if sender of Button:
+    settings.autoSaveDefaults = Button(sender).state == bsOn
+    if not settings.autoSaveDefaultsHandler.isNil:
+      settings.autoSaveDefaultsHandler(settings.autoSaveDefaults)
+    if settings.saveDefaultsHandler.isNil:
+      settings.updateStatus()
+    else:
+      discard settings.saveAsDefault()
+
+proc resetToDefaults*(settings: MerendaSettingsWindow) =
+  ## Restore the last values accepted by the persistence handler.
+  if settings.isNil:
+    return
+  let defaults = settings.defaultSettings
+  settings.activeTheme = settingsTheme(defaults.theme)
+  settings.baseAppearance =
+    if defaults.appearance.theme.isInitialized:
+      defaults.appearance
+    else:
+      settings.activeTheme.appearance()
+  for role in FontRole:
+    settings.appliedFonts[role] = defaults.appearance.selectedFont(role)
+    settings.previewFonts[role] = settings.appliedFonts[role]
+  settings.appliedFontSize = defaults.appearance.resolveLength(
+    controlStyle(srTextView), StyleFontSize, SettingsDefaultFontSize
+  )
+  settings.previewFontSize = settings.appliedFontSize
+  if not settings.fontSizeStepper.isNil:
+    settings.fontSizeStepper.value = settings.previewFontSize
+  settings.invertScrolling = defaults.invertScrolling
+  settings.uiScale =
+    if defaults.uiScale > 0.0'f32: defaults.uiScale else: SettingsDefaultUiScale
+  settings.autoSaveDefaults = defaults.autoSaveDefaults
+  if not settings.themePicker.isNil:
+    settings.themePicker.selectedIndex = settings.activeTheme.ord
+  if not settings.invertScrollingButton.isNil:
+    settings.invertScrollingButton.state = if settings.invertScrolling: bsOn else: bsOff
+  if not settings.autoSaveDefaultsButton.isNil:
+    settings.autoSaveDefaultsButton.state =
+      if settings.autoSaveDefaults: bsOn else: bsOff
+  settings.fontPickerController.selectFont(
+    settings.previewFonts[settings.activeFontRole]
+  )
+  settings.applyAppearance()
+  if not settings.themeHandler.isNil:
+    settings.themeHandler(settings.activeTheme.themeIdentifier())
+  if not settings.invertScrollingHandler.isNil:
+    settings.invertScrollingHandler(settings.invertScrolling)
+  if not settings.uiScaleHandler.isNil:
+    settings.uiScaleHandler(settings.appliedUiScale)
+  if not settings.autoSaveDefaultsHandler.isNil:
+    settings.autoSaveDefaultsHandler(settings.autoSaveDefaults)
+  settings.settingsMessage = "Restored saved defaults."
+  settings.updateStatus()
+
+proc resetDidClick(settings: MerendaSettingsWindow, sender: DynamicAgent) =
+  discard sender
+  settings.resetToDefaults()
+
+proc saveDefaultsDidClick(settings: MerendaSettingsWindow, sender: DynamicAgent) =
+  discard sender
+  discard settings.saveAsDefault()
 
 proc resetSelections*(settings: MerendaSettingsWindow) =
   ## Restores the controls to the currently applied appearance when the panel opens.
@@ -808,6 +981,12 @@ proc newMerendaSettingsWindow*(
     invertScrollingHandler: InvertScrollingHandler = nil,
     initialUiScale = SettingsDefaultUiScale,
     uiScaleHandler: UiScaleHandler = nil,
+    initialTheme = "",
+    saveDefaultsHandler: SettingsSaveHandler = nil,
+    autoSaveDefaults = false,
+    autoSaveDefaultsHandler: SettingsAutoSaveHandler = nil,
+    themeHandler: SettingsThemeHandler = nil,
+    initialDefaults = MerendaSettings(),
 ): MerendaSettingsWindow =
   ## Create a settings panel initialized from an application's appearance.
   result = MerendaSettingsWindow(
@@ -817,7 +996,11 @@ proc newMerendaSettingsWindow*(
     applyAppearanceHandler: appearanceHandler,
     invertScrollingHandler: invertScrollingHandler,
     uiScaleHandler: uiScaleHandler,
-    activeTheme: stDarkBSD,
+    themeHandler: themeHandler,
+    saveDefaultsHandler: saveDefaultsHandler,
+    autoSaveDefaultsHandler: autoSaveDefaultsHandler,
+    autoSaveDefaults: autoSaveDefaults,
+    activeTheme: settingsTheme(initialTheme),
     baseAppearance: stDarkBSD.appearance(),
     activeFontRole: frUI,
     previewFontSize: SettingsDefaultFontSize,
@@ -891,6 +1074,10 @@ proc newMerendaSettingsWindow*(
       increment = 0.1,
     )
     invertScrollingButton = newCheckBox("Invert scrolling direction")
+    autoSaveDefaultsButton = newCheckBox("Remember changes for future launches")
+    resetButton = newButton("Reset")
+    saveDefaultsButton = newButton("Save as Default")
+    actionRow = newStackView(laHorizontal)
     themeChanged = actionSelector("themeChanged")
     interfaceFontSelected = actionSelector("interfaceFontSelected")
     monospaceFontSelected = actionSelector("monospaceFontSelected")
@@ -900,6 +1087,9 @@ proc newMerendaSettingsWindow*(
     applyFont = actionSelector("applyFont")
     uiScaleChanged = actionSelector("uiScaleChanged")
     invertScrollingChanged = actionSelector("invertScrollingChanged")
+    autoSaveDefaultsChanged = actionSelector("autoSaveDefaultsChanged")
+    reset = actionSelector("reset")
+    saveDefaults = actionSelector("saveDefaults")
 
   result.preview = newLabel(FontCatalogPreviewText)
   result.status = newStatusLabel()
@@ -914,6 +1104,10 @@ proc newMerendaSettingsWindow*(
   result.onlyMonospaceFontsCheckbox = onlyMonospaceFontsCheckbox
   result.onlyDisplayableFontsCheckbox = onlyDisplayableFontsCheckbox
   result.invertScrollingButton = invertScrollingButton
+  result.themePicker = themePicker
+  result.resetButton = resetButton
+  result.saveDefaultsButton = saveDefaultsButton
+  result.autoSaveDefaultsButton = autoSaveDefaultsButton
   result.xFirstResponder = themePicker
   tabs.identifier = "settings-tabs"
 
@@ -1032,14 +1226,42 @@ proc newMerendaSettingsWindow*(
       discard sender
       if not settings.invertScrollingHandler.isNil:
         settings.invertScrollingHandler(settings.invertScrolling())
-    ,
+      settings.noteSessionChange(),
   )
   invertScrollingButton.action = invertScrollingChanged
 
+  autoSaveDefaultsButton.identifier = SettingsAutoSaveDefaultsIdentifier
+  autoSaveDefaultsButton.accessibilityLabel = "Remember changes for future launches"
+  autoSaveDefaultsButton.state = if result.autoSaveDefaults: bsOn else: bsOff
+  autoSaveDefaultsButton.target = newActionTarget(
+    autoSaveDefaultsChanged,
+    proc(sender: DynamicAgent) =
+      settings.autoSaveDefaultsDidChange(sender),
+  )
+  autoSaveDefaultsButton.action = autoSaveDefaultsChanged
+  autoSaveDefaultsButton.setHiddenFromLayout(saveDefaultsHandler.isNil)
+
+  resetButton.identifier = SettingsResetIdentifier
+  resetButton.target = newActionTarget(
+    reset,
+    proc(sender: DynamicAgent) =
+      settings.resetDidClick(sender),
+  )
+  resetButton.action = reset
+  saveDefaultsButton.identifier = SettingsSaveDefaultsIdentifier
+  saveDefaultsButton.target = newActionTarget(
+    saveDefaults,
+    proc(sender: DynamicAgent) =
+      settings.saveDefaultsDidClick(sender),
+  )
+  saveDefaultsButton.action = saveDefaults
+  saveDefaultsButton.setHiddenFromLayout(saveDefaultsHandler.isNil)
+
   appearanceForm.addRow(themeLabel, themePicker)
+  appearanceForm.addRow(uiScaleLabel, uiScaleControl)
   appearancePage.stack.addArrangedSubview(
     newHeadingLabel("Appearance"),
-    newLabel("Choose one of Merenda's built-in themes for this application."),
+    newLabel("Choose the theme and UI scale for this application."),
     appearanceForm,
   )
   appearancePage.stack.addFlexibleSpacer()
@@ -1062,12 +1284,12 @@ proc newMerendaSettingsWindow*(
   applyFontButton.identifier = "settings-apply-font"
   typographyPage.stack.addFlexibleSpacer()
 
-  behaviorForm.addRow(uiScaleLabel, uiScaleControl)
   behaviorPage.stack.addArrangedSubview(
     newHeadingLabel("Behavior"),
     newLabel("Customize how Merenda responds to input."),
     behaviorForm,
     invertScrollingButton,
+    autoSaveDefaultsButton,
   )
   behaviorPage.stack.addFlexibleSpacer()
 
@@ -1085,6 +1307,12 @@ proc newMerendaSettingsWindow*(
   layout.addArrangedSubview(titleLabel)
   layout.fillAvailableSpace(tabs)
   layout.addArrangedSubview(result.status)
+  actionRow.spacing = 10.0
+  actionRow.alignment = svaCenter
+  actionRow.addArrangedSubview(resetButton)
+  actionRow.addFlexibleSpacer()
+  actionRow.addArrangedSubview(saveDefaultsButton)
+  layout.addArrangedSubview(actionRow)
   result.xContentView.addSubview(layout)
   discard layout.pinEdges(
     toGuide = result.xContentView.contentLayoutGuide(insets(22.0, 24.0)),
@@ -1123,6 +1351,12 @@ proc newMerendaSettingsWindow*(
     FontPickerController.didFailLoadingFontCatalog(),
   )
   emit result.fontPickerController.fontCatalogLoadRequested()
+  result.defaultSettings =
+    if initialDefaults.hasSettingsBaseline():
+      initialDefaults
+    else:
+      result.committedSettings()
+  result.updateStatus()
 
 proc window*(settings: MerendaSettingsWindow): Panel =
   ## The panel that presents the settings interface.
