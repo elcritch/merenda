@@ -15,7 +15,7 @@ const
   GitDiffRefreshDebounceInterval = initDuration(milliseconds = 300)
   GitDiffReservedSummaryHeight = 240.0'f32
   # Highlighting runs on nimkitWorkerPool, so this deadline does not block the UI.
-  GitDiffHighlightTimeBudgetMs = 3000
+  GitDiffHighlightTimeBudgetMs = 6000
   GitDiffMaximumHighlightSourceBytes = 1 * 1024 * 1024
   GitDiffMaximumHighlightQueuedBytes = 8 * 1024 * 1024
   GitDiffMaximumHighlightCachedBytes = 16 * 1024 * 1024
@@ -23,7 +23,9 @@ const
   GitDiffDefaultTotalByteLimit* = 32 * 1024 * 1024
   GitDiffDefaultFileLimit* = 10_000
   GitDiffMetadataOutputByteLimit = 16 * 1024 * 1024
-  GitDiffMaterializedSectionLimit* = 32
+  # Keep a generous working set for expanded diffs without attaching every
+  # section in a very large repository snapshot at once.
+  GitDiffMaterializedSectionLimit* = 128
   GitDiffViewPoolLimit = GitDiffMaterializedSectionLimit
 
 type
@@ -1067,7 +1069,16 @@ proc toggleFile*(panel: KosmoGitDiffPanel, index: int) =
         panel.ensureFileMaterialized(index)
         if not section[].disclosureButton.isNil:
           discard nimkit.Window(owner).makeFirstResponder(section[].disclosureButton)
-    panel.scheduleSectionLayout()
+      panel.scheduleSectionLayout()
+
+proc expandAllFiles(panel: KosmoGitDiffPanel) =
+  panel.collapsed.clear()
+  panel.forcedDisclosurePaths.clear()
+  panel.forcedTextPaths.clear()
+  for file in panel.snapshot.files:
+    panel.explicitPatchPaths.incl file.path
+    panel.queueFilePatch(file.path, explicit = true, retry = true)
+  panel.scheduleSectionLayout()
 
 proc isFileCollapsed*(panel: KosmoGitDiffPanel, index: int): bool =
   index in 0 ..< panel.snapshot.files.len and
@@ -1463,20 +1474,24 @@ proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
     if expanded:
       let textView = section[].textView
       if not textView.isNil:
+        let manager = textView.layoutManager()
         textView.setHiddenFromLayout(false)
         if section[].ready and not section[].layoutStarted:
           textView.setFrameFromLayout(nimkit.rect(34, y, max(width - 20, 1), 1))
-          textView.layoutManager().requestBackgroundLayout(allowUncachedLayout = true)
+          manager.requestBackgroundLayout(allowUncachedLayout = true)
           section[].layoutStarted = true
-        let snapshot = textView.layoutManager().layoutSnapshot()
+        let snapshot = manager.layoutSnapshot()
         let size = nimkit.initSize(
           max(snapshot.contentSize.width, snapshot.usedRect.maxX),
           max(snapshot.contentSize.height, snapshot.usedRect.maxY),
         )
-        let codeHeight = max(size.height, 24.0'f32)
+        var codeHeight = max(size.height, 24.0'f32)
+        if section[].ready and not manager.isBackgroundLayoutPending():
+          section[].contentHeight = codeHeight
+        else:
+          codeHeight = max(section[].contentHeight, 24.0'f32)
         let codeWidth = max(max(width - 20, size.width), 1.0'f32)
         textView.setFrameFromLayout(nimkit.rect(34, y, codeWidth, codeHeight))
-        section[].contentHeight = codeHeight
         documentWidth = max(documentWidth, codeWidth + 68)
         y += codeHeight + 24
       else:
@@ -2499,8 +2514,7 @@ proc newKosmoGitDiffPanel(
   ):
     discard sender
     if not panel.isNil:
-      panel[].collapsed.clear()
-      panel[].scheduleSectionLayout()
+      panel[].expandAllFiles()
   let collapseAction = nimkit.actionSelector("kosmo.collapseGitDiff")
   result.collapseButton.action = collapseAction
   result.collapseButton.target = nimkit.newActionTarget(collapseAction) do(
@@ -2508,6 +2522,8 @@ proc newKosmoGitDiffPanel(
   ):
     discard sender
     if not panel.isNil:
+      panel[].forcedDisclosurePaths.clear()
+      panel[].forcedTextPaths.clear()
       for index, file in panel[].snapshot.files:
         panel[].collapsed.incl file.path
         let owner = panel[].window()
