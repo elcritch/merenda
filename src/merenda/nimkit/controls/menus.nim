@@ -2077,6 +2077,7 @@ proc `contentView=`*(root: MenuRootView, contentView: View) =
   if root.xContentView == contentView:
     return
   if not root.xContentView.isNil:
+    root.removeArrangedSubview(root.xContentView)
     root.xContentView.removeFromSuperview()
   root.xContentView = contentView
   if not contentView.isNil:

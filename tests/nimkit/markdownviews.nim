@@ -649,6 +649,33 @@ sibling body
       check view.markdownParseError() == ""
       check view.textStorage().stringValue().startsWith("Document " & $index)
 
+  test "pooled delimiter-heavy AST handoffs remain owned":
+    var views: seq[MarkdownView]
+    for _ in 0 ..< 8:
+      views.add newMarkdownView("")
+
+    for generation in 0 ..< 8:
+      for index, view in views:
+        var source = &"# Ownership {generation}:{index}\n\n"
+        for line in 0 ..< 32:
+          case (generation + index + line) mod 4
+          of 0:
+            source.add "***one _two_*** unmatched_*\n\n"
+          of 1:
+            source.add "__three *four **five** six*__\n\n"
+          of 2:
+            source.add "*seven **eight _nine_** ten*\n\n"
+          else:
+            source.add "_eleven_ **twelve** ***thirteen***_\n\n"
+        view.markdown = move source
+
+      for index, view in views:
+        require view.waitForMarkdownParsing()
+        check view.markdownParseError() == ""
+        check view.textStorage().stringValue().startsWith(
+          &"Ownership {generation}:{index}"
+        )
+
   test "applies large Markdown ASTs in resumable owner-thread chunks":
     var source: string
     for index in 0 ..< 256:
