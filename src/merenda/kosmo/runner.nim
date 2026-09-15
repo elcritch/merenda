@@ -4,7 +4,7 @@ import std/[options, os]
 
 import ./[application, cli, cliopen]
 
-proc runKosmo*(paths: openArray[string]) =
+proc runKosmo*(paths: openArray[string], add = false) =
   ## Run Kosmo as a standalone NimKit text-editor application.
   if paths.len == 0:
     runKosmoRequest(none(KosmoCliOpenRequest))
@@ -12,7 +12,7 @@ proc runKosmo*(paths: openArray[string]) =
     runKosmoRequest(
       some(
         KosmoCliOpenRequest(
-          requestId: randomIdentifier(), kind: kcrOpenPaths, paths: @paths
+          requestId: randomIdentifier(), kind: kcrOpenPaths, add: add, paths: @paths
         )
       )
     )
@@ -110,15 +110,17 @@ proc runKosmoMain*() =
       reportCliErrors(paths.errors)
       quit(1)
     if paths.paths.len > 0:
-      let response = openInRunningKosmo(paths.paths)
+      let response = openInRunningKosmo(paths.paths, add = commandLine.add)
       if response.delivered:
         reportCliErrors(response.errors)
         quit(if response.errors.len == 0: 0 else: 1)
     if commandLine.background:
       var arguments: seq[string]
+      if commandLine.add:
+        arguments.add KosmoAddFlag
       if paths.paths.len > 0:
         arguments.add "--"
         arguments.add paths.paths
       launchKosmoInBackground(arguments)
     else:
-      runKosmo(paths.paths)
+      runKosmo(paths.paths, commandLine.add)

@@ -1,4 +1,4 @@
-import std/[importutils, strutils, tables, unittest]
+import std/[importutils, math, strutils, tables, unittest]
 
 import merenda/nimkit
 import merenda/nimkit/app/settings
@@ -72,6 +72,74 @@ suite "nimkit settings":
 
     check invertButton.sendAction()
     check appliedValue
+
+  test "behavior settings scale the UI in tenths":
+    var appliedScale = 0.0'f32
+    let settings = newMerendaSettingsWindow(
+      initialUiScale = 1.0'f32,
+      uiScaleHandler = proc(scale: float32) =
+        appliedScale = scale,
+    )
+    defer:
+      settings.window().close()
+    let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require not tabsView.isNil
+    require tabsView of TabView
+    let tabs = TabView(tabsView)
+    check tabs.selectTabViewItemAtIndex(2)
+
+    let scaleView = settings.contentView().viewWithIdentifier(SettingsUiScaleIdentifier)
+    require not scaleView.isNil
+    require scaleView of Stepper
+    let scaleStepper = Stepper(scaleView)
+    check scaleStepper.minValue == 0.5'f32
+    check scaleStepper.maxValue == 3.0'f32
+    check scaleStepper.value == 1.0'f32
+    check scaleStepper.increment == 0.1'f32
+    check scaleStepper.formattedValue() == "1.0x"
+
+    check scaleStepper.incrementValue()
+    check abs(scaleStepper.value - 1.1'f32) < 0.0001'f32
+    check abs(appliedScale - 1.1'f32) < 0.0001'f32
+    check settings.uiScale == scaleStepper.value
+
+    check scaleStepper.decrementValue()
+    check abs(scaleStepper.value - 1.0'f32) < 0.0001'f32
+    check abs(appliedScale - 1.0'f32) < 0.0001'f32
+
+  test "application UI scale reaches existing and new windows":
+    let
+      app = newApplication("UI Scale Test")
+      firstWindow = newWindow("First")
+      secondWindow = newWindow("Second")
+    app.addWindow(firstWindow)
+    app.uiScale = 1.2'f32
+    check app.uiScale == 1.2'f32
+    check firstWindow.uiScale == 1.2'f32
+
+    app.addWindow(secondWindow)
+    check secondWindow.uiScale == 1.2'f32
+
+    app.showMerendaSettings()
+    let settingsWindow = app.windows[^1]
+    let tabsView = settingsWindow.contentView().viewWithIdentifier("settings-tabs")
+    require not tabsView.isNil
+    require tabsView of TabView
+    check TabView(tabsView).selectTabViewItemAtIndex(2)
+    let scaleView =
+      settingsWindow.contentView().viewWithIdentifier(SettingsUiScaleIdentifier)
+    require not scaleView.isNil
+    require scaleView of Stepper
+    let scaleStepper = Stepper(scaleView)
+    check abs(scaleStepper.value - 1.2'f32) < 0.0001'f32
+    check scaleStepper.incrementValue()
+    check abs(app.uiScale - 1.3'f32) < 0.0001'f32
+    check abs(firstWindow.uiScale - 1.3'f32) < 0.0001'f32
+    check abs(secondWindow.uiScale - 1.3'f32) < 0.0001'f32
+
+    settingsWindow.close()
+    firstWindow.close()
+    secondWindow.close()
 
   test "application scrolling preference reaches existing and new windows":
     let

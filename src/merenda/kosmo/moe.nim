@@ -800,10 +800,16 @@ proc selectTab*(editor: KosmoEditor, id: KosmoBufferId): bool {.discardable.} =
     return
   editor.editor.activateBuffer(id.toMoeBufferId)
 
-proc closeTab*(editor: KosmoEditor, id: KosmoBufferId): KosmoTabCloseResult =
-  ## Close a tab unless Moe rejects the operation, for example when modified.
+proc closeTab*(
+    editor: KosmoEditor, id: KosmoBufferId, discardChanges = false
+): KosmoTabCloseResult =
+  ## Close a tab, optionally discarding its unsaved changes.
   if editor.isNil or editor.editor.isNil:
     return KosmoTabCloseResult(message: "The editor is closed.")
+  if discardChanges:
+    let buffer = editor.editor.bufferById(id.toMoeBufferId)
+    if buffer.isSome:
+      buffer.get.markSaved()
   let outcome = editor.editor.closeBuffer(id.toMoeBufferId)
   if pkgResults.isErr(outcome):
     return KosmoTabCloseResult(message: outcome.error)

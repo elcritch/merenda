@@ -70,6 +70,8 @@ type
     xAppearance: Appearance
     xHasAppearance: bool
     xInvertScrolling: bool
+    xUiScale: float32
+    xHasUiScale: bool
     xCurrentEvent: KeyEvent
     xHasCurrentEvent: bool
     xKeyWindow: Window
@@ -322,6 +324,24 @@ proc `invertScrolling=`*(app: Application, inverted: bool) =
       window.invertScrolling = inverted
   if not app.xMerendaSettingsWindow.isNil:
     app.xMerendaSettingsWindow.invertScrolling = inverted
+
+proc uiScale*(app: Application): float32 =
+  if app.xHasUiScale:
+    return app.xUiScale
+  for window in app.xWindows:
+    if not window.isNil and window.nativeReady:
+      return window.uiScale()
+  nimkitBackend.currentUiScale()
+
+proc `uiScale=`*(app: Application, scale: float32) =
+  let normalizedScale = nimkitBackend.validatedUiScale(scale)
+  app.xUiScale = normalizedScale
+  app.xHasUiScale = true
+  for window in app.xWindows:
+    if not window.isNil:
+      window.uiScale = normalizedScale
+  if not app.xMerendaSettingsWindow.isNil:
+    app.xMerendaSettingsWindow.uiScale = normalizedScale
 
 proc workspace*(app: Application): Workspace =
   if app.xWorkspace.isNil:
@@ -905,6 +925,9 @@ proc showMerendaSettings*(app: Application) =
       invertScrolling = app.invertScrolling(),
       invertScrollingHandler = proc(inverted: bool) =
         app.invertScrolling = inverted,
+      initialUiScale = app.uiScale(),
+      uiScaleHandler = proc(scale: float32) =
+        app.uiScale = scale,
     )
   app.xMerendaSettingsWindow.resetSelections()
   discard app.showWindow(
@@ -927,6 +950,8 @@ proc addWindow*(app: Application, window: Window) =
   app.includeOrderedWindow(window)
   window.setNextResponder(app)
   window.invertScrolling = app.xInvertScrolling
+  if app.xHasUiScale:
+    window.uiScale = app.xUiScale
   window.setInheritedAppearance(app.effectiveAppearance())
   if not app.xIcon.isNil:
     window.icon = app.xIcon

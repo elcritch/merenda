@@ -159,6 +159,7 @@ type
     xFrameAutosaveName: string
     xKeyBindings: KeyBindingTable
     xPendingKeySequence: seq[events.KeyEvent]
+    xUiScaleOverride: Option[float32]
     xHostWindow: HostWindow
     xHostFocused: bool
     when defined(linux) or defined(bsd):
@@ -384,6 +385,7 @@ proc updateToolTip(window: Window, target: View, contentPoint: Point)
 
 proc setPopupDoneHandler*(window: Window, handler: proc() {.closure.})
 proc refreshAutomaticContentMinSize(window: Window)
+proc syncNativeGeometry(window: Window): Size
 proc syncNativeSizeLimits(window: Window)
 proc dispatchKeyEventInChain(
   window: Window, target: Responder, event: events.KeyEvent, selector: KeyEventSelector
@@ -1612,6 +1614,26 @@ proc nativeContentScale*(window: Window): float32 =
     return 1.0'f32
   window.xHostWindow.contentScale()
 
+proc uiScale*(window: Window): float32 =
+  if window.xUiScaleOverride.isSome:
+    return window.xUiScaleOverride.get()
+  if not window.xHostWindow.isNil:
+    return window.xHostWindow.contentScale()
+  nimkitBackend.currentUiScale()
+
+proc `uiScale=`*(window: Window, scale: float32) =
+  let normalizedScale = nimkitBackend.validatedUiScale(scale)
+  window.xUiScaleOverride = some(normalizedScale)
+  if not window.xHostWindow.isNil:
+    window.xHostWindow.setUiScaleOverride(normalizedScale)
+    discard window.syncNativeGeometry()
+    window.syncNativeSizeLimits()
+    window.xHostWindow.updatePresentationTarget()
+    window.requestNativeDisplayUpdate()
+  for auxiliary in window.xAuxiliaryWindows:
+    if not auxiliary.isNil:
+      auxiliary.uiScale = normalizedScale
+
 proc nativeRenderCount*(window: Window): Natural =
   if not window.xThreadHost.isNil:
     return window.xThreadHost.renderCount
@@ -2046,6 +2068,7 @@ proc newPopupWindow*(
     popupPlacement(anchorFrame, popupSize, owner.nativeContentScale(), placeAbove)
   owner.attachAuxiliaryWindow(result)
   result.xPopupPresentation = owner.popupPresentation()
+  result.xUiScaleOverride = owner.xUiScaleOverride
   result.setInheritedAppearance(owner.effectiveAppearance())
   if not owner.xThreadRenderer.isNil:
     result.useThreadRenderer(owner.xThreadRenderer)
@@ -3065,14 +3088,23 @@ proc ensureNativeWindow*(window: Window) =
           callbacks,
           window.xLayerSurface.get(),
           transparent = window.xTransparent,
+          uiScaleOverride = window.xUiScaleOverride,
         )
       else:
         window.xHostWindow = createHostWindow(
-          window.xFrame, window.xTitle, callbacks, transparent = window.xTransparent
+          window.xFrame,
+          window.xTitle,
+          callbacks,
+          transparent = window.xTransparent,
+          uiScaleOverride = window.xUiScaleOverride,
         )
     else:
       window.xHostWindow = createHostWindow(
-        window.xFrame, window.xTitle, callbacks, transparent = window.xTransparent
+        window.xFrame,
+        window.xTitle,
+        callbacks,
+        transparent = window.xTransparent,
+        uiScaleOverride = window.xUiScaleOverride,
       )
   window.xHostFocused = window.xHostWindow.isFocused()
   if not window.xHostFocused:

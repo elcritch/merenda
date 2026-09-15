@@ -368,8 +368,10 @@ proc removeViewState(view: KosmoEditorView, id: KosmoBufferId) =
   if index >= 0:
     view.viewStates.delete(index)
 
-proc closeTab(view: KosmoEditorView, id: KosmoBufferId): KosmoTabCloseResult =
-  result = view.editor.closeTab(id)
+proc closeTab(
+    view: KosmoEditorView, id: KosmoBufferId, discardChanges = false
+): KosmoTabCloseResult =
+  result = view.editor.closeTab(id, discardChanges)
   if result.closed:
     view.forgetMarkdownMode(id)
   if result.closed and view.usesBufferSubset:
@@ -638,6 +640,7 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
     tabContext = nimkit.controlStyle(nimkit.srDocumentTab)
     cursorColor =
       base.resolveMonoTextStyle(nimkit.controlStyle(nimkit.srMonoTextView)).cursorColor
+    monoFontSize = base.resolveMonoTextStyle(nimkit.controlStyle(nimkit.srMonoTextView)).text.fontSize
     accentColor = base.resolveColor(
       tabContext, nimkit.StyleMarkColor, nimkit.color(0.20, 0.45, 0.92, 1.0)
     )
@@ -684,9 +687,11 @@ proc applyKosmoEditorStyle(view: KosmoEditorView, base: nimkit.Appearance) =
   appearance.installKosmoMarkdownControlsStyle()
   view.styleId = KosmoEditorStyleId
   view.appearance = appearance
+  view.fontSize = monoFontSize
   if not view.documentTabs.isNil:
     view.documentTabs.appearance = appearance
   if not view.commandBar.isNil:
+    view.commandBar.fontSize = view.fontSize()
     view.commandBar.appearance = appearance
   if not view.dockGroup.isNil:
     let pane = view.dockGroup[].pane
@@ -945,6 +950,10 @@ proc activatePaneTab(
 
 proc closeCurrentPaneTab(controller: KosmoDockController, group: KosmoEditorGroup)
 
+proc closeWindow(
+  controller: KosmoDockController, window: nimkit.Window
+): bool {.discardable.}
+
 proc saveCurrentPaneTab(
   controller: KosmoDockController,
   group: KosmoEditorGroup,
@@ -974,6 +983,98 @@ proc finishDockDrag(
   item: nimkit.DocumentTabItem,
   location: nimkit.Point,
 )
+
+proc hasUnsavedData(controller: KosmoDockController, window: nimkit.Window): bool =
+  if controller.isNil or window.isNil:
+    return
+  let tabs = controller.editor.tabs()
+  for group in controller.groups:
+    if group.window != window:
+      continue
+    for tab in tabs:
+      if tab.modified and
+          (
+            not group.editorView.usesBufferSubset or tab.id in group.editorView.bufferIds
+          ):
+        return true
+    for document in group.documents:
+      if document.modified:
+        return true
+
+proc bufferHasUnsavedData(controller: KosmoDockController, id: KosmoBufferId): bool =
+  if controller.isNil:
+    return
+  for tab in controller.editor.tabs():
+    if tab.id == id:
+      return tab.modified
+
+proc presentUnsavedChangesConfirmation(
+    controller: KosmoDockController,
+    window: nimkit.Window,
+    onDiscard: proc() {.closure.},
+): bool {.discardable.} =
+  if controller.isNil or window.isNil:
+    return
+  if controller.frontend.isNil:
+    return
+  let frontend = controller.frontend[]
+  if frontend.isNil or frontend.application.isNil:
+    return
+  let alert = nimkit.newAlert(
+    "Unsaved Changes",
+    "This window has unsaved changes. Do you want to lose them?",
+    style = nimkit.asWarning,
+    buttons = ["Discard", "Cancel"],
+  )
+  alert.window.setInheritedAppearance(window.effectiveAppearance())
+  discard alert.rebuildAlertView()
+  let app = frontend.application
+  var session: nimkit.ModalSession
+  alert.prepareForModal(
+    proc(response: int) =
+      if session.isNil:
+        return
+      let shouldClose = response == nimkit.PanelResponseOk
+      app.endModalSession(session)
+      alert.window.close()
+      if shouldClose and not onDiscard.isNil:
+        onDiscard()
+  )
+  session = app.beginModalSession(alert.window)
+  true
+
+proc closeWindow(
+    controller: KosmoDockController, window: nimkit.Window
+): bool {.discardable.} =
+  if controller.isNil or window.isNil:
+    return
+  if controller.hasUnsavedData(window):
+    return controller.presentUnsavedChangesConfirmation(
+      window,
+      proc() =
+        if not window.isClosed:
+          window.close()
+      ,
+    )
+  window.close()
+  true
+
+proc closeTabWithConfirmation(
+    controller: KosmoDockController,
+    view: KosmoEditorView,
+    group: KosmoEditorGroup,
+    id: KosmoBufferId,
+): bool =
+  if not controller.bufferHasUnsavedData(id):
+    return view.closeTab(id).closed
+  discard controller.presentUnsavedChangesConfirmation(
+    group.window,
+    proc() =
+      let outcome = view.closeTab(id, discardChanges = true)
+      if outcome.closed:
+        controller.finishTabClose(view)
+    ,
+  )
 
 proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
   var keyOutcome: KosmoKeyOutcome
@@ -1323,7 +1424,7 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoCloseWindowAction:
       let group = controller.groupForView(view)
       if not group.isNil:
-        group.window.close()
+        discard controller.closeWindow(group.window)
     of KosmoQuitAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].application.terminate()
@@ -1441,6 +1542,7 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
         if controller.bufferIsVisibleOutside(group, id):
           group.removeBuffer(id)
           return true
+        return controller.closeTabWithConfirmation(view, group, id)
       let outcome = view.closeTab(id)
       return outcome.closed
     if view.dockGroup.isNil:
@@ -2125,7 +2227,7 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
     of KosmoCloseTabAction:
       controller.closeCurrentPaneTab(group)
     of KosmoCloseWindowAction:
-      group.window.close()
+      discard controller.closeWindow(group.window)
     of KosmoQuitAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].application.terminate()
