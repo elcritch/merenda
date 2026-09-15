@@ -503,6 +503,23 @@ proc isActiveEditorGroup(view: KosmoEditorView): bool =
   let controller = view.tabsDelegate.dockController[]
   controller.activeGroup.isNil or controller.activeGroup.editorView == view
 
+proc refresh*(view: KosmoEditorView)
+
+proc shouldDeferInactiveRefresh(view: KosmoEditorView): bool =
+  # Forced Input mode has no post-Insert state in which to drain deferred work;
+  # Moe re-enters Insert when it switches the active buffer under that policy.
+  not view.isActiveEditorGroup() and not view.editor.forceInputMode() and
+    view.editor.mode() in {KosmoEditorMode.Insert, KosmoEditorMode.Replace}
+
+proc refreshDeferredEditorGroups(view: KosmoEditorView) =
+  if not view.isActiveEditorGroup() or view.tabsDelegate.isNil or
+      view.tabsDelegate.dockController.isNil:
+    return
+  let controller = view.tabsDelegate.dockController[]
+  for group in controller.groups:
+    if group.editorView != view and group.editorView.inactiveRefreshDeferred:
+      group.editorView.refresh()
+
 proc syncCommandBar(view: KosmoEditorView, command: KosmoCommandLine) =
   let bar = view.commandBar
   if bar.isNil:
@@ -584,8 +601,6 @@ proc installKosmoMarkdownControlsStyle(appearance: var nimkit.Appearance) =
   appearance.setStyle(
     buttonSelector, nimkit.StyleTextInsets, nimkit.insets(0.0'f32, 2.0'f32)
   )
-
-proc refresh*(view: KosmoEditorView)
 
 proc stopMatterHighlightRefresh(view: KosmoEditorView) =
   if not view.isNil:
@@ -773,6 +788,13 @@ proc syncSelectedEditorContent(
 
 proc refresh*(view: KosmoEditorView) =
   ## Render the current editor state into the synchronous cell-grid view.
+  if view.shouldDeferInactiveRefresh():
+    view.inactiveRefreshDeferred = true
+    return
+  view.inactiveRefreshDeferred = false
+  defer:
+    if view.editor.mode() notin {KosmoEditorMode.Insert, KosmoEditorMode.Replace}:
+      view.refreshDeferredEditorGroups()
   if (view.editor.completionPopupVisible() or view.editor.commandLine().visible) and
       not view.isActiveEditorGroup():
     return
