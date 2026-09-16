@@ -15,11 +15,6 @@ type
     fmNormal
     fmIgnored
 
-  CalendarDate = object
-    year: int
-    month: int
-    day: int
-
   FilterEntry = object
     identifier: string
     title: string
@@ -28,11 +23,6 @@ type
     owner: string
     date: CalendarDate
     tags: seq[string]
-
-  DatePickerPopover = ref object of View
-    displayedMonth: CalendarDate
-    selectedDate: CalendarDate
-    onSelect: proc(value: CalendarDate) {.closure.}
 
   FilterDemoController = ref object of Responder
     entries: seq[FilterEntry]
@@ -45,10 +35,8 @@ type
     ownerChoice: ComboBox
     statusFilter: string
     ownerFilter: string
-    startButton: Button
-    endButton: Button
-    startPopover: DatePickerPopover
-    endPopover: DatePickerPopover
+    startButton: DatePickerButton
+    endButton: DatePickerButton
     hasStartDate: bool
     hasEndDate: bool
     startDate: CalendarDate
@@ -59,75 +47,6 @@ type
     tagQuery: string
     chipScroll: ScrollView
     chipRow: StackView
-
-const
-  MonthNames = [
-    "January", "February", "March", "April", "May", "June", "July", "August",
-    "September", "October", "November", "December",
-  ]
-  WeekdayNames = ["S", "M", "T", "W", "T", "F", "S"]
-  WeekdayOffsets = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
-  CalendarPopoverWidth = 252.0'f32
-  CalendarPopoverHeight = 244.0'f32
-  CalendarGridLeft = 10.0'f32
-  CalendarGridTop = 68.0'f32
-  CalendarCellWidth = 33.0'f32
-  CalendarCellHeight = 28.0'f32
-
-func makeDate(year, month, day: int): CalendarDate =
-  CalendarDate(year: year, month: month, day: day)
-
-func sameDate(left, right: CalendarDate): bool =
-  left.year == right.year and left.month == right.month and left.day == right.day
-
-func isLeapYear(year: int): bool =
-  year mod 400 == 0 or (year mod 4 == 0 and year mod 100 != 0)
-
-func daysInMonth(date: CalendarDate): int =
-  case date.month
-  of 2:
-    if date.year.isLeapYear(): 29 else: 28
-  of 4, 6, 9, 11:
-    30
-  else:
-    31
-
-func weekday(date: CalendarDate): int =
-  var year = date.year
-  if date.month < 3:
-    dec year
-  (
-    year + year div 4 - year div 100 + year div 400 + WeekdayOffsets[date.month - 1] +
-    date.day
-  ) mod 7
-
-func shiftMonth(date: CalendarDate, delta: int): CalendarDate =
-  let absoluteMonth = date.year * 12 + date.month - 1 + delta
-  makeDate(absoluteMonth div 12, absoluteMonth mod 12 + 1, 1)
-
-func twoDigits(value: int): string =
-  if value < 10:
-    "0" & $value
-  else:
-    $value
-
-func shortDate(date: CalendarDate): string =
-  MonthNames[date.month - 1][0 .. 2] & " " & twoDigits(date.day) & ", " & $date.year
-
-func monthTitle(date: CalendarDate): string =
-  MonthNames[date.month - 1] & " " & $date.year
-
-func dateBefore(left, right: CalendarDate): bool =
-  left.year < right.year or (
-    left.year == right.year and
-    (left.month < right.month or (left.month == right.month and left.day < right.day))
-  )
-
-func dateAfter(left, right: CalendarDate): bool =
-  left.year > right.year or (
-    left.year == right.year and
-    (left.month > right.month or (left.month == right.month and left.day > right.day))
-  )
 
 func entryCellText(entry: FilterEntry, column: TableColumn): string =
   case column.identifier
@@ -142,7 +61,7 @@ func entryCellText(entry: FilterEntry, column: TableColumn): string =
   of "owner":
     entry.owner
   of "date":
-    entry.date.shortDate()
+    entry.date.formatCalendarDate()
   of "labels":
     entry.tags.join(" · ")
   else:
@@ -179,118 +98,9 @@ func demoEntries(): seq[FilterEntry] =
       kind: kind,
       status: DemoStatuses[index mod DemoStatuses.len],
       owner: DemoOwners[(index * 2) mod DemoOwners.len],
-      date: makeDate(2025, month, day),
+      date: initCalendarDate(2025, month, day),
       tags: tags,
     )
-
-protocol DatePickerDrawing of ViewDrawingProtocol:
-  method draw(popover: DatePickerPopover, context: DrawContext) =
-    let bounds = popover.bounds()
-    discard context.addRenderRectangle(
-      context.renderRectFor(bounds),
-      fill(color(0.99, 0.995, 1.0, 1.0)),
-      color(0.52, 0.60, 0.70, 1.0),
-      1.0,
-      10.0,
-    )
-
-    let
-      textColor = color(0.12, 0.16, 0.23, 1.0)
-      mutedColor = color(0.39, 0.45, 0.54, 1.0)
-      accentColor = color(0.16, 0.43, 0.82, 1.0)
-      headerWidth = bounds.size.width - 20.0'f32
-    context.addText(
-      rect(36.0, 8.0, headerWidth - 56.0'f32, 28.0),
-      popover.displayedMonth.monthTitle(),
-      textColor,
-      taCenter,
-    )
-    context.addText(rect(10.0, 8.0, 26.0, 28.0), "<", mutedColor, taCenter)
-    context.addText(
-      rect(bounds.size.width - 36.0'f32, 8.0, 26.0, 28.0), ">", mutedColor, taCenter
-    )
-
-    for column, name in WeekdayNames:
-      let weekdayRect = rect(
-        CalendarGridLeft + column.float32 * CalendarCellWidth,
-        44.0,
-        CalendarCellWidth,
-        20.0,
-      )
-      context.addText(weekdayRect, name, mutedColor, taCenter)
-
-    let firstWeekday = popover.displayedMonth.weekday()
-    for row in 0 ..< 6:
-      for column in 0 ..< 7:
-        let day = row * 7 + column - firstWeekday + 1
-        if day >= 1 and day <= popover.displayedMonth.daysInMonth():
-          let dayRect = rect(
-            CalendarGridLeft + column.float32 * CalendarCellWidth,
-            CalendarGridTop + row.float32 * CalendarCellHeight,
-            CalendarCellWidth,
-            CalendarCellHeight,
-          )
-          let date =
-            makeDate(popover.displayedMonth.year, popover.displayedMonth.month, day)
-          var dayColor = textColor
-          if date.sameDate(popover.selectedDate):
-            let center = initPoint(
-              dayRect.origin.x + dayRect.size.width / 2.0'f32,
-              dayRect.origin.y + dayRect.size.height / 2.0'f32,
-            )
-            discard context.addRenderCircle(center, fill(accentColor), 11.0)
-            dayColor = color(1.0, 1.0, 1.0, 1.0)
-          context.addText(dayRect, $day, dayColor, taCenter)
-
-protocol DatePickerEvents of ResponderEventProtocol:
-  method mouseDown(popover: DatePickerPopover, event: MouseEvent): bool =
-    if event.button != mbPrimary:
-      return false
-
-    let bounds = popover.bounds()
-    if rect(8.0, 6.0, 28.0, 28.0).contains(event.location):
-      popover.displayedMonth = popover.displayedMonth.shiftMonth(-1)
-      popover.needsDisplay = true
-      return true
-    if rect(bounds.size.width - 36.0'f32, 6.0, 28.0, 28.0).contains(event.location):
-      popover.displayedMonth = popover.displayedMonth.shiftMonth(1)
-      popover.needsDisplay = true
-      return true
-
-    let gridWidth = CalendarCellWidth * 7.0'f32
-    if event.location.x < CalendarGridLeft or
-        event.location.x >= CalendarGridLeft + gridWidth or
-        event.location.y < CalendarGridTop:
-      return true
-
-    let
-      column = int((event.location.x - CalendarGridLeft) / CalendarCellWidth)
-      row = int((event.location.y - CalendarGridTop) / CalendarCellHeight)
-    if row < 0 or row >= 6:
-      return true
-    let day = row * 7 + column - popover.displayedMonth.weekday() + 1
-    if day < 1 or day > popover.displayedMonth.daysInMonth():
-      return true
-
-    popover.selectedDate =
-      makeDate(popover.displayedMonth.year, popover.displayedMonth.month, day)
-    if not popover.onSelect.isNil:
-      popover.onSelect(popover.selectedDate)
-    popover.hidden = true
-    popover.needsDisplay = true
-    true
-
-proc newDatePickerPopover(selectedDate: CalendarDate): DatePickerPopover =
-  result = DatePickerPopover(
-    displayedMonth: makeDate(selectedDate.year, selectedDate.month, 1),
-    selectedDate: selectedDate,
-  )
-  initViewFields(result)
-  result.acceptsFirstResponder = true
-  result.accessibilityRole = arGroup
-  result.accessibilityLabel = "Date picker"
-  discard result.withProtocol(DatePickerDrawing)
-  discard result.withProtocol(DatePickerEvents)
 
 func tagMatches(entry: FilterEntry, selectedTags: openArray[string]): bool =
   if selectedTags.len == 0:
@@ -314,9 +124,9 @@ func matchesFilters(controller: FilterDemoController, entry: FilterEntry): bool 
     return false
   if controller.ownerFilter.len > 0 and entry.owner != controller.ownerFilter:
     return false
-  if controller.hasStartDate and entry.date.dateBefore(controller.startDate):
+  if controller.hasStartDate and entry.date < controller.startDate:
     return false
-  if controller.hasEndDate and entry.date.dateAfter(controller.endDate):
+  if controller.hasEndDate and entry.date > controller.endDate:
     return false
   entry.tagMatches(controller.selectedTags)
 
@@ -378,8 +188,8 @@ proc newFilterDemoController(
     table: table,
     resultLabel: resultLabel,
     mode: fmAll,
-    startDate: makeDate(2025, 6, 10),
-    endDate: makeDate(2025, 7, 24),
+    startDate: initCalendarDate(2025, 6, 10),
+    endDate: initCalendarDate(2025, 7, 24),
     selectedTags: @["Backend", "Urgent", "Review"],
   )
   initResponder(result)
@@ -392,15 +202,6 @@ proc selectedChoice(comboBox: ComboBox): string =
     comboBox.optionIdentifierAtIndex(index)
   else:
     ""
-
-proc updateDateButtonTitle(
-    button: Button, prefix: string, hasDate: bool, date: CalendarDate
-) =
-  button.title =
-    if hasDate:
-      prefix & " · " & date.shortDate()
-    else:
-      prefix & " · Any date"
 
 proc onModeChanged(controller: FilterDemoController, sender: DynamicAgent) =
   for mode in FilterMode:
@@ -420,28 +221,12 @@ proc onChoiceChanged(controller: FilterDemoController, sender: DynamicAgent) =
 proc setStartDate(controller: FilterDemoController, date: CalendarDate) =
   controller.startDate = date
   controller.hasStartDate = true
-  controller.startPopover.selectedDate = date
-  controller.startPopover.displayedMonth = makeDate(date.year, date.month, 1)
-  controller.startButton.updateDateButtonTitle("From", true, date)
   controller.applyFilters()
 
 proc setEndDate(controller: FilterDemoController, date: CalendarDate) =
   controller.endDate = date
   controller.hasEndDate = true
-  controller.endPopover.selectedDate = date
-  controller.endPopover.displayedMonth = makeDate(date.year, date.month, 1)
-  controller.endButton.updateDateButtonTitle("Until", true, date)
   controller.applyFilters()
-
-proc toggleStartPopover(controller: FilterDemoController, sender: DynamicAgent) =
-  discard sender
-  controller.endPopover.hidden = true
-  controller.startPopover.hidden = not controller.startPopover.hidden
-
-proc toggleEndPopover(controller: FilterDemoController, sender: DynamicAgent) =
-  discard sender
-  controller.startPopover.hidden = true
-  controller.endPopover.hidden = not controller.endPopover.hidden
 
 proc setTagEnabled(controller: FilterDemoController, tag: string, enabled: bool) =
   var options = controller.tagOptions.options
@@ -559,7 +344,6 @@ proc makeFilterAppearance(): Appearance =
     segment = initStyleSelector(srButton, classes = @["filter-segment"])
     selectedSegment =
       initStyleSelector(srButton, {ssSelected}, classes = @["filter-segment"])
-    dateButton = initStyleSelector(srButton, classes = @["filter-date"])
     chip = initStyleSelector(srButton, classes = @["filter-chip"])
     autocomplete = initStyleSelector(srComboBox, classes = @["filter-autocomplete"])
   appearance[segment, StyleFill] = fill(color(0.93, 0.95, 0.98, 1.0))
@@ -572,8 +356,6 @@ proc makeFilterAppearance(): Appearance =
   appearance[selectedSegment, StyleFill] = fill(color(0.16, 0.43, 0.82, 1.0))
   appearance[selectedSegment, StyleBorderColor] = color(0.10, 0.32, 0.68, 1.0)
   appearance[selectedSegment, StyleTextColor] = color(1.0, 1.0, 1.0, 1.0)
-  appearance[dateButton, StyleTextInsets] = insets(0.0, 10.0)
-  appearance[dateButton, StyleMinimumSize] = initSize(0.0, 30.0)
   appearance[chip, StyleFill] = fill(color(0.88, 0.94, 1.0, 1.0))
   appearance[chip, StyleBorderColor] = color(0.47, 0.64, 0.88, 1.0)
   appearance[chip, StyleBorderWidth] = 1.0
@@ -597,8 +379,8 @@ let
   modeRow = newStackView(laHorizontal)
   statusChoice = newComboBox()
   ownerChoice = newComboBox()
-  startButton = newButton("From · Any date")
-  endButton = newButton("Until · Any date")
+  startButton = newDatePickerButton("From")
+  endButton = newDatePickerButton("Until")
   tagChoice = newComboBox()
   chipScroll = newScrollView()
   chipRow = newStackView(laHorizontal)
@@ -635,11 +417,11 @@ controller.statusChoice = statusChoice
 controller.ownerChoice = ownerChoice
 controller.startButton = startButton
 controller.endButton = endButton
+startButton.selectedDate = controller.startDate
+endButton.selectedDate = controller.endDate
 controller.tagChoice = tagChoice
 controller.chipScroll = chipScroll
 controller.chipRow = chipRow
-controller.startPopover = newDatePickerPopover(controller.startDate)
-controller.endPopover = newDatePickerPopover(controller.endDate)
 
 statusChoice.dataSource = makeChoiceOptions("any-status", "Any status", DemoStatuses)
 ownerChoice.dataSource = makeChoiceOptions("any-owner", "Any owner", DemoOwners)
@@ -648,8 +430,6 @@ ownerChoice.selectedIndex = 0
 statusChoice.styleClasses = @["filter-choice"]
 ownerChoice.styleClasses = @["filter-choice"]
 
-startButton.styleClasses = @["filter-date"]
-endButton.styleClasses = @["filter-date"]
 tagChoice.styleClasses = @["filter-autocomplete"]
 tagChoice.editable = false
 tagChoice.maxVisibleItems = 6
@@ -665,8 +445,6 @@ tagChoice.dataSource = controller.tagOptions
 let
   modeAction = actionSelector("filterModeChanged")
   choiceAction = actionSelector("filterChoiceChanged")
-  startAction = actionSelector("filterStartDate")
-  endAction = actionSelector("filterEndDate")
   tagAction = actionSelector("filterTagChanged")
   modeTarget = newActionTarget(
     modeAction,
@@ -677,16 +455,6 @@ let
     choiceAction,
     proc(sender: DynamicAgent) =
       controller.onChoiceChanged(sender),
-  )
-  startTarget = newActionTarget(
-    startAction,
-    proc(sender: DynamicAgent) =
-      controller.toggleStartPopover(sender),
-  )
-  endTarget = newActionTarget(
-    endAction,
-    proc(sender: DynamicAgent) =
-      controller.toggleEndPopover(sender),
   )
   tagTarget = newActionTarget(
     tagAction,
@@ -703,19 +471,13 @@ for combo in [statusChoice, ownerChoice]:
   combo.target = choiceTarget
   combo.action = choiceAction
 
-startButton.target = startTarget
-startButton.action = startAction
-endButton.target = endTarget
-endButton.action = endAction
 tagChoice.target = tagTarget
 tagChoice.action = tagAction
 
-controller.startPopover.onSelect = proc(date: CalendarDate) =
+startButton.onSelect = proc(date: CalendarDate) =
   controller.setStartDate(date)
-controller.endPopover.onSelect = proc(date: CalendarDate) =
+endButton.onSelect = proc(date: CalendarDate) =
   controller.setEndDate(date)
-controller.startPopover.hidden = true
-controller.endPopover.hidden = true
 controller.installTagAutocomplete()
 
 filterRow.addArrangedSubview(
@@ -743,8 +505,6 @@ table.usesAlternatingRowBackgrounds = true
 table.showsRowSeparators = true
 
 root.addSubview(layout)
-root.addSubview(controller.startPopover)
-root.addSubview(controller.endPopover)
 layout.pinEdges(
   toGuide = root.contentLayoutGuide(insets(22.0, 24.0, 18.0, 24.0)),
   edges = {leLeft, leTop, leRight, leBottom},
@@ -761,14 +521,6 @@ activateConstraints:
   endButton[atWidth] == 136.0
   tagChoice[atWidth] == 190.0
   chipScroll[atHeight] == 34.0
-  controller.startPopover[atLeft] == startButton[atLeft]
-  controller.startPopover[atTop] == startButton[atBottom] + 6.0
-  controller.startPopover[atWidth] == CalendarPopoverWidth
-  controller.startPopover[atHeight] == CalendarPopoverHeight
-  controller.endPopover[atLeft] == endButton[atLeft]
-  controller.endPopover[atTop] == endButton[atBottom] + 6.0
-  controller.endPopover[atWidth] == CalendarPopoverWidth
-  controller.endPopover[atHeight] == CalendarPopoverHeight
 
 controller.rebuildTagChips()
 controller.applyFilters()

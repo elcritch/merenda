@@ -5,6 +5,7 @@ import nimkit/application_icon
 import nimkit/assetcache
 import nimkit/backrefs_arc
 import nimkit/controls
+import nimkit/datepickers
 import nimkit/constraints
 import nimkit/controlfontfaces
 import nimkit/diagnostics

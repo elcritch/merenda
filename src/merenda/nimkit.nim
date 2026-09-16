@@ -15,6 +15,7 @@ import ./nimkit/controls/comboboxes
 import ./nimkit/controls/colorpicker
 import ./nimkit/controls/controls
 import ./nimkit/controls/dialogbuttonboxes
+import ./nimkit/controls/datepickers
 import ./nimkit/controls/fontpickers
 import ./nimkit/containers/documenttabs
 import ./nimkit/containers/dockviews
@@ -105,6 +106,7 @@ export comboboxes
 export colorpicker
 export controls
 export dialogbuttonboxes
+export datepickers
 export fontpickers
 export documenttabs
 export dockviews

@@ -68,6 +68,7 @@ type
     srTextView
     srMonoTextView
     srComboBox
+    srDatePicker
     srComboBoxItem
     srSplitView
     srTableView
