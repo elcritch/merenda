@@ -1,4 +1,4 @@
-import std/unittest
+import std/[times, unittest]
 
 import figdraw
 
@@ -101,6 +101,79 @@ suite "NimKit date pickers":
     check button.title == "At · 09:29:15"
     check not button.popupOpen()
     check button.timePicker().isNil
+    check not window.hasActiveTransientSession()
+
+  test "date-time picker combines calendar and clock selections":
+    let
+      initial = dateTime(2025, mJul, 24, 9, 30, 15, zone = utc())
+      nextDate = initCalendarDate(2025, 8, 3)
+      nextTime = initTimeOfDay(17, 45, 8)
+      picker = newDateTimePicker(initial)
+    var
+      selectedCount = 0
+      callbackDateTime: DateTime
+    picker.onSelect = proc(value: DateTime) =
+      inc selectedCount
+      callbackDateTime = value
+
+    check picker.selectedDateTime == initial
+    check picker.hasSelectedDateTime
+    check picker.calendarDate() == initCalendarDate(2025, 7, 24)
+    check picker.timePicker().selectedTime == initTimeOfDay(9, 30, 15)
+    check picker.sizeThatFits() == dateTimePickerDefaultSize()
+    picker.datePicker().selectDate(nextDate)
+    check picker.confirmDateTime()
+    check selectedCount == 1
+    check callbackDateTime == dateTime(2025, mAug, 3, 9, 30, 15, zone = utc())
+    picker.timePicker().selectTime(nextTime)
+    check selectedCount == 2
+    check picker.selectedDateTime == dateTime(2025, mAug, 3, 17, 45, 8, zone = utc())
+
+    picker.hasSelectedDateTime = false
+    check not picker.hasSelectedDateTime
+    check picker.accessibilityValue() == "No date and time selected"
+
+  test "date-time picker button commits the combined inline selection":
+    let
+      selected = dateTime(2025, mJul, 24, 9, 30, 15, zone = utc())
+      root = newView(frame = rect(0, 0, 500, 620))
+      window = newWindow("Date and Time Picker", frame = rect(0, 0, 500, 620))
+      button = newDateTimePickerButton("Updated", selected, rect(10, 10, 180, 32))
+    var
+      selectedCount = 0
+      callbackDateTime: DateTime
+    button.onSelect = proc(value: DateTime) =
+      inc selectedCount
+      callbackDateTime = value
+    root.addSubview(button)
+    window.setContentView(root)
+    button.popupPresentation = ppInline
+
+    check button.title == "Updated · Jul 24, 2025 · 09:30:15"
+    check window.mouseDownAt(initPoint(20, 20))
+    check window.mouseUpAt(initPoint(20, 20))
+    check button.popupOpen()
+    let picker = button.dateTimePicker()
+    check not picker.isNil
+    check picker.superview() == root
+    check window.hasActiveTransientSession()
+
+    # July 23 is in the fourth calendar row and Wednesday column.
+    let datePoint = picker.datePicker().pointToWindow(initPoint(125.5, 166.0))
+    check window.mouseDownAt(datePoint)
+    check window.mouseUpAt(datePoint)
+    let minuteDown = picker.timePicker().pointToWindow(initPoint(117, 94))
+    check window.mouseDownAt(minuteDown)
+    check window.mouseUpAt(minuteDown)
+    let done = picker.timePicker().pointToWindow(initPoint(210, 150))
+    check window.mouseDownAt(done)
+    check window.mouseUpAt(done)
+    check selectedCount == 1
+    check callbackDateTime == dateTime(2025, mJul, 23, 9, 29, 15, zone = utc())
+    check button.selectedDateTime == callbackDateTime
+    check button.title == "Updated · Jul 23, 2025 · 09:29:15"
+    check not button.popupOpen()
+    check button.dateTimePicker().isNil
     check not window.hasActiveTransientSession()
 
   test "date picker selection updates state and invokes its callback":

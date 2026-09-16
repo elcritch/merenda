@@ -83,6 +83,26 @@ type
     xPopupPresentation: PopupPresentation
     xOnSelect: TimePickerSelectionHandler
 
+  DateTimePickerSelectionHandler* = proc(value: DateTime) {.closure.}
+
+  DateTimePicker* = ref object of View
+    xSelectedDateTime: DateTime
+    xDraftDateTime: DateTime
+    xHasSelectedDateTime: bool
+    xDatePicker: DatePicker
+    xTimePicker: TimePicker
+    xOnSelect: DateTimePickerSelectionHandler
+
+  DateTimePickerButton* = ref object of Button
+    xTitlePrefix: string
+    xSelectedDateTime: DateTime
+    xHasSelectedDateTime: bool
+    xDateTimePicker: DateTimePicker
+    xPopupWindow: Window
+    xPopupOpen: bool
+    xPopupPresentation: PopupPresentation
+    xOnSelect: DateTimePickerSelectionHandler
+
 const
   DatePickerDefaultWidth* = 252.0'f32
   DatePickerDefaultHeight* = 244.0'f32
@@ -99,6 +119,8 @@ const
   TimePickerDoneTop = 136.0'f32
   TimePickerDoneWidth = 64.0'f32
   TimePickerDoneHeight = 30.0'f32
+  DateTimePickerDefaultWidth* = DatePickerDefaultWidth
+  DateTimePickerDefaultHeight* = DatePickerDefaultHeight + TimePickerDefaultHeight
   CalendarGridLeft = 10.0'f32
   CalendarGridTop = 68.0'f32
   CalendarCellWidth = 33.0'f32
@@ -1503,4 +1525,601 @@ proc newTimePickerButton*(
   result = TimePickerButton()
   result.initTimePickerButtonFields(
     titlePrefix, selectedTime, hasSelectedTime = true, frame = frame
+  )
+
+func isValidDateTime*(value: DateTime): bool =
+  try:
+    let date = initCalendarDate(value.year, value.month.ord, value.monthday)
+    result =
+      date.isValidCalendarDate() and value.hour in 0 .. 23 and value.minute in 0 .. 59 and
+      value.second in 0 .. 59 and value.nanosecond in 0 .. 999_999_999
+  except AssertionDefect:
+    result = false
+
+func isValidDateTimeValue*(value: DateTime): bool =
+  value.isValidDateTime()
+
+func calendarDate*(value: DateTime): CalendarDate =
+  if value.isValidDateTime():
+    result = initCalendarDate(value.year, value.month.ord, value.monthday)
+
+func datePart*(value: DateTime): CalendarDate =
+  value.calendarDate()
+
+func timeOfDay*(value: DateTime): TimeOfDay =
+  if value.isValidDateTime():
+    result = initTimeOfDay(value.hour, value.minute, value.second, value.nanosecond)
+
+func timePart*(value: DateTime): TimeOfDay =
+  value.timeOfDay()
+
+proc dateTimeWithParts(value: DateTime, date: CalendarDate, time: TimeOfDay): DateTime =
+  if not date.isValidCalendarDate() or not time.isValidTimeOfDay():
+    return
+  dateTime(
+    date.year,
+    Month(date.month),
+    date.day,
+    time.hour,
+    time.minute,
+    time.second,
+    time.nanosecond,
+    value.timezone,
+  )
+
+proc initPickerDateTime*(
+    year, month, day, hour, minute: int,
+    second = 0,
+    nanosecond = 0,
+    zone: Timezone = local(),
+): DateTime =
+  let
+    date = initCalendarDate(year, month, day)
+    time = initTimeOfDay(hour, minute, second, nanosecond)
+  if date.isValidCalendarDate() and time.isValidTimeOfDay():
+    result = dateTime(year, Month(month), day, hour, minute, second, nanosecond, zone)
+
+proc formatCalendarDateTime*(value: DateTime): string =
+  if not value.isValidDateTime():
+    return ""
+  value.calendarDate().formatCalendarDate() & " · " &
+    value.timeOfDay().formatTimeOfDay()
+
+proc formatDateTimeValue*(value: DateTime): string =
+  value.formatCalendarDateTime()
+
+proc formatPickerDateTime*(value: DateTime): string =
+  value.formatCalendarDateTime()
+
+proc dateTimePickerDefaultSize*(): Size =
+  initSize(DateTimePickerDefaultWidth, DateTimePickerDefaultHeight)
+
+proc selectDateTime*(picker: DateTimePicker, value: DateTime) {.discardable.}
+proc confirmDateTime*(picker: DateTimePicker): bool
+proc openPopup*(button: DateTimePickerButton)
+proc closePopup*(button: DateTimePickerButton)
+proc updateDateTimeButtonTitle(button: DateTimePickerButton)
+proc ownerWindow(button: DateTimePickerButton): Window
+
+proc selectedDateTime*(picker: DateTimePicker): DateTime =
+  picker.xSelectedDateTime
+
+proc `selectedDateTime=`*(picker: DateTimePicker, value: DateTime) =
+  if not value.isValidDateTime():
+    return
+  picker.xSelectedDateTime = value
+  picker.xDraftDateTime = value
+  picker.xHasSelectedDateTime = true
+  if not picker.xDatePicker.isNil:
+    picker.xDatePicker.selectedDate = value.calendarDate()
+    picker.xDatePicker.hasSelectedDate = true
+  if not picker.xTimePicker.isNil:
+    picker.xTimePicker.selectedTime = value.timeOfDay()
+    picker.xTimePicker.hasSelectedTime = true
+  picker.needsDisplay = true
+
+proc hasSelectedDateTime*(picker: DateTimePicker): bool =
+  picker.xHasSelectedDateTime
+
+proc `hasSelectedDateTime=`*(picker: DateTimePicker, value: bool) =
+  if picker.xHasSelectedDateTime == value:
+    return
+  picker.xHasSelectedDateTime = value
+  if not picker.xDatePicker.isNil:
+    picker.xDatePicker.hasSelectedDate = value
+  if not picker.xTimePicker.isNil:
+    picker.xTimePicker.hasSelectedTime = value
+  picker.needsDisplay = true
+
+proc onSelect*(picker: DateTimePicker): DateTimePickerSelectionHandler =
+  picker.xOnSelect
+
+proc `onSelect=`*(picker: DateTimePicker, handler: DateTimePickerSelectionHandler) =
+  picker.xOnSelect = handler
+
+proc datePicker*(picker: DateTimePicker): DatePicker =
+  picker.xDatePicker
+
+proc timePicker*(picker: DateTimePicker): TimePicker =
+  picker.xTimePicker
+
+proc calendarDate*(picker: DateTimePicker): CalendarDate =
+  picker.xSelectedDateTime.calendarDate()
+
+proc timeOfDay*(picker: DateTimePicker): TimeOfDay =
+  picker.xSelectedDateTime.timeOfDay()
+
+proc updateDraftDate(picker: DateTimePicker, date: CalendarDate) =
+  if not date.isValidCalendarDate():
+    return
+  picker.xDraftDateTime =
+    picker.xDraftDateTime.dateTimeWithParts(date, picker.xDraftDateTime.timeOfDay())
+  picker.needsDisplay = true
+
+proc updateDraftTime(picker: DateTimePicker, time: TimeOfDay) =
+  if not time.isValidTimeOfDay():
+    return
+  picker.xDraftDateTime =
+    picker.xDraftDateTime.dateTimeWithParts(picker.xDraftDateTime.calendarDate(), time)
+  picker.needsDisplay = true
+
+proc dateTimePickerDateDidChange(picker: DateTimePicker, date: CalendarDate) =
+  picker.updateDraftDate(date)
+
+proc dateTimePickerTimeDidConfirm(picker: DateTimePicker, time: TimeOfDay) =
+  picker.updateDraftTime(time)
+  discard picker.confirmDateTime()
+
+protocol DateTimePickerLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(picker: DateTimePicker): IntrinsicSize =
+    initIntrinsicSize(dateTimePickerDefaultSize())
+
+  method layoutSubviews(picker: DateTimePicker) =
+    let bounds = picker.bounds()
+    picker.xDatePicker.frame =
+      rect(0.0, 0.0, bounds.size.width, DatePickerDefaultHeight)
+    picker.xTimePicker.frame = rect(
+      0.0,
+      DatePickerDefaultHeight,
+      bounds.size.width,
+      max(bounds.size.height - DatePickerDefaultHeight, TimePickerDefaultHeight),
+    )
+
+protocol DateTimePickerPopupDrawing of ViewDrawingProtocol:
+  method drawLevel(picker: DateTimePicker): ZLevel =
+    PopupDrawLevel
+
+protocol DateTimePickerPopupHitTesting of ViewProtocol:
+  method hitTestLevel(picker: DateTimePicker, point: Point): int =
+    discard point
+    PopupDrawLevel.int
+
+protocol DateTimePickerEvents of ResponderEventProtocol:
+  method keyDown(picker: DateTimePicker, event: KeyEvent): bool =
+    case event.key
+    of keyEnter, keySpace:
+      picker.confirmDateTime()
+    of keyArrowLeft, keyArrowRight:
+      picker.xDatePicker.keyDown(event)
+    of keyArrowUp, keyArrowDown:
+      picker.xTimePicker.keyDown(event)
+    else:
+      false
+
+protocol DateTimePickerAccessibility of AccessibilityProtocol:
+  method accessibilityRole(picker: DateTimePicker): AccessibilityRole =
+    arGroup
+
+  method accessibilityLabel(picker: DateTimePicker): string =
+    if picker.xAccessibilityLabel.len > 0:
+      picker.xAccessibilityLabel
+    else:
+      "Date and time picker"
+
+  method accessibilityValue(picker: DateTimePicker): string =
+    if picker.xHasSelectedDateTime:
+      picker.xSelectedDateTime.formatCalendarDateTime()
+    else:
+      "No date and time selected"
+
+  method isAccessibilityElement(picker: DateTimePicker): bool =
+    true
+
+proc initDateTimePickerFields*(
+    picker: DateTimePicker,
+    selectedDateTime: DateTime,
+    hasSelectedDateTime = true,
+    frame: Rect = AutoRect,
+) =
+  initViewFields(picker, frame)
+  let fallback =
+    if selectedDateTime.isValidDateTime():
+      selectedDateTime
+    else:
+      now()
+  picker.xSelectedDateTime = fallback
+  picker.xDraftDateTime = fallback
+  picker.xHasSelectedDateTime = hasSelectedDateTime
+  picker.xDatePicker = newDatePicker(
+    fallback.calendarDate(),
+    hasSelectedDate = hasSelectedDateTime,
+    frame = rect(0.0, 0.0, DateTimePickerDefaultWidth, DatePickerDefaultHeight),
+  )
+  picker.xTimePicker = newTimePicker(
+    fallback.timeOfDay(),
+    hasSelectedTime = hasSelectedDateTime,
+    frame = rect(
+      0.0, DatePickerDefaultHeight, DateTimePickerDefaultWidth, TimePickerDefaultHeight
+    ),
+  )
+  picker.addSubview(picker.xDatePicker)
+  picker.addSubview(picker.xTimePicker)
+  picker.xDatePicker.onSelect = proc(date: CalendarDate) =
+    picker.dateTimePickerDateDidChange(date)
+  picker.xTimePicker.onSelect = proc(time: TimeOfDay) =
+    picker.dateTimePickerTimeDidConfirm(time)
+  picker.acceptsFirstResponder = true
+  picker.accessibilityRole = arGroup
+  picker.accessibilityLabel = "Date and time picker"
+  discard picker.withProtocol(DateTimePickerLayout)
+  discard picker.withProtocol(DateTimePickerPopupDrawing)
+  discard picker.withProtocol(DateTimePickerPopupHitTesting)
+  discard picker.withProtocol(DateTimePickerEvents)
+  discard picker.withProtocol(DateTimePickerAccessibility)
+  picker.applyInitialFrame(frame)
+
+proc newDateTimePicker*(
+    selectedDateTime: DateTime, hasSelectedDateTime = true, frame: Rect = AutoRect
+): DateTimePicker =
+  result = DateTimePicker()
+  result.initDateTimePickerFields(selectedDateTime, hasSelectedDateTime, frame)
+
+proc newDateTimePicker*(frame: Rect = AutoRect): DateTimePicker =
+  newDateTimePicker(now(), hasSelectedDateTime = false, frame = frame)
+
+proc selectDateTime*(picker: DateTimePicker, value: DateTime) {.discardable.} =
+  if not value.isValidDateTime():
+    return
+  picker.xSelectedDateTime = value
+  picker.xDraftDateTime = value
+  picker.xHasSelectedDateTime = true
+  if not picker.xDatePicker.isNil:
+    picker.xDatePicker.selectedDate = value.calendarDate()
+    picker.xDatePicker.hasSelectedDate = true
+  if not picker.xTimePicker.isNil:
+    picker.xTimePicker.selectedTime = value.timeOfDay()
+    picker.xTimePicker.hasSelectedTime = true
+  picker.needsDisplay = true
+  picker.postAccessibilityNotification(anValueChanged)
+  if not picker.xOnSelect.isNil:
+    picker.xOnSelect(value)
+
+proc confirmDateTime*(picker: DateTimePicker): bool =
+  if not picker.xDraftDateTime.isValidDateTime():
+    return false
+  picker.selectDateTime(picker.xDraftDateTime)
+  true
+
+proc confirmSelection*(picker: DateTimePicker): bool =
+  picker.confirmDateTime()
+
+proc commitDateTime*(picker: DateTimePicker): bool =
+  picker.confirmDateTime()
+
+proc titlePrefix*(button: DateTimePickerButton): string =
+  button.xTitlePrefix
+
+proc `titlePrefix=`*(button: DateTimePickerButton, value: string) =
+  if button.xTitlePrefix == value:
+    return
+  button.xTitlePrefix = value
+  button.updateDateTimeButtonTitle()
+
+proc selectedDateTime*(button: DateTimePickerButton): DateTime =
+  button.xSelectedDateTime
+
+proc `selectedDateTime=`*(button: DateTimePickerButton, value: DateTime) =
+  if not value.isValidDateTime():
+    return
+  button.xSelectedDateTime = value
+  button.xHasSelectedDateTime = true
+  button.updateDateTimeButtonTitle()
+  if not button.xDateTimePicker.isNil:
+    button.xDateTimePicker.selectedDateTime = value
+  button.postAccessibilityNotification(anValueChanged)
+
+proc hasSelectedDateTime*(button: DateTimePickerButton): bool =
+  button.xHasSelectedDateTime
+
+proc `hasSelectedDateTime=`*(button: DateTimePickerButton, value: bool) =
+  if value and not button.xSelectedDateTime.isValidDateTime():
+    button.xSelectedDateTime = now()
+  if button.xHasSelectedDateTime == value:
+    return
+  button.xHasSelectedDateTime = value
+  button.updateDateTimeButtonTitle()
+  if not button.xDateTimePicker.isNil:
+    button.xDateTimePicker.hasSelectedDateTime = value
+  button.postAccessibilityNotification(anValueChanged)
+
+proc onSelect*(button: DateTimePickerButton): DateTimePickerSelectionHandler =
+  button.xOnSelect
+
+proc `onSelect=`*(
+    button: DateTimePickerButton, handler: DateTimePickerSelectionHandler
+) =
+  button.xOnSelect = handler
+
+proc dateTimePicker*(button: DateTimePickerButton): DateTimePicker =
+  button.xDateTimePicker
+
+proc popupWindow*(button: DateTimePickerButton): Window =
+  button.xPopupWindow
+
+proc popupOpen*(button: DateTimePickerButton): bool =
+  button.xPopupOpen
+
+proc popupPresentation*(button: DateTimePickerButton): PopupPresentation =
+  button.xPopupPresentation
+
+proc effectivePopupPresentation*(button: DateTimePickerButton): PopupPresentation =
+  let owner = button.ownerWindow()
+  if owner.isNil:
+    return ppInline
+  owner.resolvedPopupPresentation(button.xPopupPresentation)
+
+proc `popupPresentation=`*(button: DateTimePickerButton, value: PopupPresentation) =
+  if button.xPopupPresentation == value:
+    return
+  let wasOpen = button.xPopupOpen
+  if wasOpen:
+    button.closePopup()
+  button.xPopupPresentation = value
+  if wasOpen:
+    button.openPopup()
+
+proc `popupOpen=`*(button: DateTimePickerButton, value: bool) =
+  if value:
+    button.openPopup()
+  else:
+    button.closePopup()
+
+proc updateDateTimeButtonTitle(button: DateTimePickerButton) =
+  button.title =
+    if button.xHasSelectedDateTime:
+      button.xTitlePrefix & " · " & button.xSelectedDateTime.formatCalendarDateTime()
+    else:
+      button.xTitlePrefix & " · Any date and time"
+
+proc ownerWindow(button: DateTimePickerButton): Window =
+  let owner = button.window()
+  if owner of Window:
+    result = Window(owner)
+
+proc inlinePopupFrame(button: DateTimePickerButton, parent: View, size: Size): Rect =
+  let
+    anchor = button.rectToView(button.bounds(), parent)
+    bounds = parent.bounds()
+    maximumX = max(bounds.maxX - size.width, bounds.origin.x)
+    x = min(max(anchor.origin.x, bounds.origin.x), maximumX)
+    belowY = anchor.maxY
+    aboveY = anchor.origin.y - size.height
+    y =
+      if belowY + size.height <= bounds.maxY or aboveY < bounds.origin.y:
+        belowY
+      else:
+        aboveY
+  rect(x, y, size.width, size.height)
+
+proc openInlinePopup(button: DateTimePickerButton, picker: DateTimePicker, size: Size) =
+  let owner = button.ownerWindow()
+  if owner.isNil or owner.contentView().isNil:
+    return
+  let parent = owner.contentView()
+  picker.frame = button.inlinePopupFrame(parent, size)
+  parent.addSubview(picker)
+  picker.needsDisplay = true
+
+proc clearPopupState(button: DateTimePickerButton) =
+  if not button.xDateTimePicker.isNil and not button.xDateTimePicker.superview().isNil:
+    button.xDateTimePicker.removeFromSuperview()
+  button.xPopupOpen = false
+  button.xPopupWindow = nil
+  button.xDateTimePicker = nil
+  button.setWidgetState(ssOpen, false)
+  button.needsDisplay = true
+
+proc dismissPopup(button: DateTimePickerButton, reason: DismissReason) =
+  discard reason
+  let popupWindow = button.xPopupWindow
+  button.clearPopupState()
+  if not popupWindow.isNil and not popupWindow.isClosed():
+    popupWindow.close()
+
+proc dateTimePickerDidSelect(button: DateTimePickerButton, value: DateTime) =
+  button.selectedDateTime = value
+  button.closePopup()
+  if not button.xOnSelect.isNil:
+    button.xOnSelect(value)
+  discard button.sendAction()
+
+proc openPopup*(button: DateTimePickerButton) =
+  if button.xPopupOpen or not button.isEnabled():
+    return
+  let owner = button.ownerWindow()
+  if owner.isNil:
+    return
+  let size = dateTimePickerDefaultSize()
+  let picker = newDateTimePicker(
+    button.xSelectedDateTime,
+    hasSelectedDateTime = button.xHasSelectedDateTime,
+    frame = rect(0.0, 0.0, size.width, size.height),
+  )
+  picker.onSelect = proc(value: DateTime) =
+    button.dateTimePickerDidSelect(value)
+
+  var popupWindow: Window
+  if button.effectivePopupPresentation() == ppWindow and owner.nativeReady:
+    popupWindow = owner.newPopupWindow(
+      button.rectToWindow(button.bounds()), size, "Date and Time Picker"
+    )
+    popupWindow.setContentView(picker)
+    popupWindow.setInitialFirstResponder(picker)
+    popupWindow.makeKeyAndOrderFront()
+    popupWindow.ensureNativeWindow()
+    if not popupWindow.nativeReady:
+      popupWindow.close()
+      popupWindow = nil
+  if popupWindow.isNil:
+    button.openInlinePopup(picker, size)
+
+  button.xPopupOpen = true
+  button.xPopupWindow = popupWindow
+  button.xDateTimePicker = picker
+  button.setWidgetState(ssOpen, true)
+  button.needsDisplay = true
+  if not popupWindow.isNil:
+    popupWindow.setPopupDoneHandler(
+      proc() =
+        if button.xPopupWindow != popupWindow:
+          return
+        if owner.hasActiveTransientSession() and owner.transientWindow() == popupWindow:
+          discard owner.dismissTransientSession(tdrNativeDone)
+        else:
+          button.clearPopupState()
+    )
+  owner.beginTransientSession(
+    owner =
+      if popupWindow.isNil:
+        Responder(picker)
+      else:
+        Responder(button),
+    transientWindow = popupWindow,
+    restoreResponder = Responder(button),
+    onDismiss = proc(reason: DismissReason) =
+      button.dismissPopup(reason),
+  )
+  if popupWindow.isNil:
+    discard owner.makeFirstResponder(picker)
+  else:
+    discard popupWindow.makeFirstResponder(picker)
+
+proc closePopup*(button: DateTimePickerButton) =
+  let
+    owner = button.ownerWindow()
+    popupWindow = button.xPopupWindow
+  if not button.xPopupOpen and popupWindow.isNil:
+    return
+  button.clearPopupState()
+  if not owner.isNil and owner.hasActiveTransientSession() and
+      owner.transientWindow() == popupWindow:
+    discard owner.endTransientSession()
+  if not popupWindow.isNil and not popupWindow.isClosed():
+    popupWindow.close()
+
+protocol DateTimePickerButtonEvents of ResponderEventProtocol:
+  method mouseDown(button: DateTimePickerButton, event: MouseEvent): bool =
+    if button.isEnabled() and event.button == mbPrimary:
+      button.cancelActivationFeedback()
+      button.setHighlighted(true)
+      return true
+
+  method mouseDragged(button: DateTimePickerButton, event: MouseEvent): bool =
+    if button.isEnabled() and event.button == mbPrimary:
+      button.setHighlighted(button.pointInside(event.location))
+      return true
+
+  method mouseUp(button: DateTimePickerButton, event: MouseEvent): bool =
+    if button.isEnabled() and event.button == mbPrimary:
+      let clicked = button.pointInside(event.location)
+      button.setHighlighted(false)
+      if clicked:
+        button.popupOpen = not button.popupOpen()
+      return true
+
+  method keyDown(button: DateTimePickerButton, event: KeyEvent): bool =
+    if not button.isEnabled():
+      return false
+    case event.key
+    of keyEnter, keySpace, keyArrowDown:
+      button.openPopup()
+      true
+    of keyEscape:
+      if button.popupOpen():
+        button.closePopup()
+        true
+      else:
+        false
+    else:
+      false
+
+protocol DateTimePickerButtonAccessibility of AccessibilityProtocol:
+  method accessibilityRole(button: DateTimePickerButton): AccessibilityRole =
+    arPopupButton
+
+  method accessibilityLabel(button: DateTimePickerButton): string =
+    if button.xAccessibilityLabel.len > 0:
+      button.xAccessibilityLabel
+    else:
+      button.title()
+
+  method accessibilityValue(button: DateTimePickerButton): string =
+    if button.xHasSelectedDateTime:
+      button.xSelectedDateTime.formatCalendarDateTime()
+    else:
+      "No date and time selected"
+
+  method accessibilityTraits(button: DateTimePickerButton): AccessibilityTraits =
+    result = button.xAccessibilityTraits + {atButton}
+    if not button.isEnabled():
+      result.incl atDisabled
+    if button.focused():
+      result.incl atFocused
+
+  method isAccessibilityElement(button: DateTimePickerButton): bool =
+    true
+
+  method accessibilityActionNames(button: DateTimePickerButton): seq[string] =
+    @[AccessibilityActionShowMenu]
+
+  method accessibilityPerformAction(
+      button: DateTimePickerButton, action: string
+  ): bool =
+    if action != AccessibilityActionShowMenu or not button.isEnabled():
+      return false
+    button.openPopup()
+    true
+
+proc initDateTimePickerButtonFields*(
+    button: DateTimePickerButton,
+    titlePrefix = "Date & Time",
+    selectedDateTime: DateTime = DateTime(),
+    hasSelectedDateTime = false,
+    frame: Rect = AutoRect,
+) =
+  initButtonFields(button, frame = frame)
+  button.xTitlePrefix = titlePrefix
+  button.xSelectedDateTime =
+    if selectedDateTime.isValidDateTime():
+      selectedDateTime
+    else:
+      now()
+  button.xHasSelectedDateTime = hasSelectedDateTime
+  button.xPopupPresentation = ppAutomatic
+  button.updateDateTimeButtonTitle()
+  discard button.withProtocol(DateTimePickerButtonEvents)
+  discard button.withProtocol(DateTimePickerButtonAccessibility)
+
+proc newDateTimePickerButton*(
+    titlePrefix = "Date & Time", frame: Rect = AutoRect
+): DateTimePickerButton =
+  result = DateTimePickerButton()
+  result.initDateTimePickerButtonFields(titlePrefix, frame = frame)
+
+proc newDateTimePickerButton*(
+    titlePrefix: string, selectedDateTime: DateTime, frame: Rect = AutoRect
+): DateTimePickerButton =
+  result = DateTimePickerButton()
+  result.initDateTimePickerButtonFields(
+    titlePrefix, selectedDateTime, hasSelectedDateTime = true, frame = frame
   )
