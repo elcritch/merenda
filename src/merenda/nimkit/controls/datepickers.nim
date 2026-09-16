@@ -50,7 +50,7 @@ type
     xSelectedDate: CalendarDate
     xHasSelectedDate: bool
     xDatePicker: DatePicker
-    xPopupWindow: Window
+    xPopupHost: PopupHost
     xPopupOpen: bool
     xPopupPresentation: PopupPresentation
     xOnSelect: DatePickerSelectionHandler
@@ -78,7 +78,7 @@ type
     xSelectedTime: TimeOfDay
     xHasSelectedTime: bool
     xTimePicker: TimePicker
-    xPopupWindow: Window
+    xPopupHost: PopupHost
     xPopupOpen: bool
     xPopupPresentation: PopupPresentation
     xOnSelect: TimePickerSelectionHandler
@@ -98,7 +98,7 @@ type
     xSelectedDateTime: DateTime
     xHasSelectedDateTime: bool
     xDateTimePicker: DateTimePicker
-    xPopupWindow: Window
+    xPopupHost: PopupHost
     xPopupOpen: bool
     xPopupPresentation: PopupPresentation
     xOnSelect: DateTimePickerSelectionHandler
@@ -527,7 +527,8 @@ proc datePicker*(button: DatePickerButton): DatePicker =
   button.xDatePicker
 
 proc popupWindow*(button: DatePickerButton): Window =
-  button.xPopupWindow
+  if not button.xPopupHost.isNil:
+    return button.xPopupHost.popupWindow()
 
 proc popupOpen*(button: DatePickerButton): bool =
   button.xPopupOpen
@@ -569,45 +570,20 @@ proc ownerWindow(button: DatePickerButton): Window =
   if owner of Window:
     result = Window(owner)
 
-proc inlinePopupFrame(button: DatePickerButton, parent: View, size: Size): Rect =
-  let
-    anchor = button.rectToView(button.bounds(), parent)
-    bounds = parent.bounds()
-    maximumX = max(bounds.maxX - size.width, bounds.origin.x)
-    x = min(max(anchor.origin.x, bounds.origin.x), maximumX)
-    belowY = anchor.maxY
-    aboveY = anchor.origin.y - size.height
-    y =
-      if belowY + size.height <= bounds.maxY or aboveY < bounds.origin.y:
-        belowY
-      else:
-        aboveY
-  rect(x, y, size.width, size.height)
-
-proc openInlinePopup(button: DatePickerButton, picker: DatePicker, size: Size) =
-  let owner = button.ownerWindow()
-  if owner.isNil or owner.contentView().isNil:
+proc clearPopupState(button: DatePickerButton, host: PopupHost = nil) =
+  if not host.isNil and button.xPopupHost != host:
     return
-  let parent = owner.contentView()
-  picker.frame = button.inlinePopupFrame(parent, size)
-  parent.addSubview(picker)
-  picker.needsDisplay = true
-
-proc clearPopupState(button: DatePickerButton) =
   if not button.xDatePicker.isNil and not button.xDatePicker.superview().isNil:
     button.xDatePicker.removeFromSuperview()
   button.xPopupOpen = false
-  button.xPopupWindow = nil
+  button.xPopupHost = nil
   button.xDatePicker = nil
   button.setWidgetState(ssOpen, false)
   button.needsDisplay = true
 
-proc dismissPopup(button: DatePickerButton, reason: DismissReason) =
+proc dismissPopup(button: DatePickerButton, host: PopupHost, reason: DismissReason) =
   discard reason
-  let popupWindow = button.xPopupWindow
-  button.clearPopupState()
-  if not popupWindow.isNil and not popupWindow.isClosed():
-    popupWindow.close()
+  button.clearPopupState(host)
 
 proc datePickerDidSelect(button: DatePickerButton, date: CalendarDate) =
   button.selectedDate = date
@@ -631,63 +607,35 @@ proc openPopup*(button: DatePickerButton) =
   picker.onSelect = proc(date: CalendarDate) =
     button.datePickerDidSelect(date)
 
-  var popupWindow: Window
-  if button.effectivePopupPresentation() == ppWindow and owner.nativeReady:
-    popupWindow =
-      owner.newPopupWindow(button.rectToWindow(button.bounds()), size, "Date Picker")
-    popupWindow.setContentView(picker)
-    popupWindow.setInitialFirstResponder(picker)
-    popupWindow.makeKeyAndOrderFront()
-    popupWindow.ensureNativeWindow()
-    if not popupWindow.nativeReady:
-      popupWindow.close()
-      popupWindow = nil
-  if popupWindow.isNil:
-    button.openInlinePopup(picker, size)
+  button.xDatePicker = picker
+  let host = newPopupHost(
+    owner,
+    button,
+    picker,
+    size,
+    title = "Date Picker",
+    presentation = button.xPopupPresentation,
+    restoreResponder = Responder(button),
+    onDismiss = proc(host: PopupHost, reason: DismissReason) =
+      button.dismissPopup(host, reason),
+  )
+  button.xPopupHost = host
+  if not host.presentPopup():
+    button.clearPopupState(host)
+    return
 
   button.xPopupOpen = true
-  button.xPopupWindow = popupWindow
-  button.xDatePicker = picker
   button.setWidgetState(ssOpen, true)
   button.needsDisplay = true
-  if not popupWindow.isNil:
-    popupWindow.setPopupDoneHandler(
-      proc() =
-        if button.xPopupWindow != popupWindow:
-          return
-        if owner.hasActiveTransientSession() and owner.transientWindow() == popupWindow:
-          discard owner.dismissTransientSession(tdrNativeDone)
-        else:
-          button.clearPopupState()
-    )
-  owner.beginTransientSession(
-    owner =
-      if popupWindow.isNil:
-        Responder(picker)
-      else:
-        Responder(button),
-    transientWindow = popupWindow,
-    restoreResponder = Responder(button),
-    onDismiss = proc(reason: DismissReason) =
-      button.dismissPopup(reason),
-  )
-  if popupWindow.isNil:
-    discard owner.makeFirstResponder(picker)
-  else:
-    discard popupWindow.makeFirstResponder(picker)
 
 proc closePopup*(button: DatePickerButton) =
-  let
-    owner = button.ownerWindow()
-    popupWindow = button.xPopupWindow
-  if not button.xPopupOpen and popupWindow.isNil:
+  let host = button.xPopupHost
+  if not button.xPopupOpen and host.isNil:
     return
-  button.clearPopupState()
-  if not owner.isNil and owner.hasActiveTransientSession() and
-      owner.transientWindow() == popupWindow:
-    discard owner.endTransientSession()
-  if not popupWindow.isNil and not popupWindow.isClosed():
-    popupWindow.close()
+  if not host.isNil:
+    discard host.dismissPopup()
+  else:
+    button.clearPopupState()
 
 protocol DatePickerButtonEvents of ResponderEventProtocol:
   method mouseDown(button: DatePickerButton, event: MouseEvent): bool =
@@ -1260,7 +1208,8 @@ proc timePicker*(button: TimePickerButton): TimePicker =
   button.xTimePicker
 
 proc popupWindow*(button: TimePickerButton): Window =
-  button.xPopupWindow
+  if not button.xPopupHost.isNil:
+    return button.xPopupHost.popupWindow()
 
 proc popupOpen*(button: TimePickerButton): bool =
   button.xPopupOpen
@@ -1302,45 +1251,20 @@ proc ownerWindow(button: TimePickerButton): Window =
   if owner of Window:
     result = Window(owner)
 
-proc inlinePopupFrame(button: TimePickerButton, parent: View, size: Size): Rect =
-  let
-    anchor = button.rectToView(button.bounds(), parent)
-    bounds = parent.bounds()
-    maximumX = max(bounds.maxX - size.width, bounds.origin.x)
-    x = min(max(anchor.origin.x, bounds.origin.x), maximumX)
-    belowY = anchor.maxY
-    aboveY = anchor.origin.y - size.height
-    y =
-      if belowY + size.height <= bounds.maxY or aboveY < bounds.origin.y:
-        belowY
-      else:
-        aboveY
-  rect(x, y, size.width, size.height)
-
-proc openInlinePopup(button: TimePickerButton, picker: TimePicker, size: Size) =
-  let owner = button.ownerWindow()
-  if owner.isNil or owner.contentView().isNil:
+proc clearPopupState(button: TimePickerButton, host: PopupHost = nil) =
+  if not host.isNil and button.xPopupHost != host:
     return
-  let parent = owner.contentView()
-  picker.frame = button.inlinePopupFrame(parent, size)
-  parent.addSubview(picker)
-  picker.needsDisplay = true
-
-proc clearPopupState(button: TimePickerButton) =
   if not button.xTimePicker.isNil and not button.xTimePicker.superview().isNil:
     button.xTimePicker.removeFromSuperview()
   button.xPopupOpen = false
-  button.xPopupWindow = nil
+  button.xPopupHost = nil
   button.xTimePicker = nil
   button.setWidgetState(ssOpen, false)
   button.needsDisplay = true
 
-proc dismissPopup(button: TimePickerButton, reason: DismissReason) =
+proc dismissPopup(button: TimePickerButton, host: PopupHost, reason: DismissReason) =
   discard reason
-  let popupWindow = button.xPopupWindow
-  button.clearPopupState()
-  if not popupWindow.isNil and not popupWindow.isClosed():
-    popupWindow.close()
+  button.clearPopupState(host)
 
 proc timePickerDidSelect(button: TimePickerButton, time: TimeOfDay) =
   button.selectedTime = time
@@ -1364,63 +1288,35 @@ proc openPopup*(button: TimePickerButton) =
   picker.onSelect = proc(time: TimeOfDay) =
     button.timePickerDidSelect(time)
 
-  var popupWindow: Window
-  if button.effectivePopupPresentation() == ppWindow and owner.nativeReady:
-    popupWindow =
-      owner.newPopupWindow(button.rectToWindow(button.bounds()), size, "Time Picker")
-    popupWindow.setContentView(picker)
-    popupWindow.setInitialFirstResponder(picker)
-    popupWindow.makeKeyAndOrderFront()
-    popupWindow.ensureNativeWindow()
-    if not popupWindow.nativeReady:
-      popupWindow.close()
-      popupWindow = nil
-  if popupWindow.isNil:
-    button.openInlinePopup(picker, size)
+  button.xTimePicker = picker
+  let host = newPopupHost(
+    owner,
+    button,
+    picker,
+    size,
+    title = "Time Picker",
+    presentation = button.xPopupPresentation,
+    restoreResponder = Responder(button),
+    onDismiss = proc(host: PopupHost, reason: DismissReason) =
+      button.dismissPopup(host, reason),
+  )
+  button.xPopupHost = host
+  if not host.presentPopup():
+    button.clearPopupState(host)
+    return
 
   button.xPopupOpen = true
-  button.xPopupWindow = popupWindow
-  button.xTimePicker = picker
   button.setWidgetState(ssOpen, true)
   button.needsDisplay = true
-  if not popupWindow.isNil:
-    popupWindow.setPopupDoneHandler(
-      proc() =
-        if button.xPopupWindow != popupWindow:
-          return
-        if owner.hasActiveTransientSession() and owner.transientWindow() == popupWindow:
-          discard owner.dismissTransientSession(tdrNativeDone)
-        else:
-          button.clearPopupState()
-    )
-  owner.beginTransientSession(
-    owner =
-      if popupWindow.isNil:
-        Responder(picker)
-      else:
-        Responder(button),
-    transientWindow = popupWindow,
-    restoreResponder = Responder(button),
-    onDismiss = proc(reason: DismissReason) =
-      button.dismissPopup(reason),
-  )
-  if popupWindow.isNil:
-    discard owner.makeFirstResponder(picker)
-  else:
-    discard popupWindow.makeFirstResponder(picker)
 
 proc closePopup*(button: TimePickerButton) =
-  let
-    owner = button.ownerWindow()
-    popupWindow = button.xPopupWindow
-  if not button.xPopupOpen and popupWindow.isNil:
+  let host = button.xPopupHost
+  if not button.xPopupOpen and host.isNil:
     return
-  button.clearPopupState()
-  if not owner.isNil and owner.hasActiveTransientSession() and
-      owner.transientWindow() == popupWindow:
-    discard owner.endTransientSession()
-  if not popupWindow.isNil and not popupWindow.isClosed():
-    popupWindow.close()
+  if not host.isNil:
+    discard host.dismissPopup()
+  else:
+    button.clearPopupState()
 
 protocol TimePickerButtonEvents of ResponderEventProtocol:
   method mouseDown(button: TimePickerButton, event: MouseEvent): bool =
@@ -1854,7 +1750,8 @@ proc dateTimePicker*(button: DateTimePickerButton): DateTimePicker =
   button.xDateTimePicker
 
 proc popupWindow*(button: DateTimePickerButton): Window =
-  button.xPopupWindow
+  if not button.xPopupHost.isNil:
+    return button.xPopupHost.popupWindow()
 
 proc popupOpen*(button: DateTimePickerButton): bool =
   button.xPopupOpen
@@ -1896,45 +1793,22 @@ proc ownerWindow(button: DateTimePickerButton): Window =
   if owner of Window:
     result = Window(owner)
 
-proc inlinePopupFrame(button: DateTimePickerButton, parent: View, size: Size): Rect =
-  let
-    anchor = button.rectToView(button.bounds(), parent)
-    bounds = parent.bounds()
-    maximumX = max(bounds.maxX - size.width, bounds.origin.x)
-    x = min(max(anchor.origin.x, bounds.origin.x), maximumX)
-    belowY = anchor.maxY
-    aboveY = anchor.origin.y - size.height
-    y =
-      if belowY + size.height <= bounds.maxY or aboveY < bounds.origin.y:
-        belowY
-      else:
-        aboveY
-  rect(x, y, size.width, size.height)
-
-proc openInlinePopup(button: DateTimePickerButton, picker: DateTimePicker, size: Size) =
-  let owner = button.ownerWindow()
-  if owner.isNil or owner.contentView().isNil:
+proc clearPopupState(button: DateTimePickerButton, host: PopupHost = nil) =
+  if not host.isNil and button.xPopupHost != host:
     return
-  let parent = owner.contentView()
-  picker.frame = button.inlinePopupFrame(parent, size)
-  parent.addSubview(picker)
-  picker.needsDisplay = true
-
-proc clearPopupState(button: DateTimePickerButton) =
   if not button.xDateTimePicker.isNil and not button.xDateTimePicker.superview().isNil:
     button.xDateTimePicker.removeFromSuperview()
   button.xPopupOpen = false
-  button.xPopupWindow = nil
+  button.xPopupHost = nil
   button.xDateTimePicker = nil
   button.setWidgetState(ssOpen, false)
   button.needsDisplay = true
 
-proc dismissPopup(button: DateTimePickerButton, reason: DismissReason) =
+proc dismissPopup(
+    button: DateTimePickerButton, host: PopupHost, reason: DismissReason
+) =
   discard reason
-  let popupWindow = button.xPopupWindow
-  button.clearPopupState()
-  if not popupWindow.isNil and not popupWindow.isClosed():
-    popupWindow.close()
+  button.clearPopupState(host)
 
 proc dateTimePickerDidSelect(button: DateTimePickerButton, value: DateTime) =
   button.selectedDateTime = value
@@ -1958,64 +1832,35 @@ proc openPopup*(button: DateTimePickerButton) =
   picker.onSelect = proc(value: DateTime) =
     button.dateTimePickerDidSelect(value)
 
-  var popupWindow: Window
-  if button.effectivePopupPresentation() == ppWindow and owner.nativeReady:
-    popupWindow = owner.newPopupWindow(
-      button.rectToWindow(button.bounds()), size, "Date and Time Picker"
-    )
-    popupWindow.setContentView(picker)
-    popupWindow.setInitialFirstResponder(picker)
-    popupWindow.makeKeyAndOrderFront()
-    popupWindow.ensureNativeWindow()
-    if not popupWindow.nativeReady:
-      popupWindow.close()
-      popupWindow = nil
-  if popupWindow.isNil:
-    button.openInlinePopup(picker, size)
+  button.xDateTimePicker = picker
+  let host = newPopupHost(
+    owner,
+    button,
+    picker,
+    size,
+    title = "Date and Time Picker",
+    presentation = button.xPopupPresentation,
+    restoreResponder = Responder(button),
+    onDismiss = proc(host: PopupHost, reason: DismissReason) =
+      button.dismissPopup(host, reason),
+  )
+  button.xPopupHost = host
+  if not host.presentPopup():
+    button.clearPopupState(host)
+    return
 
   button.xPopupOpen = true
-  button.xPopupWindow = popupWindow
-  button.xDateTimePicker = picker
   button.setWidgetState(ssOpen, true)
   button.needsDisplay = true
-  if not popupWindow.isNil:
-    popupWindow.setPopupDoneHandler(
-      proc() =
-        if button.xPopupWindow != popupWindow:
-          return
-        if owner.hasActiveTransientSession() and owner.transientWindow() == popupWindow:
-          discard owner.dismissTransientSession(tdrNativeDone)
-        else:
-          button.clearPopupState()
-    )
-  owner.beginTransientSession(
-    owner =
-      if popupWindow.isNil:
-        Responder(picker)
-      else:
-        Responder(button),
-    transientWindow = popupWindow,
-    restoreResponder = Responder(button),
-    onDismiss = proc(reason: DismissReason) =
-      button.dismissPopup(reason),
-  )
-  if popupWindow.isNil:
-    discard owner.makeFirstResponder(picker)
-  else:
-    discard popupWindow.makeFirstResponder(picker)
 
 proc closePopup*(button: DateTimePickerButton) =
-  let
-    owner = button.ownerWindow()
-    popupWindow = button.xPopupWindow
-  if not button.xPopupOpen and popupWindow.isNil:
+  let host = button.xPopupHost
+  if not button.xPopupOpen and host.isNil:
     return
-  button.clearPopupState()
-  if not owner.isNil and owner.hasActiveTransientSession() and
-      owner.transientWindow() == popupWindow:
-    discard owner.endTransientSession()
-  if not popupWindow.isNil and not popupWindow.isClosed():
-    popupWindow.close()
+  if not host.isNil:
+    discard host.dismissPopup()
+  else:
+    button.clearPopupState()
 
 protocol DateTimePickerButtonEvents of ResponderEventProtocol:
   method mouseDown(button: DateTimePickerButton, event: MouseEvent): bool =

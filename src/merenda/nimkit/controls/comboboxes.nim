@@ -55,7 +55,7 @@ type
     xDataSourceItemCountValid: bool
     xPopupHighlightedIndex: int
     xPopupHighlightedIdentifier: string
-    xPopupWindow: Window
+    xPopupHost: PopupHost
     xPopupPresentation: PopupPresentation
     xPopupViewport: RowViewport
     xPopupList: PopupListView
@@ -117,15 +117,12 @@ proc pagePopupHighlight(comboBox: ComboBox, deltaPages: int)
 proc canScrollPopupRows(comboBox: ComboBox, delta: int): bool
 proc scrollPopupRows(comboBox: ComboBox, delta: int)
 proc resolvedPopupPresentation(comboBox: ComboBox): PopupPresentation
-proc popupWindowActive(comboBox: ComboBox): bool
-proc shouldUseWindowPopup(comboBox: ComboBox): bool
 proc usesInlinePopup(comboBox: ComboBox): bool
-proc beginPopupSession(comboBox: ComboBox)
 proc endPopupSession(comboBox: ComboBox, reason = tdrProgrammatic): bool
-proc dismissPopupFromSession(comboBox: ComboBox, reason: DismissReason)
-proc openPopupWindow(comboBox: ComboBox)
+proc dismissPopupFromSession(comboBox: ComboBox, host: PopupHost, reason: DismissReason)
+proc clearPopupState(comboBox: ComboBox, host: PopupHost = nil)
+proc openPopupHost(comboBox: ComboBox)
 proc closePopupWindow(comboBox: ComboBox, restoreOwner = true)
-proc reactivateOwnerWindow(comboBox: ComboBox)
 proc updatePopupPresentation(comboBox: ComboBox)
 proc popupListData(comboBox: ComboBox): PopupListData
 proc popupListActions(comboBox: ComboBox): PopupListActions
@@ -971,11 +968,6 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
       style.comboBoxTextRect(comboBox.bounds), comboBox.stringValue, style.text
     )
 
-    if comboBox.usesInlinePopup:
-      comboBox.popupList().drawPopupList(
-        context, comboBox.popupRect(comboBox.bounds), PopupDrawLevel
-      )
-
 protocol DefaultComboBoxEvents of ResponderEventProtocol:
   method mouseDown(comboBox: ComboBox, event: MouseEvent): bool =
     if not comboBox.isEnabled or event.button != mbPrimary:
@@ -1403,10 +1395,8 @@ proc highlightedOptionIdentifier*(comboBox: ComboBox): string =
 
 proc setPopupNeedsDisplay(comboBox: ComboBox) =
   comboBox.needsDisplay = true
-  if not comboBox.xPopupWindow.isNil:
-    let contentView = comboBox.xPopupWindow.contentView()
-    if not contentView.isNil:
-      contentView.needsDisplay = true
+  if not comboBox.xPopupList.isNil:
+    comboBox.xPopupList.needsDisplay = true
 
 proc `highlightedIndex=`*(comboBox: ComboBox, index: int) =
   let boundedIndex = if index < 0 or index >= comboBox.numberOfItems(): -1 else: index
@@ -1579,106 +1569,82 @@ proc ownerWindow(comboBox: ComboBox): Window =
   if owner of Window:
     result = Window(owner)
 
-proc dismissPopupFromSession(comboBox: ComboBox, reason: DismissReason) =
-  case reason
-  of tdrProgrammatic, tdrOutsideClick, tdrEscape, tdrFocusChange, tdrOwnerClosed,
-      tdrNativeDone:
-    if comboBox.popupOpen():
-      comboBox.closePopup()
-
-proc beginPopupSession(comboBox: ComboBox) =
-  let owner = comboBox.ownerWindow()
-  if owner.isNil:
-    return
-  let popupWindow = if comboBox.popupWindowActive(): comboBox.xPopupWindow else: nil
-  owner.beginTransientSession(
-    owner = Responder(comboBox),
-    transientWindow = popupWindow,
-    restoreResponder = Responder(comboBox),
-    onDismiss = proc(reason: DismissReason) =
-      comboBox.dismissPopupFromSession(reason),
-  )
-
 proc endPopupSession(comboBox: ComboBox, reason = tdrProgrammatic): bool =
-  let owner = comboBox.ownerWindow()
-  if owner.isNil:
-    return false
-  owner.endTransientSession(reason)
-
-proc popupWindowActive(comboBox: ComboBox): bool =
-  not comboBox.xPopupWindow.isNil and not comboBox.xPopupWindow.isClosed
+  if not comboBox.xPopupHost.isNil:
+    comboBox.xPopupHost.dismissPopup(reason)
 
 proc resolvedPopupPresentation(comboBox: ComboBox): PopupPresentation =
   let owner = comboBox.ownerWindow()
   owner.resolvedPopupPresentation(comboBox.xPopupPresentation)
 
-proc shouldUseWindowPopup(comboBox: ComboBox): bool =
-  comboBox.resolvedPopupPresentation() == ppWindow
-
 proc usesInlinePopup(comboBox: ComboBox): bool =
-  comboBox.popupOpen() and comboBox.resolvedPopupPresentation() == ppInline
+  comboBox.popupOpen() and not comboBox.xPopupHost.isNil and
+    comboBox.xPopupHost.popupWindow().isNil
 
-proc openPopupWindow(comboBox: ComboBox) =
+proc dismissPopupFromSession(
+    comboBox: ComboBox, host: PopupHost, reason: DismissReason
+) =
+  discard reason
+  comboBox.clearPopupState(host)
+
+proc clearPopupState(comboBox: ComboBox, host: PopupHost = nil) =
+  if not host.isNil and comboBox.xPopupHost != host:
+    return
+  comboBox.xPopupHost = nil
+  View(comboBox).setWidgetState(ssOpen, false)
+  comboBox.xPopupHighlightedIndex = -1
+  comboBox.xPopupHighlightedIdentifier = ""
+  comboBox.setWidgetState(ssPressed, false)
+  if not comboBox.xPopupList.isNil:
+    comboBox.xPopupList.resetPopupListTracking()
+  comboBox.xPopupViewport.reset()
+  comboBox.needsDisplay = true
+
+proc openPopupHost(comboBox: ComboBox) =
   if not comboBox.popupOpen():
     return
-  if comboBox.popupWindowActive():
+  if not comboBox.xPopupHost.isNil:
     return
-  if not comboBox.shouldUseWindowPopup():
-    return
-  if not comboBox.xPopupWindow.isNil:
-    discard comboBox.endPopupSession()
-    comboBox.closePopupWindow(restoreOwner = false)
   let owner = comboBox.ownerWindow()
-  if owner.isNil or not owner.nativeReady:
+  if owner.isNil:
     return
 
   let
-    anchorFrame = comboBox.rectToWindow(comboBox.bounds)
     size = comboBox.popupWindowSize()
-    popupWindow = owner.newPopupWindow(anchorFrame, size, "ComboBox Popup")
     popupView = comboBox.popupList()
-
-  popupView.frame = rect(0.0, 0.0, size.width, size.height)
-  popupWindow.setContentView(popupView)
-  popupWindow.setPopupDoneHandler(
-    proc() =
-      if owner.hasActiveTransientSession():
-        discard owner.dismissTransientSession(tdrNativeDone)
-      elif comboBox.xPopupWindow == popupWindow:
-        comboBox.closePopup()
+  let host = newPopupHost(
+    owner,
+    comboBox,
+    popupView,
+    size,
+    title = "ComboBox Popup",
+    presentation = comboBox.xPopupPresentation,
+    restoreResponder = Responder(comboBox),
+    onDismiss = proc(host: PopupHost, reason: DismissReason) =
+      comboBox.dismissPopupFromSession(host, reason),
   )
-  comboBox.xPopupWindow = popupWindow
-  popupWindow.makeKeyAndOrderFront()
-  popupWindow.ensureNativeWindow()
-  discard popupWindow.makeFirstResponder(popupView)
+  comboBox.xPopupHost = host
+  if not host.presentPopup():
+    comboBox.clearPopupState(host)
 
 proc closePopupWindow(comboBox: ComboBox, restoreOwner = true) =
-  let popupWindow = comboBox.xPopupWindow
-  comboBox.xPopupWindow = nil
-  if not popupWindow.isNil and not popupWindow.isClosed:
-    popupWindow.close()
-  if restoreOwner and not popupWindow.isNil:
-    comboBox.reactivateOwnerWindow()
-
-proc reactivateOwnerWindow(comboBox: ComboBox) =
-  let owner = comboBox.ownerWindow()
-  if owner.isNil or owner.isClosed:
-    return
-  if owner.isVisible:
-    owner.makeKeyAndOrderFront()
-  discard owner.makeFirstResponder(comboBox)
+  discard restoreOwner
+  if not comboBox.xPopupHost.isNil:
+    discard comboBox.xPopupHost.dismissPopup()
 
 proc updatePopupPresentation(comboBox: ComboBox) =
   if not comboBox.popupOpen():
     comboBox.closePopupWindow()
     return
-  if comboBox.shouldUseWindowPopup():
-    comboBox.openPopupWindow()
-  elif not comboBox.xPopupWindow.isNil:
-    discard comboBox.endPopupSession()
-    comboBox.closePopupWindow(restoreOwner = false)
-  if comboBox.popupOpen():
-    comboBox.beginPopupSession()
+  let size = comboBox.popupWindowSize()
+  if not comboBox.xPopupHost.isNil:
+    let host = comboBox.xPopupHost
+    if host.popupPresentation() != comboBox.xPopupPresentation or
+        host.popupSize() != size:
+      comboBox.xPopupHost = nil
+      discard host.dismissPopup()
+  if comboBox.popupOpen() and comboBox.xPopupHost.isNil:
+    comboBox.openPopupHost()
 
 proc nextSelectableOptionIndex(comboBox: ComboBox, start, delta: int): int =
   if delta == 0:

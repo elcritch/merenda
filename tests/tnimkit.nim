@@ -7,6 +7,7 @@ import nimkit/backrefs_arc
 import nimkit/controls
 import nimkit/datepickers
 import nimkit/tokenfields
+import nimkit/popuphosts
 import nimkit/constraints
 import nimkit/controlfontfaces
 import nimkit/diagnostics
