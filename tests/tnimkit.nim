@@ -22,6 +22,7 @@ import nimkit/settings
 import nimkit/svgimages
 import nimkit/svgpathloader
 import nimkit/styledruns
+import nimkit/table_column_resizing
 import nimkit/threading
 import nimkit/textlayout
 import nimkit/terminalgeometry
