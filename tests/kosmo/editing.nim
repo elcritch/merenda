@@ -251,6 +251,47 @@ suite "Kosmo":
     check "NORMAL" in frontend.statusLabel.text
     check "number" in frontend.statusLabel.text
 
+  test "command bar grows with a larger monospace font":
+    let
+      app = newApplication("Kosmo Command Bar Font Size Test")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    frontend.show()
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    var
+      appearance = app.effectiveAppearance()
+      builder = initThemeBuilder(appearance.theme)
+    builder[srMonoTextView, StyleFontSize] = 32.0'f32
+    appearance.theme = builder.finish()
+    app.setAppearance(appearance)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.editorView.fontSize == 32.0'f32
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyQuote, keyCode: keyQuote.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput("\"")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
+    )
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    let
+      commandBar = frontend.editorPane.commandBar
+      metrics = commandBar.monoTextMetrics()
+      commandBarFrame = commandBar.frame()
+    check commandBar.fontSize == 32.0'f32
+    check not commandBar.hidden()
+    check commandBarFrame.maxY == frontend.editorPane.bounds().maxY
+    check commandBarFrame.size.height >= metrics.lineHeight * 1.6'f32
+
   test "scroll input reports a frontend-neutral outcome":
     let editor = newKosmoEditor(text = "one\ntwo\nthree")
     var buffer = newRenderBuffer(24, 8)

@@ -2115,7 +2115,10 @@ protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
           0.0'f32
       contentTop = tabHeight + markdownToolbarHeight
       contentHeight = max(bounds.size.height - contentTop, 1.0'f32)
-      commandBarHeight = min(KosmoCommandBarHeight, contentHeight)
+      commandBarHeight = min(
+        monoTextMetrics(pane.commandBar).lineHeight * KosmoCommandBarLineHeightMultiplier,
+        contentHeight,
+      )
     pane.documentTabs.setFrameFromLayout(
       nimkit.rect(0, 0, bounds.size.width, tabHeight)
     )

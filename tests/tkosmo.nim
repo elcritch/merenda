@@ -8,6 +8,7 @@ import kosmo/cliopen
 import kosmo/config
 import kosmo/contextpanel
 import kosmo/editorsearch
+import kosmo/editing
 import kosmo/filetreeinteractions
 import kosmo/gitdiff
 import kosmo/matterhighlighting
