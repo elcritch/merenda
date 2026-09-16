@@ -3,7 +3,6 @@ import std/strutils
 import merenda/nimkit
 
 import sigils/core
-import sigils/selectors as dynamicSelectors
 
 type
   EntryKind = enum
@@ -42,11 +41,7 @@ type
     startDate: CalendarDate
     endDate: CalendarDate
     selectedTags: seq[string]
-    tagChoice: ComboBox
-    tagOptions: ComboBoxOptionList
-    tagQuery: string
-    chipScroll: ScrollView
-    chipRow: StackView
+    tagField: TokenField
 
 func entryCellText(entry: FilterEntry, column: TableColumn): string =
   case column.identifier
@@ -228,97 +223,11 @@ proc setEndDate(controller: FilterDemoController, date: CalendarDate) =
   controller.hasEndDate = true
   controller.applyFilters()
 
-proc setTagEnabled(controller: FilterDemoController, tag: string, enabled: bool) =
-  var options = controller.tagOptions.options
-  for index, option in options:
-    if option.identifier == tag:
-      options[index].enabled = enabled
-  controller.tagOptions.options = options
-  controller.tagChoice.reloadData()
-
-proc rebuildTagChips(controller: FilterDemoController)
-
-proc removeTag(controller: FilterDemoController, tag: string) =
-  for index, selected in controller.selectedTags:
-    if selected == tag:
-      controller.selectedTags.delete(index)
-      break
-  controller.setTagEnabled(tag, true)
-  controller.rebuildTagChips()
+proc onTagFieldChanged(controller: FilterDemoController, field: TokenField) =
+  controller.selectedTags.setLen(0)
+  for option in field.selectedOptions:
+    controller.selectedTags.add option.identifier
   controller.applyFilters()
-
-proc clearTagQuery(controller: FilterDemoController) =
-  controller.tagQuery.setLen(0)
-  controller.tagChoice.closePopup()
-  controller.tagChoice.deselectItem()
-  controller.tagChoice.optionFilterText = ""
-  controller.tagChoice.text = "Add labels..."
-
-proc onTagChanged(controller: FilterDemoController, sender: DynamicAgent) =
-  discard sender
-  let tag = controller.tagChoice.stringValue
-  if tag.len == 0 or tag == "Add labels..." or tag in controller.selectedTags:
-    return
-  controller.selectedTags.add tag
-  controller.setTagEnabled(tag, false)
-  controller.clearTagQuery()
-  controller.rebuildTagChips()
-  controller.applyFilters()
-
-proc installTagAutocomplete(controller: FilterDemoController) =
-  let wrapper: dynamicSelectors.AroundMethod = proc(
-      self: DynamicAgent,
-      invocation: var dynamicSelectors.Invocation,
-      next: dynamicSelectors.DynamicMethod,
-  ) =
-    let event = invocation.argsAs(KeyEvent)
-    if event.modifiers == {} and event.key in {keyBackspace, keyDelete}:
-      if controller.tagQuery.len > 0:
-        controller.tagQuery.setLen(controller.tagQuery.len - 1)
-      controller.tagChoice.optionFilterText = controller.tagQuery
-      controller.tagChoice.text = controller.tagQuery
-      controller.tagChoice.openPopup()
-      invocation.setResult(true)
-      return
-    if event.modifiers == {} and event.text.len > 0:
-      controller.tagQuery.add event.text
-      controller.tagChoice.text = controller.tagQuery
-      controller.tagChoice.optionFilterText = controller.tagQuery
-      controller.tagChoice.openPopup()
-      invocation.setResult(true)
-      return
-    if not next.isNil:
-      next(self, invocation)
-    elif not invocation.handled:
-      invocation.setResult(false)
-
-  discard DynamicAgent(controller.tagChoice).pushMethod(keyDown(), wrapper)
-
-proc rebuildTagChips(controller: FilterDemoController) =
-  for child in controller.chipRow.arrangedSubviews:
-    child.removeFromSuperview()
-
-  if controller.selectedTags.len == 0:
-    let empty = newStatusLabel("No labels selected")
-    controller.chipRow.addArrangedSubview(empty)
-  else:
-    for tag in controller.selectedTags:
-      let
-        chip = newButton(tag & "  ×")
-        chipTag = tag
-        action = actionSelector("filterRemoveTag")
-      chip.styleClasses = @["filter-chip"]
-      chip.target = newActionTarget(
-        action,
-        proc(sender: DynamicAgent) =
-          discard sender
-          controller.removeTag(chipTag),
-      )
-      chip.action = action
-      controller.chipRow.addArrangedSubview(chip)
-
-  controller.chipRow.sizeToFit()
-  controller.chipScroll.tile()
 
 proc makeChoiceOptions(
     anyIdentifier, anyTitle: string, values: openArray[string]
@@ -381,9 +290,7 @@ let
   ownerChoice = newComboBox()
   startButton = newDatePickerButton("From")
   endButton = newDatePickerButton("Until")
-  tagChoice = newComboBox()
-  chipScroll = newScrollView()
-  chipRow = newStackView(laHorizontal)
+  tagField = newTokenField(placeholder = "Add labels...")
   resultLabel = newStatusLabel("")
   table = newTableView()
   controller = newFilterDemoController(table, resultLabel)
@@ -395,9 +302,6 @@ filterRow.distribution = svdNatural
 modeRow.spacing = 2.0
 modeRow.alignment = svaCenter
 modeRow.distribution = svdNatural
-chipRow.spacing = 6.0
-chipRow.alignment = svaCenter
-chipRow.distribution = svdNatural
 
 for mode in FilterMode:
   let button =
@@ -419,9 +323,7 @@ controller.startButton = startButton
 controller.endButton = endButton
 startButton.selectedDate = controller.startDate
 endButton.selectedDate = controller.endDate
-controller.tagChoice = tagChoice
-controller.chipScroll = chipScroll
-controller.chipRow = chipRow
+controller.tagField = tagField
 
 statusChoice.dataSource = makeChoiceOptions("any-status", "Any status", DemoStatuses)
 ownerChoice.dataSource = makeChoiceOptions("any-owner", "Any owner", DemoOwners)
@@ -430,22 +332,24 @@ ownerChoice.selectedIndex = 0
 statusChoice.styleClasses = @["filter-choice"]
 ownerChoice.styleClasses = @["filter-choice"]
 
-tagChoice.styleClasses = @["filter-autocomplete"]
-tagChoice.editable = false
-tagChoice.maxVisibleItems = 6
-tagChoice.popupPresentation = ppInline
-tagChoice.text = "Add labels..."
-controller.tagOptions = newComboBoxOptionList()
+tagField.inputStyleClasses = @["filter-autocomplete"]
+tagField.chipStyleClasses = @["filter-chip"]
+tagField.maxVisibleItems = 6
+tagField.popupPresentation = ppInline
+var tagOptions: seq[ComboBoxOption]
 for tag in DemoTags:
-  controller.tagOptions.add(
+  tagOptions.add(
     initComboBoxOption(identifier = tag, displayText = tag, objectValue = toObj(tag))
   )
-tagChoice.dataSource = controller.tagOptions
+tagField.options = tagOptions
+for tag in controller.selectedTags:
+  discard tagField.selectOptionWithIdentifier(tag, notify = false)
+tagField.onChange = proc(field: TokenField) =
+  controller.onTagFieldChanged(field)
 
 let
   modeAction = actionSelector("filterModeChanged")
   choiceAction = actionSelector("filterChoiceChanged")
-  tagAction = actionSelector("filterTagChanged")
   modeTarget = newActionTarget(
     modeAction,
     proc(sender: DynamicAgent) =
@@ -455,11 +359,6 @@ let
     choiceAction,
     proc(sender: DynamicAgent) =
       controller.onChoiceChanged(sender),
-  )
-  tagTarget = newActionTarget(
-    tagAction,
-    proc(sender: DynamicAgent) =
-      controller.onTagChanged(sender),
   )
 
 for mode in FilterMode:
@@ -471,21 +370,16 @@ for combo in [statusChoice, ownerChoice]:
   combo.target = choiceTarget
   combo.action = choiceAction
 
-tagChoice.target = tagTarget
-tagChoice.action = tagAction
-
 startButton.onSelect = proc(date: CalendarDate) =
   controller.setStartDate(date)
 endButton.onSelect = proc(date: CalendarDate) =
   controller.setEndDate(date)
-controller.installTagAutocomplete()
 
 filterRow.addArrangedSubview(
-  modeRow, statusChoice, ownerChoice, startButton, endButton, tagChoice
+  modeRow, statusChoice, ownerChoice, startButton, endButton, tagField
 )
 layout.addArrangedSubview(title, subtitle, filterRow)
-chipScroll.documentView = chipRow
-layout.addArrangedSubview(chipScroll, resultLabel)
+layout.addArrangedSubview(resultLabel)
 layout.addArrangedSubview(table, svspFillAvailableSpace)
 
 table.addColumn(newTableColumn("entry", "Entry", width = 210.0, minWidth = 160.0))
@@ -519,9 +413,7 @@ activateConstraints:
   ownerChoice[atWidth] == 130.0
   startButton[atWidth] == 136.0
   endButton[atWidth] == 136.0
-  tagChoice[atWidth] == 190.0
-  chipScroll[atHeight] == 34.0
+  tagField[atWidth] == 190.0
 
-controller.rebuildTagChips()
 controller.applyFilters()
 app.runWindow(window, root)

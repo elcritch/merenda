@@ -1343,6 +1343,9 @@ proc `text=`*(comboBox: ComboBox, value: string) =
 proc editable*(comboBox: ComboBox): bool =
   comboBox.isEditable()
 
+proc `editable=`*(comboBox: ComboBox, value: bool) =
+  comboBox.comboBoxCell().setCellEditable(value)
+
 proc dataSource*(comboBox: ComboBox): DynamicAgent =
   comboBox.xDataSource
 
