@@ -90,14 +90,17 @@ suite "nimkit token fields":
     root.addSubview(field)
     window.setContentView(root)
     check window.makeFirstResponder(field.input())
-    check window.dispatchKeyDown(KeyEvent(text: "sec", key: keyS, keyCode: keyS.ord))
-    check field.query == "sec"
+    check window.dispatchTextInput("sec")
+    check window.dispatchTextInput("urity")
+    check field.query == "security"
     check field.popupOpen
     check field.filteredOptionCount == 1
     check field.optionAtIndex(0).identifier == "security"
     check window.dispatchKeyDown(KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord))
     check field.input().highlightedIndex == 0
-    check window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))
+    check window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
     check field.selectedOptionIdentifiers == @["security"]
     check field.query.len == 0
     check not field.popupOpen
@@ -116,3 +119,13 @@ suite "nimkit token fields":
     check field.optionIsEnabledAtIndex(0)
     check field.selectOptionWithIdentifier("one")
     check field.selectedCount == 2
+
+  test "replacing options refreshes original enabled states":
+    let field = newTokenField([initComboBoxOption("one", "One")])
+
+    check field.selectOptionWithIdentifier("one")
+    check not field.optionIsEnabledAtIndex(0)
+    field.options = [initComboBoxOption("one", "One", enabled = false)]
+    check not field.optionIsEnabledAtIndex(0)
+    check field.removeSelectedOptionWithIdentifier("one")
+    check not field.optionIsEnabledAtIndex(0)

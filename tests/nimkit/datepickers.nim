@@ -133,6 +133,17 @@ suite "NimKit date pickers":
     check not picker.hasSelectedDateTime
     check picker.accessibilityValue() == "No date and time selected"
 
+  test "date-time confirmation commits a pending child time edit":
+    let
+      initial = dateTime(2025, mJul, 24, 9, 30, 15, zone = utc())
+      picker = newDateTimePicker(initial)
+
+    check picker.timePicker().keyDown(
+      KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord)
+    )
+    check picker.confirmDateTime()
+    check picker.selectedDateTime == dateTime(2025, mJul, 24, 10, 30, 15, zone = utc())
+
   test "date-time picker button commits the combined inline selection":
     let
       selected = dateTime(2025, mJul, 24, 9, 30, 15, zone = utc())

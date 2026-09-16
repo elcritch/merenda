@@ -1596,6 +1596,7 @@ proc clearPopupState(comboBox: ComboBox, host: PopupHost = nil) =
   comboBox.xPopupHighlightedIdentifier = ""
   comboBox.setWidgetState(ssPressed, false)
   if not comboBox.xPopupList.isNil:
+    comboBox.xPopupList.clearNextResponder()
     comboBox.xPopupList.resetPopupListTracking()
   comboBox.xPopupViewport.reset()
   comboBox.needsDisplay = true
@@ -1626,6 +1627,8 @@ proc openPopupHost(comboBox: ComboBox) =
   comboBox.xPopupHost = host
   if not host.presentPopup():
     comboBox.clearPopupState(host)
+    return
+  popupView.setNextResponder(comboBox)
 
 proc closePopupWindow(comboBox: ComboBox, restoreOwner = true) =
   discard restoreOwner

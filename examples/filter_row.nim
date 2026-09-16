@@ -297,6 +297,7 @@ filterRow.distribution = svdNatural
 
 controller.statusChoice = statusChoice
 controller.ownerChoice = ownerChoice
+controller.modeControl = modeControl
 controller.dateRangePicker = dateRangePicker
 dateRangePicker.selectedRange = controller.dateRange
 dateRangePicker.onChange = proc(picker: DateRangePicker, value: DateRange) =

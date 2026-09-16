@@ -1650,10 +1650,13 @@ proc initDateTimePickerFields*(
   )
   picker.addSubview(picker.xDatePicker)
   picker.addSubview(picker.xTimePicker)
+  let pickerRef = picker.unsafeWeakRef()
   picker.xDatePicker.onSelect = proc(date: CalendarDate) =
-    picker.dateTimePickerDateDidChange(date)
+    if not pickerRef.isNil:
+      pickerRef[].dateTimePickerDateDidChange(date)
   picker.xTimePicker.onSelect = proc(time: TimeOfDay) =
-    picker.dateTimePickerTimeDidConfirm(time)
+    if not pickerRef.isNil:
+      pickerRef[].dateTimePickerTimeDidConfirm(time)
   picker.acceptsFirstResponder = true
   picker.accessibilityRole = arGroup
   picker.accessibilityLabel = "Date and time picker"
@@ -1691,6 +1694,8 @@ proc selectDateTime*(picker: DateTimePicker, value: DateTime) {.discardable.} =
     picker.xOnSelect(value)
 
 proc confirmDateTime*(picker: DateTimePicker): bool =
+  if not picker.xTimePicker.isNil:
+    picker.updateDraftTime(picker.xTimePicker.xDraftTime)
   if not picker.xDraftDateTime.isValidDateTime():
     return false
   picker.selectDateTime(picker.xDraftDateTime)

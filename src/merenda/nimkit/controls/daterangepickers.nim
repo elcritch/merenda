@@ -21,6 +21,7 @@ type
   DateRangePicker* = ref object of StackView
     xStartButton: DatePickerButton
     xEndButton: DatePickerButton
+    xLastRange: DateRange
     xOnChange: DateRangeChangeHandler
 
   DateRangeChangeHandler* = proc(picker: DateRangePicker, value: DateRange) {.closure.}
@@ -89,7 +90,7 @@ proc `selectedRange=`*(picker: DateRangePicker, value: DateRange) =
 proc applySelectedRange(picker: DateRangePicker, value: DateRange, notify: bool): bool =
   if picker.isNil or not value.isValidDateRange():
     return false
-  let before = picker.selectedRange()
+  let before = picker.xLastRange
   if value.hasStartDate:
     picker.xStartButton.selectedDate = value.startDate
   picker.xStartButton.hasSelectedDate = value.hasStartDate
@@ -97,6 +98,7 @@ proc applySelectedRange(picker: DateRangePicker, value: DateRange, notify: bool)
     picker.xEndButton.selectedDate = value.endDate
   picker.xEndButton.hasSelectedDate = value.hasEndDate
   let after = picker.selectedRange()
+  picker.xLastRange = after
   if notify and before != after:
     picker.postAccessibilityNotification(anValueChanged)
     if not picker.xOnChange.isNil:
@@ -110,6 +112,7 @@ proc setSelectedRange*(
 
 proc notifyRangeChange(picker: DateRangePicker, before: DateRange) =
   let after = picker.selectedRange()
+  picker.xLastRange = after
   if before == after:
     return
   picker.postAccessibilityNotification(anValueChanged)
@@ -119,7 +122,7 @@ proc notifyRangeChange(picker: DateRangePicker, before: DateRange) =
 proc setStartDate*(picker: DateRangePicker, date: CalendarDate, notify = true): bool =
   if picker.isNil or not date.isValidCalendarDate():
     return false
-  let before = picker.selectedRange()
+  let before = picker.xLastRange
   var next = before
   next.startDate = date
   next.hasStartDate = true
@@ -132,7 +135,7 @@ proc setStartDate*(picker: DateRangePicker, date: CalendarDate, notify = true): 
 proc setEndDate*(picker: DateRangePicker, date: CalendarDate, notify = true): bool =
   if picker.isNil or not date.isValidCalendarDate():
     return false
-  let before = picker.selectedRange()
+  let before = picker.xLastRange
   var next = before
   next.endDate = date
   next.hasEndDate = true
@@ -213,10 +216,20 @@ proc `popupPresentation=`*(picker: DateRangePicker, value: PopupPresentation) =
   picker.xEndButton.popupPresentation = value
 
 proc startDidSelect(picker: DateRangePicker, date: CalendarDate) =
-  discard picker.setStartDate(date)
+  var next = picker.xLastRange
+  next.startDate = date
+  next.hasStartDate = true
+  if next.hasEndDate and next.endDate < date:
+    next.endDate = date
+  discard picker.applySelectedRange(next, notify = true)
 
 proc endDidSelect(picker: DateRangePicker, date: CalendarDate) =
-  discard picker.setEndDate(date)
+  var next = picker.xLastRange
+  next.endDate = date
+  next.hasEndDate = true
+  if next.hasStartDate and date < next.startDate:
+    next.startDate = date
+  discard picker.applySelectedRange(next, notify = true)
 
 protocol DateRangePickerAccessibility of AccessibilityProtocol:
   method accessibilityRole(picker: DateRangePicker): AccessibilityRole =
@@ -261,10 +274,13 @@ proc initDateRangePickerFields*(
   picker.xStartButton = newDatePickerButton(startTitle)
   picker.xEndButton = newDatePickerButton(endTitle)
   picker.addArrangedSubview(picker.xStartButton, picker.xEndButton)
+  let pickerRef = picker.unsafeWeakRef()
   picker.xStartButton.onSelect = proc(date: CalendarDate) =
-    picker.startDidSelect(date)
+    if not pickerRef.isNil:
+      pickerRef[].startDidSelect(date)
   picker.xEndButton.onSelect = proc(date: CalendarDate) =
-    picker.endDidSelect(date)
+    if not pickerRef.isNil:
+      pickerRef[].endDidSelect(date)
   discard picker.withProtocol(DateRangePickerAccessibility)
   if value.isValidDateRange():
     discard picker.setSelectedRange(value)

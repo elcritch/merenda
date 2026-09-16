@@ -11,6 +11,7 @@ import ../foundation/events
 import ../foundation/objectvalues
 import ../foundation/selectors
 import ../foundation/types
+from ../text/textviews import isInsertableText
 
 import ./chips
 import ./comboboxes
@@ -75,6 +76,12 @@ proc tokenOptionSelectable(option: ComboBoxOption): bool =
   option.enabled and not option.hidden and not option.separator and
     option.tokenOptionKey().len > 0
 
+proc appendTokenText(field: TokenField, text: string): bool =
+  if not field.isEnabled() or not text.isInsertableText():
+    return false
+  field.setTokenQuery(field.xQuery & text)
+  true
+
 proc selectedIndexForKey(field: TokenField, key: string): int =
   for index, selected in field.xSelectedIdentifiers:
     if selected == key:
@@ -114,6 +121,12 @@ proc options*(field: TokenField): seq[ComboBoxOption] =
 proc `options=`*(field: TokenField, values: openArray[ComboBoxOption]) =
   let oldIdentifiers = field.xSelectedIdentifiers
   field.xOptions.options = values
+  var originalEnabled = initTable[string, bool]()
+  for option in field.xOptions.options:
+    let key = option.tokenOptionKey()
+    if key.len > 0:
+      originalEnabled[key] = option.enabled
+  field.xOriginalEnabled = originalEnabled
   field.xSelectedOptions.setLen(0)
   field.xSelectedIdentifiers.setLen(0)
   for key in oldIdentifiers:
@@ -121,8 +134,6 @@ proc `options=`*(field: TokenField, values: openArray[ComboBoxOption]) =
     if index >= 0:
       field.xSelectedOptions.add field.xOptions.options[index]
       field.xSelectedIdentifiers.add key
-      if key notin field.xOriginalEnabled:
-        field.xOriginalEnabled[key] = field.xOptions.options[index].enabled
   field.updateEnabledOptions()
   if not field.xInput.isNil:
     field.xInput.reloadData()
@@ -466,7 +477,11 @@ proc clearTokenQuery(field: TokenField) =
 proc selectInputOption(field: TokenField) =
   if field.xInput.isNil:
     return
-  let index = field.xInput.indexOfSelectedItem()
+  let index =
+    if field.xInput.highlightedIndex() >= 0:
+      field.xInput.highlightedIndex()
+    else:
+      field.xInput.indexOfSelectedItem()
   if index >= 0:
     discard field.selectOptionAtIndex(index)
 
@@ -590,13 +605,16 @@ protocol DefaultTokenFieldEvents of ResponderEventProtocol:
         return true
       if field.xRemovesLastTokenOnBackspace and field.xSelectedOptions.len > 0:
         return field.removeSelectedOptionAtIndex(field.xSelectedOptions.high)
-    if event.modifiers == {} and event.text.len > 0:
-      field.setTokenQuery(field.xQuery & event.text)
-      return true
     if event.modifiers == {} and event.key == keyEnter:
       field.selectInputOption()
       return true
+    if event.modifiers == {} and field.appendTokenText(event.text):
+      return true
     false
+
+protocol DefaultTokenFieldInput of TextInputProtocol:
+  method insertText(field: TokenField, text: string) =
+    discard field.appendTokenText(text)
 
 proc initTokenFieldFields*(
     field: TokenField,
@@ -655,8 +673,12 @@ proc initTokenFieldFields*(
         discard target.removeSelectedOptionAtIndex(target.xSelectedOptions.high)
       invocation.setResult(true)
       return
-    if not fieldRef.isNil and event.modifiers == {} and event.text.len > 0:
-      fieldRef[].setTokenQuery(fieldRef[].xQuery & event.text)
+    if not fieldRef.isNil and event.modifiers == {} and event.key == keyEnter:
+      fieldRef[].selectInputOption()
+      invocation.setResult(true)
+      return
+    if not fieldRef.isNil and event.modifiers == {} and
+        fieldRef[].appendTokenText(event.text):
       invocation.setResult(true)
       return
     if not next.isNil:
@@ -664,6 +686,14 @@ proc initTokenFieldFields*(
     elif not invocation.handled:
       invocation.setResult(false)
   discard DynamicAgent(field.xInput).pushMethod(keyDown(), keyWrapper)
+  discard field.xInput.addMethod(
+    insertText(),
+    proc(self: ComboBox, text: string) =
+      discard self
+      if not fieldRef.isNil:
+        discard fieldRef[].appendTokenText(text)
+    ,
+  )
 
   field.acceptsFirstResponder = true
   field.accessibilityRole = arComboBox
@@ -672,6 +702,7 @@ proc initTokenFieldFields*(
   discard field.withProtocol(DefaultTokenFieldLayout)
   discard field.withProtocol(DefaultTokenFieldView)
   discard field.withProtocol(DefaultTokenFieldEvents)
+  discard field.withProtocol(DefaultTokenFieldInput)
   discard field.withProtocol(DefaultTokenFieldAccessibility)
   field.applyInitialFrame(frame)
   field.rebuildChips()

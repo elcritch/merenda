@@ -97,3 +97,33 @@ suite "NimKit date range pickers":
 
     check picker.startButton.popupPresentation == ppInline
     check picker.endButton.popupPresentation == ppInline
+
+  test "child picker selection emits one range change callback":
+    let
+      initial = initDateRange(
+        startDate = initCalendarDate(2025, 6, 10),
+        hasStartDate = true,
+        endDate = initCalendarDate(2025, 7, 24),
+        hasEndDate = true,
+      )
+      root = newView(frame = rect(0, 0, 500, 620))
+      window = newWindow("Date Range Picker", frame = rect(0, 0, 500, 620))
+      picker = newDateRangePicker(initial, frame = rect(10, 10, 280, 34))
+    var callbackCount = 0
+    picker.onChange = proc(sender: DateRangePicker, value: DateRange) =
+      check sender == picker
+      check value == picker.selectedRange
+      inc callbackCount
+    root.addSubview(picker)
+    window.setContentView(root)
+    picker.startButton.popupPresentation = ppInline
+
+    picker.startButton.openPopup()
+    let child = picker.startButton.datePicker()
+    check not child.isNil
+    child.selectDate(initCalendarDate(2025, 6, 15))
+    check callbackCount == 1
+    check picker.startDate == initCalendarDate(2025, 6, 15)
+    check picker.endDate == initCalendarDate(2025, 7, 24)
+    check not picker.startButton.popupOpen()
+    check not window.hasActiveTransientSession()
