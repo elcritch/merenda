@@ -19,6 +19,7 @@ import nimkit/fontpickers
 import nimkit/images
 import nimkit/markdownviews
 import nimkit/menus
+import nimkit/segmentedcontrols
 import nimkit/renderfragments
 import nimkit/resources
 import nimkit/settings

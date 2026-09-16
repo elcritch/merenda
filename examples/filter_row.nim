@@ -29,7 +29,7 @@ type
     table: TableView
     resultLabel: Label
     mode: FilterMode
-    modeButtons: array[FilterMode, Button]
+    modeControl: SegmentedControl
     statusChoice: ComboBox
     ownerChoice: ComboBox
     statusFilter: string
@@ -199,11 +199,10 @@ proc selectedChoice(comboBox: ComboBox): string =
     ""
 
 proc onModeChanged(controller: FilterDemoController, sender: DynamicAgent) =
-  for mode in FilterMode:
-    if sender == DynamicAgent(controller.modeButtons[mode]):
-      controller.mode = mode
-  for mode in FilterMode:
-    controller.modeButtons[mode].state = if mode == controller.mode: bsOn else: bsOff
+  if sender == DynamicAgent(controller.modeControl):
+    let index = controller.modeControl.selectedSegmentIndex()
+    if index in 0 .. ord(high(FilterMode)):
+      controller.mode = FilterMode(index)
   controller.applyFilters()
 
 proc onChoiceChanged(controller: FilterDemoController, sender: DynamicAgent) =
@@ -285,7 +284,7 @@ let
     "Every control below changes the table immediately. Type in Add labels... to search."
   )
   filterRow = newStackView(laHorizontal)
-  modeRow = newStackView(laHorizontal)
+  modeControl = newSegmentedControl(["All entries", "Normal only", "Ignored only"])
   statusChoice = newComboBox()
   ownerChoice = newComboBox()
   startButton = newDatePickerButton("From")
@@ -299,23 +298,6 @@ root.appearance = makeFilterAppearance()
 filterRow.spacing = 8.0
 filterRow.alignment = svaCenter
 filterRow.distribution = svdNatural
-modeRow.spacing = 2.0
-modeRow.alignment = svaCenter
-modeRow.distribution = svdNatural
-
-for mode in FilterMode:
-  let button =
-    case mode
-    of fmAll:
-      newButton("All entries")
-    of fmNormal:
-      newButton("Normal only")
-    of fmIgnored:
-      newButton("Ignored only")
-  button.buttonType = btToggle
-  button.styleClasses = @["filter-segment"]
-  controller.modeButtons[mode] = button
-  modeRow.addArrangedSubview(button)
 
 controller.statusChoice = statusChoice
 controller.ownerChoice = ownerChoice
@@ -361,10 +343,10 @@ let
       controller.onChoiceChanged(sender),
   )
 
-for mode in FilterMode:
-  controller.modeButtons[mode].target = modeTarget
-  controller.modeButtons[mode].action = modeAction
-controller.modeButtons[fmAll].state = bsOn
+controller.modeControl.styleClasses = @["filter-segment"]
+controller.modeControl.target = modeTarget
+controller.modeControl.action = modeAction
+controller.modeControl.selectedSegmentIndex = ord(controller.mode)
 
 for combo in [statusChoice, ownerChoice]:
   combo.target = choiceTarget
@@ -376,7 +358,7 @@ endButton.onSelect = proc(date: CalendarDate) =
   controller.setEndDate(date)
 
 filterRow.addArrangedSubview(
-  modeRow, statusChoice, ownerChoice, startButton, endButton, tagField
+  modeControl, statusChoice, ownerChoice, startButton, endButton, tagField
 )
 layout.addArrangedSubview(title, subtitle, filterRow)
 layout.addArrangedSubview(resultLabel)
@@ -408,7 +390,7 @@ activateConstraints:
   title[atHeight] == 34.0
   subtitle[atHeight] == 22.0
   filterRow[atHeight] == 34.0
-  modeRow[atWidth] == 284.0
+  modeControl[atWidth] == 284.0
   statusChoice[atWidth] == 130.0
   ownerChoice[atWidth] == 130.0
   startButton[atWidth] == 136.0

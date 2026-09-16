@@ -46,6 +46,7 @@ import ./nimkit/responder/keybindings
 import ./nimkit/responder/keybindingjson
 import ./nimkit/containers/listbasics
 import ./nimkit/controls/matrices
+import ./nimkit/controls/segmentedcontrols
 import ./nimkit/controls/menus
 import ./nimkit/app/modelcontrollers
 import ./nimkit/text/markdownviews
@@ -139,6 +140,7 @@ export keybindings
 export keybindingjson
 export listbasics
 export matrices
+export segmentedcontrols
 export menus
 export modelcontrollers
 export markdownviews
