@@ -17,6 +17,7 @@ import ./nimkit/controls/colorpicker
 import ./nimkit/controls/controls
 import ./nimkit/controls/dialogbuttonboxes
 import ./nimkit/controls/datepickers
+import ./nimkit/controls/daterangepickers
 import ./nimkit/controls/tokenfields
 import ./nimkit/controls/fontpickers
 import ./nimkit/containers/documenttabs
@@ -111,6 +112,7 @@ export colorpicker
 export controls
 export dialogbuttonboxes
 export datepickers
+export daterangepickers
 export tokenfields
 export fontpickers
 export documenttabs

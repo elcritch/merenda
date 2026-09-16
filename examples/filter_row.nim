@@ -34,12 +34,8 @@ type
     ownerChoice: ComboBox
     statusFilter: string
     ownerFilter: string
-    startButton: DatePickerButton
-    endButton: DatePickerButton
-    hasStartDate: bool
-    hasEndDate: bool
-    startDate: CalendarDate
-    endDate: CalendarDate
+    dateRangePicker: DateRangePicker
+    dateRange: DateRange
     selectedTags: seq[string]
     tagField: TokenField
 
@@ -119,9 +115,9 @@ func matchesFilters(controller: FilterDemoController, entry: FilterEntry): bool 
     return false
   if controller.ownerFilter.len > 0 and entry.owner != controller.ownerFilter:
     return false
-  if controller.hasStartDate and entry.date < controller.startDate:
+  if controller.dateRange.hasStartDate and entry.date < controller.dateRange.startDate:
     return false
-  if controller.hasEndDate and entry.date > controller.endDate:
+  if controller.dateRange.hasEndDate and entry.date > controller.dateRange.endDate:
     return false
   entry.tagMatches(controller.selectedTags)
 
@@ -183,8 +179,12 @@ proc newFilterDemoController(
     table: table,
     resultLabel: resultLabel,
     mode: fmAll,
-    startDate: initCalendarDate(2025, 6, 10),
-    endDate: initCalendarDate(2025, 7, 24),
+    dateRange: initDateRange(
+      startDate = initCalendarDate(2025, 6, 10),
+      hasStartDate = true,
+      endDate = initCalendarDate(2025, 7, 24),
+      hasEndDate = true,
+    ),
     selectedTags: @["Backend", "Urgent", "Review"],
   )
   initResponder(result)
@@ -212,14 +212,11 @@ proc onChoiceChanged(controller: FilterDemoController, sender: DynamicAgent) =
     controller.ownerFilter = controller.ownerChoice.selectedChoice()
   controller.applyFilters()
 
-proc setStartDate(controller: FilterDemoController, date: CalendarDate) =
-  controller.startDate = date
-  controller.hasStartDate = true
-  controller.applyFilters()
-
-proc setEndDate(controller: FilterDemoController, date: CalendarDate) =
-  controller.endDate = date
-  controller.hasEndDate = true
+proc onDateRangeChanged(
+    controller: FilterDemoController, picker: DateRangePicker, value: DateRange
+) =
+  discard picker
+  controller.dateRange = value
   controller.applyFilters()
 
 proc onTagFieldChanged(controller: FilterDemoController, field: TokenField) =
@@ -287,8 +284,7 @@ let
   modeControl = newSegmentedControl(["All entries", "Normal only", "Ignored only"])
   statusChoice = newComboBox()
   ownerChoice = newComboBox()
-  startButton = newDatePickerButton("From")
-  endButton = newDatePickerButton("Until")
+  dateRangePicker = newDateRangePicker(startTitle = "From", endTitle = "Until")
   tagField = newTokenField(placeholder = "Add labels...")
   resultLabel = newStatusLabel("")
   table = newTableView()
@@ -301,10 +297,10 @@ filterRow.distribution = svdNatural
 
 controller.statusChoice = statusChoice
 controller.ownerChoice = ownerChoice
-controller.startButton = startButton
-controller.endButton = endButton
-startButton.selectedDate = controller.startDate
-endButton.selectedDate = controller.endDate
+controller.dateRangePicker = dateRangePicker
+dateRangePicker.selectedRange = controller.dateRange
+dateRangePicker.onChange = proc(picker: DateRangePicker, value: DateRange) =
+  controller.onDateRangeChanged(picker, value)
 controller.tagField = tagField
 
 statusChoice.dataSource = makeChoiceOptions("any-status", "Any status", DemoStatuses)
@@ -352,13 +348,8 @@ for combo in [statusChoice, ownerChoice]:
   combo.target = choiceTarget
   combo.action = choiceAction
 
-startButton.onSelect = proc(date: CalendarDate) =
-  controller.setStartDate(date)
-endButton.onSelect = proc(date: CalendarDate) =
-  controller.setEndDate(date)
-
 filterRow.addArrangedSubview(
-  modeControl, statusChoice, ownerChoice, startButton, endButton, tagField
+  modeControl, statusChoice, ownerChoice, dateRangePicker, tagField
 )
 layout.addArrangedSubview(title, subtitle, filterRow)
 layout.addArrangedSubview(resultLabel)
@@ -393,8 +384,7 @@ activateConstraints:
   modeControl[atWidth] == 284.0
   statusChoice[atWidth] == 130.0
   ownerChoice[atWidth] == 130.0
-  startButton[atWidth] == 136.0
-  endButton[atWidth] == 136.0
+  dateRangePicker[atWidth] == 280.0
   tagField[atWidth] == 190.0
 
 controller.applyFilters()
