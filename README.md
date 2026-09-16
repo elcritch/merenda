@@ -429,7 +429,7 @@ These are good places to go once you've tried the basics:
   [constraint playground](examples/constraint_playground_demo.nim), and the
   [layout guide](docs/layout.md).
 - Tables and trees: [table example](examples/table_demo.nim),
-  [outline example](examples/outline_demo.nim), and
+  [filter row](examples/filter_row.nim), [outline example](examples/outline_demo.nim), and
   [model controllers](examples/modelcontrollers_demo.nim).
 - App workflows: [documents and windows](examples/document_workspace_demo.nim),
   [preferences](examples/preferences_demo.nim), and
