@@ -456,6 +456,48 @@ proc saveFractionsFromLengths(
   for index, paneIndex in visible:
     splitView.xPanes[paneIndex].fraction = max(lengths[index] / total, 0.0'f32)
 
+proc splitPane*(
+    splitView: SplitView,
+    target, pane: View,
+    index: int,
+    minSize = SplitViewDefaultPaneMinSize,
+    maxSize = SplitViewDefaultPaneMaxSize,
+    collapsible = false,
+): bool =
+  if target.isNil or pane.isNil or splitView.paneIndex(target) < 0 or
+      splitView.paneIndex(pane) >= 0:
+    return false
+  let
+    visible = splitView.visiblePaneIndexes()
+    targetIndex = splitView.paneIndex(target)
+    targetVisibleIndex = visible.find(targetIndex)
+  if targetVisibleIndex < 0:
+    return false
+  let
+    oldPanes = splitView.panes()
+    oldLengths =
+      splitView.constrainedPaneLengths(visible, splitView.availablePaneLength())
+    splitLength =
+      max(
+        oldLengths[targetVisibleIndex] - splitView.effectiveDividerThickness(), 0.0'f32
+      ) * 0.5'f32
+  splitView.insertPane(pane, index, minSize, maxSize, collapsible)
+
+  let newPanes = splitView.panes()
+  let newVisible = splitView.visiblePaneIndexes()
+  var newLengths: seq[float32]
+  for paneIndex in newVisible:
+    let currentPane = newPanes[paneIndex]
+    if currentPane == target or currentPane == pane:
+      newLengths.add splitLength
+      continue
+    for oldVisibleIndex, oldPaneIndex in visible:
+      if oldPanes[oldPaneIndex] == currentPane:
+        newLengths.add oldLengths[oldVisibleIndex]
+        break
+  splitView.saveFractionsFromLengths(newVisible, newLengths)
+  true
+
 proc layoutSplitViewPanes(splitView: SplitView) =
   splitView.discardCursorRects()
   let
