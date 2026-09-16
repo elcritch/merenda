@@ -66,24 +66,25 @@ suite "Kosmo settings layout":
     require tabsView of TabView
     let tabs = TabView(tabsView)
 
-    let expectedPageText = @[
+    let expectedPageText =
       @[
-        "Terminal", "Use Option/Alt-B and Option/Alt-F to move by words in Bash.",
-        "Hold the platform link modifier while hovering a URL to reveal and open it.",
-      ],
-      @[
-        "Active Shortcuts",
-        "Changes apply immediately; edit bindings in keybindings.json.",
-      ],
-      @[
-        "Moe Theme",
-        "Choose a bundled theme or a TOML theme installed in ~/.config/moe/themes.",
-      ],
-      @[
-        "TextMate Grammars",
-        "These grammars are available to Moe and Markdown syntax highlighting.",
-      ],
-    ]
+        @[
+          "Terminal", "Use Option/Alt-B and Option/Alt-F to move by words in Bash.",
+          "Hold the platform link modifier while hovering a URL to reveal and open it.",
+        ],
+        @[
+          "Active Shortcuts",
+          "Changes apply immediately; edit bindings in keybindings.json.",
+        ],
+        @[
+          "Moe Theme",
+          "Choose a bundled theme or a TOML theme installed in ~/.config/moe/themes.",
+        ],
+        @[
+          "TextMate Grammars",
+          "These grammars are available to Moe and Markdown syntax highlighting.",
+        ],
+      ]
     for pageIndex, pageText in expectedPageText:
       check tabs.selectTabViewItemAtIndex(pageIndex)
       settings.contentView().layoutSubtreeIfNeeded()
@@ -96,3 +97,58 @@ suite "Kosmo settings layout":
     window.frame = rect(180, 160, 610, 330)
     check window.frame().size ==
       initSize(KosmoSettingsMinimumWidth, KosmoSettingsMinimumHeight)
+
+  test "TextMate grammar table follows its dragged column border":
+    let settings = newKosmoSettingsWindow(
+      textMateGrammars = [
+        KosmoTextMateGrammar(
+          name: "Nim",
+          scopeName: "source.nim",
+          origin: KosmoTextMateGrammarOrigin.BuiltIn,
+        ),
+        KosmoTextMateGrammar(
+          name: "Markdown",
+          scopeName: "text.html.markdown",
+          origin: KosmoTextMateGrammarOrigin.BuiltIn,
+        ),
+      ]
+    )
+    defer:
+      settings.window().close()
+
+    let window = settings.window()
+    window.setContentView(settings.contentView())
+    let tabsView =
+      settings.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier)
+    require not tabsView.isNil
+    require tabsView of TabView
+    let tabs = TabView(tabsView)
+    check tabs.selectTabViewItemAtIndex(3)
+    discard window.buildRenders()
+
+    let tableView =
+      settings.contentView().viewWithIdentifier(KosmoTextMateGrammarsTableIdentifier)
+    require not tableView.isNil
+    require tableView of TableView
+    let grammarTable = TableView(tableView)
+    let scopeColumn =
+      grammarTable.columnWithIdentifier(KosmoTextMateGrammarScopeColumnIdentifier)
+    require not scopeColumn.isNil
+
+    let
+      initialHeader = grammarTable.tableHeaderColumnRect(scopeColumn)
+      start = grammarTable.pointToWindow(
+        initPoint(
+          initialHeader.maxX - 1.0'f32,
+          initialHeader.origin.y + initialHeader.size.height * 0.5'f32,
+        )
+      )
+      stop = initPoint(start.x + 40.0'f32, start.y)
+
+    check window.mouseDownAt(start)
+    check window.mouseDraggedAt(stop)
+    discard window.buildRenders()
+    let finalHeader = grammarTable.tableHeaderColumnRect(scopeColumn)
+    check abs(finalHeader.origin.x - initialHeader.origin.x) < 0.1'f32
+    check abs(finalHeader.maxX - initialHeader.maxX - 40.0'f32) < 0.1'f32
+    check window.mouseUpAt(stop)

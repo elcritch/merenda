@@ -8,6 +8,7 @@ import kosmo/cliopen
 import kosmo/config
 import kosmo/contextpanel
 import kosmo/editorsearch
+import kosmo/editing
 import kosmo/filetreeinteractions
 import kosmo/gitdiff
 import kosmo/matterhighlighting
@@ -15,6 +16,7 @@ import kosmo/markdownactivation
 import kosmo/panelshortcuts
 import kosmo/quickopen
 import kosmo/settings_layout
+import kosmo/splits
 import kosmo/shortcutinput
 import kosmo/terminalclipboard
 import kosmo/terminalsearch

@@ -160,8 +160,13 @@ proc replaceSplitPane(parent: SplitView, oldPane, newPane: View) =
   let index = parent.paneIndex(oldPane)
   if index < 0:
     return
+  let previousState = parent.captureState()
   parent.removePane(oldPane)
   parent.insertPane(newPane, index)
+  var nextState = parent.captureState()
+  if index < previousState.fractions.len and index < nextState.fractions.len:
+    nextState.fractions[index] = previousState.fractions[index]
+    parent.restoreState(nextState)
 
 proc splitPanel*(
     dockView: DockView, target, panel: DockPanel, position: DockPosition
@@ -174,10 +179,13 @@ proc splitPanel*(
     axis = position.splitAxis()
     parent = target.superview()
   if parent of SplitView and SplitView(parent).splitAxis == axis:
-    let targetIndex = SplitView(parent).paneIndex(target)
-    SplitView(parent).insertPane(
-      panel, targetIndex + (if position.insertsBefore(): 0 else: 1)
-    )
+    let
+      splitView = SplitView(parent)
+      targetIndex = splitView.paneIndex(target)
+    if not splitView.splitPane(
+      target, panel, targetIndex + (if position.insertsBefore(): 0 else: 1)
+    ):
+      return false
   else:
     let splitView = newSplitView(axis)
     if parent == dockView:

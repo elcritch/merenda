@@ -125,6 +125,119 @@ suite "Kosmo":
     check frontend.dockView.rootView() == groups[0].panel
     check not (frontend.dockView.rootView() of SplitView)
 
+  test "mouse pane splits preserve unrelated pane width":
+    let
+      root = createTempDir("merenda-kosmo-dock-split-sizing-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+      thirdPath = root / "third.txt"
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    writeFile(thirdPath, "third")
+    defer:
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeFile(thirdPath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Dock Split Sizing Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(firstPath)
+    check frontend.openPath(secondPath)
+    check frontend.openPath(thirdPath)
+
+    let
+      sourceTabs = frontend.documentTabs
+      sourceTabRect = sourceTabs.documentTabRect(0)
+      sourceStart = sourceTabs.pointToWindow(
+        initPoint(
+          sourceTabRect.minX + sourceTabRect.size.width * 0.5'f32,
+          sourceTabRect.minY + sourceTabRect.size.height * 0.5'f32,
+        )
+      )
+      firstDrop = frontend.dockView.pointToWindow(
+        initPoint(
+          frontend.dockView.bounds().maxX - 4.0'f32,
+          frontend.dockView.bounds().minY +
+            frontend.dockView.bounds().size.height * 0.5'f32,
+        )
+      )
+
+    check frontend.window.mouseDownAt(sourceStart)
+    check frontend.window.mouseDraggedAt(firstDrop)
+    check frontend.window.mouseUpAt(firstDrop)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    var groups = frontend.editorGroups()
+    require groups.len == 2
+    let unrelatedWidth = groups[0].panel.frame().size.width
+    let
+      movingTabs = groups[0].editorView.documentTabs
+      movingTabRect = movingTabs.documentTabRect(0)
+      movingStart = movingTabs.pointToWindow(
+        initPoint(
+          movingTabRect.minX + movingTabRect.size.width * 0.5'f32,
+          movingTabRect.minY + movingTabRect.size.height * 0.5'f32,
+        )
+      )
+      targetPanelBounds = groups[1].panel.bounds()
+      secondDrop = groups[1].panel.pointToWindow(
+        initPoint(
+          targetPanelBounds.maxX - 4.0'f32,
+          targetPanelBounds.minY + targetPanelBounds.size.height * 0.5'f32,
+        )
+      )
+
+    check frontend.window.mouseDownAt(movingStart)
+    check frontend.window.mouseDraggedAt(secondDrop)
+    check frontend.dockView.dropTarget().position == dpRight
+    check frontend.window.mouseUpAt(secondDrop)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    groups = frontend.editorGroups()
+    require groups.len == 3
+    check abs(groups[0].panel.frame().size.width - unrelatedWidth) <= 0.01'f32
+    check abs(groups[1].panel.frame().size.width - groups[2].panel.frame().size.width) <=
+      0.01'f32
+
+  test "keyboard pane splits preserve unrelated pane width":
+    let frontend =
+      newKosmoApplication(newApplication("Kosmo Keyboard Split Sizing Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {})
+    )
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    var groups = frontend.editorGroups()
+    require groups.len == 2
+    let unrelatedWidth = groups[0].panel.frame().size.width
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: {})
+    )
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    groups = frontend.editorGroups()
+    require groups.len == 3
+    check abs(groups[0].panel.frame().size.width - unrelatedWidth) <= 0.01'f32
+    check abs(groups[1].panel.frame().size.width - groups[2].panel.frame().size.width) <=
+      0.01'f32
+
   when defined(posix):
     test "terminal shortcut opens a tab that can create an independent split pane":
       let frontend = newKosmoApplication(newApplication("Kosmo Terminal Split Test"))

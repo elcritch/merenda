@@ -315,6 +315,8 @@ type
     xTitle: string
     xWidth: float32
     xPreferredWidth: float32
+    # A manually resized flexible column opts out of automatic fill resizing.
+    xUserResized: bool
     xMinWidth: float32
     xMaxWidth: float32
     xAlignment: TextAlignment
@@ -2482,6 +2484,11 @@ proc setResolvedColumnWidth(column: TableColumn, width: float32): bool =
   column.xWidth = resolved
   true
 
+proc hasUserResizedFlexibleColumn(tableView: TableView): bool =
+  for column in tableView.visibleColumns():
+    if column.sizingPolicy() == tcspFlexible and column.xUserResized:
+      return true
+
 proc distributeFlexibleColumnWidths(
     tableView: TableView, availableWidth: float32
 ): bool =
@@ -2493,7 +2500,7 @@ proc distributeFlexibleColumnWidths(
       flexible.add column
     else:
       occupiedWidth += column.width()
-  if flexible.len == 0:
+  if flexible.len == 0 or tableView.hasUserResizedFlexibleColumn():
     return
 
   var flexibleWidth = 0.0'f32
@@ -2528,11 +2535,18 @@ proc distributeFlexibleColumnWidths(
     adjustable = nextAdjustable
 
 proc resolveNaturalColumnWidths(tableView: TableView): bool =
+  let hasUserResizedFlexibleColumn =
+    tableView.xColumnSizing == tvcsFill and tableView.hasUserResizedFlexibleColumn()
   for column in tableView.visibleColumns():
     let width =
       case column.sizingPolicy()
-      of tcspFixed, tcspFlexible:
+      of tcspFixed:
         column.xPreferredWidth
+      of tcspFlexible:
+        if hasUserResizedFlexibleColumn and not column.xUserResized:
+          column.xWidth
+        else:
+          column.xPreferredWidth
       of tcspContentSized:
         tableView.measuredColumnContentWidth(column)
     if column.setResolvedColumnWidth(width):
@@ -4713,6 +4727,7 @@ proc noteColumnsChanged(tableView: TableView) =
   tableView.syncTableScrollChrome()
   tableView.syncHeaderTrackingAreas()
   tableView.clearTableCellSlots()
+  tableView.invalidateTableRows()
   tableView.invalidateTableWidthMeasurement()
   tableView.setNeedsLayout()
   tableView.needsDisplay = true
@@ -5877,6 +5892,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
       return
     if column.resizePolicy() == tcrFixed:
       return
+    column.xUserResized = true
     column.width = width
     if tableView.xEditing.active and tableView.xEditing.column == column:
       tableView.clearEditingSurface()

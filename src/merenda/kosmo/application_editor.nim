@@ -522,6 +522,9 @@ proc refreshDeferredEditorGroups(view: KosmoEditorView) =
     if group.editorView != view and group.editorView.inactiveRefreshDeferred:
       group.editorView.refresh()
 
+proc commandBarTextVerticalOffset(bar: KosmoCommandBar): float32 =
+  max((bar.bounds().size.height - bar.monoTextMetrics().lineHeight) / 2.0'f32, 0.0'f32)
+
 proc syncCommandBar(view: KosmoEditorView, command: KosmoCommandLine) =
   let bar = view.commandBar
   if bar.isNil:
@@ -554,7 +557,9 @@ proc syncCommandBar(view: KosmoEditorView, command: KosmoCommandLine) =
   if metrics.cellWidth > 0.0'f32:
     let visibleColumns = max(int(floor(bar.bounds().size.width / metrics.cellWidth)), 1)
     let firstColumn = max(cursor - visibleColumns + 1, 0)
-    bar.gridOffset = nimkit.initPoint(-firstColumn.float32 * metrics.cellWidth, 0.0'f32)
+    bar.gridOffset = nimkit.initPoint(
+      -firstColumn.float32 * metrics.cellWidth, bar.commandBarTextVerticalOffset()
+    )
 
 proc syncChrome(view: KosmoEditorView) =
   let tabs = view.visibleTabs(view.editor.tabs())
@@ -2115,7 +2120,10 @@ protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
           0.0'f32
       contentTop = tabHeight + markdownToolbarHeight
       contentHeight = max(bounds.size.height - contentTop, 1.0'f32)
-      commandBarHeight = min(KosmoCommandBarHeight, contentHeight)
+      commandBarHeight = min(
+        monoTextMetrics(pane.commandBar).lineHeight * KosmoCommandBarLineHeightMultiplier,
+        contentHeight,
+      )
     pane.documentTabs.setFrameFromLayout(
       nimkit.rect(0, 0, bounds.size.width, tabHeight)
     )
@@ -2130,6 +2138,9 @@ protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
         bounds.size.width,
         commandBarHeight,
       )
+    )
+    pane.commandBar.gridOffset = nimkit.initPoint(
+      pane.commandBar.gridOffset.x, pane.commandBar.commandBarTextVerticalOffset()
     )
     pane.activeIndicator.setFrameFromLayout(
       nimkit.rect(0, contentTop, bounds.size.width, contentHeight)
