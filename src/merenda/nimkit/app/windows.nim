@@ -2286,6 +2286,12 @@ proc presentPopup*(host: PopupHost): bool =
   if owner.isNil or host.xAnchor.isNil or host.xContent.isNil:
     return false
 
+  # Ending a session closes the owner's auxiliary windows. Do this before
+  # creating the replacement, and leave the current popup intact on a veto.
+  if host.xManagesTransientSession and owner.hasActiveTransientSession():
+    if not owner.dismissTransientSession(tdrProgrammatic):
+      return false
+
   let size =
     initSize(max(host.xPopupSize.width, 1.0'f32), max(host.xPopupSize.height, 1.0'f32))
   host.xContent.frame = rect(0.0, 0.0, size.width, size.height)

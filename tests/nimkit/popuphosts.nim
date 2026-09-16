@@ -3,6 +3,7 @@ import std/unittest
 import figdraw
 
 import merenda/nimkit
+import sigils/selectors
 
 suite "NimKit popup hosts":
   test "inline popup host owns placement focus and dismissal":
@@ -79,3 +80,44 @@ suite "NimKit popup hosts":
     check content.frame.maxY <= anchor.frame.minY
     host.popupOpen = false
     check content.superview().isNil
+
+  test "popup replacement respects a dismissal veto":
+    let
+      window = newWindow("Popup replacement veto", frame = rect(0, 0, 240, 140))
+      root = newView(frame = rect(0, 0, 240, 140))
+      anchor = newView(frame = rect(8, 8, 120, 24))
+      firstContent = newView(frame = rect(0, 0, 120, 50))
+      secondContent = newView(frame = rect(0, 0, 120, 50))
+    defer:
+      window.close()
+    root.addSubview(anchor)
+    window.setContentView(root)
+    let
+      first = newPopupHost(
+        window, anchor, firstContent, initSize(120, 50), presentation = ppInline
+      )
+      second = newPopupHost(
+        window, anchor, secondContent, initSize(120, 50), presentation = ppInline
+      )
+    var allowDismiss = false
+    discard window.addMethod(
+      shouldDismiss(),
+      proc(_: Window, reason: DismissReason): bool =
+        discard reason
+        allowDismiss,
+    )
+
+    check first.presentPopup()
+    check not second.presentPopup()
+    check first.popupOpen
+    check not second.popupOpen
+    check firstContent.superview() == root
+    check secondContent.superview().isNil
+    check window.transientOwner() == Responder(firstContent)
+
+    allowDismiss = true
+    check second.presentPopup()
+    check not first.popupOpen
+    check firstContent.superview().isNil
+    check secondContent.superview() == root
+    check window.transientOwner() == Responder(secondContent)

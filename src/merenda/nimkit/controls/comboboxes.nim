@@ -1621,6 +1621,7 @@ proc openPopupHost(comboBox: ComboBox) =
     title = "ComboBox Popup",
     presentation = comboBox.xPopupPresentation,
     restoreResponder = Responder(comboBox),
+    transientOwner = Responder(comboBox),
     onDismiss = proc(host: PopupHost, reason: DismissReason) =
       comboBox.dismissPopupFromSession(host, reason),
   )

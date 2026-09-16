@@ -108,6 +108,32 @@ suite "nimkit token fields":
     check window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
     check field.selectedCount == 0
 
+  test "clicking an inline popup row selects a token":
+    let
+      window = newWindow("Token field mouse", frame = rect(0, 0, 320, 180))
+      root = newView(frame = rect(0, 0, 320, 180))
+      field = newTokenField(
+        [
+          initComboBoxOption("backend", "Backend"),
+          initComboBoxOption("security", "Security"),
+        ],
+        frame = rect(10, 10, 280, 30),
+      )
+    defer:
+      window.close()
+    root.addSubview(field)
+    window.setContentView(root)
+    field.layoutSubtreeIfNeeded()
+    field.popupOpen = true
+    let
+      input = field.input()
+      row = input.popupItemRect(input.bounds(), 1)
+      point = initPoint(row.minX + row.size.width / 2, row.minY + row.size.height / 2)
+    check window.clickAt(input.pointToWindow(point))
+    check field.selectedOptionIdentifiers == @["security"]
+    check not field.popupOpen
+    check not window.hasActiveTransientSession()
+
   test "allowing duplicates restores selected option availability":
     let field = newMultiSelectComboBox(
       [initComboBoxOption("one", "One")], frame = rect(0, 0, 240, 30)

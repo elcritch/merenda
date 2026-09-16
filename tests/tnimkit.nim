@@ -4,6 +4,7 @@ import merenda/nimkit
 import nimkit/application_icon
 import nimkit/assetcache
 import nimkit/backrefs_arc
+import nimkit/comboboxes
 import nimkit/controls
 import nimkit/datepickers
 import nimkit/daterangepickers

@@ -90,6 +90,40 @@ suite "NimKit date range pickers":
     check picker.selectedRange.isEmpty()
     check callbackCount == 3
 
+  test "silent clears keep endpoints cleared on subsequent changes":
+    let
+      start = initCalendarDate(2025, 6, 10)
+      endDate = initCalendarDate(2025, 7, 24)
+      picker = newDateRangePicker(start, endDate)
+    var callbackCount = 0
+    picker.onChange = proc(sender: DateRangePicker, value: DateRange) =
+      check sender == picker
+      check value == picker.selectedRange
+      inc callbackCount
+
+    picker.clearStartDate(notify = false)
+    check not picker.hasStartDate
+    check callbackCount == 0
+    check picker.setEndDate(initCalendarDate(2025, 7, 25))
+    check not picker.hasStartDate
+    check callbackCount == 1
+
+    check picker.setStartDate(start, notify = false)
+    picker.clearEndDate(notify = false)
+    check not picker.hasEndDate
+    check callbackCount == 1
+    check picker.setStartDate(initCalendarDate(2025, 6, 11))
+    check not picker.hasEndDate
+    check callbackCount == 2
+
+    check picker.setEndDate(endDate, notify = false)
+    picker.clearDates(notify = false)
+    check picker.selectedRange.isEmpty()
+    check callbackCount == 2
+    check picker.setStartDate(start)
+    check not picker.hasEndDate
+    check callbackCount == 3
+
   test "date range picker propagates popup presentation to both buttons":
     let picker = newDateRangePicker(frame = rect(0, 0, 280, 34))
 

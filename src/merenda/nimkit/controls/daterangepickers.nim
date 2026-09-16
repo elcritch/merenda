@@ -110,15 +110,6 @@ proc setSelectedRange*(
 ): bool {.discardable.} =
   picker.applySelectedRange(value, notify = true)
 
-proc notifyRangeChange(picker: DateRangePicker, before: DateRange) =
-  let after = picker.selectedRange()
-  picker.xLastRange = after
-  if before == after:
-    return
-  picker.postAccessibilityNotification(anValueChanged)
-  if not picker.xOnChange.isNil:
-    picker.xOnChange(picker, after)
-
 proc setStartDate*(picker: DateRangePicker, date: CalendarDate, notify = true): bool =
   if picker.isNil or not date.isValidCalendarDate():
     return false
@@ -148,27 +139,21 @@ proc setEndDate*(picker: DateRangePicker, date: CalendarDate, notify = true): bo
 proc clearStartDate*(picker: DateRangePicker, notify = true) =
   if picker.isNil:
     return
-  let before = picker.selectedRange()
-  picker.xStartButton.hasSelectedDate = false
-  if notify:
-    picker.notifyRangeChange(before)
+  var next = picker.selectedRange()
+  next.hasStartDate = false
+  discard picker.applySelectedRange(next, notify)
 
 proc clearEndDate*(picker: DateRangePicker, notify = true) =
   if picker.isNil:
     return
-  let before = picker.selectedRange()
-  picker.xEndButton.hasSelectedDate = false
-  if notify:
-    picker.notifyRangeChange(before)
+  var next = picker.selectedRange()
+  next.hasEndDate = false
+  discard picker.applySelectedRange(next, notify)
 
 proc clearDates*(picker: DateRangePicker, notify = true) =
   if picker.isNil:
     return
-  let before = picker.selectedRange()
-  picker.xStartButton.hasSelectedDate = false
-  picker.xEndButton.hasSelectedDate = false
-  if notify:
-    picker.notifyRangeChange(before)
+  discard picker.applySelectedRange(DateRange(), notify)
 
 proc startDate*(picker: DateRangePicker): CalendarDate =
   picker.selectedRange().startDate

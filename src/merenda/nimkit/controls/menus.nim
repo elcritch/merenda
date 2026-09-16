@@ -21,6 +21,7 @@ import ../foundation/selectors as nimkitSelectors
 import ../themes
 import ../foundation/types
 import ../app/windows
+import ./nativemenus as nativeMenus
 
 type
   MenuItemModel* = object
