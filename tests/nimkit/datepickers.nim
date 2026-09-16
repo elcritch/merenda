@@ -23,6 +23,86 @@ suite "NimKit date pickers":
     check initCalendarDate(2025, 7, 1) <= initCalendarDate(2025, 7, 1)
     check initCalendarDate(2025, 13, 1).daysInMonth() == 0
 
+  test "clock times provide validation, ordering, and formatting":
+    let
+      early = initTimeOfDay(9, 5, 2)
+      late = initClockTime(17, 45, 8)
+      invalid = initTimeOfDay(24, 0)
+
+    check early.isValidTimeOfDay()
+    check late.isValidClockTime()
+    check not invalid.isValidTimeValue()
+    check early < late
+    check early <= early
+    check early.formatTimeOfDay() == "09:05:02"
+    check late.formatClockTime() == "17:45:08"
+    check initCalendarTime(0, 0).formatTimeValue() == "00:00:00"
+
+  test "time picker selection updates state and invokes its callback":
+    let
+      initial = initTimeOfDay(9, 30, 15)
+      next = initTimeOfDay(17, 45, 8)
+      picker = newTimePicker(initial)
+    var
+      selectedCount = 0
+      callbackTime: TimeOfDay
+    picker.onSelect = proc(time: TimeOfDay) =
+      inc selectedCount
+      callbackTime = time
+
+    check picker.selectedTime == initial
+    check picker.hasSelectedTime
+    check picker.sizeThatFits() == timePickerDefaultSize()
+    picker.selectTime(next)
+    check selectedCount == 1
+    check callbackTime == next
+    check picker.selectedTime == next
+    check picker.accessibilityValue() == "17:45:08"
+
+    picker.hasSelectedTime = false
+    check not picker.hasSelectedTime
+    check picker.accessibilityValue() == "No time selected"
+
+  test "time picker button edits and forwards a selected time":
+    let
+      selected = initTimeOfDay(9, 30, 15)
+      root = newView(frame = rect(0, 0, 400, 300))
+      window = newWindow("Time Picker", frame = rect(0, 0, 400, 300))
+      button = newTimePickerButton("At", selected, rect(10, 10, 140, 32))
+    var
+      selectedCount = 0
+      callbackTime: TimeOfDay
+    button.onSelect = proc(time: TimeOfDay) =
+      inc selectedCount
+      callbackTime = time
+    root.addSubview(button)
+    window.setContentView(root)
+    button.popupPresentation = ppInline
+
+    check button.title == "At · 09:30:15"
+    check window.mouseDownAt(initPoint(20, 20))
+    check window.mouseUpAt(initPoint(20, 20))
+    check button.popupOpen()
+    let picker = button.timePicker()
+    check not picker.isNil
+    check picker.superview() == root
+    check window.hasActiveTransientSession()
+
+    # The minute down control changes 30 to 29 before Done commits the edit.
+    let minuteDown = picker.pointToWindow(initPoint(117, 94))
+    check window.mouseDownAt(minuteDown)
+    check window.mouseUpAt(minuteDown)
+    let done = picker.pointToWindow(initPoint(210, 150))
+    check window.mouseDownAt(done)
+    check window.mouseUpAt(done)
+    check selectedCount == 1
+    check callbackTime == initTimeOfDay(9, 29, 15)
+    check button.selectedTime == callbackTime
+    check button.title == "At · 09:29:15"
+    check not button.popupOpen()
+    check button.timePicker().isNil
+    check not window.hasActiveTransientSession()
+
   test "date picker selection updates state and invokes its callback":
     let
       initial = initCalendarDate(2025, 7, 24)
