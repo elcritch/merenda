@@ -1639,7 +1639,7 @@ proc updatePopupPresentation(comboBox: ComboBox) =
   let size = comboBox.popupWindowSize()
   if not comboBox.xPopupHost.isNil:
     let host = comboBox.xPopupHost
-    if host.popupPresentation() != comboBox.xPopupPresentation or
+    if host.effectivePopupPresentation() != comboBox.resolvedPopupPresentation() or
         host.popupSize() != size:
       comboBox.xPopupHost = nil
       discard host.dismissPopup()

@@ -21,7 +21,6 @@ import ../foundation/selectors as nimkitSelectors
 import ../themes
 import ../foundation/types
 import ../app/windows
-import ./nativemenus as nativeMenus
 
 type
   MenuItemModel* = object
@@ -1183,24 +1182,6 @@ proc popupSize(button: PopupMenuButton): Size =
     max(button.bounds.size.width, 180.0'f32),
     max(button.itemHeight() * button.visibleItemCount().float32 + 2.0'f32, 1.0'f32),
   )
-
-proc popupFrameInSuperview(button: PopupMenuButton): Rect =
-  let size = button.popupSize()
-  if button.xUsesCascadeFrame:
-    return rect(
-      button.xCascadeFrame.origin.x, button.xCascadeFrame.origin.y, size.width,
-      size.height,
-    )
-  let
-    below = rect(button.frame.origin.x, button.frame.maxY, size.width, size.height)
-    parent = button.superview()
-  if not parent.isNil and below.maxY > parent.bounds().maxY:
-    let above = rect(
-      button.frame.origin.x, button.frame.minY - size.height, size.width, size.height
-    )
-    if above.minY >= parent.bounds().minY:
-      return above
-  below
 
 proc rootPopup(button: PopupMenuButton): PopupMenuButton =
   result = button
