@@ -10,11 +10,15 @@ import ./nimkit/containers/cascadingviews
 import ./nimkit/containers/collectionviews
 import ./nimkit/containers/compacttabviews
 import ./nimkit/controls/buttons
+import ./nimkit/controls/chips
 import ./nimkit/controls/cells
 import ./nimkit/controls/comboboxes
 import ./nimkit/controls/colorpicker
 import ./nimkit/controls/controls
 import ./nimkit/controls/dialogbuttonboxes
+import ./nimkit/controls/datepickers
+import ./nimkit/controls/daterangepickers
+import ./nimkit/controls/tokenfields
 import ./nimkit/controls/fontpickers
 import ./nimkit/containers/documenttabs
 import ./nimkit/containers/dockviews
@@ -43,6 +47,7 @@ import ./nimkit/responder/keybindings
 import ./nimkit/responder/keybindingjson
 import ./nimkit/containers/listbasics
 import ./nimkit/controls/matrices
+import ./nimkit/controls/segmentedcontrols
 import ./nimkit/controls/menus
 import ./nimkit/app/modelcontrollers
 import ./nimkit/text/markdownviews
@@ -100,11 +105,15 @@ export cascadingviews
 export collectionviews
 export compacttabviews
 export buttons
+export chips
 export cells
 export comboboxes
 export colorpicker
 export controls
 export dialogbuttonboxes
+export datepickers
+export daterangepickers
+export tokenfields
 export fontpickers
 export documenttabs
 export dockviews
@@ -133,6 +142,7 @@ export keybindings
 export keybindingjson
 export listbasics
 export matrices
+export segmentedcontrols
 export menus
 export modelcontrollers
 export markdownviews

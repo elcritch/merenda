@@ -78,7 +78,7 @@ type
     xTitle: string
     xMenu: Menu
     xPopupList: PopupListView
-    xPopupWindow: Window
+    xPopupHost: PopupHost
     xPopupOpen: bool
     xRestoreResponder: Responder
     xActionStartResponder: Responder
@@ -120,6 +120,10 @@ proc itemModels*(menu: Menu): seq[MenuItemModel]
 proc `itemModels=`*(menu: Menu, models: openArray[MenuItemModel])
 proc popupList(button: PopupMenuButton): PopupListView
 proc closeChildPopup(button: PopupMenuButton)
+proc dismissPopupFromHost(
+  button: PopupMenuButton, host: PopupHost, reason: DismissReason
+)
+
 proc openSubmenuPopup(button: PopupMenuButton, index: int)
 proc openRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool
 proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool
@@ -1180,24 +1184,6 @@ proc popupSize(button: PopupMenuButton): Size =
     max(button.itemHeight() * button.visibleItemCount().float32 + 2.0'f32, 1.0'f32),
   )
 
-proc popupFrameInSuperview(button: PopupMenuButton): Rect =
-  let size = button.popupSize()
-  if button.xUsesCascadeFrame:
-    return rect(
-      button.xCascadeFrame.origin.x, button.xCascadeFrame.origin.y, size.width,
-      size.height,
-    )
-  let
-    below = rect(button.frame.origin.x, button.frame.maxY, size.width, size.height)
-    parent = button.superview()
-  if not parent.isNil and below.maxY > parent.bounds().maxY:
-    let above = rect(
-      button.frame.origin.x, button.frame.minY - size.height, size.width, size.height
-    )
-    if above.minY >= parent.bounds().minY:
-      return above
-  below
-
 proc rootPopup(button: PopupMenuButton): PopupMenuButton =
   result = button
   while not result.isNil and not result.xParentPopup.isNil:
@@ -1299,8 +1285,6 @@ proc setPopupNeedsDisplay(button: PopupMenuButton) =
   button.needsDisplay = true
   if not button.xPopupList.isNil:
     button.xPopupList.needsDisplay = true
-  if not button.xPopupWindow.isNil and not button.xPopupWindow.contentView().isNil:
-    button.xPopupWindow.contentView().needsDisplay = true
 
 proc setHighlightedIndex(button: PopupMenuButton, index: int, openSubmenu = false) =
   var boundedIndex = if index < 0 or index >= button.menuItemCount(): -1 else: index
@@ -1465,15 +1449,22 @@ proc resolvedPopupPresentation(button: PopupMenuButton): PopupPresentation =
 proc shouldUseWindowPopup(button: PopupMenuButton): bool =
   button.resolvedPopupPresentation() == ppWindow
 
-proc closePopupWindow(button: PopupMenuButton) =
-  let popupWindow = button.xPopupWindow
-  button.xPopupWindow = nil
-  if not popupWindow.isNil and not popupWindow.isClosed:
-    popupWindow.close()
+proc popupPlaceAbove(button: PopupMenuButton): bool =
+  let owner = button.ownerWindow()
+  if owner.isNil or owner.contentView().isNil:
+    return false
+  let
+    anchorFrame = button.rectToWindow(button.bounds())
+    size = button.popupSize()
+    contentBounds = owner.contentView().bounds()
+  anchorFrame.maxY + size.height > contentBounds.maxY and
+    anchorFrame.minY - size.height >= contentBounds.minY
 
-proc closeInlinePopup(button: PopupMenuButton) =
-  if not button.xPopupList.isNil and not button.xPopupList.superview().isNil:
-    button.xPopupList.removeFromSuperview()
+proc closePopupWindow(button: PopupMenuButton) =
+  let host = button.xPopupHost
+  button.xPopupHost = nil
+  if not host.isNil:
+    discard host.dismissPopup()
 
 proc closeChildPopup(button: PopupMenuButton) =
   let child = button.xChildPopup
@@ -1482,82 +1473,46 @@ proc closeChildPopup(button: PopupMenuButton) =
   if not child.isNil and child.popupOpen():
     child.closePopup()
 
-proc dismissPopupFromSession(button: PopupMenuButton, reason: DismissReason) =
-  case reason
-  of tdrProgrammatic, tdrOutsideClick, tdrEscape, tdrFocusChange, tdrOwnerClosed,
-      tdrNativeDone:
-    if button.popupOpen():
-      button.closePopup()
-
-proc beginPopupSession(button: PopupMenuButton) =
-  if not button.xParentPopup.isNil:
+proc dismissPopupFromHost(
+    button: PopupMenuButton, host: PopupHost, reason: DismissReason
+) =
+  discard reason
+  if button.xPopupHost != host:
     return
+  button.xPopupHost = nil
+  if button.popupOpen():
+    button.closePopupImpl()
+
+proc openPopupHost(button: PopupMenuButton): bool =
   let owner = button.ownerWindow()
   if owner.isNil:
-    return
-  let transient = if button.xPopupWindow.isNil: nil else: button.xPopupWindow
-  let restore =
-    if button.xUsesCustomRestoreResponder:
-      button.xRestoreResponder
-    else:
-      Responder(button)
-  owner.beginTransientSession(
-    owner = Responder(button.popupList()),
-    transientWindow = transient,
-    restoreResponder = restore,
-    onDismiss = proc(reason: DismissReason) =
-      button.dismissPopupFromSession(reason),
+    return false
+  let host = newPopupHost(
+    owner,
+    button,
+    button.popupList(),
+    button.popupSize(),
+    title = button.title & " Menu",
+    presentation = button.xPopupPresentation,
+    restoreResponder =
+      if button.xUsesCustomRestoreResponder:
+        button.xRestoreResponder
+      else:
+        Responder(button),
+    inlineParent = button.cascadeSuperview(),
+    inlineFrame = if button.xUsesCascadeFrame: button.xCascadeFrame else: AutoRect,
+    placeAbove = button.popupPlaceAbove(),
+    onDismiss = proc(host: PopupHost, reason: DismissReason) =
+      button.dismissPopupFromHost(host, reason),
     restoreCurrentResponderIfNil = not button.xUsesCustomRestoreResponder,
+    managesTransientSession = button.xParentPopup.isNil,
+    focusContent = button.shouldUseWindowPopup(),
   )
-
-proc endPopupSession(button: PopupMenuButton) =
-  if not button.xParentPopup.isNil:
-    return
-  let owner = button.ownerWindow()
-  if not owner.isNil and owner.hasActiveTransientSession():
-    discard owner.endTransientSession()
-
-proc openInlinePopup(button: PopupMenuButton) =
-  let parent = button.cascadeSuperview()
-  if parent.isNil:
-    return
-  let popup = button.popupList()
-  popup.frame = button.popupFrameInSuperview()
-  if popup.superview() != parent:
-    parent.addSubview(popup)
-  popup.needsDisplay = true
-
-proc openPopupWindow(button: PopupMenuButton) =
-  if not button.shouldUseWindowPopup():
-    return
-  let owner = button.ownerWindow()
-  if owner.isNil or not owner.nativeReady:
-    return
-  let
-    anchorFrame = button.rectToWindow(button.bounds)
-    size = button.popupSize()
-    contentBounds = owner.contentView().bounds()
-    placeAbove =
-      anchorFrame.maxY + size.height > contentBounds.maxY and
-      anchorFrame.minY - size.height >= contentBounds.minY
-    popupWindow =
-      owner.newPopupWindow(anchorFrame, size, button.title & " Menu", placeAbove)
-    popupView = button.popupList()
-  popupView.frame = rect(0.0, 0.0, size.width, size.height)
-  popupWindow.setContentView(popupView)
-  popupWindow.setPopupDoneHandler(
-    proc() =
-      if owner.hasActiveTransientSession():
-        discard owner.dismissTransientSession(tdrNativeDone)
-  )
-  button.xPopupWindow = popupWindow
-  popupWindow.makeKeyAndOrderFront()
-  popupWindow.ensureNativeWindow()
-  if popupWindow.nativeReady:
-    discard popupWindow.makeFirstResponder(popupView)
-  else:
-    button.xPopupWindow = nil
-    popupWindow.close()
+  button.xPopupHost = host
+  if host.presentPopup():
+    return true
+  button.xPopupHost = nil
+  false
 
 proc owningMenuBar(button: PopupMenuButton): MenuBar =
   let parent = button.superview()
@@ -1593,13 +1548,14 @@ proc openPopupImpl(button: PopupMenuButton) =
     button.xViewport.scrollToVisible(
       button.xHighlightedIndex, button.menuItemCount(), button.visibleItemCount()
     )
-  if button.shouldUseWindowPopup():
-    button.openPopupWindow()
-  else:
-    button.openInlinePopup()
-  button.beginPopupSession()
-  button.noteMenuBarPopupOpened()
   button.setWidgetState(ssOpen, true)
+  if not button.openPopupHost():
+    button.xPopupOpen = false
+    button.xHighlightedIndex = -1
+    button.setWidgetState(ssOpen, false)
+    button.xMenu.close()
+    return
+  button.noteMenuBarPopupOpened()
   button.needsDisplay = true
 
 proc closePopupImpl(button: PopupMenuButton) =
@@ -1608,9 +1564,7 @@ proc closePopupImpl(button: PopupMenuButton) =
   button.closeChildPopup()
   button.xPopupOpen = false
   button.xHighlightedIndex = -1
-  button.endPopupSession()
   button.closePopupWindow()
-  button.closeInlinePopup()
   if not button.xMenu.isNil:
     button.xMenu.close()
   if not button.xParentPopup.isNil and button.xParentPopup.xChildPopup == button:

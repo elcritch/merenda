@@ -567,7 +567,8 @@ proc newFontPickerController(): FontPickerController =
 
 const TextStyleRoles = [
   srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srMonoTextView,
-  srComboBox, srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem,
+  srComboBox, srDatePicker, srComboBoxItem, srTab, srTableHeaderCell, srRowItem,
+  srCascadingRowItem,
 ]
 
 func title(theme: SettingsTheme): string =

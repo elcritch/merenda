@@ -213,6 +213,35 @@ type
     restoreResponder: Responder
     onDismiss: TransientDismissHandler
 
+  ## Presents a view as either an inline popover or a transient native window.
+  ##
+  ## PopupHost owns the presentation lifecycle while the caller owns the
+  ## content view and decides what the content does when it is dismissed.
+  PopupHost* = ref object of Responder
+    xOwner: Window
+    xAnchor: View
+    xContent: View
+    xInlineParent: View
+    xInlineFrame: Rect
+    xUsesInlineFrame: bool
+    xPopupWindow: Window
+    xPopupSize: Size
+    xTitle: string
+    xPopupPresentation: PopupPresentation
+    xRestoreResponder: Responder
+    xRequestedTransientOwner: Responder
+    xTransientOwner: Responder
+    xManagesTransientSession: bool
+    xFocusContent: bool
+    xOnDismiss: PopupHostDismissHandler
+    xPlaceAbove: bool
+    xRestoreCurrentResponderIfNil: bool
+    xPopupOpen: bool
+
+  PopoverPresenter* = PopupHost
+
+  PopupHostDismissHandler* = proc(host: PopupHost, reason: DismissReason) {.closure.}
+
 when defined(linux) or defined(bsd):
   type
     LayerSurfaceLayer* = nimkitBackend.LayerSurfaceLayer
@@ -341,6 +370,7 @@ proc zoom*(window: Window)
 proc endSheet*(window: Window, sheet: Window = nil)
 proc closeAuxiliaryWindows(window: Window, notifyDone = true)
 proc hasActiveTransientSession*(window: Window): bool
+proc transientOwner*(window: Window): Responder
 proc beginTransientSession*(
   window: Window,
   owner: Responder,
@@ -364,8 +394,38 @@ proc newPopupWindow*(
   owner: Window, anchorFrame: Rect, popupSize: Size, title = "Popup", placeAbove = false
 ): Window
 
+proc newPopupHost*(
+  owner: Window,
+  anchor: View,
+  content: View,
+  popupSize: Size,
+  title = "Popup",
+  presentation = ppAutomatic,
+  restoreResponder: Responder = nil,
+  transientOwner: Responder = nil,
+  inlineParent: View = nil,
+  inlineFrame: Rect = AutoRect,
+  placeAbove = false,
+  onDismiss: PopupHostDismissHandler = nil,
+  restoreCurrentResponderIfNil = true,
+  managesTransientSession = true,
+  focusContent = true,
+): PopupHost
+
+proc popupOpen*(host: PopupHost): bool
+proc `popupOpen=`*(host: PopupHost, value: bool)
+proc popupWindow*(host: PopupHost): Window
+proc popupSize*(host: PopupHost): Size
+proc popupPresentation*(host: PopupHost): PopupPresentation
+proc `popupPresentation=`*(host: PopupHost, value: PopupPresentation)
+proc effectivePopupPresentation*(host: PopupHost): PopupPresentation
+proc presentPopup*(host: PopupHost): bool {.discardable.}
+proc dismissPopup*(host: PopupHost, reason = tdrProgrammatic): bool {.discardable.}
+proc repositionPopup*(host: PopupHost)
+
 proc needsDisplayUpdate*(window: Window): bool
 proc isVisible*(window: Window): bool
+proc ensureNativeWindow*(window: Window)
 proc requestNativeDisplayUpdate*(window: Window)
 proc requestNativeDisplayUpdateIfNeeded*(window: Window): bool {.discardable.}
 proc animationScheduler*(window: Window): AnimationScheduler
@@ -1919,6 +1979,10 @@ proc closeAuxiliaryWindows(window: Window, notifyDone = true) =
 proc hasActiveTransientSession*(window: Window): bool =
   window.xTransientSession.active
 
+proc transientOwner*(window: Window): Responder =
+  if window.xTransientSession.active:
+    result = window.xTransientSession.ownerResponder
+
 proc transientDismissReason*(window: Window): DismissReason =
   window.xLastTransientDismissReason
 
@@ -2072,6 +2136,237 @@ proc newPopupWindow*(
   result.setInheritedAppearance(owner.effectiveAppearance())
   if not owner.xThreadRenderer.isNil:
     result.useThreadRenderer(owner.xThreadRenderer)
+
+proc popupHostInlineParent(host: PopupHost): View =
+  if not host.xInlineParent.isNil:
+    return host.xInlineParent
+  if not host.xOwner.isNil:
+    return host.xOwner.contentView()
+
+proc popupHostInlineFrame(host: PopupHost): Rect =
+  let
+    parent = host.popupHostInlineParent()
+    anchor = host.xAnchor
+    size = host.xPopupSize
+  if parent.isNil or anchor.isNil:
+    return rect(0.0, 0.0, size.width, size.height)
+  if host.xUsesInlineFrame:
+    return rect(
+      host.xInlineFrame.origin.x, host.xInlineFrame.origin.y, size.width, size.height
+    )
+  let
+    anchorFrame = anchor.rectToView(anchor.bounds(), parent)
+    bounds = parent.bounds()
+    maximumX = max(bounds.maxX - size.width, bounds.origin.x)
+    x = min(max(anchorFrame.origin.x, bounds.origin.x), maximumX)
+    belowY = anchorFrame.maxY
+    aboveY = anchorFrame.origin.y - size.height
+    y =
+      if host.xPlaceAbove:
+        aboveY
+      elif belowY + size.height <= bounds.maxY or aboveY < bounds.origin.y:
+        belowY
+      else:
+        aboveY
+  rect(x, y, size.width, size.height)
+
+proc popupHostSessionOwner(host: PopupHost): Responder =
+  if not host.xTransientOwner.isNil:
+    return host.xTransientOwner
+  if host.xPopupWindow.isNil:
+    return Responder(host.xContent)
+  Responder(host.xAnchor)
+
+proc popupHostOwnsTransientSession(host: PopupHost): bool =
+  if host.xOwner.isNil or not host.xOwner.hasActiveTransientSession():
+    return false
+  host.xOwner.transientOwner() == host.popupHostSessionOwner() and
+    host.xOwner.transientWindow() == host.xPopupWindow
+
+proc finishPopupHost(host: PopupHost, reason: DismissReason, notify = true) =
+  let
+    popupWindow = host.xPopupWindow
+    content = host.xContent
+    inlineParent = host.popupHostInlineParent()
+  host.xPopupOpen = false
+  host.xPopupWindow = nil
+  host.xTransientOwner = nil
+  if not popupWindow.isNil:
+    popupWindow.setPopupDoneHandler(nil)
+  if popupWindow.isNil and not content.isNil:
+    let parent = content.superview()
+    if not parent.isNil and parent == inlineParent:
+      content.removeFromSuperview()
+  if not popupWindow.isNil and not popupWindow.isClosed:
+    popupWindow.close()
+  if notify and not host.xOnDismiss.isNil:
+    host.xOnDismiss(host, reason)
+
+proc popupHostDidDismiss(host: PopupHost, reason: DismissReason) =
+  if host.xPopupOpen:
+    host.finishPopupHost(reason)
+
+proc newPopupHost*(
+    owner: Window,
+    anchor: View,
+    content: View,
+    popupSize: Size,
+    title = "Popup",
+    presentation = ppAutomatic,
+    restoreResponder: Responder = nil,
+    transientOwner: Responder = nil,
+    inlineParent: View = nil,
+    inlineFrame: Rect = AutoRect,
+    placeAbove = false,
+    onDismiss: PopupHostDismissHandler = nil,
+    restoreCurrentResponderIfNil = true,
+    managesTransientSession = true,
+    focusContent = true,
+): PopupHost =
+  result = PopupHost(
+    xOwner: owner,
+    xAnchor: anchor,
+    xContent: content,
+    xInlineParent: inlineParent,
+    xInlineFrame: inlineFrame,
+    xUsesInlineFrame: not inlineFrame.hasAutoMetric,
+    xPopupSize: popupSize,
+    xTitle: title,
+    xPopupPresentation: presentation,
+    xRestoreResponder: restoreResponder,
+    xRequestedTransientOwner: transientOwner,
+    xTransientOwner: transientOwner,
+    xManagesTransientSession: managesTransientSession,
+    xFocusContent: focusContent,
+    xOnDismiss: onDismiss,
+    xPlaceAbove: placeAbove,
+    xRestoreCurrentResponderIfNil: restoreCurrentResponderIfNil,
+  )
+  initResponder(result)
+
+proc popupOpen*(host: PopupHost): bool =
+  not host.isNil and host.xPopupOpen
+
+proc `popupOpen=`*(host: PopupHost, value: bool) =
+  if value:
+    discard host.presentPopup()
+  else:
+    discard host.dismissPopup()
+
+proc popupWindow*(host: PopupHost): Window =
+  if not host.isNil:
+    return host.xPopupWindow
+
+proc popupSize*(host: PopupHost): Size =
+  if not host.isNil:
+    return host.xPopupSize
+
+proc popupPresentation*(host: PopupHost): PopupPresentation =
+  host.xPopupPresentation
+
+proc `popupPresentation=`*(host: PopupHost, value: PopupPresentation) =
+  if host.xPopupPresentation == value:
+    return
+  let wasOpen = host.popupOpen()
+  if wasOpen:
+    discard host.dismissPopup()
+  host.xPopupPresentation = value
+  if wasOpen:
+    discard host.presentPopup()
+
+proc effectivePopupPresentation*(host: PopupHost): PopupPresentation =
+  if host.xOwner.isNil:
+    return ppInline
+  host.xOwner.resolvedPopupPresentation(host.xPopupPresentation)
+
+proc presentPopup*(host: PopupHost): bool =
+  if host.isNil or host.xPopupOpen:
+    return not host.isNil
+  let owner = host.xOwner
+  if owner.isNil or host.xAnchor.isNil or host.xContent.isNil:
+    return false
+
+  # Ending a session closes the owner's auxiliary windows. Do this before
+  # creating the replacement, and leave the current popup intact on a veto.
+  if host.xManagesTransientSession and owner.hasActiveTransientSession():
+    if not owner.dismissTransientSession(tdrProgrammatic):
+      return false
+
+  let size =
+    initSize(max(host.xPopupSize.width, 1.0'f32), max(host.xPopupSize.height, 1.0'f32))
+  host.xContent.frame = rect(0.0, 0.0, size.width, size.height)
+  var popupWindow: Window
+  if host.effectivePopupPresentation() == ppWindow and owner.nativeReady:
+    popupWindow = owner.newPopupWindow(
+      host.xAnchor.rectToWindow(host.xAnchor.bounds()),
+      size,
+      host.xTitle,
+      host.xPlaceAbove,
+    )
+    popupWindow.setContentView(host.xContent)
+    popupWindow.setInitialFirstResponder(host.xContent)
+    popupWindow.makeKeyAndOrderFront()
+    popupWindow.ensureNativeWindow()
+    if not popupWindow.nativeReady:
+      popupWindow.setPopupDoneHandler(nil)
+      popupWindow.close()
+      popupWindow = nil
+  if popupWindow.isNil:
+    let parent = host.popupHostInlineParent()
+    if parent.isNil:
+      return false
+    host.xContent.frame = host.popupHostInlineFrame()
+    parent.addSubview(host.xContent)
+    host.xContent.needsDisplay = true
+
+  host.xPopupSize = size
+  host.xPopupWindow = popupWindow
+  host.xPopupOpen = true
+  if not popupWindow.isNil:
+    popupWindow.setPopupDoneHandler(
+      proc() =
+        if owner.hasActiveTransientSession() and owner.transientWindow() == popupWindow:
+          discard owner.dismissTransientSession(tdrNativeDone)
+        else:
+          host.popupHostDidDismiss(tdrNativeDone)
+    )
+  host.xTransientOwner =
+    if not host.xRequestedTransientOwner.isNil:
+      host.xRequestedTransientOwner
+    else:
+      Responder(host.xContent)
+  if host.xManagesTransientSession:
+    owner.beginTransientSession(
+      owner = host.xTransientOwner,
+      transientWindow = popupWindow,
+      restoreResponder = host.xRestoreResponder,
+      onDismiss = proc(reason: DismissReason) =
+        host.popupHostDidDismiss(reason),
+      restoreCurrentResponderIfNil = host.xRestoreCurrentResponderIfNil,
+    )
+    if host.xFocusContent:
+      if popupWindow.isNil:
+        discard owner.makeFirstResponder(host.xContent)
+      else:
+        discard popupWindow.makeFirstResponder(host.xContent)
+  true
+
+proc dismissPopup*(host: PopupHost, reason = tdrProgrammatic): bool =
+  if host.isNil or not host.xPopupOpen and host.xPopupWindow.isNil:
+    return false
+  if host.popupHostOwnsTransientSession() and not host.xOwner.endTransientSession(
+    reason
+  ):
+    return false
+  host.finishPopupHost(reason)
+  true
+
+proc repositionPopup*(host: PopupHost) =
+  if host.isNil or not host.xPopupOpen or not host.xPopupWindow.isNil:
+    return
+  let parent = host.popupHostInlineParent()
+  if not parent.isNil and host.xContent.superview() == parent:
+    host.xContent.frame = host.popupHostInlineFrame()
 
 proc mouseDownAt*(
   window: Window,

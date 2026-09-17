@@ -45,7 +45,7 @@ type
   ColorWell* = ref object of Control
     xColor: Color
     xChoices: seq[ColorWellChoice]
-    xPopupWindow: Window
+    xPopupHost: PopupHost
     xPicker: ColorPicker
     xPopupOpen: bool
     xPopupPresentation: PopupPresentation
@@ -182,7 +182,8 @@ proc rgbaSlider*(picker: ColorPicker, index: int): Slider =
     result = picker.xValuesView.xSliders[index]
 
 proc popupWindow*(well: ColorWell): Window =
-  well.xPopupWindow
+  if not well.xPopupHost.isNil:
+    return well.xPopupHost.popupWindow()
 
 proc popupPresentation*(well: ColorWell): PopupPresentation =
   well.xPopupPresentation
@@ -829,45 +830,20 @@ proc ownerWindow(well: ColorWell): Window =
   if owner of Window:
     result = Window(owner)
 
-proc inlinePopupFrame(well: ColorWell, parent: View, size: Size): Rect =
-  let
-    anchor = well.rectToView(well.bounds(), parent)
-    bounds = parent.bounds()
-    maximumX = max(bounds.maxX - size.width, bounds.origin.x)
-    x = min(max(anchor.origin.x, bounds.origin.x), maximumX)
-    belowY = anchor.maxY
-    aboveY = anchor.origin.y - size.height
-    y =
-      if belowY + size.height <= bounds.maxY or aboveY < bounds.origin.y:
-        belowY
-      else:
-        aboveY
-  rect(x, y, size.width, size.height)
-
-proc openInlinePopup(well: ColorWell, picker: ColorPicker, size: Size) =
-  let owner = well.ownerWindow()
-  if owner.isNil or owner.contentView().isNil:
+proc clearPopupState(well: ColorWell, host: PopupHost = nil) =
+  if not host.isNil and well.xPopupHost != host:
     return
-  let parent = owner.contentView()
-  picker.frame = well.inlinePopupFrame(parent, size)
-  parent.addSubview(picker)
-  picker.needsDisplay = true
-
-proc clearPopupState(well: ColorWell) =
   if not well.xPicker.isNil and not well.xPicker.superview().isNil:
     well.xPicker.removeFromSuperview()
   well.xPopupOpen = false
-  well.xPopupWindow = nil
+  well.xPopupHost = nil
   well.xPicker = nil
   well.setWidgetState(ssOpen, false)
   well.needsDisplay = true
 
-proc dismissPopup(well: ColorWell, reason: DismissReason) =
+proc dismissPopup(well: ColorWell, host: PopupHost, reason: DismissReason) =
   discard reason
-  let popupWindow = well.xPopupWindow
-  well.clearPopupState()
-  if not popupWindow.isNil and not popupWindow.isClosed():
-    popupWindow.close()
+  well.clearPopupState(host)
 
 proc openPopup*(well: ColorWell) =
   if well.xPopupOpen or not well.isEnabled():
@@ -878,62 +854,35 @@ proc openPopup*(well: ColorWell) =
   let
     size = initSize(ColorPickerWidth, ColorPickerHeight)
     picker = newColorPicker(well, rect(0.0, 0.0, size.width, size.height))
-  var popupWindow: Window
-  if well.effectivePopupPresentation() == ppWindow:
-    popupWindow =
-      owner.newPopupWindow(well.rectToWindow(well.bounds()), size, "Color Picker")
-    popupWindow.setContentView(picker)
-    popupWindow.setInitialFirstResponder(picker)
-    popupWindow.makeKeyAndOrderFront()
-    popupWindow.ensureNativeWindow()
-    if not popupWindow.nativeReady():
-      popupWindow.close()
-      popupWindow = nil
-  if popupWindow.isNil:
-    well.openInlinePopup(picker, size)
-  well.xPopupOpen = true
-  well.xPopupWindow = popupWindow
   well.xPicker = picker
+  let host = newPopupHost(
+    owner,
+    well,
+    picker,
+    size,
+    title = "Color Picker",
+    presentation = well.xPopupPresentation,
+    restoreResponder = Responder(well),
+    onDismiss = proc(host: PopupHost, reason: DismissReason) =
+      well.dismissPopup(host, reason),
+  )
+  well.xPopupHost = host
+  if not host.presentPopup():
+    well.clearPopupState(host)
+    return
+
+  well.xPopupOpen = true
   well.setWidgetState(ssOpen, true)
   well.needsDisplay = true
-  if not popupWindow.isNil:
-    popupWindow.setPopupDoneHandler(
-      proc() =
-        if well.xPopupWindow != popupWindow:
-          return
-        if owner.hasActiveTransientSession() and owner.transientWindow() == popupWindow:
-          discard owner.dismissTransientSession(tdrNativeDone)
-        else:
-          well.clearPopupState()
-    )
-  owner.beginTransientSession(
-    owner =
-      if popupWindow.isNil:
-        Responder(picker)
-      else:
-        Responder(well),
-    transientWindow = popupWindow,
-    restoreResponder = Responder(well),
-    onDismiss = proc(reason: DismissReason) =
-      well.dismissPopup(reason),
-  )
-  if popupWindow.isNil:
-    discard owner.makeFirstResponder(picker)
-  else:
-    discard popupWindow.makeFirstResponder(picker)
 
 proc closePopup*(well: ColorWell) =
-  let
-    owner = well.ownerWindow()
-    popupWindow = well.xPopupWindow
-  if not well.xPopupOpen and popupWindow.isNil:
+  let host = well.xPopupHost
+  if not well.xPopupOpen and host.isNil:
     return
-  well.clearPopupState()
-  if not owner.isNil and owner.hasActiveTransientSession() and
-      owner.transientWindow() == popupWindow:
-    discard owner.endTransientSession()
-  if not popupWindow.isNil and not popupWindow.isClosed():
-    popupWindow.close()
+  if not host.isNil:
+    discard host.dismissPopup()
+  else:
+    well.clearPopupState()
 
 proc activateColorAtIndex*(well: ColorWell, index: int): bool {.discardable.} =
   if index notin 0 ..< well.xChoices.len:

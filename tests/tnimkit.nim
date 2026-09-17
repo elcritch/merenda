@@ -4,7 +4,12 @@ import merenda/nimkit
 import nimkit/application_icon
 import nimkit/assetcache
 import nimkit/backrefs_arc
+import nimkit/comboboxes
 import nimkit/controls
+import nimkit/datepickers
+import nimkit/daterangepickers
+import nimkit/tokenfields
+import nimkit/popuphosts
 import nimkit/constraints
 import nimkit/controlfontfaces
 import nimkit/diagnostics
@@ -16,6 +21,7 @@ import nimkit/fontpickers
 import nimkit/images
 import nimkit/markdownviews
 import nimkit/menus
+import nimkit/segmentedcontrols
 import nimkit/renderfragments
 import nimkit/resources
 import nimkit/settings

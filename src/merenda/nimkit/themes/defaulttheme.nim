@@ -388,7 +388,8 @@ proc clearBackgroundPinstripes*(theme: var ThemeBuilder) =
 
 const TextStyleRoles = [
   srBox, srButton, srCheckBox, srRadioButton, srTextField, srTextView, srComboBox,
-  srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem, srTooltip,
+  srDatePicker, srComboBoxItem, srTab, srTableHeaderCell, srRowItem, srCascadingRowItem,
+  srTooltip,
 ]
 
 proc buildAquaTheme(): ThemeBuilder =
@@ -599,6 +600,42 @@ proc buildAquaTheme(): ThemeBuilder =
   result[srBox, StyleFocusRingWidth] = 0.0
   result[srBox, StyleFocusRingInset] = 0.0
   result[srBox, StyleBoxShadows] = newSeq[BoxShadow]()
+
+  result.addRoleRule(
+    srDatePicker,
+    {},
+    styleToken("comboBox.item.fill"),
+    styleToken("comboBox.border.color"),
+    styleToken("comboBox.item.text.color"),
+  )
+  result.addRoleRule(
+    srDatePicker,
+    {ssHovered},
+    styleToken("comboBox.item.fill.highlighted"),
+    styleToken("comboBox.border.color.open"),
+    styleToken("comboBox.item.text.color"),
+  )
+  result.addRoleRule(
+    srDatePicker,
+    {ssSelected},
+    styleToken("accent"),
+    styleToken("accent.pressed"),
+    styleToken("comboBox.item.text.color.selected"),
+  )
+  result.addRoleRule(
+    srDatePicker,
+    {ssDisabled},
+    styleToken("disabled.fill"),
+    styleToken("comboBox.border.color"),
+    styleToken("disabled.text.color"),
+  )
+  result[srDatePicker, StyleBorderWidth] = 1.0
+  result[srDatePicker, StyleCornerRadius] = 10.0
+  result[srDatePicker, StyleTextInsets] = insets(0.0)
+  result[srDatePicker, StyleMinimumSize] = initSize(0.0, 0.0)
+  result[srDatePicker, StyleFocusRingWidth] = 0.0
+  result[srDatePicker, StyleFocusRingInset] = 0.0
+  result[srDatePicker, StyleBoxShadows] = styleToken("button.shadows")
 
   result.addRoleRule(
     srButton,

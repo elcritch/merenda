@@ -24,6 +24,64 @@ protocol NativeWindowDelegateSpyHooks of WindowDelegateProtocol:
     delegate.events.add("didClose")
 
 suite "NimKit native window lifecycle":
+  test "replacing a native popup keeps the replacement open and reusable":
+    let
+      window = newWindow("Native popup replacement", frame = rect(80, 80, 320, 240))
+      root = newView(frame = rect(0, 0, 320, 240))
+      anchor = newView(frame = rect(10, 10, 140, 24))
+      firstContent = newView(frame = rect(0, 0, 140, 40))
+      secondContent = newView(frame = rect(0, 0, 140, 40))
+    defer:
+      window.close()
+    root.addSubview(anchor)
+    window.setContentView(root)
+    anchor.acceptsFirstResponder = true
+    firstContent.acceptsFirstResponder = true
+    secondContent.acceptsFirstResponder = true
+    window.makeKeyAndOrderFront()
+    window.ensureNativeWindow()
+    require window.nativeReady
+    let
+      first = newPopupHost(
+        window,
+        anchor,
+        firstContent,
+        initSize(140, 40),
+        presentation = ppWindow,
+        restoreResponder = anchor,
+      )
+      second = newPopupHost(
+        window,
+        anchor,
+        secondContent,
+        initSize(140, 40),
+        presentation = ppWindow,
+        restoreResponder = anchor,
+      )
+    require first.presentPopup()
+    let firstWindow = first.popupWindow()
+    require not firstWindow.isNil
+    require firstWindow.nativeReady
+
+    require second.presentPopup()
+    check not first.popupOpen
+    check firstWindow.isClosed
+    require not second.popupWindow().isNil
+    check second.popupOpen
+    check second.popupWindow().nativeReady
+    check not second.popupWindow().isClosed
+    check window.transientWindow() == second.popupWindow()
+    check second.popupWindow().firstResponder == secondContent
+
+    check second.dismissPopup()
+    check window.firstResponder == anchor
+    check not window.hasActiveTransientSession()
+    require second.presentPopup()
+    require not second.popupWindow().isNil
+    check second.popupWindow().nativeReady
+    check not second.popupWindow().isClosed
+    check second.dismissPopup()
+
   test "native close delivers the regular window lifecycle callbacks":
     block nativeDelegateClose:
       let
