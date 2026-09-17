@@ -28,6 +28,9 @@ when defined(linux) and defined(gcc):
 
 switch("define", "features.markdown.regex") # temporary hack until we get atlas 0.15.1
 
+# Give bounded TextMate regex probes room for generated native declarations.
+switch("define", "MatterTimedRegexStepLimit=100000")
+
 when defined(features.merenda.kosmo):
   switch("define", "moe.embedded")
   switch("define", "features.moe.matter")

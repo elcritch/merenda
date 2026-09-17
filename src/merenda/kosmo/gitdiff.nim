@@ -1380,7 +1380,7 @@ proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
     width = max(viewport.width - 48, 1)
     offset = panel.scrollView.contentOffset()
     visible = nimkit.rect(nimkit.initPoint(offset.x, offset.y), viewport)
-    buffer = max(viewport.height, 120.0'f32)
+    buffer = max(viewport.height, 120.0'f32) * 2
     materializedRect = nimkit.rect(
       0,
       max(visible.minY - buffer, 0.0'f32),

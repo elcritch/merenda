@@ -55,3 +55,18 @@ commands to ten seconds and output to 128 MiB, and terminates, reaps, and closes
 children on cancellation or failure. Filesystem-monitor hooks are disabled for
 these commands. Moe's own asynchronous children use the cleanup implementation
 from its `fix/git-refresh-lifecycle` branch.
+
+## Diff rendering and syntax highlighting
+
+The Git diff panel prepares native sections up to two viewport heights above
+and below the visible area, releasing sections farther away. The existing
+materialized-section and view-pool limits still bound the working set.
+
+The Moe editor worker and NimKit's shared Matter highlighter parse lines up to
+1,024 bytes by default, including generated Nim declarations with long `importc`
+names. Project builds allow 100,000 regex matching steps per timed probe while
+the editor retains its 100 ms soft per-line deadline. Oversized lines and failed
+parses remain plain without preventing later independent lines from highlighting.
+
+Builds can override these budgets with `-d:KosmoMatterMaximumLineBytes=N`,
+`-d:NimkitMatterMaximumLineBytes=N`, and `-d:MatterTimedRegexStepLimit=N`.

@@ -7,6 +7,7 @@ when not defined(useNativeDynlib):
   import pkg/pixie
 
 import merenda/nimkit
+import ../fixtures/nimbindings
 
 type MarkdownParseCompletionSpy = ref object of Agent
   completions: int
@@ -865,6 +866,20 @@ fencedToken value
     check matterSyntaxHighlighter(
       "let value = \"" & "x".repeat(NimkitMatterMaximumLineBytes), "nim"
     ).len == 0
+
+  when not defined(NimkitMatterMaximumLineBytes) or
+      NimkitMatterMaximumLineBytes >= NimBindingMaximumLineBytes:
+    test "Matter highlights generated Nim native declarations through importc strings":
+      let highlighted = matterSyntaxHighlighterBounded(NimBindingDeclarations, "nim")
+      check highlighted.completed
+      var offset: int
+      for declaration in NimBindingDeclarations.splitLines():
+        if declaration.len > 0:
+          check highlighted.spans.syntaxTokenAt(offset) == stcKeyword
+          check highlighted.spans.syntaxTokenAt(offset + 5) == stcIdentifier
+          check highlighted.spans.syntaxTokenAt(offset + declaration.find('"') + 1) ==
+            stcString
+        offset += declaration.len + 1
 
   test "Markdown uses Matter for fenced languages outside SynEdit's classifier":
     let

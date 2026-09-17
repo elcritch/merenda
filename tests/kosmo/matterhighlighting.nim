@@ -10,6 +10,7 @@ import merenda/kosmo/matterworkers
 import merenda/nimkit
 from merenda/nimkit/foundation/mainthreadwork import
   drainMainThreadWork, hasPendingMainThreadWork
+import ../fixtures/nimbindings
 
 const RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
 
@@ -109,6 +110,43 @@ template checkDistinctHighlight(fileName, source, firstNeedle, secondNeedle: str
       buffer.cell(second.column, second.row).style.fg
 
 suite "Kosmo Matter highlighting":
+  when not defined(KosmoMatterMaximumLineBytes) or
+      KosmoMatterMaximumLineBytes >= NimBindingMaximumLineBytes:
+    test "Matter worker parses generated Nim native declarations":
+      let editor = newKosmoEditor()
+      defer:
+        editor.close()
+      let
+        highlighting = editor.matterHighlightingController()
+        requestId = highlighting.requestMatterHighlight(
+          1, 1, NimBindingDeclarations, moeHighlight.SourceLanguage.langNim,
+          "bindings.nim",
+        )
+        deadline = getMonoTime() + initDuration(seconds = 60)
+      while not highlighting.matterHighlightingReady(1, requestId) and
+          getMonoTime() < deadline:
+        discard getCurrentSigilThread().pollAll(NonBlocking)
+        sleep(1)
+      require highlighting.matterHighlightingReady(1, requestId)
+      let completed = highlighting.takeMatterHighlightResults()
+      require completed.len == 1
+      check completed[0].requestId == requestId
+      check completed[0].errorMessage == ""
+
+      let declarations = NimBindingDeclarations.split('\n')
+      for row, declaration in declarations:
+        if declaration.len == 0:
+          continue
+        checkpoint "Declaration: " & declaration
+        var keywordHighlighted: bool
+        for segment in completed[0].segments:
+          if segment.firstRow == row and segment.firstColumn == 0 and
+              segment.lastColumn >= 3 and
+              segment.color == moeHighlight.EditorColorPairIndex.keyword:
+            keywordHighlighted = true
+            break
+        check keywordHighlighted
+
   test "bounded Matter highlighting honors cancellation":
     var checks = 0
     let highlighted = matterSyntaxHighlighterBounded(
