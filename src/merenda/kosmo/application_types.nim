@@ -131,6 +131,7 @@ type
     groups: seq[KosmoEditorGroup]
     hosts: seq[KosmoDockHost]
     xActiveGroup: KosmoEditorGroup
+    projectedEditorView: WeakRef[KosmoEditorView]
     nextGroupIdentifier: int
     nextDocumentIdentifier: int
     shortcutBindings: nimkit.KeyBindingTable

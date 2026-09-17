@@ -55,3 +55,33 @@ commands to ten seconds and output to 128 MiB, and terminates, reaps, and closes
 children on cancellation or failure. Filesystem-monitor hooks are disabled for
 these commands. Moe's own asynchronous children use the cleanup implementation
 from its `fix/git-refresh-lifecycle` branch.
+
+## Split editor state
+
+Split editor panes share Moe's text buffers while keeping their own cursor,
+viewport, visual-selection shape and endpoints, and pointer-selection gesture.
+Kosmo saves the pane currently projected into Moe before switching to another
+pane, including when both panes show the same buffer. Selection endpoints are
+clamped when restored after shared text changes.
+Native editing commands restore their target pane before reading or changing
+Moe state, and buffer activation clears the outgoing selection before a pane
+restores its own snapshot.
+
+## Tab layout, diff rendering, and syntax highlighting
+
+Document tab headers update their scroll range during pane layout. Resizing
+keeps the selected tab visible and clears stale offsets when all tabs fit.
+Layout passes at the same width preserve deliberate horizontal scrolling.
+
+The Git diff panel prepares native sections up to two viewport heights above
+and below the visible area, releasing sections farther away. The existing
+materialized-section and view-pool limits still bound the working set.
+
+The Moe editor worker and NimKit's shared Matter highlighter parse lines up to
+1,024 bytes by default, including generated Nim declarations with long `importc`
+names. Project builds allow 100,000 regex matching steps per timed probe while
+the editor retains its 100 ms soft per-line deadline. Oversized lines and failed
+parses remain plain without preventing later independent lines from highlighting.
+
+Builds can override these budgets with `-d:KosmoMatterMaximumLineBytes=N`,
+`-d:NimkitMatterMaximumLineBytes=N`, and `-d:MatterTimedRegexStepLimit=N`.

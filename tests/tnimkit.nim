@@ -13,6 +13,7 @@ import nimkit/popuphosts
 import nimkit/constraints
 import nimkit/controlfontfaces
 import nimkit/diagnostics
+import nimkit/documenttabs
 import nimkit/filesearch
 import nimkit/filebrowsers
 import nimkit/gitstatus

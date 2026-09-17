@@ -19,9 +19,9 @@ import ../nimkit/foundation/backgroundworkers
 const KosmoMatterTimeLimitMs* {.intdefine.} = 100
   ## Soft per-line deadline used by the asynchronous adapter. A zero value
   ## disables the deadline for deterministic equivalence tests.
-const KosmoMatterMaximumLineBytes* {.intdefine.} = 256
-  ## Maximum line size passed to Matter's recursive TextMate regex engine.
-  ## Builds with smaller worker stacks can lower this value.
+const KosmoMatterMaximumLineBytes* {.intdefine.} = 1024
+  ## Maximum line size passed to Matter's TextMate tokenizer.
+  ## Longer lines stay plain to bound parsing work on generated or minified input.
 
 static:
   doAssert KosmoMatterTimeLimitMs >= 0, "KosmoMatterTimeLimitMs must be non-negative"

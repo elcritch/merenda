@@ -8,7 +8,6 @@ import std/[algorithm, options, os, strutils, tables, unicode]
 
 import matter/grammarpackages as matterPackages
 import moepkg/celina_backend as celina
-from pkg/figdraw import figDataDir
 import pkg/results as pkgResults
 
 import
@@ -38,6 +37,7 @@ import sigils/threads
 
 import ../nimkit/text/mattergrammarassets
 import ./matterworkers
+import ./moethemeassets
 
 when not defined(moe.embedded):
   when hasAsyncSupport:
@@ -144,7 +144,7 @@ type
     closeTabRequested*: bool
 
   KosmoEditorViewState* = object
-    ## Cursor and viewport state for one buffer projection in an embedding frontend.
+    ## Cursor, selection, and viewport for one buffer projection in a frontend.
     bufferId: Option[KosmoBufferId]
     cursorLine: int
     cursorColumn: int
@@ -154,6 +154,10 @@ type
     viewportLeftColumn: int
     viewportDetachedFromCursor: bool
     scrollAnimation: moeTypes.ScrollAnimation
+    visualSelection: moeTypes.VisualSelection
+    pointerSelection: moeTypes.PointerSelectionGesture
+    selectionMode: moeModes.EditorMode
+    previousMode: moeModes.EditorMode
 
   KosmoTabCloseResult* = object
     closed*: bool
@@ -276,8 +280,8 @@ proc moeThemesDirectory*(): string =
   getHomeDir() / ".config" / "moe" / "themes"
 
 proc bundledMoeThemesDirectory*(): string =
-  ## Return Kosmo's bundled Moe theme directory beneath the active data path.
-  figDataDir() / "moe" / "themes"
+  ## Install embedded Moe themes and return their directory in Kosmo's asset cache.
+  installBundledMoeThemes()
 
 proc normalizedThemePath(path: string): string =
   normalizedPath(absolutePath(path.expandTilde()))
@@ -675,6 +679,22 @@ proc activeBufferId(editor: KosmoEditor): Option[BufferId] =
     if buffer.active:
       return some(buffer.id)
 
+proc resetBufferSelection(editor: KosmoEditor) =
+  editor.editor.state.visualSelection = default(moeTypes.VisualSelection)
+  editor.editor.state.pointerSelection = default(moeTypes.PointerSelectionGesture)
+  if editor.editor.state.mode in {
+    moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
+    moeModes.EditorMode.VisualLine,
+  }:
+    editor.editor.setMode(moeModes.EditorMode.Normal)
+    editor.editor.enforceModePolicy()
+
+proc activateTextBuffer(editor: KosmoEditor, id: BufferId): bool =
+  let previousBuffer = editor.activeBufferId()
+  result = editor.editor.activateBuffer(id)
+  if result and editor.activeBufferId() != previousBuffer:
+    editor.resetBufferSelection()
+
 proc normalizeTemporaryBuffer(editor: KosmoEditor) =
   if editor.temporaryBufferId.isNone:
     return
@@ -700,7 +720,7 @@ proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
   editor.normalizeTemporaryBuffer()
   let existing = editor.bufferIdForPath(path)
   if existing.isSome:
-    result.loaded = editor.editor.activateBuffer(existing.get)
+    result.loaded = editor.activateTextBuffer(existing.get)
     if editor.temporaryBufferId == existing:
       editor.temporaryBufferId = none(BufferId)
     return
@@ -710,6 +730,7 @@ proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
   let opened = editor.activeBufferId()
   editor.discardTemporaryBuffer(opened)
   editor.temporaryBufferId = none(BufferId)
+  editor.resetBufferSelection()
 
 proc previewFile*(editor: KosmoEditor, path: string): FileOpenResult =
   ## Temporarily open `path`, replacing the previous unmodified preview.
@@ -719,7 +740,7 @@ proc previewFile*(editor: KosmoEditor, path: string): FileOpenResult =
   editor.normalizeTemporaryBuffer()
   let existing = editor.bufferIdForPath(path)
   if existing.isSome:
-    result.loaded = editor.editor.activateBuffer(existing.get)
+    result.loaded = editor.activateTextBuffer(existing.get)
     return
   let previous = editor.temporaryBufferId
   result = editor.openFileBuffer(path)
@@ -732,6 +753,7 @@ proc previewFile*(editor: KosmoEditor, path: string): FileOpenResult =
   if previous.isSome and previous != opened:
     discard editor.editor.closeBuffer(previous.get)
   editor.temporaryBufferId = opened
+  editor.resetBufferSelection()
 
 func `$`*(id: KosmoBufferId): string {.inline.} =
   $int(id)
@@ -798,7 +820,7 @@ proc selectTab*(editor: KosmoEditor, id: KosmoBufferId): bool {.discardable.} =
   ## Activate the tab identified by `id`.
   if editor.isNil or editor.editor.isNil:
     return
-  editor.editor.activateBuffer(id.toMoeBufferId)
+  editor.activateTextBuffer(id.toMoeBufferId)
 
 proc closeTab*(
     editor: KosmoEditor, id: KosmoBufferId, discardChanges = false
@@ -810,9 +832,12 @@ proc closeTab*(
     let buffer = editor.editor.bufferById(id.toMoeBufferId)
     if buffer.isSome:
       buffer.get.markSaved()
+  let previousBuffer = editor.activeBufferId()
   let outcome = editor.editor.closeBuffer(id.toMoeBufferId)
   if pkgResults.isErr(outcome):
     return KosmoTabCloseResult(message: outcome.error)
+  if editor.activeBufferId() != previousBuffer:
+    editor.resetBufferSelection()
   if editor.temporaryBufferId.isSome and editor.temporaryBufferId.get == id.toMoeBufferId:
     editor.temporaryBufferId = none(BufferId)
   KosmoTabCloseResult(closed: true)
@@ -1022,6 +1047,7 @@ proc newEmptyBuffer*(editor: KosmoEditor): Option[KosmoBufferId] =
   if outcome.isErr:
     editor.editor.state.statusMessage = outcome.error
     return
+  editor.resetBufferSelection()
   some(editor.editor.activeBuffer.id.toKosmoBufferId)
 
 proc newStdinBuffer*(
@@ -1139,7 +1165,7 @@ proc dismissCompletionPopup*(editor: KosmoEditor) =
     editor.editor.handlerManager.insertHandler.completionManager.cancelCompletion()
 
 proc captureViewState*(editor: KosmoEditor): KosmoEditorViewState =
-  ## Capture the active buffer's logical cursor and viewport for a frontend pane.
+  ## Capture the active buffer's cursor, selection, and viewport for a pane.
   if editor.isNil or editor.editor.isNil:
     return
   let window = editor.editor.activeWindow()
@@ -1153,14 +1179,63 @@ proc captureViewState*(editor: KosmoEditor): KosmoEditorViewState =
     viewportLeftColumn: window.viewport.leftColumn,
     viewportDetachedFromCursor: window.viewport.detachedFromCursor,
     scrollAnimation: editor.editor.state.windowDisplay.scrollAnimation,
+    visualSelection:
+      if window.mode in {
+        moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
+        moeModes.EditorMode.VisualLine,
+      }:
+        editor.editor.state.visualSelection
+      else:
+        default(moeTypes.VisualSelection),
+    pointerSelection: editor.editor.state.pointerSelection,
+    selectionMode: window.mode,
+    previousMode: window.previousMode,
   )
 
 func bufferId*(state: KosmoEditorViewState): Option[KosmoBufferId] =
   ## Return the buffer projected by a captured frontend view state.
   state.bufferId
 
+proc clampSelectionPosition(
+    buffer: TextBuffer, position: moeTypes.BufferPosition, blockSelection: bool
+): moeTypes.BufferPosition =
+  result.line = position.line.clamp(0, max(buffer.len - 1, 0))
+  result.column = max(position.column, 0)
+  if not blockSelection:
+    let lineLength =
+      if buffer.len > 0:
+        buffer.getLine(result.line).runeLen
+      else:
+        0
+    result.column = min(result.column, lineLength)
+
 proc applyViewState(editor: KosmoEditor, state: KosmoEditorViewState) =
   let window = editor.editor.activeWindow()
+  editor.editor.state.visualSelection = state.visualSelection
+  editor.editor.state.pointerSelection = state.pointerSelection
+  if state.visualSelection.active:
+    editor.editor.setMode(state.selectionMode)
+    window.previousMode = state.previousMode
+    let blockSelection = state.visualSelection.kind == moeTypes.vskBlock
+    editor.editor.state.visualSelection.start =
+      window.buffer.clampSelectionPosition(state.visualSelection.start, blockSelection)
+    editor.editor.state.visualSelection.current = window.buffer.clampSelectionPosition(
+      state.visualSelection.current, blockSelection
+    )
+  elif window.mode in {
+    moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
+    moeModes.EditorMode.VisualLine,
+  }:
+    editor.editor.setMode(moeModes.EditorMode.Normal)
+    editor.editor.enforceModePolicy()
+  if state.pointerSelection.active:
+    let blockSelection = state.pointerSelection.granularity == moeTypes.psgBlock
+    editor.editor.state.pointerSelection.anchorFirst = window.buffer.clampSelectionPosition(
+      state.pointerSelection.anchorFirst, blockSelection
+    )
+    editor.editor.state.pointerSelection.anchorLast = window.buffer.clampSelectionPosition(
+      state.pointerSelection.anchorLast, blockSelection
+    )
   let cursor = editor.editor.motionController.cursorManager.clampPosition(
     moeTypes.CursorPosition(x: state.cursorColumn, y: state.cursorLine), window.buffer
   )

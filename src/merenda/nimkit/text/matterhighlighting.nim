@@ -12,9 +12,9 @@ import ./mattergrammarassets
 import ./syntaxhighlighting
 import ./texttypes
 
-const NimkitMatterMaximumLineBytes* {.intdefine.} = 256
-  ## Maximum line size passed to Matter's recursive TextMate regex engine.
-  ## Builds with smaller worker stacks can lower this value.
+const NimkitMatterMaximumLineBytes* {.intdefine.} = 1024
+  ## Maximum line size passed to Matter's TextMate tokenizer.
+  ## Longer lines stay plain to bound parsing work on generated or minified input.
 
 static:
   doAssert NimkitMatterMaximumLineBytes > 0,
@@ -204,8 +204,7 @@ proc matterSyntaxHighlighterBounded*(
       dec contentStop
 
     if contentStop - lineStart > NimkitMatterMaximumLineBytes:
-      # Reni's continuation matcher can consume several native frames per byte.
-      # A plain long line is preferable to losing the background worker.
+      # Keep very large lines plain to bound the tokenizer's work.
       ruleStack = nil
       lineStart = lineStop + 1
       continue
