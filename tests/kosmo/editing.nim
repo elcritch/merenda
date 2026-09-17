@@ -6,6 +6,7 @@ import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
+import merenda/kosmo/moethemeassets
 
 proc renderedText(buffer: RenderBuffer): string =
   for row in 0 ..< buffer.height:
@@ -152,8 +153,22 @@ suite "Kosmo":
     check editor.activeMoeThemeIdentifier() == KosmoMoeDefaultThemeIdentifier
     editor.close()
 
-  test "bundled Neovim-inspired themes load through Moe":
+  test "bundled Neovim-inspired themes load outside the source checkout":
+    let
+      root = createTempDir("merenda-kosmo-bundled-themes-", "")
+      previousDirectory = getCurrentDir()
+      previousDataDirectory = figDataDir()
+    setCurrentDir(root)
+    setFigDataDir(root / "data")
+    defer:
+      setFigDataDir(previousDataDirectory)
+      setCurrentDir(previousDirectory)
+      removeDir(root)
+
+    check not dirExists(root / "data")
     let editor = newKosmoEditor(text = "themed")
+    defer:
+      editor.close()
     let themes = editor.availableMoeThemes()
     for expectedName in [
       "Catppuccin Latte", "Catppuccin Mocha", "Kanagawa Wave", "One Dark",
@@ -180,7 +195,36 @@ suite "Kosmo":
       check outcome.applied
       check editor.activeMoeThemeIdentifier() == themes[matchingIndex].identifier
     check editor.applyMoeTheme(themes[0]).applied
-    editor.close()
+
+  test "restores missing and altered bundled theme cache files":
+    let root = createTempDir("merenda-kosmo-theme-cache-", "")
+    defer:
+      removeDir(root)
+    let
+      directory = installBundledMoeThemes(root)
+      mochaPath = directory / "catppuccin-mocha.toml"
+      oneDarkPath = directory / "one-dark.toml"
+      originalMocha = readFile(mochaPath)
+      originalOneDark = readFile(oneDarkPath)
+    writeFile(mochaPath, "invalid cached theme")
+    removeFile(oneDarkPath)
+
+    check installBundledMoeThemes(root) == directory
+    check readFile(mochaPath) == originalMocha
+    check readFile(oneDarkPath) == originalOneDark
+    check discoverMoeThemes(directory).len == 6
+
+  test "an unwritable theme cache still allows the default theme":
+    let
+      root = createTempDir("merenda-kosmo-theme-cache-fallback-", "")
+      cachePath = root / "not-a-directory"
+    defer:
+      removeDir(root)
+    writeFile(cachePath, "occupied")
+
+    let themes = discoverMoeThemes(installBundledMoeThemes(cachePath))
+    require themes.len == 1
+    check themes[0].identifier == KosmoMoeDefaultThemeIdentifier
 
   test "text input and physical keys use Moe's frontend API":
     let editor = newKosmoEditor()

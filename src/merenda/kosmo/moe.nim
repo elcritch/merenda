@@ -8,7 +8,6 @@ import std/[algorithm, options, os, strutils, tables, unicode]
 
 import matter/grammarpackages as matterPackages
 import moepkg/celina_backend as celina
-from pkg/figdraw import figDataDir
 import pkg/results as pkgResults
 
 import
@@ -38,6 +37,7 @@ import sigils/threads
 
 import ../nimkit/text/mattergrammarassets
 import ./matterworkers
+import ./moethemeassets
 
 when not defined(moe.embedded):
   when hasAsyncSupport:
@@ -276,8 +276,8 @@ proc moeThemesDirectory*(): string =
   getHomeDir() / ".config" / "moe" / "themes"
 
 proc bundledMoeThemesDirectory*(): string =
-  ## Return Kosmo's bundled Moe theme directory beneath the active data path.
-  figDataDir() / "moe" / "themes"
+  ## Install embedded Moe themes and return their directory in Kosmo's asset cache.
+  installBundledMoeThemes()
 
 proc normalizedThemePath(path: string): string =
   normalizedPath(absolutePath(path.expandTilde()))

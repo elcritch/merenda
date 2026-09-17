@@ -396,6 +396,12 @@ choices on the next launch; **Reset** restores the last saved values. You can
 also enable **Remember changes for future launches** to save each committed
 change automatically.
 
+Kosmo Settings → Moe Themes includes Catppuccin Latte, Catppuccin Mocha,
+Kanagawa Wave, One Dark, and Tokyo Night Moon. These themes are embedded in
+the executable and work from any launch directory. Add your own TOML themes
+in `~/.config/moe/themes`; a user theme with the same name overrides a bundled
+theme.
+
 You can also send a Git diff straight to Kosmo:
 
 ```sh

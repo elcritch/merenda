@@ -14,6 +14,11 @@ Each executable archive also includes the notices for Kosmo's bundled IBM Plex
 Sans and JetBrains Mono Nerd Font Mono resources. On macOS the notices live in
 the app's `Contents/Resources` directory.
 
+The five bundled Moe themes are embedded in the executable and installed into
+Kosmo's platform asset cache for Moe's file-based theme loader. Release archives
+do not need a separate `data/moe/themes` directory, and theme discovery does not
+depend on the working directory used to launch Kosmo.
+
 Release executables retain native debug information and link the `libbacktrace`
 stack-trace override. Nim's instrumented stack tracing remains disabled because
 `libbacktrace` uses the compiler's native debug information without its runtime
