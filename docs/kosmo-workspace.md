@@ -56,6 +56,17 @@ children on cancellation or failure. Filesystem-monitor hooks are disabled for
 these commands. Moe's own asynchronous children use the cleanup implementation
 from its `fix/git-refresh-lifecycle` branch.
 
+## Split editor state
+
+Split editor panes share Moe's text buffers while keeping their own cursor,
+viewport, visual-selection shape and endpoints, and pointer-selection gesture.
+Kosmo saves the pane currently projected into Moe before switching to another
+pane, including when both panes show the same buffer. Selection endpoints are
+clamped when restored after shared text changes.
+Native editing commands restore their target pane before reading or changing
+Moe state, and buffer activation clears the outgoing selection before a pane
+restores its own snapshot.
+
 ## Tab layout, diff rendering, and syntax highlighting
 
 Document tab headers update their scroll range during pane layout. Resizing

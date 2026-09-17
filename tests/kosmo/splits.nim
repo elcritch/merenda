@@ -427,6 +427,109 @@ suite "Kosmo":
     check frontend.editorView.editor.tabs().len == 1
     check frontend.editorView.editor.tabs()[0].title == "second.txt"
 
+  test "duplicated buffer panes keep independent selections during repeated refreshes":
+    let pasteboard = generalPasteboard()
+    var savedClipboard: seq[tuple[kind: string, item: PasteboardItem]]
+    for kind in pasteboard.types():
+      savedClipboard.add (kind, pasteboard.itemForType(kind))
+    defer:
+      pasteboard.clearContents()
+      for (kind, item) in savedClipboard:
+        discard pasteboard.setItem(kind, item)
+    let frontend = newKosmoApplication(newApplication("Kosmo Split Selection Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let editor = frontend.editorView.editor
+    require editor.handleKey("i")
+    require editor.handleTextInput("alpha beta gamma\nsecond line text\nthird line")
+    require editor.handleKey("Esc")
+    frontend.editorView.refresh()
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    require frontend.window.dispatchKeyDown(KeyEvent(key: keyV, keyCode: keyV.ord))
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    check groups[0].pane.documentTabs.selectedDocumentTabIdentifier ==
+      groups[1].pane.documentTabs.selectedDocumentTabIdentifier
+
+    groups[0].editorView.refresh()
+    require editor.revealLocation(0, 1)
+    require editor.handleKey("v")
+    require editor.handleKey("l")
+    groups[0].editorView.refresh()
+    let
+      firstSelection = editor.currentSelection()
+      firstCursor = editor.bufferCursor()
+      firstText = editor.selectedText()
+    require firstSelection.isSome
+
+    groups[1].editorView.refresh()
+    check editor.currentSelection().isNone
+    check editor.bufferCursor() != firstCursor
+    require editor.revealLocation(1, 2)
+    require editor.handleKey("v")
+    require editor.handleKey("l")
+    groups[1].editorView.refresh()
+    let
+      secondSelection = editor.currentSelection()
+      secondCursor = editor.bufferCursor()
+      secondText = editor.selectedText()
+    require secondSelection.isSome
+
+    for _ in 0 .. 4:
+      groups[0].editorView.refresh()
+      check editor.currentSelection() == firstSelection
+      check editor.bufferCursor() == firstCursor
+      check editor.selectedText() == firstText
+      groups[1].editorView.refresh()
+      check editor.currentSelection() == secondSelection
+      check editor.bufferCursor() == secondCursor
+      check editor.selectedText() == secondText
+
+    require groups[0].editorView.tryToPerform(actionSelector(KosmoCopyAction))
+    check generalPasteboard().plainText() == firstText
+
+    groups[0].editorView.refresh()
+    require editor.handleKey("Esc")
+    require editor.revealLocation(0, 1)
+    groups[0].editorView.refresh()
+    let
+      startCursor = editor.cursor()
+      metrics = groups[0].editorView.monoTextMetrics()
+      startPoint = groups[0].editorView.pointToWindow(
+        initPoint(
+          (startCursor.column.float32 + 0.5'f32) * metrics.cellWidth,
+          (startCursor.row.float32 + 0.5'f32) * metrics.lineHeight,
+        )
+      )
+    require editor.revealLocation(1, 4)
+    groups[0].editorView.refresh()
+    let
+      finishCursor = editor.cursor()
+      finishPoint = groups[0].editorView.pointToWindow(
+        initPoint(
+          (finishCursor.column.float32 + 0.5'f32) * metrics.cellWidth,
+          (finishCursor.row.float32 + 0.5'f32) * metrics.lineHeight,
+        )
+      )
+    require frontend.window.mouseDownAt(startPoint)
+    groups[1].editorView.refresh()
+    require frontend.window.mouseDraggedAt(finishPoint)
+    groups[1].editorView.refresh()
+    require frontend.window.mouseUpAt(finishPoint)
+    groups[0].editorView.refresh()
+    let draggedSelection = editor.currentSelection()
+    require draggedSelection.isSome
+    check draggedSelection.get.anchor == KosmoBufferCursor(line: 0, column: 1)
+    check draggedSelection.get.focus == KosmoBufferCursor(line: 1, column: 4)
+    groups[1].editorView.refresh()
+    check editor.currentSelection() == secondSelection
+
   test "split editor groups keep independent cursor scroll and motion state":
     let
       root = createTempDir("merenda-kosmo-split-state-", "")

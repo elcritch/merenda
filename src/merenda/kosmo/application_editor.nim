@@ -354,6 +354,10 @@ proc viewStateIndex(view: KosmoEditorView, id: KosmoBufferId): int =
 proc saveViewState(view: KosmoEditorView) =
   if not view.usesBufferSubset or view.selectedBufferId.isNone:
     return
+  if not view.tabsDelegate.dockController.isNil:
+    let owner = view.tabsDelegate.dockController[].projectedEditorView
+    if owner.isNil or owner[] != view:
+      return
   let state = view.editor.captureViewState()
   if state.bufferId != view.selectedBufferId:
     return
@@ -393,6 +397,11 @@ proc bufferIsVisibleOutside(
 proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
   if not view.usesBufferSubset:
     return
+  let controller = view.tabsDelegate.dockController
+  if not controller.isNil:
+    let owner = controller[].projectedEditorView
+    if not owner.isNil and owner[] != view:
+      owner[].saveViewState()
   view.saveViewState()
   var selectedIsVisible = false
   if view.selectedBufferId.isSome:
@@ -408,10 +417,13 @@ proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
         none(KosmoBufferId)
   if view.selectedBufferId.isSome:
     let index = view.viewStateIndex(view.selectedBufferId.get)
-    if index >= 0:
-      discard view.editor.restoreViewState(view.viewStates[index])
-    else:
-      discard view.editor.selectTab(view.selectedBufferId.get)
+    let restored =
+      if index >= 0:
+        view.editor.restoreViewState(view.viewStates[index])
+      else:
+        view.editor.selectTab(view.selectedBufferId.get)
+    if restored and not controller.isNil:
+      controller[].projectedEditorView = view.unsafeWeakRef()
 
 proc adoptActiveBuffer(view: KosmoEditorView) =
   if not view.usesBufferSubset:
@@ -860,7 +872,7 @@ proc toggleMarkdownMode(view: KosmoEditorView, id: KosmoBufferId): bool =
 
 proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load a file selected by the frontend and refresh the cell grid.
-  view.saveViewState()
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   let outcome = view.editor.openFile(path)
   if outcome.loaded:
     view.adoptActiveBuffer()
@@ -871,7 +883,7 @@ proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
 
 proc previewFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load `path` as the replaceable file-tree preview and refresh the grid.
-  view.saveViewState()
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   let outcome = view.editor.previewFile(path)
   if outcome.loaded:
     view.adoptActiveBuffer()
@@ -890,7 +902,7 @@ proc openSearchResult(
     match: nimkit.FileSearchMatch,
     disposition: FileTreeOpenDisposition,
 ): bool =
-  view.saveViewState()
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   let outcome =
     case disposition
     of fodTemporary:
@@ -1243,16 +1255,19 @@ protocol KosmoEditorInput of nimkit.TextInputProtocol:
       view.refresh()
 
 proc editorCopy(view: KosmoEditorView) =
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   if view.editor.currentSelection().isSome:
     discard nimkit.generalPasteboard().setPlainText(view.editor.copySelection())
     view.refresh()
 
 proc editorCut(view: KosmoEditorView) =
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   if view.editor.currentSelection().isSome:
     discard nimkit.generalPasteboard().setPlainText(view.editor.cutSelection())
     view.refresh()
 
 proc editorPaste(view: KosmoEditorView) =
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   discard view.editor.handlePaste(nimkit.generalPasteboard().plainText())
   view.refresh()
 
@@ -1344,16 +1359,19 @@ protocol KosmoEditorEditingCommands of nimkit.TextEditingCommandProtocol:
 
   method selectAll(view: KosmoEditorView, args: nimkit.ActionArgs) =
     discard args
+    view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
     discard view.editor.selectAll()
     view.refresh()
 
   method undo(view: KosmoEditorView, args: nimkit.ActionArgs) =
     discard args
+    view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
     discard view.editor.undo()
     view.refresh()
 
   method redo(view: KosmoEditorView, args: nimkit.ActionArgs) =
     discard args
+    view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
     discard view.editor.redo()
     view.refresh()
 
@@ -1361,6 +1379,7 @@ func isEditingAction(action: string): bool =
   action.kosmoAction().kind == KosmoActionKind.Editing
 
 proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   if view.handlePendingPaneKey(event):
     return true
   if event.key == nimkit.keyF and event.modifiers == editorSearchShortcutModifiers():
@@ -1398,6 +1417,8 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(view: KosmoEditorView, args: nimkit.TryToPerformArgs): bool =
     if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
       return false
+    if ($args.selector.name).isEditingAction():
+      view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
     let controller = view.tabsDelegate.dockController[]
     let panelNumber = args.selector.focusPanelNumber()
     if panelNumber > 0:
@@ -2210,6 +2231,10 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
         return true
       else:
         discard
+    if ($args.selector.name).isEditingAction():
+      group.editorView.selectVisibleBuffer(
+        group.editorView.visibleTabs(group.editorView.editor.tabs())
+      )
     let panelNumber = args.selector.focusPanelNumber()
     if panelNumber > 0:
       discard controller.focusPanel(panelNumber)

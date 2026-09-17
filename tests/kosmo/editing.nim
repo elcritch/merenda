@@ -489,6 +489,97 @@ suite "Kosmo":
     check extendedSelection.get.focus == KosmoBufferCursor(line: 0, column: 7)
     check editor.selectedText() == "pha be"
 
+  test "pane snapshots restore visual selections without carrying them to other buffers":
+    for visualKey in ["v", "V", "C-v"]:
+      checkpoint "Visual key: " & visualKey
+      let editor = newKosmoEditor()
+      defer:
+        editor.close()
+      require editor.handleKey("i")
+      require editor.handleTextInput("alpha beta\nfirst line")
+      require editor.handleKey("Esc")
+      let firstPlain = editor.captureViewState()
+      require editor.newEmptyBuffer().isSome
+      require editor.handleKey("i")
+      require editor.handleTextInput("gamma delta\nsecond line")
+      require editor.handleKey("Esc")
+      let secondPlain = editor.captureViewState()
+
+      require editor.restoreViewState(firstPlain)
+      require editor.revealLocation(0, 0)
+      require editor.handleKey(visualKey)
+      require editor.handleKey("l")
+      let
+        firstSelection = editor.currentSelection()
+        firstSelectedText = editor.selectedText()
+        firstSelected = editor.captureViewState()
+      require firstSelection.isSome
+
+      require editor.restoreViewState(secondPlain)
+      check editor.currentSelection().isNone
+      check editor.selectedText() == ""
+      check editor.mode() == KosmoEditorMode.Normal
+      require editor.revealLocation(0, 2)
+      require editor.handleKey("v")
+      require editor.handleKey("j")
+      let
+        secondSelection = editor.currentSelection()
+        secondSelectedText = editor.selectedText()
+        secondSelected = editor.captureViewState()
+      require secondSelection.isSome
+
+      for _ in 0 .. 2:
+        require editor.restoreViewState(firstSelected)
+        check editor.currentSelection() == firstSelection
+        check editor.selectedText() == firstSelectedText
+        require editor.restoreViewState(secondSelected)
+        check editor.currentSelection() == secondSelection
+        check editor.selectedText() == secondSelectedText
+
+  test "opening and previewing buffers clears the outgoing visual selection":
+    let
+      root = createTempDir("kosmo-selection-buffers-", "")
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+      editor = newKosmoEditor()
+    writeFile(firstPath, "alpha")
+    writeFile(secondPath, "beta")
+    defer:
+      editor.close()
+      removeFile(firstPath)
+      removeFile(secondPath)
+      removeDir(root)
+    require editor.openFile(firstPath).loaded
+    require editor.selectAll()
+    require editor.previewFile(secondPath).loaded
+    check editor.currentSelection().isNone
+    check editor.mode() == KosmoEditorMode.Normal
+    require editor.selectAll()
+    require editor.openFile(firstPath).loaded
+    check editor.currentSelection().isNone
+    check editor.mode() == KosmoEditorMode.Normal
+    require editor.selectAll()
+    require editor.newEmptyBuffer().isSome
+    check editor.currentSelection().isNone
+
+  test "restored pane selections clamp after the shared buffer shrinks":
+    let editor = newKosmoEditor()
+    defer:
+      editor.close()
+    require editor.handleKey("i")
+    require editor.handleTextInput("first line\nsecond line\nthird line")
+    require editor.handleKey("Esc")
+    require editor.selectAll()
+    let selected = editor.captureViewState()
+    check editor.cutSelection() == "first line\nsecond line\nthird line"
+    require editor.restoreViewState(selected)
+    let selection = editor.currentSelection()
+    require selection.isSome
+    check selection.get.anchor == KosmoBufferCursor(line: 0, column: 0)
+    check selection.get.focus == KosmoBufferCursor(line: 0, column: 0)
+    check editor.selectedText() == ""
+    check editor.handleKey("y")
+
   test "opens a file through the Moe facade":
     let path = getTempDir() / "merenda-kosmo-open-file.txt"
     writeFile(path, "opened from disk")
