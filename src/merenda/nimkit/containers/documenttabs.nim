@@ -107,6 +107,7 @@ type
     xShowsHorizontalScroller: bool
     xDefaultTabStyle: DocumentTabStyle
     xScrollOffset: float32
+    xScrollViewportWidth: float32
     xLineScroll: float32
     xDataSource: DynamicAgent
     xDelegate: DynamicAgent
@@ -550,6 +551,9 @@ proc scrollOffset*(tabs: DocumentTabs): float32 =
 
 proc `scrollOffset=`*(tabs: DocumentTabs, offset: float32) =
   let clamped = tabs.clampScrollOffset(offset)
+  # Keep the geometry used for this request, including scrolling before the
+  # first layout, so a later layout only reveals the selection after resizing.
+  tabs.xScrollViewportWidth = tabs.tabViewportRect().size.width
   if abs(tabs.xScrollOffset - clamped) <= 0.01'f32:
     return
   tabs.xScrollOffset = clamped
@@ -2016,6 +2020,16 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
       false
 
 protocol DocumentTabsLayout of ViewLayoutProtocol:
+  method layoutSubviews(tabs: DocumentTabs) =
+    let
+      viewportWidth = tabs.tabViewportRect().size.width
+      viewportChanged = abs(viewportWidth - tabs.xScrollViewportWidth) > 0.01'f32
+    tabs.scrollOffset = tabs.xScrollOffset
+    if viewportChanged:
+      # Reveal the selection after resizing without undoing manual scrolling
+      # during other layout passes.
+      tabs.scrollTabToVisible(tabs.xSelectedIndex)
+
   method layoutIntrinsicContentSize(tabs: DocumentTabs): IntrinsicSize =
     let viewStyle = tabs.documentTabViewStyle()
     initIntrinsicSize(

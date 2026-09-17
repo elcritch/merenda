@@ -56,7 +56,11 @@ children on cancellation or failure. Filesystem-monitor hooks are disabled for
 these commands. Moe's own asynchronous children use the cleanup implementation
 from its `fix/git-refresh-lifecycle` branch.
 
-## Diff rendering and syntax highlighting
+## Tab layout, diff rendering, and syntax highlighting
+
+Document tab headers update their scroll range during pane layout. Resizing
+keeps the selected tab visible and clears stale offsets when all tabs fit.
+Layout passes at the same width preserve deliberate horizontal scrolling.
 
 The Git diff panel prepares native sections up to two viewport heights above
 and below the visible area, releasing sections farther away. The existing

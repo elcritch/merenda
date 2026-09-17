@@ -6,6 +6,7 @@ import figdraw
 
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
+from merenda/nimkit/view/viewgeometry import setFrameFromLayout
 
 type
   DocumentTabDelegateSpy = ref object of Responder
@@ -842,6 +843,69 @@ suite "nimkit document tabs":
     let previousPoint = tabs.pointToWindow(tabs.scrollButtonRect(dtsbPrevious).center())
     check window.clickAt(previousPoint)
     check tabs.scrollOffset() < maxOffset
+
+  test "document tabs reset stale scrolling when a pane widens":
+    let
+      tabs = newDocumentTabs(frame = rect(0, 0, 100, 34))
+      signals = newSignalSpy()
+      title = "native_abi.nim"
+    discard tabs.addDocumentTabItem(newDocumentTabItem(title, "native"))
+    discard buildRenders(tabs)
+    require tabs.hasOverflow()
+    tabs.scrollDocumentTabsToEnd()
+    discard buildRenders(tabs)
+    require tabs.scrollOffset() > 0.0'f32
+    signals.observeProtocol(tabs, DocumentTabsEvents)
+
+    tabs.setFrameFromLayout(rect(0, 0, 600, 34))
+    let renders = buildRenders(tabs)
+    check not tabs.hasOverflow()
+    check tabs.scrollOffset() == 0.0'f32
+    check tabs.documentTabRect(0).minX == tabs.tabViewportRect().minX
+    check tabs.documentTabIndexAtPoint(tabs.documentTabRect(0).center()) == 0
+    check signals.scrollCount == 1
+    check signals.lastOffset == 0.0'f32
+
+    var titleFound: bool
+    for node in renders[DefaultDrawLevel].nodes:
+      if node.kind == nkText and node.renderedText() == title:
+        titleFound = true
+    check titleFound
+    discard buildRenders(tabs)
+    check signals.scrollCount == 1
+
+  test "document tabs keep selected headers visible when a pane narrows":
+    let tabs = newDocumentTabs(frame = rect(0, 0, 640, 34))
+    for index in 0 .. 7:
+      discard tabs.addDocumentTabItem(
+        newDocumentTabItem("Document " & $index, "doc-" & $index)
+      )
+    require tabs.selectDocumentTabAtIndex(7)
+    discard buildRenders(tabs)
+
+    tabs.setFrameFromLayout(rect(0, 0, 260, 34))
+    discard buildRenders(tabs)
+    let
+      selectedRect = tabs.documentTabRect(tabs.selectedIndex())
+      viewport = tabs.tabViewportRect()
+    check rectsClose(selectedRect.intersection(viewport), selectedRect)
+    check tabs.documentTabIndexAtPoint(selectedRect.center()) == 7
+
+  test "document tab layout preserves deliberate scrolling at unchanged width":
+    let tabs = newDocumentTabs(frame = rect(0, 0, 260, 34))
+    for index in 0 .. 7:
+      discard tabs.addDocumentTabItem(
+        newDocumentTabItem("Document " & $index, "doc-" & $index)
+      )
+    discard buildRenders(tabs)
+    tabs.scrollDocumentTabsToEnd()
+    let offset = tabs.scrollOffset()
+    require offset > 0.0'f32
+
+    tabs.setNeedsLayout()
+    discard buildRenders(tabs)
+    check tabs.selectedIndex() == 0
+    check tabs.scrollOffset() == offset
 
   test "document tab rendering includes visible labels and clipped overflow":
     let tabs = newDocumentTabs(frame = rect(0, 0, 210, 34))
