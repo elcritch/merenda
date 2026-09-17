@@ -1,6 +1,7 @@
-import std/[os, strutils, tempfiles, unicode, unittest]
+import std/[monotimes, os, strutils, tempfiles, times, unicode, unittest]
 
 import figdraw
+import sigils/[core, threads]
 
 import merenda/nimkit
 import merenda/kosmo/[kosmo, workspacefiles]
@@ -174,6 +175,44 @@ suite "Kosmo file tree interactions":
     check tree.firstVisibleIndex() == 3
     check tree.renderedTextStartingWith("02-row") == "02-row.txt"
     check tree.renderedTextStartingWith("00-row").len == 0
+
+  test "filesystem refresh retains the wheel-scrolled file list position":
+    let root = createTempDir("merenda-kosmo-tree-refresh-scroll-", "")
+    for index in 0 ..< 24:
+      writeFile(root / align($index, 2, '0') & "-row.txt", "row " & $index)
+    let
+      window = newWindow("Kosmo File Tree Refresh", frame = rect(0, 0, 300, 98))
+      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 98))
+      selectedPath = root / "00-row.txt"
+      createdPath = root / "zz-created.txt"
+    defer:
+      window.close()
+      tree.workspaceFiles.close()
+      removeDir(root)
+    window.setContentView(tree)
+    require tree.workspaceFiles.waitForFiles()
+
+    let selectedRect = tree.rowItemRect(tree.rowForItem(selectedPath))
+    require window.clickAt(
+      tree.pointToWindow(
+        initPoint(selectedRect.minX + 40.0'f32, selectedRect.minY + 12.0'f32)
+      )
+    )
+    check tree.selectedItemIdentifier() == selectedPath
+    require window.scrollWheelAt(
+      tree.pointToWindow(initPoint(40.0'f32, 40.0'f32)), deltaY = -8.0'f32
+    )
+    let scrolledOffset = tree.scrollView().contentOffset()
+    require scrolledOffset.y > 0.0'f32
+
+    writeFile(createdPath, "created")
+    tree.workspaceFiles.refresh()
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while tree.rowForItem(createdPath) < 0 and getMonoTime() < deadline:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      sleep(10)
+    require tree.rowForItem(createdPath) >= 0
+    check tree.scrollView().contentOffset() == scrolledOffset
 
   test "display scopes retain folders leading to visible and changed files":
     let
