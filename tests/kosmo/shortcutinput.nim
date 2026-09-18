@@ -6,12 +6,6 @@ import merenda/kosmo/kosmo
 proc pressControlKey(window: Window, key: Key): bool =
   window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, modifiers: {kmControl}))
 
-proc closeTabShortcutEvent(): KeyEvent =
-  when defined(macosx) or defined(macos):
-    KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers())
-  else:
-    KeyEvent(key: keyF4, keyCode: keyF4.ord, modifiers: {kmControl})
-
 proc pressPaneKey(
     window: Window, key: Key, text: string, modifiers: set[nimkit.KeyModifier]
 ): bool =
@@ -48,6 +42,30 @@ proc buttonWithTitle(view: View, title: string): Button =
     result = child.buttonWithTitle(title)
     if not result.isNil:
       return
+
+func rectCenter(rect: Rect): Point =
+  initPoint(
+    rect.origin.x + rect.size.width / 2.0'f32,
+    rect.origin.y + rect.size.height / 2.0'f32,
+  )
+
+proc clickModalButton(window: Window, title: string): bool =
+  let button = window.contentView().buttonWithTitle(title)
+  if button.isNil:
+    return
+  window.clickAt(button.pointToWindow(button.bounds().rectCenter()))
+
+proc clickSelectedTabClose(frontend: KosmoApplication): bool =
+  let tabRect =
+    frontend.documentTabs.documentTabRect(frontend.documentTabs.selectedIndex)
+  for x in [tabRect.minX + 15.0'f32, tabRect.maxX - 15.0'f32]:
+    discard frontend.window.clickAt(
+      frontend.documentTabs.pointToWindow(
+        initPoint(x, tabRect.origin.y + tabRect.size.height / 2.0'f32)
+      )
+    )
+    if not frontend.application.modalSession().isNil:
+      return true
 
 suite "Kosmo synthetic shortcut input":
   test "three editor panes preserve native insert input in every pane":
@@ -189,24 +207,17 @@ suite "Kosmo synthetic shortcut input":
     require frontend.editorView.editor.handleKey("Esc")
     require frontend.editorView.editor.tabs()[0].modified
 
-    check frontend.window.dispatchKeyDown(closeTabShortcutEvent())
+    check frontend.clickSelectedTabClose()
     let session = frontend.application.modalSession()
     require not session.isNil
     check session.window.title == "Unsaved Changes"
-    let cancelButton = session.window.contentView().buttonWithTitle("Cancel")
-    require not cancelButton.isNil
-    check cancelButton.tryToPerform(performClick(), DynamicAgent(cancelButton))
+    check session.window.clickModalButton("Cancel")
     check frontend.application.modalSession().isNil
     check not frontend.window.isClosed
     check frontend.editorView.editor.tabs()[0].modified
 
-    check frontend.window.dispatchKeyDown(closeTabShortcutEvent())
-    let discardButton = frontend.application
-      .modalSession().window
-      .contentView()
-      .buttonWithTitle("Discard")
-    require not discardButton.isNil
-    check discardButton.tryToPerform(performClick(), DynamicAgent(discardButton))
+    check frontend.clickSelectedTabClose()
+    check frontend.application.modalSession().window.clickModalButton("Discard")
     check frontend.application.modalSession().isNil
     check not frontend.window.isClosed
     var modifiedFileStillOpen = false
@@ -246,9 +257,7 @@ suite "Kosmo synthetic shortcut input":
     let session = frontend.application.modalSession()
     require not session.isNil
     check session.window.title == "Unsaved Changes"
-    let cancel = session.window.contentView().buttonWithTitle("Cancel")
-    require not cancel.isNil
-    check cancel.tryToPerform(performClick(), DynamicAgent(cancel))
+    check session.window.clickModalButton("Cancel")
     check frontend.application.modalSession().isNil
     check not frontend.window.isClosed
 
@@ -257,12 +266,7 @@ suite "Kosmo synthetic shortcut input":
         key: keyW, keyCode: keyW.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
       )
     )
-    let discardButton = frontend.application
-      .modalSession().window
-      .contentView()
-      .buttonWithTitle("Discard")
-    require not discardButton.isNil
-    check discardButton.tryToPerform(performClick(), DynamicAgent(discardButton))
+    check frontend.application.modalSession().window.clickModalButton("Discard")
     check frontend.application.modalSession().isNil
     check frontend.window.isClosed
 

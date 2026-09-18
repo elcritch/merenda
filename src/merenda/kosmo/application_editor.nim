@@ -1045,6 +1045,7 @@ proc presentUnsavedChangesConfirmation(
   )
   alert.window.setInheritedAppearance(window.effectiveAppearance())
   discard alert.rebuildAlertView()
+  alert.contentView.layoutSubtreeIfNeeded()
   let app = frontend.application
   var session: nimkit.ModalSession
   alert.prepareForModal(
