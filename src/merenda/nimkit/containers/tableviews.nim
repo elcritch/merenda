@@ -3253,7 +3253,11 @@ proc clearPointerHighlights*(tableView: TableView) =
 proc reloadData*(tableView: TableView) =
   tableView.xContentWidthMeasurementValid = false
   tableView.invalidateColumnWidthMeasurements()
-  let oldFirst = tableView.firstVisibleIndex()
+  let
+    oldFirst = tableView.firstVisibleIndex()
+    selectedWasVisible =
+      tableView.xSelectedIndex >= oldFirst and
+      tableView.xSelectedIndex < oldFirst + tableView.visibleItemCount()
   let
     oldFirstIdentifier = tableView.tableRowIdentifier(oldFirst)
     selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
@@ -3311,7 +3315,7 @@ proc reloadData*(tableView: TableView) =
     ),
     false,
   )
-  if tableView.xSelectedIndex >= 0:
+  if selectedWasVisible and tableView.xSelectedIndex >= 0:
     tableView.scrollItemToVisible(tableView.xSelectedIndex)
   tableView.invalidateIntrinsicContentSize()
   tableView.invalidateTableRows()

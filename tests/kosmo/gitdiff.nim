@@ -843,6 +843,73 @@ suite "Kosmo Git diff":
       else:
         check false
 
+  test "Git diff comparison menu switches between the working tree and branches":
+    let root = createTempDir("kosmo-git-diff-comparisons-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "base.txt", "base\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "base")
+    git(root, "branch", "-M", "main")
+    git(root, "checkout", "-qb", "feature")
+    writeFile(root / "feature.txt", "feature\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "feature")
+    git(root, "branch", "other")
+    writeFile(root / "working.txt", "working\n")
+
+    let working = readGitDiff(root)
+    check working.comparison.kind == gdckWorkingTree
+    check "main" in working.branches
+    check "other" in working.branches
+    check "feature" notin working.branches
+    require working.files.len == 1
+    check working.files[0].path == "working.txt"
+
+    let branchSnapshot = readGitDiff(
+      root, comparison = GitDiffComparison(kind: gdckBranch, branch: "main")
+    )
+    check branchSnapshot.errorMessage == ""
+    check branchSnapshot.comparison.kind == gdckBranch
+    check branchSnapshot.comparison.branch == "main"
+    require branchSnapshot.files.len == 1
+    check branchSnapshot.files[0].path == "feature.txt"
+
+    let
+      panel = newKosmoGitDiffPanel(root)
+      window = newWindow("Git Diff Comparisons", frame = rect(0, 0, 700, 400))
+    defer:
+      panel.close()
+      window.close()
+    panel.frame = rect(0, 0, 700, 400)
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    check panel.comparisonButton.title == "Working Tree"
+    check not panel.comparisonButton.hidden
+    let menu = panel.comparisonButton.menu()
+    check menu.items().len == 3
+    let mainItem = menu.menuItemWithIdentifier("kosmo.gitDiff.branch.main")
+    require not mainItem.isNil
+    check mainItem.perform(window)
+    require panel.waitForDiff()
+    check panel.comparisonButton.title == "main"
+    check panel.snapshot.comparison.branch == "main"
+    require panel.snapshot.files.len == 1
+    check panel.snapshot.files[0].path == "feature.txt"
+    require panel.requestFilePatch(0)
+    require panel.waitForDiff()
+    check "+feature" in panel.snapshot.files[0].patch
+
+    let workingItem = menu.menuItemWithIdentifier("kosmo.gitDiff.workingTree")
+    require not workingItem.isNil
+    check workingItem.perform(window)
+    require panel.waitForDiff()
+    check panel.comparisonButton.title == "Working Tree"
+    require panel.snapshot.files.len == 1
+    check panel.snapshot.files[0].path == "working.txt"
+
   test "empty clean and non-repository states are explicit":
     let root = createTempDir("kosmo-git-diff-empty-", "")
     defer:
