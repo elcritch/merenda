@@ -1,12 +1,6 @@
 import std/options
 
-when defined(useNativeDynlib):
-  from figdraw/dynlib import ZLevel, FigIdx
-else:
-  import figdraw as figdrawRoot
-  type
-    ZLevel = figdrawRoot.ZLevel
-    FigIdx = figdrawRoot.FigIdx
+from figdraw import ZLevel, FigIdx
 
 import sigils/core
 import sigils/selectors

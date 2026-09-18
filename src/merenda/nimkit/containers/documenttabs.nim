@@ -1,7 +1,4 @@
-when defined(useNativeDynlib):
-  from figdraw/dynlib import FigIdx
-else:
-  import figdraw
+from figdraw import FigIdx
 
 import sigils/core
 

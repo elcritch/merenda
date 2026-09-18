@@ -5,10 +5,7 @@ import std/isolation
 import sigils/[core, threads]
 import threading/smartptrs
 
-when defined(useNativeDynlib):
-  import figdraw/dynlib
-else:
-  import figdraw
+import figdraw
 
 import ../drawing
 import ../foundation/types

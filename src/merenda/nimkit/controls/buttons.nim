@@ -10,7 +10,7 @@ import ../text/textviews
 import ../foundation/events
 import ../foundation/types
 import ../accessibility/accessibility
-from pkg/chroma import ColorRGBA
+from figdraw import ColorRGBA
 
 export controls
 

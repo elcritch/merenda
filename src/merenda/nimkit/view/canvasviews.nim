@@ -2,14 +2,9 @@
 
 import std/[math, strformat, strutils]
 
-import pkg/bumpy as bumpy
-import pkg/vmath as vmath
 import sigils/core
 
-when defined(useNativeDynlib):
-  import figdraw/dynlib as fd
-else:
-  import figdraw as fd
+import figdraw as fd
 
 import ../accessibility/accessibilityprotocols
 import ../drawing
@@ -172,19 +167,17 @@ func normalizedSweep(startAngle, endAngle: float32, anticlockwise: bool): float3
 
 func drawableLine(start, stop: Point): fd.DrawableOp =
   fd.DrawableOp(
-    kind: fd.dkLine, a: vmath.vec2(start.x, start.y), b: vmath.vec2(stop.x, stop.y)
+    kind: fd.dkLine, a: fd.vec2(start.x, start.y), b: fd.vec2(stop.x, stop.y)
   )
 
 func drawableCircle(center: Point, radius: float32): fd.DrawableOp =
-  fd.DrawableOp(
-    kind: fd.dkCircle, center: vmath.vec2(center.x, center.y), radius: radius
-  )
+  fd.DrawableOp(kind: fd.dkCircle, center: fd.vec2(center.x, center.y), radius: radius)
 
 func drawableRectangle(value: Rect, radius: float32): fd.DrawableOp =
   let corner = min(max(radius, 0.0'f32), high(uint16).float32).round().uint16
   fd.DrawableOp(
     kind: fd.dkRectangle,
-    box: bumpy.rect(value.origin.x, value.origin.y, value.size.width, value.size.height),
+    box: fd.rect(value.origin.x, value.origin.y, value.size.width, value.size.height),
     corners: [corner, corner, corner, corner],
   )
 
@@ -193,7 +186,7 @@ func drawableArc(
 ): fd.DrawableOp =
   fd.DrawableOp(
     kind: fd.dkArc,
-    arcCenter: vmath.vec2(center.x, center.y),
+    arcCenter: fd.vec2(center.x, center.y),
     arcRadius: radius,
     startAngle: startAngle,
     sweepAngle: sweepAngle,
@@ -202,10 +195,10 @@ func drawableArc(
 proc drawableBezier(segment: CanvasCubicSegment): fd.DrawableOp =
   fd.drawableBezier(
     [
-      vmath.vec2(segment.start.x, segment.start.y),
-      vmath.vec2(segment.control1.x, segment.control1.y),
-      vmath.vec2(segment.control2.x, segment.control2.y),
-      vmath.vec2(segment.stop.x, segment.stop.y),
+      fd.vec2(segment.start.x, segment.start.y),
+      fd.vec2(segment.control1.x, segment.control1.y),
+      fd.vec2(segment.control2.x, segment.control2.y),
+      fd.vec2(segment.stop.x, segment.stop.y),
     ]
   )
 
@@ -384,9 +377,9 @@ proc pathDrawables(path: openArray[CanvasPathCommand]): seq[fd.DrawableOp] =
       if hasCurrent:
         result.add fd.drawableBezier(
           [
-            vmath.vec2(current.x, current.y),
-            vmath.vec2(command.quadraticControl.x, command.quadraticControl.y),
-            vmath.vec2(command.quadraticEnd.x, command.quadraticEnd.y),
+            fd.vec2(current.x, current.y),
+            fd.vec2(command.quadraticControl.x, command.quadraticControl.y),
+            fd.vec2(command.quadraticEnd.x, command.quadraticEnd.y),
           ]
         )
       current = command.quadraticEnd
@@ -397,10 +390,10 @@ proc pathDrawables(path: openArray[CanvasPathCommand]): seq[fd.DrawableOp] =
       if hasCurrent:
         result.add fd.drawableBezier(
           [
-            vmath.vec2(current.x, current.y),
-            vmath.vec2(command.bezierControl1.x, command.bezierControl1.y),
-            vmath.vec2(command.bezierControl2.x, command.bezierControl2.y),
-            vmath.vec2(command.bezierEnd.x, command.bezierEnd.y),
+            fd.vec2(current.x, current.y),
+            fd.vec2(command.bezierControl1.x, command.bezierControl1.y),
+            fd.vec2(command.bezierControl2.x, command.bezierControl2.y),
+            fd.vec2(command.bezierEnd.x, command.bezierEnd.y),
           ]
         )
       current = command.bezierEnd

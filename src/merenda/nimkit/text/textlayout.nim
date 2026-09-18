@@ -3,12 +3,7 @@ import std/[algorithm, hashes, options, sets, unicode]
 import sigils/[core, threads]
 import threading/smartptrs
 
-when defined(useNativeDynlib):
-  import figdraw/dynlib except Hash, TextCaretPosition
-else:
-  import figdraw except TextCaretPosition
-  from figdraw/common/typefaces import getFigFont
-from pkg/vmath import vec2, x, y
+import figdraw except Hash, TextCaretPosition
 
 import ../drawing
 import ../foundation/mainthreadwork

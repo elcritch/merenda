@@ -4,7 +4,6 @@ when defined(useNativeDynlib):
   {.error: "FigDraw managed resources require the static FigDraw build".}
 
 import figdraw
-from figdraw/common/typefaces import getFigFont
 
 import ./images
 

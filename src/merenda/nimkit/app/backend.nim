@@ -6,16 +6,13 @@ import threading/[channels, smartptrs]
 when not compileOption("threads") and not defined(nimdoc):
   {.error: "NimKit's split renderer runtime requires --threads:on".}
 
+import figdraw as figrender
+from figdraw import clearColor, figUiScale, setFigUiScale, Renders, encodePng
 when defined(useNativeDynlib):
-  from figdraw/dynlib import clearColor, figUiScale, setFigUiScale, Renders
-  import figdraw/dynlib as figrender
-  import figdraw/dynlib as siwinshim
+  import figdraw as siwinshim
 else:
-  from figdraw import clearColor, figUiScale, setFigUiScale, Renders
-  import figdraw as figrender
   import figdraw/windowing/siwinshim as siwinshim
 when not defined(useNativeDynlib):
-  import pkg/pixie/fileformats/png
   import siwin/colorutils as siwinColors
 import siwin/clipboards as siwinClipboards
 import sigils/selectors

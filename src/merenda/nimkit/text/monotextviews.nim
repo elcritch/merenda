@@ -1,13 +1,8 @@
 import std/[hashes, math, unicode]
 
-when defined(useNativeDynlib):
-  from figdraw/dynlib import
-    FigFont, GlyphTopLeft, fill, fs, glyphCount, glyphFont, glyphRect, placeGlyphs,
-    typeset
-else:
-  import figdraw
-import pkg/bumpy as bumpy
-import pkg/vmath
+from figdraw import
+  FigFont, GlyphTopLeft, Vec2, fill, font, fs, glyphCount, glyphFont, glyphRect,
+  placeGlyphs, rect, typeset, vec2
 
 import ../accessibility/accessibilityprotocols
 from ../app/windows import Window, makeFirstResponder
@@ -353,7 +348,7 @@ proc monoFont(view: MonoTextView, italic = false): FigFont =
 proc monoTextMetrics*(view: MonoTextView): MonoTextMetrics =
   let font = view.monoFont()
   let layout = typeset(
-    bumpy.rect(0, 0, font.size * 4.0'f32, font.size * 4.0'f32),
+    rect(0, 0, font.size * 4.0'f32, font.size * 4.0'f32),
     [(fs(font), "M")],
     minContent = false,
     wrap = false,

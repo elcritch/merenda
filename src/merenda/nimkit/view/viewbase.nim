@@ -9,10 +9,7 @@ import ../drawing/renderresources
 when not defined(useNativeDynlib):
   import ../drawing/renderscenes
 
-when defined(useNativeDynlib):
-  from figdraw/dynlib import Renders
-else:
-  import figdraw
+from figdraw import Renders
 
 export responders
 

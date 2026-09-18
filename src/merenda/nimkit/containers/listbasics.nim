@@ -1,8 +1,4 @@
-when defined(useNativeDynlib):
-  from figdraw/dynlib import FigIdx
-else:
-  import figdraw as figdrawRoot
-  type FigIdx = figdrawRoot.FigIdx
+from figdraw import FigIdx
 import std/options
 
 import ../drawing

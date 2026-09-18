@@ -1,10 +1,6 @@
 import std/[hashes, os, tables]
 
-when defined(useNativeDynlib):
-  import figdraw/dynlib
-else:
-  import pkg/pixie
-  import figdraw
+import figdraw
 
 import ../foundation/types
 
@@ -171,11 +167,7 @@ proc newImageResourceFromFile*(
     filePath: string, name = "", cachePolicy = icpDefault
 ): ImageResource =
   let
-    pixels =
-      when defined(useNativeDynlib):
-        readImage(filePath)
-      else:
-        pixie.readImage(filePath)
+    pixels = readPixieImage(filePath)
     resolvedName =
       if name.len > 0:
         name
