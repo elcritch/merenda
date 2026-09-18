@@ -12,10 +12,7 @@ import ../foundation/selectors
 
 export comboboxes
 
-when defined(useNativeDynlib):
-  import figdraw/dynlib
-else:
-  import figdraw
+import figdraw
 
 type
   FontCatalogMetadataMode* = enum

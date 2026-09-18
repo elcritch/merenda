@@ -1,9 +1,6 @@
 import std/options
 
-when defined(useNativeDynlib):
-  from figdraw/dynlib import FigIdx
-else:
-  from figdraw import FigIdx
+from figdraw import FigIdx
 
 import sigils/core
 import sigils/selectors

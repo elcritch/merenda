@@ -4,11 +4,6 @@ import std/[algorithm, os, strutils, tables]
 
 import sigils
 
-when defined(useNativeDynlib):
-  import figdraw/dynlib
-else:
-  import figdraw
-
 import ../accessibility/accessibility
 import ../containers/cascadingviews
 import ../containers/formviews

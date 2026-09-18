@@ -1,7 +1,4 @@
-when defined(useNativeDynlib):
-  from figdraw/dynlib import ZLevel, FigIdx
-else:
-  import figdraw
+from figdraw import ZLevel, FigIdx
 import std/options
 
 import ../accessibility/accessibilityprotocols

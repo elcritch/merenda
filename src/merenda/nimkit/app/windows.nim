@@ -2,13 +2,11 @@ import std/[math, monotimes, options, os, tables, times]
 
 import pkg/chronicles
 
+import figdraw as figrender
+from figdraw import Renders, ZLevel
 when defined(useNativeDynlib):
-  import figdraw/dynlib as figrender
-  from figdraw/dynlib import Renders, ZLevel
-  import figdraw/dynlib as siwinshim
+  import figdraw as siwinshim
 else:
-  import figdraw as figrender
-  from figdraw import Renders, ZLevel
   import figdraw/windowing/siwinshim as siwinshim
 import sigils/core
 

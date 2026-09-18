@@ -1,4 +1,4 @@
-import pkg/chroma
+import figdraw
 
 import ./nimkit/app/application
 import ./nimkit/app/settings

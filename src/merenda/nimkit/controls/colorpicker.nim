@@ -1,9 +1,6 @@
 ## Color wells and tabbed color-picker controls.
 
-when defined(useNativeDynlib):
-  from figdraw/dynlib import FigIdx, ZLevel
-else:
-  from figdraw import FigIdx, ZLevel
+from figdraw import FigIdx, ZLevel
 import std/[math, strutils]
 
 import sigils/core

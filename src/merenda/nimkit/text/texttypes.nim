@@ -1,10 +1,7 @@
 import ../foundation/types
 import ../foundation/urls
 
-when defined(useNativeDynlib):
-  from figdraw/dynlib import SystemTypeface
-else:
-  from figdraw import SystemTypeface
+from figdraw import SystemTypeface
 
 type
   TextIndex* = distinct Natural

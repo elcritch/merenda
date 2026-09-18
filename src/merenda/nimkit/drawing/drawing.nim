@@ -1,11 +1,8 @@
 import std/[hashes, os, strutils, tables, unicode]
 
-import pkg/bumpy
+import figdraw
 
-when defined(useNativeDynlib):
-  import figdraw/dynlib
-else:
-  import figdraw
+when not defined(useNativeDynlib):
   import figdraw/figextras
   from figdraw/common/typefaces import getLineHeightImpl
   import ./fontfallbacks
@@ -26,16 +23,11 @@ import ../text/texttypes
 import ../foundation/types as nimkitTypes
 import ../foundation/assetcache
 
-when defined(useNativeDynlib):
-  export
-    dynlib.FillGradientAxis, dynlib.FillKind, dynlib.Linear2, dynlib.Linear3,
-    dynlib.Fill, dynlib.ColorRGBA, dynlib.toFill, themeCore.sampleColor,
-    themeCore.centerColorRgba, themeCore.centerColor
-else:
-  export
-    figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,
-    figdraw.Fill, figdraw.ColorRGBA, figdraw.toFill, figdraw.sampleColor,
-    figdraw.centerColorRgba, figdraw.centerColor
+export
+  figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,
+  figdraw.Fill, figdraw.ColorRGBA, figdraw.toFill, figdraw.sampleColor,
+  figdraw.centerColorRgba, figdraw.centerColor
+when not defined(useNativeDynlib):
   export fontfallbacks
 export images
 export renderresources

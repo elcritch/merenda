@@ -2,10 +2,7 @@
 
 import std/[strutils, times]
 
-when defined(useNativeDynlib):
-  from figdraw/dynlib import ZLevel
-else:
-  from figdraw import ZLevel
+from figdraw import ZLevel
 
 import sigils/core
 import sigils/selectors
