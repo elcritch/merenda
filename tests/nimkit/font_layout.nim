@@ -1,8 +1,6 @@
 import std/[options, os, strutils, tempfiles, unittest]
 
 import figdraw
-import figdraw/common/fontglyphs
-import figdraw/common/typefaces
 import pkg/bumpy
 import pkg/pixie
 
@@ -162,13 +160,14 @@ suite "nimkit font layout":
       check source.name == systemTypeface.get().file.path
       check source.faceIndex == systemTypeface.get().file.faceIndex
 
-  test "font fallback groups are runtime customizable by language and script":
-    setFontFallbackGroups("x-test", "Test", @[@["Example Sans"]])
-    check fontFallbackGroups("x-test-region", "test")[0] == @["Example Sans"]
+  when not defined(useNativeDynlib):
+    test "font fallback groups are runtime customizable by language and script":
+      setFontFallbackGroups("x-test", "Test", @[@["Example Sans"]])
+      check fontFallbackGroups("x-test-region", "test")[0] == @["Example Sans"]
 
-    addFontFallbackGroup("x-test", "Test", ["Preferred Sans"], prepend = true)
-    check fontFallbackGroups("x-test", "test")[0] == @["Preferred Sans"]
-    setFontFallbackGroups("x-test", "Test", newSeq[seq[string]]())
+      addFontFallbackGroup("x-test", "Test", ["Preferred Sans"], prepend = true)
+      check fontFallbackGroups("x-test", "test")[0] == @["Preferred Sans"]
+      setFontFallbackGroups("x-test", "Test", newSeq[seq[string]]())
 
   test "theme text style uses font env override precedence":
     withCleanFontEnv(

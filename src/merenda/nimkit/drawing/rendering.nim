@@ -1,9 +1,8 @@
 import std/[options, tables]
 
-when defined(useNativeDynlib):
-  import figdraw/dynlib
-else:
-  import figdraw
+from figdraw import
+  Fig, FigIdx, RenderList, Renders, TransformStyle, ZLevel, addChild, addRoot,
+  childIndex, fill, nkTransform, pairs, rect, vec2
 
 import ./drawing
 when not defined(useNativeDynlib):
@@ -214,7 +213,7 @@ when not defined(useNativeDynlib):
   proc transformNode(origin: Point, size: Size): Fig =
     Fig(
       kind: nkTransform,
-      screenBox: figdraw.rect(0.0'f32, 0.0'f32, size.width, size.height),
+      screenBox: rect(0.0'f32, 0.0'f32, size.width, size.height),
       transform: TransformStyle(translation: vec2(origin.x, origin.y)),
     )
 

@@ -1,7 +1,6 @@
 import std/[strutils, unicode, unittest]
 
 import figdraw
-import figdraw/common/typefaces
 import pkg/bumpy
 import sigils/core
 

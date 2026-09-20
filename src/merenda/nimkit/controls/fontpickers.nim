@@ -3,19 +3,12 @@ from std/unicode import runes, `$`
 
 import sigils/core
 import pixie as fontRaster
-from figdraw/common/typefaceinfos import
-  TypefaceInfo, parseTypefaceInfo, supportedCodepointCount
-import figdraw/extras/systemfonts as figSystemFonts
+import figdraw
 
 import ./comboboxes
 import ../foundation/selectors
 
 export comboboxes
-
-when defined(useNativeDynlib):
-  import figdraw/dynlib
-else:
-  import figdraw
 
 type
   FontCatalogMetadataMode* = enum
@@ -26,7 +19,7 @@ type
     style*: string
     language*: string
     languages*: seq[string]
-    typeface*: figSystemFonts.SystemTypeface
+    typeface*: SystemTypeface
     fontName*: string
     identifier*: string
     weightClass*: uint16
@@ -686,7 +679,7 @@ func displayabilityChecked*(face: FontCatalogFace): bool {.inline.} =
   ## Returns whether visible preview rendering has been checked for this face.
   face.previewDisplayabilityChecked
 
-func fontCatalogFaceIdentifier(typeface: figSystemFonts.SystemTypeface): string =
+func fontCatalogFaceIdentifier(typeface: SystemTypeface): string =
   result = "system-font-face:" & typeface.file.path
   if typeface.file.faceIndex > 0 or typeface.variations.len > 0:
     result.add ":" & $typeface.file.faceIndex
@@ -694,10 +687,7 @@ func fontCatalogFaceIdentifier(typeface: figSystemFonts.SystemTypeface): string 
     result.add ":" & variation.tag & "=" & $cast[uint32](variation.value)
 
 func initFontCatalogFace*(
-    style, language: string,
-    typeface: figSystemFonts.SystemTypeface,
-    identifier = "",
-    fontName = "",
+    style, language: string, typeface: SystemTypeface, identifier = "", fontName = ""
 ): FontCatalogFace =
   let
     normalizedStyle = style.normalizedFontStyle()
@@ -729,11 +719,7 @@ func initFontCatalogFace*(
     fontName = "",
 ): FontCatalogFace =
   initFontCatalogFace(
-    style,
-    language,
-    figSystemFonts.initSystemTypeface(path, faceIndex),
-    identifier,
-    fontName,
+    style, language, initSystemTypeface(path, faceIndex), identifier, fontName
   )
 
 func initFontCatalogEntry*(
@@ -780,11 +766,11 @@ func preferredFaceRank(face: ParsedFontFace): int =
 proc fontInfoForPath(
     path: string, faceIndex = 0
 ): tuple[info: TypefaceInfo, available: bool] =
-  result.info = parseTypefaceInfo(path, "", faceIndex)
+  result.info = parseTypefaceInfo(path, "", faceIndex, "")
   if not fileExists(path):
     return
   try:
-    result.info = parseTypefaceInfo(path, readFile(path), faceIndex)
+    result.info = parseTypefaceInfo(path, readFile(path), faceIndex, "")
     result.available = result.info.localizedNames.len > 0 or result.info.weightClass > 0
   except IOError:
     discard
@@ -854,7 +840,7 @@ proc parsedFontFace(path: string): ParsedFontFace =
     result.face.previewDisplayabilityChecked = true
     result.searchText.add " " & info.fontMetadataSearchText()
 
-func preferredFontName(info: figSystemFonts.SystemTypefaceInfo): string =
+func preferredFontName(info: SystemTypefaceInfo): string =
   if info.postScriptName.len > 0:
     info.postScriptName
   elif info.fullName.len > 0:
@@ -862,7 +848,7 @@ func preferredFontName(info: figSystemFonts.SystemTypefaceInfo): string =
   else:
     info.typeface.file.path
 
-proc parsedSystemFontFace(info: figSystemFonts.SystemTypefaceInfo): ParsedFontFace =
+proc parsedSystemFontFace(info: SystemTypefaceInfo): ParsedFontFace =
   let
     fallbackName = info.typeface.file.path.splitFontFamilyAndStyle()
     rawFamily = if info.family.len > 0: info.family else: fallbackName.family
@@ -1042,7 +1028,7 @@ proc buildFontCatalog*(
 proc buildSystemFontCatalog*(): seq[FontCatalogEntry] =
   ## Builds a display catalog from the host font database iterator.
   var parsedFaces: seq[ParsedFontFace]
-  for info in figSystemFonts.systemTypefaces():
+  for info in systemTypefaces():
     parsedFaces.add info.parsedSystemFontFace()
   result = groupFontCatalog(parsedFaces)
 

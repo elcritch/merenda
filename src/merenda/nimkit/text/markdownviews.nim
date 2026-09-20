@@ -14,10 +14,7 @@ when not defined(useNativeDynlib):
   import std/hashes
   from pkg/pixie import resize
 
-when defined(useNativeDynlib):
-  from figdraw/dynlib import SystemTypeface
-else:
-  from figdraw import SystemTypeface
+from figdraw import SystemTypeface
 
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8

@@ -1,7 +1,6 @@
 import std/[hashes, math, options, os, parseutils, strutils]
 
-import pkg/bumpy
-import pkg/chroma
+import figdraw
 export bumpy
 export chroma
 import sigils/features
@@ -378,7 +377,7 @@ proc resolveLayoutLength*(length: LayoutLength, fontSize = defaultFontSize()): f
     length.value * fontSize
 
 func isAutoMetric*(value: float32): bool =
-  value.isNaN
+  math.isNaN(value)
 
 func normalizeOptionalMetric(value: float32): float32 =
   if value.isAutoMetric or value < 0.0'f32: NoIntrinsicMetric else: value

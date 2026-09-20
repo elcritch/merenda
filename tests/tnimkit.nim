@@ -23,14 +23,18 @@ import nimkit/images
 import nimkit/markdownviews
 import nimkit/menus
 import nimkit/segmentedcontrols
-import nimkit/renderfragments
 import nimkit/resources
 import nimkit/settings
 import nimkit/svgimages
 import nimkit/svgpathloader
 import nimkit/styledruns
 import nimkit/table_column_resizing
-import nimkit/threading
 import nimkit/textlayout
 import nimkit/terminalgeometry
 import nimkit/urls
+
+when not defined(useNativeDynlib):
+  # Retained render fragments are a client-side Figdraw implementation detail
+  # and are intentionally outside the native ABI.
+  import nimkit/renderfragments
+  import nimkit/threading

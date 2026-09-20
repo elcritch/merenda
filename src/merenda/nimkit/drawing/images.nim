@@ -1,10 +1,6 @@
 import std/[hashes, os, tables]
 
-when defined(useNativeDynlib):
-  import figdraw/dynlib
-else:
-  import pkg/pixie
-  import figdraw
+import figdraw
 
 import ../foundation/types
 
@@ -48,12 +44,8 @@ proc retainsImage(
   id in resources and resources[id] == image
 
 proc releaseUnusedRenderingRef(image: ImageResource) =
-  when defined(useNativeDynlib):
-    if image.xOwned == default(ImageRef):
-      return
-  else:
-    if image.xOwned.isNil:
-      return
+  if image.xOwned.isNil:
+    return
   if not preloadedImages.retainsImage(image) and
       not automaticPreloadedImages.retainsImage(image) and
       not pinnedImages.retainsImage(image):
@@ -171,11 +163,7 @@ proc newImageResourceFromFile*(
     filePath: string, name = "", cachePolicy = icpDefault
 ): ImageResource =
   let
-    pixels =
-      when defined(useNativeDynlib):
-        readImage(filePath)
-      else:
-        pixie.readImage(filePath)
+    pixels = readPixieImage(filePath)
     resolvedName =
       if name.len > 0:
         name
@@ -237,31 +225,20 @@ proc pixels*(image: ImageResource): Image =
 proc renderingRef*(image: ImageResource): ImageRef =
   if image.isNil:
     return
-  when defined(useNativeDynlib):
-    if not image.xPublished:
-      loadImage(image.xImageId, image.xPixels)
-      image.xPublished = true
-    image.xImageId
-  else:
-    if image.xPublished and hasImage(image.xImageId):
-      return imageRef(image.xImageId)
-    image.xPublished = true
-    if image.xPixels.isNil:
-      return imageRef(image.xImageId)
-    var pixels = image.pixels()
-    imageRef(image.xImageId, ensureMove pixels)
+  if image.xPublished and hasImage(image.xImageId):
+    return imageRef(image.xImageId)
+  image.xPublished = true
+  if image.xPixels.isNil:
+    return imageRef(image.xImageId)
+  var pixels = image.pixels()
+  imageRef(image.xImageId, ensureMove pixels)
 
 proc retainForRendering(image: ImageResource) =
   if image.isNil or image.xPixels.isNil:
     return
-  when defined(useNativeDynlib):
-    if image.xOwned == image.xImageId:
-      return
-    image.xOwned = image.renderingRef()
-  else:
-    if not image.xOwned.isNil and image.xOwned.id == image.xImageId:
-      return
-    image.xOwned = image.renderingRef()
+  if not image.xOwned.isNil and image.xOwned.id == image.xImageId:
+    return
+  image.xOwned = image.renderingRef()
 
 proc registerImage*(name: string, image: ImageResource) =
   if name.len == 0 or image.isNil:

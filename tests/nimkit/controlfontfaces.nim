@@ -1,7 +1,6 @@
 import std/[os, unittest]
 
 import figdraw
-import figdraw/common/typefaces
 
 import merenda/nimkit
 

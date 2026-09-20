@@ -973,106 +973,107 @@ echo "fenced"
         check node.screenBox.h > 20.0'f32
     check panelCount == 2
 
-  test "selecting text retains unchanged Markdown underlays":
-    let
-      root = newView(frame = rect(0, 0, 520, 320))
-      view = newMarkdownView(
-        "Before.\n\n```nim\necho \"selected\"\n```", frame = rect(0, 0, 520, 320)
-      )
-    root.addSubview(view)
-    require view.waitForMarkdownParsing()
-    require view.waitForMarkdownLayout()
-    root.layoutSubtreeIfNeeded()
-    discard root.buildRenderScene()
+  when not defined(useNativeDynlib):
+    test "selecting text retains unchanged Markdown underlays":
+      let
+        root = newView(frame = rect(0, 0, 520, 320))
+        view = newMarkdownView(
+          "Before.\n\n```nim\necho \"selected\"\n```", frame = rect(0, 0, 520, 320)
+        )
+      root.addSubview(view)
+      require view.waitForMarkdownParsing()
+      require view.waitForMarkdownLayout()
+      root.layoutSubtreeIfNeeded()
+      discard root.buildRenderScene()
 
-    view.textView().selectedRange = initTextRange(0, 6)
-    discard root.buildRenderScene()
+      view.textView().selectedRange = initTextRange(0, 6)
+      discard root.buildRenderScene()
 
-  test "large documents retain only buffered visible text lines":
-    var source: string
-    for index in 0 ..< 240:
-      source.add &"paragraph {index:03}\n\n"
-    let view = newMarkdownView(source, frame = rect(0, 0, 360, 180))
-    require view.waitForMarkdownParsing()
-    require view.waitForMarkdownLayout()
+    test "large documents retain only buffered visible text lines":
+      var source: string
+      for index in 0 ..< 240:
+        source.add &"paragraph {index:03}\n\n"
+      let view = newMarkdownView(source, frame = rect(0, 0, 360, 180))
+      require view.waitForMarkdownParsing()
+      require view.waitForMarkdownLayout()
 
-    let
-      scene = view.buildRenderScene()
-      totalLines = view.textView().layoutManager().lineCount()
-    var firstRendered: seq[string]
-    for node in scene.materialize()[DefaultDrawLevel].nodes:
-      if node.kind == nkText:
-        var text: string
-        for rune in node.textLayout.runes:
-          text.add rune
-        firstRendered.add text
+      let
+        scene = view.buildRenderScene()
+        totalLines = view.textView().layoutManager().lineCount()
+      var firstRendered: seq[string]
+      for node in scene.materialize()[DefaultDrawLevel].nodes:
+        if node.kind == nkText:
+          var text: string
+          for rune in node.textLayout.runes:
+            text.add rune
+          firstRendered.add text
 
-    check totalLines > 200
-    check firstRendered.len < totalLines div 3
-    check firstRendered.join().contains("paragraph 000")
-    check not firstRendered.join().contains("paragraph 239")
+      check totalLines > 200
+      check firstRendered.len < totalLines div 3
+      check firstRendered.join().contains("paragraph 000")
+      check not firstRendered.join().contains("paragraph 239")
 
-    view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
-    discard view.buildRenderScene()
-    var lastRendered: seq[string]
-    for node in scene.materialize()[DefaultDrawLevel].nodes:
-      if node.kind == nkText:
-        var text: string
-        for rune in node.textLayout.runes:
-          text.add rune
-        lastRendered.add text
+      view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
+      discard view.buildRenderScene()
+      var lastRendered: seq[string]
+      for node in scene.materialize()[DefaultDrawLevel].nodes:
+        if node.kind == nkText:
+          var text: string
+          for rune in node.textLayout.runes:
+            text.add rune
+          lastRendered.add text
 
-    check lastRendered.len < totalLines div 3
-    check not lastRendered.join().contains("paragraph 000")
-    check lastRendered.join().contains("paragraph 239")
+      check lastRendered.len < totalLines div 3
+      check not lastRendered.join().contains("paragraph 000")
+      check lastRendered.join().contains("paragraph 239")
 
-    view.textView().selectedRange = initTextRange(0, view.textStorage().len)
-    discard view.buildRenderScene()
-    var selectionRectCount = 0
-    for node in scene.materialize()[DefaultDrawLevel].nodes:
-      if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == view.selectionColor().rgba:
-        inc selectionRectCount
-    check selectionRectCount < totalLines div 3
+      view.textView().selectedRange = initTextRange(0, view.textStorage().len)
+      discard view.buildRenderScene()
+      var selectionRectCount = 0
+      for node in scene.materialize()[DefaultDrawLevel].nodes:
+        if node.kind == nkRectangle and node.fill.kind == flColor and
+            node.fill.color == view.selectionColor().rgba:
+          inc selectionRectCount
+      check selectionRectCount < totalLines div 3
 
-  test "fitting code blocks do not allocate embedded text views":
-    let view =
-      newMarkdownView("```nim\nlet count = 42\n```", frame = rect(0, 0, 600, 240))
-    require view.waitForMarkdownParsing()
-    require view.waitForMarkdownLayout()
-    discard view.buildRenderScene()
-    check view.codeBlockScrollViews(includeHidden = true).len == 0
-    view.frame = rect(0, 0, 120, 240)
-    view.layoutSubtreeIfNeeded()
-    discard view.buildRenderScene()
-    check view.codeBlockScrollViews().len == 1
-    view.frame = rect(0, 0, 600, 240)
-    view.layoutSubtreeIfNeeded()
-    discard view.buildRenderScene()
-    check view.codeBlockScrollViews().len == 0
+    test "fitting code blocks do not allocate embedded text views":
+      let view =
+        newMarkdownView("```nim\nlet count = 42\n```", frame = rect(0, 0, 600, 240))
+      require view.waitForMarkdownParsing()
+      require view.waitForMarkdownLayout()
+      discard view.buildRenderScene()
+      check view.codeBlockScrollViews(includeHidden = true).len == 0
+      view.frame = rect(0, 0, 120, 240)
+      view.layoutSubtreeIfNeeded()
+      discard view.buildRenderScene()
+      check view.codeBlockScrollViews().len == 1
+      view.frame = rect(0, 0, 600, 240)
+      view.layoutSubtreeIfNeeded()
+      discard view.buildRenderScene()
+      check view.codeBlockScrollViews().len == 0
 
-  test "offscreen code and table scroll views are created near the viewport":
-    let source =
-      "introductory paragraph\n\n".repeat(160) & "```text\n" & "wide code ".repeat(80) &
-      "\n```\n\n" & "| A | B | C | D | E | F | G | H | I | J | K | L |\n" &
-      "| - | - | - | - | - | - | - | - | - | - | - | - |\n" &
-      "| CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU |"
-    let view = newMarkdownView(source, frame = rect(0, 0, 300, 180))
-    require view.waitForMarkdownParsing()
-    require view.waitForMarkdownLayout()
-    discard view.buildRenderScene()
+    test "offscreen code and table scroll views are created near the viewport":
+      let source =
+        "introductory paragraph\n\n".repeat(160) & "```text\n" & "wide code ".repeat(80) &
+        "\n```\n\n" & "| A | B | C | D | E | F | G | H | I | J | K | L |\n" &
+        "| - | - | - | - | - | - | - | - | - | - | - | - |\n" &
+        "| CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU |"
+      let view = newMarkdownView(source, frame = rect(0, 0, 300, 180))
+      require view.waitForMarkdownParsing()
+      require view.waitForMarkdownLayout()
+      discard view.buildRenderScene()
 
-    check view.codeBlockScrollViews(includeHidden = true).len == 0
-    check view.tableScrollViews().len == 0
+      check view.codeBlockScrollViews(includeHidden = true).len == 0
+      check view.tableScrollViews().len == 0
 
-    view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
-    discard view.buildRenderScene()
-    discard view.pollMarkdownParsing()
-    view.layoutSubtreeIfNeeded()
-    discard view.buildRenderScene()
+      view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
+      discard view.buildRenderScene()
+      discard view.pollMarkdownParsing()
+      view.layoutSubtreeIfNeeded()
+      discard view.buildRenderScene()
 
-    check view.codeBlockScrollViews(includeHidden = true).len == 1
-    check view.tableScrollViews().len == 1
+      check view.codeBlockScrollViews(includeHidden = true).len == 1
+      check view.tableScrollViews().len == 1
 
   test "code block panels in ordered lists do not overlap item labels":
     var style = initMarkdownStyle()

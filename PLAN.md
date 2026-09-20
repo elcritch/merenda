@@ -264,9 +264,9 @@ window content root.
 - Keep logical resource ownership separate from renderer-local atlas residency.
   Rebuild at frame boundaries from live manifests/preloads, and reject stale
   generation-stamped uploads.
-- Keep `useNativeDynlib` unsupported for managed resources until its ABI gains
-  equivalent font/image retain/release and renderer-targeted rebuild primitives.
-  It must not silently fall back to unmanaged ownership.
+- Keep `useNativeDynlib` managed resources on the explicit ABI operations for
+  renderer-targeted replay, rebuild, and manifest retention. It must not
+  silently fall back to unmanaged ownership.
 
 ## Long-Term Architecture
 

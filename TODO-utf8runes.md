@@ -142,7 +142,7 @@ TODO:
 - Keep `GapTextBuffer` byte sequences and its own index cache: it is mutable
   editing storage, whereas `Utf8Runes` is immutable read-oriented storage.
 
-### 5. Fix the stale native render-scene branch
+### 5. Fixed: stale native render-scene branch
 
 `isolateGlyphArrangement` has the correct static branch:
 
@@ -151,31 +151,22 @@ result.sourceRunes = layout.sourceRunes.copyUtf8Runes()
 result.runes = layout.runes.copyUtf8Runes()
 ```
 
-However, its `useNativeDynlib` branch still calls `isolateSequence()` at
-`src/merenda/nimkit/drawing/renderscenes.nim:205`. That is the old sequence-
-shaped operation. If this branch is enabled, it can force the compatibility
-conversion to `seq[Rune]` (or fail to type-check instead of copying native
-UTF-8 storage directly).
+The obsolete `useNativeDynlib` `isolateSequence()` branch has been removed.
+Both retained fields now use `copyUtf8Runes()` directly. Public retained-scene
+modules remain excluded from the dynlib build because Figdraw's client-side
+`RenderFragments` implementation is intentionally outside the native ABI.
 
-At present this is latent rather than an active runtime path: the public
-NimKit render-scene modules are excluded for `useNativeDynlib`, and managed
-render resources explicitly reject that build. Before native scene support is
-restored, make the copy operation unconditional or use the native facade's
-`copyUtf8Runes` in both branches.
+### 6. Native facade validation
 
-### 6. Validate the native facade
-
-The tests run so far report `nativeDynlib=false`. No generated native FigDraw
-ABI module or native library is currently present in the workspace, so the
-Merenda native path has not been validated by these suites.
+The generated Figdraw ABI and native library now build through Merenda's
+`build_dynlib` task. The shared NimKit runner also compiles with
+`useNativeDynlib`, covering the migrated text-layout helpers through the native
+facade.
 
 TODO:
 
-- Generate/build the FigDraw native ABI and run the relevant NimKit and
-  integration suites with `useNativeDynlib`.
 - Verify that `len`, indexing, slicing, equality, and `items`/`pairs` all stay
   in UTF-8 storage through the native facade.
-- Add a native compile check for every layout helper changed in the migration.
 
 ## API rules for the finished migration
 
@@ -212,4 +203,3 @@ avoid reintroducing them after the arrangement reaches Merenda.
 - A benchmark or allocation measurement comparing long ASCII/Unicode
   arrangements before and after the remaining migration, including render
   scene isolation and repeated glyph-property queries.
-

@@ -7,7 +7,7 @@ import ../foundation/types
 import ../drawing
 import ../themes
 import ./controls
-from pkg/chroma import ColorRGBA
+from figdraw import ColorRGBA
 
 export controls
 
