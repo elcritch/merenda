@@ -260,10 +260,7 @@ proc fontFor(style: TextStyle): FontRef =
   style.textFont()
 
 proc fontLineHeight(font: FontRef): float32 =
-  when defined(useNativeDynlib):
-    max(font.font.size, font.font.lineHeight)
-  else:
-    getLineHeightImpl(font.font)
+  getLineHeightImpl(font.font)
 
 when defined(useNativeDynlib):
   proc figLine(a, b: Vec2, fillValue: Fill, weight: float32, zlevel = 0.ZLevel): Fig =
@@ -456,7 +453,7 @@ proc normalizeLineAdvances(layout: var GlyphArrangement) =
     layout.bounding.h = max(maximumY - minimumY, 0.0'f32)
     layout.maxSize.y = max(layout.maxSize.y, layout.bounding.h)
 
-func paragraphIndices[T](runes: T): seq[int] =
+proc paragraphIndices[T](runes: T): seq[int] =
   result = newSeq[int](runes.len + 1)
   var
     paragraphIndex = 0
@@ -470,13 +467,13 @@ func paragraphIndices[T](runes: T): seq[int] =
     previousWasCarriageReturn = rune == Rune('\r')
   result[^1] = paragraphIndex
 
-func lineSourceIndex(layout: GlyphArrangement, line: Slice[int]): int =
+proc lineSourceIndex(layout: GlyphArrangement, line: Slice[int]): int =
   result = layout.sourceRunes.len
   for glyphIndex in line:
     result = min(result, layout.arrangedGlyphs[glyphIndex].source.runeStart)
   result = clamp(result, 0, layout.sourceRunes.len)
 
-func linesByParagraph(
+proc linesByParagraph(
     layout: GlyphArrangement, indices: openArray[int]
 ): seq[seq[Slice[int]]] =
   let paragraphCount =
@@ -514,7 +511,7 @@ proc paragraphLineBreakModes(
     else:
       result[paragraphIndex] = tlbmWordWrapping
 
-func canCombineLineBreakLayouts(wrapped, unwrapped: GlyphArrangement): bool =
+proc canCombineLineBreakLayouts(wrapped, unwrapped: GlyphArrangement): bool =
   wrapped.sourceRunes == unwrapped.sourceRunes and
     wrapped.arrangedGlyphs.len == unwrapped.arrangedGlyphs.len and
     wrapped.positions.len == unwrapped.positions.len and

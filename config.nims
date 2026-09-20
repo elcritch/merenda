@@ -37,18 +37,17 @@ when defined(features.merenda.kosmo):
 
 import std/strutils
 import std/os
+import figdraw/build/tasks
 
 when defined(useNativeDynlib):
-  switch("path", "../figdraw/bin")
-  when defined(macosx):
-    switch("define", "nativeLibrary=../figdraw/bin/libfigdraw_native.dylib")
-  elif defined(linux) or defined(bsd):
-    switch("define", "nativeLibrary=../figdraw/bin/libfigdraw_native.so")
+  ensureNativeDynlib()
+  let figdrawBinDir = figdrawProjectDir / "bin"
+  switch("path", figdrawBinDir)
+  switch("define", "nativeLibrary=" & stagedNativeDynlibPath())
 
 const
   referenceDir = "docs/reference"
   openStepSpecUrl = "https://levenez.com/NeXTSTEP/OpenStepSpec.pdf"
-
 
 when defined(macosx) and defined(figdraw.moltenvkBrew):
   let moltenVkPrefix = gorgeEx("brew --prefix molten-vk").output.strip()
@@ -94,6 +93,9 @@ proc platforms(): seq[string] =
       result.add "XDG_SESSION_TYPE=x11 FIGDRAW_FORCE_OPENGL=1 "
   else:
     @[""]
+
+task build_dynlib, "Force rebuild and stage the Figdraw native dynlib":
+  buildAndStageNativeDynlib()
 
 task test, "run unit test":
   for platformArg in platforms():

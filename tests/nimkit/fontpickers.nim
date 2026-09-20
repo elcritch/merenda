@@ -1,9 +1,6 @@
 import std/[os, sequtils, sets, strutils, tempfiles, unittest]
 
-from figdraw/common/typefaceinfos import TypefaceCodepointRange, TypefaceInfo
-from figdraw/common/fonttypes import fontVariation
-from figdraw/common/typefaces import fontWithSize, getTypefaceInfo
-from figdraw/extras/systemfonttypes import SystemTypeface, initSystemTypeface
+import figdraw
 import merenda/nimkit
 
 suite "NimKit font pickers":

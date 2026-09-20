@@ -208,15 +208,9 @@ proc isolateGlyphArrangement(layout: GlyphArrangement): GlyphArrangement =
   result.spans = layout.spans.isolateSequence()
   result.fonts = layout.fonts.isolateSequence()
   result.spanColors = layout.spanColors.isolateSequence()
-  when defined(useNativeDynlib):
-    result.sourceRunes = layout.sourceRunes.isolateSequence()
-  else:
-    result.sourceRunes = layout.sourceRunes.copyUtf8Runes()
+  result.sourceRunes = layout.sourceRunes.copyUtf8Runes()
   result.arrangedGlyphs = layout.arrangedGlyphs.isolateSequence()
-  when defined(useNativeDynlib):
-    result.runes = layout.runes.isolateSequence()
-  else:
-    result.runes = layout.runes.copyUtf8Runes()
+  result.runes = layout.runes.copyUtf8Runes()
   result.positions = layout.positions.isolateSequence()
   result.selectionRects = layout.selectionRects.isolateSequence()
 

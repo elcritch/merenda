@@ -12,6 +12,19 @@ when defined(useNativeDynlib):
   import figdraw as siwinshim
 else:
   import figdraw/windowing/siwinshim as siwinshim
+
+when defined(useNativeDynlib):
+  type
+    SiwinWindow = siwinshim.NativeWindow
+    SiwinScrollEvent = siwinshim.NativeScrollEvent
+    SiwinKeyEvent = siwinshim.NativeKeyEvent
+
+else:
+  type
+    SiwinWindow = siwinshim.Window
+    SiwinScrollEvent = siwinshim.ScrollEvent
+    SiwinKeyEvent = siwinshim.KeyEvent
+
 when not defined(useNativeDynlib):
   import siwin/colorutils as siwinColors
 import siwin/clipboards as siwinClipboards
@@ -210,7 +223,7 @@ type
     rendererWakeups: Chan[bool]
 
   HostWindow* = ref object
-    xNativeWindow: siwinshim.Window
+    xNativeWindow: SiwinWindow
     xRenderer: figrender.FigRenderer[siwinshim.SiwinRenderBackend]
     xPresentationTarget: siwinshim.SiwinPresentationTarget
     xAutoScale: bool
@@ -660,7 +673,7 @@ proc configuredUiScale(host: HostWindow): float32 =
     return 1.0'f32
   max(host.xNativeWindow.contentScale(), 1.0'f32)
 
-proc usesScaledBackingSize(host: HostWindow, window: siwinshim.Window): bool =
+proc usesScaledBackingSize(host: HostWindow, window: SiwinWindow): bool =
   if window.isNil:
     return false
   if host.xHasUiScaleOverride:
@@ -673,13 +686,13 @@ proc usesScaledBackingSize(host: HostWindow, window: siwinshim.Window): bool =
   else:
     scale != 1.0'f32 and not window.inputUsesBackingPixels()
 
-proc logicalSizeForBacking(host: HostWindow, window: siwinshim.Window): Vec2 =
+proc logicalSizeForBacking(host: HostWindow, window: SiwinWindow): Vec2 =
   let
     scale = host.configuredUiScale()
     backing = window.backingSize()
   vec2(backing.x.float32 / scale, backing.y.float32 / scale)
 
-proc nativeWindowKey(nativeWindow: siwinshim.Window): pointer =
+proc nativeWindowKey(nativeWindow: SiwinWindow): pointer =
   cast[pointer](nativeWindow)
 
 proc registerHost(host: HostWindow) =
@@ -705,43 +718,68 @@ proc firstReadyHost(): HostWindow =
     if host.hostReady:
       return host
 
-proc clipboardText(clipboard: siwinClipboards.Clipboard): string =
-  let content = clipboard.content(siwinClipboards.ClipboardContentKind.text)
-  case content.kind
-  of siwinClipboards.ClipboardContentKind.text: content.text
-  else: ""
+when defined(useNativeDynlib):
+  proc clipboardText(clipboard: figrender.Clipboard): string =
+    clipboard.text()
 
-proc clipboardFiles(clipboard: siwinClipboards.Clipboard): seq[string] =
-  let content = clipboard.content(siwinClipboards.ClipboardContentKind.files)
-  case content.kind
-  of siwinClipboards.ClipboardContentKind.files:
-    content.files
-  else:
-    @[]
+  proc clipboardFiles(clipboard: figrender.Clipboard): seq[string] =
+    clipboard.files()
 
-proc clipboardData(clipboard: siwinClipboards.Clipboard, mimeType: string): string =
-  let content = clipboard.content(siwinClipboards.ClipboardContentKind.other, mimeType)
-  case content.kind
-  of siwinClipboards.ClipboardContentKind.other: content.data
-  else: ""
+  proc clipboardData(clipboard: figrender.Clipboard, mimeType: string): string =
+    clipboard[mimeType]
 
-proc `clipboardText=`(clipboard: siwinClipboards.Clipboard, value: string) =
-  type TextClipboardPayload = ref object of RootObj
-    value: string
+  proc `clipboardText=`(clipboard: figrender.Clipboard, value: string) =
+    clipboard.text = value
 
-  var content: siwinClipboards.ClipboardConvertableContent
-  content.data = TextClipboardPayload(value: value)
-  content.converters.add siwinClipboards.ClipboardContentConverter(
-    kind: siwinClipboards.ClipboardContentKind.text,
-    f: proc(
-        data: ref RootObj, kind: siwinClipboards.ClipboardContentKind, mimeType: string
-    ): siwinClipboards.ClipboardContent =
-      siwinClipboards.ClipboardContent(
-        kind: siwinClipboards.ClipboardContentKind.text,
-        text: TextClipboardPayload(data).value,
-      ),
-  )
-  clipboard.content = content
+  proc `clipboardFiles=`(clipboard: figrender.Clipboard, value: seq[string]) =
+    clipboard.files = value
+
+  proc setClipboardData(
+      clipboard: figrender.Clipboard, mimeType: string, value: string
+  ) =
+    clipboard[mimeType] = value
+
+else:
+  proc clipboardText(clipboard: siwinClipboards.Clipboard): string =
+    let content = clipboard.content(siwinClipboards.ClipboardContentKind.text)
+    case content.kind
+    of siwinClipboards.ClipboardContentKind.text: content.text
+    else: ""
+
+  proc clipboardFiles(clipboard: siwinClipboards.Clipboard): seq[string] =
+    let content = clipboard.content(siwinClipboards.ClipboardContentKind.files)
+    case content.kind
+    of siwinClipboards.ClipboardContentKind.files:
+      content.files
+    else:
+      @[]
+
+  proc clipboardData(clipboard: siwinClipboards.Clipboard, mimeType: string): string =
+    let content =
+      clipboard.content(siwinClipboards.ClipboardContentKind.other, mimeType)
+    case content.kind
+    of siwinClipboards.ClipboardContentKind.other: content.data
+    else: ""
+
+  proc `clipboardText=`(clipboard: siwinClipboards.Clipboard, value: string) =
+    type TextClipboardPayload = ref object of RootObj
+      value: string
+
+    var content: siwinClipboards.ClipboardConvertableContent
+    content.data = TextClipboardPayload(value: value)
+    content.converters.add siwinClipboards.ClipboardContentConverter(
+      kind: siwinClipboards.ClipboardContentKind.text,
+      f: proc(
+          data: ref RootObj,
+          kind: siwinClipboards.ClipboardContentKind,
+          mimeType: string,
+      ): siwinClipboards.ClipboardContent =
+        siwinClipboards.ClipboardContent(
+          kind: siwinClipboards.ClipboardContentKind.text,
+          text: TextClipboardPayload(data).value,
+        ),
+    )
+    clipboard.content = content
 
 proc readyHost(provider: NativePasteboardProvider): HostWindow =
   if not provider.xHost.hostReady:
@@ -1195,9 +1233,7 @@ proc installNativeClipboardBridge(host: HostWindow) =
   nativePasteboardProvider.xHost = host
   generalPasteboard().provider = nativePasteboardProvider
 
-proc hostForNativeWindow(
-    nativeWindow: siwinshim.Window, fallbackKey: pointer
-): HostWindow =
+proc hostForNativeWindow(nativeWindow: SiwinWindow, fallbackKey: pointer): HostWindow =
   ensureHostRegistry()
   let key = if nativeWindow.isNil: fallbackKey else: nativeWindow.nativeWindowKey
   if key.isNil or key notin hostWindows:
@@ -1254,25 +1290,25 @@ proc rawInputToLogical*(rawPos: Vec2, inputSize: IVec2, logicalSize: Vec2): Vec2
     rawPos.y * logicalSize.y / inputSize.y.float32,
   )
 
-proc hostLogicalSize(host: HostWindow, window: siwinshim.Window): Vec2 =
+proc hostLogicalSize(host: HostWindow, window: SiwinWindow): Vec2 =
   if window.isNil:
     return vec2(0.0'f32, 0.0'f32)
   if host.usesScaledBackingSize(window):
     return host.logicalSizeForBacking(window)
   window.logicalSize()
 
-proc nativeMousePoint(host: HostWindow, window: siwinshim.Window): Point =
+proc nativeMousePoint(host: HostWindow, window: SiwinWindow): Point =
   # siwin mouse.pos is reported in window.size coordinates, which may lag
   # backingSize on Cocoa until resize/backing notifications are delivered.
   let pos =
     rawInputToLogical(window.mouse.pos, window.size(), host.hostLogicalSize(window))
   initPoint(pos.x.float32, pos.y.float32)
 
-proc nativeMousePoint(host: HostWindow, window: siwinshim.Window, rawPos: Vec2): Point =
+proc nativeMousePoint(host: HostWindow, window: SiwinWindow, rawPos: Vec2): Point =
   let pos = rawInputToLogical(rawPos, window.size(), host.hostLogicalSize(window))
   initPoint(pos.x.float32, pos.y.float32)
 
-proc nativeModifiers(window: siwinshim.Window): set[events.KeyModifier] =
+proc nativeModifiers(window: SiwinWindow): set[events.KeyModifier] =
   toNimkitModifiers(window.keyboard.modifiers, window.keyboard.pressed)
 
 proc visualCapabilities*(host: HostWindow): set[WindowEffectCapability] =
@@ -1334,7 +1370,7 @@ proc clearBackdrop*(host: HostWindow) =
   if host.hostReady():
     discard host.trySetBackdrop(noWindowBackdropEffect())
 
-proc activeMouseButton(window: siwinshim.Window): events.MouseButton =
+proc activeMouseButton(window: SiwinWindow): events.MouseButton =
   if siwinshim.MouseButton.left in window.mouse.pressed:
     return events.mbPrimary
   if siwinshim.MouseButton.right in window.mouse.pressed:
@@ -1359,7 +1395,7 @@ proc supportsPopupWindows*(host: HostWindow): bool =
   else:
     not host.xNativeWindow.isNil
 
-proc nativeWindowOrNil*(host: HostWindow): siwinshim.Window =
+proc nativeWindowOrNil*(host: HostWindow): SiwinWindow =
   host.xNativeWindow
 
 proc rendererOrNil*(
@@ -1650,7 +1686,7 @@ proc dispatchMouseMove(host: HostWindow, event: siwinshim.MouseMoveEvent) =
     dragging,
   )
 
-proc dispatchScroll(host: HostWindow, event: siwinshim.ScrollEvent) =
+proc dispatchScroll(host: HostWindow, event: SiwinScrollEvent) =
   let nativeWindow = if event.window.isNil: host.xNativeWindow else: event.window
   if nativeWindow.isNil or host.xCallbacks.onScroll.isNil:
     return
@@ -1665,7 +1701,7 @@ proc dispatchScroll(host: HostWindow, event: siwinshim.ScrollEvent) =
     )
   )
 
-proc dispatchKey(host: HostWindow, event: siwinshim.KeyEvent) =
+proc dispatchKey(host: HostWindow, event: SiwinKeyEvent) =
   if host.xCallbacks.onKey.isNil:
     return
   let
@@ -1737,7 +1773,7 @@ proc installEventHandlers(host: HostWindow) =
       if not host.isNil:
         host.dispatchMouseMove(event)
     ,
-    onScroll: proc(event: siwinshim.ScrollEvent) =
+    onScroll: proc(event: SiwinScrollEvent) =
       let host = hostForNativeWindow(event.window, ownerKey)
       if not host.isNil:
         host.dispatchScroll(event)
@@ -1747,7 +1783,7 @@ proc installEventHandlers(host: HostWindow) =
       if not host.isNil and not host.xCallbacks.onRender.isNil:
         host.xCallbacks.onRender()
     ,
-    onKey: proc(event: siwinshim.KeyEvent) =
+    onKey: proc(event: SiwinKeyEvent) =
       let host = hostForNativeWindow(event.window, ownerKey)
       if not host.isNil:
         host.dispatchKey(event)

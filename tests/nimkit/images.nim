@@ -4,7 +4,7 @@ import pkg/pixie
 import pkg/pixie/fileformats/png
 
 when defined(useNativeDynlib):
-  import figdraw/dynlib except Image, fill, newImage, writeFile
+  import figdraw/dynlib except Image, encodePng, fill, newImage, writeFile
 else:
   import figdraw
 
@@ -212,7 +212,7 @@ suite "nimkit image resources":
     let
       first = newImageResource(testImage(4, 4), name = "replacement-message")
       secondPixels = testImage(4, 4)
-    secondPixels[0, 0] = rgba(220, 40, 10, 255).rgbx()
+    secondPixels.data[0] = rgba(220, 40, 10, 255).rgbx()
     let second = newImageResource(secondPixels, name = "replacement-message")
     var
       firstManifest = initRenderResourceManifest()
@@ -227,7 +227,7 @@ suite "nimkit image resources":
     while messages.tryRecvImageMsg(message):
       if message.kind == ImkPutPixie and message.id == first.imageId():
         inc putCount
-        lastPixel = message.pimg[0, 0]
+        lastPixel = message.pimg.data[0]
     check first.imageId() == second.imageId()
     check putCount == 2
     check lastPixel == rgba(220, 40, 10, 255).rgbx()

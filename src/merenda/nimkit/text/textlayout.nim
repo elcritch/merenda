@@ -788,10 +788,10 @@ func toContainerRect(rect: auto, layoutRect: Rect): Rect =
 func toTextRange(source: GlyphSourceRange): TextRange =
   initTextRange(source.runeStart, max(source.runeEnd - source.runeStart, 0))
 
-func sourceRangeForGlyph(layout: GlyphArrangement, glyphIndex: int): TextRange =
+proc sourceRangeForGlyph(layout: GlyphArrangement, glyphIndex: int): TextRange =
   layout.glyphSourceRange(glyphIndex).toTextRange()
 
-func textRangeForGlyphLine(layout: GlyphArrangement, line: Slice[int]): TextRange =
+proc textRangeForGlyphLine(layout: GlyphArrangement, line: Slice[int]): TextRange =
   if line.a > line.b:
     return initTextRange(0, 0)
   var
@@ -809,7 +809,7 @@ func textRangeForGlyphLine(layout: GlyphArrangement, line: Slice[int]): TextRang
   else:
     initTextRange(0, 0)
 
-func containsHardBreak[T](runes: T, range: TextRange): bool =
+proc containsHardBreak[T](runes: T, range: TextRange): bool =
   if runes.len == 0:
     return false
   let

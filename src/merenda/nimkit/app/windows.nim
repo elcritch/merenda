@@ -6,8 +6,10 @@ import figdraw as figrender
 from figdraw import Renders, ZLevel
 when defined(useNativeDynlib):
   import figdraw as siwinshim
+  type SiwinWindow = siwinshim.NativeWindow
 else:
   import figdraw/windowing/siwinshim as siwinshim
+  type SiwinWindow = siwinshim.Window
 import sigils/core
 
 import ../accessibility/accessibility
@@ -1586,7 +1588,7 @@ when not defined(useNativeDynlib):
     window.refreshAutomaticContentMinSize()
     nimkitRendering.buildRenderScene(window.xContentView, theme)
 
-proc nativeWindowOrNil*(window: Window): siwinshim.Window =
+proc nativeWindowOrNil*(window: Window): SiwinWindow =
   if window.xHostWindow.isNil:
     return nil
   window.xHostWindow.nativeWindowOrNil()
