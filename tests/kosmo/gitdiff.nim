@@ -863,7 +863,7 @@ suite "Kosmo Git diff":
     check working.comparison.kind == gdckWorkingTree
     check "main" in working.branches
     check "other" in working.branches
-    check "feature" notin working.branches
+    check "feature" in working.branches
     require working.files.len == 1
     check working.files[0].path == "working.txt"
 
@@ -889,7 +889,7 @@ suite "Kosmo Git diff":
     check panel.comparisonButton.title == "Working Tree"
     check not panel.comparisonButton.hidden
     let menu = panel.comparisonButton.menu()
-    check menu.items().len == 3
+    check menu.items().len == 4
     let mainItem = menu.menuItemWithIdentifier("kosmo.gitDiff.branch.main")
     require not mainItem.isNil
     check mainItem.perform(window)
@@ -909,6 +909,66 @@ suite "Kosmo Git diff":
     check panel.comparisonButton.title == "Working Tree"
     require panel.snapshot.files.len == 1
     check panel.snapshot.files[0].path == "working.txt"
+
+  test "Git diff comparison menu includes the current branch and scrolls":
+    let root = createTempDir("kosmo-git-diff-comparison-scroll-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "base.txt", "base\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "base")
+    git(root, "branch", "-M", "main")
+    for index in 0 ..< 11:
+      git(root, "branch", "branch-" & align($index, 2, '0'))
+
+    let snapshot = readGitDiff(root)
+    check snapshot.errorMessage == ""
+    check snapshot.branch == "main"
+    check "main" in snapshot.branches
+    check snapshot.branches.len == 12
+
+    let
+      panel = newKosmoGitDiffPanel(root)
+      window = newWindow("Git Diff Comparison Scroll", frame = rect(0, 0, 700, 400))
+    defer:
+      panel.comparisonButton.closePopup()
+      panel.close()
+      window.close()
+    panel.frame = rect(0, 0, 700, 400)
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+
+    panel.comparisonButton.popupPresentation = ppInline
+    panel.comparisonButton.openPopup()
+    require panel.comparisonButton.popupOpen()
+    var popup: PopupListView
+    for child in panel.subviews():
+      if child of PopupListView:
+        popup = PopupListView(child)
+        break
+    require not popup.isNil
+    check popup.itemCount() == 13
+    check popup.visibleItemCount() == 12
+    check popup.firstIndex() == 0
+
+    var mainIndex = -1
+    for index in 0 ..< popup.itemCount():
+      if popup.itemText(index) == "main":
+        mainIndex = index
+        break
+    require mainIndex >= 0
+    let firstRow = popup.popupListItemRect(popup.bounds(), 0)
+    let scrollPoint = popup.pointToWindow(
+      initPoint(
+        firstRow.origin.x + firstRow.size.width / 2.0'f32,
+        firstRow.origin.y + firstRow.size.height / 2.0'f32,
+      )
+    )
+    require window.scrollWheelAt(scrollPoint, deltaY = -1.0'f32)
+    check popup.firstIndex() == 1
+    check not popup.popupListItemRect(popup.bounds(), mainIndex).isEmpty
 
   test "empty clean and non-repository states are explicit":
     let root = createTempDir("kosmo-git-diff-empty-", "")

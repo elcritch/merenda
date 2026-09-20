@@ -1258,13 +1258,13 @@ protocol KosmoEditorInput of nimkit.TextInputProtocol:
 proc editorCopy(view: KosmoEditorView) =
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   if view.editor.currentSelection().isSome:
-    discard nimkit.generalPasteboard().setPlainText(view.editor.copySelection())
+    discard nimkit.generalPasteboard().replaceWithPlainText(view.editor.copySelection())
     view.refresh()
 
 proc editorCut(view: KosmoEditorView) =
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   if view.editor.currentSelection().isSome:
-    discard nimkit.generalPasteboard().setPlainText(view.editor.cutSelection())
+    discard nimkit.generalPasteboard().replaceWithPlainText(view.editor.cutSelection())
     view.refresh()
 
 proc editorPaste(view: KosmoEditorView) =

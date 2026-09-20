@@ -492,6 +492,11 @@ proc stringForType*(pasteboard: Pasteboard, kind: string): string =
 proc setPlainText*(pasteboard: Pasteboard, value: string): bool =
   pasteboard.setString(PasteboardTypePlainText, value)
 
+proc replaceWithPlainText*(pasteboard: Pasteboard, value: string): bool =
+  ## Replace all existing pasteboard representations with plain text.
+  pasteboard.declareTypes([PasteboardTypePlainText])
+  pasteboard.setPlainText(value)
+
 proc plainText*(pasteboard: Pasteboard): string =
   pasteboard.stringForType(PasteboardTypePlainText)
 

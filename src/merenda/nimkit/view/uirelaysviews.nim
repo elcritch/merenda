@@ -413,7 +413,7 @@ proc uiGetClipboardText(): string {.nimcall.} =
   generalPasteboard().plainText()
 
 proc uiPutClipboardText(text: string) {.nimcall.} =
-  discard generalPasteboard().setPlainText(text)
+  discard generalPasteboard().replaceWithPlainText(text)
 
 proc relayFrameFor(
     context: DrawContext, frame: UIRelaysRelayFrame

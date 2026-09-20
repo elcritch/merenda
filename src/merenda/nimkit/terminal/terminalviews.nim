@@ -722,7 +722,7 @@ proc synchronizeMetadata(view: TerminalView) =
     emit view.terminalBellDidRing()
   if view.xAllowsClipboardWrites and info.clipboardRequestPending:
     let text = view.xSession.takeClipboardRequest()
-    discard generalPasteboard().setPlainText(text)
+    discard generalPasteboard().replaceWithPlainText(text)
 
 proc poll*(view: TerminalView): TerminexPollResult =
   ## Drain available PTY output and synchronize the rendered grid.
@@ -1064,13 +1064,13 @@ protocol TerminalViewEditingCommands of TextEditingCommandProtocol:
     discard args
     let text = view.selectionText()
     if text.len > 0:
-      discard generalPasteboard().setPlainText(text)
+      discard generalPasteboard().replaceWithPlainText(text)
 
   method cut(view: TerminalView, args: ActionArgs) =
     discard args
     let text = view.selectionText()
     if text.len > 0:
-      discard generalPasteboard().setPlainText(text)
+      discard generalPasteboard().replaceWithPlainText(text)
 
   method paste(view: TerminalView, args: ActionArgs) =
     discard args
