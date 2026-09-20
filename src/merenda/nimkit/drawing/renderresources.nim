@@ -1,6 +1,8 @@
 import std/[hashes, sets, tables]
 
 import figdraw
+when defined(useNativeDynlib):
+  import figdraw/windowing
 
 import ./images
 

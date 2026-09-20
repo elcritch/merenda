@@ -1,15 +1,15 @@
 import std/[math, monotimes, options, os, tables, times]
 
 import pkg/chronicles
+import pkg/vmath as vmath
 
-import figdraw as figrender
-from figdraw import Renders, ZLevel
 when defined(useNativeDynlib):
-  import figdraw as siwinshim
-  type SiwinWindow = siwinshim.NativeWindow
+  import figdraw/windowing as figrender
 else:
-  import figdraw/windowing/siwinshim as siwinshim
-  type SiwinWindow = siwinshim.Window
+  import figdraw as figrender
+from figdraw import Renders, ZLevel
+import figdraw/windowing as siwinshim
+type SiwinWindow = siwinshim.Window
 import sigils/core
 
 import ../accessibility/accessibility
@@ -773,20 +773,20 @@ proc popupPlacement(
     anchorFrame: Rect, popupSize: Size, scale: float32, placeAbove: bool
 ): siwinshim.PopupPlacement =
   siwinshim.PopupPlacement(
-    anchorRectPos: siwinshim.ivec2(
+    anchorRectPos: vmath.ivec2(
       popupPixels(anchorFrame.origin.x, scale, 0),
       popupPixels(anchorFrame.origin.y, scale, 0),
     ),
-    anchorRectSize: siwinshim.ivec2(
+    anchorRectSize: vmath.ivec2(
       popupPixels(anchorFrame.size.width, scale, 1),
       popupPixels(anchorFrame.size.height, scale, 1),
     ),
-    size: siwinshim.ivec2(
+    size: vmath.ivec2(
       popupPixels(popupSize.width, scale, 1), popupPixels(popupSize.height, scale, 1)
     ),
     anchor: if placeAbove: siwinshim.Edge.topLeft else: siwinshim.Edge.bottomLeft,
     gravity: if placeAbove: siwinshim.Edge.bottomLeft else: siwinshim.Edge.topLeft,
-    offset: siwinshim.ivec2(0, 0),
+    offset: vmath.ivec2(0, 0),
     constraintAdjustment: {
       siwinshim.PopupConstraintAdjustment.pcaFlipY,
       siwinshim.PopupConstraintAdjustment.pcaSlideX,

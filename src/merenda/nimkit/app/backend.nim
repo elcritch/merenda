@@ -2,28 +2,23 @@ import
   std/[atomics, deques, isolation, locks, math, options, os, strutils, tables, times]
 
 import threading/[channels, smartptrs]
+import pkg/vmath
 
 when not compileOption("threads") and not defined(nimdoc):
   {.error: "NimKit's split renderer runtime requires --threads:on".}
 
-import figdraw as figrender
+when defined(useNativeDynlib):
+  import figdraw/dynlib
+  import figdraw/windowing as figrender
+else:
+  import figdraw as figrender
 from figdraw import clearColor, figUiScale, setFigUiScale, Renders, encodePng
-when defined(useNativeDynlib):
-  import figdraw as siwinshim
-else:
-  import figdraw/windowing/siwinshim as siwinshim
+import figdraw/windowing as siwinshim
 
-when defined(useNativeDynlib):
-  type
-    SiwinWindow = siwinshim.NativeWindow
-    SiwinScrollEvent = siwinshim.NativeScrollEvent
-    SiwinKeyEvent = siwinshim.NativeKeyEvent
-
-else:
-  type
-    SiwinWindow = siwinshim.Window
-    SiwinScrollEvent = siwinshim.ScrollEvent
-    SiwinKeyEvent = siwinshim.KeyEvent
+type
+  SiwinWindow = siwinshim.Window
+  SiwinScrollEvent = siwinshim.ScrollEvent
+  SiwinKeyEvent = siwinshim.KeyEvent
 
 when not defined(useNativeDynlib):
   import siwin/colorutils as siwinColors
