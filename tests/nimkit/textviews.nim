@@ -441,6 +441,9 @@ suite "nimkit text views":
       newTextView("λ alpha λ https://example.test/終", frame = rect(0, 0, 280, 80))
 
     check textView.findTextRanges("λ") == @[initTextRange(0, 1), initTextRange(8, 1)]
+    let caseTextView = newTextView("α Alpha α ALPHA", frame = rect(0, 0, 220, 24))
+    check caseTextView.findTextRanges("alpha", caseSensitive = false) ==
+      @[initTextRange(2, 5), initTextRange(10, 5)]
     textView.substitutionOptions = {tsoDataDetection}
     let checks = textView.checkText()
     check checks.len == 1

@@ -1,6 +1,6 @@
 import std/[hashes, math, options, strutils, unicode]
 
-from figdraw import GlyphArrangement, Utf8Runes, lineGlyphRanges, len, `[]`
+from figdraw import GlyphArrangement, lineGlyphRanges, len, `[]`
 
 import sigils/core
 
@@ -1156,26 +1156,17 @@ proc replaceRange(
     range, newTextStorage(insertion, attributes), record = record, clearMark = clearMark
   )
 
-proc runeString(runes: Utf8Runes, start, stop: int): string =
-  let
-    first = max(0, min(start, runes.len))
-    last = max(first, min(stop, runes.len))
-  for index in first ..< last:
-    result.add runes[index].toUTF8()
+proc foldedSearchText(text: string): string =
+  result = newStringOfCap(text.len)
+  for rune in text.runes:
+    result.add rune.toUTF8().toLowerAscii()
 
-func foldedRune(rune: Rune): string =
-  rune.toUTF8().toLowerAscii()
-
-proc runesMatchAt(haystack, needle: Utf8Runes, index: int, caseSensitive: bool): bool =
-  if needle.len == 0 or index < 0 or index + needle.len > haystack.len:
-    return false
-  for offset in 0 ..< needle.len:
-    if caseSensitive:
-      if haystack[index + offset] != needle[offset]:
-        return false
-    elif haystack[index + offset].foldedRune() != needle[offset].foldedRune():
-      return false
-  true
+proc normalizedSearchText(text: string): string =
+  if text.validateUtf8() < 0:
+    return text
+  result = newStringOfCap(text.len)
+  for rune in text.runes:
+    result.add rune.toUTF8()
 
 proc applyTextSubstitutions(textView: TextView, insertion: string): string =
   result = insertion
@@ -1256,18 +1247,29 @@ proc findTextRanges*(
 ): seq[TextRange] =
   if needle.len == 0:
     return
-  let
-    haystack = utf8RunesForText(textView.textViewStringValue())
-    needleRunes = utf8RunesForText(needle)
-  if needleRunes.len == 0 or needleRunes.len > haystack.len:
+  var
+    haystack = normalizedSearchText(textView.textViewStringValue())
+    target = normalizedSearchText(needle)
+    targetLength = target.runeLen
+  if targetLength == 0:
     return
-  var index = 0
-  while index + needleRunes.len <= haystack.len:
-    if haystack.runesMatchAt(needleRunes, index, caseSensitive):
-      result.add initTextRange(index, needleRunes.len)
-      index += max(needleRunes.len, 1)
-    else:
-      inc index
+  if not caseSensitive:
+    haystack = haystack.foldedSearchText()
+    target = target.foldedSearchText()
+
+  var
+    byteIndex = 0
+    runeIndex = 0
+  while byteIndex < haystack.len:
+    let matchByte = haystack.find(target, byteIndex)
+    if matchByte < 0:
+      break
+    while byteIndex < matchByte:
+      byteIndex += max(haystack.runeLenAt(byteIndex), 1)
+      inc runeIndex
+    result.add initTextRange(runeIndex, targetLength)
+    byteIndex = matchByte + target.len
+    runeIndex += targetLength
 
 proc showFindIndicators*(
     textView: TextView, needle: string, caseSensitive = true
@@ -1306,24 +1308,45 @@ proc detectUrlRanges(textView: TextView, range: TextRange): seq[TextCheckingResu
   let
     clamped = textView.clampedRange(range)
     source = textView.xTextStorage.substring(clamped)
-    runes = utf8RunesForText(source)
-    httpPrefix = utf8RunesForText("http://")
-    httpsPrefix = utf8RunesForText("https://")
-  var index = 0
-  while index < runes.len:
-    if runes.runesMatchAt(httpPrefix, index, caseSensitive = true) or
-        runes.runesMatchAt(httpsPrefix, index, caseSensitive = true):
-      let start = index
-      while index < runes.len and not runes[index].isWhiteSpace:
-        inc index
-      let link = runes.runeString(start, index)
-      result.add initTextCheckingResult(
-        tckLink,
-        initTextRange(int(clamped.location) + start, index - start),
-        link = link,
-      )
-    else:
-      inc index
+    text = normalizedSearchText(source)
+  var
+    byteIndex = 0
+    runeIndex = 0
+  while byteIndex < text.len:
+    let
+      httpByte = text.find("http://", byteIndex)
+      httpsByte = text.find("https://", byteIndex)
+      matchByte =
+        if httpByte < 0:
+          httpsByte
+        elif httpsByte < 0:
+          httpByte
+        else:
+          min(httpByte, httpsByte)
+    if matchByte < 0:
+      break
+    while byteIndex < matchByte:
+      byteIndex += max(text.runeLenAt(byteIndex), 1)
+      inc runeIndex
+    let
+      startByte = matchByte
+      startRune = runeIndex
+    var
+      stopByte = startByte
+      stopRune = startRune
+    while stopByte < text.len:
+      let rune = text.runeAt(stopByte)
+      if rune.isWhiteSpace:
+        break
+      stopByte += max(text.runeLenAt(stopByte), 1)
+      inc stopRune
+    result.add initTextCheckingResult(
+      tckLink,
+      initTextRange(int(clamped.location) + startRune, stopRune - startRune),
+      link = text[startByte ..< stopByte],
+    )
+    byteIndex = stopByte
+    runeIndex = stopRune
 
 proc checkText*(textView: TextView, range: TextRange): seq[TextCheckingResult] =
   let clamped = textView.clampedRange(range)

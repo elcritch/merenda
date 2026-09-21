@@ -44,8 +44,7 @@ jobs:
       run: |
         mkdir -p "$HOME/.local/bin"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-        curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-          ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+        bash .github/scripts/install-atlas.sh
         "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
 
     - name: Verify Nim
@@ -193,8 +192,7 @@ jobs:
       run: |
         mkdir -p "$HOME/.local/bin"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-        curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-          ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+        bash .github/scripts/install-atlas.sh
         "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
 
     - name: Verify Nim
