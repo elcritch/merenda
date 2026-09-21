@@ -1,6 +1,6 @@
 import std/[hashes, math, options, strutils, unicode]
 
-from figdraw import GlyphArrangement, lineGlyphRanges, len, `[]`
+from figdraw import GlyphArrangement, Utf8Runes, lineGlyphRanges, len, `[]`
 
 import sigils/core
 
@@ -14,6 +14,7 @@ import ../foundation/selectors
 import ../foundation/urls
 import ./textlayout
 import ./textstorage
+import ./textruneutils
 import ./texttypes
 import ../themes
 import ../foundation/types
@@ -410,47 +411,6 @@ proc initTextCheckingResult*(
     link: link,
     attributes: attributes,
   )
-
-proc runesOf(text: string): seq[Rune] =
-  for rune in text.runes:
-    result.add rune
-
-func isWordRune(rune: Rune): bool =
-  let code = rune.int
-  (code >= int('a') and code <= int('z')) or (code >= int('A') and code <= int('Z')) or
-    (code >= int('0') and code <= int('9')) or code == int('_')
-
-proc previousWordBoundary(text: string, index: int): int =
-  let runes = text.runesOf()
-  result = clampIndex(runes.len, index)
-  while result > 0 and runes[result - 1].isWhiteSpace:
-    dec result
-  while result > 0 and not runes[result - 1].isWhiteSpace:
-    dec result
-
-proc nextWordBoundary(text: string, index: int): int =
-  let runes = text.runesOf()
-  result = clampIndex(runes.len, index)
-  while result < runes.len and runes[result].isWhiteSpace:
-    inc result
-  while result < runes.len and not runes[result].isWhiteSpace:
-    inc result
-
-proc wordRangeAt(text: string, index: int): TextRange =
-  let runes = text.runesOf()
-  if runes.len == 0:
-    return initTextRange(0, 0)
-  var
-    start = clampIndex(runes.len, index)
-    stop = start
-  if start == runes.len and start > 0:
-    dec start
-    stop = runes.len
-  while start > 0 and runes[start - 1].isWordRune:
-    dec start
-  while stop < runes.len and runes[stop].isWordRune:
-    inc stop
-  initTextRange(start, stop - start)
 
 proc lineRangeAtIndex(textView: TextView, index: int): TextRange =
   let line = textView.lineForIndex(index)
@@ -1196,7 +1156,7 @@ proc replaceRange(
     range, newTextStorage(insertion, attributes), record = record, clearMark = clearMark
   )
 
-proc runeString(runes: openArray[Rune], start, stop: int): string =
+proc runeString(runes: Utf8Runes, start, stop: int): string =
   let
     first = max(0, min(start, runes.len))
     last = max(first, min(stop, runes.len))
@@ -1206,9 +1166,7 @@ proc runeString(runes: openArray[Rune], start, stop: int): string =
 func foldedRune(rune: Rune): string =
   rune.toUTF8().toLowerAscii()
 
-proc runesMatchAt(
-    haystack, needle: openArray[Rune], index: int, caseSensitive: bool
-): bool =
+proc runesMatchAt(haystack, needle: Utf8Runes, index: int, caseSensitive: bool): bool =
   if needle.len == 0 or index < 0 or index + needle.len > haystack.len:
     return false
   for offset in 0 ..< needle.len:
@@ -1218,10 +1176,6 @@ proc runesMatchAt(
     elif haystack[index + offset].foldedRune() != needle[offset].foldedRune():
       return false
   true
-
-proc textStartsWithAt(runes: openArray[Rune], index: int, prefix: string): bool =
-  let prefixRunes = prefix.runesOf()
-  runes.runesMatchAt(prefixRunes, index, caseSensitive = true)
 
 proc applyTextSubstitutions(textView: TextView, insertion: string): string =
   result = insertion
@@ -1251,11 +1205,11 @@ proc applySmartInsert(
   result = insertion
   if not textView.xSmartInsertDelete or insertion.len == 0:
     return
-  let insertedRunes = insertion.runesOf()
+  let insertedRunes = utf8RunesForText(insertion)
   if insertedRunes.len == 0:
     return
   let
-    textRunes = textView.textViewStringValue().runesOf()
+    textRunes = utf8RunesForText(textView.textViewStringValue())
     start = int(selected.location)
     stop = selected.maxIndex
   var
@@ -1264,7 +1218,8 @@ proc applySmartInsert(
   if start > 0 and start <= textRunes.len and textRunes[start - 1].isWordRune and
       insertedRunes[0].isWordRune:
     prefix = " "
-  if stop < textRunes.len and insertedRunes[^1].isWordRune and textRunes[stop].isWordRune:
+  if stop < textRunes.len and insertedRunes[insertedRunes.len - 1].isWordRune and
+      textRunes[stop].isWordRune:
     suffix = " "
   result = prefix & insertion & suffix
 
@@ -1302,8 +1257,8 @@ proc findTextRanges*(
   if needle.len == 0:
     return
   let
-    haystack = textView.textViewStringValue().runesOf()
-    needleRunes = needle.runesOf()
+    haystack = utf8RunesForText(textView.textViewStringValue())
+    needleRunes = utf8RunesForText(needle)
   if needleRunes.len == 0 or needleRunes.len > haystack.len:
     return
   var index = 0
@@ -1351,11 +1306,13 @@ proc detectUrlRanges(textView: TextView, range: TextRange): seq[TextCheckingResu
   let
     clamped = textView.clampedRange(range)
     source = textView.xTextStorage.substring(clamped)
-    runes = source.runesOf()
+    runes = utf8RunesForText(source)
+    httpPrefix = utf8RunesForText("http://")
+    httpsPrefix = utf8RunesForText("https://")
   var index = 0
   while index < runes.len:
-    if runes.textStartsWithAt(index, "http://") or
-        runes.textStartsWithAt(index, "https://"):
+    if runes.runesMatchAt(httpPrefix, index, caseSensitive = true) or
+        runes.runesMatchAt(httpsPrefix, index, caseSensitive = true):
       let start = index
       while index < runes.len and not runes[index].isWhiteSpace:
         inc index
@@ -2325,7 +2282,7 @@ proc currentVisualLineBounds(textView: TextView): tuple[first, last: int] =
 
   let
     line = fragment.get()
-    runes = textView.textViewStringValue().toRunes()
+    runes = textView.xLayoutManager.sourceRunes()
   result.first = int(line.textRange.location)
   result.last = line.textRange.maxIndex
   if line.hardBreak and result.last > result.first and result.last - 1 < runes.len and

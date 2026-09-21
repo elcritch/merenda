@@ -436,6 +436,20 @@ suite "nimkit text views":
     check textView.acceptCompletion()
     check textView.stringValue == "alphabet"
 
+  test "text view search and URL detection preserve UTF-8 rune offsets":
+    let textView =
+      newTextView("λ alpha λ https://example.test/終", frame = rect(0, 0, 280, 80))
+
+    check textView.findTextRanges("λ") == @[initTextRange(0, 1), initTextRange(8, 1)]
+    textView.substitutionOptions = {tsoDataDetection}
+    let checks = textView.checkText()
+    check checks.len == 1
+    check checks[0].range == initTextRange(10, 22)
+    check checks[0].link == "https://example.test/終"
+
+    let malformedTextView = newTextView("a\xF0z", frame = rect(0, 0, 120, 24))
+    check malformedTextView.findTextRanges("z") == @[initTextRange(2, 1)]
+
   test "text view exposes caret selection and paragraph editing attributes":
     let
       textView = newTextView("abc", frame = rect(0, 0, 160, 24))

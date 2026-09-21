@@ -231,28 +231,23 @@ method storageLineCount*(storage: TextGapStorage): int =
   storage.xGapBuffer.lineCount()
 
 method storageLineRange*(storage: TextStorage, line: int): TextRange {.base.} =
-  let
-    runes = storage.xStringValue.toRunes()
-    targetLine = max(line, 0)
+  let targetLine = max(line, 0)
   var
     currentLine = 0
     start = 0
     index = 0
-  while index < runes.len and currentLine < targetLine:
-    if runes[index] == Rune('\n'):
+
+  for rune in storage.xStringValue.runes:
+    if currentLine == targetLine and rune == Rune('\n'):
+      return initTextRange(start, index + 1 - start)
+    if rune == Rune('\n'):
       inc currentLine
       start = index + 1
     inc index
 
   if currentLine < targetLine:
-    return initTextRange(runes.len, 0)
-
-  var stop = start
-  while stop < runes.len and runes[stop] != Rune('\n'):
-    inc stop
-  if stop < runes.len and runes[stop] == Rune('\n'):
-    inc stop
-  initTextRange(start, stop - start)
+    return initTextRange(index, 0)
+  initTextRange(start, index - start)
 
 method storageLineRange*(storage: TextGapStorage, line: int): TextRange =
   storage.xGapBuffer.lineRange(line)
@@ -261,22 +256,24 @@ method storageParagraphRange*(
     storage: TextStorage, range: TextRange
 ): TextRange {.base.} =
   let
-    runes = storage.xStringValue.toRunes()
-    clamped = clampTextRange(runes.len, range)
-  if runes.len == 0:
+    total = storage.xStringValue.runeLen
+    clamped = clampTextRange(total, range)
+    startTarget = int(clamped.location)
+    stopTarget = min(max(clamped.maxIndex, startTarget), total)
+  if total == 0:
     return initTextRange(0, 0)
 
-  var start = min(int(clamped.location), runes.len)
-  while start > 0 and runes[start - 1] != Rune('\n'):
-    dec start
-
-  var stop = min(max(clamped.maxIndex, start), runes.len)
-  if stop < runes.len and clamped.length == 0 and stop == start:
-    discard
-  while stop < runes.len and runes[stop] != Rune('\n'):
-    inc stop
-  if stop < runes.len and runes[stop] == Rune('\n'):
-    inc stop
+  var
+    start = 0
+    stop = total
+    index = 0
+  for rune in storage.xStringValue.runes:
+    if index < startTarget and rune == Rune('\n'):
+      start = index + 1
+    elif index >= stopTarget and rune == Rune('\n'):
+      stop = index + 1
+      break
+    inc index
   initTextRange(start, stop - start)
 
 method storageParagraphRange*(storage: TextGapStorage, range: TextRange): TextRange =

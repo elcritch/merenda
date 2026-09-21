@@ -2,6 +2,7 @@ import std/[hashes, monotimes, options, os, sets, strutils, times, unicode, unit
 
 import sigils/core
 import sigils/threads
+from figdraw import len, `[]`, utf8RunesFromText
 import merenda/nimkit/foundation/mainthreadwork
 
 import merenda/nimkit
@@ -323,7 +324,7 @@ proc contractSnapshot(
       else:
         request.storage.stringValue()
     containers = request.contractContainers()
-    runes = text.toRunes()
+    runes = utf8RunesFromText(text)
     layoutRect = containers[0].contractLayoutRect()
     wraps = request.wraps or containers[0].wrapsText
     maxChars =
@@ -1188,6 +1189,7 @@ suite "nimkit text layout":
       usedLineRect = manager.usedRectForLineFragmentAtIndex(0)
       extra = manager.extraLineFragment()
 
+    check manager.sourceRunes() == utf8RunesFromText("A B\nC")
     check glyphs.len == int(manager.numberOfGlyphs())
     check firstGlyph.isSome
     check firstGlyph.get().textRange == initTextRange(0, 1)
@@ -1215,6 +1217,23 @@ suite "nimkit text layout":
     check manager.glyphPropertyRuns().len == 1
     manager.removeGlyphProperties(initGlyphRange(0, 1))
     check manager.glyphPropertyRuns().len == 0
+
+  test "glyph properties use current text during deferred edits":
+    let
+      storage = newTextStorage(" a")
+      manager = newTextLayoutManager(
+        storage, initTextContainer(initSize(220.0, 100.0), insets(4.0), wraps = false)
+      )
+
+    discard manager.layoutSnapshot()
+    check gpElastic in manager.glyphProperties(initGlyphIndex(0))
+
+    storage.beginEditing()
+    storage.replace(initTextRange(0, 1), "x")
+    check storage.hasPendingEdit()
+    check gpElastic notin manager.glyphProperties(initGlyphIndex(0))
+    storage.endEditing()
+    check gpElastic notin manager.glyphProperties(initGlyphIndex(0))
 
   test "temporary attributes and invalidation APIs are observable":
     let

@@ -12,7 +12,10 @@ Kosmo requires the "kosmo" feature. Enable it with Atlas:
 
 import std/[math, options, os, strutils, unicode]
 
+from figdraw import len, `[]`
+
 import ../nimkit as nimkit
+from ../nimkit/text/textruneutils import utf8RunesForText
 from ../nimkit/foundation/mainthreadwork import scheduleMainThreadWork
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/selectors as nimkitSelectors
