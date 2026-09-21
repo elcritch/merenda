@@ -74,8 +74,10 @@ and find/replace use rune indexing without decoded sequences.
 iterator before building the indexed view, keeping trailing bytes from being
 swallowed by the indexed decoder.
 
-Consider streaming or byte-oriented implementations for operations that do
-not need random access if profiling shows repeated indexed reads are costly.
+Text search and URL detection use byte-oriented string matching with a single
+forward rune-coordinate cursor. This avoids repeated sparse-index reads for
+sequential work while preserving the public rune-based ranges. Random-access
+helpers continue to use `Utf8Runes`.
 
 The public functions can continue to accept `string`; that is an input API,
 not a retained decoded representation.
@@ -172,6 +174,7 @@ avoid reintroducing them after the arrangement reaches Merenda.
   exposes a regression.
 - Native compile/test coverage still needs explicit verification of `len`,
   indexing, slicing, equality, and `items`/`pairs` through the facade.
-- A benchmark or allocation measurement comparing long ASCII/Unicode
-  arrangements before and after the remaining migration is still useful,
-  including render-scene isolation and repeated glyph-property queries.
+- A long-text profile confirmed that the byte-oriented search path avoids the
+  old indexed-search slowdown and retains the lower memory footprint of the
+  UTF-8-backed representation. Further allocation measurements can focus on
+  render-scene isolation and repeated glyph-property queries.
