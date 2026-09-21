@@ -98,8 +98,7 @@ jobs:
         run: |
           mkdir -p "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          bash .github/scripts/install-atlas.sh
           atlas -v
 
       - name: Install Nim
@@ -194,8 +193,7 @@ jobs:
         run: |
           mkdir -p "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          bash .github/scripts/install-atlas.sh
           atlas -v
 
       - name: Install Nim
@@ -312,8 +310,7 @@ jobs:
         run: |
           mkdir -p "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          bash .github/scripts/install-atlas.sh
           atlas -v
 
       - name: Install Nim
@@ -433,8 +430,7 @@ jobs:
             set -eu
             export PATH="/usr/local/nim/bin:/usr/local/bin:$HOME/.local/bin:$PATH"
             mkdir -p "$HOME/.local/bin"
-            curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-              ATLAS_INSTALL_DIR="$HOME/.local/bin" /usr/local/bin/bash -
+            bash .github/scripts/install-atlas.sh
             export PKG_CONFIG_PATH="/usr/local/libdata/pkgconfig:/usr/local/share/pkgconfig:${PKG_CONFIG_PATH:-}"
             atlas -v
             nim -v
@@ -502,8 +498,7 @@ jobs:
         run: |
           mkdir -p "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          bash .github/scripts/install-atlas.sh
           atlas -v
 
       - name: Install Nim
@@ -741,8 +736,7 @@ jobs:
         run: |
           mkdir -p "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-            ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
+          bash .github/scripts/install-atlas.sh
           atlas -v
 
       - name: Cache packages
