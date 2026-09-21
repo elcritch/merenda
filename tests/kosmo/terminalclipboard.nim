@@ -50,6 +50,8 @@ suite "Kosmo terminal clipboard commands":
       let
         columns = session.screenInfo().columns
         originalLine = repeat('a', columns) & "tail"
+      pasteboard.declareTypes([PasteboardTypeTextStorage])
+      discard pasteboard.setAttributedString(newAttributedString("stale selection"))
       session.processOutput(originalLine)
       discard terminal.poll()
 
@@ -67,6 +69,9 @@ suite "Kosmo terminal clipboard commands":
 
       check frontend.application.performMenuKeyEquivalent(copyEvent)
       check pasteboard.plainText() == originalLine
+      check pasteboard.availableTypeFromArray(
+        [PasteboardTypeTextStorage, PasteboardTypeString]
+      ) == PasteboardTypeString
 
     test "Edit menu copy and paste target the focused terminal":
       let

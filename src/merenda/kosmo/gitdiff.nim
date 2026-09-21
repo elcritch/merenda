@@ -95,7 +95,7 @@ type
     scopePath*: string ## Absolute file or folder path; empty for the whole repository.
     branch*: string
     comparison*: GitDiffComparison ## Comparison used to produce this snapshot.
-    branches*: seq[string] ## Other local branches available for comparison.
+    branches*: seq[string] ## Local branches available for comparison.
     hasHead*: bool
     files*: seq[GitFileDiff]
     fileLimitReached*: bool
@@ -469,7 +469,7 @@ proc readGitDiff(
     if branches.code == 0:
       for branchName in branches.output.splitLines():
         let name = branchName.strip()
-        if name.len > 0 and name != result.branch:
+        if name.len > 0:
           result.branches.add name
     var comparisonRevision = "working-tree"
     if comparison.kind == gdckBranch:
