@@ -295,6 +295,99 @@ suite "Kosmo":
     check "NORMAL" in frontend.statusLabel.text
     check "number" in frontend.statusLabel.text
 
+  test "command and insert backspace keys reach Moe as physical keys":
+    let frontend = newKosmoApplication(newApplication("Kosmo Backspace Input Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    check frontend.window.dispatchTextInput("set number")
+    check frontend.editorView.editor.commandLine().text == ":set number"
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\b", key: keyBackspace, keyCode: keyBackspace.ord)
+    )
+    check frontend.editorView.editor.commandLine().text == ":set numbe"
+
+    discard
+      frontend.window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
+    check frontend.editorView.editor.mode() == KosmoEditorMode.Normal
+    discard frontend.window.dispatchKeyDown(KeyEvent(key: keyI, keyCode: keyI.ord))
+    check frontend.window.dispatchTextInput("i")
+    check frontend.window.dispatchTextInput("abc")
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\b", key: keyBackspace, keyCode: keyBackspace.ord)
+    )
+
+    var activeTab: KosmoTab
+    for tab in frontend.editorView.editor.tabs():
+      if tab.active:
+        activeTab = tab
+        break
+    check frontend.editorView.editor.bufferText(activeTab.id).get == "ab"
+
+  test "command completion cycles with native Tab and Shift-Tab":
+    let frontend =
+      newKosmoApplication(newApplication("Kosmo Command Completion Input Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    check frontend.window.dispatchTextInput("v")
+    check frontend.editorView.editor.mode() == KosmoEditorMode.Command
+    check frontend.editorView.editor.commandLine().text == ":v"
+
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\t", key: keyTab, keyCode: keyTab.ord)
+    )
+    let firstCompletion = frontend.editorView.editor.commandLine().text
+    check firstCompletion != ":v"
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\t", key: keyTab, keyCode: keyTab.ord)
+    )
+    let secondCompletion = frontend.editorView.editor.commandLine().text
+    check secondCompletion != firstCompletion
+    discard frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\t", key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+    )
+    check frontend.editorView.editor.commandLine().text == firstCompletion
+
+  test "help renders in the editor grid and survives a resize":
+    let frontend = newKosmoApplication(newApplication("Kosmo Help Viewer Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    check frontend.window.dispatchTextInput("help")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
+    check frontend.editorView.editor.mode() == KosmoEditorMode.Other
+    check "# Exiting" in frontend.editorView.displayedText()
+
+    let oldWidth = frontend.editorView.columnCount(0)
+    frontend.editorView.frame = rect(0, 0, 520, 280)
+    frontend.editorView.refresh()
+    check frontend.editorView.columnCount(0) != oldWidth
+    check "# Exiting" in frontend.editorView.displayedText()
+
   test "command bar grows with a larger monospace font":
     let
       app = newApplication("Kosmo Command Bar Font Size Test")

@@ -846,7 +846,7 @@ proc save*(editor: KosmoEditor): KosmoSaveResult =
   ## Save the active buffer to its current path.
   if editor.isNil or editor.editor.isNil:
     return KosmoSaveResult(message: "The editor is closed.")
-  let outcome = editor.editor.saveFile()
+  let outcome = editor.editor.saveFile(editor.editor.activeBuffer)
   if pkgResults.isErr(outcome):
     return KosmoSaveResult(message: outcome.error)
   if editor.temporaryBufferId == editor.activeBufferId():
@@ -866,7 +866,7 @@ proc saveAs*(editor: KosmoEditor, path: string): KosmoSaveResult =
       absolutePath(path, editor.workingDirectory)
     else:
       absolutePath(path)
-  let outcome = editor.editor.saveFile(some(savePath))
+  let outcome = editor.editor.saveFile(editor.editor.activeBuffer, some(savePath))
   if pkgResults.isErr(outcome):
     return KosmoSaveResult(message: outcome.error)
   if editor.temporaryBufferId == editor.activeBufferId():
@@ -941,6 +941,8 @@ proc mode*(editor: KosmoEditor): KosmoEditorMode =
   ## Return the active Moe mode reduced to the modes relevant to GUI routing.
   if editor.isNil or editor.editor.isNil:
     return KosmoEditorMode.Other
+  if moeTypes.isCommandOverlay(editor.editor.state):
+    return KosmoEditorMode.Command
   case editor.editor.currentMode()
   of moeModes.EditorMode.Normal:
     KosmoEditorMode.Normal
@@ -1107,12 +1109,12 @@ proc searchFrom*(
       query, state.input.search.ignorecase, state.input.search.smartcase
     )
   if moeSearch.compileSearchRegex(query, ignoreCase).isNone:
-    state.input.search.lastText = ""
+    state.input.search.last.pattern = ""
     state.input.search.hlsearchTempDisabled = true
     state.statusMessage = "Invalid regex: " & query
     return
-  state.input.search.lastText = query
-  state.input.search.wholeWord = false
+  state.input.search.last.pattern = query
+  state.input.search.last.wholeWord = false
   state.input.search.hlsearchTempDisabled = false
   let
     buffer = editor.editor.activeBuffer()
@@ -1135,13 +1137,13 @@ proc searchFrom*(
 proc clearSearch*(editor: KosmoEditor) =
   ## Clear Moe's active search query and rendered match highlights.
   if not editor.isNil and not editor.editor.isNil:
-    editor.editor.state.input.search.lastText = ""
+    editor.editor.state.input.search.last.pattern = ""
     editor.editor.state.input.search.hlsearchTempDisabled = true
 
 func searchQuery*(editor: KosmoEditor): string =
   ## Return the query currently used by Moe's search highlighting and n/N commands.
   if not editor.isNil and not editor.editor.isNil:
-    result = editor.editor.state.input.search.lastText
+    result = editor.editor.state.input.search.last.pattern
 
 proc commandLine*(editor: KosmoEditor): KosmoCommandLine =
   ## Return command input for a frontend-owned command bar.

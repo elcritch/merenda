@@ -806,32 +806,7 @@ proc syncSelectedEditorContent(
   group.pane.syncMarkdownControls(false)
   keckOther
 
-proc refresh*(view: KosmoEditorView) =
-  ## Render the current editor state into the synchronous cell-grid view.
-  if view.shouldDeferInactiveRefresh():
-    view.inactiveRefreshDeferred = true
-    return
-  view.inactiveRefreshDeferred = false
-  defer:
-    if view.editor.mode() notin {KosmoEditorMode.Insert, KosmoEditorMode.Replace}:
-      view.refreshDeferredEditorGroups()
-  if (view.editor.completionPopupVisible() or view.editor.commandLine().visible) and
-      not view.isActiveEditorGroup():
-    return
-  let tabs = view.visibleTabs(view.editor.tabs())
-  view.selectVisibleBuffer(tabs)
-  case view.syncSelectedEditorContent(tabs)
-  of keckMarkdownPreview:
-    view.syncChrome()
-    view.cursorVisible = false
-    if not view.commandBar.isNil:
-      view.commandBar.hidden = true
-    return
-  of keckOther:
-    view.syncChrome()
-    return
-  of keckSyntax:
-    discard
+proc renderGrid(view: KosmoEditorView) =
   let metrics = view.monoTextMetrics()
   if metrics.cellWidth <= 0.0'f32 or metrics.lineHeight <= 0.0'f32:
     return
@@ -855,6 +830,37 @@ proc refresh*(view: KosmoEditorView) =
   view.gridOffset =
     nimkit.initPoint(0.0'f32, -view.scrollOffsetRows * metrics.lineHeight)
   view.syncChrome()
+
+proc refresh*(view: KosmoEditorView) =
+  ## Render the current editor state into the synchronous cell-grid view.
+  if view.shouldDeferInactiveRefresh():
+    view.inactiveRefreshDeferred = true
+    return
+  view.inactiveRefreshDeferred = false
+  defer:
+    if view.editor.mode() notin {KosmoEditorMode.Insert, KosmoEditorMode.Replace}:
+      view.refreshDeferredEditorGroups()
+  if (view.editor.completionPopupVisible() or view.editor.commandLine().visible) and
+      not view.isActiveEditorGroup():
+    return
+  let tabs = view.visibleTabs(view.editor.tabs())
+  view.selectVisibleBuffer(tabs)
+  case view.syncSelectedEditorContent(tabs)
+  of keckMarkdownPreview:
+    view.syncChrome()
+    view.cursorVisible = false
+    if not view.commandBar.isNil:
+      view.commandBar.hidden = true
+    return
+  of keckOther:
+    if view.editor.mode() != KosmoEditorMode.Other:
+      view.syncChrome()
+      return
+    if not view.dockGroup.isNil:
+      view.dockGroup[].pane.setContentView(view)
+  of keckSyntax:
+    discard
+  view.renderGrid()
 
 proc toggleMarkdownMode(view: KosmoEditorView, id: KosmoBufferId): bool =
   for tab in view.editor.tabs():
@@ -1096,10 +1102,11 @@ proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
   var keyOutcome: KosmoKeyOutcome
   if keyEvent.key == nimkit.keyEnter:
     keyOutcome = view.editor.handleKeyOutcome("Enter")
-  elif keyEvent.text.len > 0 and keyEvent.modifiers - {nimkit.kmShift} == {}:
-    discard view.editor.handleTextInput(keyEvent.text)
   elif keyEvent.awaitsCommittedText():
-    return false
+    if keyEvent.text.len > 0 and keyEvent.modifiers - {nimkit.kmShift} == {}:
+      discard view.editor.handleTextInput(keyEvent.text)
+    else:
+      return false
   else:
     let notation = keyEvent.keyNotation()
     if notation.len > 0:
@@ -1387,7 +1394,8 @@ proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bo
     return false
   let controller = view.tabsDelegate.dockController[]
   if event.key == nimkit.keyTab and event.modifiers - {nimkit.kmShift} == {} and
-      view.editor.mode() in {KosmoEditorMode.Insert, KosmoEditorMode.Replace}:
+      view.editor.mode() in
+      {KosmoEditorMode.Insert, KosmoEditorMode.Replace, KosmoEditorMode.Command}:
     return view.sendKeyDownToMoe(event)
   if event.key == nimkit.keyForText("w") and event.modifiers == {nimkit.kmControl} and
       controller.editorInputPolicy != KosmoEditorInputPolicy.Native:
