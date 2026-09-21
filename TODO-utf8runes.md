@@ -43,104 +43,72 @@ atlas-run tests --compile-only tnimkit tintegrations
 atlas-run tests tnimkit tintegrations
 ```
 
-This is not complete yet. Merenda still has several old sequence-shaped
-helpers and full-text `toRunes()` allocations outside the retained
-`GlyphArrangement` path.
+The first migration pass is now complete for the plain-text paths in NimKit
+and Kosmo. The old sequence-shaped helpers and full-text `toRunes()` calls
+have been removed from those modules. UTF-8 operators are imported explicitly
+so `Utf8Runes` does not fall back through FigDraw's compatibility converter.
+The remaining work is native-facade verification, allocation measurement, and
+any optional indexing optimization that benchmarks show is worthwhile.
 
 ## Remaining migration work
 
-### 1. Remove full-text allocations from base `TextStorage`
+### 1. Base `TextStorage` range queries — implemented
 
 The base implementations of `storageLineRange` and
-`storageParagraphRange` decode the entire string on every call:
+`storageParagraphRange` now scan the UTF-8 string directly while keeping all
+returned ranges in rune coordinates. `TextGapStorage` continues to use its
+byte-backed gap-buffer index.
 
-- `src/merenda/nimkit/text/textstorage.nim:233`
-- `src/merenda/nimkit/text/textstorage.nim:260`
+If profiling shows that ordinary storage receives frequent repeated range
+queries, add a revision-aware line index; do not retain a decoded rune
+sequence alongside the source string.
 
-These are reached through the public `lineRange` and
-`paragraphRangeForRange` APIs and can run during normal editing and attribute
-fix-up. `TextGapStorage` already overrides these methods with its byte-backed
-gap-buffer index, so preserve that implementation.
+### 2. Text-view search and word helpers — implemented
 
-TODO:
+`TextView` and `TextField` now share `textruneutils.nim` helpers backed by
+`Utf8Runes`. String inputs explicitly construct a UTF-8-backed view at the
+helper boundary, while search, word movement, smart insertion, URL detection,
+and find/replace use rune indexing without decoded sequences.
 
-- Replace the base `toRunes()` calls with a UTF-8-backed indexed view or a
-  direct UTF-8 scan.
-- Prefer a shared/revision-aware index if line and paragraph queries are
-  frequent; do not retain both an unnecessary decoded sequence and the
-  `GlyphArrangement` copy.
-- Keep all returned ranges in rune coordinates.
+`utf8RunesForText` normalizes malformed input through Nim's replacement-rune
+iterator before building the indexed view, keeping trailing bytes from being
+swallowed by the indexed decoder.
 
-### 2. Convert text-view search and word helpers
-
-`TextView` still defines `runesOf(text: string): seq[Rune]` and then passes the
-result through `openArray[Rune]` helpers:
-
-- `src/merenda/nimkit/text/textviews.nim:417`
-- `src/merenda/nimkit/text/textviews.nim:1202`
-- `src/merenda/nimkit/text/textviews.nim:1212`
-- `src/merenda/nimkit/text/textviews.nim:1225`
-
-This affects word-boundary movement, smart insertion, find/replace, and URL
-detection. `findTextRanges` currently creates full decoded haystack and needle
-sequences at `src/merenda/nimkit/text/textviews.nim:1302`.
-
-`TextField` has a duplicate sequence-based `runesOf` and word-boundary
-implementation at `src/merenda/nimkit/text/textfields.nim:492`.
-
-TODO:
-
-- Make these helpers operate on `Utf8Runes` or on generic values providing
-  `len`, rune indexing, and iteration.
-- Replace `runesOf` with an explicit UTF-8 view construction at the boundary;
-  do not rely on FigDraw's implicit `toRuneSequence` converter.
-- Share the word-boundary implementation between `TextView` and `TextField`.
-- Consider streaming or byte-oriented implementations for operations that do
-  not need random access. `Utf8Runes` indexing is bounded by its sparse
-  checkpoint stride, but repeatedly indexing every rune can still be more
-  expensive than one forward scan.
+Consider streaming or byte-oriented implementations for operations that do
+not need random access if profiling shows repeated indexed reads are costly.
 
 The public functions can continue to accept `string`; that is an input API,
 not a retained decoded representation.
 
-### 3. Remove layout-adjacent `toRunes()` calls
+### 3. Layout-adjacent `toRunes()` calls — implemented
 
-Two places are close to the layout path and should be reviewed first:
+Both layout-adjacent paths now use retained or explicitly constructed
+`Utf8Runes` values:
 
-- `defaultGlyphProperties` materializes the whole text storage at
-  `src/merenda/nimkit/text/textlayout.nim:1615`. It is used as the fallback
-  for individual glyph-property queries, so this can repeat a full allocation.
-  Use the valid retained arrangement's `sourceRunes`, or another UTF-8 view,
-  while preserving the early-layout behavior when no arrangement exists.
-- `currentVisualLineBounds` materializes the text view string at
-  `src/merenda/nimkit/text/textviews.nim:2321`. The method has already updated
-  the text container and obtained a line fragment, so it should be possible
-  to use the corresponding retained layout source text instead of decoding a
-  second copy.
+- `defaultGlyphProperties` reads the valid arrangement's `sourceRunes` and
+  falls back to an explicit UTF-8 view before the first layout or while edits
+  are pending.
+- `TextLayoutManager.sourceRunes` returns the retained source view without
+  copying the complete glyph arrangement.
+- `currentVisualLineBounds` reads that source view.
 
 `TextLayoutManager.lineRange` and `lineForIndex` already iterate the UTF-8
 `string.runes` iterator without creating a `seq[Rune]`; they are not equivalent
 allocation bugs and need not be changed solely for naming consistency.
 
-### 4. Remove avoidable temporary sequences in Markdown and UI glue
+### 4. Avoidable temporary sequences in Markdown and UI glue — implemented
 
-These are not retained `GlyphArrangement` fields, but they still decode plain
-UTF-8 text into sequences:
+Markdown table and block-quote source text, terminal search normalization, and
+command-bar source text now use `Utf8Runes` directly. Rich per-rune records
+remain sequences where they carry attributes, coordinates, or other state:
 
-- Markdown table construction at `src/merenda/nimkit/text/markdownviews.nim:946`.
-- Block-quote remapping at `src/merenda/nimkit/text/markdownviews.nim:1343`.
-- Terminal search query normalization at `src/merenda/kosmo/terminalsearch.nim:62`.
-- Command-bar cell construction at `src/merenda/kosmo/application_editor.nim:534`.
+- `seq[MarkdownTableRune]`
+- `seq[TerminalSearchGlyph]`
+- `seq[MonoTextCell]`
 
-TODO:
-
-- Use `Utf8Runes` or direct UTF-8 iteration for the source text in these
-  operations.
-- Keep `seq[MarkdownTableRune]`, `seq[TerminalSearchGlyph]`, and
-  `seq[MonoTextCell]` where the element includes attributes, coordinates, or
-  other per-rune state. Those are not replacements for a plain text backing.
-- Keep `GapTextBuffer` byte sequences and its own index cache: it is mutable
-  editing storage, whereas `Utf8Runes` is immutable read-oriented storage.
+`GapTextBuffer` byte sequences and its own index cache remain unchanged because
+it is mutable editing storage, whereas `Utf8Runes` is immutable read-oriented
+storage.
 
 ### 5. Fixed: stale native render-scene branch
 
@@ -193,13 +161,17 @@ legacy glyph-building helpers, including Harfbuzzy's decoded shaping input and
 entirely would be a separate FigDraw optimization; the Merenda TODO here is to
 avoid reintroducing them after the arrangement reaches Merenda.
 
-## Tests and measurements to add
+## Tests and measurements
 
-- Unicode layout tests that exercise multi-byte source text through line
-  fragments, slicing, equality, and glyph properties.
-- Tests covering base `TextStorage` line and paragraph queries without a
-  decoded-sequence compatibility path.
-- Static and native compile/test coverage for all layout-facing helpers.
+- Added Unicode coverage for base `TextStorage` line and paragraph queries,
+  text-view search, URL rune offsets, malformed UTF-8 search, and deferred
+  glyph-property queries.
+- Added a source-view accessor check for layout managers.
+- Existing Unicode layout coverage remains in the NimKit test suite; extend it
+  with explicit `Utf8Runes` slicing/equality checks if the native-facade work
+  exposes a regression.
+- Native compile/test coverage still needs explicit verification of `len`,
+  indexing, slicing, equality, and `items`/`pairs` through the facade.
 - A benchmark or allocation measurement comparing long ASCII/Unicode
-  arrangements before and after the remaining migration, including render
-  scene isolation and repeated glyph-property queries.
+  arrangements before and after the remaining migration is still useful,
+  including render-scene isolation and repeated glyph-property queries.
