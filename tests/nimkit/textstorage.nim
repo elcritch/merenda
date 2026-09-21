@@ -183,6 +183,15 @@ suite "nimkit text storage":
     check storage.len == 5
     check storage.substring(initTextRange(1, 2)) == "Lp"
 
+  test "base storage scans UTF-8 lines and paragraphs in rune coordinates":
+    let storage = newTextStorage("α\nβeta\n終")
+
+    check storage.lineRange(0) == initTextRange(0, 2)
+    check storage.lineRange(1) == initTextRange(2, 5)
+    check storage.lineRange(2) == initTextRange(7, 1)
+    check storage.substring(storage.lineRange(1)) == "βeta\n"
+    check storage.paragraphRangeForRange(initTextRange(3, 0)) == initTextRange(2, 5)
+
   test "adjacent equal attribute runs are normalized":
     let
       storage = newTextStorage("abcd")

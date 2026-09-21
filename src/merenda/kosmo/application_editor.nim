@@ -546,9 +546,7 @@ proc syncCommandBar(view: KosmoEditorView, command: KosmoCommandLine) =
   if not visible:
     return
 
-  var runes: seq[Rune]
-  for rune in command.text.runes:
-    runes.add rune
+  let runes = utf8RunesForText(command.text)
   let
     cursor = command.cursor.clamp(0, runes.len)
     columns = max(runes.len, cursor + 1)

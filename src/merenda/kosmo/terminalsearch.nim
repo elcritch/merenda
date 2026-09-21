@@ -2,6 +2,8 @@
 
 import std/unicode
 
+from figdraw import initUtf8Runes, len, pairs
+
 import sigils/core
 
 import ../nimkit as nimkit except performKeyEquivalent
@@ -59,10 +61,10 @@ proc terminalSearchMatches*(
   let
     glyphs = session.terminalSearchGlyphs()
     needle = block:
-      var normalized: seq[Rune]
+      var normalized = newStringOfCap(query.len)
       for value in query.runes:
         normalized.add value.toLower()
-      normalized
+      initUtf8Runes(move(normalized))
   if needle.len == 0 or needle.len > glyphs.len:
     return
   for first in 0 .. glyphs.len - needle.len:
@@ -73,7 +75,7 @@ proc terminalSearchMatches*(
         break
     if matches:
       result.add nimkit.TerminalSelection(
-        anchor: glyphs[first].first, extent: glyphs[first + needle.high].last
+        anchor: glyphs[first].first, extent: glyphs[first + needle.len - 1].last
       )
 
 proc syncSearchControls(view: KosmoTerminalView) =

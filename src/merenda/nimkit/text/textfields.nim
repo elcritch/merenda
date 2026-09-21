@@ -14,6 +14,7 @@ import ../drawing
 
 import ./fieldeditors
 import ./textstorage
+import ./textruneutils
 import ./texttypes
 import ./textviews
 export controls
@@ -488,26 +489,6 @@ proc layoutFieldEditor(textField: TextField) =
   let frame = textField.fieldEditorFrame()
   editor.frame = frame
   editor.bounds = rect(0.0, 0.0, frame.size.width, frame.size.height)
-
-proc runesOf(text: string): seq[Rune] =
-  for rune in text.runes:
-    result.add rune
-
-proc previousWordBoundary(text: string, index: int): int =
-  let runes = text.runesOf()
-  result = clampIndex(runes.len, index)
-  while result > 0 and runes[result - 1].isWhiteSpace:
-    dec result
-  while result > 0 and not runes[result - 1].isWhiteSpace:
-    dec result
-
-proc nextWordBoundary(text: string, index: int): int =
-  let runes = text.runesOf()
-  result = clampIndex(runes.len, index)
-  while result < runes.len and runes[result].isWhiteSpace:
-    inc result
-  while result < runes.len and not runes[result].isWhiteSpace:
-    inc result
 
 proc setCursor(textField: TextField, index: int, extending = false) =
   let previousSelection = textField.selectedRange()

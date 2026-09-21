@@ -13,6 +13,7 @@ import ./textlayoutworkers
 import ./textlayouttypes
 export textlayouttypes
 import ./texttypes
+import ./textruneutils
 import ../themes
 import ../foundation/types
 
@@ -1195,6 +1196,11 @@ proc glyphArrangement*(manager: TextLayoutManager): GlyphArrangement =
   manager.updateLayout()
   manager.xLayout
 
+proc sourceRunes*(manager: TextLayoutManager): Utf8Runes =
+  ## Returns the current layout's compact source-rune view without copying it.
+  manager.updateLayout()
+  manager.xLayout.sourceRunes
+
 proc retainedFontCount*(manager: TextLayoutManager): Natural =
   manager.updateLayout()
   manager.xFontRefs.len.Natural
@@ -1615,9 +1621,13 @@ proc defaultGlyphProperties(
   if manager.xTextStorage.isNil:
     return
 
-  let
-    text = manager.xTextStorage.stringValue().toRunes()
-    index = int(textRange.location)
+  var text: Utf8Runes
+  if manager.xHasLayout and not manager.xTextStorage.hasPendingEdit() and
+      not manager.xLayout.sourceRunes.isNil:
+    text = manager.xLayout.sourceRunes
+  else:
+    text = utf8RunesForText(manager.xTextStorage.stringValue())
+  let index = int(textRange.location)
   if index < 0 or index >= text.len:
     return {gpNull}
   case text[index]

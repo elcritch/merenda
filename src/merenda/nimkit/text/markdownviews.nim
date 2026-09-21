@@ -14,7 +14,7 @@ when not defined(useNativeDynlib):
   import std/hashes
   from pkg/pixie import resize
 
-from figdraw import SystemTypeface
+from figdraw import SystemTypeface, len, pairs
 
 import markdown as markdownParser
 from markdownpkg/entities import htmlEntityToUtf8
@@ -34,6 +34,7 @@ import ../foundation/urlassets
 import ../foundation/urls
 import ../themes
 from ../view/viewgeometry import setFrameFromLayout
+import ./textruneutils
 import ../view/views
 import ./markdownhtmlimages
 import ./markdownparsing
@@ -941,7 +942,7 @@ func tableAlignment(cell: markdownParser.Token): MarkdownTableAlignment =
   else: mtaLeft
 
 proc tableRunes(rendered: MarkdownBuilder): seq[MarkdownTableRune] =
-  let runes = rendered.text.toRunes()
+  let runes = utf8RunesForText(rendered.text)
   var
     runIndex = 0
     imageIndex = 0
@@ -1337,7 +1338,7 @@ proc renderBlockquote(
     builder.add(builder.style.quotePrefix, prefixAttributes)
     return
 
-  let runes = quoted.text.toRunes()
+  let runes = utf8RunesForText(quoted.text)
   var
     atLineStart = true
     runIndex = 0
