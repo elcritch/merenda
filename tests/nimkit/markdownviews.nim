@@ -749,6 +749,31 @@ sibling body
     check storage.attributesFor("first line").foregroundColor == style.quoteColor
     check storage.attributesFor("│").foregroundColor == style.ruleColor
 
+  test "nested Unicode block quotes retain each prefix and text style":
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage("> outer é\n> > inner 😀\n> tail")
+      rendered = storage.stringValue()
+    check rendered.contains("│ outer é")
+    check rendered.contains("│ │ inner 😀")
+    check rendered.contains("tail")
+    check storage.attributesFor("inner 😀").foregroundColor == style.quoteColor
+
+  test "highlighted code converts only multibyte token endpoints":
+    let highlighter: SyntaxHighlighter = proc(
+        source, language: string
+    ): seq[SyntaxTokenSpan] =
+      discard source
+      discard language
+      @[SyntaxTokenSpan(range: initTextRange(1, 1), tokenClass: stcKeyword)]
+    let
+      style = initMarkdownStyle()
+      storage =
+        markdownTextStorage("```custom\né😀z\n```", syntaxHighlighter = highlighter)
+    check storage.attributesFor("😀").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+    check storage.attributesFor("é").foregroundColor == style.codeColor
+
   test "inline, fenced, and indented code use the monospace presentation":
     let
       style = initMarkdownStyle()
@@ -866,6 +891,9 @@ fencedToken value
     check matterSyntaxHighlighter(
       "let value = \"" & "x".repeat(NimkitMatterMaximumLineBytes), "nim"
     ).len == 0
+
+    let crlf = "é😀\r\nlet answer = 1"
+    check matterSyntaxHighlighter(crlf, "nim").syntaxTokenAt(4) == stcKeyword
 
   when not defined(NimkitMatterMaximumLineBytes) or
       NimkitMatterMaximumLineBytes >= NimBindingMaximumLineBytes:

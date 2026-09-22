@@ -41,6 +41,7 @@ import ./markdownparsing
 import ./matterhighlighting
 import ./syntaxhighlighting
 import ./texteditors
+import ./textbytecursors
 import ./textstorage
 import ./texttypes
 
@@ -1316,6 +1317,22 @@ proc renderContainer(
   for child in token.children:
     builder.renderContainerChild(child, attributes, wroteBlock)
 
+type QuoteOffsetSegment = object
+  sourceStart: int
+  destinationStart: int
+
+proc quoteDestination(segments: openArray[QuoteOffsetSegment], sourceIndex: int): int =
+  var
+    low = 0
+    high = segments.len
+  while low + 1 < high:
+    let middle = (low + high) div 2
+    if segments[middle].sourceStart <= sourceIndex:
+      low = middle
+    else:
+      high = middle
+  segments[low].destinationStart + sourceIndex - segments[low].sourceStart
+
 proc renderBlockquote(
     builder: var MarkdownBuilder,
     quote: markdownParser.Token,
@@ -1338,42 +1355,52 @@ proc renderBlockquote(
     builder.add(builder.style.quotePrefix, prefixAttributes)
     return
 
-  let runes = utf8RunesForText(quoted.text)
+  let source = quoted.text
   var
-    atLineStart = true
-    runIndex = 0
-    sourceToDestination = newSeq[int](runes.len + 1)
-  for index, rune in runes:
-    while runIndex < quoted.runs.high and index >= quoted.runs[runIndex].range.maxIndex:
-      inc runIndex
-    if atLineStart:
-      builder.add(builder.style.quotePrefix, prefixAttributes)
-      atLineStart = false
-    sourceToDestination[index] = builder.runeLength
-    builder.add($rune, quoted.runs[runIndex].attributes)
-    sourceToDestination[index + 1] = builder.runeLength
-    if rune == Rune('\n'):
-      atLineStart = true
+    boundaryCursor: TextByteCursor
+    mappingCursor: TextByteCursor
+    segments: seq[QuoteOffsetSegment]
+  builder.add(builder.style.quotePrefix, prefixAttributes)
+  segments.add QuoteOffsetSegment(sourceStart: 0, destinationStart: builder.runeLength)
+  for run in quoted.runs:
+    let
+      startByte = source.byteOffsetAtRune(boundaryCursor, int(run.range.location))
+      stopByte = source.byteOffsetAtRune(boundaryCursor, run.range.maxIndex)
+    var position = startByte
+    while position < stopByte:
+      let newline = source.find('\n', position)
+      if newline < 0 or newline >= stopByte:
+        builder.add(source[position ..< stopByte], run.attributes)
+        position = stopByte
+      else:
+        builder.add(source[position .. newline], run.attributes)
+        position = newline + 1
+        if position < source.len:
+          builder.add(builder.style.quotePrefix, prefixAttributes)
+          segments.add QuoteOffsetSegment(
+            sourceStart: source.runeIndexAtByte(mappingCursor, position),
+            destinationStart: builder.runeLength,
+          )
 
   for presentation in quoted.codeBlocks:
     var mapped = presentation
     let
-      start = sourceToDestination[int(presentation.range.location)]
-      stop = sourceToDestination[presentation.range.maxIndex]
+      start = segments.quoteDestination(int(presentation.range.location))
+      stop = segments.quoteDestination(presentation.range.maxIndex)
     mapped.range = initTextRange(start, stop - start)
     builder.codeBlocks.add mapped
   for presentation in quoted.images:
     var mapped = presentation
     let
-      start = sourceToDestination[int(presentation.range.location)]
-      stop = sourceToDestination[presentation.range.maxIndex]
+      start = segments.quoteDestination(int(presentation.range.location))
+      stop = segments.quoteDestination(presentation.range.maxIndex)
     mapped.range = initTextRange(start, stop - start)
     builder.images.add mapped
   for presentation in quoted.tables:
     var mapped = presentation
     let
-      start = sourceToDestination[int(presentation.range.location)]
-      stop = sourceToDestination[presentation.range.maxIndex]
+      start = segments.quoteDestination(int(presentation.range.location))
+      stop = segments.quoteDestination(presentation.range.maxIndex)
     mapped.range = initTextRange(start, stop - start)
     builder.tables.add mapped
   builder.hasTables = builder.hasTables or quoted.hasTables
@@ -1392,20 +1419,22 @@ proc addHighlightedCode(
     builder.add(source, attributes)
     return
 
-  var byteOffsets = @[0]
-  var byteOffset = 0
-  while byteOffset < source.len:
-    byteOffset += max(source.runeLenAt(byteOffset), 1)
-    byteOffsets.add min(byteOffset, source.len)
-  let runeCount = byteOffsets.len - 1
-  var position = 0
+  var
+    runeCursor: TextByteCursor
+    byteCursor: TextByteCursor
+    position = 0
+    positionByte = 0
+  let runeCount = source.runeIndexAtByte(runeCursor, source.len)
   for span in spans:
     let
       start = max(position, min(int(span.range.location), runeCount))
       stop = max(start, min(span.range.maxIndex, runeCount))
     if stop > start:
+      let
+        startByte = source.byteOffsetAtRune(byteCursor, start)
+        stopByte = source.byteOffsetAtRune(byteCursor, stop)
       if start > position:
-        builder.add(source[byteOffsets[position] ..< byteOffsets[start]], attributes)
+        builder.add(source[positionByte ..< startByte], attributes)
       var tokenAttributes = attributes
       tokenAttributes.foregroundColor = builder.style.syntaxTokenColors[span.tokenClass]
       if span.changeKind != sckUnchanged:
@@ -1418,10 +1447,11 @@ proc addHighlightedCode(
         tokenAttributes.lineBackgroundColor.a = 0.13
         if span.changeMarker:
           tokenAttributes.foregroundColor = changeColor
-      builder.add(source[byteOffsets[start] ..< byteOffsets[stop]], tokenAttributes)
+      builder.add(source[startByte ..< stopByte], tokenAttributes)
       position = stop
+      positionByte = stopByte
   if position < runeCount:
-    builder.add(source[byteOffsets[position] ..< source.len], attributes)
+    builder.add(source[positionByte ..< source.len], attributes)
 
 proc renderBlock(
     builder: var MarkdownBuilder,

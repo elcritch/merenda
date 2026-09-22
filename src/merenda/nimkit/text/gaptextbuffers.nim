@@ -173,7 +173,16 @@ proc copyGapTextBuffer*(buffer: GapTextBuffer): GapTextBuffer =
   result.xAfter.add buffer.xAfter
   result.xRuneLength = buffer.xRuneLength
   result.xBeforeRuneLength = buffer.xBeforeRuneLength
-  result.invalidateIndexCache()
+  # Edits replace the cache reference, so copies can share an existing index.
+  result.xIndexCache = buffer.xIndexCache
+
+func sameText*(a, b: GapTextBuffer): bool =
+  if a.byteLen != b.byteLen:
+    return false
+  for index in 0 ..< a.byteLen:
+    if a.byteAt(byteOffset(index)) != b.byteAt(byteOffset(index)):
+      return false
+  true
 
 proc setText*(buffer: var GapTextBuffer, value: string) =
   buffer.xBefore = newSeqOfCap[char](value.len)

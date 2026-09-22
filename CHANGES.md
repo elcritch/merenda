@@ -7,3 +7,7 @@
 - Store styled text as byte and rune ranges with compact style IDs and sparse
   rune and line checkpoints.
 - Add diagnostic RSS output to the large NimKit styled-text regression test.
+- Avoid storage and TextView undo snapshots when undo is disabled; retain one
+  prepared snapshot per grouped edit and report undo-mode RSS diagnostics.
+- Apply syntax colors in one compact run-table edit, retokenize safe single-line
+  changes locally, and use endpoint cursors instead of dense highlighting maps.

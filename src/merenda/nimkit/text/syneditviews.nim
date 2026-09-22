@@ -4,7 +4,7 @@
 ## while editing, selection, scrolling, and text input are delegated to
 ## Merenda's TextEditor/TextView stack.
 
-import std/[math, strutils, unicode]
+import std/[math, strutils]
 
 import sigils/core
 import sigils/selectors
@@ -18,6 +18,7 @@ import ../themes
 import ../text/texteditors
 import ../text/textstorage
 import ../text/syntaxhighlighting
+import ../text/textbytecursors
 import ../text/texttypes
 import ../text/textviews
 import ../view/views
@@ -316,12 +317,9 @@ func syntaxTokenClass(token: SynEditTokenClass): SyntaxTokenClass =
     stcOther
 
 type
-  SynEditHighlightCell = object
-    c: char
-    token: SynEditTokenClass
-
   SynEditHighlightBuffer = object
-    cells: seq[SynEditHighlightCell]
+    source: string
+    spans: seq[SynEditTokenSpan]
 
   GeneralTokenizer = object
     kind: SynEditTokenClass
@@ -331,25 +329,31 @@ type
     state: SynEditTokenClass
 
 proc len(buffer: ptr SynEditHighlightBuffer): int {.inline.} =
-  buffer[].cells.len
+  buffer[].source.len
 
 proc `[]`(buffer: ptr SynEditHighlightBuffer, index: int): char {.inline.} =
   if index < 0 or index >= buffer.len:
     '\L'
   else:
-    buffer[].cells[index].c
+    buffer[].source[index]
 
-proc setCellStyle(
-    buffer: var SynEditHighlightBuffer, index: int, token: SynEditTokenClass
+proc addStyleRange(
+    buffer: var SynEditHighlightBuffer, start, stop: int, token: SynEditTokenClass
 ) =
-  if index >= 0 and index < buffer.cells.len:
-    buffer.cells[index].token = token
+  let
+    first = max(0, min(start, buffer.source.len))
+    last = max(first, min(stop, buffer.source.len))
+  if last <= first:
+    return
+  if buffer.spans.len > 0 and buffer.spans[^1].token == token and
+      buffer.spans[^1].range.maxIndex == first:
+    buffer.spans[^1].range.length =
+      (buffer.spans[^1].range.length.int + last - first).Natural
+  else:
+    buffer.spans.add span(first, last, token)
 
 proc initHighlightBuffer(text: string): SynEditHighlightBuffer =
-  result.cells = newSeqOfCap[SynEditHighlightCell](text.len)
-  for ch in text:
-    if ch != '\C':
-      result.cells.add SynEditHighlightCell(c: ch, token: SynEditTokenClass.None)
+  result.source = text
 
 proc nimKeywordToken(identifier: string): SynEditTokenClass =
   if identifier.isKeyword(NimKeywords):
@@ -1063,30 +1067,29 @@ proc highlightRange(
     tokenizer.nextToken(language)
     if tokenizer.length == 0:
       break
-    for index in 0 ..< tokenizer.length:
-      buffer.setCellStyle(tokenizer.start + index, tokenizer.kind)
+    buffer.addStyleRange(
+      tokenizer.start, tokenizer.start + tokenizer.length, tokenizer.kind
+    )
 
 proc highlightMarkdown(buffer: var SynEditHighlightBuffer, first, last: int) =
   var
     insideFence = false
     fenceLanguage = langNone
     pos = first
-  while pos > 0 and buffer.cells[pos - 1].c != '\L':
+  while pos > 0 and buffer.source[pos - 1] != '\L':
     dec pos
   while pos <= last:
     let lineStart = pos
     var lineEnd = pos
-    while lineEnd <= last and buffer.cells[lineEnd].c != '\L':
+    while lineEnd <= last and buffer.source[lineEnd] != '\L':
       inc lineEnd
 
-    var lineText = ""
-    for index in lineStart ..< lineEnd:
-      lineText.add buffer.cells[index].c
-
+    let lineText = buffer.source[lineStart ..< lineEnd]
     let stripped = lineText.strip(leading = true, trailing = false)
     if stripped.startsWith("```") or stripped.startsWith("~~~"):
-      for index in lineStart ..< min(lineEnd, last + 1):
-        buffer.setCellStyle(index, SynEditTokenClass.MarkdownFence)
+      buffer.addStyleRange(
+        lineStart, min(lineEnd, last + 1), SynEditTokenClass.MarkdownFence
+      )
       let rest = stripped[3 .. ^1].strip()
       if rest.len > 0 and not insideFence:
         fenceLanguage = strToLanguage(rest)
@@ -1097,67 +1100,55 @@ proc highlightMarkdown(buffer: var SynEditHighlightBuffer, first, last: int) =
     elif insideFence and fenceLanguage != langNone:
       buffer.highlightRange(lineStart, lineEnd - 1, fenceLanguage)
       if lineEnd <= last:
-        buffer.setCellStyle(lineEnd, SynEditTokenClass.None)
+        buffer.addStyleRange(lineEnd, lineEnd + 1, SynEditTokenClass.None)
     else:
       let token = if insideFence: SynEditTokenClass.RawData else: SynEditTokenClass.Text
-      for index in lineStart ..< min(lineEnd, last + 1):
-        buffer.setCellStyle(index, token)
+      buffer.addStyleRange(lineStart, min(lineEnd, last + 1), token)
       if lineEnd <= last:
-        buffer.setCellStyle(lineEnd, SynEditTokenClass.None)
+        buffer.addStyleRange(lineEnd, lineEnd + 1, SynEditTokenClass.None)
 
     pos = lineEnd + 1
 
-proc byteRuneMap(text: string): seq[int] =
-  result = newSeq[int](text.len + 1)
-  var
-    byteIndex = 0
-    runeIndex = 0
-  while byteIndex < text.len:
-    let nextByte = min(byteIndex + max(runeLenAt(text, byteIndex), 1), text.len)
-    for index in byteIndex ..< nextByte:
-      result[index] = runeIndex
-    byteIndex = nextByte
-    inc runeIndex
-  result[text.len] = runeIndex
-
 proc addByteSpan(
     spans: var seq[SynEditTokenSpan],
-    byteToRune: openArray[int],
+    source: string,
+    cursor: var TextByteCursor,
     startByte, stopByte: int,
     token: SynEditTokenClass,
 ) =
-  if stopByte <= startByte or byteToRune.len == 0:
+  if stopByte <= startByte:
     return
   let
-    start = max(0, min(startByte, byteToRune.high))
-    stop = max(start, min(stopByte, byteToRune.high))
-    startRune = byteToRune[start]
-    stopRune = byteToRune[stop]
+    start = max(0, min(startByte, source.len))
+    stop = max(start, min(stopByte, source.len))
+    startRune = source.runeIndexAtByte(cursor, start)
+    stopRune = source.runeIndexAtByte(cursor, stop)
   if stopRune > startRune:
     spans.add span(startRune, stopRune, token)
 
 proc tokenSpans(buffer: SynEditHighlightBuffer, text: string): seq[SynEditTokenSpan] =
-  if buffer.cells.len == 0:
+  if buffer.source.len == 0:
     return
-  let byteToRune = byteRuneMap(text)
   var
-    start = 0
-    token = buffer.cells[0].token
-  for index in 1 .. buffer.cells.len:
-    if index == buffer.cells.len or buffer.cells[index].token != token:
-      result.addByteSpan(byteToRune, start, index, token)
-      if index < buffer.cells.len:
-        start = index
-        token = buffer.cells[index].token
+    cursor: TextByteCursor
+    previous = 0
+  for item in buffer.spans:
+    let start = int(item.range.location)
+    if start > previous:
+      result.addByteSpan(text, cursor, previous, start, SynEditTokenClass.None)
+    result.addByteSpan(text, cursor, start, item.range.maxIndex, item.token)
+    previous = item.range.maxIndex
+  if previous < text.len:
+    result.addByteSpan(text, cursor, previous, text.len, SynEditTokenClass.None)
 
 proc internalTokenSpans(text: string, language: SourceLanguage): seq[SynEditTokenSpan] =
   if text.len == 0:
     return
   var buffer = initHighlightBuffer(text)
   if language == langMarkdown:
-    buffer.highlightMarkdown(0, buffer.cells.high)
+    buffer.highlightMarkdown(0, text.high)
   elif language != langNone:
-    buffer.highlightRange(0, buffer.cells.high, language)
+    buffer.highlightRange(0, text.high, language)
   buffer.tokenSpans(text)
 
 proc addSyntaxTokenSpan(
@@ -1233,30 +1224,13 @@ proc addTokenSpan(
   else:
     spans.add SyntaxTokenSpan(range: range, tokenClass: tokenClass)
 
-proc tokenCacheAfterEdit(
-    spans: openArray[SyntaxTokenSpan], edit: TextStorageEdit
-): seq[SyntaxTokenSpan] =
-  let
-    oldStart = int(edit.range.location)
-    oldStop = edit.range.maxIndex
-    newStop = oldStart + int(edit.replacementLength)
-    delta = edit.textDelta
-  for item in spans:
-    let
-      start = int(item.range.location)
-      stop = item.range.maxIndex
-    if stop <= oldStart:
-      result.addTokenSpan(item.range, item.tokenClass)
-    elif start >= oldStop:
-      result.addTokenSpan(initTextRange(start + delta, stop - start), item.tokenClass)
-    else:
-      if start < oldStart:
-        result.addTokenSpan(initTextRange(start, oldStart - start), item.tokenClass)
-      if stop > oldStop:
-        result.addTokenSpan(initTextRange(newStop, stop - oldStop), item.tokenClass)
-
-func sameSpan(a, b: SyntaxTokenSpan): bool =
-  a.range == b.range and a.tokenClass == b.tokenClass
+func sameShiftedSuffixSpan(
+    oldSpan, newSpan: SyntaxTokenSpan, edit: TextStorageEdit
+): bool =
+  int(oldSpan.range.location) >= edit.range.maxIndex and
+    oldSpan.tokenClass == newSpan.tokenClass and
+    int(oldSpan.range.location) + edit.textDelta == int(newSpan.range.location) and
+    oldSpan.range.length == newSpan.range.length
 
 proc changedHighlightRange(
     storage: TextStorage,
@@ -1270,16 +1244,16 @@ proc changedHighlightRange(
     oldIndex = oldSpans.high
     newIndex = newSpans.high
   while oldIndex >= 0 and newIndex >= 0 and
-      oldSpans[oldIndex].sameSpan(newSpans[newIndex]):
+      sameShiftedSuffixSpan(oldSpans[oldIndex], newSpans[newIndex], edit):
     dec oldIndex
     dec newIndex
 
   var stop = changedLines.maxIndex
   if oldIndex >= 0:
-    stop = max(stop, oldSpans[oldIndex].range.maxIndex)
+    stop = max(stop, oldSpans[oldIndex].range.maxIndex + edit.textDelta)
   if newIndex >= 0:
     stop = max(stop, newSpans[newIndex].range.maxIndex)
-  initTextRange(int(changedLines.location), stop - int(changedLines.location))
+  initTextRange(int(changedLines.location), max(stop - int(changedLines.location), 0))
 
 proc applyCachedHighlighting(view: SynEditView, range: TextRange) =
   if view.xEditor.isNil or view.xApplyingHighlight:
@@ -1291,13 +1265,14 @@ proc applyCachedHighlighting(view: SynEditView, range: TextRange) =
   if clamped.length == 0:
     return
   view.xApplyingHighlight = true
-  storage.beginEditing()
-  storage.setAttributes(clamped, view.textAttributes(stcOther))
+  var overlays: seq[TextAttributeRun]
   for item in view.xTokenCache:
     let affected = item.range.overlapRange(clamped)
     if affected.length > 0:
-      storage.setAttributes(affected, view.textAttributes(item.tokenClass))
-  storage.endEditing()
+      overlays.add TextAttributeRun(
+        range: affected, attributes: view.textAttributes(item.tokenClass)
+      )
+  storage.setAttributeRanges(clamped, view.textAttributes(stcOther), overlays)
   if not view.xEditor.textView().isNil:
     view.xEditor.textView().layoutManager().invalidateLayout()
     view.xEditor.textView().needsDisplay = true
@@ -1319,17 +1294,76 @@ proc applySyntaxHighlighting*(view: SynEditView) =
   view.xTokenCacheValid = true
   view.applyCachedHighlighting(initTextRange(0, storage.len()))
 
+proc tryIncrementalHighlighting(
+    view: SynEditView, storage: TextStorage, edit: TextStorageEdit
+): bool =
+  ## A single lexical line can be retokenized without touching the rest of the
+  ## source when neither the old context nor this line has multiline syntax.
+  if view.xSyntaxHighlighter != synEditSyntaxHighlighter or
+      view.xLanguage in {langMarkdown, langXml, langHtml}:
+    return false
+  let changed = storage.paragraphRangeForRange(
+    initTextRange(int(edit.range.location), int(edit.replacementLength))
+  )
+  let source = storage.substring(changed)
+  let newlineCount = source.count('\n')
+  if newlineCount > 1 or (newlineCount == 1 and not source.endsWith("\n")) or
+      source.contains("/*") or source.contains("*/") or source.contains("#[") or
+      source.contains("]#") or source.contains('"') or source.contains('\''):
+    return false
+  let
+    first = int(changed.location)
+    oldStop = changed.maxIndex - edit.textDelta
+  for item in view.xTokenCache:
+    if int(item.range.location) < first and item.range.maxIndex > first and
+        item.tokenClass in {stcComment, stcString}:
+      return false
+    if int(item.range.location) < oldStop and item.range.maxIndex > oldStop and
+        item.tokenClass in {stcComment, stcString}:
+      return false
+  let localSpans = source.synEditTokenSpans(view.xLanguage)
+  var nextCache = newSeqOfCap[SyntaxTokenSpan](view.xTokenCache.len + localSpans.len)
+  for item in view.xTokenCache:
+    let
+      start = int(item.range.location)
+      stop = item.range.maxIndex
+    if stop <= first:
+      nextCache.addTokenSpan(item.range, item.tokenClass)
+    elif start < first:
+      nextCache.addTokenSpan(initTextRange(start, first - start), item.tokenClass)
+  for item in localSpans:
+    nextCache.addTokenSpan(
+      initTextRange(first + int(item.range.location), int(item.range.length)),
+      item.tokenClass,
+    )
+  for item in view.xTokenCache:
+    let
+      start = int(item.range.location)
+      stop = item.range.maxIndex
+    if start >= oldStop:
+      nextCache.addTokenSpan(
+        initTextRange(start + edit.textDelta, stop - start), item.tokenClass
+      )
+    elif stop > oldStop:
+      nextCache.addTokenSpan(
+        initTextRange(changed.maxIndex, stop - oldStop), item.tokenClass
+      )
+  view.xTokenCache = move(nextCache)
+  view.applyCachedHighlighting(changed)
+  true
+
 proc applySyntaxHighlightingForEdit(view: SynEditView, edit: TextStorageEdit) =
   if view.xEditor.isNil or view.xApplyingHighlight:
     return
   if not view.xTokenCacheValid or tseCharacters notin edit.kinds:
     view.applySyntaxHighlighting()
     return
+  let storage = view.xEditor.textStorage()
+  if view.tryIncrementalHighlighting(storage, edit):
+    return
   let
-    storage = view.xEditor.textStorage()
-    shiftedCache = view.xTokenCache.tokenCacheAfterEdit(edit)
     nextCache = view.syntaxTokenSpans(storage.stringValue())
-    changed = storage.changedHighlightRange(shiftedCache, nextCache, edit)
+    changed = storage.changedHighlightRange(view.xTokenCache, nextCache, edit)
   view.xTokenCache = nextCache
   view.applyCachedHighlighting(changed)
 

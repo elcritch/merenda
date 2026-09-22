@@ -1,5 +1,6 @@
 import std/[strutils, unicode, unittest]
 import merenda/nimkit
+import merenda/nimkit/text/textbytecursors
 import merenda/nimkit/text/textsnapshots
 
 when defined(linux):
@@ -48,6 +49,141 @@ elif defined(macosx):
     int64(info.residentSize div 1024)
 
 suite "Styled text run extraction":
+  test "endpoint cursors handle multibyte and malformed UTF-8":
+    let source = "é\xff😀\r\n"
+    var byteCursor, runeCursor: TextByteCursor
+    check source.runeIndexAtByte(byteCursor, 1) == 0
+    check source.runeIndexAtByte(byteCursor, 2) == 1
+    check source.runeIndexAtByte(byteCursor, 3) == 2
+    check source.runeIndexAtByte(byteCursor, 7) == 3
+    check source.byteOffsetAtRune(runeCursor, 2) == 3
+    check source.byteOffsetAtRune(runeCursor, 3) == 7
+
+  test "bulk attributes preserve outside styles and ordered overlaps":
+    let
+      red = defaultTextAttributes(color(1.0, 0.0, 0.0))
+      blue = defaultTextAttributes(color(0.0, 0.0, 1.0))
+      green = defaultTextAttributes(color(0.0, 1.0, 0.0))
+    for storage in [
+      newTextStorage("aé中😀xyz"), TextStorage(newTextGapStorage("aé中😀xyz"))
+    ]:
+      let original = storage.textSnapshot()
+      storage.setAttributes(initTextRange(0, 1), green)
+      let manager = newUndoManager()
+      storage.undoManager = manager
+      storage.setAttributeRanges(
+        initTextRange(1, 5),
+        defaultTextAttributes(),
+        [
+          TextAttributeRun(range: initTextRange(2, 3), attributes: red),
+          TextAttributeRun(range: initTextRange(3, 2), attributes: blue),
+        ],
+      )
+      check storage.textSnapshot() == original
+      check storage.attributesAt(0) == green
+      check storage.attributesAt(1) == defaultTextAttributes()
+      check storage.attributesAt(2) == red
+      check storage.attributesAt(3) == blue
+      check storage.attributesAt(4) == blue
+      check storage.attributesAt(5) == defaultTextAttributes()
+      check storage.attributesAt(6) == defaultTextAttributes()
+      check manager.undoCount == 1
+      check manager.performUndo()
+      check storage.attributesAt(2) == defaultTextAttributes()
+      check manager.performRedo()
+      check storage.attributesAt(3) == blue
+
+  test "attributed replacement registers one storage undo operation":
+    let
+      red = defaultTextAttributes(color(1.0, 0.0, 0.0))
+      blue = defaultTextAttributes(color(0.0, 0.0, 1.0))
+      insertion = newTextStorage(
+        "é😀",
+        @[
+          TextAttributeRun(range: initTextRange(0, 1), attributes: red),
+          TextAttributeRun(range: initTextRange(1, 1), attributes: blue),
+        ],
+      )
+    for storage in [newTextStorage("abc"), TextStorage(newTextGapStorage("abc"))]:
+      let manager = newUndoManager()
+      storage.undoManager = manager
+      storage.replace(initTextRange(1, 1), insertion)
+      check storage.stringValue() == "aé😀c"
+      check storage.attributesAt(1) == red
+      check storage.attributesAt(2) == blue
+      check manager.undoCount == 1
+      check manager.performUndo()
+      check storage.stringValue() == "abc"
+      check manager.performRedo()
+      check storage.stringValue() == "aé😀c"
+
+  when defined(linux) or defined(macosx):
+    test "large storage edits report RSS with undo disabled and enabled":
+      const sourceBytes = 2 * 1024 * 1024
+      for useGap in [false, true]:
+        for enabled in [false, true]:
+          let
+            manager = newUndoManager()
+            storage: TextStorage =
+              if useGap:
+                newTextGapStorage(repeat("abcdefgh", sourceBytes div 8))
+              else:
+                newTextStorage(repeat("abcdefgh", sourceBytes div 8))
+          storage.undoManager = manager
+          if not enabled:
+            manager.disableUndoRegistration()
+          let beforeKb = rssKb()
+          storage.replace(initTextRange(1024, 1), "X")
+          let afterKb = rssKb()
+          echo "NimKit storage undo RSS: gap=",
+            useGap, " enabled=", enabled, " delta_kib=", afterKb - beforeKb
+          check manager.undoCount == (if enabled: 1 else: 0)
+          if enabled:
+            check manager.performUndo()
+            check storage.substring(initTextRange(1024, 1)) == "a"
+          else:
+            manager.enableUndoRegistration()
+
+    test "grouped and marked text report RSS for both storage types":
+      for useGap in [false, true]:
+        for enabled in [false, true]:
+          let view = newTextView("abcd")
+          if useGap:
+            view.textStorage = newTextGapStorage("abcd")
+          view.allowsUndo = enabled
+          let beforeGroupKb = rssKb()
+          view.beginUndoGrouping()
+          for _ in 0 ..< 16:
+            view.selectedRange = initTextRange(1, 0)
+            view.insertTextValue("x")
+          view.endUndoGrouping()
+          let afterGroupKb = rssKb()
+          check view.stringValue.len == 20
+          if enabled:
+            check view.undoText()
+            check view.stringValue == "abcd"
+          else:
+            check not view.undoText()
+          view.selectedRange = initTextRange(1, 1)
+          let beforeMarkKb = rssKb()
+          for _ in 0 ..< 16:
+            view.setMarkedTextValue("é😀", initTextRange(1, 0), initTextRange(0, 0))
+          view.insertTextValue("z")
+          let afterMarkKb = rssKb()
+          echo "NimKit TextView undo RSS: gap=",
+            useGap,
+            " enabled=",
+            enabled,
+            " grouped_delta_kib=",
+            afterGroupKb - beforeGroupKb,
+            " marked_delta_kib=",
+            afterMarkKb - beforeMarkKb
+          if enabled:
+            check view.undoText()
+            check view.stringValue == "abcd"
+          else:
+            check not view.undoText()
+
   test "Unicode runs match substring for string and gap storage":
     let source = "Aé中😀é\r\nZ"
     var runs: seq[TextAttributeRun]
@@ -195,6 +331,8 @@ suite "Styled text run extraction":
   test "gap storage reuses its snapshot until characters change":
     let storage = newTextGapStorage("é😀z")
     let original = storage.textSnapshot()
+    let copy = storage.copyTextStorage()
+    check copy.textSnapshot() == original
     check storage.textSnapshot() == original
     storage.setAttributes(
       initTextRange(0, 1), defaultTextAttributes(color(1.0, 0.0, 0.0))

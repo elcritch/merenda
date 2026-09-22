@@ -1,4 +1,4 @@
-import std/[algorithm, options, unicode]
+import std/[algorithm, heapqueue, options, unicode]
 
 import sigils/core
 import sigils/selectors
@@ -373,17 +373,15 @@ proc normalizeRuns(storage: TextStorage) =
   if normalized.len == 0:
     normalized.add storage.styleRun(initTextRange(0, total), defaultTextAttributes())
   var compactStyles: seq[TextAttributes]
+  var remap = newSeq[int](storage.xStyles.len)
+  for index in 0 ..< remap.len:
+    remap[index] = -1
   for run in normalized.mitems:
-    let attributes = storage.xStyles[int(run.styleId)]
-    var found = false
-    for index, existing in compactStyles:
-      if existing == attributes:
-        run.styleId = index.uint32
-        found = true
-        break
-    if not found:
-      run.styleId = compactStyles.len.uint32
-      compactStyles.add attributes
+    let oldId = int(run.styleId)
+    if remap[oldId] < 0:
+      remap[oldId] = compactStyles.len
+      compactStyles.add storage.xStyles[oldId]
+    run.styleId = remap[oldId].uint32
   storage.xRuns = normalized
   storage.xStyles = compactStyles
 
@@ -583,7 +581,7 @@ method copyStorageTextTo*(storage: TextStorage, copy: TextStorage) {.base.} =
 method copyStorageTextTo*(storage: TextGapStorage, copy: TextStorage) =
   let gapCopy = TextGapStorage(copy)
   gapCopy.xGapBuffer = storage.xGapBuffer.copyGapTextBuffer()
-  gapCopy.xSnapshot = nil
+  gapCopy.xSnapshot = storage.xSnapshot
 
 proc copyTextStorage*(storage: TextStorage): TextStorage =
   storage.materialize()
@@ -593,16 +591,33 @@ proc copyTextStorage*(storage: TextStorage): TextStorage =
   result.xStyles = storage.xStyles
   result.xMaterialized = true
 
+method sameStorageText*(storage, other: TextStorage): bool {.base.} =
+  ## Compares values without making whole-text strings for gap-backed storage.
+  storage.storageSnapshot().bytes == other.storageSnapshot().bytes
+
+method sameStorageText*(storage: TextGapStorage, other: TextStorage): bool =
+  if other of TextGapStorage:
+    storage.xGapBuffer.sameText(TextGapStorage(other).xGapBuffer)
+  else:
+    storage.storageString() == other.storageString()
+
+proc shouldRecordUndo(storage: TextStorage): bool =
+  let manager = storage.undoManager()
+  not manager.isNil and manager.isUndoRegistrationEnabled()
+
+proc undoSnapshot(storage: TextStorage): TextStorage =
+  if storage.shouldRecordUndo():
+    result = storage.copyTextStorage()
+
 proc registerSnapshotUndo(
     storage: TextStorage, snapshot: TextStorage, actionName: string
 ) =
   let manager = storage.undoManager()
-  if manager.isNil or snapshot.isNil:
+  if manager.isNil or not manager.isUndoRegistrationEnabled() or snapshot.isNil:
     return
-  let undoSnapshot = snapshot.copyTextStorage()
   manager.registerUndo(
     proc() =
-      storage.applySnapshot(undoSnapshot, actionName),
+      storage.applySnapshot(snapshot, actionName),
     actionName,
   )
 
@@ -612,7 +627,7 @@ proc applySnapshot(storage: TextStorage, snapshot: TextStorage, actionName: stri
   storage.materialize()
   snapshot.materialize()
   let
-    before = storage.copyTextStorage()
+    before = storage.undoSnapshot()
     oldLength = storage.storageLength()
     newLength = snapshot.storageLength()
     edit = initTextStorageEdit(
@@ -665,7 +680,7 @@ proc stringValue*(storage: TextStorage): string =
 
 proc `stringValue=`*(storage: TextStorage, value: string) =
   storage.materialize()
-  let before = storage.copyTextStorage()
+  let before = storage.undoSnapshot()
   let oldLength = storage.storageLength()
   let edit = initTextStorageEdit(
     initTextRange(0, oldLength),
@@ -739,7 +754,7 @@ proc replace*(
     insertedLength = text.runeLen
     delta = insertedLength - int(clamped.length)
     edit = initTextStorageEdit(clamped, insertedLength, delta, {tseCharacters})
-    before = storage.copyTextStorage()
+    before = storage.undoSnapshot()
 
   storage.registerSnapshotUndo(before, "Edit Text")
   storage.dispatchWillEdit(edit)
@@ -784,8 +799,24 @@ proc replaceCharacters*(
 ) =
   storage.replace(range, text, attributes)
 
+proc setAttributeRanges*(
+  storage: TextStorage,
+  range: TextRange,
+  baseAttributes: TextAttributes,
+  overlays: openArray[TextAttributeRun],
+)
+
 proc setAttributes*(
     storage: TextStorage, range: TextRange, attributes: TextAttributes
+) =
+  storage.setAttributeRanges(range, attributes, [])
+
+proc applyAttributeRanges(
+    storage: TextStorage,
+    range: TextRange,
+    baseAttributes: TextAttributes,
+    overlays: openArray[TextAttributeRun],
+    recordUndo: bool,
 ) =
   storage.materialize()
   let
@@ -795,7 +826,11 @@ proc setAttributes*(
     stop = clamped.maxIndex
   if clamped.length == 0:
     return
-  let before = storage.copyTextStorage()
+  let before =
+    if recordUndo:
+      storage.undoSnapshot()
+    else:
+      nil
   let edit = initTextStorageEdit(clamped, int(clamped.length), 0, {tseAttributes})
 
   storage.registerSnapshotUndo(before, "Set Attributes")
@@ -812,17 +847,77 @@ proc setAttributes*(
         nextRuns.add TextStyleRun(
           range: initTextRange(runStart, start - runStart), styleId: run.styleId
         )
-      nextRuns.add storage.styleRun(
-        initTextRange(max(runStart, start), min(runStop, stop) - max(runStart, start)),
-        attributes,
-      )
       if runStop > stop:
         nextRuns.add TextStyleRun(
           range: initTextRange(stop, runStop - stop), styleId: run.styleId
         )
+  type AttributeOverlay = object
+    start, stop, order: int
+    styleId: uint32
+
+  var
+    changes: seq[AttributeOverlay]
+    boundaries = @[start, stop]
+    interned: seq[tuple[attributes: TextAttributes, id: uint32]]
+  let baseId = storage.styleId(baseAttributes)
+  interned.add (baseAttributes, baseId)
+  for index, overlay in overlays:
+    let affected = clampTextRange(total, overlay.range)
+    let
+      first = max(start, int(affected.location))
+      last = min(stop, affected.maxIndex)
+    if last <= first:
+      continue
+    var id = uint32.high
+    for item in interned:
+      if item.attributes == overlay.attributes:
+        id = item.id
+        break
+    if id == uint32.high:
+      id = storage.styleId(overlay.attributes)
+      interned.add (overlay.attributes, id)
+    changes.add AttributeOverlay(start: first, stop: last, order: index, styleId: id)
+    boundaries.add first
+    boundaries.add last
+  changes.sort(
+    proc(a, b: AttributeOverlay): int =
+      cmp(a.start, b.start)
+  )
+  boundaries.sort()
+  var
+    nextChange = 0
+    active: HeapQueue[tuple[priority, stop: int, styleId: uint32]]
+  for index in 0 ..< boundaries.high:
+    let first = boundaries[index]
+    let last = boundaries[index + 1]
+    if last <= first:
+      continue
+    while nextChange < changes.len and changes[nextChange].start <= first:
+      let item = changes[nextChange]
+      active.push((-item.order, item.stop, item.styleId))
+      inc nextChange
+    while active.len > 0 and active[0].stop <= first:
+      discard active.pop()
+    let id =
+      if active.len > 0:
+        active[0].styleId
+      else:
+        baseId
+    nextRuns.add TextStyleRun(range: initTextRange(first, last - first), styleId: id)
   storage.xRuns = nextRuns
   storage.normalizeRuns()
   storage.notifyCommittedEdit(edit)
+
+proc setAttributeRanges*(
+    storage: TextStorage,
+    range: TextRange,
+    baseAttributes: TextAttributes,
+    overlays: openArray[TextAttributeRun],
+) =
+  ## Applies a base style and ordered overrides in one edit. Later overrides win.
+  ## Existing styles outside `range` are retained. Style IDs remain valid until
+  ## the next storage edit, as with `styledSpans`.
+  storage.applyAttributeRanges(range, baseAttributes, overlays, true)
 
 proc setAttributesForRange*(
     storage: MutableAttributedString, range: TextRange, attributes: TextAttributes
@@ -858,13 +953,19 @@ proc replace*(storage: TextStorage, range: TextRange, inserted: TextStorage) =
     clamped = clampTextRange(storage.len, range)
     start = int(clamped.location)
   storage.beginEditing()
-  storage.replace(clamped, inserted.stringValue())
-  for run in inserted.xRuns:
-    storage.setAttributes(
-      initTextRange(start + int(run.range.location), int(run.range.length)),
-      inserted.styleAttributes(run.styleId),
+  try:
+    storage.replace(clamped, inserted.stringValue())
+    var overlays: seq[TextAttributeRun]
+    for run in inserted.xRuns:
+      overlays.add TextAttributeRun(
+        range: initTextRange(start + int(run.range.location), int(run.range.length)),
+        attributes: inserted.styleAttributes(run.styleId),
+      )
+    storage.applyAttributeRanges(
+      initTextRange(start, inserted.len), defaultTextAttributes(), overlays, false
     )
-  storage.endEditing()
+  finally:
+    storage.endEditing()
 
 proc replaceCharacters*(
     storage: MutableAttributedString, range: TextRange, inserted: AttributedString

@@ -144,6 +144,10 @@ type
     lineFragments*: seq[TextLineFragment]
     pageFragments*: seq[TextPageFragment]
 
+  TextReplaceResult = object
+    accepted: bool
+    valueChanged: bool
+
   TextView* = ref object of View
     xTextStorage: TextStorage
     xTextContainer: TextContainer
@@ -571,6 +575,9 @@ proc `allowsUndo=`*(textView: TextView, allowsUndo: bool) =
     textView.xFlags.excl tvAllowsUndo
     textView.xUndoStack.setLen(0)
     textView.xRedoStack.setLen(0)
+    textView.xMarkedUndoStorage = nil
+    textView.xGroupedUndoBefore = nil
+    textView.xHasGroupedUndo = false
 
 proc delegate*(textView: TextView): DynamicAgent =
   textView.xDelegate
@@ -1027,17 +1034,17 @@ proc recordUndo(
     beforeSelection: TextRange,
     afterSelection: TextRange,
 ) =
-  if textView.xApplyingUndo or not textView.allowsUndo:
+  if before.isNil or textView.xApplyingUndo or not textView.allowsUndo:
     return
   if textView.xUndoGroupingDepth > 0:
     if not textView.xHasGroupedUndo:
-      textView.xGroupedUndoBefore = before.copyTextStorage()
+      textView.xGroupedUndoBefore = before
       textView.xGroupedUndoSelection = beforeSelection
       textView.xHasGroupedUndo = true
     return
-  let after = textView.xTextStorage.copyTextStorage()
-  if before.stringValue() == after.stringValue() and beforeSelection == afterSelection:
+  if before.sameStorageText(textView.xTextStorage) and beforeSelection == afterSelection:
     return
+  let after = textView.xTextStorage.copyTextStorage()
   textView.xUndoStack.add TextUndoRecord(
     storageBefore: before,
     storageAfter: after,
@@ -1119,12 +1126,11 @@ proc replaceRange(
     inserted: TextStorage,
     record = true,
     clearMark = true,
-) =
+    captureMarkedUndo = false,
+): TextReplaceResult {.discardable.} =
   if not textView.editable:
     return
   let
-    before = textView.xTextStorage.copyTextStorage()
-    beforeValue = before.stringValue()
     beforeSelection = textView.textViewSelectedRange()
     clamped = textView.clampedRange(range)
     insertedLength = inserted.len
@@ -1132,17 +1138,31 @@ proc replaceRange(
 
   if not textView.shouldChangeText(clamped, inserted):
     return
+  result.accepted = true
+  let
+    valueChanged = textView.xTextStorage.substring(clamped) != inserted.stringValue()
+    needsUndo =
+      record and textView.allowsUndo and not textView.xApplyingUndo and
+      (textView.xUndoGroupingDepth == 0 or not textView.xHasGroupedUndo)
+    before =
+      if needsUndo:
+        textView.xTextStorage.copyTextStorage()
+      else:
+        nil
+  if captureMarkedUndo and textView.allowsUndo and not textView.xApplyingUndo:
+    textView.xMarkedUndoStorage = textView.xTextStorage.copyTextStorage()
+    textView.xMarkedUndoSelection = beforeSelection
   emit textView.textWillChange(clamped)
   textView.xTextStorage.replace(clamped, inserted)
   if clearMark:
     textView.clearMarkedText()
   textView.setSelection(nextSelection)
   textView.finishTextMutation(
-    initTextRange(int(clamped.location), insertedLength),
-    textView.textViewStringValue() != beforeValue,
+    initTextRange(int(clamped.location), insertedLength), valueChanged
   )
-  if record:
+  if record and (textView.xUndoGroupingDepth == 0 or not textView.xHasGroupedUndo):
     textView.recordUndo(before, beforeSelection, textView.textViewSelectedRange())
+  result.valueChanged = valueChanged
 
 proc replaceRange(
     textView: TextView,
@@ -1151,9 +1171,14 @@ proc replaceRange(
     attributes: TextAttributes,
     record = true,
     clearMark = true,
-) =
-  textView.replaceRange(
-    range, newTextStorage(insertion, attributes), record = record, clearMark = clearMark
+    captureMarkedUndo = false,
+): TextReplaceResult {.discardable.} =
+  result = textView.replaceRange(
+    range,
+    newTextStorage(insertion, attributes),
+    record = record,
+    clearMark = clearMark,
+    captureMarkedUndo = captureMarkedUndo,
   )
 
 proc foldedSearchText(text: string): string =
@@ -1298,9 +1323,7 @@ proc replaceAllText*(
     return 0
   textView.beginUndoGrouping()
   for index in countdown(ranges.len - 1, 0):
-    let before = textView.textViewStringValue()
-    textView.replaceRange(ranges[index], replacement, textView.xTypingAttributes)
-    if textView.textViewStringValue() != before:
+    if textView.replaceRange(ranges[index], replacement, textView.xTypingAttributes).valueChanged:
       inc result
   textView.endUndoGrouping()
 
@@ -2086,12 +2109,17 @@ proc setMarkedTextValue*(
     else:
       textView.textViewSelectedRange()
   let clamped = textView.clampedRange(target)
-  if not textView.xHasMarkedText:
-    textView.xMarkedUndoStorage = textView.xTextStorage.copyTextStorage()
-    textView.xMarkedUndoSelection = textView.textViewSelectedRange()
-  textView.replaceRange(
-    clamped, text, textView.xTypingAttributes, record = false, clearMark = false
+  let firstMark = not textView.xHasMarkedText
+  let edit = textView.replaceRange(
+    clamped,
+    text,
+    textView.xTypingAttributes,
+    record = false,
+    clearMark = false,
+    captureMarkedUndo = firstMark,
   )
+  if not edit.accepted:
+    return
   let
     markedStart = int(clamped.location)
     markedLength = text.runeLen

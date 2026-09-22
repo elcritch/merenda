@@ -4,12 +4,13 @@
 ## not need to locate Matter's package data at runtime. Each thread lazily
 ## compiles and caches only the grammars it uses.
 
-import std/[monotimes, options, strutils, tables, times, unicode]
+import std/[monotimes, options, strutils, tables, times]
 
 import matter
 
 import ./mattergrammarassets
 import ./syntaxhighlighting
+import ./textbytecursors
 import ./texttypes
 
 const NimkitMatterMaximumLineBytes* {.intdefine.} = 1024
@@ -124,32 +125,20 @@ func syntaxTokenClass(scopes: openArray[string]): SyntaxTokenClass =
   else:
     stcOther
 
-proc byteRuneMap(source: string): seq[int] =
-  result = newSeq[int](source.len + 1)
-  var
-    byteIndex = 0
-    runeIndex = 0
-  while byteIndex < source.len:
-    let nextByte = min(byteIndex + max(runeLenAt(source, byteIndex), 1), source.len)
-    for index in byteIndex ..< nextByte:
-      result[index] = runeIndex
-    byteIndex = nextByte
-    inc runeIndex
-  result[source.len] = runeIndex
-
 proc addSpan(
     spans: var seq[SyntaxTokenSpan],
-    byteToRune: openArray[int],
+    source: string,
+    cursor: var TextByteCursor,
     startByte, stopByte: int,
     tokenClass: SyntaxTokenClass,
 ) =
   if tokenClass == stcOther:
     return
   let
-    start = max(0, min(startByte, byteToRune.high))
-    stop = max(start, min(stopByte, byteToRune.high))
-    startRune = byteToRune[start]
-    stopRune = byteToRune[stop]
+    start = max(0, min(startByte, source.len))
+    stop = max(start, min(stopByte, source.len))
+    startRune = source.runeIndexAtByte(cursor, start)
+    stopRune = source.runeIndexAtByte(cursor, stop)
   if stopRune <= startRune:
     return
   if spans.len > 0 and spans[^1].tokenClass == tokenClass and
@@ -182,7 +171,7 @@ proc matterSyntaxHighlighterBounded*(
   if grammar.isNil:
     return
 
-  let byteToRune = source.byteRuneMap()
+  var cursor: TextByteCursor
   proc shouldStop(): bool =
     (not cancelled.isNil and cancelled()) or (
       timeLimitMs > 0 and
@@ -225,7 +214,8 @@ proc matterSyntaxHighlighterBounded*(
       return
     for token in tokenized.tokens:
       result.spans.addSpan(
-        byteToRune,
+        source,
+        cursor,
         lineStart + token.startIndex,
         lineStart + token.endIndex,
         token.scopes.syntaxTokenClass(),
