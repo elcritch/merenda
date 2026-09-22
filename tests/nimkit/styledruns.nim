@@ -1,5 +1,6 @@
 import std/[strutils, unicode, unittest]
 import merenda/nimkit
+import merenda/nimkit/text/textsnapshots
 
 suite "Styled text run extraction":
   test "Unicode runs match substring for string and gap storage":
@@ -61,3 +62,64 @@ suite "Styled text run extraction":
       inc runCount
     check reconstructed == source
     check runCount == count * 2
+
+  test "snapshots keep sparse rune and line checkpoints":
+    let source = repeat("é😀\n", 130) & "終"
+    let snapshot = newTextSnapshot(source)
+    check snapshot.runeLength == 391
+    check snapshot.byteLength == source.len
+    check snapshot.runeCheckpointCount == 7
+    check snapshot.lineCheckpointCount == 3
+    check snapshot.byteOffset(0) == 0
+    check snapshot.byteOffset(3 * 129) == source.len - "é😀\n終".len
+    check snapshot.byteOffset(snapshot.runeLength) == source.len
+    check snapshot.lineRange(64) == initTextRange(192, 3)
+    check snapshot.lineRange(129) == initTextRange(387, 3)
+    check snapshot.lineRange(130) == initTextRange(390, 1)
+    check snapshot.lineRange(131) == initTextRange(391, 0)
+
+  test "storage copies share a snapshot until characters change":
+    let storage = newTextStorage("é😀z")
+    let original = storage.textSnapshot()
+    let copy = storage.copyTextStorage()
+    check copy.textSnapshot() == original
+    storage.setAttributes(
+      initTextRange(0, 1), defaultTextAttributes(color(1.0, 0.0, 0.0))
+    )
+    check storage.textSnapshot() == original
+    storage.replace(initTextRange(1, 1), "中")
+    check storage.textSnapshot() != original
+    check original.bytes == "é😀z"
+    check copy.stringValue() == "é😀z"
+    check storage.stringValue() == "é中z"
+
+  test "borrowed spans carry byte and rune ranges with shared style IDs":
+    let
+      red = defaultTextAttributes(color(1.0, 0.0, 0.0))
+      blue = defaultTextAttributes(color(0.0, 0.0, 1.0))
+      storage = newTextStorage(
+        "é中😀",
+        @[
+          TextAttributeRun(range: initTextRange(0, 1), attributes: red),
+          TextAttributeRun(range: initTextRange(1, 1), attributes: blue),
+          TextAttributeRun(range: initTextRange(2, 1), attributes: red),
+        ],
+      )
+      snapshot = storage.textSnapshot()
+    var spans: seq[TextStyledSpan]
+    for span in storage.styledSpans():
+      spans.add span
+    check spans.len == 3
+    check spans[0].source == snapshot
+    check spans[1].source == snapshot
+    check spans[2].source == snapshot
+    check spans[0].styleId == spans[2].styleId
+    check spans[0].styleId != spans[1].styleId
+    check spans[0].byteStart == 0
+    check spans[0].byteEnd == 2
+    check spans[1].byteStart == 2
+    check spans[1].byteEnd == 5
+    check spans[2].byteStart == 5
+    check spans[2].byteEnd == 9
+    check spans[2].runeStart == 2
+    check spans[2].runeEnd == 3

@@ -107,3 +107,16 @@ suite "nimkit gap text buffers":
     editor.stringValue = "reset"
     check editor.textStorage().usesGapTextBuffer()
     check editor.stringValue() == "reset"
+
+  test "gap storage restores text through its own buffer on undo":
+    let
+      manager = newUndoManager()
+      storage = newTextGapStorage("é😀")
+    storage.undoManager = manager
+    storage.replace(initTextRange(1, 1), "中")
+    check storage.stringValue() == "é中"
+    check manager.performUndo()
+    check storage.stringValue() == "é😀"
+    check storage.substring(initTextRange(1, 1)) == "😀"
+    check manager.performRedo()
+    check storage.stringValue() == "é中"

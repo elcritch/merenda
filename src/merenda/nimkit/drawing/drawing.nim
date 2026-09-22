@@ -19,6 +19,7 @@ import ./svgimages
 import ../themes
 import ../themes/themecore as themeCore
 import ../text/textstorage
+import ../text/textsnapshots
 import ../text/texttypes
 import ../foundation/types as nimkitTypes
 import ../foundation/assetcache
@@ -567,6 +568,17 @@ proc usesMixedLineBreakModes(storage: TextStorage): bool =
     if run.attributes.paragraphStyle.lineBreakMode == tlbmClipping:
       return true
 
+proc figDrawSpans(
+    spans: openArray[tuple[style: FontStyle, text: TextStyledSpan]]
+): seq[(FontStyle, string)] =
+  ## FigDraw's current typesetter accepts owned strings. Keep that conversion
+  ## at its API boundary; NimKit's storage and layout spans share the snapshot.
+  result = newSeqOfCap[(FontStyle, string)](spans.len)
+  for span in spans:
+    result.add(
+      (span.style, span.text.source.bytes[span.text.byteStart ..< span.text.byteEnd])
+    )
+
 proc textLayoutImpl(
     rect: nimkitTypes.Rect,
     storage: TextStorage,
@@ -575,7 +587,7 @@ proc textLayoutImpl(
     wrap = false,
     rasterize = true,
 ): GlyphArrangement =
-  var spans: seq[(FontStyle, string)]
+  var spans: seq[tuple[style: FontStyle, text: TextStyledSpan]]
   if storage.isNil or storage.len == 0:
     let attributes = defaultTextAttributes(style.color, style.fontSize)
     var font = defaultFont(
@@ -588,9 +600,12 @@ proc textLayoutImpl(
     ).font
     font.underline = attributes.hasUnderline
     font.strikethrough = attributes.hasStrikethrough
-    spans.add((fs(font, fill(style.color.rgba)), ""))
+    spans.add(
+      (fs(font, fill(style.color.rgba)), TextStyledSpan(source: newTextSnapshot("")))
+    )
   else:
-    for (attributes, text) in storage.styledRuns:
+    for span in storage.styledSpans:
+      let attributes = storage.styleAttributes(span.styleId)
       let
         fontName =
           if attributes.fontName.len > 0: attributes.fontName else: style.fontName
@@ -620,14 +635,15 @@ proc textLayoutImpl(
       ).font
       font.underline = attributes.hasUnderline
       font.strikethrough = attributes.hasStrikethrough
-      spans.add((fs(font, fill(attributes.foregroundColor.rgba)), text))
+      spans.add((fs(font, fill(attributes.foregroundColor.rgba)), span))
+  let figSpans = spans.figDrawSpans()
   if wrap and storage.usesMixedLineBreakModes():
     let
       wrapped =
         if rasterize:
           typeset(
             rect.toFigRect,
-            spans,
+            figSpans,
             hAlign = alignment.toFontHorizontal,
             vAlign = Top,
             minContent = false,
@@ -636,7 +652,7 @@ proc textLayoutImpl(
         else:
           typesetForMeasurement(
             rect.toFigRect,
-            spans,
+            figSpans,
             hAlign = alignment.toFontHorizontal,
             vAlign = Top,
             minContent = false,
@@ -646,7 +662,7 @@ proc textLayoutImpl(
         if rasterize:
           typeset(
             rect.toFigRect,
-            spans,
+            figSpans,
             hAlign = alignment.toFontHorizontal,
             vAlign = Top,
             minContent = false,
@@ -655,7 +671,7 @@ proc textLayoutImpl(
         else:
           typesetForMeasurement(
             rect.toFigRect,
-            spans,
+            figSpans,
             hAlign = alignment.toFontHorizontal,
             vAlign = Top,
             minContent = false,
@@ -665,7 +681,7 @@ proc textLayoutImpl(
   elif rasterize:
     result = typeset(
       rect.toFigRect,
-      spans,
+      figSpans,
       hAlign = alignment.toFontHorizontal,
       vAlign = Top,
       minContent = false,
@@ -674,7 +690,7 @@ proc textLayoutImpl(
   else:
     result = typesetForMeasurement(
       rect.toFigRect,
-      spans,
+      figSpans,
       hAlign = alignment.toFontHorizontal,
       vAlign = Top,
       minContent = false,
