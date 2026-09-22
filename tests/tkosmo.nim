@@ -13,6 +13,7 @@ import kosmo/filetreeinteractions
 import kosmo/gitdiff
 import kosmo/matterhighlighting
 import kosmo/markdownactivation
+import kosmo/moelogging
 import kosmo/panelshortcuts
 import kosmo/quickopen
 import kosmo/settings_layout

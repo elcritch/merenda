@@ -73,6 +73,70 @@ suite "Kosmo Git diff":
     check malformed.files.len == 0
     check malformed.errorMessage == "Standard input is not a unified Git diff."
 
+  test "piped diffs open by default except large files":
+    let snapshot = parseGitDiff(
+      "diff --git a/small.txt b/small.txt\n" & "@@ -0,0 +1 @@\n+small\n" &
+        "diff --git a/many.txt b/many.txt\n" & "@@ -0,0 +1,401 @@\n" &
+        "+line\n".repeat(401) & "diff --git a/wide.txt b/wide.txt\n" & "@@ -0,0 +1 @@\n+" &
+        "x".repeat(GitDiffAutoExpandByteLimit) & "\n"
+    )
+    let panel = newKosmoGitDiffPanel(snapshot)
+    defer:
+      panel.close()
+    require panel.snapshot.files.len == 3
+    check not panel.isFileCollapsed(0)
+    check panel.isFileCollapsed(1)
+    check panel.isFileCollapsed(2)
+    panel.toggleFile(1)
+    check not panel.isFileCollapsed(1)
+
+  test "repository diffs collapse large line and byte changes":
+    let root = createTempDir("kosmo-diff-auto-expand-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "small.txt", "old\n")
+    writeFile(root / "many.txt", "old\n".repeat(201))
+    writeFile(root / "wide.txt", "a".repeat(10_300) & "\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "Initial")
+    writeFile(root / "small.txt", "new\n")
+    writeFile(root / "many.txt", "new\n".repeat(201))
+    writeFile(root / "wide.txt", "b".repeat(10_300) & "\n")
+    let panel = newKosmoGitDiffPanel(root)
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 800, 600)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    var smallIndex = -1
+    var manyIndex = -1
+    var wideIndex = -1
+    for index, file in panel.snapshot.files:
+      case file.path
+      of "small.txt":
+        smallIndex = index
+      of "many.txt":
+        manyIndex = index
+      of "wide.txt":
+        wideIndex = index
+      else:
+        discard
+    require smallIndex >= 0
+    require manyIndex >= 0
+    require wideIndex >= 0
+    check not panel.isFileCollapsed(smallIndex)
+    check panel.isFileCollapsed(manyIndex)
+    check panel.isFileCollapsed(wideIndex)
+    panel.refresh()
+    require panel.waitForDiff()
+    check panel.isFileCollapsed(wideIndex)
+    check panel.snapshot.files[wideIndex].large
+    panel.toggleFile(wideIndex)
+    require panel.waitForDiff()
+    check panel.snapshot.files[wideIndex].patchState == gdpsLoaded
+    check "+" & "b".repeat(10_300) in panel.snapshot.files[wideIndex].patch
+
   test "summary and expanded files share wheel scrolling":
     let root = createTempDir("kosmo-diff-scroll-", "")
     defer:
@@ -98,7 +162,6 @@ suite "Kosmo Git diff":
     require window.scrollWheelAt(initPoint(100, 150), deltaY = -3)
     check panel.scrollView.contentOffset().y > 0
     check panel.markdownView.scrollView().contentOffset().y == 0
-    panel.toggleFile(0)
     require panel.waitForDiff()
     panel.layoutSubtreeIfNeeded()
     let code = panel.textViewForFile(0)
@@ -140,17 +203,21 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     panel.layoutSubtreeIfNeeded()
     require panel.snapshot.files.len == 80
-    for file in panel.snapshot.files:
-      check file.patchState == gdpsUnloaded
-      check file.patch.len == 0
-      check file.syntaxPatch.len == 0
+    var loadedCount: int
+    for index, file in panel.snapshot.files:
+      check not panel.isFileCollapsed(index)
+      if file.patchState == gdpsLoaded:
+        inc loadedCount
+    check loadedCount > 0
+    check loadedCount < panel.snapshot.files.len
     check panel.materializedViewCount() < panel.snapshot.files.len
+    panel.toggleFile(0)
+    require panel.waitForDiff()
+    check panel.isFileCollapsed(0)
     panel.toggleFile(0)
     require panel.waitForDiff()
     check panel.snapshot.files[0].patchState == gdpsLoaded
     check panel.snapshot.files[0].patch.len > 0
-    panel.toggleFile(0)
-    require panel.waitForDiff()
     panel.layoutSubtreeIfNeeded()
     panel.scrollView.contentOffset = panel.scrollView.maximumContentOffset()
     panel.layoutSubtreeIfNeeded()
@@ -320,7 +387,6 @@ suite "Kosmo Git diff":
       panel.close()
     panel.frame = rect(0, 0, 600, 400)
     panel.layoutSubtreeIfNeeded()
-    panel.toggleFile(0)
     require panel.waitForDiff()
     check "+first value" in panel.textViewForFile(0).textStorage().stringValue()
 
@@ -369,7 +435,7 @@ suite "Kosmo Git diff":
       perFilePanel.close()
     require perFilePanel.waitForDiff()
     require perFilePanel.snapshot.files.len == 1
-    perFilePanel.toggleFile(0)
+    require perFilePanel.requestFilePatch(0)
     require perFilePanel.waitForDiff()
     check perFilePanel.snapshot.files[0].patchState == gdpsSkipped
     check "per-file limit" in perFilePanel.snapshot.files[0].errorMessage
@@ -380,7 +446,7 @@ suite "Kosmo Git diff":
     defer:
       totalPanel.close()
     require totalPanel.waitForDiff()
-    totalPanel.toggleFile(0)
+    require totalPanel.requestFilePatch(0)
     require totalPanel.waitForDiff()
     check totalPanel.snapshot.files[0].patchState == gdpsSkipped
     check "byte limit" in totalPanel.snapshot.files[0].errorMessage
@@ -455,9 +521,7 @@ suite "Kosmo Git diff":
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
     require panel.snapshot.files.len == 1
-    check panel.isFileCollapsed(0)
-    check panel.snapshot.files[0].patchState == gdpsUnloaded
-    panel.toggleFile(0)
+    check not panel.isFileCollapsed(0)
     require panel.waitForDiff()
     let storage = panel.textViewForFile(0).textStorage()
     let shown = storage.stringValue()
@@ -473,7 +537,7 @@ suite "Kosmo Git diff":
     check panel.textViewForFile(0).layoutManager().snapshotBuildThreadId() !=
       getThreadId()
 
-  test "file sections are retained independently and new files start collapsed":
+  test "file sections retain manual collapse across refresh":
     let root = createTempDir("kosmo-diff-sections-", "")
     defer:
       removeDir(root)
@@ -486,8 +550,8 @@ suite "Kosmo Git diff":
     panel.frame = rect(0, 0, 700, 500)
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
-    check panel.isFileCollapsed(0)
-    check panel.isFileCollapsed(1)
+    check not panel.isFileCollapsed(0)
+    check not panel.isFileCollapsed(1)
     require panel.requestFilePatch(1)
     require panel.waitForDiff()
     let retainedAdditions = panel.snapshot.files[1].additions
@@ -495,7 +559,7 @@ suite "Kosmo Git diff":
     discard panel.textViewForFile(1)
     require panel.waitForDiff()
     let retained = panel.textViewForFile(1).textStorage().stringValue()
-    panel.toggleFile(0)
+    panel.toggleFile(1)
     require panel.waitForDiff()
     writeFile(root / "one.nim", "let one = 3\n")
     panel.refresh()
@@ -520,7 +584,7 @@ suite "Kosmo Git diff":
     let markdown = newMarkdownView("```go\nfunc main() {}\n```")
     require panel.waitForDiff()
     require panel.snapshot.files.len == 1
-    panel.toggleFile(0)
+    discard panel.textViewForFile(0)
     require panel.waitForDiff()
     require markdown.waitForMarkdownParsing()
     check panel.highlightBuildCount() == 1
@@ -534,7 +598,6 @@ suite "Kosmo Git diff":
       removeDir(root)
     initRepository(root)
     writeFile(root / "one.nim", "let one = 1\n")
-    writeFile(root / "two.nim", "let two = 2\r\n")
     let panel = newKosmoGitDiffPanel(root)
     defer:
       panel.close()
@@ -542,23 +605,20 @@ suite "Kosmo Git diff":
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
     let initialCount = panel.highlightBuildCount()
-    check initialCount == 0
-    check panel.highlightQueuedBytes() == 0
-    check panel.highlightCachedBytes() == 0
-    check panel.highlightThreadId() == 0
-    check panel.highlightThreadId() != getThreadId()
-    panel.toggleFile(0)
-    require panel.waitForDiff()
-    let loadedCount = panel.highlightBuildCount()
-    check loadedCount == 1
+    check initialCount > 0
     check panel.highlightQueuedBytes() == 0
     check panel.highlightCachedBytes() > 0
     check panel.highlightThreadId() != 0
+    check panel.highlightThreadId() != getThreadId()
     panel.toggleFile(0)
     require panel.waitForDiff()
     panel.toggleFile(0)
     require panel.waitForDiff()
-    check panel.highlightBuildCount() == loadedCount
+    let loadedCount = panel.highlightBuildCount()
+    check loadedCount == initialCount
+    check panel.highlightQueuedBytes() == 0
+    check panel.highlightCachedBytes() > 0
+    check panel.highlightThreadId() != 0
     var style = panel.markdownView.markdownStyle()
     style.syntaxTokenColors[stcKeyword] = color(0.2, 0.7, 0.3, 1)
     panel.markdownStyle = style
@@ -583,7 +643,6 @@ suite "Kosmo Git diff":
       panel.close()
     panel.frame = rect(0, 0, 600, 400)
     panel.layoutSubtreeIfNeeded()
-    panel.toggleFile(0)
     require panel.waitForDiff()
     let
       textView = panel.textViewForFile(0)
@@ -739,7 +798,6 @@ suite "Kosmo Git diff":
     panel.frame = rect(0, 0, 600, 500)
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
-    panel.toggleFile(0)
     require panel.waitForDiff()
     let
       storage = panel.textViewForFile(0).textStorage()
@@ -773,7 +831,7 @@ suite "Kosmo Git diff":
     defer:
       panel.close()
     require panel.waitForDiff()
-    panel.toggleFile(0)
+    discard panel.textViewForFile(0)
     require panel.waitForDiff()
     let
       storage = panel.textViewForFile(0).textStorage()
@@ -843,7 +901,7 @@ suite "Kosmo Git diff":
       else:
         check false
 
-  test "Git diff comparison menu switches between the working tree and branches":
+  test "Git diff revision selectors compare branches and the working tree":
     let root = createTempDir("kosmo-git-diff-comparisons-", "")
     defer:
       removeDir(root)
@@ -886,31 +944,130 @@ suite "Kosmo Git diff":
     window.setContentView(panel)
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
-    check panel.comparisonButton.title == "Working Tree"
-    check not panel.comparisonButton.hidden
-    let menu = panel.comparisonButton.menu()
-    check menu.items().len == 4
-    let mainItem = menu.menuItemWithIdentifier("kosmo.gitDiff.branch.main")
+    check panel.fromRevisionButton.title == "From: HEAD"
+    check panel.toRevisionButton.title == "To: Working Tree"
+    check not panel.fromRevisionButton.hidden
+    check not panel.toRevisionButton.hidden
+    let fromMenu = panel.fromRevisionButton.menu()
+    check fromMenu.items().len == working.revisions.len
+    let mainItem = fromMenu.menuItemWithIdentifier("kosmo.gitDiff.from.refs/heads/main")
     require not mainItem.isNil
     check mainItem.perform(window)
     require panel.waitForDiff()
-    check panel.comparisonButton.title == "main"
-    check panel.snapshot.comparison.branch == "main"
+    check panel.fromRevisionButton.title == "From: main"
+    check panel.snapshot.comparison.kind == gdckRevisionRange
+    check panel.snapshot.comparison.fromRevision == "refs/heads/main"
+    check panel.snapshot.comparison.toWorkingTree
+    require panel.snapshot.files.len == 2
+    check panel.snapshot.files[0].path == "feature.txt"
+    check panel.snapshot.files[1].path == "working.txt"
+
+    let featureItem = panel.toRevisionButton.menu().menuItemWithIdentifier(
+        "kosmo.gitDiff.to.refs/heads/feature"
+      )
+    require not featureItem.isNil
+    check featureItem.perform(window)
+    require panel.waitForDiff()
+    check panel.toRevisionButton.title == "To: feature"
     require panel.snapshot.files.len == 1
     check panel.snapshot.files[0].path == "feature.txt"
     require panel.requestFilePatch(0)
     require panel.waitForDiff()
     check "+feature" in panel.snapshot.files[0].patch
 
-    let workingItem = menu.menuItemWithIdentifier("kosmo.gitDiff.workingTree")
+    let workingItem =
+      panel.toRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.WORKTREE")
     require not workingItem.isNil
     check workingItem.perform(window)
     require panel.waitForDiff()
-    check panel.comparisonButton.title == "Working Tree"
+    let headItem =
+      panel.fromRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.from.HEAD")
+    require not headItem.isNil
+    check headItem.perform(window)
+    require panel.waitForDiff()
+    check panel.fromRevisionButton.title == "From: HEAD"
+    check panel.toRevisionButton.title == "To: Working Tree"
     require panel.snapshot.files.len == 1
     check panel.snapshot.files[0].path == "working.txt"
+    require panel.requestFilePatch(0)
+    require panel.waitForDiff()
+    check "+working" in panel.snapshot.files[0].patch
 
-  test "Git diff comparison menu includes the current branch and scrolls":
+  test "Git diff revision selectors resolve HEAD parents and branch parents":
+    let root = createTempDir("kosmo-git-diff-revision-parents-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    writeFile(root / "base.txt", "base\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "base")
+    git(root, "branch", "-M", "main")
+    writeFile(root / "main.txt", "main change\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "main change")
+    git(root, "checkout", "-qb", "feature")
+    writeFile(root / "feature.txt", "feature change\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "feature change")
+
+    let parentSnapshot = readGitDiff(
+      root,
+      comparison = GitDiffComparison(
+        kind: gdckRevisionRange,
+        fromRevision: "refs/heads/main^",
+        toRevision: "refs/heads/main",
+      ),
+    )
+    check parentSnapshot.errorMessage == ""
+    require parentSnapshot.files.len == 1
+    check parentSnapshot.files[0].path == "main.txt"
+    check GitDiffRevisionChoice(title: "main^", revision: "refs/heads/main^") in
+      parentSnapshot.revisions
+    check GitDiffRevisionChoice(title: "HEAD^", revision: "HEAD^") in
+      parentSnapshot.revisions
+
+    let
+      panel = newKosmoGitDiffPanel(root)
+      window = newWindow("Git Diff Revision Parents", frame = rect(0, 0, 700, 400))
+    defer:
+      panel.close()
+      window.close()
+    panel.frame = rect(0, 0, 700, 400)
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    let mainParent = panel.fromRevisionButton.menu().menuItemWithIdentifier(
+        "kosmo.gitDiff.from.refs/heads/main^"
+      )
+    require not mainParent.isNil
+    check mainParent.perform(window)
+    require panel.waitForDiff()
+    let mainTip = panel.toRevisionButton.menu().menuItemWithIdentifier(
+        "kosmo.gitDiff.to.refs/heads/main"
+      )
+    require not mainTip.isNil
+    check mainTip.perform(window)
+    require panel.waitForDiff()
+    require panel.snapshot.files.len == 1
+    check panel.snapshot.files[0].path == "main.txt"
+    require panel.requestFilePatch(0)
+    require panel.waitForDiff()
+    check "+main change" in panel.snapshot.files[0].patch
+
+    let headParent =
+      panel.fromRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.from.HEAD^")
+    require not headParent.isNil
+    check headParent.perform(window)
+    require panel.waitForDiff()
+    let headTip =
+      panel.toRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.HEAD")
+    require not headTip.isNil
+    check headTip.perform(window)
+    require panel.waitForDiff()
+    require panel.snapshot.files.len == 1
+    check panel.snapshot.files[0].path == "feature.txt"
+
+  test "Git diff revision selectors include branch ancestry and scroll":
     let root = createTempDir("kosmo-git-diff-comparison-scroll-", "")
     defer:
       removeDir(root)
@@ -932,7 +1089,7 @@ suite "Kosmo Git diff":
       panel = newKosmoGitDiffPanel(root)
       window = newWindow("Git Diff Comparison Scroll", frame = rect(0, 0, 700, 400))
     defer:
-      panel.comparisonButton.closePopup()
+      panel.fromRevisionButton.closePopup()
       panel.close()
       window.close()
     panel.frame = rect(0, 0, 700, 400)
@@ -940,16 +1097,16 @@ suite "Kosmo Git diff":
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
 
-    panel.comparisonButton.popupPresentation = ppInline
-    panel.comparisonButton.openPopup()
-    require panel.comparisonButton.popupOpen()
+    panel.fromRevisionButton.popupPresentation = ppInline
+    panel.fromRevisionButton.openPopup()
+    require panel.fromRevisionButton.popupOpen()
     var popup: PopupListView
     for child in panel.subviews():
       if child of PopupListView:
         popup = PopupListView(child)
         break
     require not popup.isNil
-    check popup.itemCount() == 13
+    check popup.itemCount() == snapshot.revisions.len
     check popup.visibleItemCount() == 12
     check popup.firstIndex() == 0
 
@@ -968,6 +1125,11 @@ suite "Kosmo Git diff":
     )
     require window.scrollWheelAt(scrollPoint, deltaY = -1.0'f32)
     check popup.firstIndex() == 1
+    var attempts: int
+    while popup.popupListItemRect(popup.bounds(), mainIndex).isEmpty and
+        attempts < popup.itemCount():
+      require window.scrollWheelAt(scrollPoint, deltaY = -1.0'f32)
+      inc attempts
     check not popup.popupListItemRect(popup.bounds(), mainIndex).isEmpty
 
   test "empty clean and non-repository states are explicit":
@@ -1020,6 +1182,8 @@ suite "Kosmo Git diff":
     require panel.waitForDiff()
     check panel.snapshot.errorMessage == ""
     require panel.snapshot.files.len == 1
+    require panel.collapseButton.sendAction()
+    require panel.waitForDiff()
     check panel.isFileCollapsed(0)
     check panel.disclosureButtonForFile(0).rendersDisclosureArrow(expanded = false)
     panel.toggleFile(0)
@@ -1268,8 +1432,6 @@ suite "Kosmo Git diff":
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
     require panel.snapshot.files.len == 2
-    panel.toggleFile(0)
-    require panel.waitForDiff()
     let
       firstDisclosure = panel.disclosureButtonForFile(0)
       secondDisclosure = panel.disclosureButtonForFile(1)

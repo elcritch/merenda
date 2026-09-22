@@ -21,14 +21,16 @@ const
   GitDiffMaximumHighlightCachedBytes = 16 * 1024 * 1024
   GitDiffDefaultPerFileByteLimit* = 2 * 1024 * 1024
   GitDiffDefaultTotalByteLimit* = 32 * 1024 * 1024
+  GitDiffAutoExpandLineLimit* = 400
+  GitDiffAutoExpandByteLimit* = 20 * 1024
   GitDiffDefaultFileLimit* = 10_000
   GitDiffMetadataOutputByteLimit = 16 * 1024 * 1024
   # Keep a generous working set for expanded diffs without attaching every
   # section in a very large repository snapshot at once.
   GitDiffMaterializedSectionLimit* = 128
   GitDiffViewPoolLimit = GitDiffMaterializedSectionLimit
-  GitDiffWorkingTreeComparisonIdentifier = "kosmo.gitDiff.workingTree"
-  GitDiffBranchComparisonIdentifierPrefix = "kosmo.gitDiff.branch."
+  GitDiffFromRevisionIdentifierPrefix = "kosmo.gitDiff.from."
+  GitDiffToRevisionIdentifierPrefix = "kosmo.gitDiff.to."
 
 type
   GitDiffHighlightKey = tuple[source, language: string]
@@ -42,14 +44,28 @@ type
     gdsStandardInput
 
   GitDiffComparisonKind* = enum
-    ## The repository state used as the left side of a Git diff.
+    ## How the Git diff comparison endpoints are selected.
     gdckWorkingTree
+    ## Compatibility for callers using the original merge-base-to-HEAD comparison.
     gdckBranch
+    ## A comparison between two explicitly selected Git revisions.
+    gdckRevisionRange
 
   GitDiffComparison* = object
-    ## A working-tree or branch comparison shown by the Git diff viewer.
+    ## A working-tree or revision comparison shown by the Git diff viewer.
     kind*: GitDiffComparisonKind
-    branch*: string ## Local branch to compare with the current `HEAD`.
+    branch*: string ## Local branch used by the legacy gdckBranch comparison.
+    fromRevision*: string ## Left revision for gdckRevisionRange.
+    toRevision*: string ## Right revision for gdckRevisionRange.
+    toWorkingTree*: bool ## Compare fromRevision with the working tree.
+
+  GitDiffRevisionChoice* = object
+    title*: string ## Human-readable branch or revision expression.
+    revision*: string ## Git revision expression, fully qualified for local branches.
+
+  GitDiffRevisionSide = enum
+    gdrsFrom
+    gdrsTo
 
   GitDiffFileStatus* = enum
     gdfsModified
@@ -85,6 +101,7 @@ type
     status*: GitDiffFileStatus
     patchState*: GitDiffPatchState
     requiresExplicitLoad*: bool
+    large*: bool ## Exceeds the default auto-expansion limit.
     patchBytes*: int
     errorMessage*: string
     revision*: string
@@ -98,6 +115,7 @@ type
     branches*: seq[string] ## Local branches available for comparison.
     hasHead*: bool
     files*: seq[GitFileDiff]
+    revisions*: seq[GitDiffRevisionChoice] ## Local branch tips and recent ancestors.
     fileLimitReached*: bool
     errorMessage*: string
     revision*: string
@@ -200,13 +218,17 @@ type
     scrollView*: nimkit.ScrollView
     documentView*: nimkit.View
     refreshButton*: nimkit.Button
-    comparisonButton*: nimkit.PopupMenuButton ## Repository comparison selector.
+    comparisonButton*: nimkit.PopupMenuButton ## Compatibility alias for the To selector.
+    fromRevisionButton*: nimkit.PopupMenuButton ## Selects the left diff revision.
+    toRevisionButton*: nimkit.PopupMenuButton ## Selects the right diff revision.
     expandButton*: nimkit.Button
     collapseButton*: nimkit.Button
     autoRefreshLabel: nimkit.Label
     autoRefreshSwitch*: nimkit.SwitchButton
     snapshot*: GitDiffSnapshot
     collapsed: HashSet[string]
+    manuallyExpanded: HashSet[string]
+    manuallyCollapsed: HashSet[string]
     pool: SigilThreadPoolPtr
     worker: AgentProxy[GitDiffWorker]
     highlightWorker: AgentProxy[GitDiffHighlightWorker]
@@ -244,17 +266,28 @@ type
     xHighlightThreadId: int
     xRepositoryReadCount: int
 
-func gitDiffComparisonTitle(comparison: GitDiffComparison): string =
-  if comparison.kind == gdckBranch and comparison.branch.len > 0:
-    comparison.branch
+func gitDiffRevisionIdentifier(
+    fromSide: bool, revision: string, toWorkingTree = false
+): string =
+  if fromSide:
+    GitDiffFromRevisionIdentifierPrefix & revision
+  elif toWorkingTree:
+    GitDiffToRevisionIdentifierPrefix & "WORKTREE"
   else:
-    "Working Tree"
+    GitDiffToRevisionIdentifierPrefix & revision
 
-func gitDiffComparisonIdentifier(comparison: GitDiffComparison): string =
-  if comparison.kind == gdckBranch and comparison.branch.len > 0:
-    GitDiffBranchComparisonIdentifierPrefix & comparison.branch
-  else:
-    GitDiffWorkingTreeComparisonIdentifier
+proc appendRevisionChoices(snapshot: var GitDiffSnapshot) =
+  if snapshot.hasHead:
+    for suffix in ["", "^", "~2", "~3"]:
+      snapshot.revisions.add GitDiffRevisionChoice(
+        title: "HEAD" & suffix, revision: "HEAD" & suffix
+      )
+  for branch in snapshot.branches:
+    let branchRevision = "refs/heads/" & branch
+    for suffix in ["", "^", "~2", "~3"]:
+      snapshot.revisions.add GitDiffRevisionChoice(
+        title: branch & suffix, revision: branchRevision & suffix
+      )
 
 proc newGitDiffControl(): SharedPtr[GitDiffControl] =
   result = newSharedPtr(GitDiffControl)
@@ -404,6 +437,21 @@ proc fileMetadataRevision(rootPath, path: string): string =
   except CatchableError:
     result.add ":missing"
 
+proc largeLocalDiff(rootPath, path: string): bool =
+  ## Bound inspection of files that have no committed side for --numstat.
+  try:
+    let filePath = rootPath / path
+    let info = getFileInfo(filePath, followSymlink = false)
+    if info.kind != pcFile:
+      return
+    if info.size > GitDiffAutoExpandByteLimit:
+      return true
+    let content = readFile(filePath)
+    let lines = content.count('\n') + ord(content.len > 0 and content[^1] != '\n')
+    result = lines > GitDiffAutoExpandLineLimit
+  except CatchableError:
+    discard
+
 proc appendGitDiffFile(
     snapshot: var GitDiffSnapshot,
     seen: var HashSet[string],
@@ -471,6 +519,7 @@ proc readGitDiff(
         let name = branchName.strip()
         if name.len > 0:
           result.branches.add name
+    result.appendRevisionChoices()
     var comparisonRevision = "working-tree"
     if comparison.kind == gdckBranch:
       if comparison.branch.len == 0:
@@ -491,6 +540,46 @@ proc readGitDiff(
       comparisonRevision =
         "branch:" & comparison.branch & "|" & target.output.strip() & "|" &
         head.output.strip()
+    elif comparison.kind == gdckRevisionRange:
+      if comparison.fromRevision.len == 0 or
+          (comparison.toRevision.len == 0 and not comparison.toWorkingTree):
+        result.errorMessage = "Select both Git revisions for comparison."
+        return
+      let fromResult = runGit(
+        result.rootPath,
+        [
+          "rev-parse",
+          "--verify",
+          "--end-of-options",
+          comparison.fromRevision & "^{commit}",
+        ],
+      )
+      if fromResult.code != 0:
+        result.errorMessage =
+          "Could not resolve Git revision " & comparison.fromRevision & ".\n" &
+          fromResult.output.strip()
+        return
+      var toRevision = "working-tree"
+      if not comparison.toWorkingTree:
+        let toResult = runGit(
+          result.rootPath,
+          [
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            comparison.toRevision & "^{commit}",
+          ],
+        )
+        if toResult.code != 0:
+          result.errorMessage =
+            "Could not resolve Git revision " & comparison.toRevision & ".\n" &
+            toResult.output.strip()
+          return
+        toRevision = toResult.output.strip()
+      comparisonRevision =
+        "revisions:" & comparison.fromRevision & "|" & fromResult.output.strip() & "|" &
+        (if comparison.toWorkingTree: "working-tree" else: comparison.toRevision) & "|" &
+        toRevision
     elif hasHead:
       comparisonRevision &= "|" & head.output.strip()
     result.revision.add "comparison:" & comparisonRevision & '\0'
@@ -518,6 +607,15 @@ proc readGitDiff(
           comparison.branch & "...HEAD",
           "--",
         ]
+    elif comparison.kind == gdckRevisionRange:
+      namesArguments =
+        @[
+          "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status",
+          "-z", comparison.fromRevision,
+        ]
+      if not comparison.toWorkingTree:
+        namesArguments.add comparison.toRevision
+      namesArguments.add "--"
     elif hasHead:
       namesArguments =
         @[
@@ -529,23 +627,25 @@ proc readGitDiff(
     namesArguments.add pathspec
     let names = runGit(result.rootPath, namesArguments)
     var untracked: tuple[output: string, code: int, limitExceeded: bool]
-    if comparison.kind == gdckWorkingTree:
+    let includesUntracked =
+      comparison.kind == gdckWorkingTree or
+      (comparison.kind == gdckRevisionRange and comparison.toWorkingTree)
+    if includesUntracked:
       var untrackedArguments =
         @["ls-files", "--others", "--exclude-standard", "-z", "--"]
       untrackedArguments.add pathspec
       untracked = runGit(result.rootPath, untrackedArguments)
-    if names.limitExceeded or
-        (comparison.kind == gdckWorkingTree and untracked.limitExceeded):
+    if names.limitExceeded or (includesUntracked and untracked.limitExceeded):
       result.errorMessage =
         "The changed-file listing exceeded the safety limit. " &
         "Narrow the Git Diff path and try again."
       return
-    if names.code != 0 or (comparison.kind == gdckWorkingTree and untracked.code != 0):
+    if names.code != 0 or (includesUntracked and untracked.code != 0):
       result.errorMessage =
         "Could not list changed files.\n" & names.output & untracked.output
       return
     var seen = initHashSet[string]()
-    if hasHead:
+    if hasHead or comparison.kind == gdckRevisionRange:
       var cursor: int
       while cursor < names.output.len:
         let statusCode = nextGitField(names.output, cursor)
@@ -577,7 +677,7 @@ proc readGitDiff(
             fileLimit.int,
           ):
             break
-    if not result.fileLimitReached and comparison.kind == gdckWorkingTree:
+    if not result.fileLimitReached and includesUntracked:
       for rawPath in untracked.output.split('\0'):
         let path = rawPath.replace('\\', '/')
         if path.len > 0 and path notin seen and
@@ -591,6 +691,31 @@ proc readGitDiff(
             fileLimit.int,
           ):
             break
+    var largePaths = initHashSet[string]()
+    if namesArguments.len > 0 and namesArguments[0] == "diff":
+      var statsArguments: seq[string]
+      for argument in namesArguments:
+        statsArguments.add(if argument == "--name-status": "--numstat" else: argument)
+      let stats = runGit(result.rootPath, statsArguments)
+      if stats.code == 0 and not stats.limitExceeded:
+        for entry in stats.output.split('\0'):
+          let firstTab = entry.find('\t')
+          let secondTab = entry.find('\t', firstTab + 1)
+          if firstTab < 0 or secondTab < 0:
+            continue
+          try:
+            let additions = parseInt(entry[0 ..< firstTab])
+            let deletions = parseInt(entry[firstTab + 1 ..< secondTab])
+            if additions + deletions > GitDiffAutoExpandLineLimit:
+              largePaths.incl entry[secondTab + 1 .. ^1].replace('\\', '/')
+          except ValueError:
+            discard
+    for file in result.files.mitems:
+      file.large =
+        if file.status == gdfsUntracked or not hasHead:
+          largeLocalDiff(result.rootPath, file.path)
+        else:
+          file.path in largePaths
     if result.fileLimitReached:
       result.revision.add "file-limit\0"
     for file in result.files:
@@ -610,8 +735,8 @@ proc readGitDiff*(
     comparison = GitDiffComparison(),
 ): GitDiffSnapshot =
   ## Read changed filenames and status without loading patch contents.
-  ## Branch comparisons show changes from the merge base with the selected branch
-  ## to the current `HEAD`.
+  ## Revision ranges compare the selected endpoints directly. Legacy branch
+  ## comparisons show changes from their merge base to the current `HEAD`.
   readGitDiff(rootPath, newGitDiffControl(), scopePath, fileLimit, comparison)
 
 func normalizedPipedDiffPath(rawPath: string): string =
@@ -670,6 +795,9 @@ proc finishPipedFile(
   if current.path.len == 0:
     current.path = "Patch " & $(snapshot.files.len + 1)
   current.summarizePipedFile()
+  current.large =
+    current.additions + current.deletions > GitDiffAutoExpandLineLimit or
+    current.patch.len > GitDiffAutoExpandByteLimit
   snapshot.files.add current
   current = GitFileDiff()
   oldPath.setLen(0)
@@ -718,9 +846,16 @@ proc gitDiffArguments(
       "--no-renames",
       "--unified=" & $unified,
     ]
-  if comparison.kind == gdckBranch:
+  if file.status == gdfsUntracked:
+    result.add ["--no-index", "--", "/dev/null", file.path]
+  elif comparison.kind == gdckBranch:
     result.add [comparison.branch & "...HEAD", "--", file.path]
-  elif not hasHead or file.status == gdfsUntracked:
+  elif comparison.kind == gdckRevisionRange:
+    result.add comparison.fromRevision
+    if not comparison.toWorkingTree:
+      result.add comparison.toRevision
+    result.add ["--", file.path]
+  elif not hasHead:
     result.add ["--no-index", "--", "/dev/null", file.path]
   else:
     result.add ["HEAD", "--", file.path]
@@ -761,32 +896,50 @@ proc loadGitDiffFile(
     result.file.patchState = gdpsSkipped
     result.file.errorMessage = patchLimitError(file.path, perFileLimit, total = true)
     return
-  let syntax = executeGit(
+  let
+    automaticLimit =
+      if explicit:
+        high(int)
+      else:
+        GitDiffAutoExpandByteLimit
+    visibleLimit = min(min(perFileLimit, remaining), automaticLimit)
+  let visible = executeGit(
     rootPath,
-    file.gitDiffArguments(hasHead, comparison, 2_147_483_647),
+    file.gitDiffArguments(hasHead, comparison, 3),
     control,
-    maxOutputBytes = min(perFileLimit, remaining),
+    maxOutputBytes = visibleLimit,
   )
-  if syntax.limitExceeded:
-    result.file.patchState = gdpsSkipped
-    result.file.errorMessage =
-      patchLimitError(file.path, perFileLimit, total = remaining <= perFileLimit)
+  if visible.limitExceeded:
+    if not explicit and automaticLimit < min(perFileLimit, remaining):
+      result.file.large = true
+      result.file.patchState = gdpsUnloaded
+    else:
+      result.file.patchState = gdpsSkipped
+      result.file.errorMessage =
+        patchLimitError(file.path, perFileLimit, total = remaining <= perFileLimit)
     return
-  if syntax.code != 0 and
-      not ((not hasHead or file.status == gdfsUntracked) and syntax.code == 1):
+  if visible.code != 0 and
+      not ((not hasHead or file.status == gdfsUntracked) and visible.code == 1):
     result.file.patchState = gdpsFailed
     result.file.errorMessage =
-      "Could not read diff for " & file.path & ":\n" & syntax.output
+      "Could not read diff hunks for " & file.path & ":\n" & visible.output
     return
-  if syntax.output.len == 0:
+  if not explicit:
+    var visibleSummary: GitFileDiff
+    visibleSummary.summarizePatch(visible.output)
+    if visibleSummary.additions + visibleSummary.deletions > GitDiffAutoExpandLineLimit:
+      result.file.large = true
+      result.file.patchState = gdpsUnloaded
+      return
+  if visible.output.len == 0:
     result.file.patchState = gdpsLoaded
     result.file.patchBytes = 0
     result.threadId = getThreadId()
     return
   let
-    visibleRemaining = remaining - syntax.output.len
-    perFileRemaining = perFileLimit - syntax.output.len
-  if visibleRemaining <= 0:
+    syntaxRemaining = remaining - visible.output.len
+    perFileRemaining = perFileLimit - visible.output.len
+  if syntaxRemaining <= 0:
     result.file.patchState = gdpsSkipped
     result.file.errorMessage = patchLimitError(file.path, perFileLimit, total = true)
     return
@@ -794,23 +947,23 @@ proc loadGitDiffFile(
     result.file.patchState = gdpsSkipped
     result.file.errorMessage = patchLimitError(file.path, perFileLimit, total = false)
     return
-  let visible = executeGit(
+  let syntax = executeGit(
     rootPath,
-    file.gitDiffArguments(hasHead, comparison, 3),
+    file.gitDiffArguments(hasHead, comparison, 2_147_483_647),
     control,
-    maxOutputBytes = min(perFileRemaining, visibleRemaining),
+    maxOutputBytes = min(perFileRemaining, syntaxRemaining),
   )
-  if visible.limitExceeded:
+  if syntax.limitExceeded:
     result.file.patchState = gdpsSkipped
     result.file.errorMessage = patchLimitError(
-      file.path, perFileLimit, total = visibleRemaining <= perFileRemaining
+      file.path, perFileLimit, total = syntaxRemaining <= perFileRemaining
     )
     return
-  if visible.code != 0 and
-      not ((not hasHead or file.status == gdfsUntracked) and visible.code == 1):
+  if syntax.code != 0 and
+      not ((not hasHead or file.status == gdfsUntracked) and syntax.code == 1):
     result.file.patchState = gdpsFailed
     result.file.errorMessage =
-      "Could not read diff hunks for " & file.path & ":\n" & visible.output
+      "Could not read diff for " & file.path & ":\n" & syntax.output
     return
   result.file.patch = visible.output
   result.file.syntaxPatch = syntax.output
@@ -1076,7 +1229,14 @@ proc layoutDisclosureButtons(
 ) {.slot.}
 
 proc selectComparison*(panel: KosmoGitDiffPanel, comparison: GitDiffComparison)
-proc syncComparisonControl(panel: KosmoGitDiffPanel)
+proc selectRevision(
+  panel: KosmoGitDiffPanel,
+  side: GitDiffRevisionSide,
+  revision: string,
+  workingTree = false,
+)
+
+proc syncComparisonControls(panel: KosmoGitDiffPanel)
 
 func gitDiffStatusLabel(status: GitDiffFileStatus): string =
   case status
@@ -1089,44 +1249,117 @@ func gitDiffStatusLabel(status: GitDiffFileStatus): string =
   of gdfsConflicted: "conflicted"
   of gdfsUntracked: "untracked"
 
-proc newGitDiffComparisonMenuItem(
-    panel: WeakRef[KosmoGitDiffPanel], comparison: GitDiffComparison
+proc newGitDiffRevisionMenuItem(
+    panel: WeakRef[KosmoGitDiffPanel],
+    side: GitDiffRevisionSide,
+    choice: GitDiffRevisionChoice,
+    workingTree = false,
 ): nimkit.MenuItem =
-  let action = nimkit.actionSelector("kosmo.selectGitDiffComparison")
-  result = nimkit.newMenuItem(comparison.gitDiffComparisonTitle(), action)
-  result.identifier = comparison.gitDiffComparisonIdentifier()
+  let isFrom = side == gdrsFrom
+  let action = nimkit.actionSelector("kosmo.selectGitDiffRevision")
+  result = nimkit.newMenuItem(choice.title, action)
+  result.identifier = gitDiffRevisionIdentifier(isFrom, choice.revision, workingTree)
   result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
     discard sender
     if not panel.isNil:
-      panel[].selectComparison(comparison)
+      panel[].selectRevision(side, choice.revision, workingTree)
   result.validates = false
 
-proc syncComparisonControl(panel: KosmoGitDiffPanel) =
-  if panel.isNil or panel.comparisonButton.isNil:
+func selectedFromRevision(comparison: GitDiffComparison): string =
+  case comparison.kind
+  of gdckWorkingTree:
+    "HEAD"
+  of gdckRevisionRange:
+    comparison.fromRevision
+  of gdckBranch:
+    "refs/heads/" & comparison.branch
+
+func selectedToRevision(
+    comparison: GitDiffComparison
+): tuple[revision: string, workingTree: bool] =
+  case comparison.kind
+  of gdckWorkingTree:
+    (revision: "", workingTree: true)
+  of gdckRevisionRange:
+    (revision: comparison.toRevision, workingTree: comparison.toWorkingTree)
+  of gdckBranch:
+    (revision: "HEAD", workingTree: false)
+
+proc revisionTitle(panel: KosmoGitDiffPanel, revision: string): string =
+  for choice in panel.snapshot.revisions:
+    if choice.revision == revision:
+      return choice.title
+  if revision == "HEAD" and not panel.snapshot.hasHead:
+    return "Empty Tree"
+  revision
+
+proc syncComparisonControls(panel: KosmoGitDiffPanel) =
+  if panel.isNil or panel.fromRevisionButton.isNil or panel.toRevisionButton.isNil:
     return
-  let menu = panel.comparisonButton.menu()
-  if menu.isNil:
+  let
+    fromMenu = panel.fromRevisionButton.menu()
+    toMenu = panel.toRevisionButton.menu()
+  if fromMenu.isNil or toMenu.isNil:
     return
-  menu.removeAllItems()
-  discard menu.addItem(
-    newGitDiffComparisonMenuItem(panel.unsafeWeakRef(), GitDiffComparison())
-  )
+  fromMenu.removeAllItems()
+  toMenu.removeAllItems()
   if panel.snapshot.source == gdsRepository:
-    for branch in panel.snapshot.branches:
-      if branch.len > 0:
-        discard menu.addItem(
-          newGitDiffComparisonMenuItem(
-            panel.unsafeWeakRef(), GitDiffComparison(kind: gdckBranch, branch: branch)
-          )
-        )
-  panel.comparisonButton.title = panel.comparison.gitDiffComparisonTitle()
-  panel.comparisonButton.toolTip =
-    "Compare Git diff with " & panel.comparison.gitDiffComparisonTitle()
-  let selectedIdentifier = panel.comparison.gitDiffComparisonIdentifier()
-  for item in menu.items():
-    item.state =
-      if item.identifier == selectedIdentifier: nimkit.bsOn else: nimkit.bsOff
-  panel.comparisonButton.accessibilityLabel = "Git diff comparison"
+    let workingTreeChoice = GitDiffRevisionChoice(title: "Working Tree")
+    discard toMenu.addItem(
+      newGitDiffRevisionMenuItem(
+        panel.unsafeWeakRef(), gdrsTo, workingTreeChoice, workingTree = true
+      )
+    )
+    for choice in panel.snapshot.revisions:
+      discard fromMenu.addItem(
+        newGitDiffRevisionMenuItem(panel.unsafeWeakRef(), gdrsFrom, choice)
+      )
+      discard toMenu.addItem(
+        newGitDiffRevisionMenuItem(panel.unsafeWeakRef(), gdrsTo, choice)
+      )
+  let
+    fromRevision = panel.comparison.selectedFromRevision()
+    toSelection = panel.comparison.selectedToRevision()
+    fromIdentifier = gitDiffRevisionIdentifier(true, fromRevision)
+    toIdentifier =
+      gitDiffRevisionIdentifier(false, toSelection.revision, toSelection.workingTree)
+  panel.fromRevisionButton.title = "From: " & panel.revisionTitle(fromRevision)
+  panel.toRevisionButton.title =
+    "To: " & (
+      if toSelection.workingTree: "Working Tree"
+      else: panel.revisionTitle(toSelection.revision)
+    )
+  panel.fromRevisionButton.toolTip = "Select the starting Git revision"
+  panel.toRevisionButton.toolTip = "Select the ending Git revision"
+  for item in fromMenu.items():
+    item.state = if item.identifier == fromIdentifier: nimkit.bsOn else: nimkit.bsOff
+  for item in toMenu.items():
+    item.state = if item.identifier == toIdentifier: nimkit.bsOn else: nimkit.bsOff
+  panel.fromRevisionButton.accessibilityLabel = "Git diff from revision"
+  panel.toRevisionButton.accessibilityLabel = "Git diff to revision"
+
+proc selectRevision(
+    panel: KosmoGitDiffPanel,
+    side: GitDiffRevisionSide,
+    revision: string,
+    workingTree = false,
+) =
+  if panel.isNil or panel.closed or not panel.repositoryBacked:
+    return
+  let toSelection = panel.comparison.selectedToRevision()
+  var comparison = GitDiffComparison(
+    kind: gdckRevisionRange,
+    fromRevision: panel.comparison.selectedFromRevision(),
+    toRevision: toSelection.revision,
+    toWorkingTree: toSelection.workingTree,
+  )
+  case side
+  of gdrsFrom:
+    comparison.fromRevision = revision
+  of gdrsTo:
+    comparison.toRevision = revision
+    comparison.toWorkingTree = workingTree
+  panel.selectComparison(comparison)
 
 proc selectComparison*(panel: KosmoGitDiffPanel, comparison: GitDiffComparison) =
   ## Select a repository comparison and refresh the displayed file list.
@@ -1134,10 +1367,15 @@ proc selectComparison*(panel: KosmoGitDiffPanel, comparison: GitDiffComparison) 
     return
   if comparison.kind == gdckBranch and comparison.branch.len == 0:
     return
+  if comparison.kind == gdckRevisionRange and (
+    comparison.fromRevision.len == 0 or
+    (comparison.toRevision.len == 0 and not comparison.toWorkingTree)
+  ):
+    return
   if panel.comparison == comparison:
     return
   panel.comparison = comparison
-  panel.syncComparisonControl()
+  panel.syncComparisonControls()
   if panel.readingGit:
     inc panel.readGeneration
     panel.readingGit = false
@@ -1176,7 +1414,16 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
     if panel.snapshot.source == gdsStandardInput:
       document.add " |\n| Compare | Piped unified diff |\n"
     else:
-      if panel.snapshot.comparison.kind == gdckBranch and
+      if panel.snapshot.comparison.kind == gdckRevisionRange:
+        let comparison = panel.snapshot.comparison
+        document.add " |\n| Compare | " &
+          panel.revisionTitle(comparison.fromRevision).markdownLabel() & " ↔ " & (
+          if comparison.toWorkingTree:
+            "Working Tree"
+          else:
+            panel.revisionTitle(comparison.toRevision).markdownLabel()
+        ) & " |\n"
+      elif panel.snapshot.comparison.kind == gdckBranch and
           panel.snapshot.comparison.branch.len > 0:
         document.add " |\n| Compare | " &
           panel.snapshot.comparison.branch.markdownLabel() & " ↔ " &
@@ -1199,11 +1446,10 @@ proc renderDiff(panel: KosmoGitDiffPanel) =
       document.add "The piped diff contains no changes.\n"
     elif panel.snapshot.scopePath.len > 0:
       document.add "No changes in this path.\n"
+    elif panel.snapshot.comparison.kind in {gdckBranch, gdckRevisionRange}:
+      document.add "No changes between the selected revisions.\n"
     else:
-      if panel.snapshot.comparison.kind == gdckBranch:
-        document.add "No changes between the selected branches.\n"
-      else:
-        document.add "No changes. Your working tree matches HEAD.\n"
+      document.add "No changes. Your working tree matches HEAD.\n"
   panel.markdownView.markdown = document
   panel.scheduleSectionLayout()
 
@@ -1213,6 +1459,8 @@ proc toggleFile*(panel: KosmoGitDiffPanel, index: int) =
     let path = panel.snapshot.files[index].path
     if path in panel.collapsed:
       panel.collapsed.excl path
+      panel.manuallyCollapsed.excl path
+      panel.manuallyExpanded.incl path
       panel.forcedDisclosurePaths.clear()
       panel.forcedDisclosurePaths.incl path
       panel.forcedTextPaths.clear()
@@ -1222,6 +1470,8 @@ proc toggleFile*(panel: KosmoGitDiffPanel, index: int) =
       panel.queueFilePatch(path, explicit = true, retry = true)
     else:
       panel.collapsed.incl path
+      panel.manuallyExpanded.excl path
+      panel.manuallyCollapsed.incl path
       panel.forcedTextPaths.excl path
       let section = addr panel.sections[path]
       let owner = panel.window()
@@ -1234,12 +1484,19 @@ proc toggleFile*(panel: KosmoGitDiffPanel, index: int) =
 
 proc expandAllFiles(panel: KosmoGitDiffPanel) =
   panel.collapsed.clear()
+  panel.manuallyCollapsed.clear()
   panel.forcedDisclosurePaths.clear()
   panel.forcedTextPaths.clear()
   for file in panel.snapshot.files:
+    panel.manuallyExpanded.incl file.path
     panel.explicitPatchPaths.incl file.path
     panel.queueFilePatch(file.path, explicit = true, retry = true)
   panel.scheduleSectionLayout()
+
+func collapseByDefault(file: GitFileDiff): bool =
+  file.requiresExplicitLoad or file.large or
+    file.additions + file.deletions > GitDiffAutoExpandLineLimit or
+    file.patch.len > GitDiffAutoExpandByteLimit
 
 proc isFileCollapsed*(panel: KosmoGitDiffPanel, index: int): bool =
   index in 0 ..< panel.snapshot.files.len and
@@ -2164,6 +2421,8 @@ proc repositoryFileDiffFinished(
   snapshotFile.deletions = section[].deletions
   snapshotFile.binary = section[].binary
   panel.updateSnapshotFile(snapshotFile)
+  if snapshotFile.large and path notin panel.manuallyExpanded:
+    panel.collapsed.incl path
   if not section[].textView.isNil:
     if section[].patchState == gdpsLoaded:
       section[].ready = false
@@ -2194,7 +2453,8 @@ func sameGitDiffMetadata(left, right: GitDiffSnapshot): bool =
   for index, file in left.files:
     let other = right.files[index]
     if file.path != other.path or file.status != other.status or
-        file.requiresExplicitLoad != other.requiresExplicitLoad:
+        file.requiresExplicitLoad != other.requiresExplicitLoad or
+        (other.large and not file.large):
       return false
   true
 
@@ -2222,8 +2482,8 @@ proc clearSectionContent(panel: KosmoGitDiffPanel, path: string) =
 
 func sameGitDiffFileMetadata(left, right: GitFileDiff): bool =
   left.path == right.path and left.status == right.status and
-    left.requiresExplicitLoad == right.requiresExplicitLoad and left.revision.len > 0 and
-    left.revision == right.revision
+    left.requiresExplicitLoad == right.requiresExplicitLoad and left.large == right.large and
+    left.revision.len > 0 and left.revision == right.revision
 
 proc rebuildSnapshotFileIndexes(panel: KosmoGitDiffPanel) =
   panel.snapshotFileIndexes.clear()
@@ -2255,7 +2515,8 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
       panel.snapshot == snapshot
   ):
     panel.snapshot.branches = snapshot.branches
-    panel.syncComparisonControl()
+    panel.snapshot.revisions = snapshot.revisions
+    panel.syncComparisonControls()
     panel.updateLoading()
     panel.scheduleSectionLayout()
     return
@@ -2271,7 +2532,7 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
     panel.patchQueue.setLen(0)
   panel.hasSnapshot = true
   panel.snapshot = snapshot
-  panel.syncComparisonControl()
+  panel.syncComparisonControls()
   panel.rebuildSnapshotFileIndexes()
   var previousFileIndexes = initTable[string, int]()
   if revisionChanged and previousSnapshot.source == gdsRepository:
@@ -2282,7 +2543,12 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
     retained.incl file.path
     if not panel.sections.hasKey(file.path):
       panel.sections[file.path] = GitDiffSection(contentHeight: 24.0'f32)
+    if file.path in panel.manuallyExpanded:
+      panel.collapsed.excl file.path
+    elif file.path in panel.manuallyCollapsed or file.collapseByDefault():
       panel.collapsed.incl file.path
+    else:
+      panel.collapsed.excl file.path
     let section = addr panel.sections[file.path]
     var previousFile: GitFileDiff
     var foundPreviousFile: bool
@@ -2347,6 +2613,8 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
     panel.clearSectionContent(path)
     panel.sections.del path
     panel.collapsed.excl path
+    panel.manuallyExpanded.excl path
+    panel.manuallyCollapsed.excl path
     panel.forcedDisclosurePaths.excl path
     panel.forcedTextPaths.excl path
     panel.explicitPatchPaths.excl path
@@ -2366,7 +2634,8 @@ proc displayDiff*(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) =
   panel.repositoryBacked = false
   panel.repositoryRootPath = ""
   panel.repositoryScopePath = ""
-  panel.comparisonButton.hidden = true
+  panel.fromRevisionButton.hidden = true
+  panel.toRevisionButton.hidden = true
   inc panel.readGeneration
   panel.readingGit = false
   panel.applyDiff(snapshot)
@@ -2407,8 +2676,9 @@ proc displayRepositoryDiff*(
   panel.repositoryBacked = true
   panel.repositoryRootPath = rootPath
   panel.repositoryScopePath = scopePath
-  panel.comparisonButton.hidden = false
-  panel.syncComparisonControl()
+  panel.fromRevisionButton.hidden = false
+  panel.toRevisionButton.hidden = false
+  panel.syncComparisonControls()
   if changed and panel.readingGit:
     inc panel.readGeneration
     panel.readingGit = false
@@ -2486,34 +2756,38 @@ protocol GitDiffLayout of nimkit.ViewLayoutProtocol:
       bounds = panel.bounds()
       inset = min(12.0'f32, bounds.size.width * 0.05'f32)
       gap = min(8.0'f32, bounds.size.width * 0.03'f32)
-      hasComparison = not panel.comparisonButton.hidden
+      hasComparison = not panel.fromRevisionButton.hidden
       controlWidth =
-        90.0'f32 + (if hasComparison: 140.0'f32 else: 0.0'f32) + 110.0'f32 + 110.0'f32 +
+        90.0'f32 + (if hasComparison: 290.0'f32 else: 0.0'f32) + 110.0'f32 + 110.0'f32 +
         82.0'f32 + 54.0'f32
       availableWidth = max(
         bounds.size.width - inset * 2.0'f32 -
-          gap * (if hasComparison: 4.0'f32 else: 3.0'f32) - 4.0'f32,
+          gap * (if hasComparison: 5.0'f32 else: 3.0'f32) - 4.0'f32,
         0,
       )
       scale = min(availableWidth / controlWidth, 1.0'f32)
       refreshWidth = 90.0'f32 * scale
-      comparisonWidth = 140.0'f32 * scale
+      revisionWidth = 145.0'f32 * scale
       actionWidth = 110.0'f32 * scale
       autoRefreshLabelWidth = 82.0'f32 * scale
       autoRefreshWidth = 54.0'f32 * scale
-      comparisonX = inset + refreshWidth + gap
+      fromRevisionX = inset + refreshWidth + gap
+      toRevisionX = fromRevisionX + revisionWidth + gap
       expandX =
         if hasComparison:
-          comparisonX + comparisonWidth + gap
+          toRevisionX + revisionWidth + gap
         else:
-          comparisonX
+          fromRevisionX
       collapseX = expandX + actionWidth + gap
       autoRefreshLabelX = collapseX + actionWidth + gap
       autoRefreshX = autoRefreshLabelX + autoRefreshLabelWidth + 4.0'f32
     panel.refreshButton.setFrameFromLayout(nimkit.rect(inset, 8, refreshWidth, 28))
     if hasComparison:
-      panel.comparisonButton.setFrameFromLayout(
-        nimkit.rect(comparisonX, 8, comparisonWidth, 28)
+      panel.fromRevisionButton.setFrameFromLayout(
+        nimkit.rect(fromRevisionX, 8, revisionWidth, 28)
+      )
+      panel.toRevisionButton.setFrameFromLayout(
+        nimkit.rect(toRevisionX, 8, revisionWidth, 28)
       )
     panel.expandButton.setFrameFromLayout(nimkit.rect(expandX, 8, actionWidth, 28))
     panel.collapseButton.setFrameFromLayout(nimkit.rect(collapseX, 8, actionWidth, 28))
@@ -2600,13 +2874,15 @@ proc newKosmoGitDiffPanel(
     scopePath = "",
     patchLimits = initGitDiffPatchLimits(),
 ): KosmoGitDiffPanel =
-  ## Construct a syntax-highlighted hunk reader with initially collapsed files.
+  ## Construct a syntax-highlighted hunk reader with ordinary files expanded.
   startLocalThreadDefault()
   result = KosmoGitDiffPanel(
     markdownView: nimkit.newMarkdownView(),
     refreshButton: nimkit.newButton("Refresh"),
-    comparisonButton:
-      nimkit.newPopupMenuButton("Working Tree", nimkit.newMenu("Compare With")),
+    fromRevisionButton:
+      nimkit.newPopupMenuButton("From: HEAD", nimkit.newMenu("From Revision")),
+    toRevisionButton:
+      nimkit.newPopupMenuButton("To: Working Tree", nimkit.newMenu("To Revision")),
     expandButton: nimkit.newButton("Expand All"),
     collapseButton: nimkit.newButton("Collapse All"),
     autoRefreshLabel: nimkit.newLabel("Auto-refresh"),
@@ -2621,11 +2897,14 @@ proc newKosmoGitDiffPanel(
     forcedDisclosurePaths: initHashSet[string](),
     forcedTextPaths: initHashSet[string](),
     explicitPatchPaths: initHashSet[string](),
+    manuallyExpanded: initHashSet[string](),
+    manuallyCollapsed: initHashSet[string](),
     patchLimits:
       initGitDiffPatchLimits(patchLimits.perFileBytes, patchLimits.totalBytes),
     pool: newSigilThreadPool(workers = 1),
     control: newGitDiffControl(),
   )
+  result.comparisonButton = result.toRevisionButton
   result.initViewFields()
   let document = GitDiffDocumentView(panel: result.unsafeWeakRef())
   document.initViewFields()
@@ -2652,9 +2931,8 @@ proc newKosmoGitDiffPanel(
   discard result.withProtocol(GitDiffLayout)
   result.markdownStyle = markdownStyle
   result.markdownView.toolTip = rootPath
-  result.comparisonButton.hidden = not refreshesRepository
-  result.comparisonButton.accessibilityLabel = "Git diff comparison"
-  result.comparisonButton.toolTip = "Compare Git diff with Working Tree"
+  result.fromRevisionButton.hidden = not refreshesRepository
+  result.toRevisionButton.hidden = not refreshesRepository
   result.autoRefreshSwitch.accessibilityLabel = "Automatically refresh Git diff"
   result.autoRefreshSwitch.toolTip = "Automatically refresh Git diff when files change"
   result.autoRefreshSwitch.accessibilityIdentifier = "kosmo.gitDiff.autoRefresh"
@@ -2688,12 +2966,12 @@ proc newKosmoGitDiffPanel(
     nimkit.markdownDidFinishParsing, result, markdownParsingFinished
   )
   for view in [
-    nimkit.View(result.refreshButton), result.comparisonButton, result.expandButton,
-    result.collapseButton, result.autoRefreshLabel, result.autoRefreshSwitch,
-    result.scrollView,
+    nimkit.View(result.refreshButton), result.fromRevisionButton,
+    result.toRevisionButton, result.expandButton, result.collapseButton,
+    result.autoRefreshLabel, result.autoRefreshSwitch, result.scrollView,
   ]:
     result.addSubview(view)
-  result.syncComparisonControl()
+  result.syncComparisonControls()
   let panel = result.unsafeWeakRef()
   let refreshAction = nimkit.actionSelector("kosmo.refreshGitDiff")
   result.refreshButton.action = refreshAction
@@ -2730,6 +3008,8 @@ proc newKosmoGitDiffPanel(
       panel[].forcedTextPaths.clear()
       for index, file in panel[].snapshot.files:
         panel[].collapsed.incl file.path
+        panel[].manuallyExpanded.excl file.path
+        panel[].manuallyCollapsed.incl file.path
         let owner = panel[].window()
         if owner of nimkit.Window and not panel[].sections[file.path].textView.isNil and
             nimkit.Window(owner).firstResponder == panel[].sections[file.path].textView:
