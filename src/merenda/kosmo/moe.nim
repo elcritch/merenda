@@ -20,6 +20,8 @@ import moepkg/buffer/undo as moeUndo
 import moepkg/buffer/search as moeSearch
 import moepkg/buffer/highlight as moeBufferHighlight
 import moepkg/buffer/core as moeBufferCore
+import moepkg/command_completion as moeCommandCompletion
+import moepkg/help_viewer as moeHelpViewer
 import moepkg/highlight as moeHighlight
 from moepkg/buffer/file_io import loadFileWithContent
 from moepkg/buffer/core import BufferId, getLine, getTextString, len
@@ -109,6 +111,23 @@ type
     visible*: bool
     text*: string
     cursor*: int
+
+  KosmoPopupMenuKind* {.pure.} = enum
+    Completion
+    CommandCompletion
+
+  KosmoPopupMenuItem* = object
+    title*: string
+    detail*: string
+
+  KosmoPopupMenu* = object
+    kind*: KosmoPopupMenuKind
+    items*: seq[KosmoPopupMenuItem]
+    selectedIndex*: int
+    firstIndex*: int
+    maxVisibleItems*: int
+    anchorRow*: int
+    anchorColumn*: int
 
   KosmoCursor* = object ## Moe's cursor position in the rendered cell grid.
     row*: int
@@ -598,6 +617,8 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
     matterLineStateVersions: initTable[BufferId, int](),
   )
   result.workingDirectory = workingDirectory
+  result.editor.hostPopupMenus = true
+  result.editor.hostHelpViewer = true
   discard result.editor.addCommandAlias("x", claSaveAndQuit)
   result.editor.setFrontendGitStatusEnabled(true)
   if text.len > 0:
@@ -1234,6 +1255,120 @@ proc completionPopupVisible*(editor: KosmoEditor): bool =
   ## Return whether Moe currently has an active insert-completion popup.
   not editor.isNil and not editor.editor.isNil and
     editor.editor.handlerManager.insertHandler.completionManager.isActive()
+
+proc handleKey*(editor: KosmoEditor, key: string): bool {.discardable.}
+
+proc popupMenu*(editor: KosmoEditor): Option[KosmoPopupMenu] =
+  ## Return the menu-like popup Moe currently asks its host to present.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let moeEditor = editor.editor
+  let commandMenu = moeEditor.state.commandCompletionManager
+  if moeTypes.isCommandOverlay(moeEditor.state) and
+      moeCommandCompletion.isActive(commandMenu) and commandMenu.menu.entries.len > 0:
+    var menu = KosmoPopupMenu(
+      kind: KosmoPopupMenuKind.CommandCompletion,
+      selectedIndex: commandMenu.menu.selectedIndex,
+      firstIndex: commandMenu.menu.scrollOffset,
+      maxVisibleItems: commandMenu.menu.maxVisible,
+      anchorColumn: moeEditor.state.input.commandCursor + 1,
+    )
+    for entry in commandMenu.menu.entries:
+      menu.items.add KosmoPopupMenuItem(title: entry.command, detail: entry.description)
+    return some(menu)
+
+  let completionMenu = moeEditor.handlerManager.insertHandler.completionManager
+  if completionMenu.isActive() and completionMenu.menu.entries.len > 0:
+    let cursor = moeEditor.state.screenCursor
+    var menu = KosmoPopupMenu(
+      kind: KosmoPopupMenuKind.Completion,
+      selectedIndex:
+        if completionMenu.menu.hasSelection: completionMenu.menu.selectedIndex else: -1,
+      firstIndex: completionMenu.menu.scrollOffset,
+      maxVisibleItems: completionMenu.menu.maxVisible,
+      anchorRow: cursor.y,
+      anchorColumn: cursor.x,
+    )
+    for entry in completionMenu.menu.entries:
+      menu.items.add KosmoPopupMenuItem(
+        title: entry.displayText,
+        detail: if entry.detail.isSome: entry.detail.get else: "",
+      )
+    return some(menu)
+
+proc selectPopupMenuItem*(editor: KosmoEditor, index: int): bool =
+  ## Highlight a host-presented popup item without accepting it.
+  let popup = editor.popupMenu()
+  if popup.isNone or index < 0 or index >= popup.get.items.len:
+    return
+  case popup.get.kind
+  of KosmoPopupMenuKind.Completion:
+    let manager = editor.editor.handlerManager.insertHandler.completionManager
+    manager.menu.selectedIndex = index
+    manager.menu.hasSelection = true
+    manager.updateDocPanel()
+  of KosmoPopupMenuKind.CommandCompletion:
+    editor.editor.state.commandCompletionManager.menu.selectedIndex = index
+  true
+
+proc activatePopupMenuItem*(editor: KosmoEditor, index: int): bool =
+  ## Accept a host-presented popup item using Moe's normal command semantics.
+  let popup = editor.popupMenu()
+  if popup.isNone or index < 0 or index >= popup.get.items.len:
+    return
+  case popup.get.kind
+  of KosmoPopupMenuKind.Completion:
+    let manager = editor.editor.handlerManager.insertHandler.completionManager
+    manager.menu.selectedIndex = index
+    manager.menu.hasSelection = true
+    manager.updateDocPanel()
+    discard editor.handleKey("Enter")
+  of KosmoPopupMenuKind.CommandCompletion:
+    let manager = editor.editor.state.commandCompletionManager
+    manager.menu.selectedIndex =
+      if index == 0:
+        -1
+      else:
+        index - 1
+    discard editor.handleKey("Tab")
+    moeCommandCompletion.cancelCompletion(manager)
+  true
+
+proc scrollPopupMenu*(editor: KosmoEditor, delta: int) =
+  let popup = editor.popupMenu()
+  if popup.isNone or delta == 0:
+    return
+  case popup.get.kind
+  of KosmoPopupMenuKind.Completion:
+    let manager = editor.editor.handlerManager.insertHandler.completionManager
+    manager.menu.scrollOffset = clamp(
+      manager.menu.scrollOffset + delta,
+      0,
+      max(manager.menu.entries.len - manager.menu.maxVisible, 0),
+    )
+  of KosmoPopupMenuKind.CommandCompletion:
+    let manager = editor.editor.state.commandCompletionManager
+    manager.menu.scrollOffset = clamp(
+      manager.menu.scrollOffset + delta,
+      0,
+      max(manager.menu.entries.len - manager.menu.maxVisible, 0),
+    )
+
+proc dismissPopupMenu*(editor: KosmoEditor) =
+  if editor.isNil or editor.editor.isNil:
+    return
+  let commandMenu = editor.editor.state.commandCompletionManager
+  if moeCommandCompletion.isActive(commandMenu):
+    moeCommandCompletion.cancelCompletion(commandMenu)
+  editor.editor.handlerManager.insertHandler.completionManager.cancelCompletion()
+
+proc helpText*(editor: KosmoEditor): string =
+  ## Return Moe's canonical Markdown help source for a host-owned Help view.
+  moeHelpViewer.HelpSentences
+
+proc takeHostHelpRequest*(editor: KosmoEditor): bool =
+  ## Consume a request for the host to present Moe's Help document.
+  not editor.isNil and not editor.editor.isNil and editor.editor.takeHostHelpRequest()
 
 proc dismissCompletionPopup*(editor: KosmoEditor) =
   ## Dismiss Moe's active insert-completion popup, if any.

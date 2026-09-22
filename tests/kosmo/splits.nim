@@ -427,6 +427,49 @@ suite "Kosmo":
     check frontend.editorView.editor.tabs().len == 1
     check frontend.editorView.editor.tabs()[0].title == "second.txt"
 
+  test "q closes the Moe config panel without closing its Kosmo tab":
+    let
+      root = createTempDir("merenda-kosmo-config-close-", "")
+      filePath = root / "config-test.txt"
+    writeFile(filePath, "config panel host")
+    defer:
+      removeFile(filePath)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(newApplication("Kosmo Config Close Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.openPath(filePath)
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    let tabIdentifier = frontend.documentTabs.selectedDocumentTabIdentifier
+    check frontend.documentTabs.len == 1
+
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    check frontend.window.dispatchTextInput("config")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
+    check frontend.editorView.editor.mode() == KosmoEditorMode.Other
+    check frontend.documentTabs.len == 1
+
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    check frontend.window.dispatchTextInput("q")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
+
+    check frontend.editorView.editor.mode() == KosmoEditorMode.Normal
+    check frontend.documentTabs.len == 1
+    check frontend.documentTabs.selectedDocumentTabIdentifier == tabIdentifier
+
   test "duplicated buffer panes keep independent selections during repeated refreshes":
     let pasteboard = generalPasteboard()
     var savedClipboard: seq[tuple[kind: string, item: PasteboardItem]]
@@ -672,6 +715,18 @@ suite "Kosmo":
       KeyEvent(text: "p", key: keyP, keyCode: keyP.ord, modifiers: {kmControl})
     )
     check frontend.editorView.editor.completionPopupVisible()
+    let popupMenu = groups[1].editorView.editor.popupMenu()
+    check popupMenu.isSome
+    if popupMenu.isSome:
+      check popupMenu.get.kind == KosmoPopupMenuKind.Completion
+      check popupMenu.get.items.len > 0
+    var popupListVisible = false
+    for subview in groups[1].pane.subviews():
+      if subview of PopupListView:
+        let popupList = PopupListView(subview)
+        popupListVisible = not popupList.hidden() and popupList.itemCount() > 0
+        break
+    check popupListVisible
     groups[0].editorView.refresh()
     check groups[0].editorView.displayedText() == inactiveGridBeforeCompletion
 

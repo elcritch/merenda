@@ -331,7 +331,7 @@ suite "Kosmo":
         break
     check frontend.editorView.editor.bufferText(activeTab.id).get == "ab"
 
-  test "command completion cycles with native Tab and Shift-Tab":
+  test "command completion cycles with Tab and Shift-Tab in the host popup":
     let frontend =
       newKosmoApplication(newApplication("Kosmo Command Completion Input Test"))
     defer:
@@ -348,11 +348,56 @@ suite "Kosmo":
     check frontend.editorView.editor.mode() == KosmoEditorMode.Command
     check frontend.editorView.editor.commandLine().text == ":v"
 
+    let initialPopup = frontend.editorView.editor.popupMenu()
+    check initialPopup.isSome
+    if initialPopup.isSome:
+      check initialPopup.get.selectedIndex == -1
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
+    )
+    let downPopup = frontend.editorView.editor.popupMenu()
+    check downPopup.isSome
+    if downPopup.isSome:
+      check downPopup.get.selectedIndex == 0
+      check frontend.editorView.editor.commandLine().text ==
+        ":" & downPopup.get.items[0].title
+    let firstArrowSelection = frontend.editorView.editor.commandLine().text
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
+    )
+    let secondDownPopup = frontend.editorView.editor.popupMenu()
+    check secondDownPopup.isSome
+    if secondDownPopup.isSome:
+      check secondDownPopup.get.selectedIndex == 1
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord)
+    )
+    let upPopup = frontend.editorView.editor.popupMenu()
+    check upPopup.isSome
+    if upPopup.isSome:
+      check upPopup.get.selectedIndex == 0
+    check frontend.editorView.editor.commandLine().text == firstArrowSelection
+
     discard frontend.window.dispatchKeyDown(
       KeyEvent(text: "\t", key: keyTab, keyCode: keyTab.ord)
     )
     let firstCompletion = frontend.editorView.editor.commandLine().text
     check firstCompletion != ":v"
+    let popupMenu = frontend.editorView.editor.popupMenu()
+    check popupMenu.isSome
+    if popupMenu.isSome:
+      check popupMenu.get.kind == KosmoPopupMenuKind.CommandCompletion
+      check popupMenu.get.items.len > 0
+    var popupList: PopupListView
+    for subview in frontend.editorPane.subviews():
+      if subview of PopupListView:
+        popupList = PopupListView(subview)
+        break
+    check not popupList.isNil
+    if not popupList.isNil:
+      check not popupList.hidden()
+      check popupList.itemCount() > 0
+      check popupList.frame().origin.x == frontend.editorPane.commandBar.frame.origin.x
     discard frontend.window.dispatchKeyDown(
       KeyEvent(text: "\t", key: keyTab, keyCode: keyTab.ord)
     )
@@ -362,8 +407,17 @@ suite "Kosmo":
       KeyEvent(text: "\t", key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
     )
     check frontend.editorView.editor.commandLine().text == firstCompletion
+    let activePopup = frontend.editorView.editor.popupMenu()
+    check activePopup.isSome
+    if activePopup.isSome and activePopup.get.items.len > 0:
+      let
+        lastIndex = activePopup.get.items.high
+        selectedCommand = activePopup.get.items[lastIndex].title
+      check frontend.editorView.editor.activatePopupMenuItem(lastIndex)
+      check frontend.editorView.editor.commandLine().text == ":" & selectedCommand
+      check frontend.editorView.editor.popupMenu().isNone
 
-  test "help renders in the editor grid and survives a resize":
+  test "help opens as a dismissible overlay and survives a resize":
     let frontend = newKosmoApplication(newApplication("Kosmo Help Viewer Test"))
     defer:
       frontend.close()
@@ -379,14 +433,62 @@ suite "Kosmo":
     check frontend.window.dispatchKeyDown(
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
-    check frontend.editorView.editor.mode() == KosmoEditorMode.Other
-    check "# Exiting" in frontend.editorView.displayedText()
+    check frontend.editorPane.contentView == View(frontend.editorView)
+    var
+      helpPanel: Box
+      helpView: MarkdownView
+      closeButton: Button
+    for subview in frontend.editorPane.subviews():
+      if subview of Box and Box(subview).title() == "Moe Help":
+        helpPanel = Box(subview)
+        break
+    check not helpPanel.isNil
+    if not helpPanel.isNil:
+      check not helpPanel.hidden()
+      for subview in helpPanel.subviews():
+        if subview of MarkdownView:
+          helpView = MarkdownView(subview)
+        elif subview of Button:
+          closeButton = Button(subview)
+    check not helpView.isNil
+    check not closeButton.isNil
+    if not helpView.isNil:
+      check helpView.markdown == frontend.editorView.editor.helpText()
+      check "# Exiting" in helpView.markdown
 
-    let oldWidth = frontend.editorView.columnCount(0)
-    frontend.editorView.frame = rect(0, 0, 520, 280)
-    frontend.editorView.refresh()
-    check frontend.editorView.columnCount(0) != oldWidth
-    check "# Exiting" in frontend.editorView.displayedText()
+    frontend.editorPane.frame = rect(0, 0, 520, 280)
+    frontend.editorPane.layoutSubtreeIfNeeded()
+    check not helpPanel.hidden()
+    check helpPanel.frame().size.width <= 520.0'f32
+    check helpView.markdown == frontend.editorView.editor.helpText()
+
+    let closeButtonBounds = closeButton.bounds()
+    check frontend.window.clickAt(
+      closeButton.pointToWindow(
+        initPoint(
+          closeButtonBounds.size.width * 0.5'f32,
+          closeButtonBounds.size.height * 0.5'f32,
+        )
+      )
+    )
+    check helpPanel.hidden()
+    check frontend.editorPane.contentView == View(frontend.editorView)
+
+    check frontend.window.makeFirstResponder(frontend.editorView)
+    check not frontend.window.dispatchKeyDown(
+      KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
+    )
+    check frontend.window.dispatchTextInput(":")
+    check frontend.window.dispatchTextInput("help")
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
+    check not helpPanel.hidden()
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
+    )
+    check helpPanel.hidden()
+    check frontend.editorPane.contentView == View(frontend.editorView)
 
   test "command bar grows with a larger monospace font":
     let
