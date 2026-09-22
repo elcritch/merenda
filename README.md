@@ -402,6 +402,13 @@ the executable and work from any launch directory. Add your own TOML themes
 in `~/.config/moe/themes`; a user theme with the same name overrides a bundled
 theme.
 
+To add language highlighting, open **Kosmo Settings → TextMate Grammars** and
+search the built-in language grammars in the open-source `microsoft/vscode`
+repository by language name, file extension, or TextMate scope. Select a result
+to download, validate, and install its grammar files into Kosmo's user
+configuration. This searches VS Code's source repository, not its extension
+Marketplace.
+
 You can also send a Git diff straight to Kosmo:
 
 ```sh
