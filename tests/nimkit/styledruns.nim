@@ -2,6 +2,51 @@ import std/[strutils, unicode, unittest]
 import merenda/nimkit
 import merenda/nimkit/text/textsnapshots
 
+when defined(linux):
+  proc rssKb(): int64 =
+    for line in lines("/proc/self/status"):
+      if line.startsWith("VmRSS:"):
+        let fields = line.splitWhitespace()
+        if fields.len >= 2:
+          return parseInt(fields[1]).int64
+    raise newException(IOError, "unable to read VmRSS from /proc/self/status")
+
+elif defined(macosx):
+  type
+    MachPort = uint32
+    MachMsgTypeNumber = uint32
+    TimeValue = object
+      seconds: int32
+      microseconds: int32
+
+    MachTaskBasicInfo = object
+      virtualSize: uint64
+      residentSize: uint64
+      residentSizeMax: uint64
+      userTime: TimeValue
+      systemTime: TimeValue
+      policy: int32
+      suspendCount: int32
+
+  const machTaskBasicInfoFlavor = 20
+
+  var machTaskSelf {.importc: "mach_task_self_", header: "<mach/mach_init.h>".}:
+    MachPort
+
+  proc taskInfo(
+    task: MachPort,
+    flavor: cint,
+    taskInfoOut: ptr MachTaskBasicInfo,
+    taskInfoOutCount: ptr MachMsgTypeNumber,
+  ): cint {.importc: "task_info", header: "<mach/task.h>".}
+
+  proc rssKb(): int64 =
+    var info: MachTaskBasicInfo
+    var count = MachMsgTypeNumber(sizeof(MachTaskBasicInfo) div sizeof(cuint))
+    let status = taskInfo(machTaskSelf, machTaskBasicInfoFlavor, addr info, addr count)
+    doAssert status == 0, "task_info failed with kern_return_t " & $status
+    int64(info.residentSize div 1024)
+
 suite "Styled text run extraction":
   test "Unicode runs match substring for string and gap storage":
     let source = "Aé中😀é\r\nZ"
@@ -62,6 +107,60 @@ suite "Styled text run extraction":
       inc runCount
     check reconstructed == source
     check runCount == count * 2
+
+  when defined(linux) or defined(macosx):
+    test "large styled document reports borrowed and owned run RSS":
+      const
+        sourceBytes = 8 * 1024 * 1024
+        runBytes = 1024
+        runCount = sourceBytes div runBytes
+      let first = defaultTextAttributes()
+      var second = first
+      second.fontSize += 1
+      # Run this file alone for RSS deltas without earlier suites reusing pages.
+      let baselineKb = rssKb()
+      var runs = newSeqOfCap[TextAttributeRun](runCount)
+      for index in 0 ..< runCount:
+        runs.add TextAttributeRun(
+          range: initTextRange(index * runBytes, runBytes),
+          attributes: (if index mod 2 == 0: first else: second),
+        )
+      let storage = newTextStorage(repeat("abcdefgh", sourceBytes div 8), runs)
+      let storageKb = rssKb()
+
+      var borrowed = newSeqOfCap[TextStyledSpan](runCount)
+      for span in storage.styledSpans():
+        borrowed.add span
+      let borrowedKb = rssKb()
+
+      var owned = newSeqOfCap[(TextAttributes, string)](runCount)
+      for attributes, text in storage.styledRuns():
+        owned.add((attributes, text))
+      let ownedKb = rssKb()
+
+      check storage.len == sourceBytes
+      check borrowed.len == runCount
+      check owned.len == runCount
+      check owned[0][1] == repeat("abcdefgh", runBytes div 8)
+      check owned[^1][1] == owned[0][1]
+      echo "NimKit styled text RSS: source_mib=",
+        sourceBytes div (1024 * 1024),
+        " runs=",
+        runCount,
+        " baseline_kib=",
+        baselineKb,
+        " storage_kib=",
+        storageKb,
+        " borrowed_kib=",
+        borrowedKb,
+        " owned_kib=",
+        ownedKb,
+        " storage_delta_kib=",
+        storageKb - baselineKb,
+        " borrowed_delta_kib=",
+        borrowedKb - storageKb,
+        " owned_delta_kib=",
+        ownedKb - borrowedKb
 
   test "snapshots keep sparse rune and line checkpoints":
     let source = repeat("é😀\n", 130) & "終"
