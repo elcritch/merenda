@@ -5,6 +5,7 @@ import celina/core/colors as celinaColors
 import sigils/threads
 
 import moepkg/highlight as moeHighlight
+import moepkg/syntax/matter_backend as moeMatter
 import merenda/kosmo/kosmo
 import merenda/kosmo/matterworkers
 import merenda/nimkit
@@ -110,6 +111,50 @@ template checkDistinctHighlight(fileName, source, firstNeedle, secondNeedle: str
       buffer.cell(second.column, second.row).style.fg
 
 suite "Kosmo Matter highlighting":
+  test "installed VS Code file types select their root grammar asynchronously":
+    let
+      rootPath = "/kosmo/config/grammars/toy/syntaxes/toy.tmLanguage.json"
+      sources =
+        @[
+          moeMatter.MatterGrammarSource(
+            path: rootPath,
+            content:
+              """{"scopeName":"source.toy","patterns":[{"match":"\\b(fizz)\\b","name":"keyword.control.toy"}]}""",
+          )
+        ]
+      fileTypes =
+        @[
+          MatterGrammarFileType(
+            identifier: "toy:toy",
+            languageId: "toy",
+            rootPath: rootPath,
+            extensions: @[".toy", ".toy.multi"],
+            fileNames: @["Toyfile"],
+          )
+        ]
+      highlighting = newMatterHighlighting(sources, fileTypes)
+      requestId = highlighting.requestMatterHighlight(
+        7, 1, "fizz value", moeHighlight.SourceLanguage.langNone,
+        "/work/example.toy.multi",
+      )
+      deadline = getMonoTime() + initDuration(seconds = 60)
+    defer:
+      highlighting.close()
+
+    while not highlighting.matterHighlightingReady(7, requestId) and
+        getMonoTime() < deadline:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      sleep(1)
+    require highlighting.matterHighlightingReady(7, requestId)
+    let completed = highlighting.takeMatterHighlightResults()
+    require completed.len == 1
+    check completed[0].errorMessage == ""
+    var keywordFound: bool
+    for segment in completed[0].segments:
+      if segment.color == moeHighlight.EditorColorPairIndex.keyword:
+        keywordFound = true
+    check keywordFound
+
   when not defined(KosmoMatterMaximumLineBytes) or
       KosmoMatterMaximumLineBytes >= NimBindingMaximumLineBytes:
     test "Matter worker parses generated Nim native declarations":

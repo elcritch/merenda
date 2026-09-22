@@ -1,8 +1,13 @@
 ## Kosmo-specific application settings.
 
+import std/strutils
+
 import ../nimkit as nimkit
 import ./moe
 import ./shortcuts
+import ./vscodegrammars as vscodeGrammars
+
+export vscodeGrammars
 
 export shortcuts
 
@@ -29,6 +34,17 @@ const
   KosmoTextMateGrammarNameColumnIdentifier* = "grammar"
   KosmoTextMateGrammarScopeColumnIdentifier* = "scope"
   KosmoTextMateGrammarOriginColumnIdentifier* = "origin"
+  KosmoVscodeGrammarSearchFieldIdentifier* = "kosmo.settings.textMateGrammars.search"
+  KosmoVscodeGrammarSearchButtonIdentifier* =
+    "kosmo.settings.textMateGrammars.searchButton"
+  KosmoVscodeGrammarInstallButtonIdentifier* =
+    "kosmo.settings.textMateGrammars.installButton"
+  KosmoVscodeGrammarSearchTableIdentifier* =
+    "kosmo.settings.textMateGrammars.searchResults"
+  KosmoVscodeGrammarStatusIdentifier* = "kosmo.settings.textMateGrammars.status"
+  KosmoVscodeGrammarLanguageColumnIdentifier* = "language"
+  KosmoVscodeGrammarExtensionsColumnIdentifier* = "extensions"
+  KosmoVscodeGrammarScopeColumnIdentifier* = "scope"
   KosmoMoeThemePreviewText* = "let fn = \"text\" #"
   KosmoSettingsMinimumWidth* = 620.0'f32
   KosmoSettingsMinimumHeight* = 340.0'f32
@@ -43,6 +59,7 @@ type
   KosmoShortcutProfileHandler* = proc(profile: KosmoShortcutProfile) {.closure.}
   KosmoEditorInputPolicyHandler* = proc(policy: KosmoEditorInputPolicy) {.closure.}
   KosmoForceInputModeHandler* = proc(enabled: bool) {.closure.}
+  KosmoVscodeGrammarInstalledHandler* = proc() {.closure.}
 
   KosmoShortcutSetting* = object
     action*: string
@@ -68,6 +85,9 @@ type
   KosmoTextMateGrammarsTableSource = ref object of nimkit.Responder
     grammars: seq[KosmoTextMateGrammar]
 
+  KosmoVscodeGrammarSearchTableSource = ref object of nimkit.Responder
+    candidates: seq[VscodeGrammarCandidate]
+
   KosmoSettingsWindow* = ref object of nimkit.Responder
     xWindow: nimkit.Panel
     xContentView: nimkit.View
@@ -89,6 +109,14 @@ type
     xMoeThemesSource: KosmoMoeThemesTableSource
     xTextMateGrammarsTable: nimkit.TableView
     xTextMateGrammarsSource: KosmoTextMateGrammarsTableSource
+    xVscodeGrammarCatalog: KosmoVscodeGrammarCatalog
+    xVscodeGrammarInstalledHandler: KosmoVscodeGrammarInstalledHandler
+    xVscodeGrammarSearchField: nimkit.TextField
+    xVscodeGrammarSearchButton: nimkit.Button
+    xVscodeGrammarInstallButton: nimkit.Button
+    xVscodeGrammarSearchStatus: nimkit.Label
+    xVscodeGrammarSearchTable: nimkit.TableView
+    xVscodeGrammarSearchSource: KosmoVscodeGrammarSearchTableSource
 
 protocol KosmoShortcutsTableDataSource of nimkit.TableViewDataSource:
   method numberOfRows(
@@ -341,6 +369,144 @@ proc newKosmoTextMateGrammarsTableSource(
   discard result.withProtocol(KosmoTextMateGrammarsTableDataSource)
   discard result.withProtocol(KosmoTextMateGrammarsTableDelegate)
 
+protocol KosmoVscodeGrammarSearchTableDataSource of nimkit.TableViewDataSource:
+  method numberOfRows(
+      source: KosmoVscodeGrammarSearchTableSource, tableView: nimkit.TableView
+  ): int =
+    discard tableView
+    source.candidates.len
+
+  method textForCell(
+      source: KosmoVscodeGrammarSearchTableSource,
+      tableView: nimkit.TableView,
+      row: int,
+      column: nimkit.TableColumn,
+  ): string =
+    discard tableView
+    if row notin 0 ..< source.candidates.len:
+      return
+    let candidate = source.candidates[row]
+    case column.identifier()
+    of KosmoVscodeGrammarLanguageColumnIdentifier:
+      candidate.name
+    of KosmoVscodeGrammarExtensionsColumnIdentifier:
+      candidate.extensions.join(" ")
+    of KosmoVscodeGrammarScopeColumnIdentifier:
+      candidate.scopeName
+    else:
+      ""
+
+  method identifierForRow(
+      source: KosmoVscodeGrammarSearchTableSource, tableView: nimkit.TableView, row: int
+  ): string =
+    discard tableView
+    if row in 0 ..< source.candidates.len:
+      result = source.candidates[row].id
+
+protocol KosmoVscodeGrammarSearchTableDelegate of nimkit.TableViewDelegate:
+  method shouldSelectTableRow(
+      source: KosmoVscodeGrammarSearchTableSource, tableView: nimkit.TableView, row: int
+  ): bool =
+    discard source
+    discard tableView
+    discard row
+    true
+
+  method shouldEditCell(
+      source: KosmoVscodeGrammarSearchTableSource,
+      tableView: nimkit.TableView,
+      row: int,
+      column: nimkit.TableColumn,
+  ): bool =
+    discard source
+    discard tableView
+    discard row
+    discard column
+    false
+
+proc newKosmoVscodeGrammarSearchTableSource(): KosmoVscodeGrammarSearchTableSource =
+  result = KosmoVscodeGrammarSearchTableSource()
+  nimkit.initResponder(result)
+  discard result.withProtocol(KosmoVscodeGrammarSearchTableDataSource)
+  discard result.withProtocol(KosmoVscodeGrammarSearchTableDelegate)
+
+proc updateVscodeGrammarSearchControls(settings: KosmoSettingsWindow) =
+  if settings.isNil or settings.xVscodeGrammarCatalog.isNil:
+    return
+  let selectedRow =
+    if settings.xVscodeGrammarSearchTable.isNil:
+      -1
+    else:
+      settings.xVscodeGrammarSearchTable.selectedIndex
+  settings.xVscodeGrammarInstallButton.enabled = false
+  if selectedRow in 0 ..< settings.xVscodeGrammarSearchSource.candidates.len and
+      not settings.xVscodeGrammarCatalog.isBusy:
+    let candidate = settings.xVscodeGrammarSearchSource.candidates[selectedRow]
+    settings.xVscodeGrammarInstallButton.enabled =
+      not isVscodeGrammarInstalled(candidate.id)
+  settings.xVscodeGrammarSearchStatus.text = settings.xVscodeGrammarCatalog.status()
+
+proc vscodeGrammarCatalogDidUpdate(settings: KosmoSettingsWindow) {.slot.} =
+  if settings.isNil or settings.xVscodeGrammarCatalog.isNil:
+    return
+  settings.xVscodeGrammarSearchSource.candidates =
+    settings.xVscodeGrammarCatalog.candidates()
+  settings.xVscodeGrammarSearchTable.reloadData()
+  settings.xVscodeGrammarSearchTable.selectedIndex =
+    if settings.xVscodeGrammarSearchSource.candidates.len > 0: 0 else: -1
+  settings.updateVscodeGrammarSearchControls()
+
+proc vscodeGrammarDidInstall(
+    settings: KosmoSettingsWindow, directory: string
+) {.slot.} =
+  discard directory
+  if settings.isNil:
+    return
+  if not settings.xVscodeGrammarInstalledHandler.isNil:
+    settings.xVscodeGrammarInstalledHandler()
+  settings.updateVscodeGrammarSearchControls()
+
+proc vscodeGrammarSelectionDidChange(
+    settings: KosmoSettingsWindow, sender: nimkit.DynamicAgent
+) {.slot.} =
+  discard sender
+  settings.updateVscodeGrammarSearchControls()
+
+proc searchVscodeGrammars(
+    settings: KosmoSettingsWindow, sender: nimkit.DynamicAgent
+) {.slot.} =
+  discard sender
+  if not settings.isNil and not settings.xVscodeGrammarCatalog.isNil:
+    settings.xVscodeGrammarCatalog.search(settings.xVscodeGrammarSearchField.text)
+
+proc installSelectedVscodeGrammar(
+    settings: KosmoSettingsWindow, sender: nimkit.DynamicAgent
+) {.slot.} =
+  discard sender
+  if settings.isNil or settings.xVscodeGrammarCatalog.isNil or
+      settings.xVscodeGrammarSearchTable.isNil:
+    return
+  let row = settings.xVscodeGrammarSearchTable.selectedIndex
+  if row in 0 ..< settings.xVscodeGrammarSearchSource.candidates.len:
+    settings.xVscodeGrammarCatalog.install(
+      settings.xVscodeGrammarSearchSource.candidates[row].id
+    )
+
+proc vscodeGrammarCatalog*(settings: KosmoSettingsWindow): KosmoVscodeGrammarCatalog =
+  if not settings.isNil:
+    result = settings.xVscodeGrammarCatalog
+
+proc `vscodeGrammarInstalledHandler=`*(
+    settings: KosmoSettingsWindow, handler: KosmoVscodeGrammarInstalledHandler
+) =
+  if not settings.isNil:
+    settings.xVscodeGrammarInstalledHandler = handler
+
+proc close*(settings: KosmoSettingsWindow) =
+  ## Release the network worker owned by the settings controller.
+  if not settings.isNil:
+    settings.xVscodeGrammarCatalog.close()
+
 proc newSettingsPage(): tuple[view: nimkit.View, stack: nimkit.StackView] =
   result.stack = nimkit.newStackView(nimkit.laVertical)
   result.stack.spacing = 10.0
@@ -479,6 +645,7 @@ proc newKosmoSettingsWindow*(
     shortcutsSource = newKosmoShortcutsTableSource(shortcuts)
     moeThemesSource = newKosmoMoeThemesTableSource(moeThemeHandler)
     textMateGrammarsSource = newKosmoTextMateGrammarsTableSource(textMateGrammars)
+    vscodeGrammarSearchSource = newKosmoVscodeGrammarSearchTableSource()
   result = KosmoSettingsWindow(
     xWindow: nimkit.newPanel("Kosmo Settings", nimkit.rect(180, 160, 760, 420)),
     xContentView: nimkit.newView(),
@@ -490,6 +657,8 @@ proc newKosmoSettingsWindow*(
     xShortcutsSource: shortcutsSource,
     xMoeThemesSource: moeThemesSource,
     xTextMateGrammarsSource: textMateGrammarsSource,
+    xVscodeGrammarCatalog: newKosmoVscodeGrammarCatalog(),
+    xVscodeGrammarSearchSource: vscodeGrammarSearchSource,
   )
   nimkit.initResponder(result)
   let
@@ -500,6 +669,7 @@ proc newKosmoSettingsWindow*(
     shortcutsPage = newSettingsPage()
     moeThemesPage = newSettingsPage()
     textMateGrammarsPage = newSettingsPage()
+    vscodeGrammarSearchControls = nimkit.newStackView(nimkit.laHorizontal)
     optionButton = nimkit.newCheckBox("Use Option/Alt as Meta")
     terminalLinksButton = nimkit.newCheckBox(
       when defined(macosx) or defined(macos):
@@ -514,10 +684,17 @@ proc newKosmoSettingsWindow*(
     shortcutsTable = nimkit.newTableView()
     moeThemesTable = nimkit.newTableView()
     textMateGrammarsTable = nimkit.newTableView()
+    vscodeGrammarSearchField = nimkit.newTextField()
+    vscodeGrammarSearchButton = nimkit.newButton("Search Repository")
+    vscodeGrammarInstallButton = nimkit.newButton("Install Selected")
+    vscodeGrammarSearchStatus = nimkit.newLabel("Search the VS Code source repository.")
+    vscodeGrammarSearchTable = nimkit.newTableView()
     optionChanged = nimkit.actionSelector("kosmo.optionAsMetaChanged")
     terminalLinksChanged = nimkit.actionSelector("kosmo.terminalLinksChanged")
     shortcutProfileChanged = nimkit.actionSelector("kosmo.shortcutProfileChanged")
     editorInputPolicyChanged = nimkit.actionSelector("kosmo.editorInputPolicyChanged")
+    vscodeGrammarSearchAction = nimkit.actionSelector("kosmo.searchVscodeGrammars")
+    vscodeGrammarInstallAction = nimkit.actionSelector("kosmo.installVscodeGrammar")
   result.xOptionAsMetaButton = optionButton
   result.xTerminalLinksButton = terminalLinksButton
   result.xFirstResponder = optionButton
@@ -528,6 +705,79 @@ proc newKosmoSettingsWindow*(
   result.xForceInputModeButton = forceInputModeButton
   result.xMoeThemesTable = moeThemesTable
   result.xTextMateGrammarsTable = textMateGrammarsTable
+  result.xVscodeGrammarSearchField = vscodeGrammarSearchField
+  result.xVscodeGrammarSearchButton = vscodeGrammarSearchButton
+  result.xVscodeGrammarInstallButton = vscodeGrammarInstallButton
+  result.xVscodeGrammarSearchStatus = vscodeGrammarSearchStatus
+  result.xVscodeGrammarSearchTable = vscodeGrammarSearchTable
+
+  vscodeGrammarSearchField.identifier = KosmoVscodeGrammarSearchFieldIdentifier
+  vscodeGrammarSearchField.accessibilityLabel = "Search VS Code language grammars"
+  vscodeGrammarSearchButton.identifier = KosmoVscodeGrammarSearchButtonIdentifier
+  vscodeGrammarSearchButton.accessibilityLabel = "Search the VS Code repository"
+  vscodeGrammarSearchButton.target = nimkit.newActionTarget(vscodeGrammarSearchAction) do(
+    sender: nimkit.DynamicAgent
+  ):
+    settings.searchVscodeGrammars(sender)
+  vscodeGrammarSearchButton.action = vscodeGrammarSearchAction
+
+  vscodeGrammarInstallButton.identifier = KosmoVscodeGrammarInstallButtonIdentifier
+  vscodeGrammarInstallButton.accessibilityLabel = "Install selected VS Code grammar"
+  vscodeGrammarInstallButton.enabled = false
+  vscodeGrammarInstallButton.target = nimkit.newActionTarget(vscodeGrammarInstallAction) do(
+    sender: nimkit.DynamicAgent
+  ):
+    settings.installSelectedVscodeGrammar(sender)
+  vscodeGrammarInstallButton.action = vscodeGrammarInstallAction
+
+  vscodeGrammarSearchStatus.identifier = KosmoVscodeGrammarStatusIdentifier
+  vscodeGrammarSearchTable.identifier = KosmoVscodeGrammarSearchTableIdentifier
+  vscodeGrammarSearchTable.accessibilityLabel =
+    "VS Code language grammar search results"
+  vscodeGrammarSearchTable.columnSizing = nimkit.tvcsFill
+  vscodeGrammarSearchTable.selectionMode = nimkit.tsmSingle
+  vscodeGrammarSearchTable.visibleRows = 2
+  vscodeGrammarSearchTable.usesAlternatingRowBackgrounds = true
+  vscodeGrammarSearchTable.showsRowSeparators = true
+  vscodeGrammarSearchTable.addColumn(
+    nimkit.newTableColumn(
+      KosmoVscodeGrammarLanguageColumnIdentifier,
+      "Language",
+      width = 170.0,
+      minWidth = 125.0,
+      sizingPolicy = nimkit.tcspFlexible,
+    )
+  )
+  vscodeGrammarSearchTable.addColumn(
+    nimkit.newTableColumn(
+      KosmoVscodeGrammarExtensionsColumnIdentifier,
+      "Extensions",
+      width = 145.0,
+      minWidth = 95.0,
+      sizingPolicy = nimkit.tcspFlexible,
+    )
+  )
+  vscodeGrammarSearchTable.addColumn(
+    nimkit.newTableColumn(
+      KosmoVscodeGrammarScopeColumnIdentifier,
+      "TextMate Scope",
+      width = 265.0,
+      minWidth = 180.0,
+      sizingPolicy = nimkit.tcspFlexible,
+    )
+  )
+  vscodeGrammarSearchTable.dataSource = vscodeGrammarSearchSource
+  vscodeGrammarSearchTable.delegate = vscodeGrammarSearchSource
+  vscodeGrammarSearchTable.connect(
+    nimkit.selectionDidChange, settings, vscodeGrammarSelectionDidChange
+  )
+  settings.xVscodeGrammarCatalog.connect(
+    vscodeGrammars.vscodeGrammarCatalogDidUpdate, settings,
+    vscodeGrammarCatalogDidUpdate,
+  )
+  settings.xVscodeGrammarCatalog.connect(
+    vscodeGrammars.vscodeGrammarDidInstall, settings, vscodeGrammarDidInstall
+  )
 
   optionButton.identifier = KosmoOptionAsMetaIdentifier
   optionButton.accessibilityLabel = "Use Option or Alt as Meta"
@@ -708,11 +958,18 @@ proc newKosmoSettingsWindow*(
   )
   textMateGrammarsTable.dataSource = textMateGrammarsSource
   textMateGrammarsTable.delegate = textMateGrammarsSource
+  vscodeGrammarSearchControls.spacing = 8.0
+  vscodeGrammarSearchControls.alignment = nimkit.svaCenter
+  vscodeGrammarSearchControls.addArrangedSubview(
+    vscodeGrammarSearchField, vscodeGrammarSearchButton, vscodeGrammarInstallButton
+  )
   textMateGrammarsPage.stack.addArrangedSubview(
-    nimkit.newHeadingLabel("TextMate Grammars"),
-    nimkit.newLabel(
-      "These grammars are available to Moe and Markdown syntax highlighting."
-    ),
+    nimkit.newHeadingLabel("Find a Language"),
+    nimkit.newLabel("Search built-in VS Code languages by name, extension, or scope."),
+    vscodeGrammarSearchControls,
+    vscodeGrammarSearchStatus,
+    vscodeGrammarSearchTable,
+    nimkit.newHeadingLabel("Available TextMate Grammars"),
   )
   textMateGrammarsPage.stack.fillAvailableSpace(textMateGrammarsTable)
 

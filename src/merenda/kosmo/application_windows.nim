@@ -274,6 +274,8 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     selectedMoeThemeIdentifier =
       frontend.dockController.editor.activeMoeThemeIdentifier()
   if frontend.xSettingsWindow.isNil or frontend.xSettingsWindow.window.isClosed():
+    if not frontend.xSettingsWindow.isNil:
+      frontend.xSettingsWindow.close()
     let weakFrontend = frontend.unsafeWeakRef()
     frontend.xSettingsWindow = newKosmoSettingsWindow(
       optionAsMeta = frontend.xTerminalOptionAsMeta,
@@ -310,6 +312,15 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       ,
       textMateGrammars = textMateGrammars,
     )
+    frontend.xSettingsWindow.vscodeGrammarInstalledHandler = proc() =
+      if weakFrontend.isNil or weakFrontend[].dockController.isNil:
+        return
+      for group in weakFrontend[].dockController.groups:
+        group.editorView.editor.reloadInstalledVscodeGrammars()
+        group.editorView.refresh()
+      if not weakFrontend[].xSettingsWindow.isNil:
+        weakFrontend[].xSettingsWindow.textMateGrammars =
+          weakFrontend[].dockController.editor.availableTextMateGrammars()
   else:
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
     frontend.xSettingsWindow.terminalLinksEnabled = frontend.xTerminalLinksEnabled
@@ -1379,9 +1390,10 @@ proc close*(frontend: KosmoApplication) =
   frontend.xClosed = true
   if not frontend.quickOpenPanel.isNil and frontend.quickOpenPanel.isOpen():
     frontend.quickOpenPanel.dismiss()
-  if not frontend.xSettingsWindow.isNil and
-      not frontend.xSettingsWindow.window.isClosed():
-    frontend.xSettingsWindow.window.close()
+  if not frontend.xSettingsWindow.isNil:
+    frontend.xSettingsWindow.close()
+    if not frontend.xSettingsWindow.window.isClosed():
+      frontend.xSettingsWindow.window.close()
   if not frontend.dockController.isNil:
     for group in frontend.dockController.groups:
       group.editorView.stopMatterHighlightRefresh()
