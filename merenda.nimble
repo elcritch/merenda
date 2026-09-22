@@ -1,4 +1,4 @@
-version       = "0.21.1"
+version       = "0.21.3"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -31,7 +31,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  requires "gh:fox0430/moe#8de7be4"
+  requires "gh:elcritch/moe#feat/kosmo-host-ui"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"

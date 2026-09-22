@@ -20,6 +20,8 @@ import moepkg/buffer/undo as moeUndo
 import moepkg/buffer/search as moeSearch
 import moepkg/buffer/highlight as moeBufferHighlight
 import moepkg/buffer/core as moeBufferCore
+import moepkg/command_completion as moeCommandCompletion
+import moepkg/help_viewer as moeHelpViewer
 import moepkg/highlight as moeHighlight
 from moepkg/buffer/file_io import loadFileWithContent
 from moepkg/buffer/core import BufferId, getLine, getTextString, len
@@ -38,6 +40,7 @@ import sigils/threads
 import ../nimkit/text/mattergrammarassets
 import ./matterworkers
 import ./moethemeassets
+import ./vscodegrammars
 
 when not defined(moe.embedded):
   when hasAsyncSupport:
@@ -53,6 +56,11 @@ type
     name*: string
     scopeName*: string
     origin*: KosmoTextMateGrammarOrigin
+    identifier*: string
+    languageId*: string
+    rootPath*: string
+    extensions*: seq[string]
+    fileNames*: seq[string]
 
   MatterSyntaxFallbackState = ref object
     highlightVersions: Table[BufferId, int]
@@ -63,6 +71,8 @@ type
     temporaryBufferId: Option[BufferId]
     workingDirectory: string
     textMateGrammars: seq[KosmoTextMateGrammar]
+    matterSources: seq[moeMatter.MatterGrammarSource]
+    matterFileTypes: seq[MatterGrammarFileType]
     matterHighlighting: MatterHighlighting
     matterRequests: Table[BufferId, tuple[contentVersion: int, requestId: uint64]]
     matterSyntaxFallback: MatterSyntaxFallbackState
@@ -101,6 +111,23 @@ type
     visible*: bool
     text*: string
     cursor*: int
+
+  KosmoPopupMenuKind* {.pure.} = enum
+    Completion
+    CommandCompletion
+
+  KosmoPopupMenuItem* = object
+    title*: string
+    detail*: string
+
+  KosmoPopupMenu* = object
+    kind*: KosmoPopupMenuKind
+    items*: seq[KosmoPopupMenuItem]
+    selectedIndex*: int
+    firstIndex*: int
+    maxVisibleItems*: int
+    anchorRow*: int
+    anchorColumn*: int
 
   KosmoCursor* = object ## Moe's cursor position in the rendered cell grid.
     row*: int
@@ -510,6 +537,51 @@ proc builtInTextMateGrammars(): seq[KosmoTextMateGrammar] =
     if result == 0:
       result = cmp(left.scopeName, right.scopeName)
 
+proc installedGrammarState(): tuple[
+  grammars: seq[KosmoTextMateGrammar],
+  sources: seq[moeMatter.MatterGrammarSource],
+  fileTypes: seq[MatterGrammarFileType],
+] =
+  for installed in installedVscodeGrammars():
+    let candidate = installed.candidate
+    result.grammars.add KosmoTextMateGrammar(
+      name: candidate.name,
+      scopeName: candidate.scopeName,
+      origin: KosmoTextMateGrammarOrigin.Added,
+      identifier: candidate.id,
+      languageId: candidate.languageId,
+      rootPath: installed.directory / candidate.rootPath,
+      extensions: candidate.extensions,
+      fileNames: candidate.fileNames,
+    )
+    for source in installed.sources:
+      result.sources.add moeMatter.MatterGrammarSource(
+        content: source.content, path: source.path
+      )
+    result.fileTypes.add MatterGrammarFileType(
+      identifier: candidate.id,
+      languageId: candidate.languageId,
+      rootPath: installed.directory / candidate.rootPath,
+      extensions: candidate.extensions,
+      fileNames: candidate.fileNames,
+    )
+  result.grammars.sort do(left, right: KosmoTextMateGrammar) -> int:
+    result = cmpIgnoreCase(left.name, right.name)
+    if result == 0:
+      result = cmp(left.identifier, right.identifier)
+
+proc kosmoMatterGrammarState(): tuple[
+  grammars: seq[KosmoTextMateGrammar],
+  sources: seq[moeMatter.MatterGrammarSource],
+  fileTypes: seq[MatterGrammarFileType],
+] =
+  result.grammars = builtInTextMateGrammars()
+  result.sources = newKosmoMatterGrammarSources()
+  let installed = installedGrammarState()
+  result.grammars.add installed.grammars
+  result.sources.add installed.sources
+  result.fileTypes = installed.fileTypes
+
 func title*(origin: KosmoTextMateGrammarOrigin): string =
   case origin
   of KosmoTextMateGrammarOrigin.BuiltIn: "Built-in"
@@ -531,9 +603,12 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   # built-in backend so opening, editing, and rendering never parse a live
   # buffer through Matter on the UI thread.
   config.highlight.backend = hbBuiltin
+  let grammarState = kosmoMatterGrammarState()
   result = KosmoEditor(
     editor: newEditor(config),
-    textMateGrammars: builtInTextMateGrammars(),
+    textMateGrammars: grammarState.grammars,
+    matterSources: grammarState.sources,
+    matterFileTypes: grammarState.fileTypes,
     matterRequests: initTable[BufferId, tuple[contentVersion: int, requestId: uint64]](),
     matterSyntaxFallback: MatterSyntaxFallbackState(
       highlightVersions: initTable[BufferId, int](),
@@ -542,12 +617,32 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
     matterLineStateVersions: initTable[BufferId, int](),
   )
   result.workingDirectory = workingDirectory
+  result.editor.hostPopupMenus = true
+  result.editor.hostHelpViewer = true
   discard result.editor.addCommandAlias("x", claSaveAndQuit)
   result.editor.setFrontendGitStatusEnabled(true)
   if text.len > 0:
     discard result.editor.handleKeyCombo(moeKeys.toKeyCombo('i'))
     discard result.editor.handleTextInput(text)
     discard result.editor.handleKeyCombo(moeKeys.toSpecialKeyCombo(moeKeys.skEscape))
+
+proc reloadInstalledVscodeGrammars*(editor: KosmoEditor) =
+  ## Refresh the on-disk user grammar set and restart async highlighting.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let grammarState = kosmoMatterGrammarState()
+  editor.textMateGrammars = grammarState.grammars
+  editor.matterSources = grammarState.sources
+  editor.matterFileTypes = grammarState.fileTypes
+  editor.matterHighlighting.close()
+  editor.matterHighlighting = nil
+  editor.matterRequests.clear()
+  editor.matterLineStateVersions.clear()
+  if not editor.matterSyntaxFallback.isNil:
+    editor.matterSyntaxFallback.highlightVersions.clear()
+    editor.matterSyntaxFallback.remappers.clear()
+  for buffer in editor.editor.buffers:
+    buffer.highlightNeedsUpdate = true
 
 proc close*(editor: KosmoEditor) =
   ## Release Moe-owned processes and language-server resources.
@@ -846,7 +941,7 @@ proc save*(editor: KosmoEditor): KosmoSaveResult =
   ## Save the active buffer to its current path.
   if editor.isNil or editor.editor.isNil:
     return KosmoSaveResult(message: "The editor is closed.")
-  let outcome = editor.editor.saveFile()
+  let outcome = editor.editor.saveFile(editor.editor.activeBuffer)
   if pkgResults.isErr(outcome):
     return KosmoSaveResult(message: outcome.error)
   if editor.temporaryBufferId == editor.activeBufferId():
@@ -866,7 +961,7 @@ proc saveAs*(editor: KosmoEditor, path: string): KosmoSaveResult =
       absolutePath(path, editor.workingDirectory)
     else:
       absolutePath(path)
-  let outcome = editor.editor.saveFile(some(savePath))
+  let outcome = editor.editor.saveFile(editor.editor.activeBuffer, some(savePath))
   if pkgResults.isErr(outcome):
     return KosmoSaveResult(message: outcome.error)
   if editor.temporaryBufferId == editor.activeBufferId():
@@ -941,6 +1036,8 @@ proc mode*(editor: KosmoEditor): KosmoEditorMode =
   ## Return the active Moe mode reduced to the modes relevant to GUI routing.
   if editor.isNil or editor.editor.isNil:
     return KosmoEditorMode.Other
+  if moeTypes.isCommandOverlay(editor.editor.state):
+    return KosmoEditorMode.Command
   case editor.editor.currentMode()
   of moeModes.EditorMode.Normal:
     KosmoEditorMode.Normal
@@ -1107,12 +1204,12 @@ proc searchFrom*(
       query, state.input.search.ignorecase, state.input.search.smartcase
     )
   if moeSearch.compileSearchRegex(query, ignoreCase).isNone:
-    state.input.search.lastText = ""
+    state.input.search.last.pattern = ""
     state.input.search.hlsearchTempDisabled = true
     state.statusMessage = "Invalid regex: " & query
     return
-  state.input.search.lastText = query
-  state.input.search.wholeWord = false
+  state.input.search.last.pattern = query
+  state.input.search.last.wholeWord = false
   state.input.search.hlsearchTempDisabled = false
   let
     buffer = editor.editor.activeBuffer()
@@ -1135,13 +1232,13 @@ proc searchFrom*(
 proc clearSearch*(editor: KosmoEditor) =
   ## Clear Moe's active search query and rendered match highlights.
   if not editor.isNil and not editor.editor.isNil:
-    editor.editor.state.input.search.lastText = ""
+    editor.editor.state.input.search.last.pattern = ""
     editor.editor.state.input.search.hlsearchTempDisabled = true
 
 func searchQuery*(editor: KosmoEditor): string =
   ## Return the query currently used by Moe's search highlighting and n/N commands.
   if not editor.isNil and not editor.editor.isNil:
-    result = editor.editor.state.input.search.lastText
+    result = editor.editor.state.input.search.last.pattern
 
 proc commandLine*(editor: KosmoEditor): KosmoCommandLine =
   ## Return command input for a frontend-owned command bar.
@@ -1158,6 +1255,120 @@ proc completionPopupVisible*(editor: KosmoEditor): bool =
   ## Return whether Moe currently has an active insert-completion popup.
   not editor.isNil and not editor.editor.isNil and
     editor.editor.handlerManager.insertHandler.completionManager.isActive()
+
+proc handleKey*(editor: KosmoEditor, key: string): bool {.discardable.}
+
+proc popupMenu*(editor: KosmoEditor): Option[KosmoPopupMenu] =
+  ## Return the menu-like popup Moe currently asks its host to present.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let moeEditor = editor.editor
+  let commandMenu = moeEditor.state.commandCompletionManager
+  if moeTypes.isCommandOverlay(moeEditor.state) and
+      moeCommandCompletion.isActive(commandMenu) and commandMenu.menu.entries.len > 0:
+    var menu = KosmoPopupMenu(
+      kind: KosmoPopupMenuKind.CommandCompletion,
+      selectedIndex: commandMenu.menu.selectedIndex,
+      firstIndex: commandMenu.menu.scrollOffset,
+      maxVisibleItems: commandMenu.menu.maxVisible,
+      anchorColumn: moeEditor.state.input.commandCursor + 1,
+    )
+    for entry in commandMenu.menu.entries:
+      menu.items.add KosmoPopupMenuItem(title: entry.command, detail: entry.description)
+    return some(menu)
+
+  let completionMenu = moeEditor.handlerManager.insertHandler.completionManager
+  if completionMenu.isActive() and completionMenu.menu.entries.len > 0:
+    let cursor = moeEditor.state.screenCursor
+    var menu = KosmoPopupMenu(
+      kind: KosmoPopupMenuKind.Completion,
+      selectedIndex:
+        if completionMenu.menu.hasSelection: completionMenu.menu.selectedIndex else: -1,
+      firstIndex: completionMenu.menu.scrollOffset,
+      maxVisibleItems: completionMenu.menu.maxVisible,
+      anchorRow: cursor.y,
+      anchorColumn: cursor.x,
+    )
+    for entry in completionMenu.menu.entries:
+      menu.items.add KosmoPopupMenuItem(
+        title: entry.displayText,
+        detail: if entry.detail.isSome: entry.detail.get else: "",
+      )
+    return some(menu)
+
+proc selectPopupMenuItem*(editor: KosmoEditor, index: int): bool =
+  ## Highlight a host-presented popup item without accepting it.
+  let popup = editor.popupMenu()
+  if popup.isNone or index < 0 or index >= popup.get.items.len:
+    return
+  case popup.get.kind
+  of KosmoPopupMenuKind.Completion:
+    let manager = editor.editor.handlerManager.insertHandler.completionManager
+    manager.menu.selectedIndex = index
+    manager.menu.hasSelection = true
+    manager.updateDocPanel()
+  of KosmoPopupMenuKind.CommandCompletion:
+    editor.editor.state.commandCompletionManager.menu.selectedIndex = index
+  true
+
+proc activatePopupMenuItem*(editor: KosmoEditor, index: int): bool =
+  ## Accept a host-presented popup item using Moe's normal command semantics.
+  let popup = editor.popupMenu()
+  if popup.isNone or index < 0 or index >= popup.get.items.len:
+    return
+  case popup.get.kind
+  of KosmoPopupMenuKind.Completion:
+    let manager = editor.editor.handlerManager.insertHandler.completionManager
+    manager.menu.selectedIndex = index
+    manager.menu.hasSelection = true
+    manager.updateDocPanel()
+    discard editor.handleKey("Enter")
+  of KosmoPopupMenuKind.CommandCompletion:
+    let manager = editor.editor.state.commandCompletionManager
+    manager.menu.selectedIndex =
+      if index == 0:
+        -1
+      else:
+        index - 1
+    discard editor.handleKey("Tab")
+    moeCommandCompletion.cancelCompletion(manager)
+  true
+
+proc scrollPopupMenu*(editor: KosmoEditor, delta: int) =
+  let popup = editor.popupMenu()
+  if popup.isNone or delta == 0:
+    return
+  case popup.get.kind
+  of KosmoPopupMenuKind.Completion:
+    let manager = editor.editor.handlerManager.insertHandler.completionManager
+    manager.menu.scrollOffset = clamp(
+      manager.menu.scrollOffset + delta,
+      0,
+      max(manager.menu.entries.len - manager.menu.maxVisible, 0),
+    )
+  of KosmoPopupMenuKind.CommandCompletion:
+    let manager = editor.editor.state.commandCompletionManager
+    manager.menu.scrollOffset = clamp(
+      manager.menu.scrollOffset + delta,
+      0,
+      max(manager.menu.entries.len - manager.menu.maxVisible, 0),
+    )
+
+proc dismissPopupMenu*(editor: KosmoEditor) =
+  if editor.isNil or editor.editor.isNil:
+    return
+  let commandMenu = editor.editor.state.commandCompletionManager
+  if moeCommandCompletion.isActive(commandMenu):
+    moeCommandCompletion.cancelCompletion(commandMenu)
+  editor.editor.handlerManager.insertHandler.completionManager.cancelCompletion()
+
+proc helpText*(editor: KosmoEditor): string =
+  ## Return Moe's canonical Markdown help source for a host-owned Help view.
+  moeHelpViewer.HelpSentences
+
+proc takeHostHelpRequest*(editor: KosmoEditor): bool =
+  ## Consume a request for the host to present Moe's Help document.
+  not editor.isNil and not editor.editor.isNil and editor.editor.takeHostHelpRequest()
 
 proc dismissCompletionPopup*(editor: KosmoEditor) =
   ## Dismiss Moe's active insert-completion popup, if any.
@@ -1280,7 +1491,7 @@ func cell*(buffer: RenderBuffer, column, row: int): RenderCell {.inline.} =
   ## Return a rendered Celina cell, including its symbol, style, and hyperlink.
   buffer.buffer.getCell(column, row)
 
-proc matterBufferCandidate(buffer: TextBuffer): bool =
+proc matterBufferCandidate(editor: KosmoEditor, buffer: TextBuffer): bool =
   if not buffer.allowsTextTransforms:
     return false
   let extension =
@@ -1289,6 +1500,9 @@ proc matterBufferCandidate(buffer: TextBuffer): bool =
     else:
       ""
   extension in [".hcl", ".tf", ".tfvars"] or
+    editor.matterFileTypes.matchesMatterFileType(
+      if buffer.filePath.isSome: buffer.filePath.get else: ""
+    ) or
     buffer.language notin {
       moeHighlight.SourceLanguage.langNone, moeHighlight.SourceLanguage.langDiff,
       moeHighlight.SourceLanguage.langLog,
@@ -1560,7 +1774,7 @@ proc matterHighlightingReady*(editor: KosmoEditor): bool =
     return true
   discard editor.pollMatterHighlighting()
   for buffer in editor.editor.buffers:
-    if not buffer.matterBufferCandidate:
+    if not editor.matterBufferCandidate(buffer):
       continue
     if editor.matterHighlighting.isNil:
       return false
@@ -1579,7 +1793,8 @@ proc matterHighlightingController*(editor: KosmoEditor): MatterHighlighting =
   ## Return the shared asynchronous highlighter, creating it before a frontend
   ## subscribes so completion can invalidate the retained cell grid.
   if not editor.isNil and not editor.editor.isNil and editor.matterHighlighting.isNil:
-    editor.matterHighlighting = newMatterHighlighting(newKosmoMatterGrammarSources())
+    editor.matterHighlighting =
+      newMatterHighlighting(editor.matterSources, editor.matterFileTypes)
   if not editor.isNil and not editor.editor.isNil:
     result = editor.matterHighlighting
 
@@ -1675,7 +1890,7 @@ proc scheduleMatterHighlighting(editor: KosmoEditor) =
     ):
       buffer.incrementalHighlight = nil
       editor.matterLineStateVersions.del(buffer.id)
-    if not buffer.matterBufferCandidate:
+    if not editor.matterBufferCandidate(buffer):
       editor.matterSyntaxFallback.highlightVersions.del(buffer.id)
       continue
     discard editor.matterHighlightingController()

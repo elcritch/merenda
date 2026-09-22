@@ -41,10 +41,23 @@ type
     markdownCodeBlockStates*: seq[bool]
     errorMessage*: string
 
+  MatterGrammarFileType* = object
+    ## Installed VS Code file associations and the corresponding root grammar.
+    identifier*: string
+    languageId*: string
+    rootPath*: string
+    extensions*: seq[string]
+    fileNames*: seq[string]
+
   MatterHighlightWorker = ref object of AgentActor
     sources: seq[moeMatter.MatterGrammarSource]
     grammars: moeMatter.MatterGrammarSet
     terraformGrammars: moeMatter.MatterGrammarSet
+    installedGrammars: Table[
+      string,
+      tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet],
+    ]
+    fileTypes: seq[MatterGrammarFileType]
 
   MatterHighlighting* = ref object of Agent
     worker: AgentProxy[MatterHighlightWorker]
@@ -92,11 +105,76 @@ proc ensureTerraformGrammars(worker: MatterHighlightWorker) =
     worker.terraformGrammars =
       moeMatter.newMatterGrammarSet(newTerraformGrammarSources(worker.sources))
 
+proc matchingFileType(
+    worker: MatterHighlightWorker, fileName: string
+): MatterGrammarFileType =
+  let baseName = extractFilename(fileName)
+  for fileType in worker.fileTypes:
+    for candidateName in fileType.fileNames:
+      if cmpIgnoreCase(baseName, candidateName) == 0:
+        return fileType
+  let normalizedFileName = fileName.toLowerAscii()
+  for fileType in worker.fileTypes:
+    for candidateExtension in fileType.extensions:
+      if normalizedFileName.endsWith(candidateExtension.toLowerAscii()):
+        return fileType
+
+proc matchesMatterFileType*(
+    fileTypes: openArray[MatterGrammarFileType], fileName: string
+): bool =
+  let baseName = extractFilename(fileName)
+  for fileType in fileTypes:
+    for candidateName in fileType.fileNames:
+      if cmpIgnoreCase(baseName, candidateName) == 0:
+        return true
+  let normalizedFileName = fileName.toLowerAscii()
+  for fileType in fileTypes:
+    for candidateExtension in fileType.extensions:
+      if normalizedFileName.endsWith(candidateExtension.toLowerAscii()):
+        return true
+
+proc installedGrammar(
+    worker: MatterHighlightWorker, fileType: MatterGrammarFileType
+): tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet] =
+  if worker.installedGrammars.hasKey(fileType.identifier):
+    return worker.installedGrammars[fileType.identifier]
+
+  var language = moeTokenizer.getSourceLanguage(fileType.languageId)
+  if language in {
+    moeHighlight.SourceLanguage.langNone, moeHighlight.SourceLanguage.langDiff,
+    moeHighlight.SourceLanguage.langLog,
+  }:
+    # Matter uses the enum as a root selector; unknown VS Code languages use a
+    # private selector while preserving their grammar's actual token scopes.
+    language = moeHighlight.SourceLanguage.langAstro
+
+  var sources = newSeqOfCap[moeMatter.MatterGrammarSource](worker.sources.len)
+  var rootFound: bool
+  for source in worker.sources:
+    var selected = source
+    selected.language = moeHighlight.SourceLanguage.langNone
+    if source.path == fileType.rootPath:
+      selected.language = language
+      rootFound = true
+    sources.add move selected
+  if not rootFound:
+    raise newException(ValueError, "installed TextMate root grammar is unavailable")
+
+  let grammars = moeMatter.newMatterGrammarSet(sources)
+  if not grammars.matterSupports(language):
+    raise
+      newException(ValueError, "installed TextMate root grammar could not be compiled")
+  result = (language, grammars)
+  worker.installedGrammars[fileType.identifier] = result
+
 proc requestGrammar(
     worker: MatterHighlightWorker,
     language: moeHighlight.SourceLanguage,
     fileName: string,
 ): tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet] =
+  let fileType = worker.matchingFileType(fileName)
+  if fileType.identifier.len > 0:
+    return worker.installedGrammar(fileType)
   let extension = fileName.splitFile.ext.toLowerAscii()
   if extension in [".hcl", ".tf", ".tfvars"]:
     worker.ensureTerraformGrammars()
@@ -520,13 +598,21 @@ proc receiveMatterHighlight(
     emit highlighting.matterHighlightCompleted()
 
 proc newMatterHighlighting*(
-    sources: sink seq[moeMatter.MatterGrammarSource]
+    sources: sink seq[moeMatter.MatterGrammarSource],
+    fileTypes: sink seq[MatterGrammarFileType] = @[],
 ): MatterHighlighting =
   result = MatterHighlighting(
     controls: initTable[int, SharedPtr[MatterHighlightControl]](),
     completed: initTable[int, uint64](),
   )
-  var worker = MatterHighlightWorker(sources: move sources)
+  var worker = MatterHighlightWorker(
+    sources: move sources,
+    fileTypes: move fileTypes,
+    installedGrammars: initTable[
+      string,
+      tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet],
+    ](),
+  )
   result.worker = worker.moveToThread(nimkitWorkerPool())
   connectThreaded(
     result.worker, requestMatterHighlight, result.worker, requestMatterHighlight

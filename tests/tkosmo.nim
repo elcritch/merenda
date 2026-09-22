@@ -22,6 +22,7 @@ import kosmo/terminalclipboard
 import kosmo/terminalsearch
 import kosmo/workspaceroots
 import kosmo/workspacefiles
+import kosmo/vscodegrammars
 
 proc runeIndexOf(source, needle: string): int =
   let byteIndex = source.find(needle)

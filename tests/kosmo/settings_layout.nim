@@ -81,8 +81,9 @@ suite "Kosmo settings layout":
           "Choose a bundled theme or a TOML theme installed in ~/.config/moe/themes.",
         ],
         @[
-          "TextMate Grammars",
-          "These grammars are available to Moe and Markdown syntax highlighting.",
+          "Find a Language",
+          "Search built-in VS Code languages by name, extension, or scope.",
+          "Available TextMate Grammars",
         ],
       ]
     for pageIndex, pageText in expectedPageText:
@@ -91,6 +92,23 @@ suite "Kosmo settings layout":
       check tabs[pageIndex].view().frame().size.width > 0.0'f32
       check tabs[pageIndex].view().frame().size.height > 0.0'f32
       settings.contentView().checkVisibleText(pageText)
+
+    check tabs.selectTabViewItemAtIndex(3)
+    let
+      searchField = settings.contentView().viewWithIdentifier(
+          KosmoVscodeGrammarSearchFieldIdentifier
+        )
+      searchButton = settings.contentView().viewWithIdentifier(
+          KosmoVscodeGrammarSearchButtonIdentifier
+        )
+      resultsTable = settings.contentView().viewWithIdentifier(
+          KosmoVscodeGrammarSearchTableIdentifier
+        )
+    require searchField of TextField
+    require searchButton of Button
+    require resultsTable of TableView
+    check TableView(resultsTable).columnCount == 3
+    check not settings.vscodeGrammarCatalog().isBusy
 
     window.frame = rect(180, 160, 700, 390)
     check window.frame().size == initSize(700, 390)
