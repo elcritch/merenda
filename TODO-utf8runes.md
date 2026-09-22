@@ -320,10 +320,6 @@ ArrangedGlyph and GlyphArrangement.
   tests added by the FigDraw follow-up.
 - [ ] Extend native-facade coverage for UTF-8 lookup, iteration, slicing, equality,
   and source-span layout, including allocation behavior at the ABI boundary.
-- [ ] Import tests/nimkit/gaptextbuffers.nim from tests/tnimkit.nim: the added
-  gap undo/redo case is currently outside the shared runner. Put new component
-  tests in the existing NimKit/Kosmo runners; use integration tests for actual
-  cross-thread lifetime and process concerns.
 
 Keep rune-based public APIs and intentional compatibility conversions. Rich
 per-cell/per-rune records need purpose-built compaction rather than mechanical

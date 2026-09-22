@@ -19,6 +19,7 @@ import nimkit/filebrowsers
 import nimkit/gitstatus
 import nimkit/font_layout
 import nimkit/fontpickers
+import nimkit/gaptextbuffers
 import nimkit/images
 import nimkit/markdownviews
 import nimkit/menus
