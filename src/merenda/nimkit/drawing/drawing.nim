@@ -571,13 +571,72 @@ proc usesMixedLineBreakModes(storage: TextStorage): bool =
 proc figDrawSpans(
     spans: openArray[tuple[style: FontStyle, text: TextStyledSpan]]
 ): seq[(FontStyle, string)] =
-  ## FigDraw's current typesetter accepts owned strings. Keep that conversion
-  ## at its API boundary; NimKit's storage and layout spans share the snapshot.
+  ## Compatibility for sparse attribute runs that do not cover their source.
   result = newSeqOfCap[(FontStyle, string)](spans.len)
   for span in spans:
     result.add(
       (span.style, span.text.source.bytes[span.text.byteStart ..< span.text.byteEnd])
     )
+
+proc figDrawSourceSpans(
+    spans: openArray[tuple[style: FontStyle, text: TextStyledSpan]]
+): seq[TextSourceSpan] =
+  result = newSeqOfCap[TextSourceSpan](spans.len)
+  for span in spans:
+    result.add TextSourceSpan(
+      style: span.style, byteStart: span.text.byteStart, byteEnd: span.text.byteEnd
+    )
+
+proc coversSource(spans: openArray[TextSourceSpan], byteLength: int): bool =
+  if spans.len == 0:
+    return false
+  var nextByte = 0
+  for span in spans:
+    if span.byteStart != nextByte or span.byteEnd < span.byteStart:
+      return false
+    nextByte = span.byteEnd
+  nextByte == byteLength
+
+proc typesetTextSpans(
+    rect: bumpy.Rect,
+    source: TextSnapshot,
+    sourceSpans: openArray[TextSourceSpan],
+    legacySpans: openArray[(FontStyle, string)],
+    alignment: FontHorizontal,
+    wrap, rasterize, complete: bool,
+): GlyphArrangement =
+  if complete:
+    if rasterize:
+      return typesetSourceSpans(
+        rect,
+        source.sourceRunes,
+        sourceSpans,
+        hAlign = alignment,
+        vAlign = Top,
+        minContent = false,
+        wrap = wrap,
+      )
+    return typesetSourceSpansForMeasurement(
+      rect,
+      source.sourceRunes,
+      sourceSpans,
+      hAlign = alignment,
+      vAlign = Top,
+      minContent = false,
+      wrap = wrap,
+    )
+  if rasterize:
+    return typeset(
+      rect,
+      legacySpans,
+      hAlign = alignment,
+      vAlign = Top,
+      minContent = false,
+      wrap = wrap,
+    )
+  typesetForMeasurement(
+    rect, legacySpans, hAlign = alignment, vAlign = Top, minContent = false, wrap = wrap
+  )
 
 proc textLayoutImpl(
     rect: nimkitTypes.Rect,
@@ -636,65 +695,30 @@ proc textLayoutImpl(
       font.underline = attributes.hasUnderline
       font.strikethrough = attributes.hasStrikethrough
       spans.add((fs(font, fill(attributes.foregroundColor.rgba)), span))
-  let figSpans = spans.figDrawSpans()
+  let
+    source = spans[0].text.source
+    sourceSpans = spans.figDrawSourceSpans()
+    complete = sourceSpans.coversSource(source.byteLength)
+    legacySpans =
+      if complete:
+        @[]
+      else:
+        spans.figDrawSpans()
   if wrap and storage.usesMixedLineBreakModes():
     let
-      wrapped =
-        if rasterize:
-          typeset(
-            rect.toFigRect,
-            figSpans,
-            hAlign = alignment.toFontHorizontal,
-            vAlign = Top,
-            minContent = false,
-            wrap = true,
-          )
-        else:
-          typesetForMeasurement(
-            rect.toFigRect,
-            figSpans,
-            hAlign = alignment.toFontHorizontal,
-            vAlign = Top,
-            minContent = false,
-            wrap = true,
-          )
-      unwrapped =
-        if rasterize:
-          typeset(
-            rect.toFigRect,
-            figSpans,
-            hAlign = alignment.toFontHorizontal,
-            vAlign = Top,
-            minContent = false,
-            wrap = false,
-          )
-        else:
-          typesetForMeasurement(
-            rect.toFigRect,
-            figSpans,
-            hAlign = alignment.toFontHorizontal,
-            vAlign = Top,
-            minContent = false,
-            wrap = false,
-          )
+      wrapped = typesetTextSpans(
+        rect.toFigRect, source, sourceSpans, legacySpans, alignment.toFontHorizontal,
+        true, rasterize, complete,
+      )
+      unwrapped = typesetTextSpans(
+        rect.toFigRect, source, sourceSpans, legacySpans, alignment.toFontHorizontal,
+        false, rasterize, complete,
+      )
     result = mixedLineBreakLayout(wrapped, unwrapped, storage)
-  elif rasterize:
-    result = typeset(
-      rect.toFigRect,
-      figSpans,
-      hAlign = alignment.toFontHorizontal,
-      vAlign = Top,
-      minContent = false,
-      wrap = wrap,
-    )
   else:
-    result = typesetForMeasurement(
-      rect.toFigRect,
-      figSpans,
-      hAlign = alignment.toFontHorizontal,
-      vAlign = Top,
-      minContent = false,
-      wrap = wrap,
+    result = typesetTextSpans(
+      rect.toFigRect, source, sourceSpans, legacySpans, alignment.toFontHorizontal,
+      wrap, rasterize, complete,
     )
   result.normalizeLineAdvances()
 

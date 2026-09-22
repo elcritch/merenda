@@ -68,7 +68,7 @@ suite "Styled text run extraction":
     let snapshot = newTextSnapshot(source)
     check snapshot.runeLength == 391
     check snapshot.byteLength == source.len
-    check snapshot.runeCheckpointCount == 7
+    check snapshot.runeCheckpointCount == 2
     check snapshot.lineCheckpointCount == 3
     check snapshot.byteOffset(0) == 0
     check snapshot.byteOffset(3 * 129) == source.len - "é😀\n終".len
@@ -92,6 +92,19 @@ suite "Styled text run extraction":
     check original.bytes == "é😀z"
     check copy.stringValue() == "é😀z"
     check storage.stringValue() == "é中z"
+
+  test "gap storage reuses its snapshot until characters change":
+    let storage = newTextGapStorage("é😀z")
+    let original = storage.textSnapshot()
+    check storage.textSnapshot() == original
+    storage.setAttributes(
+      initTextRange(0, 1), defaultTextAttributes(color(1.0, 0.0, 0.0))
+    )
+    check storage.textSnapshot() == original
+    storage.replace(initTextRange(1, 1), "中")
+    check storage.textSnapshot() != original
+    check original.bytes == "é😀z"
+    check storage.storageString() == "é中z"
 
   test "borrowed spans carry byte and rune ranges with shared style IDs":
     let
@@ -123,3 +136,20 @@ suite "Styled text run extraction":
     check spans[2].byteEnd == 9
     check spans[2].runeStart == 2
     check spans[2].runeEnd == 3
+
+  when not defined(useNativeDynlib):
+    test "attributed layout retains the storage UTF-8 source":
+      let
+        red = defaultTextAttributes(color(1.0, 0.0, 0.0))
+        blue = defaultTextAttributes(color(0.0, 0.0, 1.0))
+        storage = newTextStorage(
+          "éA\n中",
+          @[
+            TextAttributeRun(range: initTextRange(0, 1), attributes: red),
+            TextAttributeRun(range: initTextRange(1, 3), attributes: blue),
+          ],
+        )
+        snapshot = storage.textSnapshot()
+        layout = textLayoutForMeasurement(rect(0.0, 0.0, 240.0, 80.0), storage)
+      check cast[pointer](layout.sourceRunes) == cast[pointer](snapshot.sourceRunes)
+      check layout.sourceRunes.len == snapshot.runeLength

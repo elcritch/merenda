@@ -2,71 +2,66 @@
 
 import std/unicode
 
+import figdraw
+
 import ./texttypes
 
-const
-  RuneCheckpointStride = 64
-  LineCheckpointStride = 64
+const LineCheckpointStride = 64
 
 type TextSnapshot* = ref object
-  xBytes: string
-  xRuneLength: int
+  xSource: Utf8Runes
   xLineCount: int
-  xRuneBytes: seq[int]
   xLineRunes: seq[int]
   xLineBytes: seq[int]
 
+when defined(useNativeDynlib):
+  func bytes*(snapshot: TextSnapshot): string =
+    snapshot.xSource.stringValue()
+else:
+  func bytes*(snapshot: TextSnapshot): lent string =
+    snapshot.xSource.bytes
+
 proc newTextSnapshot*(bytes: sink string): TextSnapshot =
   new result
-  result.xBytes = bytes
-  result.xRuneBytes = @[0]
+  result.xSource = initUtf8Runes(bytes)
   result.xLineRunes = @[0]
   result.xLineBytes = @[0]
   result.xLineCount = 1
+  let source = result.bytes()
   var byteIndex = 0
-  while byteIndex < result.xBytes.len:
+  var runeIndex = 0
+  while byteIndex < source.len:
     let
-      newline = result.xBytes[byteIndex] == '\n'
-      width = max(1, result.xBytes.runeLenAt(byteIndex))
-    byteIndex = min(byteIndex + width, result.xBytes.len)
-    inc result.xRuneLength
-    if result.xRuneLength mod RuneCheckpointStride == 0:
-      result.xRuneBytes.add byteIndex
+      newline = source[byteIndex] == '\n'
+      width = max(1, source.runeLenAt(byteIndex))
+    byteIndex = min(byteIndex + width, source.len)
+    inc runeIndex
     if newline:
       inc result.xLineCount
       if (result.xLineCount - 1) mod LineCheckpointStride == 0:
-        result.xLineRunes.add result.xRuneLength
+        result.xLineRunes.add runeIndex
         result.xLineBytes.add byteIndex
 
-func bytes*(snapshot: TextSnapshot): lent string =
-  snapshot.xBytes
+func sourceRunes*(snapshot: TextSnapshot): Utf8Runes =
+  snapshot.xSource
 
 func runeLength*(snapshot: TextSnapshot): int =
-  if snapshot.isNil: 0 else: snapshot.xRuneLength
+  if snapshot.isNil: 0 else: snapshot.xSource.len
 
 func byteLength*(snapshot: TextSnapshot): int =
-  if snapshot.isNil: 0 else: snapshot.xBytes.len
+  if snapshot.isNil: 0 else: snapshot.xSource.byteLength
 
 func lineCount*(snapshot: TextSnapshot): int =
   if snapshot.isNil: 1 else: snapshot.xLineCount
 
 func runeCheckpointCount*(snapshot: TextSnapshot): int =
-  if snapshot.isNil: 0 else: snapshot.xRuneBytes.len
+  if snapshot.isNil: 0 else: snapshot.xSource.runeCheckpointCount
 
 func lineCheckpointCount*(snapshot: TextSnapshot): int =
   if snapshot.isNil: 0 else: snapshot.xLineRunes.len
 
 proc byteOffset*(snapshot: TextSnapshot, runeIndex: int): int =
-  if runeIndex < 0 or runeIndex > snapshot.runeLength:
-    raise newException(IndexDefect, "text snapshot rune index out of bounds")
-  let checkpoint = runeIndex div RuneCheckpointStride
-  var
-    index = checkpoint * RuneCheckpointStride
-    offset = snapshot.xRuneBytes[checkpoint]
-  while index < runeIndex:
-    offset += max(1, snapshot.xBytes.runeLenAt(offset))
-    inc index
-  offset
+  snapshot.xSource.byteOffsetForRune(runeIndex)
 
 proc lineRange*(snapshot: TextSnapshot, line: int): TextRange =
   let target = max(line, 0)
@@ -78,10 +73,11 @@ proc lineRange*(snapshot: TextSnapshot, line: int): TextRange =
     startRune = snapshot.xLineRunes[checkpoint]
     runeIndex = startRune
     byteIndex = snapshot.xLineBytes[checkpoint]
+  let source = snapshot.bytes()
   while byteIndex < snapshot.byteLength:
     let
-      newline = snapshot.xBytes[byteIndex] == '\n'
-      width = max(1, snapshot.xBytes.runeLenAt(byteIndex))
+      newline = source[byteIndex] == '\n'
+      width = max(1, source.runeLenAt(byteIndex))
     byteIndex = min(byteIndex + width, snapshot.byteLength)
     inc runeIndex
     if newline:

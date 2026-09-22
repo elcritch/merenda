@@ -212,7 +212,9 @@ method storageSnapshot(storage: TextStorage): TextSnapshot {.base.} =
   storage.xSnapshot
 
 method storageSnapshot(storage: TextGapStorage): TextSnapshot =
-  newTextSnapshot(storage.storageString())
+  if storage.xSnapshot.isNil:
+    storage.xSnapshot = newTextSnapshot(storage.storageString())
+  storage.xSnapshot
 
 method setStorageString*(storage: TextStorage, value: string) {.base.} =
   storage.xSnapshot = newTextSnapshot(value)
