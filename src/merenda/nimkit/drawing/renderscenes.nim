@@ -208,9 +208,14 @@ proc isolateGlyphArrangement(layout: GlyphArrangement): GlyphArrangement =
   result.spans = layout.spans.isolateSequence()
   result.fonts = layout.fonts.isolateSequence()
   result.spanColors = layout.spanColors.isolateSequence()
+  if layout.isGlyphView():
+    return
   result.sourceRunes = layout.sourceRunes.copyUtf8Runes()
   result.arrangedGlyphs = layout.arrangedGlyphs.isolateSequence()
-  result.runes = layout.runes.copyUtf8Runes()
+  if layout.sourceRunes.sameUtf8Runes(layout.runes):
+    result.runes = result.sourceRunes
+  else:
+    result.runes = layout.runes.copyUtf8Runes()
   result.positions = layout.positions.isolateSequence()
   result.selectionRects = layout.selectionRects.isolateSequence()
 

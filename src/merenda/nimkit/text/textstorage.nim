@@ -1,10 +1,11 @@
-import std/[algorithm, options, unicode]
+import std/[algorithm, heapqueue, options, unicode]
 
 import sigils/core
 import sigils/selectors
 import ../foundation/undomanagers
 import ../foundation/types
 import ./gaptextbuffers
+import ./textsnapshots
 import ./texttypes
 
 type
@@ -22,9 +23,22 @@ type
     textDelta*: int
     kinds*: TextStorageEditKinds
 
+  TextStyleRun = object
+    range: TextRange
+    styleId: uint32
+
+  TextStyledSpan* = object
+    source*: TextSnapshot
+    byteStart*: int
+    byteEnd*: int
+    runeStart*: int
+    runeEnd*: int
+    styleId*: uint32
+
   TextStorage* = ref object of DynamicAgent
-    xStringValue: string
-    xRuns: seq[TextAttributeRun]
+    xSnapshot: TextSnapshot
+    xRuns: seq[TextStyleRun]
+    xStyles: seq[TextAttributes]
     xRevision: Natural
     xDelegate: DynamicAgent
     xLazyProvider: DynamicAgent
@@ -42,6 +56,10 @@ type
 
   AttributedString* = TextStorage
   MutableAttributedString* = TextStorage
+
+func byteRange*(span: TextStyledSpan): TextByteRange =
+  ## UTF-8 source range borrowed by this styled span.
+  initTextByteRange(span.byteStart, span.byteEnd - span.byteStart)
 
 func initTextStorageEdit*(
     range: TextRange,
@@ -183,26 +201,44 @@ proc usesGapTextBuffer*(storage: TextStorage): bool =
   storage of TextGapStorage
 
 method storageLength*(storage: TextStorage): int {.base.} =
-  storage.xStringValue.runeLen
+  storage.xSnapshot.runeLength
 
 method storageLength*(storage: TextGapStorage): int =
   storage.xGapBuffer.len
 
 method storageString*(storage: TextStorage): string {.base.} =
-  storage.xStringValue
+  storage.xSnapshot.bytes
 
 method storageString*(storage: TextGapStorage): string =
   storage.xGapBuffer.stringValue()
 
+method storageSnapshot(storage: TextStorage): TextSnapshot {.base.} =
+  storage.xSnapshot
+
+method storageSnapshot(storage: TextGapStorage): TextSnapshot =
+  if storage.xSnapshot.isNil:
+    storage.xSnapshot = newTextSnapshot(storage.storageString())
+  storage.xSnapshot
+
 method setStorageString*(storage: TextStorage, value: string) {.base.} =
-  storage.xStringValue = value
+  storage.xSnapshot = newTextSnapshot(value)
 
 method setStorageString*(storage: TextGapStorage, value: string) =
   storage.xGapBuffer.setText(value)
-  storage.xStringValue.setLen(0)
+  storage.xSnapshot = nil
+
+method restoreStorageText(storage: TextStorage, snapshot: TextStorage) {.base.} =
+  storage.xSnapshot = snapshot.storageSnapshot()
+
+method restoreStorageText(storage: TextGapStorage, snapshot: TextStorage) =
+  storage.setStorageString(snapshot.storageString())
 
 method storageSubstring*(storage: TextStorage, range: TextRange): string {.base.} =
-  storage.xStringValue.runeSubStr(int(range.location), int(range.length))
+  let
+    clamped = clampTextRange(storage.xSnapshot.runeLength, range)
+    start = storage.xSnapshot.byteOffset(int(clamped.location))
+    stop = storage.xSnapshot.byteOffset(clamped.maxIndex)
+  storage.xSnapshot.bytes[start ..< stop]
 
 method storageSubstring*(storage: TextGapStorage, range: TextRange): string =
   storage.xGapBuffer.substring(range)
@@ -211,43 +247,29 @@ method replaceStorageText*(
     storage: TextStorage, range: TextRange, text: string
 ) {.base.} =
   let
-    replaceStart = int(range.location)
-    replaceStop = range.maxIndex
-    current = storage.xStringValue
-  storage.xStringValue =
-    current.runeSubStr(0, replaceStart) & text & current.runeSubStr(replaceStop)
+    snapshot = storage.xSnapshot
+    clamped = clampTextRange(snapshot.runeLength, range)
+    replaceStart = int(clamped.location)
+    replaceStop = clamped.maxIndex
+    startByte = snapshot.byteOffset(replaceStart)
+    stopByte = snapshot.byteOffset(replaceStop)
+  storage.xSnapshot = newTextSnapshot(
+    snapshot.bytes[0 ..< startByte] & text &
+      snapshot.bytes[stopByte ..< snapshot.byteLength]
+  )
 
 method replaceStorageText*(storage: TextGapStorage, range: TextRange, text: string) =
   storage.xGapBuffer.replace(range, text)
-  storage.xStringValue.setLen(0)
+  storage.xSnapshot = nil
 
 method storageLineCount*(storage: TextStorage): int {.base.} =
-  result = 1
-  for item in storage.xStringValue.runes:
-    if item == Rune('\n'):
-      inc result
+  storage.xSnapshot.lineCount
 
 method storageLineCount*(storage: TextGapStorage): int =
   storage.xGapBuffer.lineCount()
 
 method storageLineRange*(storage: TextStorage, line: int): TextRange {.base.} =
-  let targetLine = max(line, 0)
-  var
-    currentLine = 0
-    start = 0
-    index = 0
-
-  for rune in storage.xStringValue.runes:
-    if currentLine == targetLine and rune == Rune('\n'):
-      return initTextRange(start, index + 1 - start)
-    if rune == Rune('\n'):
-      inc currentLine
-      start = index + 1
-    inc index
-
-  if currentLine < targetLine:
-    return initTextRange(index, 0)
-  initTextRange(start, index - start)
+  storage.xSnapshot.lineRange(line)
 
 method storageLineRange*(storage: TextGapStorage, line: int): TextRange =
   storage.xGapBuffer.lineRange(line)
@@ -256,7 +278,7 @@ method storageParagraphRange*(
     storage: TextStorage, range: TextRange
 ): TextRange {.base.} =
   let
-    total = storage.xStringValue.runeLen
+    total = storage.xSnapshot.runeLength
     clamped = clampTextRange(total, range)
     startTarget = int(clamped.location)
     stopTarget = min(max(clamped.maxIndex, startTarget), total)
@@ -267,7 +289,7 @@ method storageParagraphRange*(
     start = 0
     stop = total
     index = 0
-  for rune in storage.xStringValue.runes:
+  for rune in storage.xSnapshot.bytes.runes:
     if index < startTarget and rune == Rune('\n'):
       start = index + 1
     elif index >= stopTarget and rune == Rune('\n'):
@@ -313,34 +335,59 @@ proc endEditing*(storage: TextStorage) =
   if storage.xEditingDepth == 0:
     storage.processEditing()
 
+proc styleId(storage: TextStorage, attributes: TextAttributes): uint32 =
+  for index, existing in storage.xStyles:
+    if existing == attributes:
+      return index.uint32
+  result = storage.xStyles.len.uint32
+  storage.xStyles.add attributes
+
+proc styleRun(
+    storage: TextStorage, range: TextRange, attributes: TextAttributes
+): TextStyleRun =
+  TextStyleRun(range: range, styleId: storage.styleId(attributes))
+
+func styleAttributes*(storage: TextStorage, styleId: uint32): TextAttributes =
+  storage.xStyles[int(styleId)]
+
 proc normalizeRuns(storage: TextStorage) =
   let total = storage.storageLength()
   if total == 0:
     storage.xRuns.setLen(0)
+    storage.xStyles.setLen(0)
     return
 
   storage.xRuns.sort(
-    proc(a, b: TextAttributeRun): int =
+    proc(a, b: TextStyleRun): int =
       cmp(int(a.range.location), int(b.range.location))
   )
 
-  var normalized: seq[TextAttributeRun]
+  var normalized: seq[TextStyleRun]
   for run in storage.xRuns:
     let clamped = clampTextRange(total, run.range)
     if clamped.length == 0:
       discard
-    elif normalized.len > 0 and normalized[^1].attributes == run.attributes and
+    elif normalized.len > 0 and normalized[^1].styleId == run.styleId and
         normalized[^1].range.maxIndex == int(clamped.location):
       normalized[^1].range.length =
         (int(normalized[^1].range.length) + int(clamped.length)).Natural
     else:
-      normalized.add TextAttributeRun(range: clamped, attributes: run.attributes)
+      normalized.add TextStyleRun(range: clamped, styleId: run.styleId)
 
   if normalized.len == 0:
-    normalized.add TextAttributeRun(
-      range: initTextRange(0, total), attributes: defaultTextAttributes()
-    )
+    normalized.add storage.styleRun(initTextRange(0, total), defaultTextAttributes())
+  var compactStyles: seq[TextAttributes]
+  var remap = newSeq[int](storage.xStyles.len)
+  for index in 0 ..< remap.len:
+    remap[index] = -1
+  for run in normalized.mitems:
+    let oldId = int(run.styleId)
+    if remap[oldId] < 0:
+      remap[oldId] = compactStyles.len
+      compactStyles.add storage.xStyles[oldId]
+    run.styleId = remap[oldId].uint32
   storage.xRuns = normalized
+  storage.xStyles = compactStyles
 
 proc materialize*(storage: TextStorage) =
   if storage.xMaterialized:
@@ -351,11 +398,13 @@ proc materialize*(storage: TextStorage) =
     value = storage.xLazyProvider.trySendLocal(lazyTextStorageString(), storage).get("")
     runs = storage.xLazyProvider.trySendLocal(lazyTextStorageRuns(), storage).get(@[])
   storage.setStorageString(value)
-  storage.xRuns = runs
+  storage.xRuns.setLen(0)
+  storage.xStyles.setLen(0)
+  for run in runs:
+    storage.xRuns.add storage.styleRun(run.range, run.attributes)
   if storage.storageLength() > 0 and storage.xRuns.len == 0:
-    storage.xRuns.add TextAttributeRun(
-      range: initTextRange(0, storage.storageLength()),
-      attributes: defaultTextAttributes(),
+    storage.xRuns.add storage.styleRun(
+      initTextRange(0, storage.storageLength()), defaultTextAttributes()
     )
   storage.xMaterialized = true
   storage.normalizeRuns()
@@ -390,10 +439,10 @@ proc fixFontFallbackInRange*(storage: TextStorage, range: TextRange) =
   var changed = false
   for run in storage.xRuns.mitems:
     if run.range.intersects(clamped):
-      let nextAttributes =
-        storage.resolvedFontFallbackAttributes(run.range, run.attributes)
-      if nextAttributes != run.attributes:
-        run.attributes = nextAttributes
+      let attributes = storage.styleAttributes(run.styleId)
+      let nextAttributes = storage.resolvedFontFallbackAttributes(run.range, attributes)
+      if nextAttributes != attributes:
+        run.styleId = storage.styleId(nextAttributes)
         changed = true
   if changed:
     storage.normalizeRuns()
@@ -456,13 +505,12 @@ proc initTextStorageFields*(
     storage: TextStorage, value = "", attributes = defaultTextAttributes()
 ) =
   discard storage.withProto()
-  storage.xStringValue = value
+  storage.xSnapshot = newTextSnapshot(value)
   storage.xMaterialized = true
   storage.xRuns.setLen(0)
+  storage.xStyles.setLen(0)
   if value.runeLen > 0:
-    storage.xRuns.add TextAttributeRun(
-      range: initTextRange(0, value.runeLen), attributes: attributes
-    )
+    storage.xRuns.add storage.styleRun(initTextRange(0, value.runeLen), attributes)
 
 proc newTextStorage*(value = "", attributes = defaultTextAttributes()): TextStorage =
   result = TextStorage()
@@ -475,13 +523,13 @@ proc newTextStorage*(
   ## Runs are normalized and clamped to the text length without emitting edit events.
   result = TextStorage()
   discard result.withProto()
-  result.xStringValue = value
-  result.xRuns = runs
+  result.xSnapshot = newTextSnapshot(value)
+  for run in runs:
+    result.xRuns.add result.styleRun(run.range, run.attributes)
   result.xMaterialized = true
-  if result.xStringValue.runeLen > 0 and result.xRuns.len == 0:
-    result.xRuns.add TextAttributeRun(
-      range: initTextRange(0, result.xStringValue.runeLen),
-      attributes: defaultTextAttributes(),
+  if result.xSnapshot.runeLength > 0 and result.xRuns.len == 0:
+    result.xRuns.add result.styleRun(
+      initTextRange(0, result.xSnapshot.runeLength), defaultTextAttributes()
     )
   result.normalizeRuns()
 
@@ -489,14 +537,13 @@ proc initTextGapStorageFields*(
     storage: TextGapStorage, value = "", attributes = defaultTextAttributes()
 ) =
   discard storage.withProto()
-  storage.xStringValue.setLen(0)
+  storage.xSnapshot = nil
   storage.xGapBuffer = initGapTextBuffer(value)
   storage.xMaterialized = true
   storage.xRuns.setLen(0)
+  storage.xStyles.setLen(0)
   if value.runeLen > 0:
-    storage.xRuns.add TextAttributeRun(
-      range: initTextRange(0, value.runeLen), attributes: attributes
-    )
+    storage.xRuns.add storage.styleRun(initTextRange(0, value.runeLen), attributes)
 
 proc newTextGapStorage*(
     value = "", attributes = defaultTextAttributes()
@@ -518,6 +565,8 @@ proc newLazyTextStorage*(provider: DynamicAgent): TextStorage =
   result = TextStorage(xLazyProvider: provider)
   discard result.withProto()
   result.xMaterialized = provider.isNil
+  if provider.isNil:
+    result.xSnapshot = newTextSnapshot("")
 
 proc newAttributedString*(
     value = "", attributes = defaultTextAttributes()
@@ -531,31 +580,48 @@ method newEmptyStorageCopy*(storage: TextGapStorage): TextStorage =
   newTextGapStorage()
 
 method copyStorageTextTo*(storage: TextStorage, copy: TextStorage) {.base.} =
-  copy.xStringValue = storage.xStringValue
+  copy.xSnapshot = storage.xSnapshot
 
 method copyStorageTextTo*(storage: TextGapStorage, copy: TextStorage) =
   let gapCopy = TextGapStorage(copy)
   gapCopy.xGapBuffer = storage.xGapBuffer.copyGapTextBuffer()
-  gapCopy.xStringValue.setLen(0)
+  gapCopy.xSnapshot = storage.xSnapshot
 
 proc copyTextStorage*(storage: TextStorage): TextStorage =
-  result = newTextStorage()
   storage.materialize()
   result = storage.newEmptyStorageCopy()
   storage.copyStorageTextTo(result)
   result.xRuns = storage.xRuns
+  result.xStyles = storage.xStyles
   result.xMaterialized = true
+
+method sameStorageText*(storage, other: TextStorage): bool {.base.} =
+  ## Compares values without making whole-text strings for gap-backed storage.
+  storage.storageSnapshot().bytes == other.storageSnapshot().bytes
+
+method sameStorageText*(storage: TextGapStorage, other: TextStorage): bool =
+  if other of TextGapStorage:
+    storage.xGapBuffer.sameText(TextGapStorage(other).xGapBuffer)
+  else:
+    storage.storageString() == other.storageString()
+
+proc shouldRecordUndo(storage: TextStorage): bool =
+  let manager = storage.undoManager()
+  not manager.isNil and manager.isUndoRegistrationEnabled()
+
+proc undoSnapshot(storage: TextStorage): TextStorage =
+  if storage.shouldRecordUndo():
+    result = storage.copyTextStorage()
 
 proc registerSnapshotUndo(
     storage: TextStorage, snapshot: TextStorage, actionName: string
 ) =
   let manager = storage.undoManager()
-  if manager.isNil or snapshot.isNil:
+  if manager.isNil or not manager.isUndoRegistrationEnabled() or snapshot.isNil:
     return
-  let undoSnapshot = snapshot.copyTextStorage()
   manager.registerUndo(
     proc() =
-      storage.applySnapshot(undoSnapshot, actionName),
+      storage.applySnapshot(snapshot, actionName),
     actionName,
   )
 
@@ -565,7 +631,7 @@ proc applySnapshot(storage: TextStorage, snapshot: TextStorage, actionName: stri
   storage.materialize()
   snapshot.materialize()
   let
-    before = storage.copyTextStorage()
+    before = storage.undoSnapshot()
     oldLength = storage.storageLength()
     newLength = snapshot.storageLength()
     edit = initTextStorageEdit(
@@ -576,8 +642,9 @@ proc applySnapshot(storage: TextStorage, snapshot: TextStorage, actionName: stri
     )
   storage.registerSnapshotUndo(before, actionName)
   storage.dispatchWillEdit(edit)
-  storage.setStorageString(snapshot.storageString())
+  storage.restoreStorageText(snapshot)
   storage.xRuns = snapshot.xRuns
+  storage.xStyles = snapshot.xStyles
   storage.xMaterialized = true
   storage.normalizeRuns()
   storage.notifyCommittedEdit(edit)
@@ -592,7 +659,7 @@ proc sliceTextStorage*(storage: TextStorage, range: TextRange): TextStorage =
     clamped = clampTextRange(storage.storageLength(), range)
     start = int(clamped.location)
     stop = clamped.maxIndex
-  result.xStringValue = storage.storageSubstring(clamped)
+  result.xSnapshot = newTextSnapshot(storage.storageSubstring(clamped))
   for run in storage.xRuns:
     let
       runStart = int(run.range.location)
@@ -600,9 +667,9 @@ proc sliceTextStorage*(storage: TextStorage, range: TextRange): TextStorage =
       overlapStart = max(start, runStart)
       overlapStop = min(stop, runStop)
     if overlapStop > overlapStart:
-      result.xRuns.add TextAttributeRun(
-        range: initTextRange(overlapStart - start, overlapStop - overlapStart),
-        attributes: run.attributes,
+      result.xRuns.add result.styleRun(
+        initTextRange(overlapStart - start, overlapStop - overlapStart),
+        storage.styleAttributes(run.styleId),
       )
   result.normalizeRuns()
 
@@ -617,7 +684,7 @@ proc stringValue*(storage: TextStorage): string =
 
 proc `stringValue=`*(storage: TextStorage, value: string) =
   storage.materialize()
-  let before = storage.copyTextStorage()
+  let before = storage.undoSnapshot()
   let oldLength = storage.storageLength()
   let edit = initTextStorageEdit(
     initTextRange(0, oldLength),
@@ -629,9 +696,10 @@ proc `stringValue=`*(storage: TextStorage, value: string) =
   storage.dispatchWillEdit(edit)
   storage.setStorageString(value)
   storage.xRuns.setLen(0)
+  storage.xStyles.setLen(0)
   if value.runeLen > 0:
-    storage.xRuns.add TextAttributeRun(
-      range: initTextRange(0, value.runeLen), attributes: defaultTextAttributes()
+    storage.xRuns.add storage.styleRun(
+      initTextRange(0, value.runeLen), defaultTextAttributes()
     )
   storage.notifyCommittedEdit(edit)
 
@@ -660,7 +728,7 @@ proc attributesAt*(storage: TextStorage, index: int): TextAttributes =
   let clamped = max(0, min(index, total - 1))
   for run in storage.xRuns:
     if clamped >= int(run.range.location) and clamped < run.range.maxIndex:
-      return run.attributes
+      return storage.styleAttributes(run.styleId)
   defaultTextAttributes()
 
 proc attributesAtIndex*(storage: AttributedString, index: int): TextAttributes =
@@ -671,7 +739,9 @@ proc attributeRuns*(storage: AttributedString): seq[TextAttributeRun] =
     return
   storage.materialize()
   for run in storage.xRuns:
-    result.add run
+    result.add TextAttributeRun(
+      range: run.range, attributes: storage.styleAttributes(run.styleId)
+    )
 
 proc replace*(
     storage: TextStorage,
@@ -688,13 +758,13 @@ proc replace*(
     insertedLength = text.runeLen
     delta = insertedLength - int(clamped.length)
     edit = initTextStorageEdit(clamped, insertedLength, delta, {tseCharacters})
-    before = storage.copyTextStorage()
+    before = storage.undoSnapshot()
 
   storage.registerSnapshotUndo(before, "Edit Text")
   storage.dispatchWillEdit(edit)
   storage.replaceStorageText(clamped, text)
 
-  var nextRuns: seq[TextAttributeRun]
+  var nextRuns: seq[TextStyleRun]
   for run in storage.xRuns:
     let
       runStart = int(run.range.location)
@@ -702,25 +772,24 @@ proc replace*(
     if runStop <= replaceStart:
       nextRuns.add run
     elif runStart >= replaceStop:
-      nextRuns.add TextAttributeRun(
+      nextRuns.add TextStyleRun(
         range: initTextRange(runStart + delta, int(run.range.length)),
-        attributes: run.attributes,
+        styleId: run.styleId,
       )
     else:
       if runStart < replaceStart:
-        nextRuns.add TextAttributeRun(
-          range: initTextRange(runStart, replaceStart - runStart),
-          attributes: run.attributes,
+        nextRuns.add TextStyleRun(
+          range: initTextRange(runStart, replaceStart - runStart), styleId: run.styleId
         )
       if runStop > replaceStop:
-        nextRuns.add TextAttributeRun(
+        nextRuns.add TextStyleRun(
           range: initTextRange(replaceStart + insertedLength, runStop - replaceStop),
-          attributes: run.attributes,
+          styleId: run.styleId,
         )
 
   if insertedLength > 0:
-    nextRuns.add TextAttributeRun(
-      range: initTextRange(replaceStart, insertedLength), attributes: attributes
+    nextRuns.add storage.styleRun(
+      initTextRange(replaceStart, insertedLength), attributes
     )
   storage.xRuns = nextRuns
   storage.normalizeRuns()
@@ -734,8 +803,24 @@ proc replaceCharacters*(
 ) =
   storage.replace(range, text, attributes)
 
+proc setAttributeRanges*(
+  storage: TextStorage,
+  range: TextRange,
+  baseAttributes: TextAttributes,
+  overlays: openArray[TextAttributeRun],
+)
+
 proc setAttributes*(
     storage: TextStorage, range: TextRange, attributes: TextAttributes
+) =
+  storage.setAttributeRanges(range, attributes, [])
+
+proc applyAttributeRanges(
+    storage: TextStorage,
+    range: TextRange,
+    baseAttributes: TextAttributes,
+    overlays: openArray[TextAttributeRun],
+    recordUndo: bool,
 ) =
   storage.materialize()
   let
@@ -745,12 +830,16 @@ proc setAttributes*(
     stop = clamped.maxIndex
   if clamped.length == 0:
     return
-  let before = storage.copyTextStorage()
+  let before =
+    if recordUndo:
+      storage.undoSnapshot()
+    else:
+      nil
   let edit = initTextStorageEdit(clamped, int(clamped.length), 0, {tseAttributes})
 
   storage.registerSnapshotUndo(before, "Set Attributes")
   storage.dispatchWillEdit(edit)
-  var nextRuns: seq[TextAttributeRun]
+  var nextRuns: seq[TextStyleRun]
   for run in storage.xRuns:
     let
       runStart = int(run.range.location)
@@ -759,21 +848,80 @@ proc setAttributes*(
       nextRuns.add run
     else:
       if runStart < start:
-        nextRuns.add TextAttributeRun(
-          range: initTextRange(runStart, start - runStart), attributes: run.attributes
+        nextRuns.add TextStyleRun(
+          range: initTextRange(runStart, start - runStart), styleId: run.styleId
         )
-      nextRuns.add TextAttributeRun(
-        range:
-          initTextRange(max(runStart, start), min(runStop, stop) - max(runStart, start)),
-        attributes: attributes,
-      )
       if runStop > stop:
-        nextRuns.add TextAttributeRun(
-          range: initTextRange(stop, runStop - stop), attributes: run.attributes
+        nextRuns.add TextStyleRun(
+          range: initTextRange(stop, runStop - stop), styleId: run.styleId
         )
+  type AttributeOverlay = object
+    start, stop, order: int
+    styleId: uint32
+
+  var
+    changes: seq[AttributeOverlay]
+    boundaries = @[start, stop]
+    interned: seq[tuple[attributes: TextAttributes, id: uint32]]
+  let baseId = storage.styleId(baseAttributes)
+  interned.add (baseAttributes, baseId)
+  for index, overlay in overlays:
+    let affected = clampTextRange(total, overlay.range)
+    let
+      first = max(start, int(affected.location))
+      last = min(stop, affected.maxIndex)
+    if last <= first:
+      continue
+    var id = uint32.high
+    for item in interned:
+      if item.attributes == overlay.attributes:
+        id = item.id
+        break
+    if id == uint32.high:
+      id = storage.styleId(overlay.attributes)
+      interned.add (overlay.attributes, id)
+    changes.add AttributeOverlay(start: first, stop: last, order: index, styleId: id)
+    boundaries.add first
+    boundaries.add last
+  changes.sort(
+    proc(a, b: AttributeOverlay): int =
+      cmp(a.start, b.start)
+  )
+  boundaries.sort()
+  var
+    nextChange = 0
+    active: HeapQueue[tuple[priority, stop: int, styleId: uint32]]
+  for index in 0 ..< boundaries.high:
+    let first = boundaries[index]
+    let last = boundaries[index + 1]
+    if last <= first:
+      continue
+    while nextChange < changes.len and changes[nextChange].start <= first:
+      let item = changes[nextChange]
+      active.push((-item.order, item.stop, item.styleId))
+      inc nextChange
+    while active.len > 0 and active[0].stop <= first:
+      discard active.pop()
+    let id =
+      if active.len > 0:
+        active[0].styleId
+      else:
+        baseId
+    nextRuns.add TextStyleRun(range: initTextRange(first, last - first), styleId: id)
   storage.xRuns = nextRuns
   storage.normalizeRuns()
   storage.notifyCommittedEdit(edit)
+
+proc setAttributeRanges*(
+    storage: TextStorage,
+    range: TextRange,
+    baseAttributes: TextAttributes,
+    overlays: openArray[TextAttributeRun],
+) =
+  ## Applies a base style and ordered overrides in one edit. Later overrides win.
+  ## Existing styles outside `range` are retained. Style IDs remain valid until
+  ## the next storage edit, as with `styledSpans`.
+  storage.applyAttributeRanges(range, baseAttributes, overlays, true)
 
 proc setAttributesForRange*(
     storage: MutableAttributedString, range: TextRange, attributes: TextAttributes
@@ -809,13 +957,19 @@ proc replace*(storage: TextStorage, range: TextRange, inserted: TextStorage) =
     clamped = clampTextRange(storage.len, range)
     start = int(clamped.location)
   storage.beginEditing()
-  storage.replace(clamped, inserted.stringValue())
-  for run in inserted.xRuns:
-    storage.setAttributes(
-      initTextRange(start + int(run.range.location), int(run.range.length)),
-      run.attributes,
+  try:
+    storage.replace(clamped, inserted.stringValue())
+    var overlays: seq[TextAttributeRun]
+    for run in inserted.xRuns:
+      overlays.add TextAttributeRun(
+        range: initTextRange(start + int(run.range.location), int(run.range.length)),
+        attributes: inserted.styleAttributes(run.styleId),
+      )
+    storage.applyAttributeRanges(
+      initTextRange(start, inserted.len), defaultTextAttributes(), overlays, false
     )
-  storage.endEditing()
+  finally:
+    storage.endEditing()
 
 proc replaceCharacters*(
     storage: MutableAttributedString, range: TextRange, inserted: AttributedString
@@ -831,25 +985,40 @@ iterator runs*(storage: TextStorage): TextAttributeRun =
   if not storage.isNil:
     storage.materialize()
     for run in storage.xRuns:
-      yield run
+      yield TextAttributeRun(
+        range: run.range, attributes: storage.styleAttributes(run.styleId)
+      )
+
+proc textSnapshot*(storage: TextStorage): TextSnapshot =
+  ## Returns a stable snapshot. Editing storage creates a new snapshot.
+  if storage.isNil:
+    return newTextSnapshot("")
+  storage.materialize()
+  storage.storageSnapshot()
+
+iterator styledSpans*(storage: TextStorage): TextStyledSpan =
+  ## Span style IDs refer to this storage's style table until its next edit.
+  if not storage.isNil:
+    storage.materialize()
+    let source = storage.textSnapshot()
+    for run in storage.xRuns:
+      let range = clampTextRange(source.runeLength, run.range)
+      yield TextStyledSpan(
+        source: source,
+        byteStart: source.byteOffset(int(range.location)),
+        byteEnd: source.byteOffset(range.maxIndex),
+        runeStart: int(range.location),
+        runeEnd: range.maxIndex,
+        styleId: run.styleId,
+      )
 
 iterator styledRuns*(
     storage: TextStorage
 ): tuple[attributes: TextAttributes, text: string] =
   if not storage.isNil:
     storage.materialize()
-    let source = storage.storageString()
-    # Runs use rune offsets. Index the snapshot once instead of scanning its
-    # prefix again for every syntax token (also works for gap-backed storage).
-    var byteOffsets: seq[int]
-    var offset = 0
-    while offset < source.len:
-      byteOffsets.add offset
-      offset += source.runeLenAt(offset)
-    byteOffsets.add source.len
-    for run in storage.xRuns:
-      let range = clampTextRange(byteOffsets.len - 1, run.range)
+    for span in storage.styledSpans():
       yield (
-        run.attributes,
-        source[byteOffsets[int(range.location)] ..< byteOffsets[range.maxIndex]],
+        storage.styleAttributes(span.styleId),
+        span.source.bytes[span.byteStart ..< span.byteEnd],
       )

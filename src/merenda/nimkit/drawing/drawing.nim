@@ -19,6 +19,7 @@ import ./svgimages
 import ../themes
 import ../themes/themecore as themeCore
 import ../text/textstorage
+import ../text/textsnapshots
 import ../text/texttypes
 import ../foundation/types as nimkitTypes
 import ../foundation/assetcache
@@ -567,6 +568,107 @@ proc usesMixedLineBreakModes(storage: TextStorage): bool =
     if run.attributes.paragraphStyle.lineBreakMode == tlbmClipping:
       return true
 
+proc figDrawSpans(
+    source: TextSnapshot, runs: openArray[StyledTextRun], styles: openArray[FontStyle]
+): seq[(FontStyle, string)] =
+  ## Compatibility for sparse attribute runs that do not cover their source.
+  result = newSeqOfCap[(FontStyle, string)](runs.len)
+  for run in runs:
+    result.add(
+      (
+        styles[int(uint32(run.styleId))],
+        source.bytes[int(run.byteStart) ..< int(run.byteEnd)],
+      )
+    )
+
+proc coversSource(runs: openArray[StyledTextRun], byteLength, runeLength: int): bool =
+  if runs.len == 0:
+    return false
+  var nextByte = 0
+  var nextRune = 0
+  for run in runs:
+    if int(run.byteStart) != nextByte or int(run.runeStart) != nextRune or
+        run.byteEnd < run.byteStart or run.runeEnd < run.runeStart:
+      return false
+    nextByte = int(run.byteEnd)
+    nextRune = int(run.runeEnd)
+  nextByte == byteLength and nextRune == runeLength
+
+proc fontStyleForAttributes(attributes: TextAttributes, style: TextStyle): FontStyle =
+  let
+    fontName = if attributes.fontName.len > 0: attributes.fontName else: style.fontName
+    language =
+      if attributes.language.isAutomatic: style.language else: attributes.language
+    fontFace =
+      if attributes.fontFace.file.path.len > 0:
+        attributes.fontFace
+      elif fontName == style.fontName:
+        style.fontFace
+      else:
+        SystemTypeface()
+    italicFontFace =
+      if attributes.fontFace.file.path.len > 0:
+        attributes.fontFace
+      elif fontName == style.fontName:
+        style.italicFontFace
+      else:
+        SystemTypeface()
+  var font = defaultFont(
+    attributes.fontSize,
+    fontName,
+    language,
+    style.fontSlant,
+    fontFace = fontFace,
+    italicFontFace = italicFontFace,
+  ).font
+  font.underline = attributes.hasUnderline
+  font.strikethrough = attributes.hasStrikethrough
+  fs(font, fill(attributes.foregroundColor.rgba))
+
+proc typesetTextSpans(
+    rect: bumpy.Rect,
+    source: TextSnapshot,
+    sourceRuns: openArray[StyledTextRun],
+    styles: openArray[FontStyle],
+    legacySpans: openArray[(FontStyle, string)],
+    alignment: FontHorizontal,
+    wrap, rasterize, complete: bool,
+): GlyphArrangement =
+  if complete:
+    if rasterize:
+      return typesetSourceSpans(
+        rect,
+        source.sourceRunes,
+        sourceRuns,
+        styles,
+        hAlign = alignment,
+        vAlign = Top,
+        minContent = false,
+        wrap = wrap,
+      )
+    return typesetSourceSpansForMeasurement(
+      rect,
+      source.sourceRunes,
+      sourceRuns,
+      styles,
+      hAlign = alignment,
+      vAlign = Top,
+      minContent = false,
+      wrap = wrap,
+    )
+  if rasterize:
+    return typeset(
+      rect,
+      legacySpans,
+      hAlign = alignment,
+      vAlign = Top,
+      minContent = false,
+      wrap = wrap,
+    )
+  typesetForMeasurement(
+    rect, legacySpans, hAlign = alignment, vAlign = Top, minContent = false, wrap = wrap
+  )
+
 proc textLayoutImpl(
     rect: nimkitTypes.Rect,
     storage: TextStorage,
@@ -575,110 +677,55 @@ proc textLayoutImpl(
     wrap = false,
     rasterize = true,
 ): GlyphArrangement =
-  var spans: seq[(FontStyle, string)]
+  var
+    source: TextSnapshot
+    sourceRuns: seq[StyledTextRun]
+    styles: seq[FontStyle]
   if storage.isNil or storage.len == 0:
     let attributes = defaultTextAttributes(style.color, style.fontSize)
-    var font = defaultFont(
-      attributes.fontSize,
-      style.fontName,
-      style.language,
-      style.fontSlant,
-      fontFace = style.fontFace,
-      italicFontFace = style.italicFontFace,
-    ).font
-    font.underline = attributes.hasUnderline
-    font.strikethrough = attributes.hasStrikethrough
-    spans.add((fs(font, fill(style.color.rgba)), ""))
+    source = newTextSnapshot("")
+    styles.add fontStyleForAttributes(attributes, style)
+    sourceRuns.add StyledTextRun(styleId: TextStyleId(0))
   else:
-    for (attributes, text) in storage.styledRuns:
-      let
-        fontName =
-          if attributes.fontName.len > 0: attributes.fontName else: style.fontName
-        language =
-          if attributes.language.isAutomatic: style.language else: attributes.language
-        fontFace =
-          if attributes.fontFace.file.path.len > 0:
-            attributes.fontFace
-          elif fontName == style.fontName:
-            style.fontFace
-          else:
-            SystemTypeface()
-        italicFontFace =
-          if attributes.fontFace.file.path.len > 0:
-            attributes.fontFace
-          elif fontName == style.fontName:
-            style.italicFontFace
-          else:
-            SystemTypeface()
-      var font = defaultFont(
-        attributes.fontSize,
-        fontName,
-        language,
-        style.fontSlant,
-        fontFace = fontFace,
-        italicFontFace = italicFontFace,
-      ).font
-      font.underline = attributes.hasUnderline
-      font.strikethrough = attributes.hasStrikethrough
-      spans.add((fs(font, fill(attributes.foregroundColor.rgba)), text))
+    source = storage.textSnapshot()
+    var styleIds = initTable[uint32, TextStyleId]()
+    for span in storage.styledSpans:
+      var styleId: TextStyleId
+      if styleIds.hasKey(span.styleId):
+        styleId = styleIds[span.styleId]
+      else:
+        styleId = TextStyleId(styles.len.uint32)
+        styleIds[span.styleId] = styleId
+        styles.add fontStyleForAttributes(storage.styleAttributes(span.styleId), style)
+      sourceRuns.add StyledTextRun(
+        byteStart: span.byteStart.uint32,
+        byteEnd: span.byteEnd.uint32,
+        runeStart: span.runeStart.uint32,
+        runeEnd: span.runeEnd.uint32,
+        styleId: styleId,
+      )
+  let
+    complete = sourceRuns.coversSource(source.byteLength, source.runeLength)
+    legacySpans =
+      if complete:
+        @[]
+      else:
+        source.figDrawSpans(sourceRuns, styles)
   if wrap and storage.usesMixedLineBreakModes():
     let
-      wrapped =
-        if rasterize:
-          typeset(
-            rect.toFigRect,
-            spans,
-            hAlign = alignment.toFontHorizontal,
-            vAlign = Top,
-            minContent = false,
-            wrap = true,
-          )
-        else:
-          typesetForMeasurement(
-            rect.toFigRect,
-            spans,
-            hAlign = alignment.toFontHorizontal,
-            vAlign = Top,
-            minContent = false,
-            wrap = true,
-          )
-      unwrapped =
-        if rasterize:
-          typeset(
-            rect.toFigRect,
-            spans,
-            hAlign = alignment.toFontHorizontal,
-            vAlign = Top,
-            minContent = false,
-            wrap = false,
-          )
-        else:
-          typesetForMeasurement(
-            rect.toFigRect,
-            spans,
-            hAlign = alignment.toFontHorizontal,
-            vAlign = Top,
-            minContent = false,
-            wrap = false,
-          )
+      wrapped = typesetTextSpans(
+        rect.toFigRect, source, sourceRuns, styles, legacySpans,
+        alignment.toFontHorizontal, true, rasterize, complete,
+      )
+      unwrapped = typesetTextSpans(
+        rect.toFigRect, source, sourceRuns, styles, legacySpans,
+        alignment.toFontHorizontal, false, rasterize, complete,
+      )
     result = mixedLineBreakLayout(wrapped, unwrapped, storage)
-  elif rasterize:
-    result = typeset(
-      rect.toFigRect,
-      spans,
-      hAlign = alignment.toFontHorizontal,
-      vAlign = Top,
-      minContent = false,
-      wrap = wrap,
-    )
   else:
-    result = typesetForMeasurement(
-      rect.toFigRect,
-      spans,
-      hAlign = alignment.toFontHorizontal,
-      vAlign = Top,
-      minContent = false,
-      wrap = wrap,
+    result = typesetTextSpans(
+      rect.toFigRect, source, sourceRuns, styles, legacySpans,
+      alignment.toFontHorizontal, wrap, rasterize, complete,
     )
   result.normalizeLineAdvances()
 

@@ -77,6 +77,7 @@ import ./nimkit/terminal
 import ./nimkit/text/textfields
 import ./nimkit/text/textlayout
 import ./nimkit/text/textstorage
+import ./nimkit/text/textsnapshots
 import ./nimkit/text/texttypes
 import ./nimkit/text/textviewintegrations
 import ./nimkit/text/textviews
@@ -174,6 +175,7 @@ export terminal
 export textfields
 export textlayout
 export textstorage
+export textsnapshots
 export texttypes
 export textviewintegrations
 export textviews

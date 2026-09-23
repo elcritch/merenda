@@ -1,6 +1,9 @@
 import std/[hashes, math, options, strutils, unicode]
 
-from figdraw import GlyphArrangement, lineGlyphRanges, len, `[]`
+from figdraw import
+  GlyphArrangement, glyphArrangementView, lineGlyphRanges, shareGlyphArrangement, len,
+  `[]`
+import threading/smartptrs
 
 import sigils/core
 
@@ -143,6 +146,10 @@ type
     contentSize*: Size
     lineFragments*: seq[TextLineFragment]
     pageFragments*: seq[TextPageFragment]
+
+  TextReplaceResult = object
+    accepted: bool
+    valueChanged: bool
 
   TextView* = ref object of View
     xTextStorage: TextStorage
@@ -571,6 +578,9 @@ proc `allowsUndo=`*(textView: TextView, allowsUndo: bool) =
     textView.xFlags.excl tvAllowsUndo
     textView.xUndoStack.setLen(0)
     textView.xRedoStack.setLen(0)
+    textView.xMarkedUndoStorage = nil
+    textView.xGroupedUndoBefore = nil
+    textView.xHasGroupedUndo = false
 
 proc delegate*(textView: TextView): DynamicAgent =
   textView.xDelegate
@@ -1027,17 +1037,17 @@ proc recordUndo(
     beforeSelection: TextRange,
     afterSelection: TextRange,
 ) =
-  if textView.xApplyingUndo or not textView.allowsUndo:
+  if before.isNil or textView.xApplyingUndo or not textView.allowsUndo:
     return
   if textView.xUndoGroupingDepth > 0:
     if not textView.xHasGroupedUndo:
-      textView.xGroupedUndoBefore = before.copyTextStorage()
+      textView.xGroupedUndoBefore = before
       textView.xGroupedUndoSelection = beforeSelection
       textView.xHasGroupedUndo = true
     return
-  let after = textView.xTextStorage.copyTextStorage()
-  if before.stringValue() == after.stringValue() and beforeSelection == afterSelection:
+  if before.sameStorageText(textView.xTextStorage) and beforeSelection == afterSelection:
     return
+  let after = textView.xTextStorage.copyTextStorage()
   textView.xUndoStack.add TextUndoRecord(
     storageBefore: before,
     storageAfter: after,
@@ -1119,12 +1129,11 @@ proc replaceRange(
     inserted: TextStorage,
     record = true,
     clearMark = true,
-) =
+    captureMarkedUndo = false,
+): TextReplaceResult {.discardable.} =
   if not textView.editable:
     return
   let
-    before = textView.xTextStorage.copyTextStorage()
-    beforeValue = before.stringValue()
     beforeSelection = textView.textViewSelectedRange()
     clamped = textView.clampedRange(range)
     insertedLength = inserted.len
@@ -1132,17 +1141,31 @@ proc replaceRange(
 
   if not textView.shouldChangeText(clamped, inserted):
     return
+  result.accepted = true
+  let
+    valueChanged = textView.xTextStorage.substring(clamped) != inserted.stringValue()
+    needsUndo =
+      record and textView.allowsUndo and not textView.xApplyingUndo and
+      (textView.xUndoGroupingDepth == 0 or not textView.xHasGroupedUndo)
+    before =
+      if needsUndo:
+        textView.xTextStorage.copyTextStorage()
+      else:
+        nil
+  if captureMarkedUndo and textView.allowsUndo and not textView.xApplyingUndo:
+    textView.xMarkedUndoStorage = textView.xTextStorage.copyTextStorage()
+    textView.xMarkedUndoSelection = beforeSelection
   emit textView.textWillChange(clamped)
   textView.xTextStorage.replace(clamped, inserted)
   if clearMark:
     textView.clearMarkedText()
   textView.setSelection(nextSelection)
   textView.finishTextMutation(
-    initTextRange(int(clamped.location), insertedLength),
-    textView.textViewStringValue() != beforeValue,
+    initTextRange(int(clamped.location), insertedLength), valueChanged
   )
-  if record:
+  if record and (textView.xUndoGroupingDepth == 0 or not textView.xHasGroupedUndo):
     textView.recordUndo(before, beforeSelection, textView.textViewSelectedRange())
+  result.valueChanged = valueChanged
 
 proc replaceRange(
     textView: TextView,
@@ -1151,9 +1174,14 @@ proc replaceRange(
     attributes: TextAttributes,
     record = true,
     clearMark = true,
-) =
-  textView.replaceRange(
-    range, newTextStorage(insertion, attributes), record = record, clearMark = clearMark
+    captureMarkedUndo = false,
+): TextReplaceResult {.discardable.} =
+  result = textView.replaceRange(
+    range,
+    newTextStorage(insertion, attributes),
+    record = record,
+    clearMark = clearMark,
+    captureMarkedUndo = captureMarkedUndo,
   )
 
 proc foldedSearchText(text: string): string =
@@ -1298,9 +1326,7 @@ proc replaceAllText*(
     return 0
   textView.beginUndoGrouping()
   for index in countdown(ranges.len - 1, 0):
-    let before = textView.textViewStringValue()
-    textView.replaceRange(ranges[index], replacement, textView.xTypingAttributes)
-    if textView.textViewStringValue() != before:
+    if textView.replaceRange(ranges[index], replacement, textView.xTypingAttributes).valueChanged:
       inc result
   textView.endUndoGrouping()
 
@@ -2086,12 +2112,17 @@ proc setMarkedTextValue*(
     else:
       textView.textViewSelectedRange()
   let clamped = textView.clampedRange(target)
-  if not textView.xHasMarkedText:
-    textView.xMarkedUndoStorage = textView.xTextStorage.copyTextStorage()
-    textView.xMarkedUndoSelection = textView.textViewSelectedRange()
-  textView.replaceRange(
-    clamped, text, textView.xTypingAttributes, record = false, clearMark = false
+  let firstMark = not textView.xHasMarkedText
+  let edit = textView.replaceRange(
+    clamped,
+    text,
+    textView.xTypingAttributes,
+    record = false,
+    clearMark = false,
+    captureMarkedUndo = firstMark,
   )
+  if not edit.accepted:
+    return
   let
     markedStart = int(clamped.location)
     markedLength = text.runeLen
@@ -2610,33 +2641,10 @@ proc glyphLineRevision(layout: GlyphArrangement, glyphRange: Slice[int]): uint64
   nonzeroRevision(!$value)
 
 proc glyphLineArrangement(
-    layout: GlyphArrangement, glyphRange: Slice[int]
+    owner: ConstPtr[GlyphArrangement], glyphRange: Slice[int]
 ): GlyphArrangement =
-  let count = glyphRange.b - glyphRange.a + 1
-  if count <= 0:
-    return
-  result.contentHash = cast[Hash](layout.glyphLineRevision(glyphRange))
-  result.lines = @[0 .. count - 1]
-  result.maxSize = layout.maxSize
-  result.minSize = layout.minSize
-  result.bounding = layout.bounding
-  if layout.arrangedGlyphs.len > 0:
-    result.arrangedGlyphs = layout.arrangedGlyphs[glyphRange.a .. glyphRange.b]
-  if layout.runes.len > glyphRange.b:
-    result.runes = layout.runes[glyphRange.a .. glyphRange.b]
-  if layout.positions.len > glyphRange.b:
-    result.positions = layout.positions[glyphRange.a .. glyphRange.b]
-  if layout.selectionRects.len > glyphRange.b:
-    result.selectionRects = layout.selectionRects[glyphRange.a .. glyphRange.b]
-  for spanIndex, span in layout.spans:
-    let
-      first = max(span.a, glyphRange.a)
-      last = min(span.b, glyphRange.b)
-    if first <= last:
-      result.spans.add first - glyphRange.a .. last - glyphRange.a
-      result.fonts.add layout.fonts[spanIndex]
-      if spanIndex < layout.spanColors.len:
-        result.spanColors.add layout.spanColors[spanIndex]
+  result = owner.glyphArrangementView(glyphRange)
+  result.contentHash = cast[Hash](owner[].glyphLineRevision(glyphRange))
 
 func verticallyBuffered(source: Rect, screens: float32): Rect =
   let padding = source.size.height * max(screens, 0.0'f32)
@@ -2725,10 +2733,11 @@ proc drawTextViewText*(textView: TextView, context: DrawContext) =
   let
     textRect = textView.bounds.inset(textView.xTextContainer.insets)
     displayStorage = textView.displayTextStorage()
-    layout =
-      if displayStorage == textView.xTextStorage:
-        textView.xLayoutManager.glyphArrangement()
-      else:
+  let owner =
+    if displayStorage == textView.xTextStorage:
+      textView.xLayoutManager.glyphArrangementResource()
+    else:
+      shareGlyphArrangement(
         textLayout(
           textRect,
           displayStorage,
@@ -2736,6 +2745,12 @@ proc drawTextViewText*(textView: TextView, context: DrawContext) =
           textView.alignment(),
           textView.xTextContainer.wraps,
         )
+      )
+  if owner.isNil:
+    discard context.beginRenderSlot(textLineRenderSlotId(0), 0)
+    return
+  let
+    layout = owner[]
     lineRanges = layout.lineGlyphRanges()
   if lineRanges.len == 0:
     let slot = textLineRenderSlotId(0)
@@ -2746,7 +2761,7 @@ proc drawTextViewText*(textView: TextView, context: DrawContext) =
         slot = textLineRenderSlotId(lineIndex)
         revision = layout.glyphLineRevision(glyphRange)
       if context.beginRenderSlot(slot, revision):
-        discard context.addText(textRect, layout.glyphLineArrangement(glyphRange))
+        discard context.addText(textRect, owner.glyphLineArrangement(glyphRange))
 
 func firstFragmentEndingAfter(
     fragments: openArray[TextLineFragment], minimumY: float32
@@ -2781,7 +2796,11 @@ proc drawTextViewTextInViewport*(
   let
     textRect = textView.bounds.inset(textView.xTextContainer.insets)
     manager = textView.xLayoutManager
-    layout = manager.glyphArrangement()
+    owner = manager.glyphArrangementResource()
+  if owner.isNil:
+    return
+  let
+    layout = owner[]
     fragments = manager.layoutSnapshot().lineFragments
     glyphCount =
       if layout.arrangedGlyphs.len > 0: layout.arrangedGlyphs.len else: layout.runes.len
@@ -2798,7 +2817,7 @@ proc drawTextViewTextInViewport*(
           slot = textLineRenderSlotId(fragment.lineIndex.toInt)
           revision = layout.glyphLineRevision(glyphRange)
         if context.beginRenderSlot(slot, revision):
-          discard context.addText(textRect, layout.glyphLineArrangement(glyphRange))
+          discard context.addText(textRect, owner.glyphLineArrangement(glyphRange))
     inc index
 
 proc drawTextViewOverlay*(textView: TextView, context: DrawContext) =
@@ -2894,10 +2913,20 @@ protocol DefaultTextViewCommandDispatch of ResponderCommandDispatchProtocol:
 
 protocol DefaultTextViewDrawing of ViewDrawingProtocol:
   method drawUnderlay(textView: TextView, context: DrawContext) =
-    textView.drawTextViewUnderlay(context)
+    textView.updateTextContainer()
+    if textView.displayTextStorage() == textView.xTextStorage and
+        textView.xLayoutManager.layoutSnapshot().lineFragments.len > 256:
+      textView.drawTextViewUnderlayInViewport(context)
+    else:
+      textView.drawTextViewUnderlay(context)
 
   method draw(textView: TextView, context: DrawContext) =
-    textView.drawTextViewText(context)
+    textView.updateTextContainer()
+    if textView.displayTextStorage() == textView.xTextStorage and
+        textView.xLayoutManager.layoutSnapshot().lineFragments.len > 256:
+      textView.drawTextViewTextInViewport(context)
+    else:
+      textView.drawTextViewText(context)
 
   method drawOverlay(textView: TextView, context: DrawContext) =
     textView.drawTextViewOverlay(context)
