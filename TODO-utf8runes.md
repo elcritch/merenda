@@ -230,6 +230,20 @@ Follow-up: true viewport-only layout needs height estimates, selection and
 navigation support, and offscreen invalidation. Consider checked 32-bit source
 ranges under the UTF-8 size limit and lazy display-text materialization.
 
+Memory profile (macOS arm64, ARC release, 192,000 glyphs in 1,200 lines, both
+UI line nodes and isolated replicas retained):
+
+| Layout path | Heap after setup | Retained heap | RSS after setup | Retained RSS |
+| --- | ---: | ---: | ---: | ---: |
+| Copied line arrays | 25.4 MiB | 75.8 MiB | 31.1 MiB | 81.3 MiB |
+| Shared range views | 25.4 MiB | 20.3 MiB | 31.1 MiB | 50.4 MiB |
+
+The standalone benchmark is [layoutmemory.nim](tests/benchmarks/layoutmemory.nim).
+Separate process runs were stable across three repetitions. RSS includes
+allocator pages retained after the shared layout replaces the initial layout;
+live heap better reflects retained layout data. This profiles synthetic layout
+retention, not font shaping or full application memory.
+
 ## Verification and measurement backlog
 
 - [ ] Add allocation/retained-byte checks for large dynamically generated text,

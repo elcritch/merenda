@@ -2746,6 +2746,9 @@ proc drawTextViewText*(textView: TextView, context: DrawContext) =
           textView.xTextContainer.wraps,
         )
       )
+  if owner.isNil:
+    discard context.beginRenderSlot(textLineRenderSlotId(0), 0)
+    return
   let
     layout = owner[]
     lineRanges = layout.lineGlyphRanges()
@@ -2794,6 +2797,9 @@ proc drawTextViewTextInViewport*(
     textRect = textView.bounds.inset(textView.xTextContainer.insets)
     manager = textView.xLayoutManager
     owner = manager.glyphArrangementResource()
+  if owner.isNil:
+    return
+  let
     layout = owner[]
     fragments = manager.layoutSnapshot().lineFragments
     glyphCount =

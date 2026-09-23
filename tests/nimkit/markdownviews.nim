@@ -1032,8 +1032,8 @@ echo "fenced"
       for node in scene.materialize()[DefaultDrawLevel].nodes:
         if node.kind == nkText:
           var text: string
-          for rune in node.textLayout.runes:
-            text.add rune
+          for glyphIndex in 0 ..< node.textLayout.glyphCount():
+            text.add node.textLayout.displayRune(glyphIndex)
           firstRendered.add text
 
       check totalLines > 200
@@ -1047,8 +1047,8 @@ echo "fenced"
       for node in scene.materialize()[DefaultDrawLevel].nodes:
         if node.kind == nkText:
           var text: string
-          for rune in node.textLayout.runes:
-            text.add rune
+          for glyphIndex in 0 ..< node.textLayout.glyphCount():
+            text.add node.textLayout.displayRune(glyphIndex)
           lastRendered.add text
 
       check lastRendered.len < totalLines div 3
