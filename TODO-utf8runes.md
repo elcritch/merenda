@@ -244,6 +244,22 @@ allocator pages retained after the shared layout replaces the initial layout;
 live heap better reflects retained layout data. This profiles synthetic layout
 retention, not font shaping or full application memory.
 
+README Markdown load profile (macOS arm64, ARC release, four samples, median):
+
+| Version | Parse and apply | Layout | First render |
+| --- | ---: | ---: | ---: |
+| `origin/main` | 74.8 ms | 130.5 ms | 3.6 ms |
+| Shared layout before borrow fix | 75.1 ms | 4,863.8 ms | 3.1 ms |
+| Shared layout with borrowed accessor | 76.0 ms | 128.0 ms | 3.3 ms |
+
+The standalone benchmark is [benchmark_markdown_load.nim](tests/benchmark_markdown_load.nim).
+It loads this repository's README (14,237 runes; 393 visual lines) and separates
+construction, parse/apply, layout, and first render. A stack sample traced the
+regression to deep copies of the full `GlyphArrangement` while computing line
+fragments: an `if` expression in `xLayout` materialized a value on every access.
+Returning `lent GlyphArrangement` directly from each branch makes the generated
+code borrow the arrangement and restores layout time to the main-branch range.
+
 ## Verification and measurement backlog
 
 - [ ] Add allocation/retained-byte checks for large dynamically generated text,

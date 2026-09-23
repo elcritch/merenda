@@ -71,9 +71,10 @@ type
     xBackgroundWorker: AgentProxy[TextLayoutWorker]
     xSnapshotThreadId: int
 
-template xLayout(manager: TextLayoutManager): untyped =
-  (if manager.xSharedLayout.isNil: manager.xMutableLayout
-  else: manager.xSharedLayout[])
+proc xLayout(manager: TextLayoutManager): lent GlyphArrangement {.inline.} =
+  if manager.xSharedLayout.isNil:
+    return manager.xMutableLayout
+  return manager.xSharedLayout[]
 
 proc `==`*(a, b: GlyphIndex): bool {.borrow.}
 proc `$`*(index: GlyphIndex): string {.borrow.}
