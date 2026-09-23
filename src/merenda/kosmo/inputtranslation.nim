@@ -104,16 +104,23 @@ func toNimkitColor(color: celina.ColorValue): nimkit.Color =
     1.0'f32,
   )
 
-func toMonoTextCell*(cell: RenderCell): nimkit.MonoTextCell =
+func toMonoTextCellStyle*(cell: RenderCell): nimkit.MonoTextCellStyle =
+  ## Convert a rendered Moe cell's colors without retaining its symbol.
   var
     foreground = cell.style.fg
     background = cell.style.bg
   if celina.Reversed in cell.style.modifiers:
     swap foreground, background
+  nimkit.MonoTextCellStyle(
+    foregroundColor: foreground.toNimkitColor,
+    backgroundColor: background.toNimkitColor,
+    hasForegroundColor: foreground.kind != celina.Default,
+    hasBackgroundColor: background.kind != celina.Default,
+  )
+
+func toMonoTextCell*(cell: RenderCell): nimkit.MonoTextCell =
+  let style = cell.toMonoTextCellStyle()
   nimkit.initMonoTextCell(
-    cell.symbol,
-    foreground.toNimkitColor,
-    background.toNimkitColor,
-    foreground.kind != celina.Default,
-    background.kind != celina.Default,
+    cell.symbol, style.foregroundColor, style.backgroundColor, style.hasForegroundColor,
+    style.hasBackgroundColor,
   )

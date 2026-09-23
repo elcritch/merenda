@@ -110,6 +110,63 @@ suite "nimkit mono text views":
     check not root.needsLayout()
     check not view.needsLayout()
 
+  test "streamed rows retain multi-rune cells and skip unchanged content":
+    let
+      root = newView(frame = rect(0, 0, 240, 120))
+      view = newMonoTextViewer(frame = rect(0, 0, 240, 120))
+      accent = initMonoTextCell("e\xcc\x81", traits = {mttBold})
+      wide = initMonoTextCell("\xe6\x97\xa5")
+      continuation = initMonoTextCell(" ")
+    root.addSubview(view)
+    root.layoutSubtreeIfNeeded()
+
+    let provider: MonoTextRowProvider = proc(
+        row: int, builder: var MonoTextRowBuilder
+    ) =
+      if row == 0:
+        builder.addCell(
+          accent.text,
+          MonoTextCellStyle(foregroundColor: accent.foregroundColor, traits: {mttBold}),
+        )
+        builder.addCell(wide)
+        builder.addCell(continuation)
+      else:
+        builder.addCell(initMonoTextCell("A"))
+        builder.addCell(initMonoTextCell("B"))
+        builder.addCell(initMonoTextCell("C"))
+
+    view.replaceGridRows(2, 3, provider)
+    check view.cellAt(0, 0) == accent
+    check view.cellAt(0, 1) == wide
+    check view.cellAt(0, 2) == continuation
+    check view.columnCount(0) == 3
+    check view.stringValue() == "e\xcc\x81\xe6\x97\xa5 \nABC"
+    check view.lineRange(0).length == 4
+
+    root.clearNeedsDisplayTree()
+    view.replaceGridRows(2, 3, provider)
+    check not view.needsDisplay()
+
+    let changedProvider: MonoTextRowProvider = proc(
+        row: int, builder: var MonoTextRowBuilder
+    ) =
+      if row == 0:
+        builder.addCell(initMonoTextCell("A"))
+        builder.addCell(initMonoTextCell("B"))
+        builder.addCell(initMonoTextCell("C"))
+      else:
+        builder.addCell(initMonoTextCell("D"))
+        builder.addCell(initMonoTextCell("E"))
+        builder.addCell(initMonoTextCell("F"))
+    view.replaceGridRows(2, 3, changedProvider, rowOffset = 1)
+    check view.stringValue() == "ABC\nDEF"
+    view.replaceGridRows(2, 3, changedProvider, rowOffset = low(int))
+    check view.stringValue() == "ABC\nDEF"
+
+    expect ValueError:
+      view.replaceGridRows(2, 3) do(row: int, builder: var MonoTextRowBuilder):
+        builder.addCell(initMonoTextCell("X"))
+
   test "whole-row grid scrolling replaces only newly exposed rows":
     let
       root = newView(frame = rect(0, 0, 240, 120))

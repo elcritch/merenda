@@ -829,11 +829,13 @@ proc renderGrid(view: KosmoEditorView) =
     view.renderBuffer.resize(columns.Natural, rows.Natural)
   view.editor.render(view.renderBuffer, view.editor.captureViewState())
   view.saveViewState()
-  var cells = newSeq[nimkit.MonoTextCell](rows * columns)
-  for row in 0 ..< rows:
+  let provider: nimkit.MonoTextRowProvider = proc(
+      row: int, builder: var nimkit.MonoTextRowBuilder
+  ) =
     for column in 0 ..< columns:
-      cells[row * columns + column] = view.renderBuffer.cell(column, row).toMonoTextCell
-  view.replaceGrid(rows, columns, cells)
+      let cell = view.renderBuffer.cell(column, row)
+      builder.addCell(cell.symbol, cell.toMonoTextCellStyle())
+  view.replaceGridRows(rows, columns, provider)
   view.gridOffset =
     nimkit.initPoint(0.0'f32, -view.scrollOffsetRows * metrics.lineHeight)
   view.syncChrome()

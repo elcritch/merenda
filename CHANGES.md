@@ -13,3 +13,5 @@
   changes locally, and use endpoint cursors instead of dense highlighting maps.
 - Expose explicit UTF-8 byte ranges and allocation-free rune iteration on text
   snapshots while keeping rune-based editing ranges.
+- Pack MonoText viewport rows into UTF-8 buffers and interned styles, and stream
+  Moe and terminal rows into the viewport without full temporary cell grids.

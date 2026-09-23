@@ -3,7 +3,8 @@
 Source review: 2026-09-23. Baseline: Sol's implementation plus the follow-up
 commits Merenda `66e5cb15` and FigDraw `e742041`. Sections 1–3 were implemented
 in Merenda `172eedf1` and profiled against its parent `dd933623` as described
-below. The remaining priorities are source-based estimates.
+below. Section 9 is implemented and profiled below. The remaining priorities
+are source-based estimates.
 
 Ordinary TextStorage now owns a shared immutable TextSnapshot, backed by
 FigDraw's UTF-8 bytes and sparse rune checkpoints, with sparse line checkpoints
@@ -24,7 +25,6 @@ when case conversion or control filtering changes it.
 | 1 | Stream Kosmo terminal search | Avoid expanding all scrollback into coordinate records |
 | 2 | Preserve snapshots across layout worker requests | Avoid source copies and expanded attribute runs |
 | 2 | Compact Markdown tables and share embedded text | Reduce render peaks and duplicate retained text |
-| 2 | Compact MonoText and update grids by changed rows | Reduce retained cell size and frame allocations |
 | 2 | Reduce Kosmo Matter and Git Diff source duplication | Bound worker and document working sets |
 | 3 | Use edit deltas/chunks and share layout geometry | Larger structural reductions for long documents |
 
@@ -251,20 +251,49 @@ MonoTextCell, textToCells, and replaceGrid;
 [terminalviews.nim](src/merenda/nimkit/terminal/terminalviews.nim),
 terminalRowsToMonoTextCells and synchronizeTerminalGrid.
 
-- [ ] Use row UTF-8 buffers plus cell offsets/lengths and interned style IDs.
-  Current cells each contain an owned string, three colors, flags, traits, and
-  decorations. Compress blank/default runs where it helps.
-- [ ] Preserve strings containing multiple runes and terminal continuation
-  cells. Replacing every cell with one Rune would break the existing contract.
-- [ ] Feed changed rows/ranges into MonoText from Moe/Terminex, avoiding a full
-  temporary seq[MonoTextCell] followed by another copy into xLines.
-  replaceGrid skips an identical grid, but copies every cell when any differ.
-- [ ] Extend existing terminal row reuse: it already reuses rows when scrolling
-  an unchanged generation. Target changed-screen generations and Kosmo's full
-  grid conversion, rather than reimplementing that optimization.
+- [x] Store each row as one UTF-8 buffer, cell byte/rune endpoints, and interned
+  styles. A row with one style omits the per-cell style-ID array, including
+  blank/default rows.
+- [x] Preserve cells containing multiple runes and terminal continuation cells.
+  The packed row keeps full cell text; the terminal adapter renders continuation
+  cells as spaces.
+- [x] Stream Moe and Terminex rows into MonoText without a full temporary
+  `seq[MonoTextCell]`. Borrow source symbols and compare each cell before
+  allocating a replacement row. Existing `replaceGrid` callers retain their
+  cell-based entry point.
+- [x] Reuse shifted terminal rows across changed-screen generations, then
+  rebuild only rows whose rendered cells differ. Unchanged-generation scrolling
+  still streams only newly exposed rows.
 
-Measure per-frame allocation traffic separately from viewport retention and
-upstream terminal/editor buffer storage.
+### Profile: MonoText viewport grids
+
+The reproducible [benchmark](tests/benchmarks/monotextmemory.nim) uses a
+250 × 320 ASCII grid with one changed cell per frame. Release/ARC builds on
+macOS used `-d:nimAllocStats`; results are medians of three standalone runs
+against parent `4cafb140` and this change. Heap figures are live bytes across
+all malloc zones, while allocation figures count Nim allocator calls.
+
+| Measure | Before | After |
+| --- | ---: | ---: |
+| Synthetic upstream symbols, live heap | 2,692,128 B | 2,692,128 B |
+| Populated Celina editor buffer, live heap | 5,258,224 B | 5,258,224 B |
+| Populated Terminex screen, live heap | 5,769,568 B | 5,769,568 B |
+| MonoText viewport, live heap | 12,939,280 B | 895,680 B |
+| Initial grid allocation calls | 160,252 | 1,002 |
+| One-cell changed frame allocation calls | 80,000 | 5 |
+| Unchanged frame allocation calls | 80,000 | 1 |
+
+The synthetic source and view setup are measured before the viewport is filled;
+they are excluded from the viewport figure. A populated Celina buffer, the
+cell store used by Moe's render buffer, and a populated Terminex screen are
+measured separately after the grid operations. Current RSS growth ranged from
+about 13 to 20 MiB before and
+0.15 to 0.93 MiB after; it depends on allocator page reuse and is diagnostic
+only. The fixture isolates grid transfer; it does not include Moe's render pass,
+terminal row extraction, terminal parsing, glyph creation, or a varied-color
+screen. The Terminex figure includes a separate parse of the same ASCII grid.
+Changed generations still compare the visible cells; this bounds
+allocation traffic, though it does not remove the scan.
 
 ## 10. Reduce Kosmo Matter request and line allocations
 

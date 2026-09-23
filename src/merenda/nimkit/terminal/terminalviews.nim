@@ -156,9 +156,10 @@ func contains(selection: TerminalSelection, row, column: int): bool =
     position = initTerminalPosition(row, column)
   not position.positionLess(bounds.first) and position.positionLess(bounds.last)
 
-func terminalCellToMonoTextCell*(
+func terminalCellToMonoTextStyle*(
     cell: TerminexCell, palette: TerminalPalette, selected = false, blinkVisible = true
-): MonoTextCell =
+): MonoTextCellStyle =
+  ## Resolve a terminal cell's visual style without retaining its text.
   var
     foreground = palette.resolvedColor(cell.style.foreground, palette.foreground)
     background = palette.resolvedColor(cell.style.background, palette.background)
@@ -184,16 +185,31 @@ func terminalCellToMonoTextCell*(
   if taOverline in cell.style.attributes:
     decorations.incl mtdOverline
   let decorationColor = palette.resolvedColor(cell.style.underlineColor, foreground)
+  MonoTextCellStyle(
+    foregroundColor: foreground,
+    backgroundColor: if selected: palette.selection else: background,
+    hasForegroundColor: true,
+    hasBackgroundColor: true,
+    traits: traits,
+    decorations: decorations,
+    decorationColor: decorationColor,
+    hasDecorationColor: cell.style.underlineColor.kind != tckDefault,
+  )
+
+func terminalCellToMonoTextCell*(
+    cell: TerminexCell, palette: TerminalPalette, selected = false, blinkVisible = true
+): MonoTextCell =
+  let style = cell.terminalCellToMonoTextStyle(palette, selected, blinkVisible)
   initMonoTextCell(
     if cell.continuation or cell.text.len == 0: " " else: cell.text,
-    foreground,
-    if selected: palette.selection else: background,
-    hasForegroundColor = true,
-    hasBackgroundColor = true,
-    traits = traits,
-    decorations = decorations,
-    decorationColor = decorationColor,
-    hasDecorationColor = cell.style.underlineColor.kind != tckDefault,
+    style.foregroundColor,
+    style.backgroundColor,
+    style.hasForegroundColor,
+    style.hasBackgroundColor,
+    style.traits,
+    style.decorations,
+    style.decorationColor,
+    style.hasDecorationColor,
   )
 
 static:
@@ -582,27 +598,30 @@ proc clearHoveredLink(view: TerminalView) =
     view.xLastGeneration = high(uint64)
     view.syncTerminalScreen()
 
-proc terminalRowsToMonoTextCells(
-    view: TerminalView, session: TerminalViewSession, columns, firstRow, rowCount: int
-): seq[MonoTextCell] =
-  result = newSeq[MonoTextCell](max(rowCount, 0) * columns)
-  for row in 0 ..< max(rowCount, 0):
-    let
-      absoluteRow = firstRow + row
-      line = session.lineAtAbsolute(absoluteRow)
-    for column in 0 ..< columns:
-      var cell = terminalCellToMonoTextCell(
-        if column < line.len:
-          line[column]
-        else:
-          initTerminalCell(),
-        view.xPalette,
-        selected = view.xHasSelection and view.xSelection.contains(absoluteRow, column),
-        blinkVisible = view.xBlinkVisible,
-      )
-      if view.xHoveredLink.contains(absoluteRow, column):
-        cell.decorations.incl mtdUnderline
-      result[row * columns + column] = cell
+proc appendTerminalRow(
+    view: TerminalView,
+    session: TerminalViewSession,
+    columns, absoluteRow: int,
+    builder: var MonoTextRowBuilder,
+) =
+  let line = session.lineAtAbsolute(absoluteRow)
+  for column in 0 ..< columns:
+    let cell =
+      if column < line.len:
+        line[column]
+      else:
+        initTerminalCell()
+    var style = terminalCellToMonoTextStyle(
+      cell,
+      view.xPalette,
+      selected = view.xHasSelection and view.xSelection.contains(absoluteRow, column),
+      blinkVisible = view.xBlinkVisible,
+    )
+    if view.xHoveredLink.contains(absoluteRow, column):
+      style.decorations.incl mtdUnderline
+    builder.addCell(
+      if cell.continuation or cell.text.len == 0: " " else: cell.text, style
+    )
 
 proc renderedGridDimensionsMatch(view: TerminalView, rows, columns: int): bool =
   if view.xRenderedRows != rows or view.xRenderedColumns != columns or
@@ -623,10 +642,9 @@ proc synchronizeTerminalGrid(
     rows = info.rows
     columns = info.columns
     rowOffset = start - view.xRenderedStart
-    canReuseRows =
-      view.xLastGeneration == info.generation and
-      view.renderedGridDimensionsMatch(rows, columns)
-  if canReuseRows and rowOffset != 0 and abs(rowOffset) < rows:
+    dimensionsMatch = view.renderedGridDimensionsMatch(rows, columns)
+    unchangedGeneration = view.xLastGeneration == info.generation
+  if dimensionsMatch and unchangedGeneration and rowOffset != 0 and abs(rowOffset) < rows:
     let
       replacementCount = abs(rowOffset)
       firstReplacementRow =
@@ -634,13 +652,18 @@ proc synchronizeTerminalGrid(
           start + rows - replacementCount
         else:
           start
-      replacementCells = view.terminalRowsToMonoTextCells(
-        session, columns, firstReplacementRow, replacementCount
-      )
-    view.scrollGridRows(rowOffset, replacementCells)
-  elif not canReuseRows or rowOffset != 0:
-    view.replaceGrid(
-      rows, columns, view.terminalRowsToMonoTextCells(session, columns, start, rows)
+    let provider: MonoTextRowProvider = proc(
+        row: int, builder: var MonoTextRowBuilder
+    ) =
+      view.appendTerminalRow(session, columns, firstReplacementRow + row, builder)
+    view.scrollGridRowsWith(rowOffset, provider)
+  elif not dimensionsMatch or not unchangedGeneration or rowOffset != 0:
+    let provider: MonoTextRowProvider = proc(
+        row: int, builder: var MonoTextRowBuilder
+    ) =
+      view.appendTerminalRow(session, columns, start + row, builder)
+    view.replaceGridRows(
+      rows, columns, provider, rowOffset = if dimensionsMatch: rowOffset else: 0
     )
   view.xRenderedStart = start
   view.xRenderedRows = rows

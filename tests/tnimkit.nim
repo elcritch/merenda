@@ -23,6 +23,7 @@ import nimkit/gaptextbuffers
 import nimkit/images
 import nimkit/markdownviews
 import nimkit/menus
+import nimkit/monotextviews
 import nimkit/segmentedcontrols
 import nimkit/resources
 import nimkit/settings
@@ -32,6 +33,7 @@ import nimkit/styledruns
 import nimkit/table_column_resizing
 import nimkit/textlayout
 import nimkit/terminalgeometry
+import nimkit/terminals
 import nimkit/urls
 
 when not defined(useNativeDynlib):

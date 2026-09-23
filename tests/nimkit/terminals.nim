@@ -580,6 +580,9 @@ suite "nimkit terminal views":
     let cell = terminalCellToMonoTextCell(
       screen.cellAt(0, 0), initTerminalPalette(), selected = true
     )
+    let style = terminalCellToMonoTextStyle(
+      screen.cellAt(0, 0), initTerminalPalette(), selected = true
+    )
 
     check cell.text == "X"
     check cell.hasForegroundColor
@@ -592,6 +595,10 @@ suite "nimkit terminal views":
     check mtdStrikethrough in cell.decorations
     check mtdOverline in cell.decorations
     check cell.hasDecorationColor
+    check style.foregroundColor == cell.foregroundColor
+    check style.backgroundColor == cell.backgroundColor
+    check style.traits == cell.traits
+    check style.decorations == cell.decorations
 
   test "terminal key translation covers every supported keyboard input":
     let
@@ -706,6 +713,26 @@ suite "nimkit terminal views":
     check session.screen().rows > oldSize[1]
     check view.lineCount == session.screen().rows
     check view.maxColumnCount == session.screen().columns
+
+  test "terminal viewport retains wide continuation and combining text":
+    let
+      session = newCompactTerminalSession(columns = 8, rows = 2)
+      view = newTerminalView(session, frame = rect(0, 0, 240, 100))
+    session.processOutput("\xe6\x97\xa5e\xcc\x81")
+    discard view.poll()
+
+    check view.cellAt(0, 0).text == "\xe6\x97\xa5"
+    check view.cellAt(0, 1).text == " "
+    check view.cellAt(0, 2).text == "e\xcc\x81"
+
+    session.processOutput("\r\nnext")
+    discard view.poll()
+    check view.cellAt(1, 0).text == "n"
+
+    session.processOutput("\r\nthird")
+    discard view.poll()
+    check view.cellAt(0, 0).text == "n"
+    check view.cellAt(1, 0).text == "t"
 
   test "terminal grid fits complete rows and columns while resizing":
     let
