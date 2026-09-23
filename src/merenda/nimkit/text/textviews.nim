@@ -1,6 +1,9 @@
 import std/[hashes, math, options, strutils, unicode]
 
-from figdraw import GlyphArrangement, lineGlyphRanges, len, `[]`
+from figdraw import
+  GlyphArrangement, glyphArrangementView, lineGlyphRanges, shareGlyphArrangement, len,
+  `[]`
+import threading/smartptrs
 
 import sigils/core
 
@@ -2638,33 +2641,10 @@ proc glyphLineRevision(layout: GlyphArrangement, glyphRange: Slice[int]): uint64
   nonzeroRevision(!$value)
 
 proc glyphLineArrangement(
-    layout: GlyphArrangement, glyphRange: Slice[int]
+    owner: ConstPtr[GlyphArrangement], glyphRange: Slice[int]
 ): GlyphArrangement =
-  let count = glyphRange.b - glyphRange.a + 1
-  if count <= 0:
-    return
-  result.contentHash = cast[Hash](layout.glyphLineRevision(glyphRange))
-  result.lines = @[0 .. count - 1]
-  result.maxSize = layout.maxSize
-  result.minSize = layout.minSize
-  result.bounding = layout.bounding
-  if layout.arrangedGlyphs.len > 0:
-    result.arrangedGlyphs = layout.arrangedGlyphs[glyphRange.a .. glyphRange.b]
-  if layout.runes.len > glyphRange.b:
-    result.runes = layout.runes[glyphRange.a .. glyphRange.b]
-  if layout.positions.len > glyphRange.b:
-    result.positions = layout.positions[glyphRange.a .. glyphRange.b]
-  if layout.selectionRects.len > glyphRange.b:
-    result.selectionRects = layout.selectionRects[glyphRange.a .. glyphRange.b]
-  for spanIndex, span in layout.spans:
-    let
-      first = max(span.a, glyphRange.a)
-      last = min(span.b, glyphRange.b)
-    if first <= last:
-      result.spans.add first - glyphRange.a .. last - glyphRange.a
-      result.fonts.add layout.fonts[spanIndex]
-      if spanIndex < layout.spanColors.len:
-        result.spanColors.add layout.spanColors[spanIndex]
+  result = owner.glyphArrangementView(glyphRange)
+  result.contentHash = cast[Hash](owner[].glyphLineRevision(glyphRange))
 
 func verticallyBuffered(source: Rect, screens: float32): Rect =
   let padding = source.size.height * max(screens, 0.0'f32)
@@ -2753,10 +2733,11 @@ proc drawTextViewText*(textView: TextView, context: DrawContext) =
   let
     textRect = textView.bounds.inset(textView.xTextContainer.insets)
     displayStorage = textView.displayTextStorage()
-    layout =
-      if displayStorage == textView.xTextStorage:
-        textView.xLayoutManager.glyphArrangement()
-      else:
+  let owner =
+    if displayStorage == textView.xTextStorage:
+      textView.xLayoutManager.glyphArrangementResource()
+    else:
+      shareGlyphArrangement(
         textLayout(
           textRect,
           displayStorage,
@@ -2764,6 +2745,9 @@ proc drawTextViewText*(textView: TextView, context: DrawContext) =
           textView.alignment(),
           textView.xTextContainer.wraps,
         )
+      )
+  let
+    layout = owner[]
     lineRanges = layout.lineGlyphRanges()
   if lineRanges.len == 0:
     let slot = textLineRenderSlotId(0)
@@ -2774,7 +2758,7 @@ proc drawTextViewText*(textView: TextView, context: DrawContext) =
         slot = textLineRenderSlotId(lineIndex)
         revision = layout.glyphLineRevision(glyphRange)
       if context.beginRenderSlot(slot, revision):
-        discard context.addText(textRect, layout.glyphLineArrangement(glyphRange))
+        discard context.addText(textRect, owner.glyphLineArrangement(glyphRange))
 
 func firstFragmentEndingAfter(
     fragments: openArray[TextLineFragment], minimumY: float32
@@ -2809,7 +2793,8 @@ proc drawTextViewTextInViewport*(
   let
     textRect = textView.bounds.inset(textView.xTextContainer.insets)
     manager = textView.xLayoutManager
-    layout = manager.glyphArrangement()
+    owner = manager.glyphArrangementResource()
+    layout = owner[]
     fragments = manager.layoutSnapshot().lineFragments
     glyphCount =
       if layout.arrangedGlyphs.len > 0: layout.arrangedGlyphs.len else: layout.runes.len
@@ -2826,7 +2811,7 @@ proc drawTextViewTextInViewport*(
           slot = textLineRenderSlotId(fragment.lineIndex.toInt)
           revision = layout.glyphLineRevision(glyphRange)
         if context.beginRenderSlot(slot, revision):
-          discard context.addText(textRect, layout.glyphLineArrangement(glyphRange))
+          discard context.addText(textRect, owner.glyphLineArrangement(glyphRange))
     inc index
 
 proc drawTextViewOverlay*(textView: TextView, context: DrawContext) =
@@ -2922,10 +2907,20 @@ protocol DefaultTextViewCommandDispatch of ResponderCommandDispatchProtocol:
 
 protocol DefaultTextViewDrawing of ViewDrawingProtocol:
   method drawUnderlay(textView: TextView, context: DrawContext) =
-    textView.drawTextViewUnderlay(context)
+    textView.updateTextContainer()
+    if textView.displayTextStorage() == textView.xTextStorage and
+        textView.xLayoutManager.layoutSnapshot().lineFragments.len > 256:
+      textView.drawTextViewUnderlayInViewport(context)
+    else:
+      textView.drawTextViewUnderlay(context)
 
   method draw(textView: TextView, context: DrawContext) =
-    textView.drawTextViewText(context)
+    textView.updateTextContainer()
+    if textView.displayTextStorage() == textView.xTextStorage and
+        textView.xLayoutManager.layoutSnapshot().lineFragments.len > 256:
+      textView.drawTextViewTextInViewport(context)
+    else:
+      textView.drawTextViewText(context)
 
   method drawOverlay(textView: TextView, context: DrawContext) =
     textView.drawTextViewOverlay(context)

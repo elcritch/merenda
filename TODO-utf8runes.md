@@ -215,20 +215,20 @@ isolateGlyphArrangement;
 [fonttypes.nim](deps/figdraw/src/figdraw/common/fonttypes.nim),
 ArrangedGlyph and GlyphArrangement.
 
-- [ ] Use immutable layout resources plus glyph-range views for line render
-  nodes. Current line arrangements slice glyphs, display text, positions, and
-  selection rectangles; render isolation copies the arrays and text again.
-- [ ] Use viewport drawing for appropriate long TextViews. It already exists
-  and Markdown uses it, but it still retains a complete document layout.
-  True viewport-only layout is a separate project requiring height estimates,
-  selection/navigation support, and offscreen layout invalidation.
-- [ ] Preserve source/display aliasing when isolating layouts; two independent
-  copyUtf8Runes() calls duplicate identical buffers when both fields share
-  one source. Share more broadly only with a safe immutable thread owner.
-- [ ] Remove compatibility positions/selectionRects arrays where consumers can
-  read ArrangedGlyph.pos/.rect. They add roughly 24 bytes per glyph with the
-  current float32 geometry. Consider checked 32-bit source ranges under the
-  existing UTF-8 size limit, and lazy display-text materialization.
+- [x] Use immutable layout resources plus glyph-range views for line render
+  nodes. Each view holds an atomic owner and local style spans; render isolation
+  retains the owner instead of copying glyphs and text again.
+- [x] Use viewport drawing for TextViews with more than 256 visual lines. It
+  still retains a complete document layout.
+- [x] Preserve source/display aliasing while freezing and isolating layouts.
+  A named ref identity check avoids copying the same UTF-8 buffer twice.
+- [x] Drop positions/selectionRects from frozen layouts when ArrangedGlyph
+  already has pos/rect, saving roughly 24 retained bytes per glyph. FigDraw's
+  directly returned layouts keep their compatibility arrays.
+
+Follow-up: true viewport-only layout needs height estimates, selection and
+navigation support, and offscreen invalidation. Consider checked 32-bit source
+ranges under the UTF-8 size limit and lazy display-text materialization.
 
 ## Verification and measurement backlog
 

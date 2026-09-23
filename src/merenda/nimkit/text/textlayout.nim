@@ -48,7 +48,8 @@ type
     xBackend: TextLayoutBackend
     xClient: DynamicAgent
     xDelegate: DynamicAgent
-    xLayout: GlyphArrangement
+    xMutableLayout: GlyphArrangement
+    xSharedLayout: ConstPtr[GlyphArrangement]
     xFontRefs: seq[FontRef]
     xLayoutRect: Rect
     xSnapshot: TextLayoutSnapshot
@@ -69,6 +70,10 @@ type
     xBackgroundSchedulePending: bool
     xBackgroundWorker: AgentProxy[TextLayoutWorker]
     xSnapshotThreadId: int
+
+template xLayout(manager: TextLayoutManager): untyped =
+  (if manager.xSharedLayout.isNil: manager.xMutableLayout
+  else: manager.xSharedLayout[])
 
 proc `==`*(a, b: GlyphIndex): bool {.borrow.}
 proc `$`*(index: GlyphIndex): string {.borrow.}
@@ -1051,7 +1056,8 @@ proc finishLayout(
     oldUsedRect = manager.xSnapshot.usedRect
     oldContentSize = manager.xSnapshot.contentSize
   manager.xFontRefs = fontRefs
-  manager.xLayout = arrangement
+  manager.xSharedLayout = shareGlyphArrangement(move arrangement)
+  manager.xMutableLayout = GlyphArrangement()
   manager.xSnapshot = snapshot
   manager.xSnapshotThreadId =
     if snapshotThreadId == 0:
@@ -1153,10 +1159,11 @@ proc completeBackgroundTextLayout(
     )
   else:
     # Delegates are UI-owned; never send their callbacks to workers.
-    manager.xLayout = move layoutResult.arrangement
+    manager.xSharedLayout = default(ConstPtr[GlyphArrangement])
+    manager.xMutableLayout = move layoutResult.arrangement
     var
       snapshot = manager.snapshotFromCurrentLayout()
-      arrangement = move manager.xLayout
+      arrangement = move manager.xMutableLayout
     manager.finishLayout(move arrangement, move snapshot, move fontRefs)
 
 proc defaultUpdateLayout(manager: TextLayoutManager) =
@@ -1194,7 +1201,17 @@ proc buildFigDrawTextLayout(request: TextLayoutRequest): TextLayoutResult =
 
 proc glyphArrangement*(manager: TextLayoutManager): GlyphArrangement =
   manager.updateLayout()
-  manager.xLayout
+  if manager.xSharedLayout.isNil:
+    return
+  let glyphCount = manager.xSharedLayout[].glyphCount()
+  if glyphCount == 0:
+    result.shared = manager.xSharedLayout
+  else:
+    result = manager.xSharedLayout.glyphArrangementView(0 .. glyphCount - 1)
+
+proc glyphArrangementResource*(manager: TextLayoutManager): ConstPtr[GlyphArrangement] =
+  manager.updateLayout()
+  manager.xSharedLayout
 
 proc sourceRunes*(manager: TextLayoutManager): Utf8Runes =
   ## Returns the current layout's compact source-rune view without copying it.
@@ -1448,12 +1465,12 @@ proc workerLayoutSnapshot(
     xTextContainers: containers,
     xTextStyle: style,
     xAlignment: alignment,
-    xLayout: move arrangement,
+    xMutableLayout: move arrangement,
     xLayoutRect: containers.virtualLayoutRect(),
     xHasLayout: true,
   )
   result = manager.snapshotFromCurrentLayout()
-  arrangement = move manager.xLayout
+  arrangement = move manager.xMutableLayout
 
 proc snapshotBuildThreadId*(manager: TextLayoutManager): int =
   ## Thread that built the last applied snapshot; zero before the first layout.
