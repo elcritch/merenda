@@ -7,7 +7,7 @@ when defined(linux):
   proc rssKb(): int64 =
     for line in lines("/proc/self/status"):
       if line.startsWith("VmRSS:"):
-        let fields = line.splitWhitespace()
+        let fields = strutils.splitWhitespace(line)
         if fields.len >= 2:
           return parseInt(fields[1]).int64
     raise newException(IOError, "unable to read VmRSS from /proc/self/status")
