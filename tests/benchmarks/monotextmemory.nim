@@ -62,7 +62,7 @@ proc fillGrid(view: MonoTextView, source: Source) =
     ) =
       for column in 0 ..< Columns:
         builder.addCell(source.rows[row][column], style)
-    view.replaceGridRows(Rows, Columns, provider)
+    view.replaceGrid(Rows, Columns, provider)
 
 proc report(label: string, view: MonoTextView, source: Source) =
   let

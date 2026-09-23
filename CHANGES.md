@@ -15,3 +15,5 @@
   snapshots while keeping rune-based editing ranges.
 - Pack MonoText viewport rows into UTF-8 buffers and interned styles, and stream
   Moe and terminal rows into the viewport without full temporary cell grids.
+  Grid replacement and scrolling now take row providers instead of owned cell
+  arrays.

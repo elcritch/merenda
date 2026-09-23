@@ -1,22 +1,10 @@
 # TODO: Reduce text memory in NimKit and Kosmo
 
-Source review: 2026-09-23. Baseline: Sol's implementation plus the follow-up
-commits Merenda `66e5cb15` and FigDraw `e742041`. Sections 1–3 were implemented
-in Merenda `172eedf1` and profiled against its parent `dd933623` as described
-below. Section 9 is implemented and profiled below. The remaining priorities
-are source-based estimates.
-
-Ordinary TextStorage now owns a shared immutable TextSnapshot, backed by
-FigDraw's UTF-8 bytes and sparse rune checkpoints, with sparse line checkpoints
-in NimKit. Stored attribute runs use compact style IDs. Normal Harfbuzzy layout
-accepts source ranges without allocating text per style run or dense source
-maps. Gap storage caches a snapshot until characters change. Build further
-optimizations on these facilities rather than introducing another text index.
-
-The follow-up commits also implement compact style IDs at the FigDraw boundary,
-per-style font resolution, and Pixie source reuse/source-coordinate mapping.
-Those implementation tasks are complete. Separate display text remains necessary
-when case conversion or control filtering changes it.
+Source review: 2026-09-23. This file tracks remaining work. Completed changes
+are summarized in [CHANGES.md](CHANGES.md); their measured results are below.
+NimKit stores UTF-8 in shared immutable snapshots with sparse indexes and
+compact style IDs. Editing ranges remain rune-based; tokenizer and layout
+endpoints can use byte ranges. Build further optimizations on these facilities.
 
 ## Priorities
 
@@ -32,116 +20,35 @@ Priorities are estimates from the code paths, not measured rankings. Distinguish
 retained memory, transient peak memory, and allocation traffic when evaluating
 each change.
 
-## Profile: recent NimKit text changes
+## Public text API question
 
-Standalone release/ARC processes on macOS with the static FigDraw path, both
-built against the same Atlas dependency tree. Baseline `dd933623`, updated
-`172eedf1`; each workload ran three times per build. Numbers are median current
-RSS growth after the operation, so they include allocator retention and are not
-an allocation count.
-
-| Workload | Before | After | Change |
-| --- | ---: | ---: | ---: |
-| 8 MiB gap edit, undo disabled | 20,816 KiB | 4,384 KiB | 16,432 KiB less |
-| 8 MiB gap edit, undo enabled | 20,864 KiB | 12,640 KiB | 8,224 KiB less |
-| Tokenize 8 MiB of spaces with SynEdit | 81,968 KiB | 8,208 KiB | 73,760 KiB less |
-| Apply 2,048 token styles over 1 MiB | 1,440 KiB | 1,312 KiB | 128 KiB less |
-
-The style workload produced 4,096 final runs in both builds. Its measured
-operation time fell from about 0.336 s to 0.006 s; keep the bulk update for
-this speed benefit even though its RSS gain is small. The tokenizer produced
-one final span in both builds. Gap undo registration produced zero records when
-disabled and one when enabled in both builds. The process-isolated workload
-avoids the resident page reuse that makes full-suite RSS diagnostics print
-zero. It does not measure long-lived GUI layouts, worker copies, or allocation
-traffic.
-
-## Public text API review
-
-Keep UTF-8 in `TextSnapshot` and rune-based `TextRange` for editing. Accept
-`string` for insertion. `TextByteRange` is a separate public range type for
-tokenizer and layout endpoints; a snapshot converts between it and `TextRange`.
-Byte-to-rune conversion rejects endpoints inside a multibyte rune. A styled
-span exposes its byte range while retaining its existing rune positions.
-
-The snapshot also supports `len`, indexed rune reads, `items`/`pairs` iteration,
-and an explicit `toRunes()` conversion. This lets callers use `seq[Rune]` when
-they want a decoded sequence without making it the stored form. In isolated
-release processes over 8 MiB of UTF-8 (`4,194,304` `é` runes), iterating the
-snapshot added **0 KiB** current RSS in three runs; `toRunes()` added **16,432
-KiB**. Both visited or produced the same rune count. These are current RSS
-measurements after setup, not allocation counts; they show the expected cost of
-retaining a decoded sequence. Grapheme-based caret movement is separate future
-work: one visible emoji can contain multiple runes.
-
-- [x] Expose a byte range type and snapshot conversions without replacing
-  rune-based editing ranges or public `SyntaxTokenSpan`.
-- [x] Expose allocation-free rune iteration and explicit sequence materialization.
 - [ ] Decide later whether a byte-native highlighter callback would simplify
   external tokenizer adapters enough to justify a second callback surface.
+  Keep rune-based editing ranges and `SyntaxTokenSpan`; a byte-to-rune
+  conversion must reject endpoints inside a multibyte rune. Grapheme-based
+  caret movement is separate future work.
 
-## 1. Avoid snapshots when undo will not use them
-
-Evidence: [textstorage.nim](src/merenda/nimkit/text/textstorage.nim),
-replace, setAttributes, stringValue=, registerSnapshotUndo, and copyStorageTextTo;
-[gaptextbuffers.nim](src/merenda/nimkit/text/gaptextbuffers.nim), copyGapTextBuffer;
-[textviews.nim](src/merenda/nimkit/text/textviews.nim), replaceRange and recordUndo.
-
-- [x] Gate storage undo snapshots on undo registration. Ordinary storage shares
-  source bytes; gap storage copies its byte arrays only when undo needs them and
-  retains a valid shared snapshot cache in the copy.
-- [x] Transfer the prepared undo snapshot into the closure directly.
-- [x] Capture TextView undo state after delegate approval and only when enabled.
-  Compare the edited range for value-change notifications.
-- [x] Avoid full-text equality strings and intermediate grouped-edit copies in
-  the static path. Native facade byte access can still create an owned string;
-  section 12 tracks a borrowed byte-range API for that boundary.
-
-NimKit tests include RSS diagnostics and behavior checks for undo disabled,
-enabled, grouped, and marked-text composition, with ordinary and gap storage.
-The isolated profile above measures the largest gap-storage edit costs.
-
-## 2. Apply highlighting as one compact run-table update
+## Extend SynEdit incremental tokenization
 
 Evidence: [syneditviews.nim](src/merenda/nimkit/text/syneditviews.nim),
-applyCachedHighlighting and applySyntaxHighlightingForEdit;
-[textstorage.nim](src/merenda/nimkit/text/textstorage.nim), setAttributes,
-styleId, and normalizeRuns.
+applySyntaxHighlightingForEdit and the built-in tokenizer cache.
 
-- [x] Apply SynEdit's base and token styles in one ordered range update and one
-  normalization pass, rather than one storage edit per token.
-- [x] Compact an existing style table by remapping old IDs to new IDs, avoiding
-  a full attribute comparison for every run during normalization.
-- [x] Preserve complete/partial coverage, overlapping-range semantics, delegate
-  hooks, and style-ID lifetime rules. styledSpans IDs currently refer to a
-  mutable storage table only until its next edit.
-- [x] Retokenize safe single-line built-in edits locally and compare the shifted
-  old cache without allocating a second shifted copy.
 - [ ] Extend incremental tokenization across multiline lexical state and custom
-  highlighters. Those paths still use a full new token cache.
+  highlighters. Safe single-line built-in edits already retokenize locally;
+  these remaining paths still use a full new token cache. Keep complete/partial
+  coverage, overlapping-range semantics, and delegate hooks.
 
-## 3. Remove dense highlighting maps and per-byte token storage
+## Check SynEdit tokenizer source ownership
 
-Evidence: [matterhighlighting.nim](src/merenda/nimkit/text/matterhighlighting.nim),
-byteRuneMap; [syneditviews.nim](src/merenda/nimkit/text/syneditviews.nim),
-byteRuneMap, SynEditHighlightBuffer, and tokenSpans;
-[markdownviews.nim](src/merenda/nimkit/text/markdownviews.nim),
-renderBlockquote and addHighlightedCode.
+Evidence: [syneditviews.nim](src/merenda/nimkit/text/syneditviews.nim),
+SynEditHighlightBuffer and tokenSpans.
 
-- [x] Replace whole-source byte-to-rune `seq[int]` maps with monotonic endpoint
-  cursors; the removed map used roughly eight bytes per source byte.
-- [x] Emit SynEdit token ranges directly instead of storing a token class for
-  every byte. CR bytes remain in the source so CRLF positions stay aligned.
-- [x] Convert Markdown highlighted-code endpoints without a per-rune offset
-  array; map blockquotes with segments at inserted prefixes.
-- [x] Keep public rune-based SyntaxTokenSpan APIs if needed. Validate emoji,
-  multibyte boundaries, CRLF, malformed UTF-8, and nested blockquotes.
 - [ ] Check whether `SynEditHighlightBuffer.source` still copies the input
   string. The 8 MiB tokenizer sample retains about 8 MiB after conversion;
   borrow the source through tokenizer parameters if this is the remaining copy,
   and remeasure without introducing an unsafe pointer lifetime.
 
-## 4. Preserve compact input across background layout
+## Preserve compact input across background layout
 
 Evidence: [textlayout.nim](src/merenda/nimkit/text/textlayout.nim),
 startBackgroundTextLayout;
@@ -160,7 +67,7 @@ requestTextLayout.
 - [ ] Reuse worker source state for width/style-only changes. Retain the existing
   one-pending-request/coalescing behavior and stale-generation checks.
 
-## 5. Reduce edit-history storage with deltas or shared chunks
+## Reduce edit-history storage with deltas or shared chunks
 
 Evidence: [textviews.nim](src/merenda/nimkit/text/textviews.nim), TextUndoRecord,
 xMarkedUndoStorage, and grouped undo;
@@ -177,7 +84,7 @@ and applySnapshot.
 - [ ] Keep gap storage's compact mutable representation where useful; switching
   every TextView to gap storage alone does not solve history copies.
 
-## 6. Compact Markdown table rendering
+## Compact Markdown table rendering
 
 Evidence: [markdownviews.nim](src/merenda/nimkit/text/markdownviews.nim),
 MarkdownTableRune, tableRunes, wrapTableCell, and renderTable.
@@ -195,7 +102,7 @@ These per-rune table records are rendering temporaries, not permanently retained
 by MarkdownView. The primary gain is lower rendering/resize peak memory and
 allocation traffic; embedded table storage is a separate retained cost.
 
-## 7. Share Markdown children and budget preview caches
+## Share Markdown children and budget preview caches
 
 Evidence: [markdownviews.nim](src/merenda/nimkit/text/markdownviews.nim),
 MarkdownBuilder, code-block rendering, xMarkdownRoot, and xMatterHighlights;
@@ -224,7 +131,7 @@ syncSelectedEditorContent and markdownViewForBuffer.
   bufferText(). It builds a complete string before markdown= can reject an
   unchanged value. Share immutable document data across panes where feasible.
 
-## 8. Stream Kosmo terminal search
+## Stream Kosmo terminal search
 
 Evidence: [terminalsearch.nim](src/merenda/kosmo/terminalsearch.nim),
 TerminalSearchGlyph, terminalSearchGlyphs, and terminalSearchMatches.
@@ -243,59 +150,7 @@ TerminalSearchGlyph, terminalSearchGlyphs, and terminalSearchMatches.
 This is separate from terminal rendering, which already stores only viewport
 rows in MonoText; the search path is what expands the whole history.
 
-## 9. Compact MonoText and avoid intermediate viewport grids
-
-Evidence: [monotextviews.nim](src/merenda/nimkit/text/monotextviews.nim),
-MonoTextCell, textToCells, and replaceGrid;
-[application_editor.nim](src/merenda/kosmo/application_editor.nim), renderGrid;
-[terminalviews.nim](src/merenda/nimkit/terminal/terminalviews.nim),
-terminalRowsToMonoTextCells and synchronizeTerminalGrid.
-
-- [x] Store each row as one UTF-8 buffer, cell byte/rune endpoints, and interned
-  styles. A row with one style omits the per-cell style-ID array, including
-  blank/default rows.
-- [x] Preserve cells containing multiple runes and terminal continuation cells.
-  The packed row keeps full cell text; the terminal adapter renders continuation
-  cells as spaces.
-- [x] Stream Moe and Terminex rows into MonoText without a full temporary
-  `seq[MonoTextCell]`. Borrow source symbols and compare each cell before
-  allocating a replacement row. Existing `replaceGrid` callers retain their
-  cell-based entry point.
-- [x] Reuse shifted terminal rows across changed-screen generations, then
-  rebuild only rows whose rendered cells differ. Unchanged-generation scrolling
-  still streams only newly exposed rows.
-
-### Profile: MonoText viewport grids
-
-The reproducible [benchmark](tests/benchmarks/monotextmemory.nim) uses a
-250 × 320 ASCII grid with one changed cell per frame. Release/ARC builds on
-macOS used `-d:nimAllocStats`; results are medians of three standalone runs
-against parent `4cafb140` and this change. Heap figures are live bytes across
-all malloc zones, while allocation figures count Nim allocator calls.
-
-| Measure | Before | After |
-| --- | ---: | ---: |
-| Synthetic upstream symbols, live heap | 2,692,128 B | 2,692,128 B |
-| Populated Celina editor buffer, live heap | 5,258,224 B | 5,258,224 B |
-| Populated Terminex screen, live heap | 5,769,568 B | 5,769,568 B |
-| MonoText viewport, live heap | 12,939,280 B | 895,680 B |
-| Initial grid allocation calls | 160,252 | 1,002 |
-| One-cell changed frame allocation calls | 80,000 | 5 |
-| Unchanged frame allocation calls | 80,000 | 1 |
-
-The synthetic source and view setup are measured before the viewport is filled;
-they are excluded from the viewport figure. A populated Celina buffer, the
-cell store used by Moe's render buffer, and a populated Terminex screen are
-measured separately after the grid operations. Current RSS growth ranged from
-about 13 to 20 MiB before and
-0.15 to 0.93 MiB after; it depends on allocator page reuse and is diagnostic
-only. The fixture isolates grid transfer; it does not include Moe's render pass,
-terminal row extraction, terminal parsing, glyph creation, or a varied-color
-screen. The Terminex figure includes a separate parse of the same ASCII grid.
-Changed generations still compare the visible cells; this bounds
-allocation traffic, though it does not remove the scan.
-
-## 10. Reduce Kosmo Matter request and line allocations
+## Reduce Kosmo Matter request and line allocations
 
 Evidence: [moe.nim](src/merenda/kosmo/moe.nim), scheduleMatterHighlighting;
 [matterworkers.nim](src/merenda/kosmo/matterworkers.nim), requestMatterHighlight,
@@ -318,7 +173,7 @@ highlightMatter, runeColumns, and addLineSegments.
 Kosmo's main editor uses Moe buffers; NimKit TextStorage improvements do not
 automatically change this path. Keep any upstream buffer redesign separate.
 
-## 11. Share Git Diff patch payloads across owners
+## Share Git Diff patch payloads across owners
 
 Evidence: [gitdiff.nim](src/merenda/kosmo/gitdiff.nim), GitFileDiff,
 GitDiffSection, GitDiffHighlightKey, patch completion, and mergeSectionIntoSnapshot.
@@ -334,7 +189,7 @@ GitDiffSection, GitDiffHighlightKey, patch completion, and mergeSectionIntoSnaps
   limits, and section/view-pool limits should remain; this is not an unbounded
   cache discovery.
 
-## 12. Reuse snapshots in text helpers and native queries
+## Reuse snapshots in text helpers and native queries
 
 Evidence: [textruneutils.nim](src/merenda/nimkit/text/textruneutils.nim),
 utf8RunesForText; [textviews.nim](src/merenda/nimkit/text/textviews.nim),
@@ -351,7 +206,7 @@ defaultGlyphProperties;
   Substrings and repeated native queries should not materialize the entire
   source just to inspect a short range. Keep native ownership/lifetime explicit.
 
-## 13. Share layout resources and remove redundant glyph geometry
+## Share layout resources and remove redundant glyph geometry
 
 Evidence: [textviews.nim](src/merenda/nimkit/text/textviews.nim),
 glyphLineArrangement, drawTextViewText, and drawTextViewTextInViewport;
@@ -393,3 +248,44 @@ ArrangedGlyph and GlyphArrangement.
 Keep rune-based public APIs and intentional compatibility conversions. Rich
 per-cell/per-rune records need purpose-built compaction rather than mechanical
 replacement with Utf8Runes.
+
+## Measurements from completed changes
+
+The text-editing profiles compared Merenda `dd933623` with `172eedf1` in three
+standalone release/ARC runs per build on macOS, using the same static FigDraw
+dependency tree. Values are median current RSS growth after each operation;
+they include allocator retention and are not allocation counts.
+
+| Workload | Before | After |
+| --- | ---: | ---: |
+| 8 MiB gap edit, undo disabled | 20,816 KiB | 4,384 KiB |
+| 8 MiB gap edit, undo enabled | 20,864 KiB | 12,640 KiB |
+| Tokenize 8 MiB of spaces with SynEdit | 81,968 KiB | 8,208 KiB |
+| Apply 2,048 token styles over 1 MiB | 1,440 KiB | 1,312 KiB |
+
+The bulk style update took about 0.336 s before and 0.006 s after, despite its
+small RSS change. Over 8 MiB of UTF-8 (`4,194,304` `é` runes), iterating a
+snapshot added 0 KiB current RSS; materializing `toRunes()` added 16,432 KiB.
+
+The [MonoText benchmark](tests/benchmarks/monotextmemory.nim) uses a 250 × 320
+ASCII grid with one changed cell per frame. It compares parent `4cafb140` with
+the compact row implementation after removing its uniform-style special case
+and owned-grid adapters. Values are medians of three standalone macOS
+release/ARC runs. Heap figures are live bytes across all malloc zones;
+allocation figures count Nim allocator calls.
+
+| Measure | Before | After |
+| --- | ---: | ---: |
+| Synthetic upstream symbols, live heap | 2,692,128 B | 2,692,128 B |
+| Populated Celina editor buffer, live heap | 5,258,224 B | 5,258,224 B |
+| Populated Terminex screen, live heap | 5,769,568 B | 5,769,568 B |
+| MonoText viewport, live heap | 12,939,280 B | 1,277,632 B |
+| Initial grid allocation calls | 160,252 | 1,252 |
+| One-cell changed frame allocation calls | 80,000 | 6 |
+| Unchanged frame allocation calls | 80,000 | 1 |
+
+The upstream buffers were measured separately from the viewport. This fixture
+isolates grid transfer; it excludes Moe's render pass, terminal row extraction,
+glyph creation, and varied-color screens. Changed generations still compare
+visible cells. RSS varies with allocator page reuse, so the heap and allocation
+figures are more useful for this comparison.

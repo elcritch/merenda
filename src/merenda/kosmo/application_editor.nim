@@ -558,17 +558,22 @@ proc syncCommandBar(view: KosmoEditorView, command: KosmoCommandLine) =
     cursor = command.cursor.clamp(0, runes.len)
     columns = max(runes.len, cursor + 1)
     cursorColor = bar.cursorColor()
-  var cells = newSeq[nimkit.MonoTextCell](columns)
-  for column in 0 ..< columns:
-    let rune =
-      if column < runes.len:
-        runes[column]
-      else:
-        Rune(' ')
-    cells[column] = nimkit.initMonoTextCell(
-      rune, backgroundColor = cursorColor, hasBackgroundColor = column == cursor
-    )
-  bar.replaceGrid(1, columns, cells)
+  let provider: nimkit.MonoTextRowProvider = proc(
+      row: int, builder: var nimkit.MonoTextRowBuilder
+  ) =
+    for column in 0 ..< columns:
+      let text =
+        if column < runes.len:
+          $runes[column]
+        else:
+          " "
+      builder.addCell(
+        text,
+        nimkit.initMonoTextCellStyle(
+          backgroundColor = cursorColor, hasBackgroundColor = column == cursor
+        ),
+      )
+  bar.replaceGrid(1, columns, provider)
 
   let metrics = bar.monoTextMetrics()
   if metrics.cellWidth > 0.0'f32:
@@ -835,7 +840,7 @@ proc renderGrid(view: KosmoEditorView) =
     for column in 0 ..< columns:
       let cell = view.renderBuffer.cell(column, row)
       builder.addCell(cell.symbol, cell.toMonoTextCellStyle())
-  view.replaceGridRows(rows, columns, provider)
+  view.replaceGrid(rows, columns, provider)
   view.gridOffset =
     nimkit.initPoint(0.0'f32, -view.scrollOffsetRows * metrics.lineHeight)
   view.syncChrome()

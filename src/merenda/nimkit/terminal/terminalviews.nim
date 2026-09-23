@@ -656,13 +656,13 @@ proc synchronizeTerminalGrid(
         row: int, builder: var MonoTextRowBuilder
     ) =
       view.appendTerminalRow(session, columns, firstReplacementRow + row, builder)
-    view.scrollGridRowsWith(rowOffset, provider)
+    view.scrollGridRows(rowOffset, provider)
   elif not dimensionsMatch or not unchangedGeneration or rowOffset != 0:
     let provider: MonoTextRowProvider = proc(
         row: int, builder: var MonoTextRowBuilder
     ) =
       view.appendTerminalRow(session, columns, start + row, builder)
-    view.replaceGridRows(
+    view.replaceGrid(
       rows, columns, provider, rowOffset = if dimensionsMatch: rowOffset else: 0
     )
   view.xRenderedStart = start

@@ -107,7 +107,6 @@ type
     cellEndBytes: seq[uint32]
     cellEndRunes: seq[uint32]
     styleIds: seq[uint32]
-    uniformStyleId: uint32
     styles: seq[MonoTextCellStyle]
     runeLength: int
     revision: uint64
@@ -134,7 +133,7 @@ type
     xGridOffset: nimkitTypes.Point
 
   MonoTextRowBuilder* = object
-    ## Receives one row's cells during `replaceGridRows` or `scrollGridRowsWith`.
+    ## Receives one row's cells during `replaceGrid` or `scrollGridRows`.
     xView: MonoTextView
     xRow: int
     xExpectedColumns: int
@@ -277,6 +276,7 @@ proc initMonoTextLine(capacity = 0): MonoTextLine =
   result.text = newStringOfCap(max(capacity, 0))
   result.cellEndBytes = newSeqOfCap[uint32](max(capacity, 0))
   result.cellEndRunes = newSeqOfCap[uint32](max(capacity, 0))
+  result.styleIds = newSeqOfCap[uint32](max(capacity, 0))
   result.styles.add initMonoTextCellStyle()
 
 func len(line: MonoTextLine): int =
@@ -294,27 +294,8 @@ func cellStartRune(line: MonoTextLine, column: int): int =
   else:
     int(line.cellEndRunes[column - 1])
 
-func styleIdAt(line: MonoTextLine, column: int): uint32 =
-  if line.styleIds.len == 0:
-    line.uniformStyleId
-  else:
-    line.styleIds[column]
-
 func styleAt(line: MonoTextLine, column: int): MonoTextCellStyle =
-  line.styles[int(line.styleIdAt(column))]
-
-proc appendStyleId(line: var MonoTextLine, styleId: uint32) =
-  let existingCells = line.len
-  if line.styleIds.len == 0:
-    if existingCells == 0:
-      line.uniformStyleId = styleId
-    elif line.uniformStyleId != styleId:
-      line.styleIds = newSeqOfCap[uint32](existingCells + 1)
-      for _ in 0 ..< existingCells:
-        line.styleIds.add line.uniformStyleId
-      line.styleIds.add styleId
-  else:
-    line.styleIds.add styleId
+  line.styles[int(line.styleIds[column])]
 
 proc cellAt(line: MonoTextLine, column: int): MonoTextCell =
   let
@@ -368,7 +349,7 @@ proc addCell(line: var MonoTextLine, text: string, style: MonoTextCellStyle) =
   if line.text.len > high(uint32).int:
     raise newException(ValueError, "mono text row exceeds 4 GiB")
   line.runeLength += text.runeLen
-  line.appendStyleId(styleId.uint32)
+  line.styleIds.add styleId.uint32
   line.cellEndBytes.add line.text.len.uint32
   line.cellEndRunes.add line.runeLength.uint32
 
@@ -382,7 +363,7 @@ proc copyPrefix(destination: var MonoTextLine, source: MonoTextLine, cellCount: 
   for index in 0 ..< stopByte:
     destination.text.add source.text[index]
   for index in 0 ..< cellCount:
-    let sourceStyleId = int(source.styleIdAt(index))
+    let sourceStyleId = int(source.styleIds[index])
     if styleRemap[sourceStyleId] < 0:
       for styleId, style in destination.styles:
         if style == source.styles[sourceStyleId]:
@@ -391,7 +372,7 @@ proc copyPrefix(destination: var MonoTextLine, source: MonoTextLine, cellCount: 
       if styleRemap[sourceStyleId] < 0:
         styleRemap[sourceStyleId] = destination.styles.len
         destination.styles.add source.styles[sourceStyleId]
-    destination.appendStyleId(styleRemap[sourceStyleId].uint32)
+    destination.styleIds.add styleRemap[sourceStyleId].uint32
     destination.cellEndBytes.add source.cellEndBytes[index]
     destination.cellEndRunes.add source.cellEndRunes[index]
   destination.runeLength = int(source.cellEndRunes[cellCount - 1])
@@ -441,7 +422,6 @@ proc unpackCells(line: MonoTextLine): seq[MonoTextCell] =
 func sameContent(left, right: MonoTextLine): bool =
   left.text == right.text and left.cellEndBytes == right.cellEndBytes and
     left.cellEndRunes == right.cellEndRunes and left.styleIds == right.styleIds and
-    (left.styleIds.len > 0 or left.uniformStyleId == right.uniformStyleId) and
     left.styles == right.styles
 
 proc touchLine(view: MonoTextView, row: int) =
@@ -483,6 +463,7 @@ proc textToLine(text: string): MonoTextLine =
     result.cellEndBytes.add result.text.len.uint32
     inc result.runeLength
     result.cellEndRunes.add result.runeLength.uint32
+    result.styleIds.add 0'u32
     offset = stop
 
 proc lineToString(line: MonoTextLine): string =
@@ -764,7 +745,7 @@ proc setGridSize*(view: MonoTextView, rows, columns: int) =
     view.postAccessibilityNotification(anValueChanged)
   view.postCursorSelectionChanged(previousCursor)
 
-proc replaceGridRows*(
+proc replaceGrid*(
     view: MonoTextView, rows, columns: int, provider: MonoTextRowProvider, rowOffset = 0
 ) =
   ## Stream rectangular rows into compact storage. `provider` must append
@@ -823,26 +804,6 @@ proc replaceGridRows*(
   view.postAccessibilityNotification(anValueChanged)
   view.postCursorSelectionChanged(previousCursor)
 
-proc replaceGrid*(
-    view: MonoTextView, rows, columns: int, cells: openArray[MonoTextCell]
-) =
-  ## Replace a rectangular cell grid in one display and accessibility update.
-  ## `cells` is row-major and must contain exactly rows × columns cells.
-  let
-    nextRows = max(rows, 0)
-    nextColumns = max(columns, 0)
-    expectedCellCount = nextRows * nextColumns
-  if cells.len != expectedCellCount:
-    raise newException(
-      ValueError,
-      "a mono text grid needs " & $expectedCellCount & " cells, got " & $cells.len,
-    )
-  let ownedCells = @cells
-  let provider: MonoTextRowProvider = proc(row: int, builder: var MonoTextRowBuilder) =
-    for column in 0 ..< nextColumns:
-      builder.addCell(ownedCells[row * nextColumns + column])
-  view.replaceGridRows(rows, columns, provider)
-
 proc replaceCells*(
     view: MonoTextView, row, column: int, cells: openArray[MonoTextCell]
 ) =
@@ -879,43 +840,7 @@ proc rectangularGridColumnCount(view: MonoTextView): int =
     if view.xLines[row].len != result:
       raise newException(ValueError, "scrolling grid rows requires a rectangular grid")
 
-proc scrollGridRowsWith*(
-  view: MonoTextView, rowOffset: int, provider: MonoTextRowProvider
-)
-
 proc scrollGridRows*(
-    view: MonoTextView, rowOffset: int, replacementCells: openArray[MonoTextCell]
-) =
-  ## Move rectangular grid rows and replace only the rows exposed by the move.
-  ##
-  ## A positive `rowOffset` moves later rows toward row zero and exposes rows at
-  ## the bottom. A negative offset moves earlier rows toward the last row and
-  ## exposes rows at the top. `replacementCells` contains the exposed rows in
-  ## top-to-bottom, row-major order.
-  let rowCount = view.xLines.len
-  let columnCount = view.rectangularGridColumnCount()
-  let amount =
-    if rowOffset > 0:
-      min(rowOffset, rowCount)
-    elif rowOffset < -rowCount:
-      rowCount
-    else:
-      -rowOffset
-  let expectedCellCount = amount * columnCount
-  if replacementCells.len != expectedCellCount:
-    raise newException(
-      ValueError,
-      "scrolling " & $amount & " grid rows needs " & $expectedCellCount &
-        " replacement cells, got " & $replacementCells.len,
-    )
-
-  let ownedCells = @replacementCells
-  let provider: MonoTextRowProvider = proc(row: int, builder: var MonoTextRowBuilder) =
-    for column in 0 ..< columnCount:
-      builder.addCell(ownedCells[row * columnCount + column])
-  view.scrollGridRowsWith(rowOffset, provider)
-
-proc scrollGridRowsWith*(
     view: MonoTextView, rowOffset: int, provider: MonoTextRowProvider
 ) =
   ## Shift retained rows and stream only newly exposed rows through `provider`.
@@ -931,6 +856,18 @@ proc scrollGridRowsWith*(
         rowCount
       else:
         -rowOffset
+  var replacements = newSeqOfCap[MonoTextLine](amount)
+  for replacementRow in 0 ..< amount:
+    var builder =
+      initMonoTextRowBuilder(view, replacementRow, columnCount, compareExisting = false)
+    provider(replacementRow, builder)
+    if builder.len != columnCount:
+      raise newException(
+        ValueError,
+        "mono text row needs " & $columnCount & " cells, got " & $builder.len,
+      )
+    replacements.add move(builder.xLine)
+
   if rowOffset > 0:
     for row in 0 ..< rowCount - amount:
       view.xLines[row] = move(view.xLines[row + amount])
@@ -944,16 +881,8 @@ proc scrollGridRowsWith*(
     else:
       0
   for replacementRow in 0 ..< amount:
-    var builder = initMonoTextRowBuilder(
-      view, firstReplacementRow + replacementRow, columnCount, compareExisting = false
-    )
-    provider(replacementRow, builder)
-    if builder.len != columnCount:
-      raise newException(
-        ValueError,
-        "mono text row needs " & $columnCount & " cells, got " & $builder.len,
-      )
-    view.xLines[firstReplacementRow + replacementRow] = move(builder.xLine)
+    view.xLines[firstReplacementRow + replacementRow] =
+      move(replacements[replacementRow])
     view.touchLine(firstReplacementRow + replacementRow)
 
   view.setNeedsDisplayInRenderSlot(MonoTextViewportRenderSlot)
