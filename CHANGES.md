@@ -11,3 +11,5 @@
   prepared snapshot per grouped edit and report undo-mode RSS diagnostics.
 - Apply syntax colors in one compact run-table edit, retokenize safe single-line
   changes locally, and use endpoint cursors instead of dense highlighting maps.
+- Expose explicit UTF-8 byte ranges and allocation-free rune iteration on text
+  snapshots while keeping rune-based editing ranges.

@@ -49,6 +49,25 @@ elif defined(macosx):
     int64(info.residentSize div 1024)
 
 suite "Styled text run extraction":
+  test "snapshots expose rune views and explicit UTF-8 byte ranges":
+    let
+      storage = newTextStorage("aé😀\xffz")
+      snapshot = storage.textSnapshot()
+      byteRange = snapshot.byteRange(initTextRange(1, 2))
+    check snapshot.len == 5
+    check snapshot.byteLength == 9
+    check snapshot[1] == Rune(0xE9)
+    check byteRange == initTextByteRange(1, 6)
+    check snapshot.runeRange(byteRange) == initTextRange(1, 2)
+    for span in storage.styledSpans():
+      check span.byteRange == initTextByteRange(0, 9)
+    var runes: seq[Rune]
+    for rune in snapshot:
+      runes.add rune
+    check runes == snapshot.toRunes()
+    expect ValueError:
+      discard snapshot.runeRange(initTextByteRange(2, 1))
+
   test "endpoint cursors handle multibyte and malformed UTF-8":
     let source = "é\xff😀\r\n"
     var byteCursor, runeCursor: TextByteCursor

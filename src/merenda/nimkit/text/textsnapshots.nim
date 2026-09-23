@@ -48,6 +48,10 @@ func sourceRunes*(snapshot: TextSnapshot): Utf8Runes =
 func runeLength*(snapshot: TextSnapshot): int =
   if snapshot.isNil: 0 else: snapshot.xSource.len
 
+func len*(snapshot: TextSnapshot): int =
+  ## Number of runes. Use `byteLength` for the UTF-8 byte count.
+  snapshot.runeLength
+
 func byteLength*(snapshot: TextSnapshot): int =
   if snapshot.isNil: 0 else: snapshot.xSource.byteLength
 
@@ -62,6 +66,53 @@ func lineCheckpointCount*(snapshot: TextSnapshot): int =
 
 proc byteOffset*(snapshot: TextSnapshot, runeIndex: int): int =
   snapshot.xSource.byteOffsetForRune(runeIndex)
+
+proc byteRange*(snapshot: TextSnapshot, range: TextRange): TextByteRange =
+  ## Converts a rune range to byte offsets in this immutable snapshot.
+  if snapshot.isNil:
+    raise newException(ValueError, "cannot convert a range in a nil text snapshot")
+  let
+    startRune = min(int(range.location), snapshot.runeLength)
+    stopRune = min(range.maxIndex, snapshot.runeLength)
+    startByte = snapshot.byteOffset(startRune)
+    stopByte = snapshot.byteOffset(stopRune)
+  initTextByteRange(startByte, stopByte - startByte)
+
+proc runeRange*(snapshot: TextSnapshot, range: TextByteRange): TextRange =
+  ## Converts a byte range whose endpoints are rune boundaries. Raises
+  ## ValueError if either endpoint falls inside a multibyte rune.
+  if snapshot.isNil:
+    raise newException(ValueError, "cannot convert a range in a nil text snapshot")
+  let
+    startByte = min(int(range.location), snapshot.byteLength)
+    stopByte = min(range.maxIndex, snapshot.byteLength)
+    startRune = snapshot.xSource.runeIndexAtOrBeforeByte(startByte)
+    stopRune = snapshot.xSource.runeIndexAtOrBeforeByte(stopByte)
+  if snapshot.byteOffset(startRune) != startByte or
+      snapshot.byteOffset(stopRune) != stopByte:
+    raise newException(ValueError, "UTF-8 byte range endpoint is inside a rune")
+  initTextRange(startRune, stopRune - startRune)
+
+proc `[]`*(snapshot: TextSnapshot, index: int): Rune =
+  ## Reads one rune without creating a decoded sequence.
+  snapshot.xSource[index]
+
+iterator items*(snapshot: TextSnapshot): Rune =
+  ## Iterates runes without creating a decoded sequence.
+  if not snapshot.isNil:
+    for rune in snapshot.xSource:
+      yield rune
+
+iterator pairs*(snapshot: TextSnapshot): tuple[index: int, value: Rune] =
+  ## Iterates rune indexes and values without creating a decoded sequence.
+  if not snapshot.isNil:
+    for index, rune in snapshot.xSource.pairs:
+      yield (index, rune)
+
+proc toRunes*(snapshot: TextSnapshot): seq[Rune] =
+  ## Materializes a decoded sequence when random rune access is preferred.
+  if not snapshot.isNil:
+    result = snapshot.xSource.toRunes()
 
 proc lineRange*(snapshot: TextSnapshot, line: int): TextRange =
   let target = max(line, 0)

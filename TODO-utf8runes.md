@@ -1,10 +1,9 @@
 # TODO: Reduce text memory in NimKit and Kosmo
 
 Source review: 2026-09-23. Baseline: Sol's implementation plus the follow-up
-commits Merenda `66e5cb15` and FigDraw `e742041`, which landed during this review.
-This is a source-based backlog; no builds, tests, or allocation measurements
-were run for this review. Completed migration tasks and historical test claims
-have been removed.
+commits Merenda `66e5cb15` and FigDraw `e742041`. Sections 1–3 were implemented
+in Merenda `172eedf1` and profiled against its parent `dd933623` as described
+below. The remaining priorities are source-based estimates.
 
 Ordinary TextStorage now owns a shared immutable TextSnapshot, backed by
 FigDraw's UTF-8 bytes and sparse rune checkpoints, with sparse line checkpoints
@@ -22,8 +21,6 @@ when case conversion or control filtering changes it.
 
 | Priority | Work | Main benefit |
 | --- | --- | --- |
-| 1 | Gate undo copies and batch highlighting updates | Remove repeated document/run-table copies during edits |
-| 1 | Remove dense maps and SynEdit's per-byte token cells | Lower highlighting peak memory |
 | 1 | Stream Kosmo terminal search | Avoid expanding all scrollback into coordinate records |
 | 2 | Preserve snapshots across layout worker requests | Avoid source copies and expanded attribute runs |
 | 2 | Compact Markdown tables and share embedded text | Reduce render peaks and duplicate retained text |
@@ -35,6 +32,54 @@ Priorities are estimates from the code paths, not measured rankings. Distinguish
 retained memory, transient peak memory, and allocation traffic when evaluating
 each change.
 
+## Profile: recent NimKit text changes
+
+Standalone release/ARC processes on macOS with the static FigDraw path, both
+built against the same Atlas dependency tree. Baseline `dd933623`, updated
+`172eedf1`; each workload ran three times per build. Numbers are median current
+RSS growth after the operation, so they include allocator retention and are not
+an allocation count.
+
+| Workload | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| 8 MiB gap edit, undo disabled | 20,816 KiB | 4,384 KiB | 16,432 KiB less |
+| 8 MiB gap edit, undo enabled | 20,864 KiB | 12,640 KiB | 8,224 KiB less |
+| Tokenize 8 MiB of spaces with SynEdit | 81,968 KiB | 8,208 KiB | 73,760 KiB less |
+| Apply 2,048 token styles over 1 MiB | 1,440 KiB | 1,312 KiB | 128 KiB less |
+
+The style workload produced 4,096 final runs in both builds. Its measured
+operation time fell from about 0.336 s to 0.006 s; keep the bulk update for
+this speed benefit even though its RSS gain is small. The tokenizer produced
+one final span in both builds. Gap undo registration produced zero records when
+disabled and one when enabled in both builds. The process-isolated workload
+avoids the resident page reuse that makes full-suite RSS diagnostics print
+zero. It does not measure long-lived GUI layouts, worker copies, or allocation
+traffic.
+
+## Public text API review
+
+Keep UTF-8 in `TextSnapshot` and rune-based `TextRange` for editing. Accept
+`string` for insertion. `TextByteRange` is a separate public range type for
+tokenizer and layout endpoints; a snapshot converts between it and `TextRange`.
+Byte-to-rune conversion rejects endpoints inside a multibyte rune. A styled
+span exposes its byte range while retaining its existing rune positions.
+
+The snapshot also supports `len`, indexed rune reads, `items`/`pairs` iteration,
+and an explicit `toRunes()` conversion. This lets callers use `seq[Rune]` when
+they want a decoded sequence without making it the stored form. In isolated
+release processes over 8 MiB of UTF-8 (`4,194,304` `é` runes), iterating the
+snapshot added **0 KiB** current RSS in three runs; `toRunes()` added **16,432
+KiB**. Both visited or produced the same rune count. These are current RSS
+measurements after setup, not allocation counts; they show the expected cost of
+retaining a decoded sequence. Grapheme-based caret movement is separate future
+work: one visible emoji can contain multiple runes.
+
+- [x] Expose a byte range type and snapshot conversions without replacing
+  rune-based editing ranges or public `SyntaxTokenSpan`.
+- [x] Expose allocation-free rune iteration and explicit sequence materialization.
+- [ ] Decide later whether a byte-native highlighter callback would simplify
+  external tokenizer adapters enough to justify a second callback surface.
+
 ## 1. Avoid snapshots when undo will not use them
 
 Evidence: [textstorage.nim](src/merenda/nimkit/text/textstorage.nim),
@@ -42,22 +87,19 @@ replace, setAttributes, stringValue=, registerSnapshotUndo, and copyStorageTextT
 [gaptextbuffers.nim](src/merenda/nimkit/text/gaptextbuffers.nim), copyGapTextBuffer;
 [textviews.nim](src/merenda/nimkit/text/textviews.nim), replaceRange and recordUndo.
 
-- [ ] Create storage undo snapshots only after checking the undo manager.
-  Mutation paths copy before registerSnapshotUndo checks it. Ordinary storage
-  now shares source bytes, but still copies runs/styles; gap storage copies
-  both byte arrays and discards the copied storage's snapshot cache.
-- [ ] Transfer the prepared undo snapshot into the undo closure instead of
-  copying it again in registerSnapshotUndo.
-- [ ] Apply the same rule to TextView's independent undo stack. replaceRange
-  captures storage and a complete beforeValue before edit approval, even when
-  recording is disabled; recordUndo checks allowsUndo later. Preserve delegate
-  ordering and actual value-change notification semantics using a small edit
-  comparison or a character revision where possible.
-- [ ] Avoid full-text equality strings in recordUndo and replaceAllText.
-  Grouped undo still creates intermediate copies for each replacement.
+- [x] Gate storage undo snapshots on undo registration. Ordinary storage shares
+  source bytes; gap storage copies its byte arrays only when undo needs them and
+  retains a valid shared snapshot cache in the copy.
+- [x] Transfer the prepared undo snapshot into the closure directly.
+- [x] Capture TextView undo state after delegate approval and only when enabled.
+  Compare the edited range for value-change notifications.
+- [x] Avoid full-text equality strings and intermediate grouped-edit copies in
+  the static path. Native facade byte access can still create an owned string;
+  section 12 tracks a borrowed byte-range API for that boundary.
 
-Verify allocations with undo disabled, enabled, grouped, and during marked-text
-composition. Cover ordinary and gap storage separately.
+NimKit tests include RSS diagnostics and behavior checks for undo disabled,
+enabled, grouped, and marked-text composition, with ordinary and gap storage.
+The isolated profile above measures the largest gap-storage edit costs.
 
 ## 2. Apply highlighting as one compact run-table update
 
@@ -66,19 +108,17 @@ applyCachedHighlighting and applySyntaxHighlightingForEdit;
 [textstorage.nim](src/merenda/nimkit/text/textstorage.nim), setAttributes,
 styleId, and normalizeRuns.
 
-- [ ] Add an internal bulk attribute-range update that interns styles once,
-  merges sorted ranges once, and normalizes once. SynEdit resets the affected
-  range and calls setAttributes for every intersecting token. beginEditing
-  batches notifications, but does not defer snapshot creation or normalization.
-- [ ] Compact an existing style table by remapping old IDs to new IDs; avoid
-  comparing full TextAttributes against every compacted style for every run.
-  Current normalization is O(runs × distinct styles), with fresh sequences.
-- [ ] Preserve complete/partial coverage, overlapping-range semantics, delegate
+- [x] Apply SynEdit's base and token styles in one ordered range update and one
+  normalization pass, rather than one storage edit per token.
+- [x] Compact an existing style table by remapping old IDs to new IDs, avoiding
+  a full attribute comparison for every run during normalization.
+- [x] Preserve complete/partial coverage, overlapping-range semantics, delegate
   hooks, and style-ID lifetime rules. styledSpans IDs currently refer to a
   mutable storage table only until its next edit.
-- [ ] Follow up with incremental tokenization. The current edit path computes
-  a full new token cache and a shifted old cache before finding the changed
-  highlight range. Restricting attribute updates alone does not bound that peak.
+- [x] Retokenize safe single-line built-in edits locally and compare the shifted
+  old cache without allocating a second shifted copy.
+- [ ] Extend incremental tokenization across multiline lexical state and custom
+  highlighters. Those paths still use a full new token cache.
 
 ## 3. Remove dense highlighting maps and per-byte token storage
 
@@ -88,18 +128,18 @@ byteRuneMap, SynEditHighlightBuffer, and tokenSpans;
 [markdownviews.nim](src/merenda/nimkit/text/markdownviews.nim),
 renderBlockquote and addHighlightedCode.
 
-- [ ] Replace whole-source byte-to-rune seq[int] maps with shared sparse lookup
-  or a monotonic cursor over sorted token endpoints. Each existing map costs
-  approximately eight bytes per source byte on a 64-bit build.
-- [ ] Emit token ranges directly from SynEdit's tokenizer instead of storing
-  a character and token class for every byte, then reconstructing ranges.
-  Its buffer omits CR bytes: preserve or explicitly correct that source mapping
-  when changing the representation.
-- [ ] Replace Markdown's per-rune highlighted-code byte-offset array with
-  endpoint conversion. Replace blockquote's per-rune source/destination map
-  with segments at inserted-prefix and presentation-range boundaries.
-- [ ] Keep public rune-based SyntaxTokenSpan APIs if needed. Validate emoji,
+- [x] Replace whole-source byte-to-rune `seq[int]` maps with monotonic endpoint
+  cursors; the removed map used roughly eight bytes per source byte.
+- [x] Emit SynEdit token ranges directly instead of storing a token class for
+  every byte. CR bytes remain in the source so CRLF positions stay aligned.
+- [x] Convert Markdown highlighted-code endpoints without a per-rune offset
+  array; map blockquotes with segments at inserted prefixes.
+- [x] Keep public rune-based SyntaxTokenSpan APIs if needed. Validate emoji,
   multibyte boundaries, CRLF, malformed UTF-8, and nested blockquotes.
+- [ ] Check whether `SynEditHighlightBuffer.source` still copies the input
+  string. The 8 MiB tokenizer sample retains about 8 MiB after conversion;
+  borrow the source through tokenizer parameters if this is the remaining copy,
+  and remeasure without introducing an unsafe pointer lifetime.
 
 ## 4. Preserve compact input across background layout
 

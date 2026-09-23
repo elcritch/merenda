@@ -57,6 +57,10 @@ type
   AttributedString* = TextStorage
   MutableAttributedString* = TextStorage
 
+func byteRange*(span: TextStyledSpan): TextByteRange =
+  ## UTF-8 source range borrowed by this styled span.
+  initTextByteRange(span.byteStart, span.byteEnd - span.byteStart)
+
 func initTextStorageEdit*(
     range: TextRange,
     replacementLength: int,
