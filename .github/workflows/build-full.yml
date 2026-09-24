@@ -34,6 +34,9 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
+    - name: Check shared test runner coverage
+      run: python3 .github/scripts/check-test-imports.py
+
     - name: Cache packages
       uses: actions/cache@v4
       with:
@@ -73,6 +76,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          clang \
           xvfb \
           xauth \
           libx11-xcb-dev \
@@ -116,7 +120,11 @@ jobs:
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
-        "$testExecutable"
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          xvfb-run -a "$testExecutable"
+        else
+          "$testExecutable"
+        fi
 
     - name: Compile Kosmo tests
       run: |
@@ -130,7 +138,11 @@ jobs:
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
-        "$testExecutable"
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          xvfb-run -a "$testExecutable"
+        else
+          "$testExecutable"
+        fi
 
     - name: Compile Tekton tests
       run: |
@@ -144,7 +156,11 @@ jobs:
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
-        "$testExecutable"
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          xvfb-run -a "$testExecutable"
+        else
+          "$testExecutable"
+        fi
 
     - name: Compile integration tests
       run: |
@@ -160,9 +176,29 @@ jobs:
         fi
         if [[ "${{ matrix.display }}" == "x11" ]]; then
           xvfb-run -a -s "-screen 0 1280x1024x24" "$testExecutable"
+        elif [[ "$RUNNER_OS" == "Linux" ]]; then
+          xvfb-run -a "$testExecutable"
         else
           "$testExecutable"
         fi
+
+    - name: Check ARC ownership with sanitizers
+      if: runner.os == 'Linux'
+      timeout-minutes: 10
+      env:
+        UBSAN_OPTIONS: halt_on_error=1
+      run: |
+        xvfb-run -a atlas-run tests nimkit -- --cc:clang --mm:arc \
+          -d:nimkitOwnershipTests -d:nimkitSanitizers
+
+    - name: Check ORC ownership with sanitizers
+      if: runner.os == 'Linux'
+      timeout-minutes: 10
+      env:
+        UBSAN_OPTIONS: halt_on_error=1
+      run: |
+        xvfb-run -a atlas-run tests nimkit -- --cc:clang --mm:orc \
+          -d:nimkitOwnershipTests -d:nimkitSanitizers
 
   examples:
     runs-on: ${{ matrix.os }}

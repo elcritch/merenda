@@ -1556,7 +1556,10 @@ when not defined(useNativeDynlib):
     inc host.xRenderCount
 
 proc dedicatedRendererSupported*(): bool =
-  when not defined(useNativeDynlib):
+  # FigRenderer can carry an ORC cycle-root registration from its creation
+  # thread. Moving it would leave that registration in the wrong thread's
+  # collector. Keep native renderer ownership on the UI thread under ORC.
+  when not defined(useNativeDynlib) and not compileOption("mm", "orc"):
     not figrender.runtimeForceOpenGlRequested() and
       siwinshim.backendSupportsDedicatedRenderThread(figrender.PreferredBackendKind)
   else:
@@ -1571,7 +1574,8 @@ proc attachThreadRenderer*(
 ): ThreadHostClient =
   ## Transfers FigDraw ownership to the render runtime. Native windows and all
   ## callbacks remain owned by the caller's platform thread.
-  if host.isNil or renderer.isNil or host.xRenderer.isNil or not renderer.isRunning():
+  if host.isNil or renderer.isNil or host.xRenderer.isNil or not renderer.isRunning() or
+      not dedicatedRendererSupported():
     return nil
 
   when defined(useNativeDynlib):

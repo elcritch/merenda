@@ -405,7 +405,8 @@ suite "Kosmo":
     for row in 0 ..< textMateGrammarsTable.rowCount:
       check textMateGrammarsTable.tableCellText(row, grammarColumn).len > 0
       check textMateGrammarsTable.tableCellText(row, scopeColumn).len > 0
-      check textMateGrammarsTable.tableCellText(row, originColumn) == "Built-in"
+      check textMateGrammarsTable.tableCellText(row, originColumn) ==
+        availableGrammars[row].origin.title()
       if textMateGrammarsTable.tableCellText(row, scopeColumn) == "source.hcl.terraform":
         check textMateGrammarsTable.tableCellText(row, grammarColumn) == "Terraform"
         foundTerraform = true
@@ -568,7 +569,7 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.openPath(root)
     check frontend.sidebarTabs.selectedIndex == 0
-    check not frontend.fileTree.hidden
+    check not frontend.fileTree.isHiddenOrHasHiddenAncestor()
     check frontend.searchPanel.hidden
     let findTabPoint = frontend.sidebarTabs.pointToWindow(
       initPoint(
@@ -594,7 +595,7 @@ suite "Kosmo":
       KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmCommand, kmShift})
     )
     check frontend.sidebarTabs.selectedIndex == 1
-    check frontend.fileTree.hidden
+    check frontend.fileTree.isHiddenOrHasHiddenAncestor()
     check not frontend.searchPanel.hidden
     check frontend.searchPanel.queryField.isEditing
     check frontend.window.firstResponder == frontend.window.fieldEditor()
@@ -603,7 +604,7 @@ suite "Kosmo":
       KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmCommand, kmShift})
     )
     check frontend.sidebarTabs.selectedIndex == 0
-    check not frontend.fileTree.hidden
+    check not frontend.fileTree.isHiddenOrHasHiddenAncestor()
     check frontend.searchPanel.hidden
     check frontend.window.firstResponder == frontend.fileTree
 

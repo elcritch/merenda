@@ -2,6 +2,7 @@ import
   std/[monotimes, options, os, osproc, strutils, tempfiles, times, unicode, unittest]
 
 import figdraw
+import figdraw/debugtools
 import sigils/threads
 
 import merenda/nimkit
@@ -28,9 +29,9 @@ proc renderedTextFrameStartingWith(
   let renders = buildRenders(view)
   if DefaultDrawLevel notin renders:
     return
-  for node in renders[DefaultDrawLevel].nodes:
-    if node.kind == nkText and node.renderedText().startsWith(prefix):
-      return node.screenBox
+  for hit in renders[DefaultDrawLevel].collectDebugFigs():
+    if hit.node.kind == nkText and hit.node.renderedText().startsWith(prefix):
+      return hit.bounds
 
 suite "Kosmo":
   test "file tree column follows its viewport and retruncates after resize":

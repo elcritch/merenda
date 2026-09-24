@@ -57,7 +57,7 @@ proc newRectangleRenders(): Renders =
 
 suite "NimKit threading":
   test "dedicated renderer support follows the active FigDraw build":
-    when defined(useNativeDynlib):
+    when defined(useNativeDynlib) or compileOption("mm", "orc"):
       check not nimkitBackend.dedicatedRendererSupported()
     else:
       check nimkitBackend.dedicatedRendererSupported() == (
@@ -208,8 +208,8 @@ suite "NimKit threading":
     check not app.isThreaded()
     check not app.isRunning()
 
-  test "application loop joins dedicated renderer after an exception":
-    if not nimkitBackend.dedicatedRendererSupported():
+  test "application loop releases native renderer after an exception":
+    if not nimkitBackend.dedicatedRendererSupported() and not compileOption("mm", "orc"):
       skip()
     else:
       let
@@ -218,7 +218,10 @@ suite "NimKit threading":
           "Threading Exception Test", frame = nimkitTypes.rect(80, 80, 120, 80)
         )
         root = newRaisingDrawView(nimkitTypes.rect(0, 0, 120, 80))
-      app.renderExecutionMode = nimkitBackend.remDedicatedThread
+      when compileOption("mm", "orc"):
+        app.renderExecutionMode = nimkitBackend.remAutomatic
+      else:
+        app.renderExecutionMode = nimkitBackend.remDedicatedThread
       window.setContentView(root)
       app.addWindow(window)
       window.orderFront()
@@ -226,7 +229,8 @@ suite "NimKit threading":
       var raised = false
       try:
         app.run()
-      except ValueError:
+      except ValueError as error:
+        check error.msg == "intentional drawing failure"
         raised = true
       except OSError:
         when defined(linux) or defined(bsd):

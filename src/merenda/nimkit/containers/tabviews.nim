@@ -11,6 +11,7 @@ import ../foundation/selectors
 import ../themes
 import ../foundation/types
 from ../view/viewgeometry import setFrameFromLayout
+from ../view/viewconstraints import applyConstraintsForSubtree
 import ../view/views
 
 export views
@@ -501,7 +502,12 @@ proc syncSelectedContent(tabView: TabView) =
       if content.superview() != View(tabView):
         tabView.addSubview(content, positioned = svpBelow, relativeTo = tabView.xTabBar)
       content.hidden = false
-      content.setFrameFromLayout(tabView.contentViewRect())
+      let contentFrame = tabView.contentViewRect()
+      if content.frame() != contentFrame:
+        content.setFrameFromLayout(contentFrame)
+        # Container geometry is assigned after the outer constraint solve. Solve
+        # the selected pane's constraints against its final size before layout.
+        discard content.applyConstraintsForSubtree()
     elif content.superview() == View(tabView):
       content.removeFromSuperview()
   tabView.needsDisplay = true

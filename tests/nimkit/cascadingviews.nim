@@ -1,6 +1,7 @@
 import std/[tables, unicode, unittest]
 
 import figdraw
+import figdraw/debugtools
 from pkg/chroma import rgba
 import sigils/core
 
@@ -44,11 +45,11 @@ proc pressKey(window: Window, key: Key, modifiers: set[KeyModifier] = {}): bool 
 func nearlyEqual(a, b: float32): bool =
   abs(a - b) <= 0.01'f32
 
-func screenBoxClose(node: Fig, rect: Rect): bool =
-  abs(node.screenBox.x.float32 - rect.origin.x) <= 0.01'f32 and
-    abs(node.screenBox.y.float32 - rect.origin.y) <= 0.01'f32 and
-    abs(node.screenBox.w.float32 - rect.size.width) <= 0.01'f32 and
-    abs(node.screenBox.h.float32 - rect.size.height) <= 0.01'f32
+func screenBoxClose(node: FigHit, rect: Rect): bool =
+  abs(node.bounds.x.float32 - rect.origin.x) <= 0.01'f32 and
+    abs(node.bounds.y.float32 - rect.origin.y) <= 0.01'f32 and
+    abs(node.bounds.w.float32 - rect.size.width) <= 0.01'f32 and
+    abs(node.bounds.h.float32 - rect.size.height) <= 0.01'f32
 
 proc renderedText(node: Fig): string =
   for rune in node.textLayout.runes:
@@ -56,30 +57,34 @@ proc renderedText(node: Fig): string =
 
 proc clippedRectX(list: RenderList, rect: Rect): float32 =
   result = -1.0'f32
-  for node in list.nodes:
+  for hit in list.collectDebugFigs():
+    let node = hit.node
     if node.kind == nkRectangle and NfClipContent in node.flags and
-        node.screenBoxClose(rect):
-      return node.screenBox.x.float32
+        hit.screenBoxClose(rect):
+      return hit.bounds.x.float32
 
 proc textNodeX(list: RenderList, text: string): float32 =
   result = -1.0'f32
-  for node in list.nodes:
+  for hit in list.collectDebugFigs():
+    let node = hit.node
     if node.kind == nkText and node.renderedText() == text:
-      return node.screenBox.x.float32
+      return hit.bounds.x.float32
 
 proc hasFilledRect(list: RenderList, rect: Rect, color: Color): bool =
-  for node in list.nodes:
+  for hit in list.collectDebugFigs():
+    let node = hit.node
     if node.kind == nkRectangle and node.fill.kind == flColor and
-        node.fill.color == color.rgba and node.screenBoxClose(rect):
+        node.fill.color == color.rgba and hit.screenBoxClose(rect):
       return true
   false
 
 proc rightTriangleBarCount(list: RenderList, rowRect: Rect): int =
-  for node in list.nodes:
+  for hit in list.collectDebugFigs():
+    let node = hit.node
     if node.kind != nkRectangle:
       continue
     let
-      box = node.screenBox
+      box = hit.bounds
       x = box.x.float32
       y = box.y.float32
       width = box.w.float32
@@ -693,7 +698,8 @@ suite "NimKit CascadingView":
     check list.hasFilledRect(selectedRow, selectedFill)
 
     var selectedTextFound = false
-    for node in list.nodes:
+    for hit in list.collectDebugFigs():
+      let node = hit.node
       if node.kind == nkText and node.renderedText() == "Parent" and
           node.textLayout.spanColors.len > 0 and
           node.textLayout.spanColors[0].kind == flColor and

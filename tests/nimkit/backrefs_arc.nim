@@ -5,7 +5,8 @@ import merenda/nimkit
 import merenda/nimkit/responder/responders as nimkitResponders
 
 static:
-  doAssert compileOption("mm", "arc")
+  doAssert compileOption("mm", "arc") or compileOption("mm", "orc") or
+    compileOption("mm", "atomicArc")
 
 suite "NimKit ARC back references":
   test "view back links do not retain a destroyed superview":

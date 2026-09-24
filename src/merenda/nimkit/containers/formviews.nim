@@ -291,7 +291,9 @@ proc removeRowContaining(formView: FormView, view: View) =
     formView.removeRow(index)
 
 protocol FormViewLifecycleSlots of ViewLifecycleProtocol:
-  proc willRemoveSubview(formView: FormView, child: View) {.slot.} =
+  proc removeOwnedSubview(
+      formView: FormView, child: View
+  ) {.slotFor: willRemoveSubview.} =
     formView.removeRowContaining(child)
 
 protocol DefaultFormViewLayout of ViewLayoutProtocol:

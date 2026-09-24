@@ -17,32 +17,26 @@ proc demoSourceRange(needle: string): Slice[int] =
   let range = demoTextRange(needle)
   int(range.location) .. int(range.location + range.length - 1)
 
-proc renderedText(node: Fig): string =
-  for rune in node.textLayout.sourceRunes:
-    result.add(rune)
-
 proc hasFill(
-    node: Fig, range: Slice[int], color: ColorRGBA
+    nodes: openArray[Fig], range: Slice[int], color: ColorRGBA
 ): tuple[matched, total: int] =
+  # TextView emits one retained fragment per visual line. Glyph source ranges
+  # remain document-relative even though sourceRunes is omitted from each slice.
   for sourceIndex in range:
     inc result.total
-    for glyphIndex, glyph in node.textLayout.arrangedGlyphs:
-      if sourceIndex >= glyph.source.runeStart and sourceIndex < glyph.source.runeEnd:
-        var matches = false
-        for spanIndex, span in node.textLayout.spans:
-          if glyphIndex in span:
-            let fill = node.textLayout.spanColors[spanIndex]
-            matches = fill.kind == flColor and fill.color == color
-            break
-        if matches:
-          inc result.matched
-        break
-
-proc textNodeForDemo(nodes: openArray[Fig]): tuple[found: bool, node: Fig] =
-  for node in nodes:
-    if node.kind == nkText and node.renderedText() == IntroText:
-      return (true, node)
-  (false, Fig(kind: nkText))
+    var matched = false
+    for node in nodes:
+      if node.kind != nkText:
+        continue
+      for glyphIndex, glyph in node.textLayout.arrangedGlyphs:
+        if sourceIndex >= glyph.source.runeStart and sourceIndex < glyph.source.runeEnd:
+          for spanIndex, span in node.textLayout.spans:
+            if glyphIndex in span:
+              let fill = node.textLayout.spanColors[spanIndex]
+              if fill.kind == flColor and fill.color == color:
+                matched = true
+    if matched:
+      inc result.matched
 
 proc layoutDemo(demo: TextEditorDemo) =
   discard demo.window.buildRenders()
@@ -104,34 +98,18 @@ suite "nimkit text editors":
     let
       demo = newTextEditorDemo(newApplication())
       nodes = demo.window.buildRenders()[DefaultDrawLevel].nodes
-      found = nodes.textNodeForDemo()
 
-    check found.found
-    if found.found:
-      let node = found.node
-      check node.textLayout.sourceRuneCount == IntroText.runeLen
-      check node.textLayout.glyphCount > 0
-      check node.textLayout.spanColors.len == node.textLayout.spans.len
-
-      let title = node.hasFill(demoSourceRange(TitleText), TitleColor)
-      check title.total == TitleText.runeLen
-      check title.matched == title.total
-
-      let link = node.hasFill(demoSourceRange(LinkText), LinkColor)
-      check link.total == LinkText.runeLen
-      check link.matched == link.total
-
-      let lead = node.hasFill(demoSourceRange(LeadText), LeadColor)
-      check lead.total == LeadText.runeLen
-      check lead.matched == lead.total
-
-      let emphasis = node.hasFill(demoSourceRange(EmphasisText), EmphasisColor)
-      check emphasis.total == EmphasisText.runeLen
-      check emphasis.matched == emphasis.total
-
-      let attachment = node.hasFill(demoSourceRange(AttachmentText), AttachmentColor)
-      check attachment.total == AttachmentText.runeLen
-      check attachment.matched == attachment.total
+    for (text, fill) in [
+      (TitleText, TitleColor),
+      (LinkText, LinkColor),
+      (LeadText, LeadColor),
+      (EmphasisText, EmphasisColor),
+      (AttachmentText, AttachmentColor),
+    ]:
+      let matched = nodes.hasFill(demoSourceRange(text), fill)
+      checkpoint text
+      check matched.total == text.runeLen
+      check matched.matched == matched.total
 
   test "text editor demo editing controls dispatch from user mouse events":
     let demo = newTextEditorDemo(newApplication())

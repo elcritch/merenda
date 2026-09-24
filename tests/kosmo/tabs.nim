@@ -114,6 +114,10 @@ suite "Kosmo":
     createDir(nested)
     writeFile(filePath, "status")
     require execShellCmd("git -C " & quoteShell(root) & " init -qb status-path") == 0
+    require execShellCmd(
+      "git -C " & quoteShell(root) &
+        " -c user.name=Test -c user.email=test@example.test commit --allow-empty -qm initial"
+    ) == 0
     defer:
       removeFile(filePath)
       removeDir(nested)
@@ -128,6 +132,7 @@ suite "Kosmo":
     let deadline = getMonoTime() + initDuration(seconds = 60)
     while "Git: status-path" notin frontend.statusLabel.text and getMonoTime() < deadline:
       discard getCurrentSigilThread().pollAll(NonBlocking)
+      discard frontend.editorView.editor.pollGitStatus()
       frontend.editorView.refresh()
       sleep(10)
 

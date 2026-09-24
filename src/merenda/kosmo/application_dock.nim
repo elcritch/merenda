@@ -1024,6 +1024,11 @@ proc prepareInteractiveTerminal(options: var nimkit.TerminexSpawnOptions) =
 proc newTerminalDocument(
     controller: KosmoDockController, options: nimkit.TerminexSpawnOptions
 ): KosmoPaneDocument =
+  if options.workingDirectory.len > 0 and not dirExists(options.workingDirectory):
+    raise newException(
+      nimkit.TerminexSessionError,
+      "Working directory does not exist: " & options.workingDirectory,
+    )
   let terminalView = newKosmoTerminalView()
   var resolvedOptions = options
   resolvedOptions.prepareInteractiveTerminal()
@@ -1095,6 +1100,35 @@ proc defaultTerminalWorkingDirectory(
   if result.len == 0:
     result = getCurrentDir()
 
+proc presentTerminalError(
+    controller: KosmoDockController, group: KosmoEditorGroup, message: string
+) =
+  if not group.editorView.statusLabel.isNil:
+    group.editorView.statusLabel.text = message
+  if controller.frontend.isNil:
+    return
+  let
+    app = controller.frontend[].application
+    alert = nimkit.newAlert(
+      "Could not start terminal",
+      message & "\n\nCheck the shell and working directory, then try again.",
+      style = nimkit.asWarning,
+      buttons = ["OK"],
+    )
+  alert.window.setInheritedAppearance(group.window.effectiveAppearance())
+  discard alert.contentView()
+  discard app.beginModalSession(alert.window)
+  var weakWindow: nimkit.BackRef[nimkit.Window]
+  weakWindow[] = alert.window
+  # The application owns the modal window. Button callbacks must not retain the
+  # Alert/content tree or the application through a reference cycle.
+  for view in alert.buttonViews:
+    let button = nimkit.Button(view)
+    button.target = nimkit.newActionTarget(button.action) do(sender: DynamicAgent):
+      discard sender
+      if not weakWindow.isNil:
+        weakWindow[].close()
+
 proc openTerminal(
     controller: KosmoDockController,
     group: KosmoEditorGroup,
@@ -1111,8 +1145,7 @@ proc openTerminal(
   try:
     document = controller.newTerminalDocument(resolvedOptions)
   except nimkit.TerminexSessionError as error:
-    if not group.editorView.statusLabel.isNil:
-      group.editorView.statusLabel.text = error.msg
+    controller.presentTerminalError(group, error.msg)
     return
   if controller.openPaneDocument(group, document, insertAfterSelected):
     return true
