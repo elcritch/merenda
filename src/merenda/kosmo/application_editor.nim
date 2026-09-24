@@ -1278,7 +1278,7 @@ proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool
 
 protocol KosmoEditorInput of nimkit.TextInputProtocol:
   method insertText(view: KosmoEditorView, text: string) =
-    if text.len > 0:
+    if nimkit.isInsertableText(text):
       view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
       discard view.editor.handleTextInput(text)
       view.refresh()

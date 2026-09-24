@@ -310,9 +310,14 @@ suite "Kosmo":
     check frontend.window.dispatchTextInput("set number")
     check frontend.editorView.editor.commandLine().text == ":set number"
     discard frontend.window.dispatchKeyDown(
-      KeyEvent(text: "\b", key: keyBackspace, keyCode: keyBackspace.ord)
+      KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
     )
     check frontend.editorView.editor.commandLine().text == ":set numbe"
+    # X11 also reports Backspace as committed text after the physical key.
+    check frontend.window.dispatchTextInput("\b")
+    check frontend.editorView.editor.commandLine().text == ":set numbe"
+    check frontend.window.dispatchTextInput("r")
+    check frontend.editorView.editor.commandLine().text == ":set number"
 
     discard
       frontend.window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
@@ -321,8 +326,9 @@ suite "Kosmo":
     check frontend.window.dispatchTextInput("i")
     check frontend.window.dispatchTextInput("abc")
     discard frontend.window.dispatchKeyDown(
-      KeyEvent(text: "\b", key: keyBackspace, keyCode: keyBackspace.ord)
+      KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
     )
+    check frontend.window.dispatchTextInput("\b")
 
     var activeTab: KosmoTab
     for tab in frontend.editorView.editor.tabs():
@@ -383,6 +389,9 @@ suite "Kosmo":
     )
     let firstCompletion = frontend.editorView.editor.commandLine().text
     check firstCompletion != ":v"
+    # X11 can report Tab as committed text after the physical key.
+    check frontend.window.dispatchTextInput("\t")
+    check frontend.editorView.editor.commandLine().text == firstCompletion
     let popupMenu = frontend.editorView.editor.popupMenu()
     check popupMenu.isSome
     if popupMenu.isSome:
@@ -403,9 +412,13 @@ suite "Kosmo":
     )
     let secondCompletion = frontend.editorView.editor.commandLine().text
     check secondCompletion != firstCompletion
+    check frontend.window.dispatchTextInput("\t")
+    check frontend.editorView.editor.commandLine().text == secondCompletion
     discard frontend.window.dispatchKeyDown(
       KeyEvent(text: "\t", key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
     )
+    check frontend.editorView.editor.commandLine().text == firstCompletion
+    check frontend.window.dispatchTextInput("\t")
     check frontend.editorView.editor.commandLine().text == firstCompletion
     let activePopup = frontend.editorView.editor.popupMenu()
     check activePopup.isSome
