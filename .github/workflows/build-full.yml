@@ -34,9 +34,6 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
-    - name: Check shared test runner coverage
-      run: python3 .github/scripts/check-test-imports.py
-
     - name: Cache packages
       uses: actions/cache@v4
       with:
@@ -57,6 +54,9 @@ jobs:
         nimPath="$(command -v nim)"
         echo "$nimPath"
         nim -v
+
+    - name: Check shared test runner coverage
+      run: nim e --skipParentCfg:on --skipProjCfg:on .github/scripts/check_test_imports.nims
 
     - name: Setup software OpenGL (Mesa)
       if: runner.os == 'Windows'

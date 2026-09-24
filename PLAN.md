@@ -241,7 +241,7 @@ a new terminal silently failed.
   (X11 for native integration), and compiles examples on macOS, Linux, and
   Windows.
 - Shared runners now import all component test modules. CI's
-  `.github/scripts/check-test-imports.py` rejects missing imports; static-only
+  `.github/scripts/check_test_imports.nims` rejects missing imports; static-only
   renderer tests remain gated for `useNativeDynlib`.
 - Added ARC/ORC sanitizer configurations for the focused ownership subset.
 - Local validation on **2026-09-24**, macOS/arm64 with Nim **2.2.12**:
