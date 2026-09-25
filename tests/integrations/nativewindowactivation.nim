@@ -1,4 +1,4 @@
-## Native context menus must preserve the stacking order of document windows.
+## Native dialogs and context menus must preserve document window stacking order.
 when defined(macosx):
   import std/[monotimes, os, tempfiles, times, unittest]
 
@@ -34,7 +34,71 @@ when defined(macosx):
         return true
       sleep(1)
 
+  proc buttonWithTitle(view: View, title: string): Button =
+    if view of Button and Button(view).title == title:
+      return Button(view)
+    for child in view.subviews():
+      result = child.buttonWithTitle(title)
+      if not result.isNil:
+        return
+
   suite "NimKit native window activation":
+    test "modal dialogs preserve their owner's document window order":
+      let app = newApplication("Native Modal Activation Test")
+      var windows: seq[nimkitWindows.Window]
+      defer:
+        for window in windows:
+          window.close()
+      for index in 0 ..< 3:
+        let window = newWindow("Document " & $index, frame = rect(80, 80, 360, 240))
+        windows.add window
+        window.setContentView(newLabel("Document " & $index))
+        app.addWindow(window)
+        window.makeKeyAndOrderFront()
+        window.ensureNativeWindow()
+        require window.nativeReady
+
+      for ownerIndex in [0, 2, 1]:
+        let owner = windows[ownerIndex]
+        owner.makeKeyAndOrderFront()
+        owner.cocoaWindow().makeKeyAndOrderFront(cast[ID](nil))
+        require app.waitForNativeFront(windows, ownerIndex)
+        let before = nativeDocumentOrder(windows)
+        for response in ["Cancel", "Discard"]:
+          let alert = newAlert("Unsaved Changes", buttons = ["Discard", "Cancel"])
+          defer:
+            alert.window.close()
+          let session = app.beginModalSheet(owner, alert)
+          require not session.isNil
+          let confirmationBelongsToOwner = session.parentWindow == owner
+          check confirmationBelongsToOwner
+          check session.mode == msmWindowModal
+          session.window.ensureNativeWindow()
+          require session.window.nativeReady
+          check nativeDocumentOrder(windows) == before
+          let confirmationIsKey = app.keyWindow() == session.window
+          check confirmationIsKey
+          let button = session.window.contentView().buttonWithTitle(response)
+          require not button.isNil
+          session.window.contentView().layoutSubtreeIfNeeded()
+          let bounds = button.bounds()
+          check session.window.clickAt(
+            button.pointToWindow(
+              initPoint(
+                bounds.origin.x + bounds.size.width / 2,
+                bounds.origin.y + bounds.size.height / 2,
+              )
+            )
+          )
+          check session.state == mssStopped
+          app.endModalSession(session)
+          alert.window.close()
+          check app.modalSession().isNil
+          let ownerIsKey = app.keyWindow() == owner
+          check ownerIsKey
+          check nativeDocumentOrder(windows) == before
+          check not owner.isClosed
+
     test "file tree context menus preserve document window stacking order":
       let
         root = createTempDir("kosmo-native-context-", "")

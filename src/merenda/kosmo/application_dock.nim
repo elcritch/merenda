@@ -315,6 +315,7 @@ proc finishTabClose(controller: KosmoDockController, view: KosmoEditorView) =
     view.adoptActiveBuffer()
   view.lastTabs.setLen(0)
   view.refresh()
+  discard group.window.makeFirstResponder(nimkit.Responder(group.pane.contentView))
 
 proc closeCurrentPaneTab(controller: KosmoDockController, group: KosmoEditorGroup) =
   if controller.isNil or group.isNil:

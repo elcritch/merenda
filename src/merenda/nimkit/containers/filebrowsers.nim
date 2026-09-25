@@ -10,6 +10,7 @@ import ../foundation/selectors
 import ../foundation/types
 import ../text/textfields
 import ../view/views
+from ../view/viewgeometry import setFrameFromLayout
 import ./stackviews
 import ./tableviews
 
@@ -66,6 +67,9 @@ type
     xLayout: StackView
     xToolbar: StackView
     xLocationLabel: Label
+    xLocationField: TextField
+    xStatusLabel: Label
+    xPlaces: StackView
     xTableView: TableView
     xOperationBindings: seq[FileBrowserOperationBinding]
 
@@ -180,6 +184,10 @@ proc `entryLimit=`*(model: var FileSystemBrowserModel, value: Positive) =
   model.invalidate()
 
 protocol FileBrowserEvents:
+  proc fileBrowserDirectoryDidChange*(
+    browser: FileBrowser, sender: DynamicAgent
+  ) {.signal.}
+
   proc fileBrowserSelectionDidChange*(
     browser: FileBrowser, sender: DynamicAgent
   ) {.signal.}
@@ -252,12 +260,13 @@ proc updateOperationButtons(browser: FileBrowser) =
         binding.operation.operationAcceptsSelection(selection)
 
 proc syncLocation(browser: FileBrowser) =
-  browser.xLocationLabel.text = browser.xDirectoryPath
+  browser.xLocationField.text = browser.xDirectoryPath
+  browser.xLocationField.toolTip = browser.xDirectoryPath
+  let count = browser.entries().len
+  browser.xStatusLabel.text = $count & (if count == 1: " item" else: " items")
   if browser.isDirectoryListingTruncated():
-    browser.xLocationLabel.text =
-      browser.xLocationLabel.text & " (showing up to " & $browser.entryLimit() &
-      " entries)"
-  browser.xLocationLabel.toolTip = browser.xDirectoryPath
+    browser.xStatusLabel.text =
+      "Folder listing limited: showing up to " & $browser.entryLimit() & " entries"
   browser.updateOperationButtons()
 
 proc setDirectoryPath(browser: FileBrowser, path: string, recordHistory: bool): bool =
@@ -275,6 +284,7 @@ proc setDirectoryPath(browser: FileBrowser, path: string, recordHistory: bool): 
   browser.xTableView.selectedIndexes = @[]
   browser.xTableView.reloadData()
   browser.syncLocation()
+  emit browser.fileBrowserDirectoryDidChange(DynamicAgent(browser))
   true
 
 proc directoryPath*(browser: FileBrowser): string =
@@ -306,6 +316,18 @@ proc navigateUp*(browser: FileBrowser): bool {.discardable.} =
 
 proc navigateHome*(browser: FileBrowser): bool {.discardable.} =
   browser.setDirectoryPath(getHomeDir(), recordHistory = true)
+
+proc navigateToLocation*(browser: FileBrowser): bool {.discardable.} =
+  ## Open the location field's path, resolving relative paths from this folder.
+  let entered = browser.xLocationField.text.strip()
+  if entered.len > 0:
+    let expanded = expandTilde(entered)
+    let path = absolutePath(expanded, browser.xDirectoryPath)
+    result = browser.setDirectoryPath(path, recordHistory = true)
+    if result:
+      browser.syncLocation()
+  if not result:
+    browser.xStatusLabel.text = "Folder not found: " & entered
 
 proc selectPaths*(browser: FileBrowser, paths: openArray[string])
 
@@ -456,6 +478,16 @@ proc toolbar*(browser: FileBrowser): StackView =
 proc locationLabel*(browser: FileBrowser): Label =
   browser.xLocationLabel
 
+proc locationField*(browser: FileBrowser): TextField =
+  ## Editable folder path; press Return to navigate.
+  browser.xLocationField
+
+proc statusLabel*(browser: FileBrowser): Label =
+  browser.xStatusLabel
+
+proc placesView*(browser: FileBrowser): StackView =
+  browser.xPlaces
+
 proc `entryLimit=`*(browser: FileBrowser, value: Positive) =
   browser.xFileSystem.entryLimit = value
   browser.xTableView.reloadData()
@@ -524,6 +556,27 @@ proc installDefaultOperations(browser: FileBrowser) =
       browser.refresh(),
   )
 
+proc addPlace(browser: FileBrowser, title, path: string) =
+  if not path.isBrowsableDirectory():
+    return
+  let
+    button = newButton(title)
+    action = actionSelector("file-browser.place." & title)
+    browserRef = browser.unsafeWeakRef()
+  button.toolTip = path
+  button.action = action
+  button.target = newActionTarget(action) do(sender: DynamicAgent):
+    if not browserRef.isNil:
+      browserRef[].directoryPath = path
+  browser.xPlaces.addArrangedSubview(button)
+
+protocol FileBrowserLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(browser: FileBrowser): IntrinsicSize =
+    browser.xLayout.intrinsicContentSize()
+
+  method layoutSubviews(browser: FileBrowser) =
+    browser.xLayout.setFrameFromLayout(browser.bounds())
+
 proc initFileBrowserFields*(
     browser: FileBrowser,
     directoryPath = "",
@@ -540,15 +593,42 @@ proc initFileBrowserFields*(
   browser.xToolbar.distribution = svdNatural
   browser.xToolbar.setHuggingPriority(LayoutPriorityRequired, laVertical)
   browser.xToolbar.setCompressionPriority(LayoutPriorityRequired, laVertical)
-  browser.xLocationLabel = newStatusLabel()
-  browser.xLocationLabel.setHuggingPriority(LayoutPriorityRequired, laVertical)
-  browser.xLocationLabel.setCompressionPriority(LayoutPriorityRequired, laVertical)
+  browser.xLocationLabel = newFormLabel("Location:")
+  browser.xLocationField = newTextField()
+  browser.xStatusLabel = newStatusLabel()
+  browser.xStatusLabel.setHuggingPriority(LayoutPriorityRequired, laVertical)
+  browser.xStatusLabel.setCompressionPriority(LayoutPriorityRequired, laVertical)
+  let
+    browserRef = browser.unsafeWeakRef()
+    locationAction = actionSelector("file-browser.location")
+    locationRow = newStackView(laHorizontal)
+  browser.xLocationField.action = locationAction
+  browser.xLocationField.target = newActionTarget(locationAction) do(
+    sender: DynamicAgent
+  ):
+    if not browserRef.isNil:
+      discard browserRef[].navigateToLocation()
+  locationRow.addArrangedSubview(browser.xLocationLabel)
+  locationRow.addArrangedSubview(browser.xLocationField, svspFillAvailableWidth)
+  browser.xPlaces = newStackView(laVertical)
+  browser.xPlaces.distribution = svdNatural
+  browser.xPlaces.addArrangedSubview(newHeadingLabel("Places"))
+  for place in [
+    ("Home", getHomeDir()),
+    ("Documents", getHomeDir() / "Documents"),
+    ("Downloads", getHomeDir() / "Downloads"),
+    ("File System", absolutePath($DirSep)),
+  ]:
+    browser.addPlace(place[0], place[1])
   let tableView = FileBrowserTableView()
   tableView.initTableViewFields()
   discard DynamicAgent(tableView).pushMethods(FileBrowserTableInput.init())
   browser.xTableView = tableView
-  browser.xTableView.addColumn(newTableColumn("name", "Name", width = 300.0'f32))
-  browser.xTableView.addColumn(newTableColumn("kind", "Kind", width = 120.0'f32))
+  browser.xTableView.addColumn(
+    newTableColumn("name", "Name", width = 300.0'f32, sizingPolicy = tcspFlexible)
+  )
+  browser.xTableView.addColumn(newTableColumn("kind", "Type", width = 120.0'f32))
+  browser.xTableView.columnSizing = tvcsFill
   discard browser.withProtocol(FileBrowserTableDataSource)
   discard browser.withProtocol(FileBrowserTableDelegate)
   browser.xTableView.dataSource = browser
@@ -560,10 +640,14 @@ proc initFileBrowserFields*(
     selectionDidChange, browser, fileBrowserTableSelectionDidChange
   )
   browser.xLayout.addArrangedSubview(View(browser.xToolbar))
-  browser.xLayout.addArrangedSubview(View(browser.xLocationLabel))
-  browser.xLayout.addArrangedSubview(View(browser.xTableView))
+  browser.xLayout.addArrangedSubview(locationRow)
+  let body = newStackView(laHorizontal)
+  body.addArrangedSubview(browser.xPlaces)
+  body.addArrangedSubview(browser.xTableView, svspFillAvailableSpace)
+  browser.xLayout.addArrangedSubview(body, svspFillAvailableSpace)
+  browser.xLayout.addArrangedSubview(browser.xStatusLabel)
   browser.addSubview(browser.xLayout)
-  discard browser.xLayout.pinEdges(toGuide = browser.contentLayoutGuide())
+  discard browser.withProtocol(FileBrowserLayout)
   browser.installDefaultOperations()
   let initialDirectory =
     if directoryPath.isBrowsableDirectory():

@@ -1786,7 +1786,13 @@ proc createHostWindow*(
   result.installNativeClipboardBridge()
   result.installEventHandlers()
 
-  result.xNativeWindow.firstStep()
+  when defined(macosx):
+    # Cocoa's visible first step raises existing windows in creation order.
+    # Realize only this window, just as we do for context-menu popups.
+    result.xNativeWindow.firstStep(makeVisible = false)
+    result.xNativeWindow.visible = true
+  else:
+    result.xNativeWindow.firstStep()
   result.xNativeWindow.refreshUiScale(result.xAutoScale)
   result.xReady = true
 

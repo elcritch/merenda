@@ -108,9 +108,8 @@ runtimes also waits for the old host to be released.
 
 The acyclic render-data annotations and Siwin borrow are in
 [FigDraw PR #96](https://github.com/elcritch/figdraw/pull/96), along with
-`finishPendingFrames`. Merenda tracks its `fix/acyclic-render-ownership` branch
-until these changes are released as FigDraw 0.43.0. FigDraw is compiled directly
-into the application; Merenda's
+`finishPendingFrames`. These changes are included in FigDraw 0.43.0, which
+Merenda now requires. FigDraw is compiled directly into the application; Merenda's
 experimental native dynlib mode has been removed.
 
 This ordering is validated on macOS. Siwin's Windows/X11 OS-close notification

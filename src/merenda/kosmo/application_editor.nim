@@ -1082,7 +1082,7 @@ proc presentUnsavedChangesConfirmation(
       if shouldClose and not onDiscard.isNil:
         onDiscard()
   )
-  session = app.beginModalSession(alert.window)
+  session = app.beginModalSheet(window, alert.window)
   true
 
 proc closeWindow(
@@ -1114,6 +1114,9 @@ proc closeTabWithConfirmation(
     proc() =
       let outcome = view.closeTab(id, discardChanges = true)
       if outcome.closed:
+        # The original close was deferred by the confirmation dialog, so the
+        # tab strip has not performed its normal removal and selection step.
+        discard view.documentTabs.removeDocumentTabWithIdentifier(id.tabIdentifier)
         controller.finishTabClose(view)
     ,
   )

@@ -1,5 +1,11 @@
 # Changes
 
+## Unreleased
+
+- Use FigDraw 0.43.0 for render ownership and native window teardown.
+- Expand Open and Save dialogs with a resizable file browser and fix closing
+  edited Kosmo tabs after Discard.
+
 ## 0.22.0
 
 - Keep Kosmo window shortcuts available while a terminal tab has focus.
