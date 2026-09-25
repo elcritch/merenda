@@ -15,8 +15,8 @@ proc rememberAccessibilityNotification(
   spy.notifications.add notification
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add $rune
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add $node.textLayout.displayRune(glyphIndex)
 
 proc clickView(window: Window, view: View): bool =
   let bounds = view.bounds()

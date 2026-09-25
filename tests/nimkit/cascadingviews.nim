@@ -52,8 +52,8 @@ func screenBoxClose(node: FigHit, rect: Rect): bool =
     abs(node.bounds.h.float32 - rect.size.height) <= 0.01'f32
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add(rune)
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc clippedRectX(list: RenderList, rect: Rect): float32 =
   result = -1.0'f32
@@ -557,14 +557,13 @@ suite "NimKit CascadingView":
     view.columnWidth = 170.0
     view.minColumnWidth = 120.0
     view.fitsColumnsToWidth = true
-    var items =
-      @[
-        cascadeItem("root", "A long root category"),
-        cascadeItem("child", "A long font family", parentIdentifier = "root"),
-        cascadeItem(
-          "grandchild", "A long font face", parentIdentifier = "child", leaf = true
-        ),
-      ]
+    var items = @[
+      cascadeItem("root", "A long root category"),
+      cascadeItem("child", "A long font family", parentIdentifier = "root"),
+      cascadeItem(
+        "grandchild", "A long font face", parentIdentifier = "child", leaf = true
+      ),
+    ]
     for index in 0 ..< 20:
       items.add cascadeItem(
         "family-" & $index,

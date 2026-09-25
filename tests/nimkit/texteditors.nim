@@ -28,7 +28,8 @@ proc hasFill(
     for node in nodes:
       if node.kind != nkText:
         continue
-      for glyphIndex, glyph in node.textLayout.arrangedGlyphs:
+      for glyphIndex in 0 ..< node.textLayout.glyphCount():
+        let glyph = node.textLayout.arrangedGlyph(glyphIndex)
         if sourceIndex >= glyph.source.runeStart and sourceIndex < glyph.source.runeEnd:
           for spanIndex, span in node.textLayout.spans:
             if glyphIndex in span:

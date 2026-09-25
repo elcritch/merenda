@@ -5,8 +5,8 @@ import figdraw
 import merenda/nimkit
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc layerContainsText(renders: Renders, level: ZLevel, text: string): bool =
   if level notin renders.layers:

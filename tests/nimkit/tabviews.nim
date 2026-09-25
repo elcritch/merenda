@@ -40,8 +40,8 @@ proc newTabDelegateSpy(): TabDelegateSpy =
   discard result.withProtocol(TabDelegateSpyProtocol)
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add(rune)
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 func screenBoxClose(node: Fig, rect: nimkitTypes.Rect): bool =
   abs(node.screenBox.x - rect.origin.x) <= 0.01'f32 and

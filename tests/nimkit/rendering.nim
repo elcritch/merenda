@@ -143,8 +143,8 @@ proc newExtraChrome(): Chrome =
   Chrome(chrome)
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add(rune)
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc renderedRect(node: Fig): nimkitTypes.Rect =
   nimkitTypes.rect(
@@ -332,11 +332,10 @@ suite "nimkit rendering":
       buttonBorder = color(0.11, 0.12, 0.13, 1.0)
       fieldFill = color(0.91, 0.92, 0.93, 1.0)
       fieldBorder = color(0.21, 0.22, 0.23, 1.0)
-      buttonShadows =
-        @[
-          dropShadow(color(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
-          insetShadow(color(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
-        ]
+      buttonShadows = @[
+        dropShadow(color(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
+        insetShadow(color(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
+      ]
 
     var builder = initThemeBuilder(initTheme())
     builder[srButton, StyleFill] = buttonFill

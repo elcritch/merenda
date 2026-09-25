@@ -64,8 +64,8 @@ proc newCustomEditorTextFieldCell(editor: FieldEditor): CustomEditorTextFieldCel
   discard result.withProtocol(CustomEditorTextFieldCellProtocol)
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add(rune)
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc renderedRect(node: Fig): nimkitTypes.Rect =
   nimkitTypes.rect(
