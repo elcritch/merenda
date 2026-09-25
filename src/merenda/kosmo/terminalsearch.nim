@@ -1,6 +1,6 @@
 ## Search UI and scrollback matching for Kosmo terminal tabs.
 
-import std/unicode
+import std/[strutils, unicode]
 
 from figdraw import initUtf8Runes, len, pairs
 
@@ -160,6 +160,14 @@ protocol KosmoTerminalKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
       if event.modifiers == nimkit.shortcutModifiers() + {nimkit.kmShift}:
         view.findNext()
         return true
+    let owner = view.window()
+    if owner of nimkit.Window:
+      let binding = nimkit.Window(owner).keyBindings().match([event])
+      # Let the window route application commands before terminal input encoding.
+      if binding.kind == nimkit.kbmCommand and binding.selector.name.startsWith(
+        "kosmo."
+      ):
+        return false
     nimkit.performTerminalKeyEquivalent(nimkit.TerminalView(view), event)
 
 protocol KosmoTerminalViewLayout of nimkit.ViewLayoutProtocol:

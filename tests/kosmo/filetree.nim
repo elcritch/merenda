@@ -2,6 +2,7 @@ import
   std/[monotimes, options, os, osproc, strutils, tempfiles, times, unicode, unittest]
 
 import figdraw
+import figdraw/debugtools
 import sigils/threads
 
 import merenda/nimkit
@@ -9,8 +10,8 @@ import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc renderedTextStartingWith(view: View, prefix: string): string =
   let renders = buildRenders(view)
@@ -28,9 +29,9 @@ proc renderedTextFrameStartingWith(
   let renders = buildRenders(view)
   if DefaultDrawLevel notin renders:
     return
-  for node in renders[DefaultDrawLevel].nodes:
-    if node.kind == nkText and node.renderedText().startsWith(prefix):
-      return node.screenBox
+  for hit in renders[DefaultDrawLevel].collectDebugFigs():
+    if hit.node.kind == nkText and hit.node.renderedText().startsWith(prefix):
+      return hit.bounds
 
 suite "Kosmo":
   test "file tree column follows its viewport and retruncates after resize":
@@ -166,14 +167,13 @@ suite "Kosmo":
       GitStatusSnapshot(
         rootPath: absolutePath(root),
         isRepository: true,
-        entries:
-          @[
-            GitStatusEntry(path: nestedFile, state: gfsModified),
-            GitStatusEntry(path: untrackedFile, state: gfsUntracked),
-            GitStatusEntry(path: gitDirectory, state: gfsIgnored),
-            GitStatusEntry(path: ignoredFile, state: gfsIgnored),
-            GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
-          ],
+        entries: @[
+          GitStatusEntry(path: nestedFile, state: gfsModified),
+          GitStatusEntry(path: untrackedFile, state: gfsUntracked),
+          GitStatusEntry(path: gitDirectory, state: gfsIgnored),
+          GitStatusEntry(path: ignoredFile, state: gfsIgnored),
+          GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
+        ],
       )
     )
     tree.displayMode = FileTreeDisplayMode.AllFiles

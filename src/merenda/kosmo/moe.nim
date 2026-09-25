@@ -39,6 +39,7 @@ import sigils/threads
 
 import ../nimkit/text/mattergrammarassets
 import ./matterworkers
+import ./moelogging
 import ./moethemeassets
 import ./vscodegrammars
 
@@ -594,6 +595,7 @@ proc availableTextMateGrammars*(editor: KosmoEditor): seq[KosmoTextMateGrammar] 
 
 proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   ## Create an editor with Moe's default configuration and optional initial text.
+  startMoeMessageForwarding()
   var config = newEditorConfig()
   config.standard.mouse = true
   config.standard.statusLine = false
@@ -625,6 +627,7 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
     discard result.editor.handleKeyCombo(moeKeys.toKeyCombo('i'))
     discard result.editor.handleTextInput(text)
     discard result.editor.handleKeyCombo(moeKeys.toSpecialKeyCombo(moeKeys.skEscape))
+  discard forwardMoeMessages()
 
 proc reloadInstalledVscodeGrammars*(editor: KosmoEditor) =
   ## Refresh the on-disk user grammar set and restart async highlighting.
@@ -755,6 +758,7 @@ proc openFileBuffer(editor: KosmoEditor, path: string): FileOpenResult =
     else:
       editor.editor.editFile(path)
   if pkgResults.isErr(outcome):
+    logMoeFailure("open file", path, outcome.error)
     return FileOpenResult(message: outcome.error)
   if pristineInitialBuffer and not pathExists:
     discard editor.editor.closeBuffer(buffers[0].id)
@@ -930,6 +934,7 @@ proc closeTab*(
   let previousBuffer = editor.activeBufferId()
   let outcome = editor.editor.closeBuffer(id.toMoeBufferId)
   if pkgResults.isErr(outcome):
+    logMoeFailure("close buffer", $id, outcome.error)
     return KosmoTabCloseResult(message: outcome.error)
   if editor.activeBufferId() != previousBuffer:
     editor.resetBufferSelection()
@@ -943,6 +948,7 @@ proc save*(editor: KosmoEditor): KosmoSaveResult =
     return KosmoSaveResult(message: "The editor is closed.")
   let outcome = editor.editor.saveFile(editor.editor.activeBuffer)
   if pkgResults.isErr(outcome):
+    logMoeFailure("save file", "", outcome.error)
     return KosmoSaveResult(message: outcome.error)
   if editor.temporaryBufferId == editor.activeBufferId():
     editor.temporaryBufferId = none(BufferId)
@@ -963,6 +969,7 @@ proc saveAs*(editor: KosmoEditor, path: string): KosmoSaveResult =
       absolutePath(path)
   let outcome = editor.editor.saveFile(editor.editor.activeBuffer, some(savePath))
   if pkgResults.isErr(outcome):
+    logMoeFailure("save file", savePath, outcome.error)
     return KosmoSaveResult(message: outcome.error)
   if editor.temporaryBufferId == editor.activeBufferId():
     editor.temporaryBufferId = none(BufferId)
@@ -1917,6 +1924,7 @@ proc render*(editor: KosmoEditor, buffer: var RenderBuffer) =
   discard editor.pollMatterHighlighting()
   editor.scheduleMatterHighlighting()
   editor.renderMatterFrame(buffer)
+  discard forwardMoeMessages()
 
 proc render*(
     editor: KosmoEditor, buffer: var RenderBuffer, state: KosmoEditorViewState
@@ -1935,6 +1943,7 @@ proc render*(
   discard editor.pollMatterHighlighting()
   editor.scheduleMatterHighlighting()
   editor.renderMatterFrame(buffer)
+  discard forwardMoeMessages()
 
 func toMoeModifiers(modifiers: set[KeyModifier]): set[frontend_input.KeyModifier] =
   if kmControl in modifiers:

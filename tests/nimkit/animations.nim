@@ -166,7 +166,7 @@ suite "NimKit animations":
     checkClose(easeInOutTiming().easedProgress(0.25'f32), 0.125'f32)
     checkClose(
       cubicBezierTiming(initPoint(0.0'f32, 0.0'f32), initPoint(1.0'f32, 1.0'f32))
-      .easedProgress(0.5'f32),
+        .easedProgress(0.5'f32),
       0.5'f32,
     )
 
@@ -540,7 +540,10 @@ suite "NimKit animations":
       discard app.stopAnimation(animation)
       app.stopAnimationClock()
 
-  test "repeated Chronos clock lifetimes do not leak file descriptors":
+  test "repeated Chronos clock starts reuse dispatcher descriptors":
+    let warmup = newAnimationSchedulerClock(frameInterval = 2.ms)
+    warmup.start()
+    warmup.stop()
     let before = openFileDescriptorCount()
     for _ in 0 ..< 12:
       let clock = newAnimationSchedulerClock(frameInterval = 2.ms)

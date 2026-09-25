@@ -12,8 +12,8 @@ const MerendaNimbleManifest =
   staticRead(currentSourcePath().parentDir / "../../merenda.nimble")
 
 proc renderedFigText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune.toUTF8()
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex).toUTF8()
 
 proc renderedTexts(view: View): seq[string] =
   let renders = buildRenders(view)
@@ -405,7 +405,8 @@ suite "Kosmo":
     for row in 0 ..< textMateGrammarsTable.rowCount:
       check textMateGrammarsTable.tableCellText(row, grammarColumn).len > 0
       check textMateGrammarsTable.tableCellText(row, scopeColumn).len > 0
-      check textMateGrammarsTable.tableCellText(row, originColumn) == "Built-in"
+      check textMateGrammarsTable.tableCellText(row, originColumn) ==
+        availableGrammars[row].origin.title()
       if textMateGrammarsTable.tableCellText(row, scopeColumn) == "source.hcl.terraform":
         check textMateGrammarsTable.tableCellText(row, grammarColumn) == "Terraform"
         foundTerraform = true
@@ -568,7 +569,7 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.openPath(root)
     check frontend.sidebarTabs.selectedIndex == 0
-    check not frontend.fileTree.hidden
+    check not frontend.fileTree.isHiddenOrHasHiddenAncestor()
     check frontend.searchPanel.hidden
     let findTabPoint = frontend.sidebarTabs.pointToWindow(
       initPoint(
@@ -589,26 +590,28 @@ suite "Kosmo":
     check frontend.window.mouseUpAt(filesTabPoint)
     check frontend.sidebarTabs.selectedIndex == 0
     check frontend.window.makeFirstResponder(frontend.editorView)
+    let sidebarShortcutModifiers =
+      frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmCommand, kmShift})
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: sidebarShortcutModifiers)
     )
     check frontend.sidebarTabs.selectedIndex == 1
-    check frontend.fileTree.hidden
+    check frontend.fileTree.isHiddenOrHasHiddenAncestor()
     check not frontend.searchPanel.hidden
     check frontend.searchPanel.queryField.isEditing
     check frontend.window.firstResponder == frontend.window.fieldEditor()
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmCommand, kmShift})
+      KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: sidebarShortcutModifiers)
     )
     check frontend.sidebarTabs.selectedIndex == 0
-    check not frontend.fileTree.hidden
+    check not frontend.fileTree.isHiddenOrHasHiddenAncestor()
     check frontend.searchPanel.hidden
     check frontend.window.firstResponder == frontend.fileTree
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmCommand, kmShift})
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: sidebarShortcutModifiers)
     )
     check frontend.sidebarTabs.selectedIndex == 1
     check frontend.searchPanel.queryField.isEditing
@@ -898,15 +901,19 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.openPath(root)
     check frontend.window.makeFirstResponder(frontend.editorView)
-    check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmCommand, kmShift})
+    let findShortcutModifiers =
+      frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: findShortcutModifiers)
     )
+    require frontend.sidebarTabs.selectedIndex == 1
+    require frontend.searchPanel.queryField.isEditing
     check frontend.window.dispatchTextInput("needle")
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
     )
-    check frontend.searchPanel.waitForSearch(timeoutMilliseconds = 10_000)
-    check frontend.searchPanel.resultsView.matches.len == DefaultFileSearchMaxResults
+    require frontend.searchPanel.waitForSearch(timeoutMilliseconds = 10_000)
+    require frontend.searchPanel.resultsView.matches.len == DefaultFileSearchMaxResults
 
     frontend.contentView.layoutSubtreeIfNeeded()
     discard frontend.window.buildRenders()
@@ -944,47 +951,67 @@ suite "Kosmo":
       check frontend.terminalLinksEnabled
       frontend.terminalOptionAsMeta = false
       frontend.terminalLinksEnabled = false
-      check terminalItem.perform(Responder(frontend.editorView))
+      let terminalActionPerformed = terminalItem.perform(Responder(frontend.editorView))
+      require terminalActionPerformed
       check frontend.editorGroups().len == 1
       check frontend.editorGroups()[0].documents.len == 1
       check frontend.documentTabs.len == initialTabCount + 1
-      check frontend.documentTabs.selectedDocumentTabItem().title == "Terminal 1"
-      check frontend.editorPane.contentView of TerminalView
+      let selectedTitle = frontend.documentTabs.selectedDocumentTabItem().title
+      check selectedTitle == "Terminal 1"
+      let terminalVisible = frontend.editorPane.contentView of TerminalView
+      require terminalVisible
       let terminalView = TerminalView(frontend.editorPane.contentView)
-      check not terminalView.optionAsMeta
-      check not terminalView.allowsLinkActivation
-      check terminalView.session().running()
-      check frontend.window.firstResponder() == Responder(terminalView)
-      check terminalView.focusVisible
-      check terminalView.focusRingType == frtNone
+      let optionAsMeta = terminalView.optionAsMeta
+      let allowsLinkActivation = terminalView.allowsLinkActivation
+      let terminalRunning = terminalView.session().running()
+      let terminalIsFirstResponder =
+        frontend.window.firstResponder() == Responder(terminalView)
+      let terminalFocusVisible = terminalView.focusVisible
+      let terminalFocusRingType = terminalView.focusRingType
+      check not optionAsMeta
+      check not allowsLinkActivation
+      check terminalRunning
+      check terminalIsFirstResponder
+      check terminalFocusVisible
+      check terminalFocusRingType == frtNone
+      let tabShortcutModifiers =
+        frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
 
-      check frontend.window.dispatchKeyDown(
+      let previousShortcutHandled = frontend.window.dispatchKeyDown(
         KeyEvent(
           key: keyLeftBracket,
           keyCode: keyLeftBracket.ord,
-          modifiers: {kmCommand, kmShift},
+          modifiers: tabShortcutModifiers,
         )
       )
-      check frontend.editorPane.contentView == View(frontend.editorView)
-      check frontend.window.dispatchKeyDown(
+      check previousShortcutHandled
+      let editorVisible = frontend.editorPane.contentView == View(frontend.editorView)
+      require editorVisible
+      let nextShortcutHandled = frontend.window.dispatchKeyDown(
         KeyEvent(
           key: keyRightBracket,
           keyCode: keyRightBracket.ord,
-          modifiers: {kmCommand, kmShift},
+          modifiers: tabShortcutModifiers,
         )
       )
-      check frontend.editorPane.contentView == View(terminalView)
+      check nextShortcutHandled
+      let terminalRestored = frontend.editorPane.contentView == View(terminalView)
+      require terminalRestored
 
       when defined(macosx) or defined(macos):
-        check frontend.window.dispatchKeyDown(
+        let closeShortcutHandled = frontend.window.dispatchKeyDown(
           KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmCommand})
         )
       else:
-        check frontend.window.dispatchKeyDown(
+        let closeShortcutHandled = frontend.window.dispatchKeyDown(
           KeyEvent(key: keyF4, keyCode: keyF4.ord, modifiers: {kmControl})
         )
+      check closeShortcutHandled
       check frontend.editorGroups()[0].documents.len == 0
       check frontend.documentTabs.len == initialTabCount
-      check frontend.editorPane.contentView == View(frontend.editorView)
+      let editorRestored = frontend.editorPane.contentView == View(frontend.editorView)
+      check editorRestored
       check terminalView.session().state() == tssClosed
-      check frontend.window.firstResponder() == Responder(frontend.editorView)
+      let editorIsFirstResponder =
+        frontend.window.firstResponder() == Responder(frontend.editorView)
+      check editorIsFirstResponder

@@ -2,6 +2,7 @@ import std/unittest
 
 import figdraw/debugtools
 import figdraw
+import ./fixtures/rendergeometry
 
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
@@ -82,11 +83,11 @@ proc checkRectNearlyEqual(actual, expected: nimkitTypes.Rect) =
   check actual.size.height.nearlyEqual(expected.size.height)
 
 proc hasAncestor(list: RenderList, nodeIndex, ancestorIndex: int): bool =
-  var current = list.nodes[nodeIndex].parent.int
+  var current = list.resolvedNodes()[nodeIndex].parent.int
   while current >= 0:
     if current == ancestorIndex:
       return true
-    current = list.nodes[current].parent.int
+    current = list.resolvedNodes()[current].parent.int
 
 proc renderedRect(node: Fig): nimkitTypes.Rect =
   rect(
@@ -105,14 +106,14 @@ proc childIndexOf(list: RenderList, parentIndex, childIndex: int): int =
     return -1
   result = -1
   var order = 0
-  for idx in childIndex(list.nodes, parentIndex.FigIdx):
+  for idx in descendantIndex(list.resolvedNodes(), parentIndex.FigIdx):
     if idx.int == childIndex:
       return order
     inc order
 
 proc findClippedNode(list: RenderList, rect: nimkitTypes.Rect): int =
   result = -1
-  for idx, node in list.nodes:
+  for idx, node in list.resolvedNodes():
     if node.kind == nkRectangle and NfClipContent in node.flags and
         node.renderedRect().rectsClose(rect):
       return idx
@@ -123,14 +124,14 @@ proc findChildRectNode(
   if parentIndex < 0:
     return -1
   result = -1
-  for idx, node in list.nodes:
-    if node.parent.int == parentIndex and node.kind == nkRectangle and
+  for idx, node in list.resolvedNodes():
+    if list.isDescendant(idx, parentIndex) and node.kind == nkRectangle and
         node.renderedRect().rectsClose(rect):
       return idx
 
 proc findRectNode(list: RenderList, rect: nimkitTypes.Rect, fillValue: Fill): int =
   result = -1
-  for idx, node in list.nodes:
+  for idx, node in list.resolvedNodes():
     if node.kind == nkRectangle and node.fill == fillValue and
         node.renderedRect().rectsClose(rect):
       return idx
@@ -824,7 +825,7 @@ suite "nimkit scroll views":
       verticalScrollerIndex = -1
       horizontalScrollerIndex = -1
 
-    for idx, node in nodes.nodes:
+    for idx, node in nodes.resolvedNodes():
       if node.kind == nkRectangle and NfClipContent in node.flags and
           node.screenBox.x == 20.0 and node.screenBox.y == 30.0 and
           node.screenBox.w == 100.0 and node.screenBox.h == 70.0:
@@ -855,9 +856,9 @@ suite "nimkit scroll views":
     check childNodeFound
     check verticalScrollerIndex >= 0
     check horizontalScrollerIndex >= 0
-    check nodes.nodes[clipViewNodeIndex].parent.int == scrollViewNodeIndex
-    check nodes.nodes[verticalScrollerIndex].parent.int == scrollViewNodeIndex
-    check nodes.nodes[horizontalScrollerIndex].parent.int == scrollViewNodeIndex
+    check nodes.isDescendant(clipViewNodeIndex, scrollViewNodeIndex)
+    check nodes.isDescendant(verticalScrollerIndex, scrollViewNodeIndex)
+    check nodes.isDescendant(horizontalScrollerIndex, scrollViewNodeIndex)
     check nodes.hasAncestor(childNodeIndex, clipViewNodeIndex)
 
     let childVisibility = renders.figVisibility(DefaultDrawLevel, childNodeIndex.FigIdx)
@@ -937,8 +938,7 @@ suite "nimkit scroll views":
     check OverlayDrawLevel in renders
     check overlayIndex >= 0
     if overlayIndex >= 0:
-      check overlayNodes.nodes[overlayIndex].parent.int == -1
-      check overlayNodes.rootIds.contains(overlayIndex.FigIdx)
+      check overlayNodes.isDescendant(overlayIndex, overlayNodes.rootIds[0].int)
 
       let overlayVisibility =
         renders.figVisibility(OverlayDrawLevel, overlayIndex.FigIdx)

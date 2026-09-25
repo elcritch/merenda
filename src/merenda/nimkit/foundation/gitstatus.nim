@@ -319,6 +319,13 @@ proc close*(service: GitStatusService) =
   service.xClosed = true
   if not service.xTimer.isNil and not service.xTimerThread.isNil:
     service.xTimer.cancel(service.xTimerThread)
+  if not service.xTimer.isNil and not service.xTicker.isNil:
+    service.xTimer.disconnect(timeout, service.xTicker)
+  if not service.xTicker.isNil:
+    service.xTicker.disconnect(gitStatusRefreshTicked, service)
+  if not service.xWorker.isNil:
+    service.xWorker.disconnect(gitStatusFinished, service)
+    service.xWorker.disconnect(executeGitStatus, service.xWorker)
   discard service.poll()
   service.xTimer = nil
   service.xTicker = nil

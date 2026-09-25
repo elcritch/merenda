@@ -1,9 +1,6 @@
 import std/[hashes, sets, tables]
 
 import figdraw
-when defined(useNativeDynlib):
-  import figdraw/windowing
-
 import ./images
 
 const
@@ -139,22 +136,6 @@ proc containsFont*(snapshot: RenderResourceSnapshot, id: FontId): bool =
 proc containsImage*(snapshot: RenderResourceSnapshot, id: ImageId): bool =
   snapshot.present and id in snapshot.images
 
-proc fontIds(resources: RenderResourceManifest): seq[FontId] =
-  for id in resources.fonts.keys:
-    result.add id
-
-proc fontIds(resources: RenderResourceSnapshot): seq[FontId] =
-  for id in resources.fonts:
-    result.add id
-
-proc imageIds(resources: RenderResourceManifest): seq[ImageId] =
-  for id in resources.images.keys:
-    result.add id
-
-proc imageIds(resources: RenderResourceSnapshot): seq[ImageId] =
-  for id in resources.images:
-    result.add id
-
 proc hasResourceFilter(resources: RenderResourceManifest): bool =
   not resources.isNil
 
@@ -180,27 +161,24 @@ proc removeResourcesOutsideManifest[BackendState](
   if not resources.hasResourceFilter():
     return
 
-  when defined(useNativeDynlib):
-    renderer.retainAtlasResources(resources.fontIds(), resources.imageIds())
-  else:
-    var removed: seq[Hash]
-    for key, metadata in renderer.ctx.atlasEntryMetaPtr().pairs:
-      let retained =
-        case metadata.kind
-        of aekImage:
-          resources.containsImage(metadata.imageId)
-        of aekGlyph:
-          resources.containsFont(metadata.fontId)
-        of aekGenerated:
-          # FigDraw owns generated atlas entries such as its solid rectangle and
-          # rasterized drawing primitives. They have no application resource ID
-          # to include in a render manifest, and evicting them here makes every
-          # frame allocate the same entries again until the atlas is exhausted.
-          true
-      if not retained:
-        removed.add key
-    for key in removed:
-      renderer.ctx.removeAtlasEntry(key)
+  var removed: seq[Hash]
+  for key, metadata in renderer.ctx.atlasEntryMetaPtr().pairs:
+    let retained =
+      case metadata.kind
+      of aekImage:
+        resources.containsImage(metadata.imageId)
+      of aekGlyph:
+        resources.containsFont(metadata.fontId)
+      of aekGenerated:
+        # FigDraw owns generated atlas entries such as its solid rectangle and
+        # rasterized drawing primitives. They have no application resource ID
+        # to include in a render manifest, and evicting them here makes every
+        # frame allocate the same entries again until the atlas is exhausted.
+        true
+    if not retained:
+      removed.add key
+  for key in removed:
+    renderer.ctx.removeAtlasEntry(key)
 
 proc restoreManifestImages[BackendState](
     renderer: FigRenderer[BackendState], resources: RenderResourceManifest
@@ -224,12 +202,9 @@ proc replayWorkingSet[BackendState](
   var attempts = 0
   while attempts < 8:
     let generation = renderer.atlasGeneration()
-    when defined(useNativeDynlib):
-      renderer.replayImageMessages()
-    else:
-      renderer.ctx.ensureImageMessageSubscription()
-      replayImageMessages(renderer.ctx.imageMessages)
-      renderer.processImageMessages()
+    renderer.ctx.ensureImageMessageSubscription()
+    replayImageMessages(renderer.ctx.imageMessages)
+    renderer.processImageMessages()
     renderer.removeResourcesOutsideManifest(resources)
     renderer.restoreManifestImages(resources)
     inc manager.metricsValue.replayCount

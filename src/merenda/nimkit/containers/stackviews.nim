@@ -523,7 +523,9 @@ proc removeArrangedSubview*(stackView: StackView, child: View) =
   stackView.invalidateStackLayout()
 
 protocol StackViewLifecycleSlots of ViewLifecycleProtocol:
-  proc willRemoveSubview(stackView: StackView, child: View) {.slot.} =
+  proc removeOwnedSubview(
+      stackView: StackView, child: View
+  ) {.slotFor: willRemoveSubview.} =
     stackView.removeArrangedSubview(child)
 
 protocol DefaultStackViewLayout of ViewLayoutProtocol:

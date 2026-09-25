@@ -6,8 +6,7 @@ import ../foundation/backrefs
 import ../foundation/types
 import ../drawing/renderresources
 
-when not defined(useNativeDynlib):
-  import ../drawing/renderscenes
+import ../drawing/renderscenes
 
 from figdraw import Renders
 
@@ -259,9 +258,8 @@ type
     xRegisteredDraggedTypes*: seq[string]
     xContextMenu*: Responder
     xContextMenuHandlerInstalled*: bool
-    when not defined(useNativeDynlib):
-      xRenderViewId*: RenderViewId
-      xCachedRenderScene*: RenderScene
+    xRenderViewId*: RenderViewId
+    xCachedRenderScene*: RenderScene
     xCachedRenders*: Renders
     xCachedRenderResources*: RenderResourceManifest
     xCachedAppearanceGeneration*: ThemeGeneration
@@ -343,14 +341,11 @@ proc markRenderStructureChanged*(view: View) =
   ## Schedules retained-transform reconciliation without dirtying view drawing.
   if view.isNil:
     return
-  when defined(useNativeDynlib):
-    view.markLocalNeedsDisplay(propagateAncestors = true)
-  else:
-    view.xNeedsDisplay = true
-    var ancestor = view.superviewBacklink()
-    while not ancestor.isNil:
-      ancestor.xNeedsDisplay = true
-      ancestor = ancestor.superviewBacklink()
+  view.xNeedsDisplay = true
+  var ancestor = view.superviewBacklink()
+  while not ancestor.isNil:
+    ancestor.xNeedsDisplay = true
+    ancestor = ancestor.superviewBacklink()
 
 proc nextLayoutGeneration*(): Natural =
   inc layoutGenerationCounter

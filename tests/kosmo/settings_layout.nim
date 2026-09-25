@@ -6,8 +6,8 @@ import merenda/nimkit
 import merenda/kosmo/kosmo
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc checkVisibleText(view: View, expected: openArray[string]) =
   let renders = buildRenders(view)
@@ -66,26 +66,25 @@ suite "Kosmo settings layout":
     require tabsView of TabView
     let tabs = TabView(tabsView)
 
-    let expectedPageText =
+    let expectedPageText = @[
       @[
-        @[
-          "Terminal", "Use Option/Alt-B and Option/Alt-F to move by words in Bash.",
-          "Hold the platform link modifier while hovering a URL to reveal and open it.",
-        ],
-        @[
-          "Active Shortcuts",
-          "Changes apply immediately; edit bindings in keybindings.json.",
-        ],
-        @[
-          "Moe Theme",
-          "Choose a bundled theme or a TOML theme installed in ~/.config/moe/themes.",
-        ],
-        @[
-          "Find a Language",
-          "Search built-in VS Code languages by name, extension, or scope.",
-          "Available TextMate Grammars",
-        ],
-      ]
+        "Terminal", "Use Option/Alt-B and Option/Alt-F to move by words in Bash.",
+        "Hold the platform link modifier while hovering a URL to reveal and open it.",
+      ],
+      @[
+        "Active Shortcuts",
+        "Changes apply immediately; edit bindings in keybindings.json.",
+      ],
+      @[
+        "Moe Theme",
+        "Choose a bundled theme or a TOML theme installed in ~/.config/moe/themes.",
+      ],
+      @[
+        "Find a Language",
+        "Search built-in VS Code languages by name, extension, or scope.",
+        "Available TextMate Grammars",
+      ],
+    ]
     for pageIndex, pageText in expectedPageText:
       check tabs.selectTabViewItemAtIndex(pageIndex)
       settings.contentView().layoutSubtreeIfNeeded()

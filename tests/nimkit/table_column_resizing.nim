@@ -40,8 +40,8 @@ proc newResizeTableDelegate(hostedColumn: string): ResizeTableDelegate =
   discard result.withProtocol(ResizeTableDelegateMethods)
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc renderedTextOriginX(window: Window, text: string): float32 =
   let renders = window.buildRenders()

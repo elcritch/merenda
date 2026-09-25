@@ -4,7 +4,7 @@ import figdraw
 import pkg/bumpy
 import pkg/pixie
 
-when defined(macosx) and not defined(useNativeDynlib) and
+when defined(macosx) and
     (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
   import figdraw/extras/systemfonts
 
@@ -99,7 +99,7 @@ suite "nimkit font layout":
         )
     )
 
-  when defined(posix) and not defined(useNativeDynlib):
+  when defined(posix):
     test "platform default fonts load shape and rasterize without figDataDir":
       let previousDataDir = figDataDir()
       setFigDataDir(getTempDir() / "__merenda_missing_font_data__")
@@ -130,7 +130,7 @@ suite "nimkit font layout":
           check image.opaqueBounds().w > 0
           check image.opaqueBounds().h > 0
 
-  when defined(macosx) and not defined(useNativeDynlib) and
+  when defined(macosx) and
       (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
     test "automatic fallback retains the native collection face index":
       const
@@ -160,14 +160,13 @@ suite "nimkit font layout":
       check source.name == systemTypeface.get().file.path
       check source.faceIndex == systemTypeface.get().file.faceIndex
 
-  when not defined(useNativeDynlib):
-    test "font fallback groups are runtime customizable by language and script":
-      setFontFallbackGroups("x-test", "Test", @[@["Example Sans"]])
-      check fontFallbackGroups("x-test-region", "test")[0] == @["Example Sans"]
+  test "font fallback groups are runtime customizable by language and script":
+    setFontFallbackGroups("x-test", "Test", @[@["Example Sans"]])
+    check fontFallbackGroups("x-test-region", "test")[0] == @["Example Sans"]
 
-      addFontFallbackGroup("x-test", "Test", ["Preferred Sans"], prepend = true)
-      check fontFallbackGroups("x-test", "test")[0] == @["Preferred Sans"]
-      setFontFallbackGroups("x-test", "Test", newSeq[seq[string]]())
+    addFontFallbackGroup("x-test", "Test", ["Preferred Sans"], prepend = true)
+    check fontFallbackGroups("x-test", "test")[0] == @["Preferred Sans"]
+    setFontFallbackGroups("x-test", "Test", newSeq[seq[string]]())
 
   test "theme text style uses font env override precedence":
     withCleanFontEnv(
@@ -248,104 +247,103 @@ suite "nimkit font layout":
         check platformDefaultFontName(frUI) == expected
     )
 
-  when not defined(useNativeDynlib):
-    test "font loader extracts a ZIP path into the asset cache":
-      let path = getCurrentDir() / "data/IBMPlexSans-Regular.ttf.zip"
-      let style = TextStyle(fontName: path, fontSize: 14.0)
-      let source = getTypefaceSource(style.textFont().font.typefaceId)
-      check source.name.endsWith("-IBMPlexSans-Regular.ttf")
-      check source.name.parentDir == nimkitAssetCacheDirectory("nimkit")
-      check fileExists(source.name)
+  test "font loader extracts a ZIP path into the asset cache":
+    let path = getCurrentDir() / "data/IBMPlexSans-Regular.ttf.zip"
+    let style = TextStyle(fontName: path, fontSize: 14.0)
+    let source = getTypefaceSource(style.textFont().font.typefaceId)
+    check source.name.endsWith("-IBMPlexSans-Regular.ttf")
+    check source.name.parentDir == nimkitAssetCacheDirectory("nimkit")
+    check fileExists(source.name)
 
-    test "font loader falls back when a ZIP cannot be extracted":
-      let
-        root = createTempDir("merenda-invalid-font-zip-", "")
-        path = root / "Missing.ttf.zip"
-      defer:
-        removeDir(root)
-      writeFile(path, "not a ZIP")
-      let source = getTypefaceSource(
-        TextStyle(fontName: path, fontSize: 14.0).textFont().font.typefaceId
+  test "font loader falls back when a ZIP cannot be extracted":
+    let
+      root = createTempDir("merenda-invalid-font-zip-", "")
+      path = root / "Missing.ttf.zip"
+    defer:
+      removeDir(root)
+    writeFile(path, "not a ZIP")
+    let source = getTypefaceSource(
+      TextStyle(fontName: path, fontSize: 14.0).textFont().font.typefaceId
+    )
+    check source.name != path
+    check source.name.len > 0
+
+  test "italic text loads its exact bundled face":
+    let
+      root = createTempDir("merenda-exact-italic-", "")
+      regular = installZipAssetFile(
+        getCurrentDir() / "data/IBMPlexSans-Regular.ttf.zip", "nimkit-tests", root
       )
-      check source.name != path
-      check source.name.len > 0
-
-    test "italic text loads its exact bundled face":
-      let
-        root = createTempDir("merenda-exact-italic-", "")
-        regular = installZipAssetFile(
-          getCurrentDir() / "data/IBMPlexSans-Regular.ttf.zip", "nimkit-tests", root
-        )
-        italic = installZipAssetFile(
-          getCurrentDir() / "data/IBMPlexSans-Italic.ttf.zip", "nimkit-tests", root
-        )
-      defer:
-        removeDir(root)
-      require regular.succeeded()
-      require italic.succeeded()
-      var builder = initThemeBuilder(initTheme())
-      builder.setFontName(frUI, "Private Interface")
-      builder.setFontFaces(
-        frUI,
-        FontFaceSet(
-          regular: initSystemTypeface(regular.path),
-          italic: initSystemTypeface(italic.path),
-        ),
+      italic = installZipAssetFile(
+        getCurrentDir() / "data/IBMPlexSans-Italic.ttf.zip", "nimkit-tests", root
       )
-      var style = initAppearance(builder.finish()).resolveTextStyle(
-          controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
-        )
-      style.fontSlant = fsItalic
-      let source = getTypefaceSource(style.textFont().font.typefaceId)
-      check source.name == italic.path
+    defer:
+      removeDir(root)
+    require regular.succeeded()
+    require italic.succeeded()
+    var builder = initThemeBuilder(initTheme())
+    builder.setFontName(frUI, "Private Interface")
+    builder.setFontFaces(
+      frUI,
+      FontFaceSet(
+        regular: initSystemTypeface(regular.path),
+        italic: initSystemTypeface(italic.path),
+      ),
+    )
+    var style = initAppearance(builder.finish()).resolveTextStyle(
+        controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
+      )
+    style.fontSlant = fsItalic
+    let source = getTypefaceSource(style.textFont().font.typefaceId)
+    check source.name == italic.path
 
-    test "theme text styles load exact collection faces":
-      let collectionPath = getCurrentDir() / "deps/pixie/tests/fonts/PTSans.ttc"
-      require fileExists(collectionPath)
-      var typefaceIds: array[2, TypefaceId]
+  test "theme text styles load exact collection faces":
+    let collectionPath = getCurrentDir() / "deps/pixie/tests/fonts/PTSans.ttc"
+    require fileExists(collectionPath)
+    var typefaceIds: array[2, TypefaceId]
 
-      for faceIndex in 0 .. 1:
-        let selectedFace = initSystemTypeface(collectionPath, faceIndex)
-        var builder = initThemeBuilder(initTheme())
-        builder.setFontName(frUI, "PT Sans")
-        builder.setFontFace(frUI, selectedFace)
-        let
-          appearance = initAppearance(builder.finish())
-          style = appearance.resolveTextStyle(
-            controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
-          )
-          font = style.textFont()
-          source = getTypefaceSource(font.font.typefaceId)
-        typefaceIds[faceIndex] = font.font.typefaceId
-
-        check appearance.fontFace(frUI) == selectedFace
-        check style.fontFace == selectedFace
-        check source.name == collectionPath
-        check source.faceIndex == faceIndex
-
-      check typefaceIds[0] != typefaceIds[1]
-
-    test "theme text styles preserve exact variable font coordinates":
-      let fontPath =
-        getCurrentDir() / "deps/figdraw/examples/fonts/NotoNaskhArabic-wght.ttf"
-      require fileExists(fontPath)
-      let selectedFace =
-        initSystemTypeface(fontPath, variations = [fontVariation("wght", 650.0'f32)])
+    for faceIndex in 0 .. 1:
+      let selectedFace = initSystemTypeface(collectionPath, faceIndex)
       var builder = initThemeBuilder(initTheme())
-      builder.setFontName(frUI, "Noto Naskh Arabic")
+      builder.setFontName(frUI, "PT Sans")
       builder.setFontFace(frUI, selectedFace)
       let
         appearance = initAppearance(builder.finish())
         style = appearance.resolveTextStyle(
           controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
         )
-        font = style.textFont().font
+        font = style.textFont()
+        source = getTypefaceSource(font.font.typefaceId)
+      typefaceIds[faceIndex] = font.font.typefaceId
 
       check appearance.fontFace(frUI) == selectedFace
       check style.fontFace == selectedFace
-      check font.variations.len == 1
-      check font.variations[0].tag == "wght"
-      check font.variations[0].value == 650.0'f32
+      check source.name == collectionPath
+      check source.faceIndex == faceIndex
+
+    check typefaceIds[0] != typefaceIds[1]
+
+  test "theme text styles preserve exact variable font coordinates":
+    let fontPath =
+      getCurrentDir() / "deps/figdraw/examples/fonts/NotoNaskhArabic-wght.ttf"
+    require fileExists(fontPath)
+    let selectedFace =
+      initSystemTypeface(fontPath, variations = [fontVariation("wght", 650.0'f32)])
+    var builder = initThemeBuilder(initTheme())
+    builder.setFontName(frUI, "Noto Naskh Arabic")
+    builder.setFontFace(frUI, selectedFace)
+    let
+      appearance = initAppearance(builder.finish())
+      style = appearance.resolveTextStyle(
+        controlStyle(srTextField), color(0.0, 0.0, 0.0), insets(0.0)
+      )
+      font = style.textFont().font
+
+    check appearance.fontFace(frUI) == selectedFace
+    check style.fontFace == selectedFace
+    check font.variations.len == 1
+    check font.variations[0].tag == "wght"
+    check font.variations[0].value == 650.0'f32
 
   test "monospace font environment override is independent":
     withCleanMonospaceFontEnv(
@@ -367,8 +365,7 @@ suite "nimkit font layout":
     let font = style.textFont()
 
     check $style.language == "ja-JP"
-    when not defined(useNativeDynlib) and
-        (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
+    when (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
       check font.font.language == "ja-JP"
       check font.font.fallbackTypefaceIds.len == 0
       check fontFallbackResolver() != nil

@@ -310,9 +310,14 @@ suite "Kosmo":
     check frontend.window.dispatchTextInput("set number")
     check frontend.editorView.editor.commandLine().text == ":set number"
     discard frontend.window.dispatchKeyDown(
-      KeyEvent(text: "\b", key: keyBackspace, keyCode: keyBackspace.ord)
+      KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
     )
     check frontend.editorView.editor.commandLine().text == ":set numbe"
+    # X11 also reports Backspace as committed text after the physical key.
+    check frontend.window.dispatchTextInput("\b")
+    check frontend.editorView.editor.commandLine().text == ":set numbe"
+    check frontend.window.dispatchTextInput("r")
+    check frontend.editorView.editor.commandLine().text == ":set number"
 
     discard
       frontend.window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
@@ -321,8 +326,9 @@ suite "Kosmo":
     check frontend.window.dispatchTextInput("i")
     check frontend.window.dispatchTextInput("abc")
     discard frontend.window.dispatchKeyDown(
-      KeyEvent(text: "\b", key: keyBackspace, keyCode: keyBackspace.ord)
+      KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
     )
+    check frontend.window.dispatchTextInput("\b")
 
     var activeTab: KosmoTab
     for tab in frontend.editorView.editor.tabs():
@@ -330,6 +336,46 @@ suite "Kosmo":
         activeTab = tab
         break
     check frontend.editorView.editor.bufferText(activeTab.id).get == "ab"
+
+  test "one Return inserts one line when the backend also commits newline text":
+    let frontend = newKosmoApplication(newApplication("Kosmo Return Input Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.window.makeFirstResponder(frontend.editorView)
+
+    discard frontend.window.dispatchKeyDown(KeyEvent(key: keyI, keyCode: keyI.ord))
+    check frontend.window.dispatchTextInput("i")
+    check frontend.editorView.editor.mode() == KosmoEditorMode.Insert
+
+    var activeTab: KosmoTab
+    for tab in frontend.editorView.editor.tabs():
+      if tab.active:
+        activeTab = tab
+        break
+    check frontend.editorView.editor.bufferText(activeTab.id).get == ""
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
+    check frontend.window.dispatchTextInput("\n")
+    var buffer = newRenderBuffer(24, 6)
+    frontend.editorView.editor.render(buffer)
+    check buffer.cell(2, 0).symbol == "1"
+    check buffer.cell(2, 1).symbol == "2"
+    check buffer.cell(2, 2).symbol == " "
+    check frontend.editorView.editor.bufferCursor() ==
+      KosmoBufferCursor(line: 1, column: 0)
+
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
+    )
+    check frontend.window.dispatchTextInput("\n")
+    frontend.editorView.editor.render(buffer)
+    check buffer.cell(2, 2).symbol == "3"
+    check frontend.editorView.editor.bufferCursor() ==
+      KosmoBufferCursor(line: 2, column: 0)
 
   test "command completion cycles with Tab and Shift-Tab in the host popup":
     let frontend =
@@ -383,6 +429,9 @@ suite "Kosmo":
     )
     let firstCompletion = frontend.editorView.editor.commandLine().text
     check firstCompletion != ":v"
+    # X11 can report Tab as committed text after the physical key.
+    check frontend.window.dispatchTextInput("\t")
+    check frontend.editorView.editor.commandLine().text == firstCompletion
     let popupMenu = frontend.editorView.editor.popupMenu()
     check popupMenu.isSome
     if popupMenu.isSome:
@@ -403,9 +452,13 @@ suite "Kosmo":
     )
     let secondCompletion = frontend.editorView.editor.commandLine().text
     check secondCompletion != firstCompletion
+    check frontend.window.dispatchTextInput("\t")
+    check frontend.editorView.editor.commandLine().text == secondCompletion
     discard frontend.window.dispatchKeyDown(
       KeyEvent(text: "\t", key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
     )
+    check frontend.editorView.editor.commandLine().text == firstCompletion
+    check frontend.window.dispatchTextInput("\t")
     check frontend.editorView.editor.commandLine().text == firstCompletion
     let activePopup = frontend.editorView.editor.popupMenu()
     check activePopup.isSome
@@ -461,6 +514,8 @@ suite "Kosmo":
     check not helpPanel.hidden()
     check helpPanel.frame().size.width <= 520.0'f32
     check helpView.markdown == frontend.editorView.editor.helpText()
+    check frontend.editorView.frame().size.width == 520.0'f32
+    let narrowColumns = frontend.editorView.maxColumnCount()
 
     let closeButtonBounds = closeButton.bounds()
     check frontend.window.clickAt(
@@ -473,6 +528,11 @@ suite "Kosmo":
     )
     check helpPanel.hidden()
     check frontend.editorPane.contentView == View(frontend.editorView)
+
+    frontend.editorPane.frame = rect(0, 0, 740, 360)
+    frontend.editorPane.layoutSubtreeIfNeeded()
+    check frontend.editorView.frame().size.width == 740.0'f32
+    check frontend.editorView.maxColumnCount() > narrowColumns
 
     check frontend.window.makeFirstResponder(frontend.editorView)
     check not frontend.window.dispatchKeyDown(

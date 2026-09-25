@@ -147,6 +147,7 @@ type
     generation: uint64
     full: bool
     baseLevel: ZLevel
+    placements: seq[ViewPlacement]
     frames: seq[RenderViewFrame]
     resources: RenderResourceSnapshot
 
@@ -956,9 +957,11 @@ proc newRenderSceneUpdate*(
   result.generation = scene.generation
   result.full = full
   result.baseLevel = scene.baseLevel
-  result.frames = newSeqOfCap[RenderViewFrame](scene.placements.len)
+  result.placements = scene.placements
   for placement in scene.placements:
     let entry = addr scene.viewEntries[placement.viewId]
+    if not full and entry[].changeGeneration <= acknowledgedGeneration:
+      continue
     result.frames.add entry[].transferFrame(
       placement,
       full or entry[].changeGeneration > acknowledgedGeneration,
@@ -995,7 +998,21 @@ func capturedRenderSlotCount*(update: RenderSceneUpdate): Natural =
         inc result
 
 func viewCount*(update: RenderSceneUpdate): Natural =
-  update.frames.len.Natural
+  update.placements.len.Natural
+
+func estimatedTransferBytes*(update: RenderSceneUpdate): int =
+  ## Lower bound for owned frame, slot and drawing arrays. Excludes allocator
+  ## overhead, spare capacity, glyph/font payloads and resource snapshots.
+  result =
+    update.placements.len * sizeof(ViewPlacement) +
+    update.frames.len * sizeof(RenderViewFrame)
+  for frame in update.frames:
+    result += frame.slots.len * sizeof(RenderViewSlotFrame)
+    for slot in frame.slots:
+      result += (slot.contents.nodes.len + slot.escapedContents.nodes.len) * sizeof(Fig)
+      result += slot.extraLayers.len * sizeof(RenderLayerContribution)
+      for layer in slot.extraLayers:
+        result += layer.contents.nodes.len * sizeof(Fig)
 
 func canApply*(
     update: RenderSceneUpdate, currentSceneIdentity, currentGeneration: uint64
@@ -1030,7 +1047,24 @@ proc apply*(scene: RenderScene, update: var RenderSceneUpdate) =
           raise newException(
             ValueError, "a full render-scene update must capture every view slot"
           )
-  discard scene.reconcile(update.frames, update.baseLevel)
+  # Expand unchanged metadata only on the receiving thread. Queued snapshots
+  # carry a compact order list instead of four empty Figs for every clean view.
+  var frames = newSeqOfCap[RenderViewFrame](update.placements.len)
+  var changedIndex = 0
+  for placement in update.placements:
+    if changedIndex < update.frames.len and
+        update.frames[changedIndex].viewId == placement.viewId:
+      frames.add move update.frames[changedIndex]
+      inc changedIndex
+    else:
+      if update.full or placement.viewId notin scene.viewEntries:
+        raise newException(ValueError, "render-scene update omits a new view")
+      frames.add RenderViewFrame(
+        viewId: placement.viewId,
+        parentViewId: placement.parentViewId,
+        cacheKey: scene.viewEntries[placement.viewId].cacheKey,
+      )
+  discard scene.reconcile(frames, update.baseLevel)
   scene.identity = update.sceneIdentity
   scene.generation = update.generation
 

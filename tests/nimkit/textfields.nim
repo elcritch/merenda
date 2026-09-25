@@ -1,6 +1,7 @@
 import std/[times, unicode, unittest]
 
 import figdraw
+import ./fixtures/rendergeometry
 
 import sigils/core
 
@@ -63,8 +64,8 @@ proc newCustomEditorTextFieldCell(editor: FieldEditor): CustomEditorTextFieldCel
   discard result.withProtocol(CustomEditorTextFieldCellProtocol)
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add(rune)
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc renderedRect(node: Fig): nimkitTypes.Rect =
   nimkitTypes.rect(
@@ -194,7 +195,7 @@ suite "nimkit text fields":
     let list = buildRenders(root, appearance)[DefaultDrawLevel]
 
     var backingFound = false
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill == style.box.fill and
           node.renderedRect().rectsClose(expected):
         backingFound = true
@@ -446,13 +447,13 @@ suite "nimkit text fields":
     window.setContentView(root)
 
     check window.makeFirstResponder(field)
-    let focusedNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    let focusedNodes = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
     check focusedNodes.renderedSelectionInView(field)
     check focusedNodes.renderedFocusRingInView(field)
     check focusedNodes.renderedFocusRingOutsetsView(field)
 
     check window.dispatchKeyDown(KeyEvent(text: "X", key: keyX, keyCode: keyX.ord))
-    let editedNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    let editedNodes = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
     check editedNodes.renderedTextInView(field, "X")
     check editedNodes.renderedCaretInView(field, field.textColor())
     check editedNodes.renderedFocusRingInView(field)
@@ -473,7 +474,7 @@ suite "nimkit text fields":
     let editor = window.fieldEditor()
     check editor.superview == field
 
-    let nodes = window.buildRenders()[DefaultDrawLevel].nodes
+    let nodes = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
     check not nodes.renderedOpaqueBackgroundForView(editor)
 
   test "tabbing through field editor keeps constrained showcase layout stretched":
@@ -810,7 +811,7 @@ suite "nimkit text fields":
     check editor.insertionPointVisible
     check window.animationScheduler().animationCount == 1
 
-    let nodes = window.buildRenders()[DefaultDrawLevel].nodes
+    let nodes = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
     check nodes.renderedSelectionRingInView(field, ringStyle)
 
     check window.animationScheduler().tick(initDuration(milliseconds = 999)) == 1
@@ -900,12 +901,12 @@ suite "nimkit text fields":
     check editor.frame().size.width > 1.0'f32
     check editor.frame().size.height > 0.0'f32
 
-    let visibleNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    let visibleNodes = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
     check visibleNodes.renderedCaretInView(field, field.textColor())
 
     check window.animationScheduler().tick(initDuration(milliseconds = 1000)) == 1
     check not editor.insertionPointVisible
-    let hiddenNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    let hiddenNodes = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
     check not hiddenNodes.renderedCaretInView(field, field.textColor())
 
   test "field editor keeps blinking after deleting last character":
@@ -931,16 +932,16 @@ suite "nimkit text fields":
     check editor.frame().size.width > 1.0'f32
     check editor.frame().size.height > 0.0'f32
 
-    let visibleNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    let visibleNodes = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
     check visibleNodes.renderedCaretInView(field, field.textColor())
 
     check window.animationScheduler().tick(initDuration(milliseconds = 1000)) == 1
     check not editor.insertionPointVisible
-    let hiddenNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    let hiddenNodes = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
     check not hiddenNodes.renderedCaretInView(field, field.textColor())
     check window.animationScheduler().tick(initDuration(milliseconds = 1000)) == 1
     check editor.insertionPointVisible
-    let visibleAgainNodes = window.buildRenders()[DefaultDrawLevel].nodes
+    let visibleAgainNodes = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
     check visibleAgainNodes.renderedCaretInView(field, field.textColor())
 
   test "return ends field editor editing and sends text field action":

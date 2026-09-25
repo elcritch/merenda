@@ -3,8 +3,7 @@ import std/[algorithm, monotimes, os, strformat, strutils, times, unicode, unitt
 
 import figdraw
 
-when not defined(useNativeDynlib):
-  import pkg/pixie
+import pkg/pixie
 
 import merenda/nimkit
 import ../fixtures/nimbindings
@@ -381,32 +380,31 @@ sibling body
         check node.screenBox.h == 40.0'f32
     check imageCount == 2
 
-  when not defined(useNativeDynlib):
-    test "Markdown downsamples decoded images to their maximum display size":
-      clearImageCache()
-      let
-        messages = newImageMessageSubscription()
-        sourceImage = newImageResource(newImage(2000, 1000), name = "large-markdown")
-      var style = initMarkdownStyle()
-      style.maximumImageSize = initSize(100.0'f32, 100.0'f32)
-      let loader: MarkdownImageLoader = proc(url: string): ImageResource =
-        discard url
-        sourceImage
-      let view =
-        newMarkdownView("![Large](asset:large)", style = style, imageLoader = loader)
-      require view.waitForMarkdownParsing()
-      discard buildRenders(view)
+  test "Markdown downsamples decoded images to their maximum display size":
+    clearImageCache()
+    let
+      messages = newImageMessageSubscription()
+      sourceImage = newImageResource(newImage(2000, 1000), name = "large-markdown")
+    var style = initMarkdownStyle()
+    style.maximumImageSize = initSize(100.0'f32, 100.0'f32)
+    let loader: MarkdownImageLoader = proc(url: string): ImageResource =
+      discard url
+      sourceImage
+    let view =
+      newMarkdownView("![Large](asset:large)", style = style, imageLoader = loader)
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
 
-      var
-        message: ImageMsg
-        uploadedWidth, uploadedHeight: int
-      while messages.tryRecvImageMsg(message):
-        if message.kind == ImkPutPixie:
-          uploadedWidth = message.pimg.width
-          uploadedHeight = message.pimg.height
-      check uploadedWidth == 100
-      check uploadedHeight == 50
-      check not hasImage(sourceImage.imageId())
+    var
+      message: ImageMsg
+      uploadedWidth, uploadedHeight: int
+    while messages.tryRecvImageMsg(message):
+      if message.kind == ImkPutPixie:
+        uploadedWidth = message.pimg.width
+        uploadedHeight = message.pimg.height
+    check uploadedWidth == 100
+    check uploadedHeight == 50
+    check not hasImage(sourceImage.imageId())
 
   test "HTML img tags render through the Markdown image loader":
     const
@@ -964,8 +962,7 @@ mystery value
       cornerRadius: 9.0'f32,
       padding: insets(7.0'f32, 10.0'f32),
     )
-    let source =
-      """
+    let source = """
 Before `inline`.
 
 ```nim
@@ -1001,113 +998,111 @@ echo "fenced"
         check node.screenBox.h > 20.0'f32
     check panelCount == 2
 
-  when not defined(useNativeDynlib):
-    test "selecting text retains unchanged Markdown underlays":
-      let
-        root = newView(frame = rect(0, 0, 520, 320))
-        view = newMarkdownView(
-          "Before.\n\n```nim\necho \"selected\"\n```", frame = rect(0, 0, 520, 320)
-        )
-      root.addSubview(view)
-      require view.waitForMarkdownParsing()
-      require view.waitForMarkdownLayout()
-      root.layoutSubtreeIfNeeded()
-      discard root.buildRenderScene()
+  test "selecting text retains unchanged Markdown underlays":
+    let
+      root = newView(frame = rect(0, 0, 520, 320))
+      view = newMarkdownView(
+        "Before.\n\n```nim\necho \"selected\"\n```", frame = rect(0, 0, 520, 320)
+      )
+    root.addSubview(view)
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    root.layoutSubtreeIfNeeded()
+    discard root.buildRenderScene()
 
-      view.textView().selectedRange = initTextRange(0, 6)
-      discard root.buildRenderScene()
+    view.textView().selectedRange = initTextRange(0, 6)
+    discard root.buildRenderScene()
 
-    test "large documents retain only buffered visible text lines":
-      var source: string
-      for index in 0 ..< 240:
-        source.add &"paragraph {index:03}\n\n"
-      let view = newMarkdownView(source, frame = rect(0, 0, 360, 180))
-      require view.waitForMarkdownParsing()
-      require view.waitForMarkdownLayout()
+  test "large documents retain only buffered visible text lines":
+    var source: string
+    for index in 0 ..< 240:
+      source.add &"paragraph {index:03}\n\n"
+    let view = newMarkdownView(source, frame = rect(0, 0, 360, 180))
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
 
-      let
-        scene = view.buildRenderScene()
-        totalLines = view.textView().layoutManager().lineCount()
-      var firstRendered: seq[string]
-      for node in scene.materialize()[DefaultDrawLevel].nodes:
-        if node.kind == nkText:
-          var text: string
-          for glyphIndex in 0 ..< node.textLayout.glyphCount():
-            text.add node.textLayout.displayRune(glyphIndex)
-          firstRendered.add text
+    let
+      scene = view.buildRenderScene()
+      totalLines = view.textView().layoutManager().lineCount()
+    var firstRendered: seq[string]
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        var text: string
+        for glyphIndex in 0 ..< node.textLayout.glyphCount():
+          text.add node.textLayout.displayRune(glyphIndex)
+        firstRendered.add text
 
-      check totalLines > 200
-      check firstRendered.len < totalLines div 3
-      check firstRendered.join().contains("paragraph 000")
-      check not firstRendered.join().contains("paragraph 239")
+    check totalLines > 200
+    check firstRendered.len < totalLines div 3
+    check firstRendered.join().contains("paragraph 000")
+    check not firstRendered.join().contains("paragraph 239")
 
-      view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
-      discard view.buildRenderScene()
-      var lastRendered: seq[string]
-      for node in scene.materialize()[DefaultDrawLevel].nodes:
-        if node.kind == nkText:
-          var text: string
-          for glyphIndex in 0 ..< node.textLayout.glyphCount():
-            text.add node.textLayout.displayRune(glyphIndex)
-          lastRendered.add text
+    view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
+    discard view.buildRenderScene()
+    var lastRendered: seq[string]
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        var text: string
+        for glyphIndex in 0 ..< node.textLayout.glyphCount():
+          text.add node.textLayout.displayRune(glyphIndex)
+        lastRendered.add text
 
-      check lastRendered.len < totalLines div 3
-      check not lastRendered.join().contains("paragraph 000")
-      check lastRendered.join().contains("paragraph 239")
+    check lastRendered.len < totalLines div 3
+    check not lastRendered.join().contains("paragraph 000")
+    check lastRendered.join().contains("paragraph 239")
 
-      view.textView().selectedRange = initTextRange(0, view.textStorage().len)
-      discard view.buildRenderScene()
-      var selectionRectCount = 0
-      for node in scene.materialize()[DefaultDrawLevel].nodes:
-        if node.kind == nkRectangle and node.fill.kind == flColor and
-            node.fill.color == view.selectionColor().rgba:
-          inc selectionRectCount
-      check selectionRectCount < totalLines div 3
+    view.textView().selectedRange = initTextRange(0, view.textStorage().len)
+    discard view.buildRenderScene()
+    var selectionRectCount = 0
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == view.selectionColor().rgba:
+        inc selectionRectCount
+    check selectionRectCount < totalLines div 3
 
-    test "fitting code blocks do not allocate embedded text views":
-      let view =
-        newMarkdownView("```nim\nlet count = 42\n```", frame = rect(0, 0, 600, 240))
-      require view.waitForMarkdownParsing()
-      require view.waitForMarkdownLayout()
-      discard view.buildRenderScene()
-      check view.codeBlockScrollViews(includeHidden = true).len == 0
-      view.frame = rect(0, 0, 120, 240)
-      view.layoutSubtreeIfNeeded()
-      discard view.buildRenderScene()
-      check view.codeBlockScrollViews().len == 1
-      view.frame = rect(0, 0, 600, 240)
-      view.layoutSubtreeIfNeeded()
-      discard view.buildRenderScene()
-      check view.codeBlockScrollViews().len == 0
+  test "fitting code blocks do not allocate embedded text views":
+    let view =
+      newMarkdownView("```nim\nlet count = 42\n```", frame = rect(0, 0, 600, 240))
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    discard view.buildRenderScene()
+    check view.codeBlockScrollViews(includeHidden = true).len == 0
+    view.frame = rect(0, 0, 120, 240)
+    view.layoutSubtreeIfNeeded()
+    discard view.buildRenderScene()
+    check view.codeBlockScrollViews().len == 1
+    view.frame = rect(0, 0, 600, 240)
+    view.layoutSubtreeIfNeeded()
+    discard view.buildRenderScene()
+    check view.codeBlockScrollViews().len == 0
 
-    test "offscreen code and table scroll views are created near the viewport":
-      let source =
-        "introductory paragraph\n\n".repeat(160) & "```text\n" & "wide code ".repeat(80) &
-        "\n```\n\n" & "| A | B | C | D | E | F | G | H | I | J | K | L |\n" &
-        "| - | - | - | - | - | - | - | - | - | - | - | - |\n" &
-        "| CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU |"
-      let view = newMarkdownView(source, frame = rect(0, 0, 300, 180))
-      require view.waitForMarkdownParsing()
-      require view.waitForMarkdownLayout()
-      discard view.buildRenderScene()
+  test "offscreen code and table scroll views are created near the viewport":
+    let source =
+      "introductory paragraph\n\n".repeat(160) & "```text\n" & "wide code ".repeat(80) &
+      "\n```\n\n" & "| A | B | C | D | E | F | G | H | I | J | K | L |\n" &
+      "| - | - | - | - | - | - | - | - | - | - | - | - |\n" &
+      "| CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU | CPU |"
+    let view = newMarkdownView(source, frame = rect(0, 0, 300, 180))
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    discard view.buildRenderScene()
 
-      check view.codeBlockScrollViews(includeHidden = true).len == 0
-      check view.tableScrollViews().len == 0
+    check view.codeBlockScrollViews(includeHidden = true).len == 0
+    check view.tableScrollViews().len == 0
 
-      view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
-      discard view.buildRenderScene()
-      discard view.pollMarkdownParsing()
-      view.layoutSubtreeIfNeeded()
-      discard view.buildRenderScene()
+    view.scrollView().contentOffset = view.scrollView().maximumContentOffset()
+    discard view.buildRenderScene()
+    discard view.pollMarkdownParsing()
+    view.layoutSubtreeIfNeeded()
+    discard view.buildRenderScene()
 
-      check view.codeBlockScrollViews(includeHidden = true).len == 1
-      check view.tableScrollViews().len == 1
+    check view.codeBlockScrollViews(includeHidden = true).len == 1
+    check view.tableScrollViews().len == 1
 
   test "code block panels in ordered lists do not overlap item labels":
     var style = initMarkdownStyle()
     style.codeBlockStyle.padding = insets(7.0'f32, 10.0'f32)
-    let source =
-      """
+    let source = """
 1. Install dependencies:
 
    ```bash
@@ -1482,8 +1477,7 @@ Press <kbd>Enter</kbd>.
 
   test "GFM tables reflow once the Markdown viewport settles":
     let
-      source =
-        """
+      source = """
 | Mode | Shortcut | Notes |
 | :--- | :------: | :---- |
 | Normal | Ctrl+Shift+P | Opens the command palette and keeps a deliberately long explanation constrained to the current Markdown viewport. |

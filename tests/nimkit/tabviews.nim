@@ -3,6 +3,7 @@ import std/[unicode, unittest]
 import sigils/core
 
 import figdraw
+import ./fixtures/rendergeometry
 
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
@@ -39,8 +40,8 @@ proc newTabDelegateSpy(): TabDelegateSpy =
   discard result.withProtocol(TabDelegateSpyProtocol)
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add(rune)
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 func screenBoxClose(node: Fig, rect: nimkitTypes.Rect): bool =
   abs(node.screenBox.x - rect.origin.x) <= 0.01'f32 and
@@ -413,7 +414,7 @@ suite "nimkit tab views":
       panelFound = false
       contentFound = false
 
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkText:
         labelFound = true
         check node.screenBox.y < tabView.contentRect.origin.y
@@ -454,7 +455,7 @@ suite "nimkit tab views":
     discard tabView.addTabViewItem(newTabViewItem("General", newView()))
 
     var topTabFound = false
-    for node in buildRenders(tabView)[DefaultDrawLevel].nodes:
+    for node in buildRenders(tabView)[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.screenBoxClose(tabView.tabRect(0)):
         topTabFound = true
         check node.corners[dcTopLeft] > 0'u16
@@ -465,7 +466,7 @@ suite "nimkit tab views":
 
     tabView.tabPosition = tpBottom
     var bottomTabFound = false
-    for node in buildRenders(tabView)[DefaultDrawLevel].nodes:
+    for node in buildRenders(tabView)[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.screenBoxClose(tabView.tabRect(0)):
         bottomTabFound = true
         check node.corners[dcTopLeft] == 0'u16
@@ -487,7 +488,7 @@ suite "nimkit tab views":
       panelFillCount = 0
       resetWarningsTextFound = false
 
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       if node.drawsOpaquePanelFill(panelRect):
         inc panelFillCount
       if node.kind == nkText and node.renderedText() == "Reset Warnings":

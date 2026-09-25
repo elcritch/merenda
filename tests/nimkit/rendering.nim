@@ -1,6 +1,7 @@
 import std/[unicode, unittest]
 
 import figdraw
+import ./fixtures/rendergeometry
 
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
@@ -142,8 +143,8 @@ proc newExtraChrome(): Chrome =
   Chrome(chrome)
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add(rune)
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc renderedRect(node: Fig): nimkitTypes.Rect =
   nimkitTypes.rect(
@@ -199,14 +200,14 @@ suite "nimkit rendering":
 
     let popupList = renders[PopupDrawLevel]
     var popupFillFound = false
-    for node in popupList.nodes:
+    for node in popupList.resolvedNodes():
       if node.kind == nkRectangle and node.fill == PopupLayerFill:
         popupFillFound = true
         check node.parent.int >= 0
-        check node.parent.int < popupList.nodes.len
+        check node.parent.int < popupList.resolvedNodes().len
     check popupFillFound
 
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       check node.kind != nkRectangle or node.fill != PopupLayerFill
 
   test "buildRenders emits root, text field, and button nodes":
@@ -220,11 +221,11 @@ suite "nimkit rendering":
     check DefaultDrawLevel in renders
     let list = renders[DefaultDrawLevel]
     check list.rootIds.len >= 1
-    check list.nodes.len >= 5
+    check list.resolvedNodes().len >= 5
 
     var textNodeCount = 0
     var rectangleNodeCount = 0
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       case node.kind
       of nkText:
         inc textNodeCount
@@ -248,7 +249,7 @@ suite "nimkit rendering":
     let list = buildRenders(root)[DefaultDrawLevel]
     check list.rootIds.len == 1
 
-    let node = list.nodes[list.rootIds[0].int]
+    let node = list.resolvedNodes()[list.firstRectangle().int]
     check node.kind == nkRectangle
     check node.fill.kind == flColor
     check node.fill.color == color(0.2, 0.4, 0.6, 0.4).rgba
@@ -278,17 +279,17 @@ suite "nimkit rendering":
 
     let
       list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
-      rootIdx = list.rootIds[0]
+      rootIdx = list.firstRectangle()
 
-    check list.nodes[int(rootIdx)].fill == baseFill
+    check list.resolvedNodes()[int(rootIdx)].fill == baseFill
 
     var
       highlightFound = false
       stripeFound = false
       childFound = false
 
-    for idx in childIndex(list.nodes, rootIdx):
-      let node = list.nodes[int(idx)]
+    for idx in descendantIndex(list.resolvedNodes(), rootIdx):
+      let node = list.resolvedNodes()[int(idx)]
       if node.kind == nkRectangle:
         let nodeRect = node.renderedRect()
         if node.fill.kind == flColor and node.fill.color == highlightColor.rgba:
@@ -307,16 +308,16 @@ suite "nimkit rendering":
 
     let
       explicitList = buildRenders(explicitRoot, initAppearance(theme))[DefaultDrawLevel]
-      explicitRootIdx = explicitList.rootIds[0]
+      explicitRootIdx = explicitList.firstRectangle()
 
     var explicitPinstripeFound = false
-    for idx in childIndex(explicitList.nodes, explicitRootIdx):
-      let node = explicitList.nodes[int(idx)]
+    for idx in descendantIndex(explicitList.resolvedNodes(), explicitRootIdx):
+      let node = explicitList.resolvedNodes()[int(idx)]
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color in [highlightColor.rgba, stripeColor.rgba]:
         explicitPinstripeFound = true
 
-    check explicitList.nodes[int(explicitRootIdx)].fill.color ==
+    check explicitList.resolvedNodes()[int(explicitRootIdx)].fill.color ==
       color(0.2, 0.3, 0.4, 1.0).rgba
     check not explicitPinstripeFound
 
@@ -361,7 +362,7 @@ suite "nimkit rendering":
       buttonTextBoxFound = false
       fieldTextBoxFound = false
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == buttonFill.rgba:
         themedButtonFound = true
@@ -465,7 +466,7 @@ suite "nimkit rendering":
       fieldTextFound = false
       comboTextFound = false
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       case node.kind
       of nkText:
         let text = node.renderedText()
@@ -516,7 +517,7 @@ suite "nimkit rendering":
     let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
 
     var knobFound = false
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill == expectedKnobFill and
           node.renderedRect().rectsClose(expectedKnobRect):
         knobFound = true
@@ -549,7 +550,7 @@ suite "nimkit rendering":
     var
       buttonBackingFound = false
       buttonRoot = (-1).FigIdx
-    for idx, node in list.nodes:
+    for idx, node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == rgbaColor(0, 0, 0, 40).rgba and
           node.renderedRect().rectsClose(expectedShadowRect):
@@ -575,8 +576,8 @@ suite "nimkit rendering":
     check buttonRoot != (-1).FigIdx
 
     var innerRoot = (-1).FigIdx
-    for idx in childIndex(list.nodes, buttonRoot):
-      let node = list.nodes[int(idx)]
+    for idx in descendantIndex(list.resolvedNodes(), buttonRoot):
+      let node = list.resolvedNodes()[int(idx)]
       if node.kind == nkRectangle and NfRectMaskContent in node.flags and
           node.fill.kind == flLinear3:
         innerRoot = idx
@@ -585,8 +586,8 @@ suite "nimkit rendering":
     check innerRoot != (-1).FigIdx
 
     var glossFound = false
-    for idx in childIndex(list.nodes, innerRoot):
-      let node = list.nodes[int(idx)]
+    for idx in descendantIndex(list.resolvedNodes(), innerRoot):
+      let node = list.resolvedNodes()[int(idx)]
       if node.kind == nkRectangle and node.fill.kind == flLinear2 and
           node.fill.lin2.start.a > 0'u8 and node.fill.lin2.stop.a == 0'u8:
         glossFound = true
@@ -595,7 +596,7 @@ suite "nimkit rendering":
     var
       okTextLayerCount = 0
       mainTextFound = false
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkText and node.renderedText() == "OK":
         inc okTextLayerCount
         if node.renderedRect().rectsClose(expectedTextRect):
@@ -625,7 +626,7 @@ suite "nimkit rendering":
       list = buildRenders(root, initAppearance(theme))[DefaultDrawLevel]
 
     var buttonRoot = (-1).FigIdx
-    for idx, node in list.nodes:
+    for idx, node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill == style.box.fill and
           node.renderedRect().rectsClose(expectedButtonRect):
         buttonRoot = idx.FigIdx
@@ -633,11 +634,11 @@ suite "nimkit rendering":
     check buttonRoot != (-1).FigIdx
 
     var buttonChildCount = 0
-    for _ in childIndex(list.nodes, buttonRoot):
+    for _ in descendantIndex(list.resolvedNodes(), buttonRoot):
       inc buttonChildCount
 
     var okTextLayerCount = 0
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkText and node.renderedText() == "OK":
         inc okTextLayerCount
 
@@ -662,7 +663,7 @@ suite "nimkit rendering":
     check expectedTitle != button.title()
 
     var clippedTitleFound = false
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkText and node.renderedText() == expectedTitle:
         clippedTitleFound = true
 
@@ -687,7 +688,7 @@ suite "nimkit rendering":
     check expectedTitle != button.title()
 
     var clippedTitleFound = false
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkText and node.renderedText() == expectedTitle:
         clippedTitleFound = true
 
@@ -714,7 +715,7 @@ suite "nimkit rendering":
         specialButton.rectToWindow(specialButton.bounds).inset(insets(5.0))
 
     var extraFound = false
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill == ExtraChromeFill and
           node.renderedRect().rectsClose(expectedExtraRect):
         extraFound = true
@@ -730,9 +731,11 @@ suite "nimkit rendering":
     checkbox.styleId = "special-choice"
     combo.styleId = "special-combo"
     combo.selectedIndex = 0
-    combo.openPopup()
     root.addSubview(checkbox)
     root.addSubview(combo)
+    let window = newWindow("Chrome popup rendering", frame = root.frame)
+    window.setContentView(root)
+    combo.popupPresentation = ppInline
 
     var builder = initThemeBuilder(initTheme())
     builder.installChrome(ExtraChromeName, newExtraChrome())
@@ -741,8 +744,10 @@ suite "nimkit rendering":
     builder[initStyleSelector(srComboBox, id = "special-combo"), StyleChrome] =
       styleKeyword(ExtraChromeName)
 
+    let appearance = initAppearance(builder.finish())
+    window.setAppearance(appearance)
+    combo.openPopup()
     let
-      appearance = initAppearance(builder.finish())
       checkStyle = appearance.resolveChoiceButtonStyle(
         controlStyle(srCheckBox, id = checkbox.styleId, classes = checkbox.styleClasses)
       )
@@ -759,14 +764,14 @@ suite "nimkit rendering":
       comboExtraFound = false
       popupExtraFound = false
 
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.fill == ExtraChromeFill:
         if node.renderedRect().rectsClose(expectedChoiceExtra):
           choiceExtraFound = true
         if node.renderedRect().rectsClose(expectedComboExtra):
           comboExtraFound = true
 
-    for node in renders[PopupDrawLevel].nodes:
+    for node in renders[PopupDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.fill == ExtraChromeFill and
           node.renderedRect().rectsClose(expectedPopupExtra):
         popupExtraFound = true
@@ -811,7 +816,7 @@ suite "nimkit rendering":
       radioInnerAccentFound = false
       radioGlossFound = false
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle:
         let nodeRect = node.renderedRect()
         if nodeRect.rectsClose(checkboxIndicator):
@@ -845,7 +850,7 @@ suite "nimkit rendering":
 
     let renders = buildRenders(root)
     var buttonTextFound = false
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkText:
         buttonTextFound = true
 
@@ -879,8 +884,11 @@ suite "nimkit rendering":
 
     root.appearance = initAppearance(initAquaTheme())
     combo.selectItemAtIndex(1)
-    combo.openPopup()
     root.addSubview(combo)
+    let window = newWindow("Combo rendering", frame = root.frame)
+    window.setContentView(root)
+    combo.popupPresentation = ppInline
+    combo.openPopup()
 
     let renders = buildRenders(root)
     check DefaultDrawLevel in renders
@@ -898,7 +906,7 @@ suite "nimkit rendering":
       arrowTopWidth = 0.0'f32
       arrowBottomWidth = 0.0'f32
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkText:
         inc textNodeCount
 
@@ -919,7 +927,7 @@ suite "nimkit rendering":
         elif node.screenBox.y == 34.0:
           arrowBottomWidth = node.screenBox.w
 
-    for node in popupList.nodes:
+    for node in popupList.resolvedNodes():
       if node.kind == nkText:
         inc textNodeCount
 
@@ -960,6 +968,8 @@ suite "nimkit rendering":
     discard menu.addSeparator()
     discard menu.addItem(newMenuItem("Reset Count"))
     root.addSubview(button)
+    let window = newWindow("Popup rendering", frame = root.frame)
+    window.setContentView(root)
     button.popupPresentation = ppInline
     button.openPopup()
 
@@ -974,7 +984,7 @@ suite "nimkit rendering":
       resetFound = false
       popupButtonArrowLines = 0
 
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.screenBox.h == 1.0'f32 and
           node.screenBox.w <= 6.0'f32 and node.screenBox.x >= 70.0'f32 and
           node.screenBox.x + node.screenBox.w <= 85.0'f32 and
@@ -982,7 +992,7 @@ suite "nimkit rendering":
           [11.0'f32, 12.0'f32, 13.0'f32, 18.0'f32, 19.0'f32, 20.0'f32]:
         inc popupButtonArrowLines
 
-    for node in renders[PopupDrawLevel].nodes:
+    for node in renders[PopupDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.screenBox.x == 10.0 and
           node.screenBox.y == 28.0 and node.screenBox.w == 180.0 and
           node.screenBox.h == 74.0 and node.stroke.weight == 1.0:
@@ -1027,7 +1037,7 @@ suite "nimkit rendering":
       titleFound = false
       dividerFound = false
 
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkText and node.renderedText() == "Actions":
         titleFound = true
       if node.kind == nkRectangle and node.screenBox.x == 0.0 and
@@ -1060,7 +1070,7 @@ suite "nimkit rendering":
         initAppearance().resolveButtonStyle(controlStyle(srMenuBarItem, {ssHovered}))
     var hoverFound = false
 
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.screenBox.y == 2.0 and
           node.screenBox.h == 24.0 and node.fill == hoverStyle.box.fill:
         hoverFound = true
@@ -1108,7 +1118,7 @@ suite "nimkit rendering":
       highlightedRowFound = false
       selectedTextFound = false
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       case node.kind
       of nkRectangle:
         if node.fill.kind == flColor and node.fill.color == selectedFill.rgba and
@@ -1130,7 +1140,7 @@ suite "nimkit rendering":
           check node.screenBox.w == 110.0
           check node.screenBox.h == 20.0
           check node.parent != (-1).FigIdx
-          let clipNode = list.nodes[int(node.parent)]
+          let clipNode = list.resolvedNodes()[int(node.parent)]
           check clipNode.kind == nkRectangle
           check NfClipContent in clipNode.flags
           check clipNode.screenBox == node.screenBox
@@ -1164,7 +1174,7 @@ suite "nimkit rendering":
       middleRowFound = false
       lastRowFound = false
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == rowFill.rgba and node.screenBox.x == 11.0 and
           node.screenBox.w == 128.0 and node.screenBox.h == 28.0:
@@ -1212,12 +1222,12 @@ suite "nimkit rendering":
       bodyFocusRingFound = false
       fullTableFocusRingFound = false
 
-    for index, node in list.nodes:
+    for index, node in list.resolvedNodes():
       if node.kind == nkRectangle and node.stroke.weight == 3.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         check node.parent != (-1).FigIdx
         let
-          clipNode = list.nodes[int(node.parent)]
+          clipNode = list.resolvedNodes()[int(node.parent)]
           clipRect = list.translatedScreenRect(node.parent.int)
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
@@ -1235,7 +1245,7 @@ suite "nimkit rendering":
     check bodyFocusRingFound
     check not fullTableFocusRingFound
 
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.stroke.weight == 3.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         fail()
@@ -1259,14 +1269,14 @@ suite "nimkit rendering":
     let list = buildRenders(root, initAppearance(builder.finish()))[FocusRingDrawLevel]
     var focusRingFound = false
 
-    for index, node in list.nodes:
+    for index, node in list.resolvedNodes():
       if node.kind == nkRectangle and node.stroke.weight == 3.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
         check node.parent != (-1).FigIdx
         let
           ringRect = list.translatedScreenRect(index)
-          clipNode = list.nodes[int(node.parent)]
+          clipNode = list.resolvedNodes()[int(node.parent)]
           clipRect = list.translatedScreenRect(node.parent.int)
         check ringRect.x == 5.0
         check ringRect.y == 15.0
@@ -1300,14 +1310,14 @@ suite "nimkit rendering":
     let list = buildRenders(root, initAppearance(builder.finish()))[FocusRingDrawLevel]
     var focusRingFound = false
 
-    for index, node in list.nodes:
+    for index, node in list.resolvedNodes():
       if node.kind == nkRectangle and node.stroke.weight == 4.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
         check node.parent != (-1).FigIdx
         let
           ringRect = list.translatedScreenRect(index)
-          clipNode = list.nodes[int(node.parent)]
+          clipNode = list.resolvedNodes()[int(node.parent)]
           clipRect = list.translatedScreenRect(node.parent.int)
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
@@ -1343,13 +1353,13 @@ suite "nimkit rendering":
     let list = buildRenders(root, initAppearance(builder.finish()))[FocusRingDrawLevel]
     var focusRingFound = false
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.stroke.weight == 3.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
         check node.parent != (-1).FigIdx
         let
-          clipNode = list.nodes[int(node.parent)]
+          clipNode = list.resolvedNodes()[int(node.parent)]
           clipRect = list.translatedScreenRect(node.parent.int)
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
@@ -1383,13 +1393,13 @@ suite "nimkit rendering":
     let list = buildRenders(root, initAppearance(builder.finish()))[FocusRingDrawLevel]
     var focusRingFound = false
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.stroke.weight == 3.0 and
           node.stroke.fill.kind == flColor and node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
         check node.parent != (-1).FigIdx
         let
-          clipNode = list.nodes[int(node.parent)]
+          clipNode = list.resolvedNodes()[int(node.parent)]
           clipRect = list.translatedScreenRect(node.parent.int)
         check clipNode.kind == nkRectangle
         check NfClipContent in clipNode.flags
@@ -1412,7 +1422,7 @@ suite "nimkit rendering":
 
     let selectionRenders = buildRenders(root)
     var selectionFound = false
-    for node in selectionRenders[DefaultDrawLevel].nodes:
+    for node in selectionRenders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == color(0.24, 0.56, 1.0, 0.34).rgba and node.screenBox.w > 1.0 and
           node.screenBox.h > 0.0:
@@ -1421,7 +1431,7 @@ suite "nimkit rendering":
     field.selectedRange = initTextRange(3, 0)
     let caretRenders = buildRenders(root)
     var caretFound = false
-    for node in caretRenders[DefaultDrawLevel].nodes:
+    for node in caretRenders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == field.textColor.rgba and node.screenBox.w == 1.0:
         caretFound = true
@@ -1445,7 +1455,7 @@ suite "nimkit rendering":
     let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
 
     var activeFillFound = false
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill.kind == flColor and
           node.fill.color == activeFill.rgba:
         activeFillFound = true
@@ -1479,7 +1489,7 @@ suite "nimkit rendering":
 
       let list = buildRenders(root)[DefaultDrawLevel]
       var pressedFillFound = false
-      for node in list.nodes:
+      for node in list.resolvedNodes():
         if node.kind == nkRectangle and node.fill.kind == flColor and
             node.fill.color == pressedFill.rgba:
           pressedFillFound = true
@@ -1515,7 +1525,7 @@ suite "nimkit rendering":
       baseCount = 0
       activeCount = 0
       pressedCount = 0
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill.kind == flColor:
         if node.fill.color == baseFill.rgba:
           inc baseCount
@@ -1547,7 +1557,7 @@ suite "nimkit rendering":
     let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
 
     var focusRingFound = false
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.stroke.fill.kind == flColor and
           node.stroke.fill.color == focusColor.rgba:
         focusRingFound = true
@@ -1593,7 +1603,7 @@ suite "nimkit rendering":
       checkmarkTextCount = 0
       radioIndicatorFound = false
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill.kind == flColor:
         if node.fill.color == selectedFill.rgba:
           inc selectedIndicatorCount
@@ -1643,7 +1653,7 @@ suite "nimkit rendering":
       buttonFillFound = false
       rootFillFound = false
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.fill.kind == flColor:
         if node.fill.color == buttonFill.rgba:
           buttonFillFound = true
@@ -1667,10 +1677,10 @@ suite "nimkit rendering":
     let list = renders[DefaultDrawLevel]
 
     check list.rootIds.len == 1
-    check NfClipContent notin list.nodes[int(list.rootIds[0])].flags
+    check NfClipContent notin list.resolvedNodes()[int(list.rootIds[0])].flags
 
     var childNodeCount = 0
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.parent != (-1).FigIdx:
         inc childNodeCount
     check childNodeCount > 0
@@ -1761,26 +1771,26 @@ suite "nimkit rendering":
 
     let renders = buildRenders(root)
     let list = renders[DefaultDrawLevel]
-    let rootIdx = list.rootIds[0]
+    let rootIdx = list.firstRectangle()
 
-    check list.nodes[int(rootIdx)].screenBox.x == 0.0
-    check list.nodes[int(rootIdx)].screenBox.y == 0.0
-    check list.nodes[int(rootIdx)].screenBox.w == 100.0
-    check list.nodes[int(rootIdx)].screenBox.h == 80.0
-    check NfClipContent notin list.nodes[int(rootIdx)].flags
+    check list.resolvedNodes()[int(rootIdx)].screenBox.x == 0.0
+    check list.resolvedNodes()[int(rootIdx)].screenBox.y == 0.0
+    check list.resolvedNodes()[int(rootIdx)].screenBox.w == 100.0
+    check list.resolvedNodes()[int(rootIdx)].screenBox.h == 80.0
+    check NfClipContent notin list.resolvedNodes()[int(rootIdx)].flags
 
     var childIdx = (-1).FigIdx
-    for idx in childIndex(list.nodes, rootIdx):
-      if list.nodes[int(idx)].kind == nkRectangle:
+    for idx in descendantIndex(list.resolvedNodes(), rootIdx):
+      if list.resolvedNodes()[int(idx)].kind == nkRectangle:
         childIdx = idx
 
     check childIdx != (-1).FigIdx
-    check list.nodes[int(childIdx)].parent == rootIdx
-    check list.nodes[int(childIdx)].screenBox.x == 80.0
-    check list.nodes[int(childIdx)].screenBox.y == 70.0
-    check list.nodes[int(childIdx)].screenBox.w == 50.0
-    check list.nodes[int(childIdx)].screenBox.h == 40.0
-    check NfClipContent notin list.nodes[int(childIdx)].flags
+    check list.isDescendant(childIdx.int, rootIdx.int)
+    check list.resolvedNodes()[int(childIdx)].screenBox.x == 80.0
+    check list.resolvedNodes()[int(childIdx)].screenBox.y == 70.0
+    check list.resolvedNodes()[int(childIdx)].screenBox.w == 50.0
+    check list.resolvedNodes()[int(childIdx)].screenBox.h == 40.0
+    check NfClipContent notin list.resolvedNodes()[int(childIdx)].flags
 
   test "buildRenders adds FigDraw clipping when views clip to bounds":
     let
@@ -1794,19 +1804,19 @@ suite "nimkit rendering":
 
     let renders = buildRenders(root)
     let list = renders[DefaultDrawLevel]
-    let rootIdx = list.rootIds[0]
+    let rootIdx = list.firstRectangle()
 
-    check NfClipContent in list.nodes[int(rootIdx)].flags
+    check NfClipContent in list.resolvedNodes()[int(rootIdx)].flags
 
     var childIdx = (-1).FigIdx
-    for idx in childIndex(list.nodes, rootIdx):
-      if list.nodes[int(idx)].kind == nkRectangle:
+    for idx in descendantIndex(list.resolvedNodes(), rootIdx):
+      if list.resolvedNodes()[int(idx)].kind == nkRectangle:
         childIdx = idx
 
     check childIdx != (-1).FigIdx
-    check list.nodes[int(childIdx)].screenBox.x == 80.0
-    check list.nodes[int(childIdx)].screenBox.y == 70.0
-    check NfClipContent in list.nodes[int(childIdx)].flags
+    check list.resolvedNodes()[int(childIdx)].screenBox.x == 80.0
+    check list.resolvedNodes()[int(childIdx)].screenBox.y == 70.0
+    check NfClipContent in list.resolvedNodes()[int(childIdx)].flags
 
   test "buildRenders calls selector-backed custom drawing":
     let
@@ -1822,10 +1832,12 @@ suite "nimkit rendering":
     check customDrawCount == 1
 
     var customRoot = (-1).FigIdx
-    for idx in childIndex(list.nodes, list.rootIds[0]):
-      if list.nodes[int(idx)].screenBox.x == 10.0 and
-          list.nodes[int(idx)].screenBox.y == 20.0:
+    for idx in descendantIndex(list.resolvedNodes(), list.rootIds[0]):
+      if list.resolvedNodes()[int(idx)].screenBox.x == 10.0 and
+          list.resolvedNodes()[int(idx)].screenBox.y == 20.0 and
+          list.resolvedNodes()[int(idx)].kind == nkTransform:
         customRoot = idx
+        break
 
     check customRoot != (-1).FigIdx
 
@@ -1833,8 +1845,8 @@ suite "nimkit rendering":
     var customTextFound = false
     var customLineFound = false
     var customCircleFound = false
-    for idx, node in list.nodes:
-      if not inCustomSubtree(list.nodes, customRoot, idx.FigIdx):
+    for idx, node in list.resolvedNodes():
+      if not inCustomSubtree(list.resolvedNodes(), customRoot, idx.FigIdx):
         continue
       if node.fill.kind != flColor:
         continue

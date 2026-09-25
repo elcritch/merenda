@@ -2,6 +2,9 @@
 
 ## 0.22.0
 
+- Keep Kosmo window shortcuts available while a terminal tab has focus.
+- Reject native control-character text events on X11, Wayland, and Windows to
+  avoid duplicate editor input after Return and Delete key events.
 - Share immutable UTF-8 text snapshots across NimKit text storage and FigDraw
   layout while preserving rune-based public APIs.
 - Store styled text as byte and rune ranges with compact style IDs and sparse

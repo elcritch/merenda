@@ -372,7 +372,9 @@ proc removeGridSubview*(gridView: GridView, child: View) =
   gridView.invalidateGridLayout()
 
 protocol GridViewLifecycleSlots of ViewLifecycleProtocol:
-  proc willRemoveSubview(gridView: GridView, child: View) {.slot.} =
+  proc removeOwnedSubview(
+      gridView: GridView, child: View
+  ) {.slotFor: willRemoveSubview.} =
     gridView.removeGridSubview(child)
 
 protocol DefaultGridViewLayout of ViewLayoutProtocol:

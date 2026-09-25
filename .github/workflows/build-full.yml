@@ -55,6 +55,9 @@ jobs:
         echo "$nimPath"
         nim -v
 
+    - name: Check shared test runner coverage
+      run: nim e --skipParentCfg:on --skipProjCfg:on .github/scripts/check_test_imports.nims
+
     - name: Setup software OpenGL (Mesa)
       if: runner.os == 'Windows'
       uses: ssciwr/setup-mesa-dist-win@v3.0.0
@@ -73,6 +76,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          clang \
           xvfb \
           xauth \
           libx11-xcb-dev \
@@ -116,7 +120,11 @@ jobs:
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
-        "$testExecutable"
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          xvfb-run -a "$testExecutable"
+        else
+          "$testExecutable"
+        fi
 
     - name: Compile Kosmo tests
       run: |
@@ -130,7 +138,11 @@ jobs:
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
-        "$testExecutable"
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          xvfb-run -a "$testExecutable"
+        else
+          "$testExecutable"
+        fi
 
     - name: Compile Tekton tests
       run: |
@@ -144,7 +156,11 @@ jobs:
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
-        "$testExecutable"
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          xvfb-run -a "$testExecutable"
+        else
+          "$testExecutable"
+        fi
 
     - name: Compile integration tests
       run: |
@@ -160,9 +176,31 @@ jobs:
         fi
         if [[ "${{ matrix.display }}" == "x11" ]]; then
           xvfb-run -a -s "-screen 0 1280x1024x24" "$testExecutable"
+        elif [[ "$RUNNER_OS" == "Linux" ]]; then
+          xvfb-run -a "$testExecutable"
         else
           "$testExecutable"
         fi
+
+    - name: Check ARC ownership with sanitizers
+      if: runner.os == 'Linux'
+      timeout-minutes: 10
+      env:
+        UBSAN_OPTIONS: halt_on_error=1
+        LSAN_OPTIONS: suppressions=.github/lsan.supp
+      run: |
+        xvfb-run -a atlas-run tests nimkit -- --cc:clang --mm:arc \
+          -d:nimkitOwnershipTests -d:nimkitSanitizers
+
+    - name: Check ORC ownership with sanitizers
+      if: runner.os == 'Linux'
+      timeout-minutes: 10
+      env:
+        UBSAN_OPTIONS: halt_on_error=1:suppressions=.github/ubsan.supp
+        LSAN_OPTIONS: suppressions=.github/lsan.supp
+      run: |
+        xvfb-run -a atlas-run tests nimkit -- --cc:clang --mm:orc \
+          -d:nimkitOwnershipTests -d:nimkitSanitizers
 
   examples:
     runs-on: ${{ matrix.os }}

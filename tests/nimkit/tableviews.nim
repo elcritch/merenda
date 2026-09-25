@@ -1,6 +1,7 @@
 import std/[algorithm, options, sequtils, unicode, unittest]
 
 import figdraw
+import ./fixtures/rendergeometry
 import sigils/core
 
 import merenda/nimkit
@@ -128,14 +129,14 @@ proc dropTargetSummary(rows: openArray[int], target: DraggingDropTarget): string
   result.add ":" & $target.kind & ":" & $target.position & ":" & $target.row
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add(rune)
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc renderedTexts(view: View): seq[string] =
   let renders = buildRenders(view)
   if DefaultDrawLevel notin renders:
     return @[]
-  for node in renders[DefaultDrawLevel].nodes:
+  for node in renders[DefaultDrawLevel].resolvedNodes():
     if node.kind == nkText:
       result.add node.renderedText()
 
@@ -143,7 +144,7 @@ proc renderedRectangleCount(view: View): int =
   let renders = buildRenders(view)
   if DefaultDrawLevel notin renders:
     return 0
-  for node in renders[DefaultDrawLevel].nodes:
+  for node in renders[DefaultDrawLevel].resolvedNodes():
     if node.kind == nkRectangle:
       inc result
 
@@ -170,7 +171,7 @@ proc clippedRectangleIndex(view: View, rect: nimkitTypes.Rect): int =
   let renders = buildRenders(view)
   if DefaultDrawLevel notin renders:
     return -1
-  for index, node in renders[DefaultDrawLevel].nodes:
+  for index, node in renders[DefaultDrawLevel].resolvedNodes():
     if node.kind == nkRectangle and NfClipContent in node.flags and
         node.renderedRect().rectsClose(rect):
       return index
@@ -182,8 +183,9 @@ proc hasChildRectangleWithOriginBefore(
   let renders = buildRenders(view)
   if parentIndex < 0 or DefaultDrawLevel notin renders:
     return false
-  for node in renders[DefaultDrawLevel].nodes:
-    if node.parent == parentIndex.FigIdx and node.kind == nkRectangle and
+  let list = renders[DefaultDrawLevel]
+  for index, node in list.resolvedNodes():
+    if list.isDescendant(index, parentIndex) and node.kind == nkRectangle and
         node.renderedRect().origin.x < beforeX:
       return true
   false
@@ -194,7 +196,7 @@ proc renderedRectangleWithFill(
   let renders = buildRenders(view)
   if DefaultDrawLevel notin renders:
     return false
-  for node in renders[DefaultDrawLevel].nodes:
+  for node in renders[DefaultDrawLevel].resolvedNodes():
     if node.kind == nkRectangle and node.fill == fillValue and
         node.renderedRect().rectsClose(rect):
       return true
@@ -209,7 +211,7 @@ proc renderedRectangleFillIn(
   let renders = buildRenders(view, appearance)
   if DefaultDrawLevel notin renders:
     return false
-  for node in renders[DefaultDrawLevel].nodes:
+  for node in renders[DefaultDrawLevel].resolvedNodes():
     if node.kind == nkRectangle and node.fill == fillValue:
       let rect = node.renderedRect()
       if rect.origin.x in xRange and rect.origin.y in yRange and
@@ -228,7 +230,7 @@ proc renderedFocusedCellStroke(
   for layer in [DefaultDrawLevel, FocusRingDrawLevel]:
     if layer notin renders:
       continue
-    for node in renders[layer].nodes:
+    for node in renders[layer].resolvedNodes():
       if node.kind != nkRectangle:
         continue
       if node.stroke.weight != strokeWidth or node.stroke.fill.kind != flColor or
@@ -250,7 +252,7 @@ proc renderedFocusedCellStroke(
   for layer in [DefaultDrawLevel, FocusRingDrawLevel]:
     if layer notin renders:
       continue
-    for node in renders[layer].nodes:
+    for node in renders[layer].resolvedNodes():
       if node.kind != nkRectangle or node.stroke.weight != strokeWidth:
         continue
       let rect = node.renderedRect()
@@ -265,7 +267,7 @@ proc renderedVisibleSortIndicatorCount(view: View, minimumY = -1.0'f32): int =
   if DefaultDrawLevel notin renders:
     return 0
   let expectedSortColor = chrome.sortIndicatorColor.rgba
-  for node in renders[DefaultDrawLevel].nodes:
+  for node in renders[DefaultDrawLevel].resolvedNodes():
     if node.fill.kind == flColor and node.screenBox.y >= minimumY - 0.1'f32 and (
       (
         node.kind == nkRectangle and node.screenBox.w >= 6.0 and node.screenBox.h >= 1.5 and
@@ -1186,7 +1188,7 @@ suite "NimKit TableView":
       firstCellFound = false
       lastCellFound = false
 
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and NfClipContent notin node.flags:
         let rendered = node.renderedRect()
         if rendered.rectsClose(rect(13.0, 25.0, 298.0, 24.0)):

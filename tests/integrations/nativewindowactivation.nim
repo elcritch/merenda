@@ -1,5 +1,5 @@
 ## Native context menus must preserve the stacking order of document windows.
-when defined(macosx) and not defined(useNativeDynlib):
+when defined(macosx):
   import std/[monotimes, os, tempfiles, times, unittest]
 
   import darwin/app_kit/[nsapplication, nswindow]

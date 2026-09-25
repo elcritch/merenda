@@ -1285,7 +1285,7 @@ proc handleRawEvent(view: KosmoEditorView, event: nimkit.MonoTextRawEvent): bool
 
 protocol KosmoEditorInput of nimkit.TextInputProtocol:
   method insertText(view: KosmoEditorView, text: string) =
-    if text.len > 0:
+    if nimkit.isInsertableText(text):
       view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
       discard view.editor.handleTextInput(text)
       view.refresh()
@@ -2235,8 +2235,9 @@ protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
       pane.helpPanel.setFrameFromLayout(
         nimkit.rect(helpX, helpY, helpWidth, helpHeight)
       )
+      # Leave enough room for the × after the active theme's button text insets.
       pane.helpCloseButton.setFrameFromLayout(
-        nimkit.rect(helpWidth - 38.0'f32, 4.0'f32, 30.0'f32, 28.0'f32)
+        nimkit.rect(helpWidth - 46.0'f32, 4.0'f32, 42.0'f32, 28.0'f32)
       )
     if pane.contentView == nimkit.View(pane.editorView):
       pane.editorView.refresh()

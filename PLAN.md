@@ -1,295 +1,75 @@
-# NimKit Plan
+# Merenda Work Plan
 
-## Goal
+Updated **2026-09-25**. Focus on reliable long-running Kosmo sessions and bounded
+memory use, then extend Tekton's authoring workflow.
 
-Build and evolve Merenda's pure Nim UI layer at `src/merenda/nimkit` as the
-project's primary UI toolkit.
+Architecture and API decisions live in [design](docs/design.md) and
+[layout](docs/layout.md). Test procedures, ownership contracts, and memory
+measurements live in [reliability](docs/reliability.md); workspace behavior is
+covered in [Kosmo workspace](docs/kosmo-workspace.md).
 
-The public API should stay Nim-native: plain value types for data, `ref object`
-for identity-bearing UI objects, selector-backed hooks where dynamic dispatch is
-useful, and backend/runtime details kept behind NimKit boundaries.
+## 1. Lifecycle and platform reliability — active
 
-Completed architecture and design decisions live in [docs/design.md](docs/design.md).
-Detailed layout, constraint, invalidation, and solver notes live in
-[docs/layout.md](docs/layout.md). This file tracks current state, active work,
-deferred architecture, and open decisions rather than serving as a change log.
+The bounded multi-window/terminal regression passes, and dedicated rendering
+works with ARC and ORC. The remaining work is to close platform lifecycle gaps
+and verify extended use.
 
-## Current State
+- [ ] Add an earlier close barrier in Siwin's Windows/X11 OS-close paths so GPU
+  completion and renderer destruction finish before native window teardown.
+  Cover OS-driven close, runtime shutdown, and repeated close in integration tests.
+- [ ] Run extended sessions with multiple windows, terminals, Git activity, and
+  Markdown. Track children, descriptors, owned workers, and memory after warmup;
+  investigate growth and turn reproducible failures into bounded regressions.
+- [ ] Verify dmon's Linux recursion fix before removing Kosmo's forced polling
+  fallback. Exercise deep trees, multiple windows, missed events, and shutdown.
+- [ ] Replace the temporary FigDraw `fix/acyclic-render-ownership` dependency with
+  a release containing [PR #96](https://github.com/elcritch/figdraw/pull/96).
 
-NimKit now provides a broad desktop-control foundation across views, responders,
-windows, application/menu/modal infrastructure, themes, rendering, constraints,
-containers, text, model-backed controls, documents, undo, pasteboards, dragging,
-animations, accessibility, and resource construction. The source tree is grouped
-under `accessibility`, `app`, `controls`, `containers`, `drawing`, `foundation`,
-`responder`, `text`, and `view`; `merenda/nimkit` remains the stable public
-umbrella import.
+**Completion evidence:** supported close paths preserve window lifetime through
+render cleanup, and repeated sessions return owned resources to their warmed
+baseline. Native Windows/Linux behavior needs validation beyond macOS results.
 
-The main established layers are:
+## 2. Memory and responsiveness — next
 
-- A pure Nim application and responder runtime with window, menu, popup, modal,
-  sheet, document-controller, undo-manager, notification, pasteboard, dragging,
-  and animation services.
-- A shared model vocabulary based on stable identifiers, `ObjectValue`,
-  controller adapters, incremental updates, and model-mutation notifications.
-  Tables, outlines, collections, cascading views, combo boxes, menus, document
-  tabs, and matrices use this vocabulary instead of parallel storage models.
-- A TextKit-shaped text stack with attributed storage, layout-manager protocols,
-  selection and input-client behavior, accessibility geometry, and an optional
-  UTF-8 gap-backed storage path. Public text positions remain rune-indexed.
-- A backend-neutral resource system with canonical serialization, validation,
-  document editing and undo, identity-preserving preview reconciliation,
-  constraints and guides, Sigils-discovered properties, and the Tekton builder.
-- A FigDraw rendering path that supports direct rendering and dedicated static
-  Metal/Vulkan runtimes, with application-owned resource leases, moved render
-  snapshots, renderer acknowledgements, and atlas recovery.
+Downloads are bounded and incremental render updates are compact. The next step
+is to measure retained memory across the whole workspace and budget its caches.
 
-## Current Priorities
+- [ ] Profile representative workspaces using `tests/benchmark_memory.nim` and
+  longer sessions. Separate live allocations and cache contents from allocator
+  retention; measure decoded images, Markdown, Git diffs, and downloaded files.
+- [ ] Set aggregate cache budgets and eviction policies from those measurements.
+  Verify that closing documents releases their working sets and that reopening
+  evicted content recovers correctly.
+- [ ] Profile editing and scrolling with UTF-8 gap storage, worker layout, and
+  retained rendering together. Use the fragment/snapshot benchmarks to identify
+  remaining costs. Add general visible-range text layout only if profiling
+  shows it is needed.
 
-1. Turn Tekton's constrained resource editor into a broader authoring tool:
-   typed non-view edits, richer property metadata, direct constraint authoring,
-   reusable components, and package-relative assets.
-2. Introduce a backend-neutral workspace/services boundary for file, URL,
-   application, pasteboard, and promised-file handoff.
-3. Add native accessibility and document/workspace adapters without leaking
-   platform types into core NimKit modules.
-4. Profile text storage and layout before committing to virtual or
-   visible-range-only layout.
+**Completion evidence:** cache growth is bounded under the chosen workload, with
+before/after memory and latency measurements and coverage for eviction/recovery.
 
-## Open Reliability Issues
+## 3. Tekton authoring — next feature work
 
-- [ ] Investigate and fix Kosmo subprocess-resource exhaustion that prevents new
-  terminals from opening after extended use. Observed on macOS with two windows
-  and five terminals: 255 open file descriptors (219 pipes) and 78 unreaped child
-  processes, against a launch-default descriptor limit of 256. The menu activates
-  but no terminal appears; ordinary file operations still work. Audit subprocess
-  cleanup and child reaping, including recurring Git commands; the leaking caller
-  is not yet confirmed. Add a repeated-operation regression checking descriptor
-  and child-process counts, and make terminal-start errors visibly actionable
-  instead of only assigning an editor status label.
+View editing and preview reconciliation are established. Extend that workflow
+through typed document operations while preserving invalid drafts, undo/redo,
+selection, and compatible preview identities.
 
-## Recently Completed — Consolidated July 2026
+- [ ] Start non-view editing with constraints and guides: typed insert, remove,
+  move, and replace operations, including grouped transactions and validation.
+- [ ] Add structured inspectors for those resources and the property metadata
+  they need, using runtime descriptors for enum choices.
+- [ ] Connect inspectors to direct layout authoring: guide overlays, anchor
+  handles, and constraint constant, priority, and activation editing. Surface
+  conflicts and ambiguity in the same workflow.
 
-### Resource System and Tekton
+**Completion evidence:** a user can create, edit, undo, save, and reload a
+constrained layout, including recovery from invalid input, without losing the
+last valid preview or selection.
 
-- Completed the first four builder milestones. `ResourceDocument` owns value-only
-  drafts, validation, stable paths, selection, revisions, and undo;
-  `ResourcePreview` reconciles valid revisions transactionally while preserving
-  compatible view/controller identities; and `ResourceEditor` provides canonical
-  CBOR persistence, hierarchy/canvas selection, diagnostics, property editing,
-  direct movement and sizing, duplication, reordering, deletion, and undo.
-- Expanded the backend-neutral schema and construction layer across views,
-  controllers, windows/panels, menus, commands, images, localization, key
-  bindings, themes, layout guides, and constraints. Resource identifiers remain
-  the connection boundary, and the default palette exposes 13 registered kinds.
-- Kept editor presentation metadata separate from runtime property discovery.
-  Editable runtime properties continue to come from Sigils protocols and shared
-  resource-value conversion rather than builder-specific setter tables.
+## Validation
 
-### Text Storage, Layout, and Editing
-
-- Established the attributed text model, `TextStorage` edit lifecycle,
-  `TextContainer`, protocol-backed `TextLayoutManager`, FigDraw layout bridge,
-  glyph/text/line query APIs, invalidation signals, temporary attributes, and
-  multi-container records without exposing backend layout types.
-- Migrated text fields, text views, editors, field editors, selection drawing,
-  hit testing, movement, marked text, accessibility geometry, find/checking,
-  completion, transfer, and paragraph editing onto the shared storage/layout
-  contracts.
-- Reworked `GapTextBuffer` around ARC-owned UTF-8 byte segments with private
-  rune/byte coordinate helpers and sparse rune/line checkpoints. SynEdit now uses
-  gap-backed storage and caches token spans, shifting and invalidating affected
-  ranges while applying attributes through normal `TextStorage` APIs only where
-  highlighting changed.
-
-### Controls, Models, and Application Services
-
-- Completed the current desktop control/container slice, including scroll,
-  stack, form, grid, tab, split, box, table, outline, collection, cascading,
-  combo, matrix, editor, monospace text, panel, and dialog foundations.
-- Added shared object-value conversion and validation plus object, array, tree,
-  and selection controllers. Model-backed widgets now preserve identity and
-  selection across sorting, filtering, reloads, and incremental mutation.
-- Added document/window controllers, responder-discovered undo, typed
-  notifications, view-controller containment, pure Nim panels, animation
-  scheduling, backend-neutral pasteboards/dragging, and broad accessibility
-  semantics and notifications.
-- Completed scaling passes for tables, combo boxes, cascading views, visible-row
-  construction, row geometry, cached lookups, system font catalogs, and lazy
-  option materialization. Deterministic operation-count tests cover the large
-  collection paths.
-
-### Rendering and Managed Resources
-
-- Kept application state, native windows, input, menus, IME, accessibility, and
-  lifecycle on the platform thread while allowing static Metal/Vulkan rendering
-  on a dedicated runtime. Render trees are moved and coalesced per window;
-  unsupported backends retain direct rendering.
-- Added managed FigDraw font/image leases, render-resource manifests,
-  acknowledgement-based snapshot lifetime, rebuildable image sources,
-  renderer-local atlas generations, pressure recovery, and multi-renderer cache
-  event delivery.
-
-## Verification
-
-- Run the full suite with `atlas-run tests`. Focused NimKit tests live under
-  `tests/nimkit/*.nim` and are aggregated by `tests/tnimkit.nim`.
-- Compile the example bundle with
-  `atlas-run tests --compile-only examples/all_compile.nim`; do not run the
-  bundle as a test.
-- Resource serialization/construction coverage lives in `tests/tresources.nim`.
-  Tekton document, preview, editor, and user-workflow coverage is aggregated by
-  `tests/ttekton.nim`.
-- The full Atlas suite and example bundle compile currently pass on macOS.
-
-## Near-Term Work
-
-### Workspace File Browser
-
-- Kosmo currently refreshes Git work-tree decorations from a Sigils worker every
-  three seconds. Keep this polling interval as the initial portable fallback.
-- Add dmon-backed project-tree watching to invalidate affected lazy directory
-  entries and request a coalesced Git-status refresh when files change. Debounce
-  event bursts and retain periodic polling on platforms where dmon is unavailable.
-
-### Resource Builder
-
-The current baseline is a standalone Tekton app built directly on
-`ResourceBundle`, with no parallel declarative model. It retains invalid drafts
-beside the last valid preview and preserves selection and compatible runtime
-identities across valid revisions.
-
-- Add typed insert, remove, move, and replace operations for constraints, guides,
-  controllers, windows, menus, commands, assets, localization catalogs, key
-  bindings, and themes. Support grouped transactions for related edits.
-- Add optional editor metadata for labels, categories, palette order, default
-  frames, numeric ranges, asset pickers, multiline text, and other presentation
-  hints. Enum choices should continue to come from runtime descriptors.
-- Extend direct layout authoring with resize handles, guide overlays, snapping,
-  anchor handles, constant/priority/activation editing, ownership visualization,
-  and conflict or ambiguity diagnostics.
-- Replace read-only resource detail surfaces with structured editors for
-  target/action connections, controller ownership, menus, commands, images,
-  localized strings, key bindings, and theme fragments. All commits should use
-  typed document operations and retain invalid draft input when appropriate.
-- Add reusable components/templates, copy/paste and drag/drop payloads,
-  multi-selection transforms, and package-relative asset management. Extend
-  duplicate-ID remapping from view subtrees to related constraints, connections,
-  and non-view resources.
-- Define schema migrations and optional nib/storyboard and GNUstep import/export
-  adapters. Adapters must report lossy mappings and translate through
-  `ResourceBundle` rather than expose platform resource types.
-
-## Medium-Term Architecture
-
-### Text Scaling and Layout
-
-- Profile gap-backed mutation and the existing layout manager together. Add true
-  virtual or visible-range layout only if layout remains the measured bottleneck.
-- Add attachment layout, non-contiguous layout, and advanced bidi/grapheme
-  navigation only after the core rune/glyph/line contracts remain stable under
-  real editor workloads.
-- Keep full Cocoa compatibility names as aliases over Nim-native APIs rather than
-  allowing them to define the internal model.
-
-### Native Integration
-
-- Keep render and accessibility construction unit-testable without a live native
-  window; keep native handles behind narrow diagnostic escape hatches.
-- Add accessibility adapters for NSAccessibility, UI Automation, and AT-SPI-style
-  APIs without importing platform modules into the core accessibility layer.
-- Verify activation, hide/unhide, focus, key/main-window transitions, and modal
-  blocking on macOS, X11, Wayland, and inline-windowless targets. Native events
-  must route through the same `Application` and `Window` transitions used by
-  tests.
-- Add optional native-menu bridging after the pure Nim menu path remains stable
-  across examples.
-- Move window-frame autosave from the in-process helper store to a backend or
-  user-defaults persistence adapter.
-- Add native open/save panels, recent-document integration, represented-file URL
-  and proxy metadata, and native print/page setup only after the pure Nim
-  document/controller contracts remain stable.
-
-### Framework Refinements
-
-- Profile coordinate conversion in deep, scrolling view hierarchies. Add caching
-  only if it is a measured cost, with explicit invalidation for frame, bounds,
-  superview, and clipping changes.
-- Move the remaining hard-coded popup, list, document-tab, and color-picker
-  chrome colors and metrics into `Theme` and `Appearance`; keep only
-  geometry-derived ratios local to controls.
-- Resolve duplicated `Control`/`ActionCell` ownership of target/action and
-  control values. Keep control setters authoritative for invalidation and
-  highlighting/tracking side effects, with cells owning measurement and drawing.
-- Preserve `LayoutLength` values through anchor and constraint expressions
-  instead of resolving `em` immediately against `defaultFontSize()`. Add
-  view/theme/font-context resolution and a two-axis `LayoutSize` value.
-
-### Incremental Render Fragments
-
-FigDraw now provides `RenderFragments` for independently replaceable render
-subtrees, while NimKit still builds and caches one monolithic `Renders` tree per
-window content root.
-
-- Harden fragment handles before adoption: associate `RenderCursor` values with
-  their owning tree and generation, reject foreign or detached cursors in
-  `updateFragment`, and prevent raw `RenderList` mutation from leaving fragment
-  traversal metadata stale.
-- Refactor `DrawContext` and view render caching so stable view/subtree identities
-  own fragments and only display-dirty fragments rebuild. Preserve exact layer,
-  sibling, clipping, transform, popup, focus-ring, and accessibility-overlay
-  ordering, with monolithic `Renders` as the compatibility and diagnostic path.
-- Keep fragment resource manifests and generations explicit. Recompute the live
-  merged font/image manifest at frame boundaries, retain replaced-fragment
-  resources until render acknowledgement, and reject stale updates after clears,
-  layer replacement, target replacement, or atlas recovery.
-- Do not share mutable fragment graphs across the application and renderer
-  threads. Add generation-stamped, move-only fragment snapshots or replacement
-  messages with bounded coalescing and acknowledgement before enabling fragments
-  on the dedicated renderer; keep direct rendering and `useNativeDynlib` on the
-  monolithic path until equivalent support exists.
-- Add equivalence and operation-count tests comparing fragment-backed and
-  monolithic output across nested updates, physical inserts, multiple roots and
-  layers, removed views, resource replacement, threaded coalescing, and stale
-  handle rejection.
-
-### Rendering Constraints
-
-- Keep the render boundary limited to moved `Renders` or ownership-safe fragment
-  snapshots/replacements, logical size and target generations, renderer-local
-  resource messages, acknowledgements, diagnostics, and shutdown. Ordinary
-  application/window commands must not cross it.
-- Create, resize, replace, and destroy native presentation targets on the UI
-  thread. Renderer target replacement and shutdown require generation-aware
-  release acknowledgement.
-- Keep logical resource ownership separate from renderer-local atlas residency.
-  Rebuild at frame boundaries from live manifests/preloads, and reject stale
-  generation-stamped uploads.
-- Keep `useNativeDynlib` managed resources on the explicit ABI operations for
-  renderer-targeted replay, rebuild, and manifest retention. It must not
-  silently fall back to unmanaged ownership.
-
-## Long-Term Architecture
-
-### Printing and Page Layout
-
-- Define backend-neutral page setup, printable-range, pagination-container,
-  margin, paper-size, scale, header/footer, and print-job records.
-- Let text, table/collection, image, and custom drawing produce page-fragment
-  geometry without a live window.
-- Add document-controller hooks for page setup, print preview, print validation,
-  and edited-state-safe print flows.
-- Defer native print panels and spooler integration until pure Nim pagination and
-  render snapshots are testable.
-
-## Open Questions
-
-- How far should public export narrowing go for `View.x*` storage? Fully hiding
-  it requires a deeper internal accessor or module-organization refactor.
-- Should accessibility storage remain directly on `View`, or move behind a
-  per-view semantic record if more role-specific state accumulates?
-- Should container-generated layout inputs become a distinct source before more
-  collection-style controls are added?
-- Should generated layout summaries expose richer item, attribute, priority,
-  conflict, or cache-generation diagnostics?
-- How much of the layout invalidation bus should remain public? It is useful for
-  diagnostics, but most callers should not emit layout signals directly.
+For each code increment, run the relevant shared runner and `atlas-run tests`.
+Compile examples with `atlas-run tests --compile-only examples/all_compile.nim`.
+Ownership changes also need ARC/ORC sanitizer coverage from the reliability
+guide. Record platform limitations and measured outcomes with the change;
+keep this plan focused on unfinished work.

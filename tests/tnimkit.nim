@@ -1,43 +1,95 @@
 ## NimKit's shared test runner and complete public API smoke test.
 import merenda/nimkit
 
-import nimkit/application_icon
-import nimkit/assetcache
-import nimkit/backrefs_arc
-import nimkit/comboboxes
-import nimkit/controls
-import nimkit/datepickers
-import nimkit/daterangepickers
-import nimkit/tokenfields
-import nimkit/popuphosts
-import nimkit/constraints
-import nimkit/controlfontfaces
-import nimkit/diagnostics
-import nimkit/documenttabs
-import nimkit/filesearch
-import nimkit/filebrowsers
-import nimkit/gitstatus
-import nimkit/font_layout
-import nimkit/fontpickers
-import nimkit/gaptextbuffers
-import nimkit/images
-import nimkit/markdownviews
-import nimkit/menus
-import nimkit/monotextviews
-import nimkit/segmentedcontrols
-import nimkit/resources
-import nimkit/settings
-import nimkit/svgimages
-import nimkit/svgpathloader
-import nimkit/styledruns
-import nimkit/table_column_resizing
-import nimkit/textlayout
-import nimkit/terminalgeometry
-import nimkit/terminals
-import nimkit/urls
-
-when not defined(useNativeDynlib):
-  # Retained render fragments are a client-side Figdraw implementation detail
-  # and are intentionally outside the native ABI.
+when defined(nimkitOwnershipTests):
+  import nimkit/backrefs_arc
+  import nimkit/modals
+  import nimkit/gaptextbuffers
+  import nimkit/textstorage
+  import nimkit/textlayout
   import nimkit/renderfragments
   import nimkit/threading
+else:
+  import nimkit/accessibility
+  import nimkit/animations
+  import nimkit/application_icon
+  import nimkit/assetcache
+  import nimkit/backend
+  import nimkit/backrefs_arc
+  import nimkit/boxes
+  import nimkit/canvasdemo
+  import nimkit/canvasviews
+  import nimkit/cascadingviews
+  import nimkit/collectionviews
+  import nimkit/colorpicker
+  import nimkit/comboboxes
+  import nimkit/constraints
+  import nimkit/controlfontfaces
+  import nimkit/controls
+  import nimkit/datepickers
+  import nimkit/daterangepickers
+  import nimkit/diagnostics
+  import nimkit/dockviews
+  import nimkit/documents
+  import nimkit/documenttabs
+  import nimkit/filebrowsers
+  import nimkit/filesearch
+  import nimkit/font_layout
+  import nimkit/fontpickers
+  import nimkit/formviews
+  import nimkit/gaptextbuffers
+  import nimkit/gitstatus
+  import nimkit/gridviews
+  import nimkit/iconlabels
+  import nimkit/images
+  import nimkit/keybindings
+  import nimkit/markdownviews
+  import nimkit/matrix
+  import nimkit/menus
+  import nimkit/modals
+  import nimkit/modelcontrollers
+  import nimkit/monotextviews
+  import nimkit/notifications
+  import nimkit/objectvalues
+  import nimkit/outlineviews
+  import nimkit/pasteboards_dragging
+  import nimkit/popuphosts
+  import nimkit/rendering
+  import nimkit/resources
+  import nimkit/responder
+  import nimkit/scrollviews
+  import nimkit/scrollviews2
+  import nimkit/segmentedcontrols
+  import nimkit/selectionrings
+  import nimkit/settings
+  import nimkit/sizing
+  import nimkit/splitviews
+  import nimkit/stackviews
+  import nimkit/styledruns
+  import nimkit/svgimages
+  import nimkit/svgpathloader
+  import nimkit/syneditviews
+  import nimkit/table_column_resizing
+  import nimkit/tableviews
+  import nimkit/tabviews
+  import nimkit/terminalgeometry
+  import nimkit/texteditors
+  import nimkit/textfields
+  import nimkit/textlayout
+  import nimkit/textstorage
+  import nimkit/textviews
+  import nimkit/theme
+  import nimkit/tokenfields
+  import nimkit/tooltips
+  import nimkit/treeviewdemo
+  import nimkit/types
+  import nimkit/undomanagers
+  import nimkit/urls
+  import nimkit/viewcontrollers
+  import nimkit/viewinspectors
+  import nimkit/views
+  import nimkit/viewselection
+  import nimkit/windowcontrollers
+  import nimkit/windoweffects
+  import nimkit/windoweffectsdemo
+  import nimkit/workspaces

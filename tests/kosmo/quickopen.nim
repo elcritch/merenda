@@ -7,8 +7,8 @@ import merenda/kosmo/kosmo
 import merenda/kosmo/workspacefiles
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 suite "Kosmo quick open":
   test "quick open uses the platform primary P shortcut":

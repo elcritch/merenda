@@ -1,3 +1,6 @@
+## Terminal emulator and view interactions that own live PTY children.
+## Kept in the integration runner so shell lifetimes stay out of component tests.
+
 import std/[monotimes, os, sequtils, strutils, tempfiles, times, unittest]
 
 import terminex
@@ -1158,7 +1161,8 @@ suite "nimkit terminal views":
           KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
         )
         check window.tickUntilNormalizedText(view, "common-ready-1")
-        check window.dispatchTextInput("alpha beta gamma")
+        require window.dispatchTextInput("alpha beta gamma")
+        require window.tickUntilCurrentLineContains(view, "alpha beta gamma")
         check window.dispatchKeyDown(
           KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl})
         )
@@ -1186,7 +1190,8 @@ suite "nimkit terminal views":
           KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
         )
         check window.tickUntilNormalizedText(view, "common-ready-2")
-        check window.dispatchTextInput("acb")
+        require window.dispatchTextInput("acb")
+        require window.tickUntilCurrentLineContains(view, "acb")
         check window.dispatchKeyDown(
           KeyEvent(key: keyT, keyCode: keyT.ord, modifiers: {kmControl})
         )
@@ -1206,7 +1211,8 @@ suite "nimkit terminal views":
           KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
         )
         check window.tickUntilNormalizedText(view, "common-ready-3")
-        check window.dispatchTextInput("one two three")
+        require window.dispatchTextInput("one two three")
+        require window.tickUntilCurrentLineContains(view, "one two three")
         check window.dispatchKeyDown(
           KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: {kmControl})
         )
@@ -1233,7 +1239,8 @@ suite "nimkit terminal views":
           KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
         )
         check window.tickUntilNormalizedText(view, "common-ready-4")
-        check window.dispatchTextInput("left right")
+        require window.dispatchTextInput("left right")
+        require window.tickUntilCurrentLineContains(view, "left right")
         check window.dispatchKeyDown(KeyEvent(key: keyEscape, keyCode: keyEscape.ord))
         check window.dispatchKeyDown(KeyEvent(text: "b", key: keyB, keyCode: keyB.ord))
         check window.dispatchTextInput("middle ")
@@ -1247,7 +1254,8 @@ suite "nimkit terminal views":
           KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
         )
         check window.tickUntilNormalizedText(view, "common-ready-5")
-        check window.dispatchTextInput("common-input-ta")
+        require window.dispatchTextInput("common-input-ta")
+        require window.tickUntilCurrentLineContains(view, "common-input-ta")
         check window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
         check window.dispatchKeyDown(
           KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
@@ -1261,7 +1269,8 @@ suite "nimkit terminal views":
           KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
         )
         check window.tickUntilNormalizedText(view, "common-ready-6")
-        check window.dispatchTextInput("ctrl-l-value")
+        require window.dispatchTextInput("ctrl-l-value")
+        require window.tickUntilCurrentLineContains(view, "ctrl-l-value")
         check window.dispatchKeyDown(
           KeyEvent(key: keyL, keyCode: keyL.ord, modifiers: {kmControl})
         )
@@ -1271,7 +1280,8 @@ suite "nimkit terminal views":
         check window.tickUntilNormalizedText(view, "common-result-6:ctrl-l-value")
 
         generation = session.screenInfo().generation
-        check window.dispatchTextInput("interrupted command")
+        require window.dispatchTextInput("interrupted command")
+        require window.tickUntilCurrentLineContains(view, "interrupted command")
         check window.dispatchKeyDown(
           KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmControl})
         )

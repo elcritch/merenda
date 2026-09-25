@@ -59,6 +59,10 @@ Build your app with threads enabled and ARC or ORC, for example
 `nim r --threads:on --mm:arc main.nim`. The examples in this repository already
 have those settings.
 
+FigDraw is compiled into the application. Merenda's experimental
+`useNativeDynlib` mode and `build_dynlib` task have been removed; omit
+`-d:useNativeDynlib` from existing build commands.
+
 ## A few small apps
 
 ### Hello, Merenda
@@ -452,6 +456,7 @@ These are good places to go once you've tried the basics:
   [canvas](examples/canvas_demo.nim), and [terminal](examples/terminal_demo.nim).
 - Building UI from resources: [resource guide](docs/resources.md) and
   [example](examples/resource_ui_demo.nim).
+- Development checks: [reliability and memory profiling](docs/reliability.md).
 - Under the hood: [NimKit design](docs/design.md),
   [Kosmo workspace updates](docs/kosmo-workspace.md),
   [FigDraw](https://github.com/elcritch/figdraw/),

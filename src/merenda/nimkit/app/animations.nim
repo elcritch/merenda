@@ -1476,17 +1476,13 @@ proc acquireSharedAnimationThread(): SigilChronosThreadPtr =
     result = sharedAnimationThread
 
 proc releaseSharedAnimationThread(thread: SigilChronosThreadPtr) =
-  var toStop: SigilChronosThreadPtr
   withLock sharedAnimationThreadLock:
     if not thread.isNil and thread == sharedAnimationThread:
       if sharedAnimationThreadUseCount > 0:
         dec sharedAnimationThreadUseCount
-      if sharedAnimationThreadUseCount == 0:
-        toStop = sharedAnimationThread
-        sharedAnimationThread = nil
-  if not toStop.isNil:
-    toStop.stop()
-    toStop.join()
+      # Keep the idle dispatcher for later clocks. Sigils' Chronos thread
+      # closes its wake signal on join, but not the underlying selector, so
+      # recreating the worker for each clock would leak one OS descriptor.
 
 proc pollQueuedTicks*(clock: AnimationSchedulerClock): int {.discardable.} =
   ensureLocalAnimationDispatchThread()

@@ -120,6 +120,7 @@ proc updateWindowsMenu*(app: Application)
 proc installStandardMainMenu*(app: Application)
 proc showMerendaSettings*(app: Application)
 proc modalSession*(app: Application): ModalSession
+proc endModalSession*(app: Application, session: ModalSession)
 proc performMenuKeyEquivalent*(app: Application, event: KeyEvent): bool
 proc runForFrames*(app: Application, frames: Natural): int
 proc run*(app: Application)
@@ -574,6 +575,12 @@ proc noteWindowOrderedOut(app: Application, window: Window) =
 proc noteWindowClosed(app: Application, window: Window) =
   if window.isNil:
     return
+  # Closing via native chrome or a dialog button must unblock the application,
+  # including sessions below the currently active modal window.
+  for index in countdown(app.xModalSessions.high, 0):
+    let session = app.xModalSessions[index]
+    if session.window == window:
+      app.endModalSession(session)
   discard app.xOrderedWindows.removeWindow(window)
   app.restoreFocusAfterWindowClosed(window)
   app.updateWindowsMenu()
@@ -1153,16 +1160,21 @@ proc endModalSession*(app: Application, session: ModalSession) =
   if session.isNil:
     return
   let idx = app.xModalSessions.find(session)
-  if idx >= 0:
-    app.xModalSessions.delete(idx)
+  if idx < 0:
+    return
+  let wasActive = idx == app.xModalSessions.high
+  if session.state == mssRunning:
+    session.state = mssAborted
+  app.xModalSessions.delete(idx)
   if session.mode == msmWindowModal and not session.parentWindow.isNil:
     session.parentWindow.endSheet(session.window)
   elif not session.window.isNil:
     session.window.orderOut()
-  if not session.previousMainWindow.isNil and not session.previousMainWindow.isClosed:
-    app.setMainWindow(session.previousMainWindow)
-  if not session.previousKeyWindow.isNil and not session.previousKeyWindow.isClosed:
-    app.setKeyWindow(session.previousKeyWindow)
+  if wasActive:
+    if not session.previousMainWindow.isNil and not session.previousMainWindow.isClosed:
+      app.setMainWindow(session.previousMainWindow)
+    if not session.previousKeyWindow.isNil and not session.previousKeyWindow.isClosed:
+      app.setKeyWindow(session.previousKeyWindow)
   app.updateWindowsMenu()
 
 proc runModalSession*(app: Application, session: ModalSession): int =

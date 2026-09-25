@@ -1,6 +1,7 @@
 import std/unittest
 
 import figdraw
+import ./fixtures/rendergeometry
 
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
@@ -20,16 +21,16 @@ proc newRingDrawView(frame: nimkitTypes.Rect): RingDrawView =
   discard result.withProtocol(RingBaseDrawing)
 
 proc childRootFor(list: RenderList, frame: nimkitTypes.Rect): FigIdx =
-  for idx in childIndex(list.nodes, list.rootIds[0]):
-    let node = list.nodes[int(idx)]
+  for idx in descendantIndex(list.resolvedNodes(), list.rootIds[0]):
+    let node = list.resolvedNodes()[int(idx)]
     if node.screenBox.x == frame.origin.x and node.screenBox.y == frame.origin.y and
         node.screenBox.w == frame.size.width and node.screenBox.h == frame.size.height:
       return idx
   (-1).FigIdx
 
 proc containsBaseDraw(list: RenderList, rootIdx: FigIdx): bool =
-  for idx in childIndex(list.nodes, rootIdx):
-    let node = list.nodes[int(idx)]
+  for idx in descendantIndex(list.resolvedNodes(), rootIdx):
+    let node = list.resolvedNodes()[int(idx)]
     if node.kind == nkRectangle and node.screenBox.x == 14.0 and node.screenBox.y == 25.0 and
         node.screenBox.w == 20.0 and node.screenBox.h == 10.0:
       return true
@@ -37,8 +38,8 @@ proc containsBaseDraw(list: RenderList, rootIdx: FigIdx): bool =
 proc containsSelectionRing(
     list: RenderList, rootIdx: FigIdx, strokeColor: nimkitTypes.Color
 ): bool =
-  for idx in childIndex(list.nodes, rootIdx):
-    let node = list.nodes[int(idx)]
+  for idx in descendantIndex(list.resolvedNodes(), rootIdx):
+    let node = list.resolvedNodes()[int(idx)]
     if node.kind == nkRectangle and node.screenBox.x == 12.0 and node.screenBox.y == 22.0 and
         node.screenBox.w == 46.0 and node.screenBox.h == 36.0 and
         node.stroke.weight == 5.0 and node.stroke.fill.kind == flColor and

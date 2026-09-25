@@ -22,6 +22,10 @@ type
     failed: Atomic[bool]
     statusCode: int
     bodyKind: int
+    streaming: int
+    bodyStarted: Atomic[bool]
+    allowFinish: Atomic[bool]
+    peerClosed: Atomic[bool]
 
   TestServer = ref object
     state: ptr TestServerState
@@ -61,24 +65,46 @@ proc serveOneRequest(state: ptr TestServerState) {.thread.} =
       if line.len == 0 or line == "\r\n":
         break
 
-    let
-      body = state.responseBody()
-      reason = if state.statusCode == 200: "OK" else: "Not Found"
-      contentType = if state.bodyKind == 2: "image/png" else: "application/octet-stream"
-      response =
-        "HTTP/1.1 " & $state.statusCode & " " & reason & "\r\n" & "Content-Length: " &
-        $body.len & "\r\n" & "Content-Type: " & contentType & "\r\n" &
-        "Connection: close\r\n\r\n" & body
-    client.send(response)
     discard state.requestCount.fetchAdd(1, moRelaxed)
-  except Exception:
+    if state.streaming > 0:
+      client.send(
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+      )
+      client.send(if state.streaming == 1: "8\r\n12345678\r\n" else: "1\r\nx\r\n")
+      state.bodyStarted.store(true, moRelease)
+      let deadline = getMonoTime() + initDuration(seconds = 10)
+      while not state.allowFinish.load(moAcquire) and getMonoTime() < deadline:
+        var readable = @[client.getFd()]
+        if nativesockets.selectRead(readable, 10) > 0:
+          if client.recv(1, timeout = 100).len == 0:
+            state.peerClosed.store(true, moRelease)
+            return
+      client.send("0\r\n\r\n")
+    else:
+      let
+        body = state.responseBody()
+        reason = if state.statusCode == 200: "OK" else: "Not Found"
+        contentType =
+          if state.bodyKind == 2: "image/png" else: "application/octet-stream"
+        response =
+          "HTTP/1.1 " & $state.statusCode & " " & reason & "\r\n" & "Content-Length: " &
+          $body.len & "\r\n" & "Content-Type: " & contentType & "\r\n" &
+          "Connection: close\r\n\r\n" & body
+      client.send(response)
+  except OSError:
+    if state.streaming > 0:
+      state.peerClosed.store(true, moRelease)
+    else:
+      state.failed.store(true, moRelease)
+  except CatchableError:
     state.failed.store(true, moRelease)
 
-proc newTestServer(statusCode = 200, bodyKind = 0): TestServer =
+proc newTestServer(statusCode = 200, bodyKind = 0, streaming = 0): TestServer =
   result =
     TestServer(state: cast[ptr TestServerState](allocShared0(sizeof(TestServerState))))
   result.state.statusCode = statusCode
   result.state.bodyKind = bodyKind
+  result.state.streaming = streaming
   result.state.port.store(0, moRelaxed)
   result.state.requestCount.store(0, moRelaxed)
   result.state.failed.store(false, moRelaxed)
@@ -93,12 +119,24 @@ proc newTestServer(statusCode = 200, bodyKind = 0): TestServer =
 proc close(server: TestServer) =
   if server.isNil or server.state.isNil:
     return
+  server.state.allowFinish.store(true, moRelease)
   server.thread.joinThread()
   deallocShared(server.state)
   server.state = nil
 
 proc url(server: TestServer, path: string): string =
   "http://127.0.0.1:" & $server.state.port.load(moAcquire) & path
+
+proc waitForFlag(loader: UrlAssetLoader, flag: var Atomic[bool]): bool =
+  let deadline = getMonoTime() + initDuration(seconds = 5)
+  while not flag.load(moAcquire) and getMonoTime() < deadline:
+    discard loader.poll()
+    sleep(1)
+  flag.load(moAcquire)
+
+proc partialFileCount(cache: string): int =
+  for path in walkFiles(cache / "*.part-*"):
+    inc result
 
 suite "URL asset loader":
   test "uses the platform application cache directory":
@@ -223,6 +261,88 @@ suite "URL asset loader":
     check handle.result().errorMessage.contains("4 byte limit")
     check not fileExists(loader.cachedAssetPath(assetUrl))
 
+  test "oversized chunked responses stop before the server finishes the body":
+    let cache = createTempDir("merenda-url-stream-limit-", "")
+    defer:
+      removeDir(cache)
+    let server = newTestServer(streaming = 1)
+    defer:
+      server.close()
+    let loader =
+      newUrlAssetLoader("org.example.merenda-tests", cache, maximumAssetBytes = 4)
+    defer:
+      loader.close()
+    let handle = loader.load(server.url("/oversized"))
+    require loader.waitFor(handle, 5_000)
+    check handle.state == ualsFailed
+    check "4 byte limit" in handle.result().errorMessage
+    check loader.waitForFlag(server.state.peerClosed)
+    check not server.state.allowFinish.load(moAcquire)
+    check partialFileCount(cache) == 0
+    check not fileExists(loader.cachedAssetPath(server.url("/oversized")))
+
+  test "chunked responses exactly at the byte limit are accepted":
+    let cache = createTempDir("merenda-url-stream-exact-", "")
+    defer:
+      removeDir(cache)
+    let server = newTestServer(streaming = 1)
+    defer:
+      server.close()
+    server.state.allowFinish.store(true, moRelease)
+    let loader =
+      newUrlAssetLoader("org.example.merenda-tests", cache, maximumAssetBytes = 8)
+    defer:
+      loader.close()
+    let handle = loader.load(server.url("/exact"))
+    require loader.waitFor(handle, 5_000)
+    require handle.succeeded()
+    check handle.result().byteLength == 8
+    check readFile(handle.result().path) == "12345678"
+    check partialFileCount(cache) == 0
+
+  test "download concurrency and queue capacity stay bounded through cancellation":
+    let cache = createTempDir("merenda-url-queue-", "")
+    defer:
+      removeDir(cache)
+    let first = newTestServer(streaming = 2)
+    defer:
+      first.close()
+    let second = newTestServer(streaming = 2)
+    defer:
+      second.close()
+    let loader = newUrlAssetLoader(
+      "org.example.merenda-tests",
+      cache,
+      maximumConcurrentLoads = 1,
+      maximumPendingLoads = 2,
+    )
+    defer:
+      loader.close()
+    let active = loader.load(first.url("/active"))
+    require loader.waitForFlag(first.state.bodyStarted)
+    let queued = loader.load(second.url("/queued"))
+    let rejected = loader.load(second.url("/overflow"))
+    check rejected.isFinished()
+    check loader.pendingCount() == 2
+    require loader.waitFor(rejected, 5_000)
+    check rejected.state == ualsFailed
+    check "queue is full" in rejected.result().errorMessage
+    check second.state.requestCount.load(moAcquire) == 0
+    loader.cancel(queued)
+    require loader.waitFor(queued, 5_000)
+    check queued.state == ualsCancelled
+    check second.state.requestCount.load(moAcquire) == 0
+    let replacement = loader.load(second.url("/replacement"))
+    loader.cancel(active)
+    require loader.waitFor(active, 5_000)
+    check active.state == ualsCancelled
+    check loader.waitForFlag(first.state.peerClosed)
+    require loader.waitForFlag(second.state.bodyStarted)
+    loader.close()
+    check replacement.state == ualsCancelled
+    check loader.pendingCount() == 0
+    check partialFileCount(cache) == 0
+
   test "Markdown views rerender remote images after asynchronous loading":
     let
       cache = createTempDir("merenda-markdown-url-assets-", "")
@@ -269,6 +389,22 @@ suite "URL asset loader":
     check secondServer.state.requestCount.load(moAcquire) == 1
     check fileExists(loader.cachedAssetPath(assetUrl))
     check fileExists(loader.cachedAssetPath(secondAssetUrl))
+
+  test "cached assets also respect a smaller loader byte limit":
+    let cache = createTempDir("merenda-url-cache-limit-", "")
+    defer:
+      removeDir(cache)
+    let loader =
+      newUrlAssetLoader("org.example.merenda-tests", cache, maximumAssetBytes = 4)
+    defer:
+      loader.close()
+    let url = "https://example.test/large.bin"
+    writeFile(loader.cachedAssetPath(url), "too large")
+    let handle = loader.load(url)
+    check handle.isFinished()
+    check handle.state() == ualsFailed
+    check "byte limit" in handle.result().errorMessage
+    check loader.pendingCount() == 0
 
   test "validates URLs and rejects loads after closing":
     let cache = createTempDir("merenda-url-assets-", "")

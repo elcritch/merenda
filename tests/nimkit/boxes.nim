@@ -23,8 +23,8 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   discard result.withProtocol(FixedIntrinsicLayout)
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add(rune.toUTF8())
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add(node.textLayout.displayRune(glyphIndex).toUTF8())
 
 type BoxDemoLayoutFixture = object
   window: Window

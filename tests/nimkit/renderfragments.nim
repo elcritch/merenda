@@ -346,6 +346,8 @@ suite "NimKit render fragments":
       acknowledgedGeneration = scene.frameGeneration()
       replica = retainedScenes.newRenderSceneReplica()
     var full = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+    let fullBytes = retainedScenes.estimatedTransferBytes(full)
+    check fullBytes > 0
     check retainedScenes.fullSnapshot(full)
     check retainedScenes.baseGeneration(full) == 0
     check retainedScenes.capturedViewCount(full) == 3
@@ -365,6 +367,7 @@ suite "NimKit render fragments":
     var cumulative =
       retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, acknowledgedGeneration)
 
+    check retainedScenes.estimatedTransferBytes(cumulative) < fullBytes
     check not retainedScenes.fullSnapshot(cumulative)
     check retainedScenes.baseGeneration(cumulative) == acknowledgedGeneration
     check retainedScenes.generation(cumulative) == latestGeneration

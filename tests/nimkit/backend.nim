@@ -41,6 +41,12 @@ suite "nimkit backend":
     check nimkitBackend.toNimkitModifiers({figdrawSiwin.ModifierKey.alt}, {}) ==
       {kmOption}
 
+  test "native text input ignores control keys handled by physical key events":
+    for text in ["", "\b", "\t", "\n", "\r", "\x7f"]:
+      check not nimkitBackend.isNativeTextInput(text)
+    for text in ["x", "λ", "hello", "hello\nworld"]:
+      check nimkitBackend.isNativeTextInput(text)
+
   test "ui scale override prefers NimKit env over aliases":
     withCleanUiScaleEnv(
       proc() =

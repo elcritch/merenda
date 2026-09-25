@@ -272,8 +272,8 @@ proc newDocumentTabChromeSpy(): Chrome =
   Chrome(chrome)
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 func hasDrawableOp(node: Fig, kind: DrawableKind): bool =
   if node.kind != nkDrawable:
@@ -375,9 +375,8 @@ suite "nimkit document tabs":
     check tabs[0.Natural].styleClasses == @["preview"]
     check tabs.documentTabModels[0].styleClasses == @["preview"]
     check textStyle.fontSlant == fsItalic
-    when not defined(useNativeDynlib):
-      let typefaceInfo = getTypefaceInfo(textStyle.textFont.font.typefaceId)
-      check typefaceInfo.italic or typefaceInfo.oblique
+    let typefaceInfo = getTypefaceInfo(textStyle.textFont.font.typefaceId)
+    check typefaceInfo.italic or typefaceInfo.oblique
 
   test "document tab data sources reload and preserve selected identifiers":
     let
@@ -396,12 +395,11 @@ suite "nimkit document tabs":
     check tabs.indexOfDocumentTabIdentifier("published") == 1
     check tabs.selectDocumentTabWithIdentifier("published")
 
-    source.models =
-      @[
-        initDocumentTabModel("published", "Published Updated"),
-        initDocumentTabModel("draft", "Draft"),
-        initDocumentTabModel("archived", "Archived", hidden = true),
-      ]
+    source.models = @[
+      initDocumentTabModel("published", "Published Updated"),
+      initDocumentTabModel("draft", "Draft"),
+      initDocumentTabModel("archived", "Archived", hidden = true),
+    ]
     tabs.reloadData()
 
     check tabs.len == 2
@@ -990,8 +988,8 @@ suite "nimkit document tabs":
     check aquaAppearance.resolveLength(controlStyle(srDocumentTab), StyleItemGap, 0.0) ==
       2.0'f32
     check aquaAppearance
-    .resolveFill(controlStyle(srDocumentTabBar), fill(color(1.0, 0.0, 0.0, 1.0)))
-    .centerColor().a < 0.5'f32
+      .resolveFill(controlStyle(srDocumentTabBar), fill(color(1.0, 0.0, 0.0, 1.0)))
+      .centerColor().a < 0.5'f32
 
     special.styleId = "special-doc"
     discard tabs.addDocumentTabItem(first)

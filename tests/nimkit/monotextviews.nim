@@ -15,8 +15,8 @@ proc rememberAccessibilityNotification(
   spy.notifications.add notification
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add $rune
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add $node.textLayout.displayRune(glyphIndex)
 
 proc clickView(window: Window, view: View): bool =
   let bounds = view.bounds()
@@ -533,9 +533,8 @@ suite "nimkit mono text views":
       if node.kind == nkText and node.renderedText() == "AB":
         foundText = true
         require node.textLayout.arrangedGlyphs.len == cells.len
-        when not defined(useNativeDynlib):
-          let font = getFigFont(node.textLayout.arrangedGlyphs[0].fontId)
-          check getTypefaceInfo(font.typefaceId).monospace
+        let font = getFigFont(node.textLayout.arrangedGlyphs[0].fontId)
+        check getTypefaceInfo(font.typefaceId).monospace
 
     check foundText
 

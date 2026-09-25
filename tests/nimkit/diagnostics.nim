@@ -3,6 +3,15 @@ import std/[os, unittest]
 import merenda/nimkit/app/diagnostics
 
 suite "NimKit runtime diagnostics":
+  test "resource snapshots report memory and handle counts without child processes":
+    when defined(macosx) or defined(linux):
+      let usage = processResourceUsage()
+      check usage.residentBytes > 0
+      check usage.peakResidentBytes > 0
+      check usage.fileDescriptors >= 0
+      check usage.childProcesses >= 0
+      check usage.threads > 0
+
   test "environment snapshot reports platform and display configuration":
     let diagnostics = runtimeEnvironmentDiagnostics()
 
