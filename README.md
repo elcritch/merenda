@@ -63,6 +63,21 @@ FigDraw is compiled into the application. Merenda's experimental
 `useNativeDynlib` mode and `build_dynlib` task have been removed; omit
 `-d:useNativeDynlib` from existing build commands.
 
+## Tekton interface builder
+
+Build a resource document with Tekton's widget palette, property inspector, and live
+preview. Add layout guides and constraints, pin views to their parent, undo changes,
+and save the result for your Merenda app. Use **Interact** to try controls in the preview.
+
+```sh
+nim r src/merenda/tekton.nim
+# Or open an existing interface:
+nim r src/merenda/tekton.nim path/to/interface.cbor
+```
+
+See [Tekton's authoring workflow](docs/resources.md#tekton-resource-editor) for supported
+resources and how to load the saved interface in your app.
+
 ## A few small apps
 
 ### Hello, Merenda

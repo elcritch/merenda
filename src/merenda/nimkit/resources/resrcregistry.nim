@@ -6,7 +6,8 @@ import sigils/selectors
 
 import ../app/viewcontrollers
 import ../containers/[boxes, splitviews, stackviews]
-import ../controls/[buttons, controls, progressindicators, switchbuttons]
+import
+  ../controls/[buttons, controls, progressindicators, sliders, steppers, switchbuttons]
 import ../drawing/images
 import ../foundation/types
 import ../text/textfields
@@ -56,6 +57,10 @@ type
     view: View, value: ResourceValue, context: ResourcePropertyContext
   ): bool {.closure.}
 
+  ResourceViewPropertyGetter* = proc(
+    view: View, context: ResourcePropertyContext
+  ): ResourcePropertyReadResult {.closure.}
+
   ResourcePropertyValueApplier = proc(
     view: View,
     selectorName: SigilName,
@@ -82,6 +87,7 @@ type
     aliasOf: string
     valueType*: string
     setter*: ResourceViewPropertySetter
+    getter*: ResourceViewPropertyGetter
 
   ResourceViewRegistration = object
     baseKind: string
@@ -127,11 +133,14 @@ proc registerViewProperty*(
     kind, name: string,
     acceptedKinds: set[ResourceValueKind],
     setter: ResourceViewPropertySetter,
+    getter: ResourceViewPropertyGetter = nil,
+    nimTypeName = "",
 ) =
   registry.viewProperties.mgetOrPut(
     kind, initTable[string, ResourceViewPropertyRegistration]()
-  )[name] =
-    ResourceViewPropertyRegistration(acceptedKinds: acceptedKinds, setter: setter)
+  )[name] = ResourceViewPropertyRegistration(
+    acceptedKinds: acceptedKinds, setter: setter, getter: getter, valueType: nimTypeName
+  )
 
 proc registerResourceValueType*[T](
     registry: var ResourceRegistry,
@@ -450,19 +459,21 @@ proc readViewProperty*(
     name: string,
     context = ResourcePropertyContext(),
 ): ResourcePropertyReadResult =
-  ## Reads a supported protocol property through its Sigils getter selector.
+  ## Reads a property through its custom getter or Sigils getter selector.
   ##
   ## The registry converts the returned Nim value into a backend-neutral
   ## `ResourceValue`; it never reaches into a view's backing fields.
   var
     registration: ResourceViewPropertyRegistration
     declaredKind: string
-  if registry.findViewProperty(kind, name, registration, declaredKind) and
-      registry.propertyValueTypes.hasKey(registration.valueType):
-    let valueType = registry.propertyValueTypes[registration.valueType]
-    if not valueType.read.isNil:
-      result.read =
-        valueType.read(view, registration.getterSelector, context, result.value)
+  if registry.findViewProperty(kind, name, registration, declaredKind):
+    if not registration.getter.isNil:
+      return registration.getter(view, context)
+    if registry.propertyValueTypes.hasKey(registration.valueType):
+      let valueType = registry.propertyValueTypes[registration.valueType]
+      if not valueType.read.isNil:
+        result.read =
+          valueType.read(view, registration.getterSelector, context, result.value)
 
 proc attachChild*(registry: ResourceRegistry, kind: string, parent, child: View) =
   if registry.viewKinds.hasKey(kind) and not registry.viewKinds[kind].attachChild.isNil:
@@ -761,6 +772,18 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
     baseKind = "control",
   )
   result.registerViewKind(
+    "slider",
+    proc(frame: Rect): View =
+      newSlider(frame = frame),
+    baseKind = "control",
+  )
+  result.registerViewKind(
+    "stepper",
+    proc(frame: Rect): View =
+      newStepper(frame = frame),
+    baseKind = "control",
+  )
+  result.registerViewKind(
     "box",
     proc(frame: Rect): View =
       newBox(frame = frame),
@@ -788,6 +811,52 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
   )
 
   result.registerViewProtocolProperties("view", ViewProtocol)
+  result.registerViewProperty(
+    "view",
+    "translatesAutoresizingMaskIntoConstraints",
+    {rvBool},
+    setter = proc(
+        view: View, value: ResourceValue, context: ResourcePropertyContext
+    ): bool =
+      view.translatesAutoresizingMaskIntoConstraints = value.boolValue
+      true,
+    getter = proc(
+        view: View, context: ResourcePropertyContext
+    ): ResourcePropertyReadResult =
+      ResourcePropertyReadResult(
+        read: true,
+        value: resourceValue(view.translatesAutoresizingMaskIntoConstraints()),
+      ),
+    nimTypeName = "bool",
+  )
+  template scalarProperty(kindName: string, Widget: typedesc, property: untyped) =
+    result.registerViewProperty(
+      kindName,
+      astToStr(property),
+      {rvFloat, rvInt},
+      setter = proc(
+          view: View, value: ResourceValue, context: ResourcePropertyContext
+      ): bool =
+        Widget(view).property =
+          if value.kind == rvInt: value.intValue.float32 else: value.floatValue
+        true,
+      getter = proc(
+          view: View, context: ResourcePropertyContext
+      ): ResourcePropertyReadResult =
+        ResourcePropertyReadResult(
+          read: true, value: resourceValue(Widget(view).property())
+        ),
+      nimTypeName = "float32",
+    )
+
+  scalarProperty("slider", Slider, minValue)
+  scalarProperty("slider", Slider, maxValue)
+  scalarProperty("slider", Slider, value)
+  scalarProperty("slider", Slider, stepValue)
+  scalarProperty("stepper", Stepper, minValue)
+  scalarProperty("stepper", Stepper, maxValue)
+  scalarProperty("stepper", Stepper, value)
+  scalarProperty("stepper", Stepper, increment)
   result.registerViewPropertyAlias("view", "background", "backgroundColor")
   result.registerViewPropertyAlias("view", "alpha", "alphaValue")
   result.registerViewProtocolProperties("control", ControlProtocol)

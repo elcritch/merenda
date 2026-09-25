@@ -5,12 +5,12 @@ import std/[algorithm, options, os, sets, strutils, tables]
 import sigils/[core, selectors]
 
 import ../nimkit/accessibility/accessibility
-import ../nimkit/app/[application, documents, windowcontrollers, windows]
-import ../nimkit/containers/[gridviews, outlineviews, tableviews]
+import ../nimkit/app/[application, documents, panels, windowcontrollers, windows]
+import ../nimkit/containers/[gridviews, outlineviews, scrollviews, tableviews]
 import ../nimkit/controls/[buttons, colorpicker, comboboxes]
-import ../nimkit/debug/[selectionrings, viewselection]
+import ../nimkit/debug/selectionrings
 import ../nimkit/foundation/events
-import ../nimkit/foundation/[selectors as nimkitSelectors, types, undomanagers]
+import ../nimkit/foundation/[selectors as nimkitSelectors, types, undomanagers, urls]
 import ../nimkit/responder/keybindings
 import
   ../nimkit/resources/[
@@ -20,7 +20,7 @@ import
 import ../nimkit/text/textfields
 import ../nimkit/themes
 import ../nimkit/view/views
-import ./[preview, valueediting]
+import ./[preview, recordediting, valueediting]
 
 export valueediting
 
@@ -54,6 +54,8 @@ type
     xInstantiationContext: ResourceInstantiationContext
     xValidationOptions: ResourceValidationOptions
     xIoDiagnostics: ResourceDiagnostics
+    xExplicitAssetBasePath: bool
+    xExplicitValidationBasePath: bool
 
   ResourceEditor* = ref object of Responder
     xDocument: ResourceEditorDocument
@@ -77,13 +79,21 @@ type
     xDiagnosticRows: seq[ResourceDiagnostic]
     xPreview: ResourcePreview
     xPreviewDiagnostics: ResourceDiagnostics
+    xLayoutDiagnostics: ResourceDiagnostics
     xPreviewRevision: int
     xHasPreview: bool
+    xObservedResources: ResourceDocument
+    xSynchronizedRevision: int
+    xInspectorSelection: Option[ResourceId]
+    xHierarchyItems: seq[OutlineItem]
+    xHierarchyRevision: int
+    xSelectionText: string
+    xInteractivePreview: bool
+    xCanvasConstraints: Table[ResourceId, seq[LayoutConstraint]]
     xSynchronizingSelection: bool
-    xPreviewSelection: ViewSelection
     xSelectionRing: SelectionRing
+    xRelatedSelectionRing: SelectionRing
     xHoverRing: SelectionRing
-    xHoverTokens: seq[SwizzleToken]
     xHoveredResourceId: Option[ResourceId]
     xHoverGeometry: ResourcePreviewGeometry
     xSelectionFallbackId: Option[ResourceId]
@@ -104,6 +114,7 @@ const
   ResourceEditorPaletteKinds* = [
     "view", "control", "button", "checkBox", "radioButton", "textField", "label",
     "imageView", "stackView", "switchButton", "progressIndicator", "box", "splitView",
+    "slider", "stepper",
   ]
 
 proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor
@@ -124,11 +135,22 @@ proc resizeSelectedView*(
   editor: ResourceEditor, delta: Size
 ): ResourceEditResult {.discardable.}
 
+proc saveEditorDocument*(
+  editor: ResourceEditor, choosePath = false
+): bool {.discardable.}
+
 proc updatePreviewHover*(
   editor: ResourceEditor, point: Point
 ): ResourcePreviewHit {.discardable.}
 
 proc clearPreviewHover*(editor: ResourceEditor)
+proc interactivePreview*(editor: ResourceEditor): bool =
+  editor.xInteractivePreview
+
+proc `interactivePreview=`*(editor: ResourceEditor, value: bool) =
+  ## Design mode captures canvas input; interaction mode runs the preview controls.
+  editor.xInteractivePreview = value
+  editor.clearPreviewHover()
 
 proc beginPreviewDrag(
   editor: ResourceEditor, view: View, point: Point
@@ -143,29 +165,21 @@ protocol ResourceEditorDocumentEvents:
     document: ResourceEditorDocument, sender: ResourceEditorDocument
   ) {.signal.}
 
-func localFilePath(fileUrl: string): string =
-  result = fileUrl
-  let queryStart = result.find('?')
-  if queryStart >= 0:
-    result.setLen(queryStart)
-  let fragmentStart = result.find('#')
-  if fragmentStart >= 0:
-    result.setLen(fragmentStart)
-  if result.startsWith("file://"):
-    result = result[7 .. ^1]
+proc localFilePath(fileUrl: string): string =
+  initUrl(fileUrl).localFilePath(getCurrentDir())
 
 proc replaceResources(
     document: ResourceEditorDocument, bundle: sink ResourceBundle, assetBasePath = ""
 ) =
   let manager = document.undoManagerFor()
-  manager.clearAll()
-  if assetBasePath.len > 0 and document.xValidationOptions.assetBasePath.len == 0:
+  if not document.xExplicitValidationBasePath:
     document.xValidationOptions.assetBasePath = assetBasePath
-  if assetBasePath.len > 0 and document.xInstantiationContext.assetBasePath.len == 0:
+  if not document.xExplicitAssetBasePath:
     document.xInstantiationContext.assetBasePath = assetBasePath
   document.xResources = newResourceDocument(
     bundle, document.xRegistry, document.xValidationOptions, manager
   )
+  manager.clearAll()
   emit document.resourcesDidChange(document)
 
 protocol ResourceEditorDocumentIo of DocumentFileProtocol:
@@ -225,14 +239,23 @@ proc newResourceEditorDocument*(
     xRegistry: registry,
     xInstantiationContext: instantiationContext,
     xValidationOptions: validationOptions,
+    xExplicitAssetBasePath: instantiationContext.assetBasePath.len > 0,
+    xExplicitValidationBasePath: validationOptions.assetBasePath.len > 0,
   )
   result.initDocument(
     fileUrl = fileUrl,
     fileType = if fileUrl.len == 0: ResourceEditorDocumentType else: "",
     fileName = if fileUrl.len == 0: "Untitled Resources.cbor" else: "",
   )
-  result.xResources =
-    newResourceDocument(bundle, registry, validationOptions, result.undoManagerFor())
+  if fileUrl.len > 0:
+    let basePath = fileUrl.localFilePath().parentDir()
+    if not result.xExplicitAssetBasePath:
+      result.xInstantiationContext.assetBasePath = basePath
+    if not result.xExplicitValidationBasePath:
+      result.xValidationOptions.assetBasePath = basePath
+  result.xResources = newResourceDocument(
+    bundle, registry, result.xValidationOptions, result.undoManagerFor()
+  )
   result.setUndoManager(result.xResources.undoManager())
   discard result.withProtocol(ResourceEditorDocumentIo)
   discard result.withProtocol(ResourceEditorDocumentWindows)
@@ -333,6 +356,14 @@ proc previewHitTest*(editor: ResourceEditor, point: Point): ResourcePreviewHit =
 func propertyEditorKind*(row: ResourceEditorPropertyRow): ResourcePropertyEditorKind =
   if not row.descriptor.editable:
     rpekReadOnly
+  elif row.value.isSome and (
+    (
+      row.descriptor.acceptedKinds != {} and
+      row.value.get().kind notin row.descriptor.acceptedKinds
+    ) or
+    (row.descriptor.options.len > 0 and row.value.get() notin row.descriptor.options)
+  ):
+    rpekText
   elif row.descriptor.options.len > 0:
     rpekComboBox
   elif row.descriptor.acceptedKinds == {rvBool}:
@@ -396,16 +427,19 @@ proc refreshHierarchy(editor: ResourceEditor) =
           expanded.add parentId
         parent = document.findParentPath(parent.get())
   var paths: seq[ResourceNodePath]
-  for path in document:
-    paths.add path
+  if editor.xHierarchyRevision != document.revision().int:
+    for path in document:
+      paths.add path
 
+  var parents = initHashSet[ResourceId]()
+  for path in paths:
+    let parent = document.findParentPath(path)
+    if parent.isSome:
+      parents.incl parent.get().id
   var items: seq[OutlineItem]
   for path in paths:
     let parent = document.findParentPath(path)
-    var expandable = false
-    for candidate in paths:
-      if document.findParentPath(candidate) == some(path):
-        expandable = true
+    let expandable = path.id in parents
     items.add initOutlineItem(
       $path.id,
       document.nodeTitle(path),
@@ -421,7 +455,11 @@ proc refreshHierarchy(editor: ResourceEditor) =
 
   editor.xSynchronizingSelection = true
   try:
-    editor.xHierarchyView.outlineItems = items
+    if editor.xHierarchyRevision != document.revision().int:
+      if items != editor.xHierarchyItems:
+        editor.xHierarchyView.outlineItems = items
+        editor.xHierarchyItems = move items
+      editor.xHierarchyRevision = document.revision().int
     editor.xHierarchyView.expandedItemIdentifiers = expanded
     var selected: seq[string]
     for id in document.selectedResourceIds():
@@ -598,6 +636,20 @@ proc refreshPropertyRows(editor: ResourceEditor) =
     editor.xSelectionLabel.text =
       path.kind.resourceNodeKindTitle() & "  " & $id & "  ·  " & nodePath
     editor.refreshResourceDetailRows(path)
+    for field in document.recordFields(id):
+      var found = false
+      let row = ResourceEditorPropertyRow(
+        descriptor: field.descriptor,
+        value: some(field.value),
+        text: field.value.formatResourceValue(),
+        diagnosticPath: nodePath & "." & field.descriptor.name,
+      )
+      for existing in editor.xPropertyRows.mitems:
+        if existing.descriptor.name == field.descriptor.name:
+          existing = row
+          found = true
+      if not found:
+        editor.xPropertyRows.add row
     editor.xPropertyInspector.reloadData()
     return
 
@@ -606,7 +658,11 @@ proc refreshPropertyRows(editor: ResourceEditor) =
 
   var knownNames: seq[string]
   for descriptor in editor.xDocument.xRegistry.viewProperties(node.kind):
-    let property = document.findViewProperty(id, descriptor.name)
+    var property = document.findViewProperty(id, descriptor.name)
+    if property.isNone:
+      let effective = editor.xPreview.readViewProperty(id, descriptor.name)
+      if effective.read:
+        property = some(resourceProperty(descriptor.name, effective.value))
     editor.xPropertyRows.add ResourceEditorPropertyRow(
       descriptor: descriptor,
       value:
@@ -639,6 +695,7 @@ proc refreshPropertyRows(editor: ResourceEditor) =
   editor.xPropertyInspector.reloadData()
 
 proc refreshDiagnosticRows(editor: ResourceEditor) =
+  let previous = editor.xDiagnosticRows
   editor.xDiagnosticRows.setLen(0)
   for diagnostic in editor.xDocument.xResources.diagnostics():
     editor.xDiagnosticRows.add diagnostic
@@ -646,14 +703,17 @@ proc refreshDiagnosticRows(editor: ResourceEditor) =
     editor.xDiagnosticRows.add diagnostic
   for diagnostic in editor.xPreviewDiagnostics:
     editor.xDiagnosticRows.add diagnostic
+  for diagnostic in editor.xLayoutDiagnostics:
+    editor.xDiagnosticRows.add diagnostic
   editor.xDiagnosticsTitle.text = "Diagnostics (" & $editor.xDiagnosticRows.len & ")"
-  editor.xDiagnosticsView.reloadData()
+  if previous != editor.xDiagnosticRows:
+    editor.xDiagnosticsView.reloadData()
 
 proc clearPreviewHover*(editor: ResourceEditor) =
   discard editor.xHoverRing.uninstall()
   editor.xHoveredResourceId = none(ResourceId)
   editor.xHoverGeometry = ResourcePreviewGeometry()
-  editor.refreshPropertyRows()
+  editor.xSelectionLabel.text = editor.xSelectionText
 
 func previewHoverRingStyle(): SelectionRingStyle =
   initSelectionRingStyle(
@@ -697,9 +757,45 @@ proc updatePreviewHover*(
       "Hover " & $result.resourceId & " · x " & $frame.x & "  y " & $frame.y & "  w " &
       $frame.w & "  h " & $frame.h
   else:
-    editor.refreshPropertyRows()
+    editor.xSelectionLabel.text = editor.xSelectionText
+
+protocol ResourceEditorPreviewSurfacePicking of ViewProtocol:
+  method hitTest(surface: ResourceEditorPreviewSurface, point: Point): View =
+    if surface.isHidden() or not views.pointInside(surface, point):
+      return
+    if not surface.xEditor.isNil and surface.xEditor.xInteractivePreview:
+      let hit = surface.xEditor.previewHitTest(point)
+      if hit.found:
+        return hit.hitView
+    surface
+
+protocol ResourceEditorPreviewSurfaceLayout of ViewLayoutProtocol:
+  method layout(surface: ResourceEditorPreviewSurface) =
+    if not surface.xEditor.isNil:
+      let editor = surface.xEditor
+      let diagnostics = editor.xPreview.layoutDiagnostics(surface)
+      if diagnostics != editor.xLayoutDiagnostics:
+        editor.xLayoutDiagnostics = diagnostics
+        editor.refreshDiagnosticRows()
 
 protocol ResourceEditorPreviewSurfaceEvents of ResponderEventProtocol:
+  method mouseDown(surface: ResourceEditorPreviewSurface, event: MouseEvent): bool =
+    if not surface.xEditor.isNil and event.button == mbPrimary:
+      let hit = surface.xEditor.previewHitTest(event.location)
+      if hit.found:
+        discard surface.xEditor.selectResource(hit.resourceId)
+        discard surface.xEditor.beginPreviewDrag(hit.resourceView, event.location)
+      return true
+
+  method mouseDragged(surface: ResourceEditorPreviewSurface, event: MouseEvent): bool =
+    if not surface.xEditor.isNil and event.button == mbPrimary:
+      return surface.xEditor.updatePreviewDrag(event.location)
+
+  method mouseUp(surface: ResourceEditorPreviewSurface, event: MouseEvent): bool =
+    if not surface.xEditor.isNil and event.button == mbPrimary:
+      discard surface.xEditor.endPreviewDrag()
+      return true
+
   method mouseMoved(surface: ResourceEditorPreviewSurface, event: MouseEvent): bool =
     if not surface.xEditor.isNil:
       discard surface.xEditor.updatePreviewHover(event.location)
@@ -715,6 +811,12 @@ proc freeformParent(document: ResourceDocument, id: ResourceId): bool =
   let path = document.findNodePath(id)
   if path.isNone or path.get().kind != rnkView:
     return
+  for constraint in document.bundle().layoutConstraints:
+    if constraint.active and (
+      (constraint.firstItem.kind == rliView and constraint.firstItem.id == id) or
+      (constraint.secondItem.kind == rliView and constraint.secondItem.id == id)
+    ):
+      return
   let parent = document.findParentPath(path.get())
   if parent.isNone:
     return true
@@ -755,6 +857,10 @@ proc updatePreviewDrag*(editor: ResourceEditor, point: Point): bool =
     )
   editor.xDragDidMove = editor.xDragDidMove or delta != Point()
   editor.xDraggedView.frame = nextFrame
+  let id = editor.xDraggedResourceId.get()
+  if editor.xCanvasConstraints.hasKey(id):
+    editor.xCanvasConstraints[id][0].constant = nextFrame.x
+    editor.xCanvasConstraints[id][1].constant = nextFrame.y
   result = true
 
 proc endPreviewDrag*(editor: ResourceEditor): bool =
@@ -783,7 +889,12 @@ proc endPreviewDrag*(editor: ResourceEditor): bool =
 protocol ResourceEditorHierarchyEvents of ResponderEventProtocol:
   method keyDown(hierarchy: ResourceEditorHierarchyView, event: KeyEvent): bool =
     if not hierarchy.xEditor.isNil:
-      if event.key in {keyBackspace, keyDelete} and event.modifiers == {}:
+      if event.key == keyS and
+          event.modifiers in [shortcutModifiers(), shortcutModifiers() + {kmShift}]:
+        discard
+          hierarchy.xEditor.saveEditorDocument(choosePath = kmShift in event.modifiers)
+        return true
+      elif event.key in {keyBackspace, keyDelete} and event.modifiers == {}:
         if hierarchy.xEditor.removeSelectedView().applied:
           return true
       elif event.key == keyD and event.modifiers == shortcutModifiers():
@@ -836,91 +947,14 @@ protocol ResourceEditorHierarchyEvents of ResponderEventProtocol:
     else:
       false
 
-proc uninstallPreviewHoverTracking(editor: ResourceEditor) =
-  for index in countdown(editor.xHoverTokens.high, 0):
-    discard editor.xHoverTokens[index].popMethod()
-  editor.xHoverTokens.setLen(0)
-
-proc installPreviewHoverTracking(editor: ResourceEditor, view: View) =
-  if view.isNil:
-    return
-  let editorCopy = editor
-  let movedWrapper: AroundMethod = proc(
-      self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
-  ) =
-    if not next.isNil:
-      next(self, invocation)
-    let
-      event = invocation.argsAs(MouseEvent)
-      localView = View(self)
-      point = localView.pointToView(event.location, editorCopy.xPreviewSurface)
-    discard editorCopy.updatePreviewHover(point)
-  let exitedWrapper: AroundMethod = proc(
-      self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
-  ) =
-    discard self
-    if not next.isNil:
-      next(self, invocation)
-    if editorCopy.xHoveredResourceId.isSome:
-      editorCopy.clearPreviewHover()
-  let downWrapper: AroundMethod = proc(
-      self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
-  ) =
-    if not next.isNil:
-      next(self, invocation)
-    let
-      event = invocation.argsAs(MouseEvent)
-      localView = View(self)
-      point = localView.pointToView(event.location, editorCopy.xPreviewSurface)
-    if event.button == mbPrimary and editorCopy.beginPreviewDrag(localView, point):
-      invocation.setResult(true)
-  let draggedWrapper: AroundMethod = proc(
-      self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
-  ) =
-    if not next.isNil:
-      next(self, invocation)
-    let
-      event = invocation.argsAs(MouseEvent)
-      localView = View(self)
-      point = localView.pointToView(event.location, editorCopy.xPreviewSurface)
-    if event.button == mbPrimary and editorCopy.updatePreviewDrag(point):
-      invocation.setResult(true)
-  let upWrapper: AroundMethod = proc(
-      self: DynamicAgent, invocation: var Invocation, next: DynamicMethod
-  ) =
-    if not next.isNil:
-      next(self, invocation)
-    let event = invocation.argsAs(MouseEvent)
-    if event.button == mbPrimary and editorCopy.endPreviewDrag():
-      invocation.setResult(true)
-  editor.xHoverTokens.add DynamicAgent(view).pushMethod(
-    nimkitSelectors.mouseMoved(), movedWrapper
-  )
-  editor.xHoverTokens.add DynamicAgent(view).pushMethod(
-    nimkitSelectors.mouseExited(), exitedWrapper
-  )
-  editor.xHoverTokens.add DynamicAgent(view).pushMethod(
-    nimkitSelectors.mouseDown(), downWrapper
-  )
-  editor.xHoverTokens.add DynamicAgent(view).pushMethod(
-    nimkitSelectors.mouseDragged(), draggedWrapper
-  )
-  editor.xHoverTokens.add DynamicAgent(view).pushMethod(
-    nimkitSelectors.mouseUp(), upWrapper
-  )
-  for child in view.subviews():
-    editor.installPreviewHoverTracking(child)
-
-proc installPreviewHoverTracking(editor: ResourceEditor) =
-  editor.uninstallPreviewHoverTracking()
-  for view in editor.xPreview.rootViews():
-    editor.installPreviewHoverTracking(view)
-
 proc clearPreview(editor: ResourceEditor) =
-  editor.uninstallPreviewHoverTracking()
-  discard editor.xPreviewSelection.uninstall()
+  editor.xLayoutDiagnostics = ResourceDiagnostics()
+  for constraints in editor.xCanvasConstraints.values:
+    constraints.deactivate()
+  editor.xCanvasConstraints.clear()
   discard editor.xHoverRing.uninstall()
   discard editor.xSelectionRing.uninstall()
+  discard editor.xRelatedSelectionRing.uninstall()
   while editor.xPreviewSurface.subviews().len > 0:
     editor.xPreviewSurface.subviews()[^1].removeFromSuperview()
   editor.xPreview = newResourcePreview(
@@ -936,11 +970,26 @@ proc clearPreview(editor: ResourceEditor) =
 proc selectPreviewView(editor: ResourceEditor) =
   discard editor.xHoverRing.uninstall()
   discard editor.xSelectionRing.uninstall()
+  discard editor.xRelatedSelectionRing.uninstall()
   let selected = editor.selectedViewId()
   if selected.isSome and editor.xHasPreview:
     let view = editor.xPreview.findView(selected.get())
     if not view.isNil:
       editor.xSelectionRing = view.installSelectionRing()
+  elif editor.xHasPreview:
+    let id = editor.selectedResourceId()
+    if id.isSome:
+      var guide: LayoutGuide
+      if editor.xPreview.findLayoutGuide(id.get(), guide):
+        editor.xSelectionRing = guide.owningView().installSelectionRing(
+            initSelectionRingStyle(insets = guide.insets(), cornerRadius = 0)
+          )
+      else:
+        let constraint = editor.xPreview.findLayoutConstraint(id.get())
+        if not constraint.isNil:
+          editor.xSelectionRing = constraint.firstItem().installSelectionRing()
+          editor.xRelatedSelectionRing =
+            constraint.secondItem().installSelectionRing(previewHoverRingStyle())
   editor.installPreviewHoverRing()
 
 proc previewResourceId(editor: ResourceEditor, selectedView: View): ResourceId =
@@ -956,14 +1005,11 @@ proc selectResource*(editor: ResourceEditor, id: ResourceId): bool =
   if previous != some(id):
     editor.xSelectionFallbackId = previous
   editor.refreshHierarchy()
-  editor.refreshPropertyRows()
-  editor.selectPreviewView()
-
-proc previewViewSelected(editor: ResourceEditor, view: View, event: MouseEvent) =
-  discard event
-  let id = editor.previewResourceId(view)
-  if not id.isEmpty:
-    discard editor.selectResource(id)
+  if previous != some(id):
+    editor.refreshPropertyRows()
+    editor.xSelectionText = editor.xSelectionLabel.text
+    editor.xInspectorSelection = some(id)
+    editor.selectPreviewView()
 
 proc rebuildPreview(editor: ResourceEditor) =
   let document = editor.xDocument.xResources
@@ -975,10 +1021,8 @@ proc rebuildPreview(editor: ResourceEditor) =
 
   let revision = document.lastValidRevision().int
   if editor.xHasPreview and revision == editor.xPreviewRevision:
-    editor.selectPreviewView()
     return
 
-  editor.uninstallPreviewHoverTracking()
   discard editor.xHoverRing.uninstall()
   editor.xHoveredResourceId = none(ResourceId)
   editor.xHoverGeometry = ResourcePreviewGeometry()
@@ -987,51 +1031,88 @@ proc rebuildPreview(editor: ResourceEditor) =
   )
   editor.xPreviewDiagnostics = update.diagnostics
   if not update.applied:
-    editor.installPreviewHoverTracking()
     return
 
   editor.xPreviewRevision = revision
   editor.xHasPreview = true
-  editor.installPreviewHoverTracking()
-  if not editor.xPreviewSelection.installed():
-    editor.xPreviewSelection = installViewSelection(
-      editor.xPreviewSurface,
-      proc(view: View, event: MouseEvent) =
-        editor.previewViewSelected(view, event),
-      initViewSelectionOptions(includeRoot = false),
-    )
+  var constraints: Table[ResourceId, seq[LayoutConstraint]]
+  for node in document.lastValidBundle().views:
+    let view = editor.xPreview.findView(node.id)
+    for property in node.properties:
+      if property.name == "frame" and property.value.kind == rvRect and not view.isNil:
+        let frame = property.value.rectValue
+        var current = editor.xCanvasConstraints.getOrDefault(node.id)
+        if current.len > 0 and current[0].firstItem() != view:
+          current.deactivate()
+          current.setLen(0)
+        if current.len == 0:
+          current =
+            @[
+              view[atLeft].equalTo(
+                editor.xPreviewSurface[atLeft],
+                constant = frame.x,
+                priority = LayoutPriority(999),
+              ),
+              view[atTop].equalTo(
+                editor.xPreviewSurface[atTop],
+                constant = frame.y,
+                priority = LayoutPriority(999),
+              ),
+              view[atWidth].equalTo(frame.w, priority = LayoutPriority(999)),
+              view[atHeight].equalTo(frame.h, priority = LayoutPriority(999)),
+            ]
+          current.activate()
+        else:
+          current[0].constant = frame.x
+          current[1].constant = frame.y
+          current[2].constant = frame.w
+          current[3].constant = frame.h
+        constraints[node.id] = current
+  for id, previous in editor.xCanvasConstraints:
+    if not constraints.hasKey(id):
+      previous.deactivate()
+  editor.xCanvasConstraints = move constraints
   editor.selectPreviewView()
 
 proc refreshStatus(editor: ResourceEditor) =
   let
     resources = editor.xDocument.xResources
-    edited = if editor.xDocument.isDocumentEdited(): "edited" else: "saved"
-  if not resources.draftIsValid():
-    let preview =
-      if editor.xHasPreview:
-        $editor.xPreviewRevision
+    edited =
+      if editor.xDocument.isDocumentEdited():
+        "Unsaved changes"
+      elif editor.xDocument.fileUrl().len == 0:
+        "Untitled document"
       else:
-        "none"
-    editor.xStatusLabel.text =
-      "Draft " & $resources.revision() & " is invalid · preview " & preview &
-      " unchanged · " & edited
+        "All changes saved"
+  if not resources.draftIsValid():
+    editor.xStatusLabel.text = "Fix errors to update the preview · " & edited
   elif editor.xHasPreview:
-    editor.xStatusLabel.text =
-      "Draft " & $resources.revision() & " · preview " & $editor.xPreviewRevision &
-      " · " & edited
+    editor.xStatusLabel.text = edited
   else:
-    editor.xStatusLabel.text =
-      "Draft " & $resources.revision() & " is valid · preview unavailable · " & edited
+    editor.xStatusLabel.text = "Preview unavailable · " & edited
 
 proc synchronize*(editor: ResourceEditor) =
   ## Synchronizes hierarchy, inspector, diagnostics, and the valid preview.
   let resources = editor.xDocument.xResources
+  if resources != editor.xObservedResources:
+    editor.clearPreview()
+    editor.xHasPreview = false
+    editor.xPreviewRevision = -1
+    editor.xSynchronizedRevision = -1
+    editor.xHierarchyRevision = -1
+    editor.xSelectionFallbackId = none(ResourceId)
+    editor.xObservedResources = resources
   if resources.selectedResourceIds().len == 0 and editor.xSelectionFallbackId.isSome and
       resources.contains(editor.xSelectionFallbackId.get()):
     discard resources.selectResource(editor.xSelectionFallbackId.get())
+  let changed = resources.revision().int != editor.xSynchronizedRevision
   editor.rebuildPreview()
-  editor.refreshHierarchy()
-  editor.refreshPropertyRows()
+  if changed or editor.selectedResourceId() != editor.xInspectorSelection:
+    editor.refreshHierarchy()
+    editor.refreshPropertyRows()
+    editor.xInspectorSelection = editor.selectedResourceId()
+    editor.xSelectionText = editor.xSelectionLabel.text
+  editor.xSynchronizedRevision = resources.revision().int
   editor.refreshDiagnosticRows()
   editor.refreshStatus()
 
@@ -1078,8 +1159,15 @@ proc commitPropertyText*(
     document = editor.xDocument.xResources
     node = document.findView(viewId)
   if node.isNone:
-    result.edit =
-      document.setViewProperty(viewId, resourceProperty(name, resourceValue(text)))
+    let edited = document.editRecordField(viewId, name, text)
+    result = ResourcePropertyEditResult(
+      parsed: edited.parsed,
+      value: edited.value,
+      message: edited.message,
+      edit: edited.edit,
+    )
+    if result.edit.applied:
+      editor.synchronize()
     return
 
   let
@@ -1111,16 +1199,115 @@ proc commitPropertyText*(
 proc commitSelectedPropertyText*(
     editor: ResourceEditor, name, text: string
 ): ResourcePropertyEditResult =
-  let selected = editor.selectedViewId()
+  let selected = editor.selectedResourceId()
   if selected.isSome:
     return editor.commitPropertyText(selected.get(), name, text)
-  result.message = "no view resource is selected"
+  result.message = "no resource is selected"
 
 proc nextViewIdentifier(document: ResourceDocument, kind: string): ResourceId =
   var index = 1
   while document.contains(resourceId(kind & "." & $index)):
     inc index
   result = resourceId(kind & "." & $index)
+
+proc insertResourceKind*(
+    editor: ResourceEditor, kind: ResourceNodeKind
+): ResourceEditResult =
+  ## Adds an identified resource using the selected view as its initial owner.
+  let document = editor.xDocument.xResources
+  var owner = editor.selectedViewId().get(ResourceId(""))
+  let selected = editor.selectedResourceId()
+  if owner.isEmpty and selected.isSome:
+    let parent = document.findParentPath(document.nodePath(selected.get()))
+    if parent.isSome and parent.get().kind == rnkView:
+      owner = parent.get().id
+  let id = document.nextViewIdentifier(kind.resourceNodeKindTitle().replace(" ", ""))
+  case kind
+  of rnkLayoutGuide:
+    result = document.insertResource(initResourceLayoutGuide(id, owner, insets(8.0)))
+  of rnkLayoutConstraint:
+    var width = 180.0'f32
+    let view = editor.xPreview.findView(owner)
+    if not view.isNil:
+      width = view.frame().w
+    result = document.insertResource(
+      initResourceLayoutConstraint(
+        id, owner, resourceLayoutItem(owner), rlaWidth, constant = width
+      )
+    )
+  of rnkWindow:
+    result = document.insertResource(
+      WindowResource(
+        id: id,
+        title: resourceText("Window"),
+        frame: rect(80, 80, 640, 480),
+        contentViewId: owner,
+      )
+    )
+  of rnkCommand:
+    result = document.insertResource(CommandResource(id: id, selector: "performClick"))
+  of rnkImage:
+    result = document.insertResource(ImageAssetResource(id: id, sourceKind: risFile))
+  of rnkLocalization:
+    result = document.insertResource(LocalizedCatalogResource(id: id, locale: "en"))
+  of rnkKeyBindings:
+    result = document.insertResource(KeyBindingTableResource(id: id))
+  of rnkTheme:
+    result = document.insertResource(ThemeFragmentResource(id: id))
+  else:
+    result.message = "this resource kind cannot be inserted here"
+    result.error = reeResourceUnavailable
+  if result.applied:
+    editor.xSelectionFallbackId = selected
+    discard editor.selectResource(id)
+    editor.synchronize()
+
+proc pinSelectedView*(editor: ResourceEditor, padding = 16.0'f32): ResourceEditResult =
+  ## Pins all four edges to the parent in one undo group.
+  let
+    document = editor.xDocument.xResources
+    selected = editor.selectedViewId()
+  if selected.isNone:
+    result.message = "select a child view to pin to its parent"
+    result.error = reeResourceUnavailable
+    return
+  let id = selected.get()
+  let parent = document.findParentPath(document.nodePath(id))
+  if parent.isNone or parent.get().kind != rnkView or not document.freeformParent(id):
+    result.message = "select an unconstrained child of a freeform container"
+    result.error = reeParentUnavailable
+    return
+  let manager = document.undoManager()
+  manager.beginUndoGrouping()
+  try:
+    discard document.setViewProperty(
+      id,
+      resourceProperty(
+        "translatesAutoresizingMaskIntoConstraints", resourceValue(false)
+      ),
+    )
+    for anchor in [rlaLeft, rlaTop, rlaRight, rlaBottom]:
+      let constraintId = document.nextViewIdentifier($id & "." & $anchor)
+      let constant =
+        if anchor in {rlaLeft, rlaTop}:
+          padding
+        else:
+          -padding
+      result = document.insertResource(
+        initResourceLayoutConstraint(
+          constraintId,
+          parent.get().id,
+          resourceLayoutItem(id),
+          anchor,
+          resourceLayoutItem(parent.get().id),
+          anchor,
+          constant = constant,
+        )
+      )
+    manager.setActionName("Pin to Parent")
+  finally:
+    discard manager.endUndoGrouping()
+  editor.synchronize()
 
 type SelectedViewLocation = object
   id: ResourceId
@@ -1450,14 +1637,14 @@ proc removeSelectedView*(editor: ResourceEditor): ResourceEditResult =
       revision: document.revision(),
     )
   let path = document.findNodePath(selected.get())
-  if path.isNone or path.get().kind != rnkView:
-    return ResourceEditResult(
-      kind: rekRemove,
-      error: reeResourceUnavailable,
-      message: "the selected resource is not a view",
-      resourceId: selected.get(),
-      revision: document.revision(),
-    )
+  if path.isSome and path.get().kind != rnkView:
+    let parent = document.findParentPath(path.get())
+    result = document.removeResource(selected.get())
+    if result.applied:
+      if parent.isSome:
+        discard document.selectResource(parent.get().id)
+      editor.synchronize()
+    return
   let
     parent = document.findParentPath(path.get())
     parentId =
@@ -1479,7 +1666,33 @@ proc removeSelectedView*(editor: ResourceEditor): ResourceEditResult =
     elif index > 0:
       nextSelection = siblings[index - 1].id
     break
-  result = document.removeView(selected.get(), actionName = "Delete View")
+  var removedIds = initHashSet[ResourceId]()
+  proc collectIds(node: ViewNodeResource) =
+    removedIds.incl node.id
+    for child in node.children:
+      collectIds(child)
+
+  collectIds(document.view(selected.get()))
+  var guides, constraints: seq[ResourceId]
+  for guide in document.bundle().layoutGuides:
+    if guide.owningViewId in removedIds:
+      removedIds.incl guide.id
+      guides.add guide.id
+  for constraint in document.bundle().layoutConstraints:
+    if constraint.owningViewId in removedIds or constraint.firstItem.id in removedIds or
+        constraint.secondItem.id in removedIds:
+      constraints.add constraint.id
+  let manager = document.undoManager()
+  manager.beginUndoGrouping()
+  try:
+    for id in constraints:
+      discard document.removeResource(id)
+    for id in guides:
+      discard document.removeResource(id)
+    result = document.removeView(selected.get(), actionName = "Delete View")
+    manager.setActionName("Delete View")
+  finally:
+    discard manager.endUndoGrouping()
   if not result.applied:
     return
   if not nextSelection.isEmpty and document.selectResource(nextSelection):
@@ -1573,7 +1786,7 @@ proc newPropertyColorWell(
   colorWell.action = action
 
 proc propertyEditorView(editor: ResourceEditor, row: ResourceEditorPropertyRow): View =
-  let selected = editor.selectedViewId()
+  let selected = editor.selectedResourceId()
   if selected.isNone:
     return
   case row.propertyEditorKind()
@@ -1631,6 +1844,23 @@ protocol ResourceEditorTableSource of TableViewDataSource:
       ""
 
 protocol ResourceEditorTableDelegate of TableViewDelegate:
+  method validationErrorForCell(
+      editor: ResourceEditor,
+      tableView: TableView,
+      row: int,
+      column: TableColumn,
+      value: string,
+  ): string =
+    let selected = editor.selectedResourceId()
+    if tableView == editor.xPropertyInspector and column.identifier() == "value" and
+        row in 0 ..< editor.xPropertyRows.len and selected.isSome and
+        editor.xDocument.xResources.nodePath(selected.get()).kind != rnkView:
+      let checked = editor.xDocument.xResources.editRecordField(
+        selected.get(), editor.xPropertyRows[row].descriptor.name, value, commit = false
+      )
+      if not checked.parsed:
+        return checked.message
+
   method viewForCell(
       editor: ResourceEditor, tableView: TableView, row: int, column: TableColumn
   ): View =
@@ -1672,7 +1902,7 @@ protocol ResourceEditorTableDelegate of TableViewDelegate:
     if tableView != editor.xPropertyInspector or column.identifier() != "value" or
         row notin 0 ..< editor.xPropertyRows.len:
       return
-    let selected = editor.selectedViewId()
+    let selected = editor.selectedResourceId()
     if selected.isSome:
       discard editor.commitPropertyText(
         selected.get(), editor.xPropertyRows[row].descriptor.name, value
@@ -1705,7 +1935,27 @@ proc configureDiagnostics(tableView: TableView) =
 
 proc newPaletteButton(editor: ResourceEditor, kind: string): Button =
   let action = nimkitSelectors.actionSelector("resourceEditorInsert" & kind)
-  result = newButton(kind)
+  let title =
+    case kind
+    of "checkBox":
+      "Checkbox"
+    of "radioButton":
+      "Radio Button"
+    of "textField":
+      "Text Field"
+    of "imageView":
+      "Image"
+    of "stackView":
+      "Stack"
+    of "switchButton":
+      "Switch"
+    of "progressIndicator":
+      "Progress"
+    of "splitView":
+      "Split View"
+    else:
+      kind.capitalizeAscii()
+  result = newButton(title)
   result.target = newActionTarget(
     action,
     proc(sender: DynamicAgent) =
@@ -1722,7 +1972,33 @@ proc configurePalette(editor: ResourceEditor) =
   for index, kind in editor.xPaletteKinds:
     let button = editor.newPaletteButton(kind)
     editor.xPaletteButtons.add button
-    editor.xPaletteView.addSubview(button, row = index div 3, col = index mod 3)
+    editor.xPaletteView.addSubview(button, row = index div 2, col = index mod 2)
+  editor.xPaletteView.frame =
+    rect(0, 0, 236, ((editor.xPaletteKinds.len + 1) div 2).float32 * 34 + 8)
+
+proc saveEditorDocument*(editor: ResourceEditor, choosePath = false): bool =
+  ## Commits the current field and prompts for a destination for untitled documents.
+  if editor.xPropertyInspector.editingState().active and
+      not editor.xPropertyInspector.commitEditingCell(""):
+    return
+  if choosePath or editor.xDocument.fileUrl().len == 0:
+    let panel = newSavePanel()
+    panel.allowedFileTypes = @["cbor"]
+    panel.nameFieldStringValue =
+      if editor.xDocument.fileUrl().len == 0:
+        "Untitled Resources.cbor"
+      else:
+        editor.xDocument.fileUrl().localFilePath().extractFilename()
+    panel.directoryUrl =
+      if editor.xDocument.fileUrl().len == 0:
+        getCurrentDir()
+      else:
+        editor.xDocument.fileUrl().localFilePath().parentDir()
+    if sharedApplication().runModal(panel) == PanelResponseOk:
+      result = editor.xDocument.saveAs(panel.selectedUrl(), "cbor")
+  else:
+    result = editor.xDocument.save()
+  editor.synchronize()
 
 proc configureToolbar(
     editor: ResourceEditor,
@@ -1741,8 +2017,7 @@ proc configureToolbar(
     saveAction,
     proc(sender: DynamicAgent) =
       discard sender
-      discard editor.xDocument.save()
-      editor.synchronize(),
+      discard editor.saveEditorDocument(),
   )
   saveButton.action = saveAction
   undoButton.target = newActionTarget(
@@ -1818,12 +2093,17 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
   previewSurface.xEditor = result
   hierarchyView.xEditor = result
   discard previewSurface.withProtocol(ResourceEditorPreviewSurfaceEvents)
+  discard previewSurface.withProtocol(ResourceEditorPreviewSurfacePicking)
+  discard previewSurface.withProtocol(ResourceEditorPreviewSurfaceLayout)
   discard result.withProtocol(ResourceEditorTableSource)
   discard result.withProtocol(ResourceEditorTableDelegate)
 
   for kind in ResourceEditorPaletteKinds:
     if document.xRegistry.hasViewKind(kind):
       result.xPaletteKinds.add kind
+  for descriptor in document.xRegistry.viewKinds():
+    if descriptor.kind notin result.xPaletteKinds:
+      result.xPaletteKinds.add descriptor.kind
 
   result.xHierarchyView.configureHierarchy()
   result.xPropertyInspector.configurePropertyInspector()
@@ -1833,6 +2113,7 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
   result.xDiagnosticsView.dataSource = result
   result.xDiagnosticsView.delegate = result
   result.xPreviewSurface.backgroundColor = color(0.96, 0.97, 0.99, 1.0)
+  result.xPreviewSurface.appearance = initAppearance(initAquaTheme())
   result.xPreviewSurface.clipsToBounds = true
   result.xPreviewSurface.accessibilityRole = arGroup
   result.xPreviewSurface.accessibilityLabel = "Resource preview"
@@ -1840,7 +2121,7 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
   let
     hierarchyTitle = newHeadingLabel("Resource Hierarchy")
     paletteTitle = newHeadingLabel("View Palette")
-    previewTitle = newHeadingLabel("Valid Revision Preview")
+    previewTitle = newHeadingLabel("Preview")
     inspectorTitle = newHeadingLabel("Resource Inspector")
     saveButton = newButton("Save")
     undoButton = newButton("Undo")
@@ -1849,8 +2130,103 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     duplicateButton = newButton("Duplicate")
     moveEarlierButton = newButton("Up")
     moveLaterButton = newButton("Down")
+    interactButton = newCheckBox("Interact")
+    openButton = newButton("Open…")
+    saveAsButton = newButton("Save As…")
+    pinButton = newButton("Pin to Parent")
+    resourcePicker = newComboBox(
+      [
+        "Layout Guide", "Layout Constraint", "Window", "Command", "Image",
+        "Localization", "Key Bindings", "Theme",
+      ]
+    )
+    addResourceButton = newButton("Add")
+    paletteScroll = newScrollView(documentView = result.xPaletteView)
+    themePicker = newComboBox(
+      ["Aqua", "Dark BSD", "macOS", "macOS Dark", "Nebula", "Peachy", "Synthwave83"]
+    )
+
+  let editor = result
+  themePicker.editable = false
+  themePicker.selectedIndex = 0
+  themePicker.toolTip = "Preview theme (does not change the resource document)"
+  let themeAction = nimkitSelectors.actionSelector("resourceEditorPreviewTheme")
+  themePicker.target = newActionTarget(
+    themeAction,
+    proc(sender: DynamicAgent) =
+      let names =
+        ["aqua", "darkbsd", "macos", "macos-dark", "nebula", "peachy", "synthwave83"]
+      let index = themePicker.indexOfSelectedItem()
+      if index in 0 ..< names.len:
+        editor.xPreviewSurface.appearance =
+          initAppearance(initThemeByName(names[index]))
+    ,
+  )
+  themePicker.action = themeAction
+  let interactAction = nimkitSelectors.actionSelector("resourceEditorInteract")
+  interactButton.target = newActionTarget(
+    interactAction,
+    proc(sender: DynamicAgent) =
+      editor.interactivePreview = Button(sender).state() == bsOn,
+  )
+  interactButton.action = interactAction
+  interactButton.toolTip = "Run preview controls; uncheck to select and position views"
+  resourcePicker.editable = false
+  resourcePicker.selectedIndex = 0
+  let addAction = nimkitSelectors.actionSelector("resourceEditorAddResource")
+  addResourceButton.target = newActionTarget(
+    addAction,
+    proc(sender: DynamicAgent) =
+      let kinds = [
+        rnkLayoutGuide, rnkLayoutConstraint, rnkWindow, rnkCommand, rnkImage,
+        rnkLocalization, rnkKeyBindings, rnkTheme,
+      ]
+      let index = resourcePicker.indexOfSelectedItem()
+      if index in 0 ..< kinds.len:
+        discard editor.insertResourceKind(kinds[index])
+    ,
+  )
+  addResourceButton.action = addAction
+  let pinAction = nimkitSelectors.actionSelector("resourceEditorPin")
+  pinButton.target = newActionTarget(
+    pinAction,
+    proc(sender: DynamicAgent) =
+      let edit = editor.pinSelectedView()
+      if not edit.applied:
+        editor.xStatusLabel.text = edit.message
+    ,
+  )
+  pinButton.action = pinAction
+  let saveAsAction = nimkitSelectors.actionSelector("resourceEditorSaveAs")
+  saveAsButton.target = newActionTarget(
+    saveAsAction,
+    proc(sender: DynamicAgent) =
+      discard editor.saveEditorDocument(choosePath = true),
+  )
+  saveAsButton.action = saveAsAction
+  let openAction = nimkitSelectors.actionSelector("resourceEditorOpen")
+  openButton.target = newActionTarget(
+    openAction,
+    proc(sender: DynamicAgent) =
+      let panel = newOpenPanel()
+      panel.allowedFileTypes = @["cbor"]
+      if sharedApplication().runModal(panel) == PanelResponseOk:
+        let opened = newResourceEditorDocument()
+        if opened.readFromFileUrl(panel.selectedUrl()):
+          for path in opened.resources():
+            discard opened.resources().selectResource(path.id)
+            break
+          discard opened.showWindows(sharedApplication())
+        else:
+          editor.xStatusLabel.text = "Could not open the resource file"
+    ,
+  )
+  openButton.action = openAction
 
   result.configurePalette()
+  paletteScroll.hasHorizontalScroller = false
+  paletteScroll.hasVerticalScroller = true
+  paletteScroll.autohidesScrollers = true
   result.xUndoButton = undoButton
   result.xRedoButton = redoButton
   result.xDuplicateButton = duplicateButton
@@ -1862,15 +2238,36 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
   )
   result.xRootView.addSubviews(
     autoNames(
-      hierarchyTitle, result.xHierarchyView, paletteTitle, result.xPaletteView,
-      previewTitle, result.xStatusLabel, result.xPreviewSurface, inspectorTitle,
+      hierarchyTitle, result.xHierarchyView, paletteTitle, paletteScroll, previewTitle,
+      result.xStatusLabel, result.xPreviewSurface, inspectorTitle,
       result.xSelectionLabel, result.xPropertyInspector, result.xDiagnosticsTitle,
       result.xDiagnosticsView, saveButton, undoButton, redoButton, deleteButton,
-      duplicateButton, moveEarlierButton, moveLaterButton,
+      duplicateButton, moveEarlierButton, moveLaterButton, interactButton, openButton,
+      saveAsButton, pinButton, resourcePicker, addResourceButton, themePicker,
     )
   )
 
   activateConstraints:
+    interactButton[atTop] == saveButton[atTop]
+    interactButton[atLeft] == result.xRootView[atLeft] + 18.0
+    interactButton[atWidth] == 110.0
+    interactButton[atHeight] == saveButton[atHeight]
+    openButton[atTop] == saveButton[atTop]
+    openButton[atLeft] == interactButton[atRight] + 8.0
+    openButton[atWidth] == 70.0
+    openButton[atHeight] == saveButton[atHeight]
+    saveAsButton[atTop] == saveButton[atTop]
+    saveAsButton[atLeft] == openButton[atRight] + 8.0
+    saveAsButton[atWidth] == 90.0
+    saveAsButton[atHeight] == saveButton[atHeight]
+    pinButton[atTop] == saveButton[atTop]
+    pinButton[atLeft] == saveAsButton[atRight] + 8.0
+    pinButton[atWidth] == 110.0
+    pinButton[atHeight] == saveButton[atHeight]
+    themePicker[atTop] == saveButton[atTop]
+    themePicker[atLeft] == pinButton[atRight] + 12.0
+    themePicker[atWidth] == 140.0
+    themePicker[atHeight] == saveButton[atHeight]
     saveButton[atTop] == result.xRootView[atTop] + 14.0
     saveButton[atRight] == result.xRootView[atRight] - 18.0
     saveButton[atWidth] == 72.0
@@ -1910,12 +2307,20 @@ proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor =
     result.xHierarchyView[atBottom] == paletteTitle[atTop] - 10.0
     paletteTitle[atLeft] == hierarchyTitle[atLeft]
     paletteTitle[atWidth] == hierarchyTitle[atWidth]
-    paletteTitle[atBottom] == result.xPaletteView[atTop] - 6.0
+    paletteTitle[atBottom] == paletteScroll[atTop] - 6.0
     paletteTitle[atHeight] == 24.0
-    result.xPaletteView[atLeft] == hierarchyTitle[atLeft]
-    result.xPaletteView[atWidth] == hierarchyTitle[atWidth]
-    result.xPaletteView[atBottom] == result.xRootView[atBottom] - 18.0
-    result.xPaletteView[atHeight] == 170.0
+    paletteScroll[atLeft] == hierarchyTitle[atLeft]
+    paletteScroll[atWidth] == hierarchyTitle[atWidth]
+    paletteScroll[atBottom] == resourcePicker[atTop] - 8.0
+    paletteScroll[atHeight] == 220.0
+    resourcePicker[atLeft] == hierarchyTitle[atLeft]
+    resourcePicker[atWidth] == 180.0
+    resourcePicker[atBottom] == result.xRootView[atBottom] - 18.0
+    resourcePicker[atHeight] == 30.0
+    addResourceButton[atLeft] == resourcePicker[atRight] + 6.0
+    addResourceButton[atRight] == hierarchyTitle[atRight]
+    addResourceButton[atTop] == resourcePicker[atTop]
+    addResourceButton[atHeight] == resourcePicker[atHeight]
 
     previewTitle[atTop] == hierarchyTitle[atTop]
     previewTitle[atLeft] == result.xHierarchyView[atRight] + 18.0

@@ -63,6 +63,19 @@ proc initResourceInstance(): ResourceInstance =
     keyBindingsValue: initTable[ResourceId, KeyBindingTable](),
   )
 
+proc rebindResourceIdentities*(
+    instance: var ResourceInstance,
+    views: Table[ResourceId, View],
+    controllers: Table[ResourceId, ViewController],
+    layout: ResourceLayoutInstance,
+) =
+  ## Retires a staging layout and installs reconciled identity maps. Callers must
+  ## first reconnect controllers, windows, menus, and view hierarchy to these maps.
+  instance.layoutValue.deactivate()
+  instance.viewsValue = views
+  instance.controllersValue = controllers
+  instance.layoutValue = layout
+
 func instantiated*(instantiation: ResourceInstantiationResult): bool =
   not instantiation.diagnostics.hasErrors
 
@@ -215,16 +228,17 @@ proc initResourcePropertyContext*(
   ## Image getters are mapped back to stable resource identifiers by identity;
   ## localized getter values are intentionally returned as their resolved string.
   let
-    bundleCopy = bundle
-    instanceCopy = instance
+    bundleCopy =
+      ResourceBundle(images: bundle.images, localizations: bundle.localizations)
+    images = instance.imagesValue
     locale = context.locale
     imageIdFor = proc(image: ImageResource): ResourceId =
       for asset in bundleCopy.images:
-        if instanceCopy.findImage(asset.id) == image:
+        if images.getOrDefault(asset.id) == image:
           return asset.id
   ResourcePropertyContext(
     imageFor: proc(id: ResourceId): ImageResource =
-      instanceCopy.findImage(id),
+      images.getOrDefault(id),
     imageIdFor: imageIdFor,
     textFor: proc(key, fallback: string): string =
       bundleCopy.localizedValue(locale, key, fallback),

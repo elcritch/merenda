@@ -48,23 +48,26 @@ is to measure retained memory across the whole workspace and budget its caches.
 **Completion evidence:** cache growth is bounded under the chosen workload, with
 before/after memory and latency measurements and coverage for eviction/recovery.
 
-## 3. Tekton authoring — next feature work
+## 3. Tekton authoring — remaining work
 
-View editing and preview reconciliation are established. Extend that workflow
-through typed document operations while preserving invalid drafts, undo/redo,
-selection, and compatible preview identities.
+View, guide, constraint, and flat resource editing now share undo, validation, and
+save/reload workflows. Property edits reuse the preview graph; guide outlines,
+constraint endpoint highlights, and unsatisfied-constraint diagnostics are available.
+See [the review and measurements](docs/tekton-review.md).
 
-- [ ] Start non-view editing with constraints and guides: typed insert, remove,
-  move, and replace operations, including grouped transactions and validation.
-- [ ] Add structured inspectors for those resources and the property metadata
-  they need, using runtime descriptors for enum choices.
-- [ ] Connect inspectors to direct layout authoring: guide overlays, anchor
-  handles, and constraint constant, priority, and activation editing. Surface
-  conflicts and ambiguity in the same workflow.
+- [ ] Add tree operations and editable inspectors for controllers and menus, and
+  collection editors for localization strings, key bindings, and theme rules.
+- [ ] Add visual reparenting, anchor handles, multi-selection, alignment, and snapping.
+- [ ] Add inspection and change tracking for an attached running application's
+  resource graph, including custom view and controller types.
+- [ ] Add ambiguity diagnostics and runtime conflict attribution to generated layout
+  inputs; current diagnostics report authored constraints that remain unsatisfied.
+- [ ] Extend the palette to the remaining container/model-backed controls with
+  explicit serialization contracts, and add application command/outlet wiring.
 
-**Completion evidence:** a user can create, edit, undo, save, and reload a
-constrained layout, including recovery from invalid input, without losing the
-last valid preview or selection.
+**Completion evidence:** users can author a multi-window interface, wire its
+controllers and actions, and inspect the running application without losing history
+or live object identities.
 
 ## Validation
 

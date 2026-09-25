@@ -1,7 +1,5 @@
 ## Tekton, Merenda's resource-document builder application.
 
-import std/os
-
 import ../nimkit
 import ./editor
 
@@ -75,11 +73,14 @@ proc tektonStarterBundle*(): ResourceBundle =
 proc newTektonDocument*(fileUrl = ""): ResourceEditorDocument =
   ## Creates a starter document or loads an existing canonical CBOR resource file.
   result = newResourceEditorDocument(tektonStarterBundle(), fileUrl = fileUrl)
-  if fileUrl.len > 0 and fileExists(fileUrl):
+  if fileUrl.len > 0:
     discard result.readFromFileUrl(fileUrl)
   elif fileUrl.len == 0:
     result.displayName = "Tekton — Untitled Resources"
-  discard result.resources().selectResource(TektonRootResourceId)
+  if not result.resources().selectResource(TektonRootResourceId):
+    for path in result.resources():
+      discard result.resources().selectResource(path.id)
+      break
 
 proc runTekton*(fileUrl = "") =
   let
@@ -87,4 +88,3 @@ proc runTekton*(fileUrl = "") =
     document = newTektonDocument(fileUrl)
   discard document.showWindows(app)
   app.run()
-

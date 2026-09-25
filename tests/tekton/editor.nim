@@ -90,6 +90,7 @@ suite "Tekton resource editor":
     check editor.previewRevision() == 0
     check editor.previewInstance().view(buttonId) == previewButton
     check editor.propertyRow("enabled").get().text == "not a bool"
+    check editor.propertyRow("enabled").get().propertyEditorKind() == rpekText
     check editor.diagnosticRows().len > 0
     check editor.hasPreviewSelection()
 
@@ -255,7 +256,12 @@ suite "Tekton resource editor":
       let row = editor.propertyRow(rowName)
       check row.isSome
       check expected in row.get().text
-      check not row.get().descriptor.editable
+      check row.get().descriptor.editable == (
+        document.resources().nodePath(id).kind in {
+          rnkLayoutConstraint, rnkLayoutGuide, rnkWindow, rnkCommand, rnkImage,
+          rnkLocalization,
+        }
+      )
 
   test "CBOR document save and revert share undo clean state":
     let path =
