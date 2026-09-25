@@ -20,6 +20,7 @@ suite "NimKit modal lifetimes":
     defer:
       owner.close()
       unrelated.close()
+      discard app.runForFrames(1)
     var responses: seq[int]
     for choice in [1, 0, 1]:
       let alert = newAlert("Unsaved changes", buttons = ["Discard", "Cancel"])
@@ -42,6 +43,10 @@ suite "NimKit modal lifetimes":
       check session.response == responses[^1]
       app.endModalSession(session)
       alert.window.close()
+      check alert.window.isClosed()
+      check alert.responseHandler.isNil
+      for button in alert.buttonViews:
+        check Button(button).target.isNil
       check app.modalSession().isNil
       let ownerIsKey = app.keyWindow() == owner
       check ownerIsKey
@@ -79,6 +84,7 @@ suite "NimKit modal lifetimes":
     defer:
       parent.close()
       dialog.close()
+      discard app.runForFrames(1)
     let session = app.beginModalSession(dialog)
     dialog.close()
     check session.state == mssAborted
@@ -106,6 +112,7 @@ suite "NimKit modal lifetimes":
       second.close()
       first.close()
       parent.close()
+      discard app.runForFrames(1)
     let lower = app.beginModalSession(first)
     let active = app.beginModalSession(second)
     first.close()
