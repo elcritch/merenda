@@ -1663,8 +1663,16 @@ proc dispatchKey(host: HostWindow, event: SiwinKeyEvent) =
     )
   )
 
+func isNativeTextInput*(text: string): bool =
+  ## Physical keys handle single control characters on every native backend.
+  if text.len == 0:
+    return
+  if text.len == 1 and (text[0] < ' ' or text[0] == '\x7f'):
+    return
+  true
+
 proc dispatchTextInput(host: HostWindow, event: siwinshim.TextInputEvent) =
-  if event.text.len > 0 and not host.xCallbacks.onTextInput.isNil:
+  if event.text.isNativeTextInput() and not host.xCallbacks.onTextInput.isNil:
     host.xCallbacks.onTextInput(event.text)
 
 proc installEventHandlers(host: HostWindow) =
