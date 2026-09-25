@@ -8,3 +8,16 @@ leak:typefaces::registerTypeface
 leak:libfontconfig.so
 leak:outputs::memoryOutput
 leak:times::newTimezone
+
+# The native-renderer exception test initializes FigDraw's OpenGL shaders.
+# FigDraw frees each CString array without freeing its copied source strings.
+leak:shaders::compileShaderFiles
+
+# Siwin's X11 window allocates three clipboard wrappers that remain after close.
+# Restrict this suppression to that dependency's window-setup stack.
+leak:window::setupWindow
+
+# The NimKit text tests leave the shared application-lifetime worker pool and
+# a deferred background-layout continuation for process teardown.
+leak:backgroundworkers::nimkitWorkerPool
+leak:scheduleBackgroundTextLayout
