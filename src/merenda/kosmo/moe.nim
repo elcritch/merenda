@@ -927,11 +927,15 @@ proc closeTab*(
   ## Close a tab, optionally discarding its unsaved changes.
   if editor.isNil or editor.editor.isNil:
     return KosmoTabCloseResult(message: "The editor is closed.")
+  let previousBuffer = editor.activeBufferId()
   if discardChanges:
     let buffer = editor.editor.bufferById(id.toMoeBufferId)
     if buffer.isSome:
+      if previousBuffer == some(id.toMoeBufferId):
+        # Moe keeps edits in an open transaction until Insert exits. Commit it
+        # before marking the buffer saved, or closeBuffer still sees it as dirty.
+        editor.editor.finalizeInsertSessionForBufferSwitch(buffer.get)
       buffer.get.markSaved()
-  let previousBuffer = editor.activeBufferId()
   let outcome = editor.editor.closeBuffer(id.toMoeBufferId)
   if pkgResults.isErr(outcome):
     logMoeFailure("close buffer", $id, outcome.error)

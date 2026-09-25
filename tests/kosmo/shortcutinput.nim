@@ -220,6 +220,8 @@ suite "Kosmo synthetic shortcut input":
     check not frontend.window.isClosed
     check frontend.editorView.editor.tabs()[0].modified
 
+    require frontend.editorView.editor.handleKey("i")
+    require frontend.editorView.editor.mode() == KosmoEditorMode.Insert
     check frontend.clickSelectedTabClose()
     check frontend.application.modalSession().window.clickModalButton("Discard")
     check frontend.application.modalSession().isNil
@@ -245,7 +247,7 @@ suite "Kosmo synthetic shortcut input":
     )
     check frontend.editorView.editor.bufferText(replacement.id) == some("replacement")
 
-  test "discarding a modified middle tab selects its next tab and refreshes the editor":
+  test "discarding a modified middle tab in insert mode selects its next tab":
     let
       root = createTempDir("merenda-kosmo-discard-middle-", "")
       frontend = newKosmoApplication(
@@ -265,7 +267,7 @@ suite "Kosmo synthetic shortcut input":
     require frontend.documentTabs.selectDocumentTabWithIdentifier(models[1].identifier)
     require frontend.editorView.editor.handleKey("i")
     require frontend.editorView.editor.handleTextInput("modified ")
-    require frontend.editorView.editor.handleKey("Esc")
+    require frontend.editorView.editor.mode() == KosmoEditorMode.Insert
     frontend.editorView.refresh()
     check frontend.clickSelectedTabClose()
     require not frontend.application.modalSession().isNil
