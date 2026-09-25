@@ -32,6 +32,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
+  # Host hooks and nonblocking Git pipe reads are supplied by this Moe branch.
   requires "gh:elcritch/moe#feat/kosmo-host-ui"
 
 feature "references":
