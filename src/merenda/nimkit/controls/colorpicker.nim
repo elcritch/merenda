@@ -1002,13 +1002,16 @@ proc choiceTitle(well: PopupColorWell): string =
   else:
     "Custom"
 
+protocol PopupColorWellAccessibility of AccessibilityProtocol:
+  method accessibilityValue(well: PopupColorWell): string =
+    well.choiceTitle()
+
 proc synchronizeChoiceState(well: PopupColorWell) =
   let selected = well.selectedIndex()
   if not well.menu().isNil:
     for index, item in well.menu().items():
       item.state = if index == selected: bsOn else: bsOff
   PopupMenuButton(well).title = "      " & well.choiceTitle()
-  well.accessibilityValue = well.choiceTitle()
 
 proc `color=`*(well: PopupColorWell, value: Color) =
   if well.xColor == value:
@@ -1077,6 +1080,7 @@ proc initPopupColorWellFields*(
   well.rebuildMenu()
   well.accessibilityLabel = "Color"
   discard well.withProtocol(PopupColorWellDrawing)
+  discard well.withProtocol(PopupColorWellAccessibility)
 
 proc newPopupColorWell*(
     choices: openArray[PopupColorChoice],

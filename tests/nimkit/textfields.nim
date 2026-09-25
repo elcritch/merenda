@@ -284,29 +284,30 @@ suite "nimkit text fields":
     check field.stringValue == "Xy"
     check field.selectedRange == initTextRange(2, 0)
 
-  test "active field editor selection follows effective theme":
+  test "active field editor selection follows effective theme without losing edits":
     let
       window = newWindow("Theme selection", frame = rect(0, 0, 240, 120))
-      root = newView(frame = rect(0, 0, 240, 120))
-      field = newTextField("Selected", frame = rect(10, 10, 140, 24))
-
-    root.appearance = initAppearance(initDarkBSDTheme())
+      root = newView()
+      field = newTextField("Selected", frame = rect(10, 10, 140, 30))
+    defer:
+      window.close()
     root.addSubview(field)
     window.setContentView(root)
-    check window.makeFirstResponder(field)
-    check window.fieldEditor().selectionColor == color(0.34, 0.18, 0.23, 0.92)
-
-    root.appearance = initAppearance(initAquaTheme())
-    check window.fieldEditor().selectionColor == color(0.24, 0.56, 1.0, 0.34)
-
-    root.appearance = initAppearance(initMacOSTheme())
-    check window.fieldEditor().selectionColor == color(0.04, 0.52, 1.0, 0.26)
-
-    root.appearance = initAppearance(initMacOSDarkTheme())
-    check window.fieldEditor().selectionColor == color(0.04, 0.52, 1.0, 0.38)
-
-    root.appearance = initAppearance(initDarkBSDTheme())
-    check window.fieldEditor().selectionColor == color(0.34, 0.18, 0.23, 0.92)
+    require window.makeFirstResponder(field)
+    for tint in [color(0.7, 0.2, 0.3, 0.6), color(0.2, 0.6, 0.7, 0.5)]:
+      var appearance = initAppearance()
+      appearance[srTextField, StyleSelectionColor] = tint
+      root.appearance = appearance
+      check window.fieldEditor().selectionColor == tint
+      field.selectedRange = initTextRange(0, field.text.len)
+      let renders = window.buildRenders()
+      var selectionFound = false
+      for node in renders[DefaultDrawLevel].nodes:
+        if node.kind == nkRectangle and node.fill == fill(tint):
+          selectionFound = true
+      check selectionFound
+      require window.dispatchTextInput("Edited")
+      check field.text == "Edited"
 
   test "field editor keeps caret aligned with passive text field text":
     let

@@ -1,8 +1,52 @@
 import std/unittest
 
 import merenda/nimkit
+import ./fixtures/widgetflows
 
 suite "nimkit dock views":
+  test "split panels remain editable through resize removal and replacement":
+    let
+      window = newWindow("Dock workflow", frame = rect(0, 0, 640, 360))
+      dock = newDockView()
+      firstField = newTextField("First")
+      secondField = newTextField("Second")
+      first = newDockPanel(firstField)
+      second = newDockPanel(secondField)
+    defer:
+      window.close()
+    window.setContentView(dock)
+    require dock.addPanel(first)
+    require dock.splitPanel(first, second, dpRight)
+
+    for size in [initSize(640, 360), initSize(940, 520), initSize(480, 320)]:
+      window.frame = rect(0, 0, size.width, size.height)
+      dock.layoutSubtreeIfNeeded()
+      for index, field in [firstField, secondField]:
+        check field.frame().size.width > 0
+        check field.frame().size.height > 0
+        let entered = "Pane " & $index & " at width " & $size.width
+        require window.replaceText(field, entered)
+        check field.text == entered
+      check first.frame().maxX <= second.frame().minX
+      check second.frame().maxX <= dock.bounds().maxX
+
+    require dock.removePanel(second)
+    dock.layoutSubtreeIfNeeded()
+    check first.frame().size == dock.bounds().size
+    require window.clickView(firstField)
+    let before = firstField.text
+    require window.dispatchTextInput(" still editable")
+    check firstField.text != before
+    let
+      replacementField = newTextField("Replacement")
+      replacement = newDockPanel(replacementField)
+    require dock.splitPanel(first, replacement, dpBottom)
+    dock.layoutSubtreeIfNeeded()
+    check first.frame().maxY <= replacement.frame().minY
+    check replacement.frame().maxY <= dock.bounds().maxY
+    require window.replaceText(replacementField, "Replacement edited")
+    check replacementField.text == "Replacement edited"
+
   test "panels split around targets and collapse empty branches":
     let
       dockView = newDockView(frame = rect(0, 0, 480, 320))

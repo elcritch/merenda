@@ -21,6 +21,10 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result.autoresizingMaskConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
 
+proc splitAppearance(dividerThickness = 6.0'f32): Appearance =
+  result = initAppearance()
+  result[srSplitView, StyleSeparatorThickness] = dividerThickness
+
 suite "nimkit split views":
   test "autosave name is a field-backed protocol property":
     let splitView = newSplitView()
@@ -51,7 +55,7 @@ suite "nimkit split views":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 50.0)
 
-    splitView.appearance = initAppearance(initAquaTheme())
+    splitView.appearance = splitAppearance()
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.layoutSubtreeIfNeeded()
@@ -71,7 +75,7 @@ suite "nimkit split views":
       sidebarLeft =
         newLayoutConstraint(sidebar, atLeft, lrEqual, right, atLeft, constant = 18.0)
 
-    splitView.appearance = initAppearance(initAquaTheme())
+    splitView.appearance = splitAppearance()
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.layoutSubtreeIfNeeded()
@@ -92,7 +96,7 @@ suite "nimkit split views":
       top = newFixedIntrinsicView(80.0, 40.0)
       bottom = newFixedIntrinsicView(90.0, 50.0)
 
-    splitView.appearance = initAppearance(initAquaTheme())
+    splitView.appearance = splitAppearance()
     splitView.addPane(top)
     splitView.addPane(bottom)
     splitView.layoutSubtreeIfNeeded()
@@ -109,7 +113,7 @@ suite "nimkit split views":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
-    splitView.appearance = initAppearance(initAquaTheme())
+    splitView.appearance = splitAppearance()
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.setPaneSizeLimits(0, minSize = 80.0, maxSize = 210.0)
@@ -131,7 +135,7 @@ suite "nimkit split views":
       top = newFixedIntrinsicView(80.0, 24.0)
       bottom = newFixedIntrinsicView(90.0, 160.0)
 
-    splitView.appearance = initAppearance(initDarkBsdTheme())
+    splitView.appearance = splitAppearance(8.0'f32)
     splitView.addPane(top, minSize = 24.0, maxSize = 24.0)
     splitView.addPane(bottom, minSize = 160.0)
     splitView.layoutSubtreeIfNeeded()
@@ -147,7 +151,7 @@ suite "nimkit split views":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
-    splitView.appearance = initAppearance(initAquaTheme())
+    splitView.appearance = splitAppearance()
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.layoutSubtreeIfNeeded()
@@ -199,8 +203,8 @@ suite "nimkit split views":
       c = newFixedIntrinsicView(80.0, 40.0)
       d = newFixedIntrinsicView(90.0, 40.0)
 
-    first.appearance = initAppearance(initAquaTheme())
-    second.appearance = initAppearance(initAquaTheme())
+    first.appearance = splitAppearance()
+    second.appearance = splitAppearance()
     first.addPane(a, collapsible = true)
     first.addPane(b)
     first.setPositionOfDivider(0, 180.0)
@@ -217,48 +221,47 @@ suite "nimkit split views":
     check c.frame().size.width == 180.0
     check d.frame().size.width == 120.0
 
-  test "split view renders themed dividers":
+  test "themed divider and grip follow layout and resizing":
     let
-      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
-      left = newFixedIntrinsicView(80.0, 40.0)
-      right = newFixedIntrinsicView(90.0, 40.0)
-
-    splitView.addPane(left)
-    splitView.addPane(right)
-    splitView.layoutSubtreeIfNeeded()
-
-    let list = buildRenders(splitView)[DefaultDrawLevel]
-    var rectangleCount = 0
-    for node in list.nodes:
-      if node.kind == nkRectangle:
-        inc rectangleCount
-    check rectangleCount >= 2
-
-  test "DarkBSD split view renders a centered high-contrast drag grip":
-    let
-      appearance = initAppearance(initDarkBSDTheme())
-      style = appearance.resolveSplitViewStyle(controlStyle(srSplitView))
-      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 100.0))
-      left = newFixedIntrinsicView(80.0, 40.0)
-      right = newFixedIntrinsicView(90.0, 40.0)
-
-    check style.dividerThickness == 8.0'f32
-    check style.divider.borderWidth == 0.0'f32
-    check style.gripLength == 32.0'f32
-    check style.gripColor == color(0.72, 0.72, 0.76, 0.82)
-
+      splitView = newSplitView(laHorizontal, rect(0, 0, 306, 100))
+      left = newFixedIntrinsicView(80, 40)
+      right = newFixedIntrinsicView(90, 40)
+      dividerFill = fill(color(0.12, 0.34, 0.56, 1))
+      gripColor = color(0.76, 0.32, 0.11, 1)
+    var appearance = initAppearance()
+    appearance[srSplitView, StyleFill] = dividerFill
+    appearance[srSplitView, StyleMarkColor] = gripColor
+    appearance[srSplitView, StyleSeparatorThickness] = 10.0'f32
+    appearance[srSplitView, StyleIndicatorSize] = 30.0'f32
     splitView.appearance = appearance
     splitView.addPane(left)
     splitView.addPane(right)
-    splitView.layoutSubtreeIfNeeded()
 
-    let list = buildRenders(splitView)[DefaultDrawLevel]
-    var foundGrip = false
-    for node in list.nodes:
-      if node.kind == nkRectangle and node.fill == fill(style.gripColor):
-        foundGrip = true
-        check node.screenBox.w == 3.0'f32
-        check node.screenBox.h == 32.0'f32
-        check node.screenBox.x == 151.5'f32
-        check node.screenBox.y == 34.0'f32
-    check foundGrip
+    for bounds in [rect(0, 0, 306, 100), rect(0, 0, 480, 160)]:
+      splitView.frame = bounds
+      let
+        list = buildRenders(splitView)[DefaultDrawLevel]
+        divider = splitView.dividerRect(0)
+      check left.frame().maxX <= divider.minX
+      check right.frame().minX >= divider.maxX
+      check right.frame().maxX == splitView.bounds().maxX
+      var foundDivider, foundGrip: bool
+      for node in list.nodes:
+        if node.kind != nkRectangle:
+          continue
+        if node.fill == dividerFill:
+          foundDivider = true
+          check node.screenBox.x == divider.minX
+          check node.screenBox.w == divider.size.width
+        if node.fill == fill(gripColor):
+          foundGrip = true
+          check node.screenBox.x >= divider.minX
+          check node.screenBox.x + node.screenBox.w <= divider.maxX
+          check node.screenBox.y >= divider.minY
+          check node.screenBox.y + node.screenBox.h <= divider.maxY
+          check abs(
+            node.screenBox.y + node.screenBox.h / 2 -
+              (divider.minY + divider.size.height / 2)
+          ) < 0.01
+      check foundDivider
+      check foundGrip

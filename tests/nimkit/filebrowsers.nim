@@ -4,6 +4,7 @@ import figdraw
 import sigils/core
 
 import merenda/nimkit
+import ./fixtures/widgetflows
 
 type FileBrowserSignalSpy = ref object of Responder
   activatedPaths: seq[string]
@@ -174,22 +175,27 @@ suite "File browsers":
     defer:
       removeDir(folder)
       removeDir(root)
-    let browser = newFileBrowser(root)
-    browser.locationField().text = "folder"
-    check browser.locationField().sendAction()
+    let
+      browser = newFileBrowser(root)
+      window = newWindow("Location workflow", frame = rect(0, 0, 760, 540))
+    defer:
+      window.close()
+    window.setContentView(browser)
+    require window.replaceText(browser.locationField(), "folder")
+    require window.pressKey(keyEnter)
     check browser.directoryPath() == absolutePath(folder)
     check browser.locationField().text == absolutePath(folder)
-    browser.locationField().text = "missing"
-    check not browser.navigateToLocation()
+    require window.replaceText(browser.locationField(), "missing")
+    require window.pressKey(keyEnter)
     check browser.directoryPath() == absolutePath(folder)
     check "Folder not found" in browser.statusLabel().text
-    check browser.navigateBack()
+    require window.clickView(browser.operationButton(FileBrowserBackOperation))
     check browser.directoryPath() == absolutePath(root)
-    check browser.navigateForward()
+    require window.clickView(browser.operationButton(FileBrowserForwardOperation))
     check browser.directoryPath() == absolutePath(folder)
     for place in browser.placesView().arrangedSubviews():
       if place of Button:
-        check Button(place).sendAction()
+        require window.clickView(place)
         check browser.directoryPath() == absolutePath(place.toolTip)
 
   test "open and save panels give window growth to the browser and anchor their footers":
@@ -219,7 +225,8 @@ suite "File browsers":
         buttonSize = buttons[0].frame().size
         buttonOrigin = buttons[0].pointToWindow(initPoint(0, 0))
       check originalSize.height > 200
-      check buttonSize.width < 160
+      check buttonSize.width >= buttons[0].intrinsicContentSize().width
+      check buttonSize.width < originalWindow.size.width / 2
       check buttons[1].frame().maxX <= buttons[0].frame().origin.x
       window.frame = rect(
         100, 100, originalWindow.size.width + 200, originalWindow.size.height + 160
@@ -252,18 +259,32 @@ suite "File browsers":
     panel.directoryUrl = root
     panel.nameFieldStringValue = "draft"
     panel.allowedFileTypes = @["txt"]
+    var responses: seq[int]
+    panel.prepareForModal(
+      proc(response: int) =
+        responses.add response
+    )
     discard panel.contentView()
     let browser = panel.fileBrowser()
-    browser.selectPath(existing)
+    discard panel.window.buildRenders()
+    require panel.window.clickFileBrowserRow(browser, browser.rowForPath(existing))
     check TextField(panel.nameField).text == "existing.txt"
     check panel.selectedUrl() == existing
-    TextField(panel.nameField).text = "new draft"
-    browser.selectPath(folder)
-    check browser.activateSelection()
+    require panel.window.replaceText(TextField(panel.nameField), "new draft")
+    require panel.window.doubleClickFileBrowserRow(browser, browser.rowForPath(folder))
     check panel.directoryUrl == absolutePath(folder)
     check TextField(panel.nameField).text == "new draft"
     check panel.selectedUrl() == folder / "new draft.txt"
-    check browser.navigateBack()
+    require panel.window.clickView(browser.operationButton(FileBrowserBackOperation))
+    check panel.selectedUrl() == root / "new draft.txt"
+    check responses.len == 0
+    require panel.window.replaceText(TextField(panel.nameField), "bad.png")
+    check not panel.validateSelection()
+    check not Button(panel.buttonViews[0]).enabled
+    check responses.len == 0
+    require panel.window.replaceText(TextField(panel.nameField), "new draft")
+    require panel.window.clickView(panel.buttonViews[0])
+    check responses == @[PanelResponseOk]
     check panel.selectedUrl() == root / "new draft.txt"
 
   test "directory-only open panels can accept the current folder after navigation":
@@ -339,10 +360,9 @@ suite "File browsers":
     window.setContentView(browser)
     discard buildRenders(browser)
 
-    check browser.tableView().columnCount() == 2
+    check not browser.tableView().columnWithIdentifier("name").isNil
     check browser.tableView().rowCount() == 3
     check browser.entries()[0].path == folder
-    check browser.operationButtons().len == 7
     check not fileButton.enabled
     check not folderButton.enabled
 

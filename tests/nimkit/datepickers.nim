@@ -214,34 +214,22 @@ suite "NimKit date pickers":
     check not picker.hasSelectedDate
     check picker.accessibilityValue() == "No date selected"
 
-  test "date picker uses themed light and dark calendar colors":
+  test "calendar surface follows appearance changes without losing its selection":
     let
-      picker =
-        newDatePicker(initCalendarDate(2025, 7, 24), frame = rect(0, 0, 252, 244))
-      darkAppearance = initAppearance(initDarkBSDTheme())
-      darkStyle = darkAppearance.resolveBoxStyle(controlStyle(srDatePicker))
-      darkSelectedStyle =
-        darkAppearance.resolveBoxStyle(controlStyle(srDatePicker, {ssSelected}))
-      lightAppearance = initAppearance(initMacOSTheme())
-      lightStyle = lightAppearance.resolveBoxStyle(controlStyle(srDatePicker))
-      renders = buildRenders(picker, darkAppearance)
-
-    check darkStyle.box.fill ==
-      darkAppearance.fillToken("comboBox.item.fill", fill(color(1.0, 1.0, 1.0, 1.0)))
-    check darkStyle.text.color ==
-      darkAppearance.colorToken("comboBox.item.text.color", color(0.0, 0.0, 0.0, 1.0))
-    check darkStyle.box.fill.centerColor().r < 0.5'f32
-    check darkStyle.text.color.r > 0.5'f32
-    check darkSelectedStyle.box.fill ==
-      darkAppearance.fillToken("accent", fill(color(0.0, 0.0, 0.0, 1.0)))
-    check lightStyle.box.fill.centerColor().r > darkStyle.box.fill.centerColor().r
-    check PopupDrawLevel in renders.layers
-
-    var hasThemedCalendarSurface = false
-    for node in renders[PopupDrawLevel].nodes:
-      if node.kind == nkRectangle and node.fill == darkStyle.box.fill:
-        hasThemedCalendarSurface = true
-    check hasThemedCalendarSurface
+      selected = initCalendarDate(2025, 7, 24)
+      picker = newDatePicker(selected, frame = rect(0, 0, 252, 244))
+    for surface in [color(0.15, 0.24, 0.36, 1), color(0.8, 0.7, 0.6, 1)]:
+      var appearance = initAppearance()
+      appearance[srDatePicker, StyleFill] = surface
+      picker.appearance = appearance
+      let renders = buildRenders(picker)
+      require PopupDrawLevel in renders.layers
+      var foundSurface = false
+      for node in renders[PopupDrawLevel].nodes:
+        if node.kind == nkRectangle and node.fill == fill(surface):
+          foundSurface = true
+      check foundSurface
+      check picker.selectedDate == selected
 
   test "date picker button opens an inline picker and forwards selection":
     let

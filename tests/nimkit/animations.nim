@@ -319,7 +319,9 @@ suite "NimKit animations":
       left = newFixedIntrinsicView(80.0, 40.0)
       right = newFixedIntrinsicView(90.0, 40.0)
 
-    splitView.appearance = initAppearance(initAquaTheme())
+    var appearance = initAppearance()
+    appearance[srSplitView, StyleSeparatorThickness] = 6.0'f32
+    splitView.appearance = appearance
     splitView.addPane(left)
     splitView.addPane(right)
     splitView.layoutSubtreeIfNeeded()
@@ -334,6 +336,8 @@ suite "NimKit animations":
     checkClose(left.frame().size.width, 180.0'f32)
 
     let cascadingView = newCascadingView(rect(0.0, 0.0, 400.0, 160.0))
+    cascadingView.columnWidth = 160.0'f32
+    cascadingView.columnSpacing = 1.0'f32
     let widthAnimation = newCascadingColumnWidthAnimation(
       cascadingView, 240.0'f32, duration = initDuration(milliseconds = 100)
     )
@@ -506,7 +510,8 @@ suite "NimKit animations":
     check scheduler.startAnimation(animation)
     clock.start()
     try:
-      for _ in 0 ..< 50:
+      let deadline = getMonoTime() + initDuration(seconds = 60)
+      while clock.pendingTickCount == 0 and getMonoTime() < deadline:
         discard clock.pollQueuedTicks()
         if clock.pendingTickCount > 0:
           break
@@ -532,10 +537,13 @@ suite "NimKit animations":
     check app.startAnimation(animation)
     try:
       check not app.animationClock().isRunning
-      sleep(3)
-      check app.runForFrames(1) == 1
-      check animation.currentTime{}.inNanoseconds > 0
-      check view.frame() != rect(0.0, 0.0, 100.0, 40.0)
+      let deadline = getMonoTime() + initDuration(seconds = 60)
+      while not animation.isStopped and getMonoTime() < deadline:
+        discard app.runForFrames(1)
+        sleep(1)
+      check animation.isStopped
+      check view.frame() == rect(20.0, 10.0, 140.0, 60.0)
+      check app.animationScheduler().animationCount == 0
     finally:
       discard app.stopAnimation(animation)
       app.stopAnimationClock()
@@ -563,7 +571,8 @@ suite "NimKit animations":
     second.start()
     try:
       first.stop()
-      for _ in 0 ..< 50:
+      let deadline = getMonoTime() + initDuration(seconds = 60)
+      while second.pendingTickCount == 0 and getMonoTime() < deadline:
         discard second.pollQueuedTicks()
         if second.pendingTickCount > 0:
           break

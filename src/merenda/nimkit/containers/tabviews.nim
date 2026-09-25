@@ -210,11 +210,6 @@ func tabPanelOffset(mode: TabViewMode, style: TabViewStyle): float32 =
   of tvmTraditional:
     style.tabHeight - style.contentBorderWidth
 
-func tabBarOverlap(mode: TabViewMode, style: TabViewStyle): float32 =
-  case mode
-  of tvmInset: style.panelOverlap
-  of tvmTraditional: style.contentBorderWidth
-
 proc contentRect*(tabView: TabView): Rect =
   let
     bounds = tabView.bounds()
@@ -250,17 +245,14 @@ proc tabBarFrame(tabView: TabView): Rect =
   let
     bounds = tabView.bounds()
     style = tabView.tabStyle()
-    overlap = tabView.xTabMode.tabBarOverlap(style)
+    height = style.tabHeight + style.contentBorderWidth
   case tabView.xTabPosition
   of tpTop:
-    rect(0.0, 0.0, bounds.size.width, style.tabHeight + style.contentBorderWidth)
+    rect(0.0, 0.0, bounds.size.width, height)
   of tpBottom:
-    rect(
-      0.0,
-      tabView.contentRect().maxY - overlap,
-      bounds.size.width,
-      style.tabHeight + style.contentBorderWidth,
-    )
+    # Mirror the top bar within the bounds; panel overlap is independent of
+    # the bar's height and can be zero in a theme.
+    rect(0.0, max(bounds.size.height - height, 0.0'f32), bounds.size.width, height)
 
 func tabTextColor(enabled, selected: bool): Color =
   if not enabled:

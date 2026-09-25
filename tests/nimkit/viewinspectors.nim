@@ -54,19 +54,26 @@ suite "nimkit view inspectors":
 
   test "view inspector panel close detaches root hooks":
     let
+      window = newWindow("Inspected window", frame = rect(0, 0, 240, 180))
       root = newView()
-      child = newView("child")
+      child = newView("child", frame = rect(20, 20, 100, 50))
 
     root.addSubview(child)
+    window.setContentView(root)
+    defer:
+      window.close()
 
     let panel = newViewInspectorPanel(root)
 
-    check DynamicAgent(child).methodStack(mouseDown()).len == 1
-    panel.inspector.selectView(child)
-    check panel.inspector.selectedView == child
+    check window.mouseDownAt(initPoint(40, 40))
+    let selected = panel.inspector.selectedView == child
+    check selected
+    discard window.mouseUpAt(initPoint(40, 40))
 
     panel.window.close()
 
     check panel.inspector.inspectedRoot.isNil
     check panel.inspector.selectedView.isNil
-    check DynamicAgent(child).methodStack(mouseDown()).len == 0
+    check not window.mouseDownAt(initPoint(40, 40))
+    check panel.inspector.selectedView.isNil
+    discard window.mouseUpAt(initPoint(40, 40))

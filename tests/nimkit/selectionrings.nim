@@ -64,7 +64,6 @@ suite "nimkit selection rings":
     var ring = installSelectionRing(selected, style)
     check ring.installed
     check ring.view == selected
-    check DynamicAgent(selected).methodStack(draw()).len == 2
 
     ringDrawCount = 0
     let
@@ -80,7 +79,6 @@ suite "nimkit selection rings":
     check ring.uninstall()
     check not ring.installed
     check ring.view.isNil
-    check DynamicAgent(selected).methodStack(draw()).len == 1
 
     ringDrawCount = 0
     let

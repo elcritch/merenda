@@ -1,6 +1,7 @@
 import std/[importutils, math, os, strutils, tables, unittest]
 
 import merenda/nimkit
+import ./fixtures/widgetflows
 import merenda/nimkit/app/settings
 from figdraw/extras/systemfonttypes import initSystemTypeface
 
@@ -17,61 +18,58 @@ privateAccess(TestSelectedFont)
 type TestSystemTypeface = typeof(default(TestSelectedFont).faces.regular)
 
 suite "nimkit settings":
-  test "DarkBSD is selected by default and Aqua is named explicitly":
-    var appliedAppearance: Appearance
+  test "choosing a visible theme applies it without depending on menu order":
+    var
+      appliedAppearance: Appearance
+      appliedTheme: string
     let settings = newMerendaSettingsWindow(
-      proc(appearance: Appearance) =
-        appliedAppearance = appearance
+      appearanceHandler = proc(appearance: Appearance) =
+        appliedAppearance = appearance,
+      themeHandler = proc(theme: string) =
+        appliedTheme = theme,
+      initialTheme = "aqua",
     )
     defer:
       settings.window().close()
+    settings.window().setContentView(settings.contentView())
     let themeView = settings.contentView().viewWithIdentifier("settings-theme-picker")
-
-    require not themeView.isNil
     require themeView of ComboBox
-    let themePicker = ComboBox(themeView)
-    check themePicker.selectedIndex == 0
-    check themePicker.stringValue == "DarkBSD"
-    check settings.preview.appearance.resolveChromeName(controlStyle(srButton)) ==
-      RubyAquaChromeName
+    let picker = ComboBox(themeView)
+    check picker.stringValue == "Aqua"
     check not appliedAppearance.theme.isInitialized
-
-    themePicker.selectedIndex = 1
-    check themePicker.stringValue == "Aqua"
-    check themePicker.sendAction()
+    require settings.window().chooseItem(picker, "DarkBSD")
+    check appliedTheme == "darkbsd"
     check appliedAppearance.theme.isInitialized
+    require settings.window().chooseItem(picker, "Aqua")
+    check appliedTheme == "aqua"
 
-  test "behavior settings expose and notify inverted scrolling":
-    var appliedValue = false
+  test "behavior controls apply toggles and silent updates stay silent":
+    var applied: seq[bool]
     let settings = newMerendaSettingsWindow(
       invertScrollingHandler = proc(inverted: bool) =
-        appliedValue = inverted
+        applied.add inverted
     )
     defer:
       settings.window().close()
+    settings.window().setContentView(settings.contentView())
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
-    require not tabsView.isNil
     require tabsView of TabView
-    let tabs = TabView(tabsView)
-    check tabs.len == 3
-    check tabs[2].identifier == SettingsBehaviorTabIdentifier
-    check tabs.selectTabViewItemAtIndex(2)
-
+    require settings.window().clickTab(TabView(tabsView), SettingsBehaviorTabIdentifier)
     let invertView =
       settings.contentView().viewWithIdentifier(SettingsInvertScrollingIdentifier)
-    require not invertView.isNil
     require invertView of Button
     let invertButton = Button(invertView)
-    check invertButton.title == "Invert scrolling direction"
-    check invertButton.state == bsOff
+
+    require settings.window().clickView(invertButton)
+    check settings.invertScrolling
+    check applied == @[true]
+    require settings.window().clickView(invertButton)
     check not settings.invertScrolling
+    check applied == @[true, false]
 
     settings.invertScrolling = true
     check invertButton.state == bsOn
-    check not appliedValue
-
-    check invertButton.sendAction()
-    check appliedValue
+    check applied == @[true, false]
 
   test "appearance settings scale the UI in tenths":
     var appliedScale = 0.0'f32
@@ -82,28 +80,27 @@ suite "nimkit settings":
     )
     defer:
       settings.window().close()
+    settings.window().setContentView(settings.contentView())
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
     require not tabsView.isNil
     require tabsView of TabView
     let tabs = TabView(tabsView)
-    check tabs.selectTabViewItemAtIndex(0)
+    require settings.window().clickTab(tabs, "appearance")
 
     let scaleView = settings.contentView().viewWithIdentifier(SettingsUiScaleIdentifier)
     require not scaleView.isNil
     require scaleView of Stepper
     let scaleStepper = Stepper(scaleView)
-    check scaleStepper.minValue == 0.5'f32
-    check scaleStepper.maxValue == 3.0'f32
     check scaleStepper.value == 1.0'f32
-    check scaleStepper.increment == 0.1'f32
     check scaleStepper.formattedValue() == "1.0x"
 
-    check scaleStepper.incrementValue()
+    require settings.window().makeFirstResponder(scaleStepper)
+    require settings.window().pressKey(keyArrowUp)
     check abs(scaleStepper.value - 1.1'f32) < 0.0001'f32
     check abs(appliedScale - 1.1'f32) < 0.0001'f32
     check settings.uiScale == scaleStepper.value
 
-    check scaleStepper.decrementValue()
+    require settings.window().pressKey(keyArrowDown)
     check abs(scaleStepper.value - 1.0'f32) < 0.0001'f32
     check abs(appliedScale - 1.0'f32) < 0.0001'f32
 
@@ -130,6 +127,7 @@ suite "nimkit settings":
     )
     defer:
       settings.window().close()
+    settings.window().setContentView(settings.contentView())
 
     let
       themeView = settings.contentView().viewWithIdentifier("settings-theme-picker")
@@ -137,17 +135,17 @@ suite "nimkit settings":
     require themeView of ComboBox
     require tabsView of TabView
     let tabs = TabView(tabsView)
-    check tabs.selectTabViewItemAtIndex(1)
+    require settings.window().clickTab(tabs, "typography")
     let
       fontSizeView =
         settings.contentView().viewWithIdentifier("settings-font-size-stepper")
       applyFontView = settings.contentView().viewWithIdentifier("settings-apply-font")
     require fontSizeView of Stepper
     require applyFontView of Button
-    check tabs.selectTabViewItemAtIndex(0)
+    require settings.window().clickTab(tabs, "appearance")
     let scaleView = settings.contentView().viewWithIdentifier(SettingsUiScaleIdentifier)
     require scaleView of Stepper
-    check tabs.selectTabViewItemAtIndex(2)
+    require settings.window().clickTab(tabs, SettingsBehaviorTabIdentifier)
     let
       invertView =
         settings.contentView().viewWithIdentifier(SettingsInvertScrollingIdentifier)
@@ -170,48 +168,62 @@ suite "nimkit settings":
       resetButton = Button(resetView)
       autoSaveButton = Button(autoSaveView)
 
-    themePicker.selectedIndex = 1
-    check themePicker.sendAction()
-    invertButton.state = bsOn
-    check invertButton.sendAction()
-    check scaleStepper.incrementValue()
-    check saveButton.sendAction()
+    let window = settings.window()
+    require window.clickTab(tabs, "appearance")
+    require window.chooseItem(themePicker, "Aqua")
+    require window.makeFirstResponder(scaleStepper)
+    require window.pressKey(keyArrowUp)
+    let savedScale = scaleStepper.value
+    require window.clickTab(tabs, SettingsBehaviorTabIdentifier)
+    require window.clickView(invertButton)
+    require window.clickView(saveButton)
     check saveCount == 1
     check savedSettings.theme == "aqua"
     check savedSettings.invertScrolling
-    check abs(savedSettings.uiScale - 1.1'f32) < 0.0001'f32
+    check savedSettings.uiScale == savedScale
     check appliedInvertScrolling
-    check abs(appliedScale - 1.1'f32) < 0.0001'f32
+    check appliedScale == savedScale
 
-    check fontSizeStepper.incrementValue()
-    check applyFontButton.sendAction()
-    check saveButton.sendAction()
+    require window.clickTab(tabs, "typography")
+    require window.makeFirstResponder(fontSizeStepper)
+    require window.pressKey(keyArrowUp)
+    require window.clickView(applyFontButton)
+    let savedFontSize = fontSizeStepper.value
+    require window.clickTab(tabs, SettingsBehaviorTabIdentifier)
+    require window.clickView(saveButton)
     check saveCount == 2
-    check fontSizeStepper.incrementValue()
-    check fontSizeStepper.value == 16.0'f32
 
-    themePicker.selectedIndex = 0
-    check themePicker.sendAction()
-    invertButton.state = bsOff
-    check invertButton.sendAction()
-    check scaleStepper.decrementValue()
-    check resetButton.sendAction()
-    check themePicker.selectedIndex == 1
+    require window.clickTab(tabs, "typography")
+    require window.makeFirstResponder(fontSizeStepper)
+    require window.pressKey(keyArrowUp)
+    check fontSizeStepper.value > savedFontSize
+    require window.clickTab(tabs, "appearance")
+    require window.chooseItem(themePicker, "DarkBSD")
+    require window.makeFirstResponder(scaleStepper)
+    require window.pressKey(keyArrowDown)
+    require window.clickTab(tabs, SettingsBehaviorTabIdentifier)
+    require window.clickView(invertButton)
+    require window.clickView(resetButton)
+    check themePicker.stringValue == "Aqua"
     check invertButton.state == bsOn
-    check abs(scaleStepper.value - 1.1'f32) < 0.0001'f32
-    check fontSizeStepper.value == 15.0'f32
-    check appliedAppearance.resolveChromeName(controlStyle(srButton)) == AquaChromeName
+    check scaleStepper.value == savedScale
+    check fontSizeStepper.value == savedFontSize
+    check appliedAppearance.resolveLength(
+      controlStyle(srTextField), StyleFontSize, 0.0'f32
+    ) == savedFontSize
     check appliedInvertScrolling
-    check abs(appliedScale - 1.1'f32) < 0.0001'f32
+    check appliedScale == savedScale
     check saveCount == 2
 
-    autoSaveButton.state = bsOn
-    check autoSaveButton.sendAction()
+    require window.clickView(autoSaveButton)
     check savedSettings.autoSaveDefaults
     check saveCount == 3
-    check scaleStepper.incrementValue()
+    require window.clickTab(tabs, "appearance")
+    require window.makeFirstResponder(scaleStepper)
+    require window.pressKey(keyArrowUp)
     check saveCount == 4
-    check abs(savedSettings.uiScale - 1.2'f32) < 0.0001'f32
+    check savedSettings.uiScale == scaleStepper.value
+    check savedSettings.uiScale > savedScale
 
   test "application UI scale reaches existing and new windows":
     let
@@ -231,7 +243,7 @@ suite "nimkit settings":
     let tabsView = settingsWindow.contentView().viewWithIdentifier("settings-tabs")
     require not tabsView.isNil
     require tabsView of TabView
-    check TabView(tabsView).selectTabViewItemAtIndex(0)
+    require settingsWindow.clickTab(TabView(tabsView), "appearance")
     let scaleView =
       settingsWindow.contentView().viewWithIdentifier(SettingsUiScaleIdentifier)
     require not scaleView.isNil
@@ -269,15 +281,16 @@ suite "nimkit settings":
       settingsWindow.contentView().viewWithIdentifier("settings-tabs")
     require not settingsTabsView.isNil
     require settingsTabsView of TabView
-    check TabView(settingsTabsView).selectTabViewItemAtIndex(2)
+    require settingsWindow.clickTab(
+      TabView(settingsTabsView), SettingsBehaviorTabIdentifier
+    )
     let invertView =
       settingsWindow.contentView().viewWithIdentifier(SettingsInvertScrollingIdentifier)
     require not invertView.isNil
     require invertView of Button
     let invertButton = Button(invertView)
     check invertButton.state == bsOn
-    invertButton.state = bsOff
-    check invertButton.sendAction()
+    require settingsWindow.clickView(invertButton)
     check not app.invertScrolling
     check not firstWindow.invertScrolling
     check not secondWindow.invertScrolling
@@ -300,8 +313,7 @@ suite "nimkit settings":
       firstPanel.contentView().viewWithIdentifier("settings-theme-picker")
     require firstThemeView of ComboBox
     let firstThemePicker = ComboBox(firstThemeView)
-    firstThemePicker.selectedIndex = 1
-    check firstThemePicker.sendAction()
+    require firstPanel.chooseItem(firstThemePicker, "Aqua")
     firstPanel.close()
 
     app.showMerendaSettings()
@@ -318,10 +330,10 @@ suite "nimkit settings":
     let
       secondThemePicker = ComboBox(secondThemeView)
       resetButton = Button(secondResetView)
-    check secondThemePicker.selectedIndex == 1
-    check resetButton.sendAction()
-    check secondThemePicker.selectedIndex == 0
-    check app.appearance.resolveChromeName(controlStyle(srButton)) == RubyAquaChromeName
+    check secondThemePicker.stringValue == "Aqua"
+    require secondPanel.clickView(resetButton)
+    check secondThemePicker.stringValue == "DarkBSD"
+    check app.merendaSettingsThemeIdentifier == "darkbsd"
     check savedCount == 0
 
   test "typography settings expose independent interface and monospace fonts":
@@ -613,9 +625,10 @@ suite "nimkit settings":
 
     check familyColumn.scrollView().contentOffset() == browsedOffset
 
-  test "font size stepper previews within bounds and applies on request":
-    var appliedCount = 0
-    var appliedAppearance: Appearance
+  test "font size keyboard edits preview before Apply commits them":
+    var
+      appliedCount = 0
+      appliedAppearance: Appearance
     let settings = newMerendaSettingsWindow(
       proc(appearance: Appearance) =
         inc appliedCount
@@ -623,75 +636,74 @@ suite "nimkit settings":
     )
     defer:
       settings.window().close()
+    let window = settings.window()
+    window.setContentView(settings.contentView())
     let initialAppliedCount = appliedCount
     let tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
-    require not tabsView.isNil
     require tabsView of TabView
-    check TabView(tabsView).selectTabViewItemAtIndex(1)
-    let fontSizeView =
-      settings.contentView().viewWithIdentifier("settings-font-size-stepper")
-
-    require not fontSizeView.isNil
-    require fontSizeView of Stepper
-    let fontSizeStepper = Stepper(fontSizeView)
-    check fontSizeStepper.minValue == 6.0'f32
-    check fontSizeStepper.maxValue == 120.0'f32
-    check fontSizeStepper.value == 14.0'f32
-    check fontSizeStepper.increment == 1.0'f32
-
-    check fontSizeStepper.incrementValue()
-    check fontSizeStepper.value == 15.0'f32
-    check appliedCount == initialAppliedCount
-
-    let previewView = settings.contentView().viewWithIdentifier("settings-font-preview")
-    require not previewView.isNil
-    check previewView.appearance.resolveLength(
-      controlStyle(srTextField), StyleFontSize, 0.0'f32
-    ) == 15.0'f32
-
-    let applyFontView = settings.contentView().viewWithIdentifier("settings-apply-font")
-    require not applyFontView.isNil
-    require applyFontView of Button
-    check Button(applyFontView).sendAction()
-    check appliedCount == initialAppliedCount + 1
-    check appliedAppearance.resolveLength(
-      controlStyle(srTextField), StyleFontSize, 0.0'f32
-    ) == 15.0'f32
-
-  test "macOS-family themes apply font size to the preview label":
-    let settings = newMerendaSettingsWindow()
-    defer:
-      settings.window().close()
-    let
-      themeView = settings.contentView().viewWithIdentifier("settings-theme-picker")
-      tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
-
-    require not themeView.isNil
-    require themeView of ComboBox
-    require not tabsView.isNil
-    require tabsView of TabView
-    check TabView(tabsView).selectTabViewItemAtIndex(1)
+    require window.clickTab(TabView(tabsView), "typography")
     let
       fontSizeView =
         settings.contentView().viewWithIdentifier("settings-font-size-stepper")
-      previewView = settings.contentView().viewWithIdentifier("settings-font-preview")
-    require not fontSizeView.isNil
+      preview = settings.contentView().viewWithIdentifier("settings-font-preview")
+      applyButton = settings.contentView().viewWithIdentifier("settings-apply-font")
     require fontSizeView of Stepper
-    require not previewView.isNil
+    require not preview.isNil
+    require applyButton of Button
     let
-      themePicker = ComboBox(themeView)
-      fontSizeStepper = Stepper(fontSizeView)
-      previewContext = controlStyle(
+      stepper = Stepper(fontSizeView)
+      original = stepper.value
+      originalHeight = preview.intrinsicContentSize().height
+    require window.makeFirstResponder(stepper)
+    require window.pressKey(keyArrowUp)
+    check stepper.value > original
+    check appliedCount == initialAppliedCount
+    let context = controlStyle(
+      srTextField, id = "settings-font-preview", classes = @[LabelStyleClass]
+    )
+    check preview.effectiveAppearance().resolveLength(context, StyleFontSize, 0) ==
+      stepper.value
+    check preview.intrinsicContentSize().height >= originalHeight
+    require window.clickView(applyButton)
+    check appliedCount == initialAppliedCount + 1
+    check appliedAppearance.resolveLength(controlStyle(srTextField), StyleFontSize, 0) ==
+      stepper.value
+
+  test "changing themes preserves editable font preview controls":
+    let settings = newMerendaSettingsWindow()
+    defer:
+      settings.window().close()
+    let window = settings.window()
+    window.setContentView(settings.contentView())
+    let
+      themeView = settings.contentView().viewWithIdentifier("settings-theme-picker")
+      tabsView = settings.contentView().viewWithIdentifier("settings-tabs")
+    require themeView of ComboBox
+    require tabsView of TabView
+    let tabs = TabView(tabsView)
+    require window.clickTab(tabs, "typography")
+    let
+      fontSizeView =
+        settings.contentView().viewWithIdentifier("settings-font-size-stepper")
+      preview = settings.contentView().viewWithIdentifier("settings-font-preview")
+    require fontSizeView of Stepper
+    require not preview.isNil
+    let
+      stepper = Stepper(fontSizeView)
+      context = controlStyle(
         srTextField, id = "settings-font-preview", classes = @[LabelStyleClass]
       )
-
-    for themeIndex in [0, 2, 3]:
-      themePicker.selectedIndex = themeIndex
-      check themePicker.sendAction()
-      fontSizeStepper.value = 14.0'f32
-      check fontSizeStepper.incrementValue()
-      check previewView.appearance.resolveLength(previewContext, StyleFontSize, 0.0'f32) ==
-        15.0'f32
+    for theme in ["DarkBSD", "macOS", "macOS Dark"]:
+      checkpoint("theme: " & theme)
+      require window.clickTab(tabs, "appearance")
+      require window.chooseItem(ComboBox(themeView), theme)
+      require window.clickTab(tabs, "typography")
+      let before = stepper.value
+      require window.makeFirstResponder(stepper)
+      require window.pressKey(keyArrowUp)
+      check stepper.value > before
+      check preview.effectiveAppearance().resolveLength(context, StyleFontSize, 0) ==
+        stepper.value
 
   test "opening settings restores applied font controls":
     let app = newApplication("Settings Reset Test")

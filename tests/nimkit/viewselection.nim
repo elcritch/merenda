@@ -43,7 +43,6 @@ suite "nimkit view selection":
 
     check selection.installed
     check selection.root == root
-    check DynamicAgent(child).methodStack(mouseDown()).len == 2
 
     selectionEvents.setLen(0)
     check window.mouseDownAt(initPoint(15, 15), timestamp = 10.0)
@@ -52,7 +51,11 @@ suite "nimkit view selection":
 
     check selection.uninstall()
     check not selection.installed
-    check DynamicAgent(child).methodStack(mouseDown()).len == 1
+    selected = nil
+    selectionEvents.setLen(0)
+    check window.mouseDownAt(initPoint(15, 15), timestamp = 11.0)
+    check selected.isNil
+    check selectionEvents == @["original:child"]
 
   test "view selection consumes otherwise unhandled child clicks":
     let
@@ -108,19 +111,29 @@ suite "nimkit view selection":
         removed = view,
     )
 
-    check DynamicAgent(container).methodStack(mouseDown()).len == 0
     root.addSubview(container)
-    check DynamicAgent(container).methodStack(mouseDown()).len == 1
 
     container.addSubview(child)
-    check DynamicAgent(child).methodStack(mouseDown()).len == 1
     check window.mouseDownAt(initPoint(35, 30), timestamp = 25.0)
     check selected == child
 
     container.removeFromSuperview()
     check removed == container
-    check DynamicAgent(container).methodStack(mouseDown()).len == 0
-    check DynamicAgent(child).methodStack(mouseDown()).len == 0
+    selected = nil
+    let detachedWindow = newWindow("Uninspected", frame = rect(0, 0, 180, 120))
+    defer:
+      detachedWindow.close()
+    detachedWindow.setContentView(container)
+    let point = child.pointToWindow(initPoint(5, 5))
+    check not detachedWindow.mouseDownAt(point)
+    discard detachedWindow.mouseUpAt(point)
+    check selected.isNil
+
+    detachedWindow.setContentView(nil)
+    root.addSubview(container)
+    check window.mouseDownAt(child.pointToWindow(initPoint(5, 5)), timestamp = 26.0)
+    let selectedAgain = selected == child
+    check selectedAgain
 
     check selection.uninstall()
 

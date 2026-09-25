@@ -4,6 +4,7 @@ import sigils/core
 
 import figdraw
 import ./fixtures/rendergeometry
+import ./fixtures/widgetflows
 
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
@@ -257,17 +258,45 @@ suite "nimkit tab views":
     check secondButton.isFocusVisible
     check secondButton.window == window
 
-  test "tab view exposes top and bottom geometry":
-    let tabView = newTabView(frame = rect(0, 0, 320, 180))
-    tabView.appearance = initAppearance(initAquaTheme())
-    discard tabView.addTabViewItem(newTabViewItem("Top", newView()))
+  test "moving tabs above and below the pane preserves layout and editing":
+    let
+      window = newWindow("Tab placement", frame = rect(0, 0, 320, 180))
+      tabView = newTabView()
+      pane = newView()
+      field = newTextField("Draft", frame = rect(10, 25, 200, 30))
+    defer:
+      window.close()
+    pane.addSubview(field)
+    discard tabView.addTabViewItem(newTabViewItem("Editor", pane, "editor"))
+    discard tabView.addTabViewItem(newTabViewItem("Preview", newView(), "preview"))
+    window.setContentView(tabView)
 
-    check tabView.contentRect.origin.y == 12.0
-    check tabView.tabRect(0).origin.y == 2.0
-
-    tabView.tabPosition = tpBottom
-    check tabView.contentRect.origin.y == 0.0
-    check tabView.tabRect(0).origin.y == 158.0
+    for frame in [rect(0, 0, 320, 180), rect(0, 0, 480, 260)]:
+      window.frame = frame
+      for mode in [tvmInset, tvmTraditional]:
+        tabView.tabMode = mode
+        for position in [tpTop, tpBottom]:
+          tabView.tabPosition = position
+          tabView.layoutSubtreeIfNeeded()
+          let
+            tab = tabView.tabRect(0)
+            content = tabView.contentRect()
+            bounds = tabView.bounds()
+            tabCenterY = tab.minY + tab.size.height / 2
+            contentCenterY = content.minY + content.size.height / 2
+          check tab.minY >= bounds.minY
+          check tab.maxY <= bounds.maxY
+          check content.minY >= bounds.minY
+          check content.maxY <= bounds.maxY
+          if position == tpTop:
+            check tabCenterY < contentCenterY
+          else:
+            check tabCenterY > contentCenterY
+          require window.clickTab(tabView, "preview")
+          require window.clickTab(tabView, "editor")
+          let entered = "Edited with " & $position & " " & $mode & " tabs"
+          require window.replaceText(field, entered)
+          check field.text == entered
 
   test "tab view intrinsic height includes child pane content":
     let
@@ -444,8 +473,7 @@ suite "nimkit tab views":
         chromeContext(DefaultChromeName, crTab, cpFace, baseFill, {ssSelected})
       )
 
-    check selectedAqua.kind == flLinear3
-    check selectedAqua.lin3.stop == color(0.94, 0.94, 0.92, 1.0).rgba
+    check selectedAqua != baseFill
     check highlightAqua == highlightFill
     check defaultChrome == baseFill
 

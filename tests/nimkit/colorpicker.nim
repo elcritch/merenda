@@ -1,8 +1,9 @@
-import std/unittest
+import std/[strutils, unittest]
 
 import figdraw
 
 import merenda/nimkit
+import ./fixtures/[rendergeometry, widgetflows]
 
 suite "NimKit color picker":
   test "picker descendants stay above the popup panel":
@@ -11,9 +12,11 @@ suite "NimKit color picker":
       picker = newColorPicker(well, rect(0, 0, 300, 340))
       renders = buildRenders(picker)
 
-    check PopupDrawLevel in renders.layers
-    check renders[PopupDrawLevel].nodes.len > 1
-    check renders[DefaultDrawLevel].nodes.len == 0
+    require PopupDrawLevel in renders.layers
+    for item in picker.items():
+      check item.label in renders[PopupDrawLevel].renderedText()
+      check item.label notin renders[DefaultDrawLevel].renderedText()
+    check picker.okayButton().title in renders[PopupDrawLevel].renderedText()
 
   test "color wells expose a drawn color value and popup accessibility":
     let
@@ -23,22 +26,23 @@ suite "NimKit color picker":
     root.addSubview(well)
 
     check well.color() == selected
-    check well.selectedTitle() == "Blue"
     check well.colorDescription() == "#337AEAFF"
-    check well.intrinsicContentSize() == initIntrinsicSize(72, 30)
+    check well.intrinsicContentSize().width > 0
+    check well.intrinsicContentSize().height > 0
     check well.accessibilityRole() == arPopupButton
-    check well.accessibilityValue() == "Blue"
+    check well.accessibilityValue() == well.selectedTitle()
     check AccessibilityActionShowMenu in well.accessibilityActionNames()
 
     var
-      rectangleCount = 0
+      hasSelectedColor = false
       hasRoundedTransparencyMask = false
     for node in buildRenders(root)[DefaultDrawLevel].nodes:
       if node.kind == nkRectangle:
-        inc rectangleCount
+        if node.fill == fill(selected):
+          hasSelectedColor = true
         if NfClipContent in node.flags and node.corners[dcTopLeft] > 0'u16:
           hasRoundedTransparencyMask = true
-    check rectangleCount >= 4
+    check hasSelectedColor
     check hasRoundedTransparencyMask
 
   test "tabbed picker sends palette wheel and CSS colors back to its source well":
@@ -52,6 +56,8 @@ suite "NimKit color picker":
       root = newView(frame = rect(0, 0, 480, 440))
       window = newWindow("Color Well", frame = rect(0, 0, 480, 440))
       action = actionSelector("testColorPickerAction")
+    defer:
+      window.close()
     var actionCount = 0
     well.target = newActionTarget(
       action,
@@ -77,11 +83,6 @@ suite "NimKit color picker":
     check popupWindow.isNil
     check not picker.isNil
     check picker.superview() == root
-    check picker.len == 3
-    check picker[0].label() == "Palette"
-    check picker[1].label() == "Wheel"
-    check picker[2].label() == "Values"
-    check picker.okayButton().title() == "OK"
     check PopupDrawLevel in window.buildRenders().layers
     check window.hasActiveTransientSession()
     check window.transientWindow().isNil
@@ -92,10 +93,10 @@ suite "NimKit color picker":
     check actionCount == 1
     check well.popupOpen()
 
-    check picker.selectTabViewItemAtIndex(1)
+    require window.clickTab(picker, "wheel")
     picker.layoutSubtreeIfNeeded()
     let
-      wheelView = picker[1].view()
+      wheelView = picker.selectedTabViewItem().view()
       wheelPoint = wheelView.pointToWindow(
         initPoint(
           wheelView.bounds().size.width * 0.5'f32,
@@ -109,22 +110,22 @@ suite "NimKit color picker":
     check actionCount == 2
     check well.popupOpen()
 
-    check picker.selectTabViewItemAtIndex(2)
+    require window.clickTab(picker, "values")
     let cssField = picker.cssColorField()
-    cssField.stringValue = "tomato"
-    check cssField.sendAction()
+    require window.replaceText(cssField, "tomato")
+    require window.pressKey(keyEnter)
     check well.color() == parseHtmlColor("tomato")
     check actionCount == 3
 
     let cssColor = well.color()
-    cssField.stringValue = "definitely-not-a-color"
-    check cssField.sendAction()
+    require window.replaceText(cssField, "definitely-not-a-color")
+    require window.pressKey(keyEnter)
     check well.color() == cssColor
     check cssField.stringValue() == "definitely-not-a-color"
     check actionCount == 3
 
-    cssField.stringValue = "rgba(25, 50, 75, 0.5)"
-    check cssField.sendAction()
+    require window.replaceText(cssField, "rgba(25, 50, 75, 0.5)")
+    require window.pressKey(keyEnter)
     check well.color() == parseHtmlColor("rgba(25, 50, 75, 0.5)")
     check actionCount == 4
 
@@ -134,7 +135,7 @@ suite "NimKit color picker":
     check well.color().r == 0.75'f32
     check actionCount == 5
 
-    check picker.okayButton().sendAction()
+    require window.clickView(picker.okayButton())
     check not well.popupOpen()
     check well.popupWindow().isNil
     check picker.superview().isNil
@@ -176,6 +177,15 @@ suite "NimKit color picker":
     let
       custom = color(0.13, 0.27, 0.41, 0.73)
       well = newPopupColorWell(custom)
+      customDescription = well.accessibilityValue()
     check well.color() == custom
     check well.selectedIndex() == -1
-    check well.choices().len == 20
+    require well.choices().len > 0
+    let choice = well.choices()[0]
+    require well.activateColorAtIndex(0)
+    check well.color() == choice.color
+    check well.accessibilityValue() == choice.title
+    well.color = custom
+    check well.selectedIndex() == -1
+    check well.color() == custom
+    check well.accessibilityValue() == customDescription

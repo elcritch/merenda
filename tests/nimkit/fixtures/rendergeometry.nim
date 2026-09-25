@@ -1,5 +1,18 @@
 ## Inspect drawing coordinates independently of retained translation wrappers.
+import std/unicode
 import figdraw
+
+proc textContent*(node: Fig): string =
+  if node.kind == nkText:
+    for glyphIndex in 0 ..< node.textLayout.glyphCount():
+      result.add node.textLayout.displayRune(glyphIndex)
+
+proc renderedText*(list: RenderList): string =
+  ## Inspect content without depending on glyph counts or draw-node ordering.
+  for node in list.nodes:
+    if node.kind == nkText and node.textLayout.glyphCount() > 0:
+      result.add node.textContent()
+      result.add '\n'
 
 proc resolvedNodes*(list: RenderList): seq[Fig] =
   ## Preserve node indices and hierarchy while expressing boxes in window space.

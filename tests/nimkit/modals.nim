@@ -1,7 +1,55 @@
 import std/unittest
 import merenda/nimkit
+import ./fixtures/widgetflows
 
 suite "NimKit modal lifetimes":
+  test "prepared sheet choices reach their callback and editing resumes in the owner":
+    let
+      app = newApplication("Sheet workflow")
+      owner = newWindow("Owner", frame = rect(0, 0, 360, 160))
+      unrelated = newWindow("Unrelated", frame = rect(0, 0, 360, 160))
+      editor = newTextField("Draft", frame = rect(10, 10, 280, 30))
+      root = newView()
+    root.addSubview(editor)
+    owner.setContentView(root)
+    unrelated.setContentView(newTextField("Unchanged"))
+    app.addWindow(owner)
+    app.addWindow(unrelated)
+    owner.makeKeyAndOrderFront()
+    require owner.clickView(editor)
+    defer:
+      owner.close()
+      unrelated.close()
+    var responses: seq[int]
+    for choice in [1, 0, 1]:
+      let alert = newAlert("Unsaved changes", buttons = ["Discard", "Cancel"])
+      alert.prepareForModal(
+        proc(response: int) =
+          responses.add response
+          app.stopModal(response)
+      )
+      # Use the prepared window overload: installing another default handler
+      # would drop the caller's completion callback.
+      let session = app.beginModalSheet(owner, alert.window)
+      require not session.isNil
+      let belongsToOwner = session.parentWindow == owner
+      check belongsToOwner
+      let previousResponses = responses.len
+      require alert.window.clickView(alert.buttonViews[choice])
+      require responses.len == previousResponses + 1
+      check responses[^1] == alert.buttonResponse(choice)
+      check session.state == mssStopped
+      check session.response == responses[^1]
+      app.endModalSession(session)
+      alert.window.close()
+      check app.modalSession().isNil
+      let ownerIsKey = app.keyWindow() == owner
+      check ownerIsKey
+      let before = editor.text
+      require owner.dispatchTextInput(" resumed")
+      check editor.text != before
+      check TextField(unrelated.contentView()).text == "Unchanged"
+
   test "closing a modal aborts its running session and repeated ending is harmless":
     let
       app = newApplication("Modal lifetime test")
