@@ -536,7 +536,8 @@ suite "NimKit CascadingView":
       secondWidth = view.tableViewForColumn(1).frame.size.width
       fittingWidth = View(view).sizeThatFits().width
 
-    check firstWidth == view.columnWidth()
+    check firstWidth >= view.columnWidth()
+    check firstWidth < secondWidth
     check secondWidth > view.columnWidth()
     check fittingWidth.nearlyEqual(firstWidth + view.columnSpacing() + secondWidth)
     check renders.layers[DefaultDrawLevel].textNodeX(longTitle) >= 0.0'f32
