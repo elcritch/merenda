@@ -186,21 +186,23 @@ suite "nimkit text views":
 
   test "selection color follows the theme until explicitly overridden":
     let
-      textView = newTextView("Selected")
+      textView = newTextView("Selected", frame = rect(0, 0, 240, 60))
       customSelection = color(0.2, 0.8, 0.4, 0.5)
-
-    textView.appearance = initAppearance(initDarkBSDTheme())
-    check textView.selectionColor == color(0.34, 0.18, 0.23, 0.92)
-
-    textView.appearance = initAppearance(initMacOSTheme())
-    check textView.selectionColor == color(0.04, 0.52, 1.0, 0.26)
-
+      firstColor = color(0.7, 0.2, 0.5, 0.6)
+      secondColor = color(0.2, 0.3, 0.8, 0.7)
+    var first = initAppearance()
+    first[srTextView, StyleSelectionColor] = firstColor
+    var second = initAppearance()
+    second[srTextView, StyleSelectionColor] = secondColor
+    textView.appearance = first
+    check textView.selectionColor == firstColor
+    textView.appearance = second
+    check textView.selectionColor == secondColor
     textView.selectionColor = customSelection
-    textView.appearance = initAppearance(initMacOSDarkTheme())
+    textView.appearance = first
     check textView.selectionColor == customSelection
-
     textView.clearSelectionColorOverride()
-    check textView.selectionColor == color(0.04, 0.52, 1.0, 0.38)
+    check textView.selectionColor == firstColor
 
   test "text view inserts and replaces selected text":
     let textView = newTextView("abcdef", frame = rect(0, 0, 160, 24))

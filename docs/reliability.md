@@ -106,11 +106,10 @@ Requesting worker shutdown alone does not satisfy that condition: the worker
 publishes a separate completion flag after releasing its hosts. Switching render
 runtimes also waits for the old host to be released.
 
-The acyclic render-data annotations and Siwin borrow are in
-[FigDraw PR #96](https://github.com/elcritch/figdraw/pull/96), along with
-`finishPendingFrames`. These changes are included in FigDraw 0.43.0, which
-Merenda now requires. FigDraw is compiled directly into the application; Merenda's
-experimental native dynlib mode has been removed.
+The acyclic render-data annotations, Siwin borrow, and
+`finishPendingFrames` are in [FigDraw 0.43.0](https://github.com/elcritch/figdraw/releases/tag/v0.43.0).
+FigDraw is compiled directly into the application; Merenda's experimental
+native dynlib mode has been removed.
 
 This ordering is validated on macOS. Siwin's Windows/X11 OS-close notification
 paths can run after native teardown starts;

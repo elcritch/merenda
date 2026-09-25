@@ -395,11 +395,12 @@ suite "nimkit document tabs":
     check tabs.indexOfDocumentTabIdentifier("published") == 1
     check tabs.selectDocumentTabWithIdentifier("published")
 
-    source.models = @[
-      initDocumentTabModel("published", "Published Updated"),
-      initDocumentTabModel("draft", "Draft"),
-      initDocumentTabModel("archived", "Archived", hidden = true),
-    ]
+    source.models =
+      @[
+        initDocumentTabModel("published", "Published Updated"),
+        initDocumentTabModel("draft", "Draft"),
+        initDocumentTabModel("archived", "Archived", hidden = true),
+      ]
     tabs.reloadData()
 
     check tabs.len == 2
@@ -661,12 +662,16 @@ suite "nimkit document tabs":
           return node.renderedRect()
 
     let tabRect = tabs.documentTabRect(0)
-    for theme in [initTheme(), initMacOSTheme(), initMacOSDarkTheme()]:
-      check closeMarkRect(theme).center().x < tabRect.center().x
-
-    var builder = initThemeBuilder(initTheme())
-    builder[srDocumentTab, StyleCloseButtonPosition] = styleKeyword(dtcbRight)
-    check closeMarkRect(builder.finish()).center().x > tabRect.center().x
+    for side in [dtcbLeft, dtcbRight]:
+      var builder = initThemeBuilder(initTheme())
+      builder[srDocumentTab, StyleCloseButtonPosition] = styleKeyword(side)
+      let mark = closeMarkRect(builder.finish())
+      require mark.size.width > 0
+      require mark.size.height > 0
+      if side == dtcbLeft:
+        check mark.center().x < tabRect.center().x
+      else:
+        check mark.center().x > tabRect.center().x
 
   test "document tab close marks use centered vector lines":
     let
@@ -976,20 +981,6 @@ suite "nimkit document tabs":
       tabs = newDocumentTabs(frame = rect(0, 0, 360, 34))
       first = newDocumentTabItem("Primary", "primary")
       special = newDocumentTabItem("Special", "special")
-      aquaAppearance = initAppearance(initAquaTheme())
-
-    check aquaAppearance.resolveChromeName(controlStyle(srDocumentTab)) ==
-      aquaAppearance.resolveChromeName(controlStyle(srTab))
-    check aquaAppearance.resolveChromeName(controlStyle(srDocumentTabBar)) ==
-      aquaAppearance.resolveChromeName(controlStyle(srTabPanel))
-    check aquaAppearance.resolveLength(
-      controlStyle(srDocumentTab), StyleCornerRadius, 0.0
-    ) == 10.0'f32
-    check aquaAppearance.resolveLength(controlStyle(srDocumentTab), StyleItemGap, 0.0) ==
-      2.0'f32
-    check aquaAppearance
-      .resolveFill(controlStyle(srDocumentTabBar), fill(color(1.0, 0.0, 0.0, 1.0)))
-      .centerColor().a < 0.5'f32
 
     special.styleId = "special-doc"
     discard tabs.addDocumentTabItem(first)

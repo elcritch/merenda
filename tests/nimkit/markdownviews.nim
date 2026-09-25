@@ -1329,8 +1329,10 @@ Press <kbd>Enter</kbd>.
       )
 
     check storage.attributesFor("Body prose").fontSize == style.bodyFontSize
-    check storage.attributesFor("Metric").fontSize == style.bodyFontSize * 0.9'f32
-    check storage.attributesFor("CPU p95").fontSize == style.bodyFontSize * 0.9'f32
+    let tableSize = storage.attributesFor("CPU p95").fontSize
+    check tableSize > 0
+    check tableSize < style.bodyFontSize
+    check storage.attributesFor("Metric").fontSize == tableSize
 
   test "wide GFM tables scroll independently while the Markdown document fits":
     let

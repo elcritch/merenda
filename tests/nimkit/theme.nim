@@ -1,278 +1,9 @@
-import std/[os, unittest]
+import std/[os, strutils, unittest]
 import sigils/core
+import figdraw
 
 import merenda/nimkit
-
-func brightness(color: Color): float32 =
-  color.r + color.g + color.b
-
-func rgbaColor(r, g, b, a: int): Color =
-  color(
-    r.float32 / 255.0'f32,
-    g.float32 / 255.0'f32,
-    b.float32 / 255.0'f32,
-    a.float32 / 255.0'f32,
-  )
-
-proc checkRootPinstripesDisabled(theme: Theme) =
-  let
-    appearance = initAppearance(theme)
-    viewStyle = controlStyle(srView)
-
-  check appearance.resolveColor(
-    viewStyle, StyleBackgroundPinstripeHighlightColor, color(1.0, 1.0, 1.0, 1.0)
-  ) == color(0.0, 0.0, 0.0, 0.0)
-  check appearance.resolveColor(
-    viewStyle, StyleBackgroundPinstripeColor, color(1.0, 1.0, 1.0, 1.0)
-  ) == color(0.0, 0.0, 0.0, 0.0)
-  check appearance.resolveLength(viewStyle, StyleBackgroundPinstripePeriod, 1.0'f32) ==
-    0.0'f32
-  check appearance.resolveLength(viewStyle, StyleBackgroundPinstripeHeight, 1.0'f32) ==
-    0.0'f32
-
-proc checkDocumentTabsUseThemeTabStyle(theme: Theme) =
-  let
-    appearance = initAppearance(theme)
-    fallbackFill = fill(color(0.0, 0.0, 0.0, 0.0))
-    fallbackColor = color(0.0, 0.0, 0.0, 1.0)
-    tabStyle = controlStyle(srDocumentTab)
-    selectedTabStyle = controlStyle(srDocumentTab, {ssSelected})
-    tabBarStyle = controlStyle(srDocumentTabBar)
-    tabButtonStyle = controlStyle(srDocumentTabButton)
-    highlightedTabButtonStyle = controlStyle(srDocumentTabButton, {ssHighlighted})
-
-  check appearance.resolveChromeName(tabStyle) == FlatTransparentChromeName
-  check appearance.resolveChromeName(tabBarStyle) == FlatTransparentChromeName
-  check appearance.resolveChromeName(tabButtonStyle) == FlatTransparentChromeName
-  check appearance.resolveFill(tabBarStyle, fallbackFill) ==
-    appearance.fillToken("tab.panel.fill", fallbackFill)
-  check appearance.resolveColor(tabBarStyle, StyleBorderColor, fallbackColor) ==
-    appearance.colorToken("tab.panel.border.color", fallbackColor)
-  check appearance.resolveFill(tabStyle, fallbackFill) ==
-    appearance.fillToken("tab.fill", fallbackFill)
-  check appearance.resolveFill(selectedTabStyle, fallbackFill) ==
-    appearance.fillToken("tab.fill.selected", fallbackFill)
-  check appearance.resolveFill(tabStyle, fallbackFill, StyleHighlightFill) ==
-    appearance.fillToken("tab.highlight.fill", fallbackFill)
-  check appearance.resolveColor(tabStyle, StyleBorderColor, fallbackColor) ==
-    appearance.colorToken("tab.border.color", fallbackColor)
-  check appearance.resolveColor(selectedTabStyle, StyleBorderColor, fallbackColor) ==
-    appearance.colorToken("tab.border.color.selected", fallbackColor)
-  check appearance.resolveColor(tabStyle, StyleTextColor, fallbackColor) ==
-    appearance.colorToken("tab.text.color", fallbackColor)
-  check appearance.resolveColor(selectedTabStyle, StyleTextColor, fallbackColor) ==
-    appearance.colorToken("tab.text.color.selected", fallbackColor)
-  check appearance.resolveFill(tabButtonStyle, fallbackFill) ==
-    appearance.fillToken("tab.fill", fallbackFill)
-  check appearance.resolveFill(highlightedTabButtonStyle, fallbackFill) ==
-    appearance.fillToken("tab.fill.highlighted", fallbackFill)
-  check appearance.resolveColor(tabButtonStyle, StyleMarkColor, fallbackColor) ==
-    appearance.colorToken("tab.text.color", fallbackColor)
-
-proc checkThemeAccentConsumers(theme: Theme) =
-  let
-    appearance = initAppearance(theme)
-    fallbackColor = color(0.0, 0.0, 0.0, 1.0)
-    fallbackFill = fill(fallbackColor)
-    tabStyle = controlStyle(srDocumentTab, {ssSelected})
-    progressStyle =
-      appearance.resolveProgressIndicatorStyle(controlStyle(srProgressIndicator))
-
-  check appearance.resolveColor(tabStyle, StyleMarkColor, fallbackColor) ==
-    appearance.colorToken("accent", fallbackColor)
-  check progressStyle.activeTrack.fill ==
-    appearance.fillToken("progress.fill", fallbackFill)
-  check progressStyle.activeTrack.borderColor ==
-    appearance.colorToken("progress.border.color", fallbackColor)
-
-proc textSelectionColor(theme: Theme): Color =
-  theme.resolveTextFieldStyle(controlStyle(srTextField)).selectionColor
-
-func aquaButtonFill(): Fill =
-  linear(
-    rgbaColor(86, 167, 233, 163),
-    rgbaColor(59, 166, 240, 141),
-    rgbaColor(62, 160, 229, 134),
-    fgaY,
-    132'u8,
-  )
-
-func aquaButtonHoverFill(): Fill =
-  linear(
-    rgbaColor(128, 224, 255, 210),
-    rgbaColor(82, 198, 252, 188),
-    rgbaColor(92, 196, 246, 178),
-    fgaY,
-    132'u8,
-  )
-
-func aquaButtonPressedFill(): Fill =
-  linear(
-    rgbaColor(68, 146, 211, 163),
-    rgbaColor(42, 140, 213, 141),
-    rgbaColor(37, 124, 197, 134),
-    fgaY,
-    132'u8,
-  )
-
-func aquaAccentButtonFill(): Fill =
-  aquaButtonFill()
-
-func aquaAccentButtonHoverFill(): Fill =
-  aquaButtonHoverFill()
-
-func aquaAccentButtonPressedFill(): Fill =
-  aquaButtonPressedFill()
-
-func aquaWindowBackgroundFill(): Fill =
-  linear(rgbaColor(239, 240, 239, 255), rgbaColor(211, 214, 214, 255), fgaY)
-
-func aquaChoiceSelectedFill(): Fill =
-  linear(rgbaColor(122, 232, 255, 255), rgbaColor(0, 124, 238, 255), fgaDiagTLBR)
-
-func aquaTextFieldFill(): Fill =
-  linear(
-    rgbaColor(255, 255, 255, 222),
-    rgbaColor(236, 247, 255, 208),
-    rgbaColor(197, 222, 242, 188),
-    fgaY,
-    116'u8,
-  )
-
-func aquaSliderKnobFill(): Fill =
-  linear(
-    rgbaColor(255, 255, 255, 250),
-    rgbaColor(238, 248, 255, 246),
-    rgbaColor(204, 226, 244, 240),
-    fgaY,
-    116'u8,
-  )
-
-func aquaSliderProgressFill(): Fill =
-  linear(
-    rgbaColor(86, 167, 233, 215),
-    rgbaColor(59, 166, 240, 202),
-    rgbaColor(62, 160, 229, 198),
-    fgaY,
-    132'u8,
-  )
-
-func aquaComboItemSelectedFill(): Fill =
-  linear(
-    rgbaColor(46, 128, 230, 217),
-    rgbaColor(0, 71, 184, 217),
-    rgbaColor(0, 31, 117, 217),
-    fgaY,
-    104'u8,
-  )
-
-func aquaRowItemSelectedFill(): Fill =
-  linear(
-    rgbaColor(98, 160, 236, 217),
-    rgbaColor(64, 117, 202, 217),
-    rgbaColor(64, 87, 152, 217),
-    fgaY,
-    104'u8,
-  )
-
-func aquaRowItemSelectedHighlightedFill(): Fill =
-  linear(
-    rgbaColor(87, 140, 228, 222),
-    rgbaColor(64, 106, 190, 222),
-    rgbaColor(64, 79, 137, 222),
-    fgaY,
-    104'u8,
-  )
-
-func aquaComboBoxFill(): Fill =
-  linear(
-    rgbaColor(255, 255, 255, 226),
-    rgbaColor(238, 242, 244, 214),
-    rgbaColor(196, 207, 212, 196),
-    fgaY,
-    92'u8,
-  )
-
-func aquaTitleLabelFill(): Fill =
-  linear(
-    rgbaColor(255, 255, 255, 218),
-    rgbaColor(232, 248, 255, 166),
-    rgbaColor(62, 180, 250, 142),
-    fgaY,
-    78'u8,
-  )
-
-func aquaHeadingLabelFill(): Fill =
-  linear(
-    rgbaColor(255, 255, 255, 206),
-    rgbaColor(222, 244, 255, 154),
-    rgbaColor(58, 168, 240, 132),
-    fgaY,
-    82'u8,
-  )
-
-func aquaStatusLabelFill(): Fill =
-  linear(
-    rgbaColor(255, 255, 255, 212),
-    rgbaColor(224, 255, 238, 162),
-    rgbaColor(58, 214, 128, 138),
-    fgaY,
-    78'u8,
-  )
-
-func aquaComboArrowFill(): Fill =
-  linear(
-    rgbaColor(125, 230, 255, 230),
-    rgbaColor(38, 171, 251, 224),
-    rgbaColor(0, 112, 224, 226),
-    fgaY,
-    104'u8,
-  )
-
-func aquaScrollerTrackFill(): Fill =
-  linear(
-    rgbaColor(255, 255, 255, 118),
-    rgbaColor(225, 238, 249, 96),
-    rgbaColor(183, 204, 225, 88),
-    fgaY,
-    116'u8,
-  )
-
-func aquaScrollerTrackShadows(): seq[BoxShadow] =
-  @[
-    insetShadow(rgbaColor(255, 255, 255, 102), y = 1.0, blur = 2.0),
-    insetShadow(rgbaColor(0, 42, 112, 28), y = -1.0, blur = 3.0),
-  ]
-
-func aquaScrollerKnobShadows(): seq[BoxShadow] =
-  @[
-    dropShadow(rgbaColor(0, 0, 0, 32), y = 1.0, blur = 2.8),
-    insetShadow(rgbaColor(255, 255, 255, 78), y = 1.0, blur = 2.2),
-    insetShadow(rgbaColor(0, 44, 122, 32), y = -1.0, blur = 3.0),
-    insetShadow(rgbaColor(0, 68, 160, 24), x = 1.0, blur = 3.2),
-  ]
-
-func aquaLabelShadows(): seq[BoxShadow] =
-  @[
-    dropShadow(rgbaColor(255, 255, 255, 102), y = -1.0, blur = 1.5),
-    insetShadow(rgbaColor(0, 36, 112, 26), y = 1.2, blur = 3.0),
-    insetShadow(rgbaColor(255, 255, 255, 212), y = 2.0, blur = 2.6),
-    insetShadow(rgbaColor(255, 255, 255, 118), y = -1.0, blur = 2.1),
-    insetShadow(rgbaColor(0, 82, 190, 24), x = 2.0, blur = 7.0),
-    insetShadow(rgbaColor(0, 82, 190, 24), x = -2.0, blur = 7.0),
-    insetShadow(rgbaColor(98, 224, 255, 92), y = -3.0, blur = 7.4),
-  ]
-
-func aquaStatusLabelShadows(): seq[BoxShadow] =
-  @[
-    dropShadow(rgbaColor(255, 255, 255, 98), y = -1.0, blur = 1.5),
-    insetShadow(rgbaColor(10, 88, 38, 24), y = 1.2, blur = 3.0),
-    insetShadow(rgbaColor(255, 255, 255, 206), y = 2.0, blur = 2.6),
-    insetShadow(rgbaColor(255, 255, 255, 108), y = -1.0, blur = 2.1),
-    insetShadow(rgbaColor(30, 136, 68, 22), x = 2.0, blur = 7.0),
-    insetShadow(rgbaColor(30, 136, 68, 22), x = -2.0, blur = 7.0),
-    insetShadow(rgbaColor(112, 248, 168, 90), y = -3.0, blur = 7.2),
-  ]
+import ./fixtures/[rendergeometry, widgetflows]
 
 const CustomChromeName = "custom-widget-chrome"
 
@@ -305,25 +36,13 @@ proc withCleanThemeEnv(body: proc() {.closure.}) =
       delEnv(NimKitThemeEnv)
 
 suite "nimkit theme":
-  test "DarkBSD is the default and Aqua remains available by name":
+  test "default appearance and named default use the same theme":
     withCleanThemeEnv(
       proc() =
-        let
-          defaultStyle = initTheme().resolveButtonStyle(controlStyle(srButton))
-          defaultAppearanceStyle =
-            initAppearance().resolveButtonStyle(controlStyle(srButton))
-          darkBSDStyle = initDarkBSDTheme().resolveButtonStyle(controlStyle(srButton))
-          aquaStyle = initAquaTheme().resolveButtonStyle(controlStyle(srButton))
-          namedAquaStyle =
-            initThemeByName("aqua").resolveButtonStyle(controlStyle(srButton))
-
-        check defaultStyle.chrome == RubyAquaChromeName
-        check defaultStyle.box.fill == darkBSDStyle.box.fill
-        check defaultAppearanceStyle.box.fill == darkBSDStyle.box.fill
-        check initThemeByName("default")
-        .resolveButtonStyle(controlStyle(srButton)).box.fill == darkBSDStyle.box.fill
-        check aquaStyle.chrome == AquaChromeName
-        check namedAquaStyle.box.fill == aquaStyle.box.fill
+        let context = controlStyle(srButton)
+        let expected = initTheme().resolveButtonStyle(context)
+        check initAppearance().resolveButtonStyle(context) == expected
+        check initThemeByName("default").resolveButtonStyle(context) == expected
     )
 
   test "NimKit theme env obeys override ignore flag":
@@ -622,604 +341,104 @@ suite "nimkit theme":
     check theme.resolveButtonStyle(controlStyle(srButton)).box.cornerRadius ==
       baseStyle.box.cornerRadius
 
-  test "Aqua theme exposes resolved button and text field styles":
-    let theme = initAquaTheme()
+  test "built-in themes support editing and actions after switching and resizing":
     let
-      appearance = initAppearance(theme)
-      defaultButtonStyle = appearance.resolveButtonStyle(controlStyle(srButton))
-      hoveredButtonStyle =
-        appearance.resolveButtonStyle(controlStyle(srButton, {ssHovered}))
-      buttonStyle =
-        appearance.resolveButtonStyle(controlStyle(srButton, {ssHighlighted}))
-      accentButtonStyle =
-        appearance.resolveButtonStyle(controlStyle(srButton, {ssAccent}))
-      accentHoveredButtonStyle =
-        appearance.resolveButtonStyle(controlStyle(srButton, {ssAccent, ssHovered}))
-      accentHighlightedButtonStyle =
-        appearance.resolveButtonStyle(controlStyle(srButton, {ssAccent, ssHighlighted}))
-      checkBoxStyle =
-        appearance.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
-      checkBoxHoverStyle =
-        appearance.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssHovered}))
-      checkBoxSelectedHoverStyle = appearance.resolveChoiceButtonStyle(
-        controlStyle(srCheckBox, {ssSelected, ssHovered})
-      )
-      radioStyle =
-        appearance.resolveChoiceButtonStyle(controlStyle(srRadioButton, {ssSelected}))
-      textFieldStyle = theme.resolveTextFieldStyle(
-        controlStyle(srTextField), color(0.2, 0.3, 0.4, 1.0)
-      )
-      bodyLabelStyle = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass])
-      )
-      titleLabelStyle = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass, LabelTitleStyleClass])
-      )
-      headingLabelStyle = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass, LabelHeadingStyleClass])
-      )
-      statusLabelStyle = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass, LabelStatusStyleClass])
-      )
-      formLabelStyle = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass, LabelFormStyleClass])
-      )
-      comboBoxStyle =
-        appearance.resolveComboBoxStyle(controlStyle(srComboBox, {ssOpen}))
-      comboBoxItemStyle =
-        appearance.resolveTextFieldStyle(controlStyle(srComboBoxItem, {ssSelected}))
-      sliderStyle = appearance.resolveSliderStyle(controlStyle(srSlider))
-      progressStyle =
-        appearance.resolveProgressIndicatorStyle(controlStyle(srProgressIndicator))
-      selectedRowStyle = controlStyle(srRowItem, {ssSelected})
-      selectedHighlightedRowStyle = controlStyle(srRowItem, {ssSelected, ssHighlighted})
-      scrollViewStyle = appearance.resolveScrollViewStyle(controlStyle(srScroller))
-      cascadingScrollViewStyle =
-        appearance.resolveScrollViewStyle(controlStyle(srCascadingScroller))
-      viewStyle = controlStyle(srView)
-      tabStyle = controlStyle(srTab)
-      selectedTabStyle = controlStyle(srTab, {ssSelected})
+      window = newWindow("Theme workflow", frame = rect(0, 0, 420, 320))
+      form = newStackView(laVertical)
+      field = newTextField()
+      toggle = newCheckBox("Keep changes")
+      button = newButton("Apply changes")
+      label = newLabel("Theme preview")
+      action = actionSelector("applyThemePreview")
+    defer:
+      window.close()
+    form.distribution = svdNatural
+    form.spacing = 8
+    form.edgeInsets = insets(12)
+    form.addArrangedSubview(label, field, toggle, button)
+    window.setContentView(form)
+    var
+      submitted: string
+      actionCount = 0
+    let target = newActionTarget(
+      action,
+      proc(sender: DynamicAgent) =
+        submitted = field.text
+        inc actionCount
+      ,
+    )
+    button.target = target
+    button.action = action
 
-    check appearance.theme.rules.len == theme.rules.len
-    check theme.tokens != nil
-    check theme.rules.len > 0
-    check buttonStyle.box.borderWidth > 0.0
-    check buttonStyle.box.cornerRadius > 0.0
-    check buttonStyle.box.focusRingWidth > 0.0
-    check buttonStyle.box.focusRingInset < 0.0
-    check buttonStyle.box.focusRingColor == color(0.28, 0.64, 1.0, 0.82)
-    check buttonStyle.box.focusRingColor != buttonStyle.box.fill.centerColor()
-    check appearance.hasChrome(DefaultChromeName)
-    check appearance.hasChrome(AquaChromeName)
-    check defaultButtonStyle.chrome == AquaChromeName
-    check checkBoxStyle.chrome == AquaChromeName
-    check radioStyle.chrome == AquaChromeName
-    check comboBoxStyle.chrome == AquaChromeName
-    check appearance.resolveChromeName(controlStyle(srTab)) == AquaChromeName
-    check appearance.resolveChromeName(controlStyle(srTabPanel)) == AquaChromeName
-    check appearance.resolveFill(
-      viewStyle, fill(color(0.0, 0.0, 0.0, 1.0)), StyleBackgroundFill
-    ) == aquaWindowBackgroundFill()
-    check appearance.resolveColor(
-      viewStyle, StyleBackgroundPinstripeHighlightColor, color(0.0, 0.0, 0.0, 0.0)
-    ) == rgbaColor(255, 255, 255, 95)
-    check appearance.resolveColor(
-      viewStyle, StyleBackgroundPinstripeColor, color(0.0, 0.0, 0.0, 0.0)
-    ) == color(0.0, 0.0, 0.0, 0.0)
-    check appearance.resolveLength(viewStyle, StyleBackgroundPinstripePeriod, 0.0'f32) ==
-      4.0'f32
-    check appearance.resolveLength(viewStyle, StyleBackgroundPinstripeHeight, 0.0'f32) ==
-      1.0'f32
-    check appearance.resolveFill(tabStyle, fill(color(0.0, 0.0, 0.0, 1.0))) ==
-      fill(rgbaColor(220, 238, 255, 198))
-    check appearance.resolveFill(
-      tabStyle, fill(color(0.0, 0.0, 0.0, 0.0)), StyleHighlightFill
-    ) == fill(rgbaColor(255, 255, 255, 136))
-    check appearance.resolveColor(tabStyle, StyleTextColor, color(0.0, 0.0, 0.0, 1.0)) ==
-      color(0.14, 0.15, 0.18, 1.0)
-    check appearance.resolveColor(
-      selectedTabStyle, StyleBorderColor, color(0.0, 0.0, 0.0, 1.0)
-    ) == rgbaColor(34, 102, 210, 232)
-    check defaultButtonStyle.box.shadows.len == 0
-    check buttonStyle.box.shadows.len == 0
-    check defaultButtonStyle.box.fill == aquaButtonFill()
-    check defaultButtonStyle.box.fill.centerColor().a < 1.0'f32
-    check hoveredButtonStyle.box.fill == aquaButtonHoverFill()
-    check buttonStyle.box.fill == aquaButtonPressedFill()
-    check accentButtonStyle.box.fill == aquaAccentButtonFill()
-    check accentHoveredButtonStyle.box.fill == aquaAccentButtonHoverFill()
-    check accentHighlightedButtonStyle.box.fill == aquaAccentButtonPressedFill()
-    check hoveredButtonStyle.box.borderColor == rgbaColor(38, 156, 232, 196)
-    check buttonStyle.box.borderColor == rgbaColor(19, 93, 180, 161)
-    check accentButtonStyle.box.borderColor == rgbaColor(31, 112, 204, 145)
-    check accentHoveredButtonStyle.box.borderColor == rgbaColor(38, 156, 232, 196)
-    check accentHighlightedButtonStyle.box.borderColor == rgbaColor(19, 93, 180, 161)
-    check buttonStyle.box.borderWidth == 0.55'f32
-    check buttonStyle.box.cornerRadius == 14.0
-    check buttonStyle.text.color == rgbaColor(5, 16, 27, 248)
-    check defaultButtonStyle.textHighlightColor == rgbaColor(255, 255, 255, 82)
-    check defaultButtonStyle.textShadowColor == rgbaColor(0, 0, 0, 54)
-    check theme.resolveButtonStyle(controlStyle(srButton, {ssDisabled})).textHighlightColor ==
-      color(1.0, 1.0, 1.0, 0.16)
-    check accentButtonStyle.text.color == rgbaColor(5, 16, 27, 248)
-    check buttonStyle.minSize == initSize(0.0, 32.0)
-    check buttonStyle.buttonTextRect(rect(0, 0, 100, 30)) == rect(8, 0, 84, 30)
-
-    check checkBoxStyle.indicatorSize > 0.0
-    check checkBoxStyle.indicatorSpacing > 0.0
-    check checkBoxStyle.minSize == initSize(0.0, 20.0)
-    check checkBoxHoverStyle.indicator.fill ==
-      appearance.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssHighlighted})).indicator.fill
-    check checkBoxSelectedHoverStyle.indicator.fill ==
-      appearance.resolveChoiceButtonStyle(
-        controlStyle(srCheckBox, {ssSelected, ssHighlighted})
-      ).indicator.fill
-    check checkBoxStyle.indicator.fill == aquaChoiceSelectedFill()
-    check checkBoxStyle.indicator.borderColor == rgbaColor(0, 82, 191, 245)
-    check checkBoxStyle.indicator.cornerRadius == 3.0
-    check checkBoxStyle.indicator.focusRingColor == color(0.28, 0.64, 1.0, 0.82)
-    check radioStyle.indicator.borderColor == rgbaColor(88, 90, 88, 220)
-    check radioStyle.indicator.cornerRadius == 8.0
-    check radioStyle.indicator.focusRingColor == color(0.28, 0.64, 1.0, 0.82)
-    check checkBoxStyle.choiceIndicatorRect(rect(0, 0, 100, 24)) == rect(2, 3, 18, 18)
-    check checkBoxStyle.choiceTextRect(rect(0, 0, 100, 24)) == rect(27, 0, 71, 24)
-
-    check textFieldStyle.box.borderWidth > 0.0
-    check textFieldStyle.box.cornerRadius == 6.0
-    check textFieldStyle.box.focusRingWidth > 0.0
-    check textFieldStyle.box.fill == aquaTextFieldFill()
-    check textFieldStyle.box.fill.centerColor().a < 1.0'f32
-    check textFieldStyle.box.borderColor == rgbaColor(88, 116, 158, 220)
-    check textFieldStyle.box.shadows.len == 0
-    check textFieldStyle.box.focusRingColor == color(0.28, 0.64, 1.0, 0.82)
-    check textFieldStyle.text.color == color(0.2, 0.3, 0.4, 1.0)
-    check textFieldStyle.selectionColor == color(0.24, 0.56, 1.0, 0.34)
-    check textFieldStyle.minSize == initSize(80.0, 26.0)
-    check textFieldStyle.textFieldTextRect(rect(0, 0, 100, 30)) == rect(10, 0, 80, 30)
-
-    check bodyLabelStyle.box.fill.centerColor().a == 0.0
-    check bodyLabelStyle.box.borderWidth == 0.0
-    check bodyLabelStyle.box.focusRingWidth == 0.0
-    check bodyLabelStyle.text.color == color(0.09, 0.12, 0.18, 1.0)
-    check bodyLabelStyle.minSize == initSize(0.0, 18.0)
-    check bodyLabelStyle.box.shadows.len == 0
-    check titleLabelStyle.box.fill == aquaTitleLabelFill()
-    check titleLabelStyle.box.fill.centerColor().a < 1.0'f32
-    check titleLabelStyle.box.borderColor == rgbaColor(92, 135, 196, 138)
-    check titleLabelStyle.box.borderWidth == 1.0
-    check titleLabelStyle.box.cornerRadius == 8.0
-    check titleLabelStyle.box.shadows == aquaLabelShadows()
-    check titleLabelStyle.text.insets == insets(0.0, 12.0)
-    check titleLabelStyle.minSize == initSize(0.0, 28.0)
-    check headingLabelStyle.box.fill == aquaHeadingLabelFill()
-    check headingLabelStyle.box.borderColor == rgbaColor(104, 148, 205, 126)
-    check headingLabelStyle.box.cornerRadius == 7.0
-    check headingLabelStyle.box.shadows == aquaLabelShadows()
-    check headingLabelStyle.minSize == initSize(0.0, 24.0)
-    check statusLabelStyle.box.fill == aquaStatusLabelFill()
-    check statusLabelStyle.box.borderColor == rgbaColor(88, 168, 112, 124)
-    check statusLabelStyle.box.cornerRadius == 7.0
-    check statusLabelStyle.box.shadows == aquaStatusLabelShadows()
-    check statusLabelStyle.text.color == color(0.06, 0.25, 0.14, 1.0)
-    check formLabelStyle.box.borderWidth == 0.0
-    check formLabelStyle.text.color == color(0.10, 0.14, 0.22, 1.0)
-
-    check comboBoxStyle.box.fill == aquaComboBoxFill()
-    check comboBoxStyle.box.borderColor == rgbaColor(70, 88, 205, 228)
-    check comboBoxStyle.box.cornerRadius == 12.0
-    check comboBoxStyle.minSize == initSize(90.0, 26.0)
-    check comboBoxStyle.arrowWidth == 28.0
-    check comboBoxStyle.arrowFill == aquaComboArrowFill()
-    check comboBoxStyle.arrowColor == color(0.0, 0.12, 0.34, 1.0)
-    check comboBoxStyle.comboBoxArrowRect(rect(0, 0, 100, 28)) == rect(72, 0, 28, 28)
-    check comboBoxStyle.comboBoxTextRect(rect(0, 0, 100, 28)) == rect(10, 0, 52, 28)
-    check comboBoxItemStyle.box.fill == aquaComboItemSelectedFill()
-    check comboBoxItemStyle.text.color == color(1.0, 1.0, 1.0, 1.0)
-    check comboBoxItemStyle.minSize == initSize(0.0, 22.0)
-    check appearance.resolveFill(selectedRowStyle, fill(color(0.0, 0.0, 0.0, 0.0))) ==
-      aquaRowItemSelectedFill()
-    check appearance.resolveFill(
-      selectedHighlightedRowStyle, fill(color(0.0, 0.0, 0.0, 0.0))
-    ) == aquaRowItemSelectedHighlightedFill()
-    check sliderStyle.knob.fill == aquaSliderKnobFill()
-    check sliderStyle.knob.fill.centerColor().a > aquaTextFieldFill().centerColor().a
-    check sliderStyle.activeTrack.fill == aquaSliderProgressFill()
-    check sliderStyle.activeTrack.fill.centerColor().a >
-      aquaAccentButtonFill().centerColor().a
-    check progressStyle.knob.fill == aquaSliderKnobFill()
-    check progressStyle.activeTrack.fill == aquaSliderProgressFill()
-
-    check scrollViewStyle.scrollerTrack.fill == aquaScrollerTrackFill()
-    check scrollViewStyle.scrollerTrack.fill.centerColor().a < 1.0'f32
-    check scrollViewStyle.scrollerTrack.borderColor == rgbaColor(78, 108, 155, 138)
-    check scrollViewStyle.scrollerTrack.borderWidth == 0.7'f32
-    check scrollViewStyle.scrollerTrack.cornerRadius == 6.0
-    check scrollViewStyle.scrollerTrack.shadows == aquaScrollerTrackShadows()
-    check scrollViewStyle.scrollerKnob.fill == aquaButtonFill()
-    check scrollViewStyle.scrollerKnob.borderColor == rgbaColor(30, 80, 180, 150)
-    check scrollViewStyle.scrollerKnob.cornerRadius == 6.0
-    check scrollViewStyle.scrollerKnob.shadows == aquaScrollerKnobShadows()
-    check cascadingScrollViewStyle.scrollerTrack.fill == aquaScrollerTrackFill()
-    check cascadingScrollViewStyle.scrollerKnob.fill == aquaButtonFill()
-    check cascadingScrollViewStyle.scrollerKnob.shadows == aquaScrollerKnobShadows()
-
-  test "peachy highlighted buttons keep contrast with peach text":
-    let
-      theme = initPeachyTheme()
-      buttonStyle = theme.resolveButtonStyle(controlStyle(srButton))
-      highlightedStyle =
-        theme.resolveButtonStyle(controlStyle(srButton, {ssHighlighted}))
-
-    check highlightedStyle.box.fill.centerColor().brightness <
-      buttonStyle.text.color.brightness
-    check highlightedStyle.textHighlightColor.brightness <
-      highlightedStyle.text.color.brightness
-    check highlightedStyle.textHighlightColor.a <= 0.20'f32
-
-  test "peachy combo boxes use peach chrome instead of Aqua colors":
-    let
-      theme = initPeachyTheme()
-      comboStyle = theme.resolveComboBoxStyle(controlStyle(srComboBox))
-      openStyle = theme.resolveComboBoxStyle(controlStyle(srComboBox, {ssOpen}))
-      arrowColor = comboStyle.arrowFill.centerColor()
-
-    check comboStyle.chrome == FlatTransparentChromeName
-    check openStyle.chrome == FlatTransparentChromeName
-    check comboStyle.box.fill != aquaComboBoxFill()
-    check comboStyle.arrowFill != aquaComboArrowFill()
-    check arrowColor.r > arrowColor.g
-    check arrowColor.r >= arrowColor.b
-
-  test "peachy and synthwave themes do not inherit Aqua root pinstripes":
-    checkRootPinstripesDisabled(initPeachyTheme())
-    checkRootPinstripesDisabled(initSynthwave83Theme())
-
-  test "peachy and synthwave document tabs use theme tab styling":
-    checkDocumentTabsUseThemeTabStyle(initPeachyTheme())
-    checkDocumentTabsUseThemeTabStyle(initSynthwave83Theme())
-
-  test "theme accents drive document tabs and progress indicators":
-    for theme in [
-      initTheme(),
-      initAquaTheme(),
-      initBannerTheme(),
-      initDarkBSDTheme(),
-      initMacOSTheme(),
-      initMacOSDarkTheme(),
-      initNebulaTheme(),
-      initPeachyTheme(),
-      initSynthwave83Theme(),
+    for index, name in [
+      "aqua", "banner", "darkbsd", "macos", "macos-dark", "nebula", "peachy",
+      "synthwave83",
     ]:
-      checkThemeAccentConsumers(theme)
+      checkpoint("theme: " & name)
+      window.setAppearance(initAppearance(initThemeByName(name)))
+      window.frame = rect(0, 0, (420 + index * 20).float32, 320)
+      field.text = ""
+      form.layoutSubtreeIfNeeded()
+      checkpoint("form: " & $form.frame() & " field: " & $field.frame())
+      require window.clickView(field)
+      let entered = "Sample " & $index
+      require window.dispatchTextInput(entered)
+      let previousState = toggle.state
+      require window.clickView(toggle)
+      check toggle.state != previousState
+      require window.clickView(button)
+      check submitted == entered
+      check actionCount == index + 1
 
+      let list = buildRenders(form)[DefaultDrawLevel]
+      for text in [label.text, entered, toggle.title, button.title]:
+        check text in list.renderedText()
+      for control in [View(field), View(toggle), View(button)]:
+        check control.frame().size.width > 0
+        check control.frame().size.height >= control.intrinsicContentSize().height
+        check control.frame().maxY <= form.bounds().maxY
+
+  test "font overrides relayout existing controls and preserve input":
     let
-      defaultProgress =
-        initTheme().resolveProgressIndicatorStyle(controlStyle(srProgressIndicator))
-      peachyProgress = initPeachyTheme().resolveProgressIndicatorStyle(
-          controlStyle(srProgressIndicator)
-        )
-      synthwaveProgress = initSynthwave83Theme().resolveProgressIndicatorStyle(
-          controlStyle(srProgressIndicator)
-        )
-    check peachyProgress.activeTrack.fill != defaultProgress.activeTrack.fill
-    check synthwaveProgress.activeTrack.fill != defaultProgress.activeTrack.fill
-    check peachyProgress.activeTrack.fill != synthwaveProgress.activeTrack.fill
+      window = newWindow("Resizable theme", frame = rect(0, 0, 420, 320))
+      form = newStackView(laVertical)
+      field = newTextField()
+      button = newButton("Apply changes")
+    defer:
+      window.close()
+    form.distribution = svdNatural
+    form.spacing = 10
+    form.addArrangedSubview(field, button)
+    window.setContentView(form)
+    var previousTextWidth = 0.0'f32
+    for fontSize in [12.0'f32, 36.0'f32]:
+      var appearance = initAppearance()
+      appearance[srButton, StyleFontSize] = fontSize
+      appearance[srTextField, StyleFontSize] = fontSize
+      window.setAppearance(appearance)
+      form.layoutSubtreeIfNeeded()
+      let natural = button.intrinsicContentSize()
+      check natural.width > previousTextWidth
+      check button.frame().size.height >= natural.height
+      previousTextWidth = natural.width
+      field.text = ""
+      require window.clickView(field)
+      require window.dispatchTextInput("Readable")
+      require window.clickView(button)
+      check field.text == "Readable"
+      check "Readable" in buildRenders(form)[DefaultDrawLevel].renderedText()
 
-  test "built-in themes keep independent text selection colors":
-    check initTheme().textSelectionColor() == color(0.34, 0.18, 0.23, 0.92)
-    check initAquaTheme().textSelectionColor() == color(0.24, 0.56, 1.0, 0.34)
-    check initBannerTheme().textSelectionColor() == color(0.31, 0.58, 0.54, 0.32)
-    check initMacOSTheme().textSelectionColor() == color(0.04, 0.52, 1.0, 0.26)
-    check initMacOSDarkTheme().textSelectionColor() == color(0.04, 0.52, 1.0, 0.38)
-    check initDarkBSDTheme().textSelectionColor() == color(0.34, 0.18, 0.23, 0.92)
-    check initNebulaTheme().textSelectionColor() == color(0.20, 0.88, 1.0, 0.34)
-    check initPeachyTheme().textSelectionColor() == color(0.88, 0.30, 0.52, 0.40)
-    check initSynthwave83Theme().textSelectionColor() == color(1.0, 0.08, 0.86, 0.40)
-
-  test "banner theme exposes generated banner palette as an opt-in theme":
-    let
-      theme = initBannerTheme()
-      buttonStyle = theme.resolveButtonStyle(controlStyle(srButton))
-      highlightedButtonStyle =
-        theme.resolveButtonStyle(controlStyle(srButton, {ssHighlighted}))
-      checkBoxStyle =
-        theme.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
-      textFieldStyle = theme.resolveTextFieldStyle(controlStyle(srTextField))
-      comboBoxStyle = theme.resolveComboBoxStyle(controlStyle(srComboBox, {ssOpen}))
-      comboBoxItemStyle = theme.resolveTextFieldStyle(
-        controlStyle(srComboBoxItem, {ssSelected, ssHovered})
-      )
-      tabStyle = controlStyle(srTab)
-
-    check buttonStyle.box.fill == color(0.89, 0.38, 0.21, 1.0)
-    check highlightedButtonStyle.box.fill == color(0.62, 0.24, 0.14, 1.0)
-    check checkBoxStyle.indicator.fill == color(0.89, 0.38, 0.21, 1.0)
-    check textFieldStyle.box.fill == color(1.0, 0.97, 0.94, 1.0)
-    check textFieldStyle.selectionColor == color(0.31, 0.58, 0.54, 0.32)
-    check comboBoxStyle.box.borderColor == color(0.31, 0.58, 0.54, 1.0)
-    check comboBoxStyle.arrowColor == color(0.16, 0.15, 0.15, 1.0)
-    check comboBoxItemStyle.box.fill == color(0.19, 0.38, 0.35, 1.0)
-    check buttonStyle.chrome == DefaultChromeName
-    check checkBoxStyle.chrome == DefaultChromeName
-    check comboBoxStyle.chrome == DefaultChromeName
-    check buttonStyle.textHighlightColor.a == 0.0
-    check buttonStyle.textShadowColor.a == 0.0
-    check theme.resolveChromeName(tabStyle) == DefaultChromeName
-    check theme.resolveFill(tabStyle, fill(color(0.0, 0.0, 0.0, 1.0))) ==
-      fill(color(0.86, 0.82, 0.75, 1.0))
-    check theme.resolveColor(tabStyle, StyleTextColor, color(0.0, 0.0, 0.0, 1.0)) ==
-      color(0.11, 0.10, 0.10, 1.0)
-
-  test "macOS theme provides a modern flat control appearance":
-    let
-      theme = initMacOSTheme()
-      buttonStyle = theme.resolveButtonStyle(controlStyle(srButton))
-      accentStyle = theme.resolveButtonStyle(controlStyle(srButton, {ssAccent}))
-      checkBoxStyle =
-        theme.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
-      textFieldStyle = theme.resolveTextFieldStyle(controlStyle(srTextField))
-      switchStyle = theme.resolveSwitchButtonStyle(controlStyle(srSwitch, {ssSelected}))
-      documentTab = controlStyle(srDocumentTab)
-      selectedDocumentTab = controlStyle(srDocumentTab, {ssSelected})
-      documentTabBar = controlStyle(srDocumentTabBar)
-      documentTabButton = controlStyle(srDocumentTabButton)
-      transparentFill = fill(color(0.0, 0.0, 0.0, 0.0))
-
-    check buttonStyle.chrome == DefaultChromeName
-    check buttonStyle.box.cornerRadius == 7.0'f32
-    check buttonStyle.textHighlightColor.a == 0.0'f32
-    check buttonStyle.textShadowColor.a == 0.0'f32
-    check accentStyle.box.fill == color(0.04, 0.52, 1.0, 1.0)
-    check accentStyle.text.color == color(1.0, 1.0, 1.0, 1.0)
-    check checkBoxStyle.chrome == DefaultChromeName
-    check checkBoxStyle.indicator.cornerRadius == 4.0'f32
-    check checkBoxStyle.indicator.fill == color(0.04, 0.52, 1.0, 1.0)
-    check theme.resolveChromeName(controlStyle(srTextField)) == DefaultChromeName
-    check textFieldStyle.box.cornerRadius == 6.0'f32
-    check textFieldStyle.selectionColor == color(0.04, 0.52, 1.0, 0.26)
-    check switchStyle.chrome == DefaultChromeName
-    check switchStyle.track.fill == color(0.20, 0.78, 0.35, 1.0)
-    check theme.resolveChromeName(documentTab) == DefaultChromeName
-    check theme.resolveFill(documentTab, transparentFill) == transparentFill
-    check theme.resolveFill(selectedDocumentTab, transparentFill) ==
-      fill(color(1.0, 1.0, 1.0, 0.96))
-    check theme.resolveColor(
-      selectedDocumentTab, StyleBorderColor, color(1.0, 0.0, 0.0, 1.0)
-    ) == color(0.0, 0.0, 0.0, 0.18)
-    check theme.resolveFill(documentTabBar, transparentFill) ==
-      fill(color(1.0, 1.0, 1.0, 0.72))
-    check theme.resolveColor(
-      documentTabBar, StyleBorderColor, color(1.0, 0.0, 0.0, 1.0)
-    ) == color(0.0, 0.0, 0.0, 0.14)
-    check theme.resolveFill(documentTabButton, fill(color(1.0, 0.0, 0.0, 1.0))) ==
-      transparentFill
-    check theme.resolveColor(
-      documentTabButton, StyleMarkColor, color(1.0, 0.0, 0.0, 1.0)
-    ) == color(0.24, 0.24, 0.26, 1.0)
-    let
-      stepperStyle = theme.resolveButtonStyle(controlStyle(srStepper))
-      pressedStepperStyle =
-        theme.resolveButtonStyle(controlStyle(srStepper, {ssHighlighted}))
-      disabledStepperStyle =
-        theme.resolveButtonStyle(controlStyle(srStepper, {ssDisabled}))
-    check stepperStyle.chrome == DefaultChromeName
-    check stepperStyle.box.fill == color(0.89, 0.89, 0.90, 1.0)
-    check stepperStyle.box.cornerRadius == 8.0'f32
-    check stepperStyle.minSize == initSize(72.0, 28.0)
-    check pressedStepperStyle.box.fill == color(0.80, 0.80, 0.82, 1.0)
-    check disabledStepperStyle.text.color == color(0.58, 0.58, 0.60, 1.0)
-    checkRootPinstripesDisabled(theme)
-
-    for labelClass in [
-      LabelStyleClass, LabelTitleStyleClass, LabelHeadingStyleClass,
-      LabelStatusStyleClass, LabelFormStyleClass,
+  test "runtime theme aliases resolve to their canonical appearance":
+    for names in [
+      ["macos", "mac", "modern-macos"],
+      ["macos-dark", "dark-macos", "modern-macos-dark"],
+      ["darkbsd", "dark-bsd", "ruby-bsd"],
     ]:
-      let context = controlStyle(srTextField, classes = @[labelClass])
-      check theme.resolveChromeName(context) == DefaultChromeName
-      check theme.resolveTextFieldStyle(context).box.shadows.len == 0
-
-  test "macOS dark theme keeps modern geometry with a dark semantic palette":
-    let
-      theme = initMacOSDarkTheme()
-      buttonStyle = theme.resolveButtonStyle(controlStyle(srButton))
-      accentStyle = theme.resolveButtonStyle(controlStyle(srButton, {ssAccent}))
-      checkBoxStyle =
-        theme.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
-      textFieldStyle = theme.resolveTextFieldStyle(controlStyle(srTextField))
-      comboBoxStyle = theme.resolveComboBoxStyle(controlStyle(srComboBox))
-      selectedDocumentTab = controlStyle(srDocumentTab, {ssSelected})
-      documentTabBar = controlStyle(srDocumentTabBar)
-      title = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass, LabelTitleStyleClass])
-      )
-      status = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass, LabelStatusStyleClass])
-      )
-
-    check theme.resolveColor(
-      controlStyle(srView), StyleBackgroundColor, color(1.0, 1.0, 1.0, 1.0)
-    ) == color(0.12, 0.12, 0.14, 1.0)
-    check buttonStyle.chrome == DefaultChromeName
-    check buttonStyle.box.cornerRadius == 7.0'f32
-    check buttonStyle.box.fill == color(0.25, 0.25, 0.27, 0.98)
-    check buttonStyle.text.color == color(0.93, 0.93, 0.95, 1.0)
-    check buttonStyle.box.borderColor == color(1.0, 1.0, 1.0, 0.14)
-    check accentStyle.box.fill == color(0.04, 0.52, 1.0, 1.0)
-    check accentStyle.text.color == color(1.0, 1.0, 1.0, 1.0)
-    check checkBoxStyle.indicator.fill == color(0.04, 0.52, 1.0, 1.0)
-    check textFieldStyle.box.fill == color(0.15, 0.15, 0.17, 0.98)
-    check textFieldStyle.text.color == color(0.93, 0.93, 0.95, 1.0)
-    check textFieldStyle.selectionColor == color(0.04, 0.52, 1.0, 0.38)
-    check comboBoxStyle.box.fill == color(0.25, 0.25, 0.27, 0.98)
-    check comboBoxStyle.arrowColor == color(0.76, 0.76, 0.78, 1.0)
-    check theme.resolveFill(selectedDocumentTab, fill(color(1.0, 1.0, 1.0, 1.0))) ==
-      fill(color(0.25, 0.25, 0.27, 0.98))
-    check theme.resolveColor(
-      selectedDocumentTab, StyleTextColor, color(0.0, 0.0, 0.0, 1.0)
-    ) == color(0.96, 0.96, 0.97, 1.0)
-    check theme.resolveFill(documentTabBar, fill(color(1.0, 1.0, 1.0, 1.0))) ==
-      fill(color(0.16, 0.16, 0.18, 0.96))
-    check theme.resolveKeyword(
-      controlStyle(srDocumentTab), StyleCloseButtonPosition, ""
-    ) == "left"
-    check title.text.color == color(0.96, 0.96, 0.97, 1.0)
-    check status.text.color == color(0.70, 0.70, 0.72, 1.0)
-    checkRootPinstripesDisabled(theme)
-
-  test "DarkBSD gives macOS dark controls ruby Aqua buttons":
-    let
-      theme = initDarkBSDTheme()
-      buttonStyle = theme.resolveButtonStyle(controlStyle(srButton))
-      hoveredStyle = theme.resolveButtonStyle(controlStyle(srButton, {ssHovered}))
-      pressedStyle = theme.resolveButtonStyle(controlStyle(srButton, {ssHighlighted}))
-      accentStyle = theme.resolveButtonStyle(controlStyle(srButton, {ssAccent}))
-      disabledStyle = theme.resolveButtonStyle(controlStyle(srButton, {ssDisabled}))
-      checkBoxStyle =
-        theme.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
-      activeCheckBoxStyle = theme.resolveChoiceButtonStyle(
-        controlStyle(srCheckBox, {ssSelected, ssHighlighted})
-      )
-      textFieldStyle = theme.resolveTextFieldStyle(controlStyle(srTextField))
-      comboBoxStyle = theme.resolveComboBoxStyle(controlStyle(srComboBox))
-      selectedComboItem =
-        theme.resolveRowItemStyle(controlStyle(srComboBoxItem, {ssSelected}))
-      switchStyle = theme.resolveSwitchButtonStyle(controlStyle(srSwitch, {ssSelected}))
-      sliderStyle = theme.resolveSliderStyle(controlStyle(srSlider))
-
-    check theme.resolveColor(
-      controlStyle(srView), StyleBackgroundColor, color(1.0, 1.0, 1.0, 1.0)
-    ) == color(0.12, 0.12, 0.14, 1.0)
-    check buttonStyle.chrome == RubyAquaChromeName
-    check buttonStyle.box.fill ==
-      linear(
-        color(0.34, 0.003, 0.020, 1.0),
-        color(0.78, 0.008, 0.036, 1.0),
-        color(0.40, 0.002, 0.018, 1.0),
-        fgaY,
-        142'u8,
-      )
-    check hoveredStyle.box.fill ==
-      linear(
-        color(0.42, 0.006, 0.026, 1.0),
-        color(0.88, 0.016, 0.052, 1.0),
-        color(0.49, 0.004, 0.024, 1.0),
-        fgaY,
-        142'u8,
-      )
-    check pressedStyle.box.fill ==
-      linear(
-        color(0.22, 0.001, 0.012, 1.0),
-        color(0.54, 0.004, 0.024, 1.0),
-        color(0.28, 0.001, 0.012, 1.0),
-        fgaY,
-        136'u8,
-      )
-    check accentStyle.box.fill ==
-      linear(
-        color(0.40, 0.004, 0.024, 1.0),
-        color(0.84, 0.010, 0.044, 1.0),
-        color(0.46, 0.003, 0.022, 1.0),
-        fgaY,
-        142'u8,
-      )
-    check disabledStyle.box.fill ==
-      linear(
-        color(0.24, 0.07, 0.08, 0.78),
-        color(0.40, 0.10, 0.12, 0.78),
-        color(0.27, 0.06, 0.07, 0.78),
-        fgaY,
-        142'u8,
-      )
-    check buttonStyle.box.cornerRadius == 10.0'f32
-    check buttonStyle.box.cornerRadii == initCornerRadii(10.0)
-    check buttonStyle.box.borderWidth == 1.0'f32
-    check buttonStyle.minSize == initSize(0.0, 32.0)
-    check buttonStyle.text.color == color(1.0, 0.97, 0.98, 1.0)
-    check buttonStyle.textHighlightColor == color(1.0, 0.90, 0.92, 0.34)
-    check buttonStyle.textShadowColor == color(0.16, 0.0, 0.025, 0.66)
-    check buttonStyle.box.shadows ==
-      @[insetShadow(color(0.12, 0.0, 0.012, 0.52), y = -1.0, blur = 2.8)]
-    check pressedStyle.box.shadows.len == 2
-    check disabledStyle.box.shadows.len == 0
-    check checkBoxStyle.indicator.fill == color(0.58, 0.022, 0.052, 1.0)
-    check checkBoxStyle.indicator.borderColor == color(0.68, 0.07, 0.14, 0.90)
-    check checkBoxStyle.indicator.focusRingColor == color(0.70, 0.06, 0.24, 0.64)
-    check activeCheckBoxStyle.indicator.fill == color(0.72, 0.040, 0.080, 1.0)
-    check textFieldStyle.box.fill == color(0.15, 0.15, 0.17, 0.98)
-    check textFieldStyle.selectionColor == color(0.34, 0.18, 0.23, 0.92)
-    check comboBoxStyle.box.fill == color(0.25, 0.25, 0.27, 0.98)
-    check selectedComboItem.box.fill == color(0.58, 0.022, 0.052, 1.0)
-    check switchStyle.track.fill == color(0.58, 0.022, 0.052, 1.0)
-    check switchStyle.track.borderColor == color(0.36, 0.005, 0.020, 1.0)
-    check switchStyle.track.focusRingColor == color(0.70, 0.06, 0.24, 0.64)
-    check sliderStyle.activeTrack.fill == color(0.58, 0.022, 0.052, 1.0)
-    check sliderStyle.activeTrackMaximumFill == color(0.78, 0.040, 0.095, 1.0)
-    check sliderStyle.knob.fill == color(0.25, 0.25, 0.27, 1.0)
-    check sliderStyle.knob.borderColor == color(1.0, 1.0, 1.0, 0.14)
-    check sliderStyle.knob.focusRingColor == color(0.70, 0.06, 0.24, 0.64)
-    check sliderStyle.knobValueTint == 0.0'f32
-    checkRootPinstripesDisabled(theme)
-
-  test "macOS labels use typographic hierarchy instead of bordered bands":
-    let theme = initMacOSTheme()
-    let transparent = fill(color(0.0, 0.0, 0.0, 0.0))
-    let
-      title = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass, LabelTitleStyleClass])
-      )
-      heading = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass, LabelHeadingStyleClass])
-      )
-      status = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass, LabelStatusStyleClass])
-      )
-      form = theme.resolveTextFieldStyle(
-        controlStyle(srTextField, classes = @[LabelStyleClass, LabelFormStyleClass])
-      )
-
-    for style in [title, heading, status, form]:
-      check style.box.fill == transparent
-      check style.box.borderWidth == 0.0'f32
-      check style.box.borderColor.a == 0.0'f32
-    check title.text.fontSize == defaultFontSize() + 4.0'f32
-    check heading.text.fontSize == max(defaultFontSize() - 1.0'f32, 10.0'f32)
-    check status.text.fontSize == max(defaultFontSize() - 1.0'f32, 10.0'f32)
-    check heading.text.color == color(0.52, 0.52, 0.54, 1.0)
-    check status.text.color == color(0.40, 0.40, 0.42, 1.0)
-    check form.text.color == status.text.color
-
-  test "non-Aqua themes do not inherit Aqua chrome":
-    const ChromeRoles = [
-      srButton, srCheckBox, srRadioButton, srSwitch, srSlider, srProgressIndicator,
-      srTab, srTabPanel, srDocumentTab, srDocumentTabBar, srDocumentTabButton,
-      srTextField, srMonoTextView, srComboBox,
-    ]
-    for theme in [initPeachyTheme(), initSynthwave83Theme()]:
-      for role in ChromeRoles:
-        check theme.resolveChromeName(controlStyle(role)) == FlatTransparentChromeName
-      for labelClass in [
-        LabelStyleClass, LabelTitleStyleClass, LabelHeadingStyleClass,
-        LabelStatusStyleClass, LabelFormStyleClass,
-      ]:
-        let context = controlStyle(srTextField, classes = @[labelClass])
-        check theme.resolveChromeName(context) == FlatTransparentChromeName
-        check theme.resolveTextFieldStyle(context).box.shadows.len == 0
-
-  test "macOS theme is available through runtime theme names":
-    for name in ["macos", "mac", "modern-macos"]:
-      let style = initThemeByName(name).resolveButtonStyle(controlStyle(srButton))
-      check style.chrome == DefaultChromeName
-      check style.box.cornerRadius == 7.0'f32
-
-    for name in ["macos-dark", "dark-macos", "modern-macos-dark"]:
-      let style = initThemeByName(name).resolveButtonStyle(controlStyle(srButton))
-      check style.chrome == DefaultChromeName
-      check style.box.cornerRadius == 7.0'f32
-      check style.box.fill == color(0.25, 0.25, 0.27, 0.98)
-
-    let darkBSDStyle = initDarkBSDTheme().resolveButtonStyle(controlStyle(srButton))
-    for name in ["darkbsd", "dark-bsd", "ruby-bsd"]:
-      let style = initThemeByName(name).resolveButtonStyle(controlStyle(srButton))
-      check style.chrome == RubyAquaChromeName
-      check style.box.cornerRadius == 10.0'f32
-      check style.box.fill == darkBSDStyle.box.fill
+      let canonical = initThemeByName(names[0])
+      for name in names:
+        checkpoint("theme alias: " & name)
+        let theme = initThemeByName(name)
+        check theme.resolveButtonStyle(controlStyle(srButton)) ==
+          canonical.resolveButtonStyle(controlStyle(srButton))
+        check theme.resolveTextFieldStyle(controlStyle(srTextField)) ==
+          canonical.resolveTextFieldStyle(controlStyle(srTextField))

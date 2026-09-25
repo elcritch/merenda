@@ -540,7 +540,14 @@ suite "NimKit CascadingView":
     check firstWidth < secondWidth
     check secondWidth > view.columnWidth()
     check fittingWidth.nearlyEqual(firstWidth + view.columnSpacing() + secondWidth)
-    check renders.layers[DefaultDrawLevel].textNodeX(longTitle) >= 0.0'f32
+    var titleFits = false
+    for hit in renders[DefaultDrawLevel].collectDebugFigs():
+      let node = hit.node
+      if node.kind == nkText and node.renderedText() == longTitle:
+        titleFits =
+          node.textLayout.glyphCount() > 0 and
+          node.textLayout.bounding.w <= hit.bounds.w + 1.0'f32
+    check titleFits
 
     view.cascadingItems = [
       cascadeItem("language", "Language"),
@@ -548,7 +555,9 @@ suite "NimKit CascadingView":
     ]
     discard buildRenders(root)
 
-    check view.tableViewForColumn(1).frame.size.width == view.columnWidth()
+    let shortenedWidth = view.tableViewForColumn(1).frame.size.width
+    check shortenedWidth >= view.columnWidth()
+    check shortenedWidth < secondWidth
 
   test "columns can fit the viewport instead of scrolling horizontally":
     let
@@ -558,13 +567,14 @@ suite "NimKit CascadingView":
     view.columnWidth = 170.0
     view.minColumnWidth = 120.0
     view.fitsColumnsToWidth = true
-    var items = @[
-      cascadeItem("root", "A long root category"),
-      cascadeItem("child", "A long font family", parentIdentifier = "root"),
-      cascadeItem(
-        "grandchild", "A long font face", parentIdentifier = "child", leaf = true
-      ),
-    ]
+    var items =
+      @[
+        cascadeItem("root", "A long root category"),
+        cascadeItem("child", "A long font family", parentIdentifier = "root"),
+        cascadeItem(
+          "grandchild", "A long font face", parentIdentifier = "child", leaf = true
+        ),
+      ]
     for index in 0 ..< 20:
       items.add cascadeItem(
         "family-" & $index,

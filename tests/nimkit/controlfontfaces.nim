@@ -1,8 +1,9 @@
-import std/[os, unittest]
+import std/[os, strutils, unittest]
 
 import figdraw
 
 import merenda/nimkit
+import ./fixtures/rendergeometry
 
 suite "NimKit control font faces":
   test "derived control text styles retain the exact interface face":
@@ -27,10 +28,10 @@ suite "NimKit control font faces":
     root.addSubview(label)
     let renderList = root.buildRenders(appearance)[DefaultDrawLevel]
 
-    var textNodeCount = 0
     for node in renderList.nodes:
-      if node.kind == nkText and node.textLayout.arrangedGlyphs.len > 0:
-        inc textNodeCount
-        for glyph in node.textLayout.arrangedGlyphs:
+      if node.kind == nkText:
+        for glyphIndex in 0 ..< node.textLayout.glyphCount():
+          let glyph = node.textLayout.arrangedGlyph(glyphIndex)
           check getFigFont(glyph.fontId).typefaceId == expectedTypefaceId
-    check textNodeCount >= 5
+    for text in [button.title, "-", label.icon, label.title]:
+      check text in renderList.renderedText()

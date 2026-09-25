@@ -130,16 +130,16 @@ type
     inputsDirty*: bool
 
   LayoutConstraint* = ref object
-    xFirstItem*: View
+    xFirstItemRef*: BackRef[View]
     xFirstAttribute*: LayoutAttribute
     xRelation*: LayoutRelation
-    xSecondItem*: View
+    xSecondItemRef*: BackRef[View]
     xSecondAttribute*: LayoutAttribute
     xMultiplier*: float32
     xConstant*: float32
     xPriority*: LayoutPriority
     xActive*: bool
-    xOwningView*: View
+    xOwningViewRef*: BackRef[View]
 
   LayoutTerm* = object
     item*: View
@@ -247,8 +247,8 @@ type
     xCompressionPriority*: array[LayoutAxis, LayoutPriority]
     xConstraints*: seq[LayoutConstraint]
     xLayoutInputCache*: LayoutInputCache
-    xNextKeyView*: View
-    xPreviousKeyView*: View
+    xNextKeyView*: BackRef[View]
+    xPreviousKeyView*: BackRef[View]
     xSuperview*: BackRef[View]
     xWindow*: BackRef[Responder]
     xSubviews*: seq[View]

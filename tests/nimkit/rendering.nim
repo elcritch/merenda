@@ -1,7 +1,8 @@
-import std/[unicode, unittest]
+import std/[strutils, unicode, unittest]
 
 import figdraw
 import ./fixtures/rendergeometry
+import ./fixtures/widgetflows
 
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
@@ -24,14 +25,6 @@ let
 
 type ExtraChrome = ref object of Chrome
 
-func rgbaColor(r, g, b, a: int): Color =
-  color(
-    r.float32 / 255.0'f32,
-    g.float32 / 255.0'f32,
-    b.float32 / 255.0'f32,
-    a.float32 / 255.0'f32,
-  )
-
 proc translatedScreenRect(list: RenderList, index: int): nimkitTypes.Rect =
   let node = list.nodes[index]
   var
@@ -45,12 +38,6 @@ proc translatedScreenRect(list: RenderList, index: int): nimkitTypes.Rect =
       y += ancestor.transform.translation.y
     parent = ancestor.parent
   nimkitTypes.rect(x, y, node.screenBox.w, node.screenBox.h)
-
-func aquaChoiceSelectedFill(): Fill =
-  linear(rgbaColor(122, 232, 255, 255), rgbaColor(0, 124, 238, 255), fgaDiagTLBR)
-
-func aquaRadioShellFill(): Fill =
-  linear(rgbaColor(253, 253, 250, 255), rgbaColor(166, 168, 164, 255), fgaY)
 
 protocol CustomDrawing of ViewDrawingProtocol:
   method draw(view: CustomDrawView, context: DrawContext) =
@@ -210,32 +197,26 @@ suite "nimkit rendering":
     for node in renders[DefaultDrawLevel].resolvedNodes():
       check node.kind != nkRectangle or node.fill != PopupLayerFill
 
-  test "buildRenders emits root, text field, and button nodes":
-    let root = newView(frame = rect(0, 0, 320, 200))
-    root.backgroundColor = color(1, 1, 1)
-    root.addSubview(newTextField("Ready", frame = rect(16, 16, 180, 32)))
-    root.addSubview(newButton("Click", frame = rect(16, 64, 120, 36)))
+  test "rendering updates visible control content and omits hidden controls":
+    let
+      root = newView(frame = rect(0, 0, 320, 200))
+      field = newTextField("Ready", frame = rect(16, 16, 180, 32))
+      button = newButton("Run", frame = rect(16, 64, 120, 36))
+    root.addSubview(field)
+    root.addSubview(button)
+    let initial = buildRenders(root)[DefaultDrawLevel].renderedText()
+    check "Ready" in initial
+    check "Run" in initial
 
-    let renders = buildRenders(root)
+    field.text = "Changed"
+    button.hidden = true
+    let changed = buildRenders(root)[DefaultDrawLevel].renderedText()
+    check "Changed" in changed
+    check "Ready" notin changed
+    check "Run" notin changed
 
-    check DefaultDrawLevel in renders
-    let list = renders[DefaultDrawLevel]
-    check list.rootIds.len >= 1
-    check list.resolvedNodes().len >= 5
-
-    var textNodeCount = 0
-    var rectangleNodeCount = 0
-    for node in list.resolvedNodes():
-      case node.kind
-      of nkText:
-        inc textNodeCount
-      of nkRectangle:
-        inc rectangleNodeCount
-      else:
-        discard
-
-    check textNodeCount >= 2
-    check rectangleNodeCount >= 3
+    button.hidden = false
+    check "Run" in buildRenders(root)[DefaultDrawLevel].renderedText()
 
   test "buildRenders applies view alpha and shadow to view background node":
     let
@@ -332,10 +313,11 @@ suite "nimkit rendering":
       buttonBorder = color(0.11, 0.12, 0.13, 1.0)
       fieldFill = color(0.91, 0.92, 0.93, 1.0)
       fieldBorder = color(0.21, 0.22, 0.23, 1.0)
-      buttonShadows = @[
-        dropShadow(color(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
-        insetShadow(color(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
-      ]
+      buttonShadows =
+        @[
+          dropShadow(color(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
+          insetShadow(color(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
+        ]
 
     var builder = initThemeBuilder(initTheme())
     builder[srButton, StyleFill] = buttonFill
@@ -525,87 +507,6 @@ suite "nimkit rendering":
 
     check knobFound
 
-  test "buildRenders draws Aqua push button layers":
-    let
-      root = newView(frame = rect(0, 0, 180, 90))
-      button = newButton("OK", frame = rect(20, 24, 120, 32))
-
-    root.appearance = initAppearance(initAquaTheme())
-    root.addSubview(button)
-
-    let
-      style = button.effectiveAppearance().resolveButtonStyle(
-          controlStyle(srButton, id = button.styleId, classes = button.styleClasses)
-        )
-      expectedButtonRect = button.rectToWindow(button.bounds)
-      expectedShadowRect = rect(
-        expectedButtonRect.origin.x,
-        expectedButtonRect.origin.y + 1.1'f32,
-        expectedButtonRect.size.width,
-        expectedButtonRect.size.height,
-      )
-      expectedTextRect = button.rectToWindow(style.buttonTextRect(button.bounds))
-      list = buildRenders(root)[DefaultDrawLevel]
-
-    var
-      buttonBackingFound = false
-      buttonRoot = (-1).FigIdx
-    for idx, node in list.resolvedNodes():
-      if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == rgbaColor(0, 0, 0, 40).rgba and
-          node.renderedRect().rectsClose(expectedShadowRect):
-        buttonBackingFound = true
-        check node.corners[dcTopLeft] == 16'u16
-        check node.shadows[0].style == DropShadow
-        check node.shadows[0].fill.kind == flColor
-        check node.shadows[0].fill.color == rgbaColor(0, 0, 0, 46).rgba
-        check node.shadows[0].y == 1.2'f32
-        check node.shadows[0].blur == 4.4'f32
-      if node.kind == nkRectangle and node.fill == style.box.fill and
-          node.renderedRect().rectsClose(expectedButtonRect):
-        buttonRoot = idx.FigIdx
-        check NfRectMaskContent in node.flags
-        check NfClipContent notin node.flags
-        check node.fill.centerColor().a <= 0.57'f32
-        check node.stroke.weight == style.box.borderWidth
-        check node.stroke.fill.kind == flColor
-        check node.stroke.fill.color == style.box.borderColor.rgba
-        check node.corners[dcTopLeft] == 16'u16
-
-    check buttonBackingFound
-    check buttonRoot != (-1).FigIdx
-
-    var innerRoot = (-1).FigIdx
-    for idx in descendantIndex(list.resolvedNodes(), buttonRoot):
-      let node = list.resolvedNodes()[int(idx)]
-      if node.kind == nkRectangle and NfRectMaskContent in node.flags and
-          node.fill.kind == flLinear3:
-        innerRoot = idx
-        check node.fill.centerColor().a <= 0.55'f32
-
-    check innerRoot != (-1).FigIdx
-
-    var glossFound = false
-    for idx in descendantIndex(list.resolvedNodes(), innerRoot):
-      let node = list.resolvedNodes()[int(idx)]
-      if node.kind == nkRectangle and node.fill.kind == flLinear2 and
-          node.fill.lin2.start.a > 0'u8 and node.fill.lin2.stop.a == 0'u8:
-        glossFound = true
-        check node.fill.lin2.start.a <= 40'u8
-
-    var
-      okTextLayerCount = 0
-      mainTextFound = false
-    for node in list.resolvedNodes():
-      if node.kind == nkText and node.renderedText() == "OK":
-        inc okTextLayerCount
-        if node.renderedRect().rectsClose(expectedTextRect):
-          mainTextFound = true
-
-    check glossFound
-    check okTextLayerCount >= 3
-    check mainTextFound
-
   test "buildRenders omits Aqua extras for default button chrome":
     let
       root = newView(frame = rect(0, 0, 180, 90))
@@ -780,67 +681,6 @@ suite "nimkit rendering":
     check comboExtraFound
     check popupExtraFound
 
-  test "buildRenders keeps Aqua radio accent inside neutral shell":
-    let
-      root = newView(frame = rect(0, 0, 220, 110))
-      checkbox = newCheckBox("Check", frame = rect(10, 20, 120, 24))
-      radio = newRadioButton("Radio", frame = rect(10, 56, 120, 24))
-
-    checkbox.state = bsOn
-    radio.state = bsOn
-    root.addSubview(checkbox)
-    root.addSubview(radio)
-
-    let
-      appearance = initAppearance(initAquaTheme())
-      checkStyle =
-        appearance.resolveChoiceButtonStyle(controlStyle(srCheckBox, {ssSelected}))
-      radioStyle =
-        appearance.resolveChoiceButtonStyle(controlStyle(srRadioButton, {ssSelected}))
-      checkboxIndicator =
-        checkbox.rectToWindow(checkStyle.choiceIndicatorRect(checkbox.bounds))
-      radioIndicator = radio.rectToWindow(radioStyle.choiceIndicatorRect(radio.bounds))
-      radioInner = radioIndicator.inset(insets(1.6))
-      radioGlossWidth = max(radioInner.size.width * 0.52'f32, 1.0'f32)
-      radioGloss = rect(
-        radioInner.origin.x + (radioInner.size.width - radioGlossWidth) / 2.0'f32,
-        radioInner.origin.y + 1.0'f32,
-        radioGlossWidth,
-        max(radioInner.size.height * 0.18'f32, 1.0'f32),
-      )
-      list = buildRenders(root, appearance)[DefaultDrawLevel]
-
-    var
-      checkboxAccentFound = false
-      radioShellFound = false
-      radioInnerAccentFound = false
-      radioGlossFound = false
-
-    for node in list.resolvedNodes():
-      if node.kind == nkRectangle:
-        let nodeRect = node.renderedRect()
-        if nodeRect.rectsClose(checkboxIndicator):
-          checkboxAccentFound = true
-          check node.fill == aquaChoiceSelectedFill()
-          check node.stroke.fill.kind == flColor
-          check node.stroke.fill.color == color(0.0, 0.32, 0.75, 0.96).rgba
-        if nodeRect.rectsClose(radioIndicator):
-          radioShellFound = true
-          check node.fill == aquaRadioShellFill()
-        if nodeRect.rectsClose(radioInner):
-          radioInnerAccentFound = true
-          check node.fill == aquaChoiceSelectedFill()
-          check node.stroke.fill.kind == flColor
-          check node.stroke.fill.color == color(0.0, 0.32, 0.75, 0.96).rgba
-        if nodeRect.rectsClose(radioGloss):
-          radioGlossFound = true
-          check nodeRect.size.width < radioInner.size.width * 0.60'f32
-
-    check checkboxAccentFound
-    check radioShellFound
-    check radioInnerAccentFound
-    check radioGlossFound
-
   test "buildRenders centers push button text by default":
     let
       root = newView(frame = rect(0, 0, 160, 80))
@@ -877,149 +717,62 @@ suite "nimkit rendering":
 
     check buttonTextFound
 
-  test "buildRenders draws combo box and open popup items":
+  test "combo popup renders choices above content and updates after selection":
     let
-      root = newView(frame = rect(0, 0, 220, 150))
-      combo = newComboBox(["One", "Two", "Three"], frame = rect(10, 20, 120, 26))
-
-    root.appearance = initAppearance(initAquaTheme())
-    combo.selectItemAtIndex(1)
+      window = newWindow("Combo rendering", frame = rect(0, 0, 320, 240))
+      root = newView()
+      combo = newComboBox(["One", "Two", "Three"], frame = rect(10, 20, 160, 30))
+    defer:
+      window.close()
     root.addSubview(combo)
-    let window = newWindow("Combo rendering", frame = root.frame)
     window.setContentView(root)
     combo.popupPresentation = ppInline
-    combo.openPopup()
+    combo.selectItemAtIndex(1)
+    require window.clickView(combo)
+    require combo.popupOpen()
+    let renders = window.buildRenders()
+    require PopupDrawLevel in renders
+    check "Two" in renders[DefaultDrawLevel].renderedText()
+    for title in ["One", "Two", "Three"]:
+      check title in renders[PopupDrawLevel].renderedText()
+    check "Three" notin renders[DefaultDrawLevel].renderedText()
 
-    let renders = buildRenders(root)
-    check DefaultDrawLevel in renders
-    check PopupDrawLevel in renders
+    require window.pressKey(keyEnd)
+    require window.pressKey(keyEnter)
+    check combo.stringValue == "Three"
+    check not combo.popupOpen()
+    let closed = window.buildRenders()
+    check "Three" in closed[DefaultDrawLevel].renderedText()
+    check PopupDrawLevel notin closed or closed[PopupDrawLevel].renderedText().len == 0
 
+  test "popup menu renders labels and shortcuts and dismisses on escape":
     let
-      list = renders[DefaultDrawLevel]
-      popupList = renders[PopupDrawLevel]
-    var
-      comboBoxFound = false
-      popupInBaseLayer = false
-      popupFound = false
-      selectedItemFound = false
-      textNodeCount = 0
-      arrowTopWidth = 0.0'f32
-      arrowBottomWidth = 0.0'f32
-
-    for node in list.resolvedNodes():
-      if node.kind == nkText:
-        inc textNodeCount
-
-      if node.kind == nkRectangle and node.screenBox.x == 10.0 and
-          node.screenBox.y == 20.0 and node.screenBox.w == 120.0 and
-          node.screenBox.h == 26.0:
-        comboBoxFound = true
-
-      if node.kind == nkRectangle and node.screenBox.x == 10.0 and
-          node.screenBox.y == 46.0 and node.screenBox.w == 120.0 and
-          node.screenBox.h == 68.0:
-        popupInBaseLayer = true
-
-      if node.kind == nkRectangle and node.fill.kind == flColor and
-          node.fill.color == color(0.0, 0.12, 0.34, 1.0).rgba and node.screenBox.h == 1.0:
-        if node.screenBox.y == 32.0:
-          arrowTopWidth = node.screenBox.w
-        elif node.screenBox.y == 34.0:
-          arrowBottomWidth = node.screenBox.w
-
-    for node in popupList.resolvedNodes():
-      if node.kind == nkText:
-        inc textNodeCount
-
-      if node.kind == nkRectangle and node.screenBox.x == 10.0 and
-          node.screenBox.y == 46.0 and node.screenBox.w == 120.0 and
-          node.screenBox.h == 68.0:
-        popupFound = true
-
-      if node.kind == nkRectangle and
-          node.fill ==
-          linear(
-            color(0.12, 0.40, 0.86, 0.87),
-            color(0.0, 0.22, 0.66, 0.87),
-            color(0.0, 0.08, 0.38, 0.87),
-            fgaY,
-            104'u8,
-          ) and node.screenBox.x == 11.0 and node.screenBox.y == 69.0 and
-          node.screenBox.w == 118.0 and node.screenBox.h == 22.0:
-        selectedItemFound = true
-
-    check comboBoxFound
-    check not popupInBaseLayer
-    check popupFound
-    check selectedItemFound
-    check arrowTopWidth > arrowBottomWidth
-    check textNodeCount >= 4
-
-  test "buildRenders draws popup menu button items":
-    let
-      root = newView(frame = rect(0, 0, 220, 150))
+      window = newWindow("Popup rendering", frame = rect(0, 0, 320, 240))
+      root = newView()
       menu = newMenu("Actions")
-      button = newPopupMenuButton("Actions", menu, rect(10, 4, 82, 24))
-
-    root.appearance = initAppearance(initAquaTheme())
+      button = newPopupMenuButton("Actions", menu, rect(10, 4, 100, 30))
+    defer:
+      window.close()
     discard menu.addItem(
       newMenuItem("Run Menu Action", keyEquivalent = "r", modifiers = {kmCommand})
     )
     discard menu.addSeparator()
     discard menu.addItem(newMenuItem("Reset Count"))
     root.addSubview(button)
-    let window = newWindow("Popup rendering", frame = root.frame)
     window.setContentView(root)
     button.popupPresentation = ppInline
-    button.openPopup()
-
-    let renders = buildRenders(root)
-    check PopupDrawLevel in renders
-
-    var
-      panelFound = false
-      runFound = false
-      keyEquivalentFound = false
-      separatorFound = false
-      resetFound = false
-      popupButtonArrowLines = 0
-
-    for node in renders[DefaultDrawLevel].resolvedNodes():
-      if node.kind == nkRectangle and node.screenBox.h == 1.0'f32 and
-          node.screenBox.w <= 6.0'f32 and node.screenBox.x >= 70.0'f32 and
-          node.screenBox.x + node.screenBox.w <= 85.0'f32 and
-          node.screenBox.y in
-          [11.0'f32, 12.0'f32, 13.0'f32, 18.0'f32, 19.0'f32, 20.0'f32]:
-        inc popupButtonArrowLines
-
-    for node in renders[PopupDrawLevel].resolvedNodes():
-      if node.kind == nkRectangle and node.screenBox.x == 10.0 and
-          node.screenBox.y == 28.0 and node.screenBox.w == 180.0 and
-          node.screenBox.h == 74.0 and node.stroke.weight == 1.0:
-        panelFound = true
-        check node.corners[dcTopLeft] == 12'u16
-        check node.corners[dcTopRight] == 12'u16
-      if node.kind == nkRectangle and node.screenBox.x == 19.0 and
-          node.screenBox.y == 65.0 and node.screenBox.w == 162.0 and
-          node.screenBox.h == 1.0:
-        separatorFound = true
-      if node.kind == nkText:
-        case node.renderedText()
-        of "Run Menu Action":
-          runFound = true
-        of "Cmd-r":
-          keyEquivalentFound = true
-        of "Reset Count":
-          resetFound = true
-        else:
-          discard
-
-    check panelFound
-    check runFound
-    check keyEquivalentFound
-    check separatorFound
-    check resetFound
-    check popupButtonArrowLines == 6
+    require window.clickView(button)
+    require button.popupOpen()
+    let renders = window.buildRenders()
+    require PopupDrawLevel in renders
+    let text = renders[PopupDrawLevel].renderedText()
+    for title in ["Run Menu Action", "Cmd-r", "Reset Count"]:
+      check title in text
+    check "Reset Count" notin renders[DefaultDrawLevel].renderedText()
+    require window.pressKey(keyEscape)
+    check not button.popupOpen()
+    let closed = window.buildRenders()
+    check PopupDrawLevel notin closed or closed[PopupDrawLevel].renderedText().len == 0
 
   test "buildRenders draws a menu bar from a main menu":
     let
@@ -1613,15 +1366,12 @@ suite "nimkit rendering":
             node.screenBox.w == 12.0 and node.screenBox.h == 12.0:
           radioIndicatorFound = true
           check node.corners[dcTopLeft] == 6'u16
-      elif node.kind == nkText and node.textLayout.runes.len > 0:
-        var text = ""
-        for rune in node.textLayout.runes:
-          text.add(rune)
-        if text == "✓":
+      elif node.kind == nkText and node.textLayout.glyphCount() > 0:
+        if node.renderedText() == "✓":
           inc checkmarkTextCount
-          check node.textLayout.selectionRects.len == 1
-          check node.textLayout.selectionRects[0].w > 0.0
-          check node.textLayout.selectionRects[0].h > 0.0
+          check node.textLayout.glyphCount() == 1
+          check node.textLayout.glyphRect(0).w > 0.0
+          check node.textLayout.glyphRect(0).h > 0.0
           check node.textLayout.spanColors.len == 1
           check node.textLayout.spanColors[0].kind == flColor
           check node.textLayout.spanColors[0].color == markFill.rgba

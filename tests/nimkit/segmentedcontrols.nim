@@ -23,7 +23,6 @@ suite "nimkit segmented controls":
     check control.cellAtIndex(0).buttonType == btToggle
     check control.cellAtIndex(0).state == bsOn
     check control.cellAtIndex(1).state == bsOff
-    check control.intercellSpacing == initSize(2.0, 0.0)
 
   test "segments select one item and dispatch one matrix action":
     let

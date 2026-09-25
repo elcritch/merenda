@@ -110,7 +110,7 @@ suite "canvas views":
 
     let renders = buildRenders(canvas)[DefaultDrawLevel]
     check renderResources(canvas).imageCount == 1
-    check renders.nodes.len > 0
+    check renders.nodes.anyIt(it.kind == nkImage and it.image.id == image.imageId())
 
   test "retained operations can be cleared or truncated for live previews":
     let context = newCanvasView(rect(0, 0, 320, 200)).getContext2D()

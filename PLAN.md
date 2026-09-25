@@ -22,8 +22,6 @@ and verify extended use.
   investigate growth and turn reproducible failures into bounded regressions.
 - [ ] Verify dmon's Linux recursion fix before removing Kosmo's forced polling
   fallback. Exercise deep trees, multiple windows, missed events, and shutdown.
-- [ ] Replace the temporary FigDraw `fix/acyclic-render-ownership` dependency with
-  a release containing [PR #96](https://github.com/elcritch/figdraw/pull/96).
 
 **Completion evidence:** supported close paths preserve window lifetime through
 render cleanup, and repeated sessions return owned resources to their warmed
@@ -70,6 +68,44 @@ controllers and actions, and inspect the running application without losing hist
 or live object identities.
 
 ## Validation
+
+### NimKit test audit: unresolved validation
+
+- [ ] Rework generated layout-input cache ownership for standalone and detached
+  views. Cached equations currently hold strong references to their solve root
+  and other views; closing a window now releases those caches, but a laid-out
+  view discarded without window close can still form an ARC cycle. Preserve
+  incremental cache reuse while making cached view links non-owning, and test
+  detached/reparented trees under ARC and ORC sanitizers.
+- [ ] Audit macOS standard-menu application lifetime. A freshly created
+  `Application` remains alive under ARC even without windows: it owns its
+  default menu, whose items target the application, and the native-menu
+  dispatch closure also captures it. Decide the intended owner and teardown
+  boundary before changing menu target retention; menu-created action targets
+  may need to remain owned. Cover both native and in-window menu dispatch.
+- [ ] Review eventual Chronos dispatcher teardown in Sigils. Main now retains
+  the shared animation worker between clock users, avoiding the per-restart
+  descriptor growth seen in PR #118's older Linux CI run 36078254071. Preserve
+  that fix and the enabled `repeated Chronos clock starts reuse dispatcher
+  descriptors` regression in `tests/nimkit/animations.nim`. Before replacing
+  process-lifetime reuse with full teardown, review thread-local dispatcher
+  ownership, pending timers/signals, channel and lock cleanup, and reclamation
+  of the shared thread allocation. Validate repeated starts, shared users
+  stopping in either order, active timers, and immediate shutdown on Linux and
+  macOS under ARC/ORC. This is follow-up lifecycle work, not a claim that the
+  old restart leak still reproduces on the rebased branch.
+- [ ] Investigate intermittent Kosmo Git-diff completion during full-suite
+  validation. On macOS with Nim 2.2.12, `summary and expanded files share wheel
+  scrolling` failed at its initial `panel.waitForDiff()` both in the full run
+  and a standalone retry, then passed nine focused runs and a complete Kosmo
+  run after rebuilding without a behavior change. Keep the regression and its
+  deadline intact.
+  Reproduce with `atlas-run tests kosmo`, or filter the compiled shared runner
+  with `Kosmo Git diff::summary and expanded files share wheel scrolling`.
+  Capture pending repository, patch/highlight, Markdown, and background-layout
+  work at the timeout to establish whether a completion is lost or relayout
+  does not converge. No root cause or large rewrite has been established;
+  review that evidence before changing worker/layout ownership.
 
 For each code increment, run the relevant shared runner and `atlas-run tests`.
 Compile examples with `atlas-run tests --compile-only examples/all_compile.nim`.

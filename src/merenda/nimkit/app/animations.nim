@@ -1510,6 +1510,9 @@ proc stop*(clock: AnimationSchedulerClock) =
     return
   if not clock.xThread.isNil:
     clock.xTimer.cancel(clock.xThread)
+  if not clock.xTicker.isNil:
+    clock.xTimer.disconnect(timeout, clock.xTicker)
+    clock.xTicker.disconnect(clockTicked, clock)
   if not clock.xThread.isNil:
     releaseSharedAnimationThread(clock.xThread)
   clock.xTimer = nil

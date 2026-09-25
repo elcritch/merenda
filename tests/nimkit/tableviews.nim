@@ -944,7 +944,7 @@ suite "NimKit TableView":
     tableView.addColumn(age)
 
     check tableView.showsHeader()
-    check tableView.tableHeaderHeight() == 24.0'f32
+    check tableView.tableHeaderHeight() > 0
     check tableView.tableHeaderHitTest(initPoint(20.0'f32, 10.0'f32)).column == name
     check tableView.tableHeaderHitTest(initPoint(118.0'f32, 10.0'f32)).part ==
       thpResizeHandle

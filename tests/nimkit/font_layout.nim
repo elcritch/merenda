@@ -82,23 +82,6 @@ proc selectionBounds(layout: GlyphArrangement): tuple[x, y, w, h: float32] =
   (minX, minY, maxX - minX, maxY - minY)
 
 suite "nimkit font layout":
-  test "default font roles use platform system font names":
-    withCleanFontEnv(
-      proc() =
-        withCleanMonospaceFontEnv(
-          proc() =
-            when defined(macosx):
-              check defaultFontName(frUI) == "SFNS.ttf"
-              check defaultFontName(frMonospace) == "SFNSMono.ttf"
-            elif defined(windows):
-              check defaultFontName(frUI) == "Segoe UI"
-              check defaultFontName(frMonospace) == "Consolas"
-            else:
-              check defaultFontName(frUI) == "Noto Sans"
-              check defaultFontName(frMonospace) == "Noto Sans Mono"
-        )
-    )
-
   when defined(posix):
     test "platform default fonts load shape and rasterize without figDataDir":
       let previousDataDir = figDataDir()

@@ -10,7 +10,7 @@ import ./textviews
 import ../foundation/types
 
 type FieldEditor* = ref object of TextView
-  xClient: Responder
+  xClient: BackRef[Responder]
   xOriginalString: string
 
 protocol FieldEditorClient {.selectorScope: protocol.}:
@@ -39,7 +39,10 @@ protocol FieldEditorClient {.selectorScope: protocol.}:
   ): ObjectValidationError {.optional.}
 
 proc client*(editor: FieldEditor): Responder =
-  if editor.isNil: nil else: editor.xClient
+  if editor.isNil:
+    nil
+  else:
+    editor.xClient[]
 
 proc validationError*(editor: FieldEditor): ObjectValidationError =
   if editor.client().isNil:
@@ -121,14 +124,14 @@ proc finishEditing(
 ): bool =
   if editor.xClient.isNil:
     return true
-  let client = editor.xClient
+  let client = editor.client()
   if reason != terCancel and not client.clientShouldEndEditing(editor):
     return false
   if reason == terCancel:
     editor.stringValue = editor.xOriginalString
   else:
     editor.notifyClientChanged()
-  editor.xClient = nil
+  editor.xClient.clear()
   discard client.sendLocalIfHandled(didEndEditing(), editor)
   discard
     client.sendLocalIfHandled(didEndEditingReason(), (editor: editor, reason: reason))
@@ -140,12 +143,12 @@ proc finishEditing(
 proc beginEditing*(editor: FieldEditor, client: Responder, focusVisible = true): bool =
   if client.isNil:
     return false
-  if editor.xClient == client:
+  if editor.client() == client:
     return true
   if not editor.canEdit(client):
     return false
   editor.loadClientText(client)
-  editor.xClient = client
+  editor.xClient[] = client
   editor.focused = true
   editor.focusVisible = focusVisible
   discard client.sendLocalIfHandled(didBeginEditing(), editor)

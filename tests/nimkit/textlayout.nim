@@ -828,6 +828,17 @@ suite "nimkit text layout":
     check client.invalidations == 2
     check client.completions == 2
 
+  test "a text view does not stay alive through its layout client":
+    var weakView: BackRef[Responder]
+    var manager: TextLayoutManager
+    block:
+      let view = newTextView("Editable")
+      weakView[] = Responder(view)
+      manager = view.layoutManager()
+      check manager.layoutClient() == DynamicAgent(view)
+    check weakView.isNil
+    check manager.layoutClient().isNil
+
   test "backend-free snapshots preserve empty hard-break wrapped and trailing lines":
     let emptyBackend = newContractBackend()
     let emptyManager = newTextLayoutManager(
