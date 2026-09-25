@@ -1,0 +1,4 @@
+# Nim 2.2.10's generated ORC trace callbacks have a typed signature that does
+# not match the generic callback pointer used by system/orc.nim. Suppress this
+# compiler-runtime function-type diagnostic, not application function checks.
+function:orc.nim

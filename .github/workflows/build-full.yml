@@ -196,7 +196,7 @@ jobs:
       if: runner.os == 'Linux'
       timeout-minutes: 10
       env:
-        UBSAN_OPTIONS: halt_on_error=1
+        UBSAN_OPTIONS: halt_on_error=1:suppressions=.github/ubsan.supp
         LSAN_OPTIONS: suppressions=.github/lsan.supp
       run: |
         xvfb-run -a atlas-run tests nimkit -- --cc:clang --mm:orc \
