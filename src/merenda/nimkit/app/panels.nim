@@ -115,18 +115,21 @@ proc buttonResponse*(alert: Alert, index: int): int =
 
 proc dismiss*(alert: Alert, response: int) =
   alert.response = response
-  if not alert.responseHandler.isNil:
-    alert.responseHandler(response)
+  let handler = alert.responseHandler
+  if not handler.isNil:
+    handler(response)
 
 proc dismiss*(panel: OpenPanel, response: int) =
   panel.response = response
-  if not panel.responseHandler.isNil:
-    panel.responseHandler(response)
+  let handler = panel.responseHandler
+  if not handler.isNil:
+    handler(response)
 
 proc dismiss*(panel: SavePanel, response: int) =
   panel.response = response
-  if not panel.responseHandler.isNil:
-    panel.responseHandler(response)
+  let handler = panel.responseHandler
+  if not handler.isNil:
+    handler(response)
 
 proc syncSavePanelFromField(panel: SavePanel) =
   if panel.nameField.isNil or not (panel.nameField of TextField):
@@ -252,6 +255,23 @@ proc updatePrimaryButton(buttons: seq[View], enabled: bool) =
   if buttons.len > 0 and buttons[0] of Button:
     Button(buttons[0]).enabled = enabled
 
+proc releasePanelCallbacks(buttons: openArray[View]) =
+  for view in buttons:
+    if view of Button:
+      Button(view).target = DynamicAgent(nil)
+
+proc alertWindowWillClose(alert: Alert) {.slot.} =
+  alert.buttonViews.releasePanelCallbacks()
+  alert.responseHandler = nil
+
+proc openPanelWindowWillClose(panel: OpenPanel) {.slot.} =
+  panel.buttonViews.releasePanelCallbacks()
+  panel.responseHandler = nil
+
+proc savePanelWindowWillClose(panel: SavePanel) {.slot.} =
+  panel.buttonViews.releasePanelCallbacks()
+  panel.responseHandler = nil
+
 proc newResponseButton(
     title: string, response: int, callback: proc(response: int) {.closure.}
 ): Button =
@@ -375,6 +395,8 @@ proc initialOpenPanelDirectory(panel: OpenPanel): string =
   getCurrentDir()
 
 proc rebuildAlertView*(alert: Alert): View =
+  if not alert.window.connected(willClose, alert, alertWindowWillClose):
+    alert.window.connect(willClose, alert, alertWindowWillClose)
   let prepared = prepareRoot(alert.window)
   let layout = prepared.layout
   layout.addArrangedSubview(View(newTitleLabel(alert.messageText)))
@@ -391,6 +413,8 @@ proc rebuildAlertView*(alert: Alert): View =
   result = alert.contentView
 
 proc rebuildOpenPanelView*(panel: OpenPanel): View =
+  if not panel.window.connected(willClose, panel, openPanelWindowWillClose):
+    panel.window.connect(willClose, panel, openPanelWindowWillClose)
   let prepared = prepareRoot(panel.window, insets(12, 12, 12, 12))
   let layout = prepared.layout
   if panel.message.len > 0:
@@ -435,6 +459,8 @@ proc rebuildOpenPanelView*(panel: OpenPanel): View =
   result = panel.contentView
 
 proc rebuildSavePanelView*(panel: SavePanel): View =
+  if not panel.window.connected(willClose, panel, savePanelWindowWillClose):
+    panel.window.connect(willClose, panel, savePanelWindowWillClose)
   let prepared = prepareRoot(panel.window, insets(12, 12, 12, 12))
   let layout = prepared.layout
   if panel.message.len > 0:

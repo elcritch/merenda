@@ -8,6 +8,9 @@
 
 ## 0.22.0
 
+- Disconnect stopped animation clocks before releasing their shared-thread proxies.
+- Release closed panel button actions and response callbacks to avoid retaining
+  dismissed dialog windows and their owners.
 - Use the FigDraw 0.43.0 release for render ownership and GPU completion.
 - Keep Kosmo window shortcuts available while a terminal tab has focus.
 - Reject native control-character text events on X11, Wayland, and Windows to

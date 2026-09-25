@@ -50,6 +50,22 @@ suite "NimKit modal lifetimes":
       check editor.text != before
       check TextField(unrelated.contentView()).text == "Unchanged"
 
+  test "closing from an alert response releases the callback and button action":
+    let alert = newAlert("Complete", buttons = ["Close"])
+    var responses: seq[int]
+    alert.prepareForModal(
+      proc(response: int) =
+        responses.add response
+        alert.window.close()
+    )
+
+    let button = Button(alert.buttonViews[0])
+    require alert.window.clickView(button)
+    check responses == @[alert.buttonResponse(0)]
+    check alert.window.isClosed()
+    check alert.responseHandler.isNil
+    check button.target.isNil
+
   test "closing a modal aborts its running session and repeated ending is harmless":
     let
       app = newApplication("Modal lifetime test")
