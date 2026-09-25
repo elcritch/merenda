@@ -3,10 +3,7 @@ import std/[math, monotimes, options, os, tables, times]
 import pkg/chronicles
 import pkg/vmath as vmath
 
-when defined(useNativeDynlib):
-  import figdraw/windowing as figrender
-else:
-  import figdraw as figrender
+import figdraw as figrender
 from figdraw import Renders, ZLevel
 import figdraw/windowing as siwinshim
 type SiwinWindow = siwinshim.Window
@@ -20,8 +17,7 @@ import ../responder/keybindings
 import ../drawing/drawing
 import ../drawing/images
 import ../drawing/rendering as nimkitRendering
-when not defined(useNativeDynlib):
-  import ../drawing/renderscenes
+import ../drawing/renderscenes
 import ../foundation/events
 import ../foundation/notifications
 import ../text/fieldeditors
@@ -1572,21 +1568,20 @@ proc buildRenders*(window: Window, theme: Theme): Renders =
   window.refreshAutomaticContentMinSize()
   nimkitRendering.buildRenders(window.xContentView, theme)
 
-when not defined(useNativeDynlib):
-  proc buildRenderScene*(window: Window): RenderScene =
-    window.prepareToolTipForDisplay()
-    window.refreshAutomaticContentMinSize()
-    nimkitRendering.buildRenderScene(window.xContentView, window.effectiveAppearance())
+proc buildRenderScene*(window: Window): RenderScene =
+  window.prepareToolTipForDisplay()
+  window.refreshAutomaticContentMinSize()
+  nimkitRendering.buildRenderScene(window.xContentView, window.effectiveAppearance())
 
-  proc buildRenderScene*(window: Window, appearance: Appearance): RenderScene =
-    window.prepareToolTipForDisplay()
-    window.refreshAutomaticContentMinSize()
-    nimkitRendering.buildRenderScene(window.xContentView, appearance)
+proc buildRenderScene*(window: Window, appearance: Appearance): RenderScene =
+  window.prepareToolTipForDisplay()
+  window.refreshAutomaticContentMinSize()
+  nimkitRendering.buildRenderScene(window.xContentView, appearance)
 
-  proc buildRenderScene*(window: Window, theme: Theme): RenderScene =
-    window.prepareToolTipForDisplay()
-    window.refreshAutomaticContentMinSize()
-    nimkitRendering.buildRenderScene(window.xContentView, theme)
+proc buildRenderScene*(window: Window, theme: Theme): RenderScene =
+  window.prepareToolTipForDisplay()
+  window.refreshAutomaticContentMinSize()
+  nimkitRendering.buildRenderScene(window.xContentView, theme)
 
 proc nativeWindowOrNil*(window: Window): SiwinWindow =
   if window.xHostWindow.isNil:
@@ -2528,25 +2523,18 @@ proc renderNativeWindow*(window: Window) =
 
   window.xHostWindow.refreshContentScale()
   let logicalSize = window.syncNativeGeometry()
-  when not defined(useNativeDynlib):
-    if window.xThreadHost.isNil:
-      let renderScene = window.buildRenderScene()
-      let needsFollowUpRender = window.needsDisplayUpdate()
-      window.xHostWindow.render(renderScene, logicalSize)
-      renderScene.acknowledgeRenderGeneration(renderScene.frameGeneration())
-      if needsFollowUpRender:
-        window.requestNativeDisplayUpdate()
-    else:
-      let renderScene = window.buildRenderScene()
-      let needsFollowUpRender = window.needsDisplayUpdate()
-      discard window.xThreadHost.submitRenderScene(renderScene, logicalSize)
-      window.xHostWindow.renderSubmitted()
-      if needsFollowUpRender:
-        window.requestNativeDisplayUpdate()
-  else:
-    var renders = window.buildRenders()
+  if window.xThreadHost.isNil:
+    let renderScene = window.buildRenderScene()
     let needsFollowUpRender = window.needsDisplayUpdate()
-    window.xHostWindow.render(renders, logicalSize)
+    window.xHostWindow.render(renderScene, logicalSize)
+    renderScene.acknowledgeRenderGeneration(renderScene.frameGeneration())
+    if needsFollowUpRender:
+      window.requestNativeDisplayUpdate()
+  else:
+    let renderScene = window.buildRenderScene()
+    let needsFollowUpRender = window.needsDisplayUpdate()
+    discard window.xThreadHost.submitRenderScene(renderScene, logicalSize)
+    window.xHostWindow.renderSubmitted()
     if needsFollowUpRender:
       window.requestNativeDisplayUpdate()
 

@@ -94,7 +94,5 @@ else:
   import nimkit/windoweffectsdemo
   import nimkit/workspaces
 
-  when not defined(useNativeDynlib):
-    # Retained scenes and renderer transfer are outside the native ABI.
-    import nimkit/renderfragments
-    import nimkit/threading
+  import nimkit/renderfragments
+  import nimkit/threading

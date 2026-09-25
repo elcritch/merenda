@@ -19,96 +19,95 @@ type
   ThreadResourceView = ref object of View
     image: ImageResource
 
-when not defined(useNativeDynlib):
-  type ReleaseProbe = object
-    started, proceed, completed: RChan[bool]
-    armed: bool
-    framesFinished: bool
+type ReleaseProbe = object
+  started, proceed, completed: RChan[bool]
+  armed: bool
+  framesFinished: bool
 
-  proc `=destroy`(probe: ReleaseProbe) =
-    if probe.armed:
-      doAssert probe.framesFinished, "renderer destroyed before finishing its frames"
-      probe.completed.send(true)
-    `=destroy`(probe.started)
-    `=destroy`(probe.proceed)
-    `=destroy`(probe.completed)
+proc `=destroy`(probe: ReleaseProbe) =
+  if probe.armed:
+    doAssert probe.framesFinished, "renderer destroyed before finishing its frames"
+    probe.completed.send(true)
+  `=destroy`(probe.started)
+  `=destroy`(probe.proceed)
+  `=destroy`(probe.completed)
 
-  type DelayedReleaseContext = ref object of BackendContext
-    probe: ReleaseProbe
+type DelayedReleaseContext = ref object of BackendContext
+  probe: ReleaseProbe
 
-  method kind(context: DelayedReleaseContext): RendererBackendKind =
-    PreferredBackendKind
+method kind(context: DelayedReleaseContext): RendererBackendKind =
+  PreferredBackendKind
 
-  method finishPendingFrames(context: DelayedReleaseContext) =
-    context.probe.started.send(true)
-    var allowed: bool
-    let deadline = getMonoTime() + initDuration(seconds = 60)
-    while not context.probe.proceed.tryRecv(allowed) and getMonoTime() < deadline:
+method finishPendingFrames(context: DelayedReleaseContext) =
+  context.probe.started.send(true)
+  var allowed: bool
+  let deadline = getMonoTime() + initDuration(seconds = 60)
+  while not context.probe.proceed.tryRecv(allowed) and getMonoTime() < deadline:
+    sleep(1)
+  doAssert allowed, "renderer cleanup was not allowed to finish"
+  context.probe.framesFinished = true
+
+proc installReleaseProbe(
+    host: nimkitBackend.HostWindow, started, proceed, completed: RChan[bool]
+) =
+  let context = DelayedReleaseContext()
+  context.probe.started = started
+  context.probe.proceed = proceed
+  context.probe.completed = completed
+  context.probe.armed = true
+  host.rendererOrNil().ctx = context
+
+proc checkRendererRelease(stopRuntime: bool) =
+  var runtime = nimkitBackend.newThreadRendererRuntime()
+  let started = newRChan[bool](1)
+  let proceed = newRChan[bool](1)
+  let completed = newRChan[bool](1)
+  var host: nimkitBackend.HostWindow
+  runtime.start()
+  defer:
+    discard proceed.trySend(true)
+    runtime.stop()
+    runtime.join()
+    if not host.isNil:
+      host.close()
+  host = nimkitBackend.createHostWindow(
+    nimkitTypes.rect(20, 20, 80, 60),
+    "Renderer release order",
+    nimkitBackend.HostWindowCallbacks(),
+  )
+  host.installReleaseProbe(started, proceed, completed)
+  let client = host.attachThreadRenderer(runtime.client, nimkitTypes.initSize(80, 60))
+  require not client.isNil
+  if stopRuntime:
+    runtime.stop()
+  else:
+    host.detachThreadRenderer(runtime.client, client)
+
+  let deadline = getMonoTime() + initDuration(seconds = 60)
+  var cleanupStarted: bool
+  while not started.tryRecv(cleanupStarted) and getMonoTime() < deadline:
+    discard nimkitBackend.pollNativeEvents()
+    sleep(1)
+  require cleanupStarted
+  check not runtime.client.hasFinished()
+  var event: nimkitBackend.ThreadHostEvent
+  check not client.pollEvent(event)
+  check host.nativeWindowOrNil().opened()
+  proceed.send(true)
+  var released: bool
+  while not released and getMonoTime() < deadline:
+    if client.pollEvent(event):
+      released = event.kind == nimkitBackend.theRenderTargetReleased
+    discard nimkitBackend.pollNativeEvents()
+    if not released:
       sleep(1)
-    doAssert allowed, "renderer cleanup was not allowed to finish"
-    context.probe.framesFinished = true
-
-  proc installReleaseProbe(
-      host: nimkitBackend.HostWindow, started, proceed, completed: RChan[bool]
-  ) =
-    let context = DelayedReleaseContext()
-    context.probe.started = started
-    context.probe.proceed = proceed
-    context.probe.completed = completed
-    context.probe.armed = true
-    host.rendererOrNil().ctx = context
-
-  proc checkRendererRelease(stopRuntime: bool) =
-    var runtime = nimkitBackend.newThreadRendererRuntime()
-    let started = newRChan[bool](1)
-    let proceed = newRChan[bool](1)
-    let completed = newRChan[bool](1)
-    var host: nimkitBackend.HostWindow
-    runtime.start()
-    defer:
-      discard proceed.trySend(true)
-      runtime.stop()
-      runtime.join()
-      if not host.isNil:
-        host.close()
-    host = nimkitBackend.createHostWindow(
-      nimkitTypes.rect(20, 20, 80, 60),
-      "Renderer release order",
-      nimkitBackend.HostWindowCallbacks(),
-    )
-    host.installReleaseProbe(started, proceed, completed)
-    let client = host.attachThreadRenderer(runtime.client, nimkitTypes.initSize(80, 60))
-    require not client.isNil
-    if stopRuntime:
-      runtime.stop()
-    else:
-      host.detachThreadRenderer(runtime.client, client)
-
-    let deadline = getMonoTime() + initDuration(seconds = 60)
-    var cleanupStarted: bool
-    while not started.tryRecv(cleanupStarted) and getMonoTime() < deadline:
-      discard nimkitBackend.pollNativeEvents()
-      sleep(1)
-    require cleanupStarted
-    check not runtime.client.hasFinished()
-    var event: nimkitBackend.ThreadHostEvent
-    check not client.pollEvent(event)
-    check host.nativeWindowOrNil().opened()
-    proceed.send(true)
-    var released: bool
-    while not released and getMonoTime() < deadline:
-      if client.pollEvent(event):
-        released = event.kind == nimkitBackend.theRenderTargetReleased
-      discard nimkitBackend.pollNativeEvents()
-      if not released:
-        sleep(1)
-    require released
-    var cleanupCompleted: bool
-    check completed.tryRecv(cleanupCompleted)
-    check cleanupCompleted
-    check host.nativeWindowOrNil().opened()
-    host.close()
-    check not host.nativeWindowOrNil().opened()
+  require released
+  var cleanupCompleted: bool
+  check completed.tryRecv(cleanupCompleted)
+  check cleanupCompleted
+  check host.nativeWindowOrNil().opened()
+  host.close()
+  check not host.nativeWindowOrNil().opened()
 
 protocol RaisingDrawing of ViewDrawingProtocol:
   method draw(view: RaisingDrawView, context: DrawContext) =
@@ -165,16 +164,13 @@ proc waitForRenderedFrame(
 
 suite "NimKit threading":
   test "dedicated renderer support follows the active FigDraw build":
-    when defined(useNativeDynlib):
-      check not nimkitBackend.dedicatedRendererSupported()
-    else:
-      check nimkitBackend.dedicatedRendererSupported() == (
-        not runtimeForceOpenGlRequested() and
-        figdrawSiwin.backendSupportsDedicatedRenderThread(PreferredBackendKind)
-      )
+    check nimkitBackend.dedicatedRendererSupported() == (
+      not runtimeForceOpenGlRequested() and
+      figdrawSiwin.backendSupportsDedicatedRenderThread(PreferredBackendKind)
+    )
 
   test "forced OpenGL keeps automatic rendering on the main thread":
-    when not defined(useNativeDynlib) and UseOpenGlFallback:
+    when UseOpenGlFallback:
       let
         existed = existsEnv("FIGDRAW_FORCE_OPENGL")
         previous = getEnv("FIGDRAW_FORCE_OPENGL")
@@ -202,20 +198,14 @@ suite "NimKit threading":
     check renderThread != primaryThread
 
   test "render target release is acknowledged after renderer destruction":
-    when not defined(useNativeDynlib):
-      if nimkitBackend.dedicatedRendererSupported():
-        checkRendererRelease(stopRuntime = false)
-      else:
-        skip()
+    if nimkitBackend.dedicatedRendererSupported():
+      checkRendererRelease(stopRuntime = false)
     else:
       skip()
 
   test "stopping the runtime waits for renderer destruction":
-    when not defined(useNativeDynlib):
-      if nimkitBackend.dedicatedRendererSupported():
-        checkRendererRelease(stopRuntime = true)
-      else:
-        skip()
+    if nimkitBackend.dedicatedRendererSupported():
+      checkRendererRelease(stopRuntime = true)
     else:
       skip()
 
@@ -246,14 +236,13 @@ suite "NimKit threading":
           newRectangleRenders(), nimkitTypes.initSize(80, 60)
         )
         require host.waitForRenderedFrame(client, frame)
-      when not defined(useNativeDynlib):
-        let root = newView(frame = nimkitTypes.rect(0, 0, 80, 60))
-        for frame in 4'u64 .. 6'u64:
-          root.backgroundColor = color(frame.float32 / 6.0'f32, 0.2, 0.6)
-          root.needsDisplay = true
-          let scene = root.buildRenderScene()
-          doAssert client.submitRenderScene(scene, nimkitTypes.initSize(80, 60))
-          require host.waitForRenderedFrame(client, frame)
+      let root = newView(frame = nimkitTypes.rect(0, 0, 80, 60))
+      for frame in 4'u64 .. 6'u64:
+        root.backgroundColor = color(frame.float32 / 6.0'f32, 0.2, 0.6)
+        root.needsDisplay = true
+        let scene = root.buildRenderScene()
+        doAssert client.submitRenderScene(scene, nimkitTypes.initSize(80, 60))
+        require host.waitForRenderedFrame(client, frame)
       runtime.stop()
       runtime.join()
       check runtime.client.hasFinished()

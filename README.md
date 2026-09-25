@@ -59,6 +59,10 @@ Build your app with threads enabled and ARC or ORC, for example
 `nim r --threads:on --mm:arc main.nim`. The examples in this repository already
 have those settings.
 
+FigDraw is compiled into the application. Merenda's experimental
+`useNativeDynlib` mode and `build_dynlib` task have been removed; omit
+`-d:useNativeDynlib` from existing build commands.
+
 ## A few small apps
 
 ### Hello, Merenda

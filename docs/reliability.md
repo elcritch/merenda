@@ -75,7 +75,7 @@ fragment updates, and renderer-thread resource ownership. Full GUI integration s
 runs separately. Sanitizers complement the observable lifecycle assertions;
 they do not establish a universal RSS ceiling or prove absence of every leak.
 
-Static Metal/Vulkan renderers support dedicated rendering under both ARC and ORC.
+Metal/Vulkan renderers support dedicated rendering under both ARC and ORC.
 An earlier ORC cycle-root unregister crash came from moving a renderer while it
 was still registered in the creating thread's cycle-candidate buffer. Renderer
 commands now assemble their exclusively owned, isolated payload and call
@@ -108,12 +108,13 @@ runtimes also waits for the old host to be released.
 
 The acyclic render-data annotations and Siwin borrow are in
 [FigDraw PR #96](https://github.com/elcritch/figdraw/pull/96), along with
-`finishPendingFrames`. Merenda pins commit
-`3545d4a4fd17c0f1a9aa783773fa39a8563201fd` until these changes are released as
-FigDraw 0.43.0. The native dynlib still does not support dedicated rendering.
+`finishPendingFrames`. Merenda tracks its `fix/acyclic-render-ownership` branch
+until these changes are released as FigDraw 0.43.0. FigDraw is compiled directly
+into the application; Merenda's
+experimental native dynlib mode has been removed.
 
-This ordering is validated on macOS with the statically linked renderer. Siwin's
-Windows/X11 OS-close notification paths can run after native teardown starts;
+This ordering is validated on macOS. Siwin's Windows/X11 OS-close notification
+paths can run after native teardown starts;
 those paths need an earlier close barrier in Siwin before the same native-handle
-lifetime guarantee can be made. The dynlib facade does not yet expose the new
-GPU completion operation. No closed OpenGL window is reactivated during cleanup.
+lifetime guarantee can be made. No closed OpenGL window is reactivated during
+cleanup.

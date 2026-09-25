@@ -151,10 +151,7 @@ proc logRuntimeEnvironment*() =
     osRelease = environment.osRelease,
     osVersion = environment.osVersion,
     architecture = environment.architecture
-  info "Merenda runtime",
-    nimVersion = NimVersion,
-    threads = compileOption("threads"),
-    nativeDynlib = defined(useNativeDynlib)
+  info "Merenda runtime", nimVersion = NimVersion, threads = compileOption("threads")
   info "Merenda desktop and display",
     xdgSessionType = environment.xdgSessionType,
     display = environment.display,

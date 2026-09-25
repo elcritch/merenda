@@ -375,9 +375,8 @@ suite "nimkit document tabs":
     check tabs[0.Natural].styleClasses == @["preview"]
     check tabs.documentTabModels[0].styleClasses == @["preview"]
     check textStyle.fontSlant == fsItalic
-    when not defined(useNativeDynlib):
-      let typefaceInfo = getTypefaceInfo(textStyle.textFont.font.typefaceId)
-      check typefaceInfo.italic or typefaceInfo.oblique
+    let typefaceInfo = getTypefaceInfo(textStyle.textFont.font.typefaceId)
+    check typefaceInfo.italic or typefaceInfo.oblique
 
   test "document tab data sources reload and preserve selected identifiers":
     let

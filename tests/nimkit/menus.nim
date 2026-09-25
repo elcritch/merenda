@@ -269,13 +269,7 @@ suite "nimkit menus":
         barStyle = appearance.resolveBoxStyle(controlStyle(srMenuBar))
         itemStyle =
           appearance.resolveButtonStyle(controlStyle(srMenuBarItem, {ssHovered}))
-        itemBounds =
-          when defined(useNativeDynlib):
-            # Monolithic rendering emits absolute rectangles; retained scenes
-            # keep this node local beneath a placement transform.
-            menuBar.subviews()[0].frame()
-          else:
-            menuBar.subviews()[0].bounds()
+        itemBounds = menuBar.subviews()[0].bounds()
       var
         barFillFound = false
         itemFillFound = false

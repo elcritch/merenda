@@ -114,29 +114,16 @@ storage.
 
 ### 5. Fixed: stale native render-scene branch
 
-`isolateGlyphArrangement` has the correct static branch:
+`isolateGlyphArrangement` copies the retained UTF-8 sources:
 
 ```nim
 result.sourceRunes = layout.sourceRunes.copyUtf8Runes()
 result.runes = layout.runes.copyUtf8Runes()
 ```
 
-The obsolete `useNativeDynlib` `isolateSequence()` branch has been removed.
-Both retained fields now use `copyUtf8Runes()` directly. Public retained-scene
-modules remain excluded from the dynlib build because Figdraw's client-side
-`RenderFragments` implementation is intentionally outside the native ABI.
-
-### 6. Native facade validation
-
-The generated Figdraw ABI and native library now build through Merenda's
-`build_dynlib` task. The shared NimKit runner also compiles with
-`useNativeDynlib`, covering the migrated text-layout helpers through the native
-facade.
-
-TODO:
-
-- Verify that `len`, indexing, slicing, equality, and `items`/`pairs` all stay
-  in UTF-8 storage through the native facade.
+Both retained fields use `copyUtf8Runes()` directly. Retained-scene modules and
+their tests are always included. Merenda's native dynlib experiment has been
+removed, so native-facade validation is no longer part of this migration.
 
 ## API rules for the finished migration
 

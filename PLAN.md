@@ -17,7 +17,7 @@ deferred architecture, and open decisions rather than serving as a change log.
 ## Current State
 
 Reviewed on **2026-09-25** against source, test coverage, and repository history
-through `8e12578d` (Merenda `0.21.3`), plus the working-tree reliability updates
+through `38b60a31` (Merenda `0.21.3`), plus the working-tree reliability updates
 described below. Test execution status is recorded separately
 under Verification.
 
@@ -48,10 +48,10 @@ The main established layers are:
   document editing and undo, identity-preserving preview reconciliation,
   constraints and guides, Sigils-discovered properties, and the Tekton builder.
 - Retained per-view FigDraw render scenes, independently invalidated drawing
-  slots, and direct fragment traversal in static builds. With ARC or ORC, dedicated
+  slots, and direct fragment traversal. With ARC or ORC, dedicated
   Metal/Vulkan runtimes receive independently owned, generation-stamped updates;
-  `useNativeDynlib` retains the monolithic render path through FigDraw's facade.
-  Both paths retain managed resource ownership and acknowledgement contracts.
+  direct and dedicated rendering retain managed resource ownership and
+  acknowledgement contracts. FigDraw is compiled into the application.
 - A backend-neutral workspace/services boundary, basic macOS workspace
   operations, native macOS menu bridging, and portable URL/asset handling.
 - A Kosmo workspace pipeline with shared asynchronous file inventories,
@@ -114,10 +114,11 @@ a new terminal silently failed.
   Window close and runtime replacement wait for that acknowledgement or completed
   worker shutdown. FigDraw's dependency changes add two explicit acyclic markers
   on recursive render trees, a borrowed Siwin window, and a GPU completion wait.
-  Merenda pins dependency commit `3545d4a` from
+  Merenda tracks the `fix/acyclic-render-ownership` dependency branch from
   [FigDraw PR #96](https://github.com/elcritch/figdraw/pull/96), pending release 0.43.0.
-- [ ] Extend the close barrier to Siwin's Windows/X11 OS-driven teardown paths
-  and expose GPU completion through FigDraw's native dynlib facade.
+- [x] Remove Merenda's experimental `useNativeDynlib` mode, staging task,
+  `sharedlib` dependency feature, fallback code, and conditional test exclusions.
+- [ ] Extend the close barrier to Siwin's Windows/X11 OS-driven teardown paths.
 - [ ] Establish aggregate budgets for independent decoded-image, Markdown,
   Git-diff, and disk caches using measured representative workspace workloads.
 
@@ -193,7 +194,7 @@ a new terminal silently failed.
 
 - Added `WorkspaceProviderProtocol` and typed requests/responses for file/URL
   operations, applications, services, promised files, handoff, and recent
-  documents, plus portable system-location lookup. The static macOS provider
+  documents, plus portable system-location lookup. The macOS provider
   implements open/reveal/launch/activate operations; the broader service and
   recent-document adapters remain pending.
 - Added native macOS main, Windows, and Services menu integration with selectable
@@ -213,7 +214,7 @@ a new terminal silently failed.
 ### Rendering and Managed Resources
 
 - Kept application state, native windows, input, menus, IME, accessibility, and
-  lifecycle on the platform thread while allowing static Metal/Vulkan rendering
+  lifecycle on the platform thread while allowing Metal/Vulkan rendering
   on a dedicated runtime. Render trees are moved and coalesced per window;
   unsupported backends retain direct rendering.
 - Added managed FigDraw font/image leases, render-resource manifests,
@@ -222,15 +223,14 @@ a new terminal silently failed.
   event delivery.
 - Adopted FigDraw fragments with stable per-view placement/content identities,
   independent drawing slots, retained text-line/row contributions, and transform
-  updates for scrolling. Static direct rendering traverses the fragment graph;
+  updates for scrolling. Direct rendering traverses the fragment graph;
   `buildRenders` remains available for monolithic snapshots and diagnostics.
 - Added cumulative scene updates from the acknowledged generation, renderer-local
   replicas, stale-update rejection, full-snapshot ordering barriers, and resource
   retirement after acknowledgement. Fragment and threading tests cover retained
   identities, ordering, coalescing, and resource lifetimes.
-- Integrated the FigDraw native-window/dynlib facade while keeping fragment
-  implementation types outside the native ABI. Idle native events and worker
-  wakeups no longer force redraws; native surface damage still requests a frame.
+- Integrated FigDraw and Siwin directly. Idle native events and worker wakeups
+  no longer force redraws; native surface damage still requests a frame.
 
 ## Verification
 
@@ -245,15 +245,13 @@ a new terminal silently failed.
   `tests/ttekton.nim`; Kosmo coverage uses `tests/tkosmo.nim`, and native/process
   integration coverage uses `tests/tintegrations.nim`.
 - Fragment/cache and renderer-transfer coverage lives in
-  `tests/nimkit/renderfragments.nim` and `tests/nimkit/threading.nim`; those modules
-  are excluded from `useNativeDynlib` builds. Workspace monitoring coverage lives
-  in `tests/kosmo/workspacefiles.nim`.
+  `tests/nimkit/renderfragments.nim` and `tests/nimkit/threading.nim`.
+  Workspace monitoring coverage lives in `tests/kosmo/workspacefiles.nim`.
 - The checked-in CI workflow runs the four shared runners on macOS and Linux
   (X11 for native integration), and compiles examples on macOS, Linux, and
   Windows.
 - Shared runners now import all component test modules. CI's
-  `.github/scripts/check_test_imports.nims` rejects missing imports; static-only
-  renderer tests remain gated for `useNativeDynlib`.
+  `.github/scripts/check_test_imports.nims` rejects missing imports.
 - Added ARC/ORC sanitizer configurations for the focused ownership subset.
 - Local validation on **2026-09-24**, macOS/arm64 with Nim **2.2.12**:
   `atlas-run tests` passed all four runners, with **1,463 tests passing** and no
@@ -279,6 +277,11 @@ a new terminal silently failed.
   under ARC and ORC**; the ORC run used ASan/UBSan. The example bundle and
   shared-runner import check passed.
   Vulkan validation was unavailable because this workspace lacks `pkg/vulkan`.
+- After removing native dynlib support, `atlas-run tests` passed **1,467 tests**
+  across all four runners with no failures or skips. The obsolete define is
+  rejected with a migration message, and shared-runner import coverage passed.
+  The ORC ASan/UBSan ownership rerun passed all **94 tests**, and the example
+  bundle compiled successfully.
 
 ## Near-Term Work
 
@@ -356,10 +359,10 @@ completed baseline.
   Native events must continue through the same `Application` and `Window`
   transitions used by tests; current CI does not establish full platform parity.
 - Native macOS menu bridging is implemented. Keep the in-window menu path and
-  native/dynlib menu behavior covered as popup presentation evolves.
-- Extend native workspace capabilities beyond the basic static macOS provider.
-  Other platforms and the dynlib workspace provider currently report no native
-  operation features; selected-text/file services, promised files, and native
+  native menu behavior covered as popup presentation evolves.
+- Extend native workspace capabilities beyond the basic macOS provider.
+  Other platforms currently report no native operation features;
+  selected-text/file services, promised files, and native
   recent-document handling still need adapters.
 - Move window-frame autosave from the in-process helper store to a backend or
   user-defaults persistence adapter.
@@ -384,7 +387,7 @@ completed baseline.
 
 ### Incremental Render Fragments
 
-The adoption milestones are implemented for static builds: `DrawContext` records
+The adoption milestones are implemented: `DrawContext` records
 per-view/slot contributions, `RenderScene` retains clean fragments, direct
 rendering traverses them, and dedicated renderers apply independently owned
 scene updates. FigDraw cursors carry owner/generation checks and its layer
@@ -396,9 +399,7 @@ resource manifests, acknowledgement, and cumulative update coalescing.
   output-equivalence coverage when a new control or invalidation path needs it.
 - Preserve layer, clipping, popup, focus/selection overlay, and resource-lifetime
   invariants when changing slot placement or scene reconciliation.
-- Keep `useNativeDynlib` on the managed monolithic path unless a deliberate ABI
-  extension provides equivalent fragment transfer and lifetime guarantees.
-  Mutable fragment graphs must remain local to their owning thread.
+- Mutable fragment graphs must remain local to their owning thread.
 
 ### Rendering Constraints
 
@@ -412,9 +413,6 @@ resource manifests, acknowledgement, and cumulative update coalescing.
 - Keep logical resource ownership separate from renderer-local atlas residency.
   Rebuild at frame boundaries from live manifests/preloads, and reject stale
   generation-stamped uploads.
-- Keep `useNativeDynlib` managed resources on the explicit ABI operations for
-  renderer-targeted replay, rebuild, and manifest retention. It must not
-  silently fall back to unmanaged ownership.
 
 ## Long-Term Architecture
 

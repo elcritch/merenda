@@ -10,9 +10,8 @@
 import
   std/[algorithm, lists, math, monotimes, os, sets, strutils, tables, times, unicode]
 
-when not defined(useNativeDynlib):
-  import std/hashes
-  from pkg/pixie import resize
+import std/hashes
+from pkg/pixie import resize
 
 from figdraw import SystemTypeface, len, pairs
 
@@ -548,21 +547,17 @@ func resolvedImageSize(imageSize, requestedSize: Size): Size =
     imageSize
 
 proc imageForMarkdownDisplay(view: MarkdownView, image: ImageResource): ImageResource =
-  when defined(useNativeDynlib):
-    result = image
-  else:
-    if image.isNil:
-      return
-    let
-      sourceSize = image.size()
-      displaySize = sourceSize.scaledDown(view.xMarkdownStyle.maximumImageSize)
-      width = max(1, ceil(displaySize.width).int)
-      height = max(1, ceil(displaySize.height).int)
-    if width >= sourceSize.width.int and height >= sourceSize.height.int:
-      return image
-    let name =
-      "markdown.scaled:" & $Hash(image.imageId()) & ":" & $width & "x" & $height
-    result = newImageResource(image.pixels().resize(width, height), name = name)
+  if image.isNil:
+    return
+  let
+    sourceSize = image.size()
+    displaySize = sourceSize.scaledDown(view.xMarkdownStyle.maximumImageSize)
+    width = max(1, ceil(displaySize.width).int)
+    height = max(1, ceil(displaySize.height).int)
+  if width >= sourceSize.width.int and height >= sourceSize.height.int:
+    return image
+  let name = "markdown.scaled:" & $Hash(image.imageId()) & ":" & $width & "x" & $height
+  result = newImageResource(image.pixels().resize(width, height), name = name)
 
 proc imageLineFontSize(attributes: TextAttributes, imageHeight: float32): float32 =
   let

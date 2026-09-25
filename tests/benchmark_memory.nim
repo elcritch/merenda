@@ -3,8 +3,7 @@
 import std/[strformat, strutils]
 import merenda/nimkit
 import merenda/nimkit/app/diagnostics
-when not defined(useNativeDynlib):
-  import merenda/nimkit/drawing/renderscenes
+import merenda/nimkit/drawing/renderscenes
 
 proc report(label: string) =
   let usage = processResourceUsage()
@@ -32,36 +31,33 @@ proc measureMarkdown() =
     views.add view
     report("Markdown tabs " & $count)
 
-when not defined(useNativeDynlib):
-  proc measureScenes() =
-    let root = newView(frame = rect(0, 0, 1000, 1000))
-    for index in 0 ..< 1000:
-      root.addSubview(
-        newView(frame = rect((index mod 100).float32, (index div 100).float32, 10, 10))
-      )
-    let scene = root.buildRenderScene()
-    var full = scene.newRenderSceneUpdate(0, 0)
-    echo "scene views: ",
-      scene.viewEntryCount(), "; nodes: ", scene.traversalNodeCount()
-    echo "full update array bytes: ", full.estimatedTransferBytes()
-    let generation = scene.frameGeneration()
-    scene.acknowledgeRenderGeneration(generation)
-    root.subviews[0].needsDisplay = true
-    discard root.buildRenderScene()
-    let update = scene.newRenderSceneUpdate(scene.sceneIdentity(), generation)
-    echo "one-view update array bytes: ",
-      update.estimatedTransferBytes(),
-      "; frames: ",
-      update.viewCount(),
-      "; captured: ",
-      update.capturedViewCount()
-    report("retained scene and snapshots")
+proc measureScenes() =
+  let root = newView(frame = rect(0, 0, 1000, 1000))
+  for index in 0 ..< 1000:
+    root.addSubview(
+      newView(frame = rect((index mod 100).float32, (index div 100).float32, 10, 10))
+    )
+  let scene = root.buildRenderScene()
+  var full = scene.newRenderSceneUpdate(0, 0)
+  echo "scene views: ", scene.viewEntryCount(), "; nodes: ", scene.traversalNodeCount()
+  echo "full update array bytes: ", full.estimatedTransferBytes()
+  let generation = scene.frameGeneration()
+  scene.acknowledgeRenderGeneration(generation)
+  root.subviews[0].needsDisplay = true
+  discard root.buildRenderScene()
+  let update = scene.newRenderSceneUpdate(scene.sceneIdentity(), generation)
+  echo "one-view update array bytes: ",
+    update.estimatedTransferBytes(),
+    "; frames: ",
+    update.viewCount(),
+    "; captured: ",
+    update.capturedViewCount()
+  report("retained scene and snapshots")
 
 report("baseline")
 measureText()
 report("text released")
 measureMarkdown()
 report("Markdown released")
-when not defined(useNativeDynlib):
-  measureScenes()
-  report("scene released")
+measureScenes()
+report("scene released")

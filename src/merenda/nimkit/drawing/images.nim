@@ -140,12 +140,6 @@ proc newImageResource*(
     result.xImageId = nextAnonymousImageId()
   result.updateAutomaticPreload()
 
-when defined(useNativeDynlib):
-  proc newImageResource*[T](
-      image: T, name = "", cachePolicy = icpDefault
-  ): ImageResource =
-    newImageResource(image.toImage(), name, cachePolicy)
-
 proc newImageResourceFromData*(
     data: string, name = "", cachePolicy = icpDefault
 ): ImageResource =
