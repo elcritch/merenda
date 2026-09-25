@@ -6,7 +6,9 @@
   `--new`, and accept `-v` as an alias for `--version`.
 - Move Kosmo's Files and Find controls into a taller status bar and let the
   sidebar collapse while preserving its width and using the active theme accent.
+- Keep Kosmo's status text clear of the Files and Find icons.
 - Let Kosmo launch a configured Nim language server through Moe's LSP client.
+- Close unrelated inherited descriptors before the configured Nim server starts.
 - Release text views and active field editors after their owning windows close,
   clearing generated layout references and circular keyboard-navigation links.
 - Keep layout-constraint view links non-owning so dismissed dialog content is

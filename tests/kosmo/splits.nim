@@ -796,13 +796,25 @@ suite "Kosmo":
     check editorStyle.box.cornerRadii.isZero
 
   test "settled editor refresh does not re-dirty its containing layout":
-    let frontend = newKosmoApplication(newApplication("Kosmo Layout Test"))
+    let
+      app = newApplication("Kosmo Layout Test")
+      frontend = newKosmoApplication(app)
     defer:
       frontend.close()
 
     frontend.contentView.frame = rect(0, 0, 640, 480)
-    frontend.contentView.layoutSubtreeIfNeeded()
-    frontend.contentView.layoutSubtreeIfNeeded()
+    let deadline = getMonoTime() + initDuration(seconds = 10)
+    var cleanFrames = 0
+    while getMonoTime() < deadline and cleanFrames < 2:
+      discard app.runForFrames(1)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      if not frontend.contentView.needsLayout() and
+          not frontend.contentView.contentView().needsLayout():
+        inc cleanFrames
+      else:
+        cleanFrames = 0
+      sleep(1)
 
+    check cleanFrames == 2
     check not frontend.contentView.needsLayout()
     check not frontend.contentView.contentView().needsLayout()

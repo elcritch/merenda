@@ -1,7 +1,7 @@
 ## Verify that Kosmo's LSP launcher passes only stdio to the server.
 
 when defined(posix):
-  import std/[monotimes, os, osproc, posix, strutils, times, unittest]
+  import std/[monotimes, os, osproc, posix, streams, strutils, times, unittest]
 
   import merenda/kosmo/cli
 
@@ -17,7 +17,10 @@ when defined(posix):
         quit(2)
       execLspServer(@[getAppFilename(), checkProbe, $fd])
     of checkProbe:
-      quit(if fcntl(fd, F_GETFD) == -1: 0 else: 3)
+      let standardInput = stdin.readLine()
+      stdout.writeLine("stdio-ready")
+      stdout.flushFile()
+      quit(if fcntl(fd, F_GETFD) == -1 and standardInput == "ping": 0 else: 3)
     else:
       discard
 
@@ -38,12 +41,16 @@ when defined(posix):
       let process =
         startProcess(getAppFilename(), args = @[launchProbe, $extraFd], options = {})
       try:
+        process.inputStream().writeLine("ping")
+        process.inputStream().flush()
         let deadline = getMonoTime() + initDuration(seconds = 5)
         var exitCode = process.peekExitCode()
         while exitCode == -1 and getMonoTime() < deadline:
           sleep(5)
           exitCode = process.peekExitCode()
-        check exitCode == 0
+        require exitCode == 0
+        let outputLine = process.outputStream().readLine()
+        check outputLine == "stdio-ready"
       finally:
         if process.peekExitCode() == -1:
           process.kill()

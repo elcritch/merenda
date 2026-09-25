@@ -455,6 +455,8 @@ Add this field to the JSON config, using absolute paths without spaces:
 Kosmo enables Moe's LSP client when this field is set. In normal mode, press
 `g` then `d` to go to a definition, or `K` to show hover information. Remove
 the field or set it to an empty string to disable LSP on the next launch.
+Nimdex's `daemon` command communicates over standard input and output and stays
+attached to Kosmo; it does not need to detach itself.
 
 To add language highlighting, open **Kosmo Settings → TextMate Grammars** and
 search the built-in language grammars in the open-source `microsoft/vscode`
