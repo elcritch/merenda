@@ -220,8 +220,8 @@ suite "NimKit resources":
     check kindNames ==
       @[
         "box", "button", "checkBox", "control", "imageView", "label",
-        "progressIndicator", "radioButton", "splitView", "stackView", "switchButton",
-        "textField", "view",
+        "progressIndicator", "radioButton", "slider", "splitView", "stackView",
+        "stepper", "switchButton", "textField", "view",
       ]
     check registry.viewKindDescriptor("button").baseKind == "control"
     check registry.findViewKindDescriptor("missing").isNone

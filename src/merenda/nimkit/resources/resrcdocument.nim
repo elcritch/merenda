@@ -89,6 +89,21 @@ type
     property*: ResourceProperty
     actionName*: string
 
+  ResourceRecord* =
+    ResourceLayoutGuide | ResourceLayoutConstraint | WindowResource | CommandResource |
+    ImageAssetResource | LocalizedCatalogResource | KeyBindingTableResource |
+    ThemeFragmentResource
+
+  ResourceInsertOperation*[T: ResourceRecord] = object
+    node*: T
+    index*: Option[Natural]
+    actionName*: string
+
+  ResourceReplaceOperation*[T: ResourceRecord] = object
+    id*: ResourceId
+    node*: T
+    actionName*: string
+
   ResourceIndexEntry = object
     path: ResourceNodePath
     parent: Option[ResourceNodePath]
@@ -1064,3 +1079,183 @@ proc removeViewProperty*(
     )
   document.replaceDraft(candidate, actionName)
   document.appliedEdit(rekRemove, viewId, previousPath, previousDiagnosticPath)
+
+func recordKind[T: ResourceRecord](_: typedesc[T]): ResourceNodeKind =
+  when T is ResourceLayoutGuide:
+    rnkLayoutGuide
+  elif T is ResourceLayoutConstraint:
+    rnkLayoutConstraint
+  elif T is WindowResource:
+    rnkWindow
+  elif T is CommandResource:
+    rnkCommand
+  elif T is ImageAssetResource:
+    rnkImage
+  elif T is LocalizedCatalogResource:
+    rnkLocalization
+  elif T is KeyBindingTableResource:
+    rnkKeyBindings
+  elif T is ThemeFragmentResource:
+    rnkTheme
+
+template records(bundle: ResourceBundle, T: typedesc): untyped =
+  when T is ResourceLayoutGuide:
+    bundle.layoutGuides
+  elif T is ResourceLayoutConstraint:
+    bundle.layoutConstraints
+  elif T is WindowResource:
+    bundle.windows
+  elif T is CommandResource:
+    bundle.commands
+  elif T is ImageAssetResource:
+    bundle.images
+  elif T is LocalizedCatalogResource:
+    bundle.localizations
+  elif T is KeyBindingTableResource:
+    bundle.keyBindings
+  elif T is ThemeFragmentResource:
+    bundle.themes
+
+proc apply*[T: ResourceRecord](
+    document: ResourceDocument, operation: ResourceInsertOperation[T]
+): ResourceEditResult {.discardable.} =
+  let id = operation.node.id
+  if id.isEmpty:
+    return document.rejectedEdit(
+      rekInsert, id, reeIdentifierMissing, "inserted resources require identifiers"
+    )
+  if document.contains(id):
+    return document.rejectedEdit(
+      rekInsert, id, reeIdentifierDuplicate, "resource identifier is already in use"
+    )
+  let
+    count = document.xDraft.records(T).len
+    index = operation.index.resolvedIndex(count)
+  if index > count:
+    return document.rejectedEdit(
+      rekInsert, id, reeIndexOutOfBounds, "resource insertion index is out of bounds"
+    )
+  var candidate = document.xDraft
+  candidate.records(T).insert(operation.node, index)
+  document.replaceDraft(candidate, operation.actionName)
+  document.appliedEdit(rekInsert, id, none(ResourceNodePath), "")
+
+proc apply*[T: ResourceRecord](
+    document: ResourceDocument, operation: ResourceReplaceOperation[T]
+): ResourceEditResult {.discardable.} =
+  let path = document.findNodePath(operation.id)
+  if path.isNone or path.get().kind != recordKind(T):
+    return document.rejectedEdit(
+      rekReplace, operation.id, reeResourceUnavailable, "resource is unavailable"
+    )
+  if operation.node.id != operation.id:
+    return document.rejectedEdit(
+      rekReplace, operation.id, reeIdentifierMismatch,
+      "replacement resource must preserve its identifier",
+    )
+  let previousDiagnosticPath = document.diagnosticPath(path.get())
+  var candidate = document.xDraft
+  for record in candidate.records(T).mitems:
+    if record.id == operation.id:
+      if record == operation.node:
+        return document.rejectedEdit(
+          rekReplace, operation.id, reeUnchanged, "resource is unchanged"
+        )
+      record = operation.node
+      break
+  document.replaceDraft(candidate, operation.actionName)
+  document.appliedEdit(rekReplace, operation.id, path, previousDiagnosticPath)
+
+proc insertResource*[T: ResourceRecord](
+    document: ResourceDocument,
+    node: T,
+    index = none(Natural),
+    actionName = "Insert Resource",
+): ResourceEditResult {.discardable.} =
+  ## Inserts a layout or other flat resource record. Semantic errors remain
+  ## editable drafts, while identity and index errors reject the operation.
+  document.apply(
+    ResourceInsertOperation[T](node: node, index: index, actionName: actionName)
+  )
+
+proc replaceResource*[T: ResourceRecord](
+    document: ResourceDocument, id: ResourceId, node: T, actionName = "Change Resource"
+): ResourceEditResult {.discardable.} =
+  document.apply(
+    ResourceReplaceOperation[T](id: id, node: node, actionName: actionName)
+  )
+
+proc editRecordSequence[T](
+    records: var seq[T], id: ResourceId, kind: ResourceEditKind, index: Natural
+): ResourceEditError =
+  for previousIndex, record in records:
+    if record.id == id:
+      if kind == rekMove:
+        if index.int >= records.len:
+          return reeIndexOutOfBounds
+        if index.int == previousIndex:
+          return reeUnchanged
+        let moved = record
+        records.delete(previousIndex)
+        records.insert(moved, index.int)
+      else:
+        records.delete(previousIndex)
+      return reeNone
+  reeResourceUnavailable
+
+proc editRecord(
+    document: ResourceDocument,
+    id: ResourceId,
+    kind: ResourceEditKind,
+    index: Natural,
+    actionName: string,
+): ResourceEditResult =
+  let path = document.findNodePath(id)
+  if path.isNone:
+    return
+      document.rejectedEdit(kind, id, reeResourceUnavailable, "resource is unavailable")
+  let previousDiagnosticPath = document.diagnosticPath(path.get())
+  var candidate = document.xDraft
+  let error =
+    case path.get().kind
+    of rnkLayoutGuide:
+      candidate.layoutGuides.editRecordSequence(id, kind, index)
+    of rnkLayoutConstraint:
+      candidate.layoutConstraints.editRecordSequence(id, kind, index)
+    of rnkWindow:
+      candidate.windows.editRecordSequence(id, kind, index)
+    of rnkCommand:
+      candidate.commands.editRecordSequence(id, kind, index)
+    of rnkImage:
+      candidate.images.editRecordSequence(id, kind, index)
+    of rnkLocalization:
+      candidate.localizations.editRecordSequence(id, kind, index)
+    of rnkKeyBindings:
+      candidate.keyBindings.editRecordSequence(id, kind, index)
+    of rnkTheme:
+      candidate.themes.editRecordSequence(id, kind, index)
+    else:
+      reeResourceUnavailable
+  if error != reeNone:
+    return
+      document.rejectedEdit(kind, id, error, "resource operation could not be applied")
+  document.replaceDraft(candidate, actionName)
+  document.appliedEdit(kind, id, path, previousDiagnosticPath)
+
+proc removeResource*(
+    document: ResourceDocument, id: ResourceId, actionName = "Remove Resource"
+): ResourceEditResult {.discardable.} =
+  ## Removes a view subtree or a flat record; dangling references become diagnostics.
+  let path = document.findNodePath(id)
+  if path.isSome and path.get().kind == rnkView:
+    return document.removeView(id, actionName)
+  document.editRecord(id, rekRemove, 0, actionName)
+
+proc moveResource*(
+    document: ResourceDocument,
+    id: ResourceId,
+    index: Natural,
+    actionName = "Reorder Resource",
+): ResourceEditResult {.discardable.} =
+  ## Reorders a flat record within its resource collection.
+  document.editRecord(id, rekMove, index, actionName)

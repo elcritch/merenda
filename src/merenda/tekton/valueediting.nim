@@ -1,6 +1,6 @@
 ## Text formatting and parsing for Tekton resource property editors.
 
-import std/[sequtils, strutils]
+import std/[math, sequtils, strutils]
 
 import ../nimkit/foundation/types
 import ../nimkit/resources/resrccore
@@ -59,7 +59,10 @@ proc parseFloatParts(text: string, expected: Positive): seq[float32] =
     return
   try:
     for part in parts:
-      result.add parseFloat(part.strip()).float32
+      let value = parseFloat(part.strip()).float32
+      if classify(value) in {fcNan, fcInf, fcNegInf}:
+        return @[]
+      result.add value
   except ValueError:
     result.setLen(0)
 
@@ -78,9 +81,9 @@ proc parseResourceValueAs(
         parsed: true, value: resourceValue(parseInt(text.strip()))
       )
     of rvFloat:
-      result = ResourceValueParseResult(
-        parsed: true, value: resourceValue(parseFloat(text.strip()).float32)
-      )
+      let value = parseFloat(text.strip()).float32
+      if classify(value) notin {fcNan, fcInf, fcNegInf}:
+        result = ResourceValueParseResult(parsed: true, value: resourceValue(value))
     of rvBool:
       case text.strip().toLowerAscii()
       of "true":
@@ -141,7 +144,7 @@ proc parseResourceValueAs(
           ),
         )
   except ValueError:
-    discard
+    result = ResourceValueParseResult()
 
 proc parseResourceValue*(
     text: string, acceptedKinds: set[ResourceValueKind], preferred = ResourceValue()

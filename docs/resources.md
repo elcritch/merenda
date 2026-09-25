@@ -218,34 +218,61 @@ discard document.showWindows(app)
 app.run()
 ```
 
-The 13-kind palette and editable view inspector are driven by the same registry used
-for runtime construction. Selecting a non-view hierarchy item shows path-addressed,
-read-only details for layout, controller/window ownership, target/action connections,
-menus, commands, images, localization, key bindings, and themes.
+The view palette follows the runtime registry, including custom registered kinds,
+sliders, and steppers. The resource picker below it adds layout guides, constraints,
+windows, commands, images, localization catalogs, key binding tables, and themes.
+Select a view before adding a guide, constraint, or window to use it as the owner or
+content view. Newly added resources with missing references remain editable and show
+diagnostics until their required fields are filled in.
+
+The inspector edits guide insets, constraint endpoints and anchors, relation,
+multiplier, constant, priority, and activation; window titles and connections; command
+targets; image sources; and catalog/theme metadata. Enum fields offer choices and
+boolean fields use checkboxes. Controllers, menu trees, key binding entries,
+localization strings, and theme rules still have read-only detail rows.
 
 The view inspector chooses controls from each `ResourcePropertyDescriptor`: boolean
 properties use checkboxes, enum-backed properties use combo boxes populated from the
 registry, colors use a popup color well, and open-ended values retain text editing. If
 typed text cannot be parsed, it is committed as a string value so the exact draft text
 remains visible and validation can diagnose the mismatch. Valid revisions are
-reconciled while preserving compatible view and controller identities; layout
-constraints are rebuilt against the resulting view map. Invalid drafts never replace
+reconciled while preserving compatible view and controller identities. Property edits
+stage only changed widgets; edits to layout records rebuild constraints against the
+existing views. Unchanged hierarchies, assets, and constraints are retained. Invalid drafts never replace
 the last working preview. Hierarchy clicks and preview clicks both update selection by
-`ResourceId`, and preview selection uses `installViewSelection` and
-`installSelectionRing` rather than changing serialized records or preview state.
+`ResourceId`. Design mode captures input at the canvas, so selecting a checkbox does
+not toggle it or invoke application actions. Enable **Interact** to run the controls.
+The inspector displays live defaults without adding them to the document; authored
+values, including invalid text, take precedence. Invalid boolean/enum drafts switch
+to text editing so they can be corrected.
+
+Select a guide to see its inset outline, or a constraint to highlight its endpoints.
+**Pin to Parent** creates four edge constraints for a selected child of a freeform
+container as one undo action. Active layout constraints disable freeform dragging
+and keyboard resizing. After layout, unsatisfied authored constraints appear in
+Diagnostics, including conflicts with a control's size limits. Invalid numeric text
+in typed resource fields stays in the field editor with an error; validly parsed but
+inconsistent records remain drafts and keep the last valid preview.
 
 Palette buttons insert into selected containers and beside selected leaf views. The
-Delete and Backspace keys remove the selected view and restore selection to its parent;
-the toolbar also exposes the same deletion operation.
+Delete and Backspace keys remove the selected view or flat resource. Deleting a view
+also removes its guides and touching constraints in the same undo action, and selects
+the nearest sibling or parent. Use Duplicate, Up, and Down for view duplication and
+ordering; Option-arrow moves freeform views, and Shortcut-Option-arrow resizes them
+(Shift changes the step from one to ten points).
 
 The editor installs `DocumentFileProtocol` for canonical CBOR reads and writes and
 shares the resource draft's `UndoManager` with the application document. A save or
 revert updates the manager's clean state and the normal document edited indicator.
+**Save** prompts for a destination for new documents, **Save As** writes another file,
+and **Open** opens a file in a separate editor window. Save commits the active field
+first and stops if its text is invalid. Resource image paths are resolved relative to
+the opened document unless the caller supplies an explicit asset base directory.
 
 Run the complete vertical slice with:
 
 ```sh
-nim r src/merenda/tekton/tekton.nim
+nim r src/merenda/tekton.nim
 ```
 
 The app module exports `tektonStarterBundle`, `newTektonDocument`, and `runTekton`, so
@@ -253,6 +280,17 @@ applications and tests can host the builder without relying on example-only code
 an existing CBOR path to load it at startup. The reusable editor, preview reconciler,
 and resource-value editing APIs are available through `import merenda/tekton`; they are
 kept separate from the backend-neutral `merenda/nimkit/resources` API.
+
+For typed operations, `ResourceDocument.insertResource`, `replaceResource`,
+`removeResource`, and `moveResource` support flat resource records. Insert and replace
+also have `ResourceInsertOperation[T]` and `ResourceReplaceOperation[T]` forms. Identity
+and index errors reject an operation; semantic errors stay in the draft. Use the
+shared undo manager's `beginUndoGrouping`/`endUndoGrouping` to group operations.
+
+Tekton edits resource documents; it does not attach to a separate running process or
+generate application logic. For inspection inside an existing app, use NimKit's
+`showViewInspector(root, app)` (see `examples/view_inspector_demo.nim`). The remaining
+work toward a complete Interface Builder is recorded in [the Tekton review](tekton-review.md).
 
 ## Resource Limits
 

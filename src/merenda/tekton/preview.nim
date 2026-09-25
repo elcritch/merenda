@@ -81,8 +81,11 @@ type
     xBundle: ResourceBundle
     xInstance: ResourceInstance
     xViews: Table[ResourceId, View]
+    xViewIds: Table[pointer, ResourceId]
+    xViewSnapshots: Table[ResourceId, ViewSnapshot]
     xControllers: Table[ResourceId, ViewController]
     xLayout: ResourceLayoutInstance
+    xHost: View
     xRevision: Natural
     xHasRevision: bool
 
@@ -211,7 +214,11 @@ proc collectViews(
 ) =
   for index, node in nodes:
     let nodePath = path & "[" & $index & "]"
-    snapshots[node.id] = ViewSnapshot(node: node, parentId: parentId, path: nodePath)
+    snapshots[node.id] = ViewSnapshot(
+      node: ViewNodeResource(id: node.id, kind: node.kind, properties: node.properties),
+      parentId: parentId,
+      path: nodePath,
+    )
     collectViews(node.children, node.id, nodePath & ".children", snapshots)
 
 proc viewSnapshots(bundle: ResourceBundle): Table[ResourceId, ViewSnapshot] =
@@ -582,7 +589,7 @@ proc addChanges(
       change.kinds.incl rpckRemoved
     elif id in reused:
       change.kinds.incl rpckReused
-      if previous[id].parentId != next[id].parentId:
+      if previous[id].parentId != next[id].parentId or previous[id].path != next[id].path:
         change.kinds.incl rpckMoved
       if id in updated:
         change.kinds.incl rpckUpdated
@@ -637,6 +644,168 @@ proc addChanges(
       change.kinds.incl rpckReplaced
     changes.add change
 
+proc sameNonViewResources(previous, next: ResourceBundle): bool =
+  previous.format == next.format and previous.version == next.version and
+    previous.namespace == next.namespace and previous.controllers == next.controllers and
+    previous.windows == next.windows and previous.menus == next.menus and
+    previous.commands == next.commands and previous.images == next.images and
+    previous.localizations == next.localizations and
+    previous.keyBindings == next.keyBindings and previous.themes == next.themes
+
+proc updateProperties(
+    preview: ResourcePreview,
+    bundle: ResourceBundle,
+    revision: Natural,
+    snapshots: Table[ResourceId, ViewSnapshot],
+    updateResult: var ResourcePreviewUpdateResult,
+): bool =
+  ## Handles revisions that keep the resource graph and all non-view resources.
+  ## Stage just the changed views, then apply getter-backed values transactionally.
+  if not preview.xHasRevision or not sameNonViewResources(preview.xBundle, bundle) or
+      snapshots.len != preview.xViewSnapshots.len:
+    return
+  for id, snapshot in snapshots:
+    if not preview.xViewSnapshots.hasKey(id):
+      return
+    let previous = preview.xViewSnapshots[id]
+    if snapshot.node.kind != previous.node.kind or snapshot.path != previous.path:
+      return
+
+  var options = preview.xValidationOptions
+  if options.assetBasePath.len == 0:
+    options.assetBasePath = preview.xContext.assetBasePath
+  updateResult.diagnostics = bundle.validateResources(preview.xRegistry, options)
+  if updateResult.diagnostics.hasErrors:
+    return true
+
+  let context = initResourcePropertyContext(bundle, preview.xInstance, preview.xContext)
+  var
+    updates: seq[PropertyUpdate]
+    reused = initHashSet[ResourceId]()
+    updated = initHashSet[ResourceId]()
+  let layoutChanged =
+    preview.xBundle.layoutGuides != bundle.layoutGuides or
+    preview.xBundle.layoutConstraints != bundle.layoutConstraints
+  var nextLayout = preview.xLayout
+  if layoutChanged:
+    let views = preview.xViews
+    nextLayout = bundle.instantiateResourceLayout(
+      proc(id: ResourceId): View =
+        views.getOrDefault(id),
+      activate = false,
+    )
+    for diagnostic in nextLayout.diagnostics():
+      updateResult.diagnostics.entries.add diagnostic
+    if not nextLayout.instantiated:
+      return true
+  for id, snapshot in snapshots:
+    reused.incl id
+    let previous = preview.xViewSnapshots[id]
+    if previous.node.properties != snapshot.node.properties:
+      var names: seq[string]
+      for name in preview.xRegistry.changedPropertyNames(previous.node, snapshot.node):
+        if preview.xRegistry.propertyValue(previous.node, name) !=
+            preview.xRegistry.propertyValue(snapshot.node, name):
+          names.add name
+      if names.len > 0:
+        let currentView = preview.xViews[id]
+        var staged: View
+        try:
+          var frame = AutoRect
+          for property in snapshot.node.properties:
+            if property.name == "frame" and property.value.kind == rvRect:
+              frame = property.value.rectValue
+          staged = preview.xRegistry.constructView(snapshot.node.kind, frame)
+          if staged.isNil:
+            return false
+          for property in snapshot.node.properties:
+            if not preview.xRegistry.applyViewProperty(
+              snapshot.node.kind, staged, property, context
+            ):
+              updateResult.diagnostics.add(
+                rdsError,
+                "resource.preview.propertyPreflightFailed",
+                "property '" & property.name & "' failed preview preflight",
+                path = snapshot.path & ".properties." & property.name,
+                resourceId = id,
+              )
+              return true
+          for name in names:
+            let
+              current = preview.xRegistry.readViewProperty(
+                snapshot.node.kind, currentView, name, context
+              )
+              desired = preview.xRegistry.readViewProperty(
+                snapshot.node.kind, staged, name, context
+              )
+            if not current.read or not desired.read:
+              return false
+            updates.add PropertyUpdate(
+              resourceId: id,
+              kind: snapshot.node.kind,
+              name: name,
+              view: currentView,
+              value: desired.value,
+              rollbackValue: current.value,
+              path: snapshot.path & ".properties." & name,
+            )
+            updated.incl id
+        except CatchableError as error:
+          updateResult.diagnostics.add(
+            rdsError,
+            "resource.preview.propertyPreflightFailed",
+            "preview property preflight failed: " & error.msg,
+            path = snapshot.path,
+            resourceId = id,
+          )
+          return true
+
+  for index, update in updates:
+    try:
+      if not preview.xRegistry.applyViewProperty(
+        update.kind, update.view, resourceProperty(update.name, update.value), context
+      ):
+        raise newException(ValueError, "property setter rejected the value")
+    except CatchableError as error:
+      # A setter can mutate its view before failing, so include the attempted setter.
+      preview.rollbackProperties(updates, index, context, updateResult.diagnostics)
+      updateResult.diagnostics.add(
+        rdsError,
+        "resource.preview.propertyApplyFailed",
+        "property '" & update.name & "' reconciliation failed: " & error.msg,
+        path = update.path,
+        resourceId = update.resourceId,
+      )
+      return true
+
+  if layoutChanged:
+    try:
+      preview.xLayout.deactivate()
+      nextLayout.activate()
+    except CatchableError as error:
+      nextLayout.deactivate()
+      preview.xLayout.activate()
+      preview.rollbackProperties(
+        updates, updates.high, context, updateResult.diagnostics
+      )
+      updateResult.diagnostics.add(
+        rdsError,
+        "resource.preview.layoutApplyFailed",
+        "layout reconciliation failed: " & error.msg,
+      )
+      return true
+    preview.xLayout = nextLayout
+    preview.xInstance.rebindResourceIdentities(
+      preview.xViews, preview.xControllers, nextLayout
+    )
+  addChanges(preview.xViewSnapshots, snapshots, reused, updated, updateResult.changes)
+  preview.xBundle = bundle
+  preview.xViewSnapshots = snapshots
+  preview.xRevision = revision
+  updateResult.revision = revision
+  updateResult.applied = true
+  true
+
 proc update*(
     preview: ResourcePreview,
     bundle: ResourceBundle,
@@ -645,11 +814,16 @@ proc update*(
 ): ResourcePreviewUpdateResult =
   ## Reconciles one valid resource revision into the installed preview.
   ##
-  ## Full construction is used as a preflight graph. Existing view and controller
+  ## Property edits stage only changed views and retain the installed hierarchy.
+  ## Structural edits use full construction as a preflight graph. View and controller
   ## identities are committed only after getter-backed property updates and all
   ## hierarchy changes succeed. On failure, mappings and the installed graph stay
   ## at the previous revision.
   result.revision = if preview.hasRevision: preview.xRevision else: revision
+  let nextViewSnapshots = bundle.viewSnapshots()
+  if host == preview.xHost and
+      preview.updateProperties(bundle, revision, nextViewSnapshots, result):
+    return
   var construction: ResourceInstantiationResult
   try:
     construction = bundle.instantiateResources(
@@ -667,8 +841,7 @@ proc update*(
     return
 
   let
-    previousViewSnapshots = preview.xBundle.viewSnapshots()
-    nextViewSnapshots = bundle.viewSnapshots()
+    previousViewSnapshots = preview.xViewSnapshots
     previousControllerSnapshots = preview.xBundle.controllerSnapshots()
     nextControllerSnapshots = bundle.controllerSnapshots()
     previousPropertyContext =
@@ -761,6 +934,7 @@ proc update*(
 
   var lastApplied = -1
   for index, update in propertyUpdates:
+    lastApplied = index
     try:
       if not preview.xRegistry.applyViewProperty(
         update.kind,
@@ -779,7 +953,6 @@ proc update*(
           propertyUpdates, lastApplied, previousPropertyContext, result.diagnostics
         )
         return
-      lastApplied = index
     except CatchableError as error:
       result.diagnostics.add(
         rdsError,
@@ -846,10 +1019,16 @@ proc update*(
     result.changes,
   )
   preview.xBundle = bundle
-  preview.xInstance = construction.instance
+  construction.instance.rebindResourceIdentities(nextViews, nextControllers, nextLayout)
+  preview.xInstance = move construction.instance
   preview.xViews = move nextViews
+  preview.xViewSnapshots = nextViewSnapshots
+  preview.xViewIds.clear()
+  for id, view in preview.xViews:
+    preview.xViewIds[cast[pointer](view)] = id
   preview.xControllers = move nextControllers
   preview.xLayout = nextLayout
+  preview.xHost = host
   preview.xRevision = revision
   preview.xHasRevision = true
   result.applied = true
@@ -861,22 +1040,21 @@ proc readViewProperty*(
   ## Reads a live, runtime-normalized property value through the registry getter.
   if preview.isNil or not preview.xHasRevision:
     return
-  let
-    snapshot = preview.xBundle.findView(id)
-    view = preview.xViews.getOrDefault(id)
-  if snapshot.isSome and not view.isNil:
+  let view = preview.xViews.getOrDefault(id)
+  if preview.xViewSnapshots.hasKey(id) and not view.isNil:
     let context =
       initResourcePropertyContext(preview.xBundle, preview.xInstance, preview.xContext)
-    result =
-      preview.xRegistry.readViewProperty(snapshot.get().kind, view, name, context)
+    result = preview.xRegistry.readViewProperty(
+      preview.xViewSnapshots[id].node.kind, view, name, context
+    )
 
 proc resourceIdForView*(preview: ResourcePreview, view: View): Option[ResourceId] =
   ## Maps a hit view or one of its implementation subviews to a resource id.
   var candidate = view
   while not candidate.isNil:
-    for id, resourceView in preview.xViews.pairs:
-      if resourceView == candidate:
-        return some(id)
+    let key = cast[pointer](candidate)
+    if preview.xViewIds.hasKey(key):
+      return some(preview.xViewIds[key])
     candidate = candidate.superview()
   none(ResourceId)
 
@@ -895,10 +1073,24 @@ proc geometry*(
   )
 
 proc hitTest*(preview: ResourcePreview, host: View, point: Point): ResourcePreviewHit =
-  ## Hit-tests a preview host and maps implementation subviews to resources.
-  if preview.isNil or host.isNil:
+  ## Picks preview content even when the editor host intercepts design input.
+  if preview.isNil or host.isNil or
+      (host.clipsToBounds() and not host.pointInside(point)):
     return
-  let hit = host.hitTest(point)
+  var hit: View
+  var level = low(int)
+  let children = host.subviews()
+  for index in countdown(children.high, 0):
+    let child = children[index]
+    let candidate = child.hitTest(child.pointFromView(point, host))
+    if not candidate.isNil:
+      let candidateLevel = max(
+        child.hitTestLevel(child.pointFromView(point, host)),
+        candidate.hitTestLevel(candidate.pointFromView(point, host)),
+      )
+      if hit.isNil or candidateLevel > level:
+        hit = candidate
+        level = candidateLevel
   if hit.isNil:
     return
   let id = preview.resourceIdForView(hit)
@@ -911,3 +1103,68 @@ proc hitTest*(preview: ResourcePreview, host: View, point: Point): ResourcePrevi
     resourceView: preview.findView(id.get()),
     geometry: preview.geometry(id.get(), host),
   )
+
+proc anchorPosition(view: View, attribute: LayoutAttribute, reference: View): float32 =
+  let frame = view.rectToView(view.bounds(), reference)
+  case attribute
+  of atLeft, atLeading:
+    frame.x
+  of atRight, atTrailing:
+    frame.x + frame.w
+  of atTop:
+    frame.y
+  of atBottom:
+    frame.y + frame.h
+  of atWidth:
+    frame.w
+  of atHeight:
+    frame.h
+  of atCenterX:
+    frame.x + frame.w / 2
+  of atCenterY:
+    frame.y + frame.h / 2
+  of atFirstBaseline:
+    view.pointToView(initPoint(0, view.firstBaselineOffset()), reference).y
+  of atLastBaseline:
+    view.pointToView(
+      initPoint(0, view.bounds().h - view.lastBaselineOffset()), reference
+    ).y
+  of atNotAnAttribute:
+    0.0'f32
+
+proc layoutDiagnostics*(
+    preview: ResourcePreview, reference: View
+): ResourceDiagnostics =
+  ## Evaluates authored constraints after layout, including constraints the solver
+  ## could not satisfy because of conflicting constraints or control size limits.
+  if preview.isNil or not preview.hasRevision:
+    return
+  for index, resource in preview.xBundle.layoutConstraints:
+    let constraint = preview.findLayoutConstraint(resource.id)
+    if not constraint.isNil and constraint.active():
+      let first =
+        constraint.firstItem().anchorPosition(constraint.firstAttribute(), reference)
+      let second =
+        if constraint.secondItem().isNil:
+          0.0'f32
+        else:
+          constraint.secondItem().anchorPosition(
+            constraint.secondAttribute(), reference
+          )
+      let delta = first - (second * constraint.multiplier() + constraint.constant())
+      let satisfied =
+        case constraint.relation()
+        of lrEqual:
+          abs(delta) <= 0.5'f32
+        of lrLessThanOrEqual:
+          delta <= 0.5'f32
+        of lrGreaterThanOrEqual:
+          delta >= -0.5'f32
+      if not satisfied:
+        result.add(
+          rdsWarning,
+          "resource.layout.unsatisfied",
+          "constraint is not satisfied; check its anchors, priority, and the view's size limits",
+          path = "layoutConstraints[" & $index & "]",
+          resourceId = resource.id,
+        )
