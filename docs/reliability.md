@@ -75,10 +75,45 @@ fragment updates, and renderer-thread resource ownership. Full GUI integration s
 runs separately. Sanitizers complement the observable lifecycle assertions;
 they do not establish a universal RSS ceiling or prove absence of every leak.
 
-Under ORC, native FigDraw renderers remain on the UI thread. Moving a renderer
-created on the UI thread caused an ORC cycle-root unregister crash on the receiving
-thread during sanitizer testing. `dedicatedRendererSupported()` reports this
-restriction, and automatic mode uses UI-thread rendering. Explicitly requesting
-dedicated mode raises the existing unsupported-backend error. ARC keeps dedicated
-rendering. The ORC sanitizer subset exercises native renderer exception cleanup
-through automatic mode and checks the actual drawing-error message.
+Static Metal/Vulkan renderers support dedicated rendering under both ARC and ORC.
+An earlier ORC cycle-root unregister crash came from moving a renderer while it
+was still registered in the creating thread's cycle-candidate buffer. Renderer
+commands now assemble their exclusively owned, isolated payload and call
+`GC_runOrc()` on the sending thread immediately before publishing it. This retires
+old registrations before the receiver can release the renderer. Channel locking
+alone does not repair that thread-local ORC metadata.
+
+Collection happens for infrequent renderer commands, not per-frame snapshot
+submissions. Render data is acyclic: only the recursive `RenderFragment` and
+`RenderTree` types need explicit annotations; Nim infers the other render-data
+types. Renderers and extensible backend contexts remain cycle-capable. The
+ownership subset exercises native dedicated frames, retained scene updates,
+delayed renderer destruction, and exception cleanup under both memory managers.
+
+## Renderer shutdown ownership
+
+Renderer commands, wakeups, and pending snapshots use Sigils `RChan` (requires
+Sigils 0.31.0). Replacing a pending frame and releasing a channel destroy the
+references they owned. Snapshot coalescing uses the channel's bounded `push`.
+
+With the FigDraw ownership changes, Siwin renderers borrow their host
+window. Merenda retains that window on the platform thread, detaches the render
+host, and waits for its release acknowledgement before closing the native
+window during Merenda-controlled close. The acknowledgement follows
+`finishPendingFrames` and renderer cleanup, so submitted GPU work and renderer
+destruction finish before native teardown.
+Requesting worker shutdown alone does not satisfy that condition: the worker
+publishes a separate completion flag after releasing its hosts. Switching render
+runtimes also waits for the old host to be released.
+
+The acyclic render-data annotations and Siwin borrow are in
+[FigDraw PR #96](https://github.com/elcritch/figdraw/pull/96), along with
+`finishPendingFrames`. Merenda pins commit
+`3545d4a4fd17c0f1a9aa783773fa39a8563201fd` until these changes are released as
+FigDraw 0.43.0. The native dynlib still does not support dedicated rendering.
+
+This ordering is validated on macOS with the statically linked renderer. Siwin's
+Windows/X11 OS-close notification paths can run after native teardown starts;
+those paths need an earlier close barrier in Siwin before the same native-handle
+lifetime guarantee can be made. The dynlib facade does not yet expose the new
+GPU completion operation. No closed OpenGL window is reactivated during cleanup.

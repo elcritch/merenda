@@ -1,7 +1,8 @@
 import
   std/[atomics, deques, isolation, locks, math, options, os, strutils, tables, times]
 
-import threading/[channels, smartptrs]
+import threading/smartptrs
+import sigils/rchannels
 import pkg/vmath
 
 when not compileOption("threads") and not defined(nimdoc):
@@ -174,7 +175,7 @@ type
 
   ThreadHostChannels* = object
     events*: ThreadHostEventQueue
-    renders*: Chan[ThreadRenderSnapshot]
+    renders*: RChan[ThreadRenderSnapshot]
 
   ThreadRendererCommandKind* = enum
     trcAttachRenderHost
@@ -187,11 +188,12 @@ type
     hostId*: ThreadHostId
 
   ThreadRendererClient* = ref object
-    commands: Chan[ThreadRendererCommand]
-    wakeups: Chan[bool]
+    commands: RChan[ThreadRendererCommand]
+    wakeups: RChan[bool]
     nextHostId: uint64
     threadId: Atomic[int]
     running: Atomic[bool]
+    finished: Atomic[bool]
 
   ThreadRenderResourceLease = object
     renderId: uint64
@@ -215,7 +217,7 @@ type
     forceFullSceneUpdate: bool
     activeResources: RenderResourceManifest
     pendingResources: Deque[ThreadRenderResourceLease]
-    rendererWakeups: Chan[bool]
+    rendererWakeups: RChan[bool]
 
   HostWindow* = ref object
     xNativeWindow: SiwinWindow
@@ -250,14 +252,15 @@ type
       lastFragmentResources: RenderResourceSnapshot
 
   ThreadRenderer* = ref object
-    commands: Chan[ThreadRendererCommand]
-    wakeups: Chan[bool]
+    commands: RChan[ThreadRendererCommand]
+    wakeups: RChan[bool]
     hosts: Table[ThreadHostId, ThreadRendererHost]
     running: bool
 
   ThreadRendererStart = object
     renderer: ThreadRenderer
     threadId: ptr Atomic[int]
+    finished: ptr Atomic[bool]
 
   ThreadRendererRuntime* = object
     renderer: ThreadRenderer
@@ -312,10 +315,17 @@ const
   ThreadRenderCapacity = 2
   ThreadRendererWakeCapacity = 1
 
-proc sendMoved[T](channel: Chan[T], value: sink T) =
-  channel.send(unsafeIsolate(ensureMove value))
+proc sendMoved[T](channel: RChan[T], value: sink T) =
+  var payload = unsafeIsolate(ensureMove value)
+  when compileOption("mm", "orc"):
+    # Cyclic-capable refs may still be registered with this thread's ORC
+    # collector. Clear those registrations after assembling exclusive ownership
+    # and before the receiver can access the payload. Commands are infrequent;
+    # acyclic frame snapshots do not need a collection on every submission.
+    GC_runOrc()
+  channel.send(ensureMove payload)
 
-proc wakeRenderer(channel: Chan[bool]) =
+proc wakeRenderer(channel: RChan[bool]) =
   # Work remains in its owning queue, so one coalesced notification is enough.
   discard channel.trySend(true)
 
@@ -323,15 +333,8 @@ proc sendCommand(renderer: ThreadRendererClient, command: sink ThreadRendererCom
   renderer.commands.sendMoved(ensureMove command)
   renderer.wakeups.wakeRenderer()
 
-proc pushLatest[T](channel: Chan[T], value: sink T) =
-  var isolated = unsafeIsolate(ensureMove value)
-  if channel.tryTake(isolated):
-    return
-
-  var stale: T
-  discard channel.tryRecv(stale)
-  if not channel.tryTake(isolated):
-    discard
+proc pushLatest[T](channel: RChan[T], value: sink T) =
+  channel.push(unsafeIsolate(ensureMove value))
 
 proc newThreadHostEventQueue*(): ThreadHostEventQueue =
   result.raw = newSharedPtr(ThreadHostEventQueueObj)
@@ -375,8 +378,8 @@ proc run*(renderer: ThreadRenderer)
 
 proc newThreadRenderer*(): tuple[renderer: ThreadRenderer, client: ThreadRendererClient] =
   let
-    commands = newChan[ThreadRendererCommand](ThreadRendererCommandCapacity)
-    wakeups = newChan[bool](ThreadRendererWakeCapacity)
+    commands = newRChan[ThreadRendererCommand](ThreadRendererCommandCapacity)
+    wakeups = newRChan[bool](ThreadRendererWakeCapacity)
   result.renderer = ThreadRenderer(
     commands: commands,
     wakeups: wakeups,
@@ -386,12 +389,16 @@ proc newThreadRenderer*(): tuple[renderer: ThreadRenderer, client: ThreadRendere
     ThreadRendererClient(commands: commands, wakeups: wakeups, nextHostId: 1)
   result.client.threadId.store(-1, moRelaxed)
   result.client.running.store(false, moRelaxed)
+  result.client.finished.store(true, moRelaxed)
 
 proc runThreadRenderer(start: ThreadRendererStart) {.thread.} =
   {.cast(gcsafe).}:
     start.threadId[].store(getThreadId(), moRelease)
-    start.renderer.run()
-    start.threadId[].store(-1, moRelease)
+    try:
+      start.renderer.run()
+    finally:
+      start.threadId[].store(-1, moRelease)
+      start.finished[].store(true, moRelease)
 
 proc newThreadRendererRuntime*(): ThreadRendererRuntime =
   let pair = newThreadRenderer()
@@ -401,8 +408,11 @@ proc newThreadRendererRuntime*(): ThreadRendererRuntime =
 proc start*(runtime: var ThreadRendererRuntime) =
   if runtime.started or runtime.renderer.isNil:
     return
+  runtime.client.finished.store(false, moRelaxed)
   var start = ThreadRendererStart(
-    renderer: move runtime.renderer, threadId: addr runtime.client.threadId
+    renderer: move runtime.renderer,
+    threadId: addr runtime.client.threadId,
+    finished: addr runtime.client.finished,
   )
   createThread(runtime.worker, runThreadRenderer, move start)
   runtime.started = true
@@ -426,6 +436,10 @@ proc rendererThreadId*(client: ThreadRendererClient): int =
 proc isRunning*(client: ThreadRendererClient): bool =
   not client.isNil and client.running.load(moAcquire)
 
+proc hasFinished*(client: ThreadRendererClient): bool =
+  ## True only after the worker has released all renderer state.
+  client.isNil or client.finished.load(moAcquire)
+
 proc newThreadHostClient*(renderer: ThreadRendererClient): ThreadHostClient =
   if renderer.isNil:
     return nil
@@ -433,7 +447,7 @@ proc newThreadHostClient*(renderer: ThreadRendererClient): ThreadHostClient =
     id: ThreadHostId(renderer.nextHostId),
     channels: ThreadHostChannels(
       events: newThreadHostEventQueue(),
-      renders: newChan[ThreadRenderSnapshot](ThreadRenderCapacity),
+      renders: newRChan[ThreadRenderSnapshot](ThreadRenderCapacity),
     ),
     rendererWakeups: renderer.wakeups,
     pendingResources: initDeque[ThreadRenderResourceLease](),
@@ -1441,7 +1455,26 @@ proc refreshContentScale*(host: HostWindow) =
   elif host.isReady:
     host.xNativeWindow.refreshUiScale(host.xAutoScale)
 
+proc releaseDirectRenderer(host: HostWindow) =
+  if not host.xResources.isNil:
+    host.xResources.clear()
+  if not host.xRenderer.isNil:
+    if not host.xNativeWindow.isNil and not host.xNativeWindow.closed():
+      host.xRenderer.processImageMessages()
+      when not defined(useNativeDynlib):
+        host.xRenderer.finishPendingFrames()
+    else:
+      when not defined(useNativeDynlib):
+        # Some platform close notifications arrive after native destruction.
+        # Do not reactivate an OpenGL context through an already closed window.
+        if host.xRenderer.backendKind() != rbOpenGL:
+          host.xRenderer.ctx.finishPendingFrames()
+    host.xRenderer = nil
+
 proc markClosed(host: HostWindow, notify: bool) =
+  # Direct renderers need the same completion barrier as dedicated renderers.
+  # Merenda calls this before native close; OS notification ordering varies.
+  host.releaseDirectRenderer()
   let callbacks = host.xCallbacks
   host.unregisterHost()
   if not nativePasteboardProvider.isNil and nativePasteboardProvider.xHost == host:
@@ -1556,10 +1589,8 @@ when not defined(useNativeDynlib):
     inc host.xRenderCount
 
 proc dedicatedRendererSupported*(): bool =
-  # FigRenderer can carry an ORC cycle-root registration from its creation
-  # thread. Moving it would leave that registration in the wrong thread's
-  # collector. Keep native renderer ownership on the UI thread under ORC.
-  when not defined(useNativeDynlib) and not compileOption("mm", "orc"):
+  # Renderer commands retire source-thread ORC registrations before transfer.
+  when not defined(useNativeDynlib):
     not figrender.runtimeForceOpenGlRequested() and
       siwinshim.backendSupportsDedicatedRenderThread(figrender.PreferredBackendKind)
   else:
@@ -1644,10 +1675,6 @@ proc configureTransparentPresentation(host: HostWindow) =
 proc close*(host: HostWindow) =
   let nativeWindow = host.xNativeWindow
   let shouldClose = not nativeWindow.isNil and not nativeWindow.closed()
-  if not host.xResources.isNil:
-    host.xResources.clear()
-  if not host.xRenderer.isNil:
-    host.xRenderer.processImageMessages()
   host.markClosed(notify = false)
   if shouldClose:
     siwinshim.close(nativeWindow)
@@ -2083,6 +2110,16 @@ proc releaseRenderHost(state: ThreadRendererHost) =
     state.resources.clear()
   if not state.renderer.isNil:
     state.renderer.processImageMessages()
+    when not defined(useNativeDynlib):
+      state.renderer.finishPendingFrames()
+  # The UI may destroy its native window as soon as it receives this event.
+  # Release the renderer and presentation handles before publishing it.
+  state.lastRenders = nil
+  when not defined(useNativeDynlib):
+    state.lastScene = nil
+    state.lastFragmentResources = default(RenderResourceSnapshot)
+  state.resources = nil
+  state.renderer = nil
   state.postEvent(ThreadHostEvent(kind: theRenderTargetReleased))
 
 proc drainRendererCommands(renderer: ThreadRenderer) =
@@ -2106,13 +2143,16 @@ proc run*(renderer: ThreadRenderer) =
   if renderer.isNil:
     return
   renderer.running = true
-  while renderer.running:
-    # Commands and render submissions notify this channel after publishing work.
-    discard renderer.wakeups.recv()
-    renderer.drainRendererCommands()
-    for state in renderer.hosts.values:
-      state.drainHostChannels()
-
-  for state in renderer.hosts.values:
-    state.releaseRenderHost()
-  renderer.hosts.clear()
+  try:
+    while renderer.running:
+      # Commands and render submissions notify this channel after publishing work.
+      discard renderer.wakeups.recv()
+      renderer.drainRendererCommands()
+      for state in renderer.hosts.values:
+        state.drainHostChannels()
+  finally:
+    try:
+      for state in renderer.hosts.values:
+        state.releaseRenderHost()
+    finally:
+      renderer.hosts.clear()

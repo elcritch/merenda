@@ -16,8 +16,8 @@ deferred architecture, and open decisions rather than serving as a change log.
 
 ## Current State
 
-Reviewed on **2026-09-24** against source, test coverage, and repository history
-through `c49aa298` (Merenda `0.21.3`), plus the working-tree reliability updates
+Reviewed on **2026-09-25** against source, test coverage, and repository history
+through `8e12578d` (Merenda `0.21.3`), plus the working-tree reliability updates
 described below. Test execution status is recorded separately
 under Verification.
 
@@ -48,7 +48,7 @@ The main established layers are:
   document editing and undo, identity-preserving preview reconciliation,
   constraints and guides, Sigils-discovered properties, and the Tekton builder.
 - Retained per-view FigDraw render scenes, independently invalidated drawing
-  slots, and direct fragment traversal in static builds. With ARC, dedicated
+  slots, and direct fragment traversal in static builds. With ARC or ORC, dedicated
   Metal/Vulkan runtimes receive independently owned, generation-stamped updates;
   `useNativeDynlib` retains the monolithic render path through FigDraw's facade.
   Both paths retain managed resource ownership and acknowledgement contracts.
@@ -105,8 +105,19 @@ a new terminal silently failed.
   update fell from 1,145,272 to 25,296 array bytes (97.8%).
 - [x] Bind container removal handlers explicitly; repair selected-tab constraint
   resizing and cached table-header invalidation after direct scrolling.
-- [x] Keep native rendering on the UI thread under ORC, avoiding a confirmed
-  cross-thread cycle-root unregister crash. ARC retains dedicated rendering.
+- [x] Enable dedicated native rendering under ORC by retiring source-thread
+  cycle-candidate registrations immediately before renderer command transfer.
+  The earlier UI-thread fallback is removed; acyclic frame snapshots do not
+  trigger a collection on every submission.
+- [x] Move renderer queues to Sigils `RChan` 0.31.0, release overwritten/queued
+  snapshot references, and acknowledge native renderer release after cleanup.
+  Window close and runtime replacement wait for that acknowledgement or completed
+  worker shutdown. FigDraw's dependency changes add two explicit acyclic markers
+  on recursive render trees, a borrowed Siwin window, and a GPU completion wait.
+  Merenda pins dependency commit `3545d4a` from
+  [FigDraw PR #96](https://github.com/elcritch/figdraw/pull/96), pending release 0.43.0.
+- [ ] Extend the close barrier to Siwin's Windows/X11 OS-driven teardown paths
+  and expose GPU completion through FigDraw's native dynlib facade.
 - [ ] Establish aggregate budgets for independent decoded-image, Markdown,
   Git-diff, and disk caches using measured representative workspace workloads.
 
@@ -256,6 +267,18 @@ a new terminal silently failed.
   measurements above. Shared-runner import coverage, workflow YAML/shell syntax,
   formatting, and whitespace checks passed.
 - Linux/X11 sanitizer jobs are configured in CI; they were not run locally.
+- Local validation on **2026-09-25**, macOS/arm64 with Nim **2.2.12**:
+  the initial full run passed **1,466 tests** across all four runners. An earlier
+  run hit a Git-diff timeout while other builds were active; it did not recur.
+  The final run, including the new native-frame regression, had **1,466 passes
+  and one Bash/Readline timeout**; rerunning the integration suite alone passed.
+  After the ORC handoff fix, the renderer ownership subset passed **94 tests
+  each under ARC and ORC** with ASan/UBSan and no skips, including dedicated
+  Metal frames, full/incremental retained scenes, and delayed native teardown.
+  FigDraw's focused ownership/fragment/font/Siwin suites passed **79 tests each
+  under ARC and ORC**; the ORC run used ASan/UBSan. The example bundle and
+  shared-runner import check passed.
+  Vulkan validation was unavailable because this workspace lacks `pkg/vulkan`.
 
 ## Near-Term Work
 

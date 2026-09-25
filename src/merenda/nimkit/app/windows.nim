@@ -353,7 +353,7 @@ proc resolvedPopupPresentation*(
 
 proc supportsNativePopupWindows*(window: Window): bool
 proc close*(window: Window)
-proc releaseThreadRenderer(window: Window, waitForRelease: bool)
+proc releaseThreadRenderer(window: Window)
 proc setKeyWindow*(window: Window, value: bool)
 proc setMainWindow*(window: Window, value: bool)
 proc postWindowNotification(window: Window, kind: NotificationKind)
@@ -2096,7 +2096,7 @@ proc close*(window: Window) =
   if not window.xSheetParent.isNil and window.xSheetParent.xSheet == window:
     window.xSheetParent.xSheet = nil
     window.xSheetParent = nil
-  window.releaseThreadRenderer(waitForRelease = true)
+  window.releaseThreadRenderer()
   if not window.xHostWindow.isNil:
     window.xHostWindow.close()
     window.xHostWindow = nil
@@ -3194,7 +3194,7 @@ proc markHostClosed(window: Window) =
   emit window.willClose()
   window.postWindowNotification(nkWindowWillClose)
   window.clearToolTip()
-  window.releaseThreadRenderer(waitForRelease = true)
+  window.releaseThreadRenderer()
   window.stopInsertionPointBlink()
   window.stopAnimationClock()
   discard window.saveFrameUsingName()
@@ -3222,7 +3222,7 @@ proc markHostClosed(window: Window) =
 proc useThreadRenderer*(window: Window, renderer: ThreadRendererClient) =
   if window.isNil or window.xThreadRenderer == renderer:
     return
-  window.releaseThreadRenderer(waitForRelease = false)
+  window.releaseThreadRenderer()
   window.xThreadRenderer = renderer
   window.xThreadHost = nil
   for auxiliary in window.xAuxiliaryWindows:
@@ -3317,14 +3317,13 @@ proc drainThreadHostEvents(window: Window): int =
       window.xThreadHost.clearRenderResources()
       window.xThreadHost.acknowledgeRenderTargetRelease()
 
-proc releaseThreadRenderer(window: Window, waitForRelease: bool) =
+proc releaseThreadRenderer(window: Window) =
   let client = window.xThreadHost
   if client.isNil:
     return
   if not window.xHostWindow.isNil:
     window.xHostWindow.detachThreadRenderer(window.xThreadRenderer, client)
-  while waitForRelease and client.renderTargetReleasePending() and
-      not window.xThreadRenderer.isNil and window.xThreadRenderer.isRunning():
+  while client.renderTargetReleasePending() and not window.xThreadRenderer.hasFinished():
     discard window.drainThreadHostEvents()
     if client.renderTargetReleasePending():
       sleep(1)
