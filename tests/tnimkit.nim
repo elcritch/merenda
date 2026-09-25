@@ -93,6 +93,3 @@ else:
   import nimkit/windoweffects
   import nimkit/windoweffectsdemo
   import nimkit/workspaces
-
-  import nimkit/renderfragments
-  import nimkit/threading

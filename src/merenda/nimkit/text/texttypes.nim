@@ -6,7 +6,11 @@ from figdraw import SystemTypeface
 type
   TextIndex* = distinct Natural
 
-  TextRange* = object
+  TextRange* = object ## A location and length measured in Unicode runes.
+    location*: Natural
+    length*: Natural
+
+  TextByteRange* = object ## A location and length measured in UTF-8 bytes.
     location*: Natural
     length*: Natural
 
@@ -142,10 +146,19 @@ func toInt*(index: TextIndex): int =
 func initTextRange*(location, length: int): TextRange =
   TextRange(location: max(location, 0).Natural, length: max(length, 0).Natural)
 
+func initTextByteRange*(location, length: int): TextByteRange =
+  TextByteRange(location: max(location, 0).Natural, length: max(length, 0).Natural)
+
 func maxIndex*(range: TextRange): int =
   int(range.location) + int(range.length)
 
+func maxIndex*(range: TextByteRange): int =
+  int(range.location) + int(range.length)
+
 func isEmpty*(range: TextRange): bool =
+  range.length == 0
+
+func isEmpty*(range: TextByteRange): bool =
   range.length == 0
 
 func initTextSelection*(anchor, cursor: int): TextSelection =

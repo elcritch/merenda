@@ -19,6 +19,15 @@ proc tokenAt(source, needle: string, language = langNim): SyntaxTokenClass =
   spans.syntaxTokenAt(index)
 
 suite "nimkit synedit views":
+  test "token spans use source rune offsets across emoji CRLF and malformed bytes":
+    let
+      source = "é😀\r\nlet value = 1"
+      spans = synEditTokenSpans(source, langNim)
+      malformed = synEditTokenSpans("a\xff\r\nlet value = 1", langNim)
+    check spans.syntaxTokenAt(4) == stcKeyword
+    check spans.syntaxTokenAt(8) == stcIdentifier
+    check malformed.syntaxTokenAt(4) == stcKeyword
+
   test "tokenizer classifies Nim source spans":
     let source = """
 proc answer*(): int =
@@ -99,6 +108,15 @@ proc answer(): int = 42
     check storage.attributesAt(insertion).foregroundColor ==
       editor.theme().foreground[stcNumber]
     check storage.attributesAt(editor.text().find("let fourth")).foregroundColor ==
+      editor.theme().foreground[stcKeyword]
+
+  test "removing a multiline opener refreshes following lines":
+    let editor =
+      newSynEditView("/* comment\nint value = 1;\n*/\nint next = 2;", language = langC)
+    editor.textView().selectedRange = initTextRange(0, 2)
+    editor.textView().insertTextValue("")
+    let storage = editor.textEditor().textStorage()
+    check storage.attributesAt(editor.text().find("int value")).foregroundColor ==
       editor.theme().foreground[stcKeyword]
 
   test "widget keeps short lines fitted to gutter-adjusted viewport":

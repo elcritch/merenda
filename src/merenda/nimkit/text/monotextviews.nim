@@ -91,11 +91,29 @@ type
     forwardedEvents*: MonoTextRawEventKinds
     capturedEvents*: MonoTextRawEventKinds
 
+  MonoTextCellStyle* = object
+    ## Cell colors and decorations without an owned text string.
+    foregroundColor*: nimkitTypes.Color
+    backgroundColor*: nimkitTypes.Color
+    decorationColor*: nimkitTypes.Color
+    hasForegroundColor*: bool
+    hasBackgroundColor*: bool
+    hasDecorationColor*: bool
+    traits*: set[MonoTextTrait]
+    decorations*: set[MonoTextDecoration]
+
   MonoTextLine = object
-    cells: seq[MonoTextCell]
+    text: string
+    cellEndBytes: seq[uint32]
+    cellEndRunes: seq[uint32]
+    styleIds: seq[uint32]
+    styles: seq[MonoTextCellStyle]
+    runeLength: int
+    revision: uint64
 
   MonoTextView* = ref object of View
     xLines: seq[MonoTextLine]
+    xNextRowRevision: uint64
     xMaxColumns: int
     xEditable: bool
     xForwardedRawEvents: MonoTextRawEventKinds
@@ -113,6 +131,18 @@ type
     xTextColor: nimkitTypes.Color
     xCursorColor: nimkitTypes.Color
     xGridOffset: nimkitTypes.Point
+
+  MonoTextRowBuilder* = object
+    ## Receives one row's cells during `replaceGrid` or `scrollGridRows`.
+    xView: MonoTextView
+    xRow: int
+    xExpectedColumns: int
+    xColumn: int
+    xChanged: bool
+    xLine: MonoTextLine
+
+  MonoTextRowProvider* = proc(row: int, builder: var MonoTextRowBuilder) {.closure.}
+    ## Supplies one row at a time. Each call must append the declared column count.
 
 func toAccessibilityTextRange(range: TextRange): AccessibilityTextRange =
   initAccessibilityTextRange(int(range.location), int(range.length))
@@ -193,11 +223,47 @@ func styledMonoTextCell*(
     hasBackgroundColor = hasBackgroundColor,
   )
 
-func foreground(cell: MonoTextCell, fallback: nimkitTypes.Color): nimkitTypes.Color =
-  if cell.hasForegroundColor: cell.foregroundColor else: fallback
+template cellStyle(cell: MonoTextCell): MonoTextCellStyle =
+  MonoTextCellStyle(
+    foregroundColor: cell.foregroundColor,
+    backgroundColor: cell.backgroundColor,
+    decorationColor: cell.decorationColor,
+    hasForegroundColor: cell.hasForegroundColor,
+    hasBackgroundColor: cell.hasBackgroundColor,
+    hasDecorationColor: cell.hasDecorationColor,
+    traits: cell.traits,
+    decorations: cell.decorations,
+  )
+
+func initMonoTextCellStyle*(
+    foregroundColor = color(0.0, 0.0, 0.0, 1.0),
+    backgroundColor = color(0.0, 0.0, 0.0, 0.0),
+    hasForegroundColor = false,
+    hasBackgroundColor = false,
+    traits: set[MonoTextTrait] = {},
+    decorations: set[MonoTextDecoration] = {},
+    decorationColor = color(0.0, 0.0, 0.0, 0.0),
+    hasDecorationColor = false,
+): MonoTextCellStyle =
+  ## Return the default cell style, optionally overriding its colors and flags.
+  MonoTextCellStyle(
+    foregroundColor: foregroundColor,
+    backgroundColor: backgroundColor,
+    decorationColor: decorationColor,
+    hasForegroundColor: hasForegroundColor,
+    hasBackgroundColor: hasBackgroundColor,
+    hasDecorationColor: hasDecorationColor,
+    traits: traits,
+    decorations: decorations,
+  )
+
+func foreground(
+    style: MonoTextCellStyle, fallback: nimkitTypes.Color
+): nimkitTypes.Color =
+  if style.hasForegroundColor: style.foregroundColor else: fallback
 
 func sameRunStyle(
-    left, right: MonoTextCell, defaultTextColor: nimkitTypes.Color
+    left, right: MonoTextCellStyle, defaultTextColor: nimkitTypes.Color
 ): bool =
   left.foreground(defaultTextColor) == right.foreground(defaultTextColor) and
     left.hasBackgroundColor == right.hasBackgroundColor and
@@ -206,10 +272,168 @@ func sameRunStyle(
     left.hasDecorationColor == right.hasDecorationColor and
     (not left.hasDecorationColor or left.decorationColor == right.decorationColor)
 
-proc firstRune(cell: MonoTextCell): Rune =
-  for rune in cell.text.runes:
-    return rune
-  Rune(' ')
+proc initMonoTextLine(capacity = 0): MonoTextLine =
+  result.text = newStringOfCap(max(capacity, 0))
+  result.cellEndBytes = newSeqOfCap[uint32](max(capacity, 0))
+  result.cellEndRunes = newSeqOfCap[uint32](max(capacity, 0))
+  result.styleIds = newSeqOfCap[uint32](max(capacity, 0))
+  result.styles.add initMonoTextCellStyle()
+
+func len(line: MonoTextLine): int =
+  line.cellEndBytes.len
+
+func cellStartByte(line: MonoTextLine, column: int): int =
+  if column == 0:
+    0
+  else:
+    int(line.cellEndBytes[column - 1])
+
+func cellStartRune(line: MonoTextLine, column: int): int =
+  if column == 0:
+    0
+  else:
+    int(line.cellEndRunes[column - 1])
+
+func styleAt(line: MonoTextLine, column: int): MonoTextCellStyle =
+  line.styles[int(line.styleIds[column])]
+
+proc cellAt(line: MonoTextLine, column: int): MonoTextCell =
+  let
+    style = line.styleAt(column)
+    startByte = line.cellStartByte(column)
+    stopByte = int(line.cellEndBytes[column])
+  MonoTextCell(
+    text: line.text[startByte ..< stopByte],
+    foregroundColor: style.foregroundColor,
+    backgroundColor: style.backgroundColor,
+    decorationColor: style.decorationColor,
+    hasForegroundColor: style.hasForegroundColor,
+    hasBackgroundColor: style.hasBackgroundColor,
+    hasDecorationColor: style.hasDecorationColor,
+    traits: style.traits,
+    decorations: style.decorations,
+  )
+
+func sameCell(
+    line: MonoTextLine, column: int, text: string, style: MonoTextCellStyle
+): bool =
+  if line.styleAt(column) != style:
+    return false
+  let
+    startByte = line.cellStartByte(column)
+    byteLength = int(line.cellEndBytes[column]) - startByte
+  if byteLength != text.len:
+    return false
+  for index in 0 ..< byteLength:
+    if line.text[startByte + index] != text[index]:
+      return false
+  true
+
+proc firstRune(line: MonoTextLine, column: int): Rune =
+  let startByte = line.cellStartByte(column)
+  if startByte == int(line.cellEndBytes[column]):
+    Rune(' ')
+  else:
+    line.text.runeAt(startByte)
+
+proc addCell(line: var MonoTextLine, text: string, style: MonoTextCellStyle) =
+  var styleId = -1
+  for index, existing in line.styles:
+    if existing == style:
+      styleId = index
+      break
+  if styleId < 0:
+    styleId = line.styles.len
+    line.styles.add style
+  line.text.add text
+  if line.text.len > high(uint32).int:
+    raise newException(ValueError, "mono text row exceeds 4 GiB")
+  line.runeLength += text.runeLen
+  line.styleIds.add styleId.uint32
+  line.cellEndBytes.add line.text.len.uint32
+  line.cellEndRunes.add line.runeLength.uint32
+
+proc copyPrefix(destination: var MonoTextLine, source: MonoTextLine, cellCount: int) =
+  if cellCount == 0:
+    return
+  let stopByte = int(source.cellEndBytes[cellCount - 1])
+  var styleRemap = newSeq[int](source.styles.len)
+  for styleId in 0 ..< styleRemap.len:
+    styleRemap[styleId] = -1
+  for index in 0 ..< stopByte:
+    destination.text.add source.text[index]
+  for index in 0 ..< cellCount:
+    let sourceStyleId = int(source.styleIds[index])
+    if styleRemap[sourceStyleId] < 0:
+      for styleId, style in destination.styles:
+        if style == source.styles[sourceStyleId]:
+          styleRemap[sourceStyleId] = styleId
+          break
+      if styleRemap[sourceStyleId] < 0:
+        styleRemap[sourceStyleId] = destination.styles.len
+        destination.styles.add source.styles[sourceStyleId]
+    destination.styleIds.add styleRemap[sourceStyleId].uint32
+    destination.cellEndBytes.add source.cellEndBytes[index]
+    destination.cellEndRunes.add source.cellEndRunes[index]
+  destination.runeLength = int(source.cellEndRunes[cellCount - 1])
+
+proc initMonoTextRowBuilder(
+    view: MonoTextView, row, columns: int, compareExisting: bool
+): MonoTextRowBuilder =
+  result.xView = view
+  result.xRow = row
+  result.xExpectedColumns = columns
+  result.xChanged = not compareExisting
+  if result.xChanged:
+    result.xLine = initMonoTextLine(columns)
+
+proc addCell*(builder: var MonoTextRowBuilder, text: string, style: MonoTextCellStyle) =
+  ## Append borrowed UTF-8 text with a value style. Identical retained cells
+  ## require no row allocation.
+  if builder.xColumn >= builder.xExpectedColumns:
+    raise newException(ValueError, "mono text row has too many cells")
+  if not builder.xChanged:
+    if builder.xView.xLines[builder.xRow].sameCell(builder.xColumn, text, style):
+      inc builder.xColumn
+      return
+    builder.xLine = initMonoTextLine(builder.xExpectedColumns)
+    builder.xLine.copyPrefix(builder.xView.xLines[builder.xRow], builder.xColumn)
+    builder.xChanged = true
+  builder.xLine.addCell(text, style)
+  inc builder.xColumn
+
+proc addCell*(builder: var MonoTextRowBuilder, cell: MonoTextCell) =
+  ## Append a public cell to a streamed row.
+  builder.addCell(cell.text, cell.cellStyle())
+
+func len*(builder: MonoTextRowBuilder): int =
+  builder.xColumn
+
+proc lineFromCells(cells: openArray[MonoTextCell]): MonoTextLine =
+  result = initMonoTextLine(cells.len)
+  for cell in cells:
+    result.addCell(cell.text, cell.cellStyle())
+
+proc unpackCells(line: MonoTextLine): seq[MonoTextCell] =
+  result = newSeqOfCap[MonoTextCell](line.len)
+  for column in 0 ..< line.len:
+    result.add line.cellAt(column)
+
+func sameContent(left, right: MonoTextLine): bool =
+  left.text == right.text and left.cellEndBytes == right.cellEndBytes and
+    left.cellEndRunes == right.cellEndRunes and left.styleIds == right.styleIds and
+    left.styles == right.styles
+
+proc touchLine(view: MonoTextView, row: int) =
+  inc view.xNextRowRevision
+  view.xLines[row].revision = view.xNextRowRevision
+
+proc storeLine(view: MonoTextView, row: int, line: sink MonoTextLine): bool =
+  if view.xLines[row].sameContent(line):
+    return
+  view.xLines[row] = line
+  view.touchLine(row)
+  true
 
 proc splitMonoLines(value: string): seq[string] =
   var start = 0
@@ -228,18 +452,27 @@ proc splitMonoLines(value: string): seq[string] =
   if result.len == 0:
     result.add ""
 
-proc textToCells(text: string): seq[MonoTextCell] =
-  for rune in text.runes:
-    result.add initMonoTextCell(rune)
+proc textToLine(text: string): MonoTextLine =
+  result = initMonoTextLine(text.runeLen)
+  result.text = newStringOfCap(text.len)
+  var offset = 0
+  while offset < text.len:
+    let stop = min(text.len, offset + max(1, text.runeLenAt(offset)))
+    for index in offset ..< stop:
+      result.text.add text[index]
+    result.cellEndBytes.add result.text.len.uint32
+    inc result.runeLength
+    result.cellEndRunes.add result.runeLength.uint32
+    result.styleIds.add 0'u32
+    offset = stop
 
 proc lineToString(line: MonoTextLine): string =
-  for cell in line.cells:
-    result.add cell.text
+  line.text
 
 proc recomputeMaxColumns(view: MonoTextView) =
   view.xMaxColumns = 0
   for line in view.xLines:
-    view.xMaxColumns = max(view.xMaxColumns, line.cells.len)
+    view.xMaxColumns = max(view.xMaxColumns, line.len)
 
 proc invalidateTextGeometry(view: MonoTextView) =
   view.recomputeMaxColumns()
@@ -254,28 +487,30 @@ proc ensureLine(view: MonoTextView, row: int) =
   if row < 0:
     return
   while view.xLines.len <= row:
-    view.xLines.add MonoTextLine()
+    view.xLines.add initMonoTextLine()
 
 proc ensureColumn(view: MonoTextView, row, column: int) =
   if row < 0 or column < 0:
     return
   view.ensureLine(row)
-  while view.xLines[row].cells.len <= column:
-    view.xLines[row].cells.add initMonoTextCell()
+  while view.xLines[row].len <= column:
+    let blank = initMonoTextCell()
+    view.xLines[row].addCell(blank.text, blank.cellStyle())
+    view.touchLine(row)
 
 func clampIndex(value, low, high: int): int =
   min(max(value, low), high)
 
 proc clampCursor(view: MonoTextView) =
   if view.xLines.len == 0:
-    view.xLines.add MonoTextLine()
+    view.xLines.add initMonoTextLine()
   view.xCursorRow = view.xCursorRow.clampIndex(0, view.xLines.high)
   view.xCursorColumn =
-    view.xCursorColumn.clampIndex(0, view.xLines[view.xCursorRow].cells.len)
+    view.xCursorColumn.clampIndex(0, view.xLines[view.xCursorRow].len)
 
 proc textLength(view: MonoTextView): int =
   for row, line in view.xLines:
-    result += line.lineToString().runeLen
+    result += line.runeLength
     if row + 1 < view.xLines.len:
       inc result
 
@@ -284,33 +519,34 @@ proc textIndexForRowColumn(view: MonoTextView, row, column: int): int =
     return 0
   let targetRow = row.clampIndex(0, view.xLines.high)
   for currentRow in 0 ..< targetRow:
-    result += view.xLines[currentRow].lineToString().runeLen
+    result += view.xLines[currentRow].runeLength
     if currentRow + 1 < view.xLines.len:
       inc result
-  let targetColumn = column.clampIndex(0, view.xLines[targetRow].cells.len)
-  for currentColumn in 0 ..< targetColumn:
-    result += view.xLines[targetRow].cells[currentColumn].text.runeLen
+  let targetColumn = column.clampIndex(0, view.xLines[targetRow].len)
+  if targetColumn > 0:
+    result += int(view.xLines[targetRow].cellEndRunes[targetColumn - 1])
 
 proc rowColumnForTextIndex(view: MonoTextView, index: int): tuple[row, column: int] =
   if view.xLines.len == 0:
     return (row: 0, column: 0)
   var remaining = index.clampIndex(0, view.textLength())
   for row, line in view.xLines:
-    let lineLength = line.lineToString().runeLen
+    let lineLength = line.runeLength
     if remaining <= lineLength:
       var consumed = 0
-      for column, cell in line.cells:
-        let cellLength = max(cell.text.runeLen, 1)
+      for column in 0 ..< line.len:
+        let cellLength =
+          max(int(line.cellEndRunes[column]) - line.cellStartRune(column), 1)
         if remaining < consumed + cellLength:
           return (row: row, column: column)
         consumed += cellLength
-      return (row: row, column: line.cells.len)
+      return (row: row, column: line.len)
     remaining -= lineLength
     if row + 1 < view.xLines.len:
       if remaining == 0:
-        return (row: row, column: line.cells.len)
+        return (row: row, column: line.len)
       dec remaining
-  (row: view.xLines.high, column: view.xLines[^1].cells.len)
+  (row: view.xLines.high, column: view.xLines[^1].len)
 
 proc cursorTextIndex(view: MonoTextView): int =
   view.textIndexForRowColumn(view.xCursorRow, view.xCursorColumn)
@@ -402,7 +638,7 @@ proc rowColumnAtPoint*(
     int(floor(max(point.x - textInsets.left, 0.0'f32) / metrics.cellWidth))
   if view.xLines.len > 0:
     result.row = result.row.clampIndex(0, view.xLines.high)
-    result.column = result.column.clampIndex(0, view.xLines[result.row].cells.len)
+    result.column = result.column.clampIndex(0, view.xLines[result.row].len)
   else:
     result.row = 0
     result.column = 0
@@ -419,9 +655,10 @@ proc `stringValue=`*(view: MonoTextView, value: string) =
   let previousCursor = view.cursorTextIndex()
   view.xLines.setLen(0)
   for lineText in value.splitMonoLines():
-    view.xLines.add MonoTextLine(cells: lineText.textToCells())
+    view.xLines.add lineText.textToLine()
+    view.touchLine(view.xLines.high)
   if view.xLines.len == 0:
-    view.xLines.add MonoTextLine()
+    view.xLines.add initMonoTextLine()
   view.xCursorRow = 0
   view.xCursorColumn = 0
   view.clampCursor()
@@ -438,9 +675,10 @@ proc setLines*(view: MonoTextView, lines: openArray[string]) =
   let previousCursor = view.cursorTextIndex()
   view.xLines.setLen(0)
   for line in lines:
-    view.xLines.add MonoTextLine(cells: line.textToCells())
+    view.xLines.add line.textToLine()
+    view.touchLine(view.xLines.high)
   if view.xLines.len == 0:
-    view.xLines.add MonoTextLine()
+    view.xLines.add initMonoTextLine()
   view.clampCursor()
   view.invalidateTextGeometry()
   if view.stringValue() != previousValue:
@@ -457,23 +695,29 @@ proc columnCount*(view: MonoTextView, row: int): int =
   if row < 0 or row >= view.xLines.len:
     0
   else:
-    view.xLines[row].cells.len
+    view.xLines[row].len
 
 proc cellAt*(view: MonoTextView, row, column: int): MonoTextCell =
-  if row < 0 or row >= view.xLines.len or column < 0 or
-      column >= view.xLines[row].cells.len:
+  if row < 0 or row >= view.xLines.len or column < 0 or column >= view.xLines[row].len:
     initMonoTextCell()
   else:
-    view.xLines[row].cells[column]
+    view.xLines[row].cellAt(column)
 
 proc setCell*(view: MonoTextView, row, column: int, cell: MonoTextCell) =
   if row < 0 or column < 0:
     return
   let previousCursor = view.cursorTextIndex()
+  let oldLength =
+    if row < view.xLines.len:
+      view.xLines[row].len
+    else:
+      0
   view.ensureColumn(row, column)
-  if view.xLines[row].cells[column] == cell:
+  if oldLength > column and view.xLines[row].cellAt(column) == cell:
     return
-  view.xLines[row].cells[column] = cell
+  var cells = view.xLines[row].unpackCells()
+  cells[column] = cell
+  discard view.storeLine(row, lineFromCells(cells))
   view.clampCursor()
   view.invalidateTextGeometry()
   view.postAccessibilityNotification(anValueChanged)
@@ -487,12 +731,14 @@ proc setGridSize*(view: MonoTextView, rows, columns: int) =
     nextColumns = max(columns, 0)
   view.xLines.setLen(nextRows)
   for row in 0 ..< nextRows:
-    view.xLines[row].cells.setLen(nextColumns)
+    var cells = view.xLines[row].unpackCells()
+    cells.setLen(nextColumns)
     for col in 0 ..< nextColumns:
-      if view.xLines[row].cells[col].text.len == 0:
-        view.xLines[row].cells[col] = initMonoTextCell()
+      if cells[col].text.len == 0:
+        cells[col] = initMonoTextCell()
+    discard view.storeLine(row, lineFromCells(cells))
   if view.xLines.len == 0:
-    view.xLines.add MonoTextLine()
+    view.xLines.add initMonoTextLine()
   view.clampCursor()
   view.invalidateTextGeometry()
   if view.stringValue() != previousValue:
@@ -500,54 +746,55 @@ proc setGridSize*(view: MonoTextView, rows, columns: int) =
   view.postCursorSelectionChanged(previousCursor)
 
 proc replaceGrid*(
-    view: MonoTextView, rows, columns: int, cells: openArray[MonoTextCell]
+    view: MonoTextView, rows, columns: int, provider: MonoTextRowProvider, rowOffset = 0
 ) =
-  ## Replace a rectangular cell grid in one display and accessibility update.
-  ##
-  ## `cells` is row-major and must contain exactly `max(rows, 0) * max(columns,
-  ## 0)` cells. Empty grids retain the view's single empty editing line.
+  ## Stream rectangular rows into compact storage. `provider` must append
+  ## exactly `columns` cells to each row builder. A nonzero `rowOffset` reuses
+  ## overlapping retained rows before comparing newly rendered rows.
   let
     nextRows = max(rows, 0)
     nextColumns = max(columns, 0)
-    expectedCellCount = nextRows * nextColumns
-  if cells.len != expectedCellCount:
-    raise newException(
-      ValueError,
-      "a mono text grid needs " & $expectedCellCount & " cells, got " & $cells.len,
-    )
-
-  let storedRows = max(nextRows, 1)
+    storedRows = max(nextRows, 1)
   var dimensionsChanged = view.xLines.len != storedRows
   if not dimensionsChanged:
     for row in 0 ..< nextRows:
-      if view.xLines[row].cells.len != nextColumns:
+      if view.xLines[row].len != nextColumns:
         dimensionsChanged = true
         break
-    if nextRows == 0 and view.xLines[0].cells.len != 0:
+    if nextRows == 0 and view.xLines[0].len != 0:
       dimensionsChanged = true
-
-  var contentsChanged = dimensionsChanged
-  if not contentsChanged:
-    for row in 0 ..< nextRows:
-      for column in 0 ..< nextColumns:
-        if view.xLines[row].cells[column] != cells[row * nextColumns + column]:
-          contentsChanged = true
-          break
-      if contentsChanged:
-        break
-  if not contentsChanged:
-    return
-
   let previousCursor = view.cursorTextIndex()
+  let shifted =
+    not dimensionsChanged and rowOffset != 0 and
+    (if rowOffset > 0: rowOffset < nextRows else: rowOffset > -nextRows)
+  if shifted:
+    let amount = abs(rowOffset)
+    if rowOffset > 0:
+      for row in 0 ..< nextRows - amount:
+        view.xLines[row] = move(view.xLines[row + amount])
+    else:
+      for row in countdown(nextRows - 1, amount):
+        view.xLines[row] = move(view.xLines[row - amount])
   if dimensionsChanged:
     view.xLines.setLen(storedRows)
-    for row in 0 ..< nextRows:
-      view.xLines[row].cells.setLen(nextColumns)
     if nextRows == 0:
-      view.xLines[0].cells.setLen(0)
+      discard view.storeLine(0, initMonoTextLine())
+  var contentsChanged = dimensionsChanged or shifted
   for row in 0 ..< nextRows:
-    for column in 0 ..< nextColumns:
-      view.xLines[row].cells[column] = cells[row * nextColumns + column]
+    var builder = initMonoTextRowBuilder(
+      view, row, nextColumns, compareExisting = view.xLines[row].len == nextColumns
+    )
+    provider(row, builder)
+    if builder.len != nextColumns:
+      raise newException(
+        ValueError,
+        "mono text row " & $row & " needs " & $nextColumns & " cells, got " &
+          $builder.len,
+      )
+    if builder.xChanged and view.storeLine(row, move(builder.xLine)):
+      contentsChanged = true
+  if not contentsChanged:
+    return
 
   view.clampCursor()
   if dimensionsChanged:
@@ -563,15 +810,23 @@ proc replaceCells*(
   if row < 0 or column < 0 or cells.len == 0:
     return
   let previousCursor = view.cursorTextIndex()
+  let oldLength =
+    if row < view.xLines.len:
+      view.xLines[row].len
+    else:
+      0
   view.ensureColumn(row, column + cells.len - 1)
-  var changed = false
+  var
+    changed = oldLength < column + cells.len
+    updated = view.xLines[row].unpackCells()
   for index, cell in cells:
     let target = column + index
-    if view.xLines[row].cells[target] != cell:
-      view.xLines[row].cells[target] = cell
+    if updated[target] != cell:
+      updated[target] = cell
       changed = true
   if not changed:
     return
+  discard view.storeLine(row, lineFromCells(updated))
   view.clampCursor()
   view.invalidateTextGeometry()
   view.postAccessibilityNotification(anValueChanged)
@@ -580,25 +835,17 @@ proc replaceCells*(
 proc rectangularGridColumnCount(view: MonoTextView): int =
   if view.xLines.len == 0:
     return
-  result = view.xLines[0].cells.len
+  result = view.xLines[0].len
   for row in 1 ..< view.xLines.len:
-    if view.xLines[row].cells.len != result:
+    if view.xLines[row].len != result:
       raise newException(ValueError, "scrolling grid rows requires a rectangular grid")
 
 proc scrollGridRows*(
-    view: MonoTextView, rowOffset: int, replacementCells: openArray[MonoTextCell]
+    view: MonoTextView, rowOffset: int, provider: MonoTextRowProvider
 ) =
-  ## Move rectangular grid rows and replace only the rows exposed by the move.
-  ##
-  ## A positive `rowOffset` moves later rows toward row zero and exposes rows at
-  ## the bottom. A negative offset moves earlier rows toward the last row and
-  ## exposes rows at the top. `replacementCells` contains the exposed rows in
-  ## top-to-bottom, row-major order.
+  ## Shift retained rows and stream only newly exposed rows through `provider`.
   if rowOffset == 0:
-    if replacementCells.len != 0:
-      raise newException(ValueError, "a zero row offset cannot replace grid cells")
     return
-
   let
     rowCount = view.xLines.len
     columnCount = view.rectangularGridColumnCount()
@@ -609,13 +856,17 @@ proc scrollGridRows*(
         rowCount
       else:
         -rowOffset
-    expectedCellCount = amount * columnCount
-  if replacementCells.len != expectedCellCount:
-    raise newException(
-      ValueError,
-      "scrolling " & $amount & " grid rows needs " & $expectedCellCount &
-        " replacement cells, got " & $replacementCells.len,
-    )
+  var replacements = newSeqOfCap[MonoTextLine](amount)
+  for replacementRow in 0 ..< amount:
+    var builder =
+      initMonoTextRowBuilder(view, replacementRow, columnCount, compareExisting = false)
+    provider(replacementRow, builder)
+    if builder.len != columnCount:
+      raise newException(
+        ValueError,
+        "mono text row needs " & $columnCount & " cells, got " & $builder.len,
+      )
+    replacements.add move(builder.xLine)
 
   if rowOffset > 0:
     for row in 0 ..< rowCount - amount:
@@ -630,10 +881,9 @@ proc scrollGridRows*(
     else:
       0
   for replacementRow in 0 ..< amount:
-    var cells = newSeq[MonoTextCell](columnCount)
-    for column in 0 ..< columnCount:
-      cells[column] = replacementCells[replacementRow * columnCount + column]
-    view.xLines[firstReplacementRow + replacementRow] = MonoTextLine(cells: move(cells))
+    view.xLines[firstReplacementRow + replacementRow] =
+      move(replacements[replacementRow])
+    view.touchLine(firstReplacementRow + replacementRow)
 
   view.setNeedsDisplayInRenderSlot(MonoTextViewportRenderSlot)
   view.postAccessibilityNotification(anValueChanged)
@@ -645,7 +895,7 @@ proc setLine*(view: MonoTextView, row: int, text: string) =
   view.ensureLine(row)
   if view.xLines[row].lineToString() == text:
     return
-  view.xLines[row].cells = text.textToCells()
+  discard view.storeLine(row, text.textToLine())
   view.clampCursor()
   view.invalidateTextGeometry()
   view.postAccessibilityNotification(anValueChanged)
@@ -659,25 +909,29 @@ proc scrollCells*(view: MonoTextView, top, bottom, left, right, rows, columns: i
     bottomRow = min(max(bottom, topRow), view.xLines.len)
     leftCol = max(left, 0)
     rightCol = max(right, leftCol)
-    oldLines = view.xLines
   var changed = false
+  var nextLines: seq[MonoTextLine]
   for row in topRow ..< bottomRow:
     view.ensureColumn(row, max(rightCol - 1, 0))
+    var nextCells = view.xLines[row].unpackCells()
     for column in leftCol ..< rightCol:
       let
         srcRow = row + rows
         srcColumn = column + columns
       let nextCell =
         if srcRow >= topRow and srcRow < bottomRow and srcRow >= 0 and
-            srcRow < oldLines.len and srcColumn >= leftCol and srcColumn < rightCol and
-            srcColumn < oldLines[srcRow].cells.len:
-          oldLines[srcRow].cells[srcColumn]
+            srcRow < view.xLines.len and srcColumn >= leftCol and srcColumn < rightCol and
+            srcColumn < view.xLines[srcRow].len:
+          view.xLines[srcRow].cellAt(srcColumn)
         else:
           initMonoTextCell()
-      if view.xLines[row].cells[column] != nextCell:
-        view.xLines[row].cells[column] = nextCell
+      if nextCells[column] != nextCell:
+        nextCells[column] = nextCell
         changed = true
+    nextLines.add lineFromCells(nextCells)
   if changed:
+    for index in 0 ..< nextLines.len:
+      discard view.storeLine(topRow + index, move(nextLines[index]))
     view.invalidateTextGeometry()
     view.postAccessibilityNotification(anValueChanged)
 
@@ -1046,9 +1300,12 @@ proc insertRune(view: MonoTextView, rune: Rune): bool =
     let
       row = view.xCursorRow
       column = view.xCursorColumn
-      tail = view.xLines[row].cells[column .. ^1]
-    view.xLines[row].cells.setLen(column)
-    view.xLines.insert(MonoTextLine(cells: tail), row + 1)
+    var cells = view.xLines[row].unpackCells()
+    let tail = cells[column .. ^1]
+    cells.setLen(column)
+    discard view.storeLine(row, lineFromCells(cells))
+    view.xLines.insert(lineFromCells(tail), row + 1)
+    view.touchLine(row + 1)
     view.xCursorRow = row + 1
     view.xCursorColumn = 0
     return true
@@ -1063,7 +1320,9 @@ proc insertRune(view: MonoTextView, rune: Rune): bool =
     return false
 
   let row = view.xCursorRow
-  view.xLines[row].cells.insert(initMonoTextCell(rune), view.xCursorColumn)
+  var cells = view.xLines[row].unpackCells()
+  cells.insert(initMonoTextCell(rune), view.xCursorColumn)
+  discard view.storeLine(row, lineFromCells(cells))
   inc view.xCursorColumn
   true
 
@@ -1080,15 +1339,19 @@ proc insertTextAtCursor(view: MonoTextView, text: string) =
 proc deleteBackward(view: MonoTextView): bool =
   let previousCursor = view.cursorTextIndex()
   if view.xCursorColumn > 0:
-    view.xLines[view.xCursorRow].cells.delete(view.xCursorColumn - 1)
+    var cells = view.xLines[view.xCursorRow].unpackCells()
+    cells.delete(view.xCursorColumn - 1)
+    discard view.storeLine(view.xCursorRow, lineFromCells(cells))
     dec view.xCursorColumn
     result = true
   elif view.xCursorRow > 0:
     let
       row = view.xCursorRow
-      previousLen = view.xLines[row - 1].cells.len
-      current = view.xLines[row].cells
-    view.xLines[row - 1].cells.add current
+      previousLen = view.xLines[row - 1].len
+      current = view.xLines[row].unpackCells()
+    var previous = view.xLines[row - 1].unpackCells()
+    previous.add current
+    discard view.storeLine(row - 1, lineFromCells(previous))
     view.xLines.delete(row)
     view.xCursorRow = row - 1
     view.xCursorColumn = previousLen
@@ -1101,12 +1364,16 @@ proc deleteBackward(view: MonoTextView): bool =
 proc deleteForward(view: MonoTextView): bool =
   let previousCursor = view.cursorTextIndex()
   let row = view.xCursorRow
-  if view.xCursorColumn < view.xLines[row].cells.len:
-    view.xLines[row].cells.delete(view.xCursorColumn)
+  if view.xCursorColumn < view.xLines[row].len:
+    var cells = view.xLines[row].unpackCells()
+    cells.delete(view.xCursorColumn)
+    discard view.storeLine(row, lineFromCells(cells))
     result = true
   elif row + 1 < view.xLines.len:
-    let next = view.xLines[row + 1].cells
-    view.xLines[row].cells.add next
+    let next = view.xLines[row + 1].unpackCells()
+    var cells = view.xLines[row].unpackCells()
+    cells.add next
+    discard view.storeLine(row, lineFromCells(cells))
     view.xLines.delete(row + 1)
     result = true
   if result:
@@ -1121,9 +1388,9 @@ proc moveCursorHorizontal(view: MonoTextView, delta: int) =
       dec view.xCursorColumn
     elif view.xCursorRow > 0:
       dec view.xCursorRow
-      view.xCursorColumn = view.xLines[view.xCursorRow].cells.len
+      view.xCursorColumn = view.xLines[view.xCursorRow].len
   elif delta > 0:
-    if view.xCursorColumn < view.xLines[view.xCursorRow].cells.len:
+    if view.xCursorColumn < view.xLines[view.xCursorRow].len:
       inc view.xCursorColumn
     elif view.xCursorRow + 1 < view.xLines.len:
       inc view.xCursorRow
@@ -1135,7 +1402,7 @@ proc moveCursorVertical(view: MonoTextView, delta: int) =
   let previousCursor = view.cursorTextIndex()
   view.xCursorRow = (view.xCursorRow + delta).clampIndex(0, view.xLines.high)
   view.xCursorColumn =
-    view.xCursorColumn.clampIndex(0, view.xLines[view.xCursorRow].cells.len)
+    view.xCursorColumn.clampIndex(0, view.xLines[view.xCursorRow].len)
   view.invalidateCursorDrawing()
   view.postCursorSelectionChanged(previousCursor)
 
@@ -1161,7 +1428,7 @@ proc handleEditorKey(view: MonoTextView, event: KeyEvent): bool =
     true
   of keyEnd:
     let previousCursor = view.cursorTextIndex()
-    view.xCursorColumn = view.xLines[view.xCursorRow].cells.len
+    view.xCursorColumn = view.xLines[view.xCursorRow].len
     view.invalidateCursorDrawing()
     view.postCursorSelectionChanged(previousCursor)
     true
@@ -1258,9 +1525,7 @@ proc textIndexAtPoint*(view: MonoTextView, point: nimkitTypes.Point): int =
 proc lineRange*(view: MonoTextView, line: int): TextRange =
   if line < 0 or line >= view.xLines.len:
     return initTextRange(0, 0)
-  initTextRange(
-    view.textIndexForRowColumn(line, 0), view.xLines[line].lineToString().runeLen
-  )
+  initTextRange(view.textIndexForRowColumn(line, 0), view.xLines[line].runeLength)
 
 proc lineForIndex*(view: MonoTextView, index: int): int =
   view.rowColumnForTextIndex(index).row
@@ -1272,7 +1537,7 @@ proc lineBounds*(view: MonoTextView, line: int): nimkitTypes.Rect =
     metrics = view.monoTextMetrics()
     style = view.monoTextStyle()
     textInsets = view.monoTextGridInsets(style)
-    width = max(view.xLines[line].cells.len, 1).float32 * metrics.cellWidth
+    width = max(view.xLines[line].len, 1).float32 * metrics.cellWidth
   rect(
     textInsets.left,
     textInsets.top + line.float32 * metrics.lineHeight,
@@ -1292,8 +1557,7 @@ proc drawRun(
   if endColumn <= startColumn:
     return
   let
-    line = view.xLines[row]
-    firstCell = line.cells[startColumn]
+    firstCell = view.xLines[row].styleAt(startColumn)
     baseForegroundColor = firstCell.foreground(defaultTextColor)
     foregroundColor =
       if mttFaint in firstCell.traits:
@@ -1320,10 +1584,10 @@ proc drawRun(
   var x = 0.0'f32
   for column in startColumn ..< endColumn:
     let rune =
-      if mttHidden in line.cells[column].traits:
+      if mttHidden in view.xLines[row].styleAt(column).traits:
         Rune(' ')
       else:
-        line.cells[column].firstRune()
+        view.xLines[row].firstRune(column)
     glyphs[column - startColumn] = (rune, vec2(x, 0.0'f32))
     x += metrics.cellWidth
 
@@ -1413,30 +1677,9 @@ proc drawMonoTextSurface(
   if view.isFocusVisible() and view.focusRingType() != frtNone:
     context.addFocusRing(frame, style.box)
 
-proc monoTextRowRevision(
-    view: MonoTextView,
-    row: int,
-    font: FigFont,
-    metrics: MonoTextMetrics,
-    textInsets: EdgeInsets,
-    textColor: nimkitTypes.Color,
-): uint64 =
-  var value = hash(row)
-  value = value !& hash(repr(font))
-  value = value !& hash(metrics.cellWidth)
-  value = value !& hash(metrics.lineHeight)
-  value = value !& hash(repr(textInsets))
-  value = value !& hash(repr(textColor))
-  for cell in view.xLines[row].cells:
-    value = value !& hash(cell.text)
-    value = value !& hash(repr(cell.foregroundColor))
-    value = value !& hash(repr(cell.backgroundColor))
-    value = value !& hash(repr(cell.decorationColor))
-    value = value !& hash(cell.hasForegroundColor)
-    value = value !& hash(cell.hasBackgroundColor)
-    value = value !& hash(cell.hasDecorationColor)
-    value = value !& hash(cell.traits)
-    value = value !& hash(cell.decorations)
+func monoTextRowRevision(row: int, lineRevision: uint64, appearanceHash: Hash): uint64 =
+  var value = appearanceHash !& hash(row)
+  value = value !& hash(lineRevision)
   result = uint64(cast[uint](!$value))
   if result == 0:
     result = 1
@@ -1450,6 +1693,11 @@ proc drawMonoText(view: MonoTextView, context: DrawContext) =
     textColor = view.resolvedTextColor(style)
     metrics = view.monoTextMetrics()
     font = view.monoFont()
+  var appearanceHash = hash(repr(font))
+  appearanceHash = appearanceHash !& hash(metrics.cellWidth)
+  appearanceHash = appearanceHash !& hash(metrics.lineHeight)
+  appearanceHash = appearanceHash !& hash(repr(textInsets))
+  appearanceHash = appearanceHash !& hash(repr(textColor))
 
   let surfaceRevision = view.renderSlotRevision(MonoTextSurfaceRenderSlot)
   if context.beginRenderSlot(MonoTextSurfaceRenderSlot, surfaceRevision):
@@ -1479,16 +1727,18 @@ proc drawMonoText(view: MonoTextView, context: DrawContext) =
   for row in rowStart ..< rowStop:
     let slot = monoTextRowRenderSlotId(row)
     if context.beginRenderSlot(
-      slot, view.monoTextRowRevision(row, font, metrics, textInsets, textColor)
+      slot, monoTextRowRevision(row, view.xLines[row].revision, appearanceHash)
     ):
-      let line = view.xLines[row]
-      var column = min(colStart, line.cells.len)
-      let lastColumn = min(max(colStop, column), line.cells.len)
+      var column = min(colStart, view.xLines[row].len)
+      let lastColumn = min(max(colStop, column), view.xLines[row].len)
       while column < lastColumn:
         let startColumn = column
         inc column
         while column < lastColumn and
-            line.cells[startColumn].sameRunStyle(line.cells[column], textColor):
+            view.xLines[row].styleAt(startColumn).sameRunStyle(
+              view.xLines[row].styleAt(column), textColor
+            )
+        :
           inc column
         view.drawRun(
           context, font, row, startColumn, column, metrics, textInsets, textColor

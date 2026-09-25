@@ -284,6 +284,21 @@ suite "nimkit text views":
     check textView.stringValue == "abcd"
     check textView.selectedRange == initTextRange(1, 2)
 
+  test "rejected marked text leaves the active value and mark unchanged":
+    let
+      textView = newTextView("abcd", frame = rect(0, 0, 160, 24))
+      delegate = newTextViewDelegateSpy(allowChange = false)
+    textView.delegate = DynamicAgent(delegate)
+    textView.selectedRange = initTextRange(1, 2)
+    textView.setMarkedTextValue("XY", initTextRange(1, 0), initTextRange(0, 0))
+    check textView.stringValue == "abcd"
+    check not textView.hasMarkedText
+    check not textView.undoText()
+    delegate.allowChange = true
+    textView.setMarkedTextValue("XY", initTextRange(1, 0), initTextRange(0, 0))
+    check textView.hasMarkedText
+    check textView.stringValue == "aXYd"
+
   test "text view exposes text input client marked text geometry":
     let
       textView = newTextView("abcd", frame = rect(12, 18, 180, 48))
@@ -415,6 +430,7 @@ suite "nimkit text views":
     check replaceView.stringValue == "1 two one"
     check replaceView.replaceAllText("one", "1") == 1
     check replaceView.stringValue == "1 two 1"
+    check replaceView.replaceAllText("1", "1") == 0
 
     checker.checkingResults =
       @[initTextCheckingResult(tckSpelling, initTextRange(6, 4), "spelling")]

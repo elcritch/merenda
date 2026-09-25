@@ -2,6 +2,7 @@ import std/[hashes, tables, unicode, unittest]
 
 import figdraw
 import pkg/pixie except draw
+import threading/smartptrs
 
 import merenda/nimkit
 import merenda/nimkit/drawing/renderscenes as retainedScenes
@@ -654,6 +655,17 @@ suite "NimKit render fragments":
     root.addSubview(textView)
 
     let scene = root.buildRenderScene()
+    let layoutSource = textView.layoutManager().glyphArrangementResource()[].sourceRunes
+    var sharedLines = 0
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        check node.textLayout.isGlyphView()
+        check node.textLayout.arrangedGlyphs.len == 0
+        check node.textLayout.positions.len == 0
+        check node.textLayout.selectionRects.len == 0
+        check node.textLayout.shared[].sourceRunes.sameUtf8Runes(layoutSource)
+        inc sharedLines
+    check sharedLines == 3
     let
       sceneIdentity = retainedScenes.sceneIdentity(scene)
       firstGeneration = scene.frameGeneration()
@@ -684,10 +696,26 @@ suite "NimKit render fragments":
     for node in scene.materialize()[DefaultDrawLevel].nodes:
       if node.kind == nkText:
         var renderedLine: string
-        for rune in node.textLayout.runes:
-          renderedLine.add rune
+        for glyphIndex in 0 ..< node.textLayout.glyphCount():
+          renderedLine.add node.textLayout.displayRune(glyphIndex)
         renderedLines.add renderedLine
     check renderedLines == @["alpha\n", "Beta\n", "gamma"]
+
+    let replica = retainedScenes.newRenderSceneReplica()
+    var fullUpdate = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+    retainedScenes.apply(replica, fullUpdate)
+    let
+      liveNodes = scene.materialize()[DefaultDrawLevel].nodes
+      replicaNodes = replica.materialize()[DefaultDrawLevel].nodes
+    check liveNodes.len == replicaNodes.len
+    for index, live in liveNodes:
+      if live.kind == nkText:
+        let isolated = replicaNodes[index]
+        check isolated.textLayout.isGlyphView()
+        check isolated.textLayout.arrangedGlyphs.len == 0
+        check isolated.textLayout.shared[].sourceRunes.sameUtf8Runes(
+          live.textLayout.shared[].sourceRunes
+        )
 
     let
       secondGeneration = scene.frameGeneration()

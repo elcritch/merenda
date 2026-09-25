@@ -747,6 +747,31 @@ sibling body
     check storage.attributesFor("first line").foregroundColor == style.quoteColor
     check storage.attributesFor("│").foregroundColor == style.ruleColor
 
+  test "nested Unicode block quotes retain each prefix and text style":
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage("> outer é\n> > inner 😀\n> tail")
+      rendered = storage.stringValue()
+    check rendered.contains("│ outer é")
+    check rendered.contains("│ │ inner 😀")
+    check rendered.contains("tail")
+    check storage.attributesFor("inner 😀").foregroundColor == style.quoteColor
+
+  test "highlighted code converts only multibyte token endpoints":
+    let highlighter: SyntaxHighlighter = proc(
+        source, language: string
+    ): seq[SyntaxTokenSpan] =
+      discard source
+      discard language
+      @[SyntaxTokenSpan(range: initTextRange(1, 1), tokenClass: stcKeyword)]
+    let
+      style = initMarkdownStyle()
+      storage =
+        markdownTextStorage("```custom\né😀z\n```", syntaxHighlighter = highlighter)
+    check storage.attributesFor("😀").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+    check storage.attributesFor("é").foregroundColor == style.codeColor
+
   test "inline, fenced, and indented code use the monospace presentation":
     let
       style = initMarkdownStyle()
@@ -865,6 +890,9 @@ fencedToken value
       "let value = \"" & "x".repeat(NimkitMatterMaximumLineBytes), "nim"
     ).len == 0
 
+    let crlf = "é😀\r\nlet answer = 1"
+    check matterSyntaxHighlighter(crlf, "nim").syntaxTokenAt(4) == stcKeyword
+
   when not defined(NimkitMatterMaximumLineBytes) or
       NimkitMatterMaximumLineBytes >= NimBindingMaximumLineBytes:
     test "Matter highlights generated Nim native declarations through importc strings":
@@ -934,8 +962,7 @@ mystery value
       cornerRadius: 9.0'f32,
       padding: insets(7.0'f32, 10.0'f32),
     )
-    let source =
-      """
+    let source = """
 Before `inline`.
 
 ```nim
@@ -1001,8 +1028,8 @@ echo "fenced"
     for node in scene.materialize()[DefaultDrawLevel].nodes:
       if node.kind == nkText:
         var text: string
-        for rune in node.textLayout.runes:
-          text.add rune
+        for glyphIndex in 0 ..< node.textLayout.glyphCount():
+          text.add node.textLayout.displayRune(glyphIndex)
         firstRendered.add text
 
     check totalLines > 200
@@ -1016,8 +1043,8 @@ echo "fenced"
     for node in scene.materialize()[DefaultDrawLevel].nodes:
       if node.kind == nkText:
         var text: string
-        for rune in node.textLayout.runes:
-          text.add rune
+        for glyphIndex in 0 ..< node.textLayout.glyphCount():
+          text.add node.textLayout.displayRune(glyphIndex)
         lastRendered.add text
 
     check lastRendered.len < totalLines div 3
@@ -1075,8 +1102,7 @@ echo "fenced"
   test "code block panels in ordered lists do not overlap item labels":
     var style = initMarkdownStyle()
     style.codeBlockStyle.padding = insets(7.0'f32, 10.0'f32)
-    let source =
-      """
+    let source = """
 1. Install dependencies:
 
    ```bash
@@ -1451,8 +1477,7 @@ Press <kbd>Enter</kbd>.
 
   test "GFM tables reflow once the Markdown viewport settles":
     let
-      source =
-        """
+      source = """
 | Mode | Shortcut | Notes |
 | :--- | :------: | :---- |
 | Normal | Ctrl+Shift+P | Opens the command palette and keeps a deliberately long explanation constrained to the current Markdown viewport. |

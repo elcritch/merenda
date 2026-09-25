@@ -64,22 +64,27 @@ suite "nimkit mono text views":
     let
       root = newView(frame = rect(0, 0, 240, 120))
       view = newMonoTextViewer(frame = rect(0, 0, 240, 120))
-      cells = [
-        initMonoTextCell("A"),
-        initMonoTextCell("B"),
-        initMonoTextCell("C"),
-        initMonoTextCell("D"),
-        initMonoTextCell("E"),
-        initMonoTextCell("F"),
-      ]
       spy = MonoTextAccessibilitySpy()
+    var cells = [
+      initMonoTextCell("A"),
+      initMonoTextCell("B"),
+      initMonoTextCell("C"),
+      initMonoTextCell("D"),
+      initMonoTextCell("E"),
+      initMonoTextCell("F"),
+    ]
+    let provider: MonoTextRowProvider = proc(
+        row: int, builder: var MonoTextRowBuilder
+    ) =
+      for column in 0 ..< 3:
+        builder.addCell(cells[row * 3 + column])
 
     root.addSubview(view)
     root.layoutSubtreeIfNeeded()
     view.connect(
       accessibilityNotificationPosted, spy, rememberAccessibilityNotification
     )
-    view.replaceGrid(2, 3, cells)
+    view.replaceGrid(2, 3, provider)
     root.layoutSubtreeIfNeeded()
 
     check view.lineCount == 2
@@ -89,80 +94,118 @@ suite "nimkit mono text views":
     check not root.needsLayout()
 
     root.clearNeedsDisplayTree()
-    var changedCells = cells
-    changedCells[0] = initMonoTextCell("G")
-    view.replaceGrid(2, 3, changedCells)
+    cells[0] = initMonoTextCell("G")
+    view.replaceGrid(2, 3, provider)
     check view.stringValue == "GBC\nDEF"
     check spy.notifications == @[anValueChanged, anValueChanged]
     check view.needsDisplay()
     check not root.needsLayout()
 
     expect ValueError:
-      view.replaceGrid(2, 3, changedCells[0 .. 4])
+      view.replaceGrid(2, 3) do(row: int, builder: var MonoTextRowBuilder):
+        if row == 0:
+          builder.addCell(cells[0])
     check view.stringValue == "GBC\nDEF"
     check spy.notifications == @[anValueChanged, anValueChanged]
 
     root.clearNeedsDisplayTree()
-    view.replaceGrid(2, 3, changedCells)
+    view.replaceGrid(2, 3, provider)
     check not view.needsDisplay()
-    view.replaceGrid(2, 3, changedCells)
+    view.replaceGrid(2, 3, provider)
     check spy.notifications == @[anValueChanged, anValueChanged]
     check not root.needsLayout()
     check not view.needsLayout()
+
+  test "streamed rows retain multi-rune cells and skip unchanged content":
+    let
+      root = newView(frame = rect(0, 0, 240, 120))
+      view = newMonoTextViewer(frame = rect(0, 0, 240, 120))
+      accent = initMonoTextCell("e\xcc\x81", traits = {mttBold})
+      wide = initMonoTextCell("\xe6\x97\xa5")
+      continuation = initMonoTextCell(" ")
+    root.addSubview(view)
+    root.layoutSubtreeIfNeeded()
+
+    let provider: MonoTextRowProvider = proc(
+        row: int, builder: var MonoTextRowBuilder
+    ) =
+      if row == 0:
+        builder.addCell(
+          accent.text,
+          MonoTextCellStyle(foregroundColor: accent.foregroundColor, traits: {mttBold}),
+        )
+        builder.addCell(wide)
+        builder.addCell(continuation)
+      else:
+        builder.addCell(initMonoTextCell("A"))
+        builder.addCell(initMonoTextCell("B"))
+        builder.addCell(initMonoTextCell("C"))
+
+    view.replaceGrid(2, 3, provider)
+    check view.cellAt(0, 0) == accent
+    check view.cellAt(0, 1) == wide
+    check view.cellAt(0, 2) == continuation
+    check view.columnCount(0) == 3
+    check view.stringValue() == "e\xcc\x81\xe6\x97\xa5 \nABC"
+    check view.lineRange(0).length == 4
+
+    root.clearNeedsDisplayTree()
+    view.replaceGrid(2, 3, provider)
+    check not view.needsDisplay()
+
+    let changedProvider: MonoTextRowProvider = proc(
+        row: int, builder: var MonoTextRowBuilder
+    ) =
+      if row == 0:
+        builder.addCell(initMonoTextCell("A"))
+        builder.addCell(initMonoTextCell("B"))
+        builder.addCell(initMonoTextCell("C"))
+      else:
+        builder.addCell(initMonoTextCell("D"))
+        builder.addCell(initMonoTextCell("E"))
+        builder.addCell(initMonoTextCell("F"))
+    view.replaceGrid(2, 3, changedProvider, rowOffset = 1)
+    check view.stringValue() == "ABC\nDEF"
+    view.replaceGrid(2, 3, changedProvider, rowOffset = low(int))
+    check view.stringValue() == "ABC\nDEF"
+
+    expect ValueError:
+      view.replaceGrid(2, 3) do(row: int, builder: var MonoTextRowBuilder):
+        builder.addCell(initMonoTextCell("X"))
 
   test "whole-row grid scrolling replaces only newly exposed rows":
     let
       root = newView(frame = rect(0, 0, 240, 120))
       view = newMonoTextViewer(frame = rect(0, 0, 240, 120))
       spy = MonoTextAccessibilitySpy()
-    view.replaceGrid(
-      4,
-      3,
-      [
-        initMonoTextCell("A"),
-        initMonoTextCell("B"),
-        initMonoTextCell("C"),
-        initMonoTextCell("D"),
-        initMonoTextCell("E"),
-        initMonoTextCell("F"),
-        initMonoTextCell("G"),
-        initMonoTextCell("H"),
-        initMonoTextCell("I"),
-        initMonoTextCell("J"),
-        initMonoTextCell("K"),
-        initMonoTextCell("L"),
-      ],
-    )
+    let initialRows = ["ABC", "DEF", "GHI", "JKL"]
+    view.replaceGrid(4, 3) do(row: int, builder: var MonoTextRowBuilder):
+      for cell in initialRows[row]:
+        builder.addCell($cell, initMonoTextCellStyle())
     root.addSubview(view)
     root.layoutSubtreeIfNeeded()
     view.connect(
       accessibilityNotificationPosted, spy, rememberAccessibilityNotification
     )
 
-    view.scrollGridRows(
-      1, [initMonoTextCell("M"), initMonoTextCell("N"), initMonoTextCell("O")]
-    )
+    view.scrollGridRows(1) do(row: int, builder: var MonoTextRowBuilder):
+      for cell in "MNO":
+        builder.addCell($cell, initMonoTextCellStyle())
     check view.stringValue() == "DEF\nGHI\nJKL\nMNO"
     check spy.notifications == @[anValueChanged]
     check view.needsDisplay()
     check not root.needsLayout()
 
-    view.scrollGridRows(
-      -2,
-      [
-        initMonoTextCell("P"),
-        initMonoTextCell("Q"),
-        initMonoTextCell("R"),
-        initMonoTextCell("S"),
-        initMonoTextCell("T"),
-        initMonoTextCell("U"),
-      ],
-    )
+    let replacementRows = ["PQR", "STU"]
+    view.scrollGridRows(-2) do(row: int, builder: var MonoTextRowBuilder):
+      for cell in replacementRows[row]:
+        builder.addCell($cell, initMonoTextCellStyle())
     check view.stringValue() == "PQR\nSTU\nDEF\nGHI"
     check spy.notifications == @[anValueChanged, anValueChanged]
 
     expect ValueError:
-      view.scrollGridRows(1, [initMonoTextCell("X")])
+      view.scrollGridRows(1) do(row: int, builder: var MonoTextRowBuilder):
+        builder.addCell("X", initMonoTextCellStyle())
     check view.stringValue() == "PQR\nSTU\nDEF\nGHI"
 
   test "grid offset translates cell geometry without changing the view frame":
@@ -480,7 +523,9 @@ suite "nimkit mono text views":
         initMonoTextCell("A", traits = {mttItalic}),
         initMonoTextCell("B", traits = {mttItalic}),
       ]
-    view.replaceGrid(1, cells.len, cells)
+    view.replaceGrid(1, cells.len) do(row: int, builder: var MonoTextRowBuilder):
+      for cell in cells:
+        builder.addCell(cell)
 
     let list = buildRenders(view)[DefaultDrawLevel]
     var foundText = false
