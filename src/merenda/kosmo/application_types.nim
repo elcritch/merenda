@@ -74,7 +74,6 @@ type
     matterRefreshPending: bool
     matterRefreshActive: bool
     inactiveRefreshDeferred: bool
-    hostHelpVisible: bool
 
   KosmoEditorTabsHandler = ref object of nimkit.Responder
     editorView: WeakRef[KosmoEditorView]
@@ -86,9 +85,6 @@ type
     editorView*: KosmoEditorView
     commandBar*: KosmoCommandBar
     markdownView*: KosmoMarkdownView
-    helpView: KosmoMarkdownView
-    helpPanel: nimkit.Box
-    helpCloseButton: nimkit.Button
     popupList: nimkit.PopupListView
     popupMenuState: Option[KosmoPopupMenu]
     popupHighlightedIndex: int

@@ -13,6 +13,7 @@ type KosmoPaneDocument* = ref object
   modified*: bool
   style*: nimkit.DocumentTabStyle
   styleClasses*: seq[string]
+  onActivate*: proc(document: KosmoPaneDocument, pane: nimkit.View) {.closure.}
   onClose*: proc(document: KosmoPaneDocument): bool {.closure.}
   onSave*: proc(document: KosmoPaneDocument): bool {.closure.}
   onDuplicate*: proc(document: KosmoPaneDocument): KosmoPaneDocument {.closure.}
@@ -25,6 +26,7 @@ proc newKosmoPaneDocument*(
     closeable = true,
     style = nimkit.dtsAutomatic,
     styleClasses: openArray[string] = [],
+    onActivate: proc(document: KosmoPaneDocument, pane: nimkit.View) {.closure.} = nil,
     onClose: proc(document: KosmoPaneDocument): bool {.closure.} = nil,
     onSave: proc(document: KosmoPaneDocument): bool {.closure.} = nil,
     onDuplicate: proc(document: KosmoPaneDocument): KosmoPaneDocument {.closure.} = nil,
@@ -40,6 +42,7 @@ proc newKosmoPaneDocument*(
     closeable: closeable,
     style: style,
     styleClasses: @styleClasses,
+    onActivate: onActivate,
     onClose: onClose,
     onSave: onSave,
     onDuplicate: onDuplicate,
@@ -66,6 +69,11 @@ proc close*(document: KosmoPaneDocument): bool {.discardable.} =
   if document.onClose.isNil:
     return true
   document.onClose(document)
+
+proc activate*(document: KosmoPaneDocument, pane: nimkit.View) =
+  ## Notify a document when it becomes active in a pane.
+  if not document.isNil and not document.onActivate.isNil:
+    document.onActivate(document, pane)
 
 proc save*(document: KosmoPaneDocument): bool {.discardable.} =
   ## Save a document when it provides a save operation.

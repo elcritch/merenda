@@ -135,6 +135,7 @@ proc activatePaneTab(
   let document = group.documentForIdentifier(identifier)
   if document.isNil:
     return
+  document.activate(group.pane)
   group.editorView.editor.dismissCompletionPopup()
   group.editorView.editor.dismissCommandLine()
   group.pane.setContentView(document.contentView)

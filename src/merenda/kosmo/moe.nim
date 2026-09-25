@@ -638,7 +638,8 @@ proc newKosmoEditor*(
   )
   result.workingDirectory = workingDirectory
   result.editor.hostPopupMenus = true
-  result.editor.hostHelpViewer = true
+  result.editor.hostCommandFilter = proc(e: Editor, command: ParsedCommand): bool =
+    command.action == claHelp
   discard result.editor.addCommandAlias("x", claSaveAndQuit)
   result.editor.setFrontendGitStatusEnabled(true)
   if text.len > 0:
@@ -1404,7 +1405,10 @@ proc helpText*(editor: KosmoEditor): string =
 
 proc takeHostHelpRequest*(editor: KosmoEditor): bool =
   ## Consume a request for the host to present Moe's Help document.
-  not editor.isNil and not editor.editor.isNil and editor.editor.takeHostHelpRequest()
+  if editor.isNil or editor.editor.isNil:
+    return false
+  let request = editor.editor.takeHostCommandRequest()
+  request.isSome and request.get.action == claHelp
 
 proc dismissCompletionPopup*(editor: KosmoEditor) =
   ## Dismiss Moe's active insert-completion popup, if any.

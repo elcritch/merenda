@@ -451,13 +451,16 @@ suite "Kosmo":
       check frontend.editorView.editor.commandLine().text == ":" & selectedCommand
       check frontend.editorView.editor.popupMenu().isNone
 
-  test "help opens as a dismissible overlay and survives a resize":
+  test "help opens a reusable document tab and survives a resize":
     let frontend = newKosmoApplication(newApplication("Kosmo Help Viewer Test"))
     defer:
       frontend.close()
     frontend.window.setContentView(frontend.contentView)
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.window.makeFirstResponder(frontend.editorView)
+    let
+      originalTab = frontend.editorPane.documentTabs.selectedDocumentTabIdentifier
+      originalTabCount = frontend.editorPane.documentTabs.len
 
     check not frontend.window.dispatchKeyDown(
       KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
@@ -467,53 +470,26 @@ suite "Kosmo":
     check frontend.window.dispatchKeyDown(
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
-    check frontend.editorPane.contentView == View(frontend.editorView)
-    var
-      helpPanel: Box
-      helpView: MarkdownView
-      closeButton: Button
-    for subview in frontend.editorPane.subviews():
-      if subview of Box and Box(subview).title() == "Moe Help":
-        helpPanel = Box(subview)
-        break
-    check not helpPanel.isNil
-    if not helpPanel.isNil:
-      check not helpPanel.hidden()
-      for subview in helpPanel.subviews():
-        if subview of MarkdownView:
-          helpView = MarkdownView(subview)
-        elif subview of Button:
-          closeButton = Button(subview)
-    check not helpView.isNil
-    check not closeButton.isNil
-    if not helpView.isNil:
-      check helpView.markdown == frontend.editorView.editor.helpText()
-      check "# Exiting" in helpView.markdown
+    check frontend.editorPane.documentTabs.len == originalTabCount + 1
+    check frontend.editorPane.documentTabs.selectedDocumentTabIdentifier ==
+      KosmoHelpTabIdentifier
+    check frontend.editorPane.contentView of MarkdownView
+    let helpView = MarkdownView(frontend.editorPane.contentView)
+    check helpView.markdown == frontend.editorView.editor.helpText()
+    check "# Exiting" in helpView.markdown
 
     frontend.editorPane.frame = rect(0, 0, 520, 280)
     frontend.editorPane.layoutSubtreeIfNeeded()
-    check not helpPanel.hidden()
-    check helpPanel.frame().size.width <= 520.0'f32
+    check frontend.editorPane.contentView == View(helpView)
+    check helpView.frame().size.width <= 520.0'f32
     check helpView.markdown == frontend.editorView.editor.helpText()
-    check frontend.editorView.frame().size.width == 520.0'f32
-    let narrowColumns = frontend.editorView.maxColumnCount()
-
-    let closeButtonBounds = closeButton.bounds()
-    check frontend.window.clickAt(
-      closeButton.pointToWindow(
-        initPoint(
-          closeButtonBounds.size.width * 0.5'f32,
-          closeButtonBounds.size.height * 0.5'f32,
-        )
-      )
-    )
-    check helpPanel.hidden()
+    check frontend.editorPane.documentTabs.selectDocumentTabWithIdentifier(originalTab)
     check frontend.editorPane.contentView == View(frontend.editorView)
+    check frontend.editorPane.documentTabs.len == originalTabCount + 1
 
     frontend.editorPane.frame = rect(0, 0, 740, 360)
     frontend.editorPane.layoutSubtreeIfNeeded()
     check frontend.editorView.frame().size.width == 740.0'f32
-    check frontend.editorView.maxColumnCount() > narrowColumns
 
     check frontend.window.makeFirstResponder(frontend.editorView)
     check not frontend.window.dispatchKeyDown(
@@ -524,11 +500,14 @@ suite "Kosmo":
     check frontend.window.dispatchKeyDown(
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
-    check not helpPanel.hidden()
+    check frontend.editorPane.documentTabs.len == originalTabCount + 1
+    check frontend.editorPane.documentTabs.selectedDocumentTabIdentifier ==
+      KosmoHelpTabIdentifier
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
     )
-    check helpPanel.hidden()
+    check frontend.editorPane.documentTabs.len == originalTabCount
+    check frontend.editorPane.documentTabs.selectedDocumentTabIdentifier == originalTab
     check frontend.editorPane.contentView == View(frontend.editorView)
 
   test "command bar grows with a larger monospace font":
