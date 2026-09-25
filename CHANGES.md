@@ -9,6 +9,7 @@
 - Keep Kosmo's status text clear of the Files and Find icons.
 - Let Kosmo launch a configured Nim language server through Moe's LSP client.
 - Close unrelated inherited descriptors before the configured Nim server starts.
+- Poll Git child output without waiting for inherited pipe writers to close.
 - Release text views and active field editors after their owning windows close,
   clearing generated layout references and circular keyboard-navigation links.
 - Keep layout-constraint view links non-owning so dismissed dialog content is
