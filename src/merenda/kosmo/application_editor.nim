@@ -2285,6 +2285,7 @@ proc observeWindow(bar: KosmoStatusBar, window: nimkit.Window) =
   bar.applyKosmoStatusBarStyle(window.effectiveAppearance())
 
 proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStatusBar =
+  label.styleId = KosmoStatusLabelStyleId
   result = KosmoStatusBar(label: label)
   result.initViewFields()
   result.addSubview(label)

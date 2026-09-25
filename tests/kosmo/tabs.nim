@@ -7,6 +7,7 @@ import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
+from ../nimkit/fixtures/rendergeometry import resolvedNodes
 
 const
   RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
@@ -97,8 +98,8 @@ suite "Kosmo":
         )
       statusContext = controlStyle(
         srTextField,
-        id = "kosmo.status-label",
-        classes = @[LabelStyleClass, LabelStatusStyleClass],
+        id = frontend.statusLabel.styleId,
+        classes = frontend.statusLabel.styleClasses,
       )
       baseFontSize = frontend.window.effectiveAppearance().resolveLength(
           statusContext, StyleFontSize, defaultFontSize()
@@ -141,6 +142,31 @@ suite "Kosmo":
     check not frontend.splitView.isPaneCollapsed(0)
     check frontend.sidebarTabs.selectedIndex == 0
     check abs(frontend.sidebarPane.frame().size.width - chosenWidth) < 0.01'f32
+
+  test "status text stays clear of sidebar icons after resizing and theme changes":
+    let frontend = newKosmoApplication(newApplication("Kosmo Status Text Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    let bar = frontend.statusLabel.superview()
+    require bar.subviews().len == 3
+    let findButton = bar.subviews()[2]
+
+    for theme in [initAquaTheme(), initDarkBSDTheme()]:
+      frontend.window.setAppearance(initAppearance(theme))
+      for width in [760.0'f32, 480.0'f32]:
+        frontend.contentView.frame = rect(0, 0, width, 520)
+        frontend.contentView.layoutSubtreeIfNeeded()
+        frontend.statusLabel.text = "NORMAL · No Name"
+        let renders = frontend.statusLabel.buildRenders()
+        require DefaultDrawLevel in renders
+        var foundText = false
+        for node in renders[DefaultDrawLevel].resolvedNodes():
+          if node.kind == nkText and node.renderedText() == frontend.statusLabel.text:
+            foundText = true
+            check node.screenBox.x > findButton.frame().maxX
+            check node.screenBox.x + node.screenBox.w <= bar.bounds().maxX
+        check foundText
 
   test "native tabs select, reorder, and close Moe buffers":
     let
