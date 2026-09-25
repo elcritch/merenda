@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Move Kosmo's Files and Find controls into a taller status bar and let the
+  sidebar collapse while preserving its width and using the active theme accent.
+- Let Kosmo launch a configured Nim language server through Moe's LSP client.
 - Release text views and active field editors after their owning windows close,
   clearing generated layout references and circular keyboard-navigation links.
 - Keep layout-constraint view links non-owning so dismissed dialog content is

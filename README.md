@@ -375,6 +375,10 @@ It brings together a file browser, split panes, terminal tabs, Markdown previews
 and Git diffs. You can use it on its own or explore its source to see how a
 larger Merenda app fits together.
 
+Use the Files and Find icons at the left of the status bar to switch sidebar
+views. Click the active icon again to collapse the sidebar and give the editor
+the full window width; click either icon to reopen it at its previous width.
+
 Open, Open Folder, and Save As share a resizable file browser with Places shortcuts,
 Back/Forward/Up navigation, and an editable location field. Enter an absolute path,
 a relative folder, or `~/` and press Return to navigate. The file list and Name
@@ -426,6 +430,29 @@ Kanagawa Wave, One Dark, and Tokyo Night Moon. These themes are embedded in
 the executable and work from any launch directory. Add your own TOML themes
 in `~/.config/moe/themes`; a user theme with the same name overrides a bundled
 theme.
+
+To use a Nim language server, add `nimLspCommand` to Kosmo's
+`~/.config/kosmo/config.json` and restart Kosmo. The command must be an
+absolute executable path followed by any arguments. For example, after building
+[Nimdex](https://github.com/elcritch/nimdex) from its checkout:
+
+```sh
+cd ../nimdex
+mkdir -p bin
+deps/nim-devel/bin/nim c -d:release -o:bin/nimdex src/nimdex.nim
+```
+
+Add this field to the JSON config, using absolute paths without spaces:
+
+```json
+{
+  "nimLspCommand": "/absolute/path/to/nimdex/bin/nimdex daemon --compiler /absolute/path/to/nimdex/deps/nim-devel/bin/nim"
+}
+```
+
+Kosmo enables Moe's LSP client when this field is set. In normal mode, press
+`g` then `d` to go to a definition, or `K` to show hover information. Remove
+the field or set it to an empty string to disable LSP on the next launch.
 
 To add language highlighting, open **Kosmo Settings → TextMate Grammars** and
 search the built-in language grammars in the open-source `microsoft/vscode`

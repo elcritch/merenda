@@ -571,20 +571,14 @@ suite "Kosmo":
     check frontend.sidebarTabs.selectedIndex == 0
     check not frontend.fileTree.isHiddenOrHasHiddenAncestor()
     check frontend.searchPanel.hidden
-    let findTabPoint = frontend.sidebarTabs.pointToWindow(
-      initPoint(
-        frontend.sidebarTabs.tabWidth * 1.5'f32,
-        frontend.sidebarTabs.tabBarHeight * 0.5'f32,
-      )
+    let findTabPoint = frontend.statusLabel.pointToWindow(
+      initPoint(47.0'f32, KosmoStatusBarHeight * 0.5'f32)
     )
     check frontend.window.mouseDownAt(findTabPoint)
     check frontend.window.mouseUpAt(findTabPoint)
     check frontend.sidebarTabs.selectedIndex == 1
-    let filesTabPoint = frontend.sidebarTabs.pointToWindow(
-      initPoint(
-        frontend.sidebarTabs.tabWidth * 0.5'f32,
-        frontend.sidebarTabs.tabBarHeight * 0.5'f32,
-      )
+    let filesTabPoint = frontend.statusLabel.pointToWindow(
+      initPoint(17.0'f32, KosmoStatusBarHeight * 0.5'f32)
     )
     check frontend.window.mouseDownAt(filesTabPoint)
     check frontend.window.mouseUpAt(filesTabPoint)

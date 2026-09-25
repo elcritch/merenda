@@ -2,9 +2,9 @@
 
 import std/[json, jsonutils, os]
 
-type KosmoConfig* = object
-  ## User-configurable appearance choices persisted by the standalone editor.
+type KosmoConfig* = object ## User choices persisted by the standalone editor.
   moeTheme*: string
+  nimLspCommand*: string
   merendaTheme*: string
   merendaFont*: string
   merendaMonoFont*: string

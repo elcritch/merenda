@@ -2182,6 +2182,137 @@ proc newKosmoSidebarPane(
   discard result.withProtocol(KosmoSidebarPaneLayout)
   result.updateSidebarFocus()
 
+protocol KosmoStatusIconDrawing of nimkit.ViewDrawingProtocol:
+  method draw(button: KosmoStatusIconButton, context: nimkit.DrawContext) =
+    let
+      bounds = button.bounds()
+      labelContext = nimkit.controlStyle(
+        nimkit.srTextField,
+        classes = @[nimkit.LabelStyleClass, nimkit.LabelStatusStyleClass],
+      )
+      iconColor = context.appearance.resolveColor(
+        labelContext, nimkit.StyleTextColor, nimkit.color(0.7, 0.7, 0.72, 1.0)
+      )
+      accentColor = context.appearance.resolveColor(
+        nimkit.controlStyle(nimkit.srDocumentTab),
+        nimkit.StyleMarkColor,
+        nimkit.color(0.8, 0.3, 0.3, 1.0),
+      )
+      iconSize = min(15.0'f32, bounds.size.height - 8.0'f32)
+      iconRect = nimkit.rect(
+        (bounds.size.width - iconSize) * 0.5'f32,
+        (bounds.size.height - iconSize) * 0.5'f32,
+        iconSize,
+        iconSize,
+      )
+    if button.highlighted():
+      context.addRectangle(bounds, nimkit.fill(nimkit.color(1, 1, 1, 0.08)))
+    context.addSvgMtsdf(iconRect, button.icon, nimkit.fill(iconColor))
+    if button.selected:
+      context.addRectangle(
+        nimkit.rect(2, 0, bounds.size.width - 4.0'f32, 2), nimkit.fill(accentColor)
+      )
+
+proc newKosmoStatusIconButton(
+    icon: nimkit.SvgMtsdfResource, title: string
+): KosmoStatusIconButton =
+  result = KosmoStatusIconButton(icon: icon)
+  result.initButtonFields("")
+  result.buttonType = nimkit.btMomentary
+  result.accessibilityLabel = title
+  result.toolTip = title
+  result.acceptsFirstResponder = false
+  discard result.withProtocol(KosmoStatusIconDrawing)
+
+protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
+  method layoutSubviews(bar: KosmoStatusBar) =
+    let bounds = bar.bounds()
+    bar.label.setFrameFromLayout(bounds)
+    if not bar.fileButton.isNil:
+      bar.fileButton.setFrameFromLayout(
+        nimkit.rect(2, 0, KosmoStatusIconWidth, bounds.size.height)
+      )
+      bar.findButton.setFrameFromLayout(
+        nimkit.rect(
+          2.0'f32 + KosmoStatusIconWidth, 0, KosmoStatusIconWidth, bounds.size.height
+        )
+      )
+
+proc applyKosmoStatusBarStyle(bar: KosmoStatusBar, base: nimkit.Appearance) =
+  var appearance = base
+  let
+    context = nimkit.controlStyle(
+      nimkit.srTextField,
+      id = KosmoStatusLabelStyleId,
+      classes = @[nimkit.LabelStyleClass, nimkit.LabelStatusStyleClass],
+    )
+    selector = nimkit.initStyleSelector(
+      nimkit.srTextField,
+      id = KosmoStatusLabelStyleId,
+      classes = @[nimkit.LabelStyleClass, nimkit.LabelStatusStyleClass],
+    )
+    fontSize =
+      base.resolveLength(context, nimkit.StyleFontSize, nimkit.defaultFontSize())
+    textInset =
+      if bar.fileButton.isNil:
+        8.0'f32
+      else:
+        2.0'f32 + KosmoStatusIconWidth * 2 + 10
+  appearance.setStyle(selector, nimkit.StyleFontSize, fontSize + 1.0'f32)
+  appearance.setStyle(
+    selector, nimkit.StyleTextInsets, nimkit.insets(0.0'f32, textInset)
+  )
+  bar.label.appearance = appearance
+
+protocol KosmoStatusBarAppearanceObserver of nimkit.WindowAppearanceEvents:
+  proc didChangeEffectiveAppearance(
+      bar: KosmoStatusBar, appearance: nimkit.Appearance
+  ) {.slot.} =
+    bar.applyKosmoStatusBarStyle(appearance)
+
+proc stopObservingWindow(bar: KosmoStatusBar) =
+  if bar.isNil or bar.observedWindow.isNil:
+    return
+  bar.unobserveProtocol(bar.observedWindow[], nimkit.WindowAppearanceEvents)
+  bar.observedWindow = default(WeakRef[nimkit.Window])
+
+proc observeWindow(bar: KosmoStatusBar, window: nimkit.Window) =
+  bar.stopObservingWindow()
+  if window.isNil:
+    return
+  bar.observedWindow = window.unsafeWeakRef()
+  bar.observeProtocol(window, nimkit.WindowAppearanceEvents)
+  bar.applyKosmoStatusBarStyle(window.effectiveAppearance())
+
+proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStatusBar =
+  result = KosmoStatusBar(label: label)
+  result.initViewFields()
+  result.addSubview(label)
+  if withSidebarButtons:
+    result.fileButton = newKosmoStatusIconButton(
+      nimkit.newSvgMtsdfResource(KosmoFilesIconSvg, "kosmo-status-files"), "Files"
+    )
+    result.findButton = newKosmoStatusIconButton(
+      nimkit.newSvgMtsdfResource(KosmoFindIconSvg, "kosmo-status-find"), "Find"
+    )
+    result.addSubview(result.fileButton)
+    result.addSubview(result.findButton)
+  discard result.withProtocol(KosmoStatusBarLayout)
+
+proc syncSidebarButtons(frontend: KosmoApplication) =
+  if frontend.isNil or frontend.documentView.isNil:
+    return
+  let bar = frontend.documentView.statusBar
+  if bar.isNil or bar.fileButton.isNil:
+    return
+  let visible = frontend.hasFileBrowser() and not frontend.splitView.isPaneCollapsed(0)
+  bar.fileButton.selected = visible and frontend.sidebarTabs.selectedIndex == 0
+  bar.findButton.selected = visible and frontend.sidebarTabs.selectedIndex == 1
+  bar.fileButton.toolTip = if bar.fileButton.selected: "Hide Files" else: "Show Files"
+  bar.findButton.toolTip = if bar.findButton.selected: "Hide Find" else: "Show Find"
+  bar.fileButton.needsDisplay = true
+  bar.findButton.needsDisplay = true
+
 protocol KosmoEditorPaneLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(pane: KosmoEditorPane) =
     let
