@@ -114,6 +114,7 @@ suite "Kosmo configuration":
       path = root / "config.json"
       config = KosmoConfig(
         moeTheme: KosmoMoeDefaultThemeIdentifier,
+        nimLspCommand: "custom-server --stdio",
         merendaTheme: "aqua",
         merendaFont: "Iosevka",
         merendaMonoFont: "JetBrains Mono",
@@ -128,6 +129,7 @@ suite "Kosmo configuration":
     check config.saveKosmoConfig(path)
     let node = parseJson(readFile(path))
     check node["moeTheme"].getStr() == KosmoMoeDefaultThemeIdentifier
+    check node["nimLspCommand"].getStr() == "custom-server --stdio"
     check node["merendaTheme"].getStr() == "aqua"
     check node["merendaFont"].getStr() == "Iosevka"
     check node["merendaMonoFont"].getStr() == "JetBrains Mono"
@@ -136,6 +138,23 @@ suite "Kosmo configuration":
     check node["merendaUiScale"].getFloat() == float(config.merendaUiScale)
     check node["merendaAutoSaveDefaults"].getBool()
     check loadKosmoConfig(path) == config
+
+  test "passes the configured Nim server command to Moe":
+    let
+      root = createTempDir("merenda-kosmo-nim-lsp-", "")
+      path = root / "config.json"
+      app = newApplication("Kosmo Nim LSP Config Test")
+      command = "custom-server --stdio"
+      config = KosmoConfig(nimLspCommand: command)
+    defer:
+      removeDir(root)
+    require config.saveKosmoConfig(path)
+    let manager = newKosmoWindowManager(app, configPath = path)
+    defer:
+      manager.close()
+    let frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+    check frontend.editorView.editor.nimLspConfiguration() ==
+      (enabled: true, command: command)
 
   test "ignores malformed JSON configuration":
     let

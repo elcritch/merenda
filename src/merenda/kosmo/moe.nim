@@ -40,6 +40,7 @@ import sigils/threads
 import ../nimkit/text/mattergrammarassets
 import ./matterworkers
 import ./moelogging
+import ./cli
 import ./moethemeassets
 import ./vscodegrammars
 
@@ -69,6 +70,7 @@ type
 
   KosmoEditor* = ref object
     editor: Editor
+    nimLspCommand: string
     temporaryBufferId: Option[BufferId]
     workingDirectory: string
     textMateGrammars: seq[KosmoTextMateGrammar]
@@ -593,7 +595,9 @@ proc availableTextMateGrammars*(editor: KosmoEditor): seq[KosmoTextMateGrammar] 
   if not editor.isNil and not editor.editor.isNil:
     result = editor.textMateGrammars
 
-proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
+proc newKosmoEditor*(
+    text = "", workingDirectory = "", nimLspCommand = ""
+): KosmoEditor =
   ## Create an editor with Moe's default configuration and optional initial text.
   startMoeMessageForwarding()
   var config = newEditorConfig()
@@ -601,6 +605,19 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   config.standard.statusLine = false
   config.standard.colorMode = cm24bit
   config.tabLine.enable = false
+  if nimLspCommand.len > 0:
+    config.lsp.enable = true
+    when defined(posix):
+      if kosmoLspLauncherExecutable.len > 0:
+        config.lsp.servers["nim"] = LspServerConfig(
+          command:
+            kosmoLspLauncherExecutable & " " &
+            kosmoLspChildArguments(nimLspCommand).join(" ")
+        )
+      else:
+        config.lsp.servers["nim"] = LspServerConfig(command: nimLspCommand)
+    else:
+      config.lsp.servers["nim"] = LspServerConfig(command: nimLspCommand)
   # Matter parsing is owned by Kosmo's asynchronous adapter. Keep Moe on its
   # built-in backend so opening, editing, and rendering never parse a live
   # buffer through Matter on the UI thread.
@@ -608,6 +625,7 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
   let grammarState = kosmoMatterGrammarState()
   result = KosmoEditor(
     editor: newEditor(config),
+    nimLspCommand: nimLspCommand,
     textMateGrammars: grammarState.grammars,
     matterSources: grammarState.sources,
     matterFileTypes: grammarState.fileTypes,
@@ -628,6 +646,13 @@ proc newKosmoEditor*(text = "", workingDirectory = ""): KosmoEditor =
     discard result.editor.handleTextInput(text)
     discard result.editor.handleKeyCombo(moeKeys.toSpecialKeyCombo(moeKeys.skEscape))
   discard forwardMoeMessages()
+
+proc nimLspConfiguration*(editor: KosmoEditor): tuple[enabled: bool, command: string] =
+  ## Return the Nim language server command selected for this editor.
+  if editor.isNil or editor.editor.isNil:
+    return
+  result.enabled = editor.editor.lsp.enabled
+  result.command = editor.nimLspCommand
 
 proc reloadInstalledVscodeGrammars*(editor: KosmoEditor) =
   ## Refresh the on-disk user grammar set and restart async highlighting.

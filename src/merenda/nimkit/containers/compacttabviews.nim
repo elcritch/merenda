@@ -81,6 +81,8 @@ proc `tabBarHeight=`*(tabs: CompactTabView, height: float32) =
   if tabs.xTabBarHeight == next:
     return
   tabs.xTabBarHeight = next
+  for button in tabs.xButtons:
+    button.hidden = next == 0.0'f32
   tabs.setNeedsLayout()
 
 proc tabWidth*(tabs: CompactTabView): float32 =
@@ -210,12 +212,13 @@ protocol CompactTabViewDrawing of ViewDrawingProtocol:
       )
     discard
       context.addRenderRectangle(context.renderRectFor(tabs.bounds()), backgroundFill)
-    discard context.addRenderRectangle(
-      context.renderRectFor(
-        rect(0.0'f32, tabs.xTabBarHeight - 1.0'f32, tabs.bounds().size.width, 1.0'f32)
-      ),
-      borderColor,
-    )
+    if tabs.xTabBarHeight > 0.0'f32:
+      discard context.addRenderRectangle(
+        context.renderRectFor(
+          rect(0.0'f32, tabs.xTabBarHeight - 1.0'f32, tabs.bounds().size.width, 1.0'f32)
+        ),
+        borderColor,
+      )
 
 protocol CompactTabViewAccessibility of AccessibilityProtocol:
   method accessibilityRole(tabs: CompactTabView): AccessibilityRole =
@@ -272,6 +275,7 @@ proc addCompactTabItem*(tabs: CompactTabView, item: CompactTabItem) =
   tabs.xButtons.add button
   tabs.addSubview(item.xView)
   tabs.addSubview(button, positioned = svpAbove)
+  button.hidden = tabs.xTabBarHeight == 0.0'f32
   if tabs.xSelectedIndex < 0:
     discard tabs.selectCompactTabAtIndex(0)
   else:

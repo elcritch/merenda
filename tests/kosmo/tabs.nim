@@ -7,6 +7,7 @@ import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
+from ../nimkit/fixtures/rendergeometry import resolvedNodes
 
 const
   RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
@@ -17,6 +18,15 @@ func center(rect: Rect): Point =
     rect.origin.x + rect.size.width / 2.0'f32,
     rect.origin.y + rect.size.height / 2.0'f32,
   )
+
+proc hasAccentIndicator(view: View, accent: Color): bool =
+  let renders = view.buildRenders()
+  if DefaultDrawLevel notin renders:
+    return
+  for node in renders[DefaultDrawLevel].nodes:
+    if node.kind == nkRectangle and node.fill.kind == flColor and
+        node.fill.color == accent.rgba:
+      return true
 
 proc renderedText(node: Fig): string =
   for glyphIndex in 0 ..< node.textLayout.glyphCount():
@@ -70,6 +80,93 @@ suite "Kosmo":
       frontend.contentView.frame = rect(0, 0, width, 480)
       frontend.contentView.layoutSubtreeIfNeeded()
       check abs(frontend.fileTree.frame().size.width - fileTreeWidth) < 0.01'f32
+
+  test "status bar icons collapse and reopen the sidebar without losing its width":
+    let frontend = newKosmoApplication(newApplication("Kosmo Sidebar Status Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 760, 520)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    frontend.splitView.setPositionOfDivider(0, 230.0'f32)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let
+      chosenWidth = frontend.sidebarPane.frame().size.width
+      bar = frontend.statusLabel.superview()
+      accent = frontend.window.effectiveAppearance().resolveColor(
+          controlStyle(srDocumentTab), StyleMarkColor, color(0, 0, 0, 1)
+        )
+      statusContext = controlStyle(
+        srTextField,
+        id = frontend.statusLabel.styleId,
+        classes = frontend.statusLabel.styleClasses,
+      )
+      baseFontSize = frontend.window.effectiveAppearance().resolveLength(
+          statusContext, StyleFontSize, defaultFontSize()
+        )
+      filesPoint = frontend.statusLabel.pointToWindow(
+        initPoint(17.0'f32, KosmoStatusBarHeight * 0.5'f32)
+      )
+      findPoint = frontend.statusLabel.pointToWindow(
+        initPoint(47.0'f32, KosmoStatusBarHeight * 0.5'f32)
+      )
+    check frontend.statusLabel.frame().size.height == KosmoStatusBarHeight
+    require bar.subviews().len == 3
+    let fileButton = bar.subviews()[1]
+    let findButton = bar.subviews()[2]
+    check frontend.statusLabel.effectiveAppearance().resolveLength(
+      statusContext, StyleFontSize, defaultFontSize()
+    ) > baseFontSize
+    check fileButton.hasAccentIndicator(accent)
+    check not findButton.hasAccentIndicator(accent)
+    check frontend.sidebarTabs.tabBarHeight == 0.0'f32
+    check not frontend.splitView.isPaneCollapsed(0)
+    require frontend.window.clickAt(filesPoint)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.splitView.isPaneCollapsed(0)
+    check frontend.sidebarPane.frame().size.width == 0.0'f32
+    check frontend.dockView.frame().minX == 0.0'f32
+    check not fileButton.hasAccentIndicator(accent)
+    check not findButton.hasAccentIndicator(accent)
+    require frontend.window.clickAt(findPoint)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check not frontend.splitView.isPaneCollapsed(0)
+    check frontend.sidebarTabs.selectedIndex == 1
+    check abs(frontend.sidebarPane.frame().size.width - chosenWidth) < 0.01'f32
+    check findButton.hasAccentIndicator(accent)
+    require frontend.window.clickAt(findPoint)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check frontend.splitView.isPaneCollapsed(0)
+    require frontend.showFileExplorer()
+    frontend.contentView.layoutSubtreeIfNeeded()
+    check not frontend.splitView.isPaneCollapsed(0)
+    check frontend.sidebarTabs.selectedIndex == 0
+    check abs(frontend.sidebarPane.frame().size.width - chosenWidth) < 0.01'f32
+
+  test "status text stays clear of sidebar icons after resizing and theme changes":
+    let frontend = newKosmoApplication(newApplication("Kosmo Status Text Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    let bar = frontend.statusLabel.superview()
+    require bar.subviews().len == 3
+    let findButton = bar.subviews()[2]
+
+    for theme in [initAquaTheme(), initDarkBSDTheme()]:
+      frontend.window.setAppearance(initAppearance(theme))
+      for width in [760.0'f32, 480.0'f32]:
+        frontend.contentView.frame = rect(0, 0, width, 520)
+        frontend.contentView.layoutSubtreeIfNeeded()
+        frontend.statusLabel.text = "NORMAL · No Name"
+        let renders = frontend.statusLabel.buildRenders()
+        require DefaultDrawLevel in renders
+        var foundText = false
+        for node in renders[DefaultDrawLevel].resolvedNodes():
+          if node.kind == nkText and node.renderedText() == frontend.statusLabel.text:
+            foundText = true
+            check node.screenBox.x > findButton.frame().maxX
+            check node.screenBox.x + node.screenBox.w <= bar.bounds().maxX
+        check foundText
 
   test "native tabs select, reorder, and close Moe buffers":
     let
@@ -556,14 +653,14 @@ suite "Kosmo":
       frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
 
     check frontend.window
-      .keyBindings()
-      .commandFor(
-        KeyEvent(
-          key: keyRightBracket,
-          keyCode: keyRightBracket.ord,
-          modifiers: tabShortcutModifiers,
-        )
-      ).isNone
+    .keyBindings()
+    .commandFor(
+      KeyEvent(
+        key: keyRightBracket,
+        keyCode: keyRightBracket.ord,
+        modifiers: tabShortcutModifiers,
+      )
+    ).isNone
     check frontend.editorView.editor.tabs()[1].active
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})

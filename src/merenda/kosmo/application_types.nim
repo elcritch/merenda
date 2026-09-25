@@ -146,8 +146,19 @@ type
     editorInputPolicy: KosmoEditorInputPolicy
     xSidebarFocused: bool
 
+  KosmoStatusIconButton = ref object of nimkit.Button
+    icon: nimkit.SvgMtsdfResource
+    selected: bool
+
+  KosmoStatusBar = ref object of nimkit.View
+    label: nimkit.Label
+    fileButton: KosmoStatusIconButton
+    findButton: KosmoStatusIconButton
+    observedWindow: WeakRef[nimkit.Window]
+
   KosmoContentView = ref object of nimkit.View
     splitView: nimkit.SplitView
+    statusBar: KosmoStatusBar
     statusLabel: nimkit.Label
     setInitialDivider: bool
     lastSplitWidth: float32
@@ -162,6 +173,7 @@ type
 
   KosmoDetachedContentView = ref object of nimkit.View
     workspace: nimkit.DockView
+    statusBar: KosmoStatusBar
     statusLabel: nimkit.Label
 
   KosmoWindowManager* = ref object

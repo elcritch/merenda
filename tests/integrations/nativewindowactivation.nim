@@ -28,6 +28,9 @@ when defined(macosx):
   ): bool =
     let deadline = getMonoTime() + initDuration(seconds = 5)
     while getMonoTime() < deadline:
+      # A CI desktop may give keyboard focus to another application. Force
+      # our requested document order before checking modal restacking.
+      windows[frontIndex].cocoaWindow().orderFrontRegardless()
       discard app.runForFrames(1)
       let order = nativeDocumentOrder(windows)
       if order.len == windows.len and order[0] == frontIndex:

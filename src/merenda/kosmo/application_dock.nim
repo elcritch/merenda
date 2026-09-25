@@ -808,7 +808,7 @@ proc updateDockTarget(
 protocol KosmoDetachedContentLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(content: KosmoDetachedContentView) =
     let bounds = content.bounds()
-    content.statusLabel.setFrameFromLayout(
+    content.statusBar.setFrameFromLayout(
       nimkit.rect(
         0,
         max(bounds.size.height - KosmoStatusBarHeight, 0.0'f32),
@@ -825,10 +825,14 @@ protocol KosmoDetachedContentLayout of nimkit.ViewLayoutProtocol:
 proc newKosmoDetachedContentView(
     workspace: nimkit.DockView, statusLabel: nimkit.Label
 ): KosmoDetachedContentView =
-  result = KosmoDetachedContentView(workspace: workspace, statusLabel: statusLabel)
+  result = KosmoDetachedContentView(
+    workspace: workspace,
+    statusBar: newKosmoStatusBar(statusLabel, withSidebarButtons = false),
+    statusLabel: statusLabel,
+  )
   result.initViewFields()
   result.addSubview(workspace)
-  result.addSubview(statusLabel)
+  result.addSubview(result.statusBar)
   discard result.withProtocol(KosmoDetachedContentLayout)
 
 protocol KosmoDetachedWindowLifecycleDelegate of nimkit.WindowDelegateProtocol:
@@ -838,6 +842,9 @@ protocol KosmoDetachedWindowLifecycleDelegate of nimkit.WindowDelegateProtocol:
     if lifecycle.controller.isNil:
       return
     let controller = lifecycle.controller[]
+    for host in controller.hosts:
+      if host.window == window and host.contentView of KosmoDetachedContentView:
+        KosmoDetachedContentView(host.contentView).statusBar.stopObservingWindow()
     var hostedGroups: seq[KosmoEditorGroup]
     for group in controller.groups:
       if group.window == window:
@@ -878,6 +885,7 @@ proc detachPaneTab(
     lifecycle = KosmoDetachedWindowLifecycle(controller: controller.unsafeWeakRef())
   lifecycle.initResponder()
   discard lifecycle.withProtocol(KosmoDetachedWindowLifecycleDelegate)
+  contentView.statusBar.observeWindow(window)
   window.delegate = lifecycle
   controller.hosts.add host
   controller.installShortcutBindings(window)
@@ -1184,7 +1192,7 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
       splitWidthChanged =
         content.setInitialDivider and
         abs(bounds.size.width - content.lastSplitWidth) > 0.001'f32
-    content.statusLabel.setFrameFromLayout(
+    content.statusBar.setFrameFromLayout(
       nimkit.rect(
         0,
         max(bounds.size.height - KosmoStatusBarHeight, 0.0'f32),
@@ -1218,8 +1226,9 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
     if not content.setInitialDivider and bounds.size.width > 0.0'f32:
       content.splitView.setPositionOfDivider(0, min(bounds.size.width * 0.25, 260.0))
       content.setInitialDivider = true
-    elif splitWidthChanged:
+    elif splitWidthChanged and not content.splitView.isPaneCollapsed(0):
       content.splitView.setPositionOfDivider(0, content.fileTreeWidth)
     content.lastSplitWidth = bounds.size.width
-    if content.splitView.paneCount() > 1 and not splitWidthChanged:
+    if content.splitView.paneCount() > 1 and not content.splitView.isPaneCollapsed(0) and
+        not splitWidthChanged:
       content.fileTreeWidth = content.splitView.positionOfDivider(0)
