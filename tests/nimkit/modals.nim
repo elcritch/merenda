@@ -56,23 +56,33 @@ suite "NimKit modal lifetimes":
       check TextField(unrelated.contentView()).text == "Unchanged"
 
   test "closing from an alert response releases the callback and button action":
-    let alert = newAlert("Complete", buttons = ["Close"])
-    var responses: seq[int]
-    let afterClose = proc() =
-      responses.add 10
-    alert.prepareForModal(
-      proc(response: int) =
-        responses.add response
-        alert.window.close()
-        afterClose()
-    )
+    var weakAlert: BackRef[Responder]
+    var weakWindow: BackRef[Responder]
+    var weakEditor: BackRef[Responder]
+    block:
+      let alert = newAlert("Complete", buttons = ["Close"])
+      weakAlert[] = Responder(alert)
+      weakWindow[] = Responder(alert.window)
+      var responses: seq[int]
+      let afterClose = proc() =
+        responses.add 10
+      alert.prepareForModal(
+        proc(response: int) =
+          responses.add response
+          alert.window.close()
+          afterClose()
+      )
 
-    let button = Button(alert.buttonViews[0])
-    require alert.window.clickView(button)
-    check responses == @[alert.buttonResponse(0), 10]
-    check alert.window.isClosed()
-    check alert.responseHandler.isNil
-    check button.target.isNil
+      let button = Button(alert.buttonViews[0])
+      require alert.window.clickView(button)
+      weakEditor[] = Responder(alert.window.fieldEditor())
+      check responses == @[alert.buttonResponse(0), 10]
+      check alert.window.isClosed()
+      check alert.responseHandler.isNil
+      check button.target.isNil
+    check weakAlert.isNil
+    check weakWindow.isNil
+    check weakEditor.isNil
 
   test "closing a modal aborts its running session and repeated ending is harmless":
     let
