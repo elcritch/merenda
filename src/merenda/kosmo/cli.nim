@@ -9,31 +9,36 @@ else:
 
 const
   KosmoBackgroundFlag* = "--bg"
+  KosmoNewFlag* = "--new"
   KosmoAddFlag* = "--add"
   KosmoHelpFlag* = "--help"
   KosmoShortHelpFlag* = "-h"
   KosmoVersionFlag* = "--version"
+  KosmoShortVersionFlag* = "-v"
   KosmoDiffFlag* = "--diff"
   KosmoCliDiffInputLimit* = 8 * 1024 * 1024
   KosmoUsage* =
     """
-Usage: kosmo [--bg] [--version] [--] [file-or-folder ...]
+Usage: kosmo [--bg | --new] [--] [file-or-folder ...]
+       kosmo [-v | --version]
        kosmo --add folder [folder ...]
        command-producing-diff | kosmo --diff
        command-producing-text | kosmo --file:txt
 
 Options:
-  --bg        Start Kosmo detached from the invoking shell.
+  --bg        Start a new Kosmo instance detached from the shell.
+  --new       Start a new Kosmo instance in the current process.
   --add       Add paths to the existing Kosmo window.
   --diff      Render a unified Git diff read from standard input.
   --file:type Open stdin as stdin.type (e.g. --file:txt; maximum 8 MiB).
-  --version   Show the Kosmo version.
+  -v, --version  Show the Kosmo version.
   --          Stop parsing options.
   -h, --help  Show this help text.
 """
 
 type KosmoStandaloneCommandLine* = object ## Parsed standalone command-line options.
   background*: bool
+  newInstance*: bool
   add*: bool
   help*: bool
   version*: bool
@@ -68,11 +73,13 @@ proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneComman
         result.arguments.add argument
       of KosmoBackgroundFlag:
         result.background = true
+      of KosmoNewFlag:
+        result.newInstance = true
       of KosmoAddFlag:
         result.add = true
       of KosmoHelpFlag, KosmoShortHelpFlag:
         result.help = true
-      of KosmoVersionFlag:
+      of KosmoVersionFlag, KosmoShortVersionFlag:
         result.version = true
       of KosmoDiffFlag:
         result.diff = true
@@ -104,6 +111,21 @@ proc parseKosmoCommandLine*(arguments: openArray[string]): KosmoStandaloneComman
     result.errors.add "--add cannot be combined with --diff"
   if result.add and result.paths.len == 0:
     result.errors.add "--add requires at least one file or folder path"
+  if result.background and result.newInstance:
+    result.errors.add "--bg and --new cannot be combined"
+
+func reusesRunningInstance*(commandLine: KosmoStandaloneCommandLine): bool =
+  ## New-instance options must skip the CLI transport in this process.
+  not (commandLine.background or commandLine.newInstance)
+
+proc kosmoBackgroundChildArguments*(paths: openArray[string], add: bool): seq[string] =
+  ## The detached child must start its own instance, even when one is running.
+  result.add KosmoNewFlag
+  if add:
+    result.add KosmoAddFlag
+  if paths.len > 0:
+    result.add "--"
+    result.add paths
 
 proc resolveKosmoCliPaths*(
     paths: openArray[string], workingDirectory = getCurrentDir()

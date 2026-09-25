@@ -52,6 +52,9 @@ proc runKosmoMain*() =
     reportCliErrors(commandLine.errors)
     quit(1)
   elif commandLine.stdinName.len > 0:
+    if commandLine.background:
+      stderr.writeLine("Kosmo --bg cannot detach piped --file input; use --new")
+      quit(1)
     if kosmoCliInputIsTerminal():
       stderr.writeLine("Kosmo --file reads text from standard input")
       quit(1)
@@ -62,13 +65,11 @@ proc runKosmoMain*() =
       stderr.writeLine(error.msg)
       quit(1)
     let directory = getCurrentDir()
-    let response = openStdinInRunningKosmo(commandLine.stdinName, content, directory)
-    if response.delivered:
-      reportCliErrors(response.errors)
-      quit(if response.errors.len == 0: 0 else: 1)
-    if commandLine.background:
-      stderr.writeLine("Kosmo --bg --file requires a running Kosmo instance")
-      quit(1)
+    if commandLine.reusesRunningInstance():
+      let response = openStdinInRunningKosmo(commandLine.stdinName, content, directory)
+      if response.delivered:
+        reportCliErrors(response.errors)
+        quit(if response.errors.len == 0: 0 else: 1)
     runKosmoRequest(
       some(
         KosmoCliOpenRequest(
@@ -81,6 +82,9 @@ proc runKosmoMain*() =
       )
     )
   elif commandLine.diff:
+    if commandLine.background:
+      stderr.writeLine("Kosmo --bg cannot detach piped --diff input; use --new")
+      quit(1)
     if commandLine.paths.len > 0:
       stderr.writeLine("Kosmo --diff does not accept file or folder arguments")
       quit(1)
@@ -94,33 +98,25 @@ proc runKosmoMain*() =
       stderr.writeLine(error.msg)
       quit(1)
     let workingDirectory = getCurrentDir()
-    let response = showDiffInRunningKosmo(content, workingDirectory)
-    if response.delivered:
-      reportCliErrors(response.errors)
-      quit(if response.errors.len == 0: 0 else: 1)
-    if commandLine.background:
-      stderr.writeLine(
-        "Kosmo --bg --diff requires a running Kosmo instance to receive the pipe"
-      )
-      quit(1)
+    if commandLine.reusesRunningInstance():
+      let response = showDiffInRunningKosmo(content, workingDirectory)
+      if response.delivered:
+        reportCliErrors(response.errors)
+        quit(if response.errors.len == 0: 0 else: 1)
     runKosmoDiff(content, workingDirectory)
   else:
     let paths = resolveKosmoCliPaths(commandLine.paths)
     if paths.errors.len > 0:
       reportCliErrors(paths.errors)
       quit(1)
-    if paths.paths.len > 0:
+    if paths.paths.len > 0 and commandLine.reusesRunningInstance():
       let response = openInRunningKosmo(paths.paths, add = commandLine.add)
       if response.delivered:
         reportCliErrors(response.errors)
         quit(if response.errors.len == 0: 0 else: 1)
     if commandLine.background:
-      var arguments: seq[string]
-      if commandLine.add:
-        arguments.add KosmoAddFlag
-      if paths.paths.len > 0:
-        arguments.add "--"
-        arguments.add paths.paths
-      launchKosmoInBackground(arguments)
+      launchKosmoInBackground(
+        kosmoBackgroundChildArguments(paths.paths, commandLine.add)
+      )
     else:
       runKosmo(paths.paths, commandLine.add)

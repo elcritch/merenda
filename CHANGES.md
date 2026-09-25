@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make `kosmo --bg` open paths in a detached new instance, add foreground
+  `--new`, and accept `-v` as an alias for `--version`.
 - Move Kosmo's Files and Find controls into a taller status bar and let the
   sidebar collapse while preserving its width and using the active theme accent.
 - Let Kosmo launch a configured Nim language server through Moe's LSP client.

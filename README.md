@@ -405,8 +405,10 @@ kosmo .
 kosmo README.md
 ```
 
-These commands reuse a running Kosmo instance. Add `--bg` to start Kosmo detached
-from your shell. On macOS, you can also open `Kosmo.app` from Finder.
+These commands reuse a running Kosmo instance. Use `kosmo --bg ./folder/` to
+start a new instance detached from your shell, or `kosmo --new ./folder/` to
+start a new instance in the foreground. `kosmo -v` and `kosmo --version` print
+the version and exit. On macOS, you can also open `Kosmo.app` from Finder.
 
 Add one or more folders to the existing Kosmo window with `--add`:
 

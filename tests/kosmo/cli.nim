@@ -28,6 +28,38 @@ suite "Kosmo command line":
     check commandLine.arguments == @["notes.md", "--literal", "with spaces.md"]
     check commandLine.filePath == "notes.md"
     check commandLine.paths == @["notes.md", "--literal", "with spaces.md"]
+    check not commandLine.reusesRunningInstance()
+
+  test "background folder launch starts a child that keeps the project path":
+    let
+      root = createTempDir("merenda-kosmo-bg-folder-", "")
+      folder = root / "project"
+    defer:
+      removeDir(root)
+    createDir(folder)
+    let parent = parseKosmoCommandLine(@["--bg", "./project/"])
+    let paths = resolveKosmoCliPaths(parent.paths, root)
+    check paths.errors.len == 0
+    check paths.paths == @[folder]
+    check not parent.reusesRunningInstance()
+    let childArguments = kosmoBackgroundChildArguments(paths.paths, parent.add)
+    check childArguments == @["--new", "--", folder]
+    let child = parseKosmoCommandLine(childArguments)
+    check child.newInstance
+    check not child.background
+    check not child.reusesRunningInstance()
+    check child.paths == @[folder]
+
+  test "new instance stays attached and skips a running instance":
+    let commandLine = parseKosmoCommandLine(@["./project/", "--new"])
+    check commandLine.newInstance
+    check not commandLine.background
+    check not commandLine.reusesRunningInstance()
+    check commandLine.arguments == @["./project/"]
+    check commandLine.paths == @["./project/"]
+    check parseKosmoCommandLine(@["./project/"]).reusesRunningInstance()
+    check parseKosmoCommandLine(@["--new", "--bg"]).errors ==
+      @["--bg and --new cannot be combined"]
 
   test "add mode is parsed without becoming a path":
     let commandLine = parseKosmoCommandLine(@["--add", "project"])
@@ -76,6 +108,10 @@ suite "Kosmo command line":
     check commandLine.version
     check commandLine.arguments.len == 0
     check commandLine.filePath.len == 0
+    let shortVersion = parseKosmoCommandLine(@["--bg", "-v"])
+    check shortVersion.version
+    check shortVersion.arguments.len == 0
+    check shortVersion.paths.len == 0
 
   test "diff input is selected without becoming a path":
     let commandLine = parseKosmoCommandLine(@["--bg", "--diff"])
@@ -90,6 +126,9 @@ suite "Kosmo command line":
     check commandLine.arguments == @["--", "--version"]
     check commandLine.filePath == "--version"
     check commandLine.paths == @["--version"]
+    let shortVersionPath = parseKosmoCommandLine(@["--", "-v"])
+    check not shortVersionPath.version
+    check shortVersionPath.paths == @["-v"]
 
   test "CLI paths resolve against the invoking shell and retain input order":
     let
