@@ -901,15 +901,19 @@ suite "Kosmo":
     frontend.contentView.layoutSubtreeIfNeeded()
     check frontend.openPath(root)
     check frontend.window.makeFirstResponder(frontend.editorView)
-    check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmCommand, kmShift})
+    let findShortcutModifiers =
+      frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: findShortcutModifiers)
     )
+    require frontend.sidebarTabs.selectedIndex == 1
+    require frontend.searchPanel.queryField.isEditing
     check frontend.window.dispatchTextInput("needle")
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
     )
-    check frontend.searchPanel.waitForSearch(timeoutMilliseconds = 10_000)
-    check frontend.searchPanel.resultsView.matches.len == DefaultFileSearchMaxResults
+    require frontend.searchPanel.waitForSearch(timeoutMilliseconds = 10_000)
+    require frontend.searchPanel.resultsView.matches.len == DefaultFileSearchMaxResults
 
     frontend.contentView.layoutSubtreeIfNeeded()
     discard frontend.window.buildRenders()
@@ -960,12 +964,14 @@ suite "Kosmo":
       check frontend.window.firstResponder() == Responder(terminalView)
       check terminalView.focusVisible
       check terminalView.focusRingType == frtNone
+      let tabShortcutModifiers =
+        frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
 
       check frontend.window.dispatchKeyDown(
         KeyEvent(
           key: keyLeftBracket,
           keyCode: keyLeftBracket.ord,
-          modifiers: {kmCommand, kmShift},
+          modifiers: tabShortcutModifiers,
         )
       )
       check frontend.editorPane.contentView == View(frontend.editorView)
@@ -973,7 +979,7 @@ suite "Kosmo":
         KeyEvent(
           key: keyRightBracket,
           keyCode: keyRightBracket.ord,
-          modifiers: {kmCommand, kmShift},
+          modifiers: tabShortcutModifiers,
         )
       )
       check frontend.editorPane.contentView == View(terminalView)
