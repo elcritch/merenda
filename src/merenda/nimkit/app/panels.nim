@@ -151,6 +151,11 @@ proc fileBrowser*(panel: OpenPanel): FileBrowser =
   if not panel.browserView.isNil and panel.browserView of FileBrowser:
     result = FileBrowser(panel.browserView)
 
+proc fileBrowser*(panel: SavePanel): FileBrowser =
+  ## Return the panel's browser after its content view has been built.
+  if not panel.browserView.isNil and panel.browserView of FileBrowser:
+    result = FileBrowser(panel.browserView)
+
 proc setSelectedUrls*(panel: OpenPanel, urls: openArray[string]) =
   let requestedUrls = @urls
   defer:
@@ -261,6 +266,7 @@ proc attachButtonRow(
     layout: StackView,
     titles: openArray[string],
     responses: openArray[int],
+    fileDialog = false,
     callback: proc(response: int) {.closure.},
 ): seq[View] =
   let row = newStackView(laHorizontal)
@@ -276,12 +282,22 @@ proc attachButtonRow(
       else:
         index + 1
     let button = newResponseButton(title, response, callback)
-    row.addArrangedSubview(View(button))
     result.add View(button)
-  layout.addFlexibleSpacer()
+  if fileDialog:
+    row.distribution = svdFill
+    let spacer = row.addFlexibleSpacer()
+    row.fillAvailableWidth(spacer)
+    for index in countdown(result.high, 0):
+      row.addArrangedSubview(result[index])
+  else:
+    for button in result:
+      row.addArrangedSubview(button)
+    layout.addFlexibleSpacer()
   layout.addArrangedSubview(View(row))
 
-proc prepareRoot(window: Window): tuple[root: View, layout: StackView] =
+proc prepareRoot(
+    window: Window, contentInsets = PanelContentInsets
+): tuple[root: View, layout: StackView] =
   let frame = rect(0.0, 0.0, window.frame().size.width, window.frame().size.height)
   result.root = newView(frame = frame)
   result.layout = newStackView(laVertical)
@@ -289,7 +305,7 @@ proc prepareRoot(window: Window): tuple[root: View, layout: StackView] =
   result.layout.alignment = svaFill
   result.root.addSubview(result.layout)
   discard
-    result.layout.pinEdges(toGuide = result.root.contentLayoutGuide(PanelContentInsets))
+    result.layout.pinEdges(toGuide = result.root.contentLayoutGuide(contentInsets))
 
 proc setPanelContent(window: Window, content: View) =
   window.setContentView(content)
@@ -301,6 +317,39 @@ proc openPanelBrowserSelectionDidChange(
   if browser.isNil or sender != DynamicAgent(browser):
     return
   panel.selectedUrls = browser.selectedPaths()
+  discard panel.validateSelection()
+
+proc openPanelBrowserDirectoryDidChange(
+    panel: OpenPanel, sender: DynamicAgent
+) {.slot.} =
+  let browser = panel.fileBrowser()
+  if browser.isNil or sender != DynamicAgent(browser):
+    return
+  panel.directoryUrl = browser.directoryPath()
+  panel.selectedUrls = @[]
+  if panel.canChooseDirectories and not panel.canChooseFiles:
+    panel.selectedUrls = @[browser.directoryPath()]
+  discard panel.validateSelection()
+
+proc savePanelBrowserDirectoryDidChange(
+    panel: SavePanel, sender: DynamicAgent
+) {.slot.} =
+  let browser = panel.fileBrowser()
+  if browser.isNil or sender != DynamicAgent(browser):
+    return
+  panel.directoryUrl = browser.directoryPath()
+  discard panel.validateSelection()
+
+proc savePanelBrowserSelectionDidChange(
+    panel: SavePanel, sender: DynamicAgent
+) {.slot.} =
+  let browser = panel.fileBrowser()
+  if browser.isNil or sender != DynamicAgent(browser):
+    return
+  let selected = browser.selectedEntries()
+  if selected.len == 1 and selected[0].isFile():
+    panel.nameFieldStringValue = selected[0].name
+    TextField(panel.nameField).text = selected[0].name
   discard panel.validateSelection()
 
 proc openPanelBrowserEntryWasActivated(
@@ -333,22 +382,20 @@ proc rebuildAlertView*(alert: Alert): View =
     layout.addArrangedSubview(View(newStatusLabel(alert.informativeText)))
   if not alert.accessoryView.isNil:
     layout.addArrangedSubview(alert.accessoryView)
-  alert.buttonViews = layout.attachButtonRow(alert.buttons, alert.buttonResponses) do(
-    response: int
-  ):
+  alert.buttonViews = layout.attachButtonRow(
+    alert.buttons, alert.buttonResponses, fileDialog = false
+  ) do(response: int):
     alert.dismiss(response)
   alert.contentView = prepared.root
   alert.window.setPanelContent(alert.contentView)
   result = alert.contentView
 
 proc rebuildOpenPanelView*(panel: OpenPanel): View =
-  let prepared = prepareRoot(panel.window)
+  let prepared = prepareRoot(panel.window, insets(12, 12, 12, 12))
   let layout = prepared.layout
-  layout.addArrangedSubview(View(newTitleLabel(panel.window.title())))
   if panel.message.len > 0:
     layout.addArrangedSubview(View(newStatusLabel(panel.message)))
-  let browser =
-    newFileBrowser(panel.initialOpenPanelDirectory(), frame = rect(0, 0, 540, 280))
+  let browser = newFileBrowser(panel.initialOpenPanelDirectory())
   browser.allowsMultipleSelection = panel.allowsMultipleSelection
   var selectedPaths: seq[string]
   for url in panel.selectedUrls:
@@ -362,7 +409,13 @@ proc rebuildOpenPanelView*(panel: OpenPanel): View =
   browser.connect(
     fileBrowserEntryWasActivated, panel, openPanelBrowserEntryWasActivated
   )
-  layout.addArrangedSubview(View(browser))
+  browser.connect(
+    fileBrowserDirectoryDidChange, panel, openPanelBrowserDirectoryDidChange
+  )
+  if panel.canChooseDirectories and not panel.canChooseFiles and
+      panel.selectedUrls.len == 0:
+    panel.selectedUrls = @[browser.directoryPath()]
+  layout.addArrangedSubview(View(browser), svspFillAvailableSpace)
   if panel.allowedFileTypes.len > 0:
     layout.addArrangedSubview(
       View(newStatusLabel("Allowed types: " & panel.allowedFileTypes.join(", ")))
@@ -370,7 +423,7 @@ proc rebuildOpenPanelView*(panel: OpenPanel): View =
   if not panel.accessoryView.isNil:
     layout.addArrangedSubview(panel.accessoryView)
   panel.buttonViews = layout.attachButtonRow(
-    [panel.prompt, "Cancel"], [PanelResponseOk, PanelResponseCancel]
+    [panel.prompt, "Cancel"], [PanelResponseOk, PanelResponseCancel], fileDialog = true
   ) do(response: int):
     if response == PanelResponseOk and not panel.validateSelection():
       panel.buttonViews.updatePrimaryButton(false)
@@ -382,14 +435,27 @@ proc rebuildOpenPanelView*(panel: OpenPanel): View =
   result = panel.contentView
 
 proc rebuildSavePanelView*(panel: SavePanel): View =
-  let prepared = prepareRoot(panel.window)
+  let prepared = prepareRoot(panel.window, insets(12, 12, 12, 12))
   let layout = prepared.layout
-  layout.addArrangedSubview(View(newTitleLabel(panel.window.title())))
   if panel.message.len > 0:
     layout.addArrangedSubview(View(newStatusLabel(panel.message)))
   panel.nameField = View(newTextField(panel.nameFieldStringValue))
   TextField(panel.nameField).connect(textDidChange, panel, refreshSavePanelValidation)
-  layout.addArrangedSubview(panel.nameField)
+  let browser = newFileBrowser(panel.directoryUrl.filePathFromUrl())
+  panel.browserView = browser
+  if not panel.directoryUrl.filePathFromUrl().isBrowsableDirectory():
+    panel.directoryUrl = browser.directoryPath()
+  browser.connect(
+    fileBrowserDirectoryDidChange, panel, savePanelBrowserDirectoryDidChange
+  )
+  browser.connect(
+    fileBrowserSelectionDidChange, panel, savePanelBrowserSelectionDidChange
+  )
+  layout.addArrangedSubview(browser, svspFillAvailableSpace)
+  let nameRow = newStackView(laHorizontal)
+  nameRow.addArrangedSubview(newFormLabel("Name:"))
+  nameRow.addArrangedSubview(panel.nameField, svspFillAvailableWidth)
+  layout.addArrangedSubview(nameRow)
   if panel.allowedFileTypes.len > 0:
     layout.addArrangedSubview(
       View(newStatusLabel("Allowed types: " & panel.allowedFileTypes.join(", ")))
@@ -397,7 +463,7 @@ proc rebuildSavePanelView*(panel: SavePanel): View =
   if not panel.accessoryView.isNil:
     layout.addArrangedSubview(panel.accessoryView)
   panel.buttonViews = layout.attachButtonRow(
-    [panel.prompt, "Cancel"], [PanelResponseOk, PanelResponseCancel]
+    [panel.prompt, "Cancel"], [PanelResponseOk, PanelResponseCancel], fileDialog = true
   ) do(response: int):
     if response == PanelResponseOk and not panel.validateSelection():
       panel.buttonViews.updatePrimaryButton(false)

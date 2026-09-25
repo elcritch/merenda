@@ -97,6 +97,7 @@ type
     allowedFileTypes*: seq[string]
     accessoryView*: View
     contentView*: View
+    browserView*: View
     nameField*: View
     buttonViews*: seq[View]
     response*: int
@@ -752,14 +753,14 @@ proc newAlert*(
 
 proc newOpenPanel*(): OpenPanel =
   result = OpenPanel(
-    window: newPanel("Open", rect(100, 100, 640, 460)),
+    window: newPanel("Open", rect(100, 100, 760, 540)),
     prompt: "Open",
     canChooseFiles: true,
   )
   initResponder(result)
 
 proc newSavePanel*(): SavePanel =
-  result = SavePanel(window: newPanel("Save", rect(100, 100, 520, 280)), prompt: "Save")
+  result = SavePanel(window: newPanel("Save", rect(100, 100, 760, 580)), prompt: "Save")
   initResponder(result)
 
 proc popupPixels(value: float32, scale: float32, minimum: int32): int32 {.inline.} =

@@ -375,6 +375,12 @@ It brings together a file browser, split panes, terminal tabs, Markdown previews
 and Git diffs. You can use it on its own or explore its source to see how a
 larger Merenda app fits together.
 
+Open, Open Folder, and Save As share a resizable file browser with Places shortcuts,
+Back/Forward/Up navigation, and an editable location field. Enter an absolute path,
+a relative folder, or `~/` and press Return to navigate. The file list and Name
+column expand with the dialog; Save As keeps the filename below the browser so you
+can change folders without losing the name you typed.
+
 ### Install and open a project
 
 You don't need Nim to use a prebuilt Kosmo release. Run the installer from a
