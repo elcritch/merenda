@@ -53,15 +53,18 @@ suite "NimKit modal lifetimes":
   test "closing from an alert response releases the callback and button action":
     let alert = newAlert("Complete", buttons = ["Close"])
     var responses: seq[int]
+    let afterClose = proc() =
+      responses.add 10
     alert.prepareForModal(
       proc(response: int) =
         responses.add response
         alert.window.close()
+        afterClose()
     )
 
     let button = Button(alert.buttonViews[0])
     require alert.window.clickView(button)
-    check responses == @[alert.buttonResponse(0)]
+    check responses == @[alert.buttonResponse(0), 10]
     check alert.window.isClosed()
     check alert.responseHandler.isNil
     check button.target.isNil

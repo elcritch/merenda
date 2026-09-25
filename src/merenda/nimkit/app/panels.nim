@@ -115,21 +115,37 @@ proc buttonResponse*(alert: Alert, index: int): int =
 
 proc dismiss*(alert: Alert, response: int) =
   alert.response = response
-  let handler = alert.responseHandler
-  if not handler.isNil:
+  # The handler may close the window; keep its captured state alive until it returns.
+  var handler = move(alert.responseHandler)
+  if handler.isNil:
+    return
+  try:
     handler(response)
+  finally:
+    if not alert.window.isClosed() and alert.responseHandler.isNil:
+      alert.responseHandler = move(handler)
 
 proc dismiss*(panel: OpenPanel, response: int) =
   panel.response = response
-  let handler = panel.responseHandler
-  if not handler.isNil:
+  var handler = move(panel.responseHandler)
+  if handler.isNil:
+    return
+  try:
     handler(response)
+  finally:
+    if not panel.window.isClosed() and panel.responseHandler.isNil:
+      panel.responseHandler = move(handler)
 
 proc dismiss*(panel: SavePanel, response: int) =
   panel.response = response
-  let handler = panel.responseHandler
-  if not handler.isNil:
+  var handler = move(panel.responseHandler)
+  if handler.isNil:
+    return
+  try:
     handler(response)
+  finally:
+    if not panel.window.isClosed() and panel.responseHandler.isNil:
+      panel.responseHandler = move(handler)
 
 proc syncSavePanelFromField(panel: SavePanel) =
   if panel.nameField.isNil or not (panel.nameField of TextField):
