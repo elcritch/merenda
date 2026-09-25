@@ -115,6 +115,14 @@ proc generatedLayoutInputs*(view: View): seq[LayoutInput] =
     for input in view.xLayoutInputCache.generated[source]:
       result.add input
 
+proc releaseGeneratedLayoutInputs*(view: View) =
+  ## Generated equations hold view references; closed trees cannot reuse them.
+  if view.isNil:
+    return
+  view.xLayoutInputCache = LayoutInputCache()
+  for child in view.xSubviews:
+    child.releaseGeneratedLayoutInputs()
+
 proc addToSummary(
     summaries: var seq[LayoutInputSummary],
     source: LayoutInputSource,

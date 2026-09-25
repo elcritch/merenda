@@ -3,57 +3,91 @@ import merenda/nimkit
 import ./fixtures/widgetflows
 
 suite "NimKit modal lifetimes":
-  test "prepared sheet choices reach their callback and editing resumes in the owner":
-    let
-      app = newApplication("Sheet workflow")
-      owner = newWindow("Owner", frame = rect(0, 0, 360, 160))
-      unrelated = newWindow("Unrelated", frame = rect(0, 0, 360, 160))
-      editor = newTextField("Draft", frame = rect(10, 10, 280, 30))
-      root = newView()
-    root.addSubview(editor)
-    owner.setContentView(root)
-    unrelated.setContentView(newTextField("Unchanged"))
-    app.addWindow(owner)
-    app.addWindow(unrelated)
-    owner.makeKeyAndOrderFront()
-    require owner.clickView(editor)
-    defer:
-      owner.close()
-      unrelated.close()
+  test "closing a window releases its active field editor":
+    var weakWindow, weakField, weakEditor: BackRef[Responder]
+    block:
+      let
+        app = newApplication("Editing lifetime")
+        window = newWindow("Editor")
+        field = newTextField("Draft")
+      window.setContentView(field)
+      app.addWindow(window)
+      window.makeKeyAndOrderFront()
+      require window.clickView(field)
+      weakWindow[] = Responder(window)
+      weakField[] = Responder(field)
+      weakEditor[] = Responder(window.fieldEditor())
+      window.close()
       discard app.runForFrames(1)
-    var responses: seq[int]
-    for choice in [1, 0, 1]:
-      let alert = newAlert("Unsaved changes", buttons = ["Discard", "Cancel"])
-      alert.prepareForModal(
-        proc(response: int) =
-          responses.add response
-          app.stopModal(response)
-      )
-      # Use the prepared window overload: installing another default handler
-      # would drop the caller's completion callback.
-      let session = app.beginModalSheet(owner, alert.window)
-      require not session.isNil
-      let belongsToOwner = session.parentWindow == owner
-      check belongsToOwner
-      let previousResponses = responses.len
-      require alert.window.clickView(alert.buttonViews[choice])
-      require responses.len == previousResponses + 1
-      check responses[^1] == alert.buttonResponse(choice)
-      check session.state == mssStopped
-      check session.response == responses[^1]
-      app.endModalSession(session)
-      alert.window.close()
-      check alert.window.isClosed()
-      check alert.responseHandler.isNil
-      for button in alert.buttonViews:
-        check Button(button).target.isNil
-      check app.modalSession().isNil
-      let ownerIsKey = app.keyWindow() == owner
-      check ownerIsKey
-      let before = editor.text
-      require owner.dispatchTextInput(" resumed")
-      check editor.text != before
-      check TextField(unrelated.contentView()).text == "Unchanged"
+    check weakWindow.isNil
+    check weakField.isNil
+    check weakEditor.isNil
+
+  test "prepared sheet choices reach their callback and editing resumes in the owner":
+    var weakOwner, weakUnrelated, weakEditor: BackRef[Responder]
+    var weakAlerts, weakAlertWindows: array[3, BackRef[Responder]]
+    block:
+      let
+        app = newApplication("Sheet workflow")
+        owner = newWindow("Owner", frame = rect(0, 0, 360, 160))
+        unrelated = newWindow("Unrelated", frame = rect(0, 0, 360, 160))
+        editor = newTextField("Draft", frame = rect(10, 10, 280, 30))
+        root = newView()
+      weakOwner[] = Responder(owner)
+      weakUnrelated[] = Responder(unrelated)
+      weakEditor[] = Responder(editor)
+      root.addSubview(editor)
+      owner.setContentView(root)
+      unrelated.setContentView(newTextField("Unchanged"))
+      app.addWindow(owner)
+      app.addWindow(unrelated)
+      owner.makeKeyAndOrderFront()
+      require owner.clickView(editor)
+      defer:
+        owner.close()
+        unrelated.close()
+        discard app.runForFrames(1)
+      var responses: seq[int]
+      for index, choice in [1, 0, 1]:
+        let alert = newAlert("Unsaved changes", buttons = ["Discard", "Cancel"])
+        weakAlerts[index][] = Responder(alert)
+        weakAlertWindows[index][] = Responder(alert.window)
+        alert.prepareForModal(
+          proc(response: int) =
+            responses.add response
+            app.stopModal(response)
+        )
+        # Use the prepared window overload: installing another default handler
+        # would drop the caller's completion callback.
+        let session = app.beginModalSheet(owner, alert.window)
+        require not session.isNil
+        let belongsToOwner = session.parentWindow == owner
+        check belongsToOwner
+        let previousResponses = responses.len
+        require alert.window.clickView(alert.buttonViews[choice])
+        require responses.len == previousResponses + 1
+        check responses[^1] == alert.buttonResponse(choice)
+        check session.state == mssStopped
+        check session.response == responses[^1]
+        app.endModalSession(session)
+        alert.window.close()
+        check alert.window.isClosed()
+        check alert.responseHandler.isNil
+        for button in alert.buttonViews:
+          check Button(button).target.isNil
+        check app.modalSession().isNil
+        let ownerIsKey = app.keyWindow() == owner
+        check ownerIsKey
+        let before = editor.text
+        require owner.dispatchTextInput(" resumed")
+        check editor.text != before
+        check TextField(unrelated.contentView()).text == "Unchanged"
+    check weakOwner.isNil
+    check weakUnrelated.isNil
+    check weakEditor.isNil
+    for index in 0 ..< weakAlerts.len:
+      check weakAlerts[index].isNil
+      check weakAlertWindows[index].isNil
 
   test "closing from an alert response releases the callback and button action":
     var weakAlert: BackRef[Responder]

@@ -2069,6 +2069,11 @@ proc close*(window: Window) =
   window.sendWindowDelegate(windowWillClose(), window)
   emit window.willClose()
   window.postWindowNotification(nkWindowWillClose)
+  if window.xFirstResponder of FieldEditor and not window.makeFirstResponder(nil):
+    # A validation veto must not leave the closing window's editor attached.
+    discard FieldEditor(window.xFirstResponder).cancelEditing()
+    window.xFirstResponder = nil
+  window.xContentView.releaseGeneratedLayoutInputs()
   let notifyPopupDone =
     window.xIsPopup and not window.xClosed and not window.xOnPopupDone.isNil
   window.stopInsertionPointBlink()

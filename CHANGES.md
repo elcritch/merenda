@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Release text views and field editors when their layout managers outlive them.
+- Release text views and active field editors after their owning windows close,
+  clearing generated layout references and circular keyboard-navigation links.
 - Use FigDraw 0.43.0 for render ownership and native window teardown.
 - Expand Open and Save dialogs with a resizable file browser and fix closing
   edited Kosmo tabs after Discard.

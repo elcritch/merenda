@@ -247,8 +247,8 @@ type
     xCompressionPriority*: array[LayoutAxis, LayoutPriority]
     xConstraints*: seq[LayoutConstraint]
     xLayoutInputCache*: LayoutInputCache
-    xNextKeyView*: View
-    xPreviousKeyView*: View
+    xNextKeyView*: BackRef[View]
+    xPreviousKeyView*: BackRef[View]
     xSuperview*: BackRef[View]
     xWindow*: BackRef[Responder]
     xSubviews*: seq[View]

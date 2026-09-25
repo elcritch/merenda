@@ -71,6 +71,18 @@ or live object identities.
 
 ### NimKit test audit: unresolved validation
 
+- [ ] Rework generated layout-input cache ownership for standalone and detached
+  views. Cached equations currently hold strong references to their solve root
+  and other views; closing a window now releases those caches, but a laid-out
+  view discarded without window close can still form an ARC cycle. Preserve
+  incremental cache reuse while making cached view links non-owning, and test
+  detached/reparented trees under ARC and ORC sanitizers.
+- [ ] Audit macOS standard-menu application lifetime. A freshly created
+  `Application` remains alive under ARC even without windows: it owns its
+  default menu, whose items target the application, and the native-menu
+  dispatch closure also captures it. Decide the intended owner and teardown
+  boundary before changing menu target retention; menu-created action targets
+  may need to remain owned. Cover both native and in-window menu dispatch.
 - [ ] Review eventual Chronos dispatcher teardown in Sigils. Main now retains
   the shared animation worker between clock users, avoiding the per-restart
   descriptor growth seen in PR #118's older Linux CI run 36078254071. Preserve
