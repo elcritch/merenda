@@ -187,6 +187,7 @@ jobs:
       timeout-minutes: 10
       env:
         UBSAN_OPTIONS: halt_on_error=1
+        LSAN_OPTIONS: suppressions=.github/lsan.supp
       run: |
         xvfb-run -a atlas-run tests nimkit -- --cc:clang --mm:arc \
           -d:nimkitOwnershipTests -d:nimkitSanitizers
@@ -196,6 +197,7 @@ jobs:
       timeout-minutes: 10
       env:
         UBSAN_OPTIONS: halt_on_error=1
+        LSAN_OPTIONS: suppressions=.github/lsan.supp
       run: |
         xvfb-run -a atlas-run tests nimkit -- --cc:clang --mm:orc \
           -d:nimkitOwnershipTests -d:nimkitSanitizers

@@ -1,0 +1,10 @@
+# Static FigDraw caches parsed fonts and reference bookkeeping in Nim threadvars.
+# Nim ARC/ORC does not destroy these bounded, per-worker caches on thread exit.
+# Fontconfig and Chronicles also retain one-time state while loading those fonts.
+# Keep leak detection enabled for all other ownership-test allocations.
+leak:drawing::defaultFont
+leak:imgutils::retainFontRefId
+leak:typefaces::registerTypeface
+leak:libfontconfig.so
+leak:outputs::memoryOutput
+leak:times::newTimezone
