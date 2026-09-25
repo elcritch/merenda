@@ -6720,6 +6720,11 @@ protocol DefaultTableViewAccessibility of AccessibilityProtocol:
   method isAccessibilityElement(tableView: TableView): bool =
     true
 
+proc tableViewportGeometryChanged(tableView: TableView) {.slot.} =
+  # Header and row-header drawing lives outside the scrolling document. Its
+  # retained fragments must follow direct clip-view offset changes as well.
+  tableView.needsDisplay = true
+
 proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   initControlFields(tableView, frame)
   tableView.xTableRole = srTableView
@@ -6761,6 +6766,9 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xScrollView = initTableScrollView(tableView)
   tableView.xContentView = initTableContentView(tableView)
   tableView.xScrollView.documentView = tableView.xContentView
+  tableView.xScrollView.clipView().connect(
+    geometryDidChange, tableView, tableViewportGeometryChanged
+  )
   tableView.acceptsFirstResponder = true
   tableView.clipsToBounds = true
   tableView.addSubview(tableView.xScrollView)

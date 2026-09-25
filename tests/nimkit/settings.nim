@@ -1,4 +1,4 @@
-import std/[importutils, math, strutils, tables, unittest]
+import std/[importutils, math, os, strutils, tables, unittest]
 
 import merenda/nimkit
 import merenda/nimkit/app/settings
@@ -729,10 +729,14 @@ suite "nimkit settings":
   test "bundled exact fonts can be replaced with system defaults":
     let
       interfaceFace = TestSystemTypeface(
-        file: typeof(default(TestSystemTypeface).file)(path: "/cache/Interface.ttf")
+        file: typeof(default(TestSystemTypeface).file)(
+          path: currentSourcePath().parentDir / "../../data/Ubuntu.ttf"
+        )
       )
       monospaceFace = TestSystemTypeface(
-        file: typeof(default(TestSystemTypeface).file)(path: "/cache/Monospace.ttf")
+        file: typeof(default(TestSystemTypeface).file)(
+          path: currentSourcePath().parentDir / "../../data/Ubuntu.ttf"
+        )
       )
     var
       initialAppearance = initAppearance()

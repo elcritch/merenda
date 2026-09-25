@@ -782,7 +782,9 @@ protocol DefaultSplitViewAccessibility of AccessibilityProtocol:
           result.add pane.view.accessibilityChildren()
 
 protocol SplitViewLifecycleSlots of ViewLifecycleProtocol:
-  proc willRemoveSubview(splitView: SplitView, child: View) {.slot.} =
+  proc removeOwnedSubview(
+      splitView: SplitView, child: View
+  ) {.slotFor: willRemoveSubview.} =
     let index = splitView.paneIndex(child)
     if index >= 0:
       splitView.xPanes.delete(index)

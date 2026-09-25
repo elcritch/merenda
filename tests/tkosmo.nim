@@ -7,23 +7,28 @@ import kosmo/cli
 import kosmo/cliopen
 import kosmo/config
 import kosmo/contextpanel
-import kosmo/editorsearch
 import kosmo/editing
+import kosmo/editorsearch
+import kosmo/filetree
 import kosmo/filetreeinteractions
 import kosmo/gitdiff
-import kosmo/matterhighlighting
 import kosmo/markdownactivation
+import kosmo/matterhighlighting
 import kosmo/moelogging
 import kosmo/panelshortcuts
 import kosmo/quickopen
+import kosmo/search
 import kosmo/settings_layout
-import kosmo/splits
 import kosmo/shortcutinput
+import kosmo/shortcutprofiles
+import kosmo/splits
+import kosmo/tabs
 import kosmo/terminalclipboard
+import kosmo/terminalerrors
 import kosmo/terminalsearch
-import kosmo/workspaceroots
-import kosmo/workspacefiles
 import kosmo/vscodegrammars
+import kosmo/workspacefiles
+import kosmo/workspaceroots
 
 proc runeIndexOf(source, needle: string): int =
   let byteIndex = source.find(needle)

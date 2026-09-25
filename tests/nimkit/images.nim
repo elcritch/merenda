@@ -3,10 +3,7 @@ import std/[hashes, os, tables, unittest]
 import pkg/pixie
 import pkg/pixie/fileformats/png
 
-when defined(useNativeDynlib):
-  import figdraw/dynlib except Image, encodePng, fill, newImage, writeFile
-else:
-  import figdraw
+import figdraw
 
 import merenda/nimkit
 
@@ -14,63 +11,62 @@ proc testImage(width, height: int): Image =
   result = newImage(width, height)
   result.fill(rgba(64, 128, 192, 255))
 
-when not defined(useNativeDynlib):
-  type RecoveryContext = ref object of BackendContext
-    entries: Table[Hash, figdraw.Rect]
-    entryMetadata: Table[Hash, AtlasEntryMeta]
-    atlasSizeValue: int
-    packedArea: int
-    uploadCount: int
-    resetOnSecondUpload: bool
+type RecoveryContext = ref object of BackendContext
+  entries: Table[Hash, figdraw.Rect]
+  entryMetadata: Table[Hash, AtlasEntryMeta]
+  atlasSizeValue: int
+  packedArea: int
+  uploadCount: int
+  resetOnSecondUpload: bool
 
-  method entriesPtr*(context: RecoveryContext): ptr Table[Hash, figdraw.Rect] =
-    context.entries.addr
+method entriesPtr*(context: RecoveryContext): ptr Table[Hash, figdraw.Rect] =
+  context.entries.addr
 
-  method atlasEntryMetaPtr*(context: RecoveryContext): var Table[Hash, AtlasEntryMeta] =
-    context.entryMetadata
+method atlasEntryMetaPtr*(context: RecoveryContext): var Table[Hash, AtlasEntryMeta] =
+  context.entryMetadata
 
-  method atlasSize*(context: RecoveryContext): int =
-    context.atlasSizeValue
+method atlasSize*(context: RecoveryContext): int =
+  context.atlasSizeValue
 
-  method atlasPackedArea*(context: RecoveryContext): int =
-    context.packedArea
+method atlasPackedArea*(context: RecoveryContext): int =
+  context.packedArea
 
-  method hasImage*(context: RecoveryContext, key: Hash): bool =
-    key in context.entries
+method hasImage*(context: RecoveryContext, key: Hash): bool =
+  key in context.entries
 
-  proc recordImageUpload(context: RecoveryContext, key: Hash) =
-    inc context.uploadCount
-    if context.resetOnSecondUpload and context.uploadCount == 2:
-      context.resetOnSecondUpload = false
-      context.resetImageAtlas(16)
-    let atlasSize = context.atlasSizeValue.float32
-    context.entries[key] = figdraw.rect(0, 0, 1.0'f32 / atlasSize, 1.0'f32 / atlasSize)
+proc recordImageUpload(context: RecoveryContext, key: Hash) =
+  inc context.uploadCount
+  if context.resetOnSecondUpload and context.uploadCount == 2:
+    context.resetOnSecondUpload = false
+    context.resetImageAtlas(16)
+  let atlasSize = context.atlasSizeValue.float32
+  context.entries[key] = figdraw.rect(0, 0, 1.0'f32 / atlasSize, 1.0'f32 / atlasSize)
 
-  method putImage*(context: RecoveryContext, key: Hash, image: Image) =
-    discard image
-    context.recordImageUpload(key)
+method putImage*(context: RecoveryContext, key: Hash, image: Image) =
+  discard image
+  context.recordImageUpload(key)
 
-  method putImage*(context: RecoveryContext, image: ImgObj) =
-    context.recordImageUpload(image.id.Hash)
+method putImage*(context: RecoveryContext, image: ImgObj) =
+  context.recordImageUpload(image.id.Hash)
 
-  method resetImageAtlas*(context: RecoveryContext, minimumSize: int) =
-    context.atlasSizeValue = plannedAtlasSize(16, minimumSize)
-    context.entries.clear()
-    context.entryMetadata.clear()
-    context.packedArea = 0
-    context.noteAtlasRebuilt()
+method resetImageAtlas*(context: RecoveryContext, minimumSize: int) =
+  context.atlasSizeValue = plannedAtlasSize(16, minimumSize)
+  context.entries.clear()
+  context.entryMetadata.clear()
+  context.packedArea = 0
+  context.noteAtlasRebuilt()
 
-  proc newRecoveryRenderer(): tuple[
-    context: RecoveryContext, renderer: FigRenderer[NoRendererBackendState]
-  ] =
-    result.context = RecoveryContext(
-      entries: initTable[Hash, figdraw.Rect](),
-      entryMetadata: initTable[Hash, AtlasEntryMeta](),
-      atlasSizeValue: 16,
-      packedArea: 255,
-      resetOnSecondUpload: true,
-    )
-    result.renderer = newFigRenderer(result.context)
+proc newRecoveryRenderer(): tuple[
+  context: RecoveryContext, renderer: FigRenderer[NoRendererBackendState]
+] =
+  result.context = RecoveryContext(
+    entries: initTable[Hash, figdraw.Rect](),
+    entryMetadata: initTable[Hash, AtlasEntryMeta](),
+    atlasSizeValue: 16,
+    packedArea: 255,
+    resetOnSecondUpload: true,
+  )
+  result.renderer = newFigRenderer(result.context)
 
 suite "nimkit image resources":
   test "image resources can be created from pixels data files and names":
@@ -92,9 +88,6 @@ suite "nimkit image resources":
     check fromFile.name == "nimkit-image-resource"
     check fromFile.filePath == filePath
     check fromFile.size == initSize(4, 3)
-
-    when defined(useNativeDynlib):
-      check direct.pixels().encodePng().len > 8
 
     registerImage("registered", direct)
     check imageNamed("registered") == direct
@@ -266,145 +259,144 @@ suite "nimkit image resources":
     image.unpinImage()
     check not hasImage(image.imageId())
 
-  when not defined(useNativeDynlib):
-    test "managed subscriptions recover renderer generations and pressure rebuilds":
-      clearImageCache()
-      let
-        first = newImageResource(testImage(2, 2))
-        second = newImageResource(testImage(3, 3))
-        cached = newImageResource(testImage(4, 4), cachePolicy = icpAlways)
-        manager = newRenderResourceManager()
-        recovery = newRecoveryRenderer()
-      var manifest = initRenderResourceManifest()
-      manifest.addImage(first)
-      manifest.addImage(second)
+  test "managed subscriptions recover renderer generations and pressure rebuilds":
+    clearImageCache()
+    let
+      first = newImageResource(testImage(2, 2))
+      second = newImageResource(testImage(3, 3))
+      cached = newImageResource(testImage(4, 4), cachePolicy = icpAlways)
+      manager = newRenderResourceManager()
+      recovery = newRecoveryRenderer()
+    var manifest = initRenderResourceManifest()
+    manifest.addImage(first)
+    manifest.addImage(second)
 
-      manager.prepare(recovery.renderer)
-      check first.imageId().Hash in recovery.context.entries
-      check second.imageId().Hash in recovery.context.entries
-      check manager.metrics.generationRecoveryCount > 0
+    manager.prepare(recovery.renderer)
+    check first.imageId().Hash in recovery.context.entries
+    check second.imageId().Hash in recovery.context.entries
+    check manager.metrics.generationRecoveryCount > 0
 
-      recovery.context.packedArea = 255
-      manager.prepare(recovery.renderer)
-      check manager.metrics.pressureRebuildCount == 1
-      check manager.metrics.automaticPreloadEvictionCount >= 1
-      check manager.metrics.atlasRebuildCount >= 2
-      check manager.metrics.atlasPackedRatio < ImageAtlasPressureThreshold
-      check manager.metrics.replayCount >= 2
-      check recovery.context.uploadCount >= 6
-      check not cached.isImagePreloaded()
+    recovery.context.packedArea = 255
+    manager.prepare(recovery.renderer)
+    check manager.metrics.pressureRebuildCount == 1
+    check manager.metrics.automaticPreloadEvictionCount >= 1
+    check manager.metrics.atlasRebuildCount >= 2
+    check manager.metrics.atlasPackedRatio < ImageAtlasPressureThreshold
+    check manager.metrics.replayCount >= 2
+    check recovery.context.uploadCount >= 6
+    check not cached.isImagePreloaded()
 
-      manager.clear()
-      recovery.renderer.processImageMessages()
+    manager.clear()
+    recovery.renderer.processImageMessages()
 
-    test "managed resources shrink a grown atlas after its working set contracts":
-      clearImageCache()
-      discard purgeAutomaticImagePreloads()
-      let
-        retainedImage = newImageResource(testImage(2, 2))
-        releasedImage = newImageResource(testImage(8, 8))
-        manager = newRenderResourceManager()
-        recovery = newRecoveryRenderer()
-      recovery.context.resetOnSecondUpload = false
-      recovery.context.packedArea = 0
-      manager.prepare(recovery.renderer)
+  test "managed resources shrink a grown atlas after its working set contracts":
+    clearImageCache()
+    discard purgeAutomaticImagePreloads()
+    let
+      retainedImage = newImageResource(testImage(2, 2))
+      releasedImage = newImageResource(testImage(8, 8))
+      manager = newRenderResourceManager()
+      recovery = newRecoveryRenderer()
+    recovery.context.resetOnSecondUpload = false
+    recovery.context.packedArea = 0
+    manager.prepare(recovery.renderer)
 
-      var
-        retainedManifest = initRenderResourceManifest()
-        releasedManifest = initRenderResourceManifest()
-      retainedManifest.addImage(retainedImage)
-      releasedManifest.addImage(releasedImage)
-      manager.prepare(recovery.renderer)
+    var
+      retainedManifest = initRenderResourceManifest()
+      releasedManifest = initRenderResourceManifest()
+    retainedManifest.addImage(retainedImage)
+    releasedManifest.addImage(releasedImage)
+    manager.prepare(recovery.renderer)
 
-      recovery.context.atlasSizeValue = 64
-      recovery.context.entries[retainedImage.imageId().Hash] =
-        figdraw.rect(0, 0, 1.0'f32 / 64.0'f32, 1.0'f32 / 64.0'f32)
-      recovery.context.entries[releasedImage.imageId().Hash] =
-        figdraw.rect(0, 0, 0.5, 0.5)
-      recovery.context.entryMetadata[retainedImage.imageId().Hash] =
-        AtlasEntryMeta(kind: aekImage, imageId: retainedImage.imageId())
-      recovery.context.entryMetadata[releasedImage.imageId().Hash] =
-        AtlasEntryMeta(kind: aekImage, imageId: releasedImage.imageId())
-      recovery.context.packedArea = 1024
-      manager.prepare(recovery.renderer)
-      check recovery.context.atlasSizeValue == 64
+    recovery.context.atlasSizeValue = 64
+    recovery.context.entries[retainedImage.imageId().Hash] =
+      figdraw.rect(0, 0, 1.0'f32 / 64.0'f32, 1.0'f32 / 64.0'f32)
+    recovery.context.entries[releasedImage.imageId().Hash] =
+      figdraw.rect(0, 0, 0.5, 0.5)
+    recovery.context.entryMetadata[retainedImage.imageId().Hash] =
+      AtlasEntryMeta(kind: aekImage, imageId: retainedImage.imageId())
+    recovery.context.entryMetadata[releasedImage.imageId().Hash] =
+      AtlasEntryMeta(kind: aekImage, imageId: releasedImage.imageId())
+    recovery.context.packedArea = 1024
+    manager.prepare(recovery.renderer)
+    check recovery.context.atlasSizeValue == 64
 
-      releasedManifest = nil
-      manager.prepare(recovery.renderer)
-      check recovery.context.atlasSizeValue == 16
-      check retainedImage.imageId().Hash in recovery.context.entries
-      check releasedImage.imageId().Hash notin recovery.context.entries
-      check manager.metrics.atlasShrinkRebuildCount == 1
+    releasedManifest = nil
+    manager.prepare(recovery.renderer)
+    check recovery.context.atlasSizeValue == 16
+    check retainedImage.imageId().Hash in recovery.context.entries
+    check releasedImage.imageId().Hash notin recovery.context.entries
+    check manager.metrics.atlasShrinkRebuildCount == 1
 
-    test "atlas recovery restores only the current live manifest":
-      clearImageCache()
-      let
-        retainedImage = newImageResource(testImage(3, 2))
-        unrelatedImage = newImageResource(testImage(4, 3))
-        manager = newRenderResourceManager()
-        recovery = newRecoveryRenderer()
-      recovery.context.resetOnSecondUpload = false
-      recovery.context.packedArea = 0
-      var
-        liveManifest = initRenderResourceManifest()
-        unrelatedManifest = initRenderResourceManifest()
-      liveManifest.addImage(retainedImage)
-      unrelatedManifest.addImage(unrelatedImage)
+  test "atlas recovery restores only the current live manifest":
+    clearImageCache()
+    let
+      retainedImage = newImageResource(testImage(3, 2))
+      unrelatedImage = newImageResource(testImage(4, 3))
+      manager = newRenderResourceManager()
+      recovery = newRecoveryRenderer()
+    recovery.context.resetOnSecondUpload = false
+    recovery.context.packedArea = 0
+    var
+      liveManifest = initRenderResourceManifest()
+      unrelatedManifest = initRenderResourceManifest()
+    liveManifest.addImage(retainedImage)
+    unrelatedManifest.addImage(unrelatedImage)
 
-      manager.prepare(recovery.renderer)
-      check retainedImage.imageId().Hash in recovery.context.entries
-      check unrelatedImage.imageId().Hash in recovery.context.entries
+    manager.prepare(recovery.renderer)
+    check retainedImage.imageId().Hash in recovery.context.entries
+    check unrelatedImage.imageId().Hash in recovery.context.entries
 
-      recovery.renderer.rebuildImageAtlas()
-      manager.prepare(recovery.renderer, liveManifest)
-      check retainedImage.imageId().Hash in recovery.context.entries
-      check unrelatedImage.imageId().Hash notin recovery.context.entries
-      check manager.metrics.generationRecoveryCount >= 1
+    recovery.renderer.rebuildImageAtlas()
+    manager.prepare(recovery.renderer, liveManifest)
+    check retainedImage.imageId().Hash in recovery.context.entries
+    check unrelatedImage.imageId().Hash notin recovery.context.entries
+    check manager.metrics.generationRecoveryCount >= 1
 
-      clearImageCache()
-      manager.prepare(recovery.renderer, liveManifest)
-      check retainedImage.imageId().Hash in recovery.context.entries
-      check unrelatedImage.imageId().Hash notin recovery.context.entries
+    clearImageCache()
+    manager.prepare(recovery.renderer, liveManifest)
+    check retainedImage.imageId().Hash in recovery.context.entries
+    check unrelatedImage.imageId().Hash notin recovery.context.entries
 
-    test "renderer-thread atlas recovery filters by transferred resource IDs":
-      clearImageCache()
-      let
-        retainedImage = newImageResource(testImage(3, 2))
-        unrelatedImage = newImageResource(testImage(4, 3))
-        manager = newRenderResourceManager()
-        recovery = newRecoveryRenderer()
-      recovery.context.resetOnSecondUpload = false
-      recovery.context.packedArea = 0
-      var
-        liveManifest = initRenderResourceManifest()
-        unrelatedManifest = initRenderResourceManifest()
-      liveManifest.addImage(retainedImage)
-      unrelatedManifest.addImage(unrelatedImage)
-      let liveSnapshot = liveManifest.snapshot()
+  test "renderer-thread atlas recovery filters by transferred resource IDs":
+    clearImageCache()
+    let
+      retainedImage = newImageResource(testImage(3, 2))
+      unrelatedImage = newImageResource(testImage(4, 3))
+      manager = newRenderResourceManager()
+      recovery = newRecoveryRenderer()
+    recovery.context.resetOnSecondUpload = false
+    recovery.context.packedArea = 0
+    var
+      liveManifest = initRenderResourceManifest()
+      unrelatedManifest = initRenderResourceManifest()
+    liveManifest.addImage(retainedImage)
+    unrelatedManifest.addImage(unrelatedImage)
+    let liveSnapshot = liveManifest.snapshot()
 
-      manager.prepare(recovery.renderer)
-      check retainedImage.imageId().Hash in recovery.context.entries
-      check unrelatedImage.imageId().Hash in recovery.context.entries
+    manager.prepare(recovery.renderer)
+    check retainedImage.imageId().Hash in recovery.context.entries
+    check unrelatedImage.imageId().Hash in recovery.context.entries
 
-      recovery.renderer.rebuildImageAtlas()
-      manager.prepare(recovery.renderer, liveSnapshot)
-      check retainedImage.imageId().Hash in recovery.context.entries
-      check unrelatedImage.imageId().Hash notin recovery.context.entries
-      check manager.metrics.generationRecoveryCount >= 1
+    recovery.renderer.rebuildImageAtlas()
+    manager.prepare(recovery.renderer, liveSnapshot)
+    check retainedImage.imageId().Hash in recovery.context.entries
+    check unrelatedImage.imageId().Hash notin recovery.context.entries
+    check manager.metrics.generationRecoveryCount >= 1
 
-    test "live manifests retain renderer-generated atlas entries":
-      let
-        manager = newRenderResourceManager()
-        recovery = newRecoveryRenderer()
-        generatedKey = hash("figdraw-generated-rectangle")
-      recovery.context.resetOnSecondUpload = false
-      recovery.context.packedArea = 1
-      recovery.context.entries[generatedKey] = figdraw.rect(0, 0, 0.25, 0.25)
-      recovery.context.entryMetadata[generatedKey] = AtlasEntryMeta(kind: aekGenerated)
+  test "live manifests retain renderer-generated atlas entries":
+    let
+      manager = newRenderResourceManager()
+      recovery = newRecoveryRenderer()
+      generatedKey = hash("figdraw-generated-rectangle")
+    recovery.context.resetOnSecondUpload = false
+    recovery.context.packedArea = 1
+    recovery.context.entries[generatedKey] = figdraw.rect(0, 0, 0.25, 0.25)
+    recovery.context.entryMetadata[generatedKey] = AtlasEntryMeta(kind: aekGenerated)
 
-      let liveManifest = initRenderResourceManifest()
-      manager.prepare(recovery.renderer, liveManifest)
-      manager.prepare(recovery.renderer, liveManifest.snapshot())
+    let liveManifest = initRenderResourceManifest()
+    manager.prepare(recovery.renderer, liveManifest)
+    manager.prepare(recovery.renderer, liveManifest.snapshot())
 
-      check generatedKey in recovery.context.entries
-      check recovery.context.entryMetadata[generatedKey].kind == aekGenerated
+    check generatedKey in recovery.context.entries
+    check recovery.context.entryMetadata[generatedKey].kind == aekGenerated

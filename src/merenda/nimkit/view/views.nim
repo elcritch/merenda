@@ -10,8 +10,7 @@ import ../foundation/types
 import ./viewconstraints
 import ../foundation/events
 import ../themes
-when not defined(useNativeDynlib):
-  import ../drawing/renderscenes
+import ../drawing/renderscenes
 import ./viewgeometry
 import ./viewprotos
 import ./viewbase
@@ -416,8 +415,7 @@ proc containsView*(view, candidate: View): bool =
 
 proc initViewFields*(view: View, frame: Rect = AutoRect) =
   initResponder(view)
-  when not defined(useNativeDynlib):
-    view.xRenderViewId = nextRenderViewId()
+  view.xRenderViewId = nextRenderViewId()
   view.initLayoutSignalBus()
   view.xFrame = frame.resolveAutoRect(rect(0.0, 0.0, 0.0, 0.0))
   view.xBounds = rect(0.0, 0.0, view.xFrame.size.width, view.xFrame.size.height)
@@ -441,13 +439,12 @@ proc initViewFields*(view: View, frame: Rect = AutoRect) =
   discard view.withProtocol(DefaultAccessibilityProtocol)
   view.observeProtocol(view, ViewSuperviewLifecycleSlots)
 
-when not defined(useNativeDynlib):
-  proc renderViewId*(view: View): RenderViewId =
-    if view.isNil:
-      return 0.RenderViewId
-    if view.xRenderViewId.uint64 == 0:
-      view.xRenderViewId = nextRenderViewId()
-    view.xRenderViewId
+proc renderViewId*(view: View): RenderViewId =
+  if view.isNil:
+    return 0.RenderViewId
+  if view.xRenderViewId.uint64 == 0:
+    view.xRenderViewId = nextRenderViewId()
+  view.xRenderViewId
 
 proc newView*(frame: Rect = AutoRect): View =
   result = View()

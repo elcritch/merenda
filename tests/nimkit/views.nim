@@ -493,7 +493,7 @@ suite "nimkit views":
     let
       root = newView(frame = rect(0, 0, 200, 160))
       extra = newView(frame = rect(0, 0, 20, 20))
-      updater = newConstraintRemovingView(rect(20, 30, 80, 40), extra)
+      updater = newConstraintRemovingView(rect(20, 30, 80, 40), nil)
     updater.addSubview(extra)
     root.addSubview(updater)
     root.xLayoutSolveLimits = LayoutSolveLimits(maxViews: 2)
@@ -503,6 +503,8 @@ suite "nimkit views":
     check root.xLastLayoutSolveDiagnostic.failed
     check extra.superview == updater
 
+    updater.target = extra
+    updater.updateCount = 0
     updater.setNeedsUpdateConstraints()
     root.layoutSubtreeIfNeeded()
 

@@ -488,9 +488,8 @@ suite "nimkit mono text views":
       if node.kind == nkText and node.renderedText() == "AB":
         foundText = true
         require node.textLayout.arrangedGlyphs.len == cells.len
-        when not defined(useNativeDynlib):
-          let font = getFigFont(node.textLayout.arrangedGlyphs[0].fontId)
-          check getTypefaceInfo(font.typefaceId).monospace
+        let font = getFigFont(node.textLayout.arrangedGlyphs[0].fontId)
+        check getTypefaceInfo(font.typefaceId).monospace
 
     check foundText
 

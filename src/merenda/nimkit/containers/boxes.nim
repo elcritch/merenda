@@ -298,7 +298,7 @@ protocol DefaultBoxAccessibility of AccessibilityProtocol:
           result.add child.accessibilityChildren()
 
 protocol BoxLifecycleSlots of ViewLifecycleProtocol:
-  proc willRemoveSubview(box: Box, child: View) {.slot.} =
+  proc removeOwnedSubview(box: Box, child: View) {.slotFor: willRemoveSubview.} =
     if child == box.xContentView:
       box.xContentView = nil
       box.invalidateBoxMetrics()

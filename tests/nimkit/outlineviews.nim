@@ -1,6 +1,7 @@
 import std/[unicode, unittest]
 
 import figdraw
+import ./fixtures/rendergeometry
 import sigils/core
 
 import merenda/nimkit
@@ -30,7 +31,7 @@ proc countRenderedText(view: View, text: string): int =
   let renders = buildRenders(view)
   if DefaultDrawLevel notin renders:
     return 0
-  for node in renders[DefaultDrawLevel].nodes:
+  for node in renders[DefaultDrawLevel].resolvedNodes():
     if node.kind == nkText and node.renderedText() == text:
       inc result
 
@@ -186,7 +187,7 @@ suite "NimKit OutlineView":
     check DefaultDrawLevel in renders
 
     var surfaceFound = false
-    for node in renders[DefaultDrawLevel].nodes:
+    for node in renders[DefaultDrawLevel].resolvedNodes():
       if node.kind == nkRectangle and node.fill == surfaceFill and
           node.renderedRect().rectsClose(outlineView.bounds()):
         surfaceFound = true
@@ -233,7 +234,7 @@ suite "NimKit OutlineView":
       disclosureShellFound = false
       childTextFound = false
 
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkRectangle and node.stroke.weight > 0.0'f32 and
           node.stroke.fill.kind == flColor and
           node.stroke.fill.color == color(0.48, 0.54, 0.64, 0.42).rgba and
@@ -267,7 +268,7 @@ suite "NimKit OutlineView":
     var
       titleFound = false
       badgeFound = false
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkText and node.renderedText() in ["changed.nim", "M"]:
         require node.textLayout.spanColors.len > 0
         check node.textLayout.spanColors[0].color == decorationColor.rgba
@@ -300,13 +301,17 @@ suite "NimKit OutlineView":
     var
       titleFound = false
       badgeFound = false
-    for node in list.nodes:
+    for node in list.resolvedNodes():
       if node.kind == nkText and node.renderedText() == "changed.nim":
         titleFound = true
         check node.screenBox.x >= 40.0'f32
       if node.kind == nkText and node.renderedText() == "M":
         badgeFound = true
-        check abs(node.screenBox.x + node.screenBox.w * 0.5'f32 - 18.0'f32) < 0.01'f32
+        let rowOrigin =
+          outlineView.rectToWindow(TableView(outlineView).rowItemRect(1)).origin.x
+        check abs(
+          node.screenBox.x + node.screenBox.w * 0.5'f32 - (rowOrigin + 18.0'f32)
+        ) < 0.01'f32
 
     check titleFound
     check badgeFound

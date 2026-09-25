@@ -1,6 +1,7 @@
 import std/[strutils, unittest]
 
 import figdraw
+import ./fixtures/rendergeometry
 
 import merenda/nimkit
 
@@ -15,7 +16,7 @@ suite "NimKit window effects demo":
 
     let
       list = buildRenders(demo.root)[DefaultDrawLevel]
-      rootNode = list.nodes[list.rootIds[0].int]
+      rootNode = list.nodes[list.firstRectangle().int]
     check rootNode.kind == nkRectangle
     check rootNode.fill == fill(demo.root.backgroundColor)
 

@@ -37,13 +37,9 @@ when defined(features.merenda.kosmo):
 
 import std/strutils
 import std/os
-import figdraw/build/tasks
 
 when defined(useNativeDynlib):
-  ensureNativeDynlib()
-  let figdrawBinDir = figdrawProjectDir / "bin"
-  switch("path", figdrawBinDir)
-  switch("define", "nativeLibrary=" & stagedNativeDynlibPath())
+  quit "Merenda no longer supports useNativeDynlib; remove -d:useNativeDynlib."
 
 const
   referenceDir = "docs/reference"
@@ -93,9 +89,6 @@ proc platforms(): seq[string] =
       result.add "XDG_SESSION_TYPE=x11 FIGDRAW_FORCE_OPENGL=1 "
   else:
     @[""]
-
-task build_dynlib, "Force rebuild and stage the Figdraw native dynlib":
-  buildAndStageNativeDynlib()
 
 task test, "run unit test":
   for platformArg in platforms():

@@ -3,10 +3,7 @@ import std/[math, monotimes, options, os, tables, times]
 import pkg/chronicles
 import pkg/vmath as vmath
 
-when defined(useNativeDynlib):
-  import figdraw/windowing as figrender
-else:
-  import figdraw as figrender
+import figdraw as figrender
 from figdraw import Renders, ZLevel
 import figdraw/windowing as siwinshim
 type SiwinWindow = siwinshim.Window
@@ -20,8 +17,7 @@ import ../responder/keybindings
 import ../drawing/drawing
 import ../drawing/images
 import ../drawing/rendering as nimkitRendering
-when not defined(useNativeDynlib):
-  import ../drawing/renderscenes
+import ../drawing/renderscenes
 import ../foundation/events
 import ../foundation/notifications
 import ../text/fieldeditors
@@ -353,7 +349,7 @@ proc resolvedPopupPresentation*(
 
 proc supportsNativePopupWindows*(window: Window): bool
 proc close*(window: Window)
-proc releaseThreadRenderer(window: Window, waitForRelease: bool)
+proc releaseThreadRenderer(window: Window)
 proc setKeyWindow*(window: Window, value: bool)
 proc setMainWindow*(window: Window, value: bool)
 proc postWindowNotification(window: Window, kind: NotificationKind)
@@ -1572,21 +1568,20 @@ proc buildRenders*(window: Window, theme: Theme): Renders =
   window.refreshAutomaticContentMinSize()
   nimkitRendering.buildRenders(window.xContentView, theme)
 
-when not defined(useNativeDynlib):
-  proc buildRenderScene*(window: Window): RenderScene =
-    window.prepareToolTipForDisplay()
-    window.refreshAutomaticContentMinSize()
-    nimkitRendering.buildRenderScene(window.xContentView, window.effectiveAppearance())
+proc buildRenderScene*(window: Window): RenderScene =
+  window.prepareToolTipForDisplay()
+  window.refreshAutomaticContentMinSize()
+  nimkitRendering.buildRenderScene(window.xContentView, window.effectiveAppearance())
 
-  proc buildRenderScene*(window: Window, appearance: Appearance): RenderScene =
-    window.prepareToolTipForDisplay()
-    window.refreshAutomaticContentMinSize()
-    nimkitRendering.buildRenderScene(window.xContentView, appearance)
+proc buildRenderScene*(window: Window, appearance: Appearance): RenderScene =
+  window.prepareToolTipForDisplay()
+  window.refreshAutomaticContentMinSize()
+  nimkitRendering.buildRenderScene(window.xContentView, appearance)
 
-  proc buildRenderScene*(window: Window, theme: Theme): RenderScene =
-    window.prepareToolTipForDisplay()
-    window.refreshAutomaticContentMinSize()
-    nimkitRendering.buildRenderScene(window.xContentView, theme)
+proc buildRenderScene*(window: Window, theme: Theme): RenderScene =
+  window.prepareToolTipForDisplay()
+  window.refreshAutomaticContentMinSize()
+  nimkitRendering.buildRenderScene(window.xContentView, theme)
 
 proc nativeWindowOrNil*(window: Window): SiwinWindow =
   if window.xHostWindow.isNil:
@@ -2096,7 +2091,7 @@ proc close*(window: Window) =
   if not window.xSheetParent.isNil and window.xSheetParent.xSheet == window:
     window.xSheetParent.xSheet = nil
     window.xSheetParent = nil
-  window.releaseThreadRenderer(waitForRelease = true)
+  window.releaseThreadRenderer()
   if not window.xHostWindow.isNil:
     window.xHostWindow.close()
     window.xHostWindow = nil
@@ -2528,25 +2523,18 @@ proc renderNativeWindow*(window: Window) =
 
   window.xHostWindow.refreshContentScale()
   let logicalSize = window.syncNativeGeometry()
-  when not defined(useNativeDynlib):
-    if window.xThreadHost.isNil:
-      let renderScene = window.buildRenderScene()
-      let needsFollowUpRender = window.needsDisplayUpdate()
-      window.xHostWindow.render(renderScene, logicalSize)
-      renderScene.acknowledgeRenderGeneration(renderScene.frameGeneration())
-      if needsFollowUpRender:
-        window.requestNativeDisplayUpdate()
-    else:
-      let renderScene = window.buildRenderScene()
-      let needsFollowUpRender = window.needsDisplayUpdate()
-      discard window.xThreadHost.submitRenderScene(renderScene, logicalSize)
-      window.xHostWindow.renderSubmitted()
-      if needsFollowUpRender:
-        window.requestNativeDisplayUpdate()
-  else:
-    var renders = window.buildRenders()
+  if window.xThreadHost.isNil:
+    let renderScene = window.buildRenderScene()
     let needsFollowUpRender = window.needsDisplayUpdate()
-    window.xHostWindow.render(renders, logicalSize)
+    window.xHostWindow.render(renderScene, logicalSize)
+    renderScene.acknowledgeRenderGeneration(renderScene.frameGeneration())
+    if needsFollowUpRender:
+      window.requestNativeDisplayUpdate()
+  else:
+    let renderScene = window.buildRenderScene()
+    let needsFollowUpRender = window.needsDisplayUpdate()
+    discard window.xThreadHost.submitRenderScene(renderScene, logicalSize)
+    window.xHostWindow.renderSubmitted()
     if needsFollowUpRender:
       window.requestNativeDisplayUpdate()
 
@@ -3194,7 +3182,7 @@ proc markHostClosed(window: Window) =
   emit window.willClose()
   window.postWindowNotification(nkWindowWillClose)
   window.clearToolTip()
-  window.releaseThreadRenderer(waitForRelease = true)
+  window.releaseThreadRenderer()
   window.stopInsertionPointBlink()
   window.stopAnimationClock()
   discard window.saveFrameUsingName()
@@ -3222,7 +3210,7 @@ proc markHostClosed(window: Window) =
 proc useThreadRenderer*(window: Window, renderer: ThreadRendererClient) =
   if window.isNil or window.xThreadRenderer == renderer:
     return
-  window.releaseThreadRenderer(waitForRelease = false)
+  window.releaseThreadRenderer()
   window.xThreadRenderer = renderer
   window.xThreadHost = nil
   for auxiliary in window.xAuxiliaryWindows:
@@ -3317,14 +3305,13 @@ proc drainThreadHostEvents(window: Window): int =
       window.xThreadHost.clearRenderResources()
       window.xThreadHost.acknowledgeRenderTargetRelease()
 
-proc releaseThreadRenderer(window: Window, waitForRelease: bool) =
+proc releaseThreadRenderer(window: Window) =
   let client = window.xThreadHost
   if client.isNil:
     return
   if not window.xHostWindow.isNil:
     window.xHostWindow.detachThreadRenderer(window.xThreadRenderer, client)
-  while waitForRelease and client.renderTargetReleasePending() and
-      not window.xThreadRenderer.isNil and window.xThreadRenderer.isRunning():
+  while client.renderTargetReleasePending() and not window.xThreadRenderer.hasFinished():
     discard window.drainThreadHostEvents()
     if client.renderTargetReleasePending():
       sleep(1)
