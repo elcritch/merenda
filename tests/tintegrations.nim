@@ -2,6 +2,7 @@
 import integrations/application_sigils
 import integrations/figdraw_text_offsets
 import integrations/gitprocesslifecycle
+import integrations/processdescriptors
 import integrations/kosmocliopen
 import integrations/kosmoterminalenvironment
 import integrations/nativewindowactivation

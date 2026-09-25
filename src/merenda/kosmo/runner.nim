@@ -43,7 +43,12 @@ proc reportCliErrors(errors: openArray[string]) =
 
 proc runKosmoMain*() =
   ## Dispatch Kosmo's standalone command line.
-  let commandLine = parseKosmoCommandLine(commandLineParams())
+  let arguments = commandLineParams()
+  when defined(posix):
+    if arguments.len > 0 and arguments[0] == KosmoLspExecFlag:
+      execLspServer(arguments[1 .. ^1])
+  kosmoLspLauncherExecutable = getAppFilename()
+  let commandLine = parseKosmoCommandLine(arguments)
   if commandLine.help:
     echo KosmoUsage
   elif commandLine.version:
