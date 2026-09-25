@@ -485,12 +485,14 @@ suite "Kosmo":
     check frontend.openPath(firstPath)
     check frontend.openPath(secondPath)
     check frontend.editorView.editor.tabs()[1].active
+    let tabShortcutModifiers =
+      frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
 
     check frontend.window.dispatchKeyDown(
       KeyEvent(
         key: keyLeftBracket,
         keyCode: keyLeftBracket.ord,
-        modifiers: {kmCommand, kmShift},
+        modifiers: tabShortcutModifiers,
       )
     )
     check frontend.editorView.editor.tabs()[0].active
@@ -498,7 +500,7 @@ suite "Kosmo":
       KeyEvent(
         key: keyRightBracket,
         keyCode: keyRightBracket.ord,
-        modifiers: {kmCommand, kmShift},
+        modifiers: tabShortcutModifiers,
       )
     )
     check frontend.editorView.editor.tabs()[1].active
@@ -550,6 +552,8 @@ suite "Kosmo":
     check frontend.window.makeFirstResponder(frontend.editorView)
     check frontend.openPath(firstPath)
     check frontend.openPath(secondPath)
+    let tabShortcutModifiers =
+      frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
 
     check frontend.window
       .keyBindings()
@@ -557,7 +561,7 @@ suite "Kosmo":
         KeyEvent(
           key: keyRightBracket,
           keyCode: keyRightBracket.ord,
-          modifiers: {kmCommand, kmShift},
+          modifiers: tabShortcutModifiers,
         )
       ).isNone
     check frontend.editorView.editor.tabs()[1].active
@@ -570,7 +574,7 @@ suite "Kosmo":
     )
     check frontend.editorView.editor.tabs()[0].active
 
-  test "Command-Q terminates Kosmo through the application lifecycle":
+  test "the primary quit shortcut terminates Kosmo through the application lifecycle":
     let
       app = newApplication("Kosmo Quit Shortcut Test")
       frontend = newKosmoApplication(app)
@@ -582,11 +586,15 @@ suite "Kosmo":
     check not app.isTerminating
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyQ, keyCode: keyQ.ord, modifiers: {kmCommand})
+      KeyEvent(
+        key: keyQ,
+        keyCode: keyQ.ord,
+        modifiers: frontend.shortcutProfile().primaryModifiers(),
+      )
     )
     check app.isTerminating
 
-  test "Command-number shortcuts focus the file browser and editor panels":
+  test "primary-number shortcuts focus the file browser and editor panels":
     let
       root = createTempDir("merenda-kosmo-panel-shortcuts-", "")
       firstPath = root / "first.txt"
@@ -628,26 +636,27 @@ suite "Kosmo":
 
     let groups = frontend.editorGroups()
     require groups.len == 2
+    let primaryShortcutModifiers = frontend.shortcutProfile().primaryModifiers()
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: key2, keyCode: key2.ord, modifiers: {kmCommand})
+      KeyEvent(key: key2, keyCode: key2.ord, modifiers: primaryShortcutModifiers)
     )
     check frontend.window.firstResponder == groups[0].editorView
     check not groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: key1, keyCode: key1.ord, modifiers: {kmCommand})
+      KeyEvent(key: key1, keyCode: key1.ord, modifiers: primaryShortcutModifiers)
     )
     check frontend.sidebarTabs.selectedIndex == 0
     check frontend.window.firstResponder == frontend.fileTree
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: key3, keyCode: key3.ord, modifiers: {kmCommand})
+      KeyEvent(key: key3, keyCode: key3.ord, modifiers: primaryShortcutModifiers)
     )
     check frontend.window.firstResponder == groups[1].editorView
     check not groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: key2, keyCode: key2.ord, modifiers: {kmCommand})
+      KeyEvent(key: key2, keyCode: key2.ord, modifiers: primaryShortcutModifiers)
     )
     check frontend.window.sendAction(actionSelector(KosmoSplitHorizontalAction))
     frontend.contentView.layoutSubtreeIfNeeded()
@@ -655,11 +664,11 @@ suite "Kosmo":
     require positionedGroups.len == 3
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: key3, keyCode: key3.ord, modifiers: {kmCommand})
+      KeyEvent(key: key3, keyCode: key3.ord, modifiers: primaryShortcutModifiers)
     )
     check frontend.window.firstResponder == positionedGroups[2].editorView
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: key4, keyCode: key4.ord, modifiers: {kmCommand})
+      KeyEvent(key: key4, keyCode: key4.ord, modifiers: primaryShortcutModifiers)
     )
     check frontend.window.firstResponder == positionedGroups[1].editorView
