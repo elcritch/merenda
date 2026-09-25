@@ -22,8 +22,6 @@ and verify extended use.
   investigate growth and turn reproducible failures into bounded regressions.
 - [ ] Verify dmon's Linux recursion fix before removing Kosmo's forced polling
   fallback. Exercise deep trees, multiple windows, missed events, and shutdown.
-- [ ] Replace the temporary FigDraw `fix/acyclic-render-ownership` dependency with
-  a release containing [PR #96](https://github.com/elcritch/figdraw/pull/96).
 
 **Completion evidence:** supported close paths preserve window lifetime through
 render cleanup, and repeated sessions return owned resources to their warmed

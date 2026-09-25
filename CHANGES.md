@@ -8,6 +8,7 @@
 
 ## 0.22.0
 
+- Use the FigDraw 0.43.0 release for render ownership and GPU completion.
 - Keep Kosmo window shortcuts available while a terminal tab has focus.
 - Reject native control-character text events on X11, Wayland, and Windows to
   avoid duplicate editor input after Return and Delete key events.
