@@ -12,6 +12,7 @@ requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
 # Native damage must request onRender: https://github.com/levovix0/siwin/pull/55
 requires "gh:elcritch/siwin#fdec8e4"
+# Render ownership and GPU completion require FigDraw 0.43.0.
 requires "gh:elcritch/figdraw >= 0.43.0 [siwin, harfbuzz]"
 requires "sigils >= 0.31.0 [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
