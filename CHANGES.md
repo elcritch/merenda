@@ -4,6 +4,8 @@
 
 - Release text views and active field editors after their owning windows close,
   clearing generated layout references and circular keyboard-navigation links.
+- Keep layout-constraint view links non-owning so dismissed dialog content is
+  released without discarding constraints needed by reusable windows.
 - Use FigDraw 0.43.0 for render ownership and native window teardown.
 - Expand Open and Save dialogs with a resizable file browser and fix closing
   edited Kosmo tabs after Discard.

@@ -25,7 +25,7 @@ suite "NimKit modal lifetimes":
 
   test "prepared sheet choices reach their callback and editing resumes in the owner":
     var weakOwner, weakUnrelated, weakEditor: BackRef[Responder]
-    var weakAlerts, weakAlertWindows: array[3, BackRef[Responder]]
+    var weakAlerts, weakAlertWindows, weakAlertContents: array[3, BackRef[Responder]]
     block:
       let
         app = newApplication("Sheet workflow")
@@ -57,6 +57,7 @@ suite "NimKit modal lifetimes":
             responses.add response
             app.stopModal(response)
         )
+        weakAlertContents[index][] = Responder(alert.contentView)
         # Use the prepared window overload: installing another default handler
         # would drop the caller's completion callback.
         let session = app.beginModalSheet(owner, alert.window)
@@ -88,6 +89,7 @@ suite "NimKit modal lifetimes":
     for index in 0 ..< weakAlerts.len:
       check weakAlerts[index].isNil
       check weakAlertWindows[index].isNil
+      check weakAlertContents[index].isNil
 
   test "closing from an alert response releases the callback and button action":
     var weakAlert: BackRef[Responder]
