@@ -19,8 +19,8 @@ func center(rect: Rect): Point =
   )
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add(rune)
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc renderedTexts(view: View): seq[string] =
   let renders = buildRenders(view)
@@ -552,14 +552,14 @@ suite "Kosmo":
     check frontend.openPath(secondPath)
 
     check frontend.window
-    .keyBindings()
-    .commandFor(
-      KeyEvent(
-        key: keyRightBracket,
-        keyCode: keyRightBracket.ord,
-        modifiers: {kmCommand, kmShift},
-      )
-    ).isNone
+      .keyBindings()
+      .commandFor(
+        KeyEvent(
+          key: keyRightBracket,
+          keyCode: keyRightBracket.ord,
+          modifiers: {kmCommand, kmShift},
+        )
+      ).isNone
     check frontend.editorView.editor.tabs()[1].active
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})

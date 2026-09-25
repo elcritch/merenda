@@ -10,8 +10,8 @@ import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc renderedTextStartingWith(view: View, prefix: string): string =
   let renders = buildRenders(view)
@@ -167,14 +167,13 @@ suite "Kosmo":
       GitStatusSnapshot(
         rootPath: absolutePath(root),
         isRepository: true,
-        entries:
-          @[
-            GitStatusEntry(path: nestedFile, state: gfsModified),
-            GitStatusEntry(path: untrackedFile, state: gfsUntracked),
-            GitStatusEntry(path: gitDirectory, state: gfsIgnored),
-            GitStatusEntry(path: ignoredFile, state: gfsIgnored),
-            GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
-          ],
+        entries: @[
+          GitStatusEntry(path: nestedFile, state: gfsModified),
+          GitStatusEntry(path: untrackedFile, state: gfsUntracked),
+          GitStatusEntry(path: gitDirectory, state: gfsIgnored),
+          GitStatusEntry(path: ignoredFile, state: gfsIgnored),
+          GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
+        ],
       )
     )
     tree.displayMode = FileTreeDisplayMode.AllFiles

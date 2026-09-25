@@ -12,8 +12,8 @@ const MerendaNimbleManifest =
   staticRead(currentSourcePath().parentDir / "../../merenda.nimble")
 
 proc renderedFigText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune.toUTF8()
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex).toUTF8()
 
 proc renderedTexts(view: View): seq[string] =
   let renders = buildRenders(view)
@@ -590,9 +590,11 @@ suite "Kosmo":
     check frontend.window.mouseUpAt(filesTabPoint)
     check frontend.sidebarTabs.selectedIndex == 0
     check frontend.window.makeFirstResponder(frontend.editorView)
+    let sidebarShortcutModifiers =
+      frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmCommand, kmShift})
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: sidebarShortcutModifiers)
     )
     check frontend.sidebarTabs.selectedIndex == 1
     check frontend.fileTree.isHiddenOrHasHiddenAncestor()
@@ -601,7 +603,7 @@ suite "Kosmo":
     check frontend.window.firstResponder == frontend.window.fieldEditor()
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: {kmCommand, kmShift})
+      KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: sidebarShortcutModifiers)
     )
     check frontend.sidebarTabs.selectedIndex == 0
     check not frontend.fileTree.isHiddenOrHasHiddenAncestor()
@@ -609,7 +611,7 @@ suite "Kosmo":
     check frontend.window.firstResponder == frontend.fileTree
 
     check frontend.window.dispatchKeyDown(
-      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: {kmCommand, kmShift})
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: sidebarShortcutModifiers)
     )
     check frontend.sidebarTabs.selectedIndex == 1
     check frontend.searchPanel.queryField.isEditing

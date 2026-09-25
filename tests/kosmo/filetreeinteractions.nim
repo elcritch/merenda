@@ -7,8 +7,8 @@ import merenda/nimkit
 import merenda/kosmo/[kosmo, workspacefiles]
 
 proc renderedText(node: Fig): string =
-  for rune in node.textLayout.runes:
-    result.add rune
+  for glyphIndex in 0 ..< node.textLayout.glyphCount():
+    result.add node.textLayout.displayRune(glyphIndex)
 
 proc renderedTextStartingWith(view: View, prefix: string): string =
   let renders = buildRenders(view)
@@ -258,12 +258,11 @@ suite "Kosmo file tree interactions":
       GitStatusSnapshot(
         rootPath: absolutePath(root),
         isRepository: true,
-        entries:
-          @[
-            GitStatusEntry(path: changedFile, state: gfsModified),
-            GitStatusEntry(path: deletedFile, state: gfsDeleted),
-            GitStatusEntry(path: unicodeDeletedFile, state: gfsDeleted),
-          ],
+        entries: @[
+          GitStatusEntry(path: changedFile, state: gfsModified),
+          GitStatusEntry(path: deletedFile, state: gfsDeleted),
+          GitStatusEntry(path: unicodeDeletedFile, state: gfsDeleted),
+        ],
       )
     )
     tree.displayMode = FileTreeDisplayMode.SourceControlChanges
@@ -307,11 +306,10 @@ suite "Kosmo file tree interactions":
       GitStatusSnapshot(
         rootPath: absolutePath(root),
         isRepository: true,
-        entries:
-          @[
-            GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
-            GitStatusEntry(path: ignoredFile, state: gfsIgnored),
-          ],
+        entries: @[
+          GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
+          GitStatusEntry(path: ignoredFile, state: gfsIgnored),
+        ],
       )
     )
     check tree.rowForItem(ignoredFolder) < 0
