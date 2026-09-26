@@ -182,8 +182,59 @@ jobs:
           "$testExecutable"
         fi
 
+  ownership-sanitizers:
+    name: NimKit ownership sanitizers (ARC and ORC, Linux)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+    - uses: actions/checkout@v5
+
+    - name: Cache packages
+      uses: actions/cache@v4
+      with:
+        path: deps/
+        key: ${{ runner.os }}-nim2.2.10-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
+
+    - name: Install latest Atlas and set up Nim
+      run: |
+        mkdir -p "$HOME/.local/bin"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        bash .github/scripts/install-atlas.sh
+        "$HOME/.local/bin/atlas" env "2.2.10" --binary --github-path
+
+    - name: Setup software OpenGL/Vulkan (Mesa) + Xvfb (X11)
+      timeout-minutes: 30
+      run: |
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          clang \
+          xvfb \
+          xauth \
+          libx11-xcb-dev \
+          libxcb1-dev \
+          libxcursor-dev \
+          libxkbcommon-dev \
+          libxrender-dev \
+          libgl1-mesa-dev \
+          libgles2-mesa-dev \
+          libegl1-mesa-dev \
+          mesa-utils \
+          vulkan-tools \
+          mesa-vulkan-drivers \
+          libvulkan1 \
+          libgl1-mesa-dri \
+          libglx-mesa0 \
+          libegl-mesa0 \
+          libgles2
+
+    - name: Install Deps
+      run: |
+        atlas -tu --features:kosmo install
+
     - name: Check ARC ownership with sanitizers
-      if: runner.os == 'Linux'
       timeout-minutes: 10
       env:
         UBSAN_OPTIONS: halt_on_error=1
@@ -193,7 +244,6 @@ jobs:
           -d:nimkitOwnershipTests -d:nimkitSanitizers
 
     - name: Check ORC ownership with sanitizers
-      if: runner.os == 'Linux'
       timeout-minutes: 10
       env:
         UBSAN_OPTIONS: halt_on_error=1:suppressions=.github/ubsan.supp
