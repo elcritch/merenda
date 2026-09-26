@@ -2,11 +2,12 @@ import std/[options, os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import fixtures/ui
 
 const FixtureDirectory = currentSourcePath().parentDir / "fixtures"
 
 suite "Kosmo Markdown activation":
-  test "returning to an unchanged Markdown tab reuses its rendered preview":
+  test "switching Markdown tabs preserves selection and scroll position":
     let
       root = createTempDir("kosmo-markdown-activation-", "")
       secondPath = root / "second.md"
@@ -28,36 +29,32 @@ suite "Kosmo Markdown activation":
     first.textView().selectedRange = initTextRange(2, 3)
     first.scrollView().scrollTo(initPoint(0, 24))
     let firstScrollOffset = first.scrollView().contentOffset()
+    let firstText = first.textStorage().stringValue()
     check firstScrollOffset.y > 0
     let identifier = frontend.documentTabs.selectedDocumentTabIdentifier
     require frontend.openPath(secondPath)
     let second = frontend.editorPane.markdownView
-    let distinctPreviews = second != first
-    require distinctPreviews
     require second.waitForMarkdownParsing()
     discard buildRenders(second)
     for iteration in 0 ..< 3:
       discard iteration
       require frontend.documentTabs.selectDocumentTabWithIdentifier(identifier)
-      check not frontend.editorPane.markdownView.isMarkdownParsing()
-      let restoredFirstPreview = frontend.editorPane.markdownView == first
-      check restoredFirstPreview
-      check first.textView().selectedRange == initTextRange(2, 3)
-      check first.scrollView().contentOffset() == firstScrollOffset
-      require frontend.editorPane.markdownView.waitForMarkdownParsing()
-      discard buildRenders(frontend.editorPane.markdownView)
+      let restored = frontend.editorPane.markdownView
+      require restored.waitForMarkdownParsing()
+      check restored.textStorage().stringValue() == firstText
+      check restored.textView().selectedRange == initTextRange(2, 3)
+      check restored.scrollView().contentOffset() == firstScrollOffset
       for tab in frontend.editorView.editor.tabs():
         check not tab.modified
       require frontend.documentTabs.selectDocumentTabAtIndex(1)
-      let restoredSecondPreview = frontend.editorPane.markdownView == second
-      check restoredSecondPreview
-      check not frontend.editorPane.markdownView.isMarkdownParsing()
       require frontend.editorPane.markdownView.waitForMarkdownParsing()
+      check "Second preview" in
+        frontend.editorPane.markdownView.textStorage().stringValue()
     require frontend.documentTabs.selectDocumentTabWithIdentifier(identifier)
     require frontend.documentTabs.closeDocumentTabAtIndex(0)
-    check first.markdown == ""
-    require first.waitForMarkdownParsing()
-    check second.markdown.len > 0
+    require frontend.editorPane.markdownView.waitForMarkdownParsing()
+    check "Second preview" in
+      frontend.editorPane.markdownView.textStorage().stringValue()
 
   test "preview edit commands cannot modify hidden Markdown source":
     let
@@ -102,54 +99,31 @@ suite "Kosmo Markdown activation":
       check frontend.editorView.editor.bufferText(id).get == original
       check not frontend.editorView.editor.tabs()[0].modified
 
-  test "each pane retains its three most recently used previews":
+  test "revisiting many Markdown tabs always displays the selected document":
     let
-      root = createTempDir("kosmo-markdown-lru-", "")
-      frontend =
-        newKosmoApplication(newApplication("Markdown LRU"), monitorsGitStatus = false)
-    var paths: seq[string]
-    for index in 0 ..< 4:
-      let path = root / ("preview-" & $index & ".md")
-      writeFile(path, "# Preview " & $index & "\n")
-      paths.add path
+      root = createTempDir("kosmo-markdown-revisit-", "")
+      frontend = newKosmoApplication(
+        newApplication("Markdown tab navigation"), monitorsGitStatus = false
+      )
     defer:
       frontend.close()
-      for path in paths:
-        removeFile(path)
       removeDir(root)
     frontend.window.setContentView(frontend.contentView)
-    var
-      identifiers: seq[string]
-      previews: seq[MarkdownView]
-    for index in 0 ..< 3:
-      require frontend.openPath(paths[index])
+    var identifiers: seq[string]
+    for index in 0 ..< 6:
+      let path = root / ("preview-" & $index & ".md")
+      writeFile(path, "# Preview " & $index & "\n")
+      require frontend.openPath(path)
       identifiers.add frontend.documentTabs.selectedDocumentTabIdentifier
-      previews.add frontend.editorPane.markdownView
-      require previews[^1].waitForMarkdownParsing()
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(identifiers[0])
-    let promotedFirst = frontend.editorPane.markdownView == previews[0]
-    check promotedFirst
-    require frontend.openPath(paths[3])
-    identifiers.add frontend.documentTabs.selectedDocumentTabIdentifier
-    previews.add frontend.editorPane.markdownView
-    require previews[^1].waitForMarkdownParsing()
-    check previews[1].markdown == ""
-    check previews[0].markdown.len > 0
-    check previews[2].markdown.len > 0
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(identifiers[0])
-    let restoredPromotedPreview = frontend.editorPane.markdownView == previews[0]
-    check restoredPromotedPreview
-    check not frontend.editorPane.markdownView.isMarkdownParsing()
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(identifiers[2])
-    let restoredRecentPreview = frontend.editorPane.markdownView == previews[2]
-    check restoredRecentPreview
-    check not frontend.editorPane.markdownView.isMarkdownParsing()
-    require frontend.documentTabs.selectDocumentTabWithIdentifier(identifiers[1])
-    let recreatedEvictedPreview = frontend.editorPane.markdownView != previews[1]
-    check recreatedEvictedPreview
-    check frontend.editorPane.markdownView.isMarkdownParsing()
-    require frontend.editorPane.markdownView.waitForMarkdownParsing()
-    check frontend.editorPane.markdownView.markdown.strip() == "# Preview 1"
+      require frontend.editorPane.markdownView.waitForMarkdownParsing()
+    for index in [0, 4, 2, 5, 1, 3, 0]:
+      require frontend.documentTabs.selectDocumentTabWithIdentifier(identifiers[index])
+      let preview = frontend.editorPane.markdownView
+      require preview.waitForMarkdownParsing()
+      check preview.textStorage().stringValue().strip() == "Preview " & $index
+      check frontend.documentTabs.documentTabModels().len == identifiers.len
+      for tab in frontend.editorView.editor.tabs():
+        check not tab.modified
 
   test "source edits refresh the cached preview and save normally":
     let
@@ -166,7 +140,6 @@ suite "Kosmo Markdown activation":
     frontend.contentView.frame = rect(0, 0, 700, 500)
     frontend.contentView.layoutSubtreeIfNeeded()
     require frontend.openPath(path)
-    let preview = frontend.editorPane.markdownView
     let buttonBounds = frontend.editorPane.markdownControls.modeButton.bounds()
     let buttonPoint =
       initPoint(buttonBounds.size.width / 2, buttonBounds.size.height / 2)
@@ -181,10 +154,9 @@ suite "Kosmo Markdown activation":
     require frontend.window.clickAt(
       frontend.editorPane.markdownControls.modeButton.pointToWindow(buttonPoint)
     )
-    let reusedPreview = frontend.editorPane.markdownView == preview
-    check reusedPreview
+    let preview = frontend.editorPane.markdownView
     require preview.waitForMarkdownParsing()
-    check "Updated" in preview.markdown
+    check "Updated" in preview.textStorage().stringValue()
     discard frontend.window.sendAction(actionSelector(KosmoSaveAction))
     check not frontend.editorView.editor.tabs()[0].modified
     check "Updated" in readFile(path)
@@ -197,17 +169,29 @@ suite "Kosmo Markdown activation":
       frontend.close()
     frontend.window.setContentView(frontend.contentView)
     frontend.contentView.frame = rect(0, 0, 1000, 700)
-    frontend.editorPane.markdownControls.hidden = false
+    require frontend.openPath(FixtureDirectory / "markdown-activation.md")
+    require frontend.editorPane.markdownView.waitForMarkdownParsing()
     frontend.contentView.layoutSubtreeIfNeeded()
-    let
-      controls = frontend.editorPane.markdownControls
-      row = StackView(controls.contentView)
-      arranged = row.arrangedSubviews()
-    check arranged.len == 5
-    check arranged[0] == View(controls.modeButton)
-    check arranged[1] == View(controls.colorModeButton)
-    check arranged[3] == View(controls.decreaseFontButton)
-    check arranged[4] == View(controls.increaseFontButton)
-    check arranged[2].frame().size.width > 0.0
-    check arranged[2].frame().origin.x > arranged[1].frame().maxX()
-    check arranged[3].frame().origin.x > arranged[2].frame().maxX()
+    let controls = frontend.editorPane.markdownControls
+    for width in [640.0'f32, 1000.0'f32]:
+      frontend.contentView.frame = rect(0, 0, width, 700)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      for button in [
+        controls.modeButton, controls.colorModeButton, controls.decreaseFontButton,
+        controls.increaseFontButton,
+      ]:
+        button.checkVisibleIn(controls)
+      let
+        mode = controls.modeButton.rectToView(controls.modeButton.bounds(), controls)
+        color = controls.colorModeButton.rectToView(
+          controls.colorModeButton.bounds(), controls
+        )
+        decrease = controls.decreaseFontButton.rectToView(
+          controls.decreaseFontButton.bounds(), controls
+        )
+        increase = controls.increaseFontButton.rectToView(
+          controls.increaseFontButton.bounds(), controls
+        )
+      check mode.maxX <= color.minX
+      check color.maxX < decrease.minX
+      check decrease.maxX <= increase.minX

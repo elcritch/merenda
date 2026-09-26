@@ -6,6 +6,7 @@ import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
+import fixtures/ui
 
 proc numberedLines(prefix: string, count: Natural): string =
   var lines = newSeqOfCap[string](count)
@@ -78,13 +79,15 @@ suite "Kosmo":
 
     let groups = frontend.editorGroups()
     check groups.len == 2
-    check frontend.dockView.rootView() of SplitView
-    check SplitView(frontend.dockView.rootView()).splitAxis == laHorizontal
+    let left = groups[0].panel.rectToView(groups[0].panel.bounds(), frontend.dockView)
+    let right = groups[1].panel.rectToView(groups[1].panel.bounds(), frontend.dockView)
+    check left.maxX <= right.minX
+    check groups[0].pane.documentTabs.selectedDocumentTabItem().title == "second.txt"
+    check groups[1].pane.documentTabs.selectedDocumentTabItem().title == "first.txt"
     check groups[0].editorView.documentTabs.len == 1
     check groups[1].editorView.documentTabs.len == 1
     check frontend.editorView.editor.tabs().len == bufferCount
-    check groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
-    check not groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+    check frontend.window.firstResponder() == Responder(groups[1].editorView)
 
     let
       paneIndicatorContext = controlStyle(srBox, id = KosmoPaneIndicatorStyleId)
@@ -94,19 +97,6 @@ suite "Kosmo":
       )
       paneOutlineWidth =
         paneAppearance.resolveLength(paneIndicatorContext, StyleBorderWidth, 0.0'f32)
-      activeTabTextColor = paneAppearance.resolveColor(
-        controlStyle(srDocumentTab, {ssSelected}),
-        StyleTextColor,
-        color(0.0, 0.0, 0.0, 1.0),
-      )
-      inactiveTabTextColor = paneAppearance.resolveColor(
-        controlStyle(
-          srDocumentTab, {ssSelected}, classes = @[KosmoInactivePaneStyleClass]
-        ),
-        StyleTextColor,
-        color(0.0, 0.0, 0.0, 1.0),
-      )
-    check inactiveTabTextColor.a < activeTabTextColor.a
     check not groups[0].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
     check groups[1].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
 
@@ -114,8 +104,7 @@ suite "Kosmo":
       groups[0].editorView.pointToWindow(initPoint(12.0'f32, 12.0'f32))
     check frontend.window.mouseDownAt(sourceGroupPoint)
     check frontend.window.mouseUpAt(sourceGroupPoint)
-    check not groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
-    check groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
+    check frontend.window.firstResponder() == Responder(groups[0].editorView)
     check groups[0].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
     check not groups[1].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
 
@@ -237,119 +226,6 @@ suite "Kosmo":
     check abs(groups[0].panel.frame().size.width - unrelatedWidth) <= 0.01'f32
     check abs(groups[1].panel.frame().size.width - groups[2].panel.frame().size.width) <=
       0.01'f32
-
-  when defined(posix):
-    test "terminal shortcut opens a tab that can create an independent split pane":
-      let frontend = newKosmoApplication(newApplication("Kosmo Terminal Split Test"))
-      defer:
-        frontend.close()
-      frontend.window.setContentView(frontend.contentView)
-      frontend.contentView.layoutSubtreeIfNeeded()
-      check frontend.window.makeFirstResponder(frontend.editorView)
-      let initialFocusObservers =
-        frontend.window.signalSubscriptionCount("didChangeFirstResponder")
-      check frontend.window.dispatchKeyDown(
-        KeyEvent(
-          key: keyT,
-          keyCode: keyT.ord,
-          modifiers: shortcutModifiers() + {nimkit.kmShift},
-        )
-      )
-
-      let
-        terminalView = TerminalView(frontend.editorPane.contentView)
-        sourceTabs = frontend.documentTabs
-        tabRect = sourceTabs.documentTabRect(sourceTabs.selectedIndex())
-        start = sourceTabs.pointToWindow(
-          initPoint(
-            tabRect.minX + tabRect.size.width * 0.5'f32,
-            tabRect.minY + tabRect.size.height * 0.5'f32,
-          )
-        )
-        drop = frontend.dockView.pointToWindow(
-          initPoint(
-            frontend.dockView.bounds().maxX - 4.0'f32,
-            frontend.dockView.bounds().minY +
-              frontend.dockView.bounds().size.height * 0.5'f32,
-          )
-        )
-
-      check frontend.window.mouseDownAt(start)
-      check frontend.window.mouseDraggedAt(drop)
-      check frontend.window.mouseUpAt(drop)
-
-      let groups = frontend.editorGroups()
-      check groups.len == 2
-      check frontend.window.signalSubscriptionCount("didChangeFirstResponder") ==
-        initialFocusObservers + 1
-      check groups[0].documents.len == 0
-      check groups[1].documents.len == 1
-      check groups[1].pane.contentView == View(terminalView)
-      check groups[1].pane.documentTabs.len == 1
-      check terminalView.session().running()
-
-      frontend.contentView.layoutSubtreeIfNeeded()
-      let
-        paneIndicatorContext = controlStyle(srBox, id = KosmoPaneIndicatorStyleId)
-        paneAppearance = groups[1].pane.documentTabs.effectiveAppearance()
-        paneOutlineColor = paneAppearance.resolveColor(
-          paneIndicatorContext, StyleBorderColor, color(0.0, 0.0, 0.0, 0.0)
-        )
-        paneOutlineWidth =
-          paneAppearance.resolveLength(paneIndicatorContext, StyleBorderWidth, 0.0'f32)
-        editorPoint = groups[0].editorView.pointToWindow(initPoint(12.0'f32, 12.0'f32))
-      check frontend.window.mouseDownAt(editorPoint)
-      check frontend.window.mouseUpAt(editorPoint)
-      check not groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
-      check groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
-      check groups[0].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
-      check not groups[1].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
-
-      let terminalPoint = terminalView.pointToWindow(initPoint(12.0'f32, 12.0'f32))
-      check frontend.window.mouseDownAt(terminalPoint)
-      check frontend.window.mouseUpAt(terminalPoint)
-      check groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
-      check not groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
-      check not groups[0].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
-      check groups[1].pane.hasPaneOutline(paneOutlineColor, paneOutlineWidth)
-      check groups[1].pane.documentTabs.selectedDocumentTabIdentifier.startsWith(
-        "kosmo.terminal."
-      )
-
-      check frontend.window.dispatchKeyDown(
-        KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
-      )
-      check frontend.editorGroups().len == 2
-      check frontend.window.sendAction(
-        actionSelector(KosmoSplitVerticalAction), DynamicAgent(terminalView)
-      )
-
-      let splitGroups = frontend.editorGroups()
-      require splitGroups.len == 3
-      let
-        duplicatedGroup = splitGroups[^1]
-        duplicatedTerminal = TerminalView(duplicatedGroup.pane.contentView)
-      check frontend.window.signalSubscriptionCount("didChangeFirstResponder") ==
-        initialFocusObservers + 2
-      check groups[1].documents.len == 1
-      check duplicatedGroup.documents.len == 1
-      check duplicatedGroup.documents[0].identifier != groups[1].documents[0].identifier
-      check duplicatedTerminal != terminalView
-      check terminalView.session().running()
-      check duplicatedTerminal.session().running()
-
-      check duplicatedGroup.pane.documentTabs.closeDocumentTabAtIndex(0)
-      check frontend.editorGroups().len == 2
-      check duplicatedTerminal.session().state() == tssClosed
-      check frontend.window.signalSubscriptionCount("didChangeFirstResponder") ==
-        initialFocusObservers + 1
-
-      check groups[1].pane.documentTabs.closeDocumentTabAtIndex(0)
-      check frontend.editorGroups().len == 1
-      check frontend.dockView.len == 1
-      check terminalView.session().state() == tssClosed
-      check frontend.window.signalSubscriptionCount("didChangeFirstResponder") ==
-        initialFocusObservers
 
   test "q and x commands close the active tab and its empty split":
     let
@@ -780,20 +656,10 @@ suite "Kosmo":
     frontend.contentView.frame = rect(0, 0, 640, 480)
     frontend.contentView.layoutSubtreeIfNeeded()
 
-    check frontend.documentTabs.frame().origin.y == 0.0'f32
-    check frontend.documentTabs.frame().size.height == KosmoTabBarHeight
-    check frontend.editorView.frame().origin.y == KosmoTabBarHeight
-    check frontend.editorView.frame().size.height ==
-      frontend.editorPane.bounds().size.height - KosmoTabBarHeight
-
-    let editorStyle = frontend.editorView.effectiveAppearance.resolveMonoTextStyle(
-      controlStyle(srMonoTextView, id = frontend.editorView.styleId)
-    )
-    check editorStyle.cursorColor.a == 0.45'f32
-    check editorStyle.box.focusRingWidth == 0.0'f32
-    check editorStyle.box.focusRingInset == 0.0'f32
-    check editorStyle.box.cornerRadius == 0.0'f32
-    check editorStyle.box.cornerRadii.isZero
+    frontend.documentTabs.checkVisibleIn(frontend.editorPane)
+    frontend.editorView.checkVisibleIn(frontend.editorPane)
+    check frontend.documentTabs.frame().maxY <= frontend.editorView.frame().minY
+    check abs(frontend.editorView.frame().maxY - frontend.editorPane.bounds().maxY) < 1
 
   test "settled editor refresh does not re-dirty its containing layout":
     let

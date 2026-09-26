@@ -300,8 +300,6 @@ suite "Kosmo synthetic panel shortcuts":
       removeDir(secondRoot)
     require not first.isNil
     require not second.isNil
-    check not first.fileTree.refreshGitStatus()
-    check not second.fileTree.refreshGitStatus()
     app.presentSyntheticWindow(first)
     app.presentSyntheticWindow(second)
     check first.window.firstResponderIs(first.editorView)

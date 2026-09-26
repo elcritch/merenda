@@ -2,11 +2,11 @@ import std/[os, tempfiles, unittest]
 import merenda/nimkit
 import merenda/kosmo/kosmo
 
-proc findButton(view: View): Button =
-  if view of Button:
+proc findButton(view: View, title: string): Button =
+  if view of Button and Button(view).title == title:
     return Button(view)
   for child in view.subviews:
-    result = findButton(child)
+    result = findButton(child, title)
     if not result.isNil:
       return
 
@@ -20,14 +20,16 @@ suite "Kosmo terminal errors":
     defer:
       frontend.close()
     let originalContent = frontend.editorPane.contentView
+    let originalTabCount = frontend.documentTabs.len
     check not frontend.openTerminal(
       initTerminalSpawnOptions(workingDirectory = root / "missing")
     )
     check frontend.editorPane.contentView == originalContent
+    check frontend.documentTabs.len == originalTabCount
     var session = app.modalSession()
     require not session.isNil
     check session.window.title == "Could not start terminal"
-    let button = findButton(session.window.contentView())
+    let button = findButton(session.window.contentView(), "OK")
     require not button.isNil
     check button.title == "OK"
     let dialogWindow = session.window

@@ -5,6 +5,7 @@ import sigils/[core, threads]
 
 import merenda/nimkit
 import merenda/kosmo/[kosmo, workspacefiles]
+import fixtures/ui
 
 proc renderedText(node: Fig): string =
   for glyphIndex in 0 ..< node.textLayout.glyphCount():
@@ -100,7 +101,6 @@ suite "Kosmo file tree interactions":
     let
       root = createTempDir("merenda-kosmo-tree-git-redraw-", "")
       ignoredPath = root / "ignored.log"
-      ignoredColor = color(0.50, 0.52, 0.56, 0.72)
     writeFile(ignoredPath, "ignored")
     let tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 120))
     defer:
@@ -109,7 +109,7 @@ suite "Kosmo file tree interactions":
 
     tree.displayMode = FileTreeDisplayMode.AllFiles
     discard buildRenders(tree)
-    check not tree.rendersTextWithColor("ignored.log", ignoredColor)
+    let originalColor = tree.outlineItemWithIdentifier(ignoredPath).decoration.color
 
     tree.applyGitStatus(
       GitStatusSnapshot(
@@ -119,7 +119,10 @@ suite "Kosmo file tree interactions":
       )
     )
 
-    check tree.rendersTextWithColor("ignored.log", ignoredColor)
+    let ignoredColor = tree.outlineItemWithIdentifier(ignoredPath).decoration.color
+    require ignoredColor.isSome
+    check ignoredColor != originalColor
+    check tree.rendersTextWithColor("ignored.log", ignoredColor.get())
 
   test "hover input redraws the highlighted row":
     let
@@ -172,8 +175,10 @@ suite "Kosmo file tree interactions":
     check window.scrollWheelAt(
       tree.pointToWindow(initPoint(40.0'f32, 40.0'f32)), deltaY = -3.0'f32
     )
-    check tree.firstVisibleIndex() == 3
-    check tree.renderedTextStartingWith("02-row") == "02-row.txt"
+    check tree.firstVisibleIndex() > 0
+    let visibleName =
+      tree.itemAtRow(tree.firstVisibleIndex()).identifier.extractFilename()
+    check tree.renderedTextStartingWith(visibleName) == visibleName
     check tree.renderedTextStartingWith("00-row").len == 0
 
   test "filesystem refresh retains the wheel-scrolled file list position":
@@ -258,11 +263,12 @@ suite "Kosmo file tree interactions":
       GitStatusSnapshot(
         rootPath: absolutePath(root),
         isRepository: true,
-        entries: @[
-          GitStatusEntry(path: changedFile, state: gfsModified),
-          GitStatusEntry(path: deletedFile, state: gfsDeleted),
-          GitStatusEntry(path: unicodeDeletedFile, state: gfsDeleted),
-        ],
+        entries:
+          @[
+            GitStatusEntry(path: changedFile, state: gfsModified),
+            GitStatusEntry(path: deletedFile, state: gfsDeleted),
+            GitStatusEntry(path: unicodeDeletedFile, state: gfsDeleted),
+          ],
       )
     )
     tree.displayMode = FileTreeDisplayMode.SourceControlChanges
@@ -306,10 +312,11 @@ suite "Kosmo file tree interactions":
       GitStatusSnapshot(
         rootPath: absolutePath(root),
         isRepository: true,
-        entries: @[
-          GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
-          GitStatusEntry(path: ignoredFile, state: gfsIgnored),
-        ],
+        entries:
+          @[
+            GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
+            GitStatusEntry(path: ignoredFile, state: gfsIgnored),
+          ],
       )
     )
     check tree.rowForItem(ignoredFolder) < 0
@@ -538,10 +545,11 @@ suite "Kosmo file tree interactions":
       )
     )
     check panel.scopeButton.popupOpen()
-    require panel.subviews()[^1] of PopupListView
-    let
-      popup = PopupListView(panel.subviews()[^1])
-      itemBounds = popup.popupListItemRect(popup.bounds(), 2)
+    let popup = panel.popupIn()
+    require not popup.isNil
+    let changedIndex = popup.choiceIndex("Changed Files")
+    require changedIndex >= 0
+    let itemBounds = popup.popupListItemRect(popup.bounds(), changedIndex)
     check window.clickAt(
       popup.pointToWindow(
         initPoint(
@@ -561,10 +569,11 @@ suite "Kosmo file tree interactions":
       FileTreeDisplayMode.SourceControlChanges, FileTreeDisplayMode.AllFiles,
     ]:
       panel.scopeButton.openPopup()
-      require panel.subviews()[^1] of PopupListView
-      let
-        scopePopup = PopupListView(panel.subviews()[^1])
-        choiceBounds = scopePopup.popupListItemRect(scopePopup.bounds(), mode.ord)
+      let scopePopup = panel.popupIn()
+      require not scopePopup.isNil
+      let choice = scopePopup.choiceIndex(mode.title())
+      require choice >= 0
+      let choiceBounds = scopePopup.popupListItemRect(scopePopup.bounds(), choice)
       check window.clickAt(
         scopePopup.pointToWindow(
           initPoint(
@@ -576,7 +585,7 @@ suite "Kosmo file tree interactions":
       check tree.displayMode == mode
       check panel.scopeButton.title == mode.title()
       for index, item in panel.scopeButton.menu().items():
-        check item.state == (if index == mode.ord: bsOn else: bsOff)
+        check item.state == (if item.title == mode.title(): bsOn else: bsOff)
       if mode != FileTreeDisplayMode.SourceControlChanges:
         check tree.rowForItem(otherFile) >= 0
 

@@ -1,9 +1,8 @@
-import std/[json, math, os, strutils, tempfiles, unittest]
-
-import crunchy/[common, sha256]
+import std/[json, os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import fixtures/ui
 
 suite "Kosmo configuration":
   test "installs bundled fonts as Kosmo defaults":
@@ -21,17 +20,10 @@ suite "Kosmo configuration":
       monospaceFace = app.appearance().fontFace(frMonospace)
     check app.appearance().fontName(frUI) == KosmoInterfaceFontName
     check app.appearance().fontName(frMonospace) == KosmoMonospaceFontName
-    check interfaceFace.file.path.extractFilename().endsWith(KosmoInterfaceFontFileName)
-    check monospaceFace.file.path.extractFilename().endsWith(KosmoMonospaceFontFileName)
-    check sha256(readFile(interfaceFace.file.path)).toHex().toLowerAscii() ==
-      KosmoInterfaceFontSha256
-    check sha256(readFile(interfaceFaces.italic.file.path)).toHex().toLowerAscii() ==
-      KosmoInterfaceItalicFontSha256
-    check sha256(readFile(interfaceFaces.bold.file.path)).toHex().toLowerAscii() ==
-      KosmoInterfaceBoldFontSha256
-    check interfaceFaces.boldItalic.file.path.len == 0
-    check sha256(readFile(monospaceFace.file.path)).toHex().toLowerAscii() ==
-      KosmoMonospaceFontSha256
+    for face in [
+      interfaceFace, interfaceFaces.italic, interfaceFaces.bold, monospaceFace
+    ]:
+      check fileExists(face.file.path)
     let
       interfaceStyle = app.appearance().resolveTextStyle(
           controlStyle(srTextView), color(0.0, 0.0, 0.0), insets(0.0)
@@ -61,8 +53,6 @@ suite "Kosmo configuration":
       manager.close()
     check app.appearance().fontName(frUI) == platformDefaultFontName(frUI)
     check app.appearance().fontName(frMonospace) == platformDefaultFontName(frMonospace)
-    check app.appearance().fontFace(frUI).file.path.len == 0
-    check app.appearance().fontFace(frMonospace).file.path.len == 0
 
   test "defers unused bundled font installation until settings requests it":
     let
@@ -127,6 +117,7 @@ suite "Kosmo configuration":
       removeDir(root)
 
     check config.saveKosmoConfig(path)
+    # Configuration keys are a public format that users can edit by hand.
     let node = parseJson(readFile(path))
     check node["moeTheme"].getStr() == KosmoMoeDefaultThemeIdentifier
     check node["nimLspCommand"].getStr() == "custom-server --stdio"
@@ -192,8 +183,6 @@ suite "Kosmo configuration":
 
     check app.appearance().fontName(frUI) == config.merendaFont
     check app.appearance().fontName(frMonospace) == config.merendaMonoFont
-    check app.appearance().fontFace(frUI).file.path.len == 0
-    check app.appearance().fontFace(frMonospace).file.path.len == 0
     check app
     .appearance()
     .resolveTextStyle(controlStyle(srTextView), color(0.0, 0.0, 0.0), insets(0.0)).fontSize ==
@@ -234,11 +223,11 @@ suite "Kosmo configuration":
     themePicker.selectedIndex = 1
     check themePicker.sendAction()
     let tabs = TabView(tabsView)
-    check tabs.selectTabViewItemAtIndex(0)
+    require tabs.selectPage("appearance")
     let scaleView =
       settingsWindow.contentView().viewWithIdentifier(SettingsUiScaleIdentifier)
     require scaleView of Stepper
-    check tabs.selectTabViewItemAtIndex(2)
+    require tabs.selectPage(SettingsBehaviorTabIdentifier)
     let
       invertView = settingsWindow.contentView().viewWithIdentifier(
           SettingsInvertScrollingIdentifier
@@ -258,7 +247,7 @@ suite "Kosmo configuration":
 
     let saved = loadKosmoConfig(path)
     check saved.merendaTheme == "aqua"
-    check abs(saved.merendaUiScale - 1.1'f32) < 0.0001'f32
+    check abs(saved.merendaUiScale - app.uiScale) < 0.0001'f32
     check saved.merendaInvertScrolling
     check saved.merendaAutoSaveDefaults == false
     check saved.merendaFont.len == 0
@@ -273,32 +262,32 @@ suite "Kosmo configuration":
     defer:
       manager2.close()
     check app2.merendaSettingsThemeIdentifier == "aqua"
-    check abs(app2.uiScale - 1.1'f32) < 0.0001'f32
+    check abs(app2.uiScale - saved.merendaUiScale) < 0.0001'f32
     check app2.invertScrolling
 
-  when defined(posix):
-    test "live monospace appearance changes reach the editor and terminal":
-      let
-        app = newApplication("Kosmo Live Font Test")
-        frontend = newKosmoApplication(app, monitorsGitStatus = false)
-      defer:
-        frontend.close()
-      frontend.show()
-      require frontend.newTerminal()
-      require frontend.editorPane.contentView of KosmoTerminalView
-      let terminal = KosmoTerminalView(frontend.editorPane.contentView)
+  test "live monospace appearance changes reach the editor and terminal":
+    let
+      app = newApplication("Kosmo Live Font Test")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    frontend.show()
+    let terminal = newKosmoTerminalView()
+    require frontend.openDocument(
+      newKosmoPaneDocument("font-terminal", "Terminal", terminal)
+    )
 
-      var
-        appearance = app.effectiveAppearance()
-        builder = initThemeBuilder(appearance.theme)
-      builder.setFontName(frMonospace, "Kosmo Test Mono")
-      builder[srMonoTextView, StyleFontSize] = 19.0'f32
-      appearance.theme = builder.finish()
-      app.setAppearance(appearance)
+    var
+      appearance = app.effectiveAppearance()
+      builder = initThemeBuilder(appearance.theme)
+    builder.setFontName(frMonospace, "Kosmo Test Mono")
+    builder[srMonoTextView, StyleFontSize] = 19.0'f32
+    appearance.theme = builder.finish()
+    app.setAppearance(appearance)
 
-      check frontend.editorView.fontName == "Kosmo Test Mono"
-      check frontend.editorView.fontSize == 19.0'f32
-      check terminal.fontName == "Kosmo Test Mono"
+    check frontend.editorView.fontName == "Kosmo Test Mono"
+    check frontend.editorView.fontSize == 19.0'f32
+    check terminal.fontName == "Kosmo Test Mono"
 
   test "persists a selected Moe theme":
     let

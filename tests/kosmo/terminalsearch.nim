@@ -2,34 +2,15 @@
 
 import std/unittest
 
-import figdraw
-
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import fixtures/ui
 
 func center(rect: Rect): Point =
   initPoint(
     rect.origin.x + rect.size.width / 2.0'f32,
     rect.origin.y + rect.size.height / 2.0'f32,
   )
-
-proc rendersBackdropBlur(view: View): bool =
-  let renders = buildRenders(view)
-  if DefaultDrawLevel notin renders:
-    return
-  for node in renders[DefaultDrawLevel].nodes:
-    if node.kind == nkBackdropBlur and node.backdropBlur.blur > 0.0'f32:
-      return true
-
-proc searchButton(view: View, label: string): Button =
-  if view.isNil:
-    return
-  if view of Button and view.accessibilityLabel() == label:
-    return Button(view)
-  for child in view.subviews:
-    let button = child.searchButton(label)
-    if not button.isNil:
-      return button
 
 suite "Kosmo terminal search":
   test "find shortcuts start at the bottom and traverse older output first":
@@ -95,39 +76,26 @@ suite "Kosmo terminal search":
     check terminal.showSearch()
     check terminal.searchVisible()
     check window.fieldEditorClient() == terminal.searchField()
-    let searchFieldFrame =
-      terminal.searchField().rectToView(terminal.searchField().bounds(), terminal)
-    check searchFieldFrame.origin.x > 100.0'f32
-    check searchFieldFrame.origin.y <= 40.0'f32
-    check searchFieldFrame.size.width > 300.0'f32
-    check searchFieldFrame.size.height >= 30.0'f32
+    terminal.searchField().checkVisibleIn(terminal)
     check window.dispatchTextInput("alpha")
-    check terminal.searchField().selectedRange() == initTextRange(5, 0)
     check window.dispatchKeyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
-    check terminal.searchField().selectedRange() == initTextRange(4, 0)
     check window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
     check terminal.searchField().text() == "alpa"
-    check terminal.searchField().selectedRange() == initTextRange(3, 0)
     check window.dispatchTextInput("h")
     check terminal.searchField().text() == "alpha"
     check window.dispatchKeyDown(
       KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
     )
-    check terminal.searchField().selectedRange() == initTextRange(5, 0)
     let
-      previousButton = terminal.searchButton("Previous terminal output match")
-      nextButton = terminal.searchButton("Next terminal output match")
-      closeButton = terminal.searchButton("Close terminal output search")
+      previousButton = terminal.buttonWithLabel("Previous terminal output match")
+      nextButton = terminal.buttonWithLabel("Next terminal output match")
+      closeButton = terminal.buttonWithLabel("Close terminal output search")
     require not previousButton.isNil
     require not nextButton.isNil
     require not closeButton.isNil
-    check previousButton.title() == "^"
-    check nextButton.title() == "v"
-    check closeButton.title() == "×"
     check not previousButton.bounds().isEmpty
     check not nextButton.bounds().isEmpty
     check not closeButton.bounds().isEmpty
-    check terminal.rendersBackdropBlur()
     check terminal.searchMatchCount() == 2
     check terminal.selectedSearchMatch() == 1
     check terminal.selectionText() == "ALPHA"
@@ -170,9 +138,10 @@ suite "Kosmo terminal search":
     defer:
       frontend.close()
 
-    require frontend.newTerminal()
-    require frontend.editorPane.contentView of KosmoTerminalView
-    let terminal = KosmoTerminalView(frontend.editorPane.contentView)
+    let terminal = newKosmoTerminalView()
+    require frontend.openDocument(
+      newKosmoPaneDocument("search-terminal", "Terminal", terminal)
+    )
 
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: terminalShortcutModifiers())

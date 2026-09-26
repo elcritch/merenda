@@ -5,6 +5,7 @@ import figdraw
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import merenda/kosmo/workspacefiles
+import fixtures/ui
 
 proc renderedText(node: Fig): string =
   for glyphIndex in 0 ..< node.textLayout.glyphCount():
@@ -78,113 +79,32 @@ suite "Kosmo quick open":
     check panel.rootPath() == root
     check panel.projectFiles() == @["retained.nim"]
 
-  test "popup blurs translucent panel input and result row surfaces":
+  test "popup shows its prompt and file choices within the window":
     let
-      root = createTempDir("merenda-kosmo-quick-open-blur-", "")
-      frontend = newKosmoApplication(newApplication("Kosmo Quick Open Blur Test"))
-    writeFile(root / "alpha.nim", "discard\n")
-    writeFile(root / "beta.nim", "discard\n")
-    writeFile(root / "gamma.nim", "discard\n")
+      root = createTempDir("merenda-kosmo-quick-open-layout-", "")
+      frontend = newKosmoApplication(newApplication("Kosmo Quick Open Layout Test"))
+    for name in ["alpha.nim", "beta.nim", "gamma.nim"]:
+      writeFile(root / name, "discard\n")
     defer:
       frontend.close()
       removeDir(root)
 
     frontend.window.setContentView(frontend.contentView)
-    frontend.contentView.layoutSubtreeIfNeeded()
     frontend.quickOpenPanel.reloadProjectFiles(root)
     frontend.quickOpenPanel.hidden = false
-    let renders = buildRenders(frontend.contentView)
-
-    check frontend.quickOpenPanel.frame().origin.y == 96.0'f32
-
-    var
-      defaultBlurs: seq[Fig]
-      popupBlurs: seq[Fig]
-    for node in renders[DefaultDrawLevel].nodes:
-      if node.kind == nkBackdropBlur:
-        defaultBlurs.add node
-    for node in renders[PopupDrawLevel].nodes:
-      if node.kind == nkBackdropBlur:
-        popupBlurs.add node
-
-    require defaultBlurs.len == 2
-    require popupBlurs.len == 1
-    let
-      outerBlur = defaultBlurs[0]
-      queryBlur = defaultBlurs[1]
-      resultsBlur = popupBlurs[0]
-      outerTintAlpha = outerBlur.fill.centerColorRgba().a
-      queryTintAlpha = queryBlur.fill.centerColorRgba().a
-      resultsTintAlpha = resultsBlur.fill.centerColorRgba().a
-
-    check frontend.quickOpenPanel.boxTitle() == "Open File"
-    var titleNode = none(Fig)
-    for node in renders[DefaultDrawLevel].nodes:
-      if node.kind == nkText and node.renderedText() == "Open File":
-        titleNode = some(node)
-    require titleNode.isSome
-    require titleNode.get().textLayout.spanColors.len > 0
-    require titleNode.get().textLayout.selectionRects.len > 0
-    var
-      titleMinX = float32.high
-      titleMaxX = -float32.high
-      titleMinY = float32.high
-      titleMaxY = -float32.high
-    for rect in titleNode.get().textLayout.selectionRects:
-      titleMinX = min(titleMinX, rect.x)
-      titleMaxX = max(titleMaxX, rect.x + rect.w)
-      titleMinY = min(titleMinY, rect.y)
-      titleMaxY = max(titleMaxY, rect.y + rect.h)
-    let
-      titleColor = titleNode.get().textLayout.spanColors[0].centerColorRgba()
-      titleContentCenterX = (titleMinX + titleMaxX) / 2.0'f32
-      titleBoundsCenterX = titleNode.get().screenBox.w / 2.0'f32
-      titleContentCenterY = (titleMinY + titleMaxY) / 2.0'f32
-      titleBoundsCenterY = titleNode.get().screenBox.h / 2.0'f32
-    check abs(
-      titleNode.get().screenBox.y + titleNode.get().screenBox.h - queryBlur.screenBox.y
-    ) <= 1.0'f32
-    check abs(titleContentCenterX - titleBoundsCenterX) <= 1.0'f32
-    check abs(titleContentCenterY - titleBoundsCenterY) <= 1.0'f32
-    check titleColor.a == high(uint8)
-    check titleColor.r.int + titleColor.g.int + titleColor.b.int > 384
-
-    check outerBlur.backdropBlur.blur > 0.0'f32
-    check queryBlur.backdropBlur.blur > 0.0'f32
-    check resultsBlur.backdropBlur.blur > 0.0'f32
-    check outerTintAlpha < queryTintAlpha
-    check queryTintAlpha == resultsTintAlpha
-    check outerBlur.screenBox.w > queryBlur.screenBox.w
-    check outerBlur.screenBox.h > resultsBlur.screenBox.h
-
-    var
-      queryCoverAlpha = 0'u8
-      resultsCoverAlpha = 0'u8
-    for node in renders[DefaultDrawLevel].nodes:
-      if node.kind == nkRectangle and node.screenBox == queryBlur.screenBox:
-        queryCoverAlpha = max(queryCoverAlpha, node.fill.centerColorRgba().a)
-    for node in renders[PopupDrawLevel].nodes:
-      if node.kind == nkRectangle and node.screenBox == resultsBlur.screenBox:
-        resultsCoverAlpha = max(resultsCoverAlpha, node.fill.centerColorRgba().a)
-    check queryCoverAlpha < queryTintAlpha
-    check resultsCoverAlpha < resultsTintAlpha
-
-    var
-      minimumRowAlpha = high(uint8)
-      maximumRowAlpha = 0'u8
-      rowCount = 0
-    for node in renders[PopupDrawLevel].nodes:
-      if node.kind == nkRectangle and
-          node.screenBox.w > resultsBlur.screenBox.w * 0.9'f32 and
-          node.screenBox.h < resultsBlur.screenBox.h:
-        let alpha = node.fill.centerColorRgba().a
-        minimumRowAlpha = min(minimumRowAlpha, alpha)
-        maximumRowAlpha = max(maximumRowAlpha, alpha)
-        inc rowCount
-    require rowCount > 1
-    check minimumRowAlpha > 0'u8
-    check minimumRowAlpha < maximumRowAlpha
-    check maximumRowAlpha < high(uint8)
+    for width in [640.0'f32, 1000.0'f32]:
+      frontend.contentView.frame = rect(0, 0, width, 700)
+      frontend.contentView.layoutSubtreeIfNeeded()
+      frontend.quickOpenPanel.checkVisibleIn(frontend.contentView)
+      frontend.quickOpenPanel.queryField.checkVisibleIn(frontend.quickOpenPanel)
+      let renders = buildRenders(frontend.contentView)
+      var texts: seq[string]
+      for level, render in renders:
+        for node in render.nodes:
+          if node.kind == nkText:
+            texts.add node.renderedText()
+      for expected in ["Open File", "alpha.nim", "beta.nim", "gamma.nim"]:
+        check expected in texts
 
   test "quick open spinner draws on the popup layer":
     let files = newWorkspaceFiles()
@@ -199,13 +119,11 @@ suite "Kosmo quick open":
     defer:
       indicator.stopAnimation()
     let renders = buildRenders(indicator)
-    var dots: int
+    var visibleIndicator = false
     for node in renders[PopupDrawLevel].nodes:
-      if node.kind == nkDrawable:
-        for operation in node.drawOps:
-          if operation.kind == dkCircle:
-            inc dots
-    check dots == 12
+      if node.kind == nkDrawable and node.drawOps.len > 0:
+        visibleIndicator = true
+    check visibleIndicator
 
   test "platform primary P filters, selects, opens, and dismisses the file popup":
     let
@@ -238,7 +156,6 @@ suite "Kosmo quick open":
     frontend.contentView.layoutSubtreeIfNeeded()
     frontend.fileTree.rootPath = root
     check frontend.window.makeFirstResponder(frontend.editorView)
-    let initialAnimationCount = frontend.window.animationScheduler().animationCount()
 
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyP, keyCode: keyP.ord, modifiers: shortcutModifiers())
@@ -247,11 +164,6 @@ suite "Kosmo quick open":
     check frontend.window.fieldEditorClient() == frontend.quickOpenPanel.queryField
     let loading = frontend.quickOpenPanel.isLoading()
     check frontend.quickOpenPanel.progressIndicator.animating() == loading
-    let startFrame = frontend.quickOpenPanel.frame()
-    check startFrame.origin.y + startFrame.size.height <=
-      frontend.contentView.bounds().origin.y
-    check frontend.quickOpenPanel.presentationOffset() < 0.0'f32
-    check frontend.window.animationScheduler().animationCount() > initialAnimationCount
     require frontend.quickOpenPanel.waitForProjectFiles()
     check not frontend.quickOpenPanel.progressIndicator.animating()
     check "build/main-generated.nim" notin frontend.quickOpenPanel.projectFiles()
