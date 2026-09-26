@@ -1997,6 +1997,17 @@ suite "nimkit terminal views":
       discard window.animationScheduler().tick(initDuration(milliseconds = 500))
       check not view.cursorVisible
 
+      window.setKeyWindow(false)
+      session.processOutput("\r\x1b[5mX\x1b[25m")
+      discard view.poll()
+      check mttHidden notin view.cellAt(0, 0).traits
+      discard window.animationScheduler().tick(initDuration(milliseconds = 500))
+      check view.cursorVisible
+      check mttHidden in view.cellAt(0, 0).traits
+      discard window.animationScheduler().tick(initDuration(milliseconds = 500))
+      check view.cursorVisible
+      check mttHidden notin view.cellAt(0, 0).traits
+
   test "modifier-click activates OSC hyperlinks through mouse dispatch":
     let
       session = newCompactTerminalSession(columns = 24, rows = 2)

@@ -60,7 +60,7 @@ type
     xHoveredLink: TerminalLink
     xLastInputError: string
     xBlinkElapsed, xMaintenanceElapsed: Duration
-    xBlinkVisible, xBlinkActive, xHasBlinkingText: bool
+    xTextBlinkVisible, xCursorBlinkVisible, xBlinkActive, xHasBlinkingText: bool
     xOutputWatch: TerminalOutputWatch
     xOutputWatchReady: bool
     xHeartbeat: Animation
@@ -618,7 +618,7 @@ proc appendTerminalRow(
       cell,
       view.xPalette,
       selected = view.xHasSelection and view.xSelection.contains(absoluteRow, column),
-      blinkVisible = view.xBlinkVisible,
+      blinkVisible = view.xTextBlinkVisible,
     )
     if taBlink in cell.style.attributes:
       view.xHasBlinkingText = true
@@ -730,7 +730,7 @@ proc syncTerminalScreen(view: TerminalView) =
     view.setCursorPosition(cursor.position.row, cursor.position.column)
   view.cursorVisible =
     view.xScrollPosition == 0.0'f32 and cursor.visible and
-    (not cursor.blinking or view.xBlinkVisible)
+    (not cursor.blinking or not view.xBlinkActive or view.xCursorBlinkVisible)
   view.cursorStyle =
     case cursor.shape
     of tcsBlock: mtcBlock
@@ -1061,13 +1061,16 @@ proc terminalTicked(view: TerminalView, delta: Duration) {.slot.} =
       view.rearmTerminalOutput(token)
   if maintenanceDue:
     view.xMaintenanceElapsed = initDuration()
+    if view.xHasBlinkingText:
+      view.xTextBlinkVisible = not view.xTextBlinkVisible
+      view.xLastGeneration = high(uint64)
   if view.xBlinkActive:
     view.xBlinkElapsed = view.xBlinkElapsed + delta
   if view.xBlinkActive and view.xBlinkElapsed >= initDuration(milliseconds = 500):
     view.xBlinkElapsed = initDuration()
-    view.xBlinkVisible = not view.xBlinkVisible
-    if view.xHasBlinkingText:
-      view.xLastGeneration = high(uint64)
+    view.xCursorBlinkVisible = not view.xCursorBlinkVisible
+    view.syncTerminalScreen()
+  elif maintenanceDue and view.xHasBlinkingText:
     view.syncTerminalScreen()
 
 proc setTerminalBlinkActive(view: TerminalView, active: bool) =
@@ -1075,10 +1078,8 @@ proc setTerminalBlinkActive(view: TerminalView, active: bool) =
     return
   view.xBlinkActive = active
   view.xBlinkElapsed = initDuration()
-  if not view.xBlinkVisible:
-    view.xBlinkVisible = true
-    if view.xHasBlinkingText:
-      view.xLastGeneration = high(uint64)
+  if not view.xCursorBlinkVisible:
+    view.xCursorBlinkVisible = true
     view.syncTerminalScreen()
 
 proc refreshTerminalBlinkFocus(view: TerminalView) =
@@ -1253,7 +1254,8 @@ proc initTerminalViewFields*(
   view.xLastScrollbackCount = view.xSession.screenInfo().scrollbackCount
   view.xLastScrollbackLinesAdded = view.xSession.screenInfo().scrollbackLinesAdded
   view.xLastScrollbackResetCount = view.xSession.screenInfo().scrollbackResetCount
-  view.xBlinkVisible = true
+  view.xTextBlinkVisible = true
+  view.xCursorBlinkVisible = true
   view.clipsToBounds = true
   view.focusRingType = frtNone
   view.padding = DefaultTerminalPadding
