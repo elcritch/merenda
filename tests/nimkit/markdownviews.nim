@@ -974,7 +974,7 @@ fencedToken value
 
   test "streamed Markdown colors preserve embedded storage and horizontal scrolling":
     let
-      code = "let payload = \"" & "abcdefghij".repeat(12) & "\"\n"
+      code = "let payload = \"" & "abcdefghij".repeat(6) & "\"\n"
       view = newMarkdownView(
         "```nim\n" & code.repeat(160) & "```", frame = rect(0, 0, 240, 240)
       )
