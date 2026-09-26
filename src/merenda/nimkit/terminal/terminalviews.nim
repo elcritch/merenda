@@ -12,6 +12,7 @@ import ../responder/responders
 from ../text/textviews import isInsertableText
 import ../text/monotextviews
 import ../view/views
+import ./terminalwatch
 
 const
   DefaultTerminalFontSize* = 14.0'f32
@@ -60,6 +61,8 @@ type
     xLastInputError: string
     xBlinkElapsed: Duration
     xBlinkVisible: bool
+    xOutputWatch: TerminalOutputWatch
+    xOutputWatchReady: bool
     xHeartbeat: Animation
     xPollingWindow: BackRef[Window]
 
@@ -779,6 +782,7 @@ proc resizeToFit*(view: TerminalView) =
 
 proc start*(view: TerminalView, options = initTerminalSpawnOptions()) =
   view.xSession.start(options)
+  view.stopTerminalPolling()
   view.xExitNotified = false
   view.xLastInputError.setLen(0)
   view.startTerminalPolling()
@@ -1014,20 +1018,57 @@ proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
       view.syncTerminalScreen()
     true
 
+proc rearmTerminalOutput(view: TerminalView, token: uint64) =
+  if not view.xOutputWatch.isNil and view.xOutputWatch.token == token:
+    view.xOutputWatch.rearm()
+
+proc terminalOutputAvailable(view: TerminalView, token: uint64) {.slot.} =
+  if view.xOutputWatch.isNil or view.xOutputWatch.token != token:
+    return
+  let polled = view.poll()
+  # EOF can become readable before waitpid reports exit. Leave that watch
+  # disarmed until the maintenance tick instead of spinning on an empty PTY.
+  if polled.bytesRead > 0:
+    view.rearmTerminalOutput(token)
+
+proc terminalWatchStarted(view: TerminalView, token: uint64) {.slot.} =
+  if view.xOutputWatch.isNil or view.xOutputWatch.token != token:
+    return
+  view.xOutputWatchReady = true
+  view.xHeartbeat.cadence = intervalCadence(initDuration(milliseconds = 500))
+
+proc terminalWatchFailed(view: TerminalView, token: uint64) {.slot.} =
+  if view.xOutputWatch.isNil or view.xOutputWatch.token != token:
+    return
+  view.xOutputWatch.stop()
+  view.xOutputWatch = nil
+  view.xOutputWatchReady = false
+  view.xHeartbeat.cadence = everyFrameCadence()
+
 proc terminalTicked(view: TerminalView, delta: Duration) {.slot.} =
   if view.isNil:
     return
-  discard view.poll()
   view.xBlinkElapsed = view.xBlinkElapsed + delta
-  if view.xBlinkElapsed >= initDuration(milliseconds = 500):
+  let maintenanceDue = view.xBlinkElapsed >= initDuration(milliseconds = 500)
+  if not view.xOutputWatchReady or maintenanceDue:
+    let token = if view.xOutputWatch.isNil: 0'u64 else: view.xOutputWatch.token
+    discard view.poll()
+    # Also flush pending input and collect child exit when no output arrives.
+    if maintenanceDue:
+      view.rearmTerminalOutput(token)
+  if maintenanceDue:
     view.xBlinkElapsed = initDuration()
     view.xBlinkVisible = not view.xBlinkVisible
     view.xLastGeneration = high(uint64)
     view.syncTerminalScreen()
 
 proc stopTerminalPolling(view: TerminalView) =
-  if view.isNil or view.xPollingWindow.isNil:
+  if view.isNil:
     return
+  if not view.xOutputWatch.isNil:
+    view.xOutputWatch.stop()
+    view.xOutputWatch = nil
+  view.xOutputWatchReady = false
   let owner = view.xPollingWindow[]
   if not owner.isNil:
     owner.animationScheduler().disconnect(schedulerTicked, view, terminalTicked)
@@ -1045,10 +1086,17 @@ proc startTerminalPolling(view: TerminalView) =
     return
   let owner = Window(responder)
   view.xPollingWindow[] = owner
+  view.xBlinkElapsed = initDuration()
   owner.animationScheduler().connect(schedulerTicked, view, terminalTicked)
   view.xHeartbeat = newAnimation(duration = initDuration(seconds = 1))
   view.xHeartbeat.loopCount = -1
   discard owner.startAnimation(view.xHeartbeat)
+  view.xOutputWatch = newTerminalOutputWatch(view.xSession)
+  if not view.xOutputWatch.isNil:
+    view.xOutputWatch.connect(terminalOutputReady, view, terminalOutputAvailable)
+    view.xOutputWatch.connect(terminalOutputWatchStarted, view, terminalWatchStarted)
+    view.xOutputWatch.connect(terminalOutputWatchFailed, view, terminalWatchFailed)
+    view.xOutputWatch.start()
 
 protocol TerminalViewKeyEquivalents of ResponderCommandDispatchProtocol:
   method performKeyEquivalent(view: TerminalView, event: KeyEvent): bool =

@@ -183,7 +183,9 @@ when defined(macosx):
   import std/tables
 
   import darwin/app_kit/[nsapplication, nsevent, nsimage, nsmenu]
-  import darwin/foundation/[nsattributedstring, nsdictionary, nsrange, nsstring]
+  import
+    darwin/foundation/
+      [nsattributedstring, nsautoreleasepool, nsdictionary, nsrange, nsstring]
   import darwin/objc/runtime
 
   {.passL: "-framework AppKit".}
@@ -317,6 +319,9 @@ when defined(macosx):
         nativeItem.release()
 
   proc rebuildNativeMenuContents(nativeMenu: NSMenu, menu: NativeMenuDescription) =
+    let pool = NSAutoreleasePool.alloc().init()
+    defer:
+      pool.drain()
     ensureNativeMenuTables()
     forgetNativeMenu(nativeMenu, false)
     nativeMenu.removeAllItems()
@@ -435,6 +440,11 @@ when defined(macosx):
   proc installNativeMenus*(
       menu: NativeMenuDescription, windowsMenu: pointer, servicesMenu: pointer
   ) =
+    # Model changes can arrive between native event polls, outside Siwin's pool.
+    # Drain AppKit's temporary menu trees before returning to the caller.
+    let pool = NSAutoreleasePool.alloc().init()
+    defer:
+      pool.drain()
     ensureNativeMenuTables()
     ensureNativeMenuTarget()
     let application = NSApplication.sharedApplication()

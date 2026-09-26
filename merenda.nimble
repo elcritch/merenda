@@ -1,4 +1,4 @@
-version       = "0.23.0"
+version       = "0.24.0"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -33,7 +33,7 @@ feature "uirelays":
 
 feature "kosmo":
   # Host hooks and nonblocking Git pipe reads are supplied by this Moe branch.
-  requires "gh:elcritch/moe#feat/kosmo-host-ui"
+  requires "gh:elcritch/moe#feat/kosmo-host-command-hooks"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"

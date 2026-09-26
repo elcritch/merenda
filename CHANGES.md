@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Watch terminal PTY readiness on POSIX instead of polling every animation frame,
+  retaining a slower maintenance tick for blinking, pending input, and child exit.
+  Release watch descriptors when terminals close, change sessions, or detach.
+
+- Drain temporary macOS menu and application-frame objects promptly, preventing
+  long-running Kosmo sessions from retaining old native menus and growing by
+  tens of gigabytes.
+- Preserve unchanged Window-menu entries during keyboard shortcut checks instead
+  of repeatedly rebuilding the native menu bar.
+- Open Moe's `:config` viewer in a reusable Kosmo document tab, and show files
+  opened with `:e` in native document tabs.
+- Keep file previews and initial blank buffers owned by their pane when opening
+  files from the sidebar or search, and reuse tabs already open in another pane.
 - Make `kosmo --bg` open paths in a detached new instance, add foreground
   `--new`, and accept `-v` as an alias for `--version`.
 - Move Kosmo's Files and Find controls into a taller status bar and let the

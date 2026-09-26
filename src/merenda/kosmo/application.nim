@@ -63,6 +63,8 @@ const
   KosmoGridOverscanRows = 1
   KosmoMoeBottomAreaRows = 1
   KosmoTabIdentifierPrefix = "kosmo.buffer."
+  KosmoHelpTabIdentifier* = "kosmo.help"
+  KosmoConfigTabIdentifier* = "kosmo.config"
   KosmoTerminalIdentifierPrefix = "kosmo.terminal."
   KosmoFilesTabIdentifier* = "kosmo.sidebar.files"
   KosmoFindTabIdentifier* = "kosmo.sidebar.find"

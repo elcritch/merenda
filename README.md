@@ -421,6 +421,11 @@ File → New Terminal to open a shell. Markdown files open as previews, with a
 control to switch to the source editor. Merenda Settings places the theme and
 UI scale in Appearance, fonts in Typography, and scrolling in Behavior.
 
+In Moe's normal mode, `:e path` opens a Kosmo document tab or selects the file's
+existing tab.
+`:help` and `:config` open reusable tabs; `:config` keeps Moe's interactive
+settings viewer, which you can close with `:q`.
+
 Settings changes apply to the current Kosmo instance immediately. Choose
 **Save as Default** to use the committed theme, fonts, scale, and scrolling
 choices on the next launch; **Reset** restores the last saved values. You can

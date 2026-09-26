@@ -120,6 +120,8 @@ proc activatePaneTab(
   controller.activateGroup(group.editorView)
   var id: KosmoBufferId
   if identifier.parseTabIdentifier(id):
+    if controller.editor.configViewerOpen():
+      discard controller.editor.focusTextWindow()
     group.editorView.saveViewState()
     group.editorView.editor.dismissCompletionPopup()
     group.editorView.editor.dismissCommandLine()
@@ -135,6 +137,7 @@ proc activatePaneTab(
   let document = group.documentForIdentifier(identifier)
   if document.isNil:
     return
+  document.activate(group.pane)
   group.editorView.editor.dismissCompletionPopup()
   group.editorView.editor.dismissCommandLine()
   group.pane.setContentView(document.contentView)
@@ -312,7 +315,7 @@ proc finishTabClose(controller: KosmoDockController, view: KosmoEditorView) =
     controller.activatePaneTab(group, selectedItem.identifier())
     return
   if view.bufferIds.len == 0 and group.documents.len == 0:
-    view.adoptActiveBuffer()
+    discard view.adoptActiveBuffer()
   view.lastTabs.setLen(0)
   view.refresh()
   discard group.window.makeFirstResponder(nimkit.Responder(group.pane.contentView))
@@ -951,6 +954,7 @@ proc openPaneDocument(
     group: KosmoEditorGroup,
     document: KosmoPaneDocument,
     insertAfterSelected = false,
+    preserveVisibleTabs = false,
 ): bool =
   if controller.isNil or group.isNil or document.isNil or document.identifier.len == 0 or
       document.contentView.isNil:
@@ -978,7 +982,8 @@ proc openPaneDocument(
       group.tabOrder.len,
   )
   group.selectedTabIdentifier = document.identifier
-  group.editorView.lastTabs.setLen(0)
+  if not preserveVisibleTabs:
+    group.editorView.lastTabs.setLen(0)
   group.editorView.refresh()
   controller.activatePaneTab(group, document.identifier)
   true

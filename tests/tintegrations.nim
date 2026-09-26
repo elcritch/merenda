@@ -11,6 +11,7 @@ import integrations/nativewindowlifecycle
 import integrations/nativewindowrepaint
 import integrations/nativewindowscale
 import integrations/urlassets
+import integrations/terminalwatch
 import integrations/terminals
 import integrations/resourcelifetimes
 import integrations/backgroundworkershutdown

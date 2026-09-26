@@ -303,7 +303,7 @@ suite "Kosmo":
     check frontend.editorView.editor.tabs().len == 1
     check frontend.editorView.editor.tabs()[0].title == "second.txt"
 
-  test "q closes the Moe config panel without closing its Kosmo tab":
+  test "q closes the Moe config tab and returns to the file tab":
     let
       root = createTempDir("merenda-kosmo-config-close-", "")
       filePath = root / "config-test.txt"
@@ -331,7 +331,8 @@ suite "Kosmo":
       KeyEvent(text: "\n", key: keyEnter, keyCode: keyEnter.ord)
     )
     check frontend.editorView.editor.mode() == KosmoEditorMode.Other
-    check frontend.documentTabs.len == 1
+    check frontend.documentTabs.len == 2
+    check frontend.documentTabs.selectedDocumentTabIdentifier == KosmoConfigTabIdentifier
 
     check not frontend.window.dispatchKeyDown(
       KeyEvent(key: keySemicolon, keyCode: keySemicolon.ord, modifiers: {kmShift})
