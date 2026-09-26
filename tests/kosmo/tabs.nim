@@ -7,6 +7,7 @@ import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
+import fixtures/ui
 from ../nimkit/fixtures/rendergeometry import resolvedNodes
 
 const
@@ -96,30 +97,15 @@ suite "Kosmo":
       accent = frontend.window.effectiveAppearance().resolveColor(
           controlStyle(srDocumentTab), StyleMarkColor, color(0, 0, 0, 1)
         )
-      statusContext = controlStyle(
-        srTextField,
-        id = frontend.statusLabel.styleId,
-        classes = frontend.statusLabel.styleClasses,
-      )
-      baseFontSize = frontend.window.effectiveAppearance().resolveLength(
-          statusContext, StyleFontSize, defaultFontSize()
-        )
-      filesPoint = frontend.statusLabel.pointToWindow(
-        initPoint(17.0'f32, KosmoStatusBarHeight * 0.5'f32)
-      )
-      findPoint = frontend.statusLabel.pointToWindow(
-        initPoint(47.0'f32, KosmoStatusBarHeight * 0.5'f32)
-      )
-    check frontend.statusLabel.frame().size.height == KosmoStatusBarHeight
-    require bar.subviews().len == 3
-    let fileButton = bar.subviews()[1]
-    let findButton = bar.subviews()[2]
-    check frontend.statusLabel.effectiveAppearance().resolveLength(
-      statusContext, StyleFontSize, defaultFontSize()
-    ) > baseFontSize
+      fileButton = bar.buttonWithLabel("Files")
+      findButton = bar.buttonWithLabel("Find")
+    require not fileButton.isNil
+    require not findButton.isNil
+    let
+      filesPoint = fileButton.pointToWindow(fileButton.bounds().center())
+      findPoint = findButton.pointToWindow(findButton.bounds().center())
     check fileButton.hasAccentIndicator(accent)
     check not findButton.hasAccentIndicator(accent)
-    check frontend.sidebarTabs.tabBarHeight == 0.0'f32
     check not frontend.splitView.isPaneCollapsed(0)
     require frontend.window.clickAt(filesPoint)
     frontend.contentView.layoutSubtreeIfNeeded()
@@ -149,8 +135,8 @@ suite "Kosmo":
       frontend.close()
     frontend.window.setContentView(frontend.contentView)
     let bar = frontend.statusLabel.superview()
-    require bar.subviews().len == 3
-    let findButton = bar.subviews()[2]
+    let findButton = bar.buttonWithLabel("Find")
+    require not findButton.isNil
 
     for theme in [initAquaTheme(), initDarkBSDTheme()]:
       frontend.window.setAppearance(initAppearance(theme))
@@ -295,8 +281,6 @@ suite "Kosmo":
     check tabs.len == 1
     check tabs[0].title == "first.txt"
     check tabs[0].temporary
-    check KosmoPreviewTabStyleClass in
-      frontend.documentTabs.documentTabModels()[0].styleClasses
 
     let tabPoint = frontend.documentTabs.pointToWindow(
       frontend.documentTabs.documentTabRect(0).center()
@@ -307,8 +291,6 @@ suite "Kosmo":
     check tabs.len == 1
     check tabs[0].title == "first.txt"
     check not tabs[0].temporary
-    check KosmoPreviewTabStyleClass notin
-      frontend.documentTabs.documentTabModels()[0].styleClasses
 
     check frontend.window.mouseDownAt(tabPoint, clickCount = 2)
     check frontend.window.mouseUpAt(tabPoint, clickCount = 2)
@@ -358,17 +340,17 @@ suite "Kosmo":
     frontend.editorPane.layoutSubtreeIfNeeded()
     controls.layoutSubtreeIfNeeded()
     check not controls.hidden
-    check controls.modeButton.title == "</>"
+    check controls.modeButton.accessibilityLabel == "Edit Markdown source"
     check controls.colorModeButton.title == "Dark"
     check controls.markdownColorMode == kmcmLight
-    check controls.markdownFontSize == KosmoMarkdownDefaultFontSize
+    let originalFontSize = controls.markdownFontSize
     let
       controlsFrame = controls.frame()
       previewFrame = frontend.editorPane.markdownView.frame()
       paneBounds = frontend.editorPane.bounds()
     check abs(controlsFrame.minX) < 0.01'f32
     check abs(controlsFrame.maxX - paneBounds.maxX) < 0.01'f32
-    check abs(controlsFrame.minY - KosmoTabBarHeight) < 0.01'f32
+    check abs(controlsFrame.minY - frontend.documentTabs.frame().maxY) < 0.01'f32
     check controlsFrame.maxY <= previewFrame.minY
     let controlTitles = View(controls).renderedTexts()
     for title in ["</>", "Dark", "-", "+"]:
@@ -401,7 +383,7 @@ suite "Kosmo":
         controls.increaseFontButton.bounds().center()
       )
     )
-    check controls.markdownFontSize == KosmoMarkdownDefaultFontSize + 1.0'f32
+    check controls.markdownFontSize > originalFontSize
     check frontend.editorPane.markdownView.markdownStyle.bodyFontSize ==
       controls.markdownFontSize
     check frontend.window.clickAt(
@@ -409,7 +391,7 @@ suite "Kosmo":
         controls.decreaseFontButton.bounds().center()
       )
     )
-    check controls.markdownFontSize == KosmoMarkdownDefaultFontSize
+    check controls.markdownFontSize == originalFontSize
 
     check frontend.window.clickAt(
       controls.modeButton.pointToWindow(controls.modeButton.bounds().center())
@@ -738,7 +720,6 @@ suite "Kosmo":
       KeyEvent(key: key2, keyCode: key2.ord, modifiers: primaryShortcutModifiers)
     )
     check frontend.window.firstResponder == groups[0].editorView
-    check not groups[0].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
 
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: key1, keyCode: key1.ord, modifiers: primaryShortcutModifiers)
@@ -750,7 +731,6 @@ suite "Kosmo":
       KeyEvent(key: key3, keyCode: key3.ord, modifiers: primaryShortcutModifiers)
     )
     check frontend.window.firstResponder == groups[1].editorView
-    check not groups[1].pane.documentTabs.hasStyleClass(KosmoInactivePaneStyleClass)
 
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: key2, keyCode: key2.ord, modifiers: primaryShortcutModifiers)

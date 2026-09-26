@@ -3,6 +3,7 @@ import std/[strutils, unicode, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import kosmo/fixtures/ui
 import kosmo/cli
 import kosmo/cliopen
 import kosmo/config
@@ -18,6 +19,7 @@ import kosmo/moelogging
 import kosmo/panelshortcuts
 import kosmo/quickopen
 import kosmo/search
+import kosmo/settings
 import kosmo/settings_layout
 import kosmo/shortcutinput
 import kosmo/shortcutprofiles
@@ -41,7 +43,8 @@ suite "Kosmo public adapters":
     let frontend = newKosmoApplication(app)
     defer:
       frontend.close()
-    let settingsItem = app.mainMenu()[0].submenu()[2]
+    let settingsItem = app.mainMenu().menuItemForAction(KosmoShowSettingsAction)
+    require not settingsItem.isNil
     check settingsItem.action().name == actionSelector(KosmoShowSettingsAction).name
     var includesMerendaSettings = false
     for item in app.windowsMenu().items():

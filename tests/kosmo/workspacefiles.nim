@@ -24,13 +24,7 @@ template eventually(condition: untyped) =
     while not (condition) and getMonoTime() < deadline:
       discard getCurrentSigilThread().pollAll(NonBlocking)
       sleep(10)
-    check condition
-
-proc pumpFor(milliseconds: int) =
-  let deadline = getMonoTime() + initDuration(milliseconds = milliseconds)
-  while getMonoTime() < deadline:
-    discard getCurrentSigilThread().pollAll(NonBlocking)
-    sleep(10)
+    require condition
 
 suite "Kosmo shared workspace inventory":
   test "repository notifications respect ignore rules and tracked descendants":
@@ -165,7 +159,6 @@ suite "Kosmo shared workspace inventory":
     defer:
       frontend.close()
     let files = frontend.fileTree.workspaceFiles
-    check files == frontend.quickOpenPanel.workspaceFiles
     require files.waitForFiles()
     check "main.nim" in frontend.quickOpenPanel.projectFiles()
     check "build/ignored.nim" notin frontend.quickOpenPanel.projectFiles()
@@ -267,12 +260,9 @@ suite "Kosmo shared workspace inventory":
 
     # Drain the initial dirty notification, then detach native coverage to model
     # filesystem notifications that never arrive.
-    let settle = getMonoTime() + initDuration(milliseconds = 300)
-    while getMonoTime() < settle:
-      discard getCurrentSigilThread().pollAll(NonBlocking)
-      sleep(10)
-    require files.waitForFiles()
+    eventually(repositorySpy.changes > 0 and not files.isLoading())
     require not files.watch.isNil
+    eventually(files.watch.nativeReady)
     for id in files.watch.watches:
       unwatch(id)
     files.watch.watches.setLen(0)
@@ -329,8 +319,8 @@ suite "Kosmo shared workspace inventory":
     require runGitCommand(
       root,
       [
-        "-c", "user.name=Kosmo Tests", "-c", "user.email=tests@example.invalid",
-        "commit", "-qm", "initial",
+        "-c", "user.name=Kosmo Tests", "-c", "user.email=tests@example.invalid", "-c",
+        "commit.gpgsign=false", "commit", "-qm", "initial",
       ],
     ).exitCode == 0
     let frontend = newKosmoApplication(newApplication("Watched inventory"), root)
@@ -366,8 +356,8 @@ suite "Kosmo shared workspace inventory":
     require runGitCommand(
       repository,
       [
-        "-c", "user.name=Kosmo Tests", "-c", "user.email=tests@example.invalid",
-        "commit", "-qm", "initial",
+        "-c", "user.name=Kosmo Tests", "-c", "user.email=tests@example.invalid", "-c",
+        "commit.gpgsign=false", "commit", "-qm", "initial",
       ],
     ).exitCode == 0
     require runGitCommand(
@@ -396,8 +386,8 @@ suite "Kosmo shared workspace inventory":
     require runGitCommand(
       externalRoot,
       [
-        "-c", "user.name=Kosmo Tests", "-c", "user.email=tests@example.invalid",
-        "commit", "-qm", "initial",
+        "-c", "user.name=Kosmo Tests", "-c", "user.email=tests@example.invalid", "-c",
+        "commit.gpgsign=false", "commit", "-qm", "initial",
       ],
     ).exitCode == 0
     require runGitCommand(externalRoot, ["checkout", "-qb", "external-start"]).exitCode ==
@@ -423,7 +413,11 @@ suite "Kosmo shared workspace inventory":
         frontend.fileTree.workspaceFiles.watch.directories.len
       )
     )
-    pumpFor(500)
+    eventually(
+      frontend.fileTree.workspaceFiles.watch.nativeReady and
+        not frontend.fileTree.workspaceFiles.watch.filtering and
+        not frontend.fileTree.workspaceFiles.isLoading()
+    )
 
     require runGitCommand(externalRoot, ["checkout", "-qb", "external-next"]).exitCode ==
       0

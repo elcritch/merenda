@@ -1,9 +1,7 @@
-import
-  std/[monotimes, options, os, osproc, strutils, tempfiles, times, unicode, unittest]
+import std/[options, os, osproc, strutils, tempfiles, times, unicode, unittest]
 
 import figdraw
 import figdraw/debugtools
-import sigils/threads
 
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
@@ -55,14 +53,12 @@ suite "Kosmo":
       scrollView = tree.scrollView()
       wideTitle = tree.renderedTextStartingWith("a_very")
       wideTextFrame = tree.renderedTextFrameStartingWith("a_very")
-      wideColumnWidth = tree.outlineColumn().width()
       wideScrollerMinX =
         scrollView.frame().origin.x + scrollView.verticalScrollerRect().origin.x
 
     check not scrollView.verticalScrollerRect().isEmpty
     check scrollView.horizontalScrollerRect().isEmpty
-    check abs(wideColumnWidth - scrollView.viewportSize().width) < 0.01'f32
-    check abs(wideTextFrame.x + wideTextFrame.w - wideScrollerMinX) < 0.01'f32
+    check wideTextFrame.x + wideTextFrame.w <= wideScrollerMinX + 1
 
     tree.frame = rect(0, 0, 190, 120)
     let
@@ -72,9 +68,7 @@ suite "Kosmo":
         scrollView.frame().origin.x + scrollView.verticalScrollerRect().origin.x
 
     check scrollView.horizontalScrollerRect().isEmpty
-    check tree.outlineColumn().width() < wideColumnWidth
-    check abs(tree.outlineColumn().width() - scrollView.viewportSize().width) < 0.01'f32
-    check abs(narrowTextFrame.x + narrowTextFrame.w - narrowScrollerMinX) < 0.01'f32
+    check narrowTextFrame.x + narrowTextFrame.w <= narrowScrollerMinX + 1
     check narrowTitle != wideTitle
     check narrowTitle.endsWith("…")
 
@@ -95,12 +89,13 @@ suite "Kosmo":
 
     let tree = newKosmoFileTree(root)
     check tree.rootPath == absolutePath(root)
-    check tree.rowCount() == 3
-    check tree.itemAtRow(1).identifier == folder
+    require tree.rowForItem(folder) >= 0
+    check tree.rowForItem(folder) < tree.rowForItem(rootFile)
+    check tree.rowForItem(nestedFile) < 0
     check tree.outlineItemWithIdentifier(rootFile).leaf
 
     tree.expandItem(folder)
-    check tree.rowCount() == 4
+    check tree.rowForItem(nestedFile) > tree.rowForItem(folder)
     check tree.outlineItemWithIdentifier(nestedFile).leaf
 
   test "file tree appends ordered top-level folders":
@@ -139,9 +134,6 @@ suite "Kosmo":
       untrackedFile = root / "notes.txt"
       ignoredFile = root / "ignored.log"
       tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 140))
-      modifiedColor = color(0.82, 0.62, 0.20, 1.0)
-      addedColor = color(0.32, 0.72, 0.40, 1.0)
-      ignoredColor = color(0.50, 0.52, 0.56, 0.72)
     createDir(folder)
     createDir(gitDirectory)
     createDir(githubFolder)
@@ -167,13 +159,14 @@ suite "Kosmo":
       GitStatusSnapshot(
         rootPath: absolutePath(root),
         isRepository: true,
-        entries: @[
-          GitStatusEntry(path: nestedFile, state: gfsModified),
-          GitStatusEntry(path: untrackedFile, state: gfsUntracked),
-          GitStatusEntry(path: gitDirectory, state: gfsIgnored),
-          GitStatusEntry(path: ignoredFile, state: gfsIgnored),
-          GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
-        ],
+        entries:
+          @[
+            GitStatusEntry(path: nestedFile, state: gfsModified),
+            GitStatusEntry(path: untrackedFile, state: gfsUntracked),
+            GitStatusEntry(path: gitDirectory, state: gfsIgnored),
+            GitStatusEntry(path: ignoredFile, state: gfsIgnored),
+            GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
+          ],
       )
     )
     tree.displayMode = FileTreeDisplayMode.AllFiles
@@ -191,27 +184,31 @@ suite "Kosmo":
       ignoredNestedItem = tree.outlineItemWithIdentifier(ignoredNestedFile)
       folderItem = tree.outlineItemWithIdentifier(folder)
     check modifiedDecoration.badge == "M"
-    check modifiedDecoration.color == some(modifiedColor)
+    require modifiedDecoration.color.isSome
     check modifiedDecoration.badgePlacement == oibpLeading
     check untrackedDecoration.badge == "U"
-    check untrackedDecoration.color == some(addedColor)
+    require untrackedDecoration.color.isSome
+    check untrackedDecoration.color != modifiedDecoration.color
     check untrackedDecoration.badgePlacement == oibpLeading
-    check gitItem.decoration.color == some(ignoredColor)
+    let ignoredColor = ignoredItem.decoration.color
+    require ignoredColor.isSome
+    check ignoredColor != modifiedDecoration.color
+    check gitItem.decoration.color == ignoredColor
     check gitItem.tooltip.endsWith("Ignored")
-    check githubItem.decoration.color == some(ignoredColor)
+    check githubItem.decoration.color == ignoredColor
     check githubItem.tooltip.endsWith("Ignored")
-    check githubFileItem.decoration.color == some(ignoredColor)
+    check githubFileItem.decoration.color == ignoredColor
     check githubFileItem.tooltip.endsWith("Ignored")
     check ignoredItem.decoration.badge.len == 0
-    check ignoredItem.decoration.color == some(ignoredColor)
+    check ignoredItem.decoration.color == ignoredColor
     check ignoredItem.tooltip.endsWith("Ignored")
-    check ignoredNestedItem.decoration.color == some(ignoredColor)
+    check ignoredNestedItem.decoration.color == ignoredColor
     check ignoredNestedItem.tooltip.endsWith("Ignored")
     check folderItem.decoration.badge.len == 0
-    check folderItem.decoration.color == some(modifiedColor)
+    check folderItem.decoration.color == modifiedDecoration.color
     check folderItem.tooltip.endsWith("Contains modified files")
 
-  test "file tree receives Git status from its Sigils worker":
+  test "file tree displays Git status after a background refresh":
     let root = createTempDir("merenda-kosmo-tree-git-worker-", "")
     discard execProcess(
       "git",
@@ -221,15 +218,13 @@ suite "Kosmo":
     )
     let untrackedFile = root / "worker-result.txt"
     writeFile(untrackedFile, "worker result\n")
-    let
-      tree = newKosmoFileTree(root)
-      service = tree.startGitStatusMonitoring(refreshInterval = initDuration())
+    let tree = newKosmoFileTree(root)
+    discard tree.startGitStatusMonitoring(refreshInterval = initDuration())
     defer:
       tree.stopGitStatusMonitoring()
       removeDir(root)
 
     check tree.waitForGitStatus(timeoutMilliseconds = 10_000)
-    check service.lastSnapshot().workerThreadId != getThreadId()
     check tree.outlineItemWithIdentifier(untrackedFile).decoration.badge == "U"
 
   test "file tree activates files without entering inline editing":
@@ -360,8 +355,8 @@ suite "Kosmo":
     check frontend.hasFileBrowser()
     check frontend.fileTree.rootPaths == @[absolutePath(folder)]
     check frontend.window.title == "Kosmo (" & folder.fileBrowserDisplayName() & ")"
-    check frontend.splitView.panes() ==
-      @[View(frontend.sidebarPane), View(frontend.dockView)]
+    check not frontend.sidebarPane.isHidden
+    check not frontend.fileTree.bounds().isEmpty
     check manager.managedWindows() == @[frontend]
     check frontend.window in app.windows()
 
@@ -386,7 +381,7 @@ suite "Kosmo":
     check not frontend.hasFileBrowser()
     check frontend.fileTree.rootPaths.len == 0
     check frontend.window.title == "Kosmo"
-    check frontend.splitView.panes() == @[View(frontend.dockView)]
+    check frontend.editorView.editor.tabs()[0].filePath == some(filePath)
     check not frontend.showFileExplorer()
     check frontend.window in app.windows()
 

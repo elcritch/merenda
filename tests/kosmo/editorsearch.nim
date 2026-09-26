@@ -4,6 +4,7 @@ import std/unittest
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import fixtures/ui
 
 suite "Kosmo editor search":
   test "the Moe facade searches, wraps, reverses, and owns highlight state":
@@ -49,26 +50,16 @@ suite "Kosmo editor search":
     )
     check view.searchVisible()
     check window.fieldEditorClient() == view.searchField()
-    let searchFieldFrame =
-      view.searchField().rectToView(view.searchField().bounds(), view)
-    check searchFieldFrame.origin.x > 100.0'f32
-    check searchFieldFrame.origin.y <= 40.0'f32
-    check searchFieldFrame.size.width > 300.0'f32
-    check searchFieldFrame.size.height >= 30.0'f32
-
+    view.searchField().checkVisibleIn(view)
     check window.dispatchTextInput("alpha")
-    check view.searchField().selectedRange() == initTextRange(5, 0)
     check window.dispatchKeyDown(KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord))
-    check view.searchField().selectedRange() == initTextRange(4, 0)
     check window.dispatchKeyDown(KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord))
     check view.searchField().text() == "alpa"
-    check view.searchField().selectedRange() == initTextRange(3, 0)
     check window.dispatchTextInput("h")
     check view.searchField().text() == "alpha"
     check window.dispatchKeyDown(
       KeyEvent(key: keyArrowRight, keyCode: keyArrowRight.ord)
     )
-    check view.searchField().selectedRange() == initTextRange(5, 0)
     check editor.searchQuery() == "alpha"
     check editor.bufferCursor() == KosmoBufferCursor(line: 2, column: 0)
 

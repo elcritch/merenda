@@ -35,14 +35,17 @@ suite "Kosmo CLI window routing":
       check response.delivered
       check response.errors.len == 0
       let tabs = frontend.editorView.editor.tabs()
+      var activeCount = 0
       for tab in tabs:
         if tab.active:
+          inc activeCount
           check tab.modified
           check tab.filePath == some(root / "output.py")
           # Moe stores the final newline in its endOfLine flag, outside the lines.
           var lines = content
           lines.removeSuffix("\n")
           check frontend.editorView.editor.bufferText(tab.id) == some(lines)
+      check activeCount == 1
       check readFile(root / "output.py") == "original\n"
     check frontend.editorView.editor.tabs().len == originalCount + 2
     let editor = frontend.editorView.editor

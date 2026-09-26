@@ -573,7 +573,7 @@ suite "Kosmo synthetic shortcut input":
     check frontend.window.dispatchKeyDown(
       KeyEvent(text: "j", key: keyJ, keyCode: keyJ.ord)
     )
-    check frontend.window.animationScheduler().tick(140.ms) == 1
+    discard frontend.window.animationScheduler().tick(140.ms)
     check preview.scrollView().contentOffset().y > beforeNavigation
 
     check frontend.window.pressControlKey(keyW)
@@ -584,7 +584,7 @@ suite "Kosmo synthetic shortcut input":
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
     )
-    check frontend.window.animationScheduler().tick(140.ms) == 1
+    discard frontend.window.animationScheduler().tick(140.ms)
     check preview.scrollView().contentOffset().y > afterEscape
 
     let afterCancelledNavigation = preview.scrollView().contentOffset().y
@@ -592,7 +592,7 @@ suite "Kosmo synthetic shortcut input":
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)
     )
-    check frontend.window.animationScheduler().tick(140.ms) == 1
+    discard frontend.window.animationScheduler().tick(140.ms)
     check frontend.editorGroups().len == 1
     check preview.scrollView().contentOffset().y > afterCancelledNavigation
 

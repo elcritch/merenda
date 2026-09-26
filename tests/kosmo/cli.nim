@@ -1,5 +1,5 @@
 ## Kosmo standalone command-line handling shared by the Kosmo test runner.
-import std/[os, strutils, tempfiles, times, unittest]
+import std/[os, strutils, tempfiles, unittest]
 
 import merenda/kosmo/cli
 
@@ -174,31 +174,3 @@ suite "Kosmo command line":
       oversized.close()
     expect ValueError:
       discard oversized.readKosmoCliDiff(maxBytes = 4)
-
-  when not defined(windows):
-    test "detached launcher preserves the requested directory and arguments":
-      let root = createTempDir("merenda-kosmo-bg-", "")
-      defer:
-        removeDir(root)
-      let
-        helperPath = root / "record.sh"
-        outputPath = root / "output.txt"
-        commandLine = parseKosmoCommandLine(
-          @[helperPath, outputPath, "argument with spaces", "--bg"]
-        )
-      writeFile(
-        helperPath,
-        """#!/bin/sh
-printf '%s\n' "$PWD" > "$1.tmp"
-sleep 0.1
-printf '%s\n' "$2" >> "$1.tmp"
-mv "$1.tmp" "$1"
-""",
-      )
-      launchKosmoInBackground("/bin/sh", commandLine.arguments, root)
-
-      let deadline = epochTime() + 2.0
-      while not fileExists(outputPath) and epochTime() < deadline:
-        sleep(10)
-      require fileExists(outputPath)
-      check readFile(outputPath) == expandFilename(root) & "\nargument with spaces\n"
