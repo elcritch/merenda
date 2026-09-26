@@ -1,10 +1,13 @@
 import std/[unicode, unittest]
 
 when defined(macosx):
-  import darwin/app_kit/[nsapplication, nsevent, nsmenu, nswindow]
-  import darwin/foundation/[nsarray, nsstring]
+  import std/[monotimes, os, times]
+
+  import darwin/app_kit/[nsapplication, nsevent, nseventmask, nsmenu, nswindow]
+  import darwin/foundation/[nsarray, nsautoreleasepool, nsdate, nsrunloop, nsstring]
   import darwin/objc/runtime
   import merenda/nimkit/controls/nativemenus as nativeMenus
+  import merenda/nimkit/foundation/mainthreadwork
 
 import figdraw
 import sigils/selectors
@@ -24,6 +27,22 @@ when defined(macosx):
   ): NSEventModifierFlags {.objc: "keyEquivalentModifierMask".}
 
   proc windows(application: NSApplication): NSArray[NSWindow] {.objc: "windows".}
+
+  proc objc_initWeak(location: ptr pointer, value: pointer): pointer {.importc, cdecl.}
+  proc objc_destroyWeak(location: ptr pointer) {.importc, cdecl.}
+
+  proc pollCocoaMenuEvents() =
+    let pool = NSAutoreleasePool.alloc().init()
+    defer:
+      pool.drain()
+    let application = NSApplication.sharedApplication()
+    while true:
+      let event = application.nextEventMatchingMask(
+        NSEventMaskAny, NSDate.distantPast, NSDefaultRunLoopMode, true
+      )
+      if event.isNil:
+        break
+      application.sendEvent(event)
 
 func center(rect: Rect): Point =
   initPoint(
@@ -97,7 +116,118 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
   discard result.withProtocol(MenuModelSpyValidation)
 
 suite "nimkit menus":
+  test "shortcut checks preserve unchanged window menu entries":
+    let
+      app = newApplication()
+      first = newWindow("First")
+      second = newWindow("Second")
+    app.installStandardMainMenu()
+    defer:
+      first.close()
+      second.close()
+      app.mainMenu = nil
+    app.addWindow(first)
+    app.addWindow(second)
+    app.setMainWindow(first)
+    let
+      windowsMenu = app.windowsMenu()
+      firstItem = windowsMenu.items()[^2]
+      secondItem = windowsMenu.items()[^1]
+    when defined(macosx):
+      let nativeMenu = NSApplication.sharedApplication().mainMenu()
+      discard nativeMenu.retain()
+      defer:
+        nativeMenu.release()
+    for _ in 0 ..< 20:
+      check not app.performMenuKeyEquivalent(KeyEvent(key: keyArrowRight))
+    check windowsMenu.items()[^2] == firstItem
+    check windowsMenu.items()[^1] == secondItem
+    when defined(macosx):
+      check NSApplication.sharedApplication().mainMenu() == nativeMenu
+
+    second.title = "Renamed"
+    app.updateWindowsMenu()
+    check windowsMenu.items()[^1].title() == "Renamed"
+    app.setMainWindow(second)
+    check windowsMenu.items()[^2].state() == bsOff
+    check windowsMenu.items()[^1].state() == bsOn
+    discard windowsMenu.removeItem(windowsMenu.items()[^1])
+    app.updateWindowsMenu()
+    check windowsMenu.items()[^1].representedObject() == DynamicAgent(second)
+    second.close()
+    app.updateWindowsMenu()
+    check windowsMenu.items()[^1].representedObject() == DynamicAgent(first)
+
   when defined(macosx):
+    test "replaced native menu items are released between event polls":
+      # Keep an outer pool alive: event-poll pools cannot drain objects created
+      # before them, including AppKit's temporary references to retired menus.
+      let outerPool = NSAutoreleasePool.alloc().init()
+      defer:
+        outerPool.drain()
+      let application = NSApplication.sharedApplication()
+      application.finishLaunching()
+      var rootIdentity, childIdentity: int
+      let
+        child = nativeMenus.NativeMenuDescription(
+          identity: addr childIdentity,
+          title: "File",
+          items:
+            @[nativeMenus.NativeMenuItemDescription(title: "Action", enabled: true)],
+        )
+        menu = nativeMenus.NativeMenuDescription(
+          identity: addr rootIdentity,
+          title: "Main",
+          items:
+            @[
+              nativeMenus.NativeMenuItemDescription(
+                title: "File", enabled: true, submenu: child
+              )
+            ],
+        )
+      var retiredItems: array[20, pointer]
+      defer:
+        nativeMenus.installNativeMenus(nil, nil, nil)
+        for item in retiredItems.mitems:
+          objc_destroyWeak(addr item)
+      for index in 0 ..< retiredItems.len:
+        pollCocoaMenuEvents()
+        nativeMenus.installNativeMenus(menu, nil, nil)
+        discard objc_initWeak(
+          addr retiredItems[index],
+          cast[pointer](application.mainMenu().itemAtIndex(0).submenu().itemAtIndex(0)),
+        )
+        require not retiredItems[index].isNil
+      nativeMenus.installNativeMenus(nil, nil, nil)
+
+      let deadline = getMonoTime() + initDuration(seconds = 2)
+      while retiredItems != default(typeof(retiredItems)) and getMonoTime() < deadline:
+        pollCocoaMenuEvents()
+        if retiredItems != default(typeof(retiredItems)):
+          sleep(1)
+      check retiredItems == default(typeof(retiredItems))
+
+    test "application frame work drains autoreleased Cocoa objects":
+      let outerPool = NSAutoreleasePool.alloc().init()
+      defer:
+        outerPool.drain()
+      let app = newApplication()
+      var observed: pointer
+      defer:
+        objc_destroyWeak(addr observed)
+        app.mainMenu = nil
+      var executed: bool
+      scheduleMainThreadWork(
+        proc(): bool =
+          let temporary = NSObject.alloc().init().autorelease()
+          discard objc_initWeak(addr observed, cast[pointer](temporary))
+          check not observed.isNil
+          executed = true
+      )
+      discard app.runForFrames(1)
+      check executed
+      check observed.isNil
+
     test "standard About panel accepts linked attributed credits":
       let application = NSApplication.sharedApplication()
       var existingWindows: seq[pointer]
