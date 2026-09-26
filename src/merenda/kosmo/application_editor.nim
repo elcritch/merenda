@@ -52,6 +52,14 @@ proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
 proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
 proc openHelpDocument(view: KosmoEditorView): bool
+proc openConfigDocument(view: KosmoEditorView): bool
+proc activatePaneTab(
+  controller: KosmoDockController,
+  group: KosmoEditorGroup,
+  identifier: string,
+  focus = true,
+)
+
 proc groupForView(
   controller: KosmoDockController, view: KosmoEditorView
 ): KosmoEditorGroup
@@ -429,11 +437,17 @@ proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
     if restored and not controller.isNil:
       controller[].projectedEditorView = view.unsafeWeakRef()
 
-proc adoptActiveBuffer(view: KosmoEditorView) =
+proc adoptActiveBuffer(view: KosmoEditorView): bool =
   if not view.usesBufferSubset:
     return
   for tab in view.editor.tabs():
     if tab.active:
+      if not view.tabsDelegate.dockController.isNil:
+        let controller = view.tabsDelegate.dockController[]
+        for group in controller.groups:
+          if group.editorView != view and tab.id in group.editorView.bufferIds:
+            controller.activatePaneTab(group, tab.id.tabIdentifier)
+            return true
       if tab.id notin view.bufferIds:
         view.bufferIds.add tab.id
       view.selectedBufferId = some(tab.id)
@@ -852,6 +866,17 @@ proc refresh*(view: KosmoEditorView) =
     return
   if view.editor.takeHostHelpRequest():
     discard view.openHelpDocument()
+  if view.editor.configViewerOpen():
+    if view.isActiveEditorGroup() and view.editor.configViewerFocused() and
+        not view.dockGroup.isNil and
+        view.dockGroup[].selectedTabIdentifier != KosmoConfigTabIdentifier:
+      discard view.openConfigDocument()
+  elif not view.dockGroup.isNil:
+    let group = view.dockGroup[]
+    let index =
+      group.pane.documentTabs.indexOfDocumentTabIdentifier(KosmoConfigTabIdentifier)
+    if index >= 0:
+      discard group.pane.documentTabs.closeDocumentTabAtIndex(index)
   view.inactiveRefreshDeferred = false
   defer:
     if view.editor.mode() notin {KosmoEditorMode.Insert, KosmoEditorMode.Replace}:
@@ -890,12 +915,30 @@ proc toggleMarkdownMode(view: KosmoEditorView, id: KosmoBufferId): bool =
     view.refresh()
     return true
 
+proc previewScope(view: KosmoEditorView): string =
+  if not view.dockGroup.isNil:
+    view.dockGroup[].identifier
+  else:
+    ""
+
+proc mayReusePristineBuffer(view: KosmoEditorView): bool =
+  if not view.usesBufferSubset:
+    return true
+  for tab in view.editor.tabs():
+    if tab.active and tab.id in view.bufferIds:
+      return true
+
 proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load a file selected by the frontend and refresh the cell grid.
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
-  let outcome = view.editor.openFile(path)
+  let outcome = view.editor.openFile(
+    path,
+    scope = view.previewScope(),
+    reusePristineBuffer = view.mayReusePristineBuffer(),
+  )
   if outcome.loaded:
-    view.adoptActiveBuffer()
+    if view.adoptActiveBuffer():
+      return true
     view.refresh()
     return true
   if not view.statusLabel.isNil:
@@ -904,9 +947,14 @@ proc openFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
 proc previewFile*(view: KosmoEditorView, path: string): bool {.discardable.} =
   ## Load `path` as the replaceable file-tree preview and refresh the grid.
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
-  let outcome = view.editor.previewFile(path)
+  let outcome = view.editor.previewFile(
+    path,
+    scope = view.previewScope(),
+    reusePristineBuffer = view.mayReusePristineBuffer(),
+  )
   if outcome.loaded:
-    view.adoptActiveBuffer()
+    if view.adoptActiveBuffer():
+      return true
     view.refresh()
     return true
   if not view.statusLabel.isNil:
@@ -926,15 +974,26 @@ proc openSearchResult(
   let outcome =
     case disposition
     of fodTemporary:
-      view.editor.previewFile(match.path)
+      view.editor.previewFile(
+        match.path,
+        scope = view.previewScope(),
+        reusePristineBuffer = view.mayReusePristineBuffer(),
+      )
     of fodPermanent:
-      view.editor.openFile(match.path)
+      view.editor.openFile(
+        match.path,
+        scope = view.previewScope(),
+        reusePristineBuffer = view.mayReusePristineBuffer(),
+      )
   if outcome.loaded:
-    view.adoptActiveBuffer()
+    let redirected = view.adoptActiveBuffer()
     discard view.editor.revealLocation(
       max(match.line - 1, 0), match.bufferColumn(), centered = true
     )
-    view.refresh()
+    if redirected and not view.tabsDelegate.dockController.isNil:
+      view.tabsDelegate.dockController[].activeGroup.editorView.refresh()
+    else:
+      view.refresh()
     return true
   if not view.statusLabel.isNil:
     view.statusLabel.text = outcome.message
@@ -978,13 +1037,6 @@ proc selectRelativeTab(
   controller: KosmoDockController, view: KosmoEditorView, offset: int
 )
 
-proc activatePaneTab(
-  controller: KosmoDockController,
-  group: KosmoEditorGroup,
-  identifier: string,
-  focus = true,
-)
-
 proc closeCurrentPaneTab(controller: KosmoDockController, group: KosmoEditorGroup)
 
 proc closeWindow(
@@ -1004,6 +1056,7 @@ proc openPaneDocument(
   group: KosmoEditorGroup,
   document: KosmoPaneDocument,
   insertAfterSelected = false,
+  preserveVisibleTabs = false,
 ): bool
 
 proc selectRelativePaneTab(
@@ -1119,6 +1172,7 @@ proc closeTabWithConfirmation(
 
 proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
   var keyOutcome: KosmoKeyOutcome
+  let wasCommand = view.editor.mode() == KosmoEditorMode.Command
   if keyEvent.key == nimkit.keyEnter:
     keyOutcome = view.editor.handleKeyOutcome("Enter")
   elif keyEvent.awaitsCommittedText():
@@ -1133,6 +1187,10 @@ proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
   if keyOutcome.closeTabRequested and not view.tabsDelegate.dockController.isNil:
     view.tabsDelegate.dockController[].closeCurrentTab(view)
     return true
+  if wasCommand and keyEvent.key == nimkit.keyEnter and
+      view.editor.mode() notin {KosmoEditorMode.Command, KosmoEditorMode.Other}:
+    if view.adoptActiveBuffer():
+      return true
   view.refresh()
   true
 
@@ -2571,6 +2629,37 @@ proc openHelpDocument(view: KosmoEditorView): bool =
       helpView.markdownStyle = pane.markdownControls.markdownPresentationStyle(),
   )
   controller.openPaneDocument(group, document, insertAfterSelected = true)
+
+proc openConfigDocument(view: KosmoEditorView): bool =
+  if view.isNil or view.dockGroup.isNil or view.tabsDelegate.dockController.isNil:
+    return
+  let controller = view.tabsDelegate.dockController[]
+  for group in controller.groups:
+    if not group.documentForIdentifier(KosmoConfigTabIdentifier).isNil:
+      controller.activatePaneTab(group, KosmoConfigTabIdentifier)
+      return true
+
+  let group = view.dockGroup[]
+  let editor = view.editor
+  let document = newKosmoPaneDocument(
+    identifier = KosmoConfigTabIdentifier,
+    title = "Moe Config",
+    contentView = view,
+    preferredFirstResponder = view,
+    tooltip = "Moe Config",
+    onActivate = proc(document: KosmoPaneDocument, hostPane: nimkit.View) =
+      let pane = KosmoEditorPane(hostPane)
+      document.contentView = pane.editorView
+      document.preferredFirstResponder = pane.editorView
+      discard editor.focusConfigViewer(),
+    onClose = proc(document: KosmoPaneDocument): bool =
+      discard document
+      editor.closeConfigViewer()
+      true,
+  )
+  controller.openPaneDocument(
+    group, document, insertAfterSelected = true, preserveVisibleTabs = true
+  )
 
 proc markdownViewForBuffer(
     pane: KosmoEditorPane, id: KosmoBufferId

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Open Moe's `:config` viewer in a reusable Kosmo document tab, and show files
+  opened with `:e` in native document tabs.
+- Keep file previews and initial blank buffers owned by their pane when opening
+  files from the sidebar or search, and reuse tabs already open in another pane.
 - Make `kosmo --bg` open paths in a detached new instance, add foreground
   `--new`, and accept `-v` as an alias for `--version`.
 - Move Kosmo's Files and Find controls into a taller status bar and let the

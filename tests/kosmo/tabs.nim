@@ -749,3 +749,97 @@ suite "Kosmo":
       KeyEvent(key: key4, keyCode: key4.ord, modifiers: primaryShortcutModifiers)
     )
     check frontend.window.firstResponder == positionedGroups[1].editorView
+
+proc splitTerminalPane(frontend: KosmoApplication) =
+  let terminal = newKosmoTerminalView()
+  doAssert frontend.openDocument(
+    newKosmoPaneDocument("ownership-terminal", "Terminal", terminal)
+  )
+  doAssert frontend.window.sendAction(actionSelector(KosmoSplitVerticalAction))
+  frontend.contentView.layoutSubtreeIfNeeded()
+  doAssert frontend.editorGroups().len == 2
+  doAssert frontend.editorGroups()[1].pane.documentTabs.len == 1
+
+proc tabCountNamed(frontend: KosmoApplication, title: string): int =
+  for group in frontend.editorGroups():
+    group.editorView.refresh()
+    for model in group.pane.documentTabs.documentTabModels():
+      if model.title == title:
+        inc result
+
+suite "Kosmo pane file ownership":
+  test "opening the same preview from another pane reuses its existing tab":
+    let
+      root = createTempDir("kosmo-pane-existing-", "")
+      basePath = root / "base.txt"
+      targetPath = root / "target.txt"
+      app = newApplication("Pane file ownership")
+      frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+      removeDir(root)
+    writeFile(basePath, "base")
+    writeFile(targetPath, "target")
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
+    require frontend.openPath(basePath)
+    frontend.splitTerminalPane()
+    require frontend.showFileExplorer()
+    frontend.fileTree.onOpenFile()(targetPath, fodTemporary)
+    check frontend.tabCountNamed("target.txt") == 1
+    require frontend.window.makeFirstResponder(frontend.editorGroups()[0].editorView)
+    require frontend.showFileExplorer()
+    frontend.fileTree.onOpenFile()(targetPath, fodTemporary)
+    check frontend.tabCountNamed("target.txt") == 1
+
+  test "a preview in another pane preserves the first pane's preview":
+    let
+      root = createTempDir("kosmo-pane-preview-", "")
+      basePath = root / "base.txt"
+      firstPath = root / "first.txt"
+      secondPath = root / "second.txt"
+      app = newApplication("Pane file ownership")
+      frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+      removeDir(root)
+    writeFile(basePath, "base")
+    writeFile(firstPath, "first")
+    writeFile(secondPath, "second")
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
+    require frontend.openPath(basePath)
+    frontend.splitTerminalPane()
+    require frontend.showFileExplorer()
+    frontend.fileTree.onOpenFile()(firstPath, fodTemporary)
+    check frontend.tabCountNamed("first.txt") == 1
+    require frontend.window.makeFirstResponder(frontend.editorGroups()[0].editorView)
+    require frontend.showFileExplorer()
+    frontend.fileTree.onOpenFile()(secondPath, fodTemporary)
+    check frontend.tabCountNamed("first.txt") == 1
+    check frontend.tabCountNamed("second.txt") == 1
+
+  test "a first file in a terminal pane does not replace another pane's blank tab":
+    let
+      root = createTempDir("kosmo-pane-blank-", "")
+      targetPath = root / "target.txt"
+      app = newApplication("Pane file ownership")
+      frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+      removeDir(root)
+    writeFile(targetPath, "target")
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
+    frontend.splitTerminalPane()
+    require frontend.showFileExplorer()
+    frontend.fileTree.onOpenFile()(targetPath, fodTemporary)
+    check frontend.tabCountNamed("target.txt") == 1
+    check frontend.editorGroups()[0].pane.documentTabs.documentTabModels()[0].title ==
+      "No Name"

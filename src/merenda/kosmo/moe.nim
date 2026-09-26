@@ -14,13 +14,15 @@ import
   moepkg/[
     editor, editor_buffers, editor_display, editor_file, editor_frame,
     editor_render_views, frontend_input, handler, completion, command_line, config,
-    config_loader, editor_window, encoding, motion,
+    config_loader, editor_window, encoding, motion, viewer_mode, window_manager,
   ]
 import moepkg/buffer/undo as moeUndo
 import moepkg/buffer/search as moeSearch
 import moepkg/buffer/highlight as moeBufferHighlight
 import moepkg/buffer/core as moeBufferCore
 import moepkg/command_completion as moeCommandCompletion
+import moepkg/command_handlers/config_ops as moeConfigOps
+import moepkg/command_handlers/handler_result as moeHandlerResult
 import moepkg/help_viewer as moeHelpViewer
 import moepkg/highlight as moeHighlight
 from moepkg/buffer/file_io import loadFileWithContent
@@ -71,7 +73,7 @@ type
   KosmoEditor* = ref object
     editor: Editor
     nimLspCommand: string
-    temporaryBufferId: Option[BufferId]
+    temporaryBufferIds: Table[string, BufferId]
     workingDirectory: string
     textMateGrammars: seq[KosmoTextMateGrammar]
     matterSources: seq[moeMatter.MatterGrammarSource]
@@ -625,6 +627,7 @@ proc newKosmoEditor*(
   let grammarState = kosmoMatterGrammarState()
   result = KosmoEditor(
     editor: newEditor(config),
+    temporaryBufferIds: initTable[string, BufferId](),
     nimLspCommand: nimLspCommand,
     textMateGrammars: grammarState.grammars,
     matterSources: grammarState.sources,
@@ -772,12 +775,14 @@ proc validateFileOpen(editor: KosmoEditor, path: string): FileOpenResult =
       return FileOpenResult(message: error.msg)
   FileOpenResult(loaded: true)
 
-proc openFileBuffer(editor: KosmoEditor, path: string): FileOpenResult =
+proc openFileBuffer(
+    editor: KosmoEditor, path: string, reusePristineBuffer: bool
+): FileOpenResult =
   let pathExists = fileExists(path)
   let buffers = editor.editor.activeWindowBuffers()
   let pristineInitialBuffer =
-    buffers.len == 1 and buffers[0].title == "No Name" and buffers[0].filePath.isNone and
-    not buffers[0].modified
+    reusePristineBuffer and buffers.len == 1 and buffers[0].title == "No Name" and
+    buffers[0].filePath.isNone and not buffers[0].modified
   let outcome =
     if pristineInitialBuffer and pathExists:
       editor.editor.loadFile(path)
@@ -795,7 +800,7 @@ proc normalizedFilePath(path: string): string =
 
 proc bufferIdForPath(editor: KosmoEditor, path: string): Option[BufferId] =
   let normalized = path.normalizedFilePath
-  for buffer in editor.editor.activeWindowBuffers():
+  for buffer in editor.editor.buffers:
     if buffer.filePath.isSome and buffer.filePath.get.normalizedFilePath == normalized:
       return some(buffer.id)
 
@@ -820,64 +825,87 @@ proc activateTextBuffer(editor: KosmoEditor, id: BufferId): bool =
   if result and editor.activeBufferId() != previousBuffer:
     editor.resetBufferSelection()
 
-proc normalizeTemporaryBuffer(editor: KosmoEditor) =
-  if editor.temporaryBufferId.isNone:
-    return
-  for buffer in editor.editor.activeWindowBuffers():
-    if buffer.id == editor.temporaryBufferId.get:
-      if buffer.modified:
-        editor.temporaryBufferId = none(BufferId)
-      return
-  editor.temporaryBufferId = none(BufferId)
+proc forgetTemporaryBuffer(editor: KosmoEditor, id: BufferId) =
+  var scopes: seq[string]
+  for scope, temporaryId in editor.temporaryBufferIds:
+    if temporaryId == id:
+      scopes.add scope
+  for scope in scopes:
+    editor.temporaryBufferIds.del(scope)
 
-proc discardTemporaryBuffer(editor: KosmoEditor, exceptId: Option[BufferId]) =
-  editor.normalizeTemporaryBuffer()
-  if editor.temporaryBufferId.isNone or editor.temporaryBufferId == exceptId:
-    return
-  discard editor.editor.closeBuffer(editor.temporaryBufferId.get)
-  editor.temporaryBufferId = none(BufferId)
+proc normalizeTemporaryBuffers(editor: KosmoEditor) =
+  var scopes: seq[string]
+  for scope, id in editor.temporaryBufferIds:
+    let buffer = editor.editor.bufferById(id)
+    if buffer.isNone or buffer.get.isModified:
+      scopes.add scope
+  for scope in scopes:
+    editor.temporaryBufferIds.del(scope)
 
-proc openFile*(editor: KosmoEditor, path: string): FileOpenResult =
+proc temporaryBufferId(editor: KosmoEditor, scope: string): Option[BufferId] =
+  if editor.temporaryBufferIds.hasKey(scope):
+    some(editor.temporaryBufferIds[scope])
+  else:
+    none(BufferId)
+
+proc isTemporaryBuffer(editor: KosmoEditor, id: BufferId): bool =
+  for temporaryId in editor.temporaryBufferIds.values:
+    if temporaryId == id:
+      return true
+
+proc discardTemporaryBuffer(
+    editor: KosmoEditor, exceptId: Option[BufferId], scope: string
+) =
+  editor.normalizeTemporaryBuffers()
+  let previous = editor.temporaryBufferId(scope)
+  if previous.isNone or previous == exceptId:
+    return
+  editor.temporaryBufferIds.del(scope)
+  discard editor.editor.closeBuffer(previous.get)
+
+proc openFile*(
+    editor: KosmoEditor, path: string, scope = "", reusePristineBuffer = true
+): FileOpenResult =
   ## Permanently open `path`, promoting it when it is the temporary buffer.
   result = editor.validateFileOpen(path)
   if not result.loaded:
     return
-  editor.normalizeTemporaryBuffer()
+  editor.normalizeTemporaryBuffers()
   let existing = editor.bufferIdForPath(path)
   if existing.isSome:
     result.loaded = editor.activateTextBuffer(existing.get)
-    if editor.temporaryBufferId == existing:
-      editor.temporaryBufferId = none(BufferId)
+    editor.forgetTemporaryBuffer(existing.get)
     return
-  result = editor.openFileBuffer(path)
+  result = editor.openFileBuffer(path, reusePristineBuffer)
   if not result.loaded:
     return
   let opened = editor.activeBufferId()
-  editor.discardTemporaryBuffer(opened)
-  editor.temporaryBufferId = none(BufferId)
+  editor.discardTemporaryBuffer(opened, scope)
   editor.resetBufferSelection()
 
-proc previewFile*(editor: KosmoEditor, path: string): FileOpenResult =
+proc previewFile*(
+    editor: KosmoEditor, path: string, scope = "", reusePristineBuffer = true
+): FileOpenResult =
   ## Temporarily open `path`, replacing the previous unmodified preview.
   result = editor.validateFileOpen(path)
   if not result.loaded:
     return
-  editor.normalizeTemporaryBuffer()
+  editor.normalizeTemporaryBuffers()
   let existing = editor.bufferIdForPath(path)
   if existing.isSome:
     result.loaded = editor.activateTextBuffer(existing.get)
     return
-  let previous = editor.temporaryBufferId
-  result = editor.openFileBuffer(path)
+  let previous = editor.temporaryBufferId(scope)
+  result = editor.openFileBuffer(path, reusePristineBuffer)
   if not result.loaded:
     return
   let opened = editor.activeBufferId()
   if opened.isNone:
     return FileOpenResult(message: "Moe opened the file without an active buffer.")
-  editor.temporaryBufferId = none(BufferId)
+  editor.temporaryBufferIds.del(scope)
   if previous.isSome and previous != opened:
     discard editor.editor.closeBuffer(previous.get)
-  editor.temporaryBufferId = opened
+  editor.temporaryBufferIds[scope] = opened.get
   editor.resetBufferSelection()
 
 func `$`*(id: KosmoBufferId): string {.inline.} =
@@ -904,7 +932,7 @@ proc tabs*(editor: KosmoEditor): seq[KosmoTab] =
   ## Return the ordered tabs belonging to Moe's active window.
   if editor.isNil or editor.editor.isNil:
     return
-  editor.normalizeTemporaryBuffer()
+  editor.normalizeTemporaryBuffers()
   for buffer in editor.editor.activeWindowBuffers():
     result.add KosmoTab(
       id: buffer.id.toKosmoBufferId,
@@ -913,8 +941,7 @@ proc tabs*(editor: KosmoEditor): seq[KosmoTab] =
       modified: buffer.modified,
       readOnly: buffer.readOnly,
       active: buffer.active,
-      temporary:
-        editor.temporaryBufferId.isSome and buffer.id == editor.temporaryBufferId.get,
+      temporary: editor.isTemporaryBuffer(buffer.id),
     )
 
 proc gitWatchRoots*(editor: KosmoEditor): seq[string] =
@@ -968,8 +995,7 @@ proc closeTab*(
     return KosmoTabCloseResult(message: outcome.error)
   if editor.activeBufferId() != previousBuffer:
     editor.resetBufferSelection()
-  if editor.temporaryBufferId.isSome and editor.temporaryBufferId.get == id.toMoeBufferId:
-    editor.temporaryBufferId = none(BufferId)
+  editor.forgetTemporaryBuffer(id.toMoeBufferId)
   KosmoTabCloseResult(closed: true)
 
 proc save*(editor: KosmoEditor): KosmoSaveResult =
@@ -980,8 +1006,9 @@ proc save*(editor: KosmoEditor): KosmoSaveResult =
   if pkgResults.isErr(outcome):
     logMoeFailure("save file", "", outcome.error)
     return KosmoSaveResult(message: outcome.error)
-  if editor.temporaryBufferId == editor.activeBufferId():
-    editor.temporaryBufferId = none(BufferId)
+  let activeId = editor.activeBufferId()
+  if activeId.isSome:
+    editor.forgetTemporaryBuffer(activeId.get)
   KosmoSaveResult(saved: true)
 
 proc saveAs*(editor: KosmoEditor, path: string): KosmoSaveResult =
@@ -1001,8 +1028,9 @@ proc saveAs*(editor: KosmoEditor, path: string): KosmoSaveResult =
   if pkgResults.isErr(outcome):
     logMoeFailure("save file", savePath, outcome.error)
     return KosmoSaveResult(message: outcome.error)
-  if editor.temporaryBufferId == editor.activeBufferId():
-    editor.temporaryBufferId = none(BufferId)
+  let activeId = editor.activeBufferId()
+  if activeId.isSome:
+    editor.forgetTemporaryBuffer(activeId.get)
   KosmoSaveResult(saved: true)
 
 proc moveTab*(
@@ -1012,9 +1040,8 @@ proc moveTab*(
   if editor.isNil or editor.editor.isNil:
     return
   result = editor.editor.moveBuffer(id.toMoeBufferId, destination)
-  if result and editor.temporaryBufferId.isSome and
-      editor.temporaryBufferId.get == id.toMoeBufferId:
-    editor.temporaryBufferId = none(BufferId)
+  if result:
+    editor.forgetTemporaryBuffer(id.toMoeBufferId)
 
 proc status*(editor: KosmoEditor): KosmoStatus =
   ## Return the status values maintained by Moe for an embedding frontend.
@@ -1409,6 +1436,43 @@ proc takeHostHelpRequest*(editor: KosmoEditor): bool =
     return false
   let request = editor.editor.takeHostCommandRequest()
   request.isSome and request.get.action == claHelp
+
+proc configViewerOpen*(editor: KosmoEditor): bool =
+  ## Return whether Moe has an interactive configuration viewer.
+  if editor.isNil or editor.editor.isNil:
+    return
+  for window in editor.editor.windowManager.windows:
+    if window.mode == moeModes.EditorMode.Config:
+      return true
+
+proc configViewerFocused*(editor: KosmoEditor): bool =
+  ## Return whether Moe is currently routing input to the configuration viewer.
+  not editor.isNil and not editor.editor.isNil and
+    editor.editor.currentMode() == moeModes.EditorMode.Config
+
+proc focusConfigViewer*(editor: KosmoEditor): bool =
+  ## Make the existing configuration viewer Moe's active window.
+  if editor.isNil or editor.editor.isNil:
+    return
+  editor.editor.focusExistingViewerWindow(moeModes.EditorMode.Config)
+
+proc focusTextWindow*(editor: KosmoEditor): bool =
+  ## Focus a text window while leaving an open configuration viewer intact.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let moeEditor = editor.editor
+  for index, window in moeEditor.windowManager.windows:
+    if window.mode != moeModes.EditorMode.Config:
+      moeEditor.windowManager.activateWindow(index)
+      moeEditor.syncActiveWindow()
+      return true
+
+proc closeConfigViewer*(editor: KosmoEditor) =
+  ## Close Moe's configuration viewer, applying any pending changes.
+  if editor.focusConfigViewer():
+    discard moeConfigOps.processConfigResult(
+      editor.editor, moeHandlerResult.HandlerResult(kind: moeHandlerResult.hrConfigQuit)
+    )
 
 proc dismissCompletionPopup*(editor: KosmoEditor) =
   ## Dismiss Moe's active insert-completion popup, if any.
