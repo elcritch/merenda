@@ -1,8 +1,8 @@
 ## Matter's TextMate grammars adapted to NimKit's frontend-neutral syntax spans.
 ##
 ## Grammar archives are embedded at compile time so installed applications do
-## not need to locate Matter's package data at runtime. Each thread lazily
-## compiles and caches only the grammars it uses.
+## not need to locate Matter's package data at runtime. Synchronous calls cache
+## grammars per thread; resumable jobs use a cache private to their worker.
 
 import std/[monotimes, options, strutils, tables, times]
 
@@ -28,10 +28,26 @@ type
   MatterHighlightResult* = object
     spans*: seq[SyntaxTokenSpan]
     completed*: bool
+    range*: TextRange ## Source rune range covered by a streaming batch.
 
-var
-  matterGrammarCache {.threadvar.}: Table[string, Grammar]
-  matterGrammarCacheInitialized {.threadvar.}: bool
+  MatterGrammarCache* = object
+    ## Mutable grammars owned by one worker, never shared with another actor.
+    grammars: Table[string, Grammar]
+
+  MatterHighlightJob* = object
+    ## Resumable tokenizer state. Keep this value on its owning worker.
+    source: string
+    grammar: Grammar
+    ruleStack: StateStack
+    cursor: TextByteCursor
+    lineStart: int
+
+const
+  MatterSyntaxBatchLines* = 64
+  MatterSyntaxBatchMilliseconds = 8
+  MatterSyntaxLineMilliseconds = 100
+
+var matterGrammarCache {.threadvar.}: Table[string, Grammar]
 
 func normalizedMatterLanguage(language: string): string =
   let name = language.strip().toLowerAscii()
@@ -70,19 +86,16 @@ iterator relatedMatterGrammars(primary: GrammarContribution): GrammarContributio
         contribution.scopeName != primary.scopeName:
       yield contribution
 
-proc grammarForLanguage(language: string): Grammar =
+proc grammarForLanguage(cache: var Table[string, Grammar], language: string): Grammar =
   let modeName = language.normalizedMatterLanguage()
   if modeName.len == 0:
     return
-  if not matterGrammarCacheInitialized:
-    matterGrammarCache = initTable[string, Grammar]()
-    matterGrammarCacheInitialized = true
-  if matterGrammarCache.hasKey(modeName):
-    return matterGrammarCache[modeName]
+  if cache.hasKey(modeName):
+    return cache[modeName]
 
   let primary = primaryMatterGrammar(modeName)
   if primary.isNone:
-    matterGrammarCache[modeName] = nil
+    cache[modeName] = nil
     return
 
   let registry = newRegistry()
@@ -93,7 +106,7 @@ proc grammarForLanguage(language: string): Grammar =
       )
     )
   result = registry.loadGrammar(primary.get.scopeName)
-  matterGrammarCache[modeName] = result
+  cache[modeName] = result
 
 func scopeMatches(scope, prefix: string): bool =
   scope == prefix or
@@ -150,6 +163,59 @@ proc addSpan(
       range: initTextRange(startRune, stopRune - startRune), tokenClass: tokenClass
     )
 
+proc initMatterHighlightJob*(
+    cache: var MatterGrammarCache, source, language: string
+): MatterHighlightJob =
+  ## Start a pass using grammars private to the owning worker.
+  MatterHighlightJob(
+    source: source, grammar: grammarForLanguage(cache.grammars, language)
+  )
+
+proc nextMatterHighlightBatch*(job: var MatterHighlightJob): MatterHighlightResult =
+  ## Classify at most 64 lines or roughly 8 ms, preserving multiline state.
+  ## Each line has its own soft timeout; an incomplete line stays plain.
+  let
+    started = getMonoTime()
+    firstRune =
+      job.source.runeIndexAtByte(job.cursor, min(job.lineStart, job.source.len))
+  if job.grammar.isNil:
+    job.lineStart = job.source.len
+  var lines = 0
+  while job.lineStart < job.source.len and lines < MatterSyntaxBatchLines:
+    var lineStop = job.source.find('\n', job.lineStart)
+    if lineStop < 0:
+      lineStop = job.source.len
+    var contentStop = lineStop
+    if contentStop > job.lineStart and job.source[contentStop - 1] == '\r':
+      dec contentStop
+    if contentStop - job.lineStart > NimkitMatterMaximumLineBytes:
+      job.ruleStack = nil
+    else:
+      let tokenized = job.grammar.tokenizeLine(
+        job.source[job.lineStart ..< contentStop],
+        job.ruleStack,
+        MatterSyntaxLineMilliseconds,
+      )
+      if tokenized.stoppedEarly:
+        job.ruleStack = nil
+      else:
+        for token in tokenized.tokens:
+          result.spans.addSpan(
+            job.source,
+            job.cursor,
+            job.lineStart + token.startIndex,
+            job.lineStart + token.endIndex,
+            token.scopes.syntaxTokenClass(),
+          )
+        job.ruleStack = tokenized.ruleStack
+    job.lineStart = min(lineStop + 1, job.source.len)
+    inc lines
+    if (getMonoTime() - started).inMilliseconds >= MatterSyntaxBatchMilliseconds:
+      break
+  let endRune = job.source.runeIndexAtByte(job.cursor, job.lineStart)
+  result.range = initTextRange(firstRune, endRune - firstRune)
+  result.completed = job.lineStart >= job.source.len
+
 proc matterSyntaxHighlighterBounded*(
     source, language: string,
     timeLimitMs = 0,
@@ -167,7 +233,7 @@ proc matterSyntaxHighlighterBounded*(
   let startedAt = getMonoTime()
   if source.len == 0:
     return
-  let grammar = grammarForLanguage(language)
+  let grammar = grammarForLanguage(matterGrammarCache, language)
   if grammar.isNil:
     return
 

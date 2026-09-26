@@ -13,6 +13,12 @@ from merenda/nimkit/foundation/mainthreadwork import
   drainMainThreadWork, hasPendingMainThreadWork
 import ../fixtures/nimbindings
 
+type MatterBatchSpy = ref object of Agent
+  batches: int
+
+proc rememberMatterBatch(spy: MatterBatchSpy) {.slot.} =
+  inc spy.batches
+
 const RepositoryRoot = currentSourcePath().parentDir.parentDir.parentDir
 
 proc runeIndexOf(source, needle: string): int =
@@ -42,6 +48,18 @@ proc renderedLocation(
     let column = line.runeIndexOf(needle)
     if column >= 0:
       return (column: column, row: row)
+
+proc collectMatterBatches(
+    highlighting: MatterHighlighting, bufferId: int, requestId: uint64
+): seq[matterworkers.MatterHighlightResult] =
+  let deadline = getMonoTime() + initDuration(seconds = 60)
+  while getMonoTime() < deadline:
+    discard getCurrentSigilThread().pollAll(NonBlocking)
+    result.add highlighting.takeMatterHighlightResults()
+    if highlighting.matterHighlightingReady(bufferId, requestId):
+      return
+    sleep(1)
+  doAssert highlighting.matterHighlightingReady(bufferId, requestId)
 
 proc renderUntilMatterHighlightingReady(
     editor: KosmoEditor, buffer: var RenderBuffer
@@ -168,16 +186,13 @@ suite "Kosmo Matter highlighting":
           1, 1, NimBindingDeclarations, moeHighlight.SourceLanguage.langNim,
           "bindings.nim",
         )
-        deadline = getMonoTime() + initDuration(seconds = 60)
-      while not highlighting.matterHighlightingReady(1, requestId) and
-          getMonoTime() < deadline:
-        discard getCurrentSigilThread().pollAll(NonBlocking)
-        sleep(1)
-      require highlighting.matterHighlightingReady(1, requestId)
-      let completed = highlighting.takeMatterHighlightResults()
-      require completed.len == 1
-      check completed[0].requestId == requestId
-      check completed[0].errorMessage == ""
+      let completed = highlighting.collectMatterBatches(1, requestId)
+      require completed.len > 0
+      var segments: seq[moeHighlight.ColorSegment]
+      for batch in completed:
+        check batch.requestId == requestId
+        check batch.errorMessage == ""
+        segments.add batch.segments
 
       let declarations = NimBindingDeclarations.split('\n')
       for row, declaration in declarations:
@@ -185,13 +200,77 @@ suite "Kosmo Matter highlighting":
           continue
         checkpoint "Declaration: " & declaration
         var keywordHighlighted: bool
-        for segment in completed[0].segments:
+        for segment in segments:
           if segment.firstRow == row and segment.firstColumn == 0 and
               segment.lastColumn >= 3 and
               segment.color == moeHighlight.EditorColorPairIndex.keyword:
             keywordHighlighted = true
             break
         check keywordHighlighted
+
+  test "Matter streams bounded rows with multiline state and replaces stale work":
+    let editor = newKosmoEditor()
+    defer:
+      editor.close()
+    let
+      highlighting = editor.matterHighlightingController()
+      source = "#[\n" & "é 😀 comment\n".repeat(160) & "]#\nlet tail = 1\n"
+      requestId = highlighting.requestMatterHighlight(
+        91, 1, source, moeHighlight.SourceLanguage.langNim, "stream.nim"
+      )
+      deadline = getMonoTime() + initDuration(seconds = 60)
+    var first: seq[matterworkers.MatterHighlightResult]
+    while first.len == 0 and getMonoTime() < deadline:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      first = highlighting.takeMatterHighlightResults()
+      if first.len == 0:
+        sleep(1)
+    require first.len == 1
+    check first[0].firstRow == 0
+    check first[0].endRow <= MatterHighlightBatchLines
+    check first[0].endRow > 0
+    check not first[0].finished
+    check not highlighting.matterHighlightingReady(91, requestId)
+    let remaining = highlighting.collectMatterBatches(91, requestId)
+    var frontier = first[0].endRow
+    var crossedBoundary = false
+    for batch in remaining:
+      check batch.firstRow == frontier
+      check batch.endRow - batch.firstRow <= MatterHighlightBatchLines
+      check batch.workerThreadId != getThreadId()
+      check batch.errorMessage == ""
+      for segment in batch.segments:
+        if segment.firstRow == 100:
+          crossedBoundary = true
+          check segment.color == moeHighlight.EditorColorPairIndex.comment
+      frontier = batch.endRow
+    check crossedBoundary
+    check frontier == source.count('\n') + 1
+    require remaining.len > 0
+    check remaining[^1].finished
+
+    let spy = MatterBatchSpy()
+    highlighting.connect(matterHighlightCompleted, spy, rememberMatterBatch)
+    discard highlighting.requestMatterHighlight(
+      91, 2, source, moeHighlight.SourceLanguage.langNim, "stream.nim"
+    )
+    let queuedDeadline = getMonoTime() + initDuration(seconds = 60)
+    while spy.batches == 0 and getMonoTime() < queuedDeadline:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      if spy.batches == 0:
+        sleep(1)
+    require spy.batches == 1
+    # Supersede an observed, unconsumed batch. Its queued colors and retained
+    # continuation must be discarded together.
+    let replacement = highlighting.requestMatterHighlight(
+      91, 3, "let replacement = 2", moeHighlight.SourceLanguage.langNim, "stream.nim"
+    )
+    let replaced = highlighting.collectMatterBatches(91, replacement)
+    require replaced.len == 1
+    check replaced[0].requestId == replacement
+    check replaced[0].contentVersion == 3
+    check replaced[0].finished
+    check replaced[0].endRow == 1
 
   test "bounded Matter highlighting honors cancellation":
     var checks = 0
@@ -205,6 +284,38 @@ suite "Kosmo Matter highlighting":
     check highlighted.spans.len == 0
     check checks > 0
     check not highlighted.completed
+
+  test "Moe paints completed rows while later batches are still pending":
+    let
+      root = createTempDir("kosmo-moe-stream-", "")
+      path = root / "stream.nim"
+    writeFile(path, "proc answer = discard\n" & "# pending\n".repeat(512))
+    defer:
+      removeFile(path)
+      removeDir(root)
+    let editor = newKosmoEditor()
+    defer:
+      editor.close()
+    let
+      highlighting = editor.matterHighlightingController()
+      spy = MatterBatchSpy()
+    highlighting.connect(matterHighlightCompleted, spy, rememberMatterBatch)
+    require editor.openFile(path).loaded
+    var buffer = newRenderBuffer(48, 12)
+    editor.render(buffer)
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while spy.batches == 0 and getMonoTime() < deadline:
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      if spy.batches == 0:
+        sleep(1)
+    require spy.batches == 1
+    editor.render(buffer)
+    require not editor.matterHighlightingReady()
+    let location = buffer.renderedLocation("answer")
+    require location.column >= 0
+    let partialColor = buffer.cell(location.column, location.row).style.fg
+    require editor.renderUntilMatterHighlightingReady(buffer)
+    check buffer.cell(location.column, location.row).style.fg == partialColor
 
   test "Moe editors use Matter highlighting by default":
     let
@@ -444,7 +555,7 @@ suite "Kosmo Matter highlighting":
     let
       root = createTempDir("kosmo-moe-matter-", "")
       path = root / "pending.nim"
-    writeFile(path, "proc answer = discard\n")
+    writeFile(path, "proc answer = discard\n" & "# tail\n".repeat(256))
     defer:
       removeFile(path)
       removeDir(root)
@@ -460,16 +571,8 @@ suite "Kosmo Matter highlighting":
     require initial.column >= 0
     let initialColor = buffer.cell(initial.column, initial.row).style.fg
 
-    # The highlighter has one actor. Queue a deliberately long unrelated
-    # request so the edited buffer's result cannot arrive in this frame.
-    let highlighter = editor.matterHighlightingController()
-    discard highlighter.requestMatterHighlight(
-      0,
-      0,
-      "# queued\n".repeat(100_000),
-      moeHighlight.SourceLanguage.langNim,
-      "queued.nim",
-    )
+    # More than one batch is required, so the old projection must survive
+    # while the newly edited version streams in.
     require editor.handleKey("i")
     require editor.handleTextInput(" ")
     require editor.handleKey("Esc")
@@ -490,10 +593,6 @@ suite "Kosmo Matter highlighting":
     require shifted.column >= 0
     check buffer.cell(shifted.column, shifted.row).style.fg == initialColor
 
-    # Cancel the test-only blocker, then leave the shared actor cleanly idle.
-    discard highlighter.requestMatterHighlight(
-      0, 1, "", moeHighlight.SourceLanguage.langNim, "queued.nim"
-    )
     require editor.renderUntilMatterHighlightingReady(buffer)
 
   test "Matter completion refreshes the retained editor grid":

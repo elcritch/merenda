@@ -1,41 +1,54 @@
-## Internal Sigils worker for moving complete nim-markdown ASTs between threads.
+## Parse Markdown structure first, then stream bounded code-color batches.
 
 import std/[lists, locks, os, strutils, tables]
 
 import markdown as markdownParser
 import sigils/[core, threads]
 import ../foundation/backgroundworkers
-import ./[matterhighlighting, syntaxhighlighting]
+import ./[matterhighlighting, syntaxhighlighting, texttypes]
 
 type
   MarkdownParseDialect* = enum
     mpdCommonMark
     mpdGitHub
 
+  MarkdownCodeSource* = tuple[source, language: string]
+
   MarkdownParseResult* = object
     generation*: uint64
     root*: markdownParser.Document
     workerThreadId*: int
     errorMessage*: string
-    highlights*: Table[tuple[source, language: string], seq[SyntaxTokenSpan]]
+    codes*: seq[MarkdownCodeSource]
+
+  MarkdownHighlightBatch* = object
+    generation*: uint64
+    codeIndex*: int
+    range*: TextRange
+    spans*: seq[SyntaxTokenSpan]
+    finished*: bool
 
   MarkdownParseWorker* = ref object of AgentActor
+    generation: uint64
+    codes: seq[MarkdownCodeSource]
+    codeIndex: int
+    codeStarted: bool
+    highlightJob: MatterHighlightJob
+    grammars: MatterGrammarCache
 
-proc highlightCodeBlocks(
+proc collectCodeBlocks(
     token: markdownParser.Token,
-    highlights: var Table[tuple[source, language: string], seq[SyntaxTokenSpan]],
+    codes: var seq[MarkdownCodeSource],
+    seen: var Table[MarkdownCodeSource, bool],
 ) =
   if token of markdownParser.CodeBlock:
     let code = markdownParser.CodeBlock(token)
     let key = (source: code.doc.strip(chars = {'\n'}), language: code.info)
-    if not highlights.hasKey(key):
-      try:
-        highlights[key] = matterSyntaxHighlighter(key.source, key.language)
-      except CatchableError:
-        # A classifier failure must not discard the rest of the document.
-        highlights[key] = @[]
+    if not seen.hasKey(key):
+      seen[key] = true
+      codes.add key
   for child in token.children:
-    child.highlightCodeBlocks(highlights)
+    child.collectCodeBlocks(codes, seen)
 
 func isCommonMarkConfig(config: markdownParser.MarkdownConfig): bool =
   let
@@ -140,6 +153,54 @@ proc markdownParseFinished*(
   worker: MarkdownParseWorker, parseResult: sink MarkdownParseResult
 ) {.signal.}
 
+proc continueMarkdownHighlight*(
+  worker: AgentProxy[MarkdownParseWorker], generation: uint64
+) {.signal.}
+
+proc cancelMarkdownHighlight*(
+  worker: AgentProxy[MarkdownParseWorker], generation: uint64
+) {.signal.}
+
+proc markdownHighlightReady*(
+  worker: MarkdownParseWorker, batch: sink MarkdownHighlightBatch
+) {.signal.}
+
+proc cancelMarkdownHighlight(worker: MarkdownParseWorker, generation: uint64) {.slot.} =
+  if worker.generation == generation:
+    worker.codes.setLen(0)
+    worker.highlightJob = default(MatterHighlightJob)
+    worker.codeStarted = false
+
+proc continueMarkdownHighlight(
+    worker: MarkdownParseWorker, generation: uint64
+) {.slot.} =
+  if generation != worker.generation or worker.codeIndex >= worker.codes.len:
+    return
+  var batch =
+    MarkdownHighlightBatch(generation: generation, codeIndex: worker.codeIndex)
+  var codeFinished = false
+  try:
+    if not worker.codeStarted:
+      let code = worker.codes[worker.codeIndex]
+      worker.highlightJob =
+        worker.grammars.initMatterHighlightJob(code.source, code.language)
+      worker.codeStarted = true
+    var parsed = worker.highlightJob.nextMatterHighlightBatch()
+    batch.range = parsed.range
+    batch.spans = move parsed.spans
+    codeFinished = parsed.completed
+  except CatchableError:
+    # Keep the parsed document even if a code grammar fails.
+    codeFinished = true
+  if codeFinished:
+    inc worker.codeIndex
+    worker.codeStarted = false
+    worker.highlightJob = default(MatterHighlightJob)
+  batch.finished = worker.codeIndex >= worker.codes.len
+  if batch.finished:
+    worker.codes.setLen(0)
+  emit worker.markdownHighlightReady(move batch)
+
 proc requestMarkdownParse(
     worker: MarkdownParseWorker,
     generation: uint64,
@@ -149,6 +210,9 @@ proc requestMarkdownParse(
     keepHtml: bool,
     highlightMatter: bool,
 ) {.slot.} =
+  worker.cancelMarkdownHighlight(worker.generation)
+  worker.generation = generation
+  worker.codeIndex = 0
   var parseResult =
     MarkdownParseResult(generation: generation, workerThreadId: getThreadId())
   try:
@@ -160,7 +224,10 @@ proc requestMarkdownParse(
         markdownParser.initGfmConfig(escape = escape, keepHtml = keepHtml)
     parseResult.root = source.parseMarkdownRoot(config)
     if highlightMatter:
-      parseResult.root.highlightCodeBlocks(parseResult.highlights)
+      var seen: Table[MarkdownCodeSource, bool]
+      parseResult.root.collectCodeBlocks(parseResult.codes, seen)
+      # Retain only value descriptors; the AST is transferred without aliases.
+      worker.codes = parseResult.codes
   except CatchableError as error:
     parseResult.errorMessage = error.msg
   # The parser created this entire graph on the worker and retains no aliases
@@ -171,5 +238,7 @@ proc newMarkdownParseWorker*(): AgentProxy[MarkdownParseWorker] =
   var worker = MarkdownParseWorker()
   result = worker.moveToThread(nimkitWorkerPool())
   connectThreaded(result, requestMarkdownParse, result, requestMarkdownParse)
+  connectThreaded(result, continueMarkdownHighlight, result, continueMarkdownHighlight)
+  connectThreaded(result, cancelMarkdownHighlight, result, cancelMarkdownHighlight)
 
 var markdownWorkerLifetime {.used.}: NimkitBackgroundWorkerLifetime

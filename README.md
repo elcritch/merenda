@@ -463,6 +463,10 @@ the field or set it to an empty string to disable LSP on the next launch.
 Nimdex's `daemon` command communicates over standard input and output and stays
 attached to Kosmo; it does not need to detach itself.
 
+Syntax colors arrive progressively as background workers finish small batches.
+Markdown previews display their content before fenced-code coloring finishes;
+selection and code-block scroll positions survive those color updates.
+
 To add language highlighting, open **Kosmo Settings → TextMate Grammars** and
 search the built-in language grammars in the open-source `microsoft/vscode`
 repository by language name, file extension, or TextMate scope. Select a result

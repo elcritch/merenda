@@ -83,12 +83,6 @@ type
     matterSyntaxFallback: MatterSyntaxFallbackState
     matterLineStateVersions: Table[BufferId, int]
 
-  MatterSyntaxFallback = object
-    buffer: TextBuffer
-    contentVersion: int
-    requestId: uint64
-    colorSegments: seq[moeHighlight.ColorSegment]
-
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
 
@@ -996,6 +990,10 @@ proc closeTab*(
   if editor.activeBufferId() != previousBuffer:
     editor.resetBufferSelection()
   editor.forgetTemporaryBuffer(id.toMoeBufferId)
+  editor.matterHighlighting.cancelMatterHighlight(int(id.toMoeBufferId))
+  editor.matterRequests.del(id.toMoeBufferId)
+  editor.matterLineStateVersions.del(id.toMoeBufferId)
+  editor.matterSyntaxFallback.highlightVersions.del(id.toMoeBufferId)
   KosmoTabCloseResult(closed: true)
 
 proc save*(editor: KosmoEditor): KosmoSaveResult =
@@ -1796,6 +1794,29 @@ proc installMatterSyntaxFallbackRemapper(editor: KosmoEditor, buffer: TextBuffer
       state.remapMatterSyntaxFallback(changed, event),
   )
 
+proc replaceMatterBatch(
+    segments: var seq[moeHighlight.ColorSegment],
+    firstRow, endRow: int,
+    replacement: sink seq[moeHighlight.ColorSegment],
+) =
+  # Matter projections contain ordered, single-row segments. Reuse the flat
+  # Moe array: an initial pass appends rather than copying its growing prefix.
+  let
+    first = moeHighlight.segmentCutIndex(segments, firstRow)
+    last = moeHighlight.segmentCutIndex(segments, endRow)
+    oldLength = segments.len
+    delta = replacement.len - (last - first)
+  if delta > 0:
+    segments.setLen(oldLength + delta)
+    for index in countdown(oldLength - 1, last):
+      segments[index + delta] = move segments[index]
+  elif delta < 0:
+    for index in last ..< oldLength:
+      segments[index + delta] = move segments[index]
+    segments.setLen(oldLength + delta)
+  for index in 0 ..< replacement.len:
+    segments[first + index] = move replacement[index]
+
 proc applyMatterHighlightResult(
     editor: KosmoEditor, completed: var MatterHighlightResult
 ): bool =
@@ -1811,55 +1832,46 @@ proc applyMatterHighlightResult(
       current.contentVersion != completed.contentVersion:
     return
   if completed.errorMessage.len > 0:
-    editor.matterSyntaxFallback.highlightVersions.del(current.id)
+    # Keep any valid prefix (or remapped previous projection). Dropping its
+    # ownership flag would let the built-in parser resume synthetic line states.
+    # An initial failure still leaves Moe's own fallback untouched.
     return
 
   if current.highlight.isNil:
     current.highlight = moeHighlight.Highlight(colorSegments: @[])
-  current.highlight.colorSegments = move completed.segments
+  if not editor.matterSyntaxFallback.highlightVersions.hasKey(current.id):
+    # Built-in segments may cross row boundaries. Start an external projection
+    # with a plain suffix; subsequent versions retain their remapped colours.
+    current.highlight.colorSegments.setLen(0)
+  current.highlight.colorSegments.replaceMatterBatch(
+    completed.firstRow, completed.endRow, move completed.segments
+  )
   editor.installMatterSyntaxFallbackRemapper(current)
   editor.matterSyntaxFallback.highlightVersions[current.id] = completed.contentVersion
-  # Matter's worker also returns one plain code-block flag per Markdown line.
-  # Install those flags as a complete line-state cache so fenced backgrounds
-  # do not depend on Moe's progressive built-in tokenizer reaching EOF before
-  # the asynchronous result. Cached built-in segments remain available as the
-  # edit-time fallback; scheduleMatterHighlighting discards these synthetic
-  # states before that cache is used for a later version.
-  let canKeepLineStateCache =
-    current.incrementalHighlight != nil and
-    current.incrementalHighlight.pendingReparse == nil and
-    current.incrementalHighlight.lineStates.states.len >= current.len and
-    current.incrementalHighlight.parsedUpTo >= current.len - 1
-  if current.language == moeHighlight.SourceLanguage.langMarkdown and
-      completed.markdownCodeBlockStates.len >= current.len:
-    var
-      initialState = current.newBufferTokenizerState()
-      fallbackSegments: seq[moeHighlight.ColorSegment]
-    if current.incrementalHighlight != nil:
-      initialState = current.incrementalHighlight.initialState
-      fallbackSegments = move current.incrementalHighlight.segments
-    var lineStates = newSeq[moeHighlight.TokenizerState](current.len)
-    for row in 0 ..< current.len:
-      lineStates[row].backend = hbBuiltin
-      lineStates[row].lang.markdown.inCodeBlock = completed.markdownCodeBlockStates[row]
-    current.incrementalHighlight = moeHighlight.IncrementalHighlight(
-      backend: hbBuiltin,
-      initialState: initialState,
-      segments: move fallbackSegments,
-      lineStates: moeHighlight.LineStateCache(states: move lineStates),
-      parsedUpTo: current.len - 1,
-    )
+  if current.language == moeHighlight.SourceLanguage.langMarkdown:
+    if completed.firstRow == 0 or current.incrementalHighlight.isNil:
+      current.incrementalHighlight = moeHighlight.IncrementalHighlight(
+        backend: hbBuiltin,
+        initialState: current.newBufferTokenizerState(),
+        parsedUpTo: -1,
+      )
+    let cache = current.incrementalHighlight
+    cache.lineStates.states.setLen(completed.endRow)
+    for index, inCodeBlock in completed.markdownCodeBlockStates:
+      let row = completed.firstRow + index
+      cache.lineStates.states[row].backend = hbBuiltin
+      cache.lineStates.states[row].lang.markdown.inCodeBlock = inCodeBlock
+    cache.parsedUpTo = completed.endRow - 1
     editor.matterLineStateVersions[current.id] = current.contentVersion
-  elif canKeepLineStateCache:
-    current.incrementalHighlight.parsedUpTo = current.len - 1
   else:
     current.incrementalHighlight = nil
     editor.matterLineStateVersions.del(current.id)
   current.highlightNeedsUpdate = false
-  current.uriScanParsedUpTo = -1
-  if current.allowsTextTransforms and current.len > 0:
-    discard current.scanAndApplyUriUnderlines(0, current.len - 1)
-    current.uriScanParsedUpTo = current.len - 1
+  if current.allowsTextTransforms and completed.endRow > completed.firstRow:
+    discard current.scanAndApplyUriUnderlines(
+      completed.firstRow, completed.endRow - 1, applyToCache = false
+    )
+  current.uriScanParsedUpTo = completed.endRow - 1
   true
 
 proc pollMatterHighlighting(editor: KosmoEditor): bool =
@@ -1902,91 +1914,45 @@ proc matterHighlightingController*(editor: KosmoEditor): MatterHighlighting =
   if not editor.isNil and not editor.editor.isNil:
     result = editor.matterHighlighting
 
-proc matterSyntaxFallbackNeedsRestore(buffer: TextBuffer): bool =
-  ## Whether Moe's next frame can mutate a retained Matter projection.
-  buffer.highlightNeedsUpdate or buffer.uriScanParsedUpTo < buffer.len - 1 or (
-    buffer.incrementalHighlight != nil and (
-      buffer.incrementalHighlight.pendingReparse != nil or
-      buffer.incrementalHighlight.parsedUpTo < buffer.len - 1
-    )
-  )
-
-proc pendingMatterSyntaxFallbacks(editor: KosmoEditor): seq[MatterSyntaxFallback] =
-  ## Return the previous Matter projection for buffers awaiting a newer result.
-  if editor.isNil or editor.editor.isNil or editor.matterHighlighting.isNil:
-    return
-  for buffer in editor.editor.buffers:
-    if editor.matterSyntaxFallback.isNil or
-        not editor.matterSyntaxFallback.highlightVersions.hasKey(buffer.id) or
-        not editor.matterRequests.hasKey(buffer.id) or buffer.highlight.isNil:
-      continue
-    let request = editor.matterRequests[buffer.id]
-    if request.contentVersion != buffer.contentVersion or
-        editor.matterHighlighting.matterHighlightingReady(
-          int(buffer.id), request.requestId
-        ) or not buffer.matterSyntaxFallbackNeedsRestore:
-      continue
-    result.add MatterSyntaxFallback(
-      buffer: buffer,
-      contentVersion: buffer.contentVersion,
-      requestId: request.requestId,
-      colorSegments: buffer.highlight.colorSegments,
-    )
-
-proc restoreMatterSyntaxFallbacks(
-    editor: KosmoEditor, fallbacks: openArray[MatterSyntaxFallback]
-): bool =
-  ## Retain Matter colours while a newer asynchronous request is still running.
-  if editor.isNil or editor.editor.isNil or editor.matterHighlighting.isNil:
-    return
-  for fallback in fallbacks:
-    let current = fallback.buffer
-    if current.contentVersion != fallback.contentVersion or
-        editor.matterSyntaxFallback.isNil or
-        not editor.matterSyntaxFallback.highlightVersions.hasKey(current.id) or
-        not editor.matterRequests.hasKey(current.id):
-      continue
-    let request = editor.matterRequests[current.id]
-    if request.contentVersion != fallback.contentVersion or
-        request.requestId != fallback.requestId or
-        editor.matterHighlighting.matterHighlightingReady(
-          int(current.id), request.requestId
-        ):
-      continue
-    if current.highlight.isNil:
-      current.highlight = moeHighlight.Highlight(colorSegments: fallback.colorSegments)
-    else:
-      current.highlight.colorSegments = fallback.colorSegments
-    # A partial built-in cache would overwrite this projection on the repaint
-    # below. Keep a complete cache, though: it will not reparse and Markdown
-    # uses its line states for fenced-code backgrounds until Matter replies.
-    let cacheComplete =
-      current.incrementalHighlight != nil and
-      current.incrementalHighlight.pendingReparse == nil and
-      current.incrementalHighlight.lineStates.states.len >= current.len and
-      current.incrementalHighlight.parsedUpTo >= current.len - 1
-    if cacheComplete:
-      current.incrementalHighlight.parsedUpTo = current.len - 1
-    else:
-      current.incrementalHighlight = nil
-    current.highlightNeedsUpdate = false
-    current.uriScanParsedUpTo = current.len - 1
-    result = true
-
 proc renderMatterFrame(editor: KosmoEditor, buffer: var RenderBuffer) =
-  ## Render one frame without exposing Moe's built-in edit-time fallback.
-  let fallbacks = editor.pendingMatterSyntaxFallbacks()
-  editor.editor.render(buffer.buffer)
-  let matterApplied = editor.pollMatterHighlighting()
-  let fallbackRestored = editor.restoreMatterSyntaxFallbacks(fallbacks)
-  if matterApplied or fallbackRestored:
-    # Kosmo only publishes this grid after this proc returns, so Moe's
-    # built-in pass above remains invisible while Matter catches up.
+  # Moe normally continues its built-in tokenizer during render. Temporarily
+  # suspend that continuation for external projections, including remapped
+  # colours from the previous version. Restore the real parsed frontier after
+  # drawing so an unfinished Matter pass is never recorded as complete.
+  var suspended: seq[tuple[buffer: TextBuffer, parsedUpTo, uriParsedUpTo: int]]
+  for current in editor.editor.buffers:
+    if editor.matterSyntaxFallback.highlightVersions.hasKey(current.id):
+      let parsed =
+        if current.incrementalHighlight.isNil:
+          -1
+        else:
+          current.incrementalHighlight.parsedUpTo
+      suspended.add (current, parsed, current.uriScanParsedUpTo)
+      current.highlightNeedsUpdate = false
+      if not current.incrementalHighlight.isNil:
+        current.incrementalHighlight.pendingReparse = nil
+        current.incrementalHighlight.parsedUpTo = current.len - 1
+      current.uriScanParsedUpTo = current.len - 1
+  try:
     editor.editor.render(buffer.buffer)
+  finally:
+    for item in suspended:
+      if not item.buffer.incrementalHighlight.isNil:
+        item.buffer.incrementalHighlight.parsedUpTo = item.parsedUpTo
+      item.buffer.uriScanParsedUpTo = item.uriParsedUpTo
 
 proc scheduleMatterHighlighting(editor: KosmoEditor) =
   if editor.isNil or editor.editor.isNil:
     return
+  var closedBuffers: seq[BufferId]
+  for id in editor.matterRequests.keys:
+    if editor.editor.bufferById(id).isNone:
+      closedBuffers.add id
+  for id in closedBuffers:
+    editor.matterHighlighting.cancelMatterHighlight(int(id))
+    editor.matterRequests.del(id)
+    editor.matterLineStateVersions.del(id)
+    editor.matterSyntaxFallback.highlightVersions.del(id)
   for buffer in editor.editor.buffers:
     if editor.matterLineStateVersions.hasKey(buffer.id) and (
       editor.matterLineStateVersions[buffer.id] != buffer.contentVersion or
@@ -1995,6 +1961,8 @@ proc scheduleMatterHighlighting(editor: KosmoEditor) =
       buffer.incrementalHighlight = nil
       editor.matterLineStateVersions.del(buffer.id)
     if not editor.matterBufferCandidate(buffer):
+      editor.matterHighlighting.cancelMatterHighlight(int(buffer.id))
+      editor.matterRequests.del(buffer.id)
       editor.matterSyntaxFallback.highlightVersions.del(buffer.id)
       continue
     discard editor.matterHighlightingController()

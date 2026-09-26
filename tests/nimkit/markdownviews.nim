@@ -915,6 +915,132 @@ fencedToken value
     check storage.attributesFor("func").foregroundColor ==
       style.syntaxTokenColors[stcKeyword]
 
+  test "resumable Matter matches whole-source Unicode and multiline classification":
+    let source = "#[\r\n" & "é 😀 comment\r\n".repeat(150) & "]#\r\nlet tail = 42"
+    var
+      cache: MatterGrammarCache
+      job = cache.initMatterHighlightJob(source, "nim")
+      spans: seq[SyntaxTokenSpan]
+      frontier, batches: int
+      finished: bool
+    while not finished:
+      let batch = job.nextMatterHighlightBatch()
+      check int(batch.range.location) == frontier
+      check batch.range.length > 0
+      spans.add batch.spans
+      frontier = batch.range.maxIndex
+      finished = batch.completed
+      inc batches
+    check batches >= 3
+    check frontier == source.runeLen
+    let expected = matterSyntaxHighlighter(source, "nim")
+    for index in 0 ..< source.runeLen:
+      check spans.syntaxTokenAt(index) == expected.syntaxTokenAt(index)
+
+  test "Markdown displays code before streaming colors and preserves its storage":
+    let
+      style = initMarkdownStyle()
+      code = "#[\n" & "é 😀 comment\n".repeat(150) & "]#\nlet tail = 42"
+      source =
+        "# Visible first\n\n```nim\n" & code & "\n```\n\n> > ```nim\n> > " &
+        code.replace("\n", "\n> > ") & "\n> > ```"
+      view = newMarkdownView(source)
+      spy = MarkdownParseCompletionSpy()
+      deadline = getMonoTime() + initDuration(seconds = 60)
+    view.connect(markdownDidFinishParsing, spy, rememberMarkdownParseCompletion)
+    while view.textStorage().len == 0 and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      if view.textStorage().len == 0:
+        sleep(1)
+    require view.textStorage().len > 0
+    require view.isMarkdownParsing()
+    check spy.completions == 0
+    let storage = view.textStorage()
+    check storage.attributesFor("let tail").foregroundColor == style.codeColor
+    view.textView().selectedRange = initTextRange(0, 7)
+    require view.waitForMarkdownParsing(60_000)
+    check spy.completions == 1
+    check view.textStorage() == storage
+    check view.textView().selectedRange == initTextRange(0, 7)
+    check storage.attributesFor("let tail").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+    check storage.attributesFor("é 😀 comment").foregroundColor ==
+      style.syntaxTokenColors[stcComment]
+    check storage.attributesFor("│ │").foregroundColor == style.ruleColor
+    let quotedKeyword =
+      storage.stringValue().runeIndexOf("│ │ let tail") + "│ │ ".runeLen
+    check storage.attributesAt(quotedKeyword).foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+
+  test "streamed Markdown colors preserve embedded storage and horizontal scrolling":
+    let
+      code = "let payload = \"" & "abcdefghij".repeat(12) & "\"\n"
+      view = newMarkdownView(
+        "```nim\n" & code.repeat(160) & "```", frame = rect(0, 0, 240, 240)
+      )
+      deadline = getMonoTime() + initDuration(seconds = 60)
+    while view.textStorage().len == 0 and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      if view.textStorage().len == 0:
+        sleep(1)
+    require view.textStorage().len > 0
+    require view.isMarkdownParsing()
+    # Build layout without polling colors so the embedded presentation exists
+    # before the first batch is applied.
+    discard buildRenders(view)
+    view.layoutSubtreeIfNeeded()
+    let scrolls = view.codeBlockScrollViews()
+    require scrolls.len == 1
+    let
+      scroll = scrolls[0]
+      embedded = TextView(scroll.documentView()).textStorage()
+    scroll.contentOffset = initPoint(scroll.maximumContentOffset().x, 0)
+    let offset = scroll.contentOffset()
+    require offset.x > 0
+    require view.waitForMarkdownParsing(60_000)
+    discard buildRenders(view)
+    require view.codeBlockScrollViews().len == 1
+    check view.codeBlockScrollViews()[0] == scroll
+    check TextView(scroll.documentView()).textStorage() == embedded
+    check scroll.contentOffset() == offset
+    check embedded.attributesFor("let payload").foregroundColor ==
+      view.markdownStyle.syntaxTokenColors[stcKeyword]
+
+  test "a theme change during streaming uses cached spans and the new palette":
+    let view = newMarkdownView("```nim\n" & "let item = 1\n".repeat(256) & "```")
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while view.textStorage().len == 0 and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      if view.textStorage().len == 0:
+        sleep(1)
+    require view.textStorage().len > 0
+    require view.isMarkdownParsing()
+    var style = view.markdownStyle
+    style.syntaxTokenColors[stcKeyword] = color(0.13, 0.71, 0.29, 1.0)
+    view.markdownStyle = style
+    require view.waitForMarkdownParsing(60_000)
+    check view.textStorage().attributesFor("let item").foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+    let last = view.textStorage().len - "let item = 1".runeLen
+    check view.textStorage().attributesAt(last).foregroundColor ==
+      style.syntaxTokenColors[stcKeyword]
+
+  test "Markdown cancels streamed colors when source or classifier changes":
+    let view = newMarkdownView("```nim\n" & "let old = 1\n".repeat(256) & "```")
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while view.textStorage().len == 0 and getMonoTime() < deadline:
+      discard view.pollMarkdownParsing()
+      if view.textStorage().len == 0:
+        sleep(1)
+    require view.textStorage().len > 0
+    require view.isMarkdownParsing()
+    view.markdown = "# Replacement\n\n```nim\nlet fresh = 2\n```"
+    view.syntaxHighlighter = nil
+    require view.waitForMarkdownParsing(60_000)
+    check view.textStorage().stringValue() == "Replacement\n\n[nim]\nlet fresh = 2"
+    check view.textStorage().attributesFor("let fresh").foregroundColor ==
+      view.markdownStyle.codeColor
+
   test "Markdown viewer receives Matter colors from its parse worker":
     let view = newMarkdownView("```nim\nlet obsolete = 1\n```")
     view.markdown = "```go\nfunc main() {}\n```"
@@ -962,7 +1088,8 @@ mystery value
       cornerRadius: 9.0'f32,
       padding: insets(7.0'f32, 10.0'f32),
     )
-    let source = """
+    let source =
+      """
 Before `inline`.
 
 ```nim
@@ -1102,7 +1229,8 @@ echo "fenced"
   test "code block panels in ordered lists do not overlap item labels":
     var style = initMarkdownStyle()
     style.codeBlockStyle.padding = insets(7.0'f32, 10.0'f32)
-    let source = """
+    let source =
+      """
 1. Install dependencies:
 
    ```bash
@@ -1479,7 +1607,8 @@ Press <kbd>Enter</kbd>.
 
   test "GFM tables reflow once the Markdown viewport settles":
     let
-      source = """
+      source =
+        """
 | Mode | Shortcut | Notes |
 | :--- | :------: | :---- |
 | Normal | Ctrl+Shift+P | Opens the command palette and keeps a deliberately long explanation constrained to the current Markdown viewport. |

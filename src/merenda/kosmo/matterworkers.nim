@@ -4,7 +4,7 @@
 ## retains that state on the shared Sigils pool. Results contain only plain
 ## value data and are applied to Moe buffers by the owner thread.
 
-import std/[atomics, isolation, os, strutils, tables, unicode]
+import std/[atomics, isolation, monotimes, os, strutils, tables, times, unicode]
 
 from matter/engine import hasActiveScope
 import sigils/[core, threadProxies, threads]
@@ -23,6 +23,10 @@ const KosmoMatterMaximumLineBytes* {.intdefine.} = 1024
   ## Maximum line size passed to Matter's TextMate tokenizer.
   ## Longer lines stay plain to bound parsing work on generated or minified input.
 
+const
+  MatterHighlightBatchLines* = 64
+  MatterHighlightBatchMilliseconds = 8
+
 static:
   doAssert KosmoMatterTimeLimitMs >= 0, "KosmoMatterTimeLimitMs must be non-negative"
   doAssert KosmoMatterMaximumLineBytes > 0,
@@ -37,6 +41,8 @@ type
     bufferId*: int
     contentVersion*: int
     workerThreadId*: int
+    firstRow*, endRow*: int ## Half-open range replaced by this batch.
+    finished*: bool ## True only for the final batch of this request.
     segments*: seq[moeHighlight.ColorSegment]
     markdownCodeBlockStates*: seq[bool]
     errorMessage*: string
@@ -49,6 +55,22 @@ type
     extensions*: seq[string]
     fileNames*: seq[string]
 
+  MarkdownFence = object
+    marker: char
+    length: int
+    language: moeHighlight.SourceLanguage
+
+  MatterHighlightJob = object
+    requestId: uint64
+    bufferId, contentVersion: int
+    source: string
+    lineStart, row: int
+    control: SharedPtr[MatterHighlightControl]
+    selected:
+      tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet]
+    state, continuingState, recoveryState, embeddedState: moeMatter.MatterLineState
+    fence: MarkdownFence
+
   MatterHighlightWorker = ref object of AgentActor
     sources: seq[moeMatter.MatterGrammarSource]
     grammars: moeMatter.MatterGrammarSet
@@ -58,16 +80,19 @@ type
       tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet],
     ]
     fileTypes: seq[MatterGrammarFileType]
+    jobs: Table[int, MatterHighlightJob]
 
   MatterHighlighting* = ref object of Agent
     worker: AgentProxy[MatterHighlightWorker]
     pending: seq[MatterHighlightResult]
     controls: Table[int, SharedPtr[MatterHighlightControl]]
+    requested: Table[int, uint64]
     completed: Table[int, uint64]
     nextRequestId: uint64
     closed: bool
 
 proc matterHighlightCompleted*(highlighting: MatterHighlighting) {.signal.}
+  ## A batch is ready to consume; query readiness separately for EOF.
 
 proc newMatterHighlightControl*(): SharedPtr[MatterHighlightControl] =
   result = newSharedPtr(MatterHighlightControl)
@@ -229,11 +254,6 @@ proc shouldRestartMarkdownListState(
 
 proc exceedsMatterParsingBudget(line: string): bool =
   line.len > KosmoMatterMaximumLineBytes
-
-type MarkdownFence = object
-  marker: char
-  length: int
-  language: moeHighlight.SourceLanguage
 
 proc markdownFence(line: string): MarkdownFence =
   var first: int
@@ -404,144 +424,118 @@ proc addLineSegments(
       moeHighlight.EditorColorPairIndex.default,
     )
 
-proc highlightMatter(
-    worker: MatterHighlightWorker,
-    source: string,
-    language: moeHighlight.SourceLanguage,
-    fileName: string,
-    control: SharedPtr[MatterHighlightControl],
-): tuple[
-  segments: seq[moeHighlight.ColorSegment],
-  markdownCodeBlockStates: seq[bool],
-  errorMessage: string,
-] =
-  let selected = worker.requestGrammar(language, fileName)
-  if not selected.grammars.matterSupports(selected.language):
-    return (
-      segments: @[],
-      markdownCodeBlockStates: @[],
-      errorMessage: "No Matter grammar for " & $selected.language,
-    )
-  let
-    initialState = moeMatter.initialMatterState(selected.grammars, selected.language)
-    continuingState = continuingMatterState(selected.grammars, selected.language)
-    recoveryState =
-      if selected.language == moeHighlight.SourceLanguage.langMarkdown:
-        continuingState
-      else:
-        initialState
-  var
-    state = initialState
-    fence: MarkdownFence
-    embeddedState: moeMatter.MatterLineState
-
-  let lines = source.split('\n')
-  result.segments = newSeqOfCap[moeHighlight.ColorSegment](max(lines.len, 1))
-  if selected.language == moeHighlight.SourceLanguage.langMarkdown:
-    result.markdownCodeBlockStates = newSeqOfCap[bool](lines.len)
-  for row, line in lines:
-    if control.cancelled:
-      return (segments: @[], markdownCodeBlockStates: @[], errorMessage: "")
-    if line.exceedsMatterParsingBudget():
-      let
-        closesSkippedFence =
-          selected.language == moeHighlight.SourceLanguage.langMarkdown and
-          fence.closes(line)
-        skippedOpeningFence =
-          if selected.language == moeHighlight.SourceLanguage.langMarkdown and
-              fence.length < 3:
-            line.markdownFence()
-          else:
-            default(MarkdownFence)
-      result.segments.addLineSegments(row, line, selected.language, [])
-      if selected.language != moeHighlight.SourceLanguage.langMarkdown:
-        # A skipped YAML scalar does not change the surrounding indentation or
-        # block structure. Retaining the prior stack lets the next line unwind
-        # naturally instead of injecting a synthetic document root mid-file.
-        discard
-      elif closesSkippedFence:
-        state = recoveryState
-        fence = default(MarkdownFence)
-        embeddedState = default(moeMatter.MatterLineState)
-      elif fence.length >= 3:
-        # Keep the enclosing grammar state. Skipping one oversized embedded
-        # line must not turn all following code into Markdown prose.
-        discard
-      else:
-        state = recoveryState
-        fence = skippedOpeningFence
-        embeddedState = selected.grammars.initialEmbeddedMatterState(fence.language)
-      if selected.language == moeHighlight.SourceLanguage.langMarkdown:
-        result.markdownCodeBlockStates.add fence.length >= 3
-      continue
-    if shouldRestartMarkdownListState(selected.language, line, state):
-      state = continuingState
+proc highlightMatterLine(
+    job: var MatterHighlightJob,
+    result: var MatterHighlightResult,
+    row: int,
+    line: string,
+) =
+  if line.exceedsMatterParsingBudget():
     let
-      wasInMarkdownFence =
-        selected.language == moeHighlight.SourceLanguage.langMarkdown and
-        (fence.length >= 3 or state.stack.hasActiveScope("markup.fenced_code.block"))
-      openingFence =
-        if wasInMarkdownFence:
-          default(MarkdownFence)
-        else:
+      closesSkippedFence =
+        job.selected.language == moeHighlight.SourceLanguage.langMarkdown and
+        job.fence.closes(line)
+      skippedOpeningFence =
+        if job.selected.language == moeHighlight.SourceLanguage.langMarkdown and
+            job.fence.length < 3:
           line.markdownFence()
-      closesMarkdownFence = wasInMarkdownFence and fence.closes(line)
-    let parsed = moeMatter.tokenizeMatterLine(
-      line,
-      selected.language,
-      state,
-      timeLimitMs = KosmoMatterTimeLimitMs,
-      grammars = selected.grammars,
-    )
-    var
-      lineLanguage = selected.language
-      lineSpans = parsed.spans
-    if selected.language == moeHighlight.SourceLanguage.langMarkdown and
-        wasInMarkdownFence and not closesMarkdownFence and
-        selected.grammars.supportsEmbeddedMatterLanguage(fence.language):
-      let embedded = moeMatter.tokenizeMatterLine(
-        line,
-        fence.language,
-        embeddedState,
-        timeLimitMs = KosmoMatterTimeLimitMs,
-        grammars = selected.grammars,
-      )
-      if embedded.nextState.failed:
-        # Keep a slow or malformed embedded line plain without poisoning the
-        # rest of the fenced block. The next line gets a fresh continuation
-        # root, matching the outer Markdown recovery behavior above.
-        embeddedState = selected.grammars.continuingMatterState(fence.language)
-        lineSpans = @[]
-      else:
-        embeddedState = embedded.nextState
-        lineLanguage = fence.language
-        lineSpans = embedded.spans
-    result.segments.addLineSegments(row, line, lineLanguage, lineSpans)
-    if closesMarkdownFence:
-      state = recoveryState
-      fence = default(MarkdownFence)
-      embeddedState = default(moeMatter.MatterLineState)
-    elif parsed.nextState.failed:
-      # A soft timeout must not poison every later line. The failed line is
-      # covered plainly above; restart from a continuation root so headings
-      # and later independent constructs can recover without re-enabling
-      # document-start-only rules.
-      state = recoveryState
-      if not wasInMarkdownFence:
-        fence = default(MarkdownFence)
-        embeddedState = default(moeMatter.MatterLineState)
+        else:
+          default(MarkdownFence)
+    result.segments.addLineSegments(row, line, job.selected.language, [])
+    if job.selected.language != moeHighlight.SourceLanguage.langMarkdown:
+      # A skipped YAML scalar does not change the surrounding indentation or
+      # block structure. Retaining the prior stack lets the next line unwind
+      # naturally instead of injecting a synthetic document root mid-file.
+      discard
+    elif closesSkippedFence:
+      job.state = job.recoveryState
+      job.fence = default(MarkdownFence)
+      job.embeddedState = default(moeMatter.MatterLineState)
+    elif job.fence.length >= 3:
+      # Keep the enclosing grammar state. Skipping one oversized embedded
+      # line must not turn all following code into Markdown prose.
+      discard
     else:
-      state = parsed.nextState
-      if not wasInMarkdownFence and
-          state.stack.hasActiveScope("markup.fenced_code.block"):
-        fence = openingFence
-        embeddedState = selected.grammars.initialEmbeddedMatterState(fence.language)
-      elif fence.length < 3 and
-          not state.stack.hasActiveScope("markup.fenced_code.block"):
-        fence = default(MarkdownFence)
-        embeddedState = default(moeMatter.MatterLineState)
-    if selected.language == moeHighlight.SourceLanguage.langMarkdown:
-      result.markdownCodeBlockStates.add fence.length >= 3 or state.isMatterCodeBlock
+      job.state = job.recoveryState
+      job.fence = skippedOpeningFence
+      job.embeddedState =
+        job.selected.grammars.initialEmbeddedMatterState(job.fence.language)
+    if job.selected.language == moeHighlight.SourceLanguage.langMarkdown:
+      result.markdownCodeBlockStates.add job.fence.length >= 3
+    return
+  if shouldRestartMarkdownListState(job.selected.language, line, job.state):
+    job.state = job.continuingState
+  let
+    wasInMarkdownFence =
+      job.selected.language == moeHighlight.SourceLanguage.langMarkdown and (
+        job.fence.length >= 3 or
+        job.state.stack.hasActiveScope("markup.fenced_code.block")
+      )
+    openingFence =
+      if wasInMarkdownFence:
+        default(MarkdownFence)
+      else:
+        line.markdownFence()
+    closesMarkdownFence = wasInMarkdownFence and job.fence.closes(line)
+  let parsed = moeMatter.tokenizeMatterLine(
+    line,
+    job.selected.language,
+    job.state,
+    timeLimitMs = KosmoMatterTimeLimitMs,
+    grammars = job.selected.grammars,
+  )
+  var
+    lineLanguage = job.selected.language
+    lineSpans = parsed.spans
+  if job.selected.language == moeHighlight.SourceLanguage.langMarkdown and
+      wasInMarkdownFence and not closesMarkdownFence and
+      job.selected.grammars.supportsEmbeddedMatterLanguage(job.fence.language):
+    let embedded = moeMatter.tokenizeMatterLine(
+      line,
+      job.fence.language,
+      job.embeddedState,
+      timeLimitMs = KosmoMatterTimeLimitMs,
+      grammars = job.selected.grammars,
+    )
+    if embedded.nextState.failed:
+      # Keep a slow or malformed embedded line plain without poisoning the
+      # rest of the fenced block. The next line gets a fresh continuation
+      # root, matching the outer Markdown recovery behavior above.
+      job.embeddedState =
+        job.selected.grammars.continuingMatterState(job.fence.language)
+      lineSpans = @[]
+    else:
+      job.embeddedState = embedded.nextState
+      lineLanguage = job.fence.language
+      lineSpans = embedded.spans
+  result.segments.addLineSegments(row, line, lineLanguage, lineSpans)
+  if closesMarkdownFence:
+    job.state = job.recoveryState
+    job.fence = default(MarkdownFence)
+    job.embeddedState = default(moeMatter.MatterLineState)
+  elif parsed.nextState.failed:
+    # A soft timeout must not poison every later line. The failed line is
+    # covered plainly above; restart from a continuation root so headings
+    # and later independent constructs can recover without re-enabling
+    # document-start-only rules.
+    job.state = job.recoveryState
+    if not wasInMarkdownFence:
+      job.fence = default(MarkdownFence)
+      job.embeddedState = default(moeMatter.MatterLineState)
+  else:
+    job.state = parsed.nextState
+    if not wasInMarkdownFence and
+        job.state.stack.hasActiveScope("markup.fenced_code.block"):
+      job.fence = openingFence
+      job.embeddedState =
+        job.selected.grammars.initialEmbeddedMatterState(job.fence.language)
+    elif job.fence.length < 3 and
+        not job.state.stack.hasActiveScope("markup.fenced_code.block"):
+      job.fence = default(MarkdownFence)
+      job.embeddedState = default(moeMatter.MatterLineState)
+  if job.selected.language == moeHighlight.SourceLanguage.langMarkdown:
+    result.markdownCodeBlockStates.add job.fence.length >= 3 or
+      job.state.isMatterCodeBlock
 
 proc matterHighlightFinished*(
   worker: MatterHighlightWorker, highlighted: SharedPtr[MatterHighlightResult]
@@ -558,6 +552,62 @@ proc requestMatterHighlight*(
   control: SharedPtr[MatterHighlightControl],
 ) {.signal.}
 
+proc continueMatterHighlight*(
+  worker: AgentProxy[MatterHighlightWorker], bufferId: int, requestId: uint64
+) {.signal.}
+
+proc discardMatterHighlight*(
+  worker: AgentProxy[MatterHighlightWorker], bufferId: int, requestId: uint64
+) {.signal.}
+
+proc discardMatterHighlight(
+    worker: MatterHighlightWorker, bufferId: int, requestId: uint64
+) {.slot.} =
+  if worker.jobs.hasKey(bufferId) and worker.jobs[bufferId].requestId == requestId:
+    worker.jobs.del(bufferId)
+
+proc continueMatterHighlight(
+    worker: MatterHighlightWorker, bufferId: int, requestId: uint64
+) {.slot.} =
+  if not worker.jobs.hasKey(bufferId) or worker.jobs[bufferId].requestId != requestId:
+    return
+  var job = move worker.jobs[bufferId]
+  worker.jobs.del(bufferId)
+  if job.control.cancelled:
+    return
+  var batch = MatterHighlightResult(
+    requestId: job.requestId,
+    bufferId: bufferId,
+    contentVersion: job.contentVersion,
+    workerThreadId: getThreadId(),
+    firstRow: job.row,
+    endRow: job.row,
+  )
+  let started = getMonoTime()
+  try:
+    while job.lineStart <= job.source.len and
+        batch.endRow - batch.firstRow < MatterHighlightBatchLines:
+      if job.control.cancelled:
+        return
+      var lineStop = job.source.find('\n', job.lineStart)
+      if lineStop < 0:
+        lineStop = job.source.len
+      job.highlightMatterLine(batch, job.row, job.source[job.lineStart ..< lineStop])
+      job.lineStart = lineStop + 1
+      inc job.row
+      batch.endRow = job.row
+      if (getMonoTime() - started).inMilliseconds >= MatterHighlightBatchMilliseconds:
+        break
+    batch.finished = job.lineStart > job.source.len
+  except CatchableError as error:
+    batch.errorMessage = error.msg
+    batch.finished = true
+  if job.control.cancelled:
+    return
+  if not batch.finished:
+    worker.jobs[bufferId] = move job
+  emit worker.matterHighlightFinished(newSharedPtr(unsafeIsolate(move batch)))
+
 proc requestMatterHighlight(
     worker: MatterHighlightWorker,
     requestId: uint64,
@@ -568,32 +618,49 @@ proc requestMatterHighlight(
     fileName: string,
     control: SharedPtr[MatterHighlightControl],
 ) {.slot.} =
+  worker.jobs.del(bufferId)
   if control.cancelled:
     return
-  var highlightResult = MatterHighlightResult(
+  var job = MatterHighlightJob(
     requestId: requestId,
     bufferId: bufferId,
     contentVersion: contentVersion,
-    workerThreadId: getThreadId(),
+    source: source,
+    control: control,
   )
   try:
-    var parsed = worker.highlightMatter(source, language, fileName, control)
-    if control.cancelled:
-      return
-    highlightResult.segments = move parsed.segments
-    highlightResult.markdownCodeBlockStates = move parsed.markdownCodeBlockStates
-    highlightResult.errorMessage = move parsed.errorMessage
+    job.selected = worker.requestGrammar(language, fileName)
+    if not job.selected.grammars.matterSupports(job.selected.language):
+      raise newException(ValueError, "No Matter grammar for " & $job.selected.language)
+    job.state =
+      moeMatter.initialMatterState(job.selected.grammars, job.selected.language)
+    job.continuingState =
+      continuingMatterState(job.selected.grammars, job.selected.language)
+    job.recoveryState =
+      if job.selected.language == moeHighlight.SourceLanguage.langMarkdown:
+        job.continuingState
+      else:
+        job.state
+    worker.jobs[bufferId] = move job
+    worker.continueMatterHighlight(bufferId, requestId)
   except CatchableError as error:
-    if control.cancelled:
-      return
-    highlightResult.errorMessage = error.msg
-  emit worker.matterHighlightFinished(newSharedPtr(unsafeIsolate(move highlightResult)))
+    var batch = MatterHighlightResult(
+      requestId: requestId,
+      bufferId: bufferId,
+      contentVersion: contentVersion,
+      workerThreadId: getThreadId(),
+      finished: true,
+      errorMessage: error.msg,
+    )
+    emit worker.matterHighlightFinished(newSharedPtr(unsafeIsolate(move batch)))
 
 proc receiveMatterHighlight(
     highlighting: MatterHighlighting, result: SharedPtr[MatterHighlightResult]
 ) {.slot.} =
-  if not highlighting.closed:
-    highlighting.completed[result[].bufferId] = result[].requestId
+  if not highlighting.closed and
+      highlighting.requested.getOrDefault(result[].bufferId) == result[].requestId:
+    if result[].finished:
+      highlighting.completed[result[].bufferId] = result[].requestId
     highlighting.pending.add move result[]
     emit highlighting.matterHighlightCompleted()
 
@@ -618,11 +685,34 @@ proc newMatterHighlighting*(
     result.worker, requestMatterHighlight, result.worker, requestMatterHighlight
   )
   connectThreaded(
+    result.worker, continueMatterHighlight, result.worker, continueMatterHighlight
+  )
+  connectThreaded(
+    result.worker, discardMatterHighlight, result.worker, discardMatterHighlight
+  )
+  connectThreaded(
     result.worker,
     matterHighlightFinished,
     result,
     MatterHighlighting.receiveMatterHighlight(),
   )
+
+proc cancelMatterHighlight*(highlighting: MatterHighlighting, bufferId: int) =
+  ## Discard a closed buffer's pending batch and retained worker state.
+  if highlighting.isNil or highlighting.closed:
+    return
+  if highlighting.controls.hasKey(bufferId):
+    highlighting.controls[bufferId].cancel()
+    highlighting.controls.del(bufferId)
+  if highlighting.requested.hasKey(bufferId):
+    emit highlighting.worker.discardMatterHighlight(
+      bufferId, highlighting.requested[bufferId]
+    )
+    highlighting.requested.del(bufferId)
+  highlighting.completed.del(bufferId)
+  for index in countdown(highlighting.pending.high, 0):
+    if highlighting.pending[index].bufferId == bufferId:
+      highlighting.pending.delete(index)
 
 proc requestMatterHighlight*(
     highlighting: MatterHighlighting,
@@ -636,11 +726,11 @@ proc requestMatterHighlight*(
     return
   inc highlighting.nextRequestId
   result = highlighting.nextRequestId
-  if highlighting.controls.hasKey(bufferId):
-    highlighting.controls[bufferId].cancel()
+  highlighting.cancelMatterHighlight(bufferId)
   let control = newMatterHighlightControl()
   highlighting.controls[bufferId] = control
   highlighting.completed.del(bufferId)
+  highlighting.requested[bufferId] = result
   emit highlighting.worker.requestMatterHighlight(
     result, bufferId, contentVersion, source, language, fileName, control
   )
@@ -648,10 +738,17 @@ proc requestMatterHighlight*(
 proc takeMatterHighlightResults*(
     highlighting: MatterHighlighting
 ): seq[MatterHighlightResult] =
+  ## Consume available deltas and acknowledge their next worker slices.
+  ## Call while work is pending; readiness alone does not consume batches.
   if highlighting.isNil:
     return
   result = move highlighting.pending
   highlighting.pending = @[]
+  # Consuming a batch grants the worker one more bounded slice. There is at
+  # most one unconsumed result per buffer, including for hidden documents.
+  for batch in result:
+    if not batch.finished and not highlighting.closed:
+      emit highlighting.worker.continueMatterHighlight(batch.bufferId, batch.requestId)
 
 proc matterHighlightingReady*(
     highlighting: MatterHighlighting, bufferId: int, requestId: uint64
@@ -664,8 +761,11 @@ proc close*(highlighting: MatterHighlighting) =
   highlighting.closed = true
   for control in highlighting.controls.values:
     control.cancel()
+  for bufferId, requestId in highlighting.requested:
+    emit highlighting.worker.discardMatterHighlight(bufferId, requestId)
   highlighting.controls.clear()
   highlighting.completed.clear()
+  highlighting.requested.clear()
   highlighting.pending.setLen(0)
   highlighting.worker = nil
 
