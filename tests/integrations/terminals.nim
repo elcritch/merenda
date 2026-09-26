@@ -5,7 +5,7 @@ import std/[monotimes, os, sequtils, strutils, tempfiles, times, unittest]
 
 import terminex
 
-import sigils/core
+import sigils/[core, threads]
 
 import merenda/nimkit/accessibility/accessibilityprotocols
 import merenda/nimkit/app/[animations, application, pasteboards, windows]
@@ -76,6 +76,7 @@ proc tickUntilNormalizedText(
 ): bool =
   let deadline = getMonoTime() + timeout
   while getMonoTime() < deadline:
+    discard getCurrentSigilThread().pollAll(NonBlocking)
     discard window.animationScheduler().tick(initDuration(milliseconds = 16))
     let rendered = view.stringValue().replace("\n", " ").splitWhitespace().join(" ")
     if expected in rendered:
@@ -128,6 +129,7 @@ proc tickUntilCurrentLineContains(
 ): bool =
   let deadline = getMonoTime() + timeout
   while getMonoTime() < deadline:
+    discard getCurrentSigilThread().pollAll(NonBlocking)
     discard window.animationScheduler().tick(initDuration(milliseconds = 16))
     if expected in view.session().currentTerminalLine():
       return true
@@ -142,6 +144,7 @@ proc tickUntilCurrentLineAfterChange(
 ): bool =
   let deadline = getMonoTime() + timeout
   while getMonoTime() < deadline:
+    discard getCurrentSigilThread().pollAll(NonBlocking)
     discard window.animationScheduler().tick(initDuration(milliseconds = 16))
     if view.session().screenInfo().generation != generation and
         view.session().currentTerminalLine() == expected:
@@ -1408,7 +1411,7 @@ suite "nimkit terminal views":
         check searchMarker notin secondRenderedLine
         check repeat('z', 20) notin secondRenderedTail
 
-  test "attached running views poll from the window animation scheduler":
+  test "attached running views collect output and child exit":
     when defined(posix):
       let
         session = spawnCompactTerminalSession(
@@ -1423,6 +1426,7 @@ suite "nimkit terminal views":
       let deadline = getMonoTime() + initDuration(seconds = 3)
       while ("automatic" notin view.stringValue() or session.running()) and
           getMonoTime() < deadline:
+        discard getCurrentSigilThread().pollAll(NonBlocking)
         discard window.animationScheduler().tick(initDuration(milliseconds = 16))
         sleep(5)
 

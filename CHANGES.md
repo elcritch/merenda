@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Watch terminal PTY readiness on POSIX instead of polling every animation frame,
+  retaining a slower maintenance tick for blinking, pending input, and child exit.
+  Release watch descriptors when terminals close, change sessions, or detach.
+
 - Drain temporary macOS menu and application-frame objects promptly, preventing
   long-running Kosmo sessions from retaining old native menus and growing by
   tens of gigabytes.
