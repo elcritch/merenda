@@ -8,6 +8,12 @@
   code colors in place while preserving selection and embedded code views.
 - Reuse cached text layout for color-only edits and refresh visible glyph colors
   without reshaping text or replacing shared glyph geometry.
+- Use Matter 0.5.1's ARC ownership fix so discarded highlighting caches release
+  recursive compiled grammars, including grammars retained by saved jobs.
+- Release streamed code source copies promptly, map unquoted Markdown code with
+  one range, and index code presentations by their highlighting request.
+- Decorate URI underlines within incoming Kosmo highlighting batches to avoid
+  repeatedly copying the completed highlight prefix.
 
 - Blink the terminal cursor only while its view and window are focused, and avoid
   rebuilding the terminal grid when only the cursor changes.

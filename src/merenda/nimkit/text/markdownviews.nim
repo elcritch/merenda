@@ -279,6 +279,7 @@ type
     xMatterHighlights: seq[seq[SyntaxTokenSpan]]
     xMatterCodeIndices: Table[MarkdownCodeSource, int]
     xMarkdownCodePresentations: seq[MarkdownCodeBlockPresentation]
+    xMarkdownCodePresentationIndices: seq[seq[int]]
     xActiveMarkdownHighlightGeneration: uint64
     xMarkdownHighlightStarted: bool
     xImageBasePath: string
@@ -692,11 +693,10 @@ proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
         (int(builder.runs[^1].range.length) + int(shifted.range.length)).Natural
     else:
       builder.runs.add shifted
-  for presentation in rendered.codeBlocks:
-    var shifted = presentation
-    shifted.range = initTextRange(
-      offset + int(presentation.range.location), int(presentation.range.length)
-    )
+  for presentation in rendered.codeBlocks.mitems:
+    var shifted = move presentation
+    shifted.range =
+      initTextRange(offset + int(shifted.range.location), int(shifted.range.length))
     for slice in shifted.slices.mitems:
       slice.documentStart += offset
     builder.codeBlocks.add shifted
@@ -1331,17 +1331,54 @@ type QuoteOffsetSegment = object
   sourceStart: int
   destinationStart: int
 
-proc quoteDestination(segments: openArray[QuoteOffsetSegment], sourceIndex: int): int =
-  var
-    low = 0
-    high = segments.len
-  while low + 1 < high:
-    let middle = (low + high) div 2
+func quoteSegmentIndex(segments: openArray[QuoteOffsetSegment], sourceIndex: int): int =
+  var high = segments.len
+  while result + 1 < high:
+    let middle = (result + high) div 2
     if segments[middle].sourceStart <= sourceIndex:
-      low = middle
+      result = middle
     else:
       high = middle
-  segments[low].destinationStart + sourceIndex - segments[low].sourceStart
+
+proc quoteDestination(segments: openArray[QuoteOffsetSegment], sourceIndex: int): int =
+  let index = segments.quoteSegmentIndex(sourceIndex)
+  segments[index].destinationStart + sourceIndex - segments[index].sourceStart
+
+proc quoteCodeSlices(
+    slices: openArray[MarkdownCodeSlice], segments: openArray[QuoteOffsetSegment]
+): seq[MarkdownCodeSlice] =
+  # Split only where a quote inserts a prefix into a source-to-document range.
+  if slices.len == 0:
+    return
+  var segmentIndex = segments.quoteSegmentIndex(slices[0].documentStart)
+  for slice in slices:
+    var first = slice.documentStart
+    let stop = first + int(slice.sourceRange.length)
+    while first < stop:
+      while segmentIndex + 1 < segments.len and
+          segments[segmentIndex + 1].sourceStart <= first:
+        inc segmentIndex
+      let
+        segment = segments[segmentIndex]
+        last =
+          if segmentIndex + 1 < segments.len:
+            min(stop, segments[segmentIndex + 1].sourceStart)
+          else:
+            stop
+        mapped = MarkdownCodeSlice(
+          sourceRange: initTextRange(
+            int(slice.sourceRange.location) + first - slice.documentStart, last - first
+          ),
+          documentStart: segment.destinationStart + first - segment.sourceStart,
+        )
+      if result.len > 0 and
+          result[^1].sourceRange.maxIndex == int(mapped.sourceRange.location) and
+          result[^1].documentStart + int(result[^1].sourceRange.length) ==
+          mapped.documentStart:
+        result[^1].sourceRange.length += mapped.sourceRange.length
+      else:
+        result.add mapped
+      first = last
 
 proc renderBlockquote(
     builder: var MarkdownBuilder,
@@ -1392,14 +1429,13 @@ proc renderBlockquote(
             destinationStart: builder.runeLength,
           )
 
-  for presentation in quoted.codeBlocks:
-    var mapped = presentation
+  for presentation in quoted.codeBlocks.mitems:
+    var mapped = move presentation
     let
-      start = segments.quoteDestination(int(presentation.range.location))
-      stop = segments.quoteDestination(presentation.range.maxIndex)
+      start = segments.quoteDestination(int(mapped.range.location))
+      stop = segments.quoteDestination(mapped.range.maxIndex)
     mapped.range = initTextRange(start, stop - start)
-    for slice in mapped.slices.mitems:
-      slice.documentStart = segments.quoteDestination(slice.documentStart)
+    mapped.slices = mapped.slices.quoteCodeSlices(segments)
     builder.codeBlocks.add mapped
   for presentation in quoted.images:
     var mapped = presentation
@@ -1528,21 +1564,10 @@ proc renderBlock(
         codeStart: codeStart,
         codeAttributes: codeAttributes,
       )
-      # A slice never crosses a newline. Quotes can insert prefixes between
-      # slices without changing offsets in the embedded code storage.
-      var first, position: int
-      for rune in codeSource.source.runes:
-        inc position
-        if rune == Rune('\n'):
-          presentation.slices.add MarkdownCodeSlice(
-            sourceRange: initTextRange(first, position - first),
-            documentStart: codeStart + first,
-          )
-          first = position
-      if position > first:
+      let codeLength = renderedCode.runeLength - codeStart
+      if codeLength > 0:
         presentation.slices.add MarkdownCodeSlice(
-          sourceRange: initTextRange(first, position - first),
-          documentStart: codeStart + first,
+          sourceRange: initTextRange(0, codeLength), documentStart: codeStart
         )
       renderedCode.codeBlocks.add move presentation
       builder.add(move renderedCode)
@@ -2108,10 +2133,14 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
   else:
     view.textStorage = document.storage
   textView.installMarkdownHeadings(document.headings)
-  view.xMarkdownCodePresentations = document.codeBlocks
-  for presentation in view.xMarkdownCodePresentations.mitems:
+  view.xMarkdownCodePresentations = move document.codeBlocks
+  view.xMarkdownCodePresentationIndices = newSeq[seq[int]](view.xMatterHighlights.len)
+  for index, presentation in view.xMarkdownCodePresentations.mpairs:
     presentation.codeIndex = view.xMatterCodeIndices.getOrDefault(presentation.code, -1)
-  textView.installMarkdownCodeBlocks(document.codeBlocks)
+    presentation.code = default(MarkdownCodeSource)
+    if presentation.codeIndex >= 0:
+      view.xMarkdownCodePresentationIndices[presentation.codeIndex].add index
+  textView.installMarkdownCodeBlocks(view.xMarkdownCodePresentations)
   textView.installMarkdownTables(document.tables)
   view.pruneMarkdownImageCache(document.imageUrls)
   textView.needsDisplay = true
@@ -2290,52 +2319,56 @@ proc applyCodeOverlays(storage: TextStorage, overlays: seq[TextAttributeRun]) =
 proc applyMarkdownCodeColors(
     view: MarkdownView, codeIndex: int, spans: openArray[SyntaxTokenSpan]
 ) =
+  if spans.len == 0 or codeIndex < 0 or
+      codeIndex >= view.xMarkdownCodePresentationIndices.len:
+    return
   var document: seq[TextAttributeRun]
-  for presentation in view.xMarkdownCodePresentations:
-    if presentation.codeIndex == codeIndex and spans.len > 0:
-      var embedded: seq[TextAttributeRun]
-      var low = 0
-      var high = presentation.slices.len
-      while low < high:
-        let middle = (low + high) div 2
-        if presentation.slices[middle].sourceRange.maxIndex <=
-            int(spans[0].range.location):
-          low = middle + 1
-        else:
-          high = middle
-      var sliceIndex = low
-      for span in spans:
-        var attributes = presentation.codeAttributes
-        attributes.foregroundColor =
-          view.xMarkdownStyle.syntaxTokenColors[span.tokenClass]
-        embedded.add TextAttributeRun(
-          range: initTextRange(
-            presentation.codeStart + int(span.range.location), int(span.range.length)
-          ),
-          attributes: attributes,
-        )
-        while sliceIndex < presentation.slices.len and
-            presentation.slices[sliceIndex].sourceRange.maxIndex <=
-            int(span.range.location)
-        :
-          inc sliceIndex
-        var index = sliceIndex
-        while index < presentation.slices.len and
-            int(presentation.slices[index].sourceRange.location) < span.range.maxIndex:
-          let
-            slice = presentation.slices[index]
-            first = max(int(span.range.location), int(slice.sourceRange.location))
-            stop = min(span.range.maxIndex, slice.sourceRange.maxIndex)
-          if stop > first:
-            document.add TextAttributeRun(
-              range: initTextRange(
-                slice.documentStart + first - int(slice.sourceRange.location),
-                stop - first,
-              ),
-              attributes: attributes,
-            )
-          inc index
-      presentation.storage.applyCodeOverlays(embedded)
+  for index in view.xMarkdownCodePresentationIndices[codeIndex]:
+    let presentation {.cursor.} = view.xMarkdownCodePresentations[index]
+    var embedded: seq[TextAttributeRun]
+    var low = 0
+    var high = presentation.slices.len
+    while low < high:
+      let middle = (low + high) div 2
+      if presentation.slices[middle].sourceRange.maxIndex <= int(
+        spans[0].range.location
+      ):
+        low = middle + 1
+      else:
+        high = middle
+    var sliceIndex = low
+    for span in spans:
+      var attributes = presentation.codeAttributes
+      attributes.foregroundColor =
+        view.xMarkdownStyle.syntaxTokenColors[span.tokenClass]
+      embedded.add TextAttributeRun(
+        range: initTextRange(
+          presentation.codeStart + int(span.range.location), int(span.range.length)
+        ),
+        attributes: attributes,
+      )
+      while sliceIndex < presentation.slices.len and
+          presentation.slices[sliceIndex].sourceRange.maxIndex <=
+          int(span.range.location)
+      :
+        inc sliceIndex
+      var index = sliceIndex
+      while index < presentation.slices.len and
+          int(presentation.slices[index].sourceRange.location) < span.range.maxIndex:
+        let
+          slice = presentation.slices[index]
+          first = max(int(span.range.location), int(slice.sourceRange.location))
+          stop = min(span.range.maxIndex, slice.sourceRange.maxIndex)
+        if stop > first:
+          document.add TextAttributeRun(
+            range: initTextRange(
+              slice.documentStart + first - int(slice.sourceRange.location),
+              stop - first,
+            ),
+            attributes: attributes,
+          )
+        inc index
+    presentation.storage.applyCodeOverlays(embedded)
   view.textStorage.applyCodeOverlays(document)
   view.textView().needsDisplay = true
 

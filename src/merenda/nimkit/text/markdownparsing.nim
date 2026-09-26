@@ -181,9 +181,11 @@ proc continueMarkdownHighlight(
   var codeFinished = false
   try:
     if not worker.codeStarted:
-      let code = worker.codes[worker.codeIndex]
-      worker.highlightJob =
-        worker.grammars.initMatterHighlightJob(code.source, code.language)
+      worker.highlightJob = worker.grammars.initMatterHighlightJob(
+        move worker.codes[worker.codeIndex].source,
+        worker.codes[worker.codeIndex].language,
+      )
+      worker.codes[worker.codeIndex] = default(MarkdownCodeSource)
       worker.codeStarted = true
     var parsed = worker.highlightJob.nextMatterHighlightBatch()
     batch.range = parsed.range
@@ -193,6 +195,7 @@ proc continueMarkdownHighlight(
     # Keep the parsed document even if a code grammar fails.
     codeFinished = true
   if codeFinished:
+    worker.codes[worker.codeIndex] = default(MarkdownCodeSource)
     inc worker.codeIndex
     worker.codeStarted = false
     worker.highlightJob = default(MatterHighlightJob)

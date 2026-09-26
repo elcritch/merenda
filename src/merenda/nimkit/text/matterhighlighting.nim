@@ -164,12 +164,11 @@ proc addSpan(
     )
 
 proc initMatterHighlightJob*(
-    cache: var MatterGrammarCache, source, language: string
+    cache: var MatterGrammarCache, source: sink string, language: string
 ): MatterHighlightJob =
   ## Start a pass using grammars private to the owning worker.
-  MatterHighlightJob(
-    source: source, grammar: grammarForLanguage(cache.grammars, language)
-  )
+  let grammar = grammarForLanguage(cache.grammars, language)
+  MatterHighlightJob(source: source, grammar: grammar)
 
 proc nextMatterHighlightBatch*(job: var MatterHighlightJob): MatterHighlightResult =
   ## Classify at most 64 lines or roughly 8 ms, preserving multiline state.

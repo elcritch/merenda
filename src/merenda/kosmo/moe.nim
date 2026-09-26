@@ -33,6 +33,7 @@ from moepkg/color import EditorColorPairIndex, Rgb, ThemeColors, isTermDefaultCo
 from moepkg/theme import DefaultColors
 from moepkg/render_utils import steadyBottomAreaHeight
 from moepkg/search_utils import shouldIgnoreCase
+from moepkg/uri_utils import findAllUris
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
 import moepkg/syntax/matter_backend as moeMatter
@@ -1843,6 +1844,14 @@ proc applyMatterHighlightResult(
     # Built-in segments may cross row boundaries. Start an external projection
     # with a plain suffix; subsequent versions retain their remapped colours.
     current.highlight.colorSegments.setLen(0)
+  if current.allowsTextTransforms:
+    # Decorate only the incoming rows: Moe's underline helper rebuilds its
+    # argument, which would otherwise copy the completed prefix every batch.
+    var ranges: seq[tuple[row, firstCol, lastCol: int]]
+    for row in completed.firstRow ..< completed.endRow:
+      for uri in findAllUris(current.getLine(row), current.maxHighlightLineLength):
+        ranges.add((row: row, firstCol: uri.start, lastCol: uri.finish))
+    completed.segments.addUnderlineRanges(ranges)
   current.highlight.colorSegments.replaceMatterBatch(
     completed.firstRow, completed.endRow, move completed.segments
   )
@@ -1867,10 +1876,6 @@ proc applyMatterHighlightResult(
     current.incrementalHighlight = nil
     editor.matterLineStateVersions.del(current.id)
   current.highlightNeedsUpdate = false
-  if current.allowsTextTransforms and completed.endRow > completed.firstRow:
-    discard current.scanAndApplyUriUnderlines(
-      completed.firstRow, completed.endRow - 1, applyToCache = false
-    )
   current.uriScanParsedUpTo = completed.endRow - 1
   true
 

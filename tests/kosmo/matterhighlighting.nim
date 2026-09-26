@@ -289,7 +289,11 @@ suite "Kosmo Matter highlighting":
     let
       root = createTempDir("kosmo-moe-stream-", "")
       path = root / "stream.nim"
-    writeFile(path, "proc answer = discard\n" & "# pending\n".repeat(512))
+    writeFile(
+      path,
+      "proc answer = discard # é https://a.test\n" & "# pending\n".repeat(512) &
+        "# https://example.test/late\n",
+    )
     defer:
       removeFile(path)
       removeDir(root)
@@ -314,8 +318,20 @@ suite "Kosmo Matter highlighting":
     let location = buffer.renderedLocation("answer")
     require location.column >= 0
     let partialColor = buffer.cell(location.column, location.row).style.fg
+    let earlyUri = buffer.renderedLocation("https://a.test")
+    require earlyUri.column >= 0
+    check celinaColors.Underline in
+      buffer.cell(earlyUri.column, earlyUri.row).style.modifiers
     require editor.renderUntilMatterHighlightingReady(buffer)
     check buffer.cell(location.column, location.row).style.fg == partialColor
+    check celinaColors.Underline in
+      buffer.cell(earlyUri.column, earlyUri.row).style.modifiers
+    discard editor.handleKey("G")
+    editor.render(buffer)
+    let lateUri = buffer.renderedLocation("https://example.test/late")
+    require lateUri.column >= 0
+    check celinaColors.Underline in
+      buffer.cell(lateUri.column, lateUri.row).style.modifiers
 
   test "Moe editors use Matter highlighting by default":
     let

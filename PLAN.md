@@ -1,6 +1,6 @@
 # Merenda Work Plan
 
-Updated **2026-09-25**. Focus on reliable long-running Kosmo sessions and bounded
+Updated **2026-09-27**. Focus on reliable long-running Kosmo sessions and bounded
 memory use, then extend Tekton's authoring workflow.
 
 Architecture and API decisions live in [design](docs/design.md) and
@@ -42,6 +42,19 @@ is to measure retained memory across the whole workspace and budget its caches.
   retained rendering together. Use the fragment/snapshot benchmarks to identify
   remaining costs. Add general visible-range text layout only if profiling
   shows it is needed.
+- [ ] Make Markdown's streamed attribute updates local to their affected runs.
+  `applyCodeOverlays` scans the full run table and `setAttributeRanges` rebuilds,
+  sorts, and compacts it for every batch. The isolated 64-line-batch diagnostic
+  took about 0.20/0.79/3.15 seconds for 8k/16k/32k lines. Preserve overlap
+  precedence, quote prefixes, style reclamation, undo, and edit notifications.
+- [ ] Revisit suffix copying when streamed edits change Moe segment counts.
+  Merenda's adapter currently shifts the remainder of Moe's flat segment array
+  for each replacement; the isolated diagnostic took about 131/496 ms for
+  32k/64k rows when replacing seven segments per row with one. A chunked or
+  indexed segment representation would require reviewing Moe's consumers.
+  **Do not modify Moe or open a Moe PR for this work.** Record required Moe
+  changes here for a later decision. The URI batch optimization is implemented
+  entirely in Merenda's adapter.
 
 **Completion evidence:** cache growth is bounded under the chosen workload, with
 before/after memory and latency measurements and coverage for eviction/recovery.
@@ -71,6 +84,14 @@ or live object identities.
 
 ### NimKit test audit: unresolved validation
 
+- [ ] Investigate native window ordering on the local macOS desktop. The
+  streaming-memory follow-up's full run and isolated integration retry failed
+  `nativeDocumentOrder(windows) == before` and `waitForNativeFront` in
+  `tests/integrations/nativewindowactivation.nim`. The same activation tests
+  also failed on Merenda commit `52a84ee9` with the same dependency checkouts.
+  That commit's GitHub Actions run `36279008824` passed. Reproduce desktop
+  activation and modal/context-menu ordering before changing window code or
+  weakening the assertions; the local failure is not explained yet.
 - [ ] Rework generated layout-input cache ownership for standalone and detached
   views. Cached equations currently hold strong references to their solve root
   and other views; closing a window now releases those caches, but a laid-out

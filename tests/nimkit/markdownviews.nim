@@ -938,6 +938,21 @@ fencedToken value
     for index in 0 ..< source.runeLen:
       check spans.syntaxTokenAt(index) == expected.syntaxTokenAt(index)
 
+  test "a Matter job retains its grammar after its cache is released":
+    proc startJob(): MatterHighlightJob =
+      var cache: MatterGrammarCache
+      cache.initMatterHighlightJob("#[\né 😀\n]#\nlet value = 42", "nim")
+
+    var job = startJob()
+    var spans: seq[SyntaxTokenSpan]
+    var finished: bool
+    while not finished:
+      let batch = job.nextMatterHighlightBatch()
+      spans.add batch.spans
+      finished = batch.completed
+    check spans.syntaxTokenAt(3) == stcComment
+    check spans.syntaxTokenAt(10) == stcKeyword
+
   test "Markdown displays code before streaming colors and preserves its storage":
     let
       style = initMarkdownStyle()
