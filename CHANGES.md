@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Drain temporary macOS menu and application-frame objects promptly, preventing
+  long-running Kosmo sessions from retaining old native menus and growing by
+  tens of gigabytes.
+- Preserve unchanged Window-menu entries during keyboard shortcut checks instead
+  of repeatedly rebuilding the native menu bar.
 - Open Moe's `:config` viewer in a reusable Kosmo document tab, and show files
   opened with `:e` in native document tabs.
 - Keep file previews and initial blank buffers owned by their pane when opening
