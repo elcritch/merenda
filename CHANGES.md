@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Blink the terminal cursor only while its view and window are focused, and avoid
+  rebuilding the terminal grid when only the cursor changes.
 - Watch terminal PTY readiness on POSIX instead of polling every animation frame,
   retaining a slower maintenance tick for blinking, pending input, and child exit.
   Release watch descriptors when terminals close, change sessions, or detach.

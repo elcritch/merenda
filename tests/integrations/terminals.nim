@@ -1958,6 +1958,45 @@ suite "nimkit terminal views":
       check session.pollUntilExit()
       check "1b 5b 49 1b 5b 4f" in session.normalizedTerminalOutput()
 
+  test "terminal cursor blinks only while its view and window are focused":
+    when defined(posix):
+      let
+        session = spawnCompactTerminalSession(
+          initTerminalSpawnOptions(command = "sleep 10"), columns = 30, rows = 4
+        )
+        view = newTerminalView(session, frame = rect(0, 0, 300, 120))
+        peer = newView(frame = rect(300, 0, 60, 120))
+        root = newView(frame = rect(0, 0, 360, 120))
+        window = newWindow("Terminal cursor focus", frame = rect(0, 0, 360, 120))
+      defer:
+        view.close()
+      peer.acceptsFirstResponder = true
+      root.addSubview(view)
+      root.addSubview(peer)
+      window.setContentView(root)
+      window.setKeyWindow(true)
+      check window.makeFirstResponder(view)
+      check view.cursorVisible
+
+      discard window.animationScheduler().tick(initDuration(milliseconds = 500))
+      check not view.cursorVisible
+      window.setKeyWindow(false)
+      check view.cursorVisible
+      discard window.animationScheduler().tick(initDuration(seconds = 1))
+      check view.cursorVisible
+
+      window.setKeyWindow(true)
+      discard window.animationScheduler().tick(initDuration(milliseconds = 500))
+      check not view.cursorVisible
+      check window.makeFirstResponder(peer)
+      check view.cursorVisible
+      discard window.animationScheduler().tick(initDuration(seconds = 1))
+      check view.cursorVisible
+
+      check window.makeFirstResponder(view)
+      discard window.animationScheduler().tick(initDuration(milliseconds = 500))
+      check not view.cursorVisible
+
   test "modifier-click activates OSC hyperlinks through mouse dispatch":
     let
       session = newCompactTerminalSession(columns = 24, rows = 2)
