@@ -2,6 +2,7 @@
 import std/[algorithm, monotimes, os, strformat, strutils, times, unicode, unittest]
 
 import figdraw
+from threading/smartptrs import `[]`
 
 import pkg/pixie
 
@@ -956,11 +957,16 @@ fencedToken value
     require view.isMarkdownParsing()
     check spy.completions == 0
     let storage = view.textStorage()
+    let manager = view.textView().layoutManager()
+    manager.usesBackgroundLayout = false
+    let layoutSource = manager.glyphArrangementResource()[].sourceRunes
     check storage.attributesFor("let tail").foregroundColor == style.codeColor
     view.textView().selectedRange = initTextRange(0, 7)
     require view.waitForMarkdownParsing(60_000)
     check spy.completions == 1
     check view.textStorage() == storage
+    check manager.hasValidLayout()
+    check manager.glyphArrangementResource()[].sourceRunes.sameUtf8Runes(layoutSource)
     check view.textView().selectedRange == initTextRange(0, 7)
     check storage.attributesFor("let tail").foregroundColor ==
       style.syntaxTokenColors[stcKeyword]

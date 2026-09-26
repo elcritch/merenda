@@ -648,6 +648,49 @@ suite "NimKit render fragments":
     check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
     check scene.materialize().canonicalNodes() == root.buildRenders().canonicalNodes()
 
+  test "color edits replace only affected line renders and share glyph geometry":
+    let
+      root = newView(frame = rect(0, 0, 260, 140))
+      textView = newTextView("αβγ\nsecond\nthird", frame = rect(0, 0, 240, 120))
+    root.addSubview(textView)
+    let
+      scene = root.buildRenderScene()
+      original = scene.materialize()
+      source = textView.layoutManager().glyphArrangementResource()[].sourceRunes
+      firstGeneration = scene.viewRenderSlotChangeGeneration(
+        textView.renderViewId(), textLineRenderSlotId(0)
+      )
+      secondGeneration = scene.viewRenderSlotChangeGeneration(
+        textView.renderViewId(), textLineRenderSlotId(1)
+      )
+    var attributes = textView.textStorage().attributesAt(0)
+    let originalColor = attributes.foregroundColor
+    attributes.foregroundColor = color(0.9, 0.1, 0.2)
+    textView.textStorage().setAttributes(initTextRange(0, 1), attributes)
+    check textView.layoutManager().hasValidLayout()
+    check textView.needsDisplay
+    discard root.buildRenderScene()
+    check scene.viewRenderSlotChangeGeneration(
+      textView.renderViewId(), textLineRenderSlotId(0)
+    ) > firstGeneration
+    check scene.viewRenderSlotChangeGeneration(
+      textView.renderViewId(), textLineRenderSlotId(1)
+    ) == secondGeneration
+    var foundColor = false
+    for node in scene.materialize()[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        check node.textLayout.shared[].sourceRunes.sameUtf8Runes(source)
+        check node.textLayout.arrangedGlyphs.len == 0
+        if node.textLayout.sourceRuneRange(0).a == 0:
+          require node.textLayout.spanColors.len >= 2
+          check node.textLayout.spanColors[0].color == attributes.foregroundColor.rgba
+          check node.textLayout.spanColors[1].color == originalColor.rgba
+          foundColor = true
+    check foundColor
+    for node in original[DefaultDrawLevel].nodes:
+      if node.kind == nkText:
+        check node.textLayout.spanColors[0].color == originalColor.rgba
+
   test "dirty text updates retain unaffected visual-line fragments":
     let
       root = newView(frame = rect(0, 0, 260, 140))

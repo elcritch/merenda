@@ -6,6 +6,8 @@
   multiline state and rejecting results from superseded edits.
 - Display Markdown structure before code highlighting completes, then patch
   code colors in place while preserving selection and embedded code views.
+- Reuse cached text layout for color-only edits and refresh visible glyph colors
+  without reshaping text or replacing shared glyph geometry.
 
 - Blink the terminal cursor only while its view and window are focused, and avoid
   rebuilding the terminal grid when only the cursor changes.

@@ -2,7 +2,7 @@ import std/[hashes, math, options, strutils, unicode]
 
 from figdraw import
   GlyphArrangement, glyphArrangementView, lineGlyphRanges, shareGlyphArrangement, len,
-  `[]`
+  `[]`, sourceRuneRange
 import threading/smartptrs
 
 import sigils/core
@@ -2601,7 +2601,9 @@ proc nonzeroRevision(value: Hash): uint64 =
   if result == 0:
     result = 1
 
-proc glyphLineRevision(layout: GlyphArrangement, glyphRange: Slice[int]): uint64 =
+proc glyphLineRevision(
+    layout: GlyphArrangement, glyphRange: Slice[int], storage: TextStorage
+): uint64 =
   var value: Hash
   value = value !& hash(glyphRange.b - glyphRange.a + 1)
   if layout.arrangedGlyphs.len > 0:
@@ -2636,15 +2638,27 @@ proc glyphLineRevision(layout: GlyphArrangement, glyphRange: Slice[int]): uint64
       value = value !& hash(font.descentAdj)
       value = value !& hash(font.underline)
       value = value !& hash(font.strikethrough)
-      if spanIndex < layout.spanColors.len:
+      if storage.isNil and spanIndex < layout.spanColors.len:
         value = value !& hash(repr(layout.spanColors[spanIndex]))
+  if not storage.isNil:
+    var run: TextAttributeRun
+    for glyphIndex in glyphRange:
+      let sourceIndex = layout.sourceRuneRange(glyphIndex).a
+      if sourceIndex < int(run.range.location) or sourceIndex >= run.range.maxIndex:
+        run = storage.attributeRunAt(sourceIndex)
+      let tint = run.attributes.foregroundColor
+      value = value !& hash((tint.r, tint.g, tint.b, tint.a))
   nonzeroRevision(!$value)
 
 proc glyphLineArrangement(
-    owner: ConstPtr[GlyphArrangement], glyphRange: Slice[int]
+    owner: ConstPtr[GlyphArrangement],
+    glyphRange: Slice[int],
+    storage: TextStorage,
+    revision: uint64,
 ): GlyphArrangement =
   result = owner.glyphArrangementView(glyphRange)
-  result.contentHash = cast[Hash](owner[].glyphLineRevision(glyphRange))
+  result.applyTextColors(storage, sourceOffset = glyphRange.a)
+  result.contentHash = cast[Hash](revision)
 
 func verticallyBuffered(source: Rect, screens: float32): Rect =
   let padding = source.size.height * max(screens, 0.0'f32)
@@ -2759,9 +2773,11 @@ proc drawTextViewText*(textView: TextView, context: DrawContext) =
     for lineIndex, glyphRange in lineRanges:
       let
         slot = textLineRenderSlotId(lineIndex)
-        revision = layout.glyphLineRevision(glyphRange)
+        revision = layout.glyphLineRevision(glyphRange, displayStorage)
       if context.beginRenderSlot(slot, revision):
-        discard context.addText(textRect, owner.glyphLineArrangement(glyphRange))
+        discard context.addText(
+          textRect, owner.glyphLineArrangement(glyphRange, displayStorage, revision)
+        )
 
 func firstFragmentEndingAfter(
     fragments: openArray[TextLineFragment], minimumY: float32
@@ -2815,9 +2831,11 @@ proc drawTextViewTextInViewport*(
         let
           glyphRange = start .. stop - 1
           slot = textLineRenderSlotId(fragment.lineIndex.toInt)
-          revision = layout.glyphLineRevision(glyphRange)
+          revision = layout.glyphLineRevision(glyphRange, displayStorage)
         if context.beginRenderSlot(slot, revision):
-          discard context.addText(textRect, owner.glyphLineArrangement(glyphRange))
+          discard context.addText(
+            textRect, owner.glyphLineArrangement(glyphRange, displayStorage, revision)
+          )
     inc index
 
 proc drawTextViewOverlay*(textView: TextView, context: DrawContext) =
@@ -3248,6 +3266,14 @@ protocol DefaultTextViewLayoutClient of TextLayoutClientProtocol:
     textView.xAlignment
 
 protocol DefaultTextViewLayoutEventSlots of TextLayoutEvents:
+  proc textLayoutDidInvalidate(
+      textView: TextView, invalidations: seq[TextLayoutInvalidation]
+  ) {.slot.} =
+    for invalidation in invalidations:
+      if invalidation.kind == tlikDisplay:
+        textView.needsDisplay = true
+        break
+
   proc layoutDidInvalidate(textView: TextView, ranges: seq[TextRange]) {.slot.} =
     discard ranges
     textView.needsDisplay = true

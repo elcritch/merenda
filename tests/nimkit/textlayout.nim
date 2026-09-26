@@ -2,7 +2,8 @@ import std/[hashes, monotimes, options, os, sets, strutils, times, unicode, unit
 
 import sigils/core
 import sigils/threads
-from figdraw import len, `[]`, utf8RunesFromText
+from figdraw import len, `[]`, utf8RunesFromText, sameUtf8Runes
+from threading/smartptrs import `[]`
 import merenda/nimkit/foundation/mainthreadwork
 
 import merenda/nimkit
@@ -634,6 +635,63 @@ suite "nimkit text layout":
     manager.updateLayout()
     check manager.hasValidLayout()
     check spy.completions == 2
+
+  test "color edits preserve cached geometry and coalesce display invalidations":
+    let
+      storage = newTextStorage("αβγ\nsecond line")
+      manager =
+        newTextLayoutManager(storage, initTextContainer(initSize(180, 80), insets(0)))
+      spy = newTextLayoutSignalSpy()
+    spy.observeProtocol(manager, TextLayoutEvents)
+    let
+      before = manager.layoutSnapshot()
+      source = manager.glyphArrangementResource()[].sourceRunes
+    manager.usesBackgroundLayout = true
+    var attributes = storage.attributesAt(0)
+    for index in 0 ..< 128:
+      attributes.foregroundColor = color(index.float32 / 128, 0.2, 0.3)
+      storage.setAttributes(initTextRange(0, 2), attributes)
+      check manager.hasValidLayout()
+    manager.updateLayout()
+    check not manager.isBackgroundLayoutPending()
+    check spy.completions == 1
+    check spy.invalidations == 0
+    check spy.lastInvalidations.len == 1
+    check spy.lastInvalidations[0].kind == tlikDisplay
+    check manager.glyphArrangementResource()[].sourceRunes.sameUtf8Runes(source)
+    check manager.layoutSnapshot().lineFragments == before.lineFragments
+
+    attributes.fontSize += 4
+    storage.setAttributes(initTextRange(0, 2), attributes)
+    check not manager.hasValidLayout()
+    manager.updateLayout()
+    check spy.completions == 2
+    attributes.paragraphStyle.lineSpacing += 2
+    storage.setAttributes(initTextRange(0, 2), attributes)
+    check not manager.hasValidLayout()
+
+  test "color edits keep a pending background layout and use the latest fills":
+    let
+      storage = newTextStorage("hello κόσμος\n".repeat(100))
+      manager =
+        newTextLayoutManager(storage, initTextContainer(initSize(180, 100), insets(0)))
+    manager.usesBackgroundLayout = true
+    discard manager.layoutSnapshot()
+    manager.invalidateLayout()
+    manager.requestBackgroundLayout(allowUncachedLayout = true)
+    discard drainMainThreadWork()
+    discard drainMainThreadWork()
+    require manager.isBackgroundLayoutPending()
+    var attributes = storage.attributesAt(0)
+    attributes.foregroundColor = color(0.9, 0.1, 0.2)
+    storage.setAttributes(initTextRange(0, 5), attributes)
+    check manager.isBackgroundLayoutPending()
+    require manager.waitForBackgroundSnapshot()
+    check manager.hasValidLayout()
+    check manager.snapshotBuildThreadId() != getThreadId()
+    let arrangement = manager.glyphArrangement()
+    require arrangement.spanColors.len > 0
+    check arrangement.spanColors[0].color == attributes.foregroundColor.rgba
 
   test "batched storage edits invalidate multiple layout managers once":
     let

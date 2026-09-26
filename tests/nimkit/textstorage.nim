@@ -207,6 +207,70 @@ suite "nimkit text storage":
       check run.attributes == accent
     check count == 1
 
+  test "attribute run lookups preserve Unicode ranges and default gaps":
+    let
+      accent = defaultTextAttributes(color(0.2, 0.6, 0.4), 14.0)
+      storage = newTextStorage(
+        "αβγδε",
+        @[TextAttributeRun(range: initTextRange(1, 2), attributes: accent)],
+      )
+    check storage.attributeRunAt(-1).range == initTextRange(0, 1)
+    check storage.attributeRunAt(0).attributes == defaultTextAttributes()
+    check storage.attributeRunAt(1).range == initTextRange(1, 2)
+    check storage.attributeRunAt(2).attributes == accent
+    check storage.attributeRunAt(3).range == initTextRange(3, 2)
+    check storage.attributeRunAt(100).attributes == defaultTextAttributes()
+
+  test "effective color overlays report display edits and metric changes reflow":
+    let storage = newTextStorage("abcdef")
+    var red = storage.attributesAt(0)
+    red.foregroundColor = color(0.9, 0.1, 0.2)
+    var large = red
+    large.fontSize += 4
+    # The larger base style is completely overridden, so it cannot affect layout.
+    storage.setAttributeRanges(
+      initTextRange(0, 3),
+      large,
+      [TextAttributeRun(range: initTextRange(0, 3), attributes: red)],
+    )
+    check storage.currentEdit.displayOnly
+    check storage.currentEdit.kinds == {tseAttributes}
+
+    storage.beginEditing()
+    storage.setAttributes(initTextRange(3, 1), red)
+    storage.setAttributes(initTextRange(4, 1), red)
+    storage.endEditing()
+    check storage.currentEdit.displayOnly
+
+    storage.beginEditing()
+    storage.setAttributes(initTextRange(0, 1), large)
+    storage.setAttributes(initTextRange(5, 1), red)
+    storage.endEditing()
+    check not storage.currentEdit.displayOnly
+
+    storage.beginEditing()
+    storage.setAttributes(initTextRange(1, 1), red)
+    storage.replace(initTextRange(5, 1), "z")
+    storage.endEditing()
+    check not storage.currentEdit.displayOnly
+
+  test "attribute run lookups retain precedence for overlapping precomputed runs":
+    let
+      red = defaultTextAttributes(color(0.9, 0.1, 0.2))
+      blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
+      storage = newTextStorage(
+        "abcdef",
+        @[
+          TextAttributeRun(range: initTextRange(0, 4), attributes: red),
+          TextAttributeRun(range: initTextRange(1, 1), attributes: blue),
+          TextAttributeRun(range: initTextRange(3, 3), attributes: blue),
+        ],
+      )
+    check storage.attributesAt(3) == red
+    check storage.attributeRunAt(4).range == initTextRange(4, 2)
+    check storage.attributeRunAt(4).attributes == blue
+    check storage.copyTextStorage().attributesAt(3) == red
+
   test "rich text attributes preserve TextKit-style value fields":
     var attributes = defaultTextAttributes(color(0.1, 0.2, 0.3), 14.0)
     attributes.paragraphStyle = initTextParagraphStyle(
@@ -332,6 +396,7 @@ suite "nimkit text storage":
 
     check delegate.shouldFixCount == 1
     check delegate.fallbackCount == 3
+    check not storage.currentEdit.displayOnly
     check storage.attributesAt(5).fontSize == 17.0
     check storage.paragraphRangeForRange(initTextRange(5, 1)) == initTextRange(4, 4)
 

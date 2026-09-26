@@ -241,6 +241,8 @@ protocol TextLayoutStorageEditingSlots of TextStorageEditingEvents:
   ) {.slot.} =
     if tseCharacters in edit.kinds:
       manager.defaultInvalidateCharacters(edit.range)
+    elif edit.displayOnly:
+      manager.defaultInvalidateDisplay(edit.range)
     else:
       manager.defaultInvalidateLayout(edit.range)
 
@@ -971,7 +973,15 @@ proc defaultInvalidateGlyphs(manager: TextLayoutManager, range: GlyphRange) =
   emit manager.layoutDidInvalidate(manager.xInvalidatedRanges)
 
 proc defaultInvalidateDisplay(manager: TextLayoutManager, range: TextRange) =
-  manager.recordInvalidation(invalidationForText(tlikDisplay, range))
+  if manager.xInvalidations.len > 0 and manager.xInvalidations[^1].kind == tlikDisplay:
+    let
+      previous = manager.xInvalidations[^1].textRange
+      first = min(int(previous.location), int(range.location))
+      stop = max(previous.maxIndex, range.maxIndex)
+    manager.xInvalidations[^1].textRange = initTextRange(first, stop - first)
+    emit manager.textLayoutDidInvalidate(manager.xInvalidations)
+  else:
+    manager.recordInvalidation(invalidationForText(tlikDisplay, range))
 
 proc defaultInvalidateContainer(manager: TextLayoutManager, index: TextContainerIndex) =
   let containers = manager.effectiveContainers()
@@ -1220,8 +1230,14 @@ proc glyphArrangement*(manager: TextLayoutManager): GlyphArrangement =
     result.shared = manager.xSharedLayout
   else:
     result = manager.xSharedLayout.glyphArrangementView(0 .. glyphCount - 1)
+    result.applyTextColors(manager.xTextStorage)
+    if not manager.xTextStorage.isNil:
+      result.contentHash =
+        hash((manager.xLayout.contentHash, manager.xTextStorage.revision))
 
 proc glyphArrangementResource*(manager: TextLayoutManager): ConstPtr[GlyphArrangement] =
+  ## Borrow immutable glyph geometry. Renderers apply current storage colors to
+  ## their range views, since display-only edits preserve this shared resource.
   manager.updateLayout()
   manager.xSharedLayout
 

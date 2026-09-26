@@ -577,6 +577,41 @@ proc fontStyleForAttributes(attributes: TextAttributes, style: TextStyle): FontS
   font.strikethrough = attributes.hasStrikethrough
   fs(font, fill(attributes.foregroundColor.rgba))
 
+proc applyTextColors*(
+    layout: var GlyphArrangement, storage: TextStorage, sourceOffset = 0
+) =
+  ## Refresh foreground fills without shaping text or copying glyph geometry.
+  ## Shared layouts stay immutable: only this arrangement's span metadata changes.
+  ## `sourceOffset` locates legacy glyph slices without source-range records.
+  if storage.isNil or storage.len == 0:
+    return
+  var
+    spans: seq[Slice[int]]
+    fonts: seq[GlyphFont]
+    colors: seq[Fill]
+    run: TextAttributeRun
+    previousColor: nimkitTypes.Color
+  for spanIndex, span in layout.spans:
+    for glyphIndex in span:
+      let sourceIndex =
+        if not layout.isGlyphView() and layout.arrangedGlyphs.len == 0:
+          sourceOffset + glyphIndex
+        else:
+          layout.sourceRuneRange(glyphIndex).a
+      if sourceIndex < int(run.range.location) or sourceIndex >= run.range.maxIndex:
+        run = storage.attributeRunAt(sourceIndex)
+      let tint = run.attributes.foregroundColor
+      if glyphIndex > span.a and tint == previousColor:
+        spans[^1].b = glyphIndex
+      else:
+        spans.add glyphIndex .. glyphIndex
+        fonts.add layout.fonts[spanIndex]
+        colors.add fill(tint.rgba)
+      previousColor = tint
+  layout.spans = move spans
+  layout.fonts = move fonts
+  layout.spanColors = move colors
+
 proc typesetTextSpans(
     rect: bumpy.Rect,
     source: TextSnapshot,

@@ -465,7 +465,7 @@ attached to Kosmo; it does not need to detach itself.
 
 Syntax colors arrive progressively as background workers finish small batches.
 Markdown previews display their content before fenced-code coloring finishes;
-selection and code-block scroll positions survive those color updates.
+selection, code-block scroll positions, and text layout survive those color updates.
 
 To add language highlighting, open **Kosmo Settings → TextMate Grammars** and
 search the built-in language grammars in the open-source `microsoft/vscode`
