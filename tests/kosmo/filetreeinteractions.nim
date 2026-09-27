@@ -1,7 +1,6 @@
-import std/[monotimes, os, strutils, tempfiles, times, unicode, unittest]
+import std/[os, strutils, tempfiles, unicode, unittest]
 
 import figdraw
-import sigils/[core, threads]
 
 import merenda/nimkit
 import merenda/kosmo/[kosmo, workspacefiles]
@@ -181,7 +180,7 @@ suite "Kosmo file tree interactions":
     check tree.renderedTextStartingWith(visibleName) == visibleName
     check tree.renderedTextStartingWith("00-row").len == 0
 
-  test "filesystem refresh retains the wheel-scrolled file list position":
+  test "filesystem refresh retains the fractional wheel-scrolled file list position":
     let root = createTempDir("merenda-kosmo-tree-refresh-scroll-", "")
     for index in 0 ..< 24:
       writeFile(root / align($index, 2, '0') & "-row.txt", "row " & $index)
@@ -205,19 +204,52 @@ suite "Kosmo file tree interactions":
     )
     check tree.selectedItemIdentifier() == selectedPath
     require window.scrollWheelAt(
-      tree.pointToWindow(initPoint(40.0'f32, 40.0'f32)), deltaY = -8.0'f32
+      tree.pointToWindow(initPoint(40.0'f32, 40.0'f32)), deltaY = -8.5'f32
     )
     let scrolledOffset = tree.scrollView().contentOffset()
-    require scrolledOffset.y > 0.0'f32
+    require scrolledOffset.y == 8.5'f32 * tree.rowHeight()
 
     writeFile(createdPath, "created")
-    tree.workspaceFiles.refresh()
-    let deadline = getMonoTime() + initDuration(seconds = 60)
-    while tree.rowForItem(createdPath) < 0 and getMonoTime() < deadline:
-      discard getCurrentSigilThread().pollAll(NonBlocking)
-      sleep(10)
+    tree.refresh()
+    check tree.scrollView().contentOffset() == scrolledOffset
+    require tree.workspaceFiles.waitForFiles(timeoutMilliseconds = 60_000)
     require tree.rowForItem(createdPath) >= 0
     check tree.scrollView().contentOffset() == scrolledOffset
+
+  test "Git refresh leaves a partially visible selected file in place":
+    let root = createTempDir("merenda-kosmo-tree-git-scroll-", "")
+    for index in 0 ..< 24:
+      writeFile(root / align($index, 2, '0') & "-row.txt", "row " & $index)
+    let
+      window = newWindow("Kosmo File Tree Git Refresh", frame = rect(0, 0, 300, 98))
+      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 98))
+      selectedPath = root / "07-row.txt"
+    defer:
+      window.close()
+      tree.workspaceFiles.close()
+      removeDir(root)
+    window.setContentView(tree)
+    require tree.workspaceFiles.waitForFiles()
+    tree.selectedItemIdentifier = selectedPath
+    let
+      selectedRow = tree.rowForItem(selectedPath)
+      scrolledOffset =
+        initPoint(0.0'f32, (selectedRow.float32 + 0.5'f32) * tree.rowHeight())
+    tree.scrollView().contentOffset = scrolledOffset
+    require tree.selectedItemIdentifier() == selectedPath
+    require tree.firstVisibleIndex() == selectedRow
+
+    for state in [gfsModified, gfsAdded, gfsModified]:
+      tree.applyGitStatus(
+        GitStatusSnapshot(
+          rootPath: absolutePath(root),
+          isRepository: true,
+          entries: @[GitStatusEntry(path: selectedPath, state: state)],
+        )
+      )
+      discard buildRenders(tree)
+      check tree.selectedItemIdentifier() == selectedPath
+      check tree.scrollView().contentOffset() == scrolledOffset
 
   test "display scopes retain folders leading to visible and changed files":
     let

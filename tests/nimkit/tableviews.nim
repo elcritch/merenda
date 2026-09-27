@@ -1874,6 +1874,76 @@ suite "NimKit TableView":
     let texts = tableView.renderedTexts()
     check texts.contains("name:9")
 
+  test "table reload preserves fractional offsets without revealing the selection":
+    let
+      tableView = newTableView(frame = rect(0, 0, 160, 105))
+      scrollView = tableView.scrollView()
+      offset = initPoint(17.25'f32, 84.5'f32)
+
+    tableView.showsHeader = false
+    tableView.rowHeight = 24.0'f32
+    tableView.rowCount = 20
+    tableView.addColumn(newTableColumn("name", "Name", width = 320.0))
+    discard buildRenders(tableView)
+
+    for selected in [-1, 0, 3, 6, 19]:
+      tableView.selectedIndex = selected
+      scrollView.contentOffset = offset
+      require scrollView.contentOffset() == offset
+      for _ in 0 ..< 3:
+        tableView.reloadData()
+        discard buildRenders(tableView)
+        check tableView.selectedIndex() == selected
+        check scrollView.contentOffset() == offset
+
+    scrollView.contentOffset = scrollView.maximumContentOffset()
+    let bottomOffset = scrollView.contentOffset()
+    tableView.reloadData()
+    check scrollView.contentOffset() == bottomOffset
+
+  test "table reload retains the offset within a variable height row":
+    let
+      tableView = newTableView(frame = rect(0, 0, 180, 67))
+      delegate = newTableDelegateSpy()
+      offset = initPoint(0.0'f32, 63.5'f32)
+
+    delegate.rowHeights = @[20.0'f32, 30.0'f32, 40.0'f32, 50.0'f32, 60.0'f32]
+    tableView.showsHeader = false
+    tableView.rowCount = delegate.rowHeights.len
+    tableView.addColumn(newTableColumn("name", "Name", width = 120.0))
+    tableView.delegate = delegate
+    discard buildRenders(tableView)
+    tableView.scrollView().contentOffset = offset
+    require tableView.firstVisibleIndex() == 2
+
+    tableView.reloadData()
+    check tableView.scrollView().contentOffset() == offset
+    delegate.rowHeights[0] += 11.0'f32
+    tableView.reloadData()
+    check tableView.firstVisibleIndex() == 2
+    check tableView.scrollView().contentOffset().y == offset.y + 11.0'f32
+
+  test "table reload clamps the preserved offset when rows disappear":
+    let
+      tableView = newTableView(frame = rect(0, 0, 180, 105))
+      source = newTableDataSourceSpy(20)
+      scrollView = tableView.scrollView()
+
+    tableView.showsHeader = false
+    tableView.rowHeight = 24.0'f32
+    tableView.addColumn(newTableColumn("name", "Name", width = 120.0))
+    tableView.dataSource = source
+    discard buildRenders(tableView)
+    scrollView.contentOffset = scrollView.maximumContentOffset()
+    require scrollView.contentOffset().y > 0.0'f32
+
+    source.rows = 6
+    tableView.reloadData()
+    check scrollView.contentOffset() == scrollView.maximumContentOffset()
+    source.rows = 0
+    tableView.reloadData()
+    check scrollView.contentOffset().y == 0.0'f32
+
   test "table row updates fill the viewport immediately":
     let
       tableView = newTableView(frame = rect(0, 0, 260, 260))
