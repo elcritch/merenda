@@ -251,6 +251,46 @@ suite "Kosmo file tree interactions":
       check tree.selectedItemIdentifier() == selectedPath
       check tree.scrollView().contentOffset() == scrolledOffset
 
+  test "filesystem refresh anchors visible files when earlier rows change":
+    let root = createTempDir("merenda-kosmo-tree-refresh-anchor-", "")
+    for index in 0 ..< 24:
+      writeFile(root / align($index, 2, '0') & "-row.txt", "row " & $index)
+    let
+      tree = newKosmoFileTree(root, frame = rect(0, 0, 300, 98))
+      selectedPath = root / "07-row.txt"
+      createdPath = root / "00-created.txt"
+    defer:
+      tree.workspaceFiles.close()
+      removeDir(root)
+    require tree.workspaceFiles.waitForFiles(timeoutMilliseconds = 60_000)
+    tree.selectedItemIdentifier = selectedPath
+    discard buildRenders(tree)
+    let offset = initPoint(
+      0.0'f32, (tree.rowForItem(selectedPath).float32 + 0.5'f32) * tree.rowHeight()
+    )
+    tree.scrollView().contentOffset = offset
+    let nextRowY = tree.rowItemRect(tree.rowForItem(selectedPath) + 1).origin.y
+    require nextRowY > 0.0'f32
+
+    writeFile(createdPath, "created")
+    tree.refresh()
+    check tree.selectedItemIdentifier() == selectedPath
+    check tree.scrollView().contentOffset().y == offset.y + tree.rowHeight()
+    check tree.rowItemRect(tree.rowForItem(selectedPath) + 1).origin.y == nextRowY
+    require tree.workspaceFiles.waitForFiles(timeoutMilliseconds = 60_000)
+    discard buildRenders(tree)
+    check tree.selectedItemIdentifier() == selectedPath
+    check tree.scrollView().contentOffset().y == offset.y + tree.rowHeight()
+    check tree.rowItemRect(tree.rowForItem(selectedPath) + 1).origin.y == nextRowY
+
+    removeFile(createdPath)
+    tree.refresh()
+    require tree.workspaceFiles.waitForFiles(timeoutMilliseconds = 60_000)
+    discard buildRenders(tree)
+    check tree.selectedItemIdentifier() == selectedPath
+    check tree.scrollView().contentOffset() == offset
+    check tree.rowItemRect(tree.rowForItem(selectedPath) + 1).origin.y == nextRowY
+
   test "display scopes retain folders leading to visible and changed files":
     let
       root = createTempDir("merenda-kosmo-tree-scope-", "")

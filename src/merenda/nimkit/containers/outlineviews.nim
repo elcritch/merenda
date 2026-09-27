@@ -351,9 +351,9 @@ proc visibleOutlineRows*(outlineView: OutlineView): lent seq[OutlineRow] =
   outlineView.xOutlineRowsCache
 
 proc reloadOutlineData*(outlineView: OutlineView) =
-  ## Invalidates cached outline rows before reloading the table contents.
-  outlineView.xOutlineRowsCacheValid = false
-  TableView(outlineView).reloadData()
+  ## Retains the old row identities until the table captures its reload state.
+  TableView(outlineView).reloadData do():
+    outlineView.xOutlineRowsCacheValid = false
 
 proc rowCount*(outlineView: OutlineView): int =
   outlineView.visibleOutlineRows().len

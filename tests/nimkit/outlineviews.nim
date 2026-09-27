@@ -493,6 +493,57 @@ suite "NimKit OutlineView":
     check outlineView.rowCount == 3
     check source.numberOfChildrenCalls > callsAfterLoad[0]
 
+  test "outline reload anchors fractional scrolling and selection to existing items":
+    var items: seq[OutlineItem]
+    for index in 0 ..< 30:
+      items.add initOutlineItem($index, "Item " & $index)
+    let
+      outlineView = newOutlineView(frame = rect(0, 0, 160, 100))
+      source = newOutlineSourceSpy(items)
+      offset = initPoint(17.25'f32, 204.5'f32)
+    outlineView.showsHeader = false
+    outlineView.rowHeight = 24.0'f32
+    outlineView.outlineColumn().width = 320.0'f32
+    outlineView.outlineDataSource = source
+    outlineView.selectedItemIdentifier = "15"
+    discard buildRenders(outlineView)
+    outlineView.scrollView().contentOffset = offset
+    require outlineView.scrollView().contentOffset() == offset
+    let
+      anchor = outlineView.itemAtRow(outlineView.firstVisibleIndex()).identifier
+      nextRowY = outlineView.rowItemRect(outlineView.rowForItem(anchor) + 1).origin.y
+    require nextRowY > 0.0'f32
+
+    source.items.insert(initOutlineItem("inserted", "Inserted"), 0)
+    outlineView.reloadOutlineData()
+    discard buildRenders(outlineView)
+    check outlineView.selectedItemIdentifier() == "15"
+    check outlineView.itemAtRow(outlineView.firstVisibleIndex()).identifier == anchor
+    check outlineView.rowItemRect(outlineView.rowForItem(anchor) + 1).origin.y ==
+      nextRowY
+    check outlineView.scrollView().contentOffset() ==
+      initPoint(offset.x, offset.y + outlineView.rowHeight())
+
+    source.items.delete(0)
+    outlineView.reloadOutlineData()
+    discard buildRenders(outlineView)
+    check outlineView.selectedItemIdentifier() == "15"
+    check outlineView.itemAtRow(outlineView.firstVisibleIndex()).identifier == anchor
+    check outlineView.rowItemRect(outlineView.rowForItem(anchor) + 1).origin.y ==
+      nextRowY
+    check outlineView.scrollView().contentOffset() == offset
+
+    source.items.delete(outlineView.rowForItem(anchor))
+    outlineView.reloadOutlineData()
+    check outlineView.selectedItemIdentifier() == "15"
+    check outlineView.itemAtRow(outlineView.firstVisibleIndex()).identifier == "9"
+    check outlineView.scrollView().contentOffset() == offset
+
+    source.items.setLen(0)
+    outlineView.reloadOutlineData()
+    check outlineView.selectedItemIdentifier() == ""
+    check outlineView.scrollView().contentOffset().y == 0.0'f32
+
   test "outline drawn cell field editor aligns with indented row text":
     let
       window = newWindow("Outline field editor", frame = rect(0, 0, 380, 160))

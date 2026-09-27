@@ -10,6 +10,10 @@ Scans run on NimKit's shared worker pool. Root changes and filesystem notificati
 invalidate older generations, and overlapping requests coalesce into one follow-up
 scan. A completed snapshot updates both views without resetting browser expansion
 or quick-open selection when the selected file still exists.
+Browser refreshes preserve the first visible file and its fractional row offset,
+including when files are inserted or removed above it, and keep selections tied
+to file paths. If the anchor file disappears, the browser retains the previous
+row position and clamps it to the remaining content.
 
 ## File and Git notifications
 

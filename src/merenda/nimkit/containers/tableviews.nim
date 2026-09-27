@@ -355,7 +355,7 @@ proc visibleContentRows(contentView: TableContentView): tuple[first, last: int]
 proc invalidateTableRows(tableView: TableView)
 proc rowHeight*(tableView: TableView): float32
 proc rowHeightForRow*(tableView: TableView, row: int): float32
-proc reloadData*(tableView: TableView)
+proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil)
 proc rowEnabled*(tableView: TableView, row: int): bool
 proc rowSelectable*(tableView: TableView, row: int): bool
 proc tableRowIdentifier*(tableView: TableView, row: int): string
@@ -3238,7 +3238,10 @@ proc clearPointerHighlights*(tableView: TableView) =
   tableView.clearPointerRowHighlight()
   tableView.clearPointerColumnHighlight()
 
-proc reloadData*(tableView: TableView) =
+proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil) =
+  ## Reloads rows while preserving selection identities and the viewport anchor.
+  ## `updateRows` runs once after the old state is captured, before fresh rows
+  ## are queried. Use it to replace source rows or invalidate a cached row list.
   tableView.xContentWidthMeasurementValid = false
   tableView.invalidateColumnWidthMeasurements()
   let
@@ -3254,6 +3257,8 @@ proc reloadData*(tableView: TableView) =
         tableView.tableRowIdentifier(tableView.xEditing.row)
       else:
         ""
+  if not updateRows.isNil:
+    updateRows()
   tableView.clearTableCellSlots()
   tableView.invalidateRowHeightCache()
   tableView.setNeedsLayout()

@@ -6,6 +6,7 @@
   selection and layout until collapse. Large diffs still require an explicit open.
 - Preserve the file browser's pixel scroll position across filesystem and Git
   refreshes, including partially visible selected rows and the end of the list.
+  Keep the same files and selection in place when rows above the viewport change.
 - Stream Matter syntax colors into Moe in bounded row batches, retaining
   multiline state and rejecting results from superseded edits.
 - Display Markdown structure before code highlighting completes, then patch
