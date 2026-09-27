@@ -659,6 +659,7 @@ suite "NimKit render fragments":
       retainedScenes.apply(replica, update)
       check replica.materialize().canonicalNodes() ==
         scene.materialize().canonicalNodes()
+      root.releaseGeneratedLayoutInputs()
 
   test "cumulative scroll updates preserve changed placement order":
     let
@@ -711,6 +712,7 @@ suite "NimKit render fragments":
     check scroll.estimatedTransferBytes() == sizeof(RenderViewFrame)
     retainedScenes.apply(replica, scroll)
     check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
+    root.releaseGeneratedLayoutInputs()
 
   test "scroll updates explicit layer transforms on renderer replicas":
     let
@@ -737,6 +739,7 @@ suite "NimKit render fragments":
       retainedScenes.apply(replica, update)
       check replica.materialize().canonicalNodes() ==
         scene.materialize().canonicalNodes()
+    root.releaseGeneratedLayoutInputs()
 
   test "partial captures keep retained explicit layers aligned while scrolling":
     let
@@ -767,6 +770,7 @@ suite "NimKit render fragments":
     check replica.materialize().canonicalNodes() == retained
     root.invalidateRenderCache()
     check root.buildRenderScene().materialize().canonicalNodes() == retained
+    root.releaseGeneratedLayoutInputs()
 
   test "bounds changes recapture only drawing slots that read the bounds":
     for namedSlots in [false, true]:
@@ -794,6 +798,7 @@ suite "NimKit render fragments":
       check replica.materialize().canonicalNodes() == retained
       root.invalidateRenderCache()
       check root.buildRenderScene().materialize().canonicalNodes() == retained
+      root.releaseGeneratedLayoutInputs()
 
   test "named view slots update independently around child content":
     let
@@ -1060,6 +1065,7 @@ suite "NimKit render fragments":
       check scene.renderedText() == freshViewport.buildRenderScene().renderedText()
       if column > 0:
         check scene.renderedText() != original
+      freshViewport.releaseGeneratedLayoutInputs()
 
     viewport.setBoundsOriginFromLayout(
       initPoint(document.padding + 20.25 * cellWidth, 0)
@@ -1080,6 +1086,7 @@ suite "NimKit render fragments":
     check scene.renderedText().len > beforeResize.len
     check scene.viewRenderSlotChangeGeneration(document.renderViewId(), rowSlot) >
       beforeFraction
+    root.releaseGeneratedLayoutInputs()
 
   test "visible-rect drawing recaptures when scrolling changes its clip":
     let
