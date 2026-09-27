@@ -25,10 +25,7 @@ const
   GitDiffAutoExpandByteLimit* = 20 * 1024
   GitDiffDefaultFileLimit* = 10_000
   GitDiffMetadataOutputByteLimit = 16 * 1024 * 1024
-  # Keep a generous working set for expanded diffs without attaching every
-  # section in a very large repository snapshot at once.
-  GitDiffMaterializedSectionLimit* = 128
-  GitDiffViewPoolLimit = GitDiffMaterializedSectionLimit
+  GitDiffDisclosureButtonPoolLimit = 128
   GitDiffFromRevisionIdentifierPrefix = "kosmo.gitDiff.from."
   GitDiffToRevisionIdentifierPrefix = "kosmo.gitDiff.to."
 
@@ -251,7 +248,6 @@ type
     closed: bool
     control: SharedPtr[GitDiffControl]
     disclosureButtons: Table[string, GitDiffDisclosureButton]
-    textViewPool: seq[GitDiffTextView]
     disclosureButtonPool: seq[GitDiffDisclosureButton]
     forcedDisclosurePaths: HashSet[string]
     forcedTextPaths: HashSet[string]
@@ -1194,24 +1190,6 @@ iterator visibleSpans(
           yield span
           inc low
 
-proc includeMaterializedPath(paths: var HashSet[string], path: string): bool =
-  if path in paths:
-    return true
-  if paths.len >= GitDiffMaterializedSectionLimit:
-    return
-  paths.incl path
-  true
-
-proc includeMaterializedTextView(
-    buttons, textViews: var HashSet[string], path: string
-): bool =
-  if path notin textViews and textViews.len >= GitDiffMaterializedSectionLimit:
-    return
-  if not buttons.includeMaterializedPath(path):
-    return
-  textViews.incl path
-  true
-
 proc syncDisclosureButtons(panel: KosmoGitDiffPanel)
 proc scheduleSectionLayout(panel: KosmoGitDiffPanel)
 proc handleSharedKeys(panel: KosmoGitDiffPanel, event: nimkit.KeyEvent): bool
@@ -1678,34 +1656,27 @@ protocol GitDiffTextDrawing of nimkit.ViewDrawingProtocol:
     view.drawTextViewOverlay(context)
 
 proc newGitDiffTextView(panel: KosmoGitDiffPanel): GitDiffTextView =
-  var fresh = false
-  if panel.textViewPool.len > 0:
-    result = panel.textViewPool[^1]
-    panel.textViewPool.setLen(panel.textViewPool.len - 1)
-  else:
-    fresh = true
-    result = GitDiffTextView()
-    result.initTextViewFields()
+  result = GitDiffTextView()
+  result.initTextViewFields()
   result.editable = false
   result.selectable = true
   result.propagatesIntrinsicContentSizeChanges = false
   result.textContainer =
     nimkit.initTextContainer(wraps = false, widthTracksTextView = true)
   result.layoutManager().usesBackgroundLayout = true
-  if fresh:
-    let weakPanel = panel.unsafeWeakRef()
-    let keys: nimkit.DynamicMethod = proc(
-        self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
-    ) =
-      invocation.setResult(
-        not weakPanel.isNil and
-          weakPanel[].handleSharedKeys(invocation.argsAs(nimkit.KeyEvent))
-      )
-    discard result.withProtocol(GitDiffTextDrawing)
-    discard result.replaceMethod(nimkitSelectors.performKeyEquivalent(), keys)
-    result.layoutManager().connect(
-      nimkit.layoutDidComplete, panel, layoutDisclosureButtons
+  let weakPanel = panel.unsafeWeakRef()
+  let keys: nimkit.DynamicMethod = proc(
+      self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+  ) =
+    invocation.setResult(
+      not weakPanel.isNil and
+        weakPanel[].handleSharedKeys(invocation.argsAs(nimkit.KeyEvent))
     )
+  discard result.withProtocol(GitDiffTextDrawing)
+  discard result.replaceMethod(nimkitSelectors.performKeyEquivalent(), keys)
+  result.layoutManager().connect(
+    nimkit.layoutDidComplete, panel, layoutDisclosureButtons
+  )
   result.textStorage = nimkit.newTextStorage()
 
 proc clearQueuedHighlight(section: var GitDiffSection) =
@@ -1732,8 +1703,6 @@ proc releaseFileTextView(panel: KosmoGitDiffPanel, path: string) =
   section[].cancelHighlight()
   section[].ready = false
   section[].layoutStarted = false
-  if panel.textViewPool.len < GitDiffViewPoolLimit:
-    panel.textViewPool.add textView
 
 proc releaseFileDisclosureButton(panel: KosmoGitDiffPanel, path: string) =
   if not panel.sections.hasKey(path):
@@ -1746,7 +1715,7 @@ proc releaseFileDisclosureButton(panel: KosmoGitDiffPanel, path: string) =
   button.setHiddenFromLayout(true)
   section[].disclosureButton = nil
   panel.disclosureButtons.del path
-  if panel.disclosureButtonPool.len < GitDiffViewPoolLimit:
+  if panel.disclosureButtonPool.len < GitDiffDisclosureButtonPoolLimit:
     panel.disclosureButtonPool.add button
 
 proc ensureFileMaterialized(panel: KosmoGitDiffPanel, index: int, forceText = false) =
@@ -1826,13 +1795,14 @@ proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
         focusedDisclosurePath = path
         break
   if focusedDisclosurePath.len > 0:
-    discard desiredButtons.includeMaterializedPath(focusedDisclosurePath)
+    desiredButtons.incl focusedDisclosurePath
   for path in panel.forcedDisclosurePaths:
     if panel.sections.hasKey(path):
-      discard desiredButtons.includeMaterializedPath(path)
+      desiredButtons.incl path
   for path in panel.forcedTextPaths:
     if panel.sections.hasKey(path):
-      discard includeMaterializedTextView(desiredButtons, desiredTextViews, path)
+      desiredButtons.incl path
+      desiredTextViews.incl path
   for file in panel.snapshot.files:
     let
       path = file.path
@@ -1842,9 +1812,14 @@ proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
       contentHeight = max(section[].contentHeight, 24.0'f32)
       contentFrame = nimkit.rect(34, y + 38, max(width - 20, 1), contentHeight)
     if not headingFrame.intersection(materializedRect).isEmpty:
-      discard desiredButtons.includeMaterializedPath(path)
-    if expanded and not contentFrame.intersection(materializedRect).isEmpty:
-      discard includeMaterializedTextView(desiredButtons, desiredTextViews, path)
+      desiredButtons.incl path
+    # Opened sections retain their text, selection, and layout until collapsed.
+    if expanded and (
+      not section[].textView.isNil or path in panel.manuallyExpanded or
+      not contentFrame.intersection(materializedRect).isEmpty
+    ):
+      desiredButtons.incl path
+      desiredTextViews.incl path
     if expanded:
       y += 38 + contentHeight + 24
     else:
@@ -1855,11 +1830,15 @@ proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
       let explicit = path in panel.explicitPatchPaths
       if not section[].requiresExplicitLoad or explicit:
         panel.queueFilePatch(path, explicit)
+  var releasedTextView: bool
   for path, section in panel.sections:
     if not desiredTextViews.contains(path) and not section.textView.isNil:
       panel.releaseFileTextView(path)
+      releasedTextView = true
     if not desiredButtons.contains(path) and not section.disclosureButton.isNil:
       panel.releaseFileDisclosureButton(path)
+  if releasedTextView:
+    panel.updateLoading()
   y = summaryHeight + 16
   for index, file in panel.snapshot.files:
     let path = file.path
@@ -2738,7 +2717,6 @@ proc close*(panel: KosmoGitDiffPanel) {.slot.} =
     panel.sections.clear()
     panel.snapshotFileIndexes.clear()
     panel.disclosureButtons.clear()
-    panel.textViewPool.setLen(0)
     panel.disclosureButtonPool.setLen(0)
     panel.forcedDisclosurePaths.clear()
     panel.forcedTextPaths.clear()

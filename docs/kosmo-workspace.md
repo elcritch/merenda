@@ -73,9 +73,12 @@ Document tab headers update their scroll range during pane layout. Resizing
 keeps the selected tab visible and clears stale offsets when all tabs fit.
 Layout passes at the same width preserve deliberate horizontal scrolling.
 
-The Git diff panel prepares native sections up to two viewport heights above
-and below the visible area, releasing sections farther away. The existing
-materialized-section and view-pool limits still bound the working set.
+The Git diff panel first prepares sections near the viewport. Once loaded, an
+expanded section keeps its text view, selection, highlighting, and layout as it
+scrolls out of view. Collapsing a section releases its text view; Expand All loads
+every requested section. Large diffs stay collapsed by default above 400 changed
+lines or 20 KiB of patch text, and generated files require an explicit request.
+Repository patch reads retain their per-file and aggregate byte limits.
 
 The Moe editor worker and NimKit's shared Matter highlighter parse lines up to
 1,024 bytes by default, including generated Nim declarations with long `importc`

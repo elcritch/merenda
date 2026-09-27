@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep opened Git diff sections loaded when they scroll out of view, preserving
+  selection and layout until collapse. Large diffs still require an explicit open.
 - Preserve the file browser's pixel scroll position across filesystem and Git
   refreshes, including partially visible selected rows and the end of the list.
 - Stream Matter syntax colors into Moe in bounded row batches, retaining
