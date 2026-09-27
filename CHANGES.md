@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Refresh cached MonoText rows when horizontal scrolling exposes new columns,
+  and recapture drawing slots that depend on changed view bounds.
+- Transfer only changed scroll transforms and view ordering to the renderer,
+  including correct placement of retained explicit drawing layers.
+- Reuse Git diff section geometry while scrolling and avoid invalidating
+  unchanged headers, including offscreen headers.
 - Keep opened Git diff sections loaded when they scroll out of view, preserving
   selection and layout until collapse. Large diffs still require an explicit open.
 - Preserve the file browser's pixel scroll position across filesystem and Git

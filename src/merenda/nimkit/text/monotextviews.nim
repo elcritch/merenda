@@ -1677,9 +1677,13 @@ proc drawMonoTextSurface(
   if view.isFocusVisible() and view.focusRingType() != frtNone:
     context.addFocusRing(frame, style.box)
 
-func monoTextRowRevision(row: int, lineRevision: uint64, appearanceHash: Hash): uint64 =
+func monoTextRowRevision(
+    row, firstColumn, lastColumn: int, lineRevision: uint64, appearanceHash: Hash
+): uint64 =
   var value = appearanceHash !& hash(row)
   value = value !& hash(lineRevision)
+  value = value !& hash(firstColumn)
+  value = value !& hash(lastColumn)
   result = uint64(cast[uint](!$value))
   if result == 0:
     result = 1
@@ -1725,12 +1729,17 @@ proc drawMonoText(view: MonoTextView, context: DrawContext) =
     )
 
   for row in rowStart ..< rowStop:
-    let slot = monoTextRowRenderSlotId(row)
+    let
+      slot = monoTextRowRenderSlotId(row)
+      firstColumn = min(colStart, view.xLines[row].len)
+      lastColumn = min(colStop, view.xLines[row].len)
     if context.beginRenderSlot(
-      slot, monoTextRowRevision(row, view.xLines[row].revision, appearanceHash)
+      slot,
+      monoTextRowRevision(
+        row, firstColumn, lastColumn, view.xLines[row].revision, appearanceHash
+      ),
     ):
-      var column = min(colStart, view.xLines[row].len)
-      let lastColumn = min(max(colStop, column), view.xLines[row].len)
+      var column = firstColumn
       while column < lastColumn:
         let startColumn = column
         inc column

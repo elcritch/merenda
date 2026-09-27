@@ -108,6 +108,14 @@ surface may need its existing content presented again. Clean view contributions
 reuse their cached render fragments. Unhandled events and worker notifications
 that leave the UI unchanged do not request a frame.
 
+Scrolling updates the ancestor content transform. Descendant transforms stay
+cached unless their own placement changes; explicit drawing layers retain their
+absolute layer placement. A drawing slot that reads `DrawContext.bounds()` or
+`visibleRect()` is recaptured when that geometry changes. Read these values
+inside the slot that uses them, or include derived geometry in that slot's
+revision (as MonoText does for the visible column range). Renderer updates omit
+unchanged view ordering as well as unchanged drawing and placement payloads.
+
 ## Intrinsic Sizing
 
 NimKit follows the Cocoa-style split where controls ask cells and resolved

@@ -78,6 +78,7 @@ type
     captured*: bool
     renders*: Renders
     resources*: RenderResourceManifest
+    usesBounds*: bool
     usesVisibleRect*: bool
 
   DrawContext* = ref object
@@ -1112,6 +1113,9 @@ proc renderPointFor(context: DrawContext, point: nimkitTypes.Point): nimkitTypes
   )
 
 proc bounds*(context: DrawContext): nimkitTypes.Rect =
+  context.ensureDefaultRenderSlot()
+  if context.xCapturesSlots and context.xActiveSlot >= 0:
+    context.xSlotCaptures[context.xActiveSlot].usesBounds = true
   context.xBounds
 
 proc visibleRect*(context: DrawContext): nimkitTypes.Rect =

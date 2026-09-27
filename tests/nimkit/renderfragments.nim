@@ -22,6 +22,11 @@ type
   VisibleRectSceneView = ref object of View
     drawCount: int
 
+  BoundsSceneView = ref object of View
+    namedSlots: bool
+    boundsDrawCount: int
+    staticDrawCount: int
+
   MultiOutputSceneView = ref object of View
     escapedRootCount: int
     drawsPopup: bool
@@ -35,6 +40,7 @@ type
     style: TextStyle
 
   SlottedSceneView = ref object of View
+    drawsPopup: bool
     underlayRevision: uint64
     contentRevision: uint64
     overlayRevision: uint64
@@ -93,6 +99,15 @@ protocol VisibleRectSceneDrawing of ViewDrawingProtocol:
     inc view.drawCount
     discard context.visibleRect()
     context.addRectangle(rect(1, 2, 9, 7), color(0.2, 0.4, 0.8))
+
+protocol BoundsSceneDrawing of ViewDrawingProtocol:
+  method draw(view: BoundsSceneView, context: DrawContext) =
+    if not view.namedSlots or context.beginRenderSlot(TestContentSlot, 1):
+      inc view.boundsDrawCount
+      context.addRectangle(context.bounds(), color(0.2, 0.4, 0.8))
+    if view.namedSlots and context.beginRenderSlot(TestOverlaySlot, 1):
+      inc view.staticDrawCount
+      context.addRectangle(rect(1, 2, 9, 7), color(0.8, 0.2, 0.1))
 
 protocol MultiOutputSceneDrawing of ViewDrawingProtocol:
   method draw(view: MultiOutputSceneView, context: DrawContext) =
@@ -161,6 +176,10 @@ protocol SlottedSceneDrawing of ViewDrawingProtocol:
     if context.beginRenderSlot(TestOverlaySlot, view.overlayRevision, rspAfterSubviews):
       inc view.overlayDrawCount
       context.addRectangle(rect(1, 23, 20, 10), color(0.1, 0.1, 0.8))
+      if view.drawsPopup:
+        discard context.addRenderRectangle(
+          PopupDrawLevel, (-1).FigIdx, rect(2, 18, 15, 5), color(0.2, 0.7, 0.3)
+        )
 
 method drawRoundedRectSdf*(
     context: RenderOperationContext,
@@ -266,6 +285,11 @@ proc newVisibleRectSceneView(frame: Rect): VisibleRectSceneView =
   result.initViewFields(frame)
   discard result.withProtocol(VisibleRectSceneDrawing)
 
+proc newBoundsSceneView(frame: Rect, namedSlots: bool): BoundsSceneView =
+  result = BoundsSceneView(namedSlots: namedSlots)
+  result.initViewFields(frame)
+  discard result.withProtocol(BoundsSceneDrawing)
+
 proc newMultiOutputSceneView(frame: Rect): MultiOutputSceneView =
   result = MultiOutputSceneView()
   result.initViewFields(frame)
@@ -326,6 +350,13 @@ proc canonicalNodes(renders: Renders): seq[CanonicalRenderNode] =
   for level, _ in renders.pairs():
     for root in renders.roots(level):
       renders.appendCanonicalNodes(level, root, 0, result)
+
+proc renderedText(scene: RenderScene): string =
+  for _, layer in scene.materialize().pairs():
+    for node in layer.nodes:
+      if node.kind == nkText:
+        for glyphIndex in 0 ..< node.textLayout.glyphCount():
+          result.add node.textLayout.displayRune(glyphIndex)
 
 proc testImage(width, height: int): Image =
   result = newImage(width, height)
@@ -590,6 +621,180 @@ suite "NimKit render fragments":
     retainedScenes.apply(replica, update)
     check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
 
+  test "scroll transfers only the changed viewport among one thousand children":
+    for childCount in [1, 10, 100, 1000]:
+      let
+        root = newView(rect(0, 0, 800, 600))
+        viewport = newView(rect(0, 0, 800, 600))
+        document = newView(rect(0, 0, 800, 10000))
+      viewport.clipsToBounds = true
+      root.addSubview(viewport)
+      viewport.addSubview(document)
+      for index in 0 ..< childCount:
+        let child = newCountedSceneView(
+          rect((10 + index mod 100 * 5).float32, (10 + index div 100 * 5).float32, 4, 5),
+          color(0.2, 0.3, 0.4),
+        )
+        child.drawLevelValue = DefaultDrawLevel
+        document.addSubview(child)
+      let
+        scene = root.buildRenderScene()
+        identity = retainedScenes.sceneIdentity(scene)
+        generation = scene.frameGeneration()
+        replica = retainedScenes.newRenderSceneReplica()
+        resources = scene.renderResources()
+      var initial = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+      retainedScenes.apply(replica, initial)
+      let unchanged = retainedScenes.newRenderSceneUpdate(scene, identity, generation)
+      check unchanged.estimatedTransferBytes() == 0
+
+      viewport.setBoundsOriginFromLayout(initPoint(0, 0.25))
+      discard root.buildRenderScene()
+      var update = retainedScenes.newRenderSceneUpdate(scene, identity, generation)
+      check update.viewCount() == childCount + 3
+      check update.capturedViewCount() == 0
+      check update.estimatedTransferBytes() == sizeof(RenderViewFrame)
+      check scene.renderResources() == resources
+      check scene.retiredResourceCount() == 0
+      retainedScenes.apply(replica, update)
+      check replica.materialize().canonicalNodes() ==
+        scene.materialize().canonicalNodes()
+
+  test "cumulative scroll updates preserve changed placement order":
+    let
+      root = newView(rect(0, 0, 300, 200))
+      viewport = newView(rect(0, 0, 300, 200))
+      document = newView(rect(0, 0, 300, 800))
+      first = newSceneDrawView(rect(5, 10, 30, 20))
+      second = newSceneDrawView(rect(40, 10, 30, 20))
+      added = newSceneDrawView(rect(75, 10, 30, 20))
+    viewport.clipsToBounds = true
+    root.addSubview(viewport)
+    viewport.addSubview(document)
+    document.addSubview(first)
+    document.addSubview(second)
+    let
+      scene = root.buildRenderScene()
+      identity = retainedScenes.sceneIdentity(scene)
+      baseline = scene.frameGeneration()
+      replica = retainedScenes.newRenderSceneReplica()
+      intermediateReplica = retainedScenes.newRenderSceneReplica()
+    var initial = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+    var otherInitial = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+    retainedScenes.apply(replica, initial)
+    retainedScenes.apply(intermediateReplica, otherInitial)
+
+    document.addSubview(added)
+    document.insertSubview(second, 0)
+    discard root.buildRenderScene()
+    var intermediate = retainedScenes.newRenderSceneUpdate(scene, identity, baseline)
+    retainedScenes.apply(intermediateReplica, intermediate)
+    first.removeFromSuperview()
+    discard root.buildRenderScene()
+    viewport.setBoundsOriginFromLayout(initPoint(0, 1.25))
+    discard root.buildRenderScene()
+    var cumulative = retainedScenes.newRenderSceneUpdate(scene, identity, baseline)
+    var cumulativeAfterIntermediate =
+      retainedScenes.newRenderSceneUpdate(scene, identity, baseline)
+    check not cumulative.fullSnapshot()
+    check cumulative.viewCount() == 5
+    retainedScenes.apply(replica, cumulative)
+    retainedScenes.apply(intermediateReplica, cumulativeAfterIntermediate)
+    check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
+    check intermediateReplica.materialize().canonicalNodes() ==
+      scene.materialize().canonicalNodes()
+
+    let acknowledged = scene.frameGeneration()
+    viewport.setBoundsOriginFromLayout(initPoint(0, 2.5))
+    discard root.buildRenderScene()
+    var scroll = retainedScenes.newRenderSceneUpdate(scene, identity, acknowledged)
+    check scroll.estimatedTransferBytes() == sizeof(RenderViewFrame)
+    retainedScenes.apply(replica, scroll)
+    check replica.materialize().canonicalNodes() == scene.materialize().canonicalNodes()
+
+  test "scroll updates explicit layer transforms on renderer replicas":
+    let
+      root = newView(rect(0, 0, 180, 120))
+      viewport = newView(rect(0, 0, 100, 80))
+      document = newMultiOutputSceneView(rect(0, 0, 100, 240))
+    document.drawsPopup = true
+    viewport.clipsToBounds = true
+    root.addSubview(viewport)
+    viewport.addSubview(document)
+    let
+      scene = root.buildRenderScene()
+      identity = retainedScenes.sceneIdentity(scene)
+      replica = retainedScenes.newRenderSceneReplica()
+    var initial = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+    retainedScenes.apply(replica, initial)
+    for offset in [0.25'f32, 8.5'f32, 0.0'f32]:
+      let baseline = scene.frameGeneration()
+      viewport.setBoundsOriginFromLayout(initPoint(0, offset))
+      discard root.buildRenderScene()
+      var update = retainedScenes.newRenderSceneUpdate(scene, identity, baseline)
+      check update.capturedViewCount() == 0
+      check update.estimatedTransferBytes() == 2 * sizeof(RenderViewFrame)
+      retainedScenes.apply(replica, update)
+      check replica.materialize().canonicalNodes() ==
+        scene.materialize().canonicalNodes()
+
+  test "partial captures keep retained explicit layers aligned while scrolling":
+    let
+      root = newView(rect(0, 0, 180, 120))
+      viewport = newView(rect(0, 0, 100, 80))
+      document = newSlottedSceneView(rect(0, 0, 100, 240))
+    document.drawsPopup = true
+    viewport.clipsToBounds = true
+    root.addSubview(viewport)
+    viewport.addSubview(document)
+    let
+      scene = root.buildRenderScene()
+      identity = retainedScenes.sceneIdentity(scene)
+      baseline = scene.frameGeneration()
+      replica = retainedScenes.newRenderSceneReplica()
+    var initial = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+    retainedScenes.apply(replica, initial)
+    viewport.setBoundsOriginFromLayout(initPoint(0, 8.5))
+    document.contentRevision = 2
+    document.setNeedsDisplayInRenderSlot(TestContentSlot)
+    discard root.buildRenderScene()
+    var update = retainedScenes.newRenderSceneUpdate(scene, identity, baseline)
+    check document.contentDrawCount == 2
+    check document.overlayDrawCount == 1
+    check update.capturedRenderSlotCount() == 1
+    retainedScenes.apply(replica, update)
+    let retained = scene.materialize().canonicalNodes()
+    check replica.materialize().canonicalNodes() == retained
+    root.invalidateRenderCache()
+    check root.buildRenderScene().materialize().canonicalNodes() == retained
+
+  test "bounds changes recapture only drawing slots that read the bounds":
+    for namedSlots in [false, true]:
+      let root = newBoundsSceneView(rect(0, 0, 100, 80), namedSlots)
+      let
+        scene = root.buildRenderScene()
+        identity = retainedScenes.sceneIdentity(scene)
+        baseline = scene.frameGeneration()
+        staticGeneration =
+          scene.viewRenderSlotChangeGeneration(root.renderViewId(), TestOverlaySlot)
+        replica = retainedScenes.newRenderSceneReplica()
+      var initial = retainedScenes.newRenderSceneUpdate(scene, 0, 0)
+      retainedScenes.apply(replica, initial)
+      root.setBoundsOriginFromLayout(initPoint(3.25, 8.5))
+      discard root.buildRenderScene()
+      var update = retainedScenes.newRenderSceneUpdate(scene, identity, baseline)
+      check root.boundsDrawCount == 2
+      check update.capturedRenderSlotCount() == 1
+      if namedSlots:
+        check root.staticDrawCount == 1
+        check scene.viewRenderSlotChangeGeneration(root.renderViewId(), TestOverlaySlot) ==
+          staticGeneration
+      retainedScenes.apply(replica, update)
+      let retained = scene.materialize().canonicalNodes()
+      check replica.materialize().canonicalNodes() == retained
+      root.invalidateRenderCache()
+      check root.buildRenderScene().materialize().canonicalNodes() == retained
+
   test "named view slots update independently around child content":
     let
       root = newView(frame = rect(0, 0, 180, 120))
@@ -820,6 +1025,61 @@ suite "NimKit render fragments":
     var cursorUpdate =
       retainedScenes.newRenderSceneUpdate(scene, sceneIdentity, secondGeneration)
     check retainedScenes.capturedRenderSlotCount(cursorUpdate) == 1
+
+  test "horizontal mono text scrolling refreshes column coverage and retains fractional moves":
+    const source = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    let
+      root = newView(rect(0, 0, 300, 100))
+      viewport = newView(rect(0, 0, 120, 70))
+      document = newMonoTextViewer(source, frame = rect(0, 0, 900, 70))
+    viewport.clipsToBounds = true
+    root.addSubview(viewport)
+    viewport.addSubview(document)
+    let
+      cellWidth = document.monoTextMetrics().cellWidth
+      rowSlot = monoTextRowRenderSlotId(0)
+    viewport.frame = rect(0, 0, cellWidth * 10, 70)
+    let scene = root.buildRenderScene()
+    let original = scene.renderedText()
+
+    for column in [20.25'f32, 0.0'f32, 40.25'f32, 0.0'f32]:
+      let before =
+        scene.viewRenderSlotChangeGeneration(document.renderViewId(), rowSlot)
+      viewport.setBoundsOriginFromLayout(
+        initPoint(document.padding + column * cellWidth, 0)
+      )
+      discard root.buildRenderScene()
+      check scene.viewRenderSlotChangeGeneration(document.renderViewId(), rowSlot) >
+        before
+      let
+        freshViewport = newView(viewport.frame)
+        freshDocument = newMonoTextViewer(source, frame = document.frame)
+      freshViewport.clipsToBounds = true
+      freshViewport.addSubview(freshDocument)
+      freshViewport.bounds = viewport.bounds
+      check scene.renderedText() == freshViewport.buildRenderScene().renderedText()
+      if column > 0:
+        check scene.renderedText() != original
+
+    viewport.setBoundsOriginFromLayout(
+      initPoint(document.padding + 20.25 * cellWidth, 0)
+    )
+    discard root.buildRenderScene()
+    let beforeFraction =
+      scene.viewRenderSlotChangeGeneration(document.renderViewId(), rowSlot)
+    viewport.setBoundsOriginFromLayout(
+      initPoint(document.padding + 20.5 * cellWidth, 0)
+    )
+    discard root.buildRenderScene()
+    check scene.viewRenderSlotChangeGeneration(document.renderViewId(), rowSlot) ==
+      beforeFraction
+
+    let beforeResize = scene.renderedText()
+    viewport.frame = rect(0, 0, cellWidth * 14, 70)
+    discard root.buildRenderScene()
+    check scene.renderedText().len > beforeResize.len
+    check scene.viewRenderSlotChangeGeneration(document.renderViewId(), rowSlot) >
+      beforeFraction
 
   test "visible-rect drawing recaptures when scrolling changes its clip":
     let
@@ -1098,3 +1358,11 @@ suite "NimKit render fragments":
     check scene.retiredResourceCount() == 0
     check not hasImage(first.imageId())
     check hasImage(second.imageId())
+
+    var emptyFrame: seq[RenderViewFrame]
+    discard scene.reconcile(emptyFrame, DefaultDrawLevel)
+    check scene.renderResources().imageCount() == 0
+    check scene.retiredResourceCount() == 1
+    check hasImage(second.imageId())
+    scene.acknowledgeRenderGeneration(scene.frameGeneration())
+    check not hasImage(second.imageId())

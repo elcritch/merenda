@@ -12,8 +12,8 @@
 ##       +-- escaped drawing
 ##
 ## Scrolling or moving an ancestor updates only placement transform nodes. It does
-## not rebuild a descendant's drawing unless that drawing read
-## `DrawContext.visibleRect`; that dependency is recorded during capture. Explicit
+## not rebuild a descendant's drawing unless that drawing read changed
+## `DrawContext.bounds` or `DrawContext.visibleRect` during capture. Explicit
 ## layers use equivalent layer-root transforms. Stable fragment IDs and nested
 ## attachments therefore survive placement-only updates.
 
@@ -54,6 +54,7 @@ type
     escapedContents*: RenderList
     extraLayers*: seq[RenderLayerContribution]
     resources*: RenderResourceManifest
+    usesBounds*: bool
     usesVisibleRect*: bool
 
   RenderViewFrame* = object
@@ -81,6 +82,7 @@ type
     escapedContents: RenderList
     extraLayers: seq[RenderLayerContribution]
     resources: RenderResourceManifest
+    usesBounds: bool
     usesVisibleRect: bool
     handle: RenderFragmentHandle
     escapedHandle: RenderFragmentHandle
@@ -113,6 +115,7 @@ type
     slotId*: RenderSlotId
     position*: RenderSlotPosition
     revision*: uint64
+    usesBounds*: bool
     usesVisibleRect*: bool
 
   RetiredRenderResources = object
@@ -134,12 +137,13 @@ type
     baseLevel: ZLevel
     replicaMode: bool
     fullTransferGeneration: uint64
+    placementOrderChangeGeneration: uint64
 
   RenderSceneUpdate* = object
     ## Move-only cumulative update for a renderer-owned scene replica.
     ##
-    ## Every update contains the complete current placement order, but only
-    ## contributions changed after `baseGeneration` carry drawing payloads.
+    ## The placement order is included only when it changed after
+    ## `baseGeneration`. Only changed contributions carry drawing payloads.
     ## Placement-only changes carry cache keys and update retained transform nodes.
     ## A full update carries every payload and acts as an ordering barrier.
     sceneIdentity: uint64
@@ -147,6 +151,8 @@ type
     generation: uint64
     full: bool
     baseLevel: ZLevel
+    placementOrderChanged: bool
+    totalViewCount: Natural
     placements: seq[ViewPlacement]
     frames: seq[RenderViewFrame]
     resources: RenderResourceSnapshot
@@ -331,20 +337,28 @@ proc viewSlotCacheStates*(
       slotId: slotId,
       position: slot[].position,
       revision: slot[].revision,
+      usesBounds: slot[].usesBounds,
       usesVisibleRect: slot[].usesVisibleRect,
     )
 
-proc forcedVisibleRectSlots*(
-    scene: RenderScene, viewId: RenderViewId, visibleRect: Rect
+func geometryChanged(
+    slot: ViewRenderSlotEntry, cached, current: RenderViewCacheKey
+): bool =
+  (slot.usesBounds and cached.bounds != current.bounds) or
+    (slot.usesVisibleRect and cached.visibleRect != current.visibleRect)
+
+proc forcedGeometrySlots*(
+    scene: RenderScene, viewId: RenderViewId, cacheKey: RenderViewCacheKey
 ): seq[RenderSlotId] =
-  ## Returns cached slots whose drawing depends on a changed visible rectangle.
+  ## Returns slots whose drawing read bounds or a visible rectangle that changed.
   if scene.isNil or not scene.perViewMode or viewId notin scene.viewEntries:
     return
   let entry = addr scene.viewEntries[viewId]
-  if entry[].cacheKey.visibleRect == visibleRect:
+  if entry[].cacheKey.bounds == cacheKey.bounds and
+      entry[].cacheKey.visibleRect == cacheKey.visibleRect:
     return
   for slotId in entry[].slotOrder:
-    if entry[].slots[slotId].usesVisibleRect:
+    if entry[].slots[slotId].geometryChanged(entry[].cacheKey, cacheKey):
       result.add slotId
 
 proc needsViewCapture*(
@@ -354,17 +368,32 @@ proc needsViewCapture*(
   if scene.requiresFullViewCapture(viewId, cacheKey):
     return true
   let entry = addr scene.viewEntries[viewId]
-  entry[].cacheKey.displayRevision != cacheKey.displayRevision or (
-    entry[].cacheKey.visibleRect != cacheKey.visibleRect and
-    scene.forcedVisibleRectSlots(viewId, cacheKey.visibleRect).len > 0
-  )
+  if entry[].cacheKey.displayRevision != cacheKey.displayRevision:
+    return true
+  if entry[].cacheKey.bounds != cacheKey.bounds or
+      entry[].cacheKey.visibleRect != cacheKey.visibleRect:
+    for slotId in entry[].slotOrder:
+      if entry[].slots[slotId].geometryChanged(entry[].cacheKey, cacheKey):
+        return true
 
 proc needsViewPlacementUpdate*(
     scene: RenderScene, viewId: RenderViewId, cacheKey: RenderViewCacheKey
 ): bool =
   ## Reports whether the view's retained transform placement changed.
-  scene.isNil or not scene.perViewMode or viewId notin scene.viewEntries or
-    scene.viewEntries[viewId].cacheKey != cacheKey
+  if scene.isNil or not scene.perViewMode or viewId notin scene.viewEntries:
+    return true
+  let
+    entry = addr scene.viewEntries[viewId]
+    cached = entry[].cacheKey
+  if cached.placement != cacheKey.placement or
+      cached.bounds.origin != cacheKey.bounds.origin:
+    return true
+  # Ordinary children inherit their ancestor's transform. Only explicit layer
+  # roots encode an absolute origin of their own.
+  if cached.frame.origin != cacheKey.frame.origin:
+    for slotId in entry[].slotOrder:
+      if entry[].slots[slotId].extraLayers.len > 0:
+        return true
 
 proc externalParent(
     frame: RenderViewFrame, levels: Table[RenderViewId, ZLevel]
@@ -529,6 +558,9 @@ proc refreshPlacementNodes(entry: var ViewRenderEntry, cacheKey: RenderViewCache
     entry.contentTransform.transform.translation
   for slotId in entry.slotOrder:
     for extra in entry.slots[slotId].extraLayers.mitems:
+      # Renderer replicas move drawing storage into the fragment tree.
+      if extra.contents.nodes.len == 0:
+        continue
       if extra.contents.rootIds.len != 1:
         raise newException(ValueError, "an extra-layer placement must have one root")
       let root = extra.contents.rootIds[0]
@@ -540,19 +572,25 @@ proc refreshPlacementNodes(entry: var ViewRenderEntry, cacheKey: RenderViewCache
         cacheKey.frame.origin.y - cacheKey.bounds.origin.y,
       )
 
-proc updatePlacementEntry(scene: RenderScene, entry: var ViewRenderEntry) =
-  scene.tree.updateNode(entry.placementCursor, entry.placement)
-  scene.tree.updateNode(entry.contentCursor, entry.contentTransform)
-  scene.tree.updateNode(entry.escapedTransformCursor, entry.escapedTransform)
+proc updateLayerPlacements(scene: RenderScene, entry: var ViewRenderEntry) =
   for slotId in entry.slotOrder:
     let slot = addr entry.slots[slotId]
     for extra in slot[].extraLayers:
       let roots = scene.tree.fragmentRoots(slot[].extraHandles[extra.level])
       if roots.len != 1:
         raise newException(ValueError, "an extra-layer fragment must have one root")
-      scene.tree.updateNode(
-        roots[0], extra.contents.nodes[extra.contents.rootIds[0].int]
+      var transform = scene.tree[roots[0]]
+      transform.transform.translation = vec2(
+        entry.cacheKey.frame.origin.x - entry.cacheKey.bounds.origin.x,
+        entry.cacheKey.frame.origin.y - entry.cacheKey.bounds.origin.y,
       )
+      scene.tree.updateNode(roots[0], transform)
+
+proc updatePlacementEntry(scene: RenderScene, entry: var ViewRenderEntry) =
+  scene.tree.updateNode(entry.placementCursor, entry.placement)
+  scene.tree.updateNode(entry.contentCursor, entry.contentTransform)
+  scene.tree.updateNode(entry.escapedTransformCursor, entry.escapedTransform)
+  scene.updateLayerPlacements(entry)
 
 proc updateCapturedSlot(scene: RenderScene, slot: var ViewRenderSlotEntry) =
   if scene.replicaMode:
@@ -602,6 +640,7 @@ proc updateCapturedEntry(
   scene.tree.updateNode(entry.escapedTransformCursor, entry.escapedTransform)
   for slotId in capturedSlots:
     scene.updateCapturedSlot(entry.slots[slotId])
+  scene.updateLayerPlacements(entry)
 
 proc moveViewEntry(
     scene: RenderScene, entry: var ViewRenderEntry, parent: RenderViewId
@@ -718,9 +757,11 @@ proc reconcile*(
     raise newException(ValueError, "cannot update a nil render scene")
   frames.validateFrames()
 
-  let placements = frames.nextPlacements()
+  let
+    placements = frames.nextPlacements()
+    placementOrderChanged = not scene.perViewMode or placements != scene.placements
   var
-    topologyChanged = not scene.perViewMode or placements != scene.placements
+    topologyChanged = placementOrderChanged
     changed = topologyChanged
     levelChanged = false
     seen = initTable[RenderViewId, bool]()
@@ -787,7 +828,9 @@ proc reconcile*(
           cachedSlot[].escapedContents = move slot.escapedContents
           cachedSlot[].extraLayers = move slot.extraLayers
           cachedSlot[].resources = move slot.resources
+          cachedSlot[].usesBounds = slot.usesBounds
           cachedSlot[].usesVisibleRect = slot.usesVisibleRect
+      entry[].refreshPlacementNodes(frame.cacheKey)
       entry[].captureGeneration.advance()
       capturedViews.add frame.viewId
       changedViews.add frame.viewId
@@ -797,7 +840,12 @@ proc reconcile*(
       changedViews.add frame.viewId
       changed = true
     elif entry[].cacheKey != frame.cacheKey:
-      raise newException(ValueError, "a changed render view must include an update")
+      if scene.needsViewCapture(frame.viewId, frame.cacheKey) or
+          scene.needsViewPlacementUpdate(frame.viewId, frame.cacheKey):
+        raise newException(ValueError, "a changed render view must include an update")
+      # Keep clipping and absolute geometry current for the next capture without
+      # rewriting descendant transforms that already inherit this movement.
+      entry[].cacheKey = frame.cacheKey
 
   var removed: seq[RenderViewId]
   for viewId in scene.viewEntries.keys:
@@ -827,6 +875,8 @@ proc reconcile*(
             nextGeneration
   if rebuild:
     scene.fullTransferGeneration = nextGeneration
+  if placementOrderChanged:
+    scene.placementOrderChangeGeneration = nextGeneration
 
   if rebuild:
     for viewId, slotIds in removedSlots:
@@ -873,12 +923,13 @@ proc reconcile*(
 
   if rebuild or topologyChanged:
     scene.reconcileOrders(frames, levels)
-  let resources = scene.mergeEntryResources(frames)
-  if not scene.liveResources.isNil:
-    scene.retiredResources.add RetiredRenderResources(
-      releaseGeneration: nextGeneration, manifest: scene.liveResources
-    )
-  scene.liveResources = resources
+  if not scene.perViewMode or capturedViews.len > 0 or removed.len > 0:
+    let resources = scene.mergeEntryResources(frames)
+    if not scene.liveResources.isNil:
+      scene.retiredResources.add RetiredRenderResources(
+        releaseGeneration: nextGeneration, manifest: scene.liveResources
+      )
+    scene.liveResources = resources
   scene.placements = placements
   scene.rootLevels = levels
   scene.baseLevel = baseLevel
@@ -924,6 +975,7 @@ proc transferFrame(
         position: slot.position,
         revision: slot.revision,
         captured: slotCaptured,
+        usesBounds: slot.usesBounds,
         usesVisibleRect: slot.usesVisibleRect,
       )
       if slotCaptured:
@@ -957,7 +1009,11 @@ proc newRenderSceneUpdate*(
   result.generation = scene.generation
   result.full = full
   result.baseLevel = scene.baseLevel
-  result.placements = scene.placements
+  result.totalViewCount = scene.placements.len.Natural
+  result.placementOrderChanged =
+    full or scene.placementOrderChangeGeneration > acknowledgedGeneration
+  if result.placementOrderChanged:
+    result.placements = scene.placements
   for placement in scene.placements:
     let entry = addr scene.viewEntries[placement.viewId]
     if not full and entry[].changeGeneration <= acknowledgedGeneration:
@@ -998,7 +1054,7 @@ func capturedRenderSlotCount*(update: RenderSceneUpdate): Natural =
         inc result
 
 func viewCount*(update: RenderSceneUpdate): Natural =
-  update.placements.len.Natural
+  update.totalViewCount
 
 func estimatedTransferBytes*(update: RenderSceneUpdate): int =
   ## Lower bound for owned frame, slot and drawing arrays. Excludes allocator
@@ -1047,11 +1103,13 @@ proc apply*(scene: RenderScene, update: var RenderSceneUpdate) =
           raise newException(
             ValueError, "a full render-scene update must capture every view slot"
           )
-  # Expand unchanged metadata only on the receiving thread. Queued snapshots
-  # carry a compact order list instead of four empty Figs for every clean view.
-  var frames = newSeqOfCap[RenderViewFrame](update.placements.len)
+  # Expand unchanged metadata only on the receiving thread. Keep the existing
+  # order when no view was added, removed, reparented or reordered.
+  var frames = newSeqOfCap[RenderViewFrame](update.totalViewCount)
   var changedIndex = 0
-  for placement in update.placements:
+  for placement in (
+    if update.placementOrderChanged: update.placements else: scene.placements
+  ):
     if changedIndex < update.frames.len and
         update.frames[changedIndex].viewId == placement.viewId:
       frames.add move update.frames[changedIndex]

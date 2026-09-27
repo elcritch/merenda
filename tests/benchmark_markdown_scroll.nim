@@ -103,9 +103,9 @@ proc renderScrollFrame(frame: int) =
     var update = move snapshot.sceneUpdate
     if retainedScenes.fullSnapshot(update):
       replica = retainedScenes.newRenderSceneReplica()
-    retainedScenes.apply(replica, update)
     checksum += retainedScenes.viewCount(update).uint64
     capturedViews += retainedScenes.capturedViewCount(update).uint64
+    retainedScenes.apply(replica, update)
     host.acknowledgeRender(snapshot.renderId)
     applyMilliseconds.add(
       (getMonoTime() - applyStarted).inNanoseconds.float / 1_000_000.0

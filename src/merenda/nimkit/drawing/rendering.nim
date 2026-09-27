@@ -199,14 +199,14 @@ proc captureViewFrame(
     cachedRevisions[state.slotId] = state.revision
   let
     forceAll = scene.requiresFullViewCapture(viewId, cacheKey)
-    forcedSlots = scene.forcedVisibleRectSlots(viewId, cacheKey.visibleRect)
+    forcedSlots = scene.forcedGeometrySlots(viewId, cacheKey)
     context = initDrawContext()
     defaultRevision = view.renderSlotRevision(0.RenderSlotId)
   context.beginRenderSlotCapture(
     shell,
     ZeroPoint,
-    view.bounds,
-    view.visibleRect,
+    cacheKey.bounds,
+    cacheKey.visibleRect,
     appearance[],
     defaultRevision,
     cachedRevisions,
@@ -245,6 +245,7 @@ proc captureViewFrame(
       revision: capture.revision,
       captured: capture.captured,
       resources: move capture.resources,
+      usesBounds: capture.usesBounds,
       usesVisibleRect: capture.usesVisibleRect,
     )
     if capture.captured:
@@ -276,7 +277,8 @@ proc collectRenderFrames(
     parentLevel = DefaultDrawLevel,
     parentOrigin = ZeroPoint,
 ) =
-  if view.visibleRect.isEmpty:
+  let visibleRect = view.visibleRect()
+  if visibleRect.isEmpty:
     view.finishDisplaySubtree()
     return
 
@@ -296,7 +298,7 @@ proc collectRenderFrames(
         else:
           viewFrame.origin,
       bounds: view.bounds(),
-      visibleRect: view.visibleRect(),
+      visibleRect: visibleRect,
       level: level,
       isRoot: parentViewId.uint64 == 0,
     )
@@ -313,7 +315,8 @@ proc collectRenderFrames(
     )
   revisions.add DisplayRevisionSnapshot(view: view, revision: cacheKey.displayRevision)
 
-  let contentOrigin = absoluteFrame.origin.addPoints(view.bounds().boundsTranslation())
+  let contentOrigin =
+    absoluteFrame.origin.addPoints(cacheKey.bounds.boundsTranslation())
   for child in view.subviews:
     scene.collectRenderFrames(
       child, appearance, frames, revisions, viewId, level, contentOrigin

@@ -7,6 +7,30 @@ import merenda/nimkit/foundation/gitprocesses
 import merenda/kosmo/kosmo
 import merenda/kosmo/workspacefiles
 
+proc exerciseDocuments(root: string) =
+  let editor = newKosmoEditor(workingDirectory = root)
+  defer:
+    editor.close()
+  doAssert editor.openFile(root / "source.nim").loaded
+  let editorView = newKosmoEditorView(editor)
+  editorView.frame = rect(0, 0, 640, 360)
+  discard editorView.buildRenderScene()
+  let panel = newKosmoGitDiffPanel(root)
+  defer:
+    panel.close()
+  panel.frame = rect(0, 0, 640, 360)
+  panel.layoutSubtreeIfNeeded()
+  doAssert panel.waitForDiff(timeoutMilliseconds = 60_000)
+  let markdown = newMarkdownView("# Handles\n\n```nim\nlet value = 2\n```\n")
+  doAssert markdown.waitForMarkdownParsing()
+  doAssert markdown.waitForMarkdownLayout()
+  discard markdown.buildRenderScene()
+  for _ in 0 ..< 3:
+    panel.refresh()
+    doAssert panel.waitForDiff(timeoutMilliseconds = 60_000)
+    discard editor.pollGitStatus()
+    discard editorView.buildRenderScene()
+
 proc exerciseWorkspace(app: Application, root: string) =
   let manager = newKosmoWindowManager(app)
   defer:
@@ -62,6 +86,38 @@ proc settledUsage(
 
 suite "Workspace resource lifetimes":
   when defined(macosx) or defined(linux):
+    test "repeated editor diff and Markdown lifetimes keep descriptor counts bounded":
+      let root = createTempDir("merenda-document-handles-", "")
+      defer:
+        removeDir(root)
+      require runGitCommand(root, ["init", "-q"]).exitCode == 0
+      writeFile(root / "source.nim", "let value = 1\n")
+      require runGitCommand(root, ["add", "."]).exitCode == 0
+      require runGitCommand(
+        root,
+        [
+          "-c", "user.name=Kosmo Test", "-c", "user.email=test@example.invalid", "-c",
+          "commit.gpgsign=false", "commit", "-qm", "Initial",
+        ],
+      ).exitCode == 0
+      writeFile(root / "source.nim", "let value = 2\n")
+      exerciseDocuments(root)
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      let baseline = processResourceUsage()
+      require baseline.fileDescriptors >= 0
+      require baseline.childProcesses >= 0
+      let deadline = getMonoTime() + initDuration(seconds = 60)
+      for _ in 0 ..< 8:
+        require getMonoTime() < deadline
+        exerciseDocuments(root)
+        discard getCurrentSigilThread().pollAll(NonBlocking)
+        let current = processResourceUsage()
+        checkpoint "baseline: " & $baseline & "; after close: " & $current
+        require current.fileDescriptors >= 0
+        require current.childProcesses >= 0
+        check current.fileDescriptors <= baseline.fileDescriptors + 2
+        check current.childProcesses <= baseline.childProcesses
+
     test "repeated two-window five-terminal sessions release process resources":
       let root = createTempDir("merenda-resource-lifetimes-", "")
       defer:

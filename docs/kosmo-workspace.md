@@ -83,6 +83,9 @@ scrolls out of view. Collapsing a section releases its text view; Expand All loa
 every requested section. Large diffs stay collapsed by default above 400 changed
 lines or 20 KiB of patch text, and generated files require an explicit request.
 Repository patch reads retain their per-file and aggregate byte limits.
+Scrolling reuses cached section positions and only prepares newly exposed
+sections outside the buffered viewport. Text layout and unchanged headers stay
+cached; content changes, disclosure changes, and resizing update section geometry.
 
 The Moe editor worker and NimKit's shared Matter highlighter parse lines up to
 1,024 bytes by default, including generated Nim declarations with long `importc`

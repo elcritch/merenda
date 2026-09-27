@@ -20,6 +20,15 @@ and verify extended use.
 - [ ] Run extended sessions with multiple windows, terminals, Git activity, and
   Markdown. Track children, descriptors, owned workers, and memory after warmup;
   investigate growth and turn reproducible failures into bounded regressions.
+- [ ] Reproduce the reported Kosmo 0.24.0 `Too many open files` crash with a mix
+  of editor files, Git diffs, and Markdown open. No stack trace was available;
+  the preceding layout warning does not establish the source of the exhausted
+  descriptors. The current branch passes eight repeated mixed-document lifetimes
+  with three Git refreshes per cycle and bounded descriptors/children in
+  `tests/integrations/resourcelifetimes.nim`. Terminal-watch, workspace-watch,
+  and Git-process cleanup code is unchanged from 0.24.0. Capture descriptor
+  types/counts and the failing allocation in an extended session; this report
+  remains unresolved.
 - [ ] Verify dmon's Linux recursion fix before removing Kosmo's forced polling
   fallback. Exercise deep trees, multiple windows, missed events, and shutdown.
 

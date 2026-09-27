@@ -15,6 +15,12 @@ runtime housekeeping.
 RSS and total threads are diagnostic checkpoints: native drivers create
 housekeeping threads lazily, so thread count is not an owned-worker count.
 
+The same runner also exercises eight repeated editor, Git diff, and Markdown
+lifetimes, including three Git refreshes per cycle. It checks descriptor and
+child counts after closing the documents. This bounded check passes on macOS;
+the reported 0.24.0 descriptor-exhaustion crash remains under investigation in
+`PLAN.md`.
+
 `processResourceUsage()` in `merenda/nimkit/app/diagnostics` reports current and
 peak resident bytes, open descriptor count, child count, and thread count on
 macOS and Linux. Unavailable fields are `-1`. These are observations of the
@@ -37,6 +43,15 @@ one-view updates from 1,145,272 to 25,296 bytes (97.8%). Full updates grew from
 1,273,272 to 1,297,296 bytes because they also carry the explicit placement list.
 The receiving thread expands the list temporarily while reconciling; the savings
 apply to queued snapshots, not every allocation in a rendered frame.
+
+The scrolling regression in `tests/nimkit/renderfragments.nim` places 1,000
+children under one scrolling ancestor. On 2026-09-27, skipping unchanged child
+transforms and placement ordering reduced its update from 1,170,360 to 1,144
+bytes. Only the viewport's transforms change, and placement-only frames retain
+their resource manifest. Coverage also compares renderer replicas with fresh
+drawing after horizontal text scrolling, bounds changes, explicit-layer moves,
+and coalesced view-order changes. Git diff regressions verify that scrolling 140
+opened sections leaves header revisions and document geometry unchanged.
 
 RSS can stay high after objects are freed because allocators retain pages;
 compare repeated warmed runs and resource counts before calling that a leak.

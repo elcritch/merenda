@@ -54,6 +54,7 @@ else:
   import nimkit/outlineviews
   import nimkit/pasteboards_dragging
   import nimkit/popuphosts
+  import nimkit/renderfragments
   import nimkit/rendering
   import nimkit/resources
   import nimkit/responder
