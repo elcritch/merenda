@@ -9,6 +9,7 @@ import ../nimkit/app/[application, documents, panels, windowcontrollers, windows
 import ../nimkit/containers/[gridviews, outlineviews, scrollviews, tableviews]
 import ../nimkit/controls/[buttons, colorpicker, comboboxes]
 import ../nimkit/debug/selectionrings
+import ../nimkit/foundation/atomicfiles
 import ../nimkit/foundation/events
 import ../nimkit/foundation/[selectors as nimkitSelectors, types, undomanagers, urls]
 import ../nimkit/responder/keybindings
@@ -210,7 +211,7 @@ protocol ResourceEditorDocumentIo of DocumentFileProtocol:
     document.xIoDiagnostics = ResourceDiagnostics()
     let path = fileUrl.localFilePath()
     try:
-      writeFile(path, document.xResources.bundle().encodeResourceBundle())
+      atomicWriteFile(path, document.xResources.bundle().encodeResourceBundle())
       result = true
     except CatchableError as error:
       document.xIoDiagnostics.add(

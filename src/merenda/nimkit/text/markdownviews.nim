@@ -2300,22 +2300,6 @@ proc finishMarkdownWork(view: MarkdownView) =
       view.xPendingMarkdownCompletionGeneration = 0
       emit view.markdownDidFinishParsing(view.xMarkdownParseWorkerThreadId)
 
-proc applyCodeOverlays(storage: TextStorage, overlays: seq[TextAttributeRun]) =
-  if overlays.len == 0:
-    return
-  let
-    first = int(overlays[0].range.location)
-    stop = overlays[^1].range.maxIndex
-    affected = initTextRange(first, stop - first)
-  var preserved: seq[TextAttributeRun]
-  # Keep quote prefixes, labels and other existing attributes inside the
-  # affected interval. Apply all syntax overlays with one storage notification.
-  for run in storage.runs:
-    if run.range.maxIndex > first and int(run.range.location) < stop:
-      preserved.add run
-  preserved.add overlays
-  storage.setAttributeRanges(affected, storage.attributesAt(first), preserved)
-
 proc applyMarkdownCodeColors(
     view: MarkdownView, codeIndex: int, spans: openArray[SyntaxTokenSpan]
 ) =
@@ -2368,8 +2352,8 @@ proc applyMarkdownCodeColors(
             attributes: attributes,
           )
         inc index
-    presentation.storage.applyCodeOverlays(embedded)
-  view.textStorage.applyCodeOverlays(document)
+    presentation.storage.overlayAttributeRanges(embedded)
+  view.textStorage.overlayAttributeRanges(document)
   view.textView().needsDisplay = true
 
 proc receiveMarkdownHighlight(

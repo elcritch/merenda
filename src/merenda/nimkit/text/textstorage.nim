@@ -30,6 +30,11 @@ type
     range: TextRange
     styleId: uint32
 
+  TextStyleRuns = object
+    # The suffix is reversed. Rune lookups can binary search either side while
+    # successive streamed edits move only the runs between changed ranges.
+    before, after: seq[TextStyleRun]
+
   TextStyledSpan* = object
     source*: TextSnapshot
     byteStart*: int
@@ -40,8 +45,11 @@ type
 
   TextStorage* = ref object of DynamicAgent
     xSnapshot: TextSnapshot
-    xRuns: seq[TextStyleRun]
+    xRuns: TextStyleRuns
     xStyles: seq[TextAttributes]
+    xStyleUses: seq[int] # Stored run counts; -1 marks a reclaimed style slot.
+    xFreeStyles: seq[uint32]
+    xUnusedStyles: seq[uint32] # New or released styles to check after a splice.
     xOverlappingRuns: bool
     xRevision: Natural
     xDelegate: DynamicAgent
@@ -60,6 +68,48 @@ type
 
   AttributedString* = TextStorage
   MutableAttributedString* = TextStorage
+
+func len(runs: TextStyleRuns): int {.inline.} =
+  runs.before.len + runs.after.len
+
+func `[]`(runs: TextStyleRuns, index: int): TextStyleRun {.inline.} =
+  if index < runs.before.len:
+    runs.before[index]
+  else:
+    runs.after[runs.after.len - 1 - (index - runs.before.len)]
+
+iterator items(runs: TextStyleRuns): TextStyleRun =
+  for run in runs.before:
+    yield run
+  for index in countdown(runs.after.high, 0):
+    yield runs.after[index]
+
+iterator mitems(runs: var TextStyleRuns): var TextStyleRun =
+  for run in runs.before.mitems:
+    yield run
+  for index in countdown(runs.after.high, 0):
+    yield runs.after[index]
+
+proc moveGap(runs: var TextStyleRuns, index: int) =
+  while runs.before.len > index:
+    runs.after.add runs.before.pop()
+  while runs.before.len < index:
+    runs.before.add runs.after.pop()
+
+proc add(runs: var TextStyleRuns, run: TextStyleRun) =
+  runs.moveGap(runs.len)
+  runs.before.add run
+
+proc clear(runs: var TextStyleRuns) =
+  runs.before.setLen(0)
+  runs.after.setLen(0)
+
+proc replace(
+    runs: var TextStyleRuns, first, last: int, replacement: openArray[TextStyleRun]
+) =
+  runs.moveGap(first)
+  runs.after.setLen(runs.after.len - (last - first))
+  runs.before.add replacement
 
 func byteRange*(span: TextStyledSpan): TextByteRange =
   ## UTF-8 source range borrowed by this styled span.
@@ -342,10 +392,31 @@ proc endEditing*(storage: TextStorage) =
 
 proc styleId(storage: TextStorage, attributes: TextAttributes): uint32 =
   for index, existing in storage.xStyles:
-    if existing == attributes:
+    if storage.xStyleUses[index] >= 0 and existing == attributes:
       return index.uint32
-  result = storage.xStyles.len.uint32
-  storage.xStyles.add attributes
+  if storage.xFreeStyles.len > 0:
+    result = storage.xFreeStyles.pop()
+    storage.xStyles[int(result)] = attributes
+    storage.xStyleUses[int(result)] = 0
+  else:
+    result = storage.xStyles.len.uint32
+    storage.xStyles.add attributes
+    storage.xStyleUses.add 0
+  storage.xUnusedStyles.add result
+
+proc clearStyles(storage: TextStorage) =
+  storage.xStyles.setLen(0)
+  storage.xStyleUses.setLen(0)
+  storage.xFreeStyles.setLen(0)
+  storage.xUnusedStyles.setLen(0)
+
+proc reclaimUnusedStyles(storage: TextStorage) =
+  for id in storage.xUnusedStyles:
+    if storage.xStyleUses[int(id)] == 0:
+      storage.xStyles[int(id)] = TextAttributes()
+      storage.xStyleUses[int(id)] = -1
+      storage.xFreeStyles.add id
+  storage.xUnusedStyles.setLen(0)
 
 proc styleRun(
     storage: TextStorage, range: TextRange, attributes: TextAttributes
@@ -359,17 +430,20 @@ proc normalizeRuns(storage: TextStorage) =
   storage.xOverlappingRuns = false
   let total = storage.storageLength()
   if total == 0:
-    storage.xRuns.setLen(0)
-    storage.xStyles.setLen(0)
+    storage.xRuns.clear()
+    storage.clearStyles()
     return
 
-  storage.xRuns.sort(
+  var sorted = newSeqOfCap[TextStyleRun](storage.xRuns.len)
+  for run in storage.xRuns:
+    sorted.add run
+  sorted.sort(
     proc(a, b: TextStyleRun): int =
       cmp(int(a.range.location), int(b.range.location))
   )
 
   var normalized: seq[TextStyleRun]
-  for run in storage.xRuns:
+  for run in sorted:
     let clamped = clampTextRange(total, run.range)
     if clamped.length == 0:
       discard
@@ -383,6 +457,7 @@ proc normalizeRuns(storage: TextStorage) =
   if normalized.len == 0:
     normalized.add storage.styleRun(initTextRange(0, total), defaultTextAttributes())
   var compactStyles: seq[TextAttributes]
+  var styleUses: seq[int]
   var remap = newSeq[int](storage.xStyles.len)
   for index in 0 ..< remap.len:
     remap[index] = -1
@@ -395,9 +470,14 @@ proc normalizeRuns(storage: TextStorage) =
     if remap[oldId] < 0:
       remap[oldId] = compactStyles.len
       compactStyles.add storage.xStyles[oldId]
+      styleUses.add 0
     run.styleId = remap[oldId].uint32
-  storage.xRuns = normalized
+    inc styleUses[int(run.styleId)]
+  storage.xRuns = TextStyleRuns(before: normalized)
   storage.xStyles = compactStyles
+  storage.xStyleUses = styleUses
+  storage.xFreeStyles.setLen(0)
+  storage.xUnusedStyles.setLen(0)
 
 proc materialize*(storage: TextStorage) =
   if storage.xMaterialized:
@@ -408,8 +488,8 @@ proc materialize*(storage: TextStorage) =
     value = storage.xLazyProvider.trySendLocal(lazyTextStorageString(), storage).get("")
     runs = storage.xLazyProvider.trySendLocal(lazyTextStorageRuns(), storage).get(@[])
   storage.setStorageString(value)
-  storage.xRuns.setLen(0)
-  storage.xStyles.setLen(0)
+  storage.xRuns.clear()
+  storage.clearStyles()
   for run in runs:
     storage.xRuns.add storage.styleRun(run.range, run.attributes)
   if storage.storageLength() > 0 and storage.xRuns.len == 0:
@@ -521,10 +601,12 @@ proc initTextStorageFields*(
   storage.xSnapshot = newTextSnapshot(value)
   storage.xMaterialized = true
   storage.xOverlappingRuns = false
-  storage.xRuns.setLen(0)
-  storage.xStyles.setLen(0)
+  storage.xRuns.clear()
+  storage.clearStyles()
   if value.runeLen > 0:
     storage.xRuns.add storage.styleRun(initTextRange(0, value.runeLen), attributes)
+    storage.xStyleUses[0] = 1
+    storage.xUnusedStyles.setLen(0)
 
 proc newTextStorage*(value = "", attributes = defaultTextAttributes()): TextStorage =
   result = TextStorage()
@@ -554,10 +636,13 @@ proc initTextGapStorageFields*(
   storage.xSnapshot = nil
   storage.xGapBuffer = initGapTextBuffer(value)
   storage.xMaterialized = true
-  storage.xRuns.setLen(0)
-  storage.xStyles.setLen(0)
+  storage.xOverlappingRuns = false
+  storage.xRuns.clear()
+  storage.clearStyles()
   if value.runeLen > 0:
     storage.xRuns.add storage.styleRun(initTextRange(0, value.runeLen), attributes)
+    storage.xStyleUses[0] = 1
+    storage.xUnusedStyles.setLen(0)
 
 proc newTextGapStorage*(
     value = "", attributes = defaultTextAttributes()
@@ -607,6 +692,9 @@ proc copyTextStorage*(storage: TextStorage): TextStorage =
   storage.copyStorageTextTo(result)
   result.xRuns = storage.xRuns
   result.xStyles = storage.xStyles
+  result.xStyleUses = storage.xStyleUses
+  result.xFreeStyles = storage.xFreeStyles
+  result.xUnusedStyles = storage.xUnusedStyles
   result.xOverlappingRuns = storage.xOverlappingRuns
   result.xMaterialized = true
 
@@ -660,6 +748,7 @@ proc applySnapshot(storage: TextStorage, snapshot: TextStorage, actionName: stri
   storage.restoreStorageText(snapshot)
   storage.xRuns = snapshot.xRuns
   storage.xStyles = snapshot.xStyles
+  storage.xStyleUses = snapshot.xStyleUses
   storage.xMaterialized = true
   storage.normalizeRuns()
   storage.notifyCommittedEdit(edit)
@@ -710,12 +799,15 @@ proc `stringValue=`*(storage: TextStorage, value: string) =
   storage.registerSnapshotUndo(before, "Set Text")
   storage.dispatchWillEdit(edit)
   storage.setStorageString(value)
-  storage.xRuns.setLen(0)
-  storage.xStyles.setLen(0)
+  storage.xRuns.clear()
+  storage.clearStyles()
+  storage.xOverlappingRuns = false
   if value.runeLen > 0:
     storage.xRuns.add storage.styleRun(
       initTextRange(0, value.runeLen), defaultTextAttributes()
     )
+    storage.xStyleUses[0] = 1
+    storage.xUnusedStyles.setLen(0)
   storage.notifyCommittedEdit(edit)
 
 proc len*(storage: TextStorage): int =
@@ -749,6 +841,33 @@ func firstStyleRunAfter(storage: TextStorage, index: int): int =
       result = middle + 1
     else:
       high = middle
+
+func firstStyleRunStartingAt(storage: TextStorage, index: int): int =
+  var high = storage.xRuns.len
+  while result < high:
+    let middle = (result + high) div 2
+    if int(storage.xRuns[middle].range.location) < index:
+      result = middle + 1
+    else:
+      high = middle
+
+iterator runs*(storage: TextStorage, range: TextRange): TextAttributeRun =
+  ## Stored runs intersecting `range`, in source order, with their original
+  ## (unclipped) ranges. Disjoint runs use indexed lookup; overlapping precomputed
+  ## runs retain their order.
+  if not storage.isNil:
+    storage.materialize()
+    let clamped = clampTextRange(storage.storageLength(), range)
+    if clamped.length > 0:
+      var index = storage.firstStyleRunAfter(int(clamped.location))
+      while index < storage.xRuns.len and
+          int(storage.xRuns[index].range.location) < clamped.maxIndex:
+        let run = storage.xRuns[index]
+        if run.range.maxIndex > int(clamped.location):
+          yield TextAttributeRun(
+            range: run.range, attributes: storage.styleAttributes(run.styleId)
+          )
+        inc index
 
 proc attributeRunAt*(storage: TextStorage, index: int): TextAttributeRun =
   ## Returns the attributes and effective rune range at the clamped index.
@@ -850,7 +969,7 @@ proc replace*(
     nextRuns.add storage.styleRun(
       initTextRange(replaceStart, insertedLength), attributes
     )
-  storage.xRuns = nextRuns
+  storage.xRuns = TextStyleRuns(before: nextRuns)
   storage.normalizeRuns()
   storage.notifyCommittedEdit(edit)
 
@@ -881,6 +1000,87 @@ func sameLayoutAttributes(a, b: TextAttributes): bool =
         return false
   true
 
+proc addNormalized(runs: var seq[TextStyleRun], run: TextStyleRun) =
+  if runs.len > 0 and runs[^1].styleId == run.styleId and
+      runs[^1].range.maxIndex == int(run.range.location):
+    runs[^1].range.length += run.range.length
+  else:
+    runs.add run
+
+proc replaceAttributeRuns(
+    storage: TextStorage, range: TextRange, replacement: openArray[TextStyleRun]
+) =
+  let
+    start = int(range.location)
+    stop = range.maxIndex
+  if storage.xOverlappingRuns:
+    # Precomputed overlapping runs cannot be locally spliced by their end
+    # positions. Keep their historical precedence and normalize this uncommon
+    # representation using the complete table.
+    var updated: seq[TextStyleRun]
+    for run in storage.xRuns:
+      let
+        first = int(run.range.location)
+        last = run.range.maxIndex
+      if last <= start or first >= stop:
+        updated.add run
+      else:
+        if first < start:
+          updated.add TextStyleRun(
+            range: initTextRange(first, start - first), styleId: run.styleId
+          )
+        if last > stop:
+          updated.add TextStyleRun(
+            range: initTextRange(stop, last - stop), styleId: run.styleId
+          )
+    updated.add replacement
+    storage.xRuns = TextStyleRuns(before: updated)
+    storage.normalizeRuns()
+  else:
+    var
+      first = storage.firstStyleRunAfter(start)
+      last = storage.firstStyleRunStartingAt(stop)
+      updated = newSeqOfCap[TextStyleRun](replacement.len + 2)
+    if first < last:
+      let run = storage.xRuns[first]
+      if int(run.range.location) < start:
+        updated.add TextStyleRun(
+          range: initTextRange(int(run.range.location), start - int(run.range.location)),
+          styleId: run.styleId,
+        )
+    for run in replacement:
+      updated.addNormalized(run)
+    if first < last:
+      let run = storage.xRuns[last - 1]
+      if run.range.maxIndex > stop:
+        updated.addNormalized(
+          TextStyleRun(
+            range: initTextRange(stop, run.range.maxIndex - stop), styleId: run.styleId
+          )
+        )
+    if first > 0:
+      let previous = storage.xRuns[first - 1]
+      if previous.range.maxIndex == int(updated[0].range.location) and
+          previous.styleId == updated[0].styleId:
+        updated[0].range.location = previous.range.location
+        updated[0].range.length += previous.range.length
+        dec first
+    if last < storage.xRuns.len:
+      let following = storage.xRuns[last]
+      if updated[^1].range.maxIndex == int(following.range.location) and
+          updated[^1].styleId == following.styleId:
+        updated[^1].range.length += following.range.length
+        inc last
+    for run in updated:
+      inc storage.xStyleUses[int(run.styleId)]
+    for index in first ..< last:
+      let id = storage.xRuns[index].styleId
+      dec storage.xStyleUses[int(id)]
+      if storage.xStyleUses[int(id)] == 0:
+        storage.xUnusedStyles.add id
+    storage.xRuns.replace(first, last, updated)
+    storage.reclaimUnusedStyles()
+
 proc applyAttributeRanges(
     storage: TextStorage,
     range: TextRange,
@@ -904,21 +1104,6 @@ proc applyAttributeRanges(
   var edit = initTextStorageEdit(clamped, int(clamped.length), 0, {tseAttributes})
   edit.displayOnly = storage.xDelegate.isNil
   var nextRuns: seq[TextStyleRun]
-  for run in storage.xRuns:
-    let
-      runStart = int(run.range.location)
-      runStop = run.range.maxIndex
-    if runStop <= start or runStart >= stop:
-      nextRuns.add run
-    else:
-      if runStart < start:
-        nextRuns.add TextStyleRun(
-          range: initTextRange(runStart, start - runStart), styleId: run.styleId
-        )
-      if runStop > stop:
-        nextRuns.add TextStyleRun(
-          range: initTextRange(stop, runStop - stop), styleId: run.styleId
-        )
   type AttributeOverlay = object
     start, stop, order: int
     styleId: uint32
@@ -991,11 +1176,12 @@ proc applyAttributeRanges(
       edit.displayOnly =
         sameLayoutAttributes(previousAttributes, storage.xStyles[int(id)])
       position = stop
-    nextRuns.add TextStyleRun(range: initTextRange(first, last - first), styleId: id)
+    nextRuns.addNormalized(
+      TextStyleRun(range: initTextRange(first, last - first), styleId: id)
+    )
   storage.registerSnapshotUndo(before, "Set Attributes")
   storage.dispatchWillEdit(edit)
-  storage.xRuns = nextRuns
-  storage.normalizeRuns()
+  storage.replaceAttributeRuns(clamped, nextRuns)
   storage.notifyCommittedEdit(edit)
 
 proc setAttributeRanges*(
@@ -1008,6 +1194,35 @@ proc setAttributeRanges*(
   ## Existing styles outside `range` are retained. Style IDs remain valid until
   ## the next storage edit, as with `styledSpans`.
   storage.applyAttributeRanges(range, baseAttributes, overlays, true)
+
+proc overlayAttributeRanges*(
+    storage: TextStorage, overlays: openArray[TextAttributeRun]
+) =
+  ## Replaces styles under the given rune ranges, preserving styles and default
+  ## gaps between them. Later entries win; input ranges may be unsorted. Emits
+  ## one attribute edit and records one undo operation for the affected interval.
+  storage.materialize()
+  let total = storage.storageLength()
+  var
+    first = total
+    stop = 0
+  for overlay in overlays:
+    let affected = clampTextRange(total, overlay.range)
+    if affected.length > 0:
+      first = min(first, int(affected.location))
+      stop = max(stop, affected.maxIndex)
+  if stop <= first:
+    return
+  let affected = initTextRange(first, stop - first)
+  var preserved: seq[TextAttributeRun]
+  for run in storage.runs(affected):
+    preserved.add run
+  if storage.xOverlappingRuns:
+    # Attribute lookup gives earlier precomputed runs precedence. The batch
+    # setter gives later overlays precedence, so reverse only these old runs.
+    preserved.reverse()
+  preserved.add overlays
+  storage.setAttributeRanges(affected, defaultTextAttributes(), preserved)
 
 proc setAttributesForRange*(
     storage: MutableAttributedString, range: TextRange, attributes: TextAttributes

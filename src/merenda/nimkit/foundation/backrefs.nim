@@ -8,43 +8,39 @@ type
   BackRefSlot = object
     target: pointer
     backRefs: ptr BackRefSetCore
+    index: int
 
   BackRef*[T] = object
     ## Non-owning reference cleared when its target's ``BackRefSet`` is destroyed.
-    slot: BackRefSlot
+    ## Its registration stays at a stable address when this value is returned,
+    ## moved, or stored in a growing sequence. Access stays on the target's thread.
+    slot: ptr BackRefSlot
 
 proc removeSlot(backRefs: ptr BackRefSetCore, slot: ptr BackRefSlot) {.raises: [].} =
   if backRefs.isNil:
     return
-  for index in 0 ..< backRefs.slots.len:
-    if backRefs.slots[index] == slot:
-      backRefs.slots.delete(index)
-      return
+  let last = backRefs.slots.pop()
+  if last != slot:
+    backRefs.slots[slot.index] = last
+    last.index = slot.index
 
 proc addSlot(backRefs: ptr BackRefSetCore, slot: ptr BackRefSlot) {.raises: [].} =
   if backRefs.isNil:
     return
-  for registered in backRefs.slots:
-    if registered == slot:
-      return
+  slot.index = backRefs.slots.len
   backRefs.slots.add slot
-
-proc replaceSlot(
-    backRefs: ptr BackRefSetCore, oldSlot, newSlot: ptr BackRefSlot
-) {.raises: [].} =
-  if backRefs.isNil:
-    return
-  for index in 0 ..< backRefs.slots.len:
-    if backRefs.slots[index] == oldSlot:
-      backRefs.slots[index] = newSlot
-      return
-  backRefs.addSlot(newSlot)
 
 proc unregister(slot: var BackRefSlot) {.raises: [].} =
   if not slot.backRefs.isNil:
     slot.backRefs.removeSlot(addr slot)
   slot.target = nil
   slot.backRefs = nil
+
+proc newSlot(): ptr BackRefSlot =
+  when compileOption("threads"):
+    result = createShared(BackRefSlot)
+  else:
+    result = create(BackRefSlot)
 
 proc `=destroy`*[T](backRefs: var BackRefSet[T]) {.raises: [].} =
   while backRefs.core.slots.len > 0:
@@ -56,42 +52,48 @@ proc `=destroy`*[T](backRefs: var BackRefSet[T]) {.raises: [].} =
 proc `=copy`*[T](dest: var BackRefSet[T], src: BackRefSet[T]) {.error.}
 proc `=sink`*[T](dest: var BackRefSet[T], src: BackRefSet[T]) {.error.}
 
-proc `=destroy`*[T](backRef: var BackRef[T]) {.raises: [].} =
-  backRef.slot.unregister()
+proc `=destroy`*[T](backRef: BackRef[T]) {.raises: [].} =
+  if not backRef.slot.isNil:
+    backRef.slot[].unregister()
+    when compileOption("threads"):
+      deallocShared(backRef.slot)
+    else:
+      dealloc(backRef.slot)
 
 proc `=wasMoved`*[T](backRef: var BackRef[T]) {.inline.} =
-  backRef.slot = BackRefSlot()
+  backRef.slot = nil
 
 proc `=copy`*[T](dest: var BackRef[T], src: BackRef[T]) {.raises: [].} =
-  if cast[pointer](addr dest) == cast[pointer](unsafeAddr src):
+  if dest.slot == src.slot:
     return
-  dest.slot.unregister()
-  dest.slot = src.slot
-  if not dest.slot.backRefs.isNil:
-    dest.slot.backRefs.addSlot(addr dest.slot)
-
-proc `=sink`*[T](dest: var BackRef[T], src: BackRef[T]) {.raises: [].} =
-  dest.slot.unregister()
-  dest.slot = src.slot
-  if not dest.slot.backRefs.isNil:
-    dest.slot.backRefs.replaceSlot(unsafeAddr src.slot, addr dest.slot)
-  cast[ptr BackRef[T]](unsafeAddr src)[].slot = BackRefSlot()
+  `=destroy`(dest)
+  `=wasMoved`(dest)
+  if not src.slot.isNil and not src.slot.target.isNil:
+    dest.slot = newSlot()
+    dest.slot[] = src.slot[]
+    dest.slot.backRefs.addSlot(dest.slot)
 
 proc clear*[T](backRef: var BackRef[T]) {.inline.} =
-  backRef.slot.unregister()
+  `=destroy`(backRef)
+  `=wasMoved`(backRef)
 
 proc set*[T, U](backRef: var BackRef[T], target: T, backRefs: var BackRefSet[U]) =
-  if cast[pointer](target) == backRef.slot.target:
-    return
-  backRef.slot.unregister()
   if target.isNil:
+    backRef.clear()
     return
+  if backRef.slot.isNil:
+    backRef.slot = newSlot()
+  elif cast[pointer](target) == backRef.slot.target:
+    return
+  else:
+    backRef.slot[].unregister()
   backRef.slot.target = cast[pointer](target)
   backRef.slot.backRefs = addr backRefs.core
-  backRef.slot.backRefs.addSlot(addr backRef.slot)
+  backRef.slot.backRefs.addSlot(backRef.slot)
 
 proc `[]`*[T](backRef: BackRef[T]): T {.inline.} =
-  result = cast[T](backRef.slot.target)
+  if not backRef.slot.isNil:
+    result = cast[T](backRef.slot.target)
 
 proc isNil*[T](backRef: BackRef[T]): bool {.inline.} =
-  backRef.slot.target.isNil
+  backRef.slot.isNil or backRef.slot.target.isNil

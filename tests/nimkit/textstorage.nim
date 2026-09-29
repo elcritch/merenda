@@ -1,4 +1,4 @@
-import std/unittest
+import std/[random, strutils, unittest]
 
 import sigils/core
 
@@ -270,6 +270,188 @@ suite "nimkit text storage":
     check storage.attributeRunAt(4).range == initTextRange(4, 2)
     check storage.attributeRunAt(4).attributes == blue
     check storage.copyTextStorage().attributesAt(3) == red
+
+  test "range iteration retains original runs across sparse and overlapping storage":
+    let
+      red = defaultTextAttributes(color(0.9, 0.1, 0.2))
+      blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
+      source =
+        @[
+          TextAttributeRun(range: initTextRange(1, 4), attributes: red),
+          TextAttributeRun(range: initTextRange(2, 1), attributes: blue),
+          TextAttributeRun(range: initTextRange(4, 3), attributes: blue),
+          TextAttributeRun(range: initTextRange(8, 1), attributes: red),
+        ]
+      storage = newTextStorage("aé中😀xyz!w", source)
+    var found: seq[TextAttributeRun]
+    for run in storage.runs(initTextRange(3, 2)):
+      found.add run
+    check found == @[source[0], source[2]]
+    found.setLen(0)
+    for run in storage.runs(initTextRange(7, 1)):
+      found.add run
+    check found.len == 0
+    for run in storage.runs(initTextRange(1, 0)):
+      found.add run
+    for run in storage.runs(initTextRange(99, 1)):
+      found.add run
+    for run in TextStorage(nil).runs(initTextRange(0, 1)):
+      found.add run
+    check found.len == 0
+
+  test "unordered overlays retain sparse gaps and precomputed overlap precedence":
+    let
+      red = defaultTextAttributes(color(0.9, 0.1, 0.2))
+      blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
+      green = defaultTextAttributes(color(0.1, 0.8, 0.2))
+      storage = newTextStorage(
+        "aé中😀xyz!w",
+        @[
+          TextAttributeRun(range: initTextRange(1, 4), attributes: red),
+          TextAttributeRun(range: initTextRange(2, 1), attributes: blue),
+          TextAttributeRun(range: initTextRange(4, 2), attributes: blue),
+        ],
+      )
+    storage.overlayAttributeRanges(
+      [
+        TextAttributeRun(range: initTextRange(8, 20), attributes: green),
+        TextAttributeRun(range: initTextRange(1, 1), attributes: blue),
+        TextAttributeRun(range: initTextRange(5, 1), attributes: green),
+        TextAttributeRun(range: initTextRange(5, 1), attributes: red),
+        TextAttributeRun(range: initTextRange(2, 0), attributes: green),
+      ]
+    )
+    let expected = [
+      defaultTextAttributes(),
+      blue,
+      red,
+      red,
+      red,
+      red,
+      defaultTextAttributes(),
+      defaultTextAttributes(),
+      green,
+    ]
+    for index, attributes in expected:
+      check storage.attributesAt(index) == attributes
+    check storage.currentEdit.range == initTextRange(1, 8)
+    check storage.currentEdit.displayOnly
+    let revision = storage.revision
+    storage.overlayAttributeRanges([])
+    storage.overlayAttributeRanges(
+      [
+        TextAttributeRun(range: initTextRange(2, 0), attributes: green),
+        TextAttributeRun(range: initTextRange(99, 20), attributes: green),
+      ]
+    )
+    check storage.revision == revision
+
+  test "local range updates match per-rune styles across forward and backward edits":
+    let palette = [
+      defaultTextAttributes(),
+      defaultTextAttributes(color(0.9, 0.1, 0.2)),
+      defaultTextAttributes(color(0.1, 0.2, 0.9)),
+    ]
+    for storage in [
+      newTextStorage("é😀".repeat(32)),
+      TextStorage(newTextGapStorage("é😀".repeat(32))),
+    ]:
+      var
+        rng = initRand(19317)
+        expected = newSeq[TextAttributes](64)
+      for attributes in expected.mitems:
+        attributes = palette[0]
+      for edit in 0 ..< 120:
+        let
+          first = rng.rand(63)
+          stop = min(first + rng.rand(20) + 1, expected.len)
+          base = palette[rng.rand(palette.high)]
+        var overlays: seq[TextAttributeRun]
+        for _ in 0 ..< 4:
+          overlays.add TextAttributeRun(
+            range: initTextRange(rng.rand(70), rng.rand(12)),
+            attributes: palette[rng.rand(palette.high)],
+          )
+        if edit mod 2 == 0:
+          storage.setAttributeRanges(initTextRange(first, stop - first), base, overlays)
+          for index in first ..< stop:
+            expected[index] = base
+        else:
+          storage.overlayAttributeRanges(overlays)
+        for overlay in overlays:
+          let
+            overlayFirst =
+              max(int(overlay.range.location), if edit mod 2 == 0: first else: 0)
+            overlayStop =
+              min(overlay.range.maxIndex, if edit mod 2 == 0: stop else: expected.len)
+          for index in overlayFirst ..< overlayStop:
+            expected[index] = overlay.attributes
+        for index, attributes in expected:
+          check storage.attributesAt(index) == attributes
+        var
+          previous: TextAttributeRun
+          count = 0
+        for run in storage.runs:
+          check int(run.range.location) == previous.range.maxIndex
+          if count > 0:
+            check run.attributes != previous.attributes
+          previous = run
+          inc count
+        check previous.range.maxIndex == expected.len
+        check storage.currentEdit.displayOnly
+
+  test "incremental restyling reuses released style IDs and keeps copies independent":
+    for storage in [newTextStorage("abcdef"), TextStorage(newTextGapStorage("abcdef"))]:
+      let original = storage.copyTextStorage()
+      for iteration in 0 ..< 256:
+        var attributes = defaultTextAttributes()
+        attributes.foregroundColor = color(iteration.float32 / 256, 0.2, 0.5)
+        storage.setAttributes(initTextRange(1, 4), attributes)
+        for span in storage.styledSpans():
+          check span.styleId <= 2
+        check storage.attributesAt(1) == attributes
+      check original.attributeRuns ==
+        @[
+          TextAttributeRun(
+            range: initTextRange(0, 6), attributes: defaultTextAttributes()
+          )
+        ]
+      let copy = storage.copyTextStorage()
+      let copiedRuns = copy.attributeRuns
+      storage.setAttributes(initTextRange(0, 6), defaultTextAttributes())
+      check storage.attributeRuns.len == 1
+      check copy.attributeRuns == copiedRuns
+
+  test "overlays send one edit and undo restores a run table with a moved gap":
+    for storage in [
+      newTextStorage("aé中😀xyz"), TextStorage(newTextGapStorage("aé中😀xyz"))
+    ]:
+      let
+        red = defaultTextAttributes(color(0.9, 0.1, 0.2))
+        blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
+        manager = newUndoManager()
+        spy = newStorageEventSpy()
+      storage.setAttributes(initTextRange(5, 1), blue)
+      storage.setAttributes(initTextRange(1, 2), red)
+      let originalRuns = storage.attributeRuns
+      storage.undoManager = manager
+      spy.observeProtocol(storage, TextStorageEditingEvents)
+      storage.overlayAttributeRanges(
+        [
+          TextAttributeRun(range: initTextRange(0, 1), attributes: blue),
+          TextAttributeRun(range: initTextRange(4, 2), attributes: red),
+        ]
+      )
+      let overlaidRuns = storage.attributeRuns
+      check spy.events ==
+        @["willEdit", "didEdit", "willProcess", "didProcess", "attributes"]
+      check spy.lastEdit.range == initTextRange(0, 6)
+      check spy.lastEdit.displayOnly
+      check manager.undoCount == 1
+      check manager.performUndo()
+      check storage.attributeRuns == originalRuns
+      check manager.performRedo()
+      check storage.attributeRuns == overlaidRuns
 
   test "rich text attributes preserve TextKit-style value fields":
     var attributes = defaultTextAttributes(color(0.1, 0.2, 0.3), 14.0)

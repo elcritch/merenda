@@ -2,6 +2,8 @@
 
 import std/[json, jsonutils, os]
 
+import ../nimkit/foundation/atomicfiles
+
 type KosmoConfig* = object ## User choices persisted by the standalone editor.
   moeTheme*: string
   nimLspCommand*: string
@@ -27,12 +29,12 @@ proc loadKosmoConfig*(path: string): KosmoConfig =
     discard
 
 proc saveKosmoConfig*(config: KosmoConfig, path: string): bool =
-  ## Write `config` as JSON, creating its parent directory when needed.
+  ## Atomically replace JSON configuration, creating its parent directory when needed.
   if path.len == 0:
     return
   try:
     createDir(path.parentDir())
-    writeFile(path, config.toJson().pretty())
+    atomicWriteFile(path, config.toJson().pretty())
     result = true
   except CatchableError:
     discard

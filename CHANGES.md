@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Save Kosmo configuration and Tekton resource documents through checked
+  temporary files and atomic replacement, preserving existing contents when a
+  write or close fails.
+- Keep generated layout equations from retaining views and give back references
+  stable registrations across returns, copies, and sequence moves, so laid-out
+  standalone and detached trees release under ARC and ORC.
+- Apply streamed Markdown syntax colors with indexed range updates and local
+  run changes, preserving quote styles, undo, and edit notifications while
+  reducing work on large documents.
+
 - Add `nim install_kosmo` to build and install the current checkout as a complete
   macOS app bundle, using the release icon and resources.
 - Read terminal output in bounded application-frame work and coalesce grid

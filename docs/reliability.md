@@ -56,6 +56,25 @@ opened sections leaves header revisions and document geometry unchanged.
 RSS can stay high after objects are freed because allocators retain pages;
 compare repeated warmed runs and resource counts before calling that a leak.
 
+## Streamed Markdown syntax coloring
+
+`tests/benchmark_markdown_styling.nim` measures application of 64-line syntax
+color batches to a text storage containing 8,000–32,000 lines. Construction and
+tokenization are outside the timed section. Each figure below is the median of
+five runs after one warmup on macOS/arm64 with Nim 2.2.12 in release mode:
+
+| Lines | Plain before | Plain after | Quoted before | Quoted after |
+| ---: | ---: | ---: | ---: | ---: |
+| 8,000 | 140 ms | 9 ms | 217 ms | 14 ms |
+| 16,000 | 545 ms | 19 ms | 875 ms | 29 ms |
+| 32,000 | 2,162 ms | 38 ms | 3,367 ms | 57 ms |
+
+Forward streamed batches now use indexed run lookup and local run changes.
+Alternating edits at distant positions can still move the run gap across the
+document. The benchmark checks token and quote colors and one storage revision
+per batch; the NimKit text-storage tests cover undo, overlap precedence, style
+reuse, and edit notifications.
+
 ## Bounded URL loading
 
 `newUrlAssetLoader` accepts `maximumAssetBytes`, `maximumConcurrentLoads`, and
@@ -89,6 +108,12 @@ The subset covers back references, modal lifetimes, gap/text storage, text layou
 fragment updates, and renderer-thread resource ownership. Full GUI integration still
 runs separately. Sanitizers complement the observable lifecycle assertions;
 they do not establish a universal RSS ceiling or prove absence of every leak.
+
+Generated layout terms use non-owning back references. The ownership subset checks
+that standalone, detached, and reparented view trees release after layout, and
+that copied, moved, and sequence-stored back references clear when their target
+dies. ARC and ORC sanitizer runs passed these cases on macOS with stack-use-after-return
+detection enabled.
 
 Metal/Vulkan renderers support dedicated rendering under both ARC and ORC.
 An earlier ORC cycle-root unregister crash came from moving a renderer while it

@@ -82,7 +82,8 @@ const
 proc initLayoutTerm(
     item: View, attribute: LayoutAttribute, multiplier = 1.0'f32
 ): LayoutTerm =
-  LayoutTerm(item: item, attribute: attribute, multiplier: multiplier)
+  result = LayoutTerm(attribute: attribute, multiplier: multiplier)
+  result.item = item
 
 proc initLayoutEquation(
     terms: openArray[LayoutTerm],
@@ -116,7 +117,7 @@ proc generatedLayoutInputs*(view: View): seq[LayoutInput] =
       result.add input
 
 proc releaseGeneratedLayoutInputs*(view: View) =
-  ## Generated equations hold view references; closed trees cannot reuse them.
+  ## Drops cached equations and resets their generations throughout a tree.
   if view.isNil:
     return
   view.xLayoutInputCache = LayoutInputCache()
