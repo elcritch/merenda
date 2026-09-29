@@ -1,7 +1,8 @@
 ## Moe-backed search through Kosmo's shared floating search controls.
 
-import std/[options, unittest]
+import std/[options, strutils, unittest]
 
+import celina/core/colors
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import fixtures/ui
@@ -29,7 +30,7 @@ suite "Kosmo editor search":
     editor.clearSearch()
     check editor.searchQuery().len == 0
 
-    check not editor.searchFrom("[", editor.bufferCursor())
+    check not editor.searchFrom("[", editor.bufferCursor(), regularExpression = true)
     check editor.searchQuery().len == 0
 
   test "the editor Find shortcut opens and drives the floating search widget":
@@ -49,6 +50,8 @@ suite "Kosmo editor search":
       KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: editorSearchShortcutModifiers())
     )
     check view.searchVisible()
+    check view.replacementField().hidden
+    check not view.buttonWithLabel("Show replacement controls").isNil
     check window.fieldEditorClient() == view.searchField()
     view.searchField().checkVisibleIn(view)
     check window.dispatchTextInput("alpha")
@@ -127,12 +130,13 @@ suite "Kosmo editor search":
     defer:
       editor.close()
     let id = editor.tabs()[0].id
-    check editor.replaceSearch("[0-9]+", "x\ny", all = true) == 2
+    check editor.replaceSearch("[0-9]+", "x\ny", all = true, regularExpression = true) ==
+      2
     check editor.bufferText(id).get == "ax\ny bx\ny\nlast"
     require editor.undo()
-    check editor.replaceSearch("[0-9]+", "", all = true) == 2
+    check editor.replaceSearch("[0-9]+", "", all = true, regularExpression = true) == 2
     check editor.bufferText(id).get == "a b\nlast"
-    check editor.replaceSearch("[", "broken", all = true) == 0
+    check editor.replaceSearch("[", "broken", all = true, regularExpression = true) == 0
     check editor.replaceSearch("", "broken", all = true) == 0
     check editor.bufferText(id).get == "a b\nlast"
 
@@ -147,7 +151,7 @@ suite "Kosmo editor search":
     view.layoutSubtreeIfNeeded()
     view.refresh()
     require editor.revealLocation(0, 0)
-    require view.showSearch()
+    require view.showSearch(replacing = true)
     require window.dispatchTextInput("cat")
     require window.makeFirstResponder(view.replacementField())
     view.replacementField().checkVisibleIn(view)
@@ -171,14 +175,180 @@ suite "Kosmo editor search":
     check not view.searchVisible()
     check window.firstResponder() == view
 
+  test "search defaults stay compact and replacement is explicitly expanded":
+    let editor = newKosmoEditor(text = "cat cat")
+    let view = newKosmoEditorView(editor)
+    let window = newWindow("Search modes", frame = rect(0, 0, 640, 360))
+    defer:
+      window.close()
+      editor.close()
+    window.setContentView(view)
+    view.layoutSubtreeIfNeeded()
+    view.refresh()
+    require view.showSearch()
+    require window.dispatchTextInput("cat")
+    let cursor = editor.bufferCursor()
+    let toggle = view.buttonWithLabel("Show replacement controls")
+    require not toggle.isNil
+    toggle.checkVisibleIn(view)
+    let point = toggle.pointToWindow(
+      initPoint(toggle.bounds().size.width / 2, toggle.bounds().size.height / 2)
+    )
+    require window.mouseDownAt(point)
+    require window.mouseUpAt(point)
+    view.replacementField().checkVisibleIn(view)
+    check view.searchField().text() == "cat"
+    check editor.bufferCursor() == cursor
+    require window.makeFirstResponder(view.replacementField())
+    require window.dispatchTextInput("dog")
+
+    let find =
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: editorSearchShortcutModifiers())
+    let replace = KeyEvent(
+      key: keyF,
+      keyCode: keyF.ord,
+      modifiers: editorSearchShortcutModifiers() + {nimkit.kmOption},
+    )
+    require window.dispatchKeyDown(find)
+    check view.replacementField().hidden
+    check view.buttonWithLabel("Replace all matches").hidden
+    check window.fieldEditorClient() == view.searchField()
+    check view.searchField().text() == "cat"
+    check editor.bufferCursor() == cursor
+
+    require window.dispatchKeyDown(replace)
+    view.replacementField().checkVisibleIn(view)
+    check view.replacementField().text() == "dog"
+    check view.searchField().text() == "cat"
+    require window.mouseDownAt(point)
+    require window.mouseUpAt(point)
+    check view.replacementField().hidden
+    check window.fieldEditorClient() == view.searchField()
+    require window.makeFirstResponder(view)
+    require window.dispatchKeyDown(replace)
+    view.replacementField().checkVisibleIn(view)
+    view.dismissSearch()
+    require window.dispatchKeyDown(find)
+    check view.replacementField().hidden
+
   test "zero width replacements advance and replace all visits each original match once":
     let editor = newKosmoEditor(text = "one\ntwo")
     defer:
       editor.close()
     let id = editor.tabs()[0].id
-    check editor.replaceSearch("^", ">", all = true) == 2
+    check editor.replaceSearch("^", ">", all = true, regularExpression = true) == 2
     check editor.bufferText(id).get == ">one\n>two"
     require editor.undo()
     require editor.revealLocation(0, 0)
-    check editor.replaceSearch("^", "") == 0
+    check editor.replaceSearch("^", "", regularExpression = true) == 0
     check editor.bufferText(id).get == "one\ntwo"
+
+  test "Reni capture replacements preserve Unicode and stay undoable":
+    let editor = newKosmoEditor(text = "λcat cat\ncat")
+    defer:
+      editor.close()
+    let id = editor.tabs()[0].id
+    require editor.searchFrom(
+      r"λ\K(?<animal>cat)",
+      KosmoBufferCursor(line: 0, column: 0),
+      regularExpression = true,
+    )
+    check editor.bufferCursor() == KosmoBufferCursor(line: 0, column: 1)
+    check editor.replaceSearch(
+      r"λ\K(?<animal>cat)", "${animal}-$0-$$", regularExpression = true
+    ) == 1
+    check editor.bufferText(id).get == "λcat-cat-$ cat\ncat"
+    require editor.undo()
+    check editor.bufferText(id).get == "λcat cat\ncat"
+    check editor.replaceSearch("(cat)", "$2", all = true, regularExpression = true) == 0
+    check editor.searchError().len > 0
+    check editor.bufferText(id).get == "λcat cat\ncat"
+    check editor.replaceSearch("(cat)", "$1!", all = true, regularExpression = true) == 3
+    check editor.bufferText(id).get == "λcat! cat!\ncat!"
+    require editor.undo()
+    check editor.replaceSearch(r"(?=.)", ">", all = true, regularExpression = true) == 11
+    check editor.bufferText(id).get == ">λ>c>a>t> >c>a>t\n>c>a>t"
+
+  test "end-of-line matches navigate and replace beyond the normal cursor":
+    let editor = newKosmoEditor(text = "λcat\ndog")
+    defer:
+      editor.close()
+    let id = editor.tabs()[0].id
+    require editor.searchFrom(
+      "$", KosmoBufferCursor(line: 0, column: 0), regularExpression = true
+    )
+    check editor.bufferCursor().line == 0
+    require editor.searchFrom("$", editor.bufferCursor(), regularExpression = true)
+    check editor.bufferCursor().line == 1
+    check editor.replaceSearch("$", "!", regularExpression = true) == 1
+    check editor.bufferText(id).get == "λcat\ndog!"
+    check editor.replaceSearch("$", "?", regularExpression = true) == 1
+    check editor.bufferText(id).get == "λcat?\ndog!"
+    require editor.undo()
+    require editor.undo()
+    check editor.bufferText(id).get == "λcat\ndog"
+
+  test "editor expression toggle controls search and capture replacement together":
+    let editor = newKosmoEditor(text = "a.b axb")
+    let view = newKosmoEditorView(editor)
+    let window = newWindow("Reni controls", frame = rect(0, 0, 640, 360))
+    defer:
+      window.close()
+      editor.close()
+    window.setContentView(view)
+    view.layoutSubtreeIfNeeded()
+    view.refresh()
+    require view.showSearch(replacing = true)
+    require window.dispatchTextInput("a.b")
+    check editor.bufferCursor().column == 0
+    let toggle = view.buttonWithLabel("Use Reni regular expressions")
+    require not toggle.isNil
+    toggle.checkVisibleIn(view)
+    check toggle.state == bsOff
+    let point = toggle.pointToWindow(
+      initPoint(toggle.bounds().size.width / 2, toggle.bounds().size.height / 2)
+    )
+    require window.mouseDownAt(point)
+    require window.mouseUpAt(point)
+    check toggle.state == bsOn
+    view.findNext()
+    check editor.bufferCursor().column == 4
+    view.replacementField().text = "$0!"
+    check view.replaceMatch(all = true) == 2
+    check editor.bufferText(editor.tabs()[0].id).get == "a.b! axb!"
+    require editor.undo()
+    require window.mouseDownAt(point)
+    require window.mouseUpAt(point)
+    check toggle.state == bsOff
+    check view.replaceMatch(all = true) == 1
+    check editor.bufferText(editor.tabs()[0].id).get == "$0! axb"
+
+  test "Reni highlights follow Unicode, tabs, and wrapping without coloring empty cells":
+    let editor = newKosmoEditor(text = "λ\t猫 " & repeat("cat", 18))
+    defer:
+      editor.close()
+    var buffer = newRenderBuffer(32, 12)
+    editor.render(buffer)
+    require editor.searchFrom(
+      r"(?<=\t)猫|cat", KosmoBufferCursor(line: 0, column: 0), regularExpression = true
+    )
+    editor.render(buffer)
+    let cursor = editor.cursor()
+    require buffer.cell(cursor.column, cursor.row).symbol == "猫"
+    let highlight = buffer.cell(cursor.column, cursor.row).style.bg
+    var highlightedCells = 0
+    var lastMatchRow = -1
+    for row in 0 ..< buffer.height - 1:
+      for column in 0 ..< buffer.width:
+        let cell = buffer.cell(column, row)
+        if cell.symbol in ["猫", "c", "a", "t"]:
+          check cell.style.bg == highlight
+          inc highlightedCells
+          lastMatchRow = row
+        elif cell.symbol == " " or cell.symbol == "λ":
+          check cell.style.bg != highlight
+    check highlightedCells == 55
+    check lastMatchRow > cursor.row
+    editor.clearSearch()
+    editor.render(buffer)
+    check buffer.cell(cursor.column, cursor.row).style.bg != highlight

@@ -21,6 +21,7 @@ const
   KosmoShowFileExplorerAction* = "kosmo.showFileExplorer"
   KosmoRevealActiveFileAction* = "kosmo.revealActiveFile"
   KosmoFindInFilesAction* = "kosmo.findInFiles"
+  KosmoReplaceInFilesAction* = "kosmo.replaceInFiles"
   KosmoQuickOpenAction* = "kosmo.quickOpen"
   KosmoShowSettingsAction* = "kosmo.showSettings"
   KosmoUndoAction* = "kosmo.undo"
@@ -221,6 +222,11 @@ func kosmoActions*(): seq[KosmoAction] =
         description: "Show and focus Find in Files.",
       ),
       KosmoAction(
+        identifier: KosmoReplaceInFilesAction,
+        title: "Replace in Files",
+        description: "Show Find in Files with replacement controls expanded.",
+      ),
+      KosmoAction(
         identifier: KosmoShowSettingsAction,
         title: "Settings",
         description: "Show Kosmo Settings.",
@@ -366,6 +372,7 @@ proc initKosmoKeyBindings*(
   result.addBinding("primary-shift-e", KosmoShowFileExplorerAction, profile, platform)
   result.addBinding("primary-shift-l", KosmoRevealActiveFileAction, profile, platform)
   result.addBinding("primary-shift-f", KosmoFindInFilesAction, profile, platform)
+  result.addBinding("primary-alt-shift-f", KosmoReplaceInFilesAction, profile, platform)
   result.addBinding("primary-,", KosmoShowSettingsAction, profile, platform)
   result.addBinding("primary-z", KosmoUndoAction, profile, platform)
   result.addBinding("primary-shift-z", KosmoRedoAction, profile, platform)

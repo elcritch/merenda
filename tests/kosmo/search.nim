@@ -6,6 +6,7 @@ import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
+import fixtures/ui
 
 proc renderedFigText(node: Fig): string =
   for glyphIndex in 0 ..< node.textLayout.glyphCount():
@@ -317,7 +318,7 @@ suite "Kosmo":
       root = createTempDir("merenda-kosmo-find-stream-render-", "")
       nested = root / "nested"
       panel = newKosmoFileSearchPanel(root)
-      window = newWindow("Kosmo Find Stream Render Test", rect(0, 0, 320, 486))
+      window = newWindow("Kosmo Find Stream Render Test", rect(0, 0, 320, 420))
     createDir(nested)
     writeFile(root / "00-initial.txt", "needle\n" & repeat('x', 8 * 1024 * 1024))
     defer:
@@ -575,6 +576,76 @@ suite "Kosmo":
       check editorIsFirstResponder
 
 suite "Kosmo file replacement":
+  test "file search hides replacement until expanded and preserves results on mode changes":
+    let root = createTempDir("kosmo-search-modes-", "")
+    writeFile(root / "sample.txt", "cat cat\n")
+    let frontend = newKosmoApplication(
+      newApplication("File search modes"), filePath = root, monitorsGitStatus = false
+    )
+    defer:
+      frontend.close()
+      removeDir(root)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 900, 600)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let window = frontend.window
+    let panel = frontend.searchPanel
+    let modifiers = frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
+    let find = KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: modifiers)
+    let replace =
+      KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: modifiers + {nimkit.kmOption})
+    require window.makeFirstResponder(frontend.editorView)
+    require window.dispatchKeyDown(find)
+    check not panel.replacementVisible
+    check panel.replacementField.hidden
+    check panel.replaceButton.hidden
+    check panel.replaceAllButton.hidden
+    let compactResultsY = panel.resultsView.frame().minY
+    require window.dispatchTextInput("cat")
+    require panel.performSearch()
+    require panel.waitForSearch()
+    check panel.resultsView.matches.len == 2
+    let handle = panel.activeSearch()
+    let selected = panel.resultsView.matchIdentifier(0)
+    panel.resultsView.selectedItemIdentifier = selected
+
+    let toggle = panel.buttonWithLabel("Show replacement controls")
+    require not toggle.isNil
+    let point = toggle.pointToWindow(
+      initPoint(toggle.bounds().size.width / 2, toggle.bounds().size.height / 2)
+    )
+    require window.mouseDownAt(point)
+    require window.mouseUpAt(point)
+    check panel.replacementVisible
+    panel.replacementField.checkVisibleIn(panel)
+    panel.replaceAllButton.checkVisibleIn(panel)
+    check panel.resultsView.frame().minY > compactResultsY
+    require window.makeFirstResponder(panel.replacementField)
+    require window.dispatchTextInput("dog")
+    require window.dispatchKeyDown(find)
+    check not panel.replacementVisible
+    check panel.replacementField.hidden
+    check window.fieldEditorClient() == panel.queryField
+    check panel.resultsView.frame().minY == compactResultsY
+
+    require window.dispatchKeyDown(replace)
+    check panel.replacementVisible
+    check panel.queryField.text() == "cat"
+    check panel.replacementField.text() == "dog"
+    check panel.activeSearch() == handle
+    check panel.resultsView.matches.len == 2
+    check panel.resultsView.selectedItemIdentifier == selected
+    require window.mouseDownAt(point)
+    require window.mouseUpAt(point)
+    check not panel.replacementVisible
+    check panel.resultsView.frame().minY == compactResultsY
+    require window.makeFirstResponder(frontend.editorView)
+    require window.dispatchKeyDown(replace)
+    check panel.replacementVisible
+    require frontend.showFileExplorer()
+    require window.dispatchKeyDown(find)
+    check not panel.replacementVisible
+
   test "selected and all matches replace literal text and preserve CRLF":
     let root = createTempDir("kosmo-replace-files-", "")
     let path = root / "unicode.txt"
@@ -678,3 +749,71 @@ suite "Kosmo file replacement":
     require panel.waitForSearch()
     check readFile(path) == "dog dog cat\n"
     check panel.resultsView.matches.len == 1
+
+  test "file replacement uses named captures and rejects invalid templates before saving":
+    let root = createTempDir("kosmo-reni-files-", "")
+    let first = root / "first.txt"
+    let second = root / "second.txt"
+    writeFile(first, "λ pre:cat\r\n")
+    writeFile(second, "pre:dog\n")
+    let panel = newKosmoFileSearchPanel(root)
+    defer:
+      panel.close()
+      removeDir(root)
+    panel.queryField.text = r"pre:\K(?<animal>\w+)"
+    require panel.performSearch()
+    require panel.waitForSearch()
+    check panel.resultsView.matches.len == 0
+    panel.regularExpression = true
+    require panel.waitForSearch()
+    require panel.resultsView.matches.len == 2
+    panel.replacementField.text = "${missing}"
+    check panel.replaceMatches(all = true) == 0
+    check "Replacement error" in panel.statusLabel.text
+    check readFile(first) == "λ pre:cat\r\n"
+    check readFile(second) == "pre:dog\n"
+    panel.replacementField.text = "${animal}-$0-$$"
+    check panel.replaceMatches(all = true) == 2
+    require panel.waitForSearch()
+    check readFile(first) == "λ pre:cat-cat-$\r\n"
+    check readFile(second) == "pre:dog-dog-$\n"
+    panel.regularExpression = false
+    require panel.waitForSearch()
+    check panel.resultsView.matches.len == 0
+
+  test "file expression toggle refreshes results and reports invalid patterns":
+    let root = createTempDir("kosmo-reni-toggle-", "")
+    writeFile(root / "sample.txt", "a.b axb\n")
+    let panel = newKosmoFileSearchPanel(root)
+    let window = newWindow("Reni file controls", frame = rect(0, 0, 360, 400))
+    defer:
+      panel.close()
+      window.close()
+      removeDir(root)
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    panel.queryField.text = "a.b"
+    require panel.performSearch()
+    require panel.waitForSearch()
+    check panel.resultsView.matches.len == 1
+    let toggle = panel.buttonWithLabel("Use Reni regular expressions")
+    require not toggle.isNil
+    toggle.checkVisibleIn(panel)
+    let point = toggle.pointToWindow(
+      initPoint(toggle.bounds().size.width / 2, toggle.bounds().size.height / 2)
+    )
+    require window.mouseDownAt(point)
+    require window.mouseUpAt(point)
+    require panel.waitForSearch()
+    check panel.regularExpression
+    check panel.resultsView.matches.len == 2
+    panel.queryField.text = "("
+    check not panel.performSearch()
+    check panel.activeSearch().isNil
+    check not panel.replaceAllButton.enabled
+    check panel.statusLabel.text.len > 0
+    require window.mouseDownAt(point)
+    require window.mouseUpAt(point)
+    require panel.waitForSearch()
+    check not panel.regularExpression
+    check panel.resultsView.matches.len == 0

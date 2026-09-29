@@ -18,7 +18,7 @@ import
   ]
 import moepkg/buffer/undo as moeUndo
 import moepkg/buffer/edit as moeEdit
-import moepkg/buffer/search as moeSearch
+import moepkg/[editor_window_layout, visible_rows]
 import moepkg/buffer/highlight as moeBufferHighlight
 import moepkg/buffer/core as moeBufferCore
 import moepkg/command_completion as moeCommandCompletion
@@ -32,9 +32,11 @@ from moepkg/command_handlers/visual_commands import visualDelete
 from moepkg/registers import setYankedRegister
 from moepkg/color import EditorColorPairIndex, Rgb, ThemeColors, isTermDefaultColor
 from moepkg/theme import DefaultColors
-from moepkg/render_utils import steadyBottomAreaHeight
+from moepkg/render_utils import
+  steadyBottomAreaHeight, searchHighlightStyle, screenXToCharIndex,
+  displayWidthSubstrWithTabs
 from moepkg/search_utils import shouldIgnoreCase
-from moepkg/unicode_utils import charToBytePos
+from moepkg/unicode_utils import byteToCharPos
 from moepkg/uri_utils import findAllUris
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
@@ -43,6 +45,7 @@ import moepkg/types as moeTypes
 import sigils/threads
 
 import ../nimkit/text/mattergrammarassets
+import ../nimkit/foundation/textsearch
 import ./matterworkers
 import ./moelogging
 import ./cli
@@ -73,6 +76,11 @@ type
     highlightVersions: Table[BufferId, int]
     remappers: Table[BufferId, bool]
 
+  SearchLocation = object
+    bufferId: BufferId
+    contentVersion: int
+    match, cursor: moeTypes.BufferPosition
+
   KosmoEditor* = ref object
     editor: Editor
     nimLspCommand: string
@@ -85,6 +93,10 @@ type
     matterRequests: Table[BufferId, tuple[contentVersion: int, requestId: uint64]]
     matterSyntaxFallback: MatterSyntaxFallbackState
     matterLineStateVersions: Table[BufferId, int]
+    xSearchPattern: Option[TextSearchPattern]
+    xSearchLocation: Option[SearchLocation]
+    xSearchQuery, xSearchError: string
+    xSearchRegularExpression, xSearchIgnoreCase: bool
 
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
@@ -1252,106 +1264,199 @@ proc revealLocation*(
   editor.editor.setActiveWindowScreenCursor(window)
   result = true
 
+proc prepareSearch(editor: KosmoEditor, query: string, regularExpression: bool): bool =
+  let state = editor.editor.state
+  let ignoreCase =
+    shouldIgnoreCase(query, state.input.search.ignorecase, state.input.search.smartcase)
+  editor.xSearchError = ""
+  state.input.search.last.pattern = ""
+  state.input.search.hlsearchTempDisabled = true
+  if editor.xSearchPattern.isSome and editor.xSearchQuery == query and
+      editor.xSearchRegularExpression == regularExpression and
+      editor.xSearchIgnoreCase == ignoreCase:
+    return true
+  editor.xSearchPattern = none(TextSearchPattern)
+  editor.xSearchLocation = none(SearchLocation)
+  editor.xSearchQuery = ""
+  # Kosmo paints its own results so Reni-only syntax never reaches Moe's matcher.
+  try:
+    editor.xSearchPattern = some(
+      initTextSearchPattern(query, regularExpression, caseSensitive = not ignoreCase)
+    )
+    editor.xSearchQuery = query
+    editor.xSearchRegularExpression = regularExpression
+    editor.xSearchIgnoreCase = ignoreCase
+    result = true
+  except TextSearchError as error:
+    editor.xSearchError = error.msg
+    state.statusMessage = "Search error: " & error.msg
+
+func searchError*(editor: KosmoEditor): string =
+  editor.xSearchError
+
+proc searchStart(
+    editor: KosmoEditor, cursor: moeTypes.BufferPosition
+): moeTypes.BufferPosition =
+  ## A normal-mode cursor is clamped before an end-of-line zero-width match.
+  result = cursor
+  if editor.xSearchLocation.isSome:
+    let location = editor.xSearchLocation.get
+    let buffer = editor.editor.activeBuffer
+    if location.bufferId == buffer.id and
+        location.contentVersion == buffer.contentVersion and location.cursor == cursor:
+      result = location.match
+
+proc revealSearchMatch(editor: KosmoEditor, match: moeTypes.BufferPosition) =
+  discard editor.revealLocation(match.line, match.column, centered = true)
+  let buffer = editor.editor.activeBuffer
+  editor.xSearchLocation = some(
+    SearchLocation(
+      bufferId: buffer.id,
+      contentVersion: buffer.contentVersion,
+      match: match,
+      cursor: editor.editor.cursor,
+    )
+  )
+
+proc searchPosition(
+    editor: KosmoEditor,
+    start: moeTypes.BufferPosition,
+    direction: KosmoSearchDirection,
+    inclusive = false,
+): Option[moeTypes.BufferPosition] =
+  let buffer = editor.editor.activeBuffer
+  let pattern = editor.xSearchPattern.get
+  let origin = clamp(start.line, 0, buffer.len - 1)
+  for step in 0 .. buffer.len:
+    let lineIndex =
+      if direction == KosmoSearchDirection.Forward:
+        (origin + step) mod buffer.len
+      else:
+        (origin - step + buffer.len) mod buffer.len
+    let line = buffer.getLine(lineIndex)
+    var previous = none(moeTypes.BufferPosition)
+    for match in pattern.findMatches(line):
+      let column = line.byteToCharPos(match.first)
+      let eligible =
+        if step != 0 and step != buffer.len:
+          true
+        elif direction == KosmoSearchDirection.Forward:
+          if step == 0:
+            column > start.column or (inclusive and column == start.column)
+          else:
+            column <= start.column
+        else:
+          if step == 0:
+            column < start.column or (inclusive and column == start.column)
+          else:
+            column >= start.column
+      if eligible:
+        let position = some(moeTypes.BufferPosition(line: lineIndex, column: column))
+        if direction == KosmoSearchDirection.Forward:
+          return position
+        previous = position
+    if previous.isSome:
+      return previous
+
 proc searchFrom*(
     editor: KosmoEditor,
     query: string,
     start: KosmoBufferCursor,
     direction = KosmoSearchDirection.Forward,
+    regularExpression = false,
 ): bool {.discardable.} =
-  ## Search the active buffer with Moe's regex, case, highlight, and viewport state.
+  ## Search with literal text or opt-in Reni expressions, centering the result.
   if editor.isNil or editor.editor.isNil or query.len == 0:
     return
-  if not editor.revealLocation(start.line, start.column):
+  if not editor.revealLocation(start.line, start.column) or
+      not editor.prepareSearch(query, regularExpression):
     return
-  let
-    state = editor.editor.state
-    ignoreCase = shouldIgnoreCase(
-      query, state.input.search.ignorecase, state.input.search.smartcase
-    )
-  if moeSearch.compileSearchRegex(query, ignoreCase).isNone:
-    state.input.search.last.pattern = ""
-    state.input.search.hlsearchTempDisabled = true
-    state.statusMessage = "Invalid regex: " & query
-    return
-  state.input.search.last.pattern = query
-  state.input.search.last.wholeWord = false
-  state.input.search.hlsearchTempDisabled = false
-  let
-    buffer = editor.editor.activeBuffer()
-    startPosition = editor.editor.cursor
-    match =
-      case direction
-      of KosmoSearchDirection.Forward:
-        buffer.findNext(query, startPosition, ignoreCase)
-      of KosmoSearchDirection.Backward:
-        buffer.findPrev(query, startPosition, ignoreCase)
-  if match.isNone:
-    state.statusMessage = "Pattern not found: " & query
-    return
-  let position = match.get
-  discard editor.revealLocation(position.line, position.column, centered = true)
-  state.statusMessage = "Found: " & query
-  true
+  try:
+    let match =
+      editor.searchPosition(editor.searchStart(editor.editor.cursor), direction)
+    if match.isNone:
+      editor.xSearchLocation = none(SearchLocation)
+      editor.editor.state.statusMessage = "Pattern not found: " & query
+      return
+    editor.revealSearchMatch(match.get)
+    editor.editor.state.statusMessage = "Found: " & query
+    result = true
+  except TextSearchError as error:
+    editor.xSearchError = error.msg
+    editor.xSearchPattern = none(TextSearchPattern)
+    editor.xSearchLocation = none(SearchLocation)
+    editor.editor.state.statusMessage = "Search error: " & error.msg
 
 proc clearSearch*(editor: KosmoEditor) =
-  ## Clear Moe's active search query and rendered match highlights.
+  ## Clear both GUI and native search highlights.
   if not editor.isNil and not editor.editor.isNil:
+    editor.xSearchPattern = none(TextSearchPattern)
+    editor.xSearchLocation = none(SearchLocation)
+    editor.xSearchQuery = ""
+    editor.xSearchError = ""
     editor.editor.state.input.search.last.pattern = ""
     editor.editor.state.input.search.hlsearchTempDisabled = true
 
 func searchQuery*(editor: KosmoEditor): string =
-  ## Return the query currently used by Moe's search highlighting and n/N commands.
   if not editor.isNil and not editor.editor.isNil:
-    result = editor.editor.state.input.search.last.pattern
+    result = editor.xSearchQuery
 
-proc replaceSearch*(editor: KosmoEditor, query, replacement: string, all = false): int =
-  ## Replace the match at the cursor, or all matches, as one undo transaction.
-  ## Uses the same regex and case rules as search; replacement text is literal.
+proc replaceSearch*(
+    editor: KosmoEditor,
+    query, replacement: string,
+    all = false,
+    regularExpression = false,
+): int =
+  ## Replace original matches as one undo transaction. Validate before editing.
   if editor.isNil or editor.editor.isNil or query.len == 0:
     return
-  let
-    buffer = editor.editor.activeBuffer
-    state = editor.editor.state
-    cursor = editor.editor.cursor
-    ignoreCase = shouldIgnoreCase(
-      query, state.input.search.ignorecase, state.input.search.smartcase
-    )
-  if buffer.readOnly or moeSearch.compileSearchRegex(query, ignoreCase).isNone:
+  let buffer = editor.editor.activeBuffer
+  let state = editor.editor.state
+  let cursor = editor.editor.cursor
+  if buffer.readOnly or not editor.prepareSearch(query, regularExpression):
     return
+  let matchCursor = editor.searchStart(cursor)
   type Replacement = object
     line: int
     text: string
 
   var changes: seq[Replacement]
-  var resume = cursor
-  for lineIndex in 0 ..< buffer.len:
-    if all or lineIndex == cursor.line:
-      let line = buffer.getLine(lineIndex)
-      let ranges = buffer.findSearchMatchRanges(lineIndex, query, ignoreCase)
-      var text = ""
-      var last = 0
-      for match in ranges:
-        if (all or match.startCol == cursor.column) and
-            (match.startCol != match.endCol or replacement.len > 0):
-          let firstByte = line.charToBytePos(match.startCol)
-          let lastByte = line.charToBytePos(match.endCol)
-          text.add line[last ..< firstByte]
-          text.add replacement
-          last = lastByte
-          inc result
-          if not all:
-            let parts = replacement.split('\n')
-            resume.line = lineIndex + parts.len - 1
-            resume.column =
-              (if parts.len == 1: match.startCol else: 0) + parts[^1].runeLen
-            if match.startCol == match.endCol:
-              inc resume.column
-      if last > 0 or text.len > 0:
-        text.add line[last ..< line.len]
-        changes.add Replacement(line: lineIndex, text: text)
-  if changes.len == 0:
+  var resume = matchCursor
+  try:
+    let pattern = editor.xSearchPattern.get
+    let templateText = pattern.initTextSearchReplacement(replacement)
+    for lineIndex in 0 ..< buffer.len:
+      if all or lineIndex == matchCursor.line:
+        let line = buffer.getLine(lineIndex)
+        var text = ""
+        var last = 0
+        var count = 0
+        for match in pattern.findMatches(line):
+          let column = line.byteToCharPos(match.first)
+          if all or column == matchCursor.column:
+            let expanded = templateText.expand(match, line)
+            if match.first != match.last or expanded.len > 0:
+              text.add line[last ..< max(last, match.first)]
+              text.add expanded
+              last = max(last, match.last)
+              inc count
+              if not all:
+                let parts = expanded.split('\n')
+                resume.line = lineIndex + parts.len - 1
+                resume.column = (if parts.len == 1: column else: 0) + parts[^1].runeLen
+                if match.first == match.last:
+                  inc resume.column
+                break
+        if count > 0:
+          text.add line[last ..< line.len]
+          changes.add Replacement(line: lineIndex, text: text)
+          result += count
+  except TextSearchError as error:
+    editor.xSearchError = error.msg
+    state.statusMessage = "Replacement error: " & error.msg
     return 0
-  # Finish typing's transaction before starting the replacement's undo group.
+  if changes.len == 0:
+    return
   if buffer.inTransaction:
     discard buffer.commitTransaction()
   let started = buffer.beginTransaction("Replace search matches", some(cursor))
@@ -1367,35 +1472,35 @@ proc replaceSearch*(editor: KosmoEditor, query, replacement: string, all = false
       return 0
   discard buffer.commitTransaction()
   editor.resetBufferSelection()
-  var next = none(moeTypes.BufferPosition)
-  var first = none(moeTypes.BufferPosition)
-  for lineIndex in 0 ..< buffer.len:
-    for match in buffer.findSearchMatchRanges(lineIndex, query, ignoreCase):
-      let position = moeTypes.BufferPosition(line: lineIndex, column: match.startCol)
-      if first.isNone:
-        first = some(position)
-      if next.isNone and (
-        lineIndex > resume.line or
-        (lineIndex == resume.line and match.startCol >= resume.column)
-      ):
-        next = some(position)
-  let position =
-    if next.isSome:
-      next.get
-    else:
-      first.get(cursor)
-  discard editor.revealLocation(position.line, position.column, centered = true)
   state.statusMessage = "Replaced " & $result & " matches"
+  try:
+    let next =
+      editor.searchPosition(resume, KosmoSearchDirection.Forward, inclusive = true)
+    if next.isSome:
+      editor.revealSearchMatch(next.get)
+    else:
+      editor.xSearchLocation = none(SearchLocation)
+      discard editor.revealLocation(cursor.line, cursor.column, centered = true)
+  except TextSearchError as error:
+    editor.xSearchError = error.msg
+    state.statusMessage = state.statusMessage & "; search error: " & error.msg
 
-proc hasSearchMatches*(editor: KosmoEditor, query: string): bool =
+proc hasSearchMatches*(
+    editor: KosmoEditor, query: string, regularExpression = false
+): bool =
   if editor.isNil or editor.editor.isNil or query.len == 0:
     return
-  let state = editor.editor.state
-  let ignoreCase =
-    shouldIgnoreCase(query, state.input.search.ignorecase, state.input.search.smartcase)
-  for line in 0 ..< editor.editor.activeBuffer.len:
-    if editor.editor.activeBuffer.findSearchMatchRanges(line, query, ignoreCase).len > 0:
-      return true
+  if not editor.prepareSearch(query, regularExpression):
+    return
+  try:
+    for line in 0 ..< editor.editor.activeBuffer.len:
+      for match in editor.xSearchPattern.get.findMatches(
+        editor.editor.activeBuffer.getLine(line)
+      ):
+        return true
+  except TextSearchError as error:
+    editor.xSearchError = error.msg
+    editor.editor.state.statusMessage = "Search error: " & error.msg
 
 proc tabMatchesPath(editor: KosmoEditor, tab: KosmoTab, path: string): bool =
   if tab.filePath.isSome:
@@ -2034,6 +2139,63 @@ proc matterHighlightingController*(editor: KosmoEditor): MatterHighlighting =
   if not editor.isNil and not editor.editor.isNil:
     result = editor.matterHighlighting
 
+proc renderSearchHighlights(editor: KosmoEditor, target: var RenderBuffer) =
+  ## Project Reni results using Moe's own wrap and display-column geometry.
+  if editor.xSearchPattern.isNone or editor.editor.state.visualSelection.active or
+      not editor.editor.state.input.search.hlsearchTempDisabled:
+    return
+  let e = editor.editor
+  let window = e.activeWindow
+  let viewport = window.viewport
+  let tabOffset = if e.showTabLine: 1 else: 0
+  let height = max(viewport.height - e.calculateReservedLines() - tabOffset, 0)
+  let width = max(e.textAreaWidth(window), 0)
+  let left = viewport.x + e.gutterWidth(window)
+  let layout = initRowLayout(
+    window.buffer, window.wrapCountCache, e.lineWrap, e.wrapWidth(window), e.tabStop
+  )
+  try:
+    for visible in layout.visibleLines(viewport.topLine, viewport.topWrapOffset, height):
+      if visible.fold.isNone:
+        let line = window.buffer.getLine(visible.line)
+        var ranges: seq[tuple[first, last: int]]
+        for match in editor.xSearchPattern.get.findMatches(line):
+          ranges.add (line.byteToCharPos(match.first), line.byteToCharPos(match.last))
+        if ranges.len > 0:
+          for row in 0 ..< min(visible.rows, height - visible.startRow):
+            let y = viewport.y + tabOffset + visible.startRow + row
+            let startColumn =
+              if e.lineWrap:
+                layout.segmentStartColumn(visible.line, visible.skipSegments + row)
+              else:
+                viewport.leftColumn
+            let (_, rowWidth) =
+              displayWidthSubstrWithTabs(line, startColumn, width, e.tabStop)
+            var x = 0
+            while x < min(width, rowWidth):
+              let cell = target.buffer.getCell(left + x, y)
+              let column =
+                startColumn + screenXToCharIndex(line, startColumn, x, e.tabStop)
+              var highlighted = false
+              for span in ranges:
+                if column >= span.first and column < span.last:
+                  highlighted = true
+                  break
+              if highlighted and cell.symbol.len > 0:
+                target.buffer.setCell(
+                  left + x,
+                  y,
+                  cell.symbol,
+                  cell.width,
+                  searchHighlightStyle(),
+                  cell.hyperlink,
+                )
+              x += max(cell.width, 1)
+  except TextSearchError as error:
+    editor.xSearchPattern = none(TextSearchPattern)
+    editor.xSearchError = error.msg
+    e.state.statusMessage = "Search error: " & error.msg
+
 proc renderMatterFrame(editor: KosmoEditor, buffer: var RenderBuffer) =
   # Moe normally continues its built-in tokenizer during render. Temporarily
   # suspend that continuation for external projections, including remapped
@@ -2055,6 +2217,7 @@ proc renderMatterFrame(editor: KosmoEditor, buffer: var RenderBuffer) =
       current.uriScanParsedUpTo = current.len - 1
   try:
     editor.editor.render(buffer.buffer)
+    editor.renderSearchHighlights(buffer)
   finally:
     for item in suspended:
       if not item.buffer.incrementalHighlight.isNil:

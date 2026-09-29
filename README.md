@@ -387,10 +387,25 @@ case-insensitive literal search; diff search includes collapsed sections and
 loads ordinary patches within the viewer's size limits. Open oversized patches
 explicitly to include their contents.
 
-Editor search also offers **Replace** and **Replace All**, with one undo step per
-operation. In the Find sidebar, run a search, enter replacement text, then choose
-**Replace** for the selected match or **Replace All**. Both use regular-expression queries and
-literal replacement text (an empty replacement deletes matches). File replacement
+Editor search and the Find sidebar open with replacement controls collapsed.
+Click the chevron beside the search field to expand or collapse them without
+clearing the query or results. On macOS, `Option-Cmd-F` opens editor replacement
+and `Option-Shift-Cmd-F` opens replacement in files; elsewhere use
+`Alt-Ctrl-F` and `Alt-Shift-Ctrl-F`. The regular `Cmd/Ctrl-F` editor shortcut and
+`Shift-Cmd/Ctrl-F` file-search shortcut always return to search only.
+
+Editor replacement offers **Replace** and **Replace All**, with one undo step per
+operation. In the Find sidebar, run a search, expand replacement, enter text, then
+choose **Replace** for the selected match or **Replace All**. Both fields treat
+text literally by default. Enable **`.*`** to use Reni regular expressions in the
+query and capture templates in the replacement: `$0` is the entire match, `$1`
+and later numbers are captures, `${name}` is a named capture, and `$$` inserts a
+dollar sign. For example, search `(?<name>cat|dog)` and replace with `${name}!`.
+When named groups are present, Reni treats unnamed groups as noncapturing.
+Matching is line by line, with Unicode-aware offsets; replacement text may
+contain newlines. Invalid patterns or capture references show an error, and
+invalid replacement templates leave files and buffers untouched. Empty
+replacement text deletes matches. File replacement
 saves the displayed results, including any search limits, checks that matched lines
 still agree with the results, and skips files with unsaved editor changes. Its status
 reports replacements and skipped files, then refreshes the search.

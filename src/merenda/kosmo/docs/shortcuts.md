@@ -52,6 +52,7 @@ uses `primary`; Settings and menus show its resolved physical spelling.
 | `primary-Q` | Quit Kosmo | |
 | `primary-Shift-[` / `primary-Shift-]` | Previous / next tab | `gT` / `gt` remain Moe tab commands. |
 | `primary-Shift-E` / `primary-Shift-F` | Show and focus Files / Find in Files | |
+| `primary-Alt-Shift-F` | Replace in Files | Expands replacement controls; `primary-Shift-F` returns to search only. |
 | `primary-P` | Quick Open | |
 | `primary-Shift-T` | New terminal tab | |
 | `primary-Shift-G` | Show Git diff tab | |
@@ -81,6 +82,12 @@ semantic editor bridge when a Kosmo editor is focused.
 The File menu is populated from the same registry, so Open, Save, Quick Open,
 New Terminal, Show Git Diff, and Close Tab show the resolved key equivalents
 rather than separate hard-coded shortcuts.
+
+Editor search uses `Shortcut-F`; `Shortcut-Alt-F` opens it with replacement
+expanded. A disclosure chevron toggles replacement without clearing either field.
+`Shortcut-F` always collapses replacement and focuses the search field, including
+when a replacement field is already focused. Markdown, Git diff, and terminal
+search remain search-only.
 
 The standard Edit menu is a responder-chain facility. Kosmo bridges its Copy,
 Cut, Paste, Select All, Undo, and Redo commands to semantic Moe operations:
@@ -147,6 +154,7 @@ kosmo.splitHorizontal
 kosmo.splitVertical
 kosmo.showFileExplorer
 kosmo.findInFiles
+kosmo.replaceInFiles
 kosmo.quickOpen
 kosmo.focusPanel1 ... kosmo.focusPanel8
 ```

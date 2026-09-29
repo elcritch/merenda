@@ -13,7 +13,14 @@
 - Apply streamed Markdown syntax colors with indexed range updates and local
   run changes, preserving quote styles, undo, and edit notifications while
   reducing work on large documents.
-- Add literal replacement of regex matches to Kosmo editor panes and Find in Files,
+- Add an opt-in `.*` mode for Reni expressions and replacement captures in Kosmo
+  editor and file search. Default both fields to literal text; validate capture
+  templates before editing, handle engine limits, and render matches in Kosmo
+  without modifying the Moe dependency.
+- Default Kosmo editor and file search to compact search-only controls. Reveal
+  replacement with the disclosure chevron or by adding Option/Alt to the search
+  shortcut; regular search shortcuts collapse replacement and preserve the query.
+- Add replacement of search matches to Kosmo editor panes and Find in Files,
   with grouped editor undo, checked atomic file saves, stale-result validation,
   and protection for unsaved buffers.
 - Add plain-text search to Markdown and Git diff viewers, including collapsed diff

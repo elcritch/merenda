@@ -23,10 +23,10 @@ protocol KosmoContentCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
       if content.onRevealActiveFile.isNil:
         return false
       content.onRevealActiveFile()
-    of KosmoFindInFilesAction:
+    of KosmoFindInFilesAction, KosmoReplaceInFilesAction:
       if content.onFindInFiles.isNil:
         return false
-      content.onFindInFiles()
+      content.onFindInFiles($args.selector.name == KosmoReplaceInFilesAction)
     of KosmoQuickOpenAction:
       if content.onQuickOpen.isNil:
         return false
@@ -88,8 +88,10 @@ proc revealActiveFile*(frontend: KosmoApplication): bool {.discardable.} =
         result = frontend.showFileExplorer()
       return
 
-proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.} =
-  ## Select the find sidebar tab and focus its search query.
+proc showFindInFiles*(
+    frontend: KosmoApplication, replacing = false
+): bool {.discardable.} =
+  ## Focus file search, showing replacement only when explicitly requested.
   if frontend.isNil or not frontend.hasFileBrowser() or frontend.sidebarTabs.isNil or
       frontend.searchPanel.isNil:
     return
@@ -98,6 +100,7 @@ proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.} =
     return
   frontend.splitView.setPaneCollapsed(0, false)
   frontend.syncSidebarButtons()
+  frontend.searchPanel.replacementVisible = replacing
   result = frontend.searchPanel.focusQuery()
   if result:
     frontend.dockController.activatePanelWindow(frontend.window)
@@ -776,8 +779,9 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
         discard active.showFileExplorer()
       of KosmoRevealActiveFileAction:
         discard active.revealActiveFile()
-      of KosmoFindInFilesAction:
-        discard active.showFindInFiles()
+      of KosmoFindInFilesAction, KosmoReplaceInFilesAction:
+        discard
+          active.showFindInFiles(replacing = identifier == KosmoReplaceInFilesAction)
       else:
         if identifier.startsWith(KosmoFocusPanelActionPrefix):
           discard
@@ -794,6 +798,7 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
   addAction("Show Files", KosmoShowFileExplorerAction)
   addAction("Reveal Active File", KosmoRevealActiveFileAction)
   addAction("Find in Files", KosmoFindInFilesAction)
+  addAction("Replace in Files", KosmoReplaceInFilesAction)
 
   let
     focusMenu = nimkit.newMenu("Focus Panel")
@@ -1027,9 +1032,9 @@ proc newKosmoApplication*(
   documentView.onRevealActiveFile = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].revealActiveFile()
-  documentView.onFindInFiles = proc() =
+  documentView.onFindInFiles = proc(replacing: bool) =
     if not controller.frontend.isNil:
-      discard controller.frontend[].showFindInFiles()
+      discard controller.frontend[].showFindInFiles(replacing = replacing)
   documentView.onQuickOpen = proc() =
     if not controller.frontend.isNil:
       discard controller.frontend[].showQuickOpen()
