@@ -112,7 +112,13 @@ they do not establish a universal RSS ceiling or prove absence of every leak.
 Generated layout terms use non-owning back references. The ownership subset checks
 that standalone, detached, and reparented view trees release after layout, and
 that copied, moved, and sequence-stored back references clear when their target
-dies. ARC and ORC sanitizer runs passed these cases on macOS with stack-use-after-return
+dies. `BackRef` handles share a registration allocated as a Nim reference object;
+copying a handle does not allocate another registration. Setting `handle.target`
+or calling `clear` replaces only that handle. The registry and target links remain
+non-owning, and the last handle unregisters its slot when released. Read the target
+through `handle.target` and test its lifetime with `handle.isNil`; comparing the
+handle itself to `nil` only tests whether a registration is allocated.
+ARC and ORC sanitizer runs passed these cases on macOS with stack-use-after-return
 detection enabled.
 
 Metal/Vulkan renderers support dedicated rendering under both ARC and ORC.

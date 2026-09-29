@@ -39,10 +39,7 @@ protocol FieldEditorClient {.selectorScope: protocol.}:
   ): ObjectValidationError {.optional.}
 
 proc client*(editor: FieldEditor): Responder =
-  if editor.isNil:
-    nil
-  else:
-    editor.xClient[]
+  if editor.isNil: nil else: editor.xClient.target
 
 proc validationError*(editor: FieldEditor): ObjectValidationError =
   if editor.client().isNil:
@@ -148,7 +145,7 @@ proc beginEditing*(editor: FieldEditor, client: Responder, focusVisible = true):
   if not editor.canEdit(client):
     return false
   editor.loadClientText(client)
-  editor.xClient[] = client
+  editor.xClient.target = client
   editor.focused = true
   editor.focusVisible = focusVisible
   discard client.sendLocalIfHandled(didBeginEditing(), editor)

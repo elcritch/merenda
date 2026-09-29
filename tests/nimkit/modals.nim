@@ -14,9 +14,9 @@ suite "NimKit modal lifetimes":
       app.addWindow(window)
       window.makeKeyAndOrderFront()
       require window.clickView(field)
-      weakWindow[] = Responder(window)
-      weakField[] = Responder(field)
-      weakEditor[] = Responder(window.fieldEditor())
+      weakWindow.target = Responder(window)
+      weakField.target = Responder(field)
+      weakEditor.target = Responder(window.fieldEditor())
       window.close()
       discard app.runForFrames(1)
     check weakWindow.isNil
@@ -33,9 +33,9 @@ suite "NimKit modal lifetimes":
         unrelated = newWindow("Unrelated", frame = rect(0, 0, 360, 160))
         editor = newTextField("Draft", frame = rect(10, 10, 280, 30))
         root = newView()
-      weakOwner[] = Responder(owner)
-      weakUnrelated[] = Responder(unrelated)
-      weakEditor[] = Responder(editor)
+      weakOwner.target = Responder(owner)
+      weakUnrelated.target = Responder(unrelated)
+      weakEditor.target = Responder(editor)
       root.addSubview(editor)
       owner.setContentView(root)
       unrelated.setContentView(newTextField("Unchanged"))
@@ -50,14 +50,14 @@ suite "NimKit modal lifetimes":
       var responses: seq[int]
       for index, choice in [1, 0, 1]:
         let alert = newAlert("Unsaved changes", buttons = ["Discard", "Cancel"])
-        weakAlerts[index][] = Responder(alert)
-        weakAlertWindows[index][] = Responder(alert.window)
+        weakAlerts[index].target = Responder(alert)
+        weakAlertWindows[index].target = Responder(alert.window)
         alert.prepareForModal(
           proc(response: int) =
             responses.add response
             app.stopModal(response)
         )
-        weakAlertContents[index][] = Responder(alert.contentView)
+        weakAlertContents[index].target = Responder(alert.contentView)
         # Use the prepared window overload: installing another default handler
         # would drop the caller's completion callback.
         let session = app.beginModalSheet(owner, alert.window)
@@ -97,8 +97,8 @@ suite "NimKit modal lifetimes":
     var weakEditor: BackRef[Responder]
     block:
       let alert = newAlert("Complete", buttons = ["Close"])
-      weakAlert[] = Responder(alert)
-      weakWindow[] = Responder(alert.window)
+      weakAlert.target = Responder(alert)
+      weakWindow.target = Responder(alert.window)
       var responses: seq[int]
       let afterClose = proc() =
         responses.add 10
@@ -111,7 +111,7 @@ suite "NimKit modal lifetimes":
 
       let button = Button(alert.buttonViews[0])
       require alert.window.clickView(button)
-      weakEditor[] = Responder(alert.window.fieldEditor())
+      weakEditor.target = Responder(alert.window.fieldEditor())
       check responses == @[alert.buttonResponse(0), 10]
       check alert.window.isClosed()
       check alert.responseHandler.isNil

@@ -10,7 +10,7 @@ static:
     compileOption("mm", "atomicArc")
 
 proc observe(view: View): BackRef[View] =
-  result[] = view
+  result.target = view
 
 suite "NimKit ARC back references":
   test "returned copied and moved back references clear independently":
@@ -23,19 +23,60 @@ suite "NimKit ARC back references":
       moved = move(original)
 
       check original.isNil
-      check copied[] == target
-      check moved[] == target
+      check copied.target == target
+      check moved.target == target
 
       original = copied
       original = original
       copied.clear()
       check copied.isNil
-      check original[] == target
-      check moved[] == target
+      check original.target == target
+      check moved.target == target
 
     check original.isNil
     check copied.isNil
     check moved.isNil
+
+  test "copied back references can be rebound independently":
+    var original, copied: BackRef[View]
+
+    block:
+      let firstTarget = newView()
+      original = observe(firstTarget)
+      copied = original
+
+      block:
+        let secondTarget = newView()
+        original.target = secondTarget
+        check original.target == secondTarget
+        check copied.target == firstTarget
+
+      check original.isNil
+      check original.target.isNil
+      check copied.target == firstTarget
+
+      original.target = firstTarget
+      copied.target = nil
+      check copied.isNil
+      check copied.target.isNil
+      check original.target == firstTarget
+
+    check original.isNil
+    check copied.isNil
+
+  test "dropping the last copied handle unregisters its shared slot":
+    let target = newView()
+    var survivor: BackRef[View]
+    block:
+      var original = observe(target)
+      var copied = original
+      survivor = observe(target)
+      original.clear()
+      check copied.target == target
+      copied.clear()
+    # Removing the earlier slot must update the moved slot's registry index.
+    survivor.clear()
+    check survivor.isNil
 
   test "back references remain registered through sequence growth and deletion":
     var references, copied: seq[BackRef[View]]
@@ -47,14 +88,14 @@ suite "NimKit ARC back references":
       copied = references
       references.delete(13)
       references[17].clear()
-      references[17][] = target
+      references[17].target = target
 
       check references.len == 256
       check copied.len == 257
       for reference in references:
-        check reference[] == target
+        check reference.target == target
       for reference in copied:
-        check reference[] == target
+        check reference.target == target
 
     for reference in references:
       check reference.isNil
@@ -96,9 +137,9 @@ suite "NimKit ARC back references":
         root = newView(frame = rect(0, 0, 240, 160))
         branch = newView(frame = rect(10, 10, 120, 80))
         leaf = newView(frame = rect(5, 5, 40, 20))
-      rootRef[] = root
-      branchRef[] = branch
-      leafRef[] = leaf
+      rootRef.target = root
+      branchRef.target = branch
+      leafRef.target = leaf
       branch.addSubview(leaf)
       root.addSubview(branch)
       root.layoutSubtreeIfNeeded()
@@ -117,7 +158,7 @@ suite "NimKit ARC back references":
 
     block:
       let parent = newView(frame = rect(0, 0, 200, 160))
-      parentRef[] = parent
+      parentRef.target = parent
       parent.addSubview(child)
       parent.layoutSubtreeIfNeeded()
 
@@ -136,7 +177,7 @@ suite "NimKit ARC back references":
     block:
       let root = newButton("Intrinsic lifetime", frame = rect(0, 0, 120, 30))
       root.autoresizingMaskConstraints = false
-      rootRef[] = View(root)
+      rootRef.target = View(root)
       root.layoutSubtreeIfNeeded()
       snapshot = root.generatedLayoutInputs()
 
@@ -161,8 +202,8 @@ suite "NimKit ARC back references":
       let
         branch = newView(frame = rect(10, 10, 120, 80))
         leaf = newView(frame = rect(5, 5, 40, 20))
-      branchRef[] = branch
-      leafRef[] = leaf
+      branchRef.target = branch
+      leafRef.target = leaf
       branch.addSubview(leaf)
       root.addSubview(branch)
       root.layoutSubtreeIfNeeded()
@@ -191,16 +232,16 @@ suite "NimKit ARC back references":
         newRoot = newView(frame = rect(0, 0, 300, 160))
         branch = newView(frame = rect(10, 10, 120, 80))
         leaf = newView(frame = rect(5, 5, 40, 20))
-      newRootRef[] = newRoot
-      branchRef[] = branch
-      leafRef[] = leaf
+      newRootRef.target = newRoot
+      branchRef.target = branch
+      leafRef.target = leaf
       branch.autoresizingMask = {cxWidthSizable}
       branch.addSubview(leaf)
       var oldRootRef: BackRef[View]
 
       block:
         let oldRoot = newView(frame = rect(0, 0, 240, 160))
-        oldRootRef[] = oldRoot
+        oldRootRef.target = oldRoot
         oldRoot.addSubview(branch)
         oldRoot.layoutSubtreeIfNeeded()
         check oldRoot.generatedLayoutInputs().len > 0

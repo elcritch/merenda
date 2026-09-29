@@ -241,12 +241,12 @@ suite "nimkit responder":
 
     block:
       let target = newResponder()
-      first[] = target
+      first.target = target
       second = first
       moved = move(second)
 
-      check first[] == target
-      check moved[] == target
+      check first.target == target
+      check moved.target == target
       check second.isNil
 
     check first.isNil

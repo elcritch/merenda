@@ -1064,7 +1064,7 @@ proc terminalOutputFrameDue(view: TerminalView) {.slot.} =
     view.syncTerminalScreen()
 
 proc scheduleTerminalFrame(view: TerminalView) =
-  let owner = view.xPollingWindow[]
+  let owner = view.xPollingWindow.target
   if owner.isNil or not view.xOutputFrame.isNil:
     return
   let
@@ -1083,7 +1083,7 @@ proc scheduleTerminalFrame(view: TerminalView) =
 
 proc readTerminalOutput(view: TerminalView): bool =
   let
-    owner = view.xPollingWindow[]
+    owner = view.xPollingWindow.target
     session = view.xSession
     epoch = view.xOutputEpoch
     token = if view.xOutputWatch.isNil: 0'u64 else: view.xOutputWatch.token
@@ -1091,7 +1091,7 @@ proc readTerminalOutput(view: TerminalView): bool =
     return
   let polled = view.pollTerminal(TerminalReadBudget, synchronize = false)
   # Metadata and process-exit callbacks may close, detach, or replace the view.
-  if view.xOutputEpoch != epoch or view.xPollingWindow[] != owner or
+  if view.xOutputEpoch != epoch or view.xPollingWindow.target != owner or
       view.xSession != session:
     return
   if not session.running():
@@ -1190,7 +1190,7 @@ proc stopTerminalPolling(view: TerminalView) =
     view.xOutputWatch.stop()
     view.xOutputWatch = nil
   view.xOutputWatchReady = false
-  let owner = view.xPollingWindow[]
+  let owner = view.xPollingWindow.target
   if not owner.isNil:
     owner.disconnect(didBecomeKeyWindow, view, terminalWindowFocusChanged)
     owner.disconnect(didResignKeyWindow, view, terminalWindowFocusChanged)
@@ -1215,7 +1215,7 @@ proc startTerminalPolling(view: TerminalView) =
   if not (responder of Window):
     return
   let owner = Window(responder)
-  view.xPollingWindow[] = owner
+  view.xPollingWindow.target = owner
   view.xBlinkElapsed = initDuration()
   view.xMaintenanceElapsed = initDuration()
   owner.connect(didBecomeKeyWindow, view, terminalWindowFocusChanged)

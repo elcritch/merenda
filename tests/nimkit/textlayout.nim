@@ -891,7 +891,7 @@ suite "nimkit text layout":
     var manager: TextLayoutManager
     block:
       let view = newTextView("Editable")
-      weakView[] = Responder(view)
+      weakView.target = Responder(view)
       manager = view.layoutManager()
       check manager.layoutClient() == DynamicAgent(view)
     check weakView.isNil

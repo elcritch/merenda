@@ -400,7 +400,7 @@ proc moveToWindowOwner*(view: View, window: Responder) =
   view.propagateDidMoveToWindow()
 
 proc clearSuperviewForWindowOwner*(view: View) =
-  view.xSuperview[] = nil
+  view.xSuperview.target = nil
   view.clearNextResponder()
 
 proc containsView*(view, candidate: View): bool =

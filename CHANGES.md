@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make `BackRef` a reference object with shared registrations and independent
+  rebinding. Read and assign targets through `handle.target`, replacing `handle[]`.
 - Save Kosmo configuration and Tekton resource documents through checked
   temporary files and atomic replacement, preserving existing contents when a
   write or close fails.

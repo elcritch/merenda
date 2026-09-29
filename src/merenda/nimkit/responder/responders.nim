@@ -16,9 +16,9 @@ type
     xAcceptsFirstResponder: bool
 
   ResponderLink = ref object of DynamicAgent
-    target: BackRef[Responder]
+    targetRef: BackRef[Responder]
 
-proc `[]=`*[T: Responder](backRef: var BackRef[T], target: T) {.inline.} =
+proc `target=`*[T: Responder](backRef: var BackRef[T], target: T) {.inline.} =
   if target.isNil:
     backRef.clear()
   else:
@@ -31,8 +31,8 @@ proc responderLinkTarget(self: DynamicAgent, selector: SigilName): DynamicAgent 
   discard selector
   if not self.isNil:
     let link = ResponderLink(self)
-    if not link.target.isNil:
-      result = DynamicAgent(link.target[])
+    if not link.targetRef.isNil:
+      result = DynamicAgent(link.targetRef.target)
 
 protocol ResponderProtocol {.setterStyle: nim.} from Responder:
   property acceptsFirstResponder -> bool {.field: xAcceptsFirstResponder.}
@@ -88,8 +88,8 @@ proc newResponder*(): Responder =
 
 proc nextResponder*(responder: Responder): Responder =
   if not responder.isNil and not responder.xNextResponderLink.isNil and
-      not responder.xNextResponderLink.target.isNil:
-    result = responder.xNextResponderLink.target[]
+      not responder.xNextResponderLink.targetRef.isNil:
+    result = responder.xNextResponderLink.targetRef.target
 
 proc setNextResponder*(responder, next: Responder) =
   if next.isNil:
@@ -99,12 +99,12 @@ proc setNextResponder*(responder, next: Responder) =
     let link = ResponderLink()
     dynamicSelectors.setForwardingTarget(link, responderLinkTarget)
     responder.xNextResponderLink = link
-  responder.xNextResponderLink.target[] = next
+  responder.xNextResponderLink.targetRef.target = next
   dynamicSelectors.setNextResponder(responder, responder.xNextResponderLink)
 
 proc clearNextResponder*(responder: Responder) =
   if not responder.xNextResponderLink.isNil:
-    responder.xNextResponderLink.target.clear()
+    responder.xNextResponderLink.targetRef.clear()
   dynamicSelectors.clearNextResponder(responder)
 
 proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =

@@ -1133,7 +1133,7 @@ proc presentTerminalError(
   discard alert.contentView()
   discard app.beginModalSession(alert.window)
   var weakWindow: nimkit.BackRef[nimkit.Window]
-  weakWindow[] = alert.window
+  weakWindow.target = alert.window
   # The application owns the modal window. Button callbacks must not retain the
   # Alert/content tree or the application through a reference cycle.
   for view in alert.buttonViews:
@@ -1141,7 +1141,7 @@ proc presentTerminalError(
     button.target = nimkit.newActionTarget(button.action) do(sender: DynamicAgent):
       discard sender
       if not weakWindow.isNil:
-        weakWindow[].close()
+        weakWindow.target.close()
 
 proc openTerminal(
     controller: KosmoDockController,

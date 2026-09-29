@@ -695,7 +695,7 @@ proc `textLayoutBackend=`*(manager: TextLayoutManager, backend: TextLayoutBacken
 
 proc layoutClient*(manager: TextLayoutManager): DynamicAgent =
   if not manager.xResponderClient.isNil:
-    return DynamicAgent(manager.xResponderClient[])
+    return DynamicAgent(manager.xResponderClient.target)
   manager.xClient
 
 proc `layoutClient=`*(manager: TextLayoutManager, client: DynamicAgent) =
@@ -704,7 +704,7 @@ proc `layoutClient=`*(manager: TextLayoutManager, client: DynamicAgent) =
   manager.xResponderClient.clear()
   manager.xClient = nil
   if not client.isNil and client of Responder:
-    manager.xResponderClient[] = Responder(client)
+    manager.xResponderClient.target = Responder(client)
   else:
     manager.xClient = client
   manager.invalidateLayout()

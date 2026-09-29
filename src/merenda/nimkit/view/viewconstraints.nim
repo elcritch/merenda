@@ -363,8 +363,8 @@ proc newLayoutConstraint*(
     xConstant: constant,
     xPriority: priority,
   )
-  result.xFirstItemRef[] = firstItem
-  result.xSecondItemRef[] = secondItem
+  result.xFirstItemRef.target = firstItem
+  result.xSecondItemRef.target = secondItem
 
 func resolvedAnchorConstant(firstOffset, secondOffset, constant: float32): float32 =
   secondOffset + constant - firstOffset
@@ -807,16 +807,16 @@ proc pinEdges*(
   activate(result)
 
 proc xFirstItem*(constraint: LayoutConstraint): View =
-  constraint.xFirstItemRef[]
+  constraint.xFirstItemRef.target
 
 proc xSecondItem*(constraint: LayoutConstraint): View =
-  constraint.xSecondItemRef[]
+  constraint.xSecondItemRef.target
 
 proc xOwningView*(constraint: LayoutConstraint): View =
-  constraint.xOwningViewRef[]
+  constraint.xOwningViewRef.target
 
 proc `xOwningView=`(constraint: LayoutConstraint, view: View) =
-  constraint.xOwningViewRef[] = view
+  constraint.xOwningViewRef.target = view
 
 proc firstItem*(constraint: LayoutConstraint): View =
   constraint.xFirstItem
