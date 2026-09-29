@@ -1139,6 +1139,15 @@ proc newKosmoApplication*(
     let activeView = frontend[].dockController.activeEditorView()
     if not activeView.isNil:
       discard activeView.openSearchResult(match, disposition)
+  searchPanel.canReplaceFile = proc(path: string): bool =
+    if frontend.isNil:
+      return false
+    not frontend[].dockController.editor.hasUnsavedFileChanges(path)
+  searchPanel.onFileReplaced = proc(path: string) =
+    if not frontend.isNil:
+      frontend[].dockController.editor.reloadUnmodifiedFile(path)
+      for group in frontend[].dockController.groups:
+        group.editorView.refresh()
   if fileExists(filePath):
     discard result.dockController.activeEditorView().openFile(filePath)
   elif dirExists(filePath):

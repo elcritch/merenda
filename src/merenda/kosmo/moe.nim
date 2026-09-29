@@ -17,6 +17,7 @@ import
     config_loader, editor_window, encoding, motion, viewer_mode, window_manager,
   ]
 import moepkg/buffer/undo as moeUndo
+import moepkg/buffer/edit as moeEdit
 import moepkg/buffer/search as moeSearch
 import moepkg/buffer/highlight as moeBufferHighlight
 import moepkg/buffer/core as moeBufferCore
@@ -33,6 +34,7 @@ from moepkg/color import EditorColorPairIndex, Rgb, ThemeColors, isTermDefaultCo
 from moepkg/theme import DefaultColors
 from moepkg/render_utils import steadyBottomAreaHeight
 from moepkg/search_utils import shouldIgnoreCase
+from moepkg/unicode_utils import charToBytePos
 from moepkg/uri_utils import findAllUris
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
@@ -1287,8 +1289,7 @@ proc searchFrom*(
     state.statusMessage = "Pattern not found: " & query
     return
   let position = match.get
-  editor.editor.cursor = position
-  editor.editor.updateViewportForCursor(position)
+  discard editor.revealLocation(position.line, position.column, centered = true)
   state.statusMessage = "Found: " & query
   true
 
@@ -1302,6 +1303,120 @@ func searchQuery*(editor: KosmoEditor): string =
   ## Return the query currently used by Moe's search highlighting and n/N commands.
   if not editor.isNil and not editor.editor.isNil:
     result = editor.editor.state.input.search.last.pattern
+
+proc replaceSearch*(editor: KosmoEditor, query, replacement: string, all = false): int =
+  ## Replace the match at the cursor, or all matches, as one undo transaction.
+  ## Uses the same regex and case rules as search; replacement text is literal.
+  if editor.isNil or editor.editor.isNil or query.len == 0:
+    return
+  let
+    buffer = editor.editor.activeBuffer
+    state = editor.editor.state
+    cursor = editor.editor.cursor
+    ignoreCase = shouldIgnoreCase(
+      query, state.input.search.ignorecase, state.input.search.smartcase
+    )
+  if buffer.readOnly or moeSearch.compileSearchRegex(query, ignoreCase).isNone:
+    return
+  type Replacement = object
+    line: int
+    text: string
+
+  var changes: seq[Replacement]
+  var resume = cursor
+  for lineIndex in 0 ..< buffer.len:
+    if all or lineIndex == cursor.line:
+      let line = buffer.getLine(lineIndex)
+      let ranges = buffer.findSearchMatchRanges(lineIndex, query, ignoreCase)
+      var text = ""
+      var last = 0
+      for match in ranges:
+        if (all or match.startCol == cursor.column) and
+            (match.startCol != match.endCol or replacement.len > 0):
+          let firstByte = line.charToBytePos(match.startCol)
+          let lastByte = line.charToBytePos(match.endCol)
+          text.add line[last ..< firstByte]
+          text.add replacement
+          last = lastByte
+          inc result
+          if not all:
+            let parts = replacement.split('\n')
+            resume.line = lineIndex + parts.len - 1
+            resume.column =
+              (if parts.len == 1: match.startCol else: 0) + parts[^1].runeLen
+            if match.startCol == match.endCol:
+              inc resume.column
+      if last > 0 or text.len > 0:
+        text.add line[last ..< line.len]
+        changes.add Replacement(line: lineIndex, text: text)
+  if changes.len == 0:
+    return 0
+  # Finish typing's transaction before starting the replacement's undo group.
+  if buffer.inTransaction:
+    discard buffer.commitTransaction()
+  let started = buffer.beginTransaction("Replace search matches", some(cursor))
+  if started.isErr:
+    state.statusMessage = started.error
+    return 0
+  for index in countdown(changes.high, 0):
+    let change = changes[index]
+    let outcome = buffer.replaceLines(change.line, 1, change.text.split('\n'))
+    if outcome.isErr:
+      discard buffer.rollbackTransaction()
+      state.statusMessage = outcome.error
+      return 0
+  discard buffer.commitTransaction()
+  editor.resetBufferSelection()
+  var next = none(moeTypes.BufferPosition)
+  var first = none(moeTypes.BufferPosition)
+  for lineIndex in 0 ..< buffer.len:
+    for match in buffer.findSearchMatchRanges(lineIndex, query, ignoreCase):
+      let position = moeTypes.BufferPosition(line: lineIndex, column: match.startCol)
+      if first.isNone:
+        first = some(position)
+      if next.isNone and (
+        lineIndex > resume.line or
+        (lineIndex == resume.line and match.startCol >= resume.column)
+      ):
+        next = some(position)
+  let position =
+    if next.isSome:
+      next.get
+    else:
+      first.get(cursor)
+  discard editor.revealLocation(position.line, position.column, centered = true)
+  state.statusMessage = "Replaced " & $result & " matches"
+
+proc hasSearchMatches*(editor: KosmoEditor, query: string): bool =
+  if editor.isNil or editor.editor.isNil or query.len == 0:
+    return
+  let state = editor.editor.state
+  let ignoreCase =
+    shouldIgnoreCase(query, state.input.search.ignorecase, state.input.search.smartcase)
+  for line in 0 ..< editor.editor.activeBuffer.len:
+    if editor.editor.activeBuffer.findSearchMatchRanges(line, query, ignoreCase).len > 0:
+      return true
+
+proc tabMatchesPath(editor: KosmoEditor, tab: KosmoTab, path: string): bool =
+  if tab.filePath.isSome:
+    let openPath = absolutePath(tab.filePath.get, editor.workingDirectory)
+    result =
+      normalizedPath(openPath) == normalizedPath(path) or
+      (fileExists(openPath) and fileExists(path) and sameFile(openPath, path))
+
+proc hasUnsavedFileChanges*(editor: KosmoEditor, path: string): bool =
+  ## Include aliases of an open file when checking workspace replacement safety.
+  for tab in editor.tabs():
+    if tab.modified and editor.tabMatchesPath(tab, path):
+      return true
+
+proc reloadUnmodifiedFile*(editor: KosmoEditor, path: string) =
+  ## Refresh clean open buffers after a workspace replacement; preserve dirty buffers.
+  for tab in editor.tabs():
+    if not tab.modified and editor.tabMatchesPath(tab, path):
+      let buffer = editor.editor.bufferById(tab.id.toMoeBufferId)
+      if buffer.isSome:
+        discard buffer.get.loadFileWithContent(path, readFile(path))
 
 proc commandLine*(editor: KosmoEditor): KosmoCommandLine =
   ## Return command input for a frontend-owned command bar.

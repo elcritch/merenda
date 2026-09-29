@@ -1,4 +1,4 @@
-import std/[monotimes, os, strutils, tempfiles, times, unicode, unittest]
+import std/[monotimes, options, os, strutils, tempfiles, times, unicode, unittest]
 
 import figdraw
 import sigils/threads
@@ -317,7 +317,7 @@ suite "Kosmo":
       root = createTempDir("merenda-kosmo-find-stream-render-", "")
       nested = root / "nested"
       panel = newKosmoFileSearchPanel(root)
-      window = newWindow("Kosmo Find Stream Render Test", rect(0, 0, 320, 420))
+      window = newWindow("Kosmo Find Stream Render Test", rect(0, 0, 320, 486))
     createDir(nested)
     writeFile(root / "00-initial.txt", "needle\n" & repeat('x', 8 * 1024 * 1024))
     defer:
@@ -573,3 +573,108 @@ suite "Kosmo":
       let editorIsFirstResponder =
         frontend.window.firstResponder() == Responder(frontend.editorView)
       check editorIsFirstResponder
+
+suite "Kosmo file replacement":
+  test "selected and all matches replace literal text and preserve CRLF":
+    let root = createTempDir("kosmo-replace-files-", "")
+    let path = root / "unicode.txt"
+    let second = root / "second.txt"
+    writeFile(path, "λ Cat cat\r\ncat\r\n")
+    writeFile(second, "cat\n")
+    let panel = newKosmoFileSearchPanel(root)
+    defer:
+      panel.close()
+      removeDir(root)
+    panel.queryField.text = "cat"
+    require panel.performSearch()
+    require panel.waitForSearch()
+    check panel.resultsView.matches.len == 4
+    panel.replacementField.text = "$1"
+    for index, match in panel.resultsView.matches:
+      if match.path == path and match.line == 1 and match.column == 4:
+        panel.resultsView.selectedItemIdentifier =
+          panel.resultsView.matchIdentifier(index)
+    check panel.replaceMatches() == 1
+    require panel.waitForSearch()
+    check readFile(path) == "λ $1 cat\r\ncat\r\n"
+    panel.replacementField.text = ""
+    check panel.replaceMatches(all = true) == 3
+    require panel.waitForSearch()
+    check readFile(path) == "λ $1 \r\n\r\n"
+    check readFile(second) == "\n"
+    check panel.resultsView.matches.len == 0
+    check "Replaced 3 matches" in panel.statusLabel.text
+
+  test "stale lines and changed queries cannot overwrite a file":
+    let root = createTempDir("kosmo-replace-stale-", "")
+    let path = root / "sample.txt"
+    writeFile(path, "cat cat\n")
+    let panel = newKosmoFileSearchPanel(root)
+    defer:
+      panel.close()
+      removeDir(root)
+    panel.queryField.text = "cat"
+    panel.replacementField.text = "dog"
+    require panel.performSearch()
+    require panel.waitForSearch()
+    panel.queryField.text = "dog"
+    check panel.replaceMatches(all = true) == 0
+    check readFile(path) == "cat cat\n"
+    panel.queryField.text = "cat"
+    writeFile(path, "bat cat\n")
+    check panel.replaceMatches(all = true) == 0
+    require panel.waitForSearch()
+    check readFile(path) == "bat cat\n"
+    check "skipped 1 files" in panel.statusLabel.text
+
+  test "workspace replacement refreshes clean editors and skips unsaved buffers":
+    let root = createTempDir("kosmo-replace-open-", "")
+    let path = root / "sample.txt"
+    writeFile(path, "cat cat\n")
+    let frontend = newKosmoApplication(
+      newApplication("Replace open buffers"), filePath = root, monitorsGitStatus = false
+    )
+    defer:
+      frontend.close()
+      removeDir(root)
+    frontend.window.setContentView(frontend.contentView)
+    require frontend.openPath(path)
+    let editor = frontend.editorView.editor
+    let id = editor.tabs()[0].id
+    let panel = frontend.searchPanel
+    panel.queryField.text = "cat"
+    panel.replacementField.text = "dog"
+    require panel.performSearch()
+    require panel.waitForSearch()
+    check panel.replaceMatches(all = true) == 2
+    require panel.waitForSearch()
+    check editor.bufferText(id).get == "dog dog"
+    check not editor.tabs()[0].modified
+    check editor.replaceSearch("dog", "cat", all = true) == 2
+    panel.queryField.text = "dog"
+    require panel.performSearch()
+    require panel.waitForSearch()
+    panel.replacementField.text = "lost"
+    check panel.replaceMatches(all = true) == 0
+    require panel.waitForSearch()
+    check readFile(path) == "dog dog\n"
+    check editor.bufferText(id).get == "cat cat"
+    check "Unsaved changes" in panel.statusLabel.text
+
+  test "replace all stays within the returned result limit":
+    let root = createTempDir("kosmo-replace-limit-", "")
+    let path = root / "sample.txt"
+    writeFile(path, "cat cat cat\n")
+    let panel = newKosmoFileSearchPanel(root)
+    defer:
+      panel.close()
+      removeDir(root)
+    panel.searchOptions = initFileSearchOptions(maxResults = 2)
+    panel.queryField.text = "cat"
+    panel.replacementField.text = "dog"
+    require panel.performSearch()
+    require panel.waitForSearch()
+    check panel.replaceMatches(all = true) == 2
+    require panel.waitForSearch()
+    check readFile(path) == "dog dog cat\n"
+    check panel.resultsView.matches.len == 1

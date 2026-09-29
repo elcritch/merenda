@@ -28,6 +28,7 @@ import kosmo/tabs
 import kosmo/terminalclipboard
 import kosmo/terminalerrors
 import kosmo/terminalsearch
+import kosmo/viewersearch
 import kosmo/vscodegrammars
 import kosmo/workspacefiles
 import kosmo/workspaceroots

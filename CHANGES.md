@@ -13,6 +13,11 @@
 - Apply streamed Markdown syntax colors with indexed range updates and local
   run changes, preserving quote styles, undo, and edit notifications while
   reducing work on large documents.
+- Add literal replacement of regex matches to Kosmo editor panes and Find in Files,
+  with grouped editor undo, checked atomic file saves, stale-result validation,
+  and protection for unsaved buffers.
+- Add plain-text search to Markdown and Git diff viewers, including collapsed diff
+  sections, and center editor search matches through Kosmo's Moe adapter.
 
 - Add `nim install_kosmo` to build and install the current checkout as a complete
   macOS app bundle, using the release icon and resources.

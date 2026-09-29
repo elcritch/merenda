@@ -379,6 +379,22 @@ Use the Files and Find icons at the left of the status bar to switch sidebar
 views. Click the active icon again to collapse the sidebar and give the editor
 the full window width; click either icon to reopen it at its previous width.
 
+Press `Cmd-F` on macOS or `Ctrl-F` elsewhere to search an editor, Markdown
+preview, or Git diff. Use Enter / the arrow buttons to move through matches,
+`Cmd/Ctrl-G` and `Shift-Cmd/Ctrl-G` for next and previous, and Escape to close.
+Editor matches scroll to the center of the pane. Markdown and diff viewers use
+case-insensitive literal search; diff search includes collapsed sections and
+loads ordinary patches within the viewer's size limits. Open oversized patches
+explicitly to include their contents.
+
+Editor search also offers **Replace** and **Replace All**, with one undo step per
+operation. In the Find sidebar, run a search, enter replacement text, then choose
+**Replace** for the selected match or **Replace All**. Both use regular-expression queries and
+literal replacement text (an empty replacement deletes matches). File replacement
+saves the displayed results, including any search limits, checks that matched lines
+still agree with the results, and skips files with unsaved editor changes. Its status
+reports replacements and skipped files, then refreshes the search.
+
 Open, Open Folder, and Save As share a resizable file browser with Places shortcuts,
 Back/Forward/Up navigation, and an editable location field. Enter an absolute path,
 a relative folder, or `~/` and press Return to navigate. The file list and Name

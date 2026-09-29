@@ -1,6 +1,8 @@
 ## Find-in-files sidebar UI backed by NimKit's worker-based file search.
 
-import std/[options, os, strutils, tables]
+import std/[algorithm, options, os, sets, strutils, tables]
+import regex
+import ../nimkit/foundation/atomicfiles
 
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
@@ -37,6 +39,14 @@ type
 
   KosmoFileSearchPanel* = ref object of nimkit.View
     queryField*: nimkit.TextField
+    replacementField*: nimkit.TextField
+    replacementPrompt: nimkit.Label
+    replaceButton*, replaceAllButton*: nimkit.Button
+    canReplaceFile*: proc(path: string): bool {.closure.}
+    onFileReplaced*: proc(path: string) {.closure.}
+    xPattern: string
+    xCaseSensitive: bool
+    xReplacementSummary: string
     resultsView*: KosmoSearchResults
     statusLabel*: nimkit.Label
     progressIndicator*: nimkit.ProgressIndicator
@@ -295,6 +305,8 @@ proc newKosmoSearchResults(): KosmoSearchResults =
   result.connect(nimkit.rowWasActivated, result, searchResultWasActivated)
 
 proc updateSearchControls(panel: KosmoFileSearchPanel, searching: bool) =
+  panel.replaceButton.enabled = not searching and panel.resultsView.matches.len > 0
+  panel.replaceAllButton.enabled = panel.replaceButton.enabled
   panel.progressIndicator.hidden = not searching
   panel.cancelButton.hidden = not searching
   panel.cancelButton.enabled = searching
@@ -325,6 +337,11 @@ proc finishFileSearch(
         "1 result"
       else:
         $searchResult.matches.len & " results"
+
+  panel.updateSearchControls(false)
+  if panel.xReplacementSummary.len > 0:
+    panel.statusLabel.text = panel.xReplacementSummary & "; " & panel.statusLabel.text
+    panel.xReplacementSummary = ""
 
 proc appendFileSearchMatches(
     panel: KosmoFileSearchPanel,
@@ -370,14 +387,17 @@ proc performSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
   if panel.isNil:
     return
   let pattern = panel.queryField.text()
+  if not panel.xActiveSearch.isNil and not panel.xActiveSearch.isFinished():
+    panel.xActiveSearch.cancel()
+  panel.xActiveSearch = nil
+  panel.xPattern = pattern
+  panel.xCaseSensitive = panel.xSearchOptions.caseSensitive
   if pattern.len == 0 or panel.xRootPath.len == 0:
-    panel.updateSearchControls(false)
     panel.resultsView.setMatches(panel.xRootPath, [])
+    panel.updateSearchControls(false)
     panel.statusLabel.text =
       if pattern.len == 0: "Enter a regular expression" else: "No folder is open"
     return
-  if not panel.xActiveSearch.isNil and not panel.xActiveSearch.isFinished():
-    panel.xActiveSearch.cancel()
   panel.resultsView.setMatches(panel.xRootPath, [])
   panel.statusLabel.text = "Searching…"
   panel.updateSearchControls(true)
@@ -392,12 +412,104 @@ proc performSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
     panel.updateSearchControls(false)
     panel.statusLabel.text = error.msg
 
+proc replaceMatches*(panel: KosmoFileSearchPanel, all = false): int {.discardable.} =
+  ## Replace selected or all displayed results with literal text, validating every
+  ## affected line and regex span before atomically saving each file.
+  if panel.isNil or panel.xActiveSearch.isNil or not panel.xActiveSearch.isFinished():
+    return
+  if panel.queryField.text() != panel.xPattern:
+    panel.statusLabel.text = "Run the changed search before replacing"
+    return
+  var grouped = initOrderedTable[string, seq[nimkit.FileSearchMatch]]()
+  let selected = panel.resultsView.selectedItemIdentifier().identifierIndex(
+      SearchResultIdentifierPrefix
+    )
+  for index, match in panel.resultsView.matches:
+    if all or index == selected:
+      grouped.mgetOrPut(match.path, @[]).add match
+  if grouped.len == 0:
+    panel.statusLabel.text = "Select a match to replace"
+    return
+  var flags = {regexArbitraryBytes}
+  if not panel.xCaseSensitive:
+    flags.incl regexCaseless
+  let pattern = re2(panel.xPattern, flags)
+  let replacement = panel.replacementField.text()
+  var skipped = 0
+  var firstError = ""
+  for path, matches in grouped.mpairs:
+    try:
+      if not panel.canReplaceFile.isNil and not panel.canReplaceFile(path):
+        raise newException(IOError, "Unsaved changes: " & path)
+      if getFileSize(path) > panel.xSearchOptions.maxFileSizeBytes:
+        raise newException(IOError, "File exceeds search size limit: " & path)
+      let original = readFile(path)
+      matches.sort(
+        proc(a, b: nimkit.FileSearchMatch): int =
+          cmp(a.byteOffset, b.byteOffset)
+      )
+      var updated = ""
+      var last = 0
+      var lineEnd = -1
+      var validSpans = initHashSet[tuple[offset, length: int]]()
+      for match in matches:
+        let offset = int(match.byteOffset)
+        if offset < last or offset > original.len or
+            match.matchLength > original.len - offset:
+          raise newException(IOError, "File changed: " & path)
+        if offset > lineEnd:
+          let lineStart =
+            if offset == 0:
+              0
+            else:
+              original.rfind('\n', 0, offset - 1) + 1
+          let newline = original.find('\n', offset)
+          lineEnd = if newline < 0: original.len else: newline
+          if lineEnd > lineStart and original[lineEnd - 1] == '\r':
+            dec lineEnd
+          let line = original[lineStart ..< lineEnd]
+          if line != match.lineText:
+            raise newException(IOError, "File changed: " & path)
+          # Every result on this line came from the same worker snapshot.
+          # Validate its text and enumerate its spans only once.
+          validSpans.clear()
+          for bounds in findAllBounds(line, pattern):
+            if lineStart + bounds.a > matches[^1].byteOffset:
+              break
+            validSpans.incl((lineStart + bounds.a, max(bounds.b - bounds.a + 1, 0)))
+        if (offset, match.matchLength) notin validSpans:
+          raise newException(IOError, "File changed: " & path)
+        updated.add original[last ..< offset]
+        updated.add replacement
+        last = offset + match.matchLength
+      updated.add original[last ..< original.len]
+      if readFile(path) != original:
+        raise newException(IOError, "File changed: " & path)
+      atomicWriteFile(path, updated)
+      result += matches.len
+      if not panel.onFileReplaced.isNil:
+        panel.onFileReplaced(path)
+    except CatchableError as error:
+      inc skipped
+      if firstError.len == 0:
+        firstError = error.msg
+  panel.xReplacementSummary = "Replaced " & $result & " matches"
+  if skipped > 0:
+    panel.xReplacementSummary.add "; skipped " & $skipped & " files (" & firstError & ")"
+  discard panel.performSearch()
+
 proc submitFileSearch(panel: KosmoFileSearchPanel, sender: nimkit.DynamicAgent) =
   discard sender
   discard panel.performSearch()
   let owner = panel.window()
   if owner of nimkit.Window:
     discard nimkit.Window(owner).makeFirstResponder(panel.queryField)
+
+proc replacementTextDidChange(
+    panel: KosmoFileSearchPanel, sender: nimkit.DynamicAgent
+) {.slot.} =
+  discard sender
+  panel.replacementPrompt.hidden = panel.replacementField.text().len > 0
 
 protocol KosmoFileSearchPanelLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(panel: KosmoFileSearchPanel) =
@@ -415,10 +527,23 @@ protocol KosmoFileSearchPanelLayout of nimkit.ViewLayoutProtocol:
     panel.queryField.setFrameFromLayout(
       nimkit.rect(horizontalPadding, 8.0'f32, contentWidth, 26.0'f32)
     )
+    panel.replacementField.setFrameFromLayout(
+      nimkit.rect(horizontalPadding, 40, contentWidth, 26)
+    )
+    panel.replacementPrompt.setFrameFromLayout(
+      nimkit.rect(horizontalPadding + 6, 40, max(contentWidth - 12, 0), 26)
+    )
+    let buttonWidth = max((contentWidth - 6) / 2, 0)
+    panel.replaceButton.setFrameFromLayout(
+      nimkit.rect(horizontalPadding, 72, buttonWidth, 26)
+    )
+    panel.replaceAllButton.setFrameFromLayout(
+      nimkit.rect(horizontalPadding + buttonWidth + 6, 72, buttonWidth, 26)
+    )
     panel.statusLabel.setFrameFromLayout(
       nimkit.rect(
         horizontalPadding,
-        38.0'f32,
+        104.0'f32,
         max(contentWidth - trailingWidth, 0.0'f32),
         18.0'f32,
       )
@@ -427,7 +552,7 @@ protocol KosmoFileSearchPanelLayout of nimkit.ViewLayoutProtocol:
       nimkit.rect(
         horizontalPadding +
           max(contentWidth - progressSize - cancelSize - 4.0'f32, 0.0'f32),
-        38.0'f32,
+        104.0'f32,
         progressSize,
         18.0'f32,
       )
@@ -435,7 +560,7 @@ protocol KosmoFileSearchPanelLayout of nimkit.ViewLayoutProtocol:
     panel.cancelButton.setFrameFromLayout(
       nimkit.rect(
         horizontalPadding + max(contentWidth - cancelSize, 0.0'f32),
-        37.0'f32,
+        103.0'f32,
         cancelSize,
         20.0'f32,
       )
@@ -443,9 +568,9 @@ protocol KosmoFileSearchPanelLayout of nimkit.ViewLayoutProtocol:
     panel.resultsView.setFrameFromLayout(
       nimkit.rect(
         0.0'f32,
-        60.0'f32,
+        126.0'f32,
         bounds.size.width,
-        max(bounds.size.height - 60.0'f32, 0.0'f32),
+        max(bounds.size.height - 126.0'f32, 0.0'f32),
       )
     )
 
@@ -477,6 +602,7 @@ proc `rootPaths=`*(panel: KosmoFileSearchPanel, rootPaths: openArray[string]) =
     else:
       ""
   panel.resultsView.setMatches(panel.xRootPath, [])
+  panel.updateSearchControls(false)
   panel.statusLabel.text = "Enter a regular expression"
 
 proc `rootPath=`*(panel: KosmoFileSearchPanel, rootPath: string) =
@@ -533,6 +659,10 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
     cancelAction = nimkit.actionSelector(CancelSearchAction)
   result = KosmoFileSearchPanel(
     queryField: queryField,
+    replacementField: nimkit.newTextField(),
+    replacementPrompt: nimkit.newLabel("Replace with"),
+    replaceButton: nimkit.newButton("Replace"),
+    replaceAllButton: nimkit.newButton("Replace All"),
     resultsView: resultsView,
     statusLabel: statusLabel,
     progressIndicator: progressIndicator,
@@ -541,12 +671,36 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
   )
   result.initViewFields()
   result.addSubview(queryField)
+  result.addSubview(result.replacementField)
+  result.addSubview(result.replacementPrompt)
+  result.replacementField.connect(
+    nimkit.textDidChange, result, replacementTextDidChange
+  )
+  result.addSubview(result.replaceButton)
+  result.addSubview(result.replaceAllButton)
   result.addSubview(statusLabel)
   result.addSubview(progressIndicator)
   result.addSubview(cancelButton)
   result.addSubview(resultsView)
   discard result.withProtocol(KosmoFileSearchPanelLayout)
   let panel = result.unsafeWeakRef()
+  result.replacementField.accessibilityLabel = "Replace with (literal text)"
+  result.replacementField.toolTip = "Replacement text (literal; empty deletes matches)"
+  result.replaceButton.accessibilityLabel = "Replace selected match"
+  result.replaceButton.toolTip = "Replace the selected match"
+  result.replaceAllButton.toolTip = "Replace all displayed matches in files"
+  result.replaceButton.action = nimkit.actionSelector("kosmo.replaceFileMatch")
+  result.replaceButton.target = nimkit.newActionTarget(result.replaceButton.action) do(
+    sender: nimkit.DynamicAgent
+  ):
+    if not panel.isNil:
+      discard panel[].replaceMatches()
+  result.replaceAllButton.action = nimkit.actionSelector("kosmo.replaceAllFileMatches")
+  result.replaceAllButton.target = nimkit.newActionTarget(
+    result.replaceAllButton.action
+  ) do(sender: nimkit.DynamicAgent):
+    if not panel.isNil:
+      discard panel[].replaceMatches(all = true)
   progressIndicator.indeterminate = true
   progressIndicator.displayedWhenStopped = false
   progressIndicator.progressIndicatorStyle = nimkit.pisSpinning

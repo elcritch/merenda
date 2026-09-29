@@ -2668,6 +2668,59 @@ proc waitForMarkdownLayout*(
       return true
     sleep(1)
 
+proc selectEmbeddedMarkdownRange(
+    textView: TextView, scrollView: ScrollView, range: TextRange
+) =
+  if textView.isNil:
+    return
+  textView.selectedRange = range
+  if range.length > 0:
+    var bounds: Rect
+    for frame in textView.selectionRects(range):
+      bounds =
+        if bounds.isEmpty:
+          frame
+        else:
+          bounds.union(frame)
+    if not bounds.isEmpty:
+      discard scrollView.scrollRectToVisible(bounds)
+
+func embeddedMarkdownRange(range, blockRange: TextRange): TextRange =
+  let first = max(int(range.location), int(blockRange.location))
+  let last = min(range.maxIndex, blockRange.maxIndex)
+  if last > first:
+    result = initTextRange(first - int(blockRange.location), last - first)
+
+proc selectMarkdownRange*(view: MarkdownView, range: TextRange) =
+  ## Select a rendered document range, including its overflowing code/table views.
+  ## The caller controls vertical scrolling; embedded views reveal it horizontally.
+  let textView = MarkdownTextView(view.textView())
+  textView.selectedRange = range
+  textView.setNeedsLayout()
+  textView.layoutSubtreeIfNeeded()
+  for index, blockView in textView.markdownCodeBlocks:
+    var local = embeddedMarkdownRange(range, blockView.range)
+    if local.length > 0:
+      # Quoted code can contain prefixes in the document which are absent from
+      # its embedded storage. Code slices retain the exact source mapping.
+      let presentation = view.xMarkdownCodePresentations[index]
+      for slice in presentation.slices:
+        let sliceRange =
+          initTextRange(slice.documentStart, int(slice.sourceRange.length))
+        let mapped = embeddedMarkdownRange(range, sliceRange)
+        if mapped.length > 0:
+          local = initTextRange(
+            presentation.codeStart + int(slice.sourceRange.location) +
+              int(mapped.location),
+            int(mapped.length),
+          )
+          break
+    selectEmbeddedMarkdownRange(blockView.textView, blockView.scrollView, local)
+  for table in textView.markdownTables:
+    selectEmbeddedMarkdownRange(
+      table.textView, table.scrollView, embeddedMarkdownRange(range, table.range)
+    )
+
 proc editable*(view: MarkdownView): bool =
   ## Markdown views are deliberately read-only.
   discard view

@@ -35,7 +35,9 @@ type
 
   KosmoPaneIndicator = ref object of nimkit.View
 
-  KosmoMarkdownView = ref object of nimkit.MarkdownView
+  KosmoMarkdownView* = ref object of nimkit.MarkdownView
+    search: KosmoViewerSearch
+    pendingSearchRange: Option[nimkit.TextRange]
     editorView: WeakRef[KosmoEditorView]
 
   KosmoMarkdownPreview = object
