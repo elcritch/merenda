@@ -13,6 +13,8 @@
 - Apply streamed Markdown syntax colors with indexed range updates and local
   run changes, preserving quote styles, undo, and edit notifications while
   reducing work on large documents.
+- Keep Tab and Shift-Tab in Kosmo editor search controls from reaching the
+  underlying editor's insert, replace, or command mode.
 - Add configurable FigDraw backdrop blur to Box containers and use it behind
   Kosmo's search overlay, with a themed tint for readable controls.
 - Render push-button toggle state consistently and give enabled search regex

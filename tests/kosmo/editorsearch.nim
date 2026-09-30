@@ -7,7 +7,67 @@ import merenda/nimkit
 import merenda/kosmo/kosmo
 import fixtures/ui
 
+proc isFocused(window: Window, control: View): bool =
+  not control.isNil and
+    (window.firstResponder() == control or window.fieldEditorClient() == control)
+
 suite "Kosmo editor search":
+  test "search tab navigation does not reach the active editor input mode":
+    let frontend = newKosmoApplication(
+      newApplication("Search tab navigation"), monitorsGitStatus = false
+    )
+    defer:
+      frontend.close()
+    let
+      window = frontend.window
+      view = frontend.editorView
+      editor = view.editor
+      tab = KeyEvent(text: "\t", key: keyTab, keyCode: keyTab.ord)
+      backtab =
+        KeyEvent(text: "\t", key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+    window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require window.makeFirstResponder(view)
+    require editor.handleKey("i")
+    require editor.handleTextInput("cat cat")
+    require editor.handleKey("Esc")
+    let bufferId = editor.tabs()[0].id
+
+    for modeKey in ["i", "R", ":"]:
+      checkpoint "Editor mode entered with " & modeKey
+      require editor.handleKey(modeKey)
+      let mode = editor.mode()
+      require mode in
+        {KosmoEditorMode.Insert, KosmoEditorMode.Replace, KosmoEditorMode.Command}
+      require view.showSearch(replacing = true)
+      require window.dispatchTextInput("cat")
+      let regex = view.buttonWithLabel("Use Reni regular expressions")
+      require not regex.isNil
+
+      require window.dispatchKeyDown(tab)
+      check window.isFocused(regex)
+      require window.dispatchKeyDown(tab)
+      check window.isFocused(view.replacementField())
+      require window.dispatchKeyDown(backtab)
+      check window.isFocused(regex)
+      require window.dispatchKeyDown(backtab)
+      check window.isFocused(view.searchField())
+      require window.dispatchKeyDown(tab)
+      require window.dispatchKeyDown(tab)
+      require window.dispatchKeyDown(tab)
+      check window.isFocused(view.buttonWithLabel("Replace match"))
+      require window.dispatchKeyDown(tab)
+      check window.isFocused(view.buttonWithLabel("Replace all matches"))
+      require window.dispatchKeyDown(backtab)
+      require window.dispatchKeyDown(backtab)
+      check window.isFocused(view.replacementField())
+      check view.searchField().text == "cat"
+      check view.replacementField().text == ""
+      check editor.bufferText(bufferId).get == "cat cat"
+      check editor.mode() == mode
+      view.dismissSearch()
+      require editor.handleKey("Esc")
+
   test "overlay clicks stay in the panel and tab reaches regex before replacement":
     let
       editor = newKosmoEditor(text = "cat cat")

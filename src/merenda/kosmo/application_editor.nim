@@ -1526,6 +1526,11 @@ proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bo
     if event.modifiers == editorSearchShortcutModifiers() + {nimkit.kmShift}:
       view.findPrevious()
       return true
+  # Key equivalents also traverse ancestors of the focused search controls.
+  # Leave their Tab and editing commands to the standard widget handlers.
+  let owner = view.window()
+  if owner of nimkit.Window and nimkit.Window(owner).firstResponder() != view:
+    return false
   if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
     return false
   let controller = view.tabsDelegate.dockController[]
