@@ -4,7 +4,8 @@
 ## translate their input and paint the returned cells; Moe implementation types
 ## remain private to this module.
 
-import std/[algorithm, options, os, strutils, tables, unicode]
+import std/[algorithm, monotimes, options, os, strutils, tables, unicode]
+from std/times import initDuration
 
 import matter/grammarpackages as matterPackages
 import moepkg/celina_backend as celina
@@ -14,7 +15,8 @@ import
   moepkg/[
     editor, editor_buffers, editor_display, editor_file, editor_frame,
     editor_render_views, frontend_input, handler, completion, command_line, config,
-    config_loader, editor_window, encoding, motion, viewer_mode, window_manager,
+    config_loader, editor_window, encoding, key_router, motion, viewer_mode,
+    window_manager,
   ]
 import moepkg/buffer/undo as moeUndo
 import moepkg/buffer/search as moeSearch
@@ -23,6 +25,7 @@ import moepkg/buffer/core as moeBufferCore
 import moepkg/command_completion as moeCommandCompletion
 import moepkg/command_handlers/config_ops as moeConfigOps
 import moepkg/command_handlers/handler_result as moeHandlerResult
+import moepkg/config_mode as moeConfigMode
 import moepkg/help_viewer as moeHelpViewer
 import moepkg/highlight as moeHighlight
 from moepkg/buffer/file_io import loadFileWithContent
@@ -83,6 +86,8 @@ type
     matterRequests: Table[BufferId, tuple[contentVersion: int, requestId: uint64]]
     matterSyntaxFallback: MatterSyntaxFallbackState
     matterLineStateVersions: Table[BufferId, int]
+    configViewerState: moeTypes.ConfigModeState
+    keyMappingDeadline: Option[MonoTime]
 
   KosmoBufferId* = distinct int
     ## Stable identity for a Moe buffer without exposing Moe's buffer types.
@@ -169,6 +174,41 @@ type
     valid*: bool
     continueRunning*: bool
     closeTabRequested*: bool
+
+  KosmoHostCommandKind* {.pure.} = enum
+    Help
+    Config
+    SplitBelow
+    SplitRight
+    NewBelow
+    NewRight
+    CloseTab
+    Pane
+
+  KosmoPaneCommand* = enum
+    kpcNone
+    kpcSplitBelow
+    kpcSplitRight
+    kpcNewBelow
+    kpcFocusNext
+    kpcFocusPrevious
+    kpcFocusLeft
+    kpcFocusBelow
+    kpcFocusAbove
+    kpcFocusRight
+    kpcClose
+    kpcGrowHeight
+    kpcShrinkHeight
+    kpcShrinkWidth
+    kpcGrowWidth
+    kpcEqualize
+
+  KosmoHostCommand* = object
+    ## A parsed Moe command whose tab or pane placement belongs to the frontend.
+    kind*: KosmoHostCommandKind
+    filename*: Option[string]
+    paneCommand*: KosmoPaneCommand
+    forceClose*: bool
 
   KosmoEditorViewState* = object
     ## Cursor, selection, and viewport for one buffer projection in a frontend.
@@ -592,6 +632,56 @@ proc availableTextMateGrammars*(editor: KosmoEditor): seq[KosmoTextMateGrammar] 
   if not editor.isNil and not editor.editor.isNil:
     result = editor.textMateGrammars
 
+func hostCommand(r: moeHandlerResult.HandlerResult): Option[KosmoHostCommand] =
+  var command: KosmoHostCommand
+  case r.kind
+  of moeHandlerResult.hrEnterHelpViewer:
+    command.kind = KosmoHostCommandKind.Help
+  of moeHandlerResult.hrConfig:
+    command.kind = KosmoHostCommandKind.Config
+  of moeHandlerResult.hrHSplit:
+    command = KosmoHostCommand(
+      kind: KosmoHostCommandKind.SplitBelow, filename: r.hsplitFilename
+    )
+  of moeHandlerResult.hrVSplit:
+    command = KosmoHostCommand(
+      kind: KosmoHostCommandKind.SplitRight, filename: r.vsplitFilename
+    )
+  of moeHandlerResult.hrFilerOpenFileHSplit:
+    command = KosmoHostCommand(
+      kind: KosmoHostCommandKind.SplitBelow, filename: some(r.filerFilePath)
+    )
+  of moeHandlerResult.hrFilerOpenFileVSplit:
+    command = KosmoHostCommand(
+      kind: KosmoHostCommandKind.SplitRight, filename: some(r.filerFilePath)
+    )
+  of moeHandlerResult.hrNew:
+    command.kind = KosmoHostCommandKind.NewBelow
+  of moeHandlerResult.hrVnew:
+    command.kind = KosmoHostCommandKind.NewRight
+  else:
+    command.kind = KosmoHostCommandKind.Pane
+    command.paneCommand =
+      case r.kind
+      of moeHandlerResult.hrNextWindow: kpcFocusNext
+      of moeHandlerResult.hrPrevWindow: kpcFocusPrevious
+      of moeHandlerResult.hrMoveWindowLeft: kpcFocusLeft
+      of moeHandlerResult.hrMoveWindowDown: kpcFocusBelow
+      of moeHandlerResult.hrMoveWindowUp: kpcFocusAbove
+      of moeHandlerResult.hrMoveWindowRight: kpcFocusRight
+      of moeHandlerResult.hrCloseWindow: kpcClose
+      of moeHandlerResult.hrIncreaseWindowHeight: kpcGrowHeight
+      of moeHandlerResult.hrDecreaseWindowHeight: kpcShrinkHeight
+      of moeHandlerResult.hrIncreaseWindowWidth: kpcGrowWidth
+      of moeHandlerResult.hrDecreaseWindowWidth: kpcShrinkWidth
+      of moeHandlerResult.hrEqualizeWindows: kpcEqualize
+      else: kpcNone
+    if command.paneCommand == kpcNone:
+      return
+    if r.kind == moeHandlerResult.hrCloseWindow:
+      command.forceClose = r.forceClose
+  some(command)
+
 proc newKosmoEditor*(
     text = "", workingDirectory = "", nimLspCommand = ""
 ): KosmoEditor =
@@ -637,7 +727,14 @@ proc newKosmoEditor*(
   result.workingDirectory = workingDirectory
   result.editor.hostPopupMenus = true
   result.editor.hostCommandFilter = proc(e: Editor, command: ParsedCommand): bool =
-    command.action == claHelp
+    # Kosmo owns buffer visibility across panes, so it must perform :q's
+    # safe-close check before Moe validates against its internal windows.
+    command.action == claQuit and command.args.len == 0 and
+      e.currentMode() != moeModes.EditorMode.Config
+  result.editor.hostResultFilter = proc(
+      e: Editor, r: moeHandlerResult.HandlerResult
+  ): bool =
+    r.hostCommand().isSome
   discard result.editor.addCommandAlias("x", claSaveAndQuit)
   result.editor.setFrontendGitStatusEnabled(true)
   if text.len > 0:
@@ -696,14 +793,34 @@ proc notifyGitRepositoryChanged*(editor: KosmoEditor, rootPath = "") =
     when compiles(editor.editor.notifyGitRepositoryChanged(rootPath)):
       editor.editor.notifyGitRepositoryChanged(rootPath)
 
+proc armKeyMappingTimeout(editor: KosmoEditor) =
+  let timeoutMs = editor.editor.keyRouter.nextTimeoutMs()
+  editor.keyMappingDeadline =
+    if timeoutMs > 0:
+      some(getMonoTime() + initDuration(milliseconds = timeoutMs))
+    else:
+      none(MonoTime)
+
+proc pollKeyMappingTimeout(editor: KosmoEditor): bool =
+  if editor.keyMappingDeadline.isNone or getMonoTime() < editor.keyMappingDeadline.get:
+    return
+  editor.keyMappingDeadline = none(MonoTime)
+  if editor.editor.keyRouter.nextTimeoutMs() == 0:
+    return
+  discard editor.inWorkingDirectory:
+    editor.editor.handleKeyMappingTimeout()
+  editor.armKeyMappingTimeout()
+  true
+
 proc pollGitStatus*(editor: KosmoEditor): bool =
-  ## Advance pending work; report published Git changes requiring a repaint.
+  ## Advance pending work; report mapping or Git changes requiring a repaint.
   if not editor.isNil and not editor.editor.isNil:
+    result = editor.pollKeyMappingTimeout()
     when compiles(editor.editor.frontendGitStatusRevision()):
       let previous = editor.editor.frontendGitStatusRevision()
       editor.inWorkingDirectory:
         editor.editor.tick()
-      result = previous != editor.editor.frontendGitStatusRevision()
+      result = result or previous != editor.editor.frontendGitStatusRevision()
     else:
       editor.inWorkingDirectory:
         editor.editor.tick()
@@ -864,6 +981,8 @@ proc openFile*(
   ## Permanently open `path`, promoting it when it is the temporary buffer.
   result = editor.validateFileOpen(path)
   if not result.loaded:
+    if not editor.isNil and not editor.editor.isNil:
+      editor.editor.state.statusMessage = result.message
     return
   editor.normalizeTemporaryBuffers()
   let existing = editor.bufferIdForPath(path)
@@ -873,6 +992,8 @@ proc openFile*(
     return
   result = editor.openFileBuffer(path, reusePristineBuffer)
   if not result.loaded:
+    if not editor.isNil and not editor.editor.isNil:
+      editor.editor.state.statusMessage = result.message
     return
   let opened = editor.activeBufferId()
   editor.discardTemporaryBuffer(opened, scope)
@@ -929,15 +1050,16 @@ proc tabs*(editor: KosmoEditor): seq[KosmoTab] =
     return
   editor.normalizeTemporaryBuffers()
   for buffer in editor.editor.activeWindowBuffers():
-    result.add KosmoTab(
-      id: buffer.id.toKosmoBufferId,
-      title: buffer.title,
-      filePath: buffer.filePath,
-      modified: buffer.modified,
-      readOnly: buffer.readOnly,
-      active: buffer.active,
-      temporary: editor.isTemporaryBuffer(buffer.id),
-    )
+    if editor.editor.bufferById(buffer.id).isSome:
+      result.add KosmoTab(
+        id: buffer.id.toKosmoBufferId,
+        title: buffer.title,
+        filePath: buffer.filePath,
+        modified: buffer.modified,
+        readOnly: buffer.readOnly,
+        active: buffer.id == editor.editor.activeWindow.tabBufferId,
+        temporary: editor.isTemporaryBuffer(buffer.id),
+      )
 
 proc gitWatchRoots*(editor: KosmoEditor): seq[string] =
   ## Parent directories of open files, resolving relative paths in editor context.
@@ -1429,17 +1551,46 @@ proc helpText*(editor: KosmoEditor): string =
   ## Return Moe's canonical Markdown help source for a host-owned Help view.
   moeHelpViewer.HelpSentences
 
-proc takeHostHelpRequest*(editor: KosmoEditor): bool =
-  ## Consume a request for the host to present Moe's Help document.
+proc takeHostCommandRequest*(editor: KosmoEditor): Option[KosmoHostCommand] =
+  ## Consume a request whose presentation is owned by Kosmo.
   if editor.isNil or editor.editor.isNil:
-    return false
-  let request = editor.editor.takeHostCommandRequest()
-  request.isSome and request.get.action == claHelp
+    return
+  let command = editor.editor.takeHostCommandRequest()
+  if command.isSome:
+    return some(
+      KosmoHostCommand(
+        kind: KosmoHostCommandKind.CloseTab, forceClose: "force" in command.get.flags
+      )
+    )
+  let request = editor.editor.takeHostResultRequest()
+  if request.isSome:
+    if request.get.kind in
+        {moeHandlerResult.hrFilerOpenFileHSplit, moeHandlerResult.hrFilerOpenFileVSplit}:
+      discard editor.editor.leaveViewerModeForJump(moeModes.EditorMode.Filer)
+    result = request.get.hostCommand()
+
+proc hasWindowKeyMapping*(editor: KosmoEditor, continuation = ""): bool =
+  ## Whether a runtime mapping owns Ctrl-W alone or the supplied continuation.
+  if editor.isNil or editor.editor.isNil:
+    return
+  let registry = editor.editor.keyBindingRegistry
+  if not registry.runtimeMappings.hasKey(moeModes.EditorMode.Normal):
+    return
+  let prefix = moeKeys.parseKeyCombo("C-w").get
+  let key = moeKeys.parseKeyCombo(continuation)
+  for mapping in registry.runtimeMappings[moeModes.EditorMode.Normal]:
+    if mapping.triggerKeys.len > 0 and mapping.triggerKeys[0] == prefix:
+      if continuation.len == 0 and mapping.triggerKeys.len == 1:
+        return true
+      if key.isSome and mapping.triggerKeys.len > 1 and mapping.triggerKeys[1] == key.get:
+        return true
 
 proc configViewerOpen*(editor: KosmoEditor): bool =
   ## Return whether Moe has an interactive configuration viewer.
   if editor.isNil or editor.editor.isNil:
     return
+  if not editor.configViewerState.isNil:
+    return true
   for window in editor.editor.windowManager.windows:
     if window.mode == moeModes.EditorMode.Config:
       return true
@@ -1450,15 +1601,43 @@ proc configViewerFocused*(editor: KosmoEditor): bool =
     editor.editor.currentMode() == moeModes.EditorMode.Config
 
 proc focusConfigViewer*(editor: KosmoEditor): bool =
-  ## Make the existing configuration viewer Moe's active window.
+  ## Resume the configuration tab without creating an internal Moe split.
   if editor.isNil or editor.editor.isNil:
     return
-  editor.editor.focusExistingViewerWindow(moeModes.EditorMode.Config)
+  if editor.configViewerFocused():
+    return true
+  if editor.configViewerState.isNil:
+    return editor.editor.focusExistingViewerWindow(moeModes.EditorMode.Config)
+  let buffer = newTextBuffer("")
+  buffer.readOnly = true
+  let outcome = editor.editor.enterViewerMode(
+    moeModes.EditorMode.Config,
+    ModeState(kind: mskConfig, config: editor.configViewerState),
+    buffer,
+    vpInPlace,
+  )
+  if outcome.isErr:
+    editor.editor.state.statusMessage = outcome.error
+    return
+  true
+
+proc openConfigViewer*(editor: KosmoEditor): bool =
+  ## Create or resume Moe's interactive state for a host-owned Config tab.
+  if editor.isNil or editor.editor.isNil:
+    return
+  if editor.configViewerState.isNil:
+    editor.configViewerState = moeConfigMode.newConfigModeState(editor.editor.config)
+  editor.focusConfigViewer()
 
 proc focusTextWindow*(editor: KosmoEditor): bool =
   ## Focus a text window while leaving an open configuration viewer intact.
   if editor.isNil or editor.editor.isNil:
     return
+  if not editor.configViewerState.isNil and editor.configViewerFocused():
+    discard moeConfigOps.processConfigResult(
+      editor.editor, moeHandlerResult.HandlerResult(kind: moeHandlerResult.hrConfigQuit)
+    )
+    return true
   let moeEditor = editor.editor
   for index, window in moeEditor.windowManager.windows:
     if window.mode != moeModes.EditorMode.Config:
@@ -1472,6 +1651,12 @@ proc closeConfigViewer*(editor: KosmoEditor) =
     discard moeConfigOps.processConfigResult(
       editor.editor, moeHandlerResult.HandlerResult(kind: moeHandlerResult.hrConfigQuit)
     )
+  editor.configViewerState = nil
+
+proc moeWindowCount*(editor: KosmoEditor): int =
+  ## Return the number of engine windows, including internal viewer splits.
+  if not editor.isNil and not editor.editor.isNil:
+    result = editor.editor.windowManager.windows.len
 
 proc dismissCompletionPopup*(editor: KosmoEditor) =
   ## Dismiss Moe's active insert-completion popup, if any.
@@ -2084,11 +2269,15 @@ proc handleKeyOutcome*(editor: KosmoEditor, key: string): KosmoKeyOutcome =
   if combo.isNone:
     return
   let command = editor.commandLine()
+  let wasConfig = editor.configViewerFocused()
   result.valid = true
   result.continueRunning = editor.inWorkingDirectory:
     editor.editor.handleKeyCombo(combo.get)
+  editor.armKeyMappingTimeout()
   result.closeTabRequested =
     not result.continueRunning and command.visible and command.text.requestsTabClose()
+  if wasConfig and not editor.configViewerFocused():
+    editor.configViewerState = nil
 
 proc handleKey*(editor: KosmoEditor, key: string): bool =
   ## Send a physical key in Moe notation, for example `"j"` or `"C-s"`.
@@ -2121,8 +2310,12 @@ proc handleTextInput*(editor: KosmoEditor, text: string): bool =
   ## Send committed text, including IME and composed Unicode input.
   if editor.isNil or editor.editor.isNil:
     return false
-  editor.inWorkingDirectory:
+  let wasConfig = editor.configViewerFocused()
+  result = editor.inWorkingDirectory:
     editor.handleCommittedTextInput(text)
+  editor.armKeyMappingTimeout()
+  if wasConfig and not editor.configViewerFocused():
+    editor.configViewerState = nil
 
 proc handlePaste*(editor: KosmoEditor, text: string): bool =
   ## Insert pasted text without interpreting it as physical key input.

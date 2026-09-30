@@ -53,6 +53,7 @@ proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
 proc openHelpDocument(view: KosmoEditorView): bool
 proc openConfigDocument(view: KosmoEditorView): bool
+proc handleHostCommand(view: KosmoEditorView, command: KosmoHostCommand): bool
 proc activatePaneTab(
   controller: KosmoDockController,
   group: KosmoEditorGroup,
@@ -859,13 +860,22 @@ proc renderGrid(view: KosmoEditorView) =
   if not view.dockGroup.isNil:
     view.dockGroup[].pane.syncPopupMenu()
 
+proc handleHostCommands(view: KosmoEditorView): bool =
+  if not view.isActiveEditorGroup():
+    return
+  var request = view.editor.takeHostCommandRequest()
+  while request.isSome:
+    result = true
+    discard view.handleHostCommand(request.get)
+    request = view.editor.takeHostCommandRequest()
+
 proc refresh*(view: KosmoEditorView) =
   ## Render the current editor state into the synchronous cell-grid view.
   if view.shouldDeferInactiveRefresh():
     view.inactiveRefreshDeferred = true
     return
-  if view.editor.takeHostHelpRequest():
-    discard view.openHelpDocument()
+  if view.handleHostCommands() and not view.isActiveEditorGroup():
+    return
   if view.editor.configViewerOpen():
     if view.isActiveEditorGroup() and view.editor.configViewerFocused() and
         not view.dockGroup.isNil and
@@ -1187,6 +1197,10 @@ proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
   if keyOutcome.closeTabRequested and not view.tabsDelegate.dockController.isNil:
     view.tabsDelegate.dockController[].closeCurrentTab(view)
     return true
+  if view.handleHostCommands():
+    if view.isActiveEditorGroup():
+      view.refresh()
+    return true
   if wasCommand and keyEvent.key == nimkit.keyEnter and
       view.editor.mode() notin {KosmoEditorMode.Command, KosmoEditorMode.Other}:
     if view.adoptActiveBuffer():
@@ -1248,6 +1262,11 @@ proc handlePendingPaneKey(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
     return false
   view.pendingPanePrefix = false
   if event.key == nimkit.keyEscape:
+    return true
+  let key = event.keyNotation()
+  if key.len > 0 and view.editor.hasWindowKeyMapping(key):
+    discard view.editor.handleKeyOutcome("C-w")
+    discard view.sendKeyDownToMoe(event)
     return true
   let command = event.paneCommand()
   if command != kpcNone and not view.tabsDelegate.dockController.isNil and
@@ -1505,7 +1524,8 @@ proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bo
     return view.sendKeyDownToMoe(event)
   if event.key == nimkit.keyForText("w") and event.modifiers == {nimkit.kmControl} and
       controller.editorInputPolicy != KosmoEditorInputPolicy.Native:
-    if view.editor.mode() == KosmoEditorMode.Normal:
+    if view.editor.mode() == KosmoEditorMode.Normal and
+        not view.editor.hasWindowKeyMapping():
       view.pendingPanePrefix = true
       return true
     return view.sendKeyDownToMoe(event)
@@ -2639,6 +2659,9 @@ proc openConfigDocument(view: KosmoEditorView): bool =
       controller.activatePaneTab(group, KosmoConfigTabIdentifier)
       return true
 
+  view.syncTabs(view.editor.tabs())
+  if not view.editor.openConfigViewer():
+    return
   let group = view.dockGroup[]
   let editor = view.editor
   let document = newKosmoPaneDocument(

@@ -14,23 +14,6 @@ type
     keckSyntax
     keckMarkdownPreview
 
-  KosmoPaneCommand = enum
-    kpcNone
-    kpcSplitBelow
-    kpcSplitRight
-    kpcNewBelow
-    kpcFocusNext
-    kpcFocusLeft
-    kpcFocusBelow
-    kpcFocusAbove
-    kpcFocusRight
-    kpcClose
-    kpcGrowHeight
-    kpcShrinkHeight
-    kpcShrinkWidth
-    kpcGrowWidth
-    kpcEqualize
-
   KosmoCommandBar* = ref object of nimkit.MonoTextView
 
   KosmoPaneIndicator = ref object of nimkit.View

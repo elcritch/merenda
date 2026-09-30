@@ -424,7 +424,12 @@ UI scale in Appearance, fonts in Typography, and scrolling in Behavior.
 In Moe's normal mode, `:e path` opens a Kosmo document tab or selects the file's
 existing tab.
 `:help` and `:config` open reusable tabs; `:config` keeps Moe's interactive
-settings viewer, which you can close with `:q`.
+settings viewer and its selection when you switch tabs, and closes with `:q`.
+`:split` (`:sp`) opens the current buffer in a pane below, and `:vsplit` (`:vs`)
+opens it in a pane to the right. Add a filename to open that file in the new
+pane; relative paths use the editor's working directory. `:new` and `:vnew`
+create empty buffers in those panes. Moe mappings for these commands and
+`mode_switch config` use the same Kosmo tabs and panes.
 
 Settings changes apply to the current Kosmo instance immediately. Choose
 **Save as Default** to use the committed theme, fonts, scale, and scrolling

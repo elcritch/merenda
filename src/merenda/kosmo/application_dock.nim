@@ -103,6 +103,12 @@ proc activateGroup(controller: KosmoDockController, view: KosmoEditorView) =
       if not previous.isNil:
         previous.editorView.refresh()
     controller.activeGroup = group
+    if controller.editor.configViewerOpen():
+      let document = group.documentForIdentifier(group.selectedTabIdentifier)
+      if document.isNil:
+        discard controller.editor.focusTextWindow()
+      else:
+        document.activate(group.pane)
     let tabs = view.visibleTabs(view.editor.tabs())
     view.selectVisibleBuffer(tabs)
     discard view.syncSelectedEditorContent(tabs)
@@ -582,19 +588,92 @@ proc splitCurrentBuffer(
   controller.activatePaneTab(target, id.tabIdentifier)
   true
 
-proc splitNewBufferBelow(
-    controller: KosmoDockController, source: KosmoEditorGroup
+proc splitNewBuffer(
+    controller: KosmoDockController,
+    source: KosmoEditorGroup,
+    position: nimkit.DockPosition,
 ): bool =
   let bufferId = controller.editor.newEmptyBuffer()
   if bufferId.isNone:
     return
   let target =
     controller.newEditorGroup(source.workspace, source.window, [bufferId.get])
-  if not source.workspace.splitPanel(source.panel, target.panel, nimkit.dpBottom):
+  if not source.workspace.splitPanel(source.panel, target.panel, position):
     controller.removeGroup(target)
     return
   controller.activatePaneTab(target, bufferId.get.tabIdentifier)
   true
+
+proc splitFileBuffer(
+    controller: KosmoDockController,
+    source: KosmoEditorGroup,
+    filename: string,
+    position: nimkit.DockPosition,
+): bool =
+  let
+    editor = controller.editor
+    sourceState = editor.captureViewState()
+    path = resolvedEditorFilePath(expandTilde(filename), editor.workingDirectory())
+    outcome = editor.openFile(path, reusePristineBuffer = false)
+  if not outcome.loaded:
+    if not source.editorView.statusLabel.isNil:
+      source.editorView.statusLabel.text = outcome.message
+    return
+  var openedId: Option[KosmoBufferId]
+  for tab in editor.tabs():
+    if tab.active:
+      openedId = some(tab.id)
+  discard editor.restoreViewState(sourceState)
+  if openedId.isNone:
+    return
+  let target =
+    controller.newEditorGroup(source.workspace, source.window, [openedId.get])
+  if not source.workspace.splitPanel(source.panel, target.panel, position):
+    controller.removeGroup(target)
+    return
+  controller.activatePaneTab(target, openedId.get.tabIdentifier)
+  true
+
+proc handleHostCommand(view: KosmoEditorView, command: KosmoHostCommand): bool =
+  if view.isNil or view.dockGroup.isNil or view.tabsDelegate.dockController.isNil:
+    return
+  let controller = view.tabsDelegate.dockController[]
+  let source = controller.activeGroup
+  if source.isNil:
+    return
+  case command.kind
+  of KosmoHostCommandKind.Help:
+    discard controller.editor.focusTextWindow()
+    return source.editorView.openHelpDocument()
+  of KosmoHostCommandKind.Config:
+    return source.editorView.openConfigDocument()
+  of KosmoHostCommandKind.CloseTab:
+    var id: KosmoBufferId
+    if command.forceClose and source.selectedTabIdentifier.parseTabIdentifier(id) and
+        not controller.bufferIsVisibleOutside(source, id):
+      let outcome = source.editorView.closeTab(id, discardChanges = true)
+      if outcome.closed:
+        discard
+          source.pane.documentTabs.removeDocumentTabWithIdentifier(id.tabIdentifier)
+        controller.finishTabClose(source.editorView)
+        return true
+    controller.closeCurrentPaneTab(source)
+    return true
+  of KosmoHostCommandKind.Pane:
+    return controller.performPaneCommand(source, command.paneCommand)
+  of KosmoHostCommandKind.SplitBelow, KosmoHostCommandKind.SplitRight,
+      KosmoHostCommandKind.NewBelow, KosmoHostCommandKind.NewRight:
+    let position =
+      if command.kind in {
+        KosmoHostCommandKind.SplitBelow, KosmoHostCommandKind.NewBelow
+      }: nimkit.dpBottom else: nimkit.dpRight
+    if command.kind in {KosmoHostCommandKind.NewBelow, KosmoHostCommandKind.NewRight}:
+      discard controller.editor.focusTextWindow()
+      return controller.splitNewBuffer(source, position)
+    if command.filename.isSome:
+      discard controller.editor.focusTextWindow()
+      return controller.splitFileBuffer(source, command.filename.get, position)
+    return controller.splitCurrentBuffer(source, position)
 
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder =
   let document = group.documentForIdentifier(group.selectedTabIdentifier)
@@ -613,7 +692,9 @@ proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool 
   result = group.window.makeFirstResponder(group.preferredPaneResponder())
   group.editorView.refresh()
 
-proc focusNextGroup(controller: KosmoDockController, source: KosmoEditorGroup): bool =
+proc focusNextGroup(
+    controller: KosmoDockController, source: KosmoEditorGroup, offset = 1
+): bool =
   var candidates: seq[KosmoEditorGroup]
   for group in controller.groups:
     if group.workspace == source.workspace:
@@ -621,7 +702,9 @@ proc focusNextGroup(controller: KosmoDockController, source: KosmoEditorGroup): 
   let index = candidates.find(source)
   if candidates.len < 2 or index < 0:
     return
-  controller.focusGroup(candidates[(index + 1) mod candidates.len])
+  controller.focusGroup(
+    candidates[(index + offset + candidates.len) mod candidates.len]
+  )
 
 proc focusSpatialGroup(
     controller: KosmoDockController,
@@ -743,9 +826,11 @@ proc performPaneCommand(
   of kpcSplitRight:
     controller.splitCurrentBuffer(source, nimkit.dpRight)
   of kpcNewBelow:
-    controller.splitNewBufferBelow(source)
+    controller.splitNewBuffer(source, nimkit.dpBottom)
   of kpcFocusNext:
     controller.focusNextGroup(source)
+  of kpcFocusPrevious:
+    controller.focusNextGroup(source, -1)
   of kpcFocusLeft, kpcFocusBelow, kpcFocusAbove, kpcFocusRight:
     controller.focusSpatialGroup(source, command)
   of kpcClose:
@@ -1011,8 +1096,12 @@ proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
       discard frontend.gitDiffPanel.pollRepositoryRefresh()
     frontend.fileTree.workspaceFiles.setGitRoots(controller.editor.gitWatchRoots())
     if controller.editor.pollGitStatus():
-      for group in controller.groups:
-        group.editorView.refresh()
+      let groups = controller.groups
+      if not controller.activeGroup.isNil:
+        controller.activeGroup.editorView.refresh()
+      for group in groups:
+        if group != controller.activeGroup:
+          group.editorView.refresh()
 
 proc setTerminalEnvironment(
     options: var nimkit.TerminexSpawnOptions, name, value: string

@@ -34,8 +34,8 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  # Host hooks and nonblocking Git pipe reads are supplied by this Moe branch.
-  requires "gh:elcritch/moe#feat/kosmo-host-command-hooks"
+  # Upstream develop d8b08be5 plus the host result hook in Moe PR #3332.
+  requires "gh:elcritch/moe#8b1c56f3369fce8f12891b6ed3fe83226bca9519"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
