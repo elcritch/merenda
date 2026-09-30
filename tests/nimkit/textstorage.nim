@@ -431,6 +431,9 @@ suite "nimkit text storage":
         blue = defaultTextAttributes(color(0.1, 0.2, 0.9))
         manager = newUndoManager()
         spy = newStorageEventSpy()
+      # Undo closures retain their storage; release history at this lifetime boundary.
+      defer:
+        manager.clearAll()
       storage.setAttributes(initTextRange(5, 1), blue)
       storage.setAttributes(initTextRange(1, 2), red)
       let originalRuns = storage.attributeRuns
