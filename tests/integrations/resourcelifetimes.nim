@@ -222,7 +222,8 @@ suite "Workspace resource lifetimes":
       connectThreaded(worker, runBoundedGit, worker, runBoundedGit)
       defer:
         control[].cancelled.store(true, moRelease)
-        while not control[].finished.load(moAcquire) and getMonoTime() < deadline:
+        let cleanupDeadline = getMonoTime() + initDuration(seconds = 10)
+        while not control[].finished.load(moAcquire) and getMonoTime() < cleanupDeadline:
           discard app.runForFrames(1)
           sleep(1)
         doAssert control[].finished.load(moAcquire)
