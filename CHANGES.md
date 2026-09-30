@@ -13,6 +13,10 @@
 - Apply streamed Markdown syntax colors with indexed range updates and local
   run changes, preserving quote styles, undo, and edit notifications while
   reducing work on large documents.
+- Consolidate macOS workspace watches into FSEvents streams for whole trees,
+  preventing nested folders in multiple projects from exhausting dmon's global
+  watch limit. Deduplicate roots, report fallback causes and uncovered paths,
+  and retry registration when missing directories or capacity become available.
 - Keep Tab and Shift-Tab in Kosmo editor search controls from reaching the
   underlying editor's insert, replace, or command mode.
 - Add configurable FigDraw backdrop blur to Box containers and use it behind

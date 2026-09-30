@@ -429,6 +429,12 @@ saves the displayed results, including any search limits, checks that matched li
 still agree with the results, and skips files with unsaved editor changes. Its status
 reports replacements and skipped files, then refreshes the search.
 
+Filesystem notifications keep the browser and Quick Open inventory current.
+On macOS, one FSEvents stream covers a project tree; linked folders and Git
+metadata outside that tree retain their own streams. If native monitoring
+cannot cover a path, Kosmo polls periodically and logs the cause and affected
+paths. Missing directories and exhausted watch capacity are retried automatically.
+
 Open, Open Folder, and Save As share a resizable file browser with Places shortcuts,
 Back/Forward/Up navigation, and an editable location field. Enter an absolute path,
 a relative folder, or `~/` and press Return to navigate. The file list and Name
