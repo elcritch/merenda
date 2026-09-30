@@ -288,13 +288,25 @@ jobs:
           zigVersion=0.14.1
           zigArchive="$RUNNER_TEMP/zig-x86_64-linux-$zigVersion.tar.xz"
           zigDirectory="$RUNNER_TEMP/zig-x86_64-linux-$zigVersion"
-          curl --connect-timeout 30 --max-time 180 \
-            --retry 3 --retry-all-errors --retry-delay 2 -fsSL \
-            "https://ziglang.org/download/$zigVersion/zig-x86_64-linux-$zigVersion.tar.xz" \
-            -o "$zigArchive"
-          printf '%s  %s\n' \
-            '24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c' \
-            "$zigArchive" | sha256sum --check --status
+          zigVerified=false
+          # Fallback is listed at https://ziglang.org/download/community-mirrors.txt.
+          for zigBase in \
+            "https://ziglang.org/download/$zigVersion" \
+            "https://pkg.hexops.org/zig"; do
+            if curl --connect-timeout 30 --max-time 180 -fsSL \
+                "$zigBase/zig-x86_64-linux-$zigVersion.tar.xz" -o "$zigArchive" && \
+              printf '%s  %s\n' \
+                '24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c' \
+                "$zigArchive" | sha256sum --check --status; then
+              zigVerified=true
+              break
+            fi
+            echo "::warning::Could not download a verified Zig archive from $zigBase"
+          done
+          if ! "$zigVerified"; then
+            echo "::error::Unable to download the pinned Zig toolchain"
+            exit 1
+          fi
           tar -xJf "$zigArchive" -C "$RUNNER_TEMP"
           zigCompiler="$RUNNER_TEMP/zigcc"
           printf '%s\n' \
