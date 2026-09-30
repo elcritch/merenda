@@ -36,7 +36,11 @@ proc exerciseWorkspace(app: Application, root: string) =
   defer:
     manager.close()
   let first = newKosmoApplication(manager, filePath = root)
+  defer:
+    first.window.close()
   let second = newKosmoApplication(manager, filePath = root)
+  defer:
+    second.window.close()
   first.show()
   second.show()
   discard app.runForFrames(1)
@@ -127,7 +131,9 @@ suite "Workspace resource lifetimes":
       let app = newApplication("Resource lifetime test")
       # Warm native font, watcher, renderer, and shared-worker infrastructure.
       exerciseWorkspace(app, root)
+      discard app.runForFrames(1)
       discard getCurrentSigilThread().pollAll(NonBlocking)
+      require app.windows.len == 0
       let baseline = processResourceUsage()
       require baseline.fileDescriptors >= 0
       require baseline.childProcesses >= 0
@@ -141,6 +147,7 @@ suite "Workspace resource lifetimes":
         require current.childProcesses >= 0
         require current.fileDescriptors >= 0
         require current.threads > 0
+        check app.windows.len == 0
         check current.childProcesses <= baseline.childProcesses
         check current.fileDescriptors <= baseline.fileDescriptors + 2
         # Native drivers create housekeeping threads lazily; record their count
