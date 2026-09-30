@@ -35,7 +35,7 @@ feature "uirelays":
 
 feature "kosmo":
   # Upstream develop d8b08be5 plus the host result hook in Moe PR #3332.
-  requires "gh:elcritch/moe#8b1c56f3369fce8f12891b6ed3fe83226bca9519"
+  requires "gh:elcritch/moe#77c3c8334ae3778e0a945d2c89c722b4d49f0d75"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"

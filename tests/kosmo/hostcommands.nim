@@ -282,6 +282,27 @@ suite "Kosmo Moe host commands":
     check editor.tabs().len == 2
     check editor.moeWindowCount() == 1
 
+  test "a pane mapping stops replay before trailing edits reach the source buffer":
+    let frontend = newKosmoApplication(newApplication("Kosmo Host Replay Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let editor = frontend.editorView.editor
+    let originalBuffer = editor.tabs()[0].id
+    require editor.handleKey("i")
+    require editor.handleTextInput("original")
+    require editor.handleKey("Esc")
+    frontend.editorView.refresh()
+    require frontend.command(frontend.editorView, "nnoremap C-y C-w n i X Esc")
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyY, keyCode: keyY.ord, modifiers: {kmControl})
+    )
+    check frontend.editorGroups().len == 2
+    check editor.bufferText(originalBuffer).get("") == "original"
+    check editor.currentText() == ""
+    check editor.moeWindowCount() == 1
+
   test "Config applies edits and retains its selected setting across tab switches":
     let frontend = newKosmoApplication(newApplication("Kosmo Config Edit Test"))
     defer:

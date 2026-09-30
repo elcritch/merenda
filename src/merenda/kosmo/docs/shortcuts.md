@@ -304,6 +304,11 @@ For a single-key Ctrl-W override, use a key-sequence mapping such as
 precedence over a bare command mapped to Ctrl-W, such as
 `:nmap C-w window-new`; changing that precedence needs a separate upstream fix.
 
+A macro or key-sequence mapping stops when it requests a native tab or pane
+action. Remaining keys in that replay are discarded so they cannot edit the
+source buffer while Kosmo opens the destination. Enter further edits after
+the tab or pane opens.
+
 Ex commands use the same dock: `:split` (`:sp`) splits below, `:vsplit` (`:vs`)
 splits right, and either accepts a filename resolved from the editor's working
 directory. `:new` and `:vnew` create empty-buffer panes. `:q` closes the current
