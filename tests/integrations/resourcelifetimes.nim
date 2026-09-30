@@ -1,11 +1,40 @@
 ## Repeated workspace and terminal lifetimes, including worker and native handles.
-import std/[monotimes, os, strutils, tempfiles, times, unittest]
-import sigils/[core, threads]
+import std/[atomics, monotimes, os, strutils, tempfiles, times, unittest]
+import sigils/[core, threadProxies, threads]
+import threading/smartptrs
 import merenda/nimkit
 import merenda/nimkit/app/diagnostics
+import merenda/nimkit/foundation/backgroundworkers
 import merenda/nimkit/foundation/gitprocesses
 import merenda/kosmo/kosmo
 import merenda/kosmo/workspacefiles
+
+type
+  GitSettlementControl = object
+    cancelled, finished: Atomic[bool]
+    timedOut: bool
+
+  GitSettlementWorker = ref object of AgentActor
+
+proc runBoundedGit(
+  worker: AgentProxy[GitSettlementWorker],
+  root: string,
+  control: SharedPtr[GitSettlementControl],
+) {.signal.}
+
+proc runBoundedGit(
+    worker: GitSettlementWorker, root: string, control: SharedPtr[GitSettlementControl]
+) {.slot.} =
+  let command = runGitCommand(
+    root,
+    ["hash-object", "--stdin"],
+    timeoutMilliseconds = 6_500,
+    cancelled = proc(): bool {.gcsafe.} =
+      control[].cancelled.load(moAcquire),
+  )
+  control[].timedOut =
+    command.exitCode == -1 and command.output == "Git workspace command timed out"
+  control[].finished.store(true, moRelease)
 
 when defined(linux):
   proc descriptorTargets(): seq[string] =
@@ -85,9 +114,8 @@ proc exerciseWorkspace(app: Application, root: string) =
   doAssert second.fileTree.workspaceFiles.waitForFiles()
 
 proc settledUsage(
-    app: Application, baseline: ProcessResourceUsage
+    app: Application, baseline: ProcessResourceUsage, deadline: MonoTime
 ): ProcessResourceUsage =
-  let deadline = getMonoTime() + initDuration(seconds = 5)
   while true:
     discard app.runForFrames(1)
     discard getCurrentSigilThread().pollAll(NonBlocking)
@@ -155,7 +183,7 @@ suite "Workspace resource lifetimes":
       for _ in 0 ..< 6:
         require getMonoTime() < deadline
         exerciseWorkspace(app, root)
-        let current = settledUsage(app, baseline)
+        let current = settledUsage(app, baseline, deadline)
         checkpoint "baseline: " & $baseline & "; after close: " & $current
         require current.childProcesses >= 0
         require current.fileDescriptors >= 0
@@ -169,3 +197,51 @@ suite "Workspace resource lifetimes":
         check current.fileDescriptors <= baseline.fileDescriptors + 2
         # Native drivers create housekeeping threads lazily; record their count
         # rather than treating it as an owned-worker count.
+
+    test "resource settlement waits for bounded in-flight Git cleanup":
+      let root = createTempDir("merenda-git-settlement-", "")
+      defer:
+        removeDir(root)
+      require runGitCommand(root, ["init", "-q"]).exitCode == 0
+      let app = newApplication("Git settlement test")
+      let deadline = getMonoTime() + initDuration(seconds = 60)
+      let timer = nimkitTimerThread()
+      while getMonoTime() < deadline:
+        if getThreadId(timer.toSigilThread()[]) >= 0 and
+            processResourceUsage().childProcesses == 0:
+          break
+        discard app.runForFrames(1)
+        sleep(1)
+      require getThreadId(timer.toSigilThread()[]) >= 0
+      let baseline = processResourceUsage()
+      require baseline.childProcesses == 0
+      require baseline.fileDescriptors >= 0
+      let control = newSharedPtr(GitSettlementControl())
+      var actor = GitSettlementWorker()
+      let worker = actor.moveToThread(nimkitWorkerPool())
+      connectThreaded(worker, runBoundedGit, worker, runBoundedGit)
+      defer:
+        control[].cancelled.store(true, moRelease)
+        while not control[].finished.load(moAcquire) and getMonoTime() < deadline:
+          discard app.runForFrames(1)
+          sleep(1)
+        doAssert control[].finished.load(moAcquire)
+      # Git waits for stdin until its allowed deadline; no shell or sleep child
+      # is needed. Observe the running subprocess before testing settlement.
+      emit worker.runBoundedGit(root, control)
+      while processResourceUsage().childProcesses <= baseline.childProcesses and
+          not control[].finished.load(moAcquire) and getMonoTime() < deadline:
+        discard app.runForFrames(1)
+        sleep(1)
+      require processResourceUsage().childProcesses > baseline.childProcesses
+      let started = getMonoTime()
+      let current = settledUsage(app, baseline, deadline)
+      checkpoint "settlement elapsed: " & $(getMonoTime() - started) & "; baseline: " &
+        $baseline & "; after settlement: " & $current
+      while not control[].finished.load(moAcquire) and getMonoTime() < deadline:
+        discard app.runForFrames(1)
+        sleep(1)
+      require control[].finished.load(moAcquire)
+      check control[].timedOut
+      check current.childProcesses <= baseline.childProcesses
+      check current.fileDescriptors <= baseline.fileDescriptors + 2
