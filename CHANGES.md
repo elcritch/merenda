@@ -13,6 +13,15 @@
 - Apply streamed Markdown syntax colors with indexed range updates and local
   run changes, preserving quote styles, undo, and edit notifications while
   reducing work on large documents.
+- Add configurable FigDraw backdrop blur to Box containers and use it behind
+  Kosmo's search overlay, with a themed tint for readable controls.
+- Render push-button toggle state consistently and give enabled search regex
+  buttons a pressed accent appearance. Support vector icons in standard Buttons
+  so search disclosure and navigation arrows remain visible across fonts.
+- Use standard text fields, buttons, and Box chrome in Kosmo search panels.
+  Fix replacement-field clicks and placeholder alignment, put the expression
+  toggle first after the query in tab order, and contain overlay clicks.
+- Add TextField placeholders and compact toolbar styling for Buttons.
 - Add an opt-in `.*` mode for Reni expressions and replacement captures in Kosmo
   editor and file search. Default both fields to literal text; validate capture
   templates before editing, handle engine limits, and render matches in Kosmo
