@@ -7,6 +7,7 @@ when defined(windows):
 
 import ../nimkit as nimkit except performKeyEquivalent
 import ./workspacefiles
+import ./searchbuttons
 from ../nimkit/foundation/selectors import performKeyEquivalent
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
@@ -1037,7 +1038,7 @@ proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
     filterField = nimkit.newTextField()
     scopeMenu = nimkit.newMenu("Files Shown")
     scopeButton = nimkit.newPopupMenuButton(tree.displayMode().title(), scopeMenu)
-    closeFilterButton = nimkit.newButton("×")
+    closeFilterButton = newSearchButton("×", symbol = true)
     promptLabel = KosmoFileFilterPromptLabel()
   promptLabel.initLabelFields("Filter Files")
   discard promptLabel.withProtocol(KosmoFileFilterPromptHitTesting)

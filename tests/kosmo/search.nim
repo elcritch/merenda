@@ -7,6 +7,7 @@ import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 import fixtures/ui
+import ../nimkit/fixtures/rendergeometry
 
 proc renderedFigText(node: Fig): string =
   for glyphIndex in 0 ..< node.textLayout.glyphCount():
@@ -576,6 +577,110 @@ suite "Kosmo":
       check editorIsFirstResponder
 
 suite "Kosmo file replacement":
+  test "search controls retain visible toggle state and vector disclosure in both modes":
+    let
+      panel = newKosmoFileSearchPanel()
+      window = newWindow("Search appearance", frame = rect(0, 0, 360, 400))
+    defer:
+      panel.close()
+      window.close()
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    let toggle = panel.buttonWithLabel("Use Reni regular expressions")
+    let point = toggle.pointToWindow(initPoint(14, 13))
+    for enabled in [true, false]:
+      require window.clickAt(point)
+      check panel.regularExpression == enabled
+      check window.fieldEditorClient() == panel.queryField
+      let states =
+        if enabled:
+          {ssSelected}
+        else:
+          {}
+      let style = toggle.effectiveAppearance().resolveButtonStyle(
+          controlStyle(srButton, states, classes = toggle.styleClasses)
+        )
+      var foundFace = false
+      for node in buildRenders(toggle)[DefaultDrawLevel].resolvedNodes():
+        if node.kind == nkRectangle and node.fill == style.box.fill:
+          foundFace = true
+      check foundFace
+    let disclosure = panel.buttonWithLabel("Show replacement controls")
+    for expanded in [false, true, false]:
+      panel.replacementVisible = expanded
+      var iconCount = 0
+      for node in buildRenders(disclosure)[DefaultDrawLevel].resolvedNodes():
+        if node.kind == nkMtsdfImage and node.screenBox.w > 0 and node.screenBox.h > 0:
+          inc iconCount
+      check iconCount > 0
+
+  test "editor search draws a tinted FigDraw backdrop behind its controls":
+    let
+      editor = newKosmoEditor(text = "Readable text beneath the search overlay")
+      view = newKosmoEditorView(editor)
+      window = newWindow("Search backdrop", frame = rect(0, 0, 640, 360))
+    defer:
+      window.close()
+      editor.close()
+    window.setContentView(view)
+    view.layoutSubtreeIfNeeded()
+    view.refresh()
+    for expanded in [false, true]:
+      require view.showSearch(replacing = expanded)
+      let box = view.searchField().superview().superview()
+      let frame = box.rectToWindow(box.bounds)
+      var blurCount = 0
+      for node in window.buildRenders()[DefaultDrawLevel].resolvedNodes():
+        if node.kind == nkBackdropBlur:
+          inc blurCount
+          check node.backdropBlur.blur >= 16
+          check node.fill.centerColor().a >= 0.7
+          check node.screenBox.x == frame.minX
+          check node.screenBox.y == frame.minY
+          check node.screenBox.w == frame.size.width
+          check node.screenBox.h == frame.size.height
+      check blurCount == 1
+      for label in ["Previous editor text match", "Next editor text match"]:
+        let button = view.buttonWithLabel(label)
+        var iconCount = 0
+        for node in buildRenders(button)[DefaultDrawLevel].resolvedNodes():
+          if node.kind == nkMtsdfImage:
+            inc iconCount
+        check iconCount > 0
+
+  test "file search tabs through regex then replacement and skips hidden controls":
+    let
+      panel = newKosmoFileSearchPanel()
+      window = newWindow("File search focus", frame = rect(0, 0, 360, 400))
+      tab = KeyEvent(key: keyTab, keyCode: keyTab.ord)
+      backtab = KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+      regex = panel.buttonWithLabel("Use Reni regular expressions")
+    defer:
+      window.close()
+    window.setContentView(panel)
+    panel.replacementVisible = true
+    panel.layoutSubtreeIfNeeded()
+    require panel.focusQuery()
+    require window.dispatchKeyDown(tab)
+    check window.firstResponder() == regex
+    require window.dispatchKeyDown(tab)
+    check window.fieldEditorClient() == panel.replacementField
+    require window.dispatchKeyDown(backtab)
+    check window.firstResponder() == regex
+    let point = panel.replacementField.pointToWindow(initPoint(40, 13))
+    require window.mouseDownAt(point)
+    discard window.mouseUpAt(point)
+    require window.fieldEditorClient() == panel.replacementField
+    require window.dispatchTextInput("dog")
+    check panel.replacementField.text == "dog"
+    check panel.queryField.text == ""
+    panel.replacementVisible = false
+    check window.fieldEditorClient() == panel.queryField
+    require window.dispatchKeyDown(tab)
+    check window.firstResponder() == regex
+    require window.dispatchKeyDown(tab)
+    check window.firstResponder() == panel.buttonWithLabel("Show replacement controls")
+
   test "file search hides replacement until expanded and preserves results on mode changes":
     let root = createTempDir("kosmo-search-modes-", "")
     writeFile(root / "sample.txt", "cat cat\n")
@@ -620,7 +725,10 @@ suite "Kosmo file replacement":
     panel.replacementField.checkVisibleIn(panel)
     panel.replaceAllButton.checkVisibleIn(panel)
     check panel.resultsView.frame().minY > compactResultsY
-    require window.makeFirstResponder(panel.replacementField)
+    let replacementPoint = panel.replacementField.pointToWindow(initPoint(40, 13))
+    require window.mouseDownAt(replacementPoint)
+    discard window.mouseUpAt(replacementPoint)
+    require window.fieldEditorClient() == panel.replacementField
     require window.dispatchTextInput("dog")
     require window.dispatchKeyDown(find)
     check not panel.replacementVisible

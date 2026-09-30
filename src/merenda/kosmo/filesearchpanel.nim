@@ -7,6 +7,7 @@ import ../nimkit/foundation/textsearch
 import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ./filetree
+import ./searchbuttons
 
 const
   DefaultKosmoSearchResultsPerFile* = 30
@@ -40,7 +41,6 @@ type
   KosmoFileSearchPanel* = ref object of nimkit.View
     queryField*: nimkit.TextField
     replacementField*: nimkit.TextField
-    replacementPrompt: nimkit.Label
     xReplacementVisible: bool
     disclosureButton: nimkit.Button
     expressionButton: nimkit.Button
@@ -518,13 +518,6 @@ proc submitFileSearch(panel: KosmoFileSearchPanel, sender: nimkit.DynamicAgent) 
   if owner of nimkit.Window:
     discard nimkit.Window(owner).makeFirstResponder(panel.queryField)
 
-proc replacementTextDidChange(
-    panel: KosmoFileSearchPanel, sender: nimkit.DynamicAgent
-) {.slot.} =
-  discard sender
-  panel.replacementPrompt.hidden =
-    not panel.xReplacementVisible or panel.replacementField.text().len > 0
-
 protocol KosmoFileSearchPanelLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(panel: KosmoFileSearchPanel) =
     let
@@ -533,7 +526,8 @@ protocol KosmoFileSearchPanelLayout of nimkit.ViewLayoutProtocol:
       contentWidth = max(bounds.size.width - horizontalPadding * 2.0'f32, 0.0'f32)
       disclosureWidth = min(24.0'f32, contentWidth / 8)
       fieldX = horizontalPadding + disclosureWidth + 6
-      fieldWidth = max(contentWidth - disclosureWidth - 46, 0)
+      replacementWidth = max(contentWidth - disclosureWidth - 6, 0)
+      fieldWidth = max(replacementWidth - 34, 0)
       statusY = if panel.xReplacementVisible: 104.0'f32 else: 38.0'f32
       resultsY = statusY + 22
       cancelSize = min(20.0'f32, contentWidth)
@@ -550,13 +544,12 @@ protocol KosmoFileSearchPanelLayout of nimkit.ViewLayoutProtocol:
       nimkit.rect(fieldX, 8.0'f32, fieldWidth, 26.0'f32)
     )
     panel.expressionButton.setFrameFromLayout(
-      nimkit.rect(fieldX + fieldWidth + 6, 8, 34, 26)
+      nimkit.rect(fieldX + fieldWidth + 6, 8, 28, 26)
     )
-    panel.replacementField.setFrameFromLayout(nimkit.rect(fieldX, 40, fieldWidth, 26))
-    panel.replacementPrompt.setFrameFromLayout(
-      nimkit.rect(fieldX + 6, 40, max(fieldWidth - 12, 0), 26)
+    panel.replacementField.setFrameFromLayout(
+      nimkit.rect(fieldX, 40, replacementWidth, 26)
     )
-    let buttonWidth = max((fieldWidth - 6) / 2, 0)
+    let buttonWidth = max((replacementWidth - 6) / 2, 1)
     panel.replaceButton.setFrameFromLayout(nimkit.rect(fieldX, 72, buttonWidth, 26))
     panel.replaceAllButton.setFrameFromLayout(
       nimkit.rect(fieldX + buttonWidth + 6, 72, buttonWidth, 26)
@@ -687,10 +680,9 @@ proc `replacementVisible=`*(panel: KosmoFileSearchPanel, visible: bool) =
       discard panel.focusQuery()
   panel.xReplacementVisible = visible
   panel.replacementField.hidden = not visible
-  panel.replacementPrompt.hidden = not visible or panel.replacementField.text().len > 0
   panel.replaceButton.hidden = not visible
   panel.replaceAllButton.hidden = not visible
-  panel.disclosureButton.title = if visible: "⌄" else: "›"
+  panel.disclosureButton.showSearchDisclosure(visible)
   panel.disclosureButton.accessibilityLabel =
     if visible: "Hide replacement controls" else: "Show replacement controls"
   panel.disclosureButton.toolTip = panel.disclosureButton.accessibilityLabel()
@@ -719,17 +711,16 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
     resultsView = newKosmoSearchResults()
     statusLabel = nimkit.newStatusLabel("Enter search text")
     progressIndicator = nimkit.newProgressIndicator()
-    cancelButton = nimkit.newButton("X")
+    cancelButton = newSearchButton("X", symbol = true)
     searchAction = nimkit.actionSelector(SearchFieldAction)
     cancelAction = nimkit.actionSelector(CancelSearchAction)
   result = KosmoFileSearchPanel(
     queryField: queryField,
     replacementField: nimkit.newTextField(),
-    replacementPrompt: nimkit.newLabel("Replace with"),
-    disclosureButton: nimkit.newButton("›"),
-    expressionButton: nimkit.newButton(".*"),
-    replaceButton: nimkit.newButton("Replace"),
-    replaceAllButton: nimkit.newButton("Replace All"),
+    disclosureButton: newSearchButton("›", symbol = true),
+    expressionButton: newSearchButton(".*", symbol = true),
+    replaceButton: newSearchButton("Replace"),
+    replaceAllButton: newSearchButton("Replace All"),
     resultsView: resultsView,
     statusLabel: statusLabel,
     progressIndicator: progressIndicator,
@@ -739,15 +730,12 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
   )
   result.initViewFields()
   result.addSubview(queryField)
-  result.addSubview(result.disclosureButton)
   result.addSubview(result.expressionButton)
   result.addSubview(result.replacementField)
-  result.addSubview(result.replacementPrompt)
-  result.replacementField.connect(
-    nimkit.textDidChange, result, replacementTextDidChange
-  )
+  result.replacementField.placeholder = "Replace with"
   result.addSubview(result.replaceButton)
   result.addSubview(result.replaceAllButton)
+  result.addSubview(result.disclosureButton)
   result.addSubview(statusLabel)
   result.addSubview(progressIndicator)
   result.addSubview(cancelButton)

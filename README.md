@@ -368,6 +368,25 @@ Run [the carousel example](examples/carousel_demo.nim) with
 and the animation's `finished` signal enables the button for the next transition.
 For more, see [property animations and sequences](examples/animation_demo.nim).
 
+### Blur an overlay's background
+
+A standard `Box` can blur the content behind its rounded bounds through FigDraw.
+Its child controls stay sharp, and its fill follows the active theme:
+
+```nim
+let overlay = newBox(frame = rect(24, 24, 320, 96))
+overlay.addStyleClass(PopoverBoxStyleClass)
+overlay.backdropBlurRadius = 20
+overlay.backdropTintOpacity = 0.78
+overlay.addContentSubview(newTextField("Search"))
+root.addSubview(overlay)
+```
+
+Set `backdropBlurRadius` to zero to restore the ordinary box fill.
+`backdropTintOpacity` controls the themed tint over the blurred content, from
+zero to one. This effect is rendered inside the application, independently of
+native window backdrop effects.
+
 ## Kosmo
 
 Kosmo is a code editor built with Merenda and Moe's Vim-style editing engine.

@@ -8,6 +8,59 @@ import merenda/kosmo/kosmo
 import fixtures/ui
 
 suite "Kosmo editor search":
+  test "overlay clicks stay in the panel and tab reaches regex before replacement":
+    let
+      editor = newKosmoEditor(text = "cat cat")
+      view = newKosmoEditorView(editor)
+      window = newWindow("Search focus", frame = rect(0, 0, 640, 360))
+    defer:
+      window.close()
+      editor.close()
+    window.setContentView(view)
+    view.layoutSubtreeIfNeeded()
+    view.refresh()
+    require view.showSearch(replacing = true)
+    let
+      regex = view.buttonWithLabel("Use Reni regular expressions")
+      replace = view.buttonWithLabel("Replace match")
+      replaceAll = view.buttonWithLabel("Replace all matches")
+      tab = KeyEvent(key: keyTab, keyCode: keyTab.ord)
+      backtab = KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+    require window.dispatchTextInput("cat")
+    require window.dispatchKeyDown(tab)
+    check window.firstResponder() == regex
+    require window.dispatchKeyDown(tab)
+    check window.fieldEditorClient() == view.replacementField()
+    require window.dispatchKeyDown(backtab)
+    check window.firstResponder() == regex
+    require window.dispatchKeyDown(tab)
+    require window.dispatchKeyDown(tab)
+    check window.firstResponder() == replace
+    require window.dispatchKeyDown(tab)
+    check window.firstResponder() == replaceAll
+
+    let cursor = editor.bufferCursor()
+    let panel = view.searchField().superview().superview()
+    let paddingPoint = panel.pointToWindow(initPoint(2, 2))
+    require window.mouseDownAt(paddingPoint)
+    require window.mouseUpAt(paddingPoint)
+    check window.firstResponder() == replaceAll
+    check editor.bufferCursor() == cursor
+
+    require view.showSearch()
+    view.searchField().text = ""
+    require window.makeFirstResponder(view)
+    let queryPoint = view.searchField().pointToWindow(initPoint(40, 16))
+    require window.mouseDownAt(queryPoint)
+    discard window.mouseUpAt(queryPoint)
+    check window.fieldEditorClient() == view.searchField()
+    require window.dispatchTextInput("missing")
+    require window.dispatchKeyDown(tab)
+    check window.firstResponder() == regex
+    require window.dispatchKeyDown(tab)
+    check window.firstResponder() == view.buttonWithLabel("Close editor text search")
+    check editor.bufferText(editor.tabs()[0].id).get == "cat cat"
+
   test "the Moe facade searches, wraps, reverses, and owns highlight state":
     let editor = newKosmoEditor(text = "alpha one\nbeta\nalpha two")
     defer:
@@ -153,7 +206,10 @@ suite "Kosmo editor search":
     require editor.revealLocation(0, 0)
     require view.showSearch(replacing = true)
     require window.dispatchTextInput("cat")
-    require window.makeFirstResponder(view.replacementField())
+    let replacementPoint = view.replacementField().pointToWindow(initPoint(40, 16))
+    require window.mouseDownAt(replacementPoint)
+    discard window.mouseUpAt(replacementPoint)
+    require window.fieldEditorClient() == view.replacementField()
     view.replacementField().checkVisibleIn(view)
     require window.dispatchTextInput("dog")
     require window.dispatchKeyDown(KeyEvent(key: keyEnter, keyCode: keyEnter.ord))

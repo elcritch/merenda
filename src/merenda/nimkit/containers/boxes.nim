@@ -22,6 +22,7 @@ type
     xKind: BoxKind
     xSeparatorAxis: LayoutAxis
     xContentView: View
+    xBackdropBlurRadius, xBackdropTintOpacity: float32
 
 proc invalidateBoxMetrics(box: Box) =
   box.invalidateContainerMetrics()
@@ -116,6 +117,30 @@ protocol BoxProtocol {.selectorScope: protocol, setterStyle: nim.} from Box:
   property boxKind -> BoxKind
   property separatorAxis -> LayoutAxis
   property contentView -> View
+  property backdropBlurRadius -> float32
+  property backdropTintOpacity -> float32
+
+  method backdropBlurRadius(box: Box): float32 =
+    ## FigDraw blur of content behind this box, in logical pixels. Zero disables it.
+    box.xBackdropBlurRadius
+
+  method `backdropBlurRadius=`(box: Box, radius: float32) =
+    let value = max(radius, 0.0'f32)
+    if box.xBackdropBlurRadius == value:
+      return
+    box.xBackdropBlurRadius = value
+    box.needsDisplay = true
+
+  method backdropTintOpacity(box: Box): float32 =
+    ## Opacity of the themed box fill over a blurred backdrop, from zero to one.
+    box.xBackdropTintOpacity
+
+  method `backdropTintOpacity=`(box: Box, opacity: float32) =
+    let value = clamp(opacity, 0.0'f32, 1.0'f32)
+    if box.xBackdropTintOpacity == value:
+      return
+    box.xBackdropTintOpacity = value
+    box.needsDisplay = true
 
   method boxTitle(box: Box): string =
     box.xTitle
@@ -222,9 +247,22 @@ proc drawGroupBox(box: Box, context: DrawContext, style: BoxStyle) =
         bounds
 
   if not borderRect.isEmpty:
+    var fillValue = style.box.fill
+    if box.xBackdropBlurRadius > 0:
+      let base = style.box.fill.centerColor()
+      context.addRenderBackdropBlur(
+        context.renderLayer(),
+        context.renderParent(),
+        context.renderRectFor(borderRect),
+        fill(color(base.r, base.g, base.b, box.xBackdropTintOpacity)),
+        box.xBackdropBlurRadius,
+        style.box.cornerRadius,
+        style.box.cornerRadii,
+      )
+      fillValue = fill(color(0, 0, 0, 0))
     discard context.addRenderRectangle(
       context.renderRectFor(borderRect),
-      style.box.fill,
+      fillValue,
       style.box.borderColor,
       style.box.borderWidth,
       style.box.cornerRadius,
@@ -315,6 +353,7 @@ proc initBoxFields*(
   box.xTitle = title
   box.xKind = kind
   box.xSeparatorAxis = separatorAxis
+  box.xBackdropTintOpacity = 0.75
   discard box.withProto()
   discard box.withProtocol(DefaultBoxLayout)
   discard box.withProtocol(DefaultBoxDrawing)

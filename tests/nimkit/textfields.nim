@@ -160,6 +160,49 @@ proc renderedOpaqueBackgroundForView(nodes: openArray[Fig], view: View): bool =
       return true
 
 suite "nimkit text fields":
+  test "placeholders share text geometry and never intercept editing or become content":
+    let
+      window = newWindow("Placeholder", frame = rect(0, 0, 300, 140))
+      root = newView(frame = rect(0, 0, 300, 140))
+      field = newTextField(frame = rect(20, 20, 240, 34))
+    defer:
+      window.close()
+    field.placeholder = "Replace with"
+    root.addSubview(field)
+    window.setContentView(root)
+    let before = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
+    check before.renderedTextInView(field, "Replace with")
+    check field.stringValue == ""
+    let expectedRect = field
+      .effectiveAppearance()
+      .resolveTextFieldStyle(controlStyle(srTextField), field.textColor)
+      .textFieldTextRect(field.bounds)
+    var hintRect: nimkitTypes.Rect
+    for node in before:
+      if node.kind == nkText and node.renderedText() == "Replace with":
+        hintRect = node.renderedRect()
+        checkClose(node.renderedRect().minX, field.rectToWindow(expectedRect).minX)
+    field.text = "Replace with"
+    let valueNodes = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
+    for node in valueNodes:
+      if node.kind == nkText and node.renderedText() == "Replace with":
+        checkRectClose(node.renderedRect(), hintRect)
+    field.text = ""
+    require window.mouseDownAt(field.pointToWindow(initPoint(40, 16)))
+    check window.fieldEditorClient() == field
+    let focused = window.buildRenders()[DefaultDrawLevel].resolvedNodes()
+    check not focused.renderedTextInView(field, "Replace with")
+    require window.dispatchTextInput("dog")
+    check field.text == "dog"
+    require window.makeFirstResponder(nil)
+    check window.buildRenders()[DefaultDrawLevel].resolvedNodes().renderedTextInView(
+      field, "dog"
+    )
+    field.text = ""
+    check window.buildRenders()[DefaultDrawLevel].resolvedNodes().renderedTextInView(
+      field, "Replace with"
+    )
+
   test "text fields default to editable selectable first-responder controls":
     let field = newTextField("abc", frame = rect(0, 0, 120, 24))
 

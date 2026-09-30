@@ -21,6 +21,7 @@ type
 
   ButtonCell* = ref object of ActionCell
     xTitle: string
+    xIcon: SvgMtsdfResource
     xReservedTitles: seq[string]
     xButtonType: ButtonType
 
@@ -82,6 +83,7 @@ proc choiceRole(cell: ButtonCell): StyleRole
 
 protocol ButtonProtocol {.selectorScope: protocol, setterStyle: nim.}:
   property title -> string
+  property icon -> SvgMtsdfResource
   property state -> ButtonState
   property buttonType -> ButtonType
   property allowsMixedState -> bool
@@ -114,6 +116,15 @@ proc buttonTextSize(cell: ButtonCell, style: TextStyle): Size =
     result.height = max(result.height, titleSize.height)
 
 protocol DefaultButtonCell of ButtonProtocol:
+  method icon(cell: ButtonCell): SvgMtsdfResource =
+    ## Optional vector content for a push button; replaces its visible title.
+    ## The title remains available as the default accessibility label.
+    cell.xIcon
+
+  method `icon=`(cell: ButtonCell, icon: SvgMtsdfResource) =
+    cell.xIcon = icon
+    cell.invalidateControlMetrics()
+
   method title(cell: ButtonCell): string =
     cell.xTitle
 
@@ -173,7 +184,12 @@ protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
       return initIntrinsicSize(style.choiceControlSize(cell.buttonTextSize(style.text)))
 
     let style = appearance.resolveButtonStyle(cell.buttonStyleContext(srButton))
-    initIntrinsicSize(style.buttonControlSize(cell.buttonTextSize(style.text)))
+    let contentSize =
+      if cell.xIcon.len > 0:
+        cell.xIcon.size
+      else:
+        cell.buttonTextSize(style.text)
+    initIntrinsicSize(style.buttonControlSize(contentSize))
 
   method cellSizeForBounds(cell: ButtonCell, bounds: Rect): Size =
     cell.cellSize().resolveIntrinsicSize(bounds.size)
@@ -267,6 +283,7 @@ proc copyButtonCell*(cell: ButtonCell): ButtonCell =
   result.setTarget(cell.target())
   result.setAction(cell.action())
   result.xReservedTitles = cell.xReservedTitles
+  result.xIcon = cell.xIcon
 
 proc buttonCell*(button: Button): ButtonCell =
   let controlCell = button.cell()
@@ -674,6 +691,26 @@ proc drawChoiceButtonCell*(
     title = cell.title().clippedText(textRect.size.width, style.text)
   context.addText(textRect, title, style.text)
 
+proc drawButtonIcon(
+    context: DrawContext, icon: SvgMtsdfResource, rect: Rect, tint: Color
+) =
+  if icon.size.width <= 0 or icon.size.height <= 0 or rect.isEmpty:
+    return
+  let
+    scale = min(
+      1.0'f32,
+      min(rect.size.width / icon.size.width, rect.size.height / icon.size.height),
+    )
+    width = icon.size.width * scale
+    height = icon.size.height * scale
+    frame = rect(
+      rect.minX + (rect.size.width - width) / 2,
+      rect.minY + (rect.size.height - height) / 2,
+      width,
+      height,
+    )
+  context.addSvgMtsdf(frame, icon, fill(tint))
+
 proc drawPushButtonCell*(
     context: DrawContext,
     cell: ButtonCell,
@@ -696,6 +733,9 @@ proc drawPushButtonCell*(
     return
 
   let textRect = style.buttonTextRect(rect)
+  if cell.xIcon.len > 0:
+    context.drawButtonIcon(cell.xIcon, textRect, style.text.color)
+    return
   let title = cell.title().clippedText(textRect.size.width, style.text)
   if style.textHighlightColor.a > 0.0:
     var highlightStyle = style.text
@@ -805,7 +845,9 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
         title = button.title.clippedText(textRect.size.width, style.text)
       context.addText(textRect, title, style.text)
     else:
-      let states = button.widgetStateSet()
+      var states = button.widgetStateSet()
+      if button.state in {bsOn, bsMixed}:
+        states.incl ssSelected
       let style = button.pushButtonStyle(context.appearance, states)
       context.drawPushButtonFace(absoluteFrame, style, states)
       if button.isFocusVisible:
@@ -813,6 +855,9 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       if not button.currentEditor().isNil:
         return
       let textRect = style.buttonTextRect(button.bounds)
+      if button.icon.len > 0:
+        context.drawButtonIcon(button.icon, textRect, style.text.color)
+        return
       let title = button.title.clippedText(textRect.size.width, style.text)
       if style.textHighlightColor.a > 0.0:
         var highlightStyle = style.text

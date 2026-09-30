@@ -7,16 +7,15 @@ import sigils/core
 import ../nimkit as nimkit except performKeyEquivalent
 from ../nimkit/foundation/selectors import performKeyEquivalent
 from ../nimkit/view/viewgeometry import setFrameFromLayout
+import ./searchbuttons
 
 const
   KosmoSearchBarWidth* = 520.0'f32
   KosmoSearchBarHeight* = 48.0'f32
   KosmoSearchBarInset* = 16.0'f32
   SearchBarContentInset = 6.0'f32
-  SearchBarBlurRadius = 20.0'f32
-  SearchBarTintOpacity = 0.18'f32
   SearchControlSpacing = 6.0'f32
-  SearchButtonWidth = 40.0'f32
+  SearchButtonWidth = 28.0'f32
 
 type
   KosmoSearchQueryAction* = proc(query: string) {.closure.}
@@ -32,20 +31,11 @@ type
     xRegularExpression, xHasMatches: bool
     errorLabel: nimkit.Label
     xErrorMessage: string
-    replacementPrompt: nimkit.Label
     replaceButton, replaceAllButton: nimkit.Button
     onReplace, onReplaceAll: KosmoSearchAction
-    promptLabel: nimkit.Label
     previousButton, nextButton, closeButton: nimkit.Button
     onQueryChanged: KosmoSearchQueryAction
     onPrevious, onNext, onClose: KosmoSearchAction
-
-  KosmoSearchFieldEditor = ref object of nimkit.FieldEditor
-    searchBar: WeakRef[KosmoSearchBar]
-    replacement: bool
-
-  KosmoSearchFieldCell = ref object of nimkit.TextFieldCell
-    editor: KosmoSearchFieldEditor
 
 proc focusSearch(bar: KosmoSearchBar, replacing: bool): bool
 
@@ -61,108 +51,77 @@ proc activateClose(bar: KosmoSearchBar) =
   if not bar.isNil and not bar.onClose.isNil:
     bar.onClose()
 
-protocol KosmoSearchFieldCellEditing of nimkit.CellEditingProtocol:
-  method fieldEditorForView(
-      cell: KosmoSearchFieldCell, controlView: nimkit.View
-  ): nimkit.FieldEditor =
-    discard controlView
-    cell.editor
-
-protocol KosmoSearchEditorMovement of nimkit.TextEditingCommandProtocol:
-  method moveUp(editor: KosmoSearchFieldEditor, args: nimkit.ActionArgs) =
-    discard args
-    if not editor.searchBar.isNil:
-      editor.searchBar[].activatePrevious()
-
-  method moveDown(editor: KosmoSearchFieldEditor, args: nimkit.ActionArgs) =
-    discard args
-    if not editor.searchBar.isNil:
-      editor.searchBar[].activateNext()
-
-protocol KosmoSearchEditorActivation of nimkit.KeyViewCommandProtocol:
-  method insertNewline(editor: KosmoSearchFieldEditor, args: nimkit.ActionArgs) =
-    discard args
-    if not editor.searchBar.isNil:
-      if editor.replacement:
-        if not editor.searchBar[].onReplace.isNil:
-          editor.searchBar[].onReplace()
-      elif editor.searchBar[].backwardsSearch:
-        editor.searchBar[].activatePrevious()
-      else:
-        editor.searchBar[].activateNext()
-
-protocol KosmoSearchEditorCancellation of nimkit.MenuCommandProtocol:
-  method cancelOperation(editor: KosmoSearchFieldEditor, args: nimkit.ActionArgs) =
-    discard args
-    if not editor.searchBar.isNil:
-      editor.searchBar[].activateClose()
-
-protocol KosmoSearchEditorKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
-  method performKeyEquivalent(
-      editor: KosmoSearchFieldEditor, event: nimkit.KeyEvent
-  ): bool =
-    if not editor.searchBar.isNil and event.key == nimkit.keyF:
+protocol KosmoSearchBarKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
+  method performKeyEquivalent(bar: KosmoSearchBar, event: nimkit.KeyEvent): bool =
+    if event.key == nimkit.keyF:
       if event.modifiers == nimkit.shortcutModifiers():
-        return editor.searchBar[].focusSearch(replacing = false)
+        return bar.focusSearch(replacing = false)
       if event.modifiers == nimkit.shortcutModifiers() + {nimkit.kmOption}:
-        return editor.searchBar[].focusSearch(replacing = true)
-    if not editor.searchBar.isNil and event.key == nimkit.keyG:
+        return bar.focusSearch(replacing = true)
+    if event.key == nimkit.keyG:
       if event.modifiers == nimkit.shortcutModifiers():
-        if editor.searchBar[].backwardsSearch:
-          editor.searchBar[].activatePrevious()
+        if bar.backwardsSearch:
+          bar.activatePrevious()
         else:
-          editor.searchBar[].activateNext()
+          bar.activateNext()
         return true
       if event.modifiers == nimkit.shortcutModifiers() + {nimkit.kmShift}:
-        if editor.searchBar[].backwardsSearch:
-          editor.searchBar[].activateNext()
+        if bar.backwardsSearch:
+          bar.activateNext()
         else:
-          editor.searchBar[].activatePrevious()
+          bar.activatePrevious()
         return true
-    let owner = editor.window()
+    let owner = bar.window()
     if not (owner of nimkit.Window):
       return
-    let command = nimkit.Window(owner).keyBindings().commandFor(event)
+    let window = nimkit.Window(owner)
+    let command = window.keyBindings().commandFor(event)
     if command.isNone:
       return
-    editor.tryToPerform(command.get(), nimkit.DynamicAgent(editor))
+    if command.get().name == nimkit.cancelOperation().name:
+      bar.activateClose()
+      return true
+    let field = window.fieldEditorClient()
+    if field.isNil or (field != bar.xQueryField and field != bar.xReplacementField):
+      return
+    if command.get().name == nimkit.moveUp().name:
+      bar.activatePrevious()
+    elif command.get().name == nimkit.moveDown().name:
+      bar.activateNext()
+    elif command.get().name == nimkit.insertNewline().name:
+      if field == bar.xReplacementField:
+        if not bar.onReplace.isNil:
+          bar.onReplace()
+      elif bar.backwardsSearch:
+        bar.activatePrevious()
+      else:
+        bar.activateNext()
+    else:
+      return
+    true
+
+protocol KosmoSearchBarMouseEvents of nimkit.ResponderEventProtocol:
+  # Children handle their own events. Consume unhandled panel clicks here so
+  # padding and disabled controls cannot move the underlying editor's cursor.
+  method mouseDown(bar: KosmoSearchBar, event: nimkit.MouseEvent): bool =
+    true
+
+  method mouseUp(bar: KosmoSearchBar, event: nimkit.MouseEvent): bool =
+    true
+
+  method mouseDragged(bar: KosmoSearchBar, event: nimkit.MouseEvent): bool =
+    true
+
+  method rightMouseDown(bar: KosmoSearchBar, event: nimkit.MouseEvent): bool =
+    true
+
+  method rightMouseUp(bar: KosmoSearchBar, event: nimkit.MouseEvent): bool =
+    true
 
 proc searchQueryDidChange(bar: KosmoSearchBar, sender: nimkit.DynamicAgent) {.slot.} =
   discard sender
-  bar.promptLabel.hidden = bar.xQueryField.text().len > 0
   if not bar.onQueryChanged.isNil:
     bar.onQueryChanged(bar.xQueryField.text())
-
-func tint(fill: nimkit.Fill, opacity: float32): nimkit.Fill =
-  let base = fill.centerColor()
-  nimkit.fill(nimkit.color(base.r, base.g, base.b, opacity))
-
-protocol KosmoSearchBarDrawing of nimkit.ViewDrawingProtocol:
-  method draw(bar: KosmoSearchBar, context: nimkit.DrawContext) =
-    let bounds = bar.bounds()
-    if context.isNil or bounds.isEmpty:
-      return
-    let
-      style = context.appearance.resolveBoxStyle(nimkit.controlStyle(nimkit.srBox))
-      frame = context.renderRectFor(bounds)
-    discard context.addRenderBackdropBlur(
-      context.renderLayer(),
-      context.renderParent(),
-      frame,
-      style.box.fill.tint(SearchBarTintOpacity),
-      SearchBarBlurRadius,
-      style.box.cornerRadius,
-      style.box.cornerRadii,
-    )
-    discard context.addRenderRectangle(
-      frame,
-      nimkit.fill(nimkit.color(0.0, 0.0, 0.0, 0.0)),
-      style.box.borderColor,
-      style.box.borderWidth,
-      style.box.cornerRadius,
-      style.box.shadows,
-      cornerRadii = style.box.cornerRadii,
-    )
 
 protocol KosmoSearchBarLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(bar: KosmoSearchBar) =
@@ -182,16 +141,18 @@ protocol KosmoSearchBarLayout of nimkit.ViewLayoutProtocol:
           0.0'f32
         else:
           disclosureWidth + SearchControlSpacing
-      expressionWidth = if bar.expressionButton.isNil: 0.0'f32 else: 40.0'f32
+      expressionWidth = if bar.expressionButton.isNil: 0.0'f32 else: 34.0'f32
       buttonsWidth = buttonWidth * 3.0'f32 + SearchControlSpacing * 3.0'f32
       fieldWidth =
         max(availableWidth - buttonsWidth - fieldX - expressionWidth, 1.0'f32)
       controlY = max((availableHeight - controlHeight) * 0.5'f32, 0.0'f32)
+      buttonHeight = min(controlHeight, 28.0'f32)
+      buttonY = controlY + (controlHeight - buttonHeight) / 2
       firstButtonX = fieldX + fieldWidth + expressionWidth + SearchControlSpacing
     bar.contentView().setFrameFromLayout(contentFrame)
     if not bar.disclosureButton.isNil:
       bar.disclosureButton.setFrameFromLayout(
-        nimkit.rect(0, controlY, disclosureWidth, controlHeight)
+        nimkit.rect(0, buttonY, disclosureWidth, buttonHeight)
       )
     bar.xQueryField.setFrameFromLayout(
       nimkit.rect(fieldX, controlY, fieldWidth, controlHeight)
@@ -199,35 +160,30 @@ protocol KosmoSearchBarLayout of nimkit.ViewLayoutProtocol:
     if not bar.expressionButton.isNil:
       bar.expressionButton.setFrameFromLayout(
         nimkit.rect(
-          fieldX + fieldWidth + SearchControlSpacing, controlY, 34, controlHeight
+          fieldX + fieldWidth + SearchControlSpacing, buttonY, 28, buttonHeight
         )
       )
     if bar.xErrorMessage.len > 0:
       bar.errorLabel.setFrameFromLayout(
         nimkit.rect(0, (if bar.xReplacementVisible: 80 else: 40), availableWidth, 18)
       )
-    bar.promptLabel.setFrameFromLayout(
-      nimkit.rect(
-        fieldX + 10, controlY, max(fieldWidth - 20.0'f32, 1.0'f32), controlHeight
-      )
-    )
     bar.previousButton.setFrameFromLayout(
-      nimkit.rect(firstButtonX, controlY, buttonWidth, controlHeight)
+      nimkit.rect(firstButtonX, buttonY, buttonWidth, buttonHeight)
     )
     bar.nextButton.setFrameFromLayout(
       nimkit.rect(
         firstButtonX + buttonWidth + SearchControlSpacing,
-        controlY,
+        buttonY,
         buttonWidth,
-        controlHeight,
+        buttonHeight,
       )
     )
     bar.closeButton.setFrameFromLayout(
       nimkit.rect(
         firstButtonX + (buttonWidth + SearchControlSpacing) * 2.0'f32,
-        controlY,
+        buttonY,
         buttonWidth,
-        controlHeight,
+        buttonHeight,
       )
     )
 
@@ -238,9 +194,6 @@ protocol KosmoSearchBarLayout of nimkit.ViewLayoutProtocol:
         max(availableWidth - fieldX - 2 * (actionWidth + SearchControlSpacing), 1)
       bar.xReplacementField.setFrameFromLayout(
         nimkit.rect(fieldX, y, replacementWidth, controlHeight)
-      )
-      bar.replacementPrompt.setFrameFromLayout(
-        nimkit.rect(fieldX + 10, y, max(replacementWidth - 20, 1), controlHeight)
       )
       bar.replaceButton.setFrameFromLayout(
         nimkit.rect(
@@ -271,27 +224,19 @@ proc newKosmoSearchBar*(
     onClose: onClose,
   )
   result.initBoxFields()
-  discard result.withProtocol(KosmoSearchBarDrawing)
-
-  let
-    searchBar = result.unsafeWeakRef()
-    editor = KosmoSearchFieldEditor(searchBar: searchBar)
-  editor.initFieldEditorFields()
-  discard editor.withProtocol(KosmoSearchEditorMovement)
-  discard editor.withProtocol(KosmoSearchEditorActivation)
-  discard editor.withProtocol(KosmoSearchEditorCancellation)
-  discard editor.withProtocol(KosmoSearchEditorKeyEquivalents)
-  let cell = KosmoSearchFieldCell(editor: editor)
-  cell.initTextFieldCellFields()
-  discard cell.withProtocol(KosmoSearchFieldCellEditing)
+  result.addStyleClass(nimkit.PopoverBoxStyleClass)
+  result.backdropBlurRadius = 20
+  result.backdropTintOpacity = 0.78
+  discard result.withProtocol(KosmoSearchBarKeyEquivalents)
+  discard result.withProtocol(KosmoSearchBarMouseEvents)
+  let searchBar = result.unsafeWeakRef()
 
   result.xQueryField = nimkit.newTextField()
-  result.xQueryField.setCell(cell)
   result.xQueryField.accessibilityLabel = "Search " & accessibilitySubject
-  result.promptLabel = nimkit.newLabel("Search")
-  result.previousButton = nimkit.newButton("^")
-  result.nextButton = nimkit.newButton("v")
-  result.closeButton = nimkit.newButton("×")
+  result.xQueryField.placeholder = "Search"
+  result.previousButton = newSearchButton("↑", symbol = true)
+  result.nextButton = newSearchButton("↓", symbol = true)
+  result.closeButton = newSearchButton("×", symbol = true)
   result.errorLabel = nimkit.newLabel("")
   result.errorLabel.hidden = true
   result.previousButton.accessibilityLabel =
@@ -302,7 +247,6 @@ proc newKosmoSearchBar*(
   result.closeButton.accessibilityLabel = "Close " & accessibilitySubject & " search"
   result.closeButton.toolTip = "Close search"
   result.contentView().addSubview(result.xQueryField)
-  result.contentView().addSubview(result.promptLabel)
   result.contentView().addSubview(result.previousButton)
   result.contentView().addSubview(result.nextButton)
   result.contentView().addSubview(result.closeButton)
@@ -344,7 +288,6 @@ proc query*(bar: KosmoSearchBar): string =
 proc `query=`*(bar: KosmoSearchBar, query: string) =
   if not bar.isNil:
     bar.xQueryField.text = query
-    bar.promptLabel.hidden = query.len > 0
 
 proc `hasMatches=`*(bar: KosmoSearchBar, hasMatches: bool) =
   if not bar.isNil:
@@ -406,11 +349,11 @@ proc enableExpressions*(bar: KosmoSearchBar) =
   ## Offer opt-in Reni matching only for search targets that support it.
   if not bar.expressionButton.isNil:
     return
-  bar.expressionButton = nimkit.newButton(".*")
+  bar.expressionButton = newSearchButton(".*", symbol = true)
   bar.expressionButton.buttonType = nimkit.btToggle
   bar.expressionButton.accessibilityLabel = "Use Reni regular expressions"
   bar.expressionButton.toolTip = "Use Reni expressions and replacement captures"
-  bar.contentView().addSubview(bar.expressionButton)
+  bar.contentView().addSubview(bar.expressionButton, nimkit.svpAbove, bar.xQueryField)
   let weakBar = bar.unsafeWeakRef()
   bar.expressionButton.action = nimkit.actionSelector("kosmo.searchExpressions")
   bar.expressionButton.target = nimkit.newActionTarget(bar.expressionButton.action) do(
@@ -438,10 +381,9 @@ proc `replacementVisible=`*(bar: KosmoSearchBar, visible: bool) =
       discard window.makeFirstResponder(bar.xQueryField)
   bar.xReplacementVisible = visible
   bar.xReplacementField.hidden = not visible
-  bar.replacementPrompt.hidden = not visible or bar.xReplacementField.text().len > 0
   bar.replaceButton.hidden = not visible
   bar.replaceAllButton.hidden = not visible
-  bar.disclosureButton.title = if visible: "⌄" else: "›"
+  bar.disclosureButton.showSearchDisclosure(visible)
   bar.disclosureButton.accessibilityLabel =
     if visible: "Hide replacement controls" else: "Show replacement controls"
   bar.disclosureButton.toolTip = bar.disclosureButton.accessibilityLabel()
@@ -462,8 +404,6 @@ proc focusSearch(bar: KosmoSearchBar, replacing: bool): bool =
 
 proc replacementDidChange(bar: KosmoSearchBar, sender: nimkit.DynamicAgent) {.slot.} =
   discard sender
-  bar.replacementPrompt.hidden =
-    not bar.xReplacementVisible or bar.xReplacementField.text().len > 0
   if bar.xErrorMessage.startsWith("Replacement error:"):
     bar.errorMessage = ""
 
@@ -476,28 +416,24 @@ proc enableReplacement*(
   if not bar.xReplacementField.isNil:
     return
   let weakBar = bar.unsafeWeakRef()
-  let editor = KosmoSearchFieldEditor(searchBar: weakBar, replacement: true)
-  editor.initFieldEditorFields()
-  discard editor.withProtocol(KosmoSearchEditorMovement)
-  discard editor.withProtocol(KosmoSearchEditorActivation)
-  discard editor.withProtocol(KosmoSearchEditorCancellation)
-  discard editor.withProtocol(KosmoSearchEditorKeyEquivalents)
-  let cell = KosmoSearchFieldCell(editor: editor)
-  cell.initTextFieldCellFields()
-  discard cell.withProtocol(KosmoSearchFieldCellEditing)
   bar.xReplacementField = nimkit.newTextField()
-  bar.xReplacementField.setCell(cell)
   bar.xReplacementField.accessibilityLabel = "Replace with (literal text)"
-  bar.replacementPrompt = nimkit.newLabel("Replace with")
-  bar.replaceButton = nimkit.newButton("Replace")
-  bar.replaceAllButton = nimkit.newButton("Replace All")
-  bar.disclosureButton = nimkit.newButton("›")
+  bar.xReplacementField.placeholder = "Replace with"
+  bar.replaceButton = newSearchButton("Replace")
+  bar.replaceAllButton = newSearchButton("Replace All")
+  bar.disclosureButton = newSearchButton("›", symbol = true)
   bar.replaceButton.accessibilityLabel = "Replace match"
   bar.replaceAllButton.accessibilityLabel = "Replace all matches"
-  bar.contentView().addSubview(bar.xReplacementField)
-  bar.contentView().addSubview(bar.replacementPrompt)
-  bar.contentView().addSubview(bar.replaceButton)
-  bar.contentView().addSubview(bar.replaceAllButton)
+  let previousField =
+    if bar.expressionButton.isNil:
+      nimkit.View(bar.xQueryField)
+    else:
+      nimkit.View(bar.expressionButton)
+  bar.contentView().addSubview(bar.xReplacementField, nimkit.svpAbove, previousField)
+  bar.contentView().addSubview(
+    bar.replaceButton, nimkit.svpAbove, bar.xReplacementField
+  )
+  bar.contentView().addSubview(bar.replaceAllButton, nimkit.svpAbove, bar.replaceButton)
   bar.contentView().addSubview(bar.disclosureButton)
   bar.disclosureButton.action = nimkit.actionSelector("kosmo.toggleReplacement")
   bar.disclosureButton.target = nimkit.newActionTarget(bar.disclosureButton.action) do(
