@@ -7,6 +7,17 @@ import merenda/nimkit/foundation/gitprocesses
 import merenda/kosmo/kosmo
 import merenda/kosmo/workspacefiles
 
+when defined(linux):
+  proc descriptorTargets(): seq[string] =
+    for kind, path in walkDir("/proc/self/fd"):
+      try:
+        let target = expandSymlink(path)
+        # The directory iterator temporarily opens its own descriptor.
+        if not target.endsWith("/fd"):
+          result.add path.extractFilename() & " -> " & target
+      except OSError:
+        discard # A worker can close a descriptor during the snapshot.
+
 proc exerciseDocuments(root: string) =
   let editor = newKosmoEditor(workingDirectory = root)
   defer:
@@ -135,6 +146,8 @@ suite "Workspace resource lifetimes":
       discard getCurrentSigilThread().pollAll(NonBlocking)
       require app.windows.len == 0
       let baseline = processResourceUsage()
+      when defined(linux):
+        let baselineDescriptors = descriptorTargets()
       require baseline.fileDescriptors >= 0
       require baseline.childProcesses >= 0
       require baseline.threads > 0
@@ -149,6 +162,10 @@ suite "Workspace resource lifetimes":
         require current.threads > 0
         check app.windows.len == 0
         check current.childProcesses <= baseline.childProcesses
+        when defined(linux):
+          if current.fileDescriptors > baseline.fileDescriptors + 2:
+            checkpoint "baseline descriptors: " & $baselineDescriptors
+            checkpoint "remaining descriptors: " & $descriptorTargets()
         check current.fileDescriptors <= baseline.fileDescriptors + 2
         # Native drivers create housekeeping threads lazily; record their count
         # rather than treating it as an owned-worker count.
