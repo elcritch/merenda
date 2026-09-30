@@ -9,6 +9,18 @@ static:
   doAssert compileOption("mm", "arc") or compileOption("mm", "orc") or
     compileOption("mm", "atomicArc")
 
+type IntrinsicLifetimeView = ref object of View
+
+protocol IntrinsicLifetimeLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(view: IntrinsicLifetimeView): IntrinsicSize =
+    initIntrinsicSize(120, 30)
+
+proc newIntrinsicLifetimeView(): IntrinsicLifetimeView =
+  result = IntrinsicLifetimeView()
+  initViewFields(result, rect(0, 0, 120, 30))
+  result.autoresizingMaskConstraints = false
+  discard result.withProtocol(IntrinsicLifetimeLayout)
+
 proc observe(view: View): BackRef[View] =
   result.target = view
 
@@ -175,15 +187,17 @@ suite "NimKit ARC back references":
       snapshot: seq[LayoutInput]
 
     block:
-      let root = newButton("Intrinsic lifetime", frame = rect(0, 0, 120, 30))
-      root.autoresizingMaskConstraints = false
+      # Keep lifetime coverage independent of system fonts and their startup cost.
+      let root = newIntrinsicLifetimeView()
       rootRef.target = View(root)
       root.layoutSubtreeIfNeeded()
       snapshot = root.generatedLayoutInputs()
 
-      check snapshot.len > 0
+      check not root.xLastLayoutSolveDiagnostic.failed
+      check snapshot.len == 4
       for input in snapshot:
         check input.kind == likEquation
+        check input.source == lisIntrinsic
         for term in input.equation.terms:
           check term.item == View(root)
 
