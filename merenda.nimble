@@ -30,7 +30,7 @@ requires "gh:elcritch/terminex#143c79018554c4e81a329a9a898e176df0a92344"
 requires "gh:Araq/iconbundler"
 requires "libbacktrace"
 requires "zippy >= 0.10.20"
-requires "gh:elcritch/dmon-nim >= 0.5.1"
+requires "gh:elcritch/dmon-nim >= 0.5.2"
 
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
