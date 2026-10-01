@@ -34,8 +34,8 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  # Upstream develop d8b08be5 plus the host result hook in Moe PR #3332.
-  requires "gh:elcritch/moe#77c3c8334ae3778e0a945d2c89c722b4d49f0d75"
+  # Upstream develop includes the host result hook merged in Moe PR #3332.
+  requires "gh:fox0430/moe#22c74002ff653b0d6ee88e712160d837b4850986"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"

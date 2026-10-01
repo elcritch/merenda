@@ -13,8 +13,8 @@
 - Apply streamed Markdown syntax colors with indexed range updates and local
   run changes, preserving quote styles, undo, and edit notifications while
   reducing work on large documents.
-- Base Moe on upstream develop at `d8b08be5`, including PR #3311, and add a
-  host result hook so Ex commands, runtime mappings, and Filer split-open
+- Pin Moe to upstream develop at `22c74002`, including the host result hook
+  merged in PR #3332, so Ex commands, runtime mappings, and Filer split-open
   requests can use Kosmo's document tabs and dock panes.
 - Route `:split`/`:vsplit` and `:new`/`:vnew` to Kosmo panes, preserving the
   source buffer and cursor. Keep interactive Config state in a reusable tab
