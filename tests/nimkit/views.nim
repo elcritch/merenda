@@ -30,6 +30,10 @@ type
 
   NonConvergingLayoutView = ref object of View
     layoutCount: int
+    remainingInvalidations: int
+
+  NonConvergingConstraintView = ref object of View
+    updateCount: int
 
   ConstraintSpyView = ref object of View
     name: string
@@ -114,8 +118,15 @@ protocol ReentrantLayoutHooks of ViewLayoutProtocol:
 protocol NonConvergingLayoutHooks of ViewLayoutProtocol:
   method layout(spy: NonConvergingLayoutView) =
     inc spy.layoutCount
-    spy.setNeedsLayout()
-    spy.setNeedsLayout()
+    if spy.remainingInvalidations > 0:
+      dec spy.remainingInvalidations
+      spy.setNeedsLayout()
+      spy.setNeedsLayout()
+
+protocol NonConvergingConstraintHooks of ViewLayoutProtocol:
+  method updateConstraints(spy: NonConvergingConstraintView) =
+    inc spy.updateCount
+    spy.setNeedsUpdateConstraints()
 
 protocol ConstraintSpyHooks of ViewLayoutProtocol:
   method updateConstraints(spy: ConstraintSpyView) =
@@ -168,10 +179,15 @@ proc newReentrantLayoutView(frame: Rect, target: LayoutSpyView): ReentrantLayout
   discard result.withProtocol(ReentrantLayoutHooks)
 
 proc newNonConvergingLayoutView(frame: Rect): NonConvergingLayoutView =
-  result = NonConvergingLayoutView()
+  result = NonConvergingLayoutView(remainingInvalidations: high(int))
   initViewFields(result, frame)
   result.identifier = "nonconverging-layout-test"
   discard result.withProtocol(NonConvergingLayoutHooks)
+
+proc newNonConvergingConstraintView(frame: Rect): NonConvergingConstraintView =
+  result = NonConvergingConstraintView()
+  initViewFields(result, frame)
+  discard result.withProtocol(NonConvergingConstraintHooks)
 
 proc newConstraintSpyView(
     name: string, frame: Rect, constraintTarget: View = nil
@@ -597,6 +613,139 @@ suite "nimkit views":
     check diagnostic.targetView == "nonconverging-layout-test"
     check diagnostic.phase == ltpLayingOut
     check diagnostic.reason == lirExplicit
+
+  test "repeated self invalidation stops scheduling layout":
+    let view = newNonConvergingLayoutView(rect(0, 0, 200, 160))
+    let limits = LayoutFeedbackLimits()
+    var allocated: View
+    new allocated
+
+    check limits.warningCycles == 3
+    check limits.maxCycles == 16
+    check allocated.xLayoutFeedbackLimits == limits
+    check view.xLayoutFeedbackLimits == limits
+    check newView().xLayoutFeedbackLimits == limits
+
+    for attempt in 0 ..< 64:
+      view.layoutSubtreeIfNeeded()
+      view.finishDisplaySubtree()
+
+    check view.layoutCount == 16
+    check view.layoutFeedbackCycles() == 16
+    check view.layoutFeedbackBlocked()
+    check view.needsLayout
+    check not view.needsDisplayUpdateInSubtree()
+    let diagnostic = view.lastLayoutInvalidation()
+    check diagnostic.generation == view.layoutGeneration()
+    check diagnostic.invalidatingView == "nonconverging-layout-test"
+    check diagnostic.targetView == "nonconverging-layout-test"
+
+    view.needsDisplay = true
+    check view.needsDisplayUpdateInSubtree()
+    discard view.prepareDisplaySubtree()
+    check view.layoutCount == 16
+    view.finishDisplaySubtree()
+    check not view.needsDisplayUpdateInSubtree()
+
+  test "external layout input retries a stopped root":
+    let
+      root = newView(frame = rect(0, 0, 200, 160))
+      child = newNonConvergingLayoutView(rect(0, 0, 80, 40))
+    root.xLayoutFeedbackLimits = LayoutFeedbackLimits(warningCycles: 1, maxCycles: 4)
+    root.addSubview(child)
+
+    for attempt in 0 ..< 10:
+      root.layoutSubtreeIfNeeded()
+      root.finishDisplaySubtree()
+
+    child.layoutSubtreeIfNeeded()
+
+    check root.layoutFeedbackBlocked()
+    check child.layoutCount == 4
+    check child.needsLayout
+    check not root.needsDisplayUpdateInSubtree()
+    check not child.needsDisplayUpdateInSubtree()
+
+    child.remainingInvalidations = 0
+    child.invalidateIntrinsicContentSize()
+
+    check not root.layoutFeedbackBlocked()
+    check root.layoutFeedbackCycles() == 0
+    check root.needsDisplayUpdateInSubtree()
+    root.layoutSubtreeIfNeeded()
+
+    check child.layoutCount == 5
+    check not child.needsLayout
+    check root.layoutFeedbackCycles() == 0
+    check root.lastLayoutInvalidation() == LayoutInvalidationDiagnostic()
+
+  test "feedback hard limits can be raised or disabled":
+    let view = newNonConvergingLayoutView(rect(0, 0, 200, 160))
+    view.xLayoutFeedbackLimits = LayoutFeedbackLimits(maxCycles: 2)
+    check view.xLayoutFeedbackLimits.warningCycles == 3
+
+    for attempt in 0 ..< 8:
+      view.layoutSubtreeIfNeeded()
+    check view.layoutCount == 2
+    check view.layoutFeedbackBlocked()
+
+    view.xLayoutFeedbackLimits.maxCycles = 4
+    check not view.layoutFeedbackBlocked()
+    for attempt in 0 ..< 8:
+      view.layoutSubtreeIfNeeded()
+    check view.layoutCount == 4
+    check view.layoutFeedbackBlocked()
+
+    view.xLayoutFeedbackLimits.maxCycles = 0
+    view.layoutSubtreeIfNeeded()
+    view.layoutSubtreeIfNeeded()
+    check view.layoutCount == 6
+    check not view.layoutFeedbackBlocked()
+
+    view.remainingInvalidations = 0
+    view.setNeedsLayout()
+    view.layoutSubtreeIfNeeded()
+    check view.layoutCount == 7
+    check view.layoutFeedbackCycles() == 0
+
+  test "ordinary follow-up layout settles before the hard limit":
+    let view = newNonConvergingLayoutView(rect(0, 0, 200, 160))
+    view.remainingInvalidations = 5
+
+    for attempt in 0 ..< 20:
+      view.layoutSubtreeIfNeeded()
+      view.finishDisplaySubtree()
+
+    check view.layoutCount == 6
+    check not view.layoutFeedbackBlocked()
+    check view.layoutFeedbackCycles() == 0
+    check not view.needsDisplayUpdateInSubtree()
+
+  test "separate external changes start fresh layout feedback sequences":
+    let view = newNonConvergingLayoutView(rect(0, 0, 200, 160))
+
+    for update in 0 ..< 32:
+      view.setNeedsLayout()
+      view.layoutSubtreeIfNeeded()
+      check view.layoutFeedbackCycles() == 1
+      check not view.layoutFeedbackBlocked()
+
+    check view.layoutCount == 32
+
+  test "repeated constraint updates also stop scheduling layout":
+    let view = newNonConvergingConstraintView(rect(0, 0, 200, 160))
+    view.xLayoutFeedbackLimits = LayoutFeedbackLimits(maxCycles: 4)
+    view.setNeedsUpdateConstraints()
+
+    for attempt in 0 ..< 16:
+      view.layoutSubtreeIfNeeded()
+      view.finishDisplaySubtree()
+
+    check view.updateCount == 4
+    check view.needsUpdateConstraints
+    check view.layoutFeedbackBlocked()
+    check not view.needsDisplayUpdateInSubtree()
+    check view.lastLayoutInvalidation().phase == ltpUpdatingConstraints
 
   test "layout subtree settles recursive constraint invalidations":
     let

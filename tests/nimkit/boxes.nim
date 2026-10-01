@@ -7,6 +7,7 @@ import sigils/selectors
 
 import merenda/nimkit
 import merenda/nimkit/foundation/types as nimkitTypes
+import ./fixtures/rendergeometry
 
 type FixedIntrinsicView = ref object of View
   naturalSize: Size
@@ -201,6 +202,45 @@ proc clickView(window: Window, view: View): bool =
   window.clickAt(point)
 
 suite "nimkit boxes":
+  test "boxes blur their own rounded backdrop and retain normal child drawing":
+    let
+      root = newView(frame = rect(0, 0, 300, 180))
+      box = newBox(frame = rect(24, 30, 200, 100))
+      child = newLabel("Overlay content", frame = rect(0, 0, 160, 24))
+    var appearance = initAppearance()
+    appearance[srBox, StyleFill] = color(0.12, 0.16, 0.20, 1)
+    appearance[srBox, StyleCornerRadius] = 7.0
+    root.appearance = appearance
+    root.addSubview(box)
+    box.addContentSubview(child)
+    root.layoutSubtreeIfNeeded()
+    for radius in [0.0'f32, 20.0'f32, 8.0'f32, 0.0'f32]:
+      box.backdropBlurRadius = radius
+      box.backdropTintOpacity = 0.78
+      var
+        blurCount = 0
+        foundContent = false
+      for node in buildRenders(root)[DefaultDrawLevel].resolvedNodes():
+        if node.kind == nkBackdropBlur:
+          inc blurCount
+          check not foundContent
+          check node.backdropBlur.blur == radius
+          check node.screenBox.x == 24
+          check node.screenBox.y == 30
+          check node.screenBox.w == 200
+          check node.screenBox.h == 100
+          check node.fill == fill(color(0.12, 0.16, 0.20, 0.78))
+          for corner in node.corners:
+            check corner == 7'u16
+        if node.kind == nkText and node.renderedText() == "Overlay content":
+          foundContent = true
+      check blurCount == (if radius > 0: 1 else: 0)
+      check foundContent
+    box.backdropBlurRadius = -1
+    box.backdropTintOpacity = 2
+    check box.backdropBlurRadius == 0
+    check box.backdropTintOpacity == 1
+
   test "box protocol exposes selector-backed properties":
     let box = newBox("Original")
 

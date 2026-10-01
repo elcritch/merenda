@@ -34,6 +34,14 @@ suite "Kosmo shortcut profiles":
       ) == actionSelector(KosmoOpenProjectAction)
       check macosBindings.bindingFor([keyEvent(keyS, {kmCommand})]) ==
         actionSelector(KosmoSaveAction)
+      check platformBindings.bindingFor(
+        [keyEvent(keyF, expectedPlatformModifiers + {kmShift})]
+      ) == actionSelector(KosmoFindInFilesAction)
+      check platformBindings.bindingFor(
+        [keyEvent(keyF, expectedPlatformModifiers + {kmOption, kmShift})]
+      ) == actionSelector(KosmoReplaceInFilesAction)
+      check macosBindings.bindingFor([keyEvent(keyF, {kmCommand, kmOption, kmShift})]) ==
+        actionSelector(KosmoReplaceInFilesAction)
       if platform != KosmoShortcutPlatform.MacOS:
         check platformBindings.bindingFor([keyEvent(keyF4, {kmControl})]) ==
           actionSelector(KosmoCloseTabAction)

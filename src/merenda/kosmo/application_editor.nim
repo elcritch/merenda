@@ -37,7 +37,10 @@ proc `sidebarFocused=`(controller: KosmoDockController, focused: bool) =
 
 proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
 proc revealActiveFile*(frontend: KosmoApplication): bool {.discardable.}
-proc showFindInFiles*(frontend: KosmoApplication): bool {.discardable.}
+proc showFindInFiles*(
+  frontend: KosmoApplication, replacing = false
+): bool {.discardable.}
+
 func hasFileBrowser*(frontend: KosmoApplication): bool
 proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.}
 proc showGitDiff*(frontend: KosmoApplication, path = ""): bool {.discardable.}
@@ -1397,8 +1400,12 @@ proc refreshEditorSearch(
     discard view.editor.revealLocation(view.searchOrigin.line, view.searchOrigin.column)
     view.editor.clearSearch()
     view.searchBar.hasMatches = false
+    view.searchBar.errorMessage = ""
   else:
-    view.searchBar.hasMatches = view.editor.searchFrom(query, start, direction)
+    view.searchBar.hasMatches = view.editor.searchFrom(
+      query, start, direction, regularExpression = view.searchBar.regularExpression
+    )
+    view.searchBar.errorMessage = view.editor.searchError()
   view.refresh()
 
 proc editorSearchQueryDidChange(view: KosmoEditorView, query: string) =
@@ -1415,6 +1422,29 @@ proc findNext*(view: KosmoEditorView) =
   if not view.isNil and not view.searchBar.isNil:
     view.refreshEditorSearch(view.editor.bufferCursor())
 
+proc replaceMatch*(view: KosmoEditorView, all = false): int {.discardable.} =
+  if view.isNil or view.searchBar.isNil:
+    return
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+  result = view.editor.replaceSearch(
+    view.searchBar.query(),
+    view.searchBar.replacementField().text(),
+    all,
+    regularExpression = view.searchBar.regularExpression,
+  )
+  view.searchOrigin = view.editor.bufferCursor()
+  if view.editor.searchError().len > 0:
+    view.searchBar.errorMessage = "Replacement error: " & view.editor.searchError()
+  else:
+    view.searchBar.hasMatches = view.editor.hasSearchMatches(
+      view.searchBar.query(), regularExpression = view.searchBar.regularExpression
+    )
+    view.searchBar.errorMessage = view.editor.searchError()
+  view.refresh()
+
+func replacementField*(view: KosmoEditorView): nimkit.TextField =
+  view.searchBar.replacementField()
+
 proc dismissSearch*(view: KosmoEditorView) =
   ## Hide editor search, clear Moe's highlights, and return focus to the editor.
   if view.isNil or view.searchBar.isNil:
@@ -1426,8 +1456,8 @@ proc dismissSearch*(view: KosmoEditorView) =
   if owner of nimkit.Window:
     discard nimkit.Window(owner).makeFirstResponder(view)
 
-proc showSearch*(view: KosmoEditorView): bool {.discardable.} =
-  ## Show the editor search widget and focus its query field.
+proc showSearch*(view: KosmoEditorView, replacing = false): bool {.discardable.} =
+  ## Focus editor search, showing replacement only when explicitly requested.
   if view.isNil or view.searchBar.isNil:
     return
   let owner = view.window()
@@ -1438,12 +1468,14 @@ proc showSearch*(view: KosmoEditorView): bool {.discardable.} =
     view.searchBar.query = ""
     view.editor.clearSearch()
     view.searchBar.hasMatches = false
+    view.searchBar.errorMessage = ""
     view.searchBar.hidden = false
     view.setNeedsLayout()
     view.layoutSubtreeIfNeeded()
   else:
     view.searchBar.queryField().selectedRange =
       nimkit.initTextRange(0, view.searchBar.query().runeLen)
+  view.searchBar.replacementVisible = replacing
   result = nimkit.Window(owner).makeFirstResponder(view.searchBar.queryField())
 
 func searchField*(view: KosmoEditorView): nimkit.TextField =
@@ -1498,8 +1530,26 @@ proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bo
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   if view.handlePendingPaneKey(event):
     return true
-  if event.key == nimkit.keyF and event.modifiers == editorSearchShortcutModifiers():
-    return view.showSearch()
+  if event.key == nimkit.keyF:
+    if event.modifiers == editorSearchShortcutModifiers():
+      return view.showSearch()
+    if event.modifiers == editorSearchShortcutModifiers() + {nimkit.kmOption}:
+      return view.showSearch(replacing = true)
+  if view.searchVisible() and event.key == nimkit.keyEscape and event.modifiers == {}:
+    view.dismissSearch()
+    return true
+  if view.searchVisible() and event.key == nimkit.keyG:
+    if event.modifiers == editorSearchShortcutModifiers():
+      view.findNext()
+      return true
+    if event.modifiers == editorSearchShortcutModifiers() + {nimkit.kmShift}:
+      view.findPrevious()
+      return true
+  # Key equivalents also traverse ancestors of the focused search controls.
+  # Leave their Tab and editing commands to the standard widget handlers.
+  let owner = view.window()
+  if owner of nimkit.Window and nimkit.Window(owner).firstResponder() != view:
+    return false
   if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
     return false
   let controller = view.tabsDelegate.dockController[]
@@ -1603,9 +1653,11 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoRevealActiveFileAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].revealActiveFile()
-    of KosmoFindInFilesAction:
+    of KosmoFindInFilesAction, KosmoReplaceInFilesAction:
       if not controller.frontend.isNil:
-        discard controller.frontend[].showFindInFiles()
+        discard controller.frontend[].showFindInFiles(
+          replacing = $args.selector.name == KosmoReplaceInFilesAction
+        )
     of KosmoShowSettingsAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showSettings()
@@ -1850,6 +1902,17 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
         searchOwner[].dismissSearch()
   result.searchBar =
     newKosmoSearchBar("editor text", onQueryChanged, onPrevious, onNext, onClose)
+  result.searchBar.enableExpressions()
+  result.searchBar.enableReplacement(
+    proc() =
+      if not searchOwner.isNil:
+        discard searchOwner[].replaceMatch()
+    ,
+    proc() =
+      if not searchOwner.isNil:
+        discard searchOwner[].replaceMatch(all = true)
+    ,
+  )
   result.addSubview(result.searchBar)
   result.syncChrome()
 
@@ -2547,9 +2610,11 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
     of KosmoRevealActiveFileAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].revealActiveFile()
-    of KosmoFindInFilesAction:
+    of KosmoFindInFilesAction, KosmoReplaceInFilesAction:
       if not controller.frontend.isNil:
-        discard controller.frontend[].showFindInFiles()
+        discard controller.frontend[].showFindInFiles(
+          replacing = $args.selector.name == KosmoReplaceInFilesAction
+        )
     of KosmoShowSettingsAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showSettings()
@@ -2604,16 +2669,69 @@ protocol KosmoMarkdownLinkDelegate of nimkit.TextViewDelegateProtocol:
       return false
     controller.frontend[].openPath(path)
 
+proc searchField*(view: KosmoMarkdownView): nimkit.TextField =
+  view.search.bar.queryField()
+
+proc searchVisible*(view: KosmoMarkdownView): bool =
+  view.search.searchVisible()
+
+proc searchMatchCount*(view: KosmoMarkdownView): int =
+  view.search.searchMatchCount()
+
+proc showSearch*(view: KosmoMarkdownView): bool {.discardable.} =
+  view.search.showSearch()
+
+proc markdownSearchDidParse(view: KosmoMarkdownView, workerThreadId: int) {.slot.} =
+  discard workerThreadId
+  view.search.refreshSearch()
+
+proc markdownSearchDidLayout(
+    view: KosmoMarkdownView, snapshot: nimkit.TextLayoutSnapshot
+) {.slot.} =
+  discard snapshot
+  if view.pendingSearchRange.isSome and view.search.searchVisible():
+    if revealTextMatch(view.textView(), view.scrollView(), view.pendingSearchRange.get):
+      view.selectMarkdownRange(view.pendingSearchRange.get)
+      view.pendingSearchRange = none(nimkit.TextRange)
+
 proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result = KosmoMarkdownView()
   result.initMarkdownViewFields(syntaxHighlighter = nimkit.matterSyntaxHighlighter)
   result.editorView = editorView.unsafeWeakRef()
+  let weakView = result.unsafeWeakRef()
+  result.search = newKosmoViewerSearch(
+    result,
+    "Markdown",
+    proc(): seq[string] =
+      if not weakView.isNil:
+        result = @[weakView[].textView().stringValue()]
+    ,
+    proc(match: KosmoViewerMatch) =
+      if not weakView.isNil:
+        let view = weakView[]
+        view.pendingSearchRange = some(match.range)
+        if revealTextMatch(view.textView(), view.scrollView(), match.range):
+          view.selectMarkdownRange(match.range)
+          view.pendingSearchRange = none(nimkit.TextRange)
+    ,
+    proc() =
+      if not weakView.isNil:
+        weakView[].pendingSearchRange = none(nimkit.TextRange)
+        weakView[].selectMarkdownRange(nimkit.initTextRange(0, 0))
+    ,
+  )
+  result.connect(nimkit.markdownDidFinishParsing, result, markdownSearchDidParse)
+  result.textView().layoutManager().connect(
+    nimkit.layoutDidComplete, result, markdownSearchDidLayout
+  )
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =
     let event = invocation.argsAs(nimkit.KeyEvent)
     let markdownView = KosmoMarkdownView(self)
-    if markdownView.handleHostHelpKey(event):
+    if markdownView.search.handleSearchKey(event):
+      invocation.setResult(true)
+    elif markdownView.handleHostHelpKey(event):
       invocation.setResult(true)
     elif markdownView.handleMarkdownPaneKey(event):
       invocation.setResult(true)

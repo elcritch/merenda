@@ -600,6 +600,8 @@ proc buildAquaTheme(): ThemeBuilder =
   result[srBox, StyleFocusRingWidth] = 0.0
   result[srBox, StyleFocusRingInset] = 0.0
   result[srBox, StyleBoxShadows] = newSeq[BoxShadow]()
+  result[initStyleSelector(srBox, classes = @[PopoverBoxStyleClass]), StyleFill] =
+    styleToken("textField.fill")
 
   result.addRoleRule(
     srDatePicker,
@@ -726,6 +728,54 @@ proc buildAquaTheme(): ThemeBuilder =
     styleToken("button.shadows.disabled")
   result[srButton, {ssDisabled}, StyleTextHighlightColor] = color(1.0, 1.0, 1.0, 0.16)
   result[srButton, {ssDisabled}, StyleTextShadowColor] = color(0.0, 0.0, 0.0, 0.08)
+
+  # Compact buttons keep standard tracking, focus, and rendering while using
+  # neutral chrome and enough room for a short toolbar title or symbol.
+  let toolbar = initStyleSelector(srButton, classes = @[ToolbarButtonStyleClass])
+  result[toolbar, StyleChrome] = styleKeyword(DefaultChromeName)
+  result[toolbar, StyleFill] = styleToken("box.fill")
+  result[toolbar, StyleBorderColor] = styleToken("textField.border.color")
+  result[toolbar, StyleTextColor] = styleToken("textField.text.color")
+  result[toolbar, StyleBorderWidth] = 1.0
+  result[toolbar, StyleCornerRadius] = 5.0
+  result[toolbar, StyleTextInsets] = insets(0.0, 4.0)
+  result[toolbar, StyleMinimumSize] = initSize(24.0, 24.0)
+  result[toolbar, StyleFontSize] = 13.0
+  result[toolbar, StyleBoxShadows] = newSeq[BoxShadow]()
+  result[toolbar, StyleTextHighlightColor] = color(0, 0, 0, 0)
+  result[toolbar, StyleTextShadowColor] = color(0, 0, 0, 0)
+  for state in [ssHovered, ssHighlighted]:
+    result[
+      initStyleSelector(srButton, {state}, classes = @[ToolbarButtonStyleClass]),
+      StyleFill,
+    ] = styleToken("documentTab.fill.highlighted")
+  let selectedToolbar =
+    initStyleSelector(srButton, {ssSelected}, classes = @[ToolbarButtonStyleClass])
+  result[selectedToolbar, StyleFill] = styleToken("accent.pressed")
+  result[selectedToolbar, StyleBorderColor] = styleToken("accent")
+  result[selectedToolbar, StyleTextColor] = color(1, 1, 1, 1)
+  result[selectedToolbar, StyleBoxShadows] =
+    @[insetShadow(color(0, 0, 0, 0.35), y = 1, blur = 2)]
+
+  result[
+    initStyleSelector(
+      srButton, {ssSelected, ssHovered}, classes = @[ToolbarButtonStyleClass]
+    ),
+    StyleFill,
+  ] = styleToken("accent.pressed")
+
+  result[
+    initStyleSelector(srButton, {ssDisabled}, classes = @[ToolbarButtonStyleClass]),
+    StyleTextColor,
+  ] = styleToken("button.text.color.disabled")
+
+  result[
+    initStyleSelector(
+      srButton, classes = @[ToolbarButtonStyleClass, ToolbarSymbolStyleClass]
+    ),
+    StyleFontSize,
+  ] = 16.0
+
   result[srStepper, StyleMinimumSize] = initSize(52.0, 23.0)
 
   result[srSwitch, StyleFill] = aquaComboBoxFill()

@@ -56,9 +56,19 @@ suite "Terminal scrollback input":
         view = newTerminalView(session)
       defer:
         view.close()
-      session.start(initTerminalSpawnOptions(command = "cat"))
+      # Real output confirms the shell is ready before input and teardown.
+      # Closing immediately after forkpty can outlast bounded cleanup on macOS.
+      session.start(
+        initTerminalSpawnOptions(
+          command = "printf 'old\\r\\nmiddle\\r\\ncurrent'; IFS= read -r value"
+        )
+      )
+      let deadline = getMonoTime() + initDuration(seconds = 10)
+      while "current" notin session.screen().plainText() and getMonoTime() < deadline:
+        discard view.poll()
+        sleep(1)
+      require "current" in session.screen().plainText()
       require session.running()
-      session.processOutput("old\r\nmiddle\r\ncurrent")
       discard view.poll()
       view.selectTerminalRange(
         TerminalSelection(
@@ -72,3 +82,5 @@ suite "Terminal scrollback input":
       )
       check view.scrollPosition() == 0
       check monoTextViews.stringValue(view).startsWith("middle")
+      require session.pollUntilExit()
+      check session.exitCode() == 0

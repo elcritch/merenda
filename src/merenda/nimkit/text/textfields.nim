@@ -39,6 +39,7 @@ type
 
   TextField* = ref object of Control
     xStringValue: string
+    xPlaceholder: string
     xAlignment: TextAlignment
     xTextColor: Color
     xFlags: TextFieldFlags
@@ -89,6 +90,7 @@ protocol TextFieldEvents:
 
 protocol TextFieldProtocol {.setterStyle: nim.} from TextField:
   property stringValue -> string
+  property placeholder -> string
   property alignment -> TextAlignment
   property textColor -> Color
   property selectedRange -> TextRange
@@ -100,6 +102,16 @@ protocol TextFieldProtocol {.setterStyle: nim.} from TextField:
     if not editor.isNil:
       return textviews.stringValue(TextView(editor))
     textField.xStringValue
+
+  method placeholder(textField: TextField): string =
+    ## A display-only hint for an empty, unfocused field.
+    textField.xPlaceholder
+
+  method `placeholder=`(textField: TextField, value: string) =
+    if textField.xPlaceholder == value:
+      return
+    textField.xPlaceholder = value
+    textField.needsDisplay = true
 
   method `stringValue=`(textField: TextField, value: string) =
     if textField.xStringValue == value:
@@ -880,6 +892,19 @@ protocol DefaultTextFieldDrawing of ViewDrawingProtocol:
 
     let editor = textField.activeFieldEditor()
     if not editor.isNil:
+      return
+
+    if textField.stringValue.len == 0 and textField.xPlaceholder.len > 0 and
+        not textField.isEditing:
+      let textRect = style.textFieldTextRect(textField.bounds)
+      var hintStyle = style.text
+      hintStyle.color.a *= 0.5
+      context.addText(
+        textRect,
+        clippedText(textField.xPlaceholder, textRect.size.width, hintStyle),
+        hintStyle,
+        alignment = textField.alignment,
+      )
       return
 
     textField.syncLayout(style)

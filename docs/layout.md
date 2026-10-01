@@ -59,8 +59,8 @@ NimKit already has the core pieces needed to build this direction:
 - Scroll views and text editors compute their final geometry before applying
   it. Their internally managed frames, bounds origins, and visibility use
   layout-owned application paths that do not become new authored inputs.
-- Repeated cross-frame feedback records an actionable diagnostic rather than
-  retrying layout callbacks up to a fixed pass limit.
+- Repeated cross-frame feedback emits an actionable warning, then pauses layout
+  after a configurable higher limit. New external layout input permits retry.
 
 New controls should build on this core without hand-wiring cache behavior:
 emit semantic layout reasons through the bus, compute container output before
@@ -341,9 +341,24 @@ After three cycles it emits one diagnostic containing:
 - invalidation reason
 
 The latest data is also available through `layoutGeneration`, `layoutPhase`,
-`layoutFeedbackCycles`, and `lastLayoutInvalidation`. A transaction that settles
-resets the feedback count and diagnostic. This makes cross-frame feedback
-actionable without freezing a frame in a 64-pass retry loop.
+`layoutFeedbackCycles`, and `lastLayoutInvalidation`. After sixteen consecutive
+unsettled transactions, NimKit logs a hard-stop diagnostic and pauses automatic
+layout retries for that root. `layoutFeedbackBlocked` reports this state. Dirty
+layout flags and the latest diagnostic remain available; the display scheduler
+does not keep requesting frames solely for the blocked layout.
+
+Each root's `xLayoutFeedbackLimits` is a plain `LayoutFeedbackLimits` value with
+`warningCycles` and `maxCycles`. `LayoutFeedbackLimits()` uses their Nim field
+defaults of three and sixteen; newly allocated views inherit these defaults for
+their embedded limits. Zero disables the corresponding threshold. Raising the
+hard limit permits more retries.
+
+A transaction that settles resets the feedback count and diagnostic. A new
+layout invalidation outside that root's active transaction also resets its
+feedback sequence, including invalidations from descendants. A resize, content
+change, hierarchy edit, or explicit `setNeedsLayout()` can therefore retry a
+blocked root. An invalidation produced by its own layout callbacks cannot reset
+the count or bypass the hard stop.
 
 ## Caching
 

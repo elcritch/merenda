@@ -21,7 +21,7 @@ export viewbase except
   AutoresizingState, LayoutInputKind, LayoutTerm, LayoutEquation, LayoutInput,
   LayoutInputCache, LayoutSolveMode, LayoutSolveFailure, LayoutTransactionState,
   activeLayoutTransaction, markLocalNeedsDisplay, markRenderSlotNeedsDisplay,
-  nextLayoutGeneration, noteLayoutInvalidation
+  nextLayoutGeneration, noteLayoutInvalidation, hasBlockedLayoutAncestor
 export viewconstraints except
   generatedLayoutInputs, solveBlocked, applyConstraintsForSubtree
 export viewgeometry except
@@ -232,10 +232,8 @@ proc `needsLayout=`*(view: View, value: bool) =
 proc setNeedsLayout*(view: View) =
   view.needsLayout = true
 
-const LayoutFeedbackDiagnosticThreshold = 3
-
 proc hasPendingLayoutInSubtree(view: View): bool =
-  if view.solveBlocked(lsmLayout):
+  if view.layoutFeedbackBlocked() or view.solveBlocked(lsmLayout):
     return false
   if view.xNeedsUpdateConstraints or view.xNeedsLayout:
     return true
@@ -254,6 +252,8 @@ proc firstPendingLayoutView(view: View): View =
 proc updateConstraintsForTransaction(
     view: View, transaction: var LayoutTransactionState
 ) =
+  if view.layoutFeedbackBlocked():
+    return
   for child in view.xSubviews:
     child.updateConstraintsForTransaction(transaction)
   view.xConstraintVisitGeneration = transaction.generation
@@ -262,6 +262,8 @@ proc updateConstraintsForTransaction(
     view.runUpdateConstraints()
 
 proc layoutSubtree(view: View, transaction: var LayoutTransactionState) =
+  if view.layoutFeedbackBlocked():
+    return
   view.xLayoutVisitGeneration = transaction.generation
   transaction.currentView = view
   if view.xNeedsLayout:
@@ -279,7 +281,8 @@ proc hasActiveLayoutAncestor(view: View): bool =
     current = current.superviewBacklink()
 
 proc layoutSubtreeIfNeeded*(view: View) =
-  if view.hasActiveLayoutAncestor() or not view.hasPendingLayoutInSubtree():
+  if view.hasActiveLayoutAncestor() or view.hasBlockedLayoutAncestor() or
+      not view.hasPendingLayoutInSubtree():
     return
   view.xLayoutSubtreeInProgress = true
   var transaction = LayoutTransactionState(
@@ -328,7 +331,18 @@ proc layoutSubtreeIfNeeded*(view: View) =
       phase: transaction.phase,
       reason: lirExplicit,
     )
-  if view.xLayoutFeedbackCycles == LayoutFeedbackDiagnosticThreshold:
+  if view.layoutFeedbackBlocked():
+    let diagnostic = view.xLastLayoutInvalidation
+    error "NimKit layout feedback stopped",
+      updateCycles = view.xLayoutFeedbackCycles,
+      maxCycles = view.xLayoutFeedbackLimits.maxCycles,
+      generation = diagnostic.generation,
+      invalidatingView = diagnostic.invalidatingView,
+      target = diagnostic.targetView,
+      phase = diagnostic.phase,
+      reason = diagnostic.reason
+  elif view.xLayoutFeedbackLimits.warningCycles > 0 and
+      view.xLayoutFeedbackCycles == view.xLayoutFeedbackLimits.warningCycles:
     let diagnostic = view.xLastLayoutInvalidation
     warn "NimKit repeated layout feedback",
       updateCycles = view.xLayoutFeedbackCycles,
@@ -362,7 +376,8 @@ proc needsDisplayInSubtree*(view: View): bool =
   false
 
 proc needsDisplayUpdateInSubtree*(view: View): bool =
-  view.needsDisplayInSubtree() or view.hasPendingLayoutInSubtree()
+  view.needsDisplayInSubtree() or
+    (not view.hasBlockedLayoutAncestor() and view.hasPendingLayoutInSubtree())
 
 proc prepareDisplaySubtree*(view: View): bool =
   view.layoutSubtreeIfNeeded()

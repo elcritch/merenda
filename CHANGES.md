@@ -21,7 +21,38 @@
   without a hidden Moe split, and honor Moe runtime mappings for Ctrl-W.
 - Dispatch ambiguous Moe key mappings from Kosmo's idle poll when their
   configured timeout expires.
+- Consolidate macOS workspace watches into FSEvents streams for whole trees,
+  preventing nested folders in multiple projects from exhausting dmon's global
+  watch limit. Deduplicate roots, report fallback causes and uncovered paths,
+  and retry registration when missing directories or capacity become available.
+- Keep Tab and Shift-Tab in Kosmo editor search controls from reaching the
+  underlying editor's insert, replace, or command mode.
+- Add configurable FigDraw backdrop blur to Box containers and use it behind
+  Kosmo's search overlay, with a themed tint for readable controls.
+- Render push-button toggle state consistently and give enabled search regex
+  buttons a pressed accent appearance. Support vector icons in standard Buttons
+  so search disclosure and navigation arrows remain visible across fonts.
+- Use standard text fields, buttons, and Box chrome in Kosmo search panels.
+  Fix replacement-field clicks and placeholder alignment, put the expression
+  toggle first after the query in tab order, and contain overlay clicks.
+- Add TextField placeholders and compact toolbar styling for Buttons.
+- Add an opt-in `.*` mode for Reni expressions and replacement captures in Kosmo
+  editor and file search. Default both fields to literal text; validate capture
+  templates before editing, handle engine limits, and render matches in Kosmo
+  without modifying the Moe dependency.
+- Default Kosmo editor and file search to compact search-only controls. Reveal
+  replacement with the disclosure chevron or by adding Option/Alt to the search
+  shortcut; regular search shortcuts collapse replacement and preserve the query.
+- Add replacement of search matches to Kosmo editor panes and Find in Files,
+  with grouped editor undo, checked atomic file saves, stale-result validation,
+  and protection for unsaved buffers.
+- Add plain-text search to Markdown and Git diff viewers, including collapsed diff
+  sections, and center editor search matches through Kosmo's Moe adapter.
 
+- Pause automatic layout retries after sixteen consecutive unsettled NimKit
+  transactions, retaining the warning at three cycles and the pending work.
+  Per-root feedback limits are configurable; new external layout input retries
+  blocked roots without letting layout callbacks reset their own limit.
 - Add `nim install_kosmo` to build and install the current checkout as a complete
   macOS app bundle, using the release icon and resources.
 - Read terminal output in bounded application-frame work and coalesce grid

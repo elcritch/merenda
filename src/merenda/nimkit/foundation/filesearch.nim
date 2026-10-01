@@ -1,15 +1,17 @@
 ## Asynchronous, memory-mapped regular-expression search for local files.
 
 import
-  std/[
-    algorithm, atomics, mimetypes, monotimes, os, sets, strutils, tables, times, unicode
-  ]
+  std/
+    [
+      algorithm, atomics, mimetypes, monotimes, os, sets, strutils, tables, times,
+      unicode,
+    ]
 
 import faststreams/inputs
-import regex
 import sigils/[core, threads]
 import threading/smartptrs
 import ./gitprocesses
+import ./textsearch
 
 const
   DefaultFileSearchMaxResults* = 10_000
@@ -26,6 +28,7 @@ type
     fsfrCancelled
     fsfrResultLimitReached
     fsfrFileLimitReached
+    fsfrPatternError
 
   FileSearchOptions* = object
     recursive*: bool
@@ -33,6 +36,7 @@ type
     respectGitIgnore*: bool
     includeBinaryFiles*: bool
     caseSensitive*: bool
+    regularExpression*: bool ## Interpret the query as a Reni expression.
     maxResults*: int
     maxMatchesPerFile*: int
     maxFiles*: int
@@ -66,6 +70,7 @@ type
     reason*: FileSearchFinishReason
     matches*: seq[FileSearchMatch]
     stats*: FileSearchStats
+    errorMessage*: string
 
   FileSearchPendingError* = object of CatchableError
   FileSearchClosedError* = object of CatchableError
@@ -140,6 +145,7 @@ func initFileSearchOptions*(
     maxFileSizeBytes: Positive = DefaultFileSearchMaxFileSizeBytes,
     respectGitIgnore = true,
     includeBinaryFiles = false,
+    regularExpression = true,
 ): FileSearchOptions =
   ## Configure traversal, content filtering, and resource limits for one search.
   FileSearchOptions(
@@ -148,6 +154,7 @@ func initFileSearchOptions*(
     respectGitIgnore: respectGitIgnore,
     includeBinaryFiles: includeBinaryFiles,
     caseSensitive: caseSensitive,
+    regularExpression: regularExpression,
     maxResults: maxResults,
     maxMatchesPerFile: maxMatchesPerFile,
     maxFiles: maxFiles,
@@ -218,11 +225,10 @@ proc validate(query: FileSearchQuery) =
   if query.options.maxFileSizeBytes <= 0:
     raise newException(ValueError, "maxFileSizeBytes must be positive")
 
-proc searchPattern(query: FileSearchQuery): Regex2 =
-  var flags = {regexArbitraryBytes}
-  if not query.options.caseSensitive:
-    flags.incl(regexCaseless)
-  re2(query.pattern, flags)
+proc searchPattern(query: FileSearchQuery): TextSearchPattern =
+  initTextSearchPattern(
+    query.pattern, query.options.regularExpression, query.options.caseSensitive
+  )
 
 func hiddenPath(path: string): bool =
   let name = path.extractFilename()
@@ -358,22 +364,22 @@ proc addLineMatches(
     path, lineText: string,
     lineNumber: int,
     lineByteOffset: int64,
-    pattern: Regex2,
+    pattern: TextSearchPattern,
     options: FileSearchOptions,
     control: SharedPtr[FileSearchControl],
     fileMatchCount: var int,
     searchResult: var FileSearchResult,
 ): bool =
-  for bounds in findAllBounds(lineText, pattern):
+  for bounds in pattern.findMatches(lineText):
     if control.cancellationRequested():
       searchResult.reason = fsfrCancelled
       return false
     let match = FileSearchMatch(
       path: path,
       line: lineNumber,
-      column: bounds.a + 1,
-      byteOffset: lineByteOffset + bounds.a.int64,
-      matchLength: max(bounds.b - bounds.a + 1, 0),
+      column: bounds.first + 1,
+      byteOffset: lineByteOffset + bounds.first.int64,
+      matchLength: max(bounds.last - bounds.first, 0),
       lineText: lineText,
     )
     searchResult.matches.add match
@@ -449,7 +455,7 @@ proc isSearchableTextFile(path: string, fileSize: int64, mimeTypes: MimeDB): boo
 proc searchMappedFile(
     batchState: var FileSearchBatchState,
     path: string,
-    pattern: Regex2,
+    pattern: TextSearchPattern,
     options: FileSearchOptions,
     mimeTypes: MimeDB,
     control: SharedPtr[FileSearchControl],
@@ -546,6 +552,9 @@ proc performFileSearch(
           )
         except IOError, OSError:
           inc result.stats.failedFileCount
+        except TextSearchError as error:
+          result.reason = fsfrPatternError
+          result.errorMessage = error.msg
         if result.reason != fsfrCompleted:
           return
         batchState.publishIfDue()
@@ -569,9 +578,13 @@ proc executeFileSearch(
     query: FileSearchQuery,
     control: SharedPtr[FileSearchControl],
 ) {.slot.} =
-  emit worker.fileSearchFinished(
-    identifier, performFileSearch(worker, identifier, query, control)
-  )
+  var outcome: FileSearchResult
+  try:
+    outcome = performFileSearch(worker, identifier, query, control)
+  except TextSearchError as error:
+    outcome.reason = fsfrPatternError
+    outcome.errorMessage = error.msg
+  emit worker.fileSearchFinished(identifier, outcome)
 
 ## Publishes ordered, non-empty match batches while the handle is still pending.
 proc fileSearchDidFindMatches*(

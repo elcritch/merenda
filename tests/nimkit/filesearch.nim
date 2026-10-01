@@ -1,6 +1,6 @@
 import std/[os, osproc, strutils, tempfiles, unittest]
 
-import regex
+import merenda/nimkit/foundation/textsearch
 import sigils/core
 
 import merenda/nimkit/foundation/filesearch
@@ -353,7 +353,7 @@ suite "nimkit memory-mapped file search":
         discard service.search(initFileSearchQuery(root / "missing", "value"))
       expect ValueError:
         discard service.search(initFileSearchQuery(root, ""))
-      expect RegexError:
+      expect TextSearchError:
         discard service.search(initFileSearchQuery(root, "("))
       expect ValueError:
         var options = initFileSearchOptions()
@@ -380,3 +380,70 @@ suite "nimkit memory-mapped file search":
         discard service.search(initFileSearchQuery(root, "value"))
     finally:
       removeDir(root)
+
+suite "shared Reni search and replacement":
+  test "literal mode preserves punctuation and replacement dollar signs":
+    let pattern = initTextSearchPattern("λ.[x]", caseSensitive = false)
+    let subject = "Λ.[x] λa[x]"
+    var found: seq[TextSearchMatch]
+    for match in pattern.findMatches(subject):
+      found.add match
+    require found.len == 1
+    check found[0].first == 0
+    check found[0].last == "Λ.[x]".len
+    let replacement = pattern.initTextSearchReplacement("$0 ${missing} $$")
+    check replacement.expand(found[0], subject) == "$0 ${missing} $$"
+
+  test "Reni lookbehind and captures expand against the original subject":
+    let pattern = initTextSearchPattern(r"(?<=id:)(?<word>\p{L}+)-(?<number>\d+)", true)
+    let subject = "id:κόσμος-42"
+    var count = 0
+    for match in pattern.findMatches(subject):
+      let replacement = pattern.initTextSearchReplacement("${word}:$2:$$:$0")
+      check replacement.expand(match, subject) == "κόσμος:42:$:κόσμος-42"
+      inc count
+    check count == 1
+    for invalid in ["${missing}", "$99", "${word", "$999999999999999999999999999999"]:
+      expect TextSearchError:
+        discard pattern.initTextSearchReplacement(invalid)
+
+  test "zero width scans advance by Unicode characters":
+    let pattern = initTextSearchPattern(r"(?=.)", true)
+    var starts: seq[int]
+    for match in pattern.findMatches("λx"):
+      check match.first == match.last
+      starts.add match.first
+    check starts == @[0, 2]
+
+  test "matching budget errors reach callers and finish worker handles":
+    let root = createTempDir("reni-budget-", "")
+    let service = newFileSearchService(workers = 1)
+    defer:
+      service.close()
+      removeDir(root)
+    let subject = repeat("a", 30) & "!"
+    let pattern = initTextSearchPattern(r"(a+)+$", true)
+    expect TextSearchError:
+      for match in pattern.findMatches(subject):
+        discard match
+    writeFile(root / "sample.txt", subject)
+    let outcome = service.runSearch(root, r"(a+)+$").result()
+    check outcome.reason == fsfrPatternError
+    check outcome.errorMessage.len > 0
+
+  test "worker searches literal text or Reni-only patterns according to options":
+    let root = createTempDir("reni-worker-", "")
+    let service = newFileSearchService(workers = 1)
+    defer:
+      service.close()
+      removeDir(root)
+    writeFile(root / "sample.txt", "λ.[x] λax\npre:cat\n")
+    let literal = service
+      .runSearch(root, "λ.[x]", initFileSearchOptions(regularExpression = false))
+      .result()
+    require literal.matches.len == 1
+    check literal.matches[0].matchLength == "λ.[x]".len
+    let expression = service.runSearch(root, r"pre:\K(?<word>\w+)").result()
+    require expression.matches.len == 1
+    check expression.matches[0].column == 5
+    check expression.matches[0].matchLength == 3

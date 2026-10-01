@@ -24,7 +24,7 @@ import
     applicationassets, cliopen, config, contextpanel, filesearchpanel, filetree,
     gitdiff, inputtranslation, matterworkers, moe, moehighlighting, panedocuments,
     quickopen, searchbar, settings, shortcutpresentation, shortcuts, terminalsearch,
-    workspacefiles,
+    viewersearch, workspacefiles,
   ]
 
 export

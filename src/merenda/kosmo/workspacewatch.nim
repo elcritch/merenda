@@ -80,7 +80,7 @@ proc nativeWatchesReady(watch: WorkspaceWatch): bool =
       return
     defer:
       release(dmonInst.threadLock)
-    var failed: bool
+    var failedDirectories: seq[string]
     block:
       for id in watch.watches:
         let index = int(uint32(id)) - 1
@@ -88,11 +88,11 @@ proc nativeWatchesReady(watch: WorkspaceWatch): bool =
             not dmonInst.watches[index].init:
           return
         if not dmonInst.watches[index].started:
-          failed = true
-    if failed:
+          failedDirectories.add dmonInst.watches[index].rootDirUnmod
+    if failedDirectories.len > 0:
       watch.fallback = true
       warn "Kosmo workspace watcher using periodic fallback after FSEvents startup failure",
-        roots = watch.roots
+        roots = watch.roots, paths = failedDirectories
   watch.nativeReady = true
   result = true
 
@@ -225,8 +225,8 @@ proc watchedMetadataDirectories(root: string): seq[string] =
   for metadata in metadataDirectories(root):
     if metadata notin result:
       result.add metadata
-    # HEAD/index live directly in the Git directory. Watch refs separately so
-    # native backends never recurse through the object database or ignored files.
+    # HEAD/index live directly in the Git directory. Shallow backends need
+    # separate refs watches; FSEvents consolidates these into the parent stream.
     var pending = @[metadata / "refs"]
     var visited: int
     while pending.len > 0 and result.len < 16 and visited < 64:
@@ -243,18 +243,55 @@ proc watchedMetadataDirectories(root: string): seq[string] =
         except OSError:
           discard
 
+proc nativeWatchDirectories(directories: seq[string]): seq[string] =
+  when defined(macosx):
+    # FSEvents covers descendants without enumerating their contents. Register
+    # each tree once rather than spending dmon's process-wide slots on children.
+    # Resolve symlinks so a linked folder outside its parent keeps its own stream.
+    var candidates: seq[tuple[path, resolved: string]]
+    for path in directories:
+      let resolved =
+        try:
+          expandFilename(path)
+        except OSError:
+          path
+      candidates.add (path: path, resolved: resolved)
+    candidates.sort(
+      proc(a, b: tuple[path, resolved: string]): int =
+        result = cmp(a.resolved, b.resolved)
+        if result == 0:
+          result = cmp(a.path, b.path)
+    )
+    var covered: seq[string]
+    for candidate in candidates:
+      var hasAncestor: bool
+      for parent in covered:
+        if candidate.resolved == parent or candidate.resolved.isRelativeTo(parent):
+          hasAncestor = true
+          break
+      if not hasAncestor:
+        covered.add candidate.resolved
+        result.add candidate.path
+  else:
+    result = directories
+
 proc setRoots*(
     watch: WorkspaceWatch, roots: openArray[string], folders: openArray[string] = []
 ) =
-  ## Project directories and Git metadata use shallow, bounded watches.
-  ## Filesystem roots are never watched, and each workspace has at most 64 paths.
+  ## Bound project and Git metadata coverage to 64 paths. macOS consolidates
+  ## descendant paths into recursive FSEvents streams; other backends stay shallow.
+  ## Filesystem roots are never watched.
   if not watch.active:
     return
   var
     directories: seq[string]
     metadataPaths: seq[string]
+    uniqueRoots: seq[string]
   for root in roots:
     let path = normalizedPath(absolutePath(root))
+    if path in uniqueRoots:
+      continue
+    uniqueRoots.add path
     if path.parentDir().len > 0 and path.parentDir() != path:
       if path notin directories and directories.len < 64:
         directories.add path
@@ -269,47 +306,95 @@ proc setRoots*(
       directories.add path
   directories.sort()
   metadataPaths.sort()
-  watch.roots = @roots
+  watch.roots = uniqueRoots
   watch.folders = @folders
-  if directories == watch.directories and metadataPaths == watch.metadata:
-    return
+  let
+    nativeDirectories = nativeWatchDirectories(directories)
+    coverageChanged =
+      directories != watch.directories or metadataPaths != watch.metadata
+    wasFallback = watch.fallback
+  if not coverageChanged:
+    when defined(linux):
+      return
+    else:
+      # Missing paths or exhausted global capacity may recover later. A failed
+      # FSEvents start still has a handle and remains on the periodic fallback.
+      if watch.handles.len == nativeDirectories.len:
+        var registered = true
+        for directory in nativeDirectories:
+          if directory notin watch.handles:
+            registered = false
+            break
+        if registered:
+          return
   var removed: seq[string]
   for directory, id in watch.handles:
-    if directory notin directories:
+    if directory notin nativeDirectories:
       unwatch(id)
       removed.add directory
   for directory in removed:
     watch.handles.del(directory)
+  var registrationsChanged = removed.len > 0
   watch.metadata = metadataPaths
   watch.directories = directories
   watch.fallback = false
   watch.nativeReady = false
+  var reasons, unwatchedDirectories, registrationErrors: seq[string]
   when defined(linux):
     # dmon 0.5.0 concatenates absolute event paths when watching newly created
     # directories, asserting in its monitor thread. Do not crash the application.
     watch.fallback = directories.len > 0
+    if watch.fallback:
+      reasons.add "Linux native backend disabled"
+      unwatchedDirectories = directories
   else:
-    for directory in directories:
+    let flags: set[WatchFlags] =
+      when defined(macosx):
+        {WatchFlags.Recursive}
+      else:
+        {}
+    for directory in nativeDirectories:
       if directory in watch.handles:
         discard
       elif dirExists(directory):
-        if dmonInst.numWatches >= 64:
+        if dmonInst.numWatches >= dmonInst.watches.len:
           watch.fallback = true
+          if "process-wide watch limit" notin reasons:
+            reasons.add "process-wide watch limit"
+          unwatchedDirectories.add directory
         else:
           try:
             watch.handles[directory] =
-              dmon.watch(directory, didChange, {}, cast[pointer](watch.token))
-          except CatchableError:
+              dmon.watch(directory, didChange, flags, cast[pointer](watch.token))
+            registrationsChanged = true
+          except CatchableError as error:
             watch.fallback = true
+            if "native registration failed" notin reasons:
+              reasons.add "native registration failed"
+            unwatchedDirectories.add directory
+            registrationErrors.add error.msg
       else:
         watch.fallback = true
+        if "directory does not exist" notin reasons:
+          reasons.add "directory does not exist"
+        unwatchedDirectories.add directory
   watch.watches.setLen(0)
   for id in watch.handles.values:
     watch.watches.add id
-  if watch.fallback:
-    warn "Kosmo workspace watcher using periodic fallback", roots = watch.roots
-  withLock inboxLock:
-    inbox[watch.token] = WorkspaceChanges(rescan: true)
+  if watch.fallback and (not wasFallback or coverageChanged):
+    warn "Kosmo workspace watcher using periodic fallback",
+      roots = watch.roots,
+      reasons = reasons,
+      paths = unwatchedDirectories,
+      errors = registrationErrors,
+      requestedNativeWatches = nativeDirectories.len,
+      activeNativeWatches = dmonInst.numWatches,
+      nativeWatchLimit = dmonInst.watches.len
+  elif wasFallback and not watch.fallback:
+    info "Kosmo workspace watcher registered all native paths", roots = watch.roots
+  if coverageChanged or registrationsChanged:
+    withLock inboxLock:
+      inbox[watch.token] = WorkspaceChanges(rescan: true)
 
 proc newWorkspaceWatch*(
     reconciliationInterval = DefaultWorkspaceReconciliationInterval

@@ -5,6 +5,7 @@ import sigils/core
 import sigils/selectors
 
 import merenda/nimkit
+import ./fixtures/rendergeometry
 
 type TextChangeSpy = ref object of Agent
   changeCount: int
@@ -23,6 +24,60 @@ proc rememberActionDidSend(spy: ControlActionSpy, sender: DynamicAgent) {.slot.}
   spy.lastSender = sender
 
 suite "nimkit controls":
+  test "toggle buttons render their cell state after keyboard focus moves away":
+    let
+      window = newWindow("Toggle rendering", frame = rect(0, 0, 240, 100))
+      root = newView(frame = rect(0, 0, 240, 100))
+      button = newButton(".*", frame = rect(10, 10, 28, 28))
+      field = newTextField(frame = rect(60, 10, 140, 28))
+      offColor = color(0.1, 0.2, 0.3, 1)
+      onColor = color(0.7, 0.1, 0.2, 1)
+    defer:
+      window.close()
+    var appearance = initAppearance()
+    appearance[srButton, StyleChrome] = styleKeyword(DefaultChromeName)
+    appearance[srButton, StyleFill] = fill(offColor)
+    appearance.setStyle(
+      initStyleSelector(srButton, {ssSelected}), StyleFill, fill(onColor)
+    )
+    button.buttonType = btToggle
+    root.appearance = appearance
+    root.addSubview(button)
+    root.addSubview(field)
+    window.setContentView(root)
+    for state in [bsOff, bsOn, bsOff]:
+      if button.state != state:
+        require window.clickAt(button.pointToWindow(initPoint(14, 14)))
+      require window.makeFirstResponder(field)
+      check button.state == state
+      var foundFace = false
+      let expected = if state == bsOn: onColor else: offColor
+      for node in window.buildRenders()[DefaultDrawLevel].resolvedNodes():
+        if node.kind == nkRectangle and node.fill == fill(expected):
+          foundFace = true
+      check foundFace
+
+  test "button vector icons render independently of the title font and copy with cells":
+    let button = newButton("Expand", frame = rect(0, 0, 28, 28))
+    button.addStyleClass(ToolbarButtonStyleClass)
+    button.icon = newSvgMtsdfResource(
+      """<svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 6 L8 11 L13 6 L11 4 L8 7 L5 4 Z"/></svg>"""
+    )
+    check button.accessibilityLabel() == "Expand"
+    check button.buttonCell().copyButtonCell().icon.len == button.icon.len
+    var iconCount = 0
+    for node in buildRenders(button)[DefaultDrawLevel].resolvedNodes():
+      if node.kind == nkMtsdfImage:
+        inc iconCount
+        check node.screenBox.w > 0
+        check node.screenBox.h > 0
+        check node.screenBox.x >= 0
+        check node.screenBox.y >= 0
+        check node.screenBox.x + node.screenBox.w <= 28
+        check node.screenBox.y + node.screenBox.h <= 28
+      check node.kind != nkText
+    check iconCount > 0
+
   test "switch and slider focus rings follow the active theme":
     let
       root = newView(frame = rect(0, 0, 240, 100))

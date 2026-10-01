@@ -368,6 +368,25 @@ Run [the carousel example](examples/carousel_demo.nim) with
 and the animation's `finished` signal enables the button for the next transition.
 For more, see [property animations and sequences](examples/animation_demo.nim).
 
+### Blur an overlay's background
+
+A standard `Box` can blur the content behind its rounded bounds through FigDraw.
+Its child controls stay sharp, and its fill follows the active theme:
+
+```nim
+let overlay = newBox(frame = rect(24, 24, 320, 96))
+overlay.addStyleClass(PopoverBoxStyleClass)
+overlay.backdropBlurRadius = 20
+overlay.backdropTintOpacity = 0.78
+overlay.addContentSubview(newTextField("Search"))
+root.addSubview(overlay)
+```
+
+Set `backdropBlurRadius` to zero to restore the ordinary box fill.
+`backdropTintOpacity` controls the themed tint over the blurred content, from
+zero to one. This effect is rendered inside the application, independently of
+native window backdrop effects.
+
 ## Kosmo
 
 Kosmo is a code editor built with Merenda and Moe's Vim-style editing engine.
@@ -378,6 +397,43 @@ larger Merenda app fits together.
 Use the Files and Find icons at the left of the status bar to switch sidebar
 views. Click the active icon again to collapse the sidebar and give the editor
 the full window width; click either icon to reopen it at its previous width.
+
+Press `Cmd-F` on macOS or `Ctrl-F` elsewhere to search an editor, Markdown
+preview, or Git diff. Use Enter / the arrow buttons to move through matches,
+`Cmd/Ctrl-G` and `Shift-Cmd/Ctrl-G` for next and previous, and Escape to close.
+Editor matches scroll to the center of the pane. Markdown and diff viewers use
+case-insensitive literal search; diff search includes collapsed sections and
+loads ordinary patches within the viewer's size limits. Open oversized patches
+explicitly to include their contents.
+
+Editor search and the Find sidebar open with replacement controls collapsed.
+Click the chevron beside the search field to expand or collapse them without
+clearing the query or results. On macOS, `Option-Cmd-F` opens editor replacement
+and `Option-Shift-Cmd-F` opens replacement in files; elsewhere use
+`Alt-Ctrl-F` and `Alt-Shift-Ctrl-F`. The regular `Cmd/Ctrl-F` editor shortcut and
+`Shift-Cmd/Ctrl-F` file-search shortcut always return to search only.
+
+Editor replacement offers **Replace** and **Replace All**, with one undo step per
+operation. In the Find sidebar, run a search, expand replacement, enter text, then
+choose **Replace** for the selected match or **Replace All**. Both fields treat
+text literally by default. Enable **`.*`** to use Reni regular expressions in the
+query and capture templates in the replacement: `$0` is the entire match, `$1`
+and later numbers are captures, `${name}` is a named capture, and `$$` inserts a
+dollar sign. For example, search `(?<name>cat|dog)` and replace with `${name}!`.
+When named groups are present, Reni treats unnamed groups as noncapturing.
+Matching is line by line, with Unicode-aware offsets; replacement text may
+contain newlines. Invalid patterns or capture references show an error, and
+invalid replacement templates leave files and buffers untouched. Empty
+replacement text deletes matches. File replacement
+saves the displayed results, including any search limits, checks that matched lines
+still agree with the results, and skips files with unsaved editor changes. Its status
+reports replacements and skipped files, then refreshes the search.
+
+Filesystem notifications keep the browser and Quick Open inventory current.
+On macOS, one FSEvents stream covers a project tree; linked folders and Git
+metadata outside that tree retain their own streams. If native monitoring
+cannot cover a path, Kosmo polls periodically and logs the cause and affected
+paths. Missing directories and exhausted watch capacity are retried automatically.
 
 Open, Open Folder, and Save As share a resizable file browser with Places shortcuts,
 Back/Forward/Up navigation, and an editable location field. Enter an absolute path,

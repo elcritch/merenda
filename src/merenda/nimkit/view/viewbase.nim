@@ -65,6 +65,12 @@ type
     ## Cooperative deadline checked between solver operations.
     maxMilliseconds*: Natural
 
+  LayoutFeedbackLimits* = object
+    ## Thresholds for consecutive transactions that leave a layout root dirty.
+    ## Zero disables the corresponding warning or hard limit.
+    warningCycles*: Natural = 3
+    maxCycles*: Natural = 16
+
   LayoutSolveMode* = enum
     lsmLayout
     lsmFitting
@@ -233,6 +239,7 @@ type
     xLayoutVisitGeneration*: Natural
     xLayoutPhase*: LayoutTransactionPhase
     xLayoutFeedbackCycles*: Natural
+    xLayoutFeedbackLimits*: LayoutFeedbackLimits
     xLastLayoutInvalidation*: LayoutInvalidationDiagnostic
     xLayoutSolveLimits*: LayoutSolveLimits
     xLastLayoutSolveDiagnostic*: LayoutSolveDiagnostic
@@ -287,6 +294,12 @@ proc defaultLayoutSolveLimits*(): LayoutSolveLimits =
     maxMilliseconds: 500,
   )
 
+proc layoutFeedbackBlocked*(view: View): bool =
+  ## Whether this root has exhausted its consecutive layout retry budget.
+  ## Pending work is retained. New external input or a higher limit permits retry.
+  not view.isNil and view.xLayoutFeedbackLimits.maxCycles > 0 and
+    view.xLayoutFeedbackCycles >= view.xLayoutFeedbackLimits.maxCycles
+
 proc superviewBacklink*(view: View): View {.inline.} =
   if not view.isNil and not view.xSuperview.isNil:
     result = view.xSuperview.target
@@ -294,6 +307,13 @@ proc superviewBacklink*(view: View): View {.inline.} =
 proc windowBacklink*(view: View): Responder {.inline.} =
   if not view.isNil and not view.xWindow.isNil:
     result = view.xWindow.target
+
+proc hasBlockedLayoutAncestor*(view: View): bool =
+  var current = view
+  while not current.isNil:
+    if current.layoutFeedbackBlocked():
+      return true
+    current = current.superviewBacklink()
 
 var activeLayoutTransaction* {.threadvar.}: ptr LayoutTransactionState
 var layoutGenerationCounter {.threadvar.}: Natural
@@ -381,8 +401,16 @@ proc noteLayoutInvalidation*(
     target: View, reason: LayoutInvalidationReason, affectsConstraints: bool
 ) =
   let transaction = activeLayoutTransaction
-  if transaction.isNil or target.isNil or
-      not target.belongsToLayoutTransaction(transaction):
+  if target.isNil:
+    return
+  if transaction.isNil or not target.belongsToLayoutTransaction(transaction):
+    # External changes start a fresh feedback sequence on all affected roots.
+    # Layout-generated input revisions must not reset their own retry budget.
+    var current = target
+    while not current.isNil:
+      current.xLayoutFeedbackCycles = 0
+      current.xLastLayoutInvalidation = LayoutInvalidationDiagnostic()
+      current = current.superviewBacklink()
     return
 
   let requiresFollowUp =
