@@ -2,6 +2,7 @@ import std/[json, os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import merenda/kosmo/cli
 import fixtures/ui
 
 suite "Kosmo configuration":
@@ -146,6 +147,27 @@ suite "Kosmo configuration":
     let frontend = newKosmoApplication(manager, monitorsGitStatus = false)
     check frontend.editorView.editor.nimLspConfiguration() ==
       (enabled: true, command: command)
+
+  test "passes a persisted TCP endpoint through the standalone LSP launcher":
+    let
+      root = createTempDir("merenda-kosmo-tcp-lsp-", "")
+      path = root / "config.json"
+      app = newApplication("Kosmo TCP LSP Config Test")
+      address = "tcp://127.0.0.1:49153"
+      config = KosmoConfig(nimLspCommand: address)
+      previousLauncher = kosmoLspLauncherExecutable
+    kosmoLspLauncherExecutable = getAppFilename()
+    defer:
+      kosmoLspLauncherExecutable = previousLauncher
+      removeDir(root)
+    require config.saveKosmoConfig(path)
+    check loadKosmoConfig(path).nimLspCommand == address
+    let manager = newKosmoWindowManager(app, configPath = path)
+    defer:
+      manager.close()
+    let frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+    check frontend.editorView.editor.nimLspConfiguration() ==
+      (enabled: true, command: address)
 
   test "ignores malformed JSON configuration":
     let

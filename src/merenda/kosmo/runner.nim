@@ -3,6 +3,9 @@
 import std/[options, os]
 
 import ./[application, cli, cliopen]
+when defined(windows):
+  import std/strutils
+  import ./lsptcp
 
 proc runKosmo*(paths: openArray[string], add = false) =
   ## Run Kosmo as a standalone NimKit text-editor application.
@@ -47,6 +50,10 @@ proc runKosmoMain*() =
   when defined(posix):
     if arguments.len > 0 and arguments[0] == KosmoLspExecFlag:
       execLspServer(arguments[1 .. ^1])
+  else:
+    if arguments.len == 2 and arguments[0] == KosmoLspExecFlag and
+        arguments[1].startsWith("tcp://"):
+      runLspTcpChild(arguments[1])
   kosmoLspLauncherExecutable = getAppFilename()
   let commandLine = parseKosmoCommandLine(arguments)
   if commandLine.help:

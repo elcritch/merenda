@@ -531,6 +531,22 @@ the field or set it to an empty string to disable LSP on the next launch.
 Nimdex's `daemon` command communicates over standard input and output and stays
 attached to Kosmo; it does not need to detach itself.
 
+To connect standalone Kosmo to an LSP server already listening on a TCP socket,
+use a `tcp://host:port` address in the same setting and restart Kosmo:
+
+```json
+{
+  "nimLspCommand": "tcp://127.0.0.1:49153"
+}
+```
+
+Hostnames, IPv4 addresses, and bracketed IPv6 addresses such as
+`tcp://[::1]:49153` are accepted. Kosmo connects in its dedicated LSP child
+process and forwards standard LSP `Content-Length` frames in both directions.
+It does not launch the server; connection errors appear in the LSP message log,
+and the socket closes when the LSP session ends. Nimdex's `--listen` service uses
+its CLI protocol, so that port cannot be used as an LSP endpoint.
+
 Syntax colors arrive progressively as background workers finish small batches.
 Markdown previews display their content before fenced-code coloring finishes;
 selection, code-block scroll positions, and text layout survive those color updates.

@@ -113,6 +113,7 @@ type
     tdrNativeDone
 
   TransientDismissHandler* = proc(reason: DismissReason) {.closure.}
+  TransientKeyDownHandler* = proc(event: events.KeyEvent): bool {.closure.}
 
   TooltipOverlayView = ref object of View
     xText: string
@@ -211,6 +212,7 @@ type
     restoreWindow: Window
     restoreResponder: Responder
     onDismiss: TransientDismissHandler
+    onKeyDown: TransientKeyDownHandler
 
   ## Presents a view as either an inline popover or a transient native window.
   ##
@@ -233,6 +235,7 @@ type
     xManagesTransientSession: bool
     xFocusContent: bool
     xOnDismiss: PopupHostDismissHandler
+    xOnKeyDown: TransientKeyDownHandler
     xPlaceAbove: bool
     xRestoreCurrentResponderIfNil: bool
     xPopupOpen: bool
@@ -377,6 +380,7 @@ proc beginTransientSession*(
   restoreResponder: Responder = nil,
   onDismiss: TransientDismissHandler = nil,
   restoreCurrentResponderIfNil = true,
+  onKeyDown: TransientKeyDownHandler = nil,
 )
 
 proc dismissTransientSession*(
@@ -409,6 +413,7 @@ proc newPopupHost*(
   restoreCurrentResponderIfNil = true,
   managesTransientSession = true,
   focusContent = true,
+  onKeyDown: TransientKeyDownHandler = nil,
 ): PopupHost
 
 proc popupOpen*(host: PopupHost): bool
@@ -2028,6 +2033,7 @@ proc beginTransientSession*(
     restoreResponder: Responder = nil,
     onDismiss: TransientDismissHandler = nil,
     restoreCurrentResponderIfNil = true,
+    onKeyDown: TransientKeyDownHandler = nil,
 ) =
   window.clearToolTip()
   if window.xTransientSession.active:
@@ -2049,6 +2055,7 @@ proc beginTransientSession*(
     restoreWindow: window,
     restoreResponder: resolvedRestore,
     onDismiss: onDismiss,
+    onKeyDown: onKeyDown,
   )
 
 proc dismissTransientSession*(
@@ -2228,6 +2235,7 @@ proc newPopupHost*(
     restoreCurrentResponderIfNil = true,
     managesTransientSession = true,
     focusContent = true,
+    onKeyDown: TransientKeyDownHandler = nil,
 ): PopupHost =
   result = PopupHost(
     xOwner: owner,
@@ -2245,6 +2253,7 @@ proc newPopupHost*(
     xManagesTransientSession: managesTransientSession,
     xFocusContent: focusContent,
     xOnDismiss: onDismiss,
+    xOnKeyDown: onKeyDown,
     xPlaceAbove: placeAbove,
     xRestoreCurrentResponderIfNil: restoreCurrentResponderIfNil,
   )
@@ -2349,6 +2358,7 @@ proc presentPopup*(host: PopupHost): bool =
       onDismiss = proc(reason: DismissReason) =
         host.popupHostDidDismiss(reason),
       restoreCurrentResponderIfNil = host.xRestoreCurrentResponderIfNil,
+      onKeyDown = host.xOnKeyDown,
     )
     if host.xFocusContent:
       if popupWindow.isNil:
@@ -2485,6 +2495,12 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
 
 proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
   window.clearToolTip()
+  let owner = if window.xOwnerWindow.isNil: window else: window.xOwnerWindow
+  if owner.xTransientSession.active:
+    let onKeyDown = owner.xTransientSession.onKeyDown
+    if not onKeyDown.isNil and onKeyDown(event):
+      window.cancelKeySequence()
+      return true
   let target = window.keyDispatchTarget()
   let dispatchTextFirst =
     window.xPendingKeySequence.len == 0 and event.shouldDispatchTextKeyDownFirst()

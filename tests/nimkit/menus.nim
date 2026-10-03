@@ -116,6 +116,101 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
   discard result.withProtocol(MenuModelSpyValidation)
 
 suite "nimkit menus":
+  test "open inline menus receive arrows and Enter before the focused view":
+    let
+      window = newWindow("Menu keyboard routing", frame = rect(0, 0, 400, 300))
+      root = newView(frame = rect(0, 0, 400, 300))
+      underlying = newView(frame = rect(200, 100, 100, 100))
+      menu = newMenu("Actions")
+      childMenu = newMenu("More")
+      button = newPopupMenuButton("Actions", menu, rect(8, 8, 100, 24))
+      first = newMenuItem("Run", actionSelector("runMenuTest"))
+      disabled = newMenuItem("Disabled")
+      more = newMenuItem("More")
+    defer:
+      window.close()
+    var underlyingKeys, activations: int
+    underlying.acceptsFirstResponder = true
+    discard underlying.addMethod(
+      keyDown(),
+      proc(_: View, event: KeyEvent): bool =
+        discard event
+        inc underlyingKeys
+        true,
+    )
+    first.target = newActionTarget(
+      first.action(),
+      proc(_: DynamicAgent) =
+        inc activations
+      ,
+    )
+    first.validates = false
+    disabled.enabled = false
+    more.submenu = childMenu
+    discard childMenu.addItem(newMenuItem("Child one"))
+    discard childMenu.addItem(newMenuItem("Child two"))
+    discard menu.addItem(first)
+    discard menu.addSeparator()
+    discard menu.addItem(disabled)
+    discard menu.addItem(more)
+    button.popupPresentation = ppInline
+    root.addSubview(button)
+    root.addSubview(underlying)
+    window.setContentView(root)
+    require window.makeFirstResponder(underlying)
+    button.openPopup()
+    require button.popupOpen()
+    check button.highlightedIndex() == 0
+
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check button.highlightedIndex() == 3
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+    let child = button.activeSubmenuButton()
+    require not child.isNil
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check child.highlightedIndex() == 1
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowLeft))
+    check button.activeSubmenuButton().isNil
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowUp))
+    check button.highlightedIndex() == 0
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter))
+    check activations == 1
+    check not button.popupOpen()
+    check underlyingKeys == 0
+
+  test "menubar arrows follow visible menu order through repeated wraps":
+    let
+      window = newWindow("Menu order", frame = rect(0, 0, 500, 300))
+      mainMenu = newMenu("Main")
+    defer:
+      window.close()
+    for title in ["Kosmo", "File", "Edit", "Window", "Help"]:
+      let item = newMenuItem(title)
+      item.submenu = newMenu(title)
+      discard item.submenu().addItem(newMenuItem(title & " command"))
+      discard mainMenu.addItem(item)
+    let root = newMenuRootView(mainMenu, newView(), rect(0, 0, 500, 300))
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+    var buttons: seq[PopupMenuButton]
+    for view in root.menuBar().subviews():
+      buttons.add PopupMenuButton(view)
+      buttons[^1].popupPresentation = ppInline
+    require buttons.len == 5
+    require window.makeFirstResponder(buttons[0])
+    buttons[0].openPopup()
+    for step in 1 .. buttons.len * 3:
+      require window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+      for index, button in buttons:
+        check button.popupOpen() == (index == step mod buttons.len)
+    for step in 1 .. buttons.len * 3:
+      require window.dispatchKeyDown(KeyEvent(key: keyArrowLeft))
+      for index, button in buttons:
+        check button.popupOpen() ==
+          (index == (buttons.len - step mod buttons.len) mod buttons.len)
+    check window.dispatchKeyDown(KeyEvent(key: keyEscape))
+    check not window.hasActiveTransientSession()
+
   test "shortcut checks preserve unchanged window menu entries":
     let
       app = newApplication()

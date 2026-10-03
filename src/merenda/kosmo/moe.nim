@@ -708,17 +708,27 @@ proc newKosmoEditor*(
   config.tabLine.enable = false
   if nimLspCommand.len > 0:
     config.lsp.enable = true
-    when defined(posix):
-      if kosmoLspLauncherExecutable.len > 0:
-        config.lsp.servers["nim"] = LspServerConfig(
-          command:
-            kosmoLspLauncherExecutable & " " &
-            kosmoLspChildArguments(nimLspCommand).join(" ")
-        )
+    if nimLspCommand.startsWith("tcp://"):
+      if kosmoLspLauncherExecutable.len == 0:
+        raise
+          newException(ValueError, "TCP LSP requires a Kosmo LSP launcher executable")
+      config.lsp.servers["nim"] = LspServerConfig(
+        command:
+          kosmoLspLauncherExecutable & " " &
+          kosmoLspChildArguments(nimLspCommand).join(" ")
+      )
+    else:
+      when defined(posix):
+        if kosmoLspLauncherExecutable.len > 0:
+          config.lsp.servers["nim"] = LspServerConfig(
+            command:
+              kosmoLspLauncherExecutable & " " &
+              kosmoLspChildArguments(nimLspCommand).join(" ")
+          )
+        else:
+          config.lsp.servers["nim"] = LspServerConfig(command: nimLspCommand)
       else:
         config.lsp.servers["nim"] = LspServerConfig(command: nimLspCommand)
-    else:
-      config.lsp.servers["nim"] = LspServerConfig(command: nimLspCommand)
   # Matter parsing is owned by Kosmo's asynchronous adapter. Keep Moe on its
   # built-in backend so opening, editing, and rendering never parse a live
   # buffer through Matter on the UI thread.

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Let standalone Kosmo connect to a TCP LSP endpoint by setting `nimLspCommand`
+  to `tcp://host:port`, forwarding framed protocol bytes through its LSP child
+  process and closing the connection when the session ends.
+- Route menu navigation keys to the active popup before the focused panel.
+  Keep up/down movement within the current menu and submenu, and move left/right
+  through the visible menubar order consistently, fixing Kosmo issues #129 and #130.
+
 - Move reusable terminal sessions, Sigils commands, RChan snapshots, and the
   dedicated worker dispatcher into Terminex 0.4.0's optional threaded adapter.
   NimKit retains viewports, rendering, and native event-loop integration; the

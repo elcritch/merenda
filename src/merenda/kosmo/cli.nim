@@ -2,6 +2,8 @@
 
 import std/[os, sequtils, sets, strutils, terminal]
 
+import ./lsptcp
+
 when defined(windows):
   import std/[widestrs, winlean]
 else:
@@ -51,16 +53,17 @@ type KosmoStandaloneCommandLine* = object ## Parsed standalone command-line opti
   paths*: seq[string]
 
 var kosmoLspLauncherExecutable*: string
-  ## Set by the standalone entry point; embedders keep their own LSP command.
+  ## Set by the standalone entry point. TCP embedders must provide an executable
+  ## that handles KosmoLspExecFlag before starting their application.
 
 proc kosmoLspChildArguments*(command: string): seq[string] =
-  ## Pass the configured command through the descriptor-cleaning child mode.
+  ## Pass a server command or TCP endpoint through the dedicated LSP child mode.
   result = @[KosmoLspExecFlag]
   result.add command.splitWhitespace()
 
 when defined(posix):
   proc execLspServer*(arguments: openArray[string]) {.noreturn.} =
-    ## Keep LSP stdio and close every other inherited descriptor before exec.
+    ## Keep only LSP stdio before starting the server command or TCP bridge.
     if arguments.len == 0:
       stderr.writeLine("Kosmo LSP launcher requires a server command")
       exitnow(127)
@@ -74,6 +77,12 @@ when defined(posix):
         if openMax > 0: openMax else: 65_536
     for fd in 3 ..< maximumFd:
       discard close(fd.cint)
+
+    if arguments[0].startsWith("tcp://"):
+      if arguments.len != 1:
+        stderr.writeLine("Kosmo TCP LSP endpoint does not accept command arguments")
+        exitnow(127)
+      runLspTcpChild(arguments[0])
 
     let commandArguments = allocCStringArray(arguments)
     discard execvp(arguments[0].cstring, commandArguments)

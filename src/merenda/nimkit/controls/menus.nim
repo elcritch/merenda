@@ -1385,6 +1385,8 @@ proc closePopupRoot(button: PopupMenuButton) =
     root.closePopup()
 
 proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool =
+  if not button.xChildPopup.isNil and button.xChildPopup.popupOpen():
+    return button.xChildPopup.handlePopupKeyDown(event)
   case event.key
   of keyEscape:
     button.closePopupRoot()
@@ -1504,6 +1506,8 @@ proc openPopupHost(button: PopupMenuButton): bool =
     restoreCurrentResponderIfNil = not button.xUsesCustomRestoreResponder,
     managesTransientSession = button.xParentPopup.isNil,
     focusContent = button.shouldUseWindowPopup(),
+    onKeyDown = proc(event: KeyEvent): bool =
+      button.handlePopupKeyDown(event),
   )
   button.xPopupHost = host
   if host.presentPopup():
@@ -1739,6 +1743,8 @@ protocol PopupMenuButtonEvents of ResponderEventProtocol:
       return true
 
   method keyDown(button: PopupMenuButton, event: KeyEvent): bool =
+    if button.popupOpen():
+      return button.handlePopupKeyDown(event)
     case event.key
     of keyEscape:
       let root = button.rootPopup()
