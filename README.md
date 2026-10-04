@@ -487,6 +487,26 @@ pane; relative paths use the editor's working directory. `:new` and `:vnew`
 create empty buffers in those panes. Moe mappings for these commands and
 `mode_switch config` use the same Kosmo tabs and panes.
 
+`:wq`, `:x`, and `ZZ` save and close the selected native tab; other unsaved
+tabs stay open. `:bd` accepts a buffer number or filename and removes that
+buffer from every pane, refusing unsaved changes unless you add `!`.
+Undo and Redo also work while typing, including when Input mode is forced.
+Vim's `"+` and `"*` registers use the native clipboard; on platforms with one
+clipboard, both registers share it.
+
+Kosmo advances Moe's background work from the native event loop, including
+when Git monitoring is disabled. Hook output, build output, and `:jobs` use a
+reusable Command Output tab. `:jobs!` stops running external commands.
+`:terminal`, shell commands, and manual pages open native terminal tabs.
+Kosmo loads `[Hook]` settings from `~/.config/moe/moerc.toml`; Moe's read/write
+hook rules apply to native file opens and saves too.
+
+Unsaved work is checkpointed every five seconds after changes into Kosmo's
+recovery cache and removed on a clean close. After an interrupted session,
+Kosmo opens Recovered Work when preserved copies exist. Use `:recover` to
+open that tab again. Restore brings a copy into an unsaved editor buffer as
+an undoable edit; Discard requires a second click to confirm removal.
+
 Settings changes apply to the current Kosmo instance immediately. Choose
 **Save as Default** to use the committed theme, fonts, scale, and scrolling
 choices on the next launch; **Reset** restores the last saved values. You can

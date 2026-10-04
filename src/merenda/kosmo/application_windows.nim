@@ -993,7 +993,9 @@ proc newKosmoApplication*(
       primary: true,
     )
   result.dockController = controller
-  result.xWindowLifecycle = KosmoWindowLifecycle(frontend: result.unsafeWeakRef())
+  result.xWindowLifecycle = KosmoWindowLifecycle(
+    frontend: result.unsafeWeakRef(), monitorsGitStatus: monitorsGitStatus
+  )
   nimkit.initResponder(result.xWindowLifecycle)
   discard result.xWindowLifecycle.withProtocol(KosmoWindowLifecycleDelegate)
   result.window.delegate = result.xWindowLifecycle
@@ -1153,6 +1155,19 @@ proc newKosmoApplication*(
       frontend[].dockController.editor.reloadUnmodifiedFile(path)
       for group in frontend[].dockController.groups:
         group.editorView.refresh()
+  editorView.editor.configureClipboard(
+    read = proc(selection: KosmoClipboardSelection): string =
+      nimkit.generalPasteboard().plainText(),
+    write = proc(selection: KosmoClipboardSelection, text: string): bool =
+      nimkit.generalPasteboard().replaceWithPlainText(text),
+  )
+  when not defined(merendaTests):
+    editorView.editor.configureRecovery(getCacheDir() / "kosmo" / "recovery")
+    let hooksPath = getHomeDir() / ".config" / "moe" / "moerc.toml"
+    if fileExists(hooksPath):
+      let loaded = editorView.editor.loadHooks(hooksPath)
+      if not loaded.loaded:
+        statusLabel.text = loaded.message
   if fileExists(filePath):
     discard result.dockController.activeEditorView().openFile(filePath)
   elif dirExists(filePath):
@@ -1161,15 +1176,21 @@ proc newKosmoApplication*(
     statusLabel.text = keyBindingErrors.join("; ")
   if manager.config.moeTheme.len > 0:
     discard result.setMoeTheme(manager.config.moeTheme)
+  when not defined(merendaTests):
+    if editorView.editor.recoveryEntries().len > 0:
+      discard editorView.openRecoveryDocument()
+  # Background editor work must advance even when Git decorations are disabled.
+  fileTree.workspaceFiles.connect(
+    workspacePulse, result.xWindowLifecycle, pollWorkspaceGit
+  )
+  fileTree.workspaceFiles.startMonitoring()
+  editorView.editor.gitStatusEnabled = monitorsGitStatus
   if monitorsGitStatus:
+    discard fileTree.startGitStatusMonitoring()
     result.dockController.editor.useEventDrivenGit()
     fileTree.workspaceFiles.connect(
       workspaceRepositoryDidChange, result.xWindowLifecycle, workspaceGitChanged
     )
-    fileTree.workspaceFiles.connect(
-      workspacePulse, result.xWindowLifecycle, pollWorkspaceGit
-    )
-    discard fileTree.startGitStatusMonitoring()
 
 proc newKosmoApplication*(
     app = nimkit.sharedApplication(),

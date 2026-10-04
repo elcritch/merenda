@@ -23,8 +23,8 @@ import
   ./[
     applicationassets, cliopen, config, contextpanel, filesearchpanel, filetree,
     gitdiff, inputtranslation, matterworkers, moe, moehighlighting, panedocuments,
-    quickopen, searchbar, settings, shortcutpresentation, shortcuts, terminalsearch,
-    viewersearch, workspacefiles,
+    quickopen, recovery, searchbar, settings, shortcutpresentation, shortcuts,
+    terminalsearch, viewersearch, workspacefiles,
   ]
 
 export
@@ -65,6 +65,8 @@ const
   KosmoTabIdentifierPrefix = "kosmo.buffer."
   KosmoHelpTabIdentifier* = "kosmo.help"
   KosmoConfigTabIdentifier* = "kosmo.config"
+  KosmoOutputTabIdentifier* = "kosmo.output"
+  KosmoRecoveryTabIdentifier* = "kosmo.recovery"
   KosmoTerminalIdentifierPrefix = "kosmo.terminal."
   KosmoFilesTabIdentifier* = "kosmo.sidebar.files"
   KosmoFindTabIdentifier* = "kosmo.sidebar.find"

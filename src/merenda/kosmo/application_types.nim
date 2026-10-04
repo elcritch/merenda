@@ -166,6 +166,7 @@ type
     cliServer: KosmoCliOpenServer
 
   KosmoWindowLifecycle = ref object of nimkit.Responder
+    monitorsGitStatus: bool
     frontend: WeakRef[KosmoApplication]
 
   KosmoDetachedWindowLifecycle = ref object of nimkit.Responder

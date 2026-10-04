@@ -56,6 +56,8 @@ proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
 proc openHelpDocument(view: KosmoEditorView): bool
 proc openConfigDocument(view: KosmoEditorView): bool
+proc openRecoveryDocument(view: KosmoEditorView): bool
+proc showOutputDocument(view: KosmoEditorView, text: string, keepFocus: bool): bool
 proc handleHostCommand(view: KosmoEditorView, command: KosmoHostCommand): bool
 proc activatePaneTab(
   controller: KosmoDockController,
@@ -877,6 +879,8 @@ proc refresh*(view: KosmoEditorView) =
   if view.shouldDeferInactiveRefresh():
     view.inactiveRefreshDeferred = true
     return
+  if view.isActiveEditorGroup():
+    discard view.editor.pollFrontendWork()
   if view.handleHostCommands() and not view.isActiveEditorGroup():
     return
   if view.editor.configViewerOpen():
@@ -1070,6 +1074,13 @@ proc openPaneDocument(
   document: KosmoPaneDocument,
   insertAfterSelected = false,
   preserveVisibleTabs = false,
+): bool
+
+proc openTerminal(
+  controller: KosmoDockController,
+  group: KosmoEditorGroup,
+  options: nimkit.TerminexSpawnOptions = nimkit.initTerminalSpawnOptions(),
+  insertAfterSelected = true,
 ): bool
 
 proc selectRelativePaneTab(
@@ -2800,6 +2811,71 @@ proc openConfigDocument(view: KosmoEditorView): bool =
   )
   controller.openPaneDocument(
     group, document, insertAfterSelected = true, preserveVisibleTabs = true
+  )
+
+proc showOutputDocument(view: KosmoEditorView, text: string, keepFocus: bool): bool =
+  if view.isNil or view.dockGroup.isNil or view.tabsDelegate.dockController.isNil:
+    return
+  let controller = view.tabsDelegate.dockController[]
+  let source = controller.activeGroup
+  if not keepFocus:
+    discard view.editor.focusTextWindow()
+  for group in controller.groups:
+    let document = group.documentForIdentifier(KosmoOutputTabIdentifier)
+    if not document.isNil:
+      nimkit.TextView(document.preferredFirstResponder).stringValue = text
+      if not keepFocus:
+        controller.activatePaneTab(group, document.identifier)
+      return true
+  let output = nimkit.newTextView(text)
+  output.editable = false
+  let scroll = nimkit.newScrollView(documentView = output)
+  let document = newKosmoPaneDocument(
+    KosmoOutputTabIdentifier,
+    "Command Output",
+    scroll,
+    output,
+    tooltip = "Build and command output",
+  )
+  let previous = source.selectedTabIdentifier
+  result = controller.openPaneDocument(source, document, insertAfterSelected = true)
+  if result and keepFocus:
+    controller.activatePaneTab(source, previous)
+
+proc openRecoveryDocument(view: KosmoEditorView): bool =
+  if view.isNil or view.dockGroup.isNil or view.tabsDelegate.dockController.isNil:
+    return
+  let controller = view.tabsDelegate.dockController[]
+  discard view.editor.focusTextWindow()
+  for group in controller.groups:
+    let document = group.documentForIdentifier(KosmoRecoveryTabIdentifier)
+    if not document.isNil:
+      KosmoRecoveryView(document.contentView).refresh()
+      controller.activatePaneTab(group, document.identifier)
+      return true
+  let editor = view.editor
+  let recoveryView = newKosmoRecoveryView(editor)
+  let host = controller.unsafeWeakRef()
+  recoveryView.onRestore = proc(copyPath: string): FileOpenResult =
+    result = editor.restoreRecoveryCopy(copyPath)
+    if result.loaded and not host.isNil and not host[].activeGroup.isNil:
+      let active = host[].activeGroup.editorView
+      discard active.adoptActiveBuffer()
+      let group = host[].activeGroup
+      if not group.isNil and group.editorView.selectedBufferId.isSome:
+        host[].activatePaneTab(
+          group, group.editorView.selectedBufferId.get.tabIdentifier
+        )
+      active.refresh()
+  let document = newKosmoPaneDocument(
+    KosmoRecoveryTabIdentifier,
+    "Recovered Work",
+    recoveryView,
+    preferredFirstResponder = recoveryView.preferredResponder(),
+    tooltip = "Preserved unsaved work",
+  )
+  controller.openPaneDocument(
+    controller.activeGroup, document, insertAfterSelected = true
   )
 
 proc markdownViewForBuffer(

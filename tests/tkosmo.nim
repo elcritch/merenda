@@ -14,6 +14,7 @@ import kosmo/filetree
 import kosmo/filetreeinteractions
 import kosmo/gitdiff
 import kosmo/hostcommands
+import kosmo/frontendwork
 import kosmo/lsptcp
 import kosmo/markdownactivation
 import kosmo/matterhighlighting

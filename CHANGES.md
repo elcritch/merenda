@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Update Moe to `2ad904c1` and bridge its read/write hooks, asynchronous work,
+  and targeted buffer deletion into Kosmo. Route hook/build output and `:jobs`
+  to a reusable native document, and shell/manual/terminal commands to native
+  terminal tabs. Keep background work and visible status updates running when
+  Git monitoring is disabled, and cancel/reap hook processes on editor close.
+- Keep native Undo/Redo working during ordinary and forced Input transactions.
+  Synchronize Vim clipboard registers with the native pasteboard, preserve
+  linewise puts, and stop mapping replay after an intercepted native close.
+- Make `:wq`, `:x`, and `ZZ` save and close the selected native tab without
+  shutting down Moe or rejecting unrelated unsaved tabs. Resolve `:bd` targets
+  by stable buffer number or filename and remove their native pane projections.
+- Use Moe's undoable reload and post-reload bookkeeping for native workspace
+  replacements, including refreshed EditorConfig, LSP, and conflict state.
+- Checkpoint unsaved Kosmo buffers into a host-owned recovery store. Show
+  preserved work in a native Recovered Work tab with undoable Restore and
+  confirmed Discard actions; remove live checkpoints on a clean close.
+
 - Resolve the Git diff panel's key-equivalent selector explicitly so Kosmo builds
   with Nim devel when menu and window procedures use the same name.
 
