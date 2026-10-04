@@ -29,6 +29,19 @@ proc visibleLoadedDiffTextViewCount(panel: KosmoGitDiffPanel): int =
       inc result
 
 suite "Kosmo Git diff":
+  test "panel key equivalents use the responder selector despite procedure overloads":
+    let panel = newKosmoGitDiffPanel(parseGitDiff(""))
+    defer:
+      panel.close()
+    var handlerCalls: int
+    panel.keyEquivalentHandler = proc(event: KeyEvent): bool =
+      inc handlerCalls
+      event.key == keyF2
+    check panel.performKeyEquivalentInChain(KeyEvent(key: keyF2))
+    check handlerCalls == 1
+    check not panel.performKeyEquivalentInChain(KeyEvent(key: keyF3))
+    check handlerCalls == 2
+
   test "piped Git output becomes static per-file diff sections":
     let snapshot = parseGitDiff(
       "diff --git a/src/main.nim b/src/main.nim\n" & "index 1234567..abcdef0 100644\n" &
