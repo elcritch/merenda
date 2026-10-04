@@ -51,6 +51,8 @@ type
     scroll*: PopupListScrollProc
     keyDown*: PopupListKeyProc
     tab*: PopupListTabProc
+      ## Override Tab traversal. Without a callback, key-view commands continue
+      ## along the responder chain.
 
   PopupListView* = ref object of View
     xData: PopupListData
@@ -106,6 +108,15 @@ proc close(popupList: PopupListView)
 proc scrollBy(popupList: PopupListView, delta: int)
 proc dispatchKeyDown(popupList: PopupListView, event: KeyEvent)
 
+proc forwardKeyViewCommand(
+    popupList: PopupListView, selector: CommandSelector, args: ActionArgs
+) =
+  var responder = popupList.nextResponder()
+  while not responder.isNil:
+    if responder.tryToPerform(selector, args.sender):
+      return
+    responder = responder.nextResponder()
+
 protocol DefaultPopupListDrawing of ViewDrawingProtocol:
   method drawLevel(popupList: PopupListView): ZLevel =
     PopupDrawLevel
@@ -158,14 +169,14 @@ protocol DefaultPopupListKeyCommands of KeyViewCommandProtocol:
   method insertTab(popupList: PopupListView, args: ActionArgs) =
     let tab = popupList.actions().tab
     if tab.isNil:
-      popupList.close()
+      popupList.forwardKeyViewCommand(insertTab(), args)
     else:
       tab(1)
 
   method insertBacktab(popupList: PopupListView, args: ActionArgs) =
     let tab = popupList.actions().tab
     if tab.isNil:
-      popupList.close()
+      popupList.forwardKeyViewCommand(insertBacktab(), args)
     else:
       tab(-1)
 

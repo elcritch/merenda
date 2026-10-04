@@ -772,6 +772,43 @@ suite "nimkit menus":
       check itemFillFound
       check itemTextFound
 
+  test "popup lists without a tab callback keep window key view traversal":
+    let
+      window = newWindow("Popup list tab", frame = rect(0, 0, 320, 200))
+      root = newView(frame = rect(0, 0, 320, 200))
+      previous = newView(frame = rect(8, 8, 100, 24))
+      following = newView(frame = rect(8, 72, 100, 24))
+    defer:
+      window.close()
+    var closes = 0
+    let popup = newPopupListView(
+      actions = PopupListActions(
+        close: proc() =
+          inc closes
+      ),
+      frame = rect(8, 40, 100, 24),
+    )
+    previous.acceptsFirstResponder = true
+    following.acceptsFirstResponder = true
+    for view in [previous, View(popup), following]:
+      root.addSubview(view)
+    window.setContentView(root)
+
+    for backwards in [false, true]:
+      require window.makeFirstResponder(popup)
+      let
+        modifiers: set[KeyModifier] =
+          if backwards:
+            {kmShift}
+          else:
+            {}
+        expected = if backwards: previous else: following
+      check window.dispatchKeyDown(KeyEvent(key: keyTab, modifiers: modifiers))
+      let focusAdvanced = window.firstResponder() == expected
+      check focusAdvanced
+      check expected.isFocusVisible()
+    check closes == 0
+
   test "popup list keeps transparent view backing behind rounded chrome":
     let popup = newPopupListView(frame = rect(0, 0, 120, 60))
     check popup.background() == color(0.0, 0.0, 0.0, 0.0)
@@ -972,6 +1009,56 @@ suite "nimkit menus":
     check menu.nextResponder() == target
     check root.subviews.len == 1
     check root.subviews[0] == target
+
+  test "tab and backtab dismiss context popup trees and advance restored focus":
+    for submenuOpen in [false, true]:
+      for backwards in [false, true]:
+        let
+          window = newWindow("Context tab", frame = rect(0, 0, 320, 200))
+          root = newView(frame = rect(0, 0, 320, 200))
+          previous = newView(frame = rect(8, 8, 100, 24))
+          target = newView(frame = rect(8, 40, 100, 24))
+          following = newView(frame = rect(8, 72, 100, 24))
+          menu = newMenu("Context")
+          submenu = newMenu("More")
+          more = newMenuItem("More")
+        defer:
+          window.close()
+        window.setPopupPresentation(ppInline)
+        for view in [previous, target, following]:
+          view.acceptsFirstResponder = true
+          root.addSubview(view)
+        window.setContentView(root)
+        more.submenu = submenu
+        discard submenu.addItem(newMenuItem("One"))
+        discard menu.addItem(more)
+        require window.makeFirstResponder(target)
+        let anchor = menu.popUpContextMenu(target, initPoint(5, 5))
+        require not anchor.isNil
+        require anchor.popupOpen()
+        if submenuOpen:
+          require window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+          require not anchor.activeSubmenuButton().isNil
+          require anchor.activeSubmenuButton().popupOpen()
+
+        let
+          modifiers: set[KeyModifier] =
+            if backwards:
+              {kmShift}
+            else:
+              {}
+          expected = if backwards: previous else: following
+        check window.dispatchKeyDown(KeyEvent(key: keyTab, modifiers: modifiers))
+        check not anchor.popupOpen()
+        check anchor.activeSubmenuButton().isNil
+        check anchor.superview().isNil
+        check not menu.isOpen()
+        check not submenu.isOpen()
+        check not window.hasActiveTransientSession()
+        let focusAdvanced = window.firstResponder() == expected
+        check focusAdvanced
+        check expected.isFocusVisible()
+        check root.subviews().len == 3
 
   test "view context menu waits for custom right mouse handling":
     let

@@ -17,6 +17,9 @@
   moves key focus with the open menu, and menu bar buttons draw a focus ring
   while they hold visible keyboard focus, resolving its color from the
   theme's focus ring color token like the other controls.
+- Keep Tab and Shift+Tab moving focus after combo-box and context-menu popup
+  dismissal, and preserve normal key-view traversal for popup lists without a
+  custom Tab handler.
 
 - Move reusable terminal sessions, Sigils commands, RChan snapshots, and the
   dedicated worker dispatcher into Terminex 0.4.0's optional threaded adapter.

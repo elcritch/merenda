@@ -1391,15 +1391,26 @@ proc dismissPopupAndAdvanceKeyView(button: PopupMenuButton, delta: int) =
   ## button so Tab cycles through the menu bar and, past its end, through the
   ## remaining key views of the window. A menu bar button that gains focus
   ## opens its popup, mirroring arrow navigation between menus.
+  let
+    root = button.rootPopup()
+    owner = root.ownerWindow()
   button.closePopupRoot()
-  let root = button.rootPopup()
-  let owner = root.ownerWindow()
   if owner.isNil:
     return
+  # Context-menu anchors are removed on dismissal. Continue from the restored
+  # responder instead of looking up a key view relative to the detached anchor.
+  var start = View(root)
+  if root.ownerWindow() != owner:
+    let restored = owner.firstResponder()
+    start =
+      if restored of View:
+        View(restored)
+      else:
+        nil
   if delta < 0:
-    owner.selectKeyViewPrecedingView(root)
+    owner.selectKeyViewPrecedingView(start)
   else:
-    owner.selectKeyViewFollowingView(root)
+    owner.selectKeyViewFollowingView(start)
   let next = owner.firstResponder()
   if next.isNil or not (next of PopupMenuButton):
     return
