@@ -508,20 +508,22 @@ theme.
 
 To use a Nim language server, add `nimLspCommand` to Kosmo's
 `~/.config/kosmo/config.json` and restart Kosmo. The command must be an
-absolute executable path followed by any arguments. For example, after building
-[Nimdex](https://github.com/elcritch/nimdex) from its checkout:
+absolute executable path followed by any arguments. Nimdex 0.1.2 defaults to
+`nim ic` and requires a compiler with `--genBif:on` support, plus matching
+`nifler` and `nifmake` companions beside Nim or on `PATH`. For example, build
+[Nimdex](https://github.com/elcritch/nimdex) from its checkout with that compiler:
 
 ```sh
 cd ../nimdex
 mkdir -p bin
-deps/nim-devel/bin/nim c -d:release -o:bin/nimdex src/nimdex.nim
+/absolute/path/to/bif-enabled/nim c -d:release -o:bin/nimdex src/nimdex.nim
 ```
 
 Add this field to the JSON config, using absolute paths without spaces:
 
 ```json
 {
-  "nimLspCommand": "/absolute/path/to/nimdex/bin/nimdex daemon --compiler /absolute/path/to/nimdex/deps/nim-devel/bin/nim"
+  "nimLspCommand": "/absolute/path/to/nimdex/bin/nimdex daemon --compiler /absolute/path/to/bif-enabled/nim --log-file /absolute/path/to/nimdex.log"
 }
 ```
 
@@ -530,22 +532,40 @@ Kosmo enables Moe's LSP client when this field is set. In normal mode, press
 the field or set it to an empty string to disable LSP on the next launch.
 Nimdex's `daemon` command communicates over standard input and output and stays
 attached to Kosmo; it does not need to detach itself.
+`--log-file` appends daemon stderr to the chosen file and creates missing parent
+directories. Omit it to send logs through Kosmo's LSP message log.
 
-To connect standalone Kosmo to an LSP server already listening on a TCP socket,
-use a `tcp://host:port` address in the same setting and restart Kosmo:
+To run Nimdex separately, start its persistent LSP TCP listener in another
+terminal:
+
+```sh
+/absolute/path/to/nimdex/bin/nimdex daemon --lsp-listen 9257 --compiler /absolute/path/to/bif-enabled/nim --log-file /absolute/path/to/nimdex.log
+```
+
+Set `nimLspCommand` to the listener's `tcp://host:port` address and restart Kosmo:
 
 ```json
 {
-  "nimLspCommand": "tcp://127.0.0.1:49153"
+  "nimLspCommand": "tcp://127.0.0.1:9257"
 }
 ```
 
 Hostnames, IPv4 addresses, and bracketed IPv6 addresses such as
-`tcp://[::1]:49153` are accepted. Kosmo connects in its dedicated LSP child
+`tcp://[::1]:9257` are accepted. Kosmo connects in its dedicated LSP child
 process and forwards standard LSP `Content-Length` frames in both directions.
 It does not launch the server; connection errors appear in the LSP message log,
-and the socket closes when the LSP session ends. Nimdex's `--listen` service uses
-its CLI protocol, so that port cannot be used as an LSP endpoint.
+and closing Kosmo disconnects its session while Nimdex keeps listening for the
+next connection. Nimdex serves one editor session at a time, so use a separate
+listener for each concurrently connected Kosmo window.
+Kosmo initializes each connection with its editor's project directory as the
+LSP workspace root.
+
+Nimdex binds to `127.0.0.1` by default. `--lsp-listen 0` chooses an available
+port and records it in the daemon log. For another bind address, including a
+Tailscale address, add `--lsp-host ADDRESS` and use that address in Kosmo's TCP
+URL. The server must be able to access the same project and document paths;
+TCP does not translate paths between machines. Use `--lsp-listen` for editor
+LSP; Nimdex's separate `--listen` option serves its CLI query protocol.
 
 Syntax colors arrive progressively as background workers finish small batches.
 Markdown previews display their content before fenced-code coloring finishes;

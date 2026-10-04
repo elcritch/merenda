@@ -8,6 +8,9 @@
 - Let standalone Kosmo connect to a TCP LSP endpoint by setting `nimLspCommand`
   to `tcp://host:port`, forwarding framed protocol bytes through its LSP child
   process and closing the connection when the session ends.
+- Document Nimdex 0.1.2's `--lsp-listen` setup, default `nim ic` compiler
+  requirements, and daemon logging. Initialize LSP with the editor's project
+  directory and verify reconnects to a persistent listener with fresh sessions.
 - Route menu navigation keys to the active popup before the focused panel.
   Keep up/down movement within the current menu and submenu, and move left/right
   through the visible menubar order consistently, fixing Kosmo issues #129 and #130.

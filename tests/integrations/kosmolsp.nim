@@ -8,16 +8,23 @@ import
 import sigils/threads
 import sigils/rpcs/json/jrFraming
 import merenda/kosmo/[cli, moe]
+from moepkg/lsp/worker import pathToFileUri
 
-type TcpLspFixture = object
-  listener: SocketHandle
-  expectedUri, expectedText: string
-  initialized, opened, disconnected, finished, stop: Atomic[bool]
-  failure: string
+type
+  TcpLspSession = object
+    rootUri, documentUri, text: string
+
+  TcpLspFixture = object
+    listener: SocketHandle
+    sessions: seq[TcpLspSession]
+    initialized, opened, disconnected: Atomic[int]
+    finished, stop: Atomic[bool]
+    failure: string
 
 proc serveLsp(state: ptr TcpLspFixture) {.thread.} =
   let listener = newSocket(state.listener, buffered = false)
   var client: Socket
+  var session = 0
   try:
     var parser = initJsonRpcFrameParser()
     var buffer: array[8192, char]
@@ -33,57 +40,74 @@ proc serveLsp(state: ptr TcpLspFixture) {.thread.} =
       if selectRead(readable, 20) > 0:
         if client.isNil:
           listener.accept(client)
+          parser = initJsonRpcFrameParser()
         else:
           let count = client.recv(addr buffer[0], buffer.len)
           if count <= 0:
-            state.disconnected.store(true)
-            break
-          parser.add(buffer.toOpenArray(0, count - 1).join())
-          var frame = parser.nextFrame()
-          while frame.isSome():
-            let message = parseJson(frame.get())
-            let methodName = message{"method"}.getStr()
-            var response: JsonNode
-            case methodName
-            of "initialize":
-              response =
-                %*{
-                  "jsonrpc": "2.0",
-                  "id": message["id"],
-                  "result": {
-                    "capabilities": {
-                      "textDocumentSync": 1,
-                      "experimental": {"padding": repeat('x', 32768)},
-                    }
-                  },
-                }
-              state.initialized.store(true)
-            of "textDocument/didOpen":
-              let document = message["params"]["textDocument"]
-              if document["uri"].getStr() != state.expectedUri or
-                  document["text"].getStr() != state.expectedText:
-                raise newException(
-                  ValueError,
-                  "TCP LSP didOpen mismatch: URI " & document["uri"].getStr() &
-                    " expected " & state.expectedUri & "; text length " &
-                    $document["text"].getStr().len & " expected " &
-                    $state.expectedText.len,
-                )
-              state.opened.store(true)
-            of "shutdown":
-              response = %*{"jsonrpc": "2.0", "id": message["id"], "result": nil}
-            else:
-              if message.hasKey("id"):
+            client.close()
+            client = nil
+            inc session
+            state.disconnected.store(session)
+            if session == state.sessions.len:
+              break
+          else:
+            parser.add(buffer.toOpenArray(0, count - 1).join())
+            var frame = parser.nextFrame()
+            while frame.isSome():
+              let message = parseJson(frame.get())
+              let methodName = message{"method"}.getStr()
+              var response: JsonNode
+              case methodName
+              of "initialize":
+                if message["params"]["rootUri"].getStr() !=
+                    state.sessions[session].rootUri:
+                  raise newException(
+                    ValueError,
+                    "TCP LSP initialize workspace mismatch: " &
+                      message["params"]["rootUri"].getStr() & " expected " &
+                      state.sessions[session].rootUri,
+                  )
+                response =
+                  %*{
+                    "jsonrpc": "2.0",
+                    "id": message["id"],
+                    "result": {
+                      "capabilities": {
+                        "textDocumentSync":
+                          {"openClose": true, "change": 1, "save": true},
+                        "positionEncoding": "utf-16",
+                        "experimental": {"padding": repeat('x', 32768)},
+                      },
+                      "serverInfo": {"name": "nimdex", "version": "0.1.2"},
+                    },
+                  }
+                state.initialized.store(session + 1)
+              of "textDocument/didOpen":
+                let document = message["params"]["textDocument"]
+                let expected = state.sessions[session]
+                if document["uri"].getStr() != expected.documentUri or
+                    document["text"].getStr() != expected.text:
+                  raise newException(
+                    ValueError,
+                    "TCP LSP didOpen mismatch: URI " & document["uri"].getStr() &
+                      " expected " & expected.documentUri & "; text length " &
+                      $document["text"].getStr().len & " expected " & $expected.text.len,
+                  )
+                state.opened.store(session + 1)
+              of "shutdown":
                 response = %*{"jsonrpc": "2.0", "id": message["id"], "result": nil}
-            if not response.isNil:
-              let bytes = frameJsonRpcMessage($response)
-              # Split framing headers and send more than one transport buffer.
-              var offset = 0
-              while offset < bytes.len:
-                let next = min(offset + 512, bytes.len)
-                client.send(bytes[offset ..< next])
-                offset = next
-            frame = parser.nextFrame()
+              else:
+                if message.hasKey("id"):
+                  response = %*{"jsonrpc": "2.0", "id": message["id"], "result": nil}
+              if not response.isNil:
+                let bytes = frameJsonRpcMessage($response)
+                # Split framing headers and send more than one transport buffer.
+                var offset = 0
+                while offset < bytes.len:
+                  let next = min(offset + 512, bytes.len)
+                  client.send(bytes[offset ..< next])
+                  offset = next
+              frame = parser.nextFrame()
   except CatchableError as error:
     state.failure = error.msg
   finally:
@@ -116,19 +140,25 @@ proc acceptClient(listener: Socket): Socket =
       sleep(5)
 
 suite "Kosmo TCP LSP integration":
-  test "initializes Moe over TCP opens a document and shuts down the connection":
+  test "reconnects Moe with fresh workspaces and documents on a persistent listener":
     let
-      root = createTempDir("merenda-kosmo-tcp-client-", "")
-      path = root / "main.nim"
-      text = "const answer* = 42\n# " & repeat('a', 32768)
+      root = expandFilename(createTempDir("merenda-kosmo-tcp-client-", ""))
       listener = newSocket(buffered = false)
       previousLauncher = kosmoLspLauncherExecutable
+      previousDirectory = getCurrentDir()
     listener.bindAddr(Port(0), "127.0.0.1")
     listener.listen()
-    writeFile(path, text)
-    var state = TcpLspFixture(
-      listener: listener.getFd(), expectedUri: "file://" & path, expectedText: text
-    )
+    var state = TcpLspFixture(listener: listener.getFd())
+    for session in 0 .. 1:
+      let
+        directory = root / $session
+        path = directory / "main.nim"
+        text = "const answer" & $session & "* = 42\n# " & repeat('a', 32768)
+      createDir(directory)
+      writeFile(path, text)
+      state.sessions.add TcpLspSession(
+        rootUri: pathToFileUri(directory), documentUri: pathToFileUri(path), text: text
+      )
     var serverThread: Thread[ptr TcpLspFixture]
     var serverJoined: bool
     createThread(serverThread, serveLsp, addr state)
@@ -143,27 +173,34 @@ suite "Kosmo TCP LSP integration":
       listener.close()
       kosmoLspLauncherExecutable = previousLauncher
       removeDir(root)
-    editor = newKosmoEditor(
-      workingDirectory = root,
-      nimLspCommand = "tcp://127.0.0.1:" & $listener.getLocalAddr()[1],
-    )
-    require editor.openFile(path).loaded
     var render = newRenderBuffer(48, 12)
     let deadline = getMonoTime() + initDuration(seconds = 60)
-    while not state.opened.load() and not state.finished.load() and
-        getMonoTime() < deadline:
-      discard getCurrentSigilThread().pollAll(NonBlocking)
-      editor.render(render)
-      sleep(5)
-    check state.initialized.load()
-    check state.opened.load()
-    editor.close()
-    let closeDeadline = getMonoTime() + initDuration(seconds = 10)
-    while not state.disconnected.load() and not state.finished.load() and
-        getMonoTime() < closeDeadline:
-      discard getCurrentSigilThread().pollAll(NonBlocking)
-      sleep(5)
-    check state.disconnected.load()
+    for session in 0 ..< state.sessions.len:
+      let directory = root / $session
+      editor = newKosmoEditor(
+        workingDirectory = directory,
+        nimLspCommand = "tcp://127.0.0.1:" & $listener.getLocalAddr()[1],
+      )
+      check getCurrentDir() == previousDirectory
+      require editor.openFile(directory / "main.nim").loaded
+      while state.opened.load() <= session and not state.finished.load() and
+          getMonoTime() < deadline:
+        discard getCurrentSigilThread().pollAll(NonBlocking)
+        editor.render(render)
+        sleep(5)
+      if state.finished.load():
+        joinThread(serverThread)
+        serverJoined = true
+        check state.failure == ""
+      require state.initialized.load() == session + 1
+      require state.opened.load() == session + 1
+      editor.close()
+      editor = nil
+      while state.disconnected.load() <= session and not state.finished.load() and
+          getMonoTime() < deadline:
+        discard getCurrentSigilThread().pollAll(NonBlocking)
+        sleep(5)
+      require state.disconnected.load() == session + 1
     state.stop.store(true)
     joinThread(serverThread)
     serverJoined = true

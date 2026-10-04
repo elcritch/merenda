@@ -735,7 +735,6 @@ proc newKosmoEditor*(
   config.highlight.backend = hbBuiltin
   let grammarState = kosmoMatterGrammarState()
   result = KosmoEditor(
-    editor: newEditor(config),
     temporaryBufferIds: initTable[string, BufferId](),
     nimLspCommand: nimLspCommand,
     textMateGrammars: grammarState.grammars,
@@ -748,7 +747,10 @@ proc newKosmoEditor*(
     ),
     matterLineStateVersions: initTable[BufferId, int](),
   )
-  result.workingDirectory = workingDirectory
+  result.`workingDirectory=`(workingDirectory)
+  # Moe captures the LSP workspace root during construction.
+  result.inWorkingDirectory:
+    result.editor = newEditor(config)
   result.editor.hostPopupMenus = true
   result.editor.hostCommandFilter = proc(e: Editor, command: ParsedCommand): bool =
     # Kosmo owns buffer visibility across panes, so it must perform :q's
