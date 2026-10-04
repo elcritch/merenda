@@ -11,6 +11,12 @@
 - Route menu navigation keys to the active popup before the focused panel.
   Keep up/down movement within the current menu and submenu, and move left/right
   through the visible menubar order consistently, fixing Kosmo issues #129 and #130.
+  Tab and Shift+Tab close the active popup and cycle key focus through the
+  menu bar buttons, opening each menu as focus reaches it, and continue with
+  the remaining key views past the menu bar. Arrow navigation between menus
+  moves key focus with the open menu, and menu bar buttons draw a focus ring
+  while they hold visible keyboard focus, resolving its color from the
+  theme's focus ring color token like the other controls.
 
 - Move reusable terminal sessions, Sigils commands, RChan snapshots, and the
   dedicated worker dispatcher into Terminex 0.4.0's optional threaded adapter.

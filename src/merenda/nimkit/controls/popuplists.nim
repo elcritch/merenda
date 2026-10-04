@@ -23,6 +23,7 @@ type
   PopupListScrollProc* = proc(delta: int) {.closure.}
   PopupListKeyProc* = proc(event: KeyEvent) {.closure.}
   PopupListActionProc* = proc() {.closure.}
+  PopupListTabProc* = proc(delta: int) {.closure.}
 
   PopupListData* = object
     itemCount*: PopupListCountProc
@@ -49,6 +50,7 @@ type
     close*: PopupListActionProc
     scroll*: PopupListScrollProc
     keyDown*: PopupListKeyProc
+    tab*: PopupListTabProc
 
   PopupListView* = ref object of View
     xData: PopupListData
@@ -151,6 +153,21 @@ protocol DefaultPopupListEvents of ResponderEventProtocol:
   method keyDown(popupList: PopupListView, event: KeyEvent): bool =
     popupList.dispatchKeyDown(event)
     result = true
+
+protocol DefaultPopupListKeyCommands of KeyViewCommandProtocol:
+  method insertTab(popupList: PopupListView, args: ActionArgs) =
+    let tab = popupList.actions().tab
+    if tab.isNil:
+      popupList.close()
+    else:
+      tab(1)
+
+  method insertBacktab(popupList: PopupListView, args: ActionArgs) =
+    let tab = popupList.actions().tab
+    if tab.isNil:
+      popupList.close()
+    else:
+      tab(-1)
 
 protocol DefaultPopupListAccessibility of AccessibilityProtocol:
   method accessibilityRole(popupList: PopupListView): AccessibilityRole =
@@ -549,6 +566,7 @@ proc initPopupListViewFields*(
   popupList.acceptsFirstResponder = true
   discard popupList.withProtocol(DefaultPopupListDrawing)
   discard popupList.withProtocol(DefaultPopupListEvents)
+  discard popupList.withProtocol(DefaultPopupListKeyCommands)
   discard popupList.withProtocol(DefaultPopupListAccessibility)
 
 proc newPopupListView*(

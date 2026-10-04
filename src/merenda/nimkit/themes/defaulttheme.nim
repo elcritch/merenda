@@ -869,6 +869,7 @@ proc buildAquaTheme(): ThemeBuilder =
   result[srMenuBarItem, StyleCornerRadius] = 4.0
   result[srMenuBarItem, StyleTextInsets] = insets(3.0, 10.0)
   result[srMenuBarItem, StyleMinimumSize] = initSize(44.0, 24.0)
+  result[srMenuBarItem, StyleFocusRingColor] = styleToken("focus.ring.color")
 
   result.addRoleRule(
     srTab,

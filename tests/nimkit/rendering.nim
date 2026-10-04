@@ -1323,6 +1323,57 @@ suite "nimkit rendering":
 
     check focusRingFound
 
+  test "buildRenders hides the menu bar ring while the menu is open":
+    let
+      window = newWindow("Menu bar ring", frame = rect(0, 0, 220, 120))
+      root = newView(frame = rect(0, 0, 220, 120))
+      menu = newMenu("Bar")
+      first = newMenu("First")
+      item = newMenuItem("First")
+      ringColor = color(0.86, 0.11, 0.36, 0.90)
+
+    defer:
+      window.close()
+
+    item.submenu = first
+    discard first.addItem(newMenuItem("One"))
+    discard menu.addItem(item)
+    let menuBar = newMenuBar(menu, rect(0, 0, 220, 28))
+    root.addSubview(menuBar)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+
+    require menuBar.subviews().len == 1
+    let button = PopupMenuButton(menuBar.subviews()[0])
+
+    var builder = initThemeBuilder(initTheme())
+    builder[srMenuBarItem, StyleFocusRingColor] = ringColor
+    let appearance = initAppearance(builder.finish())
+    window.setAppearance(appearance)
+
+    check window.makeFirstResponder(button, focusVisible = true)
+    check button.isFocusVisible
+    check not button.popupOpen()
+
+    let closedList = buildRenders(root, appearance)[DefaultDrawLevel]
+    var ringFound = false
+    for node in closedList.resolvedNodes():
+      if node.kind == nkRectangle and node.stroke.fill.kind == flColor and
+          node.stroke.fill.color == ringColor.rgba:
+        ringFound = true
+    check ringFound
+
+    button.openPopup()
+    check button.popupOpen()
+
+    let openList = buildRenders(root, appearance)[DefaultDrawLevel]
+    var ringWhileOpen = false
+    for node in openList.resolvedNodes():
+      if node.kind == nkRectangle and node.stroke.fill.kind == flColor and
+          node.stroke.fill.color == ringColor.rgba:
+        ringWhileOpen = true
+    check not ringWhileOpen
+
   test "buildRenders uses theme metrics for checkbox and radio buttons":
     let
       root = newView(frame = rect(0, 0, 220, 110))
