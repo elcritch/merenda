@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Resolve the Git diff panel's key-equivalent selector explicitly so Kosmo builds
+  with Nim devel when menu and window procedures use the same name.
+
 - Let standalone Kosmo connect to a TCP LSP endpoint by setting `nimLspCommand`
   to `tcp://host:port`, forwarding framed protocol bytes through its LSP child
   process and closing the connection when the session ends.
