@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Let the todo table example fill the available window space between its input
+  and bottom controls.
+
 - Draw checkbox focus rings outside the indicator in every theme, keeping the
   checkmark and checkbox interior clear without increasing layout spacing.
 
