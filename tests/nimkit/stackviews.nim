@@ -1,9 +1,14 @@
 import std/unittest
 
 import merenda/nimkit
+from merenda/nimkit/view/viewgeometry import setFrameFromLayout
 
-type FixedIntrinsicView = ref object of View
-  naturalSize: Size
+type
+  FixedIntrinsicView = ref object of View
+    naturalSize: Size
+
+  CheckBoxRowView = ref object of View
+    checkBox: Button
 
 protocol FixedIntrinsicLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: FixedIntrinsicView): IntrinsicSize =
@@ -16,7 +21,61 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result.autoresizingMaskConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
 
+protocol CheckBoxRowLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(row: CheckBoxRowView): IntrinsicSize =
+    let size = row.checkBox.sizeThatFits()
+    initIntrinsicSize(size.width, max(size.height, 24.0'f32))
+
+  method layoutSubviews(row: CheckBoxRowView) =
+    row.checkBox.setFrameFromLayout(row.bounds())
+
+proc newCheckBoxRow(title: string): CheckBoxRowView =
+  result = CheckBoxRowView(checkBox: newCheckBox(title))
+  initViewFields(result)
+  result.setHuggingPriority(LayoutPriorityRequired, laVertical)
+  result.setCompressionPriority(LayoutPriorityRequired, laVertical)
+  discard result.withProtocol(CheckBoxRowLayout)
+  result.addSubview(result.checkBox)
+
 suite "nimkit stack views":
+  test "container-owned checkbox frames settle after resizing and reordering":
+    let
+      root = newView(frame = rect(0, 0, 420, 421))
+      stack = newStackView(laVertical)
+      first = newCheckBoxRow("Write release notes")
+      second = newCheckBoxRow("Tag v0.4.0")
+      third = newCheckBoxRow("Try the demo")
+
+    stack.addArrangedSubview(first, second, third)
+    root.addSubview(stack)
+    stack.pinEdges(
+      toGuide = root.contentLayoutGuide(insets(28.0, 28.0, 0.0, 28.0)),
+      edges = {leLeft, leTop, leRight},
+    )
+
+    template checkSettled() =
+      root.layoutSubtreeIfNeeded()
+      check root.layoutFeedbackCycles() == 0
+      check not root.layoutFeedbackBlocked()
+      for child in stack.arrangedSubviews:
+        let row = CheckBoxRowView(child)
+        check row.frame.size.width == root.bounds.size.width - 56.0'f32
+        check row.checkBox.frame == row.bounds
+      root.finishDisplaySubtree()
+      check not root.needsDisplayUpdateInSubtree()
+      let generation = root.layoutGeneration()
+      root.layoutSubtreeIfNeeded()
+      check root.layoutGeneration() == generation
+
+    checkSettled()
+    root.frame = rect(0, 0, 520, 421)
+    checkSettled()
+    stack.insertArrangedSubview(first, 2)
+    checkSettled()
+    check first.frame.origin.y > third.frame.origin.y
+    second.removeFromSuperview()
+    checkSettled()
+
   test "horizontal stack intrinsic size sums widths and spacing with insets":
     let
       stack = newStackView(laHorizontal, frame = rect(0, 0, 1, 1))

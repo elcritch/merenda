@@ -1,6 +1,7 @@
 import std/[algorithm, strutils]
 
 import merenda/nimkit
+from merenda/nimkit/view/viewgeometry import setFrameFromLayout
 
 import sigils/selectors
 
@@ -25,7 +26,7 @@ protocol TodoItemLayout of ViewLayoutProtocol:
 
   method layoutSubviews(item: TodoItemView) =
     if not item.isNil and not item.checkBox.isNil:
-      item.checkBox.frame = item.bounds()
+      item.checkBox.setFrameFromLayout(item.bounds())
 
 protocol TodoItemMouseHitPolicy of MouseHitPolicyProtocol:
   method mouseHitPolicy(item: TodoItemView, args: MouseHitPolicyArgs): CellHitPolicy =

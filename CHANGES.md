@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Stop repeated layout feedback in the draggable todo example by applying
+  checkbox frames as container layout output.
+
 - Keep Markdown parsing and streamed syntax highlighting working under `nim ic`
   by using consistent Variant type IDs for threaded worker payloads.
 
