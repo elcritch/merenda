@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Preserve Tekton inspector edits under `nim ic`, including string, boolean,
+  color, geometry, and invalid text payloads in the resource document.
+
 - Update Moe to `2ad904c1` and bridge its read/write hooks, asynchronous work,
   and targeted buffer deletion into Kosmo. Route hook/build output and `:jobs`
   to a reusable native document, and shell/manual/terminal commands to native

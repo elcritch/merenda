@@ -1186,13 +1186,12 @@ proc commitPropertyText*(
       else:
         {preferred.kind}
     parsed = text.parseResourceValue(acceptedKinds, preferred)
+  # Commit the payload before transferring it into the returned parse result.
+  let edit = document.setViewProperty(
+    viewId, resourceProperty(name, parsed.value), actionName = "Change " & name
+  )
   result = ResourcePropertyEditResult(
-    parsed: parsed.parsed,
-    value: parsed.value,
-    message: parsed.message,
-    edit: document.setViewProperty(
-      viewId, resourceProperty(name, parsed.value), actionName = "Change " & name
-    ),
+    parsed: parsed.parsed, value: parsed.value, message: parsed.message, edit: edit
   )
   if result.edit.applied:
     editor.synchronize()
