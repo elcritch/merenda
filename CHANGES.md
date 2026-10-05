@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep Markdown parsing and streamed syntax highlighting working under `nim ic`
+  by using consistent Variant type IDs for threaded worker payloads.
+
 - Preserve Tekton inspector edits under `nim ic`, including string, boolean,
   color, geometry, and invalid text payloads in the resource document.
 
