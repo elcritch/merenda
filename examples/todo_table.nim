@@ -186,9 +186,9 @@ buttonRow.distribution = svdFillEqually
 inputRow.addArrangedSubview(input, addButton)
 buttonRow.addArrangedSubview(clearButton)
 
-layout.addArrangedSubview(title, inputRow)
-layout.addArrangedSubview(table, svspFillAvailableSpace)
-layout.addArrangedSubview(buttonRow, status)
+layout.addArrangedSubview(
+  title, inputRow, (table, svspFillAvailableSpace), buttonRow, status
+)
 
 inputRow.setHuggingPriority(LayoutPriorityHigh, laVertical)
 buttonRow.setHuggingPriority(LayoutPriorityHigh, laVertical)

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Allow `addArrangedSubview` to mix views and `(view, sizingPolicy)` pairs in
+  one call.
+
 - Let the todo table example fill the available window space between its input
   and bottom controls.
 

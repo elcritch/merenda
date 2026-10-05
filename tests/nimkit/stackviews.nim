@@ -205,6 +205,61 @@ suite "nimkit stack views":
     check title.frame() == rect(40.0, 0.0, 40.0, 20.0)
     check content.frame() == rect(0.0, 28.0, 120.0, 72.0)
 
+  test "mixed arranged subviews preserve order and apply per-view sizing":
+    let
+      stack = newStackView(laVertical, frame = rect(0, 0, 120, 100))
+      title = newFixedIntrinsicView(40, 20)
+      content = newFixedIntrinsicView(40, 10)
+      footer = newFixedIntrinsicView(40, 10)
+
+    stack.spacing = 8.0
+    stack.alignment = svaCenter
+    stack.addArrangedSubview(title, (content, svspFillAvailableSpace), footer)
+    stack.layoutSubtreeIfNeeded()
+
+    check stack.arrangedSubviews == @[View(title), View(content), View(footer)]
+    check stack.arrangedSubviewSizingPolicy(title) == svspAutomatic
+    check stack.arrangedSubviewSizingPolicy(content) == svspFillAvailableSpace
+    check stack.arrangedSubviewSizingPolicy(footer) == svspAutomatic
+    check title.frame == rect(40, 0, 40, 20)
+    check content.frame == rect(0, 28, 120, 54)
+    check footer.frame == rect(40, 90, 40, 10)
+
+  test "mixed arranged subview arguments evaluate once and skip nil views":
+    let stack = newStackView(laVertical)
+    var evaluations: seq[string]
+
+    proc target(): StackView =
+      evaluations.add "stack"
+      stack
+
+    proc child(name: string): View =
+      evaluations.add name
+      newView()
+
+    target().addArrangedSubview(
+      child("first"),
+      nil,
+      (child("filled"), svspFillAvailableSpace),
+      (nil, svspFillAvailableWidth),
+      child("last"),
+    )
+
+    check evaluations == @["stack", "first", "filled", "last"]
+    check stack.arrangedSubviews.len == 3
+    check stack.arrangedSubviewSizingPolicy(stack.arrangedSubviews[1]) ==
+      svspFillAvailableSpace
+
+    # The existing collection and explicit-policy overloads stay usable.
+    let
+      plain = newView()
+      explicit = newView()
+    stack.addArrangedSubview(@[plain])
+    stack.addArrangedSubview(explicit, svspFillAvailableWidth)
+    check stack.arrangedSubviews[^2] == plain
+    check stack.arrangedSubviews[^1] == explicit
+    check stack.arrangedSubviewSizingPolicy(explicit) == svspFillAvailableWidth
+
   test "equal spacing distribution keeps natural sizes and expands gaps":
     let
       stack = newStackView(laHorizontal, frame = rect(0, 0, 100, 24))

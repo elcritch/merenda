@@ -335,6 +335,20 @@ callback. Text layout signals remain observable, but container-owned text views
 can disable propagation of intrinsic-size changes; `TextEditor` receives the
 semantic text/layout signals and schedules its own layout directly.
 
+Stack views can mix ordinary views and per-view sizing in one call:
+
+```nim
+layout.addArrangedSubview(
+  title, inputRow, (table, svspFillAvailableSpace), buttonRow, status
+)
+```
+
+Plain views use automatic sizing. A `(view, sizingPolicy)` pair applies that
+policy to its view; the table above fills the remaining stack space. Arguments
+are evaluated once, retain their order, and skip nil views. Existing single-view,
+view-collection, and explicit `addArrangedSubview(view, sizingPolicy)` calls
+remain available.
+
 ## Feedback Diagnostics
 
 NimKit does not retry arbitrary layout callbacks within one transaction. If a
