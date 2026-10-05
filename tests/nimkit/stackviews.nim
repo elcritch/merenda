@@ -1,7 +1,6 @@
 import std/unittest
 
 import merenda/nimkit
-from merenda/nimkit/view/viewgeometry import setFrameFromLayout
 
 type
   FixedIntrinsicView = ref object of View
@@ -27,7 +26,7 @@ protocol CheckBoxRowLayout of ViewLayoutProtocol:
     initIntrinsicSize(size.width, max(size.height, 24.0'f32))
 
   method layoutSubviews(row: CheckBoxRowView) =
-    row.checkBox.setFrameFromLayout(row.bounds())
+    row.checkBox.frame = row.bounds()
 
 proc newCheckBoxRow(title: string): CheckBoxRowView =
   result = CheckBoxRowView(checkBox: newCheckBox(title))
@@ -38,7 +37,7 @@ proc newCheckBoxRow(title: string): CheckBoxRowView =
   result.addSubview(result.checkBox)
 
 suite "nimkit stack views":
-  test "container-owned checkbox frames settle after resizing and reordering":
+  test "frame assignments in row layout settle after resizing and reordering":
     let
       root = newView(frame = rect(0, 0, 420, 421))
       stack = newStackView(laVertical)

@@ -306,12 +306,19 @@ without recursively rendering or losing it when the current request is cleared.
 The important feedback-loop rule is that authored input, solver output, and
 container output are different operations:
 
-- `view.frame = ...` is an authored change. It invalidates layout inputs,
-  updates autoresizing reference geometry, and emits geometry changes.
+- In `layoutSubviews` and `layout`, use normal assignments such as
+  `child.frame = container.bounds()`. Assignments to descendants of the view
+  whose callback is running apply container layout output: they update geometry,
+  schedule child layout and drawing, and emit geometry changes without feeding
+  the computed frame back into the ancestor's constraint inputs.
+- Outside those callbacks, `view.frame = ...` is an authored change. Assignments
+  to self, ancestors, or unrelated views during a callback are also authored
+  changes. These invalidate layout inputs and preserve follow-up transactions.
 - Solver frame application updates solved geometry without treating it as a new
   authored edit.
-- `setFrameFromLayout` applies a container-owned child frame. It updates visible
-  geometry and display state without invalidating the container's inputs.
+- `setFrameFromLayout` remains available to internal containers that need to
+  apply layout output outside the normal callbacks. Custom views using the
+  callbacks do not need to import this helper.
 - `setHiddenFromLayout` and `setBoundsOriginFromLayout` provide the same
   ownership rule for computed visibility and scroll offsets.
 

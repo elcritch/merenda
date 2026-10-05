@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Let custom layout callbacks assign descendant frames with the ordinary `frame`
+  setter without creating layout feedback. Changes outside layout, or to self,
+  ancestors, and unrelated views, still invalidate layout normally.
+
 - Stop repeated layout feedback in the draggable todo example by applying
   checkbox frames as container layout output.
 

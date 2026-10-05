@@ -19,6 +19,16 @@ type
   LayoutSpyView = ref object of View
     events: seq[string]
 
+  FrameAssignmentPhase = enum
+    fapUpdateConstraints
+    fapLayoutSubviews
+    fapLayout
+
+  FrameAssigningView = ref object of View
+    frameTarget: BackRef[View]
+    requestedFrame: Rect
+    assignmentPhase: FrameAssignmentPhase
+
   LayoutInvalidatingView = ref object of View
     layoutCount: int
     target: View
@@ -103,6 +113,24 @@ protocol LayoutSpyHooks of ViewLayoutProtocol:
   method layout(spy: LayoutSpyView) =
     spy.events.add "layout"
 
+proc assignFrame(spy: FrameAssigningView, phase: FrameAssignmentPhase) =
+  if spy.assignmentPhase != phase:
+    return
+  let target = spy.frameTarget.target
+  if not target.isNil:
+    spy.frameTarget.clear()
+    target.frame = spy.requestedFrame
+
+protocol FrameAssigningHooks of ViewLayoutProtocol:
+  method updateConstraints(spy: FrameAssigningView) =
+    spy.assignFrame(fapUpdateConstraints)
+
+  method layoutSubviews(spy: FrameAssigningView) =
+    spy.assignFrame(fapLayoutSubviews)
+
+  method layout(spy: FrameAssigningView) =
+    spy.assignFrame(fapLayout)
+
 protocol LayoutInvalidatingHooks of ViewLayoutProtocol:
   method layout(spy: LayoutInvalidatingView) =
     inc spy.layoutCount
@@ -165,6 +193,11 @@ proc newLayoutSpyView(frame: Rect): LayoutSpyView =
   result = LayoutSpyView()
   initViewFields(result, frame)
   discard result.withProtocol(LayoutSpyHooks)
+
+proc newFrameAssigningView(phase = fapLayoutSubviews): FrameAssigningView =
+  result = FrameAssigningView(assignmentPhase: phase)
+  initViewFields(result, rect(0, 0, 200, 160))
+  discard result.withProtocol(FrameAssigningHooks)
 
 proc newLayoutInvalidatingView(
     frame: Rect, target: View, invalidatesTarget = true
@@ -470,6 +503,90 @@ suite "nimkit views":
     check root.needsLayout
     root.finishDisplaySubtree()
     check not root.needsDisplay
+
+  test "frame assignments to descendants are output in both layout hooks":
+    for phase in [fapLayoutSubviews, fapLayout]:
+      let
+        root = newFrameAssigningView(phase)
+        parent = newView(frame = rect(0, 0, 100, 80))
+        child = newLayoutSpyView(rect(0, 0, 40, 20))
+      child.bounds = rect(5, 7, 40, 20)
+      parent.addSubview(child)
+      root.addSubview(parent)
+      root.layoutSubtreeIfNeeded()
+      root.finishDisplaySubtree()
+      child.events.setLen(0)
+      let generation = root.layoutInputGeneration()
+
+      root.frameTarget.target = View(child)
+      root.requestedFrame = rect(13, 17, 60, 25)
+      root.setNeedsLayout()
+      root.layoutSubtreeIfNeeded()
+
+      check child.frame == root.requestedFrame
+      check child.bounds == rect(5, 7, 60, 25)
+      check child.events == @["layoutSubviews", "layout"]
+      check child.needsDisplay
+      check root.layoutInputGeneration() == generation
+      check root.layoutFeedbackCycles() == 0
+      root.finishDisplaySubtree()
+      check not root.needsDisplayUpdateInSubtree()
+
+      # The same property assignment outside the callback is an input edit.
+      child.frame = rect(15, 19, 65, 30)
+      check root.needsUpdateConstraints
+      root.layoutSubtreeIfNeeded()
+      check root.layoutInputGeneration() == generation + 1
+
+  test "frame assignments to self ancestors and other views remain input edits":
+    for relation in ["self", "ancestor", "sibling", "other root"]:
+      let
+        root = newView(frame = rect(0, 0, 300, 240))
+        writer = newFrameAssigningView()
+        sibling = newView(frame = rect(0, 180, 40, 20))
+        otherRoot = newView(frame = rect(0, 0, 100, 80))
+      root.addSubview(writer)
+      root.addSubview(sibling)
+      root.layoutSubtreeIfNeeded()
+      otherRoot.layoutSubtreeIfNeeded()
+      let target =
+        case relation
+        of "self":
+          View(writer)
+        of "ancestor":
+          root
+        of "sibling":
+          sibling
+        else:
+          otherRoot
+      let revision = target.xLayoutInputRevision
+      writer.frameTarget.target = target
+      writer.requestedFrame = rect(
+        target.frame.origin,
+        initSize(target.frame.size.width + 10.0'f32, target.frame.size.height),
+      )
+      writer.setNeedsLayout()
+      root.layoutSubtreeIfNeeded()
+
+      check target.xLayoutInputRevision > revision
+      check target.needsUpdateConstraints
+      if target != otherRoot:
+        check root.layoutFeedbackCycles() == 1
+
+  test "frame assignments during constraint updates remain input edits":
+    let
+      root = newFrameAssigningView(fapUpdateConstraints)
+      child = newView(frame = rect(0, 0, 40, 20))
+    root.addSubview(child)
+    root.layoutSubtreeIfNeeded()
+    let revision = child.xLayoutInputRevision
+    root.frameTarget.target = child
+    root.requestedFrame = rect(10, 15, 60, 25)
+    root.setNeedsUpdateConstraints()
+    root.layoutSubtreeIfNeeded()
+
+    check child.xLayoutInputRevision > revision
+    check child.frame == root.requestedFrame
 
   test "blocked layout consistently suppresses descendant callbacks":
     let
