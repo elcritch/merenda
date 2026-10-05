@@ -249,6 +249,52 @@ suite "NimKit OutlineView":
     check disclosureShellFound
     check childTextFound
 
+  test "changing outline indentation redraws nested text and disclosure targets":
+    let outlineView = newOutlineView(frame = rect(10, 20, 220, 140))
+    outlineView.showsHeader = false
+    outlineView.outlineItems = [
+      initOutlineItem("root", "Root", expandable = true),
+      initOutlineItem("child", "Child", parentIdentifier = "root", expandable = true),
+      initOutlineItem(
+        "grandchild", "Grandchild", parentIdentifier = "child", expandable = true
+      ),
+      initOutlineItem("leaf", "Leaf", parentIdentifier = "grandchild"),
+    ]
+    for identifier in ["root", "child", "grandchild"]:
+      outlineView.expandItem(identifier)
+    outlineView.selectedItemIdentifiers = ["child"]
+    check outlineView.indentationPerLevel == 16.0'f32
+
+    for indentation in [16.0'f32, 8.0'f32, 0.0'f32, -2.0'f32]:
+      outlineView.indentationPerLevel = indentation
+      let spacing = max(indentation, 0.0'f32)
+      check outlineView.indentationPerLevel == spacing
+      check outlineView.selectedItemIdentifiers == @["child"]
+      check outlineView.rowCount == 4
+      let list = buildRenders(outlineView)[DefaultDrawLevel]
+      for row in 0 ..< outlineView.rowCount:
+        let
+          item = outlineView.itemAtRow(row)
+          rowRect = TableView(outlineView).rowItemRect(row)
+          textX = outlineView.rectToWindow(rowRect).x + row.float32 * spacing + 24.0'f32
+        var textFound = false
+        for node in list.resolvedNodes():
+          if node.kind == nkText and node.renderedText() == item.title:
+            textFound = true
+            check abs(node.screenBox.x - textX) < 0.01'f32
+        check textFound
+        if item.expandable:
+          let disclosure = outlineView.disclosureRectForRow(row)
+          check disclosure.x == rowRect.x + row.float32 * spacing + 4.0'f32
+          let hit = outlineView.disclosureHitTest(
+            initPoint(
+              disclosure.x + disclosure.w * 0.5'f32,
+              disclosure.y + disclosure.h * 0.5'f32,
+            )
+          )
+          check hit.row == row
+          check hit.item.identifier == item.identifier
+
   test "outline item decorations render colored trailing badges":
     let
       decorationColor = color(0.82, 0.64, 0.24, 1.0)
@@ -297,24 +343,27 @@ suite "NimKit OutlineView":
     ]
     outlineView.expandItem("root")
 
-    let list = buildRenders(outlineView)[DefaultDrawLevel]
-    var
-      titleFound = false
-      badgeFound = false
-    for node in list.resolvedNodes():
-      if node.kind == nkText and node.renderedText() == "changed.nim":
-        titleFound = true
-        check node.screenBox.x >= 40.0'f32
-      if node.kind == nkText and node.renderedText() == "M":
-        badgeFound = true
-        let rowOrigin =
+    for indentation in [16.0'f32, 8.0'f32, 0.0'f32]:
+      outlineView.indentationPerLevel = indentation
+      let
+        list = buildRenders(outlineView)[DefaultDrawLevel]
+        rowOrigin =
           outlineView.rectToWindow(TableView(outlineView).rowItemRect(1)).origin.x
-        check abs(
-          node.screenBox.x + node.screenBox.w * 0.5'f32 - (rowOrigin + 18.0'f32)
-        ) < 0.01'f32
+      var
+        titleFound = false
+        badgeFound = false
+      for node in list.resolvedNodes():
+        if node.kind == nkText and node.renderedText() == "changed.nim":
+          titleFound = true
+          check node.screenBox.x >= rowOrigin + indentation + 24.0'f32
+        if node.kind == nkText and node.renderedText() == "M":
+          badgeFound = true
+          let badgeCenter = rowOrigin + (indentation + 20.0'f32) * 0.5'f32
+          check abs(node.screenBox.x + node.screenBox.w * 0.5'f32 - badgeCenter) <
+            0.01'f32
 
-    check titleFound
-    check badgeFound
+      check titleFound
+      check badgeFound
 
   test "outline column can be replaced and remains a table column":
     let
@@ -552,6 +601,7 @@ suite "NimKit OutlineView":
       statusColumn = newTableColumn("status", "Status", width = 90.0)
 
     outlineView.showsHeader = false
+    outlineView.indentationPerLevel = 8.0'f32
     outlineView.rowHeight = 28.0
     outlineView.outlineColumn().title = "Name"
     outlineView.outlineColumn().width = 180.0
@@ -577,7 +627,7 @@ suite "NimKit OutlineView":
     check window.fieldEditor().superview() != nil
 
     let
-      indent = outlineView.levelForRow(childRow).float32 * 16.0'f32 + 24.0'f32
+      indent = outlineView.levelForRow(childRow).float32 * 8.0'f32 + 24.0'f32
       expectedFrame = rect(
         indent,
         0.0'f32,

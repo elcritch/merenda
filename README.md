@@ -526,6 +526,10 @@ the executable and work from any launch directory. Add your own TOML themes
 in `~/.config/moe/themes`; a user theme with the same name overrides a bundled
 theme.
 
+Kosmo's file tree indents children by 10 points per level. To change this,
+add `"fileTreeIndentation": 8.0` to `~/.config/kosmo/config.json` and restart
+Kosmo. Values are nonnegative points per level; `0.0` removes indentation.
+
 To use a Nim language server, add `nimLspCommand` to Kosmo's
 `~/.config/kosmo/config.json` and restart Kosmo. The command must be an
 absolute executable path followed by any arguments. Nimdex 0.1.2 defaults to

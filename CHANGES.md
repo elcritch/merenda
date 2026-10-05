@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Reduce Kosmo file-tree indentation to 10 points per level and make it
+  configurable with `fileTreeIndentation` in `config.json`.
+
 - Allow `addArrangedSubview` to mix views and `(view, sizingPolicy)` pairs in
   one call.
 

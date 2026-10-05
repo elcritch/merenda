@@ -4,6 +4,8 @@ import std/[json, jsonutils, os]
 
 import ../nimkit/foundation/atomicfiles
 
+const DefaultKosmoFileTreeIndentation* = 10.0'f32
+
 type KosmoConfig* = object ## User choices persisted by the standalone editor.
   moeTheme*: string
   nimLspCommand*: string
@@ -14,6 +16,8 @@ type KosmoConfig* = object ## User choices persisted by the standalone editor.
   merendaInvertScrolling*: bool
   merendaUiScale*: float32
   merendaAutoSaveDefaults*: bool
+  fileTreeIndentation*: float32 = DefaultKosmoFileTreeIndentation
+    ## Horizontal spacing in points for each file-tree level; zero removes indentation.
 
 func defaultKosmoConfigPath*(): string =
   ## Return the standalone editor's JSON configuration file path.
@@ -21,10 +25,13 @@ func defaultKosmoConfigPath*(): string =
 
 proc loadKosmoConfig*(path: string): KosmoConfig =
   ## Load a JSON configuration file, returning defaults when it is absent or invalid.
+  result = KosmoConfig()
   if path.len == 0 or not fileExists(path):
     return
   try:
-    result = jsonTo(parseJson(readFile(path)), KosmoConfig)
+    var config = KosmoConfig()
+    config.fromJson(parseJson(readFile(path)), Joptions(allowMissingKeys: true))
+    result = config
   except CatchableError:
     discard
 

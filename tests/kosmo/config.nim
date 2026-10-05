@@ -99,7 +99,7 @@ suite "Kosmo configuration":
 
     check not dirExists(cachePath)
 
-  test "round trips the persisted appearance choices as JSON":
+  test "round trips the persisted appearance and file-tree choices as JSON":
     let
       root = createTempDir("merenda-kosmo-config-", "")
       path = root / "config.json"
@@ -113,6 +113,7 @@ suite "Kosmo configuration":
         merendaInvertScrolling: true,
         merendaUiScale: 1.25'f32,
         merendaAutoSaveDefaults: true,
+        fileTreeIndentation: 8.0'f32,
       )
     defer:
       removeDir(root)
@@ -129,7 +130,33 @@ suite "Kosmo configuration":
     check node["merendaInvertScrolling"].getBool()
     check node["merendaUiScale"].getFloat() == float(config.merendaUiScale)
     check node["merendaAutoSaveDefaults"].getBool()
+    check node["fileTreeIndentation"].getFloat() == float(config.fileTreeIndentation)
     check loadKosmoConfig(path) == config
+
+  test "older and partial configurations retain preferences and default indentation":
+    let
+      root = createTempDir("merenda-kosmo-old-config-", "")
+      path = root / "config.json"
+      config = KosmoConfig(
+        moeTheme: "catppuccin-mocha",
+        nimLspCommand: "custom-server --stdio",
+        merendaTheme: "aqua",
+        merendaFontSize: 17.0'f32,
+      )
+    defer:
+      removeDir(root)
+    check loadKosmoConfig(path).fileTreeIndentation == 10.0'f32
+    require config.saveKosmoConfig(path)
+    let node = parseJson(readFile(path))
+    node.delete("fileTreeIndentation")
+    writeFile(path, node.pretty())
+    check loadKosmoConfig(path) == config
+    check loadKosmoConfig(path).fileTreeIndentation == 10.0'f32
+
+    writeFile(path, "{\"fileTreeIndentation\":0.0,\"merendaTheme\":\"aqua\"}")
+    let partial = loadKosmoConfig(path)
+    check partial.merendaTheme == "aqua"
+    check partial.fileTreeIndentation == 0.0'f32
 
   test "passes the configured Nim server command to Moe":
     let
@@ -192,6 +219,7 @@ suite "Kosmo configuration":
         merendaInvertScrolling: true,
         merendaUiScale: 1.25'f32,
         merendaAutoSaveDefaults: true,
+        fileTreeIndentation: 8.0'f32,
       )
       app = newApplication("Kosmo Config Test")
     defer:
@@ -215,6 +243,7 @@ suite "Kosmo configuration":
       config.merendaFontSize
     check frontend.editorView.fontSize == config.merendaFontSize
     check frontend.editorView.editor.activeMoeThemeIdentifier() == config.moeTheme
+    check frontend.fileTree.indentationPerLevel == config.fileTreeIndentation
     check app.invertScrolling == config.merendaInvertScrolling
     check abs(app.uiScale - config.merendaUiScale) < 0.0001'f32
     check app.merendaSettingsAutoSaveDefaults == config.merendaAutoSaveDefaults

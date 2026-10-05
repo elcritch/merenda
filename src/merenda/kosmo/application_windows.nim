@@ -872,7 +872,9 @@ proc newKosmoApplication*(
       )
     )
     editorPane = newKosmoEditorPane(editorView)
-    fileTree = newKosmoFileTree(initialRootPath)
+    fileTree = newKosmoFileTree(
+      initialRootPath, indentationPerLevel = manager.config.fileTreeIndentation
+    )
     fileBrowserPanel = newKosmoFileBrowserPanel(fileTree)
     searchPanel = newKosmoFileSearchPanel(fileTree.rootPath)
     quickOpenPanel = newKosmoQuickOpenPanel(fileTree.rootPath, fileTree.workspaceFiles)
