@@ -104,6 +104,82 @@ suite "nimkit controls":
               ringFound = true
           check ringFound == focused
 
+  test "checkbox focus rings surround the indicator in every theme":
+    let checkbox = newCheckBox("Enabled", frame = rect(0, 0, 140, 24))
+    for themeName in [
+      "aqua", "banner", "macos", "macos-dark", "darkbsd", "nebula", "peachy",
+      "synthwave83",
+    ]:
+      let appearance = initAppearance(initThemeByName(themeName))
+      checkbox.appearance = appearance
+      let outerRingSize = checkbox.sizeThatFits()
+      var innerRingAppearance = appearance
+      innerRingAppearance[srCheckBox, StyleFocusRingInset] = 2.0
+      checkbox.appearance = innerRingAppearance
+      checkpoint themeName & " focus ring must not enlarge the checkbox"
+      check checkbox.sizeThatFits() == outerRingSize
+      checkbox.appearance = appearance
+      for state in [bsOff, bsOn, bsMixed]:
+        checkbox.state = state
+        for focused in [true, false]:
+          checkbox.focusVisible = focused
+          var states: set[WidgetState]
+          if state != bsOff:
+            states.incl ssSelected
+          if focused:
+            states.incl ssFocused
+          let
+            style = checkbox.appearance.resolveChoiceButtonStyle(
+              controlStyle(srCheckBox, states)
+            )
+            indicator = style.choiceIndicatorRect(checkbox.bounds)
+          for drawCell in [false, true]:
+            checkpoint themeName & " " & $state & " focused=" & $focused & " cell=" &
+              $drawCell
+            var list: RenderList
+            if drawCell:
+              let context = initDrawContext()
+              context.beginDraw(
+                FigIdx(-1),
+                FigIdx(-1),
+                initPoint(0, 0),
+                checkbox.bounds,
+                checkbox.bounds,
+                checkbox.appearance,
+              )
+              context.drawChoiceButtonCell(
+                checkbox.buttonCell(), checkbox, checkbox.bounds, focused
+              )
+              list = context.renderList
+            else:
+              list = buildRenders(checkbox)[DefaultDrawLevel]
+            let nodes = list.resolvedNodes()
+            var ringCount = 0
+            for node in nodes:
+              if node.kind != nkRectangle or node.stroke.weight <= 0 or
+                  node.stroke.fill != fill(style.indicator.focusRingColor):
+                continue
+              inc ringCount
+              let
+                ring = node.screenBox
+                width = node.stroke.weight
+              check node.fill == fill(color(0, 0, 0, 0))
+              check ring.x + width <= indicator.minX
+              check ring.y + width <= indicator.minY
+              check ring.x + ring.w - width >= indicator.maxX
+              check ring.y + ring.h - width >= indicator.maxY
+              var parent = node.parent
+              while parent != FigIdx(-1):
+                let ancestor = nodes[parent.int]
+                if NfClipContent in ancestor.flags or NfRectMaskContent in ancestor.flags:
+                  let clip = ancestor.screenBox
+                  check ring.x >= clip.x
+                  check ring.y >= clip.y
+                  check ring.x + ring.w <= clip.x + clip.w
+                  check ring.y + ring.h <= clip.y + clip.h
+                parent = ancestor.parent
+            check ringCount == ord(focused)
+
   test "cell editing action flag is a field-backed protocol property":
     let cell = newCell()
 

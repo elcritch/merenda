@@ -1091,7 +1091,7 @@ proc buildAquaTheme(): ThemeBuilder =
     result[role, StyleTextInsets] = insets(0.0, 2.0)
     result[role, StyleMinimumSize] = initSize(0.0, 20.0)
     result[role, StyleFocusRingWidth] = 3.0
-    result[role, StyleFocusRingInset] = 2.0
+    result[role, StyleFocusRingInset] = (if role == srCheckBox: -3.0 else: 2.0)
     result[role, StyleFocusRingColor] = styleToken("focus.ring.color")
     result[role, StyleBoxShadows] = aquaChoiceIndicatorShadows()
     result[role, StyleChrome] = styleKeyword(AquaChromeName)

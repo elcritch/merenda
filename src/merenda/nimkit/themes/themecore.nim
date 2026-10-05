@@ -2116,6 +2116,7 @@ proc resolveChoiceButtonStyle*(theme: Theme, context: StyleContext): ChoiceButto
       fill(color(1.0, 1.0, 1.0, 1.0)),
       color(0.50, 0.55, 0.62, 1.0),
       cornerRadiusFallback = 6.0,
+      focusRingInsetFallback = (if context.role == srCheckBox: -3.0 else: 2.0),
     ),
     markColor: theme.colorRule(context, StyleMarkColor, color(1.0, 1.0, 1.0, 1.0)),
     text:
@@ -2530,17 +2531,15 @@ func buttonControlSize*(style: ButtonStyle, titleSize: Size): Size =
   controlSizeWithChrome(titleSize, style.text.insets, style.box, style.minSize)
 
 func choiceControlSize*(style: ChoiceButtonStyle, titleSize: Size): Size =
+  # Focus rings paint outside the indicator without taking up layout space.
   let
-    indicatorChrome = style.indicator.controlChromeWidth()
-    indicatorWidth = style.indicatorSize + indicatorChrome
-    indicatorHeight = style.indicatorSize + style.indicator.controlChromeHeight()
-    contentWidth = indicatorWidth + style.indicatorSpacing + titleSize.width
-    contentHeight = max(indicatorHeight, titleSize.height)
-  controlSizeWithChrome(
-    initSize(contentWidth, contentHeight),
-    style.text.insets,
-    style.indicator,
-    style.minSize,
+    borderSize = style.indicator.borderWidth * 2.0'f32
+    indicatorSize = style.indicatorSize + borderSize
+    contentWidth = indicatorSize + style.indicatorSpacing + titleSize.width
+    contentHeight = max(indicatorSize, titleSize.height)
+  initSize(
+    max(style.minSize.width, contentWidth + style.text.insets.horizontal + borderSize),
+    max(style.minSize.height, contentHeight + style.text.insets.vertical + borderSize),
   )
 
 func textFieldControlSize*(style: TextFieldStyle, textSize: Size): Size =

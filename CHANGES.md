@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Draw checkbox focus rings outside the indicator in every theme, keeping the
+  checkmark and checkbox interior clear without increasing layout spacing.
+
 - Let custom layout callbacks assign descendant frames with the ordinary `frame`
   setter without creating layout feedback. Changes outside layout, or to self,
   ancestors, and unrelated views, still invalidate layout normally.
