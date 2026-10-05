@@ -16,6 +16,8 @@
   off
 --define:
   nimStackTraceOverride
+--path:
+  "src/"
 switch("import", "libbacktrace")
 
 when defined(freebsd):
