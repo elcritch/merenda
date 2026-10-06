@@ -10,10 +10,10 @@ requires "msgpack4nim"
 requires "chronicles >= 0.4"
 requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
-# Platform C ABI follow-up: https://github.com/levovix0/siwin/pull/57
-requires "gh:elcritch/siwin#fix/platform-c-abi-upstream"
+# Merged platform C ABI fixes: https://github.com/levovix0/siwin/pull/57
+requires "gh:levovix0/siwin#dd39b781df68ecee4ab34b55bab1f9e771fcb23f"
 # FigDraw compatibility for optional libraries and uint64 Vulkan surfaces.
-requires "gh:elcritch/figdraw#fix/siwin-optional-platform-libraries [siwin, harfbuzz]"
+requires "gh:elcritch/figdraw#fix/siwin-upstream-abi [siwin, harfbuzz]"
 requires "sigils >= 0.31.0 [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
 requires "kiwiberry"
