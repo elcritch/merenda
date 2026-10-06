@@ -10,6 +10,7 @@ const
   KosmoOpenProjectAction* = "kosmo.openProject"
   KosmoNewTerminalAction* = "kosmo.newTerminal"
   KosmoShowGitDiffAction* = "kosmo.showGitDiff"
+  KosmoShowGitHubAction* = "kosmo.showGitHub"
   KosmoSaveAction* = "kosmo.save"
   KosmoCloseTabAction* = "kosmo.closeTab"
   KosmoCloseWindowAction* = "kosmo.closeWindow"
@@ -165,6 +166,11 @@ func kosmoActions*(): seq[KosmoAction] =
         identifier: KosmoShowGitDiffAction,
         title: "Show Git Diff",
         description: "Open the current Git diff in a tab.",
+      ),
+      KosmoAction(
+        identifier: KosmoShowGitHubAction,
+        title: "Show GitHub Issues and PRs",
+        description: "Read the project's GitHub issues and pull requests in a tab.",
       ),
       KosmoAction(
         identifier: KosmoSaveAction,
@@ -360,6 +366,7 @@ proc initKosmoKeyBindings*(
   result.addBinding("primary-p", KosmoQuickOpenAction, profile, platform)
   result.addBinding("primary-shift-t", KosmoNewTerminalAction, profile, platform)
   result.addBinding("primary-shift-d", KosmoShowGitDiffAction, profile, platform)
+  result.addBinding("primary-shift-h", KosmoShowGitHubAction, profile, platform)
   result.addBinding("primary-s", KosmoSaveAction, profile, platform)
   if nimkit.kmControl notin profile.primaryModifiers(platform):
     result.addBinding("primary-w", KosmoCloseTabAction, profile, platform)

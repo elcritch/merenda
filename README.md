@@ -391,20 +391,20 @@ native window backdrop effects.
 
 Kosmo is a code editor built with Merenda and Moe's Vim-style editing engine.
 It brings together a file browser, split panes, terminal tabs, Markdown previews,
-and Git diffs. You can use it on its own or explore its source to see how a
-larger Merenda app fits together.
+Git diffs, and GitHub issues and PRs. You can use it on its own or explore its
+source to see how a larger Merenda app fits together.
 
 Use the Files and Find icons at the left of the status bar to switch sidebar
 views. Click the active icon again to collapse the sidebar and give the editor
 the full window width; click either icon to reopen it at its previous width.
 
 Press `Cmd-F` on macOS or `Ctrl-F` elsewhere to search an editor, Markdown
-preview, or Git diff. Use Enter / the arrow buttons to move through matches,
-`Cmd/Ctrl-G` and `Shift-Cmd/Ctrl-G` for next and previous, and Escape to close.
-Editor matches scroll to the center of the pane. Markdown and diff viewers use
-case-insensitive literal search; diff search includes collapsed sections and
-loads ordinary patches within the viewer's size limits. Open oversized patches
-explicitly to include their contents.
+preview, Git diff, or GitHub tab. Use Enter / the arrow buttons to move through
+matches, `Cmd/Ctrl-G` and `Shift-Cmd/Ctrl-G` for next and previous, and Escape
+to close. Editor matches scroll to the center of the pane. Markdown, GitHub, and diff
+viewers use case-insensitive literal search; diff search includes collapsed
+sections and loads ordinary patches within the viewer's size limits. Open
+oversized patches explicitly to include their contents.
 
 Editor search and the Find sidebar open with replacement controls collapsed.
 Click the chevron beside the search field to expand or collapse them without
@@ -607,6 +607,23 @@ You can also send a Git diff straight to Kosmo:
 ```sh
 git diff | kosmo --diff
 ```
+
+Choose **File → Show GitHub Issues and PRs** to read the active project's issues
+and pull requests in a Markdown tab, or press `Cmd/Ctrl-Shift-H`. Install the
+[GitHub CLI](https://cli.github.com/) and sign in with `gh auth login` first;
+the viewer uses the project's GitHub remote and your existing CLI credentials.
+It defaults to open items, with controls for issues, pull requests, or both,
+and open, closed, or all states.
+
+Descriptions render as Markdown alongside authors, labels, draft status, and PR
+branch and review details. PRs also show a job summary and each CI check's workflow,
+status, and link to its details. Click an item's title to open it on GitHub, use
+`Cmd-F`/`Ctrl-F` to search the rendered page, and choose **Refresh** to fetch updates.
+Each list shows up to 100 items and indicates when that limit is reached. Fetches
+run in the background and are cancelled when the tab closes. Enable **Auto-refresh**
+to poll every 30 seconds and refresh after workspace changes; it starts off,
+like the Git Diff viewer. Automatic requests wait for the current fetch to finish.
+The action can be assigned a shortcut in Kosmo Settings.
 
 Run `kosmo --help` for command-line options. See the
 [keyboard shortcut guide](src/merenda/kosmo/docs/shortcuts.md) for navigation

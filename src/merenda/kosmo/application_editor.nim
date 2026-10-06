@@ -44,6 +44,7 @@ proc showFindInFiles*(
 func hasFileBrowser*(frontend: KosmoApplication): bool
 proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.}
 proc showGitDiff*(frontend: KosmoApplication, path = ""): bool {.discardable.}
+proc showGitHub*(frontend: KosmoApplication, path = ""): bool {.discardable.}
 proc newEditorTab*(frontend: KosmoApplication): bool {.discardable.}
 proc newTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.}
@@ -805,9 +806,7 @@ proc syncSelectedEditorContent(
   if not group.selectedTabIdentifier.parseTabIdentifier(selectedId):
     group.pane.syncMarkdownControls(false)
     let document = group.documentForIdentifier(group.selectedTabIdentifier)
-    if not document.isNil and document.contentView of KosmoGitDiffPanel:
-      KosmoGitDiffPanel(document.contentView).markdownStyle =
-        group.pane.markdownControls.markdownPresentationStyle()
+    document.updatePresentation(group.pane)
     return keckOther
   for tab in tabs:
     if tab.id != selectedId:
@@ -1634,6 +1633,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoNewTerminalAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].newTerminal()
+    of KosmoShowGitHubAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showGitHub()
     of KosmoShowGitDiffAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showGitDiff()
@@ -2595,6 +2597,9 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
     of KosmoNewTerminalAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].newTerminal()
+    of KosmoShowGitHubAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showGitHub()
     of KosmoShowGitDiffAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showGitDiff()
