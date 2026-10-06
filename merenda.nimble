@@ -10,9 +10,9 @@ requires "msgpack4nim"
 requires "chronicles >= 0.4"
 requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
-# Optional X11 and Wayland libraries: https://github.com/levovix0/siwin/pull/56
-requires "gh:elcritch/siwin#fix/optional-platform-libraries"
-# Siwin optional-library compatibility builds on the render ownership fixes.
+# Platform C ABI follow-up: https://github.com/levovix0/siwin/pull/57
+requires "gh:elcritch/siwin#fix/platform-c-abi-upstream"
+# FigDraw compatibility for optional libraries and uint64 Vulkan surfaces.
 requires "gh:elcritch/figdraw#fix/siwin-optional-platform-libraries [siwin, harfbuzz]"
 requires "sigils >= 0.31.0 [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
