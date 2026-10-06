@@ -12,8 +12,8 @@ requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
 # Merged platform C ABI fixes: https://github.com/levovix0/siwin/pull/57
 requires "gh:levovix0/siwin#dd39b781df68ecee4ab34b55bab1f9e771fcb23f"
-# FigDraw compatibility for optional libraries and uint64 Vulkan surfaces.
-requires "gh:elcritch/figdraw#fix/siwin-upstream-abi [siwin, harfbuzz]"
+# FigDraw compatibility: https://github.com/elcritch/figdraw/pull/97
+requires "gh:elcritch/figdraw#01d17998cfce81e8ba804690bafd6aa93d4482bc [siwin, harfbuzz]"
 requires "sigils >= 0.31.0 [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
 requires "kiwiberry"
