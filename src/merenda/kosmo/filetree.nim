@@ -6,6 +6,7 @@ when defined(windows):
   import winim/lean
 
 import ../nimkit as nimkit except performKeyEquivalent
+import ./config
 import ./workspacefiles
 import ./searchbuttons
 from ../nimkit/foundation/selectors import performKeyEquivalent
@@ -1006,9 +1007,12 @@ proc newKosmoFileTree*(
     rootPath = "",
     frame: nimkit.Rect = nimkit.AutoRect,
     directoryEntryLimit: Positive = nimkit.DefaultFileBrowserEntryLimit,
+    indentationPerLevel: float32 = DefaultKosmoFileTreeIndentation,
 ): KosmoFileTree =
+  ## Create a file tree with configurable hierarchy spacing in points.
   result = KosmoFileTree(xDisplayMode: FileTreeDisplayMode.VisibleFiles)
   result.initOutlineViewFields(frame)
+  result.indentationPerLevel = indentationPerLevel
   result.xWorkspaceFiles = newWorkspaceFiles(entryLimit = directoryEntryLimit)
   result.xWorkspaceFiles.connect(workspaceFilesDidChange, result, applyWorkspaceFiles)
   result.xGitFileStates = initTable[string, nimkit.GitFileState]()

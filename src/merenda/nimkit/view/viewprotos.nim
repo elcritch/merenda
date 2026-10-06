@@ -11,6 +11,19 @@ import sigils/core
 
 proc propagateNeedsDisplayInRect(view: View, rect: Rect)
 
+proc isContainerLayoutFrame(view: View): bool =
+  let transaction = activeLayoutTransaction
+  if transaction.isNil or transaction.phase != ltpLayingOut or
+      transaction.currentView.isNil:
+    return
+  # Only descendants belong to this callback's layout output. Moving self,
+  # an ancestor, or a sibling still changes the inputs of another layout.
+  var parent = view.superviewBacklink()
+  while not parent.isNil:
+    if parent == transaction.currentView:
+      return true
+    parent = parent.superviewBacklink()
+
 protocol ViewProtocol {.setterStyle: nim.} from View:
   property tag -> int
   property identifier -> string
@@ -54,6 +67,9 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
       return
     discard
       recordPropertyAnimation(DynamicAgent(self), `frame=`(), self.xFrame, nextFrame)
+    if self.isContainerLayoutFrame():
+      self.setFrameFromLayout(nextFrame)
+      return
     self.xFrame = nextFrame
     self.xBounds = rect(self.xBounds.origin, nextFrame.size)
     self.invalidateLayoutItemGeometry(lirFrame)

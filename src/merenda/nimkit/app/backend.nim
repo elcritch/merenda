@@ -43,11 +43,21 @@ when defined(macosx):
   proc setOpaque(window: NSWindow, opaque: BOOL) {.objc: "setOpaque:".}
 
 var nativeEventLoopSigilThread {.threadvar.}: SigilThreadPtr
+var nativeEventLoopWakerInstalled {.threadvar.}: bool
 
 proc installNativeEventLoopWaker*(thread: SigilThreadPtr) =
   if not thread.isNil and thread != nativeEventLoopSigilThread:
     thread.installSiwinEventLoopWaker(siwinshim.sharedSiwinGlobals())
     nativeEventLoopSigilThread = thread
+    nativeEventLoopWakerInstalled = true
+
+proc acknowledgeNativeEventLoopWake*() =
+  ## AppKit may consume Siwin's posted event inside menu or panel tracking.
+  ## Rearm before draining application work: a racing send is either consumed
+  ## by that drain or posts a fresh notification for the next frame.
+  when defined(macosx):
+    if nativeEventLoopWakerInstalled:
+      siwinshim.sharedSiwinGlobals().consumeEventLoopWake()
 
 proc waitForNativeEvents*(): bool =
   result =
@@ -334,6 +344,7 @@ proc installNativeEventLoopWaker*(queue: ThreadHostEventQueue) =
   if queue.raw.isNil:
     return
   let eventLoopWaker = siwinshim.sharedSiwinGlobals().eventLoopWaker()
+  nativeEventLoopWakerInstalled = true
   withLock queue.raw[].lock:
     queue.raw[].eventLoopWaker = eventLoopWaker
 
@@ -499,6 +510,7 @@ proc submitRenderScene*(
 proc acknowledgeRender*(host: ThreadHostClient, renderId: uint64) =
   if host.isNil or renderId == 0:
     return
+  host.renderRequested = renderId < host.nextRenderId
   while host.pendingResources.len > 0 and
       host.pendingResources.peekFirst().renderId <= renderId:
     var lease = host.pendingResources.popFirst()

@@ -1545,10 +1545,9 @@ proc lineBounds*(view: MonoTextView, line: int): nimkitTypes.Rect =
     metrics.lineHeight,
   )
 
-proc drawRun(
+proc drawRunDecoration(
     view: MonoTextView,
     context: DrawContext,
-    font: FigFont,
     row, startColumn, endColumn: int,
     metrics: MonoTextMetrics,
     textInsets: EdgeInsets,
@@ -1575,34 +1574,6 @@ proc drawRun(
       (endColumn - startColumn).float32 * metrics.cellWidth,
       metrics.lineHeight,
     )
-
-  if firstCell.hasBackgroundColor:
-    discard context.addRectangle(runRect, fill(firstCell.backgroundColor.rgba))
-
-  var glyphs: seq[(Rune, Vec2)]
-  glyphs.setLen(endColumn - startColumn)
-  var x = 0.0'f32
-  for column in startColumn ..< endColumn:
-    let rune =
-      if mttHidden in view.xLines[row].styleAt(column).traits:
-        Rune(' ')
-      else:
-        view.xLines[row].firstRune(column)
-    glyphs[column - startColumn] = (rune, vec2(x, 0.0'f32))
-    x += metrics.cellWidth
-
-  let runFont =
-    if mttItalic in firstCell.traits:
-      view.monoFont(italic = true)
-    else:
-      font
-  let layout =
-    placeGlyphs(fs(runFont, fill(foregroundColor.rgba)), glyphs, GlyphTopLeft)
-  discard context.addText(runRect, layout)
-  if mttBold in firstCell.traits:
-    var boldRect = runRect
-    boldRect.x += min(metrics.cellWidth * 0.06'f32, 0.75'f32)
-    discard context.addText(boldRect, layout)
 
   let decorationColor =
     if firstCell.hasDecorationColor: firstCell.decorationColor else: foregroundColor
@@ -1637,6 +1608,101 @@ proc drawRun(
           decorationHeight,
         ),
         fill(decorationColor.rgba),
+      )
+
+type MonoTextGlyphBatch = object
+  color: nimkitTypes.Color
+  bold, italic: bool
+  glyphs: seq[(Rune, Vec2)]
+
+proc drawMonoTextRow(
+    view: MonoTextView,
+    context: DrawContext,
+    font: FigFont,
+    row, firstColumn, lastColumn: int,
+    metrics: MonoTextMetrics,
+    textInsets: EdgeInsets,
+    textColor: nimkitTypes.Color,
+) =
+  # A row commonly alternates the same few colors (terminal animations in
+  # particular). Batch those glyphs even when their cells are not adjacent.
+  # Blank/hidden cells still paint backgrounds and decorations, but need no glyph.
+  var batches: seq[MonoTextGlyphBatch]
+  var column = firstColumn
+  while column < lastColumn:
+    let
+      startColumn = column
+      style = view.xLines[row].styleAt(column)
+    inc column
+    while column < lastColumn and
+        style.sameRunStyle(view.xLines[row].styleAt(column), textColor):
+      inc column
+    if style.hasBackgroundColor:
+      discard context.addRectangle(
+        rect(
+          textInsets.left + startColumn.float32 * metrics.cellWidth,
+          textInsets.top + row.float32 * metrics.lineHeight,
+          (column - startColumn).float32 * metrics.cellWidth,
+          metrics.lineHeight,
+        ),
+        fill(style.backgroundColor.rgba),
+      )
+    if mttHidden notin style.traits:
+      var foregroundColor = style.foreground(textColor)
+      if mttFaint in style.traits:
+        foregroundColor.a *= 0.55'f32
+      let
+        bold = mttBold in style.traits
+        italic = mttItalic in style.traits
+      var batchIndex = -1
+      for index, batch in batches:
+        if batch.color == foregroundColor and batch.bold == bold and
+            batch.italic == italic:
+          batchIndex = index
+          break
+      for glyphColumn in startColumn ..< column:
+        let rune = view.xLines[row].firstRune(glyphColumn)
+        if rune != Rune(' '):
+          if batchIndex < 0:
+            batchIndex = batches.len
+            batches.add MonoTextGlyphBatch(
+              color: foregroundColor, bold: bold, italic: italic
+            )
+          batches[batchIndex].glyphs.add (
+            rune, vec2((glyphColumn - firstColumn).float32 * metrics.cellWidth, 0.0'f32)
+          )
+  for batch in batches:
+    let
+      runFont =
+        if batch.italic:
+          view.monoFont(italic = true)
+        else:
+          font
+      layout =
+        placeGlyphs(fs(runFont, fill(batch.color.rgba)), batch.glyphs, GlyphTopLeft)
+    var rowRect = rect(
+      textInsets.left + firstColumn.float32 * metrics.cellWidth,
+      textInsets.top + row.float32 * metrics.lineHeight,
+      (lastColumn - firstColumn).float32 * metrics.cellWidth,
+      metrics.lineHeight,
+    )
+    discard context.addText(rowRect, layout)
+    if batch.bold:
+      rowRect.x += min(metrics.cellWidth * 0.06'f32, 0.75'f32)
+      discard context.addText(rowRect, layout)
+  column = firstColumn
+  while column < lastColumn:
+    let startColumn = column
+    inc column
+    while column < lastColumn and
+        view.xLines[row].styleAt(startColumn).sameRunStyle(
+          view.xLines[row].styleAt(column), textColor
+        )
+    :
+      inc column
+    if view.xLines[row].styleAt(startColumn).decorations != {}:
+      view.drawRunDecoration(
+        context, row, startColumn, column, metrics, textInsets, textColor
       )
 
 proc drawMonoTextSurface(
@@ -1739,19 +1805,9 @@ proc drawMonoText(view: MonoTextView, context: DrawContext) =
         row, firstColumn, lastColumn, view.xLines[row].revision, appearanceHash
       ),
     ):
-      var column = firstColumn
-      while column < lastColumn:
-        let startColumn = column
-        inc column
-        while column < lastColumn and
-            view.xLines[row].styleAt(startColumn).sameRunStyle(
-              view.xLines[row].styleAt(column), textColor
-            )
-        :
-          inc column
-        view.drawRun(
-          context, font, row, startColumn, column, metrics, textInsets, textColor
-        )
+      view.drawMonoTextRow(
+        context, font, row, firstColumn, lastColumn, metrics, textInsets, textColor
+      )
 
 proc drawMonoTextCursor(view: MonoTextView, context: DrawContext) =
   let revision = view.renderSlotRevision(MonoTextCursorRenderSlot)

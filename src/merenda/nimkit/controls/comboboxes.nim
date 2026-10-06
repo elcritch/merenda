@@ -1475,6 +1475,15 @@ proc popupListActions(comboBox: ComboBox): PopupListActions =
       comboBox.scrollPopupRows(delta),
     keyDown: proc(event: KeyEvent) =
       discard comboBox.keyDown(event),
+    tab: proc(delta: int) =
+      let owner = comboBox.window()
+      comboBox.closePopup()
+      if owner of Window:
+        if delta < 0:
+          Window(owner).selectKeyViewPrecedingView(comboBox)
+        else:
+          Window(owner).selectKeyViewFollowingView(comboBox)
+    ,
   )
 
 proc popupList(comboBox: ComboBox): PopupListView =

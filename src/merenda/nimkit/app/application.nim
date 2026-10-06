@@ -25,6 +25,7 @@ import ../view/views
 import ./userdefaults
 import ./animations
 import ./backend as nimkitBackend
+import ./nativeeventloop
 import ./panels
 import ./settings
 import ./workspaces
@@ -144,6 +145,14 @@ proc runApplicationFrame(app: Application): int
 proc prepareApplicationEventLoop(app: Application)
 proc pollApplicationEvents(app: Application)
 proc waitForApplicationEvents(app: Application)
+proc pumpNativeApplication(app: Application): Duration
+
+template withApplicationEventLoop(app: Application, body: untyped) =
+  withNativeEventLoop(
+    proc(): Duration =
+      app.pumpNativeApplication()
+  ):
+    body
 
 proc resolvedApplicationName(name: string): string =
   if name.len > 0:
@@ -1210,15 +1219,16 @@ proc runModalSession*(app: Application, session: ModalSession): int =
   let wasRunning = app.xRunning
   app.xRunning = true
   try:
-    while app.xRunning and session.state == mssRunning:
-      app.pollApplicationEvents()
-      let activeWindows = app.runApplicationFrame()
-      if activeWindows == 0:
+    withApplicationEventLoop(app):
+      while app.xRunning and session.state == mssRunning:
+        app.pollApplicationEvents()
+        let activeWindows = app.runApplicationFrame()
+        if activeWindows == 0:
+          session.state = mssAborted
+        elif session.state == mssRunning:
+          app.waitForApplicationEvents()
+      if not app.xRunning and session.state == mssRunning:
         session.state = mssAborted
-      elif session.state == mssRunning:
-        app.waitForApplicationEvents()
-    if not app.xRunning and session.state == mssRunning:
-      session.state = mssAborted
   finally:
     if not wasRunning:
       app.xRunning = false
@@ -1321,6 +1331,7 @@ proc windowBlockedByModal*(app: Application, window: Window): bool =
     window == session.parentWindow
 
 proc runApplicationFrame(app: Application): int =
+  checkNativeEventLoop()
   recordTerminalTrace("application-frame-start")
   defer:
     recordTerminalTrace("application-frame-end")
@@ -1330,6 +1341,7 @@ proc runApplicationFrame(app: Application): int =
     let pool = NSAutoreleasePool.alloc().init()
     defer:
       pool.drain()
+  nimkitBackend.acknowledgeNativeEventLoopWake()
   if hasLocalSigilThread():
     discard getCurrentSigilThread().pollAll(NonBlocking)
   discard drainMainThreadWork()
@@ -1376,8 +1388,25 @@ proc pollApplicationEvents(app: Application) =
   # Native damage schedules onRender; event activity alone does not dirty views.
   for window in app.xWindows:
     if not window.isNil and window.isVisible and window.nativeReady:
+      if hasLocalSigilThread():
+        nimkitBackend.installNativeEventLoopWaker(getCurrentSigilThread())
       discard nimkitBackend.pollNativeEvents()
       break
+
+proc nextApplicationWait(app: Application): Duration =
+  if hasPendingMainThreadWork():
+    return
+  let
+    now = getMonoTime()
+    deadline = app.nextAnimationDeadline(now)
+  if deadline.isSome:
+    max(deadline.get() - now, initDuration())
+  else:
+    Duration.high
+
+proc pumpNativeApplication(app: Application): Duration =
+  discard app.runApplicationFrame()
+  app.nextApplicationWait()
 
 proc waitForApplicationEvents(app: Application) =
   if hasPendingMainThreadWork():
@@ -1387,19 +1416,7 @@ proc waitForApplicationEvents(app: Application) =
     recordTerminalTrace("native-wait-end")
   if hasLocalSigilThread():
     nimkitBackend.installNativeEventLoopWaker(getCurrentSigilThread())
-  let
-    now = getMonoTime()
-    deadline = app.nextAnimationDeadline(now)
-  if deadline.isSome:
-    let timeout = deadline.get() - now
-    discard nimkitBackend.waitForNativeEvents(
-      if timeout.inNanoseconds > 0:
-        timeout
-      else:
-        initDuration()
-    )
-  else:
-    discard nimkitBackend.waitForNativeEvents()
+  discard nimkitBackend.waitForNativeEvents(app.nextApplicationWait())
 
 proc runForFrames*(app: Application, frames: Natural): int =
   if frames == 0:
@@ -1408,15 +1425,16 @@ proc runForFrames*(app: Application, frames: Natural): int =
   let wasRunning = app.xRunning
   var keepRunning = wasRunning
   app.xRunning = true
-  while app.xRunning:
-    app.pollApplicationEvents()
-    let activeWindows = app.runApplicationFrame()
-    inc result
-    if result >= frames.int:
-      break
-    if activeWindows == 0:
-      keepRunning = false
-      break
+  withApplicationEventLoop(app):
+    while app.xRunning:
+      app.pollApplicationEvents()
+      let activeWindows = app.runApplicationFrame()
+      inc result
+      if result >= frames.int:
+        break
+      if activeWindows == 0:
+        keepRunning = false
+        break
   if app.xRunning:
     app.xRunning = keepRunning
 
@@ -1434,13 +1452,14 @@ proc run*(app: Application) =
           window.useThreadRenderer(runtime.client)
 
     app.xRunning = true
-    while app.xRunning:
-      app.pollApplicationEvents()
-      let activeWindows = app.runApplicationFrame()
-      if activeWindows == 0:
-        app.xRunning = false
-      elif app.xRunning:
-        app.waitForApplicationEvents()
+    withApplicationEventLoop(app):
+      while app.xRunning:
+        app.pollApplicationEvents()
+        let activeWindows = app.runApplicationFrame()
+        if activeWindows == 0:
+          app.xRunning = false
+        elif app.xRunning:
+          app.waitForApplicationEvents()
   finally:
     try:
       for window in app.xWindows:

@@ -113,6 +113,7 @@ type
     tdrNativeDone
 
   TransientDismissHandler* = proc(reason: DismissReason) {.closure.}
+  TransientKeyDownHandler* = proc(event: events.KeyEvent): bool {.closure.}
 
   TooltipOverlayView = ref object of View
     xText: string
@@ -164,6 +165,7 @@ type
       xLayerSurface: Option[nimkitBackend.LayerSurfaceConfig]
     xThreadRenderer: ThreadRendererClient
     xThreadHost: ThreadHostClient
+    xDeferredNativeRender: bool
     xAnimationScheduler: AnimationScheduler
     xAnimationClock: AnimationSchedulerClock
     xInsertionPointBlinkAnimation: Animation
@@ -210,6 +212,7 @@ type
     restoreWindow: Window
     restoreResponder: Responder
     onDismiss: TransientDismissHandler
+    onKeyDown: TransientKeyDownHandler
 
   ## Presents a view as either an inline popover or a transient native window.
   ##
@@ -232,6 +235,7 @@ type
     xManagesTransientSession: bool
     xFocusContent: bool
     xOnDismiss: PopupHostDismissHandler
+    xOnKeyDown: TransientKeyDownHandler
     xPlaceAbove: bool
     xRestoreCurrentResponderIfNil: bool
     xPopupOpen: bool
@@ -376,6 +380,7 @@ proc beginTransientSession*(
   restoreResponder: Responder = nil,
   onDismiss: TransientDismissHandler = nil,
   restoreCurrentResponderIfNil = true,
+  onKeyDown: TransientKeyDownHandler = nil,
 )
 
 proc dismissTransientSession*(
@@ -408,6 +413,7 @@ proc newPopupHost*(
   restoreCurrentResponderIfNil = true,
   managesTransientSession = true,
   focusContent = true,
+  onKeyDown: TransientKeyDownHandler = nil,
 ): PopupHost
 
 proc popupOpen*(host: PopupHost): bool
@@ -1707,6 +1713,9 @@ proc needsDisplayUpdate*(window: Window): bool =
   (not window.xContentView.isNil) and window.xContentView.needsDisplayUpdateInSubtree()
 
 proc requestNativeDisplayUpdate*(window: Window) =
+  if not window.xThreadHost.isNil and window.xThreadHost.renderRequested:
+    window.xDeferredNativeRender = true
+    return
   if not window.xHostWindow.isNil:
     window.xHostWindow.requestRender()
 
@@ -2024,6 +2033,7 @@ proc beginTransientSession*(
     restoreResponder: Responder = nil,
     onDismiss: TransientDismissHandler = nil,
     restoreCurrentResponderIfNil = true,
+    onKeyDown: TransientKeyDownHandler = nil,
 ) =
   window.clearToolTip()
   if window.xTransientSession.active:
@@ -2045,6 +2055,7 @@ proc beginTransientSession*(
     restoreWindow: window,
     restoreResponder: resolvedRestore,
     onDismiss: onDismiss,
+    onKeyDown: onKeyDown,
   )
 
 proc dismissTransientSession*(
@@ -2224,6 +2235,7 @@ proc newPopupHost*(
     restoreCurrentResponderIfNil = true,
     managesTransientSession = true,
     focusContent = true,
+    onKeyDown: TransientKeyDownHandler = nil,
 ): PopupHost =
   result = PopupHost(
     xOwner: owner,
@@ -2241,6 +2253,7 @@ proc newPopupHost*(
     xManagesTransientSession: managesTransientSession,
     xFocusContent: focusContent,
     xOnDismiss: onDismiss,
+    xOnKeyDown: onKeyDown,
     xPlaceAbove: placeAbove,
     xRestoreCurrentResponderIfNil: restoreCurrentResponderIfNil,
   )
@@ -2345,6 +2358,7 @@ proc presentPopup*(host: PopupHost): bool =
       onDismiss = proc(reason: DismissReason) =
         host.popupHostDidDismiss(reason),
       restoreCurrentResponderIfNil = host.xRestoreCurrentResponderIfNil,
+      onKeyDown = host.xOnKeyDown,
     )
     if host.xFocusContent:
       if popupWindow.isNil:
@@ -2481,6 +2495,12 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
 
 proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
   window.clearToolTip()
+  let owner = if window.xOwnerWindow.isNil: window else: window.xOwnerWindow
+  if owner.xTransientSession.active:
+    let onKeyDown = owner.xTransientSession.onKeyDown
+    if not onKeyDown.isNil and onKeyDown(event):
+      window.cancelKeySequence()
+      return true
   let target = window.keyDispatchTarget()
   let dispatchTextFirst =
     window.xPendingKeySequence.len == 0 and event.shouldDispatchTextKeyDownFirst()
@@ -2528,6 +2548,10 @@ proc renderNativeWindow*(window: Window) =
   if not window.nativeReady:
     return
 
+  if not window.xThreadHost.isNil and window.xThreadHost.renderRequested:
+    window.xDeferredNativeRender = true
+    return
+  window.xDeferredNativeRender = false
   recordTerminalTrace("frame-start", cast[uint64](window))
   defer:
     recordTerminalTrace("frame-end", cast[uint64](window))
@@ -3308,7 +3332,6 @@ proc drainThreadHostEvents(window: Window): int =
     of theRendered:
       window.xThreadHost.acknowledgeRender(event.renderId)
       window.xThreadHost.renderCount = event.renderCount
-      window.xThreadHost.renderRequested = false
     of theRenderUpdateRejected:
       window.xThreadHost.rejectRenderUpdate(event.renderId)
       window.requestNativeDisplayUpdate()
@@ -3421,6 +3444,10 @@ proc pumpNativeWindowFrameAt(window: Window, now: MonoTime) =
     return
   window.ensureNativeWindow()
   discard window.drainThreadHostEvents()
+  if window.xDeferredNativeRender and
+      (window.xThreadHost.isNil or not window.xThreadHost.renderRequested):
+    window.xDeferredNativeRender = false
+    window.requestNativeDisplayUpdate()
   discard window.drainAnimationsAt(now)
   discard window.requestNativeDisplayUpdateIfNeeded()
   if window.nativeReady:

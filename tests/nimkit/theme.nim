@@ -442,3 +442,12 @@ suite "nimkit theme":
           canonical.resolveButtonStyle(controlStyle(srButton))
         check theme.resolveTextFieldStyle(controlStyle(srTextField)) ==
           canonical.resolveTextFieldStyle(controlStyle(srTextField))
+
+  test "menu bar item focus ring color resolves from the theme ring token":
+    let darkBSD = initAppearance(initThemeByName("darkbsd"))
+    check darkBSD.resolveButtonStyle(controlStyle(srMenuBarItem)).box.focusRingColor ==
+      color(0.70, 0.06, 0.24, 0.64)
+
+    let aqua = initAppearance(initThemeByName("aqua"))
+    check aqua.resolveButtonStyle(controlStyle(srMenuBarItem)).box.focusRingColor ==
+      color(0.28, 0.64, 1.0, 0.82)

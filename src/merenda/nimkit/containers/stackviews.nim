@@ -27,6 +27,11 @@ type
     svspFillAvailableWidth
     svspFillAvailableSpace
 
+  ArrangedSubview* = object
+    ## One input to `addArrangedSubview`, with a per-view sizing policy.
+    view*: View
+    sizingPolicy*: StackViewSizingPolicy
+
   StackView* = ref object of View
     xArrangedSubviews: seq[View]
     xArrangedSubviewSizing: seq[StackViewSizingPolicy]
@@ -477,6 +482,24 @@ proc addArrangedSubview*(
 proc addArrangedSubview*(stackView: StackView, children: varargs[View]) =
   for child in children:
     stackView.addArrangedSubview(child)
+
+func toArrangedSubview*(view: View): ArrangedSubview =
+  ## Converts a view to an arranged input using automatic sizing.
+  ArrangedSubview(view: view)
+
+func toArrangedSubview*[T: View | typeof(nil)](
+    item: (T, StackViewSizingPolicy)
+): ArrangedSubview =
+  ## Converts a `(view, sizingPolicy)` pair to an arranged input.
+  ArrangedSubview(view: item[0], sizingPolicy: item[1])
+
+proc addArrangedSubview*(
+    stackView: StackView, children: varargs[ArrangedSubview, toArrangedSubview]
+) =
+  ## Arranges a mixture of views and `(view, sizingPolicy)` pairs in order.
+  ## Plain views use `svspAutomatic`; nil views are skipped.
+  for child in children:
+    stackView.addArrangedSubview(child.view, child.sizingPolicy)
 
 proc arrangedSubviewSizingPolicy*(
     stackView: StackView, child: View

@@ -1,3 +1,4 @@
+import ../support/terminalhelpers
 import std/[strutils, unittest]
 
 import merenda/nimkit
@@ -18,7 +19,7 @@ suite "Kosmo terminal clipboard commands":
       let
         app = newApplication("Kosmo Wrapped Terminal Clipboard Test")
         frontend = newKosmoApplication(app, monitorsGitStatus = false)
-        session = newCompactTerminalSession(columns = 12, rows = 4)
+        session = newTerminalViewSession(columns = 12, rows = 4)
         terminal = newTerminalView(session, frame = rect(0, 0, 400, 120))
         pasteboard = generalPasteboard()
         previousClipboard = pasteboard.plainText()
@@ -36,6 +37,7 @@ suite "Kosmo terminal clipboard commands":
       )
       frontend.contentView.layoutSubtreeIfNeeded()
       require frontend.window.firstResponder() == Responder(terminal)
+      discard terminal.pollSettled()
 
       let
         columns = session.screenInfo().columns
@@ -43,7 +45,7 @@ suite "Kosmo terminal clipboard commands":
       pasteboard.declareTypes([PasteboardTypeTextStorage])
       discard pasteboard.setAttributedString(newAttributedString("stale selection"))
       session.processOutput(originalLine)
-      discard terminal.poll()
+      discard terminal.pollSettled()
 
       let
         dragStart = terminal.terminalCellPoint(0, 0)

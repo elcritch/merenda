@@ -16,6 +16,8 @@
   off
 --define:
   nimStackTraceOverride
+--path:
+  "src/"
 switch("import", "libbacktrace")
 
 when defined(freebsd):
@@ -134,3 +136,6 @@ task download_references, "download local study copies of reference docs":
 
 task install_kosmo, "build and install the local macOS Kosmo.app":
   exec("bash packaging/macos/install-local.sh")
+
+when defined(nimkitTerminalTrace):
+  switch("define", "terminexTrace")

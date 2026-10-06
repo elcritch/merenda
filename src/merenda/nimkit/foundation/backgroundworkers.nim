@@ -4,34 +4,38 @@
 import std/exitprocs
 import sigils/threads
 import sigils/threadChronos
+import terminex/workerthreads
 
 var
   backgroundPool {.threadvar.}: SigilThreadPoolPtr
   backgroundTimers {.threadvar.}: SigilChronosThreadPtr
   exitRegistered {.threadvar.}: bool
 
+proc stopDispatcher(dispatcher: var SigilChronosThreadPtr) =
+  if not dispatcher.isNil:
+    try:
+      dispatcher.stop(immediate = true)
+    finally:
+      try:
+        dispatcher.join()
+      finally:
+        dispatcher = nil
+
 proc shutdownNimkitBackgroundWorkers*() {.noconv.} =
-  ## Stop and join the shared pool before imported module globals are destroyed.
+  ## Stop and join every shared dispatcher even when one shutdown raises.
   ## Call on the owning UI thread. Repeated calls are harmless.
   try:
-    if not backgroundTimers.isNil:
-      try:
-        backgroundTimers.stop(immediate = true)
-      finally:
-        # Joining must still happen if waking the timer dispatcher fails.
-        try:
-          backgroundTimers.join()
-        finally:
-          backgroundTimers = nil
+    shutdownTerminalWorkers()
   finally:
-    # Timer handle cleanup can raise after its thread has already joined.
-    # That must never leave the parsing and layout workers running.
-    if not backgroundPool.isNil:
-      try:
-        backgroundPool.stop(immediate = true)
-      finally:
-        backgroundPool.join()
-        backgroundPool = nil
+    try:
+      stopDispatcher(backgroundTimers)
+    finally:
+      if not backgroundPool.isNil:
+        try:
+          backgroundPool.stop(immediate = true)
+        finally:
+          backgroundPool.join()
+          backgroundPool = nil
 
 type NimkitBackgroundWorkerLifetime* = object
   ## Internal module guard. Declare as a worker module's final global so workers

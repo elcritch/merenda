@@ -1,6 +1,7 @@
 ## Terminal scrollback search and Kosmo's floating search controls.
 
 import std/unittest
+import ../support/terminalhelpers
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
@@ -15,12 +16,13 @@ func center(rect: Rect): Point =
 suite "Kosmo terminal search":
   test "find shortcuts start at the bottom and traverse older output first":
     let
-      session = newCompactTerminalSession(columns = 20, rows = 4)
+      session = newTerminalViewSession(columns = 20, rows = 4)
       terminal = newKosmoTerminalView(session, frame = rect(0, 0, 640, 320))
       window = newWindow("Terminal find direction", frame = rect(0, 0, 640, 320))
     defer:
       window.close()
     session.processOutput("hit old\r\nhit middle\r\nhit newest")
+    session.waitForCommands()
     window.setContentView(terminal)
     terminal.layoutSubtreeIfNeeded()
     require terminal.showSearch()
@@ -46,8 +48,9 @@ suite "Kosmo terminal search":
     check terminal.selectedSearchMatch() == 1
 
   test "matching is case insensitive and retains terminal cell positions":
-    let session = newCompactTerminalSession(columns = 12, rows = 3)
+    let session = newTerminalViewSession(columns = 12, rows = 3)
     session.processOutput("alpha one\r\nbeta\r\nALPHA two")
+    session.waitForCommands()
 
     let matches = terminalSearchMatches(session, "Alpha")
 
@@ -63,10 +66,11 @@ suite "Kosmo terminal search":
 
   test "the search field navigates, wraps, reveals scrollback, and dismisses":
     let
-      session = newCompactTerminalSession(columns = 12, rows = 2)
+      session = newTerminalViewSession(columns = 12, rows = 2)
       terminal = newKosmoTerminalView(session, frame = rect(0, 0, 640, 320))
       window = newWindow("Kosmo Terminal Search Test", frame = rect(0, 0, 640, 320))
     session.processOutput("alpha old\r\nmiddle\r\nALPHA new")
+    session.waitForCommands()
     window.setContentView(terminal)
     terminal.layoutSubtreeIfNeeded()
     defer:

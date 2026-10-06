@@ -88,6 +88,7 @@ suite "Kosmo":
       removeDir(root)
 
     let tree = newKosmoFileTree(root)
+    check tree.indentationPerLevel == 10.0'f32
     check tree.rootPath == absolutePath(root)
     require tree.rowForItem(folder) >= 0
     check tree.rowForItem(folder) < tree.rowForItem(rootFile)

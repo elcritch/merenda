@@ -261,7 +261,8 @@ proc removeBuffer(group: KosmoEditorGroup, id: KosmoBufferId) =
   group.editorView.bufferIds.delete(index)
   group.editorView.removeViewState(id)
   group.editorView.forgetMarkdownMode(id)
-  group.editorView.selectedBufferId = none(KosmoBufferId)
+  if group.editorView.selectedBufferId == some(id):
+    group.editorView.selectedBufferId = none(KosmoBufferId)
   group.editorView.lastTabs.setLen(0)
   group.pane.removeMarkdownPreview(id)
   let orderIndex = group.tabOrder.find(id.tabIdentifier)
@@ -647,6 +648,53 @@ proc handleHostCommand(view: KosmoEditorView, command: KosmoHostCommand): bool =
     return source.editorView.openHelpDocument()
   of KosmoHostCommandKind.Config:
     return source.editorView.openConfigDocument()
+  of KosmoHostCommandKind.Recovery:
+    return source.editorView.openRecoveryDocument()
+  of KosmoHostCommandKind.Output:
+    return source.editorView.showOutputDocument(command.text, command.keepFocus)
+  of KosmoHostCommandKind.Jobs:
+    return source.editorView.showOutputDocument(
+      controller.editor.jobsText(command.forceClose), false
+    )
+  of KosmoHostCommandKind.Terminal:
+    let options = nimkit.initTerminalSpawnOptions(
+      command = command.filename.get(""),
+      workingDirectory = controller.editor.workingDirectory(),
+    )
+    return controller.openTerminal(source, options, insertAfterSelected = true)
+  of KosmoHostCommandKind.SaveAndCloseTab:
+    if command.bufferId.isNone:
+      return
+    let saved = controller.editor.saveBuffer(
+      command.bufferId.get, command.filename, command.forceClose
+    )
+    if not saved.saved:
+      if not source.editorView.statusLabel.isNil:
+        source.editorView.statusLabel.text = saved.message
+      return true
+    controller.closeCurrentPaneTab(source)
+    return true
+  of KosmoHostCommandKind.DeleteBuffer:
+    if command.bufferId.isNone:
+      return
+    let id = command.bufferId.get
+    let outcome = controller.editor.closeTab(id, discardChanges = command.forceClose)
+    if not outcome.closed:
+      if not source.editorView.statusLabel.isNil:
+        source.editorView.statusLabel.text = outcome.message
+      return true
+    var affected: seq[KosmoEditorGroup]
+    for group in controller.groups:
+      if id in group.editorView.bufferIds:
+        affected.add group
+      group.removeBuffer(id)
+    for group in controller.groups:
+      group.editorView.refresh()
+    for group in affected:
+      controller.finishTabClose(group.editorView)
+    if source in controller.groups:
+      controller.activatePaneTab(source, source.selectedTabIdentifier)
+    return true
   of KosmoHostCommandKind.CloseTab:
     var id: KosmoBufferId
     if command.forceClose and source.selectedTabIdentifier.parseTabIdentifier(id) and
@@ -1094,7 +1142,8 @@ proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
     let controller = frontend.dockController
     if not frontend.gitDiffPanel.isNil:
       discard frontend.gitDiffPanel.pollRepositoryRefresh()
-    frontend.fileTree.workspaceFiles.setGitRoots(controller.editor.gitWatchRoots())
+    if lifecycle.monitorsGitStatus:
+      frontend.fileTree.workspaceFiles.setGitRoots(controller.editor.gitWatchRoots())
     if controller.editor.pollGitStatus():
       let groups = controller.groups
       if not controller.activeGroup.isNil:

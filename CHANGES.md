@@ -2,6 +2,98 @@
 
 ## Unreleased
 
+- Reduce Kosmo file-tree indentation to 10 points per level and make it
+  configurable with `fileTreeIndentation` in `config.json`.
+
+- Allow `addArrangedSubview` to mix views and `(view, sizingPolicy)` pairs in
+  one call.
+
+- Let the todo table example fill the available window space between its input
+  and bottom controls.
+
+- Draw checkbox focus rings outside the indicator in every theme, keeping the
+  checkmark and checkbox interior clear without increasing layout spacing.
+
+- Let custom layout callbacks assign descendant frames with the ordinary `frame`
+  setter without creating layout feedback. Changes outside layout, or to self,
+  ancestors, and unrelated views, still invalidate layout normally.
+
+- Stop repeated layout feedback in the draggable todo example by applying
+  checkbox frames as container layout output.
+
+- Keep Markdown parsing and streamed syntax highlighting working under `nim ic`
+  by using consistent Variant type IDs for threaded worker payloads.
+
+- Preserve Tekton inspector edits under `nim ic`, including string, boolean,
+  color, geometry, and invalid text payloads in the resource document.
+
+- Update Moe to `2ad904c1` and bridge its read/write hooks, asynchronous work,
+  and targeted buffer deletion into Kosmo. Route hook/build output and `:jobs`
+  to a reusable native document, and shell/manual/terminal commands to native
+  terminal tabs. Keep background work and visible status updates running when
+  Git monitoring is disabled, and cancel/reap hook processes on editor close.
+- Keep native Undo/Redo working during ordinary and forced Input transactions.
+  Synchronize Vim clipboard registers with the native pasteboard, preserve
+  linewise puts, and stop mapping replay after an intercepted native close.
+- Make `:wq`, `:x`, and `ZZ` save and close the selected native tab without
+  shutting down Moe or rejecting unrelated unsaved tabs. Resolve `:bd` targets
+  by stable buffer number or filename and remove their native pane projections.
+- Use Moe's undoable reload and post-reload bookkeeping for native workspace
+  replacements, including refreshed EditorConfig, LSP, and conflict state.
+- Checkpoint unsaved Kosmo buffers into a host-owned recovery store. Show
+  preserved work in a native Recovered Work tab with undoable Restore and
+  confirmed Discard actions; remove live checkpoints on a clean close.
+
+- Resolve the Git diff panel's key-equivalent selector explicitly so Kosmo builds
+  with Nim devel when menu and window procedures use the same name.
+
+- Let standalone Kosmo connect to a TCP LSP endpoint by setting `nimLspCommand`
+  to `tcp://host:port`, forwarding framed protocol bytes through its LSP child
+  process and closing the connection when the session ends.
+- Document Nimdex 0.1.2's `--lsp-listen` setup, default `nim ic` compiler
+  requirements, and daemon logging. Initialize LSP with the editor's project
+  directory and verify reconnects to a persistent listener with fresh sessions.
+- Route menu navigation keys to the active popup before the focused panel.
+  Keep up/down movement within the current menu and submenu, and move left/right
+  through the visible menubar order consistently, fixing Kosmo issues #129 and #130.
+  Tab and Shift+Tab close the active popup and cycle key focus through the
+  menu bar buttons, opening each menu as focus reaches it, and continue with
+  the remaining key views past the menu bar. Arrow navigation between menus
+  moves key focus with the open menu, and menu bar buttons draw a focus ring
+  while they hold visible keyboard focus, resolving its color from the
+  theme's focus ring color token like the other controls.
+- Keep Tab and Shift+Tab moving focus after combo-box and context-menu popup
+  dismissal, and preserve normal key-view traversal for popup lists without a
+  custom Tab handler.
+
+- Move reusable terminal sessions, Sigils commands, RChan snapshots, and the
+  dedicated worker dispatcher into Terminex 0.4.0's optional threaded adapter.
+  NimKit retains viewports, rendering, and native event-loop integration; the
+  Terminex parser, synchronous PTY API, and snapshot helpers also work without
+  Sigils or threads.
+
+- Keep terminal updates and animation deadlines running during native macOS menu
+  tracking and modal panels. Rearm worker wake notifications consumed by AppKit
+  so opening About does not leave terminals updating in slow chunks afterward.
+- Give terminal workers exclusive session ownership. Send commands through Sigils
+  and transfer bounded, owned snapshots through RChan, removing parser mutexes
+  and UI lock-priority retries. Keep parsing independent of presentation while
+  transferring only newly retained history. All view sessions use this worker
+  path, including offline parsing and Windows builds; native Windows PTY startup
+  still needs a ConPTY backend in Terminex.
+- Track deferred terminal UI callbacks with `BackRef` so queued work cannot
+  dereference a destroyed view during ORC collection.
+- Terminal view mutations are now asynchronous. Use `newTerminalViewSession()` or
+  `spawnTerminalViewSession()` instead of passing raw Terminex sessions to views.
+  Queries return the last received snapshot; `poll()` consumes available updates,
+  and `pendingCommands()` reports outstanding commands. Closing marks the facade
+  closed immediately and queues process cleanup on the worker.
+
+- Batch matching terminal glyph styles within each changed row and skip blank
+  glyphs while retaining their backgrounds and decorations. Defer frame
+  construction while the renderer is occupied, and schedule the first terminal
+  update after idle without an extra batching delay.
+
 - Make `BackRef` a reference object with shared registrations and independent
   rebinding. Read and assign targets through `handle.target`, replacing `handle[]`.
 - Save Kosmo configuration and Tekton resource documents through checked

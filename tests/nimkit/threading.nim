@@ -351,6 +351,9 @@ suite "NimKit threading":
     discard root.buildRenderScene()
     doAssert host.submitRenderScene(scene, logicalSize)
 
+    host.acknowledgeRender(initial.renderId)
+    check host.renderRequested # An older completion cannot free a newer frame.
+
     var latest: nimkitBackend.ThreadRenderSnapshot
     require host.channels.pollLatestRender(latest)
     check latest.usesFragments
@@ -368,6 +371,7 @@ suite "NimKit threading":
     retainedScenes.apply(replica, latestUpdate)
     check replica.materialize().len(0.ZLevel) == scene.materialize().len(0.ZLevel)
     host.acknowledgeRender(latest.renderId)
+    check not host.renderRequested
 
     let replacement = newView(frame = nimkitTypes.rect(0, 0, 180, 100))
     let replacementScene = replacement.buildRenderScene()

@@ -85,6 +85,7 @@ type
     xOutlineColumn: TableColumn
     xOutlineDataSource: DynamicAgent
     xOutlineDelegate: DynamicAgent
+    xIndentationPerLevel: float32
     xTrackingDisclosureRow: int
     xTrackingDisclosureIdentifier: string
     xPressedDisclosureRow: int
@@ -190,10 +191,22 @@ proc childrenForParent(
 proc reloadOutlineData*(outlineView: OutlineView)
 
 const
-  OutlineIndentStep = 16.0'f32
+  DefaultOutlineIndentationPerLevel = 16.0'f32
   OutlineDisclosureLeading = 4.0'f32
   OutlineDisclosureMaxSize = 16.0'f32
   OutlineTextLeading = 24.0'f32
+
+proc indentationPerLevel*(outlineView: OutlineView): float32 =
+  ## Horizontal spacing in points for each hierarchy level; defaults to 16.
+  outlineView.xIndentationPerLevel
+
+proc `indentationPerLevel=`*(outlineView: OutlineView, indentation: float32) =
+  ## Update hierarchy spacing, clamping negative values to zero and redrawing rows.
+  let normalized = max(indentation, 0.0'f32)
+  if outlineView.xIndentationPerLevel == normalized:
+    return
+  outlineView.xIndentationPerLevel = normalized
+  TableView(outlineView).reloadData()
 
 proc hasChildren(outlineView: OutlineView, identifier: string): bool =
   outlineView.childrenForParent(identifier).len > 0
@@ -699,7 +712,8 @@ proc disclosureRectInRowBounds(
     level = outlineView.levelForRow(row)
     size = min(rowBounds.size.height, OutlineDisclosureMaxSize)
   rect(
-    rowBounds.origin.x + level.float32 * OutlineIndentStep + OutlineDisclosureLeading,
+    rowBounds.origin.x + level.float32 * outlineView.indentationPerLevel() +
+      OutlineDisclosureLeading,
     rowBounds.origin.y + max((rowBounds.size.height - size) * 0.5'f32, 0.0'f32),
     size,
     size,
@@ -1050,7 +1064,8 @@ proc outlineTextRectForCellFrame(
     trailingInset = 0.0'f32
   if column == outlineView.outlineColumn():
     let indent =
-      outlineView.levelForRow(row).float32 * OutlineIndentStep + OutlineTextLeading
+      outlineView.levelForRow(row).float32 * outlineView.indentationPerLevel() +
+      OutlineTextLeading
     result.x += indent
     result.w = max(result.w - indent - trailingInset, 0.0'f32)
   else:
@@ -1125,7 +1140,8 @@ proc drawOutlineRowText(
               rect(textRect.maxX - badgeWidth, textRect.y, badgeWidth, textRect.h)
           of oibpLeading:
             let leadingWidth = min(
-              OutlineIndentStep + OutlineTextLeading - OutlineDisclosureLeading,
+              outlineView.indentationPerLevel() + OutlineTextLeading -
+                OutlineDisclosureLeading,
               cellFrame.w,
             )
             badgeRect = rect(cellFrame.x, textRect.y, leadingWidth, textRect.h)
@@ -1396,6 +1412,7 @@ protocol OutlineViewTableDataSource of TableViewDataSource:
 
 proc initOutlineViewFields*(outlineView: OutlineView, frame: Rect = AutoRect) =
   initTableViewFields(TableView(outlineView), frame)
+  outlineView.xIndentationPerLevel = DefaultOutlineIndentationPerLevel
   outlineView.xTrackingDisclosureRow = -1
   outlineView.xPressedDisclosureRow = -1
   let column = newTableColumn("outline", "Outline", width = 220.0)

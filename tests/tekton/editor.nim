@@ -47,6 +47,30 @@ suite "Tekton resource editor":
     check invalidBool.value.kind == rvString
     check invalidBool.value.stringValue == "not a bool"
 
+  test "property edits retain parsed payloads in the draft and return value":
+    let
+      document = newResourceEditorDocument(editorBundle())
+      editor = newResourceEditor(document)
+      buttonId = resourceId("editor.button")
+
+    for (name, text, expected, parsed) in [
+      ("title", "Changed", resourceValue("Changed"), true),
+      ("enabled", "false", resourceValue(false), true),
+      (
+        "backgroundColor",
+        "0.25, 0.5, 0.75, 1",
+        resourceValue(color(0.25, 0.5, 0.75, 1)),
+        true,
+      ),
+      ("frame", "1, 2, 30, 40", resourceValue(rect(1, 2, 30, 40)), true),
+      ("enabled", "not a bool", resourceValue("not a bool"), false),
+    ]:
+      let edited = editor.commitPropertyText(buttonId, name, text)
+      check edited.edit.applied
+      check edited.parsed == parsed
+      check edited.value == expected
+      check document.resources().viewProperty(buttonId, name).value == expected
+
   test "editor exposes palette hierarchy inspector and stable valid preview":
     let
       document = newResourceEditorDocument(editorBundle())

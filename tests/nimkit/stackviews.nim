@@ -2,8 +2,12 @@ import std/unittest
 
 import merenda/nimkit
 
-type FixedIntrinsicView = ref object of View
-  naturalSize: Size
+type
+  FixedIntrinsicView = ref object of View
+    naturalSize: Size
+
+  CheckBoxRowView = ref object of View
+    checkBox: Button
 
 protocol FixedIntrinsicLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: FixedIntrinsicView): IntrinsicSize =
@@ -16,7 +20,61 @@ proc newFixedIntrinsicView(width, height: float32): FixedIntrinsicView =
   result.autoresizingMaskConstraints = false
   discard result.withProtocol(FixedIntrinsicLayout)
 
+protocol CheckBoxRowLayout of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(row: CheckBoxRowView): IntrinsicSize =
+    let size = row.checkBox.sizeThatFits()
+    initIntrinsicSize(size.width, max(size.height, 24.0'f32))
+
+  method layoutSubviews(row: CheckBoxRowView) =
+    row.checkBox.frame = row.bounds()
+
+proc newCheckBoxRow(title: string): CheckBoxRowView =
+  result = CheckBoxRowView(checkBox: newCheckBox(title))
+  initViewFields(result)
+  result.setHuggingPriority(LayoutPriorityRequired, laVertical)
+  result.setCompressionPriority(LayoutPriorityRequired, laVertical)
+  discard result.withProtocol(CheckBoxRowLayout)
+  result.addSubview(result.checkBox)
+
 suite "nimkit stack views":
+  test "frame assignments in row layout settle after resizing and reordering":
+    let
+      root = newView(frame = rect(0, 0, 420, 421))
+      stack = newStackView(laVertical)
+      first = newCheckBoxRow("Write release notes")
+      second = newCheckBoxRow("Tag v0.4.0")
+      third = newCheckBoxRow("Try the demo")
+
+    stack.addArrangedSubview(first, second, third)
+    root.addSubview(stack)
+    stack.pinEdges(
+      toGuide = root.contentLayoutGuide(insets(28.0, 28.0, 0.0, 28.0)),
+      edges = {leLeft, leTop, leRight},
+    )
+
+    template checkSettled() =
+      root.layoutSubtreeIfNeeded()
+      check root.layoutFeedbackCycles() == 0
+      check not root.layoutFeedbackBlocked()
+      for child in stack.arrangedSubviews:
+        let row = CheckBoxRowView(child)
+        check row.frame.size.width == root.bounds.size.width - 56.0'f32
+        check row.checkBox.frame == row.bounds
+      root.finishDisplaySubtree()
+      check not root.needsDisplayUpdateInSubtree()
+      let generation = root.layoutGeneration()
+      root.layoutSubtreeIfNeeded()
+      check root.layoutGeneration() == generation
+
+    checkSettled()
+    root.frame = rect(0, 0, 520, 421)
+    checkSettled()
+    stack.insertArrangedSubview(first, 2)
+    checkSettled()
+    check first.frame.origin.y > third.frame.origin.y
+    second.removeFromSuperview()
+    checkSettled()
+
   test "horizontal stack intrinsic size sums widths and spacing with insets":
     let
       stack = newStackView(laHorizontal, frame = rect(0, 0, 1, 1))
@@ -146,6 +204,61 @@ suite "nimkit stack views":
     check stack.arrangedSubviewSizingPolicy(content) == svspFillAvailableSpace
     check title.frame() == rect(40.0, 0.0, 40.0, 20.0)
     check content.frame() == rect(0.0, 28.0, 120.0, 72.0)
+
+  test "mixed arranged subviews preserve order and apply per-view sizing":
+    let
+      stack = newStackView(laVertical, frame = rect(0, 0, 120, 100))
+      title = newFixedIntrinsicView(40, 20)
+      content = newFixedIntrinsicView(40, 10)
+      footer = newFixedIntrinsicView(40, 10)
+
+    stack.spacing = 8.0
+    stack.alignment = svaCenter
+    stack.addArrangedSubview(title, (content, svspFillAvailableSpace), footer)
+    stack.layoutSubtreeIfNeeded()
+
+    check stack.arrangedSubviews == @[View(title), View(content), View(footer)]
+    check stack.arrangedSubviewSizingPolicy(title) == svspAutomatic
+    check stack.arrangedSubviewSizingPolicy(content) == svspFillAvailableSpace
+    check stack.arrangedSubviewSizingPolicy(footer) == svspAutomatic
+    check title.frame == rect(40, 0, 40, 20)
+    check content.frame == rect(0, 28, 120, 54)
+    check footer.frame == rect(40, 90, 40, 10)
+
+  test "mixed arranged subview arguments evaluate once and skip nil views":
+    let stack = newStackView(laVertical)
+    var evaluations: seq[string]
+
+    proc target(): StackView =
+      evaluations.add "stack"
+      stack
+
+    proc child(name: string): View =
+      evaluations.add name
+      newView()
+
+    target().addArrangedSubview(
+      child("first"),
+      nil,
+      (child("filled"), svspFillAvailableSpace),
+      (nil, svspFillAvailableWidth),
+      child("last"),
+    )
+
+    check evaluations == @["stack", "first", "filled", "last"]
+    check stack.arrangedSubviews.len == 3
+    check stack.arrangedSubviewSizingPolicy(stack.arrangedSubviews[1]) ==
+      svspFillAvailableSpace
+
+    # The existing collection and explicit-policy overloads stay usable.
+    let
+      plain = newView()
+      explicit = newView()
+    stack.addArrangedSubview(@[plain])
+    stack.addArrangedSubview(explicit, svspFillAvailableWidth)
+    check stack.arrangedSubviews[^2] == plain
+    check stack.arrangedSubviews[^1] == explicit
+    check stack.arrangedSubviewSizingPolicy(explicit) == svspFillAvailableWidth
 
   test "equal spacing distribution keeps natural sizes and expands gaps":
     let

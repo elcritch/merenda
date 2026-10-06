@@ -1384,7 +1384,44 @@ proc closePopupRoot(button: PopupMenuButton) =
   else:
     root.closePopup()
 
+proc owningMenuBar(button: PopupMenuButton): MenuBar
+
+proc dismissPopupAndAdvanceKeyView(button: PopupMenuButton, delta: int) =
+  ## Close the whole popup tree, then advance key focus relative to the root
+  ## button so Tab cycles through the menu bar and, past its end, through the
+  ## remaining key views of the window. A menu bar button that gains focus
+  ## opens its popup, mirroring arrow navigation between menus.
+  let
+    root = button.rootPopup()
+    owner = root.ownerWindow()
+  button.closePopupRoot()
+  if owner.isNil:
+    return
+  # Context-menu anchors are removed on dismissal. Continue from the restored
+  # responder instead of looking up a key view relative to the detached anchor.
+  var start = View(root)
+  if root.ownerWindow() != owner:
+    let restored = owner.firstResponder()
+    start =
+      if restored of View:
+        View(restored)
+      else:
+        nil
+  if delta < 0:
+    owner.selectKeyViewPrecedingView(start)
+  else:
+    owner.selectKeyViewFollowingView(start)
+  let next = owner.firstResponder()
+  if next.isNil or not (next of PopupMenuButton):
+    return
+  let nextButton = PopupMenuButton(next)
+  if nextButton.owningMenuBar().isNil or nextButton.popupOpen():
+    return
+  nextButton.openPopup()
+
 proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool =
+  if not button.xChildPopup.isNil and button.xChildPopup.popupOpen():
+    return button.xChildPopup.handlePopupKeyDown(event)
   case event.key
   of keyEscape:
     button.closePopupRoot()
@@ -1413,6 +1450,11 @@ proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool =
       discard button.openRelativeMenuBarButton(-1)
   of keyEnter:
     button.activateItem(button.xHighlightedIndex)
+  of keyTab:
+    if kmShift in event.modifiers:
+      button.dismissPopupAndAdvanceKeyView(-1)
+    else:
+      button.dismissPopupAndAdvanceKeyView(1)
   else:
     return false
   true
@@ -1429,6 +1471,8 @@ proc popupListActions(button: PopupMenuButton): PopupListActions =
       button.scrollPopupRows(delta),
     keyDown: proc(event: KeyEvent) =
       discard button.handlePopupKeyDown(event),
+    tab: proc(delta: int) =
+      button.dismissPopupAndAdvanceKeyView(delta),
   )
 
 proc popupList(button: PopupMenuButton): PopupListView =
@@ -1504,6 +1548,8 @@ proc openPopupHost(button: PopupMenuButton): bool =
     restoreCurrentResponderIfNil = not button.xUsesCustomRestoreResponder,
     managesTransientSession = button.xParentPopup.isNil,
     focusContent = button.shouldUseWindowPopup(),
+    onKeyDown = proc(event: KeyEvent): bool =
+      button.handlePopupKeyDown(event),
   )
   button.xPopupHost = host
   if host.presentPopup():
@@ -1697,14 +1743,13 @@ protocol PopupMenuButtonDrawing of ViewDrawingProtocol:
         srMenuBarItem, states, id = button.styleId, classes = button.styleClasses
       )
     )
+    let absoluteFrame = context.renderRectFor(button.bounds)
     discard context.addRenderRectangle(
-      context.renderRectFor(button.bounds),
-      style.box.fill,
-      style.box.borderColor,
-      style.box.borderWidth,
-      style.box.cornerRadius,
-      style.box.shadows,
+      absoluteFrame, style.box.fill, style.box.borderColor, style.box.borderWidth,
+      style.box.cornerRadius, style.box.shadows,
     )
+    if button.isFocusVisible and not button.popupOpen():
+      context.addFocusRing(absoluteFrame, style.box)
     context.addText(button.bounds.inset(style.text.insets), button.title(), style.text)
 
 protocol PopupMenuButtonEvents of ResponderEventProtocol:
@@ -1739,6 +1784,8 @@ protocol PopupMenuButtonEvents of ResponderEventProtocol:
       return true
 
   method keyDown(button: PopupMenuButton, event: KeyEvent): bool =
+    if button.popupOpen():
+      return button.handlePopupKeyDown(event)
     case event.key
     of keyEscape:
       let root = button.rootPopup()
@@ -1754,6 +1801,12 @@ protocol PopupMenuButtonEvents of ResponderEventProtocol:
       button.openRelativeMenuBarButton(-1)
     of keyArrowRight:
       button.openRelativeMenuBarButton(1)
+    of keyTab:
+      if kmShift in event.modifiers:
+        button.dismissPopupAndAdvanceKeyView(-1)
+      else:
+        button.dismissPopupAndAdvanceKeyView(1)
+      true
     else:
       false
 
@@ -1884,6 +1937,9 @@ proc openRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool =
         if not menuBar.xOpenButton.isNil:
           menuBar.xOpenButton.closePopup()
         candidate.openPopup()
+      let owner = candidate.ownerWindow()
+      if not owner.isNil:
+        discard owner.makeFirstResponder(candidate, focusVisible = true)
       return true
     index += delta
   false

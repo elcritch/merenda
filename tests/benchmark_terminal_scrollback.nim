@@ -9,6 +9,7 @@
 import std/[monotimes, strformat, times]
 
 import merenda/nimkit
+import support/terminalhelpers
 
 const
   Columns = 120
@@ -30,11 +31,12 @@ proc elapsedMicroseconds(startedAt: MonoTime, iterations: int): float =
   nanoseconds / 1_000.0 / iterations.float
 
 let
-  session = newCompactTerminalSession(Columns, Rows, HistoryLines)
+  session = newTerminalViewSession(Columns, Rows, HistoryLines)
   view = newTerminalView(session, frame = rect(0, 0, 1_200, 640))
   window = newWindow("Terminal scrollback benchmark", frame = rect(0, 0, 1_200, 640))
 var startedAt = getMonoTime()
 session.processOutput(terminalOutput(InputLines))
+session.waitForCommands()
 let ingestionMean = elapsedMicroseconds(startedAt, InputLines)
 discard view.poll()
 window.setContentView(view)

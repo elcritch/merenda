@@ -487,14 +487,37 @@ pane; relative paths use the editor's working directory. `:new` and `:vnew`
 create empty buffers in those panes. Moe mappings for these commands and
 `mode_switch config` use the same Kosmo tabs and panes.
 
+`:wq`, `:x`, and `ZZ` save and close the selected native tab; other unsaved
+tabs stay open. `:bd` accepts a buffer number or filename and removes that
+buffer from every pane, refusing unsaved changes unless you add `!`.
+Undo and Redo also work while typing, including when Input mode is forced.
+Vim's `"+` and `"*` registers use the native clipboard; on platforms with one
+clipboard, both registers share it.
+
+Kosmo advances Moe's background work from the native event loop, including
+when Git monitoring is disabled. Hook output, build output, and `:jobs` use a
+reusable Command Output tab. `:jobs!` stops running external commands.
+`:terminal`, shell commands, and manual pages open native terminal tabs.
+Kosmo loads `[Hook]` settings from `~/.config/moe/moerc.toml`; Moe's read/write
+hook rules apply to native file opens and saves too.
+
+Unsaved work is checkpointed every five seconds after changes into Kosmo's
+recovery cache and removed on a clean close. After an interrupted session,
+Kosmo opens Recovered Work when preserved copies exist. Use `:recover` to
+open that tab again. Restore brings a copy into an unsaved editor buffer as
+an undoable edit; Discard requires a second click to confirm removal.
+
 Settings changes apply to the current Kosmo instance immediately. Choose
 **Save as Default** to use the committed theme, fonts, scale, and scrolling
 choices on the next launch; **Reset** restores the last saved values. You can
 also enable **Remember changes for future launches** to save each committed
 change automatically.
 
-Terminal tabs sleep on PTY readiness while idle and batch active output into
-bounded updates. For native timing measurements with `cmatrix` or `ps`, see
+Terminal tabs sleep on PTY readiness while idle. A dedicated Sigils dispatcher
+owns their sessions, reads and parses output, and accepts input and resize commands.
+The UI consumes owned RChan snapshots without waiting for the parser. This worker
+path is shared across platforms; native PTY startup currently requires POSIX.
+For native timing measurements with `cmatrix`, `ps`, or a 10,000-line burst, see
 [terminal latency diagnostics](docs/terminal-latency.md).
 
 Kosmo Settings → Moe Themes includes Catppuccin Latte, Catppuccin Mocha,
@@ -503,22 +526,28 @@ the executable and work from any launch directory. Add your own TOML themes
 in `~/.config/moe/themes`; a user theme with the same name overrides a bundled
 theme.
 
+Kosmo's file tree indents children by 10 points per level. To change this,
+add `"fileTreeIndentation": 8.0` to `~/.config/kosmo/config.json` and restart
+Kosmo. Values are nonnegative points per level; `0.0` removes indentation.
+
 To use a Nim language server, add `nimLspCommand` to Kosmo's
 `~/.config/kosmo/config.json` and restart Kosmo. The command must be an
-absolute executable path followed by any arguments. For example, after building
-[Nimdex](https://github.com/elcritch/nimdex) from its checkout:
+absolute executable path followed by any arguments. Nimdex 0.1.2 defaults to
+`nim ic` and requires a compiler with `--genBif:on` support, plus matching
+`nifler` and `nifmake` companions beside Nim or on `PATH`. For example, build
+[Nimdex](https://github.com/elcritch/nimdex) from its checkout with that compiler:
 
 ```sh
 cd ../nimdex
 mkdir -p bin
-deps/nim-devel/bin/nim c -d:release -o:bin/nimdex src/nimdex.nim
+/absolute/path/to/bif-enabled/nim c -d:release -o:bin/nimdex src/nimdex.nim
 ```
 
 Add this field to the JSON config, using absolute paths without spaces:
 
 ```json
 {
-  "nimLspCommand": "/absolute/path/to/nimdex/bin/nimdex daemon --compiler /absolute/path/to/nimdex/deps/nim-devel/bin/nim"
+  "nimLspCommand": "/absolute/path/to/nimdex/bin/nimdex daemon --compiler /absolute/path/to/bif-enabled/nim --log-file /absolute/path/to/nimdex.log"
 }
 ```
 
@@ -527,6 +556,40 @@ Kosmo enables Moe's LSP client when this field is set. In normal mode, press
 the field or set it to an empty string to disable LSP on the next launch.
 Nimdex's `daemon` command communicates over standard input and output and stays
 attached to Kosmo; it does not need to detach itself.
+`--log-file` appends daemon stderr to the chosen file and creates missing parent
+directories. Omit it to send logs through Kosmo's LSP message log.
+
+To run Nimdex separately, start its persistent LSP TCP listener in another
+terminal:
+
+```sh
+/absolute/path/to/nimdex/bin/nimdex daemon --lsp-listen 9257 --compiler /absolute/path/to/bif-enabled/nim --log-file /absolute/path/to/nimdex.log
+```
+
+Set `nimLspCommand` to the listener's `tcp://host:port` address and restart Kosmo:
+
+```json
+{
+  "nimLspCommand": "tcp://127.0.0.1:9257"
+}
+```
+
+Hostnames, IPv4 addresses, and bracketed IPv6 addresses such as
+`tcp://[::1]:9257` are accepted. Kosmo connects in its dedicated LSP child
+process and forwards standard LSP `Content-Length` frames in both directions.
+It does not launch the server; connection errors appear in the LSP message log,
+and closing Kosmo disconnects its session while Nimdex keeps listening for the
+next connection. Nimdex serves one editor session at a time, so use a separate
+listener for each concurrently connected Kosmo window.
+Kosmo initializes each connection with its editor's project directory as the
+LSP workspace root.
+
+Nimdex binds to `127.0.0.1` by default. `--lsp-listen 0` chooses an available
+port and records it in the daemon log. For another bind address, including a
+Tailscale address, add `--lsp-host ADDRESS` and use that address in Kosmo's TCP
+URL. The server must be able to access the same project and document paths;
+TCP does not translate paths between machines. Use `--lsp-listen` for editor
+LSP; Nimdex's separate `--listen` option serves its CLI query protocol.
 
 Syntax colors arrive progressively as background workers finish small batches.
 Markdown previews display their content before fenced-code coloring finishes;

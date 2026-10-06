@@ -29,6 +29,8 @@ type NativeTerminalProbe = ref object of Agent
   stage: int
   idleCpu: float
   idleStart: MonoTime
+  activeCpu: float
+  activeStart: MonoTime
 
 proc advance(probe: NativeTerminalProbe) {.slot.}
 
@@ -55,18 +57,22 @@ proc advance(probe: NativeTerminalProbe) {.slot.} =
   of 1:
     let wall = (getMonoTime() - probe.idleStart).inNanoseconds.float / 1e9
     echo "idle CPU percent of one core: ", (cpuTime() - probe.idleCpu) / wall * 100
+    probe.activeCpu = cpuTime()
+    probe.activeStart = getMonoTime()
     recordTerminalTrace("workload-start")
     probe.view.session().write(probe.command & "\n")
     probe.schedule(3000)
   else:
+    let wall = (getMonoTime() - probe.activeStart).inNanoseconds.float / 1e9
+    echo "active CPU percent of one core: ", (cpuTime() - probe.activeCpu) / wall * 100
     recordTerminalTrace("workload-end")
     probe.view.close()
     probe.app.stop()
   inc probe.stage
 
 let args = commandLineParams()
-doAssert args.len == 3, "expected: cmatrix|ps terminal|kosmo output.jsonl"
-doAssert args[0] in ["cmatrix", "ps"]
+doAssert args.len == 3, "expected: cmatrix|ps|burst terminal|kosmo output.jsonl"
+doAssert args[0] in ["cmatrix", "ps", "burst"]
 doAssert args[1] in ["terminal", "kosmo"]
 let probe = NativeTerminalProbe(app: newApplication("Terminal latency probe"))
 let options = initTerminalSpawnOptions(
@@ -78,6 +84,9 @@ if args[0] == "cmatrix":
   let executable = findExe("cmatrix")
   doAssert executable.len > 0, "cmatrix must be installed"
   probe.command = "exec " & quoteShell(executable) & " -u 1"
+elif args[0] == "burst":
+  probe.command =
+    "i=0; while [ $i -lt 10000 ]; do printf 'output-line-%s\\n' \"$i\"; i=$((i+1)); done; printf 'burst-finished\\n'"
 else:
   probe.command = "i=0; while [ $i -lt 12 ]; do ps; i=$((i+1)); sleep 0.15; done"
 if args[1] == "kosmo":

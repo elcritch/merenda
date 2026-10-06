@@ -14,15 +14,14 @@ import ../responder/responders
 from ../text/textviews import isInsertableText
 import ../text/monotextviews
 import ../view/views
-import ./terminalwatch
+import ./[terminalsessions, terminalwatch]
+
+export terminalsessions
 
 const
   DefaultTerminalFontSize* = 14.0'f32
   DefaultTerminalPadding* = 4.0'f32
-  TerminalReadBudget = initDuration(milliseconds = 2)
-  TerminalBatchDelay = initDuration(milliseconds = 2)
   TerminalFrameInterval = initDuration(milliseconds = 8)
-  TerminalActivePeriod = initDuration(milliseconds = 50)
 
 type
   TerminalPalette* = object
@@ -36,8 +35,6 @@ type
   TerminalLink = object
     target: string
     row, firstColumn, lastColumn: int
-
-  TerminalViewSession* = CompactTerminalSession[TerminexCell]
 
   TerminalView* = ref object of MonoTextView
     xSession: TerminalViewSession
@@ -68,7 +65,6 @@ type
     xBlinkElapsed, xMaintenanceElapsed: Duration
     xTextBlinkVisible, xCursorBlinkVisible, xBlinkActive, xHasBlinkingText: bool
     xOutputWatch: TerminalOutputWatch
-    xOutputWatchReady: bool
     xHeartbeat: Animation
     xOutputFrame: Animation
     xLastOutputFrame: MonoTime
@@ -326,7 +322,7 @@ proc scheduleTerminalFrame(view: TerminalView)
 proc `session=`*(view: TerminalView, session: TerminalViewSession) =
   let next =
     if session.isNil:
-      newCompactTerminalSession()
+      newTerminalViewSession()
     else:
       session
   if view.xSession == next:
@@ -614,11 +610,10 @@ proc clearHoveredLink(view: TerminalView) =
 
 proc appendTerminalRow(
     view: TerminalView,
-    session: TerminalViewSession,
+    line: TerminexLine,
     columns, absoluteRow: int,
     builder: var MonoTextRowBuilder,
 ) =
-  let line = session.lineAtAbsolute(absoluteRow)
   for column in 0 ..< columns:
     let cell =
       if column < line.len:
@@ -648,13 +643,10 @@ proc renderedGridDimensionsMatch(view: TerminalView, rows, columns: int): bool =
       return false
   true
 
-proc synchronizeTerminalGrid(
-    view: TerminalView,
-    session: TerminalViewSession,
-    info: TerminexScreenInfo,
-    start: int,
-) =
+proc synchronizeTerminalGrid(view: TerminalView, snapshot: TerminalViewportSnapshot) =
   let
+    info = snapshot.info
+    start = snapshot.start
     rows = info.rows
     columns = info.columns
     rowOffset = start - view.xRenderedStart
@@ -671,14 +663,19 @@ proc synchronizeTerminalGrid(
     let provider: MonoTextRowProvider = proc(
         row: int, builder: var MonoTextRowBuilder
     ) =
-      view.appendTerminalRow(session, columns, firstReplacementRow + row, builder)
+      view.appendTerminalRow(
+        snapshot.lines[firstReplacementRow + row - start],
+        columns,
+        firstReplacementRow + row,
+        builder,
+      )
     view.scrollGridRows(rowOffset, provider)
   elif not dimensionsMatch or not unchangedGeneration or rowOffset != 0:
     view.xHasBlinkingText = false
     let provider: MonoTextRowProvider = proc(
         row: int, builder: var MonoTextRowBuilder
     ) =
-      view.appendTerminalRow(session, columns, start + row, builder)
+      view.appendTerminalRow(snapshot.lines[row], columns, start + row, builder)
     view.replaceGrid(
       rows, columns, provider, rowOffset = if dimensionsMatch: rowOffset else: 0
     )
@@ -704,8 +701,13 @@ proc syncTerminalScreen(view: TerminalView) =
   defer:
     recordTerminalTrace("grid-end", cast[uint64](view))
   let
-    info = view.xSession.screenInfo()
+    snapshot = view.xSession.viewportSnapshot(
+      view.xScrollPosition, view.xLastScrollbackLinesAdded,
+      view.xLastScrollbackResetCount,
+    )
+    info = snapshot.info
     nextScrollbackCount = info.scrollbackCount
+  recordTerminalTrace("grid-snapshot", snapshot.workerToken, snapshot.readSerial)
   let added = info.scrollbackLinesAdded - view.xLastScrollbackLinesAdded
   if info.scrollbackResetCount != view.xLastScrollbackResetCount:
     view.xScrollPosition = 0.0'f32
@@ -727,16 +729,14 @@ proc syncTerminalScreen(view: TerminalView) =
   view.xLastScrollbackLinesAdded = info.scrollbackLinesAdded
   view.xLastScrollbackResetCount = info.scrollbackResetCount
   view.xLastScrollbackCount = nextScrollbackCount
-  view.xScrollPosition =
-    clamp(view.xScrollPosition, 0.0'f32, nextScrollbackCount.float32)
+  view.xScrollPosition = snapshot.scrollPosition
   if view.refreshHoveredLink():
     view.xLastGeneration = high(uint64)
 
   let
-    start = max(info.totalLineCount - info.rows - view.viewportOffset(), 0)
     offset = view.viewportOffset().float32
     cursor = info.cursor
-  view.synchronizeTerminalGrid(view.xSession, info, start)
+  view.synchronizeTerminalGrid(snapshot)
   view.gridOffset =
     initPoint(0.0'f32, -(offset - view.xScrollPosition) * view.terminalLineHeight())
   if view.cursorRow() != cursor.position.row or
@@ -767,16 +767,14 @@ proc synchronizeMetadata(view: TerminalView) =
     let text = view.xSession.takeClipboardRequest()
     discard generalPasteboard().replaceWithPlainText(text)
 
-proc pollTerminal(
-    view: TerminalView, timeBudget: Duration, synchronize = true
-): TerminexPollResult =
+proc pollTerminal(view: TerminalView, synchronize = true): TerminexPollResult =
   if view.isNil or view.xSession.isNil:
     return
   recordTerminalTrace("poll-start", cast[uint64](view))
   let
     session = view.xSession
     epoch = view.xOutputEpoch
-  result = session.poll(timeBudget = timeBudget)
+  result = session.poll()
   view.xOutputClosed = result.outputClosed
   recordTerminalTrace("poll-end", cast[uint64](view), result.bytesRead.uint64)
   let generation = view.xSession.screenInfo().generation
@@ -794,9 +792,9 @@ proc pollTerminal(
     emit view.terminalProcessDidExit(session.exitCode())
 
 proc poll*(view: TerminalView): TerminexPollResult =
-  ## Synchronously drain available PTY output and synchronize the rendered grid.
-  ## Attached views automatically use bounded, coalesced output frames instead.
-  view.pollTerminal(initDuration())
+  ## Consume available worker snapshots and synchronize the rendered grid.
+  ## This does not wait for queued commands or PTY reads.
+  view.pollTerminal()
 
 proc resizeToFit*(view: TerminalView) =
   if view.isNil or view.xSession.isNil:
@@ -1052,10 +1050,6 @@ proc handleTerminalRawEvent(view: TerminalView, event: MonoTextRawEvent): bool =
       view.syncTerminalScreen()
     true
 
-proc rearmTerminalOutput(view: TerminalView, token: uint64) =
-  if not view.xOutputWatch.isNil and view.xOutputWatch.token == token:
-    view.xOutputWatch.rearm()
-
 proc terminalOutputFrameDue(view: TerminalView) {.slot.} =
   # The scheduler removes the completed animation after this slot returns.
   view.xOutputFrame = nil
@@ -1069,13 +1063,10 @@ proc scheduleTerminalFrame(view: TerminalView) =
     return
   let
     now = getMonoTime()
-    batchDelay =
-      if now - view.xLastOutputFrame <= TerminalActivePeriod:
-        initDuration()
-      else:
-        TerminalBatchDelay
-    delay = max(batchDelay, view.xLastOutputFrame + TerminalFrameInterval - now)
-  # One fixed deadline batches small writes without a trailing debounce.
+    interval = min(TerminalFrameInterval, owner.animationScheduler().frameInterval)
+    delay = max(initDuration(), view.xLastOutputFrame + interval - now)
+  # The first output after idle is immediate. During a burst one fixed deadline
+  # follows the window's configured cadence without postponing the final update.
   view.xOutputFrame = newAnimation(duration = delay)
   view.xOutputFrame.cadence = eventCadence()
   view.xOutputFrame.connect(finished, view, terminalOutputFrameDue)
@@ -1086,10 +1077,9 @@ proc readTerminalOutput(view: TerminalView): bool =
     owner = view.xPollingWindow.target
     session = view.xSession
     epoch = view.xOutputEpoch
-    token = if view.xOutputWatch.isNil: 0'u64 else: view.xOutputWatch.token
   if owner.isNil or session.isNil:
     return
-  let polled = view.pollTerminal(TerminalReadBudget, synchronize = false)
+  discard view.pollTerminal(synchronize = false)
   # Metadata and process-exit callbacks may close, detach, or replace the view.
   if view.xOutputEpoch != epoch or view.xPollingWindow.target != owner or
       view.xSession != session:
@@ -1098,26 +1088,21 @@ proc readTerminalOutput(view: TerminalView): bool =
     # Callers may close the session directly while its view remains attached.
     view.stopTerminalPolling()
     return
-  view.xReadScheduled = polled.readPaused
-  if polled.readPaused:
-    return true
-  if not polled.outputClosed:
-    view.rearmTerminalOutput(token)
+  view.xReadScheduled = false
 
 proc scheduleTerminalRead(view: TerminalView) =
   if view.xPollingWindow.isNil or view.xReadScheduled:
     return
   view.xReadScheduled = true
-  let
-    weakView = view.unsafeWeakRef()
-    epoch = view.xOutputEpoch
+  var weakView: BackRef[TerminalView]
+  weakView.target = view
+  let epoch = view.xOutputEpoch
   scheduleMainThreadWork(
     proc(): bool =
-      if not weakView.isNil:
-        let current = weakView[]
+      let current = weakView.target
+      if not current.isNil:
         if current.xOutputEpoch == epoch:
-          # One bounded chunk per application frame. Continuations yield to
-          # native input, animations and rendering before draining more output.
+          # Consume the newest available snapshot before scheduling its frame.
           return current.readTerminalOutput()
   )
 
@@ -1129,26 +1114,19 @@ proc terminalOutputAvailable(view: TerminalView, token: uint64) {.slot.} =
 proc terminalWatchStarted(view: TerminalView, token: uint64) {.slot.} =
   if view.xOutputWatch.isNil or view.xOutputWatch.token != token:
     return
-  view.xOutputWatchReady = true
   view.xHeartbeat.cadence = intervalCadence(initDuration(milliseconds = 500))
-
-proc terminalWatchFailed(view: TerminalView, token: uint64) {.slot.} =
-  if view.xOutputWatch.isNil or view.xOutputWatch.token != token:
-    return
-  view.xOutputWatch.stop()
-  view.xOutputWatch = nil
-  view.xOutputWatchReady = false
-  view.xHeartbeat.cadence = everyFrameCadence()
 
 proc terminalTicked(view: TerminalView, delta: Duration) {.slot.} =
   if view.isNil:
     return
   view.xMaintenanceElapsed = view.xMaintenanceElapsed + delta
   let maintenanceDue = view.xMaintenanceElapsed >= initDuration(milliseconds = 500)
-  if not view.xOutputWatchReady or
-      (maintenanceDue and (view.xOutputClosed or view.xSession.pendingWriteBytes() > 0)):
-    # A healthy watcher handles output without idle PTY polling. Maintenance
-    # retries backpressured input and collects exit after an observed hangup.
+  if maintenanceDue and (
+    view.xOutputClosed or view.xSession.pendingWriteBytes() > 0 or
+    not view.xSession.running()
+  ):
+    # Only consume worker snapshots here; transport maintenance stays on the
+    # dispatcher. Direct close must still detach the view subscription.
     view.scheduleTerminalRead()
   if maintenanceDue:
     view.xMaintenanceElapsed = initDuration()
@@ -1189,7 +1167,6 @@ proc stopTerminalPolling(view: TerminalView) =
   if not view.xOutputWatch.isNil:
     view.xOutputWatch.stop()
     view.xOutputWatch = nil
-  view.xOutputWatchReady = false
   let owner = view.xPollingWindow.target
   if not owner.isNil:
     owner.disconnect(didBecomeKeyWindow, view, terminalWindowFocusChanged)
@@ -1215,6 +1192,7 @@ proc startTerminalPolling(view: TerminalView) =
   if not (responder of Window):
     return
   let owner = Window(responder)
+  view.syncTerminalScreen()
   view.xPollingWindow.target = owner
   view.xBlinkElapsed = initDuration()
   view.xMaintenanceElapsed = initDuration()
@@ -1229,7 +1207,6 @@ proc startTerminalPolling(view: TerminalView) =
   if not view.xOutputWatch.isNil:
     view.xOutputWatch.connect(terminalOutputReady, view, terminalOutputAvailable)
     view.xOutputWatch.connect(terminalOutputWatchStarted, view, terminalWatchStarted)
-    view.xOutputWatch.connect(terminalOutputWatchFailed, view, terminalWatchFailed)
     view.xOutputWatch.start()
 
 protocol TerminalViewKeyEquivalents of ResponderCommandDispatchProtocol:
@@ -1342,7 +1319,7 @@ proc initTerminalViewFields*(
   initMonoTextViewFields(view, frame = frame)
   view.xSession =
     if session.isNil:
-      newCompactTerminalSession()
+      newTerminalViewSession()
     else:
       session
   view.xPalette = palette

@@ -1,8 +1,10 @@
+import ../support/terminalhelpers
 ## Process-level coverage for the shell environment used by Kosmo terminals.
 
 import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
 import merenda/nimkit
+import sigils/threads
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 
@@ -13,6 +15,7 @@ proc pollUntilExit(
 ): bool =
   let deadline = getMonoTime() + timeout
   while getMonoTime() < deadline:
+    discard getCurrentSigilThread().pollAll(NonBlocking)
     discard session.poll()
     if session.state() == tssExited:
       return true
@@ -52,7 +55,7 @@ suite "Terminal scrollback input":
   when defined(posix):
     test "Enter returns scrolled history to the live screen immediately":
       let
-        session = newCompactTerminalSession(columns = 16, rows = 2, maxScrollback = 4)
+        session = newTerminalViewSession(columns = 16, rows = 2, maxScrollback = 4)
         view = newTerminalView(session)
       defer:
         view.close()
@@ -65,11 +68,11 @@ suite "Terminal scrollback input":
       )
       let deadline = getMonoTime() + initDuration(seconds = 10)
       while "current" notin session.screen().plainText() and getMonoTime() < deadline:
-        discard view.poll()
+        discard view.pollSettled()
         sleep(1)
       require "current" in session.screen().plainText()
       require session.running()
-      discard view.poll()
+      discard view.pollSettled()
       view.selectTerminalRange(
         TerminalSelection(
           anchor: initTerminalPosition(0, 0), extent: initTerminalPosition(0, 3)

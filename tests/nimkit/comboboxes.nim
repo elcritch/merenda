@@ -361,6 +361,47 @@ suite "nimkit comboboxes":
     check combo.selectedOptionIdentifier() == "three"
     check combo.stringValue == "Three"
 
+  test "tab and backtab dismiss combo popups and advance from the combo":
+    for editable in [false, true]:
+      for backwards in [false, true]:
+        let
+          window = newWindow("Combo tab", frame = rect(0, 0, 320, 200))
+          root = newView(frame = rect(0, 0, 320, 200))
+          previous = newView(frame = rect(8, 8, 100, 24))
+          combo = newComboBox(["One", "Two"], frame = rect(8, 40, 100, 24))
+          following = newView(frame = rect(8, 72, 100, 24))
+        defer:
+          window.close()
+        previous.acceptsFirstResponder = true
+        following.acceptsFirstResponder = true
+        combo.editable = editable
+        combo.popupPresentation = ppInline
+        combo.selectedIndex = 0
+        for view in [previous, View(combo), following]:
+          root.addSubview(view)
+        window.setContentView(root)
+        require window.makeFirstResponder(combo)
+        combo.openPopup()
+        require combo.popupOpen()
+        require window.firstResponder() of PopupListView
+        combo.highlightedIndex = 1
+
+        let
+          modifiers: set[KeyModifier] =
+            if backwards:
+              {kmShift}
+            else:
+              {}
+          expected = if backwards: previous else: following
+        check window.dispatchKeyDown(KeyEvent(key: keyTab, modifiers: modifiers))
+        check not combo.popupOpen()
+        check not window.hasActiveTransientSession()
+        let focusAdvanced = window.firstResponder() == expected
+        check focusAdvanced
+        check expected.isFocusVisible()
+        check combo.selectedIndex() == 0
+        check combo.stringValue() == "One"
+
   test "mouse opens popup and selects clicked item":
     let
       window = newWindow("Combo mouse", frame = rect(0, 0, 240, 160))

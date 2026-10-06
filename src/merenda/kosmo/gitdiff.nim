@@ -2129,6 +2129,9 @@ proc handleSharedKeys(panel: KosmoGitDiffPanel, event: nimkit.KeyEvent): bool =
     panel.scrollView.contentOffset = nimkit.initPoint(offset.x, offset.y + delta)
     return true
 
+# Resolve the selector before protocol expansion mixes in menu/window overloads.
+let performKeyEquivalent = nimkitSelectors.performKeyEquivalent()
+
 protocol GitDiffKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
   method performKeyEquivalent(panel: KosmoGitDiffPanel, event: nimkit.KeyEvent): bool =
     panel.handleSharedKeys(event)

@@ -28,6 +28,7 @@ def analyze(path):
     for begin, end in [
         ("ready", "ui-ready"),
         ("poll-start", "poll-end"),
+        ("worker-poll-start", "worker-poll-end"),
         ("grid-start", "grid-end"),
         ("frame-start", "frame-end"),
         ("submit-start", "submit-end"),
@@ -54,6 +55,8 @@ def analyze(path):
 
     # The benchmark has one terminal and one window. Snapshots are cumulative:
     # a later presented render includes output from skipped submissions too.
+    worker_trace = any(event["stage"] == "worker-output" for event in events)
+    worker_reads = collections.defaultdict(list)
     readiness = {}
     delivered = None
     callback = None
@@ -68,7 +71,15 @@ def analyze(path):
     last_grid = None
     for event in events:
         stage, ticks = event["stage"], event["ticks"]
-        if stage == "ready":
+        if stage == "worker-output":
+            worker_reads[event["identity"]].append((event["detail"], ticks))
+        elif stage == "grid-snapshot" and worker_trace:
+            records = worker_reads[event["identity"]]
+            awaiting_grid.extend(ready for serial, ready in records if serial <= event["detail"])
+            worker_reads[event["identity"]] = [
+                (serial, ready) for serial, ready in records if serial > event["detail"]
+            ]
+        elif stage == "ready":
             readiness[event["identity"]] = ticks
         elif stage == "ui-ready":
             delivered = readiness.pop(event["identity"], None)
@@ -79,7 +90,7 @@ def analyze(path):
         elif stage == "poll-end":
             if event["detail"]:
                 read_ends.append(ticks)
-                if delivered is not None:
+                if delivered is not None and not worker_trace:
                     awaiting_grid.append(delivered)
             delivered = None
         elif stage == "grid-start":
@@ -112,7 +123,8 @@ def analyze(path):
         [right - left for left, right in zip(presented, presented[1:])]
     )
     result["counts"] = dict(collections.Counter(event["stage"] for event in events))
-    result["bytes"] = sum(event["detail"] for event in events if event["stage"] == "poll-end")
+    read_stage = "worker-poll-end" if worker_trace else "poll-end"
+    result["bytes"] = sum(event["detail"] for event in events if event["stage"] == read_stage)
     return result
 
 

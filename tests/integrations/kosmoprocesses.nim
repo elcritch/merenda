@@ -1,6 +1,7 @@
 ## Kosmo behaviors that need live shells or child-process teardown.
 import std/[monotimes, os, strutils, tempfiles, times, unittest]
 
+import ../support/terminalhelpers
 import sigils/threads
 import merenda/nimkit
 import merenda/kosmo/[kosmo, cli]
@@ -10,6 +11,7 @@ proc pollUntilText(
 ): bool =
   let deadline = getMonoTime() + timeout
   while getMonoTime() < deadline:
+    discard getCurrentSigilThread().pollAll(NonBlocking)
     discard session.poll()
     if expected in session.screen().plainText().splitWhitespace().join(" "):
       return true
@@ -30,7 +32,7 @@ suite "Kosmo live terminal clipboard":
       let
         app = newApplication("Kosmo Terminal Clipboard Test")
         frontend = newKosmoApplication(app, monitorsGitStatus = false)
-        session = spawnCompactTerminalSession(
+        session = spawnTerminalViewSession(
           initTerminalSpawnOptions(
             command =
               "stty raw -echo; printf 'copy target\\nready\\n'; " &
@@ -132,6 +134,7 @@ suite "Kosmo live terminal clipboard":
       firstTerminal.session().processOutput(
         "\x1b]7;file://kosmo-test-host" & nested & "\x07"
       )
+      firstTerminal.session().waitForCommands()
       check firstTerminal.session().screenInfo().currentDirectory ==
         "file://kosmo-test-host" & nested
 
@@ -156,7 +159,7 @@ suite "Kosmo terminal focus input":
       let
         app = newApplication("Kosmo Live Terminal Focus Test")
         frontend = newKosmoApplication(app, monitorsGitStatus = false)
-        session = spawnCompactTerminalSession(
+        session = spawnTerminalViewSession(
           initTerminalSpawnOptions(
             command =
               "stty raw -echo; printf ready; " &
@@ -177,6 +180,7 @@ suite "Kosmo terminal focus input":
       )
       require session.pollUntilText("ready")
       session.processOutput("\x1b[?1004h")
+      session.waitForCommands()
 
       let primary = frontend.shortcutProfile().primaryModifiers()
       require app.performMenuKeyEquivalent(

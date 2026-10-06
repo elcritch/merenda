@@ -29,8 +29,8 @@ proc initializeRepository(rootPath: string) =
   discard runGit(
     rootPath,
     [
-      "-c", "user.name=NimKit Tests", "-c", "user.email=nimkit@example.invalid",
-      "commit", "-qm", "initial",
+      "-c", "user.name=NimKit Tests", "-c", "user.email=nimkit@example.invalid", "-c",
+      "commit.gpgsign=false", "commit", "-qm", "initial",
     ],
   )
 

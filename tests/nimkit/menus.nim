@@ -116,6 +116,359 @@ proc newMenuModelSpy(allow = true): MenuModelSpy =
   discard result.withProtocol(MenuModelSpyValidation)
 
 suite "nimkit menus":
+  test "open inline menus receive arrows and Enter before the focused view":
+    let
+      window = newWindow("Menu keyboard routing", frame = rect(0, 0, 400, 300))
+      root = newView(frame = rect(0, 0, 400, 300))
+      underlying = newView(frame = rect(200, 100, 100, 100))
+      menu = newMenu("Actions")
+      childMenu = newMenu("More")
+      button = newPopupMenuButton("Actions", menu, rect(8, 8, 100, 24))
+      first = newMenuItem("Run", actionSelector("runMenuTest"))
+      disabled = newMenuItem("Disabled")
+      more = newMenuItem("More")
+    defer:
+      window.close()
+    var underlyingKeys, activations: int
+    underlying.acceptsFirstResponder = true
+    discard underlying.addMethod(
+      keyDown(),
+      proc(_: View, event: KeyEvent): bool =
+        discard event
+        inc underlyingKeys
+        true,
+    )
+    first.target = newActionTarget(
+      first.action(),
+      proc(_: DynamicAgent) =
+        inc activations
+      ,
+    )
+    first.validates = false
+    disabled.enabled = false
+    more.submenu = childMenu
+    discard childMenu.addItem(newMenuItem("Child one"))
+    discard childMenu.addItem(newMenuItem("Child two"))
+    discard menu.addItem(first)
+    discard menu.addSeparator()
+    discard menu.addItem(disabled)
+    discard menu.addItem(more)
+    button.popupPresentation = ppInline
+    root.addSubview(button)
+    root.addSubview(underlying)
+    window.setContentView(root)
+    require window.makeFirstResponder(underlying)
+    button.openPopup()
+    require button.popupOpen()
+    check button.highlightedIndex() == 0
+
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check button.highlightedIndex() == 3
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+    let child = button.activeSubmenuButton()
+    require not child.isNil
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check child.highlightedIndex() == 1
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowLeft))
+    check button.activeSubmenuButton().isNil
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowUp))
+    check button.highlightedIndex() == 0
+    check window.dispatchKeyDown(KeyEvent(key: keyEnter))
+    check activations == 1
+    check not button.popupOpen()
+    check underlyingKeys == 0
+
+  test "menubar arrows follow visible menu order through repeated wraps":
+    let
+      window = newWindow("Menu order", frame = rect(0, 0, 500, 300))
+      mainMenu = newMenu("Main")
+    defer:
+      window.close()
+    for title in ["Kosmo", "File", "Edit", "Window", "Help"]:
+      let item = newMenuItem(title)
+      item.submenu = newMenu(title)
+      discard item.submenu().addItem(newMenuItem(title & " command"))
+      discard mainMenu.addItem(item)
+    let root = newMenuRootView(mainMenu, newView(), rect(0, 0, 500, 300))
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+    var buttons: seq[PopupMenuButton]
+    for view in root.menuBar().subviews():
+      buttons.add PopupMenuButton(view)
+      buttons[^1].popupPresentation = ppInline
+    require buttons.len == 5
+    require window.makeFirstResponder(buttons[0])
+    buttons[0].openPopup()
+    for step in 1 .. buttons.len * 3:
+      require window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+      for index, button in buttons:
+        check button.popupOpen() == (index == step mod buttons.len)
+    for step in 1 .. buttons.len * 3:
+      require window.dispatchKeyDown(KeyEvent(key: keyArrowLeft))
+      for index, button in buttons:
+        check button.popupOpen() ==
+          (index == (buttons.len - step mod buttons.len) mod buttons.len)
+    check window.dispatchKeyDown(KeyEvent(key: keyEscape))
+    check not window.hasActiveTransientSession()
+
+  test "keyboard tab closes the popup and moves key focus":
+    let
+      window = newWindow("Menu bar tab", frame = rect(0, 0, 320, 200))
+      root = newView(frame = rect(0, 0, 320, 200))
+      menu = newMenu("Bar")
+      first = newMenu("First")
+      second = newMenu("Second")
+      items = @[newMenuItem("First"), newMenuItem("Second")]
+
+    items[0].submenu = first
+    items[1].submenu = second
+    for sub in [first, second]:
+      discard sub.addItem(newMenuItem("One"))
+    discard menu.addItem(items[0])
+    discard menu.addItem(items[1])
+    let menuBar = newMenuBar(menu, rect(0, 0, 320, 28))
+    root.addSubview(menuBar)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+
+    require menuBar.subviews().len == 2
+    let
+      firstButton = PopupMenuButton(menuBar.subviews()[0])
+      secondButton = PopupMenuButton(menuBar.subviews()[1])
+
+    check window.makeFirstResponder(firstButton, focusVisible = true)
+    firstButton.openPopup()
+    check firstButton.popupOpen()
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab))
+    check not firstButton.popupOpen()
+    check window.firstResponder == secondButton
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, modifiers: {kmShift}))
+    check window.firstResponder == firstButton
+
+  test "keyboard tab closes an open menu without reaching the focused view":
+    let
+      window = newWindow("Menu tab routing", frame = rect(0, 0, 400, 300))
+      root = newView(frame = rect(0, 0, 400, 300))
+      underlying = newView(frame = rect(200, 100, 100, 100))
+      menu = newMenu("Actions")
+      button = newPopupMenuButton("Actions", menu, rect(8, 8, 100, 24))
+    defer:
+      window.close()
+    var underlyingKeys = 0
+    underlying.acceptsFirstResponder = true
+    discard underlying.addMethod(
+      keyDown(),
+      proc(_: View, event: KeyEvent): bool =
+        discard event
+        inc underlyingKeys
+        true,
+    )
+    discard menu.addItem(newMenuItem("One"))
+    discard menu.addItem(newMenuItem("Two"))
+    button.popupPresentation = ppInline
+    root.addSubview(button)
+    root.addSubview(underlying)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+    require window.makeFirstResponder(underlying)
+    button.openPopup()
+    require button.popupOpen()
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab))
+    check not button.popupOpen()
+    check not window.hasActiveTransientSession()
+    check underlyingKeys == 0
+
+  test "keyboard tab cycles through the menu bar and past it":
+    let
+      window = newWindow("Menu bar tab cycle", frame = rect(0, 0, 400, 200))
+      root = newView(frame = rect(0, 0, 400, 200))
+      menu = newMenu("Bar")
+      first = newMenu("First")
+      second = newMenu("Second")
+      third = newMenu("Third")
+      items = @[newMenuItem("First"), newMenuItem("Second"), newMenuItem("Third")]
+
+    items[0].submenu = first
+    items[1].submenu = second
+    items[2].submenu = third
+    for sub in [first, second, third]:
+      discard sub.addItem(newMenuItem("One"))
+    discard menu.addItem(items[0])
+    discard menu.addItem(items[1])
+    discard menu.addItem(items[2])
+    let menuBar = newMenuBar(menu, rect(0, 0, 400, 28))
+    root.addSubview(menuBar)
+    let after = newView(frame = rect(8, 40, 200, 24))
+    after.acceptsFirstResponder = true
+    root.addSubview(after)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+
+    require menuBar.subviews().len == 3
+    let
+      firstButton = PopupMenuButton(menuBar.subviews()[0])
+      secondButton = PopupMenuButton(menuBar.subviews()[1])
+      thirdButton = PopupMenuButton(menuBar.subviews()[2])
+
+    check window.makeFirstResponder(firstButton, focusVisible = true)
+    firstButton.openPopup()
+    check firstButton.popupOpen()
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab))
+    check not firstButton.popupOpen()
+    check window.firstResponder == secondButton
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab))
+    check window.firstResponder == thirdButton
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab))
+    check window.firstResponder == after
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, modifiers: {kmShift}))
+    check window.firstResponder == thirdButton
+
+  test "keyboard tab opens the next menu bar menu like arrows":
+    let
+      window = newWindow("Menu bar tab autopen", frame = rect(0, 0, 400, 200))
+      root = newView(frame = rect(0, 0, 400, 200))
+      menu = newMenu("Bar")
+      first = newMenu("First")
+      second = newMenu("Second")
+      third = newMenu("Third")
+      items = @[newMenuItem("First"), newMenuItem("Second"), newMenuItem("Third")]
+
+    items[0].submenu = first
+    items[1].submenu = second
+    items[2].submenu = third
+    for sub in [first, second, third]:
+      discard sub.addItem(newMenuItem("One"))
+    discard menu.addItem(items[0])
+    discard menu.addItem(items[1])
+    discard menu.addItem(items[2])
+    let menuBar = newMenuBar(menu, rect(0, 0, 400, 28))
+    root.addSubview(menuBar)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+
+    require menuBar.subviews().len == 3
+    let
+      firstButton = PopupMenuButton(menuBar.subviews()[0])
+      secondButton = PopupMenuButton(menuBar.subviews()[1])
+      thirdButton = PopupMenuButton(menuBar.subviews()[2])
+
+    check window.makeFirstResponder(firstButton, focusVisible = true)
+    firstButton.openPopup()
+    check firstButton.popupOpen()
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab))
+    check not firstButton.popupOpen()
+    check secondButton.popupOpen()
+    check window.firstResponder == secondButton
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab))
+    check not secondButton.popupOpen()
+    check thirdButton.popupOpen()
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab, modifiers: {kmShift}))
+    check not thirdButton.popupOpen()
+    check secondButton.popupOpen()
+    check window.firstResponder == secondButton
+
+  test "tabbing into the menu bar marks the focused button focus visible":
+    let
+      window = newWindow("Menu bar tab focus", frame = rect(0, 0, 400, 200))
+      root = newView(frame = rect(0, 0, 400, 200))
+      menu = newMenu("Bar")
+      first = newMenu("First")
+      second = newMenu("Second")
+      items = @[newMenuItem("First"), newMenuItem("Second")]
+
+    items[0].submenu = first
+    items[1].submenu = second
+    for sub in [first, second]:
+      discard sub.addItem(newMenuItem("One"))
+    discard menu.addItem(items[0])
+    discard menu.addItem(items[1])
+    let menuBar = newMenuBar(menu, rect(0, 0, 400, 28))
+    root.addSubview(menuBar)
+    let before = newView(frame = rect(8, 40, 200, 24))
+    before.acceptsFirstResponder = true
+    root.addSubview(before)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+
+    require menuBar.subviews().len == 2
+    let
+      firstButton = PopupMenuButton(menuBar.subviews()[0])
+      secondButton = PopupMenuButton(menuBar.subviews()[1])
+
+    check window.makeFirstResponder(before, focusVisible = true)
+    check not firstButton.isFocusVisible
+    check not secondButton.isFocusVisible
+
+    check window.dispatchKeyDown(KeyEvent(key: keyTab))
+    check window.firstResponder == firstButton
+    check firstButton.isFocusVisible
+    check not firstButton.popupOpen()
+    check not secondButton.isFocusVisible
+
+  test "arrow navigation moves the key focus ring with the menu":
+    let
+      window = newWindow("Menu bar arrow focus", frame = rect(0, 0, 400, 200))
+      root = newView(frame = rect(0, 0, 400, 200))
+      menu = newMenu("Bar")
+      first = newMenu("First")
+      second = newMenu("Second")
+      third = newMenu("Third")
+      items = @[newMenuItem("First"), newMenuItem("Second"), newMenuItem("Third")]
+
+    items[0].submenu = first
+    items[1].submenu = second
+    items[2].submenu = third
+    for sub in [first, second, third]:
+      discard sub.addItem(newMenuItem("One"))
+    discard menu.addItem(items[0])
+    discard menu.addItem(items[1])
+    discard menu.addItem(items[2])
+    let menuBar = newMenuBar(menu, rect(0, 0, 400, 28))
+    root.addSubview(menuBar)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+
+    require menuBar.subviews().len == 3
+    let
+      firstButton = PopupMenuButton(menuBar.subviews()[0])
+      secondButton = PopupMenuButton(menuBar.subviews()[1])
+      thirdButton = PopupMenuButton(menuBar.subviews()[2])
+
+    check window.makeFirstResponder(firstButton, focusVisible = true)
+    firstButton.openPopup()
+    check firstButton.popupOpen()
+
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+    check not firstButton.popupOpen()
+    check secondButton.popupOpen()
+    check window.firstResponder == secondButton
+    check secondButton.isFocusVisible
+    check not firstButton.isFocusVisible
+
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+    check not secondButton.popupOpen()
+    check thirdButton.popupOpen()
+    check window.firstResponder == thirdButton
+    check thirdButton.isFocusVisible
+    check not secondButton.isFocusVisible
+
+    check window.dispatchKeyDown(KeyEvent(key: keyArrowLeft))
+    check not thirdButton.popupOpen()
+    check secondButton.popupOpen()
+    check window.firstResponder == secondButton
+    check secondButton.isFocusVisible
+    check not thirdButton.isFocusVisible
+
   test "shortcut checks preserve unchanged window menu entries":
     let
       app = newApplication()
@@ -419,6 +772,43 @@ suite "nimkit menus":
       check itemFillFound
       check itemTextFound
 
+  test "popup lists without a tab callback keep window key view traversal":
+    let
+      window = newWindow("Popup list tab", frame = rect(0, 0, 320, 200))
+      root = newView(frame = rect(0, 0, 320, 200))
+      previous = newView(frame = rect(8, 8, 100, 24))
+      following = newView(frame = rect(8, 72, 100, 24))
+    defer:
+      window.close()
+    var closes = 0
+    let popup = newPopupListView(
+      actions = PopupListActions(
+        close: proc() =
+          inc closes
+      ),
+      frame = rect(8, 40, 100, 24),
+    )
+    previous.acceptsFirstResponder = true
+    following.acceptsFirstResponder = true
+    for view in [previous, View(popup), following]:
+      root.addSubview(view)
+    window.setContentView(root)
+
+    for backwards in [false, true]:
+      require window.makeFirstResponder(popup)
+      let
+        modifiers: set[KeyModifier] =
+          if backwards:
+            {kmShift}
+          else:
+            {}
+        expected = if backwards: previous else: following
+      check window.dispatchKeyDown(KeyEvent(key: keyTab, modifiers: modifiers))
+      let focusAdvanced = window.firstResponder() == expected
+      check focusAdvanced
+      check expected.isFocusVisible()
+    check closes == 0
+
   test "popup list keeps transparent view backing behind rounded chrome":
     let popup = newPopupListView(frame = rect(0, 0, 120, 60))
     check popup.background() == color(0.0, 0.0, 0.0, 0.0)
@@ -619,6 +1009,56 @@ suite "nimkit menus":
     check menu.nextResponder() == target
     check root.subviews.len == 1
     check root.subviews[0] == target
+
+  test "tab and backtab dismiss context popup trees and advance restored focus":
+    for submenuOpen in [false, true]:
+      for backwards in [false, true]:
+        let
+          window = newWindow("Context tab", frame = rect(0, 0, 320, 200))
+          root = newView(frame = rect(0, 0, 320, 200))
+          previous = newView(frame = rect(8, 8, 100, 24))
+          target = newView(frame = rect(8, 40, 100, 24))
+          following = newView(frame = rect(8, 72, 100, 24))
+          menu = newMenu("Context")
+          submenu = newMenu("More")
+          more = newMenuItem("More")
+        defer:
+          window.close()
+        window.setPopupPresentation(ppInline)
+        for view in [previous, target, following]:
+          view.acceptsFirstResponder = true
+          root.addSubview(view)
+        window.setContentView(root)
+        more.submenu = submenu
+        discard submenu.addItem(newMenuItem("One"))
+        discard menu.addItem(more)
+        require window.makeFirstResponder(target)
+        let anchor = menu.popUpContextMenu(target, initPoint(5, 5))
+        require not anchor.isNil
+        require anchor.popupOpen()
+        if submenuOpen:
+          require window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+          require not anchor.activeSubmenuButton().isNil
+          require anchor.activeSubmenuButton().popupOpen()
+
+        let
+          modifiers: set[KeyModifier] =
+            if backwards:
+              {kmShift}
+            else:
+              {}
+          expected = if backwards: previous else: following
+        check window.dispatchKeyDown(KeyEvent(key: keyTab, modifiers: modifiers))
+        check not anchor.popupOpen()
+        check anchor.activeSubmenuButton().isNil
+        check anchor.superview().isNil
+        check not menu.isOpen()
+        check not submenu.isOpen()
+        check not window.hasActiveTransientSession()
+        let focusAdvanced = window.firstResponder() == expected
+        check focusAdvanced
+        check expected.isFocusVisible()
+        check root.subviews().len == 3
 
   test "view context menu waits for custom right mouse handling":
     let

@@ -199,7 +199,8 @@ suite "Kosmo":
     require execShellCmd("git -C " & quoteShell(root) & " init -qb status-path") == 0
     require execShellCmd(
       "git -C " & quoteShell(root) &
-        " -c user.name=Test -c user.email=test@example.test commit --allow-empty -qm initial"
+        " -c user.name=Test -c user.email=test@example.test -c commit.gpgsign=false" &
+        " commit --allow-empty -qm initial"
     ) == 0
     defer:
       removeFile(filePath)

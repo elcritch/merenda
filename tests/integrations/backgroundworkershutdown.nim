@@ -3,6 +3,7 @@
 import std/[atomics, monotimes, os, times, unittest]
 
 import sigils/[core, threads]
+import terminex/workerthreads
 import merenda/nimkit/foundation/backgroundworkers
 import ./fixtures/markdownworkerlifetime
 import merenda/nimkit/text/markdownparsing
@@ -37,8 +38,9 @@ proc parseAtExit(worker: ExitParseWorker) {.slot.} =
   workerFinished.store(true, moRelease)
 
 suite "NimKit direct-import worker shutdown":
-  test "explicit shutdown joins the timer and allows repeated shutdown":
+  test "explicit shutdown joins readiness and timer dispatchers and allows repeated shutdown":
     discard nimkitTimerThread()
+    discard terminalWorkerThread()
     shutdownNimkitBackgroundWorkers()
     shutdownNimkitBackgroundWorkers()
 

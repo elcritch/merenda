@@ -516,6 +516,48 @@ suite "nimkit mono text views":
 
     check foundText
 
+  test "row glyph batches preserve cell positions across colors and blank backgrounds":
+    let
+      view = newMonoTextViewer(frame = rect(0, 0, 240, 80))
+      red = color(0.9, 0.1, 0.1)
+      green = color(0.1, 0.9, 0.1)
+      background = color(0.1, 0.2, 0.8)
+      cells = [
+        styledMonoTextCell("A", red),
+        styledMonoTextCell("B", green),
+        styledMonoTextCell(" ", red, background, hasBackgroundColor = true),
+        styledMonoTextCell("C", red),
+        initMonoTextCell("X", traits = {mttHidden}),
+      ]
+    view.replaceGrid(1, cells.len) do(row: int, builder: var MonoTextRowBuilder):
+      for cell in cells:
+        builder.addCell(cell)
+    let
+      metrics = view.monoTextMetrics()
+      list = buildRenders(view)[DefaultDrawLevel]
+    var
+      textNodes = 0
+      sawBackground = false
+      sawRed = false
+    for node in list.nodes:
+      if node.kind == nkText:
+        inc textNodes
+        let text = node.renderedText()
+        check text in ["AC", "B"]
+        if text == "AC":
+          sawRed = true
+          check abs(
+            node.textLayout.positions[1].x - node.textLayout.positions[0].x -
+              3 * metrics.cellWidth
+          ) < 0.01
+      elif node.kind == nkRectangle and node.fill.kind == flColor and
+          node.fill.color == background.rgba:
+        sawBackground = true
+    check textNodes == 2
+    check sawRed
+    check sawBackground
+    check view.stringValue() == "AB CX"
+
   test "italic monospace cells retain a monospaced typeface":
     let
       view = newMonoTextViewer(frame = rect(0, 0, 220, 80))
