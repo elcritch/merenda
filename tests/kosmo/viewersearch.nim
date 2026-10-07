@@ -28,7 +28,9 @@ suite "Kosmo viewer search":
     frontend.contentView.layoutSubtreeIfNeeded()
     require frontend.openPath(path)
     let view = frontend.editorPane.markdownView
-    require view.waitForMarkdownRendering()
+    # Rendering can be idle while the initial background parse is still pending.
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
     require frontend.window.makeFirstResponder(view.textView())
     require frontend.window.dispatchKeyDown(
       KeyEvent(key: keyF, keyCode: keyF.ord, modifiers: shortcutModifiers())
