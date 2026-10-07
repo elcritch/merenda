@@ -4,9 +4,10 @@
 
 - Add a searchable GitHub issues and pull requests Markdown tab to Kosmo's File
   menu, backed by `gh` in the selected project repository. Include state and item
-  filters, descriptions and metadata, browser links, manual refresh, fetch limits,
-  PR job status and details links, optional automatic refresh every 30 seconds,
-  and cancellable background commands with explicit error messages.
+  filters, descriptions and metadata, clickable section headings with browser
+  links below them, manual refresh, fetch limits, PR job status and details links,
+  persistent section expansion across refreshes, optional automatic refresh every
+  30 seconds, and cancellable background commands with explicit error messages.
 
 - Reduce Kosmo file-tree indentation to 10 points per level and make it
   configurable with `fileTreeIndentation` in `config.json`.

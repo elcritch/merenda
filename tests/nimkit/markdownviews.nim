@@ -236,6 +236,113 @@ sibling body
     check replacement.accessibilityValue() == "expanded"
     check "replacement body" in view.textStorage().stringValue()
 
+  test "heading text can toggle sections without intercepting body links":
+    let view = newMarkdownView(
+      "# A long heading that wraps across several lines in the narrow viewport\n\n" &
+        "[Body link](https://example.com)\n\nsection body",
+      frame = rect(0, 0, 220, 480),
+    )
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    let
+      textView = view.textView()
+      title = "A long heading that wraps across several lines in the narrow viewport"
+      button = view.markdownHeadingDisclosure(title)
+      lastGlyph = textView.characterRect(title.runeLen - 1)
+      point = initPoint(
+        lastGlyph.origin.x + lastGlyph.size.width * 0.5'f32,
+        lastGlyph.origin.y + lastGlyph.size.height * 0.5'f32,
+      )
+    require not button.isNil
+    check lastGlyph.origin.y > textView.characterRect(0).origin.y
+    check not view.headingsToggleOnClick
+    check textView.hitTest(point) == textView
+    view.headingsToggleOnClick = true
+    require view.waitForMarkdownLayout()
+    check textView.hitTest(point) == button
+    require textView.clickAt(point)
+    require view.waitForMarkdownRendering()
+    require view.waitForMarkdownLayout()
+    check button.accessibilityValue() == "collapsed"
+    check "section body" notin view.textStorage().stringValue()
+    require textView.clickAt(point)
+    require view.waitForMarkdownRendering()
+    require view.waitForMarkdownLayout()
+    check button.accessibilityValue() == "expanded"
+    let
+      linkGlyph = textView.characterRect(
+        view.textStorage().stringValue().runeIndexOf("Body link")
+      )
+      linkPoint = initPoint(
+        linkGlyph.origin.x + linkGlyph.size.width * 0.5'f32,
+        linkGlyph.origin.y + linkGlyph.size.height * 0.5'f32,
+      )
+    check textView.hitTest(linkPoint) == textView
+    view.headingsToggleOnClick = false
+    require view.waitForMarkdownLayout()
+    check textView.hitTest(point) == textView
+
+  test "stable heading identities preserve nested folds across refreshed content":
+    let view = newMarkdownView(frame = rect(0, 0, 480, 320))
+    view.updateMarkdown(
+      "# Parent\n\nparent body\n\n## Child\n\nchild body\n\n# Sibling\n\nsibling body",
+      ["parent", "child", "sibling"],
+    )
+    require view.waitForMarkdownParsing()
+    let
+      parent = view.markdownHeadingDisclosure("Parent")
+      child = view.markdownHeadingDisclosure("Child")
+    require not parent.isNil
+    require not child.isNil
+    require child.accessibilityPerformAction(AccessibilityActionCollapse)
+    require view.waitForMarkdownRendering()
+    require parent.accessibilityPerformAction(AccessibilityActionCollapse)
+    require view.waitForMarkdownRendering()
+
+    view.updateMarkdown(
+      "# Obsolete\n\nobsolete body", ["obsolete"], preserveHeadingState = true
+    )
+    view.updateMarkdown(
+      "# Renamed sibling\n\nupdated sibling body\n\n# Renamed parent\n\n" &
+        "updated parent body\n\n## New child\n\nnew child body\n\n" &
+        "## Renamed child\n\nupdated child body",
+      ["sibling", "parent", "new-child", "child"],
+      preserveHeadingState = true,
+    )
+    check not parent.accessibilityPerformAction(AccessibilityActionExpand)
+    require view.waitForMarkdownParsing()
+    let
+      refreshedParent = view.markdownHeadingDisclosure("Renamed parent")
+      sibling = view.markdownHeadingDisclosure("Renamed sibling")
+    require not refreshedParent.isNil
+    require not sibling.isNil
+    check refreshedParent.accessibilityValue() == "collapsed"
+    check sibling.accessibilityValue() == "expanded"
+    check "updated sibling body" in view.textStorage().stringValue()
+    check "updated parent body" notin view.textStorage().stringValue()
+    check "Renamed child" notin view.textStorage().stringValue()
+    require refreshedParent.accessibilityPerformAction(AccessibilityActionExpand)
+    require view.waitForMarkdownRendering()
+    let refreshedChild = view.markdownHeadingDisclosure("Renamed child")
+    require not refreshedChild.isNil
+    check refreshedChild.accessibilityValue() == "collapsed"
+    check "updated parent body" in view.textStorage().stringValue()
+    check "new child body" in view.textStorage().stringValue()
+    check "updated child body" notin view.textStorage().stringValue()
+
+    view.updateMarkdown(
+      "# Renamed parent\n\nparent refreshed again\n\n## Renamed child\n\nchild refreshed again",
+      ["parent", "child"],
+      preserveHeadingState = true,
+    )
+    require view.waitForMarkdownParsing()
+    check view.markdownHeadingDisclosure("Renamed parent").accessibilityValue() ==
+      "expanded"
+    check view.markdownHeadingDisclosure("Renamed child").accessibilityValue() ==
+      "collapsed"
+    check "parent refreshed again" in view.textStorage().stringValue()
+    check "child refreshed again" notin view.textStorage().stringValue()
+
   test "paragraphs, soft breaks, hard breaks, escapes, and entities render as text":
     let
       source =

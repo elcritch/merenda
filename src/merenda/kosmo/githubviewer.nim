@@ -112,8 +112,13 @@ proc applySnapshot(panel: KosmoGitHubPanel, snapshot: GitHubSnapshot) =
   ## Show an already prepared snapshot, including offline fixtures.
   if panel.isNil or panel.closed:
     return
+  let preserveHeadingState = panel.snapshot.rootPath == snapshot.rootPath
   panel.snapshot = snapshot
-  panel.markdownView.markdown = snapshot.gitHubMarkdown()
+  panel.markdownView.updateMarkdown(
+    snapshot.gitHubMarkdown(),
+    snapshot.gitHubHeadingIdentifiers(),
+    preserveHeadingState = preserveHeadingState,
+  )
   panel.syncControls()
 
 proc repositoryFinished(
@@ -341,6 +346,7 @@ proc newKosmoGitHubPanel(
   result.acceptsFirstResponder = true
   discard result.withProtocol(GitHubLayout)
   result.markdownStyle = markdownStyle
+  result.markdownView.headingsToggleOnClick = true
   for view in [
     nimkit.View(result.refreshButton), result.kindButton, result.stateButton,
     result.autoRefreshLabel, result.autoRefreshSwitch, result.markdownView,

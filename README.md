@@ -617,12 +617,15 @@ and open, closed, or all states.
 
 Descriptions render as Markdown alongside authors, labels, draft status, and PR
 branch and review details. PRs also show a job summary and each CI check's workflow,
-status, and link to its details. Click an item's title to open it on GitHub, use
+status, and link to its details. Click a section heading to expand or collapse it;
+use the link beneath an item's heading to open it on GitHub. Use
 `Cmd-F`/`Ctrl-F` to search the rendered page, and choose **Refresh** to fetch updates.
 Each list shows up to 100 items and indicates when that limit is reached. Fetches
 run in the background and are cancelled when the tab closes. Enable **Auto-refresh**
 to poll every 30 seconds and refresh after workspace changes; it starts off,
 like the Git Diff viewer. Automatic requests wait for the current fetch to finish.
+Manual and automatic refreshes retain expanded and collapsed sections, including
+when items move or their titles change. Switching projects resets section state.
 The action can be assigned a shortcut in Kosmo Settings.
 
 Run `kosmo --help` for command-line options. See the

@@ -109,10 +109,41 @@ suite "Kosmo GitHub Markdown viewer":
     check "Fix \\*\\*wrapping\\*\\* \\[λ\\]" in markdown
     check "> ```\n> unterminated fence\n\n## Pull Requests" in markdown
     check "https://github.com/owner/project/issues/7" in markdown
+    check "### \\#7 Fix \\*\\*wrapping\\*\\* \\[λ\\]\n\n[Open issue #7 on GitHub]" in
+      markdown
+    check "### \\#8 Improve rendering\n\n[Open PR #8 on GitHub]" in markdown
     check "Draft" in markdown
     check "feature/viewer → main" in markdown
     snapshot.items[0].url = "javascript:alert(1)"
     check "javascript:" notin snapshot.gitHubMarkdown()
+
+  test "section identities use kind and number independently of titles and order":
+    var snapshot = sampleSnapshot()
+    check snapshot.gitHubHeadingIdentifiers() ==
+      @[
+        "github-project", "github-issues", "github-issues-7", "github-pull-requests",
+        "github-pull-requests-8",
+      ]
+    snapshot.items[1].title = "Renamed pull request"
+    snapshot.items[1].body = "# Heading inside a quoted description"
+    var another = snapshot.items[1]
+    another.number = 7
+    snapshot.items.insert(another, 0)
+    check snapshot.gitHubHeadingIdentifiers() ==
+      @[
+        "github-project", "github-issues", "github-issues-7", "github-pull-requests",
+        "github-pull-requests-7", "github-pull-requests-8",
+      ]
+    snapshot.kinds = {ghikPullRequest}
+    snapshot.items[0].state = "CLOSED"
+    check snapshot.gitHubHeadingIdentifiers() ==
+      @["github-project", "github-pull-requests", "github-pull-requests-8"]
+    snapshot.state = ghsAll
+    check snapshot.gitHubHeadingIdentifiers() ==
+      @[
+        "github-project", "github-pull-requests", "github-pull-requests-7",
+        "github-pull-requests-8",
+      ]
 
   test "empty lists, partial failures, and fetch limits are visible":
     var snapshot = GitHubSnapshot(rootPath: "/projects/project")
@@ -172,7 +203,36 @@ suite "Kosmo GitHub Markdown viewer":
     let rendered = panel.markdownView.textStorage().stringValue()
     require rendered.find("Fix") >= 0
     let titleIndex = rendered[0 ..< rendered.find("Fix")].runeLen
-    require panel.markdownView.textView().openLinkAtIndex(titleIndex)
+    check not panel.markdownView.textView().openLinkAtIndex(titleIndex)
+    let
+      titleRect = panel.markdownView.textView().characterRect(titleIndex)
+      titlePoint = initPoint(
+        titleRect.origin.x + titleRect.size.width * 0.5'f32,
+        titleRect.origin.y + titleRect.size.height * 0.5'f32,
+      )
+      heading = panel.markdownView.textView().hitTest(titlePoint)
+    require not heading.isNil
+    check heading.accessibilityRole() == arDisclosureButton
+    require panel.markdownView.textView().clickAt(titlePoint)
+    require panel.waitForGitHub()
+    require panel.markdownView.waitForMarkdownLayout()
+    check heading.accessibilityValue() == "collapsed"
+    check "A needle" notin panel.markdownView.textStorage().stringValue()
+    check openedLink == ""
+    let
+      collapsedTitleRect = panel.markdownView.textView().characterRect(titleIndex)
+      collapsedTitlePoint = initPoint(
+        collapsedTitleRect.origin.x + collapsedTitleRect.size.width * 0.5'f32,
+        collapsedTitleRect.origin.y + collapsedTitleRect.size.height * 0.5'f32,
+      )
+    require panel.markdownView.textView().hitTest(collapsedTitlePoint) == heading
+    require panel.markdownView.textView().clickAt(collapsedTitlePoint)
+    require panel.waitForGitHub()
+    require panel.markdownView.waitForMarkdownLayout()
+    check heading.accessibilityValue() == "expanded"
+    let issueLinkIndex =
+      rendered[0 ..< rendered.find("Open issue #7 on GitHub")].runeLen
+    require panel.markdownView.textView().openLinkAtIndex(issueLinkIndex)
     check openedLink == "https://github.com/owner/project/issues/7"
     require rendered.find("tests") >= 0
     let jobIndex = rendered[0 ..< rendered.find("tests")].runeLen

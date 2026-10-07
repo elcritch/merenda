@@ -290,6 +290,16 @@ proc jobsMarkdown(jobs: seq[GitHubJob]): string =
       job.state.title() & " |\n"
   result.add "\n"
 
+proc gitHubHeadingIdentifiers*(snapshot: GitHubSnapshot): seq[string] =
+  ## Stable section identities in the heading order produced by `gitHubMarkdown`.
+  result.add "github-project"
+  for kind in snapshot.kinds:
+    let prefix = if kind == ghikIssue: "github-issues" else: "github-pull-requests"
+    result.add prefix
+    for item in snapshot.items:
+      if item.kind == kind and item.matchesState(snapshot.state):
+        result.add prefix & "-" & $item.number
+
 proc gitHubMarkdown*(snapshot: GitHubSnapshot): string =
   ## Render metadata as text and each item's body as an isolated Markdown quote.
   result = "# GitHub · " & snapshot.rootPath.lastPathPart().markdownText() & "\n\n"
@@ -315,9 +325,13 @@ proc gitHubMarkdown*(snapshot: GitHubSnapshot): string =
       if item.kind == kind and item.matchesState(snapshot.state):
         let label = ("#" & $item.number & " " & item.title).markdownText()
         let url = item.url.markdownUrl()
-        result.add "### " &
-          (if url.len > 0: "[" & label & "](<" & url & ">)" else: label)
-        result.add "\n\n" & item.state.markdownText()
+        result.add "### " & label & "\n\n"
+        if url.len > 0:
+          let linkLabel =
+            (if kind == ghikIssue: "Open issue #" else: "Open PR #") & $item.number &
+            " on GitHub"
+          result.add "[" & linkLabel & "](<" & url & ">)\n\n"
+        result.add item.state.markdownText()
         if item.draft:
           result.add " · Draft"
         if item.author.len > 0:

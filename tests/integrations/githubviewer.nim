@@ -5,6 +5,12 @@ import merenda/nimkit/app/diagnostics
 import merenda/nimkit/foundation/mainthreadwork
 import merenda/kosmo/kosmo
 
+proc headingDisclosure(panel: KosmoGitHubPanel, title: string): Button =
+  for subview in panel.markdownView.textView().subviews():
+    if subview of Button and subview.accessibilityRole() == arDisclosureButton and
+        subview.accessibilityLabel() == title:
+      return Button(subview)
+
 proc waitForMarker(path: string): bool =
   let deadline = getMonoTime() + initDuration(seconds = 10)
   while getMonoTime() < deadline:
@@ -123,6 +129,111 @@ suite "GitHub CLI document integration":
     when defined(macosx) or defined(linux):
       check processResourceUsage().childProcesses == before.childProcesses
 
+  test "refresh retains section folds across renamed and reordered PRs":
+    let
+      root = createTempDir("kosmo-github-folds-", "")
+      otherRoot = createTempDir("kosmo-github-other-project-", "")
+    defer:
+      removeDir(root)
+      removeDir(otherRoot)
+    writeFile(root / "github-test-mode", "success")
+    writeFile(otherRoot / "github-test-mode", "success")
+    writeFile(
+      root / "pr-response.json",
+      $(
+        %*[
+          {
+            "number": 9,
+            "title": "First PR",
+            "body": "first body",
+            "state": "OPEN",
+            "url": "https://github.com/o/r/pull/9",
+          },
+          {
+            "number": 10,
+            "title": "Second PR",
+            "body": "second body",
+            "state": "OPEN",
+            "url": "https://github.com/o/r/pull/10",
+          },
+        ]
+      ),
+    )
+    let panel = newKosmoGitHubPanel(root, executable = getAppFilename())
+    defer:
+      panel.close()
+    require panel.waitForGitHub()
+    let
+      first = panel.headingDisclosure("#9 First PR")
+      group = panel.headingDisclosure("Pull Requests (2)")
+    require not first.isNil
+    require not group.isNil
+    require first.accessibilityPerformAction(AccessibilityActionCollapse)
+    require panel.waitForGitHub()
+    require group.accessibilityPerformAction(AccessibilityActionCollapse)
+    require panel.waitForGitHub()
+    writeFile(
+      root / "pr-response.json",
+      $(
+        %*[
+          {
+            "number": 11,
+            "title": "New PR",
+            "body": "new body",
+            "state": "OPEN",
+            "url": "https://github.com/o/r/pull/11",
+          },
+          {
+            "number": 10,
+            "title": "Renamed second",
+            "body": "second updated",
+            "state": "OPEN",
+            "url": "https://github.com/o/r/pull/10",
+          },
+          {
+            "number": 9,
+            "title": "Renamed first",
+            "body": "first updated",
+            "state": "OPEN",
+            "url": "https://github.com/o/r/pull/9",
+          },
+        ]
+      ),
+    )
+    panel.refresh()
+    require panel.waitForGitHub()
+    let refreshedGroup = panel.headingDisclosure("Pull Requests (3)")
+    require not refreshedGroup.isNil
+    check refreshedGroup.accessibilityValue() == "collapsed"
+    check "Renamed first" notin panel.markdownView.textStorage().stringValue()
+    check "rendered description" in panel.markdownView.textStorage().stringValue()
+    require refreshedGroup.accessibilityPerformAction(AccessibilityActionExpand)
+    require panel.waitForGitHub()
+    let
+      renamedFirst = panel.headingDisclosure("#9 Renamed first")
+      renamedSecond = panel.headingDisclosure("#10 Renamed second")
+      newPR = panel.headingDisclosure("#11 New PR")
+    require not renamedFirst.isNil
+    require not renamedSecond.isNil
+    require not newPR.isNil
+    check renamedFirst.accessibilityValue() == "collapsed"
+    check renamedSecond.accessibilityValue() == "expanded"
+    check newPR.accessibilityValue() == "expanded"
+    check "first updated" notin panel.markdownView.textStorage().stringValue()
+    check "second updated" in panel.markdownView.textStorage().stringValue()
+    check "new body" in panel.markdownView.textStorage().stringValue()
+    panel.selectFilter(ghsOpen, {ghikIssue})
+    require panel.waitForGitHub()
+    panel.selectFilter(ghsOpen, {ghikIssue, ghikPullRequest})
+    require panel.waitForGitHub()
+    check panel.headingDisclosure("#9 Renamed first").accessibilityValue() == "collapsed"
+    panel.displayRepository(otherRoot)
+    require panel.waitForGitHub()
+    let otherFirst = panel.headingDisclosure("#9 pr open")
+    require not otherFirst.isNil
+    check otherFirst.accessibilityValue() == "expanded"
+    check panel.headingDisclosure("Pull Requests (1)").accessibilityValue() == "expanded"
+
   test "automatic refresh polls remote job changes and stops when disabled":
     let root = createTempDir("kosmo-github-periodic-", "")
     defer:
@@ -136,6 +247,10 @@ suite "GitHub CLI document integration":
     require panel.waitForGitHub()
     require panel.snapshot.items.len == 2
     require panel.snapshot.items[1].jobs[0].state == ghjsRunning
+    let pr = panel.headingDisclosure("#9 pr open")
+    require not pr.isNil
+    require pr.accessibilityPerformAction(AccessibilityActionCollapse)
+    require panel.waitForGitHub()
     check not panel.autoRefreshSwitch.on
     require panel.autoRefreshSwitch.tryToPerform(
       performClick(), DynamicAgent(panel.autoRefreshSwitch)
@@ -155,6 +270,13 @@ suite "GitHub CLI document integration":
     )
     require panel.waitForGitHub()
     check "1 passed" in panel.markdownView.markdown()
+    let refreshedPR = panel.headingDisclosure("#9 pr open")
+    require not refreshedPR.isNil
+    check refreshedPR.accessibilityValue() == "collapsed"
+    check "Jobs:" notin panel.markdownView.textStorage().stringValue()
+    require refreshedPR.accessibilityPerformAction(AccessibilityActionExpand)
+    require panel.waitForGitHub()
+    check "1 passed" in panel.markdownView.textStorage().stringValue()
     let reads = readFile(root / "pr-request-count")
     writeFile(root / "github-job-state", "FAILURE")
     let disabledDeadline = getMonoTime() + initDuration(milliseconds = 200)

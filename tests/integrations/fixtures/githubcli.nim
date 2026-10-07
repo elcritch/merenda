@@ -41,6 +41,8 @@ if paramCount() == 8 and paramStr(1) in ["issue", "pr"] and paramStr(2) == "list
     quit(4)
   elif mode == "empty":
     stdout.write("[]")
+  elif fileExists(command & "-response.json"):
+    stdout.write(readFile(command & "-response.json"))
   else:
     let jobState =
       if fileExists("github-job-state"):
