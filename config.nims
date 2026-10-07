@@ -18,6 +18,8 @@
   nimStackTraceOverride
 --path:
   "src/"
+--nimcache:
+  "deps/.nimcache"
 switch("import", "libbacktrace")
 
 when defined(freebsd):

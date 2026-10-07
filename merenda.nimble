@@ -1,4 +1,4 @@
-version       = "0.25.6"
+version       = "0.25.7"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -10,8 +10,8 @@ requires "msgpack4nim"
 requires "chronicles >= 0.4"
 requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
-# X11 helpers on top of merged ABI fixes: https://github.com/levovix0/siwin/pull/58
-requires "gh:elcritch/siwin#fix/export-x11-drawable"
+# Merged platform ABI fixes and X11 helpers: https://github.com/levovix0/siwin/pull/58
+requires "gh:levovix0/siwin#78bb49c7fd7e5e14590f567e1ccbb07eb5ab6739"
 # FigDraw compatibility: https://github.com/elcritch/figdraw/pull/97
 requires "gh:elcritch/figdraw#fix/siwin-upstream-abi [siwin, harfbuzz]"
 requires "sigils >= 0.31.0 [sigNameAsString, closures, siwin, chronos]"
@@ -21,11 +21,7 @@ requires "cborious"
 requires "unicodedb >= 0.14.0"
 requires "faststreams >= 0.5.1"
 requires "gh:elcritch/nim-markdown#fix/arc-emphasis-ownership[regex]"
-# Compiled grammar ownership must reclaim recursive rules under ARC.
 requires "gh:elcritch/matter#80a1e67815da0e6af2d17a24d26378ae5ae0fdcc"
-# Keep search and replacement on the same Reni scanner used by Matter.
-requires "gh:fox0430/reni#7703aa83d8bbd358872bbab388b2c62e6798b88a"
-# Worker-owned terminal sessions and bounded snapshots require Terminex 0.4.0.
 requires "gh:elcritch/terminex >= 0.4.0 [sigils]"
 requires "gh:Araq/iconbundler"
 requires "libbacktrace"

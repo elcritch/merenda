@@ -17,6 +17,9 @@ type KosmoPaneDocument* = ref object
   onClose*: proc(document: KosmoPaneDocument): bool {.closure.}
   onSave*: proc(document: KosmoPaneDocument): bool {.closure.}
   onDuplicate*: proc(document: KosmoPaneDocument): KosmoPaneDocument {.closure.}
+  onPresentationChanged*:
+    proc(document: KosmoPaneDocument, pane: nimkit.View) {.closure.}
+    ## Refresh pane-specific fonts and colors when the host updates its content.
 
 proc newKosmoPaneDocument*(
     identifier, title: string,
@@ -30,6 +33,8 @@ proc newKosmoPaneDocument*(
     onClose: proc(document: KosmoPaneDocument): bool {.closure.} = nil,
     onSave: proc(document: KosmoPaneDocument): bool {.closure.} = nil,
     onDuplicate: proc(document: KosmoPaneDocument): KosmoPaneDocument {.closure.} = nil,
+    onPresentationChanged:
+      proc(document: KosmoPaneDocument, pane: nimkit.View) {.closure.} = nil,
 ): KosmoPaneDocument =
   ## Create a pane document that can participate in Kosmo's tab lifecycle.
   KosmoPaneDocument(
@@ -46,6 +51,7 @@ proc newKosmoPaneDocument*(
     onClose: onClose,
     onSave: onSave,
     onDuplicate: onDuplicate,
+    onPresentationChanged: onPresentationChanged,
   )
 
 func documentTabModel*(document: KosmoPaneDocument): nimkit.DocumentTabModel =
@@ -74,6 +80,11 @@ proc activate*(document: KosmoPaneDocument, pane: nimkit.View) =
   ## Notify a document when it becomes active in a pane.
   if not document.isNil and not document.onActivate.isNil:
     document.onActivate(document, pane)
+
+proc updatePresentation*(document: KosmoPaneDocument, pane: nimkit.View) =
+  ## Let a document apply the hosting pane's current presentation settings.
+  if not document.isNil and not document.onPresentationChanged.isNil:
+    document.onPresentationChanged(document, pane)
 
 proc save*(document: KosmoPaneDocument): bool {.discardable.} =
   ## Save a document when it provides a save operation.

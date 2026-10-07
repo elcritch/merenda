@@ -402,10 +402,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build Kosmo in FreeBSD 15
+      - name: Build Kosmo in FreeBSD 15.1
         uses: vmactions/freebsd-vm@v1
         with:
-          release: "15.0"
+          release: "15.1"
           sync: rsync
           disable-cache: true
           cache-after-prepare: true

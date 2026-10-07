@@ -182,6 +182,7 @@ type
     fileTree*: KosmoFileTree
     fileBrowserPanel*: KosmoFileBrowserPanel
     gitDiffPanel*: KosmoGitDiffPanel
+    gitHubPanel*: KosmoGitHubPanel
     sidebarPane*: KosmoSidebarPane
     sidebarTabs*: nimkit.CompactTabView
     searchPanel*: KosmoFileSearchPanel

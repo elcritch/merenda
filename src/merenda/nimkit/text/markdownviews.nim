@@ -179,6 +179,7 @@ type
     documentGeneration: uint64
     headingIdentifier: string
     headingTitle: string
+    disclosureFrame: Rect
 
   MarkdownHeadingControlPresentation = object
     heading: MarkdownHeadingPresentation
@@ -253,6 +254,8 @@ type
     attributes: TextAttributes
     wroteBlock: bool
     blockIndex: int
+    headingIndex: int
+    headingIdentifiers: seq[string]
     collapsedHeadingLevel: int
     collapsedHeadings: HashSet[string]
     chunkCount: int
@@ -260,6 +263,8 @@ type
 
   MarkdownView* = ref object of TextEditor ## Scrollable, selectable Markdown document.
     xMarkdown: string
+    xMarkdownHeadingIdentifiers: seq[string]
+    xMarkdownRootHeadingIdentifiers: seq[string]
     xMarkdownStyle: MarkdownStyle
     xMarkdownConfig: MarkdownParserConfig
     xMarkdownRoot: markdownParser.Document
@@ -289,6 +294,7 @@ type
     xImageMediaTypes: Table[string, string]
     xPendingUrlAssets: Table[string, UrlAssetHandle]
     xCollapsedMarkdownHeadings: HashSet[string]
+    xHeadingsToggleOnClick: bool
     xHasMarkdownTables: bool
     xMarkdownTableColumnLimit: int
     xMarkdownTableResizePending: bool
@@ -353,7 +359,7 @@ protocol MarkdownHeadingDisclosureDrawing of ViewDrawingProtocol:
       )
     )
     context.drawDisclosureAffordance(
-      button.bounds(),
+      button.disclosureFrame,
       not button.markdownView[].headingCollapsed(button.headingIdentifier),
       button.highlighted(),
     )
@@ -414,6 +420,8 @@ proc newMarkdownHeadingDisclosureButton(
     documentGeneration: view.xMarkdownRootGeneration,
     headingIdentifier: heading.identifier,
     headingTitle: heading.title,
+    disclosureFrame:
+      rect(0, 0, MarkdownHeadingDisclosureSize, MarkdownHeadingDisclosureSize),
   )
   result.initButtonFields(
     "", rect(0, 0, MarkdownHeadingDisclosureSize, MarkdownHeadingDisclosureSize)
@@ -1914,17 +1922,26 @@ proc layoutMarkdownHeadings(textView: MarkdownTextView, snapshot: TextLayoutSnap
     if lineRect.isEmpty:
       presentation.button.setHiddenFromLayout(true)
     else:
-      presentation.button.setFrameFromLayout(
-        rect(
-          max(lineRect.origin.x - MarkdownHeadingDisclosureIndent, 0.0'f32),
-          lineRect.origin.y +
-            max(
-              (lineRect.size.height - MarkdownHeadingDisclosureSize) * 0.5'f32, 0.0'f32
-            ),
-          MarkdownHeadingDisclosureSize,
-          MarkdownHeadingDisclosureSize,
-        )
+      let disclosureRect = rect(
+        max(lineRect.origin.x - MarkdownHeadingDisclosureIndent, 0.0'f32),
+        lineRect.origin.y +
+          max((lineRect.size.height - MarkdownHeadingDisclosureSize) * 0.5'f32, 0.0'f32),
+        MarkdownHeadingDisclosureSize,
+        MarkdownHeadingDisclosureSize,
       )
+      let buttonRect =
+        if not textView.markdownView.isNil and
+            textView.markdownView[].xHeadingsToggleOnClick:
+          disclosureRect.union(presentation.rangeLayout.rect)
+        else:
+          disclosureRect
+      presentation.button.disclosureFrame = rect(
+        disclosureRect.origin.x - buttonRect.origin.x,
+        disclosureRect.origin.y - buttonRect.origin.y,
+        MarkdownHeadingDisclosureSize,
+        MarkdownHeadingDisclosureSize,
+      )
+      presentation.button.setFrameFromLayout(buttonRect)
       presentation.button.setHiddenFromLayout(false)
 
 proc clearMarkdownTables(textView: MarkdownTextView) =
@@ -2401,10 +2418,15 @@ proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
           0
       headingIdentifier =
         if headingLevel > 0:
-          "markdown-heading-" & $blockIndex
+          if job.headingIndex < job.headingIdentifiers.len:
+            job.headingIdentifiers[job.headingIndex]
+          else:
+            "markdown-heading-" & $blockIndex
         else:
           ""
     inc job.blockIndex
+    if headingLevel > 0:
+      inc job.headingIndex
     var renderBlock = true
     if job.collapsedHeadingLevel > 0:
       if headingLevel == 0 or headingLevel > job.collapsedHeadingLevel:
@@ -2481,6 +2503,7 @@ proc scheduleMarkdownRendering(view: MarkdownView) =
       headingDisclosureIndent: MarkdownHeadingDisclosureIndent,
     ),
     attributes: view.xMarkdownStyle.bodyAttributes(),
+    headingIdentifiers: view.xMarkdownRootHeadingIdentifiers,
     collapsedHeadings: view.xCollapsedMarkdownHeadings,
   )
   scheduleMainThreadWork(
@@ -2505,6 +2528,7 @@ proc completeMarkdownParse(
     view.xMarkdownParseError = parseResult.errorMessage
     if parseResult.errorMessage.len == 0:
       view.xMarkdownRoot = move parseResult.root
+      view.xMarkdownRootHeadingIdentifiers = view.xMarkdownHeadingIdentifiers
       view.xMatterCodeIndices.clear()
       view.xMatterHighlights = newSeq[seq[SyntaxTokenSpan]](parseResult.codes.len)
       for index, code in parseResult.codes:
@@ -2564,6 +2588,7 @@ proc startLatestMarkdownParse(view: MarkdownView) =
     # Arbitrary parser subclasses are thread-affine reference objects. Preserve
     # their existing behavior rather than sharing or attempting to clone them.
     view.xMarkdownRoot = view.xMarkdown.parseMarkdownRoot(view.xMarkdownConfig)
+    view.xMarkdownRootHeadingIdentifiers = view.xMarkdownHeadingIdentifiers
     view.xMarkdownRootGeneration = view.xMarkdownGeneration
     view.xMarkdownParseWorkerThreadId = -1
     view.xMarkdownParseError.setLen(0)
@@ -2827,14 +2852,42 @@ proc markdown*(view: MarkdownView): string =
   ## Returns the source Markdown last rendered by `view`.
   view.xMarkdown
 
-proc `markdown=`*(view: MarkdownView, source: string) =
+proc headingsToggleOnClick*(view: MarkdownView): bool =
+  ## Whether heading text participates in the section disclosure click target.
+  view.xHeadingsToggleOnClick
+
+proc `headingsToggleOnClick=`*(view: MarkdownView, enabled: bool) =
+  ## Extend disclosure buttons over heading text; disabled by default.
+  if view.xHeadingsToggleOnClick == enabled:
+    return
+  view.xHeadingsToggleOnClick = enabled
+  view.textView().needsLayout = true
+  view.needsDisplay = true
+
+proc updateMarkdown*(
+    view: MarkdownView,
+    source: string,
+    headingIdentifiers: openArray[string] = [],
+    preserveHeadingState = false,
+) =
   ## Schedules a parse and atomically replaces the document when it completes.
-  if view.xMarkdown == source:
+  ## Supply unique, nonempty identifiers in top-level heading order to retain
+  ## section state across reordered or renamed headings. Unspecified headings
+  ## use block positions. State is cleared unless `preserveHeadingState` is true.
+  ## Identical source and identifiers leave the current document unchanged.
+  let identifiers = @headingIdentifiers
+  if view.xMarkdown == source and view.xMarkdownHeadingIdentifiers == identifiers:
     return
   view.xPendingUrlAssets.clear()
-  view.xCollapsedMarkdownHeadings.clear()
+  if not preserveHeadingState:
+    view.xCollapsedMarkdownHeadings.clear()
+  view.xMarkdownHeadingIdentifiers = identifiers
   view.xMarkdown = source
   view.scheduleMarkdownParse()
+
+proc `markdown=`*(view: MarkdownView, source: string) =
+  ## Replaces the document, resetting section state when the source changes.
+  view.updateMarkdown(source)
 
 proc imageBasePath*(view: MarkdownView): string =
   ## Returns the directory used to resolve relative local image destinations.

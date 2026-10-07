@@ -55,7 +55,8 @@ uses `primary`; Settings and menus show its resolved physical spelling.
 | `primary-Alt-Shift-F` | Replace in Files | Expands replacement controls; `primary-Shift-F` returns to search only. |
 | `primary-P` | Quick Open | |
 | `primary-Shift-T` | New terminal tab | |
-| `primary-Shift-G` | Show Git diff tab | |
+| `primary-Shift-D` | Show Git diff tab | |
+| `primary-Shift-H` | Show GitHub issues and PRs | |
 | `primary-1` through `primary-8` | Focus panel 1 through 8 | Panel 1 is the file browser; editor panels follow in split-tree order, with top or left panes first. |
 
 The scoped Vim pane commands are described below. They are handled only by a
@@ -86,7 +87,7 @@ rather than separate hard-coded shortcuts.
 Editor search uses `Shortcut-F`; `Shortcut-Alt-F` opens it with replacement
 expanded. A disclosure chevron toggles replacement without clearing either field.
 `Shortcut-F` always collapses replacement and focuses the search field, including
-when a replacement field is already focused. Markdown, Git diff, and terminal
+when a replacement field is already focused. Markdown, Git diff, GitHub, and terminal
 search remain search-only.
 
 The standard Edit menu is a responder-chain facility. Kosmo bridges its Copy,
@@ -145,6 +146,7 @@ native editing actions. The original command IDs remain valid, including:
 ```text
 kosmo.newTerminal
 kosmo.showGitDiff
+kosmo.showGitHub
 kosmo.save
 kosmo.closeTab
 kosmo.quit
@@ -371,7 +373,8 @@ the physical spelling shown by the active profile:
 | Close window | `primary-Shift-W`; also `Alt-F4` on Windows/Linux |
 | Quit | `primary-Q` |
 | New terminal | `primary-Shift-T` |
-| Show Git diff | `primary-Shift-G` |
+| Show Git diff | `primary-Shift-D` |
+| Show GitHub issues and PRs | `primary-Shift-H` |
 | Previous / next tab | `primary-Shift-[` / `primary-Shift-]`; also `gt` / `gT` through Moe |
 | Files / Find in Files | `primary-Shift-E` / `primary-Shift-F` |
 | Focus panel | `primary-1` through `primary-8` |

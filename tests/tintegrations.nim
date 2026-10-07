@@ -1,5 +1,6 @@
 ## Shared runner for tests requiring cross-component or process-level integration.
 import integrations/fixtures/atomicsavefailure
+import integrations/fixtures/githubcli
 import integrations/fixtures/kosmolspexec
 import integrations/fixtures/moefrontendexec
 import integrations/processdescriptors
@@ -8,6 +9,7 @@ import integrations/application_sigils
 import integrations/kosmolsp
 import integrations/figdraw_text_offsets
 import integrations/gitprocesslifecycle
+import integrations/githubviewer
 import integrations/kosmoprocesses
 import integrations/moefrontendwork
 import integrations/kosmocliopen

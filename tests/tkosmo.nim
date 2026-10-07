@@ -13,6 +13,7 @@ import kosmo/editorsearch
 import kosmo/filetree
 import kosmo/filetreeinteractions
 import kosmo/gitdiff
+import kosmo/github
 import kosmo/hostcommands
 import kosmo/frontendwork
 import kosmo/lsptcp

@@ -423,6 +423,9 @@ proc showGitDiffSnapshot(
       contentView = panel,
       preferredFirstResponder = panel.markdownView.textView(),
       tooltip = if refreshesRepository: "Current Git diff" else: "Piped Git diff",
+      onPresentationChanged = proc(document: KosmoPaneDocument, pane: nimkit.View) =
+        panel.markdownStyle =
+          KosmoEditorPane(pane).markdownControls.markdownPresentationStyle(),
       onClose = proc(document: KosmoPaneDocument): bool =
         discard document
         panel.close()
@@ -466,6 +469,87 @@ proc editorGitDirectory(frontend: KosmoApplication): string =
   for tab in group.editorView.editor.tabs():
     if tab.id == id and tab.filePath.isSome:
       return nearestGitDirectory(absolutePath(tab.filePath.get).parentDir())
+
+proc showGitHub*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
+  ## Show GitHub issues and PRs for an explicit project or the active repository.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  let editorRoot =
+    if path.len == 0:
+      frontend.editorGitDirectory()
+    else:
+      ""
+  let root =
+    if path.len > 0:
+      nearestGitDirectory(
+        if dirExists(path):
+          path
+        else:
+          absolutePath(path).parentDir()
+      )
+    elif editorRoot.len > 0:
+      editorRoot
+    elif frontend.fileTree.rootPath.len > 0:
+      frontend.fileTree.rootPath
+    else:
+      getCurrentDir()
+  let controller = frontend.dockController
+  let title = "GitHub · " & root.lastPathPart()
+  for group in controller.groups:
+    let document = group.documentForIdentifier(KosmoGitHubTabIdentifier)
+    if not document.isNil:
+      if not group.window.isNil and not group.window.isClosed():
+        frontend.gitHubPanel = KosmoGitHubPanel(document.contentView)
+        frontend.gitHubPanel.displayRepository(root)
+        document.title = title
+        document.tooltip = root
+        controller.activatePanelWindow(group.window)
+        controller.activatePaneTab(group, document.identifier)
+        return true
+      discard document.close()
+      let documentIndex = group.documentIndex(document.identifier)
+      if documentIndex >= 0:
+        group.documents.delete(documentIndex)
+      let orderIndex = group.tabOrder.find(document.identifier)
+      if orderIndex >= 0:
+        group.tabOrder.delete(orderIndex)
+  let group = controller.activePaneGroup()
+  if group.isNil:
+    return
+  let panel =
+    newKosmoGitHubPanel(root, group.pane.markdownControls.markdownPresentationStyle())
+  let weakFrontend = frontend.unsafeWeakRef()
+  let weakPanel = panel.unsafeWeakRef()
+  let document = newKosmoPaneDocument(
+    KosmoGitHubTabIdentifier,
+    title,
+    panel,
+    preferredFirstResponder = panel.markdownView.textView(),
+    tooltip = root,
+    onPresentationChanged = proc(document: KosmoPaneDocument, pane: nimkit.View) =
+      panel.markdownStyle =
+        KosmoEditorPane(pane).markdownControls.markdownPresentationStyle(),
+    onClose = proc(document: KosmoPaneDocument): bool =
+      panel.close()
+      if not weakFrontend.isNil and weakFrontend[].gitHubPanel == panel:
+        weakFrontend[].gitHubPanel = nil
+      true,
+  )
+  panel.keyEquivalentHandler = proc(event: nimkit.KeyEvent): bool =
+    if weakFrontend.isNil or weakPanel.isNil or weakFrontend[].dockController.isNil:
+      return
+    for candidate in weakFrontend[].dockController.groups:
+      let document = candidate.documentForIdentifier(KosmoGitHubTabIdentifier)
+      if not document.isNil and document.contentView == nimkit.View(weakPanel[]):
+        return candidate.editorView.handlePaneKey(event)
+  panel.linkHandler = proc(link: string): bool =
+    if not weakFrontend.isNil:
+      return weakFrontend[].application.workspace().openUrl(link).succeeded
+  frontend.gitHubPanel = panel
+  if controller.openPaneDocument(group, document):
+    return true
+  panel.close()
+  frontend.gitHubPanel = nil
 
 proc showGitDiff*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
   ## Show the selected editor file's repository, or a scoped diff for an explicit path.
@@ -542,6 +626,8 @@ proc performFileTreeAction(
       frontend.fileTree.deleteItem(path)
     if not frontend.gitDiffPanel.isNil:
       frontend.gitDiffPanel.scheduleRepositoryRefresh()
+    if not frontend.gitHubPanel.isNil:
+      frontend.gitHubPanel.scheduleRepositoryRefresh()
   except CatchableError as error:
     let failure = nimkit.newAlert("Could not " & title.toLowerAscii(), error.msg)
     defer:
@@ -911,6 +997,9 @@ proc newKosmoApplication*(
       nimkit.newMenuItem("New Terminal", nimkit.actionSelector(KosmoNewTerminalAction))
     gitDiffItem =
       nimkit.newMenuItem("Show Git Diff", nimkit.actionSelector(KosmoShowGitDiffAction))
+    gitHubItem = nimkit.newMenuItem(
+      "Show GitHub Issues and PRs", nimkit.actionSelector(KosmoShowGitHubAction)
+    )
     saveItem = nimkit.newMenuItem("Save", nimkit.actionSelector(KosmoSaveAction))
     closeTabItem =
       nimkit.newMenuItem("Close Tab", nimkit.actionSelector(KosmoCloseTabAction))
@@ -925,6 +1014,8 @@ proc newKosmoApplication*(
   terminalItem.identifier = KosmoNewTerminalAction
   gitDiffItem.identifier = KosmoShowGitDiffAction
   gitDiffItem.validates = false
+  gitHubItem.identifier = KosmoShowGitHubAction
+  gitHubItem.validates = false
   saveItem.identifier = KosmoSaveAction
   closeTabItem.identifier = KosmoCloseTabAction
   closeWindowItem.identifier = KosmoCloseWindowAction
@@ -936,6 +1027,7 @@ proc newKosmoApplication*(
   discard fileMenu.addItem(quickOpenItem)
   discard fileMenu.addItem(terminalItem)
   discard fileMenu.addItem(gitDiffItem)
+  discard fileMenu.addItem(gitHubItem)
   fileMenu.addSeparator()
   discard fileMenu.addItem(saveItem)
   fileMenu.addSeparator()
@@ -1101,6 +1193,13 @@ proc newKosmoApplication*(
     let active = manager.activeFrontend()
     if not active.isNil:
       discard active.showGitDiff()
+  gitHubItem.target = nimkit.newActionTarget(
+    nimkit.actionSelector(KosmoShowGitHubAction)
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    let active = manager.activeFrontend()
+    if not active.isNil:
+      discard active.showGitHub()
   saveItem.target = nimkit.newActionTarget(nimkit.actionSelector(KosmoSaveAction)) do(
     sender: nimkit.DynamicAgent
   ):

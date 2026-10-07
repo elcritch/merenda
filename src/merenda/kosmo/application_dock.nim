@@ -1135,6 +1135,8 @@ proc workspaceGitChanged(lifecycle: KosmoWindowLifecycle) {.slot.} =
     frontend.dockController.editor.notifyGitRepositoryChanged()
     if not frontend.gitDiffPanel.isNil:
       frontend.gitDiffPanel.scheduleRepositoryRefresh()
+    if not frontend.gitHubPanel.isNil:
+      frontend.gitHubPanel.scheduleRepositoryRefresh()
 
 proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
   if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
@@ -1142,6 +1144,8 @@ proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
     let controller = frontend.dockController
     if not frontend.gitDiffPanel.isNil:
       discard frontend.gitDiffPanel.pollRepositoryRefresh()
+    if not frontend.gitHubPanel.isNil:
+      discard frontend.gitHubPanel.pollRepositoryRefresh()
     if lifecycle.monitorsGitStatus:
       frontend.fileTree.workspaceFiles.setGitRoots(controller.editor.gitWatchRoots())
     if controller.editor.pollGitStatus():
