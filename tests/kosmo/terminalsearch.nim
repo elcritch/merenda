@@ -1,10 +1,11 @@
 ## Terminal scrollback search and Kosmo's floating search controls.
 
-import std/unittest
+import std/[strutils, unicode, unittest]
 import ../support/terminalhelpers
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import merenda/nimkit/foundation/textsearch
 import fixtures/ui
 
 func center(rect: Rect): Point =
@@ -14,6 +15,110 @@ func center(rect: Rect): Point =
   )
 
 suite "Kosmo terminal search":
+  test "search centers older output and keeps the latest matches at the history end":
+    let
+      session = newTerminalViewSession(columns = 20, rows = 5)
+      terminal = newKosmoTerminalView(session)
+      metrics = terminal.monoTextMetrics()
+      padding = terminal.padding()
+      frame = rect(
+        0,
+        0,
+        padding * 2 + metrics.cellWidth * 20.25,
+        padding * 2 + metrics.lineHeight * 5.25,
+      )
+      window = newWindow("Centered terminal search", frame = frame)
+    defer:
+      window.close()
+    terminal.frame = frame
+    window.setContentView(terminal)
+    terminal.layoutSubtreeIfNeeded()
+    session.waitForCommands()
+    var output: string
+    for row in 0 ..< 20:
+      if row > 0:
+        output.add "\r\n"
+      output.add(if row in [10, 19]: "hit " else: "row ")
+      output.add align($row, 2, '0')
+    session.processOutput(output)
+    discard terminal.pollSettled()
+    require session.screenInfo().rows == 5
+    require terminal.showSearch()
+    require window.dispatchTextInput("hit")
+    check terminal.selectionText() == "hit"
+    check terminal.selection().anchor.row == 19
+    check terminal.scrollPosition() == 0
+    terminal.findPrevious()
+    check terminal.selection().anchor.row == 10
+    let info = session.screenInfo()
+    let start = info.totalLineCount - info.rows - int(terminal.scrollPosition())
+    check terminal.selection().anchor.row - start == info.rows div 2
+    terminal.findNext()
+    check terminal.selection().anchor.row == 19
+    check terminal.scrollPosition() == 0
+
+  test "Reni matches keep Unicode cells and cross wrapped output":
+    let session = newTerminalViewSession(columns = 6, rows = 4)
+    session.processOutput("λ猫catDOG\r\nend")
+    session.waitForCommands()
+    let matches =
+      terminalSearchMatches(session, r"λ\K猫catdog", regularExpression = true)
+    require matches.len == 1
+    check matches[0] ==
+      TerminalSelection(
+        anchor: initTerminalPosition(0, 1), extent: initTerminalPosition(1, 3)
+      )
+    let positions = terminalSearchMatches(session, r"(?=猫)", regularExpression = true)
+    require positions.len == 1
+    check positions[0].anchor == initTerminalPosition(0, 1)
+    check positions[0].extent == positions[0].anchor
+    let wide = terminalSearchMatches(session, "猫", regularExpression = true)
+    require wide.len == 1
+    check wide[0].extent == initTerminalPosition(0, 3)
+    check terminalSearchMatches(session, r"cat|end", regularExpression = true).len == 2
+    check terminalSearchMatches(session, "[").len == 0
+    check terminalSearchMatches(session, "", regularExpression = true).len == 0
+    expect TextSearchError:
+      discard terminalSearchMatches(session, "[", regularExpression = true)
+
+  test "terminal expression controls recover from invalid queries":
+    let
+      session = newTerminalViewSession(columns = 20, rows = 3)
+      terminal = newKosmoTerminalView(session, frame = rect(0, 0, 640, 320))
+      window = newWindow("Terminal regex", frame = rect(0, 0, 640, 320))
+    defer:
+      window.close()
+    session.processOutput("a.b axb\r\nλcat cat")
+    session.waitForCommands()
+    window.setContentView(terminal)
+    terminal.layoutSubtreeIfNeeded()
+    require terminal.showSearch()
+    require window.dispatchTextInput("a.b")
+    check terminal.searchMatchCount() == 1
+    let toggle = terminal.buttonWithLabel("Use Reni regular expressions")
+    require not toggle.isNil
+    toggle.checkVisibleIn(terminal)
+    require window.clickAt(toggle.pointToWindow(initPoint(14, 14)))
+    check terminal.searchMatchCount() == 2
+    check terminal.selectionText() == "axb"
+    terminal.searchField().selectedRange = initTextRange(0, 3)
+    require window.dispatchTextInput(r"λ\Kcat")
+    check terminal.searchMatchCount() == 1
+    check terminal.selectionText() == "cat"
+    terminal.searchField().selectedRange =
+      initTextRange(0, terminal.searchField().text().runeLen)
+    require window.dispatchTextInput("[")
+    check terminal.searchMatchCount() == 0
+    check not terminal.hasSelection()
+    check not terminal.buttonWithLabel("Next terminal output match").enabled
+    terminal.searchField().selectedRange = initTextRange(0, 1)
+    require window.dispatchTextInput("cat")
+    check terminal.searchMatchCount() == 2
+    check terminal.selectionText() == "cat"
+    require window.clickAt(toggle.pointToWindow(initPoint(14, 14)))
+    check toggle.state == bsOff
+    check terminal.searchMatchCount() == 2
+
   test "find shortcuts start at the bottom and traverse older output first":
     let
       session = newTerminalViewSession(columns = 20, rows = 4)

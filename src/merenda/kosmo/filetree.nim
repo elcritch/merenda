@@ -9,6 +9,7 @@ import ../nimkit as nimkit except performKeyEquivalent
 import ./config
 import ./workspacefiles
 import ./searchbuttons
+import ../nimkit/foundation/textsearch
 from ../nimkit/foundation/selectors import performKeyEquivalent
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
@@ -35,7 +36,7 @@ type
 
   FileTreeSearchEntry = object
     path: string
-    normalizedName: string
+    name: string
     hidden: bool
 
   KosmoFileTree* = ref object of nimkit.OutlineView
@@ -54,6 +55,8 @@ type
     xVisibleChildren: Table[string, seq[string]]
     xMatchingPaths: HashSet[string]
     xFilterText: string
+    xRegularExpression: bool
+    xSearchError: string
     xDisplayMode: FileTreeDisplayMode
     xExpandedBeforeFilter: seq[string]
     xSearchEntries: seq[FileTreeSearchEntry]
@@ -64,6 +67,8 @@ type
     filterField*: nimkit.TextField
     scopeButton*: nimkit.PopupMenuButton
     closeFilterButton*: nimkit.Button
+    expressionButton: nimkit.Button
+    errorLabel: nimkit.Label
     promptLabel: nimkit.Label
 
   KosmoFileFilterFieldEditor = ref object of nimkit.FieldEditor
@@ -86,6 +91,12 @@ const
   FileBrowserControlInset = 8.0'f32
   FileBrowserControlHeight = 26.0'f32
   FileBrowserControlRowHeight = 42.0'f32
+
+proc filterQuery(tree: KosmoFileTree): string =
+  if tree.xRegularExpression:
+    tree.xFilterText
+  else:
+    tree.xFilterText.strip()
 
 func title*(mode: FileTreeDisplayMode): string =
   case mode
@@ -219,7 +230,7 @@ proc directChildPath(parentPath, path: string): string =
 proc addMatchingPathsBeyondListing(
     tree: KosmoFileTree, parentIdentifier: string, candidates: var seq[string]
 ) =
-  if tree.xFilterText.strip().len == 0 or
+  if tree.filterQuery().len == 0 or
       not tree.xWorkspaceFiles.isDirectoryTruncated(parentIdentifier):
     return
   var included = initHashSet[string]()
@@ -256,7 +267,7 @@ proc filteredChildPaths(
     var children: seq[string]
     for path in candidates:
       if tree.displayModeIncludes(path) and
-          (tree.xFilterText.strip().len == 0 or path in tree.xMatchingPaths):
+          (tree.filterQuery().len == 0 or path in tree.xMatchingPaths):
         children.add path
     tree.xVisibleChildren[parentIdentifier] = children
   tree.xVisibleChildren[parentIdentifier]
@@ -291,9 +302,7 @@ proc ensureSearchIndex(tree: KosmoFileTree) =
       if path notin seen:
         seen.incl path
         tree.xSearchEntries.add FileTreeSearchEntry(
-          path: path,
-          normalizedName: path.fileBrowserDisplayName().toLower(),
-          hidden: tree.hiddenPath(path),
+          path: path, name: path.fileBrowserDisplayName(), hidden: tree.hiddenPath(path)
         )
   tree.xSearchIndexValid = true
 
@@ -303,26 +312,36 @@ proc invalidateSearchIndex(tree: KosmoFileTree) =
 
 proc rebuildMatchingPaths(tree: KosmoFileTree): seq[string] =
   tree.xMatchingPaths.clear()
-  let needle = tree.xFilterText.strip().toLower()
+  tree.xSearchError = ""
+  let needle = tree.filterQuery()
   if needle.len == 0:
     return
-  if tree.xDisplayMode == FileTreeDisplayMode.SourceControlChanges:
-    for path, state in tree.xGitFileStates:
-      if state != nimkit.gfsIgnored and
-          path.fileBrowserDisplayName().toLower().contains(needle):
-        tree.includePathAndAncestors(path, result)
-  else:
-    tree.ensureSearchIndex()
-    for entry in tree.xSearchEntries:
-      if (
-        tree.xDisplayMode != FileTreeDisplayMode.VisibleFiles or
-        (not entry.hidden and not tree.ignoredPath(entry.path))
-      ) and entry.normalizedName.contains(needle):
-        tree.includePathAndAncestors(entry.path, result)
+  try:
+    let pattern =
+      initTextSearchPattern(needle, tree.xRegularExpression, caseSensitive = false)
+    if tree.xDisplayMode == FileTreeDisplayMode.SourceControlChanges:
+      for path, state in tree.xGitFileStates:
+        if state != nimkit.gfsIgnored and pattern.contains(
+          path.fileBrowserDisplayName()
+        ):
+          tree.includePathAndAncestors(path, result)
+    else:
+      tree.ensureSearchIndex()
+      for entry in tree.xSearchEntries:
+        if (
+          tree.xDisplayMode != FileTreeDisplayMode.VisibleFiles or
+          (not entry.hidden and not tree.ignoredPath(entry.path))
+        ) and pattern.contains(entry.name):
+          tree.includePathAndAncestors(entry.path, result)
+  except TextSearchError as error:
+    tree.xMatchingPaths.clear()
+    result.setLen(0)
+    tree.xSearchError = error.msg
 
 proc reloadFilteredTree(tree: KosmoFileTree, updateSearchExpansion = true) =
   tree.xVisibleChildren.clear()
-  if tree.xFilterText.strip().len > 0:
+  tree.xSearchError = ""
+  if tree.filterQuery().len > 0:
     let expanded = tree.rebuildMatchingPaths()
     if updateSearchExpansion:
       tree.expandedItemIdentifiers = expanded
@@ -586,16 +605,35 @@ proc `displayMode=`*(tree: KosmoFileTree, mode: FileTreeDisplayMode) =
 proc filterText*(tree: KosmoFileTree): string =
   tree.xFilterText
 
+func searchError*(tree: KosmoFileTree): string =
+  tree.xSearchError
+
+func regularExpression*(tree: KosmoFileTree): bool =
+  tree.xRegularExpression
+
+proc `regularExpression=`*(tree: KosmoFileTree, enabled: bool) =
+  ## Re-run the filename filter with literal text or Reni syntax.
+  let wasFiltering = tree.filterQuery().len > 0
+  tree.xRegularExpression = enabled
+  let isFiltering = tree.filterQuery().len > 0
+  if not wasFiltering and isFiltering:
+    tree.xExpandedBeforeFilter = tree.expandedItemIdentifiers()
+  elif wasFiltering and not isFiltering:
+    tree.xMatchingPaths.clear()
+    tree.expandedItemIdentifiers = tree.xExpandedBeforeFilter
+  tree.reloadFilteredTree()
+
 proc `filterText=`*(tree: KosmoFileTree, text: string) =
   ## Filter file names case-insensitively while retaining their ancestor folders.
   if tree.isNil or tree.xFilterText == text:
     return
-  let wasFiltering = tree.xFilterText.strip().len > 0
+  let wasFiltering = tree.filterQuery().len > 0
   tree.xFilterText = text
-  let isFiltering = tree.xFilterText.strip().len > 0
+  let isFiltering = tree.filterQuery().len > 0
   if not wasFiltering and isFiltering:
     tree.xExpandedBeforeFilter = tree.expandedItemIdentifiers()
   elif wasFiltering and not isFiltering:
+    tree.xSearchError = ""
     tree.xMatchingPaths.clear()
     tree.xVisibleChildren.clear()
     tree.expandedItemIdentifiers = tree.xExpandedBeforeFilter
@@ -615,7 +653,7 @@ proc revealPath*(tree: KosmoFileTree, path: string): bool {.discardable.} =
       break
   if rootPath.len == 0 or not tree.displayModeIncludes(targetPath):
     return
-  if tree.xFilterText.strip().len > 0 and targetPath notin tree.xMatchingPaths:
+  if tree.filterQuery().len > 0 and targetPath notin tree.xMatchingPaths:
     return
 
   var ancestors: seq[string]
@@ -641,7 +679,7 @@ proc reloadRoots(tree: KosmoFileTree, expanded: seq[string]) =
   tree.invalidateSearchIndex()
   tree.xVisibleChildren.clear()
   tree.xExpandedBeforeFilter = expanded
-  if tree.xFilterText.strip().len > 0:
+  if tree.filterQuery().len > 0:
     tree.xMatchingPaths.clear()
     tree.expandedItemIdentifiers = tree.rebuildMatchingPaths()
   else:
@@ -856,6 +894,10 @@ proc filterTextDidChange(
   discard sender
   panel.promptLabel.hidden = panel.filterField.text().len > 0
   panel.fileTree.filterText = panel.filterField.text()
+  panel.errorLabel.text = panel.fileTree.searchError()
+  panel.errorLabel.toolTip = panel.fileTree.searchError()
+  panel.errorLabel.hidden = panel.fileTree.searchError().len == 0
+  panel.setNeedsLayout()
 
 proc showFilter*(panel: KosmoFileBrowserPanel): bool {.discardable.} =
   ## Reveal and focus the live file-name filter.
@@ -865,6 +907,7 @@ proc showFilter*(panel: KosmoFileBrowserPanel): bool {.discardable.} =
     panel.filterField.hidden = false
     panel.promptLabel.hidden = panel.filterField.text().len > 0
     panel.closeFilterButton.hidden = false
+    panel.expressionButton.hidden = false
     panel.setNeedsLayout()
     panel.layoutSubtreeIfNeeded()
   else:
@@ -881,6 +924,8 @@ proc dismissFilter*(panel: KosmoFileBrowserPanel) =
   panel.promptLabel.hidden = true
   panel.filterField.hidden = true
   panel.closeFilterButton.hidden = true
+  panel.expressionButton.hidden = true
+  panel.errorLabel.hidden = true
   panel.setNeedsLayout()
   let owner = panel.window()
   if owner of nimkit.Window:
@@ -959,14 +1004,18 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
         if panel.filterField.hidden:
           0.0'f32
         else:
-          min(FileBrowserControlRowHeight, bounds.size.height)
+          min(
+            FileBrowserControlRowHeight +
+              (if panel.errorLabel.hidden: 0.0'f32 else: 22.0'f32),
+            bounds.size.height,
+          )
       scopeHeight = min(
         FileBrowserControlRowHeight, max(bounds.size.height - searchHeight, 0.0'f32)
       )
       treeHeight = max(bounds.size.height - searchHeight - scopeHeight, 0.0'f32)
       contentWidth = max(bounds.size.width - FileBrowserControlInset * 2.0'f32, 0.0'f32)
-      closeWidth = min(FileBrowserControlHeight, contentWidth)
-      filterWidth = max(contentWidth - closeWidth - 6.0'f32, 0.0'f32)
+      closeWidth = min(FileBrowserControlHeight, contentWidth / 2.0'f32)
+      filterWidth = max(contentWidth - 2 * closeWidth - 12.0'f32, 0.0'f32)
     panel.fileTree.setFrameFromLayout(
       nimkit.rect(0.0'f32, searchHeight, bounds.size.width, treeHeight)
     )
@@ -986,12 +1035,28 @@ protocol KosmoFileBrowserPanelLayout of nimkit.ViewLayoutProtocol:
         min(FileBrowserControlHeight, searchHeight),
       )
     )
-    panel.closeFilterButton.setFrameFromLayout(
+    panel.expressionButton.setFrameFromLayout(
       nimkit.rect(
         FileBrowserControlInset + filterWidth + 6.0'f32,
         FileBrowserControlInset,
         closeWidth,
         min(FileBrowserControlHeight, searchHeight),
+      )
+    )
+    panel.closeFilterButton.setFrameFromLayout(
+      nimkit.rect(
+        FileBrowserControlInset + filterWidth + closeWidth + 12.0'f32,
+        FileBrowserControlInset,
+        closeWidth,
+        min(FileBrowserControlHeight, searchHeight),
+      )
+    )
+    panel.errorLabel.setFrameFromLayout(
+      nimkit.rect(
+        FileBrowserControlInset,
+        FileBrowserControlRowHeight,
+        contentWidth,
+        max(searchHeight - FileBrowserControlRowHeight, 0.0'f32),
       )
     )
     panel.scopeButton.setFrameFromLayout(
@@ -1051,6 +1116,8 @@ proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
     filterField: filterField,
     scopeButton: scopeButton,
     closeFilterButton: closeFilterButton,
+    expressionButton: newExpressionButton(),
+    errorLabel: nimkit.newStatusLabel(""),
     promptLabel: promptLabel,
   )
   result.initViewFields()
@@ -1071,6 +1138,8 @@ proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
   result.addSubview(filterField)
   result.addSubview(promptLabel)
   result.addSubview(closeFilterButton)
+  result.addSubview(result.expressionButton)
+  result.addSubview(result.errorLabel)
   result.addSubview(scopeButton)
   discard result.withProtocol(KosmoFileBrowserPanelCommands)
   discard result.withProtocol(KosmoFileBrowserPanelMenuCommands)
@@ -1085,6 +1154,16 @@ proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
     if not panel.isNil:
       panel[].closeFileFilter(sender)
   closeFilterButton.action = closeAction
+  result.expressionButton.state =
+    if tree.regularExpression: nimkit.bsOn else: nimkit.bsOff
+  result.expressionButton.action = nimkit.actionSelector("kosmo.fileFilterExpressions")
+  result.expressionButton.target = nimkit.newActionTarget(
+    result.expressionButton.action
+  ) do(sender: nimkit.DynamicAgent):
+    if not panel.isNil:
+      panel[].fileTree.regularExpression = panel[].expressionButton.state == nimkit.bsOn
+      panel[].filterTextDidChange(sender)
+      discard panel[].showFilter()
   closeFilterButton.accessibilityLabel = "Close file filter"
   closeFilterButton.toolTip = "Close file filter"
   filterField.accessibilityLabel = "Filter files"
@@ -1092,5 +1171,7 @@ proc newKosmoFileBrowserPanel*(tree: KosmoFileTree): KosmoFileBrowserPanel =
   filterField.hidden = true
   promptLabel.hidden = true
   closeFilterButton.hidden = true
+  result.expressionButton.hidden = true
+  result.errorLabel.hidden = true
   filterField.connect(nimkit.textDidChange, result, filterTextDidChange)
   result.syncScopeControl()

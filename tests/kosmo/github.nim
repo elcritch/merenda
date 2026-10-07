@@ -245,6 +245,15 @@ suite "Kosmo GitHub Markdown viewer":
     require frontend.window.dispatchTextInput("needle")
     check panel.searchMatchCount() == 2
     check panel.markdownView.textView().selectedText() == "needle"
+    let expression = panel.buttonWithLabel("Use Reni regular expressions")
+    require not expression.isNil
+    expression.checkVisibleIn(panel)
+    require frontend.window.clickAt(expression.pointToWindow(initPoint(14, 14)))
+    panel.searchField().selectedRange =
+      initTextRange(0, panel.searchField().text().runeLen)
+    require frontend.window.dispatchTextInput(r"n(e+)dle")
+    check panel.searchMatchCount() == 2
+    check panel.markdownView.textView().selectedText() == "needle"
     require panel.kindButton.menu()[2].perform(frontend.window)
     require panel.waitForGitHub()
     check panel.kindButton.title == "Pull Requests"

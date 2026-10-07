@@ -7,6 +7,8 @@ from figdraw import ZLevel
 
 import ../nimkit as nimkit
 import ./workspacefiles
+import ./searchbuttons
+import ../nimkit/foundation/textsearch
 export workspacefiles.projectFiles
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 
@@ -51,6 +53,9 @@ type
     xPresentationAnimation: nimkit.Animation
     xWorkspaceFiles: WorkspaceFiles
     xLoading: bool
+    expressionButton: nimkit.Button
+    xRegularExpression: bool
+    xSearchError: string
 
   KosmoQuickOpenFieldEditor = ref object of nimkit.FieldEditor
     panel: WeakRef[KosmoQuickOpenPanel]
@@ -280,10 +285,36 @@ proc activateHighlighted(panel: KosmoQuickOpenPanel) =
     panel.activateIndex(panel.xHighlightedIndex)
 
 proc filterFiles(panel: KosmoQuickOpenPanel) =
-  panel.xFilteredFiles = panel.xProjectFiles.fuzzyFilterFiles(panel.queryField.text())
+  panel.xSearchError = ""
+  if panel.xRegularExpression and panel.queryField.text().len > 0:
+    panel.xFilteredFiles.setLen(0)
+    try:
+      let pattern = initTextSearchPattern(
+        panel.queryField.text(), regularExpression = true, caseSensitive = false
+      )
+      for path in panel.xProjectFiles:
+        if pattern.contains(path):
+          panel.xFilteredFiles.add path
+    except TextSearchError as error:
+      panel.xFilteredFiles.setLen(0)
+      panel.xSearchError = "Search error: " & error.msg
+  else:
+    panel.xFilteredFiles = panel.xProjectFiles.fuzzyFilterFiles(panel.queryField.text())
   panel.xFirstIndex = 0
   panel.xHighlightedIndex = if panel.xFilteredFiles.len > 0: 0 else: -1
   panel.resultsView.needsDisplay = true
+
+func regularExpression*(panel: KosmoQuickOpenPanel): bool =
+  panel.xRegularExpression
+
+func searchError*(panel: KosmoQuickOpenPanel): string =
+  panel.xSearchError
+
+proc `regularExpression=`*(panel: KosmoQuickOpenPanel, enabled: bool) =
+  ## Switch between fuzzy filename ranking and Reni expressions.
+  panel.xRegularExpression = enabled
+  panel.expressionButton.state = if enabled: nimkit.bsOn else: nimkit.bsOff
+  panel.filterFiles()
 
 proc quickOpenQueryDidChange(
     panel: KosmoQuickOpenPanel, sender: nimkit.DynamicAgent
@@ -326,9 +357,21 @@ protocol KosmoQuickOpenLayout of nimkit.ViewLayoutProtocol:
     let contentFrame = panel.contentRect()
     panel.contentView().setFrameFromLayout(contentFrame)
     let bounds = panel.contentView().bounds()
+    let expressionWidth = min(QuickOpenFieldHeight, bounds.size.width)
     panel.queryField.setFrameFromLayout(
       nimkit.rect(
-        0, 0, bounds.size.width, min(QuickOpenFieldHeight, bounds.size.height)
+        0,
+        0,
+        max(bounds.size.width - expressionWidth - QuickOpenSpacing, 0),
+        min(QuickOpenFieldHeight, bounds.size.height),
+      )
+    )
+    panel.expressionButton.setFrameFromLayout(
+      nimkit.rect(
+        bounds.size.width - expressionWidth,
+        0,
+        expressionWidth,
+        min(QuickOpenFieldHeight, bounds.size.height),
       )
     )
     let resultsY = min(QuickOpenFieldHeight + QuickOpenSpacing, bounds.size.height)
@@ -561,6 +604,16 @@ proc newKosmoQuickOpenPanel*(
   result.queryField.setCell(cell)
   result.queryField.styleId = QuickOpenFieldStyleId
   result.queryField.accessibilityLabel = "Open file by name"
+  result.expressionButton = newExpressionButton()
+  result.expressionButton.action = nimkit.actionSelector("kosmo.quickOpenExpressions")
+  result.expressionButton.target = nimkit.newActionTarget(
+    result.expressionButton.action
+  ) do(sender: nimkit.DynamicAgent):
+    if not panel.isNil:
+      panel[].regularExpression = panel[].expressionButton.state == nimkit.bsOn
+      let owner = panel[].window()
+      if owner of nimkit.Window:
+        discard nimkit.Window(owner).makeFirstResponder(panel[].queryField)
 
   result.resultsView = nimkit.newPopupListView(
     nimkit.PopupListData(
@@ -575,15 +628,23 @@ proc newKosmoQuickOpenPanel*(
         else:
           panel[].visibleItemCount(),
       firstIndex: proc(): int =
-        if panel.isNil: 0 else: panel[].xFirstIndex,
+        if panel.isNil:
+          0
+        else:
+          panel[].xFirstIndex,
       selectedIndex: proc(): int =
         -1,
       highlightedIndex: proc(): int =
-        if panel.isNil: -1 else: panel[].xHighlightedIndex,
+        if panel.isNil:
+          -1
+        else:
+          panel[].xHighlightedIndex,
       rowHeight: proc(): float32 =
         QuickOpenRowHeight,
       itemText: proc(index: int): string =
-        if not panel.isNil and panel[].xLoading:
+        if not panel.isNil and panel[].xSearchError.len > 0:
+          panel[].xSearchError
+        elif not panel.isNil and panel[].xLoading:
           LoadingFilesTitle
         elif panel.isNil or panel[].xFilteredFiles.len == 0:
           NoMatchingFilesTitle
@@ -636,6 +697,7 @@ proc newKosmoQuickOpenPanel*(
   result.progressIndicator.progressIndicatorStyle = nimkit.pisSpinning
   result.progressIndicator.accessibilityLabel = LoadingFilesTitle
   result.contentView().addSubview(result.queryField)
+  result.contentView().addSubview(result.expressionButton)
   result.contentView().addSubview(result.resultsView)
   result.contentView().addSubview(result.progressIndicator)
   discard result.withProtocol(KosmoQuickOpenLayout)

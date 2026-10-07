@@ -1,18 +1,33 @@
-import std/[os, strutils, tempfiles, unittest]
+import std/[os, strutils, tempfiles, unicode, unittest]
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import merenda/kosmo/viewersearch
 import fixtures/ui
 
 suite "Kosmo viewer search":
-  test "literal Unicode search reports rune ranges and overlapping matches":
+  test "literal Unicode search reports the same nonoverlapping ranges as Reni":
     check plainSearchRanges("λ Straße λ", "Λ") ==
       @[initTextRange(0, 1), initTextRange(9, 1)]
     check plainSearchRanges("[a] . [A]", "[a]") ==
       @[initTextRange(0, 3), initTextRange(6, 3)]
-    check plainSearchRanges("aaaa", "aa") ==
-      @[initTextRange(0, 2), initTextRange(1, 2), initTextRange(2, 2)]
+    check plainSearchRanges("aaaa", "aa") == @[initTextRange(0, 2), initTextRange(2, 2)]
     check plainSearchRanges("anything", "").len == 0
+
+  test "Reni ranges preserve Unicode, lookarounds, reset starts, and zero width matches":
+    let pattern = initTextSearchPattern(r"λ\K猫|(?<= )dog", regularExpression = true)
+    check pattern.searchRanges("λ猫 dog") ==
+      @[initTextRange(1, 1), initTextRange(3, 3)]
+    check initTextSearchPattern(r"(?=.)|$", regularExpression = true).searchRanges(
+      "λ猫"
+    ) == @[initTextRange(0, 0), initTextRange(1, 0), initTextRange(2, 0)]
+    check initTextSearchPattern(r"(?m)^cat$", regularExpression = true).searchRanges(
+      "λ\ncat\ndog"
+    ) == @[initTextRange(2, 3)]
+    check initTextSearchPattern(r"(?<=\K.)", regularExpression = true).searchRanges(
+      "λ猫"
+    ) == @[initTextRange(0, 1), initTextRange(1, 1)]
+    expect TextSearchError:
+      discard initTextSearchPattern("[", regularExpression = true)
 
   test "Markdown find selects rendered text, wraps, and restores preview focus":
     let root = createTempDir("kosmo-markdown-find-", "")
@@ -50,6 +65,27 @@ suite "Kosmo viewer search":
       KeyEvent(key: keyG, keyCode: keyG.ord, modifiers: shortcutModifiers())
     )
     check view.textView().selectedRange() == first
+    let toggle = view.buttonWithLabel("Use Reni regular expressions")
+    require not toggle.isNil
+    toggle.checkVisibleIn(view)
+    check toggle.state == bsOff
+    require frontend.window.clickAt(toggle.pointToWindow(initPoint(14, 14)))
+    check toggle.state == bsOn
+    view.searchField().selectedRange =
+      initTextRange(0, view.searchField().text().runeLen)
+    require frontend.window.dispatchTextInput(r"(?<=λ )needle|n(e+)dle(?=\.)")
+    check view.searchMatchCount() == 2
+    check view.textView().selectedText() == "Needle"
+    view.searchField().selectedRange =
+      initTextRange(0, view.searchField().text().runeLen)
+    require frontend.window.dispatchTextInput("[")
+    check view.searchMatchCount() == 0
+    check view.textView().selectedRange().length == 0
+    check not view.buttonWithLabel("Next Markdown match").enabled
+    view.searchField().selectedRange = initTextRange(0, 1)
+    require frontend.window.dispatchTextInput(r"n(e+)dle")
+    check view.searchMatchCount() == 2
+    check view.textView().selectedText() == "Needle"
     require frontend.window.dispatchKeyDown(
       KeyEvent(key: keyEscape, keyCode: keyEscape.ord)
     )
@@ -80,6 +116,16 @@ suite "Kosmo viewer search":
     check panel.searchVisible()
     panel.searchField().checkVisibleIn(panel)
     require window.dispatchTextInput("needle")
+    require panel.waitForDiff()
+    check panel.searchMatchCount() == 2
+    check panel.textViewForFile(0).selectedText() == "needle"
+    let toggle = panel.buttonWithLabel("Use Reni regular expressions")
+    require not toggle.isNil
+    toggle.checkVisibleIn(panel)
+    require window.clickAt(toggle.pointToWindow(initPoint(14, 14)))
+    panel.searchField().selectedRange =
+      initTextRange(0, panel.searchField().text().runeLen)
+    require window.dispatchTextInput(r"(?<=λ )needle|other \Kneedle")
     require panel.waitForDiff()
     check panel.searchMatchCount() == 2
     check panel.textViewForFile(0).selectedText() == "needle"

@@ -5,6 +5,7 @@ import std/strutils
 import ../nimkit as nimkit
 import ./moe
 import ./shortcuts
+import ./searchbuttons
 import ./vscodegrammars as vscodeGrammars
 
 export vscodeGrammars
@@ -113,6 +114,7 @@ type
     xVscodeGrammarInstalledHandler: KosmoVscodeGrammarInstalledHandler
     xVscodeGrammarSearchField: nimkit.TextField
     xVscodeGrammarSearchButton: nimkit.Button
+    xVscodeGrammarExpressionButton: nimkit.Button
     xVscodeGrammarInstallButton: nimkit.Button
     xVscodeGrammarSearchStatus: nimkit.Label
     xVscodeGrammarSearchTable: nimkit.TableView
@@ -477,7 +479,10 @@ proc searchVscodeGrammars(
 ) {.slot.} =
   discard sender
   if not settings.isNil and not settings.xVscodeGrammarCatalog.isNil:
-    settings.xVscodeGrammarCatalog.search(settings.xVscodeGrammarSearchField.text)
+    settings.xVscodeGrammarCatalog.search(
+      settings.xVscodeGrammarSearchField.text,
+      regularExpression = settings.xVscodeGrammarExpressionButton.state == nimkit.bsOn,
+    )
 
 proc installSelectedVscodeGrammar(
     settings: KosmoSettingsWindow, sender: nimkit.DynamicAgent
@@ -686,6 +691,7 @@ proc newKosmoSettingsWindow*(
     textMateGrammarsTable = nimkit.newTableView()
     vscodeGrammarSearchField = nimkit.newTextField()
     vscodeGrammarSearchButton = nimkit.newButton("Search Repository")
+    vscodeGrammarExpressionButton = newExpressionButton()
     vscodeGrammarInstallButton = nimkit.newButton("Install Selected")
     vscodeGrammarSearchStatus = nimkit.newLabel("Search the VS Code source repository.")
     vscodeGrammarSearchTable = nimkit.newTableView()
@@ -707,6 +713,7 @@ proc newKosmoSettingsWindow*(
   result.xTextMateGrammarsTable = textMateGrammarsTable
   result.xVscodeGrammarSearchField = vscodeGrammarSearchField
   result.xVscodeGrammarSearchButton = vscodeGrammarSearchButton
+  result.xVscodeGrammarExpressionButton = vscodeGrammarExpressionButton
   result.xVscodeGrammarInstallButton = vscodeGrammarInstallButton
   result.xVscodeGrammarSearchStatus = vscodeGrammarSearchStatus
   result.xVscodeGrammarSearchTable = vscodeGrammarSearchTable
@@ -720,6 +727,13 @@ proc newKosmoSettingsWindow*(
   ):
     settings.searchVscodeGrammars(sender)
   vscodeGrammarSearchButton.action = vscodeGrammarSearchAction
+  vscodeGrammarExpressionButton.action =
+    nimkit.actionSelector("kosmo.grammarSearchExpressions")
+  vscodeGrammarExpressionButton.target = nimkit.newActionTarget(
+    vscodeGrammarExpressionButton.action
+  ) do(sender: nimkit.DynamicAgent):
+    if settings.xVscodeGrammarSearchField.text.len > 0:
+      settings.searchVscodeGrammars(sender)
 
   vscodeGrammarInstallButton.identifier = KosmoVscodeGrammarInstallButtonIdentifier
   vscodeGrammarInstallButton.accessibilityLabel = "Install selected VS Code grammar"
@@ -961,7 +975,8 @@ proc newKosmoSettingsWindow*(
   vscodeGrammarSearchControls.spacing = 8.0
   vscodeGrammarSearchControls.alignment = nimkit.svaCenter
   vscodeGrammarSearchControls.addArrangedSubview(
-    vscodeGrammarSearchField, vscodeGrammarSearchButton, vscodeGrammarInstallButton
+    vscodeGrammarSearchField, vscodeGrammarExpressionButton, vscodeGrammarSearchButton,
+    vscodeGrammarInstallButton,
   )
   textMateGrammarsPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Find a Language"),

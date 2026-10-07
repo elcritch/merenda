@@ -1,7 +1,8 @@
 ## VS Code TextMate grammar discovery metadata and safe local installation.
-import std/[json, os, tables, tempfiles, unittest]
+import std/[json, os, strutils, tables, tempfiles, unittest]
 
 import merenda/kosmo/vscodegrammars
+import merenda/nimkit/foundation/textsearch
 
 const
   FixtureCommit = "0123456789abcdef0123456789abcdef01234567"
@@ -48,6 +49,27 @@ proc fixtureCandidate(): VscodeGrammarCandidate =
   candidates[0]
 
 suite "Kosmo VS Code TextMate grammars":
+  test "Reni searches grammar metadata and rejects invalid syntax before fetching":
+    let candidate = fixtureCandidate()
+    check candidate.matchesVscodeGrammarQuery(
+      r"(?<=source\.)toy$", regularExpression = true
+    )
+    check candidate.matchesVscodeGrammarQuery(
+      r"^\.toy(\.src)?$", regularExpression = true
+    )
+    check candidate.matchesVscodeGrammarQuery(r"^TOYFILE$", regularExpression = true)
+    check not candidate.matchesVscodeGrammarQuery(r"^rust$", regularExpression = true)
+    check not candidate.matchesVscodeGrammarQuery("", regularExpression = true)
+    expect TextSearchError:
+      discard candidate.matchesVscodeGrammarQuery("[", regularExpression = true)
+    let catalog = newKosmoVscodeGrammarCatalog()
+    defer:
+      catalog.close()
+    catalog.search("[", regularExpression = true)
+    check catalog.status().startsWith("Search error:")
+    check not catalog.isBusy()
+    check catalog.candidates().len == 0
+
   test "indexes only grammar extensions and searches names, IDs, scopes, and suffixes":
     let tree = fixtureTree()
     check tree.sha == FixtureCommit

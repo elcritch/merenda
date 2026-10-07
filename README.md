@@ -387,6 +387,29 @@ Set `backdropBlurRadius` to zero to restore the ordinary box fill.
 zero to one. This effect is rendered inside the application, independently of
 native window backdrop effects.
 
+## Reusable search controls
+
+NimKit apps can reuse the same controls through `SearchBar` or attach a
+`TextSearchController` to any host view:
+
+```nim
+let preview = newTextView("λcat and dog")
+let search = newTextSearchController(
+  preview, "document", textViewSearchAdapter(preview)
+)
+# Attach preview to a window before opening the controls.
+discard search.showSearch()
+```
+
+Keep the controller alive while its controls are attached, and call `search.close()`
+before releasing it if the host remains alive. Custom `TextSearchAdapter` callbacks
+provide text snapshots, reveal matches, and clear selections for terminals,
+multiple documents, or other data sources. An optional `replace` callback adds
+collapsed replacement controls and receives a validated Reni pattern and capture
+template. The adapter owns edits, undo, and checking that source content is current.
+Hosts can route find shortcuts through `search.handleSearchKey(event)` and call
+`search.refreshSearch()` when their source changes.
+
 ## Kosmo
 
 Kosmo is a code editor built with Merenda and Moe's Vim-style editing engine.
@@ -401,10 +424,20 @@ the full window width; click either icon to reopen it at its previous width.
 Press `Cmd-F` on macOS or `Ctrl-F` elsewhere to search an editor, Markdown
 preview, Git diff, or GitHub tab. Use Enter / the arrow buttons to move through
 matches, `Cmd/Ctrl-G` and `Shift-Cmd/Ctrl-G` for next and previous, and Escape
-to close. Editor matches scroll to the center of the pane. Markdown, GitHub, and diff
-viewers use case-insensitive literal search; diff search includes collapsed
-sections and loads ordinary patches within the viewer's size limits. Open
+to close. Editor matches scroll to the center of the pane. Enable **`.*`** in any
+content search, including terminal tabs, to use Reni regular expressions. Searches
+default to literal text; Markdown, GitHub, diff, and terminal matches ignore case.
+Diff search includes collapsed sections and loads ordinary patches within the
+viewer's size limits. Open
 oversized patches explicitly to include their contents.
+
+The Files filter, Quick Open, and VS Code grammar search also offer **`.*`** for
+Reni expressions. Quick Open keeps fuzzy filename ranking when this is off.
+Invalid expressions show an error and clear stale results. Viewer expressions
+can span lines; terminal expressions can span soft-wrapped output and retain
+the original cell positions, including wide Unicode characters.
+Terminal find centers older matches where possible and stays at the bottom for
+matches near the end of the history.
 
 Editor search and the Find sidebar open with replacement controls collapsed.
 Click the chevron beside the search field to expand or collapse them without

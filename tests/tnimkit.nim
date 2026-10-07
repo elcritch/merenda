@@ -60,6 +60,7 @@ else:
   import nimkit/responder
   import nimkit/scrollviews
   import nimkit/scrollviews2
+  import nimkit/searchcontrollers
   import nimkit/segmentedcontrols
   import nimkit/selectionrings
   import nimkit/settings

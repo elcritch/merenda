@@ -2,13 +2,11 @@
 
 import std/[strutils, unicode]
 
-from figdraw import initUtf8Runes, len, pairs
-
 import sigils/core
 
 import ../nimkit as nimkit except performKeyEquivalent
 from ../nimkit/foundation/selectors import performKeyEquivalent
-import ./searchbar
+import ../nimkit/text/searchmatching
 
 type
   TerminalSearchGlyph = object
@@ -16,9 +14,8 @@ type
     first, last: nimkit.TerminexPosition
 
   KosmoTerminalView* = ref object of nimkit.TerminalView
-    searchBar: KosmoSearchBar
-    xSearchMatches: seq[nimkit.TerminalSelection]
-    xSelectedSearchMatch: int
+    search: nimkit.TextSearchController
+    searchGlyphs: seq[TerminalSearchGlyph]
 
 proc dismissSearch*(view: KosmoTerminalView)
 proc findPrevious*(view: KosmoTerminalView)
@@ -31,7 +28,7 @@ proc addSearchGlyph(
     glyphs: var seq[TerminalSearchGlyph], value: Rune, row, firstColumn, lastColumn: int
 ) =
   glyphs.add TerminalSearchGlyph(
-    value: value.toLower(),
+    value: value,
     first: nimkit.initTerminalPosition(row, firstColumn),
     last: nimkit.initTerminalPosition(row, lastColumn),
   )
@@ -47,113 +44,76 @@ proc terminalSearchGlyphs(
         if cell.text.len == 0:
           result.addSearchGlyph(Rune(' '), row, column, column + 1)
         else:
+          var lastColumn = column + 1
+          while lastColumn < line.len and line[lastColumn].continuation:
+            inc lastColumn
           for value in cell.text.runes:
-            result.addSearchGlyph(value, row, column, column + 1)
+            result.addSearchGlyph(value, row, column, lastColumn)
     if not line.lineEndsAtRightMargin():
       result.addSearchGlyph(Rune('\n'), row, line.len, line.len)
 
-proc terminalSearchMatches*(
-    session: nimkit.TerminalViewSession, query: string
-): seq[nimkit.TerminalSelection] =
-  ## Find case-insensitive text occurrences in the visible screen and scrollback.
-  if session.isNil or query.len == 0:
-    return
-  let
-    glyphs = session.terminalSearchGlyphs()
-    needle = block:
-      var normalized = newStringOfCap(query.len)
-      for value in query.runes:
-        normalized.add value.toLower()
-      initUtf8Runes(move(normalized))
-  if needle.len == 0 or needle.len > glyphs.len:
-    return
-  for first in 0 .. glyphs.len - needle.len:
-    var matches = true
-    for offset, value in needle:
-      if glyphs[first + offset].value != value:
-        matches = false
-        break
-    if matches:
-      result.add nimkit.TerminalSelection(
-        anchor: glyphs[first].first, extent: glyphs[first + needle.len - 1].last
-      )
+proc searchText(glyphs: seq[TerminalSearchGlyph]): string =
+  result = newStringOfCap(glyphs.len)
+  for glyph in glyphs:
+    result.add glyph.value
 
-proc syncSearchControls(view: KosmoTerminalView) =
-  view.searchBar.hasMatches = view.xSearchMatches.len > 0
-
-proc selectSearchMatch(view: KosmoTerminalView, index: int) =
-  if index notin 0 ..< view.xSearchMatches.len:
-    view.xSelectedSearchMatch = -1
-    view.clearSelection()
-    return
-  view.xSelectedSearchMatch = index
-  view.selectTerminalRange(view.xSearchMatches[index])
-
-proc refreshSearchMatches(view: KosmoTerminalView) =
-  view.xSearchMatches = terminalSearchMatches(view.session(), view.searchBar.query())
-  view.selectSearchMatch(
-    if view.xSearchMatches.len > 0: view.xSearchMatches.high else: -1
-  )
-  view.syncSearchControls()
-
-proc moveSearchMatch(view: KosmoTerminalView, delta: int) =
-  if view.isNil or delta == 0:
-    return
-  if view.xSearchMatches.len == 0:
-    view.refreshSearchMatches()
-  if view.xSearchMatches.len == 0:
-    return
-  let next =
-    if view.xSelectedSearchMatch notin 0 ..< view.xSearchMatches.len:
-      if delta < 0: view.xSearchMatches.high else: 0
+proc terminalSelection(
+    glyphs: seq[TerminalSearchGlyph], range: nimkit.TextRange
+): nimkit.TerminalSelection =
+  let first = int(range.location)
+  let anchor =
+    if first < glyphs.len:
+      glyphs[first].first
+    elif glyphs.len > 0:
+      glyphs[^1].last
     else:
-      (view.xSelectedSearchMatch + delta + view.xSearchMatches.len) mod
-        view.xSearchMatches.len
-  view.selectSearchMatch(next)
+      nimkit.initTerminalPosition(0, 0)
+  let extent =
+    if range.length > 0:
+      glyphs[range.maxIndex - 1].last
+    else:
+      anchor
+  nimkit.TerminalSelection(anchor: anchor, extent: extent)
+
+proc terminalSearchMatches*(
+    session: nimkit.TerminalViewSession, query: string, regularExpression = false
+): seq[nimkit.TerminalSelection] =
+  ## Search screen and scrollback with Reni, retaining terminal cell positions.
+  ## Invalid expressions raise TextSearchError; empty queries have no matches.
+  if not session.isNil and query.len > 0:
+    let glyphs = session.terminalSearchGlyphs()
+    let pattern = initTextSearchPattern(query, regularExpression, caseSensitive = false)
+    for range in pattern.searchRanges(glyphs.searchText()):
+      result.add glyphs.terminalSelection(range)
 
 proc findPrevious*(view: KosmoTerminalView) =
   ## Select and reveal the previous terminal match, wrapping at the beginning.
-  view.moveSearchMatch(-1)
+  if not view.isNil:
+    view.search.findNext(backwards = true)
 
 proc findNext*(view: KosmoTerminalView) =
   ## Select and reveal the next terminal match, wrapping at the end.
-  view.moveSearchMatch(1)
+  if not view.isNil:
+    view.search.findNext()
 
 proc dismissSearch*(view: KosmoTerminalView) =
   ## Hide terminal search, clear its selection, and return focus to the terminal.
-  if view.isNil or view.searchBar.isNil:
-    return
-  view.searchBar.hidden = true
-  view.xSearchMatches.setLen(0)
-  view.xSelectedSearchMatch = -1
-  view.clearSelection()
-  let owner = view.window()
-  if owner of nimkit.Window:
-    discard nimkit.Window(owner).makeFirstResponder(view)
+  if not view.isNil:
+    view.search.dismissSearch()
 
 proc showSearch*(view: KosmoTerminalView): bool {.discardable.} =
   ## Show the terminal search widget and focus its query field.
-  if view.isNil or view.searchBar.isNil:
+  if view.isNil or view.search.isNil:
     return
-  let owner = view.window()
-  if not (owner of nimkit.Window):
-    return
-  if view.searchBar.hidden():
-    view.searchBar.query = ""
-    view.refreshSearchMatches()
-    view.searchBar.hidden = false
-    view.setNeedsLayout()
-    view.layoutSubtreeIfNeeded()
-  else:
-    view.searchBar.queryField().selectedRange =
-      nimkit.initTextRange(0, view.searchBar.query().runeLen)
-  result = nimkit.Window(owner).makeFirstResponder(view.searchBar.queryField())
+  if not view.search.searchVisible():
+    view.search.bar.query = ""
+  view.search.showSearch()
 
 protocol KosmoTerminalKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
   method performKeyEquivalent(view: KosmoTerminalView, event: nimkit.KeyEvent): bool =
     if event.key == nimkit.keyF and event.modifiers == nimkit.terminalShortcutModifiers():
       return view.showSearch()
-    if not view.searchBar.hidden() and event.key == nimkit.keyG:
+    if not view.search.bar.hidden() and event.key == nimkit.keyG:
       if event.modifiers == nimkit.shortcutModifiers():
         view.findPrevious()
         return true
@@ -178,7 +138,7 @@ protocol KosmoTerminalKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
 protocol KosmoTerminalViewLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(view: KosmoTerminalView) =
     view.resizeToFit()
-    view.searchBar.layoutInBounds(view.bounds())
+    view.search.bar.layoutInBounds(view.bounds())
 
 proc newKosmoTerminalView*(
     session: nimkit.TerminalViewSession = nil,
@@ -186,42 +146,49 @@ proc newKosmoTerminalView*(
     palette = nimkit.initTerminalPalette(),
 ): KosmoTerminalView =
   ## Create a terminal view with Kosmo's in-buffer search widget.
-  result = KosmoTerminalView(xSelectedSearchMatch: -1)
+  result = KosmoTerminalView()
   result.initTerminalViewFields(session, frame, palette)
   discard result.withProtocol(KosmoTerminalKeyEquivalents)
   discard result.withProtocol(KosmoTerminalViewLayout)
 
-  let
-    terminal = result.unsafeWeakRef()
-    onQueryChanged: KosmoSearchQueryAction = proc(query: string) =
-      discard query
-      if not terminal.isNil:
-        terminal[].refreshSearchMatches()
-    onPrevious: KosmoSearchAction = proc() =
-      if not terminal.isNil:
-        terminal[].findPrevious()
-    onNext: KosmoSearchAction = proc() =
-      if not terminal.isNil:
-        terminal[].findNext()
-    onClose: KosmoSearchAction = proc() =
-      if not terminal.isNil:
-        terminal[].dismissSearch()
-  result.searchBar =
-    newKosmoSearchBar("terminal output", onQueryChanged, onPrevious, onNext, onClose)
-  result.searchBar.backwardsSearch = true
-  result.addSubview(result.searchBar)
-  result.syncSearchControls()
+  let terminal = result.unsafeWeakRef()
+  result.search = nimkit.newTextSearchController(
+    result,
+    "terminal output",
+    nimkit.TextSearchAdapter(
+      sources: proc(): seq[string] =
+        if not terminal.isNil:
+          terminal[].searchGlyphs = terminal[].session().terminalSearchGlyphs()
+          result = @[terminal[].searchGlyphs.searchText()]
+      ,
+      reveal: proc(match: nimkit.TextSearchLocation) =
+        if not terminal.isNil:
+          terminal[].selectTerminalRange(
+            terminal[].searchGlyphs.terminalSelection(match.range), centered = true
+          )
+      ,
+      clear: proc() =
+        if not terminal.isNil:
+          terminal[].clearSelection()
+          terminal[].searchGlyphs = @[]
+      ,
+    ),
+    backwardsSearch = true,
+  )
 
 func searchField*(view: KosmoTerminalView): nimkit.TextField =
-  if not view.isNil and not view.searchBar.isNil:
-    result = view.searchBar.queryField()
+  if not view.isNil:
+    result = view.search.bar.queryField()
 
 proc searchVisible*(view: KosmoTerminalView): bool =
-  not view.isNil and not view.searchBar.isNil and not view.searchBar.hidden()
+  not view.isNil and view.search.searchVisible()
 
 func searchMatchCount*(view: KosmoTerminalView): int =
   if not view.isNil:
-    result = view.xSearchMatches.len
+    result = view.search.searchMatchCount()
 
 func selectedSearchMatch*(view: KosmoTerminalView): int =
-  if view.isNil: -1 else: view.xSelectedSearchMatch
+  if view.isNil:
+    -1
+  else:
+    view.search.selectedSearchMatch()

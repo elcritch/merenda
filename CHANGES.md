@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Support Reni regular expressions through the `.*` toggle in Kosmo terminal,
+  Markdown, GitHub, and Git diff views, the Files filter, Quick Open, and VS Code
+  grammar search. Share matching with editor and file search, preserve Unicode
+  text and terminal cell positions, and report invalid patterns without stale
+  results. Literal viewer matches now follow Reni's nonoverlapping scan.
+- Center terminal search matches when history permits, while keeping matches
+  near the end of the history at the bottom.
+- Expose reusable NimKit `SearchBar` and `TextSearchController` components with
+  text-source adapters and optional validated capture replacement hooks.
+
 - Add a searchable GitHub issues and pull requests Markdown tab to Kosmo's File
   menu, backed by `gh` in the selected project repository. Include state and item
   filters, descriptions and metadata, clickable section headings with browser
