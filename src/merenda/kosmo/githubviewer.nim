@@ -136,6 +136,7 @@ proc refresh*(panel: KosmoGitHubPanel) =
   if not panel.control.isNil:
     panel.control[].cancelled.store(true, moRelease)
   panel.control = newSharedPtr(GitHubRequestControl)
+  panel.control[].cancelled.store(false, moRelaxed)
   inc panel.generation
   panel.refreshPending = false
   panel.nextRefresh = getMonoTime() + panel.refreshInterval
