@@ -21,6 +21,7 @@ type
   KosmoMarkdownView* = ref object of nimkit.MarkdownView
     search: KosmoViewerSearch
     pendingSearchRange: Option[nimkit.TextRange]
+    pendingFileSearchMatch: Option[nimkit.FileSearchMatch]
     editorView: WeakRef[KosmoEditorView]
 
   KosmoMarkdownPreview = object

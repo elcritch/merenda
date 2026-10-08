@@ -544,6 +544,7 @@ proc isActiveEditorGroup(view: KosmoEditorView): bool =
 
 proc refresh*(view: KosmoEditorView)
 proc syncPopupMenu(pane: KosmoEditorPane)
+proc revealFileSearchMatch(view: KosmoMarkdownView, match: nimkit.FileSearchMatch)
 
 proc shouldDeferInactiveRefresh(view: KosmoEditorView): bool =
   # Forced Input mode has no post-Insert state in which to drain deferred work;
@@ -1006,10 +1007,16 @@ proc openSearchResult(
     discard view.editor.revealLocation(
       max(match.line - 1, 0), match.bufferColumn(), centered = true
     )
-    if redirected and not view.tabsDelegate.dockController.isNil:
-      view.tabsDelegate.dockController[].activeGroup.editorView.refresh()
-    else:
-      view.refresh()
+    let target =
+      if redirected and not view.tabsDelegate.dockController.isNil:
+        view.tabsDelegate.dockController[].activeGroup.editorView
+      else:
+        view
+    target.refresh()
+    if not target.dockGroup.isNil:
+      let pane = target.dockGroup[].pane
+      if pane.contentView == pane.markdownView and not pane.markdownView.isNil:
+        pane.markdownView.revealFileSearchMatch(match)
     return true
   if not view.statusLabel.isNil:
     view.statusLabel.text = outcome.message
@@ -2654,18 +2661,80 @@ proc searchMatchCount*(view: KosmoMarkdownView): int =
 proc showSearch*(view: KosmoMarkdownView): bool {.discardable.} =
   view.search.showSearch()
 
+proc revealPendingMarkdownSearch(view: KosmoMarkdownView) =
+  if view.pendingSearchRange.isSome:
+    # The layout completion signal invalidates the editor's measurement before
+    # its document frame grows. Update that frame before scrolling to the match.
+    view.layoutSubtreeIfNeeded()
+    if view.isMarkdownLayoutPending():
+      return
+    let range = view.pendingSearchRange.get
+    if revealTextMatch(view.textView(), view.scrollView(), range):
+      view.pendingSearchRange = none(nimkit.TextRange)
+      view.selectMarkdownRange(range)
+
+proc renderedFileSearchRange(
+    view: KosmoMarkdownView, match: nimkit.FileSearchMatch
+): Option[nimkit.TextRange] =
+  let
+    column = clamp(match.column - 1, 0, match.lineText.len)
+    stop = clamp(column + match.matchLength, column, match.lineText.len)
+    query = match.lineText[column ..< stop]
+    source = view.markdown()
+  if query.len == 0:
+    return
+  var lineStart = 0
+  for line in 1 ..< match.line:
+    discard line
+    let newline = source.find('\n', lineStart)
+    if newline < 0:
+      return
+    lineStart = newline + 1
+  let matchStop = lineStart + stop
+  if matchStop > source.len:
+    return
+  # Markdown removes delimiters and link destinations from the displayed text.
+  # Count rendered occurrences through this source match, rather than counting
+  # raw file matches or treating source columns as displayed rune offsets.
+  let
+    prefix = nimkit
+      .markdownTextStorage(
+        source[0 ..< matchStop],
+        style = view.markdownStyle(),
+        config = view.markdownConfig(),
+        syntaxHighlighter = nil,
+      )
+      .stringValue()
+    occurrence = plainSearchRanges(prefix, query).len - 1
+    ranges = plainSearchRanges(view.textView().stringValue(), query)
+  if occurrence in 0 ..< ranges.len:
+    result = some(ranges[occurrence])
+
+proc revealPendingFileSearchMatch(view: KosmoMarkdownView) =
+  if view.pendingFileSearchMatch.isNone or view.isMarkdownParsing():
+    return
+  let match = view.pendingFileSearchMatch.get
+  view.pendingFileSearchMatch = none(nimkit.FileSearchMatch)
+  view.pendingSearchRange = view.renderedFileSearchRange(match)
+  view.revealPendingMarkdownSearch()
+
+proc revealFileSearchMatch(view: KosmoMarkdownView, match: nimkit.FileSearchMatch) =
+  view.pendingSearchRange = none(nimkit.TextRange)
+  view.pendingFileSearchMatch = some(match)
+  view.revealPendingFileSearchMatch()
+
 proc markdownSearchDidParse(view: KosmoMarkdownView, workerThreadId: int) {.slot.} =
   discard workerThreadId
+  let fileMatch = view.pendingFileSearchMatch
   view.search.refreshSearch()
+  view.pendingFileSearchMatch = fileMatch
+  view.revealPendingFileSearchMatch()
 
 proc markdownSearchDidLayout(
     view: KosmoMarkdownView, snapshot: nimkit.TextLayoutSnapshot
 ) {.slot.} =
   discard snapshot
-  if view.pendingSearchRange.isSome and view.search.searchVisible():
-    if revealTextMatch(view.textView(), view.scrollView(), view.pendingSearchRange.get):
-      view.selectMarkdownRange(view.pendingSearchRange.get)
-      view.pendingSearchRange = none(nimkit.TextRange)
+  view.revealPendingMarkdownSearch()
 
 proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result = KosmoMarkdownView()
@@ -2682,14 +2751,14 @@ proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
     proc(match: KosmoViewerMatch) =
       if not weakView.isNil:
         let view = weakView[]
+        view.pendingFileSearchMatch = none(nimkit.FileSearchMatch)
         view.pendingSearchRange = some(match.range)
-        if revealTextMatch(view.textView(), view.scrollView(), match.range):
-          view.selectMarkdownRange(match.range)
-          view.pendingSearchRange = none(nimkit.TextRange)
+        view.revealPendingMarkdownSearch()
     ,
     proc() =
       if not weakView.isNil:
         weakView[].pendingSearchRange = none(nimkit.TextRange)
+        weakView[].pendingFileSearchMatch = none(nimkit.FileSearchMatch)
         weakView[].selectMarkdownRange(nimkit.initTextRange(0, 0))
     ,
   )

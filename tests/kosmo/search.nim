@@ -6,6 +6,7 @@ import sigils/threads
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
+import merenda/kosmo/viewersearch
 import fixtures/ui
 import ../nimkit/fixtures/rendergeometry
 
@@ -227,6 +228,116 @@ suite "Kosmo":
     check frontend.window.mouseDownAt(resultPoint, clickCount = 2)
     check frontend.window.mouseUpAt(resultPoint, clickCount = 2)
     check not frontend.editorView.editor.tabs()[0].temporary
+
+  test "clicked file search results select and reveal Markdown preview matches":
+    let
+      root = createTempDir("merenda-kosmo-find-markdown-", "")
+      path = root / "search.md"
+    var source =
+      "# Search\n\n[link](https://example.test/needle)\n\nλ **needle** and needle.\n\n"
+    for index in 0 ..< 300:
+      source.add "Paragraph " & $index & ".\n\n"
+    let targetLine = source.count('\n') + 1
+    source.add "λ **needle** and needle.\n\n" & repeat("Afterwards.\n\n", 20)
+    source.add "```text\n" & repeat("wide ", 100) & "needle\n```\n"
+    writeFile(path, source)
+    let frontend = newKosmoApplication(
+      newApplication("Kosmo Markdown file search"),
+      filePath = root,
+      monitorsGitStatus = false,
+    )
+    defer:
+      frontend.close()
+      removeFile(path)
+      removeDir(root)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 900, 600)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.showFindInFiles()
+    require frontend.window.dispatchTextInput("needle")
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
+    )
+    require frontend.searchPanel.waitForSearch(timeoutMilliseconds = 10_000)
+    require frontend.searchPanel.resultsView.matches.len == 6
+
+    proc clickResult(index: int, clickCount = 1) =
+      frontend.contentView.layoutSubtreeIfNeeded()
+      let
+        results = frontend.searchPanel.resultsView
+        row = results.rowForItem(results.matchIdentifier(index))
+        frame = results.rowItemRect(row)
+        position = results.pointToWindow(
+          initPoint(
+            frame.origin.x + frame.size.width / 2,
+            frame.origin.y + frame.size.height / 2,
+          )
+        )
+      require frontend.window.mouseDownAt(position, clickCount = clickCount)
+      require frontend.window.mouseUpAt(position, clickCount = clickCount)
+
+    # Opening the first result starts an asynchronous parse of a new preview.
+    clickResult(1)
+    clickResult(4)
+    let preview = frontend.editorPane.markdownView
+    require not preview.isNil
+    require preview.waitForMarkdownParsing()
+    require preview.waitForMarkdownLayout()
+    let ranges = plainSearchRanges(preview.textView().stringValue(), "needle")
+    require ranges.len == 5
+    check not preview.searchVisible()
+    check frontend.editorPane.contentView == preview
+    check preview.textView().selectedRange() == ranges[3]
+    check preview.textView().selectedText() == "needle"
+    check preview.scrollView().contentOffset().y > 0
+    let character = preview.textView().characterRect(int(ranges[3].location))
+    let viewport = preview.scrollView().clipView().documentVisibleRect()
+    check character.minY >= viewport.minY
+    check character.maxY <= viewport.maxY
+    check frontend.editorView.editor.tabs()[0].temporary
+
+    # Reusing the preview must select the clicked duplicate, including bold text.
+    clickResult(3)
+    require preview.waitForMarkdownLayout()
+    check preview.textView().selectedRange() == ranges[2]
+    clickResult(1, clickCount = 2)
+    require preview.waitForMarkdownLayout()
+    check preview.textView().selectedRange() == ranges[0]
+    check preview.scrollView().contentOffset().y < viewport.minY
+    check not frontend.editorView.editor.tabs()[0].temporary
+
+    clickResult(5)
+    require preview.waitForMarkdownLayout()
+    check preview.textView().selectedRange() == ranges[4]
+    var revealedCodeMatch = false
+    for child in preview.textView().subviews():
+      if child of ScrollView:
+        let scroll = ScrollView(child)
+        if scroll.documentView() of TextView and not scroll.hidden:
+          let code = TextView(scroll.documentView())
+          if code.selectedText() == "needle":
+            revealedCodeMatch = true
+            check scroll.contentOffset().x > 0
+            let character = code.characterRect(code.selectedRange().location)
+            check character.minX >= scroll.contentOffset().x
+            check character.maxX <=
+              scroll.contentOffset().x + scroll.viewportSize().width
+    check revealedCodeMatch
+
+    # Markdown source mode keeps its existing cursor navigation.
+    let modeButton = frontend.editorPane.markdownControls.modeButton
+    require frontend.window.clickAt(
+      modeButton.pointToWindow(
+        initPoint(
+          modeButton.bounds().size.width / 2, modeButton.bounds().size.height / 2
+        )
+      )
+    )
+    check frontend.editorPane.contentView == frontend.editorView
+    clickResult(4)
+    check frontend.editorPane.contentView == frontend.editorView
+    check frontend.editorView.editor.bufferCursor() ==
+      KosmoBufferCursor(line: targetLine - 1, column: 17)
 
   test "find sidebar cancel button stops an active search":
     let
