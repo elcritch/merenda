@@ -850,7 +850,6 @@ proc newKosmoSettingsWindow*(
   terminalInputPolicyChoice.target = nimkit.newActionTarget(terminalInputPolicyChanged) do(
     sender: nimkit.DynamicAgent
   ):
-    discard sender
     if not settings.xTerminalInputPolicyHandler.isNil:
       settings.xTerminalInputPolicyHandler(settings.terminalInputPolicy())
   terminalInputPolicyChoice.action = terminalInputPolicyChanged

@@ -19,7 +19,6 @@ proc terminalDocument(identifier: string): KosmoPaneDocument =
     "Terminal",
     terminal,
     onClose = proc(document: KosmoPaneDocument): bool =
-      discard document
       terminal.close()
       true,
     onDuplicate = proc(document: KosmoPaneDocument): KosmoPaneDocument =
