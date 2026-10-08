@@ -39,13 +39,24 @@ proc renderFrameRect(view: View, parentOrigin: types.Point): types.Rect =
 
 proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): Fill =
   var color = view.backgroundColor
-  if view.usesThemedRootBackground(isRoot):
+  var fallback = fill(color)
+  let themedRoot = view.usesThemedRootBackground(isRoot)
+  if themedRoot:
     let context = view.viewBackgroundStyleContext()
     let fallbackColor = appearance.resolveColor(
       context, StyleBackgroundColor, color(0.94, 0.95, 0.97, 1.0)
     )
-    return appearance.resolveFill(context, fill(fallbackColor), StyleBackgroundFill)
-  fill(color(color.r, color.g, color.b, color.a * view.alphaValue))
+    fallback = appearance.resolveFill(context, fill(fallbackColor), StyleBackgroundFill)
+  let themed =
+    if not appearance.theme.hasCss or
+        view.trySendLocal(drawsStyledBackground()).get(false):
+      fallback
+    else:
+      appearance.resolveFill(view.viewBackgroundStyleContext(), fallback)
+  if themedRoot:
+    return themed
+  let resolved = themed.centerColor()
+  fill(color(resolved.r, resolved.g, resolved.b, resolved.a * view.alphaValue))
 
 proc addRootBackgroundPinstripes(
     context: DrawContext,

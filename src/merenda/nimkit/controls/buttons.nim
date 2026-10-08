@@ -47,7 +47,10 @@ proc buttonCellStates(
     result.excl {ssFocused, ssFocusVisible}
   if not (owner of Button):
     result.excl ssHovered
-  result.excl {ssDisabled, ssHighlighted, ssSelected, ssActive, ssPressed}
+  if not owner.isNil and owner.effectiveAppearance().theme.hasCss:
+    result.excl {ssDisabled, ssHighlighted, ssSelected}
+  else:
+    result.excl {ssDisabled, ssHighlighted, ssSelected, ssActive, ssPressed}
   if (not owner.isNil and ssDisabled in owner.widgetStateSet()) or
       not cells.isEnabled(cell):
     result.incl ssDisabled
@@ -527,12 +530,13 @@ proc pushButtonStyle(
 
   let
     progress = button.hoverProgress()
+    cssHoverMetrics = appearance.theme.cssMetricsChange({ssHovered})
     baseStyle = appearance.resolveButtonStyle(
       controlStyle(
         srButton, baseStates, id = button.styleId, classes = button.styleClasses
       )
     )
-  if progress <= 0.0'f32:
+  if progress <= 0.0'f32 and not cssHoverMetrics:
     return baseStyle
 
   let hoverStyle = appearance.resolveButtonStyle(
@@ -540,7 +544,13 @@ proc pushButtonStyle(
       srButton, hoverStates, id = button.styleId, classes = button.styleClasses
     )
   )
-  mixButtonStyle(baseStyle, hoverStyle, progress)
+  let mixed = mixButtonStyle(baseStyle, hoverStyle, progress)
+  if cssHoverMetrics:
+    result = if ssHovered in states: hoverStyle else: baseStyle
+    result.box.fill = mixed.box.fill
+    result.box.borderColor = mixed.box.borderColor
+  else:
+    result = mixed
 
 proc checkmarkTextRect(rect: Rect): Rect =
   rect.offsetRect(0.0'f32, -1.0'f32).inset(insets(-1.0'f32))
@@ -772,6 +782,8 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       let role = button.choiceRole()
       let selected = button.state in {bsOn, bsMixed}
       var states: set[WidgetState] = button.widgetStateSet()
+      if context.appearance.theme.hasCss:
+        states = button.buttonCell().buttonCellStates(button)
       if selected:
         states.incl ssSelected
 
@@ -846,6 +858,8 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       context.addText(textRect, title, style.text)
     else:
       var states = button.widgetStateSet()
+      if context.appearance.theme.hasCss:
+        states = button.buttonCell().buttonCellStates(button)
       if button.state in {bsOn, bsMixed}:
         states.incl ssSelected
       let style = button.pushButtonStyle(context.appearance, states)

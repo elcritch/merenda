@@ -1,0 +1,35 @@
+:root {
+  --accent: #497be8;
+  --ink: #edf2ff;
+  --space: 10px;
+}
+
+view { background: #151d31; }
+label { color: var(--ink); }
+label.label-title { font-size: 25px; }
+
+button {
+  background: #303d59;
+  color: var(--ink);
+  border-color: #586789;
+  border-width: 1px;
+  border-radius: 9px;
+  padding: var(--space);
+  -nimkit-chrome: flat-transparent;
+}
+
+button.primary { background: var(--accent); }
+button.primary:hover { background: #6094ff; }
+button:pressed { background: #2d559c; }
+button:focus-visible { -nimkit-focus-ring-color: #91b2ff; }
+
+text-field {
+  background: #202b43;
+  color: var(--ink);
+  border-color: #586789;
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 16px;
+}
+
+text-field:focus { -nimkit-focus-ring-color: #91b2ff; }

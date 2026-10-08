@@ -234,6 +234,7 @@ protocol CollectionCommandProtocol:
   method deleteSelection*(args: ActionArgs) {.optional.}
 
 protocol ViewDrawingProtocol:
+  method drawsStyledBackground*(): bool {.optional.}
   method drawLevel*(): ZLevel {.optional.}
   method drawUnderlay*(context: DrawContext) {.optional.}
   method draw*(context: DrawContext) {.optional.}

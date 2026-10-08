@@ -25,6 +25,7 @@ requires "gh:Araq/iconbundler"
 requires "libbacktrace"
 requires "zippy >= 0.10.20"
 requires "gh:elcritch/dmon-nim >= 0.5.2"
+requires "stylus == 0.1.5"
 
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"

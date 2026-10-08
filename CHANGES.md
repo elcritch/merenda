@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add CSS theming through Stylus 0.1.5 with role/id/class/state selectors,
+  declaration-level specificity and importance, typed root variables, explicit
+  reloads, and source diagnostics. Style existing control colors, fonts, padding,
+  borders, corners, shadows and focus metrics without replacing the native theme;
+  CSS metric state changes relayout controls and preserve hover color animation.
+  Include a stylesheet preview example and CSS theming guide.
+
 - Keep Markdown code block backgrounds visible in Kosmo editor mode while
   asynchronous highlighting catches up with typing, line edits, and undo.
 - Highlight and scroll to clicked global file-search matches in Kosmo Markdown

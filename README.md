@@ -48,6 +48,17 @@ NIMKIT_THEME=macos nim r examples/controls_showcase.nim
 NIMKIT_THEME=aqua nim r examples/controls_showcase.nim
 ```
 
+Use CSS to change control colors, fonts, padding and state styles while keeping
+your chosen theme. The [CSS preview](examples/css_theme_demo.nim) reloads its
+stylesheet when you click **Reload CSS**:
+
+```sh
+nim r examples/css_theme_demo.nim
+```
+
+Read the [CSS theming guide](docs/css-theming.md) for selectors, variables,
+supported properties and appearance scope.
+
 To use Merenda in your own project, add this dependency to your `.nimble` file
 and run `atlas install -tuk` from that project:
 

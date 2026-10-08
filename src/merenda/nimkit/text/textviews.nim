@@ -2934,6 +2934,10 @@ protocol DefaultTextViewScrollNavigation of ScrollNavigationProtocol:
     not textView.editable() and event.modifiers == {} and event.key in KeyboardScrollKeys
 
 protocol DefaultTextViewDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(textView: TextView): bool =
+    discard textView
+    true
+
   method drawUnderlay(textView: TextView, context: DrawContext) =
     textView.updateTextContainer()
     if textView.displayTextStorage() == textView.xTextStorage and

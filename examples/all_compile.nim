@@ -18,6 +18,7 @@ import combobox_demo
 import collectionview_demo
 import constraint_playground_demo
 import controls_showcase
+import css_theme_demo
 import documenttabs_demo
 import document_workspace_demo
 import filter_row

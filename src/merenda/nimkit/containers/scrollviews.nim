@@ -1042,6 +1042,10 @@ protocol DefaultScrollViewLayout of ViewLayoutProtocol:
     scrollView.tile()
 
 protocol DefaultScrollViewDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(scrollView: ScrollView): bool =
+    discard scrollView
+    true
+
   method draw(scrollView: ScrollView, context: DrawContext) =
     let
       style =
@@ -1073,6 +1077,10 @@ protocol DefaultScrollViewDrawing of ViewDrawingProtocol:
       )
 
 protocol DefaultScrollerDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(scroller: Scroller): bool =
+    discard scroller
+    true
+
   method draw(scroller: Scroller, context: DrawContext) =
     let style =
       context.appearance.resolveScrollViewStyle(scroller.scrollerStyleContext())

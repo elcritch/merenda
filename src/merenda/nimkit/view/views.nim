@@ -125,6 +125,8 @@ proc setWidgetState*(view: View, state: WidgetState, value: bool) =
     view.xWidgetStates.incl state
   else:
     view.xWidgetStates.excl state
+  if view.effectiveAppearance().theme.cssMetricsChange({state}):
+    view.invalidateIntrinsicContentSize()
   view.needsDisplay = true
 
 proc validationMessage*(view: View): string =
@@ -188,7 +190,10 @@ protocol DefaultViewResponder of ResponderProtocol:
       states.excl ssFocusVisible
     if view.xWidgetStates == states:
       return
+    let changed = (view.xWidgetStates - states) + (states - view.xWidgetStates)
     view.xWidgetStates = states
+    if view.effectiveAppearance().theme.cssMetricsChange(changed):
+      view.invalidateIntrinsicContentSize()
     view.needsDisplay = true
 
 proc needsUpdateConstraints*(view: View): bool =

@@ -112,6 +112,10 @@ proc compactTabButtonStates(button: CompactTabButton): set[WidgetState] =
     result.incl {ssHighlighted, ssPressed}
 
 protocol CompactTabButtonDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    discard view
+    true
+
   method draw(button: CompactTabButton, context: DrawContext) =
     let
       states = button.compactTabButtonStates()
@@ -196,6 +200,10 @@ protocol CompactTabViewLayout of ViewLayoutProtocol:
         item.xView.setFrameFromLayout(contentFrame)
 
 protocol CompactTabViewDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    discard view
+    true
+
   method draw(tabs: CompactTabView, context: DrawContext) =
     let
       styleContext = controlStyle(

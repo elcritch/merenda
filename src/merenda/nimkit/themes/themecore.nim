@@ -1,4 +1,4 @@
-import std/[atomics, tables]
+import std/[atomics, math, sets, strutils, tables]
 
 import figdraw
 from sigils/selectors import DynamicAgent
@@ -131,6 +131,16 @@ type
   StyleRule* = object
     selector*: StyleSelector
     patch*: StylePatch
+    origin*: StyleRuleOrigin
+    important*: bool
+    cssSpecificity*: array[3, int]
+    sourceOrder*: int
+    line*, column*: int
+
+  StyleRuleOrigin* = enum
+    sroTheme
+    sroCss
+    sroOverride
 
   Chrome* = ref object of DynamicAgent
 
@@ -142,6 +152,11 @@ type
     xChromes: Table[string, Chrome]
     xRulesByRole: array[StyleRole, seq[int]]
     xGeneration: ThemeGeneration
+    xHasCss: bool
+    xCssMetricStates: set[WidgetState]
+    xCssImportantTokens: HashSet[string]
+    xNativeCssTokens: HashSet[string]
+    xCssSourceOrder: int
 
   ThemeBuilder* = object
     xTokens: StyleTokenStore
@@ -149,6 +164,10 @@ type
     xChromes: Table[string, Chrome]
     xBaseGeneration: ThemeGeneration
     xChanged: bool
+    xHasCss: bool
+    xCssImportantTokens: HashSet[string]
+    xNativeCssTokens: HashSet[string]
+    xCssSourceOrder: int
 
   Appearance* = object
     theme*: Theme
@@ -611,7 +630,10 @@ proc clone(selector: StyleSelector): StyleSelector =
 
 proc cloneRules(rules: openArray[StyleRule]): seq[StyleRule] =
   for rule in rules:
-    result.add StyleRule(selector: rule.selector.clone, patch: rule.patch.clone)
+    var copied = rule
+    copied.selector = rule.selector.clone
+    copied.patch = rule.patch.clone
+    result.add copied
 
 proc cloneChromes(chromes: Table[string, Chrome]): Table[string, Chrome] =
   result = initTable[string, Chrome]()
@@ -664,6 +686,10 @@ proc initThemeBuilder*(theme: Theme): ThemeBuilder =
     xRules: theme.xRules.cloneRules(),
     xChromes: theme.xChromes.cloneChromes,
     xBaseGeneration: theme.xGeneration,
+    xHasCss: theme.xHasCss,
+    xCssImportantTokens: theme.xCssImportantTokens,
+    xNativeCssTokens: theme.xNativeCssTokens,
+    xCssSourceOrder: theme.xCssSourceOrder,
   )
 
 proc finish*(builder: ThemeBuilder): Theme =
@@ -671,8 +697,22 @@ proc finish*(builder: ThemeBuilder): Theme =
   result.xTokens = builder.xTokens.clone
   result.xRules = builder.xRules.cloneRules()
   result.xChromes = builder.xChromes.cloneChromes
+  result.xHasCss = builder.xHasCss
+  result.xCssImportantTokens = builder.xCssImportantTokens
+  result.xNativeCssTokens = builder.xNativeCssTokens
+  result.xCssSourceOrder = builder.xCssSourceOrder
   for index, rule in result.xRules:
     result.xRulesByRole[rule.selector.role].add index
+    if rule.origin == sroCss:
+      for key in rule.patch.values.keys:
+        if key.startsWith("font.") or
+            key in [
+              "text.insets", "padding", "minimum.size", "border.width", "chrome",
+              "focus.ring.inset",
+            ]:
+          result.xCssMetricStates = result.xCssMetricStates + rule.selector.states
+  if ssPressed in result.xCssMetricStates:
+    result.xCssMetricStates.incl ssHighlighted
   if builder.xChanged or builder.xBaseGeneration == ThemeGeneration(0):
     result.xGeneration = nextThemeGeneration()
   else:
@@ -749,7 +789,33 @@ proc `[]=`*(tokens: StyleTokenStore, name: string, value: openArray[BoxShadow]) 
 
 proc `[]=`*(theme: var ThemeBuilder, name: string, value: StyleValue) =
   theme.xTokens[name] = value
+  if theme.xHasCss and name.startsWith("--"):
+    theme.xNativeCssTokens.incl name
   theme.noteThemeMutation()
+
+proc setCssToken*(
+    theme: var ThemeBuilder, name: string, value: StyleValue, important = false
+) =
+  ## Compiler hook: preserves custom-property importance across stylesheet appends.
+  if name in theme.xNativeCssTokens or
+      (name in theme.xCssImportantTokens and not important):
+    return
+  theme.xTokens[name] = value
+  theme.xHasCss = true
+  if important:
+    theme.xCssImportantTokens.incl name
+  theme.noteThemeMutation()
+
+func hasCss*(theme: Theme): bool =
+  ## Whether this snapshot contains CSS declarations or root custom properties.
+  theme.xHasCss
+
+func cssMetricStates*(theme: Theme): set[WidgetState] =
+  ## States whose CSS declarations can change intrinsic content metrics.
+  theme.xCssMetricStates
+
+func cssMetricsChange*(theme: Theme, states: set[WidgetState]): bool =
+  (theme.xCssMetricStates * states) != {}
 
 proc `[]=`*(theme: var ThemeBuilder, name: string, value: Color) =
   theme[name] = styleColor(value)
@@ -902,23 +968,84 @@ func inheritedStyleRole(role: StyleRole): StyleRole =
   else: role
 
 proc stylePatch(theme: var ThemeBuilder, selector: StyleSelector): StylePatch =
+  let origin = if theme.xHasCss: sroOverride else: sroTheme
   for rule in theme.xRules:
-    if rule.selector == selector:
+    if rule.selector == selector and rule.origin == origin:
       return rule.patch
   result = newStylePatch()
-  theme.xRules.add StyleRule(selector: selector, patch: result)
+  theme.xRules.add StyleRule(selector: selector, patch: result, origin: origin)
+
+func higherExactRule(left, right: StyleRule): bool =
+  if left.origin != right.origin:
+    return left.origin > right.origin
+  if left.origin == sroCss:
+    if left.important != right.important:
+      return left.important
+    for index in 0 .. 2:
+      if left.cssSpecificity[index] != right.cssSpecificity[index]:
+        return left.cssSpecificity[index] > right.cssSpecificity[index]
+    return left.sourceOrder >= right.sourceOrder
+
+proc exactStylePatch(
+    rules: openArray[StyleRule], selector: StyleSelector, hasCss: bool
+): StylePatch =
+  if not hasCss:
+    for rule in rules:
+      if rule.selector == selector:
+        return rule.patch
+  else:
+    var best: Table[string, int]
+    for index, rule in rules:
+      if rule.selector == selector:
+        if result.isNil:
+          result = newStylePatch()
+        for key, value in rule.patch.values:
+          if key notin best or rule.higherExactRule(rules[best[key]]):
+            result.values[key] = value
+            best[key] = index
 
 proc stylePatchView(theme: Theme, selector: StyleSelector): StylePatch =
-  for rule in theme.xRules:
-    if rule.selector == selector:
-      return rule.patch
+  exactStylePatch(theme.xRules, selector, theme.xHasCss)
 
 proc stylePatch*(theme: Theme, selector: StyleSelector): StylePatch =
   ## Returns a mutable copy without exposing snapshot-owned storage.
   theme.stylePatchView(selector).clone
 
 proc addRule*(theme: var ThemeBuilder, selector: StyleSelector, patch: StylePatch) =
-  theme.xRules.add StyleRule(selector: selector, patch: patch)
+  theme.xRules.add StyleRule(
+    selector: selector,
+    patch: patch,
+    origin: (if theme.xHasCss: sroOverride else: sroTheme),
+  )
+  theme.noteThemeMutation()
+
+proc nextCssSourceOrder*(theme: var ThemeBuilder): int =
+  ## Compiler hook: one source-order value for an expanded CSS declaration.
+  inc theme.xCssSourceOrder
+  theme.xCssSourceOrder
+
+proc addCssRule*(
+    theme: var ThemeBuilder,
+    selector: StyleSelector,
+    patch: StylePatch,
+    specificity: array[3, int],
+    sourceOrder: int,
+    important = false,
+    line = 1,
+    column = 1,
+) =
+  ## Compiler hook: adds a CSS declaration without merging identical selectors.
+  theme.xRules.add StyleRule(
+    selector: selector,
+    patch: patch,
+    origin: sroCss,
+    important: important,
+    cssSpecificity: specificity,
+    sourceOrder: sourceOrder,
+    line: line,
+    column: column,
+  )
+  theme.xHasCss = true
   theme.noteThemeMutation()
 
 proc setStyle*[T](
@@ -1287,17 +1414,70 @@ proc `[]`*[T](theme: Theme, role: StyleRole, key: StyleKey[T]): StyleValue =
     result = missingStyleValue()
 
 proc `[]`*[T](theme: ThemeBuilder, role: StyleRole, key: StyleKey[T]): StyleValue =
-  for rule in theme.xRules:
-    if rule.selector == initStyleSelector(role) and rule.patch.getStyle(key, result):
+  let patch = exactStylePatch(theme.xRules, initStyleSelector(role), theme.xHasCss)
+  if patch.isNil or not patch.getStyle(key, result):
+    result = missingStyleValue()
+
+proc resolveCssValue*(
+    theme: Theme, value: StyleValue, key: string, resolved: var StyleValue
+): bool =
+  ## Compiler/resolver hook for bounded typed CSS variables and shorthand coercion.
+  if not theme.xTokens.resolveValue(value, resolved):
+    return
+  case key
+  of "text.color", "border.color", "focus.ring.color":
+    result = resolved.kind == svColor
+  of "fill", "background.fill":
+    result = resolved.kind in {svColor, svFill}
+  of "font.name", "chrome":
+    result = resolved.kind == svKeyword and resolved.keyword.len > 0
+  of "font.slant":
+    result =
+      resolved.kind == svKeyword and resolved.keyword in ["normal", "italic", "oblique"]
+  of "font.face", "font.face.italic", "font.face.bold", "font.face.boldItalic":
+    result = resolved.kind == svFontFace
+  of "text.insets", "padding":
+    if resolved.kind == svLength:
+      resolved = styleInsets(insets(resolved.length))
+    if resolved.kind == svInsets:
+      result = true
+      for amount in [
+        resolved.insets.top, resolved.insets.right, resolved.insets.bottom,
+        resolved.insets.left,
+      ]:
+        if amount.classify in {fcNan, fcInf, fcNegInf} or amount < 0:
+          return false
+  of "minimum.size":
+    if resolved.kind == svSize:
+      result = resolved.size.width >= 0 and resolved.size.height >= 0
+  of "box.shadows":
+    result = resolved.kind == svShadows
+  else:
+    if resolved.kind == svLength:
+      let amount = resolved.length
+      result =
+        amount.classify notin {fcNan, fcInf, fcNegInf} and
+        (amount >= 0 or key == "focus.ring.inset")
+
+func rankAtLeast(left, right: array[7, int]): bool =
+  for index in 0 .. left.high:
+    if left[index] != right[index]:
+      return left[index] > right[index]
+  true
+
+proc validCssPatch(theme: Theme, patch: StylePatch): bool =
+  for key, value in patch.values:
+    var resolved: StyleValue
+    if not theme.resolveCssValue(value, key, resolved):
       return
-  result = missingStyleValue()
+  true
 
 proc ruleValue(
     theme: Theme, context: StyleContext, key: string, fallback: StyleValue
 ): StyleValue =
   result = fallback
   var
-    bestSpecificity = -1
+    bestRank = [-1, -1, -1, -1, -1, -1, -1]
     inheritedContext = context
   let inheritedRole = context.role.inheritedStyleRole()
   inheritedContext.role = inheritedRole
@@ -1306,15 +1486,40 @@ proc ruleValue(
     block:
       var value: StyleValue
       if rule.selector.matches(matchContext) and rule.patch.getStyle(key, value):
-        let ruleSpecificity = rule.selector.specificity() * 10 + roleRank
-        if ruleSpecificity >= bestSpecificity:
+        let rank =
+          if rule.origin == sroCss:
+            [
+              ord(rule.origin),
+              ord(rule.important),
+              rule.cssSpecificity[0],
+              rule.cssSpecificity[1],
+              rule.cssSpecificity[2],
+              rule.sourceOrder,
+              roleRank,
+            ]
+          else:
+            [
+              ord(rule.origin),
+              0,
+              0,
+              0,
+              0,
+              rule.selector.specificity() * 10 + roleRank,
+              0,
+            ]
+        if rank.rankAtLeast(bestRank):
           var resolved: StyleValue
-          if theme.xTokens.resolveValue(value, resolved):
+          if rule.origin == sroCss:
+            if theme.validCssPatch(rule.patch) and
+                theme.resolveCssValue(value, key, resolved):
+              result = resolved
+              bestRank = rank
+          elif theme.xTokens.resolveValue(value, resolved):
             result = resolved
-            bestSpecificity = ruleSpecificity
+            bestRank = rank
           elif value.kind != svToken:
             result = value
-            bestSpecificity = ruleSpecificity
+            bestRank = rank
 
   if inheritedRole != context.role:
     for ruleIndex in theme.xRulesByRole[inheritedRole]:

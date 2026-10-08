@@ -5187,6 +5187,10 @@ proc naturalSize(tableView: TableView): Size =
   )
 
 protocol DefaultTableRowViewDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    discard view
+    true
+
   method draw(rowView: TableRowView, context: DrawContext) =
     let tableView = rowView.xTableView
     let rect = rowView.bounds()
@@ -5221,6 +5225,10 @@ protocol DefaultTableRowViewAccessibility of AccessibilityProtocol:
     rowView.xRow.index >= 0
 
 protocol DefaultTableContentViewDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    discard view
+    true
+
   method draw(contentView: TableContentView, context: DrawContext) =
     discard context.visibleRect()
     contentView.syncVisibleRowViews()
@@ -6641,6 +6649,10 @@ protocol TableViewStateViewLifecycleSlots of ViewLifecycleProtocol:
       tableView.restoreStateIfNeeded()
 
 protocol DefaultTableViewDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    discard view
+    true
+
   method draw(tableView: TableView, context: DrawContext) =
     if context.isNil or tableView.bounds().isEmpty:
       return

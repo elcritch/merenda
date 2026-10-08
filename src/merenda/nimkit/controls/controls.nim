@@ -62,6 +62,11 @@ protocol ControlValueHooks {.selectorScope: protocol.}:
 protocol ControlActivationFeedbackProtocol {.selectorScope: protocol.}:
   method setActivationFeedback*(active: bool)
 
+protocol ControlStyledBackground of ViewDrawingProtocol:
+  method drawsStyledBackground(control: Control): bool =
+    discard control
+    true
+
 proc cell*(control: Control): Cell
 proc setCell*(control: Control, cell: Cell)
 proc selectedCell*(control: Control): Cell
@@ -271,6 +276,7 @@ proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = n
       cell
   )
   discard control.withProto()
+  discard control.withProtocol(ControlStyledBackground)
   discard control.withProtocol(DefaultControlActivationFeedback)
   discard control.withProtocol(DefaultControlDraggingSource)
   discard control.withProtocol(DefaultControlDraggingDestination)

@@ -2018,6 +2018,10 @@ proc tileMenuBarItems(menuBar: MenuBar) =
       inc buttonIndex
 
 protocol MenuBarDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    discard view
+    true
+
   method draw(menuBar: MenuBar, context: DrawContext) =
     let bounds = menuBar.bounds()
     if bounds.isEmpty:

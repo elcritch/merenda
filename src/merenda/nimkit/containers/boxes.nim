@@ -295,6 +295,10 @@ protocol DefaultBoxLayout of ViewLayoutProtocol:
     box.layoutBoxContent()
 
 protocol DefaultBoxDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(box: Box): bool =
+    discard box
+    true
+
   method draw(box: Box, context: DrawContext) =
     if context.isNil or box.bounds().isEmpty:
       return

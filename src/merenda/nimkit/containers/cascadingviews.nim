@@ -1700,6 +1700,10 @@ proc cascadingModelDidChange*(view: CascadingView, sender: DynamicAgent) {.slot.
   view.reloadData()
 
 protocol CascadingDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    discard view
+    true
+
   method draw(view: CascadingView, context: DrawContext) =
     if context.isNil or view.bounds().isEmpty:
       return
