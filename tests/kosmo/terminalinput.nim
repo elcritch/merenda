@@ -1,6 +1,7 @@
 import std/[os, tempfiles, unittest]
 
 import merenda/nimkit
+import merenda/nimkit/foundation/selectors as nimkitSelectors
 import merenda/kosmo/kosmo
 
 proc keyEvent(key: Key, modifiers: set[nimkit.KeyModifier] = {}, text = ""): KeyEvent =
@@ -172,6 +173,76 @@ suite "Kosmo terminal input routing":
     require frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
     check frontend.editorGroups().len == 2
     check frontend.window.terminalIsFocused(terminal)
+
+  test "editor and Markdown pane navigation consumes the destination text commit":
+    let
+      root = createTempDir("kosmo-pane-text-", "")
+      path = root / "README.md"
+    writeFile(path, "# Pane navigation\n\nPreview text.\n")
+    defer:
+      removeDir(root)
+    for markdown in [false, true]:
+      let
+        frontend = newKosmoApplication(
+          newApplication("Pane Shortcut Text"), monitorsGitStatus = false
+        )
+        document = terminalDocument("pane-text-terminal")
+        terminal = KosmoTerminalView(document.contentView)
+      defer:
+        frontend.close()
+        frontend.window.close()
+      frontend.window.setContentView(frontend.contentView)
+      frontend.contentView.frame = rect(0, 0, 1000, 700)
+      require frontend.openDocument(document)
+      require frontend.window.dispatchKeyDown(controlKey(keyW))
+      require frontend.window.dispatchKeyDown(keyEvent(keyV))
+      frontend.contentView.layoutSubtreeIfNeeded()
+      let groups = frontend.editorGroups()
+      require groups.len == 2
+      var source = Responder(groups[0].editorView)
+      require frontend.window.makeFirstResponder(source)
+      if markdown:
+        require frontend.openPath(path)
+        let preview = groups[0].pane.markdownView
+        require preview.waitForMarkdownParsing()
+        frontend.contentView.layoutSubtreeIfNeeded()
+        source = preview.textView()
+        require frontend.window.makeFirstResponder(source)
+      var commits: seq[string]
+      let recordText: DynamicMethod = proc(
+          self: DynamicAgent, invocation: var Invocation
+      ) =
+        commits.add invocation.argsAs(string)
+        invocation.setResult(())
+      discard terminal.replaceMethod(nimkitSelectors.insertText(), recordText)
+
+      for continuation in [
+        keyEvent(keyL, text = "l"),
+        keyEvent(keyL),
+        keyEvent(keyW, {nimkit.kmShift}, "W"),
+      ]:
+        commits.setLen(0)
+        require frontend.window.makeFirstResponder(source)
+        require frontend.window.dispatchKeyDown(controlKey(keyW))
+        require frontend.window.dispatchKeyDown(continuation)
+        require frontend.window.terminalIsFocused(terminal)
+        # Physical keys can omit text and commit a different keyboard layout.
+        let text = if continuation.text.len > 0: continuation.text else: "λ"
+        require frontend.window.dispatchTextInput(text)
+        check commits.len == 0
+        discard frontend.window.dispatchKeyDown(keyEvent(keyX))
+        require frontend.window.dispatchTextInput("x")
+        check commits == @["x"]
+
+      for continuation in [keyEvent(keyArrowRight), controlKey(keyL)]:
+        commits.setLen(0)
+        require frontend.window.makeFirstResponder(source)
+        require frontend.window.dispatchKeyDown(controlKey(keyW))
+        require frontend.window.dispatchKeyDown(continuation)
+        require frontend.window.terminalIsFocused(terminal)
+        # Nonprinting continuations must leave the next commit available.
+        require frontend.window.dispatchTextInput("x")
+        check commits == @["x"]
 
   test "focused raw terminals beat configured window shortcut prefixes":
     let

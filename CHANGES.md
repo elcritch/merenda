@@ -13,6 +13,9 @@
   copy/paste on Linux and Windows. Ctrl-backslash quotes the next shortcut,
   including complete pane chords. Add a persisted Terminal input selector for
   Hybrid or Raw shortcuts, applying changes to current and future terminals.
+  Consume printable pane shortcut text before focus changes, so switching from
+  an editor or Markdown preview to a terminal does not type the continuation.
+  Directional pane shortcuts follow aligned neighboring edges in nested splits.
 
 - Support Reni regular expressions through the `.*` toggle in Kosmo terminal,
   Markdown, GitHub, and Git diff views, the Files filter, Quick Open, and VS Code

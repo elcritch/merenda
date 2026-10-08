@@ -1221,6 +1221,10 @@ proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
   view.refresh()
   true
 
+proc suppressPaneShortcutText(window: nimkit.Window, event: nimkit.KeyEvent) =
+  if not window.isNil and event.awaitsCommittedText():
+    window.suppressShortcutText(event.text)
+
 proc handlePendingPaneKey(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   if not view.pendingPanePrefix:
     return false
@@ -1235,6 +1239,7 @@ proc handlePendingPaneKey(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   let command = event.paneCommand()
   if command != kpcNone and not view.tabsDelegate.dockController.isNil and
       not view.dockGroup.isNil:
+    view.dockGroup[].window.suppressPaneShortcutText(event)
     discard
       view.tabsDelegate.dockController[].performPaneCommand(view.dockGroup[], command)
     return true
@@ -1257,6 +1262,7 @@ proc handlePaneKey(editorView: KosmoEditorView, event: nimkit.KeyEvent): bool =
       return true
     let command = event.paneCommand()
     if command != kpcNone:
+      editorView.dockGroup[].window.suppressPaneShortcutText(event)
       discard editorView.tabsDelegate.dockController[].performPaneCommand(
         editorView.dockGroup[], command
       )
