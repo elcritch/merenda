@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep Markdown code block backgrounds visible in Kosmo editor mode while
+  asynchronous highlighting catches up with typing, line edits, and undo.
+
 - Share smooth arrow/page keyboard scrolling across NimKit scroll containers
   and read-only text views, including Kosmo Markdown, GitHub and Git diff readers.
   Preserve editable text cursor movement and pass vertical keys through embedded
