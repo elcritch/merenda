@@ -330,9 +330,17 @@ its other panes. `:q!` discards an unshared buffer's unsaved changes.
 `mode_switch config` open a reusable interactive Config tab, retaining its
 selection and edits across tab or pane switches without an internal Moe split.
 
-Within a focused Markdown preview, arrow keys scroll smoothly by four lines,
-while `j` and `k` retain one-line movement. `Space` scrolls smoothly by one
-quarter of the visible preview height.
+Within focused Markdown, GitHub and Git diff readers, arrow keys scroll smoothly
+by four lines. `Page Up`/`Page Down` scroll by a page and `Space` by one quarter
+of the visible height. This is shared NimKit scroll-container behavior; editable
+text keeps its normal cursor and selection keys.
+
+In Markdown readers, `j` and `k` select the next or previous visible heading or
+paragraph and reveal it. Enter toggles the selected heading's section, or the
+containing section when a paragraph is selected. Collapsing a section keeps its
+heading selected and skips its hidden paragraphs and nested headings during
+navigation. Modified keys retain their normal application and text-selection
+behavior.
 
 `Command-W` must remain a complete, immediate close command; it must never be
 a sequence prefix. Kosmo should not define `Command-W Command-W`,

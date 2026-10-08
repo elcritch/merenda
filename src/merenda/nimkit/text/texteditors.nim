@@ -4,6 +4,7 @@ import ../accessibility/accessibility
 import ../containers/scrollviews
 import ../drawing
 import ../foundation/selectors
+import ../foundation/events
 import ../foundation/types
 import ../responder/responders
 import ../themes
@@ -628,6 +629,14 @@ protocol DefaultTextEditorKeyCommands of KeyViewCommandProtocol:
     if not editor.xTextView.isNil:
       editor.xTextView.insertTextValue("\t")
 
+protocol DefaultTextEditorScrollNavigation of ScrollNavigationProtocol:
+  method wantsScrollNavigation(editor: TextEditor, event: KeyEvent): bool =
+    not editor.editable() and event.modifiers == {} and event.key in KeyboardScrollKeys
+
+  method scrollKey(editor: TextEditor, event: KeyEvent): bool =
+    if not editor.editable():
+      return editor.xScrollView.handleScrollNavigationKey(event)
+
 protocol DefaultTextEditorAccessibility of AccessibilityProtocol:
   method accessibilityRole(editor: TextEditor): AccessibilityRole =
     arScrollArea
@@ -686,6 +695,7 @@ proc initTextEditorFields*(
   discard editor.withProtocol(DefaultTextEditorInput)
   discard editor.withProtocol(DefaultTextEditorCommands)
   discard editor.withProtocol(DefaultTextEditorKeyCommands)
+  discard editor.withProtocol(DefaultTextEditorScrollNavigation)
   discard editor.withProtocol(DefaultTextEditorAccessibility)
   editor.installTextEditorInputClientMethods()
   editor.applyInitialFrame(frame)

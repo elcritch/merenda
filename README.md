@@ -157,7 +157,9 @@ nim r examples/quick_start.nim
 
 NimKit's larger controls handle more of the work for you. This app opens a
 Markdown file with selectable text, links, code blocks, tables, and images.
-The view handles scrolling and layout as you resize the window.
+The view handles scrolling and layout as you resize the window. Up/Down arrows
+scroll the reader, `j`/`k` select headings and paragraphs in reading order, and
+Enter expands or collapses the selected block's section.
 
 ```nim
 import std/os
@@ -427,6 +429,12 @@ matches, `Cmd/Ctrl-G` and `Shift-Cmd/Ctrl-G` for next and previous, and Escape
 to close. Editor matches scroll to the center of the pane. Enable **`.*`** in any
 content search, including terminal tabs, to use Reni regular expressions. Searches
 default to literal text; Markdown, GitHub, diff, and terminal matches ignore case.
+
+Use Up/Down arrows to scroll Markdown, GitHub and Git diff viewers. Read-only
+NimKit text views share this scrolling behavior; editable text keeps its cursor
+movement. Markdown readers also support `j`/`k` to select visible headings and
+paragraphs and Enter to expand or collapse the selected section.
+
 Diff search includes collapsed sections and loads ordinary patches within the
 viewer's size limits. Open
 oversized patches explicitly to include their contents.

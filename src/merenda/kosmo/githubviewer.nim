@@ -400,8 +400,13 @@ proc newKosmoGitHubPanel(
     if not weakPanel.isNil and not weakPanel[].closed:
       if weakPanel[].search.handleSearchKey(event):
         invocation.setResult(true)
-      elif not weakPanel[].keyEquivalentHandler.isNil:
-        invocation.setResult(weakPanel[].keyEquivalentHandler(event))
+      elif not weakPanel[].keyEquivalentHandler.isNil and
+          weakPanel[].keyEquivalentHandler(event):
+        invocation.setResult(true)
+      elif self == weakPanel[].markdownView:
+        invocation.setResult(
+          weakPanel[].markdownView.handleMarkdownNavigationKey(event)
+        )
   discard result.markdownView.replaceMethod(
     nimkitSelectors.performKeyEquivalent(), keyHandler
   )

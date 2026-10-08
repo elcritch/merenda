@@ -20,8 +20,7 @@ from markdownpkg/entities import htmlEntityToUtf8
 import sigils/[core, threads]
 
 import ../accessibility/accessibility
-import ../app/[animationproperties, animations]
-from ../app/windows import Window, startAnimation, stopAnimation
+from ../app/windows import Window, firstResponder, makeFirstResponder
 import ../containers/outlineviews
 import ../controls/buttons
 import ../drawing
@@ -174,6 +173,11 @@ type
     level: int
     range: TextRange
 
+  MarkdownNavigationItem = object
+    range: TextRange
+    headingIdentifier: string
+    sectionIdentifier: string
+
   MarkdownHeadingDisclosureButton = ref object of Button
     markdownView: WeakRef[MarkdownView]
     documentGeneration: uint64
@@ -205,6 +209,7 @@ type
     imageUrls: seq[string]
     tables: seq[MarkdownTablePresentation]
     headings: seq[MarkdownHeadingPresentation]
+    navigationItems: seq[MarkdownNavigationItem]
     hasTables: bool
 
   MarkdownBuilder = object
@@ -221,6 +226,8 @@ type
     tableColumnLimit: int
     tables: seq[MarkdownTablePresentation]
     headings: seq[MarkdownHeadingPresentation]
+    navigationItems: seq[MarkdownNavigationItem]
+    sectionIdentifier: string
     headingIdentifier: string
     headingDisclosureIndent: float32
     hasTables: bool
@@ -299,23 +306,21 @@ type
     xMarkdownTableColumnLimit: int
     xMarkdownTableResizePending: bool
     xMarkdownTableResizeDeadline: MonoTime
-    xKeyboardScrollAnimation: Animation
-    xKeyboardScrollTarget: Point
+    xMarkdownNavigationItems: seq[MarkdownNavigationItem]
+    xPendingMarkdownHeadingSelection: string
 
 const
   MarkdownRenderBlocksPerChunk = 16
   MarkdownRenderChunkBudgetNanoseconds = 4_000_000'i64
   MarkdownBackgroundLayoutMinimumLength = 4_096
   MarkdownTableResizeDebounce = initDuration(milliseconds = 120)
-  MarkdownKeyboardScrollDuration = initDuration(milliseconds = 140)
-  MarkdownKeyboardScrollRows = 4.0'f32
-  MarkdownKeyboardPageFraction = 0.25'f32
 
 var
   defaultMarkdownUrlAssetLoader {.threadvar.}: UrlAssetLoader
   inFlightMarkdownViews {.threadvar.}: seq[MarkdownView]
 
 proc renderCurrentMarkdownDocument(view: MarkdownView)
+proc revealMarkdownNavigationRange(view: MarkdownView, range: TextRange)
 
 func headingCollapsed(view: MarkdownView, headingIdentifier: string): bool =
   not view.isNil and headingIdentifier in view.xCollapsedMarkdownHeadings
@@ -726,6 +731,11 @@ proc add(builder: var MarkdownBuilder, rendered: sink MarkdownBuilder) =
       offset + int(presentation.range.location), int(presentation.range.length)
     )
     builder.headings.add shifted
+  for item in rendered.navigationItems:
+    var shifted = item
+    shifted.range =
+      initTextRange(offset + int(item.range.location), int(item.range.length))
+    builder.navigationItems.add shifted
 
 proc renderInline(
   builder: var MarkdownBuilder, token: markdownParser.Token, attributes: TextAttributes
@@ -1314,6 +1324,7 @@ proc renderContainerChild(
     syntaxHighlighter: builder.syntaxHighlighter,
     tableColumnLimit: builder.tableColumnLimit,
     headingIdentifier: headingIdentifier,
+    sectionIdentifier: builder.sectionIdentifier,
     headingDisclosureIndent: builder.headingDisclosureIndent,
   )
   rendered.renderBlock(child, attributes)
@@ -1404,6 +1415,7 @@ proc renderBlockquote(
     imageContentTypeLoader: builder.imageContentTypeLoader,
     syntaxHighlighter: builder.syntaxHighlighter,
     tableColumnLimit: builder.tableColumnLimit,
+    sectionIdentifier: builder.sectionIdentifier,
   )
   quoted.renderContainer(quote, quoteAttributes)
   if quoted.text.len == 0:
@@ -1459,6 +1471,13 @@ proc renderBlockquote(
       stop = segments.quoteDestination(presentation.range.maxIndex)
     mapped.range = initTextRange(start, stop - start)
     builder.tables.add mapped
+  for item in quoted.navigationItems:
+    var mapped = item
+    let
+      start = segments.quoteDestination(int(item.range.location))
+      stop = segments.quoteDestination(item.range.maxIndex)
+    mapped.range = initTextRange(start, stop - start)
+    builder.navigationItems.add mapped
   builder.hasTables = builder.hasTables or quoted.hasTables
 
 proc addHighlightedCode(
@@ -1517,7 +1536,13 @@ proc renderBlock(
   if token.isNil:
     return
   if token of markdownParser.Paragraph:
+    let start = builder.runeLength
     builder.renderInlineChildren(token, attributes)
+    if builder.runeLength > start:
+      builder.navigationItems.add MarkdownNavigationItem(
+        range: initTextRange(start, builder.runeLength - start),
+        sectionIdentifier: builder.sectionIdentifier,
+      )
   elif token of markdownParser.Heading:
     let heading = markdownParser.Heading(token)
     var headingAttributes = attributes
@@ -1534,6 +1559,12 @@ proc renderBlock(
       headingStart = builder.runeLength
       titleStart = builder.text.len
     builder.renderInlineChildren(token, headingAttributes)
+    if builder.runeLength > headingStart:
+      builder.navigationItems.add MarkdownNavigationItem(
+        range: initTextRange(headingStart, builder.runeLength - headingStart),
+        headingIdentifier: builder.headingIdentifier,
+        sectionIdentifier: builder.sectionIdentifier,
+      )
     if builder.headingIdentifier.len > 0 and builder.runeLength > headingStart:
       builder.headings.add MarkdownHeadingPresentation(
         identifier: builder.headingIdentifier,
@@ -1609,6 +1640,7 @@ proc toMarkdownDocument(builder: sink MarkdownBuilder): MarkdownDocument =
     imageUrls: builder.imageUrls,
     tables: builder.tables,
     headings: builder.headings,
+    navigationItems: builder.navigationItems,
     hasTables: builder.hasTables,
   )
 
@@ -2159,6 +2191,13 @@ proc applyMarkdownDocument(view: MarkdownView, document: sink MarkdownDocument) 
       view.xMarkdownCodePresentationIndices[presentation.codeIndex].add index
   textView.installMarkdownCodeBlocks(view.xMarkdownCodePresentations)
   textView.installMarkdownTables(document.tables)
+  view.xMarkdownNavigationItems = move document.navigationItems
+  if view.xPendingMarkdownHeadingSelection.len > 0:
+    let identifier = move view.xPendingMarkdownHeadingSelection
+    for item in view.xMarkdownNavigationItems:
+      if item.headingIdentifier == identifier:
+        view.revealMarkdownNavigationRange(item.range)
+        break
   view.pruneMarkdownImageCache(document.imageUrls)
   textView.needsDisplay = true
 
@@ -2434,6 +2473,8 @@ proc continueMarkdownRendering(view: MarkdownView, generation: uint64): bool =
       else:
         job.collapsedHeadingLevel = 0
     if renderBlock:
+      if headingIdentifier.len > 0:
+        job.builder.sectionIdentifier = headingIdentifier
       job.builder.renderContainerChild(
         child, job.attributes, job.wroteBlock, headingIdentifier
       )
@@ -2748,101 +2789,95 @@ proc selectMarkdownRange*(view: MarkdownView, range: TextRange) =
 
 proc editable*(view: MarkdownView): bool =
   ## Markdown views are deliberately read-only.
-  discard view
+  discard
 
 proc selectable*(view: MarkdownView): bool =
   ## Rendered Markdown remains selectable and copyable.
-  discard view
   true
 
-proc clampMarkdownKeyboardScrollTarget(scrollView: ScrollView, target: Point): Point =
-  let maximum = scrollView.maximumContentOffset()
-  initPoint(
-    min(max(target.x, 0.0'f32), maximum.x), min(max(target.y, 0.0'f32), maximum.y)
-  )
+proc revealMarkdownNavigationRange(view: MarkdownView, range: TextRange) =
+  view.scrollView().cancelKeyboardScroll()
+  view.selectMarkdownRange(range)
+  let firstLine = view.textView().characterRect(int(range.location))
+  discard view.scrollView().scrollRectToVisible(firstLine)
 
-proc finishMarkdownKeyboardScroll(view: MarkdownView) {.slot.} =
-  view.xKeyboardScrollAnimation = nil
-
-proc stopMarkdownKeyboardScroll(view: MarkdownView) =
-  let animation = view.xKeyboardScrollAnimation
-  if animation.isNil:
-    return
-  view.xKeyboardScrollAnimation = nil
+proc selectedMarkdownNavigationItem(view: MarkdownView): int =
   let owner = view.window()
   if owner of Window:
-    discard Window(owner).stopAnimation(animation)
-  else:
-    animation.stop()
+    let focused = Window(owner).firstResponder()
+    if focused of MarkdownHeadingDisclosureButton:
+      let button = MarkdownHeadingDisclosureButton(focused)
+      if not button.markdownView.isNil and button.markdownView[] == view:
+        for index, item in view.xMarkdownNavigationItems:
+          if item.headingIdentifier == button.headingIdentifier:
+            return index
+  let selection = view.textView().selectedRange()
+  for index, item in view.xMarkdownNavigationItems:
+    if selection == item.range or (
+      int(selection.location) >= int(item.range.location) and
+      int(selection.location) < item.range.maxIndex
+    ):
+      return index
+  -1
 
-proc scrollMarkdownBy(view: MarkdownView, delta: Point) =
-  let scrollView = view.scrollView()
-  if scrollView.isNil:
-    return
+proc navigateMarkdownBlock(view: MarkdownView, direction: int): bool =
+  let items = view.xMarkdownNavigationItems
+  if items.len == 0:
+    return true
   let
-    current = scrollView.contentOffset()
-    start =
-      if not view.xKeyboardScrollAnimation.isNil and
-          view.xKeyboardScrollAnimation.isRunning:
-        view.xKeyboardScrollTarget
-      else:
-        current
-    target = scrollView.clampMarkdownKeyboardScrollTarget(
-      initPoint(start.x + delta.x, start.y + delta.y)
-    )
-  view.stopMarkdownKeyboardScroll()
-  if target == current:
-    return
-
-  let animation = newContentOffsetAnimation(
-    scrollView,
-    current,
-    target,
-    duration = MarkdownKeyboardScrollDuration,
-    timing = easeOutTiming(),
-  )
-  view.xKeyboardScrollTarget = target
-  view.xKeyboardScrollAnimation = Animation(animation)
-  animation.connect(finished, view, finishMarkdownKeyboardScroll)
+    selection = view.textView().selectedRange()
+    current = view.selectedMarkdownNavigationItem()
+  var target = current
+  if current >= 0 and selection.length > 0:
+    target = min(max(current + direction, 0), items.high)
+  elif current < 0:
+    target = if direction > 0: items.high else: 0
+    for index, item in items:
+      if direction > 0 and item.range.location >= selection.location:
+        target = index
+        break
+      if direction < 0 and item.range.maxIndex <= int(selection.location):
+        target = index
+  view.revealMarkdownNavigationRange(items[target].range)
   let owner = view.window()
-  if not (owner of Window) or not Window(owner).startAnimation(animation):
-    view.xKeyboardScrollAnimation = nil
-    scrollView.contentOffset = target
+  if owner of Window:
+    discard Window(owner).makeFirstResponder(view.textView())
+  true
+
+proc toggleSelectedMarkdownSection(view: MarkdownView): bool =
+  let index = view.selectedMarkdownNavigationItem()
+  if index < 0:
+    return
+  let item = view.xMarkdownNavigationItems[index]
+  let identifier =
+    if item.headingIdentifier.len > 0:
+      item.headingIdentifier
+    else:
+      item.sectionIdentifier
+  if identifier.len == 0:
+    return
+  view.scrollView().cancelKeyboardScroll()
+  view.xPendingMarkdownHeadingSelection = identifier
+  view.toggleHeading(identifier)
 
 proc handleMarkdownNavigationKey*(view: MarkdownView, event: KeyEvent): bool =
+  ## Scroll with arrows/pages/Space, select visible headings and paragraphs with
+  ## j/k, and toggle the selected block's section with Enter.
   if view.isNil or event.modifiers != {}:
     return
-  let scrollView = view.scrollView()
-  if scrollView.isNil:
-    return
-  let delta =
+  case event.key
+  of keyJ, keyK, keyEnter:
+    if view.xActiveMarkdownGeneration != 0 or view.xActiveMarkdownRenderGeneration != 0:
+      return true
     case event.key
-    of keyArrowLeft:
-      initPoint(
-        -scrollView.lineScroll(laHorizontal) * MarkdownKeyboardScrollRows, 0.0'f32
-      )
-    of keyArrowRight:
-      initPoint(
-        scrollView.lineScroll(laHorizontal) * MarkdownKeyboardScrollRows, 0.0'f32
-      )
-    of keyArrowUp:
-      initPoint(
-        0.0'f32, -scrollView.lineScroll(laVertical) * MarkdownKeyboardScrollRows
-      )
-    of keyArrowDown:
-      initPoint(0.0'f32, scrollView.lineScroll(laVertical) * MarkdownKeyboardScrollRows)
-    of keyK:
-      initPoint(0.0'f32, -scrollView.lineScroll(laVertical))
     of keyJ:
-      initPoint(0.0'f32, scrollView.lineScroll(laVertical))
-    of keySpace:
-      initPoint(
-        0.0'f32, scrollView.viewportSize().height * MarkdownKeyboardPageFraction
-      )
+      view.navigateMarkdownBlock(1)
+    of keyK:
+      view.navigateMarkdownBlock(-1)
     else:
-      return
-  view.scrollMarkdownBy(delta)
-  true
+      view.toggleSelectedMarkdownSection()
+  else:
+    Responder(view.scrollView()).performScrollKeyInChain(event, consumeIfOffered = true)
 
 protocol MarkdownViewKeyEquivalents of ResponderCommandDispatchProtocol:
   method performKeyEquivalent(view: MarkdownView, event: KeyEvent): bool =
@@ -2881,6 +2916,7 @@ proc updateMarkdown*(
   view.xPendingUrlAssets.clear()
   if not preserveHeadingState:
     view.xCollapsedMarkdownHeadings.clear()
+  view.xPendingMarkdownHeadingSelection.setLen(0)
   view.xMarkdownHeadingIdentifiers = identifiers
   view.xMarkdown = source
   view.scheduleMarkdownParse()
@@ -3043,6 +3079,10 @@ proc newMarkdownView*(
     syntaxHighlighter: SyntaxHighlighter = matterSyntaxHighlighter,
 ): MarkdownView =
   ## Creates a scrollable, selectable, read-only Markdown document view.
+  ##
+  ## Arrows and page keys scroll through the shared NimKit scroll-container
+  ## behavior. j/k select visible headings and paragraphs; Enter toggles their
+  ## section and preserves its heading selection after rendering.
   ##
   ## Built-in CommonMark and GFM configurations parse asynchronously on a
   ## shared Sigils pool worker. The owning application thread applies the AST

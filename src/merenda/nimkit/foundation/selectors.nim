@@ -103,6 +103,13 @@ protocol ResponderCommandDispatchProtocol:
 protocol UndoManagerProvider:
   method undoManager*(): Option[UndoManager] {.optional.}
 
+protocol ScrollNavigationProtocol:
+  method wantsScrollNavigation*(event: KeyEvent): bool {.optional.}
+    ## A focused reader requests scrolling after other key equivalents decline.
+
+  method scrollKey*(event: KeyEvent): bool {.optional.}
+    ## Handle a reading-navigation key when this container can scroll its axis.
+
 protocol MouseHitPolicyProtocol:
   method mouseHitPolicy*(args: MouseHitPolicyArgs): CellHitPolicy {.optional.}
   method applyMouseHitPolicy*(args: MouseHitPolicyArgs): bool {.optional.}

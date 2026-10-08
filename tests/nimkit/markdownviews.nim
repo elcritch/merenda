@@ -1858,13 +1858,6 @@ Press <kbd>Enter</kbd>.
     check window.animationScheduler().tick(140.ms) == 1
     check scrollView.contentOffset().y == arrowY
 
-    check window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ, keyCode: keyJ.ord))
-    check window.animationScheduler().tick(140.ms) == 1
-    check scrollView.contentOffset().y == arrowY + lineY
-    check window.dispatchKeyDown(KeyEvent(text: "k", key: keyK, keyCode: keyK.ord))
-    check window.animationScheduler().tick(140.ms) == 1
-    check scrollView.contentOffset().y == arrowY
-
     check window.dispatchKeyDown(
       KeyEvent(text: " ", key: keySpace, keyCode: keySpace.ord)
     )
@@ -1877,6 +1870,108 @@ Press <kbd>Enter</kbd>.
     scrollView.contentOffset = initPoint(0.0, 0.0)
     check window.dispatchKeyDown(KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord))
     check scrollView.contentOffset() == initPoint(0.0, 0.0)
+
+  test "j and k select visible Markdown headings and paragraphs in reading order":
+    let
+      view = newMarkdownView(
+        "# First\n\nΚαλημέρα paragraph.\n\nSecond paragraph.\n\n" &
+          "## Nested\n\nNested paragraph.\n\n# Last\n\nLast paragraph.",
+        frame = rect(0, 0, 360, 120),
+      )
+      window = newWindow("Markdown block navigation", frame = rect(0, 0, 360, 120))
+    defer:
+      window.close()
+    window.setContentView(view)
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    view.textView().selectedRange = initTextRange(0, 0)
+    require window.makeFirstResponder(view.textView())
+    for expected in [
+      "First", "Καλημέρα paragraph.", "Second paragraph.", "Nested",
+      "Nested paragraph.", "Last", "Last paragraph.",
+    ]:
+      require window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ))
+      check view.textView().selectedText() == expected
+    check view.scrollView().contentOffset().y > 0
+    require window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ, repeated: true))
+    check view.textView().selectedText() == "Last paragraph."
+    require window.dispatchKeyDown(KeyEvent(text: "k", key: keyK))
+    check view.textView().selectedText() == "Last"
+    let selection = view.textView().selectedRange()
+    check not view.handleMarkdownNavigationKey(
+      KeyEvent(key: keyJ, modifiers: {kmControl})
+    )
+    check view.textView().selectedRange() == selection
+    view.textView().selectedRange = initTextRange(
+      view.textStorage().stringValue().runeIndexOf("Καλημέρα") + 2, 3
+    )
+    require window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ))
+    check view.textView().selectedText() == "Second paragraph."
+    require window.dispatchKeyDown(KeyEvent(text: "k", key: keyK))
+    check view.textView().selectedText() == "Καλημέρα paragraph."
+    view.textView().selectedRange = initTextRange(0, 0)
+    view.scrollView().scrollTo(initPoint(0, 0))
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    require window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ))
+    check window.animationScheduler().tick(140.ms) == 0
+    check view.textView().selectedText() == "First"
+
+  test "Enter toggles the selected paragraph section and preserves its heading selection":
+    let
+      view = newMarkdownView(
+        "# First\n\nBody.\n\n## Nested\n\nNested body.\n\n# Last\n\nLast body."
+      )
+      window = newWindow("Markdown section navigation", frame = rect(0, 0, 360, 180))
+    defer:
+      window.close()
+    window.setContentView(view)
+    require view.waitForMarkdownParsing()
+    discard buildRenders(view)
+    view.selectedRange = initTextRange(0, 0)
+    require window.makeFirstResponder(view)
+    for expected in ["First", "Body.", "Nested", "Nested body."]:
+      require window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ))
+      check view.textView().selectedText() == expected
+    require window.dispatchKeyDown(KeyEvent(key: keyEnter))
+    require view.waitForMarkdownRendering()
+    check "Nested body." notin view.textStorage().stringValue()
+    check "Body." in view.textStorage().stringValue()
+    check view.textView().selectedText() == "Nested"
+    require window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ))
+    check view.textView().selectedText() == "Last"
+    require window.dispatchKeyDown(KeyEvent(text: "k", key: keyK))
+    require window.dispatchKeyDown(KeyEvent(key: keyEnter))
+    require view.waitForMarkdownRendering()
+    check "Nested body." in view.textStorage().stringValue()
+    check view.textView().selectedText() == "Nested"
+    require window.dispatchKeyDown(KeyEvent(text: "k", key: keyK))
+    require window.dispatchKeyDown(KeyEvent(text: "k", key: keyK))
+    check view.textView().selectedText() == "First"
+    require window.dispatchKeyDown(KeyEvent(key: keyEnter))
+    require view.waitForMarkdownRendering()
+    check "Nested" notin view.textStorage().stringValue()
+    check view.textView().selectedText() == "First"
+    require window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ))
+    check view.textView().selectedText() == "Last"
+
+  test "Markdown block navigation maps list and quote paragraphs and resets on replacement":
+    let view = newMarkdownView(
+      "# Header\n\n- one **λ**\n- two\n\n> quoted α\n>\n> second β\n\n" &
+        "```nim\nlet skipped = 1\n```\n\n# End"
+    )
+    require view.waitForMarkdownParsing()
+    view.selectedRange = initTextRange(0, 0)
+    for expected in ["Header", "one λ", "two", "quoted α", "second β", "End"]:
+      require view.handleMarkdownNavigationKey(KeyEvent(key: keyJ))
+      check view.textView().selectedText() == expected
+    view.markdown = "# Replacement\n\nFresh paragraph."
+    require view.handleMarkdownNavigationKey(KeyEvent(key: keyEnter))
+    require view.waitForMarkdownParsing()
+    view.selectedRange = initTextRange(0, 0)
+    require view.handleMarkdownNavigationKey(KeyEvent(key: keyJ))
+    check view.textView().selectedText() == "Replacement"
+    require view.handleMarkdownNavigationKey(KeyEvent(key: keyJ))
+    check view.textView().selectedText() == "Fresh paragraph."
 
   test "repository README renders and responds to clicks":
     let

@@ -2496,6 +2496,9 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
     return window.dispatchKeyCommand(target, event).dispatch.handled
   if target.performKeyEquivalentInChain(event):
     return true
+  if target.trySendLocal(wantsScrollNavigation(), event).get(false) and
+      target.performScrollKeyInChain(event, consumeIfOffered = true):
+    return true
   window.dispatchKeyCommand(target, event).dispatch.handled
 
 proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
@@ -2523,9 +2526,10 @@ proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
       return window.dismissTransientSession(tdrEscape)
   if target.isNil:
     return false
-  if dispatchTextFirst:
-    return false
-  window.dispatchKeyEventInChain(target, event, keyDown()).handled
+  if not dispatchTextFirst and
+      window.dispatchKeyEventInChain(target, event, keyDown()).handled:
+    return true
+  target.performScrollKeyInChain(event)
 
 proc dispatchKeyUp*(window: Window, event: events.KeyEvent): bool =
   let target = window.keyDispatchTarget()

@@ -568,11 +568,17 @@ suite "Kosmo synthetic shortcut input":
     require preview.waitForMarkdownParsing()
     frontend.contentView.layoutSubtreeIfNeeded()
     require frontend.window.makeFirstResponder(preview)
-
-    let beforeNavigation = preview.scrollView().contentOffset().y
+    preview.textView().selectedRange = initTextRange(0, 0)
     check frontend.window.dispatchKeyDown(
       KeyEvent(text: "j", key: keyJ, keyCode: keyJ.ord)
     )
+    check preview.textView().selectedText() == "Preview"
+    check frontend.window.dispatchKeyDown(
+      KeyEvent(text: "j", key: keyJ, keyCode: keyJ.ord)
+    )
+    check "scrollable line" in preview.textView().selectedText()
+    let beforeNavigation = preview.scrollView().contentOffset().y
+    check frontend.window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
     discard frontend.window.animationScheduler().tick(140.ms)
     check preview.scrollView().contentOffset().y > beforeNavigation
 
@@ -588,6 +594,7 @@ suite "Kosmo synthetic shortcut input":
     check preview.scrollView().contentOffset().y > afterEscape
 
     let afterCancelledNavigation = preview.scrollView().contentOffset().y
+    require frontend.window.makeFirstResponder(preview.textView())
     check frontend.window.pressControlKey(keyW)
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord)

@@ -2929,6 +2929,10 @@ protocol DefaultTextViewCommandDispatch of ResponderCommandDispatchProtocol:
   method dispatchCommand(textView: TextView, args: TryToPerformArgs): bool =
     textView.performTextInputCommand(args.selector, args.sender)
 
+protocol DefaultTextViewScrollNavigation of ScrollNavigationProtocol:
+  method wantsScrollNavigation(textView: TextView, event: KeyEvent): bool =
+    not textView.editable() and event.modifiers == {} and event.key in KeyboardScrollKeys
+
 protocol DefaultTextViewDrawing of ViewDrawingProtocol:
   method drawUnderlay(textView: TextView, context: DrawContext) =
     textView.updateTextContainer()
@@ -3493,6 +3497,7 @@ proc initTextViewFields*(
   discard textView.withProtocol(DefaultTextViewLayoutEventSlots)
   discard textView.withProtocol(DefaultTextViewAccessibility)
   discard textView.withProtocol(DefaultTextViewCommandDispatch)
+  discard textView.withProtocol(DefaultTextViewScrollNavigation)
   discard textView.withProtocol(DefaultTextViewDraggingSource)
   discard textView.withProtocol(DefaultTextViewDraggingDestination)
   textView.installTextInputClientMethods()

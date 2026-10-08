@@ -1,4 +1,4 @@
-import std/[json, strutils, unicode, unittest]
+import std/[json, strutils, times, unicode, unittest]
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import fixtures/ui
@@ -166,6 +166,43 @@ suite "Kosmo GitHub Markdown viewer":
     check "Improve rendering" in markdown
     check "MERGED" in markdown
     check "Fix" notin markdown
+
+  test "GitHub forwards reading scroll and Markdown section navigation after host shortcuts":
+    var snapshot = sampleSnapshot()
+    snapshot.items[0].body = "A long issue paragraph.\n\n".repeat(50)
+    let
+      panel = newKosmoGitHubPanel(snapshot)
+      window = newWindow("GitHub keyboard navigation", frame = rect(0, 0, 600, 280))
+    defer:
+      panel.close()
+      window.close()
+    window.setContentView(panel)
+    require panel.waitForGitHub()
+    panel.layoutSubtreeIfNeeded()
+    let scroll = panel.markdownView.scrollView()
+    require scroll.maximumContentOffset().y > 64
+    panel.keyEquivalentHandler = proc(event: KeyEvent): bool =
+      event.key == keyF2
+    require window.makeFirstResponder(panel.markdownView.textView())
+    panel.markdownView.selectedRange = initTextRange(0, 0)
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check window.animationScheduler().tick(140.ms) == 1
+    check scroll.contentOffset().y == 64
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowUp))
+    check window.animationScheduler().tick(140.ms) == 1
+    check scroll.contentOffset().y == 0
+    require window.dispatchKeyDown(KeyEvent(key: keyF2))
+    require window.dispatchKeyDown(KeyEvent(text: "j", key: keyJ))
+    let heading = panel.markdownView.textView().selectedText()
+    require heading.len > 0
+    let expandedLength = panel.markdownView.textStorage().len
+    require window.dispatchKeyDown(KeyEvent(key: keyEnter))
+    require panel.waitForGitHub()
+    check panel.markdownView.textStorage().len < expandedLength
+    check panel.markdownView.textView().selectedText() == heading
+    require window.dispatchKeyDown(KeyEvent(key: keyEnter))
+    require panel.waitForGitHub()
+    check panel.markdownView.textStorage().len == expandedLength
 
   test "offline document supports filters, native find, and tab close":
     let frontend =

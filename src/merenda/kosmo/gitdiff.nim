@@ -2112,22 +2112,7 @@ proc handleSharedKeys(panel: KosmoGitDiffPanel, event: nimkit.KeyEvent): bool =
     return true
   if event.key == nimkit.keyTab and event.modifiers == {}:
     return panel.focusFirstDisclosure()
-  if event.modifiers == {}:
-    var delta: float32
-    case event.key
-    of nimkit.keyArrowDown:
-      delta = 32
-    of nimkit.keyArrowUp:
-      delta = -32
-    of nimkit.keyPageDown, nimkit.keySpace:
-      delta = panel.scrollView.viewportSize().height * 0.85
-    of nimkit.keyPageUp:
-      delta = -panel.scrollView.viewportSize().height * 0.85
-    else:
-      return false
-    let offset = panel.scrollView.contentOffset()
-    panel.scrollView.contentOffset = nimkit.initPoint(offset.x, offset.y + delta)
-    return true
+  panel.scrollView.handleScrollNavigationKey(event)
 
 # Resolve the selector before protocol expansion mixes in menu/window overloads.
 let performKeyEquivalent = nimkitSelectors.performKeyEquivalent()

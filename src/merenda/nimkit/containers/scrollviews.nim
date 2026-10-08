@@ -1,6 +1,9 @@
+import std/times
+
 import sigils/core
 
 import ../app/animations
+from ../app/windows import Window, startAnimation, stopAnimation
 import ../accessibility/accessibilityprotocols
 import ../drawing
 import ./scrollergeometry
@@ -29,13 +32,13 @@ type
     thickness*: float32
 
   ClipView* = ref object of View
-    xScrollView: ScrollView
+    xScrollView: BackRef[ScrollView]
     xDocumentView: View
     xDocumentCursor: string
     xDrawsBackground: bool
 
   Scroller* = ref object of View
-    xScrollView: ScrollView
+    xScrollView: BackRef[ScrollView]
     xAxis: LayoutAxis
     xTracking: ScrollerTrackingState
 
@@ -57,6 +60,11 @@ type
     xCornerView: View
     xRuler: array[LayoutAxis, RulerPlaceholder]
     xDynamicScrolling: bool
+    xKeyboardScrollAnimation: BackRef[KeyboardScrollAnimation]
+    xKeyboardScrollTarget: Point
+
+  KeyboardScrollAnimation = ref object of PropertyAnimation[Point]
+    backRefs: BackRefSet[KeyboardScrollAnimation]
 
   ScrollViewLayout = object
     visibleAxes: set[LayoutAxis]
@@ -66,6 +74,11 @@ type
     cornerFrame: Rect
     horizontalScrollerFrame: Rect
     verticalScrollerFrame: Rect
+
+const
+  KeyboardScrollDuration = initDuration(milliseconds = 140)
+  KeyboardScrollRows = 4.0'f32
+  KeyboardScrollPageFraction = 0.25'f32
 
 func normalizedScrollerThickness(value: float32): float32 =
   max(value, 0.0'f32)
@@ -97,6 +110,7 @@ proc scrollerRole*(scrollView: ScrollView): StyleRole
 
 proc documentRect*(clipView: ClipView): Rect
 proc lineScroll*(scrollView: ScrollView, axis: LayoutAxis): float32
+proc pageScroll*(scrollView: ScrollView, axis: LayoutAxis): float32
 proc reflectScrolledClipView*(scrollView: ScrollView, clipView: ClipView)
 
 proc scrollViewStyleContext(scrollView: ScrollView): StyleContext =
@@ -108,11 +122,14 @@ proc scrollViewStyleContext(scrollView: ScrollView): StyleContext =
   )
 
 proc scrollerStyleContext(scroller: Scroller): StyleContext =
+  let owner = scroller.xScrollView.target
+  if owner.isNil:
+    return controlStyle(srScroller, scroller.widgetStateSet())
   controlStyle(
-    scroller.xScrollView.scrollerRole(),
+    owner.scrollerRole(),
     scroller.widgetStateSet(),
-    id = scroller.xScrollView.styleId(),
-    classes = scroller.xScrollView.styleClasses(),
+    id = owner.styleId(),
+    classes = owner.styleClasses(),
   )
 
 protocol ScrollTransactionAnimProtocol:
@@ -325,7 +342,11 @@ proc `drawsBackground=`*(clipView: ClipView, value: bool) =
   clipView.needsDisplay = true
 
 proc constrainScrollPoint*(clipView: ClipView, point: Point): Point =
-  clipView.xScrollView.clampContentOffset(point)
+  let owner = clipView.xScrollView.target
+  if owner.isNil:
+    point
+  else:
+    owner.clampContentOffset(point)
 
 proc scrollToPoint*(clipView: ClipView, point: Point) =
   let
@@ -337,21 +358,26 @@ proc scrollToPoint*(clipView: ClipView, point: Point) =
   # Scrolling bypasses the regular bounds setter, so notify observers that
   # depend on the visible region, including lazy content containers.
   emit clipView.geometryDidChange()
-  clipView.xScrollView.reflectScrolledClipView(clipView)
+  let owner = clipView.xScrollView.target
+  if not owner.isNil:
+    owner.reflectScrolledClipView(clipView)
 
 proc autoscroll*(clipView: ClipView, event: MouseEvent): bool =
+  let owner = clipView.xScrollView.target
+  if owner.isNil:
+    return
   let
     bounds = clipView.bounds()
     edge = min(24.0'f32, min(bounds.size.width, bounds.size.height) / 4.0'f32)
   var delta = initPoint(0.0, 0.0)
   if event.location.x < bounds.minX + edge:
-    delta.x = -clipView.xScrollView.lineScroll(laHorizontal)
+    delta.x = -owner.lineScroll(laHorizontal)
   elif event.location.x >= bounds.maxX - edge:
-    delta.x = clipView.xScrollView.lineScroll(laHorizontal)
+    delta.x = owner.lineScroll(laHorizontal)
   if event.location.y < bounds.minY + edge:
-    delta.y = -clipView.xScrollView.lineScroll(laVertical)
+    delta.y = -owner.lineScroll(laVertical)
   elif event.location.y >= bounds.maxY - edge:
-    delta.y = clipView.xScrollView.lineScroll(laVertical)
+    delta.y = owner.lineScroll(laVertical)
   if delta.x == 0.0'f32 and delta.y == 0.0'f32:
     return false
   let nextPoint = clipView.constrainScrollPoint(bounds.origin.offset(delta.x, delta.y))
@@ -383,7 +409,9 @@ protocol DefaultClipViewGeometry of ViewProtocol:
       clipView.markRenderStructureChanged()
     else:
       clipView.needsDisplay = true
-    clipView.xScrollView.reflectScrolledClipView(clipView)
+    let owner = clipView.xScrollView.target
+    if not owner.isNil:
+      owner.reflectScrolledClipView(clipView)
 
 proc horizontalHeaderRect(scrollView: ScrollView): Rect =
   if scrollView.xHeaderView[laHorizontal].isNil:
@@ -534,6 +562,85 @@ proc scrollToFraction*(scrollView: ScrollView, fraction: Point) =
 proc scrollBy*(scrollView: ScrollView, delta: Point) =
   let current = scrollView.contentOffset()
   scrollView.contentOffset = initPoint(current.x + delta.x, current.y + delta.y)
+
+proc finishKeyboardScroll(scrollView: ScrollView) {.slot.} =
+  scrollView.xKeyboardScrollAnimation.clear()
+
+proc cancelKeyboardScroll*(scrollView: ScrollView) =
+  ## Stop an in-flight keyboard scroll before selecting or revealing other content.
+  if scrollView.xKeyboardScrollAnimation.isNil:
+    return
+  let animation = scrollView.xKeyboardScrollAnimation.target
+  scrollView.xKeyboardScrollAnimation.clear()
+  let owner = scrollView.window()
+  if owner of Window:
+    discard Window(owner).stopAnimation(animation)
+  else:
+    animation.stop()
+
+proc scrollByKeyboard(scrollView: ScrollView, delta: Point) =
+  let
+    current = scrollView.contentOffset()
+    start =
+      if not scrollView.xKeyboardScrollAnimation.isNil and
+          scrollView.xKeyboardScrollAnimation.target.isRunning:
+        scrollView.xKeyboardScrollTarget
+      else:
+        current
+    target =
+      scrollView.clampContentOffset(initPoint(start.x + delta.x, start.y + delta.y))
+  scrollView.cancelKeyboardScroll()
+  if target == current:
+    return
+  discard scrollView.withProtocol(ScrollTransactionAnim)
+  let animation = KeyboardScrollAnimation()
+  initPropertyAnimationFields[Point](
+    PropertyAnimation[Point](animation),
+    DynamicAgent(scrollView),
+    animContentOffset(),
+    current,
+    target,
+    KeyboardScrollDuration,
+  )
+  animation.timing = easeOutTiming()
+  scrollView.xKeyboardScrollTarget = target
+  scrollView.xKeyboardScrollAnimation.set(animation, animation.backRefs)
+  animation.connect(finished, scrollView, finishKeyboardScroll)
+  let owner = scrollView.window()
+  if not (owner of Window) or not Window(owner).startAnimation(animation):
+    scrollView.xKeyboardScrollAnimation.clear()
+    scrollView.contentOffset = target
+
+proc handleScrollNavigationKey*(scrollView: ScrollView, event: KeyEvent): bool =
+  ## Smoothly scroll arrows by four lines, Page Up/Down by a page, and Space
+  ## by a quarter viewport. Repeated keys accumulate; offsets stay within bounds.
+  ## Return false for modified keys or an axis without overflow, so an enclosing
+  ## scroll container can handle it.
+  if scrollView.isNil or event.modifiers != {}:
+    return
+  let delta =
+    case event.key
+    of keyArrowLeft:
+      initPoint(-scrollView.lineScroll(laHorizontal) * KeyboardScrollRows, 0)
+    of keyArrowRight:
+      initPoint(scrollView.lineScroll(laHorizontal) * KeyboardScrollRows, 0)
+    of keyArrowUp:
+      initPoint(0, -scrollView.lineScroll(laVertical) * KeyboardScrollRows)
+    of keyArrowDown:
+      initPoint(0, scrollView.lineScroll(laVertical) * KeyboardScrollRows)
+    of keyPageUp:
+      initPoint(0, -scrollView.pageScroll(laVertical))
+    of keyPageDown:
+      initPoint(0, scrollView.pageScroll(laVertical))
+    of keySpace:
+      initPoint(0, scrollView.viewportSize().height * KeyboardScrollPageFraction)
+    else:
+      return
+  let maximum = scrollView.maximumContentOffset()
+  if (delta.x != 0 and maximum.x <= 0) or (delta.y != 0 and maximum.y <= 0):
+    return
+  scrollView.scrollByKeyboard(delta)
+  true
 
 proc scrollRectToVisible*(scrollView: ScrollView, rect: Rect): bool =
   let
@@ -839,9 +946,11 @@ proc scrollerTrackRect*(scroller: Scroller): Rect =
   scroller.bounds()
 
 proc scrollerKnobRect*(scroller: Scroller): Rect =
+  let scrollView = scroller.xScrollView.target
+  if scrollView.isNil:
+    return
   let
     track = scroller.scrollerTrackRect()
-    scrollView = scroller.xScrollView
     viewport = scrollView.viewportSize()
     document = scrollView.documentSize()
     offset = scrollView.contentOffset()
@@ -891,12 +1000,15 @@ proc setContentOffset(scrollView: ScrollView, axis: LayoutAxis, offset: float32)
   scrollView.contentOffset = nextOffset
 
 proc scrollKnobTo(scroller: Scroller, point: Point) =
+  let scrollView = scroller.xScrollView.target
+  if scrollView.isNil:
+    return
   let
     knobOrigin = scroller.xTracking.knobOriginForPoint(scroller.xAxis, point)
     track = scroller.scrollerTrackRect()
     knob = scroller.scrollerKnobRect()
-    maxOffset = scroller.xScrollView.maximumContentOffset().axisOffset(scroller.xAxis)
-  scroller.xScrollView.setContentOffset(
+    maxOffset = scrollView.maximumContentOffset().axisOffset(scroller.xAxis)
+  scrollView.setContentOffset(
     scroller.xAxis,
     contentOffsetForScrollerKnobOrigin(
       track, knob, scroller.xAxis, maxOffset, knobOrigin
@@ -904,6 +1016,9 @@ proc scrollKnobTo(scroller: Scroller, point: Point) =
   )
 
 proc scrollPageToward(scroller: Scroller, point: Point) =
+  let scrollView = scroller.xScrollView.target
+  if scrollView.isNil:
+    return
   let
     knob = scroller.scrollerKnobRect()
     pointOnAxis = point.axisOffset(scroller.xAxis)
@@ -915,7 +1030,6 @@ proc scrollPageToward(scroller: Scroller, point: Point) =
 
   let
     direction = if pointOnAxis < knob.axisOrigin(scroller.xAxis): -1.0'f32 else: 1.0'f32
-    scrollView = scroller.xScrollView
     currentOffset = scrollView.contentOffset().axisOffset(scroller.xAxis)
     page = scrollView.pageScroll(scroller.xAxis)
   scrollView.setContentOffset(scroller.xAxis, currentOffset + direction * page)
@@ -1002,8 +1116,13 @@ protocol DefaultScrollViewEvents of ResponderEventProtocol:
 
   method scrollWheel(scrollView: ScrollView, event: ScrollEvent): bool =
     if scrollView.scrollWheelWouldMove(event):
+      scrollView.cancelKeyboardScroll()
       scrollView.scrollBy(scrollView.scrollWheelDelta(event))
       return true
+
+protocol DefaultScrollViewNavigation of ScrollNavigationProtocol:
+  method scrollKey(scrollView: ScrollView, event: KeyEvent): bool =
+    scrollView.handleScrollNavigationKey(event)
 
 proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
   result = Scroller()
@@ -1011,7 +1130,7 @@ proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
   result.autoresizingMaskConstraints = false
   result.background = color(0.0, 0.0, 0.0, 0.0)
   result.setHiddenFromLayout(true)
-  result.xScrollView = scrollView
+  result.xScrollView.target = scrollView
   result.xAxis = axis
   discard result.withProtocol(DefaultScrollerDrawing)
   discard result.withProtocol(DefaultScrollerEvents)
@@ -1022,7 +1141,7 @@ proc initClipView(scrollView: ScrollView, frame: Rect): ClipView =
   result.autoresizingMaskConstraints = false
   result.background = color(0.0, 0.0, 0.0, 0.0)
   result.clipsToBounds = true
-  result.xScrollView = scrollView
+  result.xScrollView.target = scrollView
   result.xDrawsBackground = false
   discard result.withProtocol(DefaultClipViewDrawing)
   discard result.withProtocol(DefaultClipViewGeometry)
@@ -1054,6 +1173,7 @@ proc initScrollViewFields*(scrollView: ScrollView, frame: Rect = AutoRect) =
   discard scrollView.withProtocol(DefaultScrollViewLayout)
   discard scrollView.withProtocol(DefaultScrollViewDrawing)
   discard scrollView.withProtocol(DefaultScrollViewEvents)
+  discard scrollView.withProtocol(DefaultScrollViewNavigation)
   discard scrollView.withProtocol(DefaultScrollViewAccessibility)
 
 proc newScrollView*(frame: Rect = AutoRect, documentView: View = nil): ScrollView =

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Share smooth arrow/page keyboard scrolling across NimKit scroll containers
+  and read-only text views, including Kosmo Markdown, GitHub and Git diff readers.
+  Preserve editable text cursor movement and pass vertical keys through embedded
+  horizontal scrollers. Markdown j/k now select visible headings and paragraphs;
+  Enter expands or collapses their section and keeps its heading selected.
+
 - Default Kosmo terminals to Hybrid shortcut routing: use Ctrl-W pane chords
   and arrow continuations for splits and navigation, and Ctrl-C/Ctrl-V for
   copy/paste on Linux and Windows. Ctrl-backslash quotes the next shortcut,

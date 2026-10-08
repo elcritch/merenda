@@ -129,6 +129,37 @@ suite "Kosmo Git diff":
     check panel.snapshot.files[wideIndex].patchState == gdpsLoaded
     check "+" & "b".repeat(10_300) in panel.snapshot.files[wideIndex].patch
 
+  test "summary and diff text share NimKit arrow scrolling":
+    let
+      snapshot = parseGitDiff(
+        "diff --git a/source.nim b/source.nim\n@@ -0,0 +1,80 @@\n" &
+          "+let value = 1\n".repeat(80)
+      )
+      panel = newKosmoGitDiffPanel(snapshot)
+      window = newWindow("Git diff arrow scrolling", frame = rect(0, 0, 700, 280))
+    defer:
+      panel.close()
+      window.close()
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    panel.layoutSubtreeIfNeeded()
+    require panel.scrollView.maximumContentOffset().y > 64
+    let code = panel.textViewForFile(0)
+    require not code.isNil
+    for target in [panel.markdownView.textView(), code]:
+      panel.scrollView.scrollTo(initPoint(0, 0))
+      target.selectedRange = initTextRange(0, 0)
+      require window.makeFirstResponder(target)
+      require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+      check window.animationScheduler().tick(140.ms) == 1
+      check panel.scrollView.contentOffset().y == 64
+      check panel.markdownView.scrollView().contentOffset().y == 0
+      check target.selectedRange() == initTextRange(0, 0)
+      require window.dispatchKeyDown(KeyEvent(key: keyArrowUp))
+      check window.animationScheduler().tick(140.ms) == 1
+      check panel.scrollView.contentOffset().y == 0
+
   test "summary and expanded files share wheel scrolling":
     let root = createTempDir("kosmo-diff-scroll-", "")
     defer:
