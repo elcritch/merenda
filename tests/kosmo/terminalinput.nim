@@ -9,6 +9,9 @@ proc keyEvent(key: Key, modifiers: set[nimkit.KeyModifier] = {}, text = ""): Key
 proc controlKey(key: Key): KeyEvent =
   keyEvent(key, {nimkit.kmControl})
 
+func terminalIsFocused(window: Window, terminal: KosmoTerminalView): bool =
+  window.firstResponder() == Responder(terminal)
+
 proc terminalDocument(identifier: string): KosmoPaneDocument =
   let terminal = newKosmoTerminalView()
   newKosmoPaneDocument(
@@ -146,25 +149,30 @@ suite "Kosmo terminal input routing":
       frontend.window.close()
     app.addWindow(frontend.window)
     frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 1000, 700)
     require frontend.openDocument(document)
+    # A single document duplicates on split; multiple tabs move the selected tab.
+    require frontend.documentTabs.closeDocumentTabAtIndex(0)
+    require frontend.documentTabs.len == 1
     frontend.contentView.layoutSubtreeIfNeeded()
-    require frontend.window.firstResponder() == Responder(terminal)
+    require frontend.window.terminalIsFocused(terminal)
     require frontend.window.dispatchKeyDown(controlKey(keyW))
     require frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
     check frontend.editorGroups().len == 2
+    frontend.contentView.layoutSubtreeIfNeeded()
     let second = frontend.window.firstResponder()
     require second of KosmoTerminalView
-    check second != Responder(terminal)
+    check not frontend.window.terminalIsFocused(terminal)
     # The native text commit for a consumed continuation must not reach the new pane.
     check frontend.window.dispatchTextInput("v")
     require frontend.window.dispatchKeyDown(controlKey(keyW))
     require frontend.window.dispatchKeyDown(keyEvent(keyArrowLeft))
-    check frontend.window.firstResponder() == Responder(terminal)
+    check frontend.window.terminalIsFocused(terminal)
     require frontend.window.dispatchKeyDown(controlKey(keyBackslash))
     require frontend.window.dispatchKeyDown(controlKey(keyW))
     require frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
     check frontend.editorGroups().len == 2
-    check frontend.window.firstResponder() == Responder(terminal)
+    check frontend.window.terminalIsFocused(terminal)
 
   test "focused raw terminals beat configured window shortcut prefixes":
     let
@@ -189,9 +197,9 @@ suite "Kosmo terminal input routing":
     )
     frontend.window.setKeyBindings(bindings)
     require frontend.window.dispatchKeyDown(controlKey(keyW))
-    require frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
+    discard frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
     check frontend.editorGroups().len == 1
-    check frontend.window.firstResponder() == Responder(terminal)
+    check frontend.window.terminalIsFocused(terminal)
 
   test "focus and policy changes clear unfinished terminal chords":
     let
@@ -208,18 +216,18 @@ suite "Kosmo terminal input routing":
     require frontend.window.dispatchKeyDown(controlKey(keyW))
     require frontend.window.makeFirstResponder(frontend.editorView)
     require frontend.window.makeFirstResponder(terminal)
-    require frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
+    discard frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
     check frontend.editorGroups().len == 1
     frontend.window.setKeyWindow(true)
     require frontend.window.dispatchKeyDown(controlKey(keyW))
     frontend.window.setKeyWindow(false)
     frontend.window.setKeyWindow(true)
-    require frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
+    discard frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
     check frontend.editorGroups().len == 1
     require frontend.window.dispatchKeyDown(controlKey(keyW))
     frontend.terminalInputPolicy = KosmoTerminalInputPolicy.Raw
     frontend.terminalInputPolicy = KosmoTerminalInputPolicy.Hybrid
-    require frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
+    discard frontend.window.dispatchKeyDown(keyEvent(keyV, text = "v"))
     check frontend.editorGroups().len == 1
 
   test "settings persist terminal policy across windows and new documents":
