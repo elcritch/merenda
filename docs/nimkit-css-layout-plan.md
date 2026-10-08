@@ -266,3 +266,61 @@ statements. This user convention also applies to protocol hooks and examples.
 
 These are local results. GitHub checks for the expanded commit are tracked
 separately from the successful checks on the earlier CSS cleanup commit.
+
+## CI follow-up
+
+The expanded commit's shared CI runners exposed two defects. The examples
+cleanup deleted the tracked demo stylesheet (and tracked SVG assets). Replace
+the two cleanup commands with a shared helper that retains git-tracked root
+example files and the existing Nim-source exemptions, while deleting generated
+root files. Verify tracked CSS/SVG and filenames containing spaces in an
+isolated filesystem fixture.
+
+The flipped-coordinate test reproduces `InternalSolverError: The objective is
+unbounded` with Linux Nim 2.2.10 and CI's `--opt:none` settings. A diagnostic-only
+trace in the isolated Linux container shows Kiwi's by-value objective retaining
+four cells and constant 24 after the live artificial row changes to six, then
+one cell with constant zero. It subsequently selects a stale symbol. Fix this
+at the dependency's optimizer by reading the live real/artificial objective
+after each pivot. Keep the solver's exception semantics and the CSS regression
+unchanged; do not catch or suppress the internal error in CSS.
+
+Keep the dependency correction and a deterministic old-source-failing regression
+in an isolated Kiwi branch/draft PR, review them with the existing Astra reviewer,
+and pin the reviewed full commit in merenda.nimble through Atlas. Do not edit the
+parent's dependency checkout, create lockfiles or change CI compiler settings.
+Verify the reduced solver test, the original Linux CSS failure, focused CSS and
+the full Linux NimKit runner with Nim 2.2.10, plus relevant stable-C shared
+runner checks and dependency tests. Record exact results and distinguish local
+validation from the new GitHub checks before committing/pushing the CSS follow-up.
+
+### CI correction validation
+
+The reviewed Kiwi correction and regression are published in
+[Kiwi PR #2](https://github.com/elcritch/kiwiberry/pull/2). The manifest pins
+`4d273da93f67d8e5d6317898851772b32fa635ec`. A clean Atlas resolution in the
+isolated Linux checkout selected that exact commit and Stylus 0.1.5; the host's
+linked parent dependency checkout was not changed. Kiwi's own GitHub CI passed.
+
+- The identical new Kiwi regression fails on the old source and passes with
+  the correction on Linux Nim 2.2.10, ARC, threads and `--opt:none`. It checks the
+  unique optimum and every required equation. Native dependency tests pass on
+  Linux and macOS; macOS also passes the JavaScript variables test.
+- Rebuilding from the actual Atlas-pinned Linux checkout with CI's settings
+  passes all 54 focused CSS cases and all 1200 cases in the Linux NimKit runner,
+  with zero failures. The original flipped-coordinate fixture remains intact.
+- Stable Nim 2.2.12/C on macOS passes all four shared runners with the fixed
+  Kiwi source: 1772 cases, zero failures (NimKit 1206, Kosmo 371, integrations
+  153, Tekton 42). The resource-lifetime integration test passes. The old linked
+  Kiwi paths were explicitly excluded for this run; generated C confirms that
+  the isolated fixed solver and its live-objective flag were selected.
+- The CSS demo and example bundle both compile with the fixed dependency;
+  neither program was executed. The earlier IC limitation remains documented
+  above; the CI backend, Atlas jobs and nimcache settings remain unchanged.
+- The cleanup helper passes shell syntax validation and an isolated git fixture:
+  tracked CSS/SVG/assets and Nim-source exemptions survive, while generated
+  files, including filenames with spaces, are removed. `git diff --check` passes.
+
+These are local follow-up results. The expanded head `23659139` had ten successful
+GitHub checks and two failed shared-runner checks; the new follow-up head's GitHub
+checks must be reported separately after push.

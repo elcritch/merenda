@@ -303,3 +303,17 @@ backend and Atlas job/cache settings were not changed.
 On this evidence, the expanded implementation is approved for the parent's final
 commit/push/readiness decision. These are local results, not a claim that GitHub
 checks have passed for the expanded commit.
+
+## CI follow-up approval
+
+The live-objective Kiwi correction and deterministic regression were reviewed,
+with the identical regression verified to fail on old source and pass on corrected
+source. The CSS manifest pins reviewed commit
+`4d273da93f67d8e5d6317898851772b32fa635ec`; clean Atlas resolution selected it
+and Stylus 0.1.5. Pinned Linux Nim 2.2.10/CI settings passed 54 CSS and 1200 NimKit
+cases. Fixed-source macOS Nim 2.2.12/C passed all four shared runners (1772 cases,
+zero failures), and both examples compiled without execution. The tracked-asset
+cleanup helper, both workflow callers, source-selection evidence and final
+validation note were reviewed. No blocking finding remains; approved for the
+authorized CSS follow-up commit/push. These local results do not claim successful
+GitHub checks for the new CSS head.
