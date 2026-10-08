@@ -1,7 +1,7 @@
 # CSS theming for NimKit
 
-Status: implemented; Astra xhigh approved the revised plan and implementation
-source, with runtime verification in progress. See `nimkit-css-plan-review.md`.
+Status: implemented and verified locally; Astra xhigh approved the revised plan
+and final implementation. See `nimkit-css-plan-review.md`.
 
 ## Existing architecture and Figuro reference
 
@@ -223,3 +223,24 @@ alter CI backends, or use fixed sleeps for event-driven assertions. The CSS agen
 owns the broad runs, example and end-user documentation. After final Astra
 review and passing checks, the CSS agent commits the isolated branch and opens
 a pull request to `main`, as subsequently requested by the user.
+
+### Completed checks
+
+- Formatted the source tree with `nph src` and the touched test/demo files.
+  This repository has no direct `src/*.nim` files.
+- Stable Nim 2.2.12 passed the shared NimKit, Kosmo and Tekton runners in the
+  full Atlas run. The integration runner initially failed its existing resource
+  settlement child-count assertion; the exact test and the complete cached
+  integration binary rerun both passed without source changes. All four shared
+  runners therefore passed across these local runs.
+- The fresh shared NimKit binary ran the single filter `NimKit CSS themes::*`
+  under an external 60-second deadline. Exactly 22 new CSS cases executed and
+  passed, including parser termination and real rendering/widget checks.
+- Stable Atlas compilation of the CSS demo and compile-only compilation of
+  `examples/all_compile.nim` passed. The example bundle was not executed.
+- Stable source checking and an IC parser smoke/termination run passed.
+- Shared NimKit and example-bundle IC builds both repeated the compiler error
+  `modules stopped for imports discovered during sem, but rescheduling found
+  no new dependency` on warm retries. Stable C validation supplied the runtime
+  and bundle results; jobs, nimcache settings and CI backends were unchanged.
+- `git diff --check` passed. These local results do not claim a GitHub CI result.

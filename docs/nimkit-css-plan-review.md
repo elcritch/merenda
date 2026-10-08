@@ -1,5 +1,10 @@
 # CSS theme plan review
 
+Final implementation approval for `d6dc5ec6`: the CSS-specific checks below
+passed, and no blocking review findings remain. All four shared runners also
+passed across the completed local runs; the initial integration failure and
+successful unchanged-source rerun are recorded under validation.
+
 Reviewed the proposed plan against NimKit, the local Figuro integration and
 the installed Stylus 0.1.5 sources. The architecture and bounded feature set are
 appropriate. **Approval recommendation: approve the revised plan for implementation.**
@@ -111,8 +116,9 @@ to verify these contracts.
 
 ## Implementation review
 
-**Source review recommendation: approve the corrected implementation, subject to
-the required tests and example compilation passing.** All findings below have
+**Final recommendation: approve the corrected CSS implementation.** The required
+CSS tests and example compilation passed for reviewed commit `d6dc5ec6`, with no
+implementation changes since source approval. All findings below have
 been corrected and rechecked in source. The implementation follows the intended
 immutable snapshot/cascade architecture, including atomic shorthand validation
 and retained variable references. The findings are retained here as the review
@@ -123,8 +129,8 @@ record, with their original evidence classification.
    `var(--gap)`. The new parser expects the function token to include its opener;
    without an adapter it counts two openings, reports unclosed rules and rejects
    variable/RGB values. A minimal `nim ic -r` tokenizer probe confirmed the token
-   sequence. The implementer has added opener consumption; shared regressions
-   still need to pass.
+   sequence. The implementer added opener consumption; the shared regressions
+   passed.
 2. **CONFIRMED — Stylus unitless numbers need normalization.** The same probe
    shows `1;` emits `tkDimension(value=1, unit=";")` followed by `tkSemicolon`;
    `1 2;` has a space pseudo-unit, and `rgb(1, 2, 3)` has comma/close-parenthesis
@@ -136,8 +142,8 @@ record, with their original evidence classification.
    `focus.ring.inset` from CSS metric-state flags. Negative insets feed
    `controlChromeOutset`, then button/text-field intrinsic size and box content
    geometry. A hover rule changing inset must invalidate layout and use current
-   geometry during interpolation. The metric key has now been added; its
-   regression is pending verification.
+   geometry during interpolation. The metric key was added and its regression
+   passed.
 4. **TRACED — Read-after-write accessors ignore the new override layer.**
    `ThemeBuilder.[]`, `Theme.[]` and `stylePatch` initially search the first base
    patch, whereas post-CSS writes now live in separate override patches. Thus a
@@ -176,8 +182,29 @@ both declarations independently.
 The shared CSS tests now include getter read-after-write checks, invalid literal
 syntax, root/child rounded shells, focus-inset relayout, appended diagnostic
 identity, variable invalidation/recovery, and the approved cascade/snapshot
-contracts. `git diff --check` passed during this source review. The tokenizer
-probe at `/tmp/nimkit_css_review_tokens.nim` uses only installed Stylus and was
-compiled with the repository's IC-capable compiler. The shared NimKit suite and
-example compilation are still being run by the implementation agent; this
-review does not claim those checks have passed yet.
+contracts. `git diff --check` passed during source review. The tokenizer probe
+at `/tmp/nimkit_css_review_tokens.nim` uses only installed Stylus and was compiled
+with the repository's IC-capable compiler.
+
+## Completed validation and broader run status
+
+The implementation agent reported these completed checks for the reviewed source:
+
+- Stable-compiler source check of the CSS tests passed.
+- Parser smoke and termination checks passed under an external 60-second deadline.
+- The stable-compiler shared NimKit runner passed.
+- The fresh shared runner was also executed with the single filter
+  `NimKit CSS themes::*` under an external 60-second deadline. Exactly 22 cases
+  were verified present; all 22 passed in 0.07 seconds.
+- Stable-compiler compilation of `examples/css_theme_demo.nim` passed.
+- Stable-compiler compile-only validation of `examples/all_compile.nim` passed.
+
+All four shared runners passed across the completed local runs. NimKit, Kosmo
+and Tekton passed their first broad run. Integration initially failed a
+resource-lifetime assertion at `resourcelifetimes:237` with child count 0; the
+parent observed the same failure on the separate terminal branch. That exact
+test then passed in isolation, and the entire freshly built, cached integration
+binary passed on rerun with exit status 0 after compilation load ended, without
+source changes. This records the observed baseline flakiness and successful
+rerun without claiming its cause was proved. These are completed local results,
+not a claim that CI has passed.
