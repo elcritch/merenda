@@ -14,6 +14,7 @@ import integrations/kosmoprocesses
 import integrations/moefrontendwork
 import integrations/kosmocliopen
 import integrations/kosmoterminalenvironment
+import integrations/kosmoterminalinput
 import integrations/nativewindowactivation
 import integrations/nativeeventloop
 import integrations/nativewindowlifecycle

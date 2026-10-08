@@ -5,12 +5,14 @@ import std/strutils
 import ../nimkit as nimkit
 import ./moe
 import ./shortcuts
+import ./terminalinput
 import ./searchbuttons
 import ./vscodegrammars as vscodeGrammars
 
 export vscodeGrammars
 
 export shortcuts
+export terminalinput.KosmoTerminalInputPolicy
 
 const
   KosmoSettingsTabsIdentifier* = "kosmo.settings.tabs"
@@ -20,6 +22,7 @@ const
   KosmoTextMateGrammarsSettingsTabIdentifier* = "kosmo.settings.textMateGrammars"
   KosmoOptionAsMetaIdentifier* = "kosmo.settings.terminal.optionAsMeta"
   KosmoTerminalLinksIdentifier* = "kosmo.settings.terminal.links"
+  KosmoTerminalInputPolicyIdentifier* = "kosmo.settings.terminal.inputPolicy"
   KosmoShortcutsTableIdentifier* = "kosmo.settings.shortcuts.table"
   KosmoShortcutProfileIdentifier* = "kosmo.settings.shortcuts.profile"
   KosmoEditorInputPolicyIdentifier* = "kosmo.settings.shortcuts.editorInput"
@@ -56,6 +59,7 @@ const
 type
   KosmoOptionAsMetaHandler* = proc(enabled: bool) {.closure.}
   KosmoTerminalLinksHandler* = proc(enabled: bool) {.closure.}
+  KosmoTerminalInputPolicyHandler* = proc(policy: KosmoTerminalInputPolicy) {.closure.}
   KosmoMoeThemeHandler* = proc(identifier: string): bool {.closure.}
   KosmoShortcutProfileHandler* = proc(profile: KosmoShortcutProfile) {.closure.}
   KosmoEditorInputPolicyHandler* = proc(policy: KosmoEditorInputPolicy) {.closure.}
@@ -97,6 +101,8 @@ type
     xOptionAsMetaHandler: KosmoOptionAsMetaHandler
     xTerminalLinksButton: nimkit.Button
     xTerminalLinksHandler: KosmoTerminalLinksHandler
+    xTerminalInputPolicyChoice: nimkit.ComboBox
+    xTerminalInputPolicyHandler: KosmoTerminalInputPolicyHandler
     xTabs: nimkit.TabView
     xShortcutsTable: nimkit.TableView
     xShortcutsSource: KosmoShortcutsTableSource
@@ -537,6 +543,21 @@ proc `terminalLinksEnabled=`*(settings: KosmoSettingsWindow, enabled: bool) =
   if not settings.isNil:
     settings.xTerminalLinksButton.state = if enabled: nimkit.bsOn else: nimkit.bsOff
 
+proc terminalInputPolicy*(settings: KosmoSettingsWindow): KosmoTerminalInputPolicy =
+  ## Return the selected terminal Control shortcut policy.
+  if not settings.isNil and settings.xTerminalInputPolicyChoice.selectedIndex == 1:
+    KosmoTerminalInputPolicy.Raw
+  else:
+    KosmoTerminalInputPolicy.Hybrid
+
+proc `terminalInputPolicy=`*(
+    settings: KosmoSettingsWindow, policy: KosmoTerminalInputPolicy
+) =
+  ## Synchronize the terminal input selector without invoking its action.
+  if not settings.isNil:
+    settings.xTerminalInputPolicyChoice.selectedIndex =
+      if policy == KosmoTerminalInputPolicy.Raw: 1 else: 0
+
 proc `shortcuts=`*(
     settings: KosmoSettingsWindow, shortcuts: openArray[KosmoShortcutSetting]
 ) =
@@ -633,6 +654,8 @@ proc newKosmoSettingsWindow*(
     optionAsMetaHandler: KosmoOptionAsMetaHandler = nil,
     terminalLinksEnabled = true,
     terminalLinksHandler: KosmoTerminalLinksHandler = nil,
+    terminalInputPolicy = KosmoTerminalInputPolicy.Hybrid,
+    terminalInputPolicyHandler: KosmoTerminalInputPolicyHandler = nil,
     shortcutProfile = defaultKosmoShortcutProfile(),
     shortcutProfileHandler: KosmoShortcutProfileHandler = nil,
     editorInputPolicy = defaultKosmoEditorInputPolicy(),
@@ -656,6 +679,7 @@ proc newKosmoSettingsWindow*(
     xContentView: nimkit.newView(),
     xOptionAsMetaHandler: optionAsMetaHandler,
     xTerminalLinksHandler: terminalLinksHandler,
+    xTerminalInputPolicyHandler: terminalInputPolicyHandler,
     xShortcutProfileHandler: shortcutProfileHandler,
     xEditorInputPolicyHandler: editorInputPolicyHandler,
     xForceInputModeHandler: forceInputModeHandler,
@@ -676,6 +700,8 @@ proc newKosmoSettingsWindow*(
     textMateGrammarsPage = newSettingsPage()
     vscodeGrammarSearchControls = nimkit.newStackView(nimkit.laHorizontal)
     optionButton = nimkit.newCheckBox("Use Option/Alt as Meta")
+    terminalInputPolicyChoice = nimkit.newComboBox(["Hybrid", "Raw shortcuts"])
+    terminalForm = nimkit.newFormView()
     terminalLinksButton = nimkit.newCheckBox(
       when defined(macosx) or defined(macos):
         "Open terminal links with Command-click"
@@ -697,12 +723,15 @@ proc newKosmoSettingsWindow*(
     vscodeGrammarSearchTable = nimkit.newTableView()
     optionChanged = nimkit.actionSelector("kosmo.optionAsMetaChanged")
     terminalLinksChanged = nimkit.actionSelector("kosmo.terminalLinksChanged")
+    terminalInputPolicyChanged =
+      nimkit.actionSelector("kosmo.terminalInputPolicyChanged")
     shortcutProfileChanged = nimkit.actionSelector("kosmo.shortcutProfileChanged")
     editorInputPolicyChanged = nimkit.actionSelector("kosmo.editorInputPolicyChanged")
     vscodeGrammarSearchAction = nimkit.actionSelector("kosmo.searchVscodeGrammars")
     vscodeGrammarInstallAction = nimkit.actionSelector("kosmo.installVscodeGrammar")
   result.xOptionAsMetaButton = optionButton
   result.xTerminalLinksButton = terminalLinksButton
+  result.xTerminalInputPolicyChoice = terminalInputPolicyChoice
   result.xFirstResponder = optionButton
   result.xTabs = tabs
   result.xShortcutsTable = shortcutsTable
@@ -815,8 +844,26 @@ proc newKosmoSettingsWindow*(
       settings.xTerminalLinksHandler(settings.terminalLinksEnabled())
   terminalLinksButton.action = terminalLinksChanged
 
+  terminalInputPolicyChoice.identifier = KosmoTerminalInputPolicyIdentifier
+  terminalInputPolicyChoice.accessibilityLabel = "Terminal input policy"
+  settings.terminalInputPolicy = terminalInputPolicy
+  terminalInputPolicyChoice.target = nimkit.newActionTarget(terminalInputPolicyChanged) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    if not settings.xTerminalInputPolicyHandler.isNil:
+      settings.xTerminalInputPolicyHandler(settings.terminalInputPolicy())
+  terminalInputPolicyChoice.action = terminalInputPolicyChanged
+  terminalForm.edgeInsets = nimkit.insets(0.0)
+  terminalForm.addRow(nimkit.newFormLabel("Terminal input"), terminalInputPolicyChoice)
+
   terminalPage.stack.addArrangedSubview(
     nimkit.newHeadingLabel("Terminal"),
+    terminalForm,
+    nimkit.newLabel("Hybrid: Ctrl-W manages panes; Raw sends Control keys directly."),
+    nimkit.newLabel(
+      "Use Ctrl-\\ before a shortcut to send it to the terminal in Hybrid mode."
+    ),
     optionButton,
     nimkit.newLabel("Use Option/Alt-B and Option/Alt-F to move by words in Bash."),
     terminalLinksButton,

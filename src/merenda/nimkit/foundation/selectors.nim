@@ -92,6 +92,9 @@ protocol ResponderEventProtocol:
 
 protocol ResponderCommandDispatchProtocol:
   method dispatchCommand*(args: TryToPerformArgs): bool {.optional.}
+  method interceptKeyEquivalent*(event: KeyEvent): bool {.optional.}
+    ## Claim focused input before window shortcut sequences are matched.
+
   method performKeyEquivalent*(event: KeyEvent): bool {.optional.}
   method validRequestorForSendType*(
     args: ValidRequestorArgs

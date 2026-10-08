@@ -5,6 +5,8 @@
 ## remain private to this module.
 
 import std/[algorithm, hashes, monotimes, options, os, strutils, tables, unicode]
+import ./panekeys
+export panekeys.KosmoPaneCommand
 from std/times import initDuration
 
 import matter/grammarpackages as matterPackages
@@ -238,24 +240,6 @@ type
     Jobs
     Terminal
     Pane
-
-  KosmoPaneCommand* = enum
-    kpcNone
-    kpcSplitBelow
-    kpcSplitRight
-    kpcNewBelow
-    kpcFocusNext
-    kpcFocusPrevious
-    kpcFocusLeft
-    kpcFocusBelow
-    kpcFocusAbove
-    kpcFocusRight
-    kpcClose
-    kpcGrowHeight
-    kpcShrinkHeight
-    kpcShrinkWidth
-    kpcGrowWidth
-    kpcEqualize
 
   KosmoHostCommand* = object
     ## A parsed Moe command whose tab or pane placement belongs to the frontend.

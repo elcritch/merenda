@@ -158,6 +158,8 @@ type
     xFrameAutosaveName: string
     xKeyBindings: KeyBindingTable
     xPendingKeySequence: seq[events.KeyEvent]
+    xSuppressShortcutText: bool
+    xSuppressedShortcutText: string
     xUiScaleOverride: Option[float32]
     xHostWindow: HostWindow
     xHostFocused: bool
@@ -2477,6 +2479,9 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
   let target = window.keyDispatchTarget()
   if target.isNil:
     return false
+  if target.trySendLocal(interceptKeyEquivalent(), event).get(false):
+    window.cancelKeySequence()
+    return true
   if window.xPendingKeySequence.len > 0:
     if event.key == keyEscape:
       window.cancelKeySequence()
@@ -2494,6 +2499,8 @@ proc performKeyEquivalent*(window: Window, event: events.KeyEvent): bool =
   window.dispatchKeyCommand(target, event).dispatch.handled
 
 proc dispatchKeyDown*(window: Window, event: events.KeyEvent): bool =
+  window.xSuppressShortcutText = false
+  window.xSuppressedShortcutText.setLen(0)
   window.clearToolTip()
   let owner = if window.xOwnerWindow.isNil: window else: window.xOwnerWindow
   if owner.xTransientSession.active:
@@ -2762,9 +2769,22 @@ proc dispatchTextInputInChain(target: Responder, text: string): EventDispatchRes
       return
     responder = responder.nextResponder()
 
+proc suppressShortcutText*(window: Window, text = "") =
+  ## Consume a shortcut's next text commit even if the action changes focus.
+  ## A nonempty text restricts suppression to that exact commit.
+  ## Another physical key or a different text commit cancels this suppression.
+  window.xSuppressShortcutText = true
+  window.xSuppressedShortcutText = text
+
 proc dispatchTextInput*(window: Window, text: string): bool =
   if text.len == 0:
     return false
+  let suppress = window.xSuppressShortcutText
+  let suppressed = window.xSuppressedShortcutText
+  window.xSuppressShortcutText = false
+  window.xSuppressedShortcutText.setLen(0)
+  if suppress and (suppressed.len == 0 or suppressed == text):
+    return true
   let target = window.keyDispatchTarget()
   if target.isNil:
     return false

@@ -553,6 +553,17 @@ path is shared across platforms; native PTY startup currently requires POSIX.
 For native timing measurements with `cmatrix`, `ps`, or a 10,000-line burst, see
 [terminal latency diagnostics](docs/terminal-latency.md).
 
+Terminals default to **Hybrid** input: `Ctrl-W v` splits right, and
+`Ctrl-W h/j/k/l` or `Ctrl-W` followed by an arrow navigates panes. On Linux and
+Windows, `Ctrl-C` copies the terminal selection and `Ctrl-V` pastes. Prefix a
+shortcut with `Ctrl-\` to send it to the shell: `Ctrl-\ Ctrl-C` interrupts,
+and `Ctrl-\ Ctrl-W v` sends the whole pane chord. **Kosmo Settings → Terminal →
+Terminal input** switches between Hybrid and **Raw shortcuts**, which sends
+Control keys directly. The choice applies to existing terminals and saves for
+future launches as `"terminalInput": "hybrid"` or `"raw"` in
+`~/.config/kosmo/config.json`. See the [shortcut guide](src/merenda/kosmo/docs/shortcuts.md#terminal-input-policies)
+for prefix cancellation and platform details.
+
 Kosmo Settings → Moe Themes includes Catppuccin Latte, Catppuccin Mocha,
 Kanagawa Wave, One Dark, and Tokyo Night Moon. These themes are embedded in
 the executable and work from any launch directory. Add your own TOML themes

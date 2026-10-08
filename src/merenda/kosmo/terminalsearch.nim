@@ -7,6 +7,9 @@ import sigils/core
 import ../nimkit as nimkit except performKeyEquivalent
 from ../nimkit/foundation/selectors import performKeyEquivalent
 import ../nimkit/text/searchmatching
+import ./terminalinput
+
+export terminalinput
 
 type
   TerminalSearchGlyph = object
@@ -16,6 +19,82 @@ type
   KosmoTerminalView* = ref object of nimkit.TerminalView
     search: nimkit.TextSearchController
     searchGlyphs: seq[TerminalSearchGlyph]
+    xInputPolicy: KosmoTerminalInputPolicy
+    xShortcutState: TerminalShortcutState
+    xPaneCommandHandler: proc(command: KosmoPaneCommand): bool {.closure.}
+    xShortcutWindow: nimkit.BackRef[nimkit.Window]
+
+proc terminalShortcutFocusLost(view: KosmoTerminalView) {.slot.} =
+  view.xShortcutState.reset()
+
+proc observeShortcutWindow*(view: KosmoTerminalView, window: nimkit.Window) =
+  ## Reset incomplete shortcuts when the owning window loses keyboard focus.
+  if view.xShortcutWindow.target == window:
+    return
+  if not view.xShortcutWindow.isNil:
+    view.xShortcutWindow.target.disconnect(
+      nimkit.didResignKeyWindow, view, terminalShortcutFocusLost
+    )
+  view.xShortcutWindow.target = window
+  if not window.isNil:
+    window.connect(nimkit.didResignKeyWindow, view, terminalShortcutFocusLost)
+
+proc terminalInputPolicy*(view: KosmoTerminalView): KosmoTerminalInputPolicy =
+  view.xInputPolicy
+
+proc `terminalInputPolicy=`*(
+    view: KosmoTerminalView, policy: KosmoTerminalInputPolicy
+) =
+  ## Apply shortcut routing and discard an unfinished prefix.
+  view.xInputPolicy = policy
+  view.xShortcutState.reset()
+
+proc `paneCommandHandler=`*(
+    view: KosmoTerminalView, handler: proc(command: KosmoPaneCommand): bool {.closure.}
+) =
+  ## Attach the owning dock's scoped pane command handler.
+  view.xPaneCommandHandler = handler
+  view.xShortcutState.reset()
+
+proc interceptTerminalKey(view: KosmoTerminalView, event: nimkit.KeyEvent): bool =
+  let owner = view.window()
+  let route = view.xShortcutState.routeTerminalKey(
+    event, view.xInputPolicy, panesEnabled = not view.xPaneCommandHandler.isNil
+  )
+  case route.kind
+  of tkrPass:
+    discard
+  of tkrConsume:
+    result = true
+  of tkrPane:
+    discard view.xPaneCommandHandler(route.command)
+    result = true
+  of tkrCopy, tkrPaste:
+    let selector =
+      if route.kind == tkrCopy:
+        nimkit.copy()
+      else:
+        nimkit.paste()
+    discard view.sendLocalIfHandled(selector, nimkit.ActionArgs(sender: view))
+    result = true
+  of tkrRaw:
+    for key in route.keys:
+      let bytes = nimkit.terminalKeyInput(
+        key, view.session().screenInfo().modes, view.optionAsMeta
+      )
+      if bytes.len > 0:
+        discard view.sendTerminalKeyInput(key)
+    result =
+      nimkit.terminalKeyInput(
+        event, view.session().screenInfo().modes, view.optionAsMeta
+      ).len > 0
+  if result and event.modifiers - {nimkit.kmShift} == {}:
+    let textKey =
+      event.key in nimkit.keyA .. nimkit.keyZ or
+      event.key in {nimkit.keyEqual, nimkit.keyMinus, nimkit.keyComma, nimkit.keyDot}
+    if owner of nimkit.Window and
+        (event.text.len > 0 or (route.kind == tkrPane and textKey)):
+      nimkit.Window(owner).suppressShortcutText(event.text)
 
 proc dismissSearch*(view: KosmoTerminalView)
 proc findPrevious*(view: KosmoTerminalView)
@@ -110,6 +189,9 @@ proc showSearch*(view: KosmoTerminalView): bool {.discardable.} =
   view.search.showSearch()
 
 protocol KosmoTerminalKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
+  method interceptKeyEquivalent(view: KosmoTerminalView, event: nimkit.KeyEvent): bool =
+    view.interceptTerminalKey(event)
+
   method performKeyEquivalent(view: KosmoTerminalView, event: nimkit.KeyEvent): bool =
     if event.key == nimkit.keyF and event.modifiers == nimkit.terminalShortcutModifiers():
       return view.showSearch()
@@ -148,6 +230,24 @@ proc newKosmoTerminalView*(
   ## Create a terminal view with Kosmo's in-buffer search widget.
   result = KosmoTerminalView()
   result.initTerminalViewFields(session, frame, palette)
+  let
+    terminalOwner = result.unsafeWeakRef()
+    rawHandler = result.rawEventHandler()
+    focusHandler = result.localMethod(nimkit.didResignFirstResponder())
+  result.rawEventHandler = proc(event: nimkit.MonoTextRawEvent): bool =
+    if not terminalOwner.isNil:
+      if event.kind == nimkit.mtreKeyDown and
+          terminalOwner[].interceptTerminalKey(event.keyEvent):
+        return true
+      result = rawHandler(event)
+  discard result.replaceMethod(
+    nimkit.didResignFirstResponder(),
+    proc(self: nimkit.DynamicAgent, invocation: var nimkit.Invocation) =
+      KosmoTerminalView(self).xShortcutState.reset()
+      if not focusHandler.isNil:
+        focusHandler(self, invocation)
+    ,
+  )
   discard result.withProtocol(KosmoTerminalKeyEquivalents)
   discard result.withProtocol(KosmoTerminalViewLayout)
 

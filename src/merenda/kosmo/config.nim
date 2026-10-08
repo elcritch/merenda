@@ -16,6 +16,8 @@ type KosmoConfig* = object ## User choices persisted by the standalone editor.
   merendaInvertScrolling*: bool
   merendaUiScale*: float32
   merendaAutoSaveDefaults*: bool
+  terminalInput*: string = "hybrid"
+    ## Terminal Control shortcut routing: "hybrid" or "raw".
   fileTreeIndentation*: float32 = DefaultKosmoFileTreeIndentation
     ## Horizontal spacing in points for each file-tree level; zero removes indentation.
 

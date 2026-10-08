@@ -193,9 +193,12 @@ suite "Kosmo terminal focus input":
       check terminalFocused
       require frontend.window.dispatchTextInput("x")
       require frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyBackslash, keyCode: keyBackslash.ord, modifiers: {kmControl})
+      )
+      require frontend.window.dispatchKeyDown(
         KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
       )
-      # Focus-out, focus-in, x, and the shell's Control-W arrive exactly once.
+      # Focus-out, focus-in, x, and quoted Control-W arrive exactly once.
       check session.pollUntilText("1b 5b 4f 1b 5b 49 78 17")
 
 suite "Kosmo terminal split lifecycle":

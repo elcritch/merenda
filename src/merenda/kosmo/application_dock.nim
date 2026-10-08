@@ -147,6 +147,20 @@ proc activatePaneTab(
   group.editorView.editor.dismissCompletionPopup()
   group.editorView.editor.dismissCommandLine()
   group.pane.setContentView(document.contentView)
+  if document.contentView of KosmoTerminalView:
+    let
+      terminal = KosmoTerminalView(document.contentView)
+      weakTerminal = terminal.unsafeWeakRef()
+      weakController = controller.unsafeWeakRef()
+    terminal.observeShortcutWindow(group.window)
+    if not controller.frontend.isNil:
+      terminal.terminalInputPolicy = controller.frontend[].xTerminalInputPolicy
+    terminal.paneCommandHandler = proc(command: KosmoPaneCommand): bool =
+      if not weakController.isNil and not weakTerminal.isNil:
+        for source in weakController[].groups:
+          for current in source.documents:
+            if current.contentView == nimkit.View(weakTerminal[]):
+              return weakController[].performPaneCommand(source, command)
   group.editorView.syncTabs(group.editorView.editor.tabs())
   if not group.editorView.statusLabel.isNil:
     group.editorView.statusLabel.text = document.title
@@ -1192,6 +1206,7 @@ proc newTerminalDocument(
     let frontend = controller.frontend[]
     terminalView.optionAsMeta = frontend.xTerminalOptionAsMeta
     terminalView.allowsLinkActivation = frontend.xTerminalLinksEnabled
+    terminalView.terminalInputPolicy = frontend.xTerminalInputPolicy
     terminalView.connect(
       nimkit.terminalHyperlinkWasActivated, frontend.xWindowLifecycle, openTerminalLink
     )

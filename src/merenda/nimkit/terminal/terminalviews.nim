@@ -993,14 +993,9 @@ proc handleTerminalShortcut(view: TerminalView, event: KeyEvent): bool =
   else:
     false
 
-proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
+proc sendTerminalKeyInput*(view: TerminalView, event: KeyEvent): bool =
+  ## Encode and send a physical key without executing local terminal shortcuts.
   view.xSuppressOptionTextInput = false
-  if view.handleTerminalShortcut(event):
-    return true
-  if event.key == keyL and event.modifiers == {kmControl}:
-    view.clearScrollback()
-    discard view.sendInput("\x0c")
-    return true
   let input =
     terminalKeyInput(event, view.xSession.screenInfo().modes, view.xOptionAsMeta)
   if input.len == 0:
@@ -1009,6 +1004,16 @@ proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
       event.key.isPrintableTerminalKey():
     view.xSuppressOptionTextInput = true
   view.sendInput(input)
+
+proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
+  view.xSuppressOptionTextInput = false
+  if view.handleTerminalShortcut(event):
+    return true
+  if event.key == keyL and event.modifiers == {kmControl}:
+    view.clearScrollback()
+    discard view.sendInput("\x0c")
+    return true
+  view.sendTerminalKeyInput(event)
 
 proc performTerminalKeyEquivalent*(view: TerminalView, event: KeyEvent): bool =
   ## Handle a terminal-local shortcut or translate the key into terminal input.

@@ -31,6 +31,7 @@ import kosmo/splits
 import kosmo/tabs
 import kosmo/terminalclipboard
 import kosmo/terminalerrors
+import kosmo/terminalinput
 import kosmo/terminalsearch
 import kosmo/viewersearch
 import kosmo/vscodegrammars

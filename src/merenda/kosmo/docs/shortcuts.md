@@ -289,7 +289,7 @@ supports it, the equivalent control-key spelling:
 | `Ctrl-W v` / `Ctrl-W Ctrl-V` | Split right and show the same buffer. |
 | `Ctrl-W n` / `Ctrl-W Ctrl-N` | Create an empty buffer in a new split below. |
 | `Ctrl-W w` / `Ctrl-W Ctrl-W` | Focus the next editor panel. This is Vim behavior; it is **not** Close Tab. |
-| `Ctrl-W h/j/k/l` | Focus the panel to the left/below/above/right. |
+| `Ctrl-W h/j/k/l` or `Ctrl-W` followed by an arrow | Focus the panel to the left/below/above/right. |
 | `Ctrl-W c` | Close the current panel, subject to safe-close checks. |
 | `Ctrl-W +`, `-`, `<`, `>`, `=` | Resize or equalize editor panels. |
 | `gt` / `gT` | Select the next / previous document tab. |
@@ -300,12 +300,13 @@ rather than a `Ctrl-W` pane operation. Close Tab uses `primary-W`; on Windows
 and Linux `Ctrl-F4` is the reliable fallback when the active input policy
 reserves physical `Ctrl-W` for Moe.
 
-The current implementation recognizes these commands at the focused Kosmo
-editor boundary in the applicable Moe mode, and at a focused Markdown preview.
+The implementation recognizes these commands at the focused Kosmo
+editor boundary in the applicable Moe mode, at a focused Markdown preview,
+and in a terminal using Hybrid input.
 Markdown previews use the same pane parser and semantic dock operations,
 including `Ctrl-W n` to create an empty-buffer split. It deliberately does not
-install a window-wide `Ctrl-W` prefix: terminals, sidebars, dialogs, and
-unrelated controls keep their own input. Moe receives unclaimed editor input,
+install a window-wide `Ctrl-W` prefix: sidebars, dialogs, unrelated controls,
+and Raw terminals keep their own input. Moe receives unclaimed editor input,
 and runtime Moe mappings for Ctrl-W take precedence over the default pane
 bridge. Moe's dispatched window results also use Kosmo's pane operations, so
 a mapping such as `:nmap C-y window-new` creates a native Kosmo pane.
@@ -337,6 +338,36 @@ quarter of the visible preview height.
 a sequence prefix. Kosmo should not define `Command-W Command-W`,
 `Command-W Command-S`, or similar bindings. GUI-oriented split commands should
 instead remain visible in menus and accept independent configurable shortcuts.
+
+### Terminal input policies
+
+Terminal input is independent of Moe's editor input policy and the application
+shortcut profile. Kosmo Settings → Terminal has a **Terminal input** selector:
+
+| Policy | Terminal behavior |
+| --- | --- |
+| **Hybrid** (default) | Ctrl-W starts a pane command. Linux/Windows Ctrl-C copies the selection and Ctrl-V pastes. Other Control input reaches the terminal. |
+| **Raw shortcuts** | Control keys go directly to the terminal, including Ctrl-W, Ctrl-C, Ctrl-V and Ctrl-backslash. |
+
+In Hybrid mode, `Ctrl-\` quotes the next shortcut. `Ctrl-\ Ctrl-C` sends a
+literal interrupt, and `Ctrl-\ Ctrl-V` sends Control-V. For a pane chord,
+`Ctrl-\ Ctrl-W v` sends Control-W followed by `v`; the Control continuation
+spelling, such as `Ctrl-\ Ctrl-W Ctrl-V`, is also forwarded intact.
+`Ctrl-\ Ctrl-\` sends literal Control-backslash. Escape cancels a pending
+prefix. An unknown Ctrl-W continuation forwards both keys in order; changing
+focus or input policy cancels any unfinished prefix.
+
+On macOS, Control-C continues to reach the terminal directly, while Command-C
+and Command-V keep their clipboard behavior. Raw mode retains Command
+shortcuts on macOS and non-Control application commands on other platforms.
+Hybrid clipboard interception applies on Linux and Windows regardless of the
+chosen application shortcut profile. Copy without a selection does nothing;
+use `Ctrl-\ Ctrl-C` when an interrupt is intended.
+
+Changing Terminal input updates current terminals in every Kosmo window and
+new terminals immediately. Kosmo persists the setting in
+`~/.config/kosmo/config.json` as `"terminalInput": "hybrid"` or `"raw"`.
+Missing or unrecognized values use Hybrid.
 
 ### Platform close behavior
 

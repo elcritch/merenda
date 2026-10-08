@@ -23,8 +23,8 @@ import
   ./[
     applicationassets, cliopen, config, contextpanel, filesearchpanel, filetree,
     gitdiff, githubviewer, inputtranslation, matterworkers, moe, moehighlighting,
-    panedocuments, quickopen, recovery, searchbar, settings, shortcutpresentation,
-    shortcuts, terminalsearch, viewersearch, workspacefiles,
+    panedocuments, panekeys, quickopen, recovery, searchbar, settings,
+    shortcutpresentation, shortcuts, terminalsearch, viewersearch, workspacefiles,
   ]
 
 export

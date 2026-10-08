@@ -594,7 +594,8 @@ suite "Kosmo synthetic shortcut input":
     )
     discard frontend.window.animationScheduler().tick(140.ms)
     check frontend.editorGroups().len == 1
-    check preview.scrollView().contentOffset().y > afterCancelledNavigation
+    # Ctrl-W arrows navigate panes; a lone pane stays focused without scrolling.
+    check preview.scrollView().contentOffset().y == afterCancelledNavigation
 
     check frontend.window.pressControlKey(keyW)
     check frontend.window.pressPaneKey(keyV, "v", {})

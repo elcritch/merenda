@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Default Kosmo terminals to Hybrid shortcut routing: use Ctrl-W pane chords
+  and arrow continuations for splits and navigation, and Ctrl-C/Ctrl-V for
+  copy/paste on Linux and Windows. Ctrl-backslash quotes the next shortcut,
+  including complete pane chords. Add a persisted Terminal input selector for
+  Hybrid or Raw shortcuts, applying changes to current and future terminals.
+
 - Support Reni regular expressions through the `.*` toggle in Kosmo terminal,
   Markdown, GitHub, and Git diff views, the Files filter, Quick Open, and VS Code
   grammar search. Share matching with editor and file search, preserve Unicode

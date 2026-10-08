@@ -195,6 +195,7 @@ type
     xSettingsWindow: KosmoSettingsWindow
     xTerminalOptionAsMeta: bool
     xTerminalLinksEnabled: bool
+    xTerminalInputPolicy: KosmoTerminalInputPolicy
     xWindowManager: WeakRef[KosmoWindowManager]
     xWindowLifecycle: KosmoWindowLifecycle
     xCliWindowId: string

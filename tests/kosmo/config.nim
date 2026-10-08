@@ -114,6 +114,7 @@ suite "Kosmo configuration":
         merendaUiScale: 1.25'f32,
         merendaAutoSaveDefaults: true,
         fileTreeIndentation: 8.0'f32,
+        terminalInput: "raw",
       )
     defer:
       removeDir(root)
@@ -131,6 +132,7 @@ suite "Kosmo configuration":
     check node["merendaUiScale"].getFloat() == float(config.merendaUiScale)
     check node["merendaAutoSaveDefaults"].getBool()
     check node["fileTreeIndentation"].getFloat() == float(config.fileTreeIndentation)
+    check node["terminalInput"].getStr() == "raw"
     check loadKosmoConfig(path) == config
 
   test "older and partial configurations retain preferences and default indentation":
@@ -149,6 +151,7 @@ suite "Kosmo configuration":
     require config.saveKosmoConfig(path)
     let node = parseJson(readFile(path))
     node.delete("fileTreeIndentation")
+    node.delete("terminalInput")
     writeFile(path, node.pretty())
     check loadKosmoConfig(path) == config
     check loadKosmoConfig(path).fileTreeIndentation == 10.0'f32
@@ -157,6 +160,9 @@ suite "Kosmo configuration":
     let partial = loadKosmoConfig(path)
     check partial.merendaTheme == "aqua"
     check partial.fileTreeIndentation == 0.0'f32
+    check parseTerminalInputPolicy(partial.terminalInput) ==
+      KosmoTerminalInputPolicy.Hybrid
+    check parseTerminalInputPolicy("unrecognized") == KosmoTerminalInputPolicy.Hybrid
 
   test "passes the configured Nim server command to Moe":
     let
