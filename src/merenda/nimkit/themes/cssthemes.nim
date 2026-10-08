@@ -11,6 +11,39 @@ from figdraw import SystemTypeface
 import ./[defaulttheme, themecore]
 import ../foundation/types
 
+const StylusTokenStartCharacters = {
+  'a' .. 'z',
+  'A' .. 'Z',
+  '0' .. '9',
+  '_',
+  ' ',
+  '\t',
+  '\n',
+  '\r',
+  '\x0c',
+  '#',
+  '$',
+  '(',
+  ')',
+  '*',
+  '+',
+  '-',
+  ',',
+  '.',
+  '/',
+  ':',
+  ';',
+  '<',
+  '@',
+  ']',
+  '^',
+  '{',
+  '|',
+  '}',
+  '~',
+  '>',
+}
+
 type
   CssDiagnostic* = object ## One-based line and byte column in the stylesheet source.
     line*, column*: int
@@ -148,38 +181,7 @@ proc tokenize(source: string, parser: var CssParser) =
     elif current == '[':
       tokenizer.forwards(1)
       token = Token(kind: tkSquareBracketBlock)
-    elif current notin {
-      'a' .. 'z',
-      'A' .. 'Z',
-      '0' .. '9',
-      '_',
-      ' ',
-      '\t',
-      '\n',
-      '\r',
-      '\x0c',
-      '#',
-      '$',
-      '(',
-      ')',
-      '*',
-      '+',
-      '-',
-      ',',
-      '.',
-      '/',
-      ':',
-      ';',
-      '<',
-      '@',
-      ']',
-      '^',
-      '{',
-      '|',
-      '}',
-      '~',
-      '>',
-    }:
+    elif current notin StylusTokenStartCharacters:
       tokenizer.forwards(1)
       token = Token(kind: tkDelim, delim: current)
     else:
