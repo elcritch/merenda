@@ -5188,7 +5188,6 @@ proc naturalSize(tableView: TableView): Size =
 
 protocol DefaultTableRowViewDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(rowView: TableRowView, context: DrawContext) =
@@ -5226,7 +5225,6 @@ protocol DefaultTableRowViewAccessibility of AccessibilityProtocol:
 
 protocol DefaultTableContentViewDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(contentView: TableContentView, context: DrawContext) =
@@ -6650,7 +6648,6 @@ protocol TableViewStateViewLifecycleSlots of ViewLifecycleProtocol:
 
 protocol DefaultTableViewDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(tableView: TableView, context: DrawContext) =

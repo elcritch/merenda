@@ -113,7 +113,6 @@ proc compactTabButtonStates(button: CompactTabButton): set[WidgetState] =
 
 protocol CompactTabButtonDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(button: CompactTabButton, context: DrawContext) =
@@ -201,7 +200,6 @@ protocol CompactTabViewLayout of ViewLayoutProtocol:
 
 protocol CompactTabViewDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(tabs: CompactTabView, context: DrawContext) =

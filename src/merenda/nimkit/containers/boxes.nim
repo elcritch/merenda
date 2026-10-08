@@ -296,7 +296,6 @@ protocol DefaultBoxLayout of ViewLayoutProtocol:
 
 protocol DefaultBoxDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(box: Box): bool =
-    discard box
     true
 
   method draw(box: Box, context: DrawContext) =

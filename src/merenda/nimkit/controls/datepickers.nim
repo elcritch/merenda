@@ -260,7 +260,6 @@ func datePickerSelectedState(picker: DatePicker, date: CalendarDate): set[Widget
 
 protocol DatePickerDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(picker: DatePicker, context: DrawContext) =
@@ -920,7 +919,6 @@ func timePickerSelectedState(
 
 protocol TimePickerDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(picker: TimePicker, context: DrawContext) =

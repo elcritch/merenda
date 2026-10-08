@@ -64,7 +64,6 @@ protocol ControlActivationFeedbackProtocol {.selectorScope: protocol.}:
 
 protocol ControlStyledBackground of ViewDrawingProtocol:
   method drawsStyledBackground(control: Control): bool =
-    discard control
     true
 
 proc cell*(control: Control): Cell

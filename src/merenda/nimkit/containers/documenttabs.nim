@@ -1836,7 +1836,6 @@ proc drawScroller(tabs: DocumentTabs, context: DrawContext) =
 
 protocol DocumentTabsDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(tabs: DocumentTabs, context: DrawContext) =

@@ -1043,7 +1043,6 @@ protocol DefaultScrollViewLayout of ViewLayoutProtocol:
 
 protocol DefaultScrollViewDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(scrollView: ScrollView): bool =
-    discard scrollView
     true
 
   method draw(scrollView: ScrollView, context: DrawContext) =
@@ -1078,7 +1077,6 @@ protocol DefaultScrollViewDrawing of ViewDrawingProtocol:
 
 protocol DefaultScrollerDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(scroller: Scroller): bool =
-    discard scroller
     true
 
   method draw(scroller: Scroller, context: DrawContext) =

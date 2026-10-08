@@ -2935,7 +2935,6 @@ protocol DefaultTextViewScrollNavigation of ScrollNavigationProtocol:
 
 protocol DefaultTextViewDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(textView: TextView): bool =
-    discard textView
     true
 
   method drawUnderlay(textView: TextView, context: DrawContext) =

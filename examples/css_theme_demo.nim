@@ -15,7 +15,6 @@ let
   reloadAction = actionSelector("reloadCssTheme")
 
 proc reloadStyles(sender: DynamicAgent) =
-  discard sender
   let parsed = loadCssTheme(stylesheet, base)
   window.setAppearance(initAppearance(parsed.theme))
   if parsed.diagnostics.len > 0:

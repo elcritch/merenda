@@ -771,7 +771,6 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
 
 protocol TabBarDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(tabBar: TabBarView, context: DrawContext) =
@@ -838,7 +837,6 @@ protocol TabBarEvents of ResponderEventProtocol:
 
 protocol TabViewDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(tabView: TabView, context: DrawContext) =

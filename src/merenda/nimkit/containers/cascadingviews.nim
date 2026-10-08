@@ -1701,7 +1701,6 @@ proc cascadingModelDidChange*(view: CascadingView, sender: DynamicAgent) {.slot.
 
 protocol CascadingDrawing of ViewDrawingProtocol:
   method drawsStyledBackground(view: View): bool =
-    discard view
     true
 
   method draw(view: CascadingView, context: DrawContext) =
