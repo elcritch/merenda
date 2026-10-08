@@ -1810,6 +1810,15 @@ protocol PopupMenuButtonEvents of ResponderEventProtocol:
     else:
       false
 
+protocol PopupMenuButtonStyleLayout of ViewLayoutProtocol:
+  method layoutStyleContext(button: PopupMenuButton): StyleContext =
+    controlStyle(
+      if button.hasStyleClass("pullDown"): srMenuBarItem else: srComboBox,
+      button.widgetStateSet(),
+      id = button.styleId,
+      classes = button.styleClasses,
+    )
+
 proc initPopupMenuButtonFields*(
     button: PopupMenuButton, title = "", menu: Menu = nil, frame: Rect = AutoRect
 ) =
@@ -1825,6 +1834,7 @@ proc initPopupMenuButtonFields*(
   button.acceptsFirstResponder = true
   discard button.withProto()
   discard button.withProtocol(PopupMenuButtonDrawing)
+  discard button.withProtocol(PopupMenuButtonStyleLayout)
   discard button.withProtocol(PopupMenuButtonEvents)
   discard button.withProtocol(PopupMenuButtonAccessibility)
   button.applyInitialFrame(frame)
@@ -2049,6 +2059,19 @@ protocol MenuBarDrawing of ViewDrawingProtocol:
     )
 
 protocol MenuBarLayout of ViewLayoutProtocol:
+  method layoutStyleContext(menuBar: MenuBar): StyleContext =
+    controlStyle(
+      srMenuBar,
+      menuBar.widgetStateSet(),
+      id = menuBar.styleId,
+      classes = menuBar.styleClasses,
+    )
+
+  method managesSubviewLayout(menuBar: MenuBar, child: DynamicAgent): bool =
+    for button in menuBar.xButtons:
+      if child == button:
+        return true
+
   method layoutIntrinsicContentSize(menuBar: MenuBar): IntrinsicSize =
     initIntrinsicSize(menuBar.menuBarNaturalSize())
 

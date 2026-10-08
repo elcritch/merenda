@@ -1,11 +1,16 @@
-import std/[macros, monotimes, sets, tables, times]
+import std/[macros, math, monotimes, options, sets, tables, times]
 
 import pkg/kiwiberry
 
 import ../themes
+from ../themes/themecore import
+  layoutStyleSelection, constraintCount, validStyleConstraint
+import ../themes/private/cssproperties
+import ../foundation/selectors
 import ../foundation/types
 import ./viewgeometry
 import ./viewbase
+import ./viewprotos
 
 type
   LayoutEdge* = enum
@@ -71,9 +76,17 @@ type
     startedAt: MonoTime
     constraintCount: Natural
     coefficientCount: Natural
+    workConstraintCount: Natural
+    workCoefficientCount: Natural
+    cssInputs: seq[LayoutInput]
+    cssSubjects: HashSet[pointer]
+    cssDiagnostics: seq[CssLayoutDiagnostic]
+    didResolveCss: bool
 
   LayoutSolveBudgetExceeded = object of CatchableError
     diagnostic: LayoutSolveDiagnostic
+
+  CssLayoutGeometryError = object of CatchableError
 
 const
   AllLayoutEdges* = {leLeft, leTop, leRight, leBottom}
@@ -110,6 +123,19 @@ proc source*(input: LayoutInput): LayoutInputSource =
   case input.kind
   of likConstraint: lisUser
   of likEquation: input.equation.source
+
+proc cssLayoutDiagnostics*(view: View, fitting = false): seq[CssLayoutDiagnostic] =
+  ## Returns defensive diagnostics for this root's latest attempt in that mode.
+  ## Measuring a fitting size does not replace the last layout diagnostics.
+  if view.isNil:
+    return
+  let mode = if fitting: lsmFitting else: lsmLayout
+  for diagnostic in view.xCssLayoutDiagnostics[mode]:
+    var copied: CssLayoutDiagnostic
+    copied.viewId.add diagnostic.viewId
+    copied.property.add diagnostic.property
+    copied.message.add diagnostic.message
+    result.add copied
 
 proc generatedLayoutInputs*(view: View): seq[LayoutInput] =
   for source in LayoutInputSource:
@@ -1065,8 +1091,8 @@ proc solveDiagnostic(state: LayoutSolveState, limit = lslNone): LayoutSolveDiagn
     failed: limit != lslNone,
     limit: limit,
     views: Natural(state.items.len),
-    constraints: state.constraintCount,
-    coefficients: state.coefficientCount,
+    constraints: state.workConstraintCount,
+    coefficients: state.workCoefficientCount,
     estimatedMemoryBytes: state.estimatedMemoryBytes(),
     elapsedMilliseconds: state.elapsedMilliseconds(),
   )
@@ -1083,10 +1109,10 @@ proc checkSolveBudget(state: LayoutSolveState) =
   if state.limits.maxViews > 0 and state.items.len > state.limits.maxViews:
     state.raiseBudgetExceeded(lslViews)
   if state.limits.maxConstraints > 0 and
-      state.constraintCount > state.limits.maxConstraints:
+      state.workConstraintCount > state.limits.maxConstraints:
     state.raiseBudgetExceeded(lslConstraints)
   if state.limits.maxCoefficients > 0 and
-      state.coefficientCount > state.limits.maxCoefficients:
+      state.workCoefficientCount > state.limits.maxCoefficients:
     state.raiseBudgetExceeded(lslCoefficients)
   if state.limits.maxMemoryBytes > 0 and
       state.estimatedMemoryBytes() > state.limits.maxMemoryBytes:
@@ -1296,19 +1322,29 @@ proc strengthened(constraint: Constraint, priority: LayoutPriority): Constraint 
   else:
     constraint.withStrength(priority.solverStrength)
 
-proc addSolverConstraint(
-    state: var LayoutSolveState,
-    constraint: Constraint,
-    priority = LayoutPriorityRequired,
-) =
+proc accountSolverConstraint(state: var LayoutSolveState, constraint: Constraint) =
   inc state.constraintCount
+  inc state.workConstraintCount
   state.coefficientCount = Natural(
     min(
       int64(high(Natural)),
       saturatingAdd(int64(state.coefficientCount), int64(constraint.expression.len)),
     )
   )
+  state.workCoefficientCount = Natural(
+    min(
+      int64(high(Natural)),
+      saturatingAdd(int64(state.workCoefficientCount), int64(constraint.expression.len)),
+    )
+  )
   state.checkSolveBudget()
+
+proc addSolverConstraint(
+    state: var LayoutSolveState,
+    constraint: Constraint,
+    priority = LayoutPriorityRequired,
+) =
+  state.accountSolverConstraint(constraint)
   try:
     state.solver.addConstraint(constraint.strengthened(priority))
     state.checkSolveBudget()
@@ -1536,6 +1572,192 @@ proc addOwnedConstraints(state: var LayoutSolveState, owner: View) =
     state.checkSolveBudget()
     state.addOwnedConstraints(child)
 
+proc cssDiagnostic(state: var LayoutSolveState, view: View, property, message: string) =
+  let id = if view.xStyleId.len > 0: view.xStyleId else: view.xIdentifier
+  let diagnostic = CssLayoutDiagnostic(viewId: id, property: property, message: message)
+  if diagnostic notin state.cssDiagnostics:
+    state.cssDiagnostics.add diagnostic
+
+proc managedBySuperview(view: View): bool =
+  var parent = view.superviewBacklink()
+  while not parent.isNil:
+    if parent.trySendLocal(managesSubviewLayout(), DynamicAgent(view)).get(false):
+      return true
+    parent = parent.superviewBacklink()
+
+proc checkCssGenerationBudget(state: LayoutSolveState, additional: Natural) =
+  state.checkSolveBudget()
+  let
+    count = saturatingAdd(int64(state.cssInputs.len), int64(additional))
+    constraints = saturatingAdd(int64(state.workConstraintCount), count)
+    coefficients =
+      saturatingAdd(int64(state.workCoefficientCount), saturatingMultiply(count, 2))
+    memory = saturatingAdd(
+      int64(state.estimatedMemoryBytes()), saturatingMultiply(count, 1536)
+    )
+  if state.limits.maxConstraints > 0 and constraints > int64(
+    state.limits.maxConstraints
+  ):
+    state.raiseBudgetExceeded(lslConstraints)
+  if state.limits.maxCoefficients > 0 and
+      coefficients > int64(state.limits.maxCoefficients):
+    state.raiseBudgetExceeded(lslCoefficients)
+  if state.limits.maxMemoryBytes > 0 and memory > int64(state.limits.maxMemoryBytes):
+    state.raiseBudgetExceeded(lslMemory)
+
+proc cssTarget(
+    state: var LayoutSolveState,
+    subject: View,
+    spec: StyleLayoutConstraint,
+    property: string,
+    target: var View,
+): bool =
+  case spec.target
+  of sltConstant:
+    return true
+  of sltSelf:
+    target = subject
+  of sltParent:
+    target = subject.superviewBacklink()
+  of sltSibling:
+    let parent = subject.superviewBacklink()
+    if not parent.isNil:
+      for child in parent.xSubviews:
+        state.checkSolveBudget()
+        if child.xStyleId == spec.targetId:
+          if not target.isNil:
+            state.cssDiagnostic(
+              subject, property, "Duplicate sibling style id #" & spec.targetId
+            )
+            return
+          target = child
+  if target.isNil or not state.hasSolverView(target):
+    state.cssDiagnostic(
+      subject, property,
+      "Constraint target is missing or outside this solve tree; use parent, self, or a unique sibling #id",
+    )
+    return
+  if target != subject and target.managedBySuperview():
+    state.cssDiagnostic(
+      subject, property,
+      "Constraint target is managed by its container and moves after the constraint solve",
+    )
+    return
+  true
+
+proc prepareCssProperty(
+    state: var LayoutSolveState,
+    root, subject: View,
+    mode: LayoutSolveMode,
+    theme: Theme,
+    context: StyleContext,
+    key: StyleKey[seq[StyleLayoutConstraint]],
+    property: string,
+) =
+  let statePointer = addr state
+  let checkWork = proc() =
+    statePointer[].checkSolveBudget()
+  let selection = theme.layoutStyleSelection(context, key, checkWork)
+  let count = selection.constraintCount
+  state.checkCssGenerationBudget(count)
+  if count == 0:
+    return
+  if subject == root and mode == lsmLayout:
+    state.cssDiagnostic(
+      subject, property, "The solve root keeps its native frame; style a child view"
+    )
+    return
+  if subject != root and subject.managedBySuperview():
+    state.cssDiagnostic(
+      subject, property,
+      "This subview is arranged by its container; style the container layout instead",
+    )
+    return
+  for spec in selection.resolveLayoutConstraints(checkWork):
+    state.checkSolveBudget()
+    if not spec.validStyleConstraint():
+      state.cssDiagnostic(subject, property, "Invalid native constraint specification")
+    elif subject == root and spec.attribute notin {atWidth, atHeight}:
+      state.cssDiagnostic(
+        subject, property, "A fitting root can style its dimensions, not its position"
+      )
+    else:
+      var target: View
+      if state.cssTarget(subject, spec, property, target):
+        var terms = @[initLayoutTerm(subject, spec.attribute)]
+        if not target.isNil:
+          terms.add initLayoutTerm(target, spec.targetAttribute, -spec.multiplier)
+        var equation =
+          initLayoutEquation(terms, spec.relation, spec.constant, spec.priority, lisCss)
+        equation.cssProperty = property
+        state.cssInputs.add equation.layoutEquationInput()
+        state.cssSubjects.incl cast[pointer](subject)
+
+proc prepareCssInputs(
+    state: var LayoutSolveState,
+    root: View,
+    mode: LayoutSolveMode,
+    excluded: HashSet[pointer],
+) =
+  for solverView in state.items:
+    state.checkSolveBudget()
+    let subject = solverView.item
+    let theme = subject.effectiveAppearance().theme
+    if theme.hasLayoutRules and cast[pointer](subject) notin excluded:
+      state.didResolveCss = true
+      let context = subject.resolvedLayoutStyleContext()
+      for property in CssGeometryProperties:
+        state.prepareCssProperty(
+          root,
+          subject,
+          mode,
+          theme,
+          context,
+          StyleKey[seq[StyleLayoutConstraint]](property.key),
+          property.name,
+        )
+      state.prepareCssProperty(
+        root, subject, mode, theme, context, StyleLayoutConstraints,
+        "-nimkit-constraints",
+      )
+  for key in state.cssSubjects:
+    state.constraintItemIndexes.incl key
+
+proc admitCssInputs(state: var LayoutSolveState): HashSet[pointer] =
+  var admitted: seq[LayoutInput]
+  for input in state.cssInputs:
+    state.checkSolveBudget()
+    let equation = input.equation
+    var expression = toExpression(0.KiwiScalar)
+    for term in equation.terms:
+      state.checkSolveBudget()
+      expression =
+        expression +
+        state.constraintExpressionFor(term.item, term.attribute) *
+        term.multiplier.solverValue
+    let right = toExpression(equation.constant.solverValue)
+    let constraint =
+      case equation.relation
+      of lrEqual:
+        eq(expression, right)
+      of lrLessThanOrEqual:
+        le(expression, right)
+      of lrGreaterThanOrEqual:
+        ge(expression, right)
+    state.accountSolverConstraint(constraint)
+    try:
+      state.solver.addConstraint(constraint.strengthened(equation.priority))
+      state.checkSolveBudget()
+      result.incl cast[pointer](equation.terms[0].item)
+      admitted.add input
+    except UnsatisfiableConstraintError:
+      state.cssDiagnostic(
+        equation.terms[0].item,
+        equation.cssProperty,
+        "Required constraint conflicts with native geometry or an earlier CSS constraint",
+      )
+  state.cssInputs = move admitted
+
 proc solvedFloat(variable: Variable): float32 =
   float32(variable.value)
 
@@ -1543,21 +1765,41 @@ type SolvedFrame = object
   item: View
   frame: Rect
 
-proc solvedFrames(state: LayoutSolveState): seq[SolvedFrame] =
+proc requireFiniteCssGeometry(
+    state: var LayoutSolveState, view: View, values: openArray[float32]
+) =
+  if state.didResolveCss:
+    for value in values:
+      if value.classify in {fcNan, fcInf, fcNegInf}:
+        state.cssDiagnostic(
+          view, "-nimkit-constraints",
+          "CSS geometry exceeded the finite coordinate range; reduce lengths or multipliers",
+        )
+        raise newException(CssLayoutGeometryError, "Nonfinite CSS geometry")
+
+proc solvedFrames(state: var LayoutSolveState): seq[SolvedFrame] =
   result = newSeqOfCap[SolvedFrame](state.items.len)
   for solverView in state.items:
     state.checkSolveBudget()
     if not solverView.item.isNil:
+      let width = solverView.width.solvedFloat()
+      let height = solverView.height.solvedFloat()
+      state.requireFiniteCssGeometry(solverView.item, [width, height])
       let alignmentRect = rect(
         solverView.left.solvedFloat(),
         solverView.top.solvedFloat(),
-        max(solverView.width.solvedFloat(), 0.0'f32),
-        max(solverView.height.solvedFloat(), 0.0'f32),
+        max(width, 0.0'f32),
+        max(height, 0.0'f32),
       )
-      result.add SolvedFrame(
-        item: solverView.item,
-        frame: solverView.item.frameForAlignmentRect(alignmentRect),
+      let frame = solverView.item.frameForAlignmentRect(alignmentRect)
+      state.requireFiniteCssGeometry(
+        solverView.item,
+        [
+          frame.origin.x, frame.origin.y, frame.size.width, frame.size.height,
+          frame.maxX, frame.maxY,
+        ],
       )
+      result.add SolvedFrame(item: solverView.item, frame: frame)
 
 proc applySolvedFrames(frames: openArray[SolvedFrame]) =
   for solved in frames:
@@ -1592,16 +1834,24 @@ proc generateLayoutInputsForSource(
     discard
   of lisUser:
     discard
+  of lisCss:
+    discard
 
   if state.generatedInputs.len > start:
     result = state.generatedInputs[start ..< state.generatedInputs.len]
     state.generatedInputs.setLen(start)
 
-proc refreshGeneratedLayoutInputs(state: var LayoutSolveState, root: View) =
+proc refreshGeneratedLayoutInputs(
+    state: var LayoutSolveState, root: View, rebuildStyledInputs = false
+) =
   if root.isNil:
     return
 
-  for source in root.generatedSourcesToRebuild():
+  var sources = root.generatedSourcesToRebuild()
+  if rebuildStyledInputs:
+    sources.incl lisAutoresizingMask
+    sources.incl lisIntrinsic
+  for source in sources:
     root.xLayoutInputCache.generated[source] =
       state.generateLayoutInputsForSource(root, source)
     inc root.xLayoutInputCache.sourceGenerations[source]
@@ -1652,17 +1902,52 @@ proc needsConstraintSolve(view: View): bool =
 proc buildAndSolveConstraints(
     state: var LayoutSolveState, view: View, mode: LayoutSolveMode
 ) =
-  state.collectSolverViews(view)
-  state.collectConstraintItems(view)
-  case mode
-  of lsmLayout:
-    state.addRootGeometryConstraints(view)
-  of lsmFitting:
-    state.addConstraintItem(view)
-    state.addRootFittingConstraints(view)
-  state.addOwnedConstraints(view)
-  state.refreshGeneratedLayoutInputs(view)
-  state.addNonNegativeSizeConstraints()
+  let
+    startedAt = state.startedAt
+    previousCache = view.xLayoutInputCache
+    previousCss = previousCache.generated[lisCss].len > 0
+  var
+    excluded = initHashSet[pointer]()
+    diagnostics: seq[CssLayoutDiagnostic]
+    constraintCount: Natural
+    coefficientCount: Natural
+    hadCss = previousCss or view.effectiveAppearance().theme.hasLayoutRules
+  while true:
+    view.xLayoutInputCache = previousCache
+    state = initLayoutSolveState(view.xLayoutSolveLimits)
+    state.startedAt = startedAt
+    state.workConstraintCount = constraintCount
+    state.workCoefficientCount = coefficientCount
+    state.didResolveCss = hadCss
+    state.cssDiagnostics = diagnostics
+    state.collectSolverViews(view)
+    state.collectConstraintItems(view)
+    state.prepareCssInputs(view, mode, excluded)
+    case mode
+    of lsmLayout:
+      state.addRootGeometryConstraints(view)
+    of lsmFitting:
+      state.addConstraintItem(view)
+      state.addRootFittingConstraints(view)
+    state.addOwnedConstraints(view)
+    state.refreshGeneratedLayoutInputs(
+      view, rebuildStyledInputs = state.cssInputs.len > 0 or previousCss
+    )
+    state.addNonNegativeSizeConstraints()
+    let admitted = state.admitCssInputs()
+    for diagnostic in state.cssDiagnostics:
+      if diagnostic notin diagnostics:
+        diagnostics.add diagnostic
+    let rejected = state.cssSubjects - admitted
+    if rejected.len == 0:
+      break
+    excluded = excluded + rejected
+    hadCss = state.didResolveCss
+    constraintCount = state.workConstraintCount
+    coefficientCount = state.workCoefficientCount
+    state.checkSolveBudget()
+  state.cssDiagnostics = move diagnostics
+  view.xLayoutInputCache.generated[lisCss] = state.cssInputs
   state.addGeometryStays(view)
   state.checkSolveBudget()
   state.solver.updateVariables()
@@ -1687,11 +1972,25 @@ proc applyConstraintsForSubtree*(view: View): bool =
     state.refreshLayoutInputCaches(view)
     view.clearSolveFailure(lsmLayout)
     view.xLastLayoutSolveDiagnostic = LayoutSolveDiagnostic()
+    view.xCssLayoutDiagnostics[lsmLayout] = state.cssDiagnostics
     return true
   except LayoutSolveBudgetExceeded as error:
     view.xLayoutInputCache = previousCache
     view.xLastLayoutSolveDiagnostic = error.diagnostic
     view.recordSolveFailure(lsmLayout)
+    if state.didResolveCss:
+      state.cssDiagnostics.add CssLayoutDiagnostic(
+        property: "-nimkit-constraints",
+        message: "Layout solver budget exceeded " & $error.diagnostic.limit,
+      )
+    view.xCssLayoutDiagnostics[lsmLayout] = state.cssDiagnostics
+    false
+  except CssLayoutGeometryError:
+    view.xLayoutInputCache = previousCache
+    view.xLastLayoutSolveDiagnostic = state.solveDiagnostic()
+    view.xLastLayoutSolveDiagnostic.failed = true
+    view.recordSolveFailure(lsmLayout)
+    view.xCssLayoutDiagnostics[lsmLayout] = state.cssDiagnostics
     false
   except CatchableError:
     view.xLayoutInputCache = previousCache
@@ -1710,16 +2009,33 @@ proc fittingSize*(view: View): Size =
     state.buildAndSolveConstraints(view, lsmFitting)
 
     let solverView = state.solverView(view)
-    result = initSize(
-      max(solverView.width.solvedFloat(), 0.0'f32),
-      max(solverView.height.solvedFloat(), 0.0'f32),
-    )
+    let width = solverView.width.solvedFloat()
+    let height = solverView.height.solvedFloat()
+    state.requireFiniteCssGeometry(view, [width, height])
+    result = initSize(max(width, 0.0'f32), max(height, 0.0'f32))
+    state.requireFiniteCssGeometry(view, [result.width, result.height])
+    if state.didResolveCss or previousCache.generated[lisCss].len > 0:
+      view.xLayoutInputCache = previousCache
     view.clearSolveFailure(lsmFitting)
     view.xLastLayoutSolveDiagnostic = LayoutSolveDiagnostic()
+    view.xCssLayoutDiagnostics[lsmFitting] = state.cssDiagnostics
   except LayoutSolveBudgetExceeded as error:
     view.xLayoutInputCache = previousCache
     view.xLastLayoutSolveDiagnostic = error.diagnostic
     view.recordSolveFailure(lsmFitting)
+    if state.didResolveCss:
+      state.cssDiagnostics.add CssLayoutDiagnostic(
+        property: "-nimkit-constraints",
+        message: "Fitting solver budget exceeded " & $error.diagnostic.limit,
+      )
+    view.xCssLayoutDiagnostics[lsmFitting] = state.cssDiagnostics
+    result = view.alignmentRect().size
+  except CssLayoutGeometryError:
+    view.xLayoutInputCache = previousCache
+    view.xLastLayoutSolveDiagnostic = state.solveDiagnostic()
+    view.xLastLayoutSolveDiagnostic.failed = true
+    view.recordSolveFailure(lsmFitting)
+    view.xCssLayoutDiagnostics[lsmFitting] = state.cssDiagnostics
     result = view.alignmentRect().size
   except CatchableError:
     view.xLayoutInputCache = previousCache

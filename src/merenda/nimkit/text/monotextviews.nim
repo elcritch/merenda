@@ -1847,6 +1847,9 @@ protocol DefaultMonoTextViewDrawing of ViewDrawingProtocol:
     view.drawMonoTextCursor(context)
 
 protocol DefaultMonoTextViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(view: MonoTextView): StyleContext =
+    view.monoTextStyleContext()
+
   method layoutIntrinsicContentSize(view: MonoTextView): IntrinsicSize =
     view.monoTextIntrinsicSize()
 

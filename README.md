@@ -48,9 +48,11 @@ NIMKIT_THEME=macos nim r examples/controls_showcase.nim
 NIMKIT_THEME=aqua nim r examples/controls_showcase.nim
 ```
 
-Use CSS to change control colors, fonts, padding and state styles while keeping
-your chosen theme. The [CSS preview](examples/css_theme_demo.nim) reloads its
-stylesheet when you click **Reload CSS**:
+Use CSS for control colors, fonts, state styles, edge pinning and native layout
+constraints. Style StackView/GridView spacing and alignment and control-specific
+metrics through `-nimkit-*` properties. The [CSS preview](examples/css_theme_demo.nim)
+lays out its toolbar, sidebar and editor from a stylesheet and reloads it when
+you click **Reload CSS**:
 
 ```sh
 nim r examples/css_theme_demo.nim

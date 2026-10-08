@@ -288,6 +288,12 @@ proc drawGroupBox(box: Box, context: DrawContext, style: BoxStyle) =
       context.addText(textRect, titleText, style.text)
 
 protocol DefaultBoxLayout of ViewLayoutProtocol:
+  method layoutStyleContext(box: Box): StyleContext =
+    box.boxStyleContext()
+
+  method managesSubviewLayout(box: Box, child: DynamicAgent): bool =
+    child == box.xContentView
+
   method layoutIntrinsicContentSize(box: Box): IntrinsicSize =
     box.intrinsicContentSize()
 

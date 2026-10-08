@@ -58,6 +58,8 @@ proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): Fill 
   let resolved = themed.centerColor()
   fill(color(resolved.r, resolved.g, resolved.b, resolved.a * view.alphaValue))
 
+const MaximumRootPinstripeBands = 4096
+
 proc addRootBackgroundPinstripes(
     context: DrawContext,
     view: View,
@@ -88,11 +90,16 @@ proc addRootBackgroundPinstripes(
     return
 
   let
-    period = max(rawPeriod, stripeHeight * 2.0'f32)
+    period = max(
+      max(rawPeriod, stripeHeight * 2.0'f32),
+      max(1.0'f32, frame.size.height / MaximumRootPinstripeBands.float32),
+    )
     bottom = frame.origin.y + frame.size.height
 
   var y = frame.origin.y
-  while y < bottom:
+  for band in 0 ..< MaximumRootPinstripeBands:
+    if y >= bottom:
+      break
     let highlightHeight = min(stripeHeight, bottom - y)
     if highlightColor.a > 0.0'f32 and highlightHeight > 0.0'f32:
       discard context.addRenderRectangle(
@@ -112,7 +119,10 @@ proc addRootBackgroundPinstripes(
         fill(stripeColor),
       )
 
-    y += period
+    let nextY = y + period
+    if nextY <= y:
+      break
+    y = nextY
 
 type DisplayRevisionSnapshot = object
   view: View

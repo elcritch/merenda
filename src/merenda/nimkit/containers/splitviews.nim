@@ -709,6 +709,14 @@ proc drawSplitViewDividers(splitView: SplitView, context: DrawContext) =
         )
 
 protocol DefaultSplitViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(splitView: SplitView): StyleContext =
+    splitView.splitViewStyleContext()
+
+  method managesSubviewLayout(splitView: SplitView, child: DynamicAgent): bool =
+    for pane in splitView.xPanes:
+      if child == pane.view:
+        return true
+
   method layoutIntrinsicContentSize(splitView: SplitView): IntrinsicSize =
     splitView.intrinsicContentSize()
 

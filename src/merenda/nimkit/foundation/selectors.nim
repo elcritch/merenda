@@ -5,6 +5,7 @@ import sigils/selectors
 from figdraw import ZLevel
 
 import ../drawing/drawing
+from ../themes/themecore import StyleContext
 import ./undomanagers
 import ./events
 import ../text/texttypes
@@ -241,6 +242,12 @@ protocol ViewDrawingProtocol:
   method drawOverlay*(context: DrawContext) {.optional.}
 
 protocol ViewLayoutProtocol:
+  method layoutStyleContext*(): StyleContext {.optional.}
+    ## Supplies this widget's semantic role and effective state for themed layout.
+
+  method managesSubviewLayout*(child: DynamicAgent): bool {.optional.}
+    ## Identifies exactly the descendants whose frames this owner assigns.
+
   method layoutIntrinsicContentSize*(): IntrinsicSize {.optional.}
   method updateConstraints*() {.optional.}
   method layoutSubviews*() {.optional.}

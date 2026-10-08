@@ -5,6 +5,7 @@
 }
 
 view { background: #151d31; }
+.panel { background: #202b43; }
 label { color: var(--ink); }
 label.label-title { font-size: 25px; }
 
@@ -33,3 +34,25 @@ text-field {
 }
 
 text-field:focus { -nimkit-focus-ring-color: #91b2ff; }
+
+#toolbar { left: 16px; right: 16px; top: 12px; height: 56px; }
+#sidebar { left: 16px; top: 80px; bottom: 40px; width: 25%; min-width: 170px; }
+#editor {
+  right: 16px; bottom: 40px; min-width: 260px;
+  -nimkit-constraints: left == #sidebar.right + 16px,
+                       top == #toolbar.bottom + 12px;
+}
+#status { left: 16px; right: 16px; bottom: 8px; height: 22px; padding: 0; font-size: 13px; }
+
+stack-view { gap: 14px; -nimkit-distribution: natural; }
+#toolbar { -nimkit-alignment: center; }
+.panel { -nimkit-content-insets: 18px; }
+grid-view { gap: 12px 18px; -nimkit-column-alignment: leading; }
+checkbox { -nimkit-indicator-size: 20px; -nimkit-indicator-spacing: 9px; }
+switch { -nimkit-knob-fill: #c2d7ff; -nimkit-width-factor: 1.9; }
+slider, progress-indicator {
+  -nimkit-highlight-fill: #497be8;
+  -nimkit-knob-fill: #c2d7ff;
+  -nimkit-knob-size: 18px;
+}
+text-field { -nimkit-selection-color: rgba(73, 123, 232, 0.5); }

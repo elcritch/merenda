@@ -2020,6 +2020,9 @@ protocol DocumentTabsEventsProtocol of ResponderEventProtocol:
       false
 
 protocol DocumentTabsLayout of ViewLayoutProtocol:
+  method layoutStyleContext(tabs: DocumentTabs): StyleContext =
+    tabs.documentTabBarStyleContext()
+
   method layoutSubviews(tabs: DocumentTabs) =
     let
       viewportWidth = tabs.tabViewportRect().size.width

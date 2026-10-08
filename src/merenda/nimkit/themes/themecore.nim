@@ -4,6 +4,7 @@ import figdraw
 from sigils/selectors import DynamicAgent
 
 import ../foundation/types
+import ./private/cssproperties
 
 export
   figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,
@@ -71,6 +72,8 @@ type
     srTooltip
     srMenuBar
     srMenuBarItem
+    srStackView
+    srGridView
 
   StyleContext* = object
     role*: StyleRole
@@ -84,6 +87,27 @@ type
     id*: string
     classes*: seq[string]
 
+  StyleLayoutTarget* = enum
+    sltConstant
+    sltSelf
+    sltParent
+    sltSibling
+
+  StyleLayoutConstraint* = object
+    ## Immutable constraint data; named targets are resolved within a superview.
+    attribute*: LayoutAttribute
+    relation*: LayoutRelation
+    target*: StyleLayoutTarget
+    targetId*: string
+    targetAttribute*: LayoutAttribute
+    multiplier*: float32 = 1
+    constant*: float32
+    priority*: LayoutPriority = LayoutPriorityRequired
+
+  CssLayoutDiagnostic* = object
+    ## One runtime constraint rejection in the latest layout or fitting attempt.
+    viewId*, property*, message*: string
+
   StyleValueKind* = enum
     svMissing
     svColor
@@ -95,6 +119,7 @@ type
     svToken
     svKeyword
     svFontFace
+    svConstraints
 
   StyleValue* = object
     case kind*: StyleValueKind
@@ -118,6 +143,8 @@ type
       token*: string
     of svKeyword:
       keyword*: string
+    of svConstraints:
+      constraints*: seq[StyleLayoutConstraint]
 
   StyleTokenStore* = ref object
     parent*: StyleTokenStore
@@ -127,6 +154,14 @@ type
 
   StylePatch* = ref object
     values*: Table[string, StyleValue]
+
+  LayoutStyleSelection* = object
+    ## A borrowed declaration in an immutable theme, counted before list copying.
+    patch: StylePatch
+    tokens: StyleTokenStore
+    key: string
+    scalar: StyleLayoutConstraint
+    hasScalar: bool
 
   StyleRule* = object
     selector*: StyleSelector
@@ -157,6 +192,7 @@ type
     xCssImportantTokens: HashSet[string]
     xNativeCssTokens: HashSet[string]
     xCssSourceOrder: int
+    xHasLayoutRules: bool
 
   ThemeBuilder* = object
     xTokens: StyleTokenStore
@@ -395,6 +431,25 @@ const
   StyleMinimumSize* = StyleKey[Size]("minimum.size")
   StyleCloseButtonPosition* = StyleKey[string]("close.button.position")
   StyleChrome* = StyleKey[string]("chrome")
+  StyleLayoutConstraints* = StyleKey[seq[StyleLayoutConstraint]]("layout.constraints")
+  StyleLayoutWidth* = StyleKey[seq[StyleLayoutConstraint]]("layout.width")
+  StyleLayoutHeight* = StyleKey[seq[StyleLayoutConstraint]]("layout.height")
+  StyleLayoutMinWidth* = StyleKey[seq[StyleLayoutConstraint]]("layout.min.width")
+  StyleLayoutMinHeight* = StyleKey[seq[StyleLayoutConstraint]]("layout.min.height")
+  StyleLayoutMaxWidth* = StyleKey[seq[StyleLayoutConstraint]]("layout.max.width")
+  StyleLayoutMaxHeight* = StyleKey[seq[StyleLayoutConstraint]]("layout.max.height")
+  StyleLayoutLeft* = StyleKey[seq[StyleLayoutConstraint]]("layout.left")
+  StyleLayoutTop* = StyleKey[seq[StyleLayoutConstraint]]("layout.top")
+  StyleLayoutRight* = StyleKey[seq[StyleLayoutConstraint]]("layout.right")
+  StyleLayoutBottom* = StyleKey[seq[StyleLayoutConstraint]]("layout.bottom")
+  StyleContainerRowGap* = StyleKey[float32]("container.row.gap")
+  StyleContainerColumnGap* = StyleKey[float32]("container.column.gap")
+  StyleContainerInsets* = StyleKey[EdgeInsets]("container.insets")
+  StyleContainerOrientation* = StyleKey[string]("container.orientation")
+  StyleContainerAlignment* = StyleKey[string]("container.alignment")
+  StyleContainerRowAlignment* = StyleKey[string]("container.row.alignment")
+  StyleContainerColumnAlignment* = StyleKey[string]("container.column.alignment")
+  StyleContainerDistribution* = StyleKey[string]("container.distribution")
 
   DefaultChromeName* = "default"
   AquaChromeName* = "aqua"
@@ -510,6 +565,15 @@ func styleInsets*(insets: EdgeInsets): StyleValue =
 func styleShadows*(shadows: openArray[BoxShadow]): StyleValue =
   StyleValue(kind: svShadows, shadows: @shadows)
 
+proc styleConstraints*(constraints: openArray[StyleLayoutConstraint]): StyleValue =
+  ## Packages value specifications without retaining any widget or native constraint.
+  result = StyleValue(kind: svConstraints)
+  for constraint in constraints:
+    var copied = constraint
+    copied.targetId = newStringOfCap(constraint.targetId.len)
+    copied.targetId.add constraint.targetId
+    result.constraints.add copied
+
 func styleFontFace*(fontFace: SystemTypeface): StyleValue =
   StyleValue(kind: svFontFace, fontFace: fontFace)
 
@@ -588,6 +652,8 @@ proc clone(value: StyleValue): StyleValue =
     styleInsets(value.insets)
   of svShadows:
     styleShadows(value.shadows)
+  of svConstraints:
+    styleConstraints(value.constraints)
   of svFontFace:
     var variations =
       newSeqOfCap[typeof(value.fontFace.variations[0])](value.fontFace.variations.len)
@@ -703,9 +769,16 @@ proc finish*(builder: ThemeBuilder): Theme =
   result.xCssSourceOrder = builder.xCssSourceOrder
   for index, rule in result.xRules:
     result.xRulesByRole[rule.selector.role].add index
+    for key in rule.patch.values.keys:
+      if key.startsWith("layout."):
+        result.xHasLayoutRules = true
+      if key.startsWith("layout.") or key.startsWith("container."):
+        result.xCssMetricStates = result.xCssMetricStates + rule.selector.states
     if rule.origin == sroCss:
       for key in rule.patch.values.keys:
-        if key.startsWith("font.") or
+        var spec: CssPropertySpec
+        if key.startsWith("font.") or key.startsWith("layout.") or
+            (cssPropertyByKey(key, spec) and spec.metric) or
             key in [
               "text.insets", "padding", "minimum.size", "border.width", "chrome",
               "focus.ring.inset",
@@ -809,6 +882,10 @@ proc setCssToken*(
 func hasCss*(theme: Theme): bool =
   ## Whether this snapshot contains CSS declarations or root custom properties.
   theme.xHasCss
+
+func hasLayoutRules*(theme: Theme): bool =
+  ## Whether the snapshot contains native or CSS constraint specifications.
+  theme.xHasLayoutRules
 
 func cssMetricStates*(theme: Theme): set[WidgetState] =
   ## States whose CSS declarations can change intrinsic content metrics.
@@ -1418,12 +1495,110 @@ proc `[]`*[T](theme: ThemeBuilder, role: StyleRole, key: StyleKey[T]): StyleValu
   if patch.isNil or not patch.getStyle(key, result):
     result = missingStyleValue()
 
+func layoutAttributeCategory*(attribute: LayoutAttribute): int =
+  case attribute
+  of atLeft, atRight, atLeading, atTrailing, atCenterX: 1
+  of atTop, atBottom, atCenterY, atFirstBaseline, atLastBaseline: 2
+  of atWidth, atHeight: 3
+  of atNotAnAttribute: 0
+
+func validStyleConstraint*(constraint: StyleLayoutConstraint): bool =
+  let priority = constraint.priority.priorityValue
+  if constraint.attribute == atNotAnAttribute or
+      constraint.constant.classify in {fcNan, fcInf, fcNegInf} or
+      constraint.multiplier.classify in {fcNan, fcInf, fcNegInf} or
+      constraint.multiplier <= 0 or priority.classify in {fcNan, fcInf, fcNegInf} or
+      priority < 1 or priority > 1000:
+    return
+  if constraint.target == sltConstant:
+    return constraint.attribute in {atWidth, atHeight}
+  if constraint.target == sltSibling and constraint.targetId.len == 0:
+    return
+  constraint.attribute.layoutAttributeCategory ==
+    constraint.targetAttribute.layoutAttributeCategory and
+    (constraint.multiplier == 1 or constraint.attribute in {atWidth, atHeight})
+
 proc resolveCssValue*(
     theme: Theme, value: StyleValue, key: string, resolved: var StyleValue
 ): bool =
   ## Compiler/resolver hook for bounded typed CSS variables and shorthand coercion.
   if not theme.xTokens.resolveValue(value, resolved):
     return
+  var geometry: CssGeometryProperty
+  if cssGeometryByKey(key, geometry):
+    if value.kind == svToken and resolved.kind == svConstraints:
+      return
+    if resolved.kind == svLength:
+      if resolved.length.classify in {fcNan, fcInf, fcNegInf} or
+          (not geometry.edge and resolved.length < 0):
+        return
+      var constraint = StyleLayoutConstraint(
+        attribute: geometry.attribute,
+        relation: geometry.relation,
+        constant: resolved.length,
+        priority: geometry.priority,
+      )
+      if geometry.edge:
+        constraint.target = sltParent
+        constraint.targetAttribute = geometry.attribute
+        if geometry.attribute in {atRight, atBottom}:
+          constraint.constant = -constraint.constant
+      resolved = styleConstraints([constraint])
+    if resolved.kind != svConstraints:
+      return
+    for constraint in resolved.constraints:
+      if not constraint.validStyleConstraint:
+        return
+    result = true
+    return
+  if key == StyleLayoutConstraints.keyName:
+    if resolved.kind != svConstraints:
+      return
+    for constraint in resolved.constraints:
+      if not constraint.validStyleConstraint:
+        return
+    return true
+  var spec: CssPropertySpec
+  if cssPropertyByKey(key, spec):
+    case spec.kind
+    of cpkColor:
+      return resolved.kind == svColor
+    of cpkFill:
+      return resolved.kind in {svColor, svFill}
+    of cpkLength:
+      return
+        resolved.kind == svLength and
+        resolved.length.classify notin {fcNan, fcInf, fcNegInf} and
+        resolved.length >= spec.minimum and resolved.length <= spec.maximum
+    of cpkSize:
+      if resolved.kind == svLength:
+        resolved = styleSize(initSize(resolved.length, resolved.length))
+      return
+        resolved.kind == svSize and
+        resolved.size.width.classify notin {fcNan, fcInf, fcNegInf} and
+        resolved.size.height.classify notin {fcNan, fcInf, fcNegInf} and
+        resolved.size.width >= 0 and resolved.size.height >= 0
+    of cpkInsets:
+      if resolved.kind == svLength:
+        resolved = styleInsets(insets(resolved.length))
+      if resolved.kind != svInsets:
+        return
+      for amount in [
+        resolved.insets.top, resolved.insets.right, resolved.insets.bottom,
+        resolved.insets.left,
+      ]:
+        if amount.classify in {fcNan, fcInf, fcNegInf} or amount < 0:
+          return
+      return true
+    of cpkShadows:
+      return resolved.kind == svShadows
+    of cpkKeyword:
+      if resolved.kind != svKeyword or resolved.keyword.len == 0:
+        return
+      if spec.keywords.len > 0:
+        resolved = styleKeyword(resolved.keyword.toLowerAscii())
+        return resolved.keyword in spec.keywords.split('|')
+      return true
   case key
   of "text.color", "border.color", "focus.ring.color":
     result = resolved.kind == svColor
@@ -1824,6 +1999,131 @@ proc resolveInsets*(
 
 proc resolveChromeName*(theme: Theme, context: StyleContext): string =
   theme.keywordRule(context, StyleChrome, DefaultChromeName)
+
+proc layoutStyleSelection*(
+    theme: Theme,
+    context: StyleContext,
+    key = StyleLayoutConstraints,
+    checkWork: proc() {.closure.} = nil,
+): LayoutStyleSelection =
+  ## Selects layout data without cloning a constraint list. Optional work checks
+  ## let layout solvers enforce a deadline while scanning declarations/tokens.
+  var
+    bestRank = [-1, -1, -1, -1, -1, -1, -1]
+    inheritedContext = context
+  let name = key.keyName
+  let inheritedRole = context.role.inheritedStyleRole()
+  inheritedContext.role = inheritedRole
+
+  template checkSelectionWork() =
+    if not checkWork.isNil:
+      checkWork()
+
+  template applyLayoutRule(rule: StyleRule, matchContext: StyleContext, roleRank: int) =
+    block:
+      checkSelectionWork()
+      if rule.selector.matches(matchContext) and rule.patch.values.hasKey(name):
+        let rank =
+          if rule.origin == sroCss:
+            [
+              ord(rule.origin),
+              ord(rule.important),
+              rule.cssSpecificity[0],
+              rule.cssSpecificity[1],
+              rule.cssSpecificity[2],
+              rule.sourceOrder,
+              roleRank,
+            ]
+          else:
+            [
+              ord(rule.origin),
+              0,
+              0,
+              0,
+              0,
+              rule.selector.specificity() * 10 + roleRank,
+              0,
+            ]
+        if rank.rankAtLeast(bestRank):
+          var candidate: LayoutStyleSelection
+          if rule.patch.values[name].kind == svConstraints:
+            # CSS literal lists were validated atomically during compilation.
+            # Native list entries are checked individually by the solver.
+            candidate = LayoutStyleSelection(patch: rule.patch, key: name)
+          else:
+            var listToken = false
+            if rule.patch.values[name].kind == svToken:
+              var tokenName = rule.patch.values[name].token
+              for depth in 0 ..< 16:
+                checkSelectionWork()
+                var tokenStore = theme.xTokens
+                while not tokenStore.isNil and not tokenStore.values.hasKey(tokenName):
+                  checkSelectionWork()
+                  tokenStore = tokenStore.parent
+                if tokenStore.isNil:
+                  break
+                if tokenStore.values[tokenName].kind == svConstraints:
+                  listToken = true
+                  if rule.origin != sroCss:
+                    candidate = LayoutStyleSelection(tokens: tokenStore, key: tokenName)
+                  break
+                if tokenStore.values[tokenName].kind != svToken:
+                  break
+                tokenName = tokenStore.values[tokenName].token
+            if candidate.tokens.isNil and not listToken:
+              var scalar: StyleValue
+              if theme.resolveCssValue(rule.patch.values[name], name, scalar) and
+                  scalar.kind == svConstraints and scalar.constraints.len == 1:
+                candidate =
+                  LayoutStyleSelection(scalar: scalar.constraints[0], hasScalar: true)
+          if not candidate.patch.isNil or not candidate.tokens.isNil or
+              candidate.hasScalar:
+            result = candidate
+            bestRank = rank
+
+  if inheritedRole != context.role:
+    for index in theme.xRulesByRole[inheritedRole]:
+      applyLayoutRule(theme.xRules[index], inheritedContext, 0)
+  for index in theme.xRulesByRole[context.role]:
+    applyLayoutRule(theme.xRules[index], context, 1)
+
+func constraintCount*(selection: LayoutStyleSelection): Natural =
+  ## Reads borrowed list metadata without copying or validating list entries.
+  if not selection.patch.isNil:
+    selection.patch.values[selection.key].constraints.len
+  elif not selection.tokens.isNil:
+    selection.tokens.values[selection.key].constraints.len
+  elif selection.hasScalar:
+    1
+  else:
+    0
+
+proc resolveLayoutConstraints*(
+    selection: LayoutStyleSelection, checkWork: proc() {.closure.} = nil
+): seq[StyleLayoutConstraint] =
+  ## Makes one independently owned copy after the caller checks list size.
+  let count = selection.constraintCount
+  result = newSeqOfCap[StyleLayoutConstraint](count)
+  for index in 0 ..< count:
+    if not checkWork.isNil:
+      checkWork()
+    var spec =
+      if not selection.patch.isNil:
+        selection.patch.values[selection.key].constraints[index]
+      elif not selection.tokens.isNil:
+        selection.tokens.values[selection.key].constraints[index]
+      else:
+        selection.scalar
+    var id = newStringOfCap(spec.targetId.len)
+    id.add spec.targetId
+    spec.targetId = move id
+    result.add spec
+
+proc resolveLayoutConstraints*(
+    theme: Theme, context: StyleContext, key = StyleLayoutConstraints
+): seq[StyleLayoutConstraint] =
+  ## Returns independently owned specifications from the winning declaration.
+  theme.layoutStyleSelection(context, key).resolveLayoutConstraints()
 
 proc resolveChromeName*(appearance: Appearance, context: StyleContext): string =
   appearance.theme.resolveChromeName(context)

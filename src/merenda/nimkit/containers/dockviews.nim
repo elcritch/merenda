@@ -47,6 +47,9 @@ proc valid*(target: DockDropTarget): bool =
   not target.panel.isNil and not target.rect.isEmpty
 
 protocol DockPanelLayout of ViewLayoutProtocol:
+  method managesSubviewLayout(panel: DockPanel, child: DynamicAgent): bool =
+    child == panel.xContentView
+
   method layoutSubviews(panel: DockPanel) =
     if not panel.xContentView.isNil:
       panel.xContentView.setFrameFromLayout(panel.bounds())
@@ -104,6 +107,9 @@ proc newDockDropIndicator(): DockDropIndicator =
   discard result.withProtocol(DockDropIndicatorHitTesting)
 
 protocol DockViewLayout of ViewLayoutProtocol:
+  method managesSubviewLayout(dockView: DockView, child: DynamicAgent): bool =
+    child == dockView.xRootView
+
   method layoutSubviews(dockView: DockView) =
     if not dockView.xRootView.isNil:
       dockView.xRootView.setFrameFromLayout(dockView.bounds())

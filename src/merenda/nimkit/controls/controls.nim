@@ -260,6 +260,10 @@ proc pulseActivationFeedback*(control: Control) =
     control.xActivationAnimation = nil
     control.setActivationFeedback(false)
 
+protocol DefaultControlLayoutOwnership of ViewLayoutProtocol:
+  method managesSubviewLayout(control: Control, child: DynamicAgent): bool =
+    not control.xCurrentEditor.isNil and child == control.xCurrentEditor
+
 proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = nil) =
   initViewFields(control, frame)
   control.background = color(0.0, 0.0, 0.0, 0.0)
@@ -276,6 +280,7 @@ proc initControlFields*(control: Control, frame: Rect = AutoRect, cell: Cell = n
   )
   discard control.withProto()
   discard control.withProtocol(ControlStyledBackground)
+  discard control.withProtocol(DefaultControlLayoutOwnership)
   discard control.withProtocol(DefaultControlActivationFeedback)
   discard control.withProtocol(DefaultControlDraggingSource)
   discard control.withProtocol(DefaultControlDraggingDestination)

@@ -7,6 +7,11 @@
   reloads, and source diagnostics. Style existing control colors, fonts, padding,
   borders, corners, shadows and focus metrics without replacing the native theme;
   CSS metric state changes relayout controls and preserve hover color animation.
+  Support edge pins, preferred/percentage dimensions, required min/max bounds and
+  scoped sibling/parent/self anchor equations with native solver priorities.
+  Expose more control-specific properties and StackView/GridView layout metrics.
+  Diagnose container ownership conflicts and invalid runtime targets; retain
+  finite geometry and the layout cache on failed solves and fitting measurements.
   Include a stylesheet preview example and CSS theming guide.
 
 - Keep Markdown code block backgrounds visible in Kosmo editor mode while

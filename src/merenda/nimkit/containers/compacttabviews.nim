@@ -174,6 +174,19 @@ protocol CompactTabButtonDrawing of ViewDrawingProtocol:
       )
 
 protocol CompactTabViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(tabs: CompactTabView): StyleContext =
+    controlStyle(
+      srTabPanel, tabs.widgetStateSet(), id = tabs.styleId, classes = tabs.styleClasses
+    )
+
+  method managesSubviewLayout(tabs: CompactTabView, child: DynamicAgent): bool =
+    for button in tabs.xButtons:
+      if child == button:
+        return true
+    for item in tabs.xItems:
+      if child == item.xView:
+        return true
+
   method layoutSubviews(tabs: CompactTabView) =
     let bounds = tabs.bounds()
     for index, button in tabs.xButtons:

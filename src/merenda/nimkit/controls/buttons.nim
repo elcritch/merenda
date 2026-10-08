@@ -927,10 +927,23 @@ protocol DefaultButtonKeyCommands of KeyViewCommandProtocol:
   method insertNewline(button: Button, args: ActionArgs) =
     button.buttonPerformClick(args, showActivationFeedback = true)
 
+protocol DefaultButtonStyleLayout of ViewLayoutProtocol:
+  method layoutStyleContext(button: Button): StyleContext =
+    let cell = button.buttonCell()
+    cell.buttonStyleContext(
+      if cell.xButtonType in {btCheckBox, btRadio}:
+        cell.choiceRole()
+      else:
+        srButton,
+      button,
+      cell.buttonCellStates(button),
+    )
+
 proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect) =
   initControlFields(button, frame, newButtonCell(title))
   button.buttonCell().updateButtonLayoutPriorities()
   button.acceptsFirstResponder = true
+  discard button.withProtocol(DefaultButtonStyleLayout)
   discard button.withProtocol(DefaultButtonHover)
   discard button.withProtocol(DefaultButtonDrawing)
   discard button.withProtocol(DefaultButtonEvents)

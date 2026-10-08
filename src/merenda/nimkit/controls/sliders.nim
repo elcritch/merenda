@@ -393,6 +393,10 @@ protocol DefaultSliderAccessibility of AccessibilityProtocol:
   method isAccessibilityElement(slider: Slider): bool =
     true
 
+protocol DefaultSliderStyleLayout of ViewLayoutProtocol:
+  method layoutStyleContext(slider: Slider): StyleContext =
+    slider.sliderStyleContext()
+
 proc initSliderFields*(
     slider: Slider,
     minValue = 0.0'f32,
@@ -411,6 +415,7 @@ proc initSliderFields*(
   slider.acceptsFirstResponder = true
   slider.setHuggingPriority(LayoutPriorityLow, laHorizontal)
   slider.setCompressionPriority(LayoutPriorityHigh, laHorizontal)
+  discard slider.withProtocol(DefaultSliderStyleLayout)
   discard slider.withProtocol(DefaultSliderDrawing)
   discard slider.withProtocol(DefaultSliderEvents)
   discard slider.withProtocol(DefaultSliderAccessibility)

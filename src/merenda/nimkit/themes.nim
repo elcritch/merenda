@@ -7,6 +7,9 @@ import ./themes/peachytheme
 import ./themes/synthwave83theme
 import ./themes/cssthemes
 
+export themecore except
+  LayoutStyleSelection, layoutStyleSelection, constraintCount, validStyleConstraint,
+  layoutAttributeCategory
 export
-  themecore, defaulttheme, darkbsdtheme, macostheme, nebulatheme, peachytheme,
-  synthwave83theme, cssthemes
+  defaulttheme, darkbsdtheme, macostheme, nebulatheme, peachytheme, synthwave83theme,
+  cssthemes

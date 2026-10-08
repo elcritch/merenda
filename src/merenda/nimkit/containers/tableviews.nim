@@ -217,6 +217,8 @@ type
     xScrollView: ScrollView
     xContentView: TableContentView
     xRowHeight: float32
+    xHasExplicitRowHeight: bool
+    xCachedDefaultRowHeight: float32
     xVisibleRows: int
     xColumnSizing: TableViewColumnSizing
     xWidthSizingMode: TableViewWidthSizingMode
@@ -246,6 +248,7 @@ type
     xReusableCellViews: Table[string, seq[View]]
     xShowsHeader: bool
     xHeaderHeight: float32
+    xHasExplicitHeaderHeight: bool
     xHoveredColumn: TableColumn
     xPressedColumn: TableColumn
     xClickedRow: int
@@ -1622,7 +1625,15 @@ func tableHeaderCellCornerRadii(
   )
 
 proc tableHeaderHeight*(tableView: TableView): float32 =
-  if not tableView.xShowsHeader: 0.0'f32 else: tableView.xHeaderHeight
+  if not tableView.xShowsHeader:
+    return
+  result = tableView.xHeaderHeight
+  let appearance = tableView.effectiveAppearance()
+  if not tableView.xHasExplicitHeaderHeight and appearance.theme.hasCss:
+    result = max(
+      appearance.resolveLength(tableView.tableStyleContext(), StyleHeaderHeight, result),
+      0.0'f32,
+    )
 
 proc showsRowHeader*(tableView: TableView): bool =
   tableView.xShowsRowHeader
@@ -1742,7 +1753,9 @@ proc tableDropIndicatorFill(tableView: TableView, context: DrawContext): Fill =
 
 proc `tableHeaderHeight=`*(tableView: TableView, height: float32) =
   let nextHeight = max(height, 0.0'f32)
-  if tableView.xHeaderHeight == nextHeight:
+  let previousHeight = tableView.tableHeaderHeight()
+  tableView.xHasExplicitHeaderHeight = true
+  if tableView.xHeaderHeight == nextHeight and previousHeight == nextHeight:
     return
   tableView.xHeaderHeight = nextHeight
   tableView.noteColumnsChanged()
@@ -2313,6 +2326,9 @@ proc usesFixedRowHeights(tableView: TableView): bool =
   delegate.isNil or not delegate.respondsTo(tableRowHeight())
 
 proc ensureRowHeightCache(tableView: TableView) =
+  let defaultHeight = tableView.rowHeight()
+  if tableView.xCachedDefaultRowHeight != defaultHeight:
+    tableView.xRowHeightCacheValid = false
   if tableView.xRowHeightCacheValid or tableView.xComputingRowHeights:
     return
   tableView.xComputingRowHeights = true
@@ -2328,6 +2344,7 @@ proc ensureRowHeightCache(tableView: TableView) =
       offset += height
     tableView.xRowHeights = heights
     tableView.xRowOffsets = offsets
+    tableView.xCachedDefaultRowHeight = defaultHeight
     tableView.xRowHeightCacheValid = true
   finally:
     tableView.xComputingRowHeights = false
@@ -2580,6 +2597,7 @@ proc resolvedTableContentLayout(tableView: TableView): TableContentLayout =
     availableWidth = viewportSize.width
 
 proc layoutTableContent(tableView: TableView) =
+  tableView.xScrollView.lineScroll = tableView.rowHeight()
   let
     offset = tableView.listContentOffset()
     layout = tableView.resolvedTableContentLayout()
@@ -3181,7 +3199,12 @@ proc focusedColumnIndex*(tableView: TableView): int =
     tableView.columnIndex(tableView.xFocusedColumn.identifier())
 
 proc rowHeight*(tableView: TableView): float32 =
-  tableView.xRowHeight.normalizedRowHeight()
+  result = tableView.xRowHeight
+  let appearance = tableView.effectiveAppearance()
+  if not tableView.xHasExplicitRowHeight and appearance.theme.hasCss:
+    result =
+      appearance.resolveLength(tableView.tableStyleContext(), StyleRowHeight, result)
+  result = result.normalizedRowHeight()
 
 proc rowHeightForRow*(tableView: TableView, row: int): float32 =
   if row notin 0 ..< tableView.len():
@@ -3192,7 +3215,9 @@ proc rowHeightForRow*(tableView: TableView, row: int): float32 =
 
 proc `rowHeight=`*(tableView: TableView, height: float32) =
   let normalized = height.normalizedRowHeight()
-  if tableView.xRowHeight == normalized:
+  let previousHeight = tableView.rowHeight()
+  tableView.xHasExplicitRowHeight = true
+  if tableView.xRowHeight == normalized and previousHeight == normalized:
     return
   tableView.xRowHeight = normalized
   tableView.xScrollView.lineScroll = normalized
@@ -5237,6 +5262,22 @@ protocol DefaultTableContentViewHitTesting of ViewProtocol:
     contentView.bounds().contains(point)
 
 protocol DefaultTableViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(tableView: TableView): StyleContext =
+    tableView.tableStyleContext()
+
+  method managesSubviewLayout(tableView: TableView, child: DynamicAgent): bool =
+    if child == tableView.xScrollView or child == tableView.xContentView:
+      return true
+    let editor = Control(tableView).currentEditor()
+    if not editor.isNil and child == editor:
+      return true
+    for rowView in tableView.xContentView.xRowViews:
+      if child == rowView:
+        return true
+    for slot in tableView.xCellSlots:
+      if child == slot.view:
+        return true
+
   method layoutIntrinsicContentSize(tableView: TableView): IntrinsicSize =
     initIntrinsicSize(tableView.naturalSize())
 

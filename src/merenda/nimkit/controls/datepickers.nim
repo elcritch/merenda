@@ -350,6 +350,9 @@ protocol DatePickerPopupHitTesting of ViewProtocol:
     PopupDrawLevel.int
 
 protocol DatePickerLayout of ViewLayoutProtocol:
+  method layoutStyleContext(picker: DatePicker): StyleContext =
+    picker.datePickerStyleContext(picker.widgetStateSet())
+
   method layoutIntrinsicContentSize(picker: DatePicker): IntrinsicSize =
     initIntrinsicSize(datePickerDefaultSize())
 
@@ -1015,6 +1018,9 @@ protocol TimePickerPopupHitTesting of ViewProtocol:
     PopupDrawLevel.int
 
 protocol TimePickerLayout of ViewLayoutProtocol:
+  method layoutStyleContext(picker: TimePicker): StyleContext =
+    picker.timePickerStyleContext(picker.widgetStateSet())
+
   method layoutIntrinsicContentSize(picker: TimePicker): IntrinsicSize =
     initIntrinsicSize(timePickerDefaultSize())
 
@@ -1570,6 +1576,17 @@ proc dateTimePickerTimeDidConfirm(picker: DateTimePicker, time: TimeOfDay) =
   discard picker.confirmDateTime()
 
 protocol DateTimePickerLayout of ViewLayoutProtocol:
+  method layoutStyleContext(picker: DateTimePicker): StyleContext =
+    controlStyle(
+      srDatePicker,
+      picker.widgetStateSet(),
+      id = picker.styleId,
+      classes = picker.styleClasses,
+    )
+
+  method managesSubviewLayout(picker: DateTimePicker, child: DynamicAgent): bool =
+    child == picker.xDatePicker or child == picker.xTimePicker
+
   method layoutIntrinsicContentSize(picker: DateTimePicker): IntrinsicSize =
     initIntrinsicSize(dateTimePickerDefaultSize())
 

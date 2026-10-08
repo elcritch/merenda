@@ -41,6 +41,7 @@ type
     lisAutoresizingMask
     lisIntrinsic
     lisContainer
+    lisCss
 
   LayoutInputSources* = set[LayoutInputSource]
 
@@ -159,6 +160,7 @@ type
     constant*: float32
     priority*: LayoutPriority
     source*: LayoutInputSource
+    cssProperty*: string
 
   LayoutInput* = object
     case kind*: LayoutInputKind
@@ -255,6 +257,7 @@ type
     xCompressionPriority*: array[LayoutAxis, LayoutPriority]
     xConstraints*: seq[LayoutConstraint]
     xLayoutInputCache*: LayoutInputCache
+    xCssLayoutDiagnostics*: array[LayoutSolveMode, seq[CssLayoutDiagnostic]]
     xNextKeyView*: BackRef[View]
     xPreviousKeyView*: BackRef[View]
     xSuperview*: BackRef[View]

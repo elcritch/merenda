@@ -25,7 +25,7 @@ export viewbase except
 export viewconstraints except
   generatedLayoutInputs, solveBlocked, applyConstraintsForSubtree
 export viewgeometry except
-  resetAutoresizingState, refreshAutoresizingReference,
+  resolvedLayoutStyleContext, resetAutoresizingState, refreshAutoresizingReference,
   refreshAutoresizingReferenceIfNeeded, applyLayoutFrame, setFrameFromLayout,
   initLayoutSignalBus, markConstraintStorageChanged, observeSuperviewGeometry,
   unobserveSuperviewGeometry, invalidateLayoutItemGeometry, ViewLayoutInputSlots,

@@ -954,6 +954,9 @@ proc textFieldStyleContext(textField: TextField): StyleContext =
   )
 
 protocol DefaultTextFieldLayout of ViewLayoutProtocol:
+  method layoutStyleContext(textField: TextField): StyleContext =
+    textField.textFieldStyleContext()
+
   method layoutSubviews(textField: TextField) =
     textField.syncLayout()
     textField.layoutFieldEditor()

@@ -837,6 +837,7 @@ proc `scrollViewRole=`*(scrollView: ScrollView, role: StyleRole) =
   if scrollView.xScrollViewRole == role:
     return
   scrollView.xScrollViewRole = role
+  scrollView.invalidateIntrinsicContentSize()
   scrollView.needsDisplay = true
 
 proc scrollerRole*(scrollView: ScrollView): StyleRole =
@@ -846,6 +847,9 @@ proc `scrollerRole=`*(scrollView: ScrollView, role: StyleRole) =
   if scrollView.xScrollerRole == role:
     return
   scrollView.xScrollerRole = role
+  for scroller in scrollView.xScroller:
+    if not scroller.isNil:
+      scroller.invalidateIntrinsicContentSize()
   scrollView.needsDisplay = true
   for scroller in scrollView.xScroller:
     scroller.needsDisplay = true
@@ -1035,6 +1039,16 @@ proc scrollPageToward(scroller: Scroller, point: Point) =
   scrollView.setContentOffset(scroller.xAxis, currentOffset + direction * page)
 
 protocol DefaultScrollViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(scrollView: ScrollView): StyleContext =
+    scrollView.scrollViewStyleContext()
+
+  method managesSubviewLayout(scrollView: ScrollView, child: DynamicAgent): bool =
+    if child == scrollView.xClipView or child == scrollView.xCornerView:
+      return true
+    for axis in LayoutAxis:
+      if child == scrollView.xScroller[axis] or child == scrollView.xHeaderView[axis]:
+        return true
+
   method layoutIntrinsicContentSize(scrollView: ScrollView): IntrinsicSize =
     NoIntrinsicContentSize
 
@@ -1130,6 +1144,10 @@ protocol DefaultScrollViewNavigation of ScrollNavigationProtocol:
   method scrollKey(scrollView: ScrollView, event: KeyEvent): bool =
     scrollView.handleScrollNavigationKey(event)
 
+protocol DefaultScrollerStyleLayout of ViewLayoutProtocol:
+  method layoutStyleContext(scroller: Scroller): StyleContext =
+    scroller.scrollerStyleContext()
+
 proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
   result = Scroller()
   initViewFields(result, rect(0.0, 0.0, 0.0, 0.0))
@@ -1139,6 +1157,7 @@ proc initScroller(scrollView: ScrollView, axis: LayoutAxis): Scroller =
   result.xScrollView.target = scrollView
   result.xAxis = axis
   discard result.withProtocol(DefaultScrollerDrawing)
+  discard result.withProtocol(DefaultScrollerStyleLayout)
   discard result.withProtocol(DefaultScrollerEvents)
 
 proc initClipView(scrollView: ScrollView, frame: Rect): ClipView =

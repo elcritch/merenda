@@ -762,6 +762,7 @@ proc `collectionRole=`*(collectionView: CollectionView, role: StyleRole) =
   if collectionView.xCollectionRole == role:
     return
   collectionView.xCollectionRole = role
+  collectionView.invalidateIntrinsicContentSize()
   collectionView.needsDisplay = true
 
 proc collectionItemRole*(collectionView: CollectionView): StyleRole =
@@ -2143,6 +2144,26 @@ proc installDefaultCollectionContentProtocols(contentView: CollectionContentView
   discard contentView.withProtocol(DefaultCollectionContentViewHitTesting)
 
 protocol DefaultCollectionViewLayoutBehavior of ViewLayoutProtocol:
+  method layoutStyleContext(collectionView: CollectionView): StyleContext =
+    controlStyle(
+      collectionView.xCollectionRole,
+      collectionView.widgetStateSet(),
+      id = collectionView.styleId,
+      classes = collectionView.styleClasses,
+    )
+
+  method managesSubviewLayout(
+      collectionView: CollectionView, child: DynamicAgent
+  ): bool =
+    if child == collectionView.xScrollView or child == collectionView.xContentView:
+      return true
+    for slot in collectionView.xItemSlots:
+      if child == slot.view:
+        return true
+    for view in collectionView.xSupplementaryViews.values:
+      if child == view:
+        return true
+
   method layoutIntrinsicContentSize(collectionView: CollectionView): IntrinsicSize =
     initIntrinsicSize(collectionView.resolvedContentSize())
 

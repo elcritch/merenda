@@ -870,6 +870,21 @@ protocol TabViewDrawing of ViewDrawingProtocol:
     )
 
 protocol TabViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(tabView: TabView): StyleContext =
+    controlStyle(
+      srTabPanel,
+      tabView.widgetStateSet(),
+      id = tabView.styleId,
+      classes = tabView.styleClasses,
+    )
+
+  method managesSubviewLayout(tabView: TabView, child: DynamicAgent): bool =
+    if child == tabView.xTabBar:
+      return true
+    for item in tabView.xItems:
+      if child == item.xView:
+        return true
+
   method layoutSubviews(tabView: TabView) =
     tabView.syncTabBarFrame()
     tabView.syncSelectedContent()
