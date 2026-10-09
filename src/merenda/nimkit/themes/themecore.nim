@@ -1,4 +1,4 @@
-import std/[atomics, math, strutils, tables]
+import std/[atomics, sets, strutils, tables]
 
 import figdraw except CornerRadii
 from sigils/selectors import DynamicAgent
@@ -6,6 +6,7 @@ from sigils/selectors import DynamicAgent
 import ../foundation/types
 import ./[stylevalues]
 import ./private/[cssproperties, cssvalues]
+from ./private/csstokens import CssDiagnostic
 
 export stylevalues except cloneText, lookupToken
 
@@ -50,10 +51,9 @@ type
     xRulesByProperty: Table[string, array[StyleRole, seq[int]]]
     xResolvedRules: seq[StylePatch]
     xGeneration: ThemeGeneration
-    xHasCss: bool
     xMetricStates: set[WidgetState]
     xTokenPriorities: Table[string, TokenPriority]
-    xCssSourceOrder: int
+    xSourceOrder: int
     xHasLayoutRules: bool
 
   ThemeBuilder* = object
@@ -63,9 +63,8 @@ type
     xBaseGeneration: ThemeGeneration
     xChanged: bool
     xWriteOrigin: StyleRuleOrigin
-    xHasCss: bool
     xTokenPriorities: Table[string, TokenPriority]
-    xCssSourceOrder: int
+    xSourceOrder: int
 
   Appearance* = object
     theme*: Theme
@@ -226,10 +225,14 @@ proc clone(selector: StyleSelector): StyleSelector =
     result.classes.add className.cloneText
 
 proc cloneRules(rules: openArray[StyleRule]): seq[StyleRule] =
+  var previous, patch: StylePatch
   for rule in rules:
+    if rule.patch != previous or patch.isNil:
+      patch = rule.patch.clone
+      previous = rule.patch
     var copied = rule
     copied.selector = rule.selector.clone
-    copied.patch = rule.patch.clone
+    copied.patch = patch
     result.add copied
 
 proc cloneChromes(chromes: Table[string, Chrome]): Table[string, Chrome] =
@@ -283,51 +286,66 @@ proc initThemeBuilder*(theme: Theme, origin = sroOverride): ThemeBuilder =
     xRules: theme.xRules.cloneRules(),
     xChromes: theme.xChromes.cloneChromes,
     xBaseGeneration: theme.xGeneration,
-    xHasCss: theme.xHasCss,
     xTokenPriorities: theme.xTokenPriorities,
     xWriteOrigin: origin,
-    xCssSourceOrder: theme.xCssSourceOrder,
+    xSourceOrder: theme.xSourceOrder,
   )
 
-proc resolveCssValue*(
-  theme: Theme, value: StyleValue, key: string, resolved: var StyleValue
-): bool
-
-proc finish*(builder: ThemeBuilder): Theme =
-  ## Freezes and compiles declarations once; drawing only reads typed values.
+proc finish*(builder: ThemeBuilder, diagnostics: var seq[CssDiagnostic]): Theme =
+  ## Compiler hook: freezes declarations and reports invalid CSS during compilation.
   result.xTokens = builder.xTokens.clone
   result.xRules = builder.xRules.cloneRules()
   result.xChromes = builder.xChromes.cloneChromes
-  result.xHasCss = builder.xHasCss
   result.xTokenPriorities = builder.xTokenPriorities
-  result.xCssSourceOrder = builder.xCssSourceOrder
+  result.xSourceOrder = builder.xSourceOrder
+  var
+    previousCssPatch, compiledCss: StylePatch
+    invalidCss: StyleValue
+    reported: HashSet[int]
   for index, rule in result.xRules:
-    var compiled = newStylePatch()
-    var valid = true
-    for key, value in rule.patch.values:
-      var resolved: StyleValue
-      if rule.isCss:
-        if not result.resolveCssValue(value, key, resolved):
-          valid = false
-        else:
-          compiled.values[key] = resolved
-      elif result.xTokens.resolveValue(value, resolved):
-        var validNative = true
-        if resolved.kind == svConstraints:
-          for constraint in resolved.constraints:
-            if not constraint.validStyleConstraint:
-              validNative = false
-        if validNative and (
-          resolved.kind != svCssExpression or
-          result.resolveCssValue(value, key, resolved)
-        ):
-          compiled.values[key] = resolved
+    var compiled: StylePatch
+    if rule.isCss:
+      if rule.patch != previousCssPatch:
+        previousCssPatch = rule.patch
+        compiledCss = result.xTokens.resolveCssPatch(rule.patch, invalidCss)
+      compiled = compiledCss
+      if compiled.isNil and rule.sourceOrder notin reported:
+        reported.incl rule.sourceOrder
+        let variable =
+          case invalidCss.kind
+          of svToken: invalidCss.token
+          of svCssExpression: invalidCss.cssText
+          else: ""
+        diagnostics.add CssDiagnostic(
+          line: rule.line,
+          column: rule.column,
+          message:
+            if variable.len == 0:
+              "Invalid CSS declaration"
+            else:
+              "Unresolved or wrong-type variable " & variable &
+                " (missing, cyclic, or beyond 16 reference steps)",
+        )
+    else:
+      compiled = newStylePatch()
+      for key, value in rule.patch.values:
+        var resolved: StyleValue
+        if result.xTokens.resolveValue(value, resolved):
+          var validNative = true
+          if resolved.kind == svConstraints:
+            for constraint in resolved.constraints:
+              if not constraint.validStyleConstraint:
+                validNative = false
+          if validNative and (
+            resolved.kind != svCssExpression or
+            result.xTokens.resolveCssValue(value, key, resolved)
+          ):
+            compiled.values[key] = resolved
+    for key in rule.patch.values.keys:
       if key.startsWith("layout."):
         result.xHasLayoutRules = true
       if styleAffectsMetrics(key):
         result.xMetricStates = result.xMetricStates + rule.selector.states
-    if not valid:
-      compiled = nil
     result.xResolvedRules.add compiled
     if not compiled.isNil:
       for key in compiled.values.keys:
@@ -340,6 +358,11 @@ proc finish*(builder: ThemeBuilder): Theme =
     result.xGeneration = nextThemeGeneration()
   else:
     result.xGeneration = builder.xBaseGeneration
+
+proc finish*(builder: ThemeBuilder): Theme =
+  ## Freezes and compiles declarations once; drawing only reads typed values.
+  var diagnostics: seq[CssDiagnostic]
+  builder.finish(diagnostics)
 
 proc noteThemeMutation(builder: var ThemeBuilder) =
   builder.xChanged = true
@@ -420,12 +443,7 @@ proc setCssToken*(
     origin = sroCss,
 ) =
   ## Source-independent layers also apply to theme custom properties.
-  if theme.setToken(name, value, important, origin):
-    theme.xHasCss = true
-
-func hasCss*(theme: Theme): bool =
-  ## Whether this snapshot contains CSS declarations or root custom properties.
-  theme.xHasCss
+  discard theme.setToken(name, value, important, origin)
 
 func hasLayoutRules*(theme: Theme): bool =
   ## Whether the snapshot contains native or CSS constraint specifications.
@@ -438,14 +456,6 @@ func metricStates*(theme: Theme): set[WidgetState] =
 func metricsChange*(theme: Theme, states: set[WidgetState]): bool =
   ## Whether changing these states can affect intrinsic content metrics.
   (theme.xMetricStates * states) != {}
-
-func cssMetricStates*(theme: Theme): set[WidgetState] =
-  ## Compatibility alias for `metricStates`; includes programmatic rules.
-  theme.metricStates
-
-func cssMetricsChange*(theme: Theme, states: set[WidgetState]): bool =
-  ## Compatibility alias for `metricsChange`; includes programmatic rules.
-  theme.metricsChange(states)
 
 proc `[]=`*(theme: var ThemeBuilder, name: string, value: Color) =
   theme[name] = styleColor(value)
@@ -510,14 +520,14 @@ func inheritedStyleRole(role: StyleRole): StyleRole =
   else: role
 
 proc stylePatch(theme: var ThemeBuilder, selector: StyleSelector): StylePatch =
-  inc theme.xCssSourceOrder
+  inc theme.xSourceOrder
   result = newStylePatch()
   theme.xRules.add StyleRule(
     selector: selector,
     patch: result,
     origin: theme.xWriteOrigin,
     cssSpecificity: selector.selectorSpecificity,
-    sourceOrder: theme.xCssSourceOrder,
+    sourceOrder: theme.xSourceOrder,
   )
 
 proc exactStylePatch(rules: openArray[StyleRule], selector: StyleSelector): StylePatch =
@@ -539,20 +549,20 @@ proc stylePatch*(theme: Theme, selector: StyleSelector): StylePatch =
   theme.stylePatchView(selector).clone
 
 proc addRule*(theme: var ThemeBuilder, selector: StyleSelector, patch: StylePatch) =
-  inc theme.xCssSourceOrder
+  inc theme.xSourceOrder
   theme.xRules.add StyleRule(
     selector: selector,
     patch: patch,
     origin: theme.xWriteOrigin,
     cssSpecificity: selector.selectorSpecificity,
-    sourceOrder: theme.xCssSourceOrder,
+    sourceOrder: theme.xSourceOrder,
   )
   theme.noteThemeMutation()
 
-proc nextCssSourceOrder*(theme: var ThemeBuilder): int =
+proc nextSourceOrder*(theme: var ThemeBuilder): int =
   ## Compiler hook: one source-order value for an expanded CSS declaration.
-  inc theme.xCssSourceOrder
-  theme.xCssSourceOrder
+  inc theme.xSourceOrder
+  theme.xSourceOrder
 
 proc addCssRule*(
     theme: var ThemeBuilder,
@@ -577,7 +587,6 @@ proc addCssRule*(
     line: line,
     column: column,
   )
-  theme.xHasCss = true
   theme.noteThemeMutation()
 
 proc setStyle*[T](
@@ -950,104 +959,6 @@ proc `[]`*[T](theme: ThemeBuilder, role: StyleRole, key: StyleKey[T]): StyleValu
   if patch.isNil or not patch.getStyle(key, result):
     result = missingStyleValue()
 
-proc resolveCssValue*(
-    theme: Theme, value: StyleValue, key: string, resolved: var StyleValue
-): bool =
-  ## Compiler/resolver hook for bounded typed CSS variables and shorthand coercion.
-  if not theme.xTokens.resolveValue(value, resolved):
-    return
-  if resolved.kind == svCssExpression:
-    let expression =
-      if value.kind == svToken:
-        StyleValue(
-          kind: svCssExpression,
-          cssProperty: resolved.cssProperty,
-          cssText: "var(" & value.token.cssTokenName & ")",
-        )
-      else:
-        resolved
-    if not resolveCssExpression(theme.xTokens, expression, key, resolved):
-      return
-  var geometry: CssGeometryProperty
-  if cssGeometryByKey(key, geometry):
-    if value.kind == svToken and resolved.kind == svConstraints:
-      return
-    if resolved.kind == svLength:
-      if resolved.length.classify in {fcNan, fcInf, fcNegInf} or
-          (not geometry.edge and resolved.length < 0):
-        return
-      var constraint = StyleLayoutConstraint(
-        attribute: geometry.attribute,
-        relation: geometry.relation,
-        constant: resolved.length,
-        priority: geometry.priority,
-      )
-      if geometry.edge:
-        constraint.target = sltParent
-        constraint.targetAttribute = geometry.attribute
-        if geometry.attribute in {atRight, atBottom}:
-          constraint.constant = -constraint.constant
-      resolved = styleConstraints([constraint])
-    if resolved.kind != svConstraints:
-      return
-    for constraint in resolved.constraints:
-      if not constraint.validStyleConstraint:
-        return
-    result = true
-    return
-  if key == StyleLayoutConstraints.keyName:
-    if resolved.kind != svConstraints:
-      return
-    for constraint in resolved.constraints:
-      if not constraint.validStyleConstraint:
-        return
-    return true
-  var spec: CssPropertySpec
-  if cssPropertyByKey(key, spec):
-    case spec.kind
-    of cpkColor:
-      return resolved.kind == svColor
-    of cpkFill:
-      return resolved.kind in {svColor, svFill}
-    of cpkLength:
-      return
-        resolved.kind == svLength and
-        resolved.length.classify notin {fcNan, fcInf, fcNegInf} and
-        resolved.length >= spec.minimum and resolved.length <= spec.maximum
-    of cpkSize:
-      if resolved.kind == svLength:
-        resolved = styleSize(initSize(resolved.length, resolved.length))
-      return
-        resolved.kind == svSize and
-        resolved.size.width.classify notin {fcNan, fcInf, fcNegInf} and
-        resolved.size.height.classify notin {fcNan, fcInf, fcNegInf} and
-        resolved.size.width >= 0 and resolved.size.height >= 0
-    of cpkInsets:
-      if resolved.kind == svLength:
-        resolved = styleInsets(insets(resolved.length))
-      if resolved.kind != svInsets:
-        return
-      for amount in [
-        resolved.insets.top, resolved.insets.right, resolved.insets.bottom,
-        resolved.insets.left,
-      ]:
-        if amount.classify in {fcNan, fcInf, fcNegInf} or amount < 0:
-          return
-      return true
-    of cpkShadows:
-      if resolved.kind == svKeyword and resolved.keyword == "none":
-        resolved = styleShadows([])
-      return resolved.kind == svShadows
-    of cpkFontFace:
-      return resolved.kind == svFontFace
-    of cpkKeyword:
-      if resolved.kind != svKeyword or resolved.keyword.len == 0:
-        return
-      if spec.keywords.len > 0:
-        resolved = styleKeyword(resolved.keyword.toLowerAscii())
-        return resolved.keyword in spec.keywords.split('|')
-      return true
-
 proc ruleValue(
     theme: Theme, context: StyleContext, key: string, fallback: StyleValue
 ): StyleValue =
@@ -1141,22 +1052,8 @@ proc keywordRule(
 proc styleValue*(theme: Theme, name: string, fallback: StyleValue): StyleValue =
   if theme.xTokens.isNil:
     return fallback
-  if not theme.xTokens.resolveToken(name, result):
+  if not theme.xTokens.resolveCssToken(name, fallback.kind, result):
     result = fallback
-  elif result.kind == svCssExpression:
-    let key =
-      case fallback.kind
-      of svColor: "text.color"
-      of svFill: "fill"
-      of svLength: "border.width"
-      of svSize: "minimum.size"
-      of svInsets: "padding"
-      of svShadows: "box.shadows"
-      of svKeyword: "font.name"
-      of svFontFace: "font.face"
-      else: ""
-    if key.len > 0 and not theme.resolveCssValue(styleToken(name), key, result):
-      result = fallback
 
 proc colorToken*(theme: Theme, name: string, fallback: Color): Color =
   let value = theme.styleValue(name, styleColor(fallback))

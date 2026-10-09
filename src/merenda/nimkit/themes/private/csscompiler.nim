@@ -4,7 +4,7 @@
 ## Appearance inheritance provides stylesheet scope; browser layout, tree
 ## selectors and per-view custom-property inheritance are not supported.
 
-import std/[sets, strutils, tables]
+import std/strutils
 import stylus
 
 import ../themecore
@@ -213,6 +213,8 @@ proc parseDeclaration(
     parser.diagnostic(values[0], "Expected property: value")
     return
   declaration.name = values[0].value.ident
+  if not declaration.name.startsWith("--"):
+    declaration.name = declaration.name.toLowerAscii()
   declaration.line = values[0].line
   declaration.column = values[0].column
   declaration.values = values[2 ..^ 1]
@@ -323,40 +325,36 @@ proc compileCssTheme*(source: string, base: Theme, origin = sroCss): CssThemeRes
   for rule in rules:
     if rule.selectors[0].root:
       for declaration in rule.declarations:
-        var value: StyleValue
-        if not declaration.name.startsWith("--") or
-            not declaration.values.basicValue(value):
+        if not declaration.name.startsWith("--"):
           parser.diagnostic(
             LocatedToken(line: declaration.line, column: declaration.column),
-            ":root permits only typed custom properties",
+            ":root permits only custom properties",
           )
         else:
-          builder.setCssToken(declaration.name, value, declaration.important, origin)
-  let rootTheme = builder.finish()
+          builder.setCssToken(
+            declaration.name,
+            cssRootValue(declaration.values),
+            declaration.important,
+            origin,
+          )
   for rule in rules:
     if not rule.selectors[0].root:
       for declaration in rule.declarations:
         let patch = declarationPatch(declaration.name, declaration.values)
         var spec: CssPropertySpec
-        var valid =
+        let valid =
           not patch.isNil and
           not (
             origin != sroTheme and cssPropertyByName(declaration.name, spec) and
             spec.bundledOnly
           )
-        if valid:
-          for key, value in patch.values:
-            var resolved: StyleValue
-            if value.kind notin {svToken, svCssExpression} and
-                not rootTheme.resolveCssValue(value, key, resolved):
-              valid = false
         if not valid:
           parser.diagnostic(
             LocatedToken(line: declaration.line, column: declaration.column),
             "Unsupported property or invalid value: " & declaration.name,
           )
         else:
-          let order = builder.nextCssSourceOrder()
+          let order = builder.nextSourceOrder()
           for selector in rule.selectors:
             if selector.hasRole:
               builder.addCssRule(
@@ -371,22 +369,5 @@ proc compileCssTheme*(source: string, base: Theme, origin = sroCss): CssThemeRes
                   expanded, patch, selector.specificity, order, declaration.important,
                   declaration.line, declaration.column, origin,
                 )
-  result.theme = builder.finish()
-  var reported = initHashSet[int]()
-  for rule in result.theme.rules:
-    if rule.isCss:
-      for key, value in rule.patch.values:
-        if value.kind in {svToken, svCssExpression}:
-          var resolved: StyleValue
-          if not result.theme.resolveCssValue(value, key, resolved) and
-              rule.sourceOrder notin reported:
-            reported.incl rule.sourceOrder
-            parser.diagnostics.add CssDiagnostic(
-              line: rule.line,
-              column: rule.column,
-              message:
-                "Unresolved or wrong-type variable " &
-                (if value.kind == svToken: value.token else: value.cssText) &
-                " (missing, cyclic, or beyond 16 reference steps)",
-            )
+  result.theme = builder.finish(parser.diagnostics)
   result.diagnostics = move parser.diagnostics

@@ -19,6 +19,122 @@ proc glyphHeight(view: View, text: string): float32 =
         result = max(result, node.textLayout.glyphRect(index).h)
 
 suite "NimKit CSS themes":
+  test "property casing is normalized while custom properties stay case sensitive":
+    let base = initThemeBuilder().finish()
+    for property in [
+      "-nimkit-column-width", "-nimkit-column-min-width", "-nimkit-column-max-width"
+    ]:
+      for spelling in [
+        property, property.toUpperAscii(), property.replace("nimkit", "NimKit")
+      ]:
+        let parsed = parseCssTheme("table-view { " & spelling & ": 211px; }", base)
+        checkpoint(spelling)
+        check parsed.diagnostics.len == 1
+        check parsed.theme.rules.len == 0
+    let theme = cleanTheme(
+      """
+      :root { --Accent: red; --accent: blue; }
+      button { BaCkGrOuNd: var(--Accent); CoLoR: var(--accent); BoRdEr-WiDtH: 3px; }
+    """,
+      base,
+    )
+    let style = theme.resolveButtonStyle(controlStyle(srButton))
+    check style.box.fill == parseHtmlColor("red")
+    check style.text.color == parseHtmlColor("blue")
+    check style.box.borderWidth == 3
+
+  test "CSS variables retain keyword meaning and units at their destination":
+    let theme = cleanTheme(
+      """
+      :root { --chrome: aqua; --family: red; --slant: ObLiQuE; --offset: -2px; }
+      button {
+        -nimkit-chrome: var(--chrome);
+        font-family: var(--family);
+        font-style: var(--slant);
+        -nimkit-focus-ring-inset: var(--offset);
+      }
+    """
+    )
+    let style = theme.resolveButtonStyle(controlStyle(srButton))
+    check style.chrome == "aqua"
+    check style.text.fontName == "red"
+    check style.text.fontSlant == fsOblique
+    check style.box.focusRingInset == -2
+    check theme.lengthToken("--offset", 0) == -2
+    check theme.styleValue("--chrome", styleKeyword("")).keyword == "aqua"
+    check theme.colorToken("--family", color(0, 0, 0, 0)) == parseHtmlColor("red")
+    for property in [
+      "-nimkit-width-factor", "-nimkit-knob-size-factor", "-nimkit-knob-value-tint"
+    ]:
+      let literal =
+        parseCssTheme("switch { " & property & ": 0.5; " & property & ": 2px; }")
+      let variable = parseCssTheme(
+        ":root { --factor: 2px; } switch { " & property & ": 0.5; " & property &
+          ": var(--factor); }"
+      )
+      checkpoint(property)
+      check literal.diagnostics.len == 1
+      check variable.diagnostics.len == 1
+      check literal.theme.resolveSwitchButtonStyle(controlStyle(srSwitch)) ==
+        variable.theme.resolveSwitchButtonStyle(controlStyle(srSwitch))
+    let percent = cleanTheme(":root { --width: 25%; } view { width: var(--width); }")
+    let constraint =
+      percent.resolveLayoutConstraints(controlStyle(srView), StyleLayoutWidth)[0]
+    check constraint.multiplier == 0.25
+    check constraint.target == sltParent
+
+  test "CSS aliases preserve native typed resources and recompile after native edits":
+    let face = initSystemTypeface(getCurrentDir() / "data/Ubuntu.ttf")
+    let shade = color(0.12345, 0.25, 0.6789, 0.5)
+    var builder = initThemeBuilder(initTheme())
+    builder.setFontFace(frUI, face)
+    builder["native.chrome"] = styleKeyword("aqua")
+    builder["native.scale"] = 0.75
+    builder["native.shade"] = shade
+    let theme = cleanTheme(
+      """
+      :root {
+        --face: var(--font-ui-face);
+        --chrome: var(--native-chrome);
+        --scale: var(--native-scale);
+        --shade: var(--native-shade);
+      }
+      button { -nimkit-font-face: var(--face); -nimkit-chrome: var(--chrome); color: var(--shade); }
+      switch { -nimkit-width-factor: var(--scale); }
+    """,
+      builder.finish(),
+    )
+    let style = theme.resolveButtonStyle(controlStyle(srButton))
+    check style.text.fontFace == face
+    check style.chrome == "aqua"
+    check style.text.color == shade
+    check theme.styleValue("--face", styleFontFace(SystemTypeface())).fontFace == face
+    check theme.lengthToken("--scale", 0) == 0.75
+    check theme.colorToken("--shade", color(0, 0, 0, 0)) == shade
+    var changed = initThemeBuilder(theme)
+    changed["native.shade"] = parseHtmlColor("orange")
+    changed[srButton, StyleTextColor] = styleToken("--shade")
+    check changed.finish().textColor() == parseHtmlColor("orange")
+    check theme.textColor() == shade
+
+  test "expanded selectors report each failed declaration once and recover atomically":
+    let first = parseCssTheme(
+      """
+      button, .primary, * { padding: var(--gap); border-radius: var(--radius); }
+    """
+    )
+    check first.diagnostics.len == 2
+    check first.diagnostics[0].line == 1
+    let fixed = cleanTheme(
+      ":root { --gap: 1px 2px 3px 4px; --radius: 5px 6px 7px 8px; }", first.theme
+    )
+    let style = fixed.resolveButtonStyle(controlStyle(srButton, classes = @["primary"]))
+    check style.text.insets == insets(1, 4, 3, 2)
+    check style.box.cornerRadii ==
+      CornerRadii(topLeft: 5, topRight: 6, bottomRight: 7, bottomLeft: 8)
+    let again = parseCssTheme("button { padding: var(--another); }", first.theme)
+    check again.diagnostics.len == 3
+
   test "application CSS overrides every bundled theme including specific state defaults":
     for name in [
       "aqua", "banner", "macos", "macos-dark", "darkbsd", "nebula", "peachy",
@@ -224,7 +340,6 @@ suite "NimKit CSS themes":
     builder[srButton, StyleFontSize] = 12.0
     builder[srButton, {ssHovered}, StyleFontSize] = 36.0
     let theme = builder.finish()
-    check not theme.hasCss
     check theme.metricsChange({ssHovered})
     let root = newView(frame = rect(0, 0, 400, 150))
     let button = newButton("Native metrics", frame = rect(0, 0, 300, 120))

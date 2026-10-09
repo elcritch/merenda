@@ -82,18 +82,9 @@ button {
   -nimkit-text-shadow-color: rgba(0, 0, 0, 0.46);
 }
 
-check-box {
-  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
-}
-
-radio-button {
-  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
-}
-
-text-field {
-  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
-}
-
+check-box,
+radio-button,
+text-field,
 combo-box {
   box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
 }

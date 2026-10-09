@@ -45,13 +45,7 @@ button {
   -nimkit-text-insets: 0px 8px;
 }
 
-check-box {
-  -nimkit-indicator-size: var(--indicator-size);
-  -nimkit-indicator-spacing: 7px;
-  -nimkit-minimum-size: 0px 2e+01px;
-  -nimkit-text-insets: 0px 2px;
-}
-
+check-box,
 radio-button {
   -nimkit-indicator-size: var(--indicator-size);
   -nimkit-indicator-spacing: 7px;
@@ -91,11 +85,7 @@ tab {
   -nimkit-text-insets: 1px 1e+01px;
 }
 
-row-item {
-  -nimkit-minimum-size: 0px 22px;
-  -nimkit-text-insets: 0px 6px;
-}
-
+row-item,
 cascading-row-item {
   -nimkit-minimum-size: 0px 22px;
   -nimkit-text-insets: 0px 6px;
@@ -133,12 +123,7 @@ switch {
   -nimkit-width-factor: 1.67;
 }
 
-slider {
-  -nimkit-indicator-size: 6px;
-  -nimkit-knob-size: 2e+01px;
-  -nimkit-minimum-size: 1.6e+02px 26px;
-}
-
+slider,
 progress-indicator {
   -nimkit-indicator-size: 6px;
   -nimkit-knob-size: 2e+01px;
@@ -186,30 +171,8 @@ text-field.label-form {
   -nimkit-text-insets: 0px 2px;
 }
 
-table-view {
-  -nimkit-autoscroll-edge: 18px;
-  -nimkit-column-max-width: 1e+04px;
-  -nimkit-column-min-width: 24px;
-  -nimkit-column-width: 1.2e+02px;
-  -nimkit-drag-threshold: 3px;
-  -nimkit-header-height: 24px;
-  -nimkit-minimum-size: 1.2e+02px 24px;
-  -nimkit-resize-handle-width: 5px;
-  -nimkit-row-height: 22px;
-}
-
-cascading-view {
-  -nimkit-autoscroll-edge: 18px;
-  -nimkit-column-max-width: 1e+04px;
-  -nimkit-column-min-width: 24px;
-  -nimkit-column-width: 1.2e+02px;
-  -nimkit-drag-threshold: 3px;
-  -nimkit-header-height: 24px;
-  -nimkit-minimum-size: 1.2e+02px 24px;
-  -nimkit-resize-handle-width: 5px;
-  -nimkit-row-height: 22px;
-}
-
+table-view,
+cascading-view,
 cascading-column {
   -nimkit-autoscroll-edge: 18px;
   -nimkit-column-max-width: 1e+04px;

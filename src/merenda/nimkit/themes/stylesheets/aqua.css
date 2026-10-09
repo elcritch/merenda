@@ -270,15 +270,7 @@ table-header-cell {
   color: rgba(12%, 14%, 18%, 1);
 }
 
-row-item {
-  -nimkit-alternating-fill: #f5f7fcf2;
-  border-color: var(--row-item-separator-color);
-  border-width: 0px;
-  border-radius: 0px;
-  background: var(--row-item-fill);
-  color: var(--row-item-text-color);
-}
-
+row-item,
 cascading-row-item {
   -nimkit-alternating-fill: #f5f7fcf2;
   border-color: var(--row-item-separator-color);
@@ -749,18 +741,7 @@ table-view {
   -nimkit-focus-ring-width: 3px;
 }
 
-cascading-view {
-  border-color: var(--table-view-border-color);
-  border-width: 1px;
-  box-shadow: inset 0px 1px 3px 0px rgba(0, 42, 112, 0.14901961), inset 0px -1px 2.4px 0px rgba(255, 255, 255, 0.5176471);
-  border-radius: 6px;
-  -nimkit-drop-indicator-fill: #2e6be0f2;
-  background: var(--table-view-fill);
-  -nimkit-focus-ring-color: var(--focus-ring-color);
-  -nimkit-focus-ring-inset: 2px;
-  -nimkit-focus-ring-width: 3px;
-}
-
+cascading-view,
 cascading-column {
   border-color: var(--table-view-border-color);
   border-width: 1px;
@@ -787,17 +768,7 @@ cascading-scroll-view {
   background: var(--table-view-fill);
 }
 
-scroller {
-  border-color: var(--scroller-track-border-color);
-  border-width: 0.7px;
-  box-shadow: var(--scroller-track-shadows);
-  border-radius: 6px;
-  background: var(--scroller-track-fill);
-  -nimkit-knob-border-color: var(--scroller-knob-border-color);
-  -nimkit-knob-fill: var(--scroller-knob-fill);
-  -nimkit-knob-shadows: var(--scroller-knob-shadows);
-}
-
+scroller,
 cascading-scroller {
   border-color: var(--scroller-track-border-color);
   border-width: 0.7px;

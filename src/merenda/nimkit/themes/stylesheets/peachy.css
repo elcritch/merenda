@@ -110,12 +110,7 @@ button {
   -nimkit-text-shadow-color: rgba(0, 0, 0, 0.34);
 }
 
-check-box {
-  border-width: 1.25px;
-  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
-  -nimkit-chrome: flat-transparent;
-}
-
+check-box,
 radio-button {
   border-width: 1.25px;
   box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);

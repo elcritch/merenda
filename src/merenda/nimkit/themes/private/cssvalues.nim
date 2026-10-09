@@ -229,27 +229,10 @@ proc expressionValue(tokens: seq[LocatedToken], property = ""): StyleValue =
     parts.add token.text
   StyleValue(kind: svCssExpression, cssProperty: property, cssText: parts.join(" "))
 
-proc basicValue*(tokens: seq[LocatedToken], value: var StyleValue): bool =
-  if tokens.singleVariable(value):
-    return true
-  if tokens.fillValue(value):
-    return true
-  if tokens.len == 1:
-    var amount: float32
-    if tokens[0].value.lengthValue(amount, signed = true):
-      value = styleLength(amount)
-      return true
-    case tokens[0].value.kind
-    of tkIdent:
-      value = styleKeyword(tokens[0].value.ident)
-    of tkQuotedString:
-      value = styleKeyword(tokens[0].value.qStr)
-    else:
-      return
-    return true
-  if tokens.len > 1:
-    value = expressionValue(tokens)
-    return true
+proc cssRootValue*(tokens: seq[LocatedToken]): StyleValue =
+  ## Keep CSS syntax until its destination is known; aliases may carry native resources.
+  if not tokens.singleVariable(result):
+    result = expressionValue(tokens)
 
 proc fourLengths(tokens: seq[LocatedToken], values: var array[4, float32]): bool =
   if tokens.len notin 1 .. 4:
@@ -560,6 +543,85 @@ proc constraintsValue(tokens: seq[LocatedToken], value: var StyleValue): bool =
   value = styleConstraints(constraints)
   true
 
+proc validateCssValue*(key: string, resolved: var StyleValue): bool =
+  var geometry: CssGeometryProperty
+  if cssGeometryByKey(key, geometry):
+    if resolved.kind == svLength:
+      if resolved.length.classify in {fcNan, fcInf, fcNegInf} or
+          (not geometry.edge and resolved.length < 0):
+        return
+      var constraint = StyleLayoutConstraint(
+        attribute: geometry.attribute,
+        relation: geometry.relation,
+        constant: resolved.length,
+        priority: geometry.priority,
+      )
+      if geometry.edge:
+        constraint.target = sltParent
+        constraint.targetAttribute = geometry.attribute
+        if geometry.attribute in {atRight, atBottom}:
+          constraint.constant = -constraint.constant
+      resolved = styleConstraints([constraint])
+    if resolved.kind != svConstraints:
+      return
+    for constraint in resolved.constraints:
+      if not constraint.validStyleConstraint:
+        return
+    result = true
+    return
+  if key == StyleLayoutConstraints.keyName:
+    if resolved.kind != svConstraints:
+      return
+    for constraint in resolved.constraints:
+      if not constraint.validStyleConstraint:
+        return
+    return true
+  var spec: CssPropertySpec
+  if cssPropertyByKey(key, spec):
+    case spec.kind
+    of cpkColor:
+      return resolved.kind == svColor
+    of cpkFill:
+      return resolved.kind in {svColor, svFill}
+    of cpkLength:
+      return
+        resolved.kind == svLength and
+        resolved.length.classify notin {fcNan, fcInf, fcNegInf} and
+        resolved.length >= spec.minimum and resolved.length <= spec.maximum
+    of cpkSize:
+      if resolved.kind == svLength:
+        resolved = styleSize(initSize(resolved.length, resolved.length))
+      return
+        resolved.kind == svSize and
+        resolved.size.width.classify notin {fcNan, fcInf, fcNegInf} and
+        resolved.size.height.classify notin {fcNan, fcInf, fcNegInf} and
+        resolved.size.width >= 0 and resolved.size.height >= 0
+    of cpkInsets:
+      if resolved.kind == svLength:
+        resolved = styleInsets(insets(resolved.length))
+      if resolved.kind != svInsets:
+        return
+      for amount in [
+        resolved.insets.top, resolved.insets.right, resolved.insets.bottom,
+        resolved.insets.left,
+      ]:
+        if amount.classify in {fcNan, fcInf, fcNegInf} or amount < 0:
+          return
+      return true
+    of cpkShadows:
+      if resolved.kind == svKeyword and resolved.keyword == "none":
+        resolved = styleShadows([])
+      return resolved.kind == svShadows
+    of cpkFontFace:
+      return resolved.kind == svFontFace
+    of cpkKeyword:
+      if resolved.kind != svKeyword or resolved.keyword.len == 0:
+        return
+      if spec.keywords.len > 0:
+        resolved = styleKeyword(resolved.keyword.toLowerAscii())
+        return resolved.keyword in spec.keywords.split('|')
+      return true
+
 proc declarationPatch*(
   propertyName: string, tokens: seq[LocatedToken]
 ): StylePatch {.noSideEffect.}
@@ -696,6 +758,12 @@ proc declarationPatch*(
     for key, value in result.values.mpairs:
       if value.kind == svToken:
         value = expressionValue(tokens, propertyName)
+  if not result.isNil:
+    for key, value in result.values.mpairs:
+      if value.kind notin {svToken, svCssExpression} and not validateCssValue(
+        key, value
+      ):
+        return nil
 
 proc compactValueTokens(source: string, tokens: var seq[LocatedToken]): bool =
   var scanned: seq[LocatedToken]
@@ -807,32 +875,122 @@ proc substituteVariables(
       inc index
   true
 
-proc resolveCssExpression*(
-    store: StyleTokenStore,
-    expression: StyleValue,
-    key: string,
-    resolved: var StyleValue,
+proc expandCssExpression(
+    store: StyleTokenStore, expression: StyleValue, expanded: var seq[LocatedToken]
 ): bool =
   var tokens: seq[LocatedToken]
   if not compactValueTokens(expression.cssText, tokens):
     return
-  var expanded: seq[LocatedToken]
   var visiting: seq[string]
   var work = 0
-  if not substituteVariables(store, tokens, expanded, visiting, work):
+  substituteVariables(store, tokens, expanded, visiting, work)
+
+func sourceExpression(input, resolved: StyleValue): StyleValue =
+  if input.kind == svToken:
+    # Expand from the original reference so aliases share the reference budget.
+    StyleValue(
+      kind: svCssExpression,
+      cssProperty: resolved.cssProperty,
+      cssText: "var(" & input.token.cssTokenName & ")",
+    )
+  else:
+    resolved
+
+type CssValueResolver = object
+  store: StyleTokenStore
+  cached: bool
+  text, property: string
+  patch: StylePatch
+
+proc resolveValue(
+    resolver: var CssValueResolver,
+    input: StyleValue,
+    key: string,
+    resolved: var StyleValue,
+): bool =
+  if not resolver.store.resolveValue(input, resolved):
     return
-  var property = expression.cssProperty
-  if property.len == 0:
-    var spec: CssPropertySpec
-    if cssPropertyByKey(key, spec):
-      property = spec.name
-    else:
-      var geometry: CssGeometryProperty
-      if not cssGeometryByKey(key, geometry):
-        return
-      property = geometry.name
-  let patch = declarationPatch(property, expanded)
-  if not patch.isNil and key in patch.values and
-      patch.values[key].kind notin {svToken, svCssExpression}:
-    resolved = patch.values[key]
+  if resolved.kind == svCssExpression:
+    let expression = sourceExpression(input, resolved)
+    var property = expression.cssProperty
+    if property.len == 0:
+      var spec: CssPropertySpec
+      if cssPropertyByKey(key, spec):
+        property = spec.name
+      else:
+        var geometry: CssGeometryProperty
+        if not cssGeometryByKey(key, geometry):
+          return
+        property = geometry.name
+    if not resolver.cached or resolver.text != expression.cssText or
+        resolver.property != property:
+      resolver.cached = true
+      resolver.text = expression.cssText
+      resolver.property = property
+      resolver.patch = nil
+      var expanded: seq[LocatedToken]
+      if resolver.store.expandCssExpression(expression, expanded):
+        resolver.patch = declarationPatch(property, expanded)
+    if resolver.patch.isNil or key notin resolver.patch.values:
+      return
+    resolved = resolver.patch.values[key]
+  elif input.kind == svToken and resolved.kind == svConstraints:
+    # Native list tokens cannot supply a scalar CSS geometry property.
+    var geometry: CssGeometryProperty
+    if cssGeometryByKey(key, geometry):
+      return
+  validateCssValue(key, resolved)
+
+proc resolveCssValue*(
+    store: StyleTokenStore, input: StyleValue, key: string, resolved: var StyleValue
+): bool =
+  var resolver = CssValueResolver(store: store)
+  resolver.resolveValue(input, key, resolved)
+
+proc resolveCssPatch*(
+    store: StyleTokenStore, source: StylePatch, invalid: var StyleValue
+): StylePatch =
+  ## Compile a declaration atomically, sharing shorthand expansion across its keys.
+  result = newStylePatch()
+  var resolver = CssValueResolver(store: store)
+  for key, value in source.values:
+    var resolved: StyleValue
+    if not resolver.resolveValue(value, key, resolved):
+      invalid = value
+      return nil
+    result.values[key] = resolved
+
+proc resolveCssToken*(
+    store: StyleTokenStore, name: string, kind: StyleValueKind, resolved: var StyleValue
+): bool =
+  ## Typed token access uses the requested type, without borrowing a property's bounds.
+  if not store.resolveToken(name, resolved):
+    return
+  if resolved.kind != svCssExpression or kind in {svMissing, svToken, svCssExpression}:
     return true
+  var tokens: seq[LocatedToken]
+  if not store.expandCssExpression(sourceExpression(styleToken(name), resolved), tokens):
+    return
+  if kind in {svColor, svFill}:
+    return tokens.fillValue(resolved)
+  if kind == svConstraints:
+    return tokens.constraintsValue(resolved)
+  let propertyKind =
+    case kind
+    of svLength:
+      cpkLength
+    of svSize:
+      cpkSize
+    of svInsets:
+      cpkInsets
+    of svShadows:
+      cpkShadows
+    of svKeyword:
+      cpkKeyword
+    of svFontFace:
+      cpkFontFace
+    else:
+      return false
+  extensionValue(
+    CssPropertySpec(kind: propertyKind, minimum: -float32.high), tokens, resolved
+  )

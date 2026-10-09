@@ -323,15 +323,17 @@ Grid uses physical axes. Per-item native sizing policies still apply; CSS does
 not introduce per-item browser flow rules. Shorthand importance/specificity/order
 applies to every expanded key, so later longhands override their own axis/edge.
 
-Margins, display/position, `em`, `rem`, gradients, font fallback lists, border
+Margins, display/position, `em`, `rem`, font fallback lists, border
 shorthand, padding longhands, animations and at-rules are unsupported and
 source-diagnosed. CSS does not set events/actions, reactive bindings, resources,
 content, accessibility identity or model data.
 
 ## Variables, cascade and scope
 
-Root variables contain colors, lengths, keywords/strings, aliases or composite
-values such as padding, sizes, shadows and gradients:
+Root variables preserve CSS syntax, including units and identifier case, until
+the consuming property determines their type. They can contain colors, lengths,
+keywords/strings, aliases or composite values such as padding, sizes, shadows
+and gradients:
 
 ```css
 :root {
@@ -352,6 +354,12 @@ button:hover { box-shadow: 0 2px var(--space) var(--accent); }
 ```
 
 Variables resolve after all root declarations, so forward references work.
+For example, `--chrome: aqua` remains a keyword when used by `-nimkit-chrome`,
+and `--factor: 2px` is rejected by a property requiring a unitless factor.
+Ordinary property names are case insensitive; custom-property names are case
+sensitive. Programmatically assigned tokens keep their native types, including
+exact font resources. Typed token accessors such as `colorToken`, `lengthToken`
+and `sizeToken` also interpret CSS values using the requested type.
 `var(--space)` converts a single length to uniform padding or corner radii.
 Variables can appear within a supported declaration value, including a gradient
 or shadow. Expansion is bounded to 16 reference steps and 4096 processed tokens.
@@ -393,8 +401,9 @@ appearance[srButton, StyleTextColor] = color(1, 1, 1, 1)
 window.setAppearance(appearance)
 ```
 
-Finishing a builder revalidates variable consumers and compiles their typed
-values once. Drawing and layout select from the compiled property/role index;
+Finishing a builder revalidates variable consumers, reports diagnostics and
+compiles each declaration once across its expanded selectors and shorthand keys.
+Drawing and layout select from the compiled property/role index;
 they do not parse CSS declaration values.
 
 Reparse against the original base to replace a stylesheet:

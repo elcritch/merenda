@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Preserve CSS custom-property syntax until use, keeping keywords and units
+  consistent with literal declarations and native typed resources. Normalize
+  property names before validation, compile shared declarations and diagnostics
+  in one pass, and combine repeated bundled CSS blocks. Remove obsolete
+  `hasCss`, `cssMetricStates` and `cssMetricsChange` APIs; use `metricStates` and
+  `metricsChange` for state-dependent sizing.
+
 - Implement all bundled NimKit themes as embedded CSS with shared widget
   defaults. Unify CSS and programmatic styling precedence, token names and
   state metric invalidation; retain typed ThemeBuilder and Appearance overrides.

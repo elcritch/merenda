@@ -90,15 +90,7 @@ switch {
   -nimkit-knob-shadows: 0px 1px 4px 0px rgba(0, 0, 0, 0.52);
 }
 
-slider {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: #b8b8bd40;
-  -nimkit-highlight-fill: var(--accent);
-  -nimkit-knob-border-color: rgba(255, 255, 255, 0.12);
-  -nimkit-knob-fill: #e0e0e6;
-  -nimkit-knob-shadows: 0px 1px 4px 0px rgba(0, 0, 0, 0.52);
-}
-
+slider,
 progress-indicator {
   border-color: rgba(255, 255, 255, 0.08);
   background: #b8b8bd40;

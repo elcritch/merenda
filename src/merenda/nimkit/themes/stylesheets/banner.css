@@ -74,18 +74,9 @@ button {
   -nimkit-text-shadow-color: rgba(0, 0, 0, 0);
 }
 
-check-box {
-  -nimkit-chrome: default;
-}
-
-radio-button {
-  -nimkit-chrome: default;
-}
-
-combo-box {
-  -nimkit-chrome: default;
-}
-
+check-box,
+radio-button,
+combo-box,
 tab {
   -nimkit-chrome: default;
 }
