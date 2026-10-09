@@ -1,9 +1,11 @@
-import std/[os, strutils, unittest]
+import std/[importutils, os, strutils, tables, unittest]
 import sigils/core
 import figdraw
 
 import merenda/nimkit
 import ./fixtures/[rendergeometry, widgetflows]
+
+privateAccess(Theme)
 
 const CustomChromeName = "custom-widget-chrome"
 
@@ -213,6 +215,49 @@ suite "nimkit theme":
     check second.colorToken("snapshot.accent", fallback) == secondAccent
     check first.resolveColor(button, StyleTextColor, fallback) == firstAccent
     check second.resolveColor(button, StyleTextColor, fallback) == secondAccent
+
+  test "appearance copies share immutable storage and isolate native edits":
+    let
+      accent = color(0.16, 0.38, 0.72, 1.0)
+      replacement = color(0.86, 0.26, 0.44, 1.0)
+      context = controlStyle(srButton)
+    var builder = initThemeBuilder(initAquaTheme())
+    builder[srButton, StyleTextColor] = accent
+    let snapshot = builder.finish()
+    let copied = snapshot
+    var appearance = initAppearance(snapshot.clone())
+
+    check copied.xSnapshot == snapshot.xSnapshot
+    check appearance.theme.xSnapshot == snapshot.xSnapshot
+    appearance[srButton, StyleTextColor] = replacement
+    check appearance.theme.xSnapshot != snapshot.xSnapshot
+    check appearance.resolveColor(context, StyleTextColor, accent) == replacement
+    check copied.resolveColor(context, StyleTextColor, replacement) == accent
+    check snapshot.resolveColor(context, StyleTextColor, replacement) == accent
+
+  test "zero initialized themes preserve empty collections and style fallbacks":
+    let
+      theme = Theme()
+      fallback = color(0.16, 0.38, 0.72, 1.0)
+      context = controlStyle(srButton)
+    check not theme.isInitialized
+    check theme.generation == ThemeGeneration(0)
+    check theme.tokens.isNil
+    check theme.rules.len == 0
+    check theme.chromes.len == 0
+    check not theme.hasChrome(CustomChromeName)
+    check theme.chrome(CustomChromeName).isNil
+    check theme.stylePatch(initStyleSelector(srButton)).isNil
+    check theme[srButton, StyleTextColor].kind == svMissing
+    check theme.colorToken("missing", fallback) == fallback
+    check theme.resolveColor(context, StyleTextColor, fallback) == fallback
+    check theme.resolveLayoutConstraints(context).len == 0
+    check not theme.hasLayoutRules
+    check theme.metricStates == {}
+    check not theme.metricsChange({ssPressed})
+    check initThemeBuilder(theme).finish().resolveColor(
+      context, StyleTextColor, fallback
+    ) == fallback
 
   test "theme snapshot accessors cannot mutate frozen storage":
     let

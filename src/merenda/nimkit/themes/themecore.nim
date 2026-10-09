@@ -44,7 +44,7 @@ type
 
   ThemeGeneration* = distinct uint64
 
-  Theme* = object
+  ThemeSnapshot = ref object
     xTokens: StyleTokenStore
     xRules: seq[StyleRule]
     xChromes: Table[string, Chrome]
@@ -55,6 +55,10 @@ type
     xTokenPriorities: Table[string, TokenPriority]
     xSourceOrder: int
     xHasLayoutRules: bool
+
+  Theme* = object
+    ## A value handle sharing one immutable snapshot across views and caches.
+    xSnapshot: ThemeSnapshot
 
   ThemeBuilder* = object
     xTokens: StyleTokenStore
@@ -241,29 +245,35 @@ proc cloneChromes(chromes: Table[string, Chrome]): Table[string, Chrome] =
     result[name.cloneText] = chrome
 
 proc clone*(theme: Theme): Theme =
-  ## Immutable theme snapshots can be copied without changing their generation.
+  ## Returns another value handle to the same immutable snapshot.
   theme
 
 proc tokens*(theme: Theme): StyleTokenStore =
   ## Returns a mutable copy of the snapshot's token store.
-  theme.xTokens.clone
+  if not theme.xSnapshot.isNil:
+    result = theme.xSnapshot.xTokens.clone
 
 proc rules*(theme: Theme): seq[StyleRule] =
   ## Returns a mutable copy of the snapshot's style rules.
-  theme.xRules.cloneRules()
+  if not theme.xSnapshot.isNil:
+    result = theme.xSnapshot.xRules.cloneRules()
 
 proc chromes*(theme: Theme): Table[string, Chrome] =
   ## Returns a value copy of the snapshot's chrome registry.
-  theme.xChromes.cloneChromes
+  if theme.xSnapshot.isNil:
+    initTable[string, Chrome]()
+  else:
+    theme.xSnapshot.xChromes.cloneChromes
 
 func generation*(theme: Theme): ThemeGeneration =
-  theme.xGeneration
+  if not theme.xSnapshot.isNil:
+    result = theme.xSnapshot.xGeneration
 
 func `==`*(left, right: ThemeGeneration): bool =
   uint64(left) == uint64(right)
 
 func isInitialized*(theme: Theme): bool =
-  not theme.xTokens.isNil
+  not theme.xSnapshot.isNil and not theme.xSnapshot.xTokens.isNil
 
 proc nextThemeGeneration(): ThemeGeneration =
   ThemeGeneration(themeGenerationCounter.fetchAdd(1'u64, moRelaxed) + 1'u64)
@@ -281,33 +291,37 @@ proc initThemeBuilder*(tokens: StyleTokenStore): ThemeBuilder =
 
 proc initThemeBuilder*(theme: Theme, origin = sroOverride): ThemeBuilder =
   ## Creates an isolated builder initialized from an immutable snapshot.
-  ThemeBuilder(
-    xTokens: theme.xTokens.clone,
-    xRules: theme.xRules.cloneRules(),
-    xChromes: theme.xChromes.cloneChromes,
-    xBaseGeneration: theme.xGeneration,
-    xTokenPriorities: theme.xTokenPriorities,
+  result = ThemeBuilder(
+    xTokens: theme.tokens(),
+    xRules: theme.rules(),
+    xChromes: theme.chromes(),
+    xBaseGeneration: theme.generation,
     xWriteOrigin: origin,
-    xSourceOrder: theme.xSourceOrder,
   )
+  if not theme.xSnapshot.isNil:
+    result.xTokenPriorities = theme.xSnapshot.xTokenPriorities
+    result.xSourceOrder = theme.xSnapshot.xSourceOrder
 
 proc finish*(builder: ThemeBuilder, diagnostics: var seq[CssDiagnostic]): Theme =
   ## Compiler hook: freezes declarations and reports invalid CSS during compilation.
-  result.xTokens = builder.xTokens.clone
-  result.xRules = builder.xRules.cloneRules()
-  result.xChromes = builder.xChromes.cloneChromes
-  result.xTokenPriorities = builder.xTokenPriorities
-  result.xSourceOrder = builder.xSourceOrder
+  let snapshot = ThemeSnapshot(
+    xTokens: builder.xTokens.clone,
+    xRules: builder.xRules.cloneRules(),
+    xChromes: builder.xChromes.cloneChromes,
+    xTokenPriorities: builder.xTokenPriorities,
+    xSourceOrder: builder.xSourceOrder,
+  )
+  result.xSnapshot = snapshot
   var
     previousCssPatch, compiledCss: StylePatch
     invalidCss: StyleValue
     reported: HashSet[int]
-  for index, rule in result.xRules:
+  for index, rule in snapshot.xRules:
     var compiled: StylePatch
     if rule.isCss:
       if rule.patch != previousCssPatch:
         previousCssPatch = rule.patch
-        compiledCss = result.xTokens.resolveCssPatch(rule.patch, invalidCss)
+        compiledCss = snapshot.xTokens.resolveCssPatch(rule.patch, invalidCss)
       compiled = compiledCss
       if compiled.isNil and rule.sourceOrder notin reported:
         reported.incl rule.sourceOrder
@@ -330,7 +344,7 @@ proc finish*(builder: ThemeBuilder, diagnostics: var seq[CssDiagnostic]): Theme 
       compiled = newStylePatch()
       for key, value in rule.patch.values:
         var resolved: StyleValue
-        if result.xTokens.resolveValue(value, resolved):
+        if snapshot.xTokens.resolveValue(value, resolved):
           var validNative = true
           if resolved.kind == svConstraints:
             for constraint in resolved.constraints:
@@ -338,26 +352,26 @@ proc finish*(builder: ThemeBuilder, diagnostics: var seq[CssDiagnostic]): Theme 
                 validNative = false
           if validNative and (
             resolved.kind != svCssExpression or
-            result.xTokens.resolveCssValue(value, key, resolved)
+            snapshot.xTokens.resolveCssValue(value, key, resolved)
           ):
             compiled.values[key] = resolved
     for key in rule.patch.values.keys:
       if key.startsWith("layout."):
-        result.xHasLayoutRules = true
+        snapshot.xHasLayoutRules = true
       if styleAffectsMetrics(key):
-        result.xMetricStates = result.xMetricStates + rule.selector.states
-    result.xResolvedRules.add compiled
+        snapshot.xMetricStates = snapshot.xMetricStates + rule.selector.states
+    snapshot.xResolvedRules.add compiled
     if not compiled.isNil:
       for key in compiled.values.keys:
-        result.xRulesByProperty.mgetOrPut(key, default(array[StyleRole, seq[int]]))[
+        snapshot.xRulesByProperty.mgetOrPut(key, default(array[StyleRole, seq[int]]))[
           rule.selector.role
         ].add index
-  if ssPressed in result.xMetricStates:
-    result.xMetricStates.incl ssHighlighted
+  if ssPressed in snapshot.xMetricStates:
+    snapshot.xMetricStates.incl ssHighlighted
   if builder.xChanged or builder.xBaseGeneration == ThemeGeneration(0):
-    result.xGeneration = nextThemeGeneration()
+    snapshot.xGeneration = nextThemeGeneration()
   else:
-    result.xGeneration = builder.xBaseGeneration
+    snapshot.xGeneration = builder.xBaseGeneration
 
 proc finish*(builder: ThemeBuilder): Theme =
   ## Freezes and compiles declarations once; drawing only reads typed values.
@@ -369,7 +383,7 @@ proc noteThemeMutation(builder: var ThemeBuilder) =
 
 func sameAppearanceGeneration*(left, right: Appearance): bool =
   ## Compare immutable cache snapshots without traversing every theme value.
-  left.theme.xGeneration == right.theme.xGeneration
+  left.theme.generation == right.theme.generation
 
 proc registerThemeInstaller*(installer: ThemeInstaller) =
   themeInstallers.add installer
@@ -396,11 +410,11 @@ proc installChrome*(theme: var ThemeBuilder, name: string, chrome: Chrome) =
     theme.noteThemeMutation()
 
 proc hasChrome*(theme: Theme, name: string): bool =
-  name in theme.xChromes
+  not theme.xSnapshot.isNil and name in theme.xSnapshot.xChromes
 
 proc chrome*(theme: Theme, name: string): Chrome =
-  if name in theme.xChromes:
-    return theme.xChromes[name]
+  if not theme.xSnapshot.isNil and name in theme.xSnapshot.xChromes:
+    return theme.xSnapshot.xChromes[name]
 
 proc installChrome*(appearance: var Appearance, name: string, chrome: Chrome) =
   var builder = initThemeBuilder(appearance.theme)
@@ -447,15 +461,16 @@ proc setCssToken*(
 
 func hasLayoutRules*(theme: Theme): bool =
   ## Whether the snapshot contains native or CSS constraint specifications.
-  theme.xHasLayoutRules
+  not theme.xSnapshot.isNil and theme.xSnapshot.xHasLayoutRules
 
 func metricStates*(theme: Theme): set[WidgetState] =
   ## States whose declarations can change intrinsic content metrics, from either source.
-  theme.xMetricStates
+  if not theme.xSnapshot.isNil:
+    result = theme.xSnapshot.xMetricStates
 
 func metricsChange*(theme: Theme, states: set[WidgetState]): bool =
   ## Whether changing these states can affect intrinsic content metrics.
-  (theme.xMetricStates * states) != {}
+  (theme.metricStates * states) != {}
 
 proc `[]=`*(theme: var ThemeBuilder, name: string, value: Color) =
   theme[name] = styleColor(value)
@@ -542,7 +557,8 @@ proc exactStylePatch(rules: openArray[StyleRule], selector: StyleSelector): Styl
           best[key] = index
 
 proc stylePatchView(theme: Theme, selector: StyleSelector): StylePatch =
-  exactStylePatch(theme.xRules, selector)
+  if not theme.xSnapshot.isNil:
+    result = exactStylePatch(theme.xSnapshot.xRules, selector)
 
 proc stylePatch*(theme: Theme, selector: StyleSelector): StylePatch =
   ## Returns a mutable copy without exposing snapshot-owned storage.
@@ -963,22 +979,25 @@ proc ruleValue(
     theme: Theme, context: StyleContext, key: string, fallback: StyleValue
 ): StyleValue =
   result = fallback
+  let snapshot = theme.xSnapshot
+  if snapshot.isNil:
+    return
   var bestRank = [-1, -1, -1, -1, -1, -1, -1]
   let inheritedRole = context.role.inheritedStyleRole
   let keyCount =
     if key in [StyleBackgroundFill.keyName, StyleBackgroundColor.keyName]: 2 else: 1
   for keyIndex in 0 ..< keyCount:
     let name = if keyIndex == 0: key else: StyleFill.keyName
-    if name in theme.xRulesByProperty:
+    if name in snapshot.xRulesByProperty:
       for role in [inheritedRole, context.role]:
         var matchContext = context
         matchContext.role = role
-        for index in theme.xRulesByProperty[name][role]:
-          let rule = theme.xRules[index]
+        for index in snapshot.xRulesByProperty[name][role]:
+          let rule = snapshot.xRules[index]
           if rule.selector.matches(matchContext):
             let rank = rule.ruleRank(ord(role == context.role))
             if rank.rankAtLeast(bestRank):
-              result = theme.xResolvedRules[index].values[name]
+              result = snapshot.xResolvedRules[index].values[name]
               bestRank = rank
         if inheritedRole == context.role:
           break
@@ -1050,9 +1069,9 @@ proc keywordRule(
   if value.kind == svKeyword: value.keyword else: fallback
 
 proc styleValue*(theme: Theme, name: string, fallback: StyleValue): StyleValue =
-  if theme.xTokens.isNil:
+  if not theme.isInitialized:
     return fallback
-  if not theme.xTokens.resolveCssToken(name, fallback.kind, result):
+  if not theme.xSnapshot.xTokens.resolveCssToken(name, fallback.kind, result):
     result = fallback
 
 proc colorToken*(theme: Theme, name: string, fallback: Color): Color =
@@ -1305,18 +1324,21 @@ proc layoutStyleSelection*(
     checkWork: proc() {.closure.} = nil,
 ): LayoutStyleSelection =
   ## Selects already-compiled data without copying potentially large lists.
+  let snapshot = theme.xSnapshot
+  if snapshot.isNil:
+    return
   var bestRank = [-1, -1, -1, -1, -1, -1, -1]
   let name = key.keyName
   let inheritedRole = context.role.inheritedStyleRole
-  if name in theme.xRulesByProperty:
+  if name in snapshot.xRulesByProperty:
     for role in [inheritedRole, context.role]:
       var matchContext = context
       matchContext.role = role
-      for index in theme.xRulesByProperty[name][role]:
+      for index in snapshot.xRulesByProperty[name][role]:
         if not checkWork.isNil:
           checkWork()
-        let rule = theme.xRules[index]
-        let patch = theme.xResolvedRules[index]
+        let rule = snapshot.xRules[index]
+        let patch = snapshot.xResolvedRules[index]
         if rule.selector.matches(matchContext) and
             patch.values[name].kind == svConstraints:
           let rank = rule.ruleRank(ord(role == context.role))

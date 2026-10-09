@@ -133,7 +133,7 @@ jobs:
           $ATLAS_TEST_NIM_ARGS
 
     - name: Run Kosmo tests
-      # The full GUI suite exceeds ten minutes in the unoptimized Linux build.
+      # Allow time for the full GUI suite in the unoptimized Linux build.
       timeout-minutes: 15
       run: |
         testExecutable=./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo

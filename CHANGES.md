@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Share immutable theme storage across Theme and Appearance copies, avoiding
+  duplicated CSS rule tables and indexes in widget caches. Preserve isolated
+  builder edits and mutable copies returned by snapshot accessors.
+
 - Preserve CSS custom-property syntax until use, keeping keywords and units
   consistent with literal declarations and native typed resources. Normalize
   property names before validation, compile shared declarations and diagnostics
