@@ -1,5 +1,6 @@
 ## Internal CSS property vocabulary shared by compilation and typed resolution.
 
+import std/strutils
 import ../../foundation/types
 
 type
@@ -11,13 +12,14 @@ type
     cpkInsets
     cpkShadows
     cpkKeyword
+    cpkFontFace
 
   CssPropertySpec* = object
     name*, key*: string
     kind*: CssPropertyKind
     minimum*, maximum*: float32
     keywords*: string
-    metric*, unitless*: bool
+    metric*, unitless*, shorthand*, bundledOnly*: bool
 
   CssGeometryProperty* = object
     name*, key*: string
@@ -34,6 +36,8 @@ func property(
     maximum = float32.high,
     keywords = "",
     unitless = false,
+    shorthand = false,
+    bundledOnly = false,
 ): CssPropertySpec =
   CssPropertySpec(
     name: name,
@@ -44,9 +48,64 @@ func property(
     maximum: maximum,
     keywords: keywords,
     unitless: unitless,
+    shorthand: shorthand,
+    bundledOnly: bundledOnly,
   )
 
 const
+  StandardCssProperties* = [
+    property("color", "text.color", cpkColor),
+    property("background", "fill", cpkFill),
+    property("background-color", "fill", cpkFill),
+    property("border-color", "border.color", cpkColor),
+    property("border-width", "border.width", cpkLength, metric = true),
+    property("border-radius", "corner.radius", cpkLength, shorthand = true),
+    property("border-top-left-radius", "corner.radius.topLeft", cpkLength),
+    property("border-top-right-radius", "corner.radius.topRight", cpkLength),
+    property("border-bottom-left-radius", "corner.radius.bottomLeft", cpkLength),
+    property("border-bottom-right-radius", "corner.radius.bottomRight", cpkLength),
+    property("font-family", "font.name", cpkKeyword, metric = true, shorthand = true),
+    property("font-size", "font.size", cpkLength, metric = true),
+    property(
+      "font-style",
+      "font.slant",
+      cpkKeyword,
+      metric = true,
+      keywords = "normal|italic|oblique",
+    ),
+    property("padding", "padding", cpkInsets, metric = true, shorthand = true),
+    property("box-shadow", "box.shadows", cpkShadows),
+    property("-nimkit-chrome", "chrome", cpkKeyword, metric = true),
+    property("-nimkit-focus-ring-color", "focus.ring.color", cpkColor),
+    property("-nimkit-focus-ring-width", "focus.ring.width", cpkLength),
+    property(
+      "-nimkit-focus-ring-inset",
+      "focus.ring.inset",
+      cpkLength,
+      metric = true,
+      minimum = -float32.high,
+    ),
+    property("-nimkit-window-background", "background.fill", cpkFill),
+    property("-nimkit-window-background-color", "background.color", cpkColor),
+    # Column objects copy these defaults at construction; runtime CSS cannot resize them.
+    property("-nimkit-column-width", "column.width", cpkLength, bundledOnly = true),
+    property(
+      "-nimkit-column-min-width", "column.min.width", cpkLength, bundledOnly = true
+    ),
+    property(
+      "-nimkit-column-max-width", "column.max.width", cpkLength, bundledOnly = true
+    ),
+    property("-nimkit-font-face", "font.face", cpkFontFace, metric = true),
+    property("-nimkit-italic-font-face", "font.face.italic", cpkFontFace, metric = true),
+    property("-nimkit-bold-font-face", "font.face.bold", cpkFontFace, metric = true),
+    property(
+      "-nimkit-bold-italic-font-face",
+      "font.face.boldItalic",
+      cpkFontFace,
+      metric = true,
+    ),
+  ]
+
   ExtendedCssProperties* = [
     property("-nimkit-selection-color", "selection.color", cpkColor),
     property("-nimkit-cursor-color", "cursor.color", cpkColor),
@@ -260,14 +319,16 @@ const
     ),
   ]
 
+const CssProperties = @StandardCssProperties & @ExtendedCssProperties
+
 func cssPropertyByName*(name: string, spec: var CssPropertySpec): bool =
-  for candidate in ExtendedCssProperties:
+  for candidate in CssProperties:
     if candidate.name == name:
       spec = candidate
       return true
 
 func cssPropertyByKey*(key: string, spec: var CssPropertySpec): bool =
-  for candidate in ExtendedCssProperties:
+  for candidate in CssProperties:
     if candidate.key == key:
       spec = candidate
       return true
@@ -283,3 +344,9 @@ func cssGeometryByKey*(key: string, spec: var CssGeometryProperty): bool =
     if candidate.key == key:
       spec = candidate
       return true
+
+func styleAffectsMetrics*(key: string): bool =
+  if key.startsWith("layout.") or key.startsWith("container."):
+    return true
+  var spec: CssPropertySpec
+  cssPropertyByKey(key, spec) and spec.metric

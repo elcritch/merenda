@@ -125,7 +125,7 @@ proc setWidgetState*(view: View, state: WidgetState, value: bool) =
     view.xWidgetStates.incl state
   else:
     view.xWidgetStates.excl state
-  if view.effectiveAppearance().theme.cssMetricsChange({state}):
+  if view.effectiveAppearance().theme.metricsChange({state}):
     view.invalidateIntrinsicContentSize()
   view.needsDisplay = true
 
@@ -192,7 +192,7 @@ protocol DefaultViewResponder of ResponderProtocol:
       return
     let changed = (view.xWidgetStates - states) + (states - view.xWidgetStates)
     view.xWidgetStates = states
-    if view.effectiveAppearance().theme.cssMetricsChange(changed):
+    if view.effectiveAppearance().theme.metricsChange(changed):
       view.invalidateIntrinsicContentSize()
     view.needsDisplay = true
 

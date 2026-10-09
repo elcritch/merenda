@@ -1,0 +1,192 @@
+/* darkbsd overrides the macos-dark theme. */
+
+:root {
+  --accent: rgba(58%, 5.61, 5.2%, 1);
+  --accent-pressed: rgba(36%, 0.5%, 2%, 1);
+  --button-border-color: rgba(35%, 0, 9.69, 0.96);
+  --button-border-color-accent: rgba(43%, 0, 4.6%, 1);
+  --button-border-color-accent-highlighted: rgba(28%, 0, 3%, 1);
+  --button-border-color-accent-hovered: rgba(153, 0.8%, 7.2%, 1);
+  --button-border-color-disabled: rgba(28%, 4%, 7%, 0.72);
+  --button-border-color-highlighted: rgba(24%, 0, 2.5%, 1);
+  --button-border-color-hovered: rgba(52%, 0.8%, 6.2%, 1);
+  --button-fill: linear-gradient(to bottom, #570105, #c70209 55.686275%, #660105);
+  --button-fill-accent: linear-gradient(to bottom, #660106, #d6030b 55.686275%, #750106);
+  --button-fill-accent-highlighted: linear-gradient(to bottom, #420004, #990107 53.333333%, #520004);
+  --button-fill-accent-hovered: linear-gradient(to bottom, #780208, #f00610 55.686275%, #8a0107);
+  --button-fill-disabled: linear-gradient(to bottom, #3d1214c7, #661a1fc7 55.686275%, #450f12c7);
+  --button-fill-highlighted: linear-gradient(to bottom, #380003, #8a0106 53.333333%, #470003);
+  --button-fill-hovered: linear-gradient(to bottom, #6b0207, #e0040d 55.686275%, #7d0106);
+  --button-shadows: inset 0px -1px 2.8px 0px rgba(12%, 0, 3.06, 0.52);
+  --button-shadows-highlighted: inset 0px 1px 4px 0px rgba(51, 0, 3%, 0.62), inset 0px -1px 2px 0px rgba(255, 38%, 44%, 0.07);
+  --button-text-color: rgba(255, 97%, 98%, 1);
+  --choice-indicator-border-color-selected: rgba(68%, 7%, 14%, 0.9);
+  --choice-indicator-fill-selected-highlighted: rgba(72%, 4%, 8%, 1);
+  --combo-box-border-color: rgba(255, 255, 255, 0.14);
+  --combo-box-fill: rgba(25%, 25%, 27%, 0.98);
+  --combo-box-item-fill-highlighted: rgba(31%, 51, 23%, 1);
+  --focus-ring-color: rgba(70%, 6%, 24%, 0.64);
+  --split-view-divider-fill: rgba(255, 255, 255, 0.035);
+  --split-view-divider-mark-color: rgba(72%, 72%, 76%, 0.82);
+  --text-field-selection-color: rgba(34%, 18%, 23%, 0.92);
+}
+
+button {
+  -nimkit-chrome: ruby-aqua;
+  border-radius: 1e+01px;
+  -nimkit-minimum-size: 0px 32px;
+  -nimkit-text-highlight-color: rgba(255, 90%, 92%, 0.34);
+  -nimkit-text-shadow-color: rgba(16%, 0, 2.5%, 0.66);
+}
+
+switch:selected {
+  border-color: var(--accent-pressed);
+  background: var(--accent);
+}
+
+slider {
+  -nimkit-maximum-highlight-fill: #c70a18;
+  -nimkit-knob-border-color: rgba(255, 255, 255, 0.14);
+  -nimkit-knob-fill: #404045;
+  -nimkit-knob-shadows: 0px 1px 3px 0px rgba(0, 0, 0, 0.38);
+  -nimkit-knob-value-tint: 0;
+}
+
+split-view {
+  border-width: 0px;
+  border-radius: 4px;
+  -nimkit-indicator-size: 32px;
+  -nimkit-mark-color: var(--split-view-divider-mark-color);
+  -nimkit-separator-thickness: 8px;
+}
+
+/* Class styles override the general control states. */
+
+box.popover-box {
+  background: var(--text-field-fill);
+}
+
+button.toolbar-button {
+  border-color: var(--text-field-border-color);
+  border-width: 1px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 5px;
+  background: var(--box-fill);
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 24px 24px;
+  color: var(--text-field-text-color);
+  -nimkit-text-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-text-insets: 0px 4px;
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0);
+}
+
+button.toolbar-button:hover {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:highlighted {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:selected {
+  border-color: var(--accent);
+  box-shadow: inset 0px 1px 2px 0px rgba(0, 0, 0, 0.35);
+  background: var(--accent-pressed);
+  color: rgba(255, 255, 255, 1);
+}
+
+button.toolbar-button:hover:selected {
+  background: var(--accent-pressed);
+}
+
+button.toolbar-button:disabled {
+  color: var(--button-text-color-disabled);
+}
+
+button.toolbar-button.toolbar-symbol {
+  font-size: 16px;
+}
+
+text-field.label {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(90%, 90%, 92%, 1);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-title {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  font-size: 17px;
+  -nimkit-minimum-size: 0px 24px;
+  color: rgba(96%, 96%, 97%, 1);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-heading {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  font-size: 12px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(62%, 62%, 65%, 1);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-status {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  font-size: 12px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(70%, 70%, 72%, 1);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-form {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(70%, 70%, 72%, 1);
+  -nimkit-text-insets: 0px 2px;
+}
+
+text-field.label.icon-label {
+  font-size: var(--font-size);
+  -nimkit-indicator-size: 18px;
+  -nimkit-indicator-spacing: 8px;
+  -nimkit-mark-color: var(--accent);
+  color: rgba(90%, 90%, 92%, 1);
+}

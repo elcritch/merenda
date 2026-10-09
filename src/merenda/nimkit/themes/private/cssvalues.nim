@@ -1,16 +1,12 @@
 ## Internal typed CSS declaration parsing. The tokenizer owns source locations.
 
-import std/[math, strutils]
+import std/[math, strutils, tables]
 import stylus
 from figdraw import SystemTypeface
 
-import ../themecore
+import ../stylevalues
 import ../../foundation/types
-import ./cssproperties
-
-type LocatedToken* = object
-  value*: Token
-  line*, column*: int
+import ./[cssproperties, csstokens]
 
 proc singleVariable(tokens: seq[LocatedToken], value: var StyleValue): bool =
   if tokens.len == 3 and tokens[0].value.kind == tkFunction and
@@ -109,12 +105,134 @@ proc colorValue(tokens: seq[LocatedToken], value: var Color): bool =
       )
       return true
 
-proc basicValue*(tokens: seq[LocatedToken], value: var StyleValue): bool =
-  if tokens.singleVariable(value):
-    return true
+proc fillValue*(tokens: seq[LocatedToken], value: var StyleValue): bool =
   var c: Color
   if tokens.colorValue(c):
     value = styleColor(c)
+    return true
+  if tokens.len < 5 or tokens[0].value.kind != tkFunction or
+      tokens[0].value.fnName.toLowerAscii() != "linear-gradient" or
+      tokens[^1].value.kind != tkCloseParen:
+    return
+  var parts: seq[seq[LocatedToken]]
+  var start = 1
+  var depth = 0
+  for index in 1 ..< tokens.high:
+    case tokens[index].value.kind
+    of tkFunction, tkParenBlock:
+      inc depth
+    of tkCloseParen:
+      dec depth
+    else:
+      discard
+    if tokens[index].value.kind == tkComma and depth == 0:
+      parts.add tokens[start ..< index]
+      start = index + 1
+  parts.add tokens[start ..< tokens.high]
+  var axis = fgaY
+  var reverse = false
+  if parts.len > 0 and parts[0].len > 0:
+    let direction = parts[0]
+    if direction[0].value.kind == tkIdent and
+        direction[0].value.ident.toLowerAscii() == "to":
+      var names: seq[string]
+      for token in direction:
+        if token.value.kind != tkIdent:
+          return
+        names.add token.value.ident.toLowerAscii()
+      case names.join(" ")
+      of "to bottom":
+        axis = fgaY
+      of "to top":
+        axis = fgaY
+        reverse = true
+      of "to right":
+        axis = fgaX
+      of "to left":
+        axis = fgaX
+        reverse = true
+      of "to bottom right", "to right bottom":
+        axis = fgaDiagTLBR
+      of "to top left", "to left top":
+        axis = fgaDiagTLBR
+        reverse = true
+      of "to top right", "to right top":
+        axis = fgaDiagBLTR
+      of "to bottom left", "to left bottom":
+        axis = fgaDiagBLTR
+        reverse = true
+      else:
+        return
+      parts.delete(0)
+    elif direction.len == 1 and direction[0].value.kind == tkDimension and
+        direction[0].value.unit.toLowerAscii() == "deg":
+      let angle = direction[0].value.dValue
+      case angle
+      of 0.0'f32, 360.0'f32:
+        axis = fgaY
+        reverse = true
+      of 45.0'f32:
+        axis = fgaDiagBLTR
+      of 90.0'f32:
+        axis = fgaX
+      of 135.0'f32:
+        axis = fgaDiagTLBR
+      of 180.0'f32:
+        axis = fgaY
+      of 225.0'f32:
+        axis = fgaDiagBLTR
+        reverse = true
+      of 270.0'f32:
+        axis = fgaX
+        reverse = true
+      of 315.0'f32:
+        axis = fgaDiagTLBR
+        reverse = true
+      else:
+        return
+      parts.delete(0)
+  if parts.len notin 2 .. 3:
+    return
+  var colors: seq[Color]
+  var mid = 128'u8
+  for index, part in parts:
+    var ending = part.len
+    if ending == 0:
+      return
+    if part[^1].value.kind == tkPercentage:
+      let position = part[^1].value.pUnitValue
+      if position.classify in {fcNan, fcInf, fcNegInf} or position < 0 or position > 1:
+        return
+      if index == 0 and position != 0 or index == parts.high and position != 1:
+        return
+      if index == 1 and parts.len == 3:
+        mid = uint8(round(position * 255))
+      dec ending
+    var stop: Color
+    if ending == 0 or not colorValue(part[0 ..< ending], stop):
+      return
+    colors.add stop
+  if reverse:
+    swap(colors[0], colors[^1])
+    mid = 255'u8 - mid
+  value = styleFill(
+    if colors.len == 2:
+      linear(colors[0], colors[1], axis)
+    else:
+      linear(colors[0], colors[1], colors[2], axis, mid)
+  )
+  true
+
+proc expressionValue(tokens: seq[LocatedToken], property = ""): StyleValue =
+  var parts: seq[string]
+  for token in tokens:
+    parts.add token.text
+  StyleValue(kind: svCssExpression, cssProperty: property, cssText: parts.join(" "))
+
+proc basicValue*(tokens: seq[LocatedToken], value: var StyleValue): bool =
+  if tokens.singleVariable(value):
+    return true
+  if tokens.fillValue(value):
     return true
   if tokens.len == 1:
     var amount: float32
@@ -128,6 +246,9 @@ proc basicValue*(tokens: seq[LocatedToken], value: var StyleValue): bool =
       value = styleKeyword(tokens[0].value.qStr)
     else:
       return
+    return true
+  if tokens.len > 1:
+    value = expressionValue(tokens)
     return true
 
 proc fourLengths(tokens: seq[LocatedToken], values: var array[4, float32]): bool =
@@ -221,15 +342,17 @@ proc extensionValue(
   if tokens.singleVariable(value):
     return true
   case spec.kind
-  of cpkColor, cpkFill:
+  of cpkColor:
     var c: Color
     if tokens.colorValue(c):
       value = styleColor(c)
       return true
+  of cpkFill:
+    return tokens.fillValue(value)
   of cpkLength:
     var amount: float32
     if tokens.len == 1 and (not spec.unitless or tokens[0].value.kind == tkNumber) and
-        tokens[0].value.lengthValue(amount):
+        tokens[0].value.lengthValue(amount, signed = spec.minimum < 0):
       value = styleLength(amount)
       return true
   of cpkSize:
@@ -247,6 +370,11 @@ proc extensionValue(
       return true
   of cpkShadows:
     return tokens.shadowValue(value)
+  of cpkFontFace:
+    if tokens.len == 1 and tokens[0].value.kind == tkIdent and
+        tokens[0].value.ident.toLowerAscii() == "none":
+      value = styleFontFace(SystemTypeface())
+      return true
   of cpkKeyword:
     if tokens.len == 1:
       let token = tokens[0].value
@@ -432,16 +560,38 @@ proc constraintsValue(tokens: seq[LocatedToken], value: var StyleValue): bool =
   value = styleConstraints(constraints)
   true
 
-proc declarationPatch*(propertyName: string, tokens: seq[LocatedToken]): StylePatch =
+proc declarationPatch*(
+  propertyName: string, tokens: seq[LocatedToken]
+): StylePatch {.noSideEffect.}
+
+proc parseDeclarationPatch(
+    propertyName: string, tokens: seq[LocatedToken]
+): StylePatch =
   let name = propertyName.toLowerAscii()
   var
     value: StyleValue
-    c: Color
     amount: float32
   let variable = tokens.singleVariable(value)
+  var compositeVariable = false
+  for token in tokens:
+    if token.value.kind == tkFunction and token.value.fnName.toLowerAscii() == "var":
+      compositeVariable = not variable
+  if compositeVariable:
+    let prototype =
+      @[
+        LocatedToken(value: Token(kind: tkFunction, fnName: "var")),
+        LocatedToken(value: Token(kind: tkIdent, ident: "--prototype")),
+        LocatedToken(value: Token(kind: tkCloseParen)),
+      ]
+    result = declarationPatch(name, prototype)
+    if not result.isNil:
+      for key, candidate in result.values.mpairs:
+        if candidate.kind in {svToken, svCssExpression}:
+          candidate = expressionValue(tokens, name)
+    return
   result = newStylePatch()
   var spec: CssPropertySpec
-  if cssPropertyByName(name, spec):
+  if cssPropertyByName(name, spec) and not spec.shorthand:
     if not extensionValue(spec, tokens, value):
       return nil
     result.setStyle(spec.key, value)
@@ -492,36 +642,6 @@ proc declarationPatch*(propertyName: string, tokens: seq[LocatedToken]): StylePa
       result[key] = value
     return
   case name
-  of "color", "background", "background-color", "border-color",
-      "-nimkit-focus-ring-color":
-    if not variable:
-      if not tokens.colorValue(c):
-        return nil
-      value = styleColor(c)
-    case name
-    of "color":
-      result[StyleTextColor] = value
-    of "background", "background-color":
-      result[StyleFill] = value
-    of "border-color":
-      result[StyleBorderColor] = value
-    else:
-      result[StyleFocusRingColor] = value
-  of "border-width", "font-size", "-nimkit-focus-ring-width", "-nimkit-focus-ring-inset":
-    if not variable:
-      if tokens.len != 1 or
-          not tokens[0].value.lengthValue(
-            amount, signed = name == "-nimkit-focus-ring-inset"
-          ):
-        return nil
-      value = styleLength(amount)
-    let key =
-      case name
-      of "border-width": StyleBorderWidth
-      of "font-size": StyleFontSize
-      of "-nimkit-focus-ring-width": StyleFocusRingWidth
-      else: StyleFocusRingInset
-    result[key] = value
   of "padding", "border-radius":
     var lengths: array[4, float32]
     if not variable and not tokens.fourLengths(lengths):
@@ -546,7 +666,7 @@ proc declarationPatch*(propertyName: string, tokens: seq[LocatedToken]): StylePa
             value
           else:
             styleLength(lengths[index])
-  of "font-family", "font-style", "-nimkit-chrome":
+  of "font-family":
     if not variable:
       if tokens.len != 1 or tokens[0].value.kind notin {tkIdent, tkQuotedString}:
         return nil
@@ -556,34 +676,163 @@ proc declarationPatch*(propertyName: string, tokens: seq[LocatedToken]): StylePa
         else:
           tokens[0].value.qStr
       )
-    if name == "font-family":
-      result[StyleFontName] = value
-      for key in [
-        StyleFontFace, StyleItalicFontFace, StyleBoldFontFace, StyleBoldItalicFontFace
-      ]:
-        result[key] = styleFontFace(SystemTypeface())
-    elif name == "font-style":
-      if not variable and value.keyword notin ["normal", "italic", "oblique"]:
-        return nil
-      result[StyleFontSlant] = value
-    else:
-      result[StyleChrome] = value
-  of "-nimkit-minimum-size":
-    if variable:
-      result[StyleMinimumSize] = value
-    elif tokens.len in 1 .. 2:
-      var width, height: float32
-      if not tokens[0].value.lengthValue(width):
-        return nil
-      height = width
-      if tokens.len == 2 and not tokens[1].value.lengthValue(height):
-        return nil
-      result[StyleMinimumSize] = styleSize(initSize(width, height))
-    else:
-      return nil
-  of "box-shadow":
-    if not variable and not tokens.shadowValue(value):
-      return nil
-    result[StyleBoxShadows] = value
+    result[StyleFontName] = value
+    for key in [
+      StyleFontFace, StyleItalicFontFace, StyleBoldFontFace, StyleBoldItalicFontFace
+    ]:
+      result[key] = styleFontFace(SystemTypeface())
   else:
     return nil
+
+proc declarationPatch*(
+    propertyName: string, tokens: seq[LocatedToken]
+): StylePatch {.noSideEffect.} =
+  result = parseDeclarationPatch(propertyName, tokens)
+  var variable: StyleValue
+  if not result.isNil and tokens.singleVariable(variable) and
+      propertyName.toLowerAscii() in
+      ["padding", "border-radius", "font-family", "gap", "inset", "-nimkit-pin-edges"]:
+    # Preserve the shorthand so every output key projects the same expanded value.
+    for key, value in result.values.mpairs:
+      if value.kind == svToken:
+        value = expressionValue(tokens, propertyName)
+
+proc compactValueTokens(source: string, tokens: var seq[LocatedToken]): bool =
+  var scanned: seq[LocatedToken]
+  var diagnostics: seq[CssDiagnostic]
+  tokenizeCss(source, scanned, diagnostics)
+  if diagnostics.len > 0:
+    return
+  for token in scanned:
+    if token.value.kind notin {tkWhiteSpace, tkComment}:
+      tokens.add token
+  tokens.len > 0
+
+proc colorText(c: Color): string =
+  "rgba(" & $(c.r * 255) & ", " & $(c.g * 255) & ", " & $(c.b * 255) & ", " & $c.a & ")"
+
+proc valueText(value: StyleValue): string =
+  case value.kind
+  of svCssExpression:
+    value.cssText
+  of svLength:
+    $value.length
+  of svColor:
+    colorText(value.color)
+  of svKeyword:
+    if value.keyword.len > 0 and value.keyword[0] in {'a' .. 'z', 'A' .. 'Z', '_', '-'} and
+        value.keyword.allCharsInSet({'a' .. 'z', 'A' .. 'Z', '0' .. '9', '_', '-'}):
+      value.keyword
+    else:
+      "\"" & value.keyword.replace("\\", "\\\\").replace("\"", "\\\"") & "\""
+  of svInsets:
+    $value.insets.top & "px " & $value.insets.right & "px " & $value.insets.bottom &
+      "px " & $value.insets.left & "px"
+  of svSize:
+    $value.size.width & "px " & $value.size.height & "px"
+  of svShadows:
+    if value.shadows.len == 0:
+      return "none"
+    var shadows: seq[string]
+    for shadow in value.shadows:
+      shadows.add (if shadow.kind == bskInset: "inset " else: "") & $shadow.x & "px " &
+        $shadow.y & "px " & $shadow.blur & "px " & $shadow.spread & "px " &
+        colorText(shadow.color)
+    shadows.join(", ")
+  of svFill:
+    case value.fill.kind
+    of flColor:
+      colorText(value.fill.color.color)
+    of flLinear2:
+      let gradient = value.fill.lin2
+      let direction =
+        ["right", "bottom", "bottom right", "top right"][ord(gradient.axis)]
+      "linear-gradient(to " & direction & ", " & colorText(gradient.start.color) & ", " &
+        colorText(gradient.stop.color) & ")"
+    of flLinear3:
+      let gradient = value.fill.lin3
+      let direction =
+        ["right", "bottom", "bottom right", "top right"][ord(gradient.axis)]
+      "linear-gradient(to " & direction & ", " & colorText(gradient.start.color) & ", " &
+        colorText(gradient.mid.color) & " " & $(gradient.midPos.float32 / 255 * 100) &
+        "%, " & colorText(gradient.stop.color) & ")"
+  else:
+    ""
+
+const MaximumCssValueTokens = 4096
+
+proc substituteVariables(
+    store: StyleTokenStore,
+    tokens: seq[LocatedToken],
+    expanded: var seq[LocatedToken],
+    visiting: var seq[string],
+    work: var int,
+): bool =
+  var index = 0
+  while index < tokens.len:
+    inc work
+    if work > MaximumCssValueTokens or expanded.len >= MaximumCssValueTokens:
+      return
+    let token = tokens[index]
+    if token.value.kind == tkFunction and token.value.fnName.toLowerAscii() == "var":
+      if index + 2 >= tokens.len or tokens[index + 1].value.kind != tkIdent or
+          not tokens[index + 1].value.ident.startsWith("--") or
+          tokens[index + 2].value.kind != tkCloseParen:
+        return
+      let name = tokens[index + 1].value.ident
+      if visiting.len >= 16 or name in visiting:
+        return
+      var value: StyleValue
+      if not store.lookupToken(name, value):
+        return
+      visiting.add name
+      while value.kind == svToken:
+        let alias = value.token.cssTokenName
+        if visiting.len >= 16 or alias in visiting or not store.lookupToken(
+          alias, value
+        ):
+          return
+        visiting.add alias
+      var replacement: seq[LocatedToken]
+      if not compactValueTokens(value.valueText, replacement) or
+          not substituteVariables(store, replacement, expanded, visiting, work):
+        return
+      # The caller owns its traversal stack, including token aliases.
+      while visiting.len > 0 and visiting[^1] != name:
+        visiting.setLen(visiting.len - 1)
+      visiting.setLen(visiting.len - 1)
+      index += 3
+    else:
+      expanded.add token
+      inc index
+  true
+
+proc resolveCssExpression*(
+    store: StyleTokenStore,
+    expression: StyleValue,
+    key: string,
+    resolved: var StyleValue,
+): bool =
+  var tokens: seq[LocatedToken]
+  if not compactValueTokens(expression.cssText, tokens):
+    return
+  var expanded: seq[LocatedToken]
+  var visiting: seq[string]
+  var work = 0
+  if not substituteVariables(store, tokens, expanded, visiting, work):
+    return
+  var property = expression.cssProperty
+  if property.len == 0:
+    var spec: CssPropertySpec
+    if cssPropertyByKey(key, spec):
+      property = spec.name
+    else:
+      var geometry: CssGeometryProperty
+      if not cssGeometryByKey(key, geometry):
+        return
+      property = geometry.name
+  let patch = declarationPatch(property, expanded)
+  if not patch.isNil and key in patch.values and
+      patch.values[key].kind notin {svToken, svCssExpression}:
+    resolved = patch.values[key]
+    return true

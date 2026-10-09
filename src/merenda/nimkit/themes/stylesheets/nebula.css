@@ -1,0 +1,291 @@
+/* nebula overrides the aqua theme. */
+
+:root {
+  --accent: rgba(10%, 92%, 255, 0.92);
+  --accent-pressed: rgba(78%, 18%, 255, 0.82);
+  --button-border-color: rgba(51, 92%, 255, 0.62);
+  --button-border-color-accent: rgba(66%, 51, 255, 0.78);
+  --button-border-color-accent-highlighted: rgba(96%, 36%, 255, 0.88);
+  --button-border-color-disabled: rgba(22%, 34%, 44%, 0.42);
+  --button-border-color-highlighted: rgba(62%, 98%, 255, 0.88);
+  --button-fill: linear-gradient(to bottom right, #2e759e6b, #142e524d 43.92157%, #2e0d4d42);
+  --button-fill-accent: linear-gradient(to bottom right, #47dbff8f, #1f61b870 43.92157%, #701ab852);
+  --button-fill-accent-highlighted: linear-gradient(to bottom, #1a3d7099, #0f1a3d85 47.058824%, #570a736b);
+  --button-fill-disabled: linear-gradient(to bottom, #141f2e3d, #0a0d1433);
+  --button-fill-highlighted: linear-gradient(to bottom right, #47dbff8f, #1f61b870 43.92157%, #701ab852);
+  --button-focus-ring-color: rgba(24%, 96%, 255, 0.86);
+  --button-shadows: 0px 1px 8px 0px rgba(0, 92%, 255, 0.18), inset 0px 1px 4px 0px rgba(62%, 96%, 255, 0.3), inset 0px -2px 7px 0px rgba(82%, 18%, 255, 0.18);
+  --button-shadows-highlighted: inset 0px 2px 7px 0px rgba(0, 0, 0, 0.38), inset 0px -1px 4px 0px rgba(28%, 92%, 255, 0.18);
+  --button-text-color: rgba(82%, 98%, 255, 0.96);
+  --choice-indicator-border-color: rgba(51, 92%, 255, 0.56);
+  --choice-indicator-border-color-disabled: rgba(22%, 34%, 44%, 0.36);
+  --choice-indicator-border-color-highlighted: rgba(70%, 98%, 255, 0.82);
+  --choice-indicator-border-color-selected: rgba(58%, 96%, 255, 0.94);
+  --choice-indicator-fill: linear-gradient(to bottom, #05122494, #0f2e4757 37.64706%, #0508147a);
+  --choice-indicator-fill-disabled: linear-gradient(to bottom, #141f2e3d, #0a0d1433);
+  --choice-indicator-fill-highlighted: linear-gradient(to bottom right, #2e759e6b, #142e524d 43.92157%, #2e0d4d42);
+  --choice-indicator-fill-selected: linear-gradient(to bottom right, #24ebff94, #0f5ce675 43.137255%, #8014eb57);
+  --choice-indicator-fill-selected-disabled: linear-gradient(to bottom, #141f2e3d, #0a0d1433);
+  --choice-indicator-fill-selected-highlighted: linear-gradient(to bottom right, #47dbff8f, #1f61b870 43.92157%, #701ab852);
+  --choice-mark-color: rgba(1%, 7%, 14%, 1);
+  --choice-text-color: rgba(78%, 92%, 255, 0.94);
+  --choice-text-color-disabled: var(--disabled-text-color);
+  --combo-box-arrow-color: rgba(42%, 96%, 255, 0.96);
+  --combo-box-border-color: var(--text-field-border-color);
+  --combo-box-border-color-open: rgba(78%, 24%, 255, 0.86);
+  --combo-box-fill: var(--text-field-fill);
+  --combo-box-item-fill: #050f21db;
+  --combo-box-item-fill-highlighted: linear-gradient(to bottom right, #2e759e6b, #142e524d 43.92157%, #2e0d4d42);
+  --combo-box-item-fill-selected: linear-gradient(to bottom right, #24ebff94, #0f5ce675 43.137255%, #8014eb57);
+  --combo-box-item-fill-selected-highlighted: linear-gradient(to bottom right, #47dbff8f, #1f61b870 43.92157%, #701ab852);
+  --combo-box-item-text-color: rgba(78%, 92%, 255, 0.94);
+  --combo-box-item-text-color-selected: rgba(94%, 255, 255, 1);
+  --disabled-fill: linear-gradient(to bottom, #141f2e3d, #0a0d1433);
+  --disabled-text-color: rgba(44%, 58%, 70%, 0.66);
+  --focus-ring-color: rgba(18%, 92%, 255, 0.88);
+  --progress-fill: var(--accent);
+  --row-item-fill: #050f211a;
+  --row-item-fill-disabled: #141a242e;
+  --row-item-fill-highlighted: #1f75b842;
+  --row-item-fill-selected: linear-gradient(to bottom right, #24ebff94, #0f5ce675 43.137255%, #8014eb57);
+  --row-item-fill-selected-highlighted: linear-gradient(to bottom right, #47dbff8f, #1f61b870 43.92157%, #701ab852);
+  --row-item-separator-color: rgba(18%, 78%, 255, 0.18);
+  --row-item-text-color: rgba(204, 94%, 255, 0.94);
+  --row-item-text-color-disabled: var(--disabled-text-color);
+  --row-item-text-color-selected: rgba(98%, 255, 255, 1);
+  --tab-border-color: rgba(18%, 74%, 255, 0.48);
+  --tab-border-color-disabled: rgba(22%, 34%, 44%, 0.32);
+  --tab-border-color-highlighted: rgba(42%, 94%, 255, 0.76);
+  --tab-border-color-selected: rgba(78%, 24%, 255, 0.74);
+  --tab-fill: #0d243d6b;
+  --tab-fill-disabled: #141a293d;
+  --tab-fill-highlighted: linear-gradient(to bottom right, #2e759e6b, #142e524d 43.92157%, #2e0d4d42);
+  --tab-fill-selected: linear-gradient(to bottom right, #47dbff8f, #1f61b870 43.92157%, #701ab852);
+  --tab-highlight-fill: #75ffff4d;
+  --tab-highlight-fill-disabled: #617a8f29;
+  --tab-panel-border-color: rgba(51, 204, 255, 0.44);
+  --tab-panel-fill: linear-gradient(to bottom, #0a1a2e85, #1a38574d 40.784314%, #080a1f75);
+  --tab-text-color: rgba(72%, 90%, 255, 0.9);
+  --tab-text-color-disabled: var(--disabled-text-color);
+  --tab-text-color-selected: rgba(98%, 255, 255, 1);
+  --table-view-border-color: rgba(14%, 76%, 255, 0.46);
+  --table-view-fill: linear-gradient(to bottom, #0a1a2e85, #1a38574d 40.784314%, #080a1f75);
+  --text-field-border-color: rgba(18%, 86%, 255, 0.54);
+  --text-field-fill: linear-gradient(to bottom, #05122494, #0f2e4757 37.64706%, #0508147a);
+  --text-field-selection-color: rgba(51, 88%, 255, 0.34);
+  --text-field-text-color: rgba(84%, 98%, 255, 0.96);
+}
+
+button {
+  border-radius: 9px;
+  -nimkit-text-highlight-color: rgba(64%, 255, 255, 0.28);
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0.46);
+}
+
+check-box {
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
+}
+
+radio-button {
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
+}
+
+text-field {
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
+}
+
+combo-box {
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
+}
+
+table-header-cell {
+  border-color: rgba(16%, 72%, 255, 0.34);
+  background: #122e4d75;
+  -nimkit-mark-color: rgba(66%, 98%, 255, 0.96);
+  color: rgba(78%, 94%, 255, 0.94);
+}
+
+row-item {
+  -nimkit-alternating-fill: #1a4d6b1a;
+}
+
+view {
+  -nimkit-window-background-color: rgba(4%, 6%, 12%, 1);
+}
+
+switch {
+  border-color: rgba(16%, 86%, 255, 0.54);
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
+  background: linear-gradient(to bottom, #05122494, #0f2e4757 37.64706%, #0508147a);
+  -nimkit-knob-border-color: rgba(58%, 96%, 255, 0.82);
+  -nimkit-knob-fill: linear-gradient(to bottom right, #2e759e6b, #142e524d 43.92157%, #2e0d4d42);
+  -nimkit-knob-shadows: 0px 1px 7px 0px rgba(0, 95%, 255, 0.24), inset 0px 1px 3px 0px rgba(204, 255, 255, 0.42);
+}
+
+switch:selected {
+  border-color: rgba(204, 24%, 255, 0.8);
+  background: linear-gradient(to bottom right, #24ebff94, #0f5ce675 43.137255%, #8014eb57);
+}
+
+switch:highlighted {
+  -nimkit-knob-fill: linear-gradient(to bottom right, #47dbff8f, #1f61b870 43.92157%, #701ab852);
+}
+
+switch:disabled {
+  border-color: rgba(22%, 34%, 44%, 0.34);
+  box-shadow: none;
+  background: linear-gradient(to bottom, #141f2e3d, #0a0d1433);
+  -nimkit-knob-border-color: rgba(22%, 34%, 44%, 0.38);
+  -nimkit-knob-fill: linear-gradient(to bottom, #141f2e3d, #0a0d1433);
+  -nimkit-knob-shadows: none;
+}
+
+switch:disabled:selected {
+  border-color: rgba(22%, 34%, 44%, 0.38);
+  background: linear-gradient(to bottom, #141f2e3d, #0a0d1433);
+}
+
+progress-indicator {
+  border-color: rgba(16%, 86%, 255, 0.54);
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
+  background: linear-gradient(to bottom, #05122494, #0f2e4757 37.64706%, #0508147a);
+}
+
+document-tab {
+  -nimkit-close-button-position: right;
+}
+
+table-view {
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.42), inset 0px -1px 4px 0px rgba(24%, 88%, 255, 0.22);
+  -nimkit-drop-indicator-fill: linear-gradient(to bottom right, #24ebff94, #0f5ce675 43.137255%, #8014eb57);
+}
+
+table-header {
+  border-color: rgba(16%, 204, 255, 0.38);
+  background: #0a243da8;
+  -nimkit-insertion-indicator-fill: linear-gradient(to bottom right, #24ebff94, #0f5ce675 43.137255%, #8014eb57);
+}
+
+table-header-cell:hover {
+  background: linear-gradient(to bottom right, #2e759e6b, #142e524d 43.92157%, #2e0d4d42);
+}
+
+table-header-cell:pressed {
+  background: linear-gradient(to bottom, #1a3d7099, #0f1a3d85 47.058824%, #570a736b);
+}
+
+/* Class styles override the general control states. */
+
+box.popover-box {
+  background: var(--text-field-fill);
+}
+
+button.toolbar-button {
+  border-color: var(--text-field-border-color);
+  border-width: 1px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 5px;
+  background: var(--box-fill);
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 24px 24px;
+  color: var(--text-field-text-color);
+  -nimkit-text-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-text-insets: 0px 4px;
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0);
+}
+
+button.toolbar-button:hover {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:highlighted {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:selected {
+  border-color: var(--accent);
+  box-shadow: inset 0px 1px 2px 0px rgba(0, 0, 0, 0.35);
+  background: var(--accent-pressed);
+  color: rgba(255, 255, 255, 1);
+}
+
+button.toolbar-button:hover:selected {
+  background: var(--accent-pressed);
+}
+
+button.toolbar-button:disabled {
+  color: var(--button-text-color-disabled);
+}
+
+button.toolbar-button.toolbar-symbol {
+  font-size: 16px;
+}
+
+text-field.label {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(78%, 92%, 255, 0.92);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-title {
+  border-color: rgba(28%, 88%, 255, 0.44);
+  border-width: 1px;
+  box-shadow: none;
+  -nimkit-chrome: aqua;
+  border-radius: 8px;
+  background: linear-gradient(to bottom, #1f5c946b, #0a1a3838);
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 28px;
+  color: rgba(84%, 98%, 255, 0.96);
+  -nimkit-text-insets: 0px 12px;
+}
+
+text-field.label-heading {
+  border-color: rgba(18%, 78%, 255, 0.28);
+  border-width: 1px;
+  box-shadow: none;
+  -nimkit-chrome: aqua;
+  border-radius: 6px;
+  background: #05142938;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 24px;
+  color: rgba(76%, 96%, 255, 0.96);
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+text-field.label-status {
+  border-color: rgba(28%, 98%, 82%, 0.34);
+  border-width: 1px;
+  box-shadow: none;
+  -nimkit-chrome: aqua;
+  border-radius: 6px;
+  background: #052e333d;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 24px;
+  color: rgba(74%, 255, 92%, 0.94);
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+text-field.label-form {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(58%, 82%, 94%, 0.86);
+  -nimkit-text-insets: 0px 2px;
+}

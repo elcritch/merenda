@@ -1,0 +1,244 @@
+/* banner overrides the aqua theme. */
+
+:root {
+  --accent: rgba(89%, 38%, 21%, 1);
+  --accent-pressed: rgba(62%, 24%, 14%, 1);
+  --button-border-color: rgba(18%, 12%, 8%, 1);
+  --button-border-color-accent: rgba(18%, 12%, 8%, 1);
+  --button-border-color-accent-highlighted: rgba(12%, 8%, 5%, 1);
+  --button-border-color-disabled: rgba(102, 37%, 33%, 1);
+  --button-border-color-highlighted: rgba(12%, 8%, 5%, 1);
+  --button-fill: var(--accent);
+  --button-fill-accent: var(--accent);
+  --button-fill-accent-highlighted: var(--accent-pressed);
+  --button-fill-disabled: var(--disabled-fill);
+  --button-fill-highlighted: var(--accent-pressed);
+  --button-focus-ring-color: rgba(255, 97%, 94%, 0.9);
+  --button-shadows: inset 2px 1px 5px 0px rgba(255, 255, 255, 0.3), inset -1px -2px 5px 0px rgba(0, 0, 0, 0.24);
+  --button-shadows-highlighted: inset 2px 1px 3px 0px rgba(255, 255, 255, 0.12), inset -1px -2px 9px 0px rgba(0, 0, 0, 0.38);
+  --button-text-color: rgba(255, 97%, 94%, 1);
+  --choice-indicator-border-color: rgba(54%, 49%, 42%, 1);
+  --choice-indicator-border-color-disabled: rgba(70%, 65%, 58%, 1);
+  --choice-indicator-border-color-highlighted: rgba(26%, 51%, 47%, 1);
+  --choice-indicator-fill: rgba(255, 97%, 94%, 1);
+  --choice-indicator-fill-disabled: rgba(86%, 82%, 75%, 1);
+  --choice-indicator-fill-highlighted: rgba(98%, 93%, 84%, 1);
+  --choice-indicator-fill-selected: var(--accent);
+  --choice-indicator-fill-selected-disabled: var(--disabled-fill);
+  --choice-indicator-fill-selected-highlighted: var(--accent-pressed);
+  --choice-mark-color: rgba(255, 97%, 94%, 1);
+  --choice-text-color: rgba(11%, 10%, 10%, 1);
+  --choice-text-color-disabled: rgba(48%, 45%, 102, 1);
+  --combo-box-arrow-color: rgba(16%, 15%, 15%, 1);
+  --combo-box-border-color-open: rgba(31%, 58%, 54%, 1);
+  --combo-box-item-fill: rgba(255, 97%, 94%, 1);
+  --combo-box-item-fill-highlighted: rgba(99%, 93%, 84%, 1);
+  --combo-box-item-fill-selected: rgba(26%, 51%, 47%, 1);
+  --combo-box-item-fill-selected-highlighted: rgba(19%, 38%, 35%, 1);
+  --combo-box-item-text-color: rgba(11%, 10%, 10%, 1);
+  --combo-box-item-text-color-selected: rgba(255, 97%, 94%, 1);
+  --disabled-fill: rgba(52%, 50%, 45%, 1);
+  --disabled-text-color: rgba(94%, 91%, 86%, 1);
+  --focus-ring-color: rgba(31%, 58%, 54%, 0.6);
+  --progress-fill: var(--accent);
+  --row-item-separator-color: rgba(74%, 70%, 63%, 1);
+  --scroll-view-border-color: rgba(74%, 70%, 63%, 1);
+  --scroller-knob-border-color: rgba(102, 34%, 28%, 0.7);
+  --scroller-knob-fill: rgba(54%, 49%, 42%, 0.68);
+  --scroller-track-border-color: rgba(66%, 61%, 54%, 0.8);
+  --scroller-track-fill: rgba(86%, 82%, 75%, 0.7);
+  --tab-border-color: rgba(54%, 49%, 42%, 1);
+  --tab-border-color-disabled: rgba(70%, 65%, 58%, 1);
+  --tab-border-color-highlighted: rgba(42%, 36%, 30%, 1);
+  --tab-border-color-selected: var(--tab-panel-border-color);
+  --tab-fill: rgba(86%, 82%, 75%, 1);
+  --tab-fill-disabled: rgba(82%, 78%, 72%, 1);
+  --tab-fill-highlighted: rgba(78%, 70%, 62%, 1);
+  --tab-fill-selected: var(--tab-panel-fill);
+  --tab-highlight-fill: rgba(255, 97%, 94%, 0);
+  --tab-highlight-fill-disabled: rgba(255, 97%, 94%, 0);
+  --tab-panel-border-color: rgba(84%, 204, 75%, 1);
+  --tab-panel-fill: rgba(255, 97%, 94%, 1);
+  --tab-text-color: rgba(11%, 10%, 10%, 1);
+  --tab-text-color-disabled: rgba(48%, 45%, 102, 1);
+  --tab-text-color-selected: rgba(11%, 10%, 10%, 1);
+  --text-field-border-color: rgba(84%, 204, 75%, 1);
+  --text-field-fill: rgba(255, 97%, 94%, 1);
+  --text-field-selection-color: rgba(31%, 58%, 54%, 0.32);
+  --text-field-text-color: rgba(11%, 10%, 10%, 1);
+}
+
+button {
+  -nimkit-chrome: default;
+  -nimkit-text-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0);
+}
+
+check-box {
+  -nimkit-chrome: default;
+}
+
+radio-button {
+  -nimkit-chrome: default;
+}
+
+combo-box {
+  -nimkit-chrome: default;
+}
+
+tab {
+  -nimkit-chrome: default;
+}
+
+table-header-cell {
+  border-color: rgba(74%, 70%, 63%, 1);
+  background: #e6dbc7;
+  -nimkit-mark-color: rgba(16%, 15%, 15%, 1);
+  color: rgba(11%, 10%, 10%, 1);
+}
+
+row-item {
+  -nimkit-alternating-fill: #faf2e6;
+}
+
+tab-panel {
+  -nimkit-chrome: default;
+}
+
+document-tab {
+  -nimkit-close-button-position: right;
+}
+
+table-view {
+  -nimkit-drop-indicator-fill: #4f948af2;
+}
+
+table-header {
+  border-color: rgba(74%, 70%, 63%, 1);
+  background: #dbd1bf;
+  -nimkit-insertion-indicator-fill: #4f948af2;
+}
+
+table-header-cell:hover {
+  background: #faedd6;
+}
+
+table-header-cell:pressed {
+  background: #c7b39e;
+}
+
+/* Class styles override the general control states. */
+
+box.popover-box {
+  background: var(--text-field-fill);
+}
+
+button.toolbar-button {
+  border-color: var(--text-field-border-color);
+  border-width: 1px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 5px;
+  background: var(--box-fill);
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 24px 24px;
+  color: var(--text-field-text-color);
+  -nimkit-text-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-text-insets: 0px 4px;
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0);
+}
+
+button.toolbar-button:hover {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:highlighted {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:selected {
+  border-color: var(--accent);
+  box-shadow: inset 0px 1px 2px 0px rgba(0, 0, 0, 0.35);
+  background: var(--accent-pressed);
+  color: rgba(255, 255, 255, 1);
+}
+
+button.toolbar-button:hover:selected {
+  background: var(--accent-pressed);
+}
+
+button.toolbar-button:disabled {
+  color: var(--button-text-color-disabled);
+}
+
+button.toolbar-button.toolbar-symbol {
+  font-size: 16px;
+}
+
+text-field.label {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(9%, 12%, 18%, 1);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-title {
+  border-color: rgba(92, 135, 196, 0.5411765);
+  border-width: 1px;
+  box-shadow: 0px -1px 1.5px 0px rgba(255, 255, 255, 0.4), inset 0px 1.2px 3px 0px rgba(0, 36, 112, 0.101960786), inset 0px 2px 2.6px 0px rgba(255, 255, 255, 0.83137256), inset 0px -1px 2.1px 0px rgba(255, 255, 255, 0.4627451), inset 2px 1px 7px 0px rgba(0, 82, 190, 0.09411765), inset -2px 1px 7px 0px rgba(0, 82, 190, 0.09411765), inset 0px -3px 7.4px 0px rgba(98, 224, 255, 0.36078432);
+  -nimkit-chrome: aqua;
+  border-radius: 8px;
+  background: linear-gradient(to bottom, #ffffffda, #e8f8ffa6 30.588235%, #3eb4fa8e);
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 28px;
+  color: rgba(9%, 14%, 26%, 1);
+  -nimkit-text-insets: 0px 12px;
+}
+
+text-field.label-heading {
+  border-color: rgba(104, 148, 205, 0.49411765);
+  border-width: 1px;
+  box-shadow: 0px -1px 1.5px 0px rgba(255, 255, 255, 0.4), inset 0px 1.2px 3px 0px rgba(0, 36, 112, 0.101960786), inset 0px 2px 2.6px 0px rgba(255, 255, 255, 0.83137256), inset 0px -1px 2.1px 0px rgba(255, 255, 255, 0.4627451), inset 2px 1px 7px 0px rgba(0, 82, 190, 0.09411765), inset -2px 1px 7px 0px rgba(0, 82, 190, 0.09411765), inset 0px -3px 7.4px 0px rgba(98, 224, 255, 0.36078432);
+  -nimkit-chrome: aqua;
+  border-radius: 7px;
+  background: linear-gradient(to bottom, #ffffffce, #def4ff9a 32.156863%, #3aa8f084);
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 24px;
+  color: rgba(10%, 18%, 32%, 1);
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+text-field.label-status {
+  border-color: rgba(88, 168, 112, 0.4862745);
+  border-width: 1px;
+  box-shadow: 0px -1px 1.5px 0px rgba(255, 255, 255, 0.38431373), inset 0px 1.2px 3px 0px rgba(10, 88, 38, 0.09411765), inset 0px 2px 2.6px 0px rgba(255, 255, 255, 0.80784315), inset 0px -1px 2.1px 0px rgba(255, 255, 255, 0.42352942), inset 2px 1px 7px 0px rgba(30, 136, 68, 0.08627451), inset -2px 1px 7px 0px rgba(30, 136, 68, 0.08627451), inset 0px -3px 7.2px 0px rgba(112, 248, 168, 0.3529412);
+  -nimkit-chrome: aqua;
+  border-radius: 7px;
+  background: linear-gradient(to bottom, #ffffffd4, #e0ffeea2 30.588235%, #3ad6808a);
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 24px;
+  color: rgba(6%, 25%, 14%, 1);
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+text-field.label-form {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(10%, 14%, 22%, 1);
+  -nimkit-text-insets: 0px 2px;
+}

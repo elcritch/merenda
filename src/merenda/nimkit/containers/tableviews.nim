@@ -1629,7 +1629,7 @@ proc tableHeaderHeight*(tableView: TableView): float32 =
     return
   result = tableView.xHeaderHeight
   let appearance = tableView.effectiveAppearance()
-  if not tableView.xHasExplicitHeaderHeight and appearance.theme.hasCss:
+  if not tableView.xHasExplicitHeaderHeight:
     result = max(
       appearance.resolveLength(tableView.tableStyleContext(), StyleHeaderHeight, result),
       0.0'f32,
@@ -3201,7 +3201,7 @@ proc focusedColumnIndex*(tableView: TableView): int =
 proc rowHeight*(tableView: TableView): float32 =
   result = tableView.xRowHeight
   let appearance = tableView.effectiveAppearance()
-  if not tableView.xHasExplicitRowHeight and appearance.theme.hasCss:
+  if not tableView.xHasExplicitRowHeight:
     result =
       appearance.resolveLength(tableView.tableStyleContext(), StyleRowHeight, result)
   result = result.normalizedRowHeight()

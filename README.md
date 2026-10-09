@@ -48,9 +48,13 @@ NIMKIT_THEME=macos nim r examples/controls_showcase.nim
 NIMKIT_THEME=aqua nim r examples/controls_showcase.nim
 ```
 
-Use CSS for control colors, fonts, state styles, edge pinning and native layout
-constraints. Style StackView/GridView spacing and alignment and control-specific
-metrics through `-nimkit-*` properties. The [CSS preview](examples/css_theme_demo.nim)
+The built-in themes are [embedded CSS stylesheets](src/merenda/nimkit/themes/stylesheets)
+with shared widget defaults. Application CSS can extend them, and typed Nim
+styling APIs remain available for programmatic overrides.
+
+Use CSS for control colors, fonts, gradients, state styles, edge pinning and
+native layout constraints. Style StackView/GridView spacing and alignment and
+control-specific metrics through `-nimkit-*` properties. The [CSS preview](examples/css_theme_demo.nim)
 lays out its toolbar, sidebar and editor from a stylesheet and reloads it when
 you click **Reload CSS**:
 

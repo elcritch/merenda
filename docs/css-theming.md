@@ -1,9 +1,9 @@
 # CSS themes
 
-Style NimKit controls with a stylesheet while keeping your existing theme's
-fonts, chrome delegates and untouched metrics. CSS uses Stylus 0.1.5 for
-tokenization and compiles to the same immutable themes that NimKit uses for
-drawing, sizing and native constraint layout.
+NimKit's built-in themes are CSS stylesheets. Application CSS and programmatic
+styling compile to the same immutable snapshots used for drawing, sizing and
+native constraint layout. CSS uses Stylus 0.1.5 for tokenization; font resources
+and chrome drawing delegates stay in Nim.
 
 ```nim
 import merenda/nimkit
@@ -31,6 +31,15 @@ byte column. Invalid literal declarations are skipped. Invalid selectors discard
 their whole rule, including a selector list, so an unsupported selector cannot
 accidentally style unrelated controls. Missing files raise `IOError` or `OSError`.
 The caller decides whether diagnostics should prevent installation.
+
+The embedded definitions live in
+[`themes/stylesheets`](../src/merenda/nimkit/themes/stylesheets). `base.css`
+shares text resource bindings and widget metrics; `aqua.css` supplies the base
+palette and surfaces. Banner, macOS, macOS Dark, DarkBSD, Nebula, Peachy and
+Synthwave83 layer their styles over their existing parent theme. The public
+constructors and `NIMKIT_THEME` names remain available. Stylesheets are embedded
+in the executable, compiled once per thread, and cached until font settings or
+registered native theme extensions change.
 
 The [CSS demo](../examples/css_theme_demo.nim) loads a
 [sidecar stylesheet](../examples/css_theme_demo.css). Edit it and click **Reload
@@ -78,9 +87,10 @@ Colors accept names, `transparent`, 3/4/6/8 digit hex notation, `rgb()` and
 | Property | Meaning |
 | --- | --- |
 | `color` | Control text color |
-| `background`, `background-color` | View background or control face fill |
+| `background`, `background-color` | View background or control face fill; solid color or supported linear gradient |
 | `border-color`, `border-width` | Existing control border |
 | `border-radius` | One to four corner radii in CSS order |
+| `border-top-left-radius`, `border-top-right-radius`, `border-bottom-left-radius`, `border-bottom-right-radius` | Individual corner radii |
 | `font-family` | One family name, quoted when it contains spaces; clears exact face overrides |
 | `font-size` | Control text size |
 | `font-style` | `normal`, `italic`, or `oblique` |
@@ -101,7 +111,20 @@ must be nonnegative; constraint edge offsets may be signed. Unitless factors
 are strictly positive; knob value tint is between 0 and 1. A scalar variable
 can supply one size/inset/gap value and is revalidated for the destination key.
 A size accepts one uniform or two width/height values; insets use CSS
-(top/right/bottom/left) order. Fill extensions currently accept solid colors.
+(top/right/bottom/left) order. Fill extensions also accept linear gradients.
+
+`linear-gradient()` supports the renderer's two or three color stops. The
+default direction is `to bottom`; cardinal and diagonal directions such as
+`to right` and `to bottom right` are supported, along with angles in 45-degree
+steps from `0deg` to `360deg`. The first and last stops span 0% and 100%; an
+optional middle percentage selects the third stop's position. Other angles,
+more stops, repeating gradients and different endpoint positions are diagnosed.
+
+```css
+button {
+  background: linear-gradient(to bottom, #fff, #ddd 40%, #bbb);
+}
+```
 
 The tables name the exact public StyleKey and its existing consumer. A property
 only affects behavior that the widget exposes. Ordinary Views paint backgrounds
@@ -167,7 +190,8 @@ default. Per-row overrides and delegate heights retain their native precedence.
 Replacing CSS restores untouched native fallback values. Table column width,
 minimum and maximum width remain native constructor/setter/model properties;
 `-nimkit-column-width`, `-nimkit-column-min-width` and `-nimkit-column-max-width`
-are unsupported and diagnosed.
+are diagnosed in application CSS. Built-in stylesheets use these properties
+only to supply the defaults copied when a column is constructed.
 
 Pinstripes apply only when `usesThemedRootBackground` is enabled. Zero period or
 height disables them. The renderer increases pitch to at least one logical pixel,
@@ -306,8 +330,8 @@ content, accessibility identity or model data.
 
 ## Variables, cascade and scope
 
-Root variables contain typed colors, single lengths, keywords/strings or direct
-aliases:
+Root variables contain colors, lengths, keywords/strings, aliases or composite
+values such as padding, sizes, shadows and gradients:
 
 ```css
 :root {
@@ -315,27 +339,63 @@ aliases:
   --space: 8px;
   --family: "Ubuntu";
   --action: var(--accent);
+  --padding: 4px 12px;
+  --shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
-button { color: var(--action); padding: var(--space); font-family: var(--family); }
+button {
+  color: var(--action);
+  padding: var(--padding);
+  font-family: var(--family);
+  box-shadow: var(--shadow);
+}
+button:hover { box-shadow: 0 2px var(--space) var(--accent); }
 ```
 
 Variables resolve after all root declarations, so forward references work.
 `var(--space)` converts a single length to uniform padding or corner radii.
-Arbitrary token substitution, variable expressions, fallback arguments and
-variables on ordinary selector rules are unsupported. Missing references,
-cycles, reference chains beyond 16 steps and wrong target types produce
-diagnostics and leave valid lower declarations in force. The variable candidate
+Variables can appear within a supported declaration value, including a gradient
+or shadow. Expansion is bounded to 16 reference steps and 4096 processed tokens.
+Fallback arguments, `calc()`, and variables on ordinary selector rules are
+unsupported. Missing references, cycles, excessive expansion and wrong target
+types produce diagnostics and leave valid lower declarations in force. The variable candidate
 is retained: appending a valid root definition can restore it, and changing a
 variable's type revalidates earlier candidates. The diagnostics for retained
 rules use the original rule's line/column.
 
-Precedence is the original native theme, then CSS, then explicit programmatic
-theme/appearance overrides made after CSS. Within CSS, `!important` wins first,
-then specificity (ids; classes and pseudo classes; types), then source order.
-Shorthands carry the same rank to every expanded key. A native write after CSS
-overrides only that key and remains above subsequently appended stylesheets.
-Root-variable importance and native token overrides also survive appends and
-builder round trips.
+Precedence is theme defaults, then application CSS, then explicit programmatic
+theme/appearance overrides. This order applies regardless of when CSS is loaded.
+Within each layer, `!important` wins first, then specificity (ids; classes and
+pseudo classes; types). Equal specificity prefers the concrete role over its
+fallback role, such as `menu-bar-item` over `tab`, then the last declaration.
+CSS and native selectors share these rules. Shorthands carry the same rank to
+every expanded key. Uniform radius assignments replace all four corners; a
+later longhand can override one corner.
+
+`initThemeBuilder()` creates defaults. `initThemeBuilder(existingTheme)` creates
+explicit overrides; pass `sroTheme` as its second argument when deliberately
+extending the defaults layer. `parseCssTheme` and `loadCssTheme` always write to
+the application layer. Programmatic edits replace only the assigned properties
+and survive subsequently appended stylesheets, including `!important` rules.
+Root-variable importance and programmatic token overrides also survive appends
+and builder round trips.
+
+Legacy token names alias CSS custom properties: `accent` is `--accent`,
+`button.fill` is `--button-fill`, and `font.ui.face.boldItalic` is
+`--font-ui-face-bold-italic`. Names starting with `--` retain their exact spelling.
+Both APIs update the same value:
+
+```nim
+var builder = initThemeBuilder(parsed.theme)
+builder["accent"] = color(0.8, 0.3, 0.1, 1)
+builder[srButton, StyleCornerRadius] = 8.0
+var appearance = initAppearance(builder.finish())
+appearance[srButton, StyleTextColor] = color(1, 1, 1, 1)
+window.setAppearance(appearance)
+```
+
+Finishing a builder revalidates variable consumers and compiles their typed
+values once. Drawing and layout select from the compiled property/role index;
+they do not parse CSS declaration values.
 
 Reparse against the original base to replace a stylesheet:
 
@@ -355,7 +415,7 @@ Install appearances through the existing application, window or view APIs.
 Window/application appearances flow to their inherited subtrees; a view's
 explicit appearance keeps its own scope. CSS text properties do not inherit
 from a parent view, and variables are theme-wide. Widget state changes redraw
-normally; CSS state rules affecting metrics also invalidate intrinsic sizing and
+normally; state rules affecting metrics also invalidate intrinsic sizing and
 layout. Button hover keeps color interpolation while applying current-state
 text and geometry metrics immediately.
 

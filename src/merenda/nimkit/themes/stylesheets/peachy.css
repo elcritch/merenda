@@ -1,0 +1,406 @@
+/* peachy overrides the aqua theme. */
+
+:root {
+  --accent: rgba(88%, 30%, 52%, 0.92);
+  --accent-pressed: rgba(255, 62%, 36%, 0.88);
+  --button-border-color: rgba(255, 58%, 102, 0.78);
+  --button-border-color-accent: rgba(92%, 32%, 54%, 0.86);
+  --button-border-color-accent-highlighted: rgba(255, 78%, 42%, 0.92);
+  --button-border-color-disabled: rgba(22%, 34%, 44%, 0.42);
+  --button-border-color-highlighted: rgba(255, 74%, 48%, 0.9);
+  --button-fill: linear-gradient(to bottom, #333645d1, #57405799 43.92157%, #2e3040c7);
+  --button-fill-accent: var(--button-fill-highlighted);
+  --button-fill-accent-highlighted: linear-gradient(to bottom, #3d3647c2, #332e40ad 47.058824%, #943d6b85);
+  --button-fill-disabled: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  --button-fill-highlighted: linear-gradient(to bottom, #6b3857c7, #523852ad 43.92157%, #94523d7a);
+  --button-shadows: 0px 1px 9px 0px rgba(95%, 35%, 52%, 0.1), inset 0px 1px 4px 0px rgba(255, 74%, 52%, 0.18), inset 0px -2px 8px 0px rgba(82%, 24%, 50%, 0.11);
+  --button-shadows-highlighted: inset 0px 2px 7px 0px rgba(0, 0, 0, 0.3), inset 0px -1px 4px 0px rgba(255, 56%, 36%, 0.12);
+  --button-text-color: rgba(255, 74%, 50%, 0.98);
+  --choice-indicator-border-color: rgba(255, 58%, 102, 0.74);
+  --choice-indicator-border-color-disabled: rgba(22%, 34%, 44%, 0.36);
+  --choice-indicator-border-color-highlighted: rgba(255, 70%, 46%, 0.86);
+  --choice-indicator-border-color-selected: rgba(255, 76%, 44%, 0.92);
+  --choice-indicator-fill: linear-gradient(to bottom, #2e3040c2, #3d364a99 37.64706%, #262938b3);
+  --choice-indicator-fill-disabled: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  --choice-indicator-fill-highlighted: linear-gradient(to bottom right, #54475c8f, #40405275 43.92157%, #61305461);
+  --choice-indicator-fill-selected: linear-gradient(to bottom right, #b84775d1, #943d6bbd 43.137255%, #f0855794);
+  --choice-indicator-fill-selected-disabled: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  --choice-indicator-fill-selected-highlighted: linear-gradient(to bottom right, #ad4f80ad, #7045708a 43.92157%, #f0875966);
+  --choice-mark-color: rgba(6%, 8%, 12%, 1);
+  --choice-text-color: rgba(255, 52%, 76%, 0.98);
+  --choice-text-color-disabled: var(--disabled-text-color);
+  --combo-box-arrow-color: rgba(255, 74%, 46%, 0.96);
+  --combo-box-arrow-fill: linear-gradient(to bottom right, #854566e0, #574057cc 43.92157%, #d1705794);
+  --combo-box-border-color: var(--text-field-border-color);
+  --combo-box-border-color-open: rgba(255, 74%, 42%, 0.88);
+  --combo-box-fill: var(--text-field-fill);
+  --combo-box-item-fill: #2e3040f0;
+  --combo-box-item-fill-highlighted: linear-gradient(to bottom right, #54475c8f, #40405275 43.92157%, #61305461);
+  --combo-box-item-fill-selected: linear-gradient(to bottom right, #b84775d1, #943d6bbd 43.137255%, #f0855794);
+  --combo-box-item-fill-selected-highlighted: linear-gradient(to bottom right, #ad4f80ad, #7045708a 43.92157%, #f0875966);
+  --combo-box-item-text-color: rgba(255, 48%, 76%, 0.98);
+  --combo-box-item-text-color-selected: rgba(255, 86%, 52%, 1);
+  --disabled-fill: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  --disabled-text-color: rgba(54%, 58%, 56%, 0.72);
+  --document-tab-bar-border-color: var(--tab-panel-border-color);
+  --document-tab-bar-fill: var(--tab-panel-fill);
+  --document-tab-border-color: var(--tab-border-color);
+  --document-tab-border-color-disabled: var(--tab-border-color-disabled);
+  --document-tab-border-color-highlighted: var(--tab-border-color-highlighted);
+  --document-tab-border-color-pressed: var(--tab-border-color-highlighted);
+  --document-tab-border-color-selected: var(--tab-border-color-selected);
+  --document-tab-button-border-color: var(--document-tab-border-color);
+  --document-tab-button-border-color-disabled: var(--document-tab-border-color-disabled);
+  --document-tab-button-border-color-highlighted: var(--document-tab-border-color-highlighted);
+  --document-tab-button-mark-color: var(--document-tab-text-color);
+  --document-tab-button-mark-color-disabled: var(--document-tab-text-color-disabled);
+  --document-tab-fill: var(--tab-fill);
+  --document-tab-fill-disabled: var(--tab-fill-disabled);
+  --document-tab-fill-highlighted: var(--tab-fill-highlighted);
+  --document-tab-fill-pressed: var(--tab-fill-highlighted);
+  --document-tab-fill-selected: var(--tab-fill-selected);
+  --document-tab-highlight-fill: var(--tab-highlight-fill);
+  --document-tab-highlight-fill-disabled: var(--tab-highlight-fill-disabled);
+  --document-tab-text-color: var(--tab-text-color);
+  --document-tab-text-color-disabled: var(--tab-text-color-disabled);
+  --document-tab-text-color-selected: var(--tab-text-color-selected);
+  --focus-ring-color: rgba(255, 58%, 36%, 0.58);
+  --progress-fill: var(--accent);
+  --row-item-fill: #2e304024;
+  --row-item-fill-disabled: #141a242e;
+  --row-item-fill-highlighted: #80426161;
+  --row-item-fill-selected: linear-gradient(to bottom right, #b84775d1, #943d6bbd 43.137255%, #f0855794);
+  --row-item-fill-selected-highlighted: linear-gradient(to bottom right, #ad4f80ad, #7045708a 43.92157%, #f0875966);
+  --row-item-separator-color: rgba(255, 58%, 102, 0.24);
+  --row-item-text-color: rgba(255, 48%, 76%, 0.98);
+  --row-item-text-color-disabled: var(--disabled-text-color);
+  --row-item-text-color-selected: rgba(255, 86%, 46%, 1);
+  --scroller-knob-border-color: rgba(255, 74%, 46%, 0.84);
+  --scroller-knob-fill: linear-gradient(to bottom right, #f05794c7, #9e4d7a99 42.35294%, #ff996670);
+  --scroller-track-border-color: rgba(255, 58%, 102, 0.34);
+  --scroller-track-fill: #2e304057;
+  --tab-border-color: rgba(255, 58%, 102, 0.72);
+  --tab-border-color-disabled: rgba(22%, 34%, 44%, 0.32);
+  --tab-border-color-highlighted: rgba(255, 70%, 46%, 0.86);
+  --tab-border-color-selected: rgba(255, 78%, 46%, 0.94);
+  --tab-fill: #333345a8;
+  --tab-fill-disabled: #141a293d;
+  --tab-fill-highlighted: linear-gradient(to bottom right, #54475c8f, #40405275 43.92157%, #61305461);
+  --tab-fill-selected: linear-gradient(to bottom right, #ad4f80ad, #7045708a 43.92157%, #f0875966);
+  --tab-highlight-fill: #ffc7752e;
+  --tab-highlight-fill-disabled: #617a8f29;
+  --tab-panel-border-color: rgba(255, 58%, 102, 0.68);
+  --tab-panel-fill: var(--table-view-fill);
+  --tab-text-color: rgba(255, 62%, 82%, 0.96);
+  --tab-text-color-disabled: var(--disabled-text-color);
+  --tab-text-color-selected: rgba(255, 84%, 52%, 1);
+  --table-view-border-color: rgba(255, 58%, 102, 0.66);
+  --table-view-fill: linear-gradient(to bottom, #383b4ad1, #473b4fbd 40.784314%, #2e3040d1);
+  --text-field-border-color: rgba(255, 58%, 102, 0.72);
+  --text-field-fill: linear-gradient(to bottom, #2e3040c2, #3d364a99 37.64706%, #262938b3);
+  --text-field-selection-color: rgba(88%, 30%, 52%, 0.4);
+  --text-field-text-color: rgba(255, 204, 64%, 0.98);
+}
+
+button {
+  border-width: 1.25px;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 9px;
+  -nimkit-text-highlight-color: rgba(38%, 18%, 14%, 0.2);
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0.34);
+}
+
+check-box {
+  border-width: 1.25px;
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  -nimkit-chrome: flat-transparent;
+}
+
+radio-button {
+  border-width: 1.25px;
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  -nimkit-chrome: flat-transparent;
+}
+
+text-field {
+  border-width: 1.25px;
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  -nimkit-chrome: flat-transparent;
+  color: rgba(255, 204, 64%, 0.98);
+}
+
+text-view {
+  color: rgba(255, 204, 64%, 0.98);
+}
+
+combo-box {
+  border-width: 1.25px;
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  -nimkit-chrome: flat-transparent;
+}
+
+tab {
+  border-width: 1.25px;
+  -nimkit-chrome: flat-transparent;
+}
+
+table-header-cell {
+  border-color: rgba(255, 58%, 102, 0.62);
+  background: #3d384db3;
+  -nimkit-mark-color: rgba(255, 78%, 46%, 0.96);
+  color: rgba(255, 54%, 78%, 0.98);
+}
+
+row-item {
+  -nimkit-alternating-fill: #6b3d5c1f;
+}
+
+mono-text-view {
+  -nimkit-chrome: flat-transparent;
+}
+
+view {
+  -nimkit-window-background-color: rgba(51, 21%, 27%, 1);
+  -nimkit-window-background: #333645;
+  -nimkit-pinstripe-height: 0px;
+  -nimkit-pinstripe-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-pinstripe-period: 0px;
+}
+
+switch {
+  border-color: rgba(16%, 86%, 255, 0.54);
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  -nimkit-chrome: flat-transparent;
+  background: linear-gradient(to bottom, #2e3040c2, #3d364a99 37.64706%, #262938b3);
+  -nimkit-knob-border-color: rgba(58%, 96%, 255, 0.82);
+  -nimkit-knob-fill: linear-gradient(to bottom right, #54475c8f, #40405275 43.92157%, #61305461);
+  -nimkit-knob-shadows: 0px 1px 7px 0px rgba(255, 34%, 52%, 0.14), inset 0px 1px 3px 0px rgba(255, 204, 153, 0.24);
+}
+
+switch:selected {
+  border-color: rgba(204, 24%, 255, 0.8);
+  background: linear-gradient(to bottom right, #b84775d1, #943d6bbd 43.137255%, #f0855794);
+}
+
+switch:highlighted {
+  -nimkit-knob-fill: linear-gradient(to bottom right, #ad4f80ad, #7045708a 43.92157%, #f0875966);
+}
+
+switch:disabled {
+  border-color: rgba(22%, 34%, 44%, 0.34);
+  box-shadow: none;
+  background: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  -nimkit-knob-border-color: rgba(22%, 34%, 44%, 0.38);
+  -nimkit-knob-fill: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  -nimkit-knob-shadows: none;
+}
+
+switch:disabled:selected {
+  border-color: rgba(22%, 34%, 44%, 0.38);
+  background: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+}
+
+slider {
+  border-color: rgba(255, 58%, 102, 0.78);
+  box-shadow: inset 0px 1px 4px 0px rgba(0, 0, 0, 0.3), inset 0px -1px 4px 0px rgba(255, 68%, 44%, 0.14);
+  -nimkit-chrome: flat-transparent;
+  background: linear-gradient(to bottom, #333645e0, #574057b8 40.784314%, #292e3ddb);
+  -nimkit-focus-ring-color: rgba(255, 74%, 46%, 0.84);
+  -nimkit-highlight-fill: linear-gradient(to bottom right, #f05794db, #ad4d7ac2 42.35294%, #ff945c9e);
+  -nimkit-knob-border-color: rgba(255, 74%, 46%, 0.92);
+  -nimkit-knob-fill: linear-gradient(to bottom right, #854566e0, #574057cc 43.92157%, #d1705794);
+  -nimkit-knob-shadows: 0px 1px 7px 0px rgba(255, 34%, 52%, 0.2), inset 0px 1px 3px 0px rgba(255, 78%, 52%, 0.24), inset 0px -1px 3px 0px rgba(0, 0, 0, 0.26);
+}
+
+progress-indicator {
+  border-color: rgba(255, 58%, 102, 0.78);
+  box-shadow: inset 0px 1px 4px 0px rgba(0, 0, 0, 0.3), inset 0px -1px 4px 0px rgba(255, 68%, 44%, 0.14);
+  -nimkit-chrome: flat-transparent;
+  background: linear-gradient(to bottom, #333645e0, #574057b8 40.784314%, #292e3ddb);
+}
+
+tab-panel {
+  border-width: 1.25px;
+  -nimkit-chrome: flat-transparent;
+}
+
+document-tab {
+  border-width: 1.25px;
+  -nimkit-chrome: flat-transparent;
+  -nimkit-close-button-position: right;
+}
+
+document-tab-bar {
+  border-width: 1.25px;
+  -nimkit-chrome: flat-transparent;
+}
+
+document-tab-button {
+  -nimkit-chrome: flat-transparent;
+}
+
+table-view {
+  border-width: 1.25px;
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  -nimkit-drop-indicator-fill: linear-gradient(to bottom right, #b84775d1, #943d6bbd 43.137255%, #f0855794);
+}
+
+scroll-view {
+  border-width: 1.25px;
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  border-radius: 5px;
+}
+
+scroller {
+  border-width: 1px;
+  border-radius: 4px;
+  -nimkit-knob-shadows: 0px 1px 7px 0px rgba(255, 34%, 52%, 0.2), inset 0px 1px 3px 0px rgba(255, 78%, 52%, 0.22);
+}
+
+table-header {
+  border-color: rgba(255, 58%, 102, 0.7);
+  background: #473b4fc7;
+  -nimkit-insertion-indicator-fill: var(--row-item-fill-selected);
+}
+
+table-header-cell:hover {
+  background: linear-gradient(to bottom right, #54475c8f, #40405275 43.92157%, #61305461);
+}
+
+table-header-cell:pressed {
+  background: linear-gradient(to bottom, #3d3647c2, #332e40ad 47.058824%, #943d6b85);
+}
+
+text-field:focus {
+  color: rgba(255, 88%, 72%, 1);
+}
+
+text-field:disabled {
+  color: var(--disabled-text-color);
+}
+
+text-view:focus {
+  color: rgba(255, 88%, 72%, 1);
+}
+
+text-view:disabled {
+  color: var(--disabled-text-color);
+}
+
+/* Class styles override the general control states. */
+
+box.popover-box {
+  background: var(--text-field-fill);
+}
+
+button.toolbar-button {
+  border-color: var(--text-field-border-color);
+  border-width: 1px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 5px;
+  background: var(--box-fill);
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 24px 24px;
+  color: var(--text-field-text-color);
+  -nimkit-text-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-text-insets: 0px 4px;
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0);
+}
+
+button.toolbar-button:hover {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:highlighted {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:selected {
+  border-color: var(--accent);
+  box-shadow: inset 0px 1px 2px 0px rgba(0, 0, 0, 0.35);
+  background: var(--accent-pressed);
+  color: rgba(255, 255, 255, 1);
+}
+
+button.toolbar-button:hover:selected {
+  background: var(--accent-pressed);
+}
+
+button.toolbar-button:disabled {
+  color: var(--button-text-color-disabled);
+}
+
+button.toolbar-button.toolbar-symbol {
+  font-size: 16px;
+}
+
+text-field.label {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(255, 153, 82%, 0.96);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-title {
+  border-color: rgba(255, 58%, 102, 0.62);
+  border-width: 1.25px;
+  box-shadow: none;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 8px;
+  background: linear-gradient(to bottom right, #54475c8f, #40405275 43.92157%, #61305461);
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 28px;
+  color: rgba(255, 76%, 50%, 0.98);
+  -nimkit-text-insets: 0px 12px;
+}
+
+text-field.label-heading {
+  border-color: rgba(255, 58%, 102, 0.54);
+  border-width: 1.25px;
+  box-shadow: none;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 6px;
+  background: #403b4f6b;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 24px;
+  color: rgba(255, 58%, 82%, 0.98);
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+text-field.label-status {
+  border-color: rgba(255, 58%, 102, 0.5);
+  border-width: 1.25px;
+  box-shadow: none;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 6px;
+  background: #403b4f61;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 24px;
+  color: rgba(255, 74%, 50%, 0.98);
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+text-field.label-form {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(255, 58%, 102, 0.9);
+  -nimkit-text-insets: 0px 2px;
+}

@@ -1,0 +1,227 @@
+/* Shared widget metrics, text roles and native resource bindings. */
+
+box,
+button,
+check-box,
+radio-button,
+text-field,
+text-view,
+combo-box,
+date-picker,
+combo-box-item,
+tab,
+table-header-cell,
+row-item,
+cascading-row-item,
+tooltip {
+  font-family: var(--font-ui-name);
+  font-size: var(--font-size);
+  -nimkit-font-face: var(--font-ui-face);
+  -nimkit-bold-font-face: var(--font-ui-face-bold);
+  -nimkit-bold-italic-font-face: var(--font-ui-face-bold-italic);
+  -nimkit-italic-font-face: var(--font-ui-face-italic);
+}
+
+mono-text-view {
+  font-family: var(--font-monospace-name);
+  font-size: var(--font-size);
+  -nimkit-font-face: var(--font-monospace-face);
+  -nimkit-bold-font-face: var(--font-monospace-face-bold);
+  -nimkit-bold-italic-font-face: var(--font-monospace-face-bold-italic);
+  -nimkit-italic-font-face: var(--font-monospace-face-italic);
+}
+
+box {
+  padding: 14px 12px;
+  -nimkit-minimum-size: 0px 0px;
+  -nimkit-separator-thickness: 1px;
+  -nimkit-text-insets: 0px 8px;
+  -nimkit-title-gap: 4px;
+  -nimkit-title-height: 18px;
+}
+
+button {
+  -nimkit-minimum-size: 0px 32px;
+  -nimkit-text-insets: 0px 8px;
+}
+
+check-box {
+  -nimkit-indicator-size: var(--indicator-size);
+  -nimkit-indicator-spacing: 7px;
+  -nimkit-minimum-size: 0px 2e+01px;
+  -nimkit-text-insets: 0px 2px;
+}
+
+radio-button {
+  -nimkit-indicator-size: var(--indicator-size);
+  -nimkit-indicator-spacing: 7px;
+  -nimkit-minimum-size: 0px 2e+01px;
+  -nimkit-text-insets: 0px 2px;
+}
+
+text-field {
+  -nimkit-minimum-size: 8e+01px 26px;
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+combo-box {
+  -nimkit-indicator-size: 28px;
+  -nimkit-minimum-size: 9e+01px 26px;
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+date-picker {
+  -nimkit-minimum-size: 0px 0px;
+  -nimkit-text-insets: 0px;
+}
+
+combo-box-item {
+  -nimkit-minimum-size: 0px 22px;
+  -nimkit-text-insets: 0px 6px;
+}
+
+tab {
+  padding: 0px 14px;
+  -nimkit-edge-inset: 1e+01px;
+  -nimkit-item-gap: 1px;
+  -nimkit-maximum-size: 1.8e+02px 0px;
+  -nimkit-minimum-size: 52px 26px;
+  -nimkit-overlap: 12px;
+  -nimkit-segment-size: 0px 22px;
+  -nimkit-text-insets: 1px 1e+01px;
+}
+
+row-item {
+  -nimkit-minimum-size: 0px 22px;
+  -nimkit-text-insets: 0px 6px;
+}
+
+cascading-row-item {
+  -nimkit-minimum-size: 0px 22px;
+  -nimkit-text-insets: 0px 6px;
+}
+
+tooltip {
+  padding: 5px 8px;
+  -nimkit-text-insets: 0px;
+}
+
+mono-text-view {
+  -nimkit-minimum-size: 8e+01px 24px;
+  -nimkit-text-insets: 6px;
+}
+
+button.toolbar-button {
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 24px 24px;
+  -nimkit-text-insets: 0px 4px;
+}
+
+button.toolbar-button.toolbar-symbol {
+  font-size: 16px;
+}
+
+stepper {
+  -nimkit-minimum-size: 52px 23px;
+}
+
+switch {
+  -nimkit-indicator-size: var(--indicator-size);
+  -nimkit-knob-inset: 1.7px;
+  -nimkit-knob-size-factor: 2;
+  -nimkit-minimum-size: 0px 0px;
+  -nimkit-width-factor: 1.67;
+}
+
+slider {
+  -nimkit-indicator-size: 6px;
+  -nimkit-knob-size: 2e+01px;
+  -nimkit-minimum-size: 1.6e+02px 26px;
+}
+
+progress-indicator {
+  -nimkit-indicator-size: 6px;
+  -nimkit-knob-size: 2e+01px;
+  -nimkit-minimum-size: 1.6e+02px 26px;
+}
+
+menu-bar-item {
+  -nimkit-minimum-size: 44px 24px;
+  -nimkit-text-insets: 3px 1e+01px;
+}
+
+document-tab {
+  padding: 0px 16px;
+  -nimkit-close-button-position: left;
+  -nimkit-item-gap: 2px;
+  -nimkit-maximum-size: 198px 0px;
+  -nimkit-minimum-size: 96px 3e+01px;
+  -nimkit-selection-indicator-insets: 2px 1e+01px 1px 1e+01px;
+  -nimkit-selection-indicator-size: 2px;
+  -nimkit-text-insets: 1px 13px;
+}
+
+text-field.label {
+  -nimkit-minimum-size: 0px 18px;
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-title {
+  -nimkit-minimum-size: 0px 28px;
+  -nimkit-text-insets: 0px 12px;
+}
+
+text-field.label-heading {
+  -nimkit-minimum-size: 0px 24px;
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+text-field.label-status {
+  -nimkit-minimum-size: 0px 24px;
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+text-field.label-form {
+  -nimkit-minimum-size: 0px 18px;
+  -nimkit-text-insets: 0px 2px;
+}
+
+table-view {
+  -nimkit-autoscroll-edge: 18px;
+  -nimkit-column-max-width: 1e+04px;
+  -nimkit-column-min-width: 24px;
+  -nimkit-column-width: 1.2e+02px;
+  -nimkit-drag-threshold: 3px;
+  -nimkit-header-height: 24px;
+  -nimkit-minimum-size: 1.2e+02px 24px;
+  -nimkit-resize-handle-width: 5px;
+  -nimkit-row-height: 22px;
+}
+
+cascading-view {
+  -nimkit-autoscroll-edge: 18px;
+  -nimkit-column-max-width: 1e+04px;
+  -nimkit-column-min-width: 24px;
+  -nimkit-column-width: 1.2e+02px;
+  -nimkit-drag-threshold: 3px;
+  -nimkit-header-height: 24px;
+  -nimkit-minimum-size: 1.2e+02px 24px;
+  -nimkit-resize-handle-width: 5px;
+  -nimkit-row-height: 22px;
+}
+
+cascading-column {
+  -nimkit-autoscroll-edge: 18px;
+  -nimkit-column-max-width: 1e+04px;
+  -nimkit-column-min-width: 24px;
+  -nimkit-column-width: 1.2e+02px;
+  -nimkit-drag-threshold: 3px;
+  -nimkit-header-height: 24px;
+  -nimkit-minimum-size: 1.2e+02px 24px;
+  -nimkit-resize-handle-width: 5px;
+  -nimkit-row-height: 22px;
+}
+
+split-view {
+  -nimkit-separator-thickness: 6px;
+}

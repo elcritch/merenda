@@ -1,4 +1,4 @@
-import std/[os, strutils, tables, tempfiles, unittest]
+import std/[os, strutils, tempfiles, unittest]
 import figdraw except CornerRadii
 import merenda/nimkit
 import ./fixtures/[rendergeometry, widgetflows]
@@ -19,6 +19,307 @@ proc glyphHeight(view: View, text: string): float32 =
         result = max(result, node.textLayout.glyphRect(index).h)
 
 suite "NimKit CSS themes":
+  test "application CSS overrides every bundled theme including specific state defaults":
+    for name in [
+      "aqua", "banner", "macos", "macos-dark", "darkbsd", "nebula", "peachy",
+      "synthwave83",
+    ]:
+      checkpoint(name)
+      let base = initThemeByName(name)
+      let themed = cleanTheme("* { color: #123456; background: #654321; }", base)
+      for states in [{}, {ssDisabled}, {ssSelected}, {ssHovered, ssAccent}]:
+        let style = themed.resolveButtonStyle(controlStyle(srButton, states))
+        check style.text.color == parseHtmlColor("#123456")
+        check style.box.fill == parseHtmlColor("#654321")
+      check themed.resolveFill(
+        controlStyle(srView), fill(color(0, 0, 0, 0)), StyleBackgroundFill
+      ) == fill(parseHtmlColor("#654321"))
+      check base.resolveButtonStyle(controlStyle(srButton)).text.color !=
+        parseHtmlColor("#123456")
+
+  test "programmatic edits have the same precedence before and after CSS is loaded":
+    var defaults = initThemeBuilder()
+    defaults[initStyleSelector(srButton, id = "apply"), StyleTextColor] =
+      parseHtmlColor("red")
+    let base = defaults.finish()
+    check cleanTheme("* { color: blue; }", base).textColor(
+      controlStyle(srButton, id = "apply")
+    ) == parseHtmlColor("blue")
+    var edits = initThemeBuilder(base)
+    edits[srButton, StyleTextColor] = parseHtmlColor("green")
+    let changed = cleanTheme("* { color: blue !important; }", edits.finish())
+    check changed.textColor(controlStyle(srButton, id = "apply")) ==
+      parseHtmlColor("green")
+    var appearance = initAppearance(changed)
+    appearance[srButton, StyleTextColor] = parseHtmlColor("orange")
+    check cleanTheme("button { color: red !important; }", appearance.theme).textColor() ==
+      parseHtmlColor("orange")
+
+  test "CSS and native selectors share class state specificity and direct role precedence":
+    var defaults = initThemeBuilder()
+    defaults[initStyleSelector(srButton, classes = @["primary"]), StyleTextColor] =
+      parseHtmlColor("red")
+    defaults[srButton, {ssHovered}, StyleTextColor] = parseHtmlColor("blue")
+    let context = controlStyle(srButton, {ssHovered}, classes = @["primary"])
+    check defaults.finish().textColor(context) ==
+      cleanTheme(
+        "button.primary { color: red; } button:hover { color: blue; }",
+        base = initThemeBuilder().finish(),
+      )
+      .textColor(context)
+    let roles =
+      cleanTheme("menu-bar-item { border-radius: 4px; } tab { border-radius: 7px; }")
+    check roles.resolveButtonStyle(controlStyle(srMenuBarItem)).box.cornerRadius == 4
+
+  test "legacy token names and CSS custom properties refer to the same values":
+    let original =
+      cleanTheme(":root { --accent: red; } button { background: var(--accent); }")
+    var defaults = initThemeBuilder(original, sroTheme)
+    defaults["accent"] = parseHtmlColor("blue")
+    check defaults.finish().resolveButtonStyle(controlStyle(srButton)).box.fill ==
+      parseHtmlColor("red")
+    var builder = initThemeBuilder(original)
+    builder["accent"] = parseHtmlColor("orange")
+    builder["button.fill"] = parseHtmlColor("lime")
+    let changed = cleanTheme(":root { --accent: blue !important; }", builder.finish())
+    check changed.colorToken("accent", color(0, 0, 0, 0)) == parseHtmlColor("orange")
+    check changed.colorToken("--accent", color(0, 0, 0, 0)) == parseHtmlColor("orange")
+    check changed.colorToken("--button-fill", color(0, 0, 0, 0)) ==
+      parseHtmlColor("lime")
+    check changed.resolveButtonStyle(controlStyle(srButton)).box.fill ==
+      parseHtmlColor("orange")
+    check original.resolveButtonStyle(controlStyle(srButton)).box.fill ==
+      parseHtmlColor("red")
+
+  test "composite variables project padding radii sizes and shadows and recompile on edits":
+    let source =
+      """
+      :root {
+        --gap: 2px 4px 6px 8px;
+        --radius: 1px 2px 3px 4px;
+        --minimum: 80px 30px;
+        --uniform: 12px;
+        --empty-shadow: none;
+        --shade: rgba(0, 0, 0, 0.25);
+        --kind: inset;
+        --shadow: var(--kind) 0 1px 3px var(--shade);
+      }
+      button {
+        padding: var(--gap);
+        border-radius: var(--radius);
+        -nimkit-minimum-size: var(--minimum);
+        box-shadow: var(--shadow);
+      }
+    """
+    let theme = cleanTheme(source)
+    let style = theme.resolveButtonStyle(controlStyle(srButton))
+    check style.text.insets == insets(2, 8, 6, 4)
+    check style.box.cornerRadii ==
+      CornerRadii(topLeft: 1, topRight: 2, bottomRight: 3, bottomLeft: 4)
+    check style.minSize == initSize(80, 30)
+    require style.box.shadows.len == 1
+    check style.box.shadows[0].kind == bskInset
+    check style.box.shadows[0].color.a == 0.25
+    check theme.insetsToken("--gap", insets(0)) == style.text.insets
+    check theme.sizeToken("--minimum", initSize(0, 0)) == style.minSize
+    check theme.sizeToken("--uniform", initSize(0, 0)) == initSize(12, 12)
+    check theme.insetsToken("--uniform", insets(0)) == insets(12)
+    check theme.shadowsToken("--empty-shadow", @[dropShadow(color(0, 0, 0, 1))]).len == 0
+    check theme.shadowsToken("--shadow", @[]) == style.box.shadows
+    var builder = initThemeBuilder(theme)
+    builder["gap"] = insets(9)
+    builder["shade"] = parseHtmlColor("red")
+    builder[srButton, StyleBoxShadows] = styleToken("shadow")
+    let edited = builder.finish().resolveButtonStyle(controlStyle(srButton))
+    check edited.text.insets == insets(9)
+    require edited.box.shadows.len == 1
+    check edited.box.shadows[0].color == parseHtmlColor("red")
+    check theme.resolveButtonStyle(controlStyle(srButton)) == style
+
+  test "bounded linear gradients preserve renderer axes stops and variable colors":
+    let theme = cleanTheme(
+      """
+      :root {
+        --a: red; --b: lime; --c: blue;
+        --surface: linear-gradient(to right, var(--a), var(--b) 40%, var(--c));
+      }
+      button { background: var(--surface); }
+    """
+    )
+    let surface = theme.resolveButtonStyle(controlStyle(srButton)).box.fill
+    check surface ==
+      linear(
+        parseHtmlColor("red"),
+        parseHtmlColor("lime"),
+        parseHtmlColor("blue"),
+        fgaX,
+        102'u8,
+      )
+    check cleanTheme("button { background: linear-gradient(to top, red, blue); }")
+    .resolveButtonStyle(controlStyle(srButton)).box.fill ==
+      linear(parseHtmlColor("blue"), parseHtmlColor("red"), fgaY)
+    check cleanTheme("button { background: linear-gradient(45deg, red, blue); }")
+    .resolveButtonStyle(controlStyle(srButton)).box.fill ==
+      linear(parseHtmlColor("red"), parseHtmlColor("blue"), fgaDiagBLTR)
+    for gradient in [
+      "linear-gradient(12deg, red, blue)", "linear-gradient(red, blue, lime, black)",
+      "linear-gradient(red 20%, blue)", "linear-gradient(red, blue 80%)",
+      "linear-gradient(red, lime 101%, blue)",
+    ]:
+      let parsed =
+        parseCssTheme("button { background: red; background: " & gradient & "; }")
+      check parsed.diagnostics.len == 1
+      check parsed.theme.resolveButtonStyle(controlStyle(srButton)).box.fill ==
+        parseHtmlColor("red")
+
+  test "composite variable failures preserve complete lower declarations and recover":
+    let first = parseCssTheme(
+      """
+      button { padding: 3px; padding: 1px var(--missing); }
+      :root { --loop: 1px var(--loop); }
+      button { border-radius: 6px; border-radius: var(--loop); }
+    """
+    )
+    check first.diagnostics.len == 2
+    let style = first.theme.resolveButtonStyle(controlStyle(srButton))
+    check style.text.insets == insets(3)
+    check style.box.cornerRadii ==
+      CornerRadii(topLeft: 6, topRight: 6, bottomLeft: 6, bottomRight: 6)
+    let recovered =
+      cleanTheme(":root { --missing: 5px; --loop: 2px 4px; }", first.theme)
+    let resolved = recovered.resolveButtonStyle(controlStyle(srButton))
+    check resolved.text.insets == insets(1, 5, 1, 5)
+    check resolved.box.cornerRadii ==
+      CornerRadii(topLeft: 2, topRight: 4, bottomLeft: 4, bottomRight: 2)
+    var growing = ":root { --a0: 1px; "
+    for i in 1 .. 15:
+      growing.add "--a" & $i & ": var(--a" & $(i - 1) & ") var(--a" & $(i - 1) & "); "
+    growing.add "} button { padding: 3px; padding: var(--a15); }"
+    let bounded = parseCssTheme(growing)
+    check bounded.diagnostics.len == 1
+    check bounded.theme.resolveButtonStyle(controlStyle(srButton)).text.insets ==
+      insets(3)
+    var chain = ":root { --end: blue; --a15: linear-gradient(red, var(--end)); "
+    for i in 0 .. 14:
+      chain.add "--a" & $i & ": var(--a" & $(i + 1) & "); "
+    chain.add "} button { background: red; background: var(--a0); }"
+    let deep = parseCssTheme(chain)
+    check deep.diagnostics.len == 1
+    check deep.theme.resolveButtonStyle(controlStyle(srButton)).box.fill ==
+      parseHtmlColor("red")
+
+  test "programmatic uniform radii replace CSS corners with later longhand control":
+    let base = cleanTheme("button { border-radius: 1px 2px 3px 4px; }")
+    var appearance = initAppearance(base)
+    appearance[srButton, StyleCornerRadius] = 9.0
+    appearance[srButton, StyleCornerRadiusBottomRight] = 12.0
+    check appearance.resolveButtonStyle(controlStyle(srButton)).box.cornerRadii ==
+      CornerRadii(topLeft: 9, topRight: 9, bottomLeft: 9, bottomRight: 12)
+    check base.resolveButtonStyle(controlStyle(srButton)).box.cornerRadii ==
+      CornerRadii(topLeft: 1, topRight: 2, bottomLeft: 4, bottomRight: 3)
+
+  test "programmatic state metrics invalidate layout and agree with rendered text":
+    var builder = initThemeBuilder()
+    builder[srButton, StyleChrome] = styleKeyword(FlatTransparentChromeName)
+    builder[srButton, StyleFontSize] = 12.0
+    builder[srButton, {ssHovered}, StyleFontSize] = 36.0
+    let theme = builder.finish()
+    check not theme.hasCss
+    check theme.metricsChange({ssHovered})
+    let root = newView(frame = rect(0, 0, 400, 150))
+    let button = newButton("Native metrics", frame = rect(0, 0, 300, 120))
+    root.addSubview(button)
+    root.appearance = initAppearance(theme)
+    let size = button.intrinsicContentSize()
+    let glyph = root.glyphHeight("Native metrics")
+    root.needsLayout = false
+    button.hovered = true
+    check root.needsLayout
+    check button.intrinsicContentSize().height > size.height
+    check root.glyphHeight("Native metrics") > glyph
+    button.hovered = false
+    check button.intrinsicContentSize() == size
+
+  test "bundled theme caching respects font environment changes and isolates edits":
+    let existed = existsEnv(NimKitFontSizeEnv)
+    let previous = getEnv(NimKitFontSizeEnv)
+    defer:
+      if existed:
+        putEnv(NimKitFontSizeEnv, previous)
+      else:
+        delEnv(NimKitFontSizeEnv)
+    let first = initAquaTheme()
+    check initAquaTheme().generation == first.generation
+    putEnv(NimKitFontSizeEnv, "19")
+    if envOverrideAllowed(NimKitFontSizeEnv):
+      let updated = initAquaTheme()
+      check updated.resolveButtonStyle(controlStyle(srButton)).text.fontSize == 19
+      check updated.generation != first.generation or
+        first.resolveButtonStyle(controlStyle(srButton)).text.fontSize == 19
+      var builder = initThemeBuilder(updated)
+      builder[srButton, StyleFontSize] = 25.0
+      check builder.finish().resolveButtonStyle(controlStyle(srButton)).text.fontSize ==
+        25
+      check initAquaTheme().resolveButtonStyle(controlStyle(srButton)).text.fontSize ==
+        19
+    else:
+      check initAquaTheme().generation == first.generation
+      check initAquaTheme().resolveButtonStyle(controlStyle(srButton)).text.fontSize ==
+        first.resolveButtonStyle(controlStyle(srButton)).text.fontSize
+
+  test "bundled inherited styles and asymmetric toolbar corners retain their appearance":
+    for name in ["macos", "macos-dark", "darkbsd"]:
+      let theme = initThemeByName(name)
+      check theme.resolveButtonStyle(controlStyle(srMenuBarItem)).box.cornerRadius == 4
+      check theme.resolveButtonStyle(controlStyle(srDocumentTab)).minSize ==
+        initSize(96, 30)
+    let toolbar = initThemeByName("synthwave83").resolveButtonStyle(
+        controlStyle(srButton, classes = @[ToolbarButtonStyleClass])
+      )
+    check toolbar.box.cornerRadii ==
+      CornerRadii(topLeft: 5, topRight: 0, bottomLeft: 0, bottomRight: 12)
+
+  test "native plain view backgrounds use style identity without CSS":
+    var builder = initThemeBuilder()
+    builder[initStyleSelector(srView, classes = @["panel"]), StyleFill] =
+      parseHtmlColor("red")
+    let root = newView(frame = rect(0, 0, 100, 100))
+    let child = newView(frame = rect(10, 10, 40, 40))
+    child.styleClasses = @["panel"]
+    root.addSubview(child)
+    let list = buildRenders(root, initAppearance(builder.finish()))[DefaultDrawLevel]
+    var found = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill == fill(parseHtmlColor("red")):
+        found = true
+    check found
+
+  test "plain child backgrounds preserve gradient stops and scale alpha":
+    let root = newView(frame = rect(0, 0, 100, 100))
+    let child = newView(frame = rect(10, 10, 40, 40))
+    child.styleClasses = @["gradient"]
+    child.alphaValue = 0.5
+    root.addSubview(child)
+    root.appearance = initAppearance(
+      cleanTheme(
+        ".gradient { background: linear-gradient(to right, red, lime 40%, blue); }"
+      )
+    )
+    let list = buildRenders(root)[DefaultDrawLevel]
+    var found = false
+    for node in list.nodes:
+      if node.kind == nkRectangle and node.fill.kind == flLinear3:
+        found = true
+        check node.fill.lin3.axis == fgaX
+        check node.fill.lin3.midPos == 102
+        check node.fill.lin3.start.r == 255
+        check node.fill.lin3.mid.g == 255
+        check node.fill.lin3.stop.b == 255
+        check node.fill.lin3.start.a == 128
+        check node.fill.lin3.mid.a == 128
+        check node.fill.lin3.stop.a == 128
+    check found
+
   test "compound selectors lists aliases and states use existing style contexts":
     let theme = cleanTheme(
       """
@@ -146,19 +447,21 @@ suite "NimKit CSS themes":
     check second.diagnostics.len == 2
 
   test "invalid variables retain lower declarations and recover after append":
-    let first =
-      parseCssTheme("button { color: red; color: var(--accent); padding: var(--gap); }")
+    let first = parseCssTheme(
+      "button { color: red; color: var(--test-accent); padding: var(--gap); }"
+    )
     check first.diagnostics.len == 2
     check first.theme.textColor() == parseHtmlColor("red")
-    let valid = cleanTheme(":root { --accent: blue; --gap: 9px; }", first.theme)
+    let valid = cleanTheme(":root { --test-accent: blue; --gap: 9px; }", first.theme)
     check valid.textColor() == parseHtmlColor("blue")
     check valid.resolveButtonStyle(controlStyle(srButton)).text.insets == insets(9)
-    let wrongType = parseCssTheme(":root { --accent: 4px; --gap: red; }", valid)
+    let wrongType = parseCssTheme(":root { --test-accent: 4px; --gap: red; }", valid)
     check wrongType.diagnostics.len == 2
     check wrongType.theme.textColor() == parseHtmlColor("red")
     check wrongType.theme.resolveButtonStyle(controlStyle(srButton)).text.insets ==
       initTheme().resolveButtonStyle(controlStyle(srButton)).text.insets
-    let restored = cleanTheme(":root { --accent: lime; --gap: 2px; }", wrongType.theme)
+    let restored =
+      cleanTheme(":root { --test-accent: lime; --gap: 2px; }", wrongType.theme)
     check restored.textColor() == parseHtmlColor("lime")
     check restored.resolveButtonStyle(controlStyle(srButton)).text.insets == insets(2)
     let cycle = parseCssTheme(
@@ -196,8 +499,8 @@ suite "NimKit CSS themes":
     check style.box.focusRingInset == -2
     check style.chrome == FlatTransparentChromeName
 
-  test "uniform radius clears earlier CSS and native per-corner values":
-    var builder = initThemeBuilder(initTheme())
+  test "uniform radius clears earlier default and CSS per-corner values":
+    var builder = initThemeBuilder(initTheme(), sroTheme)
     builder[srButton, StyleCornerRadiusTopLeft] = 99.0
     builder[srButton, StyleCornerRadiusBottomRight] = 88.0
     let theme = cleanTheme(

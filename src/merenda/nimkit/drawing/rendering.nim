@@ -1,4 +1,4 @@
-import std/[options, tables]
+import std/[math, options, tables]
 
 from figdraw import
   Fig, FigIdx, RenderList, Renders, TransformStyle, ZLevel, addChild, addRoot,
@@ -37,8 +37,27 @@ proc renderFrameRect(view: View, parentOrigin: types.Point): types.Rect =
     origin = parentOrigin.offsetPoint(frame.origin)
   rect(origin, bounds.size)
 
+func scaledAlpha(value: ColorRGBA, alpha: float32): ColorRGBA =
+  result = value
+  result.a = uint8(round(value.a.float32 * alpha))
+
+func scaledAlpha(value: Fill, alpha: float32): Fill =
+  result = value
+  case value.kind
+  of flColor:
+    result.color = value.color.scaledAlpha(alpha)
+  of flLinear2:
+    result.lin2.start = value.lin2.start.scaledAlpha(alpha)
+    result.lin2.stop = value.lin2.stop.scaledAlpha(alpha)
+  of flLinear3:
+    result.lin3.start = value.lin3.start.scaledAlpha(alpha)
+    result.lin3.mid = value.lin3.mid.scaledAlpha(alpha)
+    result.lin3.stop = value.lin3.stop.scaledAlpha(alpha)
+
 proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): Fill =
-  var color = view.backgroundColor
+  let color = view.backgroundColor
+  if view.trySendLocal(drawsStyledBackground()).get(false):
+    return fill(color).scaledAlpha(view.alphaValue)
   var fallback = fill(color)
   let themedRoot = view.usesThemedRootBackground(isRoot)
   if themedRoot:
@@ -47,16 +66,10 @@ proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): Fill 
       context, StyleBackgroundColor, color(0.94, 0.95, 0.97, 1.0)
     )
     fallback = appearance.resolveFill(context, fill(fallbackColor), StyleBackgroundFill)
-  let themed =
-    if not appearance.theme.hasCss or
-        view.trySendLocal(drawsStyledBackground()).get(false):
-      fallback
-    else:
-      appearance.resolveFill(view.viewBackgroundStyleContext(), fallback)
+  let themed = appearance.resolveFill(view.viewBackgroundStyleContext(), fallback)
   if themedRoot:
     return themed
-  let resolved = themed.centerColor()
-  fill(color(resolved.r, resolved.g, resolved.b, resolved.a * view.alphaValue))
+  themed.scaledAlpha(view.alphaValue)
 
 const MaximumRootPinstripeBands = 4096
 

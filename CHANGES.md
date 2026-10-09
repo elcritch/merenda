@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Implement all bundled NimKit themes as embedded CSS with shared widget
+  defaults. Unify CSS and programmatic styling precedence, token names and
+  state metric invalidation; retain typed ThemeBuilder and Appearance overrides.
+  Compile typed declarations once per immutable snapshot and cache bundled
+  themes. Support two/three-stop linear gradients and composite variables in
+  padding, radii, sizes and shadows. Uniform programmatic radii now replace
+  earlier per-corner values consistently.
+
 - Add CSS theming through Stylus 0.1.5 with role/id/class/state selectors,
   declaration-level specificity and importance, typed root variables, explicit
   reloads, and source diagnostics. Style existing control colors, fonts, padding,
