@@ -10,8 +10,10 @@ requires "msgpack4nim"
 requires "chronicles >= 0.4"
 requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
-requires "siwin#fdec8e4"
-requires "gh:elcritch/figdraw >= 0.43.0 [siwin, harfbuzz]"
+# Merged platform ABI fixes and X11 helpers: https://github.com/levovix0/siwin/pull/58
+requires "gh:levovix0/siwin#78bb49c7fd7e5e14590f567e1ccbb07eb5ab6739"
+# FigDraw compatibility: https://github.com/elcritch/figdraw/pull/97
+requires "gh:elcritch/figdraw#fix/siwin-upstream-abi [siwin, harfbuzz]"
 requires "sigils >= 0.31.0 [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
 requires "gh:elcritch/kiwiberry#4d273da93f67d8e5d6317898851772b32fa635ec"
