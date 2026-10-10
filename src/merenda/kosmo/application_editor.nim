@@ -30,10 +30,10 @@ proc `sidebarFocused=`(controller: KosmoDockController, focused: bool) =
   if controller.isNil or controller.xSidebarFocused == focused:
     return
   controller.xSidebarFocused = focused
+  if not focused:
+    return
   for group in controller.groups:
-    group.updateActivePaneIndicator(
-      group == controller.activeGroup and not controller.xSidebarFocused
-    )
+    group.updateActivePaneIndicator(false)
 
 proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
 proc revealActiveFile*(frontend: KosmoApplication): bool {.discardable.}
@@ -55,6 +55,11 @@ proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
 proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
+proc spatialNeighborGroup(
+  controller: KosmoDockController, source: KosmoEditorGroup, direction: KosmoPaneCommand
+): KosmoEditorGroup
+
+proc focusPaneTabStrip(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc openHelpDocument(view: KosmoEditorView): bool
 proc openConfigDocument(view: KosmoEditorView): bool
 proc openRecoveryDocument(view: KosmoEditorView): bool
@@ -756,6 +761,21 @@ protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
       handler.editorView[].applyKosmoEditorStyle(appearance)
       handler.editorView[].refresh()
 
+proc containsPaneResponder(group: KosmoEditorGroup, candidate: nimkit.Responder): bool =
+  var responder = candidate
+  while not responder.isNil:
+    if responder == nimkit.Responder(group.pane):
+      return true
+    responder = responder.nextResponder()
+
+proc hasPaneFocus(group: KosmoEditorGroup): bool =
+  if group.isNil or group.window.isNil:
+    return
+  let window = group.window
+  if group.containsPaneResponder(window.firstResponder()):
+    return true
+  group.containsPaneResponder(window.fieldEditorClient())
+
 protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
   proc didResignKeyWindow(handler: KosmoEditorTabsHandler) {.slot.} =
     if not handler.editorView.isNil:
@@ -774,12 +794,11 @@ protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
     if view.dockGroup.isNil:
       return
     let group = view.dockGroup[]
-    var responder = group.window.firstResponder()
-    while not responder.isNil:
-      if responder == nimkit.Responder(group.pane):
-        controller.activateGroup(view)
-        return
-      responder = responder.nextResponder()
+    if not group.hasPaneFocus():
+      group.updateActivePaneIndicator(false)
+      return
+    controller.activateGroup(view)
+    group.updateActivePaneIndicator(true)
 
 proc stopObservingWindow(handler: KosmoEditorTabsHandler) =
   if handler.isNil or handler.appearanceWindow.isNil:
@@ -933,10 +952,7 @@ proc toggleMarkdownMode(view: KosmoEditorView, id: KosmoBufferId): bool =
     return true
 
 proc previewScope(view: KosmoEditorView): string =
-  if not view.dockGroup.isNil:
-    view.dockGroup[].identifier
-  else:
-    ""
+  if not view.dockGroup.isNil: view.dockGroup[].identifier else: ""
 
 proc mayReusePristineBuffer(view: KosmoEditorView): bool =
   if not view.usesBufferSubset:
@@ -1112,10 +1128,9 @@ proc hasUnsavedData(controller: KosmoDockController, window: nimkit.Window): boo
     if group.window != window:
       continue
     for tab in tabs:
-      if tab.modified and
-          (
-            not group.editorView.usesBufferSubset or tab.id in group.editorView.bufferIds
-          ):
+      if tab.modified and (
+        not group.editorView.usesBufferSubset or tab.id in group.editorView.bufferIds
+      ):
         return true
     for document in group.documents:
       if document.modified:
@@ -1570,6 +1585,104 @@ proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bo
     return view.sendKeyDownToMoe(event)
   false
 
+proc insideEditorPane(view: nimkit.View): bool =
+  ## True when the view is an editor pane or lives inside one.
+  var current = view
+  while not current.isNil:
+    if current of KosmoEditorPane:
+      return true
+    current = current.superview()
+  false
+
+proc keyViewOutsidePanes(tabs: nimkit.DocumentTabs, forward: bool): nimkit.View =
+  ## Next or previous key view in the window key view loop that is not inside
+  ## an editor pane, or nil when the loop only contains pane views. Walking
+  ## the loop keeps the standard traversal order while stepping over the etab
+  ## strips, editors and controls of the other panes.
+  const MaxHops = 128
+  var candidate =
+    if forward:
+      tabs.nextValidKeyView()
+    else:
+      tabs.previousValidKeyView()
+  var hops = 0
+  while not candidate.isNil and candidate.insideEditorPane() and hops < MaxHops:
+    candidate =
+      if forward:
+        candidate.nextValidKeyView()
+      else:
+        candidate.previousValidKeyView()
+    inc hops
+  if hops >= MaxHops:
+    return nil
+  candidate
+
+proc handleDocumentTabsKeyEquivalent(
+    view: KosmoEditorView, tabs: nimkit.DocumentTabs, event: nimkit.KeyEvent
+): bool =
+  ## Tab cycles the etab selection on the focused strip, Return enters the
+  ## editor, and arrows navigate the split panes by row and column; every
+  ## other key keeps the standard widget handling. At the first or last etab
+  ## Tab falls through to the window key view traversal.
+  if view.isNil or view.tabsDelegate.isNil:
+    return
+  if event.key == nimkit.keyTab and event.modifiers - {nimkit.kmShift} == {}:
+    let next =
+      if nimkit.kmShift in event.modifiers:
+        tabs.selectedIndex() - 1
+      else:
+        tabs.selectedIndex() + 1
+    if next < 0 or next >= tabs.len():
+      return
+    view.tabsDelegate.keyboardTabbing = true
+    tabs.selectDocumentTabAtIndex(next)
+    view.tabsDelegate.keyboardTabbing = false
+    return true
+  if event.key == nimkit.keyEnter and event.modifiers == {} and not view.dockGroup.isNil:
+    let owner = view.window()
+    if owner of nimkit.Window:
+      discard nimkit.Window(owner).makeFirstResponder(
+          nimkit.Responder(view.dockGroup[].pane.contentView)
+        )
+      return true
+  case event.key
+  of nimkit.keyArrowLeft, nimkit.keyArrowRight, nimkit.keyArrowUp, nimkit.keyArrowDown:
+    if event.modifiers != {} or view.tabsDelegate.dockController.isNil or
+        view.dockGroup.isNil:
+      return
+    let
+      controller = view.tabsDelegate.dockController[]
+      direction =
+        case event.key
+        of nimkit.keyArrowLeft: kpcFocusLeft
+        of nimkit.keyArrowRight: kpcFocusRight
+        of nimkit.keyArrowUp: kpcFocusAbove
+        else: kpcFocusBelow
+      neighbor = controller.spatialNeighborGroup(view.dockGroup[], direction)
+    if not neighbor.isNil:
+      discard controller.focusPaneTabStrip(neighbor)
+      return true
+    # At a pane edge, Left and Right hand focus to the next or previous ui
+    # element outside the pane; Up and Down have no vertical neighbor here and
+    # keep the focus on the strip.
+    if direction notin {kpcFocusLeft, kpcFocusRight}:
+      return true
+    let owner = view.window()
+    if owner of nimkit.Window:
+      let window = nimkit.Window(owner)
+      if window.autorecalculatesKeyViewLoop():
+        window.recalculateKeyViewLoop()
+      let outside = keyViewOutsidePanes(tabs, direction == kpcFocusRight)
+      if not outside.isNil:
+        discard window.makeFirstResponder(nimkit.Responder(outside))
+      else:
+        # The key view loop holds no view outside the panes: keep the standard
+        # traversal fallback instead of leaving the focus on the strip.
+        discard window.selectKeyViewFollowingView(tabs)
+    return true
+  else:
+    discard
+
 protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(view: KosmoEditorView, args: nimkit.TryToPerformArgs): bool =
     if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
@@ -1674,7 +1787,9 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
     if view.syncingTabs:
       return
     if not handler.dockController.isNil and not view.dockGroup.isNil:
-      handler.dockController[].activatePaneTab(view.dockGroup[], item.identifier())
+      handler.dockController[].activatePaneTab(
+        view.dockGroup[], item.identifier(), focus = not handler.keyboardTabbing
+      )
       return
     var id: KosmoBufferId
     if item.identifier.parseTabIdentifier(id):
@@ -1823,6 +1938,12 @@ protocol KosmoEditorViewLayout of nimkit.ViewLayoutProtocol:
     if not view.searchBar.isNil:
       view.searchBar.layoutInBounds(view.bounds())
 
+## Moe editor panes are entered with Return on an etab or with a click; they
+## stay out of the window key view loop so Tab never lands inside the editor.
+protocol KosmoEditorKeyViewParticipation of nimkit.ViewProtocol:
+  method canBecomeKeyView(view: KosmoEditorView): bool =
+    false
+
 proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result = KosmoEditorView(
     editor: editor,
@@ -1847,6 +1968,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   discard result.withProtocol(KosmoEditorEditingCommands)
   discard result.withProtocol(KosmoEditorCommandDispatch)
   discard result.withProtocol(KosmoEditorViewLayout)
+  discard result.withProtocol(KosmoEditorKeyViewParticipation)
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =
@@ -1857,6 +1979,15 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result.tabsDelegate = KosmoEditorTabsHandler(editorView: result.unsafeWeakRef())
   discard result.tabsDelegate.withProtocol(KosmoEditorTabsDelegate)
   result.documentTabs.delegate = result.tabsDelegate
+  let tabsView = result.documentTabs
+  let tabsOwner = result.unsafeWeakRef()
+  let tabsKeyMethod: nimkit.DynamicMethod = proc(
+      self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+  ) =
+    let event = invocation.argsAs(nimkit.KeyEvent)
+    let owner: KosmoEditorView = if tabsOwner.isNil: nil else: tabsOwner[]
+    invocation.setResult(handleDocumentTabsKeyEquivalent(owner, tabsView, event))
+  discard tabsView.replaceMethod(nimkitSelectors.performKeyEquivalent(), tabsKeyMethod)
   connect(
     result.editor.matterHighlightingController(),
     matterHighlightCompleted,
@@ -2257,11 +2388,9 @@ protocol KosmoSidebarPaneLayout of nimkit.ViewLayoutProtocol:
         else:
           pane.contextPanel.preferredHeight()
     pane.splitView.setFrameFromLayout(bounds)
-    if bounds.size.height > 0 and
-        (
-          not pane.setInitialDivider or
-          abs(previousHeight - bounds.size.height) > 0.001'f32
-        ):
+    if bounds.size.height > 0 and (
+      not pane.setInitialDivider or abs(previousHeight - bounds.size.height) > 0.001'f32
+    ):
       pane.splitView.setPositionOfDivider(0, contextHeight)
       pane.setInitialDivider = true
 
@@ -3023,10 +3152,7 @@ proc newKosmoPopupList(pane: KosmoEditorPane): nimkit.PopupListView =
         else:
           weakPane[].popupMenuState.get.selectedIndex,
       highlightedIndex: proc(): int =
-        if weakPane.isNil:
-          -1
-        else:
-          weakPane[].popupHighlightedIndex,
+        if weakPane.isNil: -1 else: weakPane[].popupHighlightedIndex,
       rowHeight: proc(): float32 =
         if weakPane.isNil:
           22.0'f32

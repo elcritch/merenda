@@ -211,6 +211,50 @@ suite "nimkit menus":
     check window.dispatchKeyDown(KeyEvent(key: keyEscape))
     check not window.hasActiveTransientSession()
 
+  test "menubar arrows keep closed menus closed while moving the highlight":
+    let
+      window = newWindow("Closed menu arrows", frame = rect(0, 0, 500, 300))
+      mainMenu = newMenu("Main")
+    defer:
+      window.close()
+    for title in ["Kosmo", "File", "Edit"]:
+      let item = newMenuItem(title)
+      item.submenu = newMenu(title)
+      discard item.submenu().addItem(newMenuItem(title & " command"))
+      discard mainMenu.addItem(item)
+    let root = newMenuRootView(mainMenu, newView(), rect(0, 0, 500, 300))
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+    var buttons: seq[PopupMenuButton]
+    for view in root.menuBar().subviews():
+      buttons.add PopupMenuButton(view)
+      buttons[^1].popupPresentation = ppInline
+    require buttons.len == 3
+    require window.makeFirstResponder(buttons[0], focusVisible = true)
+
+    # Arrows move the highlight without opening any menu.
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+    check window.firstResponder == buttons[1]
+    for button in buttons:
+      check not button.popupOpen()
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowLeft))
+    check window.firstResponder == buttons[0]
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowLeft))
+    check window.firstResponder == buttons[2]
+    for button in buttons:
+      check not button.popupOpen()
+
+    # An open menu still travels: arrows open the next menu.
+    buttons[0].openPopup()
+    require buttons[0].popupOpen()
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+    check not buttons[0].popupOpen()
+    check buttons[1].popupOpen()
+    check window.firstResponder == buttons[1]
+
+    check window.dispatchKeyDown(KeyEvent(key: keyEscape))
+    check not window.hasActiveTransientSession()
+
   test "keyboard tab closes the popup and moves key focus":
     let
       window = newWindow("Menu bar tab", frame = rect(0, 0, 320, 200))
@@ -531,12 +575,11 @@ suite "nimkit menus":
         menu = nativeMenus.NativeMenuDescription(
           identity: addr rootIdentity,
           title: "Main",
-          items:
-            @[
-              nativeMenus.NativeMenuItemDescription(
-                title: "File", enabled: true, submenu: child
-              )
-            ],
+          items: @[
+            nativeMenus.NativeMenuItemDescription(
+              title: "File", enabled: true, submenu: child
+            )
+          ],
         )
       var retiredItems: array[20, pointer]
       defer:

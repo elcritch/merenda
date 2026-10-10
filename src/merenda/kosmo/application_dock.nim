@@ -768,21 +768,54 @@ proc focusNextGroup(
     candidates[(index + offset + candidates.len) mod candidates.len]
   )
 
-proc focusSpatialGroup(
+const SpatialTieEpsilon = 0.5'f32
+
+proc nearerPane(
+    distance, offset, center: float32, bestDistance, bestOffset, bestCenter: float32
+): bool =
+  ## True when a candidate is a better directional match than the current
+  ## best: shorter distance first, then row or column alignment, then the
+  ## topmost (horizontal) or leftmost (vertical) pane on full ties. The
+  ## epsilon keeps layout float noise from deciding between equal panes.
+  if distance < bestDistance - SpatialTieEpsilon:
+    return true
+  if distance > bestDistance + SpatialTieEpsilon:
+    return false
+  if offset < bestOffset - SpatialTieEpsilon:
+    return true
+  if offset > bestOffset + SpatialTieEpsilon:
+    return false
+  center < bestCenter
+
+proc spanOffset(center, spanMin, spanMax: float32): float32 =
+  ## Distance from a candidate center to the source span along one axis. A
+  ## center inside the span counts as fully aligned, so a source spanning
+  ## several rows or columns ranks all covered candidates equal and the
+  ## topmost or leftmost tie-break picks the target.
+  if center < spanMin:
+    spanMin - center
+  elif center > spanMax:
+    center - spanMax
+  else:
+    0.0'f32
+
+proc spatialNeighborGroup(
     controller: KosmoDockController,
     source: KosmoEditorGroup,
     direction: KosmoPaneCommand,
-): bool =
+): KosmoEditorGroup =
+  ## Nearest pane in the given direction, or nil. A neighbor must overlap the
+  ## source along the perpendicular axis; ties prefer the candidate center
+  ## closest to the source span, then the topmost (horizontal) or leftmost
+  ## (vertical) pane.
   source.workspace.layoutSubtreeIfNeeded()
   let sourceRect = source.panel.rectToView(source.panel.bounds(), source.workspace)
-  let
-    sourceX = sourceRect.origin.x + sourceRect.size.width * 0.5'f32
-    sourceY = sourceRect.origin.y + sourceRect.size.height * 0.5'f32
-    horizontal = direction in {kpcFocusLeft, kpcFocusRight}
+  let horizontal = direction in {kpcFocusLeft, kpcFocusRight}
   var
     target: KosmoEditorGroup
     bestDistance = float32.high
     bestOffset = float32.high
+    bestCenter = float32.high
   for candidate in controller.groups:
     if candidate == source or candidate.workspace != source.workspace:
       continue
@@ -810,16 +843,37 @@ proc focusSpatialGroup(
         -1.0'f32
     if distance < 0.0'f32:
       continue
-    let offset =
-      if horizontal:
-        abs(candidateRect.origin.y + candidateRect.size.height * 0.5'f32 - sourceY)
-      else:
-        abs(candidateRect.origin.x + candidateRect.size.width * 0.5'f32 - sourceX)
-    if distance < bestDistance or (distance == bestDistance and offset < bestOffset):
+    let
+      centerX = candidateRect.origin.x + candidateRect.size.width * 0.5'f32
+      centerY = candidateRect.origin.y + candidateRect.size.height * 0.5'f32
+      center = if horizontal: centerY else: centerX
+      offset =
+        if horizontal:
+          spanOffset(centerY, sourceRect.minY, sourceRect.maxY)
+        else:
+          spanOffset(centerX, sourceRect.minX, sourceRect.maxX)
+    if nearerPane(distance, offset, center, bestDistance, bestOffset, bestCenter):
       bestDistance = distance
       bestOffset = offset
+      bestCenter = center
       target = candidate
-  controller.focusGroup(target)
+  target
+
+proc focusSpatialGroup(
+    controller: KosmoDockController,
+    source: KosmoEditorGroup,
+    direction: KosmoPaneCommand,
+): bool =
+  controller.focusGroup(controller.spatialNeighborGroup(source, direction))
+
+proc focusPaneTabStrip(controller: KosmoDockController, group: KosmoEditorGroup): bool =
+  ## Activate the pane and move keyboard focus to its etab strip.
+  if controller.isNil or group.isNil or group.window.isNil or group.window.isClosed():
+    return
+  controller.activatePanelWindow(group.window)
+  controller.activateGroup(group.editorView)
+  result = group.window.makeFirstResponder(nimkit.Responder(group.pane.documentTabs))
+  group.editorView.refresh()
 
 proc closePane(controller: KosmoDockController, source: KosmoEditorGroup): bool =
   if source.workspace.len <= 1:

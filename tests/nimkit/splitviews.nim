@@ -66,6 +66,25 @@ suite "nimkit split views":
     check splitView.cursorRects().len == 1
     check splitView.cursorRects()[0].cursor == "resize-left-right"
 
+  test "insertPane keeps subview order in sync with visual pane order":
+    let
+      splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 120.0))
+      first = newView(frame = rect(0.0, 0.0, 80.0, 40.0))
+      second = newView(frame = rect(0.0, 0.0, 80.0, 40.0))
+      third = newView(frame = rect(0.0, 0.0, 80.0, 40.0))
+
+    splitView.appearance = splitAppearance()
+    splitView.addPane(first)
+    splitView.addPane(second)
+    splitView.insertPane(third, 1)
+    splitView.layoutSubtreeIfNeeded()
+
+    check splitView.panes() == @[View(first), View(third), View(second)]
+    check splitView.subviews() == @[View(first), View(third), View(second)]
+    check first.frame() == rect(0.0, 0.0, 98.0, 120.0)
+    check third.frame() == rect(104.0, 0.0, 98.0, 120.0)
+    check second.frame() == rect(208.0, 0.0, 98.0, 120.0)
+
   test "constraints inside a positioned second pane stay local":
     let
       splitView = newSplitView(laHorizontal, rect(0.0, 0.0, 306.0, 120.0))

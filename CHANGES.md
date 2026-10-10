@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- Keep the open state during menubar arrow navigation: `<left>`/`<right>` between
+  menu bar buttons only move the highlight while the current menu is closed, and
+  open the next or previous menu while the current menu is open. Opening menus
+  with `<enter>`/`<down>` and tab navigation are unchanged.
+- Navigate Kosmo editor split panes with the arrow keys from a focused etab
+  strip: `<right>`/`<left>` move to the nearest pane column to the right or
+  left (same row preferred, topmost or leftmost pane on ties; a pane spanning
+  several rows or columns always targets the topmost or leftmost pane of the
+  nearest column) and exit to the next/previous ui element outside the pane at
+  the edges, while `<down>`/`<up>` move within a pane column and
+  do nothing when there is no vertical neighbor. Arrow keys inside editor text
+  keep moving the cursor.
+- Keep `<tab>` order after splits following the visual pane layout left to
+  right: `SplitView.insertPane` now inserts the pane's view at the matching
+  subview position instead of appending it, so the window key view loop (and
+  accessibility order) matches the rendered pane order.
+- Keep `<tab>` out of Kosmo moe editor panes: from a selected etab it cycles the
+  tab selection (`<shift><tab>` backwards) while keeping focus on the strip and
+  falls through to the next or previous ui element at the ends, and `<return>`
+  enters the editor. In the editor's normal mode `<tab>`/`<shift><tab>` cycle to
+  the next/previous ui element, returning to the pane's etab strip. The selected
+  etab now highlights only while its pane has keyboard focus, so cycling into
+  the menubar or another ui element outside the pane unhighlights it until the
+  pane is entered again.
+
 - Share immutable theme storage across Theme and Appearance copies, avoiding
   duplicated CSS rule tables and indexes in widget caches. Preserve isolated
   builder edits and mutable copies returned by snapshot accessors.

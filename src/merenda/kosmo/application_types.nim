@@ -65,6 +65,7 @@ type
     editorView: WeakRef[KosmoEditorView]
     dockController: WeakRef[KosmoDockController]
     appearanceWindow: WeakRef[nimkit.Window]
+    keyboardTabbing: bool
 
   KosmoEditorPane* = ref object of nimkit.View
     documentTabs*: nimkit.DocumentTabs
