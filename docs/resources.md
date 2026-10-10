@@ -118,6 +118,8 @@ app.runWindow(window, window.contentView)
 The [runnable example](../examples/html_ui_demo.nim) loads a
 [preferences interface and About window](../examples/html_ui_demo.html).
 An [external stylesheet](../examples/html_ui_demo.css) styles the native controls.
+The demo uses `input`, `span`, and `select` for controls and display text; their
+native `nk-*` aliases remain available.
 The Appearance dropdown switches both windows between custom CSS and all eight
 built-in themes. Nim connects Preview, Reset, About, and Close actions; Reset
 restores the fields and custom appearance.
@@ -128,7 +130,7 @@ restores the fields and custom appearance.
 | `nk-stack-view` | `StackView`, with orientation and layout properties |
 | `nk-box`; `nk-group` | Native box/group box with a title and one explicit content root |
 | `section` | Vertical stack for a meaningful group |
-| `nk-label` | Display text; `data-label-style` selects `title`, `heading`, `status`, or `form` style |
+| `span`; `nk-label` | Display text; `data-label-style` selects `title`, `heading`, `status`, or `form` style |
 | `nk-text-field`; `nk-text-view` | Single-line/multiline native text widgets |
 | `nk-check-box`; `nk-radio-button` | Native buttons whose text supplies the caption |
 | `nk-combo-box` with `option` children | Noneditable combo with titles, values, and selection |

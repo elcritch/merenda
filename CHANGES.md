@@ -9,10 +9,10 @@
   native properties, retain useful HTML control/text shorthands, and validate
   resource IDs, references, load limits, and unsupported syntax. Reuse the existing
   resource model, construction, CBOR serialization, and Tekton preview. Include a
-  styled preferences demo with compact controls, custom/built-in CSS selection,
-  Preview/Reset actions, and a second About window. Preserve combo option values,
-  selection, and explicit label overrides during resource edits with shared setter
-  ordering and preview replacement when needed.
+  styled preferences demo using `input`, `span`, and `select`, with compact controls,
+  custom/built-in CSS selection, Preview/Reset actions, and a second About window.
+  Preserve combo option values, selection, and explicit label overrides during
+  resource edits with shared setter ordering and preview replacement when needed.
   Use `nk-view`, `nk-stack-view`, and native `nk-box`/`nk-group` grouping. Box
   resources now own at most one explicit content root; wrap multiple controls in
   a stack. Inherit child hooks/limits and preserve content styling on reattachment.
