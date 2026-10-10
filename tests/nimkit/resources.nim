@@ -219,8 +219,8 @@ suite "NimKit resources":
 
     check kindNames ==
       @[
-        "box", "button", "checkBox", "comboBox", "control", "imageView", "label",
-        "progressIndicator", "radioButton", "slider", "splitView", "stackView",
+        "box", "button", "checkBox", "comboBox", "control", "group", "imageView",
+        "label", "progressIndicator", "radioButton", "slider", "splitView", "stackView",
         "stepper", "switchButton", "textField", "textView", "view",
       ]
     check registry.viewKindDescriptor("button").baseKind == "control"

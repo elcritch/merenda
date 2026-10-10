@@ -2,11 +2,20 @@
 
 ## Unreleased
 
-- Add an HTML5 GUI subset using the stdlib HTML parser and existing resource
-  construction. Support semantic containers, native controls, select options,
-  images, multiline text, IDs/classes, boolean attributes, and typed `data-*`
-  properties, with diagnostics and load limits. Include a styled HTML preferences
-  example with compact, resize-stable controls and Preview/Reset actions.
+## 0.27.0
+
+- Add GUI resource markup with HTML5 syntax, `nk-` native elements, application
+  widget tags, and independent windows inside `nk-main`. Use attributes for typed
+  native properties, retain useful HTML control/text shorthands, and validate
+  resource IDs, references, load limits, and unsupported syntax. Reuse the existing
+  resource model, construction, CBOR serialization, and Tekton preview. Include a
+  styled preferences demo with compact controls, custom/built-in CSS selection,
+  Preview/Reset actions, and a second About window. Preserve combo option values,
+  selection, and explicit label overrides during resource edits with shared setter
+  ordering and preview replacement when needed.
+  Use `nk-view`, `nk-stack-view`, and native `nk-box`/`nk-group` grouping. Box
+  resources now own at most one explicit content root; wrap multiple controls in
+  a stack. Inherit child hooks/limits and preserve content styling on reattachment.
 
 - Share immutable theme storage across Theme and Appearance copies, avoiding
   duplicated CSS rule tables and indexes in widget caches. Preserve isolated

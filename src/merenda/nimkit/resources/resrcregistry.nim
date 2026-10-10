@@ -26,6 +26,8 @@ type
   ResourceViewKindDescriptor* = object
     kind*: string
     baseKind*: string
+    maximumChildren*: int
+      ## Maximum direct resource children, including inherited limits.
 
   ResourcePropertyDescriptor* = object
     name*: string
@@ -38,6 +40,10 @@ type
     options*: seq[ResourceValue]
     inherited*: bool
     editable*: bool
+    recreateOnChange*: bool
+      ## Preview must replace the widget when this authored property changes.
+    applicationOrder*: int
+      ## Lower values apply first; equal values preserve authored property order.
 
   ResourcePropertyContext* = object
     imageFor*: proc(id: ResourceId): ImageResource {.closure.}
@@ -93,9 +99,12 @@ type
     valueType*: string
     setter*: ResourceViewPropertySetter
     getter*: ResourceViewPropertyGetter
+    recreateOnChange: bool
+    applicationOrder: int
 
   ResourceViewRegistration = object
     baseKind: string
+    maximumChildren: int
     factory: ResourceViewFactory
     attachChild: ResourceChildAttacher
     detachChild: ResourceChildDetacher
@@ -125,9 +134,13 @@ proc registerViewKind*(
     baseKind = "view",
     attachChild: ResourceChildAttacher = nil,
     detachChild: ResourceChildDetacher = nil,
+    maximumChildren: Natural = high(int),
 ) =
+  ## Register a factory and optional child ownership hooks. Hooks and the
+  ## strictest `maximumChildren` limit inherit through `baseKind`.
   registry.viewKinds[kind] = ResourceViewRegistration(
     baseKind: if kind == baseKind: "" else: baseKind,
+    maximumChildren: maximumChildren,
     factory: factory,
     attachChild: attachChild,
     detachChild: detachChild,
@@ -140,11 +153,23 @@ proc registerViewProperty*(
     setter: ResourceViewPropertySetter,
     getter: ResourceViewPropertyGetter = nil,
     nimTypeName = "",
+    recreateOnChange = false,
+    applicationOrder = 0,
 ) =
+  ## Register a property setter and optional getter. Set `recreateOnChange` when
+  ## applying an edit in place would reset dependent widget state in previews.
+  ## Lower `applicationOrder` values apply before explicit overrides during
+  ## construction. Equal values retain the authored order.
+
   registry.viewProperties.mgetOrPut(
     kind, initTable[string, ResourceViewPropertyRegistration]()
   )[name] = ResourceViewPropertyRegistration(
-    acceptedKinds: acceptedKinds, setter: setter, getter: getter, valueType: nimTypeName
+    acceptedKinds: acceptedKinds,
+    setter: setter,
+    getter: getter,
+    valueType: nimTypeName,
+    recreateOnChange: recreateOnChange,
+    applicationOrder: applicationOrder,
   )
 
 proc registerResourceValueType*[T](
@@ -309,9 +334,20 @@ func findViewKindDescriptor*(
 ): Option[ResourceViewKindDescriptor] =
   ## Returns a public, non-factory view-kind description when registered.
   if registry.viewKinds.hasKey(kind):
+    var
+      maximumChildren = high(int)
+      current = kind
+    for _ in 0 ..< 32:
+      if not registry.viewKinds.hasKey(current):
+        break
+      maximumChildren =
+        min(maximumChildren, registry.viewKinds[current].maximumChildren)
+      current = registry.viewKinds[current].baseKind
     return some(
       ResourceViewKindDescriptor(
-        kind: kind, baseKind: registry.viewKinds[kind].baseKind
+        kind: kind,
+        baseKind: registry.viewKinds[kind].baseKind,
+        maximumChildren: maximumChildren,
       )
     )
 
@@ -331,9 +367,7 @@ iterator viewKinds*(registry: ResourceRegistry): ResourceViewKindDescriptor =
     names.add name
   names.sort()
   for name in names:
-    yield ResourceViewKindDescriptor(
-      kind: name, baseKind: registry.viewKinds[name].baseKind
-    )
+    yield registry.findViewKindDescriptor(name).get()
 
 func propertyAcceptedKinds(
     registry: ResourceRegistry, registration: ResourceViewPropertyRegistration
@@ -368,6 +402,8 @@ func propertyDescriptor(
     options: registry.propertyOptions(registration),
     inherited: requestedKind != declaredKind,
     editable: not registration.setter.isNil or acceptedKinds != {},
+    recreateOnChange: registration.recreateOnChange,
+    applicationOrder: registration.applicationOrder,
   )
 
 func findViewPropertyDescriptor*(
@@ -416,6 +452,28 @@ iterator viewProperties*(
   )
   for descriptor in descriptors:
     yield descriptor
+
+iterator orderedViewProperties*(
+    registry: ResourceRegistry, node: ViewNodeResource
+): tuple[index: int, property: ResourceProperty] =
+  ## Iterates setters in application order, retaining original diagnostic indices.
+  var order: seq[tuple[priority, index: int]]
+  for index, property in node.properties:
+    let descriptor = registry.findViewPropertyDescriptor(node.kind, property.name)
+    order.add (
+      priority:
+        if descriptor.isSome:
+          descriptor.get().applicationOrder
+        else:
+          0,
+      index: index,
+    )
+  order.sort do(left, right: tuple[priority, index: int]) -> int:
+    result = cmp(left.priority, right.priority)
+    if result == 0:
+      result = cmp(left.index, right.index)
+  for entry in order:
+    yield (entry.index, node.properties[entry.index])
 
 proc acceptsViewProperty*(
     registry: ResourceRegistry, kind, name: string, valueKind: ResourceValueKind
@@ -481,18 +539,30 @@ proc readViewProperty*(
           valueType.read(view, registration.getterSelector, context, result.value)
 
 proc attachChild*(registry: ResourceRegistry, kind: string, parent, child: View) =
-  if registry.viewKinds.hasKey(kind) and not registry.viewKinds[kind].attachChild.isNil:
-    registry.viewKinds[kind].attachChild(parent, child)
-  else:
-    parent.addSubview(child)
+  var current = kind
+  for _ in 0 ..< 32:
+    if not registry.viewKinds.hasKey(current):
+      break
+    let registration = registry.viewKinds[current]
+    if not registration.attachChild.isNil:
+      registration.attachChild(parent, child)
+      return
+    current = registration.baseKind
+  parent.addSubview(child)
 
 proc detachChild*(registry: ResourceRegistry, kind: string, parent, child: View) =
   if parent.isNil or child.isNil:
     return
-  if registry.viewKinds.hasKey(kind) and not registry.viewKinds[kind].detachChild.isNil:
-    registry.viewKinds[kind].detachChild(parent, child)
-  else:
-    child.removeFromSuperview()
+  var current = kind
+  for _ in 0 ..< 32:
+    if not registry.viewKinds.hasKey(current):
+      break
+    let registration = registry.viewKinds[current]
+    if not registration.detachChild.isNil:
+      registration.detachChild(parent, child)
+      return
+    current = registration.baseKind
+  child.removeFromSuperview()
 
 proc enumNamed[T: enum](name: string, value: var T): bool =
   for candidate in T:
@@ -806,10 +876,17 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
       newBox(frame = frame),
     baseKind = "view",
     attachChild = proc(parent, child: View) =
-      Box(parent).addContentSubview(child),
+      Box(parent).contentView = child,
     detachChild = proc(parent, child: View) =
       discard parent
       child.removeFromSuperview(),
+    maximumChildren = 1,
+  )
+  result.registerViewKind(
+    "group",
+    proc(frame: Rect): View =
+      newGroupBox(frame = frame),
+    baseKind = "box",
   )
   result.registerViewKind(
     "splitView",
@@ -882,6 +959,8 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
       Value: typedesc,
       valueKinds: set[ResourceValueKind],
       decoder, encoder: untyped,
+      recreate: bool = false,
+      order: int = 0,
   ) =
     result.registerViewProperty(
       kindName,
@@ -902,6 +981,8 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
         let read = encoder(Widget(view).property(), context, encoded)
         ResourcePropertyReadResult(read: read, value: encoded),
       nimTypeName = astToStr(Value),
+      recreateOnChange = recreate,
+      applicationOrder = order,
     )
 
   valueProperty(
@@ -926,6 +1007,8 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
     {rvString},
     decodeEnum[LabelStyle],
     encodeEnum[LabelStyle],
+    recreate = true,
+    order = -1,
   )
 
   result.registerViewProperty(
@@ -959,6 +1042,8 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
         items.add combo.itemAtIndex(index)
       ResourcePropertyReadResult(read: true, value: resourceValue(items)),
     nimTypeName = "seq[string]",
+    recreateOnChange = true,
+    applicationOrder = -2,
   )
   result.registerViewProperty(
     "comboBox",
@@ -985,6 +1070,8 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
         values.add value.text
       ResourcePropertyReadResult(read: true, value: resourceValue(values)),
     nimTypeName = "seq[string]",
+    recreateOnChange = true,
+    applicationOrder = -1,
   )
   result.registerViewPropertyAlias("view", "background", "backgroundColor")
   result.registerViewPropertyAlias("view", "alpha", "alphaValue")

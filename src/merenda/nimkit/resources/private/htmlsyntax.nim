@@ -189,7 +189,7 @@ proc prepareHtml*(input: string, limits: ResourceLoadLimits): PreparedHtml =
   result.identifiers = initHashSet[string]()
   if input.len > limits.maximumDataBytes:
     result.diagnostics.add(
-      rdsError, "html.data.tooLarge", "HTML exceeds the byte limit"
+      rdsError, "gui.data.tooLarge", "GUI markup exceeds the byte limit"
     )
     return
 
@@ -207,6 +207,7 @@ proc prepareHtml*(input: string, limits: ResourceLoadLimits): PreparedHtml =
     replacements: seq[HtmlReplacement]
     nodeCount: int
     emptyEndPending: bool
+    doctypeSeen: bool
     lastAttributeEnd = -1
   parser.open(
     newStringStream(source), "HTML", {allowUnquotedAttribs, allowEmptyAttribs}
@@ -218,13 +219,28 @@ proc prepareHtml*(input: string, limits: ResourceLoadLimits): PreparedHtml =
     let tokenStart = lineStarts[parser.getLine() - 1] + parser.getColumn()
     parser.next()
     case parser.kind
+    of xmlSpecial:
+      if doctypeSeen or nodeCount != 0 or
+          strutils.splitWhitespace(parser.charData.toLowerAscii()) !=
+          @["doctype", "nimkit"]:
+        result.diagnostics.add(
+          rdsError, "gui.doctype.unsupported",
+          "use an optional <!doctype nimkit> before the GUI; DTDs are unsupported",
+        )
+        return
+      doctypeSeen = true
     of xmlElementOpen, xmlElementStart:
       tag = parser.elementName.toLowerAscii()
+      if tag == "document":
+        result.diagnostics.add(
+          rdsError, "gui.element.unsupported", "use nk-main for the GUI document"
+        )
+        return
       lastAttributeEnd = -1
       inc nodeCount
       if nodeCount > limits.maximumNodes:
         result.diagnostics.add(
-          rdsError, "html.nodes.tooMany", "HTML exceeds the node limit"
+          rdsError, "gui.nodes.tooMany", "GUI markup exceeds the node limit"
         )
         return
     of xmlAttribute:
@@ -234,7 +250,7 @@ proc prepareHtml*(input: string, limits: ResourceLoadLimits): PreparedHtml =
         replacements.add HtmlReplacement(
           start: attribute.start, finish: attribute.finish, text: attribute.encoded
         )
-      if parser.attrKey.toLowerAscii() in ["id", "data-window"]:
+      if parser.attrKey.toLowerAscii() == "id":
         result.identifiers.incl attribute.value
     else:
       discard
@@ -254,7 +270,7 @@ proc prepareHtml*(input: string, limits: ResourceLoadLimits): PreparedHtml =
         stack.add tag
         if stack.len > limits.maximumTreeDepth:
           result.diagnostics.add(
-            rdsError, "html.tree.tooDeep", "HTML exceeds the depth limit"
+            rdsError, "gui.tree.tooDeep", "GUI markup exceeds the depth limit"
           )
           return
     elif parser.kind == xmlElementEnd:

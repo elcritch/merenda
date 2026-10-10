@@ -142,6 +142,28 @@ suite "Tekton resource editor":
     check editor.previewInstance().findView(resourceId("label.1")).isNil == false
     check editor.hierarchyView().selectedItemIdentifier() == "label.1"
 
+  test "palette groups keep one content root and insert controls into its layout":
+    let
+      document = newResourceEditorDocument(editorBundle())
+      editor = newResourceEditor(document)
+      resources = document.resources()
+    require editor.selectResource(resourceId("editor.root"))
+    let group = editor.insertViewKind("group")
+    require group.applied
+    let stack = editor.insertViewKind("stackView")
+    require stack.applied
+    require editor.selectResource(group.resourceId)
+    let button = editor.insertViewKind("button")
+    require button.applied
+    check resources.draftIsValid()
+    check resources.view(group.resourceId).children.len == 1
+    check resources.view(group.resourceId).children[0].id == stack.resourceId
+    check resources.view(stack.resourceId).children[0].id == button.resourceId
+    let nativeGroup = Box(editor.previewInstance().view(group.resourceId))
+    check nativeGroup.title == "Group"
+    check nativeGroup.contentView == editor.previewInstance().view(stack.resourceId)
+    check StackView(nativeGroup.contentView).arrangedSubviews.len == 1
+
   test "hierarchy selection replaces the preview selection ring":
     let
       document = newResourceEditorDocument(editorBundle())

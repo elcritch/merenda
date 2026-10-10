@@ -268,6 +268,17 @@ proc validateViewNodes(
         path = nodePath & ".kind",
         resourceId = node.id,
       )
+    else:
+      let descriptor = registry.viewKindDescriptor(node.kind)
+      if node.children.len > descriptor.maximumChildren:
+        state.diagnostics.add(
+          rdsError,
+          "resource.view.tooManyChildren",
+          "view kind '" & node.kind & "' supports at most " & $descriptor.maximumChildren &
+            " direct resource children",
+          path = nodePath & ".children",
+          resourceId = node.id,
+        )
     state.validateProperties(registry, node, nodePath)
     state.validateViewNodes(registry, node.children, nodePath & ".children")
 

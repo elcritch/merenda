@@ -65,22 +65,30 @@ nim r examples/css_theme_demo.nim
 Read the [CSS theming guide](docs/css-theming.md) for selectors, variables,
 supported properties and appearance scope.
 
-You can also [describe native GUIs in HTML](docs/resources.md#html-gui-subset),
-using normal elements and `data-*` attributes for widget options:
+You can also [describe native GUIs in lightweight markup](docs/resources.md#gui-markup),
+using HTML5 syntax and `data-*` attributes for native widget options:
 
 ```html
-<main id="root" data-window="window" data-padding="24" data-spacing="12">
-  <h1>Hello from HTML</h1>
-  <input id="name" placeholder="Your name">
-  <button id="save" data-action="saveDocument">Save</button>
-</main>
+<nk-main>
+  <nk-window id="window" title="Hello" data-frame="100 100 400 240">
+    <nk-stack-view id="root" data-axis="vertical" data-padding="24" data-spacing="12">
+      <nk-label data-label-style="title">Hello from Merenda</nk-label>
+      <nk-text-field id="name" placeholder="Your name"/>
+      <button id="save" data-action="saveDocument">Save</button>
+    </nk-stack-view>
+  </nk-window>
+</nk-main>
 ```
 
-`loadHtmlResourceBundle` reads the interface and `instantiateResources` constructs
-its native controls. Use IDs to look up controls and connect behavior in Nim. Try
-the [HTML GUI example](examples/html_ui_demo.nim) with `nim ic -r examples/html_ui_demo.nim`.
-Its HTML defines a compact preferences form; the accompanying CSS styles the native
-controls, and Nim connects Preview and Reset actions.
+`loadGuiResourceBundle` reads the interface and `instantiateResources` constructs
+its native controls. One document can define independent windows. Built-in elements
+use `nk-`; application widgets can use names such as `some-app-widget`. Use IDs to
+look up controls and connect behavior in Nim.
+
+Try the [GUI resource example](examples/html_ui_demo.nim) with
+`nim ic -r examples/html_ui_demo.nim`. It includes compact preferences controls,
+Preview and Reset actions, and a separate About window. The Appearance dropdown
+switches both windows between the custom stylesheet and the built-in CSS themes.
 
 To use Merenda in your own project, add this dependency to your `.nimble` file
 and run `atlas install -tuk` from that project:

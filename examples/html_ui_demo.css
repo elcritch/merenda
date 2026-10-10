@@ -2,7 +2,7 @@
   --accent: #829fff;
 }
 
-#root { background: #181e29; }
+#root, #about-content { background: #181e29; }
 #preferences { background: #222c3c; }
 
 label { color: #eef2fc; font-size: 14px; }
@@ -11,7 +11,7 @@ label.eyebrow { color: #a5baff; font-size: 11px; }
 label.muted { color: #aebbd0; font-size: 13px; }
 label.field-label { color: #c4cfe2; font-size: 13px; }
 
-#name, #language {
+#name, #language, #theme {
   background: #161e2b;
   color: #eef2fc;
   border-color: #465674;
@@ -23,14 +23,16 @@ label.field-label { color: #c4cfe2; font-size: 13px; }
   -nimkit-focus-ring-color: #829fff;
 }
 
-#language {
+#language, #theme {
   box-shadow: none;
   -nimkit-chrome: default;
   -nimkit-indicator-fill: #2b374c;
   -nimkit-mark-color: #dce5f5;
 }
-#language:hover, #language:open { -nimkit-indicator-fill: #35445e; }
-#language:open { border-color: #829fff; }
+#language:hover, #language:open, #theme:hover, #theme:open {
+  -nimkit-indicator-fill: #35445e;
+}
+#language:open, #theme:open { border-color: #829fff; }
 combo-box-item { background: #222c3c; color: #eef2fc; }
 combo-box-item:highlighted { background: #35445e; }
 combo-box-item:selected { background: #829fff; color: #101a30; }

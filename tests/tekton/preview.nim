@@ -1,4 +1,4 @@
-import std/[options, os, unittest]
+import std/[options, os, strutils, unittest]
 
 import sigils/[core, selectors]
 
@@ -237,6 +237,215 @@ suite "Tekton identity-preserving resource previews":
     check button.superview() == preview.view(resourceId("left"))
     check host.subviews() == @[root]
     check preview.findView(resourceId("uncommitted")).isNil
+
+  test "option title edits preserve combo values and selection through replacement":
+    for tag in ["nk-combo-box", "some-app-picker"]:
+      var registry = initNimKitResourceRegistry()
+      registry.registerViewKind(
+        "some-app-picker",
+        proc(frame: Rect): View =
+          newComboBox(frame = frame),
+        baseKind = "comboBox",
+      )
+      let
+        preview = newResourcePreview(registry)
+        initial = parseGuiResourceBundle(
+          "<nk-stack-view id=root><" & tag & " id=picker>" &
+            "<option value=nim>Nim</option><option value=c selected>C</option>" & "</" &
+            tag & "></nk-stack-view>",
+          registry,
+        )
+      require initial.loaded
+      require preview.update(initial.bundle, 0).applied
+      let
+        oldPicker = preview.view(resourceId("picker"))
+        root = preview.view(resourceId("root"))
+        changed = parseGuiResourceBundle(
+          "<nk-stack-view id=root><" & tag & " id=picker>" &
+            "<option value=nim>Nim language</option><option value=c selected>C language</option>" &
+            "</" & tag & "></nk-stack-view>",
+          registry,
+        )
+      require changed.loaded
+      let update = preview.update(changed.bundle, 1)
+      require update.applied
+      check not update.diagnostics.hasErrors
+      let picker = ComboBox(preview.view(resourceId("picker")))
+      check picker != oldPicker
+      check preview.view(resourceId("root")) == root
+      check picker.superview == root
+      check oldPicker.superview.isNil
+      check picker.itemAtIndex(1) == "C language"
+      check picker.itemObjectValueAtIndex(0) == toObj("nim")
+      check picker.itemObjectValueAtIndex(1) == toObj("c")
+      check picker.selectedIndex == 1
+
+  test "changing option counts commits a complete combo without partial updates":
+    let
+      preview = newResourcePreview()
+      initial = parseGuiResourceBundle(
+        "<select id=picker><option value=nim>Nim</option></select>"
+      )
+    require initial.loaded
+    require preview.update(initial.bundle, 0).applied
+    let
+      original = preview.view(resourceId("picker"))
+      changed = parseGuiResourceBundle(
+        "<select id=picker><option value=nim>Nim</option>" &
+          "<option value=c>C</option><option value=other selected>Other</option></select>"
+      )
+    require changed.loaded
+    let update = preview.update(changed.bundle, 1)
+    require update.applied
+    check not update.diagnostics.hasErrors
+    let picker = ComboBox(preview.view(resourceId("picker")))
+    check picker != original
+    check picker.numberOfItems == 3
+    check picker.itemObjectValueAtIndex(2) == toObj("other")
+    check picker.selectedIndex == 2
+    check preview.revision == 1
+
+  test "label style edits preserve explicit alignment and CSS classes":
+    let
+      preview = newResourcePreview()
+      source =
+        """<nk-label id=heading data-label-style=title data-alignment=right
+                          class=accent>Heading</nk-label>"""
+      initial = parseGuiResourceBundle(source)
+    require initial.loaded
+    require preview.update(initial.bundle, 0).applied
+    let original = preview.view(resourceId("heading"))
+    let changed = parseGuiResourceBundle(source.replace("style=title", "style=heading"))
+    require changed.loaded
+    require preview.update(changed.bundle, 1).applied
+    let heading = Label(preview.view(resourceId("heading")))
+    check heading != original
+    check heading.labelStyle == lsHeading
+    check heading.alignment == taRight
+    check LabelHeadingStyleClass in heading.styleClasses
+    check "accent" in heading.styleClasses
+
+  test "document appends apply label defaults before inherited explicit overrides":
+    for kind in ["label", "some-app-caption"]:
+      var registry = initNimKitResourceRegistry()
+      registry.registerViewKind(
+        "some-app-caption",
+        proc(frame: Rect): View =
+          newLabel(frame = frame),
+        baseKind = "label",
+      )
+      registry.registerViewPropertyAlias("label", "textStyle", "labelStyle")
+      var bundle = initResourceBundle()
+      let id = resourceId("heading")
+      bundle.views =
+        @[
+          initViewNodeResource(
+            id,
+            kind = kind,
+            properties = [
+              resourceProperty("alignment", resourceValue("taRight")),
+              resourceProperty("styleClasses", resourceValue(@["accent"])),
+              resourceProperty("stringValue", resourceValue("Heading")),
+            ],
+          )
+        ]
+      let
+        document = newResourceDocument(bundle, registry)
+        preview = newResourcePreview(registry)
+      require preview.update(document.bundle, document.revision).applied
+      let original = preview.view(id)
+      require document.setViewProperty(
+        id, resourceProperty("textStyle", resourceValue("lsTitle"))
+      ).applied
+      require preview.update(document.bundle, document.revision).applied
+      let heading = Label(preview.view(id))
+      check heading != original
+      check heading.labelStyle == lsTitle
+      check heading.alignment == taRight
+      check heading.styleClasses == @["accent"]
+
+      # The fast preflight path must also use the same setter order.
+      require document.setViewProperty(
+        id, resourceProperty("stringValue", resourceValue("Updated heading"))
+      ).applied
+      require document.setViewProperty(
+        id, resourceProperty("alignment", resourceValue("taLeft"))
+      ).applied
+      require document.setViewProperty(
+        id, resourceProperty("styleClasses", resourceValue(@["updated-accent"]))
+      ).applied
+      require preview.update(document.bundle, document.revision).applied
+      check preview.view(id) == heading
+      check heading.stringValue == "Updated heading"
+      check heading.alignment == taLeft
+      check heading.styleClasses == @["updated-accent"]
+
+  test "document appends build combo items before values and selection":
+    var bundle = initResourceBundle()
+    let id = resourceId("picker")
+    bundle.views =
+      @[
+        initViewNodeResource(
+          id,
+          kind = "comboBox",
+          properties = [
+            resourceProperty("items", resourceValue(@["Nim", "C"])),
+            resourceProperty("itemValues", resourceValue(@["nim", "c"])),
+            resourceProperty("selectedIndex", resourceValue(1)),
+          ],
+        )
+      ]
+    let
+      document = newResourceDocument(bundle)
+      preview = newResourcePreview()
+    require preview.update(document.bundle, document.revision).applied
+    let original = preview.view(id)
+    require document.removeViewProperty(id, "items").applied
+    require document.setViewProperty(
+      id, resourceProperty("items", resourceValue(@["Nim language", "C language"]))
+    ).applied
+    require preview.update(document.bundle, document.revision).applied
+    let picker = ComboBox(preview.view(id))
+    check picker != original
+    check picker.itemAtIndex(1) == "C language"
+    check picker.itemObjectValueAtIndex(0) == toObj("nim")
+    check picker.itemObjectValueAtIndex(1) == toObj("c")
+    check picker.selectedIndex == 1
+
+  test "group content identity and authored background survive structural reconciliation":
+    let
+      preview = newResourcePreview()
+      source =
+        """<nk-stack-view id=root>
+  <nk-group id=group data-title=Account>
+    <nk-stack-view id=content data-background-color="#123456" data-spacing=8>
+      <button id=save>Save</button>
+    </nk-stack-view>
+  </nk-group>
+</nk-stack-view>"""
+      initial = parseGuiResourceBundle(source)
+    require initial.loaded
+    require preview.update(initial.bundle, 0).applied
+    let
+      group = Box(preview.view(resourceId("group")))
+      content = preview.view(resourceId("content"))
+      background = content.background
+      changed = parseGuiResourceBundle(
+        source.replace(
+          "<button id=save>Save</button>",
+          "<button id=save>Save</button><button id=reset>Reset</button>",
+        )
+      )
+    require changed.loaded
+    let update = preview.update(changed.bundle, 1)
+    require update.applied
+    check not update.diagnostics.hasErrors
+    check preview.view(resourceId("group")) == group
+    check preview.view(resourceId("content")) == content
+    check group.contentView == content
+    check content.superview == group
+    check content.background == background
+    check StackView(content).arrangedSubviews.len == 2
 
   test "changed image assets update reused image views through resource ids":
     var initialBundle = initResourceBundle("tests.resource-preview-assets")

@@ -114,8 +114,8 @@ const
   ResourceEditorDocumentType* = "nimkit-resource"
   ResourceEditorPaletteKinds* = [
     "view", "control", "button", "checkBox", "radioButton", "textField", "label",
-    "imageView", "stackView", "switchButton", "progressIndicator", "box", "splitView",
-    "slider", "stepper", "comboBox", "textView",
+    "imageView", "stackView", "switchButton", "progressIndicator", "box", "group",
+    "splitView", "slider", "stepper", "comboBox", "textView",
   ]
 
 proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor
@@ -821,9 +821,7 @@ proc freeformParent(document: ResourceDocument, id: ResourceId): bool =
   let parent = document.findParentPath(path.get())
   if parent.isNone:
     return true
-  parent.get().kind == rnkView and document.view(parent.get().id).kind in [
-    "view", "box"
-  ]
+  parent.get().kind == rnkView and document.view(parent.get().id).kind == "view"
 
 proc beginPreviewDrag(editor: ResourceEditor, view: View, point: Point): bool =
   if view.isNil or not editor.xDocument.xResources.draftIsValid():
@@ -1551,7 +1549,7 @@ proc defaultViewNode(kind: string, id: ResourceId): ViewNodeResource =
     properties.add resourceProperty("on", resourceValue(false))
   of "progressIndicator":
     properties.add resourceProperty("value", resourceValue(0.5'f32))
-  of "box":
+  of "box", "group":
     properties.add resourceProperty("title", resourceValue("Group"))
   of "splitView":
     properties.add resourceProperty("splitAxis", resourceValue("laHorizontal"))
@@ -1562,8 +1560,7 @@ proc defaultViewNode(kind: string, id: ResourceId): ViewNodeResource =
 proc cascadeNewViewFrame(
     document: ResourceDocument, parentId: ResourceId, node: var ViewNodeResource
 ) =
-  let freeformContainer =
-    parentId.isEmpty or document.view(parentId).kind in ["view", "box"]
+  let freeformContainer = parentId.isEmpty or document.view(parentId).kind == "view"
   if not freeformContainer:
     return
   let siblings =
@@ -1607,7 +1604,7 @@ proc insertViewKind*(editor: ResourceEditor, kind: string): ResourceEditResult =
     let path = document.findNodePath(selected.get())
     if path.isSome and path.get().kind == rnkView:
       let selectedView = document.view(selected.get())
-      if selectedView.kind in ["view", "stackView", "box", "splitView"]:
+      if selectedView.kind in ["view", "stackView", "box", "group", "splitView"]:
         parent = selected.get()
       else:
         let parentPath = document.findParentPath(path.get())
@@ -1617,6 +1614,22 @@ proc insertViewKind*(editor: ResourceEditor, kind: string): ResourceEditResult =
       let parentPath = document.findParentPath(path.get())
       if parentPath.isSome and parentPath.get().kind == rnkView:
         parent = parentPath.get().id
+  if not parent.isEmpty:
+    let parentNode = document.view(parent)
+    let limit =
+      editor.xDocument.xRegistry.viewKindDescriptor(parentNode.kind).maximumChildren
+    if parentNode.children.len >= limit:
+      if parentNode.children.len == 1 and
+          parentNode.children[0].kind in ["view", "stackView", "splitView"]:
+        parent = parentNode.children[0].id
+      else:
+        return ResourceEditResult(
+          kind: rekInsert,
+          error: reeParentUnavailable,
+          message:
+            "container already has a content root; select its layout view to add controls",
+          revision: document.revision(),
+        )
   var node = kind.defaultViewNode(id)
   document.cascadeNewViewFrame(parent, node)
   result = document.insertView(node, parent)
