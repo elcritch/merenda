@@ -23,6 +23,108 @@ const htmlVoidTags = [
   "source", "track", "wbr",
 ]
 
+proc matchesTag(source: string, position: int, tag: string): bool =
+  if position + tag.len > source.len:
+    return
+  for index, ch in tag:
+    if source[position + index].toLowerAscii() != ch:
+      return
+  let finish = position + tag.len
+  finish < source.len and source[finish] in Whitespace + {'/', '>'}
+
+proc tagEnd(source: string, position: int): int =
+  result = position
+  var quote: char
+  while result < source.len:
+    let ch = source[result]
+    if quote != '\0':
+      if ch == quote:
+        quote = '\0'
+    elif ch in {'\'', '"'}:
+      quote = ch
+    elif ch == '>':
+      return
+    inc result
+
+proc textareaEnd(source: string, position: int): int =
+  result = position
+  while result < source.len:
+    result = source.find('<', result)
+    if result < 0:
+      return source.len
+    if result + 1 < source.len and source[result + 1] == '/' and
+        source.matchesTag(result + 2, "textarea"):
+      return
+    inc result
+
+proc selfClosingTag(source: string, start, finish: int): bool =
+  var position = start
+  while position < finish:
+    while position < finish and source[position] in Whitespace:
+      inc position
+    if position == finish:
+      return
+    if source[position] == '/':
+      return position == finish - 1
+    while position < finish and source[position] notin Whitespace + {'=', '/'}:
+      inc position
+    while position < finish and source[position] in Whitespace:
+      inc position
+    if position < finish and source[position] == '=':
+      inc position
+      while position < finish and source[position] in Whitespace:
+        inc position
+      if position < finish and source[position] in {'\'', '"'}:
+        let quote = source[position]
+        inc position
+        while position < finish and source[position] != quote:
+          inc position
+        if position < finish:
+          inc position
+      else:
+        # An unquoted value consumes its trailing slash, as in value=notes/.
+        while position < finish and source[position] notin Whitespace:
+          inc position
+
+proc protectTextarea(source: string): string =
+  # XML treats markup inside textarea as nodes. Escape it before either XML
+  # pass so literal tags neither disappear nor affect IDs and resource limits.
+  var position, start: int
+  while position < source.len:
+    if source[position] != '<':
+      inc position
+      continue
+    if source[position .. min(position + 3, source.high)] == "<!--":
+      let finish = source.find("-->", position + 4)
+      position =
+        if finish < 0:
+          source.len
+        else:
+          finish + 3
+      continue
+    if position + 1 >= source.len or
+        source[position + 1] notin {'a' .. 'z', 'A' .. 'Z', '/', '!', '?'}:
+      inc position
+      continue
+    let finish = source.tagEnd(position + 1)
+    if finish == source.len:
+      break
+    if source.matchesTag(position + 1, "textarea") and
+        not source.selfClosingTag(position + "<textarea".len, finish):
+      let contentStart = finish + 1
+      let contentEnd = source.textareaEnd(contentStart)
+      result.add source[start ..< contentStart]
+      for index in contentStart ..< contentEnd:
+        if source[index] == '<':
+          result.add "&lt;"
+        else:
+          result.add source[index]
+      start = contentEnd
+      position = contentEnd
+    else:
+      position = finish + 1
+  result.add source[start ..^ 1]
+
 proc attributeText(source: string, start, finish: int): HtmlAttribute =
   if finish <= start:
     return
@@ -52,9 +154,14 @@ proc attributeText(source: string, start, finish: int): HtmlAttribute =
   while position < result.finish:
     let ch = source[position]
     if ch == '&':
-      let semicolon = source.find(';', position + 1, result.finish - 1)
+      # Stop at the first non-entity character, especially another '&', so
+      # repeated literal ampersands cannot repeatedly scan the remaining value.
+      var semicolon = position + 1
+      while semicolon < result.finish and
+          source[semicolon] in {'a' .. 'z', 'A' .. 'Z', '0' .. '9', '#'}:
+        inc semicolon
       let rune =
-        if semicolon > position and semicolon < result.finish:
+        if semicolon < result.finish and source[semicolon] == ';':
           entityToRune(source[position + 1 ..< semicolon])
         else:
           Rune(0)
@@ -78,14 +185,15 @@ proc attributeText(source: string, start, finish: int): HtmlAttribute =
       result.encoded.add ch
       inc position
 
-proc prepareHtml*(source: string, limits: ResourceLoadLimits): PreparedHtml =
+proc prepareHtml*(input: string, limits: ResourceLoadLimits): PreparedHtml =
   result.identifiers = initHashSet[string]()
-  if source.len > limits.maximumDataBytes:
+  if input.len > limits.maximumDataBytes:
     result.diagnostics.add(
       rdsError, "html.data.tooLarge", "HTML exceeds the byte limit"
     )
     return
 
+  let source = protectTextarea(input)
   var lineStarts = @[0]
   for index, ch in source:
     if ch == '\n' or

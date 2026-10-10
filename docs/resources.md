@@ -119,7 +119,8 @@ styles the native controls; Nim connects Preview and Reset actions.
 Use HTML children for structure and content. Inline elements such as `strong`,
 `em`, and `code` contribute plain text; `<br>` and `<br/>` insert newlines. Mixed
 inline text inside a container becomes one label between controls. Textarea content
-preserves newlines and indentation. Option text supplies the display label,
+preserves literal markup, newlines, and indentation, and decodes HTML entities.
+Option text supplies the display label,
 `value` supplies the native object value, and `selected` sets the initial selection.
 
 `id` names both the resource and its native CSS ID. Unnamed views receive generated

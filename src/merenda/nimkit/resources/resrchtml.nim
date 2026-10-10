@@ -271,6 +271,12 @@ proc configureElement(
         )
       view.put("stringValue", resourceValue(state.textContent(source, path)))
 
+proc comboAttributeOrder(name: string): int =
+  case attributeKey(name)
+  of "dataitems": 0
+  of "dataitemvalues": 1
+  else: 2
+
 proc configureAttributes(
     state: var HtmlImport, source: XmlNode, view: var ViewNodeResource, path: string
 ) =
@@ -297,7 +303,14 @@ proc configureAttributes(
   if not source.attrs.isNil:
     for name in source.attrs.keys:
       attributes.add name
-  attributes.sort()
+  if view.kind == "comboBox":
+    # Setting items recreates options, so values and selection must follow it.
+    attributes.sort do(left, right: string) -> int:
+      result = cmp(comboAttributeOrder(left), comboAttributeOrder(right))
+      if result == 0:
+        result = cmp(left, right)
+  else:
+    attributes.sort()
   for originalName in attributes:
     let
       name = originalName.toLowerAscii()

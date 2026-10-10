@@ -1,5 +1,5 @@
 ## HTML GUI behavior shared by the NimKit test runner.
-import std/[options, os, tempfiles, unittest]
+import std/[options, os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
 
@@ -89,6 +89,60 @@ suite "NimKit HTML resources":
     check TextField(built.instance.view(resourceId("path"))).stringValue == "src/"
     check TextField(built.instance.view(resourceId("compare"))).placeholder ==
       "a > b / c"
+
+  test "native combo attributes apply items before values and selection":
+    let loaded = parseHtmlResourceBundle(
+      """<div data-kind=comboBox id=language data-item-values="nim c"
+              data-selected-index=1 data-items="Nim C"></div>"""
+    )
+    check loaded.loaded
+    let built = loaded.bundle.instantiateResources()
+    check built.instantiated
+    let combo = ComboBox(built.instance.view(resourceId("language")))
+    check combo.numberOfItems == 2
+    check combo.itemAtIndex(1) == "C"
+    check combo.itemObjectValueAtIndex(1) == toObj("c")
+    check combo.selectedIndex == 1
+
+  test "textarea preserves literal markup and only reserves actual widget IDs":
+    var limits = initResourceLoadLimits()
+    limits.maximumNodes = 3
+    limits.maximumTreeDepth = 2
+    let loaded = parseHtmlResourceBundle(
+      """<main id=root><textarea id=notes>one <b>two</b> <input id=after>
+<!-- literal comment --> &lt;three&gt; &amp; &copy; </TeXtArEa>
+<button id=after>After</button></main>""",
+      limits,
+    )
+    check loaded.loaded
+    check loaded.diagnostics.len == 0
+    let built = loaded.bundle.instantiateResources()
+    check built.instantiated
+    check TextView(built.instance.view(resourceId("notes"))).stringValue ==
+      "one <b>two</b> <input id=after>\n" & "<!-- literal comment --> <three> & \u00a9 "
+    check Button(built.instance.view(resourceId("after"))).title == "After"
+
+  test "long literal ampersand runs preserve following named entities":
+    let value = repeat('&', 100_000) & "&copy;"
+    let loaded = parseHtmlResourceBundle("<input id=field value='" & value & "'>")
+    check loaded.loaded
+    let built = loaded.bundle.instantiateResources()
+    check built.instantiated
+    check TextField(built.instance.view(resourceId("field"))).stringValue ==
+      repeat('&', 100_000) & "\u00a9"
+
+  test "textarea distinguishes unquoted value slashes from closing markers":
+    let loaded = parseHtmlResourceBundle(
+      """<main><textarea id=notes/>one <b>two</b></textarea>
+<textarea id="empty"/><button id=after>After</button></main>"""
+    )
+    check loaded.loaded
+    let built = loaded.bundle.instantiateResources()
+    check built.instantiated
+    check TextView(built.instance.view(resourceId("notes/"))).stringValue ==
+      "one <b>two</b>"
+    check TextView(built.instance.view(resourceId("empty"))).stringValue == ""
+    check Button(built.instance.view(resourceId("after"))).title == "After"
 
   test "HTML classes preserve native heading styles and data properties take precedence":
     let loaded = parseHtmlResourceBundle(
