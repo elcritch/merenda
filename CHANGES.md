@@ -17,6 +17,9 @@
   resources now own at most one explicit content root; wrap multiple controls in
   a stack. Inherit child hooks/limits and preserve content styling on reattachment.
 
+- Keep box/group captions readable when switching CSS themes by following the
+  active palette's text foreground instead of inheriting Aqua's dark caption color.
+
 - Share immutable theme storage across Theme and Appearance copies, avoiding
   duplicated CSS rule tables and indexes in widget caches. Preserve isolated
   builder edits and mutable copies returned by snapshot accessors.
