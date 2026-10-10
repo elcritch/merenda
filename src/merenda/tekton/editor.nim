@@ -115,7 +115,7 @@ const
   ResourceEditorPaletteKinds* = [
     "view", "control", "button", "checkBox", "radioButton", "textField", "label",
     "imageView", "stackView", "switchButton", "progressIndicator", "box", "splitView",
-    "slider", "stepper",
+    "slider", "stepper", "comboBox", "textView",
   ]
 
 proc newResourceEditor*(document: ResourceEditorDocument): ResourceEditor

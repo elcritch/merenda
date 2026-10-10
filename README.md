@@ -65,6 +65,23 @@ nim r examples/css_theme_demo.nim
 Read the [CSS theming guide](docs/css-theming.md) for selectors, variables,
 supported properties and appearance scope.
 
+You can also [describe native GUIs in HTML](docs/resources.md#html-gui-subset),
+using normal elements and `data-*` attributes for widget options:
+
+```html
+<main id="root" data-window="window" data-padding="24" data-spacing="12">
+  <h1>Hello from HTML</h1>
+  <input id="name" placeholder="Your name">
+  <button id="save" data-action="saveDocument">Save</button>
+</main>
+```
+
+`loadHtmlResourceBundle` reads the interface and `instantiateResources` constructs
+its native controls. Use IDs to look up controls and connect behavior in Nim. Try
+the [HTML GUI example](examples/html_ui_demo.nim) with `nim ic -r examples/html_ui_demo.nim`.
+Its HTML defines a compact preferences form; the accompanying CSS styles the native
+controls, and Nim connects Preview and Reset actions.
+
 To use Merenda in your own project, add this dependency to your `.nimble` file
 and run `atlas install -tuk` from that project:
 

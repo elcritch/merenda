@@ -63,6 +63,8 @@ proc collectViewIdentifiers(
     depth: int,
     limits: ResourceLoadLimits,
 ) =
+  if nodes.len == 0:
+    return
   if depth > limits.maximumTreeDepth:
     state.diagnostics.add(
       rdsError,

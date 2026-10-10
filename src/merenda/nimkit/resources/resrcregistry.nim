@@ -7,10 +7,15 @@ import sigils/selectors
 import ../app/viewcontrollers
 import ../containers/[boxes, splitviews, stackviews]
 import
-  ../controls/[buttons, controls, progressindicators, sliders, steppers, switchbuttons]
+  ../controls/
+    [
+      buttons, comboboxes, controls, progressindicators, sliders, steppers,
+      switchbuttons,
+    ]
 import ../drawing/images
 import ../foundation/types
-import ../text/textfields
+import ../foundation/selectors
+import ../text/[textfields, textviews]
 import ../themes
 import ../view/[imageviews, views]
 import ./resrccore
@@ -685,6 +690,7 @@ proc registerDefaultResourceValueTypes(registry: var ResourceRegistry) =
 
   registerResourceEnumType[ButtonState](registry, "ButtonState")
   registerResourceEnumType[ButtonType](registry, "ButtonType")
+  registerResourceEnumType[LabelStyle](registry, "LabelStyle")
   registerResourceEnumType[FocusRingType](registry, "FocusRingType")
   registerResourceEnumType[TextAlignment](registry, "TextAlignment")
   registerResourceEnumType[LayoutAxis](registry, "LayoutAxis")
@@ -741,6 +747,17 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
     proc(frame: Rect): View =
       newLabel(frame = frame),
     baseKind = "textField",
+  )
+  result.registerViewKind(
+    "textView",
+    proc(frame: Rect): View =
+      newTextView(frame = frame),
+  )
+  result.registerViewKind(
+    "comboBox",
+    proc(frame: Rect): View =
+      newComboBox(frame = frame),
+    baseKind = "control",
   )
   result.registerViewKind(
     "imageView",
@@ -857,11 +874,124 @@ proc initNimKitResourceRegistry*(): ResourceRegistry =
   scalarProperty("stepper", Stepper, maxValue)
   scalarProperty("stepper", Stepper, value)
   scalarProperty("stepper", Stepper, increment)
+
+  template valueProperty(
+      kindName: string,
+      Widget: typedesc,
+      property: untyped,
+      Value: typedesc,
+      valueKinds: set[ResourceValueKind],
+      decoder, encoder: untyped,
+  ) =
+    result.registerViewProperty(
+      kindName,
+      astToStr(property),
+      valueKinds,
+      setter = proc(
+          view: View, value: ResourceValue, context: ResourcePropertyContext
+      ): bool =
+        var decoded: Value
+        let converted = decoder(value, context, decoded)
+        if converted:
+          Widget(view).property = decoded
+        converted,
+      getter = proc(
+          view: View, context: ResourcePropertyContext
+      ): ResourcePropertyReadResult =
+        var encoded: ResourceValue
+        let read = encoder(Widget(view).property(), context, encoded)
+        ResourcePropertyReadResult(read: read, value: encoded),
+      nimTypeName = astToStr(Value),
+    )
+
+  valueProperty(
+    "textView",
+    TextView,
+    stringValue,
+    string,
+    {rvString, rvReference},
+    decodeString,
+    encodeString,
+  )
+  valueProperty("textView", TextView, editable, bool, {rvBool}, decodeBool, encodeBool)
+  valueProperty(
+    "textView", TextView, selectable, bool, {rvBool}, decodeBool, encodeBool
+  )
+  valueProperty("comboBox", ComboBox, editable, bool, {rvBool}, decodeBool, encodeBool)
+  valueProperty(
+    "label",
+    Label,
+    labelStyle,
+    LabelStyle,
+    {rvString},
+    decodeEnum[LabelStyle],
+    encodeEnum[LabelStyle],
+  )
+
+  result.registerViewProperty(
+    "control",
+    "action",
+    {rvString},
+    setter = proc(view: View, value: ResourceValue, _: ResourcePropertyContext): bool =
+      Control(view).action =
+        if value.stringValue.len == 0:
+          ActionSelector()
+        else:
+          actionSelector(value.stringValue)
+      true,
+    getter = proc(view: View, _: ResourcePropertyContext): ResourcePropertyReadResult =
+      ResourcePropertyReadResult(
+        read: true, value: resourceValue(Control(view).action.name)
+      ),
+    nimTypeName = "string",
+  )
+  result.registerViewProperty(
+    "comboBox",
+    "items",
+    {rvStrings},
+    setter = proc(view: View, value: ResourceValue, _: ResourcePropertyContext): bool =
+      ComboBox(view).setItems(value.stringValues)
+      true,
+    getter = proc(view: View, _: ResourcePropertyContext): ResourcePropertyReadResult =
+      let combo = ComboBox(view)
+      var items: seq[string]
+      for index in 0 ..< combo.numberOfItems():
+        items.add combo.itemAtIndex(index)
+      ResourcePropertyReadResult(read: true, value: resourceValue(items)),
+    nimTypeName = "seq[string]",
+  )
+  result.registerViewProperty(
+    "comboBox",
+    "itemValues",
+    {rvStrings},
+    setter = proc(view: View, value: ResourceValue, _: ResourcePropertyContext): bool =
+      let combo = ComboBox(view)
+      if value.stringValues.len != combo.numberOfItems():
+        return
+      var options: seq[ComboBoxOption]
+      for index, text in value.stringValues:
+        var option = combo.optionAtIndex(index)
+        option.objectValue = toObj(text)
+        options.add option
+      combo.setOptions(options)
+      true,
+    getter = proc(view: View, _: ResourcePropertyContext): ResourcePropertyReadResult =
+      let combo = ComboBox(view)
+      var values: seq[string]
+      for index in 0 ..< combo.numberOfItems():
+        let value = combo.itemObjectValueAtIndex(index)
+        if value.kind != ovString:
+          return
+        values.add value.text
+      ResourcePropertyReadResult(read: true, value: resourceValue(values)),
+    nimTypeName = "seq[string]",
+  )
   result.registerViewPropertyAlias("view", "background", "backgroundColor")
   result.registerViewPropertyAlias("view", "alpha", "alphaValue")
   result.registerViewProtocolProperties("control", ControlProtocol)
   result.registerViewProtocolProperties("button", ButtonProtocol)
   result.registerViewProtocolProperties("textField", TextFieldProtocol)
+  result.registerViewProtocolProperties("comboBox", ComboBoxProtocol)
   result.registerViewProtocolProperties("stackView", StackViewProtocol)
   result.registerViewPropertyAlias("stackView", "alignment", "stackAlignment")
   result.registerViewProtocolProperties("imageView", ImageViewProtocol)

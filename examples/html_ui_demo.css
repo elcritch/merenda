@@ -1,0 +1,61 @@
+:root {
+  --accent: #829fff;
+}
+
+#root { background: #181e29; }
+#preferences { background: #222c3c; }
+
+label { color: #eef2fc; font-size: 14px; }
+label.label-title { font-size: 28px; }
+label.eyebrow { color: #a5baff; font-size: 11px; }
+label.muted { color: #aebbd0; font-size: 13px; }
+label.field-label { color: #c4cfe2; font-size: 13px; }
+
+#name, #language {
+  background: #161e2b;
+  color: #eef2fc;
+  border-color: #465674;
+  border-width: 1px;
+  border-radius: 7px;
+  padding: 9px 12px;
+  font-size: 14px;
+  -nimkit-chrome: flat-transparent;
+  -nimkit-focus-ring-color: #829fff;
+}
+
+#language {
+  box-shadow: none;
+  -nimkit-chrome: default;
+  -nimkit-indicator-fill: #2b374c;
+  -nimkit-mark-color: #dce5f5;
+}
+#language:hover, #language:open { -nimkit-indicator-fill: #35445e; }
+#language:open { border-color: #829fff; }
+combo-box-item { background: #222c3c; color: #eef2fc; }
+combo-box-item:highlighted { background: #35445e; }
+combo-box-item:selected { background: #829fff; color: #101a30; }
+
+checkbox {
+  color: #dce5f5;
+  font-size: 14px;
+  -nimkit-indicator-size: 18px;
+  -nimkit-indicator-spacing: 9px;
+}
+
+button {
+  background: #2b374c;
+  color: #dce5f5;
+  border-color: #465674;
+  border-width: 1px;
+  border-radius: 7px;
+  padding: 9px 16px;
+  font-size: 14px;
+  -nimkit-chrome: flat-transparent;
+}
+button:hover { background: #35445e; }
+button:pressed { background: #202b3c; }
+button.primary { background: #829fff; color: #101a30; border-color: #829fff; }
+button.primary:hover { background: #9ab1ff; }
+button.primary:pressed { background: #6583dc; }
+
+progress-indicator { background: #303e55; -nimkit-highlight-fill: #829fff; }

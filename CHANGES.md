@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add an HTML5 GUI subset using the stdlib HTML parser and existing resource
+  construction. Support semantic containers, native controls, select options,
+  images, multiline text, IDs/classes, boolean attributes, and typed `data-*`
+  properties, with diagnostics and load limits. Include a styled HTML preferences
+  example with compact, resize-stable controls and Preview/Reset actions.
+
 - Share immutable theme storage across Theme and Appearance copies, avoiding
   duplicated CSS rule tables and indexes in widget caches. Preserve isolated
   builder edits and mutable copies returned by snapshot accessors.

@@ -2,10 +2,10 @@
 
 import
   ./resources/[
-    resrccbor, resrcconstruction, resrccore, resrcdocument, resrclayout, resrcregistry,
-    resrcvalidation,
+    resrccbor, resrcconstruction, resrccore, resrcdocument, resrchtml, resrclayout,
+    resrcregistry, resrcvalidation,
   ]
 
 export
-  resrccbor, resrcconstruction, resrccore, resrcdocument, resrclayout, resrcregistry,
-  resrcvalidation
+  resrccbor, resrcconstruction, resrccore, resrcdocument, resrchtml, resrclayout,
+  resrcregistry, resrcvalidation
