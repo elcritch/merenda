@@ -2,14 +2,6 @@
 
 ## Unreleased
 
-- Require Matter 0.6.0 or newer and include NIF in Kosmo's built-in language list
-  with automatic syntax highlighting for `.nif` files.
-
-## 0.27.1
-
-- Keep box/group captions readable when switching CSS themes by following the
-  active palette's text foreground instead of inheriting Aqua's dark caption color.
-
 ## 0.27.0
 
 - Add GUI resource markup with HTML5 syntax, `nk-` native elements, application
@@ -24,6 +16,12 @@
   Use `nk-view`, `nk-stack-view`, and native `nk-box`/`nk-group` grouping. Box
   resources now own at most one explicit content root; wrap multiple controls in
   a stack. Inherit child hooks/limits and preserve content styling on reattachment.
+
+- Require Matter 0.6.0 or newer and include NIF in Kosmo's built-in language list
+  with automatic syntax highlighting for `.nif` files.
+
+- Keep box/group captions readable when switching CSS themes by following the
+  active palette's text foreground instead of inheriting Aqua's dark caption color.
 
 - Share immutable theme storage across Theme and Appearance copies, avoiding
   duplicated CSS rule tables and indexes in widget caches. Preserve isolated
