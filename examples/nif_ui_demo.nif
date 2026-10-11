@@ -1,0 +1,113 @@
+(.nif27)
+(nkMain
+  (nkWindow
+    (attrs (kv "id" "window") (kv "title" "Your workspace · NimKit") (kv "data-frame" "140 120 560 640"))
+    (nkStackView
+      (attrs (kv "id" "root") (kv "data-axis" "vertical") (kv "data-spacing" "24") (kv "data-padding" "28") (kv "data-distribution" "natural"))
+      (nkStackView
+        (attrs (kv "data-spacing" "8") (kv "data-distribution" "natural"))
+        (span
+          (attrs (kv "class" "eyebrow"))
+          "NIMKIT / GUI")
+        (span
+          (attrs (kv "data-label-style" "title") (kv "data-alignment" "left"))
+          "Your workspace")
+        (span
+          (attrs (kv "class" "muted"))
+          "A few preferences. Real native controls."
+          (br)
+          "Markup describes the view; Nim brings it to life."))
+      (nkStackView
+        (attrs (kv "id" "preferences") (kv "data-spacing" "18") (kv "data-padding" "20") (kv "data-distribution" "natural"))
+        (nkStackView
+          (attrs (kv "data-spacing" "6") (kv "data-distribution" "natural"))
+          (span
+            (attrs (kv "class" "field-label"))
+            "Display name")
+          (input
+            (attrs (kv "id" "name") (kv "type" "text") (kv "placeholder" "Ada Lovelace") (kv "value" "Ada"))))
+        (nkStackView
+          (attrs (kv "data-spacing" "6") (kv "data-distribution" "natural"))
+          (span
+            (attrs (kv "class" "field-label"))
+            "Preferred language")
+          (select
+            (attrs (kv "id" "language"))
+            (option
+              (attrs (kv "value" "nim") (kv "selected" ""))
+              "Nim")
+            (option
+              (attrs (kv "value" "c"))
+              "C")
+            (option
+              (attrs (kv "value" "other"))
+              "Other")))
+        (nkStackView
+          (attrs (kv "data-spacing" "6") (kv "data-distribution" "natural"))
+          (span
+            (attrs (kv "class" "field-label"))
+            "Appearance")
+          (select
+            (attrs (kv "id" "theme") (kv "data-action" "changeTheme"))
+            (option
+              (attrs (kv "value" "custom") (kv "selected" ""))
+              "Custom CSS")
+            (option
+              (attrs (kv "value" "aqua"))
+              "Aqua")
+            (option
+              (attrs (kv "value" "banner"))
+              "Banner")
+            (option
+              (attrs (kv "value" "darkbsd"))
+              "Dark BSD")
+            (option
+              (attrs (kv "value" "macos"))
+              "macOS")
+            (option
+              (attrs (kv "value" "macos-dark"))
+              "macOS Dark")
+            (option
+              (attrs (kv "value" "nebula"))
+              "Nebula")
+            (option
+              (attrs (kv "value" "peachy"))
+              "Peachy")
+            (option
+              (attrs (kv "value" "synthwave83"))
+              "Synthwave83")))
+        (input
+          (attrs (kv "id" "updates") (kv "type" "checkbox") (kv "checked" "") (kv "data-title" "Send me product updates"))))
+      (nkStackView
+        (attrs (kv "data-spacing" "12") (kv "data-distribution" "natural"))
+        (nkStackView
+          (attrs (kv "data-axis" "horizontal") (kv "data-spacing" "10") (kv "data-alignment" "center") (kv "data-distribution" "natural"))
+          (button
+            (attrs (kv "id" "preview") (kv "class" "primary") (kv "data-action" "previewProfile"))
+            "Preview profile")
+          (button
+            (attrs (kv "id" "reset") (kv "data-action" "resetProfile"))
+            "Reset")
+          (button
+            (attrs (kv "id" "show-about") (kv "data-action" "showAbout"))
+            "About"))
+        (progress
+          (attrs (kv "id" "progress") (kv "max" "100") (kv "value" "0")))
+        (span
+          (attrs (kv "id" "status") (kv "class" "muted") (kv "data-label-style" "status"))
+          "Your preview will appear here."))))
+  (nkWindow
+    (attrs (kv "id" "about") (kv "title" "About NimKit") (kv "data-frame" "220 180 420 240"))
+    (nkStackView
+      (attrs (kv "id" "about-content") (kv "data-padding" "24") (kv "data-distribution" "natural"))
+      (nkGroup
+        (attrs (kv "id" "about-group") (kv "data-title" "One GUI resource file"))
+        (nkStackView
+          (attrs (kv "id" "about-details") (kv "data-spacing" "16") (kv "data-distribution" "natural"))
+          (span
+            "Two independent native windows."
+            (br)
+            "Markup defines the views; Nim connects their actions.")
+          (button
+            (attrs (kv "id" "close-about") (kv "data-action" "closeAbout"))
+            "Close"))))))

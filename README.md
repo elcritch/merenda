@@ -90,6 +90,20 @@ Try the [GUI resource example](examples/html_ui_demo.nim) with
 Preview and Reset actions, and a separate About window. The Appearance dropdown
 switches both windows between the custom stylesheet and the built-in CSS themes.
 
+The [NIF version](examples/nif_ui_demo.nim) duplicates this demo with
+[NIF GUI markup](examples/nif_ui_demo.nif) and a
+[NIF stylesheet](examples/nif_ui_demo.css.nif). Enable its optional dependency
+and run it with:
+
+```sh
+atlas install -tk --feature=nifDemo
+nim ic -r examples/nif_ui_demo.nim
+```
+
+It uses a [standalone nifcore fork](https://github.com/elcritch/nifcore/tree/feat/standalone-nifcore)
+without Nimony. The demo-local adapter feeds the existing GUI and CSS loaders;
+see the [NIF demo format](docs/resources.md#nif-demo) for its vocabulary.
+
 To use Merenda in your own project, add this dependency to your `.nimble` file
 and run `atlas install -tuk` from that project:
 

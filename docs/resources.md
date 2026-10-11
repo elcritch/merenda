@@ -229,6 +229,68 @@ are checked before constructing the DOM. HTML5 void elements, including `input`,
 are normalized to account for the stdlib parser's older void-element list. Resource
 validation then applies the same schema and reference checks as other frontends.
 
+## NIF demo
+
+`examples/nif_ui_demo.nim` duplicates the HTML demo using
+`nif_ui_demo.nif` for its interface and `nif_ui_demo.css.nif` for its appearance.
+The optional dependency is a pinned [standalone nifcore fork](https://github.com/elcritch/nifcore/tree/feat/standalone-nifcore)
+that includes its table support and requires no Nimony checkout:
+
+```sh
+atlas install -tk --feature=nifDemo
+nim ic -r examples/nif_ui_demo.nim
+```
+
+Elements contain an optional first `attrs` child with `kv` entries, following
+nifcore's HTML adapter shape. Camel-case native tags map to the existing
+hyphenated GUI tags. Text and attribute values are quoted strings, including
+numeric properties and empty strings for present boolean attributes:
+
+```nif
+(.nif27)
+(nkStackView
+  (attrs (kv "id" "root") (kv "data-spacing" "12"))
+  (nkLabel "Hello from NIF")
+  (input (attrs (kv "id" "name") (kv "placeholder" "Your name")))
+  (button (attrs (kv "id" "save")) "Save"))
+```
+
+The stylesheet uses a `stylesheet` root with `tokens` and ordered `rule` children.
+Each rule has a quoted CSS selector followed by property tags. Values can
+be strings or typed `(hexColor "829fff")` nodes. Hex colors accept 3, 4, 6, or 8
+hexadecimal digits, including alpha, and emit the corresponding CSS `#` form.
+The same color nodes work in GUI attribute values. CSS custom properties,
+specificity, and states retain their existing behavior:
+
+```nif
+(.nif27)
+(stylesheet
+  (tokens (accent (hexColor "829fff")))
+  (rule "button.primary"
+    (background (hexColor "829fff"))
+    (color (hexColor "101a30"))
+    (fontSize "14px")))
+```
+
+Camel-case property tags map to CSS names: `fontSize` becomes `font-size`, and
+`nimkitChrome` becomes `-nimkit-chrome`. Within `tokens`, `accent` defines the
+root custom property `--accent`.
+
+NIF escapes use two uppercase hexadecimal digits, so `\23` represents `#`,
+`\3A` represents `:`, and `\22` represents a quote. The NIF27 shortcuts
+`\n`, `\t`, `\r`, `\|` (backslash), and `\^` (quote) also work.
+
+The adapter in `examples/private/nifmarkup.nim` reads tagged nodes and quoted
+strings into a nifcore token buffer, then emits HTML/CSS for the existing
+loaders. It is a demo vocabulary, with an optional leading `(.nif27)` marker;
+other directives, comments, line annotations, and unquoted atoms are unsupported.
+Malformed input raises `ValueError`. The adapter caps source bytes, node count,
+tree depth, and distinct tags. GUI validation and construction still use the
+existing resource pipeline. CSS diagnostic locations refer to the emitted CSS.
+
+With the feature enabled, its parity and action tests run in `tests/tnimkit.nim`
+and the example is included in the example compilation bundle.
+
 ## Stable CBOR Envelope
 
 The top-level record contains:

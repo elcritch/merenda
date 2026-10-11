@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Duplicate the HTML GUI demo with NIF interface and stylesheet files, preserving
+  its preferences, Preview/Reset actions, theme switching, and About window. Use
+  the optional `nifDemo` Atlas feature and a standalone nifcore fork without Nimony.
+
 ## 0.27.0
 
 - Add GUI resource markup with HTML5 syntax, `nk-` native elements, application

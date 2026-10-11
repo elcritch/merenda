@@ -1,0 +1,78 @@
+(.nif27)
+(stylesheet
+  (tokens
+    (accent (hexColor "829fff")))
+  (rule "\23root, \23about-content"
+    (background (hexColor "181e29")))
+  (rule "\23preferences"
+    (background (hexColor "222c3c")))
+  (rule "label"
+    (color (hexColor "eef2fc"))
+    (fontSize "14px"))
+  (rule "label.label-title"
+    (fontSize "28px"))
+  (rule "label.eyebrow"
+    (color (hexColor "a5baff"))
+    (fontSize "11px"))
+  (rule "label.muted"
+    (color (hexColor "aebbd0"))
+    (fontSize "13px"))
+  (rule "label.field-label"
+    (color (hexColor "c4cfe2"))
+    (fontSize "13px"))
+  (rule "\23name, \23language, \23theme"
+    (background (hexColor "161e2b"))
+    (color (hexColor "eef2fc"))
+    (borderColor (hexColor "465674"))
+    (borderWidth "1px")
+    (borderRadius "7px")
+    (padding "9px 12px")
+    (fontSize "14px")
+    (nimkitChrome "flat-transparent")
+    (nimkitFocusRingColor (hexColor "829fff")))
+  (rule "\23language, \23theme"
+    (boxShadow "none")
+    (nimkitChrome "default")
+    (nimkitIndicatorFill (hexColor "2b374c"))
+    (nimkitMarkColor (hexColor "dce5f5")))
+  (rule "\23language\3Ahover, \23language\3Aopen, \23theme\3Ahover, \23theme\3Aopen"
+    (nimkitIndicatorFill (hexColor "35445e")))
+  (rule "\23language\3Aopen, \23theme\3Aopen"
+    (borderColor (hexColor "829fff")))
+  (rule "combo-box-item"
+    (background (hexColor "222c3c"))
+    (color (hexColor "eef2fc")))
+  (rule "combo-box-item\3Ahighlighted"
+    (background (hexColor "35445e")))
+  (rule "combo-box-item\3Aselected"
+    (background (hexColor "829fff"))
+    (color (hexColor "101a30")))
+  (rule "checkbox"
+    (color (hexColor "dce5f5"))
+    (fontSize "14px")
+    (nimkitIndicatorSize "18px")
+    (nimkitIndicatorSpacing "9px"))
+  (rule "button"
+    (background (hexColor "2b374c"))
+    (color (hexColor "dce5f5"))
+    (borderColor (hexColor "465674"))
+    (borderWidth "1px")
+    (borderRadius "7px")
+    (padding "9px 16px")
+    (fontSize "14px")
+    (nimkitChrome "flat-transparent"))
+  (rule "button\3Ahover"
+    (background (hexColor "35445e")))
+  (rule "button\3Apressed"
+    (background (hexColor "202b3c")))
+  (rule "button.primary"
+    (background (hexColor "829fff"))
+    (color (hexColor "101a30"))
+    (borderColor (hexColor "829fff")))
+  (rule "button.primary\3Ahover"
+    (background (hexColor "9ab1ff")))
+  (rule "button.primary\3Apressed"
+    (background (hexColor "6583dc")))
+  (rule "progress-indicator"
+    (background (hexColor "303e55"))
+    (nimkitHighlightFill (hexColor "829fff"))))

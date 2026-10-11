@@ -99,7 +99,7 @@ jobs:
     - name: Install Deps
       run: |
         # sync deps
-        atlas -tu --features:kosmo install
+        atlas -tu --features:kosmo,nifDemo install
 
     - name: Clean generated examples
       run: bash .github/scripts/clean_generated_examples.sh
