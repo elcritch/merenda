@@ -1,0 +1,14 @@
+{
+  "name": "merenda-win-vbox",
+  "base_folder": "/home/elcritch/VirtualBox VMs",
+  "source_disk": "/vm/merenda-win-test/.zfs/snapshot/clean/disk0.img",
+  "credentials": "../windows-bhyve/.local/credentials.json",
+  "ssh_key": "../windows-bhyve/.local/id_ed25519",
+  "memory_mb": 4096,
+  "cpus": 2,
+  "ssh_port": 2222,
+  "rdp_port": 13389,
+  "display": ":0",
+  "runtime_dir": "/var/run/xdg/elcritch",
+  "xauthority": "/var/run/xdg/elcritch/lyxauth"
+}

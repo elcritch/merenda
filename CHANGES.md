@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add a Windows VirtualBox test setup, matching Guest Additions, an OpenGL 3.3
+  console probe, and guards against concurrent bhyve operation. Document the
+  failed GPU acceleration test with the FreeBSD 7.2.20 packages.
+- Add a reproducible Windows Server evaluation VM setup for bhyve, with
+  unattended installation, private RDP/SSH access, ZFS reset helpers, and GPU
+  passthrough configuration and verification instructions.
+
 - Keep the open state during menubar arrow navigation: `<left>`/`<right>` between
   menu bar buttons only move the highlight while the current menu is closed, and
   open the next or previous menu while the current menu is open. Opening menus

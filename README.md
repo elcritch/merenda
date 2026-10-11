@@ -772,6 +772,8 @@ These are good places to go once you've tried the basics:
 - Building UI from resources: [resource guide](docs/resources.md) and
   [example](examples/resource_ui_demo.nim).
 - Development checks: [reliability and memory profiling](docs/reliability.md).
+- Windows on FreeBSD: [disposable bhyve test VM and GPU passthrough](tools/windows-bhyve/README.md).
+- Windows VirtualBox: [setup and FreeBSD GPU test results](tools/windows-virtualbox/README.md).
 - Under the hood: [NimKit design](docs/design.md),
   [Kosmo workspace updates](docs/kosmo-workspace.md),
   [FigDraw](https://github.com/elcritch/figdraw/),
