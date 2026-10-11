@@ -31,8 +31,8 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  # Matter semantic colors; use the fork until fox0430/moe#3364 is merged.
-  requires "gh:elcritch/moe#b73acdc3f6b970595bed1c4042119f69f5c92a08"
+  # Matter semantic colors and review fixes from fox0430/moe#3364.
+  requires "gh:fox0430/moe#e0897eb8663686c6e8ce7527ea0152ae95009c77"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
