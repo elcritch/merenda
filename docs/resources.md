@@ -255,35 +255,68 @@ numeric properties and empty strings for present boolean attributes:
   (button (attrs (kv "id" "save")) "Save"))
 ```
 
-The stylesheet uses a `stylesheet` root with `tokens` and ordered `rule` children.
-Each rule has a quoted CSS selector followed by property tags. Values can
-be strings or typed `(hexColor "829fff")` nodes. Hex colors accept 3, 4, 6, or 8
-hexadecimal digits, including alpha, and emit the corresponding CSS `#` form.
-The same color nodes work in GUI attribute values. CSS custom properties,
-specificity, and states retain their existing behavior:
+The theme uses a `stylesheet` root with `tokens` and ordered `rule` children.
+Rules describe selectors and values as NIF nodes rather than CSS expressions:
 
 ```nif
 (.nif27)
 (stylesheet
   (tokens (accent (hexColor "829fff")))
-  (rule "button.primary"
-    (background (hexColor "829fff"))
-    (color (hexColor "101a30"))
-    (fontSize "14px")))
+  (rule (any (id name) (id language) (id theme))
+    (background (hexColor "161e2b"))
+    (borderColor (var accent))
+    (padding 9 px 12 px)
+    (fontSize 14 px)
+    (nimkitChrome flatTransparent))
+  (rule (match (role button) (class primary) (state hover))
+    (background (var accent))))
 ```
 
-Camel-case property tags map to CSS names: `fontSize` becomes `font-size`, and
-`nimkitChrome` becomes `-nimkit-chrome`. Within `tokens`, `accent` defines the
-root custom property `--accent`.
+Selectors have a small vocabulary:
+
+| Node | Matches |
+| --- | --- |
+| `(role button)` | A semantic control role; `comboBoxItem` is also a role. |
+| `(id name)` | One exact style id. |
+| `(class primary)` | One exact style class. |
+| `(state hover)` | A widget state; `open`, `pressed`, and `focusVisible` also work. |
+| `(any selector ...)` | Any of the child selectors. |
+| `(match selector ...)` | All child conditions on the same control. |
+
+`match` accepts simple role/id/class/state conditions, with at most one role and
+one id, in any order. Use `any` around complete selectors to group alternatives.
+Ids and classes preserve their spelling; use strings for names containing
+hyphens, such as `(id "about-content")` or `(class "label-title")`. Native style
+names use ASCII letters, digits, underscores, and hyphens, starting with a letter
+or underscore.
+
+Property tags, role names, state names, bare keywords, and token names use camel
+case. For example, `fontSize` becomes `font-size`, `nimkitChrome` becomes
+`-nimkit-chrome`, and `flatTransparent` becomes `flat-transparent` internally.
+Within `tokens`, `accent` defines a shared token; `(var accent)` references it.
+Tokens, specificity, rule order, and widget states retain the existing theme
+engine's behavior.
+
+Values can be decimal numbers with optional `px` units, bare keywords, token
+references, strings, or typed `(hexColor "829fff")` nodes. Thus `(padding 9 px 12 px)`
+sets vertical and horizontal padding, `(fontSize 14 px)` sets one length, and
+`(nimkitWidthFactor 0.75)` sets a unitless scalar. Integers, signed numbers, and
+floating point numbers with NIF's uppercase `E` exponent syntax work. The engine
+currently supports pixel lengths. Quoted CSS selectors and values remain accepted
+for gradual conversion.
+
+Hex colors accept 3, 4, 6, or 8 hexadecimal digits, including alpha, and emit the
+corresponding CSS `#` form. The same color nodes work in GUI attribute values.
 
 NIF escapes use two uppercase hexadecimal digits, so `\23` represents `#`,
 `\3A` represents `:`, and `\22` represents a quote. The NIF27 shortcuts
 `\n`, `\t`, `\r`, `\|` (backslash), and `\^` (quote) also work.
 
-The adapter in `examples/private/nifmarkup.nim` reads tagged nodes and quoted
-strings into a nifcore token buffer, then emits HTML/CSS for the existing
-loaders. It is a demo vocabulary, with an optional leading `(.nif27)` marker;
-other directives, comments, line annotations, and unquoted atoms are unsupported.
+The adapter in `examples/private/nifmarkup.nim` reads tagged nodes, strings,
+numbers, and identifiers into a nifcore token buffer, then emits HTML/CSS for
+the existing loaders. GUI text and attributes still require quoted strings or
+color nodes. This is a demo vocabulary, with an optional leading `(.nif27)` marker;
+other directives, comments, line annotations, symbols, and empty atoms are unsupported.
 Malformed input raises `ValueError`. The adapter caps source bytes, node count,
 tree depth, and distinct tags. GUI validation and construction still use the
 existing resource pipeline. CSS diagnostic locations refer to the emitted CSS.

@@ -1,7 +1,7 @@
 ## Demo-local adapters from a small textual NIF vocabulary to GUI markup and CSS.
 ## Uses nifcore's token buffer and cursors; this is not a general NIF reader.
 
-import std/[sets, strutils]
+import std/[math, sets, strutils]
 import nifcore
 
 type MarkupReader = object
@@ -71,6 +71,61 @@ proc tagName(reader: var MarkupReader): string =
     if ch notin Letters + Digits + {'_', '-'}:
       reader.fail("unsupported tag character")
 
+proc addNumber(reader: var MarkupReader, buffer: var TokenBuf) =
+  let start = reader.position
+  if reader.source[reader.position] == '-':
+    inc reader.position
+  let digits = reader.position
+  while reader.position < reader.source.len and reader.source[reader.position] in Digits:
+    inc reader.position
+  if reader.position == digits:
+    reader.fail("expected decimal digits")
+  var floating = false
+  if reader.position < reader.source.len and reader.source[reader.position] == '.':
+    floating = true
+    inc reader.position
+    let fraction = reader.position
+    while reader.position < reader.source.len and
+        reader.source[reader.position] in Digits:
+      inc reader.position
+    if reader.position == fraction:
+      reader.fail("expected digits after the decimal point")
+  if reader.position < reader.source.len and reader.source[reader.position] == 'E':
+    floating = true
+    inc reader.position
+    if reader.position < reader.source.len and
+        reader.source[reader.position] in {'+', '-'}:
+      inc reader.position
+    let exponent = reader.position
+    while reader.position < reader.source.len and
+        reader.source[reader.position] in Digits:
+      inc reader.position
+    if reader.position == exponent:
+      reader.fail("expected exponent digits")
+  let unsigned =
+    not floating and reader.position < reader.source.len and
+    reader.source[reader.position] == 'u'
+  let number = reader.source[start ..< reader.position]
+  if unsigned:
+    if number[0] == '-':
+      reader.fail("unsigned numbers cannot be negative")
+    inc reader.position
+  if reader.position < reader.source.len and
+      reader.source[reader.position] notin {' ', '\t', '\r', '\n', '(', ')'}:
+    reader.fail("numbers and units must be separate NIF atoms")
+  try:
+    if floating:
+      let value = parseFloat(number)
+      if value.classify in {fcNan, fcInf, fcNegInf}:
+        reader.fail("numbers must be finite")
+      buffer.addFloatLit(value)
+    elif unsigned:
+      buffer.addUIntLit(parseBiggestUInt(number))
+    else:
+      buffer.addIntLit(parseBiggestInt(number))
+  except ValueError:
+    reader.fail("number is outside the supported range")
+
 proc parseMarkup(source: string): TokenBuf =
   if source.len > 64 * 1024 * 1024:
     raise newException(ValueError, "NIF markup exceeds the byte limit")
@@ -105,8 +160,18 @@ proc parseMarkup(source: string): TokenBuf =
         reader.fail("text must be inside an element")
       result.addStrLit(reader.quotedString())
       inc nodes
+    of '0' .. '9', '-':
+      if depth == 0:
+        reader.fail("numbers must be inside an element")
+      reader.addNumber(result)
+      inc nodes
+    of 'a' .. 'z', 'A' .. 'Z', '_', '\\':
+      if depth == 0:
+        reader.fail("identifiers must be inside an element")
+      result.addIdent(reader.tagName())
+      inc nodes
     else:
-      reader.fail("expected an element or quoted string")
+      reader.fail("expected a NIF element, string, number, or identifier")
     if nodes > 100_000:
       reader.fail("markup exceeds the node limit")
   if depth != 0:
@@ -152,6 +217,115 @@ proc htmlName(value: string): string =
       result.add ch.toLowerAscii()
     else:
       result.add ch
+
+proc takeWord(cursor: var Cursor): string =
+  if not cursor.hasMore or cursor.kind notin {Ident, StrLit}:
+    raise newException(ValueError, "expected a NIF identifier or string")
+  result = cursor.strVal()
+  cursor.inc()
+
+proc cssIdentifier(value: string): string =
+  if value.len == 0 or value[0] notin Letters + {'_'}:
+    raise newException(
+      ValueError, "expected a style name starting with a letter or underscore"
+    )
+  for ch in value:
+    if ch notin Letters + Digits + {'_', '-'}:
+      raise newException(ValueError, "unsupported style name: " & value)
+  value
+
+proc takeSimpleSelector(cursor: var Cursor): string =
+  let tag = cursor.name()
+  if tag notin ["role", "id", "class", "state"]:
+    raise newException(ValueError, "expected role, id, class, or state selector")
+  cursor.into:
+    let value = cursor.takeWord().cssIdentifier()
+    cursor.requireEnd()
+    case tag
+    of "role":
+      result = value.htmlName()
+    of "id":
+      result = "#" & value
+    of "class":
+      result = "." & value
+    of "state":
+      result = ":" & value.htmlName()
+    else:
+      discard
+
+proc takeSelector(cursor: var Cursor): string =
+  if cursor.hasMore and cursor.kind == StrLit:
+    return cursor.takeString()
+  case cursor.name()
+  of "any":
+    cursor.into:
+      while cursor.hasMore:
+        if result.len > 0:
+          result.add ", "
+        result.add cursor.takeSelector()
+    if result.len == 0:
+      raise newException(ValueError, "any requires at least one selector")
+  of "match":
+    var role: string
+    var hasId = false
+    cursor.into:
+      while cursor.hasMore:
+        let tag = cursor.name()
+        let part = cursor.takeSimpleSelector()
+        case tag
+        of "role":
+          if role.len > 0:
+            raise newException(ValueError, "match accepts at most one role")
+          role = part
+        of "id":
+          if hasId:
+            raise newException(ValueError, "match accepts at most one id")
+          hasId = true
+          result.add part
+        else:
+          result.add part
+    if role.len == 0 and result.len == 0:
+      raise newException(ValueError, "match requires at least one selector")
+    result = role & result
+  else:
+    result = cursor.takeSimpleSelector()
+
+proc takeStyleValue(cursor: var Cursor): string =
+  if not cursor.hasMore:
+    raise newException(ValueError, "expected a style value")
+  case cursor.kind
+  of IntLit, UIntLit, FloatLit:
+    while cursor.hasMore:
+      if result.len > 0:
+        result.add ' '
+      case cursor.kind
+      of IntLit:
+        result.add $cursor.intVal()
+      of UIntLit:
+        result.add $cursor.uintVal()
+      of FloatLit:
+        result.add $cursor.floatVal()
+      else:
+        raise newException(ValueError, "expected a number with an optional px unit")
+      cursor.inc()
+      if cursor.hasMore and cursor.kind == Ident:
+        if cursor.strVal() != "px":
+          raise newException(ValueError, "the theme engine supports px lengths")
+        result.add cursor.takeWord()
+  of Ident:
+    result = cursor.takeWord().cssIdentifier().htmlName()
+  of TagLit:
+    if cursor.name() == "var":
+      cursor.into:
+        let token = cursor.takeWord().cssIdentifier().htmlName()
+        cursor.requireEnd()
+        result = "var(--" & token & ")"
+    else:
+      result = cursor.takeValue()
+  of StrLit:
+    result = cursor.takeString()
+  else:
+    raise newException(ValueError, "unsupported style value")
 
 proc escapedHtml(value: string): string =
   value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace(
@@ -208,13 +382,14 @@ proc emitDeclarations(cursor: var Cursor, output: var string, customProperties: 
     elif property.startsWith("nimkit-"):
       property = "-" & property
     cursor.into:
-      let value = cursor.takeValue()
+      let value = cursor.takeStyleValue()
       cursor.requireEnd()
       output.add "  " & property & ": " & value & ";\n"
 
 proc nifStylesheet*(source: string): string =
-  ## Converts property tags with string or `(hexColor "829fff")` values.
-  ## `tokens` defines root custom properties; camel-case tags become CSS names.
+  ## Converts native selectors and values into the existing theme engine's CSS.
+  ## Values include numbers with px units, keywords, hexColor, and var nodes.
+  ## `tokens` defines root custom properties; camel-case roles/properties become CSS names.
   var buffer = parseMarkup(source)
   var cursor = buffer.beginRead()
   if cursor.name() != "stylesheet":
@@ -229,7 +404,7 @@ proc nifStylesheet*(source: string): string =
         result.add "}\n"
       of "rule":
         cursor.into:
-          result.add cursor.takeString() & " {\n"
+          result.add cursor.takeSelector() & " {\n"
           cursor.emitDeclarations(result, customProperties = false)
           result.add "}\n"
       else:

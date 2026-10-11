@@ -2,77 +2,82 @@
 (stylesheet
   (tokens
     (accent (hexColor "829fff")))
-  (rule "\23root, \23about-content"
+  (rule (any (id root) (id "about-content"))
     (background (hexColor "181e29")))
-  (rule "\23preferences"
+  (rule (id preferences)
     (background (hexColor "222c3c")))
-  (rule "label"
+  (rule (role label)
     (color (hexColor "eef2fc"))
-    (fontSize "14px"))
-  (rule "label.label-title"
-    (fontSize "28px"))
-  (rule "label.eyebrow"
+    (fontSize 14 px))
+  (rule (match (role label) (class "label-title"))
+    (fontSize 28 px))
+  (rule (match (role label) (class eyebrow))
     (color (hexColor "a5baff"))
-    (fontSize "11px"))
-  (rule "label.muted"
+    (fontSize 11 px))
+  (rule (match (role label) (class muted))
     (color (hexColor "aebbd0"))
-    (fontSize "13px"))
-  (rule "label.field-label"
+    (fontSize 13 px))
+  (rule (match (role label) (class "field-label"))
     (color (hexColor "c4cfe2"))
-    (fontSize "13px"))
-  (rule "\23name, \23language, \23theme"
+    (fontSize 13 px))
+  (rule (any (id name) (id language) (id theme))
     (background (hexColor "161e2b"))
     (color (hexColor "eef2fc"))
     (borderColor (hexColor "465674"))
-    (borderWidth "1px")
-    (borderRadius "7px")
-    (padding "9px 12px")
-    (fontSize "14px")
-    (nimkitChrome "flat-transparent")
-    (nimkitFocusRingColor (hexColor "829fff")))
-  (rule "\23language, \23theme"
-    (boxShadow "none")
-    (nimkitChrome "default")
+    (borderWidth 1 px)
+    (borderRadius 7 px)
+    (padding 9 px 12 px)
+    (fontSize 14 px)
+    (nimkitChrome flatTransparent)
+    (nimkitFocusRingColor (var accent)))
+  (rule (any (id language) (id theme))
+    (boxShadow none)
+    (nimkitChrome default)
     (nimkitIndicatorFill (hexColor "2b374c"))
     (nimkitMarkColor (hexColor "dce5f5")))
-  (rule "\23language\3Ahover, \23language\3Aopen, \23theme\3Ahover, \23theme\3Aopen"
+  (rule
+    (any
+      (match (id language) (state hover))
+      (match (id language) (state open))
+      (match (id theme) (state hover))
+      (match (id theme) (state open)))
     (nimkitIndicatorFill (hexColor "35445e")))
-  (rule "\23language\3Aopen, \23theme\3Aopen"
-    (borderColor (hexColor "829fff")))
-  (rule "combo-box-item"
+  (rule (any (match (id language) (state open)) (match (id theme) (state open)))
+    (borderColor (var accent)))
+  (rule (role comboBoxItem)
     (background (hexColor "222c3c"))
     (color (hexColor "eef2fc")))
-  (rule "combo-box-item\3Ahighlighted"
+  (rule (match (role comboBoxItem) (state highlighted))
     (background (hexColor "35445e")))
-  (rule "combo-box-item\3Aselected"
-    (background (hexColor "829fff"))
+  (rule (match (role comboBoxItem) (state selected))
+    (background (var accent))
     (color (hexColor "101a30")))
-  (rule "checkbox"
+  (rule (role checkbox)
     (color (hexColor "dce5f5"))
-    (fontSize "14px")
-    (nimkitIndicatorSize "18px")
-    (nimkitIndicatorSpacing "9px"))
-  (rule "button"
+    (fontSize 14 px)
+    (nimkitIndicatorSize 18 px)
+    (nimkitIndicatorSpacing 9 px))
+  (rule (role button)
     (background (hexColor "2b374c"))
     (color (hexColor "dce5f5"))
     (borderColor (hexColor "465674"))
-    (borderWidth "1px")
-    (borderRadius "7px")
-    (padding "9px 16px")
-    (fontSize "14px")
-    (nimkitChrome "flat-transparent"))
-  (rule "button\3Ahover"
+    (borderWidth 1 px)
+    (borderRadius 7 px)
+    (padding 9 px 16 px)
+    (fontSize 14 px)
+    (nimkitChrome flatTransparent))
+  (rule (match (role button) (state hover))
     (background (hexColor "35445e")))
-  (rule "button\3Apressed"
+  (rule (match (role button) (state pressed))
     (background (hexColor "202b3c")))
-  (rule "button.primary"
-    (background (hexColor "829fff"))
+  (rule (match (role button) (class primary))
+    (background (var accent))
     (color (hexColor "101a30"))
-    (borderColor (hexColor "829fff")))
-  (rule "button.primary\3Ahover"
+    (borderColor (var accent)))
+  (rule (match (role button) (class primary) (state hover))
     (background (hexColor "9ab1ff")))
-  (rule "button.primary\3Apressed"
+  (rule (match (role button) (class primary) (state pressed))
     (background (hexColor "6583dc")))
-  (rule "progress-indicator"
+  (rule (role progressIndicator)
     (background (hexColor "303e55"))
-    (nimkitHighlightFill (hexColor "829fff"))))
+    (nimkitHighlightFill (var accent))))

@@ -92,8 +92,9 @@ switches both windows between the custom stylesheet and the built-in CSS themes.
 
 The [NIF version](examples/nif_ui_demo.nim) duplicates this demo with
 [NIF GUI markup](examples/nif_ui_demo.nif) and a
-[NIF stylesheet](examples/nif_ui_demo.css.nif). Enable its optional dependency
-and run it with:
+[NIF theme](examples/nif_ui_demo.css.nif). The theme uses tagged selectors,
+numbers with units, bare keywords, and shared token references. Enable its
+optional dependency and run it with:
 
 ```sh
 atlas install -tk --feature=nifDemo

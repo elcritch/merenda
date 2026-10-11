@@ -3,8 +3,9 @@
 ## Unreleased
 
 - Duplicate the HTML GUI demo with NIF interface and stylesheet files, preserving
-  its preferences, Preview/Reset actions, theme switching, and About window. Use
-  the optional `nifDemo` Atlas feature and a standalone nifcore fork without Nimony.
+  its preferences, Preview/Reset actions, theme switching, and About window. The
+  theme uses native selector nodes, numeric lengths, keywords, and token references.
+  Use the optional `nifDemo` Atlas feature and a standalone nifcore fork without Nimony.
 
 ## 0.27.0
 

@@ -147,6 +147,88 @@ suite "NimKit NIF markup demo":
     check css.contains("-nimkit-chrome: flat-transparent;")
     check parseCssTheme(css).diagnostics.len == 0
 
+  test "native selectors preserve groups, conjunctions, spelling, and specificity":
+    let css = nifStylesheet(
+      """(stylesheet
+      (tokens (accent (hexColor "829fff")))
+      (rule (any (id name) (id language) (id theme))
+        (background (var accent)) (borderWidth 2 px))
+      (rule (match (state open) (class primary) (id language) (role comboBox))
+        (borderWidth 3 px))
+      (rule (match (role label) (class "label-title")) (fontSize 28 px))
+      (rule (id "about-content") (padding 9 px 12 px))
+      (rule (role comboBox) (borderWidth 5 px)))"""
+    )
+    check css.contains("#name, #language, #theme {")
+    check css.contains("combo-box:open.primary#language {")
+    check css.contains("label.label-title {")
+    check css.contains("#about-content {")
+    check css.contains("background: var(--accent);")
+    let native = parseCssTheme(css)
+    let original = parseCssTheme(
+      """:root { --accent: #829fff; }
+      #name, #language, #theme { background: var(--accent); border-width: 2px; }
+      combo-box#language.primary:open { border-width: 3px; }
+      label.label-title { font-size: 28px; }
+      #about-content { padding: 9px 12px; }
+      combo-box { border-width: 5px; }"""
+    )
+    require native.diagnostics.len == 0
+    require original.diagnostics.len == 0
+    for states in [{}, {ssOpen}]:
+      for id in ["language", "other"]:
+        for classes in [@[], @["primary"]]:
+          let context = controlStyle(srComboBox, states, id = id, classes = classes)
+          check native.theme.resolveComboBoxStyle(context) ==
+            original.theme.resolveComboBoxStyle(context)
+
+  test "native numbers, px units, keywords, and token names become typed style values":
+    let css = nifStylesheet(
+      """(stylesheet
+      (tokens (focusColor (hexColor "829fff")))
+      (rule (role button)
+        (padding 9 px 12 px)
+        (borderWidth 1u px)
+        (borderRadius 2.5 px)
+        (fontSize 1E1 px)
+        (nimkitFocusRingInset -1.5 px)
+        (nimkitWidthFactor 0.75)
+        (nimkitChrome flatTransparent)
+        (boxShadow none)
+        (nimkitFocusRingColor (var focusColor))))"""
+    )
+    check css.contains("padding: 9px 12px;")
+    check css.contains("border-width: 1px;")
+    check css.contains("border-radius: 2.5px;")
+    check css.contains("font-size: 10.0px;")
+    check css.contains("-nimkit-focus-ring-inset: -1.5px;")
+    check css.contains("-nimkit-width-factor: 0.75;")
+    check css.contains("-nimkit-chrome: flat-transparent;")
+    check css.contains("box-shadow: none;")
+    check css.contains("-nimkit-focus-ring-color: var(--focus-color);")
+    check parseCssTheme(css).diagnostics.len == 0
+
+  test "native selectors and values reject ambiguous or malformed forms":
+    for selector in [
+      "(any)", "(match)", "(id)", "(id name language)", "(id 9)",
+      "(id \"name, button\")", "(unknown name)", "(match (id name) (id language))",
+      "(match (role button) (role label))",
+      "(match (any (id name) (id language)) (state open))",
+    ]:
+      checkpoint(selector)
+      expect ValueError:
+        discard nifStylesheet("(stylesheet (rule " & selector & " (padding 0)))")
+    for value in [
+      "9px", ".5 px", "1. px", "+1 px", "1e1 px", "1E px", "1E+ px", "1E999 px",
+      "0x181e29", "1_000", "-1u", "9223372036854775808", "18446744073709551616u",
+      "9 em", "px 9", "9 px px", "9 px \"12px\"", "none default", "(var)",
+      "(var accent extra)", "(var \"accent, color\")",
+    ]:
+      checkpoint(value)
+      expect ValueError:
+        discard
+          nifStylesheet("(stylesheet (rule (role button) (padding " & value & ")))")
+
   test "canonical hex escapes and NIF27 shortcuts follow nifspec":
     check nifGuiMarkup("""(nkLabel "\28\29\5B\5D\7B\7D\7E\23\27\22\5C\3A\40")""") ==
       "<nk-label>()[]{}~#'&quot;\\:@</nk-label>"
