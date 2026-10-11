@@ -31,8 +31,8 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  # Host results, read/write hooks, and stable targeted buffer deletion.
-  requires "gh:fox0430/moe#2ad904c1cc70e8aa783c2533dcb8c4230fa44a48"
+  # Matter semantic colors; use the fork until fox0430/moe#3364 is merged.
+  requires "gh:elcritch/moe#b73acdc3f6b970595bed1c4042119f69f5c92a08"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"

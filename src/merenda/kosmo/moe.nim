@@ -58,6 +58,7 @@ from moepkg/unicode_utils import byteToCharPos
 from moepkg/uri_utils import findAllUris
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
+import moepkg/visual_selection as moeVisualSelection
 import moepkg/syntax/matter_backend as moeMatter
 import moepkg/types as moeTypes
 import sigils/threads
@@ -1046,7 +1047,6 @@ proc activeBufferId(editor: KosmoEditor): Option[BufferId] =
       return some(buffer.id)
 
 proc resetBufferSelection(editor: KosmoEditor) =
-  editor.editor.state.visualSelection = default(moeTypes.VisualSelection)
   editor.editor.state.pointerSelection = default(moeTypes.PointerSelectionGesture)
   if editor.editor.state.mode in {
     moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
@@ -1408,14 +1408,11 @@ proc selectAll*(editor: KosmoEditor): bool {.discardable.} =
     moeModes.EditorMode.VisualLine,
   }:
     editor.editor.state.previousMode = currentMode
-  editor.editor.state.visualSelection = moeTypes.VisualSelection(
-    start: moeTypes.BufferPosition(line: 0, column: 0),
-    current: moeTypes.BufferPosition(line: lastLine, column: lastColumn),
-    active: true,
-    kind: moeTypes.VisualSelectionKind.vskChar,
-  )
   editor.editor.setMode(moeModes.EditorMode.Visual)
-  editor.editor.activeWindow.cursor = editor.editor.state.visualSelection.current
+  editor.editor.state.selectVisualRange(
+    moeTypes.BufferPosition(line: 0, column: 0),
+    moeTypes.BufferPosition(line: lastLine, column: lastColumn),
+  )
   editor.editor.syncActiveWindow()
   editor.editor.setActiveWindowScreenCursor(editor.editor.activeWindow)
   true
@@ -2019,7 +2016,7 @@ proc captureViewState*(editor: KosmoEditor): KosmoEditorViewState =
         moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
         moeModes.EditorMode.VisualLine,
       }:
-        editor.editor.state.visualSelection
+        window.visualSelection
       else:
         default(moeTypes.VisualSelection),
     pointerSelection: editor.editor.state.pointerSelection,
@@ -2046,16 +2043,16 @@ proc clampSelectionPosition(
 
 proc applyViewState(editor: KosmoEditor, state: KosmoEditorViewState) =
   let window = editor.editor.activeWindow()
-  editor.editor.state.visualSelection = state.visualSelection
   editor.editor.state.pointerSelection = state.pointerSelection
   if state.visualSelection.active:
     editor.editor.setMode(state.selectionMode)
     window.previousMode = state.previousMode
     let blockSelection = state.visualSelection.kind == moeTypes.vskBlock
-    editor.editor.state.visualSelection.start =
-      window.buffer.clampSelectionPosition(state.visualSelection.start, blockSelection)
-    editor.editor.state.visualSelection.current = window.buffer.clampSelectionPosition(
-      state.visualSelection.current, blockSelection
+    editor.editor.state.selectVisualRange(
+      window.buffer.clampSelectionPosition(state.visualSelection.start, blockSelection),
+      window.buffer.clampSelectionPosition(
+        state.visualSelection.current, blockSelection
+      ),
     )
   elif window.mode in {
     moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
@@ -2071,12 +2068,15 @@ proc applyViewState(editor: KosmoEditor, state: KosmoEditorViewState) =
     editor.editor.state.pointerSelection.anchorLast = window.buffer.clampSelectionPosition(
       state.pointerSelection.anchorLast, blockSelection
     )
-  let cursor = editor.editor.motionController.cursorManager.clampPosition(
-    moeTypes.CursorPosition(x: state.cursorColumn, y: state.cursorLine), window.buffer
-  )
-  window.cursor.line = cursor.y
-  window.cursor.column = cursor.x
-  window.preferredColumn = max(state.preferredColumn, 0)
+  # The visual range already restored the cursor, including end-of-line and
+  # virtual block columns that a normal-mode cursor clamp would discard.
+  if not state.visualSelection.active:
+    let cursor = editor.editor.motionController.cursorManager.clampPosition(
+      moeTypes.CursorPosition(x: state.cursorColumn, y: state.cursorLine), window.buffer
+    )
+    window.cursor.line = cursor.y
+    window.cursor.column = cursor.x
+  window.preferredColumn = state.preferredColumn
   window.viewport.topLine =
     state.viewportTopLine.clamp(0, max(window.buffer.len - 1, 0))
   window.viewport.topWrapOffset = max(state.viewportTopWrapOffset, 0)
@@ -2492,7 +2492,7 @@ proc matterHighlightingController*(editor: KosmoEditor): MatterHighlighting =
 
 proc renderSearchHighlights(editor: KosmoEditor, target: var RenderBuffer) =
   ## Project Reni results using Moe's own wrap and display-column geometry.
-  if editor.xSearchPattern.isNone or editor.editor.state.visualSelection.active or
+  if editor.xSearchPattern.isNone or editor.editor.activeWindow.visualSelection.active or
       not editor.editor.state.input.search.hlsearchTempDisabled:
     return
   let e = editor.editor

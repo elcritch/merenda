@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Use Moe's Matter semantic scope mappings to distinguish HTML/custom element
+  names, attributes, CSS selectors and common language values in existing themes.
+  Preserve preprocessor colors for C/C++ pragmas and string colors for regex
+  captures and format placeholders. Adapt Kosmo pane snapshots and Select All to
+  Moe's window-owned visual selection API, preserving the cursor and preferred
+  column across pane switches.
+
 ## 0.27.0
 
 - Add GUI resource markup with HTML5 syntax, `nk-` native elements, application

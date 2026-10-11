@@ -877,6 +877,49 @@ suite "Kosmo":
         check editor.currentSelection() == secondSelection
         check editor.selectedText() == secondSelectedText
 
+  test "pane snapshots keep reversed selections and their cursor endpoints":
+    for visualKey in ["v", "V", "C-v"]:
+      for lastMotion in ["h", "$"]:
+        checkpoint(visualKey & " then k, " & lastMotion)
+        let editor = newKosmoEditor(text = "alpha beta\nsecond line")
+        defer:
+          editor.close()
+        require editor.revealLocation(1, 5)
+        require editor.handleKey(visualKey)
+        require editor.handleKey("k")
+        require editor.handleKey(lastMotion)
+        let
+          selection = editor.currentSelection()
+          cursor = editor.bufferCursor()
+          selectedText = editor.selectedText()
+          snapshot = editor.captureViewState()
+        require selection.isSome
+        check selection.get.anchor.line > selection.get.focus.line
+        require editor.newEmptyBuffer().isSome
+        check editor.currentSelection().isNone
+        require editor.restoreViewState(snapshot)
+        check editor.currentSelection() == selection
+        check editor.bufferCursor() == cursor
+        check editor.selectedText() == selectedText
+
+  test "pane snapshots preserve the column aimed for by vertical movements":
+    for motion in ["h", "$"]:
+      checkpoint(motion)
+      let editor = newKosmoEditor(text = "abcdef\nxy\nabcdef")
+      defer:
+        editor.close()
+      require editor.revealLocation(0, 4)
+      require editor.handleKey(motion)
+      let
+        column = editor.bufferCursor().column
+        snapshot = editor.captureViewState()
+      require editor.newEmptyBuffer().isSome
+      require editor.restoreViewState(snapshot)
+      require editor.handleKey("j")
+      check editor.bufferCursor() == KosmoBufferCursor(line: 1, column: 1)
+      require editor.handleKey("j")
+      check editor.bufferCursor() == KosmoBufferCursor(line: 2, column: column)
+
   test "opening and previewing buffers clears the outgoing visual selection":
     let
       root = createTempDir("kosmo-selection-buffers-", "")
