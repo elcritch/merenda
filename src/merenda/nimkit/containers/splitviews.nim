@@ -275,7 +275,7 @@ proc insertPane*(
     insertIndex,
   )
   if pane.superview != splitView:
-    splitView.addSubview(pane)
+    splitView.insertSubview(pane, insertIndex)
   splitView.invalidateSplitViewLayout()
 
 proc removePane*(splitView: SplitView, pane: View) =
