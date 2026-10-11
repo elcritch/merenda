@@ -46,8 +46,8 @@ proc buttonCellStates(
   if not includeFocus:
     result.excl {ssFocused, ssFocusVisible}
   if not (owner of Button):
-    result.excl ssHovered
-  result.excl {ssDisabled, ssHighlighted, ssSelected, ssActive, ssPressed}
+    result.excl {ssHovered, ssActive, ssPressed}
+  result.excl {ssDisabled, ssHighlighted, ssSelected}
   if (not owner.isNil and ssDisabled in owner.widgetStateSet()) or
       not cells.isEnabled(cell):
     result.incl ssDisabled
@@ -527,12 +527,13 @@ proc pushButtonStyle(
 
   let
     progress = button.hoverProgress()
+    hoverMetrics = appearance.theme.metricsChange({ssHovered})
     baseStyle = appearance.resolveButtonStyle(
       controlStyle(
         srButton, baseStates, id = button.styleId, classes = button.styleClasses
       )
     )
-  if progress <= 0.0'f32:
+  if progress <= 0.0'f32 and not hoverMetrics:
     return baseStyle
 
   let hoverStyle = appearance.resolveButtonStyle(
@@ -540,7 +541,13 @@ proc pushButtonStyle(
       srButton, hoverStates, id = button.styleId, classes = button.styleClasses
     )
   )
-  mixButtonStyle(baseStyle, hoverStyle, progress)
+  let mixed = mixButtonStyle(baseStyle, hoverStyle, progress)
+  if hoverMetrics:
+    result = if ssHovered in states: hoverStyle else: baseStyle
+    result.box.fill = mixed.box.fill
+    result.box.borderColor = mixed.box.borderColor
+  else:
+    result = mixed
 
 proc checkmarkTextRect(rect: Rect): Rect =
   rect.offsetRect(0.0'f32, -1.0'f32).inset(insets(-1.0'f32))
@@ -771,7 +778,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
     if button.buttonType in {btCheckBox, btRadio}:
       let role = button.choiceRole()
       let selected = button.state in {bsOn, bsMixed}
-      var states: set[WidgetState] = button.widgetStateSet()
+      var states = button.buttonCell().buttonCellStates(button)
       if selected:
         states.incl ssSelected
 
@@ -845,7 +852,7 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
         title = button.title.clippedText(textRect.size.width, style.text)
       context.addText(textRect, title, style.text)
     else:
-      var states = button.widgetStateSet()
+      var states = button.buttonCell().buttonCellStates(button)
       if button.state in {bsOn, bsMixed}:
         states.incl ssSelected
       let style = button.pushButtonStyle(context.appearance, states)
@@ -913,10 +920,23 @@ protocol DefaultButtonKeyCommands of KeyViewCommandProtocol:
   method insertNewline(button: Button, args: ActionArgs) =
     button.buttonPerformClick(args, showActivationFeedback = true)
 
+protocol DefaultButtonStyleLayout of ViewLayoutProtocol:
+  method layoutStyleContext(button: Button): StyleContext =
+    let cell = button.buttonCell()
+    cell.buttonStyleContext(
+      if cell.xButtonType in {btCheckBox, btRadio}:
+        cell.choiceRole()
+      else:
+        srButton,
+      button,
+      cell.buttonCellStates(button),
+    )
+
 proc initButtonFields*(button: Button, title = "Button", frame: Rect = AutoRect) =
   initControlFields(button, frame, newButtonCell(title))
   button.buttonCell().updateButtonLayoutPriorities()
   button.acceptsFirstResponder = true
+  discard button.withProtocol(DefaultButtonStyleLayout)
   discard button.withProtocol(DefaultButtonHover)
   discard button.withProtocol(DefaultButtonDrawing)
   discard button.withProtocol(DefaultButtonEvents)

@@ -12,6 +12,47 @@ proc renderedText(node: Fig): string =
     result.add node.textLayout.displayRune(glyphIndex)
 
 suite "Kosmo quick open":
+  test "filename expressions switch from fuzzy matching and report invalid patterns":
+    let root = createTempDir("kosmo-quick-open-regex-", "")
+    for name in ["a.b", "axb", "λcat.nim", "dog.txt"]:
+      writeFile(root / name, "")
+    let
+      panel = newKosmoQuickOpenPanel(root)
+      window = newWindow("Quick open regex", frame = rect(0, 0, 640, 360))
+    defer:
+      window.close()
+      panel.workspaceFiles.close()
+      removeDir(root)
+    panel.reloadProjectFiles()
+    require panel.workspaceFiles.waitForFiles(timeoutMilliseconds = 60_000)
+    window.setContentView(panel)
+    panel.hidden = false
+    panel.layoutSubtreeIfNeeded()
+    require window.makeFirstResponder(panel.queryField)
+    require window.dispatchTextInput("a.b")
+    check panel.filteredFiles() == @["a.b"]
+    let toggle = panel.buttonWithLabel("Use Reni regular expressions")
+    require not toggle.isNil
+    toggle.checkVisibleIn(panel)
+    require window.clickAt(toggle.pointToWindow(initPoint(14, 14)))
+    check panel.regularExpression
+    check panel.filteredFiles() == @["a.b", "axb"]
+    panel.queryField.selectedRange = initTextRange(0, 3)
+    require window.dispatchTextInput(r"(?<=λ)cat\.nim$")
+    check panel.filteredFiles() == @["λcat.nim"]
+    panel.queryField.selectedRange = initTextRange(0, panel.queryField.text().runeLen)
+    require window.dispatchTextInput("[")
+    check panel.filteredFiles().len == 0
+    check panel.highlightedIndex() == -1
+    check panel.searchError().len > 0
+    panel.queryField.selectedRange = initTextRange(0, 1)
+    require window.dispatchTextInput(r"\.txt$")
+    check panel.filteredFiles() == @["dog.txt"]
+    check panel.searchError() == ""
+    require window.clickAt(toggle.pointToWindow(initPoint(14, 14)))
+    check not panel.regularExpression
+    check panel.filteredFiles().len == 0
+
   test "quick open uses the platform primary P shortcut":
     let frontend = newKosmoApplication(newApplication("Kosmo Quick Open Shortcut Test"))
     defer:

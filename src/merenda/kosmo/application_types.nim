@@ -21,6 +21,7 @@ type
   KosmoMarkdownView* = ref object of nimkit.MarkdownView
     search: KosmoViewerSearch
     pendingSearchRange: Option[nimkit.TextRange]
+    pendingFileSearchMatch: Option[nimkit.FileSearchMatch]
     editorView: WeakRef[KosmoEditorView]
 
   KosmoMarkdownPreview = object
@@ -64,6 +65,7 @@ type
     editorView: WeakRef[KosmoEditorView]
     dockController: WeakRef[KosmoDockController]
     appearanceWindow: WeakRef[nimkit.Window]
+    keyboardTabbing: bool
 
   KosmoEditorPane* = ref object of nimkit.View
     documentTabs*: nimkit.DocumentTabs
@@ -195,6 +197,7 @@ type
     xSettingsWindow: KosmoSettingsWindow
     xTerminalOptionAsMeta: bool
     xTerminalLinksEnabled: bool
+    xTerminalInputPolicy: KosmoTerminalInputPolicy
     xWindowManager: WeakRef[KosmoWindowManager]
     xWindowLifecycle: KosmoWindowLifecycle
     xCliWindowId: string

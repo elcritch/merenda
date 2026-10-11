@@ -5,6 +5,8 @@
 ## remain private to this module.
 
 import std/[algorithm, hashes, monotimes, options, os, strutils, tables, unicode]
+import ./panekeys
+export panekeys.KosmoPaneCommand
 from std/times import initDuration
 
 import matter/grammarpackages as matterPackages
@@ -56,6 +58,7 @@ from moepkg/unicode_utils import byteToCharPos
 from moepkg/uri_utils import findAllUris
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
+import moepkg/visual_selection as moeVisualSelection
 import moepkg/syntax/matter_backend as moeMatter
 import moepkg/types as moeTypes
 import sigils/threads
@@ -238,24 +241,6 @@ type
     Jobs
     Terminal
     Pane
-
-  KosmoPaneCommand* = enum
-    kpcNone
-    kpcSplitBelow
-    kpcSplitRight
-    kpcNewBelow
-    kpcFocusNext
-    kpcFocusPrevious
-    kpcFocusLeft
-    kpcFocusBelow
-    kpcFocusAbove
-    kpcFocusRight
-    kpcClose
-    kpcGrowHeight
-    kpcShrinkHeight
-    kpcShrinkWidth
-    kpcGrowWidth
-    kpcEqualize
 
   KosmoHostCommand* = object
     ## A parsed Moe command whose tab or pane placement belongs to the frontend.
@@ -691,6 +676,12 @@ proc kosmoMatterGrammarState(): tuple[
   result.grammars.add installed.grammars
   result.sources.add installed.sources
   result.fileTypes = installed.fileTypes
+  result.fileTypes.add MatterGrammarFileType(
+    identifier: matterPackages.nifGrammar.packageKey,
+    languageId: matterPackages.nifGrammar.languageId,
+    rootPath: matterPackages.nifGrammar.archiveMember,
+    extensions: @[".nif"],
+  )
 
 func title*(origin: KosmoTextMateGrammarOrigin): string =
   case origin
@@ -1056,7 +1047,6 @@ proc activeBufferId(editor: KosmoEditor): Option[BufferId] =
       return some(buffer.id)
 
 proc resetBufferSelection(editor: KosmoEditor) =
-  editor.editor.state.visualSelection = default(moeTypes.VisualSelection)
   editor.editor.state.pointerSelection = default(moeTypes.PointerSelectionGesture)
   if editor.editor.state.mode in {
     moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
@@ -1418,14 +1408,11 @@ proc selectAll*(editor: KosmoEditor): bool {.discardable.} =
     moeModes.EditorMode.VisualLine,
   }:
     editor.editor.state.previousMode = currentMode
-  editor.editor.state.visualSelection = moeTypes.VisualSelection(
-    start: moeTypes.BufferPosition(line: 0, column: 0),
-    current: moeTypes.BufferPosition(line: lastLine, column: lastColumn),
-    active: true,
-    kind: moeTypes.VisualSelectionKind.vskChar,
-  )
   editor.editor.setMode(moeModes.EditorMode.Visual)
-  editor.editor.activeWindow.cursor = editor.editor.state.visualSelection.current
+  editor.editor.state.selectVisualRange(
+    moeTypes.BufferPosition(line: 0, column: 0),
+    moeTypes.BufferPosition(line: lastLine, column: lastColumn),
+  )
   editor.editor.syncActiveWindow()
   editor.editor.setActiveWindowScreenCursor(editor.editor.activeWindow)
   true
@@ -2029,7 +2016,7 @@ proc captureViewState*(editor: KosmoEditor): KosmoEditorViewState =
         moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
         moeModes.EditorMode.VisualLine,
       }:
-        editor.editor.state.visualSelection
+        window.visualSelection
       else:
         default(moeTypes.VisualSelection),
     pointerSelection: editor.editor.state.pointerSelection,
@@ -2056,16 +2043,16 @@ proc clampSelectionPosition(
 
 proc applyViewState(editor: KosmoEditor, state: KosmoEditorViewState) =
   let window = editor.editor.activeWindow()
-  editor.editor.state.visualSelection = state.visualSelection
   editor.editor.state.pointerSelection = state.pointerSelection
   if state.visualSelection.active:
     editor.editor.setMode(state.selectionMode)
     window.previousMode = state.previousMode
     let blockSelection = state.visualSelection.kind == moeTypes.vskBlock
-    editor.editor.state.visualSelection.start =
-      window.buffer.clampSelectionPosition(state.visualSelection.start, blockSelection)
-    editor.editor.state.visualSelection.current = window.buffer.clampSelectionPosition(
-      state.visualSelection.current, blockSelection
+    editor.editor.state.selectVisualRange(
+      window.buffer.clampSelectionPosition(state.visualSelection.start, blockSelection),
+      window.buffer.clampSelectionPosition(
+        state.visualSelection.current, blockSelection
+      ),
     )
   elif window.mode in {
     moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
@@ -2081,12 +2068,15 @@ proc applyViewState(editor: KosmoEditor, state: KosmoEditorViewState) =
     editor.editor.state.pointerSelection.anchorLast = window.buffer.clampSelectionPosition(
       state.pointerSelection.anchorLast, blockSelection
     )
-  let cursor = editor.editor.motionController.cursorManager.clampPosition(
-    moeTypes.CursorPosition(x: state.cursorColumn, y: state.cursorLine), window.buffer
-  )
-  window.cursor.line = cursor.y
-  window.cursor.column = cursor.x
-  window.preferredColumn = max(state.preferredColumn, 0)
+  # The visual range already restored the cursor, including end-of-line and
+  # virtual block columns that a normal-mode cursor clamp would discard.
+  if not state.visualSelection.active:
+    let cursor = editor.editor.motionController.cursorManager.clampPosition(
+      moeTypes.CursorPosition(x: state.cursorColumn, y: state.cursorLine), window.buffer
+    )
+    window.cursor.line = cursor.y
+    window.cursor.column = cursor.x
+  window.preferredColumn = state.preferredColumn
   window.viewport.topLine =
     state.viewportTopLine.clamp(0, max(window.buffer.len - 1, 0))
   window.viewport.topWrapOffset = max(state.viewportTopWrapOffset, 0)
@@ -2252,6 +2242,46 @@ proc remapMatterFallbackSingleLine(
       event.row, editColumn, editColumn + event.colDelta - 1
     )
 
+proc remapMatterMarkdownFallback(
+    buffer: TextBuffer, event: moeBufferCore.RowColRemapEvent
+) =
+  ## Retain fenced backgrounds alongside the remapped token colours. These
+  ## states are a presentation fallback until the new Matter batches arrive.
+  let cache = buffer.incrementalHighlight
+  if buffer.language != moeHighlight.SourceLanguage.langMarkdown or cache.isNil:
+    return
+  template states(): untyped =
+    cache.lineStates.states
+
+  case event.kind
+  of moeBufferCore.rrekClear:
+    buffer.incrementalHighlight = nil
+  of moeBufferCore.rrekSingleLine:
+    cache.parsedUpTo = min(cache.parsedUpTo, event.row - 1)
+  of moeBufferCore.rrekMultiLine:
+    let
+      delta = event.lastAffectedRowAfter - event.lastAffectedRowBefore
+      row = event.firstAffectedRow + ord(event.preservesFirstRow)
+      oldLength = states().len
+    cache.parsedUpTo = min(cache.parsedUpTo, event.firstAffectedRow - 1)
+    if row < 0 or row > oldLength:
+      return
+    if delta > 0:
+      var insertedState = buffer.newBufferTokenizerState()
+      if row > 0:
+        insertedState.lang.markdown.inCodeBlock =
+          states()[row - 1].lang.markdown.inCodeBlock
+      states().setLen(oldLength + delta)
+      for index in countdown(oldLength - 1, row):
+        states()[index + delta] = move states()[index]
+      for index in row ..< row + delta:
+        states()[index] = insertedState
+    elif delta < 0:
+      let removed = min(-delta, oldLength - row)
+      for index in row ..< oldLength - removed:
+        states()[index] = move states()[index + removed]
+      states().setLen(oldLength - removed)
+
 proc remapMatterSyntaxFallback(
     state: MatterSyntaxFallbackState,
     buffer: TextBuffer,
@@ -2261,6 +2291,7 @@ proc remapMatterSyntaxFallback(
   if state.isNil or not state.highlightVersions.hasKey(buffer.id) or
       buffer.highlight.isNil:
     return
+  buffer.remapMatterMarkdownFallback(event)
   case event.kind
   of moeBufferCore.rrekClear:
     state.highlightVersions.del(buffer.id)
@@ -2371,7 +2402,9 @@ proc applyMatterHighlightResult(
 
   if current.highlight.isNil:
     current.highlight = moeHighlight.Highlight(colorSegments: @[])
-  if not editor.matterSyntaxFallback.highlightVersions.hasKey(current.id):
+  let retainingProjection =
+    editor.matterSyntaxFallback.highlightVersions.hasKey(current.id)
+  if not retainingProjection:
     # Built-in segments may cross row boundaries. Start an external projection
     # with a plain suffix; subsequent versions retain their remapped colours.
     current.highlight.colorSegments.setLen(0)
@@ -2389,14 +2422,21 @@ proc applyMatterHighlightResult(
   editor.installMatterSyntaxFallbackRemapper(current)
   editor.matterSyntaxFallback.highlightVersions[current.id] = completed.contentVersion
   if current.language == moeHighlight.SourceLanguage.langMarkdown:
-    if completed.firstRow == 0 or current.incrementalHighlight.isNil:
+    if not retainingProjection or current.incrementalHighlight.isNil:
       current.incrementalHighlight = moeHighlight.IncrementalHighlight(
         backend: hbBuiltin,
         initialState: current.newBufferTokenizerState(),
         parsedUpTo: -1,
       )
     let cache = current.incrementalHighlight
-    cache.lineStates.states.setLen(completed.endRow)
+    # An edited snapshot replaces its prefix in batches. Keep the remapped
+    # suffix visible instead of dropping all later fenced backgrounds.
+    cache.lineStates.states.setLen(
+      if completed.finished:
+        completed.endRow
+      else:
+        max(cache.lineStates.states.len, completed.endRow)
+    )
     for index, inCodeBlock in completed.markdownCodeBlockStates:
       let row = completed.firstRow + index
       cache.lineStates.states[row].backend = hbBuiltin
@@ -2452,7 +2492,7 @@ proc matterHighlightingController*(editor: KosmoEditor): MatterHighlighting =
 
 proc renderSearchHighlights(editor: KosmoEditor, target: var RenderBuffer) =
   ## Project Reni results using Moe's own wrap and display-column geometry.
-  if editor.xSearchPattern.isNone or editor.editor.state.visualSelection.active or
+  if editor.xSearchPattern.isNone or editor.editor.activeWindow.visualSelection.active or
       not editor.editor.state.input.search.hlsearchTempDisabled:
     return
   let e = editor.editor
@@ -2552,8 +2592,10 @@ proc scheduleMatterHighlighting(editor: KosmoEditor) =
       editor.matterLineStateVersions[buffer.id] != buffer.contentVersion or
       buffer.highlightNeedsUpdate
     ):
-      buffer.incrementalHighlight = nil
-      editor.matterLineStateVersions.del(buffer.id)
+      if buffer.language != moeHighlight.SourceLanguage.langMarkdown or
+          not editor.matterSyntaxFallback.highlightVersions.hasKey(buffer.id):
+        buffer.incrementalHighlight = nil
+        editor.matterLineStateVersions.del(buffer.id)
     if not editor.matterBufferCandidate(buffer):
       editor.matterHighlighting.cancelMatterHighlight(int(buffer.id))
       editor.matterRequests.del(buffer.id)

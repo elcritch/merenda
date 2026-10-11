@@ -102,11 +102,7 @@ jobs:
         atlas -tu --features:kosmo install
 
     - name: Clean generated examples
-      run: |
-        find examples -maxdepth 1 -type f \
-          ! -name '*.nim' \
-          ! -name '*.nims' \
-          -delete
+      run: bash .github/scripts/clean_generated_examples.sh
 
     - name: Record macOS test crash-report boundary
       if: runner.os == 'macOS'
@@ -137,7 +133,8 @@ jobs:
           $ATLAS_TEST_NIM_ARGS
 
     - name: Run Kosmo tests
-      timeout-minutes: 10
+      # Allow time for the full GUI suite in the unoptimized Linux build.
+      timeout-minutes: 15
       run: |
         testExecutable=./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo
         if [[ "$RUNNER_OS" == "Windows" ]]; then
@@ -340,11 +337,7 @@ jobs:
         atlas -t --update install
 
     - name: Clean generated examples
-      run: |
-        find examples -maxdepth 1 -type f \
-          ! -name '*.nim' \
-          ! -name '*.nims' \
-          -delete
+      run: bash .github/scripts/clean_generated_examples.sh
 
     - name: Compile Examples
       run: |

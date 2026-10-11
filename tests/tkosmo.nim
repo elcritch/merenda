@@ -28,9 +28,11 @@ import kosmo/settings_layout
 import kosmo/shortcutinput
 import kosmo/shortcutprofiles
 import kosmo/splits
+import kosmo/tabnavigation
 import kosmo/tabs
 import kosmo/terminalclipboard
 import kosmo/terminalerrors
+import kosmo/terminalinput
 import kosmo/terminalsearch
 import kosmo/viewersearch
 import kosmo/vscodegrammars

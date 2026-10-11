@@ -481,6 +481,60 @@ suite "Kosmo file tree interactions":
     check nestedUnderOuter
     check fileUnderOuter
 
+  test "file filter expressions retain ancestors, display scopes, and recover from errors":
+    let root = createTempDir("kosmo-file-filter-regex-", "")
+    createDir(root / "src")
+    for name in ["a.b", "axb", "λcat.nim"]:
+      writeFile(root / "src" / name, "")
+    let
+      tree = newKosmoFileTree(root)
+      panel = newKosmoFileBrowserPanel(tree)
+      window = newWindow("File filter regex", frame = rect(0, 0, 320, 360))
+    defer:
+      window.close()
+      tree.workspaceFiles.close()
+      removeDir(root)
+    require tree.workspaceFiles.waitForFiles(timeoutMilliseconds = 60_000)
+    window.setContentView(panel)
+    panel.layoutSubtreeIfNeeded()
+    require panel.showFilter()
+    require window.dispatchTextInput("a.b")
+    check tree.rowForItem(root / "src" / "a.b") >= 0
+    check tree.rowForItem(root / "src" / "axb") < 0
+    let toggle = panel.buttonWithLabel("Use Reni regular expressions")
+    require not toggle.isNil
+    toggle.checkVisibleIn(panel)
+    require window.clickAt(toggle.pointToWindow(initPoint(13, 13)))
+    check tree.regularExpression
+    check tree.rowForItem(root / "src" / "axb") >= 0
+    panel.filterField.selectedRange = initTextRange(0, 3)
+    require window.dispatchTextInput(r"(?<=λ)cat\.nim$")
+    check tree.rowForItem(root / "src") >= 0
+    check tree.rowForItem(root / "src" / "λcat.nim") >= 0
+    check tree.rowForItem(root / "src" / "a.b") < 0
+    panel.filterField.selectedRange = initTextRange(0, panel.filterField.text().runeLen)
+    require window.dispatchTextInput("[")
+    check tree.searchError().len > 0
+    check tree.rowForItem(root / "src" / "λcat.nim") < 0
+    panel.filterField.selectedRange = initTextRange(0, 1)
+    require window.dispatchTextInput(r"\.nim$")
+    check tree.searchError() == ""
+    check tree.rowForItem(root / "src" / "λcat.nim") >= 0
+    tree.applyGitStatus(
+      GitStatusSnapshot(
+        rootPath: root,
+        isRepository: true,
+        entries:
+          @[GitStatusEntry(path: root / "src" / "deleted.nim", state: gfsDeleted)],
+      )
+    )
+    tree.displayMode = FileTreeDisplayMode.SourceControlChanges
+    check tree.rowForItem(root / "src" / "deleted.nim") >= 0
+    check tree.rowForItem(root / "src" / "λcat.nim") < 0
+    panel.dismissFilter()
+    check toggle.hidden
+    check tree.searchError() == ""
+
   test "live file filtering is case insensitive and restores expansion state":
     let
       root = createTempDir("merenda-kosmo-tree-filter-", "")

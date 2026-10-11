@@ -6,6 +6,7 @@ import crunchy/[common, sha256]
 import matter/rawgrammar
 import sigils/core
 import ../nimkit as nimkit
+import ../nimkit/foundation/textsearch
 
 const
   KosmoVscodeGrammarDirectoryName* = "grammars"
@@ -52,6 +53,7 @@ type
     allCandidates: seq[VscodeGrammarCandidate]
     candidates: seq[VscodeGrammarCandidate]
     query: string
+    pattern, compactPattern: Option[TextSearchPattern]
     status: string
     catalogLoading: bool
     catalogReady: bool
@@ -242,14 +244,11 @@ proc normalizedSearchText(value: string): string =
     if character.isAlphaNumeric and ord(character) < 128:
       result.add character
 
-proc matchesVscodeGrammarQuery*(
-    candidate: VscodeGrammarCandidate, query: string
+proc matchesVscodeGrammarQuery(
+    candidate: VscodeGrammarCandidate,
+    pattern: TextSearchPattern,
+    compactPattern: Option[TextSearchPattern],
 ): bool =
-  let
-    rawQuery = query.strip().toLowerAscii()
-    compactQuery = rawQuery.normalizedSearchText()
-  if compactQuery.len == 0:
-    return false
   var fields =
     @[
       candidate.name, candidate.extensionFolder, candidate.languageId,
@@ -258,9 +257,36 @@ proc matchesVscodeGrammarQuery*(
   fields.add candidate.extensions
   fields.add candidate.fileNames
   for field in fields:
-    let normalized = field.toLowerAscii()
-    if rawQuery in normalized or compactQuery in normalized.normalizedSearchText():
+    if pattern.contains(field) or (
+      compactPattern.isSome and compactPattern.get.contains(
+        field.normalizedSearchText()
+      )
+    ):
       return true
+
+proc matchesVscodeGrammarQuery*(
+    candidate: VscodeGrammarCandidate, query: string, regularExpression = false
+): bool =
+  ## Match metadata with Reni; literal queries also ignore punctuation as before.
+  let source =
+    if regularExpression:
+      query
+    else:
+      query.strip()
+  if source.len == 0:
+    return
+  let compactQuery = source.normalizedSearchText()
+  if not regularExpression and compactQuery.len == 0:
+    return
+  let compactPattern =
+    if regularExpression:
+      none(TextSearchPattern)
+    else:
+      some(initTextSearchPattern(compactQuery, caseSensitive = false))
+  candidate.matchesVscodeGrammarQuery(
+    initTextSearchPattern(source, regularExpression, caseSensitive = false),
+    compactPattern,
+  )
 
 proc candidateDirectoryName(candidate: VscodeGrammarCandidate): string =
   var stem: string
@@ -483,9 +509,18 @@ proc finishCatalogSearch(catalog: KosmoVscodeGrammarCatalog) =
   catalog.catalogReady = true
   catalog.tree = default(VscodeGrammarTree)
   catalog.candidates.setLen(0)
-  for candidate in catalog.allCandidates:
-    if candidate.matchesVscodeGrammarQuery(catalog.query):
-      catalog.candidates.add candidate
+  if catalog.pattern.isSome:
+    try:
+      for candidate in catalog.allCandidates:
+        if candidate.matchesVscodeGrammarQuery(
+          catalog.pattern.get, catalog.compactPattern
+        ):
+          catalog.candidates.add candidate
+    except TextSearchError as error:
+      catalog.candidates.setLen(0)
+      catalog.status = "Search error: " & error.msg
+      emit catalog.vscodeGrammarCatalogDidUpdate()
+      return
   catalog.candidates.sort do(left, right: VscodeGrammarCandidate) -> int:
     result = cmpIgnoreCase(left.name, right.name)
     if result == 0:
@@ -643,15 +678,38 @@ proc ensureLoader(catalog: KosmoVscodeGrammarCatalog) =
     nimkit.urlAssetDidFinish, catalog, KosmoVscodeGrammarCatalog.receiveUrlAsset
   )
 
-proc search*(catalog: KosmoVscodeGrammarCatalog, query: string) =
+proc search*(
+    catalog: KosmoVscodeGrammarCatalog, query: string, regularExpression = false
+) =
   ## Search the built-in VS Code repository's language grammars.
   if catalog.isNil or catalog.closed:
     return
-  catalog.query = query.strip()
+  catalog.query =
+    if regularExpression:
+      query
+    else:
+      query.strip()
   catalog.candidates.setLen(0)
-  if catalog.query.normalizedSearchText().len < 2:
+  catalog.pattern = none(TextSearchPattern)
+  catalog.compactPattern = none(TextSearchPattern)
+  if catalog.query.len == 0 or
+      (not regularExpression and catalog.query.normalizedSearchText().len < 2):
     catalog.status =
       "Enter at least two characters to search built-in VS Code languages."
+    emit catalog.vscodeGrammarCatalogDidUpdate()
+    return
+  try:
+    catalog.pattern = some(
+      initTextSearchPattern(catalog.query, regularExpression, caseSensitive = false)
+    )
+    if not regularExpression:
+      catalog.compactPattern = some(
+        initTextSearchPattern(
+          catalog.query.normalizedSearchText(), caseSensitive = false
+        )
+      )
+  except TextSearchError as error:
+    catalog.status = "Search error: " & error.msg
     emit catalog.vscodeGrammarCatalogDidUpdate()
     return
   if catalog.catalogReady:

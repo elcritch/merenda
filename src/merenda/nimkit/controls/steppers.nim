@@ -517,6 +517,10 @@ protocol DefaultStepperAccessibility of AccessibilityProtocol:
     else:
       false
 
+protocol DefaultStepperStyleLayout of ViewLayoutProtocol:
+  method layoutStyleContext(stepper: Stepper): StyleContext =
+    stepper.stepperStyleContext(stepper.widgetStateSet())
+
 proc initStepperFields*(
     stepper: Stepper,
     minValue = 0.0'f32,
@@ -536,6 +540,7 @@ proc initStepperFields*(
   stepper.acceptsFirstResponder = true
   stepper.setHuggingPriority(LayoutPriorityRequired, laHorizontal)
   stepper.setCompressionPriority(LayoutPriorityHigh, laHorizontal)
+  discard stepper.withProtocol(DefaultStepperStyleLayout)
   discard stepper.withProtocol(DefaultStepperActivationFeedback)
   discard stepper.withProtocol(DefaultStepperDrawing)
   discard stepper.withProtocol(DefaultStepperEvents)

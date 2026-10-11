@@ -1,4 +1,4 @@
-import std/[options, tables]
+import std/[math, options, tables]
 
 from figdraw import
   Fig, FigIdx, RenderList, Renders, TransformStyle, ZLevel, addChild, addRoot,
@@ -37,15 +37,41 @@ proc renderFrameRect(view: View, parentOrigin: types.Point): types.Rect =
     origin = parentOrigin.offsetPoint(frame.origin)
   rect(origin, bounds.size)
 
+func scaledAlpha(value: ColorRGBA, alpha: float32): ColorRGBA =
+  result = value
+  result.a = uint8(round(value.a.float32 * alpha))
+
+func scaledAlpha(value: Fill, alpha: float32): Fill =
+  result = value
+  case value.kind
+  of flColor:
+    result.color = value.color.scaledAlpha(alpha)
+  of flLinear2:
+    result.lin2.start = value.lin2.start.scaledAlpha(alpha)
+    result.lin2.stop = value.lin2.stop.scaledAlpha(alpha)
+  of flLinear3:
+    result.lin3.start = value.lin3.start.scaledAlpha(alpha)
+    result.lin3.mid = value.lin3.mid.scaledAlpha(alpha)
+    result.lin3.stop = value.lin3.stop.scaledAlpha(alpha)
+
 proc viewBackgroundFill(view: View, appearance: Appearance, isRoot: bool): Fill =
-  var color = view.backgroundColor
-  if view.usesThemedRootBackground(isRoot):
+  let color = view.backgroundColor
+  if view.trySendLocal(drawsStyledBackground()).get(false):
+    return fill(color).scaledAlpha(view.alphaValue)
+  var fallback = fill(color)
+  let themedRoot = view.usesThemedRootBackground(isRoot)
+  if themedRoot:
     let context = view.viewBackgroundStyleContext()
     let fallbackColor = appearance.resolveColor(
       context, StyleBackgroundColor, color(0.94, 0.95, 0.97, 1.0)
     )
-    return appearance.resolveFill(context, fill(fallbackColor), StyleBackgroundFill)
-  fill(color(color.r, color.g, color.b, color.a * view.alphaValue))
+    fallback = appearance.resolveFill(context, fill(fallbackColor), StyleBackgroundFill)
+  let themed = appearance.resolveFill(view.viewBackgroundStyleContext(), fallback)
+  if themedRoot:
+    return themed
+  themed.scaledAlpha(view.alphaValue)
+
+const MaximumRootPinstripeBands = 4096
 
 proc addRootBackgroundPinstripes(
     context: DrawContext,
@@ -77,11 +103,16 @@ proc addRootBackgroundPinstripes(
     return
 
   let
-    period = max(rawPeriod, stripeHeight * 2.0'f32)
+    period = max(
+      max(rawPeriod, stripeHeight * 2.0'f32),
+      max(1.0'f32, frame.size.height / MaximumRootPinstripeBands.float32),
+    )
     bottom = frame.origin.y + frame.size.height
 
   var y = frame.origin.y
-  while y < bottom:
+  for band in 0 ..< MaximumRootPinstripeBands:
+    if y >= bottom:
+      break
     let highlightHeight = min(stripeHeight, bottom - y)
     if highlightColor.a > 0.0'f32 and highlightHeight > 0.0'f32:
       discard context.addRenderRectangle(
@@ -101,7 +132,10 @@ proc addRootBackgroundPinstripes(
         fill(stripeColor),
       )
 
-    y += period
+    let nextY = y + period
+    if nextY <= y:
+      break
+    y = nextY
 
 type DisplayRevisionSnapshot = object
   view: View

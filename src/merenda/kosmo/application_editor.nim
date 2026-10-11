@@ -30,10 +30,10 @@ proc `sidebarFocused=`(controller: KosmoDockController, focused: bool) =
   if controller.isNil or controller.xSidebarFocused == focused:
     return
   controller.xSidebarFocused = focused
+  if not focused:
+    return
   for group in controller.groups:
-    group.updateActivePaneIndicator(
-      group == controller.activeGroup and not controller.xSidebarFocused
-    )
+    group.updateActivePaneIndicator(false)
 
 proc showFileExplorer*(frontend: KosmoApplication): bool {.discardable.}
 proc revealActiveFile*(frontend: KosmoApplication): bool {.discardable.}
@@ -55,6 +55,11 @@ proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
 proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
+proc spatialNeighborGroup(
+  controller: KosmoDockController, source: KosmoEditorGroup, direction: KosmoPaneCommand
+): KosmoEditorGroup
+
+proc focusPaneTabStrip(controller: KosmoDockController, group: KosmoEditorGroup): bool
 proc openHelpDocument(view: KosmoEditorView): bool
 proc openConfigDocument(view: KosmoEditorView): bool
 proc openRecoveryDocument(view: KosmoEditorView): bool
@@ -544,6 +549,7 @@ proc isActiveEditorGroup(view: KosmoEditorView): bool =
 
 proc refresh*(view: KosmoEditorView)
 proc syncPopupMenu(pane: KosmoEditorPane)
+proc revealFileSearchMatch(view: KosmoMarkdownView, match: nimkit.FileSearchMatch)
 
 proc shouldDeferInactiveRefresh(view: KosmoEditorView): bool =
   # Forced Input mode has no post-Insert state in which to drain deferred work;
@@ -755,6 +761,21 @@ protocol KosmoEditorAppearanceObserver of nimkit.WindowAppearanceEvents:
       handler.editorView[].applyKosmoEditorStyle(appearance)
       handler.editorView[].refresh()
 
+proc containsPaneResponder(group: KosmoEditorGroup, candidate: nimkit.Responder): bool =
+  var responder = candidate
+  while not responder.isNil:
+    if responder == nimkit.Responder(group.pane):
+      return true
+    responder = responder.nextResponder()
+
+proc hasPaneFocus(group: KosmoEditorGroup): bool =
+  if group.isNil or group.window.isNil:
+    return
+  let window = group.window
+  if group.containsPaneResponder(window.firstResponder()):
+    return true
+  group.containsPaneResponder(window.fieldEditorClient())
+
 protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
   proc didResignKeyWindow(handler: KosmoEditorTabsHandler) {.slot.} =
     if not handler.editorView.isNil:
@@ -773,12 +794,11 @@ protocol KosmoEditorFocusObserver of nimkit.WindowFocusEvents:
     if view.dockGroup.isNil:
       return
     let group = view.dockGroup[]
-    var responder = group.window.firstResponder()
-    while not responder.isNil:
-      if responder == nimkit.Responder(group.pane):
-        controller.activateGroup(view)
-        return
-      responder = responder.nextResponder()
+    if not group.hasPaneFocus():
+      group.updateActivePaneIndicator(false)
+      return
+    controller.activateGroup(view)
+    group.updateActivePaneIndicator(true)
 
 proc stopObservingWindow(handler: KosmoEditorTabsHandler) =
   if handler.isNil or handler.appearanceWindow.isNil:
@@ -932,10 +952,7 @@ proc toggleMarkdownMode(view: KosmoEditorView, id: KosmoBufferId): bool =
     return true
 
 proc previewScope(view: KosmoEditorView): string =
-  if not view.dockGroup.isNil:
-    view.dockGroup[].identifier
-  else:
-    ""
+  if not view.dockGroup.isNil: view.dockGroup[].identifier else: ""
 
 proc mayReusePristineBuffer(view: KosmoEditorView): bool =
   if not view.usesBufferSubset:
@@ -1006,10 +1023,16 @@ proc openSearchResult(
     discard view.editor.revealLocation(
       max(match.line - 1, 0), match.bufferColumn(), centered = true
     )
-    if redirected and not view.tabsDelegate.dockController.isNil:
-      view.tabsDelegate.dockController[].activeGroup.editorView.refresh()
-    else:
-      view.refresh()
+    let target =
+      if redirected and not view.tabsDelegate.dockController.isNil:
+        view.tabsDelegate.dockController[].activeGroup.editorView
+      else:
+        view
+    target.refresh()
+    if not target.dockGroup.isNil:
+      let pane = target.dockGroup[].pane
+      if pane.contentView == pane.markdownView and not pane.markdownView.isNil:
+        pane.markdownView.revealFileSearchMatch(match)
     return true
   if not view.statusLabel.isNil:
     view.statusLabel.text = outcome.message
@@ -1105,10 +1128,9 @@ proc hasUnsavedData(controller: KosmoDockController, window: nimkit.Window): boo
     if group.window != window:
       continue
     for tab in tabs:
-      if tab.modified and
-          (
-            not group.editorView.usesBufferSubset or tab.id in group.editorView.bufferIds
-          ):
+      if tab.modified and (
+        not group.editorView.usesBufferSubset or tab.id in group.editorView.bufferIds
+      ):
         return true
     for document in group.documents:
       if document.modified:
@@ -1221,54 +1243,9 @@ proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
   view.refresh()
   true
 
-proc paneCommand(event: nimkit.KeyEvent): KosmoPaneCommand =
-  let modifiers = event.modifiers
-  if modifiers - {nimkit.kmControl, nimkit.kmShift} != {}:
-    return
-  if event.key >= nimkit.keyA and event.key <= nimkit.keyZ:
-    let letter = char(ord('a') + ord(event.key) - ord(nimkit.keyA))
-    case letter
-    of 's':
-      if nimkit.kmShift notin modifiers:
-        return kpcSplitBelow
-    of 'v':
-      if nimkit.kmShift notin modifiers:
-        return kpcSplitRight
-    of 'n':
-      if nimkit.kmShift notin modifiers:
-        return kpcNewBelow
-    of 'w':
-      if nimkit.kmShift notin modifiers:
-        return kpcFocusNext
-    of 'h':
-      if nimkit.kmShift notin modifiers:
-        return kpcFocusLeft
-    of 'j':
-      if nimkit.kmShift notin modifiers:
-        return kpcFocusBelow
-    of 'k':
-      if nimkit.kmShift notin modifiers:
-        return kpcFocusAbove
-    of 'l':
-      if nimkit.kmShift notin modifiers:
-        return kpcFocusRight
-    of 'c':
-      if nimkit.kmShift notin modifiers:
-        return kpcClose
-    else:
-      discard
-    return
-  case event.key
-  of nimkit.keyEqual:
-    if nimkit.kmShift in modifiers or event.text == "+": kpcGrowHeight else: kpcEqualize
-  of nimkit.keyMinus:
-    kpcShrinkHeight
-  of nimkit.keyComma:
-    if nimkit.kmShift in modifiers or event.text == "<": kpcShrinkWidth else: kpcNone
-  of nimkit.keyDot:
-    if nimkit.kmShift in modifiers or event.text == ">": kpcGrowWidth else: kpcNone
-  else:
-    kpcNone
+proc suppressPaneShortcutText(window: nimkit.Window, event: nimkit.KeyEvent) =
+  if not window.isNil and event.awaitsCommittedText():
+    window.suppressShortcutText(event.text)
 
 proc handlePendingPaneKey(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   if not view.pendingPanePrefix:
@@ -1284,6 +1261,7 @@ proc handlePendingPaneKey(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   let command = event.paneCommand()
   if command != kpcNone and not view.tabsDelegate.dockController.isNil and
       not view.dockGroup.isNil:
+    view.dockGroup[].window.suppressPaneShortcutText(event)
     discard
       view.tabsDelegate.dockController[].performPaneCommand(view.dockGroup[], command)
     return true
@@ -1306,6 +1284,7 @@ proc handlePaneKey(editorView: KosmoEditorView, event: nimkit.KeyEvent): bool =
       return true
     let command = event.paneCommand()
     if command != kpcNone:
+      editorView.dockGroup[].window.suppressPaneShortcutText(event)
       discard editorView.tabsDelegate.dockController[].performPaneCommand(
         editorView.dockGroup[], command
       )
@@ -1606,6 +1585,104 @@ proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bo
     return view.sendKeyDownToMoe(event)
   false
 
+proc insideEditorPane(view: nimkit.View): bool =
+  ## True when the view is an editor pane or lives inside one.
+  var current = view
+  while not current.isNil:
+    if current of KosmoEditorPane:
+      return true
+    current = current.superview()
+  false
+
+proc keyViewOutsidePanes(tabs: nimkit.DocumentTabs, forward: bool): nimkit.View =
+  ## Next or previous key view in the window key view loop that is not inside
+  ## an editor pane, or nil when the loop only contains pane views. Walking
+  ## the loop keeps the standard traversal order while stepping over the etab
+  ## strips, editors and controls of the other panes.
+  const MaxHops = 128
+  var candidate =
+    if forward:
+      tabs.nextValidKeyView()
+    else:
+      tabs.previousValidKeyView()
+  var hops = 0
+  while not candidate.isNil and candidate.insideEditorPane() and hops < MaxHops:
+    candidate =
+      if forward:
+        candidate.nextValidKeyView()
+      else:
+        candidate.previousValidKeyView()
+    inc hops
+  if hops >= MaxHops:
+    return nil
+  candidate
+
+proc handleDocumentTabsKeyEquivalent(
+    view: KosmoEditorView, tabs: nimkit.DocumentTabs, event: nimkit.KeyEvent
+): bool =
+  ## Tab cycles the etab selection on the focused strip, Return enters the
+  ## editor, and arrows navigate the split panes by row and column; every
+  ## other key keeps the standard widget handling. At the first or last etab
+  ## Tab falls through to the window key view traversal.
+  if view.isNil or view.tabsDelegate.isNil:
+    return
+  if event.key == nimkit.keyTab and event.modifiers - {nimkit.kmShift} == {}:
+    let next =
+      if nimkit.kmShift in event.modifiers:
+        tabs.selectedIndex() - 1
+      else:
+        tabs.selectedIndex() + 1
+    if next < 0 or next >= tabs.len():
+      return
+    view.tabsDelegate.keyboardTabbing = true
+    tabs.selectDocumentTabAtIndex(next)
+    view.tabsDelegate.keyboardTabbing = false
+    return true
+  if event.key == nimkit.keyEnter and event.modifiers == {} and not view.dockGroup.isNil:
+    let owner = view.window()
+    if owner of nimkit.Window:
+      discard nimkit.Window(owner).makeFirstResponder(
+          nimkit.Responder(view.dockGroup[].pane.contentView)
+        )
+      return true
+  case event.key
+  of nimkit.keyArrowLeft, nimkit.keyArrowRight, nimkit.keyArrowUp, nimkit.keyArrowDown:
+    if event.modifiers != {} or view.tabsDelegate.dockController.isNil or
+        view.dockGroup.isNil:
+      return
+    let
+      controller = view.tabsDelegate.dockController[]
+      direction =
+        case event.key
+        of nimkit.keyArrowLeft: kpcFocusLeft
+        of nimkit.keyArrowRight: kpcFocusRight
+        of nimkit.keyArrowUp: kpcFocusAbove
+        else: kpcFocusBelow
+      neighbor = controller.spatialNeighborGroup(view.dockGroup[], direction)
+    if not neighbor.isNil:
+      discard controller.focusPaneTabStrip(neighbor)
+      return true
+    # At a pane edge, Left and Right hand focus to the next or previous ui
+    # element outside the pane; Up and Down have no vertical neighbor here and
+    # keep the focus on the strip.
+    if direction notin {kpcFocusLeft, kpcFocusRight}:
+      return true
+    let owner = view.window()
+    if owner of nimkit.Window:
+      let window = nimkit.Window(owner)
+      if window.autorecalculatesKeyViewLoop():
+        window.recalculateKeyViewLoop()
+      let outside = keyViewOutsidePanes(tabs, direction == kpcFocusRight)
+      if not outside.isNil:
+        discard window.makeFirstResponder(nimkit.Responder(outside))
+      else:
+        # The key view loop holds no view outside the panes: keep the standard
+        # traversal fallback instead of leaving the focus on the strip.
+        discard window.selectKeyViewFollowingView(tabs)
+    return true
+  else:
+    discard
+
 protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(view: KosmoEditorView, args: nimkit.TryToPerformArgs): bool =
     if view.tabsDelegate.isNil or view.tabsDelegate.dockController.isNil:
@@ -1710,7 +1787,9 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
     if view.syncingTabs:
       return
     if not handler.dockController.isNil and not view.dockGroup.isNil:
-      handler.dockController[].activatePaneTab(view.dockGroup[], item.identifier())
+      handler.dockController[].activatePaneTab(
+        view.dockGroup[], item.identifier(), focus = not handler.keyboardTabbing
+      )
       return
     var id: KosmoBufferId
     if item.identifier.parseTabIdentifier(id):
@@ -1859,6 +1938,12 @@ protocol KosmoEditorViewLayout of nimkit.ViewLayoutProtocol:
     if not view.searchBar.isNil:
       view.searchBar.layoutInBounds(view.bounds())
 
+## Moe editor panes are entered with Return on an etab or with a click; they
+## stay out of the window key view loop so Tab never lands inside the editor.
+protocol KosmoEditorKeyViewParticipation of nimkit.ViewProtocol:
+  method canBecomeKeyView(view: KosmoEditorView): bool =
+    false
+
 proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result = KosmoEditorView(
     editor: editor,
@@ -1883,6 +1968,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   discard result.withProtocol(KosmoEditorEditingCommands)
   discard result.withProtocol(KosmoEditorCommandDispatch)
   discard result.withProtocol(KosmoEditorViewLayout)
+  discard result.withProtocol(KosmoEditorKeyViewParticipation)
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =
@@ -1893,6 +1979,15 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   result.tabsDelegate = KosmoEditorTabsHandler(editorView: result.unsafeWeakRef())
   discard result.tabsDelegate.withProtocol(KosmoEditorTabsDelegate)
   result.documentTabs.delegate = result.tabsDelegate
+  let tabsView = result.documentTabs
+  let tabsOwner = result.unsafeWeakRef()
+  let tabsKeyMethod: nimkit.DynamicMethod = proc(
+      self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+  ) =
+    let event = invocation.argsAs(nimkit.KeyEvent)
+    let owner: KosmoEditorView = if tabsOwner.isNil: nil else: tabsOwner[]
+    invocation.setResult(handleDocumentTabsKeyEquivalent(owner, tabsView, event))
+  discard tabsView.replaceMethod(nimkitSelectors.performKeyEquivalent(), tabsKeyMethod)
   connect(
     result.editor.matterHighlightingController(),
     matterHighlightCompleted,
@@ -2293,11 +2388,9 @@ protocol KosmoSidebarPaneLayout of nimkit.ViewLayoutProtocol:
         else:
           pane.contextPanel.preferredHeight()
     pane.splitView.setFrameFromLayout(bounds)
-    if bounds.size.height > 0 and
-        (
-          not pane.setInitialDivider or
-          abs(previousHeight - bounds.size.height) > 0.001'f32
-        ):
+    if bounds.size.height > 0 and (
+      not pane.setInitialDivider or abs(previousHeight - bounds.size.height) > 0.001'f32
+    ):
       pane.splitView.setPositionOfDivider(0, contextHeight)
       pane.setInitialDivider = true
 
@@ -2697,18 +2790,80 @@ proc searchMatchCount*(view: KosmoMarkdownView): int =
 proc showSearch*(view: KosmoMarkdownView): bool {.discardable.} =
   view.search.showSearch()
 
+proc revealPendingMarkdownSearch(view: KosmoMarkdownView) =
+  if view.pendingSearchRange.isSome:
+    # The layout completion signal invalidates the editor's measurement before
+    # its document frame grows. Update that frame before scrolling to the match.
+    view.layoutSubtreeIfNeeded()
+    if view.isMarkdownLayoutPending():
+      return
+    let range = view.pendingSearchRange.get
+    if revealTextMatch(view.textView(), view.scrollView(), range):
+      view.pendingSearchRange = none(nimkit.TextRange)
+      view.selectMarkdownRange(range)
+
+proc renderedFileSearchRange(
+    view: KosmoMarkdownView, match: nimkit.FileSearchMatch
+): Option[nimkit.TextRange] =
+  let
+    column = clamp(match.column - 1, 0, match.lineText.len)
+    stop = clamp(column + match.matchLength, column, match.lineText.len)
+    query = match.lineText[column ..< stop]
+    source = view.markdown()
+  if query.len == 0:
+    return
+  var lineStart = 0
+  for line in 1 ..< match.line:
+    discard line
+    let newline = source.find('\n', lineStart)
+    if newline < 0:
+      return
+    lineStart = newline + 1
+  let matchStop = lineStart + stop
+  if matchStop > source.len:
+    return
+  # Markdown removes delimiters and link destinations from the displayed text.
+  # Count rendered occurrences through this source match, rather than counting
+  # raw file matches or treating source columns as displayed rune offsets.
+  let
+    prefix = nimkit
+      .markdownTextStorage(
+        source[0 ..< matchStop],
+        style = view.markdownStyle(),
+        config = view.markdownConfig(),
+        syntaxHighlighter = nil,
+      )
+      .stringValue()
+    occurrence = plainSearchRanges(prefix, query).len - 1
+    ranges = plainSearchRanges(view.textView().stringValue(), query)
+  if occurrence in 0 ..< ranges.len:
+    result = some(ranges[occurrence])
+
+proc revealPendingFileSearchMatch(view: KosmoMarkdownView) =
+  if view.pendingFileSearchMatch.isNone or view.isMarkdownParsing():
+    return
+  let match = view.pendingFileSearchMatch.get
+  view.pendingFileSearchMatch = none(nimkit.FileSearchMatch)
+  view.pendingSearchRange = view.renderedFileSearchRange(match)
+  view.revealPendingMarkdownSearch()
+
+proc revealFileSearchMatch(view: KosmoMarkdownView, match: nimkit.FileSearchMatch) =
+  view.pendingSearchRange = none(nimkit.TextRange)
+  view.pendingFileSearchMatch = some(match)
+  view.revealPendingFileSearchMatch()
+
 proc markdownSearchDidParse(view: KosmoMarkdownView, workerThreadId: int) {.slot.} =
   discard workerThreadId
+  let fileMatch = view.pendingFileSearchMatch
   view.search.refreshSearch()
+  view.pendingFileSearchMatch = fileMatch
+  view.revealPendingFileSearchMatch()
 
 proc markdownSearchDidLayout(
     view: KosmoMarkdownView, snapshot: nimkit.TextLayoutSnapshot
 ) {.slot.} =
   discard snapshot
-  if view.pendingSearchRange.isSome and view.search.searchVisible():
-    if revealTextMatch(view.textView(), view.scrollView(), view.pendingSearchRange.get):
-      view.selectMarkdownRange(view.pendingSearchRange.get)
-      view.pendingSearchRange = none(nimkit.TextRange)
+  view.revealPendingMarkdownSearch()
 
 proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result = KosmoMarkdownView()
@@ -2725,14 +2880,14 @@ proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
     proc(match: KosmoViewerMatch) =
       if not weakView.isNil:
         let view = weakView[]
+        view.pendingFileSearchMatch = none(nimkit.FileSearchMatch)
         view.pendingSearchRange = some(match.range)
-        if revealTextMatch(view.textView(), view.scrollView(), match.range):
-          view.selectMarkdownRange(match.range)
-          view.pendingSearchRange = none(nimkit.TextRange)
+        view.revealPendingMarkdownSearch()
     ,
     proc() =
       if not weakView.isNil:
         weakView[].pendingSearchRange = none(nimkit.TextRange)
+        weakView[].pendingFileSearchMatch = none(nimkit.FileSearchMatch)
         weakView[].selectMarkdownRange(nimkit.initTextRange(0, 0))
     ,
   )
@@ -2997,10 +3152,7 @@ proc newKosmoPopupList(pane: KosmoEditorPane): nimkit.PopupListView =
         else:
           weakPane[].popupMenuState.get.selectedIndex,
       highlightedIndex: proc(): int =
-        if weakPane.isNil:
-          -1
-        else:
-          weakPane[].popupHighlightedIndex,
+        if weakPane.isNil: -1 else: weakPane[].popupHighlightedIndex,
       rowHeight: proc(): float32 =
         if weakPane.isNil:
           22.0'f32

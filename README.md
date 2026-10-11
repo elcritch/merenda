@@ -48,6 +48,48 @@ NIMKIT_THEME=macos nim r examples/controls_showcase.nim
 NIMKIT_THEME=aqua nim r examples/controls_showcase.nim
 ```
 
+The built-in themes are [embedded CSS stylesheets](src/merenda/nimkit/themes/stylesheets)
+with shared widget defaults. Application CSS can extend them, and typed Nim
+styling APIs remain available for programmatic overrides.
+
+Use CSS for control colors, fonts, gradients, state styles, edge pinning and
+native layout constraints. Style StackView/GridView spacing and alignment and
+control-specific metrics through `-nimkit-*` properties. The [CSS preview](examples/css_theme_demo.nim)
+lays out its toolbar, sidebar and editor from a stylesheet and reloads it when
+you click **Reload CSS**:
+
+```sh
+nim r examples/css_theme_demo.nim
+```
+
+Read the [CSS theming guide](docs/css-theming.md) for selectors, variables,
+supported properties and appearance scope.
+
+You can also [describe native GUIs in lightweight markup](docs/resources.md#gui-markup),
+using HTML5 syntax and `data-*` attributes for native widget options:
+
+```html
+<nk-main>
+  <nk-window id="window" title="Hello" data-frame="100 100 400 240">
+    <nk-stack-view id="root" data-axis="vertical" data-padding="24" data-spacing="12">
+      <nk-label data-label-style="title">Hello from Merenda</nk-label>
+      <nk-text-field id="name" placeholder="Your name"/>
+      <button id="save" data-action="saveDocument">Save</button>
+    </nk-stack-view>
+  </nk-window>
+</nk-main>
+```
+
+`loadGuiResourceBundle` reads the interface and `instantiateResources` constructs
+its native controls. One document can define independent windows. Built-in elements
+use `nk-`; application widgets can use names such as `some-app-widget`. Use IDs to
+look up controls and connect behavior in Nim.
+
+Try the [GUI resource example](examples/html_ui_demo.nim) with
+`nim ic -r examples/html_ui_demo.nim`. It includes compact preferences controls,
+Preview and Reset actions, and a separate About window. The Appearance dropdown
+switches both windows between the custom stylesheet and the built-in CSS themes.
+
 To use Merenda in your own project, add this dependency to your `.nimble` file
 and run `atlas install -tuk` from that project:
 
@@ -157,7 +199,9 @@ nim r examples/quick_start.nim
 
 NimKit's larger controls handle more of the work for you. This app opens a
 Markdown file with selectable text, links, code blocks, tables, and images.
-The view handles scrolling and layout as you resize the window.
+The view handles scrolling and layout as you resize the window. Up/Down arrows
+scroll the reader, `j`/`k` select headings and paragraphs in reading order, and
+Enter expands or collapses the selected block's section.
 
 ```nim
 import std/os
@@ -387,6 +431,29 @@ Set `backdropBlurRadius` to zero to restore the ordinary box fill.
 zero to one. This effect is rendered inside the application, independently of
 native window backdrop effects.
 
+## Reusable search controls
+
+NimKit apps can reuse the same controls through `SearchBar` or attach a
+`TextSearchController` to any host view:
+
+```nim
+let preview = newTextView("λcat and dog")
+let search = newTextSearchController(
+  preview, "document", textViewSearchAdapter(preview)
+)
+# Attach preview to a window before opening the controls.
+discard search.showSearch()
+```
+
+Keep the controller alive while its controls are attached, and call `search.close()`
+before releasing it if the host remains alive. Custom `TextSearchAdapter` callbacks
+provide text snapshots, reveal matches, and clear selections for terminals,
+multiple documents, or other data sources. An optional `replace` callback adds
+collapsed replacement controls and receives a validated Reni pattern and capture
+template. The adapter owns edits, undo, and checking that source content is current.
+Hosts can route find shortcuts through `search.handleSearchKey(event)` and call
+`search.refreshSearch()` when their source changes.
+
 ## Kosmo
 
 Kosmo is a code editor built with Merenda and Moe's Vim-style editing engine.
@@ -401,10 +468,26 @@ the full window width; click either icon to reopen it at its previous width.
 Press `Cmd-F` on macOS or `Ctrl-F` elsewhere to search an editor, Markdown
 preview, Git diff, or GitHub tab. Use Enter / the arrow buttons to move through
 matches, `Cmd/Ctrl-G` and `Shift-Cmd/Ctrl-G` for next and previous, and Escape
-to close. Editor matches scroll to the center of the pane. Markdown, GitHub, and diff
-viewers use case-insensitive literal search; diff search includes collapsed
-sections and loads ordinary patches within the viewer's size limits. Open
+to close. Editor matches scroll to the center of the pane. Enable **`.*`** in any
+content search, including terminal tabs, to use Reni regular expressions. Searches
+default to literal text; Markdown, GitHub, diff, and terminal matches ignore case.
+
+Use Up/Down arrows to scroll Markdown, GitHub and Git diff viewers. Read-only
+NimKit text views share this scrolling behavior; editable text keeps its cursor
+movement. Markdown readers also support `j`/`k` to select visible headings and
+paragraphs and Enter to expand or collapse the selected section.
+
+Diff search includes collapsed sections and loads ordinary patches within the
+viewer's size limits. Open
 oversized patches explicitly to include their contents.
+
+The Files filter, Quick Open, and VS Code grammar search also offer **`.*`** for
+Reni expressions. Quick Open keeps fuzzy filename ranking when this is off.
+Invalid expressions show an error and clear stale results. Viewer expressions
+can span lines; terminal expressions can span soft-wrapped output and retain
+the original cell positions, including wide Unicode characters.
+Terminal find centers older matches where possible and stays at the bottom for
+matches near the end of the history.
 
 Editor search and the Find sidebar open with replacement controls collapsed.
 Click the chevron beside the search field to expand or collapse them without
@@ -520,6 +603,17 @@ path is shared across platforms; native PTY startup currently requires POSIX.
 For native timing measurements with `cmatrix`, `ps`, or a 10,000-line burst, see
 [terminal latency diagnostics](docs/terminal-latency.md).
 
+Terminals default to **Hybrid** input: `Ctrl-W v` splits right, and
+`Ctrl-W h/j/k/l` or `Ctrl-W` followed by an arrow navigates panes. On Linux and
+Windows, `Ctrl-C` copies the terminal selection and `Ctrl-V` pastes. Prefix a
+shortcut with `Ctrl-\` to send it to the shell: `Ctrl-\ Ctrl-C` interrupts,
+and `Ctrl-\ Ctrl-W v` sends the whole pane chord. **Kosmo Settings → Terminal →
+Terminal input** switches between Hybrid and **Raw shortcuts**, which sends
+Control keys directly. The choice applies to existing terminals and saves for
+future launches as `"terminalInput": "hybrid"` or `"raw"` in
+`~/.config/kosmo/config.json`. See the [shortcut guide](src/merenda/kosmo/docs/shortcuts.md#terminal-input-policies)
+for prefix cancellation and platform details.
+
 Kosmo Settings → Moe Themes includes Catppuccin Latte, Catppuccin Mocha,
 Kanagawa Wave, One Dark, and Tokyo Night Moon. These themes are embedded in
 the executable and work from any launch directory. Add your own TOML themes
@@ -594,6 +688,7 @@ LSP; Nimdex's separate `--listen` option serves its CLI query protocol.
 Syntax colors arrive progressively as background workers finish small batches.
 Markdown previews display their content before fenced-code coloring finishes;
 selection, code-block scroll positions, and text layout survive those color updates.
+Kosmo includes NIF syntax highlighting by default for `.nif` files.
 
 To add language highlighting, open **Kosmo Settings → TextMate Grammars** and
 search the built-in language grammars in the open-source `microsoft/vscode`

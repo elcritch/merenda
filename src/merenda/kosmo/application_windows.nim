@@ -141,6 +141,38 @@ func terminalOptionAsMeta*(frontend: KosmoApplication): bool =
   ## Return whether Kosmo terminals use Option/Alt as the Meta modifier.
   not frontend.isNil and frontend.xTerminalOptionAsMeta
 
+func terminalInputPolicy*(frontend: KosmoApplication): KosmoTerminalInputPolicy =
+  ## Return the terminal Control shortcut policy, independent of editor input.
+  if not frontend.isNil:
+    result = frontend.xTerminalInputPolicy
+
+proc applyTerminalInputPolicy(
+    frontend: KosmoApplication, policy: KosmoTerminalInputPolicy
+) =
+  frontend.xTerminalInputPolicy = policy
+  if not frontend.xSettingsWindow.isNil:
+    frontend.xSettingsWindow.terminalInputPolicy = policy
+  for group in frontend.dockController.groups:
+    for document in group.documents:
+      if document.contentView of KosmoTerminalView:
+        KosmoTerminalView(document.contentView).terminalInputPolicy = policy
+
+proc `terminalInputPolicy=`*(
+    frontend: KosmoApplication, policy: KosmoTerminalInputPolicy
+) =
+  ## Apply and persist the choice for all current and future Kosmo terminals.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  if frontend.xWindowManager.isNil:
+    frontend.applyTerminalInputPolicy(policy)
+  else:
+    let manager = frontend.xWindowManager[]
+    manager.config.terminalInput = policy.terminalInputPolicyName()
+    for target in manager.frontends:
+      if not target.xClosed:
+        target.applyTerminalInputPolicy(policy)
+    discard manager.config.saveKosmoConfig(manager.configPath)
+
 proc `terminalOptionAsMeta=`*(frontend: KosmoApplication, enabled: bool) =
   ## Apply the Option/Alt-as-Meta preference to current and future terminals.
   if frontend.isNil:
@@ -314,6 +346,11 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
         if not weakFrontend.isNil:
           weakFrontend[].terminalLinksEnabled = enabled
       ,
+      terminalInputPolicy = frontend.xTerminalInputPolicy,
+      terminalInputPolicyHandler = proc(policy: KosmoTerminalInputPolicy) =
+        if not weakFrontend.isNil:
+          weakFrontend[].terminalInputPolicy = policy
+      ,
       shortcutProfile = frontend.dockController.shortcutProfile,
       shortcutProfileHandler = proc(profile: KosmoShortcutProfile) =
         if not weakFrontend.isNil:
@@ -350,6 +387,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
   else:
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
     frontend.xSettingsWindow.terminalLinksEnabled = frontend.xTerminalLinksEnabled
+    frontend.xSettingsWindow.terminalInputPolicy = frontend.xTerminalInputPolicy
     frontend.updateShortcutSettingsWindow()
     frontend.xSettingsWindow.updateMoeThemes(
       moeThemeSettings, selectedMoeThemeIdentifier
@@ -1068,6 +1106,7 @@ proc newKosmoApplication*(
     documentView: documentView,
     xTerminalOptionAsMeta: true,
     xTerminalLinksEnabled: true,
+    xTerminalInputPolicy: parseTerminalInputPolicy(manager.config.terminalInput),
     xWindowManager: manager.unsafeWeakRef(),
     xHasFileBrowser: hasFileBrowser,
     xCliWindowId: randomIdentifier(),

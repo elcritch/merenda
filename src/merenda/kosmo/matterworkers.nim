@@ -48,7 +48,7 @@ type
     errorMessage*: string
 
   MatterGrammarFileType* = object
-    ## Installed VS Code file associations and the corresponding root grammar.
+    ## Bundled or installed file associations and the corresponding root grammar.
     identifier*: string
     languageId*: string
     rootPath*: string
@@ -75,7 +75,7 @@ type
     sources: seq[moeMatter.MatterGrammarSource]
     grammars: moeMatter.MatterGrammarSet
     terraformGrammars: moeMatter.MatterGrammarSet
-    installedGrammars: Table[
+    fileTypeGrammars: Table[
       string,
       tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet],
     ]
@@ -158,18 +158,18 @@ proc matchesMatterFileType*(
       if normalizedFileName.endsWith(candidateExtension.toLowerAscii()):
         return true
 
-proc installedGrammar(
+proc fileTypeGrammar(
     worker: MatterHighlightWorker, fileType: MatterGrammarFileType
 ): tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet] =
-  if worker.installedGrammars.hasKey(fileType.identifier):
-    return worker.installedGrammars[fileType.identifier]
+  if worker.fileTypeGrammars.hasKey(fileType.identifier):
+    return worker.fileTypeGrammars[fileType.identifier]
 
   var language = moeTokenizer.getSourceLanguage(fileType.languageId)
   if language in {
     moeHighlight.SourceLanguage.langNone, moeHighlight.SourceLanguage.langDiff,
     moeHighlight.SourceLanguage.langLog,
   }:
-    # Matter uses the enum as a root selector; unknown VS Code languages use a
+    # Matter uses the enum as a root selector; unknown TextMate languages use a
     # private selector while preserving their grammar's actual token scopes.
     language = moeHighlight.SourceLanguage.langAstro
 
@@ -183,14 +183,13 @@ proc installedGrammar(
       rootFound = true
     sources.add move selected
   if not rootFound:
-    raise newException(ValueError, "installed TextMate root grammar is unavailable")
+    raise newException(ValueError, "TextMate root grammar is unavailable")
 
   let grammars = moeMatter.newMatterGrammarSet(sources)
   if not grammars.matterSupports(language):
-    raise
-      newException(ValueError, "installed TextMate root grammar could not be compiled")
+    raise newException(ValueError, "TextMate root grammar could not be compiled")
   result = (language, grammars)
-  worker.installedGrammars[fileType.identifier] = result
+  worker.fileTypeGrammars[fileType.identifier] = result
 
 proc requestGrammar(
     worker: MatterHighlightWorker,
@@ -199,7 +198,7 @@ proc requestGrammar(
 ): tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet] =
   let fileType = worker.matchingFileType(fileName)
   if fileType.identifier.len > 0:
-    return worker.installedGrammar(fileType)
+    return worker.fileTypeGrammar(fileType)
   let extension = fileName.splitFile.ext.toLowerAscii()
   if extension in [".hcl", ".tf", ".tfvars"]:
     worker.ensureTerraformGrammars()
@@ -675,7 +674,7 @@ proc newMatterHighlighting*(
   var worker = MatterHighlightWorker(
     sources: move sources,
     fileTypes: move fileTypes,
-    installedGrammars: initTable[
+    fileTypeGrammars: initTable[
       string,
       tuple[language: moeHighlight.SourceLanguage, grammars: moeMatter.MatterGrammarSet],
     ](),

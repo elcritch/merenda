@@ -292,6 +292,10 @@ protocol DefaultSwitchButtonAccessibility of AccessibilityProtocol:
     switchButton.switchButtonPerformClick(ActionArgs(sender: switchButton))
     true
 
+protocol DefaultSwitchStyleLayout of ViewLayoutProtocol:
+  method layoutStyleContext(switchButton: SwitchButton): StyleContext =
+    switchButton.switchStyleContext()
+
 proc initSwitchButtonFields*(
     switchButton: SwitchButton, on = false, frame: Rect = AutoRect
 ) =
@@ -300,6 +304,7 @@ proc initSwitchButtonFields*(
   switchButton.acceptsFirstResponder = true
   switchButton.setHuggingPriority(LayoutPriorityHigh, laHorizontal)
   switchButton.setCompressionPriority(LayoutPriorityRequired, laHorizontal)
+  discard switchButton.withProtocol(DefaultSwitchStyleLayout)
   discard switchButton.withProtocol(DefaultSwitchButtonDrawing)
   discard switchButton.withProtocol(DefaultSwitchButtonEvents)
   discard switchButton.withProtocol(DefaultSwitchButtonAction)

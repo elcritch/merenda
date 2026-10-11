@@ -59,7 +59,6 @@ suite "Kosmo live terminal clipboard":
           "Terminal",
           terminal,
           onClose = proc(document: KosmoPaneDocument): bool =
-            discard document
             terminal.close()
             true,
         )
@@ -103,6 +102,10 @@ suite "Kosmo live terminal clipboard":
       )
       check frontend.application.performMenuKeyEquivalent(pasteEvent)
       check frontend.window.dispatchKeyDown(terminalPasteEvent)
+      # Quote Ctrl-C so Hybrid input forwards the raw byte on every platform.
+      check frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyBackslash, keyCode: keyBackslash.ord, modifiers: {kmControl})
+      )
       check frontend.window.dispatchKeyDown(
         KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: {kmControl})
       )
@@ -193,9 +196,12 @@ suite "Kosmo terminal focus input":
       check terminalFocused
       require frontend.window.dispatchTextInput("x")
       require frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyBackslash, keyCode: keyBackslash.ord, modifiers: {kmControl})
+      )
+      require frontend.window.dispatchKeyDown(
         KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
       )
-      # Focus-out, focus-in, x, and the shell's Control-W arrive exactly once.
+      # Focus-out, focus-in, x, and quoted Control-W arrive exactly once.
       check session.pollUntilText("1b 5b 4f 1b 5b 49 78 17")
 
 suite "Kosmo terminal split lifecycle":

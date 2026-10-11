@@ -1798,6 +1798,10 @@ proc addItems*(comboBox: ComboBox, values: openArray[ObjectValue]) =
   for value in values:
     comboBox.addItem(value)
 
+protocol DefaultComboBoxStyleLayout of ViewLayoutProtocol:
+  method layoutStyleContext(comboBox: ComboBox): StyleContext =
+    comboBox.comboBoxStyleContext()
+
 proc initComboBoxFields*(
     comboBox: ComboBox, items: openArray[string] = [], frame: Rect = AutoRect
 ) =
@@ -1806,6 +1810,7 @@ proc initComboBoxFields*(
   comboBox.acceptsFirstResponder = true
   discard comboBox.withProto()
   comboBox.installComboBoxTextSelectors()
+  discard comboBox.withProtocol(DefaultComboBoxStyleLayout)
   discard comboBox.withProtocol(DefaultComboBoxView)
   discard comboBox.withProtocol(DefaultComboBoxAction)
   discard comboBox.withProtocol(DefaultComboBoxDrawing)

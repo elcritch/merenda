@@ -1,9 +1,14 @@
-import std/[atomics, tables]
+import std/[atomics, sets, strutils, tables]
 
-import figdraw
+import figdraw except CornerRadii
 from sigils/selectors import DynamicAgent
 
 import ../foundation/types
+import ./[stylevalues]
+import ./private/[cssproperties, cssvalues]
+from ./private/csstokens import CssDiagnostic
+
+export stylevalues except cloneText, lookupToken
 
 export
   figdraw.FillGradientAxis, figdraw.FillKind, figdraw.Linear2, figdraw.Linear3,
@@ -11,137 +16,49 @@ export
   figdraw.centerColorRgba, figdraw.centerColor, figdraw.`==`
 
 type
-  EdgeInsets* = object
-    top*: float32
-    left*: float32
-    bottom*: float32
-    right*: float32
-
-  CornerRadii* = object
-    topLeft*: float32
-    topRight*: float32
-    bottomLeft*: float32
-    bottomRight*: float32
-
-  BoxShadowKind* = enum
-    bskDrop
-    bskInset
-
-  BoxShadow* = object
-    kind*: BoxShadowKind
-    color*: Color
-    x*: float32
-    y*: float32
-    blur*: float32
-    spread*: float32
-
-  StyleRole* = enum
-    srView
-    srBox
-    srScrollView
-    srScroller
-    srButton
-    srStepper
-    srCheckBox
-    srRadioButton
-    srSwitch
-    srSlider
-    srProgressIndicator
-    srTab
-    srTabPanel
-    srDocumentTab
-    srDocumentTabBar
-    srDocumentTabButton
-    srTextField
-    srTextView
-    srMonoTextView
-    srComboBox
-    srDatePicker
-    srComboBoxItem
-    srSplitView
-    srTableView
-    srCascadingView
-    srCascadingColumn
-    srCascadingScrollView
-    srCascadingScroller
-    srTableHeader
-    srTableHeaderCell
-    srRowItem
-    srCascadingRowItem
-    srTooltip
-    srMenuBar
-    srMenuBarItem
-
-  StyleContext* = object
-    role*: StyleRole
-    states*: set[WidgetState]
-    id*: string
-    classes*: seq[string]
-
-  StyleSelector* = object
-    role*: StyleRole
-    states*: set[WidgetState]
-    id*: string
-    classes*: seq[string]
-
-  StyleValueKind* = enum
-    svMissing
-    svColor
-    svFill
-    svLength
-    svSize
-    svInsets
-    svShadows
-    svToken
-    svKeyword
-    svFontFace
-
-  StyleValue* = object
-    case kind*: StyleValueKind
-    of svMissing:
-      discard
-    of svColor:
-      color*: Color
-    of svFill:
-      fill*: Fill
-    of svLength:
-      length*: float32
-    of svSize:
-      size*: Size
-    of svInsets:
-      insets*: EdgeInsets
-    of svShadows:
-      shadows*: seq[BoxShadow]
-    of svFontFace:
-      fontFace*: SystemTypeface
-    of svToken:
-      token*: string
-    of svKeyword:
-      keyword*: string
-
-  StyleTokenStore* = ref object
-    parent*: StyleTokenStore
-    values*: Table[string, StyleValue]
-
-  StyleKey*[T] = distinct string
-
-  StylePatch* = ref object
-    values*: Table[string, StyleValue]
+  LayoutStyleSelection* = object
+    ## A borrowed declaration in an immutable theme, counted before list copying.
+    patch: StylePatch
+    key: string
 
   StyleRule* = object
     selector*: StyleSelector
     patch*: StylePatch
+    origin*: StyleRuleOrigin
+    isCss*: bool
+    important*: bool
+    cssSpecificity*: array[3, int]
+    sourceOrder*: int
+    line*, column*: int
+
+  StyleRuleOrigin* = enum
+    sroTheme ## Bundled or newly constructed theme defaults.
+    sroCss ## Application stylesheets, including appended CSS.
+    sroOverride ## Explicit edits to an existing theme or appearance.
+
+  TokenPriority = object
+    origin: StyleRuleOrigin
+    important: bool
 
   Chrome* = ref object of DynamicAgent
 
   ThemeGeneration* = distinct uint64
 
-  Theme* = object
+  ThemeSnapshot = ref object
     xTokens: StyleTokenStore
     xRules: seq[StyleRule]
     xChromes: Table[string, Chrome]
-    xRulesByRole: array[StyleRole, seq[int]]
+    xRulesByProperty: Table[string, array[StyleRole, seq[int]]]
+    xResolvedRules: seq[StylePatch]
     xGeneration: ThemeGeneration
+    xMetricStates: set[WidgetState]
+    xTokenPriorities: Table[string, TokenPriority]
+    xSourceOrder: int
+    xHasLayoutRules: bool
+
+  Theme* = object
+    ## A value handle sharing one immutable snapshot across views and caches.
+    xSnapshot: ThemeSnapshot
 
   ThemeBuilder* = object
     xTokens: StyleTokenStore
@@ -149,6 +66,9 @@ type
     xChromes: Table[string, Chrome]
     xBaseGeneration: ThemeGeneration
     xChanged: bool
+    xWriteOrigin: StyleRuleOrigin
+    xTokenPriorities: Table[string, TokenPriority]
+    xSourceOrder: int
 
   Appearance* = object
     theme*: Theme
@@ -297,310 +217,9 @@ type
     separatorThickness*: float32
     minSize*: Size
 
-const
-  StyleFill* = StyleKey[Fill]("fill")
-  StyleBackgroundColor* = StyleKey[Color]("background.color")
-  StyleBackgroundFill* = StyleKey[Fill]("background.fill")
-  StyleBackgroundPinstripeColor* = StyleKey[Color]("background.pinstripe.color")
-  StyleBackgroundPinstripeHighlightColor* =
-    StyleKey[Color]("background.pinstripe.highlight.color")
-  StyleBackgroundPinstripePeriod* = StyleKey[float32]("background.pinstripe.period")
-  StyleBackgroundPinstripeHeight* = StyleKey[float32]("background.pinstripe.height")
-  StyleBorderColor* = StyleKey[Color]("border.color")
-  StyleBorderWidth* = StyleKey[float32]("border.width")
-  StyleCornerRadius* = StyleKey[float32]("corner.radius")
-  StyleCornerRadiusTopLeft* = StyleKey[float32]("corner.radius.topLeft")
-  StyleCornerRadiusTopRight* = StyleKey[float32]("corner.radius.topRight")
-  StyleCornerRadiusBottomLeft* = StyleKey[float32]("corner.radius.bottomLeft")
-  StyleCornerRadiusBottomRight* = StyleKey[float32]("corner.radius.bottomRight")
-  StyleFocusRingWidth* = StyleKey[float32]("focus.ring.width")
-  StyleFocusRingInset* = StyleKey[float32]("focus.ring.inset")
-  StyleFocusRingColor* = StyleKey[Color]("focus.ring.color")
-  StyleBoxShadows* = StyleKey[seq[BoxShadow]]("box.shadows")
-  StyleColumnSelectionFill* = StyleKey[Fill]("column.selection.fill")
-  StyleColumnHoverFill* = StyleKey[Fill]("column.hover.fill")
-  StyleTextColor* = StyleKey[Color]("text.color")
-  StyleFontName* = StyleKey[string]("font.name")
-  StyleFontFace* = StyleKey[SystemTypeface]("font.face")
-  StyleItalicFontFace* = StyleKey[SystemTypeface]("font.face.italic")
-  StyleBoldFontFace* = StyleKey[SystemTypeface]("font.face.bold")
-  StyleBoldItalicFontFace* = StyleKey[SystemTypeface]("font.face.boldItalic")
-  StyleFontSize* = StyleKey[float32]("font.size")
-  StyleFontSlant* = StyleKey[string]("font.slant")
-  StyleLanguage* = StyleKey[string]("text.language")
-  StyleTextHighlightColor* = StyleKey[Color]("text.highlight.color")
-  StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
-  StyleSelectionColor* = StyleKey[Color]("selection.color")
-  StyleSelectionIndicatorPosition* = StyleKey[string]("selection.indicator.position")
-  StyleSelectionIndicatorFill* = StyleKey[Fill]("selection.indicator.fill")
-  StyleSelectionIndicatorInsets* = StyleKey[EdgeInsets]("selection.indicator.insets")
-  StyleSelectionIndicatorSize* = StyleKey[float32]("selection.indicator.size")
-  StyleSelectionIndicatorCornerRadius* =
-    StyleKey[float32]("selection.indicator.corner.radius")
-  StyleCursorColor* = StyleKey[Color]("cursor.color")
-  StyleHighlightFill* = StyleKey[Fill]("highlight.fill")
-  StyleMaximumHighlightFill* = StyleKey[Fill]("highlight.fill.maximum")
-  StyleAlternatingFill* = StyleKey[Fill]("alternating.fill")
-  StyleIndicatorFill* = StyleKey[Fill]("indicator.fill")
-  StyleDropIndicatorFill* = StyleKey[Fill]("drop.indicator.fill")
-  StyleInsertionIndicatorFill* = StyleKey[Fill]("insertion.indicator.fill")
-  StyleKnobFill* = StyleKey[Fill]("knob.fill")
-  StyleKnobValueTint* = StyleKey[float32]("knob.value.tint")
-  StyleKnobBorderColor* = StyleKey[Color]("knob.border.color")
-  StyleKnobSize* = StyleKey[float32]("knob.size")
-  StyleKnobInset* = StyleKey[float32]("knob.inset")
-  StyleKnobSizeFactor* = StyleKey[float32]("knob.size.factor")
-  StyleKnobShadows* = StyleKey[seq[BoxShadow]]("knob.shadows")
-  StyleTextInsets* = StyleKey[EdgeInsets]("text.insets")
-  StylePadding* = StyleKey[EdgeInsets]("padding")
-  StyleIndicatorSize* = StyleKey[float32]("indicator.size")
-  StyleIndicatorSpacing* = StyleKey[float32]("indicator.spacing")
-  StyleWidthFactor* = StyleKey[float32]("width.factor")
-  StyleMaximumSize* = StyleKey[Size]("maximum.size")
-  StyleSegmentSize* = StyleKey[Size]("segment.size")
-  StyleEdgeInset* = StyleKey[float32]("edge.inset")
-  StyleItemGap* = StyleKey[float32]("item.gap")
-  StyleOverlap* = StyleKey[float32]("overlap")
-  StyleRowHeight* = StyleKey[float32]("row.height")
-  StyleHeaderHeight* = StyleKey[float32]("header.height")
-  StyleColumnWidth* = StyleKey[float32]("column.width")
-  StyleColumnMinWidth* = StyleKey[float32]("column.min.width")
-  StyleColumnMaxWidth* = StyleKey[float32]("column.max.width")
-  StyleResizeHandleWidth* = StyleKey[float32]("resize.handle.width")
-  StyleDragThreshold* = StyleKey[float32]("drag.threshold")
-  StyleAutoscrollEdge* = StyleKey[float32]("autoscroll.edge")
-  StyleTitleHeight* = StyleKey[float32]("title.height")
-  StyleTitleGap* = StyleKey[float32]("title.gap")
-  StyleSeparatorThickness* = StyleKey[float32]("separator.thickness")
-  StyleMarkColor* = StyleKey[Color]("mark.color")
-  StyleMinimumSize* = StyleKey[Size]("minimum.size")
-  StyleCloseButtonPosition* = StyleKey[string]("close.button.position")
-  StyleChrome* = StyleKey[string]("chrome")
-
-  DefaultChromeName* = "default"
-  AquaChromeName* = "aqua"
-  RubyAquaChromeName* = "ruby-aqua"
-  FlatTransparentChromeName* = "flat-transparent"
-  ToolbarButtonStyleClass* = "toolbar-button"
-  PopoverBoxStyleClass* = "popover-box"
-  ToolbarSymbolStyleClass* = "toolbar-symbol"
-  LabelStyleClass* = "label"
-  LabelTitleStyleClass* = "label-title"
-  LabelHeadingStyleClass* = "label-heading"
-  LabelStatusStyleClass* = "label-status"
-  LabelFormStyleClass* = "label-form"
-  IconLabelStyleClass* = "icon-label"
-
 var
   themeInstallers: seq[ThemeInstaller]
   themeGenerationCounter: Atomic[uint64]
-
-func insets*(top, left, bottom, right: float32): EdgeInsets =
-  EdgeInsets(top: top, left: left, bottom: bottom, right: right)
-
-func insets*(vertical, horizontal: float32): EdgeInsets =
-  insets(vertical, horizontal, vertical, horizontal)
-
-func insets*(all: float32): EdgeInsets =
-  insets(all, all, all, all)
-
-func initCornerRadii*(
-    topLeft, topRight, bottomLeft, bottomRight: float32
-): CornerRadii =
-  CornerRadii(
-    topLeft: max(topLeft, 0.0'f32),
-    topRight: max(topRight, 0.0'f32),
-    bottomLeft: max(bottomLeft, 0.0'f32),
-    bottomRight: max(bottomRight, 0.0'f32),
-  )
-
-func initCornerRadii*(all: float32): CornerRadii =
-  initCornerRadii(all, all, all, all)
-
-func isZero*(radii: CornerRadii): bool =
-  radii.topLeft == 0.0'f32 and radii.topRight == 0.0'f32 and radii.bottomLeft == 0.0'f32 and
-    radii.bottomRight == 0.0'f32
-
-func inset*(radii: CornerRadii, amount: float32): CornerRadii =
-  initCornerRadii(
-    max(radii.topLeft - amount, 0.0'f32),
-    max(radii.topRight - amount, 0.0'f32),
-    max(radii.bottomLeft - amount, 0.0'f32),
-    max(radii.bottomRight - amount, 0.0'f32),
-  )
-
-func horizontal*(insets: EdgeInsets): float32 =
-  insets.left + insets.right
-
-func vertical*(insets: EdgeInsets): float32 =
-  insets.top + insets.bottom
-
-func fill*(color: Color): Fill =
-  figdraw.fill(color.rgba)
-
-func linear*(start, stop: Color, axis: FillGradientAxis): Fill =
-  figdraw.linear(start.rgba, stop.rgba, axis)
-
-func linear*(start, mid, stop: Color, axis: FillGradientAxis, midPos = 128'u8): Fill =
-  figdraw.linear(start.rgba, mid.rgba, stop.rgba, axis, midPos)
-
-func initBoxShadow*(
-    kind: BoxShadowKind,
-    color: Color,
-    x = 0.0'f32,
-    y = 0.0'f32,
-    blur = 0.0'f32,
-    spread = 0.0'f32,
-): BoxShadow =
-  BoxShadow(kind: kind, color: color, x: x, y: y, blur: blur, spread: spread)
-
-func dropShadow*(
-    color: Color, x = 0.0'f32, y = 1.0'f32, blur = 3.0'f32, spread = 0.0'f32
-): BoxShadow =
-  initBoxShadow(bskDrop, color, x, y, blur, spread)
-
-func insetShadow*(
-    color: Color, x = 0.0'f32, y = 1.0'f32, blur = 2.0'f32, spread = 0.0'f32
-): BoxShadow =
-  initBoxShadow(bskInset, color, x, y, blur, spread)
-
-func missingStyleValue*(): StyleValue =
-  StyleValue(kind: svMissing)
-
-func styleColor*(color: Color): StyleValue =
-  StyleValue(kind: svColor, color: color)
-
-func styleFill*(fill: Fill): StyleValue =
-  StyleValue(kind: svFill, fill: fill)
-
-func styleFill*(color: Color): StyleValue =
-  styleFill(fill(color))
-
-func styleLength*(length: float32): StyleValue =
-  StyleValue(kind: svLength, length: length)
-
-func styleSize*(size: Size): StyleValue =
-  StyleValue(
-    kind: svSize,
-    size: Size(width: max(size.width, 0.0'f32), height: max(size.height, 0.0'f32)),
-  )
-
-func styleInsets*(insets: EdgeInsets): StyleValue =
-  StyleValue(kind: svInsets, insets: insets)
-
-func styleShadows*(shadows: openArray[BoxShadow]): StyleValue =
-  StyleValue(kind: svShadows, shadows: @shadows)
-
-func styleFontFace*(fontFace: SystemTypeface): StyleValue =
-  StyleValue(kind: svFontFace, fontFace: fontFace)
-
-func styleToken*(name: string): StyleValue =
-  StyleValue(kind: svToken, token: name)
-
-func styleKeyword*(keyword: string): StyleValue =
-  StyleValue(kind: svKeyword, keyword: keyword)
-
-func styleKeyword*(slant: FontSlant): StyleValue =
-  styleKeyword(
-    case slant
-    of fsUpright: "normal"
-    of fsItalic: "italic"
-    of fsOblique: "oblique"
-  )
-
-func fontSlant*(keyword: string): FontSlant =
-  case keyword
-  of "italic": fsItalic
-  of "oblique": fsOblique
-  else: fsUpright
-
-func styleKey*[T](name: string): StyleKey[T] =
-  StyleKey[T](name)
-
-func keyName*[T](key: StyleKey[T]): string =
-  string(key)
-
-func initStyleSelector*(
-    role: StyleRole, states: set[WidgetState] = {}, id = "", classes: seq[string] = @[]
-): StyleSelector =
-  StyleSelector(role: role, states: states, id: id, classes: classes)
-
-func initStyleContext*(
-    role: StyleRole, states: set[WidgetState] = {}, id = "", classes: seq[string] = @[]
-): StyleContext =
-  StyleContext(role: role, states: states, id: id, classes: classes)
-
-func controlStyle*(
-    role: StyleRole, states: set[WidgetState] = {}, id = "", classes: seq[string] = @[]
-): StyleContext =
-  initStyleContext(role, states, id, classes)
-
-func inset*(rect: Rect, insets: EdgeInsets): Rect =
-  rect(
-    rect.x + insets.left,
-    rect.y + insets.top,
-    max(rect.w - insets.left - insets.right, 0.0'f32),
-    max(rect.h - insets.top - insets.bottom, 0.0'f32),
-  )
-
-proc newStyleTokenStore*(parent: StyleTokenStore = nil): StyleTokenStore =
-  StyleTokenStore(parent: parent, values: initTable[string, StyleValue]())
-
-proc newStylePatch*(): StylePatch =
-  StylePatch(values: initTable[string, StyleValue]())
-
-proc cloneText(value: string): string =
-  result = newStringOfCap(value.len)
-  result.add value
-
-proc clone(value: StyleValue): StyleValue =
-  case value.kind
-  of svMissing:
-    missingStyleValue()
-  of svColor:
-    styleColor(value.color)
-  of svFill:
-    styleFill(value.fill)
-  of svLength:
-    styleLength(value.length)
-  of svSize:
-    styleSize(value.size)
-  of svInsets:
-    styleInsets(value.insets)
-  of svShadows:
-    styleShadows(value.shadows)
-  of svFontFace:
-    var variations =
-      newSeqOfCap[typeof(value.fontFace.variations[0])](value.fontFace.variations.len)
-    for variation in value.fontFace.variations:
-      variations.add variation
-    styleFontFace(
-      SystemTypeface(
-        file: typeof(value.fontFace.file)(
-          path: value.fontFace.file.path.cloneText,
-          faceIndex: value.fontFace.file.faceIndex,
-        ),
-        variations: move variations,
-      )
-    )
-  of svToken:
-    styleToken(value.token.cloneText)
-  of svKeyword:
-    styleKeyword(value.keyword.cloneText)
-
-proc clone*(tokens: StyleTokenStore): StyleTokenStore =
-  if tokens.isNil:
-    return
-  result = newStyleTokenStore(tokens.parent.clone)
-  for name, value in tokens.values:
-    result.values[name.cloneText] = value.clone
-
-proc clone*(patch: StylePatch): StylePatch =
-  if patch.isNil:
-    return
-  result = newStylePatch()
-  for name, value in patch.values:
-    result.values[name.cloneText] = value.clone
 
 proc clone(selector: StyleSelector): StyleSelector =
   result.role = selector.role
@@ -610,8 +229,15 @@ proc clone(selector: StyleSelector): StyleSelector =
     result.classes.add className.cloneText
 
 proc cloneRules(rules: openArray[StyleRule]): seq[StyleRule] =
+  var previous, patch: StylePatch
   for rule in rules:
-    result.add StyleRule(selector: rule.selector.clone, patch: rule.patch.clone)
+    if rule.patch != previous or patch.isNil:
+      patch = rule.patch.clone
+      previous = rule.patch
+    var copied = rule
+    copied.selector = rule.selector.clone
+    copied.patch = patch
+    result.add copied
 
 proc cloneChromes(chromes: Table[string, Chrome]): Table[string, Chrome] =
   result = initTable[string, Chrome]()
@@ -619,29 +245,35 @@ proc cloneChromes(chromes: Table[string, Chrome]): Table[string, Chrome] =
     result[name.cloneText] = chrome
 
 proc clone*(theme: Theme): Theme =
-  ## Immutable theme snapshots can be copied without changing their generation.
+  ## Returns another value handle to the same immutable snapshot.
   theme
 
 proc tokens*(theme: Theme): StyleTokenStore =
   ## Returns a mutable copy of the snapshot's token store.
-  theme.xTokens.clone
+  if not theme.xSnapshot.isNil:
+    result = theme.xSnapshot.xTokens.clone
 
 proc rules*(theme: Theme): seq[StyleRule] =
   ## Returns a mutable copy of the snapshot's style rules.
-  theme.xRules.cloneRules()
+  if not theme.xSnapshot.isNil:
+    result = theme.xSnapshot.xRules.cloneRules()
 
 proc chromes*(theme: Theme): Table[string, Chrome] =
   ## Returns a value copy of the snapshot's chrome registry.
-  theme.xChromes.cloneChromes
+  if theme.xSnapshot.isNil:
+    initTable[string, Chrome]()
+  else:
+    theme.xSnapshot.xChromes.cloneChromes
 
 func generation*(theme: Theme): ThemeGeneration =
-  theme.xGeneration
+  if not theme.xSnapshot.isNil:
+    result = theme.xSnapshot.xGeneration
 
 func `==`*(left, right: ThemeGeneration): bool =
   uint64(left) == uint64(right)
 
 func isInitialized*(theme: Theme): bool =
-  not theme.xTokens.isNil
+  not theme.xSnapshot.isNil and not theme.xSnapshot.xTokens.isNil
 
 proc nextThemeGeneration(): ThemeGeneration =
   ThemeGeneration(themeGenerationCounter.fetchAdd(1'u64, moRelaxed) + 1'u64)
@@ -657,36 +289,108 @@ proc initThemeBuilder*(tokens: StyleTokenStore): ThemeBuilder =
   result = initThemeBuilder()
   result.xTokens = tokens.clone
 
-proc initThemeBuilder*(theme: Theme): ThemeBuilder =
+proc initThemeBuilder*(theme: Theme, origin = sroOverride): ThemeBuilder =
   ## Creates an isolated builder initialized from an immutable snapshot.
-  ThemeBuilder(
-    xTokens: theme.xTokens.clone,
-    xRules: theme.xRules.cloneRules(),
-    xChromes: theme.xChromes.cloneChromes,
-    xBaseGeneration: theme.xGeneration,
+  result = ThemeBuilder(
+    xTokens: theme.tokens(),
+    xRules: theme.rules(),
+    xChromes: theme.chromes(),
+    xBaseGeneration: theme.generation,
+    xWriteOrigin: origin,
   )
+  if not theme.xSnapshot.isNil:
+    result.xTokenPriorities = theme.xSnapshot.xTokenPriorities
+    result.xSourceOrder = theme.xSnapshot.xSourceOrder
+
+proc finish*(builder: ThemeBuilder, diagnostics: var seq[CssDiagnostic]): Theme =
+  ## Compiler hook: freezes declarations and reports invalid CSS during compilation.
+  let snapshot = ThemeSnapshot(
+    xTokens: builder.xTokens.clone,
+    xRules: builder.xRules.cloneRules(),
+    xChromes: builder.xChromes.cloneChromes,
+    xTokenPriorities: builder.xTokenPriorities,
+    xSourceOrder: builder.xSourceOrder,
+  )
+  result.xSnapshot = snapshot
+  var
+    previousCssPatch, compiledCss: StylePatch
+    invalidCss: StyleValue
+    reported: HashSet[int]
+  for index, rule in snapshot.xRules:
+    var compiled: StylePatch
+    if rule.isCss:
+      if rule.patch != previousCssPatch:
+        previousCssPatch = rule.patch
+        compiledCss = snapshot.xTokens.resolveCssPatch(rule.patch, invalidCss)
+      compiled = compiledCss
+      if compiled.isNil and rule.sourceOrder notin reported:
+        reported.incl rule.sourceOrder
+        let variable =
+          case invalidCss.kind
+          of svToken: invalidCss.token
+          of svCssExpression: invalidCss.cssText
+          else: ""
+        diagnostics.add CssDiagnostic(
+          line: rule.line,
+          column: rule.column,
+          message:
+            if variable.len == 0:
+              "Invalid CSS declaration"
+            else:
+              "Unresolved or wrong-type variable " & variable &
+                " (missing, cyclic, or beyond 16 reference steps)",
+        )
+    else:
+      compiled = newStylePatch()
+      for key, value in rule.patch.values:
+        var resolved: StyleValue
+        if snapshot.xTokens.resolveValue(value, resolved):
+          var validNative = true
+          if resolved.kind == svConstraints:
+            for constraint in resolved.constraints:
+              if not constraint.validStyleConstraint:
+                validNative = false
+          if validNative and (
+            resolved.kind != svCssExpression or
+            snapshot.xTokens.resolveCssValue(value, key, resolved)
+          ):
+            compiled.values[key] = resolved
+    for key in rule.patch.values.keys:
+      if key.startsWith("layout."):
+        snapshot.xHasLayoutRules = true
+      if styleAffectsMetrics(key):
+        snapshot.xMetricStates = snapshot.xMetricStates + rule.selector.states
+    snapshot.xResolvedRules.add compiled
+    if not compiled.isNil:
+      for key in compiled.values.keys:
+        snapshot.xRulesByProperty.mgetOrPut(key, default(array[StyleRole, seq[int]]))[
+          rule.selector.role
+        ].add index
+  if ssPressed in snapshot.xMetricStates:
+    snapshot.xMetricStates.incl ssHighlighted
+  if builder.xChanged or builder.xBaseGeneration == ThemeGeneration(0):
+    snapshot.xGeneration = nextThemeGeneration()
+  else:
+    snapshot.xGeneration = builder.xBaseGeneration
 
 proc finish*(builder: ThemeBuilder): Theme =
-  ## Freezes the builder into an immutable, independently owned snapshot.
-  result.xTokens = builder.xTokens.clone
-  result.xRules = builder.xRules.cloneRules()
-  result.xChromes = builder.xChromes.cloneChromes
-  for index, rule in result.xRules:
-    result.xRulesByRole[rule.selector.role].add index
-  if builder.xChanged or builder.xBaseGeneration == ThemeGeneration(0):
-    result.xGeneration = nextThemeGeneration()
-  else:
-    result.xGeneration = builder.xBaseGeneration
+  ## Freezes and compiles declarations once; drawing only reads typed values.
+  var diagnostics: seq[CssDiagnostic]
+  builder.finish(diagnostics)
 
 proc noteThemeMutation(builder: var ThemeBuilder) =
   builder.xChanged = true
 
 func sameAppearanceGeneration*(left, right: Appearance): bool =
   ## Compare immutable cache snapshots without traversing every theme value.
-  left.theme.xGeneration == right.theme.xGeneration
+  left.theme.generation == right.theme.generation
 
 proc registerThemeInstaller*(installer: ThemeInstaller) =
   themeInstallers.add installer
+
+proc themeExtensionsGeneration*(): Natural =
+  ## Changes when another native theme extension is registered.
+  themeInstallers.len
 
 proc installThemeExtensions*(theme: var ThemeBuilder) =
   for installer in themeInstallers:
@@ -706,11 +410,11 @@ proc installChrome*(theme: var ThemeBuilder, name: string, chrome: Chrome) =
     theme.noteThemeMutation()
 
 proc hasChrome*(theme: Theme, name: string): bool =
-  name in theme.xChromes
+  not theme.xSnapshot.isNil and name in theme.xSnapshot.xChromes
 
 proc chrome*(theme: Theme, name: string): Chrome =
-  if name in theme.xChromes:
-    return theme.xChromes[name]
+  if not theme.xSnapshot.isNil and name in theme.xSnapshot.xChromes:
+    return theme.xSnapshot.xChromes[name]
 
 proc installChrome*(appearance: var Appearance, name: string, chrome: Chrome) =
   var builder = initThemeBuilder(appearance.theme)
@@ -723,33 +427,50 @@ proc hasChrome*(appearance: Appearance, name: string): bool =
 proc chrome*(appearance: Appearance, name: string): Chrome =
   appearance.theme.chrome(name)
 
-proc `[]=`*(tokens: StyleTokenStore, name: string, value: StyleValue) =
-  tokens.values[name] = value
-
-proc `[]=`*(tokens: StyleTokenStore, name: string, value: Color) =
-  tokens[name] = styleColor(value)
-
-proc `[]=`*(tokens: StyleTokenStore, name: string, value: Fill) =
-  tokens[name] = styleFill(value)
-
-proc `[]=`*(tokens: StyleTokenStore, name: string, value: float32) =
-  tokens[name] = styleLength(value)
-
-proc `[]=`*(tokens: StyleTokenStore, name: string, value: float) =
-  tokens[name] = styleLength(value.float32)
-
-proc `[]=`*(tokens: StyleTokenStore, name: string, value: Size) =
-  tokens[name] = styleSize(value)
-
-proc `[]=`*(tokens: StyleTokenStore, name: string, value: EdgeInsets) =
-  tokens[name] = styleInsets(value)
-
-proc `[]=`*(tokens: StyleTokenStore, name: string, value: openArray[BoxShadow]) =
-  tokens[name] = styleShadows(value)
+proc setToken(
+    theme: var ThemeBuilder,
+    name: string,
+    value: StyleValue,
+    important: bool,
+    origin: StyleRuleOrigin,
+): bool =
+  let canonical = name.cssTokenName
+  if canonical in theme.xTokenPriorities:
+    let previous = theme.xTokenPriorities[canonical]
+    if previous.origin > origin or
+        (previous.origin == origin and previous.important and not important):
+      return
+  theme.xTokens[canonical] = value
+  theme.xTokenPriorities[canonical] =
+    TokenPriority(origin: origin, important: important)
+  theme.noteThemeMutation()
+  true
 
 proc `[]=`*(theme: var ThemeBuilder, name: string, value: StyleValue) =
-  theme.xTokens[name] = value
-  theme.noteThemeMutation()
+  discard theme.setToken(name, value, false, theme.xWriteOrigin)
+
+proc setCssToken*(
+    theme: var ThemeBuilder,
+    name: string,
+    value: StyleValue,
+    important = false,
+    origin = sroCss,
+) =
+  ## Source-independent layers also apply to theme custom properties.
+  discard theme.setToken(name, value, important, origin)
+
+func hasLayoutRules*(theme: Theme): bool =
+  ## Whether the snapshot contains native or CSS constraint specifications.
+  not theme.xSnapshot.isNil and theme.xSnapshot.xHasLayoutRules
+
+func metricStates*(theme: Theme): set[WidgetState] =
+  ## States whose declarations can change intrinsic content metrics, from either source.
+  if not theme.xSnapshot.isNil:
+    result = theme.xSnapshot.xMetricStates
+
+func metricsChange*(theme: Theme, states: set[WidgetState]): bool =
+  ## Whether changing these states can affect intrinsic content metrics.
+  (theme.metricStates * states) != {}
 
 proc `[]=`*(theme: var ThemeBuilder, name: string, value: Color) =
   theme[name] = styleColor(value)
@@ -772,106 +493,6 @@ proc `[]=`*(theme: var ThemeBuilder, name: string, value: EdgeInsets) =
 proc `[]=`*(theme: var ThemeBuilder, name: string, value: openArray[BoxShadow]) =
   theme[name] = styleShadows(value)
 
-proc lookupToken(tokens: StyleTokenStore, name: string, value: var StyleValue): bool =
-  var current = tokens
-  while not current.isNil:
-    if current.values.hasKey(name):
-      value = current.values[name]
-      return true
-    current = current.parent
-
-proc resolveToken*(tokens: StyleTokenStore, name: string, value: var StyleValue): bool =
-  var
-    currentName = name
-    currentValue: StyleValue
-  for depth in 0 ..< 16:
-    if not tokens.lookupToken(currentName, currentValue):
-      value = missingStyleValue()
-      return false
-    if currentValue.kind != svToken:
-      value = currentValue
-      return true
-    currentName = currentValue.token
-  value = missingStyleValue()
-
-proc resolveValue*(
-    tokens: StyleTokenStore, input: StyleValue, value: var StyleValue
-): bool =
-  if input.kind == svToken:
-    tokens.resolveToken(input.token, value)
-  elif input.kind == svMissing:
-    value = missingStyleValue()
-    false
-  else:
-    value = input
-    true
-
-proc setStyle*(patch: StylePatch, key: string, value: StyleValue) =
-  patch.values[key] = value
-
-proc setStyle*[T](patch: StylePatch, key: StyleKey[T], value: StyleValue) =
-  patch.setStyle(key.keyName, value)
-
-proc setStyle*(patch: StylePatch, key: StyleKey[Color], value: Color) =
-  patch.setStyle(key, styleColor(value))
-
-proc setStyle*(patch: StylePatch, key: StyleKey[Fill], value: Fill) =
-  patch.setStyle(key, styleFill(value))
-
-proc setStyle*(patch: StylePatch, key: StyleKey[float32], value: float32) =
-  patch.setStyle(key, styleLength(value))
-
-proc setStyle*(patch: StylePatch, key: StyleKey[float32], value: float) =
-  patch.setStyle(key, styleLength(value.float32))
-
-proc setStyle*(patch: StylePatch, key: StyleKey[Size], value: Size) =
-  patch.setStyle(key, styleSize(value))
-
-proc setStyle*(patch: StylePatch, key: StyleKey[EdgeInsets], value: EdgeInsets) =
-  patch.setStyle(key, styleInsets(value))
-
-proc setStyle*(
-    patch: StylePatch, key: StyleKey[seq[BoxShadow]], value: openArray[BoxShadow]
-) =
-  patch.setStyle(key, styleShadows(value))
-
-proc `[]=`*(patch: StylePatch, key: string, value: StyleValue) =
-  patch.setStyle(key, value)
-
-proc `[]=`*[T](patch: StylePatch, key: StyleKey[T], value: StyleValue) =
-  patch.setStyle(key, value)
-
-proc `[]=`*(patch: StylePatch, key: StyleKey[Color], value: Color) =
-  patch.setStyle(key, value)
-
-proc `[]=`*(patch: StylePatch, key: StyleKey[Fill], value: Fill) =
-  patch.setStyle(key, value)
-
-proc `[]=`*(patch: StylePatch, key: StyleKey[float32], value: float32) =
-  patch.setStyle(key, value)
-
-proc `[]=`*(patch: StylePatch, key: StyleKey[float32], value: float) =
-  patch.setStyle(key, value)
-
-proc `[]=`*(patch: StylePatch, key: StyleKey[Size], value: Size) =
-  patch.setStyle(key, value)
-
-proc `[]=`*(patch: StylePatch, key: StyleKey[EdgeInsets], value: EdgeInsets) =
-  patch.setStyle(key, value)
-
-proc `[]=`*(
-    patch: StylePatch, key: StyleKey[seq[BoxShadow]], value: openArray[BoxShadow]
-) =
-  patch.setStyle(key, value)
-
-proc getStyle*(patch: StylePatch, key: string, value: var StyleValue): bool =
-  if patch.values.hasKey(key):
-    value = patch.values[key]
-    return true
-
-proc getStyle*[T](patch: StylePatch, key: StyleKey[T], value: var StyleValue): bool =
-  patch.getStyle(key.keyName, value)
-
 func matches*(selector: StyleSelector, context: StyleContext): bool =
   if selector.role != context.role:
     return false
@@ -884,13 +505,25 @@ func matches*(selector: StyleSelector, context: StyleContext): bool =
       return false
   true
 
-func specificity(selector: StyleSelector): int =
-  result = selector.classes.len * 100
-  for state in selector.states:
-    discard state
-    result += 1
-  if selector.id.len > 0:
-    result += 10000
+func selectorSpecificity(selector: StyleSelector): array[3, int] =
+  [ord(selector.id.len > 0), selector.classes.len + card(selector.states), 1]
+
+func ruleRank(rule: StyleRule, roleRank = 0): array[7, int] =
+  [
+    ord(rule.origin),
+    ord(rule.important),
+    rule.cssSpecificity[0],
+    rule.cssSpecificity[1],
+    rule.cssSpecificity[2],
+    roleRank,
+    rule.sourceOrder,
+  ]
+
+func rankAtLeast(left, right: array[7, int]): bool =
+  for index in 0 .. left.high:
+    if left[index] != right[index]:
+      return left[index] > right[index]
+  true
 
 func inheritedStyleRole(role: StyleRole): StyleRole =
   case role
@@ -902,23 +535,74 @@ func inheritedStyleRole(role: StyleRole): StyleRole =
   else: role
 
 proc stylePatch(theme: var ThemeBuilder, selector: StyleSelector): StylePatch =
-  for rule in theme.xRules:
-    if rule.selector == selector:
-      return rule.patch
+  inc theme.xSourceOrder
   result = newStylePatch()
-  theme.xRules.add StyleRule(selector: selector, patch: result)
+  theme.xRules.add StyleRule(
+    selector: selector,
+    patch: result,
+    origin: theme.xWriteOrigin,
+    cssSpecificity: selector.selectorSpecificity,
+    sourceOrder: theme.xSourceOrder,
+  )
+
+proc exactStylePatch(rules: openArray[StyleRule], selector: StyleSelector): StylePatch =
+  var best: Table[string, int]
+  for index, rule in rules:
+    if rule.selector == selector:
+      if result.isNil:
+        result = newStylePatch()
+      for key, value in rule.patch.values:
+        if key notin best or rule.ruleRank.rankAtLeast(rules[best[key]].ruleRank):
+          result.values[key] = value
+          best[key] = index
 
 proc stylePatchView(theme: Theme, selector: StyleSelector): StylePatch =
-  for rule in theme.xRules:
-    if rule.selector == selector:
-      return rule.patch
+  if not theme.xSnapshot.isNil:
+    result = exactStylePatch(theme.xSnapshot.xRules, selector)
 
 proc stylePatch*(theme: Theme, selector: StyleSelector): StylePatch =
   ## Returns a mutable copy without exposing snapshot-owned storage.
   theme.stylePatchView(selector).clone
 
 proc addRule*(theme: var ThemeBuilder, selector: StyleSelector, patch: StylePatch) =
-  theme.xRules.add StyleRule(selector: selector, patch: patch)
+  inc theme.xSourceOrder
+  theme.xRules.add StyleRule(
+    selector: selector,
+    patch: patch,
+    origin: theme.xWriteOrigin,
+    cssSpecificity: selector.selectorSpecificity,
+    sourceOrder: theme.xSourceOrder,
+  )
+  theme.noteThemeMutation()
+
+proc nextSourceOrder*(theme: var ThemeBuilder): int =
+  ## Compiler hook: one source-order value for an expanded CSS declaration.
+  inc theme.xSourceOrder
+  theme.xSourceOrder
+
+proc addCssRule*(
+    theme: var ThemeBuilder,
+    selector: StyleSelector,
+    patch: StylePatch,
+    specificity: array[3, int],
+    sourceOrder: int,
+    important = false,
+    line = 1,
+    column = 1,
+    origin = sroCss,
+) =
+  ## Compiler hook: adds a CSS declaration without merging identical selectors.
+  theme.xRules.add StyleRule(
+    selector: selector,
+    patch: patch,
+    origin: origin,
+    isCss: true,
+    important: important,
+    cssSpecificity: specificity,
+    sourceOrder: sourceOrder,
+    line: line,
+    column: column,
+  )
   theme.noteThemeMutation()
 
 proc setStyle*[T](
@@ -1287,40 +971,36 @@ proc `[]`*[T](theme: Theme, role: StyleRole, key: StyleKey[T]): StyleValue =
     result = missingStyleValue()
 
 proc `[]`*[T](theme: ThemeBuilder, role: StyleRole, key: StyleKey[T]): StyleValue =
-  for rule in theme.xRules:
-    if rule.selector == initStyleSelector(role) and rule.patch.getStyle(key, result):
-      return
-  result = missingStyleValue()
+  let patch = exactStylePatch(theme.xRules, initStyleSelector(role))
+  if patch.isNil or not patch.getStyle(key, result):
+    result = missingStyleValue()
 
 proc ruleValue(
     theme: Theme, context: StyleContext, key: string, fallback: StyleValue
 ): StyleValue =
   result = fallback
-  var
-    bestSpecificity = -1
-    inheritedContext = context
-  let inheritedRole = context.role.inheritedStyleRole()
-  inheritedContext.role = inheritedRole
-
-  template applyRule(rule: StyleRule, matchContext: StyleContext, roleRank: int) =
-    block:
-      var value: StyleValue
-      if rule.selector.matches(matchContext) and rule.patch.getStyle(key, value):
-        let ruleSpecificity = rule.selector.specificity() * 10 + roleRank
-        if ruleSpecificity >= bestSpecificity:
-          var resolved: StyleValue
-          if theme.xTokens.resolveValue(value, resolved):
-            result = resolved
-            bestSpecificity = ruleSpecificity
-          elif value.kind != svToken:
-            result = value
-            bestSpecificity = ruleSpecificity
-
-  if inheritedRole != context.role:
-    for ruleIndex in theme.xRulesByRole[inheritedRole]:
-      applyRule(theme.xRules[ruleIndex], inheritedContext, 0)
-  for ruleIndex in theme.xRulesByRole[context.role]:
-    applyRule(theme.xRules[ruleIndex], context, 1)
+  let snapshot = theme.xSnapshot
+  if snapshot.isNil:
+    return
+  var bestRank = [-1, -1, -1, -1, -1, -1, -1]
+  let inheritedRole = context.role.inheritedStyleRole
+  let keyCount =
+    if key in [StyleBackgroundFill.keyName, StyleBackgroundColor.keyName]: 2 else: 1
+  for keyIndex in 0 ..< keyCount:
+    let name = if keyIndex == 0: key else: StyleFill.keyName
+    if name in snapshot.xRulesByProperty:
+      for role in [inheritedRole, context.role]:
+        var matchContext = context
+        matchContext.role = role
+        for index in snapshot.xRulesByProperty[name][role]:
+          let rule = snapshot.xRules[index]
+          if rule.selector.matches(matchContext):
+            let rank = rule.ruleRank(ord(role == context.role))
+            if rank.rankAtLeast(bestRank):
+              result = snapshot.xResolvedRules[index].values[name]
+              bestRank = rank
+        if inheritedRole == context.role:
+          break
 
 proc colorRule(
     theme: Theme, context: StyleContext, key: StyleKey[Color], fallback: Color
@@ -1389,9 +1069,9 @@ proc keywordRule(
   if value.kind == svKeyword: value.keyword else: fallback
 
 proc styleValue*(theme: Theme, name: string, fallback: StyleValue): StyleValue =
-  if theme.xTokens.isNil:
+  if not theme.isInitialized:
     return fallback
-  if not theme.xTokens.resolveToken(name, result):
+  if not theme.xSnapshot.xTokens.resolveCssToken(name, fallback.kind, result):
     result = fallback
 
 proc colorToken*(theme: Theme, name: string, fallback: Color): Color =
@@ -1420,17 +1100,34 @@ proc lengthToken*(theme: Theme, name: string, fallback: float32): float32 =
 
 proc sizeToken*(theme: Theme, name: string, fallback: Size): Size =
   let value = theme.styleValue(name, styleSize(fallback))
-  if value.kind == svSize: value.size else: fallback
+  case value.kind
+  of svSize:
+    value.size
+  of svLength:
+    initSize(value.length, value.length)
+  else:
+    fallback
 
 proc insetsToken*(theme: Theme, name: string, fallback: EdgeInsets): EdgeInsets =
   let value = theme.styleValue(name, styleInsets(fallback))
-  if value.kind == svInsets: value.insets else: fallback
+  case value.kind
+  of svInsets:
+    value.insets
+  of svLength:
+    insets(value.length)
+  else:
+    fallback
 
 proc shadowsToken*(
     theme: Theme, name: string, fallback: seq[BoxShadow]
 ): seq[BoxShadow] =
   let value = theme.styleValue(name, styleShadows(fallback))
-  if value.kind == svShadows: value.shadows else: fallback
+  if value.kind == svShadows:
+    value.shadows
+  elif value.kind == svKeyword and value.keyword == "none":
+    @[]
+  else:
+    fallback
 
 proc styleValue*(
     appearance: Appearance, name: string, fallback: StyleValue
@@ -1619,6 +1316,65 @@ proc resolveInsets*(
 
 proc resolveChromeName*(theme: Theme, context: StyleContext): string =
   theme.keywordRule(context, StyleChrome, DefaultChromeName)
+
+proc layoutStyleSelection*(
+    theme: Theme,
+    context: StyleContext,
+    key = StyleLayoutConstraints,
+    checkWork: proc() {.closure.} = nil,
+): LayoutStyleSelection =
+  ## Selects already-compiled data without copying potentially large lists.
+  let snapshot = theme.xSnapshot
+  if snapshot.isNil:
+    return
+  var bestRank = [-1, -1, -1, -1, -1, -1, -1]
+  let name = key.keyName
+  let inheritedRole = context.role.inheritedStyleRole
+  if name in snapshot.xRulesByProperty:
+    for role in [inheritedRole, context.role]:
+      var matchContext = context
+      matchContext.role = role
+      for index in snapshot.xRulesByProperty[name][role]:
+        if not checkWork.isNil:
+          checkWork()
+        let rule = snapshot.xRules[index]
+        let patch = snapshot.xResolvedRules[index]
+        if rule.selector.matches(matchContext) and
+            patch.values[name].kind == svConstraints:
+          let rank = rule.ruleRank(ord(role == context.role))
+          if rank.rankAtLeast(bestRank):
+            result = LayoutStyleSelection(patch: patch, key: name)
+            bestRank = rank
+      if inheritedRole == context.role:
+        break
+
+func constraintCount*(selection: LayoutStyleSelection): Natural =
+  ## Reads borrowed list metadata without copying or validating list entries.
+  if not selection.patch.isNil:
+    selection.patch.values[selection.key].constraints.len
+  else:
+    0
+
+proc resolveLayoutConstraints*(
+    selection: LayoutStyleSelection, checkWork: proc() {.closure.} = nil
+): seq[StyleLayoutConstraint] =
+  ## Makes one independently owned copy after the caller checks list size.
+  let count = selection.constraintCount
+  result = newSeqOfCap[StyleLayoutConstraint](count)
+  for index in 0 ..< count:
+    if not checkWork.isNil:
+      checkWork()
+    var spec = selection.patch.values[selection.key].constraints[index]
+    var id = newStringOfCap(spec.targetId.len)
+    id.add spec.targetId
+    spec.targetId = move id
+    result.add spec
+
+proc resolveLayoutConstraints*(
+    theme: Theme, context: StyleContext, key = StyleLayoutConstraints
+): seq[StyleLayoutConstraint] =
+  ## Returns independently owned specifications from the winning declaration.
+  theme.layoutStyleSelection(context, key).resolveLayoutConstraints()
 
 proc resolveChromeName*(appearance: Appearance, context: StyleContext): string =
   appearance.theme.resolveChromeName(context)

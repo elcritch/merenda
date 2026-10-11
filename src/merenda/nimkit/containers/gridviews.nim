@@ -38,6 +38,11 @@ type
     colWidths: seq[float32]
     rowHeights: seq[float32]
 
+  GridLayoutStyle = object
+    spacing: array[Direction, float32]
+    insets: EdgeInsets
+    alignment: array[Direction, GridAlignment]
+
 const LayoutEpsilon = 0.001'f32
 
 func normalizedSpacing(value: float32): float32 =
@@ -83,6 +88,43 @@ proc gridItemIndex(gridView: GridView, child: View): int =
       return index
   -1
 
+proc resolvedGridLayoutStyle(grid: GridView): GridLayoutStyle =
+  let
+    theme = grid.effectiveAppearance().theme
+    context = controlStyle(
+      srGridView, grid.widgetStateSet(), id = grid.styleId, classes = grid.styleClasses
+    )
+  result.insets = theme
+    .resolveInsets(context, StyleContainerInsets, grid.xEdgeInsets)
+    .normalizedInsets()
+  for direction in Direction:
+    result.spacing[direction] = theme
+      .resolveLength(
+        context,
+        if direction == drow: StyleContainerRowGap else: StyleContainerColumnGap,
+        grid.xSpacing[direction],
+      )
+      .normalizedSpacing()
+    let alignment = theme.resolveKeyword(
+      context,
+      if direction == drow:
+        StyleContainerRowAlignment
+      else:
+        StyleContainerColumnAlignment,
+      case grid.xAlignment[direction]
+      of gaFill: "fill"
+      of gaLeading: "leading"
+      of gaCenter: "center"
+      of gaTrailing: "trailing"
+      ,
+    )
+    result.alignment[direction] =
+      case alignment
+      of "leading": gaLeading
+      of "center": gaCenter
+      of "trailing": gaTrailing
+      else: gaFill
+
 func startIndex(item: GridItem, direction: Direction): int =
   case direction
   of drow: item.row.int
@@ -120,7 +162,7 @@ proc growTracks(tracks: var seq[float32], start, span: int, needed, spacing: flo
   for index in start ..< min(start + span, tracks.len):
     tracks[index] += share
 
-proc gridMetrics(gridView: GridView): GridMetrics =
+proc gridMetrics(gridView: GridView, style: GridLayoutStyle): GridMetrics =
   let items = gridView.visibleGridItems()
   result.colWidths.setLen(items.trackCount(dcol))
   result.rowHeights.setLen(items.trackCount(drow))
@@ -129,11 +171,11 @@ proc gridMetrics(gridView: GridView): GridMetrics =
     let size = item.view.fittingSize()
     if item.spanCount(dcol) == 1:
       result.colWidths.growTracks(
-        item.startIndex(dcol), 1, size.itemMetric(dcol), gridView.xSpacing[dcol]
+        item.startIndex(dcol), 1, size.itemMetric(dcol), style.spacing[dcol]
       )
     if item.spanCount(drow) == 1:
       result.rowHeights.growTracks(
-        item.startIndex(drow), 1, size.itemMetric(drow), gridView.xSpacing[drow]
+        item.startIndex(drow), 1, size.itemMetric(drow), style.spacing[drow]
       )
 
   for item in items:
@@ -143,14 +185,14 @@ proc gridMetrics(gridView: GridView): GridMetrics =
         item.startIndex(dcol),
         item.spanCount(dcol),
         size.itemMetric(dcol),
-        gridView.xSpacing[dcol],
+        style.spacing[dcol],
       )
     if item.spanCount(drow) > 1:
       result.rowHeights.growTracks(
         item.startIndex(drow),
         item.spanCount(drow),
         size.itemMetric(drow),
-        gridView.xSpacing[drow],
+        style.spacing[drow],
       )
 
 func trackSum(tracks: openArray[float32]): float32 =
@@ -161,18 +203,18 @@ func naturalLength(tracks: openArray[float32], spacing: float32): float32 =
   tracks.trackSum() + spacing.totalSpacing(tracks.len)
 
 proc naturalSize(gridView: GridView): Size =
-  let metrics = gridView.gridMetrics()
+  let
+    style = gridView.resolvedGridLayoutStyle()
+    metrics = gridView.gridMetrics(style)
   initSize(
-    gridView.xEdgeInsets.horizontal +
-      metrics.colWidths.naturalLength(gridView.xSpacing[dcol]),
-    gridView.xEdgeInsets.vertical +
-      metrics.rowHeights.naturalLength(gridView.xSpacing[drow]),
+    style.insets.horizontal + metrics.colWidths.naturalLength(style.spacing[dcol]),
+    style.insets.vertical + metrics.rowHeights.naturalLength(style.spacing[drow]),
   )
 
-proc contentRect(gridView: GridView): Rect =
+proc contentRect(gridView: GridView, style: GridLayoutStyle): Rect =
   let
     bounds = gridView.bounds()
-    insets = gridView.xEdgeInsets
+    insets = style.insets
   rect(
     insets.left,
     insets.top,
@@ -235,6 +277,7 @@ proc itemCell(
     item: GridItem,
     colWidths, rowHeights: openArray[float32],
     colOrigins, rowOrigins: openArray[float32],
+    style: GridLayoutStyle,
 ): Rect =
   let
     col = item.startIndex(dcol)
@@ -245,31 +288,33 @@ proc itemCell(
   rect(
     colOrigins[col],
     rowOrigins[row],
-    colWidths.spannedLength(col, item.spanCount(dcol), gridView.xSpacing[dcol]),
-    rowHeights.spannedLength(row, item.spanCount(drow), gridView.xSpacing[drow]),
+    colWidths.spannedLength(col, item.spanCount(dcol), style.spacing[dcol]),
+    rowHeights.spannedLength(row, item.spanCount(drow), style.spacing[drow]),
   )
 
 proc layoutGridSubviews(gridView: GridView) =
   let
+    style = gridView.resolvedGridLayoutStyle()
     items = gridView.visibleGridItems()
-    metrics = gridView.gridMetrics()
-    content = gridView.contentRect()
+    metrics = gridView.gridMetrics(style)
+    content = gridView.contentRect(style)
     colWidths =
-      metrics.colWidths.adjustedTracks(content.size.width, gridView.xSpacing[dcol])
+      metrics.colWidths.adjustedTracks(content.size.width, style.spacing[dcol])
     rowHeights =
-      metrics.rowHeights.adjustedTracks(content.size.height, gridView.xSpacing[drow])
-    colOrigins = colWidths.trackOrigins(content.origin.x, gridView.xSpacing[dcol])
-    rowOrigins = rowHeights.trackOrigins(content.origin.y, gridView.xSpacing[drow])
+      metrics.rowHeights.adjustedTracks(content.size.height, style.spacing[drow])
+    colOrigins = colWidths.trackOrigins(content.origin.x, style.spacing[dcol])
+    rowOrigins = rowHeights.trackOrigins(content.origin.y, style.spacing[drow])
 
   for item in items:
     let
-      cell = gridView.itemCell(item, colWidths, rowHeights, colOrigins, rowOrigins)
+      cell =
+        gridView.itemCell(item, colWidths, rowHeights, colOrigins, rowOrigins, style)
       natural = item.view.fittingSize()
       colFrame = alignedLength(
-        cell.origin.x, cell.size.width, natural.width, gridView.xAlignment[dcol]
+        cell.origin.x, cell.size.width, natural.width, style.alignment[dcol]
       )
       rowFrame = alignedLength(
-        cell.origin.y, cell.size.height, natural.height, gridView.xAlignment[drow]
+        cell.origin.y, cell.size.height, natural.height, style.alignment[drow]
       )
     item.view.setFrameFromGridLayout(
       rect(colFrame.origin, rowFrame.origin, colFrame.length, rowFrame.length)
@@ -378,6 +423,16 @@ protocol GridViewLifecycleSlots of ViewLifecycleProtocol:
     gridView.removeGridSubview(child)
 
 protocol DefaultGridViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(grid: GridView): StyleContext =
+    controlStyle(
+      srGridView, grid.widgetStateSet(), id = grid.styleId, classes = grid.styleClasses
+    )
+
+  method managesSubviewLayout(grid: GridView, child: DynamicAgent): bool =
+    for item in grid.xItems:
+      if DynamicAgent(item.view) == child and item.view.superviewBacklink() == grid:
+        return true
+
   method layoutIntrinsicContentSize(gridView: GridView): IntrinsicSize =
     initIntrinsicSize(gridView.naturalSize())
 

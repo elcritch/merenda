@@ -297,6 +297,11 @@ protocol FormViewLifecycleSlots of ViewLifecycleProtocol:
     formView.removeRowContaining(child)
 
 protocol DefaultFormViewLayout of ViewLayoutProtocol:
+  method managesSubviewLayout(formView: FormView, child: DynamicAgent): bool =
+    for row in formView.xRows:
+      if child == row.label or child == row.field:
+        return true
+
   method layoutIntrinsicContentSize(formView: FormView): IntrinsicSize =
     initIntrinsicSize(formView.naturalSize())
 

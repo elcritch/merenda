@@ -152,3 +152,8 @@ type
     keyCode*: int
     modifiers*: set[KeyModifier]
     repeated*: bool
+
+const KeyboardScrollKeys* = {
+  keyArrowLeft, keyArrowRight, keyArrowUp, keyArrowDown, keyPageUp, keyPageDown,
+  keySpace,
+}

@@ -18,12 +18,14 @@ import combobox_demo
 import collectionview_demo
 import constraint_playground_demo
 import controls_showcase
+import css_theme_demo
 import documenttabs_demo
 import document_workspace_demo
 import filter_row
 import font_fallback_demo
 import grid_preferences
 import hello
+import html_ui_demo
 import image_resources_demo
 import layout_showcase
 import matrix_demo

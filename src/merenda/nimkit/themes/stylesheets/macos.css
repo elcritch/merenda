@@ -1,0 +1,441 @@
+/* macos overrides the aqua theme. */
+
+:root {
+  --accent: rgba(4%, 52%, 255, 1);
+  --accent-pressed: rgba(0, 38%, 82%, 1);
+  --button-border-color: rgba(0, 0, 0, 0.2);
+  --button-border-color-accent: rgba(0, 34%, 78%, 0.78);
+  --button-border-color-accent-highlighted: rgba(0, 28%, 68%, 0.86);
+  --button-border-color-accent-hovered: rgba(0, 38%, 82%, 0.82);
+  --button-border-color-disabled: rgba(0, 0, 0, 0.1);
+  --button-border-color-highlighted: rgba(0, 0, 0, 0.28);
+  --button-border-color-hovered: rgba(0, 0, 0, 0.25);
+  --button-fill: rgba(255, 255, 255, 0.94);
+  --button-fill-accent: var(--accent);
+  --button-fill-accent-highlighted: var(--accent-pressed);
+  --button-fill-accent-hovered: rgba(16%, 153, 255, 1);
+  --button-fill-disabled: var(--disabled-fill);
+  --button-fill-highlighted: rgba(86%, 86%, 88%, 1);
+  --button-fill-hovered: rgba(255, 255, 255, 1);
+  --button-shadows: 0px 1px 2px 0px rgba(0, 0, 0, 0.08);
+  --button-text-color: rgba(12%, 12%, 13%, 1);
+  --choice-indicator-border-color: rgba(0, 0, 0, 0.28);
+  --choice-indicator-border-color-disabled: rgba(0, 0, 0, 0.12);
+  --choice-indicator-border-color-highlighted: rgba(0, 0, 0, 0.36);
+  --choice-indicator-border-color-selected: rgba(0, 34%, 78%, 0.82);
+  --choice-indicator-fill: rgba(255, 255, 255, 1);
+  --choice-indicator-fill-disabled: var(--disabled-fill);
+  --choice-indicator-fill-highlighted: rgba(95%, 95%, 96%, 1);
+  --choice-indicator-fill-selected: var(--accent);
+  --choice-indicator-fill-selected-disabled: rgba(58%, 76%, 96%, 1);
+  --choice-indicator-fill-selected-highlighted: var(--accent-pressed);
+  --choice-mark-color: rgba(255, 255, 255, 1);
+  --choice-mark-color-disabled: rgba(255, 255, 255, 0.78);
+  --choice-text-color: rgba(12%, 12%, 13%, 1);
+  --choice-text-color-disabled: var(--disabled-text-color);
+  --combo-box-arrow-color: rgba(30%, 30%, 32%, 1);
+  --combo-box-arrow-fill: rgba(0, 0, 0, 0.04);
+  --combo-box-border-color: var(--button-border-color);
+  --combo-box-border-color-open: var(--accent);
+  --combo-box-fill: var(--button-fill);
+  --combo-box-item-fill: rgba(255, 255, 255, 0.98);
+  --combo-box-item-fill-highlighted: rgba(92%, 92%, 94%, 1);
+  --combo-box-item-fill-selected: var(--accent);
+  --combo-box-item-fill-selected-highlighted: var(--accent-pressed);
+  --combo-box-item-text-color: var(--text-field-text-color);
+  --disabled-fill: rgba(93%, 93%, 94%, 1);
+  --disabled-text-color: rgba(56%, 56%, 58%, 1);
+  --document-tab-bar-border-color: var(--tab-panel-border-color);
+  --document-tab-bar-fill: var(--tab-panel-fill);
+  --document-tab-border-color: var(--tab-border-color);
+  --document-tab-border-color-disabled: var(--tab-border-color-disabled);
+  --document-tab-border-color-highlighted: var(--tab-border-color-highlighted);
+  --document-tab-border-color-pressed: var(--tab-border-color-highlighted);
+  --document-tab-border-color-selected: var(--tab-border-color-selected);
+  --document-tab-button-border-color: var(--tab-border-color);
+  --document-tab-button-border-color-disabled: var(--tab-border-color-disabled);
+  --document-tab-button-border-color-highlighted: var(--tab-border-color-highlighted);
+  --document-tab-button-fill: var(--tab-fill);
+  --document-tab-button-fill-disabled: var(--tab-fill-disabled);
+  --document-tab-button-fill-highlighted: var(--tab-fill-highlighted);
+  --document-tab-button-mark-color: var(--tab-text-color);
+  --document-tab-button-mark-color-disabled: var(--tab-text-color-disabled);
+  --document-tab-fill: var(--tab-fill);
+  --document-tab-fill-disabled: var(--tab-fill-disabled);
+  --document-tab-fill-highlighted: var(--tab-fill-highlighted);
+  --document-tab-fill-pressed: rgba(0, 0, 0, 0.1);
+  --document-tab-fill-selected: var(--tab-fill-selected);
+  --document-tab-highlight-fill: var(--tab-highlight-fill);
+  --document-tab-highlight-fill-disabled: var(--tab-highlight-fill-disabled);
+  --document-tab-text-color: var(--tab-text-color);
+  --document-tab-text-color-disabled: var(--tab-text-color-disabled);
+  --document-tab-text-color-selected: var(--tab-text-color-selected);
+  --focus-ring-color: rgba(4%, 52%, 255, 0.48);
+  --indicator-size: 16px;
+  --mono-text-cursor-color: var(--accent);
+  --progress-fill: var(--accent);
+  --row-item-fill: rgba(255, 255, 255, 0);
+  --row-item-fill-disabled: rgba(0, 0, 0, 0.025);
+  --row-item-fill-highlighted: rgba(0, 0, 0, 0.055);
+  --row-item-fill-selected: var(--accent);
+  --row-item-fill-selected-highlighted: var(--accent-pressed);
+  --row-item-separator-color: rgba(0, 0, 0, 0.08);
+  --row-item-text-color: var(--text-field-text-color);
+  --row-item-text-color-disabled: var(--disabled-text-color);
+  --row-item-text-color-selected: rgba(255, 255, 255, 1);
+  --scroller-knob-border-color: rgba(0, 0, 0, 0.08);
+  --scroller-knob-fill: rgba(35%, 35%, 37%, 0.46);
+  --scroller-knob-shadows: none;
+  --scroller-track-border-color: rgba(0, 0, 0, 0);
+  --scroller-track-fill: rgba(0, 0, 0, 0);
+  --scroller-track-shadows: none;
+  --split-view-divider-border-color: rgba(0, 0, 0, 0.12);
+  --split-view-divider-fill: rgba(0, 0, 0, 0.08);
+  --tab-border-color: rgba(0, 0, 0, 0);
+  --tab-border-color-disabled: rgba(0, 0, 0, 0);
+  --tab-border-color-highlighted: rgba(0, 0, 0, 0.1);
+  --tab-border-color-selected: rgba(0, 0, 0, 0.18);
+  --tab-fill: rgba(0, 0, 0, 0);
+  --tab-fill-disabled: rgba(0, 0, 0, 0.025);
+  --tab-fill-highlighted: rgba(0, 0, 0, 0.06);
+  --tab-fill-selected: rgba(255, 255, 255, 0.96);
+  --tab-highlight-fill: rgba(0, 0, 0, 0);
+  --tab-highlight-fill-disabled: rgba(0, 0, 0, 0);
+  --tab-panel-border-color: rgba(0, 0, 0, 0.14);
+  --tab-panel-fill: rgba(255, 255, 255, 0.72);
+  --tab-text-color: rgba(24%, 24%, 26%, 1);
+  --tab-text-color-disabled: var(--disabled-text-color);
+  --tab-text-color-selected: rgba(8%, 8%, 9%, 1);
+  --table-view-border-color: rgba(0, 0, 0, 0.16);
+  --table-view-column-hover-fill: rgba(0, 0, 0, 0.035);
+  --table-view-column-selection-fill: rgba(4%, 52%, 255, 0.1);
+  --table-view-fill: rgba(255, 255, 255, 0.92);
+  --text-field-border-color: rgba(0, 0, 0, 0.22);
+  --text-field-fill: rgba(255, 255, 255, 0.96);
+  --text-field-selection-color: rgba(4%, 52%, 255, 0.26);
+  --text-field-text-color: rgba(10%, 10%, 11%, 1);
+}
+
+button {
+  border-width: 1px;
+  -nimkit-chrome: default;
+  border-radius: 7px;
+  -nimkit-minimum-size: 0px 28px;
+  -nimkit-text-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-text-insets: 0px 12px;
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0);
+}
+
+check-box {
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 4px;
+  -nimkit-indicator-size: 16px;
+}
+
+radio-button {
+  box-shadow: none;
+  -nimkit-chrome: default;
+  -nimkit-indicator-size: 16px;
+}
+
+text-field {
+  -nimkit-chrome: default;
+  -nimkit-minimum-size: 8e+01px 28px;
+  color: var(--text-field-text-color);
+}
+
+combo-box {
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.08);
+  -nimkit-chrome: default;
+  border-radius: 7px;
+  -nimkit-indicator-size: 24px;
+  -nimkit-minimum-size: 9e+01px 28px;
+}
+
+tab {
+  -nimkit-chrome: default;
+  border-radius: 7px;
+  -nimkit-minimum-size: 52px 28px;
+  -nimkit-overlap: 0px;
+  -nimkit-segment-size: 0px 24px;
+}
+
+table-header-cell {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: #00000000;
+  -nimkit-mark-color: rgba(35%, 35%, 37%, 1);
+  color: rgba(24%, 24%, 26%, 1);
+}
+
+row-item {
+  -nimkit-alternating-fill: #00000006;
+}
+
+mono-text-view {
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 8px;
+}
+
+view {
+  -nimkit-window-background-color: rgba(93%, 93%, 94%, 1);
+  -nimkit-window-background: #ededf0;
+  -nimkit-pinstripe-height: 0px;
+  -nimkit-pinstripe-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-pinstripe-period: 0px;
+}
+
+button:accent {
+  color: rgba(255, 255, 255, 1);
+}
+
+button:hover:accent {
+  color: rgba(255, 255, 255, 1);
+}
+
+button:highlighted:accent {
+  color: rgba(255, 255, 255, 1);
+}
+
+button:active:accent {
+  color: rgba(255, 255, 255, 1);
+}
+
+stepper {
+  border-color: rgba(0, 0, 0, 0.12);
+  border-width: 1px;
+  box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.08);
+  -nimkit-chrome: default;
+  border-radius: 8px;
+  background: #e3e3e6;
+  -nimkit-minimum-size: 72px 28px;
+  -nimkit-separator-thickness: 1px;
+  color: rgba(16%, 16%, 17%, 1);
+  -nimkit-text-insets: 0px;
+}
+
+switch {
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: none;
+  -nimkit-chrome: default;
+  background: #78787d52;
+  -nimkit-knob-border-color: rgba(0, 0, 0, 0.08);
+  -nimkit-knob-fill: #ffffff;
+  -nimkit-knob-shadows: 0px 1px 3px 0px rgba(0, 0, 0, 0.18);
+}
+
+switch:selected {
+  border-color: rgba(12%, 64%, 26%, 1);
+  background: #33c759;
+}
+
+slider {
+  border-color: rgba(0, 0, 0, 0.06);
+  -nimkit-chrome: default;
+  background: #78787d3d;
+  -nimkit-highlight-fill: #0a85ff;
+  -nimkit-indicator-size: 4px;
+  -nimkit-knob-border-color: rgba(0, 0, 0, 0.14);
+  -nimkit-knob-fill: #ffffff;
+  -nimkit-knob-shadows: 0px 1px 3px 0px rgba(0, 0, 0, 0.18);
+  -nimkit-knob-size: 18px;
+}
+
+progress-indicator {
+  border-color: rgba(0, 0, 0, 0.06);
+  -nimkit-chrome: default;
+  background: #78787d3d;
+  -nimkit-indicator-size: 4px;
+  -nimkit-knob-border-color: rgba(0, 0, 0, 0.14);
+  -nimkit-knob-fill: #ffffff;
+  -nimkit-knob-shadows: 0px 1px 3px 0px rgba(0, 0, 0, 0.18);
+  -nimkit-knob-size: 18px;
+}
+
+tab-panel {
+  -nimkit-chrome: default;
+  border-radius: 8px;
+}
+
+document-tab {
+  -nimkit-chrome: default;
+  border-radius: 7px;
+  -nimkit-selection-indicator-insets: 2px 11px 1px 11px;
+}
+
+document-tab-bar {
+  -nimkit-chrome: default;
+  border-radius: 8px;
+}
+
+document-tab-button {
+  -nimkit-chrome: default;
+}
+
+scroll-view {
+  border-radius: 8px;
+}
+
+scroller,
+cascading-scroller {
+  border-width: 0px;
+  border-radius: 4px;
+}
+
+split-view {
+  -nimkit-separator-thickness: 1px;
+}
+
+table-header {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: #f5f5f7f5;
+}
+
+table-header-cell:hover {
+  background: #0000000a;
+}
+
+table-header-cell:pressed {
+  background: #00000014;
+}
+
+stepper:highlighted {
+  box-shadow: none;
+  background: #ccccd1;
+}
+
+stepper:disabled {
+  color: rgba(58%, 58%, 153, 1);
+}
+
+/* Class styles override the general control states. */
+
+box.popover-box {
+  background: var(--text-field-fill);
+}
+
+button.toolbar-button {
+  border-color: var(--text-field-border-color);
+  border-width: 1px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 5px;
+  background: var(--box-fill);
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 24px 24px;
+  color: var(--text-field-text-color);
+  -nimkit-text-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-text-insets: 0px 4px;
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0);
+}
+
+button.toolbar-button:hover {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:highlighted {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:selected {
+  border-color: var(--accent);
+  box-shadow: inset 0px 1px 2px 0px rgba(0, 0, 0, 0.35);
+  background: var(--accent-pressed);
+  color: rgba(255, 255, 255, 1);
+}
+
+button.toolbar-button:hover:selected {
+  background: var(--accent-pressed);
+}
+
+button.toolbar-button:disabled {
+  color: var(--button-text-color-disabled);
+}
+
+button.toolbar-button.toolbar-symbol {
+  font-size: 16px;
+}
+
+text-field.label {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(12%, 12%, 13%, 1);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-title {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  font-size: 17px;
+  -nimkit-minimum-size: 0px 24px;
+  color: rgba(10%, 10%, 11%, 1);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-heading {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  font-size: 12px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(52%, 52%, 54%, 1);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-status {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  font-size: 12px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(102, 102, 42%, 1);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-form {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(102, 102, 42%, 1);
+  -nimkit-text-insets: 0px 2px;
+}
+
+text-field.label.icon-label {
+  font-size: var(--font-size);
+  -nimkit-indicator-size: 18px;
+  -nimkit-indicator-spacing: 8px;
+  -nimkit-mark-color: var(--accent);
+  color: rgba(16%, 16%, 17%, 1);
+}

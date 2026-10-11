@@ -361,6 +361,14 @@ proc resolvedIntrinsicContentSize*(view: View): IntrinsicSize =
       return measured.get()
     view.intrinsicContentSize()
 
+proc resolvedLayoutStyleContext*(view: View): StyleContext =
+  ## Concrete widgets own their semantic role/effective-state layout hook.
+  view.trySendLocal(layoutStyleContext()).get(
+    controlStyle(
+      srView, view.xWidgetStates, id = view.xStyleId, classes = view.xStyleClasses
+    )
+  )
+
 proc sizeThatFits*(view: View, proposedSize: FittingSize): Size =
   withLayoutResolutionGuard(view, lroSizeThatFits):
     let

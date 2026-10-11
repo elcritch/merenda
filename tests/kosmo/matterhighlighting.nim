@@ -8,6 +8,7 @@ import moepkg/highlight as moeHighlight
 import moepkg/syntax/matter_backend as moeMatter
 import merenda/kosmo/kosmo
 import merenda/kosmo/matterworkers
+import merenda/kosmo/moethemeassets
 import merenda/nimkit
 from merenda/nimkit/foundation/mainthreadwork import
   drainMainThreadWork, hasPendingMainThreadWork
@@ -133,24 +134,22 @@ suite "Kosmo Matter highlighting":
   test "installed VS Code file types select their root grammar asynchronously":
     let
       rootPath = "/kosmo/config/grammars/toy/syntaxes/toy.tmLanguage.json"
-      sources =
-        @[
-          moeMatter.MatterGrammarSource(
-            path: rootPath,
-            content:
-              """{"scopeName":"source.toy","patterns":[{"match":"\\b(fizz)\\b","name":"keyword.control.toy"}]}""",
-          )
-        ]
-      fileTypes =
-        @[
-          MatterGrammarFileType(
-            identifier: "toy:toy",
-            languageId: "toy",
-            rootPath: rootPath,
-            extensions: @[".toy", ".toy.multi"],
-            fileNames: @["Toyfile"],
-          )
-        ]
+      sources = @[
+        moeMatter.MatterGrammarSource(
+          path: rootPath,
+          content:
+            """{"scopeName":"source.toy","patterns":[{"match":"\\b(fizz)\\b","name":"keyword.control.toy"}]}""",
+        )
+      ]
+      fileTypes = @[
+        MatterGrammarFileType(
+          identifier: "toy:toy",
+          languageId: "toy",
+          rootPath: rootPath,
+          extensions: @[".toy", ".toy.multi"],
+          fileNames: @["Toyfile"],
+        )
+      ]
       highlighting = newMatterHighlighting(sources, fileTypes)
       requestId = highlighting.requestMatterHighlight(
         7, 1, "fizz value", moeHighlight.SourceLanguage.langNone,
@@ -360,6 +359,74 @@ suite "Kosmo Matter highlighting":
       buffer.cell(explicit.column, explicit.row).style.fg
     check buffer.cell(parameterless.column, parameterless.row).style.fg !=
       buffer.cell(keyword.column, keyword.row).style.fg
+
+  test "HTML tags, attributes, strings and text differ in every bundled Moe theme":
+    let
+      root = createTempDir("kosmo-html-colors-", "")
+      path = root / "preferences.html"
+      source =
+        "<nk-window id=\"workspace\">\n" &
+        "<span class=\"muted\">Plain text</span>\n</nk-window>\n"
+      editor = newKosmoEditor()
+    writeFile(path, source)
+    defer:
+      editor.close()
+      removeDir(root)
+    require editor.openFile(path).loaded
+    let themes = discoverMoeThemes(installBundledMoeThemes(root / "cache"))
+    require themes.len == 6
+    var buffer = newRenderBuffer(64, 8)
+    for theme in themes:
+      checkpoint(theme.name)
+      require editor.applyMoeTheme(theme).applied
+      require editor.renderUntilMatterHighlightingReady(buffer)
+      var colors: seq[celinaColors.ColorValue]
+      for needle in ["nk-window", "id", "workspace", "Plain text"]:
+        let location = buffer.renderedLocation(needle)
+        require location.column >= 0
+        colors.add buffer.cell(location.column, location.row).style.fg
+      for first in 0 ..< colors.len:
+        for second in first + 1 ..< colors.len:
+          check colors[first] != colors[second]
+      let
+        tag = buffer.renderedLocation("span")
+        attribute = buffer.renderedLocation("class")
+      require tag.column >= 0
+      require attribute.column >= 0
+      check buffer.cell(tag.column, tag.row).style.fg == colors[0]
+      check buffer.cell(attribute.column, attribute.row).style.fg == colors[1]
+
+  test "bundled grammar captures preserve pragma and string colors through workers":
+    for (fileName, source, needles) in [
+      (
+        "pragma.c",
+        "#pragma once\n#pragma mark - Section\n",
+        @["pragma", "once", "Section"],
+      ),
+      (
+        "pragma.cpp",
+        "#pragma GCC diagnostic push\n",
+        @["pragma", "GCC", "diagnostic", "push"],
+      ),
+      ("format.c", "printf(\"value %d\\n\", x);\n", @["value", "%d"]),
+      ("format.go", "fmt.Printf(\"value %d\\n\", x)\n", @["value", "%d"]),
+      ("regexp.js", "const pattern = /[a-z]\\d/;\n", @["/", "a-z"]),
+      ("regexp.ts", "const pattern = /[a-z]\\d/;\n", @["/", "a-z"]),
+      ("regexp.py", "pattern = r\"[a-z]+(?P<group>x)\"\n", @["a-z", "group", "x"]),
+    ]:
+      checkpoint(fileName)
+      let cells = renderMoeFileAcross(fileName, source, needles)
+      for cell in cells:
+        check cell.style.fg == cells[0].style.fg
+
+  test "Moe highlights NIF files using the bundled grammar":
+    for fileName in ["matter.nif", "matter.NIF"]:
+      checkDistinctHighlight(
+        fileName, "(.nif27)\n(call write.1.sys \"Kosmo\" 42)\n", "Kosmo", "42"
+      )
+      checkDistinctHighlight(
+        fileName, "(.nif27)\n(call write.1.sys \"Kosmo\" 42)\n", "call", "write.1.sys"
+      )
 
   test "Moe highlights JavaScript files":
     checkDistinctHighlight("matter.js", "const answer = \"kosmo\";\n", "const", "kosmo")
@@ -610,6 +677,123 @@ suite "Kosmo Matter highlighting":
     check buffer.cell(shifted.column, shifted.row).style.fg == initialColor
 
     require editor.renderUntilMatterHighlightingReady(buffer)
+
+  test "Markdown fence backgrounds stay visible throughout edited Matter snapshots":
+    let
+      prefixLines = MatterHighlightBatchLines * 2
+      root = createTempDir("kosmo-moe-fence-flicker-", "")
+      path = root / "pending.md"
+      source =
+        "Plain prefix\n".repeat(prefixLines) & "```sh\necho stable\n\n```\nPlain tail\n" &
+        "tail\n".repeat(256)
+    writeFile(path, source)
+    defer:
+      removeFile(path)
+      removeDir(root)
+    let editor = newKosmoEditor()
+    defer:
+      editor.close()
+    require editor.openFile(path).loaded
+    # Observe fence shading independently of the cursor-line overlay.
+    require editor.handleKey(":")
+    require editor.handleTextInput("set nocursorline")
+    require editor.handleKey("Enter")
+    var buffer = newRenderBuffer(48, 16)
+    require editor.renderUntilMatterHighlightingReady(buffer)
+    require editor.revealLocation(prefixLines + 1, 0, true)
+    editor.render(buffer)
+    let
+      initialCode = buffer.renderedLocation("stable")
+      initialPlain = buffer.renderedLocation("Plain tail")
+    require initialCode.column >= 0
+    require initialPlain.column >= 0
+    let
+      codeBg = buffer.cell(buffer.width - 1, initialCode.row).style.bg
+      plainBg = buffer.cell(buffer.width - 1, initialPlain.row).style.bg
+    require codeBg != plainBg
+
+    template checkBackgrounds() =
+      block:
+        let
+          code = buffer.renderedLocation("stable")
+          plain = buffer.renderedLocation("Plain tail")
+        require code.column >= 0
+        require plain.column >= 0
+        check buffer.cell(code.column, code.row).style.bg == codeBg
+        # Include the empty code row, both fences, and the trailing fill.
+        for row in code.row - 1 .. plain.row - 1:
+          check buffer.cell(buffer.width - 1, row).style.bg == codeBg
+        check buffer.cell(plain.column, plain.row).style.bg == plainBg
+        check buffer.cell(buffer.width - 1, plain.row).style.bg == plainBg
+
+    template finishWithStableBackgrounds() =
+      block:
+        let deadline = getMonoTime() + initDuration(seconds = 60)
+        while not editor.matterHighlightingReady() and getMonoTime() < deadline:
+          editor.render(buffer)
+          checkBackgrounds()
+          sleep(1)
+        require editor.matterHighlightingReady()
+        editor.render(buffer)
+        checkBackgrounds()
+
+    # The block is beyond the first batch: check the frame before any new
+    # results and every frame while the replacement prefix streams in.
+    require editor.handleKey("i")
+    require editor.handleTextInput(" ")
+    editor.render(buffer)
+    require not editor.matterHighlightingReady()
+    checkBackgrounds()
+    finishWithStableBackgrounds()
+
+    require editor.handleTextInput("# inserted\n")
+    editor.render(buffer)
+    require not editor.matterHighlightingReady()
+    checkBackgrounds()
+    finishWithStableBackgrounds()
+
+    require editor.handleKey("Esc")
+    require editor.handleKey("u")
+    editor.render(buffer)
+    checkBackgrounds()
+    finishWithStableBackgrounds()
+
+    # Edits above the fence must shift its entire background with the text.
+    require editor.revealLocation(0, 0, true)
+    require editor.handleKey("i")
+    require editor.handleTextInput("New prose\n")
+    require editor.handleKey("Esc")
+    require editor.revealLocation(prefixLines + 2, 0, true)
+    editor.render(buffer)
+    checkBackgrounds()
+    finishWithStableBackgrounds()
+    require editor.handleKey("u")
+    require editor.revealLocation(prefixLines + 1, 0, true)
+    editor.render(buffer)
+    checkBackgrounds()
+    finishWithStableBackgrounds()
+
+    # Retained states are replaced when delimiters change. Removing the
+    # closing fence extends the block into prose; undo restores the boundary.
+    require editor.revealLocation(prefixLines + 3, 0, true)
+    require editor.handleKey("d")
+    require editor.handleKey("d")
+    require editor.renderUntilMatterHighlightingReady(buffer)
+    let extended = buffer.renderedLocation("Plain tail")
+    require extended.column >= 0
+    check buffer.cell(buffer.width - 1, extended.row).style.bg == codeBg
+    require editor.handleKey("u")
+    require editor.renderUntilMatterHighlightingReady(buffer)
+    checkBackgrounds()
+
+    require editor.revealLocation(prefixLines, 0, true)
+    require editor.handleKey("d")
+    require editor.handleKey("d")
+    require editor.renderUntilMatterHighlightingReady(buffer)
+    let unfenced = buffer.renderedLocation("stable")
+    require unfenced.column >= 0
+    check buffer.cell(unfenced.column, unfenced.row).style.bg == plainBg
+    check buffer.cell(buffer.width - 1, unfenced.row).style.bg == plainBg
 
   test "Matter completion refreshes the retained editor grid":
     let

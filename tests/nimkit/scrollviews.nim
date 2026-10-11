@@ -1,4 +1,4 @@
-import std/unittest
+import std/[strutils, times, unittest]
 
 import figdraw/debugtools
 import figdraw
@@ -443,6 +443,180 @@ suite "nimkit scroll views":
     let visible = rect(scrollView.contentOffset(), scrollView.viewportSize())
     check visible.contains(initPoint(160, 150))
     check visible.contains(initPoint(199.99, 189.99))
+
+  test "generic scroll containers handle arrows with accumulated bounded animation":
+    let
+      window = newWindow("Keyboard scroll container", frame = rect(0, 0, 140, 100))
+      document = newView(frame = rect(0, 0, 600, 600))
+      scroll = newScrollView(documentView = document)
+    defer:
+      window.close()
+    window.setContentView(scroll)
+    document.acceptsFirstResponder = true
+    require window.makeFirstResponder(document)
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check scroll.contentOffset().y == 0
+    check window.animationScheduler().tick(70.ms) == 1
+    check scroll.contentOffset().y > 0 and scroll.contentOffset().y < 64
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown, repeated: true))
+    check window.animationScheduler().tick(140.ms) == 1
+    check scroll.contentOffset().y == 128
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowUp))
+    check window.animationScheduler().tick(140.ms) == 1
+    check scroll.contentOffset().y == 64
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowRight))
+    check window.animationScheduler().tick(140.ms) == 1
+    check scroll.contentOffset().x == 64
+    scroll.scrollTo(scroll.maximumContentOffset())
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check scroll.contentOffset() == scroll.maximumContentOffset()
+    check not scroll.handleScrollNavigationKey(
+      KeyEvent(key: keyArrowDown, modifiers: {kmShift})
+    )
+
+  test "keyboard scrolling resumes safely after its scheduler clears animations":
+    let
+      window = newWindow("Cleared keyboard animation", frame = rect(0, 0, 140, 100))
+      scroll = newScrollView(documentView = newView(frame = rect(0, 0, 600, 600)))
+    defer:
+      window.close()
+    window.setContentView(scroll)
+    require scroll.handleScrollNavigationKey(KeyEvent(key: keyArrowDown))
+    window.animationScheduler().clearAnimations()
+    require scroll.handleScrollNavigationKey(KeyEvent(key: keyArrowDown))
+    check window.animationScheduler().tick(140.ms) == 1
+    check scroll.contentOffset().y == 64
+
+  test "closing a window during keyboard scrolling releases its scroll container":
+    var weakScroll: BackRef[Responder]
+    block:
+      let
+        window = newWindow("Keyboard scroll lifetime", frame = rect(0, 0, 140, 100))
+        scroll = newScrollView(documentView = newView(frame = rect(0, 0, 600, 600)))
+      weakScroll.target = Responder(scroll)
+      window.setContentView(scroll)
+      require scroll.handleScrollNavigationKey(KeyEvent(key: keyArrowDown))
+      window.close()
+    check weakScroll.isNil
+
+  test "retained scroll children safely outlive their container":
+    var
+      weakScroll: BackRef[Responder]
+      clip: ClipView
+      scroller: Scroller
+    block:
+      let scroll = newScrollView(documentView = newView(frame = rect(0, 0, 600, 600)))
+      weakScroll.target = Responder(scroll)
+      clip = scroll.clipView()
+      scroller = scroll.verticalScroller()
+    require weakScroll.isNil
+    let point = initPoint(0, 32)
+    check clip.constrainScrollPoint(point) == point
+    clip.scrollToPoint(point)
+    check clip.bounds().origin == point
+    check not clip.autoscroll(MouseEvent(location: point))
+    check scroller.scrollerKnobRect().isEmpty
+
+  test "reading arrows preserve selection and editable text keeps cursor movement":
+    let
+      window = newWindow("Reading and editing arrows", frame = rect(0, 0, 220, 100))
+      editor = newTextEditor("row text\n".repeat(60))
+    defer:
+      window.close()
+    window.setContentView(editor)
+    editor.layoutSubtreeIfNeeded()
+    editor.editable = false
+    editor.selectedRange = initTextRange(1, 3)
+    for target in [Responder(editor), Responder(editor.textView())]:
+      editor.scrollView().scrollTo(initPoint(0, 0))
+      require window.makeFirstResponder(target)
+      require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+      check window.animationScheduler().tick(140.ms) == 1
+      check editor.scrollView().contentOffset().y == 64
+      check editor.selectedRange() == initTextRange(1, 3)
+    editor.editable = true
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check editor.selectedRange() != initTextRange(1, 3)
+    check window.animationScheduler().animationCount() == 0
+    editor.editable = false
+    editor.stringValue = "short text"
+    editor.minimumDocumentSize = initSize(0, 0)
+    editor.layoutSubtreeIfNeeded()
+    editor.selectedRange = initTextRange(1, 3)
+    require editor.scrollView().maximumContentOffset().y == 0
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check editor.selectedRange() == initTextRange(1, 3)
+
+  test "reading arrows pass through a horizontal embedded scroller to its outer container":
+    let
+      text = newTextView("wide line", frame = rect(0, 0, 500, 40))
+      child = newScrollView(frame = rect(20, 20, 100, 80), documentView = text)
+      fixture = newNestedScrollFixture(child)
+    defer:
+      fixture.window.close()
+    text.editable = false
+    text.selectedRange = initTextRange(0, 4)
+    require child.maximumContentOffset().y == 0
+    require fixture.window.makeFirstResponder(text)
+    require fixture.window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check fixture.window.animationScheduler().tick(140.ms) == 1
+    check fixture.parent.contentOffset().y > 0
+    check child.contentOffset().y == 0
+    check text.selectedRange() == initTextRange(0, 4)
+
+  test "reading scroll fallback preserves host key-equivalent priority":
+    let
+      window = newWindow("Host before reading scroll", frame = rect(0, 0, 220, 100))
+      host = newView(frame = rect(0, 0, 220, 100))
+      text = newTextView("row", frame = rect(0, 0, 220, 600))
+      scroll = newScrollView(frame = rect(0, 0, 220, 100), documentView = text)
+    defer:
+      window.close()
+    host.addSubview(scroll)
+    window.setContentView(host)
+    text.editable = false
+    var claimsArrow = true
+    var handlerCalls: int
+    let handler: DynamicMethod = proc(self: DynamicAgent, invocation: var Invocation) =
+      let event = invocation.argsAs(KeyEvent)
+      inc handlerCalls
+      invocation.setResult(claimsArrow and event.key == keyArrowDown)
+    discard host.replaceMethod(selectors.performKeyEquivalent(), handler)
+    require window.makeFirstResponder(text)
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check handlerCalls == 1
+    check scroll.contentOffset().y == 0
+    check window.animationScheduler().animationCount() == 0
+    claimsArrow = false
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check handlerCalls == 2
+    check window.animationScheduler().tick(140.ms) == 1
+    check scroll.contentOffset().y == 64
+
+  test "generic scroll fallback preserves widget key-down priority":
+    let
+      window = newWindow("Widget before scroll fallback", frame = rect(0, 0, 220, 100))
+      host = newView(frame = rect(0, 0, 220, 100))
+      document = newView(frame = rect(0, 0, 220, 600))
+      scroll = newScrollView(frame = rect(0, 0, 220, 100), documentView = document)
+    defer:
+      window.close()
+    host.addSubview(scroll)
+    window.setContentView(host)
+    document.acceptsFirstResponder = true
+    var claimsArrow = true
+    let handler: DynamicMethod = proc(self: DynamicAgent, invocation: var Invocation) =
+      invocation.setResult(
+        claimsArrow and invocation.argsAs(KeyEvent).key == keyArrowDown
+      )
+    discard host.replaceMethod(selectors.keyDown(), handler)
+    require window.makeFirstResponder(document)
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check scroll.contentOffset().y == 0
+    claimsArrow = false
+    require window.dispatchKeyDown(KeyEvent(key: keyArrowDown))
+    check window.animationScheduler().tick(140.ms) == 1
+    check scroll.contentOffset().y == 64
 
   test "window inversion reverses wheel movement on both axes":
     let

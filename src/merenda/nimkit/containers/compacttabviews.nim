@@ -112,6 +112,9 @@ proc compactTabButtonStates(button: CompactTabButton): set[WidgetState] =
     result.incl {ssHighlighted, ssPressed}
 
 protocol CompactTabButtonDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    true
+
   method draw(button: CompactTabButton, context: DrawContext) =
     let
       states = button.compactTabButtonStates()
@@ -171,6 +174,19 @@ protocol CompactTabButtonDrawing of ViewDrawingProtocol:
       )
 
 protocol CompactTabViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(tabs: CompactTabView): StyleContext =
+    controlStyle(
+      srTabPanel, tabs.widgetStateSet(), id = tabs.styleId, classes = tabs.styleClasses
+    )
+
+  method managesSubviewLayout(tabs: CompactTabView, child: DynamicAgent): bool =
+    for button in tabs.xButtons:
+      if child == button:
+        return true
+    for item in tabs.xItems:
+      if child == item.xView:
+        return true
+
   method layoutSubviews(tabs: CompactTabView) =
     let bounds = tabs.bounds()
     for index, button in tabs.xButtons:
@@ -196,6 +212,9 @@ protocol CompactTabViewLayout of ViewLayoutProtocol:
         item.xView.setFrameFromLayout(contentFrame)
 
 protocol CompactTabViewDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    true
+
   method draw(tabs: CompactTabView, context: DrawContext) =
     let
       styleContext = controlStyle(

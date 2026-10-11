@@ -5,6 +5,7 @@ import sigils/selectors
 from figdraw import ZLevel
 
 import ../drawing/drawing
+from ../themes/themecore import StyleContext
 import ./undomanagers
 import ./events
 import ../text/texttypes
@@ -92,6 +93,9 @@ protocol ResponderEventProtocol:
 
 protocol ResponderCommandDispatchProtocol:
   method dispatchCommand*(args: TryToPerformArgs): bool {.optional.}
+  method interceptKeyEquivalent*(event: KeyEvent): bool {.optional.}
+    ## Claim focused input before window shortcut sequences are matched.
+
   method performKeyEquivalent*(event: KeyEvent): bool {.optional.}
   method validRequestorForSendType*(
     args: ValidRequestorArgs
@@ -99,6 +103,13 @@ protocol ResponderCommandDispatchProtocol:
 
 protocol UndoManagerProvider:
   method undoManager*(): Option[UndoManager] {.optional.}
+
+protocol ScrollNavigationProtocol:
+  method wantsScrollNavigation*(event: KeyEvent): bool {.optional.}
+    ## A focused reader requests scrolling after other key equivalents decline.
+
+  method scrollKey*(event: KeyEvent): bool {.optional.}
+    ## Handle a reading-navigation key when this container can scroll its axis.
 
 protocol MouseHitPolicyProtocol:
   method mouseHitPolicy*(args: MouseHitPolicyArgs): CellHitPolicy {.optional.}
@@ -224,12 +235,19 @@ protocol CollectionCommandProtocol:
   method deleteSelection*(args: ActionArgs) {.optional.}
 
 protocol ViewDrawingProtocol:
+  method drawsStyledBackground*(): bool {.optional.}
   method drawLevel*(): ZLevel {.optional.}
   method drawUnderlay*(context: DrawContext) {.optional.}
   method draw*(context: DrawContext) {.optional.}
   method drawOverlay*(context: DrawContext) {.optional.}
 
 protocol ViewLayoutProtocol:
+  method layoutStyleContext*(): StyleContext {.optional.}
+    ## Supplies this widget's semantic role and effective state for themed layout.
+
+  method managesSubviewLayout*(child: DynamicAgent): bool {.optional.}
+    ## Identifies exactly the descendants whose frames this owner assigns.
+
   method layoutIntrinsicContentSize*(): IntrinsicSize {.optional.}
   method updateConstraints*() {.optional.}
   method layoutSubviews*() {.optional.}

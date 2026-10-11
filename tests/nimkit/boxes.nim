@@ -352,6 +352,30 @@ suite "nimkit boxes":
     check foundTitle
     check foundSeparator
 
+  test "group captions follow the foreground when switching bundled themes":
+    let
+      root = newView(frame = rect(0, 0, 240, 120))
+      box = newGroupBox("Network", frame = rect(0, 0, 220, 100))
+    root.addSubview(box)
+
+    for name in [
+      "aqua", "banner", "macos", "macos-dark", "darkbsd", "nebula", "peachy",
+      "synthwave83",
+    ]:
+      checkpoint("theme: " & name)
+      let
+        theme = initThemeByName(name)
+        foreground = theme.colorToken("--text-field-text-color", color(1, 0, 1))
+      root.appearance = initAppearance(theme)
+      let list = buildRenders(root)[DefaultDrawLevel]
+      var foundTitle = false
+      for node in list.nodes:
+        if node.kind == nkText and node.renderedText() == "Network":
+          foundTitle = true
+          require node.textLayout.spanColors.len > 0
+          check node.textLayout.spanColors[0] == fill(foreground)
+      check foundTitle
+
   test "boxes expose group and separator accessibility semantics":
     let
       box = newBox("Security")

@@ -1837,6 +1837,9 @@ proc monoTextIntrinsicSize(view: MonoTextView): IntrinsicSize =
   )
 
 protocol DefaultMonoTextViewDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    true
+
   method draw(view: MonoTextView, context: DrawContext) =
     view.drawMonoText(context)
 
@@ -1844,6 +1847,9 @@ protocol DefaultMonoTextViewDrawing of ViewDrawingProtocol:
     view.drawMonoTextCursor(context)
 
 protocol DefaultMonoTextViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(view: MonoTextView): StyleContext =
+    view.monoTextStyleContext()
+
   method layoutIntrinsicContentSize(view: MonoTextView): IntrinsicSize =
     view.monoTextIntrinsicSize()
 

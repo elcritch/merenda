@@ -374,6 +374,10 @@ protocol DefaultProgressIndicatorAccessibility of AccessibilityProtocol:
   method isAccessibilityElement(indicator: ProgressIndicator): bool =
     true
 
+protocol DefaultProgressStyleLayout of ViewLayoutProtocol:
+  method layoutStyleContext(indicator: ProgressIndicator): StyleContext =
+    indicator.progressStyleContext()
+
 proc initProgressIndicatorFields*(
     indicator: ProgressIndicator,
     minValue = 0.0'f32,
@@ -390,6 +394,7 @@ proc initProgressIndicatorFields*(
   indicator.setHuggingPriority(LayoutPriorityLow, laHorizontal)
   indicator.setCompressionPriority(LayoutPriorityHigh, laHorizontal)
   discard indicator.withProto()
+  discard indicator.withProtocol(DefaultProgressStyleLayout)
   discard indicator.withProtocol(DefaultProgressIndicatorDrawing)
   discard indicator.withProtocol(DefaultProgressIndicatorAccessibility)
   indicator.applyInitialFrame(frame)

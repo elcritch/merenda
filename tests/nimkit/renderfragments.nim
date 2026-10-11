@@ -1113,7 +1113,15 @@ suite "NimKit render fragments":
     let
       firstAppearance = initAppearance(initTheme())
       scene = root.buildRenderScene(firstAppearance)
-      secondAppearance = initAppearance(initTheme())
+
+    discard root.buildRenderScene(initAppearance(initTheme()))
+    check root.drawCount == 1
+    check child.drawCount == 1
+
+    var builder = initThemeBuilder(firstAppearance.theme)
+    builder[srView, StyleFill] = color(0.2, 0.3, 0.4)
+    let secondAppearance = initAppearance(builder.finish())
+    require not firstAppearance.sameAppearanceGeneration(secondAppearance)
 
     discard root.buildRenderScene(secondAppearance)
 

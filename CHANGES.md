@@ -2,6 +2,120 @@
 
 ## Unreleased
 
+- Use Moe's Matter semantic scope mappings to distinguish HTML/custom element
+  names, attributes, CSS selectors and common language values in existing themes.
+  Preserve preprocessor colors for C/C++ pragmas and string colors for regex
+  captures and format placeholders. Adapt Kosmo pane snapshots and Select All to
+  Moe's window-owned visual selection API, preserving the cursor and preferred
+  column across pane switches.
+
+- Keep the open state during menubar arrow navigation: `<left>`/`<right>` between
+  menu bar buttons only move the highlight while the current menu is closed, and
+  open the next or previous menu while the current menu is open. Opening menus
+  with `<enter>`/`<down>` and tab navigation are unchanged.
+- Navigate Kosmo editor split panes with the arrow keys from a focused etab
+  strip: `<right>`/`<left>` move to the nearest pane column to the right or
+  left (same row preferred, topmost or leftmost pane on ties; a pane spanning
+  several rows or columns always targets the topmost or leftmost pane of the
+  nearest column) and exit to the next/previous ui element outside the pane at
+  the edges, while `<down>`/`<up>` move within a pane column and
+  do nothing when there is no vertical neighbor. Arrow keys inside editor text
+  keep moving the cursor.
+- Keep `<tab>` order after splits following the visual pane layout left to
+  right: `SplitView.insertPane` now inserts the pane's view at the matching
+  subview position instead of appending it, so the window key view loop (and
+  accessibility order) matches the rendered pane order.
+- Keep `<tab>` out of Kosmo moe editor panes: from a selected etab it cycles the
+  tab selection (`<shift><tab>` backwards) while keeping focus on the strip and
+  falls through to the next or previous ui element at the ends, and `<return>`
+  enters the editor. In the editor's normal mode `<tab>`/`<shift><tab>` cycle to
+  the next/previous ui element, returning to the pane's etab strip. The selected
+  etab now highlights only while its pane has keyboard focus, so cycling into
+  the menubar or another ui element outside the pane unhighlights it until the
+  pane is entered again.
+
+## 0.27.0
+
+- Add GUI resource markup with HTML5 syntax, `nk-` native elements, application
+  widget tags, and independent windows inside `nk-main`. Use attributes for typed
+  native properties, retain useful HTML control/text shorthands, and validate
+  resource IDs, references, load limits, and unsupported syntax. Reuse the existing
+  resource model, construction, CBOR serialization, and Tekton preview. Include a
+  styled preferences demo using `input`, `span`, and `select`, with compact controls,
+  custom/built-in CSS selection, Preview/Reset actions, and a second About window.
+  Preserve combo option values, selection, and explicit label overrides during
+  resource edits with shared setter ordering and preview replacement when needed.
+  Use `nk-view`, `nk-stack-view`, and native `nk-box`/`nk-group` grouping. Box
+  resources now own at most one explicit content root; wrap multiple controls in
+  a stack. Inherit child hooks/limits and preserve content styling on reattachment.
+
+- Require Matter 0.6.0 or newer and include NIF in Kosmo's built-in language list
+  with automatic syntax highlighting for `.nif` files.
+
+- Keep box/group captions readable when switching CSS themes by following the
+  active palette's text foreground instead of inheriting Aqua's dark caption color.
+
+- Share immutable theme storage across Theme and Appearance copies, avoiding
+  duplicated CSS rule tables and indexes in widget caches. Preserve isolated
+  builder edits and mutable copies returned by snapshot accessors.
+
+- Preserve CSS custom-property syntax until use, keeping keywords and units
+  consistent with literal declarations and native typed resources. Normalize
+  property names before validation, compile shared declarations and diagnostics
+  in one pass, and combine repeated bundled CSS blocks. Remove obsolete
+  `hasCss`, `cssMetricStates` and `cssMetricsChange` APIs; use `metricStates` and
+  `metricsChange` for state-dependent sizing.
+
+- Implement all bundled NimKit themes as embedded CSS with shared widget
+  defaults. Unify CSS and programmatic styling precedence, token names and
+  state metric invalidation; retain typed ThemeBuilder and Appearance overrides.
+  Compile typed declarations once per immutable snapshot and cache bundled
+  themes. Support two/three-stop linear gradients and composite variables in
+  padding, radii, sizes and shadows. Uniform programmatic radii now replace
+  earlier per-corner values consistently.
+
+- Add CSS theming through Stylus 0.1.5 with role/id/class/state selectors,
+  declaration-level specificity and importance, typed root variables, explicit
+  reloads, and source diagnostics. Style existing control colors, fonts, padding,
+  borders, corners, shadows and focus metrics without replacing the native theme;
+  CSS metric state changes relayout controls and preserve hover color animation.
+  Support edge pins, preferred/percentage dimensions, required min/max bounds and
+  scoped sibling/parent/self anchor equations with native solver priorities.
+  Expose more control-specific properties and StackView/GridView layout metrics.
+  Diagnose container ownership conflicts and invalid runtime targets; retain
+  finite geometry and the layout cache on failed solves and fitting measurements.
+  Include a stylesheet preview example and CSS theming guide.
+
+- Keep Markdown code block backgrounds visible in Kosmo editor mode while
+  asynchronous highlighting catches up with typing, line edits, and undo.
+- Highlight and scroll to clicked global file-search matches in Kosmo Markdown
+  previews, including results opened while the preview is still loading.
+
+- Share smooth arrow/page keyboard scrolling across NimKit scroll containers
+  and read-only text views, including Kosmo Markdown, GitHub and Git diff readers.
+  Preserve editable text cursor movement and pass vertical keys through embedded
+  horizontal scrollers. Markdown j/k now select visible headings and paragraphs;
+  Enter expands or collapses their section and keeps its heading selected.
+
+- Default Kosmo terminals to Hybrid shortcut routing: use Ctrl-W pane chords
+  and arrow continuations for splits and navigation, and Ctrl-C/Ctrl-V for
+  copy/paste on Linux and Windows. Ctrl-backslash quotes the next shortcut,
+  including complete pane chords. Add a persisted Terminal input selector for
+  Hybrid or Raw shortcuts, applying changes to current and future terminals.
+  Consume printable pane shortcut text before focus changes, so switching from
+  an editor or Markdown preview to a terminal does not type the continuation.
+  Directional pane shortcuts follow aligned neighboring edges in nested splits.
+
+- Support Reni regular expressions through the `.*` toggle in Kosmo terminal,
+  Markdown, GitHub, and Git diff views, the Files filter, Quick Open, and VS Code
+  grammar search. Share matching with editor and file search, preserve Unicode
+  text and terminal cell positions, and report invalid patterns without stale
+  results. Literal viewer matches now follow Reni's nonoverlapping scan.
+- Center terminal search matches when history permits, while keeping matches
+  near the end of the history at the bottom.
+- Expose reusable NimKit `SearchBar` and `TextSearchController` components with
+  text-source adapters and optional validated capture replacement hooks.
+
 - Add a searchable GitHub issues and pull requests Markdown tab to Kosmo's File
   menu, backed by `gh` in the selected project repository. Include state and item
   filters, descriptions and metadata, clickable section headings with browser

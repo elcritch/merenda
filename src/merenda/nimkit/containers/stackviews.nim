@@ -43,6 +43,13 @@ type
 
   FlexibleSpacerView = ref object of View
 
+  StackLayoutStyle = object
+    orientation: LayoutAxis
+    spacing: float32
+    insets: EdgeInsets
+    alignment: StackViewAlignment
+    distribution: StackViewDistribution
+
 const LayoutEpsilon = 0.001'f32
 
 func normalizedSpacing(value: float32): float32 =
@@ -154,6 +161,67 @@ proc layoutArrangedSubviews(stackView: StackView): seq[View] =
     if not child.isNil and child.superview == stackView and not child.isHidden:
       result.add child
 
+proc resolvedStackLayoutStyle(stack: StackView): StackLayoutStyle =
+  let
+    theme = stack.effectiveAppearance().theme
+    context = controlStyle(
+      srStackView,
+      stack.widgetStateSet(),
+      id = stack.styleId,
+      classes = stack.styleClasses,
+    )
+    orientation = theme.resolveKeyword(
+      context,
+      StyleContainerOrientation,
+      if stack.xOrientation == laHorizontal: "horizontal" else: "vertical",
+    )
+    alignment = theme.resolveKeyword(
+      context,
+      StyleContainerAlignment,
+      case stack.xAlignment
+      of svaFill: "fill"
+      of svaLeading: "leading"
+      of svaCenter: "center"
+      of svaTrailing: "trailing"
+      ,
+    )
+    distribution = theme.resolveKeyword(
+      context,
+      StyleContainerDistribution,
+      case stack.xDistribution
+      of svdFill: "fill"
+      of svdFillEqually: "fill-equally"
+      of svdNatural: "natural"
+      of svdEqualSpacing: "equal-spacing"
+      ,
+    )
+  result.orientation = if orientation == "horizontal": laHorizontal else: laVertical
+  result.spacing = theme
+    .resolveLength(
+      context,
+      if result.orientation == laHorizontal:
+        StyleContainerColumnGap
+      else:
+        StyleContainerRowGap,
+      stack.xSpacing,
+    )
+    .normalizedSpacing()
+  result.insets = theme
+    .resolveInsets(context, StyleContainerInsets, stack.xEdgeInsets)
+    .normalizedInsets()
+  result.alignment =
+    case alignment
+    of "leading": svaLeading
+    of "center": svaCenter
+    of "trailing": svaTrailing
+    else: svaFill
+  result.distribution =
+    case distribution
+    of "fill-equally": svdFillEqually
+    of "natural": svdNatural
+    of "equal-spacing": svdEqualSpacing
+    else: svdFill
+
 proc fittingSize(child: View): Size =
   if child.isNil:
     initSize(0.0, 0.0)
@@ -162,9 +230,10 @@ proc fittingSize(child: View): Size =
 
 proc stackNaturalSize(stackView: StackView): Size =
   let
+    style = stackView.resolvedStackLayoutStyle()
     children = stackView.layoutArrangedSubviews()
-    axis = stackView.xOrientation
-    insets = stackView.xEdgeInsets
+    axis = style.orientation
+    insets = style.insets
 
   var
     main = insets.mainInset(axis)
@@ -177,14 +246,14 @@ proc stackNaturalSize(stackView: StackView): Size =
     childMain += size.mainSize(axis)
     childCross = max(childCross, size.crossSize(axis))
 
-  main += childMain + stackView.xSpacing.totalSpacing(children.len)
+  main += childMain + style.spacing.totalSpacing(children.len)
   cross += childCross
   initStackSize(axis, main, cross)
 
-proc contentRect(stackView: StackView): Rect =
+proc contentRect(stackView: StackView, style: StackLayoutStyle): Rect =
   let
     bounds = stackView.bounds()
-    insets = stackView.xEdgeInsets
+    insets = style.insets
   rect(
     insets.left,
     insets.top,
@@ -231,22 +300,22 @@ proc countPriority(
       inc result
 
 proc adjustFillSizes(
-    stackView: StackView,
     children: openArray[View],
     sizes: var seq[float32],
     availableMain: float32,
+    style: StackLayoutStyle,
 ) =
   if children.len == 0:
     return
 
-  let delta = availableMain - sizes.usedMainLength(stackView.xSpacing)
+  let delta = availableMain - sizes.usedMainLength(style.spacing)
   if not delta.shouldAdjust():
     return
 
   let
     growing = delta > 0.0'f32
-    priority = children.lowestAdjustmentPriority(stackView.xOrientation, growing)
-    count = children.countPriority(stackView.xOrientation, growing, priority)
+    priority = children.lowestAdjustmentPriority(style.orientation, growing)
+    count = children.countPriority(style.orientation, growing, priority)
   if growing and priority == LayoutPriorityRequired:
     return
   if count <= 0:
@@ -256,9 +325,9 @@ proc adjustFillSizes(
   for index, child in children:
     let childPriority =
       if growing:
-        child.huggingPriority(stackView.xOrientation)
+        child.huggingPriority(style.orientation)
       else:
-        child.compressionPriority(stackView.xOrientation)
+        child.compressionPriority(style.orientation)
     if childPriority == priority:
       sizes[index] = max(sizes[index] + share, 0.0'f32)
 
@@ -267,16 +336,17 @@ proc adjustPolicyFillSizes(
     children: openArray[View],
     sizes: var seq[float32],
     availableMain: float32,
+    style: StackLayoutStyle,
 ): bool =
   var indexes: seq[int]
   for index, child in children:
-    if stackView.sizingPolicy(child).fillsAxis(stackView.xOrientation):
+    if stackView.sizingPolicy(child).fillsAxis(style.orientation):
       indexes.add index
   if indexes.len == 0:
     return
 
   result = true
-  let delta = availableMain - sizes.usedMainLength(stackView.xSpacing)
+  let delta = availableMain - sizes.usedMainLength(style.spacing)
   if not delta.shouldAdjust():
     return
 
@@ -285,24 +355,27 @@ proc adjustPolicyFillSizes(
     sizes[index] = max(sizes[index] + share, 0.0'f32)
 
 proc arrangedMainSizes(
-    stackView: StackView, children: openArray[View], naturalSizes: openArray[Size]
+    stackView: StackView,
+    children: openArray[View],
+    naturalSizes: openArray[Size],
+    style: StackLayoutStyle,
 ): seq[float32] =
   let
-    axis = stackView.xOrientation
-    availableMain = stackView.contentRect().size.mainSize(axis)
-  case stackView.xDistribution
+    axis = style.orientation
+    availableMain = stackView.contentRect(style).size.mainSize(axis)
+  case style.distribution
   of svdFill:
     for size in naturalSizes:
       result.add size.mainSize(axis)
-    if not stackView.adjustPolicyFillSizes(children, result, availableMain):
-      stackView.adjustFillSizes(children, result, availableMain)
+    if not stackView.adjustPolicyFillSizes(children, result, availableMain, style):
+      adjustFillSizes(children, result, availableMain, style)
   of svdFillEqually:
     let size =
       if children.len == 0:
         0.0'f32
       else:
         max(
-          (availableMain - stackView.xSpacing.totalSpacing(children.len)) /
+          (availableMain - style.spacing.totalSpacing(children.len)) /
             float32(children.len),
           0.0'f32,
         )
@@ -312,29 +385,37 @@ proc arrangedMainSizes(
   of svdNatural, svdEqualSpacing:
     for size in naturalSizes:
       result.add size.mainSize(axis)
-    let usedPolicy = stackView.adjustPolicyFillSizes(children, result, availableMain)
-    if not usedPolicy and result.usedMainLength(stackView.xSpacing) > availableMain:
-      stackView.adjustFillSizes(children, result, availableMain)
+    let usedPolicy =
+      stackView.adjustPolicyFillSizes(children, result, availableMain, style)
+    if not usedPolicy and result.usedMainLength(style.spacing) > availableMain:
+      adjustFillSizes(children, result, availableMain, style)
 
 proc arrangedSpacing(
-    stackView: StackView, children: openArray[View], mainSizes: openArray[float32]
+    stackView: StackView,
+    children: openArray[View],
+    mainSizes: openArray[float32],
+    style: StackLayoutStyle,
 ): float32 =
-  result = stackView.xSpacing
-  if stackView.xDistribution != svdEqualSpacing or children.len <= 1:
+  result = style.spacing
+  if style.distribution != svdEqualSpacing or children.len <= 1:
     return
 
   let
-    availableMain = stackView.contentRect().size.mainSize(stackView.xOrientation)
-    usedMain = mainSizes.usedMainLength(stackView.xSpacing)
+    availableMain = stackView.contentRect(style).size.mainSize(style.orientation)
+    usedMain = mainSizes.usedMainLength(style.spacing)
     extra = availableMain - usedMain
   if extra > LayoutEpsilon:
     result += extra / float32(children.len - 1)
 
 proc alignedCrossFrame(
-    stackView: StackView, child: View, content: Rect, naturalCross: float32
+    stackView: StackView,
+    child: View,
+    content: Rect,
+    naturalCross: float32,
+    style: StackLayoutStyle,
 ): tuple[origin, length: float32] =
   let
-    axis = stackView.xOrientation
+    axis = style.orientation
     availableCross = content.size.crossSize(axis)
     contentCrossOrigin =
       case axis
@@ -342,11 +423,11 @@ proc alignedCrossFrame(
       of laVertical: content.origin.x
 
   let policy = stackView.sizingPolicy(child)
-  if policy.fillsAxis(axis.crossAxis) or stackView.xAlignment == svaFill:
+  if policy.fillsAxis(axis.crossAxis) or style.alignment == svaFill:
     return (contentCrossOrigin, availableCross)
 
   result.length = min(naturalCross, availableCross)
-  case stackView.xAlignment
+  case style.alignment
   of svaFill:
     discard
   of svaLeading:
@@ -358,16 +439,17 @@ proc alignedCrossFrame(
 
 proc layoutStackSubviews(stackView: StackView) =
   let
+    style = stackView.resolvedStackLayoutStyle()
     children = stackView.layoutArrangedSubviews()
-    axis = stackView.xOrientation
-    content = stackView.contentRect()
+    axis = style.orientation
+    content = stackView.contentRect(style)
 
   var naturalSizes: seq[Size]
   for child in children:
     naturalSizes.add child.fittingSize()
 
-  let mainSizes = stackView.arrangedMainSizes(children, naturalSizes)
-  let spacing = stackView.arrangedSpacing(children, mainSizes)
+  let mainSizes = stackView.arrangedMainSizes(children, naturalSizes, style)
+  let spacing = stackView.arrangedSpacing(children, mainSizes, style)
   var mainCursor =
     case axis
     of laHorizontal: content.origin.x
@@ -376,7 +458,7 @@ proc layoutStackSubviews(stackView: StackView) =
   for index, child in children:
     let
       naturalCross = naturalSizes[index].crossSize(axis)
-      cross = stackView.alignedCrossFrame(child, content, naturalCross)
+      cross = stackView.alignedCrossFrame(child, content, naturalCross, style)
       frame =
         initStackFrame(axis, mainCursor, cross.origin, mainSizes[index], cross.length)
     child.setFrameFromStackLayout(frame)
@@ -552,6 +634,19 @@ protocol StackViewLifecycleSlots of ViewLifecycleProtocol:
     stackView.removeArrangedSubview(child)
 
 protocol DefaultStackViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(stack: StackView): StyleContext =
+    controlStyle(
+      srStackView,
+      stack.widgetStateSet(),
+      id = stack.styleId,
+      classes = stack.styleClasses,
+    )
+
+  method managesSubviewLayout(stack: StackView, child: DynamicAgent): bool =
+    for arranged in stack.xArrangedSubviews:
+      if DynamicAgent(arranged) == child and arranged.superviewBacklink() == stack:
+        return true
+
   method layoutIntrinsicContentSize(stackView: StackView): IntrinsicSize =
     initIntrinsicSize(stackView.stackNaturalSize())
 

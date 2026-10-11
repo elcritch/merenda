@@ -474,11 +474,15 @@ proc viewportStart(view: TerminalView): int =
   max(info.totalLineCount - info.rows - view.viewportOffset(), 0)
 
 proc selectTerminalRange*(
-    view: TerminalView, selection: TerminalSelection, reveal = true
+    view: TerminalView, selection: TerminalSelection, reveal = true, centered = false
 ) =
   ## Select an absolute range in the terminal buffer and optionally reveal it.
+  ## Centering clamps at the history boundaries, keeping the latest output at
+  ## the bottom when there are too few following lines to center the match.
   if view.isNil or view.xSession.isNil:
     return
+  # Account for new output before assigning positions in the current history.
+  view.syncTerminalScreen()
   let info = view.xSession.screenInfo()
   if info.totalLineCount <= 0:
     view.clearSelection()
@@ -494,10 +498,10 @@ proc selectTerminalRange*(
     )
   if normalized.anchor == normalized.extent:
     view.clearSelection()
-    return
-  view.xSelection = normalized
-  view.xHasSelection = true
-  view.xSelecting = false
+  else:
+    view.xSelection = normalized
+    view.xHasSelection = true
+    view.xSelecting = false
   if reveal:
     let
       bounds = normalized.orderedSelection()
@@ -505,7 +509,9 @@ proc selectTerminalRange*(
       currentStart = maximumStart - view.viewportOffset()
       targetRow = bounds.first.row
       nextStart =
-        if targetRow < currentStart:
+        if centered:
+          targetRow - info.rows div 2
+        elif targetRow < currentStart:
           targetRow
         elif targetRow >= currentStart + info.rows:
           targetRow - info.rows + 1
@@ -987,14 +993,9 @@ proc handleTerminalShortcut(view: TerminalView, event: KeyEvent): bool =
   else:
     false
 
-proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
+proc sendTerminalKeyInput*(view: TerminalView, event: KeyEvent): bool =
+  ## Encode and send a physical key without executing local terminal shortcuts.
   view.xSuppressOptionTextInput = false
-  if view.handleTerminalShortcut(event):
-    return true
-  if event.key == keyL and event.modifiers == {kmControl}:
-    view.clearScrollback()
-    discard view.sendInput("\x0c")
-    return true
   let input =
     terminalKeyInput(event, view.xSession.screenInfo().modes, view.xOptionAsMeta)
   if input.len == 0:
@@ -1003,6 +1004,16 @@ proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
       event.key.isPrintableTerminalKey():
     view.xSuppressOptionTextInput = true
   view.sendInput(input)
+
+proc handleTerminalKeyDown(view: TerminalView, event: KeyEvent): bool =
+  view.xSuppressOptionTextInput = false
+  if view.handleTerminalShortcut(event):
+    return true
+  if event.key == keyL and event.modifiers == {kmControl}:
+    view.clearScrollback()
+    discard view.sendInput("\x0c")
+    return true
+  view.sendTerminalKeyInput(event)
 
 proc performTerminalKeyEquivalent*(view: TerminalView, event: KeyEvent): bool =
   ## Handle a terminal-local shortcut or translate the key into terminal input.

@@ -29,6 +29,13 @@ proc rowIndex(editor: ResourceEditor, name: string): int =
       return index
   -1
 
+proc renderPreviewForClick(window: Window) =
+  let root = window.contentView()
+  # These tests exercise event routing, so allow for slower CI layout work.
+  root.xLayoutSolveLimits.maxMilliseconds = 5_000
+  discard window.buildRenders()
+  require not root.xLastLayoutSolveDiagnostic.failed
+
 suite "Tekton responsiveness and editing regressions":
   test "property edits construct only the changed view and preserve layout identities":
     var
@@ -157,8 +164,13 @@ suite "Tekton responsiveness and editing regressions":
       editor = newResourceEditor(document)
       window = editor.newResourceEditorWindow()
       button = Button(editor.previewInstance().view(resourceId("button")))
-    discard window.buildRenders()
+    window.renderPreviewForClick()
     let point = button.pointToWindow(initPoint(40, 20))
+    let hit = editor.previewHitTest(editor.previewSurface().pointFromWindow(point))
+    require hit.found
+    require hit.resourceId == resourceId("button")
+    require window.contentView().hitTest(window.contentView().pointFromWindow(point)) ==
+      editor.previewSurface()
     check button.state() == bsOff
     check window.mouseDownAt(point)
     check window.mouseUpAt(point)
@@ -182,9 +194,11 @@ suite "Tekton responsiveness and editing regressions":
       editor = newResourceEditor(document)
       window = editor.newResourceEditorWindow()
       button = Button(editor.previewInstance().view(resourceId("button")))
-    discard window.buildRenders()
+    window.renderPreviewForClick()
     editor.interactivePreview = true
     let point = button.pointToWindow(initPoint(40, 20))
+    require window.contentView().hitTest(window.contentView().pointFromWindow(point)) ==
+      button
     check window.mouseDownAt(point)
     check window.mouseUpAt(point)
     check button.state() == bsOn

@@ -1,0 +1,441 @@
+/* synthwave83 overrides the aqua theme. */
+
+:root {
+  --accent: rgba(255, 8%, 86%, 0.94);
+  --accent-pressed: rgba(12%, 86%, 255, 0.9);
+  --button-border-color: rgba(96%, 4%, 255, 0.84);
+  --button-border-color-accent: rgba(255, 10%, 88%, 0.92);
+  --button-border-color-accent-highlighted: rgba(18%, 96%, 255, 0.94);
+  --button-border-color-disabled: rgba(22%, 34%, 44%, 0.42);
+  --button-border-color-highlighted: rgba(18%, 96%, 255, 0.92);
+  --button-fill: linear-gradient(to bottom right, #1a0038e6, #3d0566c7 45.490196%, #057ab847);
+  --button-fill-accent: var(--button-fill-highlighted);
+  --button-fill-accent-highlighted: linear-gradient(to bottom right, #fa0fdbdb, #7508e6bd 45.490196%, #0ff0ff75);
+  --button-fill-disabled: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  --button-fill-highlighted: linear-gradient(to bottom right, #610594e6, #b80ac7b3 45.490196%, #0ac2ff61);
+  --button-shadows: 0px 1px 1e+01px 0px rgba(255, 0, 88%, 0.16), inset 0px 1px 5px 0px rgba(30%, 95%, 255, 0.16), inset 0px -2px 8px 0px rgba(255, 0, 92%, 0.14);
+  --button-shadows-highlighted: inset 0px 2px 7px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(22%, 92%, 255, 0.18);
+  --button-text-color: rgba(84%, 98%, 255, 0.98);
+  --choice-indicator-border-color: rgba(24%, 94%, 255, 0.9);
+  --choice-indicator-border-color-disabled: rgba(22%, 34%, 44%, 0.36);
+  --choice-indicator-border-color-highlighted: rgba(255, 24%, 96%, 0.94);
+  --choice-indicator-border-color-selected: rgba(255, 30%, 92%, 0.98);
+  --choice-indicator-fill: linear-gradient(to bottom, #2e0552eb, #4d0a75b3 42.35294%, #0f002eeb);
+  --choice-indicator-fill-disabled: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  --choice-indicator-fill-highlighted: linear-gradient(to bottom, #520a7af0, #6b0f94c2 42.35294%, #140038f0);
+  --choice-indicator-fill-selected: linear-gradient(to bottom right, #f20febf0, #4d14ebdb 43.92157%, #14e0ffb8);
+  --choice-indicator-fill-selected-disabled: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  --choice-indicator-fill-selected-highlighted: linear-gradient(to bottom right, #ff33f5f5, #6b1fffe0 43.92157%, #29f0ffc7);
+  --choice-mark-color: rgba(255, 92%, 26%, 1);
+  --choice-text-color: rgba(255, 34%, 92%, 0.98);
+  --choice-text-color-disabled: var(--disabled-text-color);
+  --combo-box-arrow-color: rgba(34%, 255, 255, 1);
+  --combo-box-border-color: rgba(18%, 94%, 255, 0.82);
+  --combo-box-border-color-open: rgba(255, 8%, 92%, 0.92);
+  --combo-box-fill: linear-gradient(to bottom right, #14002eeb, #38055cc7 45.490196%, #08579447);
+  --combo-box-item-fill: #14002ef5;
+  --combo-box-item-fill-highlighted: var(--button-fill);
+  --combo-box-item-fill-selected: var(--choice-indicator-fill-selected);
+  --combo-box-item-fill-selected-highlighted: var(--button-fill-accent-highlighted);
+  --combo-box-item-text-color: rgba(82%, 96%, 255, 0.96);
+  --combo-box-item-text-color-selected: rgba(255, 86%, 28%, 1);
+  --disabled-fill: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  --disabled-text-color: rgba(45%, 36%, 58%, 0.72);
+  --document-tab-bar-border-color: var(--tab-panel-border-color);
+  --document-tab-bar-fill: var(--tab-panel-fill);
+  --document-tab-border-color: var(--tab-border-color);
+  --document-tab-border-color-disabled: var(--tab-border-color-disabled);
+  --document-tab-border-color-highlighted: var(--tab-border-color-highlighted);
+  --document-tab-border-color-pressed: var(--tab-border-color-highlighted);
+  --document-tab-border-color-selected: var(--tab-border-color-selected);
+  --document-tab-button-border-color: var(--document-tab-border-color);
+  --document-tab-button-border-color-disabled: var(--document-tab-border-color-disabled);
+  --document-tab-button-border-color-highlighted: var(--document-tab-border-color-highlighted);
+  --document-tab-button-mark-color: var(--document-tab-text-color);
+  --document-tab-button-mark-color-disabled: var(--document-tab-text-color-disabled);
+  --document-tab-fill: var(--tab-fill);
+  --document-tab-fill-disabled: var(--tab-fill-disabled);
+  --document-tab-fill-highlighted: var(--tab-fill-highlighted);
+  --document-tab-fill-pressed: var(--tab-fill-highlighted);
+  --document-tab-fill-selected: var(--tab-fill-selected);
+  --document-tab-highlight-fill: var(--tab-highlight-fill);
+  --document-tab-highlight-fill-disabled: var(--tab-highlight-fill-disabled);
+  --document-tab-text-color: var(--tab-text-color);
+  --document-tab-text-color-disabled: var(--tab-text-color-disabled);
+  --document-tab-text-color-selected: var(--tab-text-color-selected);
+  --focus-ring-color: rgba(255, 8%, 92%, 0.72);
+  --progress-fill: var(--accent);
+  --row-item-fill: #0f00292e;
+  --row-item-fill-disabled: #141a242e;
+  --row-item-fill-highlighted: #700a9e66;
+  --row-item-fill-selected: var(--choice-indicator-fill-selected);
+  --row-item-fill-selected-highlighted: var(--button-fill-accent-highlighted);
+  --row-item-separator-color: rgba(90%, 5%, 255, 0.28);
+  --row-item-text-color: rgba(255, 36%, 92%, 0.98);
+  --row-item-text-color-disabled: var(--disabled-text-color);
+  --row-item-text-color-selected: rgba(255, 88%, 30%, 1);
+  --scroller-knob-border-color: rgba(28%, 98%, 255, 0.86);
+  --scroller-knob-fill: linear-gradient(to bottom right, #ff0fe0c7, #750aeb94 42.35294%, #1fdbff6b);
+  --scroller-track-border-color: rgba(51, 94%, 255, 0.34);
+  --scroller-track-fill: #0f002952;
+  --tab-border-color: rgba(90%, 4%, 255, 0.84);
+  --tab-border-color-disabled: rgba(34%, 18%, 48%, 0.38);
+  --tab-border-color-highlighted: rgba(51, 96%, 255, 0.92);
+  --tab-border-color-selected: rgba(255, 10%, 92%, 0.98);
+  --tab-fill: linear-gradient(to bottom right, #1a003deb, #380366c7 43.92157%, #05295770);
+  --tab-fill-disabled: #14002975;
+  --tab-fill-highlighted: linear-gradient(to bottom right, #470585f0, #7a08b3c7 43.92157%, #0a94db6b);
+  --tab-fill-selected: linear-gradient(to bottom right, #f50ae6e6, #7505dbd1 45.490196%, #14dbff80);
+  --tab-highlight-fill: #33f5ff33;
+  --tab-highlight-fill-disabled: #6b4d8f1f;
+  --tab-panel-border-color: rgba(92%, 6%, 255, 0.82);
+  --tab-panel-fill: var(--table-view-fill);
+  --tab-text-color: rgba(78%, 96%, 255, 0.96);
+  --tab-text-color-disabled: var(--disabled-text-color);
+  --tab-text-color-selected: rgba(255, 90%, 28%, 1);
+  --table-view-border-color: rgba(88%, 4%, 255, 0.78);
+  --table-view-fill: linear-gradient(to bottom, #0f0029d6, #2e0347a8 40.784314%, #08001fcc);
+  --text-field-border-color: rgba(92%, 6%, 255, 0.76);
+  --text-field-fill: linear-gradient(to bottom, #14002ec7, #33055294 37.64706%, #0a0324b8);
+  --text-field-selection-color: rgba(255, 8%, 86%, 0.4);
+  --text-field-text-color: rgba(82%, 96%, 255, 0.98);
+}
+
+button {
+  border-width: 1.35px;
+  box-shadow: 0px 1px 9px 0px rgba(98%, 0, 255, 0.18), inset 0px 1px 3.4px 0px rgba(22%, 96%, 255, 0.2), inset 0px -1px 5px 0px rgba(255, 0, 92%, 0.12);
+  -nimkit-chrome: flat-transparent;
+  border-radius: 5px;
+  border-bottom-left-radius: 0px;
+  border-bottom-right-radius: 12px;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 0px;
+  -nimkit-text-highlight-color: rgba(51, 94%, 255, 0.16);
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0.42);
+}
+
+check-box,
+radio-button {
+  border-width: 1.35px;
+  box-shadow: 0px 1px 5px 0px rgba(96%, 0, 255, 0.18), inset 0px 1px 2.6px 0px rgba(32%, 96%, 255, 0.24), inset 0px -1px 3.2px 0px rgba(0, 0, 0, 0.3);
+  -nimkit-chrome: flat-transparent;
+}
+
+text-field {
+  border-width: 1.35px;
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.38), inset 0px -1px 4px 0px rgba(22%, 88%, 255, 0.12);
+  -nimkit-chrome: flat-transparent;
+  color: rgba(84%, 98%, 255, 0.98);
+}
+
+text-view {
+  color: rgba(84%, 98%, 255, 0.98);
+}
+
+combo-box {
+  border-width: 1.35px;
+  box-shadow: 0px 1px 8px 0px rgba(16%, 88%, 255, 0.16), inset 0px 1px 3px 0px rgba(34%, 98%, 255, 0.18), inset 0px -1px 5px 0px rgba(255, 2%, 88%, 0.12);
+  -nimkit-chrome: flat-transparent;
+  border-radius: 6px;
+  -nimkit-indicator-fill: linear-gradient(to bottom, #570580e0, #330057d6 40.784314%, #14002ee6);
+}
+
+tab {
+  border-width: 1.35px;
+  box-shadow: 0px 1px 7px 0px rgba(96%, 0, 255, 0.16), inset 0px 1px 2.8px 0px rgba(28%, 96%, 255, 0.18), inset 0px -1px 4px 0px rgba(255, 0, 92%, 0.1);
+  -nimkit-chrome: flat-transparent;
+}
+
+table-header-cell {
+  border-color: rgba(90%, 5%, 255, 0.66);
+  background: #290047b8;
+  -nimkit-mark-color: rgba(51, 94%, 255, 0.98);
+  color: rgba(255, 36%, 92%, 0.98);
+}
+
+row-item {
+  -nimkit-alternating-fill: #3d006624;
+}
+
+mono-text-view {
+  -nimkit-chrome: flat-transparent;
+}
+
+view {
+  -nimkit-window-background-color: rgba(8%, 0, 16%, 1);
+  -nimkit-window-background: linear-gradient(to bottom right, #140029, #21033d 38.431373%, #05001a);
+  -nimkit-pinstripe-height: 0px;
+  -nimkit-pinstripe-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-pinstripe-period: 0px;
+}
+
+button:highlighted {
+  box-shadow: inset 0px 2px 6px 0px rgba(0, 0, 0, 0.38), inset 0px -1px 4px 0px rgba(22%, 94%, 255, 0.2), 0px 1px 8px 0px rgba(18%, 90%, 255, 0.18);
+}
+
+button:active {
+  box-shadow: inset 0px 2px 6px 0px rgba(0, 0, 0, 0.38), inset 0px -1px 4px 0px rgba(22%, 94%, 255, 0.2), 0px 1px 8px 0px rgba(18%, 90%, 255, 0.18);
+}
+
+switch {
+  border-color: rgba(16%, 86%, 255, 0.54);
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  -nimkit-chrome: flat-transparent;
+  background: linear-gradient(to bottom, #2e3040c2, #3d364a99 37.64706%, #262938b3);
+  -nimkit-knob-border-color: rgba(58%, 96%, 255, 0.82);
+  -nimkit-knob-fill: linear-gradient(to bottom right, #54475c8f, #40405275 43.92157%, #61305461);
+  -nimkit-knob-shadows: 0px 1px 7px 0px rgba(255, 34%, 52%, 0.14), inset 0px 1px 3px 0px rgba(255, 204, 153, 0.24);
+}
+
+switch:selected {
+  border-color: rgba(204, 24%, 255, 0.8);
+  background: linear-gradient(to bottom right, #b84775d1, #943d6bbd 43.137255%, #f0855794);
+}
+
+switch:highlighted {
+  -nimkit-knob-fill: linear-gradient(to bottom right, #ad4f80ad, #7045708a 43.92157%, #f0875966);
+}
+
+switch:disabled {
+  border-color: rgba(22%, 34%, 44%, 0.34);
+  box-shadow: none;
+  background: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  -nimkit-knob-border-color: rgba(22%, 34%, 44%, 0.38);
+  -nimkit-knob-fill: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  -nimkit-knob-shadows: none;
+}
+
+switch:disabled:selected {
+  border-color: rgba(22%, 34%, 44%, 0.38);
+  background: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+}
+
+slider {
+  border-color: rgba(92%, 5%, 255, 0.76);
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  -nimkit-chrome: flat-transparent;
+  background: linear-gradient(to bottom, #1a0038e6, #380561c2 40.784314%, #082452d1);
+  -nimkit-focus-ring-color: rgba(16%, 94%, 255, 0.84);
+  -nimkit-highlight-fill: linear-gradient(to bottom right, #ff0fe0e6, #6b0aebc7 42.35294%, #14ebffa3);
+  -nimkit-knob-border-color: rgba(24%, 96%, 255, 0.92);
+  -nimkit-knob-fill: linear-gradient(to bottom right, #570580eb, #2e0057db 43.92157%, #0a99d18a);
+  -nimkit-knob-shadows: 0px 1px 7px 0px rgba(255, 0, 88%, 0.22), inset 0px 1px 3px 0px rgba(30%, 96%, 255, 0.24), inset 0px -1px 3px 0px rgba(0, 0, 0, 0.3);
+}
+
+progress-indicator {
+  border-color: rgba(92%, 5%, 255, 0.76);
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  -nimkit-chrome: flat-transparent;
+  background: linear-gradient(to bottom, #1a0038e6, #380561c2 40.784314%, #082452d1);
+}
+
+tab:selected {
+  box-shadow: 0px 1px 8px 0px rgba(255, 0, 92%, 0.24), inset 0px 1px 3px 0px rgba(255, 90%, 32%, 0.2), inset 0px -1px 4px 0px rgba(51, 96%, 255, 0.16);
+}
+
+tab-panel {
+  border-width: 1.35px;
+  -nimkit-chrome: flat-transparent;
+}
+
+document-tab {
+  border-width: 1.35px;
+  box-shadow: 0px 1px 7px 0px rgba(96%, 0, 255, 0.16), inset 0px 1px 2.8px 0px rgba(28%, 96%, 255, 0.18), inset 0px -1px 4px 0px rgba(255, 0, 92%, 0.1);
+  -nimkit-chrome: flat-transparent;
+  -nimkit-close-button-position: right;
+}
+
+document-tab:selected {
+  box-shadow: 0px 1px 8px 0px rgba(255, 0, 92%, 0.24), inset 0px 1px 3px 0px rgba(255, 90%, 32%, 0.2), inset 0px -1px 4px 0px rgba(51, 96%, 255, 0.16);
+}
+
+document-tab-bar {
+  border-width: 1.35px;
+  -nimkit-chrome: flat-transparent;
+}
+
+document-tab-button {
+  -nimkit-chrome: flat-transparent;
+}
+
+check-box:selected {
+  box-shadow: 0px 1px 7px 0px rgba(96%, 0, 255, 0.28), inset 0px 1px 3px 0px rgba(255, 86%, 42%, 0.3), inset 0px -1px 3.2px 0px rgba(0, 0, 0, 0.24);
+}
+
+radio-button:selected {
+  box-shadow: 0px 1px 7px 0px rgba(96%, 0, 255, 0.28), inset 0px 1px 3px 0px rgba(255, 86%, 42%, 0.3), inset 0px -1px 3.2px 0px rgba(0, 0, 0, 0.24);
+}
+
+combo-box:open {
+  -nimkit-indicator-fill: linear-gradient(to bottom, #940dc2e6, #4d0575db 40.784314%, #1a0038eb);
+}
+
+table-view {
+  border-width: 1.35px;
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.38), inset 0px -1px 4px 0px rgba(22%, 88%, 255, 0.12);
+  -nimkit-drop-indicator-fill: linear-gradient(to bottom right, #b84775d1, #943d6bbd 43.137255%, #f0855794);
+}
+
+scroll-view {
+  border-width: 1.35px;
+  box-shadow: inset 0px 1px 5px 0px rgba(0, 0, 0, 0.34), inset 0px -1px 4px 0px rgba(255, 64%, 46%, 0.15);
+  border-radius: 5px;
+}
+
+scroller {
+  border-width: 1px;
+  border-radius: 4px;
+  -nimkit-knob-shadows: 0px 1px 7px 0px rgba(255, 5%, 92%, 0.22), inset 0px 1px 3px 0px rgba(28%, 98%, 255, 0.18);
+}
+
+table-header {
+  border-color: rgba(92%, 6%, 255, 0.76);
+  background: #1f003dd1;
+  -nimkit-insertion-indicator-fill: var(--row-item-fill-selected);
+}
+
+table-header-cell:hover {
+  background: var(--button-fill);
+}
+
+table-header-cell:pressed {
+  background: var(--button-fill-accent-highlighted);
+}
+
+text-field:focus {
+  color: rgba(90%, 255, 255, 1);
+}
+
+text-field:disabled {
+  color: var(--disabled-text-color);
+}
+
+text-view:focus {
+  color: rgba(90%, 255, 255, 1);
+}
+
+text-view:disabled {
+  color: var(--disabled-text-color);
+}
+
+combo-box:highlighted {
+  -nimkit-indicator-fill: linear-gradient(to bottom, #940dc2e6, #4d0575db 40.784314%, #1a0038eb);
+}
+
+/* Class styles override the general control states. */
+
+box.popover-box {
+  background: var(--text-field-fill);
+}
+
+button.toolbar-button {
+  border-color: var(--text-field-border-color);
+  border-width: 1px;
+  box-shadow: none;
+  -nimkit-chrome: default;
+  border-radius: 5px 0px 12px 0px;
+  background: var(--box-fill);
+  font-size: var(--font-size);
+  -nimkit-minimum-size: 24px 24px;
+  color: var(--text-field-text-color);
+  -nimkit-text-highlight-color: rgba(0, 0, 0, 0);
+  -nimkit-text-insets: 0px 4px;
+  -nimkit-text-shadow-color: rgba(0, 0, 0, 0);
+}
+
+button.toolbar-button:hover {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:highlighted {
+  background: var(--document-tab-fill-highlighted);
+}
+
+button.toolbar-button:selected {
+  border-color: var(--accent);
+  box-shadow: inset 0px 1px 2px 0px rgba(0, 0, 0, 0.35);
+  background: var(--accent-pressed);
+  color: rgba(255, 255, 255, 1);
+}
+
+button.toolbar-button:hover:selected {
+  background: var(--accent-pressed);
+}
+
+button.toolbar-button:disabled {
+  color: var(--button-text-color-disabled);
+}
+
+button.toolbar-button.toolbar-symbol {
+  font-size: 16px;
+}
+
+text-field.label {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(84%, 94%, 255, 0.96);
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-title {
+  border-color: rgba(90%, 5%, 255, 0.72);
+  border-width: 1.35px;
+  box-shadow: none;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 8px;
+  background: linear-gradient(to bottom, #2e00529e, #0f002e7a);
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 28px;
+  color: rgba(255, 82%, 28%, 0.98);
+  -nimkit-text-insets: 0px 12px;
+}
+
+text-field.label-heading {
+  border-color: rgba(90%, 5%, 255, 0.62);
+  border-width: 1.35px;
+  box-shadow: none;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 6px;
+  background: #1f003d75;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 24px;
+  color: rgba(255, 36%, 92%, 0.98);
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+text-field.label-status {
+  border-color: rgba(16%, 92%, 255, 0.56);
+  border-width: 1.35px;
+  box-shadow: none;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 6px;
+  background: #1f003d6b;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 24px;
+  color: rgba(51, 94%, 255, 0.98);
+  -nimkit-text-insets: 0px 1e+01px;
+}
+
+text-field.label-form {
+  border-color: rgba(0, 0, 0, 0);
+  border-width: 0px;
+  box-shadow: none;
+  -nimkit-chrome: flat-transparent;
+  border-radius: 0px;
+  background: #00000000;
+  -nimkit-focus-ring-inset: 0px;
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 18px;
+  color: rgba(51, 94%, 255, 0.92);
+  -nimkit-text-insets: 0px 2px;
+}

@@ -26,6 +26,8 @@ else:
   import nimkit/constraints
   import nimkit/controlfontfaces
   import nimkit/controls
+  import nimkit/cssthemes
+  import nimkit/csslayout
   import nimkit/datepickers
   import nimkit/daterangepickers
   import nimkit/diagnostics
@@ -40,6 +42,7 @@ else:
   import nimkit/gaptextbuffers
   import nimkit/gitstatus
   import nimkit/gridviews
+  import nimkit/htmlresources
   import nimkit/iconlabels
   import nimkit/images
   import nimkit/keybindings
@@ -60,6 +63,7 @@ else:
   import nimkit/responder
   import nimkit/scrollviews
   import nimkit/scrollviews2
+  import nimkit/searchcontrollers
   import nimkit/segmentedcontrols
   import nimkit/selectionrings
   import nimkit/settings

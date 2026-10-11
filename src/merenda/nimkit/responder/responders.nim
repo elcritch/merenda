@@ -115,6 +115,23 @@ proc performKeyEquivalentInChain*(responder: Responder, event: KeyEvent): bool =
       return true
     current = current.nextResponder()
 
+proc performScrollKeyInChain*(
+    responder: Responder, event: KeyEvent, consumeIfOffered = false
+): bool =
+  ## Route unmodified reading keys through scroll containers.
+  ## Containers without overflow on the requested axis defer to an outer container.
+  ## Readers can consume an offered key even without overflow to preserve selection.
+  if event.modifiers != {} or event.key notin KeyboardScrollKeys:
+    return
+  var current = responder
+  while not current.isNil:
+    let handled = current.trySendLocal(scrollKey(), event)
+    if handled.isSome:
+      result = consumeIfOffered
+      if handled.get():
+        return true
+    current = current.nextResponder()
+
 proc tryToPerform*(
     responder: Responder, selector: CommandSelector, sender: DynamicAgent = nil
 ): bool =

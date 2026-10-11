@@ -1666,6 +1666,21 @@ protocol CascadingViewKeyEvents of ResponderEventProtocol:
       false
 
 protocol CascadingViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(view: CascadingView): StyleContext =
+    controlStyle(
+      srCascadingView,
+      view.widgetStateSet(),
+      id = view.styleId,
+      classes = view.styleClasses,
+    )
+
+  method managesSubviewLayout(view: CascadingView, child: DynamicAgent): bool =
+    if child == view.xScrollView or child == view.xColumnContainer:
+      return true
+    for column in view.xColumns:
+      if child == column:
+        return true
+
   method layoutIntrinsicContentSize(view: CascadingView): IntrinsicSize =
     let
       width = view.columnsContentWidth()
@@ -1700,6 +1715,9 @@ proc cascadingModelDidChange*(view: CascadingView, sender: DynamicAgent) {.slot.
   view.reloadData()
 
 protocol CascadingDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    true
+
   method draw(view: CascadingView, context: DrawContext) =
     if context.isNil or view.bounds().isEmpty:
       return

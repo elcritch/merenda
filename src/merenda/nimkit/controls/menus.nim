@@ -122,7 +122,7 @@ proc dismissPopupFromHost(
 )
 
 proc openSubmenuPopup(button: PopupMenuButton, index: int)
-proc openRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool
+proc selectRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool
 proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool
 proc syncMenuBarPresentation(menuBar: MenuBar)
 proc menu*(view: View): Menu
@@ -1440,14 +1440,14 @@ proc handlePopupKeyDown(button: PopupMenuButton, event: KeyEvent): bool =
     if not item.isNil and not item.submenu().isNil and item.enabled():
       button.openSubmenuPopup(button.xHighlightedIndex)
     else:
-      discard button.openRelativeMenuBarButton(1)
+      discard button.selectRelativeMenuBarButton(1)
   of keyArrowLeft:
     if not button.xParentPopup.isNil:
       let parent = button.xParentPopup
       button.closePopup()
       parent.setPopupNeedsDisplay()
     else:
-      discard button.openRelativeMenuBarButton(-1)
+      discard button.selectRelativeMenuBarButton(-1)
   of keyEnter:
     button.activateItem(button.xHighlightedIndex)
   of keyTab:
@@ -1798,9 +1798,9 @@ protocol PopupMenuButtonEvents of ResponderEventProtocol:
       button.openPopup()
       true
     of keyArrowLeft:
-      button.openRelativeMenuBarButton(-1)
+      button.selectRelativeMenuBarButton(-1)
     of keyArrowRight:
-      button.openRelativeMenuBarButton(1)
+      button.selectRelativeMenuBarButton(1)
     of keyTab:
       if kmShift in event.modifiers:
         button.dismissPopupAndAdvanceKeyView(-1)
@@ -1809,6 +1809,15 @@ protocol PopupMenuButtonEvents of ResponderEventProtocol:
       true
     else:
       false
+
+protocol PopupMenuButtonStyleLayout of ViewLayoutProtocol:
+  method layoutStyleContext(button: PopupMenuButton): StyleContext =
+    controlStyle(
+      if button.hasStyleClass("pullDown"): srMenuBarItem else: srComboBox,
+      button.widgetStateSet(),
+      id = button.styleId,
+      classes = button.styleClasses,
+    )
 
 proc initPopupMenuButtonFields*(
     button: PopupMenuButton, title = "", menu: Menu = nil, frame: Rect = AutoRect
@@ -1825,6 +1834,7 @@ proc initPopupMenuButtonFields*(
   button.acceptsFirstResponder = true
   discard button.withProto()
   discard button.withProtocol(PopupMenuButtonDrawing)
+  discard button.withProtocol(PopupMenuButtonStyleLayout)
   discard button.withProtocol(PopupMenuButtonEvents)
   discard button.withProtocol(PopupMenuButtonAccessibility)
   button.applyInitialFrame(frame)
@@ -1917,7 +1927,11 @@ proc openSubmenuPopup(button: PopupMenuButton, index: int) =
   child.openPopup()
   button.setPopupNeedsDisplay()
 
-proc openRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool =
+proc selectRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool =
+  ## Focus the next (delta > 0) or previous (delta < 0) enabled menu bar
+  ## button, wrapping around the ends. Navigation between menus preserves the
+  ## open state: when the current button's popup is open, the target menu
+  ## opens too; otherwise only the key focus (highlight) moves.
   let menuBar = button.owningMenuBar()
   if menuBar.isNil or menuBar.xButtons.len == 0 or delta == 0:
     return false
@@ -1925,6 +1939,7 @@ proc openRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool =
   if currentIndex < 0:
     return false
 
+  let openPopup = button.popupOpen()
   var index = currentIndex + delta
   for _ in 0 ..< menuBar.xButtons.len:
     if index < 0:
@@ -1933,7 +1948,7 @@ proc openRelativeMenuBarButton(button: PopupMenuButton, delta: int): bool =
       index = 0
     let candidate = menuBar.xButtons[index]
     if not candidate.isNil and candidate.enabled():
-      if menuBar.xOpenButton != candidate:
+      if openPopup and menuBar.xOpenButton != candidate:
         if not menuBar.xOpenButton.isNil:
           menuBar.xOpenButton.closePopup()
         candidate.openPopup()
@@ -2018,6 +2033,9 @@ proc tileMenuBarItems(menuBar: MenuBar) =
       inc buttonIndex
 
 protocol MenuBarDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    true
+
   method draw(menuBar: MenuBar, context: DrawContext) =
     let bounds = menuBar.bounds()
     if bounds.isEmpty:
@@ -2046,6 +2064,19 @@ protocol MenuBarDrawing of ViewDrawingProtocol:
     )
 
 protocol MenuBarLayout of ViewLayoutProtocol:
+  method layoutStyleContext(menuBar: MenuBar): StyleContext =
+    controlStyle(
+      srMenuBar,
+      menuBar.widgetStateSet(),
+      id = menuBar.styleId,
+      classes = menuBar.styleClasses,
+    )
+
+  method managesSubviewLayout(menuBar: MenuBar, child: DynamicAgent): bool =
+    for button in menuBar.xButtons:
+      if child == button:
+        return true
+
   method layoutIntrinsicContentSize(menuBar: MenuBar): IntrinsicSize =
     initIntrinsicSize(menuBar.menuBarNaturalSize())
 

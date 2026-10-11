@@ -1,0 +1,64 @@
+<nk-main>
+  <nk-window id="window" title="Your workspace · NimKit" data-frame="140 120 560 640">
+    <nk-stack-view id="root" data-axis="vertical" data-spacing="24"
+                   data-padding="28" data-distribution="natural">
+      <nk-stack-view data-spacing="8" data-distribution="natural">
+        <span class="eyebrow">NIMKIT / GUI</span>
+        <span data-label-style="title" data-alignment="left">Your workspace</span>
+        <span class="muted">A few preferences. Real native controls.<br>Markup describes the view; Nim brings it to life.</span>
+      </nk-stack-view>
+
+      <nk-stack-view id="preferences" data-spacing="18" data-padding="20"
+                     data-distribution="natural">
+        <nk-stack-view data-spacing="6" data-distribution="natural">
+          <span class="field-label">Display name</span>
+          <input id="name" type="text" placeholder="Ada Lovelace" value="Ada">
+        </nk-stack-view>
+        <nk-stack-view data-spacing="6" data-distribution="natural">
+          <span class="field-label">Preferred language</span>
+          <select id="language">
+            <option value="nim" selected>Nim</option>
+            <option value="c">C</option>
+            <option value="other">Other</option>
+          </select>
+        </nk-stack-view>
+        <nk-stack-view data-spacing="6" data-distribution="natural">
+          <span class="field-label">Appearance</span>
+          <select id="theme" data-action="changeTheme">
+            <option value="custom" selected>Custom CSS</option>
+            <option value="aqua">Aqua</option>
+            <option value="banner">Banner</option>
+            <option value="darkbsd">Dark BSD</option>
+            <option value="macos">macOS</option>
+            <option value="macos-dark">macOS Dark</option>
+            <option value="nebula">Nebula</option>
+            <option value="peachy">Peachy</option>
+            <option value="synthwave83">Synthwave83</option>
+          </select>
+        </nk-stack-view>
+        <input id="updates" type="checkbox" checked data-title="Send me product updates">
+      </nk-stack-view>
+
+      <nk-stack-view data-spacing="12" data-distribution="natural">
+        <nk-stack-view data-axis="horizontal" data-spacing="10"
+                       data-alignment="center" data-distribution="natural">
+          <button id="preview" class="primary" data-action="previewProfile">Preview profile</button>
+          <button id="reset" data-action="resetProfile">Reset</button>
+          <button id="show-about" data-action="showAbout">About</button>
+        </nk-stack-view>
+        <progress id="progress" max="100" value="0"></progress>
+        <span id="status" class="muted" data-label-style="status">Your preview will appear here.</span>
+      </nk-stack-view>
+    </nk-stack-view>
+  </nk-window>
+  <nk-window id="about" title="About NimKit" data-frame="220 180 420 240">
+    <nk-stack-view id="about-content" data-padding="24" data-distribution="natural">
+      <nk-group id="about-group" data-title="One GUI resource file">
+        <nk-stack-view id="about-details" data-spacing="16" data-distribution="natural">
+          <span>Two independent native windows.<br>Markup defines the views; Nim connects their actions.</span>
+          <button id="close-about" data-action="closeAbout">Close</button>
+        </nk-stack-view>
+      </nk-group>
+    </nk-stack-view>
+  </nk-window>
+</nk-main>

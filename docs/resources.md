@@ -42,6 +42,193 @@ theme fragments, layout endpoints and ownership, and image assets. Required runt
 lookups raise `ResourceLookupError`; `findView`, `findWindow`, `findMenu`, and
 similar helpers provide non-raising optional lookup.
 
+## GUI markup
+
+`parseGuiResourceBundle` and `loadGuiResourceBundle` read native GUI resource markup
+using Nim's stdlib `htmlparser`. They return the same `ResourceLoadResult` and
+`ResourceBundle` used by the widget registry, validation, editable documents,
+Tekton preview, native construction, and CBOR serialization.
+
+Built-in NimKit elements use the `nk-` prefix. Application widgets use descriptive,
+hyphenated names such as `some-app-widget`, registered under that full name.
+HTML5 conveniences remain available: attributes, entities, boolean flags, void
+inputs, inline text, and ordinary `select`/`option` children.
+
+```html
+<nk-main>
+  <nk-window id="window" title="Preferences" data-frame="100 100 480 360">
+    <nk-stack-view id="root" data-axis="vertical" data-padding="24"
+                   data-spacing="12" data-distribution="natural">
+      <nk-label data-label-style="title">Preferences</nk-label>
+      <nk-label>Your name</nk-label>
+      <nk-text-field id="name" placeholder="Ada Lovelace"/>
+      <nk-check-box id="updates" checked>Send updates</nk-check-box>
+      <select id="appearance">
+        <option value="macos">macOS</option>
+        <option value="macos-dark" selected>macOS Dark</option>
+      </select>
+      <button id="save" class="primary" data-action="saveDocument">Save</button>
+    </nk-stack-view>
+  </nk-window>
+  <nk-window id="inspector" title="Inspector" data-frame="600 100 300 240">
+    <nk-view id="inspector-content">
+      <nk-label data-frame="16 16 260 32">An independent native window</nk-label>
+    </nk-view>
+  </nk-window>
+</nk-main>
+```
+
+`nk-main` is a resource envelope and creates no widget. Each sibling `nk-window`
+requires an ID and exactly one content view. Its `title` is the window title;
+`data-frame` supplies `x y width height` and defaults to `100 100 640 480`.
+Windows remain independent and hidden after construction. Register secondary
+windows with `app.addWindow` and show them from Nim when needed.
+
+An optional `<!doctype nimkit>` can identify the format before the root. No DTD,
+schema, browser `html`/`head`/`body`, or form wrapper is needed. Rootless view and
+window fragments are also supported. Self-closing native tags such as
+`<nk-text-field .../>` are supported as a loader convenience.
+
+```nim
+import std/os
+import merenda/nimkit
+
+let path = "ui/preferences.html"
+let loaded = loadGuiResourceBundle(path)
+if not loaded.loaded:
+  for diagnostic in loaded.diagnostics:
+    echo diagnostic.path, ": ", diagnostic.message
+  quit 1
+
+let built = loaded.bundle.instantiateResources(
+  initResourceInstantiationContext(assetBasePath = path.parentDir)
+)
+if not built.instantiated:
+  for diagnostic in built.diagnostics:
+    echo diagnostic.path, ": ", diagnostic.message
+  quit 1
+
+let name = TextField(built.instance.view(resourceId("name")))
+let window = built.instance.window(resourceId("window"))
+let app = newApplication("Preferences")
+app.addWindow(built.instance.window(resourceId("inspector")))
+app.runWindow(window, window.contentView)
+```
+
+The [runnable example](../examples/html_ui_demo.nim) loads a
+[preferences interface and About window](../examples/html_ui_demo.html).
+An [external stylesheet](../examples/html_ui_demo.css) styles the native controls.
+The demo uses `input`, `span`, and `select` for controls and display text; their
+native `nk-*` aliases remain available.
+The Appearance dropdown switches both windows between custom CSS and all eight
+built-in themes. Nim connects Preview, Reset, About, and Close actions; Reset
+restores the fields and custom appearance.
+
+| Element | Native behavior |
+| --- | --- |
+| `nk-view` | Plain `View`; no automatic stacking |
+| `nk-stack-view` | `StackView`, with orientation and layout properties |
+| `nk-box`; `nk-group` | Native box/group box with a title and one explicit content root |
+| `section` | Vertical stack for a meaningful group |
+| `span`; `nk-label` | Display text; `data-label-style` selects `title`, `heading`, `status`, or `form` style |
+| `nk-text-field`; `nk-text-view` | Single-line/multiline native text widgets |
+| `nk-check-box`; `nk-radio-button` | Native buttons whose text supplies the caption |
+| `nk-combo-box` with `option` children | Noneditable combo with titles, values, and selection |
+| `nk-split-view`; other `nk-*` widget names | Corresponding registered kind, written in kebab case |
+
+Registered widgets inherit text and option handling from their native base kind.
+Labels and buttons own their text and never become layout containers. For a
+checkbox with a separate label, use an explicit stack around the two widgets.
+Browser paragraphs, headings, `div`, `header`, `footer`, and forms are unsupported;
+use native labels, groups, and layout views.
+
+`nk-group` uses NimKit's existing `newGroupBox` semantics: a titled native `Box`
+with an accessibility group role. Both `nk-box` and `nk-group` accept at most one
+content root, which becomes their actual `contentView`. Put several controls in
+an explicit stack. This keeps grouping separate from arrangement and allows the
+box to measure the content's natural size:
+
+```html
+<nk-group id="account" data-title="Account">
+  <nk-stack-view data-axis="vertical" data-spacing="12" data-distribution="natural">
+    <nk-text-field id="display-name" value="Ada"/>
+    <nk-check-box checked>Send updates</nk-check-box>
+  </nk-stack-view>
+</nk-group>
+```
+
+For unframed grouping, use `nk-view` or `nk-stack-view`. `section` remains a
+vertical-stack convenience; layout direction otherwise belongs in stack
+properties rather than column/row element names.
+
+| HTML shorthand | Native resource |
+| --- | --- |
+| `button`; input type `button` | `button` |
+| Input types `text`, `search`, `email`, `url`, `tel` | `textField` |
+| Input types `checkbox`; `radio` | `checkBox`; `radioButton` |
+| Input types `range`; `number` | `slider`; `stepper` |
+| `textarea` | Editable multiline `textView` with raw text content |
+| `select` with `option` children | Noneditable `comboBox` |
+| `progress` | `progressIndicator`; indeterminate without `value` |
+| `img src="..."` | `imageView` with a file image resource |
+
+Use element children for structure and content. Inline `span`, `strong`, `em`,
+`b`, `i`, and `code` contribute plain text; `<br>` and `<br/>` insert newlines.
+Mixed inline text inside a container becomes one label between controls.
+`nk-text-view` preserves newlines and indentation and requires literal markup to
+be escaped, for example `&lt;b&gt;text&lt;/b&gt;`; element children are errors.
+`textarea` instead preserves literal markup as raw text and decodes HTML entities.
+Option text supplies the display title, `value` supplies the native object value,
+and `selected` sets the initial selection.
+
+IDs are unique across the whole resource bundle, including windows and controls.
+An explicit `id` is also the widget's native CSS ID. Unnamed views receive generated
+IDs that avoid explicit IDs; these can change when siblings are inserted, so give
+IDs to views used by application code or persistent edits. `class` supplies native
+CSS classes and `title` on a view supplies a tooltip.
+
+`disabled`, `checked`, `hidden`, and `readonly` follow HTML boolean semantics:
+presence enables the attribute even when its value is `"false"`. `placeholder`,
+text-field `value`, and numeric `min`, `max`, and `step` supply native values.
+Range and number inputs default to 0–100 with step 1; progress defaults to a
+maximum of 1. Submission and radio grouping remain application behavior in Nim.
+
+Keep native options in `data-*` attributes rather than property subelements:
+
+- `data-axis="horizontal"`, `data-spacing="12"`, `data-alignment="center"`, and
+  `data-padding="12 24"` configure stacks. `data-axis` aliases `orientation` and
+  `data-padding` aliases `edgeInsets`.
+- Registered properties use kebab case: `data-background-color="#283040"`,
+  `data-alpha="0.8"`, `data-frame="0 0 240 40"`, or `data-enabled="false"`.
+- Data booleans accept `true`, `false`, `1`, `0`, or an empty value for true.
+  Numbers must be finite. Rectangles use `x y width height`, sizes use `width height`,
+  and padding uses CSS shorthand with 1, 2, or 4 numbers. Commas are also accepted.
+- Enums accept native names or readable suffixes, such as `laVertical` or
+  `vertical`. Data attributes override inferred defaults and standard attributes.
+- `<some-app-widget>` selects the full hyphenated registered application kind.
+  Pass the same registry to parsing and construction. Ambiguous normalized kind
+  names produce diagnostics. `nk-main` and `nk-window` remain reserved structure.
+- `<nk-view data-kind="myWidget">` explicitly selects any registered kind when
+  its name does not follow the tag convention. Other tags cannot override their kind.
+- `data-action="saveDocument"` sets a native control action using normal responder
+  dispatch. Assign a target in Nim for an explicit callback.
+
+Apply CSS through `parseCssTheme`/`loadCssTheme` and appearance APIs. Selectors use
+native widget roles, IDs, and classes. Inline `style`, embedded stylesheets,
+JavaScript handlers, and unsupported elements produce diagnostics. Combo options
+support a single selection; disabled options and option groups are unsupported.
+
+Parsing constructs no GUI objects and opens no image files. Resolve relative images
+with the construction context's `assetBasePath`. Recoverable stdlib parse errors
+are warnings; unsupported GUI syntax, invalid values, duplicate IDs, and invalid
+references are errors. Inspect `loaded` before construction. Filesystem failures
+from `loadGuiResourceBundle` raise `IOError` or `OSError`.
+
+Both loaders accept `ResourceLoadLimits`. Byte, structural node, and depth limits
+are checked before constructing the DOM. HTML5 void elements, including `input`,
+are normalized to account for the stdlib parser's older void-element list. Resource
+validation then applies the same schema and reference checks as other frontends.
+
 ## Stable CBOR Envelope
 
 The top-level record contains:
@@ -72,10 +259,10 @@ conversion APIs.
 ## Construction Registry
 
 `initNimKitResourceRegistry` provides built-in factories for views, controls,
-buttons, checkboxes, radio buttons, text fields, labels, image views, stack views,
-switches, progress indicators, boxes, split views, and view controllers. It also
-registers common view/control properties, standard action selectors, and standard
-chrome names.
+buttons, checkboxes, radio buttons, text fields, multiline text views, combo boxes,
+labels, image views, stack views, switches, progress indicators, boxes, groups,
+split views, and view controllers. It also registers common view/control properties,
+standard action selectors, and standard chrome names.
 
 Applications can extend a registry before validation and construction:
 
@@ -114,6 +301,24 @@ typed decoder with `registerResourceValueType`; `registerViewProperty` remains a
 escape hatch for properties that need custom conversion. Because dispatch still uses
 the property protocol, normal layout, drawing, responder, accessibility, and
 native-window side effects are preserved.
+
+Child attachment/detachment hooks and maximum child counts inherit through
+`baseKind`. A kind can set `maximumChildren` in `registerViewKind` to enforce a
+native ownership limit during validation. Box and group resources have one content
+root; older box bundles with several direct children need an explicit stack root.
+
+A custom resource setter that resets dependent widget state can set
+`recreateOnChange = true` in `registerViewProperty`. Tekton then adopts a fully
+constructed replacement when that authored property changes. This policy is
+inherited with the property registration. Built-in combo options use it to preserve
+option values and selection when display titles or option counts change; label
+styles use it to preserve explicit alignment and CSS classes.
+
+`applicationOrder` controls setter order during construction and preview staging.
+Lower values run first; equal values retain their authored order. The default is
+zero. Combo items run before item values and selection, and label styles run before
+explicit alignment/classes, even when an editor appends the default-setting property
+last. Aliases and derived kinds inherit both property policies.
 
 Construction returns windows without showing them or adding them to an application.
 Image resources remain local to the `ResourceInstance`; they are not published in the

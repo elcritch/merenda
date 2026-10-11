@@ -10,6 +10,7 @@ import ./nimkit/containers/cascadingviews
 import ./nimkit/containers/collectionviews
 import ./nimkit/containers/compacttabviews
 import ./nimkit/controls/buttons
+import ./nimkit/controls/searchbars
 import ./nimkit/controls/chips
 import ./nimkit/controls/cells
 import ./nimkit/controls/comboboxes
@@ -75,6 +76,7 @@ import ./nimkit/containers/tabviews
 import ./nimkit/containers/tableviews
 import ./nimkit/terminal
 import ./nimkit/text/textfields
+import ./nimkit/text/searchcontrollers
 import ./nimkit/text/textlayout
 import ./nimkit/text/textstorage
 import ./nimkit/text/textsnapshots
@@ -106,6 +108,8 @@ export cascadingviews
 export collectionviews
 export compacttabviews
 export buttons
+export searchbars
+export searchcontrollers
 export chips
 export cells
 export comboboxes

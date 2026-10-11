@@ -770,6 +770,9 @@ proc drawTab(tabView: TabView, context: DrawContext, index: int) =
     )
 
 protocol TabBarDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    true
+
   method draw(tabBar: TabBarView, context: DrawContext) =
     let tabView = tabBar.xTabView
     for index in 0 ..< tabView.xItems.len:
@@ -833,6 +836,9 @@ protocol TabBarEvents of ResponderEventProtocol:
     true
 
 protocol TabViewDrawing of ViewDrawingProtocol:
+  method drawsStyledBackground(view: View): bool =
+    true
+
   method draw(tabView: TabView, context: DrawContext) =
     let
       content = tabView.contentRect()
@@ -864,6 +870,21 @@ protocol TabViewDrawing of ViewDrawingProtocol:
     )
 
 protocol TabViewLayout of ViewLayoutProtocol:
+  method layoutStyleContext(tabView: TabView): StyleContext =
+    controlStyle(
+      srTabPanel,
+      tabView.widgetStateSet(),
+      id = tabView.styleId,
+      classes = tabView.styleClasses,
+    )
+
+  method managesSubviewLayout(tabView: TabView, child: DynamicAgent): bool =
+    if child == tabView.xTabBar:
+      return true
+    for item in tabView.xItems:
+      if child == item.xView:
+        return true
+
   method layoutSubviews(tabView: TabView) =
     tabView.syncTabBarFrame()
     tabView.syncSelectedContent()

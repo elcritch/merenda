@@ -56,6 +56,11 @@ iterator findMatches*(pattern: TextSearchPattern, subject: string): TextSearchMa
   except RegexError as error:
     raise newException(TextSearchError, error.msg)
 
+proc contains*(pattern: TextSearchPattern, subject: string): bool =
+  ## Test whether the subject has a match, including a zero-width match.
+  for match in pattern.findMatches(subject):
+    return true
+
 proc initTextSearchReplacement*(
     pattern: TextSearchPattern, text: string
 ): TextSearchReplacement =

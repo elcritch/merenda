@@ -122,6 +122,58 @@ suite "Kosmo synthetic panel shortcuts":
       check terminal.window() == Responder(frontend.window)
       require frontend.window.dispatchKeyDown(commandNumberEvent(2))
 
+  test "spatial pane shortcuts stay aligned across nested splits":
+    for vertical in [true, false]:
+      let
+        app = newApplication("Nested Pane Navigation")
+        frontend = newKosmoApplication(app, monitorsGitStatus = false)
+        terminal = newKosmoTerminalView()
+      defer:
+        frontend.close()
+        terminal.close()
+        frontend.window.close()
+      app.presentSyntheticWindow(frontend)
+      frontend.contentView.frame = rect(0, 0, 1000, 700)
+      let firstSplit =
+        if vertical: KosmoSplitVerticalAction else: KosmoSplitHorizontalAction
+      require frontend.window.sendAction(actionSelector(firstSplit))
+      frontend.contentView.layoutSubtreeIfNeeded()
+      require frontend.openDocument(
+        newKosmoPaneDocument("nested-terminal", "Terminal", terminal)
+      )
+      if vertical:
+        require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+        require frontend.window.dispatchKeyDown(KeyEvent(key: keyN))
+      else:
+        require frontend.window.sendAction(actionSelector(KosmoSplitVerticalAction))
+      frontend.contentView.layoutSubtreeIfNeeded()
+      let groups = frontend.editorGroups()
+      require groups.len == 3
+      let
+        source = groups[if vertical: 2 else: 1]
+        towardTerminal = if vertical: keyK else: keyL
+        towardTerminalArrow = if vertical: keyArrowUp else: keyArrowRight
+        towardEditor = if vertical: keyJ else: keyH
+        towardEditorArrow = if vertical: keyArrowDown else: keyArrowLeft
+      # A tall left pane beside terminal/editor rows, or its transposed layout.
+      for direction in [towardTerminal, towardTerminalArrow]:
+        require frontend.window.makeFirstResponder(source.editorView)
+        require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+        require frontend.window.dispatchKeyDown(KeyEvent(key: direction))
+        check frontend.window.firstResponderIs(terminal)
+      for direction in [towardEditor, towardEditorArrow]:
+        require frontend.window.makeFirstResponder(terminal)
+        require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+        require frontend.window.dispatchKeyDown(KeyEvent(key: direction))
+        check frontend.window.firstResponderIs(source.editorView)
+      # The full-height/width pane has no aligned neighbor toward the outer edge.
+      require frontend.window.makeFirstResponder(groups[0].editorView)
+      require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+      require frontend.window.dispatchKeyDown(
+        KeyEvent(key: if vertical: keyK else: keyH)
+      )
+      check frontend.window.firstResponderIs(groups[0].editorView)
+
   test "numbered shortcuts repeatedly return from the sidebar to terminal content":
     let
       app = newApplication("Kosmo Terminal Number Focus Test")
