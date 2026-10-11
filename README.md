@@ -688,6 +688,7 @@ LSP; Nimdex's separate `--listen` option serves its CLI query protocol.
 Syntax colors arrive progressively as background workers finish small batches.
 Markdown previews display their content before fenced-code coloring finishes;
 selection, code-block scroll positions, and text layout survive those color updates.
+Kosmo includes NIF syntax highlighting by default for `.nif` files.
 
 To add language highlighting, open **Kosmo Settings → TextMate Grammars** and
 search the built-in language grammars in the open-source `microsoft/vscode`

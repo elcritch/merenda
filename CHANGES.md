@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Require Matter 0.6.0 or newer and include NIF in Kosmo's built-in language list
+  with automatic syntax highlighting for `.nif` files.
+
 ## 0.27.1
 
 - Keep box/group captions readable when switching CSS themes by following the
