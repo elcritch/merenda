@@ -3,6 +3,7 @@
 import std/unicode
 
 import moepkg/syntax/tokenizer as moeTokenizer
+from moepkg/syntax/dispatch import getNextToken
 
 import ../nimkit as nimkit
 

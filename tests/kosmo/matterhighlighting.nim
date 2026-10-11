@@ -8,6 +8,7 @@ import moepkg/highlight as moeHighlight
 import moepkg/syntax/matter_backend as moeMatter
 import merenda/kosmo/kosmo
 import merenda/kosmo/matterworkers
+import merenda/kosmo/moethemeassets
 import merenda/nimkit
 from merenda/nimkit/foundation/mainthreadwork import
   drainMainThreadWork, hasPendingMainThreadWork
@@ -133,24 +134,22 @@ suite "Kosmo Matter highlighting":
   test "installed VS Code file types select their root grammar asynchronously":
     let
       rootPath = "/kosmo/config/grammars/toy/syntaxes/toy.tmLanguage.json"
-      sources =
-        @[
-          moeMatter.MatterGrammarSource(
-            path: rootPath,
-            content:
-              """{"scopeName":"source.toy","patterns":[{"match":"\\b(fizz)\\b","name":"keyword.control.toy"}]}""",
-          )
-        ]
-      fileTypes =
-        @[
-          MatterGrammarFileType(
-            identifier: "toy:toy",
-            languageId: "toy",
-            rootPath: rootPath,
-            extensions: @[".toy", ".toy.multi"],
-            fileNames: @["Toyfile"],
-          )
-        ]
+      sources = @[
+        moeMatter.MatterGrammarSource(
+          path: rootPath,
+          content:
+            """{"scopeName":"source.toy","patterns":[{"match":"\\b(fizz)\\b","name":"keyword.control.toy"}]}""",
+        )
+      ]
+      fileTypes = @[
+        MatterGrammarFileType(
+          identifier: "toy:toy",
+          languageId: "toy",
+          rootPath: rootPath,
+          extensions: @[".toy", ".toy.multi"],
+          fileNames: @["Toyfile"],
+        )
+      ]
       highlighting = newMatterHighlighting(sources, fileTypes)
       requestId = highlighting.requestMatterHighlight(
         7, 1, "fizz value", moeHighlight.SourceLanguage.langNone,
@@ -361,10 +360,72 @@ suite "Kosmo Matter highlighting":
     check buffer.cell(parameterless.column, parameterless.row).style.fg !=
       buffer.cell(keyword.column, keyword.row).style.fg
 
+  test "HTML tags, attributes, strings and text differ in every bundled Moe theme":
+    let
+      root = createTempDir("kosmo-html-colors-", "")
+      path = root / "preferences.html"
+      source =
+        "<nk-window id=\"workspace\">\n" &
+        "<span class=\"muted\">Plain text</span>\n</nk-window>\n"
+      editor = newKosmoEditor()
+    writeFile(path, source)
+    defer:
+      editor.close()
+      removeDir(root)
+    require editor.openFile(path).loaded
+    let themes = discoverMoeThemes(installBundledMoeThemes(root / "cache"))
+    require themes.len == 6
+    var buffer = newRenderBuffer(64, 8)
+    for theme in themes:
+      checkpoint(theme.name)
+      require editor.applyMoeTheme(theme).applied
+      require editor.renderUntilMatterHighlightingReady(buffer)
+      var colors: seq[celinaColors.ColorValue]
+      for needle in ["nk-window", "id", "workspace", "Plain text"]:
+        let location = buffer.renderedLocation(needle)
+        require location.column >= 0
+        colors.add buffer.cell(location.column, location.row).style.fg
+      for first in 0 ..< colors.len:
+        for second in first + 1 ..< colors.len:
+          check colors[first] != colors[second]
+      let
+        tag = buffer.renderedLocation("span")
+        attribute = buffer.renderedLocation("class")
+      require tag.column >= 0
+      require attribute.column >= 0
+      check buffer.cell(tag.column, tag.row).style.fg == colors[0]
+      check buffer.cell(attribute.column, attribute.row).style.fg == colors[1]
+
+  test "bundled grammar captures preserve pragma and string colors through workers":
+    for (fileName, source, needles) in [
+      (
+        "pragma.c",
+        "#pragma once\n#pragma mark - Section\n",
+        @["pragma", "once", "Section"],
+      ),
+      (
+        "pragma.cpp",
+        "#pragma GCC diagnostic push\n",
+        @["pragma", "GCC", "diagnostic", "push"],
+      ),
+      ("format.c", "printf(\"value %d\\n\", x);\n", @["value", "%d"]),
+      ("format.go", "fmt.Printf(\"value %d\\n\", x)\n", @["value", "%d"]),
+      ("regexp.js", "const pattern = /[a-z]\\d/;\n", @["/", "a-z"]),
+      ("regexp.ts", "const pattern = /[a-z]\\d/;\n", @["/", "a-z"]),
+      ("regexp.py", "pattern = r\"[a-z]+(?P<group>x)\"\n", @["a-z", "group", "x"]),
+    ]:
+      checkpoint(fileName)
+      let cells = renderMoeFileAcross(fileName, source, needles)
+      for cell in cells:
+        check cell.style.fg == cells[0].style.fg
+
   test "Moe highlights NIF files using the bundled grammar":
     for fileName in ["matter.nif", "matter.NIF"]:
       checkDistinctHighlight(
         fileName, "(.nif27)\n(call write.1.sys \"Kosmo\" 42)\n", "Kosmo", "42"
+      )
+      checkDistinctHighlight(
+        fileName, "(.nif27)\n(call write.1.sys \"Kosmo\" 42)\n", "call", "write.1.sys"
       )
 
   test "Moe highlights JavaScript files":

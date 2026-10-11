@@ -1,4 +1,4 @@
-version       = "0.27.0"
+version       = "0.27.1"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -18,7 +18,7 @@ requires "gh:elcritch/kiwiberry#4d273da93f67d8e5d6317898851772b32fa635ec"
 requires "cborious"
 requires "unicodedb >= 0.14.0"
 requires "faststreams >= 0.5.1"
-requires "gh:elcritch/nim-markdown#fix/arc-emphasis-ownership[regex]"
+requires "gh:elcritch/nim-markdown#fix/arc-emphasis-ownership [regex]"
 requires "gh:elcritch/matter >= 0.6.0"
 requires "gh:elcritch/terminex >= 0.4.0 [sigils]"
 requires "gh:Araq/iconbundler"
@@ -35,8 +35,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  # Host results, read/write hooks, and stable targeted buffer deletion.
-  requires "gh:fox0430/moe#2ad904c1cc70e8aa783c2533dcb8c4230fa44a48"
+  requires "gh:fox0430/moe#8d997efdb79d72a5934389c621efa2754856c824"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
