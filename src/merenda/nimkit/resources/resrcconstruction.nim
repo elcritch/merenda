@@ -428,7 +428,7 @@ proc configureViews(
       nodePath = path & "[" & $index & "]"
       view = state.instance.viewsValue.getOrDefault(node.id)
     if not view.isNil:
-      for propertyIndex, property in node.properties:
+      for propertyIndex, property in state.registry.orderedViewProperties(node):
         try:
           if not state.registry.applyViewProperty(
             node.kind, view, property, propertyContext

@@ -361,6 +361,12 @@ suite "Kosmo Matter highlighting":
     check buffer.cell(parameterless.column, parameterless.row).style.fg !=
       buffer.cell(keyword.column, keyword.row).style.fg
 
+  test "Moe highlights NIF files using the bundled grammar":
+    for fileName in ["matter.nif", "matter.NIF"]:
+      checkDistinctHighlight(
+        fileName, "(.nif27)\n(call write.1.sys \"Kosmo\" 42)\n", "Kosmo", "42"
+      )
+
   test "Moe highlights JavaScript files":
     checkDistinctHighlight("matter.js", "const answer = \"kosmo\";\n", "const", "kosmo")
 

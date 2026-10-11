@@ -675,6 +675,12 @@ proc kosmoMatterGrammarState(): tuple[
   result.grammars.add installed.grammars
   result.sources.add installed.sources
   result.fileTypes = installed.fileTypes
+  result.fileTypes.add MatterGrammarFileType(
+    identifier: matterPackages.nifGrammar.packageKey,
+    languageId: matterPackages.nifGrammar.languageId,
+    rootPath: matterPackages.nifGrammar.archiveMember,
+    extensions: @[".nif"],
+  )
 
 func title*(origin: KosmoTextMateGrammarOrigin): string =
   case origin

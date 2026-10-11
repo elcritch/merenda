@@ -5,7 +5,7 @@
   --accent-pressed: rgba(0, 82, 191, 1);
   --box-border-color: rgba(61%, 65%, 72%, 1);
   --box-fill: rgba(0, 0, 0, 0);
-  --box-text-color: rgba(12%, 15%, 51, 1);
+  --box-text-color: var(--text-field-text-color);
   --button-border-color: rgba(31, 112, 204, 0.5686275);
   --button-border-color-accent: var(--button-border-color);
   --button-border-color-accent-highlighted: var(--button-border-color-highlighted);

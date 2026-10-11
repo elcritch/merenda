@@ -102,6 +102,10 @@ Colors accept names, `transparent`, 3/4/6/8 digit hex notation, `rgb()` and
 | `-nimkit-focus-ring-width` | Focus ring width |
 | `-nimkit-focus-ring-inset` | Focus ring inset; negative values extend outward |
 
+For `box`, `color` styles the group title. Bundled themes default
+`--box-text-color` to `--text-field-text-color`, so captions follow the active
+palette. Override the token or use `box { color: ...; }` to style captions separately.
+
 Shadow syntax is `[inset] x y [blur [spread]] [color]`. Offsets, spread and
 focus-ring inset may be negative; ordinary padding, blur, border width, size
 and corner radii may not. Nonfinite lengths are rejected.

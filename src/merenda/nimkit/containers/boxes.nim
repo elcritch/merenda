@@ -185,7 +185,8 @@ protocol BoxProtocol {.selectorScope: protocol, setterStyle: nim.} from Box:
         newView(frame = rect(0.0, 0.0, 0.0, 0.0))
       else:
         contentView
-    box.xContentView.background = color(0.0, 0.0, 0.0, 0.0)
+    if contentView.isNil:
+      box.xContentView.background = color(0.0, 0.0, 0.0, 0.0)
     box.xContentView.autoresizingMaskConstraints = false
     if box.xContentView.superview != box:
       box.addSubview(box.xContentView)

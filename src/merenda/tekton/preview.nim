@@ -284,6 +284,15 @@ proc changedPropertyNames(
     result.add name
   result.sort()
 
+proc propertyChangesRequireReplacement(
+    registry: ResourceRegistry, previous, next: ViewNodeResource
+): bool =
+  for name in registry.changedPropertyNames(previous, next):
+    if registry.propertyValue(previous, name) != registry.propertyValue(next, name):
+      let descriptor = registry.findViewPropertyDescriptor(next.kind, name)
+      if descriptor.isSome and descriptor.get().recreateOnChange:
+        return true
+
 proc imageDependencyChanged(
     previous, next: Option[ResourceValue],
     previousContext, nextContext: ResourcePropertyContext,
@@ -309,8 +318,10 @@ proc preparePropertyUpdates(
     previousContext, nextContext: ResourcePropertyContext,
     updates: var seq[PropertyUpdate],
 ): bool =
-  ## Returns false when a changed property cannot be safely read back. The caller
-  ## then uses the staged replacement instead of risking stale state.
+  ## Declines reuse when properties cannot safely be applied in place. The caller
+  ## then adopts the fully constructed staged replacement.
+  if preview.xRegistry.propertyChangesRequireReplacement(previous.node, next.node):
+    return
   result = true
   for name in preview.xRegistry.changedPropertyNames(previous.node, next.node):
     let
@@ -670,6 +681,8 @@ proc updateProperties(
     let previous = preview.xViewSnapshots[id]
     if snapshot.node.kind != previous.node.kind or snapshot.path != previous.path:
       return
+    if preview.xRegistry.propertyChangesRequireReplacement(previous.node, snapshot.node):
+      return
 
   var options = preview.xValidationOptions
   if options.assetBasePath.len == 0:
@@ -718,7 +731,7 @@ proc updateProperties(
           staged = preview.xRegistry.constructView(snapshot.node.kind, frame)
           if staged.isNil:
             return false
-          for property in snapshot.node.properties:
+          for _, property in preview.xRegistry.orderedViewProperties(snapshot.node):
             if not preview.xRegistry.applyViewProperty(
               snapshot.node.kind, staged, property, context
             ):

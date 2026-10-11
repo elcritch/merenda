@@ -65,6 +65,31 @@ nim r examples/css_theme_demo.nim
 Read the [CSS theming guide](docs/css-theming.md) for selectors, variables,
 supported properties and appearance scope.
 
+You can also [describe native GUIs in lightweight markup](docs/resources.md#gui-markup),
+using HTML5 syntax and `data-*` attributes for native widget options:
+
+```html
+<nk-main>
+  <nk-window id="window" title="Hello" data-frame="100 100 400 240">
+    <nk-stack-view id="root" data-axis="vertical" data-padding="24" data-spacing="12">
+      <nk-label data-label-style="title">Hello from Merenda</nk-label>
+      <nk-text-field id="name" placeholder="Your name"/>
+      <button id="save" data-action="saveDocument">Save</button>
+    </nk-stack-view>
+  </nk-window>
+</nk-main>
+```
+
+`loadGuiResourceBundle` reads the interface and `instantiateResources` constructs
+its native controls. One document can define independent windows. Built-in elements
+use `nk-`; application widgets can use names such as `some-app-widget`. Use IDs to
+look up controls and connect behavior in Nim.
+
+Try the [GUI resource example](examples/html_ui_demo.nim) with
+`nim ic -r examples/html_ui_demo.nim`. It includes compact preferences controls,
+Preview and Reset actions, and a separate About window. The Appearance dropdown
+switches both windows between the custom stylesheet and the built-in CSS themes.
+
 To use Merenda in your own project, add this dependency to your `.nimble` file
 and run `atlas install -tuk` from that project:
 
@@ -663,6 +688,7 @@ LSP; Nimdex's separate `--listen` option serves its CLI query protocol.
 Syntax colors arrive progressively as background workers finish small batches.
 Markdown previews display their content before fenced-code coloring finishes;
 selection, code-block scroll positions, and text layout survive those color updates.
+Kosmo includes NIF syntax highlighting by default for `.nif` files.
 
 To add language highlighting, open **Kosmo Settings → TextMate Grammars** and
 search the built-in language grammars in the open-source `microsoft/vscode`

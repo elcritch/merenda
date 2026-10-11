@@ -276,7 +276,7 @@ suite "Kosmo settings":
     check grammarColumn.title == "Grammar"
     check scopeColumn.title == "Scope"
     check originColumn.title == "Origin"
-    var foundTerraform = false
+    var foundTerraform, foundNif: bool
     for row in 0 ..< textMateGrammarsTable.rowCount:
       check textMateGrammarsTable.tableCellText(row, grammarColumn).len > 0
       check textMateGrammarsTable.tableCellText(row, scopeColumn).len > 0
@@ -285,7 +285,12 @@ suite "Kosmo settings":
       if textMateGrammarsTable.tableCellText(row, scopeColumn) == "source.hcl.terraform":
         check textMateGrammarsTable.tableCellText(row, grammarColumn) == "Terraform"
         foundTerraform = true
+      if textMateGrammarsTable.tableCellText(row, scopeColumn) == "source.nif":
+        check textMateGrammarsTable.tableCellText(row, grammarColumn) == "NIF"
+        check textMateGrammarsTable.tableCellText(row, originColumn) == "Built-in"
+        foundNif = true
     check foundTerraform
+    check foundNif
 
     var grammarsWithAddition = availableGrammars
     grammarsWithAddition.add KosmoTextMateGrammar(
