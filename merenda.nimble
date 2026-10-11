@@ -18,7 +18,7 @@ requires "gh:elcritch/kiwiberry#4d273da93f67d8e5d6317898851772b32fa635ec"
 requires "cborious"
 requires "unicodedb >= 0.14.0"
 requires "faststreams >= 0.5.1"
-requires "gh:elcritch/nim-markdown#fix/arc-emphasis-ownership[regex]"
+requires "gh:elcritch/nim-markdown#fix/arc-emphasis-ownership [regex]"
 requires "gh:elcritch/matter >= 0.6.0"
 requires "gh:elcritch/terminex >= 0.4.0 [sigils]"
 requires "gh:Araq/iconbundler"
@@ -31,8 +31,7 @@ feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
 feature "kosmo":
-  # Matter semantic colors and review fixes from fox0430/moe#3364.
-  requires "gh:fox0430/moe#e0897eb8663686c6e8ce7527ea0152ae95009c77"
+  requires "gh:fox0430/moe#fea61e88249b4512ca2a7396c09721b7d3d0475b"
 
 feature "references":
   requires "https://github.com/ravynsoft/ravynos"
