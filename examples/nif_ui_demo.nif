@@ -114,7 +114,7 @@
         (id "status")
         (classes "muted")
         (labelStyle "status")
-        "Your preview will appear here."))))
+        "Your preview will appear here.")))
 
 (Window
   (id "about")

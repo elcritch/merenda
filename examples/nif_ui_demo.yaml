@@ -1,0 +1,164 @@
+windows:
+- type: Window
+  id: window
+  title: Your workspace · NimKit
+  frame:
+    x: 140
+    y: 120
+    width: 560
+    height: 640
+  children:
+  - type: StackView
+    id: root
+    axis: vertical
+    spacing: 24
+    padding: 28
+    distribution: natural
+    children:
+    - type: StackView
+      spacing: 8
+      distribution: natural
+      children:
+      - type: Label
+        classes: eyebrow
+        text: NIMKIT / GUI
+      - type: Label
+        labelStyle: title
+        alignment: left
+        text: Your workspace
+      - type: Label
+        classes: muted
+        text: |-
+          A few preferences. Real native controls.
+          Markup describes the view; Nim brings it to life.
+    - type: StackView
+      id: preferences
+      spacing: 18
+      padding: 20
+      distribution: natural
+      children:
+      - type: StackView
+        spacing: 6
+        distribution: natural
+        children:
+        - type: Label
+          classes: field-label
+          text: Display name
+        - type: TextField
+          id: name
+          placeholder: Ada Lovelace
+          text: Ada
+      - type: StackView
+        spacing: 6
+        distribution: natural
+        children:
+        - type: Label
+          classes: field-label
+          text: Preferred language
+        - type: ComboBox
+          id: language
+          selectedIndex: 0
+          options:
+          - objectValue: nim
+            displayText: Nim
+          - objectValue: c
+            displayText: C
+          - objectValue: other
+            displayText: Other
+      - type: StackView
+        spacing: 6
+        distribution: natural
+        children:
+        - type: Label
+          classes: field-label
+          text: Appearance
+        - type: ComboBox
+          id: theme
+          action: changeTheme
+          selectedIndex: 0
+          options:
+          - objectValue: custom
+            displayText: Custom CSS
+          - objectValue: aqua
+            displayText: Aqua
+          - objectValue: banner
+            displayText: Banner
+          - objectValue: darkbsd
+            displayText: Dark BSD
+          - objectValue: macos
+            displayText: macOS
+          - objectValue: macos-dark
+            displayText: macOS Dark
+          - objectValue: nebula
+            displayText: Nebula
+          - objectValue: peachy
+            displayText: Peachy
+          - objectValue: synthwave83
+            displayText: Synthwave83
+      - type: CheckBox
+        id: updates
+        title: Send me product updates
+        state: on
+    - type: StackView
+      spacing: 12
+      distribution: natural
+      children:
+      - type: StackView
+        axis: horizontal
+        spacing: 10
+        alignment: center
+        distribution: natural
+        children:
+        - type: Button
+          id: preview
+          classes: primary
+          action: previewProfile
+          title: Preview profile
+        - type: Button
+          id: reset
+          action: resetProfile
+          title: Reset
+        - type: Button
+          id: show-about
+          action: showAbout
+          title: About
+      - type: ProgressIndicator
+        id: progress
+        maxValue: 100
+        value: 0
+      - type: Label
+        id: status
+        classes: muted
+        labelStyle: status
+        text: Your preview will appear here.
+- type: Window
+  id: about
+  title: About NimKit
+  frame:
+    x: 220
+    y: 180
+    width: 420
+    height: 240
+  children:
+  - type: StackView
+    id: about-content
+    padding: 24
+    distribution: natural
+    children:
+    - type: Box
+      id: about-group
+      boxTitle: One GUI resource file
+      children:
+      - type: StackView
+        id: about-details
+        spacing: 16
+        distribution: natural
+        children:
+        - type: Label
+          text: |-
+            Two independent native windows.
+            Markup defines the views; Nim connects their actions.
+        - type: Button
+          id: close-about
+          action: closeAbout
+          title: Close
