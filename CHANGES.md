@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.27.3
+
+- Keep ordinary clicks between Kosmo editor panes from starting a text
+  selection, and align the first visible line after keyboard navigation
+  following fractional wheel scrolling.
+
 - Prevent Kosmo editor panes from briefly displaying another buffer when
   switching focus or editing. Pane rendering consumes delivered highlighting
   results without dispatching callbacks that can redraw another pane midway

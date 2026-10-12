@@ -431,6 +431,60 @@ suite "Kosmo":
       check names[index] & " row" in group.editorView.displayedText()
       check names[1 - index] & " row" in other.editorView.displayedText()
 
+  test "clicking between editor panes moves the caret without selecting text":
+    let frontend = newKosmoApplication(newApplication("Kosmo Pane Click Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let editor = frontend.editorView.editor
+    require editor.handleKey("i")
+    require editor.handleTextInput(
+      "alpha beta gamma ".repeat(40) & "\nsecond line text"
+    )
+    require editor.handleKey("Esc")
+    frontend.editorView.refresh()
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    require frontend.window.dispatchKeyDown(KeyEvent(key: keyV, keyCode: keyV.ord))
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    require frontend.dockView.rootView() of SplitView
+    let split = SplitView(frontend.dockView.rootView())
+    split.setPositionOfDivider(0, split.bounds().size.width * 0.3'f32)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    var points: array[2, Point]
+    for index, group in groups:
+      group.editorView.refresh()
+      require editor.revealLocation(0, 80)
+      group.editorView.refresh()
+      let
+        cursor = editor.cursor()
+        metrics = group.editorView.monoTextMetrics()
+      points[index] = group.editorView.pointToWindow(
+        initPoint(
+          (cursor.column.float32 + 0.5'f32) * metrics.cellWidth,
+          (cursor.row.float32 + 0.5'f32) * metrics.lineHeight,
+        )
+      )
+
+    for interleaveRefresh in [false, true]:
+      for _ in 0 ..< 3:
+        for index, group in groups:
+          require frontend.window.mouseDownAt(points[index])
+          if interleaveRefresh:
+            groups[1 - index].editorView.refresh()
+          require frontend.window.mouseUpAt(points[index])
+          group.editorView.refresh()
+          check frontend.window.firstResponder() == Responder(group.editorView)
+          check editor.mode() == KosmoEditorMode.Normal
+          check editor.currentSelection().isNone
+          check editor.bufferCursor() == KosmoBufferCursor(line: 0, column: 80)
+
   test "duplicated buffer panes keep independent selections during repeated refreshes":
     let pasteboard = generalPasteboard()
     var savedClipboard: seq[tuple[kind: string, item: PasteboardItem]]

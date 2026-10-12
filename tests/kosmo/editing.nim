@@ -778,6 +778,47 @@ suite "Kosmo":
     check not view.cursorVisible
     editor.close()
 
+  test "keyboard navigation clears fractional wheel scrolling":
+    let frontend = newKosmoApplication(newApplication("Kosmo Scroll Alignment Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let
+      view = frontend.editorView
+      editor = view.editor
+    require editor.handleKey("i")
+    require editor.handleTextInput("first line\nsecond line\nthird line\nfourth line")
+    require editor.handleKey("Esc")
+    view.refresh()
+    require frontend.window.makeFirstResponder(view)
+
+    for event in [
+      KeyEvent(key: keyArrowUp, keyCode: keyArrowUp.ord),
+      KeyEvent(key: keyArrowDown, keyCode: keyArrowDown.ord),
+      KeyEvent(key: keyK, keyCode: keyK.ord, text: "k"),
+      KeyEvent(key: keyJ, keyCode: keyJ.ord, text: "j"),
+      KeyEvent(key: keyY, keyCode: keyY.ord, modifiers: {kmControl}),
+      KeyEvent(key: keyU, keyCode: keyU.ord, modifiers: {kmControl}),
+    ]:
+      require view.scrollBy(100.0'f32, row = 1, column = 4).handled
+      require editor.revealLocation(1, 0)
+      view.refresh()
+      require view.scrollBy(-0.5'f32, row = 1, column = 4).handled
+      require view.gridOffset.y < 0.0'f32
+      require frontend.window.dispatchKeyDown(event)
+      check view.gridOffset.y == 0.0'f32
+
+    require view.scrollBy(100.0'f32, row = 1, column = 4).handled
+    require view.scrollBy(-0.5'f32, row = 1, column = 4).handled
+    require frontend.window.dispatchTextInput("gg")
+    check editor.bufferCursor().line == 0
+    check view.gridOffset.y == 0.0'f32
+
+    require view.scrollBy(-0.5'f32, row = 1, column = 4).handled
+    require view.scrollBy(100.0'f32, row = 1, column = 4).handled
+    check view.gridOffset.y == 0.0'f32
+
   test "editor grid overscans partial rows and columns":
     let
       editor = newKosmoEditor(text = "one\ntwo\nthree\nfour\nfive")

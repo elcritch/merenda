@@ -443,7 +443,7 @@ proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
     let index = view.viewStateIndex(view.selectedBufferId.get)
     let restored =
       if index >= 0:
-        view.editor.restoreViewState(view.viewStates[index])
+        view.editor.restoreViewState(view.viewStates[index], view.renderBuffer)
       else:
         view.editor.selectTab(view.selectedBufferId.get)
     if restored and not controller.isNil:
@@ -1216,6 +1216,7 @@ proc closeTabWithConfirmation(
   )
 
 proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
+  view.scrollOffsetRows = 0.0'f32
   var keyOutcome: KosmoKeyOutcome
   let wasCommand = view.editor.mode() == KosmoEditorMode.Command
   if keyEvent.key == nimkit.keyEnter:
@@ -1359,6 +1360,7 @@ protocol KosmoEditorInput of nimkit.TextInputProtocol:
   method insertText(view: KosmoEditorView, text: string) =
     if nimkit.isInsertableText(text):
       view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+      view.scrollOffsetRows = 0.0'f32
       discard view.editor.handleTextInput(text)
       view.refresh()
 

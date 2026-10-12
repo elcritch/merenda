@@ -2097,6 +2097,18 @@ proc restoreViewState*(
   editor.applyViewState(state)
   true
 
+proc restoreViewState*(
+    editor: KosmoEditor, state: KosmoEditorViewState, buffer: RenderBuffer
+): bool {.discardable.} =
+  ## Restore a pane's projection and grid dimensions before input or rendering.
+  if not editor.restoreViewState(state):
+    return
+  let wasResized = editor.editor.updateViewportSize(buffer.buffer)
+  if wasResized:
+    editor.editor.advanceLayoutForFrame(buffer.buffer, true)
+    editor.applyViewState(state)
+  true
+
 proc newRenderBuffer*(width, height: Natural): RenderBuffer =
   ## Create a cell grid that a Kosmo editor can render into.
   RenderBuffer(buffer: newBuffer(width, height))
@@ -2640,13 +2652,9 @@ proc render*(
   if editor.isNil or editor.editor.isNil or state.bufferId.isNone:
     editor.render(buffer)
     return
-  if not editor.restoreViewState(state):
+  if not editor.restoreViewState(state, buffer):
     editor.render(buffer)
     return
-  let wasResized = editor.editor.updateViewportSize(buffer.buffer)
-  if wasResized:
-    editor.editor.advanceLayoutForFrame(buffer.buffer, true)
-    editor.applyViewState(state)
   # Dispatching Sigils here can reenter another pane's refresh and replace the
   # shared engine's buffer, viewport, and projection owner midway through this
   # frame. Only consume results already delivered by the host event loop.
