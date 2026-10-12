@@ -229,6 +229,101 @@ are checked before constructing the DOM. HTML5 void elements, including `input`,
 are normalized to account for the stdlib parser's older void-element list. Resource
 validation then applies the same schema and reference checks as other frontends.
 
+## NIF demo
+
+`examples/nif_ui_demo.nim` duplicates the HTML demo using
+`nif_ui_demo.nif` for its interface and `nif_ui_demo.css.nif` for its appearance.
+The optional dependency is a pinned [standalone nifcore fork](https://github.com/elcritch/nifcore/tree/feat/standalone-nifcore)
+that includes its table support and requires no Nimony checkout:
+
+```sh
+atlas install -tk --feature=nifDemo
+nim ic -r examples/nif_ui_demo.nim
+```
+
+Elements contain an optional first `attrs` child with `kv` entries, following
+nifcore's HTML adapter shape. Camel-case native tags map to the existing
+hyphenated GUI tags. Text and attribute values are quoted strings, including
+numeric properties and empty strings for present boolean attributes:
+
+```nif
+(.nif27)
+(nkStackView
+  (attrs (kv "id" "root") (kv "data-spacing" "12"))
+  (nkLabel "Hello from NIF")
+  (input (attrs (kv "id" "name") (kv "placeholder" "Your name")))
+  (button (attrs (kv "id" "save")) "Save"))
+```
+
+The theme uses a `stylesheet` root with `tokens` and ordered `rule` children.
+Rules describe selectors and values as NIF nodes rather than CSS expressions:
+
+```nif
+(.nif27)
+(stylesheet
+  (tokens (accent (hexColor "829fff")))
+  (rule (any (id name) (id language) (id theme))
+    (background (hexColor "161e2b"))
+    (borderColor (var accent))
+    (padding 9 px 12 px)
+    (fontSize 14 px)
+    (nimkitChrome flatTransparent))
+  (rule (match (role button) (class primary) (state hover))
+    (background (var accent))))
+```
+
+Selectors have a small vocabulary:
+
+| Node | Matches |
+| --- | --- |
+| `(role button)` | A semantic control role; `comboBoxItem` is also a role. |
+| `(id name)` | One exact style id. |
+| `(class primary)` | One exact style class. |
+| `(state hover)` | A widget state; `open`, `pressed`, and `focusVisible` also work. |
+| `(any selector ...)` | Any of the child selectors. |
+| `(match selector ...)` | All child conditions on the same control. |
+
+`match` accepts simple role/id/class/state conditions, with at most one role and
+one id, in any order. Use `any` around complete selectors to group alternatives.
+Ids and classes preserve their spelling; use strings for names containing
+hyphens, such as `(id "about-content")` or `(class "label-title")`. Native style
+names use ASCII letters, digits, underscores, and hyphens, starting with a letter
+or underscore.
+
+Property tags, role names, state names, bare keywords, and token names use camel
+case. For example, `fontSize` becomes `font-size`, `nimkitChrome` becomes
+`-nimkit-chrome`, and `flatTransparent` becomes `flat-transparent` internally.
+Within `tokens`, `accent` defines a shared token; `(var accent)` references it.
+Tokens, specificity, rule order, and widget states retain the existing theme
+engine's behavior.
+
+Values can be decimal numbers with optional `px` units, bare keywords, token
+references, strings, or typed `(hexColor "829fff")` nodes. Thus `(padding 9 px 12 px)`
+sets vertical and horizontal padding, `(fontSize 14 px)` sets one length, and
+`(nimkitWidthFactor 0.75)` sets a unitless scalar. Integers, signed numbers, and
+floating point numbers with NIF's uppercase `E` exponent syntax work. The engine
+currently supports pixel lengths. Quoted CSS selectors and values remain accepted
+for gradual conversion.
+
+Hex colors accept 3, 4, 6, or 8 hexadecimal digits, including alpha, and emit the
+corresponding CSS `#` form. The same color nodes work in GUI attribute values.
+
+NIF escapes use two uppercase hexadecimal digits, so `\23` represents `#`,
+`\3A` represents `:`, and `\22` represents a quote. The NIF27 shortcuts
+`\n`, `\t`, `\r`, `\|` (backslash), and `\^` (quote) also work.
+
+The adapter in `examples/private/nifmarkup.nim` reads tagged nodes, strings,
+numbers, and identifiers into a nifcore token buffer, then emits HTML/CSS for
+the existing loaders. GUI text and attributes still require quoted strings or
+color nodes. This is a demo vocabulary, with an optional leading `(.nif27)` marker;
+other directives, comments, line annotations, symbols, and empty atoms are unsupported.
+Malformed input raises `ValueError`. The adapter caps source bytes, node count,
+tree depth, and distinct tags. GUI validation and construction still use the
+existing resource pipeline. CSS diagnostic locations refer to the emitted CSS.
+
+With the feature enabled, its parity and action tests run in `tests/tnimkit.nim`
+and the example is included in the example compilation bundle.
+
 ## Stable CBOR Envelope
 
 The top-level record contains:

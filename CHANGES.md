@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Duplicate the HTML GUI demo with NIF interface and stylesheet files, preserving
+  its preferences, Preview/Reset actions, theme switching, and About window. The
+  theme uses native selector nodes, numeric lengths, keywords, and token references.
+  Use the optional `nifDemo` Atlas feature and a standalone nifcore fork without Nimony.
 - Use Moe's Matter semantic scope mappings to distinguish HTML/custom element
   names, attributes, CSS selectors and common language values in existing themes.
   Preserve preprocessor colors for C/C++ pragmas and string colors for regex

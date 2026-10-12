@@ -1,0 +1,38 @@
+(.nif27)
+(.lang "nimkit-css")
+style "root" (accent (color "##829fff"))
+
+style "label" (rule (color "#eef2fc") (fontSize 14 px))
+style "label.label-title" (rule (fontSize 14 px))
+style "label.eybrow" (rule (color "#eef2fc") (fontSize 14 px))
+
+style "#name" "#language" "#theme" (rule
+  (background (color "#161e2b"))
+  (color "eef2fc")
+  (border (color "465674")
+				  (width 1 px)
+				  (radius 7 px))
+  (padding 9 px 12 px)
+  (fontSize 14 px)
+  (chrome flat transparent)
+  (focusRing (color :var.accent))
+
+style "#name" "#language" "#theme" (rule
+  (background (color "#161e2b"))
+  (color "eef2fc")
+  (border (color "#465674")
+				  (width 1 px)
+				  (radius 7 px))
+  (padding 9 px 12 px)
+  (fontSize 14 px)
+  (chrome flat transparent)
+  (focusRing (color :var.accent))
+
+style "#language" "#theme" (rule
+  (boxShadow none)
+  (chrome default)
+  (indicatorFill (color "#2b374c"))
+  (markColor (color "#dce5f5")))
+
+style "button:hover" (rule (background "#35445e"))
+

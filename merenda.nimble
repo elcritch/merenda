@@ -28,6 +28,10 @@ requires "zippy >= 0.10.20"
 requires "gh:elcritch/dmon-nim >= 0.5.2"
 requires "stylus == 0.1.5"
 
+feature "nifDemo":
+  # Standalone nifcore fork with its table support included; no Nimony dependency.
+  requires "gh:elcritch/nifcore#86db398"
+
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"
 
