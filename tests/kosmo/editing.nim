@@ -1,12 +1,26 @@
 import std/[sequtils, options, os, strutils, tempfiles, times, unittest]
 
 import figdraw
+import sigils/threads
 
 import merenda/nimkit
 import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 import fixtures/ui
 import merenda/kosmo/moethemeassets
+
+type QueuedBufferProjection = ref object of Agent
+  editor: KosmoEditor
+  bufferId: KosmoBufferId
+  calls: int
+
+proc projectBuffer(projection: QueuedBufferProjection) {.slot.} =
+  inc projection.calls
+  discard projection.editor.selectTab(projection.bufferId)
+  var grid = newRenderBuffer(32, 10)
+  projection.editor.render(grid)
+
+proc projectionRequested(projection: QueuedBufferProjection) {.signal.}
 
 proc renderedText(buffer: RenderBuffer): string =
   for row in 0 ..< buffer.height:
@@ -111,6 +125,44 @@ suite "Kosmo":
     check "NORMAL" notin buffer.renderedText
     check "No Name" notin buffer.renderedText
     editor.close()
+
+  test "pane snapshot survives a queued redraw of another buffer":
+    let root = createTempDir("kosmo-render-reentry-", "")
+    let path = root / "other.txt"
+    writeFile(path, "other pane")
+    defer:
+      removeFile(path)
+      removeDir(root)
+    let editor = newKosmoEditor("snapshot pane\nsecond row")
+    defer:
+      editor.close()
+    require editor.revealLocation(1, 3)
+    let snapshot = editor.captureViewState()
+    require editor.openFile(path).loaded
+    let other = editor.captureViewState()
+    require other.bufferId.isSome
+    let projection =
+      QueuedBufferProjection(editor: editor, bufferId: other.bufferId.get)
+    discard editor.matterHighlightingController()
+    connectQueued(projection, projectionRequested, projection, projectBuffer)
+    var grid = newRenderBuffer(48, 12)
+    emit projection.projectionRequested()
+    require projection.calls == 0
+
+    editor.render(grid, snapshot)
+
+    check projection.calls == 0
+    check "snapshot pane" in grid.renderedText()
+    check "other pane" notin grid.renderedText()
+    check editor.captureViewState().bufferId == snapshot.bufferId
+    check editor.bufferCursor() == KosmoBufferCursor(line: 1, column: 3)
+    discard getCurrentSigilThread().pollAll(NonBlocking)
+    check projection.calls == 1
+    check editor.captureViewState().bufferId == other.bufferId
+    editor.render(grid, snapshot)
+    check "snapshot pane" in grid.renderedText()
+    check "other pane" notin grid.renderedText()
+    check editor.bufferCursor() == KosmoBufferCursor(line: 1, column: 3)
 
   test "discovers and applies Moe TOML themes":
     let

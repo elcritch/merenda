@@ -2450,14 +2450,19 @@ proc applyMatterHighlightResult(
   current.uriScanParsedUpTo = completed.endRow - 1
   true
 
-proc pollMatterHighlighting(editor: KosmoEditor): bool =
+proc applyPendingMatterHighlighting(editor: KosmoEditor): bool =
   if editor.isNil or editor.editor.isNil or editor.matterHighlighting.isNil:
     return
-  discard getCurrentSigilThread().pollAll(NonBlocking)
   var completed = editor.matterHighlighting.takeMatterHighlightResults()
   for index in 0 ..< completed.len:
     if editor.applyMatterHighlightResult(completed[index]):
       result = true
+
+proc pollMatterHighlighting(editor: KosmoEditor): bool =
+  if editor.isNil or editor.editor.isNil or editor.matterHighlighting.isNil:
+    return
+  discard getCurrentSigilThread().pollAll(NonBlocking)
+  editor.applyPendingMatterHighlighting()
 
 proc matterHighlightingReady*(editor: KosmoEditor): bool =
   ## Return whether every open buffer eligible for asynchronous Matter
@@ -2631,6 +2636,7 @@ proc render*(
     editor: KosmoEditor, buffer: var RenderBuffer, state: KosmoEditorViewState
 ) =
   ## Draw a pane snapshot without losing detached scroll state when its grid resizes.
+  ## The host event loop delivers queued work before projecting a pane.
   if editor.isNil or editor.editor.isNil or state.bufferId.isNone:
     editor.render(buffer)
     return
@@ -2641,7 +2647,10 @@ proc render*(
   if wasResized:
     editor.editor.advanceLayoutForFrame(buffer.buffer, true)
     editor.applyViewState(state)
-  discard editor.pollMatterHighlighting()
+  # Dispatching Sigils here can reenter another pane's refresh and replace the
+  # shared engine's buffer, viewport, and projection owner midway through this
+  # frame. Only consume results already delivered by the host event loop.
+  discard editor.applyPendingMatterHighlighting()
   editor.scheduleMatterHighlighting()
   editor.renderMatterFrame(buffer)
   discard forwardMoeMessages()

@@ -832,6 +832,52 @@ suite "Kosmo Matter highlighting":
     check refreshed.foregroundColor != sentinel.foregroundColor
     check editor.matterHighlightingReady()
 
+  test "application frames finish multiple Matter batches in a retained grid":
+    let
+      root = createTempDir("kosmo-moe-matter-frames-", "")
+      path = root / "batched.nif"
+      lastLine = MatterHighlightBatchLines * 2 + 1
+    writeFile(path, "\n".repeat(lastLine) & "(call tail.1.sys \"Kosmo\" 42)\n")
+    defer:
+      removeFile(path)
+      removeDir(root)
+
+    let
+      app = newApplication("Kosmo Matter Frame Test")
+      editor = newKosmoEditor()
+      view = newKosmoEditorView(editor)
+      spy = MatterBatchSpy()
+    defer:
+      editor.close()
+    connect(
+      editor.matterHighlightingController(),
+      matterHighlightCompleted,
+      spy,
+      MatterBatchSpy.rememberMatterBatch(),
+    )
+    view.frame = rect(0, 0, 640, 240)
+    require view.openFile(path)
+    require editor.revealLocation(lastLine, 0, true)
+    view.refresh()
+    let
+      tag = nimkit.MonoTextView(view).renderedLocation("call")
+      symbol = nimkit.MonoTextView(view).renderedLocation("tail.1.sys")
+    require tag.column >= 0
+    require symbol.column >= 0
+    require spy.batches == 0
+
+    template tailHighlighted(): bool =
+      view.cellAt(tag.row, tag.column).foregroundColor !=
+        view.cellAt(symbol.row, symbol.column).foregroundColor
+
+    require not tailHighlighted()
+    let deadline = getMonoTime() + initDuration(seconds = 60)
+    while not tailHighlighted() and getMonoTime() < deadline:
+      discard app.runForFrames(1)
+      sleep(1)
+    check tailHighlighted()
+    check spy.batches >= 3
+
   test "queued Matter refresh retains a released editor view":
     let
       root = createTempDir("kosmo-moe-matter-lifetime-", "")

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Prevent Kosmo editor panes from briefly displaying another buffer when
+  switching focus or editing. Pane rendering consumes delivered highlighting
+  results without dispatching callbacks that can redraw another pane midway
+  through the frame.
+
 - Use Moe's Matter semantic scope mappings to distinguish HTML/custom element
   names, attributes, CSS selectors and common language values in existing themes.
   Preserve preprocessor colors for C/C++ pragmas and string colors for regex
