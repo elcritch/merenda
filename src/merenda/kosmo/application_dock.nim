@@ -83,6 +83,8 @@ proc activeEditorView(controller: KosmoDockController): KosmoEditorView =
   if not group.isNil:
     result = group.editorView
 
+# Translate Kosmo's namespaced editing actions to NimKit commands so the
+# focused text field handles them before they reach the underlying editor.
 protocol KosmoFieldEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(
       editor: nimkit.FieldEditor, args: nimkit.TryToPerformArgs
