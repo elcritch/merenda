@@ -12,6 +12,9 @@ type
     items: seq[CollectionTestItem]
     viewCalls: seq[string]
     configureCalls: seq[string]
+    publicationFailures: seq[int]
+    retiredLookups: seq[int]
+    expectedRetiredIndexes: seq[int]
     supplementaryCalls: seq[string]
     supplementaryReusedViews: int
     reusedViews: int
@@ -137,8 +140,13 @@ protocol CollectionSpyDelegate of CollectionViewDelegate:
       objectValue: ObjectValue,
       view: View,
   ) =
-    discard collectionView
-    discard view
+    if collectionView.itemViewAtIndex(index) != view:
+      spy.publicationFailures.add index
+    if spy.expectedRetiredIndexes.len > 0:
+      let visible = collectionView.visibleItemIndexes()
+      for retired in spy.expectedRetiredIndexes:
+        if retired notin visible and not collectionView.itemViewAtIndex(retired).isNil:
+          spy.retiredLookups.add retired
     spy.configureCalls.add $index & ":" & identifier & ":" & objectValue.requireString()
 
   method supplementaryViewForCollectionElement(
@@ -423,3 +431,52 @@ suite "nimkit collection views":
     collectionView.removeItemsAtIndexes([0], ["a"])
 
     check signals.updateKinds == @[cukInsert, cukReload, cukMove, cukRemove]
+
+  test "synthetic drag release commits the drop and clears item tracking":
+    let
+      window = newWindow("Collection drag", frame = rect(0, 0, 280, 160))
+      collectionView = newCollectionView(frame = rect(0, 0, 280, 160))
+      source = newCollectionSpy([item("a", "Alpha", 1), item("b", "Beta", 2)])
+    collectionView.dataSource = source
+    collectionView.delegate = source
+    collectionView.collectionLayout =
+      newCollectionViewLayout(clkList, itemSize = initSize(100, 40))
+    collectionView.registerForDraggedTypes([CollectionPasteboardTypeItems])
+    window.setContentView(collectionView)
+    discard window.buildRenders()
+    collectionView.selectedIdentifiers = ["a"]
+    let start =
+      collectionView.pointToWindow(collectionView.collectionItemRect(0).center())
+    let drop =
+      collectionView.pointToWindow(collectionView.collectionItemRect(1).center())
+    check window.mouseDownAt(start)
+    let session = collectionView.beginDraggingSelection({dgoCopy})
+    require not session.isNil
+    check window.mouseDraggedAt(drop)
+    check window.mouseUpAt(drop)
+    check session.state() == dssEnded
+    check collectionView.draggingSession().isNil
+    check collectionView.currentDropTarget().kind == ddtNone
+    check source.dropAcceptCalls.len == 1
+    check source.dropAcceptCalls[0].contains("b")
+    check collectionView.selectedIdentifiers == @["a"]
+
+  test "configuration delegates see published views and retired slots removed":
+    var items: seq[CollectionTestItem]
+    for index in 0 ..< 32:
+      items.add item($index, "Item " & $index, index)
+    let source = newCollectionSpy(items)
+    let collection = newCollectionView(frame = rect(0, 0, 240, 120))
+    collection.collectionLayout =
+      newCollectionViewLayout(clkList, itemSize = initSize(100, 40))
+    collection.dataSource = source
+    collection.delegate = source
+    discard buildRenders(collection)
+    check source.publicationFailures.len == 0
+    require not collection.itemViewAtIndex(0).isNil
+    source.expectedRetiredIndexes = @[0]
+    collection.scrollItemToVisible(15)
+    check collection.itemViewAtIndex(0).isNil
+    check source.publicationFailures.len == 0
+    check source.retiredLookups.len == 0
+    check source.reusedViews > 0

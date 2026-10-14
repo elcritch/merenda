@@ -241,6 +241,12 @@ model data in an `ArrayController`, the table and button are the view, and
 `markDone` acts as the presenter. Select a row and click **Mark done**: the
 presenter updates the model and refreshes the table.
 
+The same `ArrayController` can back menus, document tabs, matrices, combo boxes,
+and collection views. Custom sources can implement `ItemProviderProtocol` and
+receive the requesting widget on each query. See the
+[item model contracts](docs/design.md#item-models-and-controllers) for lookup,
+editing, identity preservation, and refresh behavior.
+
 ```nim
 import merenda/nimkit
 import sigils/selectors

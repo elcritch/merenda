@@ -2,6 +2,7 @@
 import merenda/nimkit
 
 when defined(nimkitOwnershipTests):
+  import nimkit/itemproviders
   import nimkit/backrefs_arc
   import nimkit/modals
   import nimkit/gaptextbuffers
@@ -44,6 +45,7 @@ else:
   import nimkit/gridviews
   import nimkit/htmlresources
   import nimkit/iconlabels
+  import nimkit/itemproviders
   import nimkit/images
   import nimkit/keybindings
   import nimkit/markdownviews

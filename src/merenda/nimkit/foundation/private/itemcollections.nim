@@ -77,6 +77,7 @@ proc arrange*[T](
     collection: var ItemCollection[T],
     filter: proc(item: T): bool {.closure.},
     compare: proc(left, right: int): int {.closure.} = nil,
+    indexFilter: proc(index: int): bool {.closure.} = nil,
 ) =
   ## The comparator reads source items by index. It is used synchronously and
   ## never retained, so it can refer to the owning model without a retain cycle.
@@ -84,7 +85,8 @@ proc arrange*[T](
     return
   var indexes: seq[int]
   for index, item in collection.items:
-    if not item.hidden and (filter.isNil or filter(item)):
+    if not item.hidden and (filter.isNil or filter(item)) and
+        (indexFilter.isNil or indexFilter(index)):
       indexes.add index
   if not compare.isNil:
     indexes.sort(compare)

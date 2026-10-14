@@ -16,10 +16,15 @@ import ../app/pasteboards
 import ../app/windows
 import ../controls/controls
 import ../containers/listbasics
+import ../foundation/private/itemselection
+import ./private/itemreuse
+import ./private/iteminteraction
 import ../containers/scrollviews
 import ../drawing
 import ../foundation/events
 import ../foundation/objectvalues
+import ../foundation/itemproviders
+import ../foundation/private/itemproviderbridges
 import ../foundation/selectors
 import ../foundation/types
 import ../foundation/undomanagers
@@ -115,23 +120,18 @@ type
     xLayout: DynamicAgent
     xScrollView: ScrollView
     xContentView: CollectionContentView
-    xReusableItemViews: Table[string, seq[View]]
-    xReusableSupplementaryViews: Table[string, seq[View]]
+    xReusableItemViews: ItemReusePool
+    xReusableSupplementaryViews: ItemReusePool
     xItemSlots: seq[CollectionItemSlot]
     xSupplementaryViews: Table[string, View]
     xItemCount: int
     xDefaultReuseIdentifier: string
-    xSelectedIdentifiers: seq[string]
+    xSelection: ItemSelectionState[string]
     xSelectionMode: CollectionSelectionMode
-    xSelectionAnchorIdentifier: string
-    xSelectionLeadIdentifier: string
     xHighlightedIdentifier: string
-    xPressedIdentifier: string
-    xTrackingItem: bool
+    xInteraction: ItemInteractionState[string]
     xCollectionRole: StyleRole
     xItemRole: StyleRole
-    xCollectionDraggingSession: DraggingSession
-    xDropTarget: DraggingDropTarget
 
 const
   csvNone* = CollectionSelectionMode.csmNone
@@ -704,10 +704,52 @@ proc `collectionLayout=`*(
 proc dataSource*(collectionView: CollectionView): DynamicAgent =
   collectionView.xDataSource
 
+proc providedCollectionValue(
+    source: DynamicAgent, collectionView: CollectionView, item: ModelItem
+): ObjectValue =
+  item.objectValue
+
+proc providedCollectionIndex(
+    source: DynamicAgent, collectionView: CollectionView, identifier: string
+): int =
+  source.providedIndex(DynamicAgent(collectionView), identifier)
+
+defineItemProviderBridge(
+  CollectionItemProviderSource, CollectionViewDataSource, CollectionView, ObjectValue,
+  numberOfCollectionItems, objectValueForCollectionItem,
+  indexForCollectionItemIdentifier, collectionView, providedCollectionValue,
+  providedCollectionIndex,
+)
+
+protocol CollectionItemProviderMetadata of CollectionViewDataSource:
+  method identifierForCollectionItem(
+      source: DynamicAgent, collectionView: CollectionView, index: int
+  ): string =
+    source
+    .trySendLocal(
+      providedItemAtIndex(), (context: DynamicAgent(collectionView), index: index)
+    )
+    .get().identifier
+
+  method textForCollectionItem(
+      source: DynamicAgent, collectionView: CollectionView, index: int
+  ): string =
+    source
+    .trySendLocal(
+      providedItemAtIndex(), (context: DynamicAgent(collectionView), index: index)
+    )
+    .get()
+    .displayTitle(ovrLabel)
+
+proc installCollectionItemProvider*(source: DynamicAgent) =
+  source.installItemProvider(CollectionItemProviderSource.init())
+  source.installItemProvider(CollectionItemProviderMetadata.init())
+
 proc `dataSource=`*(collectionView: CollectionView, dataSource: DynamicAgent) =
   if collectionView.xDataSource == dataSource:
     return
   if not dataSource.isNil:
+    dataSource.installCollectionItemProvider()
     discard dataSource.adopt(CollectionViewDataSource)
   collectionView.xDataSource = dataSource
   collectionView.reloadData()
@@ -858,7 +900,7 @@ proc collectionItemSelectable(collectionView: CollectionView, index: int): bool 
   true
 
 proc selectionContains(collectionView: CollectionView, identifier: string): bool =
-  identifier.len > 0 and identifier in collectionView.xSelectedIdentifiers
+  identifier.len > 0 and identifier in collectionView.xSelection.selected
 
 proc collectionItemState*(
     collectionView: CollectionView, index: int
@@ -875,7 +917,7 @@ proc collectionItemState*(
     states.incl ssSelected
   if identifier.len > 0 and identifier == collectionView.xHighlightedIdentifier:
     states.incl ssHovered
-  if identifier.len > 0 and identifier == collectionView.xPressedIdentifier:
+  if identifier.len > 0 and identifier == collectionView.xInteraction.pressed:
     states.incl ssPressed
   if ssFocused in collectionView.widgetStateSet():
     states.incl ssFocused
@@ -1043,16 +1085,7 @@ proc defaultReuseIdentifierForItem(collectionView: CollectionView, index: int): 
 proc dequeueReusableItemView*(
     collectionView: CollectionView, identifier: string
 ): View =
-  if identifier.len == 0:
-    return nil
-  if identifier notin collectionView.xReusableItemViews:
-    return nil
-  var views = collectionView.xReusableItemViews[identifier]
-  if views.len == 0:
-    return nil
-  result = views[^1]
-  views.setLen(views.len - 1)
-  collectionView.xReusableItemViews[identifier] = views
+  result = collectionView.xReusableItemViews.dequeue(identifier)
   if not result.isNil:
     discard result.sendLocalIfHandled(
       prepareForReuse(), (collectionView: collectionView, reuseIdentifier: identifier)
@@ -1062,13 +1095,9 @@ proc dequeueReusableItemView*(
 proc enqueueReusableItemView(
     collectionView: CollectionView, identifier: string, view: View
 ) =
-  if view.isNil or identifier.len == 0:
-    return
-  view.hidden = true
-  view.applyCollectionViewStates({})
-  if view.superview() != nil:
-    view.removeFromSuperview()
-  collectionView.xReusableItemViews.mgetOrPut(identifier, @[]).add view
+  if not view.isNil and identifier.len > 0:
+    view.applyCollectionViewStates({})
+    collectionView.xReusableItemViews.enqueue(identifier, view)
 
 proc recycleItemSlot(collectionView: CollectionView, slot: CollectionItemSlot) =
   if slot.view.isNil:
@@ -1076,9 +1105,7 @@ proc recycleItemSlot(collectionView: CollectionView, slot: CollectionItemSlot) =
   if slot.reuseIdentifier.len > 0:
     collectionView.enqueueReusableItemView(slot.reuseIdentifier, slot.view)
   else:
-    slot.view.hidden = true
-    if slot.view.superview() != nil:
-      slot.view.removeFromSuperview()
+    slot.view.detachReusableView()
 
 proc clearCollectionItemSlots(collectionView: CollectionView) =
   for slot in collectionView.xItemSlots:
@@ -1112,14 +1139,7 @@ proc dequeueReusableSupplementaryView*(
     resolvedReuseIdentifier =
       resolvedSupplementaryReuseIdentifier(kind, reuseIdentifier)
     key = supplementaryReuseKey(kind, resolvedReuseIdentifier)
-  if key notin collectionView.xReusableSupplementaryViews:
-    return nil
-  var views = collectionView.xReusableSupplementaryViews[key]
-  if views.len == 0:
-    return nil
-  result = views[^1]
-  views.setLen(views.len - 1)
-  collectionView.xReusableSupplementaryViews[key] = views
+  result = collectionView.xReusableSupplementaryViews.dequeue(key)
   if not result.isNil:
     discard result.sendLocalIfHandled(
       prepareForReuse(),
@@ -1133,16 +1153,11 @@ proc enqueueReusableSupplementaryView(
     reuseIdentifier: string,
     view: View,
 ) =
-  if view.isNil or reuseIdentifier.len == 0:
-    return
-  view.hidden = true
-  view.applyCollectionViewStates({})
-  if view.superview() != nil:
-    view.removeFromSuperview()
-
-  collectionView.xReusableSupplementaryViews.mgetOrPut(
-    supplementaryReuseKey(kind, reuseIdentifier), @[]
-  ).add view
+  if not view.isNil and reuseIdentifier.len > 0:
+    view.applyCollectionViewStates({})
+    collectionView.xReusableSupplementaryViews.enqueue(
+      supplementaryReuseKey(kind, reuseIdentifier), view
+    )
 
 proc recycleSupplementaryView(collectionView: CollectionView, view: View) =
   if view.isNil:
@@ -1154,9 +1169,7 @@ proc recycleSupplementaryView(collectionView: CollectionView, view: View) =
         supplementary.xKind, supplementary.xReuseIdentifier, view
       )
       return
-  view.hidden = true
-  if view.superview() != nil:
-    view.removeFromSuperview()
+  view.detachReusableView()
 
 proc clearCollectionSupplementaryViews(collectionView: CollectionView) =
   for view in collectionView.xSupplementaryViews.values:
@@ -1323,7 +1336,7 @@ proc invalidateCollectionItems(collectionView: CollectionView) =
   collectionView.needsDisplay = true
 
 proc reloadData*(collectionView: CollectionView) =
-  let selected = collectionView.xSelectedIdentifiers
+  let selected = collectionView.xSelection.selected
   collectionView.clearCollectionItemSlots()
   collectionView.clearCollectionSupplementaryViews()
   collectionView.tileCollectionContent()
@@ -1334,7 +1347,7 @@ proc reloadData*(collectionView: CollectionView) =
 proc applyCollectionUpdates*(
     collectionView: CollectionView, updates: openArray[CollectionUpdate]
 ) =
-  let selected = collectionView.xSelectedIdentifiers
+  let selected = collectionView.xSelection.selected
   for update in updates:
     case update.kind
     of cukReload, cukRemove, cukMove, cukInsert:
@@ -1427,33 +1440,23 @@ proc scrollItemToVisible*(collectionView: CollectionView, index: int) =
   discard scrollView.scrollRectToVisible(collectionView.resolvedContentItemRect(index))
   collectionView.xContentView.syncVisibleItemViews()
 
+proc selectionContext(collectionView: CollectionView): ItemSelectionContext[string] =
+  ItemSelectionContext[string](
+    count: collectionView.len(),
+    mode: ItemSelectionMode(collectionView.xSelectionMode.ord),
+    keyAt: proc(index: int): string =
+      collectionView.collectionItemIdentifier(index),
+    indexOf: proc(key: string): int =
+      collectionView.collectionItemIndexForIdentifier(key),
+    selectable: proc(index: int): bool =
+      collectionView.collectionItemSelectable(index),
+    retainInvalidCursor: true,
+  )
+
 proc normalizeSelectedIdentifiers(
     collectionView: CollectionView, identifiers: openArray[string]
 ): seq[string] =
-  if collectionView.xSelectionMode == csmNone:
-    return
-  for identifier in identifiers:
-    let index = collectionView.collectionItemIndexForIdentifier(identifier)
-    if index >= 0 and collectionView.collectionItemSelectable(index) and
-        identifier notin result:
-      result.add identifier
-  result.sort(
-    proc(left, right: string): int =
-      cmp(
-        collectionView.collectionItemIndexForIdentifier(left),
-        collectionView.collectionItemIndexForIdentifier(right),
-      )
-  )
-  if collectionView.xSelectionMode == csmSingle and result.len > 1:
-    result.setLen(1)
-
-proc normalizeSelectionAnchor(
-    collectionView: CollectionView, identifier: string
-): string =
-  if collectionView.collectionItemIndexForIdentifier(identifier) >= 0:
-    identifier
-  else:
-    collectionView.xSelectionAnchorIdentifier
+  collectionView.selectionContext().normalized(identifiers)
 
 proc firstSelectedIdentifier(identifiers: openArray[string]): string =
   if identifiers.len == 0:
@@ -1466,56 +1469,42 @@ proc applySelectedIdentifiers(
     identifiers: openArray[string],
     anchorIdentifier, leadIdentifier: string,
 ) =
-  let nextIdentifiers = collectionView.normalizeSelectedIdentifiers(identifiers)
-  let
-    nextSelected = nextIdentifiers.firstSelectedIdentifier()
-    nextAnchor =
-      if nextIdentifiers.len == 0:
-        ""
-      else:
-        collectionView.normalizeSelectionAnchor(anchorIdentifier)
-    nextLead =
-      if nextIdentifiers.len == 0:
-        ""
-      else:
-        collectionView.normalizeSelectionAnchor(leadIdentifier)
-    selectionChanged = collectionView.xSelectedIdentifiers != nextIdentifiers
-  if not selectionChanged:
-    collectionView.xSelectionAnchorIdentifier = nextAnchor
-    collectionView.xSelectionLeadIdentifier = nextLead
-    let leadIndex = collectionView.collectionItemIndexForIdentifier(nextLead)
-    if leadIndex >= 0:
-      collectionView.scrollItemToVisible(leadIndex)
-    return
-
-  let beforeIdentifiers = collectionView.xSelectedIdentifiers
-  collectionView.findUndoManager().registerSelectionChange(
-    proc(values: seq[string]) =
-      collectionView.selectedIdentifiers = values,
-    beforeIdentifiers,
-    "Change Selection",
-  )
-  emit collectionView.collectionSelectionIsChanging(DynamicAgent(collectionView))
-  collectionView.xSelectedIdentifiers = nextIdentifiers
-  collectionView.xSelectionAnchorIdentifier = nextAnchor
-  collectionView.xSelectionLeadIdentifier = nextLead
-  let leadIndex = collectionView.collectionItemIndexForIdentifier(nextLead)
-  if leadIndex >= 0:
-    collectionView.scrollItemToVisible(leadIndex)
-  collectionView.invalidateCollectionItems()
-  emit collectionView.collectionSelectionDidChange(DynamicAgent(collectionView))
-  collectionView.postAccessibilityNotification(anSelectionChanged)
-  let selectedIndex = collectionView.collectionItemIndexForIdentifier(nextSelected)
-  if selectedIndex >= 0:
-    let delegate = collectionView.delegate()
-    if not delegate.isNil:
+  let beforeChange = proc(previous: seq[string]) =
+    collectionView.findUndoManager().registerSelectionChange(
+      proc(values: seq[string]) =
+        collectionView.selectedIdentifiers = values,
+      previous,
+      "Change Selection",
+    )
+    emit collectionView.collectionSelectionIsChanging(DynamicAgent(collectionView))
+  let cursorChanged = proc(lead: string) =
+    let index = collectionView.collectionItemIndexForIdentifier(lead)
+    if index >= 0:
+      collectionView.scrollItemToVisible(index)
+  let afterChange = proc(first: string) =
+    collectionView.invalidateCollectionItems()
+    emit collectionView.collectionSelectionDidChange(DynamicAgent(collectionView))
+    collectionView.postAccessibilityNotification(anSelectionChanged)
+    let
+      index = collectionView.collectionItemIndexForIdentifier(first)
+      delegate = collectionView.delegate()
+    if index >= 0 and not delegate.isNil:
       discard delegate.sendLocalIfHandled(
         didSelectCollectionItem(),
-        (collectionView: collectionView, index: selectedIndex, identifier: nextSelected),
+        (collectionView: collectionView, index: index, identifier: first),
       )
+  collectionView.xSelection.changeSelection(
+    collectionView.selectionContext(),
+    identifiers,
+    anchorIdentifier,
+    leadIdentifier,
+    beforeChange,
+    cursorChanged,
+    afterChange,
+  )
 
 proc selectedIdentifiers*(collectionView: CollectionView): seq[string] =
-  collectionView.xSelectedIdentifiers
+  collectionView.xSelection.selected
 
 proc `selectedIdentifiers=`*(
     collectionView: CollectionView, identifiers: openArray[string]
@@ -1526,10 +1515,10 @@ proc `selectedIdentifiers=`*(
   )
 
 proc selectedIdentifier*(collectionView: CollectionView): string =
-  collectionView.xSelectedIdentifiers.firstSelectedIdentifier()
+  collectionView.xSelection.selected.firstSelectedIdentifier()
 
 proc selectedIndexes*(collectionView: CollectionView): seq[int] =
-  for identifier in collectionView.xSelectedIdentifiers:
+  for identifier in collectionView.xSelection.selected:
     let index = collectionView.collectionItemIndexForIdentifier(identifier)
     if index >= 0:
       result.add index
@@ -1560,13 +1549,13 @@ proc `selectionMode=`*(collectionView: CollectionView, mode: CollectionSelection
     return
   collectionView.xSelectionMode = mode
   if mode == csmNone:
-    collectionView.xSelectedIdentifiers.setLen(0)
-    collectionView.xSelectionAnchorIdentifier = ""
-    collectionView.xSelectionLeadIdentifier = ""
-  elif mode == csmSingle and collectionView.xSelectedIdentifiers.len > 1:
-    collectionView.xSelectedIdentifiers.setLen(1)
-    collectionView.xSelectionAnchorIdentifier = collectionView.xSelectedIdentifiers[0]
-    collectionView.xSelectionLeadIdentifier = collectionView.xSelectedIdentifiers[0]
+    collectionView.xSelection.selected.setLen(0)
+    collectionView.xSelection.anchor = ""
+    collectionView.xSelection.lead = ""
+  elif mode == csmSingle and collectionView.xSelection.selected.len > 1:
+    collectionView.xSelection.selected.setLen(1)
+    collectionView.xSelection.anchor = collectionView.xSelection.selected[0]
+    collectionView.xSelection.lead = collectionView.xSelection.selected[0]
   collectionView.reloadData()
 
 proc selectItemAtIndex*(collectionView: CollectionView, index: int) =
@@ -1581,19 +1570,6 @@ proc selectItemAtIndex*(collectionView: CollectionView, index: int) =
   let identifier = collectionView.collectionItemIdentifier(boundedIndex)
   collectionView.applySelectedIdentifiers([identifier], identifier, identifier)
 
-proc identifiersInRange(
-    collectionView: CollectionView, anchorIdentifier, leadIdentifier: string
-): seq[string] =
-  let
-    anchor = collectionView.collectionItemIndexForIdentifier(anchorIdentifier)
-    lead = collectionView.collectionItemIndexForIdentifier(leadIdentifier)
-  if anchor < 0 or lead < 0:
-    return
-  for index in min(anchor, lead) .. max(anchor, lead):
-    let identifier = collectionView.collectionItemIdentifier(index)
-    if identifier.len > 0:
-      result.add identifier
-
 proc extendSelectionToIndex(collectionView: CollectionView, index: int) =
   if collectionView.xSelectionMode != csmExtended:
     collectionView.selectItemAtIndex(index)
@@ -1604,12 +1580,14 @@ proc extendSelectionToIndex(collectionView: CollectionView, index: int) =
   let
     identifier = collectionView.collectionItemIdentifier(index)
     anchor =
-      if collectionView.xSelectionAnchorIdentifier.len > 0:
-        collectionView.xSelectionAnchorIdentifier
+      if collectionView.xSelection.anchor.len > 0:
+        collectionView.xSelection.anchor
       else:
         collectionView.selectedIdentifier()
   collectionView.applySelectedIdentifiers(
-    collectionView.identifiersInRange(anchor, identifier), anchor, identifier
+    collectionView.selectionContext().keysInRange(anchor, identifier),
+    anchor,
+    identifier,
   )
 
 proc toggleSelectionAtIndex(collectionView: CollectionView, index: int) =
@@ -1620,31 +1598,20 @@ proc toggleSelectionAtIndex(collectionView: CollectionView, index: int) =
       not collectionView.collectionItemSelectable(index):
     return
   let identifier = collectionView.collectionItemIdentifier(index)
-  var next = collectionView.xSelectedIdentifiers
-  if identifier in next:
-    var filtered: seq[string]
-    for selected in next:
-      if selected != identifier:
-        filtered.add selected
-    next = filtered
-  elif identifier.len > 0:
-    next.add identifier
+  let next = collectionView.xSelection.toggled(identifier, "")
   collectionView.applySelectedIdentifiers(next, identifier, identifier)
-
-proc usesDiscontiguousSelection(modifiers: set[KeyModifier]): bool =
-  kmCommand in modifiers or kmControl in modifiers
 
 proc selectItemAtIndex*(
     collectionView: CollectionView, index: int, modifiers: set[KeyModifier]
 ) =
   if collectionView.xSelectionMode == csmNone:
     return
-  if kmShift in modifiers and collectionView.xSelectionMode == csmExtended:
+  case selectionGesture(ItemSelectionMode(collectionView.xSelectionMode.ord), modifiers)
+  of isgExtend:
     collectionView.extendSelectionToIndex(index)
-  elif modifiers.usesDiscontiguousSelection() and
-      collectionView.xSelectionMode in {csmMultiple, csmExtended}:
+  of isgToggle:
     collectionView.toggleSelectionAtIndex(index)
-  else:
+  of isgReplace:
     collectionView.selectItemAtIndex(index)
 
 proc activateItemAtIndex*(
@@ -1693,37 +1660,18 @@ proc `highlightedIdentifier=`*(collectionView: CollectionView, identifier: strin
   collectionView.invalidateCollectionItems()
 
 proc selectionLeadIndex(collectionView: CollectionView): int =
-  let lead = collectionView.collectionItemIndexForIdentifier(
-    collectionView.xSelectionLeadIdentifier
-  )
+  let lead =
+    collectionView.collectionItemIndexForIdentifier(collectionView.xSelection.lead)
   if lead >= 0:
     lead
   else:
     collectionView.selectedIndex()
 
 proc firstSelectableIndex(collectionView: CollectionView): int =
-  for index in 0 ..< collectionView.len():
-    if collectionView.collectionItemSelectable(index):
-      return index
-  -1
+  collectionView.selectionContext().nextSelectable(0, 1)
 
 proc lastSelectableIndex(collectionView: CollectionView): int =
-  for offset in 0 ..< collectionView.len():
-    let index = collectionView.len() - offset - 1
-    if collectionView.collectionItemSelectable(index):
-      return index
-  -1
-
-proc nextSelectableIndex(collectionView: CollectionView, index, delta: int): int =
-  if delta == 0:
-    return -1
-  let step = if delta < 0: -1 else: 1
-  var current = index
-  while current >= 0 and current < collectionView.len():
-    if collectionView.collectionItemSelectable(current):
-      return current
-    current += step
-  -1
+  collectionView.selectionContext().nextSelectable(collectionView.len() - 1, -1)
 
 proc itemsPerRow(collectionView: CollectionView): int =
   let layout = collectionView.defaultLayout()
@@ -1738,12 +1686,7 @@ proc moveSelectionTo(
 ) =
   if collectionView.len() == 0 or collectionView.xSelectionMode == csmNone:
     return
-  let boundedTarget = max(0, min(index, collectionView.len() - 1))
-  var boundedIndex = collectionView.nextSelectableIndex(boundedTarget, delta)
-  if boundedIndex < 0 and delta > 0:
-    boundedIndex = collectionView.nextSelectableIndex(boundedTarget, -1)
-  elif boundedIndex < 0 and delta < 0:
-    boundedIndex = collectionView.nextSelectableIndex(boundedTarget, 1)
+  let boundedIndex = collectionView.selectionContext().nearestSelectable(index, delta)
   if boundedIndex < 0:
     return
   if extend and collectionView.xSelectionMode == csmExtended:
@@ -1761,31 +1704,29 @@ proc moveSelection(collectionView: CollectionView, delta: int, extend = false) =
       collectionView.len()
   collectionView.moveSelectionTo(start + delta, extend, delta)
 
+proc endCollectionPointer(collectionView: CollectionView) =
+  collectionView.xInteraction.endItemTracking("")
+
 proc defaultCollectionViewMouseDown(
     collectionView: CollectionView, event: MouseEvent
 ): bool =
-  if not collectionView.isEnabled() or event.button != mbPrimary:
+  if not collectionView.beginItemTracking(collectionView.xInteraction, event):
     return false
-  let owner = collectionView.window()
-  if owner of Window:
-    discard Window(owner).makeFirstResponder(collectionView)
-  collectionView.xTrackingItem = true
   let index = collectionView.collectionItemIndexAtPoint(event.location)
   collectionView.highlightedIndex = index
-  collectionView.xPressedIdentifier = collectionView.xHighlightedIdentifier
+  collectionView.xInteraction.pressed = collectionView.xHighlightedIdentifier
   collectionView.invalidateCollectionItems()
   true
 
 proc defaultCollectionViewMouseDragged(
     collectionView: CollectionView, event: MouseEvent
 ): bool =
-  if collectionView.isEnabled() and collectionView.xTrackingItem:
+  if collectionView.isEnabled() and collectionView.xInteraction.tracking:
     let index = collectionView.collectionItemIndexAtPoint(event.location)
     collectionView.highlightedIndex = index
-    collectionView.xPressedIdentifier = collectionView.xHighlightedIdentifier
+    collectionView.xInteraction.pressed = collectionView.xHighlightedIdentifier
     collectionView.invalidateCollectionItems()
     return true
-  false
 
 proc defaultCollectionViewMouseUp(
     collectionView: CollectionView, event: MouseEvent
@@ -1793,12 +1734,11 @@ proc defaultCollectionViewMouseUp(
   if not collectionView.isEnabled() or event.button != mbPrimary:
     return false
   let index =
-    if collectionView.xTrackingItem:
+    if collectionView.xInteraction.tracking:
       collectionView.collectionItemIndexAtPoint(event.location)
     else:
       -1
-  collectionView.xTrackingItem = false
-  collectionView.xPressedIdentifier = ""
+  collectionView.endCollectionPointer()
   if index >= 0:
     collectionView.activateItemAtIndex(index, event.modifiers)
   collectionView.invalidateCollectionItems()
@@ -1838,8 +1778,8 @@ proc defaultCollectionViewKeyDown(
     result = event.text.len > 0
 
 proc selectedDragIdentifiers(collectionView: CollectionView): seq[string] =
-  if collectionView.xSelectedIdentifiers.len > 0:
-    collectionView.xSelectedIdentifiers
+  if collectionView.xSelection.selected.len > 0:
+    collectionView.xSelection.selected
   elif collectionView.xHighlightedIdentifier.len > 0:
     @[collectionView.xHighlightedIdentifier]
   else:
@@ -1880,7 +1820,7 @@ proc beginDraggingItems*(
   result = beginDraggingSession(
     DynamicAgent(collectionView), items, operations, pasteboardName
   )
-  collectionView.xCollectionDraggingSession = result
+  collectionView.xInteraction.dragSession = result
 
 proc beginDraggingSelection*(
     collectionView: CollectionView,
@@ -1892,13 +1832,13 @@ proc beginDraggingSelection*(
   )
 
 proc draggingSession*(collectionView: CollectionView): DraggingSession =
-  collectionView.xCollectionDraggingSession
+  collectionView.xInteraction.dragSession
 
 proc draggingInfo*(collectionView: CollectionView): DraggingInfo =
-  if collectionView.xCollectionDraggingSession.isNil:
+  if collectionView.xInteraction.dragSession.isNil:
     DraggingInfo()
   else:
-    collectionView.xCollectionDraggingSession.draggingInfo()
+    collectionView.xInteraction.dragSession.draggingInfo()
 
 func collectionDropPositionForItem(location: Point, rect: Rect): DraggingDropPosition =
   let edge = rect.size.height * 0.25'f32
@@ -1939,16 +1879,16 @@ proc dropTargetForDraggingLocation*(
 proc updateCollectionDropTarget(
     collectionView: CollectionView, target: DraggingDropTarget
 ) =
-  if collectionView.xDropTarget == target:
+  if collectionView.xInteraction.dropTarget == target:
     return
-  collectionView.xDropTarget = target
+  collectionView.xInteraction.dropTarget = target
   collectionView.needsDisplay = true
 
 proc currentDropTarget*(collectionView: CollectionView): DraggingDropTarget =
-  if not collectionView.xCollectionDraggingSession.isNil and
-      collectionView.xCollectionDraggingSession.state() == dssActive:
-    return collectionView.xCollectionDraggingSession.dropTarget()
-  collectionView.xDropTarget
+  if not collectionView.xInteraction.dragSession.isNil and
+      collectionView.xInteraction.dragSession.state() == dssActive:
+    return collectionView.xInteraction.dragSession.dropTarget()
+  collectionView.xInteraction.dropTarget
 
 proc acceptsDraggingInfo(collectionView: CollectionView, info: DraggingInfo): bool =
   if info.pasteboard.isNil:
@@ -2170,25 +2110,23 @@ protocol DefaultCollectionViewLayoutBehavior of ViewLayoutProtocol:
   method layoutSubviews(collectionView: CollectionView) =
     collectionView.tileCollectionContent()
 
+defineItemActiveDragHandlers(
+  updateActiveCollectionDrag, performActiveCollectionDrag, CollectionView,
+  dropTargetForDraggingLocation, updateCollectionDropTarget, endCollectionPointer,
+)
+
 protocol DefaultCollectionViewEvents of ResponderEventProtocol:
   method mouseDown(collectionView: CollectionView, event: MouseEvent): bool =
     collectionView.defaultCollectionViewMouseDown(event)
 
   method mouseDragged(collectionView: CollectionView, event: MouseEvent): bool =
-    let session = collectionView.draggingSession()
-    if not session.isNil and session.state() == dssActive:
-      let target = collectionView.dropTargetForDraggingLocation(event.location)
-      collectionView.updateCollectionDropTarget(target)
-      discard updateDraggingSession(
-        session, event.location, DynamicAgent(collectionView), target
-      )
-      discard autoscrollDraggingSession(
-        session, event.location, DynamicAgent(collectionView), target
-      )
+    if collectionView.updateActiveCollectionDrag(event):
       return true
     collectionView.defaultCollectionViewMouseDragged(event)
 
   method mouseUp(collectionView: CollectionView, event: MouseEvent): bool =
+    if collectionView.performActiveCollectionDrag(event):
+      return true
     collectionView.defaultCollectionViewMouseUp(event)
 
   method mouseMoved(collectionView: CollectionView, event: MouseEvent): bool =
@@ -2201,53 +2139,11 @@ protocol DefaultCollectionViewEvents of ResponderEventProtocol:
   method keyDown(collectionView: CollectionView, event: KeyEvent): bool =
     collectionView.defaultCollectionViewKeyDown(event)
 
-protocol DefaultCollectionViewDraggingSource of DraggingSourceProtocol:
-  method draggingSourceOperationMask(
-      collectionView: CollectionView, info: DraggingInfo
-  ): DragOperations =
-    discard collectionView
-    info.allowedOperations
-
-  method draggingSessionEnded(collectionView: CollectionView, info: DraggingInfo) =
-    if collectionView.xCollectionDraggingSession == info.session:
-      collectionView.xCollectionDraggingSession = nil
-      collectionView.updateCollectionDropTarget(initDraggingDropTarget())
-
-protocol DefaultCollectionViewDraggingDestination of DraggingDestinationProtocol:
-  method draggingEntered(
-      collectionView: CollectionView, info: DraggingInfo
-  ): DragOperations =
-    collectionView.updateCollectionDropTarget(info.dropTarget)
-    collectionView.validateDragging(info)
-
-  method draggingUpdated(
-      collectionView: CollectionView, info: DraggingInfo
-  ): DragOperations =
-    collectionView.updateCollectionDropTarget(info.dropTarget)
-    collectionView.validateDragging(info)
-
-  method draggingExited(collectionView: CollectionView, info: DraggingInfo) =
-    discard info
-    collectionView.updateCollectionDropTarget(initDraggingDropTarget())
-
-  method prepareForDragOperation(
-      collectionView: CollectionView, info: DraggingInfo
-  ): bool =
-    collectionView.validateDragging(info) != NoDragOperations
-
-  method performDragOperation(
-      collectionView: CollectionView, info: DraggingInfo
-  ): bool =
-    collectionView.acceptDragging(info)
-
-  method concludeDragOperation(collectionView: CollectionView, info: DraggingInfo) =
-    discard info
-    collectionView.updateCollectionDropTarget(initDraggingDropTarget())
-
-  method autoscrollDraggingSession(
-      collectionView: CollectionView, info: DraggingInfo
-  ): bool =
-    collectionView.autoscrollDraggingInfo(info)
+defineItemDraggingProtocols(
+  DefaultCollectionViewDraggingSource, DefaultCollectionViewDraggingDestination,
+  CollectionView, updateCollectionDropTarget, validateDragging, acceptDragging,
+  autoscrollDraggingInfo,
+)
 
 protocol DefaultCollectionViewDrawing of ViewDrawingProtocol:
   method draw(collectionView: CollectionView, context: DrawContext) =
@@ -2298,12 +2194,10 @@ proc initCollectionViewFields*(collectionView: CollectionView, frame: Rect = Aut
   collectionView.xItemCount = 0
   collectionView.xDefaultReuseIdentifier = "item"
   collectionView.xSelectionMode = csmSingle
-  collectionView.xReusableItemViews = initTable[string, seq[View]]()
-  collectionView.xReusableSupplementaryViews = initTable[string, seq[View]]()
   collectionView.xSupplementaryViews = initTable[string, View]()
   collectionView.xLayout = DynamicAgent(newCollectionViewLayout())
   discard collectionView.xLayout.adopt(CollectionLayoutProtocol)
-  collectionView.xDropTarget = initDraggingDropTarget()
+  collectionView.xInteraction.dropTarget = initDraggingDropTarget()
   collectionView.xScrollView = initCollectionScrollView(collectionView)
   collectionView.xContentView = initCollectionContentView(collectionView)
   collectionView.xScrollView.documentView = collectionView.xContentView

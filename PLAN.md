@@ -131,56 +131,52 @@ Keep public property hooks and ownership boundaries intact.
 
 ### Shared item-model and item-view architecture
 
-The core NimKit review identified a coordinated migration with an estimated
-**1,200–1,600 net production LOC reduction**, after shared implementations and
-compatibility adapters. These are planning estimates, to be replaced by measured
-results as each phase lands. Keep widget presentation typed, property proc hooks
-intact, and mutable algorithm state in plain value objects owned by GUI objects.
+The migration is implemented in PR #164. The original **1,200–1,600 net
+production LOC reduction** forecast did not hold once typed public APIs, widget
+policies, and compatibility adapters were retained. Final measurements supersede
+that forecast: **+255 net production lines versus main**, including every new
+shared module and excluding tests/docs. The initial storage/cache increment was
++20 lines; the rest adds +235. This is an architecture and behavior improvement,
+with shared invariants and stable presentation identity as its justification.
 
-- [ ] **Shared collection engine — 300–400 LOC estimated.** Move stable identity,
-  source/visible index mapping, hidden/filter/sort arrangement, revision caching,
-  and collection mutation below both views and controllers. Migrate `TableModel`
-  and `ArrayController` to that engine while retaining their public entry points,
-  strict/optional lookup behavior, and controller notifications. Start with
-  TableModel's cached arrangement; preserve existing comparison policies, column
-  metadata, and per-view formatting/parsing adapters.
-  **Started:** the first increment shares typed storage, identity/arrangement
-  caches, mutation invalidation, column mapping, and value comparison through
-  `ItemCollection[T]`. Public model records and widget-specific adapters remain
-  separate. This foundation adds **20 net production LOC** (excluding tests/docs)
-  while reducing the repeated-query regression from 1,200 filter calls to three.
-  The estimated phase reduction is not yet realized; reassess the estimate as
-  record and provider duplication is removed.
-- [ ] **Common item-provider contract — 150–200 LOC estimated.** Replace repeated
-  count/value/identifier controller adapters with a narrow provider contract and
-  typed per-view projections. Preserve lazy source access, widget-dependent
-  source context, mutation observation, and explicit selection binding.
-- [ ] **Local/provider reconciliation — 250–350 LOC estimated.** Share source
-  switching, hidden-item projection, identity lookup, and reload reconciliation
-  across menus, document tabs, matrices, and combo boxes. Retain live presentation
-  object identities, native-menu synchronization, selection fallback policies,
-  combo-box filtering, and specialized realization callbacks.
-- [ ] **Shared item selection — 250–350 LOC estimated.** Migrate table/collection
-  normalization, anchors, ranges, navigation, undo, and notification transactions
-  to common value-state algorithms with narrow lookup/policy hooks. Preserve
-  index-only table sources, identifier-based collection sources, invalid-anchor
-  policies, focused-column behavior, and public event/delegate ordering.
-- [ ] **View reuse and pointer/drag lifecycle — 220–340 LOC estimated.** Share
-  visible-slot reconciliation, reuse-pool mechanics, tracking, and drag-session
-  transitions. Keep painted table cells, hosted cells, collection layouts and
-  supplementary views, reuse cleanup policies, payloads, hit testing, and delegate
-  fallbacks explicit. Preserve bounded live-view counts and cached source calls.
+- [x] **Shared collection engine.** TableModel, ArrayController, and local combo
+  options use `ItemCollection[T]` for source storage, identity/visible indexes,
+  arrangement caching, and mutation invalidation. Preserve column mapping,
+  comparison policies, lookup errors, and controller notifications. Repeated
+  controller-query coverage improves from 1,200 filter calls to three.
+- [x] **Common item-provider contract.** Plain records live below controllers.
+  Six presenters adapt `ItemProviderProtocol` using their own typed projections.
+  Required methods are local; existing local widget overrides keep precedence.
+  Preserve requesting-view context, typed writes, explicit selection binding,
+  and lazy combo queries. Generation helpers and bridges are private.
+- [x] **Local/provider reconciliation.** Menus, document tabs, and matrices share
+  typed snapshot lookup and identified presentation reconciliation. Live menu/tab
+  items use typed record backing; submenu children remain owned by the live tree.
+  Combo filtering retains its cached search corpus and uses the collection engine.
+  Native-menu synchronization and existing selection fallback policies remain.
+- [x] **Shared item selection.** TableView, CollectionView, and SelectionController
+  share value state and algorithms. Use hashed deduplication and cached indexes
+  for sorting, with private named modes and gestures. Preserve cursor policies,
+  undo, focused columns, and before/after notification and delegate ordering.
+- [x] **View reuse and pointer/drag lifecycle.** Share reuse-pool mechanics,
+  identity matching for table cells, small focus/tracking helpers, and drag-session
+  transitions. Widget handlers keep hit testing and activation explicit.
+  CollectionView retains its remove/publish/configure loop so delegates can query
+  live views during configuration. Collection mouse release ends active drags.
 
-**Delivery:** begin with a focused shared-engine PR, then migrate provider,
-selection, and presentation ownership in reviewable increments. OutlineView
-already inherits TableView, and CascadingView already uses tables for its columns;
-do not count those as independent list engines or assume further tree savings.
+**Review outcome:** Astra recommended retaining collection/provider/selection/
+snapshot/pool abstractions, simplifying pointer orchestration, and preserving
+CollectionView's publication order. The simplified implementation follows that
+scope. OutlineView and CascadingView already share tables; no additional tree
+engine reduction is claimed.
 
-**Completion evidence:** run the existing NimKit shared runner and affected
-Kosmo/Tekton coverage, compile the example bundle, and validate the full suite.
-Retain identity across sorting/filtering/reloads, typed edit writeback, fractional
-scroll anchors, undo/notification order, provider laziness, and reuse lifetimes.
-Add focused regressions for shared contracts and record actual LOC changes per PR.
+**Completion evidence:** focused coverage preserves source/context overrides,
+provider laziness, presentation identities, edit writeback, selection ordering,
+large selections, collection callback publication, and synthetic drag completion.
+Regression tests reproduce the reviewed submenu serialization, responder-chain,
+publication, and repeated-lookup failures before their fixes. Child-payload lifetime
+coverage runs in the shared ARC/ORC ownership suite. Full shared runners and the
+example bundle provide cross-component validation; results are recorded in the PR.
 
 ## Validation
 

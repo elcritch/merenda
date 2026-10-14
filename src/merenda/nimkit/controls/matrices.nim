@@ -6,6 +6,10 @@ import ../app/windows except sendAction
 import ../drawing
 import ../foundation/events
 import ../foundation/objectvalues
+import ../foundation/itemproviders
+import ../foundation/private/itemproviderbridges
+import ../foundation/private/itemsnapshots
+import ../foundation/private/itemreconciliation
 import ../foundation/selectors
 import ../foundation/types
 import ../foundation/undomanagers
@@ -39,12 +43,16 @@ type
     representedObject*: DynamicAgent
     userInfo*: DynamicAgent
 
+  MatrixCellSlot = object
+    identifier: string
+    cell: ButtonCell
+
   Matrix* = ref object of Control
     xRows: int
     xColumns: int
     xCells: seq[ButtonCell]
-    xItemModels: seq[MatrixItemModel]
-    xUsesItemModels: bool
+    xCellIdentifiers: seq[string]
+    xSnapshot: ItemSnapshot[MatrixItemModel]
     xDataSource: DynamicAgent
     xPrototype: ButtonCell
     xSelectionMode: MatrixSelectionMode
@@ -168,39 +176,16 @@ proc matrixItemModel*(cell: ButtonCell): MatrixItemModel =
   )
 
 proc modelIndexForVisibleIndex(matrix: Matrix, visibleIndex: int): int =
-  if visibleIndex < 0:
-    return -1
-  var current = 0
-  for index, model in matrix.xItemModels:
-    if not model.hidden:
-      if current == visibleIndex:
-        return index
-      inc current
-  -1
+  matrix.xSnapshot.visibleSourceIndex(visibleIndex)
 
 proc visibleIndexForModelIndex(matrix: Matrix, modelIndex: int): int =
-  if modelIndex < 0:
-    return -1
-  var current = 0
-  for index, model in matrix.xItemModels:
-    if not model.hidden:
-      if index == modelIndex:
-        return current
-      inc current
-  -1
+  matrix.xSnapshot.visibleIndex(modelIndex)
 
 proc visibleItemCount(matrix: Matrix): int =
-  for model in matrix.xItemModels:
-    if not model.hidden:
-      inc result
+  matrix.xSnapshot.visibleCount()
 
 proc backingIndexOfMatrixItemIdentifier(matrix: Matrix, identifier: string): int =
-  if identifier.len == 0:
-    return -1
-  for index, model in matrix.xItemModels:
-    if model.identifier == identifier:
-      return index
-  -1
+  matrix.xSnapshot.sourceIndex(identifier)
 
 proc identifiersToSet(identifiers: openArray[string]): seq[string] =
   for identifier in identifiers:
@@ -248,17 +233,35 @@ proc normalizeModelBackedCellSelection(matrix: Matrix) =
   matrix.normalizeLeadAndSelection()
 
 proc syncMatrixModelSelectionStates(matrix: Matrix) =
-  if not matrix.xUsesItemModels:
+  if not matrix.xSnapshot.active:
     return
   for visibleIndex in 0 ..< matrix.xCells.len:
     let modelIndex = matrix.modelIndexForVisibleIndex(visibleIndex)
     if modelIndex >= 0:
       let cell = matrix.xCells[visibleIndex]
-      matrix.xItemModels[modelIndex].state =
+      matrix.xSnapshot.models[modelIndex].state =
         if cell.isNil:
           bsOff
         else:
           cell.state()
+
+proc attachCell(matrix: Matrix, cell: ButtonCell) =
+  if cell.isNil:
+    return
+  cell.setMirrorsControlViewState(false)
+  cell.setControlView(matrix)
+
+proc detachCell(matrix: Matrix, cell: ButtonCell) =
+  if not cell.isNil and cell.controlView() == View(matrix):
+    cell.setControlView(nil)
+
+proc clonedPrototype(matrix: Matrix): ButtonCell =
+  let prototype =
+    if matrix.xPrototype.isNil:
+      newButtonCell()
+    else:
+      matrix.xPrototype
+  prototype.copyButtonCell()
 
 proc rebuildMatrixCellsFromModels(
     matrix: Matrix, selectedIdentifiers: openArray[string] = []
@@ -268,14 +271,55 @@ proc rebuildMatrixCellsFromModels(
     count = matrix.visibleItemCount()
     columnCount = matrix.xColumns.normalizedColumns()
     rowCount = count.gridRows(columnCount)
-  matrix.configureCells(rowCount, columnCount, matrix.xPrototype)
-  var visibleIndex = 0
-  for model in matrix.xItemModels:
+  if matrix.xPrototype.isNil:
+    matrix.xPrototype = newButtonCell()
+  var previous: seq[MatrixCellSlot]
+  for index, cell in matrix.xCells:
+    previous.add MatrixCellSlot(
+      identifier:
+        if index < matrix.xCellIdentifiers.len:
+          matrix.xCellIdentifiers[index]
+        else:
+          "pos:" & $index,
+      cell: cell,
+    )
+  var models: seq[MatrixItemModel]
+  for model in matrix.xSnapshot.models:
     if not model.hidden:
-      matrix.applyMatrixItemModelToCell(matrix.xCells[visibleIndex], model, selected)
-      inc visibleIndex
-  for index in visibleIndex ..< matrix.xCells.len:
-    clearMatrixItemCell(matrix.xCells[index])
+      models.add model
+  var desired: seq[MatrixCellSlot]
+  for index in 0 ..< rowCount * columnCount:
+    let identifier =
+      if index < models.len and models[index].identifier.len > 0:
+        "id:" & models[index].identifier
+      else:
+        "pos:" & $index
+    desired.add MatrixCellSlot(identifier: identifier)
+  let key = proc(slot: MatrixCellSlot): string =
+    slot.identifier
+  let slots = reconcileItems(
+    previous,
+    desired,
+    key,
+    key,
+    proc(spec: MatrixCellSlot): MatrixCellSlot =
+      MatrixCellSlot(identifier: spec.identifier, cell: matrix.clonedPrototype()),
+    proc(slot: var MatrixCellSlot, spec: MatrixCellSlot) =
+      matrix.attachCell(slot.cell),
+    proc(slot: MatrixCellSlot) =
+      matrix.detachCell(slot.cell),
+  )
+  matrix.xCells.setLen(0)
+  matrix.xCellIdentifiers.setLen(0)
+  for index, slot in slots:
+    matrix.xCells.add slot.cell
+    matrix.xCellIdentifiers.add slot.identifier
+    if index < models.len:
+      matrix.applyMatrixItemModelToCell(slot.cell, models[index], selected)
+    else:
+      clearMatrixItemCell(slot.cell)
+  matrix.xRows = rowCount
+  matrix.xColumns = columnCount
   matrix.normalizeModelBackedCellSelection()
   matrix.syncMatrixModelSelectionStates()
   matrix.invalidateMatrix()
@@ -343,24 +387,6 @@ proc normalizeLeadAndSelection(matrix: Matrix) =
       matrix.xCells[matrix.xSelectedIndex].state() == bsOff:
     matrix.xSelectedIndex = matrix.firstSelectedIndex()
 
-proc attachCell(matrix: Matrix, cell: ButtonCell) =
-  if cell.isNil:
-    return
-  cell.setMirrorsControlViewState(false)
-  cell.setControlView(matrix)
-
-proc detachCell(matrix: Matrix, cell: ButtonCell) =
-  if not cell.isNil and cell.controlView() == View(matrix):
-    cell.setControlView(nil)
-
-proc clonedPrototype(matrix: Matrix): ButtonCell =
-  let prototype =
-    if matrix.xPrototype.isNil:
-      newButtonCell()
-    else:
-      matrix.xPrototype
-  prototype.copyButtonCell()
-
 proc configureCells(matrix: Matrix, rows, columns: int, prototype: ButtonCell) =
   let
     nextRows = rows.normalizedCount()
@@ -387,6 +413,7 @@ proc configureCells(matrix: Matrix, rows, columns: int, prototype: ButtonCell) =
   matrix.xRows = nextRows
   matrix.xColumns = nextColumns
   matrix.xCells = nextCells
+  matrix.xCellIdentifiers.setLen(0)
   matrix.normalizeLeadAndSelection()
   matrix.invalidateMatrix()
 
@@ -482,7 +509,7 @@ proc prototypeCell*(matrix: Matrix): ButtonCell =
 proc renewRowsColumns*(
     matrix: Matrix, rows, columns: int, prototype: ButtonCell = nil
 ) =
-  if matrix.xUsesItemModels:
+  if matrix.xSnapshot.active:
     let selected = matrix.selectedItemIdentifiers()
     if not prototype.isNil:
       matrix.xPrototype = prototype.copyButtonCell()
@@ -494,6 +521,46 @@ proc renewRowsColumns*(
   else:
     matrix.configureCells(rows, columns, prototype)
 
+proc providedMatrixItem(
+    source: DynamicAgent, matrix: Matrix, item: ModelItem
+): MatrixItemModel =
+  initMatrixItemModel(
+    identifier = item.identifier,
+    title =
+      if item.separator:
+        ""
+      else:
+        item.displayTitle(ovrLabel),
+    objectValue = item.objectValue,
+    state =
+      if matrix.selectionMode() != msmNone and
+          item.identifier in
+          source.trySendLocal(providedItemSelection(), DynamicAgent(matrix)).get(@[]):
+        bsOn
+      else:
+        bsOff,
+    enabled = item.enabled and not item.separator,
+    hidden = item.hidden,
+    tag = item.modelIntField("tag", 0),
+    tooltip = item.modelStringField("tooltip"),
+    image = item.modelImageField("image"),
+    representedObject = item.representedObject,
+  )
+
+proc providedMatrixIndex(
+    source: DynamicAgent, matrix: Matrix, identifier: string
+): int =
+  source.providedIndex(DynamicAgent(matrix), identifier)
+
+defineItemProviderBridge(
+  MatrixItemProviderSource, MatrixDataSource, Matrix, MatrixItemModel, matrixItemCount,
+  matrixItemModelAtIndex, indexOfMatrixItemModelIdentifier, matrix, providedMatrixItem,
+  providedMatrixIndex,
+)
+
+proc installMatrixItemProvider*(source: DynamicAgent) =
+  source.installItemProvider(MatrixItemProviderSource.init())
+
 proc dataSource*(matrix: Matrix): DynamicAgent =
   matrix.xDataSource
 
@@ -501,6 +568,7 @@ proc `dataSource=`*(matrix: Matrix, dataSource: DynamicAgent) =
   if matrix.xDataSource == dataSource:
     return
   if not dataSource.isNil:
+    dataSource.installMatrixItemProvider()
     discard dataSource.adopt(MatrixDataSource)
   matrix.xDataSource = dataSource
   matrix.reloadData()
@@ -509,16 +577,16 @@ proc `dataSource=`*(matrix: Matrix, dataSource: Responder) =
   matrix.dataSource = DynamicAgent(dataSource)
 
 proc matrixItemIdentifiers*(matrix: Matrix): seq[string] =
-  if matrix.xUsesItemModels:
-    for model in matrix.xItemModels:
+  if matrix.xSnapshot.active:
+    for model in matrix.xSnapshot.models:
       if not model.hidden and model.identifier.len > 0:
         result.add model.identifier
 
 proc matrixItemAtIndex*(matrix: Matrix, index: int): MatrixItemModel =
-  if matrix.xUsesItemModels:
+  if matrix.xSnapshot.active:
     let modelIndex = matrix.modelIndexForVisibleIndex(index)
     if modelIndex >= 0:
-      result = matrix.xItemModels[modelIndex]
+      result = matrix.xSnapshot.models[modelIndex]
       let cell = matrix.cellAtIndex(index)
       if not cell.isNil:
         result.title = cell.title()
@@ -530,39 +598,35 @@ proc matrixItemAtIndex*(matrix: Matrix, index: int): MatrixItemModel =
   matrix.cellAtIndex(index).matrixItemModel()
 
 proc matrixItemModels*(matrix: Matrix): seq[MatrixItemModel] =
-  if matrix.xUsesItemModels:
+  if matrix.xSnapshot.active:
     matrix.syncMatrixModelSelectionStates()
-    return matrix.xItemModels
+    return matrix.xSnapshot.models
   for cell in matrix.xCells:
     result.add cell.matrixItemModel()
 
 proc `matrixItemModels=`*(matrix: Matrix, models: openArray[MatrixItemModel]) =
   let selected = matrix.selectedItemIdentifiers()
   matrix.xDataSource = nil
-  matrix.xItemModels = @models
-  matrix.xUsesItemModels = true
+  matrix.xSnapshot.replace(models)
   matrix.rebuildMatrixCellsFromModels(selected)
 
 proc reloadData*(matrix: Matrix) =
   if matrix.xDataSource.isNil:
-    if matrix.xUsesItemModels:
+    if matrix.xSnapshot.active:
       matrix.rebuildMatrixCellsFromModels(matrix.selectedItemIdentifiers())
     return
 
-  let count = matrix.xDataSource.trySendLocal(matrixItemCount(), matrix)
-  if count.isNone:
-    return
   let selected = matrix.selectedItemIdentifiers()
-  var models: seq[MatrixItemModel]
-  for index in 0 ..< count.get():
-    let model = matrix.xDataSource.trySendLocal(
-      matrixItemModelAtIndex(), (matrix: matrix, index: index)
-    )
-    if model.isSome:
-      models.add model.get()
-  matrix.xItemModels = models
-  matrix.xUsesItemModels = true
-  matrix.rebuildMatrixCellsFromModels(selected)
+  let models = readSnapshot(
+    matrix.xDataSource.trySendLocal(matrixItemCount(), matrix),
+    proc(index: int): Option[MatrixItemModel] =
+      matrix.xDataSource.trySendLocal(
+        matrixItemModelAtIndex(), (matrix: matrix, index: index)
+      ),
+  )
+  if models.isSome:
+    matrix.xSnapshot.replace(models.get())
+    matrix.rebuildMatrixCellsFromModels(selected)
 
 proc indexOfMatrixItemIdentifier*(matrix: Matrix, identifier: string): int =
   if identifier.len == 0:
@@ -573,13 +637,8 @@ proc indexOfMatrixItemIdentifier*(matrix: Matrix, identifier: string): int =
     )
     if found.isSome:
       return found.get()
-  if matrix.xUsesItemModels:
-    var visibleIndex = 0
-    for model in matrix.xItemModels:
-      if not model.hidden:
-        if model.identifier == identifier:
-          return visibleIndex
-        inc visibleIndex
+  if matrix.xSnapshot.active:
+    return matrix.xSnapshot.visibleIndexForIdentifier(identifier)
   -1
 
 proc selectedItemIdentifiers*(matrix: Matrix): seq[string] =
@@ -613,22 +672,23 @@ proc addMatrixItem*(
     matrix: Matrix, model: MatrixItemModel
 ): ButtonCell {.discardable.} =
   let selected = matrix.selectedItemIdentifiers()
-  matrix.xUsesItemModels = true
-  matrix.xItemModels.add model
+  matrix.xSnapshot.active = true
+  matrix.xSnapshot.models.add model
   matrix.rebuildMatrixCellsFromModels(selected)
   if model.identifier.len > 0:
     return matrix.cellAtIndex(matrix.indexOfMatrixItemIdentifier(model.identifier))
   if not model.hidden:
-    return matrix.cellAtIndex(matrix.visibleIndexForModelIndex(matrix.xItemModels.high))
+    return
+      matrix.cellAtIndex(matrix.visibleIndexForModelIndex(matrix.xSnapshot.models.high))
 
 proc insertMatrixItem*(
     matrix: Matrix, model: MatrixItemModel, index: Natural
 ): ButtonCell {.discardable.} =
   let
     selected = matrix.selectedItemIdentifiers()
-    modelIndex = max(0, min(index.int, matrix.xItemModels.len))
-  matrix.xUsesItemModels = true
-  matrix.xItemModels.insert(model, modelIndex)
+    modelIndex = max(0, min(index.int, matrix.xSnapshot.models.len))
+  matrix.xSnapshot.active = true
+  matrix.xSnapshot.models.insert(model, modelIndex)
   matrix.rebuildMatrixCellsFromModels(selected)
   if model.identifier.len > 0:
     return matrix.cellAtIndex(matrix.indexOfMatrixItemIdentifier(model.identifier))
@@ -645,26 +705,26 @@ proc removeMatrixItemWithIdentifier*(
   let selectedIndex = selected.find(identifier)
   if selectedIndex >= 0:
     selected.delete(selectedIndex)
-  matrix.xItemModels.delete(modelIndex)
-  matrix.xUsesItemModels = true
+  matrix.xSnapshot.models.delete(modelIndex)
+  matrix.xSnapshot.active = true
   matrix.rebuildMatrixCellsFromModels(selected)
   true
 
 proc removeAllMatrixItems*(matrix: Matrix) =
-  matrix.xItemModels.setLen(0)
-  matrix.xUsesItemModels = true
+  matrix.xSnapshot.models.setLen(0)
+  matrix.xSnapshot.active = true
   matrix.rebuildMatrixCellsFromModels()
 
 proc moveMatrixItem*(matrix: Matrix, fromIndex, toIndex: int): bool {.discardable.} =
-  if fromIndex < 0 or fromIndex >= matrix.xItemModels.len:
+  if fromIndex < 0 or fromIndex >= matrix.xSnapshot.models.len:
     return false
   let
     selected = matrix.selectedItemIdentifiers()
-    item = matrix.xItemModels[fromIndex]
-  matrix.xItemModels.delete(fromIndex)
-  let insertIndex = max(0, min(toIndex, matrix.xItemModels.len))
-  matrix.xItemModels.insert(item, insertIndex)
-  matrix.xUsesItemModels = true
+    item = matrix.xSnapshot.models[fromIndex]
+  matrix.xSnapshot.models.delete(fromIndex)
+  let insertIndex = max(0, min(toIndex, matrix.xSnapshot.models.len))
+  matrix.xSnapshot.models.insert(item, insertIndex)
+  matrix.xSnapshot.active = true
   matrix.rebuildMatrixCellsFromModels(selected)
   true
 
@@ -1099,6 +1159,10 @@ protocol DefaultMatrixAccessibility of AccessibilityProtocol:
   method isAccessibilityElement(matrix: Matrix): bool =
     true
 
+protocol DefaultMatrixItemSelection of ItemSelectionSourceProtocol:
+  method itemSelection(widget: Matrix): ItemSelection =
+    result.identifiers = widget.selectedItemIdentifiers()
+
 proc initMatrixFields*(
     matrix: Matrix,
     rows = 1,
@@ -1116,6 +1180,7 @@ proc initMatrixFields*(
   matrix.xIntercellSpacing = initSize(8.0, 6.0)
   matrix.acceptsFirstResponder = true
   matrix.installMatrixControlProtocol()
+  discard matrix.withProtocol(DefaultMatrixItemSelection)
   discard matrix.withProtocol(DefaultMatrixDrawing)
   discard matrix.withProtocol(DefaultMatrixEvents)
   discard matrix.withProtocol(DefaultMatrixAccessibility)
