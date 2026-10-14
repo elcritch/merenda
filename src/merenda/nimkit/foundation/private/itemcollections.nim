@@ -56,7 +56,7 @@ proc sourceIndexOfIdentifier*[T](
   if identifier.len == 0 and not collection.xIndexesEmptyIdentifiers:
     return -1
   if not collection.xSourceIndexesValid:
-    collection.xSourceIndexes.clear()
+    collection.xSourceIndexes = initTable[string, int]()
     for index, item in collection.items:
       if (item.identifier.len > 0 or collection.xIndexesEmptyIdentifiers) and
           item.identifier notin collection.xSourceIndexes:

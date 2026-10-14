@@ -178,9 +178,10 @@ suite "nimkit model controllers":
   test "array controller reuses its arrangement until a model mutation":
     let controller = newArrayController(personItems(), personColumns())
     var filterCalls = 0
+    var includeInactive = false
     controller.filter = proc(item: ModelItem): bool =
       inc filterCalls
-      item.value("active").requireBool()
+      includeInactive or item.value("active").requireBool()
     controller.sortDescriptors = [initModelSortDescriptor("score", msdDescending)]
 
     for iteration in 0 ..< 100:
@@ -214,6 +215,13 @@ suite "nimkit model controllers":
     check controller.len == 1
     check controller.selectionController.selectedIdentifier == ""
     check filterCalls == 17
+
+    includeInactive = true
+    check controller.len == 1
+    check filterCalls == 17
+    controller.filter = controller.filter
+    check controller.len == 2
+    check filterCalls == 19
 
   test "array controller keeps source identity indexes current across mutations":
     let controller = newArrayController(
