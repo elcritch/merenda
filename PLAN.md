@@ -129,54 +129,34 @@ helpers and adapters; tests are excluded. Combined estimated reduction:
 through the relevant existing NimKit/Kosmo tests and focused regression coverage.
 Keep public property hooks and ownership boundaries intact.
 
-### Shared item-model and item-view architecture
+### Shared collection caching and small helpers
 
-The migration is implemented in PR #164. The original **1,200–1,600 net
-production LOC reduction** forecast did not hold once typed public APIs, widget
-policies, and compatibility adapters were retained. Final measurements supersede
-that forecast: **+255 net production lines versus main**, including every new
-shared module and excluding tests/docs. The initial storage/cache increment was
-+20 lines; the rest adds +235. This is an architecture and behavior improvement,
-with shared invariants and stable presentation identity as its justification.
+PR #164 is narrowed to TableModel/ArrayController storage and arrangement caches,
+a small private template for comparator setup, and reuse of existing ObjectValue
+accessors. The broader provider, snapshot, selection, reuse, and pointer migration
+was removed: it added 255 net production lines and did not justify its additional
+abstractions. The original 1,200–1,600 LOC-reduction forecast is withdrawn; those
+larger migrations are deferred rather than assumed to be follow-up work.
+The narrowed implementation removes **14 net production lines versus main**,
+including the new private collection module and excluding tests/documentation.
 
-- [x] **Shared collection engine.** TableModel, ArrayController, and local combo
-  options use `ItemCollection[T]` for source storage, identity/visible indexes,
-  arrangement caching, and mutation invalidation. Preserve column mapping,
-  comparison policies, lookup errors, and controller notifications. Repeated
-  controller-query coverage improves from 1,200 filter calls to three.
-- [x] **Common item-provider contract.** Plain records live below controllers.
-  Six presenters adapt `ItemProviderProtocol` using their own typed projections.
-  Required methods are local; existing local widget overrides keep precedence.
-  Preserve requesting-view context, typed writes, explicit selection binding,
-  and lazy combo queries. Generation helpers and bridges are private.
-- [x] **Local/provider reconciliation.** Menus, document tabs, and matrices share
-  typed snapshot lookup and identified presentation reconciliation. Live menu/tab
-  items use typed record backing; submenu children remain owned by the live tree.
-  Combo filtering retains its cached search corpus and uses the collection engine.
-  Native-menu synchronization and existing selection fallback policies remain.
-- [x] **Shared item selection.** TableView, CollectionView, and SelectionController
-  share value state and algorithms. Use hashed deduplication and cached indexes
-  for sorting, with private named modes and gestures. Preserve cursor policies,
-  undo, focused columns, and before/after notification and delegate ordering.
-- [x] **View reuse and pointer/drag lifecycle.** Share reuse-pool mechanics,
-  identity matching for table cells, small focus/tracking helpers, and drag-session
-  transitions. Widget handlers keep hit testing and activation explicit.
-  CollectionView retains its remove/publish/configure loop so delegates can query
-  live views during configuration. Collection mouse release ends active drags.
+- [x] **Shared collection cache.** Use private `ItemCollection[T]` value state for
+  source/visible identity indexes, hidden/filter/sort arrangement, mutation
+  invalidation, and revision tracking. Keep model records, lookup errors,
+  comparison policies, edit writeback, and notification boundaries concrete.
+- [x] **Small shared template.** Share only the cached-arrangement guard and
+  synchronous comparator setup through `arrangeWithDescriptors`. Each model keeps
+  its own comparator and public sorting/filtering APIs.
+- [x] **Reuse established accessors.** Replace five copies of model-field type
+  checks with ObjectValue's typed optional accessors. Preserve absent/wrong-type
+  defaults, and read document-tab style classes once per projection.
 
-**Review outcome:** Astra recommended retaining collection/provider/selection/
-snapshot/pool abstractions, simplifying pointer orchestration, and preserving
-CollectionView's publication order. The simplified implementation follows that
-scope. OutlineView and CascadingView already share tables; no additional tree
-engine reduction is claimed.
-
-**Completion evidence:** focused coverage preserves source/context overrides,
-provider laziness, presentation identities, edit writeback, selection ordering,
-large selections, collection callback publication, and synthetic drag completion.
-Regression tests reproduce the reviewed submenu serialization, responder-chain,
-publication, and repeated-lookup failures before their fixes. Child-payload lifetime
-coverage runs in the shared ARC/ORC ownership suite. Full shared runners and the
-example bundle provide cross-component validation; results are recorded in the PR.
+**Evidence:** the repeated-query regression evaluates three source items across
+100 iterations of count/item/identity queries: filter calls fall from 1,200 to
+three until mutation invalidates the cache. This is an operation-count test, not
+a wall-clock benchmark. Coverage also checks filter refreshes, exception retries,
+identity indexes across mutations, typed field defaults, and existing widget
+bindings. Record final net production LOC and validation results in the PR.
 
 ## Validation
 

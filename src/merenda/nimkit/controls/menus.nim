@@ -1,6 +1,3 @@
-import ../foundation/private/itemsnapshots
-import ../foundation/itemproviders
-import ../foundation/private/itemproviderbridges
 import std/options
 
 from figdraw import FigIdx
@@ -45,13 +42,30 @@ type
     children*: seq[MenuItemModel]
 
   MenuItem* = ref object of Responder
-    xModel: MenuItemModel
+    xIdentifier: string
+    xTitle: string
+    xSubtitle: string
+    xAction: ActionSelector
+    xTarget: DynamicAgent
+    xState: ButtonState
+    xEnabled: bool
+    xHidden: bool
+    xKeyEquivalent: KeyStroke
+    xHasKeyEquivalent: bool
     xSubmenu: Menu
+    xSeparator: bool
+    xImage: ImageResource
+    xTag: int
+    xObjectValue: ObjectValue
+    xRepresentedObject: DynamicAgent
+    xUserInfo: DynamicAgent
+    xValidates: bool
 
   Menu* = ref object of Responder
     xTitle: string
     xItems: seq[MenuItem]
-    xSnapshot: ItemSnapshot[MenuItemModel]
+    xItemModels: seq[MenuItemModel]
+    xUsesItemModels: bool
     xDataSource: DynamicAgent
     xDelegate: DynamicAgent
     xOpen: bool
@@ -96,7 +110,6 @@ proc performKeyEquivalentImpl(menu: Menu, event: KeyEvent, start: Responder): bo
 proc openPopupImpl(button: PopupMenuButton)
 proc closePopupImpl(button: PopupMenuButton)
 proc reloadImpl(menuBar: MenuBar)
-proc `title=`*(menu: Menu, title: string)
 proc rebuildMenuItemsFromModels(menu: Menu)
 proc syncNativeMainMenu()
 proc reloadData*(menu: Menu)
@@ -178,27 +191,27 @@ protocol MenuItemAccessibility of AccessibilityProtocol:
     arMenuItem
 
   method accessibilityLabel(item: MenuItem): string =
-    item.xModel.title
+    item.xTitle
 
   method accessibilityValue(item: MenuItem): string =
-    case item.xModel.state
+    case item.xState
     of bsOff: ""
     of bsOn: "on"
     of bsMixed: "mixed"
 
   method accessibilityTraits(item: MenuItem): AccessibilityTraits =
-    if not item.xModel.enabled:
+    if not item.xEnabled:
       result.incl atDisabled
     if not item.xSubmenu.isNil:
       result.incl atButton
-    if item.xModel.state in {bsOn, bsMixed}:
+    if item.xState in {bsOn, bsMixed}:
       result.incl atSelected
 
   method isAccessibilityElement(item: MenuItem): bool =
-    not item.xModel.separator
+    not item.xSeparator
 
   method accessibilityActionNames(item: MenuItem): seq[string] =
-    if item.xModel.enabled and not item.xModel.separator:
+    if item.xEnabled and not item.xSeparator:
       @[AccessibilityActionPress]
     else:
       @[]
@@ -339,18 +352,18 @@ proc newMenuItem*(
     keyEquivalent = "",
     modifiers: set[KeyModifier] = {},
 ): MenuItem =
-  result = MenuItem(xModel: initMenuItemModel(title = title, action = action))
-  result.xModel.objectValue = toObj(title)
+  result = MenuItem(xTitle: title, xAction: action, xEnabled: true, xValidates: true)
+  result.xObjectValue = toObj(title)
   initResponder(result)
   if keyEquivalent.len > 0:
-    result.xModel.keyEquivalent = initKeyStroke(keyEquivalent, modifiers)
-    result.xModel.hasKeyEquivalent = true
+    result.xKeyEquivalent = initKeyStroke(keyEquivalent, modifiers)
+    result.xHasKeyEquivalent = true
   discard result.withProtocol(MenuItemAccessibility)
 
 proc separatorMenuItem*(): MenuItem =
   result = newMenuItem()
-  result.xModel.separator = true
-  result.xModel.enabled = false
+  result.xSeparator = true
+  result.xEnabled = false
 
 proc newMenuItem*(
     value: ObjectValue,
@@ -364,136 +377,135 @@ proc newMenuItem*(
     keyEquivalent,
     modifiers,
   )
-  result.xModel.objectValue = value
-
-proc applyMenuItemModel(item: MenuItem, model: MenuItemModel) =
-  item.xModel = model
-  # The live submenu owns children; serialization reads that tree.
-  item.xModel.children = @[]
-  item.xModel.title =
-    if model.separator:
-      ""
-    else:
-      model.menuItemModelTitle()
-  if model.separator:
-    item.xModel.action = ActionSelector()
-  if not model.hasKeyEquivalent:
-    item.xModel.keyEquivalent = KeyStroke()
-  item.xModel.enabled = model.enabled and not model.separator
-  if model.objectValue.isNilOrEmpty() and item.xModel.title.len > 0:
-    item.xModel.objectValue = toObj(item.xModel.title)
-  if model.children.len > 0:
-    if item.xSubmenu.isNil:
-      item.xSubmenu = newMenu(item.xModel.title)
-      item.xSubmenu.setNextResponder(item)
-    item.xSubmenu.title = item.xModel.title
-    item.xSubmenu.itemModels = model.children
-  else:
-    if not item.xSubmenu.isNil and item.xSubmenu.nextResponder() == Responder(item):
-      item.xSubmenu.clearNextResponder()
-    item.xSubmenu = nil
+  result.xObjectValue = value
 
 proc newMenuItem*(model: MenuItemModel): MenuItem =
-  result = newMenuItem()
-  result.applyMenuItemModel(model)
+  if model.separator:
+    result = separatorMenuItem()
+  else:
+    result = newMenuItem(model.menuItemModelTitle(), model.action)
+  result.xIdentifier = model.identifier
+  result.xSubtitle = model.subtitle
+  result.xState = model.state
+  result.xEnabled = model.enabled and not model.separator
+  result.xHidden = model.hidden
+  result.xSeparator = model.separator
+  result.xImage = model.image
+  result.xTarget = model.target
+  result.xRepresentedObject = model.representedObject
+  result.xUserInfo = model.userInfo
+  result.xTag = model.tag
+  result.xValidates = model.validates
+  if model.objectValue.isNilOrEmpty() and result.xTitle.len > 0:
+    result.xObjectValue = toObj(result.xTitle)
+  else:
+    result.xObjectValue = model.objectValue
+  if model.hasKeyEquivalent:
+    result.xKeyEquivalent = model.keyEquivalent
+    result.xHasKeyEquivalent = true
+  if model.children.len > 0:
+    let submenu = newMenu(result.xTitle)
+    submenu.itemModels = model.children
+    result.xSubmenu = submenu
+    submenu.setNextResponder(result)
 
 proc identifier*(item: MenuItem): string =
-  item.xModel.identifier
+  item.xIdentifier
 
 proc `identifier=`*(item: MenuItem, identifier: string) =
-  item.xModel.identifier = identifier
+  item.xIdentifier = identifier
 
 proc title*(item: MenuItem): string =
-  item.xModel.title
+  item.xTitle
 
 proc `title=`*(item: MenuItem, title: string) =
-  item.xModel.title = title
-  item.xModel.objectValue = toObj(title)
+  item.xTitle = title
+  item.xObjectValue = toObj(title)
   syncNativeMainMenu()
 
 proc subtitle*(item: MenuItem): string =
-  item.xModel.subtitle
+  item.xSubtitle
 
 proc `subtitle=`*(item: MenuItem, subtitle: string) =
-  item.xModel.subtitle = subtitle
+  item.xSubtitle = subtitle
 
 proc objectValue*(item: MenuItem): ObjectValue =
-  item.xModel.objectValue
+  item.xObjectValue
 
 proc `objectValue=`*(item: MenuItem, value: ObjectValue) =
-  item.xModel.objectValue = value
-  item.xModel.title = value.formatObjectValue(initObjectFormatContext(role = ovrMenu))
+  item.xObjectValue = value
+  item.xTitle = value.formatObjectValue(initObjectFormatContext(role = ovrMenu))
   syncNativeMainMenu()
 
 proc action*(item: MenuItem): ActionSelector =
-  item.xModel.action
+  item.xAction
 
 proc `action=`*(item: MenuItem, action: ActionSelector) =
-  item.xModel.action = action
+  item.xAction = action
   syncNativeMainMenu()
 
 proc target*(item: MenuItem): DynamicAgent =
-  item.xModel.target
+  item.xTarget
 
 proc `target=`*(item: MenuItem, target: DynamicAgent) =
-  item.xModel.target = target
+  item.xTarget = target
 
 proc `target=`*(item: MenuItem, target: Responder) =
   item.target = DynamicAgent(target)
 
 proc state*(item: MenuItem): ButtonState =
-  item.xModel.state
+  item.xState
 
 proc `state=`*(item: MenuItem, state: ButtonState) =
-  item.xModel.state = state
+  item.xState = state
   syncNativeMainMenu()
 
 proc enabled*(item: MenuItem): bool =
-  item.xModel.enabled
+  item.xEnabled
 
 proc `enabled=`*(item: MenuItem, enabled: bool) =
-  item.xModel.enabled = enabled
+  item.xEnabled = enabled
   syncNativeMainMenu()
 
 proc hidden*(item: MenuItem): bool =
-  item.xModel.hidden
+  item.xHidden
 
 proc `hidden=`*(item: MenuItem, hidden: bool) =
-  item.xModel.hidden = hidden
+  item.xHidden = hidden
   syncNativeMainMenu()
 
 proc validates*(item: MenuItem): bool =
-  item.xModel.validates
+  item.xValidates
 
 proc `validates=`*(item: MenuItem, validates: bool) =
-  item.xModel.validates = validates
+  item.xValidates = validates
 
 proc keyEquivalent*(item: MenuItem): KeyStroke =
-  item.xModel.keyEquivalent
+  item.xKeyEquivalent
 
 proc hasKeyEquivalent*(item: MenuItem): bool =
-  item.xModel.hasKeyEquivalent
+  item.xHasKeyEquivalent
 
 proc setKeyEquivalent*(item: MenuItem, text: string, modifiers: set[KeyModifier] = {}) =
   if text.len == 0:
-    item.xModel.keyEquivalent = KeyStroke()
-    item.xModel.hasKeyEquivalent = false
+    item.xKeyEquivalent = KeyStroke()
+    item.xHasKeyEquivalent = false
   else:
-    item.xModel.keyEquivalent = initKeyStroke(text, modifiers)
-    item.xModel.hasKeyEquivalent = true
+    item.xKeyEquivalent = initKeyStroke(text, modifiers)
+    item.xHasKeyEquivalent = true
   syncNativeMainMenu()
 
 proc setKeyEquivalent*(item: MenuItem, key: Key, modifiers: set[KeyModifier] = {}) =
-  item.xModel.keyEquivalent = initKeyStroke(key, modifiers)
-  item.xModel.hasKeyEquivalent = true
+  item.xKeyEquivalent = initKeyStroke(key, modifiers)
+  item.xHasKeyEquivalent = true
   syncNativeMainMenu()
 
 proc modifierMask*(item: MenuItem): set[KeyModifier] =
-  item.xModel.keyEquivalent.modifiers
+  item.xKeyEquivalent.modifiers
 
 proc `modifierMask=`*(item: MenuItem, modifiers: set[KeyModifier]) =
-  item.xModel.keyEquivalent.modifiers = modifiers
-  item.xModel.hasKeyEquivalent = true
+  item.xKeyEquivalent.modifiers = modifiers
+  item.xHasKeyEquivalent = true
   syncNativeMainMenu()
 
 proc submenu*(item: MenuItem): Menu =
@@ -506,42 +518,62 @@ proc `submenu=`*(item: MenuItem, submenu: Menu) =
   syncNativeMainMenu()
 
 proc isSeparatorItem*(item: MenuItem): bool =
-  item.xModel.separator
+  item.xSeparator
 
 proc image*(item: MenuItem): ImageResource =
-  item.xModel.image
+  item.xImage
 
 proc `image=`*(item: MenuItem, image: ImageResource) =
-  item.xModel.image = image
+  item.xImage = image
 
 proc tag*(item: MenuItem): int =
-  item.xModel.tag
+  item.xTag
 
 proc `tag=`*(item: MenuItem, tag: int) =
-  item.xModel.tag = tag
+  item.xTag = tag
   syncNativeMainMenu()
 
 proc representedObject*(item: MenuItem): DynamicAgent =
-  item.xModel.representedObject
+  item.xRepresentedObject
 
 proc `representedObject=`*(item: MenuItem, value: DynamicAgent) =
-  item.xModel.representedObject = value
+  item.xRepresentedObject = value
 
 proc userInfo*(item: MenuItem): DynamicAgent =
-  item.xModel.userInfo
+  item.xUserInfo
 
 proc `userInfo=`*(item: MenuItem, value: DynamicAgent) =
-  item.xModel.userInfo = value
+  item.xUserInfo = value
 
 proc menuItemModel*(item: MenuItem): MenuItemModel =
-  if item.isNil:
-    return initMenuItemModel()
-  result = item.xModel
-  result.children = @[]
-  if result.objectValue.isNilOrEmpty() and result.title.len > 0:
-    result.objectValue = toObj(result.title)
+  let objectValue =
+    if item.xObjectValue.isNilOrEmpty() and item.xTitle.len > 0:
+      toObj(item.xTitle)
+    else:
+      item.xObjectValue
+  var children: seq[MenuItemModel]
   if not item.xSubmenu.isNil:
-    result.children = item.xSubmenu.itemModels()
+    children = item.xSubmenu.itemModels()
+  initMenuItemModel(
+    identifier = item.xIdentifier,
+    title = item.xTitle,
+    subtitle = item.xSubtitle,
+    objectValue = objectValue,
+    state = item.xState,
+    enabled = item.xEnabled,
+    hidden = item.xHidden,
+    separator = item.xSeparator,
+    image = item.xImage,
+    action = item.xAction,
+    target = item.xTarget,
+    keyEquivalent = item.xKeyEquivalent,
+    hasKeyEquivalent = item.xHasKeyEquivalent,
+    representedObject = item.xRepresentedObject,
+    userInfo = item.xUserInfo,
+    tag = item.xTag,
+    validates = item.xValidates,
+    children = children,
+  )
 
 proc menu*(view: View): Menu =
   if view.xContextMenu.isNil or not (view.xContextMenu of Menu):
@@ -585,32 +617,6 @@ proc `delegate=`*(menu: Menu, delegate: DynamicAgent) =
 proc `delegate=`*(menu: Menu, delegate: Responder) =
   menu.delegate = DynamicAgent(delegate)
 
-proc providedMenuItem(
-    source: DynamicAgent, menu: Menu, item: ModelItem
-): MenuItemModel =
-  initMenuItemModel(
-    identifier = item.identifier,
-    title = item.displayTitle(ovrMenu),
-    objectValue = item.objectValue,
-    enabled = item.enabled,
-    hidden = item.hidden,
-    separator = item.separator,
-    representedObject = item.representedObject,
-    validates = false,
-  )
-
-proc providedMenuIndex(source: DynamicAgent, menu: Menu, identifier: string): int =
-  source.providedIndex(DynamicAgent(menu), identifier)
-
-defineItemProviderBridge(
-  MenuItemProviderSource, MenuDataSource, Menu, MenuItemModel, menuItemCount,
-  menuItemModelAtIndex, indexOfMenuItemModelIdentifier, menu, providedMenuItem,
-  providedMenuIndex,
-)
-
-proc installMenuItemProvider*(source: DynamicAgent) =
-  source.installItemProvider(MenuItemProviderSource.init())
-
 proc dataSource*(menu: Menu): DynamicAgent =
   menu.xDataSource
 
@@ -618,7 +624,6 @@ proc `dataSource=`*(menu: Menu, dataSource: DynamicAgent) =
   if menu.xDataSource == dataSource:
     return
   if not dataSource.isNil:
-    dataSource.installMenuItemProvider()
     discard dataSource.adopt(MenuDataSource)
   menu.xDataSource = dataSource
   menu.reloadData()
@@ -630,8 +635,8 @@ proc items*(menu: Menu): lent seq[MenuItem] =
   menu.xItems
 
 proc itemModels*(menu: Menu): seq[MenuItemModel] =
-  if menu.xSnapshot.active:
-    return menu.xSnapshot.models
+  if menu.xUsesItemModels:
+    return menu.xItemModels
   for item in menu.xItems:
     result.add item.menuItemModel()
 
@@ -642,41 +647,36 @@ proc clearMenuItems(menu: Menu) =
   menu.xItems.setLen(0)
 
 proc rebuildMenuItemsFromModels(menu: Menu) =
-  let apply = proc(item: MenuItem, model: MenuItemModel) =
-    item.applyMenuItemModel(model)
-    item.setNextResponder(menu)
-  let retire = proc(item: MenuItem) =
-    if not item.isNil and item.nextResponder() == Responder(menu):
-      item.clearNextResponder()
-  menu.xItems = menu.xSnapshot.reconcilePresentations(
-    menu.xItems,
-    proc(item: MenuItem): string =
-      item.identifier(),
-    proc(model: MenuItemModel): MenuItem =
-      newMenuItem(),
-    apply,
-    retire,
-  )
+  menu.clearMenuItems()
+  for model in menu.xItemModels:
+    if not model.hidden:
+      let item = newMenuItem(model)
+      menu.xItems.add item
+      item.setNextResponder(menu)
 
 proc `itemModels=`*(menu: Menu, models: openArray[MenuItemModel]) =
-  menu.xSnapshot.replace(models)
+  menu.xItemModels = @models
+  menu.xUsesItemModels = true
   menu.rebuildMenuItemsFromModels()
   syncNativeMainMenu()
 
 proc reloadData*(menu: Menu) =
   if menu.xDataSource.isNil:
-    if menu.xSnapshot.active:
+    if menu.xUsesItemModels:
       menu.rebuildMenuItemsFromModels()
       syncNativeMainMenu()
     return
 
-  let models = readSnapshot(
-    menu.xDataSource.trySendLocal(menuItemCount(), menu),
-    proc(index: int): Option[MenuItemModel] =
-      menu.xDataSource.trySendLocal(menuItemModelAtIndex(), (menu: menu, index: index)),
-  )
-  if models.isSome:
-    menu.itemModels = models.get()
+  let count = menu.xDataSource.trySendLocal(menuItemCount(), menu)
+  if count.isNone:
+    return
+  var models: seq[MenuItemModel]
+  for index in 0 ..< count.get():
+    let model =
+      menu.xDataSource.trySendLocal(menuItemModelAtIndex(), (menu: menu, index: index))
+    if model.isSome:
+      models.add model.get()
+  menu.itemModels = models
 
 proc len*(menu: Menu): int =
   menu.xItems.len
@@ -712,24 +712,37 @@ proc menuItemWithIdentifier*(menu: Menu, identifier: string): MenuItem =
     nil
 
 proc visibleModelIndex(menu: Menu, visibleIndex: int): int =
-  menu.xSnapshot.visibleSourceIndex(visibleIndex)
+  if visibleIndex < 0:
+    return -1
+  var current = 0
+  for index, model in menu.xItemModels:
+    if not model.hidden:
+      if current == visibleIndex:
+        return index
+      inc current
+  -1
 
 proc indexOfModelIdentifier(menu: Menu, identifier: string): int =
-  menu.xSnapshot.sourceIndex(identifier)
+  if identifier.len == 0:
+    return -1
+  for index, model in menu.xItemModels:
+    if model.identifier == identifier:
+      return index
+  -1
 
 proc addItem*(menu: Menu, item: MenuItem): MenuItem {.discardable.} =
   if item.isNil:
     return nil
-  if menu.xSnapshot.active:
-    menu.xSnapshot.models.add item.menuItemModel()
+  if menu.xUsesItemModels:
+    menu.xItemModels.add item.menuItemModel()
   menu.xItems.add item
   item.setNextResponder(menu)
   syncNativeMainMenu()
   item
 
 proc addItem*(menu: Menu, model: MenuItemModel): MenuItem {.discardable.} =
-  menu.xSnapshot.active = true
-  menu.xSnapshot.models.add model
+  menu.xUsesItemModels = true
+  menu.xItemModels.add model
   if model.hidden:
     syncNativeMainMenu()
     return nil
@@ -742,20 +755,25 @@ proc addItem*(menu: Menu, model: MenuItemModel): MenuItem {.discardable.} =
 proc insertItem*(
     menu: Menu, model: MenuItemModel, index: int
 ): MenuItem {.discardable.} =
-  menu.xSnapshot.active = true
+  menu.xUsesItemModels = true
   let modelIndex =
-    if menu.xSnapshot.models.len == 0:
+    if menu.xItemModels.len == 0:
       0
     else:
-      max(0, min(index, menu.xSnapshot.models.len))
-  menu.xSnapshot.models.insert(model, modelIndex)
+      max(0, min(index, menu.xItemModels.len))
+  menu.xItemModels.insert(model, modelIndex)
   menu.rebuildMenuItemsFromModels()
   syncNativeMainMenu()
   if model.identifier.len > 0:
     return menu.menuItemWithIdentifier(model.identifier)
   if model.hidden:
     return nil
-  menu.menuItemAtIndex(menu.xSnapshot.visibleIndex(modelIndex))
+  var visibleIndex = 0
+  for index in 0 ..< modelIndex:
+    if not menu.xItemModels[index].hidden:
+      inc visibleIndex
+  if visibleIndex >= 0:
+    return menu.menuItemAtIndex(visibleIndex)
 
 proc addItem*(
     menu: Menu,
@@ -775,14 +793,14 @@ proc removeItem*(menu: Menu, item: MenuItem): bool {.discardable.} =
   let idx = menu.xItems.find(item)
   if idx < 0:
     return false
-  if menu.xSnapshot.active:
+  if menu.xUsesItemModels:
     let modelIndex =
       if item.identifier().len > 0:
         menu.indexOfModelIdentifier(item.identifier())
       else:
         menu.visibleModelIndex(idx)
     if modelIndex >= 0:
-      menu.xSnapshot.models.delete(modelIndex)
+      menu.xItemModels.delete(modelIndex)
   if item.nextResponder() == Responder(menu):
     item.clearNextResponder()
   menu.xItems.delete(idx)
@@ -795,18 +813,18 @@ proc removeItemWithIdentifier*(menu: Menu, identifier: string): bool {.discardab
   let item = menu.menuItemWithIdentifier(identifier)
   if not item.isNil:
     return menu.removeItem(item)
-  if menu.xSnapshot.active:
+  if menu.xUsesItemModels:
     let modelIndex = menu.indexOfModelIdentifier(identifier)
     if modelIndex >= 0:
-      menu.xSnapshot.models.delete(modelIndex)
+      menu.xItemModels.delete(modelIndex)
       menu.rebuildMenuItemsFromModels()
       syncNativeMainMenu()
       return true
   false
 
 proc removeAllItems*(menu: Menu) =
-  menu.xSnapshot.models.setLen(0)
-  menu.xSnapshot.active = false
+  menu.xItemModels.setLen(0)
+  menu.xUsesItemModels = false
   menu.clearMenuItems()
   syncNativeMainMenu()
 
@@ -831,22 +849,22 @@ proc isOpen*(menu: Menu): bool =
   menu.xOpen
 
 proc validate*(item: MenuItem, target: DynamicAgent): bool =
-  if item.xModel.separator or item.xModel.hidden:
+  if item.xSeparator or item.xHidden:
     return false
-  if not item.xModel.validates:
-    return item.xModel.enabled
+  if not item.xValidates:
+    return item.xEnabled
   if not item.xSubmenu.isNil:
     return true
-  if item.xModel.action.name.len == 0:
-    return item.xModel.enabled
+  if item.xAction.name.len == 0:
+    return item.xEnabled
   if target.isNil:
     return false
   let validated = target.trySendLocal(
-    validateUserInterfaceItem(), ValidationArgs(item: item, action: item.xModel.action)
+    validateUserInterfaceItem(), ValidationArgs(item: item, action: item.xAction)
   )
   if validated.isSome:
     return validated.get()
-  target.respondsTo(item.xModel.action.name)
+  target.respondsTo(item.xAction.name)
 
 proc findActionTarget*(start: Responder, selector: ActionSelector): DynamicAgent =
   var current = start
@@ -857,14 +875,14 @@ proc findActionTarget*(start: Responder, selector: ActionSelector): DynamicAgent
 
 proc validate*(item: MenuItem, start: Responder): bool =
   let target =
-    if not item.xModel.target.isNil:
-      item.xModel.target
+    if not item.xTarget.isNil:
+      item.xTarget
     else:
-      findActionTarget(start, item.xModel.action)
+      findActionTarget(start, item.xAction)
   item.validate(target)
 
 proc syncMenuItemModelFromItem(menu: Menu, item: MenuItem, visibleIndex: int) =
-  if item.isNil or not menu.xSnapshot.active:
+  if item.isNil or not menu.xUsesItemModels:
     return
   let modelIndex =
     if item.identifier().len > 0:
@@ -872,7 +890,7 @@ proc syncMenuItemModelFromItem(menu: Menu, item: MenuItem, visibleIndex: int) =
     else:
       menu.visibleModelIndex(visibleIndex)
   if modelIndex >= 0:
-    menu.xSnapshot.models[modelIndex] = item.menuItemModel()
+    menu.xItemModels[modelIndex] = item.menuItemModel()
 
 proc updateImpl(menu: Menu, start: Responder) =
   menu.menuNeedsUpdate()
@@ -881,7 +899,7 @@ proc updateImpl(menu: Menu, start: Responder) =
   for index, item in menu.xItems:
     if not item.isNil:
       if item.xSubmenu.isNil:
-        item.xModel.enabled = item.validate(start)
+        item.xEnabled = item.validate(start)
       else:
         item.xSubmenu.update(start)
       menu.syncMenuItemModelFromItem(item, index)
@@ -899,13 +917,13 @@ proc notifyMenuItemDidActivate(menu: Menu, item: MenuItem, sender: DynamicAgent)
   )
 
 proc perform*(item: MenuItem, start: Responder, sender: DynamicAgent = nil): bool =
-  if item.xModel.separator or item.xModel.hidden or not item.xModel.enabled:
+  if item.xSeparator or item.xHidden or not item.xEnabled:
     return false
-  if not item.xModel.target.isNil:
-    if not item.validate(item.xModel.target):
+  if not item.xTarget.isNil:
+    if not item.validate(item.xTarget):
       return false
-    return item.xModel.target.sendLocalIfHandled(
-      item.xModel.action,
+    return item.xTarget.sendLocalIfHandled(
+      item.xAction,
       ActionArgs(
         sender:
           if sender.isNil:
@@ -914,11 +932,11 @@ proc perform*(item: MenuItem, start: Responder, sender: DynamicAgent = nil): boo
             sender
       ),
     )
-  let target = findActionTarget(start, item.xModel.action)
+  let target = findActionTarget(start, item.xAction)
   if not item.validate(target):
     return false
   target.sendLocalIfHandled(
-    item.xModel.action,
+    item.xAction,
     ActionArgs(
       sender:
         if sender.isNil:
@@ -930,9 +948,9 @@ proc perform*(item: MenuItem, start: Responder, sender: DynamicAgent = nil): boo
 
 proc findKeyEquivalentItem*(menu: Menu, event: KeyEvent): MenuItem =
   for item in menu.xItems:
-    if item.isNil or item.xModel.separator or item.xModel.hidden:
+    if item.isNil or item.xSeparator or item.xHidden:
       discard
-    elif item.xModel.hasKeyEquivalent and item.xModel.keyEquivalent.matches(event):
+    elif item.xHasKeyEquivalent and item.xKeyEquivalent.matches(event):
       return item
     elif not item.xSubmenu.isNil:
       let found = item.xSubmenu.findKeyEquivalentItem(event)
@@ -972,23 +990,22 @@ when defined(macosx):
 
   proc describeNativeMenuItem(item: MenuItem): nativeMenus.NativeMenuItemDescription =
     result = nativeMenus.NativeMenuItemDescription(
-      title: item.xModel.title,
-      separator: item.xModel.separator,
-      enabled: item.xModel.enabled,
-      hidden: item.xModel.hidden,
-      state: nativeMenus.toNativeState(item.xModel.state),
-      tag: item.xModel.tag,
-      modifiers: nativeMenus.toNativeModifiers(item.xModel.keyEquivalent.modifiers),
+      title: item.xTitle,
+      separator: item.xSeparator,
+      enabled: item.xEnabled,
+      hidden: item.xHidden,
+      state: nativeMenus.toNativeState(item.xState),
+      tag: item.xTag,
+      modifiers: nativeMenus.toNativeModifiers(item.xKeyEquivalent.modifiers),
     )
-    if item.xModel.hasKeyEquivalent:
-      result.keyEquivalent =
-        nativeMenus.toNativeKeyEquivalent(item.xModel.keyEquivalent)
+    if item.xHasKeyEquivalent:
+      result.keyEquivalent = nativeMenus.toNativeKeyEquivalent(item.xKeyEquivalent)
 
   proc nativeSubmenu(item: MenuItem): Menu =
     item.xSubmenu
 
   proc canActivateNativeMenuItem(item: MenuItem): bool =
-    item.xModel.action.name.len > 0
+    item.xAction.name.len > 0
 
   proc refreshNativeMenu(menu: Menu) =
     nativeSyncSuspended = true

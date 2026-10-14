@@ -344,9 +344,23 @@ suite "nimkit model controllers":
 
   test "array controller syncs choice style controls":
     let
+      accent = color(0.2, 0.4, 0.6, 1.0)
       controller = newArrayController(
         [
-          modelItem("one", objectValue = toObj("One")),
+          modelItem(
+            "one",
+            objectValue = toObj("One"),
+            fields = [
+              modelField("closeable", toObj("false")),
+              modelField("modified", toObj(1)),
+              modelField("tag", toObj("7")),
+              modelField("tooltip", toObj(1)),
+              modelField("image", toObj("missing.png")),
+              modelField("accentColor", toObj(false)),
+              modelField("styleId", toObj(1)),
+              modelField("styleClass", toObj(1)),
+            ],
+          ),
           modelItem(
             "two",
             objectValue = toObj("Two"),
@@ -356,6 +370,10 @@ suite "nimkit model controllers":
               modelField("closeable", toObj(false)),
               modelField("tooltip", toObj("Second tab")),
               modelField("tabStyle", toObj("compact")),
+              modelField("tag", toObj(7)),
+              modelField("accentColor", toObj(accent)),
+              modelField("styleId", toObj("secondary")),
+              modelField("styleClass", toObj("accent")),
             ],
             enabled = false,
           ),
@@ -418,10 +436,19 @@ suite "nimkit model controllers":
     check tabs[0.Natural].identifier == "one"
     check tabs[1.Natural].title == "Second"
     check tabs[2.Natural].identifier == "three"
+    check tabs[0.Natural].closeable
+    check not tabs[0.Natural].modified
+    check tabs[0.Natural].toolTip == ""
+    check tabs[0.Natural].accentColor == color(0.0, 0.0, 0.0, 0.0)
+    check tabs[0.Natural].styleId == ""
+    check tabs[0.Natural].styleClasses.len == 0
     check tabs[1.Natural].modified
     check not tabs[1.Natural].closeable
     check tabs[1.Natural].toolTip == "Second tab"
     check tabs[1.Natural].style == dtsCompact
+    check tabs[1.Natural].accentColor == accent
+    check tabs[1.Natural].styleId == "secondary"
+    check tabs[1.Natural].styleClasses == @["accent"]
     check not tabs[1.Natural].enabled
     check tabs.documentTabModels[2].hidden
 
@@ -438,7 +465,12 @@ suite "nimkit model controllers":
     check not Cell(matrix.cellAtIndex(1)).isEnabled()
     check matrix.cellAtIndex(2).title == ""
     check matrix.matrixItemModels.len == 4
+    check matrix.matrixItemModels[0].tag == 0
+    check matrix.matrixItemModels[0].tooltip == ""
+    check matrix.matrixItemModels[0].image.isNil
     check matrix.matrixItemModels[1].identifier == "two"
+    check matrix.matrixItemModels[1].tag == 7
+    check matrix.matrixItemModels[1].tooltip == "Second tab"
     check matrix.matrixItemModels[2].identifier == "separator"
     check not matrix.matrixItemModels[2].enabled
     check matrix.indexOfMatrixItemIdentifier("three") == 3

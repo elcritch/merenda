@@ -8,17 +8,6 @@
   mutation; public model APIs, typed edit writeback, and notifications remain
   available. Reassign a filter after changing external state captured by it.
 
-- Add a common item-provider contract for tables, menus, document tabs, matrices,
-  combo boxes, and collection views, preserving local widget overrides and lazy
-  combo-box source queries. Local combo options reuse shared arrangement caching.
-
-- Preserve identified menu items, submenus, document tabs, and matrix cells across
-  snapshot reloads and reordering. Share typed snapshot lookup and model backing.
-
-- Share selection normalization, ranges, navigation, and notification sequencing,
-  plus small tracking, reuse-pool, and drag helpers. Releasing an active collection
-  drag now completes or cancels its session.
-
 ## 0.27.4
 
 - Route Kosmo's copy, cut, paste, select-all, undo, and redo shortcuts to the

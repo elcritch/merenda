@@ -77,7 +77,6 @@ proc arrange*[T](
     collection: var ItemCollection[T],
     filter: proc(item: T): bool {.closure.},
     compare: proc(left, right: int): int {.closure.} = nil,
-    indexFilter: proc(index: int): bool {.closure.} = nil,
 ) =
   ## The comparator reads source items by index. It is used synchronously and
   ## never retained, so it can refer to the owning model without a retain cycle.
@@ -85,8 +84,7 @@ proc arrange*[T](
     return
   var indexes: seq[int]
   for index, item in collection.items:
-    if not item.hidden and (filter.isNil or filter(item)) and
-        (indexFilter.isNil or indexFilter(index)):
+    if not item.hidden and (filter.isNil or filter(item)):
       indexes.add index
   if not compare.isNil:
     indexes.sort(compare)
@@ -99,6 +97,15 @@ proc arrange*[T](
   collection.arrangedIndexes = move indexes
   collection.xArrangedIdentifierIndexes = move identifiers
   collection.arrangementValid = true
+
+template arrangeWithDescriptors*(collection, filter, descriptors, comparator: untyped) =
+  # Expand beside the owner so the synchronous comparator can read its storage.
+  if not collection.arrangementValid:
+    var compare: proc(left, right: int): int {.closure.}
+    if descriptors.len > 0:
+      compare = proc(left, right: int): int =
+        comparator(collection.items[left], collection.items[right], descriptors)
+    collection.arrange(filter, compare)
 
 proc arrangedSourceIndex*[T](collection: ItemCollection[T], index: int): int =
   if index in 0 ..< collection.arrangedIndexes.len:

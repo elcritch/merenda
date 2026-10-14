@@ -270,8 +270,7 @@ common dismissal/focus base without committing to full modal behavior too early.
 
 ## Item Models And Controllers
 
-`TableModel`, `ArrayController`, and local ComboBox option storage own a common
-private `ItemCollection[T]` value
+`TableModel` and `ArrayController` own a common private `ItemCollection[T]` value
 state. It stores typed source items, source and arranged identity indexes, the
 visible source-index projection, and revision/cache validity. Mutations invalidate
 the relevant caches before controller notifications are emitted. Queries reuse
@@ -283,42 +282,10 @@ comparison policies, and formatting/parsing adapters. Controller identity,
 selection, and observation stay above the shared storage layer. Comparison
 callbacks are used synchronously and are never retained by the collection state.
 
-`foundation/itemproviders` owns the plain item/field/column records and
-`ItemProviderProtocol`. Install its required count and record methods locally.
-Counts and indexes describe the provider's arranged, non-hidden records; sorting,
-filtering, and invalidation belong to the source. Every query receives the actual
-requesting widget as context. Optional identity lookup defaults to the first
-matching record, optional keyed reads fall back to the record's ObjectValue, and
-missing write methods make table writes fail. Blank identifiers provide no stable
-presentation identity. Use unique identifiers for reliable identity preservation.
-
-The six presenters install private compatibility bridges for these providers.
-Existing local widget selectors take precedence. Document tabs additionally hide
-separator records; their lookup adapter accounts for that projection. ComboBox
-queries stay lazy, and its local search corpus remains cached alongside the shared
-arrangement engine. After mutating a source, callers refresh the affected presenter
-with `reloadData`; controller notifications remain available for explicit wiring.
-Widget selectability, formatting, parsing, and actions retain their existing
-projection and delegate policies.
-
-Menus, document tabs, and matrices use typed snapshots with shared hidden/source
-mapping and identity reconciliation. Identified live items are updated in place
-across reloads and reordering. MenuItem and DocumentTabItem store their scalar
-presentation state in their typed model record behind existing property procs.
-A live submenu owns its children, which are derived during serialization.
-
-TableView, CollectionView, and SelectionController share plain selection state.
-Normalization uses hashed deduplication and precomputed indexes for sorting;
-transaction hooks preserve undo and notification ordering. Public selection modes
-retain their existing names and cursor policies.
-
-Small tracking helpers share focus and pressed-state transitions. Reuse pools and
-drag-session transitions are shared, while widget handlers own hit testing,
-activation, and invalidation. CollectionView removes retired slots and publishes
-new slots before delegate configuration, so callbacks can query current views.
-Identity reconciliation uses synchronous callbacks that are never retained.
-OutlineView already shares TableView behavior, while CascadingView uses TableViews
-for its columns.
+A small private template shares the cached-arrangement guard and sort-comparator
+setup. Model field projections reuse ObjectValue's typed optional accessors for
+defaults. Widget-specific data-source protocols, selection, and view lifecycles
+remain in their existing modules.
 
 ## Native Integration
 
