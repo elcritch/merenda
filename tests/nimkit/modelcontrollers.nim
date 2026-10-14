@@ -175,6 +175,84 @@ suite "nimkit model controllers":
     controller.setValue("ada", "score", toObj(32))
     check controller.valueForItem("ada", "score").requireInt() == 32
 
+  test "array controller reuses its arrangement until a model mutation":
+    let controller = newArrayController(personItems(), personColumns())
+    var filterCalls = 0
+    controller.filter = proc(item: ModelItem): bool =
+      inc filterCalls
+      item.value("active").requireBool()
+    controller.sortDescriptors = [initModelSortDescriptor("score", msdDescending)]
+
+    for iteration in 0 ..< 100:
+      check controller.len == 2
+      check controller.itemAt(0).identifier == "grace"
+      check controller.indexOfIdentifier("ada") == 1
+      check controller.indexOfIdentifier("alan") == -1
+      check controller.getItemWithIdentifier("alan").isSome
+    check filterCalls == 3
+
+    controller.setValue("ada", "active", toObj(false))
+    check controller.len == 1
+    check controller.indexOfIdentifier("ada") == -1
+    check filterCalls == 6
+
+    controller.setValue("alan", "active", toObj(true))
+    check controller.len == 2
+    check controller.itemAt(1).identifier == "alan"
+    check filterCalls == 9
+
+    controller.columns = personColumns()
+    check controller.len == 2
+    check filterCalls == 12
+
+    controller.sortDescriptors = [initModelSortDescriptor("score", msdAscending)]
+    check controller.itemAt(0).identifier == "alan"
+    check filterCalls == 15
+
+    controller.selectionController.selectIdentifier("alan")
+    check controller.removeItem("alan")
+    check controller.len == 1
+    check controller.selectionController.selectedIdentifier == ""
+    check filterCalls == 17
+
+  test "array controller keeps source identity indexes current across mutations":
+    let controller = newArrayController(
+      [modelItem(objectValue = toObj("First")), modelItem("hidden", hidden = true)]
+    )
+    check controller.itemWithIdentifier("").objectValue.requireString() == "First"
+    check controller.indexOfIdentifier("hidden") == -1
+    check controller.getItemWithIdentifier("hidden").isSome
+
+    controller.addItem(modelItem("last"))
+    controller.insertItem(modelItem("first"), -10)
+    check controller.indexOfIdentifier("first") == 0
+    check controller.indexOfIdentifier("last") == 2
+    check controller.moveItem("last", 0)
+    check controller.itemAt(0).identifier == "last"
+    check controller.indexOfIdentifier("first") == 1
+
+    expect ModelControllerError:
+      controller.addItem(modelItem("first"))
+    check controller.sourceLen == 4
+    check controller.removeItem("")
+    check controller.getItemWithIdentifier("").isNone
+    check controller.indexOfIdentifier("first") == 1
+    check not controller.removeItem("missing")
+    check not controller.moveItem("missing", 0)
+
+  test "array controller retries an arrangement after a filter raises":
+    let controller = newArrayController(personItems())
+    var reject = true
+    controller.filter = proc(item: ModelItem): bool =
+      if reject and item.identifier == "grace":
+        raise newException(ValueError, "temporary filter failure")
+      true
+    expect ValueError:
+      discard controller.len
+    reject = false
+    check controller.len == 3
+    check controller.indexOfIdentifier("alan") == 2
+
   test "array controller binds table object values and typed editing":
     let
       controller = newArrayController(personItems(), personColumns())

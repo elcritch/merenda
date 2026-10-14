@@ -14,6 +14,7 @@ import ../controls/controls
 import ../containers/listbasics
 import ../containers/scrollviews
 import ../foundation/objectvalues
+import ../foundation/private/itemcollections
 import ../foundation/selectors
 import ../themes
 import ../themes/themecore as themeCore
@@ -143,16 +144,10 @@ type
   TableRowIdentifierResolver* = proc(identifier: string): string {.closure.}
 
   TableModel* = ref object of DynamicAgent
-    xRows: seq[TableRowValue]
+    xCollection: ItemCollection[TableRowValue]
     xColumns: seq[TableModelColumn]
     xSortDescriptors: seq[TableModelSortDescriptor]
     xFilter: TableModelFilter
-    xArrangedSourceIndexes: seq[int]
-    xSourceIndexByIdentifier: Table[string, int]
-    xArrangedIndexByIdentifier: Table[string, int]
-    xSourceIndexValid: bool
-    xArrangementValid: bool
-    xRevision: Natural
 
   TableHeaderDragIndicator* = object
     index*: int
@@ -857,47 +852,8 @@ protocol TableViewStateStorageProtocol:
   method loadTableViewState*(name: string): TableViewState {.optional.}
   method hasTableViewState*(name: string): bool {.optional.}
 
-func tableModelColumnIdentifier(column: TableModelColumn): string =
-  if column.identifier.len > 0: column.identifier else: column.valueKey
-
-func tableModelColumnTitle(column: TableModelColumn): string =
-  if column.title.len > 0:
-    column.title
-  elif column.identifier.len > 0:
-    column.identifier
-  else:
-    column.valueKey
-
 proc tableModelColumnKey(model: TableModel, column: TableColumn): string =
-  let identifier = column.xIdentifier
-  for modelColumn in model.xColumns:
-    if modelColumn.tableModelColumnIdentifier() == identifier:
-      if modelColumn.valueKey.len > 0:
-        return modelColumn.valueKey
-      return modelColumn.tableModelColumnIdentifier()
-  identifier
-
-proc compareTableObjectValues(a, b: ObjectValue): int =
-  case a.kind
-  of ovInt:
-    if b.kind == ovInt:
-      return cmp(a.intValue, b.intValue)
-    if b.kind == ovFloat:
-      return cmp(a.intValue.float, b.floatValue)
-  of ovFloat:
-    if b.kind == ovFloat:
-      return cmp(a.floatValue, b.floatValue)
-    if b.kind == ovInt:
-      return cmp(a.floatValue, b.intValue.float)
-  of ovString:
-    if b.kind == ovString:
-      return cmp(a.text, b.text)
-  of ovBool:
-    if b.kind == ovBool:
-      return cmp(a.boolValue, b.boolValue)
-  else:
-    discard
-  cmp(a.formatObjectValue(), b.formatObjectValue())
+  model.xColumns.itemColumnKey(column.xIdentifier)
 
 proc compareTableRows(
     a, b: TableRowValue, descriptors: openArray[TableModelSortDescriptor]
@@ -907,72 +863,35 @@ proc compareTableRows(
       let
         left = a.getValue(descriptor.columnIdentifier).get(emptyObjectValue())
         right = b.getValue(descriptor.columnIdentifier).get(emptyObjectValue())
-      result = compareTableObjectValues(left, right)
+      result = compareObjectValues(left, right)
       if result != 0:
         if descriptor.direction == tsdDescending:
           result = -result
         return
 
-proc invalidateTableModelCaches(
-    model: TableModel, rowsChanged = false, arrangementChanged = true
-) =
-  if rowsChanged:
-    model.xSourceIndexValid = false
-  if rowsChanged or arrangementChanged:
-    model.xArrangementValid = false
-  inc model.xRevision
-
-proc refreshSourceIdentifierIndex(model: TableModel) =
-  if model.xSourceIndexValid:
-    return
-  model.xSourceIndexByIdentifier = initTable[string, int]()
-  for index, row in model.xRows:
-    if row.identifier.len > 0 and row.identifier notin model.xSourceIndexByIdentifier:
-      model.xSourceIndexByIdentifier[row.identifier] = index
-  model.xSourceIndexValid = true
-
-proc sourceIndexOfIdentifier(model: TableModel, identifier: string): int =
-  if identifier.len == 0:
-    return -1
-  model.refreshSourceIdentifierIndex()
-  model.xSourceIndexByIdentifier.getOrDefault(identifier, -1)
-
 proc ensureArrangement(model: TableModel) =
-  if model.xArrangementValid:
+  if model.xCollection.arrangementValid:
     return
-  model.xArrangedSourceIndexes.setLen(0)
-  for index, row in model.xRows:
-    if not row.hidden and (model.xFilter.isNil or model.xFilter(row)):
-      model.xArrangedSourceIndexes.add index
+  var compare: proc(left, right: int): int {.closure.}
   if model.xSortDescriptors.len > 0:
-    model.xArrangedSourceIndexes.sort(
-      proc(a, b: int): int =
-        compareTableRows(model.xRows[a], model.xRows[b], model.xSortDescriptors)
-    )
-  model.xArrangedIndexByIdentifier = initTable[string, int]()
-  for arrangedIndex, sourceIndex in model.xArrangedSourceIndexes:
-    let identifier = model.xRows[sourceIndex].identifier
-    if identifier.len > 0 and identifier notin model.xArrangedIndexByIdentifier:
-      model.xArrangedIndexByIdentifier[identifier] = arrangedIndex
-  model.xArrangementValid = true
-
-proc arrangedSourceIndexes(model: TableModel): seq[int] =
-  model.ensureArrangement()
-  model.xArrangedSourceIndexes
+    compare = proc(left, right: int): int =
+      compareTableRows(
+        model.xCollection.items[left],
+        model.xCollection.items[right],
+        model.xSortDescriptors,
+      )
+  model.xCollection.arrange(model.xFilter, compare)
 
 proc arrangedSourceIndex(model: TableModel, index: int): int =
   model.ensureArrangement()
-  if index in 0 ..< model.xArrangedSourceIndexes.len:
-    model.xArrangedSourceIndexes[index]
-  else:
-    -1
+  model.xCollection.arrangedSourceIndex(index)
 
 proc initTableModelFields*(
     model: TableModel,
     rows: openArray[TableRowValue] = [],
     columns: openArray[TableModelColumn] = [],
 ) =
-  model.xRows = @rows
+  model.xCollection = initItemCollection(rows)
   model.xColumns = @columns
   model.installTableModelProtocols()
 
@@ -984,31 +903,31 @@ proc newTableModel*(
 
 proc len*(model: TableModel): int =
   model.ensureArrangement()
-  model.xArrangedSourceIndexes.len
+  model.xCollection.arrangedIndexes.len
 
 proc revision*(model: TableModel): Natural =
-  model.xRevision
+  model.xCollection.revision
 
 proc sourceLen*(model: TableModel): int =
-  model.xRows.len
+  model.xCollection.items.len
 
 proc rows*(model: TableModel): seq[TableRowValue] =
-  model.xRows
+  model.xCollection.items
 
 proc `rows=`*(model: TableModel, rows: openArray[TableRowValue]) =
-  model.xRows = @rows
-  model.invalidateTableModelCaches(rowsChanged = true)
+  model.xCollection.replaceItems(rows)
 
 proc arrangedRows*(model: TableModel): seq[TableRowValue] =
-  for index in model.arrangedSourceIndexes():
-    result.add model.xRows[index]
+  model.ensureArrangement()
+  for index in model.xCollection.arrangedIndexes:
+    result.add model.xCollection.items[index]
 
 proc columns*(model: TableModel): seq[TableModelColumn] =
   model.xColumns
 
 proc `columns=`*(model: TableModel, columns: openArray[TableModelColumn]) =
   model.xColumns = @columns
-  model.invalidateTableModelCaches(arrangementChanged = false)
+  model.xCollection.invalidate(arrangementChanged = false)
 
 proc sortDescriptors*(model: TableModel): seq[TableModelSortDescriptor] =
   model.xSortDescriptors
@@ -1017,19 +936,19 @@ proc `sortDescriptors=`*(
     model: TableModel, descriptors: openArray[TableModelSortDescriptor]
 ) =
   model.xSortDescriptors = @descriptors
-  model.invalidateTableModelCaches()
+  model.xCollection.invalidate()
 
 proc filter*(model: TableModel): TableModelFilter =
   model.xFilter
 
 proc `filter=`*(model: TableModel, filter: TableModelFilter) =
   model.xFilter = filter
-  model.invalidateTableModelCaches()
+  model.xCollection.invalidate()
 
 proc getRowAt*(model: TableModel, index: int): Option[TableRowValue] =
   let sourceIndex = model.arrangedSourceIndex(index)
   if sourceIndex >= 0:
-    some(model.xRows[sourceIndex])
+    some(model.xCollection.items[sourceIndex])
   else:
     none(TableRowValue)
 
@@ -1042,11 +961,7 @@ proc rowAt*(model: TableModel, index: int): TableRowValue =
 proc getRowWithIdentifier*(
     model: TableModel, identifier: string
 ): Option[TableRowValue] =
-  let index = model.sourceIndexOfIdentifier(identifier)
-  if index >= 0:
-    some(model.xRows[index])
-  else:
-    none(TableRowValue)
+  model.xCollection.getItemWithIdentifier(identifier)
 
 proc rowWithIdentifier*(
     model: TableModel, identifier: string
@@ -1060,38 +975,32 @@ proc indexOfIdentifier*(model: TableModel, identifier: string): int =
   if identifier.len == 0:
     return -1
   model.ensureArrangement()
-  model.xArrangedIndexByIdentifier.getOrDefault(identifier, -1)
+  model.xCollection.arrangedIndexOfIdentifier(identifier)
 
 proc addRow*(model: TableModel, row: TableRowValue) =
-  if row.identifier.len > 0 and model.sourceIndexOfIdentifier(row.identifier) >= 0:
+  if row.identifier.len > 0 and
+      model.xCollection.sourceIndexOfIdentifier(row.identifier) >= 0:
     raiseTableModelError("duplicate table row identifier: " & row.identifier)
-  model.xRows.add row
-  model.invalidateTableModelCaches(rowsChanged = true)
+  model.xCollection.add row
 
 proc insertRow*(model: TableModel, row: TableRowValue, index: int) =
-  if row.identifier.len > 0 and model.sourceIndexOfIdentifier(row.identifier) >= 0:
+  if row.identifier.len > 0 and
+      model.xCollection.sourceIndexOfIdentifier(row.identifier) >= 0:
     raiseTableModelError("duplicate table row identifier: " & row.identifier)
-  let insertIndex = max(0, min(index, model.xRows.len))
-  model.xRows.insert(row, insertIndex)
-  model.invalidateTableModelCaches(rowsChanged = true)
+  discard model.xCollection.insert(row, index)
 
 proc removeRow*(model: TableModel, identifier: string): bool {.discardable.} =
-  let index = model.sourceIndexOfIdentifier(identifier)
+  let index = model.xCollection.sourceIndexOfIdentifier(identifier)
   if index < 0:
     return false
-  model.xRows.delete(index)
-  model.invalidateTableModelCaches(rowsChanged = true)
+  model.xCollection.delete(index)
   true
 
 proc moveRow*(model: TableModel, identifier: string, toIndex: int): bool =
-  let index = model.sourceIndexOfIdentifier(identifier)
+  let index = model.xCollection.sourceIndexOfIdentifier(identifier)
   if index < 0:
     return false
-  let row = model.xRows[index]
-  model.xRows.delete(index)
-  let insertIndex = max(0, min(toIndex, model.xRows.len))
-  model.xRows.insert(row, insertIndex)
-  model.invalidateTableModelCaches(rowsChanged = true)
+  discard model.xCollection.moveItem(index, toIndex)
   true
 
 proc valueForRow*(
@@ -1102,11 +1011,10 @@ proc valueForRow*(
 proc setValue*(
     model: TableModel, identifier, columnIdentifier: string, value: ObjectValue
 ) =
-  let index = model.sourceIndexOfIdentifier(identifier)
+  let index = model.xCollection.sourceIndexOfIdentifier(identifier)
   if index < 0:
     raiseTableModelError("unknown table row identifier: " & identifier)
-  model.xRows[index].setValue(columnIdentifier, value)
-  model.invalidateTableModelCaches()
+  model.xCollection.setValue(index, columnIdentifier, value)
 
 proc objectValueForTableModelCell(
     model: TableModel, row: int, column: TableColumn
@@ -1120,8 +1028,7 @@ proc setObjectValueForTableModelCell(
   let sourceIndex = model.arrangedSourceIndex(row)
   if sourceIndex < 0:
     return false
-  model.xRows[sourceIndex].setValue(model.tableModelColumnKey(column), value)
-  model.invalidateTableModelCaches()
+  model.xCollection.setValue(sourceIndex, model.tableModelColumnKey(column), value)
   true
 
 proc parseTableModelCellValue(
@@ -4820,16 +4727,16 @@ proc bindTableModel*(tableView: TableView, model: TableModel) =
     return
   model.installTableModelProtocols()
   for modelColumn in model.columns():
-    let identifier = modelColumn.tableModelColumnIdentifier()
+    let identifier = modelColumn.itemColumnIdentifier()
     if identifier.len > 0:
       var column = tableView.columnWithIdentifier(identifier)
       if column.isNil:
         column = newTableColumn(
-          identifier, modelColumn.tableModelColumnTitle(), width = modelColumn.width
+          identifier, modelColumn.itemColumnTitle(), width = modelColumn.width
         )
         tableView.addColumn(column)
       else:
-        column.title = modelColumn.tableModelColumnTitle()
+        column.title = modelColumn.itemColumnTitle()
         if modelColumn.width > 0.0'f32:
           column.width = modelColumn.width
       column.hidden = modelColumn.hidden

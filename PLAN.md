@@ -144,6 +144,13 @@ intact, and mutable algorithm state in plain value objects owned by GUI objects.
   strict/optional lookup behavior, and controller notifications. Start with
   TableModel's cached arrangement; preserve existing comparison policies, column
   metadata, and per-view formatting/parsing adapters.
+  **Started:** the first increment shares typed storage, identity/arrangement
+  caches, mutation invalidation, column mapping, and value comparison through
+  `ItemCollection[T]`. Public model records and widget-specific adapters remain
+  separate. This foundation adds **20 net production LOC** (excluding tests/docs)
+  while reducing the repeated-query regression from 1,200 filter calls to three.
+  The estimated phase reduction is not yet realized; reassess the estimate as
+  record and provider duplication is removed.
 - [ ] **Common item-provider contract — 150–200 LOC estimated.** Replace repeated
   count/value/identifier controller adapters with a narrow provider contract and
   typed per-view projections. Preserve lazy source access, widget-dependent

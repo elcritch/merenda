@@ -1,4 +1,4 @@
-import std/[algorithm, options]
+import std/options
 
 import sigils/core
 import sigils/selectors
@@ -15,6 +15,7 @@ import ../controls/menus
 import ../drawing/images
 import ../foundation/notifications
 import ../foundation/objectvalues
+import ../foundation/private/itemcollections
 import ../foundation/types
 import ../responder/responders
 
@@ -73,7 +74,7 @@ type
     xLeadIdentifier: string
 
   ArrayController* = ref object of Responder
-    xItems: seq[ModelItem]
+    xCollection: ItemCollection[ModelItem]
     xColumns: seq[ModelColumn]
     xSortDescriptors: seq[ModelSortDescriptor]
     xFilter: ModelFilter
@@ -165,7 +166,7 @@ proc notifyArrayControllerDidChange(
         identifiers = identifiers,
         keys = keys,
         index = index,
-        count = controller.xItems.len.Natural,
+        count = controller.xCollection.items.len.Natural,
       ),
     )
   )
@@ -272,32 +273,13 @@ proc displayTitle*(item: ModelItem, role = ovrLabel): string =
   else:
     item.objectValue.formatObjectValue(initObjectFormatContext(role = role))
 
-proc compareObjectValues(a, b: ObjectValue): int =
-  case a.kind
-  of ovInt:
-    if b.kind == ovInt:
-      return cmp(a.intValue, b.intValue)
-  of ovFloat:
-    if b.kind == ovFloat:
-      return cmp(a.floatValue, b.floatValue)
-    if b.kind == ovInt:
-      return cmp(a.floatValue, b.intValue.float)
-  of ovString:
-    if b.kind == ovString:
-      return cmp(a.text, b.text)
-  of ovBool:
-    if b.kind == ovBool:
-      return cmp(a.boolValue, b.boolValue)
-  else:
-    discard
-  cmp(a.formatObjectValue(), b.formatObjectValue())
-
 proc compareItems(a, b: ModelItem, descriptors: openArray[ModelSortDescriptor]): int =
   for descriptor in descriptors:
     let
       left = a.getValue(descriptor.key).get(emptyObjectValue())
       right = b.getValue(descriptor.key).get(emptyObjectValue())
-    result = compareObjectValues(left, right)
+    # Preserve the controller's historical mixed-number comparison policy.
+    result = compareObjectValues(left, right, compareIntToFloat = false)
     if result != 0:
       if descriptor.direction == msdDescending:
         result = -result
@@ -432,30 +414,22 @@ proc setValue*(controller: ObjectController, key: string, value: ObjectValue) =
   controller.xItem.setValue(key, value)
   controller.notifyObjectControllerDidChange(mmkValueChanged, keys = [key])
 
-proc sourceIndexOfIdentifier(controller: ArrayController, identifier: string): int =
-  for index, item in controller.xItems:
-    if item.identifier == identifier:
-      return index
-  -1
-
-proc sortedVisibleIndexes(controller: ArrayController): seq[int] =
-  for index, item in controller.xItems:
-    if not item.hidden and (controller.xFilter.isNil or controller.xFilter(item)):
-      result.add index
+proc ensureArrangement(controller: ArrayController) =
+  if controller.xCollection.arrangementValid:
+    return
+  var compare: proc(left, right: int): int {.closure.}
   if controller.xSortDescriptors.len > 0:
-    result.sort(
-      proc(a, b: int): int =
-        compareItems(
-          controller.xItems[a], controller.xItems[b], controller.xSortDescriptors
-        )
-    )
+    compare = proc(left, right: int): int =
+      compareItems(
+        controller.xCollection.items[left],
+        controller.xCollection.items[right],
+        controller.xSortDescriptors,
+      )
+  controller.xCollection.arrange(controller.xFilter, compare)
 
 proc arrangedSourceIndex(controller: ArrayController, index: int): int =
-  let indexes = controller.sortedVisibleIndexes()
-  if index in 0 ..< indexes.len:
-    indexes[index]
-  else:
-    -1
+  controller.ensureArrangement()
+  controller.xCollection.arrangedSourceIndex(index)
 
 proc initArrayControllerFields(
     controller: ArrayController,
@@ -463,7 +437,7 @@ proc initArrayControllerFields(
     columns: openArray[ModelColumn] = [],
 ) =
   initResponder(controller)
-  controller.xItems = @items
+  controller.xCollection = initItemCollection(items, indexEmptyIdentifiers = true)
   controller.xColumns = @columns
   controller.xSelection = newSelectionController(mselSingle)
   controller.installArrayControllerProtocols()
@@ -475,10 +449,11 @@ proc newArrayController*(
   result.initArrayControllerFields(items, columns)
 
 proc len*(controller: ArrayController): int =
-  controller.sortedVisibleIndexes().len
+  controller.ensureArrangement()
+  controller.xCollection.arrangedIndexes.len
 
 proc sourceLen*(controller: ArrayController): int =
-  controller.xItems.len
+  controller.xCollection.items.len
 
 proc selectionController*(controller: ArrayController): SelectionController =
   controller.xSelection
@@ -488,6 +463,7 @@ proc columns*(controller: ArrayController): seq[ModelColumn] =
 
 proc `columns=`*(controller: ArrayController, columns: openArray[ModelColumn]) =
   controller.xColumns = @columns
+  controller.xCollection.invalidate()
   controller.notifyArrayControllerDidChange(mmkColumnsChanged)
 
 proc sortDescriptors*(controller: ArrayController): seq[ModelSortDescriptor] =
@@ -497,6 +473,7 @@ proc `sortDescriptors=`*(
     controller: ArrayController, descriptors: openArray[ModelSortDescriptor]
 ) =
   controller.xSortDescriptors = @descriptors
+  controller.xCollection.invalidate()
   controller.notifyArrayControllerDidChange(mmkSortChanged)
 
 proc filter*(controller: ArrayController): ModelFilter =
@@ -504,55 +481,52 @@ proc filter*(controller: ArrayController): ModelFilter =
 
 proc `filter=`*(controller: ArrayController, filter: ModelFilter) =
   controller.xFilter = filter
+  controller.xCollection.invalidate()
   controller.notifyArrayControllerDidChange(mmkFilterChanged)
 
 proc itemAt*(controller: ArrayController, index: int): ModelItem =
   let sourceIndex = controller.arrangedSourceIndex(index)
   if sourceIndex >= 0:
-    controller.xItems[sourceIndex]
+    controller.xCollection.items[sourceIndex]
   else:
     modelItem()
 
 proc itemWithIdentifier*(
     controller: ArrayController, identifier: string
 ): ModelItem {.raises: [ModelControllerError].} =
-  let index = controller.sourceIndexOfIdentifier(identifier)
+  let index = controller.xCollection.sourceIndexOfIdentifier(identifier)
   if index >= 0:
-    return controller.xItems[index]
+    return controller.xCollection.items[index]
   raiseModelControllerError("unknown model item identifier: " & identifier)
 
 proc getItemWithIdentifier*(
     controller: ArrayController, identifier: string
 ): Option[ModelItem] =
-  let index = controller.sourceIndexOfIdentifier(identifier)
-  if index >= 0:
-    some(controller.xItems[index])
-  else:
-    none(ModelItem)
+  controller.xCollection.getItemWithIdentifier(identifier)
 
 proc indexOfIdentifier*(controller: ArrayController, identifier: string): int =
-  let indexes = controller.sortedVisibleIndexes()
-  for arrangedIndex, sourceIndex in indexes:
-    if controller.xItems[sourceIndex].identifier == identifier:
-      return arrangedIndex
-  -1
+  controller.ensureArrangement()
+  controller.xCollection.arrangedIndexOfIdentifier(identifier)
 
 proc addItem*(controller: ArrayController, item: ModelItem) =
-  if item.identifier.len > 0 and controller.sourceIndexOfIdentifier(item.identifier) >= 0:
+  if item.identifier.len > 0 and
+      controller.xCollection.sourceIndexOfIdentifier(item.identifier) >= 0:
     raiseModelControllerError("duplicate model item identifier: " & item.identifier)
-  controller.xItems.add item
+  controller.xCollection.add item
   var identifiers: seq[string]
   if item.identifier.len > 0:
     identifiers.add item.identifier
   controller.notifyArrayControllerDidChange(
-    mmkItemsChanged, identifiers = identifiers, index = controller.xItems.high
+    mmkItemsChanged,
+    identifiers = identifiers,
+    index = controller.xCollection.items.len - 1,
   )
 
 proc insertItem*(controller: ArrayController, item: ModelItem, index: int) =
-  if item.identifier.len > 0 and controller.sourceIndexOfIdentifier(item.identifier) >= 0:
+  if item.identifier.len > 0 and
+      controller.xCollection.sourceIndexOfIdentifier(item.identifier) >= 0:
     raiseModelControllerError("duplicate model item identifier: " & item.identifier)
-  let insertIndex = max(0, min(index, controller.xItems.len))
-  controller.xItems.insert(item, insertIndex)
+  let insertIndex = controller.xCollection.insert(item, index)
   var identifiers: seq[string]
   if item.identifier.len > 0:
     identifiers.add item.identifier
@@ -563,10 +537,10 @@ proc insertItem*(controller: ArrayController, item: ModelItem, index: int) =
 proc removeItem*(
     controller: ArrayController, identifier: string
 ): bool {.discardable.} =
-  let index = controller.sourceIndexOfIdentifier(identifier)
+  let index = controller.xCollection.sourceIndexOfIdentifier(identifier)
   if index < 0:
     return false
-  controller.xItems.delete(index)
+  controller.xCollection.delete(index)
   controller.xSelection.deselectIdentifier(identifier)
   controller.notifyArrayControllerDidChange(
     mmkItemsChanged, identifiers = [identifier], index = index
@@ -574,13 +548,10 @@ proc removeItem*(
   true
 
 proc moveItem*(controller: ArrayController, identifier: string, toIndex: int): bool =
-  let index = controller.sourceIndexOfIdentifier(identifier)
+  let index = controller.xCollection.sourceIndexOfIdentifier(identifier)
   if index < 0:
     return false
-  let item = controller.xItems[index]
-  controller.xItems.delete(index)
-  let insertIndex = max(0, min(toIndex, controller.xItems.len))
-  controller.xItems.insert(item, insertIndex)
+  let insertIndex = controller.xCollection.moveItem(index, toIndex)
   controller.notifyArrayControllerDidChange(
     mmkItemsChanged, identifiers = [identifier], index = insertIndex
   )
@@ -594,24 +565,13 @@ proc valueForItem*(
 proc setValue*(
     controller: ArrayController, identifier, key: string, value: ObjectValue
 ) =
-  let index = controller.sourceIndexOfIdentifier(identifier)
+  let index = controller.xCollection.sourceIndexOfIdentifier(identifier)
   if index < 0:
     raiseModelControllerError("unknown model item identifier: " & identifier)
-  controller.xItems[index].setValue(key, value)
+  controller.xCollection.setValue(index, key, value)
   controller.notifyArrayControllerDidChange(
     mmkValueChanged, identifiers = [identifier], keys = [key], index = index
   )
-
-proc tableColumnIdentifier(column: ModelColumn): string =
-  if column.identifier.len > 0: column.identifier else: column.valueKey
-
-proc tableColumnTitle(column: ModelColumn): string =
-  if column.title.len > 0:
-    column.title
-  elif column.identifier.len > 0:
-    column.identifier
-  else:
-    column.valueKey
 
 proc tableCellValuesForModelFields(fields: openArray[ModelField]): seq[TableCellValue] =
   for field in fields:
@@ -621,13 +581,7 @@ proc tableCellValuesForModelFields(fields: openArray[ModelField]): seq[TableCell
 proc columnKey(controller: ArrayController, column: TableColumn): string =
   if column.isNil:
     return ""
-  let identifier = column.identifier()
-  for modelColumn in controller.xColumns:
-    if modelColumn.tableColumnIdentifier() == identifier:
-      if modelColumn.valueKey.len > 0:
-        return modelColumn.valueKey
-      return modelColumn.tableColumnIdentifier()
-  identifier
+  controller.xColumns.itemColumnKey(column.identifier())
 
 proc objectValueForArrayCell(
     controller: ArrayController, row: int, column: TableColumn
@@ -1014,13 +968,13 @@ proc installArrayControllerProtocols(controller: ArrayController) =
 proc bindTableView*(tableView: TableView, controller: ArrayController) =
   if not controller.isNil:
     for column in controller.xColumns:
-      let identifier = column.tableColumnIdentifier()
+      let identifier = column.itemColumnIdentifier()
       if identifier.len > 0 and not tableView.containsColumn(identifier):
         let tableColumn =
           if column.width > 0.0'f32:
-            newTableColumn(identifier, column.tableColumnTitle(), width = column.width)
+            newTableColumn(identifier, column.itemColumnTitle(), width = column.width)
           else:
-            newTableColumn(identifier, column.tableColumnTitle())
+            newTableColumn(identifier, column.itemColumnTitle())
         tableView.addColumn(tableColumn)
   tableView.dataSource = controller
   tableView.delegate = controller
