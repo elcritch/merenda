@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Share typed collection storage, identity indexes, arrangement caching, and
+  mutation invalidation between NimKit TableModel and ArrayController. Repeated
+  controller lookups now reuse the filtered/sorted arrangement until a model
+  mutation; public model APIs, typed edit writeback, and notifications remain
+  available. Reassign a filter after changing external state captured by it.
+
 ## 0.27.4
 
 - Route Kosmo's copy, cut, paste, select-all, undo, and redo shortcuts to the

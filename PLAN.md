@@ -1,6 +1,6 @@
 # Merenda Work Plan
 
-Updated **2026-09-29**. Focus on reliable long-running Kosmo sessions and bounded
+Updated **2026-10-14**. Focus on reliable long-running Kosmo sessions and bounded
 memory use, then extend Tekton's authoring workflow.
 
 Architecture and API decisions live in [design](docs/design.md) and
@@ -84,6 +84,79 @@ See [the review and measurements](docs/tekton-review.md).
 **Completion evidence:** users can author a multi-window interface, wire its
 controllers and actions, and inspect the running application without losing history
 or live object identities.
+
+## 4. Cleanup
+
+Five independent options from the 2026-10-14 Astra review, ordered by suggested
+implementation priority. Estimates are net production LOC removed after adding
+helpers and adapters; tests are excluded. Combined estimated reduction:
+**385–515 LOC**.
+
+- [ ] **Simplify SVG stroke parsing — 105–120 LOC; small effort.** In
+  `src/merenda/nimkit/drawing/svgpathloader.nim`, replace `strokeSegments`' full
+  SVG decoder with a reader for the absolute `M/L/C/Q/Z` commands already emitted
+  by `normalizePathArcs`. Preserve transforms, quadratic/cubic segment types,
+  zero-length line suppression, subpath closure, and incomplete-result fallback.
+  Cover relative and reflected commands, arcs, and multiple closed subpaths.
+- [ ] **Share button painting — 60–85 LOC; small–medium effort.** In
+  `src/merenda/nimkit/controls/buttons.nim`, extract shared choice/push painting
+  helpers for ButtonCell and Button. Keep caller-specific style resolution,
+  property proc boundaries, widget hover interpolation, matrix-cell state,
+  focus rings, icon/text placement, and active field-editor behavior.
+- [ ] **Consolidate Kosmo command dispatch — 55–75 LOC; small–medium effort.**
+  In `src/merenda/kosmo/application_editor.nim`, share action execution between
+  `KosmoEditorCommandDispatch` and `KosmoEditorPaneCommandDispatch` through an
+  explicit editor/pane context and thin protocol adapters. Preserve pane-document
+  versus buffer saving, standalone-view fallbacks, focused-group routing, and
+  selection synchronization. Keep Markdown read-only handling in its adapter.
+- [ ] **Share shortcut JSON loading — 35–55 LOC; small effort.** Reuse the
+  validation and atomic replacement workflow in
+  `src/merenda/nimkit/responder/keybindingjson.nim` from
+  `src/merenda/kosmo/shortcuts.nim`, with narrow sequence-parser and insertion
+  hooks and shared prefix comparison. Preserve Kosmo's profile/platform parsing
+  and duplicate rejection, NimKit's exact-sequence replacement, diagnostics,
+  allowed-command checks, and null/empty-array disabling.
+- [ ] **Share picker-button popup behavior — 130–180 LOC; medium effort.** In
+  `src/merenda/nimkit/controls/datepickers.nim`, use a private GUI base for Date,
+  Time, and DateTime button popup lifecycle, events, and common accessibility
+  behavior. Keep typed values, property setters, selection callbacks, and
+  accessibility value text concrete. Preserve stale-host guards, failed-open
+  cleanup, responder restoration, presentation switching, and open-state
+  invalidation. Retain Date's immediate selection and Time/DateTime's draft/Done
+  semantics; cover stale dismissals and presentation changes while open.
+
+**Completion evidence:** measure net LOC after each refactor and preserve behavior
+through the relevant existing NimKit/Kosmo tests and focused regression coverage.
+Keep public property hooks and ownership boundaries intact.
+
+### Shared collection caching and small helpers
+
+PR #164 is narrowed to TableModel/ArrayController storage and arrangement caches,
+a small private template for comparator setup, and reuse of existing ObjectValue
+accessors. The broader provider, snapshot, selection, reuse, and pointer migration
+was removed: it added 255 net production lines and did not justify its additional
+abstractions. The original 1,200–1,600 LOC-reduction forecast is withdrawn; those
+larger migrations are deferred rather than assumed to be follow-up work.
+The narrowed implementation removes **14 net production lines versus main**,
+including the new private collection module and excluding tests/documentation.
+
+- [x] **Shared collection cache.** Use private `ItemCollection[T]` value state for
+  source/visible identity indexes, hidden/filter/sort arrangement, mutation
+  invalidation, and revision tracking. Keep model records, lookup errors,
+  comparison policies, edit writeback, and notification boundaries concrete.
+- [x] **Small shared template.** Share only the cached-arrangement guard and
+  synchronous comparator setup through `arrangeWithDescriptors`. Each model keeps
+  its own comparator and public sorting/filtering APIs.
+- [x] **Reuse established accessors.** Replace five copies of model-field type
+  checks with ObjectValue's typed optional accessors. Preserve absent/wrong-type
+  defaults, and read document-tab style classes once per projection.
+
+**Evidence:** the repeated-query regression evaluates three source items across
+100 iterations of count/item/identity queries: filter calls fall from 1,200 to
+three until mutation invalidates the cache. This is an operation-count test, not
+a wall-clock benchmark. Coverage also checks filter refreshes, exception retries,
+identity indexes across mutations, typed field defaults, and existing widget
+bindings. Record final net production LOC and validation results in the PR.
 
 ## Validation
 

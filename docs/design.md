@@ -268,6 +268,25 @@ The transient session layer is intentionally smaller than a full AppKit modal
 system. It gives menus, popovers, combo boxes, and future drag/tracking flows a
 common dismissal/focus base without committing to full modal behavior too early.
 
+## Item Models And Controllers
+
+`TableModel` and `ArrayController` own a common private `ItemCollection[T]` value
+state. It stores typed source items, source and arranged identity indexes, the
+visible source-index projection, and revision/cache validity. Mutations invalidate
+the relevant caches before controller notifications are emitted. Queries reuse
+the arrangement until source data, filtering, or sorting changes; reassign the
+filter when external state captured by its predicate changes.
+
+The public models retain their row/item types, lookup errors, column metadata,
+comparison policies, and formatting/parsing adapters. Controller identity,
+selection, and observation stay above the shared storage layer. Comparison
+callbacks are used synchronously and are never retained by the collection state.
+
+A small private template shares the cached-arrangement guard and sort-comparator
+setup. Model field projections reuse ObjectValue's typed optional accessors for
+defaults. Widget-specific data-source protocols, selection, and view lifecycles
+remain in their existing modules.
+
 ## Native Integration
 
 NimKit uses siwin-backed native windows and FigDraw renderers internally:
