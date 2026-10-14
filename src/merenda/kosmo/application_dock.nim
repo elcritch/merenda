@@ -83,7 +83,32 @@ proc activeEditorView(controller: KosmoDockController): KosmoEditorView =
   if not group.isNil:
     result = group.editorView
 
+# Translate Kosmo's namespaced editing actions to NimKit commands so the
+# focused text field handles them before they reach the underlying editor.
+protocol KosmoFieldEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
+  method dispatchCommand(
+      editor: nimkit.FieldEditor, args: nimkit.TryToPerformArgs
+  ): bool =
+    let selector =
+      case $args.selector.name
+      of KosmoCopyAction:
+        nimkit.copy()
+      of KosmoCutAction:
+        nimkit.cut()
+      of KosmoPasteAction:
+        nimkit.paste()
+      of KosmoSelectAllAction:
+        nimkit.selectAll()
+      of KosmoUndoAction:
+        nimkit.undo()
+      of KosmoRedoAction:
+        nimkit.redo()
+      else:
+        args.selector
+    editor.sendLocalIfHandled(selector, nimkit.ActionArgs(sender: args.sender))
+
 proc installShortcutBindings(controller: KosmoDockController, window: nimkit.Window) =
+  discard window.fieldEditor().withProtocol(KosmoFieldEditorCommandDispatch)
   var bindings = window.keyBindings()
   for command in kosmoShortcutCommands():
     discard bindings.remove(nimkit.actionSelector(command))

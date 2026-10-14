@@ -7,7 +7,7 @@ import sigils/core
 import ../accessibility/accessibility
 import ../app/windows except performKeyEquivalent
 import ../containers/boxes
-import ../foundation/[events, selectors, types]
+import ../foundation/[events, objectvalues, selectors, types]
 from ../foundation/selectors import performKeyEquivalent
 import ../responder/keybindings
 import ../text/textfields
@@ -240,6 +240,8 @@ proc newSearchBar*(
   let searchBar = result.unsafeWeakRef()
 
   result.xQueryField = newTextField()
+  result.xQueryField.objectParseContext =
+    initObjectParseContext(trimsWhitespace = false)
   result.xQueryField.accessibilityLabel = "Search " & accessibilitySubject
   result.xQueryField.placeholder = "Search"
   result.previousButton = newSearchButton("↑", symbol = true)
@@ -425,6 +427,8 @@ proc enableReplacement*(bar: SearchBar, onReplace, onReplaceAll: SearchAction) =
     return
   let weakBar = bar.unsafeWeakRef()
   bar.xReplacementField = newTextField()
+  bar.xReplacementField.objectParseContext =
+    initObjectParseContext(trimsWhitespace = false)
   bar.xReplacementField.accessibilityLabel = "Replace with (literal text)"
   bar.xReplacementField.placeholder = "Replace with"
   bar.replaceButton = newSearchButton("Replace")

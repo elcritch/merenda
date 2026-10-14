@@ -23,6 +23,7 @@ import kosmo/moelogging
 import kosmo/panelshortcuts
 import kosmo/quickopen
 import kosmo/search
+import kosmo/searchinput
 import kosmo/settings
 import kosmo/settings_layout
 import kosmo/shortcutinput
