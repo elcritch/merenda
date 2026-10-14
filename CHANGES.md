@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.27.4
+
 - Route Kosmo's copy, cut, paste, select-all, undo, and redo shortcuts to the
   focused search or replacement field. Preserve literal whitespace in search
   queries and replacements when tabbing through controls or expanding Replace.
