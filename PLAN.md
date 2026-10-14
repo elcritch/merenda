@@ -1,6 +1,6 @@
 # Merenda Work Plan
 
-Updated **2026-09-29**. Focus on reliable long-running Kosmo sessions and bounded
+Updated **2026-10-14**. Focus on reliable long-running Kosmo sessions and bounded
 memory use, then extend Tekton's authoring workflow.
 
 Architecture and API decisions live in [design](docs/design.md) and
@@ -84,6 +84,96 @@ See [the review and measurements](docs/tekton-review.md).
 **Completion evidence:** users can author a multi-window interface, wire its
 controllers and actions, and inspect the running application without losing history
 or live object identities.
+
+## 4. Cleanup
+
+Five independent options from the 2026-10-14 Astra review, ordered by suggested
+implementation priority. Estimates are net production LOC removed after adding
+helpers and adapters; tests are excluded. Combined estimated reduction:
+**385–515 LOC**.
+
+- [ ] **Simplify SVG stroke parsing — 105–120 LOC; small effort.** In
+  `src/merenda/nimkit/drawing/svgpathloader.nim`, replace `strokeSegments`' full
+  SVG decoder with a reader for the absolute `M/L/C/Q/Z` commands already emitted
+  by `normalizePathArcs`. Preserve transforms, quadratic/cubic segment types,
+  zero-length line suppression, subpath closure, and incomplete-result fallback.
+  Cover relative and reflected commands, arcs, and multiple closed subpaths.
+- [ ] **Share button painting — 60–85 LOC; small–medium effort.** In
+  `src/merenda/nimkit/controls/buttons.nim`, extract shared choice/push painting
+  helpers for ButtonCell and Button. Keep caller-specific style resolution,
+  property proc boundaries, widget hover interpolation, matrix-cell state,
+  focus rings, icon/text placement, and active field-editor behavior.
+- [ ] **Consolidate Kosmo command dispatch — 55–75 LOC; small–medium effort.**
+  In `src/merenda/kosmo/application_editor.nim`, share action execution between
+  `KosmoEditorCommandDispatch` and `KosmoEditorPaneCommandDispatch` through an
+  explicit editor/pane context and thin protocol adapters. Preserve pane-document
+  versus buffer saving, standalone-view fallbacks, focused-group routing, and
+  selection synchronization. Keep Markdown read-only handling in its adapter.
+- [ ] **Share shortcut JSON loading — 35–55 LOC; small effort.** Reuse the
+  validation and atomic replacement workflow in
+  `src/merenda/nimkit/responder/keybindingjson.nim` from
+  `src/merenda/kosmo/shortcuts.nim`, with narrow sequence-parser and insertion
+  hooks and shared prefix comparison. Preserve Kosmo's profile/platform parsing
+  and duplicate rejection, NimKit's exact-sequence replacement, diagnostics,
+  allowed-command checks, and null/empty-array disabling.
+- [ ] **Share picker-button popup behavior — 130–180 LOC; medium effort.** In
+  `src/merenda/nimkit/controls/datepickers.nim`, use a private GUI base for Date,
+  Time, and DateTime button popup lifecycle, events, and common accessibility
+  behavior. Keep typed values, property setters, selection callbacks, and
+  accessibility value text concrete. Preserve stale-host guards, failed-open
+  cleanup, responder restoration, presentation switching, and open-state
+  invalidation. Retain Date's immediate selection and Time/DateTime's draft/Done
+  semantics; cover stale dismissals and presentation changes while open.
+
+**Completion evidence:** measure net LOC after each refactor and preserve behavior
+through the relevant existing NimKit/Kosmo tests and focused regression coverage.
+Keep public property hooks and ownership boundaries intact.
+
+### Shared item-model and item-view architecture
+
+The core NimKit review identified a coordinated migration with an estimated
+**1,200–1,600 net production LOC reduction**, after shared implementations and
+compatibility adapters. These are planning estimates, to be replaced by measured
+results as each phase lands. Keep widget presentation typed, property proc hooks
+intact, and mutable algorithm state in plain value objects owned by GUI objects.
+
+- [ ] **Shared collection engine — 300–400 LOC estimated.** Move stable identity,
+  source/visible index mapping, hidden/filter/sort arrangement, revision caching,
+  and collection mutation below both views and controllers. Migrate `TableModel`
+  and `ArrayController` to that engine while retaining their public entry points,
+  strict/optional lookup behavior, and controller notifications. Start with
+  TableModel's cached arrangement; preserve existing comparison policies, column
+  metadata, and per-view formatting/parsing adapters.
+- [ ] **Common item-provider contract — 150–200 LOC estimated.** Replace repeated
+  count/value/identifier controller adapters with a narrow provider contract and
+  typed per-view projections. Preserve lazy source access, widget-dependent
+  source context, mutation observation, and explicit selection binding.
+- [ ] **Local/provider reconciliation — 250–350 LOC estimated.** Share source
+  switching, hidden-item projection, identity lookup, and reload reconciliation
+  across menus, document tabs, matrices, and combo boxes. Retain live presentation
+  object identities, native-menu synchronization, selection fallback policies,
+  combo-box filtering, and specialized realization callbacks.
+- [ ] **Shared item selection — 250–350 LOC estimated.** Migrate table/collection
+  normalization, anchors, ranges, navigation, undo, and notification transactions
+  to common value-state algorithms with narrow lookup/policy hooks. Preserve
+  index-only table sources, identifier-based collection sources, invalid-anchor
+  policies, focused-column behavior, and public event/delegate ordering.
+- [ ] **View reuse and pointer/drag lifecycle — 220–340 LOC estimated.** Share
+  visible-slot reconciliation, reuse-pool mechanics, tracking, and drag-session
+  transitions. Keep painted table cells, hosted cells, collection layouts and
+  supplementary views, reuse cleanup policies, payloads, hit testing, and delegate
+  fallbacks explicit. Preserve bounded live-view counts and cached source calls.
+
+**Delivery:** begin with a focused shared-engine PR, then migrate provider,
+selection, and presentation ownership in reviewable increments. OutlineView
+already inherits TableView, and CascadingView already uses tables for its columns;
+do not count those as independent list engines or assume further tree savings.
+
+**Completion evidence:** run the existing NimKit shared runner and affected
+Kosmo/Tekton coverage, compile the example bundle, and validate the full suite.
+Retain identity across sorting/filtering/reloads, typed edit writeback, fractional
+scroll anchors, undo/notification order, provider laziness, and reuse lifetimes.
+Add focused regressions for shared contracts and record actual LOC changes per PR.
 
 ## Validation
 
