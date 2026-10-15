@@ -7,7 +7,7 @@ import ../nimkit as nimkit
 import ../nimkit/foundation/mainthreadwork
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
-import ./[github, searchbar, viewersearch]
+import ./[github, searchbar, viewersearch, vscodegrammars]
 
 export github
 
@@ -343,6 +343,8 @@ proc newKosmoGitHubPanel(
     refreshInterval: initDuration(milliseconds = refreshIntervalMilliseconds),
   )
   result.initViewFields()
+  result.markdownView.matterGrammarSources =
+    installedVscodeGrammars().viewerGrammarSources()
   result.clipsToBounds = true
   result.acceptsFirstResponder = true
   discard result.withProtocol(GitHubLayout)

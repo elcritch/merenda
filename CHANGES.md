@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.27.5
+
+- Support Copy and Select All in Kosmo's Markdown, GitHub, Git diff, Help,
+  Command Output, and custom document views. Route clipboard shortcuts to the
+  focused content, allow Paste in editable views, and keep unsupported edits in
+  readers from reaching hidden editor buffers.
+- Use installed TextMate grammars, including SQL, for Markdown code fences and
+  Git diff highlighting. Resolve installed filename and extension associations,
+  load included grammars, and refresh open viewers and cached previews after
+  installing a grammar in Settings.
+
 ## 0.27.4
 
 - Route Kosmo's copy, cut, paste, select-all, undo, and redo shortcuts to the

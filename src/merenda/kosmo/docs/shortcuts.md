@@ -91,10 +91,13 @@ when a replacement field is already focused. Markdown, Git diff, GitHub, and ter
 search remain search-only.
 
 The standard Edit menu is a responder-chain facility. Kosmo bridges its Copy,
-Cut, Paste, Select All, Undo, and Redo commands to semantic Moe operations:
-the bridge uses the current selection, synchronizes the system clipboard and
-Moe registers, and preserves Moe's undo transactions. It does not emulate
-these actions by injecting synthetic keys.
+Cut, Paste, Select All, Undo, and Redo commands to the focused content. Markdown,
+GitHub, Git diff summaries and individual hunks, Help, and Command Output support
+Copy and Select All. Editable text views and search fields also support Cut,
+Paste, Undo, and Redo. Read-only documents consume unsupported edits so they
+cannot change a hidden editor buffer. When a Moe editor is focused, the bridge
+uses its current selection, synchronizes the system clipboard and Moe registers,
+and preserves Moe's undo transactions without injecting synthetic keys.
 
 ### Moe editor input
 

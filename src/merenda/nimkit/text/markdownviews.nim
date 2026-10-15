@@ -288,6 +288,7 @@ type
     xMarkdownRenderChunkCount: int
     xMarkdownMaximumRenderChunkDuration: Duration
     xSyntaxHighlighter: SyntaxHighlighter
+    xMatterGrammarSources: seq[MatterGrammarSource]
     xMatterHighlights: seq[seq[SyntaxTokenSpan]]
     xMatterCodeIndices: Table[MarkdownCodeSource, int]
     xMarkdownCodePresentations: seq[MarkdownCodeBlockPresentation]
@@ -2624,6 +2625,7 @@ proc startLatestMarkdownParse(view: MarkdownView) =
       view.xMarkdownConfig.escape,
       view.xMarkdownConfig.keepHtml,
       view.xSyntaxHighlighter == SyntaxHighlighter(matterSyntaxHighlighter),
+      view.xMatterGrammarSources,
     )
   else:
     # Arbitrary parser subclasses are thread-affine reference objects. Preserve
@@ -2973,6 +2975,16 @@ proc `urlAssetLoader=`*(view: MarkdownView, loader: UrlAssetLoader) =
 proc syntaxHighlighter*(view: MarkdownView): SyntaxHighlighter =
   ## Return the classifier used for fenced code blocks.
   view.xSyntaxHighlighter
+
+proc matterGrammarSources*(view: MarkdownView): seq[MatterGrammarSource] =
+  ## Return application grammars used by the background fenced-code classifier.
+  view.xMatterGrammarSources
+
+proc `matterGrammarSources=`*(view: MarkdownView, sources: seq[MatterGrammarSource]) =
+  ## Replace application grammars and rehighlight the current Markdown document.
+  if view.xMatterGrammarSources != sources:
+    view.xMatterGrammarSources = sources
+    view.scheduleMarkdownParse()
 
 proc `syntaxHighlighter=`*(view: MarkdownView, highlighter: SyntaxHighlighter) =
   ## Replace the classifier and rerender fenced code blocks.

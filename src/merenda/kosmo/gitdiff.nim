@@ -9,7 +9,7 @@ import ../nimkit/foundation/gitprocesses
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/mainthreadwork
-import ./[searchbar, viewersearch]
+import ./[searchbar, viewersearch, vscodegrammars]
 
 const
   KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
@@ -156,6 +156,8 @@ type
     key: GitDiffHighlightKey
     spans: seq[nimkit.SyntaxTokenSpan]
     cached: bool
+    grammars: nimkit.MatterGrammarCache
+    grammarSources: seq[nimkit.MatterGrammarSource]
     cacheReservation: SharedPtr[GitDiffByteReservation]
 
   GitDiffHighlightResult = object
@@ -277,6 +279,7 @@ type
     xHighlightBuildCount: int
     xHighlightThreadId: int
     xRepositoryReadCount: int
+    xMatterGrammarSources: seq[nimkit.MatterGrammarSource]
 
 func gitDiffRevisionIdentifier(
     fromSide: bool, revision: string, toWorkingTree = false
@@ -1007,6 +1010,7 @@ proc diffLanguage(path: string): string =
     path.splitFile().ext.strip(chars = {'.'}).toLowerAscii()
 
 proc diffHighlight(
+    grammars: var nimkit.MatterGrammarCache,
     source, language: string,
     timeLimitMs: int,
     cancelled: nimkit.MatterHighlightCancellation,
@@ -1071,7 +1075,7 @@ proc diffHighlight(
     return
   let oldRemainingMs =
     max(1, timeLimitMs - int((getMonoTime() - startedAt).inMilliseconds))
-  let oldHighlight = nimkit.matterSyntaxHighlighterBounded(
+  let oldHighlight = grammars.matterSyntaxHighlighterBounded(
     oldSource, sourceLanguage, oldRemainingMs, shouldStop
   )
   for span in oldHighlight.spans:
@@ -1081,7 +1085,7 @@ proc diffHighlight(
     return
   let newRemainingMs =
     max(1, timeLimitMs - int((getMonoTime() - startedAt).inMilliseconds))
-  let newHighlight = nimkit.matterSyntaxHighlighterBounded(
+  let newHighlight = grammars.matterSyntaxHighlighterBounded(
     newSource, sourceLanguage, newRemainingMs, shouldStop
   )
   for span in newHighlight.spans:
@@ -2199,6 +2203,7 @@ proc highlightDiff(
   control: SharedPtr[GitDiffControl],
   requestState: SharedPtr[GitDiffHighlightRequestState],
   reservation: SharedPtr[GitDiffByteReservation],
+  grammarSources: seq[nimkit.MatterGrammarSource],
 ) {.signal.}
 
 proc highlightingFinished(
@@ -2215,6 +2220,7 @@ proc highlightDiff(
     control: SharedPtr[GitDiffControl],
     requestState: SharedPtr[GitDiffHighlightRequestState],
     reservation: SharedPtr[GitDiffByteReservation],
+    grammarSources: seq[nimkit.MatterGrammarSource],
 ) {.slot.} =
   let startedAt = getMonoTime()
   defer:
@@ -2239,6 +2245,10 @@ proc highlightDiff(
   )
   var fallbackPlain: bool
   try:
+    if worker.grammarSources != grammarSources:
+      worker.grammars.setGrammarSources(grammarSources)
+      worker.grammarSources = grammarSources
+      worker.cached = false
     var spans: seq[nimkit.SyntaxTokenSpan]
     if not withinBudget():
       fallbackPlain = true
@@ -2247,8 +2257,8 @@ proc highlightDiff(
     else:
       var complete = false
       spans = diffHighlight(
-        key.source, key.language, GitDiffHighlightTimeBudgetMs, cancelledRequest,
-        complete,
+        worker.grammars, key.source, key.language, GitDiffHighlightTimeBudgetMs,
+        cancelledRequest, complete,
       )
       if not requestCurrent():
         return
@@ -2355,9 +2365,13 @@ proc queueSection(panel: KosmoGitDiffPanel, path: string) =
   if not panel.sections.hasKey(path) or panel.sections[path].textView.isNil:
     return
   let section = addr panel.sections[path]
+  let installedLanguage = panel.xMatterGrammarSources.matterLanguageForFile(path)
   let key = (
     source: section[].syntaxPatch.replace("\r\n", "\n"),
-    language: "diff:" & path.diffLanguage(),
+    language:
+      "diff:" &
+      (if installedLanguage.len > 0: installedLanguage
+      else: path.diffLanguage()),
   )
   let visibleSource = section[].patch.replace("\r\n", "\n")
   if section[].pending and section[].queuedKey == key and
@@ -2390,6 +2404,7 @@ proc queueSection(panel: KosmoGitDiffPanel, path: string) =
     panel.control,
     section[].highlightRequestState,
     reservation,
+    panel.xMatterGrammarSources,
   )
   panel.updateLoading()
 
@@ -2922,6 +2937,22 @@ proc `markdownStyle=`*(panel: KosmoGitDiffPanel, style: nimkit.MarkdownStyle) =
       panel.queueSection(path)
   panel.updateLoading()
 
+proc matterGrammarSources*(panel: KosmoGitDiffPanel): seq[nimkit.MatterGrammarSource] =
+  ## Return installed grammars used by the diff's background classifier.
+  panel.xMatterGrammarSources
+
+proc `matterGrammarSources=`*(
+    panel: KosmoGitDiffPanel, sources: seq[nimkit.MatterGrammarSource]
+) =
+  ## Rehighlight materialized hunks when installed grammars change.
+  if panel.xMatterGrammarSources != sources:
+    panel.xMatterGrammarSources = sources
+    panel.markdownView.matterGrammarSources = sources
+    inc panel.styleGeneration
+    for path, section in panel.sections:
+      if not section.textView.isNil:
+        panel.queueSection(path)
+
 proc highlightBuildCount*(panel: KosmoGitDiffPanel): int =
   ## Number of uncached diff highlighting passes, for performance diagnostics.
   panel.xHighlightBuildCount
@@ -3053,6 +3084,7 @@ proc newKosmoGitDiffPanel(
     control: newGitDiffControl(),
   )
   result.comparisonButton = result.toRevisionButton
+  result.matterGrammarSources = installedVscodeGrammars().viewerGrammarSources()
   result.initViewFields()
   let document = GitDiffDocumentView(panel: result.unsafeWeakRef())
   document.initViewFields()

@@ -10,6 +10,7 @@ export panekeys.KosmoPaneCommand
 from std/times import initDuration
 
 import matter/grammarpackages as matterPackages
+from ../nimkit/text/matterhighlighting import nil
 import moepkg/celina_backend as celina
 import pkg/results as pkgResults
 import pkg/chronos as moeAsync
@@ -117,6 +118,7 @@ type
     textMateGrammars: seq[KosmoTextMateGrammar]
     matterSources: seq[moeMatter.MatterGrammarSource]
     matterFileTypes: seq[MatterGrammarFileType]
+    viewerSources: seq[matterhighlighting.MatterGrammarSource]
     matterHighlighting: MatterHighlighting
     matterRequests: Table[BufferId, tuple[contentVersion: int, requestId: uint64]]
     matterSyntaxFallback: MatterSyntaxFallbackState
@@ -636,8 +638,11 @@ proc installedGrammarState(): tuple[
   grammars: seq[KosmoTextMateGrammar],
   sources: seq[moeMatter.MatterGrammarSource],
   fileTypes: seq[MatterGrammarFileType],
+  viewerSources: seq[matterhighlighting.MatterGrammarSource],
 ] =
-  for installed in installedVscodeGrammars():
+  let installations = installedVscodeGrammars()
+  result.viewerSources = installations.viewerGrammarSources()
+  for installed in installations:
     let candidate = installed.candidate
     result.grammars.add KosmoTextMateGrammar(
       name: candidate.name,
@@ -669,6 +674,7 @@ proc kosmoMatterGrammarState(): tuple[
   grammars: seq[KosmoTextMateGrammar],
   sources: seq[moeMatter.MatterGrammarSource],
   fileTypes: seq[MatterGrammarFileType],
+  viewerSources: seq[matterhighlighting.MatterGrammarSource],
 ] =
   result.grammars = builtInTextMateGrammars()
   result.sources = newKosmoMatterGrammarSources()
@@ -676,6 +682,7 @@ proc kosmoMatterGrammarState(): tuple[
   result.grammars.add installed.grammars
   result.sources.add installed.sources
   result.fileTypes = installed.fileTypes
+  result.viewerSources = installed.viewerSources
   result.fileTypes.add MatterGrammarFileType(
     identifier: matterPackages.nifGrammar.packageKey,
     languageId: matterPackages.nifGrammar.languageId,
@@ -692,6 +699,13 @@ proc availableTextMateGrammars*(editor: KosmoEditor): seq[KosmoTextMateGrammar] 
   ## Return the TextMate grammars currently installed for Moe highlighting.
   if not editor.isNil and not editor.editor.isNil:
     result = editor.textMateGrammars
+
+proc viewerGrammarSources*(
+    editor: KosmoEditor
+): seq[matterhighlighting.MatterGrammarSource] =
+  ## Return installed TextMate grammar snapshots for native document viewers.
+  if not editor.isNil:
+    result = editor.viewerSources
 
 func hostCommand(r: moeHandlerResult.HandlerResult): Option[KosmoHostCommand] =
   var command: KosmoHostCommand
@@ -810,6 +824,7 @@ proc newKosmoEditor*(
     textMateGrammars: grammarState.grammars,
     matterSources: grammarState.sources,
     matterFileTypes: grammarState.fileTypes,
+    viewerSources: grammarState.viewerSources,
     matterRequests: initTable[BufferId, tuple[contentVersion: int, requestId: uint64]](),
     matterSyntaxFallback: MatterSyntaxFallbackState(
       highlightVersions: initTable[BufferId, int](),
@@ -882,6 +897,7 @@ proc reloadInstalledVscodeGrammars*(editor: KosmoEditor) =
   editor.textMateGrammars = grammarState.grammars
   editor.matterSources = grammarState.sources
   editor.matterFileTypes = grammarState.fileTypes
+  editor.viewerSources = grammarState.viewerSources
   editor.matterHighlighting.close()
   editor.matterHighlighting = nil
   editor.matterRequests.clear()

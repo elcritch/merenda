@@ -252,25 +252,25 @@ func kosmoActions*(): seq[KosmoAction] =
       KosmoAction(
         identifier: KosmoCutAction,
         title: "Cut",
-        description: "Cut the editor selection.",
+        description: "Cut the focused editable text selection.",
         kind: KosmoActionKind.Editing,
       ),
       KosmoAction(
         identifier: KosmoCopyAction,
         title: "Copy",
-        description: "Copy the editor selection.",
+        description: "Copy the focused view's selection.",
         kind: KosmoActionKind.Editing,
       ),
       KosmoAction(
         identifier: KosmoPasteAction,
         title: "Paste",
-        description: "Paste into the editor.",
+        description: "Paste into the focused editable view.",
         kind: KosmoActionKind.Editing,
       ),
       KosmoAction(
         identifier: KosmoSelectAllAction,
         title: "Select All",
-        description: "Select all editor text.",
+        description: "Select all text in the focused view.",
         kind: KosmoActionKind.Editing,
       ),
     ]
