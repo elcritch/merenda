@@ -718,7 +718,8 @@ and pull requests in a Markdown tab, or press `Cmd/Ctrl-Shift-H`. Install the
 [GitHub CLI](https://cli.github.com/) and sign in with `gh auth login` first;
 the viewer uses the project's GitHub remote and your existing CLI credentials.
 It defaults to open items, with controls for issues, pull requests, or both,
-and open, closed, or all states.
+and open, closed, or all states. The Issues and Pull Requests sections start
+expanded, with each individual issue and PR collapsed until you open it.
 
 Descriptions render as Markdown alongside authors, labels, draft status, and PR
 branch and review details. PRs also show a job summary and each CI check's workflow,

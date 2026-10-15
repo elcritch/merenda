@@ -113,11 +113,17 @@ proc applySnapshot(panel: KosmoGitHubPanel, snapshot: GitHubSnapshot) =
   if panel.isNil or panel.closed:
     return
   let preserveHeadingState = panel.snapshot.rootPath == snapshot.rootPath
+  let headingIdentifiers = snapshot.gitHubHeadingIdentifiers()
+  var collapsedItems: seq[string]
+  for identifier in headingIdentifiers:
+    if identifier notin ["github-project", "github-issues", "github-pull-requests"]:
+      collapsedItems.add identifier
   panel.snapshot = snapshot
   panel.markdownView.updateMarkdown(
     snapshot.gitHubMarkdown(),
-    snapshot.gitHubHeadingIdentifiers(),
+    headingIdentifiers,
     preserveHeadingState = preserveHeadingState,
+    initiallyCollapsedHeadings = collapsedItems,
   )
   panel.syncControls()
 

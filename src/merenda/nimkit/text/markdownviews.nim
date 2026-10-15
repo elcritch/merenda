@@ -302,6 +302,7 @@ type
     xImageMediaTypes: Table[string, string]
     xPendingUrlAssets: Table[string, UrlAssetHandle]
     xCollapsedMarkdownHeadings: HashSet[string]
+    xKnownMarkdownHeadings: HashSet[string]
     xHeadingsToggleOnClick: bool
     xHasMarkdownTables: bool
     xMarkdownTableColumnLimit: int
@@ -2906,18 +2907,28 @@ proc updateMarkdown*(
     source: string,
     headingIdentifiers: openArray[string] = [],
     preserveHeadingState = false,
+    initiallyCollapsedHeadings: openArray[string] = [],
 ) =
   ## Schedules a parse and atomically replaces the document when it completes.
   ## Supply unique, nonempty identifiers in top-level heading order to retain
   ## section state across reordered or renamed headings. Unspecified headings
   ## use block positions. State is cleared unless `preserveHeadingState` is true.
   ## Identical source and identifiers leave the current document unchanged.
+  ## `initiallyCollapsedHeadings` supplies defaults for previously unseen explicit
+  ## heading identifiers. Preserved state includes headings temporarily filtered out.
   let identifiers = @headingIdentifiers
   if view.xMarkdown == source and view.xMarkdownHeadingIdentifiers == identifiers:
     return
   view.xPendingUrlAssets.clear()
   if not preserveHeadingState:
     view.xCollapsedMarkdownHeadings.clear()
+    view.xKnownMarkdownHeadings.clear()
+  for identifier in initiallyCollapsedHeadings:
+    if identifier.len > 0 and identifier notin view.xKnownMarkdownHeadings:
+      view.xCollapsedMarkdownHeadings.incl identifier
+  for identifier in identifiers:
+    if identifier.len > 0:
+      view.xKnownMarkdownHeadings.incl identifier
   view.xPendingMarkdownHeadingSelection.setLen(0)
   view.xMarkdownHeadingIdentifiers = identifiers
   view.xMarkdown = source

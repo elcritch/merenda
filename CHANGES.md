@@ -4,6 +4,9 @@
 
 ## 0.27.5
 
+- Start the GitHub viewer with Issues and Pull Requests expanded and individual
+  items collapsed. Preserve user expansion choices across refreshes and filters.
+
 - Support Copy and Select All in Kosmo's Markdown, GitHub, Git diff, Help,
   Command Output, and custom document views. Route clipboard shortcuts to the
   focused content, allow Paste in editable views, and keep unsupported edits in

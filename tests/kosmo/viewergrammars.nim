@@ -3,6 +3,7 @@ import std/[os, strutils, tables, tempfiles, unicode, unittest]
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import merenda/kosmo/vscodegrammars
+import fixtures/ui
 
 const
   SqlGrammarPath = "syntaxes/sql.tmLanguage.json"
@@ -102,6 +103,7 @@ suite "Kosmo installed viewer grammars":
     defer:
       github.close()
     require github.waitForGitHub()
+    github.markdownView.expandMarkdownHeadings()
     github.markdownView.matterGrammarSources = sources
     github.markdownView.checkSqlColors()
 
@@ -218,4 +220,5 @@ suite "Kosmo installed viewer grammars":
     defer:
       github.close()
     require github.waitForGitHub()
+    github.markdownView.expandMarkdownHeadings()
     github.markdownView.checkSqlColors()
