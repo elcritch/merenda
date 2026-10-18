@@ -12,6 +12,7 @@ import ../app/userdefaults
 import ../app/windows
 import ../controls/controls
 import ../containers/listbasics
+import ./tablebasics
 import ../containers/scrollviews
 import ../foundation/objectvalues
 import ../foundation/private/itemcollections
@@ -25,74 +26,13 @@ import ../foundation/undomanagers
 from ../view/viewgeometry import setFrameFromLayout
 import ../view/views
 
-const
-  TablePasteboardTypeRows* = "nimkit.table.rows"
-  TablePasteboardTypeRowIdentifiers* = "nimkit.table.row-identifiers"
-  TablePasteboardTypeColumns* = "nimkit.table.columns"
+export tablebasics
 
 const
   TableTypeSelectTimeout = 1.0
   TableSelectionIdentityPrefix = "ids:"
   TableColumnWidthEpsilon = 0.001'f32
   MaxTableContentLayoutPasses = 4
-
-type
-  TableModelError* = object of KeyError
-
-  TableSelectionMode* = enum
-    lsmNone
-    lsmSingle
-    lsmMultiple
-    lsmExtended
-
-  TableColumnResizePolicy* = enum
-    tcrFixed
-    tcrResizable
-
-  TableColumnSizingPolicy* = enum
-    tcspFixed
-    tcspFlexible
-    tcspContentSized
-
-  TableViewColumnSizing* = enum
-    tvcsNatural
-    tvcsFill
-
-  TableViewWidthSizingMode* = enum
-    tvwsmColumns
-    tvwsmContent
-    tvwsmPreferredWidth
-
-  TableSortDirection* = enum
-    tsdNone
-    tsdAscending
-    tsdDescending
-
-  TableRowUpdateKind* = enum
-    trukInsert
-    trukRemove
-    trukMove
-    trukReload
-
-  TableViewStateScope* = enum
-    tvssAutomatic
-    tvssApplication
-    tvssDocument
-    tvssWorkspace
-
-  TableHeaderHitPart* = enum
-    thpNone
-    thpRowHeader
-    thpRowHeaderResizeHandle
-    thpRowHeaderRowResizeHandle
-    thpColumn
-    thpResizeHandle
-
-const
-  tsmNone* = TableSelectionMode.lsmNone
-  tsmSingle* = TableSelectionMode.lsmSingle
-  tsmMultiple* = TableSelectionMode.lsmMultiple
-  tsmExtended* = TableSelectionMode.lsmExtended
 
 type
   TableRowView = ref object of View
@@ -103,73 +43,11 @@ type
     xTableView: TableView
     xRowViews: seq[TableRowView]
 
-  TableVisibleRowSummary* = object
-    index*: int
-    text*: string
-    rect*: Rect
-    states*: set[WidgetState]
-
-  TableRowUpdate* = object
-    kind*: TableRowUpdateKind
-    indexes*: seq[int]
-    fromIndex*: int
-    toIndex*: int
-    identifiers*: seq[string]
-
-  TableCellValue* = object
-    columnIdentifier*: string
-    value*: ObjectValue
-
-  TableRowValue* = object
-    identifier*: string
-    objectValue*: ObjectValue
-    cells*: seq[TableCellValue]
-    enabled*: bool
-    hidden*: bool
-    representedObject*: DynamicAgent
-
-  TableModelColumn* = object
-    identifier*: string
-    title*: string
-    valueKey*: string
-    width*: float32
-    hidden*: bool
-
-  TableModelSortDescriptor* = object
-    columnIdentifier*: string
-    direction*: TableSortDirection
-
-  TableModelFilter* = proc(row: TableRowValue): bool {.closure.}
-
-  TableRowIdentifierResolver* = proc(identifier: string): string {.closure.}
-
   TableModel* = ref object of DynamicAgent
     xRows: ItemCollection[TableRowValue]
     xColumns: seq[TableModelColumn]
     xSortDescriptors: seq[TableModelSortDescriptor]
     xFilter: TableModelFilter
-
-  TableHeaderDragIndicator* = object
-    index*: int
-    rect*: Rect
-    visible*: bool
-
-  TableHeaderChrome* = object
-    headerFill*: Fill
-    headerBorderColor*: Color
-    cellFill*: Fill
-    hoveredCellFill*: Fill
-    pressedCellFill*: Fill
-    cellBorderColor*: Color
-    textColor*: Color
-    sortIndicatorColor*: Color
-    insertionIndicatorFill*: Fill
-    borderWidth*: float32
-    sortIndicatorWidth*: float32
-    insertionWidth*: float32
-    insertionCapWidth*: float32
-    insertionCapHeight*: float32
-    cornerRadius*: float32
 
   TableHeaderHit* = object
     column*: TableColumn
@@ -186,21 +64,40 @@ type
     validation*: ObjectValidationError
     objectValue*: ObjectValue
 
-  TableColumnAutosaveRecord* = object
-    identifier*: string
-    width*: float32
-    hidden*: bool
-    sortDirection*: TableSortDirection
-
-  TableViewState* = object
-    columns*: seq[TableColumnAutosaveRecord]
-    selectedRows*: seq[int]
-    selectedRowIdentifiers*: seq[string]
-    selectedColumns*: seq[string]
-    expandedItems*: seq[string]
-
   TableViewStateStore* = ref object of DynamicAgent
     xStates: Table[string, TableViewState]
+
+  TableHeaderTracking = object
+    part: TableHeaderHitPart
+    column: TableColumn
+    columnIndex: int
+    row: int
+    startPoint: Point
+    startSize: Size
+    draggingColumn: bool
+    insertionIndex: int
+    insertionRect: Rect
+
+  TableDraggingState = object
+    session: DraggingSession
+    dropTarget: DraggingDropTarget
+    rowStart: TableRowDragStart
+
+  TableEditingSurface = object
+    hostView: View
+    cell: Cell
+    isRowView: bool
+
+  TableEditCompletion = object
+    row: int
+    column: TableColumn
+    committed: bool
+
+  TableEditorState = object
+    state: TableEditingState
+    surface: TableEditingSurface
+    cancelling: bool
+    completion: TableEditCompletion
 
   TableView* = ref object of Control
     xColumns: seq[TableColumn]
@@ -211,27 +108,14 @@ type
     xHighlightedIndex: int
     xScrollView: ScrollView
     xContentView: TableContentView
-    xRowHeight: float32
-    xHasExplicitRowHeight: bool
-    xCachedDefaultRowHeight: float32
-    xVisibleRows: int
-    xColumnSizing: TableViewColumnSizing
-    xWidthSizingMode: TableViewWidthSizingMode
-    xPreferredContentWidth: float32
-    xMeasuredContentWidth: float32
-    xMeasuredContentFontName: string
-    xMeasuredContentFontSize: float32
-    xContentWidthMeasurementValid: bool
-    xRowHeights: seq[float32]
-    xRowOffsets: seq[float32]
-    xRowHeightOverrides: Table[int, float32]
-    xRowHeightCacheValid: bool
-    xComputingRowHeights: bool
+    xRowSizing: TableRowSizing
+    xWidthSizing: TableWidthSizing
+    xWidthMeasurement: TableWidthMeasurement
+    xRowHeightMeasurement: TableRowHeightMeasurement
     xSelectionMode: TableSelectionMode
     xTrackingItem: bool
     xPressedIndex: int
-    xTypeSelectBuffer: string
-    xTypeSelectLastTime: float
+    xTypeSelection: TableTypeSelection
     xUsesAlternatingRowBackgrounds: bool
     xShowsRowSeparators: bool
     xTableRole: StyleRole
@@ -241,9 +125,7 @@ type
     xTableDelegate: DynamicAgent
     xCellSlots: seq[TableCellSlot]
     xReusableCellViews: Table[string, seq[View]]
-    xShowsHeader: bool
-    xHeaderHeight: float32
-    xHasExplicitHeaderHeight: bool
+    xHeaderSettings: TableHeaderSettings
     xHoveredColumn: TableColumn
     xPressedColumn: TableColumn
     xClickedRow: int
@@ -252,14 +134,12 @@ type
     xHighlightedColumn: TableColumn
     xSelectedColumns: seq[TableColumn]
     xAllowsColumnSelection: bool
-    xShowsRowHeader: bool
-    xRowHeaderWidth: float32
-    xRowHeaderTitle: string
+    xRowHeaderSettings: TableRowHeaderSettings
     xTracksPointerRowHighlights: bool
     xTracksPointerColumnHighlights: bool
     xShowsFocusedRowHighlight: bool
     xShowsFocusedColumnHighlight: bool
-    xEditing: TableEditingState
+    xCellEditing: TableEditorState
     xAutosaveName: string
     xStateStorage: DynamicAgent
     xStateScope: TableViewStateScope
@@ -269,30 +149,10 @@ type
     xColumnAutosaveAliases: Table[string, string]
     xRowIdentifierAliases: Table[string, string]
     xRowIdentifierResolver: TableRowIdentifierResolver
-    xBatchUpdateDepth: int
-    xPendingRowUpdates: seq[TableRowUpdate]
-    xTableDraggingSession: DraggingSession
-    xTableDropTarget: DraggingDropTarget
-    xEditingHostView: View
-    xEditingCell: Cell
-    xEditingHostIsRowView: bool
-    xCancellingFieldEditor: bool
-    xEndedEditingRow: int
-    xEndedEditingColumn: TableColumn
-    xEndedEditingCommitted: bool
-    xHeaderTrackingPart: TableHeaderHitPart
-    xTrackingColumn: TableColumn
-    xTrackingColumnIndex: int
-    xTrackingRowIndex: int
-    xHeaderDragInsertionIndex: int
-    xHeaderDragInsertionRect: Rect
-    xHeaderDraggingColumn: bool
+    xRowUpdates: TableRowUpdateBatch
+    xDragging: TableDraggingState
+    xHeaderTracking: TableHeaderTracking
     xAllowsRowReordering: bool
-    xRowDragStartIndex: int
-    xRowDragStartPoint: Point
-    xDragStartPoint: Point
-    xDragStartWidth: float32
-    xDragStartHeight: float32
 
   TableCellSlot = object
     row: int
@@ -307,22 +167,11 @@ type
     xTableView: TableView
     xIdentifier: string
     xTitle: string
-    xWidth: float32
-    xPreferredWidth: float32
-    # A manually resized flexible column opts out of automatic fill resizing.
-    xUserResized: bool
-    xMinWidth: float32
-    xMaxWidth: float32
+    xWidth: TableColWidth
     xAlignment: TextAlignment
     xResizePolicy: TableColumnResizePolicy
     xSizingPolicy: TableColumnSizingPolicy
-    xMeasuredContentWidth: float32
-    xMeasuredContentFontName: string
-    xMeasuredContentFontSize: float32
-    xMeasuredContentHorizontalInsets: float32
-    xMeasuredHeaderFontName: string
-    xMeasuredHeaderFontSize: float32
-    xContentWidthMeasurementValid: bool
+    xWidthMeasurement: TableColWidthMeasurement
     xHidden: bool
     xSortDirection: TableSortDirection
     xReuseIdentifier: string
@@ -430,7 +279,6 @@ proc tableRowDidActivate(tableView: TableView, row: int)
 proc tableColumnAtPoint(tableView: TableView, point: Point): TableColumn
 proc headerInsertionIndexAtPoint(tableView: TableView, point: Point): int
 proc headerInsertionRectForIndex(tableView: TableView, index: int): Rect
-proc clearHeaderDragInsertion(tableView: TableView)
 proc setHeaderDragInsertion(tableView: TableView, index: int)
 proc autoscrollHeaderColumnDrag(tableView: TableView, point: Point): bool
 proc syncHeaderTrackingAreas(tableView: TableView)
@@ -530,125 +378,7 @@ proc drawTableHeaderResizeHandle*(
 proc syncTableScrollChrome(tableView: TableView)
 proc tableFocusRingBox(box: ControlBoxStyle): ControlBoxStyle
 
-proc raiseTableModelError(message: string) {.noinline, noreturn.} =
-  raise newException(TableModelError, message)
-
 proc installTableModelProtocols(model: TableModel)
-
-func tableCell*(columnIdentifier: string, value: ObjectValue): TableCellValue =
-  TableCellValue(columnIdentifier: columnIdentifier, value: value)
-
-proc tableRow*(
-    identifier = "",
-    objectValue = emptyObjectValue(),
-    cells: openArray[TableCellValue] = [],
-    enabled = true,
-    hidden = false,
-    representedObject: DynamicAgent = nil,
-): TableRowValue =
-  TableRowValue(
-    identifier: identifier,
-    objectValue: objectValue,
-    cells: @cells,
-    enabled: enabled,
-    hidden: hidden,
-    representedObject: representedObject,
-  )
-
-func initTableModelColumn*(
-    identifier: string, title = "", valueKey = "", width = 120.0'f32, hidden = false
-): TableModelColumn =
-  TableModelColumn(
-    identifier: identifier,
-    title: title,
-    valueKey: valueKey,
-    width: width,
-    hidden: hidden,
-  )
-
-func initTableModelSortDescriptor*(
-    columnIdentifier: string, direction = tsdAscending
-): TableModelSortDescriptor =
-  TableModelSortDescriptor(columnIdentifier: columnIdentifier, direction: direction)
-
-func defaultTableRowUpdate(
-    kind: TableRowUpdateKind,
-    indexes: openArray[int] = [],
-    identifiers: openArray[string] = [],
-    fromIndex = -1,
-    toIndex = -1,
-): TableRowUpdate =
-  TableRowUpdate(
-    kind: kind,
-    indexes: @indexes,
-    fromIndex: fromIndex,
-    toIndex: toIndex,
-    identifiers: @identifiers,
-  )
-
-func initTableRowInsertUpdate*(
-    indexes: openArray[int], identifiers: openArray[string] = []
-): TableRowUpdate =
-  defaultTableRowUpdate(trukInsert, indexes, identifiers)
-
-func initTableRowRemoveUpdate*(
-    indexes: openArray[int], identifiers: openArray[string] = []
-): TableRowUpdate =
-  defaultTableRowUpdate(trukRemove, indexes, identifiers)
-
-func initTableRowReloadUpdate*(
-    indexes: openArray[int], identifiers: openArray[string] = []
-): TableRowUpdate =
-  defaultTableRowUpdate(trukReload, indexes, identifiers)
-
-func initTableRowMoveUpdate*(
-    fromIndex, toIndex: int, identifiers: openArray[string] = []
-): TableRowUpdate =
-  defaultTableRowUpdate(
-    trukMove, identifiers = identifiers, fromIndex = fromIndex, toIndex = toIndex
-  )
-
-func findCellIndex(row: TableRowValue, columnIdentifier: string): int =
-  for index, cell in row.cells:
-    if cell.columnIdentifier == columnIdentifier:
-      return index
-  -1
-
-func hasValue*(row: TableRowValue, columnIdentifier: string): bool =
-  columnIdentifier.len == 0 or row.findCellIndex(columnIdentifier) >= 0
-
-func getValue*(row: TableRowValue, columnIdentifier = ""): Option[ObjectValue] =
-  if columnIdentifier.len == 0:
-    return some(row.objectValue)
-  let index = row.findCellIndex(columnIdentifier)
-  if index >= 0:
-    some(row.cells[index].value)
-  else:
-    none(ObjectValue)
-
-proc value*(
-    row: TableRowValue, columnIdentifier = ""
-): ObjectValue {.raises: [TableModelError].} =
-  let found = row.getValue(columnIdentifier)
-  if found.isSome:
-    return found.get()
-  raiseTableModelError("unknown table cell column identifier: " & columnIdentifier)
-
-proc `[]`*(row: TableRowValue, columnIdentifier: string): ObjectValue =
-  row.value(columnIdentifier)
-
-proc setValue*(row: var TableRowValue, columnIdentifier: string, value: ObjectValue) =
-  if columnIdentifier.len == 0:
-    row.objectValue = value
-    return
-  let index = row.findCellIndex(columnIdentifier)
-  if index >= 0:
-    row.cells[index].value = value
-  else:
-    row.cells.add tableCell(columnIdentifier, value)
-
-proc `[]=`*(row: var TableRowValue, columnIdentifier: string, value: ObjectValue) =
-  row.setValue(columnIdentifier, value)
 
 protocol TableViewDataSource {.selectorScope: protocol.}:
   method numberOfRows*(tableView: TableView): int {.optional.}
@@ -1128,8 +858,14 @@ proc tableStyle(tableView: TableView): TableViewStyle =
 proc defaultTableStyle(): TableViewStyle =
   initAppearance().resolveTableViewStyle(controlStyle(srTableView))
 
+func isActive(tracking: TableHeaderTracking): bool {.inline.} =
+  tracking.part != thpNone
+
+proc clear(tracking: var TableHeaderTracking) =
+  tracking = TableHeaderTracking(columnIndex: -1, row: -1, insertionIndex: -1)
+
 proc invalidateTableWidthMeasurement(tableView: TableView) =
-  tableView.xContentWidthMeasurementValid = false
+  tableView.xWidthMeasurement.valid = false
   tableView.invalidateIntrinsicContentSize()
 
 proc invalidateColumnWidthMeasurements(tableView: TableView) =
@@ -1138,38 +874,38 @@ proc invalidateColumnWidthMeasurements(tableView: TableView) =
   var needsLayout = false
   for column in tableView.xColumns:
     if column.xSizingPolicy == tcspContentSized:
-      column.xContentWidthMeasurementValid = false
+      column.xWidthMeasurement.valid = false
       needsLayout = true
   if needsLayout:
     tableView.setNeedsLayout()
 
 proc widthSizingMode*(tableView: TableView): TableViewWidthSizingMode =
-  tableView.xWidthSizingMode
+  tableView.xWidthSizing.mode
 
 proc `widthSizingMode=`*(tableView: TableView, mode: TableViewWidthSizingMode) =
-  if tableView.xWidthSizingMode == mode:
+  if tableView.xWidthSizing.mode == mode:
     return
-  tableView.xWidthSizingMode = mode
+  tableView.xWidthSizing.mode = mode
   tableView.invalidateTableWidthMeasurement()
 
 proc columnSizing*(tableView: TableView): TableViewColumnSizing =
-  tableView.xColumnSizing
+  tableView.xWidthSizing.columnSizing
 
 proc `columnSizing=`*(tableView: TableView, sizing: TableViewColumnSizing) =
-  if tableView.xColumnSizing == sizing:
+  if tableView.xWidthSizing.columnSizing == sizing:
     return
-  tableView.xColumnSizing = sizing
+  tableView.xWidthSizing.columnSizing = sizing
   tableView.setNeedsLayout()
   tableView.needsDisplay = true
 
 proc preferredContentWidth*(tableView: TableView): float32 =
-  tableView.xPreferredContentWidth
+  tableView.xWidthSizing.preferredContentWidth
 
 proc `preferredContentWidth=`*(tableView: TableView, width: float32) =
   let normalizedWidth = max(width, 0.0'f32)
-  if tableView.xPreferredContentWidth == normalizedWidth:
+  if tableView.xWidthSizing.preferredContentWidth == normalizedWidth:
     return
-  tableView.xPreferredContentWidth = normalizedWidth
+  tableView.xWidthSizing.preferredContentWidth = normalizedWidth
   tableView.invalidateTableWidthMeasurement()
 
 proc tableRole*(tableView: TableView): StyleRole =
@@ -1204,10 +940,10 @@ template normalizedColumnMetric(value, fallback: float32): float32 =
 proc normalizedMaxWidth(value, minWidth: float32): float32 =
   max(value.normalizedColumnMetric(defaultTableStyle().columnMaxWidth), minWidth)
 
-proc normalizedWidth(value, minWidth, maxWidth: float32): float32 =
+proc normalizedWidth(value: float32, width: TableColWidth): float32 =
   min(
-    max(value.normalizedColumnMetric(defaultTableStyle().columnWidth), minWidth),
-    maxWidth,
+    max(value.normalizedColumnMetric(defaultTableStyle().columnWidth), width.min),
+    width.max,
   )
 
 proc tableView*(contentView: TableContentView): TableView =
@@ -1243,45 +979,43 @@ proc `title=`*(column: TableColumn, title: string) =
   if column.xTitle == title:
     return
   column.xTitle = title
-  column.xContentWidthMeasurementValid = false
+  column.xWidthMeasurement.valid = false
   column.tableView().noteColumnsChanged()
 
 proc width*(column: TableColumn): float32 =
-  column.xWidth
+  column.xWidth.resolved
 
 proc `width=`*(column: TableColumn, width: float32) =
-  let nextWidth = width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
-  if column.xWidth == nextWidth and column.xPreferredWidth == nextWidth:
+  let nextWidth = width.normalizedWidth(column.xWidth)
+  if column.xWidth.resolved == nextWidth and column.xWidth.preferred == nextWidth:
     return
-  column.xWidth = nextWidth
-  column.xPreferredWidth = nextWidth
+  column.xWidth.resolved = nextWidth
+  column.xWidth.preferred = nextWidth
   column.tableView().noteColumnsChanged()
 
 proc minWidth*(column: TableColumn): float32 =
-  column.xMinWidth
+  column.xWidth.min
 
 proc `minWidth=`*(column: TableColumn, width: float32) =
   let nextMin = width.normalizedColumnMetric(defaultTableStyle().columnMinWidth)
-  if column.xMinWidth == nextMin:
+  if column.xWidth.min == nextMin:
     return
-  column.xMinWidth = nextMin
-  column.xMaxWidth = max(column.xMaxWidth, nextMin)
-  column.xWidth = column.xWidth.normalizedWidth(column.xMinWidth, column.xMaxWidth)
-  column.xPreferredWidth =
-    column.xPreferredWidth.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+  column.xWidth.min = nextMin
+  column.xWidth.max = max(column.xWidth.max, nextMin)
+  column.xWidth.resolved = column.xWidth.resolved.normalizedWidth(column.xWidth)
+  column.xWidth.preferred = column.xWidth.preferred.normalizedWidth(column.xWidth)
   column.tableView().noteColumnsChanged()
 
 proc maxWidth*(column: TableColumn): float32 =
-  column.xMaxWidth
+  column.xWidth.max
 
 proc `maxWidth=`*(column: TableColumn, width: float32) =
-  let nextMax = width.normalizedMaxWidth(column.xMinWidth)
-  if column.xMaxWidth == nextMax:
+  let nextMax = width.normalizedMaxWidth(column.xWidth.min)
+  if column.xWidth.max == nextMax:
     return
-  column.xMaxWidth = nextMax
-  column.xWidth = column.xWidth.normalizedWidth(column.xMinWidth, column.xMaxWidth)
-  column.xPreferredWidth =
-    column.xPreferredWidth.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+  column.xWidth.max = nextMax
+  column.xWidth.resolved = column.xWidth.resolved.normalizedWidth(column.xWidth)
+  column.xWidth.preferred = column.xWidth.preferred.normalizedWidth(column.xWidth)
   column.tableView().noteColumnsChanged()
 
 proc alignment*(column: TableColumn): TextAlignment =
@@ -1309,10 +1043,9 @@ proc `sizingPolicy=`*(column: TableColumn, policy: TableColumnSizingPolicy) =
   if column.xSizingPolicy == policy:
     return
   column.xSizingPolicy = policy
-  column.xContentWidthMeasurementValid = false
+  column.xWidthMeasurement.valid = false
   if policy != tcspContentSized:
-    column.xWidth =
-      column.xPreferredWidth.normalizedWidth(column.xMinWidth, column.xMaxWidth)
+    column.xWidth.resolved = column.xWidth.preferred.normalizedWidth(column.xWidth)
   column.tableView().noteColumnsChanged()
 
 proc hidden*(column: TableColumn): bool =
@@ -1392,10 +1125,10 @@ proc initTableColumnFields*(
     style = defaultTableStyle()
   column.xIdentifier = identifier
   column.xTitle = if title.len == 0: identifier else: title
-  column.xMinWidth = minWidth.normalizedColumnMetric(style.columnMinWidth)
-  column.xMaxWidth = maxWidth.normalizedMaxWidth(column.xMinWidth)
-  column.xWidth = width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
-  column.xPreferredWidth = column.xWidth
+  column.xWidth.min = minWidth.normalizedColumnMetric(style.columnMinWidth)
+  column.xWidth.max = maxWidth.normalizedMaxWidth(column.xWidth.min)
+  column.xWidth.resolved = width.normalizedWidth(column.xWidth)
+  column.xWidth.preferred = column.xWidth.resolved
   column.xAlignment = alignment
   column.xResizePolicy = resizePolicy
   column.xSizingPolicy = sizingPolicy
@@ -1534,45 +1267,45 @@ func tableHeaderCellCornerRadii(
   )
 
 proc tableHeaderHeight*(tableView: TableView): float32 =
-  if not tableView.xShowsHeader:
+  if not tableView.xHeaderSettings.visible:
     return
-  result = tableView.xHeaderHeight
+  result = tableView.xHeaderSettings.height
   let appearance = tableView.effectiveAppearance()
-  if not tableView.xHasExplicitHeaderHeight:
+  if not tableView.xHeaderSettings.hasExplicitHeight:
     result = max(
       appearance.resolveLength(tableView.tableStyleContext(), StyleHeaderHeight, result),
       0.0'f32,
     )
 
 proc showsRowHeader*(tableView: TableView): bool =
-  tableView.xShowsRowHeader
+  tableView.xRowHeaderSettings.visible
 
 proc visibleRowHeaderWidth(tableView: TableView): float32 =
-  if tableView.showsRowHeader(): tableView.xRowHeaderWidth else: 0.0'f32
+  if tableView.showsRowHeader(): tableView.xRowHeaderSettings.width else: 0.0'f32
 
 proc rowHeaderWidth*(tableView: TableView): float32 =
-  tableView.xRowHeaderWidth
+  tableView.xRowHeaderSettings.width
 
 proc `rowHeaderWidth=`*(tableView: TableView, width: float32) =
   let nextWidth = max(width, 0.0'f32)
-  if tableView.xRowHeaderWidth == nextWidth:
+  if tableView.xRowHeaderSettings.width == nextWidth:
     return
-  tableView.xRowHeaderWidth = nextWidth
+  tableView.xRowHeaderSettings.width = nextWidth
   tableView.noteColumnsChanged()
 
 proc rowHeaderTitle*(tableView: TableView): string =
-  tableView.xRowHeaderTitle
+  tableView.xRowHeaderSettings.title
 
 proc `rowHeaderTitle=`*(tableView: TableView, title: string) =
-  if tableView.xRowHeaderTitle == title:
+  if tableView.xRowHeaderSettings.title == title:
     return
-  tableView.xRowHeaderTitle = title
+  tableView.xRowHeaderSettings.title = title
   tableView.needsDisplay = true
 
 proc `showsRowHeader=`*(tableView: TableView, value: bool) =
-  if tableView.xShowsRowHeader == value:
+  if tableView.xRowHeaderSettings.visible == value:
     return
-  tableView.xShowsRowHeader = value
+  tableView.xRowHeaderSettings.visible = value
   tableView.noteColumnsChanged()
 
 proc defaultTableHeaderChrome*(): TableHeaderChrome =
@@ -1663,19 +1396,19 @@ proc tableDropIndicatorFill(tableView: TableView, context: DrawContext): Fill =
 proc `tableHeaderHeight=`*(tableView: TableView, height: float32) =
   let nextHeight = max(height, 0.0'f32)
   let previousHeight = tableView.tableHeaderHeight()
-  tableView.xHasExplicitHeaderHeight = true
-  if tableView.xHeaderHeight == nextHeight and previousHeight == nextHeight:
+  tableView.xHeaderSettings.hasExplicitHeight = true
+  if tableView.xHeaderSettings.height == nextHeight and previousHeight == nextHeight:
     return
-  tableView.xHeaderHeight = nextHeight
+  tableView.xHeaderSettings.height = nextHeight
   tableView.noteColumnsChanged()
 
 proc showsHeader*(tableView: TableView): bool =
-  tableView.xShowsHeader
+  tableView.xHeaderSettings.visible
 
 proc `showsHeader=`*(tableView: TableView, value: bool) =
-  if tableView.xShowsHeader == value:
+  if tableView.xHeaderSettings.visible == value:
     return
-  tableView.xShowsHeader = value
+  tableView.xHeaderSettings.visible = value
   tableView.noteColumnsChanged()
 
 proc tableHeaderRect*(tableView: TableView): Rect =
@@ -1768,12 +1501,12 @@ proc tableHeaderHitTest*(tableView: TableView, point: Point): TableHeaderHit =
   tableView.headerHitTest(point)
 
 proc headerDragIndicator*(tableView: TableView): TableHeaderDragIndicator =
-  if tableView.xHeaderDragInsertionIndex < 0:
+  if tableView.xHeaderTracking.insertionIndex < 0:
     return TableHeaderDragIndicator(index: -1)
   TableHeaderDragIndicator(
-    index: tableView.xHeaderDragInsertionIndex,
-    rect: tableView.xHeaderDragInsertionRect,
-    visible: not tableView.xHeaderDragInsertionRect.isEmpty,
+    index: tableView.xHeaderTracking.insertionIndex,
+    rect: tableView.xHeaderTracking.insertionRect,
+    visible: not tableView.xHeaderTracking.insertionRect.isEmpty,
   )
 
 proc headerInsertionIndexAtPoint(tableView: TableView, point: Point): int =
@@ -1817,14 +1550,11 @@ proc headerInsertionRectForIndex(tableView: TableView, index: int): Rect =
       x = min(x, headerRect.maxX)
   rect(x - 1.0'f32, headerRect.origin.y, 3.0'f32, headerRect.size.height)
 
-proc clearHeaderDragInsertion(tableView: TableView) =
-  tableView.xHeaderDragInsertionIndex = -1
-  tableView.xHeaderDragInsertionRect = rect(0.0, 0.0, 0.0, 0.0)
-
 proc setHeaderDragInsertion(tableView: TableView, index: int) =
   let bounded = max(0, min(index, tableView.xColumns.len))
-  tableView.xHeaderDragInsertionIndex = bounded
-  tableView.xHeaderDragInsertionRect = tableView.headerInsertionRectForIndex(bounded)
+  tableView.xHeaderTracking.insertionIndex = bounded
+  tableView.xHeaderTracking.insertionRect =
+    tableView.headerInsertionRectForIndex(bounded)
 
 proc autoscrollHeaderColumnDrag(tableView: TableView, point: Point): bool =
   let headerRect = tableView.tableHeaderRect()
@@ -2229,18 +1959,19 @@ proc uncachedRowHeightForRow(tableView: TableView, index: int): float32 =
   tableView.resolvedRowHeight(index).normalizedRowHeight()
 
 proc usesFixedRowHeights(tableView: TableView): bool =
-  if tableView.xRowHeightOverrides.len > 0:
+  if tableView.xRowSizing.overrides.len > 0:
     return false
   let delegate = tableView.delegate()
   delegate.isNil or not delegate.respondsTo(tableRowHeight())
 
-proc ensureRowHeightCache(tableView: TableView) =
+proc refreshRowHeightCache(tableView: TableView) =
   let defaultHeight = tableView.rowHeight()
-  if tableView.xCachedDefaultRowHeight != defaultHeight:
-    tableView.xRowHeightCacheValid = false
-  if tableView.xRowHeightCacheValid or tableView.xComputingRowHeights:
+  if tableView.xRowHeightMeasurement.matches(defaultHeight):
     return
-  tableView.xComputingRowHeights = true
+  tableView.xRowHeightMeasurement.valid = false
+  if tableView.xRowHeightMeasurement.computing:
+    return
+  tableView.xRowHeightMeasurement.computing = true
   try:
     var
       heights: seq[float32]
@@ -2251,23 +1982,23 @@ proc ensureRowHeightCache(tableView: TableView) =
       let height = tableView.uncachedRowHeightForRow(index)
       heights.add height
       offset += height
-    tableView.xRowHeights = heights
-    tableView.xRowOffsets = offsets
-    tableView.xCachedDefaultRowHeight = defaultHeight
-    tableView.xRowHeightCacheValid = true
+    tableView.xRowHeightMeasurement.heights = heights
+    tableView.xRowHeightMeasurement.offsets = offsets
+    tableView.xRowHeightMeasurement.defaultHeight = defaultHeight
+    tableView.xRowHeightMeasurement.valid = true
   finally:
-    tableView.xComputingRowHeights = false
+    tableView.xRowHeightMeasurement.computing = false
 
 proc invalidateRowHeightCache(tableView: TableView) =
-  tableView.xRowHeightCacheValid = false
+  tableView.xRowHeightMeasurement.valid = false
 
 proc applyRowHeightResize(tableView: TableView, row: int, height: float32) =
   if row notin 0 ..< tableView.len():
     return
   let normalized = height.normalizedRowHeight()
-  if tableView.xRowHeightOverrides.getOrDefault(row, 0.0'f32) == normalized:
+  if tableView.xRowSizing.overrides.getOrDefault(row, 0.0'f32) == normalized:
     return
-  tableView.xRowHeightOverrides[row] = normalized
+  tableView.xRowSizing.overrides[row] = normalized
   tableView.invalidateRowHeightCache()
   tableView.clearTableCellSlots()
   tableView.invalidateIntrinsicContentSize()
@@ -2281,12 +2012,14 @@ proc rowOffset(tableView: TableView, index: int): float32 =
   let rowCount = tableView.len()
   if tableView.usesFixedRowHeights():
     return min(index, rowCount).float32 * tableView.rowHeight()
-  tableView.ensureRowHeightCache()
-  if index >= tableView.xRowHeights.len:
-    if tableView.xRowHeights.len > 0:
-      result = tableView.xRowOffsets[^1] + tableView.xRowHeights[^1]
-  elif index < tableView.xRowOffsets.len:
-    result = tableView.xRowOffsets[index]
+  tableView.refreshRowHeightCache()
+  if index >= tableView.xRowHeightMeasurement.heights.len:
+    if tableView.xRowHeightMeasurement.heights.len > 0:
+      result =
+        tableView.xRowHeightMeasurement.offsets[^1] +
+        tableView.xRowHeightMeasurement.heights[^1]
+  elif index < tableView.xRowHeightMeasurement.offsets.len:
+    result = tableView.xRowHeightMeasurement.offsets[index]
 
 proc rowIndexAtContentY(tableView: TableView, y: float32): int =
   let rowCount = tableView.len()
@@ -2296,13 +2029,15 @@ proc rowIndexAtContentY(tableView: TableView, y: float32): int =
   if tableView.usesFixedRowHeights():
     return min(int(floor(targetY / tableView.rowHeight())), rowCount - 1)
 
-  tableView.ensureRowHeightCache()
+  tableView.refreshRowHeightCache()
   var
     lower = 0
-    upper = tableView.xRowHeights.len
+    upper = tableView.xRowHeightMeasurement.heights.len
   while lower < upper:
     let middle = lower + (upper - lower) div 2
-    if targetY < tableView.xRowOffsets[middle] + tableView.xRowHeights[middle]:
+    if targetY <
+        tableView.xRowHeightMeasurement.offsets[middle] +
+        tableView.xRowHeightMeasurement.heights[middle]:
       upper = middle
     else:
       lower = middle + 1
@@ -2361,13 +2096,8 @@ proc measuredColumnContentWidth(tableView: TableView, column: TableColumn): floa
       controlStyle(srTableHeaderCell), color(0.0, 0.0, 0.0), insets(0.0)
     )
     contentInsets = contentStyle.insets.horizontal
-  if column.xContentWidthMeasurementValid and
-      column.xMeasuredContentFontName == contentStyle.fontName and
-      column.xMeasuredContentFontSize == contentStyle.fontSize and
-      column.xMeasuredContentHorizontalInsets == contentInsets and
-      column.xMeasuredHeaderFontName == headerStyle.fontName and
-      column.xMeasuredHeaderFontSize == headerStyle.fontSize:
-    return column.xMeasuredContentWidth
+  if column.xWidthMeasurement.matches(contentStyle, headerStyle):
+    return column.xWidthMeasurement.width
 
   let indicatorWidth =
     if column.sortDirection() == tsdNone:
@@ -2382,25 +2112,27 @@ proc measuredColumnContentWidth(tableView: TableView, column: TableColumn): floa
       textNaturalSize(tableView.tableCellText(row, column), contentStyle).width +
         contentInsets,
     )
-  result = result.normalizedWidth(column.xMinWidth, column.xMaxWidth)
-  column.xMeasuredContentWidth = result
-  column.xMeasuredContentFontName = contentStyle.fontName
-  column.xMeasuredContentFontSize = contentStyle.fontSize
-  column.xMeasuredContentHorizontalInsets = contentInsets
-  column.xMeasuredHeaderFontName = headerStyle.fontName
-  column.xMeasuredHeaderFontSize = headerStyle.fontSize
-  column.xContentWidthMeasurementValid = true
+  result = result.normalizedWidth(column.xWidth)
+  column.xWidthMeasurement = TableColWidthMeasurement(
+    width: result,
+    contentFontName: contentStyle.fontName,
+    contentFontSize: contentStyle.fontSize,
+    contentHorizontalInsets: contentInsets,
+    headerFontName: headerStyle.fontName,
+    headerFontSize: headerStyle.fontSize,
+    valid: true,
+  )
 
 proc setResolvedColumnWidth(column: TableColumn, width: float32): bool =
-  let resolved = width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
-  if abs(column.xWidth - resolved) <= TableColumnWidthEpsilon:
+  let resolved = width.normalizedWidth(column.xWidth)
+  if abs(column.xWidth.resolved - resolved) <= TableColumnWidthEpsilon:
     return
-  column.xWidth = resolved
+  column.xWidth.resolved = resolved
   true
 
 proc hasUserResizedFlexibleColumn(tableView: TableView): bool =
   for column in tableView.visibleColumns():
-    if column.sizingPolicy() == tcspFlexible and column.xUserResized:
+    if column.sizingPolicy() == tcspFlexible and column.xWidth.userResized:
       return true
 
 proc distributeFlexibleColumnWidths(
@@ -2431,16 +2163,15 @@ proc distributeFlexibleColumnWidths(
     for column in adjustable:
       let
         oldWidth = column.width()
-        nextWidth =
-          (oldWidth + adjustment).normalizedWidth(column.xMinWidth, column.xMaxWidth)
+        nextWidth = (oldWidth + adjustment).normalizedWidth(column.xWidth)
       if column.setResolvedColumnWidth(nextWidth):
         result = true
       applied += nextWidth - oldWidth
       let canAdjust =
         if remaining > 0.0'f32:
-          nextWidth < column.xMaxWidth - TableColumnWidthEpsilon
+          nextWidth < column.xWidth.max - TableColumnWidthEpsilon
         else:
-          nextWidth > column.xMinWidth + TableColumnWidthEpsilon
+          nextWidth > column.xWidth.min + TableColumnWidthEpsilon
       if canAdjust:
         nextAdjustable.add column
     if abs(applied) <= TableColumnWidthEpsilon:
@@ -2450,17 +2181,18 @@ proc distributeFlexibleColumnWidths(
 
 proc resolveNaturalColumnWidths(tableView: TableView): bool =
   let hasUserResizedFlexibleColumn =
-    tableView.xColumnSizing == tvcsFill and tableView.hasUserResizedFlexibleColumn()
+    tableView.xWidthSizing.columnSizing == tvcsFill and
+    tableView.hasUserResizedFlexibleColumn()
   for column in tableView.visibleColumns():
     let width =
       case column.sizingPolicy()
       of tcspFixed:
-        column.xPreferredWidth
+        column.xWidth.preferred
       of tcspFlexible:
-        if hasUserResizedFlexibleColumn and not column.xUserResized:
-          column.xWidth
+        if hasUserResizedFlexibleColumn and not column.xWidth.userResized:
+          column.xWidth.resolved
         else:
-          column.xPreferredWidth
+          column.xWidth.preferred
       of tcspContentSized:
         tableView.measuredColumnContentWidth(column)
     if column.setResolvedColumnWidth(width):
@@ -2473,7 +2205,7 @@ proc noteResolvedColumnWidthsChanged(tableView: TableView) =
 
 proc resolveColumnSizing(tableView: TableView, availableWidth: float32): bool =
   result = tableView.resolveNaturalColumnWidths()
-  if tableView.xColumnSizing == tvcsFill and
+  if tableView.xWidthSizing.columnSizing == tvcsFill and
       tableView.distributeFlexibleColumnWidths(availableWidth):
     result = true
   if result:
@@ -2851,15 +2583,15 @@ proc handleTypeSelect(tableView: TableView, event: KeyEvent): bool =
   if not event.isTypeSelectEvent():
     return false
   let now = epochTime()
-  if now - tableView.xTypeSelectLastTime > TableTypeSelectTimeout:
-    tableView.xTypeSelectBuffer = ""
-  tableView.xTypeSelectLastTime = now
-  tableView.xTypeSelectBuffer.add event.text
-  if tableView.selectItemMatchingText(tableView.xTypeSelectBuffer):
+  if now - tableView.xTypeSelection.lastInputTime > TableTypeSelectTimeout:
+    tableView.xTypeSelection.buffer = ""
+  tableView.xTypeSelection.lastInputTime = now
+  tableView.xTypeSelection.buffer.add event.text
+  if tableView.selectItemMatchingText(tableView.xTypeSelection.buffer):
     return true
-  if event.text != tableView.xTypeSelectBuffer:
-    tableView.xTypeSelectBuffer = event.text
-    return tableView.selectItemMatchingText(tableView.xTypeSelectBuffer)
+  if event.text != tableView.xTypeSelection.buffer:
+    tableView.xTypeSelection.buffer = event.text
+    return tableView.selectItemMatchingText(tableView.xTypeSelection.buffer)
   false
 
 proc clearFocusedColumn(tableView: TableView) =
@@ -3069,8 +2801,8 @@ proc autoscrollDraggingInfo(tableView: TableView, info: DraggingInfo): bool =
 proc resolvedRowHeight(tableView: TableView, row: int): float32 =
   if row notin 0 ..< tableView.rowCount():
     return tableView.rowHeight()
-  if row in tableView.xRowHeightOverrides:
-    return tableView.xRowHeightOverrides[row]
+  if row in tableView.xRowSizing.overrides:
+    return tableView.xRowSizing.overrides[row]
   let delegate = tableView.delegate()
   if not delegate.isNil:
     let height =
@@ -3108,9 +2840,9 @@ proc focusedColumnIndex*(tableView: TableView): int =
     tableView.columnIndex(tableView.xFocusedColumn.identifier())
 
 proc rowHeight*(tableView: TableView): float32 =
-  result = tableView.xRowHeight
+  result = tableView.xRowSizing.height
   let appearance = tableView.effectiveAppearance()
-  if not tableView.xHasExplicitRowHeight:
+  if not tableView.xRowSizing.hasExplicitHeight:
     result =
       appearance.resolveLength(tableView.tableStyleContext(), StyleRowHeight, result)
   result = result.normalizedRowHeight()
@@ -3125,12 +2857,12 @@ proc rowHeightForRow*(tableView: TableView, row: int): float32 =
 proc `rowHeight=`*(tableView: TableView, height: float32) =
   let normalized = height.normalizedRowHeight()
   let previousHeight = tableView.rowHeight()
-  tableView.xHasExplicitRowHeight = true
-  if tableView.xRowHeight == normalized and previousHeight == normalized:
+  tableView.xRowSizing.hasExplicitHeight = true
+  if tableView.xRowSizing.height == normalized and previousHeight == normalized:
     return
-  tableView.xRowHeight = normalized
+  tableView.xRowSizing.height = normalized
   tableView.xScrollView.lineScroll = normalized
-  tableView.xRowHeightCacheValid = false
+  tableView.xRowHeightMeasurement.valid = false
   tableView.reloadData()
 
 proc rowEnabled*(tableView: TableView, row: int): bool =
@@ -3176,7 +2908,7 @@ proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil) =
   ## Reloads rows while preserving selection identities and the viewport anchor.
   ## `updateRows` runs once after the old state is captured, before fresh rows
   ## are queried. Use it to replace source rows or invalidate a cached row list.
-  tableView.xContentWidthMeasurementValid = false
+  tableView.xWidthMeasurement.valid = false
   tableView.invalidateColumnWidthMeasurements()
   let
     oldOffset = tableView.listContentOffset()
@@ -3187,8 +2919,8 @@ proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil) =
     anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
     leadIdentifier = tableView.tableRowIdentifier(tableView.xSelectionLead)
     editingIdentifier =
-      if tableView.xEditing.active:
-        tableView.tableRowIdentifier(tableView.xEditing.row)
+      if tableView.xCellEditing.state.active:
+        tableView.tableRowIdentifier(tableView.xCellEditing.state.row)
       else:
         ""
   if not updateRows.isNil:
@@ -3219,12 +2951,12 @@ proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil) =
     tableView.xHighlightedIndex = -1
   if not tableView.rowEnabled(tableView.xPressedIndex):
     tableView.xPressedIndex = -1
-  if tableView.xEditing.active and editingIdentifier.len > 0:
+  if tableView.xCellEditing.state.active and editingIdentifier.len > 0:
     let editingRow = tableView.tableRowIndexForIdentifier(editingIdentifier)
     if editingRow >= 0:
-      tableView.xEditing.row = editingRow
+      tableView.xCellEditing.state.row = editingRow
     else:
-      tableView.xEditing = TableEditingState(row: -1)
+      tableView.xCellEditing.state = TableEditingState(row: -1)
       Control(tableView).clearValidationError()
       tableView.clearEditingSurface()
   tableView.layoutTableContentIfNeeded()
@@ -3245,15 +2977,15 @@ proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil) =
 proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdate]) =
   if updates.len == 0:
     return
-  tableView.xContentWidthMeasurementValid = false
+  tableView.xWidthMeasurement.valid = false
   tableView.invalidateColumnWidthMeasurements()
   let
     selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
     anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
     leadIdentifier = tableView.tableRowIdentifier(tableView.xSelectionLead)
     editingIdentifier =
-      if tableView.xEditing.active:
-        tableView.tableRowIdentifier(tableView.xEditing.row)
+      if tableView.xCellEditing.state.active:
+        tableView.tableRowIdentifier(tableView.xCellEditing.state.row)
       else:
         ""
   tableView.clearTableCellSlots()
@@ -3269,13 +3001,15 @@ proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdat
       tableView.normalizeSelection(tableView.xSelectedIndexes)
     tableView.syncSelectedIndex()
     tableView.syncSelectionCursor()
-  if tableView.xEditing.active and editingIdentifier.len > 0:
+  if tableView.xCellEditing.state.active and editingIdentifier.len > 0:
     let editingRow = tableView.tableRowIndexForIdentifier(editingIdentifier)
     if editingRow >= 0:
-      tableView.xEditing.row = editingRow
-  if tableView.xEditing.active and
-      not tableView.validCell(tableView.xEditing.row, tableView.xEditing.column):
-    tableView.xEditing = TableEditingState(row: -1)
+      tableView.xCellEditing.state.row = editingRow
+  if tableView.xCellEditing.state.active and
+      not tableView.validCell(
+        tableView.xCellEditing.state.row, tableView.xCellEditing.state.column
+      ):
+    tableView.xCellEditing.state = TableEditingState(row: -1)
     Control(tableView).clearValidationError()
     tableView.clearEditingSurface()
   tableView.invalidateTableWidthMeasurement()
@@ -3284,23 +3018,23 @@ proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdat
   emit tableView.tableRowsDidUpdate(DynamicAgent(tableView), @updates)
 
 proc beginTableUpdates*(tableView: TableView) =
-  inc tableView.xBatchUpdateDepth
+  inc tableView.xRowUpdates.depth
 
 proc endTableUpdates*(tableView: TableView) =
-  if tableView.xBatchUpdateDepth <= 0:
+  if tableView.xRowUpdates.depth <= 0:
     return
-  dec tableView.xBatchUpdateDepth
-  if tableView.xBatchUpdateDepth == 0 and tableView.xPendingRowUpdates.len > 0:
-    let updates = tableView.xPendingRowUpdates
-    tableView.xPendingRowUpdates.setLen(0)
+  dec tableView.xRowUpdates.depth
+  if tableView.xRowUpdates.depth == 0 and tableView.xRowUpdates.pending.len > 0:
+    let updates = tableView.xRowUpdates.pending
+    tableView.xRowUpdates.pending.setLen(0)
     tableView.flushTableRowUpdates(updates)
 
 proc applyTableRowUpdates*(tableView: TableView, updates: openArray[TableRowUpdate]) =
   if updates.len == 0:
     return
-  if tableView.xBatchUpdateDepth > 0:
+  if tableView.xRowUpdates.depth > 0:
     for update in updates:
-      tableView.xPendingRowUpdates.add update
+      tableView.xRowUpdates.pending.add update
     return
   tableView.flushTableRowUpdates(updates)
 
@@ -3381,13 +3115,13 @@ proc `selectionMode=`*(tableView: TableView, mode: TableSelectionMode) =
   tableView.reloadData()
 
 proc visibleRows*(tableView: TableView): int =
-  tableView.xVisibleRows
+  tableView.xRowSizing.visibleRows
 
 proc `visibleRows=`*(tableView: TableView, rows: int) =
   let normalized = max(rows, 1)
-  if tableView.xVisibleRows == normalized:
+  if tableView.xRowSizing.visibleRows == normalized:
     return
-  tableView.xVisibleRows = normalized
+  tableView.xRowSizing.visibleRows = normalized
   tableView.reloadData()
 
 proc usesAlternatingRowBackgrounds*(tableView: TableView): bool =
@@ -3416,7 +3150,7 @@ proc `allowsRowReordering=`*(tableView: TableView, value: bool) =
     return
   tableView.xAllowsRowReordering = value
   if not value:
-    tableView.xRowDragStartIndex = -1
+    tableView.xDragging.rowStart.row = -1
     tableView.updateTableDropTarget(initDraggingDropTarget())
 
 proc selectedIndex*(tableView: TableView): int =
@@ -3572,13 +3306,13 @@ proc `selectedColumns=`*(tableView: TableView, columns: openArray[TableColumn]) 
   tableView.setSelectedColumns(@columns)
 
 proc editingState*(tableView: TableView): TableEditingState =
-  tableView.xEditing
+  tableView.xCellEditing.state
 
 proc editingValidationError*(tableView: TableView): string =
-  tableView.xEditing.validationError
+  tableView.xCellEditing.state.validationError
 
 proc editingValidation*(tableView: TableView): ObjectValidationError =
-  tableView.xEditing.validation
+  tableView.xCellEditing.state.validation
 
 proc autosaveName*(tableView: TableView): string =
   tableView.xAutosaveName
@@ -3639,7 +3373,7 @@ proc resolveColumnAutosaveIdentifier(tableView: TableView, identifier: string): 
     result = tableView.xColumnAutosaveAliases[result]
 
 proc draggingSession*(tableView: TableView): DraggingSession =
-  tableView.xTableDraggingSession
+  tableView.xDragging.session
 
 proc beginDraggingRows*(
     tableView: TableView,
@@ -3672,10 +3406,10 @@ proc beginDraggingColumns*(
     nil
 
 proc draggingInfo*(tableView: TableView): DraggingInfo =
-  if tableView.xTableDraggingSession.isNil:
+  if tableView.xDragging.session.isNil:
     DraggingInfo()
   else:
-    tableView.xTableDraggingSession.draggingInfo()
+    tableView.xDragging.session.draggingInfo()
 
 proc withDropTarget*(
     info: DraggingInfo, row = -1, column: TableColumn = nil, position = ddpOn
@@ -3760,18 +3494,18 @@ proc dropTargetForDraggingLocation*(
   proposedTarget
 
 proc activeDropTarget(tableView: TableView): DraggingDropTarget =
-  if not tableView.xTableDraggingSession.isNil and
-      tableView.xTableDraggingSession.state() == dssActive:
-    return tableView.xTableDraggingSession.dropTarget()
-  tableView.xTableDropTarget
+  if not tableView.xDragging.session.isNil and
+      tableView.xDragging.session.state() == dssActive:
+    return tableView.xDragging.session.dropTarget()
+  tableView.xDragging.dropTarget
 
 proc currentDropTarget*(tableView: TableView): DraggingDropTarget =
   tableView.activeDropTarget()
 
 proc updateTableDropTarget(tableView: TableView, target: DraggingDropTarget) =
-  if tableView.xTableDropTarget == target:
+  if tableView.xDragging.dropTarget == target:
     return
-  tableView.xTableDropTarget = target
+  tableView.xDragging.dropTarget = target
   tableView.invalidateTableRows()
 
 proc joinRowIndexes(rows: openArray[int]): string =
@@ -4038,51 +3772,48 @@ proc visibleRowView(tableView: TableView, row: int): tuple[view: View, rect: Rec
       return (rowView, rowRect)
   (nil, rect(0.0, 0.0, 0.0, 0.0))
 
-proc prepareEditingSurface(tableView: TableView): bool =
-  if not tableView.xEditing.active:
-    return false
-  tableView.xEditingHostView = nil
-  tableView.xEditingCell = nil
-  tableView.xEditingHostIsRowView = false
+proc clearEditingSurface(tableView: TableView) =
+  tableView.xCellEditing.surface = default(TableEditingSurface)
 
-  tableView.scrollItemToVisible(tableView.xEditing.row)
+proc prepareEditingSurface(tableView: TableView): bool =
+  if not tableView.xCellEditing.state.active:
+    return false
+  tableView.clearEditingSurface()
+
+  tableView.scrollItemToVisible(tableView.xCellEditing.state.row)
   tableView.layoutSubtreeIfNeeded()
 
-  let cellView =
-    tableView.visibleCellView(tableView.xEditing.row, tableView.xEditing.column)
+  let cellView = tableView.visibleCellView(
+    tableView.xCellEditing.state.row, tableView.xCellEditing.state.column
+  )
   if not cellView.isNil:
-    tableView.xEditingHostView = cellView
+    tableView.xCellEditing.surface.hostView = cellView
     if cellView of Control:
-      tableView.xEditingCell = Control(cellView).cell()
+      tableView.xCellEditing.surface.cell = Control(cellView).cell()
     return true
 
-  let row = tableView.visibleRowView(tableView.xEditing.row)
+  let row = tableView.visibleRowView(tableView.xCellEditing.state.row)
   if row.view.isNil:
     return false
-  tableView.xEditingHostView = row.view
-  tableView.xEditingHostIsRowView = true
+  tableView.xCellEditing.surface.hostView = row.view
+  tableView.xCellEditing.surface.isRowView = true
   true
 
-proc clearEditingSurface(tableView: TableView) =
-  tableView.xEditingHostView = nil
-  tableView.xEditingCell = nil
-  tableView.xEditingHostIsRowView = false
-
 proc fieldEditorFrameForEditing(tableView: TableView): Rect =
-  if tableView.xEditingHostView.isNil:
+  if tableView.xCellEditing.surface.hostView.isNil:
     return rect(0.0, 0.0, 0.0, 0.0)
-  if tableView.xEditingHostIsRowView:
-    let row = tableView.visibleRowView(tableView.xEditing.row)
+  if tableView.xCellEditing.surface.isRowView:
+    let row = tableView.visibleRowView(tableView.xCellEditing.state.row)
     let rowBounds = rect(0.0, 0.0, row.rect.size.width, row.rect.size.height)
-    let cellFrame = tableView.columnRect(rowBounds, tableView.xEditing.column)
+    let cellFrame = tableView.columnRect(rowBounds, tableView.xCellEditing.state.column)
     let delegate = tableView.delegate()
     if not delegate.isNil:
       let frame = delegate.trySendLocal(
         fieldEditorFrameForCell(),
         (
           tableView: tableView,
-          row: tableView.xEditing.row,
-          column: tableView.xEditing.column,
+          row: tableView.xCellEditing.state.row,
+          column: tableView.xCellEditing.state.column,
           proposedFrame: cellFrame,
         ),
       )
@@ -4097,7 +3828,7 @@ proc fieldEditorFrameForEditing(tableView: TableView): Rect =
         )
       )
     return style.rowItemTextRect(cellFrame)
-  tableView.xEditingHostView.bounds()
+  tableView.xCellEditing.surface.hostView.bounds()
 
 proc fieldEditorTextStyleForEditing(tableView: TableView): TextStyle =
   let style = tableView.effectiveAppearance().resolveRowItemStyle(
@@ -4114,42 +3845,49 @@ proc removeFieldEditorFromSurface(tableView: TableView, editor: FieldEditor) =
   if editor.isNil:
     return
   TextView(editor).clearTextStyleOverride()
-  if tableView.xEditingHostView of Control:
-    Control(tableView.xEditingHostView).setCurrentEditor(nil)
-  if not tableView.xEditingCell.isNil:
-    tableView.xEditingCell.endEditing(editor, tableView.xEditingHostView)
-  elif editor.superview() == tableView.xEditingHostView:
+  if tableView.xCellEditing.surface.hostView of Control:
+    Control(tableView.xCellEditing.surface.hostView).setCurrentEditor(nil)
+  if not tableView.xCellEditing.surface.cell.isNil:
+    tableView.xCellEditing.surface.cell.endEditing(
+      editor, tableView.xCellEditing.surface.hostView
+    )
+  elif editor.superview() == tableView.xCellEditing.surface.hostView:
     editor.removeFromSuperview()
 
 proc installFieldEditorOnSurface(tableView: TableView, editor: FieldEditor) =
   if editor.isNil:
     return
-  if tableView.xEditingHostView.isNil and not tableView.prepareEditingSurface():
+  if tableView.xCellEditing.surface.hostView.isNil and
+      not tableView.prepareEditingSurface():
     return
   let frame = tableView.fieldEditorFrameForEditing()
-  if not tableView.xEditingCell.isNil:
-    tableView.xEditingCell.selectWithFrame(
-      frame, tableView.xEditingHostView, editor, 0, editor.textStorage().len
+  if not tableView.xCellEditing.surface.cell.isNil:
+    tableView.xCellEditing.surface.cell.selectWithFrame(
+      frame,
+      tableView.xCellEditing.surface.hostView,
+      editor,
+      0,
+      editor.textStorage().len,
     )
-    if tableView.xEditingHostView of Control:
-      Control(tableView.xEditingHostView).setCurrentEditor(editor)
+    if tableView.xCellEditing.surface.hostView of Control:
+      Control(tableView.xCellEditing.surface.hostView).setCurrentEditor(editor)
   else:
     let textView = TextView(editor)
     textView.setTextStyleOverride(tableView.fieldEditorTextStyleForEditing())
-    textView.alignment = tableView.xEditing.column.alignment()
+    textView.alignment = tableView.xCellEditing.state.column.alignment()
     editor.setFrameFromLayout(frame)
     editor.bounds = rect(0.0, 0.0, frame.size.width, frame.size.height)
-    if not tableView.xEditingHostView.isNil and
-        editor.superview() != tableView.xEditingHostView:
-      tableView.xEditingHostView.addSubview(editor)
+    if not tableView.xCellEditing.surface.hostView.isNil and
+        editor.superview() != tableView.xCellEditing.surface.hostView:
+      tableView.xCellEditing.surface.hostView.addSubview(editor)
     editor.selectedRange = initTextRange(0, editor.textStorage().len)
 
 proc setEditingValidation(tableView: TableView, error: ObjectValidationError) =
-  if not tableView.xEditing.active:
+  if not tableView.xCellEditing.state.active:
     return
-  let hadError = tableView.xEditing.validation.failed()
-  tableView.xEditing.validation = error
-  tableView.xEditing.validationError =
+  let hadError = tableView.xCellEditing.state.validation.failed()
+  tableView.xCellEditing.state.validation = error
+  tableView.xCellEditing.state.validationError =
     if error.failed():
       error.displayMessage()
     else:
@@ -4162,7 +3900,7 @@ proc setEditingValidation(tableView: TableView, error: ObjectValidationError) =
     tableView.needsDisplay = true
 
 proc parseEditingObjectValue(tableView: TableView, value: string): ObjectParseResult =
-  if not tableView.xEditing.active:
+  if not tableView.xCellEditing.state.active:
     return initObjectParseResult(toObj(value))
   let delegate = tableView.delegate()
   if not delegate.isNil:
@@ -4170,8 +3908,8 @@ proc parseEditingObjectValue(tableView: TableView, value: string): ObjectParseRe
       parseObjectValueForCell(),
       (
         tableView: tableView,
-        row: tableView.xEditing.row,
-        column: tableView.xEditing.column,
+        row: tableView.xCellEditing.state.row,
+        column: tableView.xCellEditing.state.column,
         value: value,
       ),
     )
@@ -4180,7 +3918,7 @@ proc parseEditingObjectValue(tableView: TableView, value: string): ObjectParseRe
   Control(tableView).parseEditedObjectValue(value, ovrTableCell)
 
 proc validateEditingValue(tableView: TableView, value: string): bool =
-  if not tableView.xEditing.active:
+  if not tableView.xCellEditing.state.active:
     return true
   tableView.setEditingValidation(initObjectValidationError())
   let parsed = tableView.parseEditingObjectValue(value)
@@ -4189,14 +3927,14 @@ proc validateEditingValue(tableView: TableView, value: string): bool =
     return false
   let delegate = tableView.delegate()
   if delegate.isNil:
-    tableView.xEditing.objectValue = parsed.value
+    tableView.xCellEditing.state.objectValue = parsed.value
     return true
   let validation = delegate.trySendLocal(
     validationErrorForCell(),
     (
       tableView: tableView,
-      row: tableView.xEditing.row,
-      column: tableView.xEditing.column,
+      row: tableView.xCellEditing.state.row,
+      column: tableView.xCellEditing.state.column,
       value: value,
     ),
   )
@@ -4215,23 +3953,23 @@ proc validateEditingValue(tableView: TableView, value: string): bool =
     validationErrorForObjectValue(),
     (
       tableView: tableView,
-      row: tableView.xEditing.row,
-      column: tableView.xEditing.column,
+      row: tableView.xCellEditing.state.row,
+      column: tableView.xCellEditing.state.column,
       value: parsed.value,
     ),
   )
   if objectValidation.isSome and objectValidation.get().failed():
     tableView.setEditingValidation(objectValidation.get())
     return false
-  tableView.xEditing.objectValue = parsed.value
+  tableView.xCellEditing.state.objectValue = parsed.value
   true
 
 proc finishCommitEditingCell(tableView: TableView, value: string): bool =
-  if not tableView.xEditing.active:
+  if not tableView.xCellEditing.state.active:
     return false
   if not tableView.validateEditingValue(value):
     return false
-  let editing = tableView.xEditing
+  let editing = tableView.xCellEditing.state
   let objectValue = editing.objectValue
   if not tableView.writeTableCellObjectValue(editing.row, editing.column, objectValue):
     tableView.setEditingValidation(
@@ -4244,10 +3982,9 @@ proc finishCommitEditingCell(tableView: TableView, value: string): bool =
       )
     )
     return false
-  tableView.xEndedEditingRow = editing.row
-  tableView.xEndedEditingColumn = editing.column
-  tableView.xEndedEditingCommitted = true
-  tableView.xEditing = TableEditingState(row: -1)
+  tableView.xCellEditing.completion =
+    TableEditCompletion(row: editing.row, column: editing.column, committed: true)
+  tableView.xCellEditing.state = TableEditingState(row: -1)
   tableView.clearEditingSurface()
   let delegate = tableView.delegate()
   if not delegate.isNil:
@@ -4276,13 +4013,12 @@ proc finishCommitEditingCell(tableView: TableView, value: string): bool =
   true
 
 proc finishCancelEditingCell(tableView: TableView): bool =
-  if not tableView.xEditing.active:
+  if not tableView.xCellEditing.state.active:
     return false
-  let editing = tableView.xEditing
-  tableView.xEndedEditingRow = editing.row
-  tableView.xEndedEditingColumn = editing.column
-  tableView.xEndedEditingCommitted = false
-  tableView.xEditing = TableEditingState(row: -1)
+  let editing = tableView.xCellEditing.state
+  tableView.xCellEditing.completion =
+    TableEditCompletion(row: editing.row, column: editing.column)
+  tableView.xCellEditing.state = TableEditingState(row: -1)
   Control(tableView).clearValidationError()
   tableView.clearEditingSurface()
   let delegate = tableView.delegate()
@@ -4324,17 +4060,18 @@ proc editableCellInRowAfter(
       return TableEditingState(row: row, column: nextColumn, active: true)
 
 proc moveEditingFromEndedCell(tableView: TableView, movement: TextEditMovement): bool =
-  if not tableView.xEndedEditingCommitted:
+  if not tableView.xCellEditing.completion.committed:
     return false
   var next = TableEditingState(row: -1)
   case movement
   of temTab:
     next = tableView.editableCellInRowAfter(
-      tableView.xEndedEditingRow, tableView.xEndedEditingColumn, 1
+      tableView.xCellEditing.completion.row, tableView.xCellEditing.completion.column, 1
     )
   of temBacktab:
     next = tableView.editableCellInRowAfter(
-      tableView.xEndedEditingRow, tableView.xEndedEditingColumn, -1
+      tableView.xCellEditing.completion.row, tableView.xCellEditing.completion.column,
+      -1,
     )
   of temReturn, temNone:
     discard
@@ -4453,8 +4190,8 @@ proc drawFocusedTableCell(
     isKeyboardFocusedCell =
       tableView.xFocusedColumn == column and row == tableView.selectionLeadIndex()
     isEditingCell =
-      tableView.xEditing.active and tableView.xEditing.row == row and
-      tableView.xEditing.column == column
+      tableView.xCellEditing.state.active and tableView.xCellEditing.state.row == row and
+      tableView.xCellEditing.state.column == column
   if not (isKeyboardFocusedCell or isEditingCell):
     return
   if not tableView.focused() and not isEditingCell:
@@ -4495,8 +4232,8 @@ proc drawTableCellText(
 ) =
   if rect.isEmpty:
     return
-  if tableView.xEditing.active and tableView.xEditing.row == row and
-      tableView.xEditing.column == column:
+  if tableView.xCellEditing.state.active and tableView.xCellEditing.state.row == row and
+      tableView.xCellEditing.state.column == column:
     return
   let text = tableView.tableCellText(row, column)
   if text.len > 0:
@@ -4745,21 +4482,6 @@ proc bindTableModel*(tableView: TableView, model: TableModel) =
   tableView.dataSource = DynamicAgent(model)
   tableView.delegate = DynamicAgent(model)
   tableView.reloadData()
-
-proc initTableViewState*(
-    columns: openArray[TableColumnAutosaveRecord] = [],
-    selectedRows: openArray[int] = [],
-    selectedColumns: openArray[string] = [],
-    expandedItems: openArray[string] = [],
-    selectedRowIdentifiers: openArray[string] = [],
-): TableViewState =
-  TableViewState(
-    columns: @columns,
-    selectedRows: @selectedRows,
-    selectedRowIdentifiers: @selectedRowIdentifiers,
-    selectedColumns: @selectedColumns,
-    expandedItems: @expandedItems,
-  )
 
 proc newTableViewStateStore*(): TableViewStateStore
 
@@ -5037,10 +4759,8 @@ proc drawCustomTableRow(
   )
 
 proc measuredTableContentWidth(tableView: TableView, style: TextStyle): float32 =
-  if tableView.xContentWidthMeasurementValid and
-      tableView.xMeasuredContentFontName == style.fontName and
-      tableView.xMeasuredContentFontSize == style.fontSize:
-    return tableView.xMeasuredContentWidth
+  if tableView.xWidthMeasurement.matches(style):
+    return tableView.xWidthMeasurement.width
 
   let source = tableView.dataSource()
   var widthHint = none(float32)
@@ -5053,10 +4773,9 @@ proc measuredTableContentWidth(tableView: TableView, style: TextStyle): float32 
       result =
         max(result, textNaturalSize(tableView.rowTextForSummary(index), style).width)
 
-  tableView.xMeasuredContentWidth = result
-  tableView.xMeasuredContentFontName = style.fontName
-  tableView.xMeasuredContentFontSize = style.fontSize
-  tableView.xContentWidthMeasurementValid = true
+  tableView.xWidthMeasurement = TableWidthMeasurement(
+    width: result, fontName: style.fontName, fontSize: style.fontSize, valid: true
+  )
 
 proc naturalSize(tableView: TableView): Size =
   let
@@ -5097,13 +4816,13 @@ proc naturalSize(tableView: TableView): Size =
 
   let
     requestedContentWidth =
-      case tableView.xWidthSizingMode
+      case tableView.xWidthSizing.mode
       of tvwsmColumns:
         0.0'f32
       of tvwsmContent:
         tableView.measuredTableContentWidth(summaryTextStyle)
       of tvwsmPreferredWidth:
-        tableView.xPreferredContentWidth
+        tableView.xWidthSizing.preferredContentWidth
     bodyWidth = max(tableView.visibleColumnWidth(), requestedContentWidth)
 
   initSize(
@@ -5197,30 +4916,29 @@ func hasExceededDragThreshold(startPoint, location: Point, threshold: float32): 
   max(abs(location.x - startPoint.x), abs(location.y - startPoint.y)) >= threshold
 
 proc clearRowDragState(tableView: TableView) =
-  tableView.xRowDragStartIndex = -1
-  tableView.xRowDragStartPoint = initPoint(0.0, 0.0)
+  tableView.xDragging.rowStart = TableRowDragStart(row: -1)
 
 proc rowReorderDragRows(tableView: TableView): seq[int] =
-  if tableView.xRowDragStartIndex < 0:
+  if tableView.xDragging.rowStart.row < 0:
     return
   if tableView.selectionMode() != tsmNone and
-      tableView.selectionContains(tableView.xRowDragStartIndex):
+      tableView.selectionContains(tableView.xDragging.rowStart.row):
     tableView.selectedIndexes()
   else:
-    @[tableView.xRowDragStartIndex]
+    @[tableView.xDragging.rowStart.row]
 
 proc shouldBeginRowReorderDrag(tableView: TableView, event: MouseEvent): bool =
   if not tableView.isEnabled() or event.button != mbPrimary:
     return false
   if not tableView.allowsRowReordering() or not tableView.xTrackingItem:
     return false
-  if tableView.xRowDragStartIndex < 0 or
-      not tableView.rowEnabled(tableView.xRowDragStartIndex):
+  if tableView.xDragging.rowStart.row < 0 or
+      not tableView.rowEnabled(tableView.xDragging.rowStart.row):
     return false
   if tableView.selectionMode() != tsmNone and
-      not tableView.rowSelectable(tableView.xRowDragStartIndex):
+      not tableView.rowSelectable(tableView.xDragging.rowStart.row):
     return false
-  tableView.xRowDragStartPoint.hasExceededDragThreshold(
+  tableView.xDragging.rowStart.point.hasExceededDragThreshold(
     event.location, tableView.tableStyle().headerDragThreshold
   )
 
@@ -5228,8 +4946,8 @@ proc tryBeginRowReorderDrag(tableView: TableView, event: MouseEvent): bool =
   if not tableView.shouldBeginRowReorderDrag(event):
     return false
   if tableView.selectionMode() != tsmNone and
-      not tableView.selectionContains(tableView.xRowDragStartIndex):
-    tableView.selectItemAtIndex(tableView.xRowDragStartIndex)
+      not tableView.selectionContains(tableView.xDragging.rowStart.row):
+    tableView.selectItemAtIndex(tableView.xDragging.rowStart.row)
 
   let rows = tableView.normalizedReorderRows(tableView.rowReorderDragRows())
   if rows.len == 0:
@@ -5303,8 +5021,7 @@ proc defaultTableViewMouseDown*(tableView: TableView, event: MouseEvent): bool =
   tableView.xTrackingItem = true
   let index = tableView.updateHighlightedCellAtPoint(event.location)
   tableView.xPressedIndex = tableView.highlightedIndex()
-  tableView.xRowDragStartIndex = index
-  tableView.xRowDragStartPoint = event.location
+  tableView.xDragging.rowStart = TableRowDragStart(row: index, point: event.location)
   tableView.invalidateTableRows()
   true
 
@@ -5839,9 +5556,10 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
       return
     if column.resizePolicy() == tcrFixed:
       return
-    column.xUserResized = true
+    column.xWidth.userResized = true
     column.width = width
-    if tableView.xEditing.active and tableView.xEditing.column == column:
+    if tableView.xCellEditing.state.active and
+        tableView.xCellEditing.state.column == column:
       tableView.clearEditingSurface()
       let editor = Control(tableView).currentEditor()
       if not editor.isNil:
@@ -5897,15 +5615,16 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     let hit = tableView.tableHeaderHitTest(event.location)
     if hit.part == thpNone:
       return false
-    tableView.xHeaderTrackingPart = hit.part
-    tableView.xTrackingColumn = hit.column
-    tableView.xTrackingColumnIndex = hit.columnIndex
-    tableView.xTrackingRowIndex = hit.row
+    tableView.xHeaderTracking = TableHeaderTracking(
+      part: hit.part,
+      column: hit.column,
+      columnIndex: hit.columnIndex,
+      row: hit.row,
+      startPoint: event.location,
+      insertionIndex: -1,
+    )
     tableView.xPressedColumn = hit.column
-    tableView.xHeaderDraggingColumn = false
-    tableView.clearHeaderDragInsertion()
-    tableView.xDragStartPoint = event.location
-    tableView.xDragStartWidth =
+    tableView.xHeaderTracking.startSize.width =
       if hit.part == thpRowHeaderResizeHandle:
         tableView.rowHeaderWidth()
       elif hit.part == thpRowHeaderRowResizeHandle:
@@ -5914,7 +5633,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
         0.0'f32
       else:
         hit.column.width()
-    tableView.xDragStartHeight =
+    tableView.xHeaderTracking.startSize.height =
       if hit.part == thpRowHeaderRowResizeHandle:
         tableView.rowHeightForRow(hit.row)
       else:
@@ -5923,33 +5642,35 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     true
 
   method headerMouseDragged(tableView: TableView, event: MouseEvent): bool =
-    if tableView.xHeaderTrackingPart == thpNone:
+    if not tableView.xHeaderTracking.isActive():
       return false
-    case tableView.xHeaderTrackingPart
+    let
+      startPoint = tableView.xHeaderTracking.startPoint
+      startSize = tableView.xHeaderTracking.startSize
+    case tableView.xHeaderTracking.part
     of thpRowHeaderResizeHandle:
-      tableView.rowHeaderWidth =
-        tableView.xDragStartWidth + event.location.x - tableView.xDragStartPoint.x
+      tableView.rowHeaderWidth = startSize.width + event.location.x - startPoint.x
     of thpRowHeaderRowResizeHandle:
       tableView.applyRowHeightResize(
-        tableView.xTrackingRowIndex,
-        tableView.xDragStartHeight + event.location.y - tableView.xDragStartPoint.y,
+        tableView.xHeaderTracking.row,
+        startSize.height + event.location.y - startPoint.y,
       )
     of thpRowHeader:
       discard
     of thpResizeHandle:
-      if tableView.xTrackingColumn.isNil:
+      if tableView.xHeaderTracking.column.isNil:
         return false
       tableView.resizeColumn(
-        tableView.xTrackingColumn,
-        tableView.xDragStartWidth + event.location.x - tableView.xDragStartPoint.x,
+        tableView.xHeaderTracking.column,
+        startSize.width + event.location.x - startPoint.x,
       )
     of thpColumn:
-      if tableView.xTrackingColumn.isNil:
+      if tableView.xHeaderTracking.column.isNil:
         return false
-      if abs(event.location.x - tableView.xDragStartPoint.x) >
+      if abs(event.location.x - startPoint.x) >
           tableView.tableStyle().headerDragThreshold:
-        tableView.xHeaderDraggingColumn = true
-      if tableView.xHeaderDraggingColumn:
+        tableView.xHeaderTracking.draggingColumn = true
+      if tableView.xHeaderTracking.draggingColumn:
         if not tableView.autoscrollHeaderColumnDrag(event.location):
           tableView.setHeaderDragInsertion(
             tableView.headerInsertionIndexAtPoint(event.location)
@@ -5960,27 +5681,22 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     true
 
   method headerMouseUp(tableView: TableView, event: MouseEvent): bool =
-    if tableView.xHeaderTrackingPart == thpNone:
+    if not tableView.xHeaderTracking.isActive():
       return false
     let
       hit = tableView.tableHeaderHitTest(event.location)
-      clickedColumn = tableView.xTrackingColumn
-      clickedPart = tableView.xHeaderTrackingPart
-      fromIndex = tableView.xTrackingColumnIndex
+      clickedColumn = tableView.xHeaderTracking.column
+      clickedPart = tableView.xHeaderTracking.part
+      fromIndex = tableView.xHeaderTracking.columnIndex
       moved =
-        tableView.xHeaderDraggingColumn or (
+        tableView.xHeaderTracking.draggingColumn or (
           clickedPart == thpColumn and
-          abs(event.location.x - tableView.xDragStartPoint.x) >
+          abs(event.location.x - tableView.xHeaderTracking.startPoint.x) >
           tableView.tableStyle().headerDragThreshold
         )
-      insertionIndex = tableView.xHeaderDragInsertionIndex
-    tableView.xHeaderTrackingPart = thpNone
-    tableView.xTrackingColumn = nil
-    tableView.xTrackingColumnIndex = -1
-    tableView.xTrackingRowIndex = -1
-    tableView.xHeaderDraggingColumn = false
+      insertionIndex = tableView.xHeaderTracking.insertionIndex
+    tableView.xHeaderTracking.clear()
     tableView.xPressedColumn = nil
-    tableView.clearHeaderDragInsertion()
     if clickedPart == thpColumn and not clickedColumn.isNil:
       if moved:
         let targetIndex =
@@ -6119,8 +5835,9 @@ protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
   method beginEditingCell(tableView: TableView, row: int, column: TableColumn): bool =
     if not tableView.shouldBeginEditingCell(row, column):
       return false
-    if tableView.xEditing.active:
-      if tableView.xEditing.row == row and tableView.xEditing.column == column:
+    if tableView.xCellEditing.state.active:
+      if tableView.xCellEditing.state.row == row and
+          tableView.xCellEditing.state.column == column:
         let owner = tableView.window()
         if owner of Window:
           return Window(owner).makeFirstResponder(tableView)
@@ -6131,7 +5848,8 @@ protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
           return false
       elif not tableView.finishCommitEditingCell(""):
         return false
-    tableView.xEditing = TableEditingState(row: row, column: column, active: true)
+    tableView.xCellEditing.state =
+      TableEditingState(row: row, column: column, active: true)
     tableView.selectCell(row, column)
     discard tableView.prepareEditingSurface()
     let delegate = tableView.delegate()
@@ -6145,7 +5863,7 @@ protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
     true
 
   method commitEditingCell(tableView: TableView, value: string): bool =
-    if not tableView.xEditing.active:
+    if not tableView.xCellEditing.state.active:
       return false
     let editor = Control(tableView).activeEditor()
     if not editor.isNil and editor.client() == tableView:
@@ -6155,13 +5873,13 @@ protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
     tableView.finishCommitEditingCell(value)
 
   method cancelEditingCell(tableView: TableView): bool =
-    if not tableView.xEditing.active:
+    if not tableView.xCellEditing.state.active:
       return false
     let editor = Control(tableView).activeEditor()
     if not editor.isNil and editor.client() == tableView:
-      tableView.xCancellingFieldEditor = true
+      tableView.xCellEditing.cancelling = true
       result = editor.cancelEditing()
-      tableView.xCancellingFieldEditor = false
+      tableView.xCellEditing.cancelling = false
       if result:
         let owner = tableView.window()
         if owner of Window and Window(owner).firstResponder() == editor:
@@ -6173,24 +5891,28 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
   method fieldEditorForClient(
       tableView: TableView, defaultEditor: FieldEditor
   ): FieldEditor =
-    if not tableView.xEditing.active:
+    if not tableView.xCellEditing.state.active:
       return defaultEditor
-    if tableView.xEditingHostView.isNil:
+    if tableView.xCellEditing.surface.hostView.isNil:
       discard tableView.prepareEditingSurface()
-    if not tableView.xEditingCell.isNil:
-      let editor = tableView.xEditingCell.fieldEditorForView(tableView.xEditingHostView)
+    if not tableView.xCellEditing.surface.cell.isNil:
+      let editor = tableView.xCellEditing.surface.cell.fieldEditorForView(
+        tableView.xCellEditing.surface.hostView
+      )
       if not editor.isNil:
         return editor
     defaultEditor
 
   method usesFieldEditor(tableView: TableView, editor: FieldEditor): bool =
-    tableView.xEditing.active
+    tableView.xCellEditing.state.active
 
   method stringForFieldEditor(tableView: TableView, editor: FieldEditor): string =
-    if not tableView.xEditing.active:
+    if not tableView.xCellEditing.state.active:
       ""
     else:
-      tableView.tableCellText(tableView.xEditing.row, tableView.xEditing.column)
+      tableView.tableCellText(
+        tableView.xCellEditing.state.row, tableView.xCellEditing.state.column
+      )
 
   method setStringFromFieldEditor(
       tableView: TableView, editor: FieldEditor, value: string
@@ -6211,16 +5933,16 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
     tableView.focusVisible = editor.isFocusVisible()
 
   method didChangeTextInEditor(tableView: TableView, editor: FieldEditor) =
-    if not tableView.xEditing.active:
+    if not tableView.xCellEditing.state.active:
       return
-    if tableView.xEditing.validation.failed():
+    if tableView.xCellEditing.state.validation.failed():
       tableView.setEditingValidation(initObjectValidationError())
 
   method shouldBeginEditing(tableView: TableView, editor: FieldEditor): bool =
-    tableView.xEditing.active
+    tableView.xCellEditing.state.active
 
   method shouldEndEditing(tableView: TableView, editor: FieldEditor): bool =
-    if tableView.xCancellingFieldEditor:
+    if tableView.xCellEditing.cancelling:
       return true
     tableView.validateEditingValue(TextView(editor).stringValue())
 
@@ -6288,7 +6010,7 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
       )
     result =
       beginDraggingSession(DynamicAgent(tableView), items, operations, pasteboardName)
-    tableView.xTableDraggingSession = result
+    tableView.xDragging.session = result
 
   method beginDraggingColumns(
       tableView: TableView,
@@ -6312,7 +6034,7 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
       operations,
       pasteboardName,
     )
-    tableView.xTableDraggingSession = result
+    tableView.xDragging.session = result
 
   method reorderTableRows(
       tableView: TableView, rows: seq[int], target: DraggingDropTarget
@@ -6393,8 +6115,8 @@ protocol DefaultTableViewDraggingSource of DraggingSourceProtocol:
     info.allowedOperations
 
   method draggingSessionEnded(tableView: TableView, info: DraggingInfo) =
-    if tableView.xTableDraggingSession == info.session:
-      tableView.xTableDraggingSession = nil
+    if tableView.xDragging.session == info.session:
+      tableView.xDragging.session = nil
       tableView.updateTableDropTarget(initDraggingDropTarget())
 
 protocol DefaultTableViewDraggingDestination of DraggingDestinationProtocol:
@@ -6437,14 +6159,14 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
     tableView.defaultTableViewMouseDown(event)
 
   method mouseDragged(tableView: TableView, event: MouseEvent): bool =
-    if tableView.xHeaderTrackingPart != thpNone:
+    if tableView.xHeaderTracking.isActive():
       return tableView.headerMouseDragged(event)
     if tableView.updateActiveTableDrag(event):
       return true
     tableView.defaultTableViewMouseDragged(event)
 
   method mouseUp(tableView: TableView, event: MouseEvent): bool =
-    if tableView.xHeaderTrackingPart != thpNone:
+    if tableView.xHeaderTracking.isActive():
       return tableView.headerMouseUp(event)
     if tableView.performActiveTableDrag(event):
       return true
@@ -6478,7 +6200,7 @@ protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
     for column in tableView.xColumns:
       result.add TableColumnAutosaveRecord(
         identifier: column.identifier(),
-        width: column.xPreferredWidth,
+        width: column.xWidth.preferred,
         hidden: column.hidden(),
         sortDirection: column.sortDirection(),
       )
@@ -6493,9 +6215,8 @@ protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
         tableView.resolveColumnAutosaveIdentifier(record.identifier)
       let column = tableView.columnWithIdentifier(resolvedIdentifier)
       if not column.isNil and column notin restored:
-        column.xPreferredWidth =
-          record.width.normalizedWidth(column.xMinWidth, column.xMaxWidth)
-        column.xWidth = column.xPreferredWidth
+        column.xWidth.preferred = record.width.normalizedWidth(column.xWidth)
+        column.xWidth.resolved = column.xWidth.preferred
         column.xHidden = record.hidden
         column.xSortDirection = record.sortDirection
         ordered.add column
@@ -6685,33 +6406,32 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   tableView.xSelectionLead = -1
   tableView.xHighlightedIndex = -1
   tableView.xPressedIndex = -1
-  tableView.xRowHeight = style.rowHeight
-  tableView.xVisibleRows = 5
-  tableView.xColumnSizing = tvcsNatural
-  tableView.xWidthSizingMode = tvwsmColumns
+  tableView.xRowSizing.height = style.rowHeight
+  tableView.xRowSizing.visibleRows = 5
+  tableView.xWidthSizing.columnSizing = tvcsNatural
+  tableView.xWidthSizing.mode = tvwsmColumns
   tableView.xSelectionMode = tsmSingle
   tableView.xItemRole = srRowItem
   tableView.xRowCount = 0
-  tableView.xShowsHeader = true
-  tableView.xHeaderHeight = style.headerHeight
+  tableView.xHeaderSettings.visible = true
+  tableView.xHeaderSettings.height = style.headerHeight
   tableView.xClickedRow = -1
   tableView.xAllowsColumnSelection = false
-  tableView.xShowsRowHeader = false
-  tableView.xRowHeaderWidth = 48.0'f32
+  tableView.xRowHeaderSettings.visible = false
+  tableView.xRowHeaderSettings.width = 48.0'f32
   tableView.xTracksPointerRowHighlights = true
   tableView.xTracksPointerColumnHighlights = true
   tableView.xShowsFocusedRowHighlight = true
   tableView.xShowsFocusedColumnHighlight = true
-  tableView.xEditing = TableEditingState(row: -1)
-  tableView.xEndedEditingRow = -1
-  tableView.xTableDropTarget = initDraggingDropTarget()
+  tableView.xCellEditing.state = TableEditingState(row: -1)
+  tableView.xCellEditing.completion.row = -1
+  tableView.xDragging.dropTarget = initDraggingDropTarget()
+  tableView.clearRowDragState()
   tableView.xStateScope = tvssAutomatic
-  tableView.xRowHeightOverrides = initTable[int, float32]()
+  tableView.xRowSizing.overrides = initTable[int, float32]()
   tableView.xColumnAutosaveAliases = initTable[string, string]()
   tableView.xRowIdentifierAliases = initTable[string, string]()
-  tableView.xTrackingColumnIndex = -1
-  tableView.xTrackingRowIndex = -1
-  tableView.xHeaderDragInsertionIndex = -1
+  tableView.xHeaderTracking.clear()
   tableView.xReusableCellViews = initTable[string, seq[View]]()
   tableView.xScrollView = initTableScrollView(tableView)
   tableView.xContentView = initTableContentView(tableView)

@@ -5,6 +5,8 @@ import ./fixtures/rendergeometry
 import sigils/core
 
 import merenda/nimkit
+import merenda/nimkit/containers/tablebasics as tableBasics
+import merenda/nimkit/containers/tableviews as tableViewsApi
 import merenda/nimkit/foundation/types as nimkitTypes
 
 func hasDrawableOp(node: Fig, kind: DrawableKind): bool =
@@ -849,6 +851,28 @@ proc newTableStateProviderSpy(identifier: string): TableStateProviderSpy =
   discard result.withProtocol(TableStateProviderSpyMethods)
 
 suite "NimKit TableView":
+  test "table basics values work with table view model and persistence APIs":
+    let
+      row: tableViewsApi.TableRowValue = tableBasics.tableRow(
+        "row", cells = [tableBasics.tableCell("name", toObj("Before"))]
+      )
+      column: tableViewsApi.TableModelColumn =
+        tableBasics.initTableModelColumn("name", "Name", width = 120.0)
+      model = newTableModel([row], [column])
+      tableView = newTableView()
+      saved: tableViewsApi.TableViewState = tableBasics.initTableViewState(
+        columns =
+          [tableBasics.TableColumnAutosaveRecord(identifier: "name", width: 88.0)]
+      )
+
+    tableView.bindTableModel(model)
+    model.setValue("row", "name", toObj("After"))
+    check tableView.tableCellText(0, tableView.columnAt(0)) == "After"
+    tableView.restoreColumnAutosaveRecords(saved.columns)
+    check tableView.columnAt(0).width == 88.0'f32
+    expect tableBasics.TableModelError:
+      discard model.valueForRow("missing", "name")
+
   test "table columns expose stable identifiers and mutable display properties":
     let column = newTableColumn(
       "name",
@@ -1335,6 +1359,27 @@ suite "NimKit TableView":
     check tableView.columnAt(2) == project
     check not tableView.headerDragIndicator().visible
 
+    let
+      resizeStart =
+        initPoint(tableView.tableHeaderColumnRect(state).maxX - 1.0'f32, 10.0)
+      resizeEnd = initPoint(resizeStart.x + 20.0'f32, resizeStart.y)
+
+    check tableView.tableHeaderHitTest(resizeStart).part == thpResizeHandle
+    check tableView.headerMouseDown(
+      MouseEvent(location: resizeStart, button: mbPrimary)
+    )
+    check tableView.headerMouseDragged(
+      MouseEvent(location: resizeEnd, button: mbPrimary)
+    )
+    check state.width == 90.0'f32
+    check project.width == 90.0'f32
+    check tableView.headerMouseUp(MouseEvent(location: resizeEnd, button: mbPrimary))
+    check tableView.columnAt(0) == state
+    check tableView.headerDragIndicator().index == -1
+    check not tableView.headerMouseDragged(
+      MouseEvent(location: resizeEnd, button: mbPrimary)
+    )
+
   test "table view keeps clicked selection on row identities after header sort":
     let
       window = newWindow("Table sort keeps selection", frame = rect(0, 0, 420, 180))
@@ -1516,7 +1561,10 @@ suite "NimKit TableView":
 
     tableView.beginTableUpdates()
     tableView.insertRowsAtIndexes([3], ["edith"])
+    tableView.beginTableUpdates()
     tableView.reloadRowsAtIndexes([1], ["grace"])
+    tableView.endTableUpdates()
+    check signals.updateKinds == newSeq[TableRowUpdateKind]()
     tableView.moveRow(3, 1)
     tableView.removeRowsAtIndexes([0], ["ada-lovelace"])
     check signals.updateKinds == newSeq[TableRowUpdateKind]()

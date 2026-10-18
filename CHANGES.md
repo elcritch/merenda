@@ -8,6 +8,9 @@
 - Add a reproducible Windows Server evaluation VM setup for bhyve, with
   unattended installation, private RDP/SSH access, ZFS reset helpers, and GPU
   passthrough configuration and verification instructions.
+- Extract table value types, sizing records, and data helpers into
+  `nimkit/containers/tablebasics`. Existing TableView and NimKit imports continue
+  to expose the public table APIs.
 - Share typed collection storage, identity indexes, arrangement caching, and
   mutation invalidation between NimKit TableModel and ArrayController. Repeated
   controller lookups now reuse the filtered/sorted arrangement until a model
