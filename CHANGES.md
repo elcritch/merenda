@@ -21,8 +21,9 @@
 - Build Windows Kosmo releases and examples with MSVC. Use the Windows SDK
   resource compiler, ship the matching PDB, and keep Nim stack traces with
   function names and source lines in place of GNU libbacktrace on MSVC.
-  Use Sigils 0.32.0 and a pinned Nim 2.2.10 build with corrected MSVC atomic
-  exchange, compare-and-swap, and arithmetic operations.
+  Use Sigils 0.32.0 and the official Nim 2.2.10 compiler with a pinned,
+  checksum-verified standard-library fix for MSVC atomic exchange,
+  compare-and-swap, and arithmetic operations.
 
 - Enable FigDraw's `textBackendHarfbuzzy` Atlas feature in `merenda.nimble` so
   this checkout and downstream Merenda apps use HarfBuzz text rendering and

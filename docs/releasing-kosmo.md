@@ -28,9 +28,12 @@ depend on the working directory used to launch Kosmo.
 Release executables retain native debug information. Windows builds use MSVC,
 ship `kosmo.pdb` beside `kosmo.exe`, and use Nim's stack tracing with function names
 and source lines. The installer keeps the PDB beside the installed executable.
-Windows CI runs `.github/scripts/install-msvc-nim.sh` to build an immutable
-revision of the Nim 2.2.10 fork with corrected MSVC atomics. Local MSVC builds
-must use that script's compiler too. The standard-library regression tests run
+Windows CI runs `.github/scripts/install-msvc-nim.sh` to copy the official Nim
+2.2.10 binary distribution into a private environment and install a corrected
+MSVC atomics module from an immutable fork revision. The script verifies the
+module's SHA-256 and probes the compiler's default library lookup before adding
+it to CI's path. The Atlas-managed official installation stays untouched. Local
+MSVC builds must use that script's compiler too. The regression tests run
 natively with MSVC in the fork, and the release job additionally checks shared
 ownership, concurrent increments, and worker shutdown before packaging.
 The other platforms link the `libbacktrace` stack-trace override. Nim's

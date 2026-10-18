@@ -807,9 +807,11 @@ nim c -o:kosmo src/merenda/kosmo/kosmo.nim
 
 On Windows, run `bash .github/scripts/install-msvc-nim.sh` first. From a Visual
 Studio Developer PowerShell, use the compiler path it prints to build with
-`c --cc:vcc -o:kosmo.exe src/merenda/kosmo/kosmo.nim`, then run `./kosmo.exe .`.
-The pinned Nim 2.2.10 compiler includes the MSVC atomic-operation fixes needed
-by the worker threads; an unpatched MSVC build is rejected at compile time.
+`& "<compiler-path>" c --cc:vcc -o:kosmo.exe src/merenda/kosmo/kosmo.nim`,
+then run `./kosmo.exe .`.
+The script makes a private copy of the official Nim 2.2.10 binary distribution
+and installs a checksum-verified standard-library fix for MSVC atomic operations.
+Worker threads need that fix; an unpatched MSVC build is rejected at compile time.
 
 On macOS, install the current checkout as a complete `Kosmo.app` with its icon,
 bundled notices, debug symbols, and local code signature:
