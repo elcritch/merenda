@@ -165,10 +165,19 @@ suite "GitHub CLI document integration":
     require panel.waitForGitHub()
     let
       first = panel.headingDisclosure("#9 First PR")
+      second = panel.headingDisclosure("#10 Second PR")
       group = panel.headingDisclosure("Pull Requests (2)")
     require not first.isNil
+    require not second.isNil
     require not group.isNil
+    check first.accessibilityValue() == "collapsed"
+    check second.accessibilityValue() == "collapsed"
+    check group.accessibilityValue() == "expanded"
+    require first.accessibilityPerformAction(AccessibilityActionExpand)
+    require panel.waitForGitHub()
     require first.accessibilityPerformAction(AccessibilityActionCollapse)
+    require panel.waitForGitHub()
+    require second.accessibilityPerformAction(AccessibilityActionExpand)
     require panel.waitForGitHub()
     require group.accessibilityPerformAction(AccessibilityActionCollapse)
     require panel.waitForGitHub()
@@ -206,7 +215,7 @@ suite "GitHub CLI document integration":
     require not refreshedGroup.isNil
     check refreshedGroup.accessibilityValue() == "collapsed"
     check "Renamed first" notin panel.markdownView.textStorage().stringValue()
-    check "rendered description" in panel.markdownView.textStorage().stringValue()
+    check "issue open" in panel.markdownView.textStorage().stringValue()
     require refreshedGroup.accessibilityPerformAction(AccessibilityActionExpand)
     require panel.waitForGitHub()
     let
@@ -218,10 +227,10 @@ suite "GitHub CLI document integration":
     require not newPR.isNil
     check renamedFirst.accessibilityValue() == "collapsed"
     check renamedSecond.accessibilityValue() == "expanded"
-    check newPR.accessibilityValue() == "expanded"
+    check newPR.accessibilityValue() == "collapsed"
     check "first updated" notin panel.markdownView.textStorage().stringValue()
     check "second updated" in panel.markdownView.textStorage().stringValue()
-    check "new body" in panel.markdownView.textStorage().stringValue()
+    check "new body" notin panel.markdownView.textStorage().stringValue()
     panel.selectFilter(ghsOpen, {ghikIssue})
     require panel.waitForGitHub()
     panel.selectFilter(ghsOpen, {ghikIssue, ghikPullRequest})
@@ -231,7 +240,7 @@ suite "GitHub CLI document integration":
     require panel.waitForGitHub()
     let otherFirst = panel.headingDisclosure("#9 pr open")
     require not otherFirst.isNil
-    check otherFirst.accessibilityValue() == "expanded"
+    check otherFirst.accessibilityValue() == "collapsed"
     check panel.headingDisclosure("Pull Requests (1)").accessibilityValue() == "expanded"
 
   test "automatic refresh polls remote job changes and stops when disabled":
@@ -249,6 +258,8 @@ suite "GitHub CLI document integration":
     require panel.snapshot.items[1].jobs[0].state == ghjsRunning
     let pr = panel.headingDisclosure("#9 pr open")
     require not pr.isNil
+    require pr.accessibilityPerformAction(AccessibilityActionExpand)
+    require panel.waitForGitHub()
     require pr.accessibilityPerformAction(AccessibilityActionCollapse)
     require panel.waitForGitHub()
     check not panel.autoRefreshSwitch.on

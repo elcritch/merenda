@@ -89,22 +89,7 @@ protocol KosmoFieldEditorCommandDispatch of nimkit.ResponderCommandDispatchProto
   method dispatchCommand(
       editor: nimkit.FieldEditor, args: nimkit.TryToPerformArgs
   ): bool =
-    let selector =
-      case $args.selector.name
-      of KosmoCopyAction:
-        nimkit.copy()
-      of KosmoCutAction:
-        nimkit.cut()
-      of KosmoPasteAction:
-        nimkit.paste()
-      of KosmoSelectAllAction:
-        nimkit.selectAll()
-      of KosmoUndoAction:
-        nimkit.undo()
-      of KosmoRedoAction:
-        nimkit.redo()
-      else:
-        args.selector
+    let selector = args.selector.nativeEditingCommand().get(args.selector)
     editor.sendLocalIfHandled(selector, nimkit.ActionArgs(sender: args.sender))
 
 proc installShortcutBindings(controller: KosmoDockController, window: nimkit.Window) =

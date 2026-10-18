@@ -147,6 +147,7 @@ proc requestMarkdownParse*(
   escape: bool,
   keepHtml: bool,
   highlightMatter: bool,
+  grammarSources: seq[MatterGrammarSource],
 ) {.signal.}
 
 proc markdownParseFinished*(
@@ -212,8 +213,10 @@ proc requestMarkdownParse(
     escape: bool,
     keepHtml: bool,
     highlightMatter: bool,
+    grammarSources: seq[MatterGrammarSource],
 ) {.slot.} =
   worker.cancelMarkdownHighlight(worker.generation)
+  worker.grammars.setGrammarSources(grammarSources)
   worker.generation = generation
   worker.codeIndex = 0
   var parseResult =

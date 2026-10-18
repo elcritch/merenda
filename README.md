@@ -577,6 +577,16 @@ Undo and Redo also work while typing, including when Input mode is forced.
 Vim's `"+` and `"*` registers use the native clipboard; on platforms with one
 clipboard, both registers share it.
 
+Copy and Select All work in Markdown previews, GitHub issues and pull requests,
+Git diff summaries and hunks, Help, and Command Output. Clipboard shortcuts and
+the Edit menu use the focused view's selection; Paste and Cut work in editable
+text views and search fields. Read-only views keep their content unchanged.
+
+TextMate grammars installed from Kosmo Settings also highlight Markdown code
+fences and Git diffs. Fences use the grammar's language ID (for example, `sql`),
+and diffs use its filename and extension associations. Installing a grammar
+refreshes open viewers and cached previews without restarting Kosmo.
+
 Kosmo advances Moe's background work from the native event loop, including
 when Git monitoring is disabled. Hook output, build output, and `:jobs` use a
 reusable Command Output tab. `:jobs!` stops running external commands.
@@ -708,7 +718,8 @@ and pull requests in a Markdown tab, or press `Cmd/Ctrl-Shift-H`. Install the
 [GitHub CLI](https://cli.github.com/) and sign in with `gh auth login` first;
 the viewer uses the project's GitHub remote and your existing CLI credentials.
 It defaults to open items, with controls for issues, pull requests, or both,
-and open, closed, or all states.
+and open, closed, or all states. The Issues and Pull Requests sections start
+expanded, with each individual issue and PR collapsed until you open it.
 
 Descriptions render as Markdown alongside authors, labels, draft status, and PR
 branch and review details. PRs also show a job summary and each CI check's workflow,

@@ -288,6 +288,7 @@ type
     xMarkdownRenderChunkCount: int
     xMarkdownMaximumRenderChunkDuration: Duration
     xSyntaxHighlighter: SyntaxHighlighter
+    xMatterGrammarSources: seq[MatterGrammarSource]
     xMatterHighlights: seq[seq[SyntaxTokenSpan]]
     xMatterCodeIndices: Table[MarkdownCodeSource, int]
     xMarkdownCodePresentations: seq[MarkdownCodeBlockPresentation]
@@ -301,6 +302,7 @@ type
     xImageMediaTypes: Table[string, string]
     xPendingUrlAssets: Table[string, UrlAssetHandle]
     xCollapsedMarkdownHeadings: HashSet[string]
+    xKnownMarkdownHeadings: HashSet[string]
     xHeadingsToggleOnClick: bool
     xHasMarkdownTables: bool
     xMarkdownTableColumnLimit: int
@@ -2624,6 +2626,7 @@ proc startLatestMarkdownParse(view: MarkdownView) =
       view.xMarkdownConfig.escape,
       view.xMarkdownConfig.keepHtml,
       view.xSyntaxHighlighter == SyntaxHighlighter(matterSyntaxHighlighter),
+      view.xMatterGrammarSources,
     )
   else:
     # Arbitrary parser subclasses are thread-affine reference objects. Preserve
@@ -2904,18 +2907,28 @@ proc updateMarkdown*(
     source: string,
     headingIdentifiers: openArray[string] = [],
     preserveHeadingState = false,
+    initiallyCollapsedHeadings: openArray[string] = [],
 ) =
   ## Schedules a parse and atomically replaces the document when it completes.
   ## Supply unique, nonempty identifiers in top-level heading order to retain
   ## section state across reordered or renamed headings. Unspecified headings
   ## use block positions. State is cleared unless `preserveHeadingState` is true.
   ## Identical source and identifiers leave the current document unchanged.
+  ## `initiallyCollapsedHeadings` supplies defaults for previously unseen explicit
+  ## heading identifiers. Preserved state includes headings temporarily filtered out.
   let identifiers = @headingIdentifiers
   if view.xMarkdown == source and view.xMarkdownHeadingIdentifiers == identifiers:
     return
   view.xPendingUrlAssets.clear()
   if not preserveHeadingState:
     view.xCollapsedMarkdownHeadings.clear()
+    view.xKnownMarkdownHeadings.clear()
+  for identifier in initiallyCollapsedHeadings:
+    if identifier.len > 0 and identifier notin view.xKnownMarkdownHeadings:
+      view.xCollapsedMarkdownHeadings.incl identifier
+  for identifier in identifiers:
+    if identifier.len > 0:
+      view.xKnownMarkdownHeadings.incl identifier
   view.xPendingMarkdownHeadingSelection.setLen(0)
   view.xMarkdownHeadingIdentifiers = identifiers
   view.xMarkdown = source
@@ -2973,6 +2986,16 @@ proc `urlAssetLoader=`*(view: MarkdownView, loader: UrlAssetLoader) =
 proc syntaxHighlighter*(view: MarkdownView): SyntaxHighlighter =
   ## Return the classifier used for fenced code blocks.
   view.xSyntaxHighlighter
+
+proc matterGrammarSources*(view: MarkdownView): seq[MatterGrammarSource] =
+  ## Return application grammars used by the background fenced-code classifier.
+  view.xMatterGrammarSources
+
+proc `matterGrammarSources=`*(view: MarkdownView, sources: seq[MatterGrammarSource]) =
+  ## Replace application grammars and rehighlight the current Markdown document.
+  if view.xMatterGrammarSources != sources:
+    view.xMatterGrammarSources = sources
+    view.scheduleMarkdownParse()
 
 proc `syntaxHighlighter=`*(view: MarkdownView, highlighter: SyntaxHighlighter) =
   ## Replace the classifier and rerender fenced code blocks.

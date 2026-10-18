@@ -36,6 +36,8 @@ import kosmo/terminalerrors
 import kosmo/terminalinput
 import kosmo/terminalsearch
 import kosmo/viewersearch
+import kosmo/viewclipboard
+import kosmo/viewergrammars
 import kosmo/vscodegrammars
 import kosmo/workspacefiles
 import kosmo/workspaceroots
