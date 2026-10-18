@@ -227,6 +227,15 @@ const
   tsmMultiple* = TableSelectionMode.lsmMultiple
   tsmExtended* = TableSelectionMode.lsmExtended
 
+proc `[]=`*(
+    options: var set[TableViewOption], option: TableViewOption, enabled: bool
+) {.inline.} =
+  ## Enables or disables one table option without changing the others.
+  if enabled:
+    options.incl(option)
+  else:
+    options.excl(option)
+
 func initTableRowSelection*(mode = tsmSingle): TableRowSelection =
   ## Initializes an empty selection with no anchor or lead row.
   TableRowSelection(mode: mode, index: -1, anchor: -1, lead: -1)

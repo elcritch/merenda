@@ -3120,10 +3120,7 @@ proc usesAlternatingRowBackgrounds*(tableView: TableView): bool =
 proc `usesAlternatingRowBackgrounds=`*(tableView: TableView, value: bool) =
   if (tvoAlternatingRowBackgrounds in tableView.xOptions) == value:
     return
-  if value:
-    tableView.xOptions.incl(tvoAlternatingRowBackgrounds)
-  else:
-    tableView.xOptions.excl(tvoAlternatingRowBackgrounds)
+  tableView.xOptions[tvoAlternatingRowBackgrounds] = value
   tableView.invalidateTableRows()
 
 proc showsRowSeparators*(tableView: TableView): bool =
@@ -3132,10 +3129,7 @@ proc showsRowSeparators*(tableView: TableView): bool =
 proc `showsRowSeparators=`*(tableView: TableView, value: bool) =
   if (tvoRowSeparators in tableView.xOptions) == value:
     return
-  if value:
-    tableView.xOptions.incl(tvoRowSeparators)
-  else:
-    tableView.xOptions.excl(tvoRowSeparators)
+  tableView.xOptions[tvoRowSeparators] = value
   tableView.invalidateTableRows()
 
 proc allowsRowReordering*(tableView: TableView): bool =
@@ -3144,10 +3138,7 @@ proc allowsRowReordering*(tableView: TableView): bool =
 proc `allowsRowReordering=`*(tableView: TableView, value: bool) =
   if (tvoRowReordering in tableView.xOptions) == value:
     return
-  if value:
-    tableView.xOptions.incl(tvoRowReordering)
-  else:
-    tableView.xOptions.excl(tvoRowReordering)
+  tableView.xOptions[tvoRowReordering] = value
   if not value:
     tableView.xDragging.rowStart.row = -1
     tableView.updateTableDropTarget(initDraggingDropTarget())
@@ -3254,10 +3245,7 @@ proc allowsColumnSelection*(tableView: TableView): bool =
 proc `allowsColumnSelection=`*(tableView: TableView, value: bool) =
   if (tvoColumnSelection in tableView.xOptions) == value:
     return
-  if value:
-    tableView.xOptions.incl(tvoColumnSelection)
-  else:
-    tableView.xOptions.excl(tvoColumnSelection)
+  tableView.xOptions[tvoColumnSelection] = value
   if not value:
     tableView.xSelectedColumns.setLen(0)
     tableView.clearPointerColumnHighlight()
@@ -3269,10 +3257,7 @@ proc tracksPointerRowHighlights*(tableView: TableView): bool =
 proc `tracksPointerRowHighlights=`*(tableView: TableView, value: bool) =
   if (tvoPointerRowHighlights in tableView.xOptions) == value:
     return
-  if value:
-    tableView.xOptions.incl(tvoPointerRowHighlights)
-  else:
-    tableView.xOptions.excl(tvoPointerRowHighlights)
+  tableView.xOptions[tvoPointerRowHighlights] = value
   if not value:
     tableView.clearPointerRowHighlight()
 
@@ -3282,10 +3267,7 @@ proc tracksPointerColumnHighlights*(tableView: TableView): bool =
 proc `tracksPointerColumnHighlights=`*(tableView: TableView, value: bool) =
   if (tvoPointerColumnHighlights in tableView.xOptions) == value:
     return
-  if value:
-    tableView.xOptions.incl(tvoPointerColumnHighlights)
-  else:
-    tableView.xOptions.excl(tvoPointerColumnHighlights)
+  tableView.xOptions[tvoPointerColumnHighlights] = value
   if not value:
     tableView.clearPointerColumnHighlight()
 
@@ -3295,10 +3277,7 @@ proc showsFocusedRowHighlight*(tableView: TableView): bool =
 proc `showsFocusedRowHighlight=`*(tableView: TableView, value: bool) =
   if (tvoFocusedRowHighlight in tableView.xOptions) == value:
     return
-  if value:
-    tableView.xOptions.incl(tvoFocusedRowHighlight)
-  else:
-    tableView.xOptions.excl(tvoFocusedRowHighlight)
+  tableView.xOptions[tvoFocusedRowHighlight] = value
   tableView.invalidateTableRows()
 
 proc showsFocusedColumnHighlight*(tableView: TableView): bool =
@@ -3307,10 +3286,7 @@ proc showsFocusedColumnHighlight*(tableView: TableView): bool =
 proc `showsFocusedColumnHighlight=`*(tableView: TableView, value: bool) =
   if (tvoFocusedColumnHighlight in tableView.xOptions) == value:
     return
-  if value:
-    tableView.xOptions.incl(tvoFocusedColumnHighlight)
-  else:
-    tableView.xOptions.excl(tvoFocusedColumnHighlight)
+  tableView.xOptions[tvoFocusedColumnHighlight] = value
   tableView.invalidateTableRows()
 
 proc selectedColumns*(tableView: TableView): seq[TableColumn] =
