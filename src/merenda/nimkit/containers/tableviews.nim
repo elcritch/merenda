@@ -5973,6 +5973,10 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
         of temReturn, temNone:
           discard Window(owner).makeFirstResponder(tableView)
 
+# Nim 2.2 cannot resolve this selector beside its openArray convenience overload
+# when registering the protocol implementation.
+let tableColumnDragSelector = beginDraggingColumns()
+
 protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
   method beginDraggingRows(
       tableView: TableView,
@@ -6002,7 +6006,7 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
       beginDraggingSession(DynamicAgent(tableView), items, operations, pasteboardName)
     tableView.xDragging.session = result
 
-  method beginDraggingColumns(
+  method tableColumnDragSelector(
       tableView: TableView,
       columns: seq[TableColumn],
       operations: DragOperations,
