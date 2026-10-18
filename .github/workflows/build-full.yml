@@ -58,6 +58,10 @@ jobs:
     - name: Check shared test runner coverage
       run: nim e --skipParentCfg:on --skipProjCfg:on .github/scripts/check_test_imports.nims
 
+    - name: Install macOS text rendering libraries
+      if: runner.os == 'macOS'
+      run: brew install harfbuzz fribidi
+
     - name: Setup software OpenGL (Mesa)
       if: runner.os == 'Windows'
       uses: ssciwr/setup-mesa-dist-win@v3.0.0
@@ -87,6 +91,8 @@ jobs:
           libgl1-mesa-dev \
           libgles2-mesa-dev \
           libegl1-mesa-dev \
+          libharfbuzz-dev \
+          libfribidi-dev \
           mesa-utils \
           vulkan-tools \
           mesa-vulkan-drivers \
@@ -260,6 +266,8 @@ jobs:
           libgl1-mesa-dev \
           libgles2-mesa-dev \
           libegl1-mesa-dev \
+          libharfbuzz-dev \
+          libfribidi-dev \
           mesa-utils \
           vulkan-tools \
           mesa-vulkan-drivers \
@@ -307,6 +315,24 @@ jobs:
           - windows-2022
     steps:
     - uses: actions/checkout@v5
+
+    - name: Install macOS text rendering libraries
+      if: runner.os == 'macOS'
+      run: brew install harfbuzz fribidi
+
+    - name: Install Linux text rendering libraries
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends libharfbuzz-dev libfribidi-dev
+
+    - name: Install Windows text rendering headers
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install harfbuzz:x64-windows
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        "CPATH=$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include/harfbuzz" >> $env:GITHUB_ENV
 
     - name: Cache packages
       uses: actions/cache@v4

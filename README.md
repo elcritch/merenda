@@ -600,6 +600,10 @@ to focus an existing terminal. If none is open, Kosmo opens one in the nearest
 pane to the right, creating a right split when needed. **New Terminal** in the
 File menu still opens an additional terminal in the active pane.
 
+Markdown task lists show ☐ for `- [ ]`, ☑ for `- [x]` (also `[X]`), and ☒ for
+`- [-]`. Text rendering uses system-font fallback for characters missing from
+the selected font, including symbols absent from the bundled Nerd Font.
+
 In Moe's normal mode, `:e path` opens a Kosmo document tab or selects the file's
 existing tab.
 `:help` and `:config` open reusable tabs; `:config` keeps Moe's interactive
@@ -788,6 +792,10 @@ for supported builds, custom install locations, and the static Linux build.
 
 ### Build from source
 
+Install HarfBuzz and FriBidi development libraries for your platform first
+(`brew install harfbuzz fribidi pkg-config` on macOS, or the `libharfbuzz-dev`
+and `libfribidi-dev` packages on Debian/Ubuntu).
+
 From your Merenda checkout, install the extra Kosmo dependencies, then build
 and launch it:
 
@@ -803,12 +811,15 @@ On macOS, install the current checkout as a complete `Kosmo.app` with its icon,
 bundled notices, debug symbols, and local code signature:
 
 ```sh
+brew install meson ninja pkg-config
 nim install_kosmo
 ```
 
 This uses Atlas to resolve dependencies, replaces `~/Applications/Kosmo.app`,
 and updates the `~/.local/bin/kosmo` link. Restart Kosmo if it was already
 running. Set `KOSMO_INSTALL_DIR` or `KOSMO_BIN_DIR` to choose other locations.
+The app build compiles and bundles its text libraries for macOS 13, so the
+installed app does not require Homebrew at runtime.
 
 ## Explore more
 

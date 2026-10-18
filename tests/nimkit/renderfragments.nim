@@ -1,4 +1,4 @@
-import std/[hashes, tables, unicode, unittest]
+import std/[hashes, strutils, tables, unicode, unittest]
 
 import figdraw
 import pkg/pixie except draw
@@ -951,8 +951,9 @@ suite "NimKit render fragments":
         var renderedLine: string
         for glyphIndex in 0 ..< node.textLayout.glyphCount():
           renderedLine.add node.textLayout.displayRune(glyphIndex)
-        renderedLines.add renderedLine
-    check renderedLines == @["alpha\n", "Beta\n", "gamma"]
+        # Shaping backends can omit newline glyphs while retaining their source.
+        renderedLines.add renderedLine.strip(chars = {'\n', '\r'})
+    check renderedLines == @["alpha", "Beta", "gamma"]
 
     let replica = retainedScenes.newRenderSceneReplica()
     var fullUpdate = retainedScenes.newRenderSceneUpdate(scene, 0, 0)

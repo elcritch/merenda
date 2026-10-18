@@ -81,6 +81,8 @@ jobs:
             "libegl1-mesa-dev:$APT_ARCH" \
             "libgl1-mesa-dev:$APT_ARCH" \
             "libgles2-mesa-dev:$APT_ARCH" \
+            "libharfbuzz-dev:$APT_ARCH" \
+            "libfribidi-dev:$APT_ARCH" \
             "libvulkan-dev:$APT_ARCH" \
             "libx11-xcb-dev:$APT_ARCH" \
             "libxcb1-dev:$APT_ARCH" \
@@ -176,6 +178,8 @@ jobs:
             libegl1-mesa-dev \
             libgl1-mesa-dev \
             libgles2-mesa-dev \
+            libharfbuzz-dev \
+            libfribidi-dev \
             libvulkan-dev \
             libx11-xcb-dev \
             libxcb1-dev \
@@ -341,6 +345,8 @@ jobs:
           # pkg-config inject their shared-only -l flags into this static link.
           staticPkgConfigDir="$RUNNER_TEMP/kosmo-empty-pkgconfig"
           mkdir -p "$staticPkgConfigDir"
+          # Keep text shaping headers available after hiding graphics .pc files.
+          echo "HARFBUZZ_CFLAGS=$(pkg-config --cflags harfbuzz)" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_LIBDIR=$staticPkgConfigDir" >> "$GITHUB_ENV"
 
       - name: Build Kosmo
@@ -352,6 +358,7 @@ jobs:
             --cc:gcc \
             --gcc.exe:"$MUSL_CC" \
             --gcc.linkerexe:"$MUSL_CC" \
+            --passC:"$HARFBUZZ_CFLAGS" \
             --passL:-static \
             --opt:size \
             --debugger:native \
@@ -500,6 +507,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Install text rendering libraries
+        run: brew install meson ninja pkg-config
+
       - name: Cache packages
         uses: actions/cache@v4
         with:
@@ -621,6 +631,9 @@ jobs:
           iconutil -c icns "$iconset_path" \
             -o "$app_path/Contents/Resources/Kosmo.icns"
 
+          text_prefix="$RUNNER_TEMP/kosmo-text-libraries"
+          bash packaging/macos/build-text-libraries.sh "$text_prefix"
+          export PKG_CONFIG_PATH="$text_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           nim c \
             --opt:size \
             --debugger:native \
@@ -628,10 +641,13 @@ jobs:
             --stackTrace:off \
             -d:nimStackTraceOverride \
             -d:moe.embedded \
+            -d:harfbuzzyDynlib=@executable_path/../Frameworks/libharfbuzz.dylib \
+            -d:harfbuzzyFribidiDynlib=@executable_path/../Frameworks/libfribidi.dylib \
             -d:KosmoVersion="$version" \
             -d:KosmoGitHashOverride="$revision" \
             --out:"$app_path/Contents/MacOS/kosmo" \
             src/merenda/kosmo/kosmo.nim
+          bash packaging/macos/bundle-text-libraries.sh "$app_path" "$text_prefix"
           xcrun dsymutil \
             "$app_path/Contents/MacOS/kosmo" \
             -o "$dsym_path"
@@ -738,6 +754,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Install text rendering libraries
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install `
+            harfbuzz:x64-windows-staticcrt fribidi:x64-windows-staticcrt `
+            --overlay-triplets=packaging/windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "CPATH=$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/include/harfbuzz" >> $env:GITHUB_ENV
+
       - name: Install Nim
         uses: jiro4989/setup-nim-action@v2
         with:
@@ -800,6 +825,7 @@ jobs:
           if ($imports -match '(?im)^\s*DLL Name:\s+libgcc_s.*\.dll\s*$') {
             throw 'Kosmo executable must not depend on a MinGW GCC runtime DLL.'
           }
+          Copy-Item "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/bin/*.dll" dist/
           $process = Start-Process `
             -FilePath "$PWD/dist/kosmo.exe" `
             -PassThru
@@ -823,8 +849,14 @@ jobs:
         run: |
           Copy-Item data/FONT-LICENSES.md dist/FONT-LICENSES.md
           Copy-Item -Recurse data/font-licenses dist/font-licenses
+          New-Item -ItemType Directory -Force dist/text-library-licenses | Out-Null
+          Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/share" -Directory | ForEach-Object {
+            if (Test-Path "$($_.FullName)/copyright") {
+              Copy-Item "$($_.FullName)/copyright" "dist/text-library-licenses/$($_.Name).txt"
+            }
+          }
           Compress-Archive `
-            -Path dist/kosmo.exe, dist/FONT-LICENSES.md, dist/font-licenses `
+            -Path dist/kosmo.exe, dist/*.dll, dist/FONT-LICENSES.md, dist/font-licenses, dist/text-library-licenses `
             -DestinationPath dist/kosmo-windows-amd64.zip `
             -Force
 

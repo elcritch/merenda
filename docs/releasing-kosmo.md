@@ -14,6 +14,12 @@ Each executable archive also includes the notices for Kosmo's bundled IBM Plex
 Sans and JetBrains Mono Nerd Font Mono resources. On macOS the notices live in
 the app's `Contents/Resources` directory.
 
+macOS bundles minimal HarfBuzz and FriBidi libraries built for macOS 13 in
+`Contents/Frameworks`, with their notices in `Contents/Resources/text-library-licenses`.
+Windows archives place the text DLLs beside `kosmo.exe`; the installer copies
+them together and installs their notices with the font notices. Linux and
+FreeBSD use system HarfBuzz and FriBidi libraries, including the musl build.
+
 The five bundled Moe themes are embedded in the executable and installed into
 Kosmo's platform asset cache for Moe's file-based theme loader. Release archives
 do not need a separate `data/moe/themes` directory, and theme discovery does not

@@ -516,6 +516,27 @@ suite "nimkit mono text views":
 
     check foundText
 
+  test "monospace checkbox cells use symbol fallback and keep their grid positions":
+    let view = newMonoTextViewer("☐☑☒", frame = rect(0, 0, 220, 80))
+    view.fontName = "JetBrainsMonoNerdFontMono-Regular.ttf.zip"
+    let list = buildRenders(view)[DefaultDrawLevel]
+    var foundText = false
+    for node in list.nodes:
+      if node.kind == nkText and node.renderedText() == "☐☑☒":
+        foundText = true
+        require node.textLayout.arrangedGlyphs.len == 3
+        let glyphs = node.textLayout.arrangedGlyphs
+        for glyph in glyphs:
+          check glyph.glyphId != FontGlyphId(0)
+          check getTypefaceSource(getFigFont(glyph.fontId).typefaceId).name.find(
+            "JetBrainsMonoNerdFontMono"
+          ) < 0
+        check glyphs[1].pos.x - glyphs[0].pos.x > 0
+        check abs(
+          (glyphs[2].pos.x - glyphs[1].pos.x) - (glyphs[1].pos.x - glyphs[0].pos.x)
+        ) < 0.001
+    check foundText
+
   test "row glyph batches preserve cell positions across colors and blank backgrounds":
     let
       view = newMonoTextViewer(frame = rect(0, 0, 240, 80))

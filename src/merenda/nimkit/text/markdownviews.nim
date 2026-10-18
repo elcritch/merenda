@@ -747,8 +747,25 @@ proc renderInlineChildren(
     builder: var MarkdownBuilder,
     token: markdownParser.Token,
     attributes: TextAttributes,
+    skipPrefixBytes = 0,
 ) =
+  let prefixEnd = token.pos - token.doc.len + skipPrefixBytes
+  var skippingPrefix = skipPrefixBytes > 0
   for child in token.children:
+    if skippingPrefix:
+      # Inline positions are source byte endpoints. Consume the task marker
+      # without changing the AST, including markers parsed as reference links.
+      if child.pos <= prefixEnd:
+        skippingPrefix = child.pos < prefixEnd
+        continue
+      skippingPrefix = false
+      if child of markdownParser.Text:
+        let skipped = max(prefixEnd - (child.pos - child.doc.len), 0)
+        if skipped > 0:
+          builder.add(
+            child.doc[skipped ..< child.doc.len].replace("\n", " "), attributes
+          )
+          continue
     builder.renderInline(child, attributes)
 
 proc renderImage(
@@ -885,6 +902,20 @@ proc renderInline(
   else:
     builder.add(token.doc, attributes)
 
+proc renderParagraph(
+    builder: var MarkdownBuilder,
+    token: markdownParser.Token,
+    attributes: TextAttributes,
+    skipPrefixBytes = 0,
+) =
+  let start = builder.runeLength
+  builder.renderInlineChildren(token, attributes, skipPrefixBytes)
+  if builder.runeLength > start:
+    builder.navigationItems.add MarkdownNavigationItem(
+      range: initTextRange(start, builder.runeLength - start),
+      sectionIdentifier: builder.sectionIdentifier,
+    )
+
 proc renderBlock(
   builder: var MarkdownBuilder, token: markdownParser.Token, attributes: TextAttributes
 )
@@ -900,6 +931,29 @@ func endsWithCodeBlock(builder: MarkdownBuilder): bool =
   builder.codeBlocks.len > 0 and
     builder.codeBlocks[^1].range.maxIndex == builder.runeLength
 
+func taskListMarker(item: markdownParser.Li): tuple[symbol: string, prefixBytes: int] =
+  if item.children.head.isNil:
+    return
+  let paragraph = item.children.head.value
+  if not (paragraph of markdownParser.Paragraph):
+    return
+  let source = paragraph.doc
+  if source.len < 3 or source[0] != '[' or source[2] != ']' or
+      (source.len > 3 and source[3] notin Whitespace):
+    return
+  case source[1]
+  of ' ':
+    result.symbol = "☐"
+  of 'x', 'X':
+    result.symbol = "☑"
+  of '-':
+    result.symbol = "☒"
+  else:
+    return
+  result.prefixBytes = 3
+  while result.prefixBytes < source.len and source[result.prefixBytes] in Whitespace:
+    inc result.prefixBytes
+
 proc renderListItem(
     builder: var MarkdownBuilder,
     item: markdownParser.Li,
@@ -908,11 +962,19 @@ proc renderListItem(
     attributes: TextAttributes,
 ) =
   let
+    task = item.taskListMarker()
+    itemMarker =
+      if task.symbol.len == 0:
+        marker
+      elif marker == "•":
+        task.symbol
+      else:
+        marker & " " & task.symbol
     indentation = " ".repeat(max(depth * builder.style.listIndent, 0))
-    continuation = indentation & " ".repeat(marker.runeLen + 1)
+    continuation = indentation & " ".repeat(itemMarker.runeLen + 1)
   var markerAttributes = attributes
   markerAttributes.foregroundColor = builder.style.mutedColor
-  builder.add(indentation & marker & " ", markerAttributes)
+  builder.add(indentation & itemMarker & " ", markerAttributes)
 
   var first = true
   for child in item.children:
@@ -928,7 +990,10 @@ proc renderListItem(
         builder.add(continuation, attributes)
       elif not first:
         builder.add("\n" & continuation, attributes)
-      builder.renderBlock(child, attributes)
+      if first and task.prefixBytes > 0:
+        builder.renderParagraph(child, attributes, task.prefixBytes)
+      else:
+        builder.renderBlock(child, attributes)
     first = false
 
 proc renderList(
@@ -1538,13 +1603,7 @@ proc renderBlock(
   if token.isNil:
     return
   if token of markdownParser.Paragraph:
-    let start = builder.runeLength
-    builder.renderInlineChildren(token, attributes)
-    if builder.runeLength > start:
-      builder.navigationItems.add MarkdownNavigationItem(
-        range: initTextRange(start, builder.runeLength - start),
-        sectionIdentifier: builder.sectionIdentifier,
-      )
+    builder.renderParagraph(token, attributes)
   elif token of markdownParser.Heading:
     let heading = markdownParser.Heading(token)
     var headingAttributes = attributes

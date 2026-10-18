@@ -71,6 +71,13 @@
   Use a compact menu that opens upward, and keep its checked selection synchronized
   with Settings and detached editor windows.
 
+- Enable HarfBuzz text rendering and automatic system-font fallback for missing
+  glyphs in the editor, terminal, and other text views, including checkbox symbols
+  absent from the bundled Nerd Font.
+
+- Render Markdown task lists with ☐ for `[ ]`, ☑ for `[x]` or `[X]`, and ☒ for
+  `[-]`, preserving nested lists, numbering, and inline formatting.
+
 - Add a Windows VirtualBox test setup, matching Guest Additions, an OpenGL 3.3
   console probe, and guards against concurrent bhyve operation. Document the
   failed GPU acceleration test with the FreeBSD 7.2.20 packages.

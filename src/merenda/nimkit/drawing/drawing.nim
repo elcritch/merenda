@@ -244,6 +244,8 @@ proc defaultFont(
         tag: variation.tag, value: variation.value
       )
   when AutomaticFontFallbackEnabled:
+    # Each text-layout worker needs its own thread-local fallback resolver.
+    installAutomaticFontFallbackResolver()
     font.language = $resolvedLanguage
   fontRef(font)
 
