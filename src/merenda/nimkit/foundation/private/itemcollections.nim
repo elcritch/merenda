@@ -79,18 +79,19 @@ proc replaceItems*[T](collection: var ItemCollection[T], items: openArray[T]) =
   collection.items = @items
   collection.invalidate(sourceChanged = true)
 
+proc fillSourceIndex(indexes: var ItemIndexes, sourceIndex: int) {.inline.} =
+  if indexes.source < 0:
+    indexes.source = sourceIndex
+
 proc buildSourceIndexes[T](collection: var ItemCollection[T]) =
   # Only identity queries allocate this table. Borrow identifiers directly so
   # building it never copies the other fields of an item.
   for index, item in collection:
     let identifier {.cursor.} = item.identifier
     if identifier.len > 0 or collection.xIndexesEmptyIdentifiers:
-      collection.xIdentifierIndexes.withValue(identifier, indexes):
-        if indexes.source < 0:
-          indexes.source = index
-      do:
-        collection.xIdentifierIndexes[identifier] =
-          ItemIndexes(source: index, arranged: -1)
+      collection.xIdentifierIndexes
+      .mgetOrPut(identifier, ItemIndexes(source: -1, arranged: -1))
+      .fillSourceIndex(index)
   collection.xSourceIndexesValid = true
 
 proc sourceIndexOfIdentifier*[T](
@@ -100,7 +101,9 @@ proc sourceIndexOfIdentifier*[T](
     return -1
   if not collection.xSourceIndexesValid:
     collection.buildSourceIndexes()
-  collection.xIdentifierIndexes.getOrDefault(identifier, ItemIndexes(source: -1)).source
+  collection.xIdentifierIndexes.withValue(identifier, indexes):
+    return indexes.source
+  -1
 
 proc getItemWithIdentifier*[T](
     collection: var ItemCollection[T], identifier: string
@@ -180,11 +183,10 @@ proc arrangedIndexOfIdentifier*[T](
     return -1
   if not collection.xArrangedIdentifierIndexesValid:
     collection.buildArrangedIdentifierIndexes()
-  let indexes = collection.xIdentifierIndexes.getOrDefault(identifier)
-  if indexes.arrangedGeneration == collection.xArrangedGeneration:
-    indexes.arranged
-  else:
-    -1
+  collection.xIdentifierIndexes.withValue(identifier, indexes):
+    if indexes.arrangedGeneration == collection.xArrangedGeneration:
+      return indexes.arranged
+  -1
 
 proc indexInsertedItem[T](collection: var ItemCollection[T], index: int) =
   if collection.xSourceIndexesValid:
