@@ -2264,6 +2264,53 @@ suite "NimKit TableView":
     check window.mouseUpAt(point)
     check tableView.selectedIndex == 1
 
+  test "table options keep defaults and column selection cleanup independent":
+    let
+      root = newView(frame = rect(0, 0, 240, 96))
+      tableView = newTableView(frame = rect(0, 0, 240, 96))
+      name = newTableColumn("name", "Name")
+      alternatingFill = fill(color(0.35, 0.45, 0.55, 1.0))
+
+    var appearance = initAppearance()
+    appearance[srRowItem, StyleAlternatingFill] = alternatingFill
+    tableView.appearance = appearance
+
+    tableView.showsHeader = false
+    tableView.rowCount = 3
+    tableView.rowHeight = 24.0
+    tableView.addColumn(name)
+    root.addSubview(tableView)
+
+    check not tableView.usesAlternatingRowBackgrounds
+    check not tableView.showsRowSeparators
+    check not tableView.allowsColumnSelection
+    check not tableView.allowsRowReordering
+    check tableView.tracksPointerRowHighlights
+    check tableView.tracksPointerColumnHighlights
+    check tableView.showsFocusedRowHighlight
+    check tableView.showsFocusedColumnHighlight
+
+    tableView.usesAlternatingRowBackgrounds = true
+    tableView.showsRowSeparators = true
+    tableView.allowsColumnSelection = true
+    tableView.allowsRowReordering = true
+    tableView.selectCell(0, name)
+    check tableView.selectedColumns == @[name]
+    check root.renderedRectangleWithFill(tableView.rowItemRect(1), alternatingFill)
+
+    tableView.allowsColumnSelection = false
+    check tableView.selectedColumns.len == 0
+    check tableView.selectedIndex == 0
+    check tableView.focusedColumn == name
+    tableView.usesAlternatingRowBackgrounds = false
+    check not root.renderedRectangleWithFill(tableView.rowItemRect(1), alternatingFill)
+    check tableView.showsRowSeparators
+    check tableView.allowsRowReordering
+    check tableView.tracksPointerRowHighlights
+    check tableView.tracksPointerColumnHighlights
+    check tableView.showsFocusedRowHighlight
+    check tableView.showsFocusedColumnHighlight
+
   test "table view keeps inherited row selection behavior":
     let tableView = newTableView()
 
@@ -2273,6 +2320,63 @@ suite "NimKit TableView":
 
     check tableView.selectedIndexes == @[1, 2, 3]
     check tableView.selectedRange == 1 .. 3
+
+  test "table selection keeps its anchor through range reversals and mode changes":
+    let
+      window = newWindow("Table selection cursor", frame = rect(0, 0, 280, 180))
+      root = newView(frame = rect(0, 0, 280, 180))
+      tableView = newTableView(frame = rect(0, 0, 240, 150))
+      name = newTableColumn("name", "Name")
+
+    tableView.showsHeader = false
+    tableView.rowCount = 5
+    tableView.rowHeight = 24.0
+    tableView.addColumn(name)
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.selectionMode == tsmSingle
+    check tableView.selectedIndex == -1
+    check tableView.selectedIndexes.len == 0
+    tableView.selectionMode = tsmExtended
+    tableView.selectCell(2, name)
+    check window.makeFirstResponder(tableView)
+
+    check window.pressKey(keyArrowUp, {kmShift})
+    check tableView.selectedIndexes == @[1, 2]
+    check tableView.selectedIndex == 1
+    check window.pressKey(keyArrowUp, {kmShift})
+    check tableView.selectedIndexes == @[0, 1, 2]
+    check window.pressKey(keyArrowDown, {kmShift})
+    check tableView.selectedIndexes == @[1, 2]
+    check window.pressKey(keyArrowDown, {kmShift})
+    check tableView.selectedIndexes == @[2]
+    check window.pressKey(keyArrowDown, {kmShift})
+    check tableView.selectedIndexes == @[2, 3]
+
+    tableView.selectionMode = tsmNone
+    check tableView.selectedIndex == -1
+    check tableView.selectedIndexes.len == 0
+    check tableView.focusedColumn.isNil
+
+    tableView.selectionMode = tsmExtended
+    tableView.selectCell(4, name)
+    check window.pressKey(keyArrowUp, {kmShift})
+    check tableView.selectedIndexes == @[3, 4]
+    tableView.selectionMode = tsmSingle
+    check tableView.selectedIndex == 3
+    check tableView.selectedIndexes == @[3]
+    tableView.selectionMode = tsmExtended
+    check window.pressKey(keyArrowUp, {kmShift})
+    check tableView.selectedIndexes == @[2, 3]
+
+    tableView.selectedIndexes = []
+    check tableView.selectionMode == tsmExtended
+    check tableView.selectedIndex == -1
+    tableView.selectCell(1, name)
+    check window.pressKey(keyArrowDown, {kmShift})
+    check tableView.selectedIndexes == @[1, 2]
 
   test "table view tracks selected columns clicked cell editing persistence and drag state":
     let

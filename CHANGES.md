@@ -11,6 +11,8 @@
 - Extract table value types, sizing records, and data helpers into
   `nimkit/containers/tablebasics`. Existing TableView and NimKit imports continue
   to expose the public table APIs.
+- Group TableView options into an enum set and row selection into a value object,
+  preserving existing property setters, selection notifications, and defaults.
 - Share typed collection storage, identity indexes, arrangement caching, and
   mutation invalidation between NimKit TableModel and ArrayController. Repeated
   controller lookups now reuse the filtered/sorted arrangement until a model

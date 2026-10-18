@@ -23,6 +23,23 @@ type
     lsmMultiple
     lsmExtended
 
+  TableViewOption* = enum
+    tvoAlternatingRowBackgrounds
+    tvoRowSeparators
+    tvoColumnSelection
+    tvoRowReordering
+    tvoPointerRowHighlights
+    tvoPointerColumnHighlights
+    tvoFocusedRowHighlight
+    tvoFocusedColumnHighlight
+
+  TableRowSelection* = object
+    mode*: TableSelectionMode
+    index*: int ## Cached first selected row, or -1 when empty.
+    indexes*: seq[int]
+    anchor*: int ## Fixed end of a Shift selection range, or -1 when empty.
+    lead*: int ## Moving end of a Shift selection range, or -1 when empty.
+
   TableColumnResizePolicy* = enum
     tcrFixed
     tcrResizable
@@ -209,6 +226,17 @@ const
   tsmSingle* = TableSelectionMode.lsmSingle
   tsmMultiple* = TableSelectionMode.lsmMultiple
   tsmExtended* = TableSelectionMode.lsmExtended
+
+func initTableRowSelection*(mode = tsmSingle): TableRowSelection =
+  ## Initializes an empty selection with no anchor or lead row.
+  TableRowSelection(mode: mode, index: -1, anchor: -1, lead: -1)
+
+proc clear*(selection: var TableRowSelection) =
+  ## Clears the selected rows and cursor while preserving the selection mode.
+  selection.indexes.setLen(0)
+  selection.index = -1
+  selection.anchor = -1
+  selection.lead = -1
 
 proc raiseTableModelError*(message: string) {.noinline, noreturn.} =
   raise newException(TableModelError, message)

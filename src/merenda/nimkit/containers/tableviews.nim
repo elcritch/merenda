@@ -101,10 +101,8 @@ type
 
   TableView* = ref object of Control
     xColumns: seq[TableColumn]
-    xSelectedIndex: int
-    xSelectedIndexes: seq[int]
-    xSelectionAnchor: int
-    xSelectionLead: int
+    xRowSelection: TableRowSelection
+    xOptions: set[TableViewOption]
     xHighlightedIndex: int
     xScrollView: ScrollView
     xContentView: TableContentView
@@ -112,12 +110,9 @@ type
     xWidthSizing: TableWidthSizing
     xWidthMeasurement: TableWidthMeasurement
     xRowHeightMeasurement: TableRowHeightMeasurement
-    xSelectionMode: TableSelectionMode
     xTrackingItem: bool
     xPressedIndex: int
     xTypeSelection: TableTypeSelection
-    xUsesAlternatingRowBackgrounds: bool
-    xShowsRowSeparators: bool
     xTableRole: StyleRole
     xItemRole: StyleRole
     xRowCount: int
@@ -133,12 +128,7 @@ type
     xFocusedColumn: TableColumn
     xHighlightedColumn: TableColumn
     xSelectedColumns: seq[TableColumn]
-    xAllowsColumnSelection: bool
     xRowHeaderSettings: TableRowHeaderSettings
-    xTracksPointerRowHighlights: bool
-    xTracksPointerColumnHighlights: bool
-    xShowsFocusedRowHighlight: bool
-    xShowsFocusedColumnHighlight: bool
     xCellEditing: TableEditorState
     xAutosaveName: string
     xStateStorage: DynamicAgent
@@ -152,7 +142,6 @@ type
     xRowUpdates: TableRowUpdateBatch
     xDragging: TableDraggingState
     xHeaderTracking: TableHeaderTracking
-    xAllowsRowReordering: bool
 
   TableCellSlot = object
     row: int
@@ -2283,7 +2272,7 @@ proc scrollCellToVisible(tableView: TableView, row: int, column: TableColumn) =
   tableView.scrollContentRectToVisible(columnRect)
 
 proc selectionContains(tableView: TableView, index: int): bool =
-  for selectedIndex in tableView.xSelectedIndexes:
+  for selectedIndex in tableView.xRowSelection.indexes:
     if selectedIndex == index:
       return true
   false
@@ -2309,7 +2298,7 @@ proc tableRowState(tableView: TableView, index: int): RowState =
 
 proc drawingTableRowState(tableView: TableView, row: RowState): RowState =
   result = row
-  if not tableView.xShowsFocusedRowHighlight and
+  if tvoFocusedRowHighlight notin tableView.xOptions and
       row.index == tableView.selectionLeadIndex():
     result.states.excl(ssSelected)
 
@@ -2326,10 +2315,11 @@ proc firstSelectedIndex(tableView: TableView, indexes: openArray[int]): int =
     indexes[0]
 
 proc syncSelectedIndex(tableView: TableView) =
-  tableView.xSelectedIndex = tableView.firstSelectedIndex(tableView.xSelectedIndexes)
+  tableView.xRowSelection.index =
+    tableView.firstSelectedIndex(tableView.xRowSelection.indexes)
 
 proc normalizeSelection(tableView: TableView, indexes: openArray[int]): seq[int] =
-  if tableView.xSelectionMode == tsmNone or tableView.len() == 0:
+  if tableView.xRowSelection.mode == tsmNone or tableView.len() == 0:
     return @[]
   for index in indexes:
     if tableView.rowSelectable(index):
@@ -2341,25 +2331,25 @@ proc normalizeSelection(tableView: TableView, indexes: openArray[int]): seq[int]
       result[writeIndex] = index
       inc writeIndex
   result.setLen(writeIndex)
-  if tableView.xSelectionMode == tsmSingle and result.len > 1:
+  if tableView.xRowSelection.mode == tsmSingle and result.len > 1:
     result.setLen(1)
 
 proc normalizeSelectionAnchor(tableView: TableView, anchor: int): int =
-  if tableView.rowSelectable(anchor): anchor else: tableView.xSelectedIndex
+  if tableView.rowSelectable(anchor): anchor else: tableView.xRowSelection.index
 
 proc syncSelectionCursor(tableView: TableView) =
-  if tableView.xSelectedIndexes.len == 0:
-    tableView.xSelectionAnchor = -1
-    tableView.xSelectionLead = -1
+  if tableView.xRowSelection.indexes.len == 0:
+    tableView.xRowSelection.anchor = -1
+    tableView.xRowSelection.lead = -1
     return
-  if tableView.xSelectionMode == tsmSingle:
-    tableView.xSelectionAnchor = tableView.xSelectedIndex
-    tableView.xSelectionLead = tableView.xSelectedIndex
+  if tableView.xRowSelection.mode == tsmSingle:
+    tableView.xRowSelection.anchor = tableView.xRowSelection.index
+    tableView.xRowSelection.lead = tableView.xRowSelection.index
     return
-  if not tableView.rowSelectable(tableView.xSelectionAnchor):
-    tableView.xSelectionAnchor = tableView.xSelectedIndex
-  if not tableView.rowSelectable(tableView.xSelectionLead):
-    tableView.xSelectionLead = tableView.xSelectedIndex
+  if not tableView.rowSelectable(tableView.xRowSelection.anchor):
+    tableView.xRowSelection.anchor = tableView.xRowSelection.index
+  if not tableView.rowSelectable(tableView.xRowSelection.lead):
+    tableView.xRowSelection.lead = tableView.xRowSelection.index
 
 proc validTableIndex(tableView: TableView, index: int): bool =
   index >= 0 and index < tableView.len()
@@ -2408,16 +2398,16 @@ proc applySelectedIndexes(
         lead
       else:
         nextSelected
-    selectionChanged = tableView.xSelectedIndexes != nextIndexes
+    selectionChanged = tableView.xRowSelection.indexes != nextIndexes
   if not selectionChanged:
-    tableView.xSelectionAnchor = nextAnchor
-    tableView.xSelectionLead = nextLead
+    tableView.xRowSelection.anchor = nextAnchor
+    tableView.xRowSelection.lead = nextLead
     if nextIndexes.len == 0:
       tableView.clearFocusedColumn()
     if nextLead >= 0:
       tableView.scrollItemToVisible(nextLead)
     return
-  let beforeIndexes = tableView.xSelectedIndexes
+  let beforeIndexes = tableView.xRowSelection.indexes
   tableView.findUndoManager().registerSelectionChange(
     proc(indexes: seq[int]) =
       tableView.selectedIndexes = indexes,
@@ -2425,10 +2415,10 @@ proc applySelectedIndexes(
     "Change Selection",
   )
   emit tableView.selectionIsChanging(DynamicAgent(tableView))
-  tableView.xSelectedIndexes = nextIndexes
+  tableView.xRowSelection.indexes = nextIndexes
   tableView.syncSelectedIndex()
-  tableView.xSelectionAnchor = nextAnchor
-  tableView.xSelectionLead = nextLead
+  tableView.xRowSelection.anchor = nextAnchor
+  tableView.xRowSelection.lead = nextLead
   if nextIndexes.len == 0:
     tableView.clearFocusedColumn()
   if nextLead >= 0:
@@ -2444,12 +2434,13 @@ proc applySelectedIndexes(
       )
 
 proc selectItemAtIndex(tableView: TableView, index: int) =
-  if tableView.xSelectionMode == tsmNone:
+  if tableView.xRowSelection.mode == tsmNone:
     return
   let boundedIndex = if index < 0 or index >= tableView.len(): -1 else: index
   if boundedIndex >= 0 and not tableView.rowSelectable(boundedIndex):
     return
-  if tableView.xSelectedIndex == boundedIndex and tableView.xSelectedIndexes.len <= 1:
+  if tableView.xRowSelection.index == boundedIndex and
+      tableView.xRowSelection.indexes.len <= 1:
     if boundedIndex >= 0:
       tableView.scrollItemToVisible(boundedIndex)
     return
@@ -2468,30 +2459,30 @@ proc rangeSelectionIndexes(anchor, lead: int): seq[int] =
     result.add index
 
 proc extendSelectionToIndex(tableView: TableView, index: int) =
-  if tableView.xSelectionMode != tsmExtended:
+  if tableView.xRowSelection.mode != tsmExtended:
     tableView.selectItemAtIndex(index)
     return
   let boundedIndex = if tableView.validTableIndex(index): index else: -1
   if boundedIndex < 0 or not tableView.rowSelectable(boundedIndex):
     return
-  let anchor = tableView.normalizeSelectionAnchor(tableView.xSelectionAnchor)
+  let anchor = tableView.normalizeSelectionAnchor(tableView.xRowSelection.anchor)
   tableView.applySelectedIndexes(
     rangeSelectionIndexes(anchor, boundedIndex), anchor, boundedIndex
   )
 
 proc toggleSelectionAtIndex(tableView: TableView, index: int) =
-  if tableView.xSelectionMode notin {tsmMultiple, tsmExtended}:
+  if tableView.xRowSelection.mode notin {tsmMultiple, tsmExtended}:
     tableView.selectItemAtIndex(index)
     return
   if not tableView.rowSelectable(index):
     return
   var nextIndexes: seq[int]
   if tableView.selectionContains(index):
-    for selectedIndex in tableView.xSelectedIndexes:
+    for selectedIndex in tableView.xRowSelection.indexes:
       if selectedIndex != index:
         nextIndexes.add selectedIndex
   else:
-    nextIndexes = tableView.xSelectedIndexes
+    nextIndexes = tableView.xRowSelection.indexes
     nextIndexes.add index
   tableView.applySelectedIndexes(nextIndexes, index, index)
 
@@ -2499,19 +2490,19 @@ proc usesDiscontiguousSelection(modifiers: set[KeyModifier]): bool =
   kmCommand in modifiers or kmControl in modifiers
 
 proc selectItemAtIndex(tableView: TableView, index: int, modifiers: set[KeyModifier]) =
-  if tableView.xSelectionMode == tsmNone:
+  if tableView.xRowSelection.mode == tsmNone:
     return
-  if kmShift in modifiers and tableView.xSelectionMode == tsmExtended:
+  if kmShift in modifiers and tableView.xRowSelection.mode == tsmExtended:
     tableView.extendSelectionToIndex(index)
   elif modifiers.usesDiscontiguousSelection() and
-      tableView.xSelectionMode in {tsmMultiple, tsmExtended}:
+      tableView.xRowSelection.mode in {tsmMultiple, tsmExtended}:
     tableView.toggleSelectionAtIndex(index)
   else:
     tableView.selectItemAtIndex(index)
 
 proc selectionLeadIndex(tableView: TableView): int =
-  if tableView.validTableIndex(tableView.xSelectionLead):
-    tableView.xSelectionLead
+  if tableView.validTableIndex(tableView.xRowSelection.lead):
+    tableView.xRowSelection.lead
   else:
     tableView.selectedIndex()
 
@@ -2643,7 +2634,7 @@ proc setFocusedCellColumn(
     previousColumn = tableView.xFocusedColumn
     previousSelectedColumns = tableView.xSelectedColumns
   tableView.xFocusedColumn = column
-  if tableView.xAllowsColumnSelection:
+  if tvoColumnSelection in tableView.xOptions:
     tableView.xSelectedColumns = @[column]
   if previousColumn != tableView.xFocusedColumn or
       previousSelectedColumns != tableView.xSelectedColumns:
@@ -2658,13 +2649,13 @@ proc setFocusedCellColumn(
 proc selectCellAtIndex(
     tableView: TableView, index: int, column: TableColumn, modifiers: set[KeyModifier]
 ) =
-  if tableView.xSelectionMode == tsmNone:
+  if tableView.xRowSelection.mode == tsmNone:
     return
   if index notin 0 ..< tableView.len() or not tableView.rowSelectable(index):
     return
 
   let
-    previousSelectedIndexes = tableView.xSelectedIndexes
+    previousSelectedIndexes = tableView.xRowSelection.indexes
     previousSelectedColumns = tableView.xSelectedColumns
   tableView.selectItemAtIndex(index, modifiers)
   if column.isNil or not tableView.shouldSelectCell(index, column):
@@ -2674,9 +2665,9 @@ proc selectCellAtIndex(
   tableView.xClickedRow = index
   tableView.xClickedColumn = column
   tableView.needsDisplay = true
-  if tableView.xAllowsColumnSelection and
+  if tvoColumnSelection in tableView.xOptions and
       previousSelectedColumns != tableView.xSelectedColumns and
-      previousSelectedIndexes == tableView.xSelectedIndexes:
+      previousSelectedIndexes == tableView.xRowSelection.indexes:
     emit tableView.selectionDidChange(DynamicAgent(tableView))
     tableView.postAccessibilityNotification(anSelectionChanged)
 
@@ -2746,7 +2737,7 @@ proc moveSelectionTo(tableView: TableView, index: int, extend = false, direction
     boundedIndex = tableView.nextSelectableIndex(targetIndex, 1)
   if boundedIndex < 0:
     return
-  if extend and tableView.xSelectionMode == tsmExtended:
+  if extend and tableView.xRowSelection.mode == tsmExtended:
     tableView.extendSelectionToIndex(boundedIndex)
   else:
     tableView.selectItemAtIndex(boundedIndex)
@@ -2883,8 +2874,8 @@ proc `highlightedIndex=`*(tableView: TableView, index: int) =
 
 proc setHighlightedColumn(tableView: TableView, column: TableColumn) =
   var next = column
-  if not tableView.xAllowsColumnSelection or next.isNil or next.tableView() != tableView or
-      next.hidden():
+  if tvoColumnSelection notin tableView.xOptions or next.isNil or
+      next.tableView() != tableView or next.hidden():
     next = nil
   if tableView.xHighlightedColumn == next:
     return
@@ -2915,9 +2906,10 @@ proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil) =
     oldFirst = tableView.firstVisibleIndex()
     offsetWithinRow = oldOffset.y - tableView.rowOffset(oldFirst)
     oldFirstIdentifier = tableView.tableRowIdentifier(oldFirst)
-    selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
-    anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
-    leadIdentifier = tableView.tableRowIdentifier(tableView.xSelectionLead)
+    selectedIdentifiers =
+      tableView.rowIdentifiersForRows(tableView.xRowSelection.indexes)
+    anchorIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.anchor)
+    leadIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.lead)
     editingIdentifier =
       if tableView.xCellEditing.state.active:
         tableView.tableRowIdentifier(tableView.xCellEditing.state.row)
@@ -2933,17 +2925,17 @@ proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil) =
       selectedIdentifiers, anchorIdentifier, leadIdentifier
     )
   else:
-    if tableView.xSelectionMode == tsmSingle and tableView.xSelectedIndexes.len > 0 and
-        tableView.len() > 0:
-      tableView.xSelectedIndexes[0] =
-        min(max(tableView.xSelectedIndexes[0], -1), tableView.len() - 1)
-    if tableView.xSelectionMode == tsmSingle and
-        tableView.xSelectedIndex >= tableView.len() and tableView.len() > 0:
-      tableView.xSelectedIndex = tableView.len() - 1
-    if tableView.xSelectedIndexes.len == 0 and tableView.xSelectedIndex >= 0:
-      tableView.xSelectedIndexes.add tableView.xSelectedIndex
-    tableView.xSelectedIndexes =
-      tableView.normalizeSelection(tableView.xSelectedIndexes)
+    if tableView.xRowSelection.mode == tsmSingle and
+        tableView.xRowSelection.indexes.len > 0 and tableView.len() > 0:
+      tableView.xRowSelection.indexes[0] =
+        min(max(tableView.xRowSelection.indexes[0], -1), tableView.len() - 1)
+    if tableView.xRowSelection.mode == tsmSingle and
+        tableView.xRowSelection.index >= tableView.len() and tableView.len() > 0:
+      tableView.xRowSelection.index = tableView.len() - 1
+    if tableView.xRowSelection.indexes.len == 0 and tableView.xRowSelection.index >= 0:
+      tableView.xRowSelection.indexes.add tableView.xRowSelection.index
+    tableView.xRowSelection.indexes =
+      tableView.normalizeSelection(tableView.xRowSelection.indexes)
     tableView.syncSelectedIndex()
     tableView.syncSelectionCursor()
 
@@ -2980,9 +2972,10 @@ proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdat
   tableView.xWidthMeasurement.valid = false
   tableView.invalidateColumnWidthMeasurements()
   let
-    selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
-    anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
-    leadIdentifier = tableView.tableRowIdentifier(tableView.xSelectionLead)
+    selectedIdentifiers =
+      tableView.rowIdentifiersForRows(tableView.xRowSelection.indexes)
+    anchorIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.anchor)
+    leadIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.lead)
     editingIdentifier =
       if tableView.xCellEditing.state.active:
         tableView.tableRowIdentifier(tableView.xCellEditing.state.row)
@@ -2997,8 +2990,8 @@ proc flushTableRowUpdates(tableView: TableView, updates: openArray[TableRowUpdat
       selectedIdentifiers, anchorIdentifier, leadIdentifier
     )
   else:
-    tableView.xSelectedIndexes =
-      tableView.normalizeSelection(tableView.xSelectedIndexes)
+    tableView.xRowSelection.indexes =
+      tableView.normalizeSelection(tableView.xRowSelection.indexes)
     tableView.syncSelectedIndex()
     tableView.syncSelectionCursor()
   if tableView.xCellEditing.state.active and editingIdentifier.len > 0:
@@ -3057,7 +3050,7 @@ proc moveRow*(tableView: TableView, fromIndex, toIndex: int) =
   tableView.applyTableRowUpdates([initTableRowMoveUpdate(fromIndex, toIndex)])
 
 proc selectedIndexes*(tableView: TableView): seq[int] =
-  tableView.xSelectedIndexes
+  tableView.xRowSelection.indexes
 
 proc `selectedIndexes=`*(tableView: TableView, indexes: openArray[int]) =
   let nextIndexes = tableView.normalizeSelection(indexes)
@@ -3079,13 +3072,13 @@ proc `selectedRange=`*(tableView: TableView, selectionRange: Slice[int]) =
   tableView.selectedIndexes = indexes
 
 proc selectedRanges*(tableView: TableView): seq[Slice[int]] =
-  if tableView.xSelectedIndexes.len == 0:
+  if tableView.xRowSelection.indexes.len == 0:
     return @[]
   var
-    firstIndex = tableView.xSelectedIndexes[0]
+    firstIndex = tableView.xRowSelection.indexes[0]
     previousIndex = firstIndex
-  for offset in 1 ..< tableView.xSelectedIndexes.len:
-    let index = tableView.xSelectedIndexes[offset]
+  for offset in 1 ..< tableView.xRowSelection.indexes.len:
+    let index = tableView.xRowSelection.indexes[offset]
     if index == previousIndex + 1:
       previousIndex = index
     else:
@@ -3095,23 +3088,20 @@ proc selectedRanges*(tableView: TableView): seq[Slice[int]] =
   result.add firstIndex .. previousIndex
 
 proc selectionMode*(tableView: TableView): TableSelectionMode =
-  tableView.xSelectionMode
+  tableView.xRowSelection.mode
 
 proc `selectionMode=`*(tableView: TableView, mode: TableSelectionMode) =
-  if tableView.xSelectionMode == mode:
+  if tableView.xRowSelection.mode == mode:
     return
-  tableView.xSelectionMode = mode
+  tableView.xRowSelection.mode = mode
   if mode == tsmNone:
-    tableView.xSelectedIndex = -1
-    tableView.xSelectedIndexes.setLen(0)
-    tableView.xSelectionAnchor = -1
-    tableView.xSelectionLead = -1
+    tableView.xRowSelection.clear()
     tableView.clearFocusedColumn()
-  elif mode == tsmSingle and tableView.xSelectedIndexes.len > 1:
-    tableView.xSelectedIndexes.setLen(1)
-    tableView.xSelectedIndex = tableView.xSelectedIndexes[0]
-    tableView.xSelectionAnchor = tableView.xSelectedIndex
-    tableView.xSelectionLead = tableView.xSelectedIndex
+  elif mode == tsmSingle and tableView.xRowSelection.indexes.len > 1:
+    tableView.xRowSelection.indexes.setLen(1)
+    tableView.xRowSelection.index = tableView.xRowSelection.indexes[0]
+    tableView.xRowSelection.anchor = tableView.xRowSelection.index
+    tableView.xRowSelection.lead = tableView.xRowSelection.index
   tableView.reloadData()
 
 proc visibleRows*(tableView: TableView): int =
@@ -3125,36 +3115,45 @@ proc `visibleRows=`*(tableView: TableView, rows: int) =
   tableView.reloadData()
 
 proc usesAlternatingRowBackgrounds*(tableView: TableView): bool =
-  tableView.xUsesAlternatingRowBackgrounds
+  tvoAlternatingRowBackgrounds in tableView.xOptions
 
 proc `usesAlternatingRowBackgrounds=`*(tableView: TableView, value: bool) =
-  if tableView.xUsesAlternatingRowBackgrounds == value:
+  if (tvoAlternatingRowBackgrounds in tableView.xOptions) == value:
     return
-  tableView.xUsesAlternatingRowBackgrounds = value
+  if value:
+    tableView.xOptions.incl(tvoAlternatingRowBackgrounds)
+  else:
+    tableView.xOptions.excl(tvoAlternatingRowBackgrounds)
   tableView.invalidateTableRows()
 
 proc showsRowSeparators*(tableView: TableView): bool =
-  tableView.xShowsRowSeparators
+  tvoRowSeparators in tableView.xOptions
 
 proc `showsRowSeparators=`*(tableView: TableView, value: bool) =
-  if tableView.xShowsRowSeparators == value:
+  if (tvoRowSeparators in tableView.xOptions) == value:
     return
-  tableView.xShowsRowSeparators = value
+  if value:
+    tableView.xOptions.incl(tvoRowSeparators)
+  else:
+    tableView.xOptions.excl(tvoRowSeparators)
   tableView.invalidateTableRows()
 
 proc allowsRowReordering*(tableView: TableView): bool =
-  tableView.xAllowsRowReordering
+  tvoRowReordering in tableView.xOptions
 
 proc `allowsRowReordering=`*(tableView: TableView, value: bool) =
-  if tableView.xAllowsRowReordering == value:
+  if (tvoRowReordering in tableView.xOptions) == value:
     return
-  tableView.xAllowsRowReordering = value
+  if value:
+    tableView.xOptions.incl(tvoRowReordering)
+  else:
+    tableView.xOptions.excl(tvoRowReordering)
   if not value:
     tableView.xDragging.rowStart.row = -1
     tableView.updateTableDropTarget(initDraggingDropTarget())
 
 proc selectedIndex*(tableView: TableView): int =
-  tableView.xSelectedIndex
+  tableView.xRowSelection.index
 
 proc `selectedIndex=`*(tableView: TableView, index: int) =
   if index < 0:
@@ -3250,53 +3249,68 @@ proc activateItemAtIndex*(tableView: TableView, index: int) =
   tableView.activateItemAtIndex(index, {})
 
 proc allowsColumnSelection*(tableView: TableView): bool =
-  tableView.xAllowsColumnSelection
+  tvoColumnSelection in tableView.xOptions
 
 proc `allowsColumnSelection=`*(tableView: TableView, value: bool) =
-  if tableView.xAllowsColumnSelection == value:
+  if (tvoColumnSelection in tableView.xOptions) == value:
     return
-  tableView.xAllowsColumnSelection = value
+  if value:
+    tableView.xOptions.incl(tvoColumnSelection)
+  else:
+    tableView.xOptions.excl(tvoColumnSelection)
   if not value:
     tableView.xSelectedColumns.setLen(0)
     tableView.clearPointerColumnHighlight()
   tableView.needsDisplay = true
 
 proc tracksPointerRowHighlights*(tableView: TableView): bool =
-  tableView.xTracksPointerRowHighlights
+  tvoPointerRowHighlights in tableView.xOptions
 
 proc `tracksPointerRowHighlights=`*(tableView: TableView, value: bool) =
-  if tableView.xTracksPointerRowHighlights == value:
+  if (tvoPointerRowHighlights in tableView.xOptions) == value:
     return
-  tableView.xTracksPointerRowHighlights = value
+  if value:
+    tableView.xOptions.incl(tvoPointerRowHighlights)
+  else:
+    tableView.xOptions.excl(tvoPointerRowHighlights)
   if not value:
     tableView.clearPointerRowHighlight()
 
 proc tracksPointerColumnHighlights*(tableView: TableView): bool =
-  tableView.xTracksPointerColumnHighlights
+  tvoPointerColumnHighlights in tableView.xOptions
 
 proc `tracksPointerColumnHighlights=`*(tableView: TableView, value: bool) =
-  if tableView.xTracksPointerColumnHighlights == value:
+  if (tvoPointerColumnHighlights in tableView.xOptions) == value:
     return
-  tableView.xTracksPointerColumnHighlights = value
+  if value:
+    tableView.xOptions.incl(tvoPointerColumnHighlights)
+  else:
+    tableView.xOptions.excl(tvoPointerColumnHighlights)
   if not value:
     tableView.clearPointerColumnHighlight()
 
 proc showsFocusedRowHighlight*(tableView: TableView): bool =
-  tableView.xShowsFocusedRowHighlight
+  tvoFocusedRowHighlight in tableView.xOptions
 
 proc `showsFocusedRowHighlight=`*(tableView: TableView, value: bool) =
-  if tableView.xShowsFocusedRowHighlight == value:
+  if (tvoFocusedRowHighlight in tableView.xOptions) == value:
     return
-  tableView.xShowsFocusedRowHighlight = value
+  if value:
+    tableView.xOptions.incl(tvoFocusedRowHighlight)
+  else:
+    tableView.xOptions.excl(tvoFocusedRowHighlight)
   tableView.invalidateTableRows()
 
 proc showsFocusedColumnHighlight*(tableView: TableView): bool =
-  tableView.xShowsFocusedColumnHighlight
+  tvoFocusedColumnHighlight in tableView.xOptions
 
 proc `showsFocusedColumnHighlight=`*(tableView: TableView, value: bool) =
-  if tableView.xShowsFocusedColumnHighlight == value:
+  if (tvoFocusedColumnHighlight in tableView.xOptions) == value:
     return
-  tableView.xShowsFocusedColumnHighlight = value
+  if value:
+    tableView.xOptions.incl(tvoFocusedColumnHighlight)
+  else:
+    tableView.xOptions.excl(tvoFocusedColumnHighlight)
   tableView.invalidateTableRows()
 
 proc selectedColumns*(tableView: TableView): seq[TableColumn] =
@@ -3638,9 +3652,10 @@ proc reorderTableModelRows(
   let
     insertionIndex = tableView.insertionIndexForDropTarget(target)
     adjustedIndex = adjustedReorderInsertionIndex(normalizedRows, insertionIndex)
-    selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
-    anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
-    leadIdentifier = tableView.tableRowIdentifier(tableView.xSelectionLead)
+    selectedIdentifiers =
+      tableView.rowIdentifiersForRows(tableView.xRowSelection.indexes)
+    anchorIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.anchor)
+    leadIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.lead)
 
   var
     nextRows = model.rows()
@@ -3653,10 +3668,7 @@ proc reorderTableModelRows(
     nextRows.insert(row, adjustedIndex + index)
 
   model.rows = nextRows
-  tableView.xSelectedIndexes.setLen(0)
-  tableView.xSelectedIndex = -1
-  tableView.xSelectionAnchor = -1
-  tableView.xSelectionLead = -1
+  tableView.xRowSelection.clear()
   tableView.reloadData()
   if selectedIdentifiers.len > 0:
     tableView.applySelectionForRowIdentifiers(
@@ -4144,7 +4156,8 @@ proc shouldDrawSelectedTableColumn(tableView: TableView, column: TableColumn): b
   if not tableView.xHighlightedColumn.isNil:
     column == tableView.xHighlightedColumn
   else:
-    tableView.xShowsFocusedColumnHighlight and column in tableView.xSelectedColumns
+    tvoFocusedColumnHighlight in tableView.xOptions and
+      column in tableView.xSelectedColumns
 
 proc drawSelectedTableColumn(
     tableView: TableView,
@@ -5003,11 +5016,11 @@ proc performActiveTableDrag(tableView: TableView, event: MouseEvent): bool =
 
 proc updateHighlightedCellAtPoint(tableView: TableView, point: Point): int =
   result = tableView.rowItemIndexAtPoint(point)
-  if tableView.xTracksPointerRowHighlights:
+  if tvoPointerRowHighlights in tableView.xOptions:
     tableView.highlightedIndex = result
   else:
     tableView.clearPointerRowHighlight()
-  if tableView.xTracksPointerColumnHighlights and result >= 0:
+  if tvoPointerColumnHighlights in tableView.xOptions and result >= 0:
     tableView.setHighlightedColumn(tableView.tableColumnAtPoint(point))
   else:
     tableView.setHighlightedColumn(nil)
@@ -5112,11 +5125,11 @@ protocol DefaultTableViewMouseHitPolicy of MouseHitPolicyProtocol:
     if owner of Window:
       discard Window(owner).makeFirstResponder(tableView, focusVisible = false)
     tableView.selectCell(row, column)
-    if tableView.xTracksPointerRowHighlights:
+    if tvoPointerRowHighlights in tableView.xOptions:
       tableView.highlightedIndex = row
     else:
       tableView.clearPointerRowHighlight()
-    if tableView.xTracksPointerColumnHighlights:
+    if tvoPointerColumnHighlights in tableView.xOptions:
       tableView.setHighlightedColumn(column)
     else:
       tableView.clearPointerColumnHighlight()
@@ -5592,9 +5605,10 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     if column.isNil or column.tableView() != tableView:
       return
     let
-      selectedIdentifiers = tableView.rowIdentifiersForRows(tableView.xSelectedIndexes)
-      anchorIdentifier = tableView.tableRowIdentifier(tableView.xSelectionAnchor)
-      leadIdentifier = tableView.tableRowIdentifier(tableView.xSelectionLead)
+      selectedIdentifiers =
+        tableView.rowIdentifiersForRows(tableView.xRowSelection.indexes)
+      anchorIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.anchor)
+      leadIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.lead)
     for current in tableView.xColumns.mitems:
       if current != column and current.xSortDirection != tsdNone:
         current.xSortDirection = tsdNone
@@ -5735,21 +5749,21 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
   method selectCell(tableView: TableView, row: int, column: TableColumn) =
     if not tableView.shouldSelectCell(row, column):
       return
-    let previousSelectedIndexes = tableView.xSelectedIndexes
+    let previousSelectedIndexes = tableView.xRowSelection.indexes
     let previousSelectedColumns = tableView.xSelectedColumns
     tableView.selectedIndex = row
     discard tableView.setFocusedCellColumn(row, column, notifySelection = false)
     tableView.xClickedRow = row
     tableView.xClickedColumn = column
     tableView.needsDisplay = true
-    if tableView.xAllowsColumnSelection and
+    if tvoColumnSelection in tableView.xOptions and
         previousSelectedColumns != tableView.xSelectedColumns and
-        previousSelectedIndexes == tableView.xSelectedIndexes:
+        previousSelectedIndexes == tableView.xRowSelection.indexes:
       emit tableView.selectionDidChange(DynamicAgent(tableView))
       tableView.postAccessibilityNotification(anSelectionChanged)
 
   method setSelectedColumns(tableView: TableView, columns: seq[TableColumn]) =
-    if not tableView.xAllowsColumnSelection:
+    if tvoColumnSelection notin tableView.xOptions:
       return
     var next: seq[TableColumn]
     for column in columns:
@@ -6400,29 +6414,24 @@ proc initTableViewFields*(tableView: TableView, frame: Rect = AutoRect) =
   initControlFields(tableView, frame)
   tableView.xTableRole = srTableView
   let style = tableView.tableStyle()
-  tableView.xSelectedIndex = -1
-  tableView.xSelectedIndexes = @[]
-  tableView.xSelectionAnchor = -1
-  tableView.xSelectionLead = -1
+  tableView.xRowSelection = initTableRowSelection()
   tableView.xHighlightedIndex = -1
   tableView.xPressedIndex = -1
   tableView.xRowSizing.height = style.rowHeight
   tableView.xRowSizing.visibleRows = 5
   tableView.xWidthSizing.columnSizing = tvcsNatural
   tableView.xWidthSizing.mode = tvwsmColumns
-  tableView.xSelectionMode = tsmSingle
   tableView.xItemRole = srRowItem
   tableView.xRowCount = 0
   tableView.xHeaderSettings.visible = true
   tableView.xHeaderSettings.height = style.headerHeight
   tableView.xClickedRow = -1
-  tableView.xAllowsColumnSelection = false
   tableView.xRowHeaderSettings.visible = false
   tableView.xRowHeaderSettings.width = 48.0'f32
-  tableView.xTracksPointerRowHighlights = true
-  tableView.xTracksPointerColumnHighlights = true
-  tableView.xShowsFocusedRowHighlight = true
-  tableView.xShowsFocusedColumnHighlight = true
+  tableView.xOptions = {
+    tvoPointerRowHighlights, tvoPointerColumnHighlights, tvoFocusedRowHighlight,
+    tvoFocusedColumnHighlight,
+  }
   tableView.xCellEditing.state = TableEditingState(row: -1)
   tableView.xCellEditing.completion.row = -1
   tableView.xDragging.dropTarget = initDraggingDropTarget()
