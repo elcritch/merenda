@@ -349,9 +349,18 @@ jobs:
     - name: Install latest Atlas and set up Nim
       run: |
         mkdir -p "$HOME/.local/bin"
-        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          cygpath -w "$HOME/.local/bin" >> "$GITHUB_PATH"
+        else
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        fi
+        export PATH="$HOME/.local/bin:$PATH"
         bash .github/scripts/install-atlas.sh
-        "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          bash .github/scripts/install-msvc-nim.sh
+        else
+          "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
+        fi
 
     - name: Verify Nim
       run: |

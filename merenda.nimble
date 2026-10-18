@@ -13,7 +13,7 @@ requires "crunchy >= 0.1.11"
 # Includes merged ABI/X11 fixes and opt-in nonactivating window presentation.
 requires "gh:elcritch/siwin#50a96efcd5a3feb5fcfdf07a46baa7da50360c0b"
 requires "gh:elcritch/figdraw >= 0.44.0 [siwin, harfbuzz, textBackendHarfbuzzy]"
-requires "sigils >= 0.31.0 [sigNameAsString, closures, siwin, chronos]"
+requires "gh:elcritch/sigils#00ce21564a390bd3883da601b54f59344d1b6c7b [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
 requires "gh:elcritch/kiwiberry#4d273da93f67d8e5d6317898851772b32fa635ec"
 requires "cborious"

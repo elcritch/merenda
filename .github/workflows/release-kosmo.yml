@@ -777,7 +777,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          cygpath -w "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
           bash .github/scripts/install-atlas.sh
           atlas -v
 
@@ -790,6 +791,10 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: atlas install -tuk --features:kosmo
+
+      - name: Install Nim with corrected MSVC atomics
+        shell: bash
+        run: bash .github/scripts/install-msvc-nim.sh
 
       - name: Build Kosmo
         shell: pwsh
@@ -867,6 +872,14 @@ jobs:
         run: |
           nim c -r --cc:vcc --passC:/MT --out:build/windowsstacktrace.exe `
             tests/integrations/fixtures/windowsstacktrace.nim
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify MSVC atomic ownership and worker shutdown
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          nim c -r --cc:vcc --passC:/MT --out:build/windowsatomics.exe `
+            tests/integrations/fixtures/windowsatomics.nim
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package Kosmo

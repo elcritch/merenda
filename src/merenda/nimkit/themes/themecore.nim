@@ -1,5 +1,12 @@
 import std/[atomics, sets, strutils, tables]
 
+when defined(windows) and defined(vcc):
+  when not declared(nimHasCorrectMsvcAtomics):
+    {.
+      error:
+        "MSVC needs the corrected Nim atomics library. Run bash .github/scripts/install-msvc-nim.sh and use the printed compiler path."
+    .}
+
 import figdraw except CornerRadii
 from sigils/selectors import DynamicAgent
 
