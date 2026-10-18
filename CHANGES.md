@@ -7,6 +7,13 @@
   controller lookups now reuse the filtered/sorted arrangement until a model
   mutation; public model APIs, typed edit writeback, and notifications remain
   available. Reassign a filter after changing external state captured by it.
+- Maintain shared collection identity indexes during mutations, allocate them
+  only for identity queries, and reuse arrangement storage. Cached reads and
+  unsorted refreshes avoid comparator closure allocations. Field projections
+  borrow values instead of creating temporary ObjectValue copies.
+- Keep arranged identity lookups proportional to visible items: defer hidden
+  source identities and use generation stamps to discard stale visible positions.
+
 ## 0.27.5
 
 - Start the GitHub viewer with Issues and Pull Requests expanded and individual

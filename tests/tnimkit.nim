@@ -45,6 +45,7 @@ else:
   import nimkit/htmlresources
   import nimkit/iconlabels
   import nimkit/images
+  import nimkit/itemcollections
   import nimkit/keybindings
   import nimkit/markdownviews
   import nimkit/matrix

@@ -342,6 +342,40 @@ suite "nimkit model controllers":
     check rootChildren[0].identifier == "child"
     check rootChildren[0].title == "Child"
 
+  test "snapshot traversal refreshes arrangements after model changes":
+    let
+      controller = newArrayController(personItems())
+      menu = newMenu("Choices")
+      tabs = newDocumentTabs()
+      matrix = newButtonMatrix([], columns = 1)
+    var filterCalls = 0
+    controller.filter = proc(item: ModelItem): bool =
+      inc filterCalls
+      item.value("active").requireBool()
+    controller.sortDescriptors = [initModelSortDescriptor("score", msdDescending)]
+
+    syncMenu(menu, controller)
+    check menu.itemModels[0].identifier == "grace"
+    check menu.itemModels[1].identifier == "ada"
+    check menu.itemModels.len == 2
+    check filterCalls == 3
+
+    controller.setValue("alan", "active", toObj(true))
+    syncDocumentTabs(tabs, controller)
+    check tabs.documentTabModels.len == 3
+    check tabs.documentTabModels[2].identifier == "alan"
+    check filterCalls == 6
+
+    controller.setValue("alan", "score", toObj(99))
+    syncMatrix(matrix, controller)
+    check matrix.matrixItemModels.len == 3
+    check matrix.matrixItemModels[0].identifier == "alan"
+    check filterCalls == 9
+
+    syncMenu(menu, controller)
+    check menu.itemModels[0].identifier == "alan"
+    check filterCalls == 9
+
   test "array controller syncs choice style controls":
     let
       accent = color(0.2, 0.4, 0.6, 1.0)

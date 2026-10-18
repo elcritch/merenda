@@ -132,31 +132,66 @@ Keep public property hooks and ownership boundaries intact.
 ### Shared collection caching and small helpers
 
 PR #164 is narrowed to TableModel/ArrayController storage and arrangement caches,
-a small private template for comparator setup, and reuse of existing ObjectValue
+a small private template for arrangement dispatch, and reuse of existing ObjectValue
 accessors. The broader provider, snapshot, selection, reuse, and pointer migration
 was removed: it added 255 net production lines and did not justify its additional
 abstractions. The original 1,200–1,600 LOC-reduction forecast is withdrawn; those
 larger migrations are deferred rather than assumed to be follow-up work.
-The narrowed implementation removes **14 net production lines versus main**,
-including the new private collection module and excluding tests/documentation.
+The shared storage keeps mutation bookkeeping explicit so batching appends and
+removals does not repeatedly allocate identity tables.
 
 - [x] **Shared collection cache.** Use private `ItemCollection[T]` value state for
-  source/visible identity indexes, hidden/filter/sort arrangement, mutation
-  invalidation, and revision tracking. Keep model records, lookup errors,
-  comparison policies, edit writeback, and notification boundaries concrete.
+  a lazy source/visible identity table, reusable hidden/filter/sort arrangement,
+  incremental identity updates, and revision tracking. Keep model records,
+  lookup errors, comparison policies, edit writeback, and notification boundaries
+  concrete.
 - [x] **Small shared template.** Share only the cached-arrangement guard and
-  synchronous comparator setup through `arrangeWithDescriptors`. Each model keeps
-  its own comparator and public sorting/filtering APIs.
+  sorted/unsorted dispatch through `arrangeWithDescriptors`. Keep comparator
+  closures in separate sorted helpers so cached reads and unsorted rebuilds do
+  not allocate environments. Each model keeps its public sorting/filtering APIs.
 - [x] **Reuse established accessors.** Replace five copies of model-field type
-  checks with ObjectValue's typed optional accessors. Preserve absent/wrong-type
-  defaults, and read document-tab style classes once per projection.
+  checks with ObjectValue's typed optional accessors and borrowed field values.
+  Preserve absent/wrong-type defaults, and read document-tab style classes once
+  per projection.
 
 **Evidence:** the repeated-query regression evaluates three source items across
 100 iterations of count/item/identity queries: filter calls fall from 1,200 to
 three until mutation invalidates the cache. This is an operation-count test, not
 a wall-clock benchmark. Coverage also checks filter refreshes, exception retries,
-identity indexes across mutations, typed field defaults, and existing widget
-bindings. Record final net production LOC and validation results in the PR.
+duplicate identities, mixed mutations, payload borrowing, buffer reuse, typed
+field defaults, and existing widget bindings. `tests/benchmark_itemcollections.nim`
+measures controller/table append and removal batches, cold and warm identity
+queries, sorted/filtered refreshes, cached reads, and arranged-row exports.
+It measures refreshes both with and without an immediate identity query;
+allocation counts can be collected separately with `-d:nimAllocStats`.
+
+The final collection API exposes source `len`, borrowed `[]`/`items`/`pairs`,
+indexed field assignment through `[]=`, and owner-level `arrangedItems`
+traversal. The owner refreshes before yielding,
+so traversal consumers never prepare caches manually. The shared arrangement
+remains a sequence for sorting and random access. Arranged-row exports reserve
+their output capacity once.
+
+Astra's review identified a selective-visibility regression: a first arranged
+identity query indexed all hidden source identities. Arranged lookups now create
+entries only for visible identifiers, defer source positions until a source
+query, and use generations to reject stale positions without scanning hidden
+entries. Partial entries retain unknown source positions across insertions and
+moves; deletion removes only the affected identity. Tests cover these partial
+states, hidden-first duplicates, and a cold visible-lookup allocation bound.
+
+The generation stamp adds one `Natural` per identity entry (8 bytes on this
+platform; `ItemIndexes` grows from 16 to 24 bytes). Source lookup still builds a
+full identity cache on first use and can cost more than scanning near the front;
+controller appends retain an additional owned identifier key. These are explicit
+cache tradeoffs, rather than a claim that every workload improves.
+
+Benchmark timings use release/ARC builds, identical dependencies, alternating
+main/PR runs, and matching result checksums. Allocation counts come from separate
+instrumented builds. The permanent harness includes one-visible-of-100,000 cold
+and repeated identity queries so the review regression remains measurable.
+[PR #164](https://github.com/elcritch/merenda/pull/164) records the comparison
+against the committed source. Local timings are diagnostic, not CI thresholds.
 
 ## Validation
 

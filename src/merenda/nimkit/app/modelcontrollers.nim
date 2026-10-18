@@ -74,7 +74,7 @@ type
     xLeadIdentifier: string
 
   ArrayController* = ref object of Responder
-    xCollection: ItemCollection[ModelItem]
+    xItems: ItemCollection[ModelItem]
     xColumns: seq[ModelColumn]
     xSortDescriptors: seq[ModelSortDescriptor]
     xFilter: ModelFilter
@@ -166,7 +166,7 @@ proc notifyArrayControllerDidChange(
         identifiers = identifiers,
         keys = keys,
         index = index,
-        count = controller.xCollection.items.len.Natural,
+        count = controller.xItems.len.Natural,
       ),
     )
   )
@@ -414,15 +414,31 @@ proc setValue*(controller: ObjectController, key: string, value: ObjectValue) =
   controller.xItem.setValue(key, value)
   controller.notifyObjectControllerDidChange(mmkValueChanged, keys = [key])
 
-proc ensureArrangement(controller: ArrayController) =
-  arrangeWithDescriptors(
-    controller.xCollection, controller.xFilter, controller.xSortDescriptors,
-    compareItems,
+proc arrangeSorted(controller: ArrayController) =
+  controller.xItems.arrange(
+    controller.xFilter,
+    proc(left, right: int): int =
+      compareItems(
+        controller.xItems[left], controller.xItems[right], controller.xSortDescriptors
+      ),
   )
 
+proc refreshArrangement(controller: ArrayController) =
+  arrangeWithDescriptors(
+    controller.xItems,
+    controller.xFilter,
+    controller.xSortDescriptors,
+    controller.arrangeSorted(),
+  )
+
+iterator arrangedItems(controller: ArrayController): lent ModelItem =
+  controller.refreshArrangement()
+  for sourceIndex in controller.xItems.arrangedIndexes:
+    yield controller.xItems[sourceIndex]
+
 proc arrangedSourceIndex(controller: ArrayController, index: int): int =
-  controller.ensureArrangement()
-  controller.xCollection.arrangedSourceIndex(index)
+  controller.refreshArrangement()
+  controller.xItems.arrangedSourceIndex(index)
 
 proc initArrayControllerFields(
     controller: ArrayController,
@@ -430,7 +446,7 @@ proc initArrayControllerFields(
     columns: openArray[ModelColumn] = [],
 ) =
   initResponder(controller)
-  controller.xCollection = initItemCollection(items, indexEmptyIdentifiers = true)
+  controller.xItems = initItemCollection(items, indexEmptyIdentifiers = true)
   controller.xColumns = @columns
   controller.xSelection = newSelectionController(mselSingle)
   controller.installArrayControllerProtocols()
@@ -442,11 +458,11 @@ proc newArrayController*(
   result.initArrayControllerFields(items, columns)
 
 proc len*(controller: ArrayController): int =
-  controller.ensureArrangement()
-  controller.xCollection.arrangedIndexes.len
+  controller.refreshArrangement()
+  controller.xItems.arrangedIndexes.len
 
 proc sourceLen*(controller: ArrayController): int =
-  controller.xCollection.items.len
+  controller.xItems.len
 
 proc selectionController*(controller: ArrayController): SelectionController =
   controller.xSelection
@@ -456,7 +472,7 @@ proc columns*(controller: ArrayController): seq[ModelColumn] =
 
 proc `columns=`*(controller: ArrayController, columns: openArray[ModelColumn]) =
   controller.xColumns = @columns
-  controller.xCollection.invalidate()
+  controller.xItems.invalidate()
   controller.notifyArrayControllerDidChange(mmkColumnsChanged)
 
 proc sortDescriptors*(controller: ArrayController): seq[ModelSortDescriptor] =
@@ -466,7 +482,7 @@ proc `sortDescriptors=`*(
     controller: ArrayController, descriptors: openArray[ModelSortDescriptor]
 ) =
   controller.xSortDescriptors = @descriptors
-  controller.xCollection.invalidate()
+  controller.xItems.invalidate()
   controller.notifyArrayControllerDidChange(mmkSortChanged)
 
 proc filter*(controller: ArrayController): ModelFilter =
@@ -474,52 +490,50 @@ proc filter*(controller: ArrayController): ModelFilter =
 
 proc `filter=`*(controller: ArrayController, filter: ModelFilter) =
   controller.xFilter = filter
-  controller.xCollection.invalidate()
+  controller.xItems.invalidate()
   controller.notifyArrayControllerDidChange(mmkFilterChanged)
 
 proc itemAt*(controller: ArrayController, index: int): ModelItem =
   let sourceIndex = controller.arrangedSourceIndex(index)
   if sourceIndex >= 0:
-    controller.xCollection.items[sourceIndex]
+    controller.xItems[sourceIndex]
   else:
     modelItem()
 
 proc itemWithIdentifier*(
     controller: ArrayController, identifier: string
 ): ModelItem {.raises: [ModelControllerError].} =
-  let index = controller.xCollection.sourceIndexOfIdentifier(identifier)
+  let index = controller.xItems.sourceIndexOfIdentifier(identifier)
   if index >= 0:
-    return controller.xCollection.items[index]
+    return controller.xItems[index]
   raiseModelControllerError("unknown model item identifier: " & identifier)
 
 proc getItemWithIdentifier*(
     controller: ArrayController, identifier: string
 ): Option[ModelItem] =
-  controller.xCollection.getItemWithIdentifier(identifier)
+  controller.xItems.getItemWithIdentifier(identifier)
 
 proc indexOfIdentifier*(controller: ArrayController, identifier: string): int =
-  controller.ensureArrangement()
-  controller.xCollection.arrangedIndexOfIdentifier(identifier)
+  controller.refreshArrangement()
+  controller.xItems.arrangedIndexOfIdentifier(identifier)
 
 proc addItem*(controller: ArrayController, item: ModelItem) =
   if item.identifier.len > 0 and
-      controller.xCollection.sourceIndexOfIdentifier(item.identifier) >= 0:
+      controller.xItems.sourceIndexOfIdentifier(item.identifier) >= 0:
     raiseModelControllerError("duplicate model item identifier: " & item.identifier)
-  controller.xCollection.add item
+  controller.xItems.add item
   var identifiers: seq[string]
   if item.identifier.len > 0:
     identifiers.add item.identifier
   controller.notifyArrayControllerDidChange(
-    mmkItemsChanged,
-    identifiers = identifiers,
-    index = controller.xCollection.items.len - 1,
+    mmkItemsChanged, identifiers = identifiers, index = controller.xItems.len - 1
   )
 
 proc insertItem*(controller: ArrayController, item: ModelItem, index: int) =
   if item.identifier.len > 0 and
-      controller.xCollection.sourceIndexOfIdentifier(item.identifier) >= 0:
+      controller.xItems.sourceIndexOfIdentifier(item.identifier) >= 0:
     raiseModelControllerError("duplicate model item identifier: " & item.identifier)
-  let insertIndex = controller.xCollection.insert(item, index)
+  let insertIndex = controller.xItems.insert(item, index)
   var identifiers: seq[string]
   if item.identifier.len > 0:
     identifiers.add item.identifier
@@ -530,10 +544,10 @@ proc insertItem*(controller: ArrayController, item: ModelItem, index: int) =
 proc removeItem*(
     controller: ArrayController, identifier: string
 ): bool {.discardable.} =
-  let index = controller.xCollection.sourceIndexOfIdentifier(identifier)
+  let index = controller.xItems.sourceIndexOfIdentifier(identifier)
   if index < 0:
     return false
-  controller.xCollection.delete(index)
+  controller.xItems.delete(index)
   controller.xSelection.deselectIdentifier(identifier)
   controller.notifyArrayControllerDidChange(
     mmkItemsChanged, identifiers = [identifier], index = index
@@ -541,10 +555,10 @@ proc removeItem*(
   true
 
 proc moveItem*(controller: ArrayController, identifier: string, toIndex: int): bool =
-  let index = controller.xCollection.sourceIndexOfIdentifier(identifier)
+  let index = controller.xItems.sourceIndexOfIdentifier(identifier)
   if index < 0:
     return false
-  let insertIndex = controller.xCollection.moveItem(index, toIndex)
+  let insertIndex = controller.xItems.moveItem(index, toIndex)
   controller.notifyArrayControllerDidChange(
     mmkItemsChanged, identifiers = [identifier], index = insertIndex
   )
@@ -558,10 +572,10 @@ proc valueForItem*(
 proc setValue*(
     controller: ArrayController, identifier, key: string, value: ObjectValue
 ) =
-  let index = controller.xCollection.sourceIndexOfIdentifier(identifier)
+  let index = controller.xItems.sourceIndexOfIdentifier(identifier)
   if index < 0:
     raiseModelControllerError("unknown model item identifier: " & identifier)
-  controller.xCollection.setValue(index, key, value)
+  controller.xItems[index, key] = value
   controller.notifyArrayControllerDidChange(
     mmkValueChanged, identifiers = [identifier], keys = [key], index = index
   )
@@ -782,8 +796,15 @@ func documentTabStyleFromValue(value: ObjectValue): DocumentTabStyle =
   else:
     dtsAutomatic
 
-proc modelFieldValue(item: ModelItem, key: string): ObjectValue =
-  item.getValue(key).get(emptyObjectValue())
+let emptyModelFieldValue = ObjectValue(kind: ovEmpty)
+
+proc modelFieldValue(item: ModelItem, key: string): lent ObjectValue {.inline.} =
+  if key.len == 0:
+    return item.objectValue
+  let index = item.findFieldIndex(key)
+  if index >= 0:
+    return item.fields[index].value
+  emptyModelFieldValue
 
 proc modelImageField(item: ModelItem, key: string): ImageResource =
   item.modelFieldValue(key).getImage().get(default(ObjectImageValue)).resource
@@ -842,8 +863,8 @@ proc indexOfArrayDocumentTabIdentifier(
   if identifier.len == 0:
     return -1
   var visibleIndex = 0
-  for index in 0 ..< controller.len():
-    let model = controller.itemAt(index).documentTabModelForArrayItem()
+  for item in controller.arrangedItems:
+    let model = item.documentTabModelForArrayItem()
     if not model.hidden:
       if model.identifier == identifier:
         return visibleIndex
@@ -1272,8 +1293,8 @@ proc syncMenu*(menu: Menu, controller: ArrayController) =
     menu.itemModels = []
     return
   var models: seq[MenuItemModel]
-  for index in 0 ..< controller.len():
-    models.add controller.itemAt(index).menuItemModelForArrayItem()
+  for item in controller.arrangedItems:
+    models.add item.menuItemModelForArrayItem()
   menu.itemModels = models
 
 proc syncDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
@@ -1282,8 +1303,8 @@ proc syncDocumentTabs*(tabs: DocumentTabs, controller: ArrayController) =
   if controller.isNil:
     return
   var models: seq[DocumentTabModel]
-  for index in 0 ..< controller.len():
-    models.add controller.itemAt(index).documentTabModelForArrayItem()
+  for item in controller.arrangedItems:
+    models.add item.documentTabModelForArrayItem()
   tabs.documentTabModels = models
 
 proc syncMatrix*(matrix: Matrix, controller: ArrayController, columns = 1) =
@@ -1294,8 +1315,6 @@ proc syncMatrix*(matrix: Matrix, controller: ArrayController, columns = 1) =
     matrix.matrixItemModels = []
     return
   var models: seq[MatrixItemModel]
-  for index in 0 ..< controller.len():
-    models.add controller.matrixItemModelForArrayItem(
-      controller.itemAt(index), matrix.selectionMode()
-    )
+  for item in controller.arrangedItems:
+    models.add controller.matrixItemModelForArrayItem(item, matrix.selectionMode())
   matrix.matrixItemModels = models
