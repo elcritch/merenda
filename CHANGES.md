@@ -18,6 +18,14 @@
 
 ## Unreleased
 
+- Enable FigDraw's `textBackendHarfbuzzy` Atlas feature in `merenda.nimble` so
+  this checkout and downstream Merenda apps use HarfBuzz text rendering and
+  automatic system-font fallback. Previously HarfBuzz was installed as a dependency,
+  but FigDraw still selected Pixie, leaving automatic fallback disabled. Missing
+  glyphs in the editor, terminal, and other text views can now use system fonts,
+  including checkbox symbols absent from the bundled Nerd Font. Initialize fallback
+  on background text-layout threads as well as the main thread.
+
 - Match split divider fills, edges, and grips to each bundled theme's palette,
   including the dark Nebula, Peachy, and Synthwave83 themes.
 
@@ -70,10 +78,6 @@
   Moe/Vim modal editing and normal text entry with native editing shortcuts.
   Use a compact menu that opens upward, and keep its checked selection synchronized
   with Settings and detached editor windows.
-
-- Enable HarfBuzz text rendering and automatic system-font fallback for missing
-  glyphs in the editor, terminal, and other text views, including checkbox symbols
-  absent from the bundled Nerd Font.
 
 - Render Markdown task lists with ☐ for `[ ]`, ☑ for `[x]` or `[X]`, and ☒ for
   `[-]`, preserving nested lists, numbering, and inline formatting.
