@@ -316,6 +316,12 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
+    - name: Configure MSVC for x64
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
     - name: Install macOS text rendering libraries
       if: runner.os == 'macOS'
       run: brew install harfbuzz fribidi
@@ -332,7 +338,7 @@ jobs:
       run: |
         & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install harfbuzz:x64-windows
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        "CPATH=$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include/harfbuzz" >> $env:GITHUB_ENV
+        "INCLUDE=$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include/harfbuzz;$env:INCLUDE" >> $env:GITHUB_ENV
 
     - name: Cache packages
       uses: actions/cache@v4
@@ -366,5 +372,13 @@ jobs:
       run: bash .github/scripts/clean_generated_examples.sh
 
     - name: Compile Examples
+      if: runner.os != 'Windows'
       run: |
         atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim"
+
+    - name: Compile Windows Examples with MSVC
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim" -- --cc:vcc --passC:/MT
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

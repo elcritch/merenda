@@ -25,15 +25,18 @@ Kosmo's platform asset cache for Moe's file-based theme loader. Release archives
 do not need a separate `data/moe/themes` directory, and theme discovery does not
 depend on the working directory used to launch Kosmo.
 
-Release executables retain native debug information and link the `libbacktrace`
-stack-trace override. Nim's instrumented stack tracing remains disabled because
+Release executables retain native debug information. Windows builds use MSVC,
+ship `kosmo.pdb` beside `kosmo.exe`, and use Nim's stack tracing with function names
+and source lines. The installer keeps the PDB beside the installed executable.
+The other platforms link the `libbacktrace` stack-trace override. Nim's
+instrumented stack tracing remains disabled on those platforms because
 `libbacktrace` uses the compiler's native debug information without its runtime
 overhead. `libbacktrace` is an unconditional package dependency, and the project
-configuration imports it globally; release builds also define
-`nimStackTraceOverride` explicitly. Each platform job verifies both the native
-debug data and linked libbacktrace backend before packaging.
+configuration imports it except on Windows/MSVC; the other release builds also
+define `nimStackTraceOverride` explicitly. Each platform job verifies its native
+debug data and stack-trace support before packaging.
 
-Linux and Windows keep the debug information in the executable. The macOS app
+Linux keeps the debug information in the executable. The macOS app
 bundles its matching symbols at
 `Contents/MacOS/kosmo.dSYM`. This is the location libbacktrace checks beside the
 running executable, so release stack traces retain file and line information.

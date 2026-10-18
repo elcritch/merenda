@@ -805,7 +805,8 @@ nim c -o:kosmo src/merenda/kosmo/kosmo.nim
 ./kosmo .
 ```
 
-On Windows, run `./kosmo.exe .` after compiling.
+On Windows, build from a Visual Studio Developer PowerShell with
+`nim c --cc:vcc -o:kosmo.exe src/merenda/kosmo/kosmo.nim`, then run `./kosmo.exe .`.
 
 On macOS, install the current checkout as a complete `Kosmo.app` with its icon,
 bundled notices, debug symbols, and local code signature:

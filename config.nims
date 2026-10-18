@@ -14,13 +14,17 @@
   goto
 --stacktrace:
   off
---define:
-  nimStackTraceOverride
 --path:
   "src/"
 --nimcache:
   "deps/.nimcache"
-switch("import", "libbacktrace")
+when defined(windows):
+  # MSVC emits PDBs; GNU libbacktrace expects DWARF and a GNU unwinder.
+  switch("stackTrace", "on")
+  switch("lineTrace", "on")
+else:
+  switch("define", "nimStackTraceOverride")
+  switch("import", "libbacktrace")
 
 when defined(freebsd):
   --define:

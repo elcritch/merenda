@@ -1,4 +1,4 @@
-import std/[times, unicode, unittest]
+import std/[times, unittest]
 
 import figdraw
 
@@ -11,8 +11,8 @@ func center(bounds: Rect): Point =
   )
 
 proc renderedText(node: Fig): string =
-  for glyphIndex in 0 ..< node.textLayout.glyphCount():
-    result.add node.textLayout.displayRune(glyphIndex)
+  # A shaped glyph can cover multiple characters, such as the `fi` ligature.
+  node.textLayout.sourceRunes.bytes()
 
 proc layerContainsText(renders: Renders, level: ZLevel, text: string): bool =
   if level notin renders.layers:

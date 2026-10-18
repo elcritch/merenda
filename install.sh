@@ -298,6 +298,9 @@ case "$platform" in
         install_command "$library" "$(basename "$library")"
       fi
     done
+    if [ -f "$extract_dir/kosmo.pdb" ]; then
+      install_command "$extract_dir/kosmo.pdb" kosmo.pdb
+    fi
     install_command "$extract_dir/kosmo.exe" kosmo.exe
     install_notices "$extract_dir"
     ;;

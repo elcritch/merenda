@@ -18,6 +18,10 @@
 
 ## Unreleased
 
+- Build Windows Kosmo releases and examples with MSVC. Use the Windows SDK
+  resource compiler, ship the matching PDB, and keep Nim stack traces with
+  function names and source lines in place of GNU libbacktrace on MSVC.
+
 - Enable FigDraw's `textBackendHarfbuzzy` Atlas feature in `merenda.nimble` so
   this checkout and downstream Merenda apps use HarfBuzz text rendering and
   automatic system-font fallback. Previously HarfBuzz was installed as a dependency,
