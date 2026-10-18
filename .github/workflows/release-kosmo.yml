@@ -803,6 +803,15 @@ jobs:
         shell: bash
         run: bash .github/scripts/install-msvc-nim.sh
 
+      - name: Verify MSVC linker response files
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          nim c -r --cc:vcc --passC:/MT --out:build/windowsresponsefiles.exe `
+            tests/integrations/fixtures/windowsresponsefiles.nim
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build Kosmo
         shell: pwsh
         run: |

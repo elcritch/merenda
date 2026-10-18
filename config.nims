@@ -19,6 +19,10 @@
 --nimcache:
   "deps/.nimcache"
 when defined(windows):
+  # Use the configured Developer shell directly; vccexe expands response files
+  # into command lines that exceed Windows' limit for large applications.
+  switch("vcc.exe", "cl.exe")
+  switch("vcc.linkerexe", "cl.exe")
   # MSVC emits PDBs; GNU libbacktrace expects DWARF and a GNU unwinder.
   switch("stackTrace", "on")
   switch("lineTrace", "on")

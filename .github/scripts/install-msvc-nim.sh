@@ -51,6 +51,7 @@ if [[ ! -e "$nimMsvcDir" ]]; then
   stageWindows="$(cygpath -m "$stageDir")"
   # Keep compiler/nim.cfg (booting/nimcore), but skip Merenda's parent config.
   "$projectRoot/deps/nim-2.2.10/bin/nim.exe" c --cc:vcc -d:release --mm:orc \
+    --vcc.exe:cl.exe --vcc.linkerexe:cl.exe \
     --skipUserCfg:on --skipParentCfg:on --lib:"$stageWindows/lib" \
     --out:"$stageWindows/bin/nim.exe" "$stageDir/compiler/nim.nim"
   # Atlas activation scripts contain the original installation's absolute path.
@@ -86,6 +87,7 @@ value[0] = 'x'
 doAssert original[0] == '\0'
 NIM
 "$nimMsvcCandidate/bin/nim.exe" c -r --cc:vcc --mm:arc \
+  --vcc.exe:cl.exe --vcc.linkerexe:cl.exe \
   --skipUserCfg:on --skipParentCfg:on --skipProjCfg:on \
   --out:"$(cygpath -m "$probeDir")/msvc_probe.exe" "$probeFile"
 

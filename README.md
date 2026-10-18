@@ -814,6 +814,8 @@ The script makes a private copy of the official Nim 2.2.10 distribution,
 installs checksum-verified atomic and large-string fixes, and builds the corrected
 compiler once. Worker threads need the atomic fix; an unpatched MSVC build is
 rejected at compile time. The string fix lets ARC/ORC embed the bundled assets.
+Keep the Developer shell open when building: the project invokes `cl.exe`
+directly so large applications can link using response files.
 
 On macOS, install the current checkout as a complete `Kosmo.app` with its icon,
 bundled notices, debug symbols, and local code signature:
