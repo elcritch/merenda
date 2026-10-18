@@ -24,7 +24,6 @@
   Use Sigils 0.32.0 and a private Nim 2.2.10 compiler built with pinned,
   checksum-verified fixes for MSVC atomic exchange, compare-and-swap,
   arithmetic operations, and large ARC/ORC string literals in embedded assets.
-  Pin FigDraw's numeric shader embedding to avoid MSVC's string literal limit.
 
 - Enable FigDraw's `textBackendHarfbuzzy` Atlas feature in `merenda.nimble` so
   this checkout and downstream Merenda apps use HarfBuzz text rendering and
