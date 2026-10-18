@@ -791,6 +791,12 @@ jobs:
         run: |
           $version = $env:KOSMO_RELEASE_VERSION.TrimStart('v')
           $revision = $env:GITHUB_SHA.Substring(0, 12)
+          $textBin = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/bin"
+          $harfbuzzDll = Get-ChildItem "$textBin/*.dll" | Where-Object Name -Match '^(lib)?harfbuzz(-[0-9]+)?\.dll$' | Select-Object -First 1
+          $fribidiDll = Get-ChildItem "$textBin/*.dll" | Where-Object Name -Match '^(lib)?fribidi(-[0-9]+)?\.dll$' | Select-Object -First 1
+          if (-not $harfbuzzDll -or -not $fribidiDll) {
+            throw 'The text dependency installation is missing HarfBuzz or FriBidi DLLs.'
+          }
           New-Item -ItemType Directory -Force -Path build, dist | Out-Null
           Push-Location data
           windres kosmo.rc -O coff -o ../build/kosmo.res
@@ -807,6 +813,8 @@ jobs:
             -d:nimStackTraceOverride `
             --app:gui `
             -d:moe.embedded `
+            "-d:harfbuzzyDynlib=$($harfbuzzDll.Name)" `
+            "-d:harfbuzzyFribidiDynlib=$($fribidiDll.Name)" `
             "-d:KosmoVersion=$version" `
             "-d:KosmoGitHashOverride=$revision" `
             --passL:build/kosmo.res `
@@ -825,7 +833,7 @@ jobs:
           if ($imports -match '(?im)^\s*DLL Name:\s+libgcc_s.*\.dll\s*$') {
             throw 'Kosmo executable must not depend on a MinGW GCC runtime DLL.'
           }
-          Copy-Item "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/bin/*.dll" dist/
+          Copy-Item "$textBin/*.dll" dist/
           $process = Start-Process `
             -FilePath "$PWD/dist/kosmo.exe" `
             -PassThru
