@@ -437,7 +437,7 @@ proc raiseObjectValueError(
   let message = "object value is " & $value.kind & ", expected " & expected
   raise newException(ObjectValueError, message)
 
-func getString*(value: ObjectValue): Option[string] =
+func getString*(value: ObjectValue): Option[string] {.inline.} =
   if value.kind == ovString:
     some(value.text)
   else:
@@ -448,7 +448,7 @@ proc requireString*(value: ObjectValue): string {.raises: [ObjectValueError].} =
     return value.text
   raiseObjectValueError("string", value)
 
-func getInt*(value: ObjectValue): Option[int] =
+func getInt*(value: ObjectValue): Option[int] {.inline.} =
   if value.kind == ovInt:
     some(value.intValue)
   else:
@@ -488,7 +488,7 @@ proc requireNumber*(value: ObjectValue): float {.raises: [ObjectValueError].} =
   else:
     raiseObjectValueError("number", value)
 
-func getBool*(value: ObjectValue): Option[bool] =
+func getBool*(value: ObjectValue): Option[bool] {.inline.} =
   if value.kind == ovBool:
     some(value.boolValue)
   else:
@@ -512,7 +512,7 @@ proc requireTemporal*(
     return value.temporalValue
   raiseObjectValueError("temporal", value)
 
-func getColor*(value: ObjectValue): Option[Color] =
+func getColor*(value: ObjectValue): Option[Color] {.inline.} =
   if value.kind == ovColor:
     some(value.colorValue)
   else:
@@ -523,7 +523,7 @@ proc requireColor*(value: ObjectValue): Color {.raises: [ObjectValueError].} =
     return value.colorValue
   raiseObjectValueError("color", value)
 
-func getImage*(value: ObjectValue): Option[ObjectImageValue] =
+func getImage*(value: ObjectValue): Option[ObjectImageValue] {.inline.} =
   if value.kind == ovImage:
     some(value.imageValue)
   else:

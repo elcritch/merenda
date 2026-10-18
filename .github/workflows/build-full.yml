@@ -97,9 +97,7 @@ jobs:
           libgles2
 
     - name: Install Deps
-      run: |
-        # sync deps
-        atlas -tu --features:kosmo install
+      run: bash .github/scripts/install-deps.sh -tu --features:kosmo
 
     - name: Clean generated examples
       run: bash .github/scripts/clean_generated_examples.sh
@@ -267,8 +265,7 @@ jobs:
           libgles2
 
     - name: Install Deps
-      run: |
-        atlas -tu --features:kosmo install
+      run: bash .github/scripts/install-deps.sh -tu --features:kosmo
 
     - name: Check ARC ownership with sanitizers
       timeout-minutes: 10
@@ -332,9 +329,7 @@ jobs:
         fi
 
     - name: Install Deps
-      run: |
-        # sync deps
-        atlas -t --update install
+      run: bash .github/scripts/install-deps.sh -t --update
 
     - name: Clean generated examples
       run: bash .github/scripts/clean_generated_examples.sh

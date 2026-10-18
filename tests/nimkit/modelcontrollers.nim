@@ -175,6 +175,92 @@ suite "nimkit model controllers":
     controller.setValue("ada", "score", toObj(32))
     check controller.valueForItem("ada", "score").requireInt() == 32
 
+  test "array controller reuses its arrangement until a model mutation":
+    let controller = newArrayController(personItems(), personColumns())
+    var filterCalls = 0
+    var includeInactive = false
+    controller.filter = proc(item: ModelItem): bool =
+      inc filterCalls
+      includeInactive or item.value("active").requireBool()
+    controller.sortDescriptors = [initModelSortDescriptor("score", msdDescending)]
+
+    for iteration in 0 ..< 100:
+      check controller.len == 2
+      check controller.itemAt(0).identifier == "grace"
+      check controller.indexOfIdentifier("ada") == 1
+      check controller.indexOfIdentifier("alan") == -1
+      check controller.getItemWithIdentifier("alan").isSome
+    check filterCalls == 3
+
+    controller.setValue("ada", "active", toObj(false))
+    check controller.len == 1
+    check controller.indexOfIdentifier("ada") == -1
+    check filterCalls == 6
+
+    controller.setValue("alan", "active", toObj(true))
+    check controller.len == 2
+    check controller.itemAt(1).identifier == "alan"
+    check filterCalls == 9
+
+    controller.columns = personColumns()
+    check controller.len == 2
+    check filterCalls == 12
+
+    controller.sortDescriptors = [initModelSortDescriptor("score", msdAscending)]
+    check controller.itemAt(0).identifier == "alan"
+    check filterCalls == 15
+
+    controller.selectionController.selectIdentifier("alan")
+    check controller.removeItem("alan")
+    check controller.len == 1
+    check controller.selectionController.selectedIdentifier == ""
+    check filterCalls == 17
+
+    includeInactive = true
+    check controller.len == 1
+    check filterCalls == 17
+    controller.filter = controller.filter
+    check controller.len == 2
+    check filterCalls == 19
+
+  test "array controller keeps source identity indexes current across mutations":
+    let controller = newArrayController(
+      [modelItem(objectValue = toObj("First")), modelItem("hidden", hidden = true)]
+    )
+    check controller.itemWithIdentifier("").objectValue.requireString() == "First"
+    check controller.indexOfIdentifier("hidden") == -1
+    check controller.getItemWithIdentifier("hidden").isSome
+
+    controller.addItem(modelItem("last"))
+    controller.insertItem(modelItem("first"), -10)
+    check controller.indexOfIdentifier("first") == 0
+    check controller.indexOfIdentifier("last") == 2
+    check controller.moveItem("last", 0)
+    check controller.itemAt(0).identifier == "last"
+    check controller.indexOfIdentifier("first") == 1
+
+    expect ModelControllerError:
+      controller.addItem(modelItem("first"))
+    check controller.sourceLen == 4
+    check controller.removeItem("")
+    check controller.getItemWithIdentifier("").isNone
+    check controller.indexOfIdentifier("first") == 1
+    check not controller.removeItem("missing")
+    check not controller.moveItem("missing", 0)
+
+  test "array controller retries an arrangement after a filter raises":
+    let controller = newArrayController(personItems())
+    var reject = true
+    controller.filter = proc(item: ModelItem): bool =
+      if reject and item.identifier == "grace":
+        raise newException(ValueError, "temporary filter failure")
+      true
+    expect ValueError:
+      discard controller.len
+    reject = false
+    check controller.len == 3
+    check controller.indexOfIdentifier("alan") == 2
+
   test "array controller binds table object values and typed editing":
     let
       controller = newArrayController(personItems(), personColumns())
@@ -256,11 +342,59 @@ suite "nimkit model controllers":
     check rootChildren[0].identifier == "child"
     check rootChildren[0].title == "Child"
 
+  test "snapshot traversal refreshes arrangements after model changes":
+    let
+      controller = newArrayController(personItems())
+      menu = newMenu("Choices")
+      tabs = newDocumentTabs()
+      matrix = newButtonMatrix([], columns = 1)
+    var filterCalls = 0
+    controller.filter = proc(item: ModelItem): bool =
+      inc filterCalls
+      item.value("active").requireBool()
+    controller.sortDescriptors = [initModelSortDescriptor("score", msdDescending)]
+
+    syncMenu(menu, controller)
+    check menu.itemModels[0].identifier == "grace"
+    check menu.itemModels[1].identifier == "ada"
+    check menu.itemModels.len == 2
+    check filterCalls == 3
+
+    controller.setValue("alan", "active", toObj(true))
+    syncDocumentTabs(tabs, controller)
+    check tabs.documentTabModels.len == 3
+    check tabs.documentTabModels[2].identifier == "alan"
+    check filterCalls == 6
+
+    controller.setValue("alan", "score", toObj(99))
+    syncMatrix(matrix, controller)
+    check matrix.matrixItemModels.len == 3
+    check matrix.matrixItemModels[0].identifier == "alan"
+    check filterCalls == 9
+
+    syncMenu(menu, controller)
+    check menu.itemModels[0].identifier == "alan"
+    check filterCalls == 9
+
   test "array controller syncs choice style controls":
     let
+      accent = color(0.2, 0.4, 0.6, 1.0)
       controller = newArrayController(
         [
-          modelItem("one", objectValue = toObj("One")),
+          modelItem(
+            "one",
+            objectValue = toObj("One"),
+            fields = [
+              modelField("closeable", toObj("false")),
+              modelField("modified", toObj(1)),
+              modelField("tag", toObj("7")),
+              modelField("tooltip", toObj(1)),
+              modelField("image", toObj("missing.png")),
+              modelField("accentColor", toObj(false)),
+              modelField("styleId", toObj(1)),
+              modelField("styleClass", toObj(1)),
+            ],
+          ),
           modelItem(
             "two",
             objectValue = toObj("Two"),
@@ -270,6 +404,10 @@ suite "nimkit model controllers":
               modelField("closeable", toObj(false)),
               modelField("tooltip", toObj("Second tab")),
               modelField("tabStyle", toObj("compact")),
+              modelField("tag", toObj(7)),
+              modelField("accentColor", toObj(accent)),
+              modelField("styleId", toObj("secondary")),
+              modelField("styleClass", toObj("accent")),
             ],
             enabled = false,
           ),
@@ -332,10 +470,19 @@ suite "nimkit model controllers":
     check tabs[0.Natural].identifier == "one"
     check tabs[1.Natural].title == "Second"
     check tabs[2.Natural].identifier == "three"
+    check tabs[0.Natural].closeable
+    check not tabs[0.Natural].modified
+    check tabs[0.Natural].toolTip == ""
+    check tabs[0.Natural].accentColor == color(0.0, 0.0, 0.0, 0.0)
+    check tabs[0.Natural].styleId == ""
+    check tabs[0.Natural].styleClasses.len == 0
     check tabs[1.Natural].modified
     check not tabs[1.Natural].closeable
     check tabs[1.Natural].toolTip == "Second tab"
     check tabs[1.Natural].style == dtsCompact
+    check tabs[1.Natural].accentColor == accent
+    check tabs[1.Natural].styleId == "secondary"
+    check tabs[1.Natural].styleClasses == @["accent"]
     check not tabs[1.Natural].enabled
     check tabs.documentTabModels[2].hidden
 
@@ -352,7 +499,12 @@ suite "nimkit model controllers":
     check not Cell(matrix.cellAtIndex(1)).isEnabled()
     check matrix.cellAtIndex(2).title == ""
     check matrix.matrixItemModels.len == 4
+    check matrix.matrixItemModels[0].tag == 0
+    check matrix.matrixItemModels[0].tooltip == ""
+    check matrix.matrixItemModels[0].image.isNil
     check matrix.matrixItemModels[1].identifier == "two"
+    check matrix.matrixItemModels[1].tag == 7
+    check matrix.matrixItemModels[1].tooltip == "Second tab"
     check matrix.matrixItemModels[2].identifier == "separator"
     check not matrix.matrixItemModels[2].enabled
     check matrix.indexOfMatrixItemIdentifier("three") == 3

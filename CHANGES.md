@@ -8,6 +8,55 @@
 - Add a reproducible Windows Server evaluation VM setup for bhyve, with
   unattended installation, private RDP/SSH access, ZFS reset helpers, and GPU
   passthrough configuration and verification instructions.
+- Share typed collection storage, identity indexes, arrangement caching, and
+  mutation invalidation between NimKit TableModel and ArrayController. Repeated
+  controller lookups now reuse the filtered/sorted arrangement until a model
+  mutation; public model APIs, typed edit writeback, and notifications remain
+  available. Reassign a filter after changing external state captured by it.
+- Maintain shared collection identity indexes during mutations, allocate them
+  only for identity queries, and reuse arrangement storage. Cached reads and
+  unsorted refreshes avoid comparator closure allocations. Field projections
+  borrow values instead of creating temporary ObjectValue copies.
+- Keep arranged identity lookups proportional to visible items: defer hidden
+  source identities and use generation stamps to discard stale visible positions.
+
+## 0.27.5
+
+- Start the GitHub viewer with Issues and Pull Requests expanded and individual
+  items collapsed. Preserve user expansion choices across refreshes and filters.
+
+- Support Copy and Select All in Kosmo's Markdown, GitHub, Git diff, Help,
+  Command Output, and custom document views. Route clipboard shortcuts to the
+  focused content, allow Paste in editable views, and keep unsupported edits in
+  readers from reaching hidden editor buffers.
+- Use installed TextMate grammars, including SQL, for Markdown code fences and
+  Git diff highlighting. Resolve installed filename and extension associations,
+  load included grammars, and refresh open viewers and cached previews after
+  installing a grammar in Settings.
+
+## 0.27.4
+
+- Route Kosmo's copy, cut, paste, select-all, undo, and redo shortcuts to the
+  focused search or replacement field. Preserve literal whitespace in search
+  queries and replacements when tabbing through controls or expanding Replace.
+
+## 0.27.3
+
+- Keep ordinary clicks between Kosmo editor panes from starting a text
+  selection, and align the first visible line after keyboard navigation
+  following fractional wheel scrolling.
+
+- Prevent Kosmo editor panes from briefly displaying another buffer when
+  switching focus or editing. Pane rendering consumes delivered highlighting
+  results without dispatching callbacks that can redraw another pane midway
+  through the frame.
+
+- Use Moe's Matter semantic scope mappings to distinguish HTML/custom element
+  names, attributes, CSS selectors and common language values in existing themes.
+  Preserve preprocessor colors for C/C++ pragmas and string colors for regex
+  captures and format placeholders. Adapt Kosmo pane snapshots and Select All to
+  Moe's window-owned visual selection API, preserving the cursor and preferred
+  column across pane switches.
 
 - Keep the open state during menubar arrow navigation: `<left>`/`<right>` between
   menu bar buttons only move the highlight while the current menu is closed, and
@@ -33,6 +82,7 @@
   etab now highlights only while its pane has keyboard focus, so cycling into
   the menubar or another ui element outside the pane unhighlights it until the
   pane is entered again.
+
 ## 0.27.0
 
 - Add GUI resource markup with HTML5 syntax, `nk-` native elements, application

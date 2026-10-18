@@ -7,7 +7,7 @@ import ../nimkit as nimkit
 import ../nimkit/foundation/mainthreadwork
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
-import ./[github, searchbar, viewersearch]
+import ./[github, searchbar, viewersearch, vscodegrammars]
 
 export github
 
@@ -113,11 +113,17 @@ proc applySnapshot(panel: KosmoGitHubPanel, snapshot: GitHubSnapshot) =
   if panel.isNil or panel.closed:
     return
   let preserveHeadingState = panel.snapshot.rootPath == snapshot.rootPath
+  let headingIdentifiers = snapshot.gitHubHeadingIdentifiers()
+  var collapsedItems: seq[string]
+  for identifier in headingIdentifiers:
+    if identifier notin ["github-project", "github-issues", "github-pull-requests"]:
+      collapsedItems.add identifier
   panel.snapshot = snapshot
   panel.markdownView.updateMarkdown(
     snapshot.gitHubMarkdown(),
-    snapshot.gitHubHeadingIdentifiers(),
+    headingIdentifiers,
     preserveHeadingState = preserveHeadingState,
+    initiallyCollapsedHeadings = collapsedItems,
   )
   panel.syncControls()
 
@@ -343,6 +349,8 @@ proc newKosmoGitHubPanel(
     refreshInterval: initDuration(milliseconds = refreshIntervalMilliseconds),
   )
   result.initViewFields()
+  result.markdownView.matterGrammarSources =
+    installedVscodeGrammars().viewerGrammarSources()
   result.clipsToBounds = true
   result.acceptsFirstResponder = true
   discard result.withProtocol(GitHubLayout)

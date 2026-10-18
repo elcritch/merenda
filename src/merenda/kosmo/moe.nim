@@ -10,6 +10,7 @@ export panekeys.KosmoPaneCommand
 from std/times import initDuration
 
 import matter/grammarpackages as matterPackages
+from ../nimkit/text/matterhighlighting import nil
 import moepkg/celina_backend as celina
 import pkg/results as pkgResults
 import pkg/chronos as moeAsync
@@ -58,6 +59,7 @@ from moepkg/unicode_utils import byteToCharPos
 from moepkg/uri_utils import findAllUris
 import moepkg/key_bindings/registry as moeKeys
 import moepkg/modes as moeModes
+import moepkg/visual_selection as moeVisualSelection
 import moepkg/syntax/matter_backend as moeMatter
 import moepkg/types as moeTypes
 import sigils/threads
@@ -116,6 +118,7 @@ type
     textMateGrammars: seq[KosmoTextMateGrammar]
     matterSources: seq[moeMatter.MatterGrammarSource]
     matterFileTypes: seq[MatterGrammarFileType]
+    viewerSources: seq[matterhighlighting.MatterGrammarSource]
     matterHighlighting: MatterHighlighting
     matterRequests: Table[BufferId, tuple[contentVersion: int, requestId: uint64]]
     matterSyntaxFallback: MatterSyntaxFallbackState
@@ -635,8 +638,11 @@ proc installedGrammarState(): tuple[
   grammars: seq[KosmoTextMateGrammar],
   sources: seq[moeMatter.MatterGrammarSource],
   fileTypes: seq[MatterGrammarFileType],
+  viewerSources: seq[matterhighlighting.MatterGrammarSource],
 ] =
-  for installed in installedVscodeGrammars():
+  let installations = installedVscodeGrammars()
+  result.viewerSources = installations.viewerGrammarSources()
+  for installed in installations:
     let candidate = installed.candidate
     result.grammars.add KosmoTextMateGrammar(
       name: candidate.name,
@@ -668,6 +674,7 @@ proc kosmoMatterGrammarState(): tuple[
   grammars: seq[KosmoTextMateGrammar],
   sources: seq[moeMatter.MatterGrammarSource],
   fileTypes: seq[MatterGrammarFileType],
+  viewerSources: seq[matterhighlighting.MatterGrammarSource],
 ] =
   result.grammars = builtInTextMateGrammars()
   result.sources = newKosmoMatterGrammarSources()
@@ -675,6 +682,7 @@ proc kosmoMatterGrammarState(): tuple[
   result.grammars.add installed.grammars
   result.sources.add installed.sources
   result.fileTypes = installed.fileTypes
+  result.viewerSources = installed.viewerSources
   result.fileTypes.add MatterGrammarFileType(
     identifier: matterPackages.nifGrammar.packageKey,
     languageId: matterPackages.nifGrammar.languageId,
@@ -691,6 +699,13 @@ proc availableTextMateGrammars*(editor: KosmoEditor): seq[KosmoTextMateGrammar] 
   ## Return the TextMate grammars currently installed for Moe highlighting.
   if not editor.isNil and not editor.editor.isNil:
     result = editor.textMateGrammars
+
+proc viewerGrammarSources*(
+    editor: KosmoEditor
+): seq[matterhighlighting.MatterGrammarSource] =
+  ## Return installed TextMate grammar snapshots for native document viewers.
+  if not editor.isNil:
+    result = editor.viewerSources
 
 func hostCommand(r: moeHandlerResult.HandlerResult): Option[KosmoHostCommand] =
   var command: KosmoHostCommand
@@ -809,6 +824,7 @@ proc newKosmoEditor*(
     textMateGrammars: grammarState.grammars,
     matterSources: grammarState.sources,
     matterFileTypes: grammarState.fileTypes,
+    viewerSources: grammarState.viewerSources,
     matterRequests: initTable[BufferId, tuple[contentVersion: int, requestId: uint64]](),
     matterSyntaxFallback: MatterSyntaxFallbackState(
       highlightVersions: initTable[BufferId, int](),
@@ -881,6 +897,7 @@ proc reloadInstalledVscodeGrammars*(editor: KosmoEditor) =
   editor.textMateGrammars = grammarState.grammars
   editor.matterSources = grammarState.sources
   editor.matterFileTypes = grammarState.fileTypes
+  editor.viewerSources = grammarState.viewerSources
   editor.matterHighlighting.close()
   editor.matterHighlighting = nil
   editor.matterRequests.clear()
@@ -1046,7 +1063,6 @@ proc activeBufferId(editor: KosmoEditor): Option[BufferId] =
       return some(buffer.id)
 
 proc resetBufferSelection(editor: KosmoEditor) =
-  editor.editor.state.visualSelection = default(moeTypes.VisualSelection)
   editor.editor.state.pointerSelection = default(moeTypes.PointerSelectionGesture)
   if editor.editor.state.mode in {
     moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
@@ -1408,14 +1424,11 @@ proc selectAll*(editor: KosmoEditor): bool {.discardable.} =
     moeModes.EditorMode.VisualLine,
   }:
     editor.editor.state.previousMode = currentMode
-  editor.editor.state.visualSelection = moeTypes.VisualSelection(
-    start: moeTypes.BufferPosition(line: 0, column: 0),
-    current: moeTypes.BufferPosition(line: lastLine, column: lastColumn),
-    active: true,
-    kind: moeTypes.VisualSelectionKind.vskChar,
-  )
   editor.editor.setMode(moeModes.EditorMode.Visual)
-  editor.editor.activeWindow.cursor = editor.editor.state.visualSelection.current
+  editor.editor.state.selectVisualRange(
+    moeTypes.BufferPosition(line: 0, column: 0),
+    moeTypes.BufferPosition(line: lastLine, column: lastColumn),
+  )
   editor.editor.syncActiveWindow()
   editor.editor.setActiveWindowScreenCursor(editor.editor.activeWindow)
   true
@@ -2019,7 +2032,7 @@ proc captureViewState*(editor: KosmoEditor): KosmoEditorViewState =
         moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
         moeModes.EditorMode.VisualLine,
       }:
-        editor.editor.state.visualSelection
+        window.visualSelection
       else:
         default(moeTypes.VisualSelection),
     pointerSelection: editor.editor.state.pointerSelection,
@@ -2046,16 +2059,16 @@ proc clampSelectionPosition(
 
 proc applyViewState(editor: KosmoEditor, state: KosmoEditorViewState) =
   let window = editor.editor.activeWindow()
-  editor.editor.state.visualSelection = state.visualSelection
   editor.editor.state.pointerSelection = state.pointerSelection
   if state.visualSelection.active:
     editor.editor.setMode(state.selectionMode)
     window.previousMode = state.previousMode
     let blockSelection = state.visualSelection.kind == moeTypes.vskBlock
-    editor.editor.state.visualSelection.start =
-      window.buffer.clampSelectionPosition(state.visualSelection.start, blockSelection)
-    editor.editor.state.visualSelection.current = window.buffer.clampSelectionPosition(
-      state.visualSelection.current, blockSelection
+    editor.editor.state.selectVisualRange(
+      window.buffer.clampSelectionPosition(state.visualSelection.start, blockSelection),
+      window.buffer.clampSelectionPosition(
+        state.visualSelection.current, blockSelection
+      ),
     )
   elif window.mode in {
     moeModes.EditorMode.Visual, moeModes.EditorMode.VisualBlock,
@@ -2071,12 +2084,15 @@ proc applyViewState(editor: KosmoEditor, state: KosmoEditorViewState) =
     editor.editor.state.pointerSelection.anchorLast = window.buffer.clampSelectionPosition(
       state.pointerSelection.anchorLast, blockSelection
     )
-  let cursor = editor.editor.motionController.cursorManager.clampPosition(
-    moeTypes.CursorPosition(x: state.cursorColumn, y: state.cursorLine), window.buffer
-  )
-  window.cursor.line = cursor.y
-  window.cursor.column = cursor.x
-  window.preferredColumn = max(state.preferredColumn, 0)
+  # The visual range already restored the cursor, including end-of-line and
+  # virtual block columns that a normal-mode cursor clamp would discard.
+  if not state.visualSelection.active:
+    let cursor = editor.editor.motionController.cursorManager.clampPosition(
+      moeTypes.CursorPosition(x: state.cursorColumn, y: state.cursorLine), window.buffer
+    )
+    window.cursor.line = cursor.y
+    window.cursor.column = cursor.x
+  window.preferredColumn = state.preferredColumn
   window.viewport.topLine =
     state.viewportTopLine.clamp(0, max(window.buffer.len - 1, 0))
   window.viewport.topWrapOffset = max(state.viewportTopWrapOffset, 0)
@@ -2095,6 +2111,18 @@ proc restoreViewState*(
   if not editor.selectTab(state.bufferId.get):
     return
   editor.applyViewState(state)
+  true
+
+proc restoreViewState*(
+    editor: KosmoEditor, state: KosmoEditorViewState, buffer: RenderBuffer
+): bool {.discardable.} =
+  ## Restore a pane's projection and grid dimensions before input or rendering.
+  if not editor.restoreViewState(state):
+    return
+  let wasResized = editor.editor.updateViewportSize(buffer.buffer)
+  if wasResized:
+    editor.editor.advanceLayoutForFrame(buffer.buffer, true)
+    editor.applyViewState(state)
   true
 
 proc newRenderBuffer*(width, height: Natural): RenderBuffer =
@@ -2450,14 +2478,19 @@ proc applyMatterHighlightResult(
   current.uriScanParsedUpTo = completed.endRow - 1
   true
 
-proc pollMatterHighlighting(editor: KosmoEditor): bool =
+proc applyPendingMatterHighlighting(editor: KosmoEditor): bool =
   if editor.isNil or editor.editor.isNil or editor.matterHighlighting.isNil:
     return
-  discard getCurrentSigilThread().pollAll(NonBlocking)
   var completed = editor.matterHighlighting.takeMatterHighlightResults()
   for index in 0 ..< completed.len:
     if editor.applyMatterHighlightResult(completed[index]):
       result = true
+
+proc pollMatterHighlighting(editor: KosmoEditor): bool =
+  if editor.isNil or editor.editor.isNil or editor.matterHighlighting.isNil:
+    return
+  discard getCurrentSigilThread().pollAll(NonBlocking)
+  editor.applyPendingMatterHighlighting()
 
 proc matterHighlightingReady*(editor: KosmoEditor): bool =
   ## Return whether every open buffer eligible for asynchronous Matter
@@ -2492,7 +2525,7 @@ proc matterHighlightingController*(editor: KosmoEditor): MatterHighlighting =
 
 proc renderSearchHighlights(editor: KosmoEditor, target: var RenderBuffer) =
   ## Project Reni results using Moe's own wrap and display-column geometry.
-  if editor.xSearchPattern.isNone or editor.editor.state.visualSelection.active or
+  if editor.xSearchPattern.isNone or editor.editor.activeWindow.visualSelection.active or
       not editor.editor.state.input.search.hlsearchTempDisabled:
     return
   let e = editor.editor
@@ -2631,17 +2664,17 @@ proc render*(
     editor: KosmoEditor, buffer: var RenderBuffer, state: KosmoEditorViewState
 ) =
   ## Draw a pane snapshot without losing detached scroll state when its grid resizes.
+  ## The host event loop delivers queued work before projecting a pane.
   if editor.isNil or editor.editor.isNil or state.bufferId.isNone:
     editor.render(buffer)
     return
-  if not editor.restoreViewState(state):
+  if not editor.restoreViewState(state, buffer):
     editor.render(buffer)
     return
-  let wasResized = editor.editor.updateViewportSize(buffer.buffer)
-  if wasResized:
-    editor.editor.advanceLayoutForFrame(buffer.buffer, true)
-    editor.applyViewState(state)
-  discard editor.pollMatterHighlighting()
+  # Dispatching Sigils here can reenter another pane's refresh and replace the
+  # shared engine's buffer, viewport, and projection owner midway through this
+  # frame. Only consume results already delivered by the host event loop.
+  discard editor.applyPendingMatterHighlighting()
   editor.scheduleMatterHighlighting()
   editor.renderMatterFrame(buffer)
   discard forwardMoeMessages()

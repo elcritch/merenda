@@ -443,7 +443,7 @@ proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
     let index = view.viewStateIndex(view.selectedBufferId.get)
     let restored =
       if index >= 0:
-        view.editor.restoreViewState(view.viewStates[index])
+        view.editor.restoreViewState(view.viewStates[index], view.renderBuffer)
       else:
         view.editor.selectTab(view.selectedBufferId.get)
     if restored and not controller.isNil:
@@ -952,7 +952,10 @@ proc toggleMarkdownMode(view: KosmoEditorView, id: KosmoBufferId): bool =
     return true
 
 proc previewScope(view: KosmoEditorView): string =
-  if not view.dockGroup.isNil: view.dockGroup[].identifier else: ""
+  if not view.dockGroup.isNil:
+    view.dockGroup[].identifier
+  else:
+    ""
 
 proc mayReusePristineBuffer(view: KosmoEditorView): bool =
   if not view.usesBufferSubset:
@@ -1128,9 +1131,10 @@ proc hasUnsavedData(controller: KosmoDockController, window: nimkit.Window): boo
     if group.window != window:
       continue
     for tab in tabs:
-      if tab.modified and (
-        not group.editorView.usesBufferSubset or tab.id in group.editorView.bufferIds
-      ):
+      if tab.modified and
+          (
+            not group.editorView.usesBufferSubset or tab.id in group.editorView.bufferIds
+          ):
         return true
     for document in group.documents:
       if document.modified:
@@ -1216,6 +1220,7 @@ proc closeTabWithConfirmation(
   )
 
 proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
+  view.scrollOffsetRows = 0.0'f32
   var keyOutcome: KosmoKeyOutcome
   let wasCommand = view.editor.mode() == KosmoEditorMode.Command
   if keyEvent.key == nimkit.keyEnter:
@@ -1359,6 +1364,7 @@ protocol KosmoEditorInput of nimkit.TextInputProtocol:
   method insertText(view: KosmoEditorView, text: string) =
     if nimkit.isInsertableText(text):
       view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+      view.scrollOffsetRows = 0.0'f32
       discard view.editor.handleTextInput(text)
       view.refresh()
 
@@ -1514,6 +1520,25 @@ protocol KosmoEditorEditingCommands of nimkit.TextEditingCommandProtocol:
 
 func isEditingAction(action: string): bool =
   action.kosmoAction().kind == KosmoActionKind.Editing
+
+proc nativeEditingCommand(
+    selector: nimkit.CommandSelector
+): Option[nimkit.CommandSelector] =
+  case $selector.name
+  of KosmoCopyAction, "copy":
+    some(nimkit.copy())
+  of KosmoCutAction, "cut":
+    some(nimkit.cut())
+  of KosmoPasteAction, "paste":
+    some(nimkit.paste())
+  of KosmoSelectAllAction, "selectAll":
+    some(nimkit.selectAll())
+  of KosmoUndoAction, "undo":
+    some(nimkit.undo())
+  of KosmoRedoAction, "redo":
+    some(nimkit.redo())
+  else:
+    none(nimkit.CommandSelector)
 
 proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
@@ -1985,7 +2010,11 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =
     let event = invocation.argsAs(nimkit.KeyEvent)
-    let owner: KosmoEditorView = if tabsOwner.isNil: nil else: tabsOwner[]
+    let owner: KosmoEditorView =
+      if tabsOwner.isNil:
+        nil
+      else:
+        tabsOwner[]
     invocation.setResult(handleDocumentTabsKeyEquivalent(owner, tabsView, event))
   discard tabsView.replaceMethod(nimkitSelectors.performKeyEquivalent(), tabsKeyMethod)
   connect(
@@ -2388,9 +2417,11 @@ protocol KosmoSidebarPaneLayout of nimkit.ViewLayoutProtocol:
         else:
           pane.contextPanel.preferredHeight()
     pane.splitView.setFrameFromLayout(bounds)
-    if bounds.size.height > 0 and (
-      not pane.setInitialDivider or abs(previousHeight - bounds.size.height) > 0.001'f32
-    ):
+    if bounds.size.height > 0 and
+        (
+          not pane.setInitialDivider or
+          abs(previousHeight - bounds.size.height) > 0.001'f32
+        ):
       pane.splitView.setPositionOfDivider(0, contextHeight)
       pane.setInitialDivider = true
 
@@ -2638,6 +2669,42 @@ proc setContentView(pane: KosmoEditorPane, contentView: nimkit.View) =
         responder = nimkit.Responder(document.preferredFirstResponder)
     discard nimkit.Window(owner).makeFirstResponder(responder)
 
+proc dispatchContentEditingCommand(
+    pane: KosmoEditorPane, args: nimkit.TryToPerformArgs
+): bool =
+  let command = args.selector.nativeEditingCommand()
+  if command.isNone or pane.contentView == nimkit.View(pane.editorView):
+    return
+  # Retry Kosmo's namespaced shortcut as a native command within the visible
+  # content. This also reaches text views created lazily by document viewers.
+  let owner = pane.window()
+  if owner of nimkit.Window:
+    let focused = nimkit.Window(owner).firstResponder()
+    var ancestor = focused
+    while not ancestor.isNil and ancestor != nimkit.Responder(pane):
+      ancestor = ancestor.nextResponder()
+    var target = if ancestor.isNil: nil else: focused
+    while not target.isNil and target != nimkit.Responder(pane):
+      if target.tryToPerform(command.get(), args.sender) or
+          not target.localMethod(command.get().name).isNil:
+        return true
+      target = target.nextResponder()
+  # Container focus uses the document's preferred responder, just as tab
+  # activation does. Markdown buffer previews are hosted directly by the pane.
+  var preferred: nimkit.Responder
+  if pane.contentView == nimkit.View(pane.markdownView):
+    preferred = pane.markdownView.textView()
+  elif not pane.dockGroup.isNil:
+    let group = pane.dockGroup[]
+    let document = group.documentForIdentifier(group.selectedTabIdentifier)
+    if not document.isNil:
+      preferred = document.preferredFirstResponder
+  if not preferred.isNil:
+    discard preferred.tryToPerform(command.get(), args.sender)
+  # Unsupported edits belong to the visible document too. In particular,
+  # pasting into a reader must never modify the hidden Moe buffer.
+  true
+
 protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(pane: KosmoEditorPane, args: nimkit.TryToPerformArgs): bool =
     if pane.dockGroup.isNil:
@@ -2647,25 +2714,8 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
         group.editorView.tabsDelegate.dockController.isNil:
       return false
     let controller = group.editorView.tabsDelegate.dockController[]
-    if pane.contentView == nimkit.View(pane.markdownView):
-      let firstResponder = group.window.firstResponder()
-      let previewTextView =
-        if firstResponder of nimkit.TextView:
-          nimkit.TextView(firstResponder)
-        else:
-          pane.markdownView.textView()
-      case $args.selector.name
-      of KosmoCopyAction, "copy":
-        discard previewTextView.copyText()
-        return true
-      of KosmoCutAction, KosmoPasteAction, KosmoUndoAction, KosmoRedoAction, "cut",
-          "paste", "undo", "redo":
-        return true
-      of KosmoSelectAllAction, "selectAll":
-        previewTextView.selectAllText()
-        return true
-      else:
-        discard
+    if pane.dispatchContentEditingCommand(args):
+      return true
     if ($args.selector.name).isEditingAction():
       group.editorView.selectVisibleBuffer(
         group.editorView.visibleTabs(group.editorView.editor.tabs())
@@ -2868,6 +2918,7 @@ proc markdownSearchDidLayout(
 proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result = KosmoMarkdownView()
   result.initMarkdownViewFields(syntaxHighlighter = nimkit.matterSyntaxHighlighter)
+  result.matterGrammarSources = editorView.editor.viewerGrammarSources()
   result.editorView = editorView.unsafeWeakRef()
   let weakView = result.unsafeWeakRef()
   result.search = newKosmoViewerSearch(
@@ -3152,7 +3203,10 @@ proc newKosmoPopupList(pane: KosmoEditorPane): nimkit.PopupListView =
         else:
           weakPane[].popupMenuState.get.selectedIndex,
       highlightedIndex: proc(): int =
-        if weakPane.isNil: -1 else: weakPane[].popupHighlightedIndex,
+        if weakPane.isNil:
+          -1
+        else:
+          weakPane[].popupHighlightedIndex,
       rowHeight: proc(): float32 =
         if weakPane.isNil:
           22.0'f32

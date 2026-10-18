@@ -287,6 +287,32 @@ func shortcutProfile*(frontend: KosmoApplication): KosmoShortcutProfile =
   else:
     frontend.dockController.shortcutProfile
 
+proc updateViewerGrammars(view: nimkit.View, sources: seq[nimkit.MatterGrammarSource]) =
+  if view of KosmoGitDiffPanel:
+    KosmoGitDiffPanel(view).matterGrammarSources = sources
+  elif view of nimkit.MarkdownView:
+    nimkit.MarkdownView(view).matterGrammarSources = sources
+  else:
+    for child in view.subviews():
+      child.updateViewerGrammars(sources)
+
+proc reloadInstalledVscodeGrammars*(frontend: KosmoApplication) =
+  ## Apply newly installed grammars to editors, cached previews, and open viewers.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  let editor = frontend.dockController.editor
+  editor.reloadInstalledVscodeGrammars()
+  let sources = editor.viewerGrammarSources()
+  for group in frontend.dockController.groups:
+    group.pane.markdownView.matterGrammarSources = sources
+    for preview in group.pane.markdownPreviews:
+      preview.view.matterGrammarSources = sources
+    for document in group.documents:
+      document.contentView.updateViewerGrammars(sources)
+    group.editorView.refresh()
+  if not frontend.xSettingsWindow.isNil:
+    frontend.xSettingsWindow.textMateGrammars = editor.availableTextMateGrammars()
+
 proc setEditorInputPolicy*(frontend: KosmoApplication, policy: KosmoEditorInputPolicy) =
   ## Apply Moe/native key routing immediately to every editor pane.
   if frontend.isNil or frontend.dockController.isNil:
@@ -378,12 +404,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     frontend.xSettingsWindow.vscodeGrammarInstalledHandler = proc() =
       if weakFrontend.isNil or weakFrontend[].dockController.isNil:
         return
-      for group in weakFrontend[].dockController.groups:
-        group.editorView.editor.reloadInstalledVscodeGrammars()
-        group.editorView.refresh()
-      if not weakFrontend[].xSettingsWindow.isNil:
-        weakFrontend[].xSettingsWindow.textMateGrammars =
-          weakFrontend[].dockController.editor.availableTextMateGrammars()
+      weakFrontend[].reloadInstalledVscodeGrammars()
   else:
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
     frontend.xSettingsWindow.terminalLinksEnabled = frontend.xTerminalLinksEnabled

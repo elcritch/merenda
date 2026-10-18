@@ -1446,6 +1446,36 @@ suite "NimKit TableView":
     check model.len() == 4
     check filterCalls == 13
 
+  test "table model keeps identity caches current across source mutations":
+    let model =
+      newTableModel([tableRow("a"), tableRow("hidden", hidden = true), tableRow()])
+    check model.sourceLen == 3
+    check model.len == 2
+    check model.getRowWithIdentifier("hidden").isSome
+    check model.indexOfIdentifier("hidden") == -1
+    check model.getRowWithIdentifier("").isNone
+    check model.indexOfIdentifier("") == -1
+
+    model.insertRow(tableRow("first"), -10)
+    check model.indexOfIdentifier("a") == 1
+    check model.moveRow("a", 99)
+    check model.indexOfIdentifier("a") == 2
+    check model.removeRow("first")
+    check model.getRowWithIdentifier("first").isNone
+    check model.indexOfIdentifier("a") == 1
+
+    model.rows = [tableRow("new"), tableRow("hidden")]
+    check model.sourceLen == 2
+    check model.len == 2
+    check model.indexOfIdentifier("a") == -1
+    check model.indexOfIdentifier("hidden") == 1
+    let revision = model.revision
+    expect TableModelError:
+      model.addRow(tableRow("new"))
+    check model.revision == revision
+    check not model.removeRow("missing")
+    check not model.moveRow("missing", 0)
+
   test "table view persists row identities drags identifiers and batches row updates":
     let
       model = newTableModel(tableModelRows(), tableModelColumns())

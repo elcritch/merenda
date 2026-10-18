@@ -268,6 +268,51 @@ The transient session layer is intentionally smaller than a full AppKit modal
 system. It gives menus, popovers, combo boxes, and future drag/tracking flows a
 common dismissal/focus base without committing to full modal behavior too early.
 
+## Item Models And Controllers
+
+`TableModel` and `ArrayController` own a common private `ItemCollection[T]` value
+state. It stores typed source items, a reusable visible source-index projection,
+and one lazy identity table containing both source and arranged positions.
+Count and item queries do not build identity indexes. Arranged identity queries
+index only visible items; source positions are filled only for a source lookup.
+Per-entry generations reject stale arranged positions without scanning hidden
+identities on every refresh. Once built, source positions are updated during
+append, insert, delete, and move operations; arrangement
+refreshes update visible positions only when an identity query needs them.
+Duplicate identifiers retain their first source and first visible occurrences.
+Partial identity tables retain existing keys across insertions and moves and
+remove deleted keys; full source tables also update source positions.
+Replacing the source releases the identity table. Mutations invalidate the
+arrangement before controller notifications are emitted. Queries reuse it until
+source data, filtering, or sorting changes; reassign the filter when external
+state captured by its predicate changes.
+
+The models name this shared storage `xRows` and `xItems`. Source access uses
+`len`, `[]`, and the borrowed `items`/`pairs` iterators. The collection's `len`
+counts all source items; model/controller `len` counts the visible arrangement.
+Field assignment uses `collection[sourceIndex, key] = value`, preserving the
+item's mutation behavior and invalidating the arrangement.
+
+Each owner supplies an `arrangedItems` iterator that refreshes the arrangement
+before borrowing items in display order. Traversal callers never prepare the
+cache themselves. The shared storage keeps its index sequence for sorting and
+random access. `arrangedRows` reserves its returned sequence using the known
+visible count before copying rows into it.
+
+The public models retain their row/item types, lookup errors, column metadata,
+comparison policies, and formatting/parsing adapters. Controller identity,
+selection, and observation stay above the shared storage layer. Comparison
+callbacks are used synchronously and are never retained by the collection state.
+
+A small private template shares the cached-arrangement guard and dispatches
+sorted rebuilds to separate helpers, so count/item queries and unsorted refreshes
+do not allocate comparator closures. Arrangement rebuilding reuses its buffer
+and leaves it invalid if a predicate or comparator raises, so the next query
+retries. Model field projections borrow ObjectValue fields and reuse their typed
+optional accessors for defaults.
+Widget-specific data-source protocols, selection, and view lifecycles remain in
+their existing modules.
+
 ## Native Integration
 
 NimKit uses siwin-backed native windows and FigDraw renderers internally:

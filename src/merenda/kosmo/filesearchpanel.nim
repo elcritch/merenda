@@ -730,9 +730,12 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
   )
   result.initViewFields()
   result.addSubview(queryField)
+  queryField.objectParseContext = nimkit.initObjectParseContext(trimsWhitespace = false)
   result.addSubview(result.expressionButton)
   result.addSubview(result.replacementField)
   result.replacementField.placeholder = "Replace with"
+  result.replacementField.objectParseContext =
+    nimkit.initObjectParseContext(trimsWhitespace = false)
   result.addSubview(result.replaceButton)
   result.addSubview(result.replaceAllButton)
   result.addSubview(result.disclosureButton)

@@ -4,7 +4,7 @@
 ## not need to locate Matter's package data at runtime. Synchronous calls cache
 ## grammars per thread; resumable jobs use a cache private to their worker.
 
-import std/[monotimes, options, strutils, tables, times]
+import std/[monotimes, options, os, strutils, tables, times]
 
 import matter
 
@@ -22,6 +22,11 @@ static:
     "NimkitMatterMaximumLineBytes must be positive"
 
 type
+  MatterGrammarSource* = object
+    ## An application-supplied TextMate grammar and optional root associations.
+    path*, content*, scopeName*, languageId*: string
+    extensions*, fileNames*: seq[string]
+
   MatterHighlightCancellation* = proc(): bool {.closure.}
     ## Return true when the caller wants the current highlighting pass to stop.
 
@@ -33,6 +38,7 @@ type
   MatterGrammarCache* = object
     ## Mutable grammars owned by one worker, never shared with another actor.
     grammars: Table[string, Grammar]
+    sources: seq[MatterGrammarSource]
 
   MatterHighlightJob* = object
     ## Resumable tokenizer state. Keep this value on its owning worker.
@@ -47,7 +53,32 @@ const
   MatterSyntaxBatchMilliseconds = 8
   MatterSyntaxLineMilliseconds = 100
 
-var matterGrammarCache {.threadvar.}: Table[string, Grammar]
+var matterGrammarCache {.threadvar.}: MatterGrammarCache
+
+proc setGrammarSources*(
+    cache: var MatterGrammarCache, sources: seq[MatterGrammarSource]
+) =
+  ## Replace application grammars, invalidating compiled and missing-language entries.
+  if cache.sources != sources:
+    cache.sources = sources
+    cache.grammars.clear()
+
+proc matterLanguageForFile*(
+    sources: openArray[MatterGrammarSource], fileName: string
+): string =
+  ## Resolve installed filename and longest-suffix associations to a root scope.
+  let baseName = fileName.extractFilename()
+  for source in sources:
+    for name in source.fileNames:
+      if cmpIgnoreCase(baseName, name) == 0:
+        return source.scopeName
+  var suffixLength = 0
+  for source in sources:
+    for extension in source.extensions:
+      if extension.len > suffixLength and
+          baseName.toLowerAscii().endsWith(extension.toLowerAscii()):
+        result = source.scopeName
+        suffixLength = extension.len
 
 func normalizedMatterLanguage(language: string): string =
   let name = language.strip().toLowerAscii()
@@ -86,27 +117,47 @@ iterator relatedMatterGrammars(primary: GrammarContribution): GrammarContributio
         contribution.scopeName != primary.scopeName:
       yield contribution
 
-proc grammarForLanguage(cache: var Table[string, Grammar], language: string): Grammar =
+proc grammarForLanguage(cache: var MatterGrammarCache, language: string): Grammar =
   let modeName = language.normalizedMatterLanguage()
   if modeName.len == 0:
     return
-  if cache.hasKey(modeName):
-    return cache[modeName]
+  if cache.grammars.hasKey(modeName):
+    return cache.grammars[modeName]
+
+  var installedScope: string
+  for source in cache.sources:
+    if source.languageId.len > 0 and (
+      source.languageId.toLowerAscii() == modeName or
+      source.scopeName.toLowerAscii() == modeName
+    ):
+      installedScope = source.scopeName
 
   let primary = primaryMatterGrammar(modeName)
-  if primary.isNone:
-    cache[modeName] = nil
+  if primary.isNone and installedScope.len == 0:
+    cache.grammars[modeName] = nil
     return
 
   let registry = newRegistry()
-  for contribution in relatedMatterGrammars(primary.get()):
-    registry.addGrammar(
-      parseRawGrammar(
-        contribution.bundledMatterGrammarContents(), contribution.archiveMember
+  if installedScope.len > 0:
+    # Installed roots may include bundled scopes or grammars from other packages.
+    for contribution in knownGrammars:
+      registry.addGrammar(
+        parseRawGrammar(
+          contribution.bundledMatterGrammarContents(), contribution.archiveMember
+        )
       )
-    )
-  result = registry.loadGrammar(primary.get.scopeName)
-  cache[modeName] = result
+  else:
+    for contribution in relatedMatterGrammars(primary.get()):
+      registry.addGrammar(
+        parseRawGrammar(
+          contribution.bundledMatterGrammarContents(), contribution.archiveMember
+        )
+      )
+  for source in cache.sources:
+    registry.addGrammar(parseRawGrammar(source.content, source.path))
+  let scopeName = if installedScope.len > 0: installedScope else: primary.get.scopeName
+  result = registry.loadGrammar(scopeName)
+  cache.grammars[modeName] = result
 
 func scopeMatches(scope, prefix: string): bool =
   scope == prefix or
@@ -167,7 +218,7 @@ proc initMatterHighlightJob*(
     cache: var MatterGrammarCache, source: sink string, language: string
 ): MatterHighlightJob =
   ## Start a pass using grammars private to the owning worker.
-  let grammar = grammarForLanguage(cache.grammars, language)
+  let grammar = grammarForLanguage(cache, language)
   MatterHighlightJob(source: source, grammar: grammar)
 
 proc nextMatterHighlightBatch*(job: var MatterHighlightJob): MatterHighlightResult =
@@ -216,11 +267,12 @@ proc nextMatterHighlightBatch*(job: var MatterHighlightJob): MatterHighlightResu
   result.completed = job.lineStart >= job.source.len
 
 proc matterSyntaxHighlighterBounded*(
+    cache: var MatterGrammarCache,
     source, language: string,
     timeLimitMs = 0,
     cancelled: MatterHighlightCancellation = nil,
 ): MatterHighlightResult =
-  ## Classify `source` with Matter's bundled TextMate grammar for `language`.
+  ## Classify `source` with this worker's installed or bundled TextMate grammar.
   ## Unknown language names return no spans. Returned ranges use rune offsets.
   ##
   ## ``timeLimitMs`` covers the complete source, not just one grammar line.
@@ -232,7 +284,7 @@ proc matterSyntaxHighlighterBounded*(
   let startedAt = getMonoTime()
   if source.len == 0:
     return
-  let grammar = grammarForLanguage(matterGrammarCache, language)
+  let grammar = grammarForLanguage(cache, language)
   if grammar.isNil:
     return
 
@@ -287,6 +339,16 @@ proc matterSyntaxHighlighterBounded*(
       )
     ruleStack = tokenized.ruleStack
     lineStart = lineStop + 1
+
+proc matterSyntaxHighlighterBounded*(
+    source, language: string,
+    timeLimitMs = 0,
+    cancelled: MatterHighlightCancellation = nil,
+): MatterHighlightResult =
+  ## Classify with the thread's bundled grammars, retaining deadline and cancellation.
+  matterGrammarCache.matterSyntaxHighlighterBounded(
+    source, language, timeLimitMs, cancelled
+  )
 
 proc matterSyntaxHighlighter*(source, language: string): seq[SyntaxTokenSpan] =
   ## Classify a source with no explicit deadline or cancellation callback.
