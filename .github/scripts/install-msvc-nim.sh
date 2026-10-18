@@ -43,6 +43,11 @@ if [[ ! -e "$nimMsvcDir" ]]; then
   cp -R "$projectRoot/deps/nim-2.2.10/." "$stageDir/"
   fetchPatch "$atomicsPath" "$nimMsvcAtomicsChecksum"
   fetchPatch "$compilerPath" "$nimMsvcCompilerChecksum"
+  # Binary distributions omit the prebuilt MSVC resource used by compiler/nim.nim.
+  (
+    cd "$stageDir/icons"
+    MSYS2_ARG_CONV_EXCL='*' rc.exe /nologo /fo nim-amd64-windows-vcc.res nim.rc
+  )
   stageWindows="$(cygpath -m "$stageDir")"
   # Keep compiler/nim.cfg (booting/nimcore), but skip Merenda's parent config.
   "$projectRoot/deps/nim-2.2.10/bin/nim.exe" c --cc:vcc -d:release --mm:orc \
