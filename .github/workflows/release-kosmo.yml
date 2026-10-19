@@ -753,7 +753,8 @@ jobs:
 
   build-windows:
     runs-on: windows-2022
-    timeout-minutes: 45
+    # Optimizing Kosmo's large C translation units can exceed 45 minutes.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v5
 
