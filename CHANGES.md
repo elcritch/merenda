@@ -20,6 +20,7 @@
 
 - Let locally signed macOS apps load their bundled text libraries. Check startup
   after signing and through the installed command to catch loader failures.
+  Statically link HarfBuzz and FriBidi when installing with `nim install_kosmo`.
 
 - Build Windows Kosmo releases and examples with MSVC. Use the Windows SDK
   resource compiler, ship the matching PDB, and keep Nim stack traces with
