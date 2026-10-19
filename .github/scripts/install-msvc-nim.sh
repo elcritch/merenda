@@ -92,8 +92,19 @@ NIM
   --out:"$(cygpath -m "$probeDir")/msvc_probe.exe" "$probeFile"
 
 if [[ -n "$stageDir" ]]; then
-  mv "$stageDir" "$nimMsvcDir"
-  stageDir=
+  # Windows may briefly retain a file lock after the compiler/probe exits.
+  for moveAttempt in {1..20}; do
+    # Do not nest the staged compiler if the destination unexpectedly exists.
+    if mv -T "$stageDir" "$nimMsvcDir"; then
+      stageDir=
+      break
+    fi
+    if ((moveAttempt == 20)); then
+      echo "Cannot install the MSVC Nim environment at $nimMsvcDir." >&2
+      exit 1
+    fi
+    sleep 0.5
+  done
 fi
 
 if [[ -n "${GITHUB_PATH:-}" ]]; then
