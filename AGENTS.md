@@ -10,6 +10,7 @@
 - Prefer `nim ic` for local development builds and testing to reuse incremental compilation results. Use `-r` to run the compiled program, and use `--backend:ic` with `atlas-run build` or `atlas-run tests`. Leave CI's compiler backend unchanged.
 - Run multiple or all tests with `atlas-run tests --backend:ic [test-selections]`. Omit selections to run the full suite, or pass one or more test selectors to run focused tests. Selectors match as `foo` -> `tests/tfoo*.nim`, `foo.nim` -> `tests/tfoo.nim`, and `examples/foo*.nim` -> `examples/foo*.nim`. Do not adjust the `--jobs` count or the `--nimcache`.
 - Compile the example bundle with `atlas-run tests --backend:ic --compile-only examples/all_compile.nim`; do not run `examples/all_compile.nim` as a test.
+- Development control (`-d:merenda.devControl`) provides live renderer screenshots, window inspection, input automation, and CSS reloads. Read [docs/dev-control.md](docs/dev-control.md) before capturing live screenshots from a running app.
 - Execute a single test locally using `nim ic`:
   - `nim ic -r tests/ttransfer.nim`
   - `nim ic -r -d:debug tests/ttransfer.nim`
