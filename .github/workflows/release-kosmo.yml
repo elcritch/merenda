@@ -703,6 +703,9 @@ jobs:
             exit 1
           fi
 
+      - name: Verify signed Kosmo startup
+        run: build/Kosmo.app/Contents/MacOS/kosmo --help
+
       - name: Package Kosmo app
         run: |
           ditto \

@@ -116,12 +116,14 @@ plutil -lint "$app_path/Contents/Info.plist"
 codesign --force --options runtime --sign - \
   --entitlements packaging/macos/debug.entitlements "$app_path"
 codesign --verify --deep --strict "$app_path"
+"$app_path/Contents/MacOS/kosmo" --help >/dev/null
 
 mkdir -p "$install_dir" "$bin_dir"
 staged_app="$install_dir/.Kosmo.app.install.$$"
 staged_command="$bin_dir/.kosmo.install.$$"
 ditto "$app_path" "$staged_app"
 codesign --verify --deep --strict "$staged_app"
+"$staged_app/Contents/MacOS/kosmo" --help >/dev/null
 
 if [[ -e "$installed_app" || -L "$installed_app" ]]; then
   backup_app="$install_dir/.Kosmo.app.backup.$$"
@@ -131,6 +133,7 @@ restore_install=1
 mv "$staged_app" "$installed_app"
 staged_app=""
 ln -s "$installed_app/Contents/MacOS/kosmo" "$staged_command"
+"$staged_command" --help >/dev/null
 mv -f "$staged_command" "$installed_command"
 staged_command=""
 restore_install=0

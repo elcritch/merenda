@@ -16,7 +16,10 @@
 
 # Changes
 
-## Unreleased
+## 0.28.0
+
+- Let locally signed macOS apps load their bundled text libraries. Check startup
+  after signing and through the installed command to catch loader failures.
 
 - Build Windows Kosmo releases and examples with MSVC. Use the Windows SDK
   resource compiler, ship the matching PDB, and keep Nim stack traces with

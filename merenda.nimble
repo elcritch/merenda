@@ -1,4 +1,4 @@
-version       = "0.27.6"
+version       = "0.28.0"
 author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
@@ -13,6 +13,7 @@ requires "crunchy >= 0.1.11"
 # Includes merged ABI/X11 fixes and opt-in nonactivating window presentation.
 requires "gh:elcritch/siwin#50a96efcd5a3feb5fcfdf07a46baa7da50360c0b"
 requires "gh:elcritch/figdraw >= 0.44.0 [siwin, harfbuzz, textBackendHarfbuzzy]"
+requires "gh:elcritch/harfbuzzy#15a69436b3acd3bb6f4cc0f41a805ec1e2504f3c"
 requires "gh:elcritch/sigils >= 0.32.0 [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
 requires "gh:elcritch/kiwiberry#4d273da93f67d8e5d6317898851772b32fa635ec"
