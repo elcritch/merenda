@@ -91,6 +91,8 @@ export CXX="$(xcrun --find clang++)"
 KOSMO_TEXT_LICENSE_DIR="$app_path/Contents/Resources/text-library-licenses" \
   nim e packaging/macos/staticTextLicenses.nims
 nim c \
+  --passC:-mmacosx-version-min=13.0 \
+  --passL:-mmacosx-version-min=13.0 \
   --opt:size \
   --debugger:native \
   --lineTrace:off \
