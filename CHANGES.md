@@ -1,3 +1,5 @@
+# Changes
+
 ## Unreleased
 
 - Route development control through Sigils JSON-RPC selectors and dispatcher over
@@ -13,8 +15,6 @@
   CLI suitable for future MCP adapters.
 - Add `MERENDA_BACKGROUND=1` nonactivating development presentation on macOS and
   Windows through a pinned Siwin update.
-
-# Changes
 
 ## 0.28.0
 
@@ -33,11 +33,15 @@
 
 - Enable FigDraw's `textBackendHarfbuzzy` Atlas feature in `merenda.nimble` so
   this checkout and downstream Merenda apps use HarfBuzz text rendering and
-  automatic system-font fallback. Previously HarfBuzz was installed as a dependency,
+  automatic system-font fallback. Require released FigDraw 0.45.0 and Harfbuzzy
+  0.3.0 for dynamic and static builds. Previously HarfBuzz was installed as a dependency,
   but FigDraw still selected Pixie, leaving automatic fallback disabled. Missing
   glyphs in the editor, terminal, and other text views can now use system fonts,
   including checkbox symbols absent from the bundled Nerd Font. Initialize fallback
   on background text-layout threads as well as the main thread.
+
+- Render Markdown task lists with ☐ for `[ ]`, ☑ for `[x]` or `[X]`, and ☒ for
+  `[-]`, preserving nested lists, numbering, and inline formatting.
 
 - Match split divider fills, edges, and grips to each bundled theme's palette,
   including the dark Nebula, Peachy, and Synthwave83 themes.
@@ -91,9 +95,6 @@
   Moe/Vim modal editing and normal text entry with native editing shortcuts.
   Use a compact menu that opens upward, and keep its checked selection synchronized
   with Settings and detached editor windows.
-
-- Render Markdown task lists with ☐ for `[ ]`, ☑ for `[x]` or `[X]`, and ☒ for
-  `[-]`, preserving nested lists, numbering, and inline formatting.
 
 - Add a Windows VirtualBox test setup, matching Guest Additions, an OpenGL 3.3
   console probe, and guards against concurrent bhyve operation. Document the
