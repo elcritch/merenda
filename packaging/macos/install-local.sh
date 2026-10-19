@@ -90,7 +90,9 @@ export CC="$(xcrun --find clang)"
 export CXX="$(xcrun --find clang++)"
 KOSMO_TEXT_LICENSE_DIR="$app_path/Contents/Resources/text-library-licenses" \
   nim e packaging/macos/staticTextLicenses.nims
+# Cached external C objects can retain an older deployment target.
 nim c \
+  --forceBuild:on \
   --passC:-mmacosx-version-min=13.0 \
   --passL:-mmacosx-version-min=13.0 \
   --opt:size \
