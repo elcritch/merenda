@@ -1,6 +1,5 @@
 ## Table-model construction, data-source/delegate adapters, binding, and reordering.
 
-import sigils/core
 import ../app/dragging
 import ../controls/controls
 import ../foundation/objectvalues

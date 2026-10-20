@@ -1,7 +1,7 @@
 ## Table layout, drawing, and column presentation.
 ## Cell editing lives in tablecells; coordinated input lives in tableviews.
 
-import std/[math, options, strutils, tables, times]
+import std/[math, options, tables]
 
 from figdraw import FigIdx
 import sigils/core
@@ -9,17 +9,13 @@ import sigils/core
 import ../accessibility/accessibilityprotocols
 import ../drawing
 import ../app/dragging
-import ../app/windows
 import ../controls/controls
 import ../containers/listbasics
-import ./tablebasics
 import ../containers/scrollviews
 import ../foundation/events
-import ../foundation/objectvalues
 import ../foundation/selectors
 import ../themes
 import ../themes/themecore as themeCore
-import ../text/textviews
 import ../foundation/types
 import ../foundation/undomanagers
 from ../view/viewgeometry import setFrameFromLayout

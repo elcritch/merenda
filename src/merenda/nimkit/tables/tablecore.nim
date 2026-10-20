@@ -1,9 +1,8 @@
 ## Shared table types, model storage, data queries, and geometry calculations.
 ## Import tableviews for widget construction and coordinated behavior.
 
-import std/[algorithm, math, options, strutils, tables, times]
+import std/[algorithm, math, options, strutils, tables]
 
-from figdraw import FigIdx
 import sigils/core
 
 import ../accessibility/accessibilityprotocols
@@ -21,8 +20,6 @@ import ../foundation/objectvalues
 import ../foundation/private/itemcollections
 import ../foundation/selectors
 import ../themes
-import ../themes/themecore as themeCore
-import ../text/textviews
 import ../foundation/types
 from ../view/viewgeometry import setFrameFromLayout
 import ../view/views

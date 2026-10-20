@@ -1,7 +1,6 @@
 ## Table reload transactions and batched row updates.
 
 import sigils/core
-import ../accessibility/accessibilityprotocols
 import ../controls/controls
 import ../foundation/selectors
 import ../foundation/types

@@ -1,7 +1,6 @@
 ## Table row/column drag sessions, drop validation, and reorder orchestration.
 
 import std/options
-import sigils/core
 import ../app/dragging
 import ../app/pasteboards
 import ../controls/controls

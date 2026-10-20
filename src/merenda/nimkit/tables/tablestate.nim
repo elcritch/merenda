@@ -5,7 +5,6 @@ import sigils/core
 import ../app/userdefaults
 import ../app/windows
 import ../foundation/selectors
-import ../foundation/types
 import ../view/views
 import ./tablecore
 import ./tablepresentation

@@ -1,6 +1,5 @@
 ## Default table mouse/keyboard input and responder-event dispatch.
 
-import sigils/core
 import ../app/windows
 import ../controls/controls
 import ../foundation/events
