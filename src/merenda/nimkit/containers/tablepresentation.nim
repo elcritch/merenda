@@ -14,6 +14,7 @@ import ../controls/controls
 import ../containers/listbasics
 import ./tablebasics
 import ../containers/scrollviews
+import ../foundation/events
 import ../foundation/objectvalues
 import ../foundation/selectors
 import ../themes
@@ -25,6 +26,8 @@ from ../view/viewgeometry import setFrameFromLayout
 import ../view/views
 
 import ./tablecore
+import ./tableselection
+import ./private/tablecoordination
 
 proc `columnSizing=`*(tableView: TableView, sizing: TableViewColumnSizing)
 proc `preferredContentWidth=`*(tableView: TableView, width: float32)
@@ -57,6 +60,24 @@ func isActive*(tracking: TableHeaderTracking): bool {.inline.} =
 
 proc clear*(tracking: var TableHeaderTracking) =
   tracking = TableHeaderTracking()
+
+proc `rowHeight=`*(tableView: TableView, height: float32) =
+  let normalized = height.normalizedRowHeight()
+  let previousHeight = tableView.rowHeight()
+  tableView.xRowSizing.hasExplicitHeight = true
+  if tableView.xRowSizing.height == normalized and previousHeight == normalized:
+    return
+  tableView.xRowSizing.height = normalized
+  tableView.xScrollView.lineScroll = normalized
+  tableView.xRowHeightMeasurement.valid = false
+  tableView.requestTableReload()
+
+proc `visibleRows=`*(tableView: TableView, rows: int) =
+  let normalized = max(rows, 1)
+  if tableView.xRowSizing.visibleRows == normalized:
+    return
+  tableView.xRowSizing.visibleRows = normalized
+  tableView.requestTableReload()
 
 proc `widthSizingMode=`*(tableView: TableView, mode: TableViewWidthSizingMode) =
   if tableView.xWidthSizing.mode == mode:
@@ -583,33 +604,6 @@ proc layoutTableContent(tableView: TableView) =
   tableView.xContentView.syncVisibleRowViews()
   tableView.syncVisibleTableCells()
 
-proc scrollContentRectToVisible(tableView: TableView, rect: Rect) =
-  let oldFirst = tableView.firstVisibleIndex()
-  if rect.isEmpty:
-    return
-  discard tableView.xScrollView.scrollRectToVisible(rect)
-  if tableView.firstVisibleIndex() != oldFirst:
-    tableView.invalidateTableRows()
-
-proc scrollItemToVisible*(tableView: TableView, itemIndex: int) =
-  if itemIndex < 0 or itemIndex >= tableView.len():
-    return
-  var rect = tableView.xContentView.tableContentItemRect(itemIndex)
-  let offset = tableView.listContentOffset()
-  rect.x = offset.x
-  rect.w = tableView.viewportSize().width
-  tableView.scrollContentRectToVisible(rect)
-
-proc scrollCellToVisible*(tableView: TableView, row: int, column: TableColumn) =
-  if row < 0 or row >= tableView.len() or column.isNil:
-    return
-  let
-    width = max(tableView.visibleColumnWidth(), tableView.viewportSize().width)
-    rowRect =
-      rect(0.0'f32, tableView.rowOffset(row), width, tableView.rowHeightForRow(row))
-    columnRect = tableView.columnRect(rowRect, column)
-  tableView.scrollContentRectToVisible(columnRect)
-
 proc `highlightedIndex=`*(tableView: TableView, index: int) =
   let boundedIndex = if tableView.rowEnabled(index): index else: -1
   if tableView.xHighlightedIndex == boundedIndex:
@@ -722,6 +716,11 @@ proc dropTargetForDraggingLocation*(
     if resolved.isSome:
       return resolved.get()
   proposedTarget
+
+proc layoutHostedCell*(rowView: TableRowView, column: TableColumn, cellView: View) =
+  let rowBounds =
+    rect(0.0, 0.0, rowView.bounds().size.width, rowView.bounds().size.height)
+  cellView.setFrameFromLayout(rowView.xTableView.columnRect(rowBounds, column))
 
 proc syncVisibleTableCells(tableView: TableView) =
   let previousSlots = tableView.xCellSlots
@@ -1815,6 +1814,243 @@ proc tableViewportGeometryChanged*(tableView: TableView) {.slot.} =
   # Header and row-header drawing lives outside the scrolling document. Its
   # retained fragments must follow direct clip-view offset changes as well.
   tableView.needsDisplay = true
+
+protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
+  method columnAtPoint(tableView: TableView, point: Point): TableColumn =
+    var x = 0.0'f32
+    for column in tableView.columns:
+      if not column.hidden():
+        let nextX = x + column.width()
+        if point.x >= x and point.x < nextX:
+          return column
+        x = nextX
+
+  method headerHitTest(tableView: TableView, point: Point): TableHeaderHit =
+    result = TableHeaderHit(columnIndex: -1, row: -1, part: thpNone)
+    let resizeHandleWidth = tableView.tableStyle().headerResizeHandleWidth
+    let rowHeaderRect = tableView.tableRowHeaderCornerRect()
+    if rowHeaderRect.contains(point):
+      result.rect = rowHeaderRect
+      if point.x >= rowHeaderRect.maxX - resizeHandleWidth:
+        result.part = thpRowHeaderResizeHandle
+      else:
+        result.part = thpRowHeader
+      return
+    let rowHeaderBodyRect = tableView.tableRowHeaderRect()
+    if rowHeaderBodyRect.contains(point):
+      let contentView = tableView.contentView()
+      let rows = contentView.visibleContentRows()
+      for row in rows.first ..< rows.last:
+        let handleRect = tableView.tableRowHeaderResizeHandleRect(row)
+        if handleRect.contains(point):
+          result.row = row
+          result.rect = tableView.tableRowHeaderCellRect(row)
+          result.part = thpRowHeaderRowResizeHandle
+          return
+      return
+    if not tableView.tableHeaderRect().contains(point):
+      return
+    for index, column in tableView.xColumns:
+      let rect = tableView.tableHeaderColumnRect(column)
+      if not rect.isEmpty and column.resizePolicy() == tcrResizable:
+        let handleRect = rect(
+          rect.maxX - resizeHandleWidth,
+          rect.origin.y,
+          resizeHandleWidth * 2.0'f32,
+          rect.size.height,
+        )
+        if handleRect.contains(point):
+          result.column = column
+          result.columnIndex = index
+          result.part = thpResizeHandle
+          result.rect = rect
+          return
+    for index, column in tableView.xColumns:
+      let rect = tableView.tableHeaderColumnRect(column)
+      if rect.contains(point):
+        result.column = column
+        result.columnIndex = index
+        result.rect = rect
+        result.part = thpColumn
+        return
+
+  method resizeColumn(tableView: TableView, column: TableColumn, width: float32) =
+    if column.isNil or column.tableView() != tableView:
+      return
+    if column.resizePolicy() == tcrFixed:
+      return
+    column.xWidth.userResized = true
+    column.width = width
+    if tableView.xCellEditing.state.active and
+        tableView.xCellEditing.state.column == column:
+      tableView.requestTableEditorLayout()
+    tableView.syncHeaderTrackingAreas()
+    tableView.setNeedsLayout()
+    tableView.needsDisplay = true
+
+  method moveColumn(tableView: TableView, fromIndex, toIndex: int) =
+    if fromIndex notin 0 ..< tableView.xColumns.len:
+      return
+    let boundedTo = max(0, min(toIndex, tableView.xColumns.len - 1))
+    if fromIndex == boundedTo:
+      return
+    let column = tableView.xColumns[fromIndex]
+    tableView.findUndoManager().registerCollectionMove(
+      proc(fromIndex, toIndex: int) =
+        tableView.moveColumn(fromIndex, toIndex),
+      fromIndex,
+      boundedTo,
+      "Move Column",
+    )
+    tableView.xColumns.delete(fromIndex)
+    tableView.xColumns.insert(column, boundedTo)
+    tableView.noteColumnsChanged()
+
+  method requestSort(
+      tableView: TableView, column: TableColumn, direction: TableSortDirection
+  ) =
+    if column.isNil or column.tableView() != tableView:
+      return
+    let
+      selectedIdentifiers =
+        tableView.rowIdentifiersForRows(tableView.xRowSelection.indexes)
+      anchorIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.anchor)
+      leadIdentifier = tableView.tableRowIdentifier(tableView.xRowSelection.lead)
+    for current in tableView.xColumns.mitems:
+      if current != column and current.xSortDirection != tsdNone:
+        current.xSortDirection = tsdNone
+    column.sortDirection = direction
+    let delegate = tableView.delegate()
+    if not delegate.isNil:
+      discard delegate.sendLocalIfHandled(
+        sortDescriptorsDidChange(),
+        (tableView: tableView, column: column, direction: direction),
+      )
+    tableView.applySelectionForRowIdentifiers(
+      selectedIdentifiers, anchorIdentifier, leadIdentifier
+    )
+
+  method headerMouseDown(tableView: TableView, event: MouseEvent): bool =
+    if event.button != mbPrimary:
+      return false
+    let hit = tableView.tableHeaderHitTest(event.location)
+    if hit.part == thpNone:
+      return false
+    tableView.xHeaderTracking = TableHeaderTracking(
+      part: hit.part,
+      column: hit.column,
+      columnIndex: hit.columnIndex,
+      row: hit.row,
+      startPoint: event.location,
+      insertionIndex: -1,
+    )
+    tableView.xPressedColumn = hit.column
+    tableView.xHeaderTracking.startSize.width =
+      if hit.part == thpRowHeaderResizeHandle:
+        tableView.rowHeaderWidth()
+      elif hit.part == thpRowHeaderRowResizeHandle:
+        0.0'f32
+      elif hit.column.isNil:
+        0.0'f32
+      else:
+        hit.column.width()
+    tableView.xHeaderTracking.startSize.height =
+      if hit.part == thpRowHeaderRowResizeHandle:
+        tableView.rowHeightForRow(hit.row)
+      else:
+        0.0'f32
+    tableView.needsDisplay = true
+    true
+
+  method headerMouseDragged(tableView: TableView, event: MouseEvent): bool =
+    if not tableView.xHeaderTracking.isActive():
+      return false
+    let
+      startPoint = tableView.xHeaderTracking.startPoint
+      startSize = tableView.xHeaderTracking.startSize
+    case tableView.xHeaderTracking.part
+    of thpRowHeaderResizeHandle:
+      tableView.rowHeaderWidth = startSize.width + event.location.x - startPoint.x
+    of thpRowHeaderRowResizeHandle:
+      tableView.applyRowHeightResize(
+        tableView.xHeaderTracking.row,
+        startSize.height + event.location.y - startPoint.y,
+      )
+    of thpRowHeader:
+      discard
+    of thpResizeHandle:
+      if tableView.xHeaderTracking.column.isNil:
+        return false
+      tableView.resizeColumn(
+        tableView.xHeaderTracking.column,
+        startSize.width + event.location.x - startPoint.x,
+      )
+    of thpColumn:
+      if tableView.xHeaderTracking.column.isNil:
+        return false
+      if abs(event.location.x - startPoint.x) >
+          tableView.tableStyle().headerDragThreshold:
+        tableView.xHeaderTracking.draggingColumn = true
+      if tableView.xHeaderTracking.draggingColumn:
+        if not tableView.autoscrollHeaderColumnDrag(event.location):
+          tableView.setHeaderDragInsertion(
+            tableView.headerInsertionIndexAtPoint(event.location)
+          )
+        tableView.needsDisplay = true
+    of thpNone:
+      discard
+    true
+
+  method headerMouseUp(tableView: TableView, event: MouseEvent): bool =
+    if not tableView.xHeaderTracking.isActive():
+      return false
+    let
+      hit = tableView.tableHeaderHitTest(event.location)
+      clickedColumn = tableView.xHeaderTracking.column
+      clickedPart = tableView.xHeaderTracking.part
+      fromIndex = tableView.xHeaderTracking.columnIndex
+      moved =
+        tableView.xHeaderTracking.draggingColumn or (
+          clickedPart == thpColumn and
+          abs(event.location.x - tableView.xHeaderTracking.startPoint.x) >
+          tableView.tableStyle().headerDragThreshold
+        )
+      insertionIndex = tableView.xHeaderTracking.insertionIndex
+    tableView.xHeaderTracking.clear()
+    tableView.xPressedColumn = nil
+    if clickedPart == thpColumn and not clickedColumn.isNil:
+      if moved:
+        let targetIndex =
+          if insertionIndex < 0:
+            tableView.headerInsertionIndexAtPoint(event.location)
+          else:
+            insertionIndex
+        if targetIndex >= 0:
+          var toIndex = targetIndex
+          if fromIndex < targetIndex:
+            dec toIndex
+          toIndex = max(0, min(toIndex, tableView.xColumns.len - 1))
+          tableView.moveColumn(fromIndex, toIndex)
+      elif hit.column == clickedColumn:
+        let nextDirection =
+          if clickedColumn.sortDirection() == tsdAscending:
+            tsdDescending
+          else:
+            tsdAscending
+        tableView.requestSort(clickedColumn, nextDirection)
+    tableView.needsDisplay = true
+    true
+
+  method headerMouseMoved(tableView: TableView, event: MouseEvent): bool =
+    let column = tableView.tableHeaderHitTest(event.location).column
+    if tableView.xHoveredColumn == column:
+      return column != nil
+    tableView.xHoveredColumn = column
+    tableView.needsDisplay = true
+    column != nil
+
+proc installTableColumnProtocol*(tableView: TableView) =
+  discard tableView.withProtocol(DefaultTableViewColumnBehavior)
 
 proc installTableLayoutProtocol*(tableView: TableView) =
   discard tableView.withProtocol(DefaultTableViewLayout)

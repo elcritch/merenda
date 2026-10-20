@@ -11,11 +11,11 @@ import ../drawing
 import ../foundation/events
 import ../app/dragging
 import ../app/pasteboards
-import ../app/userdefaults
 import ../app/windows
 import ../controls/controls
 import ../containers/listbasics
 import ./tablebasics
+import ./private/tablecoordination
 import ../containers/scrollviews
 import ../foundation/objectvalues
 import ../foundation/private/itemcollections
@@ -30,12 +30,8 @@ import ../view/views
 export tablebasics
 
 const
-  TableTypeSelectTimeout* = 1.0
-  TableSelectionIdentityPrefix* = "ids:"
   TableColumnWidthEpsilon = 0.001'f32
   MaxTableContentLayoutPasses = 4
-
-const TableViewStateDefaultsPrefix = "nimkit.table.state."
 
 const
   TableHeaderTrackingTag* = 0x74001
@@ -72,9 +68,6 @@ type
     validationError*: string
     validation*: ObjectValidationError
     objectValue*: ObjectValue
-
-  TableViewStateStore* = ref object of DynamicAgent
-    xStates: Table[string, TableViewState]
 
   TableHeaderTracking* = object
     part*: TableHeaderHitPart
@@ -142,13 +135,13 @@ type
     xSelectedColumns*: seq[TableColumn]
     xRowHeaderSettings*: TableRowHeaderSettings
     xCellEditing*: TableEditorState
-    xAutosaveName: string
-    xStateStorage: DynamicAgent
-    xStateScope: TableViewStateScope
-    xWorkspaceIdentifier: string
+    xAutosaveName*: string
+    xStateStorage*: DynamicAgent
+    xStateScope*: TableViewStateScope
+    xWorkspaceIdentifier*: string
     xHasRestoredState*: bool
     xObservedStateWindow*: Window
-    xColumnAutosaveAliases: Table[string, string]
+    xColumnAutosaveAliases*: Table[string, string]
     xRowIdentifierAliases: Table[string, string]
     xRowIdentifierResolver: TableRowIdentifierResolver
     xRowUpdates*: TableRowUpdateBatch
@@ -404,10 +397,6 @@ proc selectedIndex*(tableView: TableView): int
 proc len*(tableView: TableView): int
 proc firstVisibleIndex*(tableView: TableView): int
 proc tableDropPosition*(info: DraggingInfo): DraggingDropPosition
-proc visibleRowView*(tableView: TableView, row: int): tuple[view: View, rect: Rect]
-proc newTableViewStateStore*(): TableViewStateStore
-proc hasState*(store: TableViewStateStore, name: string): bool
-proc state*(store: TableViewStateStore, name: string): TableViewState
 proc tableContentItemRect*(contentView: TableContentView, itemIndex: int): Rect
 proc tableContentItemIndexAtPoint*(contentView: TableContentView, point: Point): int
 proc visibleContentRows*(contentView: TableContentView): tuple[first, last: int]
@@ -885,47 +874,6 @@ proc rowHeaderText*(tableView: TableView, row: int): string =
     if text.isSome:
       return text.get()
   $row
-
-proc tableCellObjectValue*(
-    tableView: TableView, row: int, column: TableColumn
-): ObjectValue =
-  if not tableView.validCell(row, column):
-    return nilObjectValue()
-  let source = tableView.dataSource()
-  if source.isNil:
-    return emptyObjectValue()
-  let value = source.trySendLocal(
-    objectValueForCell(), (tableView: tableView, row: row, column: column)
-  )
-  if value.isSome:
-    return value.get()
-  let text =
-    source.trySendLocal(textForCell(), (tableView: tableView, row: row, column: column))
-  if text.isSome:
-    toObj(text.get())
-  else:
-    emptyObjectValue()
-
-proc writeTableCellObjectValue*(
-    tableView: TableView, row: int, column: TableColumn, value: ObjectValue
-): bool =
-  if not tableView.validCell(row, column):
-    return false
-  let source = tableView.dataSource()
-  if source.isNil:
-    return true
-  let written = source.trySendLocal(
-    setObjectValueForCell(),
-    (tableView: tableView, row: row, column: column, value: value),
-  )
-  result =
-    if written.isSome:
-      written.get()
-    else:
-      true
-  if result:
-    tableView.invalidateColumnWidthMeasurements()
-    tableView.invalidateTableWidthMeasurement()
 
 proc tableRowIdentifier*(tableView: TableView, row: int): string =
   if row notin 0 ..< tableView.len():
@@ -1407,6 +1355,33 @@ proc layoutTableContentIfNeeded*(tableView: TableView) =
   if tableView.needsLayout() or tableView.needsUpdateConstraints():
     tableView.layoutSubtreeIfNeeded()
 
+proc scrollContentRectToVisible(tableView: TableView, rect: Rect) =
+  let oldFirst = tableView.firstVisibleIndex()
+  if rect.isEmpty:
+    return
+  discard tableView.xScrollView.scrollRectToVisible(rect)
+  if tableView.firstVisibleIndex() != oldFirst:
+    tableView.invalidateTableRows()
+
+proc scrollItemToVisible*(tableView: TableView, itemIndex: int) =
+  if itemIndex < 0 or itemIndex >= tableView.len():
+    return
+  var rect = tableView.xContentView.tableContentItemRect(itemIndex)
+  let offset = tableView.listContentOffset()
+  rect.x = offset.x
+  rect.w = tableView.viewportSize().width
+  tableView.scrollContentRectToVisible(rect)
+
+proc scrollCellToVisible*(tableView: TableView, row: int, column: TableColumn) =
+  if row < 0 or row >= tableView.len() or column.isNil:
+    return
+  let
+    width = max(tableView.visibleColumnWidth(), tableView.viewportSize().width)
+    rowRect =
+      rect(0.0'f32, tableView.rowOffset(row), width, tableView.rowHeightForRow(row))
+    columnRect = tableView.columnRect(rowRect, column)
+  tableView.scrollContentRectToVisible(columnRect)
+
 proc selectionContains*(tableView: TableView, index: int): bool =
   for selectedIndex in tableView.xRowSelection.indexes:
     if selectedIndex == index:
@@ -1670,66 +1645,6 @@ proc showsFocusedColumnHighlight*(tableView: TableView): bool =
 proc selectedColumns*(tableView: TableView): seq[TableColumn] =
   tableView.xSelectedColumns
 
-proc autosaveName*(tableView: TableView): string =
-  tableView.xAutosaveName
-
-proc `autosaveName=`*(tableView: TableView, name: string) =
-  if tableView.xAutosaveName == name:
-    return
-  tableView.xAutosaveName = name
-  tableView.xHasRestoredState = false
-
-proc stateStorage*(tableView: TableView): DynamicAgent =
-  tableView.xStateStorage
-
-proc `stateStorage=`*(tableView: TableView, storage: DynamicAgent) =
-  if tableView.xStateStorage == storage:
-    return
-  tableView.xStateStorage = storage
-  tableView.xHasRestoredState = false
-
-proc `stateStorage=`*(tableView: TableView, storage: Responder) =
-  tableView.stateStorage = DynamicAgent(storage)
-
-proc stateScope*(tableView: TableView): TableViewStateScope =
-  tableView.xStateScope
-
-proc `stateScope=`*(tableView: TableView, scope: TableViewStateScope) =
-  if tableView.xStateScope == scope:
-    return
-  tableView.xStateScope = scope
-  tableView.xHasRestoredState = false
-
-proc workspaceIdentifier*(tableView: TableView): string =
-  tableView.xWorkspaceIdentifier
-
-proc `workspaceIdentifier=`*(tableView: TableView, identifier: string) =
-  if tableView.xWorkspaceIdentifier == identifier:
-    return
-  tableView.xWorkspaceIdentifier = identifier
-  tableView.xHasRestoredState = false
-
-proc registerColumnAutosaveAlias*(
-    tableView: TableView, oldIdentifier, newIdentifier: string
-) =
-  if oldIdentifier.len == 0 or newIdentifier.len == 0:
-    return
-  tableView.xColumnAutosaveAliases[oldIdentifier] = newIdentifier
-  tableView.xHasRestoredState = false
-
-proc clearColumnAutosaveAliases*(tableView: TableView) =
-  tableView.xColumnAutosaveAliases.clear()
-  tableView.xHasRestoredState = false
-
-proc resolveColumnAutosaveIdentifier*(
-    tableView: TableView, identifier: string
-): string =
-  result = identifier
-  var seen: seq[string]
-  while result in tableView.xColumnAutosaveAliases and result notin seen:
-    seen.add result
-    result = tableView.xColumnAutosaveAliases[result]
-
 proc draggingSession*(tableView: TableView): DraggingSession =
   tableView.xDragging.session
 
@@ -1960,182 +1875,6 @@ proc recycleVisibleCellViews*(tableView: TableView) =
 proc hasHostedCell*(tableView: TableView, row: int, column: TableColumn): bool =
   tableView.xCellSlots.findCellSlot(row, column) >= 0
 
-proc layoutHostedCell*(rowView: TableRowView, column: TableColumn, cellView: View) =
-  let rowBounds =
-    rect(0.0, 0.0, rowView.bounds().size.width, rowView.bounds().size.height)
-  cellView.setFrameFromLayout(rowView.xTableView.columnRect(rowBounds, column))
-
-proc visibleCellView*(tableView: TableView, row: int, column: TableColumn): View =
-  let index = tableView.xCellSlots.findCellSlot(row, column)
-  if index >= 0:
-    tableView.xCellSlots[index].view
-  else:
-    nil
-
-proc visibleRowView*(tableView: TableView, row: int): tuple[view: View, rect: Rect] =
-  for (index, rowView, rowRect) in tableView.visibleRowViews():
-    if index == row:
-      return (rowView, rowRect)
-  (nil, rect(0.0, 0.0, 0.0, 0.0))
-
-proc tableViewStateScopeKey(kind, identifier: string): string =
-  if identifier.len == 0:
-    kind
-  elif identifier.startsWith(kind & ":"):
-    identifier
-  else:
-    kind & ":" & identifier
-
-proc tableViewStateStoreForDefaults*(
-    defaults: UserDefaults, identifier: string
-): TableViewStateStore =
-  let resolvedDefaults =
-    if defaults.isNil:
-      sharedUserDefaults()
-    else:
-      defaults
-  let key =
-    if identifier.len == 0:
-      TableViewStateDefaultsPrefix & "application"
-    else:
-      TableViewStateDefaultsPrefix & identifier
-  let existing = resolvedDefaults.objectForKey(key)
-  if existing.isSome and existing.get() of TableViewStateStore:
-    return TableViewStateStore(existing.get())
-  result = newTableViewStateStore()
-  resolvedDefaults.setObjectForKey(key, DynamicAgent(result))
-
-proc userDefaultsTableViewStateStore*(): TableViewStateStore =
-  tableViewStateStoreForDefaults(sharedUserDefaults(), "")
-
-proc workspaceTableViewStateStore*(identifier: string): TableViewStateStore =
-  if identifier.len == 0:
-    return userDefaultsTableViewStateStore()
-  tableViewStateStoreForDefaults(
-    sharedUserDefaults(), tableViewStateScopeKey("workspace", identifier)
-  )
-
-proc documentTableViewStateStore*(identifier: string): TableViewStateStore =
-  if identifier.len == 0:
-    return userDefaultsTableViewStateStore()
-  tableViewStateStoreForDefaults(
-    sharedUserDefaults(), tableViewStateScopeKey("document", identifier)
-  )
-
-proc stateProviderForTableView(tableView: TableView): Responder =
-  var responder = Responder(tableView)
-  while not responder.isNil:
-    if responder.trySendLocal(defaultsStore(), ()).isSome or
-        responder.trySendLocal(defaultsScopeId(), ()).isSome:
-      return responder
-    responder = responder.nextResponder()
-
-proc stateStorageFromProvider(provider: Responder): DynamicAgent =
-  if provider.isNil:
-    return nil
-  let
-    storage = provider.trySendLocal(defaultsStore(), ())
-    identifier = provider.trySendLocal(defaultsScopeId(), ())
-    scopeId =
-      if identifier.isSome:
-        identifier.get()
-      else:
-        ""
-  if storage.isSome:
-    let store = storage.get()
-    if store of TableViewStateStore:
-      return store
-    if store of UserDefaults:
-      return DynamicAgent(
-        tableViewStateStoreForDefaults(
-          UserDefaults(store), tableViewStateScopeKey("document", scopeId)
-        )
-      )
-  if scopeId.len > 0:
-    return DynamicAgent(documentTableViewStateStore(scopeId))
-
-proc resolveTableViewStateStorage(tableView: TableView): DynamicAgent =
-  if not tableView.xStateStorage.isNil:
-    return tableView.xStateStorage
-  case tableView.xStateScope
-  of tvssApplication:
-    DynamicAgent(userDefaultsTableViewStateStore())
-  of tvssWorkspace:
-    DynamicAgent(workspaceTableViewStateStore(tableView.xWorkspaceIdentifier))
-  of tvssDocument:
-    let storage = stateStorageFromProvider(tableView.stateProviderForTableView())
-    if storage.isNil:
-      DynamicAgent(userDefaultsTableViewStateStore())
-    else:
-      storage
-  of tvssAutomatic:
-    if tableView.xWorkspaceIdentifier.len > 0:
-      DynamicAgent(workspaceTableViewStateStore(tableView.xWorkspaceIdentifier))
-    else:
-      let storage = stateStorageFromProvider(tableView.stateProviderForTableView())
-      if storage.isNil:
-        DynamicAgent(userDefaultsTableViewStateStore())
-      else:
-        storage
-
-proc saveState*(tableView: TableView, storage: DynamicAgent) =
-  if storage.isNil or tableView.autosaveName().len == 0:
-    return
-  discard storage.sendLocalIfHandled(
-    saveTableViewState(),
-    (name: tableView.autosaveName(), state: tableView.captureState()),
-  )
-
-proc restoreState*(tableView: TableView, storage: DynamicAgent) =
-  if storage.isNil or tableView.autosaveName().len == 0:
-    return
-  let name = tableView.autosaveName()
-  let hasState = storage.trySendLocal(hasTableViewState(), name)
-  if hasState.isSome and not hasState.get():
-    return
-  let state = storage.trySendLocal(loadTableViewState(), name)
-  if state.isSome:
-    tableView.restoreState(state.get())
-
-proc saveAutosavedState*(tableView: TableView) =
-  tableView.saveState(tableView.resolveTableViewStateStorage())
-
-proc restoreAutosavedState*(tableView: TableView) =
-  tableView.restoreState(tableView.resolveTableViewStateStorage())
-
-proc restoreStateIfNeeded*(tableView: TableView) =
-  if tableView.xHasRestoredState:
-    return
-  tableView.restoreAutosavedState()
-  tableView.xHasRestoredState = true
-
-protocol TableViewStateStoreBehavior of TableViewStateStorageProtocol:
-  method saveTableViewState(
-      store: TableViewStateStore, name: string, state: TableViewState
-  ) =
-    if name.len == 0:
-      return
-    store.xStates[name] = state
-
-  method loadTableViewState(store: TableViewStateStore, name: string): TableViewState =
-    if name.len == 0:
-      return initTableViewState()
-    store.xStates.getOrDefault(name, initTableViewState())
-
-  method hasTableViewState(store: TableViewStateStore, name: string): bool =
-    name in store.xStates
-
-proc newTableViewStateStore*(): TableViewStateStore =
-  result = TableViewStateStore()
-  result.xStates = initTable[string, TableViewState]()
-  discard result.withProtocol(TableViewStateStoreBehavior)
-
-proc hasState*(store: TableViewStateStore, name: string): bool =
-  name in store.xStates
-
-proc state*(store: TableViewStateStore, name: string): TableViewState =
-  store.xStates.getOrDefault(name, initTableViewState())
-
 proc tableContentItemRect*(contentView: TableContentView, itemIndex: int): Rect =
   let tableView = contentView.tableView()
   if itemIndex notin 0 ..< tableView.len():
@@ -2177,3 +1916,34 @@ proc configureRowView*(rowView: TableRowView, itemIndex: int) =
     rowView.xRow = nextRow
     rowView.needsDisplay = true
   rowView.setFrameFromLayout(tableView.xContentView.tableContentItemRect(itemIndex))
+
+proc `rowCount=`*(tableView: TableView, count: int) =
+  let nextCount = max(count, 0)
+  if tableView.xRowCount == nextCount:
+    return
+  tableView.xRowCount = nextCount
+  tableView.requestTableReload()
+
+proc `dataSource=`*(tableView: TableView, dataSource: DynamicAgent) =
+  if tableView.xTableDataSource == dataSource:
+    return
+  if not dataSource.isNil:
+    discard dataSource.adopt(TableViewDataSource)
+  tableView.clearTableCellSlots()
+  tableView.xTableDataSource = dataSource
+  tableView.requestTableReload()
+
+proc `dataSource=`*(tableView: TableView, dataSource: Responder) =
+  tableView.dataSource = DynamicAgent(dataSource)
+
+proc `delegate=`*(tableView: TableView, delegate: DynamicAgent) =
+  if tableView.xTableDelegate == delegate:
+    return
+  if not delegate.isNil:
+    discard delegate.adopt(TableViewDelegate)
+  tableView.clearTableCellSlots()
+  tableView.xTableDelegate = delegate
+  tableView.requestTableReload()
+
+proc `delegate=`*(tableView: TableView, delegate: Responder) =
+  tableView.delegate = DynamicAgent(delegate)

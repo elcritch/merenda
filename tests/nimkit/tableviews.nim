@@ -1190,9 +1190,9 @@ suite "NimKit TableView":
     )
     check name.width > 120.0'f32
 
-    tableView.saveState(store)
+    tableView.saveStateToStorage(store)
     name.width = 80.0
-    tableView.restoreState(store)
+    tableView.restoreStateFromStorage(store)
     check name.width > 120.0'f32
 
   test "table header rounds only exposed top corners":
@@ -1252,7 +1252,7 @@ suite "NimKit TableView":
     oldTable.selectedColumns = [oldName]
     oldName.sortDirection = tsdDescending
     oldAge.hidden = true
-    oldTable.saveState(store)
+    oldTable.saveStateToStorage(store)
 
     let
       newTable = newTableView()
@@ -1264,7 +1264,7 @@ suite "NimKit TableView":
     newTable.addColumn(newAge)
     newTable.addColumn(newName)
     newTable.registerColumnAutosaveAlias("fullName", "name")
-    newTable.restoreState(store)
+    newTable.restoreStateFromStorage(store)
 
     check newTable.columnAt(0) == newName
     check newTable.columnAt(1) == newAge

@@ -1,7 +1,7 @@
-## Cell focus, validation, field-editor hosting, and editing lifecycle for tables.
+## Table cell queries, focus, selection, hit policy, validation, and field editors.
 ## Shared storage, geometry, and cache helpers live in tablecore.
 
-import std/options
+import std/[options, strutils]
 
 import sigils/core
 
@@ -19,6 +19,62 @@ from ../view/viewgeometry import setFrameFromLayout
 import ../view/views
 import ./tablecore
 import ./tablepresentation
+import ./tableselection
+import ./private/tablecoordination
+
+proc tableCellObjectValue*(
+    tableView: TableView, row: int, column: TableColumn
+): ObjectValue =
+  if not tableView.validCell(row, column):
+    return nilObjectValue()
+  let source = tableView.dataSource()
+  if source.isNil:
+    return emptyObjectValue()
+  let value = source.trySendLocal(
+    objectValueForCell(), (tableView: tableView, row: row, column: column)
+  )
+  if value.isSome:
+    return value.get()
+  let text =
+    source.trySendLocal(textForCell(), (tableView: tableView, row: row, column: column))
+  if text.isSome:
+    toObj(text.get())
+  else:
+    emptyObjectValue()
+
+proc writeTableCellObjectValue*(
+    tableView: TableView, row: int, column: TableColumn, value: ObjectValue
+): bool =
+  if not tableView.validCell(row, column):
+    return false
+  let source = tableView.dataSource()
+  if source.isNil:
+    return true
+  let written = source.trySendLocal(
+    setObjectValueForCell(),
+    (tableView: tableView, row: row, column: column, value: value),
+  )
+  result =
+    if written.isSome:
+      written.get()
+    else:
+      true
+  if result:
+    tableView.invalidateColumnWidthMeasurements()
+    tableView.invalidateTableWidthMeasurement()
+
+proc visibleCellView*(tableView: TableView, row: int, column: TableColumn): View =
+  let index = tableView.xCellSlots.findCellSlot(row, column)
+  if index >= 0:
+    tableView.xCellSlots[index].view
+  else:
+    nil
+
+proc visibleRowView*(tableView: TableView, row: int): tuple[view: View, rect: Rect] =
+  for (index, rowView, rowRect) in tableView.visibleRowViews():
+    if index == row:
+      return (rowView, rowRect)
+  (nil, rect(0.0, 0.0, 0.0, 0.0))
 
 proc editingState*(tableView: TableView): TableEditingState =
   tableView.xCellEditing.state
@@ -623,6 +679,210 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
         of temReturn, temNone:
           discard Window(owner).makeFirstResponder(tableView)
 
+protocol DefaultTableCellLayout of TableCellLayoutProtocol:
+  method refreshEditingCellLayout(tableView: TableView) =
+    tableView.clearEditingSurface()
+    let editor = Control(tableView).currentEditor()
+    if not editor.isNil:
+      tableView.installFieldEditorOnSurface(editor)
+
+proc selectCellAtIndex(
+    tableView: TableView, index: int, column: TableColumn, modifiers: set[KeyModifier]
+) =
+  if tableView.xRowSelection.mode == tsmNone:
+    return
+  if index notin 0 ..< tableView.len() or not tableView.rowSelectable(index):
+    return
+
+  let
+    previousSelectedIndexes = tableView.xRowSelection.indexes
+    previousSelectedColumns = tableView.xSelectedColumns
+  tableView.selectItemAtIndex(index, modifiers)
+  if column.isNil or not tableView.shouldSelectCell(index, column):
+    return
+
+  discard tableView.setFocusedCellColumn(index, column, notifySelection = false)
+  tableView.xClickedRow = index
+  tableView.xClickedColumn = column
+  tableView.needsDisplay = true
+  if tvoColumnSelection in tableView.xOptions and
+      previousSelectedColumns != tableView.xSelectedColumns and
+      previousSelectedIndexes == tableView.xRowSelection.indexes:
+    emit tableView.selectionDidChange(DynamicAgent(tableView))
+    tableView.postAccessibilityNotification(anSelectionChanged)
+
+proc activateCellAtIndex*(
+    tableView: TableView, index: int, column: TableColumn, modifiers: set[KeyModifier]
+) =
+  if not tableView.rowEnabled(index):
+    return
+  if tableView.selectionMode() != tsmNone:
+    if not tableView.rowSelectable(index):
+      return
+    tableView.selectCellAtIndex(index, column, modifiers)
+  tableView.sendTableActivation(index)
+
+proc `allowsColumnSelection=`*(tableView: TableView, value: bool) =
+  if (tvoColumnSelection in tableView.xOptions) == value:
+    return
+  tableView.xOptions[tvoColumnSelection] = value
+  if not value:
+    tableView.xSelectedColumns.setLen(0)
+    tableView.clearPointerColumnHighlight()
+  tableView.needsDisplay = true
+
+proc `selectedColumns=`*(tableView: TableView, columns: openArray[TableColumn]) =
+  tableView.setSelectedColumns(@columns)
+
+proc updateHighlightedCellAtPoint*(tableView: TableView, point: Point): int =
+  result = tableView.rowItemIndexAtPoint(point)
+  if tvoPointerRowHighlights in tableView.xOptions:
+    tableView.highlightedIndex = result
+  else:
+    tableView.clearPointerRowHighlight()
+  if tvoPointerColumnHighlights in tableView.xOptions and result >= 0:
+    tableView.setHighlightedColumn(tableView.tableColumnAtPoint(point))
+  else:
+    tableView.setHighlightedColumn(nil)
+
+const TableSelectionIdentityPrefix = "ids:"
+
+protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
+  method shouldSelectCell(tableView: TableView, row: int, column: TableColumn): bool =
+    tableView.validCell(row, column)
+
+  method selectCell(tableView: TableView, row: int, column: TableColumn) =
+    if not tableView.shouldSelectCell(row, column):
+      return
+    let previousSelectedIndexes = tableView.xRowSelection.indexes
+    let previousSelectedColumns = tableView.xSelectedColumns
+    tableView.selectedIndex = row
+    discard tableView.setFocusedCellColumn(row, column, notifySelection = false)
+    tableView.xClickedRow = row
+    tableView.xClickedColumn = column
+    tableView.needsDisplay = true
+    if tvoColumnSelection in tableView.xOptions and
+        previousSelectedColumns != tableView.xSelectedColumns and
+        previousSelectedIndexes == tableView.xRowSelection.indexes:
+      emit tableView.selectionDidChange(DynamicAgent(tableView))
+      tableView.postAccessibilityNotification(anSelectionChanged)
+
+  method setSelectedColumns(tableView: TableView, columns: seq[TableColumn]) =
+    if tvoColumnSelection notin tableView.xOptions:
+      return
+    var next: seq[TableColumn]
+    for column in columns:
+      if not column.isNil and column.tableView() == tableView:
+        var seen = false
+        for existing in next:
+          if existing == column:
+            seen = true
+        if not seen:
+          next.add column
+    if tableView.xSelectedColumns == next:
+      return
+    tableView.xSelectedColumns = next
+    let row = tableView.selectionLeadIndex()
+    if next.len > 0 and row >= 0 and not next[0].hidden() and
+        tableView.shouldSelectCell(row, next[0]):
+      tableView.xFocusedColumn = next[0]
+    else:
+      tableView.clearFocusedColumn()
+    tableView.needsDisplay = true
+    emit tableView.selectionDidChange(DynamicAgent(tableView))
+    tableView.postAccessibilityNotification(anSelectionChanged)
+
+  method selectionPersistenceString(tableView: TableView): string =
+    let selectedIdentifiers =
+      tableView.rowIdentifiersForRows(tableView.selectedIndexes())
+    if selectedIdentifiers.len > 0:
+      return TableSelectionIdentityPrefix & joinIdentifiers(selectedIdentifiers)
+    var first = true
+    for row in tableView.selectedIndexes():
+      if not first:
+        result.add ","
+      result.add $row
+      first = false
+
+  method restoreSelectionPersistenceString(tableView: TableView, value: string) =
+    if value.startsWith(TableSelectionIdentityPrefix):
+      let payload =
+        if value.len > TableSelectionIdentityPrefix.len:
+          value[TableSelectionIdentityPrefix.len .. ^1]
+        else:
+          ""
+      let identifiers = parseIdentifiers(payload)
+      if identifiers.len == 0:
+        tableView.selectedIndexes = []
+      else:
+        tableView.applySelectionForRowIdentifiers(identifiers, "", "")
+      return
+    var rows: seq[int]
+    var token = ""
+    for ch in value:
+      if ch == ',':
+        if token.len > 0:
+          try:
+            rows.add parseInt(token)
+          except ValueError:
+            discard
+        token.setLen(0)
+      else:
+        token.add ch
+    if token.len > 0:
+      try:
+        rows.add parseInt(token)
+      except ValueError:
+        discard
+    tableView.selectedIndexes = rows
+
+protocol DefaultTableViewMouseHitPolicy of MouseHitPolicyProtocol:
+  method mouseHitPolicy(tableView: TableView, args: MouseHitPolicyArgs): CellHitPolicy =
+    if not tableView.isEnabled() or args.event.button != mbPrimary:
+      return chpDefault
+    let row = tableView.rowItemIndexAtPoint(args.event.location)
+    if row < 0:
+      return chpDefault
+    let
+      target =
+        if args.target of View:
+          View(args.target)
+        else:
+          nil
+      column = tableView.tableColumnAtPoint(args.event.location)
+    tableView.tableCellHitPolicy(row, column, target, args.event)
+
+  method applyMouseHitPolicy(tableView: TableView, args: MouseHitPolicyArgs): bool =
+    if not tableView.isEnabled() or args.event.button != mbPrimary:
+      return false
+    let
+      row = tableView.rowItemIndexAtPoint(args.event.location)
+      column = tableView.tableColumnAtPoint(args.event.location)
+    if row < 0:
+      return false
+    let owner = tableView.window()
+    if owner of Window:
+      discard Window(owner).makeFirstResponder(tableView, focusVisible = false)
+    tableView.selectCell(row, column)
+    if tvoPointerRowHighlights in tableView.xOptions:
+      tableView.highlightedIndex = row
+    else:
+      tableView.clearPointerRowHighlight()
+    if tvoPointerColumnHighlights in tableView.xOptions:
+      tableView.setHighlightedColumn(column)
+    else:
+      tableView.clearPointerColumnHighlight()
+    tableView.xPressedIndex = row
+    tableView.invalidateTableRows()
+    true
+
 proc installTableCellEditingProtocols*(tableView: TableView) =
   discard tableView.withProtocol(DefaultTableViewEditingBehavior)
   discard tableView.withProtocol(DefaultTableViewFieldEditorClient)
+  discard tableView.withProtocol(DefaultTableCellLayout)
+
+proc installTableCellSelectionProtocol*(tableView: TableView) =
+  discard tableView.withProtocol(DefaultTableViewSelectionBehavior)
+
+proc installTableMouseHitPolicy*(tableView: TableView) =
+  discard tableView.withProtocol(DefaultTableViewMouseHitPolicy)
