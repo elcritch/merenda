@@ -9,7 +9,7 @@ import ../foundation/selectors
 import ../foundation/types
 import ../foundation/undomanagers
 import ../view/views
-import ./scrollviews
+import ../containers/scrollviews
 import ./tablecore
 import ./private/tablecoordination
 

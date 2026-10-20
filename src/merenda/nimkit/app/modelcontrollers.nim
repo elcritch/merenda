@@ -7,7 +7,7 @@ import ../containers/cascadingviews
 import ../containers/collectionviews
 import ../containers/documenttabs
 import ../containers/outlineviews
-import ../containers/tableviews
+import ../tables/tableviews
 import ../controls/comboboxes
 import ../controls/controls
 import ../controls/matrices

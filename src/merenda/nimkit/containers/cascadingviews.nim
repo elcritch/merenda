@@ -16,7 +16,7 @@ import ../themes
 import ../view/views
 import ./listbasics
 import ./scrollviews
-import ./tableviews
+import ../tables/tableviews
 
 export controls, scrollviews, tableviews
 

@@ -343,8 +343,10 @@ native window, while application tests still cover native pumping.
 - `stackviews.nim`, `formviews.nim`, `gridviews.nim`: native layout
   containers.
 - `cells.nim`, `controls.nim`, `buttons.nim`, `textfields.nim`,
-  `comboboxes.nim`, `tableviews.nim`: controls, cells, popups, and table
-  widgets.
+  `comboboxes.nim`: controls, cells, and popups.
+- `tables/`: table value types, model adapters, selection, cells, presentation,
+  persistence, input, and dragging. `tables/tableviews.nim` constructs the widget
+  and exports its public APIs.
 - `theme.nim`: style keys, tokens, rules, appearances, resolved styles,
   insets, shadows, metrics, and default themes.
 - `rendering.nim`: generic render traversal and render-tree construction.

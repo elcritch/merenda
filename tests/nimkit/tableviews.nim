@@ -5,8 +5,8 @@ import ./fixtures/rendergeometry
 import sigils/core
 
 import merenda/nimkit
-import merenda/nimkit/containers/tablebasics as tableBasics
-import merenda/nimkit/containers/tableviews as tableViewsApi
+import merenda/nimkit/tables/tablebasics as tableBasics
+import merenda/nimkit/tables/tableviews as tableViewsApi
 import merenda/nimkit/foundation/types as nimkitTypes
 
 func hasDrawableOp(node: Fig, kind: DrawableKind): bool =

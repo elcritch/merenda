@@ -3,7 +3,7 @@
 ## Add `-d:nimAllocStats` to collect allocation counts in a separate run.
 import std/[monotimes, times, options]
 import merenda/nimkit/app/modelcontrollers
-import merenda/nimkit/containers/tableviews
+import merenda/nimkit/tables/tableviews
 
 var checksum: int
 

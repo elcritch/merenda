@@ -6,7 +6,8 @@ import sigils/[core, selectors]
 
 import ../nimkit/accessibility/accessibility
 import ../nimkit/app/[application, documents, panels, windowcontrollers, windows]
-import ../nimkit/containers/[gridviews, outlineviews, scrollviews, tableviews]
+import ../nimkit/containers/[gridviews, outlineviews, scrollviews]
+import ../nimkit/tables/tableviews
 import ../nimkit/controls/[buttons, colorpicker, comboboxes]
 import ../nimkit/debug/selectionrings
 import ../nimkit/foundation/atomicfiles
@@ -1045,21 +1046,20 @@ proc rebuildPreview(editor: ResourceEditor) =
           current.deactivate()
           current.setLen(0)
         if current.len == 0:
-          current =
-            @[
-              view[atLeft].equalTo(
-                editor.xPreviewSurface[atLeft],
-                constant = frame.x,
-                priority = LayoutPriority(999),
-              ),
-              view[atTop].equalTo(
-                editor.xPreviewSurface[atTop],
-                constant = frame.y,
-                priority = LayoutPriority(999),
-              ),
-              view[atWidth].equalTo(frame.w, priority = LayoutPriority(999)),
-              view[atHeight].equalTo(frame.h, priority = LayoutPriority(999)),
-            ]
+          current = @[
+            view[atLeft].equalTo(
+              editor.xPreviewSurface[atLeft],
+              constant = frame.x,
+              priority = LayoutPriority(999),
+            ),
+            view[atTop].equalTo(
+              editor.xPreviewSurface[atTop],
+              constant = frame.y,
+              priority = LayoutPriority(999),
+            ),
+            view[atWidth].equalTo(frame.w, priority = LayoutPriority(999)),
+            view[atHeight].equalTo(frame.h, priority = LayoutPriority(999)),
+          ]
           current.activate()
         else:
           current[0].constant = frame.x

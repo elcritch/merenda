@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Move NimKit table modules into `nimkit/tables/`. Direct module imports now use
+  `nimkit/tables/tableviews` and `nimkit/tables/tablebasics`; `merenda/nimkit`
+  continues to export the public table APIs.
+
 - Route development control through Sigils JSON-RPC selectors and dispatcher over
   the private Unix socket. Keep asynchronous captures behind bounded result handles
   and allow modal callbacks or shutdown to reenter polling safely.

@@ -8,7 +8,7 @@ import ../controls/controls
 import ../foundation/selectors
 import ../foundation/types
 import ../view/views
-import ./scrollviews
+import ../containers/scrollviews
 import ./tablecore
 import ./tablepresentation
 import ./tableselection
