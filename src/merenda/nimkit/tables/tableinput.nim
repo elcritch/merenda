@@ -84,21 +84,26 @@ proc defaultTableViewKeyDown*(tableView: TableView, event: KeyEvent): bool =
       tableView.handleTypeSelect(event) or event.text.len > 0
 
 protocol DefaultTableViewEvents of ResponderEventProtocol:
+  ## Routes pointer and keyboard events to table interaction handlers.
   method updateTrackingAreas(tableView: TableView, event: MouseEvent): bool =
+    ## Refreshes header tracking regions.
     discard event
     tableView.syncHeaderTrackingAreas()
     true
 
   method cursorUpdate(tableView: TableView, event: MouseEvent): bool =
+    ## Reports whether the pointer is over a resize handle.
     tableView.tableHeaderHitTest(event.location).part in
       {thpResizeHandle, thpRowHeaderResizeHandle, thpRowHeaderRowResizeHandle}
 
   method mouseDown(tableView: TableView, event: MouseEvent): bool =
+    ## Routes a press to header tracking or cell selection.
     if tableView.headerMouseDown(event):
       return true
     tableView.defaultTableViewMouseDown(event)
 
   method mouseDragged(tableView: TableView, event: MouseEvent): bool =
+    ## Advances header tracking, row dragging, or selection dragging.
     if tableView.xHeaderTracking.isActive():
       return tableView.headerMouseDragged(event)
     if tableView.updateActiveTableDrag(event):
@@ -106,6 +111,7 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
     tableView.defaultTableViewMouseDragged(event)
 
   method mouseUp(tableView: TableView, event: MouseEvent): bool =
+    ## Completes tracking and starts cell editing on a double click.
     if tableView.xHeaderTracking.isActive():
       return tableView.headerMouseUp(event)
     if tableView.performActiveTableDrag(event):
@@ -120,6 +126,7 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
     handled
 
   method mouseMoved(tableView: TableView, event: MouseEvent): bool =
+    ## Updates header feedback or cell hover highlights.
     if tableView.headerMouseMoved(event):
       tableView.clearPointerRowHighlight()
       tableView.setHighlightedColumn(nil)
@@ -130,6 +137,7 @@ protocol DefaultTableViewEvents of ResponderEventProtocol:
     false
 
   method keyDown(tableView: TableView, event: KeyEvent): bool =
+    ## Starts editing on Enter or handles table keyboard navigation.
     tableView.clearPointerHighlights()
     if event.key == keyEnter and tableView.beginEditingFocusedCell():
       return true

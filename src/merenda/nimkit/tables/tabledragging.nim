@@ -163,12 +163,14 @@ proc performActiveTableDrag*(tableView: TableView, event: MouseEvent): bool =
 let tableColumnDragSelector = beginDraggingColumns()
 
 protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
+  ## Builds table drag payloads and coordinates drop validation and reordering.
   method beginDraggingRows(
       tableView: TableView,
       rows: seq[int],
       operations: DragOperations,
       pasteboardName: string,
   ): DraggingSession =
+    ## Starts a drag carrying row indexes and available stable identities.
     var validRows: seq[int]
     for row in rows:
       if row in 0 ..< tableView.rowCount():
@@ -195,7 +197,7 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
       columns: seq[TableColumn],
       operations: DragOperations,
       pasteboardName: string,
-  ): DraggingSession =
+  ): DraggingSession = ## Starts a drag carrying the selected column identifiers.
     var identifiers: seq[string]
     for column in columns:
       if not column.isNil and column.tableView() == tableView:
@@ -216,10 +218,11 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
 
   method reorderTableRows(
       tableView: TableView, rows: seq[int], target: DraggingDropTarget
-  ): bool =
+  ): bool = ## Moves the requested rows to a validated drop target.
     tableView.defaultReorderRows(rows, target)
 
   method validateDragging(tableView: TableView, info: DraggingInfo): DragOperations =
+    ## Combines delegate drop validation with row-reorder constraints.
     let
       isRowReorder = tableView.isTableRowReorderDrag(info)
       rowReorderOperation =
@@ -259,6 +262,7 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
     info.selectedOperations
 
   method acceptDragging(tableView: TableView, info: DraggingInfo): bool =
+    ## Performs a permitted row reorder or delegates an incoming drop.
     let operation = tableView.validateDragging(info)
     if operation == NoDragOperations:
       return false
@@ -287,38 +291,48 @@ protocol DefaultTableViewDraggingBehavior of TableViewDraggingProtocol:
     true
 
 protocol DefaultTableViewDraggingSource of DraggingSourceProtocol:
+  ## Reports source operations and clears completed table drag sessions.
   method draggingSourceOperationMask(
       tableView: TableView, info: DraggingInfo
-  ): DragOperations =
+  ): DragOperations = ## Returns the operations allowed by the source drag session.
     info.allowedOperations
 
   method draggingSessionEnded(tableView: TableView, info: DraggingInfo) =
+    ## Clears the completed source session and drop indicator.
     if tableView.xDragging.session == info.session:
       tableView.xDragging.session = nil
       tableView.updateTableDropTarget(initDraggingDropTarget())
 
 protocol DefaultTableViewDraggingDestination of DraggingDestinationProtocol:
+  ## Maintains drop feedback and dispatches drops and autoscrolling.
   method draggingEntered(tableView: TableView, info: DraggingInfo): DragOperations =
+    ## Shows the drop target and returns permitted operations.
     tableView.updateTableDropTarget(info.dropTarget)
     tableView.validateDragging(info)
 
   method draggingUpdated(tableView: TableView, info: DraggingInfo): DragOperations =
+    ## Refreshes the drop target and permitted operations.
     tableView.updateTableDropTarget(info.dropTarget)
     tableView.validateDragging(info)
 
   method draggingExited(tableView: TableView, info: DraggingInfo) =
+    ## Clears the drop indicator when a drag leaves the table.
     tableView.updateTableDropTarget(initDraggingDropTarget())
 
   method prepareForDragOperation(tableView: TableView, info: DraggingInfo): bool =
+    ## Checks that the incoming drop has a permitted operation.
     tableView.validateDragging(info) != NoDragOperations
 
   method performDragOperation(tableView: TableView, info: DraggingInfo): bool =
+    ## Dispatches the validated drop to the table drop handler.
     tableView.acceptDragging(info)
 
   method concludeDragOperation(tableView: TableView, info: DraggingInfo) =
+    ## Clears drop feedback after the operation completes.
     tableView.updateTableDropTarget(initDraggingDropTarget())
 
   method autoscrollDraggingSession(tableView: TableView, info: DraggingInfo): bool =
+    ## Scrolls the table when dragging near viewport edges.
     tableView.autoscrollDraggingInfo(info)
 
 proc installTableDraggingProtocols*(tableView: TableView) =

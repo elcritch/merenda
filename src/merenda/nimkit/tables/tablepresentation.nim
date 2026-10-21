@@ -1283,17 +1283,22 @@ proc naturalSize(tableView: TableView): Size =
   )
 
 protocol DefaultTableRowViewDrawing of ViewDrawingProtocol:
+  ## Draws a row through the delegate or the standard renderer.
   method drawsStyledBackground(view: View): bool =
+    ## Declares that this view supplies its own styled background.
     true
 
   method draw(rowView: TableRowView, context: DrawContext) =
+    ## Draws the row through the delegate or standard row renderer.
     let tableView = rowView.xTableView
     let rect = rowView.bounds()
     if not tableView.drawCustomTableRow(context, rect, rowView.xRow):
       tableView.drawTableRow(context, rect, rowView.xRow)
 
 protocol DefaultTableRowViewLayout of ViewLayoutProtocol:
+  ## Keeps hosted cell frames aligned with their row.
   method layoutSubviews(rowView: TableRowView) =
+    ## Restores the frames of hosted cells belonging to this row.
     # A sibling's intrinsic-size change can solve cached control geometry without
     # laying out the table. Restore this row's hosted frames in the same pass.
     for slot in rowView.xTableView.xCellSlots:
@@ -1301,20 +1306,27 @@ protocol DefaultTableRowViewLayout of ViewLayoutProtocol:
         rowView.layoutHostedCell(slot.column, slot.view)
 
 protocol DefaultTableRowViewHitTesting of ViewProtocol:
+  ## Leaves row input handling to the owning table.
   method pointInside(rowView: TableRowView, point: Point): bool =
+    ## Declines row hits so the owning table handles input.
     false
 
 protocol DefaultTableRowViewAccessibility of AccessibilityProtocol:
+  ## Exposes row text, index, and selection state to accessibility.
   method accessibilityRole(rowView: TableRowView): AccessibilityRole =
+    ## Exposes the row as a list item.
     arListItem
 
   method accessibilityLabel(rowView: TableRowView): string =
+    ## Uses the row display text as its accessible label.
     rowView.xRow.text
 
   method accessibilityValue(rowView: TableRowView): string =
+    ## Exposes the row index as its accessible value.
     $rowView.xRow.index
 
   method accessibilityTraits(rowView: TableRowView): AccessibilityTraits =
+    ## Reports row selection, focus, and availability traits.
     if ssDisabled in rowView.xRow.states:
       result.incl atDisabled
     if ssFocused in rowView.xRow.states:
@@ -1325,26 +1337,35 @@ protocol DefaultTableRowViewAccessibility of AccessibilityProtocol:
       result.incl atSelectable
 
   method isAccessibilityElement(rowView: TableRowView): bool =
+    ## Exposes only rows with a valid index.
     rowView.xRow.index >= 0
 
 protocol DefaultTableContentViewDrawing of ViewDrawingProtocol:
+  ## Synchronizes visible row views and hosted cell views.
   method drawsStyledBackground(view: View): bool =
+    ## Declares that this view supplies its own styled background.
     true
 
   method draw(contentView: TableContentView, context: DrawContext) =
+    ## Synchronizes row and hosted-cell views with the visible content.
     discard context.visibleRect()
     contentView.syncVisibleRowViews()
     contentView.tableView().syncVisibleTableCells()
 
 protocol DefaultTableContentViewHitTesting of ViewProtocol:
+  ## Limits content hit testing to the content bounds.
   method pointInside(contentView: TableContentView, point: Point): bool =
+    ## Accepts points inside the content bounds.
     contentView.bounds().contains(point)
 
 protocol DefaultTableViewLayout of ViewLayoutProtocol:
+  ## Owns layout of the scroll view, rows, cells, and editor.
   method layoutStyleContext(tableView: TableView): StyleContext =
+    ## Returns the style context used for table layout.
     tableView.tableStyleContext()
 
   method managesSubviewLayout(tableView: TableView, child: DynamicAgent): bool =
+    ## Reports whether table layout owns the child geometry.
     if child == tableView.xScrollView or child == tableView.xContentView:
       return true
     let editor = Control(tableView).currentEditor()
@@ -1358,9 +1379,11 @@ protocol DefaultTableViewLayout of ViewLayoutProtocol:
         return true
 
   method layoutIntrinsicContentSize(tableView: TableView): IntrinsicSize =
+    ## Returns the natural table size for layout measurement.
     initIntrinsicSize(tableView.naturalSize())
 
   method layoutSubviews(tableView: TableView) =
+    ## Lays out table content, scroll geometry, and the active editor.
     tableView.layoutTableContent()
 
 proc initTableRowView(tableView: TableView): TableRowView =
@@ -1733,10 +1756,13 @@ proc drawTableHeader*(tableView: TableView, context: DrawContext) =
   tableView.drawTableHeader(context, tableView.tableHeaderChrome(context))
 
 protocol DefaultTableViewDrawing of ViewDrawingProtocol:
+  ## Draws table chrome, headers, and the keyboard focus ring.
   method drawsStyledBackground(view: View): bool =
+    ## Declares that this view supplies its own styled background.
     true
 
   method draw(tableView: TableView, context: DrawContext) =
+    ## Draws the table background, headers, and visible focus ring.
     if context.isNil or tableView.bounds().isEmpty:
       return
     let
@@ -1790,13 +1816,17 @@ protocol DefaultTableViewDrawing of ViewDrawingProtocol:
         )
 
 protocol DefaultTableViewAccessibility of AccessibilityProtocol:
+  ## Exposes the table role, row count, and interaction state.
   method accessibilityRole(tableView: TableView): AccessibilityRole =
+    ## Exposes the view as a table.
     arTable
 
   method accessibilityValue(tableView: TableView): string =
+    ## Exposes the row count as the table value.
     $tableView.rowCount()
 
   method accessibilityTraits(tableView: TableView): AccessibilityTraits =
+    ## Reports table selection, focus, and availability traits.
     result = tableView.xAccessibilityTraits + {atSelectable}
     if ssDisabled in tableView.xWidgetStates:
       result.incl atDisabled
@@ -1804,6 +1834,7 @@ protocol DefaultTableViewAccessibility of AccessibilityProtocol:
       result.incl atFocused
 
   method isAccessibilityElement(tableView: TableView): bool =
+    ## Exposes the table as an accessibility element.
     true
 
 proc tableViewportGeometryChanged*(tableView: TableView) {.slot.} =
@@ -1812,7 +1843,9 @@ proc tableViewportGeometryChanged*(tableView: TableView) {.slot.} =
   tableView.needsDisplay = true
 
 protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
+  ## Implements header hit testing, resizing, reordering, and sorting.
   method columnAtPoint(tableView: TableView, point: Point): TableColumn =
+    ## Returns the visible column at a horizontal content position.
     var x = 0.0'f32
     for column in tableView.columns:
       if not column.hidden():
@@ -1822,6 +1855,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
         x = nextX
 
   method headerHitTest(tableView: TableView, point: Point): TableHeaderHit =
+    ## Identifies a header or resize handle at the pointer location.
     result = TableHeaderHit(columnIndex: -1, row: -1, part: thpNone)
     let resizeHandleWidth = tableView.tableStyle().headerResizeHandleWidth
     let rowHeaderRect = tableView.tableRowHeaderCornerRect()
@@ -1871,6 +1905,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
         return
 
   method resizeColumn(tableView: TableView, column: TableColumn, width: float32) =
+    ## Applies a user resize and refreshes dependent layout.
     if column.isNil or column.tableView() != tableView:
       return
     if column.resizePolicy() == tcrFixed:
@@ -1885,6 +1920,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     tableView.needsDisplay = true
 
   method moveColumn(tableView: TableView, fromIndex, toIndex: int) =
+    ## Moves a column within the table order.
     if fromIndex notin 0 ..< tableView.xColumns.len:
       return
     let boundedTo = max(0, min(toIndex, tableView.xColumns.len - 1))
@@ -1904,7 +1940,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
 
   method requestSort(
       tableView: TableView, column: TableColumn, direction: TableSortDirection
-  ) =
+  ) = ## Updates column sorting and preserves selection by row identity.
     if column.isNil or column.tableView() != tableView:
       return
     let
@@ -1927,6 +1963,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     )
 
   method headerMouseDown(tableView: TableView, event: MouseEvent): bool =
+    ## Starts header tracking for resizing, sorting, or reordering.
     if event.button != mbPrimary:
       return false
     let hit = tableView.tableHeaderHitTest(event.location)
@@ -1959,6 +1996,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     true
 
   method headerMouseDragged(tableView: TableView, event: MouseEvent): bool =
+    ## Updates the active header resize or reorder gesture.
     if not tableView.xHeaderTracking.isActive():
       return false
     let
@@ -1998,6 +2036,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     true
 
   method headerMouseUp(tableView: TableView, event: MouseEvent): bool =
+    ## Completes the active header gesture.
     if not tableView.xHeaderTracking.isActive():
       return false
     let
@@ -2038,6 +2077,7 @@ protocol DefaultTableViewColumnBehavior of TableViewColumnProtocol:
     true
 
   method headerMouseMoved(tableView: TableView, event: MouseEvent): bool =
+    ## Updates pointer feedback over headers and resize handles.
     let column = tableView.tableHeaderHitTest(event.location).column
     if tableView.xHoveredColumn == column:
       return column != nil

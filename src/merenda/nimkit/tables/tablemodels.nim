@@ -27,19 +27,21 @@ proc newTableModel*(
   result.initTableModelFields(rows, columns)
 
 protocol TableModelTableDataSource of TableViewDataSource:
+  ## Adapts arranged model rows and values to table data queries.
   method numberOfRows(model: TableModel, tableView: TableView): int =
+    ## Returns the number of available rows.
     discard tableView
     model.len()
 
   method objectValueForCell(
       model: TableModel, tableView: TableView, row: int, column: TableColumn
-  ): ObjectValue =
+  ): ObjectValue = ## Returns the typed value for the requested cell.
     discard tableView
     model.objectValueForTableModelCell(row, column)
 
   method textForCell(
       model: TableModel, tableView: TableView, row: int, column: TableColumn
-  ): string =
+  ): string = ## Returns display text for the requested cell.
     let value = model.objectValueForTableModelCell(row, column)
     Control(tableView).formatObjectValue(value, ovrTableCell)
 
@@ -49,22 +51,25 @@ protocol TableModelTableDataSource of TableViewDataSource:
       row: int,
       column: TableColumn,
       value: ObjectValue,
-  ): bool =
+  ): bool = ## Stores a typed cell value and reports whether it was accepted.
     discard tableView
     model.setObjectValueForTableModelCell(row, column, value)
 
   method identifierForRow(model: TableModel, tableView: TableView, row: int): string =
+    ## Returns a stable identity for the row.
     discard tableView
     model.rowAt(row).identifier
 
   method rowForIdentifier(
       model: TableModel, tableView: TableView, identifier: string
-  ): int =
+  ): int = ## Resolves a stable row identity, or returns -1 when absent.
     discard tableView
     model.indexOfIdentifier(identifier)
 
 protocol TableModelTableDelegate of TableViewDelegate:
+  ## Uses model metadata for row availability, parsing, and sorting.
   method isRowEnabled(model: TableModel, tableView: TableView, row: int): bool =
+    ## Reports whether a row permits interaction.
     discard tableView
     model.rowAt(row).enabled
 
@@ -74,7 +79,7 @@ protocol TableModelTableDelegate of TableViewDelegate:
       row: int,
       column: TableColumn,
       value: string,
-  ): ObjectParseResult =
+  ): ObjectParseResult = ## Parses editor text into a typed cell value.
     model.parseTableModelCellValue(tableView, row, column, value)
 
   method sortDescriptorsDidChange(
@@ -82,7 +87,7 @@ protocol TableModelTableDelegate of TableViewDelegate:
       tableView: TableView,
       column: TableColumn,
       direction: TableSortDirection,
-  ) =
+  ) = ## Updates model sorting and reloads the table.
     if direction == tsdNone:
       model.sortDescriptors = []
     else:

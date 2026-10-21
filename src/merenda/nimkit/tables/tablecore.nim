@@ -171,40 +171,56 @@ type
     xUserInfo*: DynamicAgent
 
 protocol TableViewDataSource {.selectorScope: protocol.}:
+  ## Supplies row counts, cell values, and stable row identities.
   method numberOfRows*(tableView: TableView): int {.optional.}
+    ## Returns the number of available rows.
+
   method textForCell*(
     tableView: TableView, row: int, column: TableColumn
-  ): string {.optional.}
+  ): string {.optional.} ## Returns display text for the requested cell.
 
   method textForRowHeader*(tableView: TableView, row: int): string {.optional.}
+    ## Returns display text for a row header.
 
   method normalizedSearchTextForRow*(
     tableView: TableView, row: int
-  ): string {.optional.}
+  ): string {.optional.} ## Returns normalized row text for keyboard type selection.
 
   method objectValueForCell*(
     tableView: TableView, row: int, column: TableColumn
-  ): ObjectValue {.optional.}
+  ): ObjectValue {.optional.} ## Returns the typed value for the requested cell.
 
   method setObjectValueForCell*(
     tableView: TableView, row: int, column: TableColumn, value: ObjectValue
-  ): bool {.optional.}
+  ): bool {.optional.} ## Stores a typed cell value and reports whether it was accepted.
 
   method identifierForRow*(tableView: TableView, row: int): string {.optional.}
+    ## Returns a stable identity for the row.
+
   method rowForIdentifier*(tableView: TableView, identifier: string): int {.optional.}
+    ## Resolves a stable row identity, or returns -1 when absent.
+
   method tableIntrinsicContentWidth*(tableView: TableView): float32 {.optional.}
+    ## Returns the preferred content width supplied by the data source.
 
 protocol TableViewEvents:
+  ## Publishes selection, activation, editing, and row-update notifications.
   proc selectionIsChanging*(tableView: TableView, sender: DynamicAgent) {.signal.}
+    ## Notifies observers before the selection changes.
+
   proc selectionDidChange*(tableView: TableView, sender: DynamicAgent) {.signal.}
+    ## Notifies observers after the selection changes.
+
   proc rowWasActivated*(tableView: TableView, sender: DynamicAgent) {.signal.}
+    ## Notifies observers when the clicked row is activated.
+
   proc cellEditDidCommit*(
     tableView: TableView,
     sender: DynamicAgent,
     row: int,
     column: TableColumn,
     value: string,
-  ) {.signal.}
+  ) {.signal.} ## Notifies observers of a committed cell text value.
 
   proc cellObjectValueDidCommit*(
     tableView: TableView,
@@ -212,77 +228,90 @@ protocol TableViewEvents:
     row: int,
     column: TableColumn,
     value: ObjectValue,
-  ) {.signal.}
+  ) {.signal.} ## Notifies observers of a committed typed cell value.
 
   proc tableRowsDidUpdate*(
     tableView: TableView, sender: DynamicAgent, updates: seq[TableRowUpdate]
-  ) {.signal.}
+  ) {.signal.} ## Notifies observers of applied row changes.
 
 protocol TableViewDelegate {.selectorScope: protocol.}:
+  ## Customizes cell presentation, interaction, editing, and drops.
   method viewForCell*(
     tableView: TableView, row: int, column: TableColumn
   ): View {.optional.}
+    ## Provides a hosted view for a cell instead of standard cell drawing.
 
   method tableRowHeight*(tableView: TableView, row: int): float32 {.optional.}
+    ## Returns the preferred height for a row.
+
   method isRowEnabled*(tableView: TableView, row: int): bool {.optional.}
+    ## Reports whether a row permits interaction.
+
   method shouldSelectTableRow*(tableView: TableView, row: int): bool {.optional.}
+    ## Reports whether a row may be selected.
+
   method didSelectTableRow*(tableView: TableView, row: int) {.optional.}
+    ## Handles selection of a row.
+
   method shouldTrackCell*(
     tableView: TableView, row: int, column: TableColumn, target: View
-  ): bool {.optional.}
+  ): bool {.optional.} ## Reports whether a hosted cell view may track pointer input.
 
   method hitPolicyForCell*(
     tableView: TableView, row: int, column: TableColumn, target: View, event: MouseEvent
-  ): CellHitPolicy {.optional.}
+  ): CellHitPolicy {.optional.} ## Chooses how cell input is shared with row selection.
 
   method didActivateRow*(tableView: TableView, row: int) {.optional.}
+    ## Handles activation of a row.
+
   method sortDescriptorsDidChange*(
     tableView: TableView, column: TableColumn, direction: TableSortDirection
-  ) {.optional.}
+  ) {.optional.} ## Applies the requested column sort direction.
 
   method shouldEditCell*(
     tableView: TableView, row: int, column: TableColumn
-  ): bool {.optional.}
+  ): bool {.optional.} ## Reports whether editing is allowed for a cell.
 
   method didBeginEditingCell*(
     tableView: TableView, row: int, column: TableColumn
-  ) {.optional.}
+  ) {.optional.} ## Handles the start of cell editing.
 
   method fieldEditorFrameForCell*(
     tableView: TableView, row: int, column: TableColumn, proposedFrame: Rect
-  ): Rect {.optional.}
+  ): Rect {.optional.} ## Adjusts the proposed editor frame for a cell.
 
   method validationErrorForCell*(
     tableView: TableView, row: int, column: TableColumn, value: string
   ): string {.optional.}
+    ## Returns an error message for cell text, or an empty string if valid.
 
   method parseObjectValueForCell*(
     tableView: TableView, row: int, column: TableColumn, value: string
-  ): ObjectParseResult {.optional.}
+  ): ObjectParseResult {.optional.} ## Parses editor text into a typed cell value.
 
   method validationErrorForObjectValue*(
     tableView: TableView, row: int, column: TableColumn, value: ObjectValue
-  ): ObjectValidationError {.optional.}
+  ): ObjectValidationError {.optional.} ## Validates a typed cell value before writeback.
 
   method didCommitEditingCell*(
     tableView: TableView, row: int, column: TableColumn, value: string
-  ) {.optional.}
+  ) {.optional.} ## Handles committed cell text.
 
   method didCommitEditingObjectValue*(
     tableView: TableView, row: int, column: TableColumn, value: ObjectValue
-  ) {.optional.}
+  ) {.optional.} ## Handles a committed typed cell value.
 
   method didCancelEditingCell*(
     tableView: TableView, row: int, column: TableColumn
-  ) {.optional.}
+  ) {.optional.} ## Handles cancellation of cell editing.
 
   method validateDragOperation*(
     tableView: TableView, info: DraggingInfo
-  ): DragOperations {.optional.}
+  ): DragOperations {.optional.} ## Returns the allowed operations for an incoming drag.
 
   method acceptDragOperation*(
     tableView: TableView, info: DraggingInfo
-  ): bool {.optional.}
+  ): bool {.optional.} ## Accepts an incoming drag and reports success.
 
   method validateDropOperation*(
     tableView: TableView,
@@ -291,6 +320,7 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
     target: DraggingDropTarget,
     position: DraggingDropPosition,
   ): DragOperations {.optional.}
+    ## Returns allowed operations for the proposed drop target and position.
 
   method acceptDropOperation*(
     tableView: TableView,
@@ -298,73 +328,126 @@ protocol TableViewDelegate {.selectorScope: protocol.}:
     operation: DragOperations,
     target: DraggingDropTarget,
     position: DraggingDropPosition,
-  ): bool {.optional.}
+  ): bool {.optional.} ## Performs a validated drop at the proposed target and position.
 
   method tableDropTargetForLocation*(
     tableView: TableView, location: Point, proposedTarget: DraggingDropTarget
   ): DraggingDropTarget {.optional.}
+    ## Adjusts the proposed drop target for a pointer location.
 
   method shouldReorderRows*(
     tableView: TableView, rows: seq[int], target: DraggingDropTarget
-  ): bool {.optional.}
+  ): bool {.optional.} ## Reports whether the rows may move to the proposed target.
 
   method performRowReorder*(
     tableView: TableView, rows: seq[int], target: DraggingDropTarget
-  ): bool {.optional.}
+  ): bool {.optional.} ## Moves the rows to the proposed target and reports success.
 
   method drawRow*(
     tableView: TableView, context: DrawContext, rect: Rect, row: RowState
-  ) {.optional.}
+  ) {.optional.} ## Draws a row using its current visual state.
 
 protocol TableViewEditingProtocol:
+  ## Controls the lifecycle of an editable table cell.
   method shouldBeginEditingCell*(row: int, column: TableColumn): bool
+    ## Checks that the cell is valid and editing is permitted.
+
   method beginEditingCell*(row: int, column: TableColumn): bool
+    ## Selects a cell and starts editing when permitted.
+
   method commitEditingCell*(value: string = ""): bool
-  method cancelEditingCell*(): bool
+    ## Attempts to commit the active cell edit and reports success.
+
+  method cancelEditingCell*(): bool ## Cancels the active cell edit and reports success.
 
 protocol TableViewColumnProtocol:
+  ## Coordinates column geometry, sorting, and header interaction.
   method columnAtPoint*(point: Point): TableColumn
+    ## Returns the visible column at a horizontal content position.
+
   method headerHitTest*(point: Point): TableHeaderHit
+    ## Identifies a header or resize handle at the pointer location.
+
   method resizeColumn*(column: TableColumn, width: float32)
-  method moveColumn*(fromIndex, toIndex: int)
+    ## Applies a user resize and refreshes dependent layout.
+
+  method moveColumn*(fromIndex, toIndex: int) ## Moves a column within the table order.
   method requestSort*(column: TableColumn, direction: TableSortDirection)
+    ## Updates column sorting and preserves selection by row identity.
+
   method headerMouseDown*(event: MouseEvent): bool
+    ## Starts header tracking for resizing, sorting, or reordering.
+
   method headerMouseDragged*(event: MouseEvent): bool
-  method headerMouseUp*(event: MouseEvent): bool
+    ## Updates the active header resize or reorder gesture.
+
+  method headerMouseUp*(event: MouseEvent): bool ## Completes the active header gesture.
   method headerMouseMoved*(event: MouseEvent): bool
+    ## Updates pointer feedback over headers and resize handles.
 
 protocol TableViewSelectionProtocol:
+  ## Controls cell and column selection and its persistence.
   method shouldSelectCell*(row: int, column: TableColumn): bool
+    ## Reports whether the requested cell can be selected.
+
   method selectCell*(row: int, column: TableColumn)
+    ## Selects a cell and updates row, column, and keyboard focus state.
+
   method setSelectedColumns*(columns: seq[TableColumn])
+    ## Applies column selection when enabled and notifies observers.
+
   method selectionPersistenceString*(): string
+    ## Encodes selected rows using stable identities or row indexes.
+
   method restoreSelectionPersistenceString*(value: string)
+    ## Restores row selection from encoded identities or indexes.
 
 protocol TableViewDraggingProtocol:
+  ## Starts table drags and validates or accepts incoming drops.
   method beginDraggingRows*(
     rows: seq[int], operations: DragOperations, pasteboardName: string
   ): DraggingSession
+    ## Starts a drag carrying row indexes and available stable identities.
 
   method beginDraggingColumns*(
     columns: seq[TableColumn], operations: DragOperations, pasteboardName: string
-  ): DraggingSession
+  ): DraggingSession ## Starts a drag carrying the selected column identifiers.
 
   method validateDragging*(info: DraggingInfo): DragOperations
+    ## Combines delegate drop validation with row-reorder constraints.
+
   method acceptDragging*(info: DraggingInfo): bool
+    ## Performs a permitted row reorder or delegates an incoming drop.
+
   method reorderTableRows*(rows: seq[int], target: DraggingDropTarget): bool
+    ## Moves the requested rows to a validated drop target.
 
 protocol TableViewPersistenceProtocol:
+  ## Captures and restores column configuration by identifier.
   method columnAutosaveRecords*(): seq[TableColumnAutosaveRecord]
+    ## Captures column order, widths, visibility, and sort directions.
+
   method restoreColumnAutosaveRecords*(records: seq[TableColumnAutosaveRecord])
+    ## Restores known columns by identity and retains unlisted columns.
 
 protocol TableViewStateProtocol:
+  ## Captures and restores column configuration and selection.
   method captureState*(): TableViewState
+    ## Captures column configuration and selected row and column identities.
+
   method restoreState*(state: TableViewState)
+    ## Restores column configuration and selection from a snapshot.
 
 protocol TableViewStateStorageProtocol:
+  ## Stores named table snapshots independently of the view.
   method saveTableViewState*(name: string, state: TableViewState) {.optional.}
+    ## Stores a table snapshot under its autosave name.
+
   method loadTableViewState*(name: string): TableViewState {.optional.}
+    ## Loads a named snapshot, returning empty state when absent.
+
   method hasTableViewState*(name: string): bool {.optional.}
+    ## Reports whether a named snapshot exists.
 
 proc len*(model: TableModel): int
 proc rows*(model: TableModel): seq[TableRowValue]

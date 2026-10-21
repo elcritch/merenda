@@ -210,19 +210,22 @@ proc restoreStateIfNeeded*(tableView: TableView) =
   tableView.xHasRestoredState = true
 
 protocol TableViewStateStoreBehavior of TableViewStateStorageProtocol:
+  ## Keeps named table snapshots in an in-memory store.
   method saveTableViewState(
       store: TableViewStateStore, name: string, state: TableViewState
-  ) =
+  ) = ## Stores a table snapshot under its autosave name.
     if name.len == 0:
       return
     store.xStates[name] = state
 
   method loadTableViewState(store: TableViewStateStore, name: string): TableViewState =
+    ## Loads a named snapshot, returning empty state when absent.
     if name.len == 0:
       return initTableViewState()
     store.xStates.getOrDefault(name, initTableViewState())
 
   method hasTableViewState(store: TableViewStateStore, name: string): bool =
+    ## Reports whether a named snapshot exists.
     name in store.xStates
 
 proc newTableViewStateStore*(): TableViewStateStore =
@@ -237,7 +240,9 @@ proc state*(store: TableViewStateStore, name: string): TableViewState =
   store.xStates.getOrDefault(name, initTableViewState())
 
 protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
+  ## Restores column order, width, visibility, and sorting by identifier.
   method columnAutosaveRecords(tableView: TableView): seq[TableColumnAutosaveRecord] =
+    ## Captures column order, widths, visibility, and sort directions.
     for column in tableView.xColumns:
       result.add TableColumnAutosaveRecord(
         identifier: column.identifier(),
@@ -248,7 +253,7 @@ protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
 
   method restoreColumnAutosaveRecords(
       tableView: TableView, records: seq[TableColumnAutosaveRecord]
-  ) =
+  ) = ## Restores known columns by identity and retains unlisted columns.
     var ordered: seq[TableColumn]
     var restored: seq[TableColumn]
     for record in records:
@@ -273,7 +278,9 @@ protocol DefaultTableViewPersistenceBehavior of TableViewPersistenceProtocol:
     tableView.noteColumnsChanged()
 
 protocol DefaultTableViewStateBehavior of TableViewStateProtocol:
+  ## Restores table configuration and selection using stable identities.
   method captureState(tableView: TableView): TableViewState =
+    ## Captures column configuration and selected row and column identities.
     var selectedColumns: seq[string]
     for column in tableView.selectedColumns():
       if not column.isNil:
@@ -288,6 +295,7 @@ protocol DefaultTableViewStateBehavior of TableViewStateProtocol:
     )
 
   method restoreState(tableView: TableView, state: TableViewState) =
+    ## Restores column configuration and selection from a snapshot.
     tableView.restoreColumnAutosaveRecords(state.columns)
     if state.selectedRowIdentifiers.len > 0:
       var hasRestoredRow = false
@@ -312,7 +320,9 @@ protocol DefaultTableViewStateBehavior of TableViewStateProtocol:
       tableView.selectedColumns = columns
 
 protocol TableViewStateWindowLifecycleSlots of WindowLifecycleEvents:
+  ## Saves table state when the observed window closes.
   proc willClose(tableView: TableView) {.slot.} =
+    ## Saves autosaved state before the observed window closes.
     tableView.saveAutosavedState()
 
 proc unobserveTableStateWindow(tableView: TableView) =
@@ -333,9 +343,11 @@ proc observeTableStateWindow(tableView: TableView, window: Window) =
   tableView.xObservedStateWindow = window
 
 protocol TableViewStateViewLifecycleSlots of ViewLifecycleProtocol:
+  ## Saves and restores table state as window ownership changes.
   proc saveTableStateBeforeWindowChange(
       tableView: TableView, window: Responder
   ) {.slotFor: viewWillMoveToWindow.} =
+    ## Saves state and removes observation of the previous window.
     let currentWindow =
       if tableView.window() of Window:
         Window(tableView.window())
@@ -349,6 +361,7 @@ protocol TableViewStateViewLifecycleSlots of ViewLifecycleProtocol:
   proc restoreTableStateAfterWindowChange(
       tableView: TableView
   ) {.slotFor: viewDidMoveToWindow.} =
+    ## Observes the new window and restores autosaved state once.
     let currentWindow =
       if tableView.window() of Window:
         Window(tableView.window())

@@ -3,10 +3,13 @@
 import sigils/selectors
 
 protocol TableDataUpdateProtocol {.selectorScope: protocol.}:
+  ## Routes reload requests to the row-update layer.
   method reloadTableData*()
+    ## Reloads rows while preserving selection and viewport state.
 
 protocol TableCellLayoutProtocol {.selectorScope: protocol.}:
-  method refreshEditingCellLayout*()
+  ## Routes editor-layout updates to the cell-editing layer.
+  method refreshEditingCellLayout*() ## Reattaches the active editor to its current cell.
 
 proc requestTableReload*(tableView: DynamicAgent) =
   if not tableView.sendLocalIfHandled(reloadTableData()):

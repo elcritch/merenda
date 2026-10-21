@@ -514,9 +514,10 @@ proc moveEditingFromEndedCell(tableView: TableView, movement: TextEditMovement):
   tableView.beginEditingCell(next.row, next.column)
 
 protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
+  ## Coordinates cell validation, editor activation, commit, and cancel.
   method shouldBeginEditingCell(
       tableView: TableView, row: int, column: TableColumn
-  ): bool =
+  ): bool = ## Checks that the cell is valid and editing is permitted.
     if not tableView.validCell(row, column):
       return false
     let delegate = tableView.delegate()
@@ -529,6 +530,7 @@ protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
     true
 
   method beginEditingCell(tableView: TableView, row: int, column: TableColumn): bool =
+    ## Selects a cell and starts editing when permitted.
     if not tableView.shouldBeginEditingCell(row, column):
       return false
     if tableView.xCellEditing.state.active:
@@ -559,6 +561,7 @@ protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
     true
 
   method commitEditingCell(tableView: TableView, value: string): bool =
+    ## Attempts to commit the active cell edit and reports success.
     if not tableView.xCellEditing.state.active:
       return false
     let editor = Control(tableView).activeEditor()
@@ -569,6 +572,7 @@ protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
     tableView.finishCommitEditingCell(value)
 
   method cancelEditingCell(tableView: TableView): bool =
+    ## Cancels the active cell edit and reports success.
     if not tableView.xCellEditing.state.active:
       return false
     let editor = Control(tableView).activeEditor()
@@ -584,9 +588,10 @@ protocol DefaultTableViewEditingBehavior of TableViewEditingProtocol:
     tableView.finishCancelEditingCell()
 
 protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
+  ## Connects the shared field editor to the active table cell.
   method fieldEditorForClient(
       tableView: TableView, defaultEditor: FieldEditor
-  ): FieldEditor =
+  ): FieldEditor = ## Chooses the cell-provided editor or the shared default editor.
     if not tableView.xCellEditing.state.active:
       return defaultEditor
     if tableView.xCellEditing.surface.hostView.isNil:
@@ -600,9 +605,11 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
     defaultEditor
 
   method usesFieldEditor(tableView: TableView, editor: FieldEditor): bool =
+    ## Reports whether a cell edit is active.
     tableView.xCellEditing.state.active
 
   method stringForFieldEditor(tableView: TableView, editor: FieldEditor): string =
+    ## Returns the active cell text used to initialize the editor.
     if not tableView.xCellEditing.state.active:
       ""
     else:
@@ -612,10 +619,11 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
 
   method setStringFromFieldEditor(
       tableView: TableView, editor: FieldEditor, value: string
-  ) =
+  ) = ## Defers cell writeback to the validated commit path.
     discard
 
   method didBeginEditing(tableView: TableView, editor: FieldEditor) =
+    ## Attaches the editor to the cell and updates focus state.
     Control(tableView).setCurrentEditor(editor)
     tableView.installFieldEditorOnSurface(editor)
     tableView.focused = true
@@ -623,31 +631,36 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
     tableView.needsDisplay = true
 
   method didChangeFocusInEditor(tableView: TableView, editor: FieldEditor) =
+    ## Mirrors focus changes from the active editor.
     if Control(tableView).activeEditor() != editor:
       return
     tableView.focused = editor.isFocused()
     tableView.focusVisible = editor.isFocusVisible()
 
   method didChangeTextInEditor(tableView: TableView, editor: FieldEditor) =
+    ## Clears stale validation errors when the editor text changes.
     if not tableView.xCellEditing.state.active:
       return
     if tableView.xCellEditing.state.validation.failed():
       tableView.setEditingValidation(initObjectValidationError())
 
   method shouldBeginEditing(tableView: TableView, editor: FieldEditor): bool =
+    ## Allows the editor to begin only while a cell edit is active.
     tableView.xCellEditing.state.active
 
   method shouldEndEditing(tableView: TableView, editor: FieldEditor): bool =
+    ## Validates editor text unless the edit is being cancelled.
     if tableView.xCellEditing.cancelling:
       return true
     tableView.validateEditingValue(TextView(editor).stringValue())
 
   method validationErrorForEditor(
       tableView: TableView, editor: FieldEditor
-  ): ObjectValidationError =
+  ): ObjectValidationError = ## Returns the current cell validation error.
     tableView.editingValidation()
 
   method didEndEditing(tableView: TableView, editor: FieldEditor) =
+    ## Detaches the editor and clears editor focus state.
     tableView.removeFieldEditorFromSurface(editor)
     Control(tableView).setCurrentEditor(nil)
     tableView.focused = false
@@ -656,7 +669,7 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
 
   method didEndEditingReason(
       tableView: TableView, editor: FieldEditor, reason: TextEditReason
-  ) =
+  ) = ## Completes or cancels cell editing according to the end reason.
     case reason
     of terCancel:
       discard tableView.finishCancelEditingCell()
@@ -665,7 +678,7 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
 
   method didEndEditingMovement(
       tableView: TableView, editor: FieldEditor, movement: TextEditMovement
-  ) =
+  ) = ## Advances cell editing or keyboard focus after the edit ends.
     if not tableView.moveEditingFromEndedCell(movement):
       let owner = tableView.window()
       if owner of Window and Window(owner).firstResponder() == editor:
@@ -680,7 +693,9 @@ protocol DefaultTableViewFieldEditorClient of FieldEditorClient:
           discard Window(owner).makeFirstResponder(tableView)
 
 protocol DefaultTableCellLayout of TableCellLayoutProtocol:
+  ## Reattaches the active editor after cell geometry changes.
   method refreshEditingCellLayout(tableView: TableView) =
+    ## Reattaches the active editor to its current cell.
     tableView.clearEditingSurface()
     let editor = Control(tableView).currentEditor()
     if not editor.isNil:
@@ -748,10 +763,13 @@ proc updateHighlightedCellAtPoint*(tableView: TableView, point: Point): int =
 const TableSelectionIdentityPrefix = "ids:"
 
 protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
+  ## Maintains cell focus, column selection, and persisted row selection.
   method shouldSelectCell(tableView: TableView, row: int, column: TableColumn): bool =
+    ## Reports whether the requested cell can be selected.
     tableView.validCell(row, column)
 
   method selectCell(tableView: TableView, row: int, column: TableColumn) =
+    ## Selects a cell and updates row, column, and keyboard focus state.
     if not tableView.shouldSelectCell(row, column):
       return
     let previousSelectedIndexes = tableView.xRowSelection.indexes
@@ -768,6 +786,7 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
       tableView.postAccessibilityNotification(anSelectionChanged)
 
   method setSelectedColumns(tableView: TableView, columns: seq[TableColumn]) =
+    ## Applies column selection when enabled and notifies observers.
     if tvoColumnSelection notin tableView.xOptions:
       return
     var next: seq[TableColumn]
@@ -793,6 +812,7 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
     tableView.postAccessibilityNotification(anSelectionChanged)
 
   method selectionPersistenceString(tableView: TableView): string =
+    ## Encodes selected rows using stable identities or row indexes.
     let selectedIdentifiers =
       tableView.rowIdentifiersForRows(tableView.selectedIndexes())
     if selectedIdentifiers.len > 0:
@@ -805,6 +825,7 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
       first = false
 
   method restoreSelectionPersistenceString(tableView: TableView, value: string) =
+    ## Restores row selection from encoded identities or indexes.
     if value.startsWith(TableSelectionIdentityPrefix):
       let payload =
         if value.len > TableSelectionIdentityPrefix.len:
@@ -837,7 +858,9 @@ protocol DefaultTableViewSelectionBehavior of TableViewSelectionProtocol:
     tableView.selectedIndexes = rows
 
 protocol DefaultTableViewMouseHitPolicy of MouseHitPolicyProtocol:
+  ## Coordinates row selection with input to hosted cell views.
   method mouseHitPolicy(tableView: TableView, args: MouseHitPolicyArgs): CellHitPolicy =
+    ## Chooses the hosted-cell input policy for a primary-button hit.
     if not tableView.isEnabled() or args.event.button != mbPrimary:
       return chpDefault
     let row = tableView.rowItemIndexAtPoint(args.event.location)
@@ -853,6 +876,7 @@ protocol DefaultTableViewMouseHitPolicy of MouseHitPolicyProtocol:
     tableView.tableCellHitPolicy(row, column, target, args.event)
 
   method applyMouseHitPolicy(tableView: TableView, args: MouseHitPolicyArgs): bool =
+    ## Selects and focuses the hit cell before hosted-cell tracking.
     if not tableView.isEnabled() or args.event.button != mbPrimary:
       return false
     let

@@ -165,7 +165,9 @@ proc moveRow*(tableView: TableView, fromIndex, toIndex: int) =
   tableView.applyTableRowUpdates([initTableRowMoveUpdate(fromIndex, toIndex)])
 
 protocol DefaultTableDataUpdates of TableDataUpdateProtocol:
+  ## Connects reload requests to row rebuilding and state preservation.
   method reloadTableData(tableView: TableView) =
+    ## Reloads rows while preserving selection and viewport state.
     tableView.reloadData()
 
 proc installTableRowUpdateProtocol*(tableView: TableView) =
