@@ -8,7 +8,7 @@ import ../view/views
 import ./tablecore
 import ./tableselection
 import ./tablecells
-import ./private/tablecoordination
+import ./tablecoordination
 
 proc reloadData*(tableView: TableView, updateRows: proc() {.closure.} = nil) =
   ## Reloads rows while preserving selection identities and the viewport anchor.

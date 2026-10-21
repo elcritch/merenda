@@ -14,7 +14,7 @@ import ../app/windows
 import ../controls/controls
 import ../containers/listbasics
 import ./tablebasics
-import ./private/tablecoordination
+import ./tablecoordination
 import ../containers/scrollviews
 import ../foundation/objectvalues
 import ../foundation/private/itemcollections

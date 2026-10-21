@@ -23,7 +23,7 @@ import ../view/views
 
 import ./tablecore
 import ./tableselection
-import ./private/tablecoordination
+import ./tablecoordination
 
 proc `columnSizing=`*(tableView: TableView, sizing: TableViewColumnSizing)
 proc `preferredContentWidth=`*(tableView: TableView, width: float32)

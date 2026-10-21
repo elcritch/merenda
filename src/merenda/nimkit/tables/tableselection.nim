@@ -11,7 +11,7 @@ import ../foundation/undomanagers
 import ../view/views
 import ../containers/scrollviews
 import ./tablecore
-import ./private/tablecoordination
+import ./tablecoordination
 
 const TableTypeSelectTimeout = 1.0
 

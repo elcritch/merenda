@@ -20,7 +20,7 @@ import ../view/views
 import ./tablecore
 import ./tablepresentation
 import ./tableselection
-import ./private/tablecoordination
+import ./tablecoordination
 
 proc tableCellObjectValue*(
     tableView: TableView, row: int, column: TableColumn
