@@ -1067,8 +1067,8 @@ proc shouldClose(tabs: DocumentTabs, item: DocumentTabItem, index: int): bool =
     return true
 
   delegate
-  .trySendLocal(shouldCloseDocumentTab(), (tabs: tabs, item: item, index: index))
-  .get(true)
+    .trySendLocal(shouldCloseDocumentTab(), (tabs: tabs, item: item, index: index))
+    .get(true)
 
 proc didClose(tabs: DocumentTabs, item: DocumentTabItem, index: int) =
   let delegate = tabs.delegate()
@@ -1087,11 +1087,11 @@ proc shouldMove(
     return true
 
   delegate
-  .trySendLocal(
-    shouldMoveDocumentTab(),
-    (tabs: tabs, item: item, fromIndex: fromIndex, toIndex: toIndex),
-  )
-  .get(true)
+    .trySendLocal(
+      shouldMoveDocumentTab(),
+      (tabs: tabs, item: item, fromIndex: fromIndex, toIndex: toIndex),
+    )
+    .get(true)
 
 proc didMove(tabs: DocumentTabs, item: DocumentTabItem, fromIndex, toIndex: int) =
   let delegate = tabs.delegate()

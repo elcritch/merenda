@@ -643,8 +643,8 @@ proc resolvedVisibleIndexes(collectionView: CollectionView): seq[int] =
       return
   for index in 0 ..< collectionView.len():
     if not collectionView
-    .resolvedContentItemRect(index)
-    .intersection(visibleRect).isEmpty:
+      .resolvedContentItemRect(index)
+      .intersection(visibleRect).isEmpty:
       result.add index
 
 protocol DefaultCollectionLayout of CollectionLayoutProtocol:
@@ -665,10 +665,10 @@ protocol DefaultCollectionLayout of CollectionLayoutProtocol:
   ): int =
     for index in 0 ..< collectionView.len():
       if layout
-      .layoutItemRect(
-        collectionView.len(), index, collectionView.collectionViewportSize().width
-      )
-      .contains(point):
+          .layoutItemRect(
+            collectionView.len(), index, collectionView.collectionViewportSize().width
+          )
+          .contains(point):
         return index
     -1
 

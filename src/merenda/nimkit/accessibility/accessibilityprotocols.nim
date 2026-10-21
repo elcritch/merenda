@@ -327,16 +327,15 @@ protocol DefaultAccessibilityProtocol of AccessibilityProtocol:
     view.accessibilityChildrenForView()
 
   method accessibilityAttributeNames*(view: View): seq[string] =
-    result =
-      @[
-        AccessibilityAttributeRole, AccessibilityAttributeLabel,
-        AccessibilityAttributeValue, AccessibilityAttributeHelp,
-        AccessibilityAttributeInvalid, AccessibilityAttributeValidationError,
-        AccessibilityAttributeIdentifier, AccessibilityAttributeEnabled,
-        AccessibilityAttributeFocused, AccessibilityAttributeSelected,
-        AccessibilityAttributeFrame, AccessibilityAttributeParent,
-        AccessibilityAttributeChildren, AccessibilityAttributeWindow,
-      ]
+    result = @[
+      AccessibilityAttributeRole, AccessibilityAttributeLabel,
+      AccessibilityAttributeValue, AccessibilityAttributeHelp,
+      AccessibilityAttributeInvalid, AccessibilityAttributeValidationError,
+      AccessibilityAttributeIdentifier, AccessibilityAttributeEnabled,
+      AccessibilityAttributeFocused, AccessibilityAttributeSelected,
+      AccessibilityAttributeFrame, AccessibilityAttributeParent,
+      AccessibilityAttributeChildren, AccessibilityAttributeWindow,
+    ]
     if view.accessibilityRole() in {arTextField, arTextArea, arStaticText}:
       result.add AccessibilityAttributeNumberOfCharacters
       result.add AccessibilityAttributeSelectedTextRange

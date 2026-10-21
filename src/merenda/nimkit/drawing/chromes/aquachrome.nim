@@ -250,12 +250,11 @@ func aquaRadioInnerBorderColor(chrome: ChromeContext): Color =
 
 func aquaRadioInnerShadows(chrome: ChromeContext): seq[BoxShadow] =
   if chrome.isSelected and chrome.isEnabled:
-    return
-      @[
-        insetShadow(rgbaColor(0, 58, 142, 86), y = 1.0, blur = 2.8),
-        insetShadow(rgbaColor(255, 255, 255, 80), x = -1.0, y = -1.0, blur = 2.8),
-        insetShadow(rgbaColor(0, 51, 120, 46), x = 1.0, blur = 3.8),
-      ]
+    return @[
+      insetShadow(rgbaColor(0, 58, 142, 86), y = 1.0, blur = 2.8),
+      insetShadow(rgbaColor(255, 255, 255, 80), x = -1.0, y = -1.0, blur = 2.8),
+      insetShadow(rgbaColor(0, 51, 120, 46), x = 1.0, blur = 3.8),
+    ]
   @[
     insetShadow(
       rgbaColor(0, 0, 0, if chrome.isEnabled: 30 else: 13), y = 1.0, blur = 2.5
@@ -387,13 +386,12 @@ func aquaTextFieldInnerShadows(chrome: ChromeContext): seq[BoxShadow] =
     let
       base = chrome.baseFill.centerColor()
       sideShade = base.darkenColor(0.30'f32, base.scaledAlpha(0.20'f32))
-    result =
-      @[
-        insetShadow(rgbaColor(0, 0, 0, 22), y = 1.2, blur = 3.0),
-        insetShadow(rgbaColor(255, 255, 255, 150), y = -1.0, blur = 2.0),
-        insetShadow(sideShade, x = 2.0, blur = 5.8),
-        insetShadow(sideShade, x = -2.0, blur = 5.8),
-      ]
+    result = @[
+      insetShadow(rgbaColor(0, 0, 0, 22), y = 1.2, blur = 3.0),
+      insetShadow(rgbaColor(255, 255, 255, 150), y = -1.0, blur = 2.0),
+      insetShadow(sideShade, x = 2.0, blur = 5.8),
+      insetShadow(sideShade, x = -2.0, blur = 5.8),
+    ]
   else:
     result = @[insetShadow(rgbaColor(0, 0, 0, 32), x = 1.4, y = 0.8, blur = 1.125)]
 

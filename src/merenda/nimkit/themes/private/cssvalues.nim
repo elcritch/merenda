@@ -639,12 +639,11 @@ proc parseDeclarationPatch(
     if token.value.kind == tkFunction and token.value.fnName.toLowerAscii() == "var":
       compositeVariable = not variable
   if compositeVariable:
-    let prototype =
-      @[
-        LocatedToken(value: Token(kind: tkFunction, fnName: "var")),
-        LocatedToken(value: Token(kind: tkIdent, ident: "--prototype")),
-        LocatedToken(value: Token(kind: tkCloseParen)),
-      ]
+    let prototype = @[
+      LocatedToken(value: Token(kind: tkFunction, fnName: "var")),
+      LocatedToken(value: Token(kind: tkIdent, ident: "--prototype")),
+      LocatedToken(value: Token(kind: tkCloseParen)),
+    ]
     result = declarationPatch(name, prototype)
     if not result.isNil:
       for key, candidate in result.values.mpairs:

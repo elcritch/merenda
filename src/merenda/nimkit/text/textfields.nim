@@ -139,8 +139,8 @@ protocol TextFieldProtocol {.setterStyle: nim.} from TextField:
       return textField.xTextColor
 
     textField
-    .effectiveAppearance()
-    .resolveTextFieldStyle(textField.textFieldStyleContext()).text.color
+      .effectiveAppearance()
+      .resolveTextFieldStyle(textField.textFieldStyleContext()).text.color
 
   method `textColor=`(textField: TextField, color: Color) =
     if textField.xTextColor == color:
@@ -1057,8 +1057,8 @@ protocol DefaultTextFieldAccessibility of AccessibilityProtocol:
       return TextView(editor).accessibilityCharacterIndexAtPoint(point)
     int(
       textField
-      .layoutManager()
-      .textRangeAtPoint(textField.pointFromWindow(point)).location
+        .layoutManager()
+        .textRangeAtPoint(textField.pointFromWindow(point)).location
     )
 
   method accessibilityLineRange(

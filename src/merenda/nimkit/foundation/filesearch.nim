@@ -1,11 +1,9 @@
 ## Asynchronous, memory-mapped regular-expression search for local files.
 
 import
-  std/
-    [
-      algorithm, atomics, mimetypes, monotimes, os, sets, strutils, tables, times,
-      unicode,
-    ]
+  std/[
+    algorithm, atomics, mimetypes, monotimes, os, sets, strutils, tables, times, unicode
+  ]
 
 import faststreams/inputs
 import sigils/[core, threads]

@@ -1956,11 +1956,10 @@ proc resolveSliderStyle*(theme: Theme, context: StyleContext): SliderStyle =
       fillKey = StyleKnobFill,
       borderColorKey = StyleKnobBorderColor,
       shadowKey = StyleKnobShadows,
-      shadowsFallback =
-        @[
-          dropShadow(color(0.0, 0.0, 0.0, 0.20), y = 1.0, blur = 3.0),
-          insetShadow(color(1.0, 1.0, 1.0, 0.75), y = 1.0, blur = 2.0),
-        ],
+      shadowsFallback = @[
+        dropShadow(color(0.0, 0.0, 0.0, 0.20), y = 1.0, blur = 3.0),
+        insetShadow(color(1.0, 1.0, 1.0, 0.75), y = 1.0, blur = 2.0),
+      ],
     ),
     knobValueTint: theme.lengthRule(context, StyleKnobValueTint, 1.0'f32),
     trackHeight: theme.lengthRule(context, StyleIndicatorSize, 6.0'f32),

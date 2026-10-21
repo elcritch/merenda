@@ -237,16 +237,8 @@ proc captureViewFrame(
     context = initDrawContext()
     defaultRevision = view.renderSlotRevision(0.RenderSlotId)
   context.beginRenderSlotCapture(
-    shell,
-    ZeroPoint,
-    cacheKey.bounds,
-    cacheKey.visibleRect,
-    appearance[],
-    defaultRevision,
-    cachedRevisions,
-    forcedSlots,
-    forceAll,
-    cacheKey.level,
+    shell, ZeroPoint, cacheKey.bounds, cacheKey.visibleRect, appearance[],
+    defaultRevision, cachedRevisions, forcedSlots, forceAll, cacheKey.level,
   )
 
   if view.usesThemedRootBackground(cacheKey.isRoot):

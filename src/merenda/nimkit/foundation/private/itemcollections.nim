@@ -90,8 +90,8 @@ proc buildSourceIndexes[T](collection: var ItemCollection[T]) =
     let identifier {.cursor.} = item.identifier
     if identifier.len > 0 or collection.xIndexesEmptyIdentifiers:
       collection.xIdentifierIndexes
-      .mgetOrPut(identifier, ItemIndexes(source: -1, arranged: -1))
-      .fillSourceIndex(index)
+        .mgetOrPut(identifier, ItemIndexes(source: -1, arranged: -1))
+        .fillSourceIndex(index)
   collection.xSourceIndexesValid = true
 
 proc sourceIndexOfIdentifier*[T](

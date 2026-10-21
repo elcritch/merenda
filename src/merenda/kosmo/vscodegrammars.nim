@@ -264,11 +264,9 @@ proc matchesVscodeGrammarQuery(
     pattern: TextSearchPattern,
     compactPattern: Option[TextSearchPattern],
 ): bool =
-  var fields =
-    @[
-      candidate.name, candidate.extensionFolder, candidate.languageId,
-      candidate.scopeName,
-    ]
+  var fields = @[
+    candidate.name, candidate.extensionFolder, candidate.languageId, candidate.scopeName
+  ]
   fields.add candidate.extensions
   fields.add candidate.fileNames
   for field in fields:

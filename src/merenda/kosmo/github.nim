@@ -202,17 +202,16 @@ proc readGitHubSnapshot*(
     if kind == ghikPullRequest:
       fields.add ",isDraft,headRefName,baseRefName,reviewDecision,statusCheckRollup"
     var commandExecutable = executable
-    var arguments =
-      @[
-        command,
-        "list",
-        "--state",
-        state.cliState(),
-        "--limit",
-        $itemLimit,
-        "--json",
-        fields,
-      ]
+    var arguments = @[
+      command,
+      "list",
+      "--state",
+      state.cliState(),
+      "--limit",
+      $itemLimit,
+      "--json",
+      fields,
+    ]
     when defined(posix):
       if executable == "gh":
         commandExecutable = getEnv("SHELL")
@@ -220,18 +219,17 @@ proc readGitHubSnapshot*(
           commandExecutable = "/bin/sh"
         # Login profiles can change cwd or GitHub settings. Reapply these after
         # startup, and exec the command so cancellation still reaps gh itself.
-        var commandParts =
-          @[
-            "/usr/bin/env",
-            "-C",
-            absolutePath(rootPath),
-            "-u",
-            "GH_REPO",
-            "--",
-            "GH_PROMPT_DISABLED=1",
-            "GH_PAGER=cat",
-            executable,
-          ]
+        var commandParts = @[
+          "/usr/bin/env",
+          "-C",
+          absolutePath(rootPath),
+          "-u",
+          "GH_REPO",
+          "--",
+          "GH_PROMPT_DISABLED=1",
+          "GH_PAGER=cat",
+          executable,
+        ]
         commandParts.add arguments
         arguments = @["-l", "-c", "exec " & quoteShellCommand(commandParts)]
     let response = runBackgroundCommand(

@@ -624,32 +624,29 @@ proc readGitDiff(
           @[]
     var namesArguments: seq[string]
     if comparison.kind == gdckBranch:
-      namesArguments =
-        @[
-          "diff",
-          "--no-ext-diff",
-          "--no-textconv",
-          "--no-renames",
-          "--name-status",
-          "-z",
-          comparison.branch & "...HEAD",
-          "--",
-        ]
+      namesArguments = @[
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-renames",
+        "--name-status",
+        "-z",
+        comparison.branch & "...HEAD",
+        "--",
+      ]
     elif comparison.kind == gdckRevisionRange:
-      namesArguments =
-        @[
-          "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status",
-          "-z", comparison.fromRevision,
-        ]
+      namesArguments = @[
+        "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status", "-z",
+        comparison.fromRevision,
+      ]
       if not comparison.toWorkingTree:
         namesArguments.add comparison.toRevision
       namesArguments.add "--"
     elif hasHead:
-      namesArguments =
-        @[
-          "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status",
-          "-z", "HEAD", "--",
-        ]
+      namesArguments = @[
+        "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status", "-z",
+        "HEAD", "--",
+      ]
     else:
       namesArguments = @["ls-files", "--cached", "-z", "--"]
     namesArguments.add pathspec
@@ -865,15 +862,14 @@ proc parseGitDiff*(
 proc gitDiffArguments(
     file: GitFileDiff, hasHead: bool, comparison: GitDiffComparison, unified: int
 ): seq[string] =
-  result =
-    @[
-      "diff",
-      "--no-ext-diff",
-      "--no-textconv",
-      "--no-color",
-      "--no-renames",
-      "--unified=" & $unified,
-    ]
+  result = @[
+    "diff",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--no-color",
+    "--no-renames",
+    "--unified=" & $unified,
+  ]
   if file.status == gdfsUntracked:
     result.add ["--no-index", "--", "/dev/null", file.path]
   elif comparison.kind == gdckBranch:
@@ -3183,10 +3179,9 @@ proc revealPendingSearch(panel: KosmoGitDiffPanel) =
       section.textView.layoutManager().isBackgroundLayoutPending():
     return
   panel.searchRevealPending = false
-  panel.searchRevealPending =
-    not revealTextMatch(
-      section.textView, panel.scrollView, match.range, section.textView.frame().origin
-    )
+  panel.searchRevealPending = not revealTextMatch(
+    section.textView, panel.scrollView, match.range, section.textView.frame().origin
+  )
 
 proc searchField*(panel: KosmoGitDiffPanel): nimkit.TextField =
   panel.search.bar.queryField()

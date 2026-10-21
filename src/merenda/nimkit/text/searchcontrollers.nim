@@ -217,23 +217,20 @@ proc newTextSearchController*(
   let
     bar = result.bar
     insetPriority = initLayoutPriority(999)
-  result.floatingConstraints =
-    @[
-      bar[atLeft].greaterThanOrEqualTo(host[atLeft]),
-      bar[atTop].greaterThanOrEqualTo(host[atTop]),
-      bar[atRight].lessThanOrEqualTo(host[atRight]),
-      bar[atBottom].lessThanOrEqualTo(host[atBottom]),
-      bar[atWidth].lessThanOrEqualTo(SearchBarWidth),
-      bar[atTop].equalTo(
-        host[atTop], constant = SearchBarInset, priority = insetPriority
-      ),
-      bar[atRight].equalTo(
-        host[atRight], constant = -SearchBarInset, priority = insetPriority
-      ),
-      bar[atWidth].lessThanOrEqualTo(
-        host[atWidth], constant = -2 * SearchBarInset, priority = insetPriority
-      ),
-    ]
+  result.floatingConstraints = @[
+    bar[atLeft].greaterThanOrEqualTo(host[atLeft]),
+    bar[atTop].greaterThanOrEqualTo(host[atTop]),
+    bar[atRight].lessThanOrEqualTo(host[atRight]),
+    bar[atBottom].lessThanOrEqualTo(host[atBottom]),
+    bar[atWidth].lessThanOrEqualTo(SearchBarWidth),
+    bar[atTop].equalTo(host[atTop], constant = SearchBarInset, priority = insetPriority),
+    bar[atRight].equalTo(
+      host[atRight], constant = -SearchBarInset, priority = insetPriority
+    ),
+    bar[atWidth].lessThanOrEqualTo(
+      host[atWidth], constant = -2 * SearchBarInset, priority = insetPriority
+    ),
+  ]
   activate(result.floatingConstraints)
 
 func searchMatchCount*(search: TextSearchController): int =

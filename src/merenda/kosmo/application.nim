@@ -2,8 +2,7 @@
 
 when not defined(features.merenda.kosmo):
   {.
-    error:
-      """
+    error: """
 Kosmo requires the "kosmo" feature. Enable it with Atlas:
 
   atlas install -tuk --features:kosmo

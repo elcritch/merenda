@@ -979,10 +979,7 @@ proc toggleMarkdownMode(view: KosmoEditorView, id: KosmoBufferId): bool =
     return true
 
 proc previewScope(view: KosmoEditorView): string =
-  if not view.dockGroup.isNil:
-    view.dockGroup[].identifier
-  else:
-    ""
+  if not view.dockGroup.isNil: view.dockGroup[].identifier else: ""
 
 proc mayReusePristineBuffer(view: KosmoEditorView): bool =
   if not view.usesBufferSubset:
@@ -1158,10 +1155,9 @@ proc hasUnsavedData(controller: KosmoDockController, window: nimkit.Window): boo
     if group.window != window:
       continue
     for tab in tabs:
-      if tab.modified and
-          (
-            not group.editorView.usesBufferSubset or tab.id in group.editorView.bufferIds
-          ):
+      if tab.modified and (
+        not group.editorView.usesBufferSubset or tab.id in group.editorView.bufferIds
+      ):
         return true
     for document in group.documents:
       if document.modified:
@@ -2040,11 +2036,7 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
   ) =
     let event = invocation.argsAs(nimkit.KeyEvent)
-    let owner: KosmoEditorView =
-      if tabsOwner.isNil:
-        nil
-      else:
-        tabsOwner[]
+    let owner: KosmoEditorView = if tabsOwner.isNil: nil else: tabsOwner[]
     invocation.setResult(handleDocumentTabsKeyEquivalent(owner, tabsView, event))
   discard tabsView.replaceMethod(nimkitSelectors.performKeyEquivalent(), tabsKeyMethod)
   connect(
@@ -2532,11 +2524,9 @@ protocol KosmoSidebarPaneLayout of nimkit.ViewLayoutProtocol:
         else:
           pane.contextPanel.preferredHeight()
     pane.splitView.setFrameFromLayout(bounds)
-    if bounds.size.height > 0 and
-        (
-          not pane.setInitialDivider or
-          abs(previousHeight - bounds.size.height) > 0.001'f32
-        ):
+    if bounds.size.height > 0 and (
+      not pane.setInitialDivider or abs(previousHeight - bounds.size.height) > 0.001'f32
+    ):
       pane.splitView.setPositionOfDivider(0, contextHeight)
       pane.setInitialDivider = true
 
@@ -3424,10 +3414,7 @@ proc newKosmoPopupList(pane: KosmoEditorPane): nimkit.PopupListView =
         else:
           weakPane[].popupMenuState.get.selectedIndex,
       highlightedIndex: proc(): int =
-        if weakPane.isNil:
-          -1
-        else:
-          weakPane[].popupHighlightedIndex,
+        if weakPane.isNil: -1 else: weakPane[].popupHighlightedIndex,
       rowHeight: proc(): float32 =
         if weakPane.isNil:
           22.0'f32

@@ -420,11 +420,10 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       moeThemeSettings, selectedMoeThemeIdentifier
     )
     frontend.xSettingsWindow.textMateGrammars = textMateGrammars
-  result =
-    not frontend.application.showWindow(
-      frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
-      frontend.xSettingsWindow.firstResponder,
-    ).isNil
+  result = not frontend.application.showWindow(
+    frontend.xSettingsWindow.window, frontend.xSettingsWindow.contentView,
+    frontend.xSettingsWindow.firstResponder,
+  ).isNil
 
 proc showGitDiffSnapshot(
     frontend: KosmoApplication, snapshot: GitDiffSnapshot, refreshesRepository: bool
@@ -853,11 +852,7 @@ proc configureKosmoSettingsMenu(frontend: KosmoApplication) =
   let applicationMenu = mainMenu[0].submenu()
   if not applicationMenu.isNil and applicationMenu.len > 2:
     let settingsItem = applicationMenu[2]
-    let manager =
-      if frontend.xWindowManager.isNil:
-        nil
-      else:
-        frontend.xWindowManager[]
+    let manager = if frontend.xWindowManager.isNil: nil else: frontend.xWindowManager[]
     settingsItem.identifier = KosmoShowSettingsAction
     settingsItem.action = nimkit.actionSelector(KosmoShowSettingsAction)
     settingsItem.target = nimkit.newActionTarget(
@@ -913,11 +908,7 @@ proc configureKosmoWorkspaceMenu(frontend: KosmoApplication) =
   let windowMenu = frontend.application.windowsMenu()
   if windowMenu.isNil or not windowMenu.menuItemWithIdentifier(KosmoNextTabAction).isNil:
     return
-  let manager =
-    if frontend.xWindowManager.isNil:
-      nil
-    else:
-      frontend.xWindowManager[]
+  let manager = if frontend.xWindowManager.isNil: nil else: frontend.xWindowManager[]
 
   proc addAction(title, identifier: string) =
     let item = nimkit.newMenuItem(title, nimkit.actionSelector(identifier))

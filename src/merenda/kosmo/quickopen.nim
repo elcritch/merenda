@@ -628,17 +628,11 @@ proc newKosmoQuickOpenPanel*(
         else:
           panel[].visibleItemCount(),
       firstIndex: proc(): int =
-        if panel.isNil:
-          0
-        else:
-          panel[].xFirstIndex,
+        if panel.isNil: 0 else: panel[].xFirstIndex,
       selectedIndex: proc(): int =
         -1,
       highlightedIndex: proc(): int =
-        if panel.isNil:
-          -1
-        else:
-          panel[].xHighlightedIndex,
+        if panel.isNil: -1 else: panel[].xHighlightedIndex,
       rowHeight: proc(): float32 =
         QuickOpenRowHeight,
       itemText: proc(index: int): string =

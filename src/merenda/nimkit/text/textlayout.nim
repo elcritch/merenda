@@ -1006,16 +1006,16 @@ proc delegateAllowsGlyphGeneration(manager: TextLayoutManager, range: TextRange)
     return true
 
   manager.xDelegate
-  .trySendLocal(shouldGenerateGlyphs(), (manager: manager, range: range))
-  .get(true)
+    .trySendLocal(shouldGenerateGlyphs(), (manager: manager, range: range))
+    .get(true)
 
 proc delegateLineSpacing(manager: TextLayoutManager, glyphIndex: GlyphIndex): float32 =
   if manager.xDelegate.isNil:
     return 0.0'f32
   max(
     manager.xDelegate
-    .trySendLocal(lineSpacingAfterGlyph(), (manager: manager, glyphIndex: glyphIndex))
-    .get(0.0'f32),
+      .trySendLocal(lineSpacingAfterGlyph(), (manager: manager, glyphIndex: glyphIndex))
+      .get(0.0'f32),
     0.0'f32,
   )
 
@@ -1026,10 +1026,10 @@ proc delegateParagraphSpacingBefore(
     return 0.0'f32
   max(
     manager.xDelegate
-    .trySendLocal(
-      paragraphSpacingBeforeGlyph(), (manager: manager, glyphIndex: glyphIndex)
-    )
-    .get(0.0'f32),
+      .trySendLocal(
+        paragraphSpacingBeforeGlyph(), (manager: manager, glyphIndex: glyphIndex)
+      )
+      .get(0.0'f32),
     0.0'f32,
   )
 
@@ -1040,10 +1040,10 @@ proc delegateParagraphSpacingAfter(
     return 0.0'f32
   max(
     manager.xDelegate
-    .trySendLocal(
-      paragraphSpacingAfterGlyph(), (manager: manager, glyphIndex: glyphIndex)
-    )
-    .get(0.0'f32),
+      .trySendLocal(
+        paragraphSpacingAfterGlyph(), (manager: manager, glyphIndex: glyphIndex)
+      )
+      .get(0.0'f32),
     0.0'f32,
   )
 
@@ -1058,8 +1058,8 @@ proc shouldHyphenate*(manager: TextLayoutManager, range: TextRange, word = ""): 
     return false
 
   manager.xDelegate
-  .trySendLocal(shouldHyphenateText(), (manager: manager, range: range, word: word))
-  .get(false)
+    .trySendLocal(shouldHyphenateText(), (manager: manager, range: range, word: word))
+    .get(false)
 
 proc retainedFonts(arrangement: GlyphArrangement): seq[FontRef] =
   var retainedFontIds = initHashSet[FontId]()

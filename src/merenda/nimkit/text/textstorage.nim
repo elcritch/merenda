@@ -542,16 +542,16 @@ proc delegateHandledAttributeFixing(storage: TextStorage, range: TextRange): boo
     return false
 
   storage.xDelegate
-  .trySendLocal(textStorageFixAttributes(), (storage: storage, range: range))
-  .get(false)
+    .trySendLocal(textStorageFixAttributes(), (storage: storage, range: range))
+    .get(false)
 
 proc shouldFixAttributes(storage: TextStorage, range: TextRange): bool =
   if storage.xDelegate.isNil:
     return true
 
   storage.xDelegate
-  .trySendLocal(textStorageShouldFixAttributes(), (storage: storage, range: range))
-  .get(true)
+    .trySendLocal(textStorageShouldFixAttributes(), (storage: storage, range: range))
+    .get(true)
 
 proc fixAttributesInRange*(storage: TextStorage, range: TextRange) =
   storage.materialize()
