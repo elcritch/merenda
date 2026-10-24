@@ -9,39 +9,119 @@ const exampleDir = currentSourcePath().parentDir.parentDir.parentDir / "examples
 suite "NimKit NIF markup demo":
   test "NIF and HTML demo markup produce identical resource bundles":
     let original = loadGuiResourceBundle(exampleDir / "html_ui_demo.html")
-    let converted =
-      parseGuiResourceBundle(nifGuiMarkup(readFile(exampleDir / "nif_ui_demo.nif")))
-    require original.loaded
-    require converted.loaded
-    check converted.diagnostics.len == 0
-    check converted.bundle.encodeResourceBundle() ==
-      original.bundle.encodeResourceBundle()
+    for filename in ["nif_ui_demo.nif", "nif_shorthand_demo.nif"]:
+      checkpoint filename
+      let converted =
+        parseGuiResourceBundle(nifGuiMarkup(readFile(exampleDir / filename)))
+      require original.loaded
+      require converted.loaded
+      check converted.diagnostics.len == 0
+      check converted.bundle.encodeResourceBundle() ==
+        original.bundle.encodeResourceBundle()
 
   test "NIF and CSS styles resolve identically across roles, ids, classes, and states":
     let base = initThemeByName("macos-dark")
     let original = loadCssTheme(exampleDir / "html_ui_demo.css", base)
-    let converted =
-      parseCssTheme(nifStylesheet(readFile(exampleDir / "nif_ui_demo.css.nif")), base)
-    require original.diagnostics.len == 0
-    require converted.diagnostics.len == 0
-    for role in StyleRole:
-      for states in [{}, {ssHovered}, {ssPressed}, {ssSelected}, {ssOpen}, {ssDisabled}]:
-        for id in [
-          "", "root", "about-content", "preferences", "name", "language", "theme"
+    for filename in ["nif_ui_demo.css.nif", "nif_shorthand_demo.css.nif"]:
+      checkpoint filename
+      let converted =
+        parseCssTheme(nifStylesheet(readFile(exampleDir / filename)), base)
+      require original.diagnostics.len == 0
+      require converted.diagnostics.len == 0
+      for role in StyleRole:
+        for states in [
+          {}, {ssHovered}, {ssPressed}, {ssSelected}, {ssOpen}, {ssDisabled}
         ]:
-          for classes in [
-            @[],
-            @["primary"],
-            @["label-title"],
-            @["muted"],
-            @["eyebrow"],
-            @["field-label"],
+          for id in [
+            "", "root", "about-content", "preferences", "name", "language", "theme"
           ]:
-            let context = controlStyle(role, states, id = id, classes = classes)
-            check converted.theme.resolveButtonStyle(context) ==
-              original.theme.resolveButtonStyle(context)
-            check converted.theme.resolveComboBoxStyle(context) ==
-              original.theme.resolveComboBoxStyle(context)
+            for classes in [
+              @[],
+              @["primary"],
+              @["label-title"],
+              @["muted"],
+              @["eyebrow"],
+              @["field-label"],
+            ]:
+              let context = controlStyle(role, states, id = id, classes = classes)
+              check converted.theme.resolveButtonStyle(context) ==
+                original.theme.resolveButtonStyle(context)
+              check converted.theme.resolveComboBoxStyle(context) ==
+                original.theme.resolveComboBoxStyle(context)
+
+  test "native shorthand preserves text newlines and both ComboBox option forms":
+    let loaded = parseGuiResourceBundle(
+      nifGuiMarkup(
+        """(StackView (id "root") (axis vertical) (padding 0xC 0o14)
+        (Label (id "label") "First\nSecond")
+        (TextField (id "name") "Grace")
+        (TextView (id "notes") "First\n  Second")
+        (ComboBox (id "language") (selectedIndex 1)
+          (ComboBoxOption (objectValue "nim") (displayText "Nim"))
+          (option "c" 'C'))
+        (CheckBox (id "updates") (title "Updates") (state off)))"""
+      )
+    )
+    require loaded.loaded
+    let built = loaded.bundle.instantiateResources()
+    require built.instantiated
+    check TextField(built.instance.view(resourceId("label"))).stringValue ==
+      "First\nSecond"
+    check TextField(built.instance.view(resourceId("name"))).stringValue == "Grace"
+    check TextView(built.instance.view(resourceId("notes"))).stringValue ==
+      "First\n  Second"
+    let picker = ComboBox(built.instance.view(resourceId("language")))
+    check picker.selectedIndex == 1
+    check picker.itemAtIndex(1) == "C"
+    check picker.itemObjectValueAtIndex(1).requireString() == "c"
+    check Button(built.instance.view(resourceId("updates"))).state == bsOff
+
+  test "style shorthand expands borders chrome colors and token references":
+    let css = nifStylesheet(
+      """(.nif27)
+(.lang "nimkit-css")
+style ":root" (accent (color 0x00_ff_00))
+style "#name:hover" "#name:open" (rule
+  (border (color :var.accent) (width 0x2 px) (radius 0o7 px))
+  (chrome flat transparent)
+  (focusRing (color :var.accent))
+  (indicatorFill (color 0x0ff))
+  (markColor "#fff"))
+"""
+    )
+    check css.contains("--accent: #00ff00;")
+    check css.contains("#name:hover, #name:open {")
+    check css.contains("border-color: var(--accent);")
+    check css.contains("border-width: 2px;")
+    check css.contains("border-radius: 7px;")
+    check css.contains("-nimkit-chrome: flat-transparent;")
+    check css.contains("-nimkit-focus-ring-color: var(--accent);")
+    check css.contains("-nimkit-indicator-fill: #0ff;")
+    check css.contains("-nimkit-mark-color: #fff;")
+
+  test "shorthand rejects malformed properties options and style bodies":
+    for source in [
+      "(StackView (id \"a\") (id \"b\"))", "(StackView (padding))",
+      "(Window (frame 1 2 3))", "(StackView (padding 1 2 3))",
+      "(ComboBox (selectedIndex 2) (option \"nim\" \"Nim\"))",
+      "(ComboBox (selectedIndex -2) (option \"nim\" \"Nim\"))",
+      "(ComboBox (Button (title \"No\")))", "(ComboBox (option \"nim\"))",
+      "(TextField (value \"a\") \"b\")", "(CheckBox (state unknown))", "(UnknownView)",
+    ]:
+      checkpoint source
+      expect ValueError:
+        discard nifGuiMarkup(source)
+    for source in [
+      "style", "style \"button\"", "style \"button\" (color \"red\")",
+      "style \"button\" (rule (border))", "style \"button\" (rule (border (other 1)))",
+      "style \"button\" (rule (chrome))", "style \"button\" (rule (color :other.name))",
+      "style \"button\" (rule (focusRing (width 1)))",
+      "style \"button\" (rule (color (color 0o777)))",
+      "(.lang \"other\")\nstyle \"button\" (rule)",
+    ]:
+      checkpoint source
+      expect ValueError:
+        discard nifStylesheet(source)
 
   test "NIF demo wires preview, reset, and appearance changes for both windows":
     let loaded =
@@ -134,6 +214,75 @@ suite "NimKit NIF markup demo":
       expect ValueError:
         discard nifStylesheet("(stylesheet (rule \"button\" (color " & value & ")))")
 
+  test "hex integer colors preserve leading zeros, short forms, separators, and alpha":
+    for (literal, digits) in [
+      ("0xf00", "f00"),
+      ("0xf00a", "f00a"),
+      ("0x00ff00", "00ff00"),
+      ("0x82_9f_ff", "829fff"),
+      ("0x829fff80u", "829fff80"),
+      ("0x000", "000"),
+      ("0x0000", "0000"),
+      ("0x00000000", "00000000"),
+      ("0xABCDEF", "ABCDEF"),
+    ]:
+      let css = nifStylesheet(
+        "(stylesheet (rule \"button\" (color (hexColor " & literal & "))))"
+      )
+      check css.contains("color: #" & digits & ";")
+      check parseCssTheme(css).diagnostics.len == 0
+      check nifGuiMarkup(
+        "(nkView (attrs (kv \"data-background-color\" (hexColor " & literal & "))))"
+      )
+        .contains("data-background-color=\"#" & digits & "\"")
+    for literal in ["255", "0o377", "0b11111111", "-0xfff", "0x12", "0x12345"]:
+      expect ValueError:
+        discard nifStylesheet(
+          "(stylesheet (rule \"button\" (color (hexColor " & literal & "))))"
+        )
+
+  test "number bases and separators decode identically in CSS and GUI attributes":
+    for literal in ["24", "0x18", "0o30", "0b1_1000", "2_4", "0x18u"]:
+      check nifStylesheet("(stylesheet (rule \"button\" (padding " & literal & " px)))")
+        .contains("padding: 24px;")
+      check nifGuiMarkup("(nkStackView (attrs (kv \"data-spacing\" " & literal & ")))") ==
+        "<nk-stack-view data-spacing=\"24\"></nk-stack-view>"
+    let css = nifStylesheet(
+      """(stylesheet (rule "button" (padding -0x2 px) (fontSize 1_0.5_0 px)))"""
+    )
+    check css.contains("padding: -2px;")
+    check css.contains("font-size: 10.5px;")
+    check nifStylesheet("""(stylesheet (rule "button" (padding 9px)))""").contains(
+      "padding: 9px;"
+    )
+
+  test "quoted hashes, colons, semicolons, characters, and comment suffixes survive":
+    check nifGuiMarkup(
+      """(nkLabel#The hash after a tag begins a comment#
+        "key: value; # text"#This comment is not label text# '\23')"""
+    ) == "<nk-label>key: value; # text#</nk-label>"
+    check nifGuiMarkup("""(nkLabel "2026-10-24T12:00:00Z")""") ==
+      "<nk-label>2026-10-24T12:00:00Z</nk-label>"
+    check nifGuiMarkup(
+      """(nkLabel "first
+second")"""
+    ) == "<nk-label>first\nsecond</nk-label>"
+    let css = nifStylesheet(
+      """(stylesheet (rule "#save:hover" (color "#ff0000")
+        (padding "9px")))"""
+    )
+    check css.contains("#save:hover {")
+    check css.contains("color: #ff0000;")
+    check css.contains("padding: 9px;")
+
+  test "OpenParser errors retain source context through ValueError":
+    try:
+      discard nifGuiMarkup("(nkLabel \"unterminated)")
+      check false
+    except ValueError as error:
+      check error.msg.contains("unterminated")
+      check error.msg.contains("Error")
+
   test "property and token tags map to CSS names":
     let css = nifStylesheet(
       """(stylesheet
@@ -219,10 +368,10 @@ suite "NimKit NIF markup demo":
       expect ValueError:
         discard nifStylesheet("(stylesheet (rule " & selector & " (padding 0)))")
     for value in [
-      "9px", ".5 px", "1. px", "+1 px", "1e1 px", "1E px", "1E+ px", "1E999 px",
-      "0x181e29", "1_000", "-1u", "9223372036854775808", "18446744073709551616u",
-      "9 em", "px 9", "9 px px", "9 px \"12px\"", "none default", "(var)",
-      "(var accent extra)", "(var \"accent, color\")",
+      ".5 px", "1. px", "+1 px", "1e1 px", "1E px", "1E+ px", "1E999 px", "0x", "0o8",
+      "0b102", "0x_FF", "1_", "1__2", "0XFF", "-1u", "9223372036854775808",
+      "18446744073709551616u", "9 em", "px 9", "9 px px", "9 px \"12px\"",
+      "none default", "(var)", "(var accent extra)", "(var \"accent, color\")",
     ]:
       checkpoint(value)
       expect ValueError:
@@ -235,6 +384,7 @@ suite "NimKit NIF markup demo":
     check nifGuiMarkup("""(nkLabel "\n\t\r\|\^")""") ==
       "<nk-label>\n\t\r\\&quot;</nk-label>"
     check nifGuiMarkup("""(nk\2Dlabel "Hello")""") == "<nk-label>Hello</nk-label>"
+    check nifGuiMarkup("""(nk-label "Hello")""") == "<nk-label>Hello</nk-label>"
 
   test "malformed NIF is rejected before GUI or CSS parsing":
     for source in [
@@ -244,8 +394,8 @@ suite "NimKit NIF markup demo":
       "(nkView (attrs (kv \"id\" \"a\" \"b\")))",
       "(nkView (attrs (kv \"id\" \"a\") (kv \"ID\" \"b\")))",
       "(nkView (attrs (kv \"bad name\" \"x\")))", "(nkView (attrs) (attrs))",
-      "(nkView \"\\af\")", "(nkView \"\\\\\")", "(nkView \"raw # control\")",
-      "(nk-view)",
+      "(nkView \"\\af\")", "(nkView \"\\\\\")", "(nkView \"raw @ control\")",
+      "(.nif27 extra)(nkView)", "(.lang \"other\")(nkView)", "(nkView .)",
     ]:
       checkpoint(source)
       expect ValueError:

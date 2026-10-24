@@ -78,8 +78,7 @@ proc configureNifUiDemo*(
       status.stringValue = "Your preview will appear here.",
   )
 
-when isMainModule:
-  let path = currentSourcePath().parentDir / "nif_ui_demo.nif"
+proc runNifUiDemo*(path: string) = ## Loads and runs either NIF preferences example.
   let loaded = parseGuiResourceBundle(nifGuiMarkup(readFile(path)))
   if not loaded.loaded:
     for diagnostic in loaded.diagnostics:
@@ -109,3 +108,6 @@ when isMainModule:
   app.configureNifUiDemo(built.instance, stylesheet.theme)
   app.addWindow(built.instance.window(resourceId("about")))
   app.runWindow(window, window.contentView)
+
+when isMainModule:
+  runNifUiDemo(currentSourcePath().parentDir / "nif_ui_demo.nif")

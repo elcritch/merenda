@@ -1,228 +1,131 @@
-## Demo-local adapters from a small textual NIF vocabulary to GUI markup and CSS.
-## Uses nifcore's token buffer and cursors; this is not a general NIF reader.
+## Demo-local adapters from OpenParser's NIF nodes to GUI markup and CSS.
 
 import std/[math, sets, strutils]
-import nifcore
+import openparser/nif
+import ./nifshorthand
 
-type MarkupReader = object
-  source: string
-  position: int
+proc name(node: NifNode): string =
+  if node.kind != nkCompound:
+    raise newException(ValueError, "expected a NIF element")
+  node.tag
 
-const NifControlCharacters =
-  {'(', ')', '[', ']', '{', '}', '~', '#', '\'', '"', '\\', ':', '@'}
+proc requireChildren(node: NifNode, count: int) =
+  if node.children.len != count:
+    raise newException(ValueError, node.name() & " expects " & $count & " values")
 
-proc fail(reader: MarkupReader, message: string) {.noreturn.} =
-  raise newException(ValueError, "NIF byte " & $(reader.position + 1) & ": " & message)
-
-proc escapedByte(reader: var MarkupReader): char =
-  inc reader.position
-  if reader.position >= reader.source.len:
-    reader.fail("incomplete escape")
-  let shortcut = reader.source[reader.position]
-  inc reader.position
-  case shortcut
-  of 'n':
-    return '\n'
-  of 't':
-    return '\t'
-  of 'r':
-    return '\r'
-  of '|':
-    return '\\'
-  of '^':
-    return '"'
-  else:
+proc validateNode(node: NifNode, count: var int) =
+  inc count
+  if count > 100_000:
+    raise newException(ValueError, "NIF markup exceeds the node limit")
+  case node.kind
+  of nkCompound:
+    let tag = node.name()
+    if tag.len == 0 or tag[0] notin Letters + {'_'}:
+      raise newException(ValueError, "expected a markup tag name")
+    for ch in tag:
+      if ch notin Letters + Digits + {'_', '-'}:
+        raise newException(ValueError, "unsupported markup tag: " & tag)
+    for child in node.children:
+      child.validateNode(count)
+  of nkFloat:
+    if node.floatVal.classify in {fcNan, fcInf, fcNegInf}:
+      raise newException(ValueError, "NIF markup numbers must be finite")
+  of nkUInt:
+    if node.rawUInt.startsWith("-"):
+      raise newException(ValueError, "NIF markup unsigned numbers cannot be negative")
+  of nkStrLit, nkCharLit, nkIdent, nkInt, nkSymbolDef:
     discard
-  if shortcut notin HexDigits - {'a' .. 'f'} or reader.position >= reader.source.len or
-      reader.source[reader.position] notin HexDigits - {'a' .. 'f'}:
-    reader.fail("expected an uppercase hex escape or NIF shortcut")
-  result = char(parseHexInt($shortcut & $reader.source[reader.position]))
-  inc reader.position
+  else:
+    raise newException(ValueError, "unsupported NIF markup node: " & $node.kind)
 
-proc quotedString(reader: var MarkupReader): string =
-  inc reader.position
-  while reader.position < reader.source.len:
-    case reader.source[reader.position]
-    of '"':
-      inc reader.position
-      return
-    of '\\':
-      result.add reader.escapedByte()
-    else:
-      if reader.source[reader.position] in NifControlCharacters:
-        reader.fail("NIF control characters must use escapes")
-      result.add reader.source[reader.position]
-      inc reader.position
-  reader.fail("unclosed string")
-
-proc tagName(reader: var MarkupReader): string =
-  while reader.position < reader.source.len and
-      reader.source[reader.position] notin {' ', '\t', '\r', '\n', '(', ')'}:
-    if reader.source[reader.position] == '\\':
-      result.add reader.escapedByte()
-    else:
-      if reader.source[reader.position] notin Letters + Digits + {'_'}:
-        reader.fail("tag characters must be identifiers or escapes")
-      result.add reader.source[reader.position]
-      inc reader.position
-  if result.len == 0 or result[0] notin Letters + {'_'}:
-    reader.fail("expected a tag name")
-  for ch in result:
-    if ch notin Letters + Digits + {'_', '-'}:
-      reader.fail("unsupported tag character")
-
-proc addNumber(reader: var MarkupReader, buffer: var TokenBuf) =
-  let start = reader.position
-  if reader.source[reader.position] == '-':
-    inc reader.position
-  let digits = reader.position
-  while reader.position < reader.source.len and reader.source[reader.position] in Digits:
-    inc reader.position
-  if reader.position == digits:
-    reader.fail("expected decimal digits")
-  var floating = false
-  if reader.position < reader.source.len and reader.source[reader.position] == '.':
-    floating = true
-    inc reader.position
-    let fraction = reader.position
-    while reader.position < reader.source.len and
-        reader.source[reader.position] in Digits:
-      inc reader.position
-    if reader.position == fraction:
-      reader.fail("expected digits after the decimal point")
-  if reader.position < reader.source.len and reader.source[reader.position] == 'E':
-    floating = true
-    inc reader.position
-    if reader.position < reader.source.len and
-        reader.source[reader.position] in {'+', '-'}:
-      inc reader.position
-    let exponent = reader.position
-    while reader.position < reader.source.len and
-        reader.source[reader.position] in Digits:
-      inc reader.position
-    if reader.position == exponent:
-      reader.fail("expected exponent digits")
-  let unsigned =
-    not floating and reader.position < reader.source.len and
-    reader.source[reader.position] == 'u'
-  let number = reader.source[start ..< reader.position]
-  if unsigned:
-    if number[0] == '-':
-      reader.fail("unsigned numbers cannot be negative")
-    inc reader.position
-  if reader.position < reader.source.len and
-      reader.source[reader.position] notin {' ', '\t', '\r', '\n', '(', ')'}:
-    reader.fail("numbers and units must be separate NIF atoms")
-  try:
-    if floating:
-      let value = parseFloat(number)
-      if value.classify in {fcNan, fcInf, fcNegInf}:
-        reader.fail("numbers must be finite")
-      buffer.addFloatLit(value)
-    elif unsigned:
-      buffer.addUIntLit(parseBiggestUInt(number))
-    else:
-      buffer.addIntLit(parseBiggestInt(number))
-  except ValueError:
-    reader.fail("number is outside the supported range")
-
-proc parseMarkup(source: string): TokenBuf =
+proc parseMarkup(source: string, language = "", lineBased = false): NifModule =
   if source.len > 64 * 1024 * 1024:
     raise newException(ValueError, "NIF markup exceeds the byte limit")
-  result = createTokenBuf()
-  var reader = MarkupReader(source: source)
-  if source.startsWith("(.nif27)"):
-    reader.position = "(.nif27)".len
-  var depth, nodes: int
-  while reader.position < source.len:
-    case source[reader.position]
-    of ' ', '\t', '\r', '\n':
-      inc reader.position
-    of '(':
-      inc reader.position
-      let name = reader.tagName()
-      let tag = result.tags.registerTag(name)
-      if tag.uint32 > TagMask:
-        reader.fail("too many distinct tags")
-      inc depth
-      inc nodes
-      if depth > 256:
-        reader.fail("markup exceeds the depth limit")
-      result.openTag(tag)
-    of ')':
-      if depth == 0:
-        reader.fail("unmatched closing parenthesis")
-      result.closeTag()
-      dec depth
-      inc reader.position
-    of '"':
-      if depth == 0:
-        reader.fail("text must be inside an element")
-      result.addStrLit(reader.quotedString())
-      inc nodes
-    of '0' .. '9', '-':
-      if depth == 0:
-        reader.fail("numbers must be inside an element")
-      reader.addNumber(result)
-      inc nodes
-    of 'a' .. 'z', 'A' .. 'Z', '_', '\\':
-      if depth == 0:
-        reader.fail("identifiers must be inside an element")
-      result.addIdent(reader.tagName())
-      inc nodes
-    else:
-      reader.fail("expected a NIF element, string, number, or identifier")
-    if nodes > 100_000:
-      reader.fail("markup exceeds the node limit")
-  if depth != 0:
-    reader.fail("unclosed element")
+  let options = defaultNifOptions()
+  options.maxDepth = 256
+  options.expandGlobalSymbols = false
+  options.preserveComments = false
+  options.allowLineBased = lineBased
+  try:
+    result = fromNif(source, options)
+  except OpenParserNifError as error:
+    raise newException(ValueError, error.msg)
+  if result.len > 0 and result[0].kind == nkDirective and result[0].tag == ".nif27":
+    if result[0].children.len != 0:
+      raise newException(ValueError, "the NIF version marker takes no values")
+    result.delete(0)
+  if language.len > 0 and result.len > 0 and result[0].kind == nkDirective and
+      result[0].tag == ".lang":
+    if result[0].children.len != 1 or result[0].children[0].kind != nkStrLit or
+        result[0].children[0].strVal != language:
+      raise newException(ValueError, "expected the " & language & " language directive")
+    result.delete(0)
   if result.len == 0:
-    reader.fail("markup is empty")
+    raise newException(ValueError, "NIF markup is empty")
+  var count: int
+  for node in result:
+    node.validateNode(count)
 
-proc name(cursor: Cursor): string =
-  if not cursor.hasMore or cursor.kind != TagLit:
-    raise newException(ValueError, "expected a NIF element")
-  cursor.tags.tagName(cursor.cursorTagId)
+proc stringValue(node: NifNode): string =
+  case node.kind
+  of nkStrLit:
+    node.strVal
+  of nkCharLit:
+    node.charVal
+  else:
+    raise newException(ValueError, "expected a NIF string or character literal")
 
-proc takeString(cursor: var Cursor): string =
-  if not cursor.hasMore or cursor.kind != StrLit:
-    raise newException(ValueError, "expected a quoted NIF string")
-  result = cursor.strVal()
-  cursor.inc()
+proc numberValue(node: NifNode): string =
+  case node.kind
+  of nkInt:
+    $node.intVal
+  of nkUInt:
+    $node.uintVal
+  of nkFloat:
+    $node.floatVal
+  else:
+    raise newException(ValueError, "expected a NIF number")
 
-proc requireEnd(cursor: Cursor) =
-  if cursor.hasMore:
-    raise newException(ValueError, "unexpected NIF element content")
+proc value(node: NifNode): string =
+  case node.kind
+  of nkStrLit, nkCharLit:
+    return node.stringValue()
+  of nkInt, nkUInt, nkFloat:
+    return node.numberValue()
+  else:
+    discard
+  if node.name() != "hexColor":
+    raise newException(ValueError, "expected a string, number, or hexColor value")
+  node.requireChildren(1)
+  let color = node.children[0]
+  var digits: string
+  case color.kind
+  of nkStrLit:
+    digits = color.strVal
+  of nkInt, nkUInt:
+    let raw = if color.kind == nkInt: color.rawInt else: color.rawUInt
+    if not raw.startsWith("0x"):
+      raise newException(ValueError, "hexColor integers require a 0x prefix")
+    digits = raw[2 .. ^1].replace("_", "")
+    if digits.endsWith("u"):
+      digits.setLen(digits.len - 1)
+  else:
+    raise newException(ValueError, "hexColor requires hex digits or a 0x integer")
+  if digits.len notin [3, 4, 6, 8]:
+    raise newException(ValueError, "hexColor requires 3, 4, 6, or 8 hex digits")
+  for ch in digits:
+    if ch notin HexDigits:
+      raise newException(ValueError, "invalid hexColor digit")
+  "#" & digits
 
-proc takeValue(cursor: var Cursor): string =
-  if cursor.hasMore and cursor.kind == StrLit:
-    return cursor.takeString()
-  if cursor.name() != "hexColor":
-    raise newException(ValueError, "expected a string or hexColor value")
-  cursor.into:
-    let digits = cursor.takeString()
-    cursor.requireEnd()
-    if digits.len notin [3, 4, 6, 8]:
-      raise newException(ValueError, "hexColor requires 3, 4, 6, or 8 hex digits")
-    for ch in digits:
-      if ch notin HexDigits:
-        raise newException(ValueError, "invalid hexColor digit")
-    result = "#" & digits
-
-proc htmlName(value: string): string =
-  for ch in value:
-    if ch in {'A' .. 'Z'}:
-      if result.len > 0:
-        result.add '-'
-      result.add ch.toLowerAscii()
-    else:
-      result.add ch
-
-proc takeWord(cursor: var Cursor): string =
-  if not cursor.hasMore or cursor.kind notin {Ident, StrLit}:
+proc word(node: NifNode): string =
+  case node.kind
+  of nkIdent:
+    node.ident
+  of nkStrLit:
+    node.strVal
+  else:
     raise newException(ValueError, "expected a NIF identifier or string")
-  result = cursor.strVal()
-  cursor.inc()
 
 proc cssIdentifier(value: string): string =
   if value.len == 0 or value[0] notin Letters + {'_'}:
@@ -234,96 +137,89 @@ proc cssIdentifier(value: string): string =
       raise newException(ValueError, "unsupported style name: " & value)
   value
 
-proc takeSimpleSelector(cursor: var Cursor): string =
-  let tag = cursor.name()
+proc simpleSelector(node: NifNode): string =
+  let tag = node.name()
   if tag notin ["role", "id", "class", "state"]:
     raise newException(ValueError, "expected role, id, class, or state selector")
-  cursor.into:
-    let value = cursor.takeWord().cssIdentifier()
-    cursor.requireEnd()
-    case tag
-    of "role":
-      result = value.htmlName()
-    of "id":
-      result = "#" & value
-    of "class":
-      result = "." & value
-    of "state":
-      result = ":" & value.htmlName()
-    else:
-      discard
+  node.requireChildren(1)
+  let value = node.children[0].word().cssIdentifier()
+  case tag
+  of "role":
+    value.htmlName()
+  of "id":
+    "#" & value
+  of "class":
+    "." & value
+  of "state":
+    ":" & value.htmlName()
+  else:
+    ""
 
-proc takeSelector(cursor: var Cursor): string =
-  if cursor.hasMore and cursor.kind == StrLit:
-    return cursor.takeString()
-  case cursor.name()
+proc selector(node: NifNode): string =
+  if node.kind == nkStrLit:
+    return node.strVal
+  case node.name()
   of "any":
-    cursor.into:
-      while cursor.hasMore:
-        if result.len > 0:
-          result.add ", "
-        result.add cursor.takeSelector()
+    for child in node.children:
+      if result.len > 0:
+        result.add ", "
+      result.add child.selector()
     if result.len == 0:
       raise newException(ValueError, "any requires at least one selector")
   of "match":
     var role: string
     var hasId = false
-    cursor.into:
-      while cursor.hasMore:
-        let tag = cursor.name()
-        let part = cursor.takeSimpleSelector()
-        case tag
-        of "role":
-          if role.len > 0:
-            raise newException(ValueError, "match accepts at most one role")
-          role = part
-        of "id":
-          if hasId:
-            raise newException(ValueError, "match accepts at most one id")
-          hasId = true
-          result.add part
-        else:
-          result.add part
+    for child in node.children:
+      let tag = child.name()
+      let part = child.simpleSelector()
+      case tag
+      of "role":
+        if role.len > 0:
+          raise newException(ValueError, "match accepts at most one role")
+        role = part
+      of "id":
+        if hasId:
+          raise newException(ValueError, "match accepts at most one id")
+        hasId = true
+        result.add part
+      else:
+        result.add part
     if role.len == 0 and result.len == 0:
       raise newException(ValueError, "match requires at least one selector")
     result = role & result
   else:
-    result = cursor.takeSimpleSelector()
+    result = node.simpleSelector()
 
-proc takeStyleValue(cursor: var Cursor): string =
-  if not cursor.hasMore:
+proc styleValue(node: NifNode): string =
+  if node.children.len == 0:
     raise newException(ValueError, "expected a style value")
-  case cursor.kind
-  of IntLit, UIntLit, FloatLit:
-    while cursor.hasMore:
+  let first = node.children[0]
+  if first.kind in {nkInt, nkUInt, nkFloat}:
+    var index: int
+    while index < node.children.len:
       if result.len > 0:
         result.add ' '
-      case cursor.kind
-      of IntLit:
-        result.add $cursor.intVal()
-      of UIntLit:
-        result.add $cursor.uintVal()
-      of FloatLit:
-        result.add $cursor.floatVal()
-      else:
-        raise newException(ValueError, "expected a number with an optional px unit")
-      cursor.inc()
-      if cursor.hasMore and cursor.kind == Ident:
-        if cursor.strVal() != "px":
+      result.add node.children[index].numberValue()
+      inc index
+      if index < node.children.len and node.children[index].kind == nkIdent:
+        if node.children[index].ident != "px":
           raise newException(ValueError, "the theme engine supports px lengths")
-        result.add cursor.takeWord()
-  of Ident:
-    result = cursor.takeWord().cssIdentifier().htmlName()
-  of TagLit:
-    if cursor.name() == "var":
-      cursor.into:
-        let token = cursor.takeWord().cssIdentifier().htmlName()
-        cursor.requireEnd()
-        result = "var(--" & token & ")"
+        result.add "px"
+        inc index
+    return
+  node.requireChildren(1)
+  case first.kind
+  of nkIdent:
+    result = first.word().cssIdentifier().htmlName()
+  of nkCompound:
+    if first.name() == "var":
+      first.requireChildren(1)
+      let token = first.children[0].word().cssIdentifier().htmlName()
+      result = "var(--" & token & ")"
     else:
-      result = cursor.takeValue()
-  of StrLit:
-    result = cursor.takeString()
+      result = first.value()
+  of nkStrLit, nkCharLit:
+    result = first.stringValue()
   else:
     raise newException(ValueError, "unsupported style value")
 
@@ -332,81 +228,87 @@ proc escapedHtml(value: string): string =
     "\"", "&quot;"
   )
 
-proc emitElement(cursor: var Cursor, output: var string) =
-  if cursor.kind == StrLit:
-    output.add escapedHtml(cursor.takeString())
+proc emitElement(node: NifNode, output: var string) =
+  if node.kind in {nkStrLit, nkCharLit}:
+    output.add escapedHtml(node.stringValue())
     return
-  let tag = cursor.name().htmlName()
+  let tag = node.name().htmlName()
   if tag in ["attrs", "kv"]:
     raise newException(ValueError, "attrs must be the first child of an element")
   output.add '<' & tag
-  cursor.into:
-    if cursor.hasMore and cursor.kind == TagLit and cursor.name() == "attrs":
-      var attributes = initHashSet[string]()
-      cursor.into:
-        while cursor.hasMore:
-          if cursor.name() != "kv":
-            raise newException(ValueError, "attrs requires kv entries")
-          cursor.into:
-            let key = cursor.takeString()
-            if key.len == 0 or key.toLowerAscii() in attributes:
-              raise newException(ValueError, "empty or duplicate attribute: " & key)
-            for ch in key:
-              if ch notin Letters + Digits + {'-', '_'}:
-                raise newException(ValueError, "invalid attribute name: " & key)
-            attributes.incl key.toLowerAscii()
-            let value = cursor.takeValue()
-            cursor.requireEnd()
-            output.add ' ' & key & "=\"" & value.escapedHtml() & '"'
-    output.add '>'
-    if tag in ["input", "img", "br"]:
-      cursor.requireEnd()
-    else:
-      while cursor.hasMore:
-        cursor.emitElement(output)
-      output.add "</" & tag & '>'
+  var childIndex: int
+  if node.children.len > 0 and node.children[0].kind == nkCompound and
+      node.children[0].name() == "attrs":
+    var attributes = initHashSet[string]()
+    for entry in node.children[0].children:
+      if entry.name() != "kv":
+        raise newException(ValueError, "attrs requires kv entries")
+      entry.requireChildren(2)
+      let key = entry.children[0].stringValue()
+      if key.len == 0 or key.toLowerAscii() in attributes:
+        raise newException(ValueError, "empty or duplicate attribute: " & key)
+      for ch in key:
+        if ch notin Letters + Digits + {'-', '_'}:
+          raise newException(ValueError, "invalid attribute name: " & key)
+      attributes.incl key.toLowerAscii()
+      output.add ' ' & key & "=\"" & entry.children[1].value().escapedHtml() & '"'
+    inc childIndex
+  output.add '>'
+  if tag in ["input", "img", "br"]:
+    if node.children.len != childIndex:
+      raise newException(ValueError, "unexpected content in " & tag)
+  else:
+    while childIndex < node.children.len:
+      node.children[childIndex].emitElement(output)
+      inc childIndex
+    output.add "</" & tag & '>'
 
 proc nifGuiMarkup*(source: string): string =
-  ## Converts elements with htmlnif-style `(attrs (kv "name" "value"))` blocks.
+  ## Converts elements with `(attrs (kv "name" value))` blocks to GUI markup.
   ## Camel-case tags such as `nkStackView` map to native `nk-stack-view` tags.
-  var buffer = parseMarkup(source)
-  var cursor = buffer.beginRead()
-  while cursor.hasMore:
-    cursor.emitElement(result)
+  var nodes = parseMarkup(source)
+  let windowDocument = nodes[0].kind == nkCompound and nodes[0].tag == "Window"
+  for node in nodes.mitems:
+    if node.kind == nkCompound and node.tag[0] in {'A' .. 'Z'}:
+      node = node.expandGuiShorthand()
+  if windowDocument:
+    newNifCompound("nkMain", "nkMain", nodes).emitElement(result)
+  else:
+    for node in nodes:
+      node.emitElement(result)
 
-proc emitDeclarations(cursor: var Cursor, output: var string, customProperties: bool) =
-  while cursor.hasMore:
-    var property = cursor.name().htmlName()
+proc emitDeclarations(
+    nodes: openArray[NifNode], output: var string, customProperties: bool
+) =
+  for declaration in nodes:
+    var property = declaration.name().htmlName()
     if customProperties:
       property = "--" & property
     elif property.startsWith("nimkit-"):
       property = "-" & property
-    cursor.into:
-      let value = cursor.takeStyleValue()
-      cursor.requireEnd()
-      output.add "  " & property & ": " & value & ";\n"
+    output.add "  " & property & ": " & declaration.styleValue() & ";\n"
 
 proc nifStylesheet*(source: string): string =
   ## Converts native selectors and values into the existing theme engine's CSS.
-  ## Values include numbers with px units, keywords, hexColor, and var nodes.
-  ## `tokens` defines root custom properties; camel-case roles/properties become CSS names.
-  var buffer = parseMarkup(source)
-  var cursor = buffer.beginRead()
-  if cursor.name() != "stylesheet":
-    raise newException(ValueError, "expected a stylesheet root")
-  cursor.into:
-    while cursor.hasMore:
-      case cursor.name()
-      of "tokens":
-        result.add ":root {\n"
-        cursor.into:
-          cursor.emitDeclarations(result, customProperties = true)
-        result.add "}\n"
-      of "rule":
-        cursor.into:
-          result.add cursor.takeSelector() & " {\n"
-          cursor.emitDeclarations(result, customProperties = false)
-          result.add "}\n"
-      else:
-        raise newException(ValueError, "stylesheet requires tokens or rule elements")
-  cursor.requireEnd()
+  ## Numbers support NIF bases; hexColor keeps leading zeros and alpha digits.
+  var nodes = parseMarkup(source, language = "nimkit-css", lineBased = true)
+  if nodes[0].kind == nkCompound and nodes[0].tag == "style":
+    nodes = @[nodes.expandStyleShorthand()]
+  if nodes.len != 1 or nodes[0].name() != "stylesheet":
+    raise newException(ValueError, "expected one stylesheet root")
+  for node in nodes[0].children:
+    case node.name()
+    of "tokens":
+      result.add ":root {\n"
+      node.children.emitDeclarations(result, customProperties = true)
+      result.add "}\n"
+    of "rule":
+      if node.children.len == 0:
+        raise newException(ValueError, "rule requires a selector")
+      result.add node.children[0].selector() & " {\n"
+      node.children.toOpenArray(1, node.children.high).emitDeclarations(
+        result, customProperties = false
+      )
+      result.add "}\n"
+    else:
+      raise newException(ValueError, "stylesheet requires tokens or rule elements")

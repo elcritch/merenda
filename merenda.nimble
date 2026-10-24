@@ -20,7 +20,7 @@ requires "cborious"
 requires "unicodedb >= 0.14.0"
 requires "faststreams >= 0.5.1"
 requires "gh:elcritch/nim-markdown#fix/arc-emphasis-ownership [regex]"
-requires "gh:elcritch/matter >= 0.6.0"
+requires "gh:elcritch/matter >= 0.6.1"
 requires "gh:elcritch/terminex >= 0.4.0 [sigils]"
 requires "gh:Araq/iconbundler"
 requires "libbacktrace"
@@ -29,8 +29,7 @@ requires "gh:elcritch/dmon-nim >= 0.5.2"
 requires "stylus == 0.1.5"
 
 feature "nifDemo":
-  # Standalone nifcore fork with its table support included; no Nimony dependency.
-  requires "gh:elcritch/nifcore#86db398"
+  requires "gh:openpeeps/openparser >= 0.4.1"
 
 feature "uirelays":
   requires "gh:nim-lang/uirelays#688dd44"

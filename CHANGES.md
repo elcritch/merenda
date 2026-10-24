@@ -5,7 +5,12 @@
 - Duplicate the HTML GUI demo with NIF interface and stylesheet files, preserving
   its preferences, Preview/Reset actions, theme switching, and About window. The
   theme uses native selector nodes, numeric lengths, keywords, and token references.
-  Use the optional `nifDemo` Atlas feature and a standalone nifcore fork without Nimony.
+  Use the optional `nifDemo` Atlas feature with OpenParser 0.4.1 or newer. NIF
+  numbers support hexadecimal, octal, binary, and digit separators; quoted strings
+  accept literal `#`, `:`, and `;`. Restore the working example vocabulary and
+  preserve short colors, leading zeros, and alpha in hexadecimal color literals.
+  Add a matching shorthand demo with native widget properties, ComboBox options,
+  and line-based style rules with grouped borders, chrome, and token references.
 - Use Moe's Matter semantic scope mappings to distinguish HTML/custom element
   names, attributes, CSS selectors and common language values in existing themes.
   Preserve preprocessor colors for C/C++ pragmas and string colors for regex

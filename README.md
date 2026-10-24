@@ -93,17 +93,19 @@ switches both windows between the custom stylesheet and the built-in CSS themes.
 The [NIF version](examples/nif_ui_demo.nim) duplicates this demo with
 [NIF GUI markup](examples/nif_ui_demo.nif) and a
 [NIF theme](examples/nif_ui_demo.css.nif). The theme uses tagged selectors,
-numbers with units, bare keywords, and shared token references. Enable its
-optional dependency and run it with:
+hex colors, numbers with units, bare keywords, and shared token references.
+Enable its optional dependency and run it with:
 
 ```sh
 atlas install -tk --feature=nifDemo
 nim ic -r examples/nif_ui_demo.nim
 ```
 
-It uses a [standalone nifcore fork](https://github.com/elcritch/nifcore/tree/feat/standalone-nifcore)
-without Nimony. The demo-local adapter feeds the existing GUI and CSS loaders;
-see the [NIF demo format](docs/resources.md#nif-demo) for its vocabulary.
+It uses [OpenParser](https://github.com/openpeeps/openparser) 0.4.1 or newer
+with Nim 2.2.10 or newer. The demo-local adapter feeds the existing GUI and CSS
+loaders; see the [NIF demo format](docs/resources.md#nif-demo) for its vocabulary.
+The [shorthand version](examples/nif_shorthand_demo.nim) uses native widget
+property nodes and line-based `style` rules for the same preferences window.
 
 To use Merenda in your own project, add this dependency to your `.nimble` file
 and run `atlas install -tuk` from that project:

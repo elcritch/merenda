@@ -1,0 +1,144 @@
+(.nif27)
+(Window
+  (id "window")
+  (title "Your workspace · NimKit")
+  (frame 140 120 560 640)
+
+  (StackView
+    (id "root")
+    (axis "vertical")
+    (spacing 0x18)
+    (padding 0o34)
+    (distribution "natural")
+
+    (StackView
+      (spacing 0b1000)
+      (distribution "natural")
+
+      (Label
+        (classes "eyebrow")
+        "NIMKIT / GUI")
+      (Label
+        (labelStyle "title")
+        (alignment "left")
+        "Your workspace")
+      (Label
+        (classes "muted")
+        "A few preferences. Real native controls.\n"
+        "Markup describes the view; Nim brings it to life."))
+    (StackView
+      (id "preferences")
+      (spacing 18)
+      (padding 20)
+      (distribution "natural")
+
+      (StackView
+        (spacing 6)
+        (distribution "natural")
+
+        (Label
+          (classes "field-label")
+          "Display name")
+        (TextField
+          (id "name")
+          (placeholder "Ada Lovelace")
+          "Ada"))
+      (StackView
+        (spacing 6)
+        (distribution "natural")
+
+        (Label
+          (classes "field-label")
+          "Preferred language")
+        (ComboBox
+          (id "language")
+          (selectedIndex 0)
+
+          (ComboBoxOption (objectValue "nim") (displayText "Nim"))
+          (ComboBoxOption (objectValue "c") (displayText "C"))
+          (ComboBoxOption (objectValue "other") (displayText "Other"))))
+      (StackView
+        (spacing 6)
+        (distribution "natural")
+
+        (Label
+          (classes "field-label")
+          "Appearance")
+        (ComboBox
+          (id "theme")
+          (action "changeTheme")
+          (selectedIndex 0)
+
+          (option "custom" "Custom CSS")
+          (option "aqua" "Aqua")
+          (option "banner" "Banner")
+          (option "darkbsd" "Dark BSD")
+          (option "macos" "macOS")
+          (option "macos-dark" "macOS Dark")
+          (option "nebula" "Nebula")
+          (option "peachy" "Peachy")
+          (option "synthwave83" "Synthwave83")))
+
+      (CheckBox
+        (id "updates")
+        (title "Send me product updates")
+        (state "on")))
+    (StackView
+      (spacing 12)
+      (distribution "natural")
+
+      (StackView
+        (axis "horizontal")
+        (spacing 10)
+        (alignment "center")
+        (distribution "natural")
+
+        (Button
+          (id "preview")
+          (classes "primary")
+          (action "previewProfile")
+          (title "Preview profile"))
+        (Button
+          (id "reset")
+          (action "resetProfile")
+          (title "Reset"))
+        (Button
+          (id "show-about")
+          (action "showAbout")
+          (title "About")))
+      (ProgressIndicator
+        (id "progress")
+        (maxValue 100)
+        (value 0))
+      (Label
+        (id "status")
+        (classes "muted")
+        (labelStyle "status")
+        "Your preview will appear here."))))
+
+(Window
+  (id "about")
+  (title "About NimKit")
+  (frame 220 180 420 240)
+
+  (StackView
+    (id "about-content")
+    (padding 24)
+    (distribution "natural")
+
+    (Box
+      (id "about-group")
+      (boxTitle "One GUI resource file")
+
+      (StackView
+        (id "about-details")
+        (spacing 16)
+        (distribution "natural")
+
+        (Label
+          "Two independent native windows.\n"
+          "Markup defines the views; Nim connects their actions.")
+        (Button
+          (id "close-about")
+          (action "closeAbout")
+          (title "Close"))))))

@@ -1,0 +1,57 @@
+(.nif27)
+(.lang "nimkit-css")
+style ":root" (accent (color 0x82_9f_ff))
+
+style "#root" "#about-content" (rule (background (color 0x181e29)))
+style "#preferences" (rule (background (color 0x222c3c)))
+
+style "label" (rule (color "#eef2fc") (fontSize 0xE px))
+style "label.label-title" (rule (fontSize 0o34 px))
+style "label.eyebrow" (rule (color 0xa5baff) (fontSize 11 px))
+style "label.muted" (rule (color 0xaebbd0) (fontSize 13 px))
+style "label.field-label" (rule (color 0xc4cfe2) (fontSize 13 px))
+
+style "#name" "#language" "#theme" (rule
+  (background (color 0x161e2b))
+  (color 0xeef2fc)
+  (border (color 0x465674) (width 0b1 px) (radius 7 px))
+  (padding 9 px 12 px)
+  (fontSize 14 px)
+  (chrome flat transparent)
+  (focusRing (color :var.accent)))
+
+style "#language" "#theme" (rule
+  (boxShadow none)
+  (chrome default)
+  (indicatorFill (color 0x2b374c))
+  (markColor (color 0xdce5f5)))
+style "#language:hover" "#language:open" "#theme:hover" "#theme:open" (rule
+  (indicatorFill (color 0x35445e)))
+style "#language:open" "#theme:open" (rule (borderColor :var.accent))
+
+style "combo-box-item" (rule (background (color 0x222c3c)) (color 0xeef2fc))
+style "combo-box-item:highlighted" (rule (background (color 0x35445e)))
+style "combo-box-item:selected" (rule (background :var.accent) (color 0x101a30))
+
+style "checkbox" (rule
+  (color 0xdce5f5)
+  (fontSize 14 px)
+  (nimkitIndicatorSize 18 px)
+  (nimkitIndicatorSpacing 9 px))
+
+style "button" (rule
+  (background (color 0x2b374c))
+  (color 0xdce5f5)
+  (border (color 0x465674) (width 1 px) (radius 7 px))
+  (padding 9 px 16 px)
+  (fontSize 14 px)
+  (chrome flat transparent))
+style "button:hover" (rule (background "#35445e"))
+style "button:pressed" (rule (background (color 0x202b3c)))
+style "button.primary" (rule
+  (background :var.accent) (color 0x101a30) (borderColor :var.accent))
+style "button.primary:hover" (rule (background (color 0x9ab1ff)))
+style "button.primary:pressed" (rule (background (color 0x6583dc)))
+
+style "progress-indicator" (rule
+  (background (color 0x303e55)) (nimkitHighlightFill :var.accent))

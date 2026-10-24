@@ -233,23 +233,23 @@ validation then applies the same schema and reference checks as other frontends.
 
 `examples/nif_ui_demo.nim` duplicates the HTML demo using
 `nif_ui_demo.nif` for its interface and `nif_ui_demo.css.nif` for its appearance.
-The optional dependency is a pinned [standalone nifcore fork](https://github.com/elcritch/nifcore/tree/feat/standalone-nifcore)
-that includes its table support and requires no Nimony checkout:
+The optional dependency is [OpenParser](https://github.com/openpeeps/openparser)
+0.4.1 or newer. This feature requires Nim 2.2.10 or newer:
 
 ```sh
 atlas install -tk --feature=nifDemo
 nim ic -r examples/nif_ui_demo.nim
 ```
 
-Elements contain an optional first `attrs` child with `kv` entries, following
-nifcore's HTML adapter shape. Camel-case native tags map to the existing
-hyphenated GUI tags. Text and attribute values are quoted strings, including
-numeric properties and empty strings for present boolean attributes:
+Elements contain an optional first `attrs` child with `kv` entries. Camel-case
+native tags map to the existing hyphenated GUI tags. Text uses quoted strings
+or character literals. Attribute values also accept numbers and color nodes;
+use empty strings for present boolean attributes:
 
 ```nif
 (.nif27)
 (nkStackView
-  (attrs (kv "id" "root") (kv "data-spacing" "12"))
+  (attrs (kv "id" "root") (kv "data-spacing" 0xC))
   (nkLabel "Hello from NIF")
   (input (attrs (kv "id" "name") (kv "placeholder" "Your name")))
   (button (attrs (kv "id" "save")) "Save"))
@@ -261,12 +261,12 @@ Rules describe selectors and values as NIF nodes rather than CSS expressions:
 ```nif
 (.nif27)
 (stylesheet
-  (tokens (accent (hexColor "829fff")))
-  (rule (any (id name) (id language) (id theme))
-    (background (hexColor "161e2b"))
+  (tokens (accent (hexColor 0x82_9f_ff)))
+  (rule "#name, #language, #theme"
+    (background (hexColor 0x161e2b))
     (borderColor (var accent))
     (padding 9 px 12 px)
-    (fontSize 14 px)
+    (fontSize 0xE px)
     (nimkitChrome flatTransparent))
   (rule (match (role button) (class primary) (state hover))
     (background (var accent))))
@@ -297,32 +297,115 @@ Within `tokens`, `accent` defines a shared token; `(var accent)` references it.
 Tokens, specificity, rule order, and widget states retain the existing theme
 engine's behavior.
 
-Values can be decimal numbers with optional `px` units, bare keywords, token
-references, strings, or typed `(hexColor "829fff")` nodes. Thus `(padding 9 px 12 px)`
+Values can be numbers with optional `px` units, bare keywords, token
+references, strings, or typed `(hexColor 0x829fff)` nodes. Thus `(padding 9 px 12 px)`
 sets vertical and horizontal padding, `(fontSize 14 px)` sets one length, and
 `(nimkitWidthFactor 0.75)` sets a unitless scalar. Integers, signed numbers, and
-floating point numbers with NIF's uppercase `E` exponent syntax work. The engine
+floating point numbers with NIF's uppercase `E` exponent syntax work. Integers
+also accept `0x` hexadecimal, `0o` octal, and `0b` binary prefixes. Separators such
+as `1_000`, `0b1_1000`, and `0x82_9f_ff` are decoded by OpenParser. The engine
 currently supports pixel lengths. Quoted CSS selectors and values remain accepted
 for gradual conversion.
 
 Hex colors accept 3, 4, 6, or 8 hexadecimal digits, including alpha, and emit the
-corresponding CSS `#` form. The same color nodes work in GUI attribute values.
+corresponding CSS `#` form. `(hexColor 0x00ff00)` preserves the leading zeros,
+and `(hexColor 0x829fff80)` preserves the alpha byte. Color integers must use
+the `0x` prefix; digit separators and a trailing `u` are allowed. The older
+`(hexColor "829fff")` string form also works. The same color nodes work in GUI
+attribute values. A plain quoted CSS color such as `"#829fff"` needs no wrapper.
 
-NIF escapes use two uppercase hexadecimal digits, so `\23` represents `#`,
-`\3A` represents `:`, and `\22` represents a quote. The NIF27 shortcuts
+Quoted strings accept literal `#`, `:`, and `;`, so selectors such as
+`"#language:hover"` and timestamps such as `"2026-10-24T12:00:00Z"` need no
+punctuation escapes. Strings may span lines. Other NIF controls still require
+escapes: `\28` represents `(`, `\40` represents `@`, and `\22` represents a quote.
+The older `\23` and `\3A` escapes remain valid too. The NIF27 shortcuts
 `\n`, `\t`, `\r`, `\|` (backslash), and `\^` (quote) also work.
+Character literals retain NIF's stricter escaping rules, for example `'\23'`
+for a hash. Suffix comments such as `(nkLabel#Description# "Text")` are accepted
+and do not become GUI text or CSS.
 
-The adapter in `examples/private/nifmarkup.nim` reads tagged nodes, strings,
-numbers, and identifiers into a nifcore token buffer, then emits HTML/CSS for
-the existing loaders. GUI text and attributes still require quoted strings or
-color nodes. This is a demo vocabulary, with an optional leading `(.nif27)` marker;
-other directives, comments, line annotations, symbols, and empty atoms are unsupported.
-Malformed input raises `ValueError`. The adapter caps source bytes, node count,
-tree depth, and distinct tags. GUI validation and construction still use the
-existing resource pipeline. CSS diagnostic locations refer to the emitted CSS.
+The adapter in `examples/private/nifmarkup.nim` translates OpenParser's NIF
+nodes into HTML/CSS for the existing loaders. This is a demo vocabulary, with an
+optional leading `(.nif27)` marker; other directives, symbols, and empty atoms
+are unsupported. Comment and line-info suffixes are ignored during conversion.
+OpenParser handles lexical syntax, escapes, and numeric decoding; the adapter
+validates the resource vocabulary and preserves hexadecimal color spelling.
+Malformed input raises `ValueError`, retaining OpenParser's source context.
+The adapter caps source bytes, node count, and tree depth. GUI validation and
+construction still use the existing resource pipeline. CSS diagnostic locations
+refer to the emitted CSS.
 
 With the feature enabled, its parity and action tests run in `tests/tnimkit.nim`
 and the example is included in the example compilation bundle.
+
+### Native shorthand example
+
+`examples/nif_shorthand_demo.nim` loads the same interface and appearance from
+`nif_shorthand_demo.nif` and `nif_shorthand_demo.css.nif`. Run it after enabling
+the same `nifDemo` feature:
+
+```sh
+nim ic -r examples/nif_shorthand_demo.nim
+```
+
+Widget tags use native names, with lowercase property children:
+
+```nif
+(.nif27)
+(Window
+  (id "window")
+  (title "Preferences")
+  (frame 140 120 560 640)
+  (StackView
+    (axis vertical)
+    (spacing 0x18)
+    (padding 0o34)
+    (Label "Display name")
+    (TextField (id "name") (placeholder "Ada Lovelace") "Ada")
+    (ComboBox (id "language") (selectedIndex 1)
+      (ComboBoxOption (objectValue "nim") (displayText "Nim"))
+      (option "c" 'C'))
+    (Button (action "save") (title "Save"))))
+```
+
+The demo supports `Window`, `StackView`, `View`, `Label`, `TextField`, `TextView`,
+`ComboBox`, `ComboBoxOption`, `CheckBox`, `Button`, `ProgressIndicator`, and `Box`.
+Multiple top-level `Window` nodes form a resource bundle. `classes` assigns style
+classes, `boxTitle` names a group, and `state on`/`state off` controls checkboxes.
+`selectedIndex` selects an option; `-1` clears the selection. Labels preserve
+authored line breaks; text views also preserve indentation. Properties expand to
+the existing GUI attributes and are validated by the resource registry. Duplicate
+properties, invalid frame/padding arity, and out-of-range option selections raise
+`ValueError`.
+
+The stylesheet shorthand uses NIF's optional line-based extension: each `style`
+line contains quoted selectors followed by a parenthesized body. Bodies may span
+lines, while widget files retain parenthesized syntax:
+
+```nif
+(.nif27)
+(.lang "nimkit-css")
+style ":root" (accent (color 0x82_9f_ff))
+style "#name" "#language" (rule
+  (background (color "#161e2b"))
+  (color 0xeef2fc)
+  (border (color 0x465674) (width 1 px) (radius 7 px))
+  (padding 9 px 12 px)
+  (chrome flat transparent)
+  (focusRing (color :var.accent)))
+```
+
+`style ":root"` (also `style "root"`) declares tokens. Multiple selectors expand
+to a selector group. `border` expands `color`, `width`, and `radius`; `chrome flat
+transparent` selects flat-transparent chrome. `focusRing`, `indicatorFill`, and
+`markColor` map to the corresponding NimKit properties. Within shorthand rules,
+`:var.accent` is a concise token reference, equivalent to `(var accent)`.
+`(color 0x...)` preserves hexadecimal color width and alpha just like `hexColor`;
+plain `"#..."` colors and named colors also work.
+
+Both forms use the same resource importer, theme engine, and Nim action wiring.
+Tests compare both complete examples with the HTML/CSS originals, including
+resource serialization and resolved styles across roles, ids, classes, and states.
 
 ## Stable CBOR Envelope
 
