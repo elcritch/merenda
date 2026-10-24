@@ -288,6 +288,7 @@ type
     xMarkdownRenderChunkCount: int
     xMarkdownMaximumRenderChunkDuration: Duration
     xSyntaxHighlighter: SyntaxHighlighter
+    xMatterGrammarSources: seq[MatterGrammarSource]
     xMatterHighlights: seq[seq[SyntaxTokenSpan]]
     xMatterCodeIndices: Table[MarkdownCodeSource, int]
     xMarkdownCodePresentations: seq[MarkdownCodeBlockPresentation]
@@ -301,6 +302,7 @@ type
     xImageMediaTypes: Table[string, string]
     xPendingUrlAssets: Table[string, UrlAssetHandle]
     xCollapsedMarkdownHeadings: HashSet[string]
+    xKnownMarkdownHeadings: HashSet[string]
     xHeadingsToggleOnClick: bool
     xHasMarkdownTables: bool
     xMarkdownTableColumnLimit: int
@@ -745,8 +747,25 @@ proc renderInlineChildren(
     builder: var MarkdownBuilder,
     token: markdownParser.Token,
     attributes: TextAttributes,
+    skipPrefixBytes = 0,
 ) =
+  let prefixEnd = token.pos - token.doc.len + skipPrefixBytes
+  var skippingPrefix = skipPrefixBytes > 0
   for child in token.children:
+    if skippingPrefix:
+      # Inline positions are source byte endpoints. Consume the task marker
+      # without changing the AST, including markers parsed as reference links.
+      if child.pos <= prefixEnd:
+        skippingPrefix = child.pos < prefixEnd
+        continue
+      skippingPrefix = false
+      if child of markdownParser.Text:
+        let skipped = max(prefixEnd - (child.pos - child.doc.len), 0)
+        if skipped > 0:
+          builder.add(
+            child.doc[skipped ..< child.doc.len].replace("\n", " "), attributes
+          )
+          continue
     builder.renderInline(child, attributes)
 
 proc renderImage(
@@ -883,6 +902,20 @@ proc renderInline(
   else:
     builder.add(token.doc, attributes)
 
+proc renderParagraph(
+    builder: var MarkdownBuilder,
+    token: markdownParser.Token,
+    attributes: TextAttributes,
+    skipPrefixBytes = 0,
+) =
+  let start = builder.runeLength
+  builder.renderInlineChildren(token, attributes, skipPrefixBytes)
+  if builder.runeLength > start:
+    builder.navigationItems.add MarkdownNavigationItem(
+      range: initTextRange(start, builder.runeLength - start),
+      sectionIdentifier: builder.sectionIdentifier,
+    )
+
 proc renderBlock(
   builder: var MarkdownBuilder, token: markdownParser.Token, attributes: TextAttributes
 )
@@ -898,6 +931,29 @@ func endsWithCodeBlock(builder: MarkdownBuilder): bool =
   builder.codeBlocks.len > 0 and
     builder.codeBlocks[^1].range.maxIndex == builder.runeLength
 
+func taskListMarker(item: markdownParser.Li): tuple[symbol: string, prefixBytes: int] =
+  if item.children.head.isNil:
+    return
+  let paragraph = item.children.head.value
+  if not (paragraph of markdownParser.Paragraph):
+    return
+  let source = paragraph.doc
+  if source.len < 3 or source[0] != '[' or source[2] != ']' or
+      (source.len > 3 and source[3] notin Whitespace):
+    return
+  case source[1]
+  of ' ':
+    result.symbol = "☐"
+  of 'x', 'X':
+    result.symbol = "☑"
+  of '-':
+    result.symbol = "☒"
+  else:
+    return
+  result.prefixBytes = 3
+  while result.prefixBytes < source.len and source[result.prefixBytes] in Whitespace:
+    inc result.prefixBytes
+
 proc renderListItem(
     builder: var MarkdownBuilder,
     item: markdownParser.Li,
@@ -906,11 +962,19 @@ proc renderListItem(
     attributes: TextAttributes,
 ) =
   let
+    task = item.taskListMarker()
+    itemMarker =
+      if task.symbol.len == 0:
+        marker
+      elif marker == "•":
+        task.symbol
+      else:
+        marker & " " & task.symbol
     indentation = " ".repeat(max(depth * builder.style.listIndent, 0))
-    continuation = indentation & " ".repeat(marker.runeLen + 1)
+    continuation = indentation & " ".repeat(itemMarker.runeLen + 1)
   var markerAttributes = attributes
   markerAttributes.foregroundColor = builder.style.mutedColor
-  builder.add(indentation & marker & " ", markerAttributes)
+  builder.add(indentation & itemMarker & " ", markerAttributes)
 
   var first = true
   for child in item.children:
@@ -926,7 +990,10 @@ proc renderListItem(
         builder.add(continuation, attributes)
       elif not first:
         builder.add("\n" & continuation, attributes)
-      builder.renderBlock(child, attributes)
+      if first and task.prefixBytes > 0:
+        builder.renderParagraph(child, attributes, task.prefixBytes)
+      else:
+        builder.renderBlock(child, attributes)
     first = false
 
 proc renderList(
@@ -1536,13 +1603,7 @@ proc renderBlock(
   if token.isNil:
     return
   if token of markdownParser.Paragraph:
-    let start = builder.runeLength
-    builder.renderInlineChildren(token, attributes)
-    if builder.runeLength > start:
-      builder.navigationItems.add MarkdownNavigationItem(
-        range: initTextRange(start, builder.runeLength - start),
-        sectionIdentifier: builder.sectionIdentifier,
-      )
+    builder.renderParagraph(token, attributes)
   elif token of markdownParser.Heading:
     let heading = markdownParser.Heading(token)
     var headingAttributes = attributes
@@ -2624,6 +2685,7 @@ proc startLatestMarkdownParse(view: MarkdownView) =
       view.xMarkdownConfig.escape,
       view.xMarkdownConfig.keepHtml,
       view.xSyntaxHighlighter == SyntaxHighlighter(matterSyntaxHighlighter),
+      view.xMatterGrammarSources,
     )
   else:
     # Arbitrary parser subclasses are thread-affine reference objects. Preserve
@@ -2904,18 +2966,28 @@ proc updateMarkdown*(
     source: string,
     headingIdentifiers: openArray[string] = [],
     preserveHeadingState = false,
+    initiallyCollapsedHeadings: openArray[string] = [],
 ) =
   ## Schedules a parse and atomically replaces the document when it completes.
   ## Supply unique, nonempty identifiers in top-level heading order to retain
   ## section state across reordered or renamed headings. Unspecified headings
   ## use block positions. State is cleared unless `preserveHeadingState` is true.
   ## Identical source and identifiers leave the current document unchanged.
+  ## `initiallyCollapsedHeadings` supplies defaults for previously unseen explicit
+  ## heading identifiers. Preserved state includes headings temporarily filtered out.
   let identifiers = @headingIdentifiers
   if view.xMarkdown == source and view.xMarkdownHeadingIdentifiers == identifiers:
     return
   view.xPendingUrlAssets.clear()
   if not preserveHeadingState:
     view.xCollapsedMarkdownHeadings.clear()
+    view.xKnownMarkdownHeadings.clear()
+  for identifier in initiallyCollapsedHeadings:
+    if identifier.len > 0 and identifier notin view.xKnownMarkdownHeadings:
+      view.xCollapsedMarkdownHeadings.incl identifier
+  for identifier in identifiers:
+    if identifier.len > 0:
+      view.xKnownMarkdownHeadings.incl identifier
   view.xPendingMarkdownHeadingSelection.setLen(0)
   view.xMarkdownHeadingIdentifiers = identifiers
   view.xMarkdown = source
@@ -2973,6 +3045,16 @@ proc `urlAssetLoader=`*(view: MarkdownView, loader: UrlAssetLoader) =
 proc syntaxHighlighter*(view: MarkdownView): SyntaxHighlighter =
   ## Return the classifier used for fenced code blocks.
   view.xSyntaxHighlighter
+
+proc matterGrammarSources*(view: MarkdownView): seq[MatterGrammarSource] =
+  ## Return application grammars used by the background fenced-code classifier.
+  view.xMatterGrammarSources
+
+proc `matterGrammarSources=`*(view: MarkdownView, sources: seq[MatterGrammarSource]) =
+  ## Replace application grammars and rehighlight the current Markdown document.
+  if view.xMatterGrammarSources != sources:
+    view.xMatterGrammarSources = sources
+    view.scheduleMarkdownParse()
 
 proc `syntaxHighlighter=`*(view: MarkdownView, highlighter: SyntaxHighlighter) =
   ## Replace the classifier and rerender fenced code blocks.

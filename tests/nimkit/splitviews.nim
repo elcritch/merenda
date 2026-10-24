@@ -10,6 +10,12 @@ import merenda/nimkit
 type FixedIntrinsicView = ref object of View
   naturalSize: Size
 
+type SplitPopupView = ref object of View
+
+protocol SplitPopupHitTesting of ViewProtocol:
+  method hitTestLevel(view: SplitPopupView, point: Point): int =
+    PopupDrawLevel.int
+
 protocol FixedIntrinsicLayout of ViewLayoutProtocol:
   method layoutIntrinsicContentSize(view: FixedIntrinsicView): IntrinsicSize =
     initIntrinsicSize(view.naturalSize)
@@ -194,6 +200,113 @@ suite "nimkit split views":
     check splitView.mouseUp(
       MouseEvent(button: mbPrimary, location: initPoint(193.0, 10.0))
     )
+
+  test "macOS thin dividers drag from either pane edge through window events":
+    for theme in ["macos", "macos-dark"]:
+      for axis in [laHorizontal, laVertical]:
+        for offset in [-3.0'f32, 3.0'f32]:
+          checkpoint(theme & " " & $axis & " " & $offset)
+          let
+            window = newWindow("Thin divider", frame = rect(0, 0, 400, 300))
+            splitView = newSplitView(axis)
+            first = newTextView("First pane")
+            second = newTextView("Second pane")
+          defer:
+            window.close()
+          splitView.addPane(first)
+          splitView.addPane(second)
+          window.setAppearance(initAppearance(initThemeByName(theme)))
+          window.setContentView(splitView)
+          splitView.layoutSubtreeIfNeeded()
+          let
+            divider = splitView.dividerRect(0)
+            initial = splitView.positionOfDivider(0)
+            local =
+              if axis == laHorizontal:
+                initPoint(divider.minX + divider.size.width / 2 + offset, 30)
+              else:
+                initPoint(30, divider.minY + divider.size.height / 2 + offset)
+            start = splitView.pointToWindow(local)
+            finish = splitView.pointToWindow(
+              if axis == laHorizontal:
+                initPoint(local.x + 30, local.y)
+              else:
+                initPoint(local.x, local.y + 30)
+            )
+            firstSize = first.frame().size
+          check not divider.contains(local)
+          check splitView.dividerAtPoint(local) == 0
+          check splitView.hitTest(local) == splitView
+          require splitView.cursorRects().len == 1
+          check splitView.cursorRects()[0].rect.contains(local)
+          require window.mouseDownAt(start)
+          require window.mouseDraggedAt(finish)
+          require window.mouseUpAt(finish)
+          splitView.layoutSubtreeIfNeeded()
+          check abs(splitView.positionOfDivider(0) - initial - 30) < 0.01
+          if axis == laHorizontal:
+            check abs(first.frame().size.width - firstSize.width - 30) < 0.01
+          else:
+            check abs(first.frame().size.height - firstSize.height - 30) < 0.01
+          check splitView.hitTest(initPoint(20, 20)) != splitView
+          let
+            before = first.stringValue()
+            textPoint = first.pointToWindow(initPoint(20, 20))
+          require window.mouseDownAt(textPoint)
+          discard window.mouseUpAt(textPoint)
+          require window.dispatchTextInput("!")
+          check first.stringValue().len == before.len + 1
+
+  test "thin divider grab areas stay inside bounds and ignore hidden split views":
+    let splitView = newSplitView(laHorizontal, rect(0, 0, 50, 30))
+    splitView.appearance = splitAppearance(1)
+    splitView.addPane(newView())
+    splitView.addPane(newView())
+    splitView.setPositionOfDivider(0, 0)
+    splitView.layoutSubtreeIfNeeded()
+    check splitView.dividerAtPoint(initPoint(-1, 15)) == -1
+    check splitView.dividerAtPoint(initPoint(2, 15)) == 0
+    splitView.hidden = true
+    check splitView.hitTest(initPoint(2, 15)).isNil
+
+  test "split view misses allow hit testing to continue to sibling views":
+    let
+      root = newView(rect(0, 0, 320, 200))
+      sibling = newView(rect(0, 160, 320, 40))
+      splitView = newSplitView(laHorizontal, rect(0, 0, 320, 140))
+      point = initPoint(20, 180)
+    splitView.appearance = splitAppearance(1)
+    splitView.addPane(newView())
+    splitView.addPane(newView())
+    root.addSubview(sibling)
+    root.addSubview(splitView)
+    splitView.layoutSubtreeIfNeeded()
+
+    check splitView.hitTest(point).isNil
+    check root.hitTest(point) == sibling
+
+  test "divider grab areas preserve popup hits and choose the nearest divider":
+    let
+      splitView = newSplitView(laHorizontal, rect(0, 0, 101, 50))
+      first = newView()
+      popup = SplitPopupView()
+    splitView.appearance = splitAppearance(1)
+    splitView.addPane(first)
+    splitView.addPane(newView())
+    splitView.layoutSubtreeIfNeeded()
+    let divider = splitView.dividerRect(0)
+    initViewFields(popup, rect(divider.minX - 10, 0, 20, 40))
+    discard popup.withProtocol(SplitPopupHitTesting)
+    first.addSubview(popup)
+    check splitView.hitTest(initPoint(divider.minX - 2, 20)) == popup
+
+    let crowded = newSplitView(laHorizontal, rect(0, 0, 5, 30))
+    crowded.appearance = splitAppearance(1)
+    for index in 0 .. 2:
+      crowded.addPane(newView())
+    crowded.layoutSubtreeIfNeeded()
+    check crowded.dividerAtPoint(initPoint(1.5, 15)) == 0
+    check crowded.dividerAtPoint(initPoint(3.5, 15)) == 1
 
   test "collapsible panes are removed from layout and accessibility":
     let

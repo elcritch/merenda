@@ -47,6 +47,9 @@
   --scroller-knob-fill: rgba(54%, 49%, 42%, 0.68);
   --scroller-track-border-color: rgba(66%, 61%, 54%, 0.8);
   --scroller-track-fill: rgba(86%, 82%, 75%, 0.7);
+  --split-view-divider-border-color: rgba(74%, 70%, 63%, 1);
+  --split-view-divider-fill: #dbd1bf;
+  --split-view-divider-mark-color: rgba(54%, 49%, 42%, 1);
   --tab-border-color: rgba(54%, 49%, 42%, 1);
   --tab-border-color-disabled: rgba(70%, 65%, 58%, 1);
   --tab-border-color-highlighted: rgba(42%, 36%, 30%, 1);

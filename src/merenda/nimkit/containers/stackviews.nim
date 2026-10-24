@@ -547,6 +547,20 @@ proc insertArrangedSubview*(
   let boundedIndex = max(0, min(index, stackView.xArrangedSubviews.len))
   stackView.xArrangedSubviews.insert(child, boundedIndex)
   stackView.xArrangedSubviewSizing.insert(sizingPolicy, boundedIndex)
+  # Keep keyboard traversal in layout order without detaching focused controls.
+  var orderedSubviews: seq[View]
+  var nextArranged = 0
+  for view in stackView.subviews():
+    if stackView.arrangedIndex(view) >= 0:
+      orderedSubviews.add stackView.xArrangedSubviews[nextArranged]
+      inc nextArranged
+    else:
+      orderedSubviews.add view
+  if orderedSubviews != stackView.subviews():
+    stackView.sortSubviews(
+      proc(first, second: View): int =
+        cmp(orderedSubviews.find(first), orderedSubviews.find(second))
+    )
   stackView.invalidateStackLayout()
 
 proc addArrangedSubview*(stackView: StackView, child: View) =

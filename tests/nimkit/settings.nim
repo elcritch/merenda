@@ -1,6 +1,7 @@
-import std/[importutils, math, os, strutils, tables, unittest]
+import std/[importutils, math, os, strutils, tables, tempfiles, unittest]
 
 import merenda/nimkit
+from figdraw import parseHtmlColor
 import ./fixtures/widgetflows
 import merenda/nimkit/app/settings
 from figdraw/extras/systemfonttypes import initSystemTypeface
@@ -42,6 +43,59 @@ suite "nimkit settings":
     check appliedAppearance.theme.isInitialized
     require settings.window().chooseItem(picker, "Aqua")
     check appliedTheme == "aqua"
+
+  test "refresh theme rereads selected CSS and preserves fonts on success or failure":
+    let directory = createTempDir("merenda-theme-refresh-", "")
+    let oldDirectory = getEnv("MERENDA_THEME_CSS_DIR")
+    let hadDirectory = existsEnv("MERENDA_THEME_CSS_DIR")
+    putEnv("MERENDA_THEME_CSS_DIR", directory)
+    for name in ["base", "aqua", "macos", "macos-dark", "darkbsd"]:
+      copyFile(BuiltinThemeCssDirectory / (name & ".css"), directory / (name & ".css"))
+    defer:
+      if hadDirectory:
+        putEnv("MERENDA_THEME_CSS_DIR", oldDirectory)
+      else:
+        delEnv("MERENDA_THEME_CSS_DIR")
+      removeDir(directory)
+    var applied: Appearance
+    var initial = initThemeBuilder(initAquaTheme())
+    initial.setFontName(frMonospace, "Test Mono")
+    let settings = newMerendaSettingsWindow(
+      appearanceHandler = proc(appearance: Appearance) =
+        applied = appearance,
+      initialAppearance = initAppearance(initial.finish()),
+      initialTheme = "aqua",
+    )
+    defer:
+      settings.window().close()
+    settings.window().setContentView(settings.contentView())
+    let tabs = settings.contentView().viewWithIdentifier("settings-tabs")
+    require tabs of TabView
+    require settings.window().clickTab(TabView(tabs), "typography")
+    let refresh =
+      settings.contentView().viewWithIdentifier(SettingsRefreshThemeIdentifier)
+    require refresh of Button
+    writeFile(
+      directory / "aqua.css",
+      readFile(directory / "aqua.css") & "\n:root { --refresh-marker: #123456; }",
+    )
+    require settings.window().clickView(Button(refresh))
+    check applied.theme.colorToken("--refresh-marker", color(0, 0, 0, 0)) ==
+      parseHtmlColor("#123456")
+    check applied.fontName(frMonospace) == "Test Mono"
+    let originalCss = readFile(BuiltinThemeCssDirectory / "aqua.css")
+    writeFile(directory / "aqua.css", originalCss)
+    require Button(refresh).sendAction()
+    check applied.theme.colorToken("--refresh-marker", color(0, 0, 0, 0)) ==
+      color(0, 0, 0, 0)
+    let generation = applied.theme.generation
+    writeFile(directory / "aqua.css", "button { color: invalid-color; }")
+    require Button(refresh).sendAction()
+    check applied.theme.generation == generation
+    check applied.fontName(frMonospace) == "Test Mono"
+    removeFile(directory / "aqua.css")
+    require Button(refresh).sendAction()
+    check applied.theme.generation == generation
 
   test "behavior controls apply toggles and silent updates stay silent":
     var applied: seq[bool]
@@ -427,12 +481,11 @@ suite "nimkit settings":
         file: typeof(default(TestSystemTypeface).file)(
           path: "/fonts/TestCollection.ttc", faceIndex: 3
         ),
-        variations:
-          @[
-            typeof(default(TestSystemTypeface).variations[0])(
-              tag: "wght", value: 650.0'f32
-            )
-          ],
+        variations: @[
+          typeof(default(TestSystemTypeface).variations[0])(
+            tag: "wght", value: 650.0'f32
+          )
+        ],
       )
       proportionalFont = TestSelectedFont(
         name: "Test Proportional", faces: FontFaceSet(regular: proportionalFile)
@@ -464,15 +517,14 @@ suite "nimkit settings":
     monospaceFace.metadataLoaded = true
     monospaceFace.supportsPreviewText = true
     unavailableFace.metadataLoaded = true
-    settings.fontPickerController.catalogEntries =
-      @[
-        initFontCatalogEntry(
-          "Test Fonts",
-          proportionalFile.file.path,
-          identifier = "test-font-family",
-          faces = [proportionalFace, monospaceFace, unavailableFace],
-        )
-      ]
+    settings.fontPickerController.catalogEntries = @[
+      initFontCatalogEntry(
+        "Test Fonts",
+        proportionalFile.file.path,
+        identifier = "test-font-family",
+        faces = [proportionalFace, monospaceFace, unavailableFace],
+      )
+    ]
 
     onlyMonospaceFonts.state = bsOn
     check onlyMonospaceFonts.sendAction()
@@ -556,15 +608,14 @@ suite "nimkit settings":
       fontName = "JetBrainsMono-Regular",
     )
     jetBrainsFace.metadataLoaded = true
-    settings.fontPickerController.catalogEntries =
-      @[
-        initFontCatalogEntry(
-          "JetBrains Mono",
-          jetBrainsFace.path,
-          identifier = "jetbrains-mono",
-          faces = [jetBrainsFace],
-        )
-      ]
+    settings.fontPickerController.catalogEntries = @[
+      initFontCatalogEntry(
+        "JetBrains Mono",
+        jetBrainsFace.path,
+        identifier = "jetbrains-mono",
+        faces = [jetBrainsFace],
+      )
+    ]
 
     check monospaceFont.sendAction()
     check onlyMonospaceFonts.state == bsOn

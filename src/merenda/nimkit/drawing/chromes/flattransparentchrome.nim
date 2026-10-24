@@ -141,11 +141,10 @@ func flatRadioInnerBorderColor(chrome: ChromeContext): Color =
 
 func flatRadioInnerShadows(chrome: ChromeContext): seq[BoxShadow] =
   if chrome.isSelected and chrome.isEnabled:
-    return
-      @[
-        insetShadow(color(0.0, 0.0, 0.0, 0.26), y = 1.0, blur = 2.8),
-        insetShadow(color(0.30, 0.96, 1.0, 0.20), y = -1.0, blur = 2.6),
-      ]
+    return @[
+      insetShadow(color(0.0, 0.0, 0.0, 0.26), y = 1.0, blur = 2.8),
+      insetShadow(color(0.30, 0.96, 1.0, 0.20), y = -1.0, blur = 2.6),
+    ]
   @[
     insetShadow(
       color(0.0, 0.0, 0.0, if chrome.isEnabled: 0.18 else: 0.06), y = 1.0, blur = 2.4

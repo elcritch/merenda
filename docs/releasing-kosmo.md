@@ -14,20 +14,40 @@ Each executable archive also includes the notices for Kosmo's bundled IBM Plex
 Sans and JetBrains Mono Nerd Font Mono resources. On macOS the notices live in
 the app's `Contents/Resources` directory.
 
+macOS bundles minimal HarfBuzz and FriBidi libraries built for macOS 13 in
+`Contents/Frameworks`, with their notices in `Contents/Resources/text-library-licenses`.
+Windows archives place the text DLLs beside `kosmo.exe`; the installer copies
+them together and installs their notices with the font notices. Linux and
+FreeBSD use system HarfBuzz and FriBidi libraries, including the musl build.
+
 The five bundled Moe themes are embedded in the executable and installed into
 Kosmo's platform asset cache for Moe's file-based theme loader. Release archives
 do not need a separate `data/moe/themes` directory, and theme discovery does not
 depend on the working directory used to launch Kosmo.
 
-Release executables retain native debug information and link the `libbacktrace`
-stack-trace override. Nim's instrumented stack tracing remains disabled because
+Release executables retain native debug information. Windows builds use MSVC,
+ship `kosmo.pdb` beside `kosmo.exe`, and use Nim's stack tracing with function names
+and source lines. The installer keeps the PDB beside the installed executable.
+Windows CI runs `.github/scripts/install-msvc-nim.sh` to copy the official Nim
+2.2.10 distribution into a private environment and install atomic and ARC/ORC
+large-string fixes from an immutable fork revision. The script verifies both
+files' SHA-256 and builds the compiler once with the official binary. It retains
+the compiler's own configuration while skipping Merenda's parent configuration.
+A compiled probe verifies default library lookup, binary string contents, and
+copy-on-write behavior before adding the compiler to CI's path. The Atlas-managed
+official installation stays untouched. Local MSVC builds must use that script's
+compiler too. The regression tests run
+natively with MSVC in the fork, and the release job additionally checks shared
+ownership, concurrent increments, and worker shutdown before packaging.
+The other platforms link the `libbacktrace` stack-trace override. Nim's
+instrumented stack tracing remains disabled on those platforms because
 `libbacktrace` uses the compiler's native debug information without its runtime
 overhead. `libbacktrace` is an unconditional package dependency, and the project
-configuration imports it globally; release builds also define
-`nimStackTraceOverride` explicitly. Each platform job verifies both the native
-debug data and linked libbacktrace backend before packaging.
+configuration imports it except on Windows/MSVC; the other release builds also
+define `nimStackTraceOverride` explicitly. Each platform job verifies its native
+debug data and stack-trace support before packaging.
 
-Linux and Windows keep the debug information in the executable. The macOS app
+Linux keeps the debug information in the executable. The macOS app
 bundles its matching symbols at
 `Contents/MacOS/kosmo.dSYM`. This is the location libbacktrace checks beside the
 running executable, so release stack traces retain file and line information.

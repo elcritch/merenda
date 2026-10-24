@@ -5,6 +5,8 @@
 leak:drawing::defaultFont
 leak:imgutils::retainFontRefId
 leak:typefaces::registerTypeface
+# The HarfBuzz backend also retains parsed faces in an ARC/ORC threadvar table.
+leak:harfbuzzy::initHarfbuzzTypeface
 leak:libfontconfig.so
 leak:outputs::memoryOutput
 leak:times::newTimezone

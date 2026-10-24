@@ -33,8 +33,8 @@ func formatResourceValue*(value: ResourceValue): string =
       value.rectValue.origin.x, value.rectValue.origin.y, value.rectValue.size.width,
       value.rectValue.size.height,
     ]
-    .mapIt(it.formatResourceFloat())
-    .join(", ")
+      .mapIt(it.formatResourceFloat())
+      .join(", ")
   of rvSize:
     [value.sizeValue.width, value.sizeValue.height].mapIt(it.formatResourceFloat()).join(
       ", "
@@ -44,12 +44,12 @@ func formatResourceValue*(value: ResourceValue): string =
       value.insetsValue.top, value.insetsValue.left, value.insetsValue.bottom,
       value.insetsValue.right,
     ]
-    .mapIt(it.formatResourceFloat())
-    .join(", ")
+      .mapIt(it.formatResourceFloat())
+      .join(", ")
   of rvColor:
     [value.colorValue.r, value.colorValue.g, value.colorValue.b, value.colorValue.a]
-    .mapIt(it.formatResourceFloat())
-    .join(", ")
+      .mapIt(it.formatResourceFloat())
+      .join(", ")
   of rvReference:
     $value.referenceValue.kind & ":" & $value.referenceValue.id
 

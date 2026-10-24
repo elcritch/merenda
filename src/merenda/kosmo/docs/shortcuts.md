@@ -91,10 +91,13 @@ when a replacement field is already focused. Markdown, Git diff, GitHub, and ter
 search remain search-only.
 
 The standard Edit menu is a responder-chain facility. Kosmo bridges its Copy,
-Cut, Paste, Select All, Undo, and Redo commands to semantic Moe operations:
-the bridge uses the current selection, synchronizes the system clipboard and
-Moe registers, and preserves Moe's undo transactions. It does not emulate
-these actions by injecting synthetic keys.
+Cut, Paste, Select All, Undo, and Redo commands to the focused content. Markdown,
+GitHub, Git diff summaries and individual hunks, Help, and Command Output support
+Copy and Select All. Editable text views and search fields also support Cut,
+Paste, Undo, and Redo. Read-only documents consume unsupported edits so they
+cannot change a hidden editor buffer. When a Moe editor is focused, the bridge
+uses its current selection, synchronizes the system clipboard and Moe registers,
+and preserves Moe's undo transactions without injecting synthetic keys.
 
 ### Moe editor input
 
@@ -145,6 +148,7 @@ native editing actions. The original command IDs remain valid, including:
 
 ```text
 kosmo.newTerminal
+kosmo.showTerminal
 kosmo.showGitDiff
 kosmo.showGitHub
 kosmo.save
@@ -279,7 +283,8 @@ Kosmo's GUI concepts do not correspond one-to-one with Vim's names:
 | Document tab backed by Moe | Buffer |
 | Native application window | No single direct equivalent |
 
-The `Ctrl-W` namespace manages editor panels, not document tabs. Kosmo
+The `Ctrl-W` namespace manages editor panels and includes the visible Files or
+Find sidebar in horizontal focus navigation. Kosmo
 supports the Vim spelling with an unmodified second key and, where Vim
 supports it, the equivalent control-key spelling:
 
@@ -289,7 +294,7 @@ supports it, the equivalent control-key spelling:
 | `Ctrl-W v` / `Ctrl-W Ctrl-V` | Split right and show the same buffer. |
 | `Ctrl-W n` / `Ctrl-W Ctrl-N` | Create an empty buffer in a new split below. |
 | `Ctrl-W w` / `Ctrl-W Ctrl-W` | Focus the next editor panel. This is Vim behavior; it is **not** Close Tab. |
-| `Ctrl-W h/j/k/l` or `Ctrl-W` followed by an arrow | Focus the panel to the left/below/above/right. |
+| `Ctrl-W h/j/k/l` or `Ctrl-W` followed by an arrow | Focus the panel to the left/below/above/right; horizontal movement includes the visible sidebar. |
 | `Ctrl-W c` | Close the current panel, subject to safe-close checks. |
 | `Ctrl-W +`, `-`, `<`, `>`, `=` | Resize or equalize editor panels. |
 | `gt` / `gT` | Select the next / previous document tab. |
@@ -303,9 +308,15 @@ reserves physical `Ctrl-W` for Moe.
 The implementation recognizes these commands at the focused Kosmo
 editor boundary in the applicable Moe mode, at a focused Markdown preview,
 and in a terminal using Hybrid input.
+From the leftmost editor pane, `Ctrl-W h` focuses the currently selected Files or
+Find sidebar tab. Within the sidebar, `Ctrl-W l` focuses the nearest editor pane
+to its right, preferring the topmost pane when several share that edge. Control
+continuations and the left/right arrow aliases work there too. Search queries,
+replacement text, and the selected sidebar tab are preserved; collapsed sidebars
+stay hidden. Sidebar pane prefixes cancel when focus or the active window changes.
 Markdown previews use the same pane parser and semantic dock operations,
 including `Ctrl-W n` to create an empty-buffer split. It deliberately does not
-install a window-wide `Ctrl-W` prefix: sidebars, dialogs, unrelated controls,
+install a window-wide `Ctrl-W` prefix: dialogs, unrelated controls,
 and Raw terminals keep their own input. Moe receives unclaimed editor input,
 and runtime Moe mappings for Ctrl-W take precedence over the default pane
 bridge. Moe's dispatched window results also use Kosmo's pane operations, so
@@ -412,12 +423,18 @@ the physical spelling shown by the active profile:
 | Close window | `primary-Shift-W`; also `Alt-F4` on Windows/Linux |
 | Quit | `primary-Q` |
 | New terminal | `primary-Shift-T` |
+| Show terminal | `primary-J` |
 | Show Git diff | `primary-Shift-D` |
 | Show GitHub issues and PRs | `primary-Shift-H` |
 | Previous / next tab | `primary-Shift-[` / `primary-Shift-]`; also `gt` / `gT` through Moe |
 | Files / Find in Files | `primary-Shift-E` / `primary-Shift-F` |
 | Focus panel | `primary-1` through `primary-8` |
 | Split below / right | `Ctrl-W s` / `Ctrl-W v` in Vim routing, with their control-key aliases; configurable GUI alternatives otherwise |
+
+**Show terminal** focuses an existing terminal tab, including a hidden tab or
+one in a detached window. If none is open, it opens a terminal in the nearest
+pane to the active pane's right, creating a right split when needed.
+**New terminal** always opens an additional terminal in the active pane.
 
 The registry removes the former accidental difference between Save, Quick
 Open, tab navigation, and the File menu. It also makes Open, Settings, Close

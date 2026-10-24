@@ -22,6 +22,12 @@ proc initRepository(root: string) =
 proc firstResponderIs(window: Window, expected: Responder): bool =
   window.firstResponder == expected
 
+proc renderedControlText(view: View): string =
+  for node in buildRenders(view)[DefaultDrawLevel].nodes:
+    if node.kind == nkText:
+      for index in 0 ..< node.textLayout.glyphCount():
+        result.add node.textLayout.displayRune(index)
+
 proc visibleLoadedDiffTextViewCount(panel: KosmoGitDiffPanel): int =
   for child in panel.documentView.subviews():
     if child of TextView and not child.visibleRect().isEmpty and
@@ -1151,17 +1157,26 @@ suite "Kosmo Git diff":
     window.setContentView(panel)
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
-    check panel.fromRevisionButton.title == "From: HEAD"
-    check panel.toRevisionButton.title == "To: Working Tree"
+    check panel.fromRevisionButton.title == "HEAD"
+    check panel.toRevisionButton.title == "Working Tree"
+    check panel.fromHistoryButton.title == "-"
+    check panel.toHistoryButton.title == "-"
+    check not panel.toHistoryButton.enabled
+    check panel.fromHistoryButton.menu().len == 4
+    for index, title in ["-", "^", "^2", "^3"]:
+      check panel.fromHistoryButton.menu()[index].title == title
     check not panel.fromRevisionButton.hidden
     check not panel.toRevisionButton.hidden
     let fromMenu = panel.fromRevisionButton.menu()
-    check fromMenu.items().len == working.revisions.len
+    check fromMenu.items().len == working.branches.len + 1
+    for item in fromMenu.items():
+      check '^' notin item.title
+      check '~' notin item.title
     let mainItem = fromMenu.menuItemWithIdentifier("kosmo.gitDiff.from.refs/heads/main")
     require not mainItem.isNil
     check mainItem.perform(window)
     require panel.waitForDiff()
-    check panel.fromRevisionButton.title == "From: main"
+    check panel.fromRevisionButton.title == "main"
     check panel.snapshot.comparison.kind == gdckRevisionRange
     check panel.snapshot.comparison.fromRevision == "refs/heads/main"
     check panel.snapshot.comparison.toWorkingTree
@@ -1175,7 +1190,8 @@ suite "Kosmo Git diff":
     require not featureItem.isNil
     check featureItem.perform(window)
     require panel.waitForDiff()
-    check panel.toRevisionButton.title == "To: feature"
+    check panel.toRevisionButton.title == "feature"
+    check panel.toHistoryButton.enabled
     require panel.snapshot.files.len == 1
     check panel.snapshot.files[0].path == "feature.txt"
     require panel.requestFilePatch(0)
@@ -1192,8 +1208,10 @@ suite "Kosmo Git diff":
     require not headItem.isNil
     check headItem.perform(window)
     require panel.waitForDiff()
-    check panel.fromRevisionButton.title == "From: HEAD"
-    check panel.toRevisionButton.title == "To: Working Tree"
+    check panel.fromRevisionButton.title == "HEAD"
+    check panel.toRevisionButton.title == "Working Tree"
+    check panel.toHistoryButton.title == "-"
+    check not panel.toHistoryButton.enabled
     require panel.snapshot.files.len == 1
     check panel.snapshot.files[0].path == "working.txt"
     require panel.requestFilePatch(0)
@@ -1243,12 +1261,20 @@ suite "Kosmo Git diff":
     window.setContentView(panel)
     panel.layoutSubtreeIfNeeded()
     require panel.waitForDiff()
-    let mainParent = panel.fromRevisionButton.menu().menuItemWithIdentifier(
-        "kosmo.gitDiff.from.refs/heads/main^"
+    let mainBranch = panel.fromRevisionButton.menu().menuItemWithIdentifier(
+        "kosmo.gitDiff.from.refs/heads/main"
+      )
+    require not mainBranch.isNil
+    require mainBranch.perform(window)
+    require panel.waitForDiff()
+    let mainParent = panel.fromHistoryButton.menu().menuItemWithIdentifier(
+        "kosmo.gitDiff.from.history.^"
       )
     require not mainParent.isNil
     check mainParent.perform(window)
     require panel.waitForDiff()
+    check panel.fromRevisionButton.title == "main"
+    check panel.fromHistoryButton.title == "^"
     let mainTip = panel.toRevisionButton.menu().menuItemWithIdentifier(
         "kosmo.gitDiff.to.refs/heads/main"
       )
@@ -1262,10 +1288,13 @@ suite "Kosmo Git diff":
     check "+main change" in panel.snapshot.files[0].patch
 
     let headParent =
-      panel.fromRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.from.HEAD^")
+      panel.fromRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.from.HEAD")
     require not headParent.isNil
     check headParent.perform(window)
     require panel.waitForDiff()
+    check panel.snapshot.comparison.fromRevision == "HEAD^"
+    check panel.fromRevisionButton.title == "HEAD"
+    check panel.fromHistoryButton.title == "^"
     let headTip =
       panel.toRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.HEAD")
     require not headTip.isNil
@@ -1274,7 +1303,50 @@ suite "Kosmo Git diff":
     require panel.snapshot.files.len == 1
     check panel.snapshot.files[0].path == "feature.txt"
 
-  test "Git diff revision selectors include branch ancestry and scroll":
+    let secondAncestor = panel.fromHistoryButton.menu().menuItemWithIdentifier(
+        "kosmo.gitDiff.from.history.^2"
+      )
+    require not secondAncestor.isNil
+    require secondAncestor.perform(window)
+    require panel.waitForDiff()
+    check panel.snapshot.comparison.fromRevision == "HEAD~2"
+    check panel.fromRevisionButton.title == "HEAD"
+    check panel.fromHistoryButton.title == "^2"
+    for width in [800.0'f32, 500.0'f32, 300.0'f32]:
+      panel.frame = rect(0, 0, width, 600)
+      panel.layoutSubtreeIfNeeded()
+      check "^2" in panel.fromHistoryButton.renderedControlText()
+    check panel.snapshot.errorMessage == ""
+    check panel.snapshot.files.len == 2
+    let toParent =
+      panel.toHistoryButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.history.^")
+    require not toParent.isNil
+    require toParent.perform(window)
+    require panel.waitForDiff()
+    check panel.snapshot.comparison.fromRevision == "HEAD~2"
+    check panel.snapshot.comparison.toRevision == "HEAD^"
+    check panel.toRevisionButton.title == "HEAD"
+    check panel.toHistoryButton.title == "^"
+    require panel.snapshot.files.len == 1
+    check panel.snapshot.files[0].path == "main.txt"
+    let workingTree =
+      panel.toRevisionButton.menu().menuItemWithIdentifier("kosmo.gitDiff.to.WORKTREE")
+    require not workingTree.isNil
+    require workingTree.perform(window)
+    require panel.waitForDiff()
+    check panel.toHistoryButton.title == "-"
+    check not panel.toHistoryButton.enabled
+    let current = panel.fromHistoryButton.menu().menuItemWithIdentifier(
+        "kosmo.gitDiff.from.history.-"
+      )
+    require not current.isNil
+    require current.perform(window)
+    require panel.waitForDiff()
+    check panel.snapshot.comparison.fromRevision == "HEAD"
+    check panel.fromHistoryButton.title == "-"
+    check panel.snapshot.files.len == 0
+
+  test "Git diff revision selectors list branches without ancestry and scroll":
     let root = createTempDir("kosmo-git-diff-comparison-scroll-", "")
     defer:
       removeDir(root)
@@ -1313,7 +1385,7 @@ suite "Kosmo Git diff":
         popup = PopupListView(child)
         break
     require not popup.isNil
-    check popup.itemCount() == snapshot.revisions.len
+    check popup.itemCount() == snapshot.branches.len + 1
     check popup.visibleItemCount() > 0
     check popup.visibleItemCount() < popup.itemCount()
     check popup.firstIndex() == 0
@@ -1382,11 +1454,48 @@ suite "Kosmo Git diff":
     let panel = newKosmoGitDiffPanel(root)
     defer:
       panel.close()
+    for width in [1000.0'f32, 800.0'f32, 500.0'f32, 300.0'f32]:
+      panel.frame = rect(0, 0, width, 600)
+      panel.layoutSubtreeIfNeeded()
+      let separator = panel.viewWithIdentifier("kosmo.gitDiff.revisionSeparator")
+      require separator of Label
+      check Label(separator).text == "…"
+      check panel.fromRevisionButton.frame().maxX < panel.fromHistoryButton.frame().minX
+      check panel.fromHistoryButton.frame().maxX < separator.frame().minX
+      check separator.frame().maxX < panel.toRevisionButton.frame().minX or
+        separator.frame().maxY <= panel.toRevisionButton.frame().minY
+      check panel.toRevisionButton.frame().maxX < panel.toHistoryButton.frame().minX
+      check panel.toHistoryButton.frame().maxX < panel.expandButton.frame().minX or
+        panel.toHistoryButton.frame().maxY <= panel.expandButton.frame().minY
+      check "-" in panel.fromHistoryButton.renderedControlText()
+      check "-" in panel.toHistoryButton.renderedControlText()
+      check "…" in separator.renderedControlText()
+      check panel.expandButton.frame().maxX < panel.collapseButton.frame().minX
+      let autoRefresh = panel.autoRefreshSwitch
+      check panel.collapseButton.frame().maxX < autoRefresh.frame().minX
+      check autoRefresh.frame().maxX < panel.refreshButton.frame().minX
+      check abs(panel.refreshButton.frame().maxX - (width - 12)) <= 0.01'f32
+    check panel.refreshButton.icon.len > 0
+    check panel.expandButton.title == "+"
+    check panel.collapseButton.title == "-"
     panel.frame = rect(0, 0, 800, 600)
     panel.layoutSubtreeIfNeeded()
-    panel.frame = rect(0, 0, 300, 600)
-    panel.layoutSubtreeIfNeeded()
-    check panel.collapseButton.frame().maxX <= panel.bounds().maxX
+    for button in [panel.expandButton, panel.collapseButton]:
+      check button.title in button.renderedControlText()
+    var iconCount = 0
+    for node in buildRenders(panel.refreshButton)[DefaultDrawLevel].nodes:
+      if node.kind == nkMtsdfImage:
+        inc iconCount
+        check node.screenBox.w > 0
+        check node.screenBox.h > 0
+      check node.kind != nkText
+    check iconCount > 0
+    var label: Label
+    for child in panel.subviews():
+      if child of Label and Label(child).text == "Auto-refresh":
+        label = Label(child)
+    require not label.isNil
+    check abs(panel.autoRefreshSwitch.frame().minX - label.frame().maxX - 2) < 0.01
     require panel.waitForDiff()
     check panel.snapshot.errorMessage == ""
     require panel.snapshot.files.len == 1

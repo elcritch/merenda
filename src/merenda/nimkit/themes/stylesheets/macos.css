@@ -91,6 +91,7 @@
   --scroller-track-shadows: none;
   --split-view-divider-border-color: rgba(0, 0, 0, 0.12);
   --split-view-divider-fill: rgba(0, 0, 0, 0.08);
+  --split-view-divider-mark-color: rgba(35%, 35%, 37%, 0.55);
   --tab-border-color: rgba(0, 0, 0, 0);
   --tab-border-color-disabled: rgba(0, 0, 0, 0);
   --tab-border-color-highlighted: rgba(0, 0, 0, 0.1);

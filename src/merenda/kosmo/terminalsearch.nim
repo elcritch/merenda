@@ -220,7 +220,6 @@ protocol KosmoTerminalKeyEquivalents of nimkit.ResponderCommandDispatchProtocol:
 protocol KosmoTerminalViewLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(view: KosmoTerminalView) =
     view.resizeToFit()
-    view.search.bar.layoutInBounds(view.bounds())
 
 proc newKosmoTerminalView*(
     session: nimkit.TerminalViewSession = nil,

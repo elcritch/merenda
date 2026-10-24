@@ -29,6 +29,16 @@ var
   aquaCache {.threadvar.}: AquaThemeCache
   bannerCache {.threadvar.}: BundledThemeCache
 
+proc initThemeResources*(): Theme =
+  ## Native font resources used before compiling a complete CSS theme.
+  var resources = initThemeBuilder()
+  for role in FontRole:
+    resources.setFontName(role, defaultFontName(role))
+    resources.setFontFaces(role, FontFaceSet())
+  resources["font.size"] = defaultFontSize()
+  resources.installThemeExtensions()
+  resources.finish()
+
 proc initAquaTheme*(): Theme =
   var fontNames: array[FontRole, string]
   for role in FontRole:

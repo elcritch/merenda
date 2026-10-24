@@ -160,6 +160,136 @@ proc renderedOpaqueBackgroundForView(nodes: openArray[Fig], view: View): bool =
       return true
 
 suite "nimkit text fields":
+  test "pasting styled text into a field uses the field's text metrics":
+    let
+      window = newWindow("Field editor styled paste", frame = rect(0, 0, 520, 240))
+      root = newView(frame = rect(0, 0, 520, 240))
+      field = newTextField("", frame = rect(20, 20, 320, 34))
+      source = newTextView("ensureArrangement", frame = rect(20, 90, 480, 100))
+      pasteboard = generalPasteboard()
+      previousProvider = pasteboard.provider
+      modifiers = shortcutModifiers()
+    pasteboard.provider = nil
+    pasteboard.clearContents()
+    defer:
+      window.close()
+      pasteboard.clearContents()
+      pasteboard.provider = previousProvider
+    source.textStorage().setAttributes(
+      initTextRange(0, 17), defaultTextAttributes(color(1, 0, 0), 48)
+    )
+    root.addSubview(field)
+    root.addSubview(source)
+    window.setContentView(root)
+    require window.makeFirstResponder(source)
+    require window.dispatchKeyDown(
+      KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: modifiers)
+    )
+    require window.dispatchKeyDown(
+      KeyEvent(key: keyC, keyCode: keyC.ord, modifiers: modifiers)
+    )
+    require window.makeFirstResponder(field)
+    let
+      editor = TextView(field.currentEditor())
+      attributes = editor.typingAttributes()
+    require window.dispatchKeyDown(
+      KeyEvent(key: keyV, keyCode: keyV.ord, modifiers: modifiers)
+    )
+    check field.text() == "ensureArrangement"
+    check field.selectedRange() == initTextRange(17, 0)
+    check editor.textStorage().attributesAt(0).fontSize == attributes.fontSize
+    check editor.textStorage().attributesAt(0).foregroundColor ==
+      attributes.foregroundColor
+    let caret = editor.rectToWindow(editor.layoutManager().caretRect(17))
+    check field.rectToWindow(field.bounds()).containsRect(caret)
+    check window.buildRenders()[DefaultDrawLevel].resolvedNodes().renderedTextInView(
+      field, "ensureArrangement"
+    )
+    require window.dispatchKeyDown(
+      KeyEvent(key: keyArrowLeft, keyCode: keyArrowLeft.ord)
+    )
+    require window.dispatchKeyDown(
+      KeyEvent(key: keyBackspace, keyCode: keyBackspace.ord)
+    )
+    require window.dispatchTextInput("n")
+    check field.text() == "ensureArrangement"
+
+  test "shared field editor keeps undo and redo within the current editing session":
+    for profile in KeyBindingProfile:
+      checkpoint $profile
+      let
+        window = newWindow("Field editor history", frame = rect(0, 0, 420, 180))
+        root = newView(frame = rect(0, 0, 420, 180))
+        first = newTextField("", frame = rect(20, 20, 320, 34))
+        second = newTextField("", frame = rect(20, 70, 320, 34))
+        modifiers =
+          if profile == kbpMacOS:
+            {kmCommand}
+          else:
+            {kmControl}
+        undo = KeyEvent(key: keyZ, keyCode: keyZ.ord, modifiers: modifiers)
+        redo =
+          if profile == kbpMacOS:
+            KeyEvent(key: keyZ, keyCode: keyZ.ord, modifiers: modifiers + {kmShift})
+          else:
+            KeyEvent(key: keyY, keyCode: keyY.ord, modifiers: modifiers)
+      defer:
+        window.close()
+      window.setKeyBindingProfile(profile)
+      root.addSubview(first)
+      root.addSubview(second)
+      window.setContentView(root)
+      require window.makeFirstResponder(first)
+      require window.dispatchTextInput("ensureArrangement")
+      require window.dispatchKeyDown(undo)
+      check first.text() == ""
+      require window.dispatchKeyDown(KeyEvent(key: keyTab, keyCode: keyTab.ord))
+      require window.fieldEditorClient() == second
+      discard window.dispatchKeyDown(redo)
+      check second.text() == ""
+      require window.dispatchTextInput("replacement")
+      require window.dispatchKeyDown(undo)
+      check second.text() == ""
+      require window.dispatchKeyDown(redo)
+      check second.text() == "replacement"
+      require window.dispatchKeyDown(
+        KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+      )
+      require window.fieldEditorClient() == first
+      discard window.dispatchKeyDown(undo)
+      check first.text() == ""
+      check second.text() == "replacement"
+
+  test "field editor mouse drags select text for replacement in either direction":
+    let
+      window = newWindow("Field editor selection", frame = rect(0, 0, 420, 180))
+      root = newView(frame = rect(0, 0, 420, 180))
+      field = newTextField("", frame = rect(20, 20, 360, 34))
+    defer:
+      window.close()
+    root.addSubview(field)
+    window.setContentView(root)
+    for backwards in [false, true]:
+      field.text = "ensureArrangement"
+      require window.makeFirstResponder(field)
+      discard window.buildRenders()
+      let
+        editor = TextView(field.currentEditor())
+        start = if backwards: 17 else: 6
+        finish = if backwards: 6 else: 17
+        firstCaret = editor.layoutManager().caretRect(start)
+        lastCaret = editor.layoutManager().caretRect(finish)
+        firstPoint = editor.pointToWindow(firstCaret.center())
+        lastPoint = editor.pointToWindow(lastCaret.center())
+      if backwards:
+        require window.makeFirstResponder(nil)
+      require window.mouseDownAt(firstPoint)
+      discard window.mouseDraggedAt(lastPoint)
+      discard window.mouseUpAt(lastPoint)
+      check field.selectedRange() == initTextRange(6, 11)
+      require window.dispatchTextInput("Layout")
+      check field.text() == "ensureLayout"
+
   test "placeholders share text geometry and never intercept editing or become content":
     let
       window = newWindow("Placeholder", frame = rect(0, 0, 300, 140))

@@ -8,6 +8,7 @@ import ../nimkit as nimkit
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ./filetree
 import ./searchbuttons
+import ./workspacefiles
 
 const
   DefaultKosmoSearchResultsPerFile* = 30
@@ -35,7 +36,7 @@ type
     xMatchGroupIndexes: seq[int]
     xOnOpenResult: SearchResultOpenHandler
     xOpenDisposition: FileTreeOpenDisposition
-    xRootPath: string
+    xRootPaths: seq[string]
     xResultsPerFile: int
 
   KosmoFileSearchPanel* = ref object of nimkit.View
@@ -81,9 +82,9 @@ func resultIdentifier(index: int): string =
 func loadMoreIdentifier(index: int): string =
   indexedIdentifier(SearchLoadMoreIdentifierPrefix, index)
 
-proc searchFileTitle(path, rootPath: string): string =
-  if rootPath.len > 0:
-    relativePath(path, rootPath)
+proc searchFileTitle(path: string, rootPaths: openArray[string]): string =
+  if rootPaths.len > 0:
+    relativePath(path, rootPaths[0])
   else:
     path
 
@@ -144,9 +145,9 @@ protocol KosmoSearchResultsDataSource of nimkit.OutlineViewDataSource:
       let group = results.xGroups[groupIndex]
       return nimkit.initOutlineItem(
         identifier,
-        group.path.searchFileTitle(results.xRootPath),
+        group.path.searchFileTitle(results.xRootPaths),
         expandable = true,
-        tooltip = group.path,
+        tooltip = group.path.projectRelativePath(results.xRootPaths),
         decoration = nimkit.initOutlineItemDecoration(badge = $group.matchIndexes.len),
       )
 
@@ -160,7 +161,9 @@ protocol KosmoSearchResultsDataSource of nimkit.OutlineViewDataSource:
         match.searchResultTitle(),
         parentIdentifier = fileIdentifier(parentIndex),
         leaf = true,
-        tooltip = match.path & ":" & $match.line & ":" & $match.column,
+        tooltip =
+          match.path.projectRelativePath(results.xRootPaths) & ":" & $match.line & ":" &
+          $match.column,
       )
 
     let loadMoreIndex = identifier.identifierIndex(SearchLoadMoreIdentifierPrefix)
@@ -172,7 +175,9 @@ protocol KosmoSearchResultsDataSource of nimkit.OutlineViewDataSource:
           group.loadMoreTitle(results.xResultsPerFile),
           parentIdentifier = fileIdentifier(loadMoreIndex),
           leaf = true,
-          tooltip = "Show more matches from " & group.path,
+          tooltip =
+            "Show more matches from " &
+            group.path.projectRelativePath(results.xRootPaths),
         )
 
 protocol KosmoSearchResultsTableDelegate of nimkit.TableViewDelegate:
@@ -243,11 +248,11 @@ proc appendMatches(
 
 proc setMatches(
     results: KosmoSearchResults,
-    rootPath: string,
+    rootPaths: openArray[string],
     matches: openArray[nimkit.FileSearchMatch],
 ) =
   results.selectedItemIdentifier = ""
-  results.xRootPath = rootPath
+  results.xRootPaths = @rootPaths
   results.xMatches.setLen(0)
   results.xGroups.setLen(0)
   results.xGroupIndexes.clear()
@@ -327,7 +332,7 @@ proc finishFileSearch(
   panel.updateSearchControls(false)
   let searchResult = handle.result()
   if panel.resultsView.matches.len != searchResult.matches.len:
-    panel.resultsView.setMatches(panel.xRootPath, searchResult.matches)
+    panel.resultsView.setMatches(panel.xRootPaths, searchResult.matches)
   panel.statusLabel.text =
     case searchResult.reason
     of nimkit.fsfrCancelled:
@@ -403,12 +408,12 @@ proc performSearch*(panel: KosmoFileSearchPanel): bool {.discardable.} =
   panel.xCaseSensitive = panel.xSearchOptions.caseSensitive
   panel.xRegularExpression = panel.xSearchOptions.regularExpression
   if pattern.len == 0 or panel.xRootPath.len == 0:
-    panel.resultsView.setMatches(panel.xRootPath, [])
+    panel.resultsView.setMatches(panel.xRootPaths, [])
     panel.updateSearchControls(false)
     panel.statusLabel.text =
       if pattern.len == 0: "Enter search text" else: "No folder is open"
     return
-  panel.resultsView.setMatches(panel.xRootPath, [])
+  panel.resultsView.setMatches(panel.xRootPaths, [])
   panel.statusLabel.text = "Searching…"
   panel.updateSearchControls(true)
   try:
@@ -612,7 +617,7 @@ proc `rootPaths=`*(panel: KosmoFileSearchPanel, rootPaths: openArray[string]) =
       next[0]
     else:
       ""
-  panel.resultsView.setMatches(panel.xRootPath, [])
+  panel.resultsView.setMatches(panel.xRootPaths, [])
   panel.updateSearchControls(false)
   panel.statusLabel.text = "Enter search text"
 
@@ -730,9 +735,12 @@ proc newKosmoFileSearchPanel*(rootPath = ""): KosmoFileSearchPanel =
   )
   result.initViewFields()
   result.addSubview(queryField)
+  queryField.objectParseContext = nimkit.initObjectParseContext(trimsWhitespace = false)
   result.addSubview(result.expressionButton)
   result.addSubview(result.replacementField)
   result.replacementField.placeholder = "Replace with"
+  result.replacementField.objectParseContext =
+    nimkit.initObjectParseContext(trimsWhitespace = false)
   result.addSubview(result.replaceButton)
   result.addSubview(result.replaceAllButton)
   result.addSubview(result.disclosureButton)

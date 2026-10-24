@@ -23,6 +23,7 @@ import kosmo/moelogging
 import kosmo/panelshortcuts
 import kosmo/quickopen
 import kosmo/search
+import kosmo/searchinput
 import kosmo/settings
 import kosmo/settings_layout
 import kosmo/shortcutinput
@@ -35,6 +36,8 @@ import kosmo/terminalerrors
 import kosmo/terminalinput
 import kosmo/terminalsearch
 import kosmo/viewersearch
+import kosmo/viewclipboard
+import kosmo/viewergrammars
 import kosmo/vscodegrammars
 import kosmo/workspacefiles
 import kosmo/workspaceroots

@@ -53,6 +53,9 @@
   --row-item-text-color: rgba(204, 94%, 255, 0.94);
   --row-item-text-color-disabled: var(--disabled-text-color);
   --row-item-text-color-selected: rgba(98%, 255, 255, 1);
+  --split-view-divider-border-color: rgba(18%, 78%, 255, 0.28);
+  --split-view-divider-fill: #12243a;
+  --split-view-divider-mark-color: rgba(42%, 86%, 255, 0.7);
   --tab-border-color: rgba(18%, 74%, 255, 0.48);
   --tab-border-color-disabled: rgba(22%, 34%, 44%, 0.32);
   --tab-border-color-highlighted: rgba(42%, 94%, 255, 0.76);

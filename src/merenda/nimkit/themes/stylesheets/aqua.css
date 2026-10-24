@@ -120,6 +120,7 @@
   --scroller-track-shadows: inset 0px 1px 2px 0px rgba(255, 255, 255, 0.4), inset 0px -1px 3px 0px rgba(0, 42, 112, 0.10980392);
   --split-view-divider-border-color: rgba(52%, 64%, 82%, 1);
   --split-view-divider-fill: #d4e3f7cf;
+  --split-view-divider-mark-color: var(--split-view-divider-border-color);
   --tab-border-color: rgba(96, 112, 132, 0.8392157);
   --tab-border-color-disabled: rgba(150, 156, 166, 0.5803922);
   --tab-border-color-highlighted: rgba(70, 116, 178, 0.8784314);
@@ -788,6 +789,7 @@ split-view {
   background: var(--split-view-divider-fill);
   -nimkit-focus-ring-inset: 0px;
   -nimkit-focus-ring-width: 0px;
+  -nimkit-mark-color: var(--split-view-divider-mark-color);
 }
 
 table-header {
@@ -990,16 +992,16 @@ text-field.label-heading {
 }
 
 text-field.label-status {
-  border-color: rgba(88, 168, 112, 0.4862745);
+  border-color: rgba(116, 136, 122, 0.4862745);
   border-width: 1px;
-  box-shadow: 0px -1px 1.5px 0px rgba(255, 255, 255, 0.38431373), inset 0px 1.2px 3px 0px rgba(10, 88, 38, 0.09411765), inset 0px 2px 2.6px 0px rgba(255, 255, 255, 0.80784315), inset 0px -1px 2.1px 0px rgba(255, 255, 255, 0.42352942), inset 2px 1px 7px 0px rgba(30, 136, 68, 0.08627451), inset -2px 1px 7px 0px rgba(30, 136, 68, 0.08627451), inset 0px -3px 7.2px 0px rgba(112, 248, 168, 0.3529412);
+  box-shadow: 0px -1px 1.5px 0px rgba(255, 255, 255, 0.38431373), inset 0px 1.2px 3px 0px rgba(62, 82, 68, 0.09411765), inset 0px 2px 2.6px 0px rgba(255, 255, 255, 0.80784315), inset 0px -1px 2.1px 0px rgba(255, 255, 255, 0.42352942), inset 2px 1px 7px 0px rgba(100, 124, 108, 0.08627451), inset -2px 1px 7px 0px rgba(100, 124, 108, 0.08627451), inset 0px -3px 7.2px 0px rgba(146, 170, 154, 0.18);
   -nimkit-chrome: aqua;
   border-radius: 7px;
-  background: linear-gradient(to bottom, #ffffffd4, #e0ffeea2 30.588235%, #3ad6808a);
+  background: linear-gradient(to bottom, #f5f7f4d4, #dce5dda2 30.588235%, #94aa998a);
   -nimkit-focus-ring-inset: 0px;
   -nimkit-focus-ring-width: 0px;
   -nimkit-minimum-size: 0px 24px;
-  color: rgba(6%, 25%, 14%, 1);
+  color: rgba(17%, 23%, 19%, 1);
   -nimkit-text-insets: 0px 1e+01px;
 }
 

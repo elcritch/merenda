@@ -73,14 +73,16 @@ suite "Kosmo":
       frontend.close()
     frontend.contentView.frame = rect(0, 0, 720, 480)
     frontend.contentView.layoutSubtreeIfNeeded()
-    frontend.splitView.setPositionOfDivider(0, 230.0'f32)
-    frontend.contentView.layoutSubtreeIfNeeded()
-    let fileTreeWidth = frontend.fileTree.frame().size.width
-
-    for width in [1040.0'f32, 760.0'f32, 1180.0'f32, 820.0'f32, 960.0'f32]:
-      frontend.contentView.frame = rect(0, 0, width, 480)
+    for chosenWidth in [128.0'f32, 230.0'f32]:
+      frontend.splitView.setPositionOfDivider(0, chosenWidth)
       frontend.contentView.layoutSubtreeIfNeeded()
-      check abs(frontend.fileTree.frame().size.width - fileTreeWidth) < 0.01'f32
+      let fileTreeWidth = frontend.fileTree.frame().size.width
+      check abs(frontend.sidebarPane.frame().size.width - chosenWidth) < 0.01'f32
+
+      for width in [1040.0'f32, 760.0'f32, 1180.0'f32, 820.0'f32, 960.0'f32]:
+        frontend.contentView.frame = rect(0, 0, width, 480)
+        frontend.contentView.layoutSubtreeIfNeeded()
+        check abs(frontend.fileTree.frame().size.width - fileTreeWidth) < 0.01'f32
 
   test "status bar icons collapse and reopen the sidebar without losing its width":
     let frontend = newKosmoApplication(newApplication("Kosmo Sidebar Status Test"))
@@ -89,7 +91,7 @@ suite "Kosmo":
     frontend.window.setContentView(frontend.contentView)
     frontend.contentView.frame = rect(0, 0, 760, 520)
     frontend.contentView.layoutSubtreeIfNeeded()
-    frontend.splitView.setPositionOfDivider(0, 230.0'f32)
+    frontend.splitView.setPositionOfDivider(0, 128.0'f32)
     frontend.contentView.layoutSubtreeIfNeeded()
     let
       chosenWidth = frontend.sidebarPane.frame().size.width

@@ -97,7 +97,6 @@ suite "Kosmo":
 
     check frontend.showFindInFiles()
     check frontend.sidebarTabs.focused
-    check frontend.window.firstResponder == frontend.window.fieldEditor()
     check frontend.window.fieldEditorClient() == frontend.searchPanel.queryField
     check frontend.fileTree.showsFocusedRowHighlight
     check frontend.searchPanel.resultsView.showsFocusedRowHighlight
@@ -161,7 +160,7 @@ suite "Kosmo":
     check frontend.fileTree.isHiddenOrHasHiddenAncestor()
     check not frontend.searchPanel.hidden
     check frontend.searchPanel.queryField.isEditing
-    check frontend.window.firstResponder == frontend.window.fieldEditor()
+    check frontend.window.fieldEditorClient() == frontend.searchPanel.queryField
 
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyE, keyCode: keyE.ord, modifiers: sidebarShortcutModifiers)
@@ -510,6 +509,8 @@ suite "Kosmo":
     check results.matches.len == 65
     check results.rowCount == 32
     check fileItem.title == "many.txt"
+    check results.tooltipForItem(fileIdentifier) == "many.txt"
+    check results.tooltipForItem(firstResultIdentifier) == "many.txt:1:1"
     check fileItem.decoration.badge == "65"
     check results.isItemExpanded(fileIdentifier)
 
@@ -536,6 +537,7 @@ suite "Kosmo":
     check results.rowCount == 32
 
     var loadMoreIdentifier = results.itemIdentifierForRow(results.rowCount - 1)
+    check results.tooltipForItem(loadMoreIdentifier) == "Show more matches from many.txt"
     check results.outlineItemWithIdentifier(loadMoreIdentifier).title.startsWith(
       "Load 30"
     )
@@ -738,7 +740,7 @@ suite "Kosmo file replacement":
     view.refresh()
     for expanded in [false, true]:
       require view.showSearch(replacing = expanded)
-      let box = view.searchField().superview().superview()
+      let box = view.searchField().containingSearchBar()
       let frame = box.rectToWindow(box.bounds)
       var blurCount = 0
       for node in window.buildRenders()[DefaultDrawLevel].resolvedNodes():

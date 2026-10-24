@@ -1,4 +1,4 @@
-## Synthetic user-input coverage for Kosmo's numbered panel shortcuts.
+## Synthetic user-input coverage for Kosmo's directional and numbered panel shortcuts.
 import std/[options, os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
@@ -31,6 +31,125 @@ proc primaryShiftKeyEvent(key: Key): KeyEvent =
   )
 
 suite "Kosmo synthetic panel shortcuts":
+  test "show terminal shortcut reveals an existing hidden tab without splitting":
+    let
+      app = newApplication("Kosmo Show Terminal Shortcut")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+      terminal = newKosmoTerminalView()
+      shortcut = KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: shortcutModifiers())
+    defer:
+      frontend.close()
+      terminal.close()
+    app.presentSyntheticWindow(frontend)
+    require frontend.window.sendAction(actionSelector(KosmoSplitVerticalAction))
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    require frontend.openDocument(
+      newKosmoPaneDocument("show-terminal", "Terminal", terminal)
+    )
+    require frontend.newEditorTab()
+    let tabCount = groups[1].pane.documentTabs.len
+    for policy in KosmoEditorInputPolicy:
+      frontend.setEditorInputPolicy(policy)
+      require frontend.window.makeFirstResponder(groups[0].editorView)
+      require frontend.window.dispatchKeyDown(shortcut)
+      check frontend.window.firstResponderIs(terminal)
+      check groups[1].pane.contentView == View(terminal)
+      check groups[1].pane.documentTabs.selectedDocumentTabItem().identifier ==
+        "show-terminal"
+      check groups[1].pane.documentTabs.len == tabCount
+      check frontend.editorGroups().len == 2
+      require frontend.window.dispatchKeyDown(shortcut)
+      check frontend.window.firstResponderIs(terminal)
+    require frontend.window.makeFirstResponder(frontend.fileTree)
+    require frontend.window.dispatchKeyDown(shortcut)
+    check frontend.window.firstResponderIs(terminal)
+
+  for viewer in ["GitHub", "Git diff", "custom reader"]:
+    test viewer & " background clicks focus its document from a terminal pane":
+      let
+        app = newApplication("Kosmo reader background focus")
+        frontend = newKosmoApplication(app, monitorsGitStatus = false)
+        terminal = newKosmoTerminalView()
+      defer:
+        frontend.close()
+        terminal.close()
+      app.presentSyntheticWindow(frontend)
+      require frontend.window.sendAction(actionSelector(KosmoSplitVerticalAction))
+      require frontend.openDocument(
+        newKosmoPaneDocument("focus.terminal", "Terminal", terminal)
+      )
+      require frontend.window.dispatchKeyDown(commandNumberEvent(2))
+
+      var
+        content, background: View
+        text: TextView
+        github: KosmoGitHubPanel
+        diff: KosmoGitDiffPanel
+      defer:
+        if not github.isNil:
+          github.close()
+        if not diff.isNil:
+          diff.close()
+      case viewer
+      of "GitHub":
+        github = newKosmoGitHubPanel(
+          GitHubSnapshot(
+            items: @[GitHubItem(kind: ghikIssue, number: 1, title: "Issue")]
+          )
+        )
+        content = github
+        text = github.markdownView.textView()
+      of "Git diff":
+        diff = newKosmoGitDiffPanel(
+          parseGitDiff("diff --git a/file.nim b/file.nim\n@@ -1 +1 @@\n-old\n+new\n")
+        )
+        content = diff
+        text = diff.markdownView.textView()
+      else:
+        text = newTextView("Reader selection", frame = rect(8, 8, 180, 28))
+        text.editable = false
+        content = newView()
+        content.addSubview(text)
+        background = content
+      if background.isNil:
+        for child in content.subviews():
+          if child of Label and Label(child).text() == "Auto-refresh":
+            background = child
+            break
+      require not background.isNil
+      require frontend.openDocument(
+        newKosmoPaneDocument(
+          "focus.reader", viewer, content, preferredFirstResponder = text
+        )
+      )
+      if not github.isNil:
+        require github.waitForGitHub()
+      if not diff.isNil:
+        require diff.waitForDiff()
+      frontend.contentView.layoutSubtreeIfNeeded()
+      text.selectedRange = initTextRange(1, 3)
+      require frontend.window.dispatchKeyDown(commandNumberEvent(3))
+      require frontend.window.firstResponderIs(terminal)
+
+      let
+        bounds = background.bounds()
+        point = background.pointToWindow(
+          initPoint(bounds.maxX - 2, bounds.origin.y + bounds.size.height / 2)
+        )
+        target =
+          frontend.contentView.hitTest(frontend.contentView.pointFromWindow(point))
+      require not target.isNil
+      require not target.acceptsFirstResponder()
+      discard frontend.window.mouseDownAt(point)
+      discard frontend.window.mouseUpAt(point)
+      check frontend.window.firstResponderIs(text)
+      check text.selectedRange() == initTextRange(1, 3)
+      require frontend.window.dispatchKeyDown(
+        KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: shortcutModifiers())
+      )
+      check text.selectedText() == text.stringValue()
+
   test "Save makes an unchanged temporary tab permanent":
     let root = createTempDir("kosmo-save-preview-", "")
     defer:
@@ -166,13 +285,129 @@ suite "Kosmo synthetic panel shortcuts":
         require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
         require frontend.window.dispatchKeyDown(KeyEvent(key: direction))
         check frontend.window.firstResponderIs(source.editorView)
-      # The full-height/width pane has no aligned neighbor toward the outer edge.
+      # The top edge stops navigation; the left edge reaches the visible sidebar.
       require frontend.window.makeFirstResponder(groups[0].editorView)
       require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
       require frontend.window.dispatchKeyDown(
         KeyEvent(key: if vertical: keyK else: keyH)
       )
+      if vertical:
+        check frontend.window.firstResponderIs(groups[0].editorView)
+      else:
+        check frontend.window.firstResponderIs(frontend.fileTree)
+        require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+        require frontend.window.dispatchKeyDown(KeyEvent(key: keyL))
+        check frontend.window.firstResponderIs(groups[0].editorView)
+
+  test "horizontal pane shortcuts include the selected sidebar and adjacent content":
+    let
+      root = createTempDir("kosmo-sidebar-pane-navigation-", "")
+      app = newApplication("Kosmo Sidebar Pane Navigation")
+      frontend = newKosmoApplication(app, root, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+      removeDir(root)
+    app.presentSyntheticWindow(frontend)
+    frontend.contentView.frame = rect(0, 0, 1000, 700)
+    require frontend.window.sendAction(actionSelector(KosmoSplitVerticalAction))
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+
+    for inFiles in [false, true]:
+      if inFiles:
+        require frontend.showFindInFiles(replacing = true)
+        frontend.searchPanel.queryField.text = "needle"
+        frontend.searchPanel.replacementField.text = "replacement"
+      else:
+        require frontend.showFileExplorer()
+      for continuation in [
+        KeyEvent(key: keyH, text: "h"),
+        controlKeyEvent(keyH),
+        KeyEvent(key: keyArrowLeft),
+      ]:
+        require frontend.window.makeFirstResponder(groups[1].editorView)
+        require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+        require frontend.window.dispatchKeyDown(continuation)
+        check frontend.window.firstResponderIs(groups[0].editorView)
+        require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+        require frontend.window.dispatchKeyDown(continuation)
+        if continuation.text.len > 0:
+          check frontend.window.dispatchTextInput(continuation.text)
+        if inFiles:
+          check frontend.sidebarTabs.selectedIndex == 1
+          check frontend.window.fieldEditorClient() == frontend.searchPanel.queryField
+          check frontend.searchPanel.queryField.text == "needle"
+          check frontend.searchPanel.replacementField.text == "replacement"
+          check frontend.searchPanel.replacementVisible
+        else:
+          check frontend.sidebarTabs.selectedIndex == 0
+          check frontend.window.firstResponderIs(frontend.fileTree)
+        let towardRight =
+          if continuation.key == keyArrowLeft:
+            KeyEvent(key: keyArrowRight)
+          elif continuation.modifiers == {nimkit.kmControl}:
+            controlKeyEvent(keyL)
+          else:
+            KeyEvent(key: keyL, text: "l")
+        require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+        require frontend.window.dispatchKeyDown(towardRight)
+        if towardRight.text.len > 0:
+          check frontend.window.dispatchTextInput(towardRight.text)
+        check frontend.window.firstResponderIs(groups[0].editorView)
+        check frontend.editorGroups().len == 2
+
+    require frontend.showFindInFiles(replacing = true)
+    for responder in [
+      Responder(frontend.searchPanel.resultsView),
+      Responder(frontend.searchPanel.replacementField),
+    ]:
+      require frontend.window.makeFirstResponder(responder)
+      require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+      require frontend.window.dispatchKeyDown(KeyEvent(key: keyL, text: "l"))
       check frontend.window.firstResponderIs(groups[0].editorView)
+      check frontend.searchPanel.queryField.text == "needle"
+      check frontend.searchPanel.replacementField.text == "replacement"
+
+    require frontend.showFileExplorer()
+    require frontend.fileBrowserPanel.showFilter()
+    frontend.fileBrowserPanel.filterField.text = "filter"
+    require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+    require frontend.window.dispatchKeyDown(KeyEvent(key: keyL, text: "l"))
+    check frontend.window.firstResponderIs(groups[0].editorView)
+    check frontend.fileBrowserPanel.filterField.text == "filter"
+
+    let terminal = newKosmoTerminalView()
+    require frontend.openDocument(
+      newKosmoPaneDocument("sidebar-navigation-terminal", "Terminal", terminal)
+    )
+    require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+    require frontend.window.dispatchKeyDown(KeyEvent(key: keyH, text: "h"))
+    check frontend.window.firstResponderIs(frontend.fileTree)
+    require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+    require frontend.window.dispatchKeyDown(KeyEvent(key: keyL, text: "l"))
+    check frontend.window.firstResponderIs(terminal)
+
+  test "horizontal pane shortcuts skip hidden and browserless sidebars":
+    let root = createTempDir("kosmo-hidden-sidebar-navigation-", "")
+    defer:
+      removeDir(root)
+    for hasBrowser in [true, false]:
+      let
+        app = newApplication("Kosmo Hidden Sidebar Navigation")
+        frontend = newKosmoApplication(
+          app, root, hasFileBrowser = hasBrowser, monitorsGitStatus = false
+        )
+      defer:
+        frontend.close()
+      app.presentSyntheticWindow(frontend)
+      if hasBrowser:
+        frontend.splitView.setPaneCollapsed(0, true)
+      require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+      require frontend.window.dispatchKeyDown(KeyEvent(key: keyH))
+      check frontend.window.firstResponderIs(frontend.editorView)
+      if hasBrowser:
+        check frontend.splitView.isPaneCollapsed(0)
 
   test "numbered shortcuts repeatedly return from the sidebar to terminal content":
     let
@@ -215,6 +450,22 @@ suite "Kosmo synthetic panel shortcuts":
       KeyEvent(key: keyH, keyCode: keyH.ord)
     )
 
+    require frontend.showFindInFiles()
+    frontend.searchPanel.queryField.text = "needle"
+    for deactivate in [false, true]:
+      require frontend.window.sendAction(actionSelector(KosmoSelectAllAction))
+      require frontend.window.dispatchKeyDown(controlKeyEvent(keyW))
+      if deactivate:
+        app.activateWindow(otherWindow)
+        app.activateWindow(frontend.window)
+      else:
+        require frontend.window.makeFirstResponder(frontend.editorView)
+        require frontend.showFindInFiles()
+      require frontend.window.dispatchKeyDown(KeyEvent(key: keyL, text: "l"))
+      check frontend.window.fieldEditorClient() == frontend.searchPanel.queryField
+      check frontend.searchPanel.queryField.text == "l"
+      frontend.searchPanel.queryField.text = "needle"
+
   test "sidebar commands from a detached pane activate the browser window":
     let
       app = newApplication("Kosmo Detached Sidebar Focus Test")
@@ -245,6 +496,11 @@ suite "Kosmo synthetic panel shortcuts":
     detached.contentView().layoutSubtreeIfNeeded()
 
     app.activateWindow(detached)
+    let detachedResponder = detached.firstResponder()
+    require detached.dispatchKeyDown(controlKeyEvent(keyW))
+    require detached.dispatchKeyDown(KeyEvent(key: keyH))
+    check detached.firstResponder() == detachedResponder
+    check app.keyWindowIs(detached)
     require detached.sendAction(actionSelector(KosmoShowFileExplorerAction))
     check app.keyWindowIs(frontend.window)
     check frontend.window.firstResponderIs(frontend.fileTree)

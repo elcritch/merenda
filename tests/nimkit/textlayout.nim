@@ -1121,13 +1121,18 @@ suite "nimkit text layout":
     )
     let snapshot = manager.layoutSnapshot()
 
-    check snapshot.lineFragments.len >= 4
+    require snapshot.lineFragments.len == 4
     check snapshot.hasLineStart(0)
     check snapshot.hasLineStart(2)
     check snapshot.hasLineStart(3)
     check snapshot.hasLineStart(5)
     check snapshot.lineFragments[^1].textRange.location == 5
     check snapshot.lineFragments[^1].glyphRange.isEmpty
+    for index, start in [0, 2, 3, 5]:
+      check snapshot.lineFragments[index].textRange.location == start
+      if index > 0:
+        check snapshot.lineFragments[index].fragmentRect.minY >=
+          snapshot.lineFragments[index - 1].fragmentRect.maxY - TextLayoutEpsilon
 
   test "layout lifecycle and scalar queries expose current cached layout":
     let manager = newTextLayoutManager(

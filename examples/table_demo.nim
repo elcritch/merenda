@@ -571,10 +571,10 @@ table.usesAlternatingRowBackgrounds = true
 table.showsRowSeparators = true
 table.selectCell(0, projectColumn)
 table.requestSort(projectColumn, tsdAscending)
-table.saveState(controller.stateStore)
+table.saveStateToStorage(controller.stateStore)
 stateColumn.hidden = true
 table.moveColumn(table.columnIndex("owner"), table.columnIndex("project"))
-table.restoreState(controller.stateStore)
+table.restoreStateFromStorage(controller.stateStore)
 table.connect(selectionDidChange, controller, tableSelectionDidChange)
 table.connect(cellEditDidCommit, controller, tableCellEditDidCommit)
 controller.installContextRowTracking()

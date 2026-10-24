@@ -1192,9 +1192,7 @@ proc viewFragmentIds*(scene: RenderScene, id: RenderViewId): seq[uint64] =
     return
   let entry = addr scene.viewEntries[id]
   for handle in [
-    entry[].placementHandle,
-    entry[].shellHandle,
-    entry[].contentHandle,
+    entry[].placementHandle, entry[].shellHandle, entry[].contentHandle,
     entry[].escapedTransformHandle,
   ]:
     if scene.tree.isValid(handle):

@@ -12,6 +12,57 @@ proc isFocused(window: Window, control: View): bool =
     (window.firstResponder() == control or window.fieldEditorClient() == control)
 
 suite "Kosmo editor search":
+  test "search snapshots preserve errors and zero width continuation without moving the cursor":
+    let editor = newKosmoEditor(text = "cat\ncat")
+    defer:
+      editor.close()
+    require editor.searchFrom(
+      "$", KosmoBufferCursor(line: 0, column: 0), regularExpression = true
+    )
+    check editor.bufferCursor() == KosmoBufferCursor(line: 0, column: 2)
+    let endSearch = editor.captureSearchState()
+    require editor.searchFrom("cat", KosmoBufferCursor(line: 0, column: 0))
+    let
+      wordSearch = editor.captureSearchState()
+      cursor = editor.bufferCursor()
+    editor.restoreSearchState(endSearch)
+    check editor.bufferCursor() == cursor
+    check editor.searchQuery() == "$"
+    require editor.revealLocation(0, 2)
+    require editor.searchFrom("$", editor.bufferCursor(), regularExpression = true)
+    check editor.bufferCursor() == KosmoBufferCursor(line: 1, column: 2)
+    require not editor.searchFrom("[", editor.bufferCursor(), regularExpression = true)
+    let invalidSearch = editor.captureSearchState()
+    require editor.searchError().len > 0
+    editor.restoreSearchState(wordSearch)
+    check editor.searchQuery() == "cat"
+    check editor.searchError() == ""
+    editor.restoreSearchState(invalidSearch)
+    check editor.searchError().len > 0
+    editor.restoreSearchState(KosmoSearchState())
+    check editor.searchQuery() == ""
+    check editor.searchError() == ""
+
+  test "GUI search collapses character line and block selections before moving":
+    for visualKey in ["v", "V", "C-v"]:
+      checkpoint "Selection mode " & visualKey
+      let
+        source = "needle alpha\nmiddle text\nneedle omega"
+        editor = newKosmoEditor(text = source)
+      defer:
+        editor.close()
+      require editor.handleKey(visualKey)
+      require editor.handleKey("l")
+      require editor.currentSelection().isSome
+      let copied = editor.copySelection()
+      require copied.len > 0
+      require editor.searchFrom("needle", editor.bufferCursor())
+      check editor.bufferCursor() == KosmoBufferCursor(line: 2, column: 0)
+      check editor.currentSelection().isNone
+      check editor.selectedText() == ""
+      check editor.mode() == KosmoEditorMode.Normal
+      check editor.bufferText(editor.tabs()[0].id).get() == source
+
   test "search tab navigation does not reach the active editor input mode":
     let frontend = newKosmoApplication(
       newApplication("Search tab navigation"), monitorsGitStatus = false
@@ -100,7 +151,7 @@ suite "Kosmo editor search":
     check window.firstResponder() == replaceAll
 
     let cursor = editor.bufferCursor()
-    let panel = view.searchField().superview().superview()
+    let panel = view.searchField().containingSearchBar()
     let paddingPoint = panel.pointToWindow(initPoint(2, 2))
     require window.mouseDownAt(paddingPoint)
     require window.mouseUpAt(paddingPoint)
@@ -312,6 +363,7 @@ suite "Kosmo editor search":
     )
     require window.mouseDownAt(point)
     require window.mouseUpAt(point)
+    discard window.buildRenders()
     view.replacementField().checkVisibleIn(view)
     check view.searchField().text() == "cat"
     check editor.bufferCursor() == cursor
@@ -338,6 +390,7 @@ suite "Kosmo editor search":
     check view.searchField().text() == "cat"
     require window.mouseDownAt(point)
     require window.mouseUpAt(point)
+    discard window.buildRenders()
     check view.replacementField().hidden
     check window.fieldEditorClient() == view.searchField()
     require window.makeFirstResponder(view)

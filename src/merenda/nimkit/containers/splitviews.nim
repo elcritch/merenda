@@ -1,4 +1,4 @@
-import std/[strutils]
+import std/strutils
 
 import sigils/core
 
@@ -42,6 +42,7 @@ type
 
 const
   SplitViewDefaultDividerThickness = 6.0'f32
+  SplitViewMinimumDividerHitThickness = 8.0'f32
   SplitViewDefaultPaneMinSize = 0.0'f32
   SplitViewDefaultPaneMaxSize = float32.high
   SplitViewEpsilon = 0.001'f32
@@ -301,11 +302,35 @@ proc setSplitViewSubviews*(splitView: SplitView, panes: openArray[View]) =
 
 proc dividerRect*(splitView: SplitView, dividerIndex: int): Rect
 
+proc dividerHitRect(splitView: SplitView, divider: Rect): Rect =
+  if divider.isEmpty:
+    return divider
+  let
+    axis = splitView.xAxis
+    thickness = divider.size.mainSize(axis)
+    hitThickness = max(thickness, SplitViewMinimumDividerHitThickness)
+
+  initSplitRect(
+    axis,
+    divider.mainOrigin(axis) - (hitThickness - thickness) / 2,
+    (if axis == laHorizontal: divider.minY else: divider.minX),
+    hitThickness,
+    divider.size.crossSize(axis),
+  )
+    .intersection(splitView.bounds())
+
 proc dividerAtPoint*(splitView: SplitView, point: Point): int =
+  var distance = float32.high
+  result = -1
   for index in 0 ..< splitView.splitDividerCount():
-    if splitView.dividerRect(index).contains(point):
-      return index
-  -1
+    let divider = splitView.dividerRect(index)
+    if splitView.dividerHitRect(divider).contains(point):
+      let center =
+        divider.mainOrigin(splitView.xAxis) + divider.size.mainSize(splitView.xAxis) / 2
+      let candidate = abs(point.mainPoint(splitView.xAxis) - center)
+      if candidate < distance:
+        distance = candidate
+        result = index
 
 proc paneLengthFractions(
     splitView: SplitView, visible: openArray[int], storedFractions: openArray[float32]
@@ -525,7 +550,8 @@ proc layoutSplitViewPanes(splitView: SplitView) =
     if visibleIndex < visible.len - 1:
       let divider = initSplitRect(axis, cursor, 0.0'f32, dividerThickness, crossLength)
       splitView.addCursorRect(
-        divider, if axis == laHorizontal: "resize-left-right" else: "resize-up-down"
+        splitView.dividerHitRect(divider),
+        if axis == laHorizontal: "resize-left-right" else: "resize-up-down",
       )
       cursor += dividerThickness
 
@@ -729,6 +755,17 @@ protocol DefaultSplitViewDrawing of ViewDrawingProtocol:
       return
     splitView.drawSplitViewDividers(context)
 
+protocol DefaultSplitViewHitTesting of ViewProtocol:
+  method hitTest(splitView: SplitView, point: Point): View =
+    if splitView.isHidden():
+      return
+    discard splitView.performNext(hitTest, point, result)
+    if splitView.dividerAtPoint(point) >= 0 and (
+      result.isNil or
+      result.hitTestLevel(result.pointFromView(point, splitView)) <= DefaultDrawLevel.int
+    ):
+      result = splitView
+
 protocol DefaultSplitViewEvents of ResponderEventProtocol:
   method mouseDown(splitView: SplitView, event: MouseEvent): bool =
     if event.button != mbPrimary:
@@ -808,6 +845,7 @@ proc initSplitViewFields*(
   discard splitView.withProto()
   discard splitView.withProtocol(DefaultSplitViewLayout)
   discard splitView.withProtocol(DefaultSplitViewDrawing)
+  discard DynamicAgent(splitView).pushMethods(DefaultSplitViewHitTesting.init())
   discard DynamicAgent(splitView).pushMethods(DefaultSplitViewEvents.init())
   discard splitView.withProtocol(DefaultSplitViewAccessibility)
   discard splitView.withProtocol(SplitViewLifecycleSlots)

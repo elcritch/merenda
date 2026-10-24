@@ -5,6 +5,8 @@ import ./fixtures/rendergeometry
 import sigils/core
 
 import merenda/nimkit
+import merenda/nimkit/tables/tablebasics as tableBasics
+import merenda/nimkit/tables/tableviews as tableViewsApi
 import merenda/nimkit/foundation/types as nimkitTypes
 
 func hasDrawableOp(node: Fig, kind: DrawableKind): bool =
@@ -849,6 +851,28 @@ proc newTableStateProviderSpy(identifier: string): TableStateProviderSpy =
   discard result.withProtocol(TableStateProviderSpyMethods)
 
 suite "NimKit TableView":
+  test "table basics values work with table view model and persistence APIs":
+    let
+      row: tableViewsApi.TableRowValue = tableBasics.tableRow(
+        "row", cells = [tableBasics.tableCell("name", toObj("Before"))]
+      )
+      column: tableViewsApi.TableModelColumn =
+        tableBasics.initTableModelColumn("name", "Name", width = 120.0)
+      model = newTableModel([row], [column])
+      tableView = newTableView()
+      saved: tableViewsApi.TableViewState = tableBasics.initTableViewState(
+        columns =
+          [tableBasics.TableColumnAutosaveRecord(identifier: "name", width: 88.0)]
+      )
+
+    tableView.bindTableModel(model)
+    model.setValue("row", "name", toObj("After"))
+    check tableView.tableCellText(0, tableView.columnAt(0)) == "After"
+    tableView.restoreColumnAutosaveRecords(saved.columns)
+    check tableView.columnAt(0).width == 88.0'f32
+    expect tableBasics.TableModelError:
+      discard model.valueForRow("missing", "name")
+
   test "table columns expose stable identifiers and mutable display properties":
     let column = newTableColumn(
       "name",
@@ -1166,9 +1190,9 @@ suite "NimKit TableView":
     )
     check name.width > 120.0'f32
 
-    tableView.saveState(store)
+    tableView.saveStateToStorage(store)
     name.width = 80.0
-    tableView.restoreState(store)
+    tableView.restoreStateFromStorage(store)
     check name.width > 120.0'f32
 
   test "table header rounds only exposed top corners":
@@ -1228,7 +1252,7 @@ suite "NimKit TableView":
     oldTable.selectedColumns = [oldName]
     oldName.sortDirection = tsdDescending
     oldAge.hidden = true
-    oldTable.saveState(store)
+    oldTable.saveStateToStorage(store)
 
     let
       newTable = newTableView()
@@ -1240,7 +1264,7 @@ suite "NimKit TableView":
     newTable.addColumn(newAge)
     newTable.addColumn(newName)
     newTable.registerColumnAutosaveAlias("fullName", "name")
-    newTable.restoreState(store)
+    newTable.restoreStateFromStorage(store)
 
     check newTable.columnAt(0) == newName
     check newTable.columnAt(1) == newAge
@@ -1334,6 +1358,27 @@ suite "NimKit TableView":
     check tableView.columnAt(1) == owner
     check tableView.columnAt(2) == project
     check not tableView.headerDragIndicator().visible
+
+    let
+      resizeStart =
+        initPoint(tableView.tableHeaderColumnRect(state).maxX - 1.0'f32, 10.0)
+      resizeEnd = initPoint(resizeStart.x + 20.0'f32, resizeStart.y)
+
+    check tableView.tableHeaderHitTest(resizeStart).part == thpResizeHandle
+    check tableView.headerMouseDown(
+      MouseEvent(location: resizeStart, button: mbPrimary)
+    )
+    check tableView.headerMouseDragged(
+      MouseEvent(location: resizeEnd, button: mbPrimary)
+    )
+    check state.width == 90.0'f32
+    check project.width == 90.0'f32
+    check tableView.headerMouseUp(MouseEvent(location: resizeEnd, button: mbPrimary))
+    check tableView.columnAt(0) == state
+    check tableView.headerDragIndicator().index == -1
+    check not tableView.headerMouseDragged(
+      MouseEvent(location: resizeEnd, button: mbPrimary)
+    )
 
   test "table view keeps clicked selection on row identities after header sort":
     let
@@ -1446,6 +1491,36 @@ suite "NimKit TableView":
     check model.len() == 4
     check filterCalls == 13
 
+  test "table model keeps identity caches current across source mutations":
+    let model =
+      newTableModel([tableRow("a"), tableRow("hidden", hidden = true), tableRow()])
+    check model.sourceLen == 3
+    check model.len == 2
+    check model.getRowWithIdentifier("hidden").isSome
+    check model.indexOfIdentifier("hidden") == -1
+    check model.getRowWithIdentifier("").isNone
+    check model.indexOfIdentifier("") == -1
+
+    model.insertRow(tableRow("first"), -10)
+    check model.indexOfIdentifier("a") == 1
+    check model.moveRow("a", 99)
+    check model.indexOfIdentifier("a") == 2
+    check model.removeRow("first")
+    check model.getRowWithIdentifier("first").isNone
+    check model.indexOfIdentifier("a") == 1
+
+    model.rows = [tableRow("new"), tableRow("hidden")]
+    check model.sourceLen == 2
+    check model.len == 2
+    check model.indexOfIdentifier("a") == -1
+    check model.indexOfIdentifier("hidden") == 1
+    let revision = model.revision
+    expect TableModelError:
+      model.addRow(tableRow("new"))
+    check model.revision == revision
+    check not model.removeRow("missing")
+    check not model.moveRow("missing", 0)
+
   test "table view persists row identities drags identifiers and batches row updates":
     let
       model = newTableModel(tableModelRows(), tableModelColumns())
@@ -1486,7 +1561,10 @@ suite "NimKit TableView":
 
     tableView.beginTableUpdates()
     tableView.insertRowsAtIndexes([3], ["edith"])
+    tableView.beginTableUpdates()
     tableView.reloadRowsAtIndexes([1], ["grace"])
+    tableView.endTableUpdates()
+    check signals.updateKinds == newSeq[TableRowUpdateKind]()
     tableView.moveRow(3, 1)
     tableView.removeRowsAtIndexes([0], ["ada-lovelace"])
     check signals.updateKinds == newSeq[TableRowUpdateKind]()
@@ -2186,6 +2264,53 @@ suite "NimKit TableView":
     check window.mouseUpAt(point)
     check tableView.selectedIndex == 1
 
+  test "table options keep defaults and column selection cleanup independent":
+    let
+      root = newView(frame = rect(0, 0, 240, 96))
+      tableView = newTableView(frame = rect(0, 0, 240, 96))
+      name = newTableColumn("name", "Name")
+      alternatingFill = fill(color(0.35, 0.45, 0.55, 1.0))
+
+    var appearance = initAppearance()
+    appearance[srRowItem, StyleAlternatingFill] = alternatingFill
+    tableView.appearance = appearance
+
+    tableView.showsHeader = false
+    tableView.rowCount = 3
+    tableView.rowHeight = 24.0
+    tableView.addColumn(name)
+    root.addSubview(tableView)
+
+    check not tableView.usesAlternatingRowBackgrounds
+    check not tableView.showsRowSeparators
+    check not tableView.allowsColumnSelection
+    check not tableView.allowsRowReordering
+    check tableView.tracksPointerRowHighlights
+    check tableView.tracksPointerColumnHighlights
+    check tableView.showsFocusedRowHighlight
+    check tableView.showsFocusedColumnHighlight
+
+    tableView.usesAlternatingRowBackgrounds = true
+    tableView.showsRowSeparators = true
+    tableView.allowsColumnSelection = true
+    tableView.allowsRowReordering = true
+    tableView.selectCell(0, name)
+    check tableView.selectedColumns == @[name]
+    check root.renderedRectangleWithFill(tableView.rowItemRect(1), alternatingFill)
+
+    tableView.allowsColumnSelection = false
+    check tableView.selectedColumns.len == 0
+    check tableView.selectedIndex == 0
+    check tableView.focusedColumn == name
+    tableView.usesAlternatingRowBackgrounds = false
+    check not root.renderedRectangleWithFill(tableView.rowItemRect(1), alternatingFill)
+    check tableView.showsRowSeparators
+    check tableView.allowsRowReordering
+    check tableView.tracksPointerRowHighlights
+    check tableView.tracksPointerColumnHighlights
+    check tableView.showsFocusedRowHighlight
+    check tableView.showsFocusedColumnHighlight
+
   test "table view keeps inherited row selection behavior":
     let tableView = newTableView()
 
@@ -2195,6 +2320,63 @@ suite "NimKit TableView":
 
     check tableView.selectedIndexes == @[1, 2, 3]
     check tableView.selectedRange == 1 .. 3
+
+  test "table selection keeps its anchor through range reversals and mode changes":
+    let
+      window = newWindow("Table selection cursor", frame = rect(0, 0, 280, 180))
+      root = newView(frame = rect(0, 0, 280, 180))
+      tableView = newTableView(frame = rect(0, 0, 240, 150))
+      name = newTableColumn("name", "Name")
+
+    tableView.showsHeader = false
+    tableView.rowCount = 5
+    tableView.rowHeight = 24.0
+    tableView.addColumn(name)
+    root.addSubview(tableView)
+    window.setContentView(root)
+    discard buildRenders(root)
+
+    check tableView.selectionMode == tsmSingle
+    check tableView.selectedIndex == -1
+    check tableView.selectedIndexes.len == 0
+    tableView.selectionMode = tsmExtended
+    tableView.selectCell(2, name)
+    check window.makeFirstResponder(tableView)
+
+    check window.pressKey(keyArrowUp, {kmShift})
+    check tableView.selectedIndexes == @[1, 2]
+    check tableView.selectedIndex == 1
+    check window.pressKey(keyArrowUp, {kmShift})
+    check tableView.selectedIndexes == @[0, 1, 2]
+    check window.pressKey(keyArrowDown, {kmShift})
+    check tableView.selectedIndexes == @[1, 2]
+    check window.pressKey(keyArrowDown, {kmShift})
+    check tableView.selectedIndexes == @[2]
+    check window.pressKey(keyArrowDown, {kmShift})
+    check tableView.selectedIndexes == @[2, 3]
+
+    tableView.selectionMode = tsmNone
+    check tableView.selectedIndex == -1
+    check tableView.selectedIndexes.len == 0
+    check tableView.focusedColumn.isNil
+
+    tableView.selectionMode = tsmExtended
+    tableView.selectCell(4, name)
+    check window.pressKey(keyArrowUp, {kmShift})
+    check tableView.selectedIndexes == @[3, 4]
+    tableView.selectionMode = tsmSingle
+    check tableView.selectedIndex == 3
+    check tableView.selectedIndexes == @[3]
+    tableView.selectionMode = tsmExtended
+    check window.pressKey(keyArrowUp, {kmShift})
+    check tableView.selectedIndexes == @[2, 3]
+
+    tableView.selectedIndexes = []
+    check tableView.selectionMode == tsmExtended
+    check tableView.selectedIndex == -1
+    tableView.selectCell(1, name)
+    check window.pressKey(keyArrowDown, {kmShift})
+    check tableView.selectedIndexes == @[1, 2]
 
   test "table view tracks selected columns clicked cell editing persistence and drag state":
     let
@@ -3557,6 +3739,49 @@ suite "NimKit TableView":
 
     check not scrollView.verticalScrollerRect().isEmpty
     check scrollView.horizontalScrollerRect().isEmpty
+
+  test "hosted table controls keep their cell frames after a sibling label changes":
+    let
+      root = newView(frame = rect(0, 0, 600, 180))
+      tableView = newTableView(frame = rect(0, 0, 360, 140))
+      detail = newLabel("No row selected")
+      source = newTableDataSourceSpy(3)
+      delegate = newTableDelegateSpy()
+
+    delegate.hostedColumns = @["state", "action"]
+    delegate.textFieldColumns = @["state"]
+    delegate.buttonColumns = @["action"]
+    tableView.addColumn(newTableColumn("project", "Project", width = 160.0))
+    tableView.addColumn(newTableColumn("state", "State", width = 100.0))
+    tableView.addColumn(newTableColumn("action", "Action", width = 90.0))
+    tableView.dataSource = source
+    tableView.delegate = delegate
+    tableView.rowHeight = 28.0
+    root.addSubview(tableView)
+    root.addSubview(detail)
+    activateConstraints:
+      detail[atLeft] == tableView[atRight] + 10.0
+      detail[atTop] == root[atTop]
+
+    discard buildRenders(root)
+    discard buildRenders(root)
+
+    detail.text = "Inspecting: Renderer Pipeline (Mara)"
+    root.layoutSubtreeIfNeeded()
+
+    for (_, rowView, _) in tableView.visibleRowViews():
+      let cells = rowView.subviews()
+      require cells.len == 2
+      check cells[0].frame().rectsClose(rect(160, 0, 100, 28))
+      check cells[1].frame().rectsClose(rect(260, 0, 90, 28))
+    check not root.hasPendingLayout()
+
+    discard buildRenders(root)
+    for (_, rowView, _) in tableView.visibleRowViews():
+      let cells = rowView.subviews()
+      check cells[0].frame().rectsClose(rect(160, 0, 100, 28))
+      check cells[1].frame().rectsClose(rect(260, 0, 90, 28))
+    check not root.hasPendingLayout()
 
   test "one table resize converges without pending layout":
     let

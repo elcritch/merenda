@@ -144,7 +144,11 @@ proc beginEditing*(editor: FieldEditor, client: Responder, focusVisible = true):
     return true
   if not editor.canEdit(client):
     return false
+  # A window reuses this editor for different controls, each with its own text.
+  let allowsUndo = editor.allowsUndo
+  editor.allowsUndo = false
   editor.loadClientText(client)
+  editor.allowsUndo = allowsUndo
   editor.xClient.target = client
   editor.focused = true
   editor.focusVisible = focusVisible
@@ -186,11 +190,6 @@ protocol DefaultFieldEditorView of ViewProtocol:
     false
 
 protocol DefaultFieldEditorEvents of ResponderEventProtocol:
-  method mouseDown(editor: FieldEditor, event: MouseEvent): bool =
-    if event.button == mbPrimary and (editor.editable or editor.selectable):
-      editor.setCursor(editor.textIndexAtPoint(event.location))
-      return true
-
   method keyDown(editor: FieldEditor, event: KeyEvent): bool =
     if editor.editable and event.text.isInsertableText():
       TextView(editor).insertTextValue(event.text)

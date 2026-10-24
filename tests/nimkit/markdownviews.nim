@@ -343,6 +343,53 @@ sibling body
     check "parent refreshed again" in view.textStorage().stringValue()
     check "child refreshed again" notin view.textStorage().stringValue()
 
+  test "initial heading folds apply only to unseen identities and reset with a document":
+    let view = newMarkdownView(frame = rect(0, 0, 480, 320))
+    view.updateMarkdown(
+      "# Group\n\n## First\n\nfirst body\n\n## Second\n\nsecond body",
+      ["group", "first", "second"],
+      initiallyCollapsedHeadings = ["first", "second"],
+    )
+    require view.waitForMarkdownParsing()
+    check view.markdownHeadingDisclosure("Group").accessibilityValue() == "expanded"
+    check view.markdownHeadingDisclosure("First").accessibilityValue() == "collapsed"
+    check "first body" notin view.textStorage().stringValue()
+    require view.markdownHeadingDisclosure("First").accessibilityPerformAction(
+      AccessibilityActionExpand
+    )
+    require view.waitForMarkdownRendering()
+    view.updateMarkdown(
+      "# Group\n\n## Second\n\nsecond body",
+      ["group", "second"],
+      preserveHeadingState = true,
+      initiallyCollapsedHeadings = ["second"],
+    )
+    require view.waitForMarkdownParsing()
+    view.updateMarkdown(
+      "# Group\n\n## Renamed first\n\nfirst body\n\n## Second\n\nsecond body\n\n" &
+        "## New item\n\nnew body",
+      ["group", "first", "second", "new"],
+      preserveHeadingState = true,
+      initiallyCollapsedHeadings = ["first", "second", "new"],
+    )
+    require view.waitForMarkdownParsing()
+    check view.markdownHeadingDisclosure("Renamed first").accessibilityValue() ==
+      "expanded"
+    check view.markdownHeadingDisclosure("Second").accessibilityValue() == "collapsed"
+    check view.markdownHeadingDisclosure("New item").accessibilityValue() == "collapsed"
+    check "first body" in view.textStorage().stringValue()
+    check "new body" notin view.textStorage().stringValue()
+    view.updateMarkdown(
+      "# Other group\n\n## First\n\nfresh body",
+      ["group", "first"],
+      initiallyCollapsedHeadings = ["first"],
+    )
+    require view.waitForMarkdownParsing()
+    check view.markdownHeadingDisclosure("Other group").accessibilityValue() ==
+      "expanded"
+    check view.markdownHeadingDisclosure("First").accessibilityValue() == "collapsed"
+    check "fresh body" notin view.textStorage().stringValue()
+
   test "paragraphs, soft breaks, hard breaks, escapes, and entities render as text":
     let
       source =
@@ -834,6 +881,89 @@ sibling body
     )
     check rendered.contains("3. third\n4. fourth")
     check rendered.contains("• paragraph one\n  paragraph two")
+
+  test "task lists render Unicode checkboxes and preserve inline styling":
+    let
+      style = initMarkdownStyle()
+      storage = markdownTextStorage(
+        "- [ ] Todo é\n- [x] **Done** and [link](https://example.com)\n" &
+          "- [X] Checked\n- [-] Cancelled\n- ordinary"
+      )
+    check storage.stringValue() ==
+      "☐ Todo é\n☑ Done and link\n☑ Checked\n☒ Cancelled\n• ordinary"
+    check storage.attributesFor("Done").fontName == style.strongFontName
+    check storage.attributesFor("link").link == "https://example.com"
+    check storage.attributesFor("☐").foregroundColor == style.mutedColor
+    check storage.attributesFor("Todo").foregroundColor == style.textColor
+
+  test "nested and ordered tasks retain numbering and continuation indentation":
+    let storage = markdownTextStorage(
+      "- [ ] Parent\n  - [x] Child\n\n    More details\n\n" &
+        "3. [-] Cancelled\n\n   Follow up\n4. [ ] Next"
+    )
+    check storage.stringValue().contains("☐ Parent\n  ☑ Child\n    More details")
+    check storage.stringValue().contains(
+      "3. ☒ Cancelled\n     Follow up\n4. ☐ Next"
+    )
+
+  test "background task-list layout resolves missing checkbox glyphs":
+    var style = initMarkdownStyle()
+    style.bodyFontName = "JetBrainsMonoNerdFontMono-Regular.ttf.zip"
+    let view = newMarkdownView(
+      "- [ ] Pending\n- [x] Done\n- [-] Cancelled\n\n" &
+        "Background content. ".repeat(256),
+      style = style,
+      frame = rect(0, 0, 360, 180),
+    )
+    require view.waitForMarkdownParsing()
+    require view.waitForMarkdownLayout()
+    let manager = view.textView().layoutManager()
+    check manager.snapshotBuildThreadId() != getThreadId()
+    let layout = manager.glyphArrangementResource()[]
+    var checkboxCount = 0
+    for glyph in layout.arrangedGlyphs:
+      if glyph.rune in [Rune(0x2610), Rune(0x2611), Rune(0x2612)]:
+        inc checkboxCount
+        check glyph.glyphId != FontGlyphId(0)
+        check not getTypefaceSource(getFigFont(glyph.fontId).typefaceId).name.contains(
+          "JetBrainsMonoNerdFontMono"
+        )
+    check checkboxCount == 3
+
+  test "task markers only replace a list item's initial literal marker":
+    let storage = markdownTextStorage(
+      "[ ] paragraph\n\n- \\[ ] escaped\n- [x]word\n- [z] unknown\n" &
+        "- `[x]` code\n- [x](https://example.com) link\n- body [x] later\n\n" &
+        "  [ ] later paragraph\n\n```\n- [x] fenced\n```"
+    )
+    let rendered = storage.stringValue()
+    check rendered.contains("[ ] paragraph")
+    check rendered.contains("• [ ] escaped")
+    check rendered.contains("• [x]word")
+    check rendered.contains("• [z] unknown")
+    check rendered.contains("• [x] code")
+    check rendered.contains("• x link")
+    check rendered.contains("• body [x] later\n  [ ] later paragraph")
+    check rendered.contains("- [x] fenced")
+    check not rendered.contains("☐")
+    check not rendered.contains("☑")
+    check not rendered.contains("☒")
+
+  test "task rendering keeps the parsed tree reusable for style changes":
+    let view = newMarkdownView(
+      "- [x] **Done**\n- [ ] [pending](https://example.com)\n- [-] Cancelled\n\n" &
+        "[x]: https://example.com/reference"
+    )
+    require view.waitForMarkdownParsing()
+    let expected = "☑ Done\n☐ pending\n☒ Cancelled"
+    check view.textStorage().stringValue() == expected
+    var style = view.markdownStyle
+    style.mutedColor = color(0.7, 0.2, 0.1)
+    view.markdownStyle = style
+    require view.waitForMarkdownRendering()
+    check view.textStorage().stringValue() == expected
+    check view.textStorage().attributesFor("☑").foregroundColor == style.mutedColor
+    check view.textStorage().attributesFor("pending").link == "https://example.com"
 
   test "block quotes prefix every line and thematic breaks use the configured rule":
     let

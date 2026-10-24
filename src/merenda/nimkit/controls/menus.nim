@@ -1175,12 +1175,6 @@ proc popupFirstItemIndex(button: PopupMenuButton): int =
     button.menuItemCount(), button.visibleItemCount()
   )
 
-proc popupSize(button: PopupMenuButton): Size =
-  initSize(
-    max(button.bounds.size.width, 180.0'f32),
-    max(button.itemHeight() * button.visibleItemCount().float32 + 2.0'f32, 1.0'f32),
-  )
-
 proc rootPopup(button: PopupMenuButton): PopupMenuButton =
   result = button
   while not result.isNil and not result.xParentPopup.isNil:
@@ -1199,6 +1193,24 @@ proc ownerWindow(button: PopupMenuButton): Window =
     Window(owner)
   else:
     nil
+
+proc popupSize(button: PopupMenuButton): Size =
+  let
+    owner = button.ownerWindow()
+    parent = button.cascadeSuperview()
+    windowPopup =
+      not owner.isNil and button.xParentPopup.isNil and
+      owner.resolvedPopupPresentation(button.xPopupPresentation) == ppWindow and
+      owner.supportsNativePopupWindows()
+    appearance =
+      if windowPopup:
+        owner.effectiveAppearance()
+      elif not parent.isNil:
+        parent.effectiveAppearance()
+      else:
+        button.effectiveAppearance()
+  result = button.popupList().popupListContentSize(appearance)
+  result.width = max(result.width, button.bounds.size.width)
 
 proc menuItem(button: PopupMenuButton, index: int): MenuItem =
   if button.xMenu.isNil or index < 0 or index >= button.xMenu.len:
@@ -1900,7 +1912,7 @@ proc submenuCascadeFrame(button: PopupMenuButton, index: int): Rect =
   rect(
     max(itemRect.maxX - 1.0'f32, 0.0'f32),
     itemRect.origin.y,
-    180.0'f32,
+    0.0'f32,
     itemRect.size.height,
   )
 

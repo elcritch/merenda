@@ -1,6 +1,6 @@
 # Merenda Work Plan
 
-Updated **2026-09-29**. Focus on reliable long-running Kosmo sessions and bounded
+Updated **2026-10-14**. Focus on reliable long-running Kosmo sessions and bounded
 memory use, then extend Tekton's authoring workflow.
 
 Architecture and API decisions live in [design](docs/design.md) and
@@ -84,6 +84,114 @@ See [the review and measurements](docs/tekton-review.md).
 **Completion evidence:** users can author a multi-window interface, wire its
 controllers and actions, and inspect the running application without losing history
 or live object identities.
+
+## 4. Cleanup
+
+Five independent options from the 2026-10-14 Astra review, ordered by suggested
+implementation priority. Estimates are net production LOC removed after adding
+helpers and adapters; tests are excluded. Combined estimated reduction:
+**385–515 LOC**.
+
+- [ ] **Simplify SVG stroke parsing — 105–120 LOC; small effort.** In
+  `src/merenda/nimkit/drawing/svgpathloader.nim`, replace `strokeSegments`' full
+  SVG decoder with a reader for the absolute `M/L/C/Q/Z` commands already emitted
+  by `normalizePathArcs`. Preserve transforms, quadratic/cubic segment types,
+  zero-length line suppression, subpath closure, and incomplete-result fallback.
+  Cover relative and reflected commands, arcs, and multiple closed subpaths.
+- [ ] **Share button painting — 60–85 LOC; small–medium effort.** In
+  `src/merenda/nimkit/controls/buttons.nim`, extract shared choice/push painting
+  helpers for ButtonCell and Button. Keep caller-specific style resolution,
+  property proc boundaries, widget hover interpolation, matrix-cell state,
+  focus rings, icon/text placement, and active field-editor behavior.
+- [ ] **Consolidate Kosmo command dispatch — 55–75 LOC; small–medium effort.**
+  In `src/merenda/kosmo/application_editor.nim`, share action execution between
+  `KosmoEditorCommandDispatch` and `KosmoEditorPaneCommandDispatch` through an
+  explicit editor/pane context and thin protocol adapters. Preserve pane-document
+  versus buffer saving, standalone-view fallbacks, focused-group routing, and
+  selection synchronization. Keep Markdown read-only handling in its adapter.
+- [ ] **Share shortcut JSON loading — 35–55 LOC; small effort.** Reuse the
+  validation and atomic replacement workflow in
+  `src/merenda/nimkit/responder/keybindingjson.nim` from
+  `src/merenda/kosmo/shortcuts.nim`, with narrow sequence-parser and insertion
+  hooks and shared prefix comparison. Preserve Kosmo's profile/platform parsing
+  and duplicate rejection, NimKit's exact-sequence replacement, diagnostics,
+  allowed-command checks, and null/empty-array disabling.
+- [ ] **Share picker-button popup behavior — 130–180 LOC; medium effort.** In
+  `src/merenda/nimkit/controls/datepickers.nim`, use a private GUI base for Date,
+  Time, and DateTime button popup lifecycle, events, and common accessibility
+  behavior. Keep typed values, property setters, selection callbacks, and
+  accessibility value text concrete. Preserve stale-host guards, failed-open
+  cleanup, responder restoration, presentation switching, and open-state
+  invalidation. Retain Date's immediate selection and Time/DateTime's draft/Done
+  semantics; cover stale dismissals and presentation changes while open.
+
+**Completion evidence:** measure net LOC after each refactor and preserve behavior
+through the relevant existing NimKit/Kosmo tests and focused regression coverage.
+Keep public property hooks and ownership boundaries intact.
+
+### Shared collection caching and small helpers
+
+PR #164 is narrowed to TableModel/ArrayController storage and arrangement caches,
+a small private template for arrangement dispatch, and reuse of existing ObjectValue
+accessors. The broader provider, snapshot, selection, reuse, and pointer migration
+was removed: it added 255 net production lines and did not justify its additional
+abstractions. The original 1,200–1,600 LOC-reduction forecast is withdrawn; those
+larger migrations are deferred rather than assumed to be follow-up work.
+The shared storage keeps mutation bookkeeping explicit so batching appends and
+removals does not repeatedly allocate identity tables.
+
+- [x] **Shared collection cache.** Use private `ItemCollection[T]` value state for
+  a lazy source/visible identity table, reusable hidden/filter/sort arrangement,
+  incremental identity updates, and revision tracking. Keep model records,
+  lookup errors, comparison policies, edit writeback, and notification boundaries
+  concrete.
+- [x] **Small shared template.** Share only the cached-arrangement guard and
+  sorted/unsorted dispatch through `arrangeWithDescriptors`. Keep comparator
+  closures in separate sorted helpers so cached reads and unsorted rebuilds do
+  not allocate environments. Each model keeps its public sorting/filtering APIs.
+- [x] **Reuse established accessors.** Replace five copies of model-field type
+  checks with ObjectValue's typed optional accessors and borrowed field values.
+  Preserve absent/wrong-type defaults, and read document-tab style classes once
+  per projection.
+
+**Evidence:** the repeated-query regression evaluates three source items across
+100 iterations of count/item/identity queries: filter calls fall from 1,200 to
+three until mutation invalidates the cache. This is an operation-count test, not
+a wall-clock benchmark. Coverage also checks filter refreshes, exception retries,
+duplicate identities, mixed mutations, payload borrowing, buffer reuse, typed
+field defaults, and existing widget bindings. `tests/benchmark_itemcollections.nim`
+measures controller/table append and removal batches, cold and warm identity
+queries, sorted/filtered refreshes, cached reads, and arranged-row exports.
+It measures refreshes both with and without an immediate identity query;
+allocation counts can be collected separately with `-d:nimAllocStats`.
+
+The final collection API exposes source `len`, borrowed `[]`/`items`/`pairs`,
+indexed field assignment through `[]=`, and owner-level `arrangedItems`
+traversal. The owner refreshes before yielding,
+so traversal consumers never prepare caches manually. The shared arrangement
+remains a sequence for sorting and random access. Arranged-row exports reserve
+their output capacity once.
+
+Astra's review identified a selective-visibility regression: a first arranged
+identity query indexed all hidden source identities. Arranged lookups now create
+entries only for visible identifiers, defer source positions until a source
+query, and use generations to reject stale positions without scanning hidden
+entries. Partial entries retain unknown source positions across insertions and
+moves; deletion removes only the affected identity. Tests cover these partial
+states, hidden-first duplicates, and a cold visible-lookup allocation bound.
+
+The generation stamp adds one `Natural` per identity entry (8 bytes on this
+platform; `ItemIndexes` grows from 16 to 24 bytes). Source lookup still builds a
+full identity cache on first use and can cost more than scanning near the front;
+controller appends retain an additional owned identifier key. These are explicit
+cache tradeoffs, rather than a claim that every workload improves.
+
+Benchmark timings use release/ARC builds, identical dependencies, alternating
+main/PR runs, and matching result checksums. Allocation counts come from separate
+instrumented builds. The permanent harness includes one-visible-of-100,000 cold
+and repeated identity queries so the review regression remains measurable.
+[PR #164](https://github.com/elcritch/merenda/pull/164) records the comparison
+against the committed source. Local timings are diagnostic, not CI thresholds.
 
 ## Validation
 

@@ -105,6 +105,14 @@ suite "Kosmo workspace roots":
     require frontend.searchPanel.performSearch()
     require frontend.searchPanel.waitForSearch(timeoutMilliseconds = 60_000)
     check frontend.searchPanel.resultsView.matches.len == 3
+    let results = frontend.searchPanel.resultsView
+    for index, match in results.matches:
+      let
+        identifier = results.matchIdentifier(index)
+        parentIdentifier = results.parentIdentifierForItem(identifier)
+      check results.tooltipForItem(parentIdentifier) == "shared.txt"
+      check results.tooltipForItem(identifier) ==
+        "shared.txt:" & $match.line & ":" & $match.column
     for root in roots:
       require frontend.showFileExplorer()
       frontend.contentView.layoutSubtreeIfNeeded()
@@ -123,6 +131,68 @@ suite "Kosmo workspace roots":
         if tab.filePath == some(root / "shared.txt"):
           found = true
       check found
+
+  test "removing project roots updates searches and preserves open files":
+    let
+      workspace = createTempDir("kosmo-remove-workspace-roots-", "")
+      first = workspace / "first"
+      second = workspace / "second"
+    for root in [first, second]:
+      createDir(root)
+      writeFile(root / "file.txt", "needle")
+    let
+      app = newApplication("Kosmo Remove Roots")
+      frontend = newKosmoApplication(app, first, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+      removeDir(workspace)
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
+    require frontend.openPath(first / "file.txt")
+    require frontend.openPath(second)
+    require frontend.showQuickOpen()
+    require frontend.quickOpenPanel.waitForProjectFiles(timeoutMilliseconds = 60_000)
+    check frontend.quickOpenPanel.projectFiles().len == 2
+    frontend.quickOpenPanel.dismiss()
+    require frontend.showFindInFiles()
+    frontend.searchPanel.queryField.text = "needle"
+    require frontend.searchPanel.performSearch()
+    require frontend.searchPanel.waitForSearch(timeoutMilliseconds = 60_000)
+    check frontend.searchPanel.resultsView.matches.len == 2
+
+    for root in [second, first]:
+      let menu = frontend.fileTree.itemContextMenu(root)
+      let removeItem = menu.items()[^1]
+      check removeItem.title == "Remove Project Root"
+      require removeItem.perform(frontend.window)
+      check frontend.searchPanel.rootPaths == frontend.fileTree.rootPaths
+      check frontend.searchPanel.resultsView.matches.len == 0
+      require frontend.showQuickOpen()
+      require frontend.quickOpenPanel.waitForProjectFiles(timeoutMilliseconds = 60_000)
+      check frontend.quickOpenPanel.projectFiles().len == frontend.fileTree.rootPaths.len
+      frontend.quickOpenPanel.dismiss()
+      check readFile(root / "file.txt") == "needle"
+      if root == second:
+        check frontend.fileTree.rootPaths == @[first]
+        check frontend.window.title == "Kosmo (first)"
+        require frontend.showFindInFiles()
+        require frontend.searchPanel.performSearch()
+        require frontend.searchPanel.waitForSearch(timeoutMilliseconds = 60_000)
+        require frontend.searchPanel.resultsView.matches.len == 1
+        check frontend.searchPanel.resultsView.matches[0].path == first / "file.txt"
+
+    check frontend.fileTree.rootPaths.len == 0
+    check frontend.window.title == "Kosmo"
+    var fileStillOpen = false
+    for tab in frontend.editorView.editor.tabs():
+      if tab.filePath == some(first / "file.txt"):
+        fileStillOpen = true
+    check fileStillOpen
+    require frontend.openPath(second)
+    check frontend.fileTree.rootPaths == @[second]
+    check frontend.window.title == "Kosmo (second)"
 
   test "quick open keeps duplicate names distinct and deduplicates overlapping roots":
     let
@@ -175,7 +245,7 @@ suite "Kosmo workspace roots":
       let initialization = execCmdEx("git -C " & quoteShell(root) & " init -q")
       require initialization.exitCode == 0
     let tree = newKosmoFileTree(first)
-    discard tree.startGitStatusMonitoring(refreshInterval = initDuration())
+    let monitoring = tree.startGitStatusMonitoring(refreshInterval = initDuration())
     defer:
       tree.stopGitStatusMonitoring()
       removeDir(workspace)
@@ -193,6 +263,10 @@ suite "Kosmo workspace roots":
     require tree.waitForGitStatus()
     check tree.outlineItemWithIdentifier(first / "changed.txt").decoration.badge == "U"
     check tree.outlineItemWithIdentifier(second / "changed.txt").decoration.badge == ""
+    require tree.removeRootPath(first)
+    check monitoring.rootPaths == @[second, plain]
+    require tree.waitForGitStatus()
+    check tree.outlineItemWithIdentifier(first / "changed.txt").decoration.badge == ""
     tree.rootPath = plain
     require tree.waitForGitStatus()
     tree.applyGitStatus(
@@ -203,3 +277,6 @@ suite "Kosmo workspace roots":
       )
     )
     check tree.outlineItemWithIdentifier(plain / "changed.txt").decoration.badge == ""
+    require tree.removeRootPath(plain)
+    check monitoring.rootPaths.len == 0
+    require tree.waitForGitStatus()

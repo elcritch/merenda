@@ -168,6 +168,10 @@ type
     xThreadRenderer: ThreadRendererClient
     xThreadHost: ThreadHostClient
     xDeferredNativeRender: bool
+    when defined(merenda.devControl):
+      xDevCapture: proc(capture: RenderCapture) {.closure.}
+      xDevCaptureSubmitted: bool
+      xDevCaptureId: uint64
     xAnimationScheduler: AnimationScheduler
     xAnimationClock: AnimationSchedulerClock
     xInsertionPointBlinkAnimation: Animation
@@ -185,6 +189,7 @@ type
     xMouseActiveView: View
     xMouseHoverView: View
     xToolTipTarget: View
+    xToolTipText: string
     xToolTipPoint: Point
     xToolTipOverlay: TooltipOverlayView
     xToolTipDelayAnimation: Animation
@@ -356,6 +361,9 @@ proc resolvedPopupPresentation*(
 ): PopupPresentation
 
 proc supportsNativePopupWindows*(window: Window): bool
+when defined(merenda.devControl):
+  proc completeDevCapture(window: Window, capture: RenderCapture)
+
 proc close*(window: Window)
 proc releaseThreadRenderer(window: Window)
 proc setKeyWindow*(window: Window, value: bool)
@@ -634,10 +642,14 @@ proc stopToolTipDelay(window: Window) =
 proc clearToolTip(window: Window) =
   window.stopToolTipDelay()
   window.xToolTipTarget = nil
+  window.xToolTipText.setLen(0)
   if not window.xToolTipOverlay.isNil:
     window.xToolTipOverlay.xText.setLen(0)
     if not window.xToolTipOverlay.superview().isNil:
       window.xToolTipOverlay.removeFromSuperview()
+
+proc currentToolTipText(window: Window, target: View): string =
+  target.toolTipAtPoint(target.pointFromView(window.xToolTipPoint, window.xContentView))
 
 proc finishToolTipDelay(window: Window) {.slot.} =
   window.xToolTipDelayAnimation = nil
@@ -649,7 +661,7 @@ proc finishToolTipDelay(window: Window) {.slot.} =
     window.clearToolTip()
     return
 
-  let text = target.toolTip()
+  let text = window.currentToolTipText(target)
   if text.len == 0:
     window.clearToolTip()
     return
@@ -659,6 +671,7 @@ proc finishToolTipDelay(window: Window) {.slot.} =
   let
     overlay = window.xToolTipOverlay
     contentBounds = content.bounds()
+  window.xToolTipText = text
   overlay.xText = text
   overlay.xAnchor = initPoint(
     window.xToolTipPoint.x - contentBounds.origin.x,
@@ -681,10 +694,10 @@ proc scheduleToolTip(window: Window) =
   if not window.startAnimation(animation):
     window.xToolTipDelayAnimation = nil
 
-proc toolTipTarget(view: View): View =
+proc toolTipTarget(view, content: View, contentPoint: Point): View =
   var candidate = view
   while not candidate.isNil:
-    if candidate.toolTip().len > 0:
+    if candidate.toolTipAtPoint(candidate.pointFromView(contentPoint, content)).len > 0:
       return candidate
     candidate = candidate.superview()
 
@@ -693,22 +706,28 @@ proc updateToolTip(window: Window, target: View, contentPoint: Point) =
     window.clearToolTip()
     return
 
-  let candidate = target.toolTipTarget()
-  if candidate == window.xToolTipTarget:
+  let
+    candidate = target.toolTipTarget(window.xContentView, contentPoint)
+    text =
+      if candidate.isNil:
+        ""
+      else:
+        candidate.toolTipAtPoint(
+          candidate.pointFromView(contentPoint, window.xContentView)
+        )
+  if candidate == window.xToolTipTarget and text == window.xToolTipText:
     if candidate.isNil:
       return
     if window.xToolTipOverlay.isNil or window.xToolTipOverlay.superview().isNil:
       window.xToolTipPoint = contentPoint
       window.scheduleToolTip()
-    elif window.xToolTipOverlay.xText != candidate.toolTip():
-      window.xToolTipOverlay.xText = candidate.toolTip()
-      window.xToolTipOverlay.needsDisplay = true
     return
 
   window.clearToolTip()
   if candidate.isNil:
     return
   window.xToolTipTarget = candidate
+  window.xToolTipText = text
   window.xToolTipPoint = contentPoint
   window.scheduleToolTip()
 
@@ -719,14 +738,21 @@ proc prepareToolTipForDisplay(window: Window) =
   if target.isNil:
     return
   if content.isNil or window.hasActiveTransientSession() or
-      not content.containsView(target) or target.toolTip().len == 0:
+      not content.containsView(target):
+    window.clearToolTip()
+    return
+  let text = window.currentToolTipText(target)
+  if text.len == 0:
     window.clearToolTip()
     return
   if window.xToolTipOverlay.isNil or window.xToolTipOverlay.superview() != content:
     return
 
   let contentBounds = content.bounds()
-  window.xToolTipOverlay.xText = target.toolTip()
+  window.xToolTipText = text
+  if window.xToolTipOverlay.xText != text:
+    window.xToolTipOverlay.xText = text
+    window.xToolTipOverlay.needsDisplay = true
   window.xToolTipOverlay.xAnchor = initPoint(
     window.xToolTipPoint.x - contentBounds.origin.x,
     window.xToolTipPoint.y - contentBounds.origin.y,
@@ -2080,6 +2106,11 @@ proc close*(window: Window) =
       window.xDelegate.trySendLocal(windowShouldClose(), window).get(true)
   if not shouldClose:
     return
+  when defined(merenda.devControl):
+    if not window.isNil:
+      window.completeDevCapture(
+        RenderCapture(id: window.xDevCaptureId, error: "Window closed during capture")
+      )
   window.sendWindowDelegate(windowWillClose(), window)
   emit window.willClose()
   window.postWindowNotification(nkWindowWillClose)
@@ -2555,6 +2586,38 @@ proc syncNativeGeometry(window: Window): Size =
       window.xContentView.frame = rect(0.0, 0.0, result.width, result.height)
     discard window.saveFrameUsingName()
 
+when defined(merenda.devControl):
+  proc requestScreenshot*(
+      window: Window, complete: proc(capture: RenderCapture) {.closure.}
+  ): bool =
+    ## Requests a fresh rendered frame without showing or focusing the window.
+    ## False means another capture is pending or the native surface is unavailable.
+    if window.isNil or not window.nativeReady or not window.isVisible or window.isClosed or
+        not window.xDevCapture.isNil:
+      return
+    inc window.xDevCaptureId
+    window.xDevCapture = complete
+    window.xDevCaptureSubmitted = false
+    window.requestNativeDisplayUpdate()
+    true
+
+  proc cancelScreenshot*(window: Window) =
+    ## Cancels a pending development capture without accepting stale render results.
+    window.xDevCapture = nil
+    window.xDevCaptureSubmitted = false
+    inc window.xDevCaptureId
+
+  proc completeDevCapture(window: Window, capture: RenderCapture) =
+    if window.xDevCapture.isNil or capture.id != window.xDevCaptureId:
+      return
+    let complete = move window.xDevCapture
+    window.xDevCaptureSubmitted = false
+    complete(capture)
+
+  proc auxiliaryWindows*(window: Window): seq[Window] =
+    ## Includes popup hosts so development clients can inspect their render surfaces.
+    window.xAuxiliaryWindows
+
 proc renderNativeWindow*(window: Window) =
   if not window.nativeReady:
     return
@@ -2572,13 +2635,23 @@ proc renderNativeWindow*(window: Window) =
   if window.xThreadHost.isNil:
     let renderScene = window.buildRenderScene()
     let needsFollowUpRender = window.needsDisplayUpdate()
+    when defined(merenda.devControl):
+      if not window.xDevCapture.isNil:
+        window.xHostWindow.requestFrameCapture(window.xDevCaptureId)
     window.xHostWindow.render(renderScene, logicalSize)
+    when defined(merenda.devControl):
+      if not window.xDevCapture.isNil:
+        window.completeDevCapture(window.xHostWindow.takeCapturedFrame())
     renderScene.acknowledgeRenderGeneration(renderScene.frameGeneration())
     if needsFollowUpRender:
       window.requestNativeDisplayUpdate()
   else:
     let renderScene = window.buildRenderScene()
     let needsFollowUpRender = window.needsDisplayUpdate()
+    when defined(merenda.devControl):
+      if not window.xDevCapture.isNil and not window.xDevCaptureSubmitted:
+        window.xThreadHost.requestFrameCapture(window.xDevCaptureId)
+        window.xDevCaptureSubmitted = true
     discard window.xThreadHost.submitRenderScene(renderScene, logicalSize)
     window.xHostWindow.renderSubmitted()
     if needsFollowUpRender:
@@ -3237,6 +3310,11 @@ proc dispatchHostFocusChanged*(window: Window, focused: bool) =
 proc markHostClosed(window: Window) =
   if window.xClosed:
     return
+  when defined(merenda.devControl):
+    if not window.isNil:
+      window.completeDevCapture(
+        RenderCapture(id: window.xDevCaptureId, error: "Window closed during capture")
+      )
   window.sendWindowDelegate(windowWillClose(), window)
   emit window.willClose()
   window.postWindowNotification(nkWindowWillClose)
@@ -3356,8 +3434,18 @@ proc drainThreadHostEvents(window: Window): int =
     of theRendered:
       window.xThreadHost.acknowledgeRender(event.renderId)
       window.xThreadHost.renderCount = event.renderCount
+      when defined(merenda.devControl):
+        if event.capture.png.len > 0 or event.capture.error.len > 0:
+          window.completeDevCapture(event.capture)
     of theRenderUpdateRejected:
       window.xThreadHost.rejectRenderUpdate(event.renderId)
+      when defined(merenda.devControl):
+        if window.xDevCaptureSubmitted:
+          window.completeDevCapture(
+            RenderCapture(
+              id: window.xDevCaptureId, error: "Render target changed during capture"
+            )
+          )
       window.requestNativeDisplayUpdate()
     of theRenderTargetReleased:
       window.xThreadHost.clearRenderResources()

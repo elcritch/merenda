@@ -1,4 +1,5 @@
 ## Shared runner for tests requiring cross-component or process-level integration.
+import integrations/fixtures/devcontrol
 import integrations/fixtures/atomicsavefailure
 import integrations/fixtures/githubcli
 import integrations/fixtures/kosmolspexec
@@ -24,4 +25,5 @@ import integrations/urlassets
 import integrations/terminalwatch
 import integrations/terminals
 import integrations/resourcelifetimes
+import integrations/devcontrol
 import integrations/backgroundworkershutdown

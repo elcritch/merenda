@@ -1,4 +1,4 @@
-import std/[options, os, strutils, tempfiles, unittest]
+import std/[options, os, strutils, tempfiles, unicode, unittest]
 
 import figdraw
 import pkg/bumpy
@@ -82,6 +82,37 @@ proc selectionBounds(layout: GlyphArrangement): tuple[x, y, w, h: float32] =
   (minX, minY, maxX - minX, maxY - minY)
 
 suite "nimkit font layout":
+  test "checkbox symbols fall back from the bundled Nerd Font and rasterize":
+    require "font-fallback" in textBackendFeatures()
+    require fontFallbackResolver() != nil
+    let
+      font = TextStyle(
+        fontName: "JetBrainsMonoNerdFontMono-Regular.ttf.zip", fontSize: 16.0
+      ).textFont(frMonospace).font
+      shaped = typeset(
+        bumpy.rect(0, 0, 120, 40), font, "☐☑☒", minContent = false, wrap = false
+      )
+      placed = placeGlyphs(
+        font,
+        [
+          (Rune(0x2610), vec2(0, 0)),
+          (Rune(0x2611), vec2(20, 0)),
+          (Rune(0x2612), vec2(40, 0)),
+        ],
+      )
+    for layout in [shaped, placed]:
+      require layout.arrangedGlyphs.len == 3
+      for glyph in layout.arrangedGlyphs:
+        check glyph.glyphId != FontGlyphId(0)
+        check getFigFont(glyph.fontId).typefaceId != font.typefaceId
+      for glyph in layout.glyphs():
+        let image = glyph.generateGlyph(force = true, upload = false)
+        require not image.isNil
+        check image.opaqueBounds().w > 0
+        check image.opaqueBounds().h > 0
+    for index, glyph in placed.arrangedGlyphs:
+      check glyph.pos.x == float32(index * 20)
+
   when defined(posix):
     test "platform default fonts load shape and rasterize without figDataDir":
       let previousDataDir = figDataDir()

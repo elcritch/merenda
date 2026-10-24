@@ -11,6 +11,206 @@
   preserve short colors, leading zeros, and alpha in hexadecimal color literals.
   Add a matching shorthand demo with native widget properties, ComboBox options,
   and line-based style rules with grouped borders, chrome, and token references.
+
+- Move NimKit table modules into `nimkit/tables/`. Direct module imports now use
+  `nimkit/tables/tableviews` and `nimkit/tables/tablebasics`; `merenda/nimkit`
+  continues to export the public table APIs.
+
+- Route development control through Sigils JSON-RPC selectors and dispatcher over
+  the private Unix socket. Keep asynchronous captures behind bounded result handles
+  and allow modal callbacks or shutdown to reenter polling safely.
+- Add `merenda-dev theme-load --file PATH` and `theme-reload` for live CSS changes.
+  Add Refresh theme below the font choice in Merenda Settings to reread the selected
+  bundled theme's CSS inheritance chain while preserving fonts. Failed loads keep
+  the current appearance. `MERENDA_THEME_CSS_DIR` selects an alternate source directory.
+
+- Add opt-in `-d:merenda.devControl` automation with explicit PID/socket addressing,
+  renderer PNG screenshots, window inspection, pointer/key/text input, and a small
+  CLI suitable for future MCP adapters.
+- Add `MERENDA_BACKGROUND=1` nonactivating development presentation on macOS and
+  Windows through a pinned Siwin update.
+
+## 0.28.0
+
+- Let locally signed macOS apps load their bundled text libraries. Check startup
+  after signing and through the installed command to catch loader failures.
+  Statically link HarfBuzz and FriBidi when installing with `nim install_kosmo`.
+
+- Build Windows Kosmo releases and examples with MSVC. Use the Windows SDK
+  resource compiler, ship the matching PDB, and keep Nim stack traces with
+  function names and source lines in place of GNU libbacktrace on MSVC.
+  Use Sigils 0.32.0 and a private Nim 2.2.10 compiler built with pinned,
+  checksum-verified fixes for MSVC atomic exchange, compare-and-swap,
+  arithmetic operations, and large ARC/ORC string literals in embedded assets.
+  Invoke MSVC directly from its Developer shell so large linker response files
+  remain within Windows' command-line limit.
+
+- Enable FigDraw's `textBackendHarfbuzzy` Atlas feature in `merenda.nimble` so
+  this checkout and downstream Merenda apps use HarfBuzz text rendering and
+  automatic system-font fallback. Require released FigDraw 0.45.0 and Harfbuzzy
+  0.3.0 for dynamic and static builds. Previously HarfBuzz was installed as a dependency,
+  but FigDraw still selected Pixie, leaving automatic fallback disabled. Missing
+  glyphs in the editor, terminal, and other text views can now use system fonts,
+  including checkbox symbols absent from the bundled Nerd Font. Initialize fallback
+  on background text-layout threads as well as the main thread.
+
+- Render Markdown task lists with ☐ for `[ ]`, ☑ for `[x]` or `[X]`, and ☒ for
+  `[-]`, preserving nested lists, numbering, and inline formatting.
+
+- Match split divider fills, edges, and grips to each bundled theme's palette,
+  including the dark Nebula, Peachy, and Synthwave83 themes.
+
+- Tone down Aqua status labels with muted sage-gray surfaces, quieter shadows,
+  and darker text.
+
+- Give thin SplitView dividers an 8-pixel grab area, including macOS and macOS
+  Dark, so dragging near either pane edge resizes the split reliably.
+
+- Support CSS variable fallbacks such as `var(--accent, royalblue)`, including
+  nested fallbacks, composite values, and empty substitutions. Revalidate them
+  when root variables change while retaining cycle and expansion limits.
+
+- Run Kosmo's GitHub CLI through the user's login shell on macOS and Linux, so
+  apps opened from the desktop can find `gh` installed through shell profiles.
+  Preserve the project directory and noninteractive GitHub settings after startup.
+- Split Git diff comparison controls into branch and history dropdowns, with
+  an ellipsis between the two sides. Keep branch menus free of ancestor entries,
+  preserve history depth when switching branches, and wrap the toolbar in narrow
+  panes so history values stay visible.
+
+- Add Cmd-J (Ctrl-J with the platform shortcut profile on Windows/Linux) to
+  focus an existing terminal, including hidden tabs and detached windows, or
+  open a terminal in the nearest pane to the right. Create a right split when
+  no pane is available. Keep New Terminal available for additional terminals.
+
+- Draw the Git diff refresh control with a vector icon so it remains visible
+  with every UI font, and fit Auto-refresh's label and switch to their content
+  with a smaller gap.
+
+- Keep the status-bar keymode tied to the global editor key-routing policy,
+  mapping Vim and Hybrid to Moe and Native to normal. Opening read-only viewers
+  and toggling forced text entry preserve the selected keymode.
+
+- Reserve popup menu columns for checkmarks, shortcuts, and submenu indicators
+  so they do not overlap titles. Measure menu contents instead of forcing small
+  menus to be 180 pixels wide.
+
+- Show project-relative paths in Find in Files tooltips, including match locations
+  and Load more rows. Use the closest project root in workspaces with multiple roots.
+
+- Use compact +, -, and refresh controls on the right of Kosmo's Git diff toolbar,
+  with Auto-refresh beside Refresh at the far right and descriptive tooltips and
+  accessibility labels. Leave enough text space for the action symbols to render.
+
+- Keep hosted table controls at their cell size when sibling labels update,
+  preventing Inspect buttons and state fields from shrinking until another interaction.
+
+- Add a keymode popup at the bottom right of Kosmo's status bar to switch between
+  Moe/Vim modal editing and normal text entry with native editing shortcuts.
+  Use a compact menu that opens upward, and keep its checked selection synchronized
+  with Settings and detached editor windows.
+
+- Add a Windows VirtualBox test setup, matching Guest Additions, an OpenGL 3.3
+  console probe, and guards against concurrent bhyve operation. Document the
+  failed GPU acceleration test with the FreeBSD 7.2.20 packages.
+- Add a reproducible Windows Server evaluation VM setup for bhyve, with
+  unattended installation, private RDP/SSH access, ZFS reset helpers, and GPU
+  passthrough configuration and verification instructions.
+- Extract table value types, sizing records, and data helpers into
+  `nimkit/containers/tablebasics`. Existing TableView and NimKit imports continue
+  to expose the public table APIs.
+- Group TableView options into an enum set and row selection into a value object,
+  preserving existing property setters, selection notifications, and defaults.
+- Share typed collection storage, identity indexes, arrangement caching, and
+  mutation invalidation between NimKit TableModel and ArrayController. Repeated
+  controller lookups now reuse the filtered/sorted arrangement until a model
+  mutation; public model APIs, typed edit writeback, and notifications remain
+  available. Reassign a filter after changing external state captured by it.
+- Maintain shared collection identity indexes during mutations, allocate them
+  only for identity queries, and reuse arrangement storage. Cached reads and
+  unsorted refreshes avoid comparator closure allocations. Field projections
+  borrow values instead of creating temporary ObjectValue copies.
+- Keep arranged identity lookups proportional to visible items: defer hidden
+  source identities and use generation stamps to discard stale visible positions.
+
+## 0.27.6
+
+- Focus the displayed document when clicking passive areas in a pane's content,
+  including GitHub and Git diff readers beside a focused terminal.
+
+- Show project-relative file paths in file-tree hover tooltips, preserving Git
+  status details and using the same closest project root as Copy Relative Path.
+  Connect outline item tooltips to NimKit's shared hover display.
+
+- Keep editor Find scoped to its pane, including its query, highlights, errors,
+  and match navigation when other panes repaint or search the same buffer.
+  Closing Find in one pane preserves the other panes' searches. Switching tabs
+  rechecks matches without moving the restored cursor.
+
+- End Moe's active Visual selection before GUI Find moves to a match, so copying
+  selected text into Find does not select the intervening document text.
+
+- Resolve internal layout anchors after manual containers resize their content,
+  keeping nested widgets in the same layout pass without repeated global layout.
+
+- Compose reusable search bars with standard Box and StackView layout. Let hosts
+  choose floating or embedded placement, measure expanded and error states from
+  their content, and keep floating bars within narrow panes.
+
+- Keep Git diff document navigation out of focused search controls, so Tab and
+  arrow keys preserve query focus and caret movement after pasting.
+
+- Keep StackView keyboard traversal aligned with arranged insertion and reordering
+  without detaching focused controls.
+
+- Keep pasted text in ordinary text fields at the field's font and color, isolate
+  undo history between editing sessions, and use shared text-view mouse selection
+  so dragging over text replaces the selected range correctly.
+
+- Add Copy Full Path and Copy Relative Path to Kosmo's file-tree context menu.
+  Relative paths use the closest containing project root, including nested roots.
+
+- Let Kosmo's Files/Find sidebar shrink to 128 points, 20% narrower than before.
+
+- Include the visible Files or Find sidebar in Kosmo's Ctrl-W h/l pane focus
+  navigation, including Control and arrow aliases. Keep the selected sidebar tab
+  and search text, and use Ctrl-W l to return to the adjacent editor or terminal.
+
+- Add "Remove Project Root" to Kosmo's file-tree context menu. Removing a root
+  updates the browser, Quick Open, file search, and Git monitoring while keeping
+  its files and open tabs.
+
+## 0.27.5
+
+- Start the GitHub viewer with Issues and Pull Requests expanded and individual
+  items collapsed. Preserve user expansion choices across refreshes and filters.
+
+- Support Copy and Select All in Kosmo's Markdown, GitHub, Git diff, Help,
+  Command Output, and custom document views. Route clipboard shortcuts to the
+  focused content, allow Paste in editable views, and keep unsupported edits in
+  readers from reaching hidden editor buffers.
+- Use installed TextMate grammars, including SQL, for Markdown code fences and
+  Git diff highlighting. Resolve installed filename and extension associations,
+  load included grammars, and refresh open viewers and cached previews after
+  installing a grammar in Settings.
+
+## 0.27.4
+
+- Route Kosmo's copy, cut, paste, select-all, undo, and redo shortcuts to the
+  focused search or replacement field. Preserve literal whitespace in search
+  queries and replacements when tabbing through controls or expanding Replace.
+
+## 0.27.3
+
+- Keep ordinary clicks between Kosmo editor panes from starting a text
+  selection, and align the first visible line after keyboard navigation
+  following fractional wheel scrolling.
+
+- Prevent Kosmo editor panes from briefly displaying another buffer when
+  switching focus or editing. Pane rendering consumes delivered highlighting
+  results without dispatching callbacks that can redraw another pane midway
+  through the frame.
+
 - Use Moe's Matter semantic scope mappings to distinguish HTML/custom element
   names, attributes, CSS selectors and common language values in existing themes.
   Preserve preprocessor colors for C/C++ pragmas and string colors for regex

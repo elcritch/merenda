@@ -1,4 +1,4 @@
-## Floating find controls with optional Reni expressions and replacement actions.
+## Reusable find controls with optional expressions and replacement actions.
 
 import std/[options, strutils, unicode]
 
@@ -6,8 +6,8 @@ import sigils/core
 
 import ../accessibility/accessibility
 import ../app/windows except performKeyEquivalent
-import ../containers/boxes
-import ../foundation/[events, selectors, types]
+import ../containers/[boxes, stackviews]
+import ../foundation/[events, objectvalues, selectors, types]
 from ../foundation/selectors import performKeyEquivalent
 import ../responder/keybindings
 import ../text/textfields
@@ -19,9 +19,7 @@ const
   SearchBarWidth* = 520.0'f32
   SearchBarHeight* = 48.0'f32
   SearchBarInset* = 16.0'f32
-  SearchBarContentInset = 6.0'f32
   SearchControlSpacing = 6.0'f32
-  SearchButtonWidth = 28.0'f32
 
 type
   SearchQueryAction* = proc(query: string) {.closure.}
@@ -29,6 +27,7 @@ type
 
   SearchBar* = ref object of Box
     backwardsSearch*: bool ## Find-next follows older output; arrows remain spatial.
+    inputColumn, queryRow, replacementRow: StackView
     xQueryField: TextField
     xReplacementField: TextField
     xReplacementVisible: bool
@@ -129,92 +128,10 @@ proc searchQueryDidChange(bar: SearchBar, sender: DynamicAgent) {.slot.} =
   if not bar.onQueryChanged.isNil:
     bar.onQueryChanged(bar.xQueryField.text())
 
-protocol SearchBarLayout of ViewLayoutProtocol:
-  method layoutSubviews(bar: SearchBar) =
-    let
-      contentFrame = bar.bounds().inset(insets(SearchBarContentInset))
-      availableWidth = contentFrame.size.width
-      availableHeight = min(contentFrame.size.height, SearchBarHeight - 12)
-      controlHeight = min(max(availableHeight, 1.0'f32), 34.0'f32)
-      buttonWidth = min(SearchButtonWidth, availableWidth / 4.0'f32)
-      disclosureWidth =
-        if bar.disclosureButton.isNil:
-          0.0'f32
-        else:
-          min(24.0'f32, availableWidth / 8)
-      fieldX =
-        if bar.disclosureButton.isNil:
-          0.0'f32
-        else:
-          disclosureWidth + SearchControlSpacing
-      expressionWidth = if bar.expressionButton.isNil: 0.0'f32 else: 34.0'f32
-      buttonsWidth = buttonWidth * 3.0'f32 + SearchControlSpacing * 3.0'f32
-      fieldWidth =
-        max(availableWidth - buttonsWidth - fieldX - expressionWidth, 1.0'f32)
-      controlY = max((availableHeight - controlHeight) * 0.5'f32, 0.0'f32)
-      buttonHeight = min(controlHeight, 28.0'f32)
-      buttonY = controlY + (controlHeight - buttonHeight) / 2
-      firstButtonX = fieldX + fieldWidth + expressionWidth + SearchControlSpacing
-    bar.contentView().setFrameFromLayout(contentFrame)
-    if not bar.disclosureButton.isNil:
-      bar.disclosureButton.setFrameFromLayout(
-        rect(0, buttonY, disclosureWidth, buttonHeight)
-      )
-    bar.xQueryField.setFrameFromLayout(
-      rect(fieldX, controlY, fieldWidth, controlHeight)
-    )
-    if not bar.expressionButton.isNil:
-      bar.expressionButton.setFrameFromLayout(
-        rect(fieldX + fieldWidth + SearchControlSpacing, buttonY, 28, buttonHeight)
-      )
-    if bar.xErrorMessage.len > 0:
-      bar.errorLabel.setFrameFromLayout(
-        rect(0, (if bar.xReplacementVisible: 80 else: 40), availableWidth, 18)
-      )
-    bar.previousButton.setFrameFromLayout(
-      rect(firstButtonX, buttonY, buttonWidth, buttonHeight)
-    )
-    bar.nextButton.setFrameFromLayout(
-      rect(
-        firstButtonX + buttonWidth + SearchControlSpacing,
-        buttonY,
-        buttonWidth,
-        buttonHeight,
-      )
-    )
-    bar.closeButton.setFrameFromLayout(
-      rect(
-        firstButtonX + (buttonWidth + SearchControlSpacing) * 2.0'f32,
-        buttonY,
-        buttonWidth,
-        buttonHeight,
-      )
-    )
-
-    if bar.xReplacementVisible:
-      let y = controlY + 40.0'f32
-      let actionWidth = min(90.0'f32, availableWidth / 3)
-      let replacementWidth =
-        max(availableWidth - fieldX - 2 * (actionWidth + SearchControlSpacing), 1)
-      bar.xReplacementField.setFrameFromLayout(
-        rect(fieldX, y, replacementWidth, controlHeight)
-      )
-      bar.replaceButton.setFrameFromLayout(
-        rect(
-          fieldX + replacementWidth + SearchControlSpacing,
-          y,
-          actionWidth,
-          controlHeight,
-        )
-      )
-      bar.replaceAllButton.setFrameFromLayout(
-        rect(
-          fieldX + replacementWidth + actionWidth + 2 * SearchControlSpacing,
-          y,
-          actionWidth,
-          controlHeight,
-        )
-      )
+protocol SearchBarSizing of ViewLayoutProtocol:
+  method layoutIntrinsicContentSize(bar: SearchBar): IntrinsicSize =
+    let size = Box(bar).intrinsicContentSize().resolveIntrinsicSize(initSize(0, 0))
+    initIntrinsicSize(SearchBarWidth, size.height)
 
 proc newSearchBar*(
     accessibilitySubject = "text",
@@ -222,8 +139,10 @@ proc newSearchBar*(
     onPrevious: SearchAction = nil,
     onNext: SearchAction = nil,
     onClose: SearchAction = nil,
+    frame: Rect = AutoRect,
 ): SearchBar =
-  ## Construct floating find controls. Call enableExpressions and optionally
+  ## Construct ordinary find controls. The containing view owns their placement.
+  ## Call enableExpressions and optionally
   ## enableReplacement, or use TextSearchController to wire a data adapter.
   result = SearchBar(
     onQueryChanged: onQueryChanged,
@@ -231,7 +150,7 @@ proc newSearchBar*(
     onNext: onNext,
     onClose: onClose,
   )
-  result.initBoxFields()
+  result.initBoxFields(frame = frame)
   result.addStyleClass(PopoverBoxStyleClass)
   result.backdropBlurRadius = 20
   result.backdropTintOpacity = 0.78
@@ -240,6 +159,8 @@ proc newSearchBar*(
   let searchBar = result.unsafeWeakRef()
 
   result.xQueryField = newTextField()
+  result.xQueryField.objectParseContext =
+    initObjectParseContext(trimsWhitespace = false)
   result.xQueryField.accessibilityLabel = "Search " & accessibilitySubject
   result.xQueryField.placeholder = "Search"
   result.previousButton = newSearchButton("↑", symbol = true)
@@ -256,12 +177,28 @@ proc newSearchBar*(
   result.nextButton.toolTip = "Next match"
   result.closeButton.accessibilityLabel = "Close " & accessibilitySubject & " search"
   result.closeButton.toolTip = "Close search"
-  result.contentView().addSubview(result.xQueryField)
-  result.contentView().addSubview(result.previousButton)
-  result.contentView().addSubview(result.nextButton)
-  result.contentView().addSubview(result.closeButton)
-  result.contentView().addSubview(result.errorLabel)
-  discard result.withProtocol(SearchBarLayout)
+  result.queryRow = newStackView(laHorizontal)
+  result.queryRow.spacing = SearchControlSpacing
+  result.queryRow.alignment = svaCenter
+  result.queryRow.addArrangedSubview(result.xQueryField, svspFillAvailableWidth)
+  result.inputColumn = newStackView(laVertical)
+  result.inputColumn.spacing = SearchControlSpacing
+  result.inputColumn.distribution = svdNatural
+  result.inputColumn.addArrangedSubview(result.queryRow, result.errorLabel)
+  let navigation = newStackView(laHorizontal)
+  navigation.spacing = SearchControlSpacing
+  navigation.alignment = svaCenter
+  navigation.edgeInsets = insets(3, 0, 0, 0)
+  navigation.addArrangedSubview(
+    result.previousButton, result.nextButton, result.closeButton
+  )
+  let content = newStackView(laHorizontal)
+  content.spacing = SearchControlSpacing
+  content.alignment = svaLeading
+  content.addArrangedSubview(result.inputColumn, svspFillAvailableWidth)
+  content.addArrangedSubview(navigation)
+  result.contentView = content
+  discard result.withProtocol(SearchBarSizing)
   result.hidden = true
 
   result.xQueryField.connect(textDidChange, result, searchQueryDidChange)
@@ -308,33 +245,15 @@ proc `hasMatches=`*(bar: SearchBar, hasMatches: bool) =
       bar.replaceButton.enabled = hasMatches and bar.xErrorMessage.len == 0
       bar.replaceAllButton.enabled = bar.replaceButton.enabled
 
-proc layoutInBounds*(bar: SearchBar, bounds: Rect) =
-  let
-    availableWidth = max(bounds.size.width - SearchBarInset * 2.0'f32, 1.0'f32)
-    width = min(SearchBarWidth, availableWidth)
-    height = min(
-      SearchBarHeight + (if bar.xReplacementVisible: 40.0'f32 else: 0.0'f32) +
-        (if bar.xErrorMessage.len > 0: 22.0'f32 else: 0.0'f32),
-      bounds.size.height,
-    )
-  bar.setFrameFromLayout(
-    rect(
-      max(bounds.size.width - width - SearchBarInset, 0.0'f32),
-      min(SearchBarInset, max(bounds.size.height - height, 0.0'f32)),
-      width,
-      height,
-    )
-  )
-
 proc `errorMessage=`*(bar: SearchBar, message: string) =
+  if bar.xErrorMessage == message:
+    return
   bar.xErrorMessage = message
   bar.errorLabel.text = message
   bar.errorLabel.toolTip = message
   bar.errorLabel.hidden = message.len == 0
   bar.hasMatches = bar.xHasMatches
-  let parent = bar.superview()
-  if not parent.isNil:
-    bar.layoutInBounds(parent.bounds())
+  bar.invalidateIntrinsicContentSize()
   bar.setNeedsLayout()
 
 func errorMessage*(bar: SearchBar): string =
@@ -363,7 +282,9 @@ proc enableExpressions*(bar: SearchBar) =
   if not bar.expressionButton.isNil:
     return
   bar.expressionButton = newExpressionButton()
-  bar.contentView().addSubview(bar.expressionButton, svpAbove, bar.xQueryField)
+  bar.queryRow.insertArrangedSubview(
+    bar.expressionButton, if bar.disclosureButton.isNil: 1 else: 2
+  )
   let weakBar = bar.unsafeWeakRef()
   bar.expressionButton.action = actionSelector("nimkit.searchExpressions")
   bar.expressionButton.target = newActionTarget(bar.expressionButton.action) do(
@@ -390,6 +311,7 @@ proc `replacementVisible=`*(bar: SearchBar, visible: bool) =
         window.firstResponder() == bar.replaceAllButton:
       discard window.makeFirstResponder(bar.xQueryField)
   bar.xReplacementVisible = visible
+  bar.replacementRow.hidden = not visible
   bar.xReplacementField.hidden = not visible
   bar.replaceButton.hidden = not visible
   bar.replaceAllButton.hidden = not visible
@@ -397,11 +319,8 @@ proc `replacementVisible=`*(bar: SearchBar, visible: bool) =
   bar.disclosureButton.accessibilityLabel =
     if visible: "Hide replacement controls" else: "Show replacement controls"
   bar.disclosureButton.toolTip = bar.disclosureButton.accessibilityLabel()
-  let parent = bar.superview()
-  if not parent.isNil:
-    bar.layoutInBounds(parent.bounds())
+  bar.invalidateIntrinsicContentSize()
   bar.setNeedsLayout()
-  bar.layoutSubtreeIfNeeded()
 
 proc focusSearch(bar: SearchBar, replacing: bool): bool =
   if replacing and bar.xReplacementField.isNil:
@@ -425,6 +344,8 @@ proc enableReplacement*(bar: SearchBar, onReplace, onReplaceAll: SearchAction) =
     return
   let weakBar = bar.unsafeWeakRef()
   bar.xReplacementField = newTextField()
+  bar.xReplacementField.objectParseContext =
+    initObjectParseContext(trimsWhitespace = false)
   bar.xReplacementField.accessibilityLabel = "Replace with (literal text)"
   bar.xReplacementField.placeholder = "Replace with"
   bar.replaceButton = newSearchButton("Replace")
@@ -432,15 +353,13 @@ proc enableReplacement*(bar: SearchBar, onReplace, onReplaceAll: SearchAction) =
   bar.disclosureButton = newSearchButton("›", symbol = true)
   bar.replaceButton.accessibilityLabel = "Replace match"
   bar.replaceAllButton.accessibilityLabel = "Replace all matches"
-  let previousField =
-    if bar.expressionButton.isNil:
-      View(bar.xQueryField)
-    else:
-      View(bar.expressionButton)
-  bar.contentView().addSubview(bar.xReplacementField, svpAbove, previousField)
-  bar.contentView().addSubview(bar.replaceButton, svpAbove, bar.xReplacementField)
-  bar.contentView().addSubview(bar.replaceAllButton, svpAbove, bar.replaceButton)
-  bar.contentView().addSubview(bar.disclosureButton)
+  bar.replacementRow = newStackView(laHorizontal)
+  bar.replacementRow.spacing = SearchControlSpacing
+  bar.replacementRow.alignment = svaCenter
+  bar.replacementRow.addArrangedSubview(bar.xReplacementField, svspFillAvailableWidth)
+  bar.replacementRow.addArrangedSubview(bar.replaceButton, bar.replaceAllButton)
+  bar.inputColumn.insertArrangedSubview(bar.replacementRow, 1)
+  bar.queryRow.insertArrangedSubview(bar.disclosureButton, 0)
   bar.disclosureButton.action = actionSelector("nimkit.toggleReplacement")
   bar.disclosureButton.target = newActionTarget(bar.disclosureButton.action) do(
     sender: DynamicAgent

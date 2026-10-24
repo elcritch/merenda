@@ -23,6 +23,7 @@ if paramCount() == 8 and paramStr(1) in ["issue", "pr"] and paramStr(2) == "list
         "args": arguments,
         "promptDisabled": getEnv("GH_PROMPT_DISABLED"),
         "repoOverride": getEnv("GH_REPO"),
+        "pager": getEnv("GH_PAGER"),
       }
     ),
   )

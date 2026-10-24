@@ -30,6 +30,7 @@ else:
   import nimkit/csslayout
   import nimkit/datepickers
   import nimkit/daterangepickers
+  import nimkit/devcontrol
   import nimkit/diagnostics
   import nimkit/dockviews
   import nimkit/documents
@@ -47,6 +48,7 @@ else:
     import nimkit/nifresources
   import nimkit/iconlabels
   import nimkit/images
+  import nimkit/itemcollections
   import nimkit/keybindings
   import nimkit/markdownviews
   import nimkit/matrix

@@ -609,15 +609,15 @@ proc textColor*(textView: TextView): Color =
     textView.xTextColor
   else:
     textView
-    .effectiveAppearance()
-    .resolveTextFieldStyle(
-      controlStyle(
-        if textView.isFieldEditor: srTextField else: srTextView,
-        textView.widgetStateSet(),
-        id = textView.styleId,
-        classes = textView.styleClasses,
-      )
-    ).text.color
+      .effectiveAppearance()
+      .resolveTextFieldStyle(
+        controlStyle(
+          if textView.isFieldEditor: srTextField else: srTextView,
+          textView.widgetStateSet(),
+          id = textView.styleId,
+          classes = textView.styleClasses,
+        )
+      ).text.color
 
 proc textStyle(textView: TextView): TextStyle =
   if textView.isNil:
@@ -1104,10 +1104,10 @@ proc shouldChangeText(
     return true
 
   textView.xDelegate
-  .trySendLocal(
-    tvShouldChange(), (textView: textView, range: range, replacement: replacement)
-  )
-  .get(true)
+    .trySendLocal(
+      tvShouldChange(), (textView: textView, range: range, replacement: replacement)
+    )
+    .get(true)
 
 proc finishTextMutation(
     textView: TextView, changedRange: TextRange, valueChanged: bool
@@ -1378,14 +1378,14 @@ proc checkText*(textView: TextView, range: TextRange): seq[TextCheckingResult] =
   let clamped = textView.clampedRange(range)
   if not textView.xTextChecker.isNil:
     result.add textView.xTextChecker
-    .trySendLocal(tvCheckingResults(), (textView: textView, range: clamped))
-    .get(@[])
+      .trySendLocal(tvCheckingResults(), (textView: textView, range: clamped))
+      .get(@[])
   if tsoDataDetection in textView.xSubstitutionOptions:
     result.add textView.detectUrlRanges(clamped)
   if not textView.xTextChecker.isNil:
     result.add textView.xTextChecker
-    .trySendLocal(tvDataDetections(), (textView: textView, range: clamped))
-    .get(@[])
+      .trySendLocal(tvDataDetections(), (textView: textView, range: clamped))
+      .get(@[])
   textView.xCheckingResults = result
 
 proc checkText*(textView: TextView): seq[TextCheckingResult] =
@@ -1449,10 +1449,10 @@ proc completeText*(textView: TextView): TextCompletionPanel =
         @[]
       else:
         textView.xDelegate
-        .trySendLocal(
-          tvCompletions(), (textView: textView, prefix: prefix, range: range)
-        )
-        .get(@[])
+          .trySendLocal(
+            tvCompletions(), (textView: textView, prefix: prefix, range: range)
+          )
+          .get(@[])
   textView.xCompletionPanel = TextCompletionPanel(
     prefix: prefix,
     range: range,
@@ -1647,31 +1647,31 @@ proc selectedAttachmentPresentations*(
           nil
         else:
           textView.xDelegate
-          .trySendLocal(
-            tvAttachmentView(),
-            (
-              textView: textView,
-              attachment: run.attributes.attachment,
-              range: overlap,
-              frame: frame,
-            ),
-          )
-          .get(nil)
+            .trySendLocal(
+              tvAttachmentView(),
+              (
+                textView: textView,
+                attachment: run.attributes.attachment,
+                range: overlap,
+                frame: frame,
+              ),
+            )
+            .get(nil)
       let delegateCell =
         if textView.xDelegate.isNil:
           TextAttachmentCell()
         else:
           textView.xDelegate
-          .trySendLocal(
-            tvAttachmentCell(),
-            (
-              textView: textView,
-              attachment: run.attributes.attachment,
-              range: overlap,
-              frame: frame,
-            ),
-          )
-          .get(TextAttachmentCell())
+            .trySendLocal(
+              tvAttachmentCell(),
+              (
+                textView: textView,
+                attachment: run.attributes.attachment,
+                range: overlap,
+                frame: frame,
+              ),
+            )
+            .get(TextAttachmentCell())
       let cell =
         if delegateCell.attachment.identifier.len > 0 or
             delegateCell.attachment.contentType.len > 0 or
@@ -1803,7 +1803,10 @@ proc insertTextFromPasteboard*(textView: TextView, pasteboard: Pasteboard): bool
     let storage = pasteboard.textStorageForType(PasteboardTypeTextStorage)
     if storage.isNil:
       return false
-    textView.replaceRange(selected, storage)
+    if textView.isFieldEditor or not textView.richText:
+      textView.insertTextValue(storage.stringValue())
+    else:
+      textView.replaceRange(selected, storage)
     true
   of PasteboardTypeString:
     textView.insertTextValue(pasteboard.stringForType(PasteboardTypeString))
@@ -1943,10 +1946,10 @@ proc openLinkAtIndex*(textView: TextView, index: int): bool =
     return true
 
   textView.xDelegate
-  .trySendLocal(
-    tvClickedLink(), (textView: textView, link: link.link, range: link.range)
-  )
-  .get(true)
+    .trySendLocal(
+      tvClickedLink(), (textView: textView, link: link.link, range: link.range)
+    )
+    .get(true)
 
 proc openLinkAtPoint*(textView: TextView, point: Point): bool =
   textView.openLinkAtIndex(textView.textIndexAtPoint(point))
@@ -2439,7 +2442,7 @@ proc pageContentRect(options: TextPageLayoutOptions, pageIndex: int): Rect =
     options.pageSize.width,
     options.pageSize.height,
   )
-  .inset(options.contentInsets)
+    .inset(options.contentInsets)
 
 proc addLineToPage(
     pages: var seq[TextPageFragment],
@@ -2956,7 +2959,7 @@ protocol DefaultTextViewDrawing of ViewDrawingProtocol:
   method drawOverlay(textView: TextView, context: DrawContext) =
     textView.drawTextViewOverlay(context)
 
-protocol DefaultTextViewEvents of ResponderEventProtocol:
+protocol DefaultTextViewMouseEvents of ResponderEventProtocol:
   method mouseDown(textView: TextView, event: MouseEvent): bool =
     if event.button == mbPrimary and (textView.editable or textView.selectable):
       if textView.clickTextAtPoint(event.location):
@@ -2980,6 +2983,7 @@ protocol DefaultTextViewEvents of ResponderEventProtocol:
       textView.xSelectingWithMouse = false
       return true
 
+protocol DefaultTextViewEvents of ResponderEventProtocol:
   method keyDown(textView: TextView, event: KeyEvent): bool =
     if textView.editable and event.shouldInsertText():
       textView.insertTextValue(event.text)
@@ -3451,8 +3455,8 @@ protocol DefaultTextViewAccessibility of AccessibilityProtocol:
   method accessibilityCharacterIndexAtPoint(textView: TextView, point: Point): int =
     int(
       textView
-      .layoutManager()
-      .textRangeAtPoint(textView.pointFromWindow(point)).location
+        .layoutManager()
+        .textRangeAtPoint(textView.pointFromWindow(point)).location
     )
 
   method accessibilityLineRange(textView: TextView, line: int): AccessibilityTextRange =
@@ -3511,6 +3515,7 @@ proc initTextViewFields*(
   discard textView.withProtocol(DefaultTextViewAccessibility)
   discard textView.withProtocol(DefaultTextViewCommandDispatch)
   discard textView.withProtocol(DefaultTextViewScrollNavigation)
+  discard textView.withProtocol(DefaultTextViewMouseEvents)
   discard textView.withProtocol(DefaultTextViewDraggingSource)
   discard textView.withProtocol(DefaultTextViewDraggingDestination)
   textView.installTextInputClientMethods()

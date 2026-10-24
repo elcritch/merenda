@@ -37,6 +37,36 @@ proc newCheckBoxRow(title: string): CheckBoxRowView =
   result.addSubview(result.checkBox)
 
 suite "nimkit stack views":
+  test "inserting and reordering arranged fields keeps Tab order and focus":
+    let
+      stack = newStackView(laVertical, frame = rect(0, 0, 420, 180))
+      window = newWindow("Stack keyboard order", frame = stack.frame())
+      first = newTextField("first")
+      middle = newTextField("middle")
+      last = newTextField("last")
+      decoration = newView()
+      tab = KeyEvent(key: keyTab, keyCode: keyTab.ord)
+    defer:
+      window.close()
+    stack.addArrangedSubview(first)
+    stack.addSubview(decoration)
+    stack.addArrangedSubview(last)
+    stack.insertArrangedSubview(middle, 1)
+    check stack.subviews() == @[View(first), decoration, View(middle), View(last)]
+    window.setContentView(stack)
+    require window.makeFirstResponder(first)
+    require window.dispatchKeyDown(tab)
+    check window.fieldEditorClient() == middle
+    let editor = window.firstResponder()
+    stack.insertArrangedSubview(last, 0)
+    check stack.subviews() == @[View(last), decoration, View(first), View(middle)]
+    check window.firstResponder() == editor
+    check window.fieldEditorClient() == middle
+    require window.dispatchKeyDown(tab)
+    check window.fieldEditorClient() == last
+    require window.dispatchKeyDown(tab)
+    check window.fieldEditorClient() == first
+
   test "frame assignments in row layout settle after resizing and reordering":
     let
       root = newView(frame = rect(0, 0, 420, 421))

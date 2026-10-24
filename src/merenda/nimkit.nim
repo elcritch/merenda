@@ -73,7 +73,7 @@ import ./nimkit/foundation/selectors
 import ./nimkit/containers/stackviews
 import ./nimkit/containers/scrollviews
 import ./nimkit/containers/tabviews
-import ./nimkit/containers/tableviews
+import ./nimkit/tables/tableviews
 import ./nimkit/terminal
 import ./nimkit/text/textfields
 import ./nimkit/text/searchcontrollers

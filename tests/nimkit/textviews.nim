@@ -639,6 +639,21 @@ suite "nimkit text views":
     check source.stringValue == "ad"
     check source.selectedRange == initTextRange(1, 0)
 
+  test "plain text views normalize attributed paste while rich views retain it":
+    let
+      pasteboard = pasteboardWithUniqueName()
+      attributes = defaultTextAttributes(color(0.7, 0.1, 0.2), 48)
+      source = newTextStorage("ensureArrangement", attributes)
+    require pasteboard.setTextStorage(PasteboardTypeTextStorage, source)
+    for rich in [false, true]:
+      let view = newTextView()
+      view.richText = rich
+      let typingAttributes = view.typingAttributes()
+      require view.insertTextFromPasteboard(pasteboard)
+      check view.stringValue() == "ensureArrangement"
+      check view.textStorage().attributesAt(0) ==
+        (if rich: attributes else: typingAttributes)
+
   test "text view services can replace selected attributed text":
     let
       textView = newTextView("abcdef", frame = rect(0, 0, 180, 40))

@@ -718,7 +718,13 @@ suite "Kosmo synthetic shortcut input":
       bindingsPath = root / "keybindings.json"
     writeFile(firstPath, "first")
     writeFile(secondPath, "second")
-    writeFile(bindingsPath, """{"kosmo.nextTab": "ctrl-w ctrl-j"}""")
+    writeFile(
+      bindingsPath,
+      """{
+  "kosmo.nextTab": "ctrl-w ctrl-j",
+  "kosmo.showTerminal": null
+}""",
+    )
     defer:
       removeFile(firstPath)
       removeFile(secondPath)
@@ -736,6 +742,10 @@ suite "Kosmo synthetic shortcut input":
     check frontend.openPath(secondPath)
     check frontend.window.makeFirstResponder(frontend.editorView)
     check frontend.editorView.editor.tabs()[1].active
+    require frontend.window
+    .keyBindings()
+    .match([KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: {kmControl})]).kind ==
+      kbmNone
 
     check frontend.window.pressControlKey(keyW)
     check frontend.window.dispatchKeyDown(
@@ -743,6 +753,8 @@ suite "Kosmo synthetic shortcut input":
     )
     discard frontend.window.pressControlKey(keyJ)
     check frontend.editorView.editor.tabs()[1].active
+    check frontend.window.firstResponder() == Responder(frontend.editorView)
+    check frontend.editorGroups().len == 1
 
     check frontend.window.pressControlKey(keyW)
     check frontend.window.pressControlKey(keyJ)

@@ -18,7 +18,58 @@ proc sampleSnapshot(): GitHubSnapshot =
   result.items.add parseGitHubItems(issueJson, ghikIssue)
   result.items.add parseGitHubItems(prJson, ghikPullRequest)
 
+proc headingStartingWith(panel: KosmoGitHubPanel, prefix: string): View =
+  for child in panel.markdownView.textView().subviews():
+    if child.accessibilityRole() == arDisclosureButton and
+        child.accessibilityLabel().startsWith(prefix):
+      return child
+
 suite "Kosmo GitHub Markdown viewer":
+  test "lists start expanded and item choices survive filtering and new arrivals":
+    let panel = newKosmoGitHubPanel(sampleSnapshot())
+    defer:
+      panel.close()
+    panel.frame = rect(0, 0, 800, 600)
+    require panel.waitForGitHub()
+    let initialText = panel.markdownView.textStorage().stringValue()
+    check "Fix" in initialText
+    check "Improve rendering" in initialText
+    check "needle" notin initialText
+    check panel.headingStartingWith("Issues (").accessibilityValue() == "expanded"
+    check panel.headingStartingWith("Pull Requests (").accessibilityValue() == "expanded"
+    check panel.headingStartingWith("#7 ").accessibilityValue() == "collapsed"
+    check panel.headingStartingWith("#8 ").accessibilityValue() == "collapsed"
+    require panel.headingStartingWith("#7 ").accessibilityPerformAction(
+      AccessibilityActionExpand
+    )
+    require panel.waitForGitHub()
+    check "needle" in panel.markdownView.textStorage().stringValue()
+
+    panel.selectFilter(ghsOpen, {ghikPullRequest})
+    require panel.waitForGitHub()
+    panel.selectFilter(ghsOpen, {ghikIssue, ghikPullRequest})
+    require panel.waitForGitHub()
+    check panel.headingStartingWith("#7 ").accessibilityValue() == "expanded"
+    check panel.headingStartingWith("#8 ").accessibilityValue() == "collapsed"
+
+    panel.snapshot.items[0].title = "Renamed issue"
+    var newIssue = panel.snapshot.items[0]
+    newIssue.number = 9
+    newIssue.title = "New issue"
+    panel.snapshot.items.insert(newIssue, 0)
+    panel.selectFilter(ghsOpen, {ghikIssue, ghikPullRequest})
+    require panel.waitForGitHub()
+    check panel.headingStartingWith("#7 Renamed").accessibilityValue() == "expanded"
+    check panel.headingStartingWith("#9 New").accessibilityValue() == "collapsed"
+    check panel.headingStartingWith("#8 ").accessibilityValue() == "collapsed"
+    require panel.headingStartingWith("Issues (").accessibilityPerformAction(
+      AccessibilityActionCollapse
+    )
+    require panel.waitForGitHub()
+    panel.selectFilter(ghsAll, {ghikIssue, ghikPullRequest})
+    require panel.waitForGitHub()
+    check panel.headingStartingWith("Issues (").accessibilityValue() == "collapsed"
+
   test "gh JSON preserves issue bodies and PR metadata":
     let snapshot = sampleSnapshot()
     check snapshot.items.len == 2
@@ -178,6 +229,7 @@ suite "Kosmo GitHub Markdown viewer":
       window.close()
     window.setContentView(panel)
     require panel.waitForGitHub()
+    panel.markdownView.expandMarkdownHeadings()
     panel.layoutSubtreeIfNeeded()
     let scroll = panel.markdownView.scrollView()
     require scroll.maximumContentOffset().y > 64
@@ -224,6 +276,8 @@ suite "Kosmo GitHub Markdown viewer":
           true,
       )
     )
+    require panel.waitForGitHub()
+    panel.markdownView.expandMarkdownHeadings()
     require panel.waitForGitHub()
     frontend.contentView.layoutSubtreeIfNeeded()
     check panel.refreshButton.enabled == false

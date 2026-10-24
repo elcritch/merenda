@@ -138,6 +138,7 @@ const
   SettingsUIFontButtonIdentifier = "settings-ui-font-button"
   SettingsMonospaceFontButtonIdentifier = "settings-monospace-font-button"
   SettingsFontPickerIdentifier = "settings-font-picker"
+  SettingsRefreshThemeIdentifier* = "settings-refresh-theme"
   SettingsFontPreviewIdentifier = "settings-font-preview"
   SettingsOnlyMonospaceFontsIdentifier = "settings-only-monospace-fonts"
   SettingsOnlyDisplayableFontsIdentifier = "settings-only-displayable-fonts"
@@ -808,6 +809,22 @@ proc applyAppearance(settings: MerendaSettingsWindow) =
     )
   settings.updatePreview()
 
+proc refreshThemeDidClick(settings: MerendaSettingsWindow, sender: DynamicAgent) =
+  discard sender
+  try:
+    let loaded = reloadThemeCss(settings.activeTheme.themeIdentifier())
+    if loaded.diagnostics.len > 0:
+      let diagnostic = loaded.diagnostics[0]
+      settings.settingsMessage =
+        "Theme CSS: line " & $diagnostic.line & ": " & diagnostic.message
+    else:
+      settings.baseAppearance = initAppearance(loaded.theme)
+      settings.applyAppearance()
+      settings.settingsMessage = "Theme refreshed."
+  except CatchableError as error:
+    settings.settingsMessage = "Could not refresh theme: " & error.msg
+  settings.updateStatus()
+
 proc themeDidChange(settings: MerendaSettingsWindow, sender: DynamicAgent) =
   if sender of ComboBox:
     let index = ComboBox(sender).selectedIndex()
@@ -1060,6 +1077,7 @@ proc newMerendaSettingsWindow*(
       increment = 1.0,
     )
     applyFontButton = newButton("Apply font")
+    refreshThemeButton = newButton("Refresh theme")
     uiScaleLabel = newFormLabel("Scale UI")
     uiScaleControl = newStackView(laHorizontal)
     uiScaleValue = newLabel(result.previewUiScale.uiScaleTitle())
@@ -1081,6 +1099,7 @@ proc newMerendaSettingsWindow*(
     onlyDisplayableFontsChanged = actionSelector("onlyDisplayableFontsChanged")
     fontSizeChanged = actionSelector("fontSizeChanged")
     applyFont = actionSelector("applyFont")
+    refreshTheme = actionSelector("refreshTheme")
     uiScaleChanged = actionSelector("uiScaleChanged")
     invertScrollingChanged = actionSelector("invertScrollingChanged")
     autoSaveDefaultsChanged = actionSelector("autoSaveDefaultsChanged")
@@ -1196,6 +1215,13 @@ proc newMerendaSettingsWindow*(
       settings.applyFontDidClick(sender),
   )
   applyFontButton.action = applyFont
+  refreshThemeButton.identifier = SettingsRefreshThemeIdentifier
+  refreshThemeButton.target = newActionTarget(
+    refreshTheme,
+    proc(sender: DynamicAgent) =
+      settings.refreshThemeDidClick(sender),
+  )
+  refreshThemeButton.action = refreshTheme
 
   uiScaleControl.spacing = 8.0
   uiScaleControl.alignment = svaCenter
@@ -1274,6 +1300,7 @@ proc newMerendaSettingsWindow*(
     newHeadingLabel("Preview"),
     result.preview,
     applyFontButton,
+    refreshThemeButton,
   )
   result.preview.identifier = SettingsFontPreviewIdentifier
   result.preview.styleId = SettingsFontPreviewIdentifier

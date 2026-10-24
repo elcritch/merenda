@@ -81,6 +81,8 @@ jobs:
             "libegl1-mesa-dev:$APT_ARCH" \
             "libgl1-mesa-dev:$APT_ARCH" \
             "libgles2-mesa-dev:$APT_ARCH" \
+            "libharfbuzz-dev:$APT_ARCH" \
+            "libfribidi-dev:$APT_ARCH" \
             "libvulkan-dev:$APT_ARCH" \
             "libx11-xcb-dev:$APT_ARCH" \
             "libxcb1-dev:$APT_ARCH" \
@@ -176,6 +178,8 @@ jobs:
             libegl1-mesa-dev \
             libgl1-mesa-dev \
             libgles2-mesa-dev \
+            libharfbuzz-dev \
+            libfribidi-dev \
             libvulkan-dev \
             libx11-xcb-dev \
             libxcb1-dev \
@@ -341,6 +345,8 @@ jobs:
           # pkg-config inject their shared-only -l flags into this static link.
           staticPkgConfigDir="$RUNNER_TEMP/kosmo-empty-pkgconfig"
           mkdir -p "$staticPkgConfigDir"
+          # Keep text shaping headers available after hiding graphics .pc files.
+          echo "HARFBUZZ_CFLAGS=$(pkg-config --cflags harfbuzz)" >> "$GITHUB_ENV"
           echo "PKG_CONFIG_LIBDIR=$staticPkgConfigDir" >> "$GITHUB_ENV"
 
       - name: Build Kosmo
@@ -352,6 +358,7 @@ jobs:
             --cc:gcc \
             --gcc.exe:"$MUSL_CC" \
             --gcc.linkerexe:"$MUSL_CC" \
+            --passC:"$HARFBUZZ_CFLAGS" \
             --passL:-static \
             --opt:size \
             --debugger:native \
@@ -500,6 +507,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Install text rendering libraries
+        run: brew install meson ninja pkg-config
+
       - name: Cache packages
         uses: actions/cache@v4
         with:
@@ -621,6 +631,9 @@ jobs:
           iconutil -c icns "$iconset_path" \
             -o "$app_path/Contents/Resources/Kosmo.icns"
 
+          text_prefix="$RUNNER_TEMP/kosmo-text-libraries"
+          bash packaging/macos/build-text-libraries.sh "$text_prefix"
+          export PKG_CONFIG_PATH="$text_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           nim c \
             --opt:size \
             --debugger:native \
@@ -628,10 +641,13 @@ jobs:
             --stackTrace:off \
             -d:nimStackTraceOverride \
             -d:moe.embedded \
+            -d:harfbuzzyDynlib=@executable_path/../Frameworks/libharfbuzz.dylib \
+            -d:harfbuzzyFribidiDynlib=@executable_path/../Frameworks/libfribidi.dylib \
             -d:KosmoVersion="$version" \
             -d:KosmoGitHashOverride="$revision" \
             --out:"$app_path/Contents/MacOS/kosmo" \
             src/merenda/kosmo/kosmo.nim
+          bash packaging/macos/bundle-text-libraries.sh "$app_path" "$text_prefix"
           xcrun dsymutil \
             "$app_path/Contents/MacOS/kosmo" \
             -o "$dsym_path"
@@ -687,6 +703,9 @@ jobs:
             exit 1
           fi
 
+      - name: Verify signed Kosmo startup
+        run: build/Kosmo.app/Contents/MacOS/kosmo --help
+
       - name: Package Kosmo app
         run: |
           ditto \
@@ -734,9 +753,31 @@ jobs:
 
   build-windows:
     runs-on: windows-2022
-    timeout-minutes: 45
+    # Optimizing Kosmo's large C translation units can exceed 45 minutes.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v5
+
+      - name: Configure MSVC for x64
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up software OpenGL for the startup check
+        uses: ssciwr/setup-mesa-dist-win@v3.0.0
+        with:
+          version: '26.0.3'
+          build-type: 'release-msvc'
+          deployment-choice: '1'
+
+      - name: Install text rendering libraries
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install `
+            harfbuzz:x64-windows-staticcrt fribidi:x64-windows-staticcrt `
+            --overlay-triplets=packaging/windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "INCLUDE=$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/include/harfbuzz;$env:INCLUDE" >> $env:GITHUB_ENV
 
       - name: Install Nim
         uses: jiro4989/setup-nim-action@v2
@@ -747,7 +788,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          cygpath -w "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
           bash .github/scripts/install-atlas.sh
           atlas -v
 
@@ -761,44 +803,71 @@ jobs:
         shell: bash
         run: atlas install -tuk --features:kosmo
 
+      - name: Install Nim with corrected MSVC atomics
+        shell: bash
+        run: bash .github/scripts/install-msvc-nim.sh
+
+      - name: Verify MSVC linker response files
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          nim c -r --cc:vcc --passC:/MT --out:build/windowsresponsefiles.exe `
+            tests/integrations/fixtures/windowsresponsefiles.nim
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build Kosmo
         shell: pwsh
         run: |
           $version = $env:KOSMO_RELEASE_VERSION.TrimStart('v')
           $revision = $env:GITHUB_SHA.Substring(0, 12)
+          $textBin = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/bin"
+          $harfbuzzDll = Get-ChildItem "$textBin/*.dll" | Where-Object Name -Match '^(lib)?harfbuzz(-[0-9]+)?\.dll$' | Select-Object -First 1
+          $fribidiDll = Get-ChildItem "$textBin/*.dll" | Where-Object Name -Match '^(lib)?fribidi(-[0-9]+)?\.dll$' | Select-Object -First 1
+          if (-not $harfbuzzDll -or -not $fribidiDll) {
+            throw 'The text dependency installation is missing HarfBuzz or FriBidi DLLs.'
+          }
           New-Item -ItemType Directory -Force -Path build, dist | Out-Null
           Push-Location data
-          windres kosmo.rc -O coff -o ../build/kosmo.res
+          rc.exe /nologo /fo ../build/kosmo.res kosmo.rc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Pop-Location
-          # The setup action uses MinGW. Link its exception runtime into the
-          # executable so the release ZIP does not require libgcc_s_seh-1.dll
-          # beside kosmo.exe.
           nim c `
+            --cc:vcc `
             --opt:size `
             --debugger:native `
-            --lineTrace:off `
-            --stackTrace:off `
-            --passL:-static-libgcc `
-            -d:nimStackTraceOverride `
+            --lineTrace:on `
+            --stackTrace:on `
+            --passC:/MT `
             --app:gui `
             -d:moe.embedded `
+            "-d:harfbuzzyDynlib=$($harfbuzzDll.Name)" `
+            "-d:harfbuzzyFribidiDynlib=$($fribidiDll.Name)" `
             "-d:KosmoVersion=$version" `
             "-d:KosmoGitHashOverride=$revision" `
             --passL:build/kosmo.res `
+            "--passL:/link /DEBUG:FULL /PDB:dist/kosmo.pdb" `
             --out:dist/kosmo.exe `
             src/merenda/kosmo/kosmo.nim
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
-          if (-not (& objdump -h dist/kosmo.exe | Select-String -Quiet '\.debug_info')) {
-            throw 'Kosmo executable is missing native debug information.'
+          if (-not (Test-Path dist/kosmo.pdb)) {
+            throw 'Kosmo executable is missing its PDB.'
           }
-          if (-not (& nm dist/kosmo.exe | Select-String -Quiet 'backtrace_create_state')) {
-            throw 'Kosmo executable is missing libbacktrace.'
+          if (-not (& dumpbin /headers dist/kosmo.exe | Select-String -Quiet 'Debug Directories')) {
+            throw 'Kosmo executable is missing its native debug directory.'
           }
-          $imports = & objdump -p dist/kosmo.exe
-          if ($imports -match '(?im)^\s*DLL Name:\s+libgcc_s.*\.dll\s*$') {
-            throw 'Kosmo executable must not depend on a MinGW GCC runtime DLL.'
+          $imports = & dumpbin /dependents dist/kosmo.exe
+          if ($imports -match '(?i)libgcc|libstdc\+\+|vcruntime[0-9]+|msvcp[0-9]+') {
+            throw 'Kosmo executable must not depend on a compiler runtime DLL.'
+          }
+          Copy-Item "$textBin/*.dll" dist/
+          Get-ChildItem dist/*.dll | ForEach-Object {
+            $dependencies = & dumpbin /dependents $_.FullName
+            if ($dependencies -match '(?i)vcruntime[0-9]+|msvcp[0-9]+') {
+              throw "Text DLL $($_.Name) requires a Visual C++ redistributable."
+            }
           }
           $process = Start-Process `
             -FilePath "$PWD/dist/kosmo.exe" `
@@ -818,13 +887,34 @@ jobs:
             }
           }
 
+      - name: Verify MSVC stack traces
+        shell: pwsh
+        run: |
+          nim c -r --cc:vcc --passC:/MT --out:build/windowsstacktrace.exe `
+            tests/integrations/fixtures/windowsstacktrace.nim
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify MSVC atomic ownership and worker shutdown
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          nim c -r --cc:vcc --passC:/MT --out:build/windowsatomics.exe `
+            tests/integrations/fixtures/windowsatomics.nim
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Package Kosmo
         shell: pwsh
         run: |
           Copy-Item data/FONT-LICENSES.md dist/FONT-LICENSES.md
           Copy-Item -Recurse data/font-licenses dist/font-licenses
+          New-Item -ItemType Directory -Force dist/text-library-licenses | Out-Null
+          Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/share" -Directory | ForEach-Object {
+            if (Test-Path "$($_.FullName)/copyright") {
+              Copy-Item "$($_.FullName)/copyright" "dist/text-library-licenses/$($_.Name).txt"
+            }
+          }
           Compress-Archive `
-            -Path dist/kosmo.exe, dist/FONT-LICENSES.md, dist/font-licenses `
+            -Path dist/kosmo.exe, dist/kosmo.pdb, dist/*.dll, dist/FONT-LICENSES.md, dist/font-licenses, dist/text-library-licenses `
             -DestinationPath dist/kosmo-windows-amd64.zip `
             -Force
 

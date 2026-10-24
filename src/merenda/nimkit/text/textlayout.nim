@@ -826,7 +826,8 @@ proc textRangeForGlyphLine(layout: GlyphArrangement, line: Slice[int]): TextRang
   if found:
     initTextRange(start, stop - start)
   else:
-    initTextRange(0, 0)
+    # Shaping backends can represent an empty line with an insertion glyph.
+    layout.sourceRangeForGlyph(line.a)
 
 proc containsHardBreak[T](runes: T, range: TextRange): bool =
   if runes.len == 0:
@@ -1005,16 +1006,16 @@ proc delegateAllowsGlyphGeneration(manager: TextLayoutManager, range: TextRange)
     return true
 
   manager.xDelegate
-  .trySendLocal(shouldGenerateGlyphs(), (manager: manager, range: range))
-  .get(true)
+    .trySendLocal(shouldGenerateGlyphs(), (manager: manager, range: range))
+    .get(true)
 
 proc delegateLineSpacing(manager: TextLayoutManager, glyphIndex: GlyphIndex): float32 =
   if manager.xDelegate.isNil:
     return 0.0'f32
   max(
     manager.xDelegate
-    .trySendLocal(lineSpacingAfterGlyph(), (manager: manager, glyphIndex: glyphIndex))
-    .get(0.0'f32),
+      .trySendLocal(lineSpacingAfterGlyph(), (manager: manager, glyphIndex: glyphIndex))
+      .get(0.0'f32),
     0.0'f32,
   )
 
@@ -1025,10 +1026,10 @@ proc delegateParagraphSpacingBefore(
     return 0.0'f32
   max(
     manager.xDelegate
-    .trySendLocal(
-      paragraphSpacingBeforeGlyph(), (manager: manager, glyphIndex: glyphIndex)
-    )
-    .get(0.0'f32),
+      .trySendLocal(
+        paragraphSpacingBeforeGlyph(), (manager: manager, glyphIndex: glyphIndex)
+      )
+      .get(0.0'f32),
     0.0'f32,
   )
 
@@ -1039,10 +1040,10 @@ proc delegateParagraphSpacingAfter(
     return 0.0'f32
   max(
     manager.xDelegate
-    .trySendLocal(
-      paragraphSpacingAfterGlyph(), (manager: manager, glyphIndex: glyphIndex)
-    )
-    .get(0.0'f32),
+      .trySendLocal(
+        paragraphSpacingAfterGlyph(), (manager: manager, glyphIndex: glyphIndex)
+      )
+      .get(0.0'f32),
     0.0'f32,
   )
 
@@ -1057,8 +1058,8 @@ proc shouldHyphenate*(manager: TextLayoutManager, range: TextRange, word = ""): 
     return false
 
   manager.xDelegate
-  .trySendLocal(shouldHyphenateText(), (manager: manager, range: range, word: word))
-  .get(false)
+    .trySendLocal(shouldHyphenateText(), (manager: manager, range: range, word: word))
+    .get(false)
 
 proc retainedFonts(arrangement: GlyphArrangement): seq[FontRef] =
   var retainedFontIds = initHashSet[FontId]()
@@ -1265,11 +1266,12 @@ proc lineFragment[T](
     lineCount: int,
     sourceRunes: T,
 ): TextLineFragment =
-  let
-    containers = manager.effectiveContainers()
-    glyphRange = initGlyphRange(line.a, line.b - line.a + 1)
+  let containers = manager.effectiveContainers()
+  var glyphRange = initGlyphRange(line.a, line.b - line.a + 1)
   # Read the retained arrangement directly; a local value copies every glyph.
   var textRange = manager.xLayout.textRangeForGlyphLine(line)
+  if textRange.isEmpty:
+    glyphRange.length = 0
   if textRange.maxIndex < sourceRunes.len and
       sourceRunes[textRange.maxIndex] in [Rune('\n'), Rune('\r')]:
     inc textRange.length
@@ -1302,7 +1304,10 @@ proc lineFragment[T](
 
   let
     lineTop =
-      if hasUsedRect: virtualUsedRect.origin.y else: manager.xLayoutRect.origin.y
+      if hasUsedRect:
+        virtualUsedRect.origin.y
+      else:
+        manager.xLayout.glyphRect(line.a).y + manager.xLayoutRect.origin.y
     containerIndex = containers.containerIndexForVirtualY(lineTop)
     container = containers[containerIndex.toInt]
     virtualContainer = containers.virtualContainerRect(containerIndex.toInt)

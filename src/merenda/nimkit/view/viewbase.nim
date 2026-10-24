@@ -235,6 +235,7 @@ type
     xValidationMessage*: string
     xNeedsUpdateConstraints*: bool
     xNeedsLayout*: bool
+    xNeedsLocalConstraintLayout*: bool
     xLayoutSubtreeInProgress*: bool
     xLayoutGeneration*: Natural
     xConstraintVisitGeneration*: Natural

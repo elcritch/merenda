@@ -10,7 +10,7 @@ fi
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
-for required_command in atlas nim git awk sips iconutil xcrun nm plutil codesign ditto; do
+for required_command in atlas nim git awk sips iconutil xcrun nm plutil codesign ditto meson ninja cmake; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
     echo "install-local.sh: missing required command: $required_command" >&2
     exit 1
@@ -84,13 +84,24 @@ done
 iconutil -c icns "$iconset_path" -o "$app_path/Contents/Resources/Kosmo.icns"
 
 echo "install-local.sh: building Kosmo.app $version ($revision)"
+export MACOSX_DEPLOYMENT_TARGET=13.0
+export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+export CC="$(xcrun --find clang)"
+export CXX="$(xcrun --find clang++)"
+KOSMO_TEXT_LICENSE_DIR="$app_path/Contents/Resources/text-library-licenses" \
+  nim e packaging/macos/staticTextLicenses.nims
+# Cached external C objects can retain an older deployment target.
 nim c \
+  --forceBuild:on \
+  --passC:-mmacosx-version-min=13.0 \
+  --passL:-mmacosx-version-min=13.0 \
   --opt:size \
   --debugger:native \
   --lineTrace:off \
   --stackTrace:off \
   -d:nimStackTraceOverride \
   -d:moe.embedded \
+  -d:harfbuzzyStatic \
   -d:KosmoVersion="$version" \
   -d:KosmoGitHashOverride="$revision" \
   --out:"$app_path/Contents/MacOS/kosmo" \
@@ -110,12 +121,14 @@ plutil -lint "$app_path/Contents/Info.plist"
 codesign --force --options runtime --sign - \
   --entitlements packaging/macos/debug.entitlements "$app_path"
 codesign --verify --deep --strict "$app_path"
+"$app_path/Contents/MacOS/kosmo" --help >/dev/null
 
 mkdir -p "$install_dir" "$bin_dir"
 staged_app="$install_dir/.Kosmo.app.install.$$"
 staged_command="$bin_dir/.kosmo.install.$$"
 ditto "$app_path" "$staged_app"
 codesign --verify --deep --strict "$staged_app"
+"$staged_app/Contents/MacOS/kosmo" --help >/dev/null
 
 if [[ -e "$installed_app" || -L "$installed_app" ]]; then
   backup_app="$install_dir/.Kosmo.app.backup.$$"
@@ -125,6 +138,7 @@ restore_install=1
 mv "$staged_app" "$installed_app"
 staged_app=""
 ln -s "$installed_app/Contents/MacOS/kosmo" "$staged_command"
+"$staged_command" --help >/dev/null
 mv -f "$staged_command" "$installed_command"
 staged_command=""
 restore_install=0

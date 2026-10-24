@@ -21,6 +21,7 @@ type
     fill*: Option[Fill]
     textColor*: Option[Color]
     cornerRadii*: Option[themeCore.CornerRadii]
+    textInsets*: Option[EdgeInsets] ## Override text padding for accessory columns.
 
 func normalizedRowHeight*(rowHeight: float32): float32 =
   max(rowHeight, 1.0'f32)
@@ -170,8 +171,11 @@ func initRowStyle*(
     fill = none(Fill),
     textColor = none(Color),
     cornerRadii = none(themeCore.CornerRadii),
+    textInsets = none(EdgeInsets),
 ): RowStyle =
-  RowStyle(fill: fill, textColor: textColor, cornerRadii: cornerRadii)
+  RowStyle(
+    fill: fill, textColor: textColor, cornerRadii: cornerRadii, textInsets: textInsets
+  )
 
 proc drawRowItem*(
     context: DrawContext,
@@ -196,6 +200,8 @@ proc drawRowItem*(
     itemStyle.text.color = style.textColor.get()
   if style.cornerRadii.isSome:
     itemStyle.box.cornerRadii = style.cornerRadii.get()
+  if style.textInsets.isSome:
+    itemStyle.text.insets = style.textInsets.get()
 
   if currentParent:
     discard context.addRenderRectangle(

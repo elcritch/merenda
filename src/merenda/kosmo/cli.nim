@@ -20,8 +20,7 @@ const
   KosmoDiffFlag* = "--diff"
   KosmoLspExecFlag* = "--kosmo-lsp-exec"
   KosmoCliDiffInputLimit* = 8 * 1024 * 1024
-  KosmoUsage* =
-    """
+  KosmoUsage* = """
 Usage: kosmo [--bg | --new] [--] [file-or-folder ...]
        kosmo [-v | --version]
        kosmo --add folder [folder ...]

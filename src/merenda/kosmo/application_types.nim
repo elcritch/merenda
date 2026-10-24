@@ -43,6 +43,8 @@ type
     documentTabs*: nimkit.DocumentTabs
     searchBar: KosmoSearchBar
     searchOrigin: KosmoBufferCursor
+    searchState: KosmoSearchState
+    searchBufferId: Option[KosmoBufferId]
     renderBuffer: RenderBuffer
     statusLabel: nimkit.Label
     commandBar: KosmoCommandBar
@@ -95,6 +97,7 @@ type
     activeIndicator: KosmoPaneIndicator
     dockController: WeakRef[KosmoDockController]
     observedWindow: WeakRef[nimkit.Window]
+    pendingPanePrefix: bool
 
   KosmoEditorGroup* = ref object
     identifier*: string
@@ -137,7 +140,14 @@ type
     label: nimkit.Label
     fileButton: KosmoStatusIconButton
     findButton: KosmoStatusIconButton
+    keyModeChoice: nimkit.PopupMenuButton
     observedWindow: WeakRef[nimkit.Window]
+
+  KosmoKeyMode = object
+    identifier: string
+    title: string
+    inputPolicy: KosmoEditorInputPolicy
+    forceInput: bool
 
   KosmoContentView = ref object of nimkit.View
     splitView: nimkit.SplitView
@@ -151,6 +161,7 @@ type
     onFindInFiles: proc(replacing: bool) {.closure.}
     onQuickOpen: proc() {.closure.}
     onNewTerminal: proc() {.closure.}
+    onShowTerminal: proc() {.closure.}
     onFocusPanel: proc(panelNumber: int) {.closure.}
     quickOpenPanel: KosmoQuickOpenPanel
 

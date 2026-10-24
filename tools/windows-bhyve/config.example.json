@@ -1,0 +1,20 @@
+{
+  "name": "merenda-win-test",
+  "vm_dir": "/vm",
+  "zfs_parent": "zroot/vm",
+  "switch": "public",
+  "cpus": 2,
+  "memory": "4G",
+  "disk_size": "80G",
+  "vnc_port": 5901,
+  "guest_ip": "172.31.0.20",
+  "prefix_length": 24,
+  "gateway": "172.31.0.1",
+  "dns": ["1.1.1.1", "9.9.9.9"],
+  "computer_name": "MERENDA-WIN",
+  "image_index": 2,
+  "iso_url": "https://go.microsoft.com/fwlink/?linkid=2345730&clcid=0x409&culture=en-us&country=us",
+  "iso_sha256": "",
+  "gpu_devices": [],
+  "gpu_rom": ""
+}

@@ -10,7 +10,8 @@ jobs:
   tests:
     name: tests (${{ matrix.os }}, ${{ matrix.nimversion }}, ${{ matrix.display }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    # Full GUI and integration coverage can take nearly 40 minutes on macOS.
+    timeout-minutes: 60
     env:
       ATLAS_TEST_NIM_ARGS: ${{ matrix.nimargs }}
     defaults:
@@ -58,6 +59,10 @@ jobs:
     - name: Check shared test runner coverage
       run: nim e --skipParentCfg:on --skipProjCfg:on .github/scripts/check_test_imports.nims
 
+    - name: Install macOS text rendering libraries
+      if: runner.os == 'macOS'
+      run: brew install harfbuzz fribidi
+
     - name: Setup software OpenGL (Mesa)
       if: runner.os == 'Windows'
       uses: ssciwr/setup-mesa-dist-win@v3.0.0
@@ -87,6 +92,8 @@ jobs:
           libgl1-mesa-dev \
           libgles2-mesa-dev \
           libegl1-mesa-dev \
+          libharfbuzz-dev \
+          libfribidi-dev \
           mesa-utils \
           vulkan-tools \
           mesa-vulkan-drivers \
@@ -97,9 +104,7 @@ jobs:
           libgles2
 
     - name: Install Deps
-      run: |
-        # sync deps
-        atlas -tu --features:kosmo,nifDemo install
+      run: bash .github/scripts/install-deps.sh -tu --features:kosmo,nifDemo
 
     - name: Clean generated examples
       run: bash .github/scripts/clean_generated_examples.sh
@@ -118,25 +123,6 @@ jobs:
       timeout-minutes: 5
       run: |
         testExecutable=./deps/.nimcache/atlas-run/tests/tnimkit/tnimkit
-        if [[ "$RUNNER_OS" == "Windows" ]]; then
-          testExecutable+=".exe"
-        fi
-        if [[ "$RUNNER_OS" == "Linux" ]]; then
-          xvfb-run -a "$testExecutable"
-        else
-          "$testExecutable"
-        fi
-
-    - name: Compile Kosmo tests
-      run: |
-        atlas-run tests --compile-only --compiler-output tkosmo.nim \
-          $ATLAS_TEST_NIM_ARGS
-
-    - name: Run Kosmo tests
-      # Allow time for the full GUI suite in the unoptimized Linux build.
-      timeout-minutes: 15
-      run: |
-        testExecutable=./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           testExecutable+=".exe"
         fi
@@ -166,8 +152,13 @@ jobs:
 
     - name: Compile integration tests
       run: |
-        atlas-run tests --compile-only --compiler-output tintegrations.nim \
-          $ATLAS_TEST_NIM_ARGS
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          atlas-run tests --compile-only --compiler-output tintegrations.nim \
+            -- -d:merenda.devControl
+        else
+          atlas-run tests --compile-only --compiler-output tintegrations.nim \
+            $ATLAS_TEST_NIM_ARGS
+        fi
 
     - name: Run integration tests
       timeout-minutes: 5
@@ -195,7 +186,7 @@ jobs:
         reportDeadline=$((SECONDS + 30))
         while (( SECONDS < reportDeadline )); do
           for reportDirectory in "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports; do
-            for report in "$reportDirectory"/{tnimkit,tkosmo,ttekton,tintegrations}*.{ips,crash}; do
+            for report in "$reportDirectory"/{tnimkit,ttekton,tintegrations}*.{ips,crash}; do
               if [[ -f "$report" && -f "$reportBoundary" && "$report" -nt "$reportBoundary" ]]; then
                 cp "$report" "$reportOutput/"
               fi
@@ -214,6 +205,150 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: macos-test-crash-reports-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/merenda-test-crash-reports/
+        if-no-files-found: warn
+        retention-days: 7
+
+  kosmo:
+    name: Kosmo tests (${{ matrix.os }}, ${{ matrix.nimversion }}, ${{ matrix.display }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      ATLAS_TEST_NIM_ARGS: ${{ matrix.nimargs }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            nimversion: '2.2.10'
+            display: none
+            nimargs: ''
+          - os: ubuntu-26.04
+            nimversion: '2.2.10'
+            display: x11
+            nimargs: >-
+              -- --opt:none
+              -d:KosmoMatterMaximumLineBytes=96
+              -d:NimkitMatterMaximumLineBytes=96
+    steps:
+    - uses: actions/checkout@v5
+
+    - name: Cache packages
+      uses: actions/cache@v4
+      with:
+        path: deps/
+        key: ${{ runner.os }}-nim${{ matrix.nimversion }}-${{ hashFiles('merenda.nimble', 'nim.cfg') }}
+
+    - name: Install latest Atlas and set up Nim
+      run: |
+        mkdir -p "$HOME/.local/bin"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        bash .github/scripts/install-atlas.sh
+        "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
+
+    - name: Verify Nim
+      run: |
+        atlas -v
+        uname -m
+        nimPath="$(command -v nim)"
+        echo "$nimPath"
+        nim -v
+
+    - name: Install macOS text rendering libraries
+      if: runner.os == 'macOS'
+      run: brew install harfbuzz fribidi
+
+    - name: Setup software OpenGL/Vulkan (Mesa) + Xvfb (X11)
+      if: runner.os == 'Linux' && matrix.display == 'x11'
+      timeout-minutes: 30
+      run: |
+        sudo apt-get update
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          clang \
+          xvfb \
+          xauth \
+          libx11-xcb-dev \
+          libxcb1-dev \
+          libxcursor-dev \
+          libxkbcommon-dev \
+          libxrender-dev \
+          libgl1-mesa-dev \
+          libgles2-mesa-dev \
+          libegl1-mesa-dev \
+          libharfbuzz-dev \
+          libfribidi-dev \
+          mesa-utils \
+          vulkan-tools \
+          mesa-vulkan-drivers \
+          libvulkan1 \
+          libgl1-mesa-dri \
+          libglx-mesa0 \
+          libegl-mesa0 \
+          libgles2
+
+    - name: Install Deps
+      run: bash .github/scripts/install-deps.sh -tu --features:kosmo
+
+    - name: Clean generated examples
+      run: bash .github/scripts/clean_generated_examples.sh
+
+    - name: Record macOS test crash-report boundary
+      if: runner.os == 'macOS'
+      run: |
+        touch "$RUNNER_TEMP/merenda-test-start"
+
+    - name: Compile Kosmo tests
+      run: |
+        atlas-run tests --compile-only --compiler-output tkosmo.nim \
+          $ATLAS_TEST_NIM_ARGS
+
+    - name: Run Kosmo tests
+      # The expanded GUI suite takes over 15 minutes in the unoptimized Linux build.
+      timeout-minutes: 20
+      run: |
+        testExecutable=./deps/.nimcache/atlas-run/tests/tkosmo/tkosmo
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          testExecutable+=".exe"
+        fi
+        if [[ "$RUNNER_OS" == "Linux" ]]; then
+          xvfb-run -a "$testExecutable"
+        else
+          "$testExecutable"
+        fi
+
+    - name: Collect macOS test crash reports
+      if: failure() && runner.os == 'macOS'
+      run: |
+        shopt -s nullglob
+        reportOutput="$RUNNER_TEMP/merenda-test-crash-reports"
+        reportBoundary="$RUNNER_TEMP/merenda-test-start"
+        mkdir -p "$reportOutput"
+        # ReportCrash can write its report shortly after the process exits.
+        reportDeadline=$((SECONDS + 30))
+        while (( SECONDS < reportDeadline )); do
+          for reportDirectory in "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports; do
+            for report in "$reportDirectory"/tkosmo*.{ips,crash}; do
+              if [[ -f "$report" && -f "$reportBoundary" && "$report" -nt "$reportBoundary" ]]; then
+                cp "$report" "$reportOutput/"
+              fi
+            done
+          done
+          reports=("$reportOutput"/*)
+          if (( ${#reports[@]} > 0 )); then
+            printf 'Collected %s current-job test crash report(s).\n' "${#reports[@]}"
+            break
+          fi
+          sleep 1
+        done
+
+    - name: Upload macOS test crash reports
+      if: failure() && runner.os == 'macOS'
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-kosmo-test-crash-reports-${{ github.run_attempt }}
         path: ${{ runner.temp }}/merenda-test-crash-reports/
         if-no-files-found: warn
         retention-days: 7
@@ -257,6 +392,8 @@ jobs:
           libgl1-mesa-dev \
           libgles2-mesa-dev \
           libegl1-mesa-dev \
+          libharfbuzz-dev \
+          libfribidi-dev \
           mesa-utils \
           vulkan-tools \
           mesa-vulkan-drivers \
@@ -267,8 +404,7 @@ jobs:
           libgles2
 
     - name: Install Deps
-      run: |
-        atlas -tu --features:kosmo install
+      run: bash .github/scripts/install-deps.sh -tu --features:kosmo
 
     - name: Check ARC ownership with sanitizers
       timeout-minutes: 10
@@ -306,6 +442,30 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
+    - name: Configure MSVC for x64
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    - name: Install macOS text rendering libraries
+      if: runner.os == 'macOS'
+      run: brew install harfbuzz fribidi
+
+    - name: Install Linux text rendering libraries
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends libharfbuzz-dev libfribidi-dev
+
+    - name: Install Windows text rendering headers
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install harfbuzz:x64-windows
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        "INCLUDE=$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include/harfbuzz;$env:INCLUDE" >> $env:GITHUB_ENV
+
     - name: Cache packages
       uses: actions/cache@v4
       with:
@@ -315,9 +475,18 @@ jobs:
     - name: Install latest Atlas and set up Nim
       run: |
         mkdir -p "$HOME/.local/bin"
-        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          cygpath -w "$HOME/.local/bin" >> "$GITHUB_PATH"
+        else
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        fi
+        export PATH="$HOME/.local/bin:$PATH"
         bash .github/scripts/install-atlas.sh
-        "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          bash .github/scripts/install-msvc-nim.sh
+        else
+          "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
+        fi
 
     - name: Verify Nim
       run: |
@@ -332,13 +501,19 @@ jobs:
         fi
 
     - name: Install Deps
-      run: |
-        # sync deps
-        atlas -t --update install
+      run: bash .github/scripts/install-deps.sh -t --update --features:nifDemo
 
     - name: Clean generated examples
       run: bash .github/scripts/clean_generated_examples.sh
 
     - name: Compile Examples
+      if: runner.os != 'Windows'
       run: |
         atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim"
+
+    - name: Compile Windows Examples with MSVC
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim" -- --cc:vcc --passC:/MT
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

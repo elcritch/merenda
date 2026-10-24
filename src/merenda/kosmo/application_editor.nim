@@ -47,13 +47,18 @@ proc showGitDiff*(frontend: KosmoApplication, path = ""): bool {.discardable.}
 proc showGitHub*(frontend: KosmoApplication, path = ""): bool {.discardable.}
 proc newEditorTab*(frontend: KosmoApplication): bool {.discardable.}
 proc newTerminal*(frontend: KosmoApplication): bool {.discardable.}
+proc showTerminal*(frontend: KosmoApplication): bool {.discardable.}
 proc showSettings*(frontend: KosmoApplication): bool {.discardable.}
 proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.}
 proc show*(frontend: KosmoApplication)
 proc close*(frontend: KosmoApplication)
+proc setEditorInputPolicy*(frontend: KosmoApplication, policy: KosmoEditorInputPolicy)
+proc setForceInputMode*(frontend: KosmoApplication, enabled: bool)
+proc syncKeyModeChoices(controller: KosmoDockController)
 proc activateGroup(controller: KosmoDockController, view: KosmoEditorView)
 proc focusPanel(controller: KosmoDockController, panelNumber: int): bool
 proc focusGroup(controller: KosmoDockController, group: KosmoEditorGroup): bool
+proc focusFromSidebar(controller: KosmoDockController): bool
 proc preferredPaneResponder(group: KosmoEditorGroup): nimkit.Responder
 proc spatialNeighborGroup(
   controller: KosmoDockController, source: KosmoEditorGroup, direction: KosmoPaneCommand
@@ -384,6 +389,7 @@ proc saveViewState(view: KosmoEditorView) =
   let state = view.editor.captureViewState()
   if state.bufferId != view.selectedBufferId:
     return
+  view.searchState = view.editor.captureSearchState()
   let index = view.viewStateIndex(view.selectedBufferId.get)
   if index >= 0:
     view.viewStates[index] = state
@@ -422,8 +428,10 @@ proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
       view.editor.mode() in {KosmoEditorMode.Command, KosmoEditorMode.Other}:
     return
   let controller = view.tabsDelegate.dockController
+  var switchingProjection = false
   if not controller.isNil:
     let owner = controller[].projectedEditorView
+    switchingProjection = owner.isNil or owner[] != view
     if not owner.isNil and owner[] != view:
       owner[].saveViewState()
   view.saveViewState()
@@ -443,11 +451,27 @@ proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
     let index = view.viewStateIndex(view.selectedBufferId.get)
     let restored =
       if index >= 0:
-        view.editor.restoreViewState(view.viewStates[index])
+        view.editor.restoreViewState(view.viewStates[index], view.renderBuffer)
       else:
         view.editor.selectTab(view.selectedBufferId.get)
-    if restored and not controller.isNil:
-      controller[].projectedEditorView = view.unsafeWeakRef()
+    if restored:
+      if not controller.isNil:
+        if switchingProjection:
+          view.editor.restoreSearchState(view.searchState)
+        controller[].projectedEditorView = view.unsafeWeakRef()
+      if view.searchBufferId != view.selectedBufferId:
+        view.searchBufferId = view.selectedBufferId
+        if not view.searchBar.isNil and not view.searchBar.hidden():
+          view.searchOrigin = view.editor.bufferCursor()
+          if view.searchBar.query().len == 0:
+            view.editor.clearSearch()
+            view.searchBar.hasMatches = false
+          else:
+            view.searchBar.hasMatches = view.editor.hasSearchMatches(
+              view.searchBar.query(),
+              regularExpression = view.searchBar.regularExpression,
+            )
+          view.searchBar.errorMessage = view.editor.searchError()
 
 proc adoptActiveBuffer(view: KosmoEditorView): bool =
   if not view.usesBufferSubset:
@@ -615,6 +639,9 @@ proc syncChrome(view: KosmoEditorView) =
     let text = view.editor.status().statusText(tabs, view.editor.workingDirectory())
     if view.statusLabel.text != text:
       view.statusLabel.text = text
+  if view.isActiveEditorGroup() and not view.tabsDelegate.isNil and
+      not view.tabsDelegate.dockController.isNil:
+    view.tabsDelegate.dockController[].syncKeyModeChoices()
   let command = view.editor.commandLine()
   view.syncCommandBar(command)
   let cursor = view.editor.cursor()
@@ -1216,6 +1243,7 @@ proc closeTabWithConfirmation(
   )
 
 proc sendKeyDownToMoe(view: KosmoEditorView, keyEvent: nimkit.KeyEvent): bool =
+  view.scrollOffsetRows = 0.0'f32
   var keyOutcome: KosmoKeyOutcome
   let wasCommand = view.editor.mode() == KosmoEditorMode.Command
   if keyEvent.key == nimkit.keyEnter:
@@ -1359,6 +1387,7 @@ protocol KosmoEditorInput of nimkit.TextInputProtocol:
   method insertText(view: KosmoEditorView, text: string) =
     if nimkit.isInsertableText(text):
       view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
+      view.scrollOffsetRows = 0.0'f32
       discard view.editor.handleTextInput(text)
       view.refresh()
 
@@ -1381,9 +1410,10 @@ proc editorPaste(view: KosmoEditorView) =
 
 proc refreshEditorSearch(
     view: KosmoEditorView,
-    start: KosmoBufferCursor,
+    start = none(KosmoBufferCursor),
     direction = KosmoSearchDirection.Forward,
 ) =
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   let query = view.searchBar.query()
   if query.len == 0:
     discard view.editor.revealLocation(view.searchOrigin.line, view.searchOrigin.column)
@@ -1392,24 +1422,27 @@ proc refreshEditorSearch(
     view.searchBar.errorMessage = ""
   else:
     view.searchBar.hasMatches = view.editor.searchFrom(
-      query, start, direction, regularExpression = view.searchBar.regularExpression
+      query,
+      start.get(view.editor.bufferCursor()),
+      direction,
+      regularExpression = view.searchBar.regularExpression,
     )
     view.searchBar.errorMessage = view.editor.searchError()
   view.refresh()
 
 proc editorSearchQueryDidChange(view: KosmoEditorView, query: string) =
   discard query
-  view.refreshEditorSearch(view.searchOrigin)
+  view.refreshEditorSearch(some(view.searchOrigin))
 
 proc findPrevious*(view: KosmoEditorView) =
   ## Find the previous Moe match while retaining the floating search field.
   if not view.isNil and not view.searchBar.isNil:
-    view.refreshEditorSearch(view.editor.bufferCursor(), KosmoSearchDirection.Backward)
+    view.refreshEditorSearch(direction = KosmoSearchDirection.Backward)
 
 proc findNext*(view: KosmoEditorView) =
   ## Find the next Moe match while retaining the floating search field.
   if not view.isNil and not view.searchBar.isNil:
-    view.refreshEditorSearch(view.editor.bufferCursor())
+    view.refreshEditorSearch()
 
 proc replaceMatch*(view: KosmoEditorView, all = false): int {.discardable.} =
   if view.isNil or view.searchBar.isNil:
@@ -1438,6 +1471,7 @@ proc dismissSearch*(view: KosmoEditorView) =
   ## Hide editor search, clear Moe's highlights, and return focus to the editor.
   if view.isNil or view.searchBar.isNil:
     return
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   view.searchBar.hidden = true
   view.editor.clearSearch()
   view.refresh()
@@ -1452,6 +1486,7 @@ proc showSearch*(view: KosmoEditorView, replacing = false): bool {.discardable.}
   let owner = view.window()
   if not (owner of nimkit.Window):
     return
+  view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
   if view.searchBar.hidden():
     view.searchOrigin = view.editor.bufferCursor()
     view.searchBar.query = ""
@@ -1459,12 +1494,12 @@ proc showSearch*(view: KosmoEditorView, replacing = false): bool {.discardable.}
     view.searchBar.hasMatches = false
     view.searchBar.errorMessage = ""
     view.searchBar.hidden = false
-    view.setNeedsLayout()
-    view.layoutSubtreeIfNeeded()
   else:
     view.searchBar.queryField().selectedRange =
       nimkit.initTextRange(0, view.searchBar.query().runeLen)
   view.searchBar.replacementVisible = replacing
+  view.setNeedsLayout()
+  view.layoutSubtreeIfNeeded()
   result = nimkit.Window(owner).makeFirstResponder(view.searchBar.queryField())
 
 func searchField*(view: KosmoEditorView): nimkit.TextField =
@@ -1514,6 +1549,25 @@ protocol KosmoEditorEditingCommands of nimkit.TextEditingCommandProtocol:
 
 func isEditingAction(action: string): bool =
   action.kosmoAction().kind == KosmoActionKind.Editing
+
+proc nativeEditingCommand(
+    selector: nimkit.CommandSelector
+): Option[nimkit.CommandSelector] =
+  case $selector.name
+  of KosmoCopyAction, "copy":
+    some(nimkit.copy())
+  of KosmoCutAction, "cut":
+    some(nimkit.cut())
+  of KosmoPasteAction, "paste":
+    some(nimkit.paste())
+  of KosmoSelectAllAction, "selectAll":
+    some(nimkit.selectAll())
+  of KosmoUndoAction, "undo":
+    some(nimkit.undo())
+  of KosmoRedoAction, "redo":
+    some(nimkit.redo())
+  else:
+    none(nimkit.CommandSelector)
 
 proc handleKosmoKeyEquivalent(view: KosmoEditorView, event: nimkit.KeyEvent): bool =
   view.selectVisibleBuffer(view.visibleTabs(view.editor.tabs()))
@@ -1710,6 +1764,9 @@ protocol KosmoEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
     of KosmoNewTerminalAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].newTerminal()
+    of KosmoShowTerminalAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showTerminal()
     of KosmoShowGitHubAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showGitHub()
@@ -1933,11 +1990,6 @@ protocol KosmoEditorTabsDelegate of nimkit.DocumentTabsDelegate:
     if not handler.dockController.isNil:
       handler.dockController[].finishDockDrag(tabs, info.item, info.location)
 
-protocol KosmoEditorViewLayout of nimkit.ViewLayoutProtocol:
-  method layoutSubviews(view: KosmoEditorView) =
-    if not view.searchBar.isNil:
-      view.searchBar.layoutInBounds(view.bounds())
-
 ## Moe editor panes are entered with Return on an etab or with a click; they
 ## stay out of the window key view loop so Tab never lands inside the editor.
 protocol KosmoEditorKeyViewParticipation of nimkit.ViewProtocol:
@@ -1967,7 +2019,6 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
   discard result.withProtocol(KosmoEditorInput)
   discard result.withProtocol(KosmoEditorEditingCommands)
   discard result.withProtocol(KosmoEditorCommandDispatch)
-  discard result.withProtocol(KosmoEditorViewLayout)
   discard result.withProtocol(KosmoEditorKeyViewParticipation)
   let keyEquivalentMethod: nimkit.DynamicMethod = proc(
       self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
@@ -2022,6 +2073,31 @@ proc newKosmoEditorView*(editor = newKosmoEditor()): KosmoEditorView =
     ,
   )
   result.addSubview(result.searchBar)
+  let
+    bar = result.searchBar
+    insetPriority = nimkit.initLayoutPriority(999)
+  nimkit.activate(
+    [
+      bar[nimkit.atLeft].greaterThanOrEqualTo(result[nimkit.atLeft]),
+      bar[nimkit.atTop].greaterThanOrEqualTo(result[nimkit.atTop]),
+      bar[nimkit.atRight].lessThanOrEqualTo(result[nimkit.atRight]),
+      bar[nimkit.atBottom].lessThanOrEqualTo(result[nimkit.atBottom]),
+      bar[nimkit.atWidth].lessThanOrEqualTo(nimkit.SearchBarWidth),
+      bar[nimkit.atTop].equalTo(
+        result[nimkit.atTop], constant = nimkit.SearchBarInset, priority = insetPriority
+      ),
+      bar[nimkit.atRight].equalTo(
+        result[nimkit.atRight],
+        constant = -nimkit.SearchBarInset,
+        priority = insetPriority,
+      ),
+      bar[nimkit.atWidth].lessThanOrEqualTo(
+        result[nimkit.atWidth],
+        constant = -2 * nimkit.SearchBarInset,
+        priority = insetPriority,
+      ),
+    ]
+  )
   result.syncChrome()
 
 protocol KosmoCommandBarHitTesting of nimkit.ViewProtocol:
@@ -2324,6 +2400,62 @@ proc hasSidebarFocus(pane: KosmoSidebarPane): bool =
     return true
   pane.containsResponder(window.fieldEditorClient())
 
+proc handleSidebarPaneKey(pane: KosmoSidebarPane, event: nimkit.KeyEvent): bool =
+  if pane.dockController.isNil or not pane.hasSidebarFocus():
+    return
+  if pane.pendingPanePrefix:
+    pane.pendingPanePrefix = false
+    if event.key == nimkit.keyEscape:
+      return true
+    let command = event.paneCommand()
+    if command in {kpcFocusLeft, kpcFocusRight}:
+      pane.observedWindow[].suppressPaneShortcutText(event)
+      if command == kpcFocusRight:
+        discard pane.dockController[].focusFromSidebar()
+      return true
+  elif event.key == nimkit.keyW and event.modifiers == {nimkit.kmControl}:
+    pane.pendingPanePrefix = true
+    return true
+
+proc sidebarKeyMethod(
+    pane: KosmoSidebarPane, selector: nimkit.KeyEventSelector
+): nimkit.DynamicMethod =
+  let weakPane = pane.unsafeWeakRef()
+  result = proc(self: nimkit.DynamicAgent, invocation: var nimkit.Invocation) =
+    let event = invocation.argsAs(nimkit.KeyEvent)
+    if not weakPane.isNil and weakPane[].handleSidebarPaneKey(event):
+      invocation.setResult(true)
+    else:
+      invocation.setResult(self.performNext(selector, event).get(false))
+
+proc installSidebarKeys(pane: KosmoSidebarPane, target: nimkit.DynamicAgent) =
+  # Handle continuations before a focused field or outline consumes their text.
+  for selector in [nimkit.keyDown(), nimkitSelectors.performKeyEquivalent()]:
+    discard target.pushMethod(selector, pane.sidebarKeyMethod(selector))
+
+# Translate Kosmo's namespaced editing actions to NimKit commands so the
+# focused text field handles them before they reach the underlying editor.
+protocol KosmoFieldEditorCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
+  method dispatchCommand(
+      editor: nimkit.FieldEditor, args: nimkit.TryToPerformArgs
+  ): bool =
+    let selector = args.selector.nativeEditingCommand().get(args.selector)
+    editor.sendLocalIfHandled(selector, nimkit.ActionArgs(sender: args.sender))
+
+proc installSidebarFieldKeys(pane: KosmoSidebarPane, field: nimkit.TextField) =
+  let cell = field.textFieldCell()
+  var editor = cell.fieldEditorForView(field)
+  if editor.isNil:
+    editor = nimkit.newFieldEditor()
+    let fieldEditor = editor
+    let editorMethod: nimkit.DynamicMethod = proc(
+        self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+    ) =
+      invocation.setResult(fieldEditor)
+    discard cell.replaceMethod(nimkit.fieldEditorForView(), editorMethod)
+  discard editor.withProtocol(KosmoFieldEditorCommandDispatch)
+  pane.installSidebarKeys(editor)
+
 proc updateSidebarFocus(pane: KosmoSidebarPane) =
   if pane.isNil:
     return
@@ -2342,10 +2474,14 @@ protocol KosmoSidebarAppearanceObserver of nimkit.WindowAppearanceEvents:
     pane.applyKosmoSidebarStyle(appearance)
 
 protocol KosmoSidebarFocusObserver of nimkit.WindowFocusEvents:
+  proc didResignKeyWindow(pane: KosmoSidebarPane) {.slot.} =
+    pane.pendingPanePrefix = false
+
   proc didChangeFirstResponder(
       pane: KosmoSidebarPane, previous: nimkit.Responder
   ) {.slot.} =
     discard previous
+    pane.pendingPanePrefix = false
     pane.updateSidebarFocus()
 
 proc stopObservingWindow(pane: KosmoSidebarPane) =
@@ -2396,7 +2532,7 @@ protocol KosmoSidebarPaneLayout of nimkit.ViewLayoutProtocol:
 
 proc newKosmoSidebarPane(
     tabs: nimkit.CompactTabView,
-    fileTree: KosmoFileTree,
+    fileBrowserPanel: KosmoFileBrowserPanel,
     searchPanel: KosmoFileSearchPanel,
 ): KosmoSidebarPane =
   let
@@ -2419,7 +2555,7 @@ proc newKosmoSidebarPane(
     contextPanel: contextPanel,
     splitView: splitView,
     tabs: tabs,
-    fileTree: fileTree,
+    fileTree: fileBrowserPanel.fileTree,
     searchPanel: searchPanel,
     activeIndicator: activeIndicator,
   )
@@ -2427,6 +2563,13 @@ proc newKosmoSidebarPane(
   result.clipsToBounds = true
   result.addSubview(splitView)
   discard result.withProtocol(KosmoSidebarPaneLayout)
+  result.installSidebarKeys(result)
+  result.installSidebarKeys(fileBrowserPanel.fileTree)
+  result.installSidebarKeys(searchPanel.resultsView)
+  for field in [
+    fileBrowserPanel.filterField, searchPanel.queryField, searchPanel.replacementField
+  ]:
+    result.installSidebarFieldKeys(field)
   result.updateSidebarFocus()
 
 protocol KosmoStatusIconDrawing of nimkit.ViewDrawingProtocol:
@@ -2471,10 +2614,32 @@ proc newKosmoStatusIconButton(
   result.acceptsFirstResponder = false
   discard result.withProtocol(KosmoStatusIconDrawing)
 
+const KosmoKeyModes = [
+  KosmoKeyMode(
+    identifier: "moe", title: "moe (vim)", inputPolicy: KosmoEditorInputPolicy.Vim
+  ),
+  KosmoKeyMode(
+    identifier: "normal",
+    title: "normal",
+    inputPolicy: KosmoEditorInputPolicy.Native,
+    forceInput: true,
+  ),
+]
+
 protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(bar: KosmoStatusBar) =
     let bounds = bar.bounds()
-    bar.label.setFrameFromLayout(bounds)
+    let
+      choiceWidth = min(100.0'f32, max(bounds.size.width - 8.0'f32, 0.0'f32))
+      choiceHeight = min(20.0'f32, max(bounds.size.height - 8.0'f32, 0.0'f32))
+      choiceX = max(bounds.size.width - choiceWidth - 4.0'f32, 0.0'f32)
+      choiceY = (bounds.size.height - choiceHeight) * 0.5'f32
+    bar.label.setFrameFromLayout(
+      nimkit.rect(0, 0, max(choiceX - 4.0'f32, 0.0'f32), bounds.size.height)
+    )
+    bar.keyModeChoice.setFrameFromLayout(
+      nimkit.rect(choiceX, choiceY, choiceWidth, choiceHeight)
+    )
     if not bar.fileButton.isNil:
       bar.fileButton.setFrameFromLayout(
         nimkit.rect(2, 0, KosmoStatusIconWidth, bounds.size.height)
@@ -2510,6 +2675,15 @@ proc applyKosmoStatusBarStyle(bar: KosmoStatusBar, base: nimkit.Appearance) =
     selector, nimkit.StyleTextInsets, nimkit.insets(0.0'f32, textInset)
   )
   bar.label.appearance = appearance
+  let choiceSelector =
+    nimkit.initStyleSelector(nimkit.srComboBox, id = KosmoKeyModeSelectorIdentifier)
+  appearance.setStyle(
+    choiceSelector, nimkit.StyleFontSize, max(fontSize - 2.0'f32, 10.0'f32)
+  )
+  appearance.setStyle(choiceSelector, nimkit.StyleTextInsets, nimkit.insets(0.0, 4.0))
+  appearance.setStyle(choiceSelector, nimkit.StyleIndicatorSize, 16.0'f32)
+  appearance.setStyle(choiceSelector, nimkit.StyleMinimumSize, nimkit.initSize(0, 20))
+  bar.keyModeChoice.appearance = appearance
 
 protocol KosmoStatusBarAppearanceObserver of nimkit.WindowAppearanceEvents:
   proc didChangeEffectiveAppearance(
@@ -2533,9 +2707,22 @@ proc observeWindow(bar: KosmoStatusBar, window: nimkit.Window) =
 
 proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStatusBar =
   label.styleId = KosmoStatusLabelStyleId
-  result = KosmoStatusBar(label: label)
+  let
+    menu = nimkit.newMenu("Editor keymode")
+    choice = nimkit.newPopupMenuButton(KosmoKeyModes[0].title, menu)
+  choice.identifier = KosmoKeyModeSelectorIdentifier
+  choice.styleId = KosmoKeyModeSelectorIdentifier
+  choice.accessibilityLabel = "Editor keymode"
+  choice.toolTip = "Editor keymode"
+  choice.acceptsFirstResponder = false
+  for mode in KosmoKeyModes:
+    let item = nimkit.newMenuItem(mode.title)
+    item.identifier = mode.identifier
+    menu.addItem(item)
+  result = KosmoStatusBar(label: label, keyModeChoice: choice)
   result.initViewFields()
   result.addSubview(label)
+  result.addSubview(choice)
   if withSidebarButtons:
     result.fileButton = newKosmoStatusIconButton(
       nimkit.newSvgMtsdfResource(KosmoFilesIconSvg, "kosmo-status-files"), "Files"
@@ -2546,6 +2733,48 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     result.addSubview(result.fileButton)
     result.addSubview(result.findButton)
   discard result.withProtocol(KosmoStatusBarLayout)
+
+proc syncKeyModeChoices(controller: KosmoDockController) =
+  var selectedMode = KosmoKeyModes[0]
+  for mode in KosmoKeyModes:
+    if mode.inputPolicy == controller.editorInputPolicy:
+      selectedMode = mode
+      break
+  for host in controller.hosts:
+    let choice = host.contentView.viewWithIdentifier(KosmoKeyModeSelectorIdentifier)
+    if choice of nimkit.PopupMenuButton:
+      let button = nimkit.PopupMenuButton(choice)
+      for item in button.menu().items():
+        let selected = item.identifier() == selectedMode.identifier
+        let state = if selected: nimkit.bsOn else: nimkit.bsOff
+        if item.state() != state:
+          item.state = state
+      if button.title() != selectedMode.title:
+        button.title = selectedMode.title
+
+proc newKeyModeTarget(
+    controller: KosmoDockController, mode: KosmoKeyMode
+): nimkit.DynamicAgent =
+  let weakController = controller.unsafeWeakRef()
+  result = nimkit.newActionTarget(nimkit.actionSelector("kosmo.selectKeyMode")) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    if weakController.isNil:
+      return
+    let controller = weakController[]
+    if controller.frontend.isNil:
+      return
+    let frontend = controller.frontend[]
+    frontend.setEditorInputPolicy(mode.inputPolicy)
+    frontend.setForceInputMode(mode.forceInput)
+
+proc configureKeyModeChoice(bar: KosmoStatusBar, controller: KosmoDockController) =
+  for index, mode in KosmoKeyModes:
+    let item = bar.keyModeChoice.menu()[index]
+    item.action = nimkit.actionSelector("kosmo.selectKeyMode")
+    item.target = controller.newKeyModeTarget(mode)
+  controller.syncKeyModeChoices()
 
 proc syncSidebarButtons(frontend: KosmoApplication) =
   if frontend.isNil or frontend.documentView.isNil:
@@ -2638,6 +2867,52 @@ proc setContentView(pane: KosmoEditorPane, contentView: nimkit.View) =
         responder = nimkit.Responder(document.preferredFirstResponder)
     discard nimkit.Window(owner).makeFirstResponder(responder)
 
+proc dispatchContentEditingCommand(
+    pane: KosmoEditorPane, args: nimkit.TryToPerformArgs
+): bool =
+  let command = args.selector.nativeEditingCommand()
+  if command.isNone or pane.contentView == nimkit.View(pane.editorView):
+    return
+  # Retry Kosmo's namespaced shortcut as a native command within the visible
+  # content. This also reaches text views created lazily by document viewers.
+  let owner = pane.window()
+  if owner of nimkit.Window:
+    let focused = nimkit.Window(owner).firstResponder()
+    var ancestor = focused
+    while not ancestor.isNil and ancestor != nimkit.Responder(pane):
+      ancestor = ancestor.nextResponder()
+    var target = if ancestor.isNil: nil else: focused
+    while not target.isNil and target != nimkit.Responder(pane):
+      if target.tryToPerform(command.get(), args.sender) or
+          not target.localMethod(command.get().name).isNil:
+        return true
+      target = target.nextResponder()
+  # Container focus uses the document's preferred responder, just as tab
+  # activation does. Markdown buffer previews are hosted directly by the pane.
+  var preferred: nimkit.Responder
+  if pane.contentView == nimkit.View(pane.markdownView):
+    preferred = pane.markdownView.textView()
+  elif not pane.dockGroup.isNil:
+    let group = pane.dockGroup[]
+    let document = group.documentForIdentifier(group.selectedTabIdentifier)
+    if not document.isNil:
+      preferred = document.preferredFirstResponder
+  if not preferred.isNil:
+    discard preferred.tryToPerform(command.get(), args.sender)
+  # Unsupported edits belong to the visible document too. In particular,
+  # pasting into a reader must never modify the hidden Moe buffer.
+  true
+
+protocol KosmoEditorPaneEvents of nimkit.ResponderEventProtocol:
+  method mouseDown(pane: KosmoEditorPane, event: nimkit.MouseEvent): bool =
+    if event.button != nimkit.mbPrimary or pane.dockGroup.isNil or pane.contentView.isNil or
+        not pane.contentView.frame().contains(event.location):
+      return
+    let handler = pane.editorView.tabsDelegate
+    if handler.isNil or handler.dockController.isNil:
+      return
+    handler.dockController[].focusGroup(pane.dockGroup[])
+
 protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtocol:
   method dispatchCommand(pane: KosmoEditorPane, args: nimkit.TryToPerformArgs): bool =
     if pane.dockGroup.isNil:
@@ -2647,25 +2922,8 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
         group.editorView.tabsDelegate.dockController.isNil:
       return false
     let controller = group.editorView.tabsDelegate.dockController[]
-    if pane.contentView == nimkit.View(pane.markdownView):
-      let firstResponder = group.window.firstResponder()
-      let previewTextView =
-        if firstResponder of nimkit.TextView:
-          nimkit.TextView(firstResponder)
-        else:
-          pane.markdownView.textView()
-      case $args.selector.name
-      of KosmoCopyAction, "copy":
-        discard previewTextView.copyText()
-        return true
-      of KosmoCutAction, KosmoPasteAction, KosmoUndoAction, KosmoRedoAction, "cut",
-          "paste", "undo", "redo":
-        return true
-      of KosmoSelectAllAction, "selectAll":
-        previewTextView.selectAllText()
-        return true
-      else:
-        discard
+    if pane.dispatchContentEditingCommand(args):
+      return true
     if ($args.selector.name).isEditingAction():
       group.editorView.selectVisibleBuffer(
         group.editorView.visibleTabs(group.editorView.editor.tabs())
@@ -2690,6 +2948,9 @@ protocol KosmoEditorPaneCommandDispatch of nimkit.ResponderCommandDispatchProtoc
     of KosmoNewTerminalAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].newTerminal()
+    of KosmoShowTerminalAction:
+      if not controller.frontend.isNil:
+        discard controller.frontend[].showTerminal()
     of KosmoShowGitHubAction:
       if not controller.frontend.isNil:
         discard controller.frontend[].showGitHub()
@@ -2868,6 +3129,7 @@ proc markdownSearchDidLayout(
 proc newKosmoMarkdownView(editorView: KosmoEditorView): KosmoMarkdownView =
   result = KosmoMarkdownView()
   result.initMarkdownViewFields(syntaxHighlighter = nimkit.matterSyntaxHighlighter)
+  result.matterGrammarSources = editorView.editor.viewerGrammarSources()
   result.editorView = editorView.unsafeWeakRef()
   let weakView = result.unsafeWeakRef()
   result.search = newKosmoViewerSearch(
@@ -3229,6 +3491,7 @@ proc newKosmoEditorPane(editorView: KosmoEditorView): KosmoEditorPane =
   result.popupList.hidden = true
   result.addSubview(result.popupList)
   discard result.withProtocol(KosmoEditorPaneLayout)
+  discard result.withProtocol(KosmoEditorPaneEvents)
   discard result.withProtocol(KosmoEditorPaneCommandDispatch)
   discard result.withProtocol(KosmoMarkdownLinkDelegate)
   result.markdownView.textView().delegate = nimkit.DynamicAgent(result)

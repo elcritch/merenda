@@ -111,7 +111,7 @@ To use Merenda in your own project, add this dependency to your `.nimble` file
 and run `atlas install -tuk` from that project:
 
 ```nim
-requires "https://github.com/elcritch/merenda"
+requires "merenda"
 ```
 
 Build your app with threads enabled and ARC or ORC, for example
@@ -122,20 +122,19 @@ FigDraw is compiled into the application. Merenda's experimental
 `useNativeDynlib` mode and `build_dynlib` task have been removed; omit
 `-d:useNativeDynlib` from existing build commands.
 
-## Tekton interface builder
+### Running with Dev Control Mode
 
-Build a resource document with Tekton's widget palette, property inspector, and live
-preview. Add layout guides and constraints, pin views to their parent, undo changes,
-and save the result for your Merenda app. Use **Interact** to try controls in the preview.
+Compile Merenda apps with `-d:merenda.devControl` for optional local screenshots and input automation.
+Setting `MERENDA_DEV_CONTROL=1` then starts and control socket.
+`MERENDA_BACKGROUND=1` supports automated runs without activating the app.
+See [development control](docs/dev-control.md) for the PID/socket CLI and protocol.
 
 ```sh
-nim r src/merenda/tekton.nim
-# Or open an existing interface:
-nim r src/merenda/tekton.nim path/to/interface.cbor
+MERENDA_DEV_CONTROL=1 MERENDA_BACKGROUND=1 ./examples/controls_showcase &
+app_pid=$!
+./deps/merenda-dev --pid "$app_pid" windows
+./deps/merenda-dev --pid "$app_pid" screenshot --window w1 --output /tmp/showcase.png
 ```
-
-See [Tekton's authoring workflow](docs/resources.md#tekton-resource-editor) for supported
-resources and how to load the saved interface in your app.
 
 ## A few small apps
 
@@ -471,75 +470,19 @@ template. The adapter owns edits, undo, and checking that source content is curr
 Hosts can route find shortcuts through `search.handleSearchKey(event)` and call
 `search.refreshSearch()` when their source changes.
 
+`SearchBar` is a regular `Box` containing standard text fields and buttons, arranged
+with `StackView`. For embedded controls, add `newSearchBar(frame = ...)` to a
+container (or use layout constraints) and set `hidden = false`. The host chooses
+whether it floats; query, error, and replacement changes do not override an
+embedded frame. `TextSearchController` anchors the floating controls with ordinary
+layout constraints, allowing their height to follow their content.
+
 ## Kosmo
 
 Kosmo is a code editor built with Merenda and Moe's Vim-style editing engine.
 It brings together a file browser, split panes, terminal tabs, Markdown previews,
 Git diffs, and GitHub issues and PRs. You can use it on its own or explore its
 source to see how a larger Merenda app fits together.
-
-Use the Files and Find icons at the left of the status bar to switch sidebar
-views. Click the active icon again to collapse the sidebar and give the editor
-the full window width; click either icon to reopen it at its previous width.
-
-Press `Cmd-F` on macOS or `Ctrl-F` elsewhere to search an editor, Markdown
-preview, Git diff, or GitHub tab. Use Enter / the arrow buttons to move through
-matches, `Cmd/Ctrl-G` and `Shift-Cmd/Ctrl-G` for next and previous, and Escape
-to close. Editor matches scroll to the center of the pane. Enable **`.*`** in any
-content search, including terminal tabs, to use Reni regular expressions. Searches
-default to literal text; Markdown, GitHub, diff, and terminal matches ignore case.
-
-Use Up/Down arrows to scroll Markdown, GitHub and Git diff viewers. Read-only
-NimKit text views share this scrolling behavior; editable text keeps its cursor
-movement. Markdown readers also support `j`/`k` to select visible headings and
-paragraphs and Enter to expand or collapse the selected section.
-
-Diff search includes collapsed sections and loads ordinary patches within the
-viewer's size limits. Open
-oversized patches explicitly to include their contents.
-
-The Files filter, Quick Open, and VS Code grammar search also offer **`.*`** for
-Reni expressions. Quick Open keeps fuzzy filename ranking when this is off.
-Invalid expressions show an error and clear stale results. Viewer expressions
-can span lines; terminal expressions can span soft-wrapped output and retain
-the original cell positions, including wide Unicode characters.
-Terminal find centers older matches where possible and stays at the bottom for
-matches near the end of the history.
-
-Editor search and the Find sidebar open with replacement controls collapsed.
-Click the chevron beside the search field to expand or collapse them without
-clearing the query or results. On macOS, `Option-Cmd-F` opens editor replacement
-and `Option-Shift-Cmd-F` opens replacement in files; elsewhere use
-`Alt-Ctrl-F` and `Alt-Shift-Ctrl-F`. The regular `Cmd/Ctrl-F` editor shortcut and
-`Shift-Cmd/Ctrl-F` file-search shortcut always return to search only.
-
-Editor replacement offers **Replace** and **Replace All**, with one undo step per
-operation. In the Find sidebar, run a search, expand replacement, enter text, then
-choose **Replace** for the selected match or **Replace All**. Both fields treat
-text literally by default. Enable **`.*`** to use Reni regular expressions in the
-query and capture templates in the replacement: `$0` is the entire match, `$1`
-and later numbers are captures, `${name}` is a named capture, and `$$` inserts a
-dollar sign. For example, search `(?<name>cat|dog)` and replace with `${name}!`.
-When named groups are present, Reni treats unnamed groups as noncapturing.
-Matching is line by line, with Unicode-aware offsets; replacement text may
-contain newlines. Invalid patterns or capture references show an error, and
-invalid replacement templates leave files and buffers untouched. Empty
-replacement text deletes matches. File replacement
-saves the displayed results, including any search limits, checks that matched lines
-still agree with the results, and skips files with unsaved editor changes. Its status
-reports replacements and skipped files, then refreshes the search.
-
-Filesystem notifications keep the browser and Quick Open inventory current.
-On macOS, one FSEvents stream covers a project tree; linked folders and Git
-metadata outside that tree retain their own streams. If native monitoring
-cannot cover a path, Kosmo polls periodically and logs the cause and affected
-paths. Missing directories and exhausted watch capacity are retried automatically.
-
-Open, Open Folder, and Save As share a resizable file browser with Places shortcuts,
-Back/Forward/Up navigation, and an editable location field. Enter an absolute path,
-a relative folder, or `~/` and press Return to navigate. The file list and Name
-column expand with the dialog; Save As keeps the filename below the browser so you
-can change folders without losing the name you typed.
 
 ### Install and open a project
 
@@ -561,184 +504,16 @@ kosmo .
 kosmo README.md
 ```
 
-These commands reuse a running Kosmo instance. Use `kosmo --bg ./folder/` to
-start a new instance detached from your shell, or `kosmo --new ./folder/` to
-start a new instance in the foreground. `kosmo -v` and `kosmo --version` print
-the version and exit. On macOS, you can also open `Kosmo.app` from Finder.
-
-Add one or more folders to the existing Kosmo window with `--add`:
+These commands reuse a running Kosmo instance.
+Use `kosmo --bg ./folder/` to start a new instance detached from your shell.
+Start a new instance with `kosmo --new ./folder/`.
+`kosmo -v` and `kosmo --version` print the version and exit.
+On macOS, you can also open `Kosmo.app` from Finder.
 
 ```sh
 kosmo --add ../shared-library
+kosmo --bg ../shared-library
 ```
-
-Use Quick Open to find a file, drag tabs to arrange your panes, or choose
-File → New Terminal to open a shell. Markdown files open as previews, with a
-control to switch to the source editor. Merenda Settings places the theme and
-UI scale in Appearance, fonts in Typography, and scrolling in Behavior.
-
-In Moe's normal mode, `:e path` opens a Kosmo document tab or selects the file's
-existing tab.
-`:help` and `:config` open reusable tabs; `:config` keeps Moe's interactive
-settings viewer and its selection when you switch tabs, and closes with `:q`.
-`:split` (`:sp`) opens the current buffer in a pane below, and `:vsplit` (`:vs`)
-opens it in a pane to the right. Add a filename to open that file in the new
-pane; relative paths use the editor's working directory. `:new` and `:vnew`
-create empty buffers in those panes. Moe mappings for these commands and
-`mode_switch config` use the same Kosmo tabs and panes.
-
-`:wq`, `:x`, and `ZZ` save and close the selected native tab; other unsaved
-tabs stay open. `:bd` accepts a buffer number or filename and removes that
-buffer from every pane, refusing unsaved changes unless you add `!`.
-Undo and Redo also work while typing, including when Input mode is forced.
-Vim's `"+` and `"*` registers use the native clipboard; on platforms with one
-clipboard, both registers share it.
-
-Kosmo advances Moe's background work from the native event loop, including
-when Git monitoring is disabled. Hook output, build output, and `:jobs` use a
-reusable Command Output tab. `:jobs!` stops running external commands.
-`:terminal`, shell commands, and manual pages open native terminal tabs.
-Kosmo loads `[Hook]` settings from `~/.config/moe/moerc.toml`; Moe's read/write
-hook rules apply to native file opens and saves too.
-
-Unsaved work is checkpointed every five seconds after changes into Kosmo's
-recovery cache and removed on a clean close. After an interrupted session,
-Kosmo opens Recovered Work when preserved copies exist. Use `:recover` to
-open that tab again. Restore brings a copy into an unsaved editor buffer as
-an undoable edit; Discard requires a second click to confirm removal.
-
-Settings changes apply to the current Kosmo instance immediately. Choose
-**Save as Default** to use the committed theme, fonts, scale, and scrolling
-choices on the next launch; **Reset** restores the last saved values. You can
-also enable **Remember changes for future launches** to save each committed
-change automatically.
-
-Terminal tabs sleep on PTY readiness while idle. A dedicated Sigils dispatcher
-owns their sessions, reads and parses output, and accepts input and resize commands.
-The UI consumes owned RChan snapshots without waiting for the parser. This worker
-path is shared across platforms; native PTY startup currently requires POSIX.
-For native timing measurements with `cmatrix`, `ps`, or a 10,000-line burst, see
-[terminal latency diagnostics](docs/terminal-latency.md).
-
-Terminals default to **Hybrid** input: `Ctrl-W v` splits right, and
-`Ctrl-W h/j/k/l` or `Ctrl-W` followed by an arrow navigates panes. On Linux and
-Windows, `Ctrl-C` copies the terminal selection and `Ctrl-V` pastes. Prefix a
-shortcut with `Ctrl-\` to send it to the shell: `Ctrl-\ Ctrl-C` interrupts,
-and `Ctrl-\ Ctrl-W v` sends the whole pane chord. **Kosmo Settings → Terminal →
-Terminal input** switches between Hybrid and **Raw shortcuts**, which sends
-Control keys directly. The choice applies to existing terminals and saves for
-future launches as `"terminalInput": "hybrid"` or `"raw"` in
-`~/.config/kosmo/config.json`. See the [shortcut guide](src/merenda/kosmo/docs/shortcuts.md#terminal-input-policies)
-for prefix cancellation and platform details.
-
-Kosmo Settings → Moe Themes includes Catppuccin Latte, Catppuccin Mocha,
-Kanagawa Wave, One Dark, and Tokyo Night Moon. These themes are embedded in
-the executable and work from any launch directory. Add your own TOML themes
-in `~/.config/moe/themes`; a user theme with the same name overrides a bundled
-theme.
-
-Kosmo's file tree indents children by 10 points per level. To change this,
-add `"fileTreeIndentation": 8.0` to `~/.config/kosmo/config.json` and restart
-Kosmo. Values are nonnegative points per level; `0.0` removes indentation.
-
-To use a Nim language server, add `nimLspCommand` to Kosmo's
-`~/.config/kosmo/config.json` and restart Kosmo. The command must be an
-absolute executable path followed by any arguments. Nimdex 0.1.2 defaults to
-`nim ic` and requires a compiler with `--genBif:on` support, plus matching
-`nifler` and `nifmake` companions beside Nim or on `PATH`. For example, build
-[Nimdex](https://github.com/elcritch/nimdex) from its checkout with that compiler:
-
-```sh
-cd ../nimdex
-mkdir -p bin
-/absolute/path/to/bif-enabled/nim c -d:release -o:bin/nimdex src/nimdex.nim
-```
-
-Add this field to the JSON config, using absolute paths without spaces:
-
-```json
-{
-  "nimLspCommand": "/absolute/path/to/nimdex/bin/nimdex daemon --compiler /absolute/path/to/bif-enabled/nim --log-file /absolute/path/to/nimdex.log"
-}
-```
-
-Kosmo enables Moe's LSP client when this field is set. In normal mode, press
-`g` then `d` to go to a definition, or `K` to show hover information. Remove
-the field or set it to an empty string to disable LSP on the next launch.
-Nimdex's `daemon` command communicates over standard input and output and stays
-attached to Kosmo; it does not need to detach itself.
-`--log-file` appends daemon stderr to the chosen file and creates missing parent
-directories. Omit it to send logs through Kosmo's LSP message log.
-
-To run Nimdex separately, start its persistent LSP TCP listener in another
-terminal:
-
-```sh
-/absolute/path/to/nimdex/bin/nimdex daemon --lsp-listen 9257 --compiler /absolute/path/to/bif-enabled/nim --log-file /absolute/path/to/nimdex.log
-```
-
-Set `nimLspCommand` to the listener's `tcp://host:port` address and restart Kosmo:
-
-```json
-{
-  "nimLspCommand": "tcp://127.0.0.1:9257"
-}
-```
-
-Hostnames, IPv4 addresses, and bracketed IPv6 addresses such as
-`tcp://[::1]:9257` are accepted. Kosmo connects in its dedicated LSP child
-process and forwards standard LSP `Content-Length` frames in both directions.
-It does not launch the server; connection errors appear in the LSP message log,
-and closing Kosmo disconnects its session while Nimdex keeps listening for the
-next connection. Nimdex serves one editor session at a time, so use a separate
-listener for each concurrently connected Kosmo window.
-Kosmo initializes each connection with its editor's project directory as the
-LSP workspace root.
-
-Nimdex binds to `127.0.0.1` by default. `--lsp-listen 0` chooses an available
-port and records it in the daemon log. For another bind address, including a
-Tailscale address, add `--lsp-host ADDRESS` and use that address in Kosmo's TCP
-URL. The server must be able to access the same project and document paths;
-TCP does not translate paths between machines. Use `--lsp-listen` for editor
-LSP; Nimdex's separate `--listen` option serves its CLI query protocol.
-
-Syntax colors arrive progressively as background workers finish small batches.
-Markdown previews display their content before fenced-code coloring finishes;
-selection, code-block scroll positions, and text layout survive those color updates.
-Kosmo includes NIF syntax highlighting by default for `.nif` files.
-
-To add language highlighting, open **Kosmo Settings → TextMate Grammars** and
-search the built-in language grammars in the open-source `microsoft/vscode`
-repository by language name, file extension, or TextMate scope. Select a result
-to download, validate, and install its grammar files into Kosmo's user
-configuration. This searches VS Code's source repository, not its extension
-Marketplace.
-
-You can also send a Git diff straight to Kosmo:
-
-```sh
-git diff | kosmo --diff
-```
-
-Choose **File → Show GitHub Issues and PRs** to read the active project's issues
-and pull requests in a Markdown tab, or press `Cmd/Ctrl-Shift-H`. Install the
-[GitHub CLI](https://cli.github.com/) and sign in with `gh auth login` first;
-the viewer uses the project's GitHub remote and your existing CLI credentials.
-It defaults to open items, with controls for issues, pull requests, or both,
-and open, closed, or all states.
-
-Descriptions render as Markdown alongside authors, labels, draft status, and PR
-branch and review details. PRs also show a job summary and each CI check's workflow,
-status, and link to its details. Click a section heading to expand or collapse it;
-use the link beneath an item's heading to open it on GitHub. Use
-`Cmd-F`/`Ctrl-F` to search the rendered page, and choose **Refresh** to fetch updates.
-Each list shows up to 100 items and indicates when that limit is reached. Fetches
-run in the background and are cancelled when the tab closes. Enable **Auto-refresh**
-to poll every 30 seconds and refresh after workspace changes; it starts off,
-like the Git Diff viewer. Automatic requests wait for the current fetch to finish.
-Manual and automatic refreshes retain expanded and collapsed sections, including
-when items move or their titles change. Switching projects resets section state.
-The action can be assigned a shortcut in Kosmo Settings.
 
 Run `kosmo --help` for command-line options. See the
 [keyboard shortcut guide](src/merenda/kosmo/docs/shortcuts.md) for navigation
@@ -746,6 +521,10 @@ and Vim bindings, or [release and installer details](docs/releasing-kosmo.md)
 for supported builds, custom install locations, and the static Linux build.
 
 ### Build from source
+
+Install HarfBuzz and FriBidi development libraries for your platform first
+(`brew install harfbuzz fribidi pkg-config` on macOS, or the `libharfbuzz-dev`
+and `libfribidi-dev` packages on Debian/Ubuntu).
 
 From your Merenda checkout, install the extra Kosmo dependencies, then build
 and launch it:
@@ -756,18 +535,31 @@ nim c -o:kosmo src/merenda/kosmo/kosmo.nim
 ./kosmo .
 ```
 
-On Windows, run `./kosmo.exe .` after compiling.
+On Windows, open a Visual Studio x64 Developer PowerShell and run
+`bash .github/scripts/install-msvc-nim.sh` using Git for Windows Bash.
+Use the compiler path it prints to build with
+`& "<compiler-path>" c --cc:vcc -o:kosmo.exe src/merenda/kosmo/kosmo.nim`,
+then run `./kosmo.exe .`.
+The script makes a private copy of the official Nim 2.2.10 distribution,
+installs checksum-verified atomic and large-string fixes, and builds the corrected
+compiler once. Worker threads need the atomic fix; an unpatched MSVC build is
+rejected at compile time. The string fix lets ARC/ORC embed the bundled assets.
+Keep the Developer shell open when building: the project invokes `cl.exe`
+directly so large applications can link using response files.
 
 On macOS, install the current checkout as a complete `Kosmo.app` with its icon,
 bundled notices, debug symbols, and local code signature:
 
 ```sh
+brew install cmake meson ninja
 nim install_kosmo
 ```
 
 This uses Atlas to resolve dependencies, replaces `~/Applications/Kosmo.app`,
 and updates the `~/.local/bin/kosmo` link. Restart Kosmo if it was already
 running. Set `KOSMO_INSTALL_DIR` or `KOSMO_BIN_DIR` to choose other locations.
+This build links HarfBuzz and FriBidi statically with `-d:harfbuzzyStatic`,
+so the installed app does not require Homebrew at runtime.
 
 ## Explore more
 
@@ -789,8 +581,25 @@ These are good places to go once you've tried the basics:
 - Building UI from resources: [resource guide](docs/resources.md) and
   [example](examples/resource_ui_demo.nim).
 - Development checks: [reliability and memory profiling](docs/reliability.md).
+- Windows on FreeBSD: [disposable bhyve test VM and GPU passthrough](tools/windows-bhyve/README.md).
+- Windows VirtualBox: [setup and FreeBSD GPU test results](tools/windows-virtualbox/README.md).
 - Under the hood: [NimKit design](docs/design.md),
   [Kosmo workspace updates](docs/kosmo-workspace.md),
   [FigDraw](https://github.com/elcritch/figdraw/),
   [Siwin](https://github.com/levovix0/siwin), and
   [Sigils](https://github.com/elcritch/sigils).
+
+## Tekton interface builder
+
+Build a resource document with Tekton's widget palette, property inspector, and live
+preview. Add layout guides and constraints, pin views to their parent, undo changes,
+and save the result for your Merenda app. Use **Interact** to try controls in the preview.
+
+```sh
+nim r src/merenda/tekton.nim
+# Or open an existing interface:
+nim r src/merenda/tekton.nim path/to/interface.cbor
+```
+
+See [Tekton's authoring workflow](docs/resources.md#tekton-resource-editor) for supported
+resources and how to load the saved interface in your app.

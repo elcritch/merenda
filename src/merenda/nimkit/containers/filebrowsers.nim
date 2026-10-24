@@ -12,7 +12,7 @@ import ../text/textfields
 import ../view/views
 from ../view/viewgeometry import setFrameFromLayout
 import ./stackviews
-import ./tableviews
+import ../tables/tableviews
 
 export tableviews
 

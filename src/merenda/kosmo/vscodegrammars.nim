@@ -74,6 +74,21 @@ func defaultKosmoVscodeGrammarDirectory*(): string =
   ## Return Kosmo's user configuration folder for installed grammars.
   getConfigDir() / "kosmo" / KosmoVscodeGrammarDirectoryName
 
+proc viewerGrammarSources*(
+    installed: openArray[InstalledVscodeGrammar]
+): seq[nimkit.MatterGrammarSource] =
+  ## Convert validated installations to value snapshots for viewer workers.
+  for grammar in installed:
+    for source in grammar.sources:
+      var converted = nimkit.MatterGrammarSource(
+        path: source.path, content: source.content, scopeName: source.scopeName
+      )
+      if source.path == grammar.directory / grammar.candidate.rootPath:
+        converted.languageId = grammar.candidate.languageId
+        converted.extensions = grammar.candidate.extensions
+        converted.fileNames = grammar.candidate.fileNames
+      result.add move converted
+
 proc validCommitSha(value: string): bool =
   if value.len != 40:
     return
@@ -249,11 +264,9 @@ proc matchesVscodeGrammarQuery(
     pattern: TextSearchPattern,
     compactPattern: Option[TextSearchPattern],
 ): bool =
-  var fields =
-    @[
-      candidate.name, candidate.extensionFolder, candidate.languageId,
-      candidate.scopeName,
-    ]
+  var fields = @[
+    candidate.name, candidate.extensionFolder, candidate.languageId, candidate.scopeName
+  ]
   fields.add candidate.extensions
   fields.add candidate.fileNames
   for field in fields:

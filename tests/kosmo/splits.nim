@@ -8,6 +8,16 @@ import merenda/nimkit/text/monotextviews as monoTextViews
 import merenda/kosmo/kosmo
 import fixtures/ui
 
+type QueuedPaneRefresh = ref object of Agent
+  view: KosmoEditorView
+  calls: int
+
+proc refreshPane(refresh: QueuedPaneRefresh) {.slot.} =
+  inc refresh.calls
+  refresh.view.refresh()
+
+proc paneRefreshRequested(refresh: QueuedPaneRefresh) {.signal.}
+
 proc numberedLines(prefix: string, count: Natural): string =
   var lines = newSeqOfCap[string](count)
   for index in 0 ..< count:
@@ -347,6 +357,134 @@ suite "Kosmo":
     check frontend.documentTabs.len == 1
     check frontend.documentTabs.selectedDocumentTabIdentifier == tabIdentifier
 
+  test "queued pane refreshes preserve grids during clicks and keyboard edits":
+    let root = createTempDir("merenda-kosmo-pane-reentry-", "")
+    let paths = [root / "first.txt", root / "second.txt"]
+    let names = ["first", "second"]
+    for index, path in paths:
+      writeFile(path, numberedLines(names[index], 80))
+    defer:
+      for path in paths:
+        removeFile(path)
+      removeDir(root)
+
+    let frontend = newKosmoApplication(
+      newApplication("Kosmo Pane Reentry Test"), monitorsGitStatus = false
+    )
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.openPath(paths[0])
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    require frontend.window.dispatchKeyDown(KeyEvent(key: keyV, keyCode: keyV.ord))
+    # Consume the split shortcut's suppressed text commit before editing.
+    require frontend.window.dispatchTextInput("v")
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.openPath(paths[1])
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    let refresh = QueuedPaneRefresh(view: groups[1].editorView)
+    connectQueued(refresh, paneRefreshRequested, refresh, refreshPane)
+
+    # Deliver the other pane's redraw at the old mid-render polling point.
+    # Neither its content nor its projection ownership may leak into this grid.
+    emit refresh.paneRefreshRequested()
+    groups[0].editorView.refresh()
+    check "first row 0" in groups[0].editorView.displayedText()
+    check "second row" notin groups[0].editorView.displayedText()
+    check refresh.calls == 0
+    discard getCurrentSigilThread().pollAll(NonBlocking)
+    check refresh.calls == 1
+
+    for index, group in groups:
+      let other = groups[1 - index]
+      refresh.view = other.editorView
+      let point = group.editorView.pointToWindow(initPoint(100, 30))
+      emit refresh.paneRefreshRequested()
+      require frontend.window.mouseDownAt(point)
+      require frontend.window.mouseUpAt(point)
+      require frontend.window.firstResponder() == Responder(group.editorView)
+      check names[index] & " row" in group.editorView.displayedText()
+      check names[1 - index] & " row" notin group.editorView.displayedText()
+      let selected = group.editorView.editor.captureViewState().bufferId
+      require selected.isSome
+      let beforeEdit = group.editorView.editor.bufferText(selected.get)
+      require beforeEdit.isSome
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      let otherBuffer = group.editorView.editor.captureViewState().bufferId
+      require otherBuffer.isSome
+      require otherBuffer != selected
+      let otherBeforeEdit = group.editorView.editor.bufferText(otherBuffer.get)
+      emit refresh.paneRefreshRequested()
+      require frontend.window.dispatchTextInput("x")
+      check group.editorView.editor.captureViewState().bufferId == selected
+      check group.editorView.editor.bufferText(selected.get).get.len ==
+        beforeEdit.get.len - 1
+      check group.editorView.editor.bufferText(otherBuffer.get) == otherBeforeEdit
+      check names[index] & " row" in group.editorView.displayedText()
+      check names[1 - index] & " row" notin group.editorView.displayedText()
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      check names[index] & " row" in group.editorView.displayedText()
+      check names[1 - index] & " row" in other.editorView.displayedText()
+
+  test "clicking between editor panes moves the caret without selecting text":
+    let frontend = newKosmoApplication(newApplication("Kosmo Pane Click Test"))
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let editor = frontend.editorView.editor
+    require editor.handleKey("i")
+    require editor.handleTextInput(
+      "alpha beta gamma ".repeat(40) & "\nsecond line text"
+    )
+    require editor.handleKey("Esc")
+    frontend.editorView.refresh()
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
+    )
+    require frontend.window.dispatchKeyDown(KeyEvent(key: keyV, keyCode: keyV.ord))
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let groups = frontend.editorGroups()
+    require groups.len == 2
+    require frontend.dockView.rootView() of SplitView
+    let split = SplitView(frontend.dockView.rootView())
+    split.setPositionOfDivider(0, split.bounds().size.width * 0.3'f32)
+    frontend.contentView.layoutSubtreeIfNeeded()
+
+    var points: array[2, Point]
+    for index, group in groups:
+      group.editorView.refresh()
+      require editor.revealLocation(0, 80)
+      group.editorView.refresh()
+      let
+        cursor = editor.cursor()
+        metrics = group.editorView.monoTextMetrics()
+      points[index] = group.editorView.pointToWindow(
+        initPoint(
+          (cursor.column.float32 + 0.5'f32) * metrics.cellWidth,
+          (cursor.row.float32 + 0.5'f32) * metrics.lineHeight,
+        )
+      )
+
+    for interleaveRefresh in [false, true]:
+      for _ in 0 ..< 3:
+        for index, group in groups:
+          require frontend.window.mouseDownAt(points[index])
+          if interleaveRefresh:
+            groups[1 - index].editorView.refresh()
+          require frontend.window.mouseUpAt(points[index])
+          group.editorView.refresh()
+          check frontend.window.firstResponder() == Responder(group.editorView)
+          check editor.mode() == KosmoEditorMode.Normal
+          check editor.currentSelection().isNone
+          check editor.bufferCursor() == KosmoBufferCursor(line: 0, column: 80)
+
   test "duplicated buffer panes keep independent selections during repeated refreshes":
     let pasteboard = generalPasteboard()
     var savedClipboard: seq[tuple[kind: string, item: PasteboardItem]]
@@ -649,6 +787,43 @@ suite "Kosmo":
     let detachedWindow = frontend.detachedEditorWindows()[0]
     check detachedWindow.contentView() != nil
     check frontend.editorView.editor.tabs().len == 2
+    let
+      primaryChoiceView =
+        frontend.contentView.viewWithIdentifier(KosmoKeyModeSelectorIdentifier)
+      detachedChoiceView =
+        detachedWindow.contentView().viewWithIdentifier(KosmoKeyModeSelectorIdentifier)
+    require primaryChoiceView of PopupMenuButton
+    require detachedChoiceView of PopupMenuButton
+    let
+      primaryChoice = PopupMenuButton(primaryChoiceView)
+      detachedChoice = PopupMenuButton(detachedChoiceView)
+    require primaryChoice.menu()[1].perform(frontend.editorView)
+    check detachedChoice.title == "normal"
+    check frontend.forceInputMode()
+    require detachedChoice.menu()[0].perform(frontend.editorView)
+    check primaryChoice.title == "moe (vim)"
+    check not frontend.forceInputMode()
+
+    let terminal = newKosmoTerminalView()
+    defer:
+      terminal.close()
+    frontend.application.addWindow(frontend.window)
+    frontend.application.activateWindow(detachedWindow)
+    let detachedGroup = frontend.editorGroups()[1]
+    require detachedWindow.makeFirstResponder(detachedGroup.editorView)
+    require frontend.openDocument(
+      newKosmoPaneDocument("detached-terminal", "Terminal", terminal)
+    )
+    require frontend.newEditorTab()
+    frontend.application.activateWindow(frontend.window)
+    require frontend.window.makeFirstResponder(frontend.editorView)
+    require frontend.window.dispatchKeyDown(
+      KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: shortcutModifiers())
+    )
+    check frontend.application.keyWindow() == detachedWindow
+    check detachedWindow.firstResponder() == Responder(terminal)
+    check detachedGroup.pane.contentView == View(terminal)
+    check frontend.editorGroups().len == 2
 
   test "native tab bar sits above the editor grid":
     let frontend = newKosmoApplication(newApplication("Kosmo Tabs Layout Test"))

@@ -273,8 +273,14 @@ proc refreshAutoresizingReferenceIfNeeded*(view: View) =
     view.refreshAutoresizingReference()
 
 proc applyLayoutFrame*(view: View, frame: Rect, origin = lfoContainer) =
+  if origin == lfoSolver:
+    view.xNeedsLocalConstraintLayout = false
   if view.xFrame == frame:
     return
+  if origin == lfoContainer and view.xFrame.size != frame.size:
+    view.xNeedsLocalConstraintLayout = true
+    inc view.xLayoutInputRevision
+    view.xLayoutInputCache.dirtySources.incl lisAutoresizingMask
   view.xFrame = frame
   view.xBounds = rect(view.xBounds.origin, frame.size)
   view.xNeedsLayout = true

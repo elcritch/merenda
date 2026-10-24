@@ -639,12 +639,11 @@ proc parseDeclarationPatch(
     if token.value.kind == tkFunction and token.value.fnName.toLowerAscii() == "var":
       compositeVariable = not variable
   if compositeVariable:
-    let prototype =
-      @[
-        LocatedToken(value: Token(kind: tkFunction, fnName: "var")),
-        LocatedToken(value: Token(kind: tkIdent, ident: "--prototype")),
-        LocatedToken(value: Token(kind: tkCloseParen)),
-      ]
+    let prototype = @[
+      LocatedToken(value: Token(kind: tkFunction, fnName: "var")),
+      LocatedToken(value: Token(kind: tkIdent, ident: "--prototype")),
+      LocatedToken(value: Token(kind: tkCloseParen)),
+    ]
     result = declarationPatch(name, prototype)
     if not result.isNil:
       for key, candidate in result.values.mpairs:
@@ -829,61 +828,154 @@ proc valueText(value: StyleValue): string =
 
 const MaximumCssValueTokens = 4096
 
+type CssExpansionStatus = enum
+  cesResolved
+  cesMissing
+  cesInvalid
+
+proc variableArguments(
+    tokens: seq[LocatedToken], start: int, ending, fallback: var int, work: var int
+): bool =
+  if start + 2 >= tokens.len or tokens[start + 1].value.kind != tkIdent:
+    return
+  let name = tokens[start + 1].value.ident
+  if not name.startsWith("--") or name.len == 2:
+    return
+  ending = start + 2
+  fallback = -1
+  if tokens[ending].value.kind == tkCloseParen:
+    return true
+  if tokens[ending].value.kind != tkComma:
+    return
+  inc ending
+  fallback = ending
+  var depth = 1
+  while ending < tokens.len:
+    inc work
+    if work > MaximumCssValueTokens:
+      return
+    case tokens[ending].value.kind
+    of tkFunction, tkParenBlock:
+      inc depth
+    of tkCloseParen:
+      dec depth
+      if depth == 0:
+        return true
+    else:
+      discard
+    inc ending
+
+proc substituteVariables(
+  store: StyleTokenStore,
+  tokens: seq[LocatedToken],
+  expanded: var seq[LocatedToken],
+  native: var StyleValue,
+  visiting: var seq[string],
+  work: var int,
+  depth = 0,
+): CssExpansionStatus {.noSideEffect.}
+
+proc expandVariable(
+    store: StyleTokenStore,
+    name: string,
+    expanded: var seq[LocatedToken],
+    native: var StyleValue,
+    visiting: var seq[string],
+    work: var int,
+    depth: int,
+): CssExpansionStatus {.noSideEffect.} =
+  if depth >= 16 or visiting.len >= 16 or name in visiting:
+    return cesInvalid
+  var value: StyleValue
+  if not store.lookupToken(name, value) or value.kind == svMissing:
+    return cesMissing
+  let previousDepth = visiting.len
+  visiting.add name
+  defer:
+    visiting.setLen(previousDepth)
+  if value.kind == svToken:
+    return store.expandVariable(
+      value.token.cssTokenName, expanded, native, visiting, work, depth + 1
+    )
+  var replacement: seq[LocatedToken]
+  let text = value.valueText
+  if text.len > 0:
+    if not compactValueTokens(text, replacement):
+      return cesInvalid
+    result = substituteVariables(
+      store, replacement, expanded, native, visiting, work, depth + 1
+    )
+    if result != cesResolved:
+      return
+  elif value.kind == svCssExpression:
+    return cesInvalid
+  if value.kind != svCssExpression:
+    native = value
+
 proc substituteVariables(
     store: StyleTokenStore,
     tokens: seq[LocatedToken],
     expanded: var seq[LocatedToken],
+    native: var StyleValue,
     visiting: var seq[string],
     work: var int,
-): bool =
+    depth = 0,
+): CssExpansionStatus =
   var index = 0
   while index < tokens.len:
     inc work
     if work > MaximumCssValueTokens or expanded.len >= MaximumCssValueTokens:
-      return
+      return cesInvalid
     let token = tokens[index]
     if token.value.kind == tkFunction and token.value.fnName.toLowerAscii() == "var":
-      if index + 2 >= tokens.len or tokens[index + 1].value.kind != tkIdent or
-          not tokens[index + 1].value.ident.startsWith("--") or
-          tokens[index + 2].value.kind != tkCloseParen:
-        return
+      var ending, fallback: int
+      if not variableArguments(tokens, index, ending, fallback, work):
+        return cesInvalid
       let name = tokens[index + 1].value.ident
-      if visiting.len >= 16 or name in visiting:
-        return
-      var value: StyleValue
-      if not store.lookupToken(name, value):
-        return
-      visiting.add name
-      while value.kind == svToken:
-        let alias = value.token.cssTokenName
-        if visiting.len >= 16 or alias in visiting or not store.lookupToken(
-          alias, value
-        ):
-          return
-        visiting.add alias
-      var replacement: seq[LocatedToken]
-      if not compactValueTokens(value.valueText, replacement) or
-          not substituteVariables(store, replacement, expanded, visiting, work):
-        return
-      # The caller owns its traversal stack, including token aliases.
-      while visiting.len > 0 and visiting[^1] != name:
-        visiting.setLen(visiting.len - 1)
-      visiting.setLen(visiting.len - 1)
-      index += 3
+      let previousLength = expanded.len
+      var replacementNative: StyleValue
+      var status =
+        store.expandVariable(name, expanded, replacementNative, visiting, work, depth)
+      if status == cesMissing and fallback >= 0:
+        if depth >= 16:
+          return cesInvalid
+        expanded.setLen(previousLength)
+        replacementNative = missingStyleValue()
+        status = substituteVariables(
+          store,
+          tokens[fallback ..< ending],
+          expanded,
+          replacementNative,
+          visiting,
+          work,
+          depth + 1,
+        )
+      if status != cesResolved:
+        return status
+      if replacementNative.kind != svMissing:
+        if index == 0 and ending == tokens.high:
+          native = replacementNative
+        elif expanded.len == previousLength:
+          # Exact font resources and native constraint lists have no CSS spelling.
+          return cesInvalid
+      index = ending + 1
     else:
       expanded.add token
       inc index
-  true
+  cesResolved
 
 proc expandCssExpression(
-    store: StyleTokenStore, expression: StyleValue, expanded: var seq[LocatedToken]
+    store: StyleTokenStore,
+    expression: StyleValue,
+    expanded: var seq[LocatedToken],
+    native: var StyleValue,
 ): bool =
   var tokens: seq[LocatedToken]
   if not compactValueTokens(expression.cssText, tokens):
     return
   var visiting: seq[string]
   var work = 0
-  substituteVariables(store, tokens, expanded, visiting, work)
+  substituteVariables(store, tokens, expanded, native, visiting, work) == cesResolved
 
 func sourceExpression(input, resolved: StyleValue): StyleValue =
   if input.kind == svToken:
@@ -901,6 +993,7 @@ type CssValueResolver = object
   cached: bool
   text, property: string
   patch: StylePatch
+  native: StyleValue
 
 proc resolveValue(
     resolver: var CssValueResolver,
@@ -928,9 +1021,19 @@ proc resolveValue(
       resolver.text = expression.cssText
       resolver.property = property
       resolver.patch = nil
+      resolver.native = missingStyleValue()
       var expanded: seq[LocatedToken]
-      if resolver.store.expandCssExpression(expression, expanded):
-        resolver.patch = declarationPatch(property, expanded)
+      if resolver.store.expandCssExpression(expression, expanded, resolver.native):
+        if resolver.native.kind == svMissing:
+          resolver.patch = declarationPatch(property, expanded)
+      else:
+        resolver.native = missingStyleValue()
+    if resolver.native.kind != svMissing:
+      resolved = resolver.native
+      var geometry: CssGeometryProperty
+      if resolved.kind == svConstraints and cssGeometryByKey(key, geometry):
+        return
+      return validateCssValue(key, resolved)
     if resolver.patch.isNil or key notin resolver.patch.values:
       return
     resolved = resolver.patch.values[key]
@@ -969,8 +1072,14 @@ proc resolveCssToken*(
   if resolved.kind != svCssExpression or kind in {svMissing, svToken, svCssExpression}:
     return true
   var tokens: seq[LocatedToken]
-  if not store.expandCssExpression(sourceExpression(styleToken(name), resolved), tokens):
+  var native: StyleValue
+  if not store.expandCssExpression(
+    sourceExpression(styleToken(name), resolved), tokens, native
+  ):
     return
+  if native.kind != svMissing:
+    resolved = native
+    return true
   if kind in {svColor, svFill}:
     return tokens.fillValue(resolved)
   if kind == svConstraints:

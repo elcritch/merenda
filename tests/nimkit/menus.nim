@@ -575,11 +575,12 @@ suite "nimkit menus":
         menu = nativeMenus.NativeMenuDescription(
           identity: addr rootIdentity,
           title: "Main",
-          items: @[
-            nativeMenus.NativeMenuItemDescription(
-              title: "File", enabled: true, submenu: child
-            )
-          ],
+          items:
+            @[
+              nativeMenus.NativeMenuItemDescription(
+                title: "File", enabled: true, submenu: child
+              )
+            ],
         )
       var retiredItems: array[20, pointer]
       defer:
@@ -882,6 +883,123 @@ suite "nimkit menus":
 
     check not inheritedPinstripeFound
     check clippedPopupChromeFound
+
+  test "popup titles stay clear of checkmarks and align with unchecked rows":
+    for scenario in [
+      (titles: @["moe (vim)", "normal"], marked: 1, state: bsOn),
+      (titles: @["moe (vim)", "normal"], marked: 1, state: bsMixed),
+      (titles: @["-", "^", "^2", "^3"], marked: 0, state: bsOn),
+    ]:
+      let
+        appearance = initAppearance(initTheme())
+        popup = newPopupListView(
+          PopupListData(
+            itemCount: proc(): int =
+              scenario.titles.len,
+            itemText: proc(index: int): string =
+              scenario.titles[index],
+            itemState: proc(index: int): ButtonState =
+              if index == scenario.marked: scenario.state else: bsOff,
+          )
+        )
+      popup.frame = rect(0, 0, 160, popup.popupListContentSize(appearance).height)
+      var
+        mark: Fig
+        titles: seq[Fig]
+      let markText = if scenario.state == bsOn: "✓" else: "-"
+      for node in buildRenders(popup, appearance)[PopupDrawLevel].nodes:
+        if node.kind == nkText:
+          let text = node.renderedText()
+          if text == markText:
+            mark = node
+          elif text in scenario.titles:
+            titles.add node
+      require mark.kind == nkText
+      require titles.len == scenario.titles.len
+      for title in titles:
+        check mark.screenBox.x + mark.screenBox.w <= title.screenBox.x
+        check title.screenBox.x == titles[0].screenBox.x
+
+  test "small checked menus fit their contents and retain the anchor width":
+    let
+      window = newWindow("Compact checked menus", frame = rect(0, 0, 400, 240))
+      root = newView(frame = rect(0, 0, 400, 240))
+    defer:
+      window.close()
+    window.setContentView(root)
+    for titles in [@["-", "^", "^2", "^3"], @["moe (vim)", "normal"]]:
+      let
+        menu = newMenu("Compact")
+        button = newPopupMenuButton(titles[0], menu, rect(8, 8, 100, 24))
+      for index, title in titles:
+        let item = newMenuItem(title)
+        if index == 0:
+          item.state = bsOn
+        menu.addItem(item)
+      root.addSubview(button)
+      button.popupPresentation = ppInline
+      button.openPopup()
+      require root.subviews()[^1] of PopupListView
+      let popup = PopupListView(root.subviews()[^1])
+      check popup.frame().size.width >= button.bounds().size.width
+      check popup.frame().size.width < 180
+      button.closePopup()
+      button.removeFromSuperview()
+
+  test "menu measurement uses the host font and separates trailing accessories":
+    let
+      window = newWindow("Menu accessory columns", frame = rect(0, 0, 1200, 240))
+      root = newView(frame = rect(0, 0, 1200, 240))
+      menu = newMenu("Choices")
+      submenu = newMenu("More")
+      item = newMenuItem("A long checked menu title with accessories")
+      button = newPopupMenuButton("Choices", menu, rect(8, 8, 80, 24))
+    defer:
+      window.close()
+    var appearance = initAppearance(initTheme())
+    appearance.setStyle(initStyleSelector(srComboBoxItem), StyleFontSize, 20.0'f32)
+    root.appearance = appearance
+    item.state = bsOn
+    item.subtitle = "Cmd-Shift-X"
+    item.submenu = submenu
+    submenu.addItem(newMenuItem("Child"))
+    menu.addItem(item)
+    root.addSubview(button)
+    window.setContentView(root)
+    button.popupPresentation = ppInline
+    button.openPopup()
+    require root.subviews()[^1] of PopupListView
+    let popup = PopupListView(root.subviews()[^1])
+    var title, mark, shortcut, arrow: Fig
+    for node in buildRenders(popup, appearance)[PopupDrawLevel].nodes:
+      if node.kind == nkText:
+        case node.renderedText()
+        of "✓":
+          mark = node
+        of "Cmd-Shift-X":
+          shortcut = node
+        of ">":
+          arrow = node
+        else:
+          title = node
+    require title.kind == nkText
+    require mark.kind == nkText
+    require shortcut.kind == nkText
+    require arrow.kind == nkText
+    check title.renderedText() == item.title()
+    check popup.frame().size.width > 180
+    check mark.screenBox.x + mark.screenBox.w <= title.screenBox.x
+    check title.screenBox.x + title.screenBox.w <= shortcut.screenBox.x
+    check shortcut.screenBox.x + shortcut.screenBox.w <= arrow.screenBox.x
+    require button.dispatchPopupKeyDown(KeyEvent(key: keyArrowRight))
+    require not button.activeSubmenuButton().isNil
+    var childPopup: PopupListView
+    for child in popup.subviews():
+      if child of PopupListView:
+        childPopup = PopupListView(child)
+    require not childPopup.isNil
+    check childPopup.frame().size.width < 180
+    button.closePopup()
 
   test "menu item models back identifiers hidden rows submenus and validation":
     let

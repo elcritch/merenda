@@ -4,6 +4,7 @@ import sigils/core
 
 import merenda/nimkit
 import merenda/nimkit/view/viewbase
+from merenda/nimkit/view/viewgeometry import setFrameFromLayout
 
 type LayoutInvalidationSpy = ref object of Agent
   reasons: seq[LayoutInvalidationReason]
@@ -11,7 +12,71 @@ type LayoutInvalidationSpy = ref object of Agent
 proc record(spy: LayoutInvalidationSpy, reason: LayoutInvalidationReason) {.slot.} =
   spy.reasons.add reason
 
+type ManualInsetView = ref object of View
+
+protocol ManualInsetLayout of ViewLayoutProtocol:
+  method layoutSubviews(view: ManualInsetView) =
+    for child in view.subviews():
+      child.setFrameFromLayout(view.bounds().inset(insets(10)))
+
 suite "nimkit constraints":
+  test "container reconciliation preserves ancestor-owned descendant constraints":
+    let
+      root = ManualInsetView()
+      host = newView()
+      child = newLabel("text")
+    root.initViewFields()
+    discard root.withProtocol(ManualInsetLayout)
+    root.addSubview(host)
+    host.addSubview(child)
+    root.addConstraint(child[atWidth].equalTo(80))
+    activate(
+      [
+        child[atTop].equalTo(host[atTop], constant = 16),
+        child[atRight].equalTo(host[atRight], constant = -16),
+        child[atHeight].equalTo(40),
+      ]
+    )
+    for width in [600.0'f32, 320.0'f32, 900.0'f32]:
+      root.frame = rect(0, 0, width, 400)
+      root.layoutSubtreeIfNeeded()
+      check host.frame() == rect(10, 10, width - 20, 380)
+      check child.frame().size.width == 80
+      check not root.needsLayout()
+
+  test "internal anchors follow nested container frames within the same layout pass":
+    let
+      root = ManualInsetView()
+      middle = ManualInsetView()
+      host = newView()
+      child = newView()
+    root.initViewFields()
+    middle.initViewFields()
+    discard root.withProtocol(ManualInsetLayout)
+    discard middle.withProtocol(ManualInsetLayout)
+    root.addSubview(middle)
+    middle.addSubview(host)
+    host.addSubview(child)
+    activate(
+      [
+        child[atTop].equalTo(host[atTop], constant = 16),
+        child[atRight].equalTo(host[atRight], constant = -16),
+        child[atWidth].equalTo(100),
+        child[atHeight].equalTo(40),
+      ]
+    )
+    for width in [600.0'f32, 320.0'f32, 900.0'f32]:
+      root.frame = rect(0, 0, width, 400)
+      root.layoutSubtreeIfNeeded()
+      check host.frame() == rect(10, 10, width - 40, 360)
+      check child.frame() == rect(width - 156, 16, 100, 40)
+      check not root.needsLayout()
+      check not host.needsLayout()
+      let generation = root.layoutGeneration()
+      root.layoutSubtreeIfNeeded()
+      check root.layoutGeneration() == generation
+      check not root.layoutFeedbackBlocked()
+
   test "layout constraints store Cocoa-shaped relation data":
     let
       view = newView(frame = rect(0, 0, 100, 80))

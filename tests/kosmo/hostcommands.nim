@@ -309,6 +309,12 @@ suite "Kosmo Moe host commands":
       frontend.close()
     frontend.window.setContentView(frontend.contentView)
     frontend.contentView.layoutSubtreeIfNeeded()
+    frontend.setEditorInputPolicy(KosmoEditorInputPolicy.Vim)
+    frontend.setForceInputMode(false)
+    let choice = PopupMenuButton(
+      frontend.contentView.viewWithIdentifier(KosmoKeyModeSelectorIdentifier)
+    )
+    check choice.title == "moe (vim)"
     let editor = frontend.editorView.editor
     let originalTab = frontend.documentTabs.selectedDocumentTabIdentifier
     let originalForceMode = editor.forceInputMode()
@@ -321,6 +327,9 @@ suite "Kosmo Moe host commands":
       KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
     )
     check editor.forceInputMode() != originalForceMode
+    check choice.title == "moe (vim)"
+    check choice.menu()[0].state == bsOn
+    check choice.menu()[1].state == bsOff
     require frontend.documentTabs.selectDocumentTabWithIdentifier(originalTab)
     require frontend.documentTabs.selectDocumentTabWithIdentifier(
       KosmoConfigTabIdentifier
@@ -329,6 +338,8 @@ suite "Kosmo Moe host commands":
       KeyEvent(key: keyEnter, keyCode: keyEnter.ord)
     )
     check editor.forceInputMode() == originalForceMode
+    check choice.title == "moe (vim)"
+    check choice.menu()[0].state == bsOn
     check editor.moeWindowCount() == 1
     require frontend.command(frontend.editorView, "help")
     check frontend.documentTabs.selectedDocumentTabIdentifier == KosmoHelpTabIdentifier

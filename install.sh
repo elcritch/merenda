@@ -158,6 +158,10 @@ install_notices() {
     rm -rf "$KOSMO_DOC_DIR/font-licenses"
     cp -R "$extract_dir/font-licenses" "$KOSMO_DOC_DIR/font-licenses"
   fi
+  if [ -d "$extract_dir/text-library-licenses" ]; then
+    rm -rf "$KOSMO_DOC_DIR/text-library-licenses"
+    cp -R "$extract_dir/text-library-licenses" "$KOSMO_DOC_DIR/text-library-licenses"
+  fi
   echo "install.sh: installed bundled-font notices to $KOSMO_DOC_DIR" >&2
 }
 
@@ -288,6 +292,14 @@ case "$platform" in
     if [ ! -f "$extract_dir/kosmo.exe" ]; then
       echo "install.sh: release archive did not contain kosmo.exe" >&2
       exit 1
+    fi
+    for library in "$extract_dir/"*.dll; do
+      if [ -f "$library" ]; then
+        install_command "$library" "$(basename "$library")"
+      fi
+    done
+    if [ -f "$extract_dir/kosmo.pdb" ]; then
+      install_command "$extract_dir/kosmo.pdb" kosmo.pdb
     fi
     install_command "$extract_dir/kosmo.exe" kosmo.exe
     install_notices "$extract_dir"

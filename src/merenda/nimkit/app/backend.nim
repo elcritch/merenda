@@ -108,6 +108,15 @@ when defined(linux) or defined(bsd):
       output*: int32
       namespace*: string
 
+when defined(merenda.devControl):
+  type RenderCapture* = object
+    ## Owned readback result transferred from the renderer to the GUI thread.
+    id*, renderId*: uint64
+    png*: string
+    width*, height*: int
+    scale*: float32
+    error*: string
+
 type
   HostKeyEvent* = object
     event*: events.KeyEvent
@@ -139,6 +148,8 @@ type
     kind*: ThreadHostEventKind
     renderCount*: Natural
     renderId*: uint64
+    when defined(merenda.devControl):
+      capture*: RenderCapture
 
   ThreadHostEventQueueObj = object
     lock: Lock
@@ -156,6 +167,8 @@ type
     targetGeneration*: uint64
     usesFragments*: bool
     sceneUpdate*: RenderSceneUpdate
+    when defined(merenda.devControl):
+      captureNextFrame*: uint64
 
   ThreadRenderSnapshotStatus* = enum
     trssAccepted
@@ -207,6 +220,8 @@ type
     activeResources: RenderResourceManifest
     pendingResources: Deque[ThreadRenderResourceLease]
     rendererWakeups: RChan[bool]
+    when defined(merenda.devControl):
+      captureNextFrame: uint64
 
   HostWindow* = ref object
     xNativeWindow: SiwinWindow
@@ -222,6 +237,9 @@ type
     xUiScaleOverride: float32
     xTransparent: bool
     xResources: RenderResourceManager
+    when defined(merenda.devControl):
+      captureNextFrame: uint64
+      capturedFrame: RenderCapture
 
   ThreadRendererHost = ref object
     id: ThreadHostId
@@ -238,6 +256,8 @@ type
     lastSceneIdentity: uint64
     lastSceneGeneration: uint64
     lastFragmentResources: RenderResourceSnapshot
+    when defined(merenda.devControl):
+      captureNextFrame: uint64
 
   ThreadRenderer* = ref object
     commands: RChan[ThreadRendererCommand]
@@ -333,8 +353,14 @@ proc post*(queue: ThreadHostEventQueue, event: sink ThreadHostEvent) =
   if queue.raw.isNil:
     return
   withLock queue.raw[].lock:
-    if event.kind == theRendered and queue.raw[].pending.len > 0 and
-        queue.raw[].pending.peekLast().kind == event.kind:
+    var coalesce =
+      event.kind == theRendered and queue.raw[].pending.len > 0 and
+      queue.raw[].pending.peekLast().kind == event.kind
+    when defined(merenda.devControl):
+      if coalesce:
+        coalesce =
+          event.capture.id == 0 and queue.raw[].pending.peekLast().capture.id == 0
+    if coalesce:
       queue.raw[].pending[^1] = ensureMove event
     else:
       queue.raw[].pending.addLast(ensureMove event)
@@ -493,15 +519,17 @@ proc submitRenderScene*(
       sceneGeneration: sceneGeneration,
     )
   )
-  host.channels.renders.pushLatest(
-    ThreadRenderSnapshot(
-      logicalSize: logicalSize,
-      renderId: renderId,
-      targetGeneration: host.targetGeneration,
-      usesFragments: true,
-      sceneUpdate: ensureMove update,
-    )
+  var snapshot = ThreadRenderSnapshot(
+    logicalSize: logicalSize,
+    renderId: renderId,
+    targetGeneration: host.targetGeneration,
+    usesFragments: true,
+    sceneUpdate: ensureMove update,
   )
+  when defined(merenda.devControl):
+    snapshot.captureNextFrame = host.captureNextFrame
+    host.captureNextFrame = 0
+  host.channels.renders.pushLatest(ensureMove snapshot)
   host.rendererWakeups.wakeRenderer()
   host.renderRequested = true
   recordTerminalTrace("submit-end", host.id, renderId)
@@ -1486,9 +1514,47 @@ proc setIcon*(host: HostWindow, icon: ImageResource) =
 proc setVisible*(host: HostWindow, visible: bool) =
   if not host.isReady:
     return
-  if visible and host.xNativeWindow.visible() and not host.xNativeWindow.focused():
+  if visible and host.xNativeWindow.visible() and not host.xNativeWindow.focused() and
+      getEnv("SIWIN_NO_ACTIVATE") != "1":
     host.xNativeWindow.visible = false
   host.xNativeWindow.visible = visible
+
+when defined(merenda.devControl):
+  proc backgroundLaunchRequested*(): bool =
+    getEnv("MERENDA_BACKGROUND") == "1"
+
+  proc captureFrame(
+      renderer: figrender.FigRenderer[siwinshim.SiwinRenderBackend],
+      id, renderId: uint64,
+      logicalSize: Size,
+  ): RenderCapture =
+    result.id = id
+    result.renderId = renderId
+    if logicalSize.width <= 0 or logicalSize.height <= 0:
+      result.error = "Render surface has no logical size"
+      return
+    try:
+      let image = renderer.takeOneFrameScreenshot()
+      if image.isNil or image.width <= 0 or image.height <= 0:
+        result.error = "Renderer returned no pixels"
+      elif image.width.int64 * image.height.int64 > 8_000_000:
+        result.error = "Capture exceeds 8 million pixels"
+      else:
+        result.width = image.width
+        result.height = image.height
+        result.scale = image.width.float32 / logicalSize.width
+        result.png = image.encodePng()
+    except CatchableError as error:
+      result.error = error.msg
+
+  proc requestFrameCapture*(host: HostWindow, id: uint64) =
+    host.captureNextFrame = id
+
+  proc requestFrameCapture*(host: ThreadHostClient, id: uint64) =
+    host.captureNextFrame = id
+
+  proc takeCapturedFrame*(host: HostWindow): RenderCapture =
+    result = move host.capturedFrame
 
 proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
   if not host.isReady or host.xRenderer.isNil or not host.xNativeWindow.opened():
@@ -1502,6 +1568,12 @@ proc render*(host: HostWindow, renders: var Renders, logicalSize: Size) =
     host.xRenderer.renderFrame(renders, size, clearColor = clearColor)
   else:
     host.xRenderer.renderFrame(renders, size)
+  when defined(merenda.devControl):
+    if host.captureNextFrame != 0:
+      host.capturedFrame = captureFrame(
+        host.xRenderer, host.captureNextFrame, host.xRenderCount.uint64 + 1, logicalSize
+      )
+      host.captureNextFrame = 0
   host.xRenderer.endFrame()
   inc host.xRenderCount
 
@@ -1523,6 +1595,12 @@ proc render*(host: HostWindow, scene: RenderScene, logicalSize: Size) =
   else:
     scene.renderFrame(host.xRenderer, size)
   recordTerminalTrace("render-drawn", cast[uint64](host), host.xRenderCount.uint64 + 1)
+  when defined(merenda.devControl):
+    if host.captureNextFrame != 0:
+      host.capturedFrame = captureFrame(
+        host.xRenderer, host.captureNextFrame, host.xRenderCount.uint64 + 1, logicalSize
+      )
+      host.captureNextFrame = 0
   host.xRenderer.endFrame()
   inc host.xRenderCount
   recordTerminalTrace("present", cast[uint64](host), host.xRenderCount.uint64)
@@ -1787,6 +1865,9 @@ proc createHostWindow*(
     xTransparent: transparent,
     xResources: newRenderResourceManager(),
   )
+  when defined(merenda.devControl):
+    if backgroundLaunchRequested():
+      putEnv("SIWIN_NO_ACTIVATE", "1")
   result.xNativeWindow = siwinshim.newSiwinWindow(
     size = size,
     title = title,
@@ -1983,6 +2064,8 @@ proc acceptPendingRender(state: ThreadRendererHost): bool =
     state.lastSceneIdentity = 0
     state.lastSceneGeneration = 0
     state.lastFragmentResources = default(RenderResourceSnapshot)
+  when defined(merenda.devControl):
+    state.captureNextFrame = snapshot.captureNextFrame
   state.lastRenderId = snapshot.renderId
   state.logicalSize = snapshot.logicalSize
   true
@@ -2011,14 +2094,22 @@ proc renderLatest(state: ThreadRendererHost) =
   else:
     state.renderer.renderFrame(state.lastRenders, size)
   recordTerminalTrace("render-drawn", state.id, state.lastRenderId)
+  when defined(merenda.devControl):
+    var capture: RenderCapture
+    if state.captureNextFrame != 0:
+      capture = captureFrame(
+        state.renderer, state.captureNextFrame, state.lastRenderId, state.logicalSize
+      )
+      state.captureNextFrame = 0
   state.renderer.endFrame()
   recordTerminalTrace("present", state.id, state.lastRenderId)
   inc state.renderCount
-  state.postEvent(
-    ThreadHostEvent(
-      kind: theRendered, renderCount: state.renderCount, renderId: state.lastRenderId
-    )
+  var event = ThreadHostEvent(
+    kind: theRendered, renderCount: state.renderCount, renderId: state.lastRenderId
   )
+  when defined(merenda.devControl):
+    event.capture = move capture
+  state.postEvent(ensureMove event)
 
 proc drainHostChannels(state: ThreadRendererHost) =
   if state.acceptPendingRender():

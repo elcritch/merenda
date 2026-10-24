@@ -7,11 +7,9 @@ import sigils/selectors
 import ../app/viewcontrollers
 import ../containers/[boxes, splitviews, stackviews]
 import
-  ../controls/
-    [
-      buttons, comboboxes, controls, progressindicators, sliders, steppers,
-      switchbuttons,
-    ]
+  ../controls/[
+    buttons, comboboxes, controls, progressindicators, sliders, steppers, switchbuttons
+  ]
 import ../drawing/images
 import ../foundation/types
 import ../foundation/selectors

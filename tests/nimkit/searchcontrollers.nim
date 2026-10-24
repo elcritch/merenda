@@ -3,6 +3,109 @@ import std/[options, strutils, unittest]
 import merenda/nimkit
 
 suite "NimKit reusable search":
+  test "floating search tolerates collapsed hosts and releases its constraints":
+    let
+      host = newView(frame = rect(0, 0, 0, 0))
+      originalConstraints = host.constraints().len
+      search = newTextSearchController(
+        host,
+        "records",
+        TextSearchAdapter(
+          sources: proc(): seq[string] =
+            @["needle"]
+        ),
+      )
+    defer:
+      search.close()
+    search.bar.hidden = false
+    for size in [initSize(0, 0), initSize(16, 20), initSize(640, 360)]:
+      host.frame = rect(initPoint(0, 0), size)
+      host.layoutSubtreeIfNeeded()
+      let frame = search.bar.frame()
+      check frame.minX >= -0.01
+      check frame.minY >= -0.01
+      check frame.maxX <= size.width + 0.01
+      check frame.maxY <= size.height + 0.01
+      check not host.layoutFeedbackBlocked()
+    check search.bar.frame().size.width == SearchBarWidth
+    search.close()
+    check host.constraints().len == originalConstraints
+    host.layoutSubtreeIfNeeded()
+    check not host.needsLayout()
+
+  test "floating search respects narrow hosts and settles after error transitions":
+    for width in [320.0'f32, 400.0'f32]:
+      let
+        host = newView(frame = rect(0, 0, width, 240))
+        window = newWindow("Narrow floating search", frame = host.frame())
+        search = newTextSearchController(
+          host,
+          "records",
+          TextSearchAdapter(
+            sources: proc(): seq[string] =
+              @["needle"]
+          ),
+        )
+      defer:
+        search.close()
+        window.close()
+      window.setContentView(host)
+      require search.showSearch()
+      search.bar.regularExpression = true
+      var normalHeight: float32
+      for query in ["needle", "[", "needle", "[", "needle"]:
+        require window.dispatchKeyDown(
+          KeyEvent(key: keyA, keyCode: keyA.ord, modifiers: shortcutModifiers())
+        )
+        require window.dispatchTextInput(query)
+        host.layoutSubtreeIfNeeded()
+        discard window.buildRenders()
+        let frame = search.bar.frame()
+        check frame.minX == SearchBarInset
+        check frame.maxX == width - SearchBarInset
+        check frame.size.width == width - SearchBarInset * 2
+        if query == "[":
+          check search.bar.errorMessage().len > 0
+          check frame.size.height > normalHeight
+        elif normalHeight == 0:
+          normalHeight = frame.size.height
+        else:
+          check frame.size.height == normalHeight
+        let generation = host.layoutGeneration()
+        discard window.buildRenders()
+        check host.layoutGeneration() == generation
+        check not host.layoutFeedbackBlocked()
+
+  test "embedded search bars leave their frame under their container's control":
+    let
+      host = newView(frame = rect(0, 0, 800, 480))
+      window = newWindow("Embedded search", frame = host.frame())
+      embeddedFrame = rect(24, 120, 480, 120)
+      bar = newSearchBar(frame = embeddedFrame)
+    defer:
+      bar.close()
+      window.close()
+    host.addSubview(bar)
+    window.setContentView(host)
+    bar.hidden = false
+    bar.frame = embeddedFrame
+    bar.enableExpressions()
+    bar.enableReplacement(nil, nil)
+    host.layoutSubtreeIfNeeded()
+    check bar.frame() == embeddedFrame
+    require window.makeFirstResponder(bar.queryField())
+    require window.dispatchTextInput("ensureArrangement")
+    for message in ["Search error: incomplete expression", ""]:
+      bar.errorMessage = message
+      host.layoutSubtreeIfNeeded()
+      check bar.frame() == embeddedFrame
+      check bar.query() == "ensureArrangement"
+    for expanded in [true, false]:
+      bar.replacementVisible = expanded
+      host.layoutSubtreeIfNeeded()
+      check bar.frame() == embeddedFrame
+      check bar.query() == "ensureArrangement"
+
   test "adapters search multiple sources, retain navigation, and detach cleanly":
     let
       host = newView(frame = rect(0, 0, 640, 360))

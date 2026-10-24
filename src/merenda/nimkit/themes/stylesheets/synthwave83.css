@@ -78,6 +78,9 @@
   --scroller-knob-fill: linear-gradient(to bottom right, #ff0fe0c7, #750aeb94 42.35294%, #1fdbff6b);
   --scroller-track-border-color: rgba(51, 94%, 255, 0.34);
   --scroller-track-fill: #0f002952;
+  --split-view-divider-border-color: rgba(90%, 5%, 255, 0.4);
+  --split-view-divider-fill: #2e0b4b;
+  --split-view-divider-mark-color: rgba(255, 34%, 92%, 0.7);
   --tab-border-color: rgba(90%, 4%, 255, 0.84);
   --tab-border-color-disabled: rgba(34%, 18%, 48%, 0.38);
   --tab-border-color-highlighted: rgba(51, 96%, 255, 0.92);

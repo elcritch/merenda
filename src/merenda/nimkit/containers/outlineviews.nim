@@ -4,7 +4,7 @@ import sigils/core
 
 import ./listbasics
 import ./scrollviews
-import ./tableviews
+import ../tables/tableviews
 import ../accessibility/accessibilityprotocols
 import ../app/dragging
 import ../app/pasteboards
@@ -1323,6 +1323,15 @@ protocol OutlineViewStateBehavior of TableViewStateProtocol:
       TableView(outlineView).selectedColumns = columns
     outlineView.expandedItemIdentifiers = state.expandedItems
 
+protocol OutlineViewToolTips of ViewProtocol:
+  method toolTipAtPoint(outlineView: OutlineView, point: Point): string =
+    let row = outlineView.rowItemIndexAtPoint(point)
+    if row >= 0:
+      let text = outlineView.itemAtRow(row).tooltip
+      if text.len > 0:
+        return text
+    outlineView.toolTip()
+
 protocol OutlineViewTableDelegate of TableViewDelegate:
   method isRowEnabled(outlineView: OutlineView, tableView: TableView, row: int): bool =
     discard tableView
@@ -1421,6 +1430,7 @@ proc initOutlineViewFields*(outlineView: OutlineView, frame: Rect = AutoRect) =
   discard outlineView.withProtocol(OutlineViewTableDataSource)
   discard outlineView.withProtocol(OutlineViewTableDelegate)
   discard outlineView.withProtocol(OutlineViewDrawing)
+  discard outlineView.withProtocol(OutlineViewToolTips)
   discard DynamicAgent(outlineView).pushMethods(OutlineViewEvents.init())
   discard outlineView.withProtocol(OutlineViewAccessibility)
   discard outlineView.withProtocol(OutlineViewStateBehavior)

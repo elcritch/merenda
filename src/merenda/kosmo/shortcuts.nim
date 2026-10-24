@@ -9,6 +9,7 @@ const
   KosmoOpenFileAction* = "kosmo.openFile"
   KosmoOpenProjectAction* = "kosmo.openProject"
   KosmoNewTerminalAction* = "kosmo.newTerminal"
+  KosmoShowTerminalAction* = "kosmo.showTerminal"
   KosmoShowGitDiffAction* = "kosmo.showGitDiff"
   KosmoShowGitHubAction* = "kosmo.showGitHub"
   KosmoSaveAction* = "kosmo.save"
@@ -135,145 +136,147 @@ func focusPanelAction*(panelNumber: int): string =
 
 func kosmoActions*(): seq[KosmoAction] =
   ## Return every configurable action shown by Kosmo's menus and Settings.
-  result =
-    @[
-      KosmoAction(
-        identifier: KosmoNewFileAction,
-        title: "New File",
-        description: "Open a new blank editor tab.",
-      ),
-      KosmoAction(
-        identifier: KosmoOpenFileAction,
-        title: "Open File",
-        description: "Open a file in the active editor panel.",
-      ),
-      KosmoAction(
-        identifier: KosmoOpenProjectAction,
-        title: "Open Project",
-        description: "Open a folder in a new project window.",
-      ),
-      KosmoAction(
-        identifier: KosmoQuickOpenAction,
-        title: "Quick Open",
-        description: "Open a file with Quick Open.",
-      ),
-      KosmoAction(
-        identifier: KosmoNewTerminalAction,
-        title: "New Terminal",
-        description: "Open a new terminal tab.",
-      ),
-      KosmoAction(
-        identifier: KosmoShowGitDiffAction,
-        title: "Show Git Diff",
-        description: "Open the current Git diff in a tab.",
-      ),
-      KosmoAction(
-        identifier: KosmoShowGitHubAction,
-        title: "Show GitHub Issues and PRs",
-        description: "Read the project's GitHub issues and pull requests in a tab.",
-      ),
-      KosmoAction(
-        identifier: KosmoSaveAction,
-        title: "Save",
-        description: "Save the active editor tab.",
-      ),
-      KosmoAction(
-        identifier: KosmoCloseTabAction,
-        title: "Close Tab",
-        description: "Close the active tab.",
-      ),
-      KosmoAction(
-        identifier: KosmoCloseWindowAction,
-        title: "Close Window",
-        description: "Close the active application window.",
-      ),
-      KosmoAction(
-        identifier: KosmoQuitAction, title: "Quit", description: "Quit Kosmo."
-      ),
-      KosmoAction(
-        identifier: KosmoPreviousTabAction,
-        title: "Previous Tab",
-        description: "Select the previous tab.",
-      ),
-      KosmoAction(
-        identifier: KosmoNextTabAction,
-        title: "Next Tab",
-        description: "Select the next tab.",
-      ),
-      KosmoAction(
-        identifier: KosmoSplitHorizontalAction,
-        title: "Split Below",
-        description: "Split the active editor panel below.",
-        kind: KosmoActionKind.Pane,
-      ),
-      KosmoAction(
-        identifier: KosmoSplitVerticalAction,
-        title: "Split Right",
-        description: "Split the active editor panel on the right.",
-        kind: KosmoActionKind.Pane,
-      ),
-      KosmoAction(
-        identifier: KosmoShowFileExplorerAction,
-        title: "Files",
-        description: "Show and focus the file explorer.",
-      ),
-      KosmoAction(
-        identifier: KosmoRevealActiveFileAction,
-        title: "Reveal Active File",
-        description: "Reveal the active editor file in the file explorer.",
-      ),
-      KosmoAction(
-        identifier: KosmoFindInFilesAction,
-        title: "Find in Files",
-        description: "Show and focus Find in Files.",
-      ),
-      KosmoAction(
-        identifier: KosmoReplaceInFilesAction,
-        title: "Replace in Files",
-        description: "Show Find in Files with replacement controls expanded.",
-      ),
-      KosmoAction(
-        identifier: KosmoShowSettingsAction,
-        title: "Settings",
-        description: "Show Kosmo Settings.",
-      ),
-      KosmoAction(
-        identifier: KosmoUndoAction,
-        title: "Undo",
-        description: "Undo the last editor change.",
-        kind: KosmoActionKind.Editing,
-      ),
-      KosmoAction(
-        identifier: KosmoRedoAction,
-        title: "Redo",
-        description: "Redo the last undone editor change.",
-        kind: KosmoActionKind.Editing,
-      ),
-      KosmoAction(
-        identifier: KosmoCutAction,
-        title: "Cut",
-        description: "Cut the editor selection.",
-        kind: KosmoActionKind.Editing,
-      ),
-      KosmoAction(
-        identifier: KosmoCopyAction,
-        title: "Copy",
-        description: "Copy the editor selection.",
-        kind: KosmoActionKind.Editing,
-      ),
-      KosmoAction(
-        identifier: KosmoPasteAction,
-        title: "Paste",
-        description: "Paste into the editor.",
-        kind: KosmoActionKind.Editing,
-      ),
-      KosmoAction(
-        identifier: KosmoSelectAllAction,
-        title: "Select All",
-        description: "Select all editor text.",
-        kind: KosmoActionKind.Editing,
-      ),
-    ]
+  result = @[
+    KosmoAction(
+      identifier: KosmoNewFileAction,
+      title: "New File",
+      description: "Open a new blank editor tab.",
+    ),
+    KosmoAction(
+      identifier: KosmoOpenFileAction,
+      title: "Open File",
+      description: "Open a file in the active editor panel.",
+    ),
+    KosmoAction(
+      identifier: KosmoOpenProjectAction,
+      title: "Open Project",
+      description: "Open a folder in a new project window.",
+    ),
+    KosmoAction(
+      identifier: KosmoQuickOpenAction,
+      title: "Quick Open",
+      description: "Open a file with Quick Open.",
+    ),
+    KosmoAction(
+      identifier: KosmoNewTerminalAction,
+      title: "New Terminal",
+      description: "Open a new terminal tab.",
+    ),
+    KosmoAction(
+      identifier: KosmoShowTerminalAction,
+      title: "Show Terminal",
+      description: "Focus an existing terminal, or open a terminal on the right.",
+    ),
+    KosmoAction(
+      identifier: KosmoShowGitDiffAction,
+      title: "Show Git Diff",
+      description: "Open the current Git diff in a tab.",
+    ),
+    KosmoAction(
+      identifier: KosmoShowGitHubAction,
+      title: "Show GitHub Issues and PRs",
+      description: "Read the project's GitHub issues and pull requests in a tab.",
+    ),
+    KosmoAction(
+      identifier: KosmoSaveAction,
+      title: "Save",
+      description: "Save the active editor tab.",
+    ),
+    KosmoAction(
+      identifier: KosmoCloseTabAction,
+      title: "Close Tab",
+      description: "Close the active tab.",
+    ),
+    KosmoAction(
+      identifier: KosmoCloseWindowAction,
+      title: "Close Window",
+      description: "Close the active application window.",
+    ),
+    KosmoAction(identifier: KosmoQuitAction, title: "Quit", description: "Quit Kosmo."),
+    KosmoAction(
+      identifier: KosmoPreviousTabAction,
+      title: "Previous Tab",
+      description: "Select the previous tab.",
+    ),
+    KosmoAction(
+      identifier: KosmoNextTabAction,
+      title: "Next Tab",
+      description: "Select the next tab.",
+    ),
+    KosmoAction(
+      identifier: KosmoSplitHorizontalAction,
+      title: "Split Below",
+      description: "Split the active editor panel below.",
+      kind: KosmoActionKind.Pane,
+    ),
+    KosmoAction(
+      identifier: KosmoSplitVerticalAction,
+      title: "Split Right",
+      description: "Split the active editor panel on the right.",
+      kind: KosmoActionKind.Pane,
+    ),
+    KosmoAction(
+      identifier: KosmoShowFileExplorerAction,
+      title: "Files",
+      description: "Show and focus the file explorer.",
+    ),
+    KosmoAction(
+      identifier: KosmoRevealActiveFileAction,
+      title: "Reveal Active File",
+      description: "Reveal the active editor file in the file explorer.",
+    ),
+    KosmoAction(
+      identifier: KosmoFindInFilesAction,
+      title: "Find in Files",
+      description: "Show and focus Find in Files.",
+    ),
+    KosmoAction(
+      identifier: KosmoReplaceInFilesAction,
+      title: "Replace in Files",
+      description: "Show Find in Files with replacement controls expanded.",
+    ),
+    KosmoAction(
+      identifier: KosmoShowSettingsAction,
+      title: "Settings",
+      description: "Show Kosmo Settings.",
+    ),
+    KosmoAction(
+      identifier: KosmoUndoAction,
+      title: "Undo",
+      description: "Undo the last editor change.",
+      kind: KosmoActionKind.Editing,
+    ),
+    KosmoAction(
+      identifier: KosmoRedoAction,
+      title: "Redo",
+      description: "Redo the last undone editor change.",
+      kind: KosmoActionKind.Editing,
+    ),
+    KosmoAction(
+      identifier: KosmoCutAction,
+      title: "Cut",
+      description: "Cut the focused editable text selection.",
+      kind: KosmoActionKind.Editing,
+    ),
+    KosmoAction(
+      identifier: KosmoCopyAction,
+      title: "Copy",
+      description: "Copy the focused view's selection.",
+      kind: KosmoActionKind.Editing,
+    ),
+    KosmoAction(
+      identifier: KosmoPasteAction,
+      title: "Paste",
+      description: "Paste into the focused editable view.",
+      kind: KosmoActionKind.Editing,
+    ),
+    KosmoAction(
+      identifier: KosmoSelectAllAction,
+      title: "Select All",
+      description: "Select all text in the focused view.",
+      kind: KosmoActionKind.Editing,
+    ),
+  ]
   for panelNumber in 1 .. KosmoMaxFocusPanelShortcut:
     result.add KosmoAction(
       identifier: panelNumber.focusPanelAction(),
@@ -365,6 +368,7 @@ proc initKosmoKeyBindings*(
   result.addBinding("primary-shift-o", KosmoOpenProjectAction, profile, platform)
   result.addBinding("primary-p", KosmoQuickOpenAction, profile, platform)
   result.addBinding("primary-shift-t", KosmoNewTerminalAction, profile, platform)
+  result.addBinding("primary-j", KosmoShowTerminalAction, profile, platform)
   result.addBinding("primary-shift-d", KosmoShowGitDiffAction, profile, platform)
   result.addBinding("primary-shift-h", KosmoShowGitHubAction, profile, platform)
   result.addBinding("primary-s", KosmoSaveAction, profile, platform)

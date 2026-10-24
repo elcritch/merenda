@@ -37,6 +37,7 @@
   --scroller-knob-fill: rgba(72%, 72%, 74%, 0.45);
   --split-view-divider-border-color: rgba(0, 0, 0, 0.42);
   --split-view-divider-fill: rgba(255, 255, 255, 0.08);
+  --split-view-divider-mark-color: rgba(72%, 72%, 74%, 0.6);
   --tab-border-color-highlighted: rgba(255, 255, 255, 0.1);
   --tab-border-color-selected: rgba(255, 255, 255, 0.16);
   --tab-fill-disabled: rgba(255, 255, 255, 0.02);

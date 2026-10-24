@@ -199,6 +199,11 @@ protocol ViewProtocol {.setterStyle: nim.} from View:
   method `toolTip=`(self: View, toolTip: string) =
     self.xToolTip = toolTip
 
+  method toolTipAtPoint*(self: View, point: Point): string =
+    ## Return tooltip text at a point in the view's local coordinates.
+    ## Containers can override this to supply help for individual items.
+    self.toolTip()
+
   method styleId(self: View): string =
     self.xStyleId
 

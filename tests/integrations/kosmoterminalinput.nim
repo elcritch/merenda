@@ -17,6 +17,69 @@ proc waitForTerminalText(view: TerminalView, text: string): bool =
 
 suite "Kosmo terminal shortcut PTY input":
   when defined(posix):
+    test "show terminal shortcut creates a right split or reuses the nearest right pane":
+      let originalShell = getEnv("SHELL")
+      putEnv("SHELL", "/bin/sh")
+      defer:
+        putEnv("SHELL", originalShell)
+      for rightPaneCount in 0 .. 2:
+        let
+          app = newApplication("Kosmo Right Terminal Shortcut")
+          frontend = newKosmoApplication(app, monitorsGitStatus = false)
+          window = frontend.window
+          shortcut =
+            KeyEvent(key: keyJ, keyCode: keyJ.ord, modifiers: shortcutModifiers())
+        var terminal: KosmoTerminalView
+        defer:
+          frontend.close()
+          if not terminal.isNil:
+            terminal.session().waitForCommands()
+          window.close()
+        app.addWindow(window)
+        window.setContentView(frontend.contentView)
+        frontend.contentView.frame = rect(0, 0, 1200, 720)
+        frontend.contentView.layoutSubtreeIfNeeded()
+        app.activateWindow(window)
+        require window.makeFirstResponder(frontend.editorView)
+        if rightPaneCount > 0:
+          require window.sendAction(actionSelector(KosmoSplitVerticalAction))
+        if rightPaneCount > 1:
+          require window.sendAction(actionSelector(KosmoSplitHorizontalAction))
+        let
+          beforeGroups = frontend.editorGroups()
+          source = beforeGroups[0]
+          sourceTabCount = source.pane.documentTabs.len
+          bufferCount = frontend.editorView.editor.tabs().len
+        require window.makeFirstResponder(source.editorView)
+        require window.dispatchKeyDown(shortcut)
+        frontend.contentView.layoutSubtreeIfNeeded()
+        let groups = frontend.editorGroups()
+        require groups.len == max(rightPaneCount + 1, 2)
+        let target = groups[1]
+        require target.pane.contentView of KosmoTerminalView
+        terminal = KosmoTerminalView(target.pane.contentView)
+        terminal.session().write("printf 'KOSMO_%s\\n' TERMINAL_READY\r")
+        require terminal.waitForTerminalText("KOSMO_TERMINAL_READY")
+        check window.firstResponder() == Responder(terminal)
+        check source.pane.documentTabs.len == sourceTabCount
+        check source.documents.len == 0
+        check target.documents.len == 1
+        check frontend.editorView.editor.tabs().len == bufferCount
+        let
+          sourceRect = source.panel.rectToView(source.panel.bounds(), frontend.dockView)
+          targetRect = target.panel.rectToView(target.panel.bounds(), frontend.dockView)
+        check sourceRect.maxX <= targetRect.minX
+        if rightPaneCount == 0:
+          check target.pane.documentTabs.len == 1
+        if rightPaneCount == 2:
+          check groups[2].documents.len == 0
+        require window.dispatchKeyDown(shortcut)
+        check window.firstResponder() == Responder(terminal)
+        require window.makeFirstResponder(source.editorView)
+        require window.dispatchKeyDown(shortcut)
+        check window.firstResponder() == Responder(terminal)
+        check target.documents.len == 1
+
     test "editor pane shortcuts do not leak text into the destination PTY":
       let
         session = spawnTerminalViewSession(

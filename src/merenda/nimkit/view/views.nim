@@ -266,9 +266,47 @@ proc updateConstraintsForTransaction(
   if view.xNeedsUpdateConstraints:
     view.runUpdateConstraints()
 
+proc hasInternalLayoutConstraints(view: View): bool =
+  if view.xConstraints.len > 0:
+    return true
+  for child in view.xSubviews:
+    if child.hasInternalLayoutConstraints():
+      return true
+
+proc isStrictLayoutDescendant(item, root: View): bool =
+  if item.isNil or item == root:
+    return
+  var parent = item.superviewBacklink()
+  while not parent.isNil:
+    if parent == root:
+      return true
+    parent = parent.superviewBacklink()
+
+proc hasAncestorOwnedDescendantConstraints(view: View): bool =
+  var parent = view.superviewBacklink()
+  while not parent.isNil:
+    for constraint in parent.xConstraints:
+      if constraint.isActive and (
+        constraint.firstItem.isStrictLayoutDescendant(view) or
+        constraint.secondItem.isStrictLayoutDescendant(view)
+      ):
+        return true
+    parent = parent.superviewBacklink()
+
 proc layoutSubtree(view: View, transaction: var LayoutTransactionState) =
   if view.layoutFeedbackBlocked():
     return
+  if view.xNeedsLocalConstraintLayout:
+    view.xNeedsLocalConstraintLayout = false
+    # A manual container can resize this host after the outer solve. Resolve its
+    # internal anchors with that assigned frame fixed before laying out children.
+    # Preserve descendant geometry governed by the outer constraint graph.
+    if view.xSubviews.len > 0 and not view.hasAncestorOwnedDescendantConstraints() and (
+      view.hasInternalLayoutConstraints() or
+      view.effectiveAppearance().theme.hasLayoutRules
+    ):
+      if not view.applyConstraintsForSubtree():
+        return
   view.xLayoutVisitGeneration = transaction.generation
   transaction.currentView = view
   if view.xNeedsLayout:

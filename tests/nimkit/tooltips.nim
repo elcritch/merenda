@@ -1,12 +1,18 @@
-import std/[times, unicode, unittest]
+import std/[times, unittest]
 
 import figdraw
 
 import merenda/nimkit
 
+func center(bounds: Rect): Point =
+  initPoint(
+    bounds.origin.x + bounds.size.width / 2.0'f32,
+    bounds.origin.y + bounds.size.height / 2.0'f32,
+  )
+
 proc renderedText(node: Fig): string =
-  for glyphIndex in 0 ..< node.textLayout.glyphCount():
-    result.add node.textLayout.displayRune(glyphIndex)
+  # A shaped glyph can cover multiple characters, such as the `fi` ligature.
+  node.textLayout.sourceRunes.bytes()
 
 proc layerContainsText(renders: Renders, level: ZLevel, text: string): bool =
   if level notin renders.layers:
@@ -97,3 +103,75 @@ suite "NimKit tooltips":
     check TooltipDrawLevel notin window.buildRenders().layers
     check root.subviews().len == 1
     discard window.drainAnimations()
+
+  test "outline tooltips follow hovered rows without changing focus":
+    let
+      window = newWindow("Outline tooltips", frame = rect(0, 0, 360, 200))
+      root = newView()
+      outline = newOutlineView(frame = rect(20, 20, 240, 130))
+      field = newTextField(frame = rect(20, 160, 200, 24))
+    defer:
+      window.close()
+    outline.showsHeader = false
+    outline.outlineItems = [
+      initOutlineItem("first", "File", tooltip = "source/first.nim"),
+      initOutlineItem("second", "File", tooltip = "tests/second.nim"),
+      initOutlineItem("empty", "No help"),
+    ]
+    root.addSubview(outline)
+    root.addSubview(field)
+    window.setContentView(root)
+    root.layoutSubtreeIfNeeded()
+    require window.makeFirstResponder(field)
+
+    let
+      focusedResponder = window.firstResponder()
+      firstPoint = outline.pointToWindow(outline.rowItemRect(0).center())
+    discard window.mouseMovedAt(firstPoint)
+    discard window.animationScheduler().tick(initDuration(milliseconds = 250))
+    discard window.mouseMovedAt(initPoint(firstPoint.x + 8, firstPoint.y))
+    discard window.animationScheduler().tick(initDuration(milliseconds = 250))
+    check window.buildRenders().layerContainsText(TooltipDrawLevel, "source/first.nim")
+
+    discard window.mouseMovedAt(outline.pointToWindow(outline.rowItemRect(1).center()))
+    discard window.animationScheduler().tick(initDuration(milliseconds = 499))
+    check TooltipDrawLevel notin window.buildRenders().layers
+    discard window.animationScheduler().tick(initDuration(milliseconds = 1))
+    check window.buildRenders().layerContainsText(TooltipDrawLevel, "tests/second.nim")
+    check window.firstResponder() == focusedResponder
+    check TableView(outline).selectedIndex() == -1
+
+    discard window.mouseMovedAt(outline.pointToWindow(outline.rowItemRect(2).center()))
+    discard window.animationScheduler().tick(initDuration(milliseconds = 500))
+    check TooltipDrawLevel notin window.buildRenders().layers
+    discard window.mouseMovedAt(firstPoint)
+    discard window.mouseMovedAt(initPoint(320, 180))
+    discard window.animationScheduler().tick(initDuration(milliseconds = 500))
+    check TooltipDrawLevel notin window.buildRenders().layers
+
+  test "outline tooltips recheck items after scrolling and removal":
+    let
+      window = newWindow("Scrolling tooltips", frame = rect(0, 0, 300, 160))
+      outline = newOutlineView()
+    defer:
+      window.close()
+    outline.showsHeader = false
+    var items: seq[OutlineItem]
+    for index in 0 ..< 30:
+      items.add initOutlineItem($index, "File", tooltip = "file-" & $index & ".nim")
+    outline.outlineItems = items
+    window.setContentView(outline)
+    outline.layoutSubtreeIfNeeded()
+    let point = outline.rowItemRect(1).center()
+    discard window.mouseMovedAt(outline.pointToWindow(point))
+    discard window.animationScheduler().tick(initDuration(milliseconds = 500))
+    check window.buildRenders().layerContainsText(TooltipDrawLevel, "file-1.nim")
+
+    outline.scrollRows(3)
+    let row = outline.rowItemIndexAtPoint(point)
+    require row > 1
+    let renders = window.buildRenders()
+    check renders.layerContainsText(TooltipDrawLevel, "file-" & $row & ".nim")
+    check not renders.layerContainsText(TooltipDrawLevel, "file-1.nim")
+    outline.outlineItems = []
+    check TooltipDrawLevel notin window.buildRenders().layers

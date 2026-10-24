@@ -14,13 +14,21 @@
   goto
 --stacktrace:
   off
---define:
-  nimStackTraceOverride
 --path:
   "src/"
 --nimcache:
   "deps/.nimcache"
-switch("import", "libbacktrace")
+when defined(windows):
+  # Use the configured Developer shell directly; vccexe expands response files
+  # into command lines that exceed Windows' limit for large applications.
+  switch("vcc.exe", "cl.exe")
+  switch("vcc.linkerexe", "cl.exe")
+  # MSVC emits PDBs; GNU libbacktrace expects DWARF and a GNU unwinder.
+  switch("stackTrace", "on")
+  switch("lineTrace", "on")
+else:
+  switch("define", "nimStackTraceOverride")
+  switch("import", "libbacktrace")
 
 when defined(freebsd):
   --define:
@@ -141,3 +149,6 @@ task install_kosmo, "build and install the local macOS Kosmo.app":
 
 when defined(nimkitTerminalTrace):
   switch("define", "terminexTrace")
+
+when defined(merenda.devControl):
+  switch("define", "figdraw.vulkanReadback=on")

@@ -122,6 +122,97 @@ suite "Kosmo":
     tree.rootPath = firstRoot
     check tree.rootPaths == @[absolutePath(firstRoot)]
 
+  test "removing roots retains order, expansion, and remaining Git decorations":
+    let
+      workspace = createTempDir("kosmo-remove-roots-", "")
+      first = workspace / "first"
+      second = workspace / "second"
+      third = workspace / "third"
+      folder = third / "folder"
+    for root in [first, second, folder]:
+      createDir(root)
+    for root in [second, folder]:
+      writeFile(root / "file.txt", "keep")
+    let tree = newKosmoFileTree(first)
+    defer:
+      tree.stopGitStatusMonitoring()
+      removeDir(workspace)
+    require tree.addRootPath(second)
+    require tree.addRootPath(third)
+    tree.expandItem(folder)
+    for root in [second, third]:
+      let path = (if root == third: folder else: root) / "file.txt"
+      tree.applyGitStatus(
+        GitStatusSnapshot(
+          rootPath: root,
+          isRepository: true,
+          entries: @[GitStatusEntry(path: path, state: gfsUntracked)],
+        )
+      )
+    check not tree.removeRootPath("")
+    check not tree.removeRootPath(folder)
+    require tree.removeRootPath(second / ".")
+    check tree.rootPaths == @[first, third]
+    check tree.rootPath == first
+    check tree.rowForItem(second) < 0
+    check tree.isItemExpanded(folder)
+    check tree.outlineItemWithIdentifier(second / "file.txt").decoration.badge == ""
+    check tree.outlineItemWithIdentifier(folder / "file.txt").decoration.badge == "U"
+    check not tree.removeRootPath(second)
+    require tree.removeRootPath(first)
+    check tree.rootPath == third
+    require tree.removeRootPath(third)
+    check tree.rootPaths.len == 0
+    check tree.rootPath.len == 0
+    check tree.rowCount() == 0
+    check readFile(folder / "file.txt") == "keep"
+    require tree.addRootPath(second)
+    check tree.rootPaths == @[second]
+    check tree.outlineItemWithIdentifier(second / "file.txt").decoration.badge == ""
+
+  test "removing an overlapping root rebuilds filtered paths from remaining snapshots":
+    let
+      root = createTempDir("kosmo-remove-overlapping-root-", "")
+      nested = root / "nested"
+      path = nested / "changed.txt"
+    createDir(nested)
+    writeFile(path, "keep")
+    let tree = newKosmoFileTree(root)
+    defer:
+      tree.stopGitStatusMonitoring()
+      removeDir(root)
+    require tree.addRootPath(nested)
+    tree.applyGitStatus(
+      GitStatusSnapshot(
+        rootPath: root,
+        isRepository: true,
+        entries:
+          @[
+            GitStatusEntry(path: path, state: gfsModified),
+            GitStatusEntry(path: root / "changed-deleted.txt", state: gfsDeleted),
+          ],
+      )
+    )
+    tree.applyGitStatus(
+      GitStatusSnapshot(
+        rootPath: nested,
+        isRepository: true,
+        entries: @[GitStatusEntry(path: path, state: gfsAdded)],
+      )
+    )
+    tree.displayMode = FileTreeDisplayMode.SourceControlChanges
+    tree.filterText = "changed"
+    require tree.removeRootPath(root)
+    check tree.rootPaths == @[nested]
+    check tree.rowForItem(root) < 0
+    check tree.rowForItem(path) >= 0
+    check tree.outlineItemWithIdentifier(path).decoration.badge == "A"
+    tree.filterText = ""
+    check tree.isItemExpanded(nested)
+    check tree.rowForItem(path) >= 0
+    require tree.addRootPath(root)
+    check tree.rowForItem(root / "changed-deleted.txt") < 0
+
   test "file tree exposes Git file badges and descendant folder colors":
     let
       root = createTempDir("merenda-kosmo-tree-git-", "")

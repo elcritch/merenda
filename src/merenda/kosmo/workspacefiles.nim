@@ -17,6 +17,22 @@ proc isFilesystemRoot*(path: string): bool =
   let normalized = normalizedPath(absolutePath(path))
   normalized.parentDir().len == 0 or normalized.parentDir() == normalized
 
+proc projectRelativePath*(path: string, rootPaths: openArray[string]): string =
+  ## Return a path relative to the closest containing project root.
+  ## Paths outside the workspace retain their normalized absolute path.
+  let fullPath = normalizedPath(absolutePath(path))
+  var containingRoot: string
+  for root in rootPaths:
+    if (fullPath == root or fullPath.isRelativeTo(root)) and
+        root.len > containingRoot.len:
+      containingRoot = root
+  if containingRoot.len == 0:
+    fullPath
+  elif fullPath == containingRoot:
+    "."
+  else:
+    relativePath(fullPath, containingRoot)
+
 type
   WorkspaceFileSnapshot* = object
     roots*: seq[string]

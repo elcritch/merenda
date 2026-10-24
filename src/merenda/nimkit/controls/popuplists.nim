@@ -61,6 +61,19 @@ type
     xPopupRole: StyleRole
     xItemRole: StyleRole
 
+  PopupListItemMetrics = object
+    textStyle: TextStyle
+    baseInsets: EdgeInsets
+    textInsets: EdgeInsets
+    stateWidth: float32
+    shortcutWidth: float32
+    submenuWidth: float32
+
+const
+  PopupStateGap = 6.0'f32
+  PopupShortcutGap = 12.0'f32
+  PopupSubmenuGap = 8.0'f32
+
 proc itemCount*(popupList: PopupListView): int
 proc visibleItemCount*(popupList: PopupListView): int
 proc firstIndex*(popupList: PopupListView): int
@@ -302,6 +315,55 @@ proc popupListScrollerKnobRect*(popupList: PopupListView, popupBounds: Rect): Re
     popupList.itemCount(),
   )
 
+proc hasStateColumn(popupList: PopupListView): bool =
+  for index in 0 ..< popupList.itemCount():
+    if not popupList.itemIsSeparator(index) and popupList.itemState(index) != bsOff:
+      return true
+
+proc itemMetrics(
+    popupList: PopupListView,
+    index: int,
+    appearance: Appearance,
+    states: set[WidgetState],
+    stateColumn: bool,
+): PopupListItemMetrics =
+  let style = appearance.resolveRowItemStyle(
+    controlStyle(
+      popupList.xItemRole,
+      states,
+      id = popupList.styleId(),
+      classes = popupList.styleClasses(),
+    )
+  )
+  result.textStyle = style.text
+  result.baseInsets = style.text.insets
+  result.textInsets = style.text.insets
+  if stateColumn:
+    result.stateWidth = max(textNaturalSize("✓", style.text).width, 12.0'f32)
+    result.textInsets.left += result.stateWidth + PopupStateGap
+  let shortcut = popupList.itemKeyEquivalentText(index)
+  if shortcut.len > 0:
+    result.shortcutWidth = textNaturalSize(shortcut, style.text).width
+    result.textInsets.right += result.shortcutWidth + PopupShortcutGap
+  if popupList.itemHasSubmenu(index):
+    result.submenuWidth = max(textNaturalSize(">", style.text).width, 10.0'f32)
+    result.textInsets.right += result.submenuWidth + PopupSubmenuGap
+
+proc popupListContentSize*(popupList: PopupListView, appearance: Appearance): Size =
+  ## Measure popup contents with the appearance used by their presentation host.
+  ## Include columns for checked states, shortcuts, and submenu indicators.
+  let stateColumn = popupList.hasStateColumn()
+  for index in 0 ..< popupList.itemCount():
+    if not popupList.itemIsSeparator(index):
+      let metrics = popupList.itemMetrics(index, appearance, {}, stateColumn)
+      result.width = max(
+        result.width,
+        textNaturalSize(popupList.itemText(index), metrics.textStyle).width +
+          metrics.textInsets.left + metrics.textInsets.right + 2.0'f32,
+      )
+  result.height =
+    max(popupList.rowHeight() * popupList.visibleItemCount().float32 + 2.0'f32, 1.0'f32)
+
 proc drawPopupList*(
     popupList: PopupListView,
     context: DrawContext,
@@ -348,6 +410,7 @@ proc drawPopupList*(
     itemRadius = max(
       popupStyle.box.cornerRadius - max(popupStyle.box.borderWidth, 1.0'f32), 0.0'f32
     )
+    stateColumn = popupList.hasStateColumn()
 
   context.drawChromeExtras(
     popupChrome,
@@ -391,6 +454,7 @@ proc drawPopupList*(
               rowStates.incl(ssFocused)
             rowStates
           row = initRowState(itemIndex, popupList.itemText(itemIndex), states = states)
+          metrics = popupList.itemMetrics(itemIndex, appearance, states, stateColumn)
           itemCornerRadii = initCornerRadii(
             if itemIndex == first: itemRadius else: 0.0'f32,
             if itemIndex == first: itemRadius else: 0.0'f32,
@@ -404,22 +468,18 @@ proc drawPopupList*(
               else:
                 none(Color),
             cornerRadii = some(itemCornerRadii),
+            textInsets = some(metrics.textInsets),
           )
           keyEquivalentText = popupList.itemKeyEquivalentText(itemIndex)
-          accessoryColor =
-            if ssDisabled in states:
-              color(0.52, 0.53, 0.56)
-            elif ssHovered in states:
-              color(1.0, 1.0, 1.0)
-            else:
-              color(0.27, 0.29, 0.33)
-          accessoryStyle = context.appearance.resolveTextStyle(
-            controlStyle(
-              popupList.xItemRole, states, id = popupList.styleId(), classes = classes
-            ),
-            accessoryColor,
-            insets(0.0),
+          accessoryStyle = metrics.textStyle
+          accessoryY = itemRect.minY + metrics.baseInsets.top
+          accessoryHeight = max(
+            itemRect.size.height - metrics.baseInsets.top - metrics.baseInsets.bottom, 0
           )
+          submenuX = itemRect.maxX - metrics.baseInsets.right - metrics.submenuWidth
+          shortcutX =
+            submenuX - (if metrics.submenuWidth > 0: PopupSubmenuGap else: 0.0'f32) -
+            metrics.shortcutWidth
         context.drawRowItem(
           itemRect,
           row,
@@ -438,10 +498,10 @@ proc drawPopupList*(
             layer,
             popupRoot,
             rect(
-              itemRect.origin.x + 7.0'f32,
-              itemRect.origin.y + 3.0'f32,
-              12.0'f32,
-              max(itemRect.size.height - 5.0'f32, 0.0'f32),
+              itemRect.minX + metrics.baseInsets.left,
+              accessoryY,
+              metrics.stateWidth,
+              accessoryHeight,
             ),
             if popupList.itemState(itemIndex) == bsOn: "✓" else: "-",
             accessoryStyle,
@@ -451,12 +511,7 @@ proc drawPopupList*(
           context.addText(
             layer,
             popupRoot,
-            rect(
-              itemRect.maxX - 86.0'f32,
-              itemRect.origin.y + 3.0'f32,
-              74.0'f32,
-              max(itemRect.size.height - 5.0'f32, 0.0'f32),
-            ),
+            rect(shortcutX, accessoryY, metrics.shortcutWidth, accessoryHeight),
             keyEquivalentText,
             accessoryStyle,
             taRight,
@@ -465,12 +520,7 @@ proc drawPopupList*(
           context.addText(
             layer,
             popupRoot,
-            rect(
-              itemRect.maxX - 18.0'f32,
-              itemRect.origin.y + 3.0'f32,
-              10.0'f32,
-              max(itemRect.size.height - 5.0'f32, 0.0'f32),
-            ),
+            rect(submenuX, accessoryY, metrics.submenuWidth, accessoryHeight),
             ">",
             accessoryStyle,
             taRight,
