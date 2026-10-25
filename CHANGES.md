@@ -4,6 +4,9 @@
 
 ## 0.29.0
 
+- Close the focused auxiliary window when using Kosmo’s close shortcuts or menu
+  actions, including Merenda Settings and Kosmo Settings.
+
 - Add the Punch theme, adapted from RUI2, with cream and orange colors, thick ink
   outlines, bold uppercase button captions, and hard shadows that depress on press.
   Select it in Settings or with `NIMKIT_THEME=punch`. Keep combo box arrow panels

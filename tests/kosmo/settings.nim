@@ -45,6 +45,40 @@ suite "Kosmo settings":
       settingsPanel.contentView().layoutSubtreeIfNeeded()
       settingsTabs.checkVisibleIn(settingsPanel.contentView())
 
+  test "close shortcuts target Merenda Settings before the editor":
+    let tabCount = frontend.editorView.editor.tabs().len
+    for action in [KosmoCloseTabAction, KosmoCloseWindowAction]:
+      let item = app.mainMenu().menuItemForAction(action)
+      require not item.isNil
+      require item.hasKeyEquivalent()
+      let stroke = item.keyEquivalent()
+      app.showMerendaSettings()
+      let panel = app.windows[^1]
+      require panel.title == "Merenda Settings"
+      app.activateWindow(panel)
+      require app.keyWindow() == panel
+      require app.performMenuKeyEquivalent(
+        nimkit.KeyEvent(
+          key: stroke.key,
+          keyCode: stroke.keyCode,
+          text: stroke.text,
+          modifiers: stroke.modifiers,
+        )
+      )
+      check panel.isClosed
+      check frontend.editorView.editor.tabs().len == tabCount
+      check not frontend.window.isClosed
+      check not settingsPanel.isClosed
+
+  test "Close Tab menu action closes the focused Kosmo settings panel":
+    app.activateWindow(settingsPanel)
+    require app.keyWindow() == settingsPanel
+    let closeItem = app.mainMenu().menuItemForAction(KosmoCloseTabAction)
+    require not closeItem.isNil
+    require closeItem.perform(Responder(settingsPanel))
+    check settingsPanel.isClosed
+    check not frontend.window.isClosed
+
   test "About identifies the application and credits Moe":
     let info = app.aboutInfo()
     check not app.icon().isNil

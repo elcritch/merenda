@@ -730,6 +730,16 @@ func ownsWindow(frontend: KosmoApplication, window: nimkit.Window): bool =
     if host.window == window:
       return true
 
+proc closeKeyAuxiliaryWindow(manager: KosmoWindowManager): bool =
+  let window = manager.application.keyWindow()
+  if window.isNil:
+    return
+  for frontend in manager.frontends:
+    if frontend.ownsWindow(window):
+      return
+  discard window.sendAction(nimkit.actionSelector("performClose"))
+  true
+
 proc activeFrontend(manager: KosmoWindowManager): KosmoApplication =
   if manager.isNil:
     return
@@ -1302,6 +1312,8 @@ proc newKosmoApplication*(
     nimkit.actionSelector(KosmoCloseTabAction)
   ) do(sender: nimkit.DynamicAgent):
     discard sender
+    if manager.closeKeyAuxiliaryWindow():
+      return
     let active = manager.activeFrontend()
     if not active.isNil:
       let controller = active.dockController
@@ -1310,6 +1322,8 @@ proc newKosmoApplication*(
     nimkit.actionSelector(KosmoCloseWindowAction)
   ) do(sender: nimkit.DynamicAgent):
     discard sender
+    if manager.closeKeyAuxiliaryWindow():
+      return
     let active = manager.activeFrontend()
     if not active.isNil:
       let group = active.dockController.activePaneGroup()
