@@ -82,6 +82,7 @@ else:
   import nimkit/tableviews
   import nimkit/tabviews
   import nimkit/terminalgeometry
+  import nimkit/terminalfilelinks
   import nimkit/texteditors
   import nimkit/textfields
   import nimkit/textlayout

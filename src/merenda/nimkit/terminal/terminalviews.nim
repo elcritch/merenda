@@ -1,6 +1,6 @@
 ## A reusable terminal-emulator view backed by Terminex.
 
-import std/[math, monotimes, strutils, times, unicode]
+import std/[math, monotimes, options, os, strutils, times, unicode]
 
 import sigils/core
 import terminex/[compactscrollback, terminput, termscreen, termsessions]
@@ -14,9 +14,9 @@ import ../responder/responders
 from ../text/textviews import isInsertableText
 import ../text/monotextviews
 import ../view/views
-import ./[terminalsessions, terminalwatch]
+import ./[terminalfilelinks, terminalsessions, terminalwatch]
 
-export terminalsessions
+export terminalfilelinks, terminalsessions
 
 const
   DefaultTerminalFontSize* = 14.0'f32
@@ -34,6 +34,7 @@ type
 
   TerminalLink = object
     target: string
+    fileLocation: TerminalFileLocation
     row, firstColumn, lastColumn: int
 
   TerminalView* = ref object of MonoTextView
@@ -51,6 +52,7 @@ type
     xCachedLineHeight, xCachedFontSize: float32
     xCachedFontName: string
     xLastTitle, xLastDirectory: string
+    xWorkingDirectory: string
     xLastBellCount: uint64
     xExitNotified: bool
     xAllowsClipboardWrites: bool
@@ -78,6 +80,9 @@ protocol TerminalViewEvents:
   proc terminalBellDidRing*(view: TerminalView) {.signal.}
   proc terminalProcessDidExit*(view: TerminalView, exitCode: int) {.signal.}
   proc terminalHyperlinkWasActivated*(view: TerminalView, link: string) {.signal.}
+  proc terminalFileWasActivated*(
+    view: TerminalView, location: TerminalFileLocation
+  ) {.signal.}
 
 func initTerminalPalette*(): TerminalPalette =
   TerminalPalette(
@@ -523,7 +528,7 @@ proc selectTerminalRange*(
   view.syncTerminalScreen()
 
 func isTerminalLinkSeparator(cell: TerminexCell): bool =
-  cell.text.len == 0 or cell.text.strip().len == 0
+  not cell.continuation and (cell.text.len == 0 or cell.text.strip().len == 0)
 
 func terminalLinkText(line: TerminexLine, firstColumn, lastColumn: int): string =
   for column in firstColumn ..< lastColumn:
@@ -543,6 +548,8 @@ proc terminalLinkAt(view: TerminalView, row, column: int): TerminalLink =
   let line = view.xSession.lineAtAbsolute(row)
   if column notin 0 ..< line.len:
     return
+  let workingDirectory =
+    if info.currentDirectory.len > 0: info.currentDirectory else: view.xWorkingDirectory
 
   let explicitTarget = line[column].style.hyperlink
   if explicitTarget.len > 0:
@@ -553,9 +560,13 @@ proc terminalLinkAt(view: TerminalView, row, column: int): TerminalLink =
       dec firstColumn
     while lastColumn < line.len and line[lastColumn].style.hyperlink == explicitTarget:
       inc lastColumn
-    return TerminalLink(
+    result = TerminalLink(
       target: explicitTarget, row: row, firstColumn: firstColumn, lastColumn: lastColumn
     )
+    let location = resolveTerminalFileLocation(explicitTarget, workingDirectory)
+    if location.isSome:
+      result.fileLocation = location.get()
+    return
   if line[column].isTerminalLinkSeparator():
     return
 
@@ -567,8 +578,9 @@ proc terminalLinkAt(view: TerminalView, row, column: int): TerminalLink =
   while tokenLast < line.len and not line[tokenLast].isTerminalLinkSeparator():
     inc tokenLast
   const
-    LeadingLinkPunctuation = {'(', '[', '{', '<', '"'}
-    TrailingLinkPunctuation = {'.', ',', ';', ':', '!', '?', ')', ']', '}', '>', '"'}
+    LeadingLinkPunctuation = {'(', '[', '{', '<', '"', '\''}
+    TrailingLinkPunctuation =
+      {'.', ',', ';', ':', '!', '?', ')', ']', '}', '>', '"', '\''}
   while tokenFirst < tokenLast and line[tokenFirst].text.len == 1 and
       line[tokenFirst].text[0] in LeadingLinkPunctuation:
     inc tokenFirst
@@ -584,6 +596,17 @@ proc terminalLinkAt(view: TerminalView, row, column: int): TerminalLink =
       return TerminalLink(
         target: target, row: row, firstColumn: firstColumn, lastColumn: tokenLast
       )
+  let
+    target = line.terminalLinkText(tokenFirst, tokenLast)
+    location = resolveTerminalFileLocation(target, workingDirectory)
+  if location.isSome:
+    return TerminalLink(
+      target: target,
+      fileLocation: location.get(),
+      row: row,
+      firstColumn: tokenFirst,
+      lastColumn: tokenLast,
+    )
 
 proc refreshHoveredLink(view: TerminalView): bool =
   let next =
@@ -820,6 +843,11 @@ proc resizeToFit*(view: TerminalView) =
 
 proc start*(view: TerminalView, options = initTerminalSpawnOptions()) =
   view.xSession.start(options)
+  view.xWorkingDirectory =
+    if options.workingDirectory.len > 0:
+      absolutePath(options.workingDirectory)
+    else:
+      getCurrentDir()
   view.stopTerminalPolling()
   view.xExitNotified = false
   view.xLastInputError.setLen(0)
@@ -884,7 +912,10 @@ proc handleLocalMouse(view: TerminalView, event: MonoTextRawEvent): bool =
     if view.xAllowsLinkActivation and mouse.modifiers.hasTerminalLinkModifier():
       let link = view.terminalLinkAt(position.row, position.column)
       if link.target.len > 0:
-        emit view.terminalHyperlinkWasActivated(link.target)
+        if link.fileLocation.path.len > 0:
+          emit view.terminalFileWasActivated(link.fileLocation)
+        else:
+          emit view.terminalHyperlinkWasActivated(link.target)
         return true
     if mouse.clickCount >= 3:
       view.selectLine(position)
@@ -1334,6 +1365,7 @@ proc initTerminalViewFields*(
     else:
       session
   view.xPalette = palette
+  view.xWorkingDirectory = getCurrentDir()
   view.xAllowsLinkActivation = true
   view.xOptionAsMeta = true
   view.xLastGeneration = high(uint64)

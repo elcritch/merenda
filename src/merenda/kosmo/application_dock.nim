@@ -1233,6 +1233,26 @@ proc openTerminalLink(lifecycle: KosmoWindowLifecycle, link: string) {.slot.} =
   if not frontend.isNil and not frontend.application.isNil:
     discard frontend.application.workspace().openUrl(link)
 
+proc openTerminalFile(
+    lifecycle: KosmoWindowLifecycle, location: nimkit.TerminalFileLocation
+) {.slot.} =
+  if lifecycle.isNil or lifecycle.frontend.isNil:
+    return
+  let
+    frontend = lifecycle.frontend[]
+    controller = frontend.dockController
+    view = controller.activeEditorView()
+  if not view.isNil and view.openFile(location.path):
+    let target = controller.activeEditorView()
+    if location.line > 0:
+      for tab in controller.editor.tabs():
+        if tab.active and tab.isMarkdownTab and target.markdownMode(tab.id) == kmmPreview:
+          discard target.toggleMarkdownMode(tab.id)
+      discard controller.editor.revealLocation(
+        location.line - 1, max(location.column - 1, 0), centered = true
+      )
+    target.refresh()
+
 proc workspaceGitChanged(lifecycle: KosmoWindowLifecycle) {.slot.} =
   if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
     # All panes share one Moe engine. Invalidate once, not once per pane.
@@ -1300,6 +1320,9 @@ proc newTerminalDocument(
     terminalView.terminalInputPolicy = frontend.xTerminalInputPolicy
     terminalView.connect(
       nimkit.terminalHyperlinkWasActivated, frontend.xWindowLifecycle, openTerminalLink
+    )
+    terminalView.connect(
+      nimkit.terminalFileWasActivated, frontend.xWindowLifecycle, openTerminalFile
     )
     if not frontend.xWindowManager.isNil:
       let manager = frontend.xWindowManager[]

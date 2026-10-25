@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Open existing terminal file paths in Kosmo with Command-click on macOS or
+  Control-click on Linux and Windows. Support `filename:line:column`, relative
+  paths using the terminal's directory, and OSC file hyperlinks.
+
+- Prevent stuck modifiers after macOS screenshot capture by using refreshed native
+  modifier flags instead of stale cached key presses.
+
 ## 0.29.0
 
 - Let Kosmo’s focused file tree use unmodified `h/j/k/l` as left/down/up/right

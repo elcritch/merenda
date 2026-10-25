@@ -1,7 +1,7 @@
 ## Terminal emulator and view interactions that own live PTY children.
 ## Kept in the integration runner so shell lifetimes stay out of component tests.
 
-import std/[monotimes, os, sequtils, strutils, tempfiles, times, unittest]
+import std/[monotimes, os, sequtils, strutils, tempfiles, times, unittest, uri]
 
 import ../support/terminalhelpers
 import terminex
@@ -19,6 +19,7 @@ import merenda/nimkit/view/views
 
 type TerminalInteractionSpy = ref object of Agent
   links: seq[string]
+  files: seq[TerminalFileLocation]
   notifications: seq[AccessibilityNotification]
 
 type TerminalEditingFallback = ref object of Responder
@@ -39,6 +40,11 @@ protocol TerminalEditingFallbackCommands of TextEditingCommandProtocol:
 
 proc rememberTerminalLink(spy: TerminalInteractionSpy, link: string) {.slot.} =
   spy.links.add link
+
+proc rememberTerminalFile(
+    spy: TerminalInteractionSpy, location: TerminalFileLocation
+) {.slot.} =
+  spy.files.add location
 
 proc rememberTerminalAccessibility(
     spy: TerminalInteractionSpy, notification: AccessibilityNotification
@@ -2089,6 +2095,97 @@ suite "nimkit terminal views":
     check mtdUnderline notin view.cellAt(0, 10).decorations
     check window.mouseDownAt(point, clickCount = 1, modifiers = terminalLinkModifiers())
     check spy.links == @["https://example.com/docs"]
+
+  test "modifier-click activates source paths using the terminal's OSC directory":
+    let
+      root = createTempDir("merenda-terminal-path-click-", "")
+      path = root / "source.nim"
+      session = newTerminalViewSession(columns = 60, rows = 2)
+      view = newTerminalView(session, frame = rect(0, 0, 720, 80))
+      window = newWindow("Terminal source links", frame = rect(0, 0, 720, 80))
+      spy = TerminalInteractionSpy()
+    defer:
+      view.close()
+      window.close()
+      removeDir(root)
+    writeFile(path, "first\nsecond line\n")
+    var uriPath = root.replace('\\', '/')
+    if not uriPath.startsWith('/'):
+      uriPath = "/" & uriPath
+    session.processOutput(
+      "\x1b]7;file://localhost" & uriPath.encodeUrl(usePlus = false).replace("%2F", "/") &
+        "\x07\x1b[?1000;1006hSee (source.nim:2:4). missing.nim:1:2"
+    )
+    discard view.pollSettled()
+    view.connect(terminalFileWasActivated, spy, rememberTerminalFile)
+    view.connect(terminalHyperlinkWasActivated, spy, rememberTerminalLink)
+    window.setContentView(view)
+    let point = view.terminalCellPoint(0, 10)
+    discard window.mouseMovedAt(point, modifiers = terminalLinkModifiers())
+    check mtdUnderline notin view.cellAt(0, 4).decorations
+    check mtdUnderline in view.cellAt(0, 5).decorations
+    check mtdUnderline in view.cellAt(0, 18).decorations
+    check mtdUnderline notin view.cellAt(0, 19).decorations
+    check window.mouseDownAt(point, modifiers = terminalLinkModifiers())
+    check window.mouseUpAt(point, modifiers = terminalLinkModifiers())
+    require spy.files.len == 1
+    check spy.files[0] == TerminalFileLocation(path: path, line: 2, column: 4)
+    check spy.links.len == 0
+
+    discard window.mouseMovedAt(
+      view.terminalCellPoint(0, 24), modifiers = terminalLinkModifiers()
+    )
+    check mtdUnderline notin view.cellAt(0, 24).decorations
+    view.allowsLinkActivation = false
+    discard window.mouseDownAt(point, modifiers = terminalLinkModifiers())
+    discard window.mouseUpAt(point, modifiers = terminalLinkModifiers())
+    check spy.files.len == 1
+
+    let widePath = root / "源.nim"
+    writeFile(widePath, "source")
+    view.allowsLinkActivation = true
+    session.processOutput("\x1b[2J\x1b[H'源.nim:2:4'")
+    discard view.pollSettled()
+    let widePoint = view.terminalCellPoint(0, 2)
+    discard window.mouseMovedAt(widePoint, modifiers = terminalLinkModifiers())
+    check mtdUnderline notin view.cellAt(0, 0).decorations
+    check mtdUnderline in view.cellAt(0, 1).decorations
+    check mtdUnderline in view.cellAt(0, 2).decorations
+    check window.mouseDownAt(widePoint, modifiers = terminalLinkModifiers())
+    check window.mouseUpAt(widePoint, modifiers = terminalLinkModifiers())
+    require spy.files.len == 2
+    check spy.files[1] == TerminalFileLocation(path: widePath, line: 2, column: 4)
+
+  test "OSC file hyperlinks emit local files rather than external URLs":
+    let
+      root = createTempDir("merenda-terminal-osc-file-", "")
+      path = root / "source with spaces.nim"
+      session = newTerminalViewSession(columns = 40, rows = 2)
+      view = newTerminalView(session, frame = rect(0, 0, 480, 80))
+      window = newWindow("Terminal OSC file", frame = rect(0, 0, 480, 80))
+      spy = TerminalInteractionSpy()
+    defer:
+      view.close()
+      window.close()
+      removeDir(root)
+    writeFile(path, "source")
+    var uriPath = path.replace('\\', '/')
+    if not uriPath.startsWith('/'):
+      uriPath = "/" & uriPath
+    session.processOutput(
+      "\x1b]8;;file://localhost" & uriPath.encodeUrl(usePlus = false).replace(
+        "%2F", "/"
+      ) & "\x07source file\x1b]8;;\x07"
+    )
+    discard view.pollSettled()
+    view.connect(terminalFileWasActivated, spy, rememberTerminalFile)
+    view.connect(terminalHyperlinkWasActivated, spy, rememberTerminalLink)
+    window.setContentView(view)
+    let point = view.terminalCellPoint(0, 3)
+    check window.mouseDownAt(point, modifiers = terminalLinkModifiers())
+    check window.mouseUpAt(point, modifiers = terminalLinkModifiers())
+    check spy.files == @[TerminalFileLocation(path: path)]
+    check spy.links.len == 0
 
   test "OSC clipboard writes remain opt-in":
     let

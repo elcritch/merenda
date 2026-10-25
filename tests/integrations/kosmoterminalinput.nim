@@ -1,6 +1,6 @@
 ## Hybrid terminal routing against a live PTY, with bounded readiness and teardown.
 
-import std/[monotimes, os, strutils, times, unittest]
+import std/[monotimes, options, os, strutils, tempfiles, times, unittest]
 import sigils/threads
 import merenda/nimkit
 import merenda/kosmo/kosmo
@@ -17,6 +17,60 @@ proc waitForTerminalText(view: TerminalView, text: string): bool =
 
 suite "Kosmo terminal shortcut PTY input":
   when defined(posix):
+    test "modifier-click opens a terminal source location in Kosmo":
+      for extension in ["nim", "md"]:
+        let
+          root = createTempDir("kosmo-terminal-source-click-", "")
+          filename = "source." & extension
+          path = root / filename
+          originalShell = getEnv("SHELL")
+        putEnv("SHELL", "/bin/sh")
+        writeFile(path, "first line\nsecond line\nthird line\n")
+        let
+          app = newApplication("Kosmo Terminal Source Link")
+          frontend = newKosmoApplication(app, root, monitorsGitStatus = false)
+          window = frontend.window
+        var terminal: KosmoTerminalView
+        defer:
+          frontend.close()
+          if not terminal.isNil:
+            terminal.session().waitForCommands()
+          window.close()
+          putEnv("SHELL", originalShell)
+          removeDir(root)
+        app.addWindow(window)
+        window.setContentView(frontend.contentView)
+        frontend.contentView.frame = rect(0, 0, 1200, 720)
+        frontend.contentView.layoutSubtreeIfNeeded()
+        require frontend.newTerminal()
+        frontend.contentView.layoutSubtreeIfNeeded()
+        let group = frontend.editorGroups()[0]
+        require group.pane.contentView of KosmoTerminalView
+        terminal = KosmoTerminalView(group.pane.contentView)
+        terminal.session().write(
+          "stty -echo; printf '\\033[2J\\033[H%s.%s:2:4' source " & extension &
+            "; read merenda_wait\r"
+        )
+        require terminal.waitForTerminalText(filename & ":2:4")
+        let
+          metrics = terminal.monoTextMetrics()
+          point = terminal.pointToWindow(
+            initPoint(
+              terminal.padding() + metrics.cellWidth * 3.5'f32,
+              terminal.padding() + metrics.lineHeight * 0.5'f32,
+            )
+          )
+        require window.mouseDownAt(point, modifiers = terminalLinkModifiers())
+        require window.mouseUpAt(point, modifiers = terminalLinkModifiers())
+        var activePath: Option[string]
+        for tab in group.editorView.editor.tabs():
+          if tab.active:
+            activePath = tab.filePath
+        check activePath == some(path)
+        check group.editorView.editor.bufferCursor() ==
+          KosmoBufferCursor(line: 1, column: 3)
+        check window.firstResponder() == Responder(group.editorView)
+
     test "show terminal shortcut creates a right split or reuses the nearest right pane":
       let originalShell = getEnv("SHELL")
       putEnv("SHELL", "/bin/sh")

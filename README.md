@@ -488,6 +488,12 @@ It brings together a file browser, split panes, terminal tabs, Markdown previews
 Git diffs, and GitHub issues and PRs. You can use it on its own or explore its
 source to see how a larger Merenda app fits together.
 
+In terminal tabs, Command-click a file path on macOS, or Control-click on Linux
+and Windows, to open it in Kosmo. Links such as `src/main.nim:12:5` jump to the
+given line and column (both start at 1). Relative paths use the terminal's reported
+current directory, or its starting directory when the shell does not report one.
+The terminal link setting controls both file links and web links.
+
 ### Install and open a project
 
 You don't need Nim to use a prebuilt Kosmo release. Run the installer from a
