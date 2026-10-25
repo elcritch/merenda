@@ -4,6 +4,9 @@
 
 ## 0.29.0
 
+- Let Kosmo’s focused file tree use unmodified `h/j/k/l` as left/down/up/right
+  arrows while keeping filter typing and shifted display shortcuts intact.
+
 - Move Kosmo Git diff’s Working Tree choice into the ending revision-state menu.
   Show `^*` on its button and the checked-out branch in the branch selector.
   Choosing another branch returns to its tip; choosing Working Tree returns to

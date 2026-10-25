@@ -15,6 +15,11 @@ including when files are inserted or removed above it, and keep selections tied
 to file paths. If the anchor file disappears, the browser retains the previous
 row position and clamps it to the remaining content.
 
+When the file tree has keyboard focus, `j` and `k` move down and up, and `h` and
+`l` behave like the left and right arrows to collapse and expand folders. These
+unmodified keys remain ordinary text in the file filter. Shifted browser shortcuts
+such as `Shift-H` keep their existing behavior.
+
 ## File and Git notifications
 
 With the default `monitorsGitStatus = true`, dmon watches workspace roots and Git

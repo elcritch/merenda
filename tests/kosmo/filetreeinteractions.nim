@@ -45,6 +45,82 @@ proc rendersTextWithColor(view: View, text: string, textColor: Color): bool =
           return true
 
 suite "Kosmo file tree interactions":
+  test "h j k l navigate the focused tree exactly like arrow keys":
+    let root = createTempDir("kosmo-tree-navigation-", "")
+    let folder = root / "folder"
+    let nested = folder / "nested"
+    let leaf = nested / "leaf.txt"
+    let letterMatch = root / "j-match.txt"
+    let lastFile = root / "z-last.txt"
+    createDir(nested)
+    for path in [leaf, letterMatch, lastFile]:
+      writeFile(path, "test")
+    let window = newWindow("Tree navigation", frame = rect(0, 0, 640, 400))
+    let content = newView(frame = rect(0, 0, 640, 400))
+    let letters = newKosmoFileTree(root, frame = rect(0, 0, 300, 400))
+    let arrows = newKosmoFileTree(root, frame = rect(320, 0, 300, 400))
+    defer:
+      window.close()
+      removeDir(root)
+    content.addSubview(letters)
+    content.addSubview(arrows)
+    window.setContentView(content)
+    for tree in [letters, arrows]:
+      tree.expandItem(root)
+      require tree.selectItemWithIdentifier(root)
+    for (letter, arrow, text, expected) in [
+      (keyK, keyArrowUp, "k", root),
+      (keyJ, keyArrowDown, "j", folder),
+      (keyL, keyArrowRight, "l", folder),
+      (keyJ, keyArrowDown, "j", nested),
+      (keyL, keyArrowRight, "l", nested),
+      (keyJ, keyArrowDown, "j", leaf),
+      (keyH, keyArrowLeft, "h", leaf),
+      (keyL, keyArrowRight, "l", leaf),
+      (keyK, keyArrowUp, "k", nested),
+      (keyH, keyArrowLeft, "h", nested),
+      (keyK, keyArrowUp, "k", folder),
+      (keyH, keyArrowLeft, "h", folder),
+      (keyJ, keyArrowDown, "j", letterMatch),
+      (keyJ, keyArrowDown, "j", lastFile),
+      (keyJ, keyArrowDown, "j", lastFile),
+    ]:
+      checkpoint(text & " -> " & expected)
+      require window.makeFirstResponder(letters)
+      let letterHandled =
+        window.dispatchKeyDown(KeyEvent(key: letter, keyCode: letter.ord, text: text))
+      require window.makeFirstResponder(arrows)
+      let arrowHandled =
+        window.dispatchKeyDown(KeyEvent(key: arrow, keyCode: arrow.ord))
+      check letterHandled == arrowHandled
+      check letters.selectedItemIdentifier() == expected
+      check letters.selectedItemIdentifier() == arrows.selectedItemIdentifier()
+      check letters.expandedItemIdentifiers() == arrows.expandedItemIdentifiers()
+    require window.makeFirstResponder(letters)
+    require letters.selectItemWithIdentifier(root)
+    require window.dispatchKeyDown(
+      KeyEvent(key: keyJ, keyCode: keyJ.ord, text: "J", modifiers: {kmShift})
+    )
+    check letters.selectedItemIdentifier() == letterMatch
+
+  test "navigation letters remain text in the file filter":
+    let root = createTempDir("kosmo-tree-filter-navigation-", "")
+    writeFile(root / "hjkl.txt", "test")
+    let tree = newKosmoFileTree(root)
+    let panel = newKosmoFileBrowserPanel(tree)
+    let window = newWindow("Tree filter navigation", frame = rect(0, 0, 320, 400))
+    defer:
+      window.close()
+      removeDir(root)
+    window.setContentView(panel)
+    require panel.showFilter()
+    for (key, text) in [(keyH, "h"), (keyJ, "j"), (keyK, "k"), (keyL, "l")]:
+      require window.dispatchKeyDown(KeyEvent(key: key, keyCode: key.ord, text: text))
+    check panel.filterField.text == "hjkl"
+    check tree.filterText == "hjkl"
+    check window.fieldEditorClient() == panel.filterField
+    check tree.displayMode == FileTreeDisplayMode.VisibleFiles
+
   test "file hover shows paths relative to the closest project root":
     let
       workspace = createTempDir("kosmo-tree-tooltips-", "")
@@ -401,12 +477,11 @@ suite "Kosmo file tree interactions":
       GitStatusSnapshot(
         rootPath: absolutePath(root),
         isRepository: true,
-        entries:
-          @[
-            GitStatusEntry(path: changedFile, state: gfsModified),
-            GitStatusEntry(path: deletedFile, state: gfsDeleted),
-            GitStatusEntry(path: unicodeDeletedFile, state: gfsDeleted),
-          ],
+        entries: @[
+          GitStatusEntry(path: changedFile, state: gfsModified),
+          GitStatusEntry(path: deletedFile, state: gfsDeleted),
+          GitStatusEntry(path: unicodeDeletedFile, state: gfsDeleted),
+        ],
       )
     )
     tree.displayMode = FileTreeDisplayMode.SourceControlChanges
@@ -450,11 +525,10 @@ suite "Kosmo file tree interactions":
       GitStatusSnapshot(
         rootPath: absolutePath(root),
         isRepository: true,
-        entries:
-          @[
-            GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
-            GitStatusEntry(path: ignoredFile, state: gfsIgnored),
-          ],
+        entries: @[
+          GitStatusEntry(path: ignoredFolder, state: gfsIgnored),
+          GitStatusEntry(path: ignoredFile, state: gfsIgnored),
+        ],
       )
     )
     check tree.rowForItem(ignoredFolder) < 0
@@ -925,14 +999,13 @@ suite "Kosmo file browser item actions":
       pasteboard.provider = previousProvider
       removeDir(workspace)
     require frontend.openPath(second)
-    let cases =
-      @[
-        (path: firstFile, relative: "source folder" / "café.nim"),
-        (path: secondFile, relative: "other λ.txt"),
-        (path: folder, relative: "source folder"),
-        (path: first, relative: "."),
-        (path: second, relative: "."),
-      ]
+    let cases = @[
+      (path: firstFile, relative: "source folder" / "café.nim"),
+      (path: secondFile, relative: "other λ.txt"),
+      (path: folder, relative: "source folder"),
+      (path: first, relative: "."),
+      (path: second, relative: "."),
+    ]
     for entry in cases:
       let menu = frontend.fileTree.itemContextMenu(entry.path)
       discard frontend.fileTree.selectItemWithIdentifier(first)

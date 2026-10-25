@@ -570,6 +570,26 @@ proc itemContextMenu*(tree: KosmoFileTree, path: string): nimkit.Menu =
     discard result.addItem(item)
 
 protocol KosmoFileTreeEvents of nimkit.ResponderEventProtocol:
+  method keyDown(tree: KosmoFileTree, event: nimkit.KeyEvent): bool =
+    ## Routes unmodified h/j/k/l through the outline's arrow-key handlers.
+    var navigation = event
+    if event.modifiers == {}:
+      case event.key
+      of nimkit.keyJ:
+        navigation.key = nimkit.keyArrowDown
+      of nimkit.keyK:
+        navigation.key = nimkit.keyArrowUp
+      of nimkit.keyH:
+        navigation.key = nimkit.keyArrowLeft
+      of nimkit.keyL:
+        navigation.key = nimkit.keyArrowRight
+      else:
+        discard
+      if navigation.key != event.key:
+        navigation.keyCode = navigation.key.ord
+        navigation.text = ""
+    tree.performNext(keyDown, navigation).get(false)
+
   method rightMouseDown(tree: KosmoFileTree, event: nimkit.MouseEvent): bool =
     let row = tree.rowItemIndexAtPoint(event.location)
     if row < 0:
