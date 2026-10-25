@@ -495,6 +495,10 @@ current directory, or its starting directory when the shell does not report one.
 The terminal link setting controls both file links and web links.
 Nim diagnostics such as `src/main.nim(12, 5)` and `src/main.nim(12)` are clickable too.
 
+Show Git Diff keeps a separate viewer for each repository. Detach their tabs to
+compare projects in separate windows; invoking the shortcut again returns to that
+project's viewer.
+
 ### Install and open a project
 
 You don't need Nim to use a prebuilt Kosmo release. Run the installer from a

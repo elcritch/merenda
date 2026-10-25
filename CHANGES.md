@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep separate Git diff viewers for different projects, including detached windows.
+  Reuse each project's viewer and refresh all open viewers without retargeting another project.
+
 - Open existing terminal file paths in Kosmo with Command-click on macOS or
   Control-click on Linux and Windows. Support `filename:line:column` and Nim's
   `filename(line, column)` / `filename(line)` diagnostics in both terminal links

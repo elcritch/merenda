@@ -234,4 +234,6 @@ suite "Kosmo CLI window routing":
     check origin.gitDiffPanel.snapshot.files[0].additions == 1
     check origin.gitDiffPanel.snapshot.files[0].deletions == 1
     check not origin.gitDiffPanel.refreshButton.enabled
-    check origin.documentTabs.selectedDocumentTabIdentifier == KosmoGitDiffTabIdentifier
+    check origin.documentTabs.selectedDocumentTabIdentifier == gitDiffTabIdentifier(
+      root
+    )

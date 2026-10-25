@@ -1257,13 +1257,21 @@ proc openTerminalFile(
   if not lifecycle.isNil and not lifecycle.frontend.isNil:
     discard lifecycle.frontend[].openFileLocation(location)
 
+iterator gitDiffPanels(frontend: KosmoApplication): KosmoGitDiffPanel =
+  if not frontend.isNil and not frontend.xClosed and not frontend.dockController.isNil:
+    for group in frontend.dockController.groups:
+      if not group.window.isNil and not group.window.isClosed():
+        for document in group.documents:
+          if document.contentView of KosmoGitDiffPanel:
+            yield KosmoGitDiffPanel(document.contentView)
+
 proc workspaceGitChanged(lifecycle: KosmoWindowLifecycle) {.slot.} =
   if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
     # All panes share one Moe engine. Invalidate once, not once per pane.
     let frontend = lifecycle.frontend[]
     frontend.dockController.editor.notifyGitRepositoryChanged()
-    if not frontend.gitDiffPanel.isNil:
-      frontend.gitDiffPanel.scheduleRepositoryRefresh()
+    for panel in frontend.gitDiffPanels():
+      panel.scheduleRepositoryRefresh()
     if not frontend.gitHubPanel.isNil:
       frontend.gitHubPanel.scheduleRepositoryRefresh()
 
@@ -1271,8 +1279,8 @@ proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
   if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
     let frontend = lifecycle.frontend[]
     let controller = frontend.dockController
-    if not frontend.gitDiffPanel.isNil:
-      discard frontend.gitDiffPanel.pollRepositoryRefresh()
+    for panel in frontend.gitDiffPanels():
+      discard panel.pollRepositoryRefresh()
     if not frontend.gitHubPanel.isNil:
       discard frontend.gitHubPanel.pollRepositoryRefresh()
     if lifecycle.monitorsGitStatus:

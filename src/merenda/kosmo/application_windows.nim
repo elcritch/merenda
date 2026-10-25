@@ -432,6 +432,7 @@ proc showGitDiffSnapshot(
     return
   let
     controller = frontend.dockController
+    identifier = gitDiffTabIdentifier(snapshot.rootPath)
     title =
       "Git Diff · " & (
         if snapshot.scopePath.len > 0: snapshot.scopePath.lastPathPart()
@@ -439,7 +440,7 @@ proc showGitDiffSnapshot(
         else: "stdin"
       )
   for group in controller.groups:
-    let document = group.documentForIdentifier(KosmoGitDiffTabIdentifier)
+    let document = group.documentForIdentifier(identifier)
     if not document.isNil:
       if not group.window.isNil and not group.window.isClosed():
         if document.contentView of KosmoGitDiffPanel:
@@ -482,7 +483,7 @@ proc showGitDiffSnapshot(
     weakFrontend = frontend.unsafeWeakRef()
     weakPanel = panel.unsafeWeakRef()
     document = newKosmoPaneDocument(
-      identifier = KosmoGitDiffTabIdentifier,
+      identifier = identifier,
       title = title,
       contentView = panel,
       preferredFirstResponder = panel.markdownView.textView(),
@@ -495,21 +496,23 @@ proc showGitDiffSnapshot(
         panel.close()
         if not weakFrontend.isNil and weakFrontend[].gitDiffPanel == panel:
           weakFrontend[].gitDiffPanel = nil
+          for candidate in weakFrontend[].gitDiffPanels():
+            if candidate != panel:
+              weakFrontend[].gitDiffPanel = candidate
         true,
     )
   panel.keyEquivalentHandler = proc(event: nimkit.KeyEvent): bool =
     if weakFrontend.isNil or weakPanel.isNil or weakFrontend[].dockController.isNil:
       return
     for candidate in weakFrontend[].dockController.groups:
-      let candidateDocument = candidate.documentForIdentifier(KosmoGitDiffTabIdentifier)
+      let candidateDocument = candidate.documentForIdentifier(identifier)
       if not candidateDocument.isNil and
           candidateDocument.contentView == nimkit.View(weakPanel[]):
         return candidate.editorView.handlePaneKey(event)
-  frontend.gitDiffPanel = panel
   if controller.openPaneDocument(group, document):
+    frontend.gitDiffPanel = panel
     return true
   panel.close()
-  frontend.gitDiffPanel = nil
 
 proc nearestGitDirectory(directory: string): string =
   var parent = absolutePath(directory)
@@ -619,11 +622,15 @@ proc showGitDiff*(frontend: KosmoApplication, path = ""): bool {.discardable.} =
   ## Show the selected editor file's repository, or a scoped diff for an explicit path.
   if frontend.isNil:
     return
-  let editorRoot =
-    if path.len == 0:
-      frontend.editorGitDirectory()
-    else:
-      ""
+  var editorRoot: string
+  if path.len == 0:
+    editorRoot = frontend.editorGitDirectory()
+    if editorRoot.len == 0 and not frontend.dockController.isNil:
+      let group = frontend.dockController.activePaneGroup()
+      if not group.isNil:
+        let document = group.documentForIdentifier(group.selectedTabIdentifier)
+        if not document.isNil and document.contentView of KosmoGitDiffPanel:
+          editorRoot = KosmoGitDiffPanel(document.contentView).snapshot.rootPath
   let root =
     if path.len > 0:
       nearestGitDirectory(
@@ -705,8 +712,8 @@ proc performFileTreeAction(
       discard frontend.fileTree.renameItem(path, nameField.text())
     else:
       frontend.fileTree.deleteItem(path)
-    if not frontend.gitDiffPanel.isNil:
-      frontend.gitDiffPanel.scheduleRepositoryRefresh()
+    for panel in frontend.gitDiffPanels():
+      panel.scheduleRepositoryRefresh()
     if not frontend.gitHubPanel.isNil:
       frontend.gitHubPanel.scheduleRepositoryRefresh()
   except CatchableError as error:

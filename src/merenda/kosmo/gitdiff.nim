@@ -13,6 +13,7 @@ import ./[searchbar, viewersearch, vscodegrammars]
 
 const
   KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
+    ## Namespace for project-specific identifiers returned by `gitDiffTabIdentifier`.
   GitDiffRefreshDebounceInterval = initDuration(milliseconds = 300)
   GitDiffReservedSummaryHeight = 240.0'f32
   # Highlighting runs on nimkitWorkerPool, so this deadline does not block the UI.
@@ -38,6 +39,17 @@ const
     (title: "^2", suffix: "~2"),
     (title: "^3", suffix: "~3"),
   ]
+
+proc gitDiffTabIdentifier*(rootPath: string): string =
+  ## Return the stable document identifier for a project's Git diff viewer.
+  var root = normalizedPath(absolutePath(rootPath))
+  try:
+    root = normalizedPath(expandFilename(root))
+  except OSError:
+    discard
+  when defined(windows):
+    root = root.toLowerAscii()
+  KosmoGitDiffTabIdentifier & ":" & root
 
 type
   GitDiffHighlightKey = tuple[source, language: string]

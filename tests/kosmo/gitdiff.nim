@@ -3,6 +3,7 @@ import figdraw
 import sigils/[core, threads]
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import merenda/kosmo/workspacefiles
 from merenda/nimkit/foundation/mainthreadwork import drainMainThreadWork
 
 proc git(root: string, args: varargs[string]) =
@@ -21,6 +22,45 @@ proc initRepository(root: string) =
 
 proc firstResponderIs(window: Window, expected: Responder): bool =
   window.firstResponder == expected
+
+proc showEditorRepositoryDiff(
+    frontend: KosmoApplication, path: string
+): KosmoGitDiffPanel =
+  frontend.application.activateWindow(frontend.window)
+  require frontend.window.makeFirstResponder(frontend.editorView)
+  require frontend.openPath(path)
+  require frontend.window.makeFirstResponder(frontend.editorView)
+  require frontend.window.dispatchKeyDown(
+    KeyEvent(
+      key: keyD, keyCode: keyD.ord, modifiers: shortcutModifiers() + {nimkit.kmShift}
+    )
+  )
+  result = frontend.gitDiffPanel
+  require not result.isNil
+  require result.waitForDiff()
+
+proc detachDiffViewer(
+    frontend: KosmoApplication, panel: KosmoGitDiffPanel, offset: float32
+): Window =
+  frontend.contentView.layoutSubtreeIfNeeded()
+  let
+    tabs = frontend.documentTabs
+    index =
+      tabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(panel.snapshot.rootPath))
+  require index >= 0
+  let
+    bounds = tabs.documentTabRect(index)
+    start = tabs.pointToWindow(initPoint(bounds.minX + 30, bounds.minY + 12))
+    stop = initPoint(
+      frontend.window.frame().size.width + 180 + offset,
+      frontend.window.frame().size.height + 180,
+    )
+    previous = frontend.detachedEditorWindows().len
+  require frontend.window.mouseDownAt(start)
+  require frontend.window.mouseDraggedAt(stop)
+  require frontend.window.mouseUpAt(stop)
+  require frontend.detachedEditorWindows().len == previous + 1
+  frontend.detachedEditorWindows()[^1]
 
 proc renderedControlText(view: View): string =
   for node in buildRenders(view)[DefaultDrawLevel].nodes:
@@ -1660,11 +1700,11 @@ suite "Kosmo Git diff":
     require frontend.gitDiffPanel.waitForDiff()
 
     check frontend.documentTabs.selectedDocumentTabIdentifier ==
-      KosmoGitDiffTabIdentifier
+      gitDiffTabIdentifier(root)
     check frontend.editorPane.contentView == View(frontend.gitDiffPanel)
     check frontend.gitDiffPanel.snapshot.files.len == 1
     let diffTabIndex =
-      frontend.documentTabs.indexOfDocumentTabIdentifier(KosmoGitDiffTabIdentifier)
+      frontend.documentTabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(root))
     require diffTabIndex >= 0
     check frontend.documentTabs.documentTabModels()[diffTabIndex].title ==
       "Git Diff · " & root.lastPathPart()
@@ -1706,7 +1746,7 @@ suite "Kosmo Git diff":
     check item.perform(frontend.window)
     check frontend.documentTabs.len == originalTabCount
     check frontend.documentTabs.selectedDocumentTabIdentifier ==
-      KosmoGitDiffTabIdentifier
+      gitDiffTabIdentifier(root)
     require frontend.gitDiffPanel.waitForDiff()
     let closeItem =
       app.mainMenu()[1].submenu().menuItemWithIdentifier(KosmoCloseTabAction)
@@ -1721,11 +1761,11 @@ suite "Kosmo Git diff":
     require not frontend.gitDiffPanel.isNil
     check frontend.documentTabs.len == originalTabCount
     check frontend.documentTabs.selectedDocumentTabIdentifier ==
-      KosmoGitDiffTabIdentifier
+      gitDiffTabIdentifier(root)
     require frontend.gitDiffPanel.waitForDiff()
 
     let tabIndex =
-      frontend.documentTabs.indexOfDocumentTabIdentifier(KosmoGitDiffTabIdentifier)
+      frontend.documentTabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(root))
     require tabIndex >= 0
     let
       tabBounds = frontend.documentTabs.documentTabRect(tabIndex)
@@ -1754,7 +1794,7 @@ suite "Kosmo Git diff":
     require not frontend.gitDiffPanel.isNil
     check frontend.gitDiffPanel != detachedPanel
     check frontend.documentTabs.selectedDocumentTabIdentifier ==
-      KosmoGitDiffTabIdentifier
+      gitDiffTabIdentifier(root)
     require frontend.gitDiffPanel.waitForDiff()
 
   test "Git diff tab participates in control-W pane navigation":
@@ -1893,6 +1933,91 @@ suite "Kosmo scoped Git diff":
     check panel.snapshot.files.len == 3
 
 suite "Kosmo editor repository diff":
+  test "different projects keep independent detached Git diff viewers":
+    let
+      workspace = createTempDir("kosmo-independent-diff-viewers-", "")
+      first = workspace / "first"
+      second = workspace / "second"
+    defer:
+      removeDir(workspace)
+    for root in [first, second]:
+      createDir(root)
+      initRepository(root)
+      writeFile(root / "source.txt", root.lastPathPart() & "\n")
+    let
+      app = newApplication("Independent Git Diff Viewers")
+      frontend = newKosmoApplication(app, first)
+    defer:
+      frontend.close()
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 1000, 700)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.openPath(second)
+
+    let
+      firstPanel = frontend.showEditorRepositoryDiff(first / "source.txt")
+      firstWindow = frontend.detachDiffViewer(firstPanel, 0)
+      secondPanel = frontend.showEditorRepositoryDiff(second / "source.txt")
+    check secondPanel != firstPanel
+    check sameFile(firstPanel.snapshot.rootPath, first)
+    check sameFile(secondPanel.snapshot.rootPath, second)
+    let secondWindow = frontend.detachDiffViewer(secondPanel, 900)
+    require frontend.detachedEditorWindows().len == 2
+
+    firstPanel.autoRefreshSwitch.on = true
+    secondPanel.autoRefreshSwitch.on = true
+    require firstPanel.autoRefreshSwitch.on and secondPanel.autoRefreshSwitch.on
+    require frontend.fileTree.workspaceFiles.waitForFiles()
+    let
+      firstReads = firstPanel.repositoryReadCount()
+      secondReads = secondPanel.repositoryReadCount()
+    writeFile(first / "new.txt", "first update\n")
+    writeFile(second / "new.txt", "second update\n")
+    emit frontend.fileTree.workspaceFiles.workspaceRepositoryDidChange()
+    let deadline = getMonoTime() + initDuration(seconds = 10)
+    while getMonoTime() < deadline:
+      if firstPanel.repositoryReadCount() > firstReads and
+          secondPanel.repositoryReadCount() > secondReads:
+        break
+      discard getCurrentSigilThread().pollAll(NonBlocking)
+      discard drainMainThreadWork()
+      emit frontend.fileTree.workspaceFiles.workspacePulse()
+      sleep(1)
+    check firstPanel.repositoryReadCount() > firstReads
+    check secondPanel.repositoryReadCount() > secondReads
+    require firstPanel.waitForDiff()
+    require secondPanel.waitForDiff()
+    check firstPanel.snapshot.files.len == 2
+    check secondPanel.snapshot.files.len == 2
+    firstPanel.autoRefreshSwitch.on = false
+    secondPanel.autoRefreshSwitch.on = false
+
+    check frontend.showEditorRepositoryDiff(first / "source.txt") == firstPanel
+    check app.keyWindow() == firstWindow
+    check sameFile(secondPanel.snapshot.rootPath, second)
+    check frontend.showEditorRepositoryDiff(second / "source.txt") == secondPanel
+    check app.keyWindow() == secondWindow
+    require frontend.showGitDiff()
+    check frontend.gitDiffPanel == secondPanel
+    require secondPanel.waitForDiff()
+    check sameFile(secondPanel.snapshot.rootPath, second)
+
+    require frontend.showGitDiff(first / "source.txt")
+    check frontend.gitDiffPanel == firstPanel
+    require firstPanel.waitForDiff()
+    check firstPanel.snapshot.scopePath == first / "source.txt"
+    check secondPanel.snapshot.scopePath.len == 0
+    firstWindow.close()
+    check frontend.detachedEditorWindows().len == 1
+    check frontend.gitDiffPanel == secondPanel
+    check frontend.showEditorRepositoryDiff(second / "source.txt") == secondPanel
+    check app.keyWindow() == secondWindow
+    let reopened = frontend.showEditorRepositoryDiff(first / "source.txt")
+    check reopened != firstPanel
+    check reopened != secondPanel
+    check sameFile(secondPanel.snapshot.rootPath, second)
+
   test "diff shortcut finds the nearest repository of the selected editor file":
     let workspace = createTempDir("kosmo-active-repository-", "")
     defer:
@@ -1940,7 +2065,7 @@ suite "Kosmo editor repository diff":
           siblingIncluded = true
       check siblingIncluded
       let index =
-        frontend.documentTabs.indexOfDocumentTabIdentifier(KosmoGitDiffTabIdentifier)
+        frontend.documentTabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(root))
       require index >= 0
       check frontend.documentTabs.documentTabModels()[index].title ==
         "Git Diff · " & root.lastPathPart()
