@@ -33,13 +33,36 @@ suite "nimkit backend":
       check not declared(nimkitBackend.LayerSurfaceConfig)
       check not declared(nimkitBackend.createLayerSurfaceHostWindow)
 
-  test "held native modifier keys supplement missing event modifier flags":
-    check nimkitBackend.toNimkitModifiers({}, {figdrawSiwin.Key.lsystem}) == {kmCommand}
+  test "native modifier flags preserve held modifiers without cached key presses":
     check nimkitBackend.toNimkitModifiers(
-      {}, {figdrawSiwin.Key.rcontrol, figdrawSiwin.Key.lshift}
-    ) == {kmControl, kmShift}
-    check nimkitBackend.toNimkitModifiers({figdrawSiwin.ModifierKey.alt}, {}) ==
-      {kmOption}
+      {
+        figdrawSiwin.ModifierKey.shift, figdrawSiwin.ModifierKey.control,
+        figdrawSiwin.ModifierKey.alt, figdrawSiwin.ModifierKey.system,
+      }
+    ) == {kmShift, kmControl, kmOption, kmCommand}
+
+  when defined(macosx):
+    test "macOS screenshot capture cannot leave cached modifier keys active":
+      for key in [
+        figdrawSiwin.Key.lshift, figdrawSiwin.Key.rshift, figdrawSiwin.Key.lcontrol,
+        figdrawSiwin.Key.rcontrol, figdrawSiwin.Key.lalt, figdrawSiwin.Key.ralt,
+        figdrawSiwin.Key.lsystem, figdrawSiwin.Key.rsystem,
+      ]:
+        check nimkitBackend.toNimkitModifiers({}, {key}) == {}
+
+      check nimkitBackend.toNimkitModifiers(
+        {figdrawSiwin.ModifierKey.control},
+        {figdrawSiwin.Key.lshift, figdrawSiwin.Key.lsystem},
+      ) == {kmControl}
+  else:
+    test "held native modifier keys supplement missing event modifier flags":
+      check nimkitBackend.toNimkitModifiers({}, {figdrawSiwin.Key.lsystem}) ==
+        {kmCommand}
+      check nimkitBackend.toNimkitModifiers(
+        {}, {figdrawSiwin.Key.rcontrol, figdrawSiwin.Key.lshift}
+      ) == {kmControl, kmShift}
+      check nimkitBackend.toNimkitModifiers({figdrawSiwin.ModifierKey.alt}, {}) ==
+        {kmOption}
 
   test "native text input ignores control keys handled by physical key events":
     for text in ["", "\b", "\t", "\n", "\r", "\x7f"]:

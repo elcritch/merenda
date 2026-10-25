@@ -1224,17 +1224,24 @@ proc toNimkitMouseButton(button: siwinshim.MouseButton): events.MouseButton =
 proc toNimkitModifiers*(
     modifiers: set[siwinshim.ModifierKey], pressed: set[siwinshim.Key] = {}
 ): set[events.KeyModifier] =
+  # Cocoa refreshes modifier flags from the system. Cached key presses can retain
+  # modifiers whose release events were intercepted by screenshot capture.
+  let pressedKeys: set[siwinshim.Key] =
+    when defined(macosx):
+      {}
+    else:
+      pressed
   if siwinshim.ModifierKey.shift in modifiers or
-      pressed * {siwinshim.Key.lshift, siwinshim.Key.rshift} != {}:
+      pressedKeys * {siwinshim.Key.lshift, siwinshim.Key.rshift} != {}:
     result.incl events.kmShift
   if siwinshim.ModifierKey.control in modifiers or
-      pressed * {siwinshim.Key.lcontrol, siwinshim.Key.rcontrol} != {}:
+      pressedKeys * {siwinshim.Key.lcontrol, siwinshim.Key.rcontrol} != {}:
     result.incl events.kmControl
   if siwinshim.ModifierKey.alt in modifiers or
-      pressed * {siwinshim.Key.lalt, siwinshim.Key.ralt} != {}:
+      pressedKeys * {siwinshim.Key.lalt, siwinshim.Key.ralt} != {}:
     result.incl events.kmOption
   if siwinshim.ModifierKey.system in modifiers or
-      pressed * {siwinshim.Key.lsystem, siwinshim.Key.rsystem} != {}:
+      pressedKeys * {siwinshim.Key.lsystem, siwinshim.Key.rsystem} != {}:
     result.incl events.kmCommand
 
 proc toNimkitKey(key: siwinshim.Key): events.Key =
