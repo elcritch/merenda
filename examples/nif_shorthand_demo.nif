@@ -77,7 +77,8 @@
           (option "macos-dark" "macOS Dark")
           (option "nebula" "Nebula")
           (option "peachy" "Peachy")
-          (option "synthwave83" "Synthwave83")))
+          (option "synthwave83" "Synthwave83")
+          (option "punch" "Punch")))
 
       (CheckBox
         (id "updates")

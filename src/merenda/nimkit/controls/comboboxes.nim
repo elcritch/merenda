@@ -936,14 +936,18 @@ protocol DefaultComboBoxDrawing of ViewDrawingProtocol:
 
     let
       arrowRect = style.comboBoxArrowRect(comboBox.bounds)
-      arrowFrame = context.renderRectFor(arrowRect)
+      borderInset = min(style.box.borderWidth, min(arrowRect.w, arrowRect.h / 2))
+      arrowPaintRect = rect(
+        arrowRect.x,
+        arrowRect.y + borderInset,
+        max(arrowRect.w - borderInset, 0.0'f32),
+        max(arrowRect.h - borderInset * 2, 0.0'f32),
+      )
+      arrowFrame = context.renderRectFor(arrowPaintRect)
       arrowChrome =
         chromeContext(style.chrome, crComboBox, cpArrow, style.arrowFill, styleStates)
       separatorRect = rect(
-        arrowRect.origin.x,
-        arrowRect.origin.y + 2.0'f32,
-        1.0'f32,
-        max(arrowRect.size.height - 4.0'f32, 0.0'f32),
+        arrowRect.origin.x, arrowPaintRect.origin.y, 1.0'f32, arrowPaintRect.size.height
       )
       separatorChrome = chromeContext(
         style.chrome, crComboBox, cpSeparator, fill(style.box.borderColor), styleStates

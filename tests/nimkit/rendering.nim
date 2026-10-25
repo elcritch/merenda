@@ -176,6 +176,76 @@ proc rectsClose(left, right: nimkitTypes.Rect): bool =
     abs(left.size.height - right.size.height) <= 0.01'f32
 
 suite "nimkit rendering":
+  test "hard control shadows draw offset silhouettes and retain their opacity":
+    let button = newButton("", frame = rect(0, 0, 120, 80))
+    var appearance = initAppearance(initPunchTheme())
+    let shadowColor = color(17.0 / 255, 17.0 / 255, 17.0 / 255, 0.5)
+    appearance[srButton, StyleBoxShadows] =
+      @[dropShadow(shadowColor, x = 4, y = 4, blur = 0)]
+    button.appearance = appearance
+    var rectangles: seq[Fig]
+    for node in buildRenders(button)[DefaultDrawLevel].resolvedNodes():
+      if node.kind == nkRectangle and node.stroke.weight == 3:
+        rectangles.add node
+    require rectangles.len == 2
+    check rectangles[0].screenBox == rect(4, 4, 120, 80)
+    check rectangles[0].fill.kind == flColor
+    check rectangles[0].fill.color.r == 17
+    check rectangles[0].fill.color.g == 17
+    check rectangles[0].fill.color.b == 17
+    check abs(rectangles[0].fill.color.a.int - 128) <= 1
+    check rectangles[1].screenBox == rect(0, 0, 120, 80)
+    check rectangles[1].fill == fill(color(1, 1, 1, 1))
+    appearance[srButton, StyleBoxShadows] = newSeq[BoxShadow]()
+    button.appearance = appearance
+    rectangles.setLen(0)
+    for node in buildRenders(button)[DefaultDrawLevel].resolvedNodes():
+      if node.kind == nkRectangle and node.stroke.weight == 3:
+        rectangles.add node
+    check rectangles.len == 1
+
+  test "combo box arrow panels stay inside thick outlines":
+    let root = newView(frame = rect(0, 0, 240, 100))
+    let combo = newComboBox(["Plan"], frame = rect(10, 12, 180, 46))
+    root.appearance = initAppearance(initPunchTheme())
+    root.addSubview(combo)
+    let style = root.appearance.resolveComboBoxStyle(controlStyle(srComboBox))
+    var foundArrow = false
+    for node in buildRenders(root)[DefaultDrawLevel].resolvedNodes():
+      if node.kind == nkRectangle and node.fill == style.arrowFill:
+        foundArrow = true
+        check node.screenBox.y == combo.frame.y + style.box.borderWidth
+        check node.screenBox.h == combo.frame.h - style.box.borderWidth * 2
+        check node.screenBox.x + node.screenBox.w ==
+          combo.frame.maxX - style.box.borderWidth
+    check foundArrow
+
+  test "dropdown rows preserve thick popup borders at rounded corners":
+    let popup = newPopupListView(
+      PopupListData(
+        itemCount: proc(): int =
+          2,
+        visibleCount: proc(): int =
+          2,
+        rowHeight: proc(): float32 =
+          38,
+        itemText: proc(index: int): string =
+          $index,
+      ),
+      frame = rect(0, 0, 160, 78),
+    )
+    let appearance = initAppearance(initPunchTheme())
+    var rows = 0
+    for node in buildRenders(popup, appearance)[PopupDrawLevel].resolvedNodes():
+      if node.kind == nkRectangle and node.fill == fill(color(1, 1, 1, 1)) and
+          node.stroke.weight == 0:
+        inc rows
+        check node.screenBox.x >= 3
+        check node.screenBox.y >= 3
+        check node.screenBox.x + node.screenBox.w <= 157
+        check node.screenBox.y + node.screenBox.h <= 75
+    check rows == 2
+
   test "drawing helpers keep popup nodes in their active render layer":
     let root = newView(frame = rect(0, 0, 120, 80))
     for index in 0 ..< 3:
@@ -313,11 +383,10 @@ suite "nimkit rendering":
       buttonBorder = color(0.11, 0.12, 0.13, 1.0)
       fieldFill = color(0.91, 0.92, 0.93, 1.0)
       fieldBorder = color(0.21, 0.22, 0.23, 1.0)
-      buttonShadows =
-        @[
-          dropShadow(color(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
-          insetShadow(color(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
-        ]
+      buttonShadows = @[
+        dropShadow(color(0, 0, 0, 0.40), y = 2.0, blur = 5.0),
+        insetShadow(color(1, 1, 1, 0.20), y = -1.0, blur = 1.0),
+      ]
 
     var builder = initThemeBuilder(initTheme())
     builder[srButton, StyleFill] = buttonFill

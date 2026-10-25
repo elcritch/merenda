@@ -43,6 +43,10 @@ suite "nimkit settings":
     check appliedAppearance.theme.isInitialized
     require settings.window().chooseItem(picker, "Aqua")
     check appliedTheme == "aqua"
+    require settings.window().chooseItem(picker, "Punch")
+    check appliedTheme == "punch"
+    check appliedAppearance.theme.resolveButtonStyle(controlStyle(srButton)).box.borderWidth ==
+      3
 
   test "refresh theme rereads selected CSS and preserves fonts on success or failure":
     let directory = createTempDir("merenda-theme-refresh-", "")

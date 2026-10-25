@@ -287,6 +287,9 @@ proc toFigShadow(shadow: BoxShadow): RenderShadow =
     y: shadow.y,
   )
 
+func isHardDropShadow(shadow: BoxShadow): bool =
+  shadow.kind == bskDrop and shadow.blur == 0 and shadow.spread == 0
+
 proc rectangleNode(
     rect: nimkitTypes.Rect,
     fillValue: Fill,
@@ -316,7 +319,8 @@ proc rectangleNode(
   elif lightMaskContent:
     result.flags.incl NfRectMaskContent
   for idx in 0 ..< min(shadows.len, result.shadows.len):
-    result.shadows[idx] = shadows[idx].toFigShadow()
+    if not shadows[idx].isHardDropShadow():
+      result.shadows[idx] = shadows[idx].toFigShadow()
 
 proc translationNode(rect: nimkitTypes.Rect, translation: nimkitTypes.Point): Fig =
   Fig(
@@ -1165,6 +1169,24 @@ proc addRenderRectangle*(
     lightMaskContent = false,
     cornerRadii = initCornerRadii(0.0'f32),
 ): FigIdx {.discardable.} =
+  # FigDraw skips shadows without blur or spread. Paint hard offset silhouettes
+  # as siblings so the face's content mask does not clip them.
+  for index in countdown(shadows.len - 1, 0):
+    let shadow = shadows[index]
+    if shadow.isHardDropShadow() and shadow.color.a > 0:
+      discard context.addFig(
+        layer,
+        parent,
+        rectangleNode(
+          nimkitTypes.rect(rect.x + shadow.x, rect.y + shadow.y, rect.w, rect.h),
+          fill(shadow.color.rgba),
+          shadow.color,
+          strokeWidth,
+          cornerRadius,
+          roundedCorners = roundedCorners,
+          cornerRadii = cornerRadii,
+        ),
+      )
   context.addFig(
     layer,
     parent,

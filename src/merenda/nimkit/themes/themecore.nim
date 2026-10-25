@@ -1,4 +1,5 @@
 import std/[atomics, sets, strutils, tables]
+from std/unicode import toUpper
 
 when defined(windows) and defined(vcc):
   when not declared(nimHasCorrectMsvcAtomics):
@@ -120,6 +121,8 @@ type
     padding*: EdgeInsets
 
   ButtonStyle* = object
+    captionTransform*: string
+    faceOffset*: Size
     box*: ControlBoxStyle
     text*: TextStyle
     textHighlightColor*: Color
@@ -1857,6 +1860,8 @@ proc resolveScrollViewStyle*(theme: Theme, context: StyleContext): ScrollViewSty
 
 proc resolveButtonStyle*(theme: Theme, context: StyleContext): ButtonStyle =
   ButtonStyle(
+    captionTransform: theme.keywordRule(context, StyleCaptionTransform, "none"),
+    faceOffset: theme.sizeRule(context, StyleFaceOffset, initSize(0, 0)),
     box: theme.resolveControlBoxStyle(
       context,
       fill(color(0.20, 0.48, 0.86, 1.0)),
@@ -2188,8 +2193,17 @@ proc resolveRowItemStyle*(appearance: Appearance, context: StyleContext): RowIte
 proc resolveBoxStyle*(appearance: Appearance, context: StyleContext): BoxStyle =
   appearance.theme.resolveBoxStyle(context)
 
+func buttonCaption*(style: ButtonStyle, title: string): string =
+  ## Applies the push-button caption style without changing its stored title.
+  if style.captionTransform == "uppercase":
+    title.toUpper()
+  else:
+    title
+
 func buttonTextRect*(style: ButtonStyle, bounds: Rect): Rect =
-  bounds.inset(style.text.insets)
+  result = bounds.inset(style.text.insets)
+  result.x += style.faceOffset.width
+  result.y += style.faceOffset.height
 
 func choiceIndicatorRect*(style: ChoiceButtonStyle, bounds: Rect): Rect =
   let

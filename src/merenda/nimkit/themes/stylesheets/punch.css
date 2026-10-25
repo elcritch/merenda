@@ -1,0 +1,394 @@
+/* Adapted from RUI2 Punch (MIT), copyright 2026 RUI2 Contributors.
+ * Palette and geometry: https://github.com/kobi2187/rui2
+ * See punch.LICENSE for the upstream license. */
+
+:root {
+  --punch-ink: #111111;
+  --punch-paper: #fff1d6;
+  --punch-surface: #ffffff;
+  --punch-hover: #fff2ed;
+  --punch-pressed: #ffe5db;
+  --punch-disabled: #88816f;
+  --punch-shadow: 4px 4px 0px 0px var(--punch-ink);
+  --accent: #ff5a1f;
+  --accent-pressed: #cc4819;
+  --box-border-color: var(--punch-ink);
+  --box-fill: transparent;
+  --box-text-color: var(--punch-ink);
+  --button-border-color: var(--punch-ink);
+  --button-border-color-accent: var(--punch-ink);
+  --button-border-color-accent-highlighted: var(--punch-ink);
+  --button-border-color-accent-hovered: var(--punch-ink);
+  --button-border-color-disabled: var(--punch-disabled);
+  --button-border-color-highlighted: var(--punch-ink);
+  --button-border-color-hovered: var(--punch-ink);
+  --button-fill: var(--punch-surface);
+  --button-fill-accent: var(--accent);
+  --button-fill-accent-highlighted: var(--accent-pressed);
+  --button-fill-accent-hovered: var(--accent-pressed);
+  --button-fill-disabled: var(--punch-paper);
+  --button-fill-highlighted: var(--punch-hover);
+  --button-fill-hovered: var(--punch-hover);
+  --button-focus-ring-color: var(--accent);
+  --button-shadows: var(--punch-shadow);
+  --button-shadows-disabled: none;
+  --button-shadows-highlighted: none;
+  --button-text-color: var(--punch-ink);
+  --button-text-color-disabled: var(--punch-disabled);
+  --choice-indicator-border-color: var(--punch-ink);
+  --choice-indicator-border-color-disabled: var(--punch-disabled);
+  --choice-indicator-border-color-highlighted: var(--punch-ink);
+  --choice-indicator-border-color-selected: var(--punch-ink);
+  --choice-indicator-fill: var(--punch-surface);
+  --choice-indicator-fill-disabled: var(--punch-paper);
+  --choice-indicator-fill-highlighted: var(--punch-hover);
+  --choice-indicator-fill-selected: var(--accent);
+  --choice-indicator-fill-selected-disabled: var(--punch-paper);
+  --choice-indicator-fill-selected-highlighted: var(--accent);
+  --choice-mark-color: var(--punch-ink);
+  --choice-mark-color-disabled: var(--punch-disabled);
+  --choice-text-color: var(--punch-ink);
+  --choice-text-color-disabled: var(--punch-disabled);
+  --combo-box-arrow-color: var(--punch-ink);
+  --combo-box-arrow-fill: var(--accent);
+  --combo-box-border-color: var(--punch-ink);
+  --combo-box-border-color-open: var(--punch-ink);
+  --combo-box-fill: var(--punch-surface);
+  --combo-box-item-fill: var(--punch-surface);
+  --combo-box-item-fill-highlighted: var(--punch-hover);
+  --combo-box-item-fill-selected: var(--accent);
+  --combo-box-item-fill-selected-highlighted: var(--accent);
+  --combo-box-item-text-color: var(--punch-ink);
+  --combo-box-item-text-color-selected: var(--punch-ink);
+  --combo-box-text-color: var(--punch-ink);
+  --disabled-fill: var(--punch-paper);
+  --disabled-text-color: var(--punch-disabled);
+  --document-tab-accent-color: var(--accent);
+  --document-tab-bar-border-color: var(--punch-ink);
+  --document-tab-bar-fill: var(--punch-paper);
+  --document-tab-border-color: var(--punch-ink);
+  --document-tab-border-color-disabled: var(--punch-disabled);
+  --document-tab-border-color-highlighted: var(--punch-ink);
+  --document-tab-border-color-pressed: var(--punch-ink);
+  --document-tab-border-color-selected: var(--punch-ink);
+  --document-tab-button-border-color: var(--punch-ink);
+  --document-tab-button-border-color-disabled: var(--punch-disabled);
+  --document-tab-button-border-color-highlighted: var(--punch-ink);
+  --document-tab-button-fill: var(--punch-surface);
+  --document-tab-button-fill-disabled: var(--punch-paper);
+  --document-tab-button-fill-highlighted: var(--punch-hover);
+  --document-tab-button-mark-color: var(--punch-ink);
+  --document-tab-button-mark-color-disabled: var(--punch-disabled);
+  --document-tab-fill: var(--punch-surface);
+  --document-tab-fill-disabled: var(--punch-paper);
+  --document-tab-fill-highlighted: var(--punch-hover);
+  --document-tab-fill-pressed: var(--punch-pressed);
+  --document-tab-fill-selected: var(--accent);
+  --document-tab-highlight-fill: var(--punch-surface);
+  --document-tab-highlight-fill-disabled: var(--punch-paper);
+  --document-tab-text-color: var(--punch-ink);
+  --document-tab-text-color-disabled: var(--punch-disabled);
+  --document-tab-text-color-selected: var(--punch-ink);
+  --focus-ring-color: var(--accent);
+  --indicator-size: 24px;
+  --menu-bar-border-color: var(--punch-ink);
+  --menu-bar-fill: var(--punch-surface);
+  --menu-bar-item-border-color: var(--punch-ink);
+  --menu-bar-item-border-color-active: var(--punch-ink);
+  --menu-bar-item-border-color-disabled: var(--punch-disabled);
+  --menu-bar-item-border-color-hovered: var(--punch-ink);
+  --menu-bar-item-fill: var(--punch-surface);
+  --menu-bar-item-fill-active: var(--punch-surface);
+  --menu-bar-item-fill-disabled: var(--punch-paper);
+  --menu-bar-item-fill-hovered: var(--punch-hover);
+  --menu-bar-item-text-color: var(--punch-ink);
+  --menu-bar-item-text-color-active: var(--punch-ink);
+  --menu-bar-item-text-color-disabled: var(--punch-disabled);
+  --mono-text-border-color: var(--punch-ink);
+  --mono-text-cursor-color: var(--punch-ink);
+  --mono-text-fill: var(--punch-surface);
+  --mono-text-text-color: var(--punch-ink);
+  --progress-border-color: var(--punch-ink);
+  --progress-fill: var(--accent);
+  --row-item-fill: var(--punch-surface);
+  --row-item-fill-disabled: var(--punch-paper);
+  --row-item-fill-highlighted: var(--punch-hover);
+  --row-item-fill-selected: var(--accent);
+  --row-item-fill-selected-highlighted: var(--accent);
+  --row-item-separator-color: var(--punch-ink);
+  --row-item-text-color: var(--punch-ink);
+  --row-item-text-color-disabled: var(--punch-disabled);
+  --row-item-text-color-selected: var(--punch-ink);
+  --scroll-view-border-color: var(--punch-ink);
+  --scroll-view-fill: var(--punch-surface);
+  --scroller-knob-border-color: var(--punch-ink);
+  --scroller-knob-fill: var(--punch-surface);
+  --scroller-knob-shadows: none;
+  --scroller-track-border-color: var(--punch-ink);
+  --scroller-track-fill: var(--punch-paper);
+  --scroller-track-shadows: none;
+  --split-view-divider-border-color: var(--punch-ink);
+  --split-view-divider-fill: var(--punch-paper);
+  --split-view-divider-mark-color: var(--punch-ink);
+  --tab-border-color: var(--punch-ink);
+  --tab-border-color-disabled: var(--punch-disabled);
+  --tab-border-color-highlighted: var(--punch-ink);
+  --tab-border-color-selected: var(--punch-ink);
+  --tab-fill: var(--punch-surface);
+  --tab-fill-disabled: var(--punch-paper);
+  --tab-fill-highlighted: var(--punch-hover);
+  --tab-fill-selected: var(--accent);
+  --tab-highlight-fill: var(--punch-surface);
+  --tab-highlight-fill-disabled: var(--punch-paper);
+  --tab-panel-border-color: var(--punch-ink);
+  --tab-panel-fill: var(--punch-paper);
+  --tab-text-color: var(--punch-ink);
+  --tab-text-color-disabled: var(--punch-disabled);
+  --tab-text-color-selected: var(--punch-ink);
+  --table-view-border-color: var(--punch-ink);
+  --table-view-column-hover-fill: var(--punch-surface);
+  --table-view-column-selection-fill: #ff5a1f55;
+  --table-view-fill: var(--punch-surface);
+  --text-field-border-color: var(--punch-ink);
+  --text-field-fill: var(--punch-surface);
+  --text-field-selection-color: #ff5a1f55;
+  --text-field-text-color: var(--punch-ink);
+  --tooltip-border-color: var(--punch-ink);
+  --tooltip-fill: var(--punch-surface);
+  --tooltip-text-color: var(--punch-ink);
+}
+
+view {
+  -nimkit-window-background-color: var(--punch-paper);
+  -nimkit-window-background: var(--punch-paper);
+  -nimkit-pinstripe-height: 0px;
+  -nimkit-pinstripe-period: 0px;
+}
+
+box,
+button,
+check-box,
+radio-button,
+text-field,
+combo-box,
+date-picker,
+tab,
+tab-panel,
+document-tab,
+document-tab-bar,
+document-tab-button,
+mono-text-view,
+switch,
+slider,
+progress-indicator,
+stepper {
+  -nimkit-chrome: default;
+  border-width: 3px;
+  border-radius: 6px;
+  box-shadow: none;
+  -nimkit-focus-ring-color: var(--accent);
+  -nimkit-focus-ring-width: 3px;
+}
+
+button {
+  font-family: "IBMPlexSans-Bold.ttf.zip";
+  -nimkit-font-face: var(--font-ui-face-bold);
+  font-size: 15px;
+  -nimkit-caption-transform: uppercase;
+  -nimkit-minimum-size: 0px 46px;
+  -nimkit-text-insets: 10px 22px;
+  box-shadow: var(--punch-shadow);
+}
+
+button,
+button:disabled,
+button:disabled:accent {
+  -nimkit-text-highlight-color: transparent;
+  -nimkit-text-shadow-color: transparent;
+}
+
+button:highlighted,
+button:active,
+button:pressed {
+  -nimkit-face-offset: 4px 4px;
+  box-shadow: none;
+}
+
+button:disabled {
+  -nimkit-face-offset: 0px 0px;
+  box-shadow: none;
+}
+
+text-field,
+combo-box {
+  font-size: 15px;
+  -nimkit-minimum-size: 80px 46px;
+  -nimkit-text-insets: 10px 12px;
+  box-shadow: none;
+}
+
+check-box,
+radio-button {
+  font-size: 15px;
+  -nimkit-indicator-size: 24px;
+  -nimkit-minimum-size: 0px 30px;
+}
+
+radio-button {
+  border-radius: 12px;
+}
+
+switch {
+  border-color: var(--punch-ink);
+  background: var(--punch-surface);
+  -nimkit-knob-fill: var(--punch-ink);
+  -nimkit-knob-border-color: var(--punch-ink);
+  -nimkit-knob-shadows: none;
+}
+
+switch:selected {
+  border-color: var(--punch-ink);
+  background: var(--accent);
+}
+
+switch:highlighted {
+  -nimkit-knob-fill: var(--accent-pressed);
+}
+
+switch:disabled,
+switch:disabled:selected {
+  border-color: var(--punch-disabled);
+  background: var(--punch-paper);
+  -nimkit-knob-fill: var(--punch-disabled);
+  -nimkit-knob-border-color: var(--punch-disabled);
+}
+
+slider,
+progress-indicator {
+  border-color: var(--punch-ink);
+  background: var(--punch-surface);
+  -nimkit-highlight-fill: var(--accent);
+  -nimkit-knob-fill: var(--accent);
+  -nimkit-knob-border-color: var(--punch-ink);
+  -nimkit-knob-shadows: none;
+  -nimkit-indicator-size: 12px;
+  -nimkit-knob-size: 26px;
+  -nimkit-minimum-size: 160px 32px;
+}
+
+progress-indicator {
+  -nimkit-indicator-size: 26px;
+}
+
+table-view,
+cascading-view,
+cascading-column,
+scroll-view,
+cascading-scroll-view {
+  border-color: var(--punch-ink);
+  border-width: 3px;
+  border-radius: 6px;
+  box-shadow: none;
+  -nimkit-drop-indicator-fill: var(--accent);
+  -nimkit-row-height: 38px;
+  -nimkit-header-height: 38px;
+}
+
+row-item,
+cascading-row-item {
+  -nimkit-alternating-fill: var(--punch-paper);
+  -nimkit-minimum-size: 0px 38px;
+}
+
+combo-box-item {
+  -nimkit-minimum-size: 0px 38px;
+}
+
+table-header,
+table-header-cell {
+  border-color: var(--punch-ink);
+  background: var(--punch-paper);
+  color: var(--punch-ink);
+  -nimkit-mark-color: var(--punch-ink);
+  -nimkit-insertion-indicator-fill: var(--accent);
+}
+
+table-header-cell:hover {
+  background: var(--punch-hover);
+}
+
+table-header-cell:pressed {
+  background: var(--punch-pressed);
+}
+
+scroller,
+cascading-scroller {
+  border-width: 3px;
+  border-radius: 6px;
+  -nimkit-knob-shadows: none;
+}
+
+/* Keep labels and compact toolbars usable in existing application layouts. */
+button.toolbar-button {
+  -nimkit-chrome: default;
+  border-width: 2px;
+  border-radius: 4px;
+  background: var(--punch-surface);
+  color: var(--punch-ink);
+  box-shadow: 2px 2px 0px 0px var(--punch-ink);
+  -nimkit-caption-transform: none;
+  -nimkit-minimum-size: 24px 24px;
+  -nimkit-text-insets: 0px 4px;
+  -nimkit-text-highlight-color: transparent;
+  -nimkit-text-shadow-color: transparent;
+}
+
+button.toolbar-button:hover,
+button.toolbar-button:highlighted {
+  background: var(--punch-hover);
+}
+
+button.toolbar-button:selected {
+  background: var(--accent);
+}
+
+button.toolbar-button:highlighted,
+button.toolbar-button:pressed {
+  -nimkit-face-offset: 2px 2px;
+  box-shadow: none;
+}
+
+button.toolbar-button:disabled {
+  -nimkit-face-offset: 0px 0px;
+  color: var(--punch-disabled);
+  border-color: var(--punch-disabled);
+  box-shadow: none;
+}
+
+text-field.label,
+text-field.label-title,
+text-field.label-heading,
+text-field.label-status,
+text-field.label-form {
+  -nimkit-chrome: default;
+  border-color: transparent;
+  border-width: 0px;
+  border-radius: 0px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--punch-ink);
+  -nimkit-focus-ring-width: 0px;
+  -nimkit-minimum-size: 0px 22px;
+  -nimkit-text-insets: 0px;
+}
+
+text-field.label-title,
+text-field.label-heading {
+  font-family: "IBMPlexSans-Bold.ttf.zip";
+  -nimkit-font-face: var(--font-ui-face-bold);
+}
+
+text-field.label-title {
+  font-size: 26px;
+  -nimkit-minimum-size: 0px 34px;
+}

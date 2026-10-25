@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.29.0
+
+- Add the Punch theme, adapted from RUI2, with cream and orange colors, thick ink
+  outlines, bold uppercase button captions, and hard shadows that depress on press.
+  Select it in Settings or with `NIMKIT_THEME=punch`. Keep combo box arrow panels
+  inside thick borders so the accent fill preserves the surrounding outline, and
+  inset dropdown rows to preserve the popup border and rounded corners.
+- Keep Peachy button hover and accent hover colors in its warm palette instead of
+  inheriting Aqua blue, including Kosmo’s Git diff refresh button.
+
 - Duplicate the HTML GUI demo with NIF interface and stylesheet files, preserving
   its preferences, Preview/Reset actions, theme switching, and About window. The
   theme uses native selector nodes, numeric lengths, keywords, and token references.

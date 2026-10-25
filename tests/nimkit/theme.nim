@@ -317,11 +317,10 @@ suite "nimkit theme":
       buttonShadow = color(0.04, 0.05, 0.06, 0.22)
       buttonMinimum = initSize(72.0, 32.0)
       buttonInsets = insets(2.0, 10.0)
-      buttonShadows =
-        @[
-          dropShadow(color(0, 0, 0, 0.35), y = 2.0, blur = 5.0),
-          insetShadow(color(1, 1, 1, 0.18), y = -1.0, blur = 1.0),
-        ]
+      buttonShadows = @[
+        dropShadow(color(0, 0, 0, 0.35), y = 2.0, blur = 5.0),
+        insetShadow(color(1, 1, 1, 0.18), y = -1.0, blur = 1.0),
+      ]
 
     var builder = initThemeBuilder(appearance.theme)
     builder["field.text.override"] = fieldText
@@ -417,7 +416,7 @@ suite "nimkit theme":
 
     for index, name in [
       "aqua", "banner", "darkbsd", "macos", "macos-dark", "nebula", "peachy",
-      "synthwave83",
+      "synthwave83", "punch",
     ]:
       checkpoint("theme: " & name)
       window.setAppearance(initAppearance(initThemeByName(name)))
@@ -436,7 +435,11 @@ suite "nimkit theme":
       check actionCount == index + 1
 
       let list = buildRenders(form)[DefaultDrawLevel]
-      for text in [label.text, entered, toggle.title, button.title]:
+      let buttonStyle =
+        window.effectiveAppearance().resolveButtonStyle(controlStyle(srButton))
+      for text in [
+        label.text, entered, toggle.title, buttonStyle.buttonCaption(button.title)
+      ]:
         check text in list.renderedText()
       for control in [View(field), View(toggle), View(button)]:
         check control.frame().size.width > 0

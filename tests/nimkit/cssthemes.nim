@@ -19,6 +19,63 @@ proc glyphHeight(view: View, text: string): float32 =
         result = max(result, node.textLayout.glyphRect(index).h)
 
 suite "NimKit CSS themes":
+  test "Peachy hover and accent states keep the warm palette":
+    let peachy = initPeachyTheme()
+    let aqua = initAquaTheme()
+    for states in [{ssHovered}, {ssHovered, ssAccent}]:
+      let context = controlStyle(srButton, states)
+      let style = peachy.resolveButtonStyle(context)
+      let warm = peachy.resolveButtonStyle(
+        controlStyle(srButton, {ssHighlighted} + states - {ssHovered})
+      )
+      check style.box.fill == warm.box.fill
+      check style.box.borderColor == warm.box.borderColor
+      check style.box.fill != aqua.resolveButtonStyle(context).box.fill
+
+  test "Punch supplies ink outlines orange accents and hard shadows":
+    let theme = initThemeByName("punch")
+    let normal = theme.resolveButtonStyle(controlStyle(srButton))
+    check normal.box.fill == parseHtmlColor("#ffffff")
+    check normal.box.borderColor == parseHtmlColor("#111111")
+    check normal.box.borderWidth == 3
+    check normal.box.cornerRadius == 6
+    check normal.chrome == DefaultChromeName
+    check theme.chromeFill(
+      chromeContext(normal.chrome, crButton, cpFace, normal.box.fill)
+    ) == normal.box.fill
+    check normal.buttonCaption("éclair") == "ÉCLAIR"
+    check normal.minSize.height == 46
+    check normal.captionTransform == "uppercase"
+    check normal.text.fontFace == theme.fontFaces(frUI).bold
+    require normal.box.shadows.len == 1
+    check normal.box.shadows[0].blur == 0
+    check normal.box.shadows[0].color == parseHtmlColor("#111111")
+    let accent = theme.resolveButtonStyle(controlStyle(srButton, {ssAccent}))
+    check accent.box.fill == parseHtmlColor("#ff5a1f")
+    for states in [{ssHighlighted}, {ssActive}, {ssPressed}, {ssAccent, ssHighlighted}]:
+      let pressed = theme.resolveButtonStyle(controlStyle(srButton, states))
+      check pressed.faceOffset == initSize(4, 4)
+      check pressed.box.shadows.len == 0
+    let disabled =
+      theme.resolveButtonStyle(controlStyle(srButton, {ssDisabled, ssHighlighted}))
+    check disabled.faceOffset == initSize(0, 0)
+    check disabled.box.shadows.len == 0
+    let toolbar = theme.resolveButtonStyle(
+      controlStyle(srButton, classes = @[ToolbarButtonStyleClass])
+    )
+    check toolbar.captionTransform == "none"
+    check toolbar.minSize == initSize(24, 24)
+    let label =
+      theme.resolveTextFieldStyle(controlStyle(srTextField, classes = @["label"]))
+    check label.box.borderWidth == 0
+    check label.box.shadows.len == 0
+    check label.box.fill == color(0, 0, 0, 0)
+    let reloaded = reloadThemeCss("punch", BuiltinThemeCssDirectory)
+    require reloaded.diagnostics.len == 0
+    for states in [{}, {ssAccent}, {ssHighlighted}, {ssDisabled}]:
+      check reloaded.theme.resolveButtonStyle(controlStyle(srButton, states)) ==
+        theme.resolveButtonStyle(controlStyle(srButton, states))
+
   test "property casing is normalized while custom properties stay case sensitive":
     let base = initThemeBuilder().finish()
     for property in [
@@ -138,7 +195,7 @@ suite "NimKit CSS themes":
   test "application CSS overrides every bundled theme including specific state defaults":
     for name in [
       "aqua", "banner", "macos", "macos-dark", "darkbsd", "nebula", "peachy",
-      "synthwave83",
+      "synthwave83", "punch",
     ]:
       checkpoint(name)
       let base = initThemeByName(name)
@@ -816,7 +873,7 @@ suite "NimKit CSS themes":
   test "all bundled themes rebuild from their on disk CSS inheritance chain":
     for name in [
       "aqua", "banner", "macos", "macos-dark", "darkbsd", "nebula", "peachy",
-      "synthwave83",
+      "synthwave83", "punch",
     ]:
       checkpoint(name)
       let loaded = reloadThemeCss(name, BuiltinThemeCssDirectory)

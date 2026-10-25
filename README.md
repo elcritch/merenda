@@ -46,11 +46,15 @@ theme, run it with `NIMKIT_THEME` set (in a POSIX shell):
 ```sh
 NIMKIT_THEME=macos nim r examples/controls_showcase.nim
 NIMKIT_THEME=aqua nim r examples/controls_showcase.nim
+NIMKIT_THEME=punch nim r examples/controls_showcase.nim
 ```
 
 The built-in themes are [embedded CSS stylesheets](src/merenda/nimkit/themes/stylesheets)
 with shared widget defaults. Application CSS can extend them, and typed Nim
 styling APIs remain available for programmatic overrides.
+
+The **Punch** theme ports [RUI2’s Punch (fat) theme](https://github.com/kobi2187/rui2):
+warm cream, orange accents, thick ink outlines, bold uppercase buttons and hard shadows.
 
 Use CSS for control colors, fonts, gradients, state styles, edge pinning and
 native layout constraints. Style StackView/GridView spacing and alignment and

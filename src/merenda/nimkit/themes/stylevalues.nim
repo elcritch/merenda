@@ -188,6 +188,8 @@ const
   StyleFontSlant* = StyleKey[string]("font.slant")
   StyleLanguage* = StyleKey[string]("text.language")
   StyleTextHighlightColor* = StyleKey[Color]("text.highlight.color")
+  StyleCaptionTransform* = StyleKey[string]("caption.transform")
+  StyleFaceOffset* = StyleKey[Size]("face.offset")
   StyleTextShadowColor* = StyleKey[Color]("text.shadow.color")
   StyleSelectionColor* = StyleKey[Color]("selection.color")
   StyleSelectionIndicatorPosition* = StyleKey[string]("selection.indicator.position")

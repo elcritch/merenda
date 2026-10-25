@@ -407,9 +407,9 @@ proc drawPopupList*(
     visible = popupList.visibleItemCount()
     total = popupList.itemCount()
     last = min(first + visible, total) - 1
-    itemRadius = max(
-      popupStyle.box.cornerRadius - max(popupStyle.box.borderWidth, 1.0'f32), 0.0'f32
-    )
+    borderWidth = max(popupStyle.box.borderWidth, 1.0'f32)
+    contentBounds = popupBounds.inset(insets(borderWidth))
+    itemRadius = max(popupStyle.box.cornerRadius - borderWidth, 0.0'f32)
     stateColumn = popupList.hasStateColumn()
 
   context.drawChromeExtras(
@@ -428,7 +428,8 @@ proc drawPopupList*(
     if itemIndex < 0 or itemIndex >= total:
       discard
     else:
-      let itemRect = popupList.popupListItemRect(popupBounds, itemIndex)
+      let itemRect =
+        popupList.popupListItemRect(popupBounds, itemIndex).intersection(contentBounds)
       if popupList.itemIsSeparator(itemIndex):
         let line = rect(
           itemRect.origin.x + 8.0'f32,

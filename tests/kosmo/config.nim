@@ -218,7 +218,7 @@ suite "Kosmo configuration":
       path = root / "config.json"
       config = KosmoConfig(
         moeTheme: KosmoMoeDefaultThemeIdentifier,
-        merendaTheme: "aqua",
+        merendaTheme: "punch",
         merendaFont: "Iosevka",
         merendaMonoFont: "JetBrains Mono",
         merendaFontSize: 17.0'f32,
@@ -240,12 +240,12 @@ suite "Kosmo configuration":
     check app.appearance().fontName(frUI) == config.merendaFont
     check app.appearance().fontName(frMonospace) == config.merendaMonoFont
     check app
-    .appearance()
-    .resolveTextStyle(controlStyle(srTextView), color(0.0, 0.0, 0.0), insets(0.0)).fontSize ==
+      .appearance()
+      .resolveTextStyle(controlStyle(srTextView), color(0.0, 0.0, 0.0), insets(0.0)).fontSize ==
       config.merendaFontSize
     check app
-    .appearance()
-    .resolveTextStyle(controlStyle(srMonoTextView), color(0.0, 0.0, 0.0), insets(0.0)).fontSize ==
+      .appearance()
+      .resolveTextStyle(controlStyle(srMonoTextView), color(0.0, 0.0, 0.0), insets(0.0)).fontSize ==
       config.merendaFontSize
     check frontend.editorView.fontSize == config.merendaFontSize
     check frontend.editorView.editor.activeMoeThemeIdentifier() == config.moeTheme

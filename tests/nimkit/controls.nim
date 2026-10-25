@@ -24,6 +24,44 @@ proc rememberActionDidSend(spy: ControlActionSpy, sender: DynamicAgent) {.slot.}
   spy.lastSender = sender
 
 suite "nimkit controls":
+  test "styled button captions measure and render without changing their title":
+    let button = newButton("Save changes", frame = rect(10, 10, 240, 60))
+    button.appearance = initAppearance(initPunchTheme())
+    let originalSize = button.intrinsicContentSize()
+    let normal = buildRenders(button)[DefaultDrawLevel]
+    check "SAVE CHANGES\n" == normal.renderedText()
+    check button.title == "Save changes"
+    check button.accessibilityLabel() == "Save changes"
+    button.title = "SAVE CHANGES"
+    check button.intrinsicContentSize() == originalSize
+    button.title = "Save changes"
+    button.highlighted = true
+    let pressed = buildRenders(button)[DefaultDrawLevel]
+    var
+      normalFace, pressedFace: Rect
+      normalText, pressedText: Rect
+      foundNormalFace, foundPressedFace: bool
+    for node in normal.resolvedNodes():
+      if node.kind == nkRectangle and node.fill == fill(parseHtmlColor("#ffffff")):
+        normalFace = node.screenBox
+        foundNormalFace = true
+      if node.kind == nkText:
+        normalText = node.screenBox
+    for node in pressed.resolvedNodes():
+      if node.kind == nkRectangle and node.stroke.weight == 3 and
+          node.stroke.fill == fill(parseHtmlColor("#111111")):
+        pressedFace = node.screenBox
+        foundPressedFace = true
+      if node.kind == nkText:
+        pressedText = node.screenBox
+    check foundNormalFace
+    check foundPressedFace
+    check pressedFace.x - normalFace.x == 4
+    check pressedFace.y - normalFace.y == 4
+    check pressedText.x - normalText.x == 4
+    check pressedText.y - normalText.y == 4
+    check button.intrinsicContentSize() == originalSize
+
   test "toggle buttons render their cell state after keyboard focus moves away":
     let
       window = newWindow("Toggle rendering", frame = rect(0, 0, 240, 100))

@@ -115,6 +115,13 @@ proc buttonTextSize(cell: ButtonCell, style: TextStyle): Size =
     result.width = max(result.width, titleSize.width)
     result.height = max(result.height, titleSize.height)
 
+proc buttonTextSize(cell: ButtonCell, style: ButtonStyle): Size =
+  result = textNaturalSize(style.buttonCaption(cell.title()), style.text)
+  for title in cell.xReservedTitles:
+    let titleSize = textNaturalSize(style.buttonCaption(title), style.text)
+    result.width = max(result.width, titleSize.width)
+    result.height = max(result.height, titleSize.height)
+
 protocol DefaultButtonCell of ButtonProtocol:
   method icon(cell: ButtonCell): SvgMtsdfResource =
     ## Optional vector content for a push button; replaces its visible title.
@@ -188,7 +195,7 @@ protocol DefaultButtonCellMeasurement of CellMeasurementProtocol:
       if cell.xIcon.len > 0:
         cell.xIcon.size
       else:
-        cell.buttonTextSize(style.text)
+        cell.buttonTextSize(style)
     initIntrinsicSize(style.buttonControlSize(contentSize))
 
   method cellSizeForBounds(cell: ButtonCell, bounds: Rect): Size =
@@ -732,7 +739,9 @@ proc drawPushButtonCell*(
     style = context.appearance.resolveButtonStyle(
       cell.buttonStyleContext(srButton, owner, states)
     )
-    absoluteFrame = context.renderRectFor(rect)
+    absoluteFrame = context.renderRectFor(
+      rect.offsetRect(style.faceOffset.width, style.faceOffset.height)
+    )
   context.drawPushButtonFace(absoluteFrame, style, states)
   if focusVisible:
     context.addFocusRing(absoluteFrame, style.buttonFaceBox(absoluteFrame))
@@ -743,7 +752,8 @@ proc drawPushButtonCell*(
   if cell.xIcon.len > 0:
     context.drawButtonIcon(cell.xIcon, textRect, style.text.color)
     return
-  let title = cell.title().clippedText(textRect.size.width, style.text)
+  let title =
+    style.buttonCaption(cell.title()).clippedText(textRect.size.width, style.text)
   if style.textHighlightColor.a > 0.0:
     var highlightStyle = style.text
     highlightStyle.color = style.textHighlightColor
@@ -774,7 +784,6 @@ proc drawButtonCell*(
 
 protocol DefaultButtonDrawing of ViewDrawingProtocol:
   method draw(button: Button, context: DrawContext) =
-    let absoluteFrame = context.renderRectFor(button.bounds)
     if button.buttonType in {btCheckBox, btRadio}:
       let role = button.choiceRole()
       let selected = button.state in {bsOn, bsMixed}
@@ -856,16 +865,20 @@ protocol DefaultButtonDrawing of ViewDrawingProtocol:
       if button.state in {bsOn, bsMixed}:
         states.incl ssSelected
       let style = button.pushButtonStyle(context.appearance, states)
-      context.drawPushButtonFace(absoluteFrame, style, states)
+      let faceFrame = context.renderRectFor(
+        button.bounds.offsetRect(style.faceOffset.width, style.faceOffset.height)
+      )
+      context.drawPushButtonFace(faceFrame, style, states)
       if button.isFocusVisible:
-        context.addFocusRing(absoluteFrame, style.buttonFaceBox(absoluteFrame))
+        context.addFocusRing(faceFrame, style.buttonFaceBox(faceFrame))
       if not button.currentEditor().isNil:
         return
       let textRect = style.buttonTextRect(button.bounds)
       if button.icon.len > 0:
         context.drawButtonIcon(button.icon, textRect, style.text.color)
         return
-      let title = button.title.clippedText(textRect.size.width, style.text)
+      let title =
+        style.buttonCaption(button.title).clippedText(textRect.size.width, style.text)
       if style.textHighlightColor.a > 0.0:
         var highlightStyle = style.text
         highlightStyle.color = style.textHighlightColor

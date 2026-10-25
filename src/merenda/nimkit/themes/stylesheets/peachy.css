@@ -7,11 +7,15 @@
   --button-border-color-accent: rgba(92%, 32%, 54%, 0.86);
   --button-border-color-accent-highlighted: rgba(255, 78%, 42%, 0.92);
   --button-border-color-disabled: rgba(22%, 34%, 44%, 0.42);
+  --button-border-color-hovered: var(--button-border-color-highlighted);
+  --button-border-color-accent-hovered: var(--button-border-color-accent-highlighted);
   --button-border-color-highlighted: rgba(255, 74%, 48%, 0.9);
   --button-fill: linear-gradient(to bottom, #333645d1, #57405799 43.92157%, #2e3040c7);
   --button-fill-accent: var(--button-fill-highlighted);
   --button-fill-accent-highlighted: linear-gradient(to bottom, #3d3647c2, #332e40ad 47.058824%, #943d6b85);
   --button-fill-disabled: linear-gradient(to bottom, #2e2e3b4d, #1c1f293d);
+  --button-fill-hovered: var(--button-fill-highlighted);
+  --button-fill-accent-hovered: var(--button-fill-accent-highlighted);
   --button-fill-highlighted: linear-gradient(to bottom, #6b3857c7, #523852ad 43.92157%, #94523d7a);
   --button-shadows: 0px 1px 9px 0px rgba(95%, 35%, 52%, 0.1), inset 0px 1px 4px 0px rgba(255, 74%, 52%, 0.18), inset 0px -2px 8px 0px rgba(82%, 24%, 50%, 0.11);
   --button-shadows-highlighted: inset 0px 2px 7px 0px rgba(0, 0, 0, 0.3), inset 0px -1px 4px 0px rgba(255, 56%, 36%, 0.12);

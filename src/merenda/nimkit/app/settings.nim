@@ -31,6 +31,7 @@ type
     stNebula
     stPeachy
     stSynthwave83
+    stPunch
 
   AppearanceHandler* = proc(appearance: Appearance) {.closure.}
   InvertScrollingHandler* = proc(inverted: bool) {.closure.}
@@ -576,6 +577,7 @@ func title(theme: SettingsTheme): string =
   of stNebula: "Nebula"
   of stPeachy: "Peachy"
   of stSynthwave83: "Synthwave '83"
+  of stPunch: "Punch"
 
 func themeIdentifier(theme: SettingsTheme): string =
   case theme
@@ -586,6 +588,7 @@ func themeIdentifier(theme: SettingsTheme): string =
   of stNebula: "nebula"
   of stPeachy: "peachy"
   of stSynthwave83: "synthwave83"
+  of stPunch: "punch"
 
 func settingsTheme(identifier: string): SettingsTheme =
   case identifier.strip().toLowerAscii()
@@ -594,6 +597,7 @@ func settingsTheme(identifier: string): SettingsTheme =
   of "macos-dark", "macosdark", "mac-os-dark", "dark-macos": stMacOSDark
   of "nebula": stNebula
   of "peachy": stPeachy
+  of "punch": stPunch
   of "synthwave83", "synthwave-83", "synthwave": stSynthwave83
   else: stDarkBSD
 
@@ -639,6 +643,8 @@ proc appearance(theme: SettingsTheme): Appearance =
     initAppearance(initPeachyTheme())
   of stSynthwave83:
     initAppearance(initSynthwave83Theme())
+  of stPunch:
+    initAppearance(initPunchTheme())
 
 proc appearanceFor(
     baseAppearance: Appearance,
@@ -1060,6 +1066,7 @@ proc newMerendaSettingsWindow*(
         stNebula.title(),
         stPeachy.title(),
         stSynthwave83.title(),
+        stPunch.title(),
       ]
     )
     interfaceFontButton = newRadioButton("Default")

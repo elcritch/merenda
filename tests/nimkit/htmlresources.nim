@@ -528,7 +528,7 @@ suite "NimKit GUI markup resources":
     check parseGuiResourceBundle(
       "<section><section><section></section></section></section>", limits
     )
-    .hasCode("gui.tree.tooDeep")
+      .hasCode("gui.tree.tooDeep")
     check parseGuiResourceBundle(
       "<section><section/><button>Safe</button></section>", limits
     ).loaded
@@ -639,7 +639,7 @@ suite "NimKit GUI markup resources":
       context = controlStyle(srButton, id = "preview", classes = @["primary"])
       themeNames = [
         "custom", "aqua", "banner", "darkbsd", "macos", "macos-dark", "nebula",
-        "peachy", "synthwave83",
+        "peachy", "synthwave83", "punch",
       ]
     defer:
       window.close()

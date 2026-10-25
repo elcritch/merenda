@@ -95,6 +95,8 @@ windows:
             displayText: Peachy
           - objectValue: synthwave83
             displayText: Synthwave83
+          - objectValue: punch
+            displayText: Punch
       - type: CheckBox
         id: updates
         title: Send me product updates

@@ -75,7 +75,10 @@
               "Peachy")
             (option
               (attrs (kv "value" "synthwave83"))
-              "Synthwave83")))
+              "Synthwave83")
+            (option
+              (attrs (kv "value" "punch"))
+              "Punch")))
         (input
           (attrs (kv "id" "updates") (kv "type" "checkbox") (kv "checked" "") (kv "data-title" "Send me product updates"))))
       (nkStackView

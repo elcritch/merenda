@@ -33,7 +33,7 @@ proc reloadThemeCss*(name: string, directory = themeCssDirectory()): CssThemeRes
     files.add ["macos", "macos-dark"]
   of "darkbsd", "dark-bsd":
     files.add ["macos", "macos-dark", "darkbsd"]
-  of "banner", "nebula", "peachy", "synthwave83":
+  of "banner", "nebula", "peachy", "punch", "synthwave83":
     files.add name.toLowerAscii().strip()
   else:
     raise newException(ValueError, "Unknown CSS theme: " & name)

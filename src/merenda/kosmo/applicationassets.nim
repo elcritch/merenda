@@ -255,6 +255,8 @@ proc configureKosmoApplicationAssets*(
       "macos-dark"
     of "nebula", "nebula-glass":
       "nebula"
+    of "punch":
+      "punch"
     of "peachy", "peach", "peachy83":
       "peachy"
     of "synthwave83", "synthwave-83", "synthwave":
