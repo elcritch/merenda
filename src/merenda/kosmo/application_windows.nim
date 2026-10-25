@@ -1528,10 +1528,11 @@ proc openPath*(frontend: KosmoApplication, path: string): bool {.discardable.} =
       return not frontend.xWindowManager[].openProject(path).isNil
     let root = normalizedPath(absolutePath(path))
     result = root in frontend.fileTree.rootPaths or frontend.fileTree.addRootPath(root)
-  elif fileExists(path) or (not dirExists(path) and dirExists(path.parentDir())):
-    let view = frontend.dockController.activeEditorView()
-    if not view.isNil:
-      result = view.openFile(path)
+  else:
+    let location =
+      nimkit.resolveTerminalFileLocation(path, getCurrentDir(), allowMissing = true)
+    if location.isSome and dirExists(location.get().path.parentDir()):
+      result = frontend.openFileLocation(location.get())
   if result and dirExists(path):
     frontend.updateProjectWindowTitle()
     if not frontend.searchPanel.isNil:

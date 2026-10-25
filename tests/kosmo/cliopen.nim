@@ -4,6 +4,7 @@ import std/[options, os, strutils, tempfiles, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
+import merenda/kosmo/cli
 
 proc hasOpenPath(frontend: KosmoApplication, path: string): bool =
   for tab in frontend.editorView.editor.tabs():
@@ -11,6 +12,40 @@ proc hasOpenPath(frontend: KosmoApplication, path: string): bool =
       return true
 
 suite "Kosmo CLI window routing":
+  test "CLI source positions open in fresh existing and add-mode destinations":
+    let
+      root = createTempDir("kosmo-cli-source-locations-", "")
+      path = root / "source.nim"
+      manager = newKosmoWindowManager(newApplication("CLI source locations"))
+    defer:
+      manager.close()
+      removeDir(root)
+    writeFile(path, "first line\nsecond line\nthird line\n")
+    for add in [false, true]:
+      for suffix in [":2:4", ":2", "(2)", "(2,4)", "(2, 4)"]:
+        let resolved = resolveKosmoCliPaths(@["source.nim" & suffix], root)
+        require resolved.errors.len == 0
+        let response = manager.openCliRequestForTesting(
+          KosmoCliOpenRequest(
+            requestId: "source-location", paths: resolved.paths, add: add
+          )
+        )
+        check response.delivered
+        check response.errors.len == 0
+        let windows = manager.managedWindows()
+        require windows.len == 1
+        check windows[0].hasOpenPath(path)
+        check windows[0].editorView.editor.bufferCursor() ==
+          KosmoBufferCursor(line: 1, column: (if suffix in [":2", "(2)"]: 0 else: 3))
+    let response = manager.openCliRequestForTesting(
+      KosmoCliOpenRequest(
+        requestId: "new-file-location", paths: @[root / "new.nim:2:4"]
+      )
+    )
+    check response.errors.len == 0
+    check manager.managedWindows()[0].hasOpenPath(root / "new.nim")
+    check not manager.managedWindows()[0].hasOpenPath(root / "new.nim:2:4")
+
   test "stdin creates separate modified buffers without changing existing files":
     let root = createTempDir("kosmo-stdin-", "")
     let manager = newKosmoWindowManager(newApplication("Stdin files"))

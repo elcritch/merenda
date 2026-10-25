@@ -493,6 +493,7 @@ and Windows, to open it in Kosmo. Links such as `src/main.nim:12:5` jump to the
 given line and column (both start at 1). Relative paths use the terminal's reported
 current directory, or its starting directory when the shell does not report one.
 The terminal link setting controls both file links and web links.
+Nim diagnostics such as `src/main.nim(12, 5)` and `src/main.nim(12)` are clickable too.
 
 ### Install and open a project
 
@@ -512,6 +513,8 @@ Open the current folder or a file:
 ```sh
 kosmo .
 kosmo README.md
+kosmo src/main.nim:12:5
+kosmo 'src/main.nim(12, 5)'
 ```
 
 These commands reuse a running Kosmo instance.

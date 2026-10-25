@@ -539,6 +539,31 @@ func contains(link: TerminalLink, row, column: int): bool =
   link.target.len > 0 and link.row == row and
     column in link.firstColumn ..< link.lastColumn
 
+proc terminalDiagnosticLink(
+    line: TerminexLine, row, column: int, workingDirectory: string
+): TerminalLink =
+  for closing in column ..< line.len:
+    if line[closing].text == ")":
+      var opening = closing - 1
+      while opening >= 0 and line[opening].text.len == 1 and
+          line[opening].text[0] in {'0' .. '9', ',', ' ', '\t', '-', '+'}:
+        dec opening
+      if opening > 0 and line[opening].text == "(":
+        for first in 0 .. min(column, opening - 1):
+          if first == 0 or line[first - 1].isTerminalLinkSeparator() or
+              line[first - 1].text in ["(", "[", "{", "<", "\"", "'"]:
+            let
+              target = line.terminalLinkText(first, closing + 1)
+              location = resolveTerminalFileLocation(target, workingDirectory)
+            if location.isSome:
+              return TerminalLink(
+                target: target,
+                fileLocation: location.get(),
+                row: row,
+                firstColumn: first,
+                lastColumn: closing + 1,
+              )
+
 proc terminalLinkAt(view: TerminalView, row, column: int): TerminalLink =
   if view.isNil or view.xSession.isNil:
     return
@@ -567,6 +592,9 @@ proc terminalLinkAt(view: TerminalView, row, column: int): TerminalLink =
     if location.isSome:
       result.fileLocation = location.get()
     return
+  let diagnostic = line.terminalDiagnosticLink(row, column, workingDirectory)
+  if diagnostic.target.len > 0:
+    return diagnostic
   if line[column].isTerminalLinkSeparator():
     return
 

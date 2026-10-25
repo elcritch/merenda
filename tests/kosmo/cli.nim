@@ -156,6 +156,29 @@ suite "Kosmo command line":
     check paths.errors[1].endsWith("missing")
     check paths.errors[2].endsWith("missing" / "child.txt")
 
+  test "source positions survive resolution and detached child arguments":
+    let root = createTempDir("merenda-kosmo-cli-locations-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "source.nim", "source\n")
+    for filename in ["source.nim", "new.nim"]:
+      for suffix in [":2", ":2:4", "(2)", "(2,4)", "(2, 4)"]:
+        let
+          command = parseKosmoCommandLine(@["--bg", filename & suffix])
+          resolved = resolveKosmoCliPaths(command.paths, root)
+        check resolved.errors.len == 0
+        check resolved.paths == @[root / (filename & suffix)]
+        let child = parseKosmoCommandLine(
+          kosmoBackgroundChildArguments(resolved.paths, command.add)
+        )
+        let childPaths = resolveKosmoCliPaths(child.paths, root)
+        check childPaths.errors.len == 0
+        check childPaths.paths == resolved.paths
+    for suffix in [":0", "(0)", "(2, 0)", "(999999999999999999999999)"]:
+      let resolved = resolveKosmoCliPaths(@["source.nim" & suffix], root)
+      check resolved.paths.len == 0
+      check resolved.errors.len == 1
+
   test "diff input is read exactly and bounded":
     let root = createTempDir("merenda-kosmo-cli-diff-", "")
     defer:

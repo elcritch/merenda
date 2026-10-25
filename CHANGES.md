@@ -3,8 +3,10 @@
 ## Unreleased
 
 - Open existing terminal file paths in Kosmo with Command-click on macOS or
-  Control-click on Linux and Windows. Support `filename:line:column`, relative
-  paths using the terminal's directory, and OSC file hyperlinks.
+  Control-click on Linux and Windows. Support `filename:line:column` and Nim's
+  `filename(line, column)` / `filename(line)` diagnostics in both terminal links
+  and CLI arguments, including forwarded and background launches. Resolve terminal
+  paths using the terminal's directory and support OSC file hyperlinks.
 
 - Prevent stuck modifiers after macOS screenshot capture by using refreshed native
   modifier flags instead of stale cached key presses.

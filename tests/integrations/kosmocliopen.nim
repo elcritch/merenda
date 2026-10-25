@@ -99,6 +99,27 @@ proc requestWhilePumping(
   )
 
 suite "Kosmo CLI open transport":
+  test "source position syntax including Nim diagnostic spaces survives transport":
+    let registry = createTempDir("kosmo-location-transport-", "")
+    defer:
+      removeDir(registry)
+    var received: seq[KosmoCliOpenRequest]
+    let server = startKosmoCliOpenServer(
+      proc(request: KosmoCliOpenRequest): KosmoCliOpenResponse =
+        received.add request
+        KosmoCliOpenResponse(),
+      registry,
+    )
+    defer:
+      server.close()
+    for suffix in [":2", ":2:4", "(2)", "(2,4)", "(2, 4)"]:
+      let target = registry / ("source.nim" & suffix)
+      let response = requestWhilePumping(target, server.endpointPath(), registry)
+      check response.delivered
+      check response.errorCount == 0
+      require received.len > 0
+      check received[^1].paths == @[target]
+
   test "stdin preserves text name and originating window across transport":
     let registry = createTempDir("kosmo-stdin-transport-", "")
     defer:

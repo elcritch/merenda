@@ -2156,6 +2156,51 @@ suite "nimkit terminal views":
     require spy.files.len == 2
     check spy.files[1] == TerminalFileLocation(path: widePath, line: 2, column: 4)
 
+  test "modifier-click recognizes Nim diagnostic locations including spaces":
+    let
+      root = createTempDir("merenda-terminal-nim-diagnostic-", "")
+      session = newTerminalViewSession(columns = 70, rows = 2)
+      view = newTerminalView(session, frame = rect(0, 0, 840, 80))
+      window = newWindow("Nim diagnostic links", frame = rect(0, 0, 840, 80))
+      spy = TerminalInteractionSpy()
+    defer:
+      view.close()
+      window.close()
+      removeDir(root)
+    var uriPath = root.replace('\\', '/')
+    if not uriPath.startsWith('/'):
+      uriPath = "/" & uriPath
+    session.processOutput(
+      "\x1b]7;file://localhost" & uriPath.encodeUrl(usePlus = false).replace("%2F", "/") &
+        "\x07"
+    )
+    view.connect(terminalFileWasActivated, spy, rememberTerminalFile)
+    window.setContentView(view)
+    for filename in ["source.nim", "source with spaces.nim"]:
+      let path = root / filename
+      writeFile(path, "first\nsecond line\n")
+      for suffix in ["(2)", "(2,4)", "(2, 4)"]:
+        let text = "See " & filename & suffix
+        session.processOutput("\x1b[2J\x1b[H" & text & " Error: example diagnostic")
+        discard view.pollSettled()
+        var columns = @[5, text.len - 1]
+        if suffix == "(2, 4)":
+          columns.add 4 + filename.len + 3
+        for column in columns:
+          let point = view.terminalCellPoint(0, column)
+          discard window.mouseMovedAt(point, modifiers = terminalLinkModifiers())
+          check mtdUnderline in view.cellAt(0, 4).decorations
+          check mtdUnderline in view.cellAt(0, text.len - 1).decorations
+          check mtdUnderline notin view.cellAt(0, text.len).decorations
+          let previous = spy.files.len
+          check window.mouseDownAt(point, modifiers = terminalLinkModifiers())
+          check window.mouseUpAt(point, modifiers = terminalLinkModifiers())
+          require spy.files.len == previous + 1
+          check spy.files[^1] ==
+            TerminalFileLocation(
+              path: path, line: 2, column: (if suffix == "(2)": 0 else: 4)
+            )
+
   test "OSC file hyperlinks emit local files rather than external URLs":
     let
       root = createTempDir("merenda-terminal-osc-file-", "")

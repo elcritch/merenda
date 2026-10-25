@@ -1,8 +1,9 @@
 ## Command-line handling and detached launching for standalone Kosmo.
 
-import std/[os, sequtils, sets, strutils, terminal]
+import std/[options, os, sequtils, sets, strutils, terminal]
 
 import ./lsptcp
+import ../nimkit/terminal/terminalfilelinks
 
 when defined(windows):
   import std/[widestrs, winlean]
@@ -26,6 +27,9 @@ Usage: kosmo [--bg | --new] [--] [file-or-folder ...]
        kosmo --add folder [folder ...]
        command-producing-diff | kosmo --diff
        command-producing-text | kosmo --file:txt
+
+File positions: file:line[:column] or 'file(line[, column])'.
+Line and column numbers start at 1. Quote parentheses in your shell.
 
 Options:
   --bg        Start a new Kosmo instance detached from the shell.
@@ -89,7 +93,8 @@ when defined(posix):
     exitnow(127)
 
 type KosmoCliPathResolution* = object
-  ## Absolute paths ready for local opening or transport to another process.
+  ## Absolute path arguments, retaining any source position for local opening
+  ## or transport to another process.
   paths*: seq[string]
   errors*: seq[string]
 
@@ -177,10 +182,14 @@ proc resolveKosmoCliPaths*(
     if original.len == 0:
       result.errors.add "Kosmo cannot open an empty path"
       continue
-    let path = normalizedPath(absolutePath(original, workingDirectory))
+    let path = normalizedPath(absolutePath(original.expandTilde(), workingDirectory))
     let directoryShaped = original[^1] in {DirSep, AltSep}
-    if dirExists(path) or fileExists(path) or
-        (not directoryShaped and dirExists(path.parentDir())):
+    let location =
+      resolveTerminalFileLocation(path, workingDirectory, allowMissing = true)
+    if dirExists(path) or (
+      not directoryShaped and location.isSome and
+      dirExists(location.get().path.parentDir())
+    ):
       if path notin seen:
         seen.incl path
         result.paths.add path

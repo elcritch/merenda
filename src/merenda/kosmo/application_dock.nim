@@ -1233,13 +1233,10 @@ proc openTerminalLink(lifecycle: KosmoWindowLifecycle, link: string) {.slot.} =
   if not frontend.isNil and not frontend.application.isNil:
     discard frontend.application.workspace().openUrl(link)
 
-proc openTerminalFile(
-    lifecycle: KosmoWindowLifecycle, location: nimkit.TerminalFileLocation
-) {.slot.} =
-  if lifecycle.isNil or lifecycle.frontend.isNil:
-    return
+proc openFileLocation(
+    frontend: KosmoApplication, location: nimkit.TerminalFileLocation
+): bool =
   let
-    frontend = lifecycle.frontend[]
     controller = frontend.dockController
     view = controller.activeEditorView()
   if not view.isNil and view.openFile(location.path):
@@ -1252,6 +1249,13 @@ proc openTerminalFile(
         location.line - 1, max(location.column - 1, 0), centered = true
       )
     target.refresh()
+    result = true
+
+proc openTerminalFile(
+    lifecycle: KosmoWindowLifecycle, location: nimkit.TerminalFileLocation
+) {.slot.} =
+  if not lifecycle.isNil and not lifecycle.frontend.isNil:
+    discard lifecycle.frontend[].openFileLocation(location)
 
 proc workspaceGitChanged(lifecycle: KosmoWindowLifecycle) {.slot.} =
   if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
