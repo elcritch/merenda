@@ -77,6 +77,12 @@ Document tab headers update their scroll range during pane layout. Resizing
 keeps the selected tab visible and clears stale offsets when all tabs fit.
 Layout passes at the same width preserve deliberate horizontal scrolling.
 
+The Git diff comparison toolbar pairs each branch selector with a revision-state
+menu. `-` selects the branch tip; `^`, `^2`, and `^3` select first-parent ancestors.
+The ending menu also offers `^* Working Tree`, shown as `^*` on the button. Working
+Tree follows the checked-out branch; selecting another branch switches the ending
+state to its tip. Selecting `^* Working Tree` restores the checked-out branch.
+
 The Git diff panel first prepares sections near the viewport. Once loaded, an
 expanded section keeps its text view, selection, highlighting, and layout as it
 scrolls out of view. Collapsing a section releases its text view; Expand All loads

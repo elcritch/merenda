@@ -4,6 +4,11 @@
 
 ## 0.29.0
 
+- Move Kosmo Git diff’s Working Tree choice into the ending revision-state menu.
+  Show `^*` on its button and the checked-out branch in the branch selector.
+  Choosing another branch returns to its tip; choosing Working Tree returns to
+  the checked-out branch.
+
 - Close the focused auxiliary window when using Kosmo’s close shortcuts or menu
   actions, including Merenda Settings and Kosmo Settings.
 

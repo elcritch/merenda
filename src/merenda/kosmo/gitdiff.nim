@@ -31,6 +31,7 @@ const
   GitDiffToRevisionIdentifierPrefix = "kosmo.gitDiff.to."
   GitDiffRefreshIconSvg =
     """<svg width="16" height="16" viewBox="0 0 24 24"><path d="M19 4v6h-6l2.4-2.4A6 6 0 1 0 18 12h2a8 8 0 1 1-3.2-6.4L19 4z"/></svg>"""
+  GitDiffWorkingTreeSymbol = "^*"
   GitDiffHistoryChoices = [
     (title: "-", suffix: ""),
     (title: "^", suffix: "^"),
@@ -294,15 +295,17 @@ type
     xRepositoryReadCount: int
     xMatterGrammarSources: seq[nimkit.MatterGrammarSource]
 
-func gitDiffRevisionIdentifier(
-    fromSide: bool, revision: string, toWorkingTree = false
-): string =
-  if fromSide:
-    GitDiffFromRevisionIdentifierPrefix & revision
-  elif toWorkingTree:
-    GitDiffToRevisionIdentifierPrefix & "WORKTREE"
+func gitDiffRevisionIdentifier(fromSide: bool, revision: string): string =
+  (
+    if fromSide: GitDiffFromRevisionIdentifierPrefix
+    else: GitDiffToRevisionIdentifierPrefix
+  ) & revision
+
+func checkedOutRevision(snapshot: GitDiffSnapshot): string =
+  if snapshot.branch in snapshot.branches:
+    "refs/heads/" & snapshot.branch
   else:
-    GitDiffToRevisionIdentifierPrefix & revision
+    "HEAD"
 
 proc appendRevisionChoices(snapshot: var GitDiffSnapshot) =
   if snapshot.hasHead:
@@ -1257,8 +1260,6 @@ func splitHistoryRevision(revision: string): tuple[base, suffix: string] =
       return (revision[0 ..< revision.len - choice.suffix.len], choice.suffix)
   (revision, "")
 
-proc selectedHistorySuffix(panel: KosmoGitDiffPanel, side: GitDiffRevisionSide): string
-
 func gitDiffStatusLabel(status: GitDiffFileStatus): string =
   case status
   of gdfsModified: "modified"
@@ -1269,27 +1270,6 @@ func gitDiffStatusLabel(status: GitDiffFileStatus): string =
   of gdfsTypeChanged: "type changed"
   of gdfsConflicted: "conflicted"
   of gdfsUntracked: "untracked"
-
-proc newGitDiffRevisionMenuItem(
-    panel: WeakRef[KosmoGitDiffPanel],
-    side: GitDiffRevisionSide,
-    choice: GitDiffRevisionChoice,
-    workingTree = false,
-): nimkit.MenuItem =
-  let isFrom = side == gdrsFrom
-  let action = nimkit.actionSelector("kosmo.selectGitDiffRevision")
-  result = nimkit.newMenuItem(choice.title, action)
-  result.identifier = gitDiffRevisionIdentifier(isFrom, choice.revision, workingTree)
-  result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
-    discard sender
-    if not panel.isNil:
-      let revision =
-        if workingTree:
-          choice.revision
-        else:
-          choice.revision & panel[].selectedHistorySuffix(side)
-      panel[].selectRevision(side, revision, workingTree)
-  result.validates = false
 
 func selectedFromRevision(comparison: GitDiffComparison): string =
   case comparison.kind
@@ -1321,8 +1301,30 @@ proc selectedHistorySuffix(
       panel.comparison.selectedToRevision().revision
   revision.splitHistoryRevision().suffix
 
+proc newGitDiffRevisionMenuItem(
+    panel: WeakRef[KosmoGitDiffPanel],
+    side: GitDiffRevisionSide,
+    choice: GitDiffRevisionChoice,
+): nimkit.MenuItem =
+  let isFrom = side == gdrsFrom
+  let action = nimkit.actionSelector("kosmo.selectGitDiffRevision")
+  result = nimkit.newMenuItem(choice.title, action)
+  result.identifier = gitDiffRevisionIdentifier(isFrom, choice.revision)
+  result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if not panel.isNil:
+      if side == gdrsTo and panel[].comparison.selectedToRevision().workingTree and
+          choice.revision in ["HEAD", panel[].snapshot.checkedOutRevision()]:
+        return
+      let revision = choice.revision & panel[].selectedHistorySuffix(side)
+      panel[].selectRevision(side, revision)
+  result.validates = false
+
 proc newGitDiffHistoryMenuItem(
-    panel: WeakRef[KosmoGitDiffPanel], side: GitDiffRevisionSide, title, suffix: string
+    panel: WeakRef[KosmoGitDiffPanel],
+    side: GitDiffRevisionSide,
+    title, suffix: string,
+    workingTree = false,
 ): nimkit.MenuItem =
   let action = nimkit.actionSelector("kosmo.selectGitDiffHistory")
   result = nimkit.newMenuItem(title, action)
@@ -1330,16 +1332,22 @@ proc newGitDiffHistoryMenuItem(
     (
       if side == gdrsFrom: GitDiffFromRevisionIdentifierPrefix
       else: GitDiffToRevisionIdentifierPrefix
-    ) & "history." & title
+    ) & "history." & (if workingTree: GitDiffWorkingTreeSymbol else: title)
   result.target = nimkit.newActionTarget(action) do(sender: nimkit.DynamicAgent):
     discard sender
     if not panel.isNil:
-      let current =
-        if side == gdrsFrom:
-          panel[].comparison.selectedFromRevision()
-        else:
-          panel[].comparison.selectedToRevision().revision
-      panel[].selectRevision(side, current.splitHistoryRevision().base & suffix)
+      if workingTree:
+        if panel[].comparison.selectedToRevision().workingTree:
+          return
+        panel[].selectRevision(side, "", workingTree = true)
+      else:
+        let current =
+          if side == gdrsFrom:
+            panel[].comparison.selectedFromRevision()
+          else:
+            let selection = panel[].comparison.selectedToRevision()
+            if selection.workingTree: "HEAD" else: selection.revision
+        panel[].selectRevision(side, current.splitHistoryRevision().base & suffix)
   result.validates = false
 
 proc syncHistoryControl(
@@ -1351,17 +1359,34 @@ proc syncHistoryControl(
   let
     menu = button.menu()
     selectedSuffix = panel.selectedHistorySuffix(side)
+    workingTree = side == gdrsTo and panel.comparison.selectedToRevision().workingTree
   menu.removeAllItems()
   for choice in GitDiffHistoryChoices:
     let item = newGitDiffHistoryMenuItem(
       panel.unsafeWeakRef(), side, choice.title, choice.suffix
     )
-    if choice.suffix == selectedSuffix:
+    item.enabled = enabled
+    if not workingTree and choice.suffix == selectedSuffix:
       item.state = nimkit.bsOn
       button.title = choice.title
     discard menu.addItem(item)
-  button.enabled = enabled
-  button.toolTip = "Select how many commits back along first-parent history"
+  if side == gdrsTo and panel.snapshot.source == gdsRepository:
+    let item = newGitDiffHistoryMenuItem(
+      panel.unsafeWeakRef(),
+      side,
+      GitDiffWorkingTreeSymbol & " Working Tree",
+      "",
+      workingTree = true,
+    )
+    if workingTree:
+      item.state = nimkit.bsOn
+      button.title = GitDiffWorkingTreeSymbol
+    discard menu.addItem(item)
+    button.enabled = true
+    button.toolTip = "Select a commit offset or the working tree (^*)"
+  else:
+    button.enabled = enabled
+    button.toolTip = "Select how many commits back along first-parent history"
 
 proc revisionTitle(panel: KosmoGitDiffPanel, revision: string): string =
   for choice in panel.snapshot.revisions:
@@ -1382,12 +1407,6 @@ proc syncComparisonControls(panel: KosmoGitDiffPanel) =
   fromMenu.removeAllItems()
   toMenu.removeAllItems()
   if panel.snapshot.source == gdsRepository:
-    let workingTreeChoice = GitDiffRevisionChoice(title: "Working Tree")
-    discard toMenu.addItem(
-      newGitDiffRevisionMenuItem(
-        panel.unsafeWeakRef(), gdrsTo, workingTreeChoice, workingTree = true
-      )
-    )
     for choice in panel.snapshot.revisions:
       if choice.revision.splitHistoryRevision().suffix.len == 0:
         discard fromMenu.addItem(
@@ -1400,21 +1419,27 @@ proc syncComparisonControls(panel: KosmoGitDiffPanel) =
     fromRevision = panel.comparison.selectedFromRevision()
     toSelection = panel.comparison.selectedToRevision()
     fromBase = fromRevision.splitHistoryRevision().base
-    toBase = toSelection.revision.splitHistoryRevision().base
-    fromIdentifier = gitDiffRevisionIdentifier(true, fromBase)
-    toIdentifier = gitDiffRevisionIdentifier(false, toBase, toSelection.workingTree)
-  panel.fromRevisionButton.title = panel.revisionTitle(fromBase)
-  panel.toRevisionButton.title =
-    if toSelection.workingTree:
-      "Working Tree"
-    else:
-      panel.revisionTitle(toBase)
+    toBase =
+      if toSelection.workingTree:
+        "HEAD"
+      else:
+        toSelection.revision.splitHistoryRevision().base
+    fromControlBase =
+      if fromBase == "HEAD":
+        panel.snapshot.checkedOutRevision()
+      else:
+        fromBase
+    toControlBase =
+      if toBase == "HEAD":
+        panel.snapshot.checkedOutRevision()
+      else:
+        toBase
+    fromIdentifier = gitDiffRevisionIdentifier(true, fromControlBase)
+    toIdentifier = gitDiffRevisionIdentifier(false, toControlBase)
+  panel.fromRevisionButton.title = panel.revisionTitle(fromControlBase)
+  panel.toRevisionButton.title = panel.revisionTitle(toControlBase)
   panel.syncHistoryControl(panel.fromHistoryButton, gdrsFrom, panel.snapshot.hasHead)
-  panel.syncHistoryControl(
-    panel.toHistoryButton,
-    gdrsTo,
-    panel.snapshot.hasHead and not toSelection.workingTree,
-  )
+  panel.syncHistoryControl(panel.toHistoryButton, gdrsTo, panel.snapshot.hasHead)
   panel.fromRevisionButton.toolTip = "Select the starting Git revision"
   panel.toRevisionButton.toolTip = "Select the ending Git revision"
   for item in fromMenu.items():
@@ -2971,7 +2996,14 @@ proc historyControlWidth(button: nimkit.PopupMenuButton): float32 =
       )
     )
   style.minSize.width = 0
-  style.comboBoxControlSize(nimkit.textNaturalSize("^3", style.text)).width + 2
+  let titleSize = nimkit.initSize(
+    max(
+      nimkit.textNaturalSize("^3", style.text).width,
+      nimkit.textNaturalSize(GitDiffWorkingTreeSymbol, style.text).width,
+    ),
+    style.text.fontSize,
+  )
+  style.comboBoxControlSize(titleSize).width + 2
 
 protocol GitDiffLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(panel: KosmoGitDiffPanel) =
@@ -3218,10 +3250,11 @@ proc newKosmoGitDiffPanel(
     refreshButton: nimkit.newButton("Refresh Git diff"),
     fromRevisionButton:
       nimkit.newPopupMenuButton("HEAD", nimkit.newMenu("From Revision")),
-    toRevisionButton:
-      nimkit.newPopupMenuButton("Working Tree", nimkit.newMenu("To Revision")),
+    toRevisionButton: nimkit.newPopupMenuButton("HEAD", nimkit.newMenu("To Revision")),
     fromHistoryButton: nimkit.newPopupMenuButton("-", nimkit.newMenu("From History")),
-    toHistoryButton: nimkit.newPopupMenuButton("-", nimkit.newMenu("To History")),
+    toHistoryButton: nimkit.newPopupMenuButton(
+      GitDiffWorkingTreeSymbol, nimkit.newMenu("To Revision State")
+    ),
     revisionSeparator: nimkit.newLabel("…"),
     expandButton: nimkit.newButton("+"),
     collapseButton: nimkit.newButton("-"),
@@ -3279,7 +3312,7 @@ proc newKosmoGitDiffPanel(
   result.toHistoryButton.hidden = not refreshesRepository
   result.revisionSeparator.hidden = not refreshesRepository
   result.fromHistoryButton.accessibilityLabel = "Git diff from history"
-  result.toHistoryButton.accessibilityLabel = "Git diff to history"
+  result.toHistoryButton.accessibilityLabel = "Git diff to revision or working tree"
   result.revisionSeparator.identifier = "kosmo.gitDiff.revisionSeparator"
   result.revisionSeparator.alignment = nimkit.taCenter
   result.refreshButton.accessibilityLabel = "Refresh Git diff"
