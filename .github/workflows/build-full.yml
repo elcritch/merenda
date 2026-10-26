@@ -314,7 +314,7 @@ jobs:
           testExecutable+=".exe"
         fi
         if [[ "$RUNNER_OS" == "Linux" ]]; then
-          xvfb-run -a "$testExecutable"
+          xvfb-run -a bash .github/scripts/run-test-suites.sh "$testExecutable"
         else
           "$testExecutable"
         fi
