@@ -65,7 +65,10 @@ On Linux amd64, pass `--static` to install `kosmo-linux-amd64-musl.tar.gz`, the
 statically linked musl variant.
 
 Publishing a GitHub release runs all platform builds and uploads the resulting archives
-to that release. The Linux amd64 musl build is statically linked for the C runtime; the
+to that release. Linux, FreeBSD, and macOS publish as soon as those builds finish,
+without waiting for Windows. A separate job adds the Windows archive when it is
+ready and updates the shared `SHA256SUMS.txt` while preserving the other checksums.
+The Linux amd64 musl build is statically linked for the C runtime; the
 other Linux and FreeBSD builds use their platform's shared system libraries. The
 release tag should use the `vX.Y.Z` form; the version without the `v` is embedded in the
 executable and the macOS bundle.

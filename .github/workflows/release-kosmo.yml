@@ -938,7 +938,6 @@ jobs:
       - build-linux-musl
       - build-freebsd
       - build-macos
-      - build-windows
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -946,6 +945,7 @@ jobs:
       - name: Download binaries
         uses: actions/download-artifact@v4
         with:
+          pattern: kosmo-{linux,freebsd,macos}-*
           path: dist
           merge-multiple: true
 
@@ -958,7 +958,6 @@ jobs:
             kosmo-linux-arm64.tar.gz \
             kosmo-freebsd-amd64.tar.gz \
             kosmo-macos-arm64.zip \
-            kosmo-windows-amd64.zip \
             > SHA256SUMS.txt
 
       - name: Upload release assets
@@ -973,6 +972,41 @@ jobs:
             dist/kosmo-linux-arm64.tar.gz \
             dist/kosmo-freebsd-amd64.tar.gz \
             dist/kosmo-macos-arm64.zip \
-            dist/kosmo-windows-amd64.zip \
             dist/SHA256SUMS.txt \
+            --clobber
+
+  publish-windows-release-assets:
+    if: >-
+      github.event_name == 'release' ||
+      (github.event_name == 'push' &&
+      github.ref == 'refs/heads/ci/update-release-binaries')
+    # The other platforms publish without waiting for Windows. Wait for their
+    # checksum manifest before adding Windows, so the installer keeps one list.
+    needs:
+      - build-windows
+      - publish-release-assets
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: kosmo-windows-amd64
+          path: dist
+
+      - name: Upload Windows release assets
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || (github.event_name == 'push' && github.ref == 'refs/heads/ci/update-release-binaries' && 'v0.17.0') }}
+        run: |
+          gh release download "$RELEASE_TAG" --pattern SHA256SUMS.txt
+          awk '$2 != "kosmo-windows-amd64.zip"' SHA256SUMS.txt > SHA256SUMS.updated.txt
+          sha256sum kosmo-windows-amd64.zip >> SHA256SUMS.updated.txt
+          mv SHA256SUMS.updated.txt SHA256SUMS.txt
+          gh release upload "$RELEASE_TAG" \
+            kosmo-windows-amd64.zip \
+            SHA256SUMS.txt \
             --clobber
