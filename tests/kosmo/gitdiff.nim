@@ -75,6 +75,31 @@ proc visibleLoadedDiffTextViewCount(panel: KosmoGitDiffPanel): int =
       inc result
 
 suite "Kosmo Git diff":
+  test "Punch toolbar actions render their symbols in compact button frames":
+    let panel = newKosmoGitDiffPanel(parseGitDiff(""))
+    defer:
+      panel.close()
+    panel.appearance = initAppearance(initPunchTheme())
+    require panel.waitForDiff()
+    for width in [1000.0'f32, 500.0'f32, 300.0'f32]:
+      panel.frame = rect(0, 0, width, 600)
+      panel.layoutSubtreeIfNeeded()
+      for highlighted in [false, true]:
+        for button in [panel.expandButton, panel.collapseButton]:
+          button.highlighted = highlighted
+          check button.title in button.renderedControlText()
+        panel.refreshButton.highlighted = highlighted
+        for enabled in [false, true]:
+          panel.refreshButton.enabled = enabled
+          var icons: int
+          for node in buildRenders(panel.refreshButton)[DefaultDrawLevel].nodes:
+            if node.kind == nkMtsdfImage:
+              inc icons
+              check node.screenBox.w > 0
+              check node.screenBox.h > 0
+            check node.kind != nkText
+          check icons > 0
+
   test "panel key equivalents use the responder selector despite procedure overloads":
     let panel = newKosmoGitDiffPanel(parseGitDiff(""))
     defer:

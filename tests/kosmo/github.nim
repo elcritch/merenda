@@ -1,15 +1,14 @@
 import std/[json, strutils, times, unicode, unittest]
+import figdraw
 import merenda/nimkit
 import merenda/kosmo/kosmo
 import fixtures/ui
 
 const
-  issueJson =
-    """
+  issueJson = """
 [{"number":7,"title":"Fix **wrapping** [λ]","body":"A **needle** and `code`.\n\n```nim\nlet x = 1\n```","url":"https://github.com/owner/project/issues/7","state":"OPEN","author":{"login":"alice"},"labels":[{"name":"bug"}],"updatedAt":"2026-10-06T12:00:00Z"}]
 """
-  prJson =
-    """
+  prJson = """
 [{"number":8,"title":"Improve rendering","body":"Another needle.","url":"https://github.com/owner/project/pull/8","state":"OPEN","author":null,"labels":[],"isDraft":true,"headRefName":"feature/viewer","baseRefName":"main","reviewDecision":"REVIEW_REQUIRED","statusCheckRollup":[{"__typename":"CheckRun","name":"tests | macOS","workflowName":"Build **CI**","status":"IN_PROGRESS","conclusion":"","detailsUrl":"https://github.com/owner/project/actions/runs/12/job/34"}]}]
 """
 
@@ -25,6 +24,47 @@ proc headingStartingWith(panel: KosmoGitHubPanel, prefix: string): View =
       return child
 
 suite "Kosmo GitHub Markdown viewer":
+  test "refresh uses the Git diff icon at the toolbar's right edge across themes":
+    let
+      panel = newKosmoGitHubPanel(sampleSnapshot())
+      diff = newKosmoGitDiffPanel(parseGitDiff(""))
+    defer:
+      panel.close()
+      diff.close()
+    require panel.waitForGitHub()
+    require diff.waitForDiff()
+    check panel.refreshButton.icon.size == diff.refreshButton.icon.size
+    require panel.refreshButton.icon.layers.len == diff.refreshButton.icon.layers.len
+    for index, layer in panel.refreshButton.icon.layers:
+      let diffLayer = diff.refreshButton.icon.layers[index]
+      require layer.kind == diffLayer.kind
+      if layer.kind in {slkMtsdfFill, slkMtsdfStroke}:
+        check layer.image == diffLayer.image
+    check panel.refreshButton.icon.len > 0
+    check panel.refreshButton.accessibilityLabel() == "Refresh GitHub"
+    for theme in [initAquaTheme(), initPunchTheme()]:
+      panel.appearance = initAppearance(theme)
+      for width in [1000.0'f32, 600.0'f32, 300.0'f32]:
+        panel.frame = rect(0, 0, width, 500)
+        panel.layoutSubtreeIfNeeded()
+        panel.refreshButton.checkVisibleIn(panel)
+        panel.kindButton.checkVisibleIn(panel)
+        panel.stateButton.checkVisibleIn(panel)
+        panel.autoRefreshSwitch.checkVisibleIn(panel)
+        check panel.kindButton.frame().minX == 12
+        check panel.kindButton.frame().maxX < panel.stateButton.frame().minX
+        check panel.stateButton.frame().maxX < panel.autoRefreshSwitch.frame().minX
+        check panel.autoRefreshSwitch.frame().maxX < panel.refreshButton.frame().minX
+        check abs(panel.refreshButton.frame().maxX - (width - 12)) <= 0.01'f32
+        var icons: int
+        for node in buildRenders(panel.refreshButton)[DefaultDrawLevel].nodes:
+          if node.kind == nkMtsdfImage:
+            inc icons
+            check node.screenBox.w > 0
+            check node.screenBox.h > 0
+          check node.kind != nkText
+        check icons > 0
+
   test "lists start expanded and item choices survive filtering and new arrivals":
     let panel = newKosmoGitHubPanel(sampleSnapshot())
     defer:
@@ -88,25 +128,24 @@ suite "Kosmo GitHub Markdown viewer":
 
   test "check runs and legacy statuses preserve completed, pending, and unknown states":
     var source = parseJson(prJson)
-    source[0]["statusCheckRollup"] =
-      %*[
-        {"__typename": "CheckRun", "status": "QUEUED"},
-        {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS"},
-        {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "TIMED_OUT"},
-        {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "CANCELLED"},
-        {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SKIPPED"},
-        {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "NEUTRAL"},
-        {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "FUTURE_STATE"},
-        {
-          "__typename": "StatusContext",
-          "context": "external CI",
-          "state": "ERROR",
-          "targetUrl": "https://ci.example/job",
-        },
-        {"__typename": "StatusContext", "context": "deployment", "state": "PENDING"},
-        {"__typename": "StatusContext", "context": "lint", "state": "SUCCESS"},
-        {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "STALE"},
-      ]
+    source[0]["statusCheckRollup"] = %*[
+      {"__typename": "CheckRun", "status": "QUEUED"},
+      {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SUCCESS"},
+      {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "TIMED_OUT"},
+      {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "CANCELLED"},
+      {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "SKIPPED"},
+      {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "NEUTRAL"},
+      {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "FUTURE_STATE"},
+      {
+        "__typename": "StatusContext",
+        "context": "external CI",
+        "state": "ERROR",
+        "targetUrl": "https://ci.example/job",
+      },
+      {"__typename": "StatusContext", "context": "deployment", "state": "PENDING"},
+      {"__typename": "StatusContext", "context": "lint", "state": "SUCCESS"},
+      {"__typename": "CheckRun", "status": "COMPLETED", "conclusion": "STALE"},
+    ]
     let jobs = parseGitHubItems($source, ghikPullRequest)[0].jobs
     require jobs.len == 11
     for index, state in [

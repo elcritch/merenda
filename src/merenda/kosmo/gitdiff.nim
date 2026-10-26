@@ -9,7 +9,7 @@ import ../nimkit/foundation/gitprocesses
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
 import ../nimkit/foundation/mainthreadwork
-import ./[searchbar, viewersearch, vscodegrammars]
+import ./[searchbar, viewerbuttons, viewersearch, vscodegrammars]
 
 const
   KosmoGitDiffTabIdentifier* = "kosmo.gitDiff"
@@ -30,8 +30,6 @@ const
   GitDiffDisclosureButtonPoolLimit = 128
   GitDiffFromRevisionIdentifierPrefix = "kosmo.gitDiff.from."
   GitDiffToRevisionIdentifierPrefix = "kosmo.gitDiff.to."
-  GitDiffRefreshIconSvg =
-    """<svg width="16" height="16" viewBox="0 0 24 24"><path d="M19 4v6h-6l2.4-2.4A6 6 0 1 0 18 12h2a8 8 0 1 1-3.2-6.4L19 4z"/></svg>"""
   GitDiffWorkingTreeSymbol = "^*"
   GitDiffHistoryChoices = [
     (title: "-", suffix: ""),
@@ -3259,7 +3257,7 @@ proc newKosmoGitDiffPanel(
   startLocalThreadDefault()
   result = KosmoGitDiffPanel(
     markdownView: nimkit.newMarkdownView(),
-    refreshButton: nimkit.newButton("Refresh Git diff"),
+    refreshButton: newViewerRefreshButton("Refresh Git diff"),
     fromRevisionButton:
       nimkit.newPopupMenuButton("HEAD", nimkit.newMenu("From Revision")),
     toRevisionButton: nimkit.newPopupMenuButton("HEAD", nimkit.newMenu("To Revision")),
@@ -3327,10 +3325,8 @@ proc newKosmoGitDiffPanel(
   result.toHistoryButton.accessibilityLabel = "Git diff to revision or working tree"
   result.revisionSeparator.identifier = "kosmo.gitDiff.revisionSeparator"
   result.revisionSeparator.alignment = nimkit.taCenter
-  result.refreshButton.accessibilityLabel = "Refresh Git diff"
-  result.refreshButton.icon =
-    nimkit.newSvgMtsdfResource(GitDiffRefreshIconSvg, "kosmo-git-diff-refresh")
-  result.refreshButton.toolTip = "Refresh Git diff"
+  result.expandButton.addStyleClass(nimkit.ToolbarButtonStyleClass)
+  result.collapseButton.addStyleClass(nimkit.ToolbarButtonStyleClass)
   result.expandButton.accessibilityLabel = "Expand all files"
   result.expandButton.toolTip = "Expand all files"
   result.collapseButton.accessibilityLabel = "Collapse all files"

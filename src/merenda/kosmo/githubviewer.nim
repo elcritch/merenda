@@ -7,7 +7,7 @@ import ../nimkit as nimkit
 import ../nimkit/foundation/mainthreadwork
 import ../nimkit/foundation/selectors as nimkitSelectors
 from ../nimkit/view/viewgeometry import setFrameFromLayout
-import ./[github, searchbar, viewersearch, vscodegrammars]
+import ./[github, searchbar, viewerbuttons, viewersearch, vscodegrammars]
 
 export github
 
@@ -288,20 +288,30 @@ proc searchLayoutFinished(
 
 protocol GitHubLayout of nimkit.ViewLayoutProtocol:
   method layoutSubviews(panel: KosmoGitHubPanel) =
-    let bounds = panel.bounds()
-    let scale = min(max((bounds.size.width - 52) / 546, 0), 1)
-    panel.refreshButton.setFrameFromLayout(nimkit.rect(12, 8, 90 * scale, 28))
-    panel.kindButton.setFrameFromLayout(
-      nimkit.rect(20 + 90 * scale, 8, 180 * scale, 28)
-    )
+    let
+      bounds = panel.bounds()
+      inset = min(12.0'f32, bounds.size.width * 0.05'f32)
+      gap = min(8.0'f32, bounds.size.width * 0.03'f32)
+      availableWidth = max(bounds.size.width - inset * 2, 0)
+      labelGap = min(2.0'f32, availableWidth)
+      labelWidth = panel.autoRefreshLabel.sizeThatFits().width
+      switchWidth = panel.autoRefreshSwitch.sizeThatFits().width
+      contentWidth = 180 + 140 + labelWidth + switchWidth + 44
+      scale = min(max(availableWidth - gap * 3 - labelGap, 0) / contentWidth, 1)
+      refreshWidth = 44 * scale
+      refreshX = bounds.size.width - inset - refreshWidth
+      switchX = refreshX - gap - switchWidth * scale
+      labelX = switchX - labelGap - labelWidth * scale
+    panel.refreshButton.setFrameFromLayout(nimkit.rect(refreshX, 8, refreshWidth, 28))
+    panel.kindButton.setFrameFromLayout(nimkit.rect(inset, 8, 180 * scale, 28))
     panel.stateButton.setFrameFromLayout(
-      nimkit.rect(28 + 270 * scale, 8, 140 * scale, 28)
+      nimkit.rect(inset + 180 * scale + gap, 8, 140 * scale, 28)
     )
     panel.autoRefreshLabel.setFrameFromLayout(
-      nimkit.rect(36 + 410 * scale, 8, 82 * scale, 28)
+      nimkit.rect(labelX, 8, labelWidth * scale, 28)
     )
     panel.autoRefreshSwitch.setFrameFromLayout(
-      nimkit.rect(40 + 492 * scale, 8, 54 * scale, 28)
+      nimkit.rect(switchX, 8, switchWidth * scale, 28)
     )
     panel.markdownView.setFrameFromLayout(
       nimkit.rect(0, 44, bounds.size.width, max(bounds.size.height - 44, 0))
@@ -334,7 +344,7 @@ proc newKosmoGitHubPanel(
   startLocalThreadDefault()
   result = KosmoGitHubPanel(
     markdownView: nimkit.newMarkdownView(),
-    refreshButton: nimkit.newButton("Refresh"),
+    refreshButton: newViewerRefreshButton("Refresh GitHub"),
     kindButton:
       nimkit.newPopupMenuButton("Issues & PRs", nimkit.newMenu("GitHub Items")),
     stateButton: nimkit.newPopupMenuButton("Open", nimkit.newMenu("GitHub State")),

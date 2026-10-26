@@ -4,6 +4,12 @@
 
 ## 0.29.1
 
+- Publish Linux, FreeBSD, and macOS release assets without waiting for Windows,
+  then add Windows in a separate upload job while preserving the shared checksum list.
+
+- Keep Git diff toolbar symbols visible in Punch's compact buttons. Give the
+  GitHub viewer the same Refresh icon at the toolbar's right edge.
+
 - Keep separate Git diff viewers for different projects, including detached windows.
   Reuse each project's viewer and refresh all open viewers without retargeting another project.
 
