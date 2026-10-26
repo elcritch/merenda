@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.29.1
+
 - Keep separate Git diff viewers for different projects, including detached windows.
   Reuse each project's viewer and refresh all open viewers without retargeting another project.
 
