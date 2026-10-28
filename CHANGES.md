@@ -8,7 +8,8 @@
   in static builds and update bundled-library overrides for macOS and Windows.
 - Switch Windows CI examples and Kosmo releases back to MinGW-w64 GCC. Bundle
   the UCRT64 text DLLs and their dependencies, retain DWARF debug information,
-  and check startup without compiler tools on `PATH`.
+  and check startup without compiler tools on `PATH`. Update Siwin for FigDraw's
+  Windows Vulkan-to-OpenGL fallback API.
 
 - Open working-tree files directly from their Git diff headers in Kosmo.
 

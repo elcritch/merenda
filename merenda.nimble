@@ -10,8 +10,8 @@ requires "msgpack4nim"
 requires "chronicles >= 0.4"
 requires "chroniclers >= 0.6"
 requires "crunchy >= 0.1.11"
-# Includes merged ABI/X11 fixes and opt-in nonactivating window presentation.
-requires "gh:elcritch/siwin#50a96efcd5a3feb5fcfdf07a46baa7da50360c0b"
+# Includes ABI/X11 fixes, nonactivating windows, and FigDraw's WinAPI fallback API.
+requires "gh:elcritch/siwin#86f38cd4112f6254e398e9921d8f0971c3cd9720"
 requires "gh:elcritch/figdraw ^= 0.46.3 [siwin]"
 requires "gh:elcritch/harfbuzzy >= 0.6.0 [runtime]"
 requires "gh:elcritch/sigils >= 0.32.1 [sigNameAsString, closures, siwin, chronos]"
