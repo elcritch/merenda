@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.29.4
+
+- Update Matter and Reni for Nim 2.4 compatibility.
+
 ## 0.29.3
 
 - Prefer opening editor tabs in a pane not displaying a terminal, with a Kosmo
