@@ -1,4 +1,5 @@
-import std/[monotimes, os, osproc, strutils, tempfiles, times, unicode, unittest]
+import
+  std/[monotimes, options, os, osproc, strutils, tempfiles, times, unicode, unittest]
 import figdraw
 import sigils/[core, threads]
 import merenda/nimkit
@@ -1759,6 +1760,71 @@ suite "Kosmo Git diff":
     panel.refresh()
     require panel.waitForDiff()
     check "+refreshed text" in panel.snapshot.files[0].patch
+
+  test "diff file links open working files in editor tabs":
+    let root = createTempDir("kosmo-diff-open-file-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    let
+      path = root / "source with spaces.txt"
+      deleted = root / "deleted.txt"
+    writeFile(path, "original\n")
+    writeFile(deleted, "deleted\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "Initial")
+    writeFile(path, "changed\n")
+    removeFile(deleted)
+    let
+      app = newApplication("Open diff file")
+      frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 1000, 700)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
+    require frontend.showGitDiff(root)
+    let panel = frontend.gitDiffPanel
+    require panel.waitForDiff()
+    var sourceIndex = -1
+    var deletedIndex = -1
+    for index, file in panel.snapshot.files:
+      if file.path == "source with spaces.txt":
+        sourceIndex = index
+      if file.path == "deleted.txt":
+        deletedIndex = index
+    require sourceIndex >= 0
+    require deletedIndex >= 0
+    discard panel.disclosureButtonForFile(deletedIndex)
+    let deletedView =
+      panel.documentView.viewWithIdentifier("kosmo.gitDiff.openFile." & $deletedIndex)
+    require deletedView of Button
+    check not Button(deletedView).enabled
+    let disclosure = panel.disclosureButtonForFile(sourceIndex)
+    let openView =
+      panel.documentView.viewWithIdentifier("kosmo.gitDiff.openFile." & $sourceIndex)
+    require openView of Button
+    let button = Button(openView)
+    check button.enabled
+    check button.accessibilityLabel() == "Open source with spaces.txt in editor"
+    require frontend.window.makeFirstResponder(disclosure)
+    require disclosure.performKeyEquivalentInChain(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord)
+    )
+    check frontend.window.firstResponder == button
+    require button.performKeyEquivalentInChain(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+    )
+    check frontend.window.firstResponder == disclosure
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let point = button.pointToWindow(initPoint(button.bounds().size.width / 2, 15))
+    require frontend.window.clickAt(point)
+    check sameFile(frontend.editorView.editor.tabs()[^1].filePath.get, path)
+    check frontend.editorPane.contentView == View(frontend.editorView)
+    check frontend.documentTabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(root)) >=
+      0
 
   test "File menu exposes the Git diff action":
     let root = createTempDir("kosmo-git-diff-menu-", "")

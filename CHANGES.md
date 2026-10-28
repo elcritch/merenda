@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Open working-tree files directly from their Git diff headers in Kosmo.
+
 - Document that installing dependencies needs a newer Atlas than the one bundled
   with Nim 2.2.12.
 - Pin FigDraw to release 0.46.2 and build bundled HarfBuzz/FriBidi libraries

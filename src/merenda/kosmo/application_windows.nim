@@ -425,6 +425,14 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     frontend.xSettingsWindow.firstResponder,
   ).isNil
 
+proc gitDiffOpenFileHandler(
+    frontend: KosmoApplication
+): proc(path: string) {.closure.} =
+  let weakFrontend = frontend.unsafeWeakRef()
+  result = proc(path: string) =
+    if not weakFrontend.isNil:
+      discard weakFrontend[].openPath(path)
+
 proc showGitDiffSnapshot(
     frontend: KosmoApplication, snapshot: GitDiffSnapshot, refreshesRepository: bool
 ): bool =
@@ -501,6 +509,7 @@ proc showGitDiffSnapshot(
               weakFrontend[].gitDiffPanel = candidate
         true,
     )
+  panel.onOpenFile = frontend.gitDiffOpenFileHandler()
   panel.keyEquivalentHandler = proc(event: nimkit.KeyEvent): bool =
     if weakFrontend.isNil or weakPanel.isNil or weakFrontend[].dockController.isNil:
       return

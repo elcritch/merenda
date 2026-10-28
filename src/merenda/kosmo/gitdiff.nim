@@ -204,6 +204,7 @@ type
     filePath: string
     expanded: bool
     styleGeneration: uint64
+    openButton: nimkit.Button
 
   GitDiffTextView = ref object of nimkit.TextView
 
@@ -304,6 +305,7 @@ type
     patchQueue: seq[GitDiffPatchRequest]
     patchGeneration: uint64
     keyEquivalentHandler: GitDiffKeyEquivalentHandler
+    onOpenFile*: proc(path: string) {.closure.}
     xHighlightBuildCount: int
     xHighlightThreadId: int
     xRepositoryReadCount: int
@@ -1741,6 +1743,31 @@ protocol GitDiffDisclosureAccessibility of nimkit.AccessibilityProtocol:
         action == nimkit.AccessibilityActionCollapse and not collapsed:
       return button.activateDisclosure()
 
+proc focusAdjacentDisclosure(button: GitDiffDisclosureButton, backwards: bool): bool =
+  let owner = button.window()
+  if owner of nimkit.Window and not button.panel.isNil:
+    let
+      window = nimkit.Window(owner)
+      panel = button.panel[]
+      next = button.fileIndex + (if backwards: -1 else: 1)
+    var target: nimkit.Responder
+    if next < 0:
+      panel.forcedDisclosurePaths.clear()
+      panel.syncDisclosureButtons()
+      target = panel.markdownView.textView()
+    elif next >= panel.snapshot.files.len:
+      panel.forcedDisclosurePaths.clear()
+      panel.syncDisclosureButtons()
+      target = panel.refreshButton
+    else:
+      let path = panel.snapshot.files[next].path
+      panel.forcedDisclosurePaths.clear()
+      panel.forcedDisclosurePaths.incl path
+      panel.ensureFileMaterialized(next)
+      panel.syncDisclosureButtons()
+      target = panel.disclosureButtons.getOrDefault(path)
+    result = window.makeFirstResponder(target)
+
 proc newDisclosureButton(
     panel: KosmoGitDiffPanel, fileIndex: int, filePath: string, frame: nimkit.Rect
 ): GitDiffDisclosureButton =
@@ -1767,36 +1794,61 @@ proc newDisclosureButton(
     if event.modifiers == {} and event.key in {nimkit.keyEnter, nimkit.keySpace}:
       invocation.setResult(button.activateDisclosure())
     elif event.key == nimkit.keyTab and event.modifiers in [{}, {nimkit.kmShift}]:
-      let owner = button.window()
-      if owner of nimkit.Window and not button.panel.isNil:
-        let window = nimkit.Window(owner)
-        let panel = button.panel[]
-        let next = button.fileIndex + (if nimkit.kmShift in event.modifiers: -1 else: 1)
-        var target: nimkit.Responder
-        if next < 0:
-          panel.forcedDisclosurePaths.clear()
-          panel.syncDisclosureButtons()
-          target = panel.markdownView.textView()
-        elif next >= panel.snapshot.files.len:
-          panel.forcedDisclosurePaths.clear()
-          panel.syncDisclosureButtons()
-          target = panel.refreshButton
-        else:
-          let path = panel.snapshot.files[next].path
-          panel.forcedDisclosurePaths.clear()
-          panel.forcedDisclosurePaths.incl path
-          panel.ensureFileMaterialized(next)
-          panel.syncDisclosureButtons()
-          target = panel.disclosureButtons.getOrDefault(path)
-        invocation.setResult(window.makeFirstResponder(target))
+      if nimkit.kmShift notin event.modifiers and button.openButton.enabled:
+        let owner = button.window()
+        invocation.setResult(
+          owner of nimkit.Window and
+            nimkit.Window(owner).makeFirstResponder(button.openButton)
+        )
       else:
-        invocation.setResult(false)
+        invocation.setResult(
+          button.focusAdjacentDisclosure(nimkit.kmShift in event.modifiers)
+        )
     else:
       invocation.setResult(
         not button.panel.isNil and button.panel[].handleReaderKeys(event)
       )
   discard
     result.replaceMethod(nimkitSelectors.performKeyEquivalent(), keyEquivalentMethod)
+  result.openButton = nimkit.newButton("Open")
+  result.openButton.addStyleClass(nimkit.ToolbarButtonStyleClass)
+  let openAction = nimkit.actionSelector("kosmo.openGitDiffFile")
+  result.openButton.action = openAction
+  result.openButton.target = nimkit.newActionTarget(openAction) do(
+    sender: nimkit.DynamicAgent
+  ):
+    discard sender
+    if not weakButton.isNil and not weakButton[].panel.isNil:
+      let
+        button = weakButton[]
+        panel = button.panel[]
+        path = panel.snapshot.rootPath / button.filePath
+      if not panel.closed and not panel.onOpenFile.isNil and fileExists(path):
+        panel.onOpenFile(path)
+  let openKeyMethod: nimkit.DynamicMethod = proc(
+      self: nimkit.DynamicAgent, invocation: var nimkit.Invocation
+  ) =
+    let event = invocation.argsAs(nimkit.KeyEvent)
+    if not weakButton.isNil and event.key == nimkit.keyTab and
+        event.modifiers in [{}, {nimkit.kmShift}]:
+      let button = weakButton[]
+      if nimkit.kmShift in event.modifiers:
+        let owner = button.window()
+        invocation.setResult(
+          owner of nimkit.Window and nimkit.Window(owner).makeFirstResponder(button)
+        )
+      else:
+        invocation.setResult(button.focusAdjacentDisclosure(false))
+    elif event.modifiers == {} and event.key in {nimkit.keyEnter, nimkit.keySpace}:
+      invocation.setResult(nimkit.Button(self).sendAction())
+    else:
+      invocation.setResult(
+        not weakButton.isNil and not weakButton[].panel.isNil and
+          weakButton[].panel[].handleReaderKeys(event)
+      )
+  discard result.openButton.replaceMethod(
+    nimkitSelectors.performKeyEquivalent(), openKeyMethod
+  )
   result.accessibilityIdentifier = "kosmo.gitDiff.file." & $fileIndex
   result.toolTip =
     (if panel.isFileCollapsed(fileIndex): "Expand " else: "Collapse ") &
@@ -1880,6 +1932,7 @@ proc releaseFileDisclosureButton(panel: KosmoGitDiffPanel, path: string) =
     return
   let button = section[].disclosureButton
   button.removeFromSuperview()
+  button.openButton.removeFromSuperview()
   button.setHiddenFromLayout(true)
   section[].disclosureButton = nil
   panel.disclosureButtons.del path
@@ -1907,6 +1960,7 @@ proc ensureFileMaterialized(panel: KosmoGitDiffPanel, index: int, forceText = fa
     section[].disclosureButton = button
     panel.disclosureButtons[path] = button
     panel.documentView.addSubview(button)
+    panel.documentView.addSubview(button.openButton)
   if forceText or path notin panel.collapsed:
     if section[].textView.isNil:
       let textView = panel.newGitDiffTextView()
@@ -1948,7 +2002,27 @@ proc syncDisclosureButton(panel: KosmoGitDiffPanel, index: int, frame: nimkit.Re
       else:
         "   " & gitDiffStatusLabel(file.status)
     )
-  button.setFrameFromLayout(frame)
+  let openWidth = min(68.0'f32, max(frame.size.width - 24.0'f32, 0.0'f32))
+  button.setFrameFromLayout(
+    nimkit.rect(
+      frame.origin.x, frame.origin.y, frame.size.width - openWidth, frame.size.height
+    )
+  )
+  button.openButton.setFrameFromLayout(
+    nimkit.rect(frame.maxX - openWidth, frame.origin.y, openWidth, frame.size.height)
+  )
+  button.openButton.enabled =
+    not panel.onOpenFile.isNil and panel.snapshot.rootPath.len > 0 and
+    fileExists(panel.snapshot.rootPath / file.path)
+  button.openButton.identifier = "kosmo.gitDiff.openFile." & $index
+  button.openButton.accessibilityIdentifier = "kosmo.gitDiff.openFile." & $index
+  button.openButton.accessibilityLabel = "Open " & file.path & " in editor"
+  button.openButton.toolTip =
+    if button.openButton.enabled:
+      "Open working file in editor: " & file.path
+    else:
+      "Working file is unavailable: " & file.path
+  button.openButton.setHiddenFromLayout(false)
   button.setHiddenFromLayout(false)
   let expanded = file.path notin panel.collapsed
   if button.expanded != expanded or button.styleGeneration != panel.styleGeneration:
@@ -1996,7 +2070,10 @@ proc syncDisclosureButtons(panel: KosmoGitDiffPanel) =
   let owner = panel.window()
   if owner of nimkit.Window:
     for path, section in panel.sections:
-      if nimkit.Window(owner).firstResponder == section.disclosureButton:
+      if nimkit.Window(owner).firstResponder == section.disclosureButton or (
+        not section.disclosureButton.isNil and
+        nimkit.Window(owner).firstResponder == section.disclosureButton.openButton
+      ):
         focusedDisclosurePath = path
         break
   if focusedDisclosurePath.len > 0:
@@ -2162,8 +2239,11 @@ proc syncVisibleSections(panel: KosmoGitDiffPanel) =
     let section = addr panel.sections[path]
     if path in desiredButtons or path in panel.forcedDisclosurePaths or
         path in panel.forcedTextPaths or
-        (path notin panel.collapsed and not section[].textView.isNil) or
-        (owner of nimkit.Window and nimkit.Window(owner).firstResponder == button):
+        (path notin panel.collapsed and not section[].textView.isNil) or (
+      owner of nimkit.Window and
+      nimkit.Window(owner).firstResponder in
+      [nimkit.Responder(button), nimkit.Responder(button.openButton)]
+    ):
       continue
     released.add path
   for path in released:
