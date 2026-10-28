@@ -68,7 +68,7 @@ jobs:
       uses: ssciwr/setup-mesa-dist-win@v3.0.0
       with:
         version: '26.0.3'
-        build-type: 'release-msvc'
+        build-type: 'release-mingw'
         deployment-choice: '1'
 
     - name: Force OpenGL for Windows tests
@@ -108,6 +108,15 @@ jobs:
 
     - name: Clean generated examples
       run: bash .github/scripts/clean_generated_examples.sh
+
+    - name: Verify optional text library fallback
+      run: |
+        atlas-run tests tests/nimkit/textbackends.nim -- \
+          -d:harfbuzzDynlib=merenda-missing-harfbuzz \
+          -d:merendaTestTextBackend=pixie
+        atlas-run tests tests/nimkit/textbackends.nim -- \
+          -d:harfbuzzyFribidiDynlib=merenda-missing-fribidi \
+          -d:merendaTestTextBackend=pixie
 
     - name: Record macOS test crash-report boundary
       if: runner.os == 'macOS'
@@ -442,12 +451,6 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
-    - name: Configure MSVC for x64
-      if: runner.os == 'Windows'
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
-
     - name: Install macOS text rendering libraries
       if: runner.os == 'macOS'
       run: brew install harfbuzz fribidi
@@ -457,14 +460,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends libharfbuzz-dev libfribidi-dev
-
-    - name: Install Windows text rendering headers
-      if: runner.os == 'Windows'
-      shell: pwsh
-      run: |
-        & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install harfbuzz:x64-windows
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        "INCLUDE=$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/include/harfbuzz;$env:INCLUDE" >> $env:GITHUB_ENV
 
     - name: Cache packages
       uses: actions/cache@v4
@@ -482,11 +477,11 @@ jobs:
         fi
         export PATH="$HOME/.local/bin:$PATH"
         bash .github/scripts/install-atlas.sh
-        if [[ "$RUNNER_OS" == "Windows" ]]; then
-          bash .github/scripts/install-msvc-nim.sh
-        else
-          "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
-        fi
+        "$HOME/.local/bin/atlas" env "${{ matrix.nimversion }}" --binary --github-path
+
+    - name: Set up MinGW and text libraries
+      if: runner.os == 'Windows'
+      uses: ./.github/actions/setup-mingw
 
     - name: Verify Nim
       run: |
@@ -511,9 +506,20 @@ jobs:
       run: |
         atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim"
 
-    - name: Compile Windows Examples with MSVC
+    - name: Compile Windows Examples with MinGW
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim" -- --cc:vcc --passC:/MT
+        atlas-run tests --jobs:2 --compile-only --only-errors "examples/all_compile.nim" -- --cc:gcc
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Verify Windows optional text backends
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc -d:merendaTestTextBackend=harfbuzzy
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc -d:harfbuzzDynlib=merenda-missing-harfbuzz -d:merendaTestTextBackend=pixie
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc -d:harfbuzzyFribidiDynlib=merenda-missing-fribidi -d:merendaTestTextBackend=pixie
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

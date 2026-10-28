@@ -546,9 +546,16 @@ for supported builds, custom install locations, and the static Linux build.
 
 ### Build from source
 
-Install HarfBuzz and FriBidi development libraries for your platform first
-(`brew install harfbuzz fribidi pkg-config` on macOS, or the `libharfbuzz-dev`
-and `libfribidi-dev` packages on Debian/Ubuntu).
+FigDraw 0.46.3 discovers HarfBuzz 7 or newer and FriBidi at runtime. Kosmo uses
+them for complex-script shaping, ligatures, and automatic system-font fallback;
+if either library is unavailable, it uses Pixie for text layout and rasterization.
+The native text libraries are optional for building and running ordinary source
+builds. Install `harfbuzz` and `fribidi` with Homebrew on macOS, or `libharfbuzz0b`
+and `libfribidi0` on Debian/Ubuntu, to enable shaping.
+
+Use `-d:figdrawTextBackend=pixie` to build with Pixie only, or
+`-d:figdrawTextBackend=harfbuzzy` to require native shaping. Bundled static
+builds (`-d:harfbuzzyStatic`) retain the Harfbuzzy backend by default.
 
 From your Merenda checkout, install the extra Kosmo dependencies, then build
 and launch it:
@@ -559,17 +566,17 @@ nim c -o:kosmo src/merenda/kosmo/kosmo.nim
 ./kosmo .
 ```
 
-On Windows, open a Visual Studio x64 Developer PowerShell and run
-`bash .github/scripts/install-msvc-nim.sh` using Git for Windows Bash.
-Use the compiler path it prints to build with
-`& "<compiler-path>" c --cc:vcc -o:kosmo.exe src/merenda/kosmo/kosmo.nim`,
-then run `./kosmo.exe .`.
-The script makes a private copy of the official Nim 2.2.10 distribution,
-installs checksum-verified atomic and large-string fixes, and builds the corrected
-compiler once. Worker threads need the atomic fix; an unpatched MSVC build is
-rejected at compile time. The string fix lets ARC/ORC embed the bundled assets.
-Keep the Developer shell open when building: the project invokes `cl.exe`
-directly so large applications can link using response files.
+On Windows, use MinGW-w64 GCC. CI and releases use MSYS2's UCRT64 environment:
+
+```sh
+pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-harfbuzz mingw-w64-ucrt-x86_64-fribidi
+nim c --cc:gcc -o:kosmo.exe src/merenda/kosmo/kosmo.nim
+./kosmo.exe .
+```
+
+Keep the UCRT64 `bin` directory on `PATH` for the compiler and optional text DLLs.
+Release archives bundle the text DLLs and their dependencies, and retain native
+debug information inside `kosmo.exe`.
 
 On macOS, install the current checkout as a complete `Kosmo.app` with its icon,
 bundled notices, debug symbols, and local code signature:

@@ -1,13 +1,13 @@
-## Standalone native MSVC coverage for shared ownership and contended atomics.
+## Standalone Windows coverage for shared ownership and contended atomics.
 
 when isMainModule:
   import std/[atomics, monotimes, os, times]
   import threading/smartptrs
   import sigils/[threadChronos, threadPool]
 
-  when not (defined(windows) and defined(vcc)):
-    {.error: "Compile this fixture for Windows with --cc:vcc".}
-  when not declared(nimHasCorrectMsvcAtomics):
+  when not defined(windows):
+    {.error: "Compile this fixture for Windows".}
+  when defined(vcc) and not declared(nimHasCorrectMsvcAtomics):
     {.error: "Use the pinned MSVC compiler with corrected atomics".}
 
   var destructions: Atomic[int]
@@ -60,4 +60,4 @@ when isMainModule:
   dispatcher.start()
   dispatcher.stop()
   dispatcher.join()
-  echo "MSVC shared ownership and contended atomic increments passed"
+  echo "Windows shared ownership and contended atomic increments passed"

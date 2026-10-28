@@ -2,12 +2,20 @@
 
 ## Unreleased
 
+- Use FigDraw 0.46.3 and Harfbuzzy 0.6.0 for optional runtime text-library
+  loading. Kosmo uses HarfBuzz shaping and automatic system-font fallback when
+  supported libraries are present, and Pixie otherwise. Preserve native shaping
+  in static builds and update bundled-library overrides for macOS and Windows.
+- Switch Windows CI examples and Kosmo releases back to MinGW-w64 GCC. Bundle
+  the UCRT64 text DLLs and their dependencies, retain DWARF debug information,
+  and check startup without compiler tools on `PATH`.
+
 - Open working-tree files directly from their Git diff headers in Kosmo.
 
 - Document that installing dependencies needs a newer Atlas than the one bundled
   with Nim 2.2.12.
-- Pin FigDraw to release 0.46.2 and build bundled HarfBuzz/FriBidi libraries
-  with Zig for static Linux musl releases.
+- Build bundled HarfBuzz/FriBidi libraries with Zig for static Linux musl
+  releases.
 - Open a pull request's base-to-head comparison in Kosmo from its GitHub view.
   Fetch PR refs in the background, including fork PRs, without changing the working branch.
 

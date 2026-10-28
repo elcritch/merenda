@@ -500,7 +500,7 @@ suite "nimkit mono text views":
       if node.kind == nkText and node.renderedText() == "AB":
         foundText = true
         require node.textLayout.arrangedGlyphs.len == 2
-        when figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid":
+        if selectedTextBackend() != TextBackendKind.Pixie:
           let font = getFigFont(node.textLayout.arrangedGlyphs[0].fontId)
           for index, rune in [Rune('A'), Rune('B')]:
             let shaped = typeset(

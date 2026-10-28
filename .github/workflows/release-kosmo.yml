@@ -24,6 +24,7 @@ on:
     branches:
       - main
     paths:
+      - .github/actions/setup-mingw/**
       - .github/workflows/release-kosmo.yml
       - atlas.lock
       - config.nims
@@ -31,6 +32,7 @@ on:
       - merenda.nimble
       - packaging/macos/debug.entitlements
       - packaging/macos/Info.plist
+      - packaging/windows/**
       - src/**
 
 permissions:
@@ -657,7 +659,7 @@ jobs:
             --stackTrace:off \
             -d:nimStackTraceOverride \
             -d:moe.embedded \
-            -d:harfbuzzyDynlib=@executable_path/../Frameworks/libharfbuzz.dylib \
+            -d:harfbuzzDynlib=@executable_path/../Frameworks/libharfbuzz.dylib \
             -d:harfbuzzyFribidiDynlib=@executable_path/../Frameworks/libfribidi.dylib \
             -d:KosmoVersion="$version" \
             -d:KosmoGitHashOverride="$revision" \
@@ -774,26 +776,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Configure MSVC for x64
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
       - name: Set up software OpenGL for the startup check
         uses: ssciwr/setup-mesa-dist-win@v3.0.0
         with:
           version: '26.0.3'
-          build-type: 'release-msvc'
+          build-type: 'release-mingw'
           deployment-choice: '1'
-
-      - name: Install text rendering libraries
-        shell: pwsh
-        run: |
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install `
-            harfbuzz:x64-windows-staticcrt fribidi:x64-windows-staticcrt `
-            --overlay-triplets=packaging/windows
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "INCLUDE=$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/include/harfbuzz;$env:INCLUDE" >> $env:GITHUB_ENV
 
       - name: Install Nim
         uses: jiro4989/setup-nim-action@v2
@@ -819,25 +807,15 @@ jobs:
         shell: bash
         run: atlas install -tuk --features:kosmo
 
-      - name: Install Nim with corrected MSVC atomics
-        shell: bash
-        run: bash .github/scripts/install-msvc-nim.sh
-
-      - name: Verify MSVC linker response files
-        shell: pwsh
-        timeout-minutes: 5
-        run: |
-          New-Item -ItemType Directory -Force -Path build | Out-Null
-          nim c -r --cc:vcc --passC:/MT --out:build/windowsresponsefiles.exe `
-            tests/integrations/fixtures/windowsresponsefiles.nim
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Set up MinGW and text libraries
+        uses: ./.github/actions/setup-mingw
 
       - name: Build Kosmo
         shell: pwsh
         run: |
           $version = $env:KOSMO_RELEASE_VERSION.TrimStart('v')
           $revision = $env:GITHUB_SHA.Substring(0, 12)
-          $textBin = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/bin"
+          $textBin = "$env:MERENDA_MINGW_PREFIX/bin"
           $harfbuzzDll = Get-ChildItem "$textBin/*.dll" | Where-Object Name -Match '^(lib)?harfbuzz(-[0-9]+)?\.dll$' | Select-Object -First 1
           $fribidiDll = Get-ChildItem "$textBin/*.dll" | Where-Object Name -Match '^(lib)?fribidi(-[0-9]+)?\.dll$' | Select-Object -First 1
           if (-not $harfbuzzDll -or -not $fribidiDll) {
@@ -845,46 +823,51 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path build, dist | Out-Null
           Push-Location data
-          rc.exe /nologo /fo ../build/kosmo.res kosmo.rc
+          windres kosmo.rc -O coff -o ../build/kosmo.res
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Pop-Location
           nim c `
-            --cc:vcc `
+            --cc:gcc `
             --opt:size `
             --debugger:native `
-            --lineTrace:on `
-            --stackTrace:on `
-            --passC:/MT `
+            --lineTrace:off `
+            --stackTrace:off `
+            --passL:-static-libgcc `
+            --passL:-static-libstdc++ `
+            -d:nimStackTraceOverride `
             --app:gui `
             -d:moe.embedded `
-            "-d:harfbuzzyDynlib=$($harfbuzzDll.Name)" `
+            "-d:harfbuzzDynlib=$($harfbuzzDll.Name)" `
             "-d:harfbuzzyFribidiDynlib=$($fribidiDll.Name)" `
             "-d:KosmoVersion=$version" `
             "-d:KosmoGitHashOverride=$revision" `
             --passL:build/kosmo.res `
-            "--passL:/link /DEBUG:FULL /PDB:dist/kosmo.pdb" `
             --out:dist/kosmo.exe `
             src/merenda/kosmo/kosmo.nim
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
-          if (-not (Test-Path dist/kosmo.pdb)) {
-            throw 'Kosmo executable is missing its PDB.'
+          if (-not (& objdump -h dist/kosmo.exe | Select-String -Quiet '\.debug_info')) {
+            throw 'Kosmo executable is missing native debug information.'
           }
-          if (-not (& dumpbin /headers dist/kosmo.exe | Select-String -Quiet 'Debug Directories')) {
-            throw 'Kosmo executable is missing its native debug directory.'
+          if (-not (& nm dist/kosmo.exe | Select-String -Quiet 'backtrace_create_state')) {
+            throw 'Kosmo executable is missing libbacktrace.'
           }
-          $imports = & dumpbin /dependents dist/kosmo.exe
-          if ($imports -match '(?i)libgcc|libstdc\+\+|vcruntime[0-9]+|msvcp[0-9]+') {
-            throw 'Kosmo executable must not depend on a compiler runtime DLL.'
+          nim c --cc:gcc -d:merendaTestTextBackend=harfbuzzy --out:dist/textbackends.exe tests/nimkit/textbackends.nim
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & packaging/windows/bundle-text-libraries.ps1 -Prefix $env:MERENDA_MINGW_PREFIX -Destination dist
+          # Run without build-tool paths so missing bundled DLLs cannot be hidden.
+          $buildPath = $env:PATH
+          $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
+          try {
+            & "$PWD/dist/textbackends.exe"
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled native text shaping failed.' }
           }
-          Copy-Item "$textBin/*.dll" dist/
-          Get-ChildItem dist/*.dll | ForEach-Object {
-            $dependencies = & dumpbin /dependents $_.FullName
-            if ($dependencies -match '(?i)vcruntime[0-9]+|msvcp[0-9]+') {
-              throw "Text DLL $($_.Name) requires a Visual C++ redistributable."
-            }
+          finally {
+            $env:PATH = $buildPath
+            Remove-Item dist/textbackends.exe
           }
+          $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
           $process = Start-Process `
             -FilePath "$PWD/dist/kosmo.exe" `
             -PassThru
@@ -897,24 +880,25 @@ jobs:
             }
           }
           finally {
+            $env:PATH = $buildPath
             if (-not $process.HasExited) {
               Stop-Process -Id $process.Id -Force
               $process.WaitForExit()
             }
           }
 
-      - name: Verify MSVC stack traces
+      - name: Verify MinGW stack traces
         shell: pwsh
         run: |
-          nim c -r --cc:vcc --passC:/MT --out:build/windowsstacktrace.exe `
+          nim c -r --cc:gcc --out:build/windowsstacktrace.exe `
             tests/integrations/fixtures/windowsstacktrace.nim
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify MSVC atomic ownership and worker shutdown
+      - name: Verify MinGW atomic ownership and worker shutdown
         shell: pwsh
         timeout-minutes: 5
         run: |
-          nim c -r --cc:vcc --passC:/MT --out:build/windowsatomics.exe `
+          nim c -r --cc:gcc --out:build/windowsatomics.exe `
             tests/integrations/fixtures/windowsatomics.nim
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -923,14 +907,8 @@ jobs:
         run: |
           Copy-Item data/FONT-LICENSES.md dist/FONT-LICENSES.md
           Copy-Item -Recurse data/font-licenses dist/font-licenses
-          New-Item -ItemType Directory -Force dist/text-library-licenses | Out-Null
-          Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-staticcrt/share" -Directory | ForEach-Object {
-            if (Test-Path "$($_.FullName)/copyright") {
-              Copy-Item "$($_.FullName)/copyright" "dist/text-library-licenses/$($_.Name).txt"
-            }
-          }
           Compress-Archive `
-            -Path dist/kosmo.exe, dist/kosmo.pdb, dist/*.dll, dist/FONT-LICENSES.md, dist/font-licenses, dist/text-library-licenses `
+            -Path dist/kosmo.exe, dist/*.dll, dist/FONT-LICENSES.md, dist/font-licenses, dist/text-library-licenses `
             -DestinationPath dist/kosmo-windows-amd64.zip `
             -Force
 

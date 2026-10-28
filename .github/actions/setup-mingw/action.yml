@@ -1,0 +1,25 @@
+name: Set up MinGW
+description: Install one UCRT64 toolchain and its shared text libraries
+runs:
+  using: composite
+  steps:
+    - uses: msys2/setup-msys2@v2
+      id: msys2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-pkgconf
+          mingw-w64-ucrt-x86_64-harfbuzz
+          mingw-w64-ucrt-x86_64-fribidi
+    - name: Select MinGW tools for native Windows builds
+      shell: pwsh
+      env:
+        MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+      run: |
+        $prefix = Join-Path $env:MSYS2_LOCATION 'ucrt64'
+        "$prefix/bin" >> $env:GITHUB_PATH
+        "MERENDA_MINGW_PREFIX=$prefix" >> $env:GITHUB_ENV
+        & "$prefix/bin/gcc.exe" -dumpmachine
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

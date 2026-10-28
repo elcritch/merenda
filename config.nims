@@ -18,7 +18,7 @@
   "src/"
 --nimcache:
   "deps/.nimcache"
-when defined(windows):
+when defined(windows) and defined(vcc):
   # Use the configured Developer shell directly; vccexe expands response files
   # into command lines that exceed Windows' limit for large applications.
   switch("vcc.exe", "cl.exe")
@@ -29,6 +29,10 @@ when defined(windows):
 else:
   switch("define", "nimStackTraceOverride")
   switch("import", "libbacktrace")
+
+when defined(windows) and defined(gcc):
+  # libbacktrace's C++ demangler needs the MinGW C++ runtime in C builds too.
+  switch("passL", "-lstdc++")
 
 when defined(freebsd):
   --define:
@@ -42,6 +46,14 @@ switch("define", "features.markdown.regex") # temporary hack until we get atlas 
 
 # Give bounded TextMate regex probes room for generated native declarations.
 switch("define", "MatterTimedRegexStepLimit=100000")
+
+when not defined(figdrawTextBackend):
+  when defined(harfbuzzyStatic) or defined(features.harfbuzzy.static):
+    # FigDraw defaults static builds to Pixie; retain shaping in bundled builds.
+    switch("define", "figdrawTextBackend=harfbuzzy")
+  else:
+    # Atlas -k can retain the old textBackendHarfbuzzy feature after an upgrade.
+    switch("define", "figdrawTextBackend=runtime")
 
 when defined(features.merenda.kosmo):
   switch("define", "moe.embedded")

@@ -4,8 +4,7 @@ import figdraw
 import pkg/bumpy
 import pkg/pixie
 
-when defined(macosx) and
-    (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
+when defined(macosx):
   import figdraw/extras/systemfonts
 
 import merenda/nimkit/drawing
@@ -83,35 +82,37 @@ proc selectionBounds(layout: GlyphArrangement): tuple[x, y, w, h: float32] =
 
 suite "nimkit font layout":
   test "checkbox symbols fall back from the bundled Nerd Font and rasterize":
-    require "font-fallback" in textBackendFeatures()
-    require fontFallbackResolver() != nil
-    let
-      font = TextStyle(
-        fontName: "JetBrainsMonoNerdFontMono-Regular.ttf.zip", fontSize: 16.0
-      ).textFont(frMonospace).font
-      shaped = typeset(
-        bumpy.rect(0, 0, 120, 40), font, "☐☑☒", minContent = false, wrap = false
-      )
-      placed = placeGlyphs(
-        font,
-        [
-          (Rune(0x2610), vec2(0, 0)),
-          (Rune(0x2611), vec2(20, 0)),
-          (Rune(0x2612), vec2(40, 0)),
-        ],
-      )
-    for layout in [shaped, placed]:
-      require layout.arrangedGlyphs.len == 3
-      for glyph in layout.arrangedGlyphs:
-        check glyph.glyphId != FontGlyphId(0)
-        check getFigFont(glyph.fontId).typefaceId != font.typefaceId
-      for glyph in layout.glyphs():
-        let image = glyph.generateGlyph(force = true, upload = false)
-        require not image.isNil
-        check image.opaqueBounds().w > 0
-        check image.opaqueBounds().h > 0
-    for index, glyph in placed.arrangedGlyphs:
-      check glyph.pos.x == float32(index * 20)
+    if "font-fallback" in textBackendFeatures():
+      require fontFallbackResolver() != nil
+      let
+        font = TextStyle(
+          fontName: "JetBrainsMonoNerdFontMono-Regular.ttf.zip", fontSize: 16.0
+        ).textFont(frMonospace).font
+        shaped = typeset(
+          bumpy.rect(0, 0, 120, 40), font, "☐☑☒", minContent = false, wrap = false
+        )
+        placed = placeGlyphs(
+          font,
+          [
+            (Rune(0x2610), vec2(0, 0)),
+            (Rune(0x2611), vec2(20, 0)),
+            (Rune(0x2612), vec2(40, 0)),
+          ],
+        )
+      for layout in [shaped, placed]:
+        require layout.arrangedGlyphs.len == 3
+        for glyph in layout.arrangedGlyphs:
+          check glyph.glyphId != FontGlyphId(0)
+          check getFigFont(glyph.fontId).typefaceId != font.typefaceId
+        for glyph in layout.glyphs():
+          let image = glyph.generateGlyph(force = true, upload = false)
+          require not image.isNil
+          check image.opaqueBounds().w > 0
+          check image.opaqueBounds().h > 0
+      for index, glyph in placed.arrangedGlyphs:
+        check glyph.pos.x == float32(index * 20)
+    else:
+      skip()
 
   when defined(posix):
     test "platform default fonts load shape and rasterize without figDataDir":
@@ -144,35 +145,37 @@ suite "nimkit font layout":
           check image.opaqueBounds().w > 0
           check image.opaqueBounds().h > 0
 
-  when defined(macosx) and
-      (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
+  when defined(macosx):
     test "automatic fallback retains the native collection face index":
-      const
-        TestLanguage = "x-native-font-face"
-        TestScript = "latn"
-      let systemTypeface = findSystemTypeface(["Helvetica Bold"])
-      require systemTypeface.isSome
+      if "font-fallback" in textBackendFeatures():
+        const
+          TestLanguage = "x-native-font-face"
+          TestScript = "latn"
+        let systemTypeface = findSystemTypeface(["Helvetica Bold"])
+        require systemTypeface.isSome
 
-      setFontFallbackGroups(TestLanguage, TestScript, @[@["Helvetica Bold"]])
-      defer:
-        setFontFallbackGroups(TestLanguage, TestScript, newSeq[seq[string]]())
+        setFontFallbackGroups(TestLanguage, TestScript, @[@["Helvetica Bold"]])
+        defer:
+          setFontFallbackGroups(TestLanguage, TestScript, newSeq[seq[string]]())
 
-      let resolver = fontFallbackResolver()
-      require resolver != nil
-      let
-        primaryTypefaceId = loadTypeface("Menlo")
-        resolved = resolver(
-          FontFallbackRequest(
-            primaryTypefaceId: primaryTypefaceId,
-            language: TestLanguage,
-            script: TestScript,
-            codepoints: @[uint32(ord('A'))],
+        let resolver = fontFallbackResolver()
+        require resolver != nil
+        let
+          primaryTypefaceId = loadTypeface("Menlo")
+          resolved = resolver(
+            FontFallbackRequest(
+              primaryTypefaceId: primaryTypefaceId,
+              language: TestLanguage,
+              script: TestScript,
+              codepoints: @[uint32(ord('A'))],
+            )
           )
-        )
-      require resolved.len == 1
-      let source = getTypefaceSource(resolved[0])
-      check source.name == systemTypeface.get().file.path
-      check source.faceIndex == systemTypeface.get().file.faceIndex
+        require resolved.len == 1
+        let source = getTypefaceSource(resolved[0])
+        check source.name == systemTypeface.get().file.path
+        check source.faceIndex == systemTypeface.get().file.faceIndex
+      else:
+        skip()
 
   test "font fallback groups are runtime customizable by language and script":
     setFontFallbackGroups("x-test", "Test", @[@["Example Sans"]])
@@ -379,7 +382,7 @@ suite "nimkit font layout":
     let font = style.textFont()
 
     check $style.language == "ja-JP"
-    when (figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"):
+    if "font-fallback" in textBackendFeatures():
       check font.font.language == "ja-JP"
       check font.font.fallbackTypefaceIds.len == 0
       check fontFallbackResolver() != nil

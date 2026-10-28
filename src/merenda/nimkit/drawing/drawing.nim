@@ -7,7 +7,8 @@ from figdraw/common/typefaces import getLineHeightImpl
 import ./fontfallbacks
 
 const AutomaticFontFallbackEnabled =
-  figdrawTextBackend == "harfbuzzy" or figdrawTextBackend == "hybrid"
+  runtimeTextBackends or figdrawTextBackend == "harfbuzzy" or
+  figdrawTextBackend == "hybrid"
 
 import ./images
 import ./renderresources

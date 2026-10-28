@@ -1,14 +1,13 @@
-## Standalone MSVC smoke test for the Windows stack-trace compiler settings.
-## The release job compiles this separately so its PDB stays beside the process.
+## Standalone smoke test for the Windows stack-trace compiler settings.
 
 when isMainModule:
   import std/strutils
 
-  when not (defined(windows) and defined(vcc)):
-    {.error: "Compile this fixture for Windows with --cc:vcc".}
+  when not defined(windows):
+    {.error: "Compile this fixture for Windows".}
 
   proc captureFailure() {.noinline.} =
-    raise newException(ValueError, "MSVC stack trace probe")
+    raise newException(ValueError, "Windows stack trace probe")
 
   try:
     captureFailure()
@@ -16,4 +15,4 @@ when isMainModule:
     let trace = getStackTrace(error)
     doAssert trace.contains("captureFailure"), trace
     doAssert trace.contains("windowsstacktrace.nim"), trace
-    echo "MSVC stack trace includes the function and Nim source location"
+    echo "Windows stack trace includes the function and Nim source location"
