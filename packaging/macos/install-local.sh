@@ -10,7 +10,7 @@ fi
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
-for required_command in atlas nim git awk sips iconutil xcrun nm plutil codesign ditto meson ninja cmake; do
+for required_command in atlas nim git awk sips iconutil xcrun nm plutil codesign ditto brew meson ninja pkg-config tar otool install_name_tool; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
     echo "install-local.sh: missing required command: $required_command" >&2
     exit 1
@@ -88,8 +88,9 @@ export MACOSX_DEPLOYMENT_TARGET=13.0
 export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
 export CC="$(xcrun --find clang)"
 export CXX="$(xcrun --find clang++)"
-KOSMO_TEXT_LICENSE_DIR="$app_path/Contents/Resources/text-library-licenses" \
-  nim e packaging/macos/staticTextLicenses.nims
+text_prefix="$build_root/text-libraries"
+bash packaging/macos/build-text-libraries.sh "$text_prefix"
+export PKG_CONFIG_PATH="$text_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 # Cached external C objects can retain an older deployment target.
 nim c \
   --forceBuild:on \
@@ -101,11 +102,13 @@ nim c \
   --stackTrace:off \
   -d:nimStackTraceOverride \
   -d:moe.embedded \
-  -d:harfbuzzyStatic \
+  -d:harfbuzzDynlib=@executable_path/../Frameworks/libharfbuzz.dylib \
+  -d:harfbuzzyFribidiDynlib=@executable_path/../Frameworks/libfribidi.dylib \
   -d:KosmoVersion="$version" \
   -d:KosmoGitHashOverride="$revision" \
   --out:"$app_path/Contents/MacOS/kosmo" \
   src/merenda/kosmo/kosmo.nim
+bash packaging/macos/bundle-text-libraries.sh "$app_path" "$text_prefix"
 xcrun dsymutil "$app_path/Contents/MacOS/kosmo" \
   -o "$app_path/Contents/MacOS/kosmo.dSYM"
 binary_uuid="$(xcrun dwarfdump --uuid "$app_path/Contents/MacOS/kosmo" | awk '{ print $2 }')"

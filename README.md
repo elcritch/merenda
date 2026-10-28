@@ -582,15 +582,16 @@ On macOS, install the current checkout as a complete `Kosmo.app` with its icon,
 bundled notices, debug symbols, and local code signature:
 
 ```sh
-brew install cmake meson ninja
+brew install meson ninja pkg-config
 nim install_kosmo
 ```
 
 This uses Atlas to resolve dependencies, replaces `~/Applications/Kosmo.app`,
 and updates the `~/.local/bin/kosmo` link. Restart Kosmo if it was already
 running. Set `KOSMO_INSTALL_DIR` or `KOSMO_BIN_DIR` to choose other locations.
-This build links HarfBuzz and FriBidi statically with `-d:harfbuzzyStatic`,
-so the installed app does not require Homebrew at runtime.
+Like CI, this builds shared HarfBuzz and FriBidi libraries for macOS 13, bundles
+them in `Contents/Frameworks`, and loads them at runtime. The installed app does
+not require Homebrew at runtime.
 
 ## Explore more
 

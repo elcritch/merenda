@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Make `nim install_kosmo` use macOS CI's runtime-loaded HarfBuzz/FriBidi
+  libraries, bundled and signed inside the app with their license notices.
+
 - Use FigDraw 0.46.3 and Harfbuzzy 0.6.0 for optional runtime text-library
   loading. Kosmo uses HarfBuzz shaping and automatic system-font fallback when
   supported libraries are present, and Pixie otherwise. Preserve native shaping

@@ -20,7 +20,9 @@ Windows archives place the text DLLs beside `kosmo.exe`; the installer copies
 them together and installs their notices with the font notices. Regular Linux
 and FreeBSD builds discover system HarfBuzz and FriBidi libraries at runtime.
 The Linux amd64 musl build compiles and links both text libraries statically
-with `-d:harfbuzzyStatic`, as does the local macOS installer.
+with `-d:harfbuzzyStatic`. The local macOS installer uses the same shared-library
+build and bundling scripts as macOS CI, including runtime paths into
+`Contents/Frameworks`, text-library notices, and library code signatures.
 
 Shared builds use FigDraw 0.46.3's runtime backend selection: when HarfBuzz 7
 or newer and FriBidi are available, Kosmo enables shaping and automatic
