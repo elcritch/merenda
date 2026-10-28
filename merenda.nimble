@@ -13,7 +13,7 @@ requires "crunchy >= 0.1.11"
 # Includes ABI/X11 fixes, nonactivating windows, and FigDraw's WinAPI fallback API.
 requires "siwin#5827ee9dadb5e2597db85375e0e87b8a2272174b"
 requires "figdraw ^= 0.46.3 [siwin]"
-requires "harfbuzzy >= 0.6.0 [runtime]"
+requires "harfbuzzy >= 0.7.0 [runtime]"
 requires "sigils >= 0.32.1 [sigNameAsString, closures, siwin, chronos]"
 requires "gh:elcritch/variant#fix/ic-type-ids"
 requires "kiwiberry#4d273da93f67d8e5d6317898851772b32fa635ec"
