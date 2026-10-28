@@ -1,4 +1,5 @@
-import std/[monotimes, os, osproc, strutils, tempfiles, times, unicode, unittest]
+import
+  std/[monotimes, options, os, osproc, strutils, tempfiles, times, unicode, unittest]
 import figdraw
 import sigils/[core, threads]
 import merenda/nimkit
@@ -574,7 +575,7 @@ suite "Kosmo Git diff":
     for child in panel.documentView.subviews():
       if child of Button:
         headers.add (child, child.xDisplayRevision, child.frame())
-    require headers.len == fileCount
+    require headers.len == fileCount * 2
     let
       documentRevision = panel.documentView.xDisplayRevision
       documentFrame = panel.documentView.frame()
@@ -1759,6 +1760,155 @@ suite "Kosmo Git diff":
     panel.refresh()
     require panel.waitForDiff()
     check "+refreshed text" in panel.snapshot.files[0].patch
+
+  test "diff file links open working files in editor tabs":
+    let root = createTempDir("kosmo-diff-open-file-", "")
+    defer:
+      removeDir(root)
+    initRepository(root)
+    let
+      path = root / "source with spaces.txt"
+      deleted = root / "deleted.txt"
+    writeFile(path, "original\n")
+    writeFile(deleted, "deleted\n")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "Initial")
+    writeFile(path, "changed\n")
+    removeFile(deleted)
+    let
+      app = newApplication("Open diff file")
+      frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.frame = rect(0, 0, 1000, 700)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
+    require frontend.showGitDiff(root)
+    let panel = frontend.gitDiffPanel
+    require panel.waitForDiff()
+    var sourceIndex = -1
+    var deletedIndex = -1
+    for index, file in panel.snapshot.files:
+      if file.path == "source with spaces.txt":
+        sourceIndex = index
+      if file.path == "deleted.txt":
+        deletedIndex = index
+    require sourceIndex >= 0
+    require deletedIndex >= 0
+    discard panel.disclosureButtonForFile(deletedIndex)
+    let deletedView =
+      panel.documentView.viewWithIdentifier("kosmo.gitDiff.openFile." & $deletedIndex)
+    require deletedView of Button
+    check not Button(deletedView).enabled
+    let disclosure = panel.disclosureButtonForFile(sourceIndex)
+    let openView =
+      panel.documentView.viewWithIdentifier("kosmo.gitDiff.openFile." & $sourceIndex)
+    require openView of Button
+    let button = Button(openView)
+    check button.enabled
+    check button.accessibilityLabel() == "Open source with spaces.txt in editor"
+    require frontend.window.makeFirstResponder(disclosure)
+    require disclosure.performKeyEquivalentInChain(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord)
+    )
+    check frontend.window.firstResponder == button
+    require button.performKeyEquivalentInChain(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+    )
+    check frontend.window.firstResponder == disclosure
+    frontend.contentView.layoutSubtreeIfNeeded()
+    let point = button.pointToWindow(initPoint(button.bounds().size.width / 2, 15))
+    require frontend.window.clickAt(point)
+    check sameFile(frontend.editorView.editor.tabs()[^1].filePath.get, path)
+    check frontend.editorPane.contentView == View(frontend.editorView)
+    check frontend.documentTabs.indexOfDocumentTabIdentifier(gitDiffTabIdentifier(root)) >=
+      0
+
+  test "file header keyboard navigation visits open buttons in both directions":
+    let root = createTempDir("kosmo-diff-open-navigation-", "")
+    defer:
+      removeDir(root)
+    writeFile(root / "first.txt", "first")
+    writeFile(root / "second.txt", "second")
+    let
+      patch = """
+diff --git a/first.txt b/first.txt
+@@ -1 +1 @@
+-old
++new
+diff --git a/second.txt b/second.txt
+@@ -1 +1 @@
+-old
++new
+"""
+      panel = newKosmoGitDiffPanel(parseGitDiff(patch, root))
+      window = newWindow("Diff navigation", frame = rect(0, 0, 600, 400))
+    defer:
+      panel.close()
+      window.close()
+    panel.onOpenFile = proc(path: string) =
+      discard
+    window.setContentView(panel)
+    panel.frame = rect(0, 0, 600, 400)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    let first = panel.disclosureButtonForFile(0)
+    let second = panel.disclosureButtonForFile(1)
+    let openFirst = panel.documentView.viewWithIdentifier("kosmo.gitDiff.openFile.0")
+    require openFirst of Button
+    require Button(openFirst).enabled
+    require window.makeFirstResponder(second)
+    require second.performKeyEquivalentInChain(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+    )
+    check window.firstResponder == openFirst
+    require openFirst.performKeyEquivalentInChain(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord, modifiers: {kmShift})
+    )
+    check window.firstResponder == first
+    require first.performKeyEquivalentInChain(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord)
+    )
+    check window.firstResponder == openFirst
+    require openFirst.performKeyEquivalentInChain(
+      KeyEvent(key: keyTab, keyCode: keyTab.ord)
+    )
+    check window.firstResponder == second
+
+  test "removing a diff file restores focus from its open button":
+    let
+      root = createTempDir("kosmo-diff-open-focus-", "")
+      path = root / "file.txt"
+    defer:
+      removeDir(root)
+    writeFile(path, "content")
+    let
+      panel = newKosmoGitDiffPanel(
+        parseGitDiff(
+          "diff --git a/file.txt b/file.txt\n@@ -1 +1 @@\n-old\n+new\n", root
+        )
+      )
+      window = newWindow("Diff focus", frame = rect(0, 0, 600, 400))
+    defer:
+      panel.close()
+      window.close()
+    panel.onOpenFile = proc(path: string) =
+      discard
+    window.setContentView(panel)
+    panel.frame = rect(0, 0, 600, 400)
+    panel.layoutSubtreeIfNeeded()
+    require panel.waitForDiff()
+    discard panel.disclosureButtonForFile(0)
+    let button = panel.documentView.viewWithIdentifier("kosmo.gitDiff.openFile.0")
+    require button of Button
+    require Button(button).enabled
+    require window.makeFirstResponder(button)
+    panel.displayDiff(parseGitDiff("", root))
+    require panel.waitForDiff()
+    check window.firstResponder == panel.markdownView.textView()
+    check button.superview().isNil
 
   test "File menu exposes the Git diff action":
     let root = createTempDir("kosmo-git-diff-menu-", "")
