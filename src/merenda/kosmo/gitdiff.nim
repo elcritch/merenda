@@ -1765,7 +1765,11 @@ proc focusAdjacentDisclosure(button: GitDiffDisclosureButton, backwards: bool): 
       panel.forcedDisclosurePaths.incl path
       panel.ensureFileMaterialized(next)
       panel.syncDisclosureButtons()
-      target = panel.disclosureButtons.getOrDefault(path)
+      let previous = panel.disclosureButtons.getOrDefault(path)
+      if backwards and not previous.isNil and previous.openButton.enabled:
+        target = previous.openButton
+      else:
+        target = previous
     result = window.makeFirstResponder(target)
 
 proc newDisclosureButton(
@@ -2948,11 +2952,16 @@ proc applyDiff(panel: KosmoGitDiffPanel, snapshot: GitDiffSnapshot) {.slot.} =
     if path notin retained:
       stale.add path
   for path in stale:
-    let owner = panel.window()
+    let
+      owner = panel.window()
+      section = panel.sections[path]
+      openButton =
+        if section.disclosureButton.isNil: nil else: section.disclosureButton.openButton
     if owner of nimkit.Window and
         nimkit.Window(owner).firstResponder in [
-          nimkit.Responder(panel.sections[path].textView),
-          nimkit.Responder(panel.sections[path].disclosureButton),
+          nimkit.Responder(section.textView),
+          nimkit.Responder(section.disclosureButton),
+          nimkit.Responder(openButton),
         ]:
       discard nimkit.Window(owner).makeFirstResponder(panel.markdownView.textView())
     panel.releaseFileTextView(path)
