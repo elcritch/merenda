@@ -78,27 +78,19 @@ proc activePaneGroup(controller: KosmoDockController): KosmoEditorGroup =
     if not group.window.isNil and not group.window.isClosed():
       return group
 
+proc showsTerminal(group: KosmoEditorGroup): bool =
+  let document = group.documentForIdentifier(group.selectedTabIdentifier)
+  not document.isNil and document.contentView of nimkit.TerminalView
+
 proc editorDestination(controller: KosmoDockController): KosmoEditorGroup =
   result = controller.activePaneGroup()
-  if result.isNil or controller.frontend.isNil or
-      not controller.frontend[].xPreferEditorPanes:
+  if result.isNil or controller.frontend.isNil:
     return
-  var hasTerminal = false
-  for document in result.documents:
-    if document.contentView of nimkit.TerminalView:
-      hasTerminal = true
-      break
-  if not hasTerminal:
+  if not controller.frontend[].xPreferEditorPanes or not result.showsTerminal():
     return
   for candidate in controller.groupsInPanelOrder():
-    if candidate.workspace == result.workspace:
-      var candidateHasTerminal = false
-      for document in candidate.documents:
-        if document.contentView of nimkit.TerminalView:
-          candidateHasTerminal = true
-          break
-      if not candidateHasTerminal:
-        return candidate
+    if candidate.workspace == result.workspace and not candidate.showsTerminal():
+      return candidate
 
 proc editorDestinationView(controller: KosmoDockController): KosmoEditorView =
   let group = controller.editorDestination()

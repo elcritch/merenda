@@ -142,7 +142,7 @@ proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.} =
   )
 
 func preferEditorPanes*(frontend: KosmoApplication): bool =
-  ## Return whether new editor tabs prefer panes without terminals.
+  ## Return whether new editor tabs prefer panes not displaying terminals.
   not frontend.isNil and frontend.xPreferEditorPanes
 
 proc `preferEditorPanes=`*(frontend: KosmoApplication, enabled: bool) =

@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- Prefer opening editor tabs in a pane without terminals, with a Kosmo Settings
-  option to restore opening them in the active pane.
+- Prefer opening editor tabs in a pane not displaying a terminal, with a Kosmo
+  Settings option to always use the active pane.
 
 - Document that installing dependencies needs a newer Atlas than the one bundled
   with Nim 2.2.12.

@@ -715,7 +715,7 @@ proc newKosmoSettingsWindow*(
     textMateGrammarsPage = newSettingsPage()
     vscodeGrammarSearchControls = nimkit.newStackView(nimkit.laHorizontal)
     preferEditorPanesButton =
-      nimkit.newCheckBox("Prefer panes without terminals for editor tabs")
+      nimkit.newCheckBox("Prefer panes not displaying terminals for editor tabs")
     optionButton = nimkit.newCheckBox("Use Option/Alt as Meta")
     terminalInputPolicyChoice = nimkit.newComboBox(["Hybrid", "Raw shortcuts"])
     terminalForm = nimkit.newFormView()
@@ -844,7 +844,7 @@ proc newKosmoSettingsWindow*(
   optionButton.accessibilityLabel = "Use Option or Alt as Meta"
   preferEditorPanesButton.identifier = KosmoPreferEditorPanesIdentifier
   preferEditorPanesButton.accessibilityLabel =
-    "Prefer panes without terminals for editor tabs"
+    "Prefer panes not displaying terminals for editor tabs"
   settings.preferEditorPanes = preferEditorPanes
   preferEditorPanesButton.target = nimkit.newActionTarget(
     nimkit.actionSelector("kosmo.preferEditorPanesChanged")

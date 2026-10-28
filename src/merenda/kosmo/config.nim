@@ -17,7 +17,7 @@ type KosmoConfig* = object ## User choices persisted by the standalone editor.
   merendaUiScale*: float32
   merendaAutoSaveDefaults*: bool
   preferEditorPanes*: bool = true
-    ## Open editor tabs in a pane without terminal tabs when available.
+    ## Open editor tabs in a pane that is not displaying a terminal when available.
   terminalInput*: string = "hybrid"
     ## Terminal Control shortcut routing: "hybrid" or "raw".
   fileTreeIndentation*: float32 = DefaultKosmoFileTreeIndentation

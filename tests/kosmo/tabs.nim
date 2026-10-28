@@ -897,3 +897,42 @@ suite "Kosmo pane file ownership":
     )
     require frontend.newEditorTab()
     check frontend.editorGroups()[0].pane.documentTabs.len == 3
+
+  test "editor placement checks the selected tab and falls back when all show terminals":
+    let
+      app = newApplication("Selected terminal pane preference")
+      frontend = newKosmoApplication(app, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
+    frontend.splitTerminalPane()
+    let
+      groups = frontend.editorGroups()
+      first = groups[0].pane.documentTabs
+      second = groups[1].pane.documentTabs
+      firstEditorId = first.documentTabModels()[0].identifier
+    require frontend.window.makeFirstResponder(groups[0].editorView)
+    require frontend.openDocument(
+      newKosmoPaneDocument("first-terminal", "Terminal", newKosmoTerminalView())
+    )
+    require first.selectDocumentTabWithIdentifier(firstEditorId)
+    check groups[0].pane.contentView == View(groups[0].editorView)
+    let initialFirstCount = first.len
+    require frontend.newEditorTab()
+    check first.len == initialFirstCount + 1
+    check second.len == 1
+
+    require frontend.window.makeFirstResponder(groups[1].pane.contentView)
+    require frontend.newEditorTab()
+    check first.len == initialFirstCount + 2
+    check second.len == 1
+
+    require first.selectDocumentTabWithIdentifier("first-terminal")
+    require frontend.window.makeFirstResponder(groups[1].pane.contentView)
+    require frontend.newEditorTab()
+    check first.len == initialFirstCount + 2
+    check second.len == 2
+    check second.documentTabModels()[^1].title == "No Name"
