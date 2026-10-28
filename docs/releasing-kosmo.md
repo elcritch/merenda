@@ -24,6 +24,12 @@ with `-d:harfbuzzyStatic`. The local macOS installer uses the same shared-librar
 build and bundling scripts as macOS CI, including runtime paths into
 `Contents/Frameworks`, text-library notices, and library code signatures.
 
+For regular Linux builds, install the runtime libraries with `sudo apt install
+libharfbuzz0b libfribidi0` on Debian/Ubuntu, `sudo pacman -S harfbuzz fribidi`
+on Arch, or `sudo dnf install harfbuzz fribidi` on Fedora.
+Debian 12 provides HarfBuzz 6, so its amd64 users can choose `--static` for
+shaping with the bundled newer library.
+
 Shared builds use FigDraw 0.46.3's runtime backend selection: when HarfBuzz 7
 or newer and FriBidi are available, Kosmo enables shaping and automatic
 system-font fallback. Missing or unsupported text libraries select Pixie

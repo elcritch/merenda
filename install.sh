@@ -305,3 +305,17 @@ case "$platform" in
     install_notices "$extract_dir"
     ;;
 esac
+
+if [ "$platform" = linux ] && [ "$KOSMO_STATIC" -eq 0 ]; then
+  cat >&2 <<'EOF'
+install.sh: For complex text shaping and font fallback, install HarfBuzz 7 or
+newer and FriBidi. If either is unavailable or HarfBuzz is older than 7,
+Kosmo uses Pixie for text rendering.
+
+  Debian/Ubuntu: sudo apt install libharfbuzz0b libfribidi0
+  Arch Linux:    sudo pacman -S harfbuzz fribidi
+  Fedora:        sudo dnf install harfbuzz fribidi
+
+Debian 12 ships HarfBuzz 6; its Linux amd64 users can use --static for shaping.
+EOF
+fi

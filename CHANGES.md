@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Recommend Linux text-rendering packages after installing a shared build,
+  with commands for Debian/Ubuntu, Arch, and Fedora.
+
 - Log Kosmo's selected text backend and explain missing or outdated native text libraries.
 
 - Make `nim install_kosmo` use macOS CI's runtime-loaded HarfBuzz/FriBidi
