@@ -113,10 +113,22 @@ jobs:
       run: |
         atlas-run tests tests/nimkit/textbackends.nim -- \
           -d:harfbuzzDynlib=merenda-missing-harfbuzz \
-          -d:merendaTestTextBackend=pixie
+          -d:merendaTestTextBackend=pixie \
+          '-d:merendaTestTextDiagnostic=HarfBuzz could not be loaded'
         atlas-run tests tests/nimkit/textbackends.nim -- \
           -d:harfbuzzyFribidiDynlib=merenda-missing-fribidi \
-          -d:merendaTestTextBackend=pixie
+          -d:merendaTestTextBackend=pixie \
+          '-d:merendaTestTextDiagnostic=FriBidi could not be loaded'
+
+    - name: Verify old HarfBuzz diagnostic
+      if: runner.os == 'Linux'
+      run: |
+        cc -shared -fPIC tests/integrations/fixtures/oldharfbuzz.c \
+          -o "$RUNNER_TEMP/merenda-old-harfbuzz.so"
+        atlas-run tests tests/nimkit/textbackends.nim -- \
+          -d:harfbuzzDynlib="$RUNNER_TEMP/merenda-old-harfbuzz.so" \
+          -d:merendaTestTextBackend=pixie \
+          '-d:merendaTestTextDiagnostic=HarfBuzz 6.0.0 is too old'
 
     - name: Record macOS test crash-report boundary
       if: runner.os == 'macOS'

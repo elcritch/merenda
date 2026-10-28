@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Log Kosmo's selected text backend and explain missing or outdated native text libraries.
+
 - Make `nim install_kosmo` use macOS CI's runtime-loaded HarfBuzz/FriBidi
   libraries, bundled and signed inside the app with their license notices.
 

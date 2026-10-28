@@ -1804,6 +1804,7 @@ proc close*(manager: KosmoWindowManager) =
     frontend.close()
 
 proc runKosmoRequest*(initialRequest: Option[KosmoCliOpenRequest]) =
+  logTextBackend()
   let
     app = nimkit.sharedApplication()
     keyBindingsPath = defaultKosmoKeyBindingsPath()

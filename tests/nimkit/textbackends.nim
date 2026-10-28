@@ -1,5 +1,5 @@
 ## Exercise Merenda font setup with optional native text libraries.
-import std/unittest
+import std/[strutils, unittest]
 
 import figdraw
 import pkg/bumpy
@@ -9,8 +9,10 @@ import merenda/nimkit/drawing
 import merenda/nimkit/foundation/types
 import merenda/nimkit/themes
 import merenda/nimkit/text/texttypes
+import merenda/kosmo/textbackendlogging
 
 const merendaTestTextBackend {.strdefine.} = ""
+const merendaTestTextDiagnostic {.strdefine.} = ""
 
 proc layoutSample(): GlyphArrangement =
   let font = TextStyle(fontSize: 16, language: initLanguageTag("en-US")).textFont()
@@ -34,6 +36,16 @@ proc checkRasterization(layout: GlyphArrangement, backend: GlyphRasterBackend) =
     check image.opaqueBounds().h > 0
 
 suite "nimkit optional text backends":
+  test "backend diagnostics explain library availability":
+    let diagnostic = textBackendDiagnostic()
+    logTextBackend()
+    check diagnostic.backend == textBackend()
+    when runtimeTextBackends:
+      if diagnostic.backend == "harfbuzzy":
+        check diagnostic.detail == "HarfBuzz and FriBidi loaded successfully"
+    when merendaTestTextDiagnostic != "":
+      check merendaTestTextDiagnostic in diagnostic.detail
+
   test "default fonts lay out and rasterize with the discovered backend":
     when merendaTestTextBackend != "":
       check textBackend() == merendaTestTextBackend
