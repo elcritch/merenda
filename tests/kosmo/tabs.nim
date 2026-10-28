@@ -638,14 +638,14 @@ suite "Kosmo":
       frontend.shortcutProfile().primaryModifiers() + {nimkit.kmShift}
 
     check frontend.window
-    .keyBindings()
-    .commandFor(
-      KeyEvent(
-        key: keyRightBracket,
-        keyCode: keyRightBracket.ord,
-        modifiers: tabShortcutModifiers,
-      )
-    ).isNone
+      .keyBindings()
+      .commandFor(
+        KeyEvent(
+          key: keyRightBracket,
+          keyCode: keyRightBracket.ord,
+          modifiers: tabShortcutModifiers,
+        )
+      ).isNone
     check frontend.editorView.editor.tabs()[1].active
     check frontend.window.dispatchKeyDown(
       KeyEvent(key: keyW, keyCode: keyW.ord, modifiers: {kmControl})
@@ -789,6 +789,7 @@ suite "Kosmo pane file ownership":
     app.activateWindow(frontend.window)
     require frontend.openPath(basePath)
     frontend.splitTerminalPane()
+    frontend.preferEditorPanes = false
     require frontend.showFileExplorer()
     frontend.fileTree.onOpenFile()(targetPath, fodTemporary)
     check frontend.tabCountNamed("target.txt") == 1
@@ -817,6 +818,7 @@ suite "Kosmo pane file ownership":
     app.activateWindow(frontend.window)
     require frontend.openPath(basePath)
     frontend.splitTerminalPane()
+    frontend.preferEditorPanes = false
     require frontend.showFileExplorer()
     frontend.fileTree.onOpenFile()(firstPath, fodTemporary)
     check frontend.tabCountNamed("first.txt") == 1
@@ -841,8 +843,57 @@ suite "Kosmo pane file ownership":
     frontend.contentView.layoutSubtreeIfNeeded()
     app.activateWindow(frontend.window)
     frontend.splitTerminalPane()
+    frontend.preferEditorPanes = false
     require frontend.showFileExplorer()
     frontend.fileTree.onOpenFile()(targetPath, fodTemporary)
     check frontend.tabCountNamed("target.txt") == 1
     check frontend.editorGroups()[0].pane.documentTabs.documentTabModels()[0].title ==
       "No Name"
+
+  test "editor tabs prefer panes without terminals when enabled":
+    let
+      root = createTempDir("kosmo-prefer-editor-pane-", "")
+      targetPath = root / "target.txt"
+      secondPath = root / "second.txt"
+      app = newApplication("Preferred editor pane")
+      frontend = newKosmoApplication(app, filePath = root, monitorsGitStatus = false)
+    defer:
+      frontend.close()
+      removeDir(root)
+    writeFile(targetPath, "target")
+    writeFile(secondPath, "second")
+    app.addWindow(frontend.window)
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    app.activateWindow(frontend.window)
+    frontend.splitTerminalPane()
+    let groups = frontend.editorGroups()
+    require frontend.preferEditorPanes()
+    require frontend.showFileExplorer()
+    frontend.fileTree.onOpenFile()(targetPath, fodPermanent)
+    check groups[0].pane.documentTabs.documentTabModels()[0].title == "target.txt"
+    check groups[1].pane.documentTabs.len == 1
+    require frontend.window.makeFirstResponder(groups[1].pane.contentView)
+    require frontend.newEditorTab()
+    check groups[0].pane.documentTabs.len == 2
+    check groups[1].pane.documentTabs.len == 1
+
+    frontend.preferEditorPanes = false
+    require frontend.window.makeFirstResponder(groups[1].pane.contentView)
+    require frontend.openPath(secondPath)
+    check groups[1].pane.documentTabs.len == 2
+    check groups[1].pane.documentTabs.documentTabModels()[^1].title == "second.txt"
+
+  test "editor tabs fall back to the terminal pane when no other pane exists":
+    let frontend = newKosmoApplication(
+      newApplication("Terminal fallback"), monitorsGitStatus = false
+    )
+    defer:
+      frontend.close()
+    frontend.window.setContentView(frontend.contentView)
+    frontend.contentView.layoutSubtreeIfNeeded()
+    require frontend.openDocument(
+      newKosmoPaneDocument("fallback-terminal", "Terminal", newKosmoTerminalView())
+    )
+    require frontend.newEditorTab()
+    check frontend.editorGroups()[0].pane.documentTabs.len == 3

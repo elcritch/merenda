@@ -202,6 +202,36 @@ suite "Kosmo configuration":
     check frontend.editorView.editor.nimLspConfiguration() ==
       (enabled: true, command: address)
 
+  test "editor pane preference is configurable and persisted":
+    let
+      root = createTempDir("kosmo-editor-pane-setting-", "")
+      path = root / "config.json"
+      app = newApplication("Editor pane setting")
+      manager = newKosmoWindowManager(app, configPath = path)
+      frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+      second = newKosmoApplication(manager, monitorsGitStatus = false)
+    defer:
+      manager.close()
+      removeDir(root)
+    check loadKosmoConfig(path).preferEditorPanes
+    require frontend.showSettings()
+    let view = frontend.settingsWindow().contentView().viewWithIdentifier(
+        KosmoPreferEditorPanesIdentifier
+      )
+    require view of Button
+    let button = Button(view)
+    check button.state == bsOn
+    require button.tryToPerform(performClick(), DynamicAgent(button))
+    check not frontend.preferEditorPanes()
+    check not second.preferEditorPanes()
+    check not loadKosmoConfig(path).preferEditorPanes
+    let reloaded =
+      newKosmoWindowManager(newApplication("Reload setting"), configPath = path)
+    defer:
+      reloaded.close()
+    let restored = newKosmoApplication(reloaded, monitorsGitStatus = false)
+    check not restored.preferEditorPanes()
+
   test "ignores malformed JSON configuration":
     let
       root = createTempDir("merenda-kosmo-invalid-config-", "")

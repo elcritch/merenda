@@ -386,6 +386,12 @@ use `Ctrl-\ Ctrl-C` when an interrupt is intended.
 Changing Terminal input updates current terminals in every Kosmo window and
 new terminals immediately. Kosmo persists the setting in
 `~/.config/kosmo/config.json` as `"terminalInput": "hybrid"` or `"raw"`.
+
+Kosmo Settings → Terminal also offers **Prefer panes without terminals for editor
+tabs**, enabled by default. When the active pane contains a terminal, new editor
+tabs use another terminal-free pane in the same window if one is available. Disable
+the option to use the active pane. The choice is saved as `preferEditorPanes` in
+`config.json`.
 Missing or unrecognized values use Hybrid.
 
 ### Platform close behavior

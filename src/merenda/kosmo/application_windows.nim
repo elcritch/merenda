@@ -135,11 +135,33 @@ proc showQuickOpen*(frontend: KosmoApplication): bool {.discardable.} =
     proc(path: string) =
       if weakFrontend.isNil:
         return
-      let activeView = weakFrontend[].dockController.activeEditorView()
+      let activeView = weakFrontend[].dockController.editorDestinationView()
       if not activeView.isNil:
         discard activeView.openFile(path)
     ,
   )
+
+func preferEditorPanes*(frontend: KosmoApplication): bool =
+  ## Return whether new editor tabs prefer panes without terminals.
+  not frontend.isNil and frontend.xPreferEditorPanes
+
+proc `preferEditorPanes=`*(frontend: KosmoApplication, enabled: bool) =
+  ## Apply and persist the editor pane preference across project windows.
+  if frontend.isNil:
+    return
+  if frontend.xWindowManager.isNil:
+    frontend.xPreferEditorPanes = enabled
+    if not frontend.xSettingsWindow.isNil:
+      frontend.xSettingsWindow.preferEditorPanes = enabled
+  else:
+    let manager = frontend.xWindowManager[]
+    manager.config.preferEditorPanes = enabled
+    for target in manager.frontends:
+      if not target.xClosed:
+        target.xPreferEditorPanes = enabled
+        if not target.xSettingsWindow.isNil:
+          target.xSettingsWindow.preferEditorPanes = enabled
+    discard manager.config.saveKosmoConfig(manager.configPath)
 
 func terminalOptionAsMeta*(frontend: KosmoApplication): bool =
   ## Return whether Kosmo terminals use Option/Alt as the Meta modifier.
@@ -368,6 +390,11 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       frontend.xSettingsWindow.close()
     let weakFrontend = frontend.unsafeWeakRef()
     frontend.xSettingsWindow = newKosmoSettingsWindow(
+      preferEditorPanes = frontend.xPreferEditorPanes,
+      preferEditorPanesHandler = proc(enabled: bool) =
+        if not weakFrontend.isNil:
+          weakFrontend[].preferEditorPanes = enabled
+      ,
       optionAsMeta = frontend.xTerminalOptionAsMeta,
       optionAsMetaHandler = proc(enabled: bool) =
         if not weakFrontend.isNil:
@@ -412,6 +439,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
         return
       weakFrontend[].reloadInstalledVscodeGrammars()
   else:
+    frontend.xSettingsWindow.preferEditorPanes = frontend.xPreferEditorPanes
     frontend.xSettingsWindow.optionAsMeta = frontend.xTerminalOptionAsMeta
     frontend.xSettingsWindow.terminalLinksEnabled = frontend.xTerminalLinksEnabled
     frontend.xSettingsWindow.terminalInputPolicy = frontend.xTerminalInputPolicy
@@ -1191,6 +1219,7 @@ proc newKosmoApplication*(
     dockView: dockView,
     contentView: contentView,
     documentView: documentView,
+    xPreferEditorPanes: manager.config.preferEditorPanes,
     xTerminalOptionAsMeta: true,
     xTerminalLinksEnabled: true,
     xTerminalInputPolicy: parseTerminalInputPolicy(manager.config.terminalInput),
@@ -1369,7 +1398,7 @@ proc newKosmoApplication*(
   fileTree.onOpenFile = proc(path: string, disposition: FileTreeOpenDisposition) =
     if frontend.isNil:
       return
-    let activeView = frontend[].dockController.activeEditorView()
+    let activeView = frontend[].dockController.editorDestinationView()
     if activeView.isNil:
       return
     case disposition
@@ -1385,7 +1414,7 @@ proc newKosmoApplication*(
   ) =
     if frontend.isNil:
       return
-    let activeView = frontend[].dockController.activeEditorView()
+    let activeView = frontend[].dockController.editorDestinationView()
     if not activeView.isNil:
       discard activeView.openSearchResult(match, disposition)
   searchPanel.canReplaceFile = proc(path: string): bool =
@@ -1595,7 +1624,7 @@ proc openCliRequest(
     if destination.isNil:
       destination = newKosmoApplication(manager, hasFileBrowser = false)
     let controller = destination.dockController
-    let group = controller.activePaneGroup()
+    let group = controller.editorDestination()
     let id = controller.editor.newStdinBuffer(
       request.stdinName, request.stdinText, request.workingDirectory
     )
