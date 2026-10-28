@@ -15,12 +15,19 @@
   Windows Vulkan-to-OpenGL fallback API. Remove the private patched Nim installer
   and its fork-specific atomics checks; Windows builds use the official compiler.
 
+## 0.29.3
+
+- Prefer opening editor tabs in a pane not displaying a terminal, with a Kosmo
+  Settings option to always use the active pane.
 - Open working-tree files directly from their Git diff headers in Kosmo.
 
 - Document that installing dependencies needs a newer Atlas than the one bundled
   with Nim 2.2.12.
 - Build bundled HarfBuzz/FriBidi libraries with Zig for static Linux musl
   releases.
+- Require FigDraw 0.46.3 or newer and update Siwin for Windows presentation,
+  retaining background development windows. Build bundled HarfBuzz/FriBidi
+  libraries with Zig for static Linux musl releases.
 - Open a pull request's base-to-head comparison in Kosmo from its GitHub view.
   Fetch PR refs in the background, including fork PRs, without changing the working branch.
 

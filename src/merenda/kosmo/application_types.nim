@@ -206,6 +206,7 @@ type
     documentView: KosmoContentView
     dockController: KosmoDockController
     xSettingsWindow: KosmoSettingsWindow
+    xPreferEditorPanes: bool
     xTerminalOptionAsMeta: bool
     xTerminalLinksEnabled: bool
     xTerminalInputPolicy: KosmoTerminalInputPolicy

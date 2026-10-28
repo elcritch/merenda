@@ -20,6 +20,7 @@ const
   KosmoShortcutsSettingsTabIdentifier* = "kosmo.settings.shortcuts"
   KosmoMoeThemesSettingsTabIdentifier* = "kosmo.settings.moeThemes"
   KosmoTextMateGrammarsSettingsTabIdentifier* = "kosmo.settings.textMateGrammars"
+  KosmoPreferEditorPanesIdentifier* = "kosmo.settings.terminal.preferEditorPanes"
   KosmoOptionAsMetaIdentifier* = "kosmo.settings.terminal.optionAsMeta"
   KosmoTerminalLinksIdentifier* = "kosmo.settings.terminal.links"
   KosmoTerminalInputPolicyIdentifier* = "kosmo.settings.terminal.inputPolicy"
@@ -97,6 +98,8 @@ type
     xWindow: nimkit.Panel
     xContentView: nimkit.View
     xFirstResponder: nimkit.Responder
+    xPreferEditorPanesButton: nimkit.Button
+    xPreferEditorPanesHandler: proc(enabled: bool) {.closure.}
     xOptionAsMetaButton: nimkit.Button
     xOptionAsMetaHandler: KosmoOptionAsMetaHandler
     xTerminalLinksButton: nimkit.Button
@@ -525,6 +528,15 @@ proc newSettingsPage(): tuple[view: nimkit.View, stack: nimkit.StackView] =
   result.stack.edgeInsets = nimkit.insets(14.0, 16.0)
   result.view = result.stack
 
+proc preferEditorPanes*(settings: KosmoSettingsWindow): bool =
+  ## Return the editor pane preference shown in settings.
+  not settings.isNil and settings.xPreferEditorPanesButton.state == nimkit.bsOn
+
+proc `preferEditorPanes=`*(settings: KosmoSettingsWindow, enabled: bool) =
+  ## Update the editor pane preference shown in settings.
+  if not settings.isNil:
+    settings.xPreferEditorPanesButton.state = if enabled: nimkit.bsOn else: nimkit.bsOff
+
 proc optionAsMeta*(settings: KosmoSettingsWindow): bool =
   ## Return the current terminal Option/Alt-as-Meta selection.
   not settings.isNil and settings.xOptionAsMetaButton.state == nimkit.bsOn
@@ -650,6 +662,8 @@ proc `textMateGrammars=`*(
   settings.xTextMateGrammarsTable.reloadData()
 
 proc newKosmoSettingsWindow*(
+    preferEditorPanes = true,
+    preferEditorPanesHandler: proc(enabled: bool) {.closure.} = nil,
     optionAsMeta = true,
     optionAsMetaHandler: KosmoOptionAsMetaHandler = nil,
     terminalLinksEnabled = true,
@@ -677,6 +691,7 @@ proc newKosmoSettingsWindow*(
   result = KosmoSettingsWindow(
     xWindow: nimkit.newPanel("Kosmo Settings", nimkit.rect(180, 160, 760, 420)),
     xContentView: nimkit.newView(),
+    xPreferEditorPanesHandler: preferEditorPanesHandler,
     xOptionAsMetaHandler: optionAsMetaHandler,
     xTerminalLinksHandler: terminalLinksHandler,
     xTerminalInputPolicyHandler: terminalInputPolicyHandler,
@@ -699,6 +714,8 @@ proc newKosmoSettingsWindow*(
     moeThemesPage = newSettingsPage()
     textMateGrammarsPage = newSettingsPage()
     vscodeGrammarSearchControls = nimkit.newStackView(nimkit.laHorizontal)
+    preferEditorPanesButton =
+      nimkit.newCheckBox("Prefer panes not displaying terminals for editor tabs")
     optionButton = nimkit.newCheckBox("Use Option/Alt as Meta")
     terminalInputPolicyChoice = nimkit.newComboBox(["Hybrid", "Raw shortcuts"])
     terminalForm = nimkit.newFormView()
@@ -729,6 +746,7 @@ proc newKosmoSettingsWindow*(
     editorInputPolicyChanged = nimkit.actionSelector("kosmo.editorInputPolicyChanged")
     vscodeGrammarSearchAction = nimkit.actionSelector("kosmo.searchVscodeGrammars")
     vscodeGrammarInstallAction = nimkit.actionSelector("kosmo.installVscodeGrammar")
+  result.xPreferEditorPanesButton = preferEditorPanesButton
   result.xOptionAsMetaButton = optionButton
   result.xTerminalLinksButton = terminalLinksButton
   result.xTerminalInputPolicyChoice = terminalInputPolicyChoice
@@ -824,6 +842,19 @@ proc newKosmoSettingsWindow*(
 
   optionButton.identifier = KosmoOptionAsMetaIdentifier
   optionButton.accessibilityLabel = "Use Option or Alt as Meta"
+  preferEditorPanesButton.identifier = KosmoPreferEditorPanesIdentifier
+  preferEditorPanesButton.accessibilityLabel =
+    "Prefer panes not displaying terminals for editor tabs"
+  settings.preferEditorPanes = preferEditorPanes
+  preferEditorPanesButton.target = nimkit.newActionTarget(
+    nimkit.actionSelector("kosmo.preferEditorPanesChanged")
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if not settings.xPreferEditorPanesHandler.isNil:
+      settings.xPreferEditorPanesHandler(settings.preferEditorPanes())
+  preferEditorPanesButton.action =
+    nimkit.actionSelector("kosmo.preferEditorPanesChanged")
+
   optionButton.state = if optionAsMeta: nimkit.bsOn else: nimkit.bsOff
   optionButton.target = nimkit.newActionTarget(optionChanged) do(
     sender: nimkit.DynamicAgent
@@ -863,6 +894,7 @@ proc newKosmoSettingsWindow*(
     nimkit.newLabel(
       "Use Ctrl-\\ before a shortcut to send it to the terminal in Hybrid mode."
     ),
+    preferEditorPanesButton,
     optionButton,
     nimkit.newLabel("Use Option/Alt-B and Option/Alt-F to move by words in Bash."),
     terminalLinksButton,

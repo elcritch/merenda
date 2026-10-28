@@ -78,6 +78,27 @@ proc activePaneGroup(controller: KosmoDockController): KosmoEditorGroup =
     if not group.window.isNil and not group.window.isClosed():
       return group
 
+proc showsTerminal(group: KosmoEditorGroup): bool =
+  let document = group.documentForIdentifier(group.selectedTabIdentifier)
+  not document.isNil and document.contentView of nimkit.TerminalView
+
+proc editorDestination(controller: KosmoDockController): KosmoEditorGroup =
+  result = controller.activePaneGroup()
+  if result.isNil or controller.frontend.isNil:
+    return
+  if not controller.frontend[].xPreferEditorPanes or not result.showsTerminal():
+    return
+  for candidate in controller.groupsInPanelOrder():
+    if candidate.workspace == result.workspace and not candidate.showsTerminal():
+      return candidate
+
+proc editorDestinationView(controller: KosmoDockController): KosmoEditorView =
+  let group = controller.editorDestination()
+  if not group.isNil:
+    if group != controller.activePaneGroup():
+      discard controller.focusGroup(group)
+    result = group.editorView
+
 proc activeEditorView(controller: KosmoDockController): KosmoEditorView =
   let group = controller.activePaneGroup()
   if not group.isNil:
@@ -1238,7 +1259,7 @@ proc openFileLocation(
 ): bool =
   let
     controller = frontend.dockController
-    view = controller.activeEditorView()
+    view = controller.editorDestinationView()
   if not view.isNil and view.openFile(location.path):
     let target = controller.activeEditorView()
     if location.line > 0:
@@ -1449,12 +1470,12 @@ proc openTerminal(
   discard document.close()
 
 proc newEditorTab*(frontend: KosmoApplication): bool {.discardable.} =
-  ## Create and select an unnamed buffer in the active editor pane.
+  ## Create and select an unnamed buffer in the preferred editor pane.
   if frontend.isNil or frontend.dockController.isNil:
     return
   let
     controller = frontend.dockController
-    group = controller.activePaneGroup()
+    group = controller.editorDestination()
   if group.isNil:
     return
   let bufferId = controller.editor.newEmptyBuffer()
