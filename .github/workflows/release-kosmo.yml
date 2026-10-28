@@ -834,9 +834,9 @@ jobs:
             --stackTrace:off `
             --passL:-static-libgcc `
             --passL:-static-libstdc++ `
-            -d:nimStackTraceOverride `
+            "-d:nimStackTraceOverride" `
             --app:gui `
-            -d:moe.embedded `
+            "-d:moe.embedded" `
             "-d:harfbuzzDynlib=$($harfbuzzDll.Name)" `
             "-d:harfbuzzyFribidiDynlib=$($fribidiDll.Name)" `
             "-d:KosmoVersion=$version" `
@@ -853,7 +853,12 @@ jobs:
           if (-not (& nm dist/kosmo.exe | Select-String -Quiet 'backtrace_create_state')) {
             throw 'Kosmo executable is missing libbacktrace.'
           }
-          nim c --cc:gcc -d:merendaTestTextBackend=harfbuzzy --out:dist/textbackends.exe tests/nimkit/textbackends.nim
+          $imports = & objdump -p dist/kosmo.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect Kosmo executable imports.' }
+          if ($imports -match '(?i)DLL Name:\s*(libgcc_s[^\s]*|libstdc\+\+-6|libwinpthread-1)\.dll') {
+            throw 'Kosmo executable must link the MinGW runtimes statically.'
+          }
+          nim c --cc:gcc "-d:merendaTestTextBackend=harfbuzzy" --out:dist/textbackends.exe tests/nimkit/textbackends.nim
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & packaging/windows/bundle-text-libraries.ps1 -Prefix $env:MERENDA_MINGW_PREFIX -Destination dist
           # Run without build-tool paths so missing bundled DLLs cannot be hidden.

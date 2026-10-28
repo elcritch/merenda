@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Link MinGW runtimes statically into Windows executables and verify the release
+  executable's imports. Shared text libraries retain their bundled dependencies.
+
 - Recommend Linux text-rendering packages after installing a shared build,
   with commands for Debian/Ubuntu, Arch, and Fedora.
 

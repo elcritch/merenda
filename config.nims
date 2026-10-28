@@ -31,8 +31,10 @@ else:
   switch("import", "libbacktrace")
 
 when defined(windows) and defined(gcc):
-  # libbacktrace's C++ demangler needs the MinGW C++ runtime in C builds too.
-  switch("passL", "-lstdc++")
+  # The C linker needs libstdc++ for libbacktrace's demangler. Select the
+  # static archives explicitly: -static-libstdc++ only affects g++'s own link.
+  switch("passL", "-static-libgcc")
+  switch("passL", "-Wl,-Bstatic -lstdc++ -lwinpthread -Wl,-Bdynamic")
 
 when defined(freebsd):
   --define:

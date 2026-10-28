@@ -529,9 +529,9 @@ jobs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc -d:merendaTestTextBackend=harfbuzzy
+        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc "-d:merendaTestTextBackend=harfbuzzy"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc -d:harfbuzzDynlib=merenda-missing-harfbuzz -d:merendaTestTextBackend=pixie
+        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc "-d:harfbuzzDynlib=merenda-missing-harfbuzz" "-d:merendaTestTextBackend=pixie"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc -d:harfbuzzyFribidiDynlib=merenda-missing-fribidi -d:merendaTestTextBackend=pixie
+        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc "-d:harfbuzzyFribidiDynlib=merenda-missing-fribidi" "-d:merendaTestTextBackend=pixie"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

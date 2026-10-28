@@ -50,6 +50,9 @@ license notices beside `kosmo.exe`. The executable retains DWARF symbols;
 there is no separate PDB. Release checks inspect its debug information and
 `libbacktrace` symbols, test stack traces and concurrent ownership, and launch
 Kosmo with build-tool directories removed from `PATH`.
+Kosmo links its MinGW GCC, C++ and threading runtimes statically; release CI
+checks that the executable does not import their DLLs. The shared text libraries
+can still require MinGW runtime DLLs, which the bundler copies beside the executable.
 
 Nim's instrumented stack tracing remains disabled for these builds because
 `libbacktrace` uses the compiler's native debug information without its runtime
