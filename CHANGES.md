@@ -9,7 +9,8 @@
 - Switch Windows CI examples and Kosmo releases back to MinGW-w64 GCC. Bundle
   the UCRT64 text DLLs and their dependencies, retain DWARF debug information,
   and check startup without compiler tools on `PATH`. Update Siwin for FigDraw's
-  Windows Vulkan-to-OpenGL fallback API.
+  Windows Vulkan-to-OpenGL fallback API. Remove the private patched Nim installer
+  and its fork-specific atomics checks; Windows builds use the official compiler.
 
 - Open working-tree files directly from their Git diff headers in Kosmo.
 

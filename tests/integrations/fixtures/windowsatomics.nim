@@ -7,9 +7,6 @@ when isMainModule:
 
   when not defined(windows):
     {.error: "Compile this fixture for Windows".}
-  when defined(vcc) and not declared(nimHasCorrectMsvcAtomics):
-    {.error: "Use the pinned MSVC compiler with corrected atomics".}
-
   var destructions: Atomic[int]
 
   type Tracked = object
