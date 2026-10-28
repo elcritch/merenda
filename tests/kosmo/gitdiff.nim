@@ -575,7 +575,7 @@ suite "Kosmo Git diff":
     for child in panel.documentView.subviews():
       if child of Button:
         headers.add (child, child.xDisplayRevision, child.frame())
-    require headers.len == fileCount
+    require headers.len == fileCount * 2
     let
       documentRevision = panel.documentView.xDisplayRevision
       documentFrame = panel.documentView.frame()
