@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.29.3
+
 - Prefer opening editor tabs in a pane not displaying a terminal, with a Kosmo
   Settings option to always use the active pane.
 - Open working-tree files directly from their Git diff headers in Kosmo.
