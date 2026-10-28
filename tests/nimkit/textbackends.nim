@@ -11,6 +11,9 @@ import merenda/nimkit/themes
 import merenda/nimkit/text/texttypes
 import merenda/kosmo/textbackendlogging
 
+when defined(figdrawTestMissingVulkan):
+  import figdraw/vulkan/vulkan_dispatch
+
 const merendaTestTextBackend {.strdefine.} = ""
 const merendaTestTextDiagnostic {.strdefine.} = ""
 
@@ -36,6 +39,11 @@ proc checkRasterization(layout: GlyphArrangement, backend: GlyphRasterBackend) =
     check image.opaqueBounds().h > 0
 
 suite "nimkit optional text backends":
+  when defined(figdrawTestMissingVulkan):
+    test "an unavailable Vulkan loader raises a catchable error":
+      expect LibraryError:
+        discard newVulkanDispatch()
+
   test "backend diagnostics explain library availability":
     let diagnostic = textBackendDiagnostic()
     logTextBackend()

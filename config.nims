@@ -44,6 +44,10 @@ when defined(linux) and defined(gcc):
   # GCC 15 promotes Siwin's generated typed-empty-sequence pointer warning to an error.
   switch("passC", "-Wno-error=incompatible-pointer-types")
 
+# FigDraw owns Vulkan dispatch and loads the driver lazily. Disable the Vulkan
+# bindings' process-wide eager loader so missing drivers can fall back to OpenGL.
+switch("define", "vkCustomLoader")
+
 switch("define", "features.markdown.regex") # temporary hack until we get atlas 0.15.1
 
 # Give bounded TextMate regex probes room for generated native declarations.

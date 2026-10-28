@@ -120,6 +120,13 @@ jobs:
           -d:merendaTestTextBackend=pixie \
           '-d:merendaTestTextDiagnostic=FriBidi could not be loaded'
 
+    - name: Verify missing Vulkan loader is recoverable
+      if: runner.os == 'Linux'
+      run: |
+        atlas-run tests tests/nimkit/textbackends.nim -- \
+          -d:figdrawTestMissingVulkan \
+          -d:figdrawVulkanDynlib=merenda-missing-vulkan
+
     - name: Verify old HarfBuzz diagnostic
       if: runner.os == 'Linux'
       run: |
@@ -529,6 +536,8 @@ jobs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
+        atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc "-d:figdrawTestMissingVulkan" "-d:figdrawVulkanDynlib=merenda-missing-vulkan"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc "-d:merendaTestTextBackend=harfbuzzy"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         atlas-run tests tests/nimkit/textbackends.nim -- --cc:gcc "-d:harfbuzzDynlib=merenda-missing-harfbuzz" "-d:merendaTestTextBackend=pixie"

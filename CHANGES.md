@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Load Vulkan on demand so Kosmo can fall back to OpenGL when the driver is absent.
+
 - Link MinGW runtimes statically into Windows executables and verify the release
   executable's imports. Shared text libraries retain their bundled dependencies.
 
