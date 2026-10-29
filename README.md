@@ -494,7 +494,10 @@ In terminal tabs, Command-click a file path on macOS, or Control-click on Linux
 and Windows, to open it in Kosmo. Links such as `src/main.nim:12:5` jump to the
 given line and column (both start at 1). Relative paths use the terminal's reported
 current directory, or its starting directory when the shell does not report one.
-The terminal link setting controls both file links and web links.
+The terminal link setting controls both file links and web links. Kosmo Settings
+also provides a Themes page where you can select a theme for All, Moe, or
+Terminal; editor and terminal choices are saved separately. Terminal colors are
+derived from the selected Moe theme's editor and syntax colors.
 Nim diagnostics such as `src/main.nim(12, 5)` and `src/main.nim(12)` are clickable too.
 
 Show Git Diff keeps a separate viewer for each repository. Detach their tabs to

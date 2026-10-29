@@ -383,8 +383,12 @@ suite "Kosmo settings":
         renderedPreview.add node.renderedFigText()
     check hasPreviewBackground
     check renderedPreview == KosmoMoeThemePreviewText
-    check moeThemesTable.tableRowIdentifier(moeThemesTable.selectedIndex) ==
-      frontend.editorView.editor.activeMoeThemeIdentifier()
+    let initialEditorTheme = frontend.editorView.editor.activeMoeThemeIdentifier()
+    if initialEditorTheme == KosmoMoeDefaultThemeIdentifier:
+      check moeThemesTable.tableRowIdentifier(moeThemesTable.selectedIndex) ==
+        initialEditorTheme
+    else:
+      check moeThemesTable.selectedIndex == -1
     discard settingsPanel.buildRenders()
     let catppuccinRect = moeThemesTable.rowItemRect(catppuccinRow)
     let catppuccinPoint = moeThemesTable.pointToWindow(
@@ -409,6 +413,68 @@ suite "Kosmo settings":
     check frontend.editorView.editor.activeMoeThemeIdentifier() ==
       KosmoMoeDefaultThemeIdentifier
     discard settingsPanel.buildRenders()
+
+  test "theme targets keep editor and terminal choices independent":
+    require settingsTabs.selectPage(KosmoMoeThemesSettingsTabIdentifier)
+    let terminal = newKosmoTerminalView()
+    defer:
+      terminal.close()
+    require frontend.openDocument(
+      newKosmoPaneDocument("theme-terminal", "Terminal", terminal)
+    )
+    let initialPalette = terminal.palette
+    let initialEditorTheme = frontend.editorView.editor.activeMoeThemeIdentifier()
+    let table = TableView(
+      settingsPanel.contentView().viewWithIdentifier(KosmoMoeThemesTableIdentifier)
+    )
+    let allButton = Button(
+      settingsPanel.contentView().viewWithIdentifier(
+        KosmoThemeTargetIdentifier & ".All"
+      )
+    )
+    let moeButton = Button(
+      settingsPanel.contentView().viewWithIdentifier(
+        KosmoThemeTargetIdentifier & ".Moe"
+      )
+    )
+    let terminalButton = Button(
+      settingsPanel.contentView().viewWithIdentifier(
+        KosmoThemeTargetIdentifier & ".Terminal"
+      )
+    )
+    check allButton.state == bsOn
+    check moeButton.state == bsOff
+    check terminalButton.state == bsOff
+    let themes = frontend.editorView.editor.availableMoeThemes()
+    require themes.len >= 3
+    proc selectTheme(identifier: string) =
+      discard settingsPanel.buildRenders()
+      let row = table.tableRowIndexForIdentifier(identifier)
+      require row >= 0
+      let bounds = table.rowItemRect(row)
+      let point = table.pointToWindow(
+        initPoint(bounds.origin.x + 20, bounds.origin.y + bounds.size.height / 2)
+      )
+      require settingsPanel.mouseDownAt(point)
+      require settingsPanel.mouseUpAt(point)
+
+    require terminalButton.sendAction()
+    check terminalButton.state == bsOn
+    selectTheme(themes[1].identifier)
+    check frontend.editorView.editor.activeMoeThemeIdentifier() == initialEditorTheme
+    check terminal.palette != initialPalette
+    let terminalPalette = terminal.palette
+    require moeButton.sendAction()
+    selectTheme(themes[2].identifier)
+    check frontend.editorView.editor.activeMoeThemeIdentifier() == themes[2].identifier
+    check terminal.palette == terminalPalette
+    require allButton.sendAction()
+    check table.selectedIndex == -1
+    selectTheme(themes[1].identifier)
+    check frontend.editorView.editor.activeMoeThemeIdentifier() == themes[1].identifier
+    check terminal.palette == terminalPalette
+    require terminalButton.sendAction()
+    check table.tableRowIdentifier(table.selectedIndex) == themes[1].identifier
 
   test "grammar settings list built-in and newly added languages":
     require settingsTabs.selectPage(KosmoTextMateGrammarsSettingsTabIdentifier)

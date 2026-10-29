@@ -17,6 +17,36 @@ proc waitForTerminalText(view: TerminalView, text: string): bool =
 
 suite "Kosmo terminal shortcut PTY input":
   when defined(posix):
+    test "new terminals restore the saved theme":
+      let
+        root = createTempDir("kosmo-terminal-theme-", "")
+        path = root / "config.json"
+        app = newApplication("Kosmo Terminal Theme")
+        manager = newKosmoWindowManager(app, configPath = path)
+        frontend = newKosmoApplication(manager, monitorsGitStatus = false)
+        themes = frontend.editorView.editor.availableMoeThemes()
+      var terminal: KosmoTerminalView
+      defer:
+        manager.close()
+        if not terminal.isNil:
+          terminal.session().waitForCommands()
+        removeDir(root)
+      require themes.len > 1
+      require frontend.setTerminalTheme(themes[1].identifier)
+      check loadKosmoConfig(path).terminalTheme == themes[1].identifier
+      let second = newKosmoApplication(manager, monitorsGitStatus = false)
+      require second.newTerminal()
+      require second.editorGroups()[0].pane.contentView of KosmoTerminalView
+      terminal = KosmoTerminalView(second.editorGroups()[0].pane.contentView)
+      check terminal.palette.background ==
+        color(
+          themes[1].preview.background.red.float32 / 255,
+          themes[1].preview.background.green.float32 / 255,
+          themes[1].preview.background.blue.float32 / 255,
+          1.0,
+        )
+      check terminal.palette != initTerminalPalette()
+
     test "terminal search edits stay in the focused field until it is dismissed":
       let
         session = spawnTerminalViewSession(

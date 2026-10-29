@@ -252,8 +252,74 @@ proc setMoeTheme*(frontend: KosmoApplication, identifier: string): bool =
     if outcome.applied and not frontend.xWindowManager.isNil:
       let manager = frontend.xWindowManager[]
       manager.config.moeTheme = identifier
+      for target in manager.frontends:
+        if target != frontend and not target.xClosed:
+          discard target.dockController.editor.applyMoeTheme(theme)
+          for group in target.dockController.groups:
+            group.editorView.refresh()
       discard manager.config.saveKosmoConfig(manager.configPath)
     return outcome.applied
+
+func terminalThemeColor(value: KosmoMoeThemeColor): nimkit.Color =
+  nimkit.color(
+    value.red.float32 / 255, value.green.float32 / 255, value.blue.float32 / 255, 1.0
+  )
+
+func terminalPalette(theme: KosmoMoeTheme): nimkit.TerminalPalette =
+  result = nimkit.initTerminalPalette()
+  if theme.identifier == KosmoMoeDefaultThemeIdentifier:
+    return
+  let preview = theme.preview
+  result.background = preview.background.terminalThemeColor()
+  result.foreground = preview.foreground.terminalThemeColor()
+  result.cursor = result.foreground
+  result.selection = preview.selection.terminalThemeColor()
+  result.colors[0] = result.background
+  result.colors[1] = preview.red.terminalThemeColor()
+  result.colors[2] = preview.stringLiteral.terminalThemeColor()
+  result.colors[3] = preview.yellow.terminalThemeColor()
+  result.colors[4] = preview.functionName.terminalThemeColor()
+  result.colors[5] = preview.keyword.terminalThemeColor()
+  result.colors[6] = preview.cyan.terminalThemeColor()
+  result.colors[7] = result.foreground
+  result.colors[8] = preview.comment.terminalThemeColor()
+  for index in 1 .. 7:
+    result.colors[index + 8] = result.colors[index]
+
+proc applyTerminalTheme(frontend: KosmoApplication, theme: KosmoMoeTheme) =
+  frontend.xTerminalTheme = theme.identifier
+  frontend.xTerminalPalette = theme.terminalPalette()
+  for group in frontend.dockController.groups:
+    for document in group.documents:
+      if document.contentView of nimkit.TerminalView:
+        nimkit.TerminalView(document.contentView).palette = frontend.xTerminalPalette
+
+proc setTerminalTheme*(frontend: KosmoApplication, identifier: string): bool =
+  ## Apply a theme to current and future terminal views.
+  if frontend.isNil or frontend.dockController.isNil:
+    return
+  for theme in frontend.dockController.editor.availableMoeThemes():
+    if theme.identifier == identifier and theme.validMoeTheme():
+      frontend.applyTerminalTheme(theme)
+      if not frontend.xWindowManager.isNil:
+        let manager = frontend.xWindowManager[]
+        manager.config.terminalTheme = identifier
+        for target in manager.frontends:
+          if target != frontend and not target.xClosed:
+            target.applyTerminalTheme(theme)
+        discard manager.config.saveKosmoConfig(manager.configPath)
+      return true
+
+proc setTheme(
+    frontend: KosmoApplication, identifier: string, target: KosmoThemeTarget
+): bool =
+  if target in {KosmoThemeTarget.All, KosmoThemeTarget.Moe}:
+    if not frontend.setMoeTheme(identifier):
+      return
+  if target in {KosmoThemeTarget.All, KosmoThemeTarget.Terminal}:
+    if not frontend.setTerminalTheme(identifier):
+      return
+  result = true
 
 proc menuItemWithIdentifier(menu: nimkit.Menu, identifier: string): nimkit.MenuItem =
   if menu.isNil:
@@ -428,9 +494,10 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       shortcuts = shortcuts,
       moeThemes = moeThemeSettings,
       selectedMoeThemeIdentifier = selectedMoeThemeIdentifier,
-      moeThemeHandler = proc(identifier: string): bool =
+      selectedTerminalThemeIdentifier = frontend.xTerminalTheme,
+      moeThemeHandler = proc(identifier: string, target: KosmoThemeTarget): bool =
         if not weakFrontend.isNil:
-          return weakFrontend[].setMoeTheme(identifier)
+          return weakFrontend[].setTheme(identifier, target)
       ,
       textMateGrammars = textMateGrammars,
     )
@@ -445,7 +512,7 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
     frontend.xSettingsWindow.terminalInputPolicy = frontend.xTerminalInputPolicy
     frontend.updateShortcutSettingsWindow()
     frontend.xSettingsWindow.updateMoeThemes(
-      moeThemeSettings, selectedMoeThemeIdentifier
+      moeThemeSettings, selectedMoeThemeIdentifier, frontend.xTerminalTheme
     )
     frontend.xSettingsWindow.textMateGrammars = textMateGrammars
   result = not frontend.application.showWindow(
@@ -1454,8 +1521,12 @@ proc newKosmoApplication*(
     statusLabel.text = absolutePath(filePath)
   if keyBindingErrors.len > 0:
     statusLabel.text = keyBindingErrors.join("; ")
+  result.xTerminalPalette = nimkit.initTerminalPalette()
+  result.xTerminalTheme = KosmoMoeDefaultThemeIdentifier
   if manager.config.moeTheme.len > 0:
     discard result.setMoeTheme(manager.config.moeTheme)
+  if manager.config.terminalTheme.len > 0:
+    discard result.setTerminalTheme(manager.config.terminalTheme)
   when not defined(merendaTests):
     if editorView.editor.recoveryEntries().len > 0:
       discard editorView.openRecoveryDocument()

@@ -305,6 +305,7 @@ type
     functionName*: KosmoMoeThemeColor
     stringLiteral*: KosmoMoeThemeColor
     comment*: KosmoMoeThemeColor
+    red*, yellow*, cyan*, selection*: KosmoMoeThemeColor
 
   KosmoMoeTheme* = object
     ## A Moe theme that Kosmo can present without exposing Moe configuration types.
@@ -459,6 +460,13 @@ func moeThemePreview(colors: ThemeColors): KosmoMoeThemePreview =
       colors[EditorColorPairIndex.stringLit].foreground.rgb.moeThemeColor(foreground),
     comment:
       colors[EditorColorPairIndex.comment].foreground.rgb.moeThemeColor(foreground),
+    red:
+      colors[EditorColorPairIndex.errorMessage].foreground.rgb.moeThemeColor(foreground),
+    yellow:
+      colors[EditorColorPairIndex.warnMessage].foreground.rgb.moeThemeColor(foreground),
+    cyan: colors[EditorColorPairIndex.operator].foreground.rgb.moeThemeColor(foreground),
+    selection:
+      colors[EditorColorPairIndex.selectArea].background.rgb.moeThemeColor(background),
   )
 
 proc themePreview(path: string): KosmoMoeThemePreview =
@@ -554,6 +562,11 @@ proc availableMoeThemes*(editor: KosmoEditor): seq[KosmoMoeTheme] =
       return
   result.mergeConfigThemes([current])
   result.sortAvailableMoeThemes()
+
+proc validMoeTheme*(theme: KosmoMoeTheme): bool =
+  ## Check whether a theme can be loaded without changing the editor.
+  theme.kind == kmmtDefault or
+    (fileExists(theme.path) and loadThemeFromToml(theme.path).isOk)
 
 proc applyMoeTheme*(
     editor: KosmoEditor, theme: KosmoMoeTheme

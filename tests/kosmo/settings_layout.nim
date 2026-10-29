@@ -67,16 +67,15 @@ suite "Kosmo settings layout":
     require tabsView of TabView
     let tabs = TabView(tabsView)
 
-    let expectedPageText =
-      @[
-        (KosmoTerminalSettingsTabIdentifier, @["Terminal"]),
-        (KosmoShortcutsSettingsTabIdentifier, @["Active Shortcuts"]),
-        (KosmoMoeThemesSettingsTabIdentifier, @["Moe Theme"]),
-        (
-          KosmoTextMateGrammarsSettingsTabIdentifier,
-          @["Find a Language", "Available TextMate Grammars"],
-        ),
-      ]
+    let expectedPageText = @[
+      (KosmoTerminalSettingsTabIdentifier, @["Terminal"]),
+      (KosmoShortcutsSettingsTabIdentifier, @["Active Shortcuts"]),
+      (KosmoMoeThemesSettingsTabIdentifier, @["Themes"]),
+      (
+        KosmoTextMateGrammarsSettingsTabIdentifier,
+        @["Find a Language", "Available TextMate Grammars"],
+      ),
+    ]
     for (identifier, pageText) in expectedPageText:
       require tabs.selectPage(identifier)
       settings.contentView().layoutSubtreeIfNeeded()

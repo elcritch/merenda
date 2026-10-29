@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Choose themes for Moe, terminals, or both from Kosmo settings, with separate saved choices.
 - Load Vulkan on demand so Kosmo can fall back to OpenGL when the driver is absent.
 
 - Link MinGW runtimes statically into Windows executables and verify the release

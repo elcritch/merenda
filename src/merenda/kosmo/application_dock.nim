@@ -1348,6 +1348,7 @@ proc newTerminalDocument(
   resolvedOptions.prepareInteractiveTerminal()
   if not controller.frontend.isNil:
     let frontend = controller.frontend[]
+    terminalView.palette = frontend.xTerminalPalette
     terminalView.optionAsMeta = frontend.xTerminalOptionAsMeta
     terminalView.allowsLinkActivation = frontend.xTerminalLinksEnabled
     terminalView.terminalInputPolicy = frontend.xTerminalInputPolicy

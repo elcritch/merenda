@@ -210,6 +210,8 @@ type
     xTerminalOptionAsMeta: bool
     xTerminalLinksEnabled: bool
     xTerminalInputPolicy: KosmoTerminalInputPolicy
+    xTerminalPalette: nimkit.TerminalPalette
+    xTerminalTheme: string
     xWindowManager: WeakRef[KosmoWindowManager]
     xWindowLifecycle: KosmoWindowLifecycle
     xCliWindowId: string

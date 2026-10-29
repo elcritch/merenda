@@ -105,6 +105,7 @@ suite "Kosmo configuration":
       path = root / "config.json"
       config = KosmoConfig(
         moeTheme: KosmoMoeDefaultThemeIdentifier,
+        terminalTheme: "config:terminal",
         nimLspCommand: "custom-server --stdio",
         merendaTheme: "aqua",
         merendaFont: "Iosevka",
@@ -123,6 +124,7 @@ suite "Kosmo configuration":
     # Configuration keys are a public format that users can edit by hand.
     let node = parseJson(readFile(path))
     check node["moeTheme"].getStr() == KosmoMoeDefaultThemeIdentifier
+    check node["terminalTheme"].getStr() == "config:terminal"
     check node["nimLspCommand"].getStr() == "custom-server --stdio"
     check node["merendaTheme"].getStr() == "aqua"
     check node["merendaFont"].getStr() == "Iosevka"
