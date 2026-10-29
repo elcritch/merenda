@@ -1,0 +1,87 @@
+# Moe adaptation of altercation/solarized (solarized-light).
+
+[Colors]
+
+foreground = "#657b83"
+background = "#fdf6e3"
+
+lineNum = { fg = "#839496", bg = "#fdf6e3" }
+currentLineNum = { fg = "#268bd2", bg = "#fdf6e3" }
+commandLine = { fg = "#657b83", bg = "#eee8d5" }
+errorMessage = { fg = "#dc322f", bg = "#fdf6e3" }
+warnMessage = { fg = "#b58900", bg = "#fdf6e3" }
+searchResult = { fg = "#fdf6e3", bg = "#b58900" }
+selectArea = { fg = "#657b83", bg = "#93a1a1" }
+
+keyword = { fg = "#859900" }
+functionName = { fg = "#268bd2" }
+typeName = { fg = "#b58900" }
+boolean = { fg = "#d33682" }
+charLit = { fg = "#2aa198" }
+stringLit = { fg = "#2aa198" }
+specialVar = { fg = "#6c71c4" }
+builtin = { fg = "#dc322f" }
+binNumber = { fg = "#d33682" }
+decNumber = { fg = "#d33682" }
+floatNumber = { fg = "#d33682" }
+hexNumber = { fg = "#d33682" }
+octNumber = { fg = "#d33682" }
+comment = { fg = "#839496" }
+longComment = { fg = "#839496" }
+docComment = { fg = "#839496" }
+docLongComment = { fg = "#839496" }
+whitespace = { fg = "#eee8d5" }
+preprocessor = { fg = "#6c71c4" }
+pragma = { fg = "#6c71c4" }
+identifier = { fg = "#657b83" }
+operator = { fg = "#2aa198" }
+property = { fg = "#268bd2" }
+
+markdownCodeBlock = { fg = "#657b83", bg = "#eee8d5" }
+namespace = { fg = "#859900" }
+className = { fg = "#b58900" }
+enumName = { fg = "#b58900" }
+enumMember = { fg = "#d33682" }
+interfaceName = { fg = "#b58900" }
+typeParameter = { fg = "#b58900" }
+parameter = { fg = "#dc322f" }
+variable = { fg = "#657b83" }
+string = { fg = "#2aa198" }
+function = { fg = "#268bd2" }
+method = { fg = "#268bd2" }
+macro = { fg = "#859900" }
+regexp = { fg = "#6c71c4" }
+decorator = { fg = "#6c71c4" }
+builtinType = { fg = "#b58900" }
+constParameter = { fg = "#d33682" }
+escapeSequence = { fg = "#d33682" }
+selfKeyword = { fg = "#dc322f" }
+inlayHint = { fg = "#839496" }
+codeLens = { fg = "#839496" }
+
+currentFile = { fg = "#fdf6e3", bg = "#268bd2" }
+file = { fg = "#657b83", bg = "#fdf6e3" }
+dir = { fg = "#268bd2", bg = "#fdf6e3" }
+popupWindow = { fg = "#657b83", bg = "#eee8d5" }
+popupWinCurrentLine = { fg = "#657b83", bg = "#eee8d5" }
+popupWindowBorder = { fg = "#93a1a1", bg = "#eee8d5" }
+replaceText = { fg = "#fdf6e3", bg = "#dc322f" }
+parenPair = { fg = "#fdf6e3", bg = "#268bd2" }
+currentWord = { fg = "#657b83", bg = "#eee8d5" }
+syntaxCheckInfo = { fg = "#2aa198", bg = "#fdf6e3" }
+syntaxCheckHint = { fg = "#859900", bg = "#fdf6e3" }
+syntaxCheckWarn = { fg = "#b58900", bg = "#fdf6e3" }
+syntaxCheckErr = { fg = "#dc322f", bg = "#fdf6e3" }
+diffViewerAddedLine = { fg = "#2aa198", bg = "#fdf6e3" }
+diffViewerDeletedLine = { fg = "#dc322f", bg = "#fdf6e3" }
+currentLine = { bg = "#eee8d5" }
+currentColumn = { bg = "#eee8d5" }
+sidebarGitAddedSign = { fg = "#2aa198", bg = "#fdf6e3" }
+sidebarGitDeletedSign = { fg = "#dc322f", bg = "#fdf6e3" }
+sidebarGitChangedSign = { fg = "#b58900", bg = "#fdf6e3" }
+indentationLine = { fg = "#eee8d5" }
+scrollBarThumb = { fg = "#93a1a1", bg = "#93a1a1" }
+scrollBarTrack = { fg = "#eee8d5" }
+documentHighlightText = { fg = "termDefault", bg = "#eee8d5" }
+documentHighlightRead = { fg = "termDefault", bg = "#eee8d5" }
+documentHighlightWrite = { fg = "termDefault", bg = "#93a1a1" }

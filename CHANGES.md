@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bundle dark and light Moe themes from ten popular Neovim theme families, plus Solarized.
+
 - Choose themes for Moe, terminals, or both from Kosmo settings, with separate saved choices.
 - Load Vulkan on demand so Kosmo can fall back to OpenGL when the driver is absent.
 

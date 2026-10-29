@@ -223,7 +223,11 @@ suite "Kosmo":
       editor.close()
     let themes = editor.availableMoeThemes()
     for expectedName in [
-      "Catppuccin Latte", "Catppuccin Mocha", "Kanagawa Wave", "One Dark",
+      "Catppuccin Latte", "Catppuccin Mocha", "Cyberdream Dark", "Cyberdream Light",
+      "Dayfox", "Everforest Dark", "Everforest Light", "GitHub Dark", "GitHub Light",
+      "Gruvbox Material Dark", "Gruvbox Material Light", "Kanagawa Lotus",
+      "Kanagawa Wave", "Nightfox", "One Dark", "One Light", "Rose Pine",
+      "Rose Pine Dawn", "Solarized Dark", "Solarized Light", "Tokyo Night Day",
       "Tokyo Night Moon",
     ]:
       var matchingIndex = -1
@@ -256,6 +260,8 @@ suite "Kosmo":
     check installBundledMoeThemes(root) == directory
     check readFile(mochaPath) == originalMocha
     check readFile(oneDarkPath) == originalOneDark
+    check fileExists(directory / "licenses" / "solarized.txt")
+    check fileExists(directory / "licenses" / "tokyo.txt")
     let restoredThemes = discoverMoeThemes(directory)
     for expected in ["Catppuccin Mocha", "One Dark"]:
       check restoredThemes.anyIt(it.name == expected)

@@ -374,7 +374,7 @@ suite "Kosmo Matter highlighting":
       removeDir(root)
     require editor.openFile(path).loaded
     let themes = discoverMoeThemes(installBundledMoeThemes(root / "cache"))
-    require themes.len == 6
+    require themes.len == 23
     var buffer = newRenderBuffer(64, 8)
     for theme in themes:
       checkpoint(theme.name)

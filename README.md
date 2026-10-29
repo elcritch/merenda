@@ -497,7 +497,9 @@ current directory, or its starting directory when the shell does not report one.
 The terminal link setting controls both file links and web links. Kosmo Settings
 also provides a Themes page where you can select a theme for All, Moe, or
 Terminal; editor and terminal choices are saved separately. Terminal colors are
-derived from the selected Moe theme's editor and syntax colors.
+derived from the selected Moe theme's editor and syntax colors. Bundled themes
+include light and dark variants of popular Neovim palettes; [palette sources and
+licenses](data/moe/themes/SOURCES.md) are listed alongside them.
 Nim diagnostics such as `src/main.nim(12, 5)` and `src/main.nim(12)` are clickable too.
 
 Show Git Diff keeps a separate viewer for each repository. Detach their tabs to

@@ -354,7 +354,11 @@ suite "Kosmo settings":
     require defaultThemeRow >= 0
     var catppuccinRow = -1
     for expectedName in [
-      "Catppuccin Latte", "Catppuccin Mocha", "Kanagawa Wave", "One Dark",
+      "Catppuccin Latte", "Catppuccin Mocha", "Cyberdream Dark", "Cyberdream Light",
+      "Dayfox", "Everforest Dark", "Everforest Light", "GitHub Dark", "GitHub Light",
+      "Gruvbox Material Dark", "Gruvbox Material Light", "Kanagawa Lotus",
+      "Kanagawa Wave", "Nightfox", "One Dark", "One Light", "Rose Pine",
+      "Rose Pine Dawn", "Solarized Dark", "Solarized Light", "Tokyo Night Day",
       "Tokyo Night Moon",
     ]:
       var matchingRow = -1
