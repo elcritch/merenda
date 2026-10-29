@@ -10,6 +10,7 @@ type KosmoConfig* = object ## User choices persisted by the standalone editor.
   moeTheme*: string
   terminalTheme*: string
   nimLspCommand*: string
+  nimdexStopped*: bool
   merendaTheme*: string
   merendaFont*: string
   merendaMonoFont*: string

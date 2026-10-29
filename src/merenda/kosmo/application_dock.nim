@@ -1561,7 +1561,7 @@ protocol KosmoContentLayout of nimkit.ViewLayoutProtocol:
         )
       )
     if not content.setInitialDivider and bounds.size.width > 0.0'f32:
-      content.splitView.setPositionOfDivider(0, min(bounds.size.width * 0.25, 260.0))
+      content.splitView.setPositionOfDivider(0, min(bounds.size.width * 0.2125, 221.0))
       content.setInitialDivider = true
     elif splitWidthChanged and not content.splitView.isPaneCollapsed(0):
       content.splitView.setPositionOfDivider(0, content.fileTreeWidth)

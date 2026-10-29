@@ -1,6 +1,6 @@
 ## Kosmo-specific application settings.
 
-import std/strutils
+import std/[os, strutils]
 
 import ../nimkit as nimkit
 import ./moe
@@ -15,6 +15,7 @@ export shortcuts
 export terminalinput.KosmoTerminalInputPolicy
 
 const
+  KosmoNimdexSettingsTabIdentifier* = "kosmo.settings.nimdex"
   KosmoSettingsTabsIdentifier* = "kosmo.settings.tabs"
   KosmoTerminalSettingsTabIdentifier* = "kosmo.settings.terminal"
   KosmoShortcutsSettingsTabIdentifier* = "kosmo.settings.shortcuts"
@@ -116,6 +117,9 @@ type
     xTerminalInputPolicyChoice: nimkit.ComboBox
     xTerminalInputPolicyHandler: KosmoTerminalInputPolicyHandler
     xTabs: nimkit.TabView
+    xNimdexStatus: nimkit.Label
+    xNimdexStatusError: bool
+    xNimdexStatusHandler: proc(): string {.closure.}
     xShortcutsTable: nimkit.TableView
     xShortcutsSource: KosmoShortcutsTableSource
     xShortcutProfileChoice: nimkit.ComboBox
@@ -690,6 +694,9 @@ proc `textMateGrammars=`*(
   settings.xTextMateGrammarsTable.reloadData()
 
 proc newKosmoSettingsWindow*(
+    nimdexCommand = "",
+    nimdexAction: proc(command: string, connect: bool): string {.closure.} = nil,
+    nimdexStatus: proc(): string {.closure.} = nil,
     preferEditorPanes = true,
     preferEditorPanesHandler: proc(enabled: bool) {.closure.} = nil,
     optionAsMeta = true,
@@ -718,6 +725,7 @@ proc newKosmoSettingsWindow*(
     textMateGrammarsSource = newKosmoTextMateGrammarsTableSource(textMateGrammars)
     vscodeGrammarSearchSource = newKosmoVscodeGrammarSearchTableSource()
   result = KosmoSettingsWindow(
+    xNimdexStatusHandler: nimdexStatus,
     xWindow: nimkit.newPanel("Kosmo Settings", nimkit.rect(180, 160, 760, 420)),
     xContentView: nimkit.newView(),
     xPreferEditorPanesHandler: preferEditorPanesHandler,
@@ -739,6 +747,15 @@ proc newKosmoSettingsWindow*(
     layout = nimkit.newStackView(nimkit.laVertical)
     tabs = nimkit.newTabView()
     terminalPage = newSettingsPage()
+    nimdexPage = newSettingsPage()
+    nimdexForm = nimkit.newFormView()
+    nimdexMode = nimkit.newComboBox(["Launch locally", "Connect to daemon"])
+    nimdexLocal = nimkit.newTextField()
+    nimdexAddress = nimkit.newTextField()
+    nimdexStatusLabel = nimkit.newLabel("Disconnected")
+    nimdexConnect = nimkit.newButton("Start / Connect")
+    nimdexDisconnect = nimkit.newButton("Stop / Disconnect")
+    nimdexButtons = nimkit.newStackView(nimkit.laHorizontal)
     shortcutsPage = newSettingsPage()
     moeThemesPage = newSettingsPage()
     textMateGrammarsPage = newSettingsPage()
@@ -1141,6 +1158,64 @@ proc newKosmoSettingsWindow*(
   )
   textMateGrammarsPage.stack.fillAvailableSpace(textMateGrammarsTable)
 
+  nimdexMode.identifier = "kosmo.settings.nimdex.mode"
+  nimdexLocal.identifier = "kosmo.settings.nimdex.local"
+  nimdexAddress.identifier = "kosmo.settings.nimdex.address"
+  nimdexStatusLabel.identifier = "kosmo.settings.nimdex.status"
+  nimdexConnect.identifier = "kosmo.settings.nimdex.connect"
+  nimdexDisconnect.identifier = "kosmo.settings.nimdex.disconnect"
+  nimdexMode.selectedIndex = if nimdexCommand.startsWith("tcp://"): 1 else: 0
+  nimdexLocal.text = if nimdexMode.selectedIndex == 0: nimdexCommand else: ""
+  nimdexAddress.text =
+    if nimdexMode.selectedIndex == 1: nimdexCommand else: "tcp://127.0.0.1:9257"
+  settings.xNimdexStatus = nimdexStatusLabel
+  nimdexForm.edgeInsets = nimkit.insets(0.0)
+  nimdexForm.spacing[nimkit.dcol] = 12.0
+  nimdexForm.spacing[nimkit.drow] = 8.0
+  nimdexForm.addRow(nimkit.newFormLabel("Mode"), nimdexMode)
+  nimdexForm.addRow(nimkit.newFormLabel("Executable or command"), nimdexLocal)
+  nimdexForm.addRow(nimkit.newFormLabel("Daemon address"), nimdexAddress)
+  nimdexButtons.spacing = 8.0
+  nimdexButtons.alignment = nimkit.svaCenter
+  nimdexButtons.addArrangedSubview(nimdexConnect, nimdexDisconnect)
+  nimdexConnect.target = nimkit.newActionTarget(
+    nimkit.actionSelector("kosmo.nimdex.connect")
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    var command =
+      if nimdexMode.selectedIndex == 1:
+        nimdexAddress.text.strip()
+      else:
+        nimdexLocal.text.strip()
+    if nimdexMode.selectedIndex == 0 and command.len > 0 and
+        (fileExists(command) or not command.contains(' ')):
+      command = quoteShell(command) & " daemon"
+    if not nimdexAction.isNil:
+      let error = nimdexAction(command, true)
+      settings.xNimdexStatusError = error.len > 0
+      nimdexStatusLabel.text = if error.len > 0: error else: "Connecting…"
+  nimdexConnect.action = nimkit.actionSelector("kosmo.nimdex.connect")
+  nimdexDisconnect.target = nimkit.newActionTarget(
+    nimkit.actionSelector("kosmo.nimdex.disconnect")
+  ) do(sender: nimkit.DynamicAgent):
+    discard sender
+    if not nimdexAction.isNil:
+      let error = nimdexAction("", false)
+      settings.xNimdexStatusError = error.len > 0
+      nimdexStatusLabel.text = if error.len > 0: error else: "Disconnected"
+  nimdexDisconnect.action = nimkit.actionSelector("kosmo.nimdex.disconnect")
+  nimdexPage.stack.addArrangedSubview(
+    nimkit.newHeadingLabel("Nimdex"),
+    nimdexForm,
+    nimdexButtons,
+    nimdexStatusLabel,
+    nimkit.newLabel(
+      "Local mode starts Nimdex for this editor; daemon mode connects to an existing listener."
+    ),
+  )
+  if not nimdexStatus.isNil:
+    nimdexStatusLabel.text = nimdexStatus()
+
   tabs.identifier = KosmoSettingsTabsIdentifier
   discard tabs.addTabViewItem(
     nimkit.newTabViewItem(
@@ -1163,6 +1238,9 @@ proc newKosmoSettingsWindow*(
       KosmoTextMateGrammarsSettingsTabIdentifier,
     )
   )
+  discard tabs.addTabViewItem(
+    nimkit.newTabViewItem("Nimdex", nimdexPage.view, KosmoNimdexSettingsTabIdentifier)
+  )
   layout.spacing = 12.0
   layout.alignment = nimkit.svaFill
   layout.addArrangedSubview(nimkit.newTitleLabel("Kosmo Settings"))
@@ -1175,6 +1253,14 @@ proc newKosmoSettingsWindow*(
   result.xWindow.styleMask = result.xWindow.styleMask + {nimkit.wsmResizable}
   result.xWindow.contentMinSize =
     nimkit.initSize(KosmoSettingsMinimumWidth, KosmoSettingsMinimumHeight)
+
+proc refreshNimdexStatus*(settings: KosmoSettingsWindow) =
+  ## Refresh the connection indicator from the editor worker.
+  if not settings.isNil and not settings.xNimdexStatusError and
+      not settings.xNimdexStatusHandler.isNil:
+    let status = settings.xNimdexStatusHandler()
+    if settings.xNimdexStatus.text != status:
+      settings.xNimdexStatus.text = status
 
 proc window*(settings: KosmoSettingsWindow): nimkit.Panel =
   ## Return the settings panel window.

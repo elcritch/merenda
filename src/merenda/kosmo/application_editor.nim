@@ -632,9 +632,39 @@ proc syncCommandBar(view: KosmoEditorView, command: KosmoCommandLine) =
       -firstColumn.float32 * metrics.cellWidth, bar.commandBarTextVerticalOffset()
     )
 
+proc syncIndexProgress(
+    bar: KosmoStatusBar, progress: tuple[active: bool, percentage: int, hundredths: int]
+) =
+  if bar.indexProgress.hidden != not progress.active:
+    bar.indexProgress.hidden = not progress.active
+    bar.indexProgressLabel.hidden = not progress.active
+    bar.setNeedsLayout()
+  if progress.active:
+    bar.indexProgress.value = progress.hundredths.float32 / 100
+    bar.indexProgressLabel.text =
+      $(progress.hundredths div 100) & "." &
+      align($(progress.hundredths mod 100), 2, '0') & "%"
+
+proc syncIndexProgress(view: KosmoEditorView) =
+  if not view.isActiveEditorGroup():
+    return
+  let progress = view.editor.nimdexProgress()
+  if not view.tabsDelegate.isNil and not view.tabsDelegate.dockController.isNil:
+    for host in view.tabsDelegate.dockController[].hosts:
+      if not host.statusLabel.isNil and host.statusLabel.superview() of KosmoStatusBar:
+        KosmoStatusBar(host.statusLabel.superview()).syncIndexProgress(progress)
+  elif not view.statusLabel.isNil and view.statusLabel.superview() of KosmoStatusBar:
+    KosmoStatusBar(view.statusLabel.superview()).syncIndexProgress(progress)
+
 proc syncChrome(view: KosmoEditorView) =
   let tabs = view.visibleTabs(view.editor.tabs())
   view.syncTabs(tabs)
+  view.syncIndexProgress()
+  if view.isActiveEditorGroup() and not view.tabsDelegate.isNil and
+      not view.tabsDelegate.dockController.isNil:
+    let controller = view.tabsDelegate.dockController[]
+    if not controller.frontend.isNil and not controller.frontend[].xSettingsWindow.isNil:
+      controller.frontend[].xSettingsWindow.refreshNimdexStatus()
   if not view.statusLabel.isNil and view.isActiveEditorGroup():
     let text = view.editor.status().statusText(tabs, view.editor.workingDirectory())
     if view.statusLabel.text != text:
@@ -2634,8 +2664,25 @@ protocol KosmoStatusBarLayout of nimkit.ViewLayoutProtocol:
       choiceHeight = min(20.0'f32, max(bounds.size.height - 8.0'f32, 0.0'f32))
       choiceX = max(bounds.size.width - choiceWidth - 4.0'f32, 0.0'f32)
       choiceY = (bounds.size.height - choiceHeight) * 0.5'f32
+    let progressWidth =
+      if bar.indexProgress.hidden:
+        0.0'f32
+      else:
+        min(146.0'f32, choiceX)
+    let progressX = max(choiceX - progressWidth, 0.0'f32)
     bar.label.setFrameFromLayout(
-      nimkit.rect(0, 0, max(choiceX - 4.0'f32, 0.0'f32), bounds.size.height)
+      nimkit.rect(0, 0, max(progressX - 4.0'f32, 0.0'f32), bounds.size.height)
+    )
+    bar.indexProgress.setFrameFromLayout(
+      nimkit.rect(progressX, choiceY + 5, max(progressWidth - 56, 0.0'f32), 10)
+    )
+    bar.indexProgressLabel.setFrameFromLayout(
+      nimkit.rect(
+        max(choiceX - 52, progressX),
+        0,
+        min(52.0'f32, progressWidth),
+        bounds.size.height,
+      )
     )
     bar.keyModeChoice.setFrameFromLayout(
       nimkit.rect(choiceX, choiceY, choiceWidth, choiceHeight)
@@ -2710,6 +2757,15 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
   let
     menu = nimkit.newMenu("Editor keymode")
     choice = nimkit.newPopupMenuButton(KosmoKeyModes[0].title, menu)
+    indexProgress = nimkit.newProgressIndicator()
+    indexProgressLabel = nimkit.newStatusLabel("")
+  indexProgress.identifier = "kosmo.nimdex.progress"
+  indexProgress.accessibilityLabel = "Nimdex indexing"
+  indexProgress.toolTip = "Nimdex: estimated progress for the current entry point"
+  indexProgress.maxValue = 100
+  indexProgress.hidden = true
+  indexProgressLabel.identifier = "kosmo.nimdex.progress.percentage"
+  indexProgressLabel.hidden = true
   choice.identifier = KosmoKeyModeSelectorIdentifier
   choice.styleId = KosmoKeyModeSelectorIdentifier
   choice.accessibilityLabel = "Editor keymode"
@@ -2719,10 +2775,17 @@ proc newKosmoStatusBar(label: nimkit.Label, withSidebarButtons: bool): KosmoStat
     let item = nimkit.newMenuItem(mode.title)
     item.identifier = mode.identifier
     menu.addItem(item)
-  result = KosmoStatusBar(label: label, keyModeChoice: choice)
+  result = KosmoStatusBar(
+    label: label,
+    keyModeChoice: choice,
+    indexProgress: indexProgress,
+    indexProgressLabel: indexProgressLabel,
+  )
   result.initViewFields()
   result.addSubview(label)
   result.addSubview(choice)
+  result.addSubview(indexProgress)
+  result.addSubview(indexProgressLabel)
   if withSidebarButtons:
     result.fileButton = newKosmoStatusIconButton(
       nimkit.newSvgMtsdfResource(KosmoFilesIconSvg, "kosmo-status-files"), "Files"

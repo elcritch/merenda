@@ -141,6 +141,8 @@ type
     fileButton: KosmoStatusIconButton
     findButton: KosmoStatusIconButton
     keyModeChoice: nimkit.PopupMenuButton
+    indexProgress: nimkit.ProgressIndicator
+    indexProgressLabel: nimkit.Label
     observedWindow: WeakRef[nimkit.Window]
 
   KosmoKeyMode = object

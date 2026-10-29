@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Configure and connect Nimdex from Kosmo Settings.
+
+- Show Nimdex indexing progress beside the editor input mode selector.
+
 - Bundle dark and light Moe themes from ten popular Neovim theme families, plus Solarized.
 
 - Choose themes for Moe, terminals, or both from Kosmo settings, with separate saved choices.

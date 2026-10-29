@@ -502,6 +502,16 @@ include light and dark variants of popular Neovim palettes; [palette sources and
 licenses](data/moe/themes/SOURCES.md) are listed alongside them.
 Nim diagnostics such as `src/main.nim(12, 5)` and `src/main.nim(12)` are clickable too.
 
+To use Nimdex for Nim language features, open **Kosmo Settings → Nimdex**.
+Choose **Launch locally** and enter a Nimdex executable or command, or choose
+**Connect to daemon** and enter an address such as `tcp://127.0.0.1:9257`.
+Start or connect from the same page; Stop / Disconnect closes this editor's
+session. An externally started daemon stays running. Kosmo supplies the
+workspace root when the editor starts; a TCP listener serves one editor session
+at a time. The status bar shows estimated progress for the current entry point while Nimdex
+refreshes its compiler cache. The percentage is approximate, particularly on an
+incremental rebuild.
+
 Show Git Diff keeps a separate viewer for each repository. Detach their tabs to
 compare projects in separate windows; invoking the shortcut again returns to that
 project's viewer.

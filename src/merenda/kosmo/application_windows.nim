@@ -456,6 +456,30 @@ proc showSettings*(frontend: KosmoApplication): bool {.discardable.} =
       frontend.xSettingsWindow.close()
     let weakFrontend = frontend.unsafeWeakRef()
     frontend.xSettingsWindow = newKosmoSettingsWindow(
+      nimdexCommand =
+        if not frontend.xWindowManager.isNil:
+          frontend.xWindowManager[].config.nimLspCommand
+        else:
+          frontend.dockController.editor.nimLspConfiguration().command,
+      nimdexStatus = proc(): string =
+        if not weakFrontend.isNil:
+          return weakFrontend[].dockController.editor.nimdexConnectionStatus()
+        "Disconnected",
+      nimdexAction = proc(command: string, connect: bool): string =
+        if weakFrontend.isNil:
+          return "The editor window is closed."
+        let target = weakFrontend[]
+        if connect:
+          result = target.dockController.editor.connectNimdex(command)
+          if result.len == 0 and not target.xWindowManager.isNil:
+            let manager = target.xWindowManager[]
+            manager.config.nimLspCommand = command
+            manager.config.nimdexStopped = false
+            if not manager.config.saveKosmoConfig(manager.configPath) and
+                manager.configPath.len > 0:
+              return "Connecting; could not save the setting."
+        else:
+          target.dockController.editor.disconnectNimdex(),
       preferEditorPanes = frontend.xPreferEditorPanes,
       preferEditorPanesHandler = proc(enabled: bool) =
         if not weakFrontend.isNil:
@@ -1178,7 +1202,8 @@ proc newKosmoApplication*(
     editorView = newKosmoEditorView(
       newKosmoEditor(
         workingDirectory = editorWorkingDirectory,
-        nimLspCommand = manager.config.nimLspCommand,
+        nimLspCommand =
+          if manager.config.nimdexStopped: "" else: manager.config.nimLspCommand,
       )
     )
     editorPane = newKosmoEditorPane(editorView)

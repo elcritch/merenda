@@ -38,8 +38,9 @@ suite "Kosmo settings":
     check app.windows[^1] == settingsPanel
     check settingsPanel.title == "Kosmo Settings"
     for identifier in [
-      KosmoTerminalSettingsTabIdentifier, KosmoShortcutsSettingsTabIdentifier,
-      KosmoMoeThemesSettingsTabIdentifier, KosmoTextMateGrammarsSettingsTabIdentifier,
+      KosmoNimdexSettingsTabIdentifier, KosmoTerminalSettingsTabIdentifier,
+      KosmoShortcutsSettingsTabIdentifier, KosmoMoeThemesSettingsTabIdentifier,
+      KosmoTextMateGrammarsSettingsTabIdentifier,
     ]:
       require settingsTabs.selectPage(identifier)
       settingsPanel.contentView().layoutSubtreeIfNeeded()
@@ -88,11 +89,51 @@ suite "Kosmo settings":
     check "GPL-3.0" in info.credits
     check ApplicationAboutLink(text: KosmoMoeUrl, url: KosmoMoeUrl) in info.creditLinks
 
+  test "Nimdex settings connect and disconnect using the selected mode":
+    var command = ""
+    var connected = false
+    let panel = newKosmoSettingsWindow(
+      nimdexAction = proc(value: string, connect: bool): string =
+        command = value
+        connected = connect
+    )
+    defer:
+      panel.close()
+    let root = panel.contentView()
+    let tabs = TabView(root.viewWithIdentifier(KosmoSettingsTabsIdentifier))
+    require not tabs.isNil
+    require tabs.selectPage(KosmoNimdexSettingsTabIdentifier)
+    let mode = ComboBox(root.viewWithIdentifier("kosmo.settings.nimdex.mode"))
+    let local = TextField(root.viewWithIdentifier("kosmo.settings.nimdex.local"))
+    let address = TextField(root.viewWithIdentifier("kosmo.settings.nimdex.address"))
+    let start = Button(root.viewWithIdentifier("kosmo.settings.nimdex.connect"))
+    let stop = Button(root.viewWithIdentifier("kosmo.settings.nimdex.disconnect"))
+    require not mode.isNil and not local.isNil and not address.isNil
+    require not start.isNil and not stop.isNil
+    local.text = "nimdex"
+    mode.selectedIndex = 0
+    require start.tryToPerform(performClick(), DynamicAgent(start))
+    check connected
+    check command.contains("nimdex") and command.endsWith(" daemon")
+    mode.selectedIndex = 1
+    address.text = "tcp://127.0.0.1:9257"
+    require start.tryToPerform(performClick(), DynamicAgent(start))
+    check command == "tcp://127.0.0.1:9257"
+    require stop.tryToPerform(performClick(), DynamicAgent(stop))
+    check not connected
+
   test "status bar keymode popup switches editing and follows settings":
     frontend.window.setContentView(frontend.contentView)
     let choiceView =
       frontend.contentView.viewWithIdentifier(KosmoKeyModeSelectorIdentifier)
     require choiceView of PopupMenuButton
+    let progress = frontend.contentView.viewWithIdentifier("kosmo.nimdex.progress")
+    let percentage =
+      frontend.contentView.viewWithIdentifier("kosmo.nimdex.progress.percentage")
+    require progress of ProgressIndicator
+    require percentage of Label
+    check progress.hidden
+    check percentage.hidden
     let choice = PopupMenuButton(choiceView)
     check choice.menu().len == 2
     check choice.menu()[0].title == "moe (vim)"

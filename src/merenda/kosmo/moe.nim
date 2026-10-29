@@ -6,6 +6,7 @@
 
 import std/[algorithm, hashes, monotimes, options, os, strutils, tables, unicode]
 import ./panekeys
+import ./lsptcp
 export panekeys.KosmoPaneCommand
 from std/times import initDuration
 
@@ -34,6 +35,8 @@ import moepkg/command_handlers/result_processor as moeResults
 import moepkg/command_handlers/recovery_ops as moeRecoveryOps
 import moepkg/editor_reload as moeReload
 import moepkg/editor_hooks as moeHooks
+import moepkg/lsp_integration as moeLspIntegration
+import moepkg/lsp_service as moeLspService
 import moepkg/editor_lsp as moeLsp
 import moepkg/editor_file_jobs as moeJobs
 import moepkg/editor_mode as moeMode
@@ -122,6 +125,7 @@ type
   KosmoEditor* = ref object
     editor: Editor
     nimLspCommand: string
+    nimLspRequested: bool
     temporaryBufferIds: Table[string, BufferId]
     workingDirectory: string
     textMateGrammars: seq[KosmoTextMateGrammar]
@@ -799,6 +803,22 @@ func hostCommand(r: moeHandlerResult.HandlerResult): Option[KosmoHostCommand] =
       command.forceClose = r.forceClose
   some(command)
 
+proc configureNimdexService(editor: Editor, command: string) =
+  let service = editor.lsp.service
+  var config = service.getConfig("nim").get(
+      moeLspService.LanguageServerConfig(extensions: @["nim", "nims"])
+    )
+  let args = parseCmdLine(command)
+  config.enabled = true
+  if kosmoLspLauncherExecutable.len > 0 and
+      (command.startsWith("tcp://") or defined(posix)):
+    config.command = kosmoLspLauncherExecutable
+    config.args = @[KosmoLspExecFlag] & args
+  elif args.len > 0:
+    config.command = args[0]
+    config.args = args[1 .. ^1]
+  service.setConfig("nim", config)
+
 proc newKosmoEditor*(
     text = "", workingDirectory = "", nimLspCommand = ""
 ): KosmoEditor =
@@ -840,6 +860,7 @@ proc newKosmoEditor*(
   result = KosmoEditor(
     temporaryBufferIds: initTable[string, BufferId](),
     nimLspCommand: nimLspCommand,
+    nimLspRequested: nimLspCommand.len > 0,
     textMateGrammars: grammarState.grammars,
     matterSources: grammarState.sources,
     matterFileTypes: grammarState.fileTypes,
@@ -855,6 +876,8 @@ proc newKosmoEditor*(
   # Moe captures the LSP workspace root during construction.
   result.inWorkingDirectory:
     result.editor = newEditor(config)
+  if nimLspCommand.len > 0:
+    result.editor.configureNimdexService(nimLspCommand)
   result.editor.hostPopupMenus = true
   let host = result.unsafeWeakRef()
   result.editor.hostCommandFilter = proc(e: Editor, command: ParsedCommand): bool =
@@ -900,6 +923,75 @@ proc newKosmoEditor*(
     discard result.editor.handleTextInput(text)
     discard result.editor.handleKeyCombo(moeKeys.toSpecialKeyCombo(moeKeys.skEscape))
   discard forwardMoeMessages()
+
+proc nimdexConnectionStatus*(editor: KosmoEditor): string =
+  ## Describe the actual Nim language server connection state.
+  if editor.isNil or editor.editor.isNil or not editor.nimLspRequested:
+    return "Disconnected"
+  let worker = editor.editor.lsp.service.getWorker("nim")
+  if worker.isNone:
+    return "Disconnected or connection failed"
+  if worker.get.isRunning: "Connected" else: "Connecting…"
+
+proc disconnectNimdex*(editor: KosmoEditor) =
+  ## Stop the Nim LSP worker and prevent automatic restart.
+  if editor.isNil or editor.editor.isNil:
+    return
+  editor.nimLspRequested = false
+  let service = editor.editor.lsp.service
+  var config = service.getConfig("nim")
+  if config.isSome:
+    var disabled = config.get
+    disabled.enabled = false
+    service.setConfig("nim", disabled)
+  discard service.stopWorker("nim")
+  editor.editor.lsp.clearProgressForLanguage("nim")
+
+proc connectNimdex*(editor: KosmoEditor, command: string): string =
+  ## Start a Nim LSP worker and resynchronize open buffers.
+  if editor.isNil or editor.editor.isNil or command.len == 0:
+    return "Enter a Nimdex command or daemon address."
+  if command.startsWith("tcp://"):
+    try:
+      discard parseLspTcpEndpoint(command)
+    except ValueError as error:
+      return error.msg
+    if kosmoLspLauncherExecutable.len == 0:
+      return "TCP connections require the Kosmo LSP launcher."
+  editor.disconnectNimdex()
+  let service = editor.editor.lsp.service
+  editor.editor.configureNimdexService(command)
+  editor.editor.config.lsp.enable = true
+  editor.editor.lsp.setEnabled(true)
+  let started = service.startWorker("nim")
+  if started.isErr:
+    return started.error
+  editor.nimLspRequested = true
+  editor.nimLspCommand = command
+  editor.editor.onLspServerRestart("nim")
+
+proc nimdexProgress*(
+    editor: KosmoEditor
+): tuple[active: bool, percentage: int, hundredths: int] =
+  ## Return the current Nimdex indexing progress, if any.
+  if editor.isNil or editor.editor.isNil or editor.editor.lsp.isNil:
+    return
+  for progress in editor.editor.lsp.getActiveProgressList():
+    if progress.langId == "nim" and progress.title == "Nimdex indexing":
+      result.active = true
+      result.percentage = progress.percentage.get(0).clamp(0, 100)
+      result.hundredths = result.percentage * 100
+      if progress.message.isSome:
+        let message = progress.message.get()
+        let endPercent = message.find('%')
+        if endPercent > 0 and endPercent <= 6:
+          try:
+            let value = parseFloat(message[0 ..< endPercent])
+            if value >= 0.0 and value <= 100.0:
+              result.hundredths = int(value * 100.0 + 0.5).clamp(0, 10000)
+          except ValueError:
+            discard
+      return
 
 proc nimLspConfiguration*(editor: KosmoEditor): tuple[enabled: bool, command: string] =
   ## Return the Nim language server command selected for this editor.

@@ -68,6 +68,7 @@ suite "Kosmo settings layout":
     let tabs = TabView(tabsView)
 
     let expectedPageText = @[
+      (KosmoNimdexSettingsTabIdentifier, @["Nimdex"]),
       (KosmoTerminalSettingsTabIdentifier, @["Terminal"]),
       (KosmoShortcutsSettingsTabIdentifier, @["Active Shortcuts"]),
       (KosmoMoeThemesSettingsTabIdentifier, @["Themes"]),
@@ -105,6 +106,29 @@ suite "Kosmo settings layout":
     check window.frame().size == largerSize
     window.frame = rect(180, 160, minimumSize.width - 20, minimumSize.height - 20)
     check window.frame().size == minimumSize
+
+  test "Nimdex action buttons retain their control height when resized":
+    let settings = newKosmoSettingsWindow()
+    defer:
+      settings.window().close()
+    let window = settings.window()
+    window.setContentView(settings.contentView())
+    let tabs =
+      TabView(settings.contentView().viewWithIdentifier(KosmoSettingsTabsIdentifier))
+    require tabs.selectPage(KosmoNimdexSettingsTabIdentifier)
+    let connect =
+      settings.contentView().viewWithIdentifier("kosmo.settings.nimdex.connect")
+    let disconnect =
+      settings.contentView().viewWithIdentifier("kosmo.settings.nimdex.disconnect")
+    require connect of Button
+    require disconnect of Button
+    for height in [360.0'f32, 500.0'f32, 700.0'f32]:
+      window.frame = rect(180, 160, 760, height)
+      settings.contentView().layoutSubtreeIfNeeded()
+      check connect.frame().size.height <= 36.0'f32
+      check disconnect.frame().size.height <= 36.0'f32
+      check connect.frame().size.height > 0
+      check disconnect.frame().size.height > 0
 
   test "TextMate grammar table follows its dragged column border":
     let settings = newKosmoSettingsWindow(

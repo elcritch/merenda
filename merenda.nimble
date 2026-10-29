@@ -3,6 +3,7 @@ author        = "Jaremy Creechley"
 description   = "Nim-native UI toolkit"
 license       = "BSD-3-Clause"
 srcDir        = "src"
+bin           = @["merenda/kosmo/kosmo"]
 
 # Dependencies
 requires "nim >= 2.2.10"
