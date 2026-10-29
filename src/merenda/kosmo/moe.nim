@@ -144,6 +144,7 @@ type
     clipboardWrite: KosmoClipboardWriter
     clipboardValues: array[KosmoClipboardSelection, Option[string]]
     pollingWork: bool
+    frontendBufferChange: Option[KosmoEditorViewState]
     frontendFingerprint: Hash
     xFrontendRevision: uint64
     recoveryDirectory: string

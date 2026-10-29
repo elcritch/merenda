@@ -343,6 +343,7 @@ proc pollFrontendWork*(editor: KosmoEditor): bool =
   editor.pollingWork = true
   defer:
     editor.pollingWork = false
+  let previousBuffer = editor.activeBufferId()
   result = editor.pollKeyMappingTimeout()
   editor.inWorkingDirectory:
     # Terminal-only operations never enter the TUI's blocking suspend path.
@@ -368,6 +369,8 @@ proc pollFrontendWork*(editor: KosmoEditor): bool =
     nonblockingAsyncStep()
     editor.editor.tick()
   editor.takeEngineOutput()
+  if editor.activeBufferId() != previousBuffer:
+    editor.frontendBufferChange = some(editor.captureViewState())
   editor.checkpointRecovery()
   let fingerprint = editor.visibleFrontendFingerprint()
   result =
@@ -375,3 +378,9 @@ proc pollFrontendWork*(editor: KosmoEditor): bool =
   if result:
     inc editor.xFrontendRevision
   editor.frontendFingerprint = fingerprint
+
+proc takeFrontendBufferChange*(editor: KosmoEditor): Option[KosmoEditorViewState] =
+  ## Return a buffer switch performed by asynchronous Moe work once.
+  if not editor.isNil:
+    result = editor.frontendBufferChange
+    editor.frontendBufferChange = none(KosmoEditorViewState)

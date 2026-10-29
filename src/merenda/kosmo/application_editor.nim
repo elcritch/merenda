@@ -473,7 +473,18 @@ proc selectVisibleBuffer(view: KosmoEditorView, tabs: openArray[KosmoTab]) =
             )
           view.searchBar.errorMessage = view.editor.searchError()
 
-proc adoptActiveBuffer(view: KosmoEditorView): bool =
+proc rememberViewState(
+    view: KosmoEditorView, id: KosmoBufferId, state: KosmoEditorViewState
+) =
+  let index = view.viewStateIndex(id)
+  if index >= 0:
+    view.viewStates[index] = state
+  else:
+    view.viewStates.add state
+
+proc adoptActiveBuffer(
+    view: KosmoEditorView, state = none(KosmoEditorViewState)
+): bool =
   if not view.usesBufferSubset:
     return
   for tab in view.editor.tabs():
@@ -482,10 +493,14 @@ proc adoptActiveBuffer(view: KosmoEditorView): bool =
         let controller = view.tabsDelegate.dockController[]
         for group in controller.groups:
           if group.editorView != view and tab.id in group.editorView.bufferIds:
+            if state.isSome and state.get.bufferId == some(tab.id):
+              group.editorView.rememberViewState(tab.id, state.get)
             controller.activatePaneTab(group, tab.id.tabIdentifier)
             return true
       if tab.id notin view.bufferIds:
         view.bufferIds.add tab.id
+      if state.isSome and state.get.bufferId == some(tab.id):
+        view.rememberViewState(tab.id, state.get)
       view.selectedBufferId = some(tab.id)
       view.selectEditorContent(tab.id)
       view.lastTabs.setLen(0)
@@ -957,6 +972,9 @@ proc refresh*(view: KosmoEditorView) =
     return
   if view.isActiveEditorGroup():
     discard view.editor.pollFrontendWork()
+    let bufferChange = view.editor.takeFrontendBufferChange()
+    if bufferChange.isSome and view.adoptActiveBuffer(bufferChange):
+      return
   if view.handleHostCommands() and not view.isActiveEditorGroup():
     return
   if view.editor.configViewerOpen():
