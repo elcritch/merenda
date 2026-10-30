@@ -125,8 +125,8 @@ task test, "run unit test":
     if platformArg != "":
       echo "Running platform args: ", platformArg
     for file in listFiles("tests"):
-      if file.nimFileStemHasPrefix("t"):
-        nimExec("r", file, platform = platformArg)
+      if file.nimFileStemHasPrefix("t") and extractFilename(file) != "tintegrations.nim":
+        nimExec("ic", file, extraFlags = "-r", platform = platformArg)
 
 task integration, "run integration tests":
   for platformArg in platforms():
@@ -134,12 +134,12 @@ task integration, "run integration tests":
       echo "Running platform args: ", platformArg
     for file in listFiles("tests"):
       if file.nimFileStemHasPrefix("t"):
-        nimExec("r", file, platform = platformArg)
+        nimExec("ic", file, extraFlags = "-r", platform = platformArg)
 
 task test_compile, "compile unit tests without running":
   for file in listFiles("tests"):
     if file.nimFileStemHasPrefix("nimkit_"):
-      nimExec("c", file)
+      nimExec("ic", file)
 
 task examples, "compile examples":
   for file in listFiles("examples"):
