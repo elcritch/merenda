@@ -1297,7 +1297,6 @@ proc workspaceGitChanged(lifecycle: KosmoWindowLifecycle) {.slot.} =
       frontend.gitHubPanel.scheduleRepositoryRefresh()
 
 proc pollWorkspaceGit(lifecycle: KosmoWindowLifecycle) {.slot.} =
-
   if not lifecycle.frontend.isNil and not lifecycle.frontend[].xClosed:
     let frontend = lifecycle.frontend[]
     let controller = frontend.dockController
