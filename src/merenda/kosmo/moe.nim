@@ -888,6 +888,8 @@ proc newKosmoEditor*(
   config.standard.colorMode = cm24bit
   config.tabLine.enable = false
   config.autocomplete.lspOnlyAfterDot = true
+  # Auto-indented empty lines otherwise appear as bright trailing whitespace.
+  config.highlight.trailingSpaces = false
   # Kosmo presents editor notifications in its own status bar.
   config.notification.popupNotifications = false
   config.notification.lspForcePopup = false

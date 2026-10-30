@@ -1,6 +1,7 @@
 import std/[sequtils, options, os, strutils, tempfiles, times, unicode, unittest]
 
 import figdraw
+from celina/core/colors import `==`
 import sigils/threads
 
 import merenda/nimkit
@@ -290,6 +291,20 @@ suite "Kosmo":
 
     check "λ" in buffer.renderedText
     editor.close()
+
+  test "auto-indented empty lines do not highlight trailing spaces":
+    let editor = newKosmoEditor(text = "  value")
+    defer:
+      editor.close()
+    var buffer = newRenderBuffer(32, 8)
+    editor.render(buffer)
+    require editor.handleKey("o")
+    editor.render(buffer)
+    check editor.bufferCursor() == KosmoBufferCursor(line: 1, column: 2)
+    let cursor = editor.cursor()
+    require cursor.column > 1
+    check buffer.cell(cursor.column - 1, cursor.row).style.bg ==
+      buffer.cell(cursor.column + 1, cursor.row).style.bg
 
   test "force input mode keeps editable buffers out of Normal mode":
     let editor = newKosmoEditor()
