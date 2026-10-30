@@ -391,12 +391,14 @@ suite "Kosmo GitHub Markdown viewer":
     require panel.waitForGitHub()
     require panel.markdownView.waitForMarkdownLayout()
     check heading.accessibilityValue() == "expanded"
+    let expanded = panel.markdownView.textStorage().stringValue()
+    require expanded.find("Open issue #7 on GitHub") >= 0
     let issueLinkIndex =
-      rendered[0 ..< rendered.find("Open issue #7 on GitHub")].runeLen
+      expanded[0 ..< expanded.find("Open issue #7 on GitHub")].runeLen
     require panel.markdownView.textView().openLinkAtIndex(issueLinkIndex)
     check openedLink == "https://github.com/owner/project/issues/7"
-    require rendered.find("tests") >= 0
-    let jobIndex = rendered[0 ..< rendered.find("tests")].runeLen
+    require expanded.find("tests") >= 0
+    let jobIndex = expanded[0 ..< expanded.find("tests")].runeLen
     require panel.markdownView.textView().openLinkAtIndex(jobIndex)
     check openedLink == "https://github.com/owner/project/actions/runs/12/job/34"
     require frontend.window.makeFirstResponder(panel.markdownView.textView())

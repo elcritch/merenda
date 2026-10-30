@@ -1,4 +1,5 @@
 ## NimKit's shared test runner and complete public API smoke test.
+import std/exitprocs
 import merenda/nimkit
 
 when defined(nimkitOwnershipTests):
@@ -104,3 +105,8 @@ else:
   import nimkit/windoweffects
   import nimkit/windoweffectsdemo
   import nimkit/workspaces
+
+when isMainModule:
+  # Nim ic can otherwise exit successfully after unittest records a failure.
+  if getProgramResult() != 0:
+    quit(getProgramResult())

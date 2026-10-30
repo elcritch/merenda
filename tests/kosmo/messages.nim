@@ -17,5 +17,6 @@ suite "Kosmo editor messages":
         rendered.add(buffer.cell(column, row).symbol)
       rendered.add('\n')
     check "Pattern not found: missing" notin rendered
-    check editor.handleKey("/")
+    check editor.handleKey("Esc")
+    check editor.handleKey(":")
     check editor.commandLine().visible

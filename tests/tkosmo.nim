@@ -1,5 +1,5 @@
 ## Kosmo's public API and frontend-specific adapters.
-import std/[strutils, unicode, unittest]
+import std/[exitprocs, strutils, unicode, unittest]
 
 import merenda/nimkit
 import merenda/kosmo/kosmo
@@ -92,3 +92,8 @@ suite "Kosmo public adapters":
     let funcIndex = preview.textStorage().stringValue().runeIndexOf("func")
     check preview.textStorage().attributesAt(funcIndex).foregroundColor ==
       preview.markdownStyle().syntaxTokenColors[stcKeyword]
+
+when isMainModule:
+  # Nim ic can otherwise exit successfully after unittest records a failure.
+  if getProgramResult() != 0:
+    quit(getProgramResult())
